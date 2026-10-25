@@ -1,0 +1,95 @@
+/**
+ * Windows with the real helper (spec „Widget”, D229): the desktop bar lies under a normal window that overlaps it and
+ * right above the desktop; the real cursor (SendInput) over every button of the bar opens no new window and changes no
+ * order of windows; the control – a test bar with one title attribute – must open a tooltip window, or the check proves
+ * nothing.
+ */
+import { expect, test, type ElectronApplication } from '@playwright/test'
+import { launch, viewPage, withMainLog } from './app'
+import { hover, topWindows, type TopWindow } from './win32'
+
+test.skip(process.platform !== 'win32' || process.env.RD_E2E_REAL_HELPER !== '1', 'Windows with the real helper only')
+
+async function barInfo(app: ElectronApplication) {
+  return app.evaluate(({ BrowserWindow, screen }) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.getTitle() === 'Regulated Day – pasek')!
+    const buf = w.getNativeWindowHandle()
+    return { hwnd: buf.readBigUInt64LE(0).toString(), bounds: w.getBounds(), visible: w.isVisible(), pid: process.pid, scale: screen.getDisplayMatching(w.getBounds()).scaleFactor, zoom: w.webContents.getZoomFactor() }
+  })
+}
+
+const pidWindows = (pid: number) =>
+  topWindows()
+    .filter((w) => w.pid === pid && w.visible)
+    .map((w) => `${w.cls}`)
+    .sort()
+
+/** Index of a window in the z-order (0 = the top). */
+const zIndex = (list: TopWindow[], hwnd: string) => list.findIndex((w) => w.hwnd === hwnd)
+
+test('pasek pulpitu pod oknem, które na niego nachodzi, i tuż nad pulpitem', async () => {
+  const { app, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      const bar = await barInfo(app)
+      // A normal window over the bar (like TradingView maximized): it must lie above the bar.
+      const cover = await app.evaluate(({ BrowserWindow }, b) => {
+        const w = new BrowserWindow({ x: b.x - 20, y: b.y - 20, width: b.width + 40, height: b.height + 40, show: true, title: 'RD-CI-okno' })
+        void w.loadURL('data:text/html,<body style="background:%23333">okno</body>')
+        w.focus()
+        return w.getNativeWindowHandle().readBigUInt64LE(0).toString()
+      }, bar.bounds)
+      await new Promise((r) => setTimeout(r, 3000))
+      const list = topWindows()
+      const desktop = list.findIndex((w) => w.cls === 'Progman' || w.cls === 'WorkerW')
+      expect(zIndex(list, cover)).toBeLessThan(zIndex(list, bar.hwnd))
+      expect(zIndex(list, bar.hwnd)).toBeLessThan(desktop)
+      expect((await barInfo(app)).visible).toBe(true)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejności; próba kontrolna z title daje okno', async () => {
+  test.setTimeout(180_000)
+  const { app, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      const page = await viewPage(app, 'bar')
+      const bar = await barInfo(app)
+      const before = pidWindows(bar.pid)
+      const orderBefore = zIndex(topWindows(), bar.hwnd)
+      const rects = await page.evaluate(() => [...document.querySelectorAll('button')].map((b) => b.getBoundingClientRect()).map((r) => [r.x + r.width / 2, r.y + r.height / 2]))
+      expect(rects.length).toBeGreaterThan(5)
+      const k = bar.scale
+      hover(
+        rects.map(([x, y]) => [(bar.bounds.x + x! * bar.zoom) * k, (bar.bounds.y + y! * bar.zoom) * k] as [number, number]),
+        1200
+      )
+      expect(pidWindows(bar.pid)).toEqual(before)
+      expect(zIndex(topWindows(), bar.hwnd)).toBe(orderBefore)
+      // The control: the same kind of window with one title attribute must open a tooltip window.
+      const probe = await app.evaluate(({ BrowserWindow }) => {
+        const w = new BrowserWindow({ x: 300, y: 300, width: 300, height: 120, show: false, frame: false, type: 'toolbar', focusable: false, title: 'RD-CI-kontrola' })
+        void w.loadURL('data:text/html,<button title="podpowiedź kontrolna" style="width:100%25;height:100%25">x</button>')
+        w.showInactive()
+        return w.getBounds()
+      })
+      await new Promise((r) => setTimeout(r, 1500))
+      const probeBefore = pidWindows(bar.pid)
+      hover(
+        [
+          [(probe.x + 150) * k, (probe.y + 60) * k],
+          [(probe.x + 160) * k, (probe.y + 62) * k]
+        ],
+        2500
+      )
+      expect(pidWindows(bar.pid).length, `kontrola: ${JSON.stringify(pidWindows(bar.pid))}`).toBeGreaterThan(probeBefore.length)
+    })
+  } finally {
+    await app.close()
+  }
+})
