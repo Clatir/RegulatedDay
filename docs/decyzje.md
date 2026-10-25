@@ -290,6 +290,12 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D281 | Po projekcie czas do wyjaśnienia kończy dopiero przerwa od 30 min; krótsza przerwa jest odpoczynkiem, a czas do wyjaśnienia trwa po niej dalej (zmienia D250 dla projektów) |
 | D282 | Start E0: repozytorium Clatir/RegulatedDay zakładam sam, jeśli mam uprawnienia |
 | D283 | Kanał beta zostaje poza zakresem 1.0; „tożsamość testowa” służy wyłącznie testom w CI (25.10.2026) |
+| D284 | E0 w całości, bez podziału na części: jeden PR, jedno wydanie i jedna pauza na końcu etapu (25.10.2026) |
+| D285 | PR-y scala Claude, gdy CI na Linuksie i Windows jest zielone, nie ma konfliktu ani otwartych uwag i nic nie czeka na Twoją decyzję; po scaleniu sprawdza, że zadanie Windows opublikowało wydanie (25.10.2026) |
+| D286 | Próba widgetu w wersjach 0.x: ekran „Próba” w oknie głównym i „Próba ▸” w menu zasobnika (akcje i powiadomienie za 10 s, bez otwierania okna); usunięte przed 1.0 (25.10.2026) |
+| D287 | Nawigacja okna głównego: menu boczne z nazwami ekranów, u góry nazwa „Regulated Day” i pasek widgetu (25.10.2026) |
+| D288 | Ikona aplikacji: sylwetka lampki biurkowej w kolorze lampki (#F2B66D) na zaokrąglonym kwadracie w kolorze tła (#211B23) (25.10.2026) |
+| D289 | Ikona przy zegarze: pełne kółko w kolorze paska, kropka w prawym górnym rogu z ciemną obwódką, kropla w prawym dolnym (25.10.2026) |
 
 **Decyzje techniczne (T)**, zaakceptowane 21.10.2026; szczegóły są w rozdziałach powyżej
 
@@ -682,3 +688,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T385 | Adnotacje rejestru: D155, D165, D167, D174, D231, D243, D256, D267, D268, D271–D273, T214, T250, T359, T373, T378, T380, T381 |
 | T386 | Przegląd zmian v28: uruchomienie spakowane bez znacznika najpierw czyta plik zadania tożsamości produkcyjnej i przy trwającej instalacji kończy się w 1 s; wersja nowsza niż X kończy zadanie bez manifestu X; „Uruchom ręcznie” dopiero przy martwym instalatorze; ścieżka z FI bez wpisu strażnika; test przycisku po tytule albo „PowerShell”; tożsamość testowa bez aktualizacji; „Koniec pracy?” – „sam” to koniec w chwili odejścia bez odpowiedzi albo z odpowiedzią, która tylko nazywa nieobecność; D275 tylko po bloku pracy albo projektu, „odliczyć” wznawia też inny blok elastyczny; takie bloki poza kalibracją i trafnością; drobne sformułowania |
 | T387 | Adnotacje rejestru: D28, D165, D167, D174, D243, D249, D250, D275, D276, T214, T250, T379, T384 |
+| T388 | Node przypięty w `.node-version` na 24.21.0, jak FI; praca lokalna i `build-windows.cmd` używają Node pobranego do `.tools\` (suma SHA-256 z nodejs.org), systemowy Node nie jest zmieniany |
+| T389 | Baza kodu: FI @ de81f2b oraz późniejsze poprawki infrastruktury z FI @ e2cd030 (`scripts/check-context.mjs`, `ci.yml`, `Segmented` w `ui.tsx`); nagłówek pliku podaje hash, z którego plik faktycznie pochodzi |
+| T390 | Numeracja wydań: E0 to 0.1.0, każdy kolejny etap podbija drugą liczbę, poprawki w etapie trzecią; do 1.0 bez wydań testowych (D283) |

@@ -579,6 +579,8 @@ Wygląd to motyw „Pokój lo-fi” z mockupu, wyłącznie ciemny: nocny pokój 
 - **Typografia (czcionki dołączone do aplikacji, bez sieci, a nazwy tokenów CSS takie jak w FI):** Outfit dla tekstu, DM Mono dla czasów i liczb.
 - **Dostępność:** kontrast tekstu co najmniej 4,5:1 przy każdej jasności, bo suwak jasności 50–100% przyciemnia tylko tło, grafikę i akcenty; minimalne okno 1024×700, a na mniejszym obszarze roboczym cały ten obszar z przewijaniem w pionie, skalowanie interfejsu 90–150%.
 - **Format polski:** daty „21.10.2026”, czas 24-godzinny, tysiące oddzielone spacją, przecinek dziesiętny, polskie formy liczby mnogiej.
+- **Nawigacja:** menu boczne z nazwami ekranów; u góry okna nazwa „Regulated Day” i pasek (D287).
+- **Ikony:** ikona aplikacji to sylwetka lampki biurkowej w kolorze lampki na zaokrąglonym kwadracie w kolorze tła (D288); ikona przy zegarze to pełne kółko w kolorze paska, z kropką w prawym górnym rogu (ciemna obwódka) i kroplą w prawym dolnym (D289).
 
 | Rola | Kolor |
 | --- | --- |
