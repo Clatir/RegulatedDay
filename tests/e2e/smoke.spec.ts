@@ -55,6 +55,7 @@ test('pasek pulpitu: okno narzędziowe bez aktywacji, nigdy na wierzchu, pokazan
 })
 
 test('pasek pulpitu bez potwierdzenia pomocnika zostaje ukryty z komunikatem', async () => {
+  test.skip(process.env.RD_E2E_REAL_HELPER === '1', 'the stand-in of the helper refuses the bar; the real one confirms it')
   const { app, page, userData } = await launch({ env: { RD_FAKE_HELPER_BAR: 'fail' } })
   try {
     await withMainLog(userData, async () => {

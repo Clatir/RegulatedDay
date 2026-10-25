@@ -12,6 +12,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { _electron as electron, expect, test } from '@playwright/test'
 import { minidumpProcessType } from '../../src/main/crash/minidump'
+import { click, foreground, topWindows, type TopWindow } from '../e2e/win32'
 import { readSharedSync, writeSyncAtomic } from '../../src/main/update/files'
 import { newTask } from '../../src/main/update/install'
 import { readTask, writeTask, type Task } from '../../src/shared/task'
@@ -191,6 +192,35 @@ test('wyjątek strażnika w trakcie instalatora: nowy strażnik z --after napraw
     expect(log).toContain('nieobsłużony wyjątek właściciela')
     expect(log).toContain('--after')
   })
+})
+
+test('widoczny start strażnika i wymuszony wyjątek nie zmieniają okna na pierwszym planie', async () => {
+  test.setTimeout(20 * 60_000)
+  let probe: ChildProcess | null = null
+  await guarded('pierwszy plan przy strażniku', async () => {
+    const dir = await install(FROM, CURRENT)
+    stage(dir)
+    scheduleTask(dir, 'exit')
+    plan(false)
+    probe = spawn('notepad.exe', [], { detached: true, stdio: 'ignore' })
+    let pw: TopWindow | undefined
+    await expect.poll(() => (pw = topWindows().find((w) => w.pid === probe!.pid && w.visible && w.cls === 'Notepad')) != null, { timeout: 30_000 }).toBe(true)
+    click((pw!.rect[0] + pw!.rect[2]) / 2, pw!.rect[1] + 60)
+    await expect.poll(foreground, { timeout: 10_000 }).toBe(pw!.hwnd)
+    // Started by hand (no --autostart): its window shows – without taking the focus; then an exception and a new guard.
+    spawn(join(taskDir(), 'rd-guard.exe'), [], { cwd: taskDir(), detached: true, stdio: 'ignore', env: env({ RD_TEST_OWNER_THROW: 'duringInstaller', RD_TEST_INSTALLER_SLEEP_MS: '15000' }) }).unref()
+    const until = Date.now() + 120_000
+    let sawWindow = false
+    while (Date.now() < until && installed()?.version !== NEXT) {
+      expect(foreground()).toBe(pw!.hwnd)
+      if (topWindows().some((w) => w.visible && w.title === 'Regulated Day – aktualizacja')) sawWindow = true
+      await sleep(1000)
+    }
+    expect(sawWindow).toBe(true)
+    await expectNext(dir)
+    expect(await readText(join(productionData(), 'logs', 'guard.log'))).toContain('nieobsłużony wyjątek właściciela')
+  })
+  ;(probe as ChildProcess | null)?.kill()
 })
 
 test('wyjątek przy każdym starcie: najpóźniej przy czwartym starcie „nieudane” i uruchomiona aplikacja', async () => {
