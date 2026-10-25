@@ -137,6 +137,12 @@ namespace RegulatedDay
                 return 0;
             }
             TakeLock();
+            // CI: a hung owner – the lock held, the signal standing still (the app closes it after 30 s).
+            if (Environment.GetEnvironmentVariable("RD_TEST_OWNER_HANG") == "1" && args.AfterPid == 0)
+            {
+                Log.Warn("RD_TEST_OWNER_HANG: zawieszam się");
+                Thread.Sleep(Timeout.Infinite);
+            }
             heartbeat = new Timer(delegate(object s) { TickSignal(); }, null, 1000, 1000);
             power.Set(false, true, true, "Regulated Day: instalacja aktualizacji");
             Ui = new OwnerUi(this);
@@ -149,11 +155,15 @@ namespace RegulatedDay
             return 0;
         }
 
-        /// <summary>Test hooks of CI (RD_TEST_OWNER_THROW=&lt;step&gt;): an exception at that step.</summary>
+/// <summary>
+        /// Test hooks of CI (RD_TEST_OWNER_THROW=&lt;step&gt;): an exception at that step of the first owner only (the one
+        /// started after it, with --after, goes on); „every-start” – at every start.
+        /// </summary>
         void Test(string where)
         {
             string at = Environment.GetEnvironmentVariable("RD_TEST_OWNER_THROW");
-            if (at == where || (at == "every-start" && where == "start")) throw new InvalidOperationException("RD_TEST_OWNER_THROW: " + where);
+            if (at == "every-start" && where == "start") throw new InvalidOperationException("RD_TEST_OWNER_THROW: every-start");
+            if (at == where && args.AfterPid == 0) throw new InvalidOperationException("RD_TEST_OWNER_THROW: " + where);
         }
 
         void Loop()
@@ -298,8 +308,10 @@ namespace RegulatedDay
                 job.Start(Task.Installer, "--updated /S", TaskDir);
                 Log.Info("instalator wystartował (pid " + job.Pid + ")");
                 long until = awake.AwakeMs + InstallerLimitMs;
+                long throwAt = awake.AwakeMs + 3000;
                 while (!job.Wait(1000))
                 {
+                    if (awake.AwakeMs > throwAt) Test("duringInstaller");
                     if (runAnyway) { Log.Info("„Uruchom mimo to”: przerywam instalator"); job.Kill(); job.Wait(10000); break; }
                     if (awake.AwakeMs > until) { Log.Warn("instalator przerwany po 10 min czuwania"); job.Kill(); job.Wait(10000); break; }
                 }

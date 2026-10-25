@@ -43,7 +43,9 @@ test('pasek pulpitu: okno narzędziowe bez aktywacji, nigdy na wierzchu, pokazan
           .map((w) => ({ visible: w.isVisible(), focusable: w.isFocusable(), onTop: w.isAlwaysOnTop(), resizable: w.isResizable(), maximizable: w.isMaximizable(), minimizable: w.isMinimizable() }))
       )
       await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – pasek' && w.isVisible()))).toBe(true)
-      expect(props[0]).toMatchObject({ focusable: false, onTop: false, resizable: false, maximizable: false, minimizable: false })
+      expect(props[0]).toMatchObject({ focusable: false, onTop: false, resizable: false })
+      // Linux reports maximizable/minimizable always true; Windows keeps what the window was made with.
+      if (process.platform === 'win32') expect(props[0]).toMatchObject({ maximizable: false, minimizable: false })
       // No tooltip anywhere in the bar (each would be a window on top).
       expect(await bar.locator('[title]').count()).toBe(0)
     })

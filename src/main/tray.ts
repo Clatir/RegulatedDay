@@ -29,7 +29,7 @@ export class AppTray {
   constructor(private readonly d: TrayDeps) {
     mkdirSync(d.iconDir, { recursive: true })
     // The icons of earlier runs: drawn again when needed.
-    for (const name of readdirSync(d.iconDir)) if (name.endsWith('.ico')) rmSync(join(d.iconDir, name), { force: true })
+    for (const name of readdirSync(d.iconDir)) if (/^tray-.*\.(ico|png)$/.test(name)) rmSync(join(d.iconDir, name), { force: true })
   }
 
   get active(): boolean {
@@ -39,9 +39,12 @@ export class AppTray {
   /** The .ico of a state, drawn once per run. */
   private iconFile(s: TrayIconState): string {
     const key = trayIconKey(s)
-    const file = join(this.d.iconDir, `tray-${key}.ico`)
+    // Windows: an .ico with every size; elsewhere (CI on Linux) Electron reads no .ico – a PNG of the largest size.
+    const ico = process.platform === 'win32'
+    const file = join(this.d.iconDir, `tray-${key}.${ico ? 'ico' : 'png'}`)
     if (!this.drawn.has(key) || !existsSync(file)) {
-      writeFileSync(file, encodeIco(TRAY_SIZES.map((size) => ({ size, png: encodePng(renderTrayIcon(size, s), size, size) }))))
+      const last = TRAY_SIZES[TRAY_SIZES.length - 1]!
+      writeFileSync(file, ico ? encodeIco(TRAY_SIZES.map((size) => ({ size, png: encodePng(renderTrayIcon(size, s), size, size) }))) : encodePng(renderTrayIcon(last, s), last, last))
       this.drawn.add(key)
     }
     return file

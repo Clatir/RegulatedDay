@@ -38,6 +38,14 @@ Var pid
   Pop $0
 !macroend
 
+!macro customInit
+  ; CI: an installer slowed down (RD_TEST_INSTALLER_SLEEP_MS) must still install to the end.
+  ReadEnvStr $0 RD_TEST_INSTALLER_SLEEP_MS
+  ${if} $0 != ""
+    Sleep $0
+  ${endIf}
+!macroend
+
 !macro customCheckAppRunning
   !insertmacro IS_POWERSHELL_AVAILABLE
   ${GetProcessInfo} 0 $pid $1 $2 $3 $4

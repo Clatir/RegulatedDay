@@ -564,7 +564,8 @@ async function main(): Promise<void> {
     log
   })
   // The local plan of sessions and classes for the guard: E1 / E4a fill it; empty, it covers the next 7 days.
-  if (identity.updates) writePlan(userData, [])
+  // RD_TEST_KEEP_PLAN=1 (CI): the plan a test wrote for the guard stays.
+  if (identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1') writePlan(userData, [])
 
   registerIpc()
   tray = new AppTray({ title: APP_TITLE, iconDir: join(userData, 'icons'), click: () => panel?.toggle(), menu: trayMenu, log })

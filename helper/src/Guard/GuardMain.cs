@@ -46,7 +46,7 @@ namespace RegulatedDay
             Native.PerMonitorDpi();
             // No error window, no Windows error report (the owner restarts itself; a mode answers {"ok": false}).
             Native.SetErrorMode(0x0002 | 0x0001);
-            bool mode = Has(args, "--run-entry") || Has(args, "--query") || Has(args, "--kill") || Has(args, "--selftest");
+            bool mode = Has(args, "--run-entry") || Has(args, "--query") || Has(args, "--kill") || Has(args, "--selftest") || Has(args, "--stress-write");
             if (mode)
             {
                 try
@@ -125,6 +125,27 @@ namespace RegulatedDay
                 bool killed = h != IntPtr.Zero && Native.TerminateProcess(h, 1);
                 if (h != IntPtr.Zero) Native.CloseHandle(h);
                 return new JObj().Set("ok", true).Set("killed", killed).Set("name", name);
+            }
+            if (Has(args, "--stress-write"))
+            {
+                // CI: the task file written N times while Node writes and reads it (spec: 10 000 parallel writes and reads
+                // without a single missing file); answers the writes whose retries ran out and the unreadable reads.
+                string path = Arg(args, "--stress-write");
+                int count = int.Parse(Arg(args, "--count") ?? "1000", CultureInfo.InvariantCulture);
+                int failed = 0, unreadable = 0, missing = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    try { SharedFile.Write(path, Json.WritePretty(new JObj().Set("format", 1).Set("version", "0.0.0").Set("state", "scheduled").Set("writer", "cs").Set("i", i))); }
+                    catch (Exception) { failed++; }
+                    try
+                    {
+                        string text = SharedFile.Read(path);
+                        if (text == null) missing++;
+                        else Json.ParseObject(text);
+                    }
+                    catch (Exception) { unreadable++; }
+                }
+                return new JObj().Set("ok", true).Set("writes", count).Set("failed", failed).Set("unreadable", unreadable).Set("missing", missing);
             }
             if (Has(args, "--selftest"))
             {
