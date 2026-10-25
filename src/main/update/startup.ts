@@ -117,7 +117,9 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
   const cmp = compareVersions(d.version, X)
   const updated = d.argv.includes('--updated')
 
-  if (task.state === 'postponed' || task.state === 'failed') return normal()
+  if (task.state === 'postponed') return normal()
+  // „nieudane” for a newer X: the banner „nie udała się · Spróbuj ponownie · Pobierz” until a retry or a newer release.
+  if (task.state === 'failed') return normal(cmp < 0 ? { kind: task.message === 'strażnik nie wystartował' || task.message === 'pliki niezgodne z manifestem' ? 'unfinished' : 'failed', version: X } : null)
 
   if (task.state === 'fi') {
     const installer = join(dir, task.installer)

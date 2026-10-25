@@ -121,7 +121,6 @@ namespace RegulatedDay
                 StartAppIfComplete(null, false);
                 return 0;
             }
-            Test("start");
             try
             {
                 Task.Set("starts", Task.Starts + 1);
@@ -151,6 +150,8 @@ namespace RegulatedDay
                 GiveUpAfterStarts();
                 return 0;
             }
+            // After the count: a start that throws every time still reaches the limit of 4 starts.
+            Test("start");
             Loop();
             return 0;
         }
@@ -342,15 +343,31 @@ namespace RegulatedDay
             return "yes";
         }
 
+/// <summary>
+        /// The app can start: its exe is there with an installation – the old version left whole (DisplayVersion below X), or
+        /// X with its files agreeing with the manifest. No uninstall entry (the old version removed, X not in) is not complete.
+        /// </summary>
         bool FilesComplete()
         {
-            return File.Exists(Task != null ? Task.AppExe : "") && Installed(false) != "no";
+            if (Task == null || !File.Exists(Task.AppExe)) return false;
+            string shown = Install.DisplayVersion(Task.UninstallKey);
+            if (shown == null) return false;
+            return Install.Compare(shown, Task.Version) != 0 || Installed(false) == "yes";
         }
 
         // ------------------------------------------------------------ the ends
 
         void AfterInstalled()
         {
+            string shown = Install.DisplayVersion(Task.UninstallKey) ?? Task.Version;
+            if (Install.Compare(shown, Task.Version) > 0)
+            {
+                // A newer version is there already, by any way (installed by hand): the task ends, nothing is reinstalled.
+                Log.Info("zainstalowano " + shown + " (nowsza niż " + Task.Version + ") – kończę zadanie");
+                StartAppIfComplete(Task, false);
+                Finish(false);
+                return;
+            }
             Log.Info("zainstalowano " + Task.Version);
             Step("start aplikacji", ConfirmLimitMs + StepLimitMs);
             bool started = StartAppIfComplete(Task, true);
@@ -379,7 +396,11 @@ namespace RegulatedDay
             Log.Info("sesja albo zajęcia teraz lub w ciągu 30 min – odkładam instalację");
             Task.Set("state", "postponed");
             Task.Save();
-            if (Environment.GetEnvironmentVariable("RD_TEST_DIE_AFTER_POSTPONE") == "1") Environment.FailFast("RD_TEST_DIE_AFTER_POSTPONE");
+            if (Environment.GetEnvironmentVariable("RD_TEST_DIE_AFTER_POSTPONE") == "1")
+            {
+                Log.Warn("RD_TEST_DIE_AFTER_POSTPONE: koniec procesu zaraz po „odłożono”");
+                Native.TerminateProcess(Native.GetCurrentProcess(), 9);
+            }
             StartAppIfComplete(Task, false);
             CleanEnd();
             Release();
@@ -388,7 +409,8 @@ namespace RegulatedDay
         void FailAfterAttempts()
         {
             Log.Warn("dwie nieudane próby instalacji " + Task.Version + " – przestaję");
-            Fail("Aktualizacja do " + Task.Version + " nie udała się.", !FilesComplete());
+            // The window „nie udała się” always; the app starts too when its files are complete (it shows the banner).
+            Fail("Aktualizacja do " + Task.Version + " nie udała się.", true, FilesComplete());
         }
 
         void GiveUpAfterStarts()
@@ -398,16 +420,16 @@ namespace RegulatedDay
             Fail("Aktualizacja do " + Task.Version + " nie udała się.", broken);
         }
 
-        /// <summary>„nieudane”: the entry removed; complete files – the app starts (with its banner), otherwise the window.</summary>
-        void Fail(string message, bool showWindow)
+        /// <summary>„nieudane”: the entry removed; the app started (it shows the banner) and/or the window „nie udała się”.</summary>
+        void Fail(string message, bool showWindow, bool startApp = true)
         {
             Task.Set("state", "failed");
             Task.Set("message", message);
             Task.Save();
             RunEntry.Remove();
-            if (showWindow) Ui.Failed(Task.Version);
-            else StartAppIfComplete(Task, false);
+            if (startApp && (!showWindow || FilesComplete())) StartAppIfComplete(Task, false);
             CleanEnd();
+            if (showWindow) Ui.Failed(Task.Version);
             Release();
         }
 

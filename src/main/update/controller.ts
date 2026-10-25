@@ -118,6 +118,10 @@ export class UpdateController {
     // Without the helper only the exit and „Zainstaluj teraz” install (the FI path); never the night or the logon.
     if (!owner && (trigger === 'night' || trigger === 'logon')) return false
     if (trigger === 'logon' && this.guardDisabled) return false
+    // „nieudane” for X holds its automatic installation on this computer; only a click („Zainstaluj teraz”, „Spróbuj
+    // ponownie”) or a newer release resumes it.
+    const t = readTask(readSharedSync(join(this.updateDir, ready.version, 'task.json')))
+    if (trigger !== 'now' && t.kind === 'task' && t.task.state === 'failed') return false
     this.installing = true
     this.updater!.markInstalling()
     this.d.beforeInstall()
