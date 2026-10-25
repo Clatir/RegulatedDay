@@ -20,6 +20,8 @@ export interface PanelDeps {
   /** The rectangle to open at for a content height (CSS px). */
   place: (height: number) => Rect
   helperRunning: () => boolean
+  /** Out of recordings and screen sharing (this computer's setting, on by default). */
+  hideFromCapture: () => boolean
   log: (msg: string) => void
 }
 
@@ -112,6 +114,7 @@ export class IconPanel {
     if (this.win.isDestroyed()) return
     const r = this.d.place(this.contentHeight)
     this.win.setBounds(r)
+    this.win.setContentProtection(this.d.hideFromCapture())
     this.openedAt = Date.now()
     this.touchedAt = this.openedAt
     this.unfolded = false

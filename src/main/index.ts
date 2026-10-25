@@ -605,6 +605,7 @@ async function main(): Promise<void> {
       return panelRect(icon, cursor, all, { width, height: Math.min(height, wa.height) })
     },
     helperRunning: () => !!helper?.running,
+    hideFromCapture: () => prefs().hideFromCapture,
     log: (m) => trial.log(m)
   })
   panel.onExternalClose = quitApp
@@ -658,6 +659,11 @@ process.on('unhandledRejection', (reason) => log('error', 'nieobsłużone odrzuc
 app.on('render-process-gone', (_e, contents, details) => {
   log('error', `okno przestało działać (${viewOf(contents)}): ${details.reason}, kod ${details.exitCode}`)
   if (details.reason !== 'clean-exit' && !quitting && !contents.isDestroyed()) contents.reload()
+})
+// A window that stops answering leaves a line in the log, for every window (the bar and the panel too).
+app.on('browser-window-created', (_e, win) => {
+  win.on('unresponsive', () => log('warn', `okno nie odpowiada: ${win.getTitle()}`))
+  win.on('responsive', () => log('info', `okno znów odpowiada: ${win.getTitle()}`))
 })
 app.on('child-process-gone', (_e, details) => log('warn', `proces pomocniczy Electrona zakończył się: ${details.type} ${details.name ?? ''} ${details.reason}, kod ${details.exitCode}`))
 
