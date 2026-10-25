@@ -1,17 +1,21 @@
 // adapted from FI src/main/index.ts @ de81f2b
 /**
  * The main process: loaded by start.ts once the identity of this run is fixed. It owns the windows (main, icon panel,
- * desktop bar), the tray icon, the helper, the trial of E0 and, from E1 on, the timer and the deadlines (spec „Baza kodu
- * i technika”: the timer, the deadlines and the widget's writes belong to the main process, not to the main window).
+ * desktop bar), the tray icon, the helper, updates, the life marker, the trial of E0 and, from E1 on, the timer and the
+ * deadlines (spec „Baza kodu i technika”: the timer, the deadlines and the widget's writes belong to the main process).
  */
+import { spawn } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { BrowserWindow, Menu, app, clipboard, crashReporter, ipcMain, powerMonitor, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
+import { BrowserWindow, Menu, app, clipboard, crashReporter, ipcMain, net, powerMonitor, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
 import { CH, type AppInfo, type BarLayout, type TrialAction, type UpdateAction, type ViewKind, type WidgetAction } from '@shared/api'
 import type { MachinePrefs } from '@shared/machine'
 import { patchMachinePrefs } from '@shared/machine'
 import { barRect, cornerOffset, panelRect } from '@shared/placement'
 import { urlFromArgv, type PanelTarget } from '@shared/protocol'
-import { UPDATES_OFF } from '@shared/updateView'
+import { compareVersions } from '@shared/update'
+import type { UpdateView } from '@shared/updateView'
 import { BAR_NOTE_FAILED, BAR_NOTE_HELPER, type WidgetView } from '@shared/widget'
 import { identity } from './identity'
 import { flushLog, initLog, log } from './log'
@@ -23,22 +27,27 @@ import { createMainWindow } from './windows/mainWindow'
 import { DesktopBar } from './windows/desktopBar'
 import { IconPanel } from './windows/iconPanel'
 import { HelperClient, type HelperMessage } from './helper/client'
+import { helperProgram } from './helper/program'
 import { notify } from './notify'
 import { Trial } from './trial'
-import { helperProgram } from './helper/program'
+import { runStartup, type Banner, type StartupResult } from './update/startup'
+import { cleanUpdateFolders, fsDeps, manifestOf, writeLaunched, writePlan } from './update/files'
+import { UpdateController } from './update/controller'
+import { guardMode } from './update/install'
+import { LifeKeeper, judge } from './crash/lifeMarker'
+import { recordRun } from './crash/versions'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
 crashReporter.start({ uploadToServer: false, submitURL: '', compress: false })
 
 const APP_TITLE = identity.name
-
-// One instance per identity (the lock is tied to the folder of app data): a second start only shows the window – one
-// from the autostart (--hidden) not even that – or opens the panel for an address.
-const isPrimaryInstance = app.requestSingleInstanceLock()
-if (!isPrimaryInstance) app.quit()
-
-const config = new ConfigStore(app.getPath('userData'), Number(process.env.RD_CONFIG_WRITE_DELAY_MS) || 0)
+const userData = app.getPath('userData')
+const updateDir = join(userData, 'update')
+const helperDir = app.isPackaged ? join(process.resourcesPath, 'helper') : join(app.getAppPath(), 'build', 'helper')
+const config = new ConfigStore(userData, Number(process.env.RD_CONFIG_WRITE_DELAY_MS) || 0)
 const preload = join(__dirname, '../preload/index.js')
+const runId = randomBytes(8).toString('hex')
+const life = new LifeKeeper(userData)
 
 let mainWindow: BrowserWindow | null = null
 let bar: DesktopBar | null = null
@@ -46,9 +55,12 @@ let panel: IconPanel | null = null
 let tray: AppTray | null = null
 let helper: HelperClient | null = null
 let autostart: Autostart | null = null
+let updates: UpdateController | null = null
 let thisComputer = ''
 const trial = new Trial()
 let quitting = false
+/** Windows ends the session (logoff, shutdown): never an installer now (spec), the record of closing written at once. */
+let sessionEnding = false
 /** The bar's content height now (CSS px), whether something in it is unfolded, and its height folded. */
 let barLayoutNow: BarLayout = { height: 64, unfolded: false }
 let barFoldedHeight = 64
@@ -88,7 +100,7 @@ function widgetView(): WidgetView {
 
 function showWidget(view: WidgetView): void {
   tray?.set({ color: view.iconColor, dot: view.dot, drop: view.drop }, view.tooltip)
-  broadcast(CH.onWidget, view)
+  broadcast(CH.onWidget, widgetView())
   layoutBar()
 }
 
@@ -116,9 +128,12 @@ function layoutBar(): void {
   helper.send('bar.watch', { hwnd: bar.hwnd })
 }
 
+let lastBarState = ''
 function onHelperEvent(m: HelperMessage): void {
   if (m.type === 'bar') {
     trial.log(`pasek: ${String(m.state)}${m.detail ? ` – ${String(m.detail)}` : ''}`)
+    if (m.state !== lastBarState) log('info', `pasek pulpitu: ${String(m.state)}${m.detail ? ` (${String(m.detail)})` : ''}`)
+    lastBarState = String(m.state)
     if (m.state === 'confirmed') {
       barProblem = null
       bar?.apply({ visible: true })
@@ -135,10 +150,10 @@ function onHelperEvent(m: HelperMessage): void {
     trial.log('Eksplorator uruchomiony ponownie – ikona ustawiona jeszcze raz')
     tray?.refresh()
     layoutBar()
-  } else if (m.type === 'notificationState') {
-    trial.log(`stan powiadomień: ${String(m.state)}`)
   } else if (m.type === 'power') {
-    trial.log(`zasilanie: ${JSON.stringify(m)}`)
+    trial.log(`zasilanie: ${String(m.event)}${m.value !== undefined ? ` = ${String(m.value)}` : ''}`)
+  } else if (m.type === 'session' || m.type === 'display') {
+    trial.log(`${m.type === 'session' ? 'sesja' : 'ekrany'}: ${String(m.event ?? 'zmiana')}`)
   } else {
     trial.log(`pomocnik: ${JSON.stringify(m)}`)
   }
@@ -156,7 +171,6 @@ function quitApp(): void {
   log('info', 'zamykanie: wyjście z aplikacji')
   if (bar) bar.quitting = true
   if (panel) panel.quitting = true
-  helper?.stop()
   tray?.destroy()
   void config
     .flush()
@@ -170,6 +184,18 @@ function showMainWindow(page?: string): void {
   mainWindow.show()
   mainWindow.focus()
   if (page) mainWindow.webContents.send(CH.onNavigate, page)
+}
+
+/**
+ * The end of the Windows session, from any window (spec „Pliki na OneDrive”): the app never holds Windows up – the record
+ * of closing goes out at once, one synchronous write without fsync; no installer starts now.
+ */
+function onSystemEnd(): void {
+  if (sessionEnding) return
+  sessionEnding = true
+  quitting = true
+  life.close('system')
+  log('info', 'koniec sesji Windows – zapis zamknięcia')
 }
 
 // ------------------------------------------------------------------ the tray's menu
@@ -209,9 +235,11 @@ function trialMenu(): MenuItemConstructorOptions[] {
 }
 
 function trayMenu(): MenuItemConstructorOptions[] {
+  const ready = updates?.updater?.readyRelease
   return [
     { label: 'Otwórz Regulated Day', click: () => showMainWindow() },
     { label: 'Próba', submenu: trialMenu() },
+    ...(ready ? [{ label: `Zainstaluj teraz (${ready.version})`, click: () => void updates?.action('installNow') }] : []),
     { type: 'separator' },
     { label: 'Zakończ', click: () => quitApp() }
   ]
@@ -246,7 +274,7 @@ async function trialAction(action: TrialAction, arg?: string): Promise<void> {
     const now = all.find((d) => current && current.x >= d.workArea.x && current.x < d.workArea.x + d.workArea.width) ?? primaryDisplay()
     const target = action === 'nextDisplay' ? all[(all.indexOf(now) + 1) % all.length]! : now
     const corner = (action === 'corner' ? arg : 'bottom-left') as 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right'
-    const size = { width: current?.width ?? 480, height: Math.ceil(64 * prefs().zoom) }
+    const size = { width: current?.width ?? 480, height: Math.ceil(barFoldedHeight * prefs().zoom) }
     await setPrefs({ barPlacement: { display: { label: target.label, bounds: target.bounds }, offset: cornerOffset(corner, target.workArea, size) } })
   } else if (action === 'powerDisplay') {
     helper?.send('power', { display: true, system: true, reason: 'Regulated Day: próba nagrywania wykładu' })
@@ -294,7 +322,7 @@ function registerIpc(): void {
     electron: process.versions.electron ?? '',
     identity: identity.kind,
     name: identity.name,
-    userData: app.getPath('userData'),
+    userData,
     computerId: thisComputer,
     helper: helper?.status ?? { state: 'off', note: null },
     platform: process.platform
@@ -309,7 +337,7 @@ function registerIpc(): void {
     return autostart!.read()
   })
   handle(CH.openLogs, async () => {
-    await shell.openPath(join(app.getPath('userData'), 'logs'))
+    await shell.openPath(join(userData, 'logs'))
   })
   handle(CH.widget, () => widgetView())
   handle(CH.copyText, (_e, text: unknown) => {
@@ -337,11 +365,11 @@ function registerIpc(): void {
   handle(CH.setTrial, (_e, patch: unknown) => trial.set(patch))
   handle(CH.trialAction, (_e, action: TrialAction, arg?: string) => trialAction(action, arg))
   handle(CH.trialLog, () => trial.history())
-  handle(CH.update, () => UPDATES_OFF(app.getVersion(), 'Aktualizacje pojawią się w tej wersji próbnej później.'))
-  handle(CH.updateAction, (_e, _action: UpdateAction) => UPDATES_OFF(app.getVersion(), 'Aktualizacje pojawią się w tej wersji próbnej później.'))
+  handle(CH.update, () => updates!.view())
+  handle(CH.updateAction, (_e, action: UpdateAction) => updates!.action(action))
 }
 
-// ------------------------------------------------------------------ start
+// ------------------------------------------------------------------ the start
 
 /**
  * The windows need no permission at all; „notifications” above all is refused in every session of every identity – only
@@ -362,18 +390,132 @@ function handleArgv(argv: readonly string[], firstStart: boolean): void {
   if (!firstStart && !argv.includes(HIDDEN_ARG)) showMainWindow()
 }
 
-app.on('second-instance', (_e, argv) => handleArgv(argv, false))
+const guardExe = (dir: string): string => (existsSync(join(dir, 'rd-guard.exe')) ? join(dir, 'rd-guard.exe') : join(helperDir, 'rd-guard.exe'))
 
-app.whenReady().then(async () => {
-  if (!isPrimaryInstance) return
+/** The start sequence of the production app (update/startup.ts): before the lock of one copy, without the helper. */
+async function startupGate(): Promise<StartupResult> {
+  if (!identity.updates || process.platform !== 'win32') return { kind: 'normal', banner: null, afterLock: null, confirmed: null }
+  return runStartup({
+    updateDir,
+    version: app.getVersion(),
+    argv: process.argv,
+    protocol: identity.protocol ?? 'regulatedday',
+    now: () => Date.now(),
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    ...fsDeps(),
+    startGuard: (dir) => {
+      const child = spawn(guardExe(dir), ['--task', join(dir, 'task.json'), '--hidden'], { cwd: dir, detached: true, stdio: 'ignore' })
+      child.on('error', (e) => log('error', `strażnik nie wystartował: ${e.message}`))
+      child.unref()
+      let exited = false
+      child.on('exit', () => {
+        exited = true
+      })
+      return child.pid ? { pid: child.pid, exited: () => exited } : null
+    },
+    killOwner: (pid, startMs) => guardMode(guardExe(updateDir), ['--kill', '--pid', String(pid), '--start', String(startMs)]).killed === true,
+    removeGuardEntry: () => void guardMode(guardExe(updateDir), ['--run-entry', 'remove']),
+    log
+  })
+}
+
+/** „Co nowego” after an update: this version's section of CHANGELOG (bundled), shown at the first opening of the window. */
+function whatsNew(): UpdateView['whatsNew'] {
+  const last = config.get().updates.lastRunVersion
+  const version = app.getVersion()
+  if (!last || last === version) return null
+  try {
+    if (compareVersions(version, last) <= 0) return null
+  } catch {
+    return null
+  }
+  const file = join(app.getAppPath(), 'CHANGELOG.md')
+  let notes = ''
+  try {
+    const text = readFileSync(file, 'utf8')
+    const at = text.indexOf(`## ${version}`)
+    if (at >= 0) notes = text.slice(text.indexOf('\n', at) + 1).split(/\n## /)[0]!.trim()
+  } catch {
+    notes = ''
+  }
+  return { version, notes }
+}
+
+async function helperReady(ms: number): Promise<boolean> {
+  if (!helper) return false
+  if (helper.running) return true
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms)
+    helper!.on('status', (s) => {
+      if (s.state === 'running') {
+        clearTimeout(timer)
+        resolve(true)
+      }
+    })
+  })
+}
+
+/** The previous run's end from the life marker (a crash or not), then this run's marker. */
+async function judgePreviousRun(): Promise<void> {
+  const prev = life.previous()
+  const close = life.closeRecord()
+  const installerAt = life.installerMarker()
+  const dumps = LifeKeeper.mainDumpSince(app.getPath('crashDumps'), prev?.startedAt ?? Number.MAX_SAFE_INTEGER)
+  let sessionInfo: { prevRunId: string | null } | null = null
+  if (process.platform === 'win32' && (await helperReady(5000))) {
+    try {
+      const r = await helper!.request('session.start', { runId })
+      sessionInfo = { prevRunId: r.existed === true && typeof r.prevRunId === 'string' ? r.prevRunId : null }
+    } catch (e) {
+      log('warn', 'klucz sesji logowania niedostępny', e instanceof Error ? e.message : e)
+    }
+  }
+  const verdict = judge(prev, close, sessionInfo, installerAt, dumps.found)
+  if (dumps.types.length) log('info', `nowe zrzuty awarii: ${dumps.types.join(', ')}`)
+  log(verdict.kind === 'crash' ? 'warn' : 'info', `poprzednie uruchomienie: ${verdict.kind} (${verdict.why})`)
+  life.start(runId, app.getVersion())
+  recordRun(userData, app.getVersion(), verdict.kind === 'crash' && verdict.previous ? verdict.previous.version : null, log)
+}
+
+async function main(): Promise<void> {
+  initLog(userData)
+  const startup = await startupGate()
+  if (startup.kind === 'exit') {
+    log('info', `start zakończony: ${startup.reason}`)
+    flushLog()
+    app.exit(0)
+    return
+  }
+  // One instance per identity (the lock is tied to the folder of app data): a second start only shows the window – one
+  // from the autostart (--hidden) not even that – or opens the panel for an address.
+  if (!app.requestSingleInstanceLock()) {
+    app.quit()
+    return
+  }
+  app.on('second-instance', (_e, argv) => handleArgv(argv, false))
+  await app.whenReady()
   Menu.setApplicationMenu(null)
-  initLog(app.getPath('userData'))
   log('info', `start v${app.getVersion()} (${identity.kind}, ${identity.name}) Electron ${process.versions.electron}`)
+  let banner: Banner | null = startup.kind === 'normal' ? (startup.afterLock?.() ?? startup.banner) : null
+  if (startup.kind === 'normal' && startup.confirmed) {
+    writeLaunched(userData, startup.confirmed.version, startup.confirmed.attemptId)
+    log('info', `uruchomiono wersję ${startup.confirmed.version} (próba ${startup.confirmed.attemptId})`)
+  }
+  if (identity.updates) {
+    cleanUpdateFolders(updateDir, app.getVersion(), (m) => log('info', m))
+    // The first start of a new version: its version and Electron's against the manifest; a mismatch repairs like an
+    // interrupted installation (the guard).
+    const m = manifestOf(updateDir, app.getVersion())
+    if (m && (m.version !== app.getVersion() || m.electron !== process.versions.electron)) {
+      log('warn', `wersja niezgodna z manifestem (${m.version}/${m.electron}) – strażnik naprawia instalację`)
+      spawn(guardExe(join(updateDir, app.getVersion())), ['--task', join(updateDir, app.getVersion(), 'task.json'), '--hidden'], { detached: true, stdio: 'ignore' }).unref()
+    }
+  }
   await config.load()
   if (config.setAside) log('warn', `config.json uszkodzony – odłożony jako ${config.setAside}, ustawienia domyślne`)
   if (config.loadFailed) log('warn', `config.json nieczytelny: ${config.loadFailed} – nic nie jest nadpisywane`)
   try {
-    const id = await computerId(app.getPath('userData'), config.get().computerId)
+    const id = await computerId(userData, config.get().computerId)
     thisComputer = id.id
     if (id.created) log('info', `nowy identyfikator komputera ${id.id}`)
     if (config.get().computerId !== id.id && !config.loadFailed) await config.update({ computerId: id.id })
@@ -389,22 +531,43 @@ app.whenReady().then(async () => {
 
   helper = new HelperClient({
     program: helperProgram(),
-    cwd: app.getPath('userData'),
-    init: { identity: identity.name, aumid: identity.appUserModelId, userData: app.getPath('userData'), logs: join(app.getPath('userData'), 'logs'), parentPid: process.pid },
+    cwd: userData,
+    init: { identity: identity.name, aumid: identity.appUserModelId, userData, logs: join(userData, 'logs'), parentPid: process.pid },
     log
   })
   helper.on('event', onHelperEvent)
   helper.on('status', (s) => {
     trial.log(`pomocnik: ${s.state}${s.note ? ` (${s.note})` : ''}`)
-    if (s.state === 'running') {
-      helper?.send('foreground.watch')
-    }
+    if (s.state === 'running') helper?.send('foreground.watch')
     layoutBar()
     broadcast(CH.onWidget, widgetView())
+    broadcast(CH.onUpdate, updates?.view())
   })
+  helper.start()
+
+  updates = new UpdateController({
+    enabled: identity.updates && app.isPackaged && process.platform === 'win32',
+    version: app.getVersion(),
+    userData,
+    helperDir,
+    fetch: (url, init) => net.fetch(url, init),
+    helperRunning: () => !!helper?.running,
+    autostartOn: () => config.get().autostart.enabled,
+    nightInstall: () => config.get().updates.nightInstall,
+    beforeInstall: () => life.close('update'),
+    quit: quitApp,
+    openExternal: (url) => void shell.openExternal(url),
+    broadcast: (v) => {
+      broadcast(CH.onUpdate, v)
+      tray?.refresh()
+    },
+    log
+  })
+  // The local plan of sessions and classes for the guard: E1 / E4a fill it; empty, it covers the next 7 days.
+  if (identity.updates) writePlan(userData, [])
 
   registerIpc()
-  tray = new AppTray({ title: APP_TITLE, iconDir: join(app.getPath('userData'), 'icons'), click: () => panel?.toggle(), menu: trayMenu, log })
+  tray = new AppTray({ title: APP_TITLE, iconDir: join(userData, 'icons'), click: () => panel?.toggle(), menu: trayMenu, log })
   tray.ensure()
 
   const startHidden = process.argv.includes(HIDDEN_ARG)
@@ -425,9 +588,12 @@ app.whenReady().then(async () => {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+  mainWindow.on('query-session-end', onSystemEnd)
+  mainWindow.on('session-end', onSystemEnd)
 
   bar = new DesktopBar(preload, loadView)
   bar.onExternalClose = quitApp
+  bar.onSystemEnd(onSystemEnd)
   panel = new IconPanel(preload, loadView, {
     place: (height) => {
       const all = displays()
@@ -441,11 +607,11 @@ app.whenReady().then(async () => {
     log: (m) => trial.log(m)
   })
   panel.onExternalClose = quitApp
+  panel.onSystemEnd(onSystemEnd)
 
   trial.on('change', (view: WidgetView) => showWidget(view))
   trial.on('log', (line: string) => broadcast(CH.onTrialLog, line))
   showWidget(widgetView())
-  helper.start()
 
   screen.on('display-metrics-changed', () => {
     tray?.refresh()
@@ -456,8 +622,15 @@ app.whenReady().then(async () => {
   powerMonitor.on('resume', () => layoutBar())
   powerMonitor.on('unlock-screen', () => layoutBar())
 
+  await judgePreviousRun()
+  if (banner) log('warn', `aktualizacja do ${banner.version}: ${banner.kind === 'failed' ? 'nie udała się' : 'nie dokończyła się'}`)
+  updates.init(banner, whatsNew())
+  banner = null
+  if (config.get().updates.lastRunVersion !== app.getVersion() && !config.loadFailed) void config.update({ updates: { ...config.get().updates, lastRunVersion: app.getVersion() } })
+  // Started by the autostart with a downloaded update: the guard installs it at the start of Windows.
+  if (startHidden && updates.atAutostart()) return
   handleArgv(process.argv, true)
-})
+}
 
 // The windows are hidden, never closed, while the app runs: this fires only when it quits.
 app.on('window-all-closed', () => {
@@ -471,6 +644,10 @@ app.on('before-quit', () => {
 })
 
 app.on('will-quit', () => {
+  // A ready download installs at the full exit (never at the end of the Windows session).
+  updates?.onQuit(sessionEnding)
+  helper?.stop()
+  if (!sessionEnding) life.close('quit')
   log('info', 'koniec pracy')
   flushLog()
 })
@@ -482,3 +659,22 @@ app.on('render-process-gone', (_e, contents, details) => {
   if (details.reason !== 'clean-exit' && !quitting && !contents.isDestroyed()) contents.reload()
 })
 app.on('child-process-gone', (_e, details) => log('warn', `proces pomocniczy Electrona zakończył się: ${details.type} ${details.name ?? ''} ${details.reason}, kod ${details.exitCode}`))
+
+// Test hooks of CI (RD_TEST_CRASH): a crash of the main process, the renderer or the GPU – only the first is a crash.
+if (process.env.RD_TEST_CRASH) {
+  app.whenReady().then(() =>
+    setTimeout(() => {
+      const kind = process.env.RD_TEST_CRASH
+      log('info', `RD_TEST_CRASH=${kind}`)
+      if (kind === 'main') process.crash()
+      else if (kind === 'renderer') mainWindow?.webContents.forcefullyCrashRenderer()
+      else if (kind === 'gpu') void new BrowserWindow({ show: false }).loadURL('chrome://gpucrash').catch(() => undefined)
+    }, Number(process.env.RD_TEST_CRASH_MS) || 3000)
+  )
+}
+
+main().catch((e) => {
+  log('error', 'start aplikacji nie udał się', e)
+  flushLog()
+  app.exit(1)
+})

@@ -17,7 +17,7 @@ module.exports = {
   directories: { output: 'release', buildResources: 'resources' },
   // Everything is bundled by electron-vite into out/ (all libraries are devDependencies), so the package contains no
   // node_modules and no native modules.
-  files: ['out/**', 'package.json', '!**/*.map'],
+  files: ['out/**', 'package.json', 'CHANGELOG.md', '!**/*.map'],
   extraResources: [{ from: 'build/helper', to: 'helper', filter: ['*.exe', '*.exe.config', '!roslyn/**'] }],
   asar: true,
   npmRebuild: false,

@@ -71,6 +71,12 @@ export class DesktopBar {
   /** Called when something outside closes the window (an installer's taskkill): the app quits. */
   onExternalClose: (() => void) | null = null
 
+  /** The end of the Windows session, in this window too (spec: the record goes out from every window). */
+  onSystemEnd(cb: () => void): void {
+    this.win.on('query-session-end', cb)
+    this.win.on('session-end', cb)
+  }
+
   /** The bar's window handle (the helper lays and checks it). */
   get hwnd(): string {
     const buf = this.win.getNativeWindowHandle()

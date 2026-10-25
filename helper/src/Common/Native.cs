@@ -259,6 +259,7 @@ namespace RegulatedDay
         [DllImport("kernel32.dll")] public static extern void GetSystemTimeAsFileTime(out long time);
         [DllImport("kernel32.dll")] public static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
         [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+        [DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint mode);
         [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
         [DllImport("kernel32.dll")] public static extern bool ProcessIdToSessionId(int pid, out int session);
         [DllImport("advapi32.dll", SetLastError = true)] public static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);

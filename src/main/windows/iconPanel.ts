@@ -78,6 +78,12 @@ export class IconPanel {
     void load(this.win)
   }
 
+  /** The end of the Windows session, in this window too. */
+  onSystemEnd(cb: () => void): void {
+    this.win.on('query-session-end', cb)
+    this.win.on('session-end', cb)
+  }
+
   get isOpen(): boolean {
     return this.win.isVisible()
   }
