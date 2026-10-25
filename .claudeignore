@@ -1,0 +1,23 @@
+# Logi
+*.log
+logs/
+
+# Raporty testów i pokrycia
+coverage/
+test-results/
+playwright-report/
+TestResults/
+*.trx
+
+# Buildinfo i artefakty
+*.tsbuildinfo
+*.buildinfo
+dist/
+build/
+bin/
+obj/
+node_modules/
+
+# Duże fixtures
+fixtures/large/
+**/fixtures/*.big.*

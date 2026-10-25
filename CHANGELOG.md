@@ -1,0 +1,4 @@
+# Changelog
+
+## [Unreleased]
+- Inicjalizacja projektu.

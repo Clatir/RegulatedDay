@@ -1,0 +1,31 @@
+# Zależności i build
+node_modules/
+dist/
+build/
+bin/
+obj/
+.venv/
+__pycache__/
+
+# Logi i raporty testów
+*.log
+logs/
+coverage/
+test-results/
+playwright-report/
+TestResults/
+
+# Środowisko i sekrety
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code (lokalne)
+.claude/settings.local.json
