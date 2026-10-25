@@ -124,17 +124,21 @@ jobs:
           Get-TimeZone | Select-Object Id
           Get-Culture | Select-Object Name
       - name: Samotest pomocnika
+        if: ${{ !cancelled() }}
         run: npx playwright test -c playwright.update.config.ts tests/update/helper.spec.ts
       - name: E2E spakowanej aplikacji z prawdziwym pomocnikiem
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           $env:RD_E2E_EXECUTABLE = (Resolve-Path 'release\win-unpacked\Regulated Day.exe').Path
           $env:RD_E2E_REAL_HELPER = '1'
           npx playwright test
       - name: Instalacja, tożsamości i deinstalacja
+        if: ${{ !cancelled() }}
         run: npx playwright test -c playwright.update.config.ts tests/update/install.spec.ts
       # The next patch version built like a future release (release-next\): the four update paths go N → N+1.
       - name: Następna wersja do testu aktualizacji
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           $next = node scripts/next-version.mjs
@@ -146,12 +150,13 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Cztery ścieżki aktualizacji i ścieżka FI
+        if: ${{ !cancelled() }}
         run: npx playwright test -c playwright.update.config.ts tests/update/update-paths.spec.ts
         env:
           RD_UPDATE_FROM: ${{ github.workspace }}\release
           RD_UPDATE_TO: ${{ github.workspace }}\release-next
       - name: Scenariusze instalacji (strażnicy, wyjątki, odłożono, blokady, zrzuty)
-        if: success() || failure()
+        if: ${{ !cancelled() }}
         run: npx playwright test -c playwright.update.config.ts tests/update/scenarios.spec.ts
         env:
           RD_UPDATE_FROM: ${{ github.workspace }}\release

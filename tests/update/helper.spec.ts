@@ -5,7 +5,7 @@
  * and the zone „Central European Standard Time” set by the job, so a Polish format never leaks into the JSON.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, existsSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, existsSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -66,7 +66,8 @@ test('samotest pomocnika: sesja, powiadomienia, układ SYSTEM_POWER_CAPABILITIES
   expect(['enabled', 'disabledForApplication', 'disabledForUser', 'disabledByGroupPolicy', 'disabledByManifest', 'unknown']).toContain(s.toastSetting)
   expect(s.culture).toBe('')
   expect(String(s.framework)).toMatch(/^4\./)
-  expect(s.cwd).toBe(cwd)
+  // The runner's temp folder is a short 8.3 path (RUNNER~1): compared by the long one.
+  expect(String(s.cwd).toLowerCase()).toBe(realpathSync.native(cwd).toLowerCase())
   console.log('samotest pomocnika:', JSON.stringify(s))
 
   // The volatile key: the second run in the same logon session sees the first.
