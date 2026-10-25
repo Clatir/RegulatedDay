@@ -296,6 +296,7 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D287 | Nawigacja okna głównego: menu boczne z nazwami ekranów, u góry nazwa „Regulated Day” i pasek widgetu (25.10.2026) |
 | D288 | Ikona aplikacji: sylwetka lampki biurkowej w kolorze lampki (#F2B66D) na zaokrąglonym kwadracie w kolorze tła (#211B23) (25.10.2026) |
 | D289 | Ikona przy zegarze: pełne kółko w kolorze paska, kropka w prawym górnym rogu z ciemną obwódką, kropla w prawym dolnym (25.10.2026) |
+| D290 | Instalator tworzy skrót na pulpicie i w menu Start, jak w FI (26.10.2026) |
 
 **Decyzje techniczne (T)**, zaakceptowane 21.10.2026; szczegóły są w rozdziałach powyżej
 
