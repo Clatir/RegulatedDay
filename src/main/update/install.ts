@@ -108,14 +108,13 @@ export function startInstall(i: InstallInput): boolean {
     writeFileSync(taskFile, writeTask(task))
     const entry = guardMode(join(dir, 'rd-guard.exe'), ['--run-entry', 'set'])
     if (entry.ok !== true) i.log('warn', `wpis strażnika nie zapisany: ${JSON.stringify(entry)}`)
-    if (i.trigger === 'logon') {
-      i.log('info', `instalacja ${i.version} przy następnym starcie Windows (strażnik z autostartu)`)
-      return true
-    }
-    const child = spawn(join(dir, 'rd-install.exe'), ['--task', taskFile, '--wait-pid', String(i.appPid)], { cwd: dir, detached: true, stdio: 'ignore' })
-    child.on('error', (e) => i.log('error', `pomocnik instalacji nie wystartował: ${e.message}`))
+    // At the start of Windows the guard owns the installation (as from its Run entry); otherwise the install helper.
+    const owner = i.trigger === 'logon' ? join(dir, 'rd-guard.exe') : join(dir, 'rd-install.exe')
+    const args = ['--task', taskFile, '--wait-pid', String(i.appPid), ...(i.trigger === 'logon' ? ['--autostart'] : [])]
+    const child = spawn(owner, args, { cwd: dir, detached: true, stdio: 'ignore' })
+    child.on('error', (e) => i.log('error', `właściciel instalacji nie wystartował: ${e.message}`))
     child.unref()
-    i.log('info', `instalacja ${i.version} (${i.trigger}): pomocnik instalacji pid ${child.pid ?? '?'}`)
+    i.log('info', `instalacja ${i.version} (${i.trigger}): ${i.trigger === 'logon' ? 'strażnik' : 'pomocnik instalacji'} pid ${child.pid ?? '?'}`)
     return child.pid != null
   }
   // The FI path: no owner, no power request, no guard's entry (the settings say it).

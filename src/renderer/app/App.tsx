@@ -14,6 +14,7 @@ import { Toasts } from '../components/Toasts'
 import { EmptyState, cx } from '../components/ui'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { TrialPage } from '../features/trial/TrialPage'
+import { Banners } from './Banners'
 
 export const PAGE_LABEL: Record<Page, string> = {
   today: 'Dziś',
@@ -124,6 +125,7 @@ export function App() {
     // Below 1024×700 (a small work area, the scale 150 %) the whole window scrolls vertically.
     <div className="flex h-full min-h-[460px] flex-col overflow-y-auto" data-testid="main-window">
       <Header>{view && <Bar view={view} mode="main" grows="down" />}</Header>
+      <Banners />
       <div className="flex min-h-0 flex-1">
         <SideMenu page={page} />
         <main className="min-w-0 flex-1 overflow-y-auto" key={page} data-testid={`page-${page}`}>

@@ -9,8 +9,9 @@ import { join } from 'node:path'
 import { GITHUB_API, RELEASES_PAGE } from '@shared/update'
 import { UPDATES_OFF, type UpdateView } from '@shared/updateView'
 import type { UpdateAction } from '@shared/api'
-import type { TaskStart, TaskTrigger } from '@shared/task'
+import { readTask, type TaskStart, type TaskTrigger } from '@shared/task'
 import { Updater } from './updater'
+import { readSharedSync } from './files'
 import { guardMode, stageInstall, startInstall } from './install'
 import type { FetchLike } from './download'
 
@@ -88,8 +89,14 @@ export class UpdateController {
     }
     const delay = Number(process.env.RD_UPDATE_CHECK_DELAY_MS) || 30_000
     this.updater.startAuto(delay)
+    // The night of a test (E4a schedules the real one): installs as soon as a download is ready.
     const night = Number(process.env.RD_TEST_NIGHT_INSTALL_MS)
-    if (night > 0) setTimeout(() => this.install('night', 'hidden'), night).unref?.()
+    if (night > 0) {
+      const t = setInterval(() => {
+        if (this.install('night', 'hidden')) clearInterval(t)
+      }, night)
+      t.unref?.()
+    }
   }
 
   /** A download ready: copied with the programs into update\<X> now, so installing later only starts. */
@@ -145,6 +152,11 @@ export class UpdateController {
 
   /** The app started by the autostart: a ready download is installed by the guard at the start of Windows. */
   atAutostart(): boolean {
+    const ready = this.updater?.readyRelease
+    if (!ready) return false
+    // Put off by the guard (a session or a class): it waits for the exit or the night, never a loop of starts.
+    const t = readTask(readSharedSync(join(this.updateDir, ready.version, 'task.json')))
+    if (t.kind === 'task' && t.task.state === 'postponed') return false
     return this.install('logon', 'hidden')
   }
 

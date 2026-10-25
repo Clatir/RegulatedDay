@@ -131,9 +131,28 @@ jobs:
           $env:RD_E2E_EXECUTABLE = (Resolve-Path 'release\win-unpacked\Regulated Day.exe').Path
           $env:RD_E2E_REAL_HELPER = '1'
           npx playwright test
+      - name: Instalacja, tożsamości i deinstalacja
+        run: npx playwright test -c playwright.update.config.ts tests/update/install.spec.ts
+      # The next patch version built like a future release (release-next\): the four update paths go N → N+1.
+      - name: Następna wersja do testu aktualizacji
+        shell: pwsh
+        run: |
+          $next = node scripts/next-version.mjs
+          npx electron-builder --win --x64 --publish never '-c.directories.output=release-next'
+          $code = $LASTEXITCODE
+          git checkout -- package.json
+          if ($code -ne 0) { exit $code }
+          "RD_UPDATE_TO_VERSION=$next" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Cztery ścieżki aktualizacji i ścieżka FI
+        run: npx playwright test -c playwright.update.config.ts tests/update/update-paths.spec.ts
+        env:
+          RD_UPDATE_FROM: ${{ github.workspace }}\release
+          RD_UPDATE_TO: ${{ github.workspace }}\release-next
       - name: Dziennik niestabilnych testów
         if: always()
-        run: node scripts/flaky.mjs test-results/e2e-report.json
+        run: node scripts/flaky.mjs test-results/e2e-report.json test-results/update-report.json
       # Every new version on the default branch becomes a GitHub release – the app updates itself from it. Bump
       # "version" in package.json and add a CHANGELOG.md section to release.
       - name: Publish v<version> (once per version)

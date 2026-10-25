@@ -691,3 +691,17 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T388 | Node przypięty w `.node-version` na 24.21.0, jak FI; praca lokalna i `build-windows.cmd` używają Node pobranego do `.tools\` (suma SHA-256 z nodejs.org), systemowy Node nie jest zmieniany |
 | T389 | Baza kodu: FI @ de81f2b oraz późniejsze poprawki infrastruktury z FI @ e2cd030 (`scripts/check-context.mjs`, `ci.yml`, `Segmented` w `ui.tsx`); nagłówek pliku podaje hash, z którego plik faktycznie pochodzi |
 | T390 | Numeracja wydań: E0 to 0.1.0, każdy kolejny etap podbija drugą liczbę, poprawki w etapie trzecią; do 1.0 bez wydań testowych (D283) |
+| T391 | Zależności przypięte dokładnie w wersjach rozwiązanych w FI @ e2cd030; czcionki @fontsource/outfit i dm-mono 5.3.0 |
+| T392 | Data bez roku: najbliższa taka data od dziś włącznie, 29.02 najbliższego roku przestępnego; długość z kropką albo przecinkiem odrzucona z komunikatem |
+| T393 | Tożsamość: stałe i rozstrzygnięcie w `identityRules.ts`, dołączanym tylko do `start.js`; `index.ts` czyta ustaloną tożsamość z globalnej zmiennej |
+| T394 | Pomocnik: linie JSON (`cmd`/`id` → `re`; zdarzenia `type`), `alive` co 2 s, cisza 10 s = zamknięcie i ponowny start; uchwyt okna jako liczba dziesiętna; pasek: `bar.watch` / `bar.unwatch` / `bar.retry` |
+| T395 | Pasek pulpitu: pomocnik sprawdza kolejność także ukrytego okna; aplikacja pokazuje pasek dopiero po „confirmed”, każde przeliczenie położenia wysyła `bar.watch` |
+| T396 | Zamknięcie z zewnątrz ukrytego okna (taskkill instalatora) kończy aplikację w 1 s; zwykłe zamknięcie widocznego okna chowa ją do zasobnika |
+| T397 | Instalacja przy starcie Windows: aplikacja z autostartu przekazuje gotową wersję strażnikowi (`--wait-pid`, `--autostart`); koniec sesji pisze tylko zapis zamknięcia; zadanie „odłożono” wstrzymuje kolejne przekazania do wyjścia albo nocy |
+| T398 | Pobrana wersja od razu kopiowana z programami do update\<X>, więc wyjście tylko uruchamia właściciela |
+| T399 | Stan „FI”: żywy instalator najwyżej 10 min zegarowo od zapisu zadania (startująca aplikacja nie zna czasu czuwania) |
+| T400 | Manifest w `afterSign` (rcedit i podpis zmieniają exe, elevate.exe dochodzi później); `publish: null` bez app-update.yml; CHANGELOG w pakiecie do „Co nowego” |
+| T401 | Właściciel instalacji: mutex `Local\RegulatedDay.Owner.<guid>`, guard.lock jako JSON dopełniony do 200 bajtów, sygnał co 1 s tylko w terminie kroku; wpis Run „Regulated Day Guard” z `--autostart`; strażnik uruchomiony przez aplikację dostaje `--hidden` |
+| T402 | Awarie: life.json co 30 s, closing.json, closed-by-installer.json (NSIS), versions.json z 10 wersjami lokalnie (E1 przenosi do obecności); typ procesu zrzutu z adnotacji strumienia Crashpad |
+| T403 | Limit `docs/decyzje.md`: 1000 linii i 200 KB w `scripts/check-context.mjs` |
+| T404 | Odłożone do E4a (potrzebują bloków): strażnik przy logowaniu w sesji trzyma żądania zasilania i ekranu do potwierdzenia pomocnika; pomocnik kończy się po 30 tyknięciach bez stanu blokady |

@@ -14,12 +14,14 @@ import { PanelApp } from './widget/PanelApp'
 import { installEscape } from './lib/escape'
 import { loadMachinePrefs } from './store/machine'
 import { loadWidget } from './store/widget'
+import { loadUpdate } from './store/update'
 
 const view = window.rd.view
 document.documentElement.dataset.view = view
 installEscape()
 void loadMachinePrefs()
 void loadWidget()
+if (view === 'main') void loadUpdate()
 
 const root = view === 'bar' ? <DesktopBarApp /> : view === 'panel' ? <PanelApp /> : <App />
 createRoot(document.getElementById('root') as HTMLElement).render(<StrictMode>{root}</StrictMode>)

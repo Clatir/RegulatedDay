@@ -1,30 +1,30 @@
 # Postęp
 
 ## Stan bieżący
-- Etap: **E0**. Zrobione: repozytorium, dokumenty, „Przed etapem E0” z odpowiedziami (D284–D289, T388–T390).
-- Czeka: uprawnienie `workflow` dla `gh` (bez niego push pliku CI zostanie odrzucony) i „dalej”; potem budowa.
-- E0 w całości (D284): gałąź `claude/0.1.0-e0`, jeden PR, wydanie 0.1.0, jedna pauza na końcu. PR scalam sam po
-  zielonym CI (D285).
+- Etap: **E0** w budowie na gałęzi `claude/0.1.0-e0` (D284: jeden PR, wydanie 0.1.0, pauza na końcu).
+- Zrobione lokalnie (testy jednostkowe i E2E z atrapą pomocnika przechodzą): szkielet (tożsamości, okna, zasobnik,
+  autostart, log, config, motyw, menu boczne, konwencje), pomocnik C# (kolejność okien, pierwszy plan, powiadomienia,
+  sesja, zasilanie), widget próbny i ekran „Próba”, instalator NSIS z manifestem, aktualizacje (lista wydań, pobieranie,
+  plik zadania, sekwencja startu), strażnik i pomocnik instalacji C#, rozpoznawanie awarii, CI (Linux + Windows).
+- **Blokada:** push gałęzi odrzucony – token `gh` bez uprawnienia `workflow`. Użytkownik: `! gh auth refresh -h github.com -s workflow`.
+- Narzędzia Claude Code na tym komputerze działają poza pulpitem: kolejność okien, powłoka, OneDrive i powiadomienia
+  tylko w CI na Windows.
+
+## Kolejka (E0)
+1. Push, PR i rundy CI na Windows (plan ≥ 15): samotest pomocnika, E2E z prawdziwym pomocnikiem, instalacja
+   i tożsamości, cztery ścieżki aktualizacji N → N+1 i ścieżka FI (`tests/update/*.spec.ts`).
+2. Scenariusze CI z rozdziału „Jakość i protokół” jeszcze bez testów: dwóch strażników i aplikacja w obu kolejnościach,
+   10 000 zapisów pliku zadania C# ↔ Node, mutex instalatora trzymany przez test, plik zablokowany przed deinstalacją,
+   wyjątek strażnika w trakcie kopiowania i powtarzany, cztery logowania z „odłożono”, strażnik padający po „odłożono”,
+   ręczny instalator (znacznik < 5 s od zegara), zrzuty renderera, GPU i procesu głównego, otwarcie aplikacji w czasie
+   instalacji, X+1 przy zadaniu X, brak i zawieszenie strażnika, „Uruchom mimo to”, test okna postępu z SendInput i UIA,
+   test paska z najazdem kursora (próba kontrolna z atrybutem title), instalator spowolniony zmienną RD_*.
+3. Lista „do sprawdzenia” (próba ikony, panelu i paska; przerwana instalacja z wylogowaniem), `/code-review`, PR,
+   scalenie, wydanie 0.1.0, pauza.
 
 ## Przed etapem E0 (25.10.2026)
-- Baza: FI @ de81f2b plus poprawki infrastruktury z e2cd030 (T389). Nowe względem FI: pomocnik C# (C# 5, csc.exe),
-  strażnik, pomocnik instalacji, własny skrypt NSIS, manifest, plik zadania, guard.lock, rozpoznawanie awarii,
-  tożsamości produkcyjna / deweloperska / testowa, pasek pulpitu pod oknami.
-- Node 24.21.0 z `.tools\` (T388); systemowy Node 20.12 zostaje nietknięty.
-- Próba widgetu (D286): ekran „Próba” i „Próba ▸” w zasobniku. Sprzęt: drugi monitor, laptop, platforma brokera
-  jako osobny program, nagrywanie wykładów na tym komputerze.
-- Model: Opus 5.5 · xhigh przez cały etap (plan).
-
-## Kolejka (kolejność pracy w E0)
-1. Szkielet z FI: punkt wejścia z tożsamością, jedna kopia, log błędów, config, zasobnik, autostart, motyw lo-fi,
-   menu boczne (D287), komponenty konwencji interfejsu, CI Linux.
-2. Pomocnik C#: protokół JSON, budowanie csc / Roslyn, stan powiadomień, pełny ekran, kolejność okien, zasilanie.
-3. Widget próbny: ikona .ico (D289), panel ikony, pasek pulpitu pod oknami, powiadomienia z regulatedday://, ekran
-   „Próba”.
-4. Instalator NSIS, manifest, aktualizacje z Releases, ścieżka FI.
-5. Strażnik i pomocnik instalacji: plik zadania, guard.lock, przekazanie, obiekt zadania, plik planu, awarie.
-6. CI na Windows: E2E, samotest pomocnika, cztery ścieżki aktualizacji N → N+1 i scenariusze z rozdziału Jakość.
-7. Lista „do sprawdzenia” i pauza.
+- Odpowiedzi: D284–D289. Model: Opus 5.5 · xhigh. Sprzęt próby: drugi monitor, laptop, platforma brokera jako
+  osobny program, nagrywanie wykładów na tym komputerze.
 
 ## Do sprawdzenia na Windows
 (po etapie E0)

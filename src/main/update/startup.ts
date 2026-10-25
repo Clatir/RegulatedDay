@@ -124,8 +124,11 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
     const fresh = task.installerPid == null && d.now() - task.updatedAt < FI_FRESH_MS
     const live = d.now() - task.updatedAt < FI_ALIVE_MAX_MS && (fresh || (task.installerPid != null && d.processAlive(task.installerPid) && d.heldOpen(installer)))
     if (live && (cmp < 0 || (cmp === 0 && !updated))) return { kind: 'exit', reason: `trwa instalacja ${X} (ścieżka FI)` }
-    // After the lock of one copy: the state of the task.
-    return normal(null, () => {
+    // After the lock of one copy: the state of the task. X started with „--updated” confirms „uruchomiono wersję X”.
+    const confirm = cmp === 0 && updated ? task : null
+    return normal(
+      null,
+      () => {
       if (cmp > 0) {
         update(d, dir, task, raw, { state: 'done' })
         return null
@@ -140,7 +143,9 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
       }
       update(d, dir, task, raw, { state: 'failed', message: 'starsza wersja po instalacji' })
       return { kind: 'failed', version: X }
-    })
+      },
+      confirm
+    )
   }
 
   // scheduled / installing / done: an owner (the guard or the install helper) runs the installation.

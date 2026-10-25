@@ -10,6 +10,7 @@ import { setMachinePrefs, useMachine } from '../../store/machine'
 import { useWidget } from '../../store/widget'
 import { Field, Section, Segmented, Toggle } from '../../components/ui'
 import { SHORTCUTS } from '../../lib/shortcuts'
+import { phaseText, updateAction } from '../../store/update'
 
 const IDENTITY_LABEL: Record<AppInfo['identity'], string> = {
   production: 'zainstalowana',
@@ -88,9 +89,27 @@ export function SettingsPage() {
             {info?.version ?? ''}
           </span>
         </Field>
-        <Field label="Stan">
-          <span data-testid="update-note">{update?.note ?? update?.phase ?? ''}</span>
-        </Field>
+        {update && (
+          <Field label="Stan" hint={update.note ?? undefined}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span data-testid="update-phase">
+                {phaseText(update)}
+                {update.available ? ` (${update.available.version})` : ''}
+                {update.error ? ` – ${update.error}` : ''}
+              </span>
+              {update.phase !== 'off' && (
+                <button type="button" className="btn" onClick={() => void updateAction('check').then(() => window.rd.update().then(setUpdate))} data-testid="update-check">
+                  Sprawdź teraz
+                </button>
+              )}
+              {update.phase === 'ready' && (
+                <button type="button" className="btn btn-accent" onClick={() => void updateAction('installNow')} data-testid="update-install">
+                  Zainstaluj teraz
+                </button>
+              )}
+            </div>
+          </Field>
+        )}
       </Section>
       <Section title="Informacje">
         <Field label="Wersja aplikacji">
