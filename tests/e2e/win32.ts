@@ -85,3 +85,23 @@ export function hover(points: Array<[number, number]>, dwellMs: number): void {
 export function click(x: number, y: number): void {
   ps(`[RdWin]::Click(${Math.round(x)}, ${Math.round(y)})`)
 }
+
+/** The rectangle of a taskbar button found by UI Automation by a word of its name; null = no such button. */
+export function taskbarButton(word: string): { x: number; y: number; width: number; height: number; name: string } | null {
+  const script = `
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$cls = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'Shell_TrayWnd')
+$tray = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $cls)
+if (-not $tray) { 'null'; exit }
+$btn = [System.Windows.Automation.ControlType]::Button
+$cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, $btn)
+$found = $null
+foreach ($b in $tray.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond)) { if ($b.Current.Name -like '*${word}*') { $found = $b; break } }
+if (-not $found) { 'null'; exit }
+$r = $found.Current.BoundingRectangle
+@{ x = $r.X; y = $r.Y; width = $r.Width; height = $r.Height; name = $found.Current.Name } | ConvertTo-Json -Compress`
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', timeout: 60_000 })
+  const out = (r.stdout ?? '').trim()
+  return out && out !== 'null' ? (JSON.parse(out) as { x: number; y: number; width: number; height: number; name: string }) : null
+}

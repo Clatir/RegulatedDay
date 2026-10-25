@@ -5,7 +5,8 @@
  * „uruchomiono wersję X”; and the FI path without the helper. Each step has its deadline; a failure prints the logs.
  */
 import { createReadStream, existsSync, mkdirSync, copyFileSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { click, foreground, taskbarButton, topWindows, type TopWindow } from '../e2e/win32'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join, resolve } from 'node:path'
@@ -105,19 +106,57 @@ async function expectUpdated(installDir: string, step: { name: string }): Promis
   expect(runEntry('Regulated Day Guard')).toBeNull()
 }
 
-test('z oknem: „Zainstaluj teraz” – pobranie w tle, pomocnik instalacji, start nowej wersji', async () => {
+test('z oknem: „Zainstaluj teraz” – pobranie w tle, okno postępu bez fokusu z przyciskiem na pasku zadań, start nowej wersji', async () => {
   test.setTimeout(20 * 60_000)
   const step = { name: 'instalacja N' }
+  let probe: ChildProcess | null = null
   try {
     const dir = await freshN()
     step.name = 'pobranie w tle'
-    const app = await electron.launch({ executablePath: join(dir, APP_EXE), env: env() })
+    // The installer slowed down: the progress window stays long enough to be checked.
+    const app = await electron.launch({ executablePath: join(dir, APP_EXE), env: env({ RD_TEST_INSTALLER_SLEEP_MS: '30000' }) })
     const page = await app.firstWindow()
     await expect.poll(() => page.evaluate(() => window.rd.update().then((u) => u.phase)), { timeout: 180_000, intervals: [1000] }).toBe('ready')
+    step.name = 'okno próbne na pierwszym planie (kliknięcie prawdziwym kursorem)'
+    probe = spawn('notepad.exe', [], { detached: true, stdio: 'ignore' })
+    const probeWindow = async () => {
+      for (let i = 0; i < 60; i++) {
+        const w = topWindows().find((x) => x.pid === probe!.pid && x.visible && x.cls === 'Notepad')
+        if (w) return w
+        await sleep(500)
+      }
+      throw new Error('brak okna próbnego')
+    }
+    const pw = await probeWindow()
+    const clickProbe = () => click((pw.rect[0] + pw.rect[2]) / 2, pw.rect[1] + 60)
+    clickProbe()
+    await expect.poll(foreground, { timeout: 10_000 }).toBe(pw.hwnd)
     step.name = '„Zainstaluj teraz”'
     const closed = app.waitForEvent('close', { timeout: 120_000 })
     await page.evaluate(() => window.rd.updateAction('installNow')).catch(() => undefined)
     await closed
+    step.name = 'okno postępu: na wierzchu, bez zabierania fokusu'
+    let progress: TopWindow | undefined
+    await expect
+      .poll(
+        () => {
+          progress = topWindows().find((w) => w.visible && w.title === 'Regulated Day – aktualizacja')
+          return !!progress
+        },
+        { timeout: 120_000, intervals: [500] }
+      )
+      .toBe(true)
+    expect(foreground()).toBe(pw.hwnd)
+    const order = () => topWindows().map((w) => w.hwnd)
+    expect(order().indexOf(progress!.hwnd)).toBeLessThan(order().indexOf(pw.hwnd))
+    step.name = 'kliknięcie okna próbnego zasłania okno postępu'
+    clickProbe()
+    await expect.poll(() => order().indexOf(pw.hwnd) < order().indexOf(progress!.hwnd), { timeout: 10_000 }).toBe(true)
+    step.name = 'przycisk okna postępu na pasku zadań (UI Automation)'
+    const button = taskbarButton('aktualizacja')
+    expect(button, 'brak przycisku okna postępu na pasku zadań').not.toBeNull()
+    click(button!.x + button!.width / 2, button!.y + button!.height / 2)
+    await expect.poll(() => order().indexOf(progress!.hwnd) < order().indexOf(pw.hwnd), { timeout: 10_000 }).toBe(true)
     await expectUpdated(dir, step)
     expect(await readText(join(productionData(), 'logs', 'install.log'))).toContain('nowa wersja potwierdziła start')
   } catch (e) {
@@ -125,6 +164,7 @@ test('z oknem: „Zainstaluj teraz” – pobranie w tle, pomocnik instalacji, s
     await dump(`z oknem: ${step.name}`)
     throw e
   } finally {
+    probe?.kill()
     await stopAll()
   }
 })
