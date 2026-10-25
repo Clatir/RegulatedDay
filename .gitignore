@@ -1,9 +1,13 @@
 # Zależności i build
 node_modules/
+out/
 dist/
 build/
 bin/
 obj/
+release/
+release-next/
+.tools/
 .venv/
 __pycache__/
 

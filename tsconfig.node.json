@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": [
+    "electron.vite.config.mts",
+    "vitest.config.mts",
+    "playwright.config.ts",
+    "playwright.update.config.ts",
+    "src/main/**/*",
+    "src/shared/**/*",
+    "tests/**/*",
+    "scripts/**/*"
+  ],
+  "exclude": ["tests/web/**/*"]
+}
