@@ -258,10 +258,12 @@ if ($at -ne [string]$hwnd) { 'covered ' + $at; exit }
 [RdWin]::Click($x, $y)
 'clicked'`
   return new Promise((r) => {
-    const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: ['ignore', 'pipe', 'ignore'] })
+    const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: ['ignore', 'pipe', 'pipe'] })
     let out = ''
+    let err = ''
     ps.stdout.on('data', (d: Buffer) => (out += d.toString('utf8')))
-    ps.on('exit', () => r(out.trim()))
+    ps.stderr.on('data', (d: Buffer) => (err += d.toString('utf8')))
+    ps.on('exit', () => r(out.trim() || `błąd: ${err.trim().slice(0, 600)}`))
   })
 }
 

@@ -6,7 +6,7 @@
  */
 import { createReadStream, existsSync, mkdirSync, copyFileSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { click, foreground, taskbarButton, topWindows, type TopWindow } from '../e2e/win32'
+import { click, foreground, taskbarButton, topWindows, windowsAt, type TopWindow } from '../e2e/win32'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join, resolve } from 'node:path'
@@ -130,7 +130,14 @@ test('z oknem: „Zainstaluj teraz” – pobranie w tle, okno postępu bez foku
       throw new Error('brak okna próbnego')
     }
     const pw = await probeWindow()
-    const clickProbe = () => click((pw.rect[0] + pw.rect[2]) / 2, pw.rect[1] + 60)
+    // A point of the probe window that no other window covers (the progress window opens in the middle of the screen).
+    const clickProbe = () => {
+      const [l, t, r, b] = pw.rect
+      const candidates: Array<[number, number]> = [[(l + r) / 2, t + 60], [l + 40, t + 60], [r - 40, t + 60], [l + 40, b - 40], [r - 40, b - 40], [(l + r) / 2, b - 40]]
+      const i = windowsAt(candidates).indexOf(pw.hwnd)
+      if (i < 0) throw new Error('okno próbne zasłonięte w każdym punkcie')
+      click(...candidates[i]!)
+    }
     clickProbe()
     await expect.poll(foreground, { timeout: 10_000 }).toBe(pw.hwnd)
     step.name = '„Zainstaluj teraz”'

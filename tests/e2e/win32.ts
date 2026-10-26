@@ -15,7 +15,9 @@ public static class RdWin {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
   [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx, dy; public uint data, flags, time; public IntPtr extra; }
-  [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public MOUSEINPUT mi; public int pad1, pad2; }
+  // Exactly Win32's INPUT (40 B on x64, 28 B on x86): MOUSEINPUT is the union's largest member. Any other size and
+  // SendInput refuses the call (ERROR_INVALID_PARAMETER) – no move, no click.
+  [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public MOUSEINPUT mi; }
   delegate bool EnumProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
@@ -24,7 +26,8 @@ public static class RdWin {
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll")] static extern uint SendInput(uint n, INPUT[] inputs, int size);
+  [DllImport("user32.dll", SetLastError = true)] static extern uint SendInput(uint n, INPUT[] inputs, int size);
+  [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT p);
   [DllImport("user32.dll")] static extern int GetSystemMetrics(int i);
   [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
@@ -93,20 +96,31 @@ public static class RdWin {
     }, IntPtr.Zero);
     return sb.Append("]").ToString();
   }
-  /** A real move of the cursor to (x, y) in physical pixels (absolute SendInput over the virtual screen). */
+  static void Send(INPUT[] inputs) {
+    uint sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
+    if (sent != inputs.Length) throw new Exception("SendInput: sent " + sent + " of " + inputs.Length + ", error " + Marshal.GetLastWin32Error());
+  }
+  /** A real move of the cursor to (x, y) in physical pixels (absolute SendInput over the virtual screen); throws unless it is there. */
   public static void Move(int x, int y) {
     SetProcessDPIAware();
     int vx = GetSystemMetrics(76), vy = GetSystemMetrics(77), vw = GetSystemMetrics(78), vh = GetSystemMetrics(79);
     var i = new INPUT(); i.type = 0;
-    i.mi.dx = (int)((x - vx) * 65535.0 / (vw - 1)); i.mi.dy = (int)((y - vy) * 65535.0 / (vh - 1));
+    i.mi.dx = (int)Math.Round((x - vx) * 65535.0 / (vw - 1)); i.mi.dy = (int)Math.Round((y - vy) * 65535.0 / (vh - 1));
     i.mi.flags = 0x0001 | 0x8000 | 0x4000;
-    SendInput(1, new INPUT[] { i }, Marshal.SizeOf(typeof(INPUT)));
+    Send(new INPUT[] { i });
+    POINT p = new POINT();
+    for (int t = 0; t < 50; t++) {
+      GetCursorPos(out p);
+      if (Math.Abs(p.X - x) <= 2 && Math.Abs(p.Y - y) <= 2) return;
+      System.Threading.Thread.Sleep(10);
+    }
+    throw new Exception("cursor at (" + p.X + ", " + p.Y + ") instead of (" + x + ", " + y + ")");
   }
   public static void Click(int x, int y) {
     Move(x, y);
     var down = new INPUT(); down.type = 0; down.mi.flags = 0x0002;
     var up = new INPUT(); up.type = 0; up.mi.flags = 0x0004;
-    SendInput(2, new INPUT[] { down, up }, Marshal.SizeOf(typeof(INPUT)));
+    Send(new INPUT[] { down, up });
   }
 }
 `
@@ -114,8 +128,11 @@ public static class RdWin {
 /** UTF-8 output: PowerShell 5.1 writes the OEM code page otherwise („Regulated Day – aktualizacja” loses its „–”). */
 const UTF8_OUT = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; '
 
-/** The start of a PowerShell script with [RdWin] loaded (also for the tests' own scripts that wait and then click). */
-export const RDWIN_PRELUDE = `${UTF8_OUT}Add-Type -TypeDefinition @'\n${CS}\n'@ -Language CSharp`
+/**
+ * The start of a PowerShell script with [RdWin] loaded (also for the tests' own scripts that wait and then click); an
+ * error – a refused SendInput – ends it with exit code 1 instead of letting it go on.
+ */
+export const RDWIN_PRELUDE = `$ErrorActionPreference = 'Stop'; ${UTF8_OUT}Add-Type -TypeDefinition @'\n${CS}\n'@ -Language CSharp`
 
 function ps(call: string): string {
   const script = `${RDWIN_PRELUDE}; ${call}`
