@@ -228,10 +228,12 @@ async function wizardFinish(w: WizardFinish): Promise<{ ok: boolean; error: stri
   if (w.first && probe.hasData) return { ok: false, error: 'W tym folderze są już dane Regulated Day – ten komputer może do nich dołączyć.' }
   if (!w.first && !probe.hasData) return { ok: false, error: 'W tym folderze nie ma danych Regulated Day.' }
   if (w.first) {
+    // The shared data before the folder opens (its first check makes today's day from them).
     try {
-      await DataHub.create(probe.path)
+      await DataHub.createFirst(probe.path, w.records, thisComputer, Date.now())
     } catch (e) {
-      return { ok: false, error: `Nie mogę utworzyć folderu: ${e instanceof Error ? e.message : String(e)}` }
+      log('error', 'kreator: zapis danych wspólnych nie udał się', e)
+      return { ok: false, error: `Nie zapisano danych: ${e instanceof Error ? e.message : String(e)}` }
     }
   }
   await setPrefs(w.prefs)
@@ -241,17 +243,6 @@ async function wizardFinish(w: WizardFinish): Promise<{ ok: boolean; error: stri
   }
   if (!(await hub.open(probe.path))) return { ok: false, error: hub.error ?? 'Folder danych nie otworzył się.' }
   await config.update({ dataFolder: probe.path })
-  if (w.first && w.records.length) {
-    try {
-      const out = await hub.edit(w.records.map((r) => ({ rel: r.rel, create: true, edits: Object.entries(r.value).map(([k, v]) => ({ path: [k], base: undefined, value: v })) })))
-      const waiting = out.filter((o) => o.status !== 'applied')
-      if (waiting.length) log('warn', `kreator: ${waiting.length} zapisów czeka w kolejce (${waiting[0]!.why ?? waiting[0]!.status})`)
-    } catch (e) {
-      // A file of this app already in the folder (one left from before): nothing shared is written over.
-      log('error', 'kreator: zapis danych wspólnych nie udał się', e)
-      return { ok: false, error: `Nie zapisano danych: ${e instanceof Error ? e.message : String(e)}` }
-    }
-  }
   if (w.pin && probe.inOneDrive && process.platform === 'win32') {
     await DataHub.pin(probe.path).then(
       () => log('info', `folder danych przypięty („Zawsze przechowuj na tym urządzeniu”): ${probe.path}`),

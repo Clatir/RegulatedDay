@@ -11,13 +11,14 @@ import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type { DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, HistoryRecord, HistoryVersion, RawRecord } from '@shared/api'
-import { diffRecords } from '@shared/data/merge'
+import { deepEqual, diffRecords } from '@shared/data/merge'
 import { classify, ID_COLLECTIONS, paths, SETTINGS_FILE, type IdKind } from '@shared/data/paths'
 import type { HolidayLookup } from '@shared/engine/createDay'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { createUpdateBackup } from './backup'
+import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
 import { DataService, STOP_TIMEOUT_MS, type ServiceOptions } from './service'
 
@@ -424,9 +425,38 @@ export class DataHub {
     return this.edit([entry])
   }
 
-  /** The first computer's folder made at „Zakończ” (the only place the app creates a data folder). */
-  static async create(dir: string): Promise<void> {
+  /**
+   * The first computer's folder and shared data, made at „Zakończ” (the only place the app creates a data folder) and
+   * before the folder opens: its first check – the leader making today's day – sees the wizard's settings, never the
+   * defaults. rd.json goes last, so a folder with it holds the whole set. A file already there is never written over: the
+   * same content is skipped (a „Zakończ” again after a failed one), another refuses – OneDrive may still be bringing
+   * the data of a folder whose rd.json has not come yet.
+   */
+  static async createFirst(dir: string, records: ReadonlyArray<{ rel: string; value: RawRecord }>, computer: string, at: number, fs: DataFs = nodeFs): Promise<void> {
     await mkdir(dir, { recursive: true })
+    const stamp = (v: RawRecord) => {
+      const { updatedAt: _a, updatedBy: _b, ...rest } = v
+      return rest
+    }
+    const ordered = [...records.filter((r) => r.rel !== SETTINGS_FILE), ...records.filter((r) => r.rel === SETTINGS_FILE)]
+    for (const r of ordered) {
+      const c = classify(r.rel)
+      if (!c || c.conflict || c.kind === 'log' || c.kind === 'presence' || c.kind === 'grades') throw new Error(`nie można utworzyć ${r.rel}`)
+      const abs = join(dir, c.canonical)
+      const now = await fs.read(abs)
+      if (now) {
+        let same = false
+        try {
+          const old = JSON.parse(now.toString('utf8')) as unknown
+          same = isPlain(old) && deepEqual(stamp(old), stamp(r.value))
+        } catch {
+          // A broken file is someone's data too: refused below.
+        }
+        if (same) continue
+        throw new Error(`w folderze jest już ${c.canonical} – jeśli to dane z innego komputera, poczekaj, aż OneDrive je pobierze, i dołącz do nich`)
+      }
+      await fs.writeAtomic(abs, `${JSON.stringify({ ...r.value, updatedAt: at, updatedBy: computer }, null, 2)}\n`)
+    }
   }
 
   /** Where the wizard proposes the data folder: OneDrive\RegulatedDay, else Documents\RegulatedDay. */

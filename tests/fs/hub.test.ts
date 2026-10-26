@@ -4,13 +4,14 @@
  * that failed is made at the next opening, a computer whose own settings cannot be read is never shown the wizard, and a
  * day file changed on another computer reaches the window.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
 import { logicalDayOf } from '@shared/time/day'
+import { nodeFs, type DataFs } from '../../src/main/data/fsio'
 import { DataHub, type HubOptions } from '../../src/main/data/hub'
 import { STOP_TIMEOUT_MS, type DataService, type ServiceOptions } from '../../src/main/data/service'
 
@@ -157,6 +158,31 @@ describe('folder danych okna głównego (DataHub)', () => {
     known.unknownFolder('x')
     known.noFolder()
     expect(known.status).toBe('opening')
+  })
+
+  it('dane wspólne pierwszego komputera: przed otwarciem folderu, rd.json na końcu, nic nie jest nadpisywane', async () => {
+    const dir = join(root, 'first')
+    const records = [
+      { rel: paths.settings, value: { schema: 1, people: [{ id: 'p1', name: 'Mama' }] } },
+      { rel: paths.record('template', 'zwykly'), value: { schema: 1, id: 'zwykly' } },
+      { rel: paths.record('template', 'sobota'), value: { schema: 1, id: 'sobota' } }
+    ]
+    const order: string[] = []
+    const fs: DataFs = { ...nodeFs, writeAtomic: (p, t) => (order.push(p.slice(dir.length + 1).replace(/\\/g, '/')), nodeFs.writeAtomic(p, t)) }
+    await DataHub.createFirst(dir, records, 'pca', 1000, fs)
+    expect(order).toEqual([paths.record('template', 'zwykly'), paths.record('template', 'sobota'), paths.settings])
+    expect(JSON.parse(readFileSync(join(dir, paths.settings), 'utf8'))).toMatchObject({ people: [{ name: 'Mama' }], updatedAt: 1000, updatedBy: 'pca' })
+    // „Zakończ” again after a failed one: the same files are skipped.
+    order.length = 0
+    await DataHub.createFirst(dir, records, 'pca', 2000, fs)
+    expect(order).toEqual([])
+    // Another computer's data still coming through OneDrive (rd.json not yet here): never written over.
+    const other = join(root, 'other')
+    mkdirSync(join(other, 'templates'), { recursive: true })
+    writeFileSync(join(other, paths.record('template', 'sobota')), JSON.stringify({ schema: 1, id: 'sobota', note: 'z laptopa' }))
+    await expect(DataHub.createFirst(other, records, 'pca', 1000)).rejects.toThrow(/jest już templates\/sobota\.json/)
+    expect(JSON.parse(readFileSync(join(other, paths.record('template', 'sobota')), 'utf8')).note).toBe('z laptopa')
+    expect(existsSync(join(other, paths.settings))).toBe(false)
   })
 
   it('plik dzisiejszego dnia zmieniony na innym komputerze: okno dostaje zmianę', async () => {

@@ -12,10 +12,13 @@
   z wersjami od daty, druga zmiana; prośby, rutyny w dwóch wersjach, historia z przywracaniem; ustawienia z modułami
   (od jutra / od dziś / od daty); pytania kolejki i kopii konfliktowych OneDrive; kopia przed aktualizacją.
   Decyzje: D292–D295, T444–T462.
-- Testy: 482 jednostkowe i plikowe (m.in. 122 testy ustawień – każde z wartościami w zakresie i poza nim, plan dnia E3,
+- Testy: 483 jednostkowe i plikowe (m.in. 122 testy ustawień – każde z wartościami w zakresie i poza nim, plan dnia E3,
   folder dla okna, `DataHub`) i 16 E2E (kreator pierwszego i kolejnego komputera, ekrany E3; 2 tylko w CI). Lokalnie
-  w 3 pełnych przebiegach za każdym razem jeden inny test stawał przy starcie okna (proces główny przed oknem albo okno
-  bez pierwszego wyświetlenia – narzędzia działają tu poza pulpitem); każdy z nich osobno przechodzi. Rozstrzyga CI.
+  w 3 z 4 pełnych przebiegów jeden (za każdym razem inny) test stawał przy starcie okna – narzędzia działają tu poza
+  pulpitem; osobno każdy przechodzi, ostatni pełny przebieg zielony.
+- CI pierwszej rundy PR #6 (run 40382255862) zielone, ale test kreatora na Windows przeszedł dopiero przy ponowieniu:
+  okno pokazywało „Dziś” po otwarciu folderu, a kreator zapisywał dane wspólne dopiero potem (wyścig – pierwsze
+  sprawdzenie folderu mogło liczyć dzień bez ustawień kreatora). Poprawione: dane wspólne przed otwarciem (T462).
 - `/code-review` (xhigh, diff etapu): 15 uwag, wszystkie poprawione z testem, który na starym kodzie pada (sprawdzone
   na kodzie sprzed przeglądu i mutacjami `DataHub`): powrót przeniesionego bloku, pliki dni w podpisie widoku, odpowiedź
   w trakcie przebiegu kolejki, kopia szablonu w archiwum, nieczytelny config.json bez kreatora, prowadzący bez Twoich
@@ -26,8 +29,8 @@
 - Czas faktyczny: 26.10 ok. 17:10–19:50 (zegarowo, bez CI), w tym przegląd w tle.
 
 ## Kolejka
-1. Push gałęzi, PR (opis po polsku), CI na Linuksie i Windows → scalenie (D285) → sprawdzenie, że zadanie Windows na
-   `main` opublikowało wydanie 0.2.0; numer PR i wynik CI dopisać tutaj.
+1. PR #6 (https://github.com/Clatir/RegulatedDay/pull/6): druga runda CI po poprawce kreatora → przy zielonym CI bez
+   niestabilnych testów scalenie (D285) → sprawdzenie, że zadanie Windows na `main` opublikowało wydanie 0.2.0.
 2. Twoje sprawdzenie na Windows (lista niżej), potem „dalej”: komunikat „Przed etapem E4a”.
 
 ## Do sprawdzenia na Windows (E3, wersja 0.2.0)
