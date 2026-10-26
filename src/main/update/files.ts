@@ -65,7 +65,10 @@ export function processAlive(pid: number): boolean {
   }
 }
 
-/** The first of the manifest's files missing in the installation or of another size; null = all agree (only its files). */
+/**
+ * The first of the manifest's files missing in the installation or of another size; null = all agree (only its files).
+ * Electron's fs shows an asar archive as a folder of size 0: the check reads with the archives' support off.
+ */
 export function manifestMismatch(taskDir: string, task: Task): string | null {
   let m
   try {
@@ -73,16 +76,23 @@ export function manifestMismatch(taskDir: string, task: Task): string | null {
   } catch (e) {
     return `manifest nieczytelny (${e instanceof Error ? e.message : String(e)})`
   }
-  for (const f of m.files) {
-    let size: number
-    try {
-      size = statSync(join(task.installDir, ...f.path.split('/'))).size
-    } catch {
-      return `${f.path} – brak pliku`
+  const proc = process as { noAsar?: boolean }
+  const noAsar = proc.noAsar
+  proc.noAsar = true
+  try {
+    for (const f of m.files) {
+      let size: number
+      try {
+        size = statSync(join(task.installDir, ...f.path.split('/'))).size
+      } catch {
+        return `${f.path} – brak pliku`
+      }
+      if (size !== f.size) return `${f.path} – ${size} B zamiast ${f.size} B`
     }
-    if (size !== f.size) return `${f.path} – ${size} B zamiast ${f.size} B`
+    return null
+  } finally {
+    proc.noAsar = noAsar
   }
-  return null
 }
 
 export function fsDeps(): Pick<StartupDeps, 'readText' | 'writeText' | 'appendText' | 'listDirs' | 'heldOpen' | 'processAlive' | 'filesMismatch'> {
