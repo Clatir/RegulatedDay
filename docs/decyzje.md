@@ -302,6 +302,9 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D293 | Plan dnia (ekran „Dziś” i szablony) jako pionowa oś czasu: wysokość bloku według długości, widoczne przerwy bez bloku, kolizje i bloki w tle w wąskiej kolumnie obok, prognoza energii obok osi, edycja bloku w panelu z prawej (26.10.2026) |
 | D294 | Kreator pierwszego komputera krok po kroku: jeden temat na ekran, pasek postępu, wartości domyślne wypełnione („Dalej” wystarcza), podgląd dnia na bieżąco (26.10.2026) |
 | D295 | Kalendarz jako siatka miesiąca: kolor typu dnia i oznaczenia (zjazd, wolne, święto, skrócona sesja, tydzień przesunięcia sesji), zaznaczanie kilku dat przeciągnięciem albo z Ctrl, kliknięcie dnia otwiera jego plan (26.10.2026) |
+| D296 | Pod Twoją nieobecność (ok. 12 h od 26.10 wieczorem) etapy ciągiem bez pauzy między nimi: E4a → E4b → logika E5 (silnik wariantów z testami, bez elementów w pasku – te po Twoim sprawdzeniu E4b); każdy etap z pełnym zamknięciem, PR scalany i wydawany jak zwykle (D285); pytanie o zachowanie widoczne dla Ciebie zatrzymuje pracę, czas, który się skończy, zostawia etap w toku opisany w postępie (26.10.2026) |
+| D297 | Komputer nagrywający wykład: ekran świeci przez cały wykład (D184) do Twojego sprawdzenia nagrywania OBS przy wygaszonym ekranie (punkt 15 z E0) (26.10.2026) |
+| D298 | E4b na roboczych kolorach z próby E0 (klasy bloków, rezerwa, kroki 15 / 5 / 0 min), a w „Próbie” 2–3 dodatkowe zestawy do porównania; wybór po Twoim powrocie (26.10.2026) |
 
 **Decyzje techniczne (T)**, zaakceptowane 21.10.2026; szczegóły są w rozdziałach powyżej
 

@@ -1,8 +1,8 @@
 # Postęp
 
 ## Stan bieżący
-- Etap: **E3 zakończony w kodzie, PR do scalenia** (gałąź `claude/e3-kreator-i-plan`, wersja 0.2.0 – pierwsza na
-  Twoich danych). Scalam sam przy zielonym CI (D285); po scaleniu zadanie Windows na `main` publikuje wydanie 0.2.0.
+- Etap: **E3 scalony** (PR #6, 27c3535, 26.10 ok. 21:15; druga runda CI 40388633029 zielona, niestabilnych testów
+  brak). CI na `main` (run 40393794530) w toku przy zapisie tego wpisu – zadanie Windows publikuje wydanie 0.2.0.
   E2 → `docs/archiwum/postep-E2.md`.
 - Zakres E3: kreator pierwszego komputera (15 kroków z podglądem dnia, nic nie zapisuje się przed „Zakończ”, folder
   w OneDrive z „Zawsze przechowuj na tym urządzeniu”) i kolejnego (3 kroki, nic wspólnego nie zmienia); „Dziś” jako oś
@@ -29,9 +29,22 @@
 - Czas faktyczny: 26.10 ok. 17:10–19:50 (zegarowo, bez CI), w tym przegląd w tle.
 
 ## Kolejka
-1. PR #6 (https://github.com/Clatir/RegulatedDay/pull/6): druga runda CI po poprawce kreatora → przy zielonym CI bez
-   niestabilnych testów scalenie (D285) → sprawdzenie, że zadanie Windows na `main` opublikowało wydanie 0.2.0.
-2. Twoje sprawdzenie na Windows (lista niżej), potem „dalej”: komunikat „Przed etapem E4a”.
+1. Sprawdzić run 40393794530 na `main` (`gh run view`) i wydanie 0.2.0 (`gh release list`); czerwone E2E na `main` =
+   brak wydania → poprawka przed E4a. Wynik dopisać w „Stan bieżący”.
+2. **Praca ciągiem pod Twoją nieobecność (D296):** E4a → E4b → logika E5, bez pauzy i bez „dalej” między nimi; każdy
+   etap: komunikat „Przed etapem” zapisany tutaj (pytań nie zadaję – odpowiedzi niżej; nowe pytanie o zachowanie
+   widoczne dla Ciebie = stop), testy, `/code-review`, PR, CI, scalenie i wydanie (D285), wpis i lista „do sprawdzenia”.
+   Gałęzie `claude/e4a-...`, `claude/e4b-...`, `claude/e5-...`. Model: Opus 5.5 · xhigh przez cały ciąg.
+3. Po Twoim powrocie: sprawdzenia na Windows – E3 (lista niżej), E4a, E4b (ich listy dopiszą etapy), wybór zestawu
+   kolorów (D298); potem „dalej” – E5 (elementy w pasku).
+
+## Przed etapami E4a, E4b i logiką E5 (26.10.2026)
+- Odpowiedzi: praca ciągiem (D296), ekran komputera nagrywającego świeci cały wykład (D297, potwierdza D184), E4b na
+  kolorach roboczych z 2–3 zestawami do porównania w „Próbie” (D298); scalanie i wydania jak zwykle (D285).
+- Oszacowanie (z czasów E0–E3, FI i ICTTJ): E4a 4–6 h (ok. 4 rundy CI na Windows), E4b 3,5–5 h, logika E5 1,5–2 h.
+- Do przygotowania na powrót: laptop (nowoczesny tryb wstrzymania, szybkie uruchamianie, blokada ekranu), TradingView
+  i platforma brokera (pasek, ikona, powiadomienia).
+- Otwarte bez zmian: baner „nie dokończyła się” (Pytania na później) – E4a go nie zmienia.
 
 ## Do sprawdzenia na Windows (E3, wersja 0.2.0)
 1. Aktualizacja z 0.1.1 przychodzi sama (albo instalator z wydania 0.2.0) → po starcie okno główne pokazuje kreator
