@@ -119,7 +119,7 @@ function layoutBar(): void {
   const zoom = prefs().zoom
   const r = barRect(prefs().barPlacement, displays(), primary, zoom, Math.ceil(barFoldedHeight * zoom), Math.ceil(barLayoutNow.height * zoom))
   bar.apply({ bounds: r.bounds, contentProtection: prefs().hideFromCapture })
-  bar.webContents.send('rd:barGrows', r.growsUp ? 'up' : 'down')
+  bar.webContents?.send('rd:barGrows', r.growsUp ? 'up' : 'down')
   if (!helper?.running) {
     barProblem = 'helper'
     bar.apply({ visible: false })

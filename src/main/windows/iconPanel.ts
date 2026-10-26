@@ -95,8 +95,9 @@ export class IconPanel {
     return buf.length >= 8 ? buf.readBigUInt64LE(0).toString() : String(buf.readUInt32LE(0))
   }
 
-  get webContents(): Electron.WebContents {
-    return this.win.webContents
+  /** null once the window is destroyed (at the quit; the helper's last status comes after it). */
+  get webContents(): Electron.WebContents | null {
+    return this.win.isDestroyed() ? null : this.win.webContents
   }
 
   get bounds(): Rect {

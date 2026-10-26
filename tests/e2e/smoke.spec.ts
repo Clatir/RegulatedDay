@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { launch, viewPage, withMainLog } from './app'
 
@@ -29,6 +31,18 @@ test('start: okno główne z menu bocznym, nazwą i paskiem; tożsamość testow
   } finally {
     await app.close()
   }
+})
+
+test('zamknięcie: koniec pracy bez nieobsłużonych wyjątków, także gdy pomocnik kończy się po oknach', async () => {
+  const { app, page, userData } = await launch()
+  await expect(page.getByTestId('bar-main')).toBeVisible()
+  await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => ''), { timeout: 30_000 }).toContain('pomocnik działa')
+  // app.close() returns when the process has ended: the log is complete. The helper's end comes after the windows are
+  // gone – its status must not reach a destroyed window.
+  await app.close()
+  const log = await readFile(join(userData, 'logs', 'main.log'), 'utf8')
+  expect(log).toContain('koniec pracy')
+  expect(log.split('\n').filter((l) => /nieobsłużon/.test(l))).toEqual([])
 })
 
 test('pasek pulpitu: okno narzędziowe bez aktywacji, nigdy na wierzchu, pokazane po potwierdzeniu pomocnika', async () => {
