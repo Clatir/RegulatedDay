@@ -19,7 +19,14 @@
   0 B, więc porównanie z manifestem zawsze widziało różnicę (teraz z `noAsar`).
 - Runda 8: E2E z prawdziwym pomocnikiem, wszystkie scenariusze i 4 z 5 ścieżek przechodzą. „Z oknem”: Windows nie
   podnosi klikniętego okna, które już jest aktywne – okno postępu zostawało nad nim; hak myszy właściciela (T408).
-  Runda 9 w toku.
+- Runda 9: wszystko zielone, bez niestabilnych testów. `/code-review` (xhigh, PR #1): 15 uwag + odcięte; zweryfikowane
+  i poprawione z testem, który na starym kodzie pada (T409–T411): blokady właściciela przy oknach czekających, odwołany
+  koniec sesji, nieudany start instalacji, wyścig „odłożono” przy logowaniu, ponowny odczyt config.json, przekazania
+  jednej próby, klucz sesji przy spóźnionym pomocniku, „Spróbuj ponownie” dla bieżącej wersji, panel przy kursorze,
+  pasek po spóźnionym potwierdzeniu, odpowiedź toastSetting, kopie w update\<X>, nieparsowalne wersje, zadanie
+  „zakończono” przy starszej wersji, kolejność wersji beta w C#, kopiowanie i zapytanie strażnika w tle. Odrzucone:
+  nagłówek check-node (pochodzi z ICTTJ i go ma), wyjątek właściciela przed licznikiem (bez pliku zadania nie wiadomo,
+  co uruchomić). Runda 10 w toku.
 - Narzędzia Claude Code na tym komputerze działają poza pulpitem: kolejność okien, powłoka, OneDrive i powiadomienia
   tylko w CI na Windows.
 
@@ -63,3 +70,6 @@ przy zegarze → „Próba” (bez otwierania okna) i na ekranie „Próba”; d
 
 ## Pytania na później
 - Przed E4b: ostateczne kolory klas bloków, rezerwy i kroków 15 / 5 / 0 min (w próbie E0 kolory robocze).
+- Baner „Aktualizacja do X nie dokończyła się” dla uruchomionej wersji X (ścieżka FI, pliki niezgodne) pokazuje się
+  tylko przy pierwszym starcie – czy ma wracać przy każdym, aż „Spróbuj ponownie” (T411) naprawi instalację?
+  Rekomendacja: tak, jak baner „nie udała się” dla starszej wersji.

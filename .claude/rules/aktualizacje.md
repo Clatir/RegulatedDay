@@ -25,7 +25,8 @@ Poniżej formaty i podział ról, żeby nie czytać całości przy każdej zmian
 
 ## Pliki w danych aplikacji (`%APPDATA%\Regulated Day`)
 - `update\<X>\download\` – pobrane wydanie (instalator, manifest); nie jest usuwane przed instalacją.
-- `update\<X>\` – kopie `rd-*.exe`, instalatora i manifestu, `task.json`, `guard.lock`, `handover.jsonl`.
+- `update\<X>\` – kopie `rd-*.exe`, instalatora i manifestu (przez nazwę tymczasową), `task.json`, `guard.lock`,
+  `handover.jsonl` (jednej próby: właściciel usuwa go po starcie aplikacji, nowa próba na starcie).
 - `launched.json` – „uruchomiono wersję X” (wersja, attemptId) poza update; liczy się tylko z attemptId bieżącej próby.
 - `closed-by-installer.json` – znacznik skryptu NSIS (czas ms UTC); `plan-blocks.json` – bloki sesji i zajęć na 7 dni.
 
