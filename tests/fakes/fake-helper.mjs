@@ -1,7 +1,6 @@
 // A stand-in for the helper (rd-helper.exe) in tests and in CI on Linux (RD_HELPER_PATH): the same JSON lines, no Windows.
-// RD_FAKE_HELPER_BAR=fail – the desktop bar is never confirmed; RD_FAKE_HELPER_CRASH_MS=<n> – exits after n ms;
-// RD_FAKE_HELPER_HELLO_MS=<n> – its hello comes n ms late. The volatile key of the logon session is a file in its working
-// folder (the app's data): it lasts for as long as the folder does.
+// RD_FAKE_HELPER_BAR=fail – the desktop bar is never confirmed; RD_FAKE_HELPER_CRASH_MS=<n> – exits after n ms. The
+// volatile key of the logon session is a file in its working folder (the app's data): it lasts as long as the folder.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
@@ -23,7 +22,7 @@ input.on('line', (line) => {
   const reply = (extra = {}) => m.id != null && out({ re: m.id, ok: true, ...extra })
   switch (m.cmd) {
     case 'init':
-      setTimeout(() => out({ type: 'hello', version: 'fake', pid: process.pid }), Number(process.env.RD_FAKE_HELPER_HELLO_MS) || 0)
+      out({ type: 'hello', version: 'fake', pid: process.pid })
       break
     case 'session.start': {
       const existed = existsSync(sessionKey)

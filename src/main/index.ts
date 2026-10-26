@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { BrowserWindow, Menu, app, clipboard, crashReporter, ipcMain, net, powerMonitor, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
-import { CH, type AppInfo, type BarLayout, type HelperStatus, type TrialAction, type UpdateAction, type ViewKind, type WidgetAction } from '@shared/api'
+import { CH, type AppInfo, type BarLayout, type TrialAction, type UpdateAction, type ViewKind, type WidgetAction } from '@shared/api'
 import type { MachinePrefs } from '@shared/machine'
 import { patchMachinePrefs } from '@shared/machine'
 import { barRect, cornerOffset, panelRect } from '@shared/placement'
@@ -35,6 +35,7 @@ import { cleanUpdateFolders, fsDeps, manifestOf, writeLaunched, writePlan } from
 import { UpdateController } from './update/controller'
 import { guardMode } from './update/install'
 import { LifeKeeper, judge } from './crash/lifeMarker'
+import { sessionAtStart } from './crash/session'
 import { recordRun } from './crash/versions'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
@@ -466,60 +467,13 @@ function whatsNew(): UpdateView['whatsNew'] {
   return { version, notes }
 }
 
-async function helperReady(ms: number): Promise<boolean> {
-  const h = helper
-  if (!h) return false
-  if (h.running) return true
-  return new Promise((resolve) => {
-    const onStatus = (s: HelperStatus) => {
-      if (s.state !== 'running') return
-      clearTimeout(timer)
-      h.off('status', onStatus)
-      resolve(true)
-    }
-    const timer = setTimeout(() => {
-      h.off('status', onStatus)
-      resolve(false)
-    }, ms)
-    h.on('status', onStatus)
-  })
-}
-
-/**
- * The volatile key of the logon session gets this run's id once the helper runs, also when it came too late for the
- * verdict: otherwise a crash of this run would look, at the next start, like the end of another logon session.
- */
-function registerSessionLater(): void {
-  const h = helper
-  if (!h) return
-  const onStatus = (s: HelperStatus) => {
-    if (s.state !== 'running') return
-    h.off('status', onStatus)
-    h.request('session.start', { runId }).then(
-      () => log('info', 'klucz sesji logowania ustawiony po starcie pomocnika'),
-      (e: unknown) => log('warn', 'klucz sesji logowania niedostępny', e instanceof Error ? e.message : e)
-    )
-  }
-  h.on('status', onStatus)
-}
-
 /** The previous run's end from the life marker (a crash or not), then this run's marker. */
 async function judgePreviousRun(): Promise<void> {
   const prev = life.previous()
   const close = life.closeRecord()
   const installerAt = life.installerMarker()
   const dumps = LifeKeeper.mainDumpSince(app.getPath('crashDumps'), prev?.startedAt ?? Number.MAX_SAFE_INTEGER)
-  let sessionInfo: { prevRunId: string | null } | null = null
-  if (process.platform === 'win32' || process.env.RD_TEST_SESSION_KEY === '1') {
-    if (await helperReady(5000)) {
-      try {
-        const r = await helper!.request('session.start', { runId })
-        sessionInfo = { prevRunId: r.existed === true && typeof r.prevRunId === 'string' ? r.prevRunId : null }
-      } catch (e) {
-        log('warn', 'klucz sesji logowania niedostępny', e instanceof Error ? e.message : e)
-      }
-    } else registerSessionLater()
-  }
+  const sessionInfo = process.platform === 'win32' ? await sessionAtStart(helper, runId, 5000, log) : null
   const verdict = judge(prev, close, sessionInfo, installerAt, dumps.found)
   if (dumps.types.length) log('info', `nowe zrzuty awarii: ${dumps.types.join(', ')}`)
   log(verdict.kind === 'crash' ? 'warn' : 'info', `poprzednie uruchomienie: ${verdict.kind} (${verdict.why})`)

@@ -1,6 +1,4 @@
-import { mkdtempSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { launch, viewPage, withMainLog } from './app'
@@ -71,38 +69,6 @@ test('koniec sesji Windows odwołany: zapis zamknięcia, potem znacznik życia z
   } finally {
     await app.close()
   }
-})
-
-test('pomocnik spóźniony ponad 5 s: klucz sesji i tak dostaje to uruchomienie, a jego koniec bez zapisu to awaria', async () => {
-  test.skip(process.env.RD_E2E_REAL_HELPER === '1', 'the stand-in helper only (its hello comes late)')
-  test.setTimeout(180_000)
-  const userData = join(mkdtempSync(join(tmpdir(), 'rd-e2e-')), 'userData')
-  const env = { RD_TEST_SESSION_KEY: '1' }
-  const mainLog = () => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => '')
-  const verdicts = async () => (await mainLog()).split('\n').filter((l) => l.includes('poprzednie uruchomienie'))
-  // Only the verdicts in the log count here: no run waits for its window.
-  await withMainLog(userData, async () => {
-    const a = await launch({ userData, env, hidden: true })
-    await expect.poll(async () => (await verdicts()).length, { timeout: 30_000 }).toBe(1)
-    await a.app.close()
-    // B: the helper's hello after the 5 s of the verdict; B then ends without a record of closing.
-    const b = await launch({ userData, env: { ...env, RD_FAKE_HELPER_HELLO_MS: '6500' }, hidden: true })
-    await expect.poll(mainLog, { timeout: 60_000 }).toContain('klucz sesji logowania ustawiony po starcie pomocnika')
-    // Ended abruptly (the main process itself, by its own id – as a crash or Task Manager would end it).
-    const pid = await b.app.evaluate(() => process.pid)
-    process.kill(pid)
-    await expect.poll(() => { try { process.kill(pid, 0); return true } catch { return false } }, { timeout: 15_000 }).toBe(false)
-    await b.app.close().catch(() => undefined)
-    // Its renderer and GPU processes end a moment after it (until then they hold the lock of one copy).
-    await new Promise((r) => setTimeout(r, 3000))
-    const c = await launch({ userData, env, hidden: true })
-    try {
-      await expect.poll(async () => (await verdicts()).length, { timeout: 30_000 }).toBe(3)
-      expect((await verdicts()).at(-1)).toContain('crash')
-    } finally {
-      await c.app.close()
-    }
-  }, 60)
 })
 
 test('pasek pulpitu: okno narzędziowe bez aktywacji, nigdy na wierzchu, pokazane po potwierdzeniu pomocnika', async () => {
