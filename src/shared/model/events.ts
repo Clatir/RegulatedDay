@@ -9,6 +9,7 @@
  * day's file. Instants are ms UTC.
  */
 import { isIsoDate } from '../time/zone'
+import { POOLS, type Costs, type Pool, type PoolValues } from './categories'
 import type { PlanBlock } from './plan'
 import type { DayTypeId, RulesSettings } from './settings'
 
@@ -67,8 +68,8 @@ export type TimerEvent =
       block: string
       at: number
       bg: boolean
-      /** What the plan said at the start – a later edit of the plan never changes it (spec). */
-      planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean }
+      /** What the plan said at the start – a later edit of the plan never changes it (spec); costs since E2. */
+      planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null }
       /** Minutes after the boundary confirmed in advance up to this instant (two clicks, „Dodaj bez wymiany”). */
       confirmUntil: number | null
       how: 'click' | 'auto' | 'start'
@@ -112,16 +113,39 @@ export type PresenceEvent =
   | (EventBase & { k: 'observe.alive'; at: number })
   | (EventBase & { k: 'observe.to'; at: number; why: 'quit' | 'suspend' | 'crash' | 'system' })
 
+/** An answer of the check-in: no, a little, yes (spec „Pierwszy check-in”). */
+export type Answer = 0 | 1 | 2
+/** „Okulary”, „Zatyczki”, „Więcej bujania”, „Drażnią pytania” (spec „Sygnały w ciągu dnia”). */
+export type Signal = 'glasses' | 'earplugs' | 'rocking' | 'questions'
+export const SIGNALS: readonly Signal[] = ['glasses', 'earplugs', 'rocking', 'questions']
+
+/**
+ * Energy (spec „Model energii”). A check-in and the signals are anchors: a signal carries the exact state before it as
+ * its computer knew it, so corrections of times before it never change the state after it.
+ */
+export type EnergyEvent =
+  | (EventBase & { k: 'energy.checkin'; at: number; answers: Record<Pool, [Answer, Answer]> })
+  | (EventBase & { k: 'energy.signal'; at: number; signal: Signal; before: PoolValues | null })
+  /** The relative assessment: a pool worse, the same or better. */
+  | (EventBase & { k: 'energy.relative'; at: number; pool: Pool; delta: -10 | 0 | 10; before: PoolValues | null })
+  /** A descent to the reserve as the leader registered it: it stays whatever later corrections say. */
+  | (EventBase & { k: 'energy.reserve'; at: number; pool: Pool; silent: boolean })
+  /** The energy module switched on or off (a shared setting that works at once), with the state before. */
+  | (EventBase & { k: 'energy.module'; at: number; on: boolean; was?: boolean })
+
 /** An event of a kind this version does not know: kept, skipped by the rules. */
 export type UnknownEvent = EventBase & { k: string; unknown: true; raw: Record<string, unknown> }
 
-export type LogEvent = TimerEvent | PresenceEvent
+export type LogEvent = TimerEvent | PresenceEvent | EnergyEvent
 export type AnyEvent = LogEvent | UnknownEvent
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 const DOMAINS = new Set(['timer', 'energy', 'game', 'meta'])
+const isPool = (v: unknown): v is Pool => (POOLS as readonly unknown[]).includes(v)
+const isAnswers = (v: unknown) => isPlain(v) && POOLS.every((p) => Array.isArray(v[p]) && (v[p] as unknown[]).length === 2 && (v[p] as unknown[]).every((a) => a === 0 || a === 1 || a === 2))
+const isValues = (v: unknown) => v == null || (isPlain(v) && POOLS.every((p) => isNum(v[p]) && (v[p] as number) >= 0 && (v[p] as number) <= 100))
 
 /** The fields every kind needs beyond the base: name → check. */
 const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
@@ -153,7 +177,12 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'gap.close': { gap: isStr, to: isNum },
   'observe.from': { at: isNum },
   'observe.alive': { at: isNum },
-  'observe.to': { at: isNum }
+  'observe.to': { at: isNum },
+  'energy.checkin': { at: isNum, answers: isAnswers },
+  'energy.signal': { at: isNum, signal: (v) => (SIGNALS as readonly unknown[]).includes(v), before: isValues },
+  'energy.relative': { at: isNum, pool: isPool, delta: (v) => v === -10 || v === 0 || v === 10, before: isValues },
+  'energy.reserve': { at: isNum, pool: isPool },
+  'energy.module': { at: isNum, on: (v) => typeof v === 'boolean', was: (v) => v === undefined || typeof v === 'boolean' }
 }
 
 export const KNOWN_KINDS: ReadonlySet<string> = new Set(Object.keys(NEEDS))

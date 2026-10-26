@@ -2,8 +2,10 @@
  * A small language for day scenarios in tests: a plan in Polish wall times („17:30”, „00:30+1”), events by the clock,
  * and the engine's state at a chosen moment. Every event gets the base fields a log line has.
  */
-import { computeDay, type DayState } from '@shared/engine/day'
-import type { AnyEvent, DaySnapshot, TimerEvent } from '@shared/model/events'
+import { computeDay, type DayContext, type DayState } from '@shared/engine/day'
+import { computeEnergy, type EnergyOptions, type EnergyState } from '@shared/engine/energy'
+import type { Pool } from '@shared/model/categories'
+import type { AnyEvent, Answer, DaySnapshot, Domain, Signal, TimerEvent } from '@shared/model/events'
 import { RULES_VERSION } from '@shared/model/events'
 import { planBlock, type PlanBlock } from '@shared/model/plan'
 import { DEFAULT_SETTINGS, deepMerge, settingsFrom, type DayTypeId, type RulesSettings } from '@shared/model/settings'
@@ -92,10 +94,10 @@ export class Scenario {
     return placeLogical(this.opts.date, lm(hhmm))
   }
 
-  private push(e: Record<string, unknown>, at: string, computer = this.computer): this {
+  private push(e: Record<string, unknown>, at: string, computer = this.computer, dom: Domain = 'timer'): this {
     const t = this.at(at)
     const n = this.n++
-    this.events.push({ id: `${computer}-${n}`, c: computer, n, t, l: t + n, v: RULES_VERSION, day: this.opts.date, dom: 'timer', ...e } as unknown as TimerEvent)
+    this.events.push({ id: `${computer}-${n}`, c: computer, n, t, l: t + n, v: RULES_VERSION, day: this.opts.date, dom, ...e } as unknown as TimerEvent)
     return this
   }
 
@@ -105,14 +107,16 @@ export class Scenario {
     return p
   }
 
-  start(id: string, at: string, o: { bg?: boolean; confirmUntil?: string; cat?: string; min?: number; tag?: PlanBlock['tag'] } = {}): this {
+  start(id: string, at: string, o: { bg?: boolean; confirmUntil?: string; cat?: string; variant?: string; min?: number; tag?: PlanBlock['tag'] } = {}): this {
     const p = this.opts.plan.find((b) => b.id === id)
     const planned = {
       categoryId: o.cat ?? p?.categoryId ?? 'inne',
-      variantId: p?.variantId ?? null,
+      variantId: o.variant ?? p?.variantId ?? null,
       durationMin: o.min ?? p?.durationMin ?? 30,
       tag: o.tag ?? p?.tag ?? null,
-      fixed: p?.fixed ?? false
+      fixed: p?.fixed ?? false,
+      costs: p?.costs ?? null,
+      bgCostPct: p?.bgCostPct ?? null
     }
     return this.push({ k: 'block.start', block: id, at: this.at(at), bg: o.bg === true, planned, confirmUntil: o.confirmUntil ? this.at(o.confirmUntil) : null, how: 'click' }, at)
   }
@@ -151,7 +155,12 @@ export class Scenario {
     return this.push({ k: 'work.end', at: this.at(at), end: this.at(end) }, at)
   }
 
-  request(id: string, from: string, to: string | null, mode: 'now' | 'urgent' = 'now'): this {
+  /** A block moved to the background or back to the foreground. */
+  fg(id: string, bg: boolean, at: string): this {
+    return this.push({ k: 'block.fg', block: id, at: this.at(at), bg }, at)
+  }
+
+  request(id: string, from: string, to: string | null, mode: 'now' | 'urgent' | 'queue' = 'now'): this {
     this.push({ k: 'request.start', request: id, at: this.at(from), mode, person: null, estimateMin: null, hardEndAt: null }, from)
     return to ? this.push({ k: 'request.end', request: id, at: this.at(to) }, to) : this
   }
@@ -166,14 +175,41 @@ export class Scenario {
     return this.push(e, at, computer)
   }
 
-  /** The engine at `now` (events after `now` are not yet written). */
-  state(now: string, extra: Partial<Parameters<typeof computeDay>[0]> = {}): DayState {
-    return this.stateAt(this.at(now), extra)
+  /** The check-in: two answers per pool (0 no, 1 a little, 2 yes). */
+  checkin(at: string, answers: Record<Pool, [Answer, Answer]>): this {
+    return this.push({ k: 'energy.checkin', at: this.at(at), answers }, at, this.computer, 'energy')
   }
 
-  /** The engine at an instant. */
-  stateAt(t: number, extra: Partial<Parameters<typeof computeDay>[0]> = {}): DayState {
-    return computeDay({
+  /**
+   * A signal, with the state before it as the computer writing it knows it then (null: unknown, or given) – an anchor.
+   */
+  signal(signal: Signal, at: string, before?: Record<Pool, number> | null): this {
+    const b = before !== undefined ? before : this.energy(at).now
+    return this.push({ k: 'energy.signal', at: this.at(at), signal, before: b }, at, this.computer, 'energy')
+  }
+
+  relative(pool: Pool, delta: -10 | 0 | 10, at: string, before?: Record<Pool, number> | null): this {
+    const b = before !== undefined ? before : this.energy(at).now
+    return this.push({ k: 'energy.relative', at: this.at(at), pool, delta, before: b }, at, this.computer, 'energy')
+  }
+
+  /** A descent registered by the leader. */
+  reserve(pool: Pool, at: string, silent = false): this {
+    return this.push({ k: 'energy.reserve', at: this.at(at), pool, silent }, at, this.computer, 'energy')
+  }
+
+  /** The module switched (`was`: the state before, as the writer knew it). */
+  module(on: boolean, at: string, was: boolean = !on): this {
+    return this.push({ k: 'energy.module', at: this.at(at), on, was }, at, this.computer, 'energy')
+  }
+
+  presence(at: string): this {
+    return this.push({ k: 'presence.first', at: this.at(at) }, at)
+  }
+
+  /** What the engine is given at an instant (events after it are not yet written). */
+  contextAt(t: number, extra: Partial<DayContext> = {}): DayContext {
+    return {
       date: this.opts.date,
       snapshot: this.snapshot,
       plan: this.opts.plan,
@@ -182,7 +218,28 @@ export class Scenario {
       events: this.events.filter((e) => e.t <= t),
       now: t,
       ...extra
-    })
+    }
+  }
+
+  /** The engine at `now` (events after `now` are not yet written). */
+  state(now: string, extra: Partial<DayContext> = {}): DayState {
+    return this.stateAt(this.at(now), extra)
+  }
+
+  /** The engine at an instant. */
+  stateAt(t: number, extra: Partial<DayContext> = {}): DayState {
+    return computeDay(this.contextAt(t, extra))
+  }
+
+  /** Energy at `now`, with the day it is computed from. */
+  energyWithDay(now: string, opts: EnergyOptions = {}): { day: DayState; energy: EnergyState } {
+    const ctx = this.contextAt(this.at(now))
+    const day = computeDay(ctx)
+    return { day, energy: computeEnergy(ctx, day, opts) }
+  }
+
+  energy(now: string, opts: EnergyOptions = {}): EnergyState {
+    return this.energyWithDay(now, opts).energy
   }
 }
 

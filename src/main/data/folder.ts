@@ -1,9 +1,10 @@
 /**
  * One data folder in the main process (spec „Dane, komputery i ustawienia”, „Kilka komputerów”): the local journal and
  * the logs, the records and the queue of edits, this computer's presence and the others', who leads, „nieustalony”, and
- * the leader's tasks of E1 – creating the day and writing the segments of minutes (the questions, notifications and
- * backups are run by the scheduler of E4a from the same decisions). Everything this computer's state needs that is not
- * in the folder – the journal, the queue, the life marker – lives in `stateDir`, separate for every folder.
+ * the leader's tasks – creating the day, writing the segments of minutes and the descents to the reserve (the questions,
+ * notifications and backups are run by the scheduler of E4a from the same decisions). Everything this computer's state
+ * needs that is not in the folder – the journal, the queue, the life marker – lives in `stateDir`, separate for every
+ * folder.
  *
  * The scheduler calls `check()` every 15 s (and on events of the watcher); the sync simulator of E1 calls it on its own
  * virtual clock with a faulty file system.
@@ -12,7 +13,9 @@ import { join } from 'node:path'
 import { EventClock, type ClockSources } from '@shared/data/clock'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { createDay, dayPlan, dayWakeMin, nextWakeForBedtime, type HolidayLookup } from '@shared/engine/createDay'
-import { computeDay, newSegments, type DayState } from '@shared/engine/day'
+import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
+import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
+import { idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
 import { daySnapshotOf, isKnown, RULES_VERSION, type AnyEvent } from '@shared/model/events'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
@@ -270,15 +273,15 @@ export class DataFolder {
     return v === undefined ? null : dayFileFrom(v, date)
   }
 
-  /** The engine's day: the snapshot from the log, or – before the leader wrote it – the one this computer computes. */
-  async dayState(date: string, read?: DayRead, at = this.clock.now()): Promise<DayState> {
+  /** What the engine counts a day from: the snapshot from the log, or – before the leader wrote it – the one this computer computes. */
+  private async dayContext(date: string, read: DayRead | undefined, at: number): Promise<DayContext> {
     const inp = await this.inputs()
     const file = await this.dayFile(date)
     const events = (read ?? (await this.log.readDay(date))).events
     const snapshot = daySnapshotOf(events) ?? createDay({ date, ...inp, dayFile: file, holidays: this.o.holidays, at })
     const nextDate = addDays(date, 1)
     const nextFile = await this.dayFile(nextDate)
-    return computeDay({
+    return {
       date,
       snapshot,
       plan: dayPlan(snapshot, file),
@@ -286,7 +289,19 @@ export class DataFolder {
       nextWakeMin: nextWakeForBedtime(null, nextFile, inp.changes, nextDate),
       events,
       now: at
-    })
+    }
+  }
+
+  /** The engine's day. */
+  async dayState(date: string, read?: DayRead, at = this.clock.now()): Promise<DayState> {
+    return computeDay(await this.dayContext(date, read, at))
+  }
+
+  /** The day's energy with the day it is counted from (spec „Model energii”); the module counts as on until its setting (E3). */
+  async energyState(date: string, read?: DayRead, at = this.clock.now()): Promise<{ day: DayState; energy: EnergyState }> {
+    const ctx = await this.dayContext(date, read, at)
+    const day = computeDay(ctx)
+    return { day, energy: computeEnergy(ctx, day) }
   }
 
   /** One check (every 15 s): presences, who leads, the journal against OneDrive, the queue, and the leader's tasks. */
@@ -363,7 +378,8 @@ export class DataFolder {
         }
         // The segments of minutes: only minutes every computer with a fresh presence has caught up with – from the day's
         // start, as minutes already written are skipped and a stale segment's minutes are written again (T416).
-        const state = await this.dayState(day, read, now)
+        const ctx = await this.dayContext(day, read, now)
+        const state = computeDay(ctx)
         const gate = minuteGate(now, day, this.peers, read.lastByComputer)
         for (const seg of newSegments(state, state.grid.start, Math.min(gate, now))) {
           this.append({ day, dom: 'timer', k: 'minutes', ...seg })
@@ -371,6 +387,17 @@ export class DataFolder {
         }
         if (state.hardEnd.passed != null && !state.facts.hardEndPass && state.grid.start + state.hardEnd.passed * 60_000 <= gate) {
           this.append({ id: derivedId(day, 'hardend.pass'), day, dom: 'timer', k: 'hardend.pass', at: state.grid.start + state.hardEnd.passed * 60_000, basis: 'prowadzący' })
+        }
+        // Descents to the reserve, registered once their minute is closed by the gate (events up to 30 s after a minute
+        // still round into it): they stay whatever later corrections say (spec). Apart, so energy never stops the rest.
+        try {
+          const gateIdx = idxOf(state.grid, gate)
+          for (const d of newDescents(state.grid, computeEnergy(ctx, state))) {
+            if (idxOf(state.grid, d.at) >= gateIdx) continue
+            this.append({ id: derivedId(day, 'energy.reserve', d.pool, d.at), day, dom: 'energy', k: 'energy.reserve', at: d.at, pool: d.pool, silent: d.silent })
+          }
+        } catch (e) {
+          problems.push(`energia: ${String(e)}`)
         }
       } catch (e) {
         problems.push(`zadania prowadzącego: ${String(e)}`)

@@ -72,7 +72,8 @@ describe('test skali (3 lata danych)', () => {
     expect(state.budgetUsedMin).toBeGreaterThan(0)
     expect(openMs).toBeLessThan(3_000 * factor)
 
-    // Daily operations, on a warm cache: a click (into the journal and the log), a check of the leader, the day counted.
+    // Daily operations, on a warm cache: a click (into the journal and the log), a check of the leader, the day counted,
+    // the day's energy.
     const time = async (fn: () => Promise<unknown> | unknown) => {
       const s = performance.now()
       await fn()
@@ -89,6 +90,7 @@ describe('test skali (3 lata danych)', () => {
     })
     const check = await time(() => folder.check())
     const day = await time(() => folder.dayState(TODAY))
-    for (const [what, ms] of Object.entries({ click, check, day })) expect(ms, what).toBeLessThan(100 * factor)
+    const energy = await time(() => folder.energyState(TODAY))
+    for (const [what, ms] of Object.entries({ click, check, day, energy })) expect(ms, what).toBeLessThan(100 * factor)
   })
 })

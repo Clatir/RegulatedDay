@@ -172,6 +172,28 @@ describe('kolejka edycji zablokowana przy starcie', () => {
   })
 })
 
+describe('zejście do rezerwy (E2)', () => {
+  it('prowadzący rejestruje zejście raz, z identyfikatorem wyliczonym z dnia, puli i chwili', async () => {
+    writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, settings: [] }))
+    const f = await make({ at: '08:00' })
+    const yes = [2, 2] as const
+    f.folder.append({ day: DAY, dom: 'energy', k: 'energy.checkin', at: f.now, answers: { head: yes, emotions: yes, senses: yes } })
+    const r = await f.advance(5)
+    expect(r.leader.iLead && r.settled).toBe(true)
+    // Głowa 25 → 15: rezerwa o 08:05.
+    f.folder.append({ day: DAY, dom: 'energy', k: 'energy.relative', at: f.now, pool: 'head', delta: -10, before: { head: 25, emotions: 25, senses: 25 } })
+    const at = f.now
+    // Minuta zejścia nie jest jeszcze zamknięta (zdarzenia do 30 s po niej też do niej należą): bez zapisu.
+    await f.folder.check()
+    expect(events().filter((e) => e.k === 'energy.reserve')).toEqual([])
+    await f.advance(3)
+    const reserve = events().filter((e) => e.k === 'energy.reserve')
+    expect(reserve).toEqual([expect.objectContaining({ dom: 'energy', pool: 'head', at, silent: false })])
+    const { energy } = await f.folder.energyState(DAY)
+    expect(energy.descents.map((d) => d.recorded)).toEqual([true])
+  })
+})
+
 describe('bramka minut i kopia zdarzenia o wyliczonym identyfikatorze', () => {
   it('numer przegranej kopii zdarzenia (dwa komputery zapisały to samo id) jest widoczny jako ostatni tego komputera', async () => {
     mkdirSync(join(dataDir, paths.logDir(DAY)), { recursive: true })
