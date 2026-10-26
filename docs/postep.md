@@ -1,8 +1,9 @@
 # Postęp
 
 ## Stan bieżący
-- Etap: **E1 zakończony w kodzie** (gałąź `claude/e1-dane-silnik-czasu`, PR #4, CI w toku); bez wydania (T427:
-  folder danych otwiera się tylko z `RD_DATA_DIR`, nic się nie zmienia dla Ciebie). Historia E0 → `docs/archiwum/postep-E0.md`.
+- Etap: **E1 zakończony** (D285): PR #4 scalony 26.10 (f460ef7) przy zielonym CI (Linux i Windows, niestabilnych
+  testów brak); bez wydania (T427: folder danych otwiera się tylko z `RD_DATA_DIR`, nic się nie zmienia dla Ciebie).
+  Historia E0 → `docs/archiwum/postep-E0.md`.
 - Zakres E1: czas i dzień logiczny (zmiana czasu, 04:00), model danych (kategorie, typy dni, ustawienia z datą,
   szablony z wersjami, plan wykładów, plik dnia, zdarzenia logu), kalendarz świąt (NYSE, CME FX, LSE, PL), tworzenie
   dnia (sesje ze strefy NY, tygodnie przesunięcia, skrócone sesje), silnik dnia (granica, koniec pracy z regułą 15 min,
@@ -25,9 +26,20 @@
   w 25 s); pułapka zapisana w pamięci.
 
 ## Kolejka
-1. PR #4 (E1): CI na Linuksie i Windows; scalam sam przy zielonym CI (D285). Wydania nie ma (wersja 0.1.1 bez zmian).
-2. Pauza do „dalej”, potem „Przed etapem E2” (Model energii: pule, objawy, sygnały, koszty, tło, przełączenia,
-   kontakt, prognoza, rezerwa; przykład z Modelu energii jako test). Model: Opus 5.5 · xhigh.
+1. CI na `main` po scaleniu PR #4 (run 40328605555): powinno przejść na zielono; nowego wydania nie ma (wersja 0.1.1
+   bez zmian, krok publikacji to pomija). Gdy czerwone – poprawka na gałęzi `claude/e2-model-energii`.
+2. Pauza do „dalej”. **E2** (gałąź `claude/e2-model-energii`): zakres i kryteria w `docs/plan.md`, rozdział „Model
+   energii” specyfikacji. Model: Opus 5.5 · xhigh.
+
+## Przed etapem E2 (26.10.2026)
+- Co trzeba wiedzieć: E2 to silnik energii bez interfejsu (check-in i sygnały w widoku dochodzą w E3–E4b): trzy pule
+  0–100 z odpowiedzi o objawy, sygnały, koszty bloków na godzinę (tło 50%, sesja w tle 0, suma w puli w zakresie ±5),
+  przełączenia (2 poznawcze), koszt kontaktu (2 psychiczne), regeneracja i czas bez bloku jako „gra, film”, prognoza,
+  rezerwa 15 z histerezą +5, zejście do rezerwy, nagroda „Reakcja na rezerwę” (warunki D241, D244). Kryterium: przykład
+  z Modelu energii jako test (pierwsze kroki sprawdzone arytmetycznie – zgodne). Silnik E1 dostarcza klasyfikację
+  czasu (regeneracja, bloki, prośby, tło), na której energia się opiera.
+- Pytania do Ciebie: brak (zachowanie opisane w specyfikacji; sprawy techniczne jako T-decyzje).
+- Do przygotowania: nic. Model: Opus 5.5 · xhigh.
 
 ## Do sprawdzenia na Windows (E1)
 - Nic do ręcznego sprawdzenia: E1 nie ma interfejsu, a zachowanie aplikacji bez `RD_DATA_DIR` się nie zmienia. Wynik
