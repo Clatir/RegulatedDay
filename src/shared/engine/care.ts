@@ -67,10 +67,26 @@ export function workRunStart(state: DayState, now: number): number | null {
   return start
 }
 
-/** Contact with people now (a block of a category with contact running in the foreground): since when (ms). */
-export function contactSince(state: DayState, t: TimerNow): number | null {
-  if (!t.fg || !t.fg.info.rules.contact) return null
-  return atOf(state.grid, t.fg.fact.runs.at(-1)?.from ?? t.fg.startedAt)
+/** The suggestion of solitude shows for this long after the contact ended. */
+export const SOLITUDE_SHOW_MIN = 15
+
+/**
+ * Contact with people that just ended (spec „Po kontakcie z ludźmi dłuższym niż 30 min … widget raz sugeruje chwilę
+ * samotności”): the latest block of a category with contact in the foreground, ended within the last 15 min after more
+ * than `afterMin` in the foreground – its end (ms), or null.
+ */
+export function contactEnded(state: DayState, t: TimerNow, now: number, afterMin: number): number | null {
+  if (t.fg?.info.rules.contact) return null
+  let best: number | null = null
+  for (const b of state.blocks) {
+    if (!b.rules.contact) continue
+    const f = state.facts.blocks.get(b.id)
+    if (!f || f.endedAt == null) continue
+    const fgMin = f.runs.filter((r) => !r.bg).reduce((s, r) => s + Math.max(0, (r.to === OPEN ? f.endedAt! : r.to) - r.from), 0)
+    const end = atOf(state.grid, f.endedAt)
+    if (fgMin > afterMin && now - end < SOLITUDE_SHOW_MIN * MIN && now >= end) best = Math.max(best ?? 0, end)
+  }
+  return best
 }
 
 /** An answer or a start recorded for a proposal (it is shown once). */

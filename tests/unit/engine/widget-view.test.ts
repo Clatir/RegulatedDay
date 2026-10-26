@@ -8,6 +8,7 @@ import { activityOf } from '@shared/engine/activity'
 import { autoActions } from '@shared/engine/auto'
 import { timerAction, type TimerAction } from '@shared/engine/timer'
 import { engineView } from '@shared/engineView'
+import { toneOnChange } from '../../../src/main/widget'
 import { block, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
@@ -17,7 +18,7 @@ function view(s: Scenario, time: string, o: { sessionMode?: boolean } = {}) {
   const t = s.at(time)
   const ctx = s.contextAt(t)
   const state = s.stateAt(t)
-  return engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, name: (c) => ({ inne: 'Inne obowiązki', sesja: 'Sesja tradingowa', posilek: 'Posiłek', 'zajecia-zdalne': 'Zajęcia zdalne', regeneracja: 'Regeneracja' })[c] ?? c, care, modePrefs: { sessionMode: o.sessionMode ?? true, classMode: true }, pending: null })
+  return engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, name: (b) => ({ inne: 'Inne obowiązki', sesja: 'Sesja tradingowa', posilek: 'Posiłek', 'zajecia-zdalne': 'Zajęcia zdalne', regeneracja: 'Regeneracja' })[b.categoryId] ?? b.categoryId, care, modePrefs: { sessionMode: o.sessionMode ?? true, classMode: true }, pending: null })
 }
 
 function click(s: Scenario, time: string, act: TimerAction) {
@@ -130,6 +131,27 @@ describe('widok paska z silnika', () => {
     expect(quiet.lines.some((l) => l.id.startsWith('fewerOffer:'))).toBe(false)
     click(s, '13:00', { a: 'better' })
     expect(view(s, '13:01').quiet).toBe(false)
+  })
+
+  it('chwila samotności po kontakcie dłuższym niż 30 min – gdy się skończył, nie w jego trakcie', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'r', cat: 'prosby', at: '10:00', min: 45 })] }).observe('07:00', null)
+    click(s, '10:00', { a: 'start', block: 'r' })
+    expect(view(s, '10:40').lines.some((l) => l.id.startsWith('solitude:'))).toBe(false)
+    click(s, '10:45', { a: 'next' })
+    expect(view(s, '10:46').lines.find((l) => l.id.startsWith('solitude:'))).toMatchObject({ text: 'Po rozmowach – chwila samotności?' })
+    expect(view(s, '11:05').lines.some((l) => l.id.startsWith('solitude:'))).toBe(false)
+  })
+
+  it('dźwięk tylko przy zmianie kroku tego samego bloku: nie przy starcie ani po powrocie z próby', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const warm = view(s, '08:50')
+    const five = view(s, '08:56')
+    const zero = view(s, '09:20')
+    expect(toneOnChange(null, zero).play).toBeNull()
+    expect(toneOnChange(toneOnChange(null, warm).next, five).play).toBe('five')
+    expect(toneOnChange(toneOnChange(null, five).next, zero).play).toBe('zero')
+    expect(toneOnChange(toneOnChange(null, zero).next, zero).play).toBeNull()
   })
 
   it('„Zacznij jeszcze raz” sesji skończonej przed planowanym końcem (D207)', () => {

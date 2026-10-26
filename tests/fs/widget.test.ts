@@ -78,7 +78,7 @@ describe('widget w procesie głównym', () => {
   })
 
   it('koszt pierwszego kliknięcia czeka 10 s na drugie w miejscu przycisku', async () => {
-    const { w, folder, at } = await make()
+    const { w, folder, at, clock } = await make()
     await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 10 * 60 + 30), auto: false }])
     at(10 * 60 + 1)
     await w.refresh()
@@ -86,6 +86,10 @@ describe('widget w procesie głównym', () => {
     expect(w.current().pending).toMatchObject({ button: 'start' })
     expect(w.current().pending!.text).toContain('przedłużenie · −31 min puli')
     expect((await folder.timer(DAY)).fg).toBeNull()
+    // The second click within 0.5 s is the same click: nothing; after 2 s it confirms.
+    await w.act('confirm', undefined, 'main')
+    expect((await folder.timer(DAY)).fg).toBeNull()
+    clock.now += 2_000
     await w.act('confirm', undefined, 'main')
     expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
     expect(w.current().pending).toBeNull()
@@ -103,6 +107,90 @@ describe('widget w procesie głównym', () => {
     await w.refresh()
     expect(shown.map((n) => n.title)).toEqual(['Sesja tradingowa o 15:30'])
     expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'notice.shown')).toHaveLength(1)
+  })
+
+  it('dwa kliknięcia w 0,5 s to jedno: podwójne „Dalej” nie kończy też następnego bloku, a drugie kliknięcie kosztu za szybko nic nie potwierdza', async () => {
+    const { w, folder, clock } = await make()
+    // „x” runs; „Dalej” ends it and starts „a” – a second „Dalej” of the same double click must not end „a”.
+    await folder.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 30 })
+    await w.refresh()
+    clock.now += 60_000
+    await w.act('next', undefined, 'bar')
+    clock.now += 200
+    await w.act('next', undefined, 'bar')
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'block.end')).toHaveLength(1)
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+  })
+
+  it('„Dalej” z kosztem: koszt stoi przy „Start” następnego bloku, „Potwierdź” zaczyna właśnie ten blok (także z pytania „Dalej?”)', async () => {
+    const { w, folder, at, clock } = await make()
+    await folder.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 30 })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 10 * 60 + 40), auto: false }])
+    at(10 * 60 + 35)
+    await w.refresh()
+    const q = w.current().question!
+    expect(q).toMatchObject({ text: 'Dalej?' })
+    await w.act('line', `${q.id}|next`, 'main')
+    expect(w.current().pending).toMatchObject({ button: 'start' })
+    expect(w.current().buttons.start).toBe('Start: Inne obowiązki')
+    clock.now += 3_000
+    await w.act('confirm', undefined, 'main')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+  })
+
+  it('odmowa kliknięcia mówi w pasku dlaczego; błąd folderu nie zostawia starego widoku', async () => {
+    const { w, folder } = await make()
+    await w.refresh()
+    await w.act('pause', undefined, 'bar')
+    expect(w.current().note?.text).toBe('nic nie biegnie na pierwszym planie')
+    folder.widgetModel = async () => {
+      throw new Error('plik dnia nieczytelny')
+    }
+    await w.refresh()
+    expect(w.current()).toMatchObject({ day: null, block: null, lines: [expect.objectContaining({ id: 'unknown' })] })
+  })
+
+  it('nazwa bloku z rutyny (jak w „Dziś”), a za zobaczone liczą się tylko pytania silnika', async () => {
+    mkdirSync(join(dataDir, 'routines'), { recursive: true })
+    writeFileSync(join(dataDir, paths.record('routine', 'r1')), JSON.stringify({ schema: 1, id: 'r1', name: 'Spacer z psem', normal: [{ id: 's', name: 'spacer', min: 30 }], worse: [] }))
+    writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'p', categoryId: 'rutyny', startMin: 10 * 60, durationMin: 30, fixed: false, origin: 'user', routine: 'r1' }] }))
+    const { w } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'main')
+    expect(w.current().block?.name).toBe('Spacer z psem')
+    expect(w.shownQuestions()).toEqual([])
+  })
+
+  it('powiadomienie o rezerwie raz dziennie dla puli: tylko zejście z komunikatem', async () => {
+    const { w, folder, shown, at } = await make()
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(16 * 60)
+    await folder.check()
+    const real = folder.widgetModel.bind(folder)
+    folder.widgetModel = async (t?: number) => {
+      const m = await real(t)
+      const idx = m.state.now
+      return { ...m, energy: { ...m.energy, enabled: true, known: true, descents: [{ pool: 'emotions', at: idx - 30, recorded: true, silent: false, message: true }, { pool: 'emotions', at: idx - 5, recorded: true, silent: false, message: false }] } }
+    }
+    await w.refresh()
+    expect(shown.filter((n) => n.title === 'Energia na poziomie rezerwy')).toHaveLength(1)
+  })
+
+  it('koszt „Przedłuż” bloku w tle stoi w miejscu jego przycisku', async () => {
+    writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'w', categoryId: 'inne', startMin: 9 * 60, durationMin: 90, fixed: true, background: true, origin: 'user' }] }))
+    const { w, folder, at } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 8 * 60), boundary: placeLogical(DAY, 10 * 60 + 30), auto: false }])
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(10 * 60 + 20)
+    await folder.check()
+    await w.refresh()
+    expect(w.current().background.map((b) => b.id)).toEqual(['w'])
+    await w.act('bgExtend', 'w|15', 'panel')
+    expect(w.current().pending).toMatchObject({ button: 'bgExtend:w' })
   })
 
   it('przez 10 min po zmianie próby widget pokazuje próbę', async () => {

@@ -57,7 +57,7 @@ import { STOP_TIMEOUT_MS, type DataService } from './data/service'
 import { DataHub } from './data/hub'
 import { PowerKeeper } from './power'
 import { OneDriveWatch } from './onedrive'
-import { WidgetEngine } from './widget'
+import { toneOnChange, WidgetEngine } from './widget'
 import { SoundWindow } from './windows/soundWindow'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
@@ -173,18 +173,16 @@ function widgetView(): WidgetView {
   return { ...view, barNote }
 }
 
-/** The step of the warning last shown (a tone plays when it turns to 5 or 0 min, only once per step). */
-let lastWarn = ''
+/** The block and the step of the warning last shown (a tone plays when the step of the same block turns to 5 or 0 min). */
+let lastWarn: { block: string; warn: string } | null = null
 
 function showWidget(view: WidgetView): void {
   tray?.set({ color: view.iconColor, dot: view.dot, drop: view.drop }, view.tooltip)
   broadcast(CH.onWidget, widgetView())
   layoutBar()
-  const warnKey = `${view.day}|${view.block?.name ?? ''}|${view.block?.endsAt ?? ''}|${view.warn}`
-  if (warnKey !== lastWarn) {
-    lastWarn = warnKey
-    if (view.day && prefs().sound && view.soundOk && (view.warn === 'five' || view.warn === 'zero')) sound?.play(view.warn, prefs().soundVolume)
-  }
+  const tone = toneOnChange(lastWarn, view)
+  lastWarn = tone.next
+  if (tone.play && prefs().sound) sound?.play(tone.play, prefs().soundVolume)
   // The open icon's panel shows the questions: they count as seen (spec D231).
   if (panel?.isOpen) {
     const ids = widget.shownQuestions()
@@ -194,6 +192,8 @@ function showWidget(view: WidgetView): void {
 
 /** The window in the foreground covers its monitor (the helper's event): a bar „na wierzchu” hides over it (D291). */
 let fullscreenNow = false
+/** The desktop bar is „na wierzchu” now. */
+let barTop = false
 
 /** The settings and the widget want the desktop bar shown now. */
 const barWanted = (): boolean => prefs().desktopBar && !widgetView().hidden && !(prefs().onTop !== 'off' && fullscreenNow)
@@ -215,6 +215,9 @@ function layoutBar(): void {
   const zoom = prefs().zoom
   const r = barRect(prefs().barPlacement, displays(), primary, zoom, Math.ceil(barFoldedHeight * zoom), Math.ceil(barLayoutNow.height * zoom))
   const onTop = prefs().onTop !== 'off'
+  // Off again: hidden first – dropping „topmost” would leave it above the windows until the helper lays it under them.
+  if (!onTop && barTop) bar.apply({ visible: false })
+  barTop = onTop
   bar.apply({ bounds: r.bounds, contentProtection: prefs().hideFromCapture, onTop })
   bar.webContents?.send('rd:barGrows', r.growsUp ? 'up' : 'down')
   if (onTop) {
@@ -285,6 +288,7 @@ function timerIn(c: TimerIn): TimerIn {
     confirm: c.confirm === true,
     categoryId: str(c.categoryId),
     durationMin: num(c.durationMin),
+    variantId: str(c.variantId) ?? null,
     target: str(c.target),
     question: str(c.question),
     answer: str(c.answer)

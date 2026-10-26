@@ -11,13 +11,14 @@
 import { questionsOf, type Question } from './engine/auto'
 import type { Activity } from './engine/activity'
 import { plannedSpan } from './engine/blocks'
-import { answered, contactSince, waterDue, workRunStart, type CareSettings } from './engine/care'
+import { answered, contactEnded, waterDue, workRunStart, type CareSettings } from './engine/care'
 import type { DayContext, DayState } from './engine/day'
 import type { EnergyState } from './engine/energy'
 import type { AutoAction } from './engine/facts'
 import { atOf } from './engine/grid'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
 import { timerNow, type TimerNow } from './engine/timer'
+import type { PlanBlock } from './model/plan'
 import { iconColor, toneColor, type Tone, type WarnStep } from './theme'
 import type { BarLine, BarPending, WidgetView } from './widget'
 
@@ -29,8 +30,8 @@ export interface EngineInput {
   energy: EnergyState | null
   activity: Activity
   now: number
-  /** A block's name: its variant's or its category's (never an id). */
-  name: (categoryId: string, variantId: string | null) => string
+  /** A block's name (its routine, its requests' people, its variant or category – never an id; shared/blockName.ts). */
+  name: (b: Pick<PlanBlock, 'categoryId' | 'variantId' | 'routine' | 'requests' | 'note'>) => string
   care: CareSettings
   modePrefs: ModePrefs
   pending: BarPending | null
@@ -121,8 +122,10 @@ export function engineView(i: EngineInput): WidgetView {
   const at = (idx: number) => atOf(state.grid, idx)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
   const nameOf = (id: string) => {
+    const p = i.ctx.plan.find((x) => x.id === id)
+    if (p) return i.name(p)
     const b = byId.get(id)
-    return b ? i.name(b.categoryId, b.variantId) : i.name(state.facts.blocks.get(id)?.planned?.categoryId ?? 'inne', null)
+    return i.name({ categoryId: b?.categoryId ?? state.facts.blocks.get(id)?.planned?.categoryId ?? 'inne', variantId: b?.variantId ?? null, routine: null, requests: [], note: '' })
   }
   const hidden = modes.disconnect != null
   const questions = hidden ? [] : questionsOf({ ctx: i.ctx, state, activity: i.activity, now })
@@ -172,9 +175,9 @@ export function engineView(i: EngineInput): WidgetView {
         if (now - s.at < 15 * MIN && !answered(events, id)) lines.push({ id, text: 'Włączyć mniej pytań?', actions: [{ id: 'yes', label: 'Tak' }, { id: 'no', label: 'Nie' }], dot: false })
       }
     }
-    // The solitude after contact longer than 30 min, once.
-    const contact = i.care.solitudeAfterMin > 0 ? contactSince(state, t) : null
-    if (contact != null && now - contact > i.care.solitudeAfterMin * MIN) {
+    // The solitude after contact longer than 30 min, once, when it ended (not during a class).
+    const contact = i.care.solitudeAfterMin > 0 && !modes.classMode ? contactEnded(state, t, now, i.care.solitudeAfterMin) : null
+    if (contact != null) {
       const id = `solitude:${state.grid.date}:${Math.round((contact - state.grid.start) / MIN)}`
       if (!answered(events, id)) lines.push({ id, text: 'Po rozmowach – chwila samotności?', actions: [{ id: 'solitude', label: 'Chwila ciszy' }, { id: 'dismiss', label: 'Nie teraz' }], dot: false })
     }
@@ -242,6 +245,7 @@ export function engineView(i: EngineInput): WidgetView {
     night: modes.night,
     pending: i.pending && i.pending.until > now ? i.pending : null,
     day: state.grid.date,
-    toneSet: 'robocze'
+    toneSet: 'robocze',
+    note: null
   }
 }

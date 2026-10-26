@@ -31,8 +31,8 @@ const POOLS: Array<[string, string]> = [
   ['senses', 'bodźce']
 ]
 const EXTEND = [15, 30, 60]
-/** Question lines (their id: rule:day:…) count as seen where they are shown. */
-const QUESTION_ID = /^[a-zA-Z0-9]+:\d{4}-/
+/** The engine's questions (their id: rule:day:block:threshold) count as seen where they are shown – not the bar's proposals. */
+const QUESTION_ID = /^(next|next2|workEnd|return|absence|shutdown):\d{4}-\d{2}-\d{2}:/
 
 function act(action: WidgetAction, arg?: string): void {
   void window.rd.widgetAction(action, arg)
@@ -115,9 +115,12 @@ export function useReportLayout(ref: React.RefObject<HTMLElement | null>, unfold
   }, [ref, unfolded])
 }
 
-/** The main window tells which questions it shows while it is in the foreground (the main process checks presence, D231). */
-function useSeen(view: WidgetView, mode: BarMode): void {
-  const ids = [view.question?.id, ...view.lines.map((l) => l.id)].filter((x): x is string => !!x && QUESTION_ID.test(x))
+/**
+ * The main window tells which questions it shows while it is in the foreground (the main process checks presence,
+ * D231): „Dalej?” and the lines on view – those folded in „⋯” only while it is unfolded.
+ */
+function useSeen(view: WidgetView, mode: BarMode, lines: readonly BarLine[]): void {
+  const ids = [view.question?.id, ...lines.map((l) => l.id)].filter((x): x is string => !!x && QUESTION_ID.test(x))
   const key = ids.join(',')
   useEffect(() => {
     if (mode !== 'main' || !ids.length || view.day == null) return
@@ -148,7 +151,14 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
   const shownLines = view.lines.slice(0, fit)
   const extra = view.lines.slice(fit)
   const pending = view.pending && view.pending.until > now ? view.pending : null
-  useSeen(view, mode)
+  useSeen(view, mode, unfold === 'more' ? view.lines : shownLines)
+  // The cost stands in place of its button when that button is on view; otherwise in the row under the buttons.
+  const inPlace =
+    !!pending &&
+    ((pending.button === 'next' && view.buttons.next) ||
+      (pending.button === 'extend' && view.buttons.extend) ||
+      (pending.button === 'start' && !!view.buttons.start) ||
+      (pending.button.startsWith('bgExtend:') && unfold === 'more' && view.background.some((b) => `bgExtend:${b.id}` === pending.button)))
 
   useEffect(() => {
     onUnfold?.(unfold != null)
@@ -400,12 +410,17 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
             </BarButton>
           )}
         </div>
-        {pending && !['next', 'extend', 'start'].includes(pending.button) && !pending.button.startsWith('bgExtend:') && (
+        {pending && !inPlace && (
           <div className="flex flex-wrap items-center gap-1.5" data-testid="bar-pending">
             <span className="text-[12px] text-fg">{pending.text}</span>
             <BarButton mode={mode} accent testId="bar-confirm" onAct={() => act('confirm')}>
               Potwierdź
             </BarButton>
+          </div>
+        )}
+        {view.note && view.note.until > now && (
+          <div className="text-[12px] text-rose" data-testid="bar-note-click">
+            {view.note.text}
           </div>
         )}
         {shownLines.map((l) => (

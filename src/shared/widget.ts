@@ -92,6 +92,8 @@ export interface WidgetView {
   soundOk: boolean
   /** This computer records a lecture now: no notifications, no sounds. */
   recording: boolean
+  /** Why a click did nothing (shown in the bar for a few seconds), null: nothing to say. */
+  note: { text: string; until: number } | null
 }
 
 export const ALL_BUTTONS: BarButtons = { next: true, pause: true, extend: true, workEnd: true, finished: false, cutOff: true, start: null }
@@ -188,6 +190,7 @@ export function trialView(t: TrialState, now: number): WidgetView {
     day: null,
     toneSet: t.toneSet,
     soundOk: !t.quiet,
-    recording: false
+    recording: false,
+    note: null
   }
 }

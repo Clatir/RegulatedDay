@@ -231,6 +231,7 @@ export interface TimerIn {
   confirm?: boolean
   categoryId?: string
   durationMin?: number
+  variantId?: string | null
   /** „Cofnij”: the automatic action's event id. */
   target?: string
   /** An answer to a proposal of the bar (`mark`). */

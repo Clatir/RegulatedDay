@@ -1,28 +1,40 @@
 /**
  * The widget in the main process (spec „Widget”, „Akcje widgetu wykonuje proces główny”): the view of the engine for the
  * bar at the top of the main window, the icon's panel and the desktop bar, and the icon; every click of the bar as an
- * action of the timer (a first click with a cost waits 10 s for the second, shown in place of its button); the Windows
- * notifications on by default (D230) – shown only by the leader, each once by its stable id in the day's log.
+ * action of the timer (a first click with a cost waits 10 s for the second, shown in place of its button; two clicks
+ * within 0.5 s are one); the Windows notifications on by default (D230) – shown only by the leader, each once by its
+ * stable id in the day's log.
  *
  * Until a data folder is open, and for 10 min after a change of the trial (E0, D298), the widget shows the trial.
  */
 import type { TimerIn, TimerResult, ViewKind } from '@shared/api'
+import { blockName } from '@shared/blockName'
 import { engineView } from '@shared/engineView'
-import { questionsOf } from '@shared/engine/auto'
 import { plannedSpan } from '@shared/engine/blocks'
 import { atOf } from '@shared/engine/grid'
 import type { ModePrefs } from '@shared/engine/modes'
+import { suggestRegen } from '@shared/engine/reserve'
 import { timerNow } from '@shared/engine/timer'
 import type { NoticeKind } from '@shared/machine'
-import { categoryName } from '@shared/model/rd'
-import type { BarPending, WidgetView } from '@shared/widget'
+import { POOLS, type Pool } from '@shared/model/categories'
+import { requestFrom, type RequestRecord } from '@shared/model/requests'
+import { routineFrom, type Routine } from '@shared/model/routines'
+import { ALL_BUTTONS, type BarPending, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
 const CONFIRM_MS = 10_000
+/** Two clicks within this count as one (spec „Potwierdzenie przedłużenia”). */
+export const DOUBLE_MS = 500
 const REFRESH_MS = 15_000
+/** A refused or failed click says why in the bar this long. */
+const NOTE_MS = 6_000
 /** A change of the trial shows it instead of the engine for this long (the trial's checks, D298). */
 export const TRIAL_HOLD_MS = 10 * 60_000
 const MIN = 60_000
+/** The questions of the engine (their ids: rule:day:block:threshold) – only they are marked seen. */
+const QUESTION_ID = /^(next|next2|workEnd|return|absence|shutdown):\d{4}-\d{2}-\d{2}:/
+/** The bar shows this many lines (one in the quiet modes); the rest gathers in „⋯”. */
+export const shownLineCount = (v: Pick<WidgetView, 'quiet'>): number => (v.quiet ? 1 : 2)
 
 export interface NotifyIn {
   id: string
@@ -54,15 +66,53 @@ interface Pending extends BarPending {
 
 const costText = (label: string, c: NonNullable<TimerResult['confirm']>) => `${label}: ${c.overrun ? 'przekroczenie' : 'przedłużenie'} · ${c.bedtime ? `pora snu +${c.minutes} min` : `−${c.minutes} min puli`}`
 
+/**
+ * The tone of a warning (spec: quiet at 5 and 0 min): only when the step of the same block (and plan) changes to 5 or 0
+ * – never at the start of the app, nor when the view comes back from the trial with a block already over its end.
+ */
+export function toneOnChange(prev: { block: string; warn: string } | null, view: WidgetView): { next: { block: string; warn: string } | null; play: 'five' | 'zero' | null } {
+  const next = view.day ? { block: `${view.day}|${view.block?.name ?? ''}|${view.block?.endsAt ?? ''}`, warn: view.warn } : null
+  const changed = !!next && !!prev && prev.block === next.block && prev.warn !== next.warn
+  return { next, play: changed && view.soundOk && (view.warn === 'five' || view.warn === 'zero') ? view.warn : null }
+}
+
+/** The bar while the day cannot be counted (a file not readable now): no actions, one line why. */
+function unknownView(trial: WidgetView): WidgetView {
+  return {
+    ...trial,
+    hidden: false,
+    quiet: false,
+    tone: 'brak',
+    warn: 'none',
+    dot: false,
+    drop: false,
+    block: null,
+    question: null,
+    lines: [{ id: 'unknown', text: 'Dnia nie da się teraz policzyć (plik jeszcze nieczytelny) – pasek wróci sam.', actions: [], dot: false }],
+    session: false,
+    stateLine: null,
+    tooltip: 'Dzień nieznany – czekam na pliki',
+    buttons: { ...ALL_BUTTONS, next: false, pause: false, extend: false, workEnd: false, cutOff: false },
+    background: [],
+    autos: { groups: [], items: [] },
+    pending: null,
+    day: null,
+    note: null
+  }
+}
+
 export class WidgetEngine {
   private view: WidgetView | null = null
   private pending: Pending | null = null
+  private note: { text: string; until: number } | null = null
   private timer: ReturnType<typeof setInterval> | null = null
   private running: Promise<void> | null = null
   private again = false
   /** The block „Start: …” would start (from the last view). */
   private nextBlock: string | null = null
-  private logged = false
+  private failing = false
+  private lastClick = { key: '', at: Number.NEGATIVE_INFINITY }
+  private model: Awaited<ReturnType<DataFolder['widgetModel']>> | null = null
 
   constructor(private readonly d: WidgetDeps) {}
 
@@ -111,36 +161,42 @@ export class WidgetEngine {
       this.d.emit(this.current())
       return
     }
+    const now = this.now
     try {
-      const now = this.now
       const m = await folder.widgetModel(now)
+      this.model = m
       const rd = m.rd
-      const name = (categoryId: string, variantId: string | null) => {
-        const variant = variantId ? m.state.settings.categories[categoryId]?.variants.find((v) => v.id === variantId) : undefined
-        return variant?.name ?? categoryName(rd, categoryId)
-      }
+      const routines = (await folder.collection('routine').catch(() => [])).map(routineFrom).filter((x): x is Routine => !!x)
+      const requests = (await folder.collection('request').catch(() => [])).map(requestFrom).filter((x): x is RequestRecord => !!x)
+      const names = { rd, settings: m.state.settings, routines, requests }
       if (this.pending && this.pending.until <= now) this.pending = null
+      if (this.note && this.note.until <= now) this.note = null
       this.nextBlock = timerNow(m.state).next?.id ?? null
-      this.view = engineView({
-        ctx: m.ctx,
-        state: m.state,
-        energy: m.energy,
-        activity: m.activity,
-        now,
-        name,
-        care: { waterOn: rd.general.modules.water, waterEveryMin: rd.general.waterEveryMin, breakAfterMin: rd.general.breakAfterMin, solitudeAfterMin: rd.general.solitudeAfterMin },
-        modePrefs: this.d.modePrefs(),
-        // Only what the windows show (the view goes over IPC – no function in it).
-        pending: this.pending ? { button: this.pending.button, text: this.pending.text, until: this.pending.until } : null,
-        computer: folder.computers[0]?.id
-      })
-      if (!this.logged) {
-        this.logged = true
-        this.d.log('info', `widget: widok silnika (dzień ${m.state.grid.date})`)
+      this.view = {
+        ...engineView({
+          ctx: m.ctx,
+          state: m.state,
+          energy: m.energy,
+          activity: m.activity,
+          now,
+          name: (b) => blockName(b, names),
+          care: { waterOn: rd.general.modules.water, waterEveryMin: rd.general.waterEveryMin, breakAfterMin: rd.general.breakAfterMin, solitudeAfterMin: rd.general.solitudeAfterMin },
+          modePrefs: this.d.modePrefs(),
+          // Only what the windows show (the view goes over IPC – no function in it).
+          pending: this.pending ? { button: this.pending.button, text: this.pending.text, until: this.pending.until } : null,
+          computer: folder.computers[0]?.id
+        }),
+        note: this.note
       }
-      if (folder.leader.iLead) await this.notices(folder, m, name, now)
+      if (this.failing) this.d.log('info', 'widget: dzień znów policzony')
+      this.failing = false
+      if (folder.leader.iLead) await this.notices(folder, m, (b) => blockName(b, names), now)
     } catch (e) {
-      this.d.log('warn', 'widok widgetu nie policzył się', e)
+      // The day cannot be counted now: a bar without actions says so (never the last view with a stale countdown).
+      if (!this.failing) this.d.log('warn', 'widok widgetu nie policzył się', e)
+      this.failing = true
+      this.model = null
+      this.view = unknownView(this.d.trial().view)
     }
     this.d.emit(this.current())
   }
@@ -148,9 +204,10 @@ export class WidgetEngine {
   /**
    * The notifications on by default (D230): 5 min before a block waiting for „Zacznij” and before classes and the commute
    * (not before an online lecture, D237; none in the class mode, D236, nor during stationary classes and the commute),
-   * the hard end of projects while a project runs, a pool at the reserve. Each once: its id goes to the day's log.
+   * the hard end of projects while a project runs, a pool at the reserve (the message of its first descent of the day).
+   * Each once: its id goes to the day's log.
    */
-  private async notices(folder: DataFolder, m: Awaited<ReturnType<DataFolder['widgetModel']>>, name: (c: string, v: string | null) => string, now: number): Promise<void> {
+  private async notices(folder: DataFolder, m: Awaited<ReturnType<DataFolder['widgetModel']>>, name: (b: Parameters<typeof blockName>[0]) => string, now: number): Promise<void> {
     const on = this.d.notices()
     const view = this.view
     if (!view || view.hidden || view.night || view.recording) return
@@ -173,13 +230,14 @@ export class WidgetEngine {
         const start = atOf(state.grid, span.start)
         if (now < start - 5 * MIN || now >= start) continue
         const clock = new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(start)
-        out.push({ id: `notice:${date}:start5:${b.id}:${span.start}`, title: `${name(b.categoryId, b.variantId)} o ${clock}`, body: b.waits ? 'Za 5 min – „Zacznij” czeka w pasku.' : 'Za 5 min.', line: `wait:${b.id}`, day: date })
+        const p = m.ctx.plan.find((x) => x.id === b.id)
+        out.push({ id: `notice:${date}:start5:${b.id}:${span.start}`, title: `${p ? name(p) : b.categoryId} o ${clock}`, body: b.waits ? 'Za 5 min – „Zacznij” czeka w pasku.' : 'Za 5 min.', line: `wait:${b.id}`, day: date })
       }
     }
     if (on.hardEnd && state.hardEnd.passed != null && t.fg?.info.isProject) out.push({ id: `notice:${date}:hardEnd:-:${state.hardEnd.passed}`, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
     if (on.reserve && m.energy.enabled) {
       for (const d of m.energy.descents) {
-        if (d.silent || atOf(state.grid, d.at) < now - 60 * MIN) continue
+        if (!d.message || atOf(state.grid, d.at) < now - 60 * MIN) continue
         out.push({ id: `notice:${date}:reserve:${d.pool}:${d.at}`, title: 'Energia na poziomie rezerwy', body: { head: 'Głowa', emotions: 'Emocje', senses: 'Bodźce' }[d.pool] + ' – czas na regenerację.', line: null, day: date })
       }
     }
@@ -189,13 +247,46 @@ export class WidgetEngine {
     }
   }
 
-  /** A click of the bar (`from`: which window). */
+  /** The way of a break: from the screen after a project, else the lowest cost in the lowest pool (spec „Timer”). */
+  private breakWay(): string | null {
+    const m = this.model
+    if (!m) return null
+    const t = timerNow(m.state)
+    if (t.fg?.info.isProject) return 'przerwa-od-ekranu'
+    const now = m.energy.known ? m.energy.now : null
+    if (!now) return null
+    const lowest = [...POOLS].sort((a: Pool, b: Pool) => now[a] - now[b])[0]!
+    return suggestRegen(m.state.settings, lowest)
+  }
+
+  /** A click of the bar (`from`: which window). A refused or failed one says why in the bar for a few seconds. */
   async act(action: string, arg: string | undefined, from: ViewKind): Promise<void> {
+    const key = `${action}|${arg ?? ''}`
+    const at = this.now
+    // Two clicks within 0.5 s are one – also the second click of a cost that comes too soon after its first.
+    if ((this.lastClick.key === key && at - this.lastClick.at < DOUBLE_MS) || (action === 'confirm' && this.pending && at - (this.pending.until - CONFIRM_MS) < DOUBLE_MS)) return
+    this.lastClick = { key, at }
+    try {
+      await this.actNow(action, arg, from)
+    } catch (e) {
+      this.pending = null
+      this.say(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`)
+      this.d.log('warn', `pasek: ${action}`, e)
+      await this.refresh()
+    }
+  }
+
+  private say(text: string): void {
+    this.note = { text, until: this.now + NOTE_MS }
+    setTimeout(() => void this.refresh(), NOTE_MS + 50).unref?.()
+  }
+
+  private async actNow(action: string, arg: string | undefined, from: ViewKind): Promise<void> {
     const v = this.current()
     if (from === 'bar') {
-      // A click of the desktop bar counts as seeing everything it shows (spec), and its next 10 s are the app's own.
+      // A click of the desktop bar counts as seeing what it shows (spec), and its next 10 s are the app's own.
       this.d.clickedApp()
-      const ids = [v.question?.id, ...v.lines.map((l) => l.id)].filter((x): x is string => !!x && /^[a-zA-Z0-9]+:\d{4}-/.test(x))
+      const ids = this.shownQuestions()
       if (ids.length) void this.d.seen(ids, 'bar')
     }
     if (v.day == null && action !== 'openMain') return
@@ -203,11 +294,12 @@ export class WidgetEngine {
     let r: TimerResult | null = null
     let label = ''
     let click: TimerIn | null = null
+    /** The button the cost stands in place of (none: the row under the buttons). */
+    let button = action
     const num = (s: string | undefined) => (s != null && /^-?\d+$/.test(s) ? Number(s) : null)
     switch (action) {
       case 'next':
         click = { a: 'next' }
-        label = 'Dalej'
         break
       case 'pause':
         click = { a: 'pause' }
@@ -248,6 +340,7 @@ export class WidgetEngine {
         const [block, min] = (arg ?? '').split('|')
         if (block) click = { a: 'extend', block, minutes: num(min) ?? 15 }
         label = `Przedłuż +${num(min) ?? 15}`
+        button = `bgExtend:${block}`
         break
       }
       case 'undo':
@@ -258,14 +351,14 @@ export class WidgetEngine {
         const f = this.d.folder()
         if (!f || !arg) return
         const [a, b] = arg.split('|')
-        await f.energySignal(action === 'signal' ? { signal: a as 'glasses' } : { pool: a as 'head', delta: (num(b) ?? 0) as -10 | 0 | 10 }).catch((e) => this.d.log('warn', 'sygnał nie zapisany', e))
+        await f.energySignal(action === 'signal' ? { signal: a as 'glasses' } : { pool: a as 'head', delta: (num(b) ?? 0) as -10 | 0 | 10 })
         return this.refresh()
       }
       case 'confirm': {
         const p = this.pending
         this.pending = null
         if (p && p.until > this.now) r = await p.redo()
-        if (r && !r.ok && r.why) this.d.log('info', `pasek: ${r.why}`)
+        if (r && !r.ok && r.why) this.say(r.why)
         return this.refresh()
       }
       case 'openMain':
@@ -275,24 +368,31 @@ export class WidgetEngine {
         const [line, act, value] = (arg ?? '').split('|')
         if (!line || !act) return
         const [kind, id] = [line.slice(0, line.indexOf(':')), line.slice(line.indexOf(':') + 1)]
+        button = `line:${line}|${act}`
         if (kind === 'wait') click = act === 'start' ? { a: 'start', block: id } : { a: 'cancel', block: id }
         else if (kind === 'restart') click = { a: 'restart', block: id }
         else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
         else if (kind === 'fewerOffer') {
-          await this.d.timer({ a: 'mark', question: line, answer: act } as TimerIn)
+          await this.d.timer({ a: 'mark', question: line, answer: act, day })
           if (act === 'yes') click = { a: 'fewer' }
         } else if (kind === 'break' || kind === 'solitude') {
-          await this.d.timer({ a: 'mark', question: line, answer: act } as TimerIn)
-          if (act === 'break' || act === 'solitude') click = { a: 'startNew', block: `${line.replace(/[^a-z0-9]/gi, '')}`.slice(0, 40), categoryId: 'regeneracja', durationMin: 15 }
+          await this.d.timer({ a: 'mark', question: line, answer: act, day })
+          // A break pauses the running work (it waits as the next in the plan), never ends it.
+          if (act === 'break' || act === 'solitude') click = { a: 'startNew', block: line.replace(/[^a-z0-9]/gi, '').slice(0, 40), categoryId: 'regeneracja', variantId: act === 'solitude' ? 'cisza' : this.breakWay(), durationMin: 15 }
         } else if (act === 'extend') click = { a: 'extend', minutes: num(value) ?? 15 }
-        else if (act === 'next') click = { a: 'next' }
-        else if (act === 'workEnd') click = { a: 'workEnd' }
+        else if (act === 'next') {
+          click = { a: 'next' }
+          action = 'next'
+        } else if (act === 'workEnd') click = { a: 'workEnd' }
         else if (act === 'endedAt' && value == null) {
           this.d.showMain('today')
           return
         } else {
           r = await this.d.answer(line, act, num(value))
-          if (r.confirm) this.wait(`${line}|${act}`, act === 'working' ? 'Pracuję' : 'Start', r.confirm, () => this.d.answer(line, act, 1))
+          if (r.confirm) {
+            const c = r.confirm
+            this.wait('start', act === 'working' ? 'Pracuję' : 'Start', c, () => this.d.answer(line, act, 1))
+          } else if (!r.ok && r.why) this.say(r.why)
           return this.refresh()
         }
         label = act === 'start' ? 'Zacznij' : label
@@ -304,9 +404,15 @@ export class WidgetEngine {
     if (!click) return
     const c = { ...click, day }
     r = await this.d.timer(c)
-    if (r.confirm) this.wait(action === 'line' ? `line:${arg}` : action, label || 'Start', r.confirm, () => this.d.timer({ ...c, ...(action === 'next' ? { a: 'start', block: r!.confirm!.block } : {}), confirm: true }))
-    else this.pending = null
-    if (!r.ok && r.why && !r.confirm) this.d.log('info', `pasek: ${r.why}`)
+    if (r.confirm) {
+      const cost = r.confirm
+      // „Dalej”: its first click ended the running block; the cost belongs to starting the next one – shown at „Start”.
+      if (action === 'next') this.wait('start', 'Start', cost, () => this.d.timer({ a: 'start', block: cost.block, day, confirm: true }))
+      else this.wait(button, label || 'Start', cost, () => this.d.timer({ ...c, confirm: true }))
+    } else {
+      this.pending = null
+      if (!r.ok && r.why) this.say(r.why)
+    }
     await this.refresh()
   }
 
@@ -316,14 +422,10 @@ export class WidgetEngine {
     setTimeout(() => void this.refresh(), CONFIRM_MS + 50).unref?.()
   }
 
-  /** The questions shown in a window that sees them (the main window in the foreground, the open panel). */
+  /** The questions a window that sees them shows (D231): „Dalej?” and the lines the bar shows, not those folded in „⋯”. */
   shownQuestions(): string[] {
     const v = this.current()
-    return [v.question?.id, ...v.lines.map((l) => l.id)].filter((x): x is string => !!x && /^[a-zA-Z0-9]+:\d{4}-/.test(x))
-  }
-
-  /** For the tests: the questions as the engine has them now. */
-  static questionIds(m: Awaited<ReturnType<DataFolder['widgetModel']>>, now: number): string[] {
-    return questionsOf({ ctx: m.ctx, state: m.state, activity: m.activity, now }).map((q) => q.id)
+    if (v.day == null) return []
+    return [v.question?.id, ...v.lines.slice(0, shownLineCount(v)).map((l) => l.id)].filter((x): x is string => !!x && QUESTION_ID.test(x))
   }
 }

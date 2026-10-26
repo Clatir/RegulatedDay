@@ -3,10 +3,14 @@
 ## Stan bieżący
 - E3 scalony, wydanie 0.2.0 opublikowane z runu 40395541803 na `main` (zielony, 26.10 ok. 22:06). E3 →
   `docs/archiwum/postep-E3.md`, E2 → `docs/archiwum/postep-E2.md`.
-- Etap: **E4a w toku** – PR #7 (`claude/e4a-timer-i-terminy`, wersja 0.3.0). Pierwsza runda CI (run 40403404716, kod
-  sprzed przeglądu) zielona, także Windows. `/code-review` (xhigh): 15 uwag, wszystkie poprawione z testem, który na
-  kodzie sprzed poprawek pada (13 testów, sprawdzone odłożeniem `src`), T471. Druga runda CI w toku; dalej scalenie
-  i wydanie 0.3.0 (D285).
+- **E4a scalony** (PR #7, 26.10 ok. 23:25; CI PR zielone, także Windows; test skali na Node 26 raz przekroczył 100 ms –
+  ponowienie zielone, lokalnie ~32 ms jak na `main`). CI na `main` (run 40412280420, wydanie 0.3.0) w toku przy zapisie.
+- **E4b w toku**: PR do `main` z gałęzi `claude/e4b-pasek-ikona-cisza` (wersja 0.4.0), `/code-review` (xhigh): 15 uwag,
+  wszystkie poprawione z testem, który na kodzie sprzed poprawek pada (14 testów, sprawdzone odłożeniem `src`; wyjątek:
+  chowanie paska przy wyłączeniu „Zawsze na wierzchu” – tylko sprawdzenie na Windows, punkt 9 listy E4b), T472–T477.
+  Testy: 564 jednostkowe i plikowe, E2E 17 (2 tylko w CI). Dalej: CI PR, scalenie, wydanie 0.4.0, potem logika E5.
+- Logika E5 (D296): silnik wariantów `engine/variants.ts` z 7 testami gotowy poza repozytorium (katalog roboczy sesji)
+  – trafi na gałąź `claude/e5-warianty` po scaleniu E4b.
 - Zakres E4a: silnik timera (`engine/timer.ts`), działania automatyczne prowadzącego z „Cofnij” i pytania ze
   zobaczeniem (`engine/auto.ts`), aktywność wszystkich komputerów (`engine/activity.ts`), wejście co 5 s
   (`main/engine/input.ts`), blokada usypiania (`engine/power.ts`, `main/power.ts`, pomocnik zwalnia po 30 s bez stanu),
@@ -56,9 +60,30 @@
   i platforma brokera (pasek, ikona, powiadomienia).
 - Otwarte bez zmian: baner „nie dokończyła się” (Pytania na później) – E4a go nie zmienia.
 
+## Do sprawdzenia na Windows (E4b, wersja 0.4.0)
+1. Ten sam pasek u góry okna głównego, w panelu ikony (kliknięcie ikony) i na pasku pulpitu: blok, odliczanie,
+   Dalej · Pauza · Przedłuż · Koniec pracy · Odcinam się; ikona przy zegarze w kolorze klasy bloku (praca – lampka,
+   życie – lawenda, wolne – morski), cieplejsza 15 min przed końcem, o stopień przy 5 i 0 min.
+2. Kropka na ikonie tylko przy „Dalej?”, „Zacznij · Odwołaj” sesji i „Wznów · Zaparkuj”; „zrobione automatycznie”
+   (w „⋯”) jej nie zapala.
+3. „Odcinam się” w pasku → pasek pulpitu znika, ikona szara, w panelu „Odcinam się od HH:MM · Wracam”; biegnący blok
+   elastyczny pauzuje; „Wracam” → „Wznów · Zaparkuj”.
+4. Sesja czekająca na „Zacznij” (od jej planowanego startu) → pasek zwarty i przygaszony; 5 min przed sesją
+   powiadomienie Windows „Sesja tradingowa o HH:MM” (tylko na komputerze prowadzącym, raz).
+5. „⋯” → „Mniej pytań” → pasek przygaszony, „Jest lepiej” go kończy; sygnał „okulary” w „Sygnały ▸” → raz „Włączyć
+   mniej pytań?”, znika po 15 min.
+6. Woda: kropla w pasku i znak kropli na ikonie 45 min po ostatnim „wypite”; kliknięcie kropli → znika.
+7. Po 90 min pracy ciągiem linia „Przerwa? … · Przerwa · Kontynuuję” z kropką; „Przerwa” zaczyna 15 min regeneracji.
+8. Po 22:00 (cisza nocna) w pasku tylko godzina albo biegnący blok z Dalej, Przedłuż, Koniec pracy; blok zaczniesz
+   z panelu bloku w „Dziś” („Start”).
+9. Ustawienia → „Zawsze na wierzchu”: „pasek pulpitu” → pasek nad oknami (kliknięcie nie zabiera fokusu), znika nad
+   filmem na pełnym ekranie; „pasek i panel” → panel ikony zostaje na wierzchu, aż go zamkniesz.
+10. Ustawienia → Dźwięk włączony → cichy dźwięk 5 i 0 min przed końcem bloku; w „mniej pytań” cisza.
+11. „Próba” → „Zestaw kolorów”: robocze / cieplejsze / chłodniejsze – wybierz zestaw (D298).
+
 ## Do sprawdzenia na Windows (E4a, wersja 0.3.0)
-1. „Dziś” z blokiem elastycznym teraz: u góry okna „Bez bloku · następny: …” i „Start: …” → klik → nazwa bloku,
-   „do HH:MM” i odliczanie; blok na osi przesuwa się na teraz.
+1. „Dziś” z blokiem elastycznym teraz: u góry okna „Bez bloku” i przycisk „Start: …” (od 0.4.0 ten sam pasek co
+   w panelu ikony) → klik → nazwa bloku i odliczanie; blok na osi przesuwa się na teraz.
 2. Pauza → „Wznów: …” → klik → biegnie dalej, planowany koniec przesunięty o czas pauzy; Dalej → następny blok
    elastyczny z planu (albo „Bez bloku”).
 3. Po zatwierdzeniu planu blok, którego koniec wychodzi za granicę: „Start” pokazuje koszt („przedłużenie · −N min

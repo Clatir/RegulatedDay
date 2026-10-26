@@ -172,6 +172,12 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
       await expect(page.getByTestId('block-late')).not.toContainText('03:00')
       await page.getByTestId('bar-next').click()
       await expect(page.getByTestId('bar-block')).not.toContainText('Inne obowiązki')
+      // „Odcinam się”: the panel shows its line with „Wracam”, which ends it.
+      await page.evaluate(() => window.rd.trialAction('openPanel'))
+      await page.evaluate(() => window.rd.widgetAction('cutOff'))
+      await expect(panel.getByTestId('bar-state')).toContainText('Odcinam się od')
+      await panel.getByTestId('bar-back').click()
+      await expect(panel.getByTestId('bar-block')).toBeVisible()
       const log = readFileSync(join(dataDir, 'log', logicalToday().slice(0, 4), logicalToday(), `${(await page.evaluate(() => window.rd.dataView())).computer}.jsonl`), 'utf8')
       const kinds = log
         .trim()
