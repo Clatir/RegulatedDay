@@ -92,6 +92,21 @@ Var pid
   ${endIf}
 !macroend
 
+; The result of the old version's uninstall, as electron-builder's own check – except its message box has a default for
+; the silent mode: without /SD a silent installer showed it and waited for a click (a file locked before the uninstall
+; hung the installer until the owner's 10 min). The code 2 stays: the owner counts it as an attempt.
+!macro customUnInstallCheck
+  IfErrors 0 +3
+    DetailPrint `Uninstall was not successful. Not able to launch uninstaller!`
+    Return
+  ${if} $R0 != 0
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0" /SD IDOK
+    DetailPrint `Uninstall was not successful. Uninstaller error code: $R0.`
+    SetErrorLevel 2
+    Quit
+  ${endIf}
+!macroend
+
 !macro customInstall
   ; The installation's marker: only the installed exe is the production identity (T384).
   FileOpen $0 "$INSTDIR\resources\rd-installed" w
@@ -180,6 +195,8 @@ FunctionEnd
         DeleteRegKey HKCU "Software\Classes\CLSID\$R4"
         Goto rdClsidDelete
     rdClsidEnd:
+    Delete "$INSTDIR\resources\rd-installed"
   ${endIf}
-  Delete "$INSTDIR\resources\rd-installed"
+  ; An update leaves the marker to electron-builder's atomic move of the files: it goes with them and comes back with them
+  ; when the uninstall fails (a busy file) – the old version then starts as the production app, never without it (T407).
 !macroend
