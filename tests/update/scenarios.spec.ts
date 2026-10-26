@@ -26,7 +26,8 @@ const CURRENT = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: 
 const HELPERS = ['rd-guard.exe', 'rd-install.exe', 'rd-helper.exe']
 
 test.skip(process.platform !== 'win32' || !NEXT, 'Windows CI only: needs release/ and release-next/')
-test.describe.configure({ mode: 'serial' })
+// Each test starts from a fresh installation: one failure does not skip the rest (one worker, in order).
+test.describe.configure({ mode: 'default' })
 
 const env = (extra: Record<string, string> = {}): Record<string, string> => ({
   ...(process.env as Record<string, string>),

@@ -19,7 +19,8 @@ const NEXT = process.env.RD_UPDATE_TO_VERSION ?? ''
 const CURRENT = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version
 
 test.skip(process.platform !== 'win32' || !NEXT, 'Windows CI only: needs the next version built into release-next (ci.yml)')
-test.describe.configure({ mode: 'serial' })
+// Each test starts from a fresh installation: one failure does not skip the rest (one worker, in order).
+test.describe.configure({ mode: 'default' })
 
 let server: Server
 let base = ''

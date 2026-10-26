@@ -128,6 +128,8 @@ jobs:
       - name: Samotest pomocnika
         if: ${{ !cancelled() }}
         run: npx playwright test -c playwright.update.config.ts tests/update/helper.spec.ts
+        env:
+          RD_REPORT: helper
       - name: E2E spakowanej aplikacji z prawdziwym pomocnikiem
         if: ${{ !cancelled() }}
         shell: pwsh
@@ -137,7 +139,10 @@ jobs:
           npx playwright test
       - name: Instalacja, tożsamości i deinstalacja
         if: ${{ !cancelled() }}
+        timeout-minutes: 45
         run: npx playwright test -c playwright.update.config.ts tests/update/install.spec.ts
+        env:
+          RD_REPORT: install
       # The next patch version built like a future release (release-next\): the four update paths go N → N+1.
       - name: Następna wersja do testu aktualizacji
         if: ${{ !cancelled() }}
@@ -151,21 +156,26 @@ jobs:
           "RD_UPDATE_TO_VERSION=$next" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # Limits per step: a broken round ends in hours, not at the job's 6 h, and the steps after it still run.
       - name: Cztery ścieżki aktualizacji i ścieżka FI
         if: ${{ !cancelled() }}
+        timeout-minutes: 75
         run: npx playwright test -c playwright.update.config.ts tests/update/update-paths.spec.ts
         env:
+          RD_REPORT: paths
           RD_UPDATE_FROM: ${{ github.workspace }}\release
           RD_UPDATE_TO: ${{ github.workspace }}\release-next
       - name: Scenariusze instalacji (strażnicy, wyjątki, odłożono, blokady, zrzuty)
         if: ${{ !cancelled() }}
+        timeout-minutes: 150
         run: npx playwright test -c playwright.update.config.ts tests/update/scenarios.spec.ts
         env:
+          RD_REPORT: scenarios
           RD_UPDATE_FROM: ${{ github.workspace }}\release
           RD_UPDATE_TO: ${{ github.workspace }}\release-next
       - name: Dziennik niestabilnych testów
         if: always()
-        run: node scripts/flaky.mjs test-results/e2e-report.json test-results/update-report.json
+        run: node scripts/flaky.mjs test-results/e2e-report.json test-results/update-helper-report.json test-results/update-install-report.json test-results/update-paths-report.json test-results/update-scenarios-report.json
       # Every new version on the default branch becomes a GitHub release – the app updates itself from it. Bump
       # "version" in package.json and add a CHANGELOG.md section to release.
       - name: Publish v<version> (once per version)
