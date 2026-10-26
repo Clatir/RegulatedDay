@@ -28,6 +28,8 @@ export interface PlanBlock {
   waitUntilMin: number | null
   /** Its own costs instead of the category's. */
   costs: { head: number; emotions: number; senses: number } | null
+  /** Its own share of the cost in the background, 0–100 % (null: the setting, 50 % at the start). */
+  bgCostPct: number | null
   note: string
   /** Where it comes from: the template, the plan of lectures, the session layer, or you. */
   origin: 'template' | 'lecture' | 'session' | 'user'
@@ -130,6 +132,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     tag: v.tag === 'secondShift' || v.tag === 'weeklyAnalysis' ? v.tag : null,
     waitUntilMin: intIn(v.waitUntilMin, PLAN_MIN, PLAN_MAX),
     costs: costsFrom(v.costs),
+    bgCostPct: intIn(v.bgCostPct, 0, 100),
     note: str(v.note).slice(0, 2000),
     origin: origins.includes(v.origin as string) ? (v.origin as PlanBlock['origin']) : origin,
     sourceId: typeof v.sourceId === 'string' ? v.sourceId : null,
@@ -149,6 +152,7 @@ export function planBlock(p: Partial<PlanBlock> & Pick<PlanBlock, 'id' | 'catego
     tag: null,
     waitUntilMin: null,
     costs: null,
+    bgCostPct: null,
     note: '',
     origin: 'user',
     sourceId: null,

@@ -8,6 +8,7 @@
  * `viewAt(facts, m)` is what was known at the start of minute m: only what happened before it (T413) – the engine judges
  * every minute by the values in force when it began.
  */
+import type { Costs } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type LogEvent, type MinuteClass } from '../model/events'
 import type { DayTypeId, RulesSettings } from '../model/settings'
 import type { PlanBlock } from '../model/plan'
@@ -34,7 +35,7 @@ export interface BlockFact {
   startedAt: number | null
   endedAt: number | null
   runs: Run[]
-  planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean } | null
+  planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null } | null
   confirms: Confirm[]
   /** Confirmed „Przedłuż”, in order. */
   extends: Array<{ at: number; minutes: number }>
@@ -96,10 +97,10 @@ const newBlock = (id: string): BlockFact => ({
   endRule: null
 })
 
-/** Events that never change the timer's facts (they do not make segments stale either). */
+/** Events that never change the timer's facts (they do not make segments stale either); energy never does either. */
 const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to'])
 
-export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k)
+export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k) || e.dom === 'energy'
 
 /** Fold the day's events (any order given; folded in their full order). */
 export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {

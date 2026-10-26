@@ -4,7 +4,7 @@
  * (never an extension), whether it counts after the end of work as a project (D195) and whether it has the mark „po
  * pracy” (D209). Built from the plan and, for blocks started outside the plan, from their start events.
  */
-import { REGEN_CATEGORY, type CategoryRules } from '../model/categories'
+import { REGEN_CATEGORY, type CategoryRules, type Costs } from '../model/categories'
 import type { PlanBlock } from '../model/plan'
 import type { RulesSettings } from '../model/settings'
 import type { DayFacts } from './facts'
@@ -43,6 +43,9 @@ export interface BlockInfo {
   /** The mark „po pracy” (D209): planned at least 30 min after the last other work block before the second shift. */
   afterWorkMark: boolean
   protectedLife: boolean
+  /** The block's own costs and share of them in the background (null: the category's, the setting). */
+  costs: Costs | null
+  bgCostPct: number | null
 }
 
 const CAT_FALLBACK: CategoryRules = {
@@ -94,7 +97,9 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
       isProject: rules.kind === 'project',
       isRequestCat: rules.kind === 'request',
       afterWorkMark: false,
-      protectedLife: rules.cls === 'life' && rules.protected
+      protectedLife: rules.cls === 'life' && rules.protected,
+      costs: p.costs,
+      bgCostPct: p.bgCostPct
     }
   }
   const ids = new Set<string>()
@@ -118,6 +123,7 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
           tag: f.planned.tag,
           waitUntilMin: null,
           costs: null,
+          bgCostPct: null,
           note: '',
           origin: 'user',
           sourceId: null,

@@ -23,6 +23,12 @@ export interface Costs {
   senses: number
 }
 
+/** The three pools (spec „Pule”): „głowa”, „emocje”, „bodźce”. */
+export type Pool = keyof Costs
+export const POOLS: readonly Pool[] = ['head', 'emotions', 'senses']
+/** A state of the three pools, 0–100. */
+export type PoolValues = Record<Pool, number>
+
 export interface Variant {
   id: string
   name: string
@@ -157,6 +163,8 @@ export const LECTURE_CATEGORY = 'wyklad'
 export const REMOTE_CLASS_CATEGORY = 'zajecia-zdalne'
 export const COMMUTE_CATEGORY = 'dojazd'
 export const REGEN_CATEGORY = 'regeneracja'
+/** The costs of a request (spec: „Prośby domowe”, plus the cost of contact). */
+export const REQUEST_CATEGORY = 'prosby'
 export const PROJECT_CATEGORY = 'projekty'
 export const OTHER_WORK_CATEGORY = 'inne'
 

@@ -40,6 +40,20 @@ const F_FORECAST = 4096
 /** The flags that tell whether the day went as its forecast said. */
 const SAME_MASK = 0xffff & ~F_FORECAST
 
+/** What a minute of regeneration is (DayState.rest): a regeneration block, „Odcinam się”, time without a block; 0 none. */
+export const REST_BLOCK = 1
+export const REST_DISCONNECT = 2
+export const REST_FREE = 3
+
+/** The settings, the day type and its values in force at minute k: the day's snapshot, then each „od dziś” one before k. */
+export function settingsAtMinute(snapshot: DaySnapshot, facts: DayFacts, k: number): { settings: RulesSettings; params: DayTypeParams; dayType: string } {
+  let settings = snapshot.settings
+  let dayType: string = snapshot.dayType
+  for (const s of facts.snapshots) if (s.at < k || (k === 0 && s.at <= 0)) ((settings = s.settings), (dayType = s.dayType))
+  const params = settings.dayTypes[dayType as keyof RulesSettings['dayTypes']] ?? snapshot.settings.dayTypes[snapshot.dayType]
+  return { settings, params, dayType }
+}
+
 export interface DayContext {
   date: string
   snapshot: DaySnapshot
@@ -103,6 +117,8 @@ export interface DayState {
   forecast: Placed[]
   /** The forecast end of work (index), null in a day without work. */
   forecastWorkEnd: number | null
+  /** The regeneration of every minute as known now – the past and the forecast (REST_*; 0: none). */
+  rest: Uint8Array
   warnings: string[]
 }
 
@@ -345,13 +361,7 @@ export function computeDay(ctx: DayContext): DayState {
   const facts = foldFacts(g, events)
   const now = Math.max(0, Math.min(cap, idxOf(g, ctx.now)))
   const snapshot = ctx.snapshot
-  const settingsAt = (k: number) => {
-    let settings = snapshot.settings
-    let dayType: string = snapshot.dayType
-    for (const s of facts.snapshots) if (s.at < k || (k === 0 && s.at <= 0)) ((settings = s.settings), (dayType = s.dayType))
-    const params = settings.dayTypes[dayType as keyof RulesSettings['dayTypes']] ?? snapshot.settings.dayTypes[snapshot.dayType]
-    return { settings, params, dayType }
-  }
+  const settingsAt = (k: number) => settingsAtMinute(snapshot, facts, k)
   const blocks = blockInfos(g, ctx.plan, facts, snapshot.settings)
   const byId = new Map(blocks.map((b) => [b.id, b]))
   const secondWindows = new Map<string, { start: number; end: number }>()
@@ -631,6 +641,7 @@ export function computeDay(ctx: DayContext): DayState {
     pool: hardPassed ? { min: 0, byLimit: fin.pool.byLimit, byTime: 0, empty: true } : { ...fin.pool, empty: fin.pool.min <= 0 },
     forecast: fin.forecast,
     forecastWorkEnd: fin.forecastWorkEnd,
+    rest: fin.rest,
     warnings
   }
 }
@@ -719,6 +730,8 @@ interface Evaluation {
   forecastBudgetMin: number
   /** The minutes as evaluated: the past before m, the forecast from m. */
   flags: Uint16Array
+  /** Regeneration per minute (REST_*). */
+  rest: Uint8Array
 }
 
 /**
@@ -792,7 +805,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
       const f = flags[k]!
       if (f & F_BLOCK || f & F_DISC) {
         if (f & F_BLOCK) seenBlock = true
-        if (!(f & F_REQUEST) && (f & F_DISC || f & F_REGEN)) regen[k] = 1
+        if (!(f & F_REQUEST) && (f & F_DISC || f & F_REGEN)) regen[k] = f & F_DISC ? REST_DISCONNECT : REST_BLOCK
         k++
         continue
       }
@@ -802,7 +815,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
       const between = seenBlock && z < cap
       for (let j = k; j < z; j++) {
         if (j < c.wake) continue
-        if (after[j] || (between && z - k >= 30)) regen[j] = 1
+        if (after[j] || (between && z - k >= 30)) regen[j] = REST_FREE
       }
       k = z
     }
@@ -926,7 +939,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   let regenTotal = 0
   let towardMin = 0
   for (let k = 0; k < Math.min(m, bedtimeForecast); k++) {
-    regenTotal += regen[k]!
+    if (regen[k]) regenTotal++
     towardMin += toward[k]!
   }
   let budgetFc = 0
@@ -950,6 +963,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     forecast: fcT.placed,
     budgetMin: c.snapshot.budgetMin,
     forecastBudgetMin: budgetFc,
-    flags
+    flags,
+    rest: regen
   }
 }

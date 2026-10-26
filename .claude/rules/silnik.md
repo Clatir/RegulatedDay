@@ -25,7 +25,8 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - `engine/blocks.ts` – `BlockInfo` (klasa, czeka na „Zacznij”, druga zmiana, wykład/zjazd, oznaczenie „po pracy”).
 - `engine/forecast.ts` – prognoza planu od minuty m (tryby `window` i `typical`).
 - `engine/day.ts` – `computeDay`: granica, koniec pracy, klasyfikacja minut, budżet, regeneracja, minimum, pora snu,
-  twardy koniec, pula; `newSegments` (odcinki do zapisu przez prowadzącego).
+  twardy koniec, pula, regeneracja każdej minuty (`rest`, dla energii); `newSegments` (odcinki do zapisu przez
+  prowadzącego); `settingsAtMinute`. Energia (E2) – osobne reguły `energia.md`.
 
 ## Jak liczy `computeDay`
 - Siatka minut od 04:00 (T412). Przeszłość z faktów (`actual` – flagi minut), przyszłość z prognozy; każda minuta
@@ -51,4 +52,4 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - Testy przykładów: `tests/unit/engine/dsl.ts` (plan w godzinach polskich, zdarzenia po zegarze). Każdy wiersz
   przykładu ze specyfikacji jest osobnym testem w `model-dnia.test.ts`.
 - Jeszcze nie w silniku (późniejsze etapy): pytania „Dalej?” i „Koniec pracy?” (E4a), czas do wyjaśnienia, nieobecność
-  i bezczynność (E4a), panel zmiany typu dnia (E3), wymiana i warianty (E3/E5), rytuał i zamrażanie (E6), energia (E2).
+  i bezczynność (E4a), panel zmiany typu dnia (E3), wymiana i warianty (E3/E5), rytuał i zamrażanie (E6).
