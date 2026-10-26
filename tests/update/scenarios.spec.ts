@@ -3,10 +3,10 @@
  * the guard's modes and 10 000 parallel writes of the task file, two guards and the app at once, exceptions of the
  * guard (once while the installer works, at every start, a failed write of its count), four logons with „odłożono” and a
  * guard dying right after it, „Uruchom mimo to” while the files are copied and before the installer, a hung and a
- * missing guard, X+1 installed by hand while a task for X waits, the installer
- * run by hand (its marker within 5 s of the clock), the app opened while the install helper works, a slowed installer,
- * the installer's mutex held by the test, a file locked before the uninstall, and the crash dumps of the main process,
- * the renderer and the GPU.
+ * missing guard, X+1 installed by hand while a task for X waits, the installer run by hand (its marker within 5 s of
+ * the clock), the app opened while the install helper works, a slowed installer, the installer's mutex held by the
+ * test, a file locked before the uninstall and while the files are copied, and the crash dumps of the main process, the
+ * renderer and the GPU.
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
@@ -17,7 +17,7 @@ import { click, foreground, topWindows, type TopWindow } from '../e2e/win32'
 import { readSharedSync, writeSyncAtomic } from '../../src/main/update/files'
 import { newTask } from '../../src/main/update/install'
 import { readTask, writeTask, type Task } from '../../src/shared/task'
-import { APP_EXE, MANIFEST, SETUP, appProcesses, appRunning, dump, installed, powershell, productionData, readJson, readText, runEntry, sleep, stopAll, uninstall } from './util'
+import { APP_EXE, MANIFEST, SETUP, appProcesses, appRunning, dump, installed, powershell, productionData, readJson, readText, runEntry, sha256, sleep, stopAll, uninstall } from './util'
 
 const FROM = resolve(process.env.RD_UPDATE_FROM ?? 'release')
 const TO = resolve(process.env.RD_UPDATE_TO ?? 'release-next')
@@ -519,6 +519,59 @@ test('plik zablokowany przed deinstalacją: po dwóch próbach baner „nie uda�
     expect(await readText(join(productionData(), 'logs', 'main.log'))).toContain(`aktualizacja do ${NEXT}: nie udała się`)
     locker.kill()
     locker = null
+  })
+  ;(locker as ChildProcess | null)?.kill()
+})
+
+/**
+ * Holds `file` of the installation (FileShare None, emptied) for `seconds` from the moment the old version's files are
+ * gone (its exe and the file itself) – the new files are not in yet. Resolves with the first line: „locked” or „no-lock”.
+ */
+function holdDuringCopy(dir: string, file: string, seconds: number): { first: Promise<string>; child: ChildProcess } {
+  const exe = join(dir, APP_EXE)
+  const script = `
+for ($i = 0; $i -lt 30000 -and ((Test-Path -LiteralPath '${exe}') -or (Test-Path -LiteralPath '${file}')); $i++) { Start-Sleep -Milliseconds 20 }
+Start-Sleep -Milliseconds 300
+[System.IO.Directory]::CreateDirectory('${dir}') | Out-Null
+$h = $null
+for ($i = 0; $i -lt 100 -and -not $h; $i++) { try { $h = [System.IO.File]::Open('${file}', 'OpenOrCreate', 'ReadWrite', 'None') } catch { Start-Sleep -Milliseconds 50 } }
+if (-not $h) { 'no-lock'; exit }
+$h.SetLength(0)
+'locked'
+Start-Sleep -Seconds ${seconds}
+$h.Close()`
+  const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: ['ignore', 'pipe', 'ignore'] })
+  const first = new Promise<string>((r) => {
+    let out = ''
+    child.stdout!.on('data', (d: Buffer) => {
+      out += d.toString('utf8')
+      if (out.includes('\n')) r(out.split(/\r?\n/)[0]!.trim())
+    })
+    child.on('exit', () => r(out.trim() || 'exit'))
+  })
+  return { first, child }
+}
+
+test('plik aplikacji zablokowany w czasie kopiowania: instalator kończy się „sukcesem”, strażnik wykrywa to manifestem i naprawia', async () => {
+  test.setTimeout(25 * 60_000)
+  let locker: ChildProcess | null = null
+  await guarded('plik zablokowany w czasie kopiowania', async () => {
+    const dir = await install(FROM, CURRENT)
+    stage(dir)
+    scheduleTask(dir, 'logon')
+    plan(false)
+    const target = join(dir, 'LICENSES.chromium.html')
+    // 40 s: past the installer's five copies and its forced extraction; its repair starts after a 30 s sleep, unlocked.
+    const hold = holdDuringCopy(dir, target, 40)
+    locker = hold.child
+    logon({ RD_TEST_INSTALLER_SLEEP_MS: '30000' }).unref()
+    expect(await hold.first).toBe('locked')
+    await expectNext(dir)
+    const log = await readText(join(productionData(), 'logs', 'guard.log'))
+    expect(log).toContain('pliki niezgodne z manifestem')
+    expect(count(log, /instalator wystartował/)).toBe(2)
+    const manifest = JSON.parse(readFileSync(join(TO, MANIFEST), 'utf8')) as { files: Array<{ path: string; sha256: string }> }
+    expect(await sha256(target)).toBe(manifest.files.find((f) => f.path === 'LICENSES.chromium.html')!.sha256)
   })
   ;(locker as ChildProcess | null)?.kill()
 })
