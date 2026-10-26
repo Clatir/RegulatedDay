@@ -9,7 +9,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { CH, type RdApi, type ViewKind } from '../shared/api'
 
 const viewArg = process.argv.find((a) => a.startsWith('--rd-view='))?.slice('--rd-view='.length)
-const view: ViewKind = viewArg === 'bar' || viewArg === 'panel' ? viewArg : 'main'
+const view: ViewKind = viewArg === 'bar' || viewArg === 'panel' || viewArg === 'sound' ? viewArg : 'main'
 
 function on<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_e: IpcRendererEvent, payload: T) => cb(payload)
@@ -66,7 +66,8 @@ const api: RdApi = {
   setNightInstall: (on) => ipcRenderer.invoke(CH.setNightInstall, on),
   timer: (click) => ipcRenderer.invoke(CH.timer, click),
   answer: (id, answer, value) => ipcRenderer.invoke(CH.answer, id, answer, value ?? null),
-  seen: (ids) => ipcRenderer.send(CH.seen, ids)
+  seen: (ids) => ipcRenderer.send(CH.seen, ids),
+  onSound: (cb) => on('rd:sound', cb)
 }
 
 contextBridge.exposeInMainWorld('rd', api)

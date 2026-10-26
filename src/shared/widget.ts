@@ -4,15 +4,43 @@
  * from E4b the engine does, with the same view.
  */
 import { clock } from './format'
-import { iconColor, toneColor, type Tone, type WarnStep } from './theme'
+import { iconColor, TONE_SETS, toneColor, type Tone, type ToneSetId, type WarnStep } from './theme'
+
+/** A button of a line: its id goes back to the main process with the line's (`line` action, `<line>|<action>`). */
+export interface BarAction {
+  id: string
+  label: string
+}
 
 export interface BarLine {
   id: string
   text: string
   /** The answers, each a button of the bar (confirmations are a second click in the bar, never a window – D229). */
-  actions: string[]
+  actions: BarAction[]
   /** Something stands without your click (D240): it lights the icon's dot. */
   dot: boolean
+  /** The instant an answer „Skończył się o …” starts from (its steps of ±5 min), ms. */
+  at?: number | null
+}
+
+/** Which of the bar's own buttons stand now (spec „Cisza”: Dalej, Pauza, Przedłuż, Koniec pracy, Odcinam się; Skończyłem in a session). */
+export interface BarButtons {
+  next: boolean
+  pause: boolean
+  extend: boolean
+  workEnd: boolean
+  finished: boolean
+  cutOff: boolean
+  /** „Start: …” or „Wznów: …” when nothing runs (the label). */
+  start: string | null
+}
+
+/** The cost a first click shows in place of its button: the second click within 10 s does it (spec „Przedłużenie”). */
+export interface BarPending {
+  /** The button it stands in place of (`next`, `extend`, `start`, a line's action …). */
+  button: string
+  text: string
+  until: number
 }
 
 export interface WidgetView {
@@ -42,7 +70,33 @@ export interface WidgetView {
   tooltip: string
   /** Why the desktop bar is hidden although it is on (the panel, the main window and the settings say it, D270). */
   barNote: string | null
+  /** The bar's own buttons now (the trial: all of them). */
+  buttons: BarButtons
+  /** Blocks in the background with „Zakończ teraz” and „Przedłuż” (in „⋯”). */
+  background: Array<{ id: string; name: string; endsAt: number }>
+  /** „Zrobione automatycznie”: the actions as the plan said them gathered in one row, the rest each with „Cofnij”. */
+  autos: { groups: string[]; items: Array<{ id: string; text: string; undo: boolean }> }
+  /** „Mniej pytań” is on (the button says „Jest lepiej”). */
+  fewer: boolean
+  /** The signals and the relative assessment (the energy module on). */
+  signals: boolean
+  /** The night's quiet: only the time and the running block with Dalej, Przedłuż and Koniec pracy. */
+  night: boolean
+  /** The cost of a first click waiting for the second. */
+  pending: BarPending | null
+  /** The day the bar's actions concern (a block running through 04:00 keeps its day), null: the trial. */
+  day: string | null
+  /** The set of tones (the working one; another only in the trial's comparison, D298). */
+  toneSet: ToneSetId
+  /** A sound may play now (not in „mniej pytań”, a day of stationary classes, on the recording computer in a lecture). */
+  soundOk: boolean
+  /** This computer records a lecture now: no notifications, no sounds. */
+  recording: boolean
+  /** Why a click did nothing (shown in the bar for a few seconds), null: nothing to say. */
+  note: { text: string; until: number } | null
 }
+
+export const ALL_BUTTONS: BarButtons = { next: true, pause: true, extend: true, workEnd: true, finished: false, cutOff: true, start: null }
 
 export const BAR_NOTE_HELPER = 'Pasek pulpitu ukryty: pomocnik nie działa'
 export const BAR_NOTE_FAILED = 'Paska pulpitu nie udało się położyć pod oknami (inny program trzyma okno na dole)'
@@ -61,6 +115,8 @@ export interface TrialState {
   question: boolean
   /** Minutes left of the trial's block (its countdown). */
   minutesLeft: number
+  /** The set of tones compared (D298). */
+  toneSet: ToneSetId
 }
 
 export const DEFAULT_TRIAL: TrialState = {
@@ -73,7 +129,8 @@ export const DEFAULT_TRIAL: TrialState = {
   long: false,
   session: false,
   question: false,
-  minutesLeft: 42
+  minutesLeft: 42,
+  toneSet: 'robocze'
 }
 
 const TONE_BLOCK: Record<Tone, { name: string; className: string }> = {
@@ -96,13 +153,14 @@ export const LONGEST = {
 export function trialView(t: TrialState, now: number): WidgetView {
   const block = t.tone === 'brak' ? null : { ...TONE_BLOCK[t.tone], endsAt: now + t.minutesLeft * 60_000 }
   const lines: BarLine[] = []
+  const acts = (...labels: string[]): BarAction[] => labels.map((label) => ({ id: label, label }))
   if (t.long) {
-    lines.push({ id: 'trial-cost', text: LONGEST.cost, actions: ['Potwierdź'], dot: false })
-    lines.push({ id: 'trial-worked', text: LONGEST.workedUntil, actions: ['Tak', 'Popraw'], dot: false })
-    lines.push({ id: 'trial-done', text: LONGEST.done, actions: ['popraw'], dot: false })
+    lines.push({ id: 'trial-cost', text: LONGEST.cost, actions: acts('Potwierdź'), dot: false })
+    lines.push({ id: 'trial-worked', text: LONGEST.workedUntil, actions: acts('Tak', 'Popraw'), dot: false })
+    lines.push({ id: 'trial-done', text: LONGEST.done, actions: acts('popraw'), dot: false })
   }
-  if (t.dot) lines.push({ id: 'trial-start', text: 'NY 14:00 · Zacznij · Odwołaj', actions: ['Zacznij', 'Odwołaj'], dot: true })
-  const question = t.question ? { id: 'trial-next', text: 'Dalej?', actions: ['Dalej', 'Przedłuż', 'Koniec pracy'], dot: true } : null
+  if (t.dot) lines.push({ id: 'trial-start', text: 'NY 14:00 · Zacznij · Odwołaj', actions: acts('Zacznij', 'Odwołaj'), dot: true })
+  const question = t.question ? { id: 'trial-next', text: 'Dalej?', actions: acts('Dalej', 'Przedłuż', 'Koniec pracy'), dot: true } : null
   const dot = !t.hidden && (lines.some((l) => l.dot) || !!question)
   const end = block ? clock(Math.round((block.endsAt - new Date(now).setHours(0, 0, 0, 0)) / 60_000)) : null
   return {
@@ -110,8 +168,8 @@ export function trialView(t: TrialState, now: number): WidgetView {
     quiet: t.quiet,
     tone: t.tone,
     warn: t.warn,
-    color: toneColor(t.tone, t.warn),
-    iconColor: iconColor(t.tone, t.warn, t.quiet, t.hidden),
+    color: toneColor(t.tone, t.warn, TONE_SETS[t.toneSet].tones),
+    iconColor: iconColor(t.tone, t.warn, t.quiet, t.hidden, TONE_SETS[t.toneSet].tones),
     dot,
     drop: !t.hidden && t.drop,
     muted: t.quiet,
@@ -121,6 +179,18 @@ export function trialView(t: TrialState, now: number): WidgetView {
     session: t.session,
     stateLine: t.hidden ? 'Odcinam się od 15:10 · Wracam' : null,
     tooltip: block ? `${block.name} · do ${end} (${t.minutesLeft} min)\nNastępny stały: NY 14:00` : 'bez bloku',
-    barNote: null
+    barNote: null,
+    buttons: { ...ALL_BUTTONS, finished: t.session },
+    background: [{ id: 'trial-bg', name: 'NY', endsAt: now + 90 * 60_000 }],
+    autos: { groups: ['bloki stałe według planu: 6'], items: [] },
+    fewer: false,
+    signals: true,
+    night: false,
+    pending: null,
+    day: null,
+    toneSet: t.toneSet,
+    soundOk: !t.quiet,
+    recording: false,
+    note: null
   }
 }

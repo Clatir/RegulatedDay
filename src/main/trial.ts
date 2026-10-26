@@ -5,7 +5,7 @@
  */
 import { EventEmitter } from 'node:events'
 import { DEFAULT_TRIAL, trialView, type TrialState, type WidgetView } from '@shared/widget'
-import type { Tone, WarnStep } from '@shared/theme'
+import { TONE_SETS, type Tone, type WarnStep } from '@shared/theme'
 
 const TONES: Tone[] = ['praca', 'zycie', 'wolne', 'rezerwa', 'brak']
 const WARNS: WarnStep[] = ['none', 'warm', 'five', 'zero']
@@ -24,7 +24,8 @@ export function trialFrom(raw: unknown, base: TrialState): TrialState {
     long: flag(r.long, base.long),
     session: flag(r.session, base.session),
     question: flag(r.question, base.question),
-    minutesLeft: typeof r.minutesLeft === 'number' && Number.isInteger(r.minutesLeft) && r.minutesLeft >= 0 && r.minutesLeft <= 600 ? r.minutesLeft : base.minutesLeft
+    minutesLeft: typeof r.minutesLeft === 'number' && Number.isInteger(r.minutesLeft) && r.minutesLeft >= 0 && r.minutesLeft <= 600 ? r.minutesLeft : base.minutesLeft,
+    toneSet: typeof r.toneSet === 'string' && r.toneSet in TONE_SETS ? r.toneSet : base.toneSet
   }
 }
 
@@ -33,6 +34,8 @@ export class Trial extends EventEmitter {
   private lines: string[] = []
   /** The block's end moves on only when the trial changes – its countdown runs meanwhile. */
   private viewAt = Date.now()
+  /** When the trial was last changed (0: never – the engine drives the widget, E4b). */
+  changedAt = 0
 
   get state(): TrialState {
     return this.s
@@ -45,6 +48,7 @@ export class Trial extends EventEmitter {
   set(patch: unknown): TrialState {
     this.s = trialFrom({ ...this.s, ...(patch as object) }, this.s)
     this.viewAt = Date.now()
+    this.changedAt = this.viewAt
     this.emit('change', this.view())
     return this.s
   }

@@ -21,7 +21,7 @@ import { EmptyState, cx } from '../../components/ui'
 import { useNow } from '../../lib/clock'
 import { useData } from '../../store/data'
 import { useDay, type DayModel } from '../../store/day'
-import { openDay, useUi } from '../../store/ui'
+import { openDay, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
@@ -227,6 +227,11 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                 </>
               ) : (
                 <>
+                  {isToday && canStart(model, block.id) && (
+                    <button type="button" className="btn btn-accent" onClick={() => void startBlock(date, block.id)} data-testid="block-timer-start">
+                      {model.state.facts.blocks.get(block.id)?.startedAt != null ? 'Wznów' : 'Start'}
+                    </button>
+                  )}
                   <button type="button" className="btn" onClick={() => setDialog({ move: block })} data-testid="block-move">
                     Przenieś na…
                   </button>
@@ -319,6 +324,21 @@ function SidePanel({ model, names, onSelect, onMove }: { model: DayModel; names:
       <p className={cx('text-[11.5px] text-muted')}>Kliknij wolne miejsce na osi, żeby dodać blok w tej godzinie (Ctrl N – w najbliższym wolnym miejscu).</p>
     </aside>
   )
+}
+
+/** A block of today that may be started now (not running, not ended): also at night, when the bar shows no „Start”. */
+function canStart(model: DayModel, id: string): boolean {
+  const f = model.state.facts.blocks.get(id)
+  return !f || (f.endedAt == null && !f.runs.some((r) => r.to === Number.POSITIVE_INFINITY))
+}
+
+/** „Start” from the block's panel: the main process writes it; a cost after the boundary asks the second click. */
+async function startBlock(date: string, block: string): Promise<void> {
+  const r = await window.rd.timer({ a: 'start', block, day: date })
+  if (r.confirm) {
+    const c = r.confirm
+    toast(`${c.overrun ? 'Przekroczenie' : 'Przedłużenie'}: ${c.minutes} min${c.bedtime ? ' (pora snu się przesunie)' : ' z puli projektów'}`, 'info', 10_000, { label: 'Potwierdź', run: () => void window.rd.timer({ a: 'start', block, day: date, confirm: true }) })
+  } else if (!r.ok && r.why) toast(r.why, 'info')
 }
 
 /** Names of categories for texts (the side panel and dialogs). */

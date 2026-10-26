@@ -2,32 +2,11 @@
  * How a block is named and coloured in the main window (spec „W interfejsie tylko prawdziwe nazwy”): its category or
  * variant, its routine, the people of its requests; the category's colour or its class's. Never an id.
  */
-import { CLASS_COLORS, categoryName, personName, type RdFile } from '@shared/model/rd'
+import { CLASS_COLORS, categoryName } from '@shared/model/rd'
 import type { PlanBlock } from '@shared/model/plan'
-import type { RequestRecord } from '@shared/model/requests'
-import type { Routine } from '@shared/model/routines'
-import type { RulesSettings } from '@shared/model/settings'
+import { blockName, type Names } from '@shared/blockName'
 
-export interface Names {
-  rd: RdFile
-  settings: RulesSettings
-  routines: readonly Routine[]
-  requests: readonly RequestRecord[]
-}
-
-export function blockName(b: Pick<PlanBlock, 'categoryId' | 'variantId' | 'routine' | 'requests' | 'note'>, n: Names): string {
-  if (b.routine) {
-    const r = n.routines.find((x) => x.id === b.routine)
-    if (r) return r.name
-  }
-  if (b.requests.length) {
-    const people = b.requests.map((id) => personName(n.rd, n.requests.find((r) => r.id === id)?.person ?? null))
-    return `Prośby: ${[...new Set(people)].join(', ')}`
-  }
-  const rules = n.settings.categories[b.categoryId]
-  const variant = b.variantId ? rules?.variants.find((v) => v.id === b.variantId) : undefined
-  return variant?.name ?? categoryName(n.rd, b.categoryId)
-}
+export { blockName, type Names }
 
 export function blockColor(categoryId: string, n: Pick<Names, 'rd' | 'settings'>): string {
   const meta = n.rd.categories[categoryId]

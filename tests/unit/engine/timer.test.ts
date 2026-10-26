@@ -399,6 +399,30 @@ describe('poprawki po przeglądzie E4a', () => {
   })
 })
 
+describe('poprawki po przeglądzie E4b', () => {
+  it('przerwa (regeneracja zaczęta teraz) pauzuje biegnący blok pracy, nie kończy go', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 120 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const r = click(s, '09:30', { a: 'startNew', block: 'brk', categoryId: 'regeneracja', variantId: 'przerwa-od-ekranu', durationMin: 15 })
+    expect(r.ok && r.events.map((e) => e.k)).toEqual(['block.pause', 'block.start'])
+    expect(s.state('09:35').facts.blocks.get('brk')!.planned).toMatchObject({ variantId: 'przerwa-od-ekranu' })
+    click(s, '09:45', { a: 'next' })
+    expect(fgId(s, '09:46')).toBe('a')
+  })
+
+  it('„Zacznij jeszcze raz” sesji przy innym bloku stałym: sesja na pierwszym planie, tamten w tle', () => {
+    const s = day([block({ id: 'ny', cat: 'sesja', at: '15:30', min: 120, fixed: true, bg: false }), block({ id: 'w', cat: 'zajecia-zdalne', at: '16:05', min: 60, fixed: true })]).observe('07:00', null)
+    click(s, '15:30', { a: 'start', block: 'ny' })
+    click(s, '16:00', { a: 'finish' })
+    leader(s, '16:05')
+    expect(fgId(s, '16:06')).toBe('w')
+    expect(click(s, '16:10', { a: 'restart', block: 'ny' }).ok).toBe(true)
+    const t = timerNow(s.state('16:11'))
+    expect(t.fg?.info.id).toBe('ny')
+    expect(t.bg.map((b) => b.info.id)).toEqual(['w'])
+  })
+})
+
 describe('dwa komputery', () => {
   it('dwa prowadzące po przerwie synchronizacji zapisują to samo działanie z tym samym identyfikatorem (bez podwójnych wpisów)', () => {
     const plan = [block({ id: 'w', cat: 'zajecia-zdalne', at: '09:00', min: 60, fixed: true })]

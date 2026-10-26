@@ -12,7 +12,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
 import { DEFAULT_SETTINGS } from '../../src/shared/model/settings'
 import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
-import { launch, withMainLog } from './app'
+import { launch, viewPage, withMainLog } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
 async function shot(page: Page, name: string): Promise<void> {
@@ -146,26 +146,38 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
   }
 })
 
-test('timer E4a: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na osi tam, gdzie biegł', async () => {
+test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na osi tam, gdzie biegł; ten sam pasek w panelu ikony', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-timer-'))
   seed(dataDir)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
-      const bar = page.getByTestId('timer-bar')
-      await expect(bar).toBeVisible({ timeout: 30_000 })
-      await expect(page.getByTestId('timer-idle')).toContainText('następny: Inne obowiązki')
-      await page.getByTestId('timer-start').click()
-      await expect(page.getByTestId('timer-fg-name')).toHaveText('Inne obowiązki')
+      // „Start” from the block's panel (it works at any hour – at night the bar shows only the running block).
+      await expect(page.getByTestId('block-late')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('block-late').click()
+      await page.getByTestId('block-timer-start').click()
+      await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
+      await expect(page.getByTestId('bar-main')).toHaveAttribute('data-tone', 'praca')
       await shot(page, 'e4a-01-running')
-      await page.getByTestId('timer-pause').click()
-      await expect(page.getByTestId('timer-start')).toContainText('Wznów: Inne obowiązki')
-      await page.getByTestId('timer-start').click()
-      await expect(page.getByTestId('timer-fg-name')).toHaveText('Inne obowiązki')
+      // The icon's panel shows the same bar (the engine's view in every window).
+      await page.evaluate(() => window.rd.trialAction('openPanel'))
+      const panel = await viewPage(app, 'panel')
+      await expect(panel.getByTestId('bar-block')).toContainText('Inne obowiązki')
+      // Pauza through the main process (the bar hides it at night), „Wznów” from the block's panel.
+      await page.evaluate(() => window.rd.widgetAction('pause'))
+      await expect(page.getByTestId('block-timer-start')).toHaveText('Wznów')
+      await page.getByTestId('block-timer-start').click()
+      await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
       // The block stands on the axis where it runs (from now, not at 03:00 of its plan).
       await expect(page.getByTestId('block-late')).not.toContainText('03:00')
-      await page.getByTestId('timer-next').click()
-      await expect(page.getByTestId('timer-idle')).toBeVisible()
+      await page.getByTestId('bar-next').click()
+      await expect(page.getByTestId('bar-block')).not.toContainText('Inne obowiązki')
+      // „Odcinam się”: the panel shows its line with „Wracam”, which ends it.
+      await page.evaluate(() => window.rd.trialAction('openPanel'))
+      await page.evaluate(() => window.rd.widgetAction('cutOff'))
+      await expect(panel.getByTestId('bar-state')).toContainText('Odcinam się od')
+      await panel.getByTestId('bar-back').click()
+      await expect(panel.getByTestId('bar-block')).toBeVisible()
       const log = readFileSync(join(dataDir, 'log', logicalToday().slice(0, 4), logicalToday(), `${(await page.evaluate(() => window.rd.dataView())).computer}.jsonl`), 'utf8')
       const kinds = log
         .trim()

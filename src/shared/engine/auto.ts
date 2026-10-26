@@ -249,6 +249,11 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     if (due(when)) take([auto(date, 'boundary', { k: 'boundary.approve', at: when, boundary: at(state.boundary.approved), auto: true } as TimerDraft)])
   }
 
+  // „Odcinam się” lasts at the latest to 04:00 (spec „Odcinam się”): the day that ended closes it – information only.
+  const openCut = state.facts.disconnect.find((d) => d.to === OPEN)
+  const dayEnd = state.grid.start + state.grid.length * MIN
+  if (openCut && inp.now >= dayEnd && due(dayEnd)) take([auto(date, 'disconnect04', { k: 'disconnect.end', at: dayEnd })])
+
   // Fixed blocks start by themselves at their planned time (sessions and blocks marked as second shift or weekly
   // analysis wait for „Zacznij”); in „Odcinam się” they do not; behind a running regeneration they wait for its end.
   const disconnected = state.facts.disconnect.some((d) => d.to === OPEN)

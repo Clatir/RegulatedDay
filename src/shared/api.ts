@@ -56,8 +56,8 @@ export const CH = {
   seen: 'rd:seen'
 } as const
 
-/** Which window a renderer is (the preload reads it from its arguments). */
-export type ViewKind = 'main' | 'bar' | 'panel'
+/** Which window a renderer is (the preload reads it from its arguments); `sound` – the hidden window of sound. */
+export type ViewKind = 'main' | 'bar' | 'panel' | 'sound'
 
 export interface HelperStatus {
   /** running – answering; starting – (re)starting after a crash; unavailable – 3 crashes in 10 min; missing – no program. */
@@ -99,7 +99,31 @@ export interface BarLayout {
   unfolded: boolean
 }
 
-export type WidgetAction = 'next' | 'pause' | 'extend' | 'endWork' | 'cutOff' | 'finished' | 'water' | 'request' | 'doneNow' | 'urgent' | 'variants' | 'barClick'
+export type WidgetAction =
+  | 'next'
+  | 'pause'
+  | 'extend'
+  | 'endWork'
+  | 'cutOff'
+  | 'back'
+  | 'finished'
+  | 'water'
+  | 'fewer'
+  | 'better'
+  | 'start'
+  | 'bgEnd'
+  | 'bgExtend'
+  | 'undo'
+  | 'signal'
+  | 'relative'
+  | 'confirm'
+  | 'line'
+  | 'openMain'
+  | 'request'
+  | 'doneNow'
+  | 'urgent'
+  | 'variants'
+  | 'barClick'
 
 export type TrialAction =
   | 'notifyIn10s'
@@ -207,8 +231,12 @@ export interface TimerIn {
   confirm?: boolean
   categoryId?: string
   durationMin?: number
+  variantId?: string | null
   /** „Cofnij”: the automatic action's event id. */
   target?: string
+  /** An answer to a proposal of the bar (`mark`). */
+  question?: string
+  answer?: string
 }
 
 /** What a click did: nothing (why), or a cost waiting for the second click within 10 s. */
@@ -325,4 +353,6 @@ export interface RdApi {
   answer(id: string, answer: string, value?: number | null): Promise<TimerResult>
   /** Questions this window showed (seen only in the main window in the foreground with presence, D231). */
   seen(ids: string[]): void
+  /** The window of sound: a tone to play (5 min, 0 min). */
+  onSound(cb: (s: { kind: 'five' | 'zero'; volume: number }) => void): () => void
 }

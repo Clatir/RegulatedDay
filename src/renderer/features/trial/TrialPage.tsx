@@ -5,7 +5,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { TrialState } from '@shared/widget'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
-import type { Tone, WarnStep } from '@shared/theme'
+import { TONE_SETS, type Tone, type ToneSetId, type WarnStep } from '@shared/theme'
+
+const TONE_SET_IDS = Object.keys(TONE_SETS) as ToneSetId[]
 import { Counter, EmptyState, Field, ReadOnlyMark, Section, Segmented, Toggle } from '../../components/ui'
 import { DateField, DurationField, IntegerField, TimeField } from '../../components/fields'
 import { FilterBar, useFilters } from '../../components/FilterBar'
@@ -43,8 +45,11 @@ function TrialSwitches() {
   const set = (patch: Partial<TrialState>) => void window.rd.setTrial(patch).then(setT)
   return (
     <Section title="Ikona i pasek" data-testid="trial-switches">
-      <Field label="Kolor (klasa bloku)" hint="Kolory są robocze – ostateczne wybierzesz przed etapem E4b.">
+      <Field label="Kolor (klasa bloku)" hint="Pasek i ikona działają na kolorach roboczych; zestawy do porównania wybierasz niżej (D298).">
         <Segmented value={t.tone} options={TONES} onChange={(tone) => set({ tone })} aria-label="Kolor" data-testid="trial-tone" />
+      </Field>
+      <Field label="Zestaw kolorów" hint="Porównanie kolorów klas, rezerwy i kroków 15 · 5 · 0 min – wybrany zestaw zostanie w pasku po Twojej decyzji.">
+        <Segmented value={t.toneSet} options={TONE_SET_IDS.map((id) => ({ value: id, label: TONE_SETS[id].name }))} onChange={(toneSet) => set({ toneSet })} aria-label="Zestaw kolorów" data-testid="trial-tone-set" />
       </Field>
       <Field label="Ostrzeżenie przed końcem">
         <Segmented value={t.warn} options={WARNS} onChange={(warn) => set({ warn })} aria-label="Ostrzeżenie" data-testid="trial-warn" />

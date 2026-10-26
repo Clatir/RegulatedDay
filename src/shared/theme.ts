@@ -33,6 +33,14 @@ export const TONES: Record<Tone, string> = {
   brak: '#8C7F87'
 }
 
+/** The sets of tones to compare in the trial (D298): the working one (the engine's until you choose) and two more. */
+export type ToneSetId = 'robocze' | 'cieple' | 'chlodne'
+export const TONE_SETS: Record<ToneSetId, { name: string; tones: Record<Tone, string> }> = {
+  robocze: { name: 'robocze (z próby E0)', tones: TONES },
+  cieple: { name: 'cieplejsze', tones: { praca: '#E8A15A', zycie: '#C9A2D6', wolne: '#8CC4A8', rezerwa: '#E08A7E', brak: '#8C7F87' } },
+  chlodne: { name: 'chłodniejsze', tones: { praca: '#F0C674', zycie: '#9FA8DA', wolne: '#6FB3C8', rezerwa: '#D98BA0', brak: '#8C7F87' } }
+}
+
 /** The icon while a rule hides the widget: grey, without steps or a dot (spec „Widget”). */
 export const HIDDEN_ICON = '#6E6870'
 
@@ -82,9 +90,9 @@ export function contrast(a: string, b: string): number {
   return (l1 + 0.05) / (l2 + 0.05)
 }
 
-/** The colour of the bar and the icon for a tone and a warning step. */
-export function toneColor(tone: Tone, warn: WarnStep): string {
-  const base = TONES[tone]
+/** The colour of the bar and the icon for a tone and a warning step (`set`: the trial's comparison, D298). */
+export function toneColor(tone: Tone, warn: WarnStep, set: Record<Tone, string> = TONES): string {
+  const base = set[tone]
   if (warn === 'warm') return mix(base, WARM, 0.45)
   if (warn === 'five') return mix(base, STEP, 0.6)
   if (warn === 'zero') return mix(base, STEP_ZERO, 0.8)
@@ -92,15 +100,15 @@ export function toneColor(tone: Tone, warn: WarnStep): string {
 }
 
 /** The icon's colour: grey while hidden; darker but the same hue in the quiet modes (spec „Cisza”). */
-export function iconColor(tone: Tone, warn: WarnStep, quiet: boolean, hidden: boolean): string {
+export function iconColor(tone: Tone, warn: WarnStep, quiet: boolean, hidden: boolean, set: Record<Tone, string> = TONES): string {
   if (hidden) return HIDDEN_ICON
-  const c = toneColor(tone, warn)
+  const c = toneColor(tone, warn, set)
   return quiet ? darken(c, 0.72) : c
 }
 
 /** The bar's background: the tone laid thinly over the surface (dimmed further in the quiet modes). */
-export function barBackground(tone: Tone, warn: WarnStep, quiet: boolean, brightness = 1): string {
-  return darken(mix(PALETTE.surface, toneColor(tone, warn), quiet ? 0.08 : 0.15), brightness)
+export function barBackground(tone: Tone, warn: WarnStep, quiet: boolean, brightness = 1, set: Record<Tone, string> = TONES): string {
+  return darken(mix(PALETTE.surface, toneColor(tone, warn, set), quiet ? 0.08 : 0.15), brightness)
 }
 
 /** The fill of a block on the plan's axis: its category's colour laid thinly over the surface, dimmed with brightness. */
@@ -144,9 +152,10 @@ export function contrastPairs(brightness: number): Array<{ name: string; text: s
     ['wskazany element', v['--color-hover']!]
   ]
   const barBgs: Array<[string, string]> = []
-  for (const tone of Object.keys(TONES) as Tone[])
-    for (const warn of ['none', 'warm', 'five', 'zero'] as WarnStep[])
-      for (const quiet of [false, true]) barBgs.push([`pasek ${tone}/${warn}${quiet ? '/cisza' : ''}`, barBackground(tone, warn, quiet, brightness)])
+  for (const [setId, set] of Object.entries(TONE_SETS))
+    for (const tone of Object.keys(TONES) as Tone[])
+      for (const warn of ['none', 'warm', 'five', 'zero'] as WarnStep[])
+        for (const quiet of [false, true]) barBgs.push([`pasek ${setId} ${tone}/${warn}${quiet ? '/cisza' : ''}`, barBackground(tone, warn, quiet, brightness, set.tones)])
   const plainTexts: Array<[string, string]> = [
     ['tekst', PALETTE.text],
     ['tekst przygaszony', PALETTE.muted]

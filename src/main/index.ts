@@ -57,6 +57,8 @@ import { STOP_TIMEOUT_MS, type DataService } from './data/service'
 import { DataHub } from './data/hub'
 import { PowerKeeper } from './power'
 import { OneDriveWatch } from './onedrive'
+import { toneOnChange, WidgetEngine } from './widget'
+import { SoundWindow } from './windows/soundWindow'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
 crashReporter.start({ uploadToServer: false, submitURL: '', compress: false })
@@ -76,6 +78,7 @@ let mainWindow: BrowserWindow | null = null
 let bar: DesktopBar | null = null
 let panel: IconPanel | null = null
 let tray: AppTray | null = null
+let sound: SoundWindow | null = null
 let helper: HelperClient | null = null
 let autostart: Autostart | null = null
 let updates: UpdateController | null = null
@@ -145,22 +148,60 @@ function viewOf(sender: Electron.WebContents): ViewKind {
 
 // ------------------------------------------------------------------ the widget
 
+/**
+ * The widget's engine (E4b): the engine's view once a data folder is open (the trial while none is, and for 10 min
+ * after a change of the trial), the bar's clicks as actions of the timer, the notifications of the leader.
+ */
+const widget = new WidgetEngine({
+  folder: () => hub?.service?.folder ?? null,
+  timer: (click) => (hub ? hub.timer(click) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
+  answer: (id, a, value) => (hub ? hub.answer(id, a, value) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
+  seen: (ids, how) => hub?.seen(ids, how) ?? Promise.resolve(0),
+  clickedApp: () => hub?.clickedApp(),
+  modePrefs: () => ({ sessionMode: prefs().sessionMode, classMode: prefs().classMode }),
+  notices: () => prefs().notices,
+  trial: () => ({ view: trial.view(), changedAt: trial.changedAt }),
+  notify: (n) => notify(n, log),
+  showMain: (page) => showMainWindow(page),
+  emit: (view) => showWidget(view),
+  log
+})
+
 function widgetView(): WidgetView {
-  const view = trial.view()
+  const view = widget.current()
   const barNote = !prefs().desktopBar || view.hidden ? null : barProblem === 'failed' ? BAR_NOTE_FAILED : barProblem === 'helper' ? BAR_NOTE_HELPER : null
   return { ...view, barNote }
 }
+
+/** The block and the step of the warning last shown (a tone plays when the step of the same block turns to 5 or 0 min). */
+let lastWarn: { block: string; warn: string } | null = null
 
 function showWidget(view: WidgetView): void {
   tray?.set({ color: view.iconColor, dot: view.dot, drop: view.drop }, view.tooltip)
   broadcast(CH.onWidget, widgetView())
   layoutBar()
+  const tone = toneOnChange(lastWarn, view)
+  lastWarn = tone.next
+  if (tone.play && prefs().sound) sound?.play(tone.play, prefs().soundVolume)
+  // The open icon's panel shows the questions: they count as seen (spec D231).
+  if (panel?.isOpen) {
+    const ids = widget.shownQuestions()
+    if (ids.length) void hub?.seen(ids, 'panel').catch(() => undefined)
+  }
 }
 
-/** The desktop bar as the settings, the widget and the helper allow: laid under the windows before it shows. */
-/** The settings and the widget want the desktop bar shown now. */
-const barWanted = (): boolean => prefs().desktopBar && !widgetView().hidden
+/** The window in the foreground covers its monitor (the helper's event): a bar „na wierzchu” hides over it (D291). */
+let fullscreenNow = false
+/** The desktop bar is „na wierzchu” now. */
+let barTop = false
 
+/** The settings and the widget want the desktop bar shown now. */
+const barWanted = (): boolean => prefs().desktopBar && !widgetView().hidden && !(prefs().onTop !== 'off' && fullscreenNow)
+
+/**
+ * The desktop bar as the settings, the widget and the helper allow: laid under the windows before it shows – or, with
+ * „Zawsze na wierzchu” chosen on this computer (D291), above them, still without activation, hidden over a full screen.
+ */
 function layoutBar(): void {
   // Destroyed at the quit: the helper's last status and events come after the windows.
   if (!bar?.alive) return
@@ -173,8 +214,19 @@ function layoutBar(): void {
   const primary = primaryDisplay()
   const zoom = prefs().zoom
   const r = barRect(prefs().barPlacement, displays(), primary, zoom, Math.ceil(barFoldedHeight * zoom), Math.ceil(barLayoutNow.height * zoom))
-  bar.apply({ bounds: r.bounds, contentProtection: prefs().hideFromCapture })
+  const onTop = prefs().onTop !== 'off'
+  // Off again: hidden first – dropping „topmost” would leave it above the windows until the helper lays it under them.
+  if (!onTop && barTop) bar.apply({ visible: false })
+  barTop = onTop
+  bar.apply({ bounds: r.bounds, contentProtection: prefs().hideFromCapture, onTop })
   bar.webContents?.send('rd:barGrows', r.growsUp ? 'up' : 'down')
+  if (onTop) {
+    // Above the windows: nothing to lay under them, no confirmation needed.
+    barProblem = null
+    helper?.send('bar.unwatch')
+    bar.apply({ visible: true })
+    return
+  }
   if (!helper?.running) {
     barProblem = 'helper'
     bar.apply({ visible: false })
@@ -202,6 +254,11 @@ function onHelperEvent(m: HelperMessage): void {
     const hwnd = String(m.hwnd ?? '')
     trial.log(`pierwszy plan: ${String(m.cls ?? '?')} (${String(m.process ?? '?')})${m.shell ? ' – okno powłoki' : ''}${m.fullscreen ? ' – pełny ekran' : ''}`)
     panel?.foreground(hwnd, m.shell === true)
+    // An own window in the foreground keeps the state (the bar itself never takes it).
+    if (hwnd !== bar?.hwnd && hwnd !== panel?.hwnd && fullscreenNow !== (m.fullscreen === true)) {
+      fullscreenNow = m.fullscreen === true
+      if (prefs().onTop !== 'off') layoutBar()
+    }
   } else if (m.type === 'shell') {
     trial.log('Eksplorator uruchomiony ponownie – ikona ustawiona jeszcze raz')
     tray?.refresh()
@@ -215,7 +272,7 @@ function onHelperEvent(m: HelperMessage): void {
   }
 }
 
-const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm', 'undo'])
+const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm', 'undo', 'cutOff', 'back', 'fewer', 'better', 'drink', 'restart', 'mark'])
 
 /** A click of the timer from a window, only with the fields an action takes (anything else is dropped). */
 function timerIn(c: TimerIn): TimerIn {
@@ -231,7 +288,10 @@ function timerIn(c: TimerIn): TimerIn {
     confirm: c.confirm === true,
     categoryId: str(c.categoryId),
     durationMin: num(c.durationMin),
-    target: str(c.target)
+    variantId: str(c.variantId) ?? null,
+    target: str(c.target),
+    question: str(c.question),
+    answer: str(c.answer)
   }
 }
 
@@ -255,7 +315,10 @@ function createHub(): DataHub {
     writeGuardPlan: identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1',
     extraBackupDir: () => prefs().backupDir,
     previousVersion: () => lastRunVersion,
-    onChange: () => broadcast(CH.onData, null)
+    onChange: () => {
+      broadcast(CH.onData, null)
+      void widget.refresh()
+    }
   })
 }
 
@@ -513,8 +576,10 @@ function registerIpc(): void {
   handle(CH.copyText, (_e, text: unknown) => {
     if (typeof text === 'string') clipboard.writeText(text.slice(0, 200_000))
   })
-  handle(CH.widgetAction, (e, action: WidgetAction, arg?: string) => {
-    trial.log(`przycisk paska (${viewOf(e.sender)}): ${action}${arg ? ` ${arg}` : ''}`)
+  handle(CH.widgetAction, async (e, action: WidgetAction, arg?: string) => {
+    const from = viewOf(e.sender)
+    trial.log(`przycisk paska (${from}): ${action}${arg ? ` ${arg}` : ''}`)
+    await widget.act(String(action), typeof arg === 'string' ? arg.slice(0, 200) : undefined, from)
   })
   ipcMain.on(CH.barLayout, (e, layout: BarLayout) => {
     if (!layout || typeof layout.height !== 'number') return
@@ -867,14 +932,17 @@ async function main(): Promise<void> {
     },
     helperRunning: () => !!helper?.running,
     hideFromCapture: () => prefs().hideFromCapture,
+    stayOnTop: () => prefs().onTop === 'barPanel',
     log: (m) => trial.log(m)
   })
   panel.onExternalClose = quitApp
   panel.onSystemEnd(onSystemEnd)
 
-  trial.on('change', (view: WidgetView) => showWidget(view))
+  sound = new SoundWindow(preload, loadView)
+  trial.on('change', () => showWidget(widgetView()))
   trial.on('log', (line: string) => broadcast(CH.onTrialLog, line))
   showWidget(widgetView())
+  widget.start()
 
   screen.on('display-metrics-changed', () => {
     tray?.refresh()
@@ -933,6 +1001,8 @@ app.on('will-quit', () => {
   updates?.onQuit(sessionEnding)
   power.stop()
   oneDrive.stop()
+  widget.stop()
+  sound?.destroy()
   helper?.stop()
   if (!sessionEnding) life.close('quit')
   log('info', 'koniec pracy')

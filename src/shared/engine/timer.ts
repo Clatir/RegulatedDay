@@ -61,8 +61,8 @@ export interface TimerDraft {
 
 export type TimerAction =
   | { a: 'start'; block: string; confirm?: boolean }
-  /** A block outside the plan from now („Pracuję” – 30 min of „Inne obowiązki”, a block begun by hand). */
-  | { a: 'startNew'; block: string; categoryId: string; durationMin: number; confirm?: boolean }
+  /** A block outside the plan from now („Pracuję” – 30 min of „Inne obowiązki”, a break of the bar, a block begun by hand). */
+  | { a: 'startNew'; block: string; categoryId: string; durationMin: number; variantId?: string | null; confirm?: boolean }
   | { a: 'pause' }
   | { a: 'next'; done?: boolean; confirm?: boolean }
   | { a: 'extend'; block?: string; minutes: number; confirm?: boolean }
@@ -73,6 +73,18 @@ export type TimerAction =
   | { a: 'confirm'; block: string }
   /** „Cofnij” of an automatic action (spec: it writes an event „korekta”; the boundary's own approval opens it again). */
   | { a: 'undo'; target: string }
+  /** „Odcinam się” and „Wracam” (spec „Odcinam się”). */
+  | { a: 'cutOff' }
+  | { a: 'back' }
+  /** „Mniej pytań” and „Jest lepiej” (spec „Cisza”). */
+  | { a: 'fewer' }
+  | { a: 'better' }
+  /** „Wypite” (spec „Woda”). */
+  | { a: 'drink' }
+  /** „Zacznij jeszcze raz” of a session ended before its planned end (D207). */
+  | { a: 'restart'; block: string }
+  /** An answer to a proposal of the bar (the break, the solitude): recorded, so it is shown once. */
+  | { a: 'mark'; question: string; answer: string }
 
 /** The cost a first click shows (spec: „przedłużenie · −40 min puli”, „pora snu +40 min”, „przekroczenie”). */
 export interface ActionCost {
@@ -136,8 +148,9 @@ export function timerNow(state: DayState): TimerNow {
       extendedMin: f.extends.reduce((s, x) => s + x.minutes, 0)
     })
   }
-  // One block in the foreground: the latest started (two after a pause of sync – the later wins the place).
-  const fgRunning = started.filter((t) => t.running && !t.bg).sort((a, b) => b.startedAt - a.startedAt)
+  // One block in the foreground: the latest started or resumed (two after a pause of sync – the later wins the place).
+  const lastRun = (t: TimerBlock) => t.fact.runs.at(-1)?.from ?? t.startedAt
+  const fgRunning = started.filter((t) => t.running && !t.bg).sort((a, b) => lastRun(b) - lastRun(a))
   const fg = fgRunning[0] ?? null
   const bg = started.filter((t) => t.running && (t.bg || (fg != null && t !== fg && !t.bg)))
   const paused = started.filter((t) => !t.running && !t.bg)
@@ -239,8 +252,9 @@ function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockI
     if (fg.info.fixed || fg.info.waits) {
       // A fixed block is never paused: it goes on in the background (spec „Przerwania”).
       out.push({ k: 'block.fg', block: fg.info.id, at, bg: true })
-    } else if ((info.waits || info.fixed) && !fg.info.isRegen) {
-      // A waiting or fixed block pauses the running flexible one; it waits as the next in the plan (spec „Bloki”).
+    } else if (((info.waits || info.fixed) && !fg.info.isRegen) || (info.isRegen && !fg.info.isRegen)) {
+      // A waiting or fixed block pauses the running flexible one; it waits as the next in the plan (spec „Bloki”) – so
+      // does a break (a regeneration begun now never ends the work it interrupts).
       out.push({ k: 'block.pause', block: fg.info.id, at })
     } else {
       // Another flexible block (or the start ends a regeneration): the running one ends here, done.
@@ -284,10 +298,11 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (!rules) return no('nie ma takiej kategorii')
       if (state.facts.blocks.get(act.block)?.startedAt != null || byId.has(act.block)) return no('ten blok już jest w dniu')
       if (!(act.durationMin > 0 && act.durationMin <= 24 * 60)) return no('długość bloku')
+      const variantId = act.variantId && rules.variants.some((v) => v.id === act.variantId) ? act.variantId : null
       const info: BlockInfo = {
         id: act.block,
         categoryId: act.categoryId,
-        variantId: null,
+        variantId,
         rules,
         inPlan: false,
         fixed: false,
@@ -316,7 +331,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (cost && !act.confirm) return no('koszt do potwierdzenia', cost)
       const events = startEvents(ctx, state, t, info, at, cost != null)
       const start = events.at(-1)!
-      start.planned = { categoryId: act.categoryId, variantId: null, durationMin: act.durationMin, tag: null, fixed: false, costs: null, bgCostPct: null }
+      start.planned = { categoryId: act.categoryId, variantId, durationMin: act.durationMin, tag: null, fixed: false, costs: null, bgCostPct: null }
       if (cost) start.confirmUntil = at + act.durationMin * 60_000
       return yes(events)
     }
@@ -417,6 +432,42 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       // second time that day); the approval leaves the list.
       if (a.k === 'boundary.approve') return yes([{ k: 'undo', at, target: a.id, reason: 'user' }, { k: 'boundary.undo', at }])
       return yes([{ k: 'undo', at, target: a.id, reason: 'user' }])
+    }
+    case 'cutOff': {
+      if (state.facts.disconnect.some((d) => d.to === OPEN)) return no('„Odcinam się” już trwa')
+      // A flexible block in the foreground pauses (after „Wracam” it waits as „Wznów · Zaparkuj”); a running block waiting
+      // for „Zacznij” (a session, the second shift, a weekly analysis) ends at the click (D206). Nothing is parked.
+      const events: TimerDraft[] = [{ k: 'disconnect.start', at }]
+      for (const tb of [t.fg, ...t.bg]) {
+        if (!tb) continue
+        if (tb.info.waits) events.push({ k: 'block.end', block: tb.info.id, at, done: null, rule: 'disconnect', autoRule: 'disconnect' })
+        else if (tb === t.fg && !isFixedLike(tb.info)) events.push({ k: 'block.pause', block: tb.info.id, at, autoRule: 'disconnect' })
+      }
+      return yes(events)
+    }
+    case 'back':
+      if (!state.facts.disconnect.some((d) => d.to === OPEN)) return no('„Odcinam się” nie trwa')
+      return yes([{ k: 'disconnect.end', at }])
+    case 'fewer':
+      return yes([{ k: 'fewer.start', at }])
+    case 'better':
+      return yes([{ k: 'fewer.end', at }])
+    case 'drink':
+      return yes([{ k: 'water.drink', at }])
+    case 'mark':
+      if (state.facts.answers.has(act.question)) return no('już odpowiedziane')
+      return yes([{ k: 'question.answer', at, question: act.question, answer: act.answer, value: null }])
+    case 'restart': {
+      const info = byId.get(act.block)
+      const f = state.facts.blocks.get(act.block)
+      if (!info || !f || f.endedAt == null) return no('ten blok się nie skończył')
+      const span = plannedSpan(info, byId)
+      if (!info.waits || !span || m >= span.end) return no('po planowanym końcu blok nie zaczyna się jeszcze raz')
+      // Like a start: a flexible block in the foreground pauses, a fixed one goes on in the background.
+      const events: TimerDraft[] = []
+      if (t.fg && !info.bg) events.push(isFixedLike(t.fg.info) || t.fg.info.protectedLife ? { k: 'block.fg', block: t.fg.info.id, at, bg: true } : { k: 'block.pause', block: t.fg.info.id, at })
+      events.push({ k: 'block.restart', block: info.id, at })
+      return yes(events)
     }
   }
 }
