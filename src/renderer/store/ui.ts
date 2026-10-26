@@ -21,14 +21,22 @@ export interface Toast {
 interface UiState {
   page: Page
   toasts: Toast[]
+  /** The day the plan screen shows (null: today). */
+  day: string | null
 }
 
-export const useUi = create<UiState>(() => ({ page: 'today', toasts: [] }))
+export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null }))
 
 /** Every change of view first commits the active field (spec „Zatwierdzanie przed przejściem”). */
 export function navigate(page: Page): void {
   commitActiveField()
   useUi.setState({ page })
+}
+
+/** The plan of a day (a click in the calendar opens it, D295); null: today. Commits the active field first. */
+export function openDay(day: string | null): void {
+  commitActiveField()
+  useUi.setState({ page: 'today', day })
 }
 
 let nextToast = 1

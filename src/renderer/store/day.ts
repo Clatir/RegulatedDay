@@ -4,7 +4,7 @@
  * whenever the data change. Days to come are counted the same way, from the snapshot this computer computes now.
  */
 import { useEffect, useMemo, useState } from 'react'
-import type { DayData } from '@shared/api'
+import type { DayData, RawRecord } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
 import { dayContextOf, snapshotOf, type PlanInputs } from '@shared/engine/context'
 import { computeDay, type DayContext, type DayState } from '@shared/engine/day'
@@ -40,6 +40,24 @@ export function useDayData(date: string): DayData | null {
     }
   }, [date, stamp, open])
   return data
+}
+
+/** The raw files of several days (the morning plan looks at yesterday and the week ahead); null until read. */
+export function useDayFiles(dates: readonly string[]): Record<string, RawRecord | null> | null {
+  const stamp = useData((s) => s.stamp)
+  const key = dates.join(',')
+  const [files, setFiles] = useState<Record<string, RawRecord | null> | null>(null)
+  useEffect(() => {
+    let alive = true
+    void Promise.all(dates.map(async (d) => [d, (await window.rd.dayData(d).catch(() => null))?.dayFile ?? null] as const)).then((list) => {
+      if (alive) setFiles(Object.fromEntries(list))
+    })
+    return () => {
+      alive = false
+    }
+    // The dates by their key: a new array of the same dates reads nothing again.
+  }, [key, stamp])
+  return files
 }
 
 export interface DayModel {

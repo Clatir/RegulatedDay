@@ -31,6 +31,8 @@ export interface TypeChangeInput {
   /** The settings in force at the switch (with this day's changes „od dziś”). */
   settings: RulesSettings
   templates: readonly Template[]
+  /** „Dodaj bloki typu …” later in the day: the missing blocks of the type, whatever its maximum. */
+  withAdd?: boolean
 }
 
 export interface AddCandidate {
@@ -163,7 +165,7 @@ export function planTypeChange(inp: TypeChangeInput): TypeChangePlan {
   const before = lastTypeMin(state) ?? now.params.minRegenMin
   const after = to === 'regeneracyjny' ? regenMinimum(inp, before, park.map((b) => b.id)) : settings.dayTypes[to].minRegenMin
   let add: AddCandidate[] = []
-  if (laterMax) {
+  if (laterMax || inp.withAdd) {
     const at = atOf(state.grid, state.now)
     const simCtx: DayContext = { ...ctx, events: [...ctx.events, simSnapshot(ctx, at, to, settings, atOf(state.grid, idxOfLogical(state.grid, newMaxMin)), null)] }
     const simState = computeDay(simCtx)
@@ -263,6 +265,34 @@ export function applyTypeChange(inp: TypeChangeInput, plan: TypeChangePlan, choi
     if (!runningWork && !staying && lastEnd != null) events.push({ k: 'work.end', day, at, end: atOf(g, lastEnd) })
   }
   return { events, blocks, sessionsYes, requestBlocks, boundary }
+}
+
+/**
+ * „Dodaj bloki typu …” later in the day (spec): the chosen missing blocks of the day's type now; an approved boundary is
+ * counted again as that type's proposal with them, without cost, no further than the boundary the type already had.
+ */
+export function addTypeBlocks(inp: TypeChangeInput, plan: TypeChangePlan, add: readonly string[]): TypeChangeResult {
+  const { ctx, state } = inp
+  const g = state.grid
+  const at = atOf(g, state.now)
+  const added = plan.add.filter((a) => add.includes(a.block.id))
+  const blocks = added.filter((a) => !a.session).map((a) => a.block)
+  const sessionsYes = added.filter((a) => a.session).map((a) => a.session!)
+  const events: Array<Record<string, unknown>> = []
+  let boundary: TypeChangeResult['boundary'] = null
+  const approved = state.boundary.approved
+  if (approved != null && added.length) {
+    const sessions = added.filter((a) => a.session).map((a) => a.block)
+    const sim = computeDay({ ...ctx, plan: [...ctx.plan, ...blocks, ...sessions], now: at + 60_000 })
+    let next = Math.max(state.now, sim.boundary.proposal ?? approved)
+    const cap = morningBoundary(state, inp.to, ctx.snapshot.dayType)
+    if (cap != null) next = Math.min(next, cap)
+    if (next !== approved) {
+      events.push({ k: 'boundary.approve', day: ctx.date, at, boundary: atOf(g, next), auto: false })
+      boundary = { before: approved, after: next }
+    }
+  }
+  return { events, blocks, sessionsYes, requestBlocks: [], boundary }
 }
 
 /** The boundary approved before the first change of type, when the day was planned with `to` (the cap of a return to it). */

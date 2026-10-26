@@ -222,6 +222,13 @@ async function wizardFinish(w: WizardFinish): Promise<{ ok: boolean; error: stri
   if (probe.unreadable) return { ok: false, error: `Nie mogę odczytać folderu: ${probe.unreadable}` }
   if (w.first && probe.hasData) return { ok: false, error: 'W tym folderze są już dane Regulated Day – ten komputer może do nich dołączyć.' }
   if (!w.first && !probe.hasData) return { ok: false, error: 'W tym folderze nie ma danych Regulated Day.' }
+  if (w.first) {
+    try {
+      await DataHub.create(probe.path)
+    } catch (e) {
+      return { ok: false, error: `Nie mogę utworzyć folderu: ${e instanceof Error ? e.message : String(e)}` }
+    }
+  }
   await setPrefs(w.prefs)
   if (w.autostart != null && autostart?.read().supported) {
     autostart.set(w.autostart)
@@ -233,6 +240,12 @@ async function wizardFinish(w: WizardFinish): Promise<{ ok: boolean; error: stri
     const out = await hub.edit(w.records.map((r) => ({ rel: r.rel, create: true, edits: Object.entries(r.value).map(([k, v]) => ({ path: [k], base: undefined, value: v })) })))
     const waiting = out.filter((o) => o.status !== 'applied')
     if (waiting.length) log('warn', `kreator: ${waiting.length} zapisów czeka w kolejce (${waiting[0]!.why ?? waiting[0]!.status})`)
+  }
+  if (w.pin && probe.inOneDrive && process.platform === 'win32') {
+    await DataHub.pin(probe.path).then(
+      () => log('info', `folder danych przypięty („Zawsze przechowuj na tym urządzeniu”): ${probe.path}`),
+      (e) => log('warn', 'przypięcie folderu danych nie udało się', e)
+    )
   }
   log('info', `kreator zakończony (${w.first ? 'pierwszy komputer' : 'kolejny komputer'}): ${probe.path}`)
   return { ok: true, error: null }
@@ -478,6 +491,7 @@ function registerIpc(): void {
   }
   handle(CH.dataView, () => needHub().view())
   handle(CH.dayData, (_e, date: string) => needHub().day(String(date)))
+  handle(CH.dayFiles, (_e, dates: string[]) => needHub().dayFiles(Array.isArray(dates) ? dates.map(String) : []))
   handle(CH.edit, (_e, entries: EditEntry[]) => needHub().edit(Array.isArray(entries) ? entries : []))
   handle(CH.logEvents, (_e, events: EventIn[]) => needHub().events(Array.isArray(events) ? events : []))
   handle(CH.resolve, (_e, id: string, choice: 'mine' | 'theirs') => needHub().resolve(String(id), choice === 'theirs' ? 'theirs' : 'mine'))

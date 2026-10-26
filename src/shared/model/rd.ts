@@ -7,6 +7,7 @@
  * Lists of records with ids (settings changes, people) are lists of objects with `id`: the queue edits them item by
  * item (`#id` paths), so two computers adding different items merge without a question.
  */
+import { BLOCK_COLORS } from '../theme'
 import { DEFAULT_CATEGORIES } from './categories'
 import { changeFrom, changeOrder, type SettingsChange } from './settings'
 
@@ -96,9 +97,9 @@ export function generalFrom(v: unknown): GeneralSettings {
 
 /**
  * The palette of category colours: warm, muted hues that keep the text readable on a block (the contrast test goes
- * through each). The classes' own colours come first.
+ * through each, theme.ts). The classes' own colours come first.
  */
-export const CATEGORY_COLORS = ['#F2B66D', '#B49FCC', '#79AFAB', '#D49A97', '#C9B27A', '#8FB3D9', '#A3C49A', '#D6A2C4'] as const
+export const CATEGORY_COLORS = BLOCK_COLORS
 
 /** The colour of a class (praca – lampka, życie i opieka – lawenda, wolne – morski), as the bar and the icon (D225). */
 export const CLASS_COLORS = { work: '#F2B66D', life: '#B49FCC', free: '#79AFAB' } as const

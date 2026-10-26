@@ -49,6 +49,10 @@
 }
 
 @layer base {
+  :root {
+    /* Native lists and scrollbars of the main window in the dark theme. */
+    color-scheme: dark;
+  }
   html,
   body,
   #root {

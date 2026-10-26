@@ -103,6 +103,14 @@ export function barBackground(tone: Tone, warn: WarnStep, quiet: boolean, bright
   return darken(mix(PALETTE.surface, toneColor(tone, warn), quiet ? 0.08 : 0.15), brightness)
 }
 
+/** The fill of a block on the plan's axis: its category's colour laid thinly over the surface, dimmed with brightness. */
+export function blockFill(color: string, brightness = 1): string {
+  return darken(mix(PALETTE.surface, color, 0.15), Math.min(1, Math.max(0.5, brightness)))
+}
+
+/** The palette of category colours (rd.ts keeps the same list): the classes' own colours first. */
+export const BLOCK_COLORS = ['#F2B66D', '#B49FCC', '#79AFAB', '#D49A97', '#C9B27A', '#8FB3D9', '#A3C49A', '#D6A2C4'] as const
+
 /** The CSS variables of the windows for a brightness (50–100 %): backgrounds, lines and accent fills only. */
 export function themeVars(brightness: number): Record<string, string> {
   const b = Math.min(1, Math.max(0.5, brightness))
@@ -151,6 +159,8 @@ export function contrastPairs(brightness: number): Array<{ name: string; text: s
   const out: Array<{ name: string; text: string; bg: string }> = []
   for (const [bn, bg] of windowBgs) for (const [tn, text] of [...plainTexts, ...accentTexts]) out.push({ name: `${tn} na ${bn}`, text, bg })
   for (const [bn, bg] of barBgs) for (const [tn, text] of plainTexts) out.push({ name: `${tn} na ${bn}`, text, bg })
+  // Blocks on the plan's axis: the text and the muted text on every category colour's fill.
+  for (const color of BLOCK_COLORS) for (const [tn, text] of plainTexts) out.push({ name: `${tn} na bloku ${color}`, text, bg: blockFill(color, brightness) })
   // A primary button: its accent as text on a soft fill of the accent (never dark text on a full fill – that fill dims
   // with brightness and the dark text would lose its contrast).
   for (const [name, accent] of accentTexts) {

@@ -48,6 +48,7 @@ const api: RdApi = {
   dataView: () => ipcRenderer.invoke(CH.dataView),
   onData: (cb) => on(CH.onData, cb),
   dayData: (date) => ipcRenderer.invoke(CH.dayData, date),
+  dayFiles: (dates) => ipcRenderer.invoke(CH.dayFiles, dates),
   edit: (entries) => ipcRenderer.invoke(CH.edit, entries),
   logEvents: (events) => ipcRenderer.invoke(CH.logEvents, events),
   resolve: (id, choice) => ipcRenderer.invoke(CH.resolve, id, choice),

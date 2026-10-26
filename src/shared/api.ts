@@ -35,6 +35,7 @@ export const CH = {
   dataView: 'rd:dataView',
   onData: 'rd:onData',
   dayData: 'rd:dayData',
+  dayFiles: 'rd:dayFiles',
   edit: 'rd:edit',
   logEvents: 'rd:logEvents',
   resolve: 'rd:resolve',
@@ -147,7 +148,9 @@ export interface EditQuestion {
   rel: string
   /** conflict – a field changed here and elsewhere; removed – the record was removed elsewhere; broken – the file is broken. */
   kind: 'conflict' | 'removed' | 'broken'
+  /** When you made your change, and when the file was changed elsewhere (null: unknown) – „Przyjmij nowsze” compares them. */
   at: number
+  theirsAt: number | null
   fields: Array<{ path: string[]; mine: unknown; theirs: unknown }>
 }
 
@@ -209,6 +212,8 @@ export interface WizardFinish {
   /** This computer's settings. */
   prefs: Record<string, unknown>
   autostart: boolean | null
+  /** „Zawsze przechowuj na tym urządzeniu” for the folder (in OneDrive only). */
+  pin: boolean
 }
 
 export interface HistoryRecord {
@@ -267,6 +272,8 @@ export interface RdApi {
   /** Something in the data changed (a check of the folder, an edit, another computer's file). */
   onData(cb: () => void): () => void
   dayData(date: string): Promise<DayData>
+  /** The files of several days (the calendar's month), null where a day has none. */
+  dayFiles(dates: string[]): Promise<Record<string, RawRecord | null>>
   edit(entries: EditEntry[]): Promise<EditOutcome[]>
   logEvents(events: EventIn[]): Promise<void>
   resolve(id: string, choice: 'mine' | 'theirs'): Promise<void>

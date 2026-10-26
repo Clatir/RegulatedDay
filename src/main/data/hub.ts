@@ -34,6 +34,9 @@ export interface HubOptions {
   onChange: () => void
 }
 
+/** A folder that did not open is tried again this often (spec: „ponawia otwarcie co 30 s”). */
+const RETRY_MS = 30_000
+
 /** Files OneDrive and Windows put in any folder: they do not make it „not empty”. */
 const NOISE = new Set(['desktop.ini', 'thumbs.db', '.ds_store'])
 
@@ -55,6 +58,7 @@ export class DataHub {
   private opening: Promise<boolean> | null = null
   private closing = false
   private lastSignature = ''
+  private retry: ReturnType<typeof setTimeout> | null = null
 
   constructor(private readonly o: HubOptions) {}
 
@@ -77,7 +81,10 @@ export class DataHub {
     this.error = null
     this.changed()
     try {
-      await mkdir(dir, { recursive: true })
+      // A folder that is not there (OneDrive not ready yet): nothing is created in its place (spec „W niedostępnym folderze
+      // niczego nie tworzy”) – it is tried again.
+      const st = await stat(dir).catch(() => null)
+      if (!st?.isDirectory()) throw new Error('folder jest niedostępny')
       const s = await DataService.start({
         dataDir: dir,
         userData: this.o.userData,
@@ -107,6 +114,14 @@ export class DataHub {
       this.error = e instanceof Error ? e.message : String(e)
       this.o.log('error', `folder danych ${dir} nie otworzył się`, e)
       this.changed()
+      // OneDrive not ready at the start: the app tries again every 30 s by itself (spec „czekam na folder”).
+      if (!this.closing) {
+        this.retry = setTimeout(() => {
+          this.retry = null
+          if (this.status === 'failed' && this.folder === dir) void this.open(dir)
+        }, RETRY_MS)
+        this.retry.unref?.()
+      }
       return false
     }
   }
@@ -117,6 +132,8 @@ export class DataHub {
    */
   async close(why: 'quit' | 'system'): Promise<void> {
     this.closing = true
+    if (this.retry) clearTimeout(this.retry)
+    this.retry = null
     try {
       if (this.opening) await Promise.race([this.opening, new Promise((r) => setTimeout(r, STOP_TIMEOUT_MS))])
       const s = this.service
@@ -164,6 +181,7 @@ export class DataHub {
     const f = this.service?.folder
     const records = await this.records()
     const problems = f ? [...f.records.problems.entries()].map(([rel, why]) => `${rel}: ${why}`) : []
+    const questions = f ? await this.questions() : []
     return {
       status: this.status,
       folder: this.folder,
@@ -173,22 +191,30 @@ export class DataHub {
       ...records,
       computers: f?.computers ?? [{ id: this.o.computer(), name: this.o.computerName }],
       unsynced: f?.unsynced ?? 0,
-      questions: f ? this.questions() : [],
+      questions,
       problems,
       leader: f?.leader.leader ?? null,
       today: logicalDayOf(f ? f.clock.now() : Date.now())
     }
   }
 
-  private questions(): EditQuestion[] {
+  private async questions(): Promise<EditQuestion[]> {
     const f = this.service!.folder
-    return f.queue.questions().map(({ edit, outcome }) => ({
-      id: edit.id,
-      rel: edit.rel,
-      kind: outcome.status === 'conflict' ? 'conflict' : outcome.status === 'removedElsewhere' ? 'removed' : 'broken',
-      at: edit.at,
-      fields: outcome.status === 'conflict' ? outcome.fields.map((x) => ({ path: x.path, mine: x.value, theirs: x.now })) : edit.edits.map((x) => ({ path: x.path, mine: x.value, theirs: undefined }))
-    }))
+    const out: EditQuestion[] = []
+    for (const { edit, outcome } of f.queue.questions()) {
+      // The file's own stamp of its last save (written with every edit), for „Przyjmij nowsze”.
+      const now = await f.records.read(edit.rel).catch(() => null)
+      const theirsAt = now?.status === 'ok' && typeof now.value.updatedAt === 'number' ? now.value.updatedAt : null
+      out.push({
+        id: edit.id,
+        rel: edit.rel,
+        kind: outcome.status === 'conflict' ? 'conflict' : outcome.status === 'removedElsewhere' ? 'removed' : 'broken',
+        at: edit.at,
+        theirsAt,
+        fields: outcome.status === 'conflict' ? outcome.fields.map((x) => ({ path: x.path, mine: x.value, theirs: x.now })) : edit.edits.map((x) => ({ path: x.path, mine: x.value, theirs: undefined }))
+      })
+    }
+    return out
   }
 
   private need() {
@@ -203,6 +229,13 @@ export class DataHub {
     const read = await f.readDay(date)
     const file = async (d: string) => (await f.recordView(paths.day(d)).catch(() => undefined)) ?? null
     return { date, dayFile: await file(date), nextFile: await file(addDays(date, 1)), prevFile: await file(addDays(date, -1)), events: read.events, complete: read.complete }
+  }
+
+  async dayFiles(dates: string[]): Promise<Record<string, RawRecord | null>> {
+    const f = this.need()
+    const out: Record<string, RawRecord | null> = {}
+    for (const d of dates.slice(0, 62)) if (isIsoDate(d)) out[d] = (await f.recordView(paths.day(d)).catch(() => undefined)) ?? null
+    return out
   }
 
   async edit(entries: EditEntry[]): Promise<EditOutcome[]> {
@@ -273,6 +306,11 @@ export class DataHub {
       : { rel, create: true, edits: Object.entries(v.record).map(([k, x]) => ({ path: [k], base: undefined, value: x })) }
     if (!entry.edits.length) return []
     return this.edit([entry])
+  }
+
+  /** The first computer's folder made at „Zakończ” (the only place the app creates a data folder). */
+  static async create(dir: string): Promise<void> {
+    await mkdir(dir, { recursive: true })
   }
 
   /** Where the wizard proposes the data folder: OneDrive\RegulatedDay, else Documents\RegulatedDay. */

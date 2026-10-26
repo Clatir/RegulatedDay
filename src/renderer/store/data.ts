@@ -7,6 +7,7 @@
 import { create } from 'zustand'
 import type { DataView, EditEntry, EditOutcome, EventIn, RawRecord } from '@shared/api'
 import { diffRecords } from '@shared/data/merge'
+import { newId } from '@shared/model/ids'
 import { lectureFrom, templateFrom, type LectureSeries, type Template } from '@shared/model/plan'
 import { rdFrom, type RdFile } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
@@ -107,6 +108,21 @@ export async function saveEdits(entries: ReadonlyArray<EditEntry | null>): Promi
     toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
     return []
   }
+}
+
+/** rd.json changed by `fn` (made when there is none yet – the defaults are never written unless you change something). */
+export function saveRd(fn: (raw: RawRecord) => RawRecord): Promise<EditOutcome[]> {
+  const before = rawRecord('rd.json')
+  return saveRecord('rd.json', before, fn(before ? { ...before } : { schema: 1 }))
+}
+
+/** A new person of the list (spec „Słowniki: … z „+ dodaj””); answers its id. */
+export async function addPerson(name: string): Promise<string | null> {
+  const n = name.trim().slice(0, 60)
+  if (!n) return null
+  const id = newId()
+  await saveRd((raw) => ({ ...raw, people: [...(Array.isArray(raw.people) ? raw.people : []), { id, name: n, archived: false }] }))
+  return id
 }
 
 /** One record changed from `before` to `after` (null: removed / new). */
