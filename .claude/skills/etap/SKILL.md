@@ -21,7 +21,8 @@ Wszystkie wiadomości do użytkownika po polsku. Pytania zawsze klikalne (AskUse
 4. Wpis w `docs/postep.md`: zakres, decyzje (D… / T…), testy, czas faktyczny, rzeczy otwarte; reguła albo pułapka
    modułu → `.claude/rules/<moduł>.md`; zmiany dla użytkownika → `CHANGELOG.md` (sekcja nowej wersji).
 5. Lista „do sprawdzenia” na Windows w `docs/postep.md` – konkretne kroki, każdy z oczekiwanym wynikiem.
-6. Pauza do „dalej”.
+6. Pauza do „dalej” – z informacją, czy `/clear` jest teraz bezpieczny (zasada w `CLAUDE.md`): PR-y w toku i CI zapisane
+   w `docs/postep.md`, wszystko wypchnięte.
 
 ## PR, scalanie (D285), wydanie
 - Nowa wersja: `version` w `package.json` + sekcja `## X.Y.Z` w `CHANGELOG.md` (CI sprawdza `scripts/release-notes.mjs`).

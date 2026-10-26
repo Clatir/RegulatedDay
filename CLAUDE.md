@@ -12,6 +12,9 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
   sam i dopisz jako T-decyzję.
 - Do `main` pisze naraz jedna sesja; po scaleniu sprawdź, że zadanie Windows w CI opublikowało wydanie.
 - Po wznowieniu (limit, nowa sesja) najpierw przeczytaj `docs/postep.md`.
+- **`/clear`:** przy każdej pauzie i po każdym zamkniętym kroku powiedz wprost, czy można go teraz bezpiecznie wykonać.
+  Bezpiecznie = wszystko jest w commitach wypchniętych na GitHuba, `docs/postep.md` mówi, co dalej (także PR do scalenia
+  i CI w toku), i nic nie zależy tylko od pamięci rozmowy. Inaczej powiedz, czego brakuje i kiedy będzie można.
 
 ## Zasady produktu (najważniejsze)
 - Aplikacja nigdy nie kontroluje użytkownika: ostrzega, odradza, sugeruje, nic twardo nie blokuje (D72).

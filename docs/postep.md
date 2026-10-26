@@ -41,7 +41,9 @@
   chowa się nad pełnym ekranem; budowa w E4b.
 
 ## Kolejka
-1. Pauza do „dalej”, potem „Przed etapem E1”.
+1. PR #3 (`claude/docs-d291`: D291 i zasada o `/clear`) – jeśli jeszcze otwarty, scalić po zielonym CI (D285); potem
+   lokalnie `git checkout main && git pull`.
+2. Pauza do „dalej”, potem „Przed etapem E1”.
 
 ## Przed etapem E0 (25.10.2026)
 - Odpowiedzi: D284–D289. Model: Opus 5.5 · xhigh. Sprzęt próby: drugi monitor, laptop, platforma brokera jako
