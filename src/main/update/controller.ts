@@ -6,13 +6,13 @@
  */
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { GITHUB_API, RELEASES_PAGE } from '@shared/update'
+import { GITHUB_API, MANIFEST_ASSET, RELEASES_PAGE, SETUP_ASSET } from '@shared/update'
 import { UPDATES_OFF, type UpdateView } from '@shared/updateView'
 import type { UpdateAction } from '@shared/api'
 import { readTask, type TaskStart, type TaskTrigger } from '@shared/task'
 import { Updater } from './updater'
-import { readSharedSync } from './files'
-import { guardMode, stageInstall, startInstall } from './install'
+import { heldOpen, readSharedSync } from './files'
+import { guardModeAsync, stageInstallAsync, startInstall } from './install'
 import type { FetchLike } from './download'
 
 export interface ControllerDeps {
@@ -26,6 +26,10 @@ export interface ControllerDeps {
   nightInstall: () => boolean
   /** Before the installer or the install helper starts: the record of closing, the writes waited for. */
   beforeInstall: () => void
+  /** The installation did not start after beforeInstall: the app goes on (its life marker beats again). */
+  installFailed: () => void
+  /** guard.lock held open by an owner (tests stand in for it). */
+  lockHeld?: (path: string) => boolean
   quit: () => void
   openExternal: (url: string) => void
   broadcast: (view: UpdateView) => void
@@ -81,12 +85,12 @@ export class UpdateController {
     this.updater.banner = banner
     this.updater.whatsNew = whatsNew
     this.updater.init()
-    // The guard's entry switched off in Task Manager: no installation at the start of Windows.
+    // The guard's entry switched off in Task Manager: no installation at the start of Windows (read in the background).
     const guard = join(this.d.helperDir, 'rd-guard.exe')
-    if (existsSync(guard)) {
-      const r = guardMode(guard, ['--run-entry', 'query'])
-      this.guardDisabled = r.ok === true && r.approved === false
-    }
+    if (existsSync(guard))
+      void guardModeAsync(guard, ['--run-entry', 'query']).then((r) => {
+        this.guardDisabled = r.ok === true && r.approved === false
+      })
     const delay = Number(process.env.RD_UPDATE_CHECK_DELAY_MS) || 30_000
     this.updater.startAuto(delay)
     // The night of a test (E4a schedules the real one): installs as soon as a download is ready.
@@ -99,20 +103,17 @@ export class UpdateController {
     }
   }
 
-  /** A download ready: copied with the programs into update\<X> now, so installing later only starts. */
+  /** A download ready: copied with the programs into update\<X> now (in the background), so installing later only starts. */
   private stage(): void {
     const ready = this.updater?.readyRelease
     if (!ready) return
-    try {
-      stageInstall({ updateDir: this.updateDir, version: ready.version, downloadDir: ready.dir, helperDir: this.d.helperDir })
-    } catch (e) {
+    stageInstallAsync({ updateDir: this.updateDir, version: ready.version, downloadDir: ready.dir, helperDir: this.d.helperDir }).catch((e: unknown) =>
       this.d.log('warn', 'przygotowanie instalacji nie udało się', e)
-    }
+    )
   }
 
   /** Installs the ready download now (`trigger`), then quits; false = nothing to install. */
-  install(trigger: TaskTrigger, start: TaskStart, url: string | null = null): boolean {
-    const ready = this.updater?.readyRelease
+  install(trigger: TaskTrigger, start: TaskStart, url: string | null = null, ready = this.updater?.readyRelease): boolean {
     if (!ready || this.installing) return false
     const owner = this.d.helperRunning()
     // Without the helper only the exit and „Zainstaluj teraz” install (the FI path); never the night or the logon.
@@ -122,30 +123,58 @@ export class UpdateController {
     // ponownie”) or a newer release resumes it.
     const t = readTask(readSharedSync(join(this.updateDir, ready.version, 'task.json')))
     if (trigger !== 'now' && t.kind === 'task' && t.task.state === 'failed') return false
+    // An owner works on X right now (a guard of the logon that took the task after this app read it): its task is never
+    // written over – it installs and starts the app itself.
+    if ((this.d.lockHeld ?? heldOpen)(join(this.updateDir, ready.version, 'guard.lock'))) {
+      this.d.log('info', `instalacja ${ready.version}: właściciel już działa – nie zaczynam drugiej`)
+      return false
+    }
     this.installing = true
     this.updater!.markInstalling()
     this.d.beforeInstall()
-    const ok = startInstall({
-      version: ready.version,
-      downloadDir: ready.dir,
-      updateDir: this.updateDir,
-      helperDir: this.d.helperDir,
-      trigger,
-      start,
-      url,
-      autostart: this.d.autostartOn(),
-      appPid: process.pid,
-      owner,
-      userDataDir: this.d.userData,
-      log: (l, m) => this.d.log(l, m)
-    })
+    let ok = false
+    try {
+      ok = startInstall({
+        version: ready.version,
+        downloadDir: ready.dir,
+        updateDir: this.updateDir,
+        helperDir: this.d.helperDir,
+        trigger,
+        start,
+        url,
+        autostart: this.d.autostartOn(),
+        appPid: process.pid,
+        owner,
+        userDataDir: this.d.userData,
+        log: (l, m) => this.d.log(l, m)
+      })
+    } catch (e) {
+      this.d.log('error', `przygotowanie instalacji ${ready.version} nie udało się`, e)
+    }
     if (!ok) {
+      // The app lives on as before: the download ready, the checks back, the life marker beating again.
       this.installing = false
+      this.updater!.cancelInstalling()
+      this.d.installFailed()
       this.d.log('error', `instalacja ${ready.version} nie wystartowała`)
       return false
     }
     if (trigger !== 'exit') this.d.quit()
     return true
+  }
+
+  /**
+   * „Spróbuj ponownie” after an installation of the running version left its files unfinished (the FI path): no newer
+   * release is there to download – its own download, still in update\<X>, is installed once more.
+   */
+  private repairRunning(): boolean {
+    const version = this.d.version
+    const t = readTask(readSharedSync(join(this.updateDir, version, 'task.json')))
+    if (t.kind !== 'task' || t.task.state !== 'failed') return false
+    const dir = join(this.updateDir, version, 'download')
+    if (!existsSync(join(dir, SETUP_ASSET)) || !existsSync(join(dir, MANIFEST_ASSET))) return false
+    this.d.log('info', `naprawa instalacji ${version}: jej instalator jeszcze raz`)
+    return this.install('now', 'visible', null, { version, notes: '', dir })
   }
 
   /** The full exit: a ready download installs (the app is quitting anyway). */
@@ -177,7 +206,7 @@ export class UpdateController {
     }
     if (a === 'installNow' || a === 'retry') {
       this.updater.banner = null
-      if (!this.install('now', 'visible')) {
+      if (!this.install('now', 'visible') && !(a === 'retry' && this.repairRunning())) {
         // Nothing downloaded yet (a retry after a failure): check, download, then install.
         await this.updater.check(true)
         await this.updater.download()

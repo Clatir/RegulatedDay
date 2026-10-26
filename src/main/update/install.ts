@@ -7,9 +7,9 @@
  * („--force-run” only for „Zainstaluj teraz”), the task in the state „FI” with the installer's process id, and a status
  * window of PowerShell (WPF, without activation) shown only after the app ended.
  */
-import { spawn, spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
-import { randomBytes } from 'node:crypto'
+import { execFile, spawn, spawnSync } from 'node:child_process'
+import { copyFileSync, existsSync, mkdirSync, promises as fs, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createHash, randomBytes } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { MANIFEST_ASSET, NSIS_GUID, SETUP_ASSET, UNINSTALL_KEY } from '@shared/update'
@@ -66,33 +66,95 @@ export function newTask(i: Pick<InstallInput, 'version' | 'trigger' | 'start' | 
   }
 }
 
-/** A JSON-line mode of the guard (one line; an exception there answers {"ok": false}). */
-export function guardMode(guardExe: string, args: string[], timeoutMs = 15_000): Record<string, unknown> {
-  const r = spawnSync(guardExe, args, { encoding: 'utf8', windowsHide: true, timeout: timeoutMs })
-  const line = (r.stdout ?? '').trim().split(/\r?\n/).pop() ?? ''
+/** The guard's one line of JSON; `why` – the exit code or the error when there is none. */
+function guardLine(stdout: string | null | undefined, why: unknown): Record<string, unknown> {
+  const line = (stdout ?? '').trim().split(/\r?\n/).pop() ?? ''
   try {
     return JSON.parse(line) as Record<string, unknown>
   } catch {
-    return { ok: false, error: `brak odpowiedzi (kod ${r.status ?? r.signal ?? r.error?.message})` }
+    return { ok: false, error: `brak odpowiedzi (kod ${String(why)})` }
   }
 }
 
-/** Copies the programs and the release into update\<X>; answers the task's folder. */
-export function stageInstall(i: Pick<InstallInput, 'updateDir' | 'version' | 'downloadDir' | 'helperDir'>): string {
+/** A JSON-line mode of the guard (one line; an exception there answers {"ok": false}). */
+export function guardMode(guardExe: string, args: string[], timeoutMs = 15_000): Record<string, unknown> {
+  const r = spawnSync(guardExe, args, { encoding: 'utf8', windowsHide: true, timeout: timeoutMs })
+  return guardLine(r.stdout, r.status ?? r.signal ?? r.error?.message)
+}
+
+/** The same without holding the main process up (a query at the start; .NET's start takes a moment). */
+export function guardModeAsync(guardExe: string, args: string[], timeoutMs = 15_000): Promise<Record<string, unknown>> {
+  return new Promise((resolve) => {
+    execFile(guardExe, args, { encoding: 'utf8', windowsHide: true, timeout: timeoutMs }, (err, stdout) => resolve(guardLine(stdout, err ? (err.code ?? err.message) : 0)))
+  })
+}
+
+type StageInput = Pick<InstallInput, 'updateDir' | 'version' | 'downloadDir' | 'helperDir'>
+
+/** What staging copies – [from, to, compared by SHA-256] – into the task's folder. */
+function stagePlan(i: StageInput): { dir: string; copies: Array<[string, string, boolean]> } {
   const dir = join(i.updateDir, i.version)
-  mkdirSync(dir, { recursive: true })
-  // A copy already there with the same size is kept (staged right after the download; the exit then only starts).
-  const copy = (from: string, to: string) => {
-    if (existsSync(to) && statSync(to).size === statSync(from).size) return
-    copyFileSync(from, to)
-  }
-  for (const f of [SETUP_ASSET, MANIFEST_ASSET]) copy(join(i.downloadDir, f), join(dir, f))
+  const copies: Array<[string, string, boolean]> = [
+    [join(i.downloadDir, SETUP_ASSET), join(dir, SETUP_ASSET), false],
+    [join(i.downloadDir, MANIFEST_ASSET), join(dir, MANIFEST_ASSET), true]
+  ]
   for (const p of PROGRAMS) {
     if (!existsSync(join(i.helperDir, p))) continue
-    copy(join(i.helperDir, p), join(dir, p))
-    if (existsSync(join(i.helperDir, `${p}.config`))) copy(join(i.helperDir, `${p}.config`), join(dir, `${p}.config`))
+    copies.push([join(i.helperDir, p), join(dir, p), true])
+    if (existsSync(join(i.helperDir, `${p}.config`))) copies.push([join(i.helperDir, `${p}.config`), join(dir, `${p}.config`), true])
+  }
+  return { dir, copies }
+}
+
+const sha256Of = (p: string) => createHash('sha256').update(readFileSync(p)).digest('hex')
+const sameCopy = (from: string, to: string, byHash: boolean) => existsSync(to) && statSync(to).size === statSync(from).size && (!byHash || sha256Of(to) === sha256Of(from))
+const tmpName = (to: string) => `${to}.${randomBytes(4).toString('hex')}.tmp`
+
+/**
+ * Copies the programs and the release into update\<X>; answers the task's folder. Each copy goes under a temporary name
+ * and is renamed, so a copy cut short never has the final name. A copy already there is kept when it is the same (staged
+ * right after the download; the exit then only starts): the installer by its size – it was verified at the download and
+ * is only ever copied whole – the small files by their SHA-256 (another version's program may have the same size).
+ */
+export function stageInstall(i: StageInput): string {
+  const { dir, copies } = stagePlan(i)
+  mkdirSync(dir, { recursive: true })
+  for (const [from, to, byHash] of copies) {
+    if (sameCopy(from, to, byHash)) continue
+    const tmp = tmpName(to)
+    copyFileSync(from, tmp)
+    renameSync(tmp, to)
   }
   return dir
+}
+
+/** The same in the background – right after a download, so the ~100 MB installer never holds the main process up. */
+export async function stageInstallAsync(i: StageInput): Promise<string> {
+  const { dir, copies } = stagePlan(i)
+  await fs.mkdir(dir, { recursive: true })
+  for (const [from, to, byHash] of copies) {
+    if (sameCopy(from, to, byHash)) continue
+    const tmp = tmpName(to)
+    await fs.copyFile(from, tmp)
+    await fs.rename(tmp, to)
+  }
+  return dir
+}
+
+/**
+ * A detached process; its id, or null when it did not start – Node throws at once for some failures (a file that is no
+ * program: „spawn UNKNOWN”) and reports others by „error”.
+ */
+function startDetached(exe: string, args: string[], cwd: string, what: string, log: InstallInput['log']): number | null {
+  try {
+    const child = spawn(exe, args, { cwd, detached: true, stdio: 'ignore' })
+    child.on('error', (e) => log('error', `${what} nie wystartował: ${e.message}`))
+    child.unref()
+    return child.pid ?? null
+  } catch (e) {
+    log('error', `${what} nie wystartował: ${e instanceof Error ? e.message : String(e)}`)
+    return null
+  }
 }
 
 /**
@@ -103,6 +165,8 @@ export function startInstall(i: InstallInput): boolean {
   const dir = stageInstall(i)
   const taskFile = join(dir, 'task.json')
   const now = Date.now()
+  // A new attempt: starts handed over to an earlier one never shape this one's start.
+  rmSync(join(dir, 'handover.jsonl'), { force: true })
   if (i.owner && existsSync(join(dir, 'rd-guard.exe')) && existsSync(join(dir, 'rd-install.exe'))) {
     const task = newTask(i, 'scheduled', now)
     writeFileSync(taskFile, writeTask(task))
@@ -111,28 +175,29 @@ export function startInstall(i: InstallInput): boolean {
     // At the start of Windows the guard owns the installation (as from its Run entry); otherwise the install helper.
     const owner = i.trigger === 'logon' ? join(dir, 'rd-guard.exe') : join(dir, 'rd-install.exe')
     const args = ['--task', taskFile, '--wait-pid', String(i.appPid), ...(i.trigger === 'logon' ? ['--autostart'] : [])]
-    const child = spawn(owner, args, { cwd: dir, detached: true, stdio: 'ignore' })
-    child.on('error', (e) => i.log('error', `właściciel instalacji nie wystartował: ${e.message}`))
-    child.unref()
-    i.log('info', `instalacja ${i.version} (${i.trigger}): ${i.trigger === 'logon' ? 'strażnik' : 'pomocnik instalacji'} pid ${child.pid ?? '?'}`)
-    return child.pid != null
+    const pid = startDetached(owner, args, dir, 'właściciel instalacji', i.log)
+    i.log('info', `instalacja ${i.version} (${i.trigger}): ${i.trigger === 'logon' ? 'strażnik' : 'pomocnik instalacji'} pid ${pid ?? '?'}`)
+    return pid != null
   }
   // The FI path: no owner, no power request, no guard's entry (the settings say it).
   const task = newTask(i, 'fi', now)
   writeFileSync(taskFile, writeTask(task))
   const args = ['--updated', '/S', ...(i.trigger === 'now' ? ['--force-run'] : [])]
-  const child = spawn(join(dir, SETUP_ASSET), args, { cwd: dir, detached: true, stdio: 'ignore' })
-  child.on('error', (e) => i.log('error', `instalator nie wystartował: ${e.message}`))
-  child.unref()
-  if (child.pid != null) writeFileSync(taskFile, writeTask({ ...task, installerPid: child.pid, installerStartedAt: Date.now(), updatedAt: Date.now() }))
-  i.log('info', `instalacja ${i.version} ścieżką FI (${i.trigger}), instalator pid ${child.pid ?? '?'}`)
+  const pid = startDetached(join(dir, SETUP_ASSET), args, dir, 'instalator', i.log)
+  if (pid == null) {
+    // Never a fresh „FI” without an installer (a start within 60 s would take it for one under way and end at once).
+    writeFileSync(taskFile, writeTask({ ...task, state: 'failed', message: 'instalator nie wystartował', updatedAt: Date.now() }))
+    return false
+  }
+  writeFileSync(taskFile, writeTask({ ...task, installerPid: pid, installerStartedAt: Date.now(), updatedAt: Date.now() }))
+  i.log('info', `instalacja ${i.version} ścieżką FI (${i.trigger}), instalator pid ${pid}`)
   try {
-    startFiStatus({ version: i.version, appPid: i.appPid, installerPid: child.pid ?? 0, restart: i.trigger === 'now', attemptId: task.attemptId, launchedFile: join(i.userDataDir, 'launched.json'), logFile: join(i.userDataDir, 'logs', 'update.log'), appExe: process.execPath })
+    startFiStatus({ version: i.version, appPid: i.appPid, installerPid: pid, restart: i.trigger === 'now', attemptId: task.attemptId, launchedFile: join(i.userDataDir, 'launched.json'), logFile: join(i.userDataDir, 'logs', 'update.log'), appExe: process.execPath })
   } catch (e) {
     // Only the status window is missing; the installer works on (as in FI).
     i.log('warn', `okno stanu instalacji niedostępne: ${e instanceof Error ? e.message : String(e)}`)
   }
-  return child.pid != null
+  return true
 }
 
 // ------------------------------------------------------------------ the FI path's status window (PowerShell, WPF)

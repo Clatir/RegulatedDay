@@ -6,7 +6,9 @@
  *   blur, setFocusable, moveTop, moveAbove, show, restore, setAlwaysOnTop or setParentWindow;
  * - the bar's components have no title attribute (also no <title> in SVG), no <select>, no date or colour field and no
  *   alert / confirm / prompt – each would be a separate window of Chromium on top of every other;
- * - no window uses Notification (only the main process does, through notify.ts).
+ * - no window uses Notification (only the main process does, through notify.ts);
+ * - the helper's commands that answer only a request (with an id) are never sent without one – their answer would be
+ *   lost (`helper.send('toastSetting')` read Windows' setting and said nothing).
  * `--self-test` proves each check catches its case.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
@@ -66,6 +68,16 @@ export function checkRenderer(text) {
   return /\bNotification\b/.test(text) ? ['powiadomienie w oknie – powiadomienia pokazuje tylko proces główny (notify.ts)'] : []
 }
 
+/** The helper's commands whose only result is their answer (helper/src/Helper/HelperMain.cs). */
+const ANSWER_ONLY = ['notificationState', 'toastSetting', 'session.start', 'oneDrive', 'attributes', 'powerState', 'installLocation', 'selftest']
+
+/** The main process's code: an answer-only command goes by request(), never by send(). */
+export function checkHelperCalls(text) {
+  const problems = []
+  for (const m of text.matchAll(/\.send\(\s*['"]([\w.]+)['"]/g)) if (ANSWER_ONLY.includes(m[1])) problems.push(`pomocnik: send('${m[1]}') – ta komenda odpowiada tylko na request() (z id), odpowiedź by przepadła`)
+  return problems
+}
+
 function run() {
   const problems = []
   const startJs = join(root, 'out', 'main', 'start.js')
@@ -76,8 +88,10 @@ function run() {
   for (const f of files(join(root, 'src', 'renderer', 'widget'), ['.tsx', '.ts'])) problems.push(...checkBarComponent(readFileSync(f, 'utf8')).map((p) => `${rel(f)}: ${p}`))
   for (const f of files(join(root, 'src', 'renderer'), ['.tsx', '.ts'])) problems.push(...checkRenderer(readFileSync(f, 'utf8')).map((p) => `${rel(f)}: ${p}`))
   for (const f of files(join(root, 'src', 'main'), ['.ts'])) {
+    const code = readFileSync(f, 'utf8').replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '')
+    problems.push(...checkHelperCalls(code).map((p) => `${rel(f)}: ${p}`))
     if (rel(f) === 'src/main/notify.ts') continue
-    if (/\bNotification\b/.test(readFileSync(f, 'utf8').replace(/\/\/.*|\/\*[\s\S]*?\*\//g, ''))) problems.push(`${rel(f)}: Notification poza notify.ts`)
+    if (/\bNotification\b/.test(code)) problems.push(`${rel(f)}: Notification poza notify.ts`)
   }
   if (problems.length) {
     console.error(problems.join('\n'))
@@ -98,7 +112,9 @@ function selfTest() {
     [checkBarComponent('<select>').length === 1, 'select'],
     [checkBarComponent('<input type="color" />').length === 1, 'color'],
     [checkBarComponent('if (confirm("x"))').length === 1, 'confirm'],
-    [checkRenderer('new Notification("x")').length === 1, 'Notification']
+    [checkRenderer('new Notification("x")').length === 1, 'Notification'],
+    [checkHelperCalls("helper?.send('toastSetting')").length === 1, 'pomocnik: send bez id'],
+    [checkHelperCalls("helper?.send('bar.watch', { hwnd }); void helper.request('toastSetting')").length === 0, 'pomocnik: ok']
   ]
   const failed = cases.filter(([ok]) => !ok).map(([, name]) => name)
   if (failed.length) {

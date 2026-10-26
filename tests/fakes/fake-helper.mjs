@@ -1,12 +1,19 @@
 // A stand-in for the helper (rd-helper.exe) in tests and in CI on Linux (RD_HELPER_PATH): the same JSON lines, no Windows.
-// RD_FAKE_HELPER_BAR=fail – the desktop bar is never confirmed; RD_FAKE_HELPER_CRASH_MS=<n> – exits after n ms.
+// RD_FAKE_HELPER_BAR=fail – the desktop bar is never confirmed; RD_FAKE_HELPER_CRASH_MS=<n> – exits after n ms;
+// RD_FAKE_HELPER_HELLO_MS=<n> – its hello comes n ms late. The volatile key of the logon session is a file in its working
+// folder (the app's data): it lasts for as long as the folder does.
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
 const out = (obj) => process.stdout.write(`${JSON.stringify(obj)}\n`)
 const barMode = process.env.RD_FAKE_HELPER_BAR ?? 'ok'
 let watched = null
 
-createInterface({ input: process.stdin }).on('line', (line) => {
+const sessionKey = 'fake-session-key.json'
+
+const input = createInterface({ input: process.stdin })
+input.on('close', () => process.exit(0))
+input.on('line', (line) => {
   let m
   try {
     m = JSON.parse(line)
@@ -16,8 +23,15 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   const reply = (extra = {}) => m.id != null && out({ re: m.id, ok: true, ...extra })
   switch (m.cmd) {
     case 'init':
-      out({ type: 'hello', version: 'fake', pid: process.pid })
+      setTimeout(() => out({ type: 'hello', version: 'fake', pid: process.pid }), Number(process.env.RD_FAKE_HELPER_HELLO_MS) || 0)
       break
+    case 'session.start': {
+      const existed = existsSync(sessionKey)
+      const prevRunId = existed ? JSON.parse(readFileSync(sessionKey, 'utf8')).runId : null
+      writeFileSync(sessionKey, JSON.stringify({ runId: m.runId }))
+      reply({ existed, prevRunId })
+      break
+    }
     case 'bar.watch':
       watched = m.hwnd
       setTimeout(() => out({ type: 'bar', hwnd: watched, state: barMode === 'fail' ? 'failed' : 'confirmed', detail: 'fake' }), 50)

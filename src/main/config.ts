@@ -27,6 +27,7 @@ export class ConfigStore {
   private held: Array<[string[], unknown]> = []
   /** Writes are queued and always write the latest state, so an older snapshot never lands last. */
   private writing: Promise<void> = Promise.resolve()
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
 
   /** `writeDelayMs` – a slow disk in test runs (RD_CONFIG_WRITE_DELAY_MS): each write waits this long first. */
   constructor(
@@ -59,9 +60,7 @@ export class ConfigStore {
       const aside = `config.uszkodzony-${new Date().toISOString().replace(/[-:.]/g, '')}.json`
       await fs.rename(this.file, join(this.userDataDir, aside)).catch(() => undefined)
       this.setAside = aside
-      this.config = { ...DEFAULT_CONFIG }
-      this.raw = {}
-      return this.config
+      raw = {}
     }
     this.raw = raw
     this.config = configFrom(raw)
@@ -73,6 +72,29 @@ export class ConfigStore {
       await this.update(configFrom(mergePreserving(this.raw, next)))
     }
     return this.config
+  }
+
+  /**
+   * config.json was there but unreadable at the load: read again every `everyMs` until it is (the changes held meanwhile
+   * then go onto its settings and are written); `onRead` gets the settings as they are now.
+   */
+  retryLoad(everyMs: number, onRead: (config: MachineConfig) => void): void {
+    if (!this.loadFailed || this.retryTimer) return
+    // One read at a time: the next is timed from the end of the last.
+    const again = () => {
+      this.retryTimer = setTimeout(() => {
+        this.load().then(
+          (c) => {
+            if (this.loadFailed) return again()
+            this.retryTimer = null
+            onRead(c)
+          },
+          () => again()
+        )
+      }, everyMs)
+      this.retryTimer.unref?.()
+    }
+    again()
   }
 
   get(): MachineConfig {

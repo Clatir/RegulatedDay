@@ -1,4 +1,6 @@
+import { mkdtempSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { launch, viewPage, withMainLog } from './app'
@@ -45,6 +47,64 @@ test('zamknięcie: koniec pracy bez nieobsłużonych wyjątków, także gdy pomo
   expect(log.split('\n').filter((l) => /nieobsłużon/.test(l)), log).toEqual([])
 })
 
+test('koniec sesji Windows odwołany: zapis zamknięcia, potem znacznik życia znowu bije, okno chowa się do zasobnika', async () => {
+  const { app, userData } = await launch({ env: { RD_TEST_SESSION_RESUME_MS: '1500' } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(() => readFile(join(userData, 'life.json'), 'utf8').catch(() => ''), { timeout: 30_000 }).toContain('lastAt')
+      // Only asked (WM_QUERYENDSESSION); another app cancels the logoff, so no „session-end” follows.
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day Test')!.emit('query-session-end', { preventDefault: () => undefined, reasons: [] }))
+      const closing = JSON.parse(await readFile(join(userData, 'closing.json'), 'utf8')) as { at: number; why: string }
+      expect(closing.why).toBe('system')
+      await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8'), { timeout: 15_000 }).toContain('koniec sesji Windows odwołany')
+      // The record is stale: a crash from here on is told as one.
+      const life = JSON.parse(await readFile(join(userData, 'life.json'), 'utf8')) as { lastAt: number }
+      expect(life.lastAt).toBeGreaterThan(closing.at)
+      // The app is not quitting: its window's close hides it to the tray, as always.
+      const shown = await app.evaluate(({ BrowserWindow }) => {
+        const w = BrowserWindow.getAllWindows().find((x) => x.getTitle() === 'Regulated Day Test')!
+        w.close()
+        return new Promise<{ destroyed: boolean; visible: boolean }>((r) => setTimeout(() => r({ destroyed: w.isDestroyed(), visible: !w.isDestroyed() && w.isVisible() }), 500))
+      })
+      expect(shown).toEqual({ destroyed: false, visible: false })
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+test('pomocnik spóźniony ponad 5 s: klucz sesji i tak dostaje to uruchomienie, a jego koniec bez zapisu to awaria', async () => {
+  test.skip(process.env.RD_E2E_REAL_HELPER === '1', 'the stand-in helper only (its hello comes late)')
+  test.setTimeout(180_000)
+  const userData = join(mkdtempSync(join(tmpdir(), 'rd-e2e-')), 'userData')
+  const env = { RD_TEST_SESSION_KEY: '1' }
+  const mainLog = () => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => '')
+  const verdicts = async () => (await mainLog()).split('\n').filter((l) => l.includes('poprzednie uruchomienie'))
+  // Only the verdicts in the log count here: no run waits for its window.
+  await withMainLog(userData, async () => {
+    const a = await launch({ userData, env, hidden: true })
+    await expect.poll(async () => (await verdicts()).length, { timeout: 30_000 }).toBe(1)
+    await a.app.close()
+    // B: the helper's hello after the 5 s of the verdict; B then ends without a record of closing.
+    const b = await launch({ userData, env: { ...env, RD_FAKE_HELPER_HELLO_MS: '6500' }, hidden: true })
+    await expect.poll(mainLog, { timeout: 60_000 }).toContain('klucz sesji logowania ustawiony po starcie pomocnika')
+    // Ended abruptly (the main process itself, by its own id – as a crash or Task Manager would end it).
+    const pid = await b.app.evaluate(() => process.pid)
+    process.kill(pid)
+    await expect.poll(() => { try { process.kill(pid, 0); return true } catch { return false } }, { timeout: 15_000 }).toBe(false)
+    await b.app.close().catch(() => undefined)
+    // Its renderer and GPU processes end a moment after it (until then they hold the lock of one copy).
+    await new Promise((r) => setTimeout(r, 3000))
+    const c = await launch({ userData, env, hidden: true })
+    try {
+      await expect.poll(async () => (await verdicts()).length, { timeout: 30_000 }).toBe(3)
+      expect((await verdicts()).at(-1)).toContain('crash')
+    } finally {
+      await c.app.close()
+    }
+  }, 60)
+})
+
 test('pasek pulpitu: okno narzędziowe bez aktywacji, nigdy na wierzchu, pokazane po potwierdzeniu pomocnika', async () => {
   const { app, userData } = await launch()
   try {
@@ -62,6 +122,28 @@ test('pasek pulpitu: okno narzędziowe bez aktywacji, nigdy na wierzchu, pokazan
       if (process.platform === 'win32') expect(props[0]).toMatchObject({ maximizable: false, minimizable: false })
       // No tooltip anywhere in the bar (each would be a window on top).
       expect(await bar.locator('[title]').count()).toBe(0)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+test('pasek pulpitu wyłączony tuż po włączeniu: spóźnione potwierdzenie pomocnika go nie pokazuje', async () => {
+  test.skip(process.env.RD_E2E_REAL_HELPER === '1', 'the stand-in helper only (it confirms 50 ms after a watch, even one taken back)')
+  const { app, page, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      const barVisible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – pasek' && w.isVisible()))
+      await expect.poll(barVisible, { timeout: 30_000 }).toBe(true)
+      await page.evaluate(() => window.rd.setPrefs({ desktopBar: false }))
+      await expect.poll(barVisible).toBe(false)
+      // On and at once off: the watch's confirmation comes after the bar was switched off.
+      await page.evaluate(async () => {
+        void window.rd.setPrefs({ desktopBar: true })
+        await window.rd.setPrefs({ desktopBar: false })
+      })
+      await new Promise((r) => setTimeout(r, 1000))
+      expect(await barVisible()).toBe(false)
     })
   } finally {
     await app.close()
@@ -100,6 +182,42 @@ test('próba: kolor, kroki i kropka zmieniają pasek we wszystkich oknach; panel
       await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – panel' && w.isVisible()))).toBe(true)
       await panel.keyboard.press('Escape')
       await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – panel' && w.isVisible()))).toBe(false)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+test('panel przy kursorze (ikona pod strzałką ukrytych ikon): rośnie w miejscu, nie skacze za kursorem', async () => {
+  const { app, page, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      // No usable icon rectangle (the icon among the hidden ones), the cursor at a known point.
+      const at = await app.evaluate(({ Tray, screen }) => {
+        Tray.prototype.getBounds = () => ({ x: 0, y: 0, width: 0, height: 0 })
+        const wa = screen.getPrimaryDisplay().workArea
+        const p = { x: wa.x + Math.round(wa.width * 0.7), y: wa.y + Math.round(wa.height * 0.8) }
+        screen.getCursorScreenPoint = () => p
+        return p
+      })
+      await page.evaluate(() => window.rd.trialAction('openPanel'))
+      const panel = await viewPage(app, 'panel')
+      await expect(panel.getByTestId('panel')).toBeVisible()
+      const bounds = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day – panel')!.getBounds())
+      await expect.poll(async () => { const b = await bounds(); return [b.x + b.width, b.y + b.height] }).toEqual([at.x, at.y])
+      // The cursor goes on (into the panel, to „Przedłuż”); then the content grows.
+      await app.evaluate(({ screen }, p) => {
+        screen.getCursorScreenPoint = () => ({ x: p.x - 150, y: p.y - 60 })
+      }, at)
+      const before = await bounds()
+      await panel.evaluate(() => {
+        const more = document.createElement('div')
+        more.style.height = '80px'
+        document.querySelector('[data-testid="panel"]')!.appendChild(more)
+      })
+      await expect.poll(async () => (await bounds()).height, { timeout: 10_000 }).toBeGreaterThan(before.height)
+      const after = await bounds()
+      expect([after.x + after.width, after.y + after.height]).toEqual([at.x, at.y])
     })
   } finally {
     await app.close()

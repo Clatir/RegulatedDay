@@ -117,7 +117,9 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
   const cmp = compareVersions(d.version, X)
   const updated = d.argv.includes('--updated')
 
-  if (task.state === 'postponed') return normal()
+  // „odłożono”: a normal start – unless an owner holds the task now (the guard of the logon took it up just before its
+  // state changes): then its start is handed over as for a task under way.
+  if (task.state === 'postponed' && !d.heldOpen(join(dir, 'guard.lock'))) return normal()
   // „nieudane” for a newer X: the banner „nie udała się · Spróbuj ponownie · Pobierz” until a retry or a newer release.
   if (task.state === 'failed') return normal(cmp < 0 ? { kind: task.message === 'strażnik nie wystartował' || task.message === 'pliki niezgodne z manifestem' ? 'unfinished' : 'failed', version: X } : null)
 
@@ -162,6 +164,8 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
   }
   // X started by its owner after the installation: the confirmation „uruchomiono wersję X” (the owner finishes the task).
   if (cmp === 0 && updated) return normal(null, null, task)
+  // X done while an older version starts (installed again by hand): nothing to hand over or to repair.
+  if (task.state === 'done') return normal()
 
   const handover = join(dir, 'handover.jsonl')
   const handOver = (why: string): StartupResult => {

@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { BrowserWindow, Menu, app, clipboard, crashReporter, ipcMain, net, powerMonitor, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
-import { CH, type AppInfo, type BarLayout, type TrialAction, type UpdateAction, type ViewKind, type WidgetAction } from '@shared/api'
+import { CH, type AppInfo, type BarLayout, type HelperStatus, type TrialAction, type UpdateAction, type ViewKind, type WidgetAction } from '@shared/api'
 import type { MachinePrefs } from '@shared/machine'
 import { patchMachinePrefs } from '@shared/machine'
 import { barRect, cornerOffset, panelRect } from '@shared/placement'
@@ -45,6 +45,8 @@ const userData = app.getPath('userData')
 const updateDir = join(userData, 'update')
 const helperDir = app.isPackaged ? join(process.resourcesPath, 'helper') : join(app.getAppPath(), 'build', 'helper')
 const config = new ConfigStore(userData, Number(process.env.RD_CONFIG_WRITE_DELAY_MS) || 0)
+/** An unreadable config.json is read again this often (held by an antivirus or a backup at the start with Windows). */
+const CONFIG_RETRY_MS = 10_000
 const preload = join(__dirname, '../preload/index.js')
 const runId = randomBytes(8).toString('hex')
 const life = new LifeKeeper(userData)
@@ -61,6 +63,9 @@ const trial = new Trial()
 let quitting = false
 /** Windows ends the session (logoff, shutdown): never an installer now (spec), the record of closing written at once. */
 let sessionEnding = false
+/** A session that was only asked to end and still runs after this was cancelled (Windows ends one within seconds). */
+const SESSION_RESUME_MS = 60_000
+let sessionResume: ReturnType<typeof setTimeout> | null = null
 /** The bar's content height now (CSS px), whether something in it is unfolded, and its height folded. */
 let barLayoutNow: BarLayout = { height: 64, unfolded: false }
 let barFoldedHeight = 64
@@ -105,12 +110,13 @@ function showWidget(view: WidgetView): void {
 }
 
 /** The desktop bar as the settings, the widget and the helper allow: laid under the windows before it shows. */
+/** The settings and the widget want the desktop bar shown now. */
+const barWanted = (): boolean => prefs().desktopBar && !widgetView().hidden
+
 function layoutBar(): void {
   // Destroyed at the quit: the helper's last status and events come after the windows.
   if (!bar?.alive) return
-  const view = widgetView()
-  const want = prefs().desktopBar && !view.hidden
-  if (!want) {
+  if (!barWanted()) {
     barProblem = null
     bar.apply({ visible: false })
     helper?.send('bar.unwatch')
@@ -137,7 +143,8 @@ function onHelperEvent(m: HelperMessage): void {
     lastBarState = String(m.state)
     if (m.state === 'confirmed') {
       barProblem = null
-      bar?.apply({ visible: true })
+      // A confirmation of a watch sent just before the bar was switched off or hidden: it stays hidden.
+      if (barWanted()) bar?.apply({ visible: true })
     } else if (m.state === 'failed') {
       barProblem = 'failed'
       bar?.apply({ visible: false })
@@ -189,14 +196,24 @@ function showMainWindow(page?: string): void {
 
 /**
  * The end of the Windows session, from any window (spec „Pliki na OneDrive”): the app never holds Windows up – the record
- * of closing goes out at once, one synchronous write without fsync; no installer starts now.
+ * of closing goes out at once, one synchronous write without fsync; no installer starts now. Only asked (another app or
+ * you may still cancel it): the app goes on as before, and once the session has not ended in a while the life marker
+ * beats again. When it does end, the record is written once more (a marker beaten again made the first one stale).
  */
-function onSystemEnd(): void {
-  if (sessionEnding) return
+function onSystemEnd(ending: boolean): void {
+  if (!sessionEnding) log('info', 'koniec sesji Windows – zapis zamknięcia')
   sessionEnding = true
-  quitting = true
   life.close('system')
-  log('info', 'koniec sesji Windows – zapis zamknięcia')
+  if (sessionResume) clearTimeout(sessionResume)
+  sessionResume = null
+  if (ending) return
+  sessionResume = setTimeout(() => {
+    sessionResume = null
+    sessionEnding = false
+    life.resume()
+    log('info', 'koniec sesji Windows odwołany – działam dalej')
+  }, Number(process.env.RD_TEST_SESSION_RESUME_MS) || SESSION_RESUME_MS)
+  sessionResume.unref?.()
 }
 
 // ------------------------------------------------------------------ the tray's menu
@@ -256,8 +273,15 @@ async function trialAction(action: TrialAction, arg?: string): Promise<void> {
         ?.request('notificationState')
         .then((m) => trial.log(`stan powiadomień przed wysłaniem: ${String(m.state)}`))
         .catch(() => trial.log('stan powiadomień: pomocnik nie odpowiedział'))
+      // Refused by Windows: why (the app's setting, the user's, a group policy) goes to the log and the trial's log.
       const sent = notify({ id: `trial-${Date.now()}`, title: 'Próba Regulated Day', body: 'Kliknij, żeby otworzyć panel ikony na linii próby.', line: 'trial', day: null }, log, () =>
-        helper?.send('toastSetting')
+        void helper
+          ?.request('toastSetting')
+          .then((m) => {
+            log('warn', `powiadomienie odrzucone – ustawienie Windows: ${String(m.setting)}`)
+            trial.log(`ustawienie powiadomień Windows: ${String(m.setting)}`)
+          })
+          .catch(() => trial.log('ustawienie powiadomień: pomocnik nie odpowiedział'))
       )
       trial.log(sent ? 'powiadomienie wysłane' : 'powiadomienie niedostępne w tej tożsamości')
     }, 10_000).unref?.()
@@ -443,17 +467,40 @@ function whatsNew(): UpdateView['whatsNew'] {
 }
 
 async function helperReady(ms: number): Promise<boolean> {
-  if (!helper) return false
-  if (helper.running) return true
+  const h = helper
+  if (!h) return false
+  if (h.running) return true
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(false), ms)
-    helper!.on('status', (s) => {
-      if (s.state === 'running') {
-        clearTimeout(timer)
-        resolve(true)
-      }
-    })
+    const onStatus = (s: HelperStatus) => {
+      if (s.state !== 'running') return
+      clearTimeout(timer)
+      h.off('status', onStatus)
+      resolve(true)
+    }
+    const timer = setTimeout(() => {
+      h.off('status', onStatus)
+      resolve(false)
+    }, ms)
+    h.on('status', onStatus)
   })
+}
+
+/**
+ * The volatile key of the logon session gets this run's id once the helper runs, also when it came too late for the
+ * verdict: otherwise a crash of this run would look, at the next start, like the end of another logon session.
+ */
+function registerSessionLater(): void {
+  const h = helper
+  if (!h) return
+  const onStatus = (s: HelperStatus) => {
+    if (s.state !== 'running') return
+    h.off('status', onStatus)
+    h.request('session.start', { runId }).then(
+      () => log('info', 'klucz sesji logowania ustawiony po starcie pomocnika'),
+      (e: unknown) => log('warn', 'klucz sesji logowania niedostępny', e instanceof Error ? e.message : e)
+    )
+  }
+  h.on('status', onStatus)
 }
 
 /** The previous run's end from the life marker (a crash or not), then this run's marker. */
@@ -463,13 +510,15 @@ async function judgePreviousRun(): Promise<void> {
   const installerAt = life.installerMarker()
   const dumps = LifeKeeper.mainDumpSince(app.getPath('crashDumps'), prev?.startedAt ?? Number.MAX_SAFE_INTEGER)
   let sessionInfo: { prevRunId: string | null } | null = null
-  if (process.platform === 'win32' && (await helperReady(5000))) {
-    try {
-      const r = await helper!.request('session.start', { runId })
-      sessionInfo = { prevRunId: r.existed === true && typeof r.prevRunId === 'string' ? r.prevRunId : null }
-    } catch (e) {
-      log('warn', 'klucz sesji logowania niedostępny', e instanceof Error ? e.message : e)
-    }
+  if (process.platform === 'win32' || process.env.RD_TEST_SESSION_KEY === '1') {
+    if (await helperReady(5000)) {
+      try {
+        const r = await helper!.request('session.start', { runId })
+        sessionInfo = { prevRunId: r.existed === true && typeof r.prevRunId === 'string' ? r.prevRunId : null }
+      } catch (e) {
+        log('warn', 'klucz sesji logowania niedostępny', e instanceof Error ? e.message : e)
+      }
+    } else registerSessionLater()
   }
   const verdict = judge(prev, close, sessionInfo, installerAt, dumps.found)
   if (dumps.types.length) log('info', `nowe zrzuty awarii: ${dumps.types.join(', ')}`)
@@ -517,7 +566,17 @@ async function main(): Promise<void> {
   }
   await config.load()
   if (config.setAside) log('warn', `config.json uszkodzony – odłożony jako ${config.setAside}, ustawienia domyślne`)
-  if (config.loadFailed) log('warn', `config.json nieczytelny: ${config.loadFailed} – nic nie jest nadpisywane`)
+  if (config.loadFailed) {
+    log('warn', `config.json nieczytelny: ${config.loadFailed} – nic nie jest nadpisywane, czytam ponownie co ${CONFIG_RETRY_MS / 1000} s`)
+    config.retryLoad(CONFIG_RETRY_MS, (c) => {
+      log('info', 'config.json przeczytany – zmiany z tej sesji zapisane')
+      if (thisComputer && c.computerId !== thisComputer) void config.update({ computerId: thisComputer }).catch(() => undefined)
+      if (c.updates.lastRunVersion !== app.getVersion()) void config.update({ updates: { ...c.updates, lastRunVersion: app.getVersion() } }).catch(() => undefined)
+      for (const w of appWindows()) w.setZoomFactor(c.prefs.zoom)
+      broadcast(CH.onPrefs, c.prefs)
+      layoutBar()
+    })
+  }
   try {
     const id = await computerId(userData, config.get().computerId)
     thisComputer = id.id
@@ -560,6 +619,7 @@ async function main(): Promise<void> {
     autostartOn: () => config.get().autostart.enabled,
     nightInstall: () => config.get().updates.nightInstall,
     beforeInstall: () => life.close('update'),
+    installFailed: () => life.resume(),
     quit: quitApp,
     openExternal: (url) => void shell.openExternal(url),
     broadcast: (v) => {
@@ -594,17 +654,16 @@ async function main(): Promise<void> {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
-  mainWindow.on('query-session-end', onSystemEnd)
-  mainWindow.on('session-end', onSystemEnd)
+  mainWindow.on('query-session-end', () => onSystemEnd(false))
+  mainWindow.on('session-end', () => onSystemEnd(true))
 
   bar = new DesktopBar(preload, loadView)
   bar.onExternalClose = quitApp
   bar.onSystemEnd(onSystemEnd)
   panel = new IconPanel(preload, loadView, {
-    place: (height) => {
+    place: (height, cursor) => {
       const all = displays()
       const icon = tray?.bounds() ?? null
-      const cursor = screen.getCursorScreenPoint()
       const wa = (all.find((d) => icon && icon.x >= d.bounds.x && icon.x < d.bounds.x + d.bounds.width) ?? primaryDisplay()).workArea
       const width = Math.floor(Math.min(480 * prefs().zoom, wa.width - 16))
       return panelRect(icon, cursor, all, { width, height: Math.min(height, wa.height) })

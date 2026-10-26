@@ -17,8 +17,8 @@ export const PANEL_IDLE_MS = 60_000
 export const REOPEN_BLOCK_MS = 500
 
 export interface PanelDeps {
-  /** The rectangle to open at for a content height (CSS px). */
-  place: (height: number) => Rect
+  /** The rectangle to open at for a content height (CSS px); `cursor` – where it was when the panel opened. */
+  place: (height: number, cursor: { x: number; y: number }) => Rect
   helperRunning: () => boolean
   /** Out of recordings and screen sharing (this computer's setting, on by default). */
   hideFromCapture: () => boolean
@@ -32,6 +32,8 @@ export class IconPanel {
   private touchedAt = 0
   private unfolded = false
   private contentHeight = 320
+  /** The cursor when the panel opened: by it the panel keeps its place (icon under the hidden icons' arrow) as it grows. */
+  private cursorAtOpen = { x: 0, y: 0 }
   private idleTimer: NodeJS.Timeout | null = null
   quitting = false
   onExternalClose: (() => void) | null = null
@@ -80,10 +82,10 @@ export class IconPanel {
     void load(this.win)
   }
 
-  /** The end of the Windows session, in this window too. */
-  onSystemEnd(cb: () => void): void {
-    this.win.on('query-session-end', cb)
-    this.win.on('session-end', cb)
+  /** The end of the Windows session, in this window too; `ending`: it ends (else only asked). */
+  onSystemEnd(cb: (ending: boolean) => void): void {
+    this.win.on('query-session-end', () => cb(false))
+    this.win.on('session-end', () => cb(true))
   }
 
   /** False once the window is destroyed too (at the quit; the helper's events still come after it). */
@@ -115,7 +117,8 @@ export class IconPanel {
 
   open(target: PanelTarget | null = null): void {
     if (this.win.isDestroyed()) return
-    const r = this.d.place(this.contentHeight)
+    this.cursorAtOpen = screen.getCursorScreenPoint()
+    const r = this.d.place(this.contentHeight, this.cursorAtOpen)
     this.win.setBounds(r)
     this.win.setContentProtection(this.d.hideFromCapture())
     this.openedAt = Date.now()
@@ -156,7 +159,7 @@ export class IconPanel {
   layout(height: number, zoom: number, unfolded: boolean): void {
     this.contentHeight = Math.ceil(height * zoom)
     this.unfolded = unfolded
-    if (this.isOpen) this.win.setBounds(this.d.place(this.contentHeight))
+    if (this.isOpen) this.win.setBounds(this.d.place(this.contentHeight, this.cursorAtOpen))
   }
 
   private armIdle(): void {

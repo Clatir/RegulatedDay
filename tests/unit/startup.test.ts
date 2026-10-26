@@ -113,6 +113,31 @@ describe('start aplikacji przy zadaniu instalacji (Instalacja, aktualizacje i lo
     expect(w.log.join(' ')).toContain('nieczytelny')
   })
 
+  it('wersja w zadaniu, która nie jest numerem wersji: nieczytelne zadanie i zwykły start (nigdy wyjątek przy każdym starcie)', async () => {
+    for (const version of ['0.1', 'abc', '']) {
+      const w = world({ version: '0.1.0', task: JSON.stringify({ format: 1, version, state: 'installing' }) })
+      const r = await runStartup(w.deps)
+      expect(r.kind).toBe('normal')
+      expect(w.log.join(' ')).toContain('nieczytelny')
+    }
+  })
+
+  it('X „zakończono”, a startuje starsza wersja (zainstalowana ponownie ręcznie): zwykły start bez strażnika i banera', async () => {
+    const w = world({ version: '0.1.0', task: task({ state: 'done' }), lock: () => ({ held: false, counter: 0 }) })
+    const r = await runStartup(w.deps)
+    expect(r).toMatchObject({ kind: 'normal', banner: null })
+    expect(w.guardStarts).toBe(0)
+    expect(state(w)).toBe('done')
+  })
+
+  it('„odłożono” z żywym właścicielem (strażnik logowania właśnie je podjął): start przekazany, bez drugiego strażnika', async () => {
+    const w = world({ version: '0.1.0', task: task({ state: 'postponed' }), lock: (now) => ({ held: true, counter: now }) })
+    const r = await runStartup(w.deps)
+    expect(r.kind).toBe('exit')
+    expect(w.files.get(`${T}\\handover.jsonl`)).toContain('"hidden"')
+    expect(w.guardStarts).toBe(0)
+  })
+
   it('FI z żywym instalatorem: starsza wersja i X bez --updated kończą się od razu', async () => {
     const live = task({ state: 'fi', installerPid: 900, updatedAt: 1_000_000 - 5000 })
     for (const version of ['0.1.0', '0.1.1']) {

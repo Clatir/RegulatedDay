@@ -3,6 +3,8 @@
  * the guard and the install helper. It has a format number; an unknown one, an unreadable file or none at all means the
  * app starts normally. Fields this version does not know are kept when it writes the file.
  */
+import { parseVersion } from './update'
+
 export const TASK_FORMAT = 1
 
 export type TaskState = 'scheduled' | 'installing' | 'postponed' | 'done' | 'failed' | 'fi'
@@ -57,7 +59,8 @@ export function readTask(text: string | null): TaskRead {
   const r = raw as Record<string, unknown>
   if (r.format !== TASK_FORMAT) return { kind: 'unknownFormat', format: r.format }
   const state = STATES.includes(r.state as TaskState) ? (r.state as TaskState) : null
-  if (!state || typeof r.version !== 'string') return { kind: 'unreadable', error: 'brak stanu albo wersji' }
+  // A version that is no version number is no task either (comparing it would throw at every start).
+  if (!state || typeof r.version !== 'string' || !parseVersion(r.version)) return { kind: 'unreadable', error: 'brak stanu albo wersji' }
   return {
     kind: 'task',
     raw: r,
@@ -121,22 +124,4 @@ export interface Handover {
 
 export function handoverLine(h: Handover): string {
   return `${JSON.stringify(h)}\n`
-}
-
-/** What the owner starts after the installation from the handed over starts. */
-export function mergeHandovers(lines: string, base: { start: TaskStart; url: string | null }): { start: TaskStart; url: string | null } {
-  let start = base.start
-  let url = base.url
-  for (const line of lines.split(/\r?\n/)) {
-    if (!line.trim()) continue
-    try {
-      const h = JSON.parse(line) as Partial<Handover>
-      if (h.hidden === false) start = 'visible'
-      else if (start === 'none') start = 'hidden'
-      if (typeof h.url === 'string') url = h.url
-    } catch {
-      /* a torn line: skipped */
-    }
-  }
-  return { start, url }
 }

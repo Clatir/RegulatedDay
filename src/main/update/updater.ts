@@ -20,6 +20,7 @@ import {
   isNewerVersion,
   parseChecksums,
   parseReleases,
+  parseVersion,
   type ReleaseInfo
 } from '@shared/update'
 import type { UpdatePhase, UpdateView } from '@shared/updateView'
@@ -68,7 +69,8 @@ export function readyDownloads(updateDir: string): Ready[] {
     const dir = join(updateDir, name, 'download')
     try {
       const r = JSON.parse(readFileSync(join(dir, 'ready.json'), 'utf8')) as { version?: unknown; notes?: unknown }
-      if (typeof r.version === 'string' && existsSync(join(dir, SETUP_ASSET)) && existsSync(join(dir, MANIFEST_ASSET))) out.push({ version: r.version, notes: typeof r.notes === 'string' ? r.notes : '', dir })
+      // A version that is no version number is no download (comparing it would throw at every start).
+      if (typeof r.version === 'string' && parseVersion(r.version) && existsSync(join(dir, SETUP_ASSET)) && existsSync(join(dir, MANIFEST_ASSET))) out.push({ version: r.version, notes: typeof r.notes === 'string' ? r.notes : '', dir })
     } catch {
       /* no ready download there */
     }
@@ -253,5 +255,12 @@ export class Updater {
   markInstalling(): void {
     this.stopAuto()
     this.set('installing')
+  }
+
+  /** The installation did not start: the download is ready again and the automatic checks are back. */
+  cancelInstalling(): void {
+    if (this.phase !== 'installing') return
+    this.set(this.ready ? 'ready' : 'idle')
+    this.startAuto(CHECK_MIN_INTERVAL_MS)
   }
 }
