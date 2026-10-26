@@ -12,11 +12,15 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
   sam i dopisz jako T-decyzję.
 - Do `main` pisze naraz jedna sesja; po scaleniu sprawdź, że zadanie Windows w CI opublikowało wydanie.
 - Po wznowieniu (limit, nowa sesja) najpierw przeczytaj `docs/postep.md`.
+- **`/clear`:** przy każdej pauzie i po każdym zamkniętym kroku powiedz wprost, czy można go teraz bezpiecznie wykonać.
+  Bezpiecznie = wszystko jest w commitach wypchniętych na GitHuba, `docs/postep.md` mówi, co dalej (także PR do scalenia
+  i CI w toku), i nic nie zależy tylko od pamięci rozmowy. Inaczej powiedz, czego brakuje i kiedy będzie można.
 
 ## Zasady produktu (najważniejsze)
 - Aplikacja nigdy nie kontroluje użytkownika: ostrzega, odradza, sugeruje, nic twardo nie blokuje (D72).
 - Używanie komputera może być regeneracją (D142); czas otwartej pozycji nie jest pracą (D187).
-- Żaden pasek ani okno nie wychodzi nad inne aplikacje (D229). Brak asystenta AI.
+- Żaden pasek ani okno nie wychodzi nad inne aplikacje (D229), chyba że włączysz „Zawsze na wierzchu” (D291, E4b).
+  Brak asystenta AI.
 - Kanał beta poza 1.0; „tożsamość testowa” tylko do CI (D283).
 
 ## Dokumenty
