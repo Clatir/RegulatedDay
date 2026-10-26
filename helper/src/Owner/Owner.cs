@@ -156,7 +156,7 @@ namespace RegulatedDay
             return 0;
         }
 
-/// <summary>
+        /// <summary>
         /// Test hooks of CI (RD_TEST_OWNER_THROW=&lt;step&gt;): an exception at that step of the first owner only (the one
         /// started after it, with --after, goes on); „every-start” – at every start.
         /// </summary>
@@ -176,7 +176,14 @@ namespace RegulatedDay
                 Task.Reload();
                 string state = Task.State;
                 if (state == "done") { Finish(false); return; }
-                if (state == "failed") { Log.Info("zadanie już nieudane – koniec"); StartAppIfComplete(Task, true); CleanEnd(); return; }
+                if (state == "failed")
+                {
+                    Log.Info("zadanie już nieudane – koniec");
+                    StartAppIfComplete(Task, false);
+                    CleanEnd();
+                    Release();
+                    return;
+                }
                 bool repair = Task.InstallerStarted;
                 string installed = Installed(true);
                 if (installed == "yes") { AfterInstalled(); return; }
@@ -343,7 +350,7 @@ namespace RegulatedDay
             return "yes";
         }
 
-/// <summary>
+        /// <summary>
         /// The app can start: its exe is there with an installation – the old version left whole (DisplayVersion below X), or
         /// X with its files agreeing with the manifest. No uninstall entry (the old version removed, X not in) is not complete.
         /// </summary>
