@@ -23,9 +23,17 @@
 ## Kolejka
 1. CI na `main` po scaleniu PR #5 zielone (run 40349267979, niestabilnych testów brak); wydania nie ma (wersja 0.1.1
    bez zmian – krok publikacji to pominął, zgodnie z planem).
-2. Pauza do „dalej”. **E3** (gałąź `claude/e3-...`): kreator, ustawienia z modułami, plan poranny, prośby, rutyny,
-   historia; pierwsza wersja 0.x na Twoich danych. Najpierw komunikat „Przed etapem E3” (będą pytania – E3 ma
-   interfejs). Model: Opus 5.5 · high (plan).
+2. **E3** (gałąź `claude/e3-...`): komunikat „Przed etapem E3” zrobiony, odpowiedzi D292–D295. Start po ustawieniu
+   Opus 5.5 · xhigh (T444) i `/clear`.
+
+## Przed etapem E3 (26.10.2026)
+- Co trzeba wiedzieć: pierwszy etap z interfejsem i pierwsza wersja 0.x na Twoim folderze (migracje i kopia przed
+  aktualizacją); timera jeszcze nie ma (E4a), pasek z sygnałami w E4b. Wersja po E3: 0.2.0 (opisy „przyjdzie z wersją
+  0.4” w pustych ekranach do poprawienia).
+- Odpowiedzi: E3 w całości (D292), plan dnia jako oś czasu (D293), kreator krok po kroku (D294), kalendarz miesięczny
+  (D295). Model: Opus 5.5 · xhigh zamiast high (T444).
+- Do przygotowania: laptop (drugi komputer dołącza bez zmian w danych); plan wykładów na semestr, daty zjazdów, lista
+  osób, sposoby regeneracji; czas na autostart wyłączony w Menedżerze zadań i dwa restarty.
 
 ## Przed etapem E2 (26.10.2026)
 - Co trzeba wiedzieć: E2 to silnik energii bez interfejsu (check-in i sygnały w widoku dochodzą w E3–E4b). Kryterium:
