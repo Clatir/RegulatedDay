@@ -180,6 +180,21 @@ namespace RegulatedDay
         public uint FileNameLength;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X, Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSLLHOOKSTRUCT
+    {
+        public POINT pt;
+        public uint mouseData, flags, time;
+        public IntPtr extra;
+    }
+
+    public delegate IntPtr LowLevelMouseProc(int code, IntPtr wParam, IntPtr lParam);
     public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
     public delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
 
@@ -199,6 +214,9 @@ namespace RegulatedDay
         public const int DWMWA_CLOAKED = 14;
         public const uint MONITOR_DEFAULTTONEAREST = 2;
         public const uint WM_QUIT = 0x0012, WM_TIMER = 0x0113, WM_USER = 0x0400;
+        public const uint WM_LBUTTONDOWN = 0x0201, WM_RBUTTONDOWN = 0x0204, WM_MBUTTONDOWN = 0x0207;
+        public const int WH_MOUSE_LL = 14;
+        public const uint GA_ROOT = 2;
 
         [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lParam);
         [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hwnd, uint cmd);
@@ -226,6 +244,12 @@ namespace RegulatedDay
         [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
         [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
+        [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
+        [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+        [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr SetWindowsHookEx(int id, LowLevelMouseProc proc, IntPtr module, uint threadId);
+        [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hook);
+        [DllImport("user32.dll")] public static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetModuleHandle(string name);
         [DllImport("user32.dll")] public static extern IntPtr RegisterPowerSettingNotification(IntPtr recipient, ref Guid setting, int flags);
         [DllImport("user32.dll")] public static extern UIntPtr SetTimer(IntPtr hwnd, UIntPtr id, uint ms, IntPtr proc);
         [DllImport("user32.dll")] public static extern bool KillTimer(IntPtr hwnd, UIntPtr id);

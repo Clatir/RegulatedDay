@@ -4,9 +4,14 @@
 // window is created only after the app's process ended; at night the install helper lays it under the windows first.
 // The guard shows its icon in the tray („Trwa aktualizacja do X od 03:12 · Uruchom mimo to”) and a small window only
 // when the start was made by hand – never from the autostart, and never during a session or a class or 30 min before.
+// A press of a mouse button in another window lays the shown windows right under it (T408): Windows raises a clicked
+// window only when it was not active, and the window active under ours – the one Windows activated after the app ended –
+// would stay under it after its click.
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -65,6 +70,10 @@ namespace RegulatedDay
         NotifyIcon icon;
         readonly ManualResetEvent ready = new ManualResetEvent(false);
         readonly DateTime since = DateTime.Now;
+        /// <summary>The owner's windows shown now (the windows' thread only).</summary>
+        readonly List<OwnerForm> shown = new List<OwnerForm>();
+        IntPtr mouseHook = IntPtr.Zero;
+        LowLevelMouseProc mouseProc;
 
         public OwnerUi(Owner owner)
         {
@@ -111,6 +120,73 @@ namespace RegulatedDay
 
         string Version { get { return owner.Task != null ? owner.Task.Version : "?"; } }
 
+        /// <summary>Shows a window of the owner without activation; the mouse hook works while any of them is shown.</summary>
+        void ShowTracked(OwnerForm f)
+        {
+            shown.Add(f);
+            f.FormClosed += delegate
+            {
+                shown.Remove(f);
+                if (shown.Count == 0 && mouseHook != IntPtr.Zero)
+                {
+                    Native.UnhookWindowsHookEx(mouseHook);
+                    mouseHook = IntPtr.Zero;
+                }
+            };
+            if (mouseHook == IntPtr.Zero)
+            {
+                // Kept in a field: the hook calls it for as long as it is set.
+                mouseProc = OnMouse;
+                mouseHook = Native.SetWindowsHookEx(Native.WH_MOUSE_LL, mouseProc, Native.GetModuleHandle(null), 0);
+                if (mouseHook == IntPtr.Zero) Log.Warn("hak myszy nie ustawiony (błąd " + Marshal.GetLastWin32Error() + ") – kliknięte okno nie zasłoni okna aktualizacji");
+            }
+            f.Show();
+        }
+
+        /// <summary>Only reads where a button was pressed; the rest is done after the press reached its window.</summary>
+        IntPtr OnMouse(int code, IntPtr wParam, IntPtr lParam)
+        {
+            if (code >= 0)
+            {
+                long m = wParam.ToInt64();
+                if (m == Native.WM_LBUTTONDOWN || m == Native.WM_RBUTTONDOWN || m == Native.WM_MBUTTONDOWN)
+                {
+                    POINT pt = ((MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT))).pt;
+                    Do(delegate { LowerUnder(pt); });
+                }
+            }
+            return Native.CallNextHookEx(mouseHook, code, wParam, lParam);
+        }
+
+        /// <summary>
+        /// The shown windows lying above the window pressed at `pt` go right under it – never under the taskbar, the desktop
+        /// or an always-on-top window (ours would become one), and nothing moves when one of ours is pressed.
+        /// </summary>
+        void LowerUnder(POINT pt)
+        {
+            IntPtr target = Native.GetAncestor(Native.WindowFromPoint(pt), Native.GA_ROOT);
+            if (target == IntPtr.Zero || Native.IsTopmost(target)) return;
+            string cls = Native.ClassOf(target);
+            if (WindowOrder.IsDesktopClass(cls) || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd") return;
+            foreach (OwnerForm f in shown) if (f.Handle == target) return;
+            foreach (OwnerForm f in shown.ToArray())
+            {
+                if (!Above(f.Handle, target)) continue;
+                if (Native.SetWindowPos(f.Handle, target, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE | Native.SWP_NOOWNERZORDER))
+                    Log.Info("okno aktualizacji pod kliknięte okno " + cls);
+                else
+                    Log.Warn("okno aktualizacji pod kliknięte okno: błąd " + Marshal.GetLastWin32Error());
+            }
+        }
+
+        /// <summary>`h` lies above `other` in the z-order.</summary>
+        static bool Above(IntPtr h, IntPtr other)
+        {
+            for (IntPtr w = Native.GetWindow(h, Native.GW_HWNDNEXT); w != IntPtr.Zero; w = Native.GetWindow(w, Native.GW_HWNDNEXT))
+                if (w == other) return true;
+            return false;
+        }
+
         /// <summary>The progress of the installation (the install helper's window; the guard's icon and, by hand, its window).</summary>
         public void Progress(string text, bool night)
         {
@@ -132,7 +208,7 @@ namespace RegulatedDay
                         string why;
                         if (!WindowOrder.LayAboveDesktop(h, out why)) Log.Warn("okno postępu: nie udało się położyć pod oknami – " + why);
                     }
-                    progress.Show();
+                    ShowTracked(progress);
                     Log.Info("okno postępu: " + (Native.IsWindowVisible(h) ? "widoczne" : "niewidoczne") + " (hwnd " + h.ToInt64() + ")");
                 }
                 progress.Text1.Text = text;
@@ -145,7 +221,7 @@ namespace RegulatedDay
             {
                 progress = new OwnerForm(WindowTitle);
                 progress.AddButton("Uruchom mimo to", delegate { owner.RunAnyway(); });
-                progress.Show();
+                ShowTracked(progress);
                 Log.Info("okno stanu: " + (Native.IsWindowVisible(progress.Handle) ? "widoczne" : "niewidoczne"));
             }
             progress.Text1.Text = "Trwa aktualizacja do " + Version + " od " + since.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture) + ". " + text;
@@ -202,7 +278,7 @@ namespace RegulatedDay
                     f.Close();
                 });
                 f.FormClosed += delegate { closed.Set(); };
-                f.Show();
+                ShowTracked(f);
             });
             if (Environment.GetEnvironmentVariable("RD_TEST_NO_WAIT_WINDOWS") == "1") return;
             closed.WaitOne(TimeSpan.FromHours(12));
@@ -239,7 +315,7 @@ namespace RegulatedDay
                     f.Close();
                 });
                 f.FormClosed += delegate { closed.Set(); };
-                f.Show();
+                ShowTracked(f);
             });
             if (Environment.GetEnvironmentVariable("RD_TEST_NO_WAIT_WINDOWS") == "1") return;
             closed.WaitOne(TimeSpan.FromHours(12));
