@@ -1,4 +1,8 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { manifestMismatch } from '../../src/main/update/files'
 import { runStartup, type StartupDeps } from '../../src/main/update/startup'
 import { readTask, writeTask, type Task } from '@shared/task'
 
@@ -78,7 +82,7 @@ function world(opts: { version: string; argv?: string[]; task?: Task | string | 
       listDirs: (d) => (d === DIR ? ['0.1.1'] : null),
       heldOpen: (p) => (p.endsWith('guard.lock') ? !!opts.lock?.(clock.now)?.held : held.has(p)),
       processAlive: (pid) => opts.alive?.has(pid) ?? false,
-      sizesMatch: () => opts.sizes ?? true,
+      filesMismatch: () => ((opts.sizes ?? true) ? null : 'resources/app.asar – 1 B zamiast 2 B'),
       startGuard: () => {
         w.guardStarts++
         return { pid: 77, exited: () => false }
@@ -132,6 +136,8 @@ describe('start aplikacji przy zadaniu instalacji (Instalacja, aktualizacje i lo
     const rb = await runStartup(bad.deps)
     expect(rb.kind === 'normal' && rb.afterLock?.()).toEqual({ kind: 'unfinished', version: '0.1.1' })
     expect(state(bad)).toBe('failed')
+    // The log names the file that disagrees.
+    expect(bad.log).toContain('pliki niezgodne z manifestem 0.1.1: resources/app.asar – 1 B zamiast 2 B')
     const older = world({ version: '0.1.0', task: dead })
     const ro = await runStartup(older.deps)
     expect(ro.kind === 'normal' && ro.afterLock?.()).toEqual({ kind: 'failed', version: '0.1.1' })
@@ -192,5 +198,33 @@ describe('start aplikacji przy zadaniu instalacji (Instalacja, aktualizacje i lo
     expect(state(w)).toBe('failed')
     expect(w.removed).toBe(1)
     expect(w.clock.now - 1_000_000).toBeGreaterThanOrEqual(60_000)
+  })
+})
+
+describe('pliki instalacji według manifestu (rozmiary)', () => {
+  it('pierwszy plik brakujący albo o innym rozmiarze; null, gdy wszystkie się zgadzają', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rd-manifest-'))
+    try {
+      const app = join(root, 'app')
+      mkdirSync(join(app, 'resources'), { recursive: true })
+      writeFileSync(join(app, 'a.dll'), 'abc')
+      writeFileSync(join(app, 'resources', 'app.asar'), 'abcd')
+      const files = [
+        { path: 'a.dll', size: 3, sha256: '0'.repeat(64) },
+        { path: 'resources/app.asar', size: 4, sha256: '0'.repeat(64) }
+      ]
+      const write = (f: typeof files) => writeFileSync(join(root, 'm.json'), JSON.stringify({ format: 1, version: '0.1.1', electron: '44.5.1', files: f }))
+      const t = task({ installDir: app, manifest: 'm.json' })
+      write(files)
+      expect(manifestMismatch(root, t)).toBeNull()
+      write([files[0]!, { ...files[1]!, size: 5 }])
+      expect(manifestMismatch(root, t)).toBe('resources/app.asar – 4 B zamiast 5 B')
+      write([...files, { path: 'resources/helper/rd-guard.exe', size: 1, sha256: '0'.repeat(64) }])
+      expect(manifestMismatch(root, t)).toBe('resources/helper/rd-guard.exe – brak pliku')
+      writeFileSync(join(root, 'm.json'), '{')
+      expect(manifestMismatch(root, t)).toMatch(/^manifest nieczytelny/)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

@@ -65,23 +65,27 @@ export function processAlive(pid: number): boolean {
   }
 }
 
-/** The sizes of the manifest's files in the installation (only the files of the manifest). */
-export function manifestSizesMatch(taskDir: string, task: Task): boolean {
+/** The first of the manifest's files missing in the installation or of another size; null = all agree (only its files). */
+export function manifestMismatch(taskDir: string, task: Task): string | null {
+  let m
   try {
-    const m = parseManifest(readFileSync(join(taskDir, task.manifest), 'utf8'))
-    return m.files.every((f) => {
-      try {
-        return statSync(join(task.installDir, ...f.path.split('/'))).size === f.size
-      } catch {
-        return false
-      }
-    })
-  } catch {
-    return false
+    m = parseManifest(readFileSync(join(taskDir, task.manifest), 'utf8'))
+  } catch (e) {
+    return `manifest nieczytelny (${e instanceof Error ? e.message : String(e)})`
   }
+  for (const f of m.files) {
+    let size: number
+    try {
+      size = statSync(join(task.installDir, ...f.path.split('/'))).size
+    } catch {
+      return `${f.path} – brak pliku`
+    }
+    if (size !== f.size) return `${f.path} – ${size} B zamiast ${f.size} B`
+  }
+  return null
 }
 
-export function fsDeps(): Pick<StartupDeps, 'readText' | 'writeText' | 'appendText' | 'listDirs' | 'heldOpen' | 'processAlive' | 'sizesMatch'> {
+export function fsDeps(): Pick<StartupDeps, 'readText' | 'writeText' | 'appendText' | 'listDirs' | 'heldOpen' | 'processAlive' | 'filesMismatch'> {
   return {
     readText: readSharedSync,
     writeText: writeSyncAtomic,
@@ -97,7 +101,7 @@ export function fsDeps(): Pick<StartupDeps, 'readText' | 'writeText' | 'appendTe
     },
     heldOpen,
     processAlive,
-    sizesMatch: manifestSizesMatch
+    filesMismatch: manifestMismatch
   }
 }
 

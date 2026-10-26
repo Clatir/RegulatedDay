@@ -42,8 +42,8 @@ export interface StartupDeps {
   /** Held open by another process so that it cannot be opened for writing (read and write, never truncating). */
   heldOpen(path: string): boolean
   processAlive(pid: number): boolean
-  /** The files of the manifest are all there with their sizes (only the files of the manifest). */
-  sizesMatch(taskDir: string, task: Task): boolean
+  /** The first file of the manifest missing or of another size (only the files of the manifest); null = all agree. */
+  filesMismatch(taskDir: string, task: Task): string | null
   /** Starts the guard (detached, outside the app's job) for the task in `taskDir`; answers its process. */
   startGuard(taskDir: string): { pid: number; exited: () => boolean } | null
   /** Closes a hung owner after checking its program's name and start time. */
@@ -136,10 +136,12 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
         return null
       }
       if (cmp === 0) {
-        if (d.sizesMatch(dir, task)) {
+        const bad = d.filesMismatch(dir, task)
+        if (bad == null) {
           update(d, dir, task, raw, { state: 'done' })
           return null
         }
+        d.log('warn', `pliki niezgodne z manifestem ${X}: ${bad}`)
         update(d, dir, task, raw, { state: 'failed', message: 'pliki niezgodne z manifestem' })
         return { kind: 'unfinished', version: X }
       }
@@ -218,7 +220,7 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
   d.log('warn', `strażnik ${X} nie przejął instalacji – zwykły start z banerem`)
   task = update(d, dir, task, raw, { state: 'failed', message: 'strażnik nie wystartował' })
   d.removeGuardEntry()
-  const sizes = d.sizesMatch(dir, task)
-  d.log('info', `pliki ${sizes ? 'zgodne' : 'niezgodne'} z manifestem ${X}`)
+  const bad = d.filesMismatch(dir, task)
+  d.log('info', bad == null ? `pliki zgodne z manifestem ${X}` : `pliki niezgodne z manifestem ${X}: ${bad}`)
   return normal({ kind: 'unfinished', version: X })
 }
