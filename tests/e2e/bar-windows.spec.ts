@@ -2,11 +2,12 @@
  * Windows with the real helper (spec „Widget”, D229): the desktop bar lies under a normal window that overlaps it and
  * right above the desktop; the real cursor (SendInput) over every button of the bar – each one records that it was
  * entered – opens no new window and changes no order of windows; the control – an active window with one title
- * attribute – must open a tooltip window, or the check proves nothing.
+ * attribute – must open a tooltip window, or the check proves nothing. The windows lying over the bar (CI's console)
+ * are minimized first, and every point must be the bar's own – or the cursor never reaches it.
  */
 import { expect, test, type ElectronApplication } from '@playwright/test'
 import { launch, viewPage, withMainLog } from './app'
-import { click, hover, topWindows, type TopWindow } from './win32'
+import { click, hover, topWindows, uncover, windowsAt, type TopWindow } from './win32'
 
 test.skip(process.platform !== 'win32' || process.env.RD_E2E_REAL_HELPER !== '1', 'Windows with the real helper only')
 
@@ -74,6 +75,8 @@ test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejn
       await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
       const page = await viewPage(app, 'bar')
       const bar = await barInfo(app)
+      const covers = uncover(bar.hwnd)
+      await new Promise((r) => setTimeout(r, 1000))
       const before = pidWindows(bar.pid)
       const orderBefore = topWindows()
       // The visible buttons (folded ones have no box), each recording that the real cursor entered it.
@@ -86,10 +89,10 @@ test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejn
       })
       expect(rects.length).toBeGreaterThan(5)
       const k = bar.scale
-      hover(
-        rects.map(([x, y]) => [(bar.bounds.x + x! * bar.zoom) * k, (bar.bounds.y + y! * bar.zoom) * k] as [number, number]),
-        1200
-      )
+      const points = rects.map(([x, y]) => [(bar.bounds.x + x! * bar.zoom) * k, (bar.bounds.y + y! * bar.zoom) * k] as [number, number])
+      const atPoints = windowsAt(points)
+      expect(atPoints.filter((h) => h !== bar.hwnd), `punkty paska zasłonięte (${covers.join(', ') || 'nic nie zminimalizowano'}): ${JSON.stringify(topWindows().filter((w) => atPoints.includes(w.hwnd) && w.hwnd !== bar.hwnd).map((w) => w.cls))}`).toEqual([])
+      hover(points, 1200)
       expect(await page.evaluate(() => (window as unknown as { rdEntered: Set<number> }).rdEntered.size), 'kursor nie doszedł do każdego przycisku').toBe(rects.length)
       expect(pidWindows(bar.pid)).toEqual(before)
       const orderAfter = topWindows()
@@ -103,11 +106,18 @@ test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejn
         void w.loadURL('data:text/html,<body style="margin:0"><button title="podpowiedź kontrolna" style="width:150px;height:120px" onpointerenter="window.entered=true">x</button></body>')
         w.show()
         ;(globalThis as unknown as { rdControl: typeof w }).rdControl = w
-        return w.getBounds()
+        return { ...w.getBounds(), hwnd: w.getNativeWindowHandle().readBigUInt64LE(0).toString() }
       })
       const control = <T,>(js: string) => app.evaluate((_e, code) => (globalThis as unknown as { rdControl: Electron.BrowserWindow }).rdControl.webContents.executeJavaScript(code), js) as Promise<T>
       await expect.poll(() => control<boolean>('document.readyState === "complete"'), { timeout: 10_000 }).toBe(true)
-      click((probe.x + 225) * k, (probe.y + 60) * k)
+      const probeCovers = uncover(probe.hwnd)
+      await new Promise((r) => setTimeout(r, 1000))
+      const probePoints: Array<[number, number]> = [
+        [(probe.x + 225) * k, (probe.y + 60) * k],
+        [(probe.x + 75) * k, (probe.y + 60) * k]
+      ]
+      expect(windowsAt(probePoints), `okno kontrolne zasłonięte (${probeCovers.join(', ') || 'nic nie zminimalizowano'})`).toEqual([probe.hwnd, probe.hwnd])
+      click(...probePoints[0]!)
       const probeBefore = pidWindows(bar.pid)
       hover(
         [

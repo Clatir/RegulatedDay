@@ -1,9 +1,10 @@
 // adapted from FI tests/update/util.ts @ de81f2b
 import { createHash } from 'node:crypto'
-import { createReadStream, existsSync, promises as fs, readFileSync } from 'node:fs'
+import { createReadStream, existsSync, promises as fs, readFileSync, statSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import type { ElectronApplication } from '@playwright/test'
 import { NSIS_GUID, SETUP_ASSET, MANIFEST_ASSET } from '../../src/shared/update'
 
 export const PRODUCT = 'Regulated Day'
@@ -21,6 +22,34 @@ export async function sha256(file: string): Promise<string> {
 }
 
 export const readText = (file: string) => fs.readFile(file, 'utf8').catch(() => '')
+
+/**
+ * The end of the app's process – call it before what ends the app. Playwright's „close” comes only once every copy of
+ * the app's pipes is closed, and an owner of the installation the app starts detached inherits them: „close” would come
+ * after the whole installation, when its windows and its installer are gone.
+ */
+export function processEnd(app: ElectronApplication, ms: number): Promise<void> {
+  const p = app.process()
+  return new Promise((resolve, reject) => {
+    if (p.exitCode != null || p.signalCode != null) return resolve()
+    const t = setTimeout(() => reject(new Error(`aplikacja nie zakończyła się w ${ms / 1000} s`)), ms)
+    p.once('exit', () => {
+      clearTimeout(t)
+      resolve()
+    })
+  })
+}
+
+/** The files of a manifest missing in an installation or of another size (for a failure's dump). */
+export function manifestDiff(installDir: string, manifestFile: string): string[] {
+  const m = JSON.parse(readFileSync(manifestFile, 'utf8')) as { files: Array<{ path: string; size: number }> }
+  return m.files.flatMap((f) => {
+    const p = join(installDir, ...f.path.split('/'))
+    if (!existsSync(p)) return [`${f.path}: brak`]
+    const size = statSync(p).size
+    return size === f.size ? [] : [`${f.path}: ${size} B zamiast ${f.size} B`]
+  })
+}
 
 /**
  * Output of a Windows PowerShell command (the tests may read the text of tools – the app never does). Its output is

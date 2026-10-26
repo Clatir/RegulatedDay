@@ -11,7 +11,8 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join, resolve } from 'node:path'
 import { _electron as electron, expect, test } from '@playwright/test'
-import { APP_EXE, MANIFEST, SETUP, appProcesses, appRunning, dump, installed, powershell, productionData, readJson, readText, runEntry, sha256, sleep, stopAll, uninstall } from './util'
+import { mainPage } from '../e2e/app'
+import { APP_EXE, MANIFEST, SETUP, appProcesses, appRunning, dump, installed, manifestDiff, powershell, processEnd, productionData, readJson, readText, runEntry, sha256, sleep, stopAll, uninstall } from './util'
 
 const FROM = resolve(process.env.RD_UPDATE_FROM ?? 'release')
 const TO = resolve(process.env.RD_UPDATE_TO ?? 'release-next')
@@ -116,7 +117,7 @@ test('z oknem: „Zainstaluj teraz” – pobranie w tle, okno postępu bez foku
     step.name = 'pobranie w tle'
     // The installer slowed down: the progress window stays long enough to be checked.
     const app = await electron.launch({ executablePath: join(dir, APP_EXE), env: env({ RD_TEST_INSTALLER_SLEEP_MS: '30000' }) })
-    const page = await app.firstWindow()
+    const page = await mainPage(app)
     await expect.poll(() => page.evaluate(() => window.rd.update().then((u) => u.phase)), { timeout: 180_000, intervals: [1000] }).toBe('ready')
     step.name = 'okno próbne na pierwszym planie (kliknięcie prawdziwym kursorem)'
     probe = spawn('notepad.exe', [], { detached: true, stdio: 'ignore' })
@@ -133,9 +134,9 @@ test('z oknem: „Zainstaluj teraz” – pobranie w tle, okno postępu bez foku
     clickProbe()
     await expect.poll(foreground, { timeout: 10_000 }).toBe(pw.hwnd)
     step.name = '„Zainstaluj teraz”'
-    const closed = app.waitForEvent('close', { timeout: 120_000 })
+    const ended = processEnd(app, 120_000)
     await page.evaluate(() => window.rd.updateAction('installNow')).catch(() => undefined)
-    await closed
+    await ended
     step.name = 'okno postępu: na wierzchu, bez zabierania fokusu'
     let progress: TopWindow | undefined
     // What the install helper's process showed (its pid from install.log), printed if the window is not found.
@@ -225,11 +226,11 @@ test('przerwana: pomocnik instalacji i instalator zabite w trakcie – strażnik
     stageDownload()
     step.name = 'start instalacji'
     const app = await electron.launch({ executablePath: join(dir, APP_EXE), env: env({ RD_UPDATE_URL: 'http://127.0.0.1:9' }) })
-    const page = await app.firstWindow()
+    const page = await mainPage(app)
     await expect.poll(() => page.evaluate(() => window.rd.update().then((u) => u.phase)), { timeout: 60_000 }).toBe('ready')
-    const closed = app.waitForEvent('close', { timeout: 120_000 })
+    const ended = processEnd(app, 120_000)
     await page.evaluate(() => window.rd.updateAction('installNow')).catch(() => undefined)
-    await closed
+    await ended
     step.name = 'przerwanie w trakcie instalatora'
     await expect.poll(installerRuns, { timeout: 120_000, intervals: [200] }).toBe(true)
     await sleep(1500)
@@ -256,18 +257,19 @@ test('przerwana: pomocnik instalacji i instalator zabite w trakcie – strażnik
 test('ścieżka FI bez pomocnika: „Zainstaluj teraz” – instalator odłączony, X działa bez banera', async () => {
   test.setTimeout(20 * 60_000)
   const step = { name: 'instalacja N' }
+  let dir = ''
   try {
-    const dir = await freshN()
+    dir = await freshN()
     for (const f of ['rd-helper.exe', 'rd-guard.exe', 'rd-install.exe']) rmSync(join(dir, 'resources', 'helper', f), { force: true })
     stageDownload()
     step.name = 'start bez pomocnika'
     const app = await electron.launch({ executablePath: join(dir, APP_EXE), env: env({ RD_UPDATE_URL: 'http://127.0.0.1:9' }) })
-    const page = await app.firstWindow()
+    const page = await mainPage(app)
     await expect.poll(() => page.evaluate(() => window.rd.update().then((u) => u.phase)), { timeout: 60_000 }).toBe('ready')
     expect(await page.evaluate(() => window.rd.update().then((u) => u.note ?? ''))).toContain('Pomocnik nie działa')
-    const closed = app.waitForEvent('close', { timeout: 120_000 })
+    const ended = processEnd(app, 120_000)
     await page.evaluate(() => window.rd.updateAction('installNow')).catch(() => undefined)
-    await closed
+    await ended
     step.name = `instalacja ${NEXT} ścieżką FI`
     await expect.poll(() => installed()?.version, { timeout: 600_000, intervals: [2000] }).toBe(NEXT)
     await expect.poll(() => readJson<{ version: string }>(join(productionData(), 'launched.json'))?.version, { timeout: 300_000, intervals: [1000] }).toBe(NEXT)
@@ -275,6 +277,7 @@ test('ścieżka FI bez pomocnika: „Zainstaluj teraz” – instalator odłącz
     expect(await readText(join(productionData(), 'logs', 'main.log'))).not.toMatch(new RegExp(`aktualizacja do ${NEXT.replace(/\./g, '\\.')}: nie`))
   } catch (e) {
     console.log(`Nieudany etap: ${step.name}`)
+    if (dir) console.log(`różnice z manifestem ${NEXT}: ${manifestDiff(dir, join(TO, MANIFEST)).join('; ') || 'żadnych'}`)
     await dump(`FI: ${step.name}`)
     throw e
   } finally {

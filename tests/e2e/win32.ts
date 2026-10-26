@@ -1,7 +1,8 @@
 /**
  * Win32 for the Windows E2E tests (the tests may use any tool; the app never reads tools' text): the top-level windows
- * in z-order, the cursor moved by SendInput (a real move – tooltips and hover need it), the foreground window. Runs a
- * small C# through PowerShell's Add-Type; each call answers JSON.
+ * in z-order, the window at a point, the windows covering one minimized (CI's console may lie over the desktop bar), the
+ * cursor moved by SendInput (a real move – tooltips and hover need it), the foreground window. Runs a small C# through
+ * PowerShell's Add-Type; each call answers JSON.
  */
 import { spawnSync } from 'node:child_process'
 
@@ -12,6 +13,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 public static class RdWin {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
   [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx, dy; public uint data, flags, time; public IntPtr extra; }
   [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public MOUSEINPUT mi; public int pad1, pad2; }
   delegate bool EnumProc(IntPtr h, IntPtr l);
@@ -25,6 +27,12 @@ public static class RdWin {
   [DllImport("user32.dll")] static extern uint SendInput(uint n, INPUT[] inputs, int size);
   [DllImport("user32.dll")] static extern int GetSystemMetrics(int i);
   [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
+  [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int index);
+  [DllImport("user32.dll")] static extern bool ShowWindowAsync(IntPtr h, int cmd);
+  [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int value, int size);
   /** A JSON string's content: quotes, backslashes and control characters escaped (titles stay as they are). */
   static string Esc(string s) {
     var b = new StringBuilder();
@@ -51,6 +59,40 @@ public static class RdWin {
     return sb.Append("]").ToString();
   }
   public static string Foreground() { return GetForegroundWindow().ToInt64().ToString(); }
+  /** The top-level window at (x, y) in physical pixels. */
+  public static string At(int x, int y) {
+    SetProcessDPIAware();
+    POINT p; p.X = x; p.Y = y;
+    return GetAncestor(WindowFromPoint(p), 2).ToInt64().ToString();
+  }
+  /**
+   * Minimizes without activation (SW_SHOWMINNOACTIVE) every shown window above \`target\` in the z-order that overlaps it
+   * and can be minimized – never the taskbar or the desktop. Answers the classes minimized and those left.
+   */
+  public static string Uncover(long target) {
+    SetProcessDPIAware();
+    IntPtr t = new IntPtr(target);
+    RECT tr; GetWindowRect(t, out tr);
+    var sb = new StringBuilder("[");
+    bool first = true;
+    EnumWindows((h, l) => {
+      if (h == t) return false;
+      if (!IsWindowVisible(h) || IsIconic(h)) return true;
+      int cloaked;
+      if (DwmGetWindowAttribute(h, 14, out cloaked, 4) == 0 && cloaked != 0) return true;
+      RECT r; GetWindowRect(h, out r);
+      if (r.R <= tr.L || r.L >= tr.R || r.B <= tr.T || r.T >= tr.B) return true;
+      var c = new StringBuilder(256); GetClassName(h, c, 256);
+      string cls = c.ToString();
+      if (cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd" || cls == "Progman" || cls == "WorkerW") return true;
+      bool minimizable = (GetWindowLong(h, -16) & 0x00020000) != 0;
+      if (minimizable) ShowWindowAsync(h, 7);
+      if (!first) sb.Append(","); first = false;
+      sb.Append("\\"" + (minimizable ? "zminimalizowane " : "zostawione ") + Esc(cls) + "\\"");
+      return true;
+    }, IntPtr.Zero);
+    return sb.Append("]").ToString();
+  }
   /** A real move of the cursor to (x, y) in physical pixels (absolute SendInput over the virtual screen). */
   public static void Move(int x, int y) {
     SetProcessDPIAware();
@@ -72,8 +114,11 @@ public static class RdWin {
 /** UTF-8 output: PowerShell 5.1 writes the OEM code page otherwise („Regulated Day – aktualizacja” loses its „–”). */
 const UTF8_OUT = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; '
 
+/** The start of a PowerShell script with [RdWin] loaded (also for the tests' own scripts that wait and then click). */
+export const RDWIN_PRELUDE = `${UTF8_OUT}Add-Type -TypeDefinition @'\n${CS}\n'@ -Language CSharp`
+
 function ps(call: string): string {
-  const script = `${UTF8_OUT}Add-Type -TypeDefinition @'\n${CS}\n'@ -Language CSharp; ${call}`
+  const script = `${RDWIN_PRELUDE}; ${call}`
   const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', timeout: 60_000 })
   if (r.status !== 0) throw new Error(`Win32: ${r.stderr}`)
   return (r.stdout ?? '').trim()
@@ -91,6 +136,13 @@ export interface TopWindow {
 /** Every top-level window, from the top of the z-order down. */
 export const topWindows = (): TopWindow[] => JSON.parse(ps('[RdWin]::Windows()')) as TopWindow[]
 export const foreground = (): string => ps('[RdWin]::Foreground()')
+/** The top-level window at each point (physical px); one PowerShell for all. */
+export const windowsAt = (points: Array<[number, number]>): string[] =>
+  ps(points.map(([x, y]) => `[RdWin]::At(${Math.round(x)}, ${Math.round(y)})`).join('; '))
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+/** The windows covering `hwnd` minimized without activation (the taskbar and the desktop never); what was done. */
+export const uncover = (hwnd: string): string[] => JSON.parse(ps(`[RdWin]::Uncover(${hwnd})`)) as string[]
 /** Moves the cursor along points (physical px), staying `dwellMs` on each; one PowerShell for the whole walk. */
 export function hover(points: Array<[number, number]>, dwellMs: number): void {
   ps(points.map(([x, y]) => `[RdWin]::Move(${Math.round(x)}, ${Math.round(y)}); Start-Sleep -Milliseconds ${dwellMs}`).join('; '))

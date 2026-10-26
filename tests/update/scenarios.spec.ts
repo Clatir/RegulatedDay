@@ -13,11 +13,12 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { _electron as electron, expect, test } from '@playwright/test'
 import { minidumpProcessType } from '../../src/main/crash/minidump'
-import { click, foreground, topWindows, type TopWindow } from '../e2e/win32'
+import { mainPage } from '../e2e/app'
+import { RDWIN_PRELUDE, click, foreground, topWindows, type TopWindow } from '../e2e/win32'
 import { readSharedSync, writeSyncAtomic } from '../../src/main/update/files'
 import { newTask } from '../../src/main/update/install'
 import { readTask, writeTask, type Task } from '../../src/shared/task'
-import { APP_EXE, MANIFEST, SETUP, appProcesses, appRunning, dump, installed, powershell, productionData, readJson, readText, runEntry, sha256, sleep, stopAll, uninstall } from './util'
+import { APP_EXE, MANIFEST, SETUP, appProcesses, appRunning, dump, installed, powershell, processEnd, productionData, readJson, readText, runEntry, sha256, sleep, stopAll, uninstall } from './util'
 
 const FROM = resolve(process.env.RD_UPDATE_FROM ?? 'release')
 const TO = resolve(process.env.RD_UPDATE_TO ?? 'release-next')
@@ -226,13 +227,16 @@ test('widoczny start strażnika i wymuszony wyjątek nie zmieniają okna na pier
 })
 
 /**
- * „Uruchom mimo to” in the guard's window, pressed by UI Automation (Invoke) as soon as `marker` disappears (null: once
- * the button is there). One PowerShell finds the button first and then watches the file every 20 ms, so the press falls
- * into the copying of files. Answers „invoked”, „no-window” or „no-button”.
+ * „Uruchom mimo to” in the guard's window, clicked by the real cursor as soon as `marker` disappears (null: once the
+ * button is there) – as you click it. UI Automation's Invoke is no click here: it sends BM_CLICK, which an inactive
+ * window ignores, and the guard's window is never activated by itself. One PowerShell finds the button (and minimizes
+ * what covers its window) first, then watches the file every 20 ms, so the click falls into the copying of files.
+ * Answers „clicked”, „no-window”, „no-button” or „covered …” (another window at the button).
  */
 function pressRunAnyway(marker: string | null): Promise<string> {
-  const script = `
-[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+  const script = `${RDWIN_PRELUDE}
+# DPI aware before UI Automation's rectangles (physical pixels, as SendInput's).
+[RdWin]::At(0, 0) | Out-Null
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 $A = [System.Windows.Automation.AutomationElement]
 $scope = [System.Windows.Automation.TreeScope]
@@ -242,9 +246,17 @@ for ($i = 0; $i -lt 900 -and -not $win; $i++) { $win = $A::RootElement.FindFirst
 if (-not $win) { 'no-window'; exit }
 $btn = $win.FindFirst($scope::Descendants, (New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, 'Uruchom mimo to')))
 if (-not $btn) { 'no-button'; exit }
+$hwnd = [long]$win.Current.NativeWindowHandle
+$r = $btn.Current.BoundingRectangle
+$x = [int]($r.X + $r.Width / 2)
+$y = [int]($r.Y + $r.Height / 2)
+[RdWin]::Uncover($hwnd) | Out-Null
+Start-Sleep -Milliseconds 500
 ${marker ? `for ($i = 0; $i -lt 15000 -and (Test-Path -LiteralPath '${marker}'); $i++) { Start-Sleep -Milliseconds 20 }` : ''}
-$btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-'invoked'`
+$at = [RdWin]::At($x, $y)
+if ($at -ne [string]$hwnd) { 'covered ' + $at; exit }
+[RdWin]::Click($x, $y)
+'clicked'`
   return new Promise((r) => {
     const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: ['ignore', 'pipe', 'ignore'] })
     let out = ''
@@ -264,7 +276,7 @@ test('„Uruchom mimo to” w czasie kopiowania plików: instalator przerwany, p
     // it is missing, the files are being replaced. The slowed start leaves the time to find the button.
     const pressed = pressRunAnyway(join(dir, 'resources', 'rd-installed'))
     spawn(join(taskDir(), 'rd-guard.exe'), [], { cwd: taskDir(), detached: true, stdio: 'ignore', env: env({ RD_TEST_INSTALLER_SLEEP_MS: '8000' }) }).unref()
-    expect(await pressed).toBe('invoked')
+    expect(await pressed).toBe('clicked')
     await expectNext(dir)
     await expect.poll(() => readJson<{ version: string }>(join(productionData(), 'launched.json'))?.version, { timeout: 300_000, intervals: [1000] }).toBe(NEXT)
     const log = await readText(join(productionData(), 'logs', 'guard.log'))
@@ -290,7 +302,7 @@ test('„Uruchom mimo to” przed instalatorem: obecna wersja startuje od razu, 
       await sleep(3000)
       const pressed = pressRunAnyway(null)
       spawn(join(taskDir(), 'rd-guard.exe'), [], { cwd: taskDir(), detached: true, stdio: 'ignore', env: env() }).unref()
-      expect(await pressed).toBe('invoked')
+      expect(await pressed).toBe('clicked')
       await expect.poll(appRunning, { timeout: 120_000 }).toBe(true)
       await expect.poll(() => readTaskNow()?.state, { timeout: 60_000, intervals: [500] }).toBe('postponed')
       expect(installed()!.version).toBe(CURRENT)
@@ -385,8 +397,9 @@ test('brak programu strażnika: aplikacja startuje z banerem „nie dokończyła
     rmSync(join(taskDir(), 'rd-guard.exe'), { force: true })
     rmSync(join(dir, 'resources', 'helper', 'rd-guard.exe'), { force: true })
     const app = await electron.launch({ executablePath: join(dir, APP_EXE), env: env(), timeout: 180_000 })
-    // The start waits up to 60 s for an owner before its windows exist.
-    const page = await app.firstWindow({ timeout: 180_000 })
+    // The start waits up to 60 s for an owner before its windows exist; the first one may be the bar's or the panel's.
+    await app.firstWindow({ timeout: 180_000 })
+    const page = await mainPage(app)
     await expect(page.getByTestId('banner-update-failed')).toContainText('nie dokończyła się', { timeout: 120_000 })
     expect(readTaskNow()?.state).toBe('failed')
     await app.close()
@@ -458,11 +471,11 @@ test('otwarcie aplikacji w czasie instalacji pomocnika: start przekazany, instal
     const dir = await install(FROM, CURRENT)
     stage(dir)
     const app = await electron.launch({ executablePath: join(dir, APP_EXE), env: env({ RD_TEST_INSTALLER_SLEEP_MS: '25000' }) })
-    const page = await app.firstWindow()
+    const page = await mainPage(app)
     await expect.poll(() => page.evaluate(() => window.rd.update().then((u) => u.phase)), { timeout: 60_000 }).toBe('ready')
-    const closed = app.waitForEvent('close', { timeout: 120_000 })
+    const ended = processEnd(app, 120_000)
     await page.evaluate(() => window.rd.updateAction('installNow')).catch(() => undefined)
-    await closed
+    await ended
     await expect.poll(() => readText(join(productionData(), 'logs', 'install.log')), { timeout: 120_000 }).toContain('instalator wystartował')
     const opened = spawn(join(dir, APP_EXE), [], { detached: true, stdio: 'ignore', env: env() })
     expect(await exited(opened, 30_000)).toBe(true)
