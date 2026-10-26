@@ -45,7 +45,10 @@ export async function launch(opts: { userData?: string; env?: Record<string, str
     if (m.type() === 'error') errors.push(`console: ${m.text()}`)
   })
   await page.waitForLoadState('domcontentloaded')
-  if (!opts.hidden) await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.isVisible() && w.getTitle() === 'Regulated Day Test')), { timeout: 30_000 }).toBe(true)
+  if (!opts.hidden)
+    await withMainLog(userData, () =>
+      expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.isVisible() && w.getTitle() === 'Regulated Day Test')), { timeout: 30_000 }).toBe(true)
+    )
   await page.emulateMedia({ reducedMotion: 'reduce' })
   return { app, page, userData, errors }
 }

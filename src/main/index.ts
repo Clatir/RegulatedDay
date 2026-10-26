@@ -436,7 +436,7 @@ function handle<A extends unknown[], R>(channel: string, fn: (e: IpcMainInvokeEv
 }
 
 function registerIpc(): void {
-  handle(CH.appInfo, (): AppInfo => ({
+  const appInfo = (): AppInfo => ({
     version: app.getVersion(),
     electron: process.versions.electron ?? '',
     identity: identity.kind,
@@ -444,8 +444,14 @@ function registerIpc(): void {
     userData,
     computerId: thisComputer,
     helper: helper?.status ?? { state: 'off', note: null },
-    platform: process.platform
-  }))
+    platform: process.platform,
+    nightInstall: config.get().updates.nightInstall
+  })
+  handle(CH.appInfo, appInfo)
+  handle(CH.setNightInstall, async (_e, on: unknown) => {
+    await config.update({ updates: { ...config.get().updates, nightInstall: on === true } })
+    return appInfo()
+  })
   handle(CH.prefs, () => prefs())
   handle(CH.setPrefs, (_e, patch: unknown) => setPrefs(patch))
   handle(CH.autostart, () => autostart!.read())

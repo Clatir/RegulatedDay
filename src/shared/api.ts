@@ -49,7 +49,8 @@ export const CH = {
   wizardFinish: 'rd:wizardFinish',
   pinFolder: 'rd:pinFolder',
   openSystemSettings: 'rd:openSystemSettings',
-  openDataFolder: 'rd:openDataFolder'
+  openDataFolder: 'rd:openDataFolder',
+  setNightInstall: 'rd:setNightInstall'
 } as const
 
 /** Which window a renderer is (the preload reads it from its arguments). */
@@ -71,6 +72,8 @@ export interface AppInfo {
   computerId: string
   helper: HelperStatus
   platform: string
+  /** „Automatyczna instalacja aktualizacji w nocy” on this computer (on by default). */
+  nightInstall: boolean
 }
 
 /** The real state of „Uruchamiaj z Windows” (spec „Instalacja”): also off in Task Manager. */
@@ -289,4 +292,5 @@ export interface RdApi {
   pinFolder(): Promise<{ ok: boolean; error: string | null }>
   openSystemSettings(page: SystemSettingsPage): Promise<void>
   openDataFolder(): Promise<void>
+  setNightInstall(on: boolean): Promise<AppInfo>
 }

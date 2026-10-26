@@ -161,6 +161,9 @@ export function SettingsPage() {
             {info?.version ?? ''}
           </span>
         </Field>
+        <Field label="Instalacja w nocy" hint="W ciszy nocnej, przy zablokowanym ekranie albo bez używania komputera od 30 min, na zasilaniu z sieci i poza blokami. Przed pierwszym otwarciem danych nowa wersja robi ich kopię.">
+          <Toggle checked={info?.nightInstall ?? true} onChange={(v) => void window.rd.setNightInstall(v).then(setInfo)} label={(info?.nightInstall ?? true) ? 'włączona' : 'wyłączona'} data-testid="pref-night-install" />
+        </Field>
         {update && (
           <Field label="Stan" hint={update.note ?? undefined}>
             <div className="flex flex-wrap items-center gap-2">

@@ -24,7 +24,7 @@ import { addDays } from '@shared/time/zone'
 import { Segmented, cx } from '../../components/ui'
 import { editOf, logEvents, rawRecord, saveEdits, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
-import type { Names } from '../plan/blockView'
+import { blockName, type Names } from '../plan/blockView'
 import { saveDay } from './dayActions'
 
 const QUESTIONS: Array<{ pool: Pool; text: string }> = [
@@ -177,7 +177,7 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
     <div className="flex flex-col gap-3 text-[12.5px]" data-testid="morning-steps">
       {yesterday.length > 0 && (
         <Card>
-          Z wczoraj: {yesterday.map((b) => b.note || names.rd.categories[b.categoryId]?.name).join(', ')} (+{durationLabel(yesterday.reduce((m, b) => m + b.durationMin, 0))})
+          Z wczoraj: {yesterday.map((b) => blockName(b, names)).join(', ')} (+{durationLabel(yesterday.reduce((m, b) => m + b.durationMin, 0))})
         </Card>
       )}
       {sessionsAsk.map((x) => (

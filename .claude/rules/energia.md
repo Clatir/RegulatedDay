@@ -42,5 +42,6 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
 - Przerwa ≥ 30 min przed końcem pracy liczy się od początku według prognozy: stan w trakcie przerwy już rośnie, gdy
   plan stawia następny blok dalej niż 30 min od jej początku.
 - Koszt: ~1,7 ms na dzień (dzień ~4,5 ms); nie wracaj do filtrowania odcinków w każdej minucie (malowanie tablic).
+- Moduł energii: przełącznik w ustawieniach (E3) zapisuje `rd.general.modules.energy` i `energy.module` w logu dnia.
 - Jeszcze nie: zobaczenie komunikatu i tryby ciszy (E4b), warianty przy rezerwie i przesunięcie granicy po regeneracji
-  z komunikatu (E5), wyjątki typów dni w nagrodzie i nuty (E7), ustawienie modułu i okres kalibracji (E3, E6).
+  z komunikatu (E5), wyjątki typów dni w nagrodzie i nuty (E7), okres kalibracji (E6).
