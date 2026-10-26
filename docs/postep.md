@@ -1,9 +1,9 @@
 # Postęp
 
 ## Stan bieżący
-- Etap: **E0 zakończony** na gałęzi `claude/0.1.0-e0` (D284: jeden PR, wydanie 0.1.0, pauza na końcu): PR #1 do
-  scalenia według D285, wydanie 0.1.0 z zadania Windows na `main`; potem PR 0.1.1 – wersja do próby aktualizacji
-  (punkt 17 listy) – i pauza do „dalej”.
+- Etap: **E0 zakończony** (D284): PR #1 scalony 26.10 (77fdcd5), wydanie **0.1.0** opublikowane przez zadanie
+  Windows na `main` (instalator, manifest, SHA256SUMS). PR 0.1.1 (gałąź `claude/0.1.1-proba-aktualizacji`) – wersja
+  do próby aktualizacji (punkt 17 listy), bez zmian w działaniu; po jej wydaniu pauza do „dalej”.
 - Zakres: szkielet (tożsamości, okna, zasobnik, autostart, log, config, motyw, menu boczne, konwencje), pomocnik C#
   (kolejność okien, pierwszy plan, powiadomienia, sesja, zasilanie), widget próbny i ekran „Próba”, instalator NSIS
   z manifestem, aktualizacje (lista wydań, pobieranie, plik zadania, sekwencja startu, cztery ścieżki i FI), strażnik
@@ -38,9 +38,8 @@
   tylko w CI na Windows; tutejszy `taskkill /T` nie kończy drzewa procesów Electrona.
 
 ## Kolejka
-1. Scalenie PR #1 (D285), wydanie 0.1.0 – sprawdzenie zadania Windows na `main`.
-2. PR 0.1.1 (wersja do punktu 17: przerwana instalacja, okno postępu pod klikniętym oknem), scalenie, wydanie.
-3. Pauza do „dalej”, potem „Przed etapem E1”.
+1. PR 0.1.1 (wersja do punktu 17: aktualizacja z oknem postępu), scalenie (D285), wydanie – sprawdzenie zadania Windows.
+2. Pauza do „dalej”, potem „Przed etapem E1”.
 
 ## Przed etapem E0 (25.10.2026)
 - Odpowiedzi: D284–D289. Model: Opus 5.5 · xhigh. Sprzęt próby: drugi monitor, laptop, platforma brokera jako
