@@ -26,8 +26,8 @@
   w 25 s); pułapka zapisana w pamięci.
 
 ## Kolejka
-1. CI na `main` po scaleniu PR #4 (run 40328605555): powinno przejść na zielono; nowego wydania nie ma (wersja 0.1.1
-   bez zmian, krok publikacji to pomija). Gdy czerwone – poprawka na gałęzi `claude/e2-model-energii`.
+1. CI na `main` po scaleniu PR #4 zielone (run 40328605555, niestabilnych testów brak); wydania nie ma (wersja 0.1.1
+   bez zmian – krok publikacji to pominął, zgodnie z planem).
 2. Pauza do „dalej”. **E2** (gałąź `claude/e2-model-energii`): zakres i kryteria w `docs/plan.md`, rozdział „Model
    energii” specyfikacji. Model: Opus 5.5 · xhigh.
 
