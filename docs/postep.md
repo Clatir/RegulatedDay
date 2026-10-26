@@ -1,9 +1,9 @@
 # Postęp
 
 ## Stan bieżący
-- Etap: **E2 zakończony w PR #5** (gałąź `claude/e2-model-energii`, commity 3510cb7 i d83fd11): czeka na CI (Linux
-  i Windows) i scalenie (D285); bez wydania – E2 nie ma interfejsu, nic się dla Ciebie nie zmienia (wersja 0.1.1).
-  E1 scalony w PR #4 (historia → `docs/archiwum/postep-E1.md`).
+- Etap: **E2 zakończony** (D285): PR #5 scalony 26.10 (33a0b19) przy zielonym CI (Linux i Windows, niestabilnych
+  testów brak); bez wydania – E2 nie ma interfejsu, nic się dla Ciebie nie zmienia (wersja 0.1.1). E1 scalony
+  w PR #4 (historia → `docs/archiwum/postep-E1.md`).
 - Zakres E2: pule z check-inu (6 pytań → 100 / 85 / 65 / 45 / 25), sygnały i ocena względna jako kotwice (zapisany
   stan sprzed sygnału), koszty na godzinę (3·k, dokładnie w jednostkach 1/2000), tło (50 %, własny udział bloku, sesja
   za innym blokiem 0, blok stały wysłany w tło – pełny), suma ±5, przełączenia (2 poznawcze, D205) i kontakt (2
@@ -21,7 +21,8 @@
 - Czas faktyczny: 26.10 ok. 14:55–15:55 (zegarowo, bez CI), w tym ok. 14 min przeglądu w tle.
 
 ## Kolejka
-1. CI na PR #5 (Linux i Windows) → scalenie (D285) → CI na `main` zielone; wydania nie ma (wersja 0.1.1 bez zmian).
+1. CI na `main` po scaleniu PR #5 zielone (run 40349267979, niestabilnych testów brak); wydania nie ma (wersja 0.1.1
+   bez zmian – krok publikacji to pominął, zgodnie z planem).
 2. Pauza do „dalej”. **E3** (gałąź `claude/e3-...`): kreator, ustawienia z modułami, plan poranny, prośby, rutyny,
    historia; pierwsza wersja 0.x na Twoich danych. Najpierw komunikat „Przed etapem E3” (będą pytania – E3 ma
    interfejs). Model: Opus 5.5 · high (plan).
