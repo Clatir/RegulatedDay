@@ -63,7 +63,10 @@ const api: RdApi = {
   pinFolder: () => ipcRenderer.invoke(CH.pinFolder),
   openSystemSettings: (page) => ipcRenderer.invoke(CH.openSystemSettings, page),
   openDataFolder: () => ipcRenderer.invoke(CH.openDataFolder),
-  setNightInstall: (on) => ipcRenderer.invoke(CH.setNightInstall, on)
+  setNightInstall: (on) => ipcRenderer.invoke(CH.setNightInstall, on),
+  timer: (click) => ipcRenderer.invoke(CH.timer, click),
+  answer: (id, answer, value) => ipcRenderer.invoke(CH.answer, id, answer, value ?? null),
+  seen: (ids) => ipcRenderer.send(CH.seen, ids)
 }
 
 contextBridge.exposeInMainWorld('rd', api)

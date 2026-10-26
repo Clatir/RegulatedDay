@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
-import { BrowserWindow, Menu, app, clipboard, crashReporter, dialog, ipcMain, net, powerMonitor, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
+import { BrowserWindow, Menu, app, clipboard, crashReporter, dialog, ipcMain, net, powerMonitor, powerSaveBlocker, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
 import {
   CH,
   type AppInfo,
@@ -17,6 +17,7 @@ import {
   type EditEntry,
   type EventIn,
   type SystemSettingsPage,
+  type TimerIn,
   type TrialAction,
   type UpdateAction,
   type ViewKind,
@@ -49,10 +50,13 @@ import { UpdateController } from './update/controller'
 import { guardMode } from './update/install'
 import { LifeKeeper, judge } from './crash/lifeMarker'
 import { sessionAtStart } from './crash/session'
-import { recordRun } from './crash/versions'
+import { readVersions, recordRun } from './crash/versions'
+import { NightInstaller } from './update/night'
 import { marketDay } from '@shared/calendar/holidays'
 import { STOP_TIMEOUT_MS, type DataService } from './data/service'
 import { DataHub } from './data/hub'
+import { PowerKeeper } from './power'
+import { OneDriveWatch } from './onedrive'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
 crashReporter.start({ uploadToServer: false, submitURL: '', compress: false })
@@ -86,6 +90,24 @@ let dataClosing = false
 let lastRunVersion: string | null = null
 const data = (): DataService | null => hub?.service ?? null
 const trial = new Trial()
+/** The block of sleep: the helper holds the system, the app the screen (T290, T301). */
+const power = new PowerKeeper({
+  request: (cmd, args, timeoutMs) => (helper ? helper.request(cmd, args, timeoutMs) : Promise.reject(new Error('pomocnik nie działa'))),
+  blocker: { start: (type) => powerSaveBlocker.start(type), stop: (id) => powerSaveBlocker.stop(id) },
+  log: (level, msg) => log(level, msg)
+})
+/** OneDrive in this session (the helper), for the folder's decisions of who leads. */
+const oneDrive = new OneDriveWatch({
+  ask: async () => {
+    if (!helper?.running) throw new Error('pomocnik nie działa')
+    return (await helper.request('oneDrive', {}, 5000)).running === true
+  },
+  inOneDrive: () => {
+    const dir = dataFolderNow()
+    return !!dir && DataHub.inOneDrive(dir)
+  },
+  log: (level, msg) => log(level, msg)
+})
 let quitting = false
 /** Windows ends the session (logoff, shutdown): never an installer now (spec), the record of closing written at once. */
 let sessionEnding = false
@@ -193,6 +215,26 @@ function onHelperEvent(m: HelperMessage): void {
   }
 }
 
+const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm', 'undo'])
+
+/** A click of the timer from a window, only with the fields an action takes (anything else is dropped). */
+function timerIn(c: TimerIn): TimerIn {
+  if (!c || typeof c !== 'object' || !TIMER_ACTIONS.has(String(c.a))) throw new Error('nieznane działanie timera')
+  const str = (v: unknown) => (typeof v === 'string' && v.length <= 64 ? v : undefined)
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+  return {
+    a: String(c.a),
+    day: str(c.day),
+    block: str(c.block),
+    minutes: num(c.minutes),
+    done: typeof c.done === 'boolean' ? c.done : undefined,
+    confirm: c.confirm === true,
+    categoryId: str(c.categoryId),
+    durationMin: num(c.durationMin),
+    target: str(c.target)
+  }
+}
+
 /** The data folder of this computer: RD_DATA_DIR (tests, the developer), else the wizard's choice; none – the wizard. */
 const dataFolderNow = (): string | null => process.env.RD_DATA_DIR || config.get().dataFolder
 
@@ -205,6 +247,10 @@ function createHub(): DataHub {
     runId,
     holidays: marketDay,
     idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    appFocused: () => (!!mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) || (!!panel?.isOpen && !!panel.webContents?.isFocused()),
+    oneDriveRunning: () => oneDrive.running,
+    onPower: (need) => power.want(need),
+    versions: () => readVersions(userData),
     log,
     writeGuardPlan: identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1',
     extraBackupDir: () => prefs().backupDir,
@@ -504,6 +550,15 @@ function registerIpc(): void {
   handle(CH.logEvents, (_e, events: EventIn[]) => needHub().events(Array.isArray(events) ? events : []))
   handle(CH.resolve, (_e, id: string, choice: 'mine' | 'theirs') => needHub().resolve(String(id), choice === 'theirs' ? 'theirs' : 'mine'))
   handle(CH.monthEvents, (_e, month: string, kinds: string[]) => needHub().monthEvents(String(month), Array.isArray(kinds) ? kinds.map(String) : []))
+  handle(CH.timer, (_e, click: TimerIn) => needHub().timer(timerIn(click)))
+  handle(CH.answer, (_e, id: string, answer: string, value: number | null) => needHub().answer(String(id), String(answer), typeof value === 'number' && Number.isFinite(value) ? value : null))
+  ipcMain.on(CH.seen, (e, ids: unknown) => {
+    // Seen only in the main window in the foreground (spec D231); the panel counts while it is open (E4b).
+    const view = viewOf(e.sender)
+    const shown = view === 'main' ? !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused() : view === 'panel' && !!panel?.isOpen
+    if (!shown || !Array.isArray(ids)) return
+    void hub?.seen(ids.filter((x): x is string => typeof x === 'string'), view === 'panel' ? 'panel' : 'main').catch((err) => log('warn', 'zapis zobaczenia pytania nie udał się', err))
+  })
   handle(CH.historyList, () => needHub().historyList())
   handle(CH.historyVersions, (_e, kind: string, id: string) => needHub().historyVersions(String(kind), String(id)))
   handle(CH.historyRestore, (_e, kind: string, id: string, file: string) => needHub().historyRestore(String(kind), String(id), String(file)))
@@ -708,7 +763,12 @@ async function main(): Promise<void> {
   helper.on('event', onHelperEvent)
   helper.on('status', (s) => {
     trial.log(`pomocnik: ${s.state}${s.note ? ` (${s.note})` : ''}`)
-    if (s.state === 'running') helper?.send('foreground.watch')
+    if (s.state === 'running') {
+      helper?.send('foreground.watch')
+      oneDrive.start()
+      // The helper (re)started: it gets the state of the sleep block at once (T301).
+      void data()?.tick()
+    }
     layoutBar()
     broadcast(CH.onWidget, widgetView())
     broadcast(CH.onUpdate, updates?.view())
@@ -734,6 +794,37 @@ async function main(): Promise<void> {
     },
     log
   })
+  // The night installation (D162): judged every minute and at the lock of the screen (modern standby sleeps after it).
+  const night = new NightInstaller({
+    now: () => Date.now(),
+    me: () => thisComputer,
+    ready: () => updates?.updater?.readyRelease?.version ?? null,
+    peers: () => (data()?.folder.presence.peers() ?? []).map((p) => ({ computer: p.presence.computer, appVersion: p.presence.appVersion, versions: p.presence.versions, installing: p.presence.installing })),
+    unknownTimerEvents: async () => (await data()?.folder.unknownTimerEvents()) ?? false,
+    state: async () => {
+      const f = data()?.folder
+      const notif = helper?.running ? await helper.request('notificationState', {}, 3000).catch(() => null) : null
+      const caps = helper?.running ? await helper.request('powerState', {}, 3000).catch(() => null) : null
+      return {
+        now: Date.now(),
+        quiet: f ? await f.nightQuiet().catch(() => false) : false,
+        locked: powerMonitor.getSystemIdleState(1) === 'locked',
+        idleMs: powerMonitor.getSystemIdleTime() * 1000,
+        onMains: typeof caps?.onMains === 'boolean' ? caps.onMains : !powerMonitor.isOnBatteryPower(),
+        blockRunning: f ? await f.anyBlockRunning().catch(() => true) : false,
+        notificationState: typeof notif?.state === 'string' ? notif.state : null,
+        enabled: config.get().updates.nightInstall,
+        helperRunning: !!helper?.running
+      }
+    },
+    claim: (v) => data()?.folder.setInstalling(v),
+    install: () => !!updates?.install('night', 'hidden'),
+    log: (level, msg) => log(level, msg)
+  })
+  if (identity.updates && app.isPackaged && process.platform === 'win32') {
+    setInterval(() => void night.check(), 60_000).unref?.()
+    powerMonitor.on('lock-screen', () => void night.check())
+  }
   // The local plan of sessions and classes for the guard: E1 / E4a fill it; empty, it covers the next 7 days.
   // RD_TEST_KEEP_PLAN=1 (CI): the plan a test wrote for the guard stays.
   if (identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1') writePlan(userData, [])
@@ -840,6 +931,8 @@ app.on('before-quit', (e) => {
 app.on('will-quit', () => {
   // A ready download installs at the full exit (never at the end of the Windows session).
   updates?.onQuit(sessionEnding)
+  power.stop()
+  oneDrive.stop()
   helper?.stop()
   if (!sessionEnding) life.close('quit')
   log('info', 'koniec pracy')

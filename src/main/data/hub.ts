@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import type { DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, HistoryRecord, HistoryVersion, RawRecord } from '@shared/api'
+import type { DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, HistoryRecord, HistoryVersion, RawRecord, TimerIn, TimerResult } from '@shared/api'
 import { deepEqual, diffRecords } from '@shared/data/merge'
 import { classify, ID_COLLECTIONS, paths, SETTINGS_FILE, type IdKind } from '@shared/data/paths'
 import type { HolidayLookup } from '@shared/engine/createDay'
@@ -18,6 +18,7 @@ import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { createUpdateBackup } from './backup'
+import type { TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
 import { DataService, STOP_TIMEOUT_MS, type ServiceOptions } from './service'
@@ -30,6 +31,14 @@ export interface HubOptions {
   runId: string
   holidays: HolidayLookup
   idleSeconds: () => number
+  /** The main window or the icon's panel has the focus (input then is not use). */
+  appFocused?: () => boolean
+  /** OneDrive runs in this session (the helper). */
+  oneDriveRunning?: () => boolean
+  /** What this computer must hold against sleep (after every check). */
+  onPower?: ServiceOptions['onPower']
+  /** The versions that ran here (into the presence). */
+  versions?: ServiceOptions['versions']
   log: (level: 'info' | 'warn' | 'error', msg: string, e?: unknown) => void
   writeGuardPlan: boolean
   extraBackupDir: () => string | null
@@ -55,6 +64,9 @@ const COPY_PREFIX = 'copy:'
 
 /** A folder that did not open is tried again this often (spec: „ponawia otwarcie co 30 s”). */
 const RETRY_MS = 30_000
+
+/** A question in the window counts as seen when this computer had input this recently (presence at it). */
+const SEEN_PRESENCE_MS = 60_000
 
 /** Files OneDrive and Windows put in any folder: they do not make it „not empty”. */
 const NOISE = new Set(['desktop.ini', 'thumbs.db', '.ds_store'])
@@ -174,6 +186,10 @@ export class DataHub {
         runId: this.o.runId,
         holidays: this.o.holidays,
         idleSeconds: this.o.idleSeconds,
+        appFocused: this.o.appFocused,
+        oneDriveRunning: this.o.oneDriveRunning,
+        onPower: this.o.onPower,
+        versions: this.o.versions,
         log: this.o.log,
         writeGuardPlan: this.o.writeGuardPlan,
         extraBackupDir: this.o.extraBackupDir,
@@ -365,6 +381,44 @@ export class DataHub {
   async events(drafts: EventIn[]): Promise<void> {
     await this.need().userEvents(drafts)
     this.changed()
+  }
+
+  /**
+   * A click of the timer (spec „Akcje widgetu wykonuje proces główny”): written at once, then a check of the folder, so
+   * the leader's automatic consequences (a fixed block waiting behind a regeneration, the boundary) follow without 15 s.
+   */
+  async timer(click: TimerIn): Promise<TimerResult> {
+    const r = await this.need().timerClick(click as TimerClick)
+    this.changed()
+    if (r.ok) void this.service?.tick()
+    return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
+  }
+
+  /** Your answer to a question of the timer (its id names its day). */
+  async answer(id: string, answer: string, value: number | null): Promise<TimerResult> {
+    const r = await this.need().answer(id, answer, value)
+    this.changed()
+    if (r.ok) void this.service?.tick()
+    return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
+  }
+
+  /**
+   * Questions the window showed (spec D231: seen only in the open icon's panel or the main window in the foreground with
+   * presence at this computer): written when this computer had input in the last minute.
+   */
+  async seen(ids: string[], how: 'panel' | 'main' | 'notification' | 'bar'): Promise<number> {
+    const s = this.service
+    if (!s || !ids.length) return 0
+    const last = s.lastInput
+    if (how !== 'notification' && how !== 'bar' && (last == null || s.folder.clock.now() - last > SEEN_PRESENCE_MS)) return 0
+    const n = await s.folder.markSeen(ids.slice(0, 20), how)
+    if (n) this.changed()
+    return n
+  }
+
+  /** A click of the desktop bar or the icon (input in the next 10 s is the app's own). */
+  clickedApp(): void {
+    this.service?.clickedApp()
   }
 
   async resolve(id: string, choice: 'mine' | 'theirs'): Promise<void> {

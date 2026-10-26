@@ -16,6 +16,9 @@ test('start: okno główne z menu bocznym, nazwą i paskiem; tożsamość testow
   try {
     await withMainLog(userData, async () => {
       await expect(page.getByTestId('app-name')).toHaveText('Regulated Day')
+      // With the folder open the top of the window is the timer's bar; the trial's bar stays on its page.
+      await expect(page.getByTestId('timer-bar')).toBeVisible()
+      await page.getByTestId('nav-trial').click()
       await expect(page.getByTestId('bar-main')).toBeVisible()
       for (const p of PAGES) await expect(page.getByTestId(`nav-${p}`)).toBeVisible()
       await page.getByTestId('nav-settings').click()

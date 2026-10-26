@@ -22,6 +22,10 @@ namespace RegulatedDay
         static readonly PowerRequests power = new PowerRequests();
         static string identity = "Regulated Day";
         static string aumid = "app.regulatedday.desktop";
+        /// <summary>The power requests are released when the app sent no state for this long (T301).</summary>
+        const int PowerSilentMs = 30000;
+        static int lastPowerTick = Environment.TickCount;
+        static readonly object PowerGate = new object();
 
         static void Send(JObj o)
         {
@@ -76,6 +80,19 @@ namespace RegulatedDay
             watcher = new Watcher(Send);
             watcher.Start();
             Timer alive = new Timer(delegate(object s) { Send(new JObj().Set("type", "alive")); }, null, 2000, 2000);
+            // The app sends its state of the sleep block every 15 s: without one for 30 s (a hung app) everything is released.
+            Timer powerWatch = new Timer(delegate(object s)
+            {
+                lock (PowerGate)
+                {
+                    if (!power.Any || unchecked(Environment.TickCount - lastPowerTick) < PowerSilentMs) return;
+                    power.Set(false, false, false, null);
+                }
+                Log.Info("blokada usypiania zwolniona: aplikacja nie podała stanu od 30 s");
+                JObj st = power.State();
+                st.Set("type", "power").Set("event", "released");
+                Send(st);
+            }, null, 5000, 5000);
             Send(new JObj().Set("type", "hello").Set("version", "1").Set("pid", System.Diagnostics.Process.GetCurrentProcess().Id));
             string line;
             while ((line = stdin.ReadLine()) != null)
@@ -94,6 +111,7 @@ namespace RegulatedDay
                 }
             }
             GC.KeepAlive(alive);
+            GC.KeepAlive(powerWatch);
             power.Dispose();
             Log.Info("koniec");
             return 0;
@@ -139,7 +157,11 @@ namespace RegulatedDay
                     Reply(m, new JObj().Set("setting", ToastSetting.Read(Json.Str(m, "aumid") ?? aumid)));
                     return true;
                 case "power":
-                    power.Set(Json.Bool(m, "display", false), Json.Bool(m, "system", false), Json.Bool(m, "execution", false), Json.Str(m, "reason"));
+                    lock (PowerGate)
+                    {
+                        lastPowerTick = Environment.TickCount;
+                        power.Set(Json.Bool(m, "display", false), Json.Bool(m, "system", false), Json.Bool(m, "execution", false), Json.Str(m, "reason"));
+                    }
                     {
                         JObj st = power.State();
                         st.Set("type", "power").Set("event", "requests");

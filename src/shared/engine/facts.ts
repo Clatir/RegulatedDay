@@ -9,7 +9,7 @@
  * every minute by the values in force when it began.
  */
 import type { Costs } from '../model/categories'
-import { compareEvents, isKnown, type AnyEvent, type LogEvent, type MinuteClass } from '../model/events'
+import { compareEvents, eventAt, isKnown, type AnyEvent, type LogEvent, type MinuteClass } from '../model/events'
 import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
 import type { PlanBlock } from '../model/plan'
 import { idxOf, type Grid } from './grid'
@@ -45,8 +45,23 @@ export interface BlockFact {
   cancelledAt: number | null
   done: boolean | null
   endRule: string | null
+  /** The id of the event that ended it („Cofnij” of an automatic end points at it). */
+  endId: string | null
   /** „Dodaj bez wymiany” (index): its minutes after the boundary are confirmed in advance, up to its planned length. */
   addConfirmedAt: number | null
+}
+
+/** An action the app did itself (spec „Działania automatyczne”): on the list „zrobione automatycznie” with „Cofnij”. */
+export interface AutoAction {
+  id: string
+  k: string
+  /** The rule that did it ('fixedStart', 'plan', 'twoQuestions', 'idle', 'lastInput', 'workEnd' …). */
+  rule: string
+  block: string | null
+  /** Index. */
+  at: number
+  /** The computer that wrote it. */
+  c: string
 }
 
 export interface RequestFact {
@@ -86,6 +101,14 @@ export interface DayFacts {
   know: Record<string, number>
   /** Clicks that did not fit (stale views) and conflicts, for the bar. */
   problems: Array<{ event: string; why: string }>
+  /** What the app did itself and nobody undid, in order. */
+  autos: AutoAction[]
+  /** Events undone by „Cofnij” (their ids): the facts are folded without them. */
+  undone: Set<string>
+  /** Questions seen (question id → the first instant it was seen, ms, and on which computer and how). */
+  seen: Map<string, { at: number; c: string; how: string }>
+  /** Answers to questions that are not actions of the timer („Przerwa” of „Koniec pracy?”, absence …): id → answer. */
+  answers: Map<string, { at: number; answer: string; value: number | null }>
 }
 
 const newBlock = (id: string): BlockFact => ({
@@ -101,11 +124,12 @@ const newBlock = (id: string): BlockFact => ({
   cancelledAt: null,
   done: null,
   endRule: null,
+  endId: null,
   addConfirmedAt: null
 })
 
 /** Events that never change the timer's facts (they do not make segments stale either); energy never does either. */
-const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set'])
+const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen'])
 
 export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k) || e.dom === 'energy'
 
@@ -124,9 +148,17 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
     segments: [],
     hardEndPass: null,
     know: {},
-    problems: []
+    problems: [],
+    autos: [],
+    undone: new Set(),
+    seen: new Map(),
+    answers: new Map()
   }
   const idx = (at: number) => idxOf(grid, at)
+  // „Cofnij” (spec: the undo writes an event „korekta”): the events it points at are folded as if never written. The
+  // latest undo first: an undo undone by a later one (its „Cofnij”) points at nothing.
+  const undos = events.filter((e): e is Extract<LogEvent, { k: 'undo' }> => isKnown(e) && e.k === 'undo').sort((a, b) => compareEvents(b, a))
+  for (const u of undos) if (!f.undone.has(u.id)) f.undone.add(u.target)
   const block = (id: string) => {
     let b = f.blocks.get(id)
     if (!b) f.blocks.set(id, (b = newBlock(id)))
@@ -138,7 +170,9 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
 
   for (const e of [...events].sort(compareEvents)) {
     f.know[e.c] = Math.max(f.know[e.c] ?? -1, e.n)
-    if (!isKnown(e)) continue
+    if (!isKnown(e) || f.undone.has(e.id)) continue
+    const auto: unknown = e.autoRule
+    const problemsBefore = f.problems.length
     switch (e.k) {
       case 'block.start': {
         const b = block(e.block)
@@ -186,6 +220,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.endedAt = run ? run.to : (b.runs.at(-1)?.to ?? at)
         b.done = e.done ?? null
         b.endRule = e.rule ?? null
+        b.endId = e.id
         break
       }
       case 'block.fg': {
@@ -281,8 +316,20 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
       case 'hardend.pass':
         if (!f.hardEndPass) f.hardEndPass = { at: idx(e.at) }
         break
+      case 'question.seen':
+        if (!f.seen.has(e.question)) f.seen.set(e.question, { at: e.at, c: e.c, how: e.how })
+        break
+      case 'question.answer':
+        if (!f.answers.has(e.question)) f.answers.set(e.question, { at: e.at, answer: e.answer, value: e.value ?? null })
+        break
       default:
         break
+    }
+    // An automatic action that changed something is listed (one that no longer fitted is only a problem); the leader's
+    // own corrections of its automatic ends (a later log showed input) are not actions to undo.
+    if (typeof auto === 'string' && auto && e.k !== 'undo' && f.problems.length === problemsBefore) {
+      const blockId = (e as { block?: unknown }).block
+      f.autos.push({ id: e.id, k: e.k, rule: auto, block: typeof blockId === 'string' ? blockId : null, at: idx(eventAt(e)), c: e.c })
     }
   }
   f.snapshots.sort((a, b) => a.at - b.at)

@@ -53,7 +53,8 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Symulator (`tests/sim/onedrive.ts`): nowsza wersja pliku w drodze nie może odkładać jego dostarczenia – plik pisany
   co minutę nigdy by nie dotarł. Test dwóch komputerów ~25 s, test skali ~15 s (generator 3 lat).
 - Folder z kreatora (`config.dataFolder`) albo `RD_DATA_DIR` (pierwszeństwo, T445); niedostępny folder – nic nie
-  powstaje w jego miejscu. Obecność z `powerMonitor.getSystemIdleTime` do czasu pomocnika E4a.
+  powstaje w jego miejscu. Obecność i przerwy w wejściu z `InputTracker` (co 5 s, T464); timer i działania
+  automatyczne – reguły `timer.md`.
 - Dwa przebiegi kolejki naraz gubiły wpisy – `apply` i `resolve` idą po kolei; wpis za nierozstrzygniętym tego samego
   pliku czeka. Błąd zapisu jednego wpisu (także nowego rekordu) = „czeka”, nigdy wyjątek przerywający przebieg.
 - Prowadzący liczy dzień z plików folderu (`inputs()`, `dayFile(d)`), okno – z kolejką (`inputs(true)`, `recordView`):

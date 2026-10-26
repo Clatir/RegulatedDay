@@ -1,44 +1,52 @@
 # Postęp
 
 ## Stan bieżący
-- Etap: **E3 scalony** (PR #6, 27c3535, 26.10 ok. 21:15; druga runda CI 40388633029 zielona, niestabilnych testów
-  brak). CI na `main` w toku przy zapisie tego wpisu (push dokumentów przerwał run 40393794530 – wydanie 0.2.0
-  publikuje najnowszy run na `main`, raz na wersję).
-  E2 → `docs/archiwum/postep-E2.md`.
-- Zakres E3: kreator pierwszego komputera (15 kroków z podglądem dnia, nic nie zapisuje się przed „Zakończ”, folder
-  w OneDrive z „Zawsze przechowuj na tym urządzeniu”) i kolejnego (3 kroki, nic wspólnego nie zmienia); „Dziś” jako oś
-  czasu (D293) z panelem bloku; plan poranny (check-in, pytania sesji i świąt, prośby z kolejki jako blok, ostrzeżenia,
-  zatwierdzenie i wyjątek granicy); wymiana z „Dodaj bez wymiany”; zmiana typu dnia (też w trakcie), późne wstanie,
-  przenoszenie z licznikiem, kopiowanie dnia i szablonu; kalendarz miesiąca (D295) z analizą sobotnią; szablony
-  z wersjami od daty, druga zmiana; prośby, rutyny w dwóch wersjach, historia z przywracaniem; ustawienia z modułami
-  (od jutra / od dziś / od daty); pytania kolejki i kopii konfliktowych OneDrive; kopia przed aktualizacją.
-  Decyzje: D292–D295, T444–T462.
-- Testy: 483 jednostkowe i plikowe (m.in. 122 testy ustawień – każde z wartościami w zakresie i poza nim, plan dnia E3,
-  folder dla okna, `DataHub`) i 16 E2E (kreator pierwszego i kolejnego komputera, ekrany E3; 2 tylko w CI). Lokalnie
-  w 3 z 4 pełnych przebiegów jeden (za każdym razem inny) test stawał przy starcie okna – narzędzia działają tu poza
-  pulpitem; osobno każdy przechodzi, ostatni pełny przebieg zielony.
-- CI pierwszej rundy PR #6 (run 40382255862) zielone, ale test kreatora na Windows przeszedł dopiero przy ponowieniu:
-  okno pokazywało „Dziś” po otwarciu folderu, a kreator zapisywał dane wspólne dopiero potem (wyścig – pierwsze
-  sprawdzenie folderu mogło liczyć dzień bez ustawień kreatora). Poprawione: dane wspólne przed otwarciem (T462).
-- `/code-review` (xhigh, diff etapu): 15 uwag, wszystkie poprawione z testem, który na starym kodzie pada (sprawdzone
-  na kodzie sprzed przeglądu i mutacjami `DataHub`): powrót przeniesionego bloku, pliki dni w podpisie widoku, odpowiedź
-  w trakcie przebiegu kolejki, kopia szablonu w archiwum, nieczytelny config.json bez kreatora, prowadzący bez Twoich
-  niezapisanych edycji, „nowy rekord” tylko tam, gdzie go nie ma, pora snu z migawek, święta wszystkich rynków, zakres
-  pobudki dnia, `updatedAt` bez cofania, zamknięcie w trakcie otwierania folderu, otwarcie innego folderu, kopie
-  z zeszłego roku, kopia przed aktualizacją dla wersji beta. Test wykrył przy tym 16. błąd: nieudany zapis nowego
-  rekordu przerywał przebieg kolejki (T462).
-- Czas faktyczny: 26.10 ok. 17:10–19:50 (zegarowo, bez CI), w tym przegląd w tle.
+- E3 scalony, wydanie 0.2.0 opublikowane z runu 40395541803 na `main` (zielony, 26.10 ok. 22:06). E3 →
+  `docs/archiwum/postep-E3.md`, E2 → `docs/archiwum/postep-E2.md`.
+- Etap: **E4a w toku** – PR #7 (`claude/e4a-timer-i-terminy`, wersja 0.3.0). Pierwsza runda CI (run 40403404716, kod
+  sprzed przeglądu) zielona, także Windows. `/code-review` (xhigh): 15 uwag, wszystkie poprawione z testem, który na
+  kodzie sprzed poprawek pada (13 testów, sprawdzone odłożeniem `src`), T471. Druga runda CI w toku; dalej scalenie
+  i wydanie 0.3.0 (D285).
+- Zakres E4a: silnik timera (`engine/timer.ts`), działania automatyczne prowadzącego z „Cofnij” i pytania ze
+  zobaczeniem (`engine/auto.ts`), aktywność wszystkich komputerów (`engine/activity.ts`), wejście co 5 s
+  (`main/engine/input.ts`), blokada usypiania (`engine/power.ts`, `main/power.ts`, pomocnik zwalnia po 30 s bez stanu),
+  nocna instalacja D162 (`shared/nightInstall.ts`, `main/update/night.ts`), OneDrive z pomocnika, pasek timera u góry
+  okna głównego, oś dnia z blokami tam, gdzie biegły. Decyzje T463–T471 (podział z E4b i później – T463).
+- Testy: 541 jednostkowych i plikowych (nowe: timer 30, folder 5, wejście 5, blokada usypiania 6, noc 10, usługa 1,
+  szybkie uruchamianie), E2E: 17 (nowy – timer Start → Pauza → Wznów → Dalej); lokalnie w pełnym przebiegu 1–2 testy
+  stają przy starcie okna, osobno przechodzą (narzędzia poza pulpitem).
+- Czas faktyczny: 26.10 ok. 21:30–22:20 (zegarowo, bez przeglądu i CI).
 
 ## Kolejka
-1. Sprawdzić najnowszy run CI na `main` (`gh run list --branch main`) i wydanie 0.2.0 (`gh release list`); czerwone E2E
-   na `main` = brak wydania → poprawka przed E4a. Wynik dopisać w „Stan bieżący” (razem z pierwszym commitem E4a – push
-   samych dokumentów na `main` przerywa trwający run).
+1. E4a do końca: poprawki z `/code-review`, CI PR #7, scalenie, wydanie 0.3.0, lista „do sprawdzenia” niżej.
 2. **Praca ciągiem pod Twoją nieobecność (D296):** E4a → E4b → logika E5, bez pauzy i bez „dalej” między nimi; każdy
    etap: komunikat „Przed etapem” zapisany tutaj (pytań nie zadaję – odpowiedzi niżej; nowe pytanie o zachowanie
    widoczne dla Ciebie = stop), testy, `/code-review`, PR, CI, scalenie i wydanie (D285), wpis i lista „do sprawdzenia”.
    Gałęzie `claude/e4a-...`, `claude/e4b-...`, `claude/e5-...`. Model: Opus 5.5 · xhigh przez cały ciąg.
 3. Po Twoim powrocie: sprawdzenia na Windows – E3 (lista niżej), E4a, E4b (ich listy dopiszą etapy), wybór zestawu
    kolorów (D298); potem „dalej” – E5 (elementy w pasku).
+
+## Przed etapem E4b (26.10.2026, ok. 22:30 – zapisane przed jego startem)
+- Co trzeba wiedzieć: E4a daje silnik timera, pytania i działania automatyczne; pasek z nimi jest tylko u góry okna
+  głównego. E4b przenosi tę samą treść do panelu ikony i paska pulpitu (`WidgetView` z silnika zamiast próby; próba
+  zostaje na swojej stronie i z 2–3 zestawami kolorów do porównania, D298), ikona z kolorem klasy bloku, krokami
+  15 · 5 · 0 min i kropką (D232, D240), tryby ciszy (sesja, zajęcia, „mniej pytań”), cisza nocna, „Odcinam się”
+  z „Wracam” i końcem o 04:00, woda, propozycja przerwy po 90 min i samotności, sygnały i ocena względna w pasku,
+  powiadomienia według D230 ze stałym identyfikatorem w logu, dźwięki (domyślnie wyłączone), „Zawsze na wierzchu”
+  (D291), zobaczenie z panelu i kliknięcia paska pulpitu, „Zacznij jeszcze raz” sesji, grupy listy automatycznej.
+- Prośby w pasku i znacznik wariantów – E5 (w E4b ich przyciski są schowane). Pytań nie zadaję (D296).
+- Model: Opus 5.5 · xhigh. Gałąź `claude/e4b-pasek-ikona-cisza`.
+
+## Przed etapem E4a (26.10.2026, ok. 21:40)
+- Co trzeba wiedzieć: E1 ma zdarzenia timera i silnik dnia, E3 – „Dziś” bez startów. E4a dokłada: silnik timera
+  (Start, Pauza, Wznów, Dalej z dwoma kliknięciami po granicy, Przedłuż, Koniec pracy, Skończyłem, Zacznij · Odwołaj),
+  działania automatyczne prowadzącego z „Cofnij” (bloki stałe według planu, koniec bloku stałego 10 min po końcu,
+  koniec sesji o planie i przy ostatnim wejściu, dwa pytania „Dalej?”, próg bezczynności, bloki „poza komputerem”),
+  pytania „Dalej?” i „Koniec pracy?” z zobaczeniem w logu, wejście i użycie komputera co 5 s (przerwy w logu),
+  nieobecność, blokadę usypiania, zmianę dnia o 04:00, D162 (wersje w obecności, nocna instalacja), wykrywanie OneDrive.
+- Pasek z treścią silnika widać w E4a u góry okna głównego; panel ikony, pasek pulpitu, ikona, tryby ciszy,
+  powiadomienia według D230 i dźwięki – E4b (T463). Czas do wyjaśnienia i „byłem na prośbie” – później (T463).
+- Pytań nie zadaję (D296). Model: Opus 5.5 · xhigh. Gałąź `claude/e4a-timer-i-terminy`.
 
 ## Przed etapami E4a, E4b i logiką E5 (26.10.2026)
 - Odpowiedzi: praca ciągiem (D296), ekran komputera nagrywającego świeci cały wykład (D297, potwierdza D184), E4b na
@@ -47,6 +55,36 @@
 - Do przygotowania na powrót: laptop (nowoczesny tryb wstrzymania, szybkie uruchamianie, blokada ekranu), TradingView
   i platforma brokera (pasek, ikona, powiadomienia).
 - Otwarte bez zmian: baner „nie dokończyła się” (Pytania na później) – E4a go nie zmienia.
+
+## Do sprawdzenia na Windows (E4a, wersja 0.3.0)
+1. „Dziś” z blokiem elastycznym teraz: u góry okna „Bez bloku · następny: …” i „Start: …” → klik → nazwa bloku,
+   „do HH:MM” i odliczanie; blok na osi przesuwa się na teraz.
+2. Pauza → „Wznów: …” → klik → biegnie dalej, planowany koniec przesunięty o czas pauzy; Dalej → następny blok
+   elastyczny z planu (albo „Bez bloku”).
+3. Po zatwierdzeniu planu blok, którego koniec wychodzi za granicę: „Start” pokazuje koszt („przedłużenie · −N min
+   puli”) i „Potwierdź”; bez drugiego kliknięcia w 10 s nic się nie zaczyna.
+4. Blok stały (np. zajęcia zdalne) w czasie biegnącego bloku elastycznego: o czasie z planu zaczyna się sam, elastyczny
+   pauzuje; „Zrobione automatycznie (2)” → lista z „Cofnij”; 10 min po końcu bloku stałego bez reakcji – koniec o czasie
+   z planu.
+5. Sesja w oknie: „Sesja tradingowa HH:MM · Zacznij · Odwołaj” → Zacznij → Skończyłem; w czasie sesji Windows nie
+   usypia komputera (`powercfg /requests` w PowerShell administratora: „Regulated Day: sesja” w SYSTEM i EXECUTION,
+   a w DISPLAY proces Regulated Day, gdy jesteś przy komputerze).
+6. Blok elastyczny po planowanym końcu z oknem na wierzchu: „Dalej?” z kropką; po 30 min „Dalej? (drugi raz)”, po
+   kolejnych 30 min blok kończy się sam (w „Zrobione automatycznie”: „dwa pytania bez odpowiedzi”).
+7. Blok elastyczny po planowanym końcu, okno schowane do zasobnika, 10 min bez myszy i klawiatury: blok kończy się sam
+   w chwili ostatniego wejścia (nie przed planowanym końcem).
+8. Posiłek: Start, odejście od komputera na ponad 2 min, powrót → posiłek kończy się przy pierwszym użyciu, w pasku
+   „Posiłek – po powrocie: Trwał do teraz · Skończył się o …”.
+9. Blok pracy, odejście na 40 min przed jego planowanym końcem: po powrocie blok biegnie dalej, w pasku „nieobecność
+   od …: Odliczyć · Zakończyć · Zostawić”.
+10. Zamknięcie aplikacji („Zakończ” w zasobniku) z biegnącym blokiem, start po kilku minutach → w pasku „przerwany
+    zamknięciem aplikacji o …: Skończył się przy wyłączeniu · Trwał do teraz · Skończył się o …”.
+11. Laptop (drugi komputer) z 0.2.0: wydanie 0.3.0 instaluje się na pierwszym w nocy (albo „Zainstaluj teraz”), a na
+    laptopie w nocy dopiero po 24 h działania 0.3.0 na pierwszym (log `main.log`: „instalacja w nocy: …”).
+12. Laptop z nowoczesnym trybem wstrzymania, w nocy na zasilaniu z sieci: Win+L → instalacja zaczyna się od razu
+    (okno „Instaluję…” pod oknami); zamknięcie pokrywy w trakcie i otwarcie → instalacja kończy się, nie „nieudana”.
+13. Zamknięcie Windows z szybkim uruchamianiem, wylogowanie, zamknięcie w Menedżerze zadań, ręcznie uruchomiony
+    instalator – po starcie w `main.log` „poprzednie uruchomienie: clean”, a po Menedżerze zadań „crash”.
 
 ## Do sprawdzenia na Windows (E3, wersja 0.2.0)
 1. Aktualizacja z 0.1.1 przychodzi sama (albo instalator z wydania 0.2.0) → po starcie okno główne pokazuje kreator
@@ -73,12 +111,6 @@
     startuje sama.
 12. Przy następnym wydaniu (po 0.2.0): w `OneDrive\RegulatedDay\backups\aktualizacje\` pojawi się
     `0.2.0-do-<nowa>.zip`.
-
-## Przed etapem E3 (26.10.2026)
-- Co trzeba wiedzieć: pierwszy etap z interfejsem i pierwsza wersja 0.x na Twoim folderze (migracje i kopia przed
-  aktualizacją); timera jeszcze nie ma (E4a), pasek z sygnałami w E4b.
-- Odpowiedzi: E3 w całości (D292), plan dnia jako oś czasu (D293), kreator krok po kroku (D294), kalendarz miesięczny
-  (D295). Model: Opus 5.5 · xhigh zamiast high (T444).
 
 ## Przed etapem E0 (25.10.2026)
 - Odpowiedzi: D284–D289. Model: Opus 5.5 · xhigh. Sprzęt próby: drugi monitor, laptop, platforma brokera jako

@@ -196,6 +196,12 @@ namespace RegulatedDay
             return new JObj().Set("display", display).Set("system", system).Set("execution", execution);
         }
 
+        /// <summary>Some request is held now.</summary>
+        public bool Any
+        {
+            get { return display || system || execution; }
+        }
+
         public void Dispose()
         {
             if (handle == IntPtr.Zero) return;

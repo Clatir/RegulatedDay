@@ -34,6 +34,8 @@ export interface EventBase {
   /** The logical day it concerns (a fix made in the morning goes to yesterday's log). */
   day: string
   dom: Domain
+  /** An automatic action (spec „Działania automatyczne”): the rule that did it – listed with „Cofnij”. */
+  autoRule?: string
 }
 
 /** What a day was created with (spec „Dzień tworzy jedna deterministyczna funkcja”). */
@@ -113,6 +115,15 @@ export type TimerEvent =
   | (EventBase & { k: 'bedtime.recalc'; at: number; base: number })
   | (EventBase & { k: 'minutes'; from: number; to: number; cls: MinuteClass; upfront: boolean; know: Record<string, number> })
   | (EventBase & { k: 'hardend.pass'; at: number; basis: string })
+  /** „Cofnij” (spec „korekta”): the event `target` (an automatic action) is folded as if never written. */
+  | (EventBase & { k: 'undo'; at: number; target: string; reason?: string })
+  /**
+   * A question or a message seen (spec „Zobaczenie zapisuje w logu dnia komputer, na którym je widać”): in the open
+   * icon's panel, the main window in the foreground with presence, a clicked notification, a click of the desktop bar.
+   */
+  | (EventBase & { k: 'question.seen'; at: number; question: string; how: 'panel' | 'main' | 'notification' | 'bar' })
+  /** An answer that is no action of the timer („Przerwa” of „Koniec pracy?”, an absence …), with a value when it has one. */
+  | (EventBase & { k: 'question.answer'; at: number; question: string; answer: string; value?: number | null })
 
 export type PresenceEvent =
   | (EventBase & { k: 'presence.first'; at: number })
@@ -191,6 +202,9 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'bedtime.recalc': { at: isNum, base: isNum },
   minutes: { from: isNum, to: isNum, cls: (v) => v === 'in' || v === 'after' || v === 'max' || v === 'empty', know: isPlain },
   'hardend.pass': { at: isNum },
+  undo: { at: isNum, target: isStr },
+  'question.seen': { at: isNum, question: isStr, how: (v) => v === 'panel' || v === 'main' || v === 'notification' || v === 'bar' },
+  'question.answer': { at: isNum, question: isStr, answer: isStr, value: (v) => v == null || isNum(v) },
   'presence.first': { at: isNum },
   'gap.open': { gap: isStr, kind: (v) => v === 'input' || v === 'use', from: isNum },
   'gap.close': { gap: isStr, to: isNum },

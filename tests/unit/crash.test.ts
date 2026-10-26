@@ -22,6 +22,13 @@ describe('awaria czy zwykłe zamknięcie (Terminy, D181)', () => {
     expect(judge(prev, null, null, null, false).kind).toBe('unknown')
   })
 
+  it('zamknięcie Windows z szybkim uruchamianiem to nie awaria (E4a): zapis końca sesji, a po nowym rozruchu nie ma klucza ulotnego', () => {
+    // The end of the session wrote its record (query-session-end): clean, whatever the key says.
+    expect(judge(prev, { runId: 'r1', at: 100_200, why: 'system' }, { prevRunId: null }, null, false).kind).toBe('clean')
+    // Windows ended the process before the record: the volatile key vanished with the session (fast startup too) – no crash.
+    expect(judge(prev, null, { prevRunId: null }, null, false).kind).toBe('clean')
+  })
+
   it('zamknięcie przez instalator liczy się tylko w ostatnim oknie znacznika życia', () => {
     expect(judge(prev, null, { prevRunId: 'r1' }, 100_000 + 10_000, false).kind).toBe('installer')
     expect(judge(prev, null, { prevRunId: 'r1' }, 100_000 + INSTALLER_WINDOW_MS + 1, false).kind).toBe('crash')

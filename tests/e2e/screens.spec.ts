@@ -145,3 +145,37 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
     await app.close()
   }
 })
+
+test('timer E4a: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na osi tam, gdzie biegł', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-timer-'))
+  seed(dataDir)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      const bar = page.getByTestId('timer-bar')
+      await expect(bar).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByTestId('timer-idle')).toContainText('następny: Inne obowiązki')
+      await page.getByTestId('timer-start').click()
+      await expect(page.getByTestId('timer-fg-name')).toHaveText('Inne obowiązki')
+      await shot(page, 'e4a-01-running')
+      await page.getByTestId('timer-pause').click()
+      await expect(page.getByTestId('timer-start')).toContainText('Wznów: Inne obowiązki')
+      await page.getByTestId('timer-start').click()
+      await expect(page.getByTestId('timer-fg-name')).toHaveText('Inne obowiązki')
+      // The block stands on the axis where it runs (from now, not at 03:00 of its plan).
+      await expect(page.getByTestId('block-late')).not.toContainText('03:00')
+      await page.getByTestId('timer-next').click()
+      await expect(page.getByTestId('timer-idle')).toBeVisible()
+      const log = readFileSync(join(dataDir, 'log', logicalToday().slice(0, 4), logicalToday(), `${(await page.evaluate(() => window.rd.dataView())).computer}.jsonl`), 'utf8')
+      const kinds = log
+        .trim()
+        .split('\n')
+        .map((l) => (JSON.parse(l) as { k: string }).k)
+        .filter((k) => k.startsWith('block.'))
+      expect(kinds).toEqual(['block.start', 'block.pause', 'block.resume', 'block.end'])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

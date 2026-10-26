@@ -13,17 +13,24 @@ import { join } from 'node:path'
 import { EventClock, type ClockSources } from '@shared/data/clock'
 import type { MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
+import { activityOf } from '@shared/engine/activity'
+import { answerEvents, autoActions, nextDeadline, questionsOf, type Question } from '@shared/engine/auto'
 import { createDay, type HolidayLookup } from '@shared/engine/createDay'
 import { dayContextOf } from '@shared/engine/context'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
+import { NO_POWER, powerNeedOf, type PowerNeed } from '@shared/engine/power'
+import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft } from '@shared/engine/timer'
+import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
-import { idxOf } from '@shared/engine/grid'
+import { foldFacts, isRunning } from '@shared/engine/facts'
+import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
 import { daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type Domain } from '@shared/model/events'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { isDayTypeId, settingsOn, type SettingsChange } from '@shared/model/settings'
 import { decideLeader, minuteGate, type LeaderDecision, type Peer } from '@shared/sync/leader'
+import type { Presence } from '@shared/sync/presence'
 import { Settle, type SettleReason } from '@shared/sync/settle'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
@@ -55,6 +62,16 @@ export const JOURNAL_KEEP_DAYS = 14
 const COMPACT_EVERY_MS = 60 * 60_000
 /** Conflict copies of the records are looked for this often (and at the first check). */
 const COPY_SCAN_MS = 60_000
+
+/**
+ * A block of the day runs now (started, not ended, not paused – „Cofnij” counted): one running through 04:00 keeps its
+ * day (spec „Timer”); a block left paused is no reason to stay on the day before.
+ */
+function hasRunning(day: string, events: readonly AnyEvent[]): boolean {
+  if (!events.some((e) => e.k === 'block.start')) return false
+  for (const f of foldFacts(gridOf(day), events).blocks.values()) if (f.endedAt == null && isRunning(f)) return true
+  return false
+}
 
 /** A record the day is made from that cannot be read now (or is broken) and was never read before: unknown. */
 export class UnknownRecordError extends Error {
@@ -88,8 +105,15 @@ export interface CheckResult {
   settled: boolean
   created: string | null
   segments: number
+  /** Automatic actions the leader wrote in this check. */
+  autos: number
+  /** The next instant the timer has something due (ms): the scheduler's exact timer. */
+  nextAt: number | null
   problems: string[]
 }
+
+/** A click of the widget or the main window, with the day it concerns (default: the day of the running block, else today). */
+export type TimerClick = TimerAction & { day?: string }
 
 /** The records the day is made from, read through a cache checked by size and time of modification. */
 interface Inputs {
@@ -404,7 +428,7 @@ export class DataFolder {
     const settled = this.settle.settled(now)
     this.leader = decideLeader({
       now,
-      self: { computer: this.o.computer, rulesVersion: this.rulesVersion, crashed: false, lastPresence: this.presence.own.lastPresence, oneDriveRunning: this.o.oneDriveRunning() },
+      self: { computer: this.o.computer, rulesVersion: this.rulesVersion, crashed: this.ownVersionCrashed, lastPresence: this.presence.own.lastPresence, oneDriveRunning: this.o.oneDriveRunning() },
       peers: this.peers,
       current: this.current,
       currentClaimed: this.leader.claimed
@@ -414,6 +438,8 @@ export class DataFolder {
 
     let created: string | null = null
     let segments = 0
+    let autos = 0
+    let nextAt: number | null = null
     // The leader's tasks need a settled computer, a complete view of the day's logs and clocks that agree.
     if (read?.ahead) problems.push('zegar: zdarzenie innego komputera ponad 24 h przed zegarem tego komputera – działania automatyczne czekają')
     if (this.leader.iLead && settled && read?.complete && !read.ahead) {
@@ -449,6 +475,24 @@ export class DataFolder {
         } catch (e) {
           problems.push(`energia: ${String(e)}`)
         }
+        // What the app does by itself (spec „Działania automatyczne”): today's, and yesterday's while a block of it runs
+        // through 04:00 (it belongs to the day it began). Apart, so the timer never stops the rest.
+        try {
+          const r = await this.autoTasks(day, read, ctx, state, now, gate)
+          autos += r.written
+          nextAt = r.nextAt
+          const yesterday = addDays(day, -1)
+          const yRead = await this.log.readDay(yesterday)
+          if (yRead.complete && hasRunning(yesterday, yRead.events)) {
+            const yCtx = await this.dayContext(yesterday, yRead, now)
+            // Input after 04:00 is in today's logs: both gates hold.
+            const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, Math.min(gate, minuteGate(now, yesterday, this.peers, yRead.lastByComputer)))
+            autos += y.written
+            if (y.nextAt != null) nextAt = nextAt == null ? y.nextAt : Math.min(nextAt, y.nextAt)
+          }
+        } catch (e) {
+          problems.push(`timer: ${String(e)}`)
+        }
       } catch (e) {
         problems.push(`zadania prowadzącego: ${String(e)}`)
       }
@@ -459,7 +503,203 @@ export class DataFolder {
     }
     await this.log.flush()
     await this.presence.tick().catch((e) => problems.push(`obecność: ${String(e)}`))
-    return { leader: this.leader, settled, created, segments, problems }
+    return { leader: this.leader, settled, created, segments, autos, nextAt, problems }
+  }
+
+  /** The leader's automatic actions of one day up to the gate, and the day's next deadline. */
+  private async autoTasks(day: string, read: DayRead, ctx: DayContext, state: DayState, now: number, gate: number): Promise<{ written: number; nextAt: number | null }> {
+    const activity = await this.activityFor(day, read, now)
+    let written = 0
+    for (const e of autoActions({ ctx, state, activity, now, gate: Math.min(gate, now) })) {
+      this.append({ ...e, day, dom: 'timer' })
+      written++
+    }
+    return { written, nextAt: nextDeadline(state) }
+  }
+
+  /**
+   * Input and use of every computer from the day's 04:00 to now: the day before too (an observation or a gap through
+   * 04:00 began there) and, for a day that is over (a block running through 04:00), the days after it up to today –
+   * gaps and observations after 04:00 are written to the new day's logs.
+   */
+  private async activityFor(day: string, read: DayRead, now: number): Promise<ReturnType<typeof activityOf>> {
+    const events = [...((await this.log.readDay(addDays(day, -1)).catch(() => null))?.events ?? []), ...read.events]
+    const today = logicalDayOf(now)
+    for (let d = addDays(day, 1); d <= today; d = addDays(d, 1)) events.push(...((await this.log.readDay(d).catch(() => null))?.events ?? []))
+    return activityOf(events, dayStart(day), now, this.observing ? this.o.computer : null)
+  }
+
+  /** The day a click concerns: the one with a block still running from before 04:00, else today. */
+  private async activeDay(now: number): Promise<string> {
+    const today = logicalDayOf(now)
+    const yesterday = addDays(today, -1)
+    const y = await this.log.readDay(yesterday).catch(() => null)
+    return y && hasRunning(yesterday, y.events) ? yesterday : today
+  }
+
+  /** The day as you see it (your queued edits laid over the files): clicks and answers are judged on it. */
+  private async ownContext(date: string, read: DayRead, at: number): Promise<DayContext> {
+    const inp = await this.inputs(true)
+    return dayContextOf(inp, { date, events: read.events, dayFile: await this.dayFile(date, true), nextFile: await this.dayFile(addDays(date, 1), true) }, this.o.holidays, at)
+  }
+
+  /** Writes drafts of the timer to a day's log, each checked as a line of the log first. */
+  private async writeTimer(day: string, drafts: readonly TimerDraft[]): Promise<void> {
+    const now = this.clock.now()
+    const ready: EventDraft[] = []
+    for (const d of drafts) {
+      const draft: EventDraft = { ...d, day, dom: 'timer' }
+      const check = parseEvent(JSON.stringify({ ...draft, id: 'x', c: this.o.computer, n: 0, t: now, l: now, v: this.rulesVersion }))
+      if (!check.ok || !isKnown(check.event)) throw new Error(`zdarzenie ${d.k}: ${check.ok ? 'nieznane' : check.why}`)
+      ready.push(draft)
+    }
+    for (const d of ready) this.append(d)
+    await this.log.flush()
+  }
+
+  private clicks: Promise<unknown> = Promise.resolve()
+
+  /**
+   * A click of the timer (spec „Akcje widgetu wykonuje proces główny i zapisuje je jako zdarzenia w logu”): judged on the
+   * day as it is now – a second click of the same action finds it done and does nothing (no two entries) – one at a time.
+   */
+  timerClick(click: TimerClick): Promise<ActionResult> {
+    const run = async (): Promise<ActionResult> => {
+      const now = this.clock.now()
+      const day = click.day && isIsoDate(click.day) ? click.day : await this.activeDay(now)
+      const read = await this.log.readDay(day)
+      if (!read.complete) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę', confirm: null }
+      const ctx = await this.ownContext(day, read, now)
+      const { day: _d, ...act } = click
+      void _d
+      const r = timerAction(ctx, computeDay(ctx), act as TimerAction, now)
+      if (r.ok && r.events.length) await this.writeTimer(day, r.events)
+      return r
+    }
+    const p = this.clicks.then(run, run)
+    this.clicks = p.catch(() => undefined)
+    return p
+  }
+
+  /** The questions open now on a day, as this computer sees them. */
+  async questions(day: string, at = this.clock.now()): Promise<Question[]> {
+    const read = await this.log.readDay(day)
+    const ctx = await this.ownContext(day, read, at)
+    const state = computeDay(ctx)
+    return questionsOf({ ctx, state, activity: await this.activityFor(day, read, at), now: at })
+  }
+
+  /**
+   * Your answer to a question (`id` names its day). An answer that is an action of the timer („Dalej”, „Przedłuż”,
+   * „Koniec pracy”, „Pracuję”) goes as that click; an answer on one computer closes the question on every one.
+   */
+  answer(id: string, answer: string, value: number | null = null): Promise<ActionResult> {
+    const run = async (): Promise<ActionResult> => {
+      const day = id.split(':')[1] ?? ''
+      if (!isIsoDate(day)) return { ok: false, why: 'pytanie bez dnia', confirm: null }
+      const now = this.clock.now()
+      const q = (await this.questions(day, now)).find((x) => x.id === id)
+      if (!q) return { ok: false, why: 'to pytanie już nie czeka', confirm: null }
+      const read = await this.log.readDay(day)
+      const ctx = await this.ownContext(day, read, now)
+      const state = computeDay(ctx)
+      const drafts = answerEvents(state, q, answer, now, value)
+      if (drafts) {
+        await this.writeTimer(day, drafts)
+        return { ok: true, events: drafts, confirm: null }
+      }
+      const act: TimerAction | null =
+        answer === 'next' ? { a: 'next', confirm: value === 1 } : answer === 'extend' ? { a: 'extend', minutes: value ?? 15, confirm: false } : answer === 'workEnd' ? { a: 'workEnd' } : answer === 'working' ? { a: 'startNew', block: `${this.o.computer}-${now.toString(36)}`, categoryId: 'inne', durationMin: 30, confirm: value === 1 } : null
+      if (!act) return { ok: false, why: `nieznana odpowiedź ${answer}`, confirm: null }
+      const r = timerAction(ctx, state, act, now)
+      if (r.ok && r.events.length) await this.writeTimer(day, [...r.events, ...(q.kind === 'workEnd' ? [{ k: 'question.answer', at: now, question: q.id, answer, value: null }] : [])])
+      return r
+    }
+    const p = this.clicks.then(run, run)
+    this.clicks = p.catch(() => undefined)
+    return p
+  }
+
+  /** Questions seen on this computer (spec D231): each written once, to its day's log. */
+  async markSeen(ids: readonly string[], how: 'panel' | 'main' | 'notification' | 'bar'): Promise<number> {
+    const now = this.clock.now()
+    let n = 0
+    const byDay = new Map<string, string[]>()
+    for (const id of ids) {
+      const day = id.split(':')[1] ?? ''
+      if (isIsoDate(day)) byDay.set(day, [...(byDay.get(day) ?? []), id])
+    }
+    for (const [day, list] of byDay) {
+      const read = await this.log.readDay(day)
+      const seen = new Set(read.events.filter((e) => isKnown(e) && e.k === 'question.seen').map((e) => (e as { question: string }).question))
+      const fresh = list.filter((id) => !seen.has(id))
+      if (!fresh.length) continue
+      await this.writeTimer(day, fresh.map((question) => ({ k: 'question.seen', at: now, question, how })))
+      n += fresh.length
+    }
+    return n
+  }
+
+  /** The version running here has a crash recorded (spec D163: such a version never counts as the newest). */
+  get ownVersionCrashed(): boolean {
+    const own = this.presence.own
+    return (own.versions.find((v) => v.version === own.appVersion)?.crashes ?? 0) > 0
+  }
+
+  /** This computer's versions with their first and last runs and crashes (versions.json), in its presence. */
+  setVersions(versions: Presence['versions']): void {
+    this.presence.update({ versions: versions.slice(0, 10) })
+  }
+
+  /** „Instaluję wersję X” in this computer's presence (spec D162), null: nothing. */
+  setInstalling(version: string | null): void {
+    this.presence.update({ installing: version })
+  }
+
+  /** The night's quiet now (from the effective bedtime of the logical day to its wake), by today's day. */
+  async nightQuiet(at = this.clock.now()): Promise<boolean> {
+    const day = logicalDayOf(at)
+    const s = await this.dayState(day, undefined, at)
+    return at >= atOf(s.grid, s.bedtime.effective) || at < atOf(s.grid, s.wake)
+  }
+
+  /** A block runs now (today's, or yesterday's through 04:00). */
+  async anyBlockRunning(at = this.clock.now()): Promise<boolean> {
+    const today = logicalDayOf(at)
+    for (const day of [addDays(today, -1), today]) {
+      const read = await this.log.readDay(day)
+      if (hasRunning(day, read.events)) {
+        const t = timerNow(await this.dayState(day, read, at))
+        if (t.fg || t.bg.length) return true
+      }
+    }
+    return false
+  }
+
+  /** Events of the timer of a kind this version does not know, today (spec: install without the 24 h). */
+  async unknownTimerEvents(at = this.clock.now()): Promise<boolean> {
+    const read = await this.log.readDay(logicalDayOf(at))
+    return read.events.some((e) => !isKnown(e) && e.dom === 'timer')
+  }
+
+  /** What this computer must hold against sleep now (today's blocks and yesterday's still running). */
+  async powerNeed(lastInput: number | null, at = this.clock.now()): Promise<PowerNeed> {
+    const today = logicalDayOf(at)
+    let need: PowerNeed = NO_POWER
+    for (const day of [addDays(today, -1), today]) {
+      const read = await this.log.readDay(day)
+      if (day !== today && !hasRunning(day, read.events)) continue
+      const ctx = await this.dayContext(day, read, at)
+      const n = powerNeedOf(ctx, computeDay(ctx), { computer: this.o.computer, leads: this.leader.iLead, lastPresence: this.presence.own.lastPresence, lastInput, now: at })
+      need = { system: need.system || n.system, display: need.display || n.display, reason: need.reason ?? n.reason }
+    }
+    return need
+  }
+
+  /** The timer of a day as this computer sees it now (for the bar of the main process and the tests). */
+  async timer(day: string, at = this.clock.now()): Promise<ReturnType<typeof timerNow>> {
+    const read = await this.log.readDay(day)
+    return timerNow(computeDay(await this.ownContext(day, read, at)))
   }
 
   /**
