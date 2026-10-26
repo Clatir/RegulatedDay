@@ -635,6 +635,35 @@ export function computeDay(ctx: DayContext): DayState {
   }
 }
 
+/**
+ * The segments the leader writes now (spec „Klasyfikację minut zapisuje komputer prowadzący”): minutes of work in
+ * [from, to) not yet written, joined while their class and confirmation stay the same, each with the state of knowledge
+ * the computation had (the last event of each computer). Instants, ready for 'minutes' events.
+ */
+export function newSegments(state: DayState, from: number, to: number): Array<{ from: number; to: number; cls: MinuteClass; upfront: boolean; know: Record<string, number> }> {
+  const out: Array<{ from: number; to: number; cls: MinuteClass; upfront: boolean; know: Record<string, number> }> = []
+  const at = (idx: number) => state.grid.start + idx * 60_000
+  let open: { from: number; to: number; cls: MinuteClass; upfront: boolean } | null = null
+  const close = () => {
+    if (open) out.push({ from: at(open.from), to: at(open.to), cls: open.cls, upfront: open.upfront, know: { ...state.facts.know } })
+    open = null
+  }
+  for (let k = Math.max(0, idxOf(state.grid, from)); k < Math.min(state.now, idxOf(state.grid, to)); k++) {
+    const info = state.minutes.get(k)
+    if (!info || info.recorded) {
+      close()
+      continue
+    }
+    if (open && open.to === k && open.cls === info.cls && open.upfront === info.upfront) open.to = k + 1
+    else {
+      close()
+      open = { from: k, to: k + 1, cls: info.cls, upfront: info.upfront }
+    }
+  }
+  close()
+  return out
+}
+
 /** Valid segments of the leader for a minute: newest rules first, then the widest knowledge; stale ones never. */
 function recordedSegments(c: Ctx, facts: DayFacts): (k: number) => Segment | null {
   if (!facts.segments.length) return () => null

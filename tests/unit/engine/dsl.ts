@@ -168,7 +168,11 @@ export class Scenario {
 
   /** The engine at `now` (events after `now` are not yet written). */
   state(now: string, extra: Partial<Parameters<typeof computeDay>[0]> = {}): DayState {
-    const t = this.at(now)
+    return this.stateAt(this.at(now), extra)
+  }
+
+  /** The engine at an instant. */
+  stateAt(t: number, extra: Partial<Parameters<typeof computeDay>[0]> = {}): DayState {
     return computeDay({
       date: this.opts.date,
       snapshot: this.snapshot,
