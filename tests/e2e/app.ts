@@ -20,14 +20,17 @@ export const FAKE_HELPER = resolve('tests/fakes/fake-helper.mjs')
  * data – RD_USER_DATA makes a run without the installation marker the test identity („Regulated Day Test”). The helper
  * is the stand-in unless RD_E2E_REAL_HELPER=1 (Windows CI with the real one).
  */
-export async function launch(opts: { userData?: string; env?: Record<string, string>; args?: string[]; hidden?: boolean } = {}): Promise<Launched> {
+export async function launch(opts: { userData?: string; env?: Record<string, string>; args?: string[]; hidden?: boolean; data?: boolean } = {}): Promise<Launched> {
   const base = mkdtempSync(join(tmpdir(), 'rd-e2e-'))
   const userData = opts.userData ?? join(base, 'userData')
+  // `data`: an (empty) data folder from RD_DATA_DIR – the screens instead of the wizard of a computer without one.
+  const dataDir = opts.data ? mkdtempSync(join(tmpdir(), 'rd-e2e-data-')) : null
   const env = {
     ...process.env,
     RD_USER_DATA: userData,
     ...(process.env.RD_E2E_REAL_HELPER === '1' ? {} : { RD_HELPER_PATH: FAKE_HELPER }),
     ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+    ...(dataDir ? { RD_DATA_DIR: dataDir } : {}),
     ...opts.env
   } as Record<string, string>
   delete env.ELECTRON_RENDERER_URL

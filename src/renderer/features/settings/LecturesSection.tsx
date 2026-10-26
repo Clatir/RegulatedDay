@@ -36,7 +36,8 @@ export function LecturesSection() {
 }
 
 function Lecture({ l, today }: { l: LectureSeries; today: string }) {
-  const computers = useData((s) => s.view?.computers ?? [])
+  const view = useData((s) => s.view)
+  const computers = view?.computers ?? []
   const rel = paths.record('schedule', l.id)
   const [ex, setEx] = useState<string | null>(null)
   const set = (patch: Partial<LectureSeries>) => {

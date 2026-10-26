@@ -674,6 +674,8 @@ async function main(): Promise<void> {
     log('error', 'identyfikator komputera nieczytelny', e)
   }
   hub = createHub()
+  const folderAtStart = dataFolderNow()
+  if (folderAtStart) hub.expect(folderAtStart)
   if (quitting) return
   denyPermissions(session.defaultSession)
   app.on('session-created', denyPermissions)

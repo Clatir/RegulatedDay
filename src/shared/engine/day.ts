@@ -273,6 +273,26 @@ function paintUpfront(c: Ctx, flags: Uint16Array, facts: DayFacts, spans: readon
   }
 }
 
+/**
+ * Blocks waiting for „Zacznij” (a session, the weekly analysis) not started by the end of their wait (spec „Pierwszy
+ * koniec pracy”): they do not make the day one without work and do not change the boundary – the planned end of the
+ * last of them before the second shift (index), or null when none has expired (or one still may start).
+ */
+function expiredWaitEnd(c: Ctx, view: DayFacts, m: number): number | null {
+  let last: number | null = null
+  for (const b of c.blocks) {
+    if (!b.waits || b.secondShift || !b.inPlan || !isBoundaryWork(b)) continue
+    const span = plannedSpan(b, c.byId)
+    if (!span || span.start >= c.secondShiftStart) continue
+    const f = view.blocks.get(b.id)
+    if (f?.startedAt != null || f?.cancelledAt != null || f?.parkedAt != null) continue
+    const until = b.waitUntil ?? span.end
+    if (until > m) return null
+    last = Math.max(last ?? 0, span.end)
+  }
+  return last
+}
+
 /** Maximal stretches of minutes with `flag` set, within [0, until). */
 function stretches(flags: Uint16Array, flag: number, until: number): Array<{ from: number; to: number }> {
   const out: Array<{ from: number; to: number }> = []
@@ -477,7 +497,10 @@ export function computeDay(ctx: DayContext): DayState {
     return last
   }
   const proposalAt = (m: number, view: DayFacts, flags: Uint16Array, fcW: Forecast): number | null => {
-    const end = lastWorkEnd(m, flags, fcW)
+    // Waiting blocks that expired unstarted keep their place in the proposal (they do not change the boundary).
+    const worked = lastWorkEnd(m, flags, fcW)
+    const waited = expiredWaitEnd(c, view, m)
+    const end = worked == null ? waited : waited == null ? worked : Math.max(worked, waited)
     if (end == null) return null
     return Math.min(maxAt(m, view, fcW), end + settingsAt(m).settings.boundaryBufferMin)
   }
@@ -780,6 +803,14 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   paintUpfront(c, flags, view, spans, m, cap)
 
   const ends = workEnds(c, view, flags, m, fcW, fcProjects)
+  // No work at all (past nor forecast) and the waiting blocks expired unstarted: their planned end is the first end of
+  // work until the ritual (spec „Pierwszy koniec pracy”).
+  if (!ends.length) {
+    let anyEnd = false
+    for (let k = 0; k < cap && !anyEnd; k++) if (flags[k]! & F_END) anyEnd = true
+    const waited = anyEnd ? null : expiredWaitEnd(c, view, m)
+    if (waited != null) ends.push({ at: waited, confirmed: false })
+  }
   // A block parked or cancelled before it began is no work of the plan any more (a change of type, „Koniec pracy”).
   const gone = (id: string) => {
     const f = view.blocks.get(id)

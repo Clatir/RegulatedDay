@@ -31,7 +31,14 @@ export const useData = create<DataState>(() => ({ view: null, rd: empty, templat
 
 const isDefined = <T>(v: T | null): v is T => v != null
 
-function apply(view: DataView): void {
+let lastJson = ''
+
+/** `news`: the main process said something changed (a day's log too) – the days read again even if the view is the same. */
+function apply(view: DataView, news: boolean): void {
+  // The same view again (a periodic read): nothing re-renders.
+  const json = JSON.stringify(view)
+  if (json === lastJson && !news) return
+  lastJson = json
   useData.setState((s) => ({
     view,
     rd: rdFrom(view.rd ?? undefined),
@@ -45,9 +52,11 @@ function apply(view: DataView): void {
 
 let reading: Promise<void> | null = null
 let again = false
+let pendingNews = false
 
 /** Reads the view again (one read at a time; a change during a read reads once more after it). */
-export function reloadData(): Promise<void> {
+export function reloadData(news = true): Promise<void> {
+  pendingNews ||= news
   if (reading) {
     again = true
     return reading
@@ -55,8 +64,10 @@ export function reloadData(): Promise<void> {
   reading = (async () => {
     do {
       again = false
+      const n = pendingNews
+      pendingNews = false
       try {
-        apply(await window.rd.dataView())
+        apply(await window.rd.dataView(), n)
       } catch {
         /* the main process is starting: the next change reads again */
       }
@@ -68,8 +79,15 @@ export function reloadData(): Promise<void> {
 }
 
 export async function loadData(): Promise<void> {
-  window.rd.onData(() => void reloadData())
-  await reloadData()
+  window.rd.onData(() => void reloadData(true))
+  await reloadData(true)
+  // The main process tells every change; a read now and then besides (often while the folder opens) never leaves the
+  // window on a view it missed the news of at the start.
+  const again = () => {
+    const status = useData.getState().view?.status
+    setTimeout(() => void reloadData(false).finally(again), status === 'open' || status === 'none' ? 30_000 : 2_000)
+  }
+  again()
 }
 
 /** A record of the raw view by its file (rd.json, a template …): what an edit is made against. */

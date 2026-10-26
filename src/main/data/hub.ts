@@ -62,6 +62,16 @@ export class DataHub {
 
   constructor(private readonly o: HubOptions) {}
 
+  /**
+   * The folder this computer will open as soon as the start allows (it opens beside the rest of the start): from now
+   * the window shows „opening”, never the wizard of a computer without a folder (no flash of a wrong view).
+   */
+  expect(dir: string): void {
+    if (this.status !== 'none') return
+    this.status = 'opening'
+    this.folder = dir
+  }
+
   /** Opens `dir` (the data folder chosen here); a folder that cannot be opened leaves the app working without it. */
   open(dir: string): Promise<boolean> {
     if (this.opening) return this.opening

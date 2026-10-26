@@ -11,8 +11,11 @@ import { fieldText, keyOf, valueText } from '../lib/recordText'
 import { reloadData, useData } from '../store/data'
 import { toast } from '../store/ui'
 
+/** One empty list: a selector must answer the same value for the same state (a new [] each time loops React). */
+const NONE: EditQuestion[] = []
+
 export function QuestionsBanner() {
-  const questions = useData((s) => s.view?.questions ?? [])
+  const questions = useData((s) => s.view?.questions ?? NONE)
   const [open, setOpen] = useState(false)
   if (!questions.length) return null
   return (

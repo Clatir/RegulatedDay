@@ -92,6 +92,29 @@ describe('poranek idzie za pobudką dnia', () => {
   })
 })
 
+describe('sesje niezaczęte do końca czekania', () => {
+  const plan = [
+    block({ id: 'lo', cat: 'sesja', at: '08:00', min: 180, fixed: true, origin: 'session', source: 'londyn' }),
+    block({ id: 'ny', cat: 'sesja', at: '14:00', min: 180, fixed: true, origin: 'session', source: 'ny' }),
+    block({ id: 'dz', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })
+  ]
+
+  it('nie robią dnia bez pracy: pierwszym końcem pracy jest planowany koniec ostatniej z nich, granica się nie zmienia', () => {
+    const s = new Scenario({ date: '2026-10-21', plan })
+    const waiting = s.state('15:00')
+    expect(waiting.firstEnd).toBeNull()
+    expect(hhmm(waiting, waiting.boundary.proposal)).toBe('17:15')
+    const st = s.state('18:00')
+    expect(st.noWorkDay).toBe(false)
+    expect(hhmm(st, st.firstEnd)).toBe('17:00')
+    expect(hhmm(st, st.workEnd)).toBe('17:00')
+    expect(hhmm(st, st.boundary.proposal)).toBe('17:15')
+    // Time without a block after it is regeneration: the minimum fits before the bedtime.
+    expect(st.hardEnd.unreachable).toBe(false)
+    expect(st.warnings).not.toContain('minimum regeneracji nie mieści się przed porą snu')
+  })
+})
+
 describe('wymiana (zasada 2)', () => {
   const plan = [block({ id: 'an', cat: 'analiza', at: '08:00', min: 120 }), block({ id: 'na', cat: 'inne', at: '10:30', min: 120 })]
   const scenario = () => new Scenario({ date: '2026-10-21', plan, settings: { transitionBufferMin: 0 } }).approve('12:45', '07:30')

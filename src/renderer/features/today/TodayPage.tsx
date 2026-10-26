@@ -263,7 +263,7 @@ function SidePanel({ model, names, onSelect, onMove }: { model: DayModel; names:
       <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
         <dt className="text-muted">Granica</dt>
         <dd className="num" data-testid="side-boundary">
-          {s.boundary.approved != null ? `${lm(s.boundary.approved)} (zatwierdzona)` : s.boundary.proposal != null ? `${lm(s.boundary.proposal)} (propozycja)` : 'dzień bez pracy'}
+          {s.boundary.approved != null ? `${lm(s.boundary.approved)} (zatwierdzona)` : s.boundary.proposal != null ? `${lm(s.boundary.proposal)} (propozycja)` : s.noWorkDay ? 'dzień bez pracy' : '—'}
         </dd>
         <dt className="text-muted">Maksimum</dt>
         <dd className="num">{lm(s.boundary.max)}</dd>
