@@ -2,7 +2,7 @@
 
 ## Stan bieżący
 - E4a scalony (PR #7), wydanie 0.3.0 opublikowane. **E4b scalony** (PR #8, b663153, 27.10 ok. 00:25; CI PR zielone za
-  pierwszym razem, także Windows); CI na `main` z wydaniem 0.4.0 – run 40419583256, w toku przy zapisie. Wpisy E4a
+  pierwszym razem, także Windows); wydanie 0.4.0 opublikowane z runu 40419583256 na `main` (27.10 ok. 00:58). Wpisy E4a
   i E4b → `docs/archiwum/postep-E4.md`, E3 → `docs/archiwum/postep-E3.md`.
 - **Logika E5 w toku** na gałęzi `claude/e5-warianty` (wersja 0.5.0): prośby w dniu (`engine/requests.ts`, 16 testów),
   warianty z wyzwalaczami znacznika (`engine/variants.ts`, 12 testów), prośba przez 04:00 w folderze (2 testy),
