@@ -129,10 +129,15 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
   const currentType = s.facts.snapshots.at(-1)?.dayType ?? model.snapshot.dayType
   const yesterday = fromYesterday(model.ctx.plan, date)
   const sessionsAsk = sessionQuestions(model.snapshot, model.dayFile, date)
-  const holidays = inputs ? holidayQuestions(inputs) : []
-  const lighter = inputs ? lighterDay(inputs, currentType) : false
-  const shift = inputs ? shiftNotice(inputs) : null
-  const analysis = inputs ? weeklyAnalysisMove(inputs, date) : null
+  // Each of these counts days of the week ahead: once per change of the data, not at every render.
+  const ahead = useMemo(
+    () =>
+      inputs
+        ? { holidays: holidayQuestions(inputs), lighter: lighterDay(inputs, currentType), shift: shiftNotice(inputs), analysis: weeklyAnalysisMove(inputs, date) }
+        : { holidays: [], lighter: false, shift: null, analysis: null },
+    [inputs, currentType, date]
+  )
+  const { holidays, lighter, shift, analysis } = ahead
   const warnings = morningWarnings(s)
   const queued = requests.filter((r) => r.state === 'queued')
   const [chosen, setChosen] = useState<string[]>([])

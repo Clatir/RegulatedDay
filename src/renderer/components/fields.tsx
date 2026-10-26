@@ -7,6 +7,7 @@
  */
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { clock, durationLabel, logicalClock, parseDate, parseDuration, parseInteger, parseLogicalTime, plDate, type Parsed } from '@shared/format'
+import { parseField } from '@shared/model/fields'
 import { toast } from '../store/ui'
 import { cx } from './ui'
 
@@ -87,9 +88,13 @@ export function IntegerField({ min, max, ...p }: Omit<CommitFieldProps<number>, 
   return <CommitField {...p} parse={(t) => parseInteger(t, min, max)} format={(n) => String(n)} />
 }
 
-/** A time of the logical day: minutes since 00:00 of its date (00:00–03:59 is the night after, „+1”). */
-export function TimeField(p: Omit<CommitFieldProps<number>, 'parse' | 'format'>) {
-  return <CommitField {...p} parse={parseLogicalTime} format={logicalClock} placeholder={p.placeholder ?? 'np. 7:05'} />
+/**
+ * A time of the logical day: minutes since 00:00 of its date (00:00–03:59 is the night after, „+1”); with `range`, a time
+ * outside it is refused with its message (never saved to be dropped by the model's schema).
+ */
+export function TimeField({ range, ...p }: Omit<CommitFieldProps<number>, 'parse' | 'format'> & { range?: readonly [number, number] }) {
+  const parse = range ? (t: string) => parseField({ kind: 'time', range, offAllowed: false }, t) : parseLogicalTime
+  return <CommitField {...p} parse={parse} format={logicalClock} placeholder={p.placeholder ?? 'np. 7:05'} />
 }
 
 /** A wall time of another zone (a session's hours in New York time): 00:00–23:59, no „+1”. */

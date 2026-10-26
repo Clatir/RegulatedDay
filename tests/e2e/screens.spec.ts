@@ -74,6 +74,13 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(page.getByTestId('exchange')).toBeHidden()
       const day = JSON.parse(readFileSync(join(dataDir, 'days', logicalToday().slice(0, 4), `${logicalToday()}.json`), 'utf8')) as { blocks: unknown[] }
       expect(day.blocks).toHaveLength(2)
+      // The day's wake outside 04:00–12:00: refused with its message (never saved to be dropped by the day's schema).
+      const wake = page.getByTestId('day-wake')
+      const wakeBefore = await wake.inputValue()
+      await wake.fill('13:00')
+      await wake.press('Enter')
+      await expect(wake).toHaveAttribute('data-error', /Dozwolone/)
+      await expect(wake).toHaveValue(wakeBefore)
 
       // Kalendarz: two dates marked as a remote „zjazd”.
       await page.getByTestId('nav-calendar').click()

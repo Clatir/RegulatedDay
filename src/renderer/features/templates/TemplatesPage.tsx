@@ -33,7 +33,9 @@ export function TemplatesPage() {
   const templates = useData((s) => s.templates)
   const today = useData((s) => s.view?.today ?? '')
   const [selected, setSelected] = useState<string | null>(null)
-  const [showArchived, setShowArchived] = useState(false)
+  const [showArchivedState, setShowArchived] = useState(false)
+  // A copy starts in the archive: the one selected is shown even then.
+  const showArchived = showArchivedState || templates.some((t) => t.id === selected && t.archived)
   const create = async () => {
     const id = newId()
     const hasDefault = templates.some((t) => t.dayType === 'zwykly' && !t.weekdays.length && !t.archived)
@@ -130,7 +132,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   }, [from, template.weekdays])
   const model = useMemo(() => {
     const t: Template = { ...template, versions: [{ ...version, from: '2000-01-01' }] }
-    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true }, { changes: rd.settings, templates: [t], lectures }, placeLogical(sample, 4 * 60), false)
+    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false }, { changes: rd.settings, templates: [t], lectures }, placeLogical(sample, 4 * 60), false)
   }, [template, version, sample, rd.settings, lectures])
   const axis = dayAxis(model, names, null)
   // Template blocks have the day's derived ids: the block of the version is found by its source.
@@ -141,7 +143,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   const copy = async () => {
     const id = newId()
     const c = copiedTemplate(template, id, `Kopia: ${template.name}`.slice(0, 80))
-    await saveRecord(paths.record('template', id), null, templateJson({ ...c, weekdays: [] }))
+    await saveRecord(paths.record('template', id), null, templateJson(c))
     onCopied(id)
   }
   const remove = async () => {
@@ -168,6 +170,11 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
               Usuń
             </button>
           </div>
+          {template.archived && (
+            <p className="rounded border border-line-strong bg-raised px-3 py-2 text-[12.5px]" data-testid="template-archived">
+              Ten szablon jest w archiwum – nie tworzy żadnego dnia. Ustaw typ i dni tygodnia, potem kliknij „Przywróć z archiwum”.
+            </p>
+          )}
           <Field label="Typ dnia" labelWidth={140}>
             <Segmented value={template.dayType} options={DAY_TYPES.map((t) => ({ value: t, label: DAY_TYPE_NAMES[t] }))} onChange={(dayType) => void saveTemplate({ dayType })} aria-label="Typ dnia szablonu" />
           </Field>

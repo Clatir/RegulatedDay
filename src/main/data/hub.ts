@@ -19,7 +19,7 @@ import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { createUpdateBackup } from './backup'
 import { historyKey } from './records'
-import { DataService, STOP_TIMEOUT_MS } from './service'
+import { DataService, STOP_TIMEOUT_MS, type ServiceOptions } from './service'
 
 export interface HubOptions {
   userData: string
@@ -33,9 +33,11 @@ export interface HubOptions {
   writeGuardPlan: boolean
   extraBackupDir: () => string | null
   /** The version that ran here before this one (config.json): a newer one backs the folder up before opening it. */
-  previousVersion: string | null
+  previousVersion: () => string | null
   /** Something the window shows changed (the hub tells it once per change of what it would read). */
   onChange: () => void
+  /** Starts the folder's service (tests: a slow or failing folder). */
+  start?: (o: ServiceOptions) => Promise<DataService>
 }
 
 /** `a` is a newer version than `b` (versions that cannot be compared: no). */
@@ -76,6 +78,9 @@ export class DataHub {
   private lastSignature = ''
   private retry: ReturnType<typeof setTimeout> | null = null
   private backedUp = false
+  private openingDir: string | null = null
+  /** The app quits: nothing opens any more. */
+  private shutdown = false
 
   constructor(private readonly o: HubOptions) {}
 
@@ -89,16 +94,54 @@ export class DataHub {
     this.folder = dir
   }
 
-  /** Opens `dir` (the data folder chosen here); a folder that cannot be opened leaves the app working without it. */
+  /**
+   * This computer's own settings (config.json) cannot be read now, so the folder it works in is unknown: „failed”, never
+   * the wizard of a computer without a folder (it would start a second folder beside the real one). The config is read
+   * again by itself; then `open` or `noFolder`.
+   */
+  unknownFolder(why: string): void {
+    if (this.status !== 'none') return
+    this.status = 'failed'
+    this.error = why
+    this.changed()
+  }
+
+  /** The settings read at last, without a folder in them: a computer without a folder after all (the wizard). */
+  noFolder(): void {
+    if (this.status !== 'failed' || this.folder !== null) return
+    this.status = 'none'
+    this.error = null
+    this.changed()
+  }
+
+  /**
+   * Opens `dir` (the data folder chosen here); a folder that cannot be opened leaves the app working without it. An
+   * opening of another folder under way (a retry of the one before) finishes first – this one opens after it, never
+   * answered by it.
+   */
   open(dir: string): Promise<boolean> {
-    if (this.opening) return this.opening
-    this.opening = this.openNow(dir).finally(() => {
-      this.opening = null
-    })
-    return this.opening
+    if (this.shutdown) return Promise.resolve(false)
+    if (this.opening && this.openingDir === dir) return this.opening
+    if (!this.opening && this.status === 'open' && this.folder === dir && this.service) return Promise.resolve(true)
+    if (this.retry) clearTimeout(this.retry)
+    this.retry = null
+    const before = this.opening ?? Promise.resolve(false)
+    this.openingDir = dir
+    const run = before
+      .catch(() => false)
+      .then(() => this.openNow(dir))
+      .finally(() => {
+        if (this.opening === run) {
+          this.opening = null
+          this.openingDir = null
+        }
+      })
+    this.opening = run
+    return run
   }
 
   private async openNow(dir: string): Promise<boolean> {
+    if (this.shutdown) return false
     // Another folder open before (the wizard on a computer that had one): it closes first.
     const old = this.service
     this.service = null
@@ -113,14 +156,15 @@ export class DataHub {
       const st = await stat(dir).catch(() => null)
       if (!st?.isDirectory()) throw new Error('folder jest niedostępny')
       // The first opening by a newer version: a backup before it touches anything (the data still in the old format).
-      const prev = this.o.previousVersion
+      const prev = this.o.previousVersion()
       if (prev && !this.backedUp && isNewer(this.o.appVersion, prev)) {
-        this.backedUp = true
         const r = await createUpdateBackup(dir, join(dir, 'backups'), prev, this.o.appVersion)
+        // Made (or there already): not again; failed: tried again at the next opening.
+        if (!r || r.ok) this.backedUp = true
         if (r?.ok) this.o.log('info', `kopia przed aktualizacją ${prev} → ${this.o.appVersion}: ${r.files} plików`)
         else if (r) this.o.log('error', `kopia przed aktualizacją nie powiodła się: ${r.error}`)
       }
-      const s = await DataService.start({
+      const s = await (this.o.start ?? ((o: ServiceOptions) => DataService.start(o)))({
         dataDir: dir,
         userData: this.o.userData,
         computer: this.o.computer(),
@@ -134,7 +178,7 @@ export class DataHub {
         extraBackupDir: this.o.extraBackupDir,
         onChecked: () => this.changed()
       })
-      if (this.closing) {
+      if (this.closing || this.shutdown) {
         await s.stop('quit')
         return false
       }
@@ -150,7 +194,7 @@ export class DataHub {
       this.o.log('error', `folder danych ${dir} nie otworzył się`, e)
       this.changed()
       // OneDrive not ready at the start: the app tries again every 30 s by itself (spec „czekam na folder”).
-      if (!this.closing) {
+      if (!this.closing && !this.shutdown) {
         this.retry = setTimeout(() => {
           this.retry = null
           if (this.status === 'failed' && this.folder === dir) void this.open(dir)
@@ -166,6 +210,9 @@ export class DataHub {
    * the folder it opened at once.
    */
   async close(why: 'quit' | 'system'): Promise<void> {
+    // The quit: for good – an opening that ends after the wait below (a slow folder, the backup before an update) stops
+    // the folder it opened, and no retry is armed any more.
+    this.shutdown = true
     this.closing = true
     if (this.retry) clearTimeout(this.retry)
     this.retry = null
@@ -196,7 +243,10 @@ export class DataHub {
     if (!f) return head
     const today = logicalDayOf(f.clock.now())
     const read = await f.readDay(today)
-    return `${head}|${today}|${JSON.stringify(await this.records())}|${read.events.length}|${f.unsynced}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}`
+    // The day files the window reads with today (yesterday's and tomorrow's beside it): a change of the plan made on
+    // another computer reaches the window like a change of the settings.
+    const days = await Promise.all([-1, 0, 1].map((d) => f.recordView(paths.day(addDays(today, d))).catch((e: unknown) => `?${String(e)}`)))
+    return `${head}|${today}|${JSON.stringify(await this.records())}|${JSON.stringify(days)}|${read.events.length}|${f.unsynced}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}`
   }
 
   private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines'>> {
@@ -216,6 +266,14 @@ export class DataHub {
     const f = this.service?.folder
     const records = await this.records()
     const problems = f ? [...f.records.problems.entries()].map(([rel, why]) => `${rel}: ${why}`) : []
+    if (f) {
+      // rd.json there but not readable now: the window must not take its defaults for it (a change waits for it).
+      try {
+        await f.recordView(SETTINGS_FILE)
+      } catch (e) {
+        problems.push(`${SETTINGS_FILE}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
     const questions = f ? await this.questions() : []
     return {
       status: this.status,
@@ -270,8 +328,18 @@ export class DataHub {
     if (!isIsoDate(date)) throw new Error('data dnia')
     const f = this.need()
     const read = await f.readDay(date)
-    const file = async (d: string) => (await f.recordView(paths.day(d)).catch(() => undefined)) ?? null
-    return { date, dayFile: await file(date), nextFile: await file(addDays(date, 1)), prevFile: await file(addDays(date, -1)), events: read.events, complete: read.complete }
+    let unknown = false
+    const file = async (d: string, main = false) => {
+      try {
+        return (await f.recordView(paths.day(d))) ?? null
+      } catch {
+        // There but not readable now: never shown as a day without changes (and never edited as a new one).
+        if (main) unknown = true
+        return null
+      }
+    }
+    const dayFile = await file(date, true)
+    return { date, dayFile, nextFile: await file(addDays(date, 1)), prevFile: await file(addDays(date, -1)), events: read.events, complete: read.complete && !unknown, unknown }
   }
 
   async dayFiles(dates: string[]): Promise<Record<string, RawRecord | null>> {
@@ -316,7 +384,7 @@ export class DataHub {
         if (isPlain(last?.record)) restoreFrom = last.record
       }
     }
-    f.queue.resolve(id, choice, restoreFrom)
+    await f.queue.resolve(id, choice, restoreFrom)
     await f.queue.apply(f.records)
     this.changed()
   }

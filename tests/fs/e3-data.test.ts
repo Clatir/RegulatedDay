@@ -78,13 +78,13 @@ describe('folder danych dla okna głównego', () => {
     expect(read(req)).toMatchObject({ note: 'c', estimateMin: 20 })
     const [q] = folder.queue.questions()
     expect(q!.outcome.status).toBe('conflict')
-    folder.queue.resolve(q!.edit.id, 'mine')
+    await folder.queue.resolve(q!.edit.id, 'mine')
     await folder.queue.apply(folder.records)
     expect(read(req).note).toBe('b')
     // Again, and „theirs” this time.
     write(req, { schema: 1, id: 'r1', note: 'd', estimateMin: 20 })
     await folder.edit([{ rel: req, edits: [{ path: ['note'], base: 'b', value: 'e' }] }])
-    folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'theirs')
+    await folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'theirs')
     await folder.queue.apply(folder.records)
     expect(read(req).note).toBe('d')
     expect(folder.queue.questions()).toEqual([])
@@ -98,7 +98,7 @@ describe('folder danych dla okna głównego', () => {
     expect(out[0]!.status).toBe('removedElsewhere')
     expect(existsSync(join(dataDir, req))).toBe(false)
     const last = (await folder.history.list('request', 'r1'))[0]!
-    folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'mine', last.record as Record<string, unknown>)
+    await folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'mine', last.record as Record<string, unknown>)
     await folder.queue.apply(folder.records)
     expect(read(req)).toMatchObject({ note: 'b', person: 'p1' })
   })
@@ -110,6 +110,7 @@ describe('folder danych dla okna głównego', () => {
     await folder.userEvents([{ k: 'day.snapshot', day: DAY, dayType: 'zwykly', reason: 'today' }])
     await expect(folder.userEvents([{ k: 'block.start', day: DAY, block: 'x', planned: {} }])).rejects.toThrow(/nie pochodzi z okna/)
     await expect(folder.userEvents([{ k: 'boundary.exception', day: DAY, minutes: -5 }])).rejects.toThrow(/minutes/)
+    await expect(folder.userEvents([{ k: 'day.snapshot', day: DAY, dayType: 'świąteczny', reason: 'type' }])).rejects.toThrow(/typ dnia/)
     const events = readLogText(readFileSync(join(dataDir, paths.log(DAY, 'pca')), 'utf8')).events
     expect(events.find((e) => e.k === 'boundary.approve')).toMatchObject({ dom: 'timer', auto: false })
     const snap = events.find((e) => e.k === 'day.snapshot') as unknown as { settings: { boundaryBufferMin: number }; at: number }
@@ -144,6 +145,97 @@ describe('folder danych dla okna głównego', () => {
     expect((await readBackupEntry(join(backups, 'aktualizacje', '0.2.0-do-0.3.0.zip'), req))?.toString('utf8')).toContain('"note":"a"')
     for (let i = 1; i <= 6; i++) await createUpdateBackup(dataDir, backups, `0.3.${i - 1}`, `0.3.${i}`)
     expect(readdirSync(join(backups, 'aktualizacje'))).toHaveLength(5)
+  })
+
+  it('odpowiedź w trakcie wolnego zapisu kolejki: wpis „ich” nie wraca po jego końcu', async () => {
+    const req2 = paths.record('request', 'r2')
+    write(req, { schema: 1, id: 'r1', note: 'a' })
+    write(req2, { schema: 1, id: 'r2', note: 'x' })
+    let hold: Promise<void> | null = null
+    let entered: () => void = () => undefined
+    const inWrite = new Promise<void>((r) => (entered = r))
+    const fs: DataFs = {
+      ...nodeFs,
+      writeAtomic: async (p, t) => {
+        if (hold && p.replace(/\\/g, '/').endsWith(req2)) {
+          entered()
+          await hold
+        }
+        return nodeFs.writeAtomic(p, t)
+      }
+    }
+    const { folder } = await make({ fs })
+    write(req, { schema: 1, id: 'r1', note: 'c' })
+    await folder.edit([{ rel: req, edits: [{ path: ['note'], base: 'a', value: 'b' }] }])
+    const qid = folder.queue.questions()[0]!.edit.id
+    folder.queue.add({ id: 'e-r2', rel: req2, at: placeLogical(DAY, 10 * 60), schema: 1, edits: [{ path: ['note'], base: 'x', value: 'y' }] })
+    let release: () => void = () => undefined
+    hold = new Promise<void>((r) => (release = r))
+    const run = folder.queue.apply(folder.records)
+    await inWrite
+    const answered = folder.queue.resolve(qid, 'theirs')
+    release()
+    await run
+    expect(await answered).toBe(true)
+    expect(folder.queue.pending.map((e) => e.id)).not.toContain(qid)
+    expect(folder.queue.questions()).toEqual([])
+    expect(read(req).note).toBe('c')
+    expect(read(req2).note).toBe('y')
+  })
+
+  it('prowadzący liczy dzień z plików folderu, nie z moich zmian, które jeszcze czekają', async () => {
+    const change = { id: 's', from: DAY, at: placeLogical(DAY, 9 * 60), patch: { boundaryBufferMin: 25 } }
+    write(paths.settings, { schema: 1, settings: [] })
+    let away = false
+    const fs: DataFs = { ...nodeFs, writeAtomic: (p, t) => (away ? Promise.reject(Object.assign(new Error('EBUSY'), { code: 'EBUSY' })) : nodeFs.writeAtomic(p, t)) }
+    const { folder } = await make({ fs })
+    away = true
+    expect((await folder.edit([{ rel: paths.settings, edits: [{ path: ['settings'], base: [], value: [change] }] }]))[0]!.status).toBe('waiting')
+    expect((await folder.inputs()).changes).toEqual([])
+    expect((await folder.inputs(true)).changes.map((c) => c.id)).toEqual(['s'])
+  })
+
+  it('nowy rekord tylko tam, gdzie go nie ma: istniejący albo już w kolejce – odmowa, nic nie trafia do kolejki', async () => {
+    write(req, { schema: 1, id: 'r1', note: 'a' })
+    let away = false
+    const fs: DataFs = { ...nodeFs, writeAtomic: (p, t) => (away ? Promise.reject(Object.assign(new Error('EBUSY'), { code: 'EBUSY' })) : nodeFs.writeAtomic(p, t)) }
+    const { folder } = await make({ fs })
+    await expect(folder.edit([{ rel: req, create: true, edits: [{ path: ['note'], base: undefined, value: 'b' }] }])).rejects.toThrow(/już jest/)
+    expect(read(req).note).toBe('a')
+    expect(folder.queue.pending).toEqual([])
+    // A new record still in the queue (the folder away): a second „new” of it is refused too.
+    const req3 = paths.record('request', 'r3')
+    away = true
+    expect((await folder.edit([{ rel: req3, create: true, edits: [{ path: ['note'], base: undefined, value: 'n' }] }]))[0]!.status).toBe('waiting')
+    await expect(folder.edit([{ rel: req3, create: true, edits: [{ path: ['note'], base: undefined, value: 'm' }] }])).rejects.toThrow()
+    expect(folder.queue.pending).toHaveLength(1)
+  })
+
+  it('znacznik ostatniej zmiany pliku nigdy się nie cofa (starsza zmiana nałożona później)', async () => {
+    const later = placeLogical(DAY, 11 * 60)
+    write(req, { schema: 1, id: 'r1', note: 'a', estimateMin: 10, updatedAt: later })
+    const { folder } = await make()
+    await folder.edit([{ rel: req, edits: [{ path: ['estimateMin'], base: 10, value: 20 }] }])
+    expect(read(req)).toMatchObject({ estimateMin: 20, updatedAt: later })
+  })
+
+  it('kopia konfliktowa dnia z zeszłego roku (31.12 widziana 1.01) też się łączy', async () => {
+    const day = '2025-12-31'
+    write(paths.day(day), { schema: 1, date: day, dayType: 'zwykly' })
+    write(`days/2025/${day}-DESKTOP-B.json`, { schema: 1, date: day, dayType: 'zwykly', wakeMin: 420 })
+    const { folder } = await make()
+    await folder.check()
+    expect(existsSync(join(dataDir, `days/2025/${day}-DESKTOP-B.json`))).toBe(false)
+    expect(read(paths.day(day)).wakeMin).toBe(420)
+  })
+
+  it('kopia przed aktualizacją także dla wersji beta', async () => {
+    write(req, { schema: 1, id: 'r1', note: 'a' })
+    const backups = join(dataDir, 'backups')
+    expect(await createUpdateBackup(dataDir, backups, '0.3.0-beta.1', '0.3.0')).toMatchObject({ ok: true })
+    expect(await createUpdateBackup(dataDir, backups, '0.3.0', '0.4.0-beta.2')).toMatchObject({ ok: true })
+    expect(readdirSync(join(backups, 'aktualizacje')).sort()).toEqual(['0.3.0-beta.1-do-0.3.0.zip', '0.3.0-do-0.4.0-beta.2.zip'])
+    expect(await createUpdateBackup(dataDir, backups, '../x', '0.3.0')).toMatchObject({ ok: false })
   })
 
   it('historia: rekordy z wersjami (bez czytania plików), najnowsze pierwsze', async () => {

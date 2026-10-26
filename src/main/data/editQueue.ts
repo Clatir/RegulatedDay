@@ -213,7 +213,14 @@ export class EditQueue {
    * them; a record removed elsewhere is created again from `restoreFrom`, your fields laid over it); „theirs” – the
    * change elsewhere stays and your entry leaves.
    */
-  resolve(id: string, choice: 'mine' | 'theirs', restoreFrom?: Record<string, unknown>): boolean {
+  resolve(id: string, choice: 'mine' | 'theirs', restoreFrom?: Record<string, unknown>): Promise<boolean> {
+    // In turn with the runs of the queue: a run under way never puts back an entry you answered meanwhile.
+    const run = this.running.then(() => this.resolveNow(id, choice, restoreFrom))
+    this.running = run.catch(() => false)
+    return run
+  }
+
+  private resolveNow(id: string, choice: 'mine' | 'theirs', restoreFrom?: Record<string, unknown>): boolean {
     const e = this.entries.find((x) => x.id === id)
     const o = this.outcomes.get(id)
     if (!e || !o) return false
@@ -235,7 +242,17 @@ export class EditQueue {
     return true
   }
 
+  /** One entry laid onto its file; a write that fails (the folder away) leaves it waiting – the run goes on. */
   private async applyOne(records: RecordStore, edit: QueuedEdit): Promise<Outcome> {
+    try {
+      return await this.applyOneNow(records, edit)
+    } catch (e) {
+      if (e instanceof BrokenRecordError) return { id: edit.id, status: 'broken' }
+      return { id: edit.id, status: 'waiting', why: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  private async applyOneNow(records: RecordStore, edit: QueuedEdit): Promise<Outcome> {
     const cur = await records.read(edit.rel)
     if (cur.status === 'unreadable') return { id: edit.id, status: 'waiting', why: cur.why }
     if (cur.status === 'broken') return { id: edit.id, status: 'broken' }
@@ -247,6 +264,9 @@ export class EditQueue {
       await records.write(edit.rel, { ...(value as Record<string, unknown>), updatedAt: edit.at, updatedBy: this.o.computer }, 'edit')
       return { id: edit.id, status: 'applied' }
     }
+    // The file's stamp of its last change never goes back (an older edit laid on later keeps the newer time – „Przyjmij
+    // nowsze” compares it).
+    const stamp = Math.max(edit.at, typeof cur.value.updatedAt === 'number' ? cur.value.updatedAt : 0)
     if (edit.remove) {
       await records.remove(edit.rel)
       return { id: edit.id, status: 'applied' }
@@ -262,14 +282,7 @@ export class EditQueue {
         applied.push(f)
       } else conflicts.push({ ...f, now })
     }
-    if (applied.length) {
-      try {
-        await records.write(edit.rel, { ...(value as Record<string, unknown>), updatedAt: edit.at, updatedBy: this.o.computer }, 'edit')
-      } catch (e) {
-        if (e instanceof BrokenRecordError) return { id: edit.id, status: 'broken' }
-        return { id: edit.id, status: 'waiting', why: e instanceof Error ? e.message : String(e) }
-      }
-    }
+    if (applied.length) await records.write(edit.rel, { ...(value as Record<string, unknown>), updatedAt: stamp, updatedBy: this.o.computer }, 'edit')
     if (conflicts.length) {
       // What did not meet a change elsewhere is written; the rest stays queued as a question.
       edit.edits = conflicts.map(({ now: _now, ...f }) => f)

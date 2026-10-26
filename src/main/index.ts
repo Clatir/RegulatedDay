@@ -208,7 +208,7 @@ function createHub(): DataHub {
     log,
     writeGuardPlan: identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1',
     extraBackupDir: () => prefs().backupDir,
-    previousVersion: lastRunVersion,
+    previousVersion: () => lastRunVersion,
     onChange: () => broadcast(CH.onData, null)
   })
 }
@@ -221,6 +221,8 @@ function createHub(): DataHub {
 async function wizardFinish(w: WizardFinish): Promise<{ ok: boolean; error: string | null }> {
   if (!hub || !thisComputer) return { ok: false, error: 'Aplikacja jeszcze się uruchamia.' }
   if (process.env.RD_DATA_DIR) return { ok: false, error: 'Folder danych jest ustawiony zmienną RD_DATA_DIR.' }
+  // The folder this computer already works in may be written there: no second folder chosen beside it meanwhile.
+  if (config.loadFailed) return { ok: false, error: 'Ustawienia tego komputera (config.json) są teraz nieczytelne – spróbuj ponownie za chwilę.' }
   const probe = await DataHub.probe(w.folder)
   if (probe.unreadable) return { ok: false, error: `Nie mogę odczytać folderu: ${probe.unreadable}` }
   if (w.first && probe.hasData) return { ok: false, error: 'W tym folderze są już dane Regulated Day – ten komputer może do nich dołączyć.' }
@@ -240,9 +242,15 @@ async function wizardFinish(w: WizardFinish): Promise<{ ok: boolean; error: stri
   if (!(await hub.open(probe.path))) return { ok: false, error: hub.error ?? 'Folder danych nie otworzył się.' }
   await config.update({ dataFolder: probe.path })
   if (w.first && w.records.length) {
-    const out = await hub.edit(w.records.map((r) => ({ rel: r.rel, create: true, edits: Object.entries(r.value).map(([k, v]) => ({ path: [k], base: undefined, value: v })) })))
-    const waiting = out.filter((o) => o.status !== 'applied')
-    if (waiting.length) log('warn', `kreator: ${waiting.length} zapisów czeka w kolejce (${waiting[0]!.why ?? waiting[0]!.status})`)
+    try {
+      const out = await hub.edit(w.records.map((r) => ({ rel: r.rel, create: true, edits: Object.entries(r.value).map(([k, v]) => ({ path: [k], base: undefined, value: v })) })))
+      const waiting = out.filter((o) => o.status !== 'applied')
+      if (waiting.length) log('warn', `kreator: ${waiting.length} zapisów czeka w kolejce (${waiting[0]!.why ?? waiting[0]!.status})`)
+    } catch (e) {
+      // A file of this app already in the folder (one left from before): nothing shared is written over.
+      log('error', 'kreator: zapis danych wspólnych nie udał się', e)
+      return { ok: false, error: `Nie zapisano danych: ${e instanceof Error ? e.message : String(e)}` }
+    }
   }
   if (w.pin && probe.inOneDrive && process.platform === 'win32') {
     await DataHub.pin(probe.path).then(
@@ -668,6 +676,11 @@ async function main(): Promise<void> {
     log('warn', `config.json nieczytelny: ${config.loadFailed} – nic nie jest nadpisywane, czytam ponownie co ${CONFIG_RETRY_MS / 1000} s`)
     config.retryLoad(CONFIG_RETRY_MS, (c) => {
       log('info', 'config.json przeczytany – zmiany z tej sesji zapisane')
+      lastRunVersion = c.updates.lastRunVersion
+      // The folder was unknown until now: it opens (or the wizard of a computer without one comes).
+      const dir = dataFolderNow()
+      if (hub && dir && thisComputer && hub.status === 'failed' && hub.folder === null) void hub.open(dir)
+      else if (!dir) hub?.noFolder()
       if (thisComputer && c.computerId !== thisComputer) void config.update({ computerId: thisComputer }).catch(() => undefined)
       if (c.updates.lastRunVersion !== app.getVersion()) void config.update({ updates: { ...c.updates, lastRunVersion: app.getVersion() } }).catch(() => undefined)
       for (const w of appWindows()) w.setZoomFactor(c.prefs.zoom)
@@ -686,6 +699,7 @@ async function main(): Promise<void> {
   hub = createHub()
   const folderAtStart = dataFolderNow()
   if (folderAtStart) hub.expect(folderAtStart)
+  else if (config.loadFailed) hub.unknownFolder('ustawienia tego komputera (config.json) są nieczytelne – czytam je ponownie')
   if (quitting) return
   denyPermissions(session.defaultSession)
   app.on('session-created', denyPermissions)

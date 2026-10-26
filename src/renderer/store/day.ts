@@ -17,10 +17,17 @@ import { useData } from './data'
 
 const cache = new Map<string, DayData>()
 
+/**
+ * Days other than today's three are not in the signature of the data (the main process does not watch every day): they
+ * are read again this often too, so a change made on another computer reaches an open day by itself.
+ */
+const REREAD_MS = 30_000
+
 /** The day's data, read again when the data change (the last one read is shown meanwhile – no flash of an empty day). */
 export function useDayData(date: string): DayData | null {
   const stamp = useData((s) => s.stamp)
   const open = useData((s) => s.view?.status === 'open')
+  const reread = useNow(REREAD_MS)
   const [data, setData] = useState<DayData | null>(() => cache.get(date) ?? null)
   useEffect(() => {
     setData(cache.get(date) ?? null)
@@ -38,13 +45,14 @@ export function useDayData(date: string): DayData | null {
     return () => {
       alive = false
     }
-  }, [date, stamp, open])
+  }, [date, stamp, open, reread])
   return data
 }
 
 /** The raw files of several days (the morning plan looks at yesterday and the week ahead); null until read. */
 export function useDayFiles(dates: readonly string[]): Record<string, RawRecord | null> | null {
   const stamp = useData((s) => s.stamp)
+  const reread = useNow(REREAD_MS)
   const key = dates.join(',')
   const [files, setFiles] = useState<Record<string, RawRecord | null> | null>(null)
   useEffect(() => {
@@ -56,7 +64,7 @@ export function useDayFiles(dates: readonly string[]): Record<string, RawRecord 
       alive = false
     }
     // The dates by their key: a new array of the same dates reads nothing again.
-  }, [key, stamp])
+  }, [key, stamp, reread])
   return files
 }
 

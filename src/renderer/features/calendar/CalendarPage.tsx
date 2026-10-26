@@ -13,7 +13,7 @@ import { sessionShiftMin, sessionWindow } from '@shared/engine/createDay'
 import { weeklyAnalysisMove } from '@shared/engine/morning'
 import { logicalClock, plDate } from '@shared/format'
 import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
-import { DAY_TYPES, DAY_TYPE_NAMES, settingsOn, type DayTypeId } from '@shared/model/settings'
+import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn, type DayTypeId } from '@shared/model/settings'
 import { blockFill } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
 import { Dialog } from '../../components/Dialog'
@@ -158,7 +158,7 @@ export function CalendarPage() {
           Typ z tygodnia
         </button>
         <span className="inline-flex items-center gap-1.5">
-          <TimeField value={wake} onCommit={setWake} className="w-[76px]" aria-label="Pobudka zaznaczonych dni" placeholder="pobudka" />
+          <TimeField value={wake} range={RANGES.wakeMin} onCommit={setWake} className="w-[76px]" aria-label="Pobudka zaznaczonych dni" placeholder="pobudka" />
           <button type="button" className="btn" disabled={!sel.size || wake == null} onClick={() => void setWakeOf(wake)}>
             Ustaw pobudkę
           </button>

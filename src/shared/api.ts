@@ -167,6 +167,8 @@ export interface DayData {
   events: unknown[]
   /** Every log of the day was read (false: unknown – never shown as an empty day). */
   complete: boolean
+  /** The day's file is there but cannot be read now: its own changes are not shown, and the day is not edited. */
+  unknown: boolean
 }
 
 export interface FieldEditIn {

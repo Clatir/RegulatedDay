@@ -133,8 +133,10 @@ export function createDay(inp: DayInputs): DaySnapshot {
   const sessionIds = new Map<string, string>()
   let shift = 0
   for (const def of settings.sessions) {
-    if (!sessionKept(settings, dayType, date, def.id, dayFile)) continue
+    // Every session's markets, kept or not: a session added later the same day (an answer „tak”, a change of type)
+    // ends at its market's early close too.
     for (const m of def.markets) noteMarket(m)
+    if (!sessionKept(settings, dayType, date, def.id, dayFile)) continue
     const block = sessionBlock(def, date, holidays)
     if (!block) continue
     sessionIds.set(def.id, block.id)

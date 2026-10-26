@@ -13,6 +13,20 @@ import { toast } from '../store/ui'
 
 /** One empty list: a selector must answer the same value for the same state (a new [] each time loops React). */
 const NONE: EditQuestion[] = []
+const NO_PROBLEMS: string[] = []
+
+/** Records that cannot be read now or are broken (never written over): named, so a change that waits is not a surprise. */
+export function ProblemsBanner() {
+  const problems = useData((s) => s.view?.problems ?? NO_PROBLEMS)
+  if (!problems.length) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-rose/40 bg-rose-soft px-4 py-1.5 text-[12px]" data-testid="banner-problems">
+      <span>
+        Nie mogę teraz odczytać: {[...new Set(problems.map((p) => recordTitle(p.slice(0, p.indexOf(':')))))].join(', ')}. Zmiany tych zapisów poczekają; uszkodzony plik przywrócisz z historii.
+      </span>
+    </div>
+  )
+}
 
 export function QuestionsBanner() {
   const questions = useData((s) => s.view?.questions ?? NONE)

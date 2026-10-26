@@ -24,7 +24,7 @@ import { Wizard } from '../features/wizard/Wizard'
 import { patchWizard, useWizard } from '../features/wizard/wizardStore'
 import { useData } from '../store/data'
 import { Banners } from './Banners'
-import { QuestionsBanner } from './Questions'
+import { ProblemsBanner, QuestionsBanner } from './Questions'
 
 export const PAGE_LABEL: Record<Page, string> = {
   today: 'Dziś',
@@ -154,6 +154,7 @@ export function App() {
       <Header>{view && <Bar view={view} mode="main" grows="down" />}</Header>
       <Banners />
       <QuestionsBanner />
+      <ProblemsBanner />
       {wizard ? (
         <Wizard />
       ) : (

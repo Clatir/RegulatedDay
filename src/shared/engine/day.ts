@@ -538,13 +538,18 @@ export function computeDay(ctx: DayContext): DayState {
     const latest = idxOfLogical(g, 27 * 60 + 59)
     return Math.max(0, Math.min(settings.bedtimeShiftMaxMin, latest - base))
   }
+  const bedtimeOf = (settings: RulesSettings, params: DayTypeParams) => Math.min(idxOfLogical(g, params.bedtimeMin), c.nextWake - settings.targetSleepMin)
   const baseBedtime = (m: number): number => {
-    const { settings, params } = settingsAt(m)
-    const base = Math.min(idxOfLogical(g, params.bedtimeMin), c.nextWake - settings.targetSleepMin)
-    // A change that shortens tonight (a type, settings „od dziś”) never puts the bedtime before its own instant.
-    let floor = Number.NEGATIVE_INFINITY
-    for (const s of facts.snapshots) if (s.at < m || (m === 0 && s.at <= 0)) floor = s.at
-    return Math.max(base, floor)
+    // The day's snapshot, then each later one in force at m: a change that shortens tonight (a type, settings „od dziś”)
+    // never puts the bedtime before its own instant (nor later than it was); one that does not shorten it changes
+    // nothing of that rule – a bedtime already passed stays where it was.
+    let base = bedtimeOf(snapshot.settings, snapshot.settings.dayTypes[snapshot.dayType])
+    for (const s of facts.snapshots) {
+      if (!(s.at < m || (m === 0 && s.at <= 0))) break
+      const next = bedtimeOf(s.settings, s.settings.dayTypes[s.dayType] ?? snapshot.settings.dayTypes[snapshot.dayType])
+      base = next < base ? Math.max(next, Math.min(base, s.at)) : next
+    }
+    return base
   }
 
   // State of the day at the start of minute m (what the leader would have shown then).

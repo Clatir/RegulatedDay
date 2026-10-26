@@ -12,7 +12,7 @@ import { detectLateWake } from '@shared/engine/lateWake'
 import { newUserBlock } from '@shared/engine/planEdit'
 import { categoryName } from '@shared/model/rd'
 import type { PlanBlock } from '@shared/model/plan'
-import { DAY_TYPE_NAMES } from '@shared/model/settings'
+import { DAY_TYPE_NAMES, RANGES } from '@shared/model/settings'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
 import { atOf } from '@shared/engine/grid'
@@ -87,7 +87,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const snapshotIds = new Set(model.snapshot.blocks.map((b) => b.id))
   const block = draft ?? plan.find((b) => b.id === selected) ?? null
   const currentType = model.state.facts.snapshots.at(-1)?.dayType ?? model.snapshot.dayType
-  const lateWake = isToday ? detectLateWake(model.ctx, model.state, model.dayFile) : null
+  const lateWake = useMemo(() => (isToday ? detectLateWake(model.ctx, model.state, model.dayFile) : null), [isToday, model])
   const nowMin = logicalMinuteOf(date, now)
 
   /** A new block: in the panel first (nothing is saved until „Dodaj”). */
@@ -142,6 +142,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
           pobudka
           <TimeField
             value={model.ctx.wakeMin}
+            range={RANGES.wakeMin}
             onCommit={(v) => void saveDay(date, raw, (r) => setDayField(r, 'wakeMin', v === model.snapshot.wakeMin && !model.dayFile?.wakeMin ? null : v))}
             className="w-[76px]"
             aria-label="Pobudka tego dnia"
@@ -175,7 +176,12 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
           <div className="flex flex-col gap-3 p-4">
             {lateWake && (lateWake.waitUntilMin == null || nowMin >= lateWake.waitUntilMin) && <LateWakeCard model={model} lw={lateWake} names={names} />}
             {isToday && <MorningPlan model={model} names={names} />}
-            {!model.data.complete && <p className="text-[12px] text-rose">Nie wszystkie logi tego dnia dało się teraz odczytać – dzień może być niepełny.</p>}
+            {model.data.unknown && (
+              <p className="rounded border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px]" data-testid="day-unknown">
+                Plik tego dnia jest teraz nieczytelny (OneDrive może go jeszcze pobierać) – jego zmian nie widać, a nowe zmiany poczekają, aż da się go odczytać.
+              </p>
+            )}
+            {!model.data.complete && !model.data.unknown && <p className="text-[12px] text-rose">Nie wszystkie logi tego dnia dało się teraz odczytać – dzień może być niepełny.</p>}
             <div className="flex items-center justify-between gap-3">
               <span className="text-[12px] text-muted" data-testid="day-summary">
                 {daySummary(model).join(' · ')}

@@ -87,7 +87,7 @@ export function DayTypesSection() {
     const d = addDays(today, 1)
     return DAY_TYPES.filter((t) => {
       if (t === 'wolne') return false
-      const m = countDay(d, { date: d, dayFile: { schema: 1, date: d, dayType: t }, nextFile: null, prevFile: null, events: [], complete: true }, { changes: rd.settings, templates, lectures }, placeLogical(d, 4 * 60), false)
+      const m = countDay(d, { date: d, dayFile: { schema: 1, date: d, dayType: t }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false }, { changes: rd.settings, templates, lectures }, placeLogical(d, 4 * 60), false)
       return m.state.hardEnd.unreachable || (m.state.forecastWorkEnd != null && m.state.hardEnd.at < m.state.forecastWorkEnd)
     })
   }, [today, rd.settings, templates, lectures])

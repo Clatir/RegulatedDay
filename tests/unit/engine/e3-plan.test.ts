@@ -11,11 +11,11 @@ import { computeDay } from '@shared/engine/day'
 import { exchangeCost, isFullExchange, proposeExchange } from '@shared/engine/exchange'
 import { detectLateWake } from '@shared/engine/lateWake'
 import { fromYesterday, holidayQuestions, morningWarnings, sessionQuestions, shiftNotice, weeklyAnalysisMove, type MorningInputs } from '@shared/engine/morning'
-import { copiedDay, copiedTemplate, movedBlock, newUserBlock } from '@shared/engine/planEdit'
+import { copiedDay, copiedTemplate, moveBetweenDays, movedBlock, newUserBlock } from '@shared/engine/planEdit'
 import { applyTypeChange, planTypeChange } from '@shared/engine/typeChange'
 import { defaultTemplates, firstComputerRecords, settingsPatch } from '@shared/model/defaults'
 import { DEFAULT_GENERAL, rdFrom } from '@shared/model/rd'
-import { dayFileFrom, emptyDayFile, templateFrom, type DayFile } from '@shared/model/plan'
+import { dayFileFrom, emptyDayFile, templateFor, templateFrom, type DayFile } from '@shared/model/plan'
 import { DEFAULT_SETTINGS, deepMerge, settingsFrom, settingsOn } from '@shared/model/settings'
 import { block, hhmm, lm, Scenario } from './dsl'
 
@@ -227,6 +227,22 @@ describe('zmiana typu w trakcie dnia', () => {
     expect(hhmm(s.state('21:30'), s.state('21:30').bedtime.base)).toBe('21:00')
   })
 
+  it('zmiana, która nie skraca wieczoru, nie przesuwa pory snu, także gdy ta już minęła', () => {
+    const s = new Scenario({ date: '2026-10-21', plan: [] })
+    s.raw({ k: 'day.snapshot', at: s.at('23:30'), dayType: 'zwykly', settings: s.settings, reason: 'today', max: null, minRegen: null }, '23:30')
+    expect(hhmm(s.state('23:45'), s.state('23:45').bedtime.base)).toBe('22:00')
+  })
+
+  it('sesja dodana później tego dnia kończy się o skróconej sesji swojego rynku', () => {
+    // 27.11.2026: NYSE closes at 13:00 New York time; a session 09:30–16:00 NY on a day without sessions, added by „tak”.
+    const changes = [{ id: 'a', from: '2026-01-01', at: null, patch: { sessions: [{ id: 'rth', name: 'RTH', zone: 'America/New_York', startMin: 570, endMin: 960, markets: ['NYSE'] }] } }]
+    const file: DayFile = { ...emptyDayFile('2026-11-27'), dayType: 'regeneracyjny' }
+    const snap = createDay({ date: '2026-11-27', changes, templates: [], lectures: [], dayFile: file, holidays: marketDay, at: null })
+    expect(snap.blocks.some((b) => b.origin === 'session')).toBe(false)
+    const rth = dayPlan(snap, { ...file, sessions: { rth: 'yes' } }).find((b) => b.sourceId === 'rth')!
+    expect(rth.durationMin).toBe(210)
+  })
+
   it('na typ z późniejszym maksimum: brakujące sesje i druga zmiana nowego typu do dodania, zaznaczone bez kosztu', () => {
     const s = new Scenario({ date: '2026-10-21', dayType: 'regeneracyjny', plan: [block({ id: 'sp', cat: 'regeneracja', at: '09:30', min: 30 })] })
     const ctx = s.contextAt(s.at('09:00'))
@@ -357,6 +373,17 @@ describe('przenoszenie i kopiowanie', () => {
     expect(movedBlock(plan[1]!, plan, '2026-10-21', false).moves).toBe(0)
   })
 
+  it('blok przeniesiony z powrotem na dzień, z którego wyszedł, jest tam znowu (i nie ma go na drugim)', () => {
+    const x = block({ id: 'x', cat: 'analiza', at: '09:00', min: 60, origin: 'user' })
+    const snap = createDay({ date: '2026-10-21', changes: [], templates: [], lectures: [], dayFile: null, holidays: noHolidays, at: null })
+    const there = moveBetweenDays({ schema: 1, date: '2026-10-21', blocks: [x] }, null, x, [x], '2026-10-21', '2026-10-22')
+    const back = moveBetweenDays(there.target, there.source, { ...x, movedFrom: '2026-10-21', moves: 1 }, [x], '2026-10-22', '2026-10-21')
+    const mon = dayPlan(snap, dayFileFrom(back.target, '2026-10-21'))
+    const tue = dayPlan({ ...snap }, dayFileFrom(back.source, '2026-10-22'))
+    expect(mon.find((b) => b.id === 'x')).toMatchObject({ moves: 2, movedFrom: '2026-10-22' })
+    expect(tue.some((b) => b.id === 'x')).toBe(false)
+  })
+
   it('kopia dnia: Twoje bloki i szablonu z nowymi identyfikatorami, bez sesji i wykładów; kotwice idą za nimi', () => {
     const plan = [
       block({ id: 'ny', cat: 'sesja', at: '14:00', min: 180, fixed: true, origin: 'session', source: 'ny' }),
@@ -376,7 +403,9 @@ describe('przenoszenie i kopiowanie', () => {
     const t = templateFrom({ id: 't', name: 'A', dayType: 'zwykly', versions: [{ from: '2026-01-01', blocks: [{ id: 'x', categoryId: 'analiza', startMin: 480, durationMin: 60 }, { id: 'y', categoryId: 'journaling', anchor: 'session:ny', durationMin: 30 }, { id: 'z', categoryId: 'nauka', anchor: 'x', durationMin: 30 }] }] })!
     const c = copiedTemplate(t, 't2', 'Kopia A')
     const [x, y, z] = c.versions[0]!.blocks
-    expect(c).toMatchObject({ id: 't2', name: 'Kopia A' })
+    // In the archive until you give it its days: never the type's template at once.
+    expect(c).toMatchObject({ id: 't2', name: 'Kopia A', archived: true })
+    expect(templateFor([t, c], 'zwykly', 3, '2026-10-21')?.template.id).toBe('t')
     expect(x!.id).not.toBe('x')
     expect(y!.anchor).toBe('session:ny')
     expect(z!.anchor).toBe(x!.id)

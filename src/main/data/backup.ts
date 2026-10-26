@@ -234,7 +234,9 @@ export async function createDailyBackup(dataDir: string, backupsDir: string, dat
 
 /** Backups made before a new version first opens the folder (plan „Wersje 0.x na prawdziwych danych”): the last kept. */
 export const UPDATE_KEEP = 5
-const UPDATE_NAME = /^\d+\.\d+\.\d+-do-\d+\.\d+\.\d+\.zip$/
+/** A version as `parseVersion` reads it (betas included: „0.3.0-beta.1”), without the leading „v”. */
+const VERSION = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?`
+const UPDATE_NAME = new RegExp(`^${VERSION}-do-${VERSION}\\.zip$`)
 
 /**
  * The backup before an update (plan: „kopia zapasowa przed aktualizacją”): a new version makes it at its first opening

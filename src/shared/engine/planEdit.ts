@@ -6,7 +6,8 @@
  */
 import { REQUEST_CATEGORY, type CategoryRules } from '../model/categories'
 import { newId } from '../model/ids'
-import { PLAN_MAX, PLAN_MIN, planBlock, type PlanBlock, type Template } from '../model/plan'
+import { dayRaw, putBlock, setMovedTo, takeBlock, type Raw } from '../data/dayEdits'
+import { dayFileFrom, PLAN_MAX, PLAN_MIN, planBlock, type PlanBlock, type Template } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan, type BlockInfo } from './blocks'
 import type { DayState } from './day'
@@ -70,6 +71,19 @@ export function movedBlock(b: PlanBlock, plan: readonly PlanBlock[], fromDate: s
 }
 
 /**
+ * The two files of a move (spec „Przeniesienie”): the source notes where the block went (one of yours leaves its blocks),
+ * the target takes it – and forgets a move of the same block away from it before (a block moved back is there again).
+ */
+export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou = true): { source: Raw; target: Raw } {
+  const moved = movedBlock(b, plan, fromDate, byYou)
+  const own = dayFileFrom(fromRaw ?? {}, fromDate).blocks.some((x) => x.id === b.id)
+  let source = setMovedTo(dayRaw(fromRaw, fromDate), b.id, toDate)
+  if (own) source = takeBlock(source, b.id)
+  const target = setMovedTo(putBlock(dayRaw(toRaw, toDate), moved), b.id, null)
+  return { source, target }
+}
+
+/**
  * A day copied to another (spec „Skopiuj ten dzień do…”): your blocks and the template's, with new ids (anchors follow
  * them), as yours; sessions and lectures come from that day's own layer and plan of lectures, so they are not copied.
  * The target's own template blocks are cancelled – its plan becomes the copied one.
@@ -98,13 +112,17 @@ export function copiedDay(plan: readonly PlanBlock[]): PlanBlock[] {
   return out
 }
 
-/** A template copied (spec „kopiowanie … szablonu”): a new id, its versions with new ids of blocks (anchors follow). */
+/**
+ * A template copied (spec „kopiowanie … szablonu”): a new id, its versions with new ids of blocks (anchors follow). The
+ * copy starts in the archive – it makes no day until you give it its weekdays and bring it back (a copy in use at once
+ * would take the original's days: templates of one weekday are chosen by id).
+ */
 export function copiedTemplate(t: Template, id: string, name: string): Template {
   return {
     ...t,
     id,
     name,
-    archived: false,
+    archived: true,
     versions: t.versions.map((v) => {
       const ids = new Map(v.blocks.map((b) => [b.id, newId(10)]))
       return {

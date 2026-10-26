@@ -5,11 +5,11 @@
  * parking) are events of its log.
  */
 import type { RawRecord } from '@shared/api'
-import { blockJson, dayRaw, putBlock, setCancelled, setMovedTo, takeBlock } from '@shared/data/dayEdits'
+import { blockJson, dayRaw, putBlock, setCancelled, takeBlock } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { marketDay } from '@shared/calendar/holidays'
 import { createDay } from '@shared/engine/createDay'
-import { copiedDay, movedBlock } from '@shared/engine/planEdit'
+import { copiedDay, moveBetweenDays } from '@shared/engine/planEdit'
 import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
 import { plDate } from '@shared/format'
 import { editOf, saveEdits, saveRecord, useData } from '../../store/data'
@@ -41,11 +41,8 @@ export async function removeDayBlock(date: string, before: RawRecord | null, b: 
  * the target with the day it came from and one move more when you moved it.
  */
 export async function moveDayBlock(fromDate: string, fromRaw: RawRecord | null, plan: readonly PlanBlock[], b: PlanBlock, toDate: string, toRaw: RawRecord | null, byYou = true): Promise<void> {
-  const moved = movedBlock(b, plan, fromDate, byYou)
-  const own = dayFileFrom(fromRaw ?? {}, fromDate).blocks.some((x) => x.id === b.id)
-  let source = setMovedTo(dayRaw(fromRaw, fromDate), b.id, toDate)
-  if (own) source = takeBlock(source, b.id)
-  await saveEdits([editOf(paths.day(fromDate), fromRaw, source), editOf(paths.day(toDate), toRaw, putBlock(dayRaw(toRaw, toDate), moved))])
+  const { source, target } = moveBetweenDays(fromRaw, toRaw, b, plan, fromDate, toDate, byYou)
+  await saveEdits([editOf(paths.day(fromDate), fromRaw, source), editOf(paths.day(toDate), toRaw, target)])
 }
 
 /**
