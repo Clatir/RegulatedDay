@@ -98,4 +98,6 @@ test('samotest strażnika: kultura niezmienna, licznik ustawiony przez właścic
   expect(s.culture).toBe('')
   expect(s.powerCapabilities).toEqual({ size: 76, aoAcOffset: 20, batteryScaleOffset: 32, acOnLineWakeOffset: 56 })
   expect(s.startsAfterSet).toBe(4)
+  // Install.Compare orders versions as the app does (beta.10 after beta.9, build metadata ignored).
+  expect(s.versionOrderWrong).toBe(0)
 })

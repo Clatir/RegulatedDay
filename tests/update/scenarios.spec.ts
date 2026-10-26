@@ -484,6 +484,9 @@ test('otwarcie aplikacji w czasie instalacji pomocnika: start przekazany, instal
     expect(readFileSync(join(taskDir(), 'handover.jsonl'), 'utf8')).toContain('"hidden":false')
     await expectNext(dir)
     expect(count(await readText(join(productionData(), 'logs', 'install.log')), /instalator wystartował/)).toBe(1)
+    // Taken by the owner when it started the app: a later attempt never inherits it.
+    await expect.poll(() => existsSync(taskFile()), { timeout: 120_000, intervals: [1000] }).toBe(false)
+    expect(existsSync(join(taskDir(), 'handover.jsonl'))).toBe(false)
   })
 })
 
@@ -525,10 +528,13 @@ test('plik zablokowany przed deinstalacją: po dwóch próbach baner „nie uda�
     const target = join(dir, 'LICENSES.chromium.html')
     locker = spawn('powershell.exe', ['-NoProfile', '-Command', `$f = [System.IO.File]::Open('${target}', 'Open', 'Read', 'None'); Start-Sleep -Seconds 1200; $f.Close()`], { stdio: 'ignore' })
     await sleep(3000)
-    logon({ RD_TEST_NO_WAIT_WINDOWS: '1' }).unref()
+    logon().unref()
     await expect.poll(() => readTaskNow()?.state, { timeout: 900_000, intervals: [2000] }).toBe('failed')
     expect(readTaskNow()!.attempts).toBe(2)
     expect(installed()!.version).toBe(CURRENT)
+    // The window „nie udała się” stays open (it waits for you) with its guard alive – and no lock held meanwhile.
+    await expect.poll(() => existsSync(join(taskDir(), 'guard.lock')), { timeout: 30_000 }).toBe(false)
+    expect(powershell(`(Get-Process -Name 'rd-guard' -ErrorAction SilentlyContinue | Measure-Object).Count`)).not.toBe('0')
     // The old version is whole: the app starts and shows „nie udała się”.
     await expect.poll(appRunning, { timeout: 120_000 }).toBe(true)
     expect(await readText(join(productionData(), 'logs', 'main.log'))).toContain(`aktualizacja do ${NEXT}: nie udała się`)

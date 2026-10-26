@@ -409,13 +409,15 @@ namespace RegulatedDay
             Task.Set("state", "done");
             Task.Save();
             RunEntry.Remove();
+            CleanEnd();
+            try { File.Delete(Task.Path); } catch (Exception e) { Log.Warn("plik zadania: " + e.Message); }
+            // The window „Uruchom ręcznie” waits for you: no lock is held meanwhile (another owner may start at once).
+            ReleaseLocks();
             if (startNotConfirmed)
             {
                 Log.Warn("nowa wersja nie potwierdziła startu w 180 s czuwania");
                 Ui.StartByHand(Task.AppExe);
             }
-            CleanEnd();
-            try { File.Delete(Task.Path); } catch (Exception e) { Log.Warn("plik zadania: " + e.Message); }
             Release();
         }
 
@@ -473,6 +475,9 @@ namespace RegulatedDay
             RunEntry.Remove();
             if (startApp && (!showWindow || FilesComplete())) StartAppIfComplete(Task, false);
             CleanEnd();
+            // The window „nie udała się” waits up to 12 h: the mutex and guard.lock are free before it – its „Spróbuj
+            // ponownie” and any installation started meanwhile get an owner at once.
+            ReleaseLocks();
             if (showWindow) Ui.Failed(Task.Version);
             Release();
         }
@@ -493,10 +498,23 @@ namespace RegulatedDay
         void Release()
         {
             if (Ui != null) Ui.Close();
+            ReleaseLocks();
+        }
+
+        /// <summary>The power request, the signal, guard.lock and the mutex (each once; the windows stay).</summary>
+        void ReleaseLocks()
+        {
             power.Dispose();
-            if (heartbeat != null) heartbeat.Dispose();
-            if (lockStream != null) { lockStream.Dispose(); lockStream = null; }
-            try { File.Delete(Path.Combine(TaskDir, "guard.lock")); } catch { }
+            if (heartbeat != null) { heartbeat.Dispose(); heartbeat = null; }
+            lock (lockGate)
+            {
+                if (lockStream != null)
+                {
+                    lockStream.Dispose();
+                    lockStream = null;
+                    try { File.Delete(Path.Combine(TaskDir, "guard.lock")); } catch { }
+                }
+            }
             if (mutex != null) { try { mutex.ReleaseMutex(); } catch { } mutex.Dispose(); mutex = null; }
         }
 
@@ -518,11 +536,12 @@ namespace RegulatedDay
         {
             string exe = task != null ? task.AppExe : null;
             if (string.IsNullOrEmpty(exe) || !File.Exists(exe)) { Log.Warn("aplikacji nie ma (" + exe + ") – nie uruchamiam"); return false; }
-            if (AppRuns(exe)) { Log.Info("aplikacja już działa"); return false; }
+            if (AppRuns(exe)) { Log.Info("aplikacja już działa"); DropHandovers(); return false; }
             string start = task.Start;
             string url = task.Url;
             if (Role == "guard") start = StartedByHand ? "visible" : "hidden";
             MergeHandovers(ref start, ref url);
+            DropHandovers();
             if (args.Autostart && !task.Autostart && start == "hidden" && url == null) { Log.Info("autostart aplikacji wyłączony – nie uruchamiam"); return false; }
             if (start == "none" && url == null) { Log.Info("bez startu aplikacji (wyjście)"); return false; }
             List<string> a = new List<string>();
@@ -534,6 +553,12 @@ namespace RegulatedDay
             int pid = Launch.Detached(exe, line, Path.GetDirectoryName(exe));
             Log.Info("aplikacja uruchomiona (pid " + pid + ", " + line + ")");
             return true;
+        }
+
+        /// <summary>The starts handed over are taken (or met by the app running): a later attempt never inherits them.</summary>
+        void DropHandovers()
+        {
+            try { File.Delete(Path.Combine(TaskDir, "handover.jsonl")); } catch (Exception e) { Log.Warn("handover: " + e.Message); }
         }
 
         void MergeHandovers(ref string start, ref string url)

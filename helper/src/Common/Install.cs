@@ -126,14 +126,39 @@ namespace RegulatedDay
             return new JObj().Set("installLocation", loc).Set("matches", matches);
         }
 
-        /// <summary>Semantic versions „1.2.3” compared (a pre-release below its release).</summary>
+        /// <summary>
+        /// Semantic versions „1.2.3” compared as the app does (src/shared/update.ts): a pre-release below its release, its
+        /// identifiers one by one – numbers as numbers (beta.10 after beta.9), below words; build metadata ignored.
+        /// </summary>
         public static int Compare(string a, string b)
         {
             int[] x = Parts(a), y = Parts(b);
             for (int i = 0; i < 3; i++) if (x[i] != y[i]) return x[i].CompareTo(y[i]);
-            bool pa = a.IndexOf('-') >= 0, pb = b.IndexOf('-') >= 0;
-            if (pa == pb) return string.CompareOrdinal(a, b);
-            return pa ? -1 : 1;
+            string[] pa = Pre(a), pb = Pre(b);
+            if (pa.Length == 0 || pb.Length == 0) return pb.Length - pa.Length;
+            for (int i = 0; i < Math.Max(pa.Length, pb.Length); i++)
+            {
+                if (i >= pa.Length) return -1;
+                if (i >= pb.Length) return 1;
+                if (pa[i] == pb[i]) continue;
+                long na, nb;
+                bool da = long.TryParse(pa[i], NumberStyles.None, CultureInfo.InvariantCulture, out na);
+                bool db = long.TryParse(pb[i], NumberStyles.None, CultureInfo.InvariantCulture, out nb);
+                if (da && db) return na.CompareTo(nb);
+                if (da != db) return da ? -1 : 1;
+                return string.CompareOrdinal(pa[i], pb[i]) < 0 ? -1 : 1;
+            }
+            return 0;
+        }
+
+        /// <summary>The pre-release identifiers („beta.10” → beta, 10); none for a release.</summary>
+        static string[] Pre(string v)
+        {
+            string s = (v ?? "").Trim();
+            int plus = s.IndexOf('+');
+            if (plus >= 0) s = s.Substring(0, plus);
+            int dash = s.IndexOf('-');
+            return dash < 0 ? new string[0] : s.Substring(dash + 1).Split('.');
         }
 
         static int[] Parts(string v)

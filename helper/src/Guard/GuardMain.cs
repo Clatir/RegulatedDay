@@ -171,6 +171,20 @@ namespace RegulatedDay
             TaskFile t = TaskFile.FromText("selftest", "{\"format\": 1, \"version\": \"0.0.1\", \"state\": \"scheduled\", \"starts\": 3}");
             t.Set("starts", t.Starts + 1);
             r.Set("startsAfterSet", t.Starts);
+            // The versions as the app compares them: each pair ordered from the lower.
+            string[][] pairs = new string[][]
+            {
+                new string[] { "0.2.0-beta.9", "0.2.0-beta.10" },
+                new string[] { "0.2.0-beta.10", "0.2.0" },
+                new string[] { "0.2.0-alpha", "0.2.0-beta" },
+                new string[] { "0.2.0-beta", "0.2.0-beta.1" },
+                new string[] { "0.2.0-1", "0.2.0-beta" },
+                new string[] { "0.1.9", "0.1.10" }
+            };
+            int wrong = 0;
+            foreach (string[] p in pairs) if (Install.Compare(p[0], p[1]) >= 0 || Install.Compare(p[1], p[0]) <= 0) wrong++;
+            if (Install.Compare("0.2.0+abc", "0.2.0") != 0) wrong++;
+            r.Set("versionOrderWrong", wrong);
             return r;
         }
     }
