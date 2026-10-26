@@ -41,9 +41,14 @@
   chowa się nad pełnym ekranem; budowa w E4b.
 
 ## Kolejka
-1. PR #3 (`claude/docs-d291`: D291 i zasada o `/clear`) – jeśli jeszcze otwarty, scalić po zielonym CI (D285); potem
-   lokalnie `git checkout main && git pull`.
-2. Pauza do „dalej”, potem „Przed etapem E1”.
+1. PR #3 (D291 i zasada o `/clear`) scalony 26.10 (9501d7b); lokalnie `main` zaktualizowany.
+2. **E1** (gałąź `claude/e1-dane-silnik-czasu`): zakres i kryteria w `docs/plan.md`, rozdziały „Model dnia” i „Dane,
+   komputery i ustawienia” specyfikacji. Model: Opus 5.5 · xhigh – przełącz `/model` przed startem. Pytań o zachowanie
+   widoczne dla użytkownika nie ma (E1 nie ma interfejsu); sprawy techniczne rozstrzygam jako T-decyzje.
+
+## Przed etapem E1 (26.10.2026)
+- Brak pytań do użytkownika. Model: Opus 5.5 · xhigh. Do przygotowania: nic (E1 nie wymaga sprzętu ani ręcznych
+  sprawdzeń na Windows; wynik to testy i symulator).
 
 ## Przed etapem E0 (25.10.2026)
 - Odpowiedzi: D284–D289. Model: Opus 5.5 · xhigh. Sprzęt próby: drugi monitor, laptop, platforma brokera jako
