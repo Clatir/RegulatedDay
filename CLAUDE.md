@@ -16,7 +16,8 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
 ## Zasady produktu (najważniejsze)
 - Aplikacja nigdy nie kontroluje użytkownika: ostrzega, odradza, sugeruje, nic twardo nie blokuje (D72).
 - Używanie komputera może być regeneracją (D142); czas otwartej pozycji nie jest pracą (D187).
-- Żaden pasek ani okno nie wychodzi nad inne aplikacje (D229). Brak asystenta AI.
+- Żaden pasek ani okno nie wychodzi nad inne aplikacje (D229), chyba że włączysz „Zawsze na wierzchu” (D291, E4b).
+  Brak asystenta AI.
 - Kanał beta poza 1.0; „tożsamość testowa” tylko do CI (D283).
 
 ## Dokumenty

@@ -37,9 +37,11 @@
 - Narzędzia Claude Code na tym komputerze działają poza pulpitem: kolejność okien, powłoka, OneDrive i powiadomienia
   tylko w CI na Windows; tutejszy `taskkill /T` nie kończy drzewa procesów Electrona.
 
+- 0.1.1 opublikowane (PR #2). 26.10: D291 – „Zawsze na wierzchu” do wyboru (wyłączone / pasek / pasek i panel),
+  chowa się nad pełnym ekranem; budowa w E4b.
+
 ## Kolejka
-1. PR 0.1.1 (wersja do punktu 17: aktualizacja z oknem postępu), scalenie (D285), wydanie – sprawdzenie zadania Windows.
-2. Pauza do „dalej”, potem „Przed etapem E1”.
+1. Pauza do „dalej”, potem „Przed etapem E1”.
 
 ## Przed etapem E0 (25.10.2026)
 - Odpowiedzi: D284–D289. Model: Opus 5.5 · xhigh. Sprzęt próby: drugi monitor, laptop, platforma brokera jako

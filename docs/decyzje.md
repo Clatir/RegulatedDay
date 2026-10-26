@@ -235,7 +235,7 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D226 | Sobotnia analiza tygodniowa czeka na „Zacznij” do ostatniej chwili, w której zmieści się przed maksimum (w szablonie soboty do 15:00); spóźnione „Zacznij” przesuwa ją bez kosztu (rozszerza D221) |
 | D227 | Tryb sesji kończy się o planowanym końcu sesji (z potwierdzonym „Przedłuż”), także gdy dalej używasz komputera; „Przedłuż” zostaje jeszcze 30 min cichą linią (zmienia T111) |
 | D228 | Komunikat o twardym końcu projektów i propozycja przerwy po 90 min przy projekcie nie czekają na koniec trybu sesji (np. gdy druga zmiana czeka na „Zacznij” albo biegnie w tle): linia tekstu w pasku z kropką na ikonie i powiadomienie według D230 (kropka według D232, przerwa bez powiadomienia według D234) (bez kropki według D240) |
-| D229 | Nic nad oknami innych aplikacji: zamiast okna zawsze na wierzchu pasek u góry okna głównego, w panelu ikony przy zegarze otwieranym kliknięciem i na pasku pulpitu pod oknami; ikona pokazuje kolor paska i kropkę, gdy coś czeka (zastępuje D114, D213, D223) (kropka według D232 i D240) |
+| D229 | Nic nad oknami innych aplikacji: zamiast okna zawsze na wierzchu pasek u góry okna głównego, w panelu ikony przy zegarze otwieranym kliknięciem i na pasku pulpitu pod oknami; ikona pokazuje kolor paska i kropkę, gdy coś czeka (zastępuje D114, D213, D223) (kropka według D232 i D240) („Zawsze na wierzchu” do włączenia według D291) |
 | D230 | Powiadomienia Windows domyślnie włączone tylko 5 min przed startem sesji, analizy tygodniowej, zajęć i dojazdu, przy twardym końcu projektów i przy rezerwie energii; start sesji bez powiadomienia (zmienia D133) (poza trybem zajęć według D236, bez wykładu online według D237) |
 | D231 | „Dalej?”, którego nikt nie zobaczył, liczy się od zobaczenia; do tego czasu blok aktywny przy komputerze trwa (projekt jako projekt) i kończy go dopiero 10 min bez użycia; gra zaczęta bez kliknięcia – poprawka w rytuale (z wejścia, nie z użycia, według T345; dwa końce według T344) (nie wcześniej niż o planowanym końcu według T352) (blok porzucony przed planowanym końcem według D256, D260 i T364) (czas od powrotu po bloku pracy albo projektu według D271) |
 | D232 | Kropka na ikonie tylko przy rzeczach czekających na Twoje kliknięcie („Zacznij”, „Dalej?”, „Koniec pracy?” i podobne); woda ma osobny mały znak kropli, linie informacyjne nic nie zapalają (doprecyzowane przez D240) |
@@ -297,6 +297,7 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D288 | Ikona aplikacji: sylwetka lampki biurkowej w kolorze lampki (#F2B66D) na zaokrąglonym kwadracie w kolorze tła (#211B23) (25.10.2026) |
 | D289 | Ikona przy zegarze: pełne kółko w kolorze paska, kropka w prawym górnym rogu z ciemną obwódką, kropla w prawym dolnym (25.10.2026) |
 | D290 | Instalator tworzy skrót na pulpicie i w menu Start, jak w FI (26.10.2026) |
+| D291 | „Zawsze na wierzchu” do wyboru na każdym komputerze: wyłączone (domyślnie, jak D229), pasek pulpitu albo pasek pulpitu i panel ikony; nad oknem na pełnym ekranie pasek się chowa; budowa w E4b (zmienia D229) (26.10.2026) |
 
 **Decyzje techniczne (T)**, zaakceptowane 21.10.2026; szczegóły są w rozdziałach powyżej
 
