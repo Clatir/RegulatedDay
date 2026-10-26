@@ -1,12 +1,17 @@
 # Postęp
 
 ## Stan bieżący
-- Etap: **E0** w budowie na gałęzi `claude/0.1.0-e0` (D284: jeden PR, wydanie 0.1.0, pauza na końcu).
-- Zrobione lokalnie (testy jednostkowe i E2E z atrapą pomocnika przechodzą): szkielet (tożsamości, okna, zasobnik,
-  autostart, log, config, motyw, menu boczne, konwencje), pomocnik C# (kolejność okien, pierwszy plan, powiadomienia,
-  sesja, zasilanie), widget próbny i ekran „Próba”, instalator NSIS z manifestem, aktualizacje (lista wydań, pobieranie,
-  plik zadania, sekwencja startu), strażnik i pomocnik instalacji C#, rozpoznawanie awarii, CI (Linux + Windows).
-- PR #1 (szkic) z gałęzi; CI uruchamia się raz na zmianę (zdarzenie PR; `push` tylko na `main`).
+- Etap: **E0 zakończony** na gałęzi `claude/0.1.0-e0` (D284: jeden PR, wydanie 0.1.0, pauza na końcu): PR #1 do
+  scalenia według D285, wydanie 0.1.0 z zadania Windows na `main`; potem PR 0.1.1 – wersja do próby aktualizacji
+  (punkt 17 listy) – i pauza do „dalej”.
+- Zakres: szkielet (tożsamości, okna, zasobnik, autostart, log, config, motyw, menu boczne, konwencje), pomocnik C#
+  (kolejność okien, pierwszy plan, powiadomienia, sesja, zasilanie), widget próbny i ekran „Próba”, instalator NSIS
+  z manifestem, aktualizacje (lista wydań, pobieranie, plik zadania, sekwencja startu, cztery ścieżki i FI), strażnik
+  i pomocnik instalacji C#, rozpoznawanie awarii, CI (Linux + Windows). Decyzje: D284–D290, T388–T411.
+- Testy: 62 jednostkowe, 13 E2E (z atrapą; na Windows z prawdziwym pomocnikiem), samotesty pomocnika i strażnika,
+  instalacja i tożsamości, 5 ścieżek aktualizacji, 21 scenariuszy instalacji – wszystkie w CI, bez niestabilnych.
+- Czas faktyczny: 25.10 21:47 – 26.10 rano (≈ 11 h zegarowo), głównie 11 rund CI na Windows po 1,5–2 h.
+- CI uruchamia się raz na zmianę (zdarzenie PR; `push` tylko na `main`).
 - Rundy CI na Windows: 1–5 – poprawki testów i kodu (m.in. deinstalacja przez `cmd /C`, wyjście PowerShell w OEM,
   logi wspólne dla testów); w kodzie: zamknięcie w trakcie startu (T406), „Uruchom mimo to” (T405), licznik startów
   strażnika (limit 4 nie działał), wyjątek po wyjściu („Object has been destroyed”).
@@ -26,21 +31,22 @@
   pasek po spóźnionym potwierdzeniu, odpowiedź toastSetting, kopie w update\<X>, nieparsowalne wersje, zadanie
   „zakończono” przy starszej wersji, kolejność wersji beta w C#, kopiowanie i zapytanie strażnika w tle. Odrzucone:
   nagłówek check-node (pochodzi z ICTTJ i go ma), wyjątek właściciela przed licznikiem (bez pliku zadania nie wiadomo,
-  co uruchomić). Runda 10 w toku.
+  co uruchomić).
+- Runda 10: Linux E2E – test spóźnionego pomocnika zależny od sygnałów (SIGTERM zamyka Electron czysto) i lokalnie od
+  procesów potomnych; zastąpiony testem jednostkowym `sessionAtStart`. Runda 11 – ostatnia przed scaleniem.
 - Narzędzia Claude Code na tym komputerze działają poza pulpitem: kolejność okien, powłoka, OneDrive i powiadomienia
-  tylko w CI na Windows.
+  tylko w CI na Windows; tutejszy `taskkill /T` nie kończy drzewa procesów Electrona.
 
-## Kolejka (E0)
-1. Rundy CI na Windows (plan ≥ 15), aż wszystkie przejdą: samotest pomocnika, E2E z prawdziwym pomocnikiem,
-   instalacja i tożsamości, cztery ścieżki aktualizacji N → N+1 i ścieżka FI, scenariusze (`tests/update/*.spec.ts`).
-2. Lista „do sprawdzenia” (próba ikony, panelu i paska; przerwana instalacja z wylogowaniem), `/code-review`, PR
-   gotowy, scalenie, wydanie 0.1.0 (sprawdzenie zadania Windows), potem 0.1.1 do punktu 17, pauza.
+## Kolejka
+1. Scalenie PR #1 (D285), wydanie 0.1.0 – sprawdzenie zadania Windows na `main`.
+2. PR 0.1.1 (wersja do punktu 17: przerwana instalacja, okno postępu pod klikniętym oknem), scalenie, wydanie.
+3. Pauza do „dalej”, potem „Przed etapem E1”.
 
 ## Przed etapem E0 (25.10.2026)
 - Odpowiedzi: D284–D289. Model: Opus 5.5 · xhigh. Sprzęt próby: drugi monitor, laptop, platforma brokera jako
   osobny program, nagrywanie wykładów na tym komputerze.
 
-## Do sprawdzenia na Windows (E0 – szkic, uzupełniany po CI)
+## Do sprawdzenia na Windows (E0)
 Instalacja: Regulated-Day-Setup.exe z wydania 0.1.0 (SmartScreen: „Więcej informacji” → „Uruchom mimo to”). Przy
 każdym punkcie: TradingView zmaksymalizowany w przeglądarce, potem platforma brokera. Akcje próby są w menu ikony
 przy zegarze → „Próba” (bez otwierania okna) i na ekranie „Próba”; dziennik próby można skopiować i wkleić mi.
@@ -65,8 +71,11 @@ przy zegarze → „Próba” (bez otwierania okna) i na ekranie „Próba”; d
 15. Nagrywanie wykładu (OBS) przy wygaszonym ekranie: Próba → „Bez usypiania systemu” – czy nagrywa po zgaśnięciu
     ekranu? Jeśli nie – „Ekran świeci” (D184).
 16. Pokaz slajdów tapety: pasek dalej pod oknami.
-17. Przerwana instalacja: przy wersji 0.1.1 (wydam ją po 0.1.0) „Zainstaluj teraz” i od razu wyloguj się; po
-    zalogowaniu strażnik kończy instalację i uruchamia 0.1.1.
+17. Aktualizacja do 0.1.1 (wydam ją po 0.1.0): Ustawienia → „Zainstaluj teraz” przy TradingView na wierzchu – okno
+    „Regulated Day – aktualizacja” pokazuje się bez zabierania fokusu, kliknięcie TradingView je zasłania, jego przycisk
+    na pasku zadań je podnosi; potem 0.1.1 startuje sama i pokazuje „Co nowego”.
+18. Przerwana instalacja (wymaga drugiego wydania – przy 0.1.2 albo ponownej instalacji 0.1.0 i aktualizacji):
+    „Zainstaluj teraz” i od razu wyloguj się; po zalogowaniu strażnik kończy instalację i uruchamia nową wersję.
 
 ## Pytania na później
 - Przed E4b: ostateczne kolory klas bloków, rezerwy i kroków 15 / 5 / 0 min (w próbie E0 kolory robocze).
