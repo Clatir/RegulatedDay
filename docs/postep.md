@@ -1,52 +1,38 @@
 # Postęp
 
 ## Stan bieżący
-- Etap: **E1 zakończony** (D285): PR #4 scalony 26.10 (f460ef7) przy zielonym CI (Linux i Windows, niestabilnych
-  testów brak); bez wydania (T427: folder danych otwiera się tylko z `RD_DATA_DIR`, nic się nie zmienia dla Ciebie).
-  E0 odebrany przez Ciebie 26.10 (lista sprawdzeń i historia → `docs/archiwum/postep-E0.md`).
-- Zakres E1: czas i dzień logiczny (zmiana czasu, 04:00), model danych (kategorie, typy dni, ustawienia z datą,
-  szablony z wersjami, plan wykładów, plik dnia, zdarzenia logu), kalendarz świąt (NYSE, CME FX, LSE, PL), tworzenie
-  dnia (sesje ze strefy NY, tygodnie przesunięcia, skrócone sesje), silnik dnia (granica, koniec pracy z regułą 15 min,
-  budżet, przedłużenie, przekroczenie, regeneracja z limitem 1/3, minimum i prośby usprawiedliwione, pora snu
-  z przesunięciami, twardy koniec, pula), warstwa plików (log z lokalnym dziennikiem i dwoma zegarami, kopie
-  konfliktowe, rekordy z historią, kolejka edycji), obecność i komputer prowadzący, stan „nieustalony”, bramka minut,
-  szkielet terminów, znacznik życia folderu, kopie ZIP (14 dziennych, 8 tygodniowych), plik planu dla strażnika,
-  generator 3 lat, symulator OneDrive. Decyzje: T412–T435.
-- Testy: 242 jednostkowe, plikowe i symulatora (przykład z Modelu dnia – każdy wiersz, reguły, zmiana czasu 25.10.2026
-  i 28.03.2027, tygodnie przesunięcia sesji, punkt stały, kalendarz świąt, warstwa plików, prowadzenie, terminy,
-  kopie ZIP, symulator dwóch komputerów z 90 min wstrzymanej synchronizacji i przypadkami T330, skala: otwarcie folderu
-  3 lat ok. 1,5 s, codzienne operacje < 0,1 s) i 14 E2E (nowy: folder danych z `RD_DATA_DIR`).
-- `/code-review` (xhigh, diff etapu): 15 uwag, wszystkie zweryfikowane i poprawione z testem, który na starym kodzie pada
-  (T431–T435): nieczytelny rd.json nie tworzy dnia z ustawień domyślnych, kompaktowanie dziennika, ponowny zapis
-  unieważnionych odcinków, zegar „do przodu” liczony przy każdym odczycie, cykl kotwic, koniec sesji Windows nie jest
-  awarią folderu, zamykanie czeka na sprawdzenie (z limitem 5 s) i działa też w trakcie otwierania, obserwacja po
-  uśpieniu, kolejka edycji przy blokadzie pliku, bramka minut z przegraną kopią zdarzenia, plan strażnika co godzinę.
-- Czas faktyczny: 26.10 ok. 11:40–13:50 (zegarowo, bez CI); dwa niezależne moduły (kalendarz świąt, kopie ZIP) zrobili agenci.
-- Lokalne E2E przekraczały czas, bo po przerwanych przebiegach zostało ~36 procesów `electron` (zabite – potem 12/12
-  w 25 s); pułapka zapisana w pamięci.
+- Etap: **E2 zakończony w PR #5** (gałąź `claude/e2-model-energii`, commity 3510cb7 i d83fd11): czeka na CI (Linux
+  i Windows) i scalenie (D285); bez wydania – E2 nie ma interfejsu, nic się dla Ciebie nie zmienia (wersja 0.1.1).
+  E1 scalony w PR #4 (historia → `docs/archiwum/postep-E1.md`).
+- Zakres E2: pule z check-inu (6 pytań → 100 / 85 / 65 / 45 / 25), sygnały i ocena względna jako kotwice (zapisany
+  stan sprzed sygnału), koszty na godzinę (3·k, dokładnie w jednostkach 1/2000), tło (50 %, własny udział bloku, sesja
+  za innym blokiem 0, blok stały wysłany w tło – pełny), suma ±5, przełączenia (2 poznawcze, D205) i kontakt (2
+  psychiczne), czas bez bloku jak „gra, film”, „Odcinam się” jak cisza, rezerwa z histerezą +5 (zejścia rejestrowane
+  przez prowadzącego), moduł wyłączony (zejście ciche), prognoza do pory snu (ostrzeżenie), propozycja regeneracji
+  i warunek nagrody „Reakcja na rezerwę” (D241, D244). Blok liczy się tak, jak się zaczął (koszty w `block.start`).
+  Decyzje: T436–T443.
+- Testy: 309 jednostkowych i plikowych (każdy wiersz przykładu z Modelu energii – zgodny co do jednostki, reguły
+  energii i reakcji, folder: zapis zejścia i izolacja błędu energii, test skali z energią: ok. 1,7 ms na dzień) i 14 E2E.
+- `/code-review` (xhigh, diff etapu): 15 uwag; 13 poprawionych z testem, który na starym kodzie pada (T443): prośba
+  przerywa regenerację, blok według startu, blok elastyczny w tle i pod innym blokiem, kolejność bloków bez wpływu,
+  check-in przed kosztami minuty, przyszłe koszty poza listą poniesionych, `energy.module` ze stanem sprzed, zapis
+  zejścia po zamknięciu minuty, izolacja błędu energii, sposób regeneracji bez kosztów. Bez zmian: przebudowa na flagi
+  silnika dnia (nie niosą kosztów bloków) i podwójny odczyt w folderze (zadania prowadzącego liczą kontekst raz).
+- Czas faktyczny: 26.10 ok. 14:55–15:55 (zegarowo, bez CI), w tym ok. 14 min przeglądu w tle.
 
 ## Kolejka
-1. CI na `main` po scaleniu PR #4 zielone (run 40328605555, niestabilnych testów brak); wydania nie ma (wersja 0.1.1
-   bez zmian – krok publikacji to pominął, zgodnie z planem).
-2. Pauza do „dalej”. **E2** (gałąź `claude/e2-model-energii`): zakres i kryteria w `docs/plan.md`, rozdział „Model
-   energii” specyfikacji. Model: Opus 5.5 · xhigh.
+1. CI na PR #5 (Linux i Windows) → scalenie (D285) → CI na `main` zielone; wydania nie ma (wersja 0.1.1 bez zmian).
+2. Pauza do „dalej”. **E3** (gałąź `claude/e3-...`): kreator, ustawienia z modułami, plan poranny, prośby, rutyny,
+   historia; pierwsza wersja 0.x na Twoich danych. Najpierw komunikat „Przed etapem E3” (będą pytania – E3 ma
+   interfejs). Model: Opus 5.5 · high (plan).
 
 ## Przed etapem E2 (26.10.2026)
-- Co trzeba wiedzieć: E2 to silnik energii bez interfejsu (check-in i sygnały w widoku dochodzą w E3–E4b): trzy pule
-  0–100 z odpowiedzi o objawy, sygnały, koszty bloków na godzinę (tło 50%, sesja w tle 0, suma w puli w zakresie ±5),
-  przełączenia (2 poznawcze), koszt kontaktu (2 psychiczne), regeneracja i czas bez bloku jako „gra, film”, prognoza,
-  rezerwa 15 z histerezą +5, zejście do rezerwy, nagroda „Reakcja na rezerwę” (warunki D241, D244). Kryterium: przykład
-  z Modelu energii jako test (pierwsze kroki sprawdzone arytmetycznie – zgodne). Silnik E1 dostarcza klasyfikację
-  czasu (regeneracja, bloki, prośby, tło), na której energia się opiera.
-- Pytania do Ciebie: brak (zachowanie opisane w specyfikacji; sprawy techniczne jako T-decyzje).
-- Do przygotowania: nic. Model: Opus 5.5 · xhigh.
+- Co trzeba wiedzieć: E2 to silnik energii bez interfejsu (check-in i sygnały w widoku dochodzą w E3–E4b). Kryterium:
+  przykład z Modelu energii jako test. Pytania: brak. Do przygotowania: nic. Model: Opus 5.5 · xhigh.
 
-## Do sprawdzenia na Windows (E1)
-- Nic do ręcznego sprawdzenia: E1 nie ma interfejsu, a zachowanie aplikacji bez `RD_DATA_DIR` się nie zmienia. Wynik
-  E1 to testy i symulator (wszystkie w CI na Linuksie i Windows).
-
-## Przed etapem E1 (26.10.2026)
-- Brak pytań do użytkownika. Model: Opus 5.5 · xhigh. Do przygotowania: nic.
+## Do sprawdzenia na Windows (E2)
+- Nic do ręcznego sprawdzenia: E2 nie ma interfejsu, a działanie aplikacji się nie zmienia. Wynik E2 to testy (w CI na
+  Linuksie i Windows).
 
 ## Przed etapem E0 (25.10.2026)
 - Odpowiedzi: D284–D289. Model: Opus 5.5 · xhigh. Sprzęt próby: drugi monitor, laptop, platforma brokera jako
