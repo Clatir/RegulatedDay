@@ -77,8 +77,14 @@ export class DesktopBar {
     this.win.on('session-end', cb)
   }
 
+  /** False once the window is destroyed (at the quit). */
+  get alive(): boolean {
+    return !this.win.isDestroyed()
+  }
+
   /** The bar's window handle (the helper lays and checks it). */
   get hwnd(): string {
+    if (this.win.isDestroyed()) return '0'
     const buf = this.win.getNativeWindowHandle()
     return buf.length >= 8 ? buf.readBigUInt64LE(0).toString() : String(buf.readUInt32LE(0))
   }

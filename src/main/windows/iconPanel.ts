@@ -86,11 +86,13 @@ export class IconPanel {
     this.win.on('session-end', cb)
   }
 
+  /** False once the window is destroyed too (at the quit; the helper's events still come after it). */
   get isOpen(): boolean {
-    return this.win.isVisible()
+    return !this.win.isDestroyed() && this.win.isVisible()
   }
 
   get hwnd(): string {
+    if (this.win.isDestroyed()) return '0'
     const buf = this.win.getNativeWindowHandle()
     return buf.length >= 8 ? buf.readBigUInt64LE(0).toString() : String(buf.readUInt32LE(0))
   }
@@ -101,7 +103,7 @@ export class IconPanel {
   }
 
   get bounds(): Rect {
-    return this.win.getBounds()
+    return this.win.isDestroyed() ? { x: 0, y: 0, width: 0, height: 0 } : this.win.getBounds()
   }
 
   /** A click of the icon: open, or close when open – but not right after the panel closed itself. */

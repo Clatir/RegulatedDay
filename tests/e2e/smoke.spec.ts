@@ -37,12 +37,12 @@ test('zamknięcie: koniec pracy bez nieobsłużonych wyjątków, także gdy pomo
   const { app, page, userData } = await launch()
   await expect(page.getByTestId('bar-main')).toBeVisible()
   await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => ''), { timeout: 30_000 }).toContain('pomocnik działa')
-  // app.close() returns when the process has ended: the log is complete. The helper's end comes after the windows are
-  // gone – its status must not reach a destroyed window.
+  // app.close() returns when the process has ended: the log is complete. The helper's end and its last events (the
+  // foreground, the bar) come after the windows are gone – none may reach a destroyed window.
   await app.close()
   const log = await readFile(join(userData, 'logs', 'main.log'), 'utf8')
   expect(log).toContain('koniec pracy')
-  expect(log.split('\n').filter((l) => /nieobsłużon/.test(l))).toEqual([])
+  expect(log.split('\n').filter((l) => /nieobsłużon/.test(l)), log).toEqual([])
 })
 
 test('pasek pulpitu: okno narzędziowe bez aktywacji, nigdy na wierzchu, pokazane po potwierdzeniu pomocnika', async () => {

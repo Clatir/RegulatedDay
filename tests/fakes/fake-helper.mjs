@@ -32,7 +32,11 @@ createInterface({ input: process.stdin }).on('line', (line) => {
       reply({ setting: 'enabled' })
       break
     case 'quit':
-      process.exit(0)
+      // As the real helper: the app's windows are gone by now, and the change of the foreground and the bar's end still
+      // come.
+      out({ type: 'foreground', hwnd: '1', cls: 'Progman', process: 'explorer.exe', shell: false })
+      out({ type: 'bar', hwnd: watched, state: 'gone', detail: 'fake' })
+      setTimeout(() => process.exit(0), 200)
       break
     default:
       reply()

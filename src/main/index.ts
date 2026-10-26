@@ -106,7 +106,8 @@ function showWidget(view: WidgetView): void {
 
 /** The desktop bar as the settings, the widget and the helper allow: laid under the windows before it shows. */
 function layoutBar(): void {
-  if (!bar) return
+  // Destroyed at the quit: the helper's last status and events come after the windows.
+  if (!bar?.alive) return
   const view = widgetView()
   const want = prefs().desktopBar && !view.hidden
   if (!want) {
