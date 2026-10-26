@@ -1,6 +1,8 @@
 /**
- * Ustawienia (E0): this computer's settings that exist already – the autostart with its real state, the desktop bar,
- * hiding from recordings, the scale, the brightness, the animations – and the version, the helper and the logs.
+ * Ustawienia: the shared settings (from the date chosen at the top – by default tomorrow), the modules, categories,
+ * the plan of lectures, then this computer's own – the autostart with its real state, the desktop bar, hiding from
+ * recordings, the scale, the brightness, the animations, the stationary classes (D224), the data folder and an extra
+ * place for backups – and the version, the helper and the logs.
  */
 import { useEffect, useState } from 'react'
 import type { AppInfo, AutostartState } from '@shared/api'
@@ -8,9 +10,14 @@ import { BRIGHTNESS_STEPS, ZOOM_STEPS } from '@shared/machine'
 import type { UpdateView } from '@shared/updateView'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { useWidget } from '../../store/widget'
+import { useData } from '../../store/data'
 import { Field, Section, Segmented, Toggle } from '../../components/ui'
 import { SHORTCUTS } from '../../lib/shortcuts'
 import { phaseText, updateAction } from '../../store/update'
+import { toast } from '../../store/ui'
+import { CategoriesSection } from './CategoriesSection'
+import { LecturesSection } from './LecturesSection'
+import { DayTypesSection, FieldsSection, FromBar, ModulesSection, RegenWaysSection, SessionsSection } from './SharedSettings'
 
 const IDENTITY_LABEL: Record<AppInfo['identity'], string> = {
   production: 'zainstalowana',
@@ -29,6 +36,8 @@ const HELPER_LABEL: Record<AppInfo['helper']['state'], string> = {
 export function SettingsPage() {
   const prefs = useMachine((s) => s.prefs)
   const barNote = useWidget((s) => s.view?.barNote ?? null)
+  const dataOpen = useData((s) => s.view?.status === 'open')
+  const folder = useData((s) => s.view?.folder ?? null)
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [auto, setAuto] = useState<AutostartState | null>(null)
   const [update, setUpdate] = useState<UpdateView | null>(null)
@@ -39,7 +48,24 @@ export function SettingsPage() {
     return window.rd.onUpdate(setUpdate)
   }, [])
   return (
-    <div className="mx-auto flex max-w-[760px] flex-col gap-4 p-4" data-testid="settings">
+    <div className="mx-auto flex max-w-[900px] flex-col gap-4 p-4" data-testid="settings">
+      {dataOpen && (
+        <>
+          <FromBar />
+          <ModulesSection />
+          <DayTypesSection />
+          <FieldsSection group="sleep" />
+          <SessionsSection />
+          <FieldsSection group="boundary" />
+          <FieldsSection group="energy" />
+          <CategoriesSection />
+          <RegenWaysSection />
+          <LecturesSection />
+          <FieldsSection group="reminders" />
+          <FieldsSection group="timer" />
+          <FieldsSection group="care" />
+        </>
+      )}
       <Section title="Ten komputer">
         <Field
           label="Uruchamiaj z Windows"
@@ -82,12 +108,61 @@ export function SettingsPage() {
         <Field label="Animacje" hint="Bez animacji zostaje sam kolor ostrzeżeń.">
           <Toggle checked={prefs.animations} onChange={(v) => void setMachinePrefs({ animations: v })} label={prefs.animations ? 'włączone' : 'wyłączone'} data-testid="pref-animations" />
         </Field>
+        <Field label="Zajęcia stacjonarne" hint="Używasz tego komputera na zajęciach stacjonarnych: koniec zajęć i dojazdu jest wtedy z planu, bez pytania, czy skończyły się wcześniej.">
+          <Toggle checked={prefs.stationaryClasses} onChange={(v) => void setMachinePrefs({ stationaryClasses: v })} label={prefs.stationaryClasses ? 'używam go' : 'nie używam'} data-testid="pref-stationary" />
+        </Field>
+        <Field label="Folder danych" hint={folder ? undefined : 'Nie wybrano – zrobi to kreator.'}>
+          <div className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 break-all text-[12px] text-muted" data-testid="data-folder">
+              {folder ?? '—'}
+            </span>
+            {folder && (
+              <>
+                <button type="button" className="btn" onClick={() => void window.rd.openDataFolder()}>
+                  Otwórz
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void window.rd.pinFolder().then((r) => (r.ok ? toast('Folder przypięty: OneDrive trzyma go na tym komputerze.', 'success') : toast(r.error ?? 'Nie udało się.', 'error', 8000)))}
+                  title="Zawsze przechowuj na tym urządzeniu"
+                >
+                  Przypnij w OneDrive
+                </button>
+              </>
+            )}
+          </div>
+        </Field>
+        <Field label="Dodatkowe miejsce kopii" hint="Poza OneDrive: ten komputer kopiuje tam najnowszą kopię zapasową (14 ostatnich).">
+          <div className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 break-all text-[12px] text-muted">{prefs.backupDir ?? 'brak'}</span>
+            <button
+              type="button"
+              className="btn"
+              onClick={() =>
+                void window.rd.folderPick(prefs.backupDir).then((d) => {
+                  if (d) void setMachinePrefs({ backupDir: d })
+                })
+              }
+            >
+              Wybierz…
+            </button>
+            {prefs.backupDir && (
+              <button type="button" className="btn" onClick={() => void setMachinePrefs({ backupDir: null })}>
+                Bez dodatkowego
+              </button>
+            )}
+          </div>
+        </Field>
       </Section>
       <Section title="Aktualizacje" data-testid="settings-updates">
         <Field label="Wersja">
           <span className="num" data-testid="current-version">
             {info?.version ?? ''}
           </span>
+        </Field>
+        <Field label="Instalacja w nocy" hint="W ciszy nocnej, przy zablokowanym ekranie albo bez używania komputera od 30 min, na zasilaniu z sieci i poza blokami. Przed pierwszym otwarciem danych nowa wersja robi ich kopię.">
+          <Toggle checked={info?.nightInstall ?? true} onChange={(v) => void window.rd.setNightInstall(v).then(setInfo)} label={(info?.nightInstall ?? true) ? 'włączona' : 'wyłączona'} data-testid="pref-night-install" />
         </Field>
         {update && (
           <Field label="Stan" hint={update.note ?? undefined}>

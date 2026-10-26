@@ -26,6 +26,13 @@ export interface MachinePrefs {
   barPlacement: BarPlacement | null
   /** Filters of the lists, remembered one way, on this computer (spec „Listy i filtry”). */
   filters: Record<string, string[]>
+  /**
+   * „Używam tego komputera na zajęciach stacjonarnych” (D224): on it the question whether classes ended early is never
+   * asked, the end of classes and the commute comes from the plan.
+   */
+  stationaryClasses: boolean
+  /** An extra place for backups outside OneDrive: this computer copies the newest backup there (spec „Kopie zapasowe”). */
+  backupDir: string | null
 }
 
 export const ZOOM_STEPS = [0.9, 1, 1.1, 1.25, 1.5] as const
@@ -38,7 +45,9 @@ export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   desktopBar: true,
   hideFromCapture: true,
   barPlacement: null,
-  filters: {}
+  filters: {},
+  stationaryClasses: false,
+  backupDir: null
 }
 
 const num = (v: unknown, min: number, max: number, fallback: number): number =>
@@ -75,7 +84,9 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
     desktopBar: bool(r.desktopBar, DEFAULT_MACHINE_PREFS.desktopBar),
     hideFromCapture: bool(r.hideFromCapture, DEFAULT_MACHINE_PREFS.hideFromCapture),
     barPlacement: placementFrom(r.barPlacement),
-    filters: filtersFrom(r.filters)
+    filters: filtersFrom(r.filters),
+    stationaryClasses: bool(r.stationaryClasses, DEFAULT_MACHINE_PREFS.stationaryClasses),
+    backupDir: typeof r.backupDir === 'string' && r.backupDir.trim() ? r.backupDir.slice(0, 1000) : null
   }
 }
 

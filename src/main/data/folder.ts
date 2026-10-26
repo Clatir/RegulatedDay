@@ -11,20 +11,23 @@
  */
 import { join } from 'node:path'
 import { EventClock, type ClockSources } from '@shared/data/clock'
+import type { MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
-import { createDay, dayPlan, dayWakeMin, nextWakeForBedtime, type HolidayLookup } from '@shared/engine/createDay'
+import { createDay, type HolidayLookup } from '@shared/engine/createDay'
+import { dayContextOf } from '@shared/engine/context'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
 import { idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
-import { daySnapshotOf, isKnown, RULES_VERSION, type AnyEvent } from '@shared/model/events'
+import { daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type Domain } from '@shared/model/events'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
-import { changeFrom, type SettingsChange } from '@shared/model/settings'
+import { rdFrom } from '@shared/model/rd'
+import { isDayTypeId, settingsOn, type SettingsChange } from '@shared/model/settings'
 import { decideLeader, minuteGate, type LeaderDecision, type Peer } from '@shared/sync/leader'
 import { Settle, type SettleReason } from '@shared/sync/settle'
 import { logicalDayOf } from '@shared/time/day'
-import { addDays } from '@shared/time/zone'
-import { EditQueue } from './editQueue'
+import { addDays, isIsoDate } from '@shared/time/zone'
+import { EditQueue, type Outcome, type QueuedEdit } from './editQueue'
 import { EventLog, type DayRead, type EventDraft } from './eventLog'
 import type { DataFs } from './fsio'
 import { RecordHistory } from './history'
@@ -32,9 +35,26 @@ import { PresenceStore } from './presenceStore'
 import { RecordStore } from './records'
 
 export const OBSERVE_EVERY_MS = 5 * 60_000
+
+/** What the main window may write to a day's log, and what each concerns (spec „Każde zdarzenie podaje, czego dotyczy”). */
+const USER_EVENTS: Record<string, Domain> = {
+  'boundary.approve': 'timer',
+  'boundary.undo': 'timer',
+  'boundary.exception': 'timer',
+  'block.park': 'timer',
+  'block.cancel': 'timer',
+  'block.addConfirm': 'timer',
+  'work.end': 'timer',
+  'day.snapshot': 'timer',
+  'energy.checkin': 'energy',
+  'energy.module': 'energy',
+  'module.set': 'meta'
+}
 /** The journal keeps own events of this many days back (spec: until the day's freeze plus 7 days – freezing is E6). */
 export const JOURNAL_KEEP_DAYS = 14
 const COMPACT_EVERY_MS = 60 * 60_000
+/** Conflict copies of the records are looked for this often (and at the first check). */
+const COPY_SCAN_MS = 60_000
 
 /** A record the day is made from that cannot be read now (or is broken) and was never read before: unknown. */
 export class UnknownRecordError extends Error {
@@ -97,6 +117,10 @@ export class DataFolder {
   private lastCompact = 0
   private readonly listed = new Map<string, string[]>()
   private readonly rulesVersion: number
+  private editSeq = 0
+  private lastCopyScan = 0
+  /** Conflict copies with fields different on both sides (copy → the file and the fields). */
+  readonly copyConflicts = new Map<string, { canonical: string; conflicts: MergeConflict[] }>()
 
   private constructor(private readonly o: FolderOptions) {
     this.rulesVersion = o.rulesVersion ?? RULES_VERSION
@@ -225,8 +249,21 @@ export class DataFolder {
     return r.value
   }
 
-  /** A folder of records; a listing that fails keeps the names listed before (unknown is never empty). */
-  private async cachedDir(dir: string, parse: (v: unknown) => unknown, lenient = false): Promise<unknown[]> {
+  /** A record as this computer sees it: the file with your queued edits laid over it (shown at once, also offline). */
+  async recordView(rel: string): Promise<Record<string, unknown> | undefined> {
+    return this.queue.overlay(rel, (await this.cachedJson(rel)) as Record<string, unknown> | undefined)
+  }
+
+  /** A record as the folder holds it (no queued edits): what the leader makes the shared day from. */
+  private async shared(rel: string): Promise<Record<string, unknown> | undefined> {
+    return (await this.cachedJson(rel)) as Record<string, unknown> | undefined
+  }
+
+  /**
+   * A folder of records – as the folder holds it, or (`own`) as this computer sees it, with your queued edits and new
+   * records still in the queue; a listing that fails keeps the names listed before (unknown is never empty).
+   */
+  private async cachedDir(dir: string, parse: (v: unknown) => unknown, lenient = false, own = false): Promise<unknown[]> {
     let names: string[]
     try {
       names = (await this.o.fs.list(join(this.o.dataDir, dir))).filter((e) => !e.dir && e.name.endsWith('.json')).map((e) => e.name)
@@ -236,60 +273,79 @@ export class DataFolder {
       if (!before) throw e
       names = before
     }
+    const rels = new Set(names.map((n) => `${dir}/${n}`))
+    if (own) for (const rel of this.queue.relsUnder(dir)) rels.add(rel)
     const out: unknown[] = []
-    for (const name of names) {
-      const c = classify(`${dir}/${name}`)
+    for (const rel of [...rels].sort()) {
+      const c = classify(rel)
       if (!c || c.conflict) continue
       let raw: unknown
       try {
-        raw = await this.cachedJson(`${dir}/${name}`)
+        raw = own ? await this.recordView(rel) : await this.shared(rel)
       } catch (e) {
         // A list for showing (requests) goes on without the unknown record; what a day is made from does not.
         if (lenient && e instanceof UnknownRecordError) continue
         throw e
       }
+      if (raw === undefined) continue
       const v = parse(raw)
       if (v) out.push(v)
     }
     return out
   }
 
-  /** rd.json's changes, the templates and the plan of lectures. */
-  async inputs(): Promise<Inputs> {
-    const rd = (await this.cachedJson(paths.settings)) as { settings?: unknown } | undefined
-    const changes = Array.isArray(rd?.settings) ? rd.settings.map(changeFrom).filter((c): c is SettingsChange => !!c) : []
-    const templates = (await this.cachedDir(ID_COLLECTIONS.template, templateFrom)) as Template[]
-    const lectures = (await this.cachedDir(ID_COLLECTIONS.schedule, lectureFrom)) as LectureSeries[]
+  /**
+   * rd.json's changes, the templates and the plan of lectures – as the folder holds them (the leader makes the shared
+   * day from them, never from edits not yet written nor answers not yet given), or (`own`) with your queued edits.
+   */
+  async inputs(own = false): Promise<Inputs> {
+    const changes = rdFrom(own ? await this.recordView(paths.settings) : await this.shared(paths.settings)).settings
+    const templates = (await this.cachedDir(ID_COLLECTIONS.template, templateFrom, false, own)) as Template[]
+    const lectures = (await this.cachedDir(ID_COLLECTIONS.schedule, lectureFrom, false, own)) as LectureSeries[]
     return { changes, templates, lectures }
   }
 
-  /** The records of a collection (requests, routines …), through the same cache. */
+  /** The records of a collection as this computer sees them (requests, routines …), through the same cache. */
   async collection(kind: keyof typeof ID_COLLECTIONS): Promise<Array<Record<string, unknown>>> {
-    return (await this.cachedDir(ID_COLLECTIONS[kind], (v) => v, true)) as Array<Record<string, unknown>>
+    return (await this.cachedDir(ID_COLLECTIONS[kind], (v) => v, true, true)) as Array<Record<string, unknown>>
   }
 
-  async dayFile(date: string): Promise<DayFile | null> {
-    const v = await this.cachedJson(paths.day(date))
+  async dayFile(date: string, own = false): Promise<DayFile | null> {
+    const v = own ? await this.recordView(paths.day(date)) : await this.shared(paths.day(date))
     return v === undefined ? null : dayFileFrom(v, date)
+  }
+
+  /**
+   * Your edits from the main window (spec „Edycje plików … trafiają najpierw do lokalnej trwałej kolejki”): each goes to
+   * the queue on the disk first, then the queue is laid onto the folder; what met a change elsewhere stays a question.
+   */
+  async edit(entries: ReadonlyArray<Omit<QueuedEdit, 'id' | 'at' | 'schema'> & { schema?: number }>): Promise<Outcome[]> {
+    // A new record only where there is none: a file that is there but cannot be read now (OneDrive still fetching it) or
+    // that came meanwhile is never taken as missing – its every field would be a question about a change you never made.
+    for (const e of entries) {
+      if (!e.create) continue
+      const now = await this.records.read(e.rel)
+      if (now.status !== 'missing' || this.queue.overlay(e.rel, undefined) !== undefined)
+        throw new Error(now.status === 'ok' ? 'ten rekord już jest w folderze (zmienił się w międzyczasie) – zmiana nie została zapisana, spróbuj jeszcze raz' : 'plik jest teraz nieczytelny – zmiana nie została zapisana, spróbuj za chwilę')
+    }
+    const at = this.clock.now()
+    const ids: string[] = []
+    for (const e of entries) {
+      const id = `${this.o.computer}-${at.toString(36)}-${(this.editSeq++).toString(36)}`
+      ids.push(id)
+      this.queue.add({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true } : {}) })
+    }
+    const outcomes = await this.queue.apply(this.records)
+    return outcomes.filter((o) => ids.includes(o.id))
   }
 
   /** What the engine counts a day from: the snapshot from the log, or – before the leader wrote it – the one this computer computes. */
   private async dayContext(date: string, read: DayRead | undefined, at: number): Promise<DayContext> {
     const inp = await this.inputs()
-    const file = await this.dayFile(date)
+    const dayFile = await this.dayFile(date)
     const events = (read ?? (await this.log.readDay(date))).events
-    const snapshot = daySnapshotOf(events) ?? createDay({ date, ...inp, dayFile: file, holidays: this.o.holidays, at })
-    const nextDate = addDays(date, 1)
-    const nextFile = await this.dayFile(nextDate)
-    return {
-      date,
-      snapshot,
-      plan: dayPlan(snapshot, file),
-      wakeMin: dayWakeMin(snapshot, file),
-      nextWakeMin: nextWakeForBedtime(null, nextFile, inp.changes, nextDate),
-      events,
-      now: at
-    }
+    const nextFile = await this.dayFile(addDays(date, 1))
+    return dayContextOf(inp, { date, events, dayFile, nextFile }, this.o.holidays, at)
   }
 
   /** The engine's day. */
@@ -341,15 +397,9 @@ export class DataFolder {
       problems.push(String(e))
     }
     await this.queue.apply(this.records).catch((e) => problems.push(`kolejka: ${String(e)}`))
-    // Conflict copies of the open day's file are joined (what differs on both sides stays a question for E3).
-    try {
-      for (const c of await this.records.conflictCopies(paths.day(day).slice(0, paths.day(day).lastIndexOf('/')))) {
-        if (c.canonical !== paths.day(day)) continue
-        const r = await this.records.joinCopy(c.copy, c.canonical)
-        if (!r.joined && r.conflicts.length) problems.push(`konflikt ${c.copy}: ${r.conflicts.map((x) => x.path.join('.')).join(', ')}`)
-      }
-    } catch (e) {
-      problems.push(`kopie konfliktowe: ${String(e)}`)
+    if (now - this.lastCopyScan >= COPY_SCAN_MS) {
+      this.lastCopyScan = now
+      await this.joinCopies(day).catch((e) => problems.push(`kopie konfliktowe: ${String(e)}`))
     }
     const settled = this.settle.settled(now)
     this.leader = decideLeader({
@@ -410,6 +460,93 @@ export class DataFolder {
     await this.log.flush()
     await this.presence.tick().catch((e) => problems.push(`obecność: ${String(e)}`))
     return { leader: this.leader, settled, created, segments, problems }
+  }
+
+  /**
+   * OneDrive's conflict copies of the records (spec „Kopie konfliktowe OneDrive są porównywane po treści”): the same
+   * content goes, fields only one side has join, both versions go to the history; fields different on both sides stay
+   * a question (`copyConflicts`) until you answer it. Every folder of records, the days of this year and the next.
+   */
+  private async joinCopies(day: string): Promise<void> {
+    const year = Number(day.slice(0, 4))
+    // Last year's days too (a copy of 31.12 seen on 1.01).
+    const dirs = ['', ID_COLLECTIONS.template, ID_COLLECTIONS.schedule, ID_COLLECTIONS.request, ID_COLLECTIONS.routine, `days/${year - 1}`, `days/${year}`, `days/${year + 1}`]
+    const scanned = new Set(dirs)
+    const seen = new Set<string>()
+    for (const dir of dirs) {
+      let copies: Array<{ copy: string; canonical: string }>
+      try {
+        copies = await this.records.conflictCopies(dir)
+      } catch {
+        // A folder that cannot be listed now: its questions stay as they were.
+        for (const k of this.copyConflicts.keys()) if ((k.includes('/') ? k.slice(0, k.lastIndexOf('/')) : '') === dir) seen.add(k)
+        continue
+      }
+      for (const c of copies) {
+        seen.add(c.copy)
+        const r = await this.records.joinCopy(c.copy, c.canonical)
+        if (r.joined) this.copyConflicts.delete(c.copy)
+        else if (r.conflicts.length) this.copyConflicts.set(c.copy, { canonical: c.canonical, conflicts: r.conflicts })
+      }
+    }
+    // A question goes only when its folder was looked at and the copy is not there any more (joined, removed).
+    const dirOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '')
+    for (const k of [...this.copyConflicts.keys()]) if (scanned.has(dirOf(k)) && !seen.has(k)) this.copyConflicts.delete(k)
+  }
+
+  /** Your answer to a conflict copy: „mine” – the file's values, „theirs” – the copy's; then the copy goes. */
+  async resolveCopy(copyRel: string, choice: 'mine' | 'theirs'): Promise<void> {
+    const q = this.copyConflicts.get(copyRel)
+    if (!q) return
+    const r = await this.records.joinCopy(copyRel, q.canonical, () => choice)
+    if (r.joined) this.copyConflicts.delete(copyRel)
+  }
+
+  /** The computers that wrote a presence, this one first (names as each computer calls itself). */
+  get computers(): Array<{ id: string; name: string }> {
+    const out = [{ id: this.o.computer, name: this.o.computerName }]
+    for (const p of this.peers) if (p.presence.computer !== this.o.computer) out.push({ id: p.presence.computer, name: p.presence.name || p.presence.computer })
+    return out
+  }
+
+  /**
+   * Actions of the main window as events of a day's log (spec: facts you set live only in the log): only the kinds a
+   * window may write, each checked as a line of the log before it is written; an action without its instant gets now. A
+   * snapshot „od dziś” or of a change of type takes the settings in force at its instant (with your queued changes).
+   */
+  async userEvents(drafts: ReadonlyArray<Record<string, unknown>>): Promise<void> {
+    const now = this.clock.now()
+    const ready: EventDraft[] = []
+    for (const d of drafts) {
+      const k = String(d.k ?? '')
+      const dom = USER_EVENTS[k]
+      if (!dom) throw new Error(`zdarzenie ${k} nie pochodzi z okna`)
+      if (typeof d.day !== 'string' || !isIsoDate(d.day)) throw new Error(`zdarzenie ${k}: dzień`)
+      const at = typeof d.at === 'number' && Number.isFinite(d.at) ? d.at : now
+      const draft: EventDraft = { ...d, day: d.day, dom, k, at }
+      delete draft.id
+      if (k === 'day.snapshot') {
+        if (!isDayTypeId(d.dayType)) throw new Error('zdarzenie day.snapshot: typ dnia')
+        // Your own action: the settings with your own queued change (a change „od dziś” just made, also offline).
+        draft.settings = settingsOn((await this.inputs(true)).changes, d.day, at)
+      }
+      const check = parseEvent(JSON.stringify({ ...draft, id: 'x', c: this.o.computer, n: 0, t: now, l: now, v: this.rulesVersion }))
+      if (!check.ok || !isKnown(check.event)) throw new Error(`zdarzenie ${k}: ${check.ok ? 'nieznane' : check.why}`)
+      ready.push(draft)
+    }
+    for (const d of ready) this.append(d)
+    await this.log.flush()
+  }
+
+  /** The events of the given kinds of every day of a month ('RRRR-MM'), as this computer sees them now. */
+  async monthEvents(month: string, kinds: readonly string[]): Promise<AnyEvent[]> {
+    const out: AnyEvent[] = []
+    const want = new Set(kinds)
+    for (let d = `${month}-01`; d.startsWith(month); d = addDays(d, 1)) {
+      const read = await this.log.readDay(d).catch(() => null)
+      if (read) for (const e of read.events) if (want.has(e.k)) out.push(e)
+    }
+    return out
   }
 
   /** The end of the Windows session: the observation's end as one synchronous line in the journal, without fsync. */

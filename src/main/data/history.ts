@@ -26,6 +26,12 @@ export interface Snapshot {
 const safe = (s: string) => s.replace(/[^0-9A-Za-z_-]/g, '')
 const stamp = (ms: number) => new Date(ms).toISOString().replace(/[-:.]/g, '')
 
+/** The time a version's file name starts with (`stamp`), 0 when it cannot be read. */
+function stampTime(name: string): number {
+  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(\d{3})Z/.exec(name)
+  return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]), Number(m[7])) : 0
+}
+
 export class RecordHistory {
   private readonly last = new Map<string, number>()
 
@@ -73,6 +79,37 @@ export class RecordHistory {
   private async prune(dir: string): Promise<void> {
     const names = await this.names(dir)
     for (const n of names.slice(0, Math.max(0, names.length - MAX_PER_RECORD))) await this.o.fs.remove(join(dir, n))
+  }
+
+  /**
+   * Every record with versions kept: its kind and id, how many and the newest one's time (from the file names – nothing
+   * is read). Listed on demand only (the history screen), never at the start.
+   */
+  async records(): Promise<Array<{ kind: string; id: string; versions: number; last: number }>> {
+    const root = join(this.o.dataDir, HISTORY_DIR)
+    const out: Array<{ kind: string; id: string; versions: number; last: number }> = []
+    let kinds: Array<{ name: string; dir: boolean }>
+    try {
+      kinds = await this.o.fs.list(root)
+    } catch {
+      return []
+    }
+    for (const k of kinds) {
+      if (!k.dir) continue
+      let ids: Array<{ name: string; dir: boolean }>
+      try {
+        ids = await this.o.fs.list(join(root, k.name))
+      } catch {
+        continue
+      }
+      for (const i of ids) {
+        if (!i.dir) continue
+        const names = await this.names(join(root, k.name, i.name))
+        if (!names.length) continue
+        out.push({ kind: k.name, id: i.name, versions: names.length, last: stampTime(names.at(-1)!) })
+      }
+    }
+    return out.sort((a, b) => b.last - a.last)
   }
 
   /** Versions of a record, newest first (unreadable ones skipped). */

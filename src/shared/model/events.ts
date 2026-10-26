@@ -11,7 +11,7 @@
 import { isIsoDate } from '../time/zone'
 import { POOLS, type Costs, type Pool, type PoolValues } from './categories'
 import type { PlanBlock } from './plan'
-import type { DayTypeId, RulesSettings } from './settings'
+import { settingsFrom, type DayTypeId, type RulesSettings } from './settings'
 
 export type Domain = 'timer' | 'energy' | 'game' | 'meta'
 
@@ -62,7 +62,13 @@ export type TimerEvent =
   | (EventBase & { k: 'day.create'; snapshot: DaySnapshot })
   /** The snapshot issued again (an older rd.json arrived after the creation, before any minute was classified). */
   | (EventBase & { k: 'day.reissue'; snapshot: DaySnapshot })
-  | (EventBase & { k: 'day.snapshot'; at: number; dayType: DayTypeId; settings: RulesSettings; reason: 'today' | 'type' | 'reissue' })
+  /**
+   * A second snapshot of the day from `at` on: settings changed „od dziś”, or the day's type changed (spec „Zmiana typu w
+   * trakcie dnia”). A change of type may fix the day's maximum from then on (`max`, an instant: the new type's maximum,
+   * moved by the running and kept blocks within the old one) and the minimum of regeneration it asks (`minRegen`, counted
+   * once at the switch to a regeneration day).
+   */
+  | (EventBase & { k: 'day.snapshot'; at: number; dayType: DayTypeId; settings: RulesSettings; reason: 'today' | 'type' | 'reissue'; max?: number | null; minRegen?: number | null })
   | (EventBase & {
       k: 'block.start'
       block: string
@@ -81,6 +87,11 @@ export type TimerEvent =
   | (EventBase & { k: 'block.confirm'; block: string; at: number })
   | (EventBase & { k: 'block.park'; block: string; at: number; rule: string })
   | (EventBase & { k: 'block.cancel'; block: string; at: number; rule: string })
+  /**
+   * „Dodaj bez wymiany” (spec „Wymiana”): the block's minutes after the boundary are confirmed in advance – when they
+   * come nothing asks again, and the block starts with the first click.
+   */
+  | (EventBase & { k: 'block.addConfirm'; block: string; at: number })
   | (EventBase & { k: 'block.fg'; block: string; at: number; bg: boolean })
   | (EventBase & { k: 'boundary.approve'; at: number; boundary: number; auto: boolean })
   | (EventBase & { k: 'boundary.undo'; at: number })
@@ -136,7 +147,13 @@ export type EnergyEvent =
 /** An event of a kind this version does not know: kept, skipped by the rules. */
 export type UnknownEvent = EventBase & { k: string; unknown: true; raw: Record<string, unknown> }
 
-export type LogEvent = TimerEvent | PresenceEvent | EnergyEvent
+/**
+ * A module switched on or off (spec „Moduły”: it works at once; its rewards of that day count neither way) – the day's
+ * record of it (energy has its own `energy.module`, which the energy engine reads).
+ */
+export type MetaEvent = EventBase & { k: 'module.set'; at: number; module: string; on: boolean; was: boolean }
+
+export type LogEvent = TimerEvent | PresenceEvent | EnergyEvent | MetaEvent
 export type AnyEvent = LogEvent | UnknownEvent
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -151,7 +168,7 @@ const isValues = (v: unknown) => v == null || (isPlain(v) && POOLS.every((p) => 
 const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'day.create': { snapshot: isPlain },
   'day.reissue': { snapshot: isPlain },
-  'day.snapshot': { at: isNum, dayType: isStr, settings: isPlain },
+  'day.snapshot': { at: isNum, dayType: isStr, settings: isPlain, max: (v) => v == null || isNum(v), minRegen: (v) => v == null || (isNum(v) && v >= 0 && v <= 24 * 60) },
   'block.start': { block: isStr, at: isNum, planned: isPlain },
   'block.pause': { block: isStr, at: isNum },
   'block.resume': { block: isStr, at: isNum },
@@ -160,6 +177,8 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'block.confirm': { block: isStr, at: isNum },
   'block.park': { block: isStr, at: isNum },
   'block.cancel': { block: isStr, at: isNum },
+  'block.addConfirm': { block: isStr, at: isNum },
+  'module.set': { at: isNum, module: isStr, on: (v) => typeof v === 'boolean', was: (v) => typeof v === 'boolean' },
   'block.fg': { block: isStr, at: isNum },
   'boundary.approve': { at: isNum, boundary: isNum },
   'boundary.undo': { at: isNum },
@@ -226,7 +245,8 @@ export function daySnapshotOf(events: readonly AnyEvent[]): DaySnapshot | null {
     if (!isKnown(e) || (e.k !== 'day.create' && e.k !== 'day.reissue')) continue
     if (!found || compareEvents(e, found.e) > 0) found = { e, s: e.snapshot }
   }
-  return found?.s ?? null
+  // Settings written by an older version lack the fields added since: they take their defaults (tolerant schemas).
+  return found ? { ...found.s, settings: settingsFrom(found.s.settings) } : null
 }
 
 /** The kind's own instant (`at`, `from` …) – what the rules place the event at. */

@@ -27,6 +27,11 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - `engine/day.ts` – `computeDay`: granica, koniec pracy, klasyfikacja minut, budżet, regeneracja, minimum, pora snu,
   twardy koniec, pula, regeneracja każdej minuty (`rest`, dla energii); `newSegments` (odcinki do zapisu przez
   prowadzącego); `settingsAtMinute`. Energia (E2) – osobne reguły `energia.md`.
+- E3: `engine/context.ts` (`dayContextOf`, `snapshotOf` – jedno źródło kontekstu dla prowadzącego i okna),
+  `planEdit.ts` (nowy blok, przeniesienie, kopia dnia i szablonu, blok próśb), `exchange.ts` (wymiana),
+  `typeChange.ts` (zmiana typu, „Dodaj bloki typu …”), `lateWake.ts`, `morning.ts` (z wczoraj, pytania sesji i świąt,
+  ostrzeżenia, przesunięcie sesji, analiza sobotnia); `model/rd.ts`, `requests.ts`, `routines.ts`, `fields.ts`
+  (opis każdego ustawienia z liczbą), `defaults.ts` (zapisy kreatora). Testy: `tests/unit/engine/e3-plan.test.ts`.
 
 ## Jak liczy `computeDay`
 - Siatka minut od 04:00 (T412). Przeszłość z faktów (`actual` – flagi minut), przyszłość z prognozy; każda minuta
@@ -51,5 +56,12 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - `afterWorkAsProject` nie czyni bloku projektem w prognozie – tylko oznaczenie „po pracy” albo start po ważnym końcu.
 - Testy przykładów: `tests/unit/engine/dsl.ts` (plan w godzinach polskich, zdarzenia po zegarze). Każdy wiersz
   przykładu ze specyfikacji jest osobnym testem w `model-dnia.test.ts`.
+- Migawka typu (`day.snapshot` reason type) niesie `max` i `minRegen`; pora snu nigdy przed chwilą migawki. Blok
+  zaparkowany albo odwołany przed startem nie jest pracą w planie (dzień bez pracy). `block.addConfirm` potwierdza
+  minuty bloku z góry także przed startem (prognoza pory snu).
+- Niezaczęte bloki czekające na „Zacznij” po końcu okna: bez innej pracy przed drugą zmianą ich planowany koniec jest
+  pierwszym końcem pracy (`expiredWaitEnd`, T455) – bez tego dzień bez timera ma „minimum nie mieści się”.
+- „Nauka”, „Oglądanie”, „Journaling” zaplanowane ≥ 30 min po innej pracy mają „po pracy” – w testach budżetu i
+  granicy używaj „Inne obowiązki”.
 - Jeszcze nie w silniku (późniejsze etapy): pytania „Dalej?” i „Koniec pracy?” (E4a), czas do wyjaśnienia, nieobecność
-  i bezczynność (E4a), panel zmiany typu dnia (E3), wymiana i warianty (E3/E5), rytuał i zamrażanie (E6).
+  i bezczynność (E4a), warianty (E5), rytuał i zamrażanie (E6).

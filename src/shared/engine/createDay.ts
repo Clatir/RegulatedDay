@@ -8,9 +8,9 @@
 import { derivedId } from '../model/ids'
 import { SESSION_CATEGORY } from '../model/categories'
 import type { DaySnapshot } from '../model/events'
-import { planBlock, templateFor, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
-import { settingsOn, type DayTypeId, type RulesSettings, type SessionDef, type SettingsChange } from '../model/settings'
-import { dayEnd, dayStart, logicalMinuteOf } from '../time/day'
+import { PLAN_MAX, PLAN_MIN, planBlock, templateFor, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
+import { DEFAULT_SETTINGS, settingsOn, type DayTypeId, type RulesSettings, type SessionDef, type SettingsChange } from '../model/settings'
+import { dayEnd, dayStart, logicalMinuteOf, placeLogical } from '../time/day'
 import { MINUTE, PL_ZONE, addDays, offsetMin, placeWall, weekday } from '../time/zone'
 
 /** What the holiday calendar answers for a market and date (the calendar module's MarketDay). */
@@ -33,9 +33,9 @@ export interface DayInputs {
   at: number | null
 }
 
-/** The type a date has unless you choose another: weekdays are ordinary days, Saturday and Sunday weekend days. */
-export function defaultDayType(date: string): DayTypeId {
-  return weekday(date) >= 6 ? 'weekend' : 'zwykly'
+/** The type a date has unless you choose another: the type of its weekday (by default Monday–Friday ordinary days). */
+export function defaultDayType(date: string, settings: Pick<RulesSettings, 'weekTypes'> = DEFAULT_SETTINGS): DayTypeId {
+  return settings.weekTypes[weekday(date) - 1] ?? (weekday(date) >= 6 ? 'weekend' : 'zwykly')
 }
 
 /** Anchors in templates point at template blocks by their id, or at a session as „session:<id>”. */
@@ -69,6 +69,30 @@ export function sessionShiftMin(def: SessionDef, at: number): number {
   return now - usual
 }
 
+/**
+ * A session of the layer as a block of `date`: fixed, of the session category, placed from its zone and ending at the
+ * early close of its markets (as the day's holidays say); null when it does not fall in the day or closes before it starts.
+ */
+export function sessionBlock(def: SessionDef, date: string, holidays: DaySnapshot['holidays']): PlanBlock | null {
+  const win = sessionWindow(def, date)
+  if (!win) return null
+  let end = win.end
+  for (const m of def.markets) {
+    const h = holidays.find((x) => x.market === m)
+    if (h?.earlyCloseAt != null) end = Math.min(end, h.earlyCloseAt)
+  }
+  if (end <= win.start) return null
+  return planBlock({
+    id: sessionBlockId(date, def.id),
+    categoryId: SESSION_CATEGORY,
+    startMin: Math.round(logicalMinuteOf(date, win.start)),
+    durationMin: Math.round((end - win.start) / MINUTE),
+    fixed: true,
+    origin: 'session',
+    sourceId: def.id
+  })
+}
+
 /** The lectures of the plan held on `date`. */
 export function lecturesOn(lectures: readonly LectureSeries[], date: string): LectureSeries[] {
   const wd = weekday(date)
@@ -86,8 +110,8 @@ function sessionKept(settings: RulesSettings, type: DayTypeId, date: string, ses
 /** The deterministic snapshot of a day. */
 export function createDay(inp: DayInputs): DaySnapshot {
   const { date, dayFile } = inp
-  const dayType = dayFile?.dayType ?? defaultDayType(date)
   const settings = settingsOn(inp.changes, date, inp.at)
+  const dayType = dayFile?.dayType ?? defaultDayType(date, settings)
   const params = settings.dayTypes[dayType]
   const tpl = templateFor(inp.templates, dayType, weekday(date), date)
   const changes = inp.changes.filter((c) => c.from < date || (c.from === date && (c.at == null || (inp.at != null && c.at <= inp.at)))).map((c) => c.id).sort()
@@ -109,30 +133,15 @@ export function createDay(inp: DayInputs): DaySnapshot {
   const sessionIds = new Map<string, string>()
   let shift = 0
   for (const def of settings.sessions) {
+    // Every session's markets, kept or not: a session added later the same day (an answer „tak”, a change of type)
+    // ends at its market's early close too.
+    for (const m of def.markets) noteMarket(m)
     if (!sessionKept(settings, dayType, date, def.id, dayFile)) continue
-    const win = sessionWindow(def, date)
-    if (!win) continue
-    let end = win.end
-    for (const m of def.markets) {
-      noteMarket(m)
-      const h = holidays.find((x) => x.market === m)
-      if (h?.earlyCloseAt != null) end = Math.min(end, h.earlyCloseAt)
-    }
-    if (end <= win.start) continue
-    const id = sessionBlockId(date, def.id)
-    sessionIds.set(def.id, id)
-    shift = Math.min(shift, sessionShiftMin(def, win.start))
-    blocks.push(
-      planBlock({
-        id,
-        categoryId: SESSION_CATEGORY,
-        startMin: Math.round(logicalMinuteOf(date, win.start)),
-        durationMin: Math.round((end - win.start) / MINUTE),
-        fixed: true,
-        origin: 'session',
-        sourceId: def.id
-      })
-    )
+    const block = sessionBlock(def, date, holidays)
+    if (!block) continue
+    sessionIds.set(def.id, block.id)
+    shift = Math.min(shift, sessionShiftMin(def, placeLogical(date, block.startMin!)))
+    blocks.push(block)
   }
 
   // The template's blocks; anchors to template blocks and sessions get the day's ids. A block anchored to a session that
@@ -193,8 +202,20 @@ export function createDay(inp: DayInputs): DaySnapshot {
 export function dayPlan(snapshot: DaySnapshot, dayFile: DayFile | null): PlanBlock[] {
   const own = new Map((dayFile?.blocks ?? []).map((b) => [b.id, b]))
   const gone = new Set([...(dayFile?.cancelled ?? []), ...Object.keys(dayFile?.movedTo ?? {})])
+  // The answers of the session layer given after the day was made: „nie” takes a session away (and what is anchored to
+  // it), „tak” brings one the day was made without (spec „Sesje tradingowe”).
+  const answers = dayFile?.sessions ?? {}
+  const snapshotBlocks = snapshot.blocks.filter((b) => !(b.origin === 'session' && b.sourceId && answers[b.sourceId] === 'no'))
+  if (dayFile) {
+    for (const def of snapshot.settings.sessions) {
+      if (answers[def.id] !== 'yes' || snapshotBlocks.some((b) => b.origin === 'session' && b.sourceId === def.id)) continue
+      const b = sessionBlock(def, dayFile.date, snapshot.holidays)
+      if (b) snapshotBlocks.push(b)
+    }
+  }
+  const shift = wakeShift(snapshot, dayFile, snapshotBlocks, own)
   const out = new Map<string, PlanBlock>()
-  for (const b of snapshot.blocks) if (!gone.has(b.id)) out.set(b.id, own.get(b.id) ?? b)
+  for (const b of snapshotBlocks) if (!gone.has(b.id)) out.set(b.id, own.get(b.id) ?? shift(b))
   for (const b of own.values()) if (!gone.has(b.id) && !out.has(b.id)) out.set(b.id, b)
   // A block in a cycle of anchors (anchored to itself, or A→B→A) can never start: it leaves the plan.
   const cyclic = new Set<string>()
@@ -222,6 +243,23 @@ export function dayPlan(snapshot: DaySnapshot, dayFile: DayFile | null): PlanBlo
   return [...out.values()]
 }
 
+/**
+ * The morning follows the day's wake (spec „Pobudkę możesz ustawić osobno”): the morning routine and the blocks planned
+ * before the first fixed block (in a day without fixed blocks: every flexible one) move by the difference between the
+ * day's wake and the template's, also in the weeks of the session shift; fixed blocks stay at their times (the plan shows
+ * collisions). Only blocks of the snapshot you have not changed for the day move – a block you placed keeps its time.
+ */
+function wakeShift(snapshot: DaySnapshot, dayFile: DayFile | null, blocks: readonly PlanBlock[], own: ReadonlyMap<string, PlanBlock>): (b: PlanBlock) => PlanBlock {
+  const delta = dayWakeMin(snapshot, dayFile) - snapshot.templateWakeMin
+  if (delta === 0) return (b) => b
+  const fixedStarts = [...blocks.map((b) => own.get(b.id) ?? b), ...[...own.values()]].filter((b) => b.fixed && b.startMin != null).map((b) => b.startMin!)
+  const firstFixed = fixedStarts.length ? Math.min(...fixedStarts) : Number.POSITIVE_INFINITY
+  return (b) => {
+    if (b.fixed || b.anchor || b.startMin == null || b.startMin >= firstFixed) return b
+    return { ...b, startMin: Math.max(PLAN_MIN, Math.min(PLAN_MAX - b.durationMin, b.startMin + delta)) }
+  }
+}
+
 /** The wake time of a day: your own for the day, else the snapshot's (with the session shift). */
 export function dayWakeMin(snapshot: DaySnapshot, dayFile: DayFile | null): number {
   return dayFile?.wakeMin ?? snapshot.wakeMin
@@ -234,6 +272,7 @@ export function dayWakeMin(snapshot: DaySnapshot, dayFile: DayFile | null): numb
 export function nextWakeForBedtime(nextSnapshot: DaySnapshot | null, nextFile: DayFile | null, changes: readonly SettingsChange[], nextDate: string): number {
   if (nextFile?.wakeMin != null) return nextFile.wakeMin
   if (nextSnapshot) return nextSnapshot.templateWakeMin
-  const type = nextFile?.dayType ?? defaultDayType(nextDate)
-  return settingsOn(changes, nextDate).dayTypes[type].wakeMin
+  const settings = settingsOn(changes, nextDate)
+  const type = nextFile?.dayType ?? defaultDayType(nextDate, settings)
+  return settings.dayTypes[type].wakeMin
 }

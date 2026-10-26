@@ -29,6 +29,10 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   konfliktowe pliku dnia, zadania prowadzącego: dzień, odcinki minut, minięcie twardego końca), `dayState`, `close`.
 - `main/data/service.ts` – w procesie głównym: folder + `Scheduler` + znacznik życia folderu + kopia dzienna + plik
   planu dla strażnika. `main/data/backup.ts`, `zip.ts` – kopie ZIP (z FI). `main/engine/scheduler.ts` – terminy.
+- E3: `main/data/hub.ts` – folder dla okna (reguły `interfejs.md`); w `folder.ts`: `recordView` (plik + kolejka),
+  `edit`, `userEvents`, `monthEvents`, `joinCopies` (kopie konfliktowe wszystkich zapisów co 60 s → `copyConflicts`),
+  `resolveCopy`; `EditQueue`: `overlay`, `questions`, `resolve`, nakładanie po kolei; `history.records()`;
+  `backup.createUpdateBackup` (kopia przed aktualizacją, `backups/aktualizacje/`).
 
 ## Formaty
 - Log: `log/RRRR/RRRR-MM-DD/<komputer>.jsonl`, linia = zdarzenie z `id c n t l v day dom k` + pola rodzaju.
@@ -48,4 +52,9 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   timera sprzed jego końca spoza jego stanu wiedzy (T416).
 - Symulator (`tests/sim/onedrive.ts`): nowsza wersja pliku w drodze nie może odkładać jego dostarczenia – plik pisany
   co minutę nigdy by nie dotarł. Test dwóch komputerów ~25 s, test skali ~15 s (generator 3 lat).
-- E1 otwiera folder tylko z `RD_DATA_DIR` (T427); obecność z `powerMonitor.getSystemIdleTime` do czasu pomocnika E4a.
+- Folder z kreatora (`config.dataFolder`) albo `RD_DATA_DIR` (pierwszeństwo, T445); niedostępny folder – nic nie
+  powstaje w jego miejscu. Obecność z `powerMonitor.getSystemIdleTime` do czasu pomocnika E4a.
+- Dwa przebiegi kolejki naraz gubiły wpisy – `apply` i `resolve` idą po kolei; wpis za nierozstrzygniętym tego samego
+  pliku czeka. Błąd zapisu jednego wpisu (także nowego rekordu) = „czeka”, nigdy wyjątek przerywający przebieg.
+- Prowadzący liczy dzień z plików folderu (`inputs()`, `dayFile(d)`), okno – z kolejką (`inputs(true)`, `recordView`):
+  edycja jeszcze niezapisana nie może trafić do wspólnej migawki dnia. `updatedAt` pliku nigdy się nie cofa.

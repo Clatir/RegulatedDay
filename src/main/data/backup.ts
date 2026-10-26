@@ -232,6 +232,36 @@ export async function createDailyBackup(dataDir: string, backupsDir: string, dat
   }
 }
 
+/** Backups made before a new version first opens the folder (plan „Wersje 0.x na prawdziwych danych”): the last kept. */
+export const UPDATE_KEEP = 5
+/** A version as `parseVersion` reads it (betas included: „0.3.0-beta.1”), without the leading „v”. */
+const VERSION = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?`
+const UPDATE_NAME = new RegExp(`^${VERSION}-do-${VERSION}\\.zip$`)
+
+/**
+ * The backup before an update (plan: „kopia zapasowa przed aktualizacją”): a new version makes it at its first opening
+ * of the folder, before it reads or writes anything there – the data are still as the version before left them, so a
+ * change of format (a migration) can always be undone. `<backupsDir>/aktualizacje/<from>-do-<to>.zip`, made once per
+ * update (on the computer that opens the folder first), the last 5 kept. Never throws.
+ */
+export async function createUpdateBackup(dataDir: string, backupsDir: string, from: string, to: string): Promise<BackupResult | null> {
+  const dir = join(backupsDir, 'aktualizacje')
+  const name = `${from}-do-${to}.zip`
+  if (!UPDATE_NAME.test(name)) return { ok: false, error: `Niepoprawne wersje: ${from}, ${to}` }
+  const file = join(dir, name)
+  if (await pathExists(file)) return null
+  try {
+    const made = await zipFolder(dataDir, file, isDataFile, isOutsideBackup, backupSource)
+    const names = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => UPDATE_NAME.test(n))
+    // Oldest first by the time each was made (the names hold versions, not dates).
+    const dated = await Promise.all(names.map(async (n) => ({ n, t: (await fs.stat(join(dir, n)).catch(() => null))?.mtimeMs ?? 0 })))
+    for (const old of dated.sort((a, b) => a.t - b.t).slice(0, Math.max(0, dated.length - UPDATE_KEEP))) await removeFile(join(dir, old.n)).catch(() => undefined)
+    return { ok: true, file, ...made }
+  } catch (e) {
+    return { ok: false, error: message(e) }
+  }
+}
+
 /**
  * The additional place of this computer, outside OneDrive (spec: „sam kopiuje tam najnowszą kopię, także gdy nie
  * prowadzi”): the newest daily backup copied to `<extraDir>/daily/` when it is not there (or there with another size –

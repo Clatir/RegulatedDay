@@ -1,0 +1,47 @@
+/**
+ * A dialog of the main window: over the page, closed by Esc (one order of Esc – a field's edit first, then the dialog)
+ * and by its own buttons. The main window's dialogs open only on your click (never by themselves, D229).
+ */
+import { useEffect, useRef, type ReactNode } from 'react'
+import { useEscapeLayer } from '../lib/escape'
+import { cx } from './ui'
+
+export function Dialog({
+  title,
+  children,
+  actions,
+  onClose,
+  wide,
+  ...rest
+}: {
+  title: ReactNode
+  children: ReactNode
+  actions?: ReactNode
+  onClose: () => void
+  wide?: boolean
+  'data-testid'?: string
+}) {
+  useEscapeLayer(true, onClose)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    // The first field (or the box) takes the focus, so keys go to the dialog.
+    const first = box.current?.querySelector<HTMLElement>('input, textarea, select, button[data-autofocus]')
+    ;(first ?? box.current)?.focus()
+  }, [])
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-10" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div
+        ref={box}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        data-testid={rest['data-testid']}
+        className={cx('flex w-full animate-fade-in flex-col rounded-lg border border-line-strong bg-panel outline-none', wide ? 'max-w-[760px]' : 'max-w-[520px]')}
+      >
+        <h2 className="border-b border-line px-4 py-2.5 text-[14px] font-medium">{title}</h2>
+        <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto px-4 py-3">{children}</div>
+        {actions && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-4 py-2.5">{actions}</div>}
+      </div>
+    </div>
+  )
+}

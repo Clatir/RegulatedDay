@@ -6,7 +6,8 @@
  * („3.01” – the nearest such date) are parsed by @shared/format.
  */
 import { useRef, useState, type KeyboardEvent } from 'react'
-import { durationLabel, logicalClock, parseDate, parseDuration, parseInteger, parseLogicalTime, plDate, type Parsed } from '@shared/format'
+import { clock, durationLabel, logicalClock, parseDate, parseDuration, parseInteger, parseLogicalTime, plDate, type Parsed } from '@shared/format'
+import { parseField } from '@shared/model/fields'
 import { toast } from '../store/ui'
 import { cx } from './ui'
 
@@ -87,12 +88,112 @@ export function IntegerField({ min, max, ...p }: Omit<CommitFieldProps<number>, 
   return <CommitField {...p} parse={(t) => parseInteger(t, min, max)} format={(n) => String(n)} />
 }
 
-/** A time of the logical day: minutes since 00:00 of its date (00:00–03:59 is the night after, „+1”). */
-export function TimeField(p: Omit<CommitFieldProps<number>, 'parse' | 'format'>) {
-  return <CommitField {...p} parse={parseLogicalTime} format={logicalClock} placeholder={p.placeholder ?? 'np. 7:05'} />
+/**
+ * A time of the logical day: minutes since 00:00 of its date (00:00–03:59 is the night after, „+1”); with `range`, a time
+ * outside it is refused with its message (never saved to be dropped by the model's schema).
+ */
+export function TimeField({ range, ...p }: Omit<CommitFieldProps<number>, 'parse' | 'format'> & { range?: readonly [number, number] }) {
+  const parse = range ? (t: string) => parseField({ kind: 'time', range, offAllowed: false }, t) : parseLogicalTime
+  return <CommitField {...p} parse={parse} format={logicalClock} placeholder={p.placeholder ?? 'np. 7:05'} />
+}
+
+/** A wall time of another zone (a session's hours in New York time): 00:00–23:59, no „+1”. */
+export function ClockField(p: Omit<CommitFieldProps<number>, 'parse' | 'format'>) {
+  return (
+    <CommitField
+      {...p}
+      parse={(t) => {
+        const r = parseLogicalTime(t)
+        return r.ok ? { ok: true, value: r.value % 1440 } : r
+      }}
+      format={clock}
+      placeholder={p.placeholder ?? 'np. 8:00'}
+    />
+  )
 }
 
 /** A date: „21.10.2026”, or „3.01” – the nearest such date from `today` on. */
 export function DateField({ today, ...p }: Omit<CommitFieldProps<string>, 'parse' | 'format'> & { today: string }) {
   return <CommitField {...p} parse={(t) => parseDate(t, today)} format={plDate} placeholder={p.placeholder ?? 'np. 21.10.2026 albo 3.01'} />
+}
+
+/** A text (a name, a note): saved on leaving the field or Enter, Esc throws the edit away; trimmed, at most `max` characters. */
+export function TextField({ value, onCommit, max = 80, multiline, placeholder, className, required, ...rest }: {
+  value: string
+  onCommit: (v: string) => void
+  max?: number
+  multiline?: boolean
+  placeholder?: string
+  className?: string
+  /** An empty text is refused (a name). */
+  required?: boolean
+  'aria-label'?: string
+  'data-testid'?: string
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const cancelled = useRef(false)
+  const shown = draft ?? value
+  const commit = () => {
+    if (cancelled.current) {
+      cancelled.current = false
+      setDraft(null)
+      return
+    }
+    if (draft == null) return
+    const v = draft.trim().slice(0, max)
+    setDraft(null)
+    if (required && !v) {
+      toast('To pole nie może być puste.', 'error', 5000)
+      return
+    }
+    if (v !== value) onCommit(v)
+  }
+  const common = {
+    value: shown,
+    placeholder,
+    maxLength: max,
+    spellCheck: false,
+    'aria-label': rest['aria-label'],
+    'data-testid': rest['data-testid'],
+    onBlur: commit,
+    onChange: (e: { currentTarget: { value: string } }) => setDraft(e.currentTarget.value),
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && (!multiline || e.ctrlKey)) e.currentTarget.blur()
+      if (e.key === 'Escape' && draft != null) {
+        e.stopPropagation()
+        e.preventDefault()
+        cancelled.current = true
+        e.currentTarget.blur()
+      }
+    }
+  }
+  return multiline ? <textarea {...common} rows={3} className={cx('input h-auto py-1.5 leading-snug', className)} /> : <input {...common} className={cx('input', className)} />
+}
+
+/** A choice from a list (a native list: the main window only – the bar never opens one, D229). */
+export function Choice<T extends string>({ value, options, onChange, className, ...rest }: {
+  value: T | null
+  options: Array<{ value: T; label: string; disabled?: boolean }>
+  onChange: (v: T) => void
+  className?: string
+  placeholder?: string
+  'aria-label'?: string
+  'data-testid'?: string
+}) {
+  return (
+    <select
+      className={cx('input pr-6', className)}
+      value={value ?? ''}
+      aria-label={rest['aria-label']}
+      data-testid={rest['data-testid']}
+      onChange={(e) => onChange(e.currentTarget.value as T)}
+    >
+      {value == null && <option value="">{rest.placeholder ?? '— wybierz —'}</option>}
+      {options.map((o) => (
+        <option key={o.value} value={o.value} disabled={o.disabled}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  )
 }

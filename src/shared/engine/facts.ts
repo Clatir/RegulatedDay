@@ -10,7 +10,7 @@
  */
 import type { Costs } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type LogEvent, type MinuteClass } from '../model/events'
-import type { DayTypeId, RulesSettings } from '../model/settings'
+import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
 import type { PlanBlock } from '../model/plan'
 import { idxOf, type Grid } from './grid'
 
@@ -40,9 +40,13 @@ export interface BlockFact {
   /** Confirmed „Przedłuż”, in order. */
   extends: Array<{ at: number; minutes: number }>
   parkedAt: number | null
+  /** Why it was parked or cancelled (the rule: 'exchange', 'type', 'lateWake', 'workEnd' …). */
+  goneRule: string | null
   cancelledAt: number | null
   done: boolean | null
   endRule: string | null
+  /** „Dodaj bez wymiany” (index): its minutes after the boundary are confirmed in advance, up to its planned length. */
+  addConfirmedAt: number | null
 }
 
 export interface RequestFact {
@@ -74,7 +78,8 @@ export interface DayFacts {
   undos: number[]
   exceptions: Array<{ at: number; minutes: number }>
   workEnds: Array<{ at: number; end: number }>
-  snapshots: Array<{ at: number; dayType: DayTypeId; settings: RulesSettings }>
+  /** Snapshots after the day's creation: „od dziś” and changes of type (with the maximum and minimum a change fixed, index / min). */
+  snapshots: Array<{ at: number; dayType: DayTypeId; settings: RulesSettings; reason: string; max: number | null; minRegen: number | null }>
   segments: Segment[]
   hardEndPass: { at: number } | null
   /** The last event number seen of each computer (the state of knowledge of a segment). */
@@ -92,13 +97,15 @@ const newBlock = (id: string): BlockFact => ({
   confirms: [],
   extends: [],
   parkedAt: null,
+  goneRule: null,
   cancelledAt: null,
   done: null,
-  endRule: null
+  endRule: null,
+  addConfirmedAt: null
 })
 
 /** Events that never change the timer's facts (they do not make segments stale either); energy never does either. */
-const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to'])
+const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set'])
 
 export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k) || e.dom === 'energy'
 
@@ -200,12 +207,23 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
       }
       case 'block.park': {
         const b = block(e.block)
-        if (b.parkedAt == null && b.startedAt == null) b.parkedAt = idx(e.at)
+        if (b.parkedAt == null && b.startedAt == null) {
+          b.parkedAt = idx(e.at)
+          b.goneRule = e.rule ?? null
+        }
         break
       }
       case 'block.cancel': {
         const b = block(e.block)
-        if (b.cancelledAt == null && b.startedAt == null) b.cancelledAt = idx(e.at)
+        if (b.cancelledAt == null && b.startedAt == null) {
+          b.cancelledAt = idx(e.at)
+          b.goneRule = e.rule ?? null
+        }
+        break
+      }
+      case 'block.addConfirm': {
+        const b = block(e.block)
+        if (b.addConfirmedAt == null) b.addConfirmedAt = idx(e.at)
         break
       }
       case 'boundary.approve':
@@ -248,7 +266,14 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         break
       }
       case 'day.snapshot':
-        f.snapshots.push({ at: idx(e.at), dayType: e.dayType, settings: e.settings })
+        f.snapshots.push({
+          at: idx(e.at),
+          dayType: e.dayType,
+          settings: settingsFrom(e.settings),
+          reason: e.reason,
+          max: e.max != null ? idx(e.max) : null,
+          minRegen: e.minRegen ?? null
+        })
         break
       case 'minutes':
         if (e.to > e.from) f.segments.push({ from: idx(e.from), to: idx(e.to), cls: e.cls, upfront: e.upfront === true, know: e.know, v: e.v, c: e.c, l: e.l })
@@ -266,8 +291,11 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
 
 /** A block as known at the start of minute m: runs cut at m, what began at m or later not yet there. */
 export function blockAt(b: BlockFact, m: number): BlockFact {
+  const addConfirmedAt = b.addConfirmedAt != null && b.addConfirmedAt < m ? b.addConfirmedAt : null
   if (b.startedAt == null || b.startedAt >= m) {
-    return { ...newBlock(b.id), parkedAt: b.parkedAt != null && b.parkedAt < m ? b.parkedAt : null, cancelledAt: b.cancelledAt != null && b.cancelledAt < m ? b.cancelledAt : null }
+    const parkedAt = b.parkedAt != null && b.parkedAt < m ? b.parkedAt : null
+    const cancelledAt = b.cancelledAt != null && b.cancelledAt < m ? b.cancelledAt : null
+    return { ...newBlock(b.id), parkedAt, cancelledAt, goneRule: parkedAt != null || cancelledAt != null ? b.goneRule : null, addConfirmedAt }
   }
   const runs = b.runs.filter((r) => r.from < m).map((r) => (r.to >= m ? { ...r, to: OPEN } : r))
   const ended = b.endedAt != null && b.endedAt < m
@@ -278,7 +306,8 @@ export function blockAt(b: BlockFact, m: number): BlockFact {
     done: ended ? b.done : null,
     endRule: ended ? b.endRule : null,
     confirms: b.confirms.filter((c) => c.at < m),
-    extends: b.extends.filter((x) => x.at < m)
+    extends: b.extends.filter((x) => x.at < m),
+    addConfirmedAt
   }
 }
 

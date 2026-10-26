@@ -14,7 +14,17 @@ import { Toasts } from '../components/Toasts'
 import { EmptyState, cx } from '../components/ui'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { TrialPage } from '../features/trial/TrialPage'
+import { TodayPage } from '../features/today/TodayPage'
+import { CalendarPage } from '../features/calendar/CalendarPage'
+import { RequestsPage } from '../features/requests/RequestsPage'
+import { TemplatesPage } from '../features/templates/TemplatesPage'
+import { RoutinesPage } from '../features/routines/RoutinesPage'
+import { HistoryPage } from '../features/history/HistoryPage'
+import { Wizard } from '../features/wizard/Wizard'
+import { patchWizard, useWizard } from '../features/wizard/wizardStore'
+import { useData } from '../store/data'
 import { Banners } from './Banners'
+import { ProblemsBanner, QuestionsBanner } from './Questions'
 
 export const PAGE_LABEL: Record<Page, string> = {
   today: 'Dziś',
@@ -28,16 +38,13 @@ export const PAGE_LABEL: Record<Page, string> = {
   trial: 'Próba'
 }
 
-/** The screens that come later, and the version that brings them (spec „Plan budowy”). */
+/** The screens that come later, and the stage that brings them (spec „Plan budowy”). */
 const LATER: Partial<Record<Page, string>> = {
-  today: 'Plan dnia, bloki i timer przyjdą z wersjami 0.2–0.4 (etapy E1–E3).',
-  calendar: 'Kalendarz z typami dni i szablonami przyjdzie z wersją 0.4 (etap E3).',
-  requests: 'Prośby i ich kolejka przyjdą z wersją 0.4 (etap E3), a w pasku z wersją 0.6 (etap E5).',
-  templates: 'Szablony dnia przyjdą z wersją 0.4 (etap E3).',
-  routines: 'Rutyny w dwóch wersjach przyjdą z wersją 0.4 (etap E3).',
-  room: 'Pokój, nuty i kasety przyjdą z wersją 0.8 (etap E7).',
-  history: 'Historia zmian z przywracaniem przyjdzie z wersją 0.4 (etap E3).'
+  room: 'Pokój, nuty i kasety przyjdą z etapem gry (E7).'
 }
+
+/** Screens that need the data folder (without it they point to the wizard). */
+const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'requests', 'templates', 'routines', 'history'])
 
 function useHotkeys(): void {
   useEffect(() => {
@@ -111,27 +118,53 @@ function Header({ children }: { children: ReactNode }) {
 }
 
 function PageView({ page }: { page: Page }) {
+  const status = useData((s) => s.view?.status ?? null)
+  const error = useData((s) => s.view?.error ?? null)
   if (page === 'settings') return <SettingsPage />
   if (page === 'trial') return <TrialPage />
-  return <EmptyState why={LATER[page] ?? ''} action={{ label: 'Otwórz Próbę widgetu', run: () => navigate('trial') }} data-testid={`later-${page}`} />
+  if (NEEDS_DATA.has(page) && status !== 'open') {
+    if (status === 'opening' || status == null) return <EmptyState why="Otwieram folder danych…" data-testid="data-opening" />
+    if (status === 'failed')
+      return <EmptyState why={`Folder danych nie otworzył się: ${error ?? 'nieznany błąd'}. Aplikacja próbuje ponownie co 30 s; możesz też wybrać inny folder.`} action={{ label: 'Otwórz kreator', run: () => patchWizard({ open: true, asked: true }) }} data-testid="data-failed" />
+    return <EmptyState why="Ten komputer nie ma jeszcze folderu danych – kreator ustawi go w kilka minut." action={{ label: 'Otwórz kreator', run: () => patchWizard({ open: true, asked: true }) }} data-testid="no-data" />
+  }
+  if (page === 'today') return <TodayPage />
+  if (page === 'calendar') return <CalendarPage />
+  if (page === 'requests') return <RequestsPage />
+  if (page === 'templates') return <TemplatesPage />
+  if (page === 'routines') return <RoutinesPage />
+  if (page === 'history') return <HistoryPage />
+  return <EmptyState why={LATER[page] ?? ''} data-testid={`later-${page}`} />
 }
 
 export function App() {
   const page = useUi((s) => s.page)
   const view = useWidget((s) => s.view)
+  const status = useData((s) => s.view?.status ?? null)
+  const wizardOpen = useWizard((s) => s.open)
+  const wizardAsked = useWizard((s) => s.asked)
   useHotkeys()
   useEffect(() => window.rd.onNavigate((p) => (PAGES as string[]).includes(p) && navigate(p as Page)), [])
+  // No folder on this computer: the wizard (until „Później”). A folder that did not open (OneDrive not ready at the
+  // start) is tried again by itself – the wizard only when you ask for it.
+  const wizard = wizardOpen && (status === 'none' || (status === 'failed' && wizardAsked))
   return (
     // Below 1024×700 (a small work area, the scale 150 %) the whole window scrolls vertically.
     <div className="flex h-full min-h-[460px] flex-col overflow-y-auto" data-testid="main-window">
       <Header>{view && <Bar view={view} mode="main" grows="down" />}</Header>
       <Banners />
-      <div className="flex min-h-0 flex-1">
-        <SideMenu page={page} />
-        <main className="min-w-0 flex-1 overflow-y-auto" key={page} data-testid={`page-${page}`}>
-          <PageView page={page} />
-        </main>
-      </div>
+      <QuestionsBanner />
+      <ProblemsBanner />
+      {wizard ? (
+        <Wizard />
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          <SideMenu page={page} />
+          <main className="flex min-w-0 flex-1 flex-col overflow-y-auto" key={page} data-testid={`page-${page}`}>
+            <PageView page={page} />
+          </main>
+        </div>
+      )}
       <Toasts />
     </div>
   )

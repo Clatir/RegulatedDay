@@ -35,6 +35,8 @@ export interface Variant {
   /** A variant may sit elsewhere (listening is passive, a game is at the computer). */
   place?: Place
   costs?: Costs
+  /** Removed: out of the choice, kept in the history and the counters (spec „Usunięcie to archiwizacja”). */
+  archived?: boolean
 }
 
 /** What the engine reads of a category – shared settings with a date (rd.json). */
@@ -159,6 +161,8 @@ export const DEFAULT_CATEGORIES: readonly Category[] = [
 
 /** The category id the session layer and the second shift use. */
 export const SESSION_CATEGORY = 'sesja'
+/** The weekly analysis of the Saturday template. */
+export const ANALYSIS_CATEGORY = 'analiza'
 export const LECTURE_CATEGORY = 'wyklad'
 export const REMOTE_CLASS_CATEGORY = 'zajecia-zdalne'
 export const COMMUTE_CATEGORY = 'dojazd'

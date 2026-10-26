@@ -17,7 +17,7 @@ import { addDays } from '@shared/time/zone'
 import { LifeKeeper } from '../crash/lifeMarker'
 import { writePlan, PLAN_DAYS, type PlanBlock as GuardBlock } from '../update/files'
 import { Scheduler } from '../engine/scheduler'
-import { backupDue, createDailyBackup } from './backup'
+import { backupDue, copyLatestTo, createDailyBackup } from './backup'
 import { DataFolder } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 
@@ -46,6 +46,10 @@ export interface ServiceOptions {
   fs?: DataFs
   /** The scheduler's timers (tests drive the checks by hand). */
   timers?: { set: (fn: () => void, ms: number) => unknown; clear: (t: unknown) => void }
+  /** After every check of the folder (the main window reads what changed). */
+  onChecked?: () => void
+  /** This computer's extra place for backups (spec: it copies the newest one there itself, also when it does not lead). */
+  extraBackupDir?: () => string | null
 }
 
 /** The folder's own state in the app data: one folder per data folder, by its resolved path. */
@@ -81,6 +85,7 @@ export class DataService {
   private lastGuardPlan = 0
   private lockedAt: number | null = null
   private lastIdle = -1
+  private lastExtraCopy = 0
   private systemEnding = false
 
   private constructor(
@@ -168,9 +173,14 @@ export class DataService {
       // The guard's plan: at the start, every hour, at the change of the day and when this computer made the day.
       if (r.created || now - this.lastGuardPlan >= GUARD_PLAN_EVERY_MS) await this.refreshGuardPlan()
       if (r.leader.iLead && r.settled) await this.backupIfDue(now)
+      if (now - this.lastExtraCopy >= BACKUP_EVERY_MS) {
+        this.lastExtraCopy = now
+        await this.copyToExtra().catch((e) => this.o.log('warn', 'kopia w dodatkowym miejscu nie powiodła się', e))
+      }
     } catch (e) {
       this.o.log('error', 'sprawdzenie folderu danych nie udało się', e)
     }
+    this.o.onChecked?.()
   }
 
   /** The daily backup after 12:00 of the logical day, tried at most every hour (and at the start and after a wake). */
@@ -184,6 +194,14 @@ export class DataService {
     const r = await createDailyBackup(this.o.dataDir, backups, today)
     if (r.ok) this.o.log('info', `kopia zapasowa ${today}: ${r.files} plików`)
     else this.o.log('error', `kopia zapasowa ${today} nie powiodła się: ${r.error}`)
+  }
+
+  /** The newest daily backup copied to this computer's extra place (spec: also when it does not lead). */
+  async copyToExtra(): Promise<void> {
+    const extra = this.o.extraBackupDir?.()
+    if (!extra) return
+    const copied = await copyLatestTo(join(this.o.dataDir, 'backups'), extra)
+    if (copied) this.o.log('info', `kopia ${copied} skopiowana do dodatkowego miejsca`)
   }
 
   /**

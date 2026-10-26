@@ -100,7 +100,7 @@ export class RecordStore {
    * has are taken, the same ones stay, and fields with different values on both sides are the conflicts left to ask
    * (then nothing is written and the copy stays). Both versions go to the history.
    */
-  async joinCopy(copyRel: string, canonicalRel: string): Promise<{ joined: boolean; conflicts: MergeConflict[] }> {
+  async joinCopy(copyRel: string, canonicalRel: string, answer?: (c: MergeConflict) => 'mine' | 'theirs'): Promise<{ joined: boolean; conflicts: MergeConflict[] }> {
     const [copy, canon] = await Promise.all([this.read(copyRel), this.read(canonicalRel)])
     if (copy.status !== 'ok') return { joined: false, conflicts: [] }
     if (canon.status === 'missing') {
@@ -113,11 +113,13 @@ export class RecordStore {
       await this.o.fs.remove(join(this.o.dataDir, copyRel))
       return { joined: true, conflicts: [] }
     }
-    // Without a common base: what only one side has is an addition, what both have differently is a question.
+    // Without a common base: what only one side has is an addition, what both have differently is a question – unless
+    // `answer` (your answer: „mine” the file, „theirs” the copy) decides it.
     const asked: MergeConflict[] = []
     const { merged } = merge3<Record<string, unknown>>(undefined, canon.value, copy.value, (c) => {
       if (c.mine === undefined) return 'theirs'
       if (c.theirs === undefined) return 'mine'
+      if (answer) return answer(c)
       asked.push(c)
       return 'mine'
     })

@@ -31,7 +31,26 @@ export const CH = {
   updateAction: 'rd:updateAction',
   onNavigate: 'rd:onNavigate',
   showMain: 'rd:showMain',
-  copyText: 'rd:copyText'
+  copyText: 'rd:copyText',
+  dataView: 'rd:dataView',
+  onData: 'rd:onData',
+  dayData: 'rd:dayData',
+  dayFiles: 'rd:dayFiles',
+  edit: 'rd:edit',
+  logEvents: 'rd:logEvents',
+  resolve: 'rd:resolve',
+  monthEvents: 'rd:monthEvents',
+  historyList: 'rd:historyList',
+  historyVersions: 'rd:historyVersions',
+  historyRestore: 'rd:historyRestore',
+  folderDefault: 'rd:folderDefault',
+  folderPick: 'rd:folderPick',
+  folderProbe: 'rd:folderProbe',
+  wizardFinish: 'rd:wizardFinish',
+  pinFolder: 'rd:pinFolder',
+  openSystemSettings: 'rd:openSystemSettings',
+  openDataFolder: 'rd:openDataFolder',
+  setNightInstall: 'rd:setNightInstall'
 } as const
 
 /** Which window a renderer is (the preload reads it from its arguments). */
@@ -53,6 +72,8 @@ export interface AppInfo {
   computerId: string
   helper: HelperStatus
   platform: string
+  /** „Automatyczna instalacja aktualizacji w nocy” on this computer (on by default). */
+  nightInstall: boolean
 }
 
 /** The real state of „Uruchamiaj z Windows” (spec „Instalacja”): also off in Task Manager. */
@@ -92,6 +113,136 @@ export type TrialAction =
 
 export type UpdateAction = 'check' | 'installNow' | 'retry' | 'download' | 'dismissNotes'
 
+/** A record as stored (JSON, unknown fields kept): the window edits it field by field. */
+export type RawRecord = Record<string, unknown>
+
+/**
+ * The data folder as the main window sees it: its records with this computer's queued edits laid over them (your change
+ * shows at once, also while the folder is away), the questions the queue left, who leads.
+ */
+export interface DataView {
+  /** none – no folder chosen on this computer (the wizard); opening; open; failed – it did not open (why in `error`). */
+  status: 'none' | 'opening' | 'open' | 'failed'
+  folder: string | null
+  error: string | null
+  computer: string
+  computerName: string
+  /** rd.json (null: none yet – the defaults). */
+  rd: RawRecord | null
+  templates: RawRecord[]
+  lectures: RawRecord[]
+  requests: RawRecord[]
+  routines: RawRecord[]
+  /** Computers that have written a presence (for „komputer nagrywający”), this one first. */
+  computers: Array<{ id: string; name: string }>
+  /** Own changes not yet in the folder (events and edits). */
+  unsynced: number
+  questions: EditQuestion[]
+  /** Records that cannot be read now or are broken (never written over). */
+  problems: string[]
+  leader: string | null
+  /** The logical day now (by the main process's clock). */
+  today: string
+}
+
+/** A question of the queue (spec „pola zmienione po obu stronach dają zwykłe pytanie”). */
+export interface EditQuestion {
+  id: string
+  rel: string
+  /** conflict – a field changed here and elsewhere; removed – the record was removed elsewhere; broken – the file is broken. */
+  kind: 'conflict' | 'removed' | 'broken'
+  /** When you made your change, and when the file was changed elsewhere (null: unknown) – „Przyjmij nowsze” compares them. */
+  at: number
+  theirsAt: number | null
+  fields: Array<{ path: string[]; mine: unknown; theirs: unknown }>
+}
+
+/** A day for the main window: its file, the next day's (its wake sets the bedtime) and the log of every computer. */
+export interface DayData {
+  date: string
+  dayFile: RawRecord | null
+  nextFile: RawRecord | null
+  /** The previous day's file (blocks moved „z wczoraj”). */
+  prevFile: RawRecord | null
+  events: unknown[]
+  /** Every log of the day was read (false: unknown – never shown as an empty day). */
+  complete: boolean
+  /** The day's file is there but cannot be read now: its own changes are not shown, and the day is not edited. */
+  unknown: boolean
+}
+
+export interface FieldEditIn {
+  path: string[]
+  base: unknown
+  value: unknown
+}
+
+/** An edit of one record: fields with the values they had when you changed them; a new record; a removal. */
+export interface EditEntry {
+  rel: string
+  edits: FieldEditIn[]
+  create?: boolean
+  remove?: boolean
+}
+
+export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'broken' | 'waiting'; why?: string }
+
+/** An action of the main window written to the day's log (spec: facts you set live only in the log). */
+export interface EventIn {
+  k: string
+  day: string
+  [field: string]: unknown
+}
+
+export interface FolderProbe {
+  path: string
+  exists: boolean
+  /** No entries at all (or the folder is not there yet). */
+  empty: boolean
+  /** rd.json is there: this app's data – the next computer joins it. */
+  hasData: boolean
+  /** rd.json is there but cannot be read now (OneDrive still fetching it): never taken as missing. */
+  unreadable: string | null
+  entries: number
+  /** Inside a OneDrive folder of this user (the pinning applies). */
+  inOneDrive: boolean
+}
+
+export interface WizardFinish {
+  folder: string
+  /** The first computer writes the shared data; the next one only joins. */
+  first: boolean
+  /** The shared records the first computer creates (rel → content). */
+  records: Array<{ rel: string; value: RawRecord }>
+  /** This computer's settings. */
+  prefs: Record<string, unknown>
+  autostart: boolean | null
+  /** „Zawsze przechowuj na tym urządzeniu” for the folder (in OneDrive only). */
+  pin: boolean
+}
+
+export interface HistoryRecord {
+  kind: string
+  id: string
+  rel: string | null
+  versions: number
+  /** The newest version's time (ms UTC). */
+  last: number
+  /** The record is there now (false: removed – „Przywróć”). */
+  exists: boolean
+}
+
+export interface HistoryVersion {
+  file: string
+  savedAt: number
+  savedBy: string
+  reason: string
+  record: unknown
+}
+
+/** Windows' settings the wizard opens with one button: priority notifications (D233), the icons beside the clock (D229). */
+export type SystemSettingsPage = 'notifications' | 'taskbar'
+
 export interface RdApi {
   view: ViewKind
   appInfo(): Promise<AppInfo>
@@ -122,4 +273,26 @@ export interface RdApi {
   onPanelTarget(cb: (target: { line: string | null; day: string | null } | null) => void): () => void
   /** The desktop bar: which way it unfolds (up, or down when it stands at the top). */
   onBarGrows(cb: (dir: 'up' | 'down') => void): () => void
+  dataView(): Promise<DataView>
+  /** Something in the data changed (a check of the folder, an edit, another computer's file). */
+  onData(cb: () => void): () => void
+  dayData(date: string): Promise<DayData>
+  /** The files of several days (the calendar's month), null where a day has none. */
+  dayFiles(dates: string[]): Promise<Record<string, RawRecord | null>>
+  edit(entries: EditEntry[]): Promise<EditOutcome[]>
+  logEvents(events: EventIn[]): Promise<void>
+  resolve(id: string, choice: 'mine' | 'theirs'): Promise<void>
+  /** The events of every day of a month (kinds asked) – e.g. the exceptions of the boundary this month. */
+  monthEvents(month: string, kinds: string[]): Promise<unknown[]>
+  historyList(): Promise<HistoryRecord[]>
+  historyVersions(kind: string, id: string): Promise<HistoryVersion[]>
+  historyRestore(kind: string, id: string, file: string): Promise<EditOutcome[]>
+  folderDefault(): Promise<string>
+  folderPick(current: string | null): Promise<string | null>
+  folderProbe(path: string): Promise<FolderProbe>
+  wizardFinish(w: WizardFinish): Promise<{ ok: boolean; error: string | null }>
+  pinFolder(): Promise<{ ok: boolean; error: string | null }>
+  openSystemSettings(page: SystemSettingsPage): Promise<void>
+  openDataFolder(): Promise<void>
+  setNightInstall(on: boolean): Promise<AppInfo>
 }

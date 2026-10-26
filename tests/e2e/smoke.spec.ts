@@ -12,7 +12,7 @@ async function noHorizontalOverflow(page: Page): Promise<string[]> {
 }
 
 test('start: okno główne z menu bocznym, nazwą i paskiem; tożsamość testowa', async () => {
-  const { app, page, userData, errors } = await launch()
+  const { app, page, userData, errors } = await launch({ data: true })
   try {
     await withMainLog(userData, async () => {
       await expect(page.getByTestId('app-name')).toHaveText('Regulated Day')
@@ -130,7 +130,7 @@ test('pasek pulpitu bez potwierdzenia pomocnika zostaje ukryty z komunikatem', a
 })
 
 test('próba: kolor, kroki i kropka zmieniają pasek we wszystkich oknach; panel ikony otwiera się i zamyka Esc', async () => {
-  const { app, page, userData } = await launch()
+  const { app, page, userData } = await launch({ data: true })
   try {
     await withMainLog(userData, async () => {
       await page.getByTestId('nav-trial').click()
@@ -191,7 +191,7 @@ test('panel przy kursorze (ikona pod strzałką ukrytych ikon): rośnie w miejsc
 })
 
 test('konwencje: długość „1h30”, ułamek odrzucony z komunikatem, Esc cofa edycję, usunięcie z „Cofnij”', async () => {
-  const { app, page, userData } = await launch()
+  const { app, page, userData } = await launch({ data: true })
   try {
     await withMainLog(userData, async () => {
       await page.getByTestId('nav-trial').click()
@@ -229,7 +229,7 @@ for (const [label, area, zoom] of [
   ['obszar roboczy 1280×672 (laptop 14" przy 150 %)', '1280x672', 1]
 ] as const) {
   test(`układ: ${label} – bez przewijania w poziomie na żadnym ekranie`, async () => {
-    const { app, page, userData } = await launch({ env: { RD_WORK_AREA: area } })
+    const { app, page, userData } = await launch({ data: true, env: { RD_WORK_AREA: area } })
     try {
       await withMainLog(userData, async () => {
         if (zoom !== 1) await page.evaluate((z) => window.rd.setPrefs({ zoom: z }), zoom)
