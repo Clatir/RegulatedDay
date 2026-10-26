@@ -54,6 +54,11 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
 - Instalator electron-buildera w trybie cichym po 5 próbach podmiany zablokowanego pliku kończy się sukcesem – zawsze
   porównanie z manifestem. Kod 2 w 5 s nie jest próbą tylko przy istniejącym mutexie instalatora (nazwa = nsis.guid).
 - Manifest powstaje w `afterSign` (rcedit i podpis zmieniają exe, elevate.exe dochodzi później).
+- Szablon NSIS pokazuje „uninstallFailed” bez `/SD` – cichy instalator czekał na kliknięcie; własny `customUnInstallCheck`.
+  Przy `--updated` znacznik `rd-installed` przenosi atomicRMDir razem z plikami (T407).
+- Testy: „close” Playwrighta czeka na wszystkie kopie potoków aplikacji, a odłączony właściciel je dziedziczy – czekaj na
+  koniec procesu (`processEnd`). Okno właściciela klikaj kursorem: Invoke z UI Automation to BM_CLICK, a nieaktywne okno
+  go ignoruje.
 - Żadne okno pomocnika, strażnika ani skryptu nie pokazuje się pierwszy raz przez SW_SHOW / SW_SHOWNORMAL /
   SW_SHOWDEFAULT (Node startuje procesy ze STARTF_USESHOWWINDOW): `ShowWithoutActivation` (SW_SHOWNOACTIVATE).
 - Narzędzia Claude Code na komputerze użytkownika działają poza pulpitem: kolejność okien, powłoka, OneDrive

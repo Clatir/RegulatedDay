@@ -7,8 +7,14 @@
   sesja, zasilanie), widget próbny i ekran „Próba”, instalator NSIS z manifestem, aktualizacje (lista wydań, pobieranie,
   plik zadania, sekwencja startu), strażnik i pomocnik instalacji C#, rozpoznawanie awarii, CI (Linux + Windows).
 - PR #1 (szkic) z gałęzi; CI uruchamia się raz na zmianę (zdarzenie PR; `push` tylko na `main`).
-- Rundy CI na Windows: 1–4 – poprawki testów i kodu (m.in. deinstalacja przez `cmd /C`, wyjście PowerShell w OEM,
-  logi wspólne dla testów); w kodzie: zamknięcie w trakcie startu (T406), „Uruchom mimo to” (T405).
+- Rundy CI na Windows: 1–5 – poprawki testów i kodu (m.in. deinstalacja przez `cmd /C`, wyjście PowerShell w OEM,
+  logi wspólne dla testów); w kodzie: zamknięcie w trakcie startu (T406), „Uruchom mimo to” (T405), licznik startów
+  strażnika (limit 4 nie działał), wyjątek po wyjściu („Object has been destroyed”).
+- Runda 6: 16 z 21 scenariuszy i 2 z 5 ścieżek przechodzą. Przyczyny reszty: „close” Playwrighta dopiero po końcu
+  pomocnika instalacji (okno postępu było, test patrzył za późno); Invoke z UI Automation nie klika w nieaktywnym oknie;
+  konsola CI leży nad paskiem; w kodzie – zdarzenie pomocnika po wyjściu w zniszczonym panelu, instalator czekający na
+  kliknięcie przy nieudanej deinstalacji i znacznik instalacji kasowany przed nią (T407). Runda 7 w toku.
+- Otwarte: ścieżka FI – nowa wersja widzi pliki niezgodne z manifestem; runda 7 podaje w logu pierwszy niezgodny plik.
 - Narzędzia Claude Code na tym komputerze działają poza pulpitem: kolejność okien, powłoka, OneDrive i powiadomienia
   tylko w CI na Windows.
 
