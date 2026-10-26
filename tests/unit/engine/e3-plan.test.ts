@@ -113,6 +113,13 @@ describe('sesje niezaczęte do końca czekania', () => {
     expect(st.hardEnd.unreachable).toBe(false)
     expect(st.warnings).not.toContain('minimum regeneracji nie mieści się przed porą snu')
   })
+
+  it('praca zaplanowana po drugiej zmianie nie odbiera im roli końca pracy', () => {
+    const s = new Scenario({ date: '2026-10-21', plan: [...plan, block({ id: 'late', cat: 'inne', at: '21:15', min: 30 })] })
+    const st = s.state('18:00')
+    expect(hhmm(st, st.firstEnd)).toBe('17:00')
+    expect(st.hardEnd.unreachable).toBe(false)
+  })
 })
 
 describe('wymiana (zasada 2)', () => {
@@ -153,6 +160,15 @@ describe('wymiana (zasada 2)', () => {
     expect(p.needed).toBe(true)
     expect(p.beyondMin).toBe(0)
     expect(p.overBudgetMin).toBe(30)
+  })
+
+  it('blok pracy po drugiej zmianie też kosztuje swoje minuty po granicy (otwiera pracę ponownie)', () => {
+    const s = new Scenario({ date: '2026-10-21', plan: [...plan, block({ id: 'dz', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })], settings: { transitionBufferMin: 0 } }).approve('12:45', '07:30')
+    const ctx = s.contextAt(s.at('07:45'))
+    const p = proposeExchange(ctx, computeDay(ctx), newUserBlock('inne', lm('21:30'), 30, undefined))
+    expect(p.needed).toBe(true)
+    expect(p.beyondMin).toBe(30)
+    expect(p.overrun).toBe(true)
   })
 
   it('prośba nie dostaje propozycji wymiany', () => {

@@ -122,9 +122,12 @@ export function DayTypesSection() {
         </p>
       )}
       <Field label="Tydzień" hint="Typ, który dzień tygodnia ma, gdy w kalendarzu nie ustawisz innego.">
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-4 gap-x-2 gap-y-1.5">
           {WEEKDAY_NAMES.map((n, i) => (
-            <Choice key={n} value={s.weekTypes[i]!} options={DAY_TYPES.map((t) => ({ value: t, label: DAY_TYPE_NAMES[t] }))} onChange={(t) => save({ weekTypes: s.weekTypes.map((x, j) => (j === i ? t : x)) })} aria-label={`Typ: ${n}`} className="px-1 text-[11.5px]" data-testid={`setting-week-${i}`} />
+            <label key={n} className="flex flex-col gap-0.5 text-[11.5px] text-muted">
+              {n}
+              <Choice value={s.weekTypes[i]!} options={DAY_TYPES.map((t) => ({ value: t, label: DAY_TYPE_NAMES[t] }))} onChange={(t) => save({ weekTypes: s.weekTypes.map((x, j) => (j === i ? t : x)) })} aria-label={`Typ: ${n}`} data-testid={`setting-week-${i}`} />
+            </label>
           ))}
         </div>
       </Field>

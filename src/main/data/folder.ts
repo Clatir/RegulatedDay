@@ -11,6 +11,7 @@
  */
 import { join } from 'node:path'
 import { EventClock, type ClockSources } from '@shared/data/clock'
+import type { MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { createDay, type HolidayLookup } from '@shared/engine/createDay'
 import { dayContextOf } from '@shared/engine/context'
@@ -52,6 +53,8 @@ const USER_EVENTS: Record<string, Domain> = {
 /** The journal keeps own events of this many days back (spec: until the day's freeze plus 7 days – freezing is E6). */
 export const JOURNAL_KEEP_DAYS = 14
 const COMPACT_EVERY_MS = 60 * 60_000
+/** Conflict copies of the records are looked for this often (and at the first check). */
+const COPY_SCAN_MS = 60_000
 
 /** A record the day is made from that cannot be read now (or is broken) and was never read before: unknown. */
 export class UnknownRecordError extends Error {
@@ -115,6 +118,9 @@ export class DataFolder {
   private readonly listed = new Map<string, string[]>()
   private readonly rulesVersion: number
   private editSeq = 0
+  private lastCopyScan = 0
+  /** Conflict copies with fields different on both sides (copy → the file and the fields). */
+  readonly copyConflicts = new Map<string, { canonical: string; conflicts: MergeConflict[] }>()
 
   private constructor(private readonly o: FolderOptions) {
     this.rulesVersion = o.rulesVersion ?? RULES_VERSION
@@ -375,15 +381,9 @@ export class DataFolder {
       problems.push(String(e))
     }
     await this.queue.apply(this.records).catch((e) => problems.push(`kolejka: ${String(e)}`))
-    // Conflict copies of the open day's file are joined (what differs on both sides stays a question for E3).
-    try {
-      for (const c of await this.records.conflictCopies(paths.day(day).slice(0, paths.day(day).lastIndexOf('/')))) {
-        if (c.canonical !== paths.day(day)) continue
-        const r = await this.records.joinCopy(c.copy, c.canonical)
-        if (!r.joined && r.conflicts.length) problems.push(`konflikt ${c.copy}: ${r.conflicts.map((x) => x.path.join('.')).join(', ')}`)
-      }
-    } catch (e) {
-      problems.push(`kopie konfliktowe: ${String(e)}`)
+    if (now - this.lastCopyScan >= COPY_SCAN_MS) {
+      this.lastCopyScan = now
+      await this.joinCopies(day).catch((e) => problems.push(`kopie konfliktowe: ${String(e)}`))
     }
     const settled = this.settle.settled(now)
     this.leader = decideLeader({
@@ -444,6 +444,42 @@ export class DataFolder {
     await this.log.flush()
     await this.presence.tick().catch((e) => problems.push(`obecność: ${String(e)}`))
     return { leader: this.leader, settled, created, segments, problems }
+  }
+
+  /**
+   * OneDrive's conflict copies of the records (spec „Kopie konfliktowe OneDrive są porównywane po treści”): the same
+   * content goes, fields only one side has join, both versions go to the history; fields different on both sides stay
+   * a question (`copyConflicts`) until you answer it. Every folder of records, the days of this year and the next.
+   */
+  private async joinCopies(day: string): Promise<void> {
+    const year = Number(day.slice(0, 4))
+    const dirs = ['', ID_COLLECTIONS.template, ID_COLLECTIONS.schedule, ID_COLLECTIONS.request, ID_COLLECTIONS.routine, `days/${year}`, `days/${year + 1}`]
+    const seen = new Set<string>()
+    for (const dir of dirs) {
+      let copies: Array<{ copy: string; canonical: string }>
+      try {
+        copies = await this.records.conflictCopies(dir)
+      } catch {
+        // A folder that cannot be listed now: its questions stay as they were.
+        for (const k of this.copyConflicts.keys()) if ((k.includes('/') ? k.slice(0, k.lastIndexOf('/')) : '') === dir) seen.add(k)
+        continue
+      }
+      for (const c of copies) {
+        seen.add(c.copy)
+        const r = await this.records.joinCopy(c.copy, c.canonical)
+        if (r.joined) this.copyConflicts.delete(c.copy)
+        else if (r.conflicts.length) this.copyConflicts.set(c.copy, { canonical: c.canonical, conflicts: r.conflicts })
+      }
+    }
+    for (const k of [...this.copyConflicts.keys()]) if (!seen.has(k)) this.copyConflicts.delete(k)
+  }
+
+  /** Your answer to a conflict copy: „mine” – the file's values, „theirs” – the copy's; then the copy goes. */
+  async resolveCopy(copyRel: string, choice: 'mine' | 'theirs'): Promise<void> {
+    const q = this.copyConflicts.get(copyRel)
+    if (!q) return
+    const r = await this.records.joinCopy(copyRel, q.canonical, () => choice)
+    if (r.joined) this.copyConflicts.delete(copyRel)
   }
 
   /** The computers that wrote a presence, this one first (names as each computer calls itself). */

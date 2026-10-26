@@ -150,8 +150,19 @@ export class EditQueue {
     return this.entries
   }
 
-  /** Lays every queued edit onto its file; applied ones leave the queue, the others stay with why. */
-  async apply(records: RecordStore): Promise<Outcome[]> {
+  /**
+   * Lays every queued edit onto its file; applied ones leave the queue, the others stay with why. One run at a time: the
+   * check of the folder and an edit of the window never lay the same entry twice nor lose one between them.
+   */
+  apply(records: RecordStore): Promise<Outcome[]> {
+    const run = this.running.then(() => this.applyNow(records))
+    this.running = run.catch(() => [])
+    return run
+  }
+
+  private running: Promise<unknown> = Promise.resolve()
+
+  private async applyNow(records: RecordStore): Promise<Outcome[]> {
     // The file could not be read before: nothing is applied until it is (its entries come first).
     if (this.unread) this.load()
     if (this.unread) return this.entries.map((e) => ({ id: e.id, status: 'waiting' as const, why: 'kolejka nieczytelna' }))

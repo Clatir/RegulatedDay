@@ -45,18 +45,39 @@ function boundaryWork(state: DayState, block: PlanBlock): boolean {
 
 const budgetTotal = (s: DayState) => s.budgetUsedMin + s.budget.forecastMin
 
+/**
+ * The forecast's minutes of work after the boundary (each counted once) – what would be extension: work that sets the
+ * boundary, not the plan of lectures nor a „zjazd”, also after the second shift (work there reopens it) – and whether
+ * any is past the maximum.
+ */
+function forecastExtension(s: DayState, boundary: number): { minutes: number; pastMax: boolean } {
+  const marks = new Uint8Array(s.grid.length + 24 * 60)
+  let pastMax = false
+  for (const p of s.forecast) {
+    const b = p.block
+    if (!isBoundaryWork(b) || b.lectureOrCommute) continue
+    for (let k = Math.max(p.from, boundary, 0); k < Math.min(p.to, marks.length); k++) {
+      marks[k] = 1
+      if (k >= s.boundary.max) pastMax = true
+    }
+  }
+  let minutes = 0
+  for (const m of marks) minutes += m
+  return { minutes, pastMax }
+}
+
 /** What adding `block` (with `yielding` parked) costs against the day as it is (`before`). */
 export function exchangeCost(ctx: DayContext, before: DayState, block: PlanBlock, yielding: readonly string[] = []): ExchangeCost {
   const gone = new Set(yielding)
   const after = computeDay({ ...ctx, plan: [...ctx.plan.filter((b) => !gone.has(b.id)), block] })
   const boundary = before.boundary.approved ?? before.boundary.proposal
-  const beyond = (s: DayState) => (boundary == null || s.forecastWorkEnd == null ? 0 : Math.max(0, s.forecastWorkEnd - boundary))
   const limit = before.budget.limitMin
   const over = (s: DayState) => Math.max(0, budgetTotal(s) - limit)
+  const ext = boundary == null ? null : { before: forecastExtension(before, boundary), after: forecastExtension(after, boundary) }
   return {
-    beyondMin: Math.max(0, beyond(after) - beyond(before)),
+    beyondMin: ext ? Math.max(0, ext.after.minutes - ext.before.minutes) : 0,
     overBudgetMin: Math.max(0, over(after) - over(before)),
-    overrun: after.forecastWorkEnd != null && after.forecastWorkEnd > after.boundary.max
+    overrun: ext ? ext.after.pastMax && ext.after.minutes > ext.before.minutes : false
   }
 }
 

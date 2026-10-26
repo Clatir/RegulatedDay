@@ -50,10 +50,11 @@ export function CalendarPage() {
     const type: DayTypeId = own?.dayType ?? s.weekTypes[weekday(d) - 1]!
     const marks: string[] = []
     if (own?.dayType) marks.push(DAY_TYPE_NAMES[type].replace('Zjazd ', 'zjazd ').toLowerCase())
+    // A holiday is a day with a holiday's name (a market closed on a weekend is not one).
     const pl = marketDay('PL', d)
-    if (pl.closed) marks.push('święto')
+    if (pl.closed && pl.names.length) marks.push('święto')
     const us = [marketDay('NYSE', d), marketDay('CME_FX', d)]
-    if (us.some((h) => h.closed)) marks.push('święto USA')
+    if (us.some((h) => h.closed && h.names.length)) marks.push('święto USA')
     else if (us.some((h) => h.earlyClose)) marks.push('skrócona sesja')
     if (s.sessions.some((x) => {
       const w = sessionWindow(x, d)

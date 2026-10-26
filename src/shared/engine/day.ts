@@ -803,11 +803,11 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   paintUpfront(c, flags, view, spans, m, cap)
 
   const ends = workEnds(c, view, flags, m, fcW, fcProjects)
-  // No work at all (past nor forecast) and the waiting blocks expired unstarted: their planned end is the first end of
-  // work until the ritual (spec „Pierwszy koniec pracy”).
+  // No other work before the second shift (past nor forecast) and the waiting blocks expired unstarted: their planned
+  // end is the first end of work until the ritual (spec „Pierwszy koniec pracy”).
   if (!ends.length) {
     let anyEnd = false
-    for (let k = 0; k < cap && !anyEnd; k++) if (flags[k]! & F_END) anyEnd = true
+    for (let k = 0; k < Math.min(cap, c.secondShiftStart) && !anyEnd; k++) if (flags[k]! & F_END) anyEnd = true
     const waited = anyEnd ? null : expiredWaitEnd(c, view, m)
     if (waited != null) ends.push({ at: waited, confirmed: false })
   }

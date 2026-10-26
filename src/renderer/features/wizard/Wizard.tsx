@@ -16,7 +16,8 @@ import { placeLogical } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
 import { Choice, ClockField, DateField, DurationField, TextField, TimeField } from '../../components/fields'
 import { blockFill } from '@shared/theme'
-import { useMachine } from '../../store/machine'
+import { setMachinePrefs, useMachine } from '../../store/machine'
+import { BRIGHTNESS_STEPS } from '@shared/machine'
 import { Field, Section, Segmented, Toggle, cx } from '../../components/ui'
 import { navigate, toast } from '../../store/ui'
 import { reloadData, useData } from '../../store/data'
@@ -617,6 +618,7 @@ const CORNERS: Array<{ value: Corner; label: string }> = [
 
 function StepComputer() {
   const w = useWizard()
+  const brightness = useMachine((x) => x.prefs.brightness)
   const m = w.machine
   const set = (p: Partial<typeof m>) => patchWizard({ machine: { ...m, ...p } })
   return (
@@ -656,6 +658,9 @@ function StepComputer() {
             <Segmented value={m.stationaryClasses ? 'yes' : 'no'} options={[{ value: 'no', label: 'nie' }, { value: 'yes', label: 'tak' }]} onChange={(v) => set({ stationaryClasses: v === 'yes' })} data-testid="wizard-stationary-join" />
           </Field>
         )}
+        <Field label="Jasność" hint="Przyciemnia tło, grafikę i akcenty; tekst zostaje tak samo czytelny. Działa od razu.">
+          <Segmented value={brightness} options={BRIGHTNESS_STEPS.map((b) => ({ value: b, label: `${Math.round(b * 100)} %` }))} onChange={(b) => void setMachinePrefs({ brightness: b })} aria-label="Jasność" />
+        </Field>
       </Section>
     </div>
   )

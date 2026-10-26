@@ -3,6 +3,6 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['Ctrl 1 … Ctrl 7', 'ekrany w kolejności menu'],
   ['Ctrl ,', 'ustawienia'],
   ['Ctrl S', 'zatwierdza pole, które edytujesz'],
-  ['Ctrl N', 'nowy rekord w bieżącym widoku (od wersji z rekordami)'],
+  ['Ctrl N', 'nowy rekord w bieżącym widoku: blok w planie, prośba, szablon, rutyna'],
   ['Esc', 'cofa edycję pola; kolejny Esc zamyka to, co otwarte']
 ]

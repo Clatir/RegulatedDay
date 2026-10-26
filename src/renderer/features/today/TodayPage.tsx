@@ -4,7 +4,7 @@
  * exception), getting up later, the change of the day's type, the exchange for a work block added after the approval,
  * moving and copying.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { setDayField } from '@shared/data/dayEdits'
 import { logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
@@ -67,6 +67,20 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     setSelected(null)
     setDraft(null)
   }, [date])
+  // Ctrl+N: a new block in the nearest free place (spec „Tworzenie”).
+  const newHere = () => create(isToday ? Math.ceil(Math.max(logicalMinuteOf(date, Date.now()), model.ctx.wakeMin) / 15) * 15 : model.ctx.wakeMin + 60)
+  const newRef = useRef(newHere)
+  newRef.current = newHere
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN') {
+        e.preventDefault()
+        newRef.current()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const raw = model.data.dayFile
   const plan = model.ctx.plan
@@ -135,7 +149,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
           />
         </label>
         <span className="flex-1" />
-        <button type="button" className="btn h-[26px]" onClick={() => create(isToday ? Math.ceil(Math.max(nowMin, model.ctx.wakeMin) / 15) * 15 : model.ctx.wakeMin + 60)} data-testid="day-add">
+        <button type="button" className="btn h-[26px]" onClick={newHere} data-testid="day-add">
           + Blok
         </button>
         <div className="relative">

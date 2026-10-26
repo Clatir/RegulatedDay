@@ -79,12 +79,14 @@ export function useDay(date: string): DayModel | null {
   const rd = useData((s) => s.rd)
   const templates = useData((s) => s.templates)
   const lectures = useData((s) => s.lectures)
-  const now = useNow(30_000)
-  const minute = Math.floor(now / 60_000)
+  const tick = useNow(30_000)
   return useMemo(() => {
     if (!data || data.date !== date) return null
-    return countDay(date, data, { changes: rd.settings, templates, lectures }, minute * 60_000, rd.general.modules.energy)
-  }, [data, date, rd, templates, lectures, minute])
+    // The day at this very instant (read when the data change or the clock ticks): an action written a moment ago – an
+    // approval at 12:34:45 counts from the minute it rounds to – is in the day at once.
+    void tick
+    return countDay(date, data, { changes: rd.settings, templates, lectures }, Date.now(), rd.general.modules.energy)
+  }, [data, date, rd, templates, lectures, tick])
 }
 
 /** The day from its data and the plan's inputs at `at` (also for previews: the wizard counts a day it has not written). */

@@ -16,6 +16,8 @@ import { classify, ID_COLLECTIONS, paths, SETTINGS_FILE, type IdKind } from '@sh
 import type { HolidayLookup } from '@shared/engine/createDay'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
+import { compareVersions } from '@shared/update'
+import { createUpdateBackup } from './backup'
 import { historyKey } from './records'
 import { DataService, STOP_TIMEOUT_MS } from './service'
 
@@ -30,9 +32,23 @@ export interface HubOptions {
   log: (level: 'info' | 'warn' | 'error', msg: string, e?: unknown) => void
   writeGuardPlan: boolean
   extraBackupDir: () => string | null
+  /** The version that ran here before this one (config.json): a newer one backs the folder up before opening it. */
+  previousVersion: string | null
   /** Something the window shows changed (the hub tells it once per change of what it would read). */
   onChange: () => void
 }
+
+/** `a` is a newer version than `b` (versions that cannot be compared: no). */
+function isNewer(a: string, b: string): boolean {
+  try {
+    return compareVersions(a, b) > 0
+  } catch {
+    return false
+  }
+}
+
+/** The questions of conflict copies have ids of their own (the copy's path after this). */
+const COPY_PREFIX = 'copy:'
 
 /** A folder that did not open is tried again this often (spec: „ponawia otwarcie co 30 s”). */
 const RETRY_MS = 30_000
@@ -59,6 +75,7 @@ export class DataHub {
   private closing = false
   private lastSignature = ''
   private retry: ReturnType<typeof setTimeout> | null = null
+  private backedUp = false
 
   constructor(private readonly o: HubOptions) {}
 
@@ -95,6 +112,14 @@ export class DataHub {
       // niczego nie tworzy”) – it is tried again.
       const st = await stat(dir).catch(() => null)
       if (!st?.isDirectory()) throw new Error('folder jest niedostępny')
+      // The first opening by a newer version: a backup before it touches anything (the data still in the old format).
+      const prev = this.o.previousVersion
+      if (prev && !this.backedUp && isNewer(this.o.appVersion, prev)) {
+        this.backedUp = true
+        const r = await createUpdateBackup(dir, join(dir, 'backups'), prev, this.o.appVersion)
+        if (r?.ok) this.o.log('info', `kopia przed aktualizacją ${prev} → ${this.o.appVersion}: ${r.files} plików`)
+        else if (r) this.o.log('error', `kopia przed aktualizacją nie powiodła się: ${r.error}`)
+      }
       const s = await DataService.start({
         dataDir: dir,
         userData: this.o.userData,
@@ -171,7 +196,7 @@ export class DataHub {
     if (!f) return head
     const today = logicalDayOf(f.clock.now())
     const read = await f.readDay(today)
-    return `${head}|${today}|${JSON.stringify(await this.records())}|${read.events.length}|${f.unsynced}|${f.queue.questions().length}|${f.leader.leader}`
+    return `${head}|${today}|${JSON.stringify(await this.records())}|${read.events.length}|${f.unsynced}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}`
   }
 
   private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines'>> {
@@ -224,6 +249,14 @@ export class DataHub {
         fields: outcome.status === 'conflict' ? outcome.fields.map((x) => ({ path: x.path, mine: x.value, theirs: x.now })) : edit.edits.map((x) => ({ path: x.path, mine: x.value, theirs: undefined }))
       })
     }
+    // OneDrive's conflict copies with fields different on both sides: the file („tutaj”) against the copy („tam”).
+    for (const [copy, q] of f.copyConflicts) {
+      const st = await f.records.read(copy).catch(() => null)
+      const theirsAt = st?.status === 'ok' && typeof st.value.updatedAt === 'number' ? st.value.updatedAt : null
+      const now = await f.records.read(q.canonical).catch(() => null)
+      const mineAt = now?.status === 'ok' && typeof now.value.updatedAt === 'number' ? now.value.updatedAt : 0
+      out.push({ id: `${COPY_PREFIX}${copy}`, rel: q.canonical, kind: 'conflict', at: mineAt, theirsAt, fields: q.conflicts.map((c) => ({ path: c.path, mine: c.mine, theirs: c.theirs })) })
+    }
     return out
   }
 
@@ -267,6 +300,11 @@ export class DataHub {
 
   async resolve(id: string, choice: 'mine' | 'theirs'): Promise<void> {
     const f = this.need()
+    if (id.startsWith(COPY_PREFIX)) {
+      await f.resolveCopy(id.slice(COPY_PREFIX.length), choice)
+      this.changed()
+      return
+    }
     const q = f.queue.questions().find((x) => x.edit.id === id)
     let restoreFrom: RawRecord | undefined
     // A record removed elsewhere comes back from its last version in the history, your fields laid over it.

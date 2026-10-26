@@ -82,6 +82,8 @@ let thisComputer = ''
  */
 let hub: DataHub | null = null
 let dataClosing = false
+/** The version that ran on this computer before this start (read before it is overwritten): a backup after an update. */
+let lastRunVersion: string | null = null
 const data = (): DataService | null => hub?.service ?? null
 const trial = new Trial()
 let quitting = false
@@ -206,6 +208,7 @@ function createHub(): DataHub {
     log,
     writeGuardPlan: identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1',
     extraBackupDir: () => prefs().backupDir,
+    previousVersion: lastRunVersion,
     onChange: () => broadcast(CH.onData, null)
   })
 }
@@ -653,6 +656,7 @@ async function main(): Promise<void> {
     }
   }
   await config.load()
+  lastRunVersion = config.get().updates.lastRunVersion
   if (config.setAside) log('warn', `config.json uszkodzony – odłożony jako ${config.setAside}, ustawienia domyślne`)
   if (config.loadFailed) {
     log('warn', `config.json nieczytelny: ${config.loadFailed} – nic nie jest nadpisywane, czytam ponownie co ${CONFIG_RETRY_MS / 1000} s`)

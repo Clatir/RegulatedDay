@@ -8,7 +8,6 @@
  * E1 opens a folder only from RD_DATA_DIR (tests and the developer's version); the wizard of E3 chooses it for real.
  */
 import { createHash } from 'node:crypto'
-import { copyFile, mkdir, readdir, rename, rm } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type { HolidayLookup } from '@shared/engine/createDay'
 import { createDay, dayPlan } from '@shared/engine/createDay'
@@ -18,7 +17,7 @@ import { addDays } from '@shared/time/zone'
 import { LifeKeeper } from '../crash/lifeMarker'
 import { writePlan, PLAN_DAYS, type PlanBlock as GuardBlock } from '../update/files'
 import { Scheduler } from '../engine/scheduler'
-import { backupDue, createDailyBackup } from './backup'
+import { backupDue, copyLatestTo, createDailyBackup } from './backup'
 import { DataFolder } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 
@@ -52,9 +51,6 @@ export interface ServiceOptions {
   /** This computer's extra place for backups (spec: it copies the newest one there itself, also when it does not lead). */
   extraBackupDir?: () => string | null
 }
-
-/** Daily backups kept in the extra place, as in backups/ (spec „Przechowywanych jest 14 kopii dziennych”). */
-const EXTRA_KEEP = 14
 
 /** The folder's own state in the app data: one folder per data folder, by its resolved path. */
 export function stateDirFor(userData: string, dataDir: string): string {
@@ -200,23 +196,12 @@ export class DataService {
     else this.o.log('error', `kopia zapasowa ${today} nie powiodła się: ${r.error}`)
   }
 
-  /** The newest daily backup copied to this computer's extra place (once; the oldest beyond 14 go). */
+  /** The newest daily backup copied to this computer's extra place (spec: also when it does not lead). */
   async copyToExtra(): Promise<void> {
     const extra = this.o.extraBackupDir?.()
     if (!extra) return
-    const daily = join(this.o.dataDir, 'backups', 'daily')
-    const names = (await readdir(daily).catch(() => [] as string[])).filter((n) => /^\d{4}-\d{2}-\d{2}\.zip$/.test(n)).sort()
-    const newest = names.at(-1)
-    if (!newest) return
-    await mkdir(extra, { recursive: true })
-    const have = (await readdir(extra)).filter((n) => /^\d{4}-\d{2}-\d{2}\.zip$/.test(n)).sort()
-    if (!have.includes(newest)) {
-      await copyFile(join(daily, newest), join(extra, `${newest}.tmp`))
-      await rename(join(extra, `${newest}.tmp`), join(extra, newest))
-      have.push(newest)
-      this.o.log('info', `kopia ${newest} skopiowana do dodatkowego miejsca`)
-    }
-    for (const old of have.sort().slice(0, Math.max(0, have.length - EXTRA_KEEP))) await rm(join(extra, old), { force: true })
+    const copied = await copyLatestTo(join(this.o.dataDir, 'backups'), extra)
+    if (copied) this.o.log('info', `kopia ${copied} skopiowana do dodatkowego miejsca`)
   }
 
   /**
