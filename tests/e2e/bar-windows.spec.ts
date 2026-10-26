@@ -1,12 +1,12 @@
 /**
  * Windows with the real helper (spec „Widget”, D229): the desktop bar lies under a normal window that overlaps it and
- * right above the desktop; the real cursor (SendInput) over every button of the bar opens no new window and changes no
- * order of windows; the control – a test bar with one title attribute – must open a tooltip window, or the check proves
- * nothing.
+ * right above the desktop; the real cursor (SendInput) over every button of the bar – each one records that it was
+ * entered – opens no new window and changes no order of windows; the control – an active window with one title
+ * attribute – must open a tooltip window, or the check proves nothing.
  */
 import { expect, test, type ElectronApplication } from '@playwright/test'
 import { launch, viewPage, withMainLog } from './app'
-import { hover, topWindows, type TopWindow } from './win32'
+import { click, hover, topWindows, type TopWindow } from './win32'
 
 test.skip(process.platform !== 'win32' || process.env.RD_E2E_REAL_HELPER !== '1', 'Windows with the real helper only')
 
@@ -76,33 +76,47 @@ test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejn
       const bar = await barInfo(app)
       const before = pidWindows(bar.pid)
       const orderBefore = topWindows()
-      const rects = await page.evaluate(() => [...document.querySelectorAll('button')].map((b) => b.getBoundingClientRect()).map((r) => [r.x + r.width / 2, r.y + r.height / 2]))
+      // The visible buttons (folded ones have no box), each recording that the real cursor entered it.
+      const rects = await page.evaluate(() => {
+        const w = window as unknown as { rdEntered: Set<number> }
+        w.rdEntered = new Set()
+        const shown = [...document.querySelectorAll('button')].filter((b) => b.getBoundingClientRect().width > 0 && b.getBoundingClientRect().height > 0)
+        shown.forEach((b, i) => b.addEventListener('pointerenter', () => w.rdEntered.add(i)))
+        return shown.map((b) => b.getBoundingClientRect()).map((r) => [r.x + r.width / 2, r.y + r.height / 2])
+      })
       expect(rects.length).toBeGreaterThan(5)
       const k = bar.scale
       hover(
         rects.map(([x, y]) => [(bar.bounds.x + x! * bar.zoom) * k, (bar.bounds.y + y! * bar.zoom) * k] as [number, number]),
         1200
       )
+      expect(await page.evaluate(() => (window as unknown as { rdEntered: Set<number> }).rdEntered.size), 'kursor nie doszedł do każdego przycisku').toBe(rects.length)
       expect(pidWindows(bar.pid)).toEqual(before)
       const orderAfter = topWindows()
       expect(movedAcross(orderBefore, orderAfter, bar.hwnd)).toEqual([])
       expect(zIndex(orderAfter, bar.hwnd)).toBeLessThan(orderAfter.findIndex((w) => w.cls === 'Progman' || w.cls === 'WorkerW'))
-      // The control: the same kind of window with one title attribute must open a tooltip window.
+      // The control: one title attribute must open a tooltip window, or counting the windows proves nothing. Chromium
+      // shows a page's tooltip only in the active window, so the control is activated by a real click beside its button
+      // (the bar is never active – no tooltip shows there, and no other popup may).
       const probe = await app.evaluate(({ BrowserWindow }) => {
-        const w = new BrowserWindow({ x: 300, y: 300, width: 300, height: 120, show: false, frame: false, type: 'toolbar', focusable: false, title: 'RD-CI-kontrola' })
-        void w.loadURL('data:text/html,<button title="podpowiedź kontrolna" style="width:100%25;height:100%25">x</button>')
-        w.showInactive()
+        const w = new BrowserWindow({ x: 300, y: 300, width: 300, height: 120, show: false, frame: false, title: 'RD-CI-kontrola' })
+        void w.loadURL('data:text/html,<body style="margin:0"><button title="podpowiedź kontrolna" style="width:150px;height:120px" onpointerenter="window.entered=true">x</button></body>')
+        w.show()
+        ;(globalThis as unknown as { rdControl: typeof w }).rdControl = w
         return w.getBounds()
       })
-      await new Promise((r) => setTimeout(r, 1500))
+      const control = <T,>(js: string) => app.evaluate((_e, code) => (globalThis as unknown as { rdControl: Electron.BrowserWindow }).rdControl.webContents.executeJavaScript(code), js) as Promise<T>
+      await expect.poll(() => control<boolean>('document.readyState === "complete"'), { timeout: 10_000 }).toBe(true)
+      click((probe.x + 225) * k, (probe.y + 60) * k)
       const probeBefore = pidWindows(bar.pid)
       hover(
         [
-          [(probe.x + 150) * k, (probe.y + 60) * k],
-          [(probe.x + 160) * k, (probe.y + 62) * k]
+          [(probe.x + 75) * k, (probe.y + 60) * k],
+          [(probe.x + 80) * k, (probe.y + 62) * k]
         ],
         2500
       )
+      expect(await control<boolean>('window.entered === true'), 'kursor nie doszedł do przycisku kontrolnego').toBe(true)
       expect(pidWindows(bar.pid).length, `kontrola: ${JSON.stringify(pidWindows(bar.pid))}`).toBeGreaterThan(probeBefore.length)
     })
   } finally {

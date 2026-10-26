@@ -90,14 +90,23 @@ namespace RegulatedDay
 
         void Do(Action a)
         {
-            if (marshal == null) return;
-            try { marshal.BeginInvoke(a); } catch (Exception e) { Log.Warn("okna: " + e.Message); }
+            if (marshal == null) { Log.Warn("okna: wątek okien nie wystartował"); return; }
+            try { marshal.BeginInvoke(Guarded(a)); } catch (Exception e) { Log.Warn("okna: " + e.Message); }
         }
 
         void DoAndWait(Action a)
         {
-            if (marshal == null) return;
-            try { marshal.Invoke(a); } catch (Exception e) { Log.Warn("okna: " + e.Message); }
+            if (marshal == null) { Log.Warn("okna: wątek okien nie wystartował"); return; }
+            try { marshal.Invoke(Guarded(a)); } catch (Exception e) { Log.Warn("okna: " + e.Message); }
+        }
+
+        /// <summary>An exception on the windows' thread goes to the log (never WinForms' error window, never lost).</summary>
+        static MethodInvoker Guarded(Action a)
+        {
+            return delegate
+            {
+                try { a(); } catch (Exception e) { Log.Warn("okna: " + e); }
+            };
         }
 
         string Version { get { return owner.Task != null ? owner.Task.Version : "?"; } }
@@ -124,6 +133,7 @@ namespace RegulatedDay
                         if (!WindowOrder.LayAboveDesktop(h, out why)) Log.Warn("okno postępu: nie udało się położyć pod oknami – " + why);
                     }
                     progress.Show();
+                    Log.Info("okno postępu: " + (Native.IsWindowVisible(h) ? "widoczne" : "niewidoczne") + " (hwnd " + h.ToInt64() + ")");
                 }
                 progress.Text1.Text = text;
             });
@@ -136,6 +146,7 @@ namespace RegulatedDay
                 progress = new OwnerForm(WindowTitle);
                 progress.AddButton("Uruchom mimo to", delegate { owner.RunAnyway(); });
                 progress.Show();
+                Log.Info("okno stanu: " + (Native.IsWindowVisible(progress.Handle) ? "widoczne" : "niewidoczne"));
             }
             progress.Text1.Text = "Trwa aktualizacja do " + Version + " od " + since.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture) + ". " + text;
         }

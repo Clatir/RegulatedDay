@@ -138,15 +138,25 @@ test('z oknem: „Zainstaluj teraz” – pobranie w tle, okno postępu bez foku
     await closed
     step.name = 'okno postępu: na wierzchu, bez zabierania fokusu'
     let progress: TopWindow | undefined
-    await expect
-      .poll(
-        () => {
-          progress = topWindows().find((w) => w.visible && w.title === 'Regulated Day – aktualizacja')
-          return !!progress
-        },
-        { timeout: 120_000, intervals: [500] }
-      )
-      .toBe(true)
+    // What the install helper's process showed (its pid from install.log), printed if the window is not found.
+    const seen = new Set<string>()
+    try {
+      await expect
+        .poll(
+          async () => {
+            const all = topWindows()
+            progress = all.find((w) => w.visible && w.title === 'Regulated Day – aktualizacja')
+            const pid = Number(/start install \(pid (\d+)/.exec(await readText(join(productionData(), 'logs', 'install.log')))?.[1] ?? 0)
+            for (const w of all.filter((x) => x.pid === pid)) seen.add(`${w.cls} „${w.title}” ${w.visible ? 'widoczne' : 'ukryte'}`)
+            return !!progress
+          },
+          { timeout: 120_000, intervals: [500] }
+        )
+        .toBe(true)
+    } catch (e) {
+      console.log(`okna pomocnika instalacji: ${[...seen].join('; ') || 'żadnych'}`)
+      throw e
+    }
     expect(foreground()).toBe(pw.hwnd)
     const order = () => topWindows().map((w) => w.hwnd)
     expect(order().indexOf(progress!.hwnd)).toBeLessThan(order().indexOf(pw.hwnd))
