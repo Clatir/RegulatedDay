@@ -156,6 +156,22 @@ export function engineView(i: EngineInput): WidgetView {
       const id = `break:${state.grid.date}:${Math.round((run - state.grid.start) / MIN)}`
       if (!answered(events, id)) lines.push({ id, text: `Przerwa? ${Math.round((now - run) / MIN)} min pracy ciągiem`, actions: [{ id: 'break', label: 'Przerwa' }, { id: 'continue', label: 'Kontynuuję' }], dot: !modes.fewer })
     }
+    // „Włączyć mniej pytań?” after a signal of overload: once a day for each kind, one at a time, hidden after 15 min; a
+    // signal while one is shown or within 60 min after it hid counts as shown (spec „Cisza”).
+    if (!modes.fewer) {
+      let lastShown: number | null = null
+      const proposed = new Set<string>()
+      for (const e of [...events].sort((a, b) => a.t - b.t)) {
+        if (e.k !== 'energy.signal') continue
+        const s = e as unknown as { at: number; signal: string }
+        if (proposed.has(s.signal)) continue
+        proposed.add(s.signal)
+        if (lastShown != null && s.at < lastShown + 75 * MIN) continue
+        lastShown = s.at
+        const id = `fewerOffer:${state.grid.date}:${s.signal}`
+        if (now - s.at < 15 * MIN && !answered(events, id)) lines.push({ id, text: 'Włączyć mniej pytań?', actions: [{ id: 'yes', label: 'Tak' }, { id: 'no', label: 'Nie' }], dot: false })
+      }
+    }
     // The solitude after contact longer than 30 min, once.
     const contact = i.care.solitudeAfterMin > 0 ? contactSince(state, t) : null
     if (contact != null && now - contact > i.care.solitudeAfterMin * MIN) {

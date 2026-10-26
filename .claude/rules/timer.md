@@ -28,8 +28,8 @@ paths:
 - `main/engine/input.ts` – próbki co 5 s, użycie (ciąg 30 s poza aplikacją), `gap.open`/`gap.close`.
 - `main/data/folder.ts` – `autoTasks` w `check()`, `timerClick`, `answer`, `markSeen`, `questions`, `powerNeed`.
 - `shared/nightInstall.ts` + `main/update/night.ts` – D162; `main/onedrive.ts` – OneDrive z pomocnika.
-- Okno: `renderer/features/timer/TimerBar.tsx` (pasek u góry), `timerView.ts`; oś dnia (`dayItems`) – bloki tam,
-  gdzie biegły, niezaczęte według prognozy.
+- Okno: pasek z silnika (E4b, reguły `widget.md`), „Start” w panelu bloku (`TodayPage`); oś dnia (`dayItems`) –
+  bloki tam, gdzie biegły, niezaczęte według prognozy.
 
 ## Zasady
 - Każde działanie automatyczne ma `autoRule` i identyfikator `derivedId(dzień, 'auto', reguła, rodzaj, blok, at)` –

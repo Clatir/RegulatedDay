@@ -130,7 +130,8 @@ export class WidgetEngine {
         name,
         care: { waterOn: rd.general.modules.water, waterEveryMin: rd.general.waterEveryMin, breakAfterMin: rd.general.breakAfterMin, solitudeAfterMin: rd.general.solitudeAfterMin },
         modePrefs: this.d.modePrefs(),
-        pending: this.pending,
+        // Only what the windows show (the view goes over IPC – no function in it).
+        pending: this.pending ? { button: this.pending.button, text: this.pending.text, until: this.pending.until } : null,
         computer: folder.computers[0]?.id
       })
       if (!this.logged) {
@@ -258,13 +259,14 @@ export class WidgetEngine {
         if (!f || !arg) return
         const [a, b] = arg.split('|')
         await f.energySignal(action === 'signal' ? { signal: a as 'glasses' } : { pool: a as 'head', delta: (num(b) ?? 0) as -10 | 0 | 10 }).catch((e) => this.d.log('warn', 'sygnał nie zapisany', e))
-        return void this.refresh()
+        return this.refresh()
       }
       case 'confirm': {
         const p = this.pending
         this.pending = null
         if (p && p.until > this.now) r = await p.redo()
-        return void this.refresh().then(() => r && !r.ok && r.why && this.d.log('info', `pasek: ${r.why}`))
+        if (r && !r.ok && r.why) this.d.log('info', `pasek: ${r.why}`)
+        return this.refresh()
       }
       case 'openMain':
         this.d.showMain('today')
@@ -276,7 +278,10 @@ export class WidgetEngine {
         if (kind === 'wait') click = act === 'start' ? { a: 'start', block: id } : { a: 'cancel', block: id }
         else if (kind === 'restart') click = { a: 'restart', block: id }
         else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
-        else if (kind === 'break' || kind === 'solitude') {
+        else if (kind === 'fewerOffer') {
+          await this.d.timer({ a: 'mark', question: line, answer: act } as TimerIn)
+          if (act === 'yes') click = { a: 'fewer' }
+        } else if (kind === 'break' || kind === 'solitude') {
           await this.d.timer({ a: 'mark', question: line, answer: act } as TimerIn)
           if (act === 'break' || act === 'solitude') click = { a: 'startNew', block: `${line.replace(/[^a-z0-9]/gi, '')}`.slice(0, 40), categoryId: 'regeneracja', durationMin: 15 }
         } else if (act === 'extend') click = { a: 'extend', minutes: num(value) ?? 15 }
@@ -288,7 +293,7 @@ export class WidgetEngine {
         } else {
           r = await this.d.answer(line, act, num(value))
           if (r.confirm) this.wait(`${line}|${act}`, act === 'working' ? 'Pracuję' : 'Start', r.confirm, () => this.d.answer(line, act, 1))
-          return void this.refresh()
+          return this.refresh()
         }
         label = act === 'start' ? 'Zacznij' : label
         break

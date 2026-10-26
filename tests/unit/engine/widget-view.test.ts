@@ -113,6 +113,25 @@ describe('widok paska z silnika', () => {
     expect(view(s, '09:40').lines.some((l) => l.id.startsWith('break:'))).toBe(false)
   })
 
+  it('„Włączyć mniej pytań?” po sygnale przeciążenia: raz dziennie na rodzaj, chowa się po 15 min; „Tak” włącza tryb ciszy', () => {
+    const s = new Scenario({ date: DATE, plan: [] }).observe('07:00', null)
+    s.signal('glasses', '10:00', null)
+    expect(view(s, '10:05').lines.find((l) => l.id.startsWith('fewerOffer:'))).toMatchObject({ text: 'Włączyć mniej pytań?' })
+    expect(view(s, '10:16').lines.some((l) => l.id.startsWith('fewerOffer:'))).toBe(false)
+    // Another kind within 60 min after it hid: counts as shown, no new proposal.
+    s.signal('earplugs', '10:40', null)
+    expect(view(s, '10:41').lines.some((l) => l.id.startsWith('fewerOffer:'))).toBe(false)
+    s.signal('rocking', '12:00', null)
+    const line = view(s, '12:01').lines.find((l) => l.id.startsWith('fewerOffer:'))!
+    expect(line.id).toContain('rocking')
+    click(s, '12:02', { a: 'fewer' })
+    const quiet = view(s, '12:03')
+    expect(quiet).toMatchObject({ quiet: true, fewer: true, soundOk: false })
+    expect(quiet.lines.some((l) => l.id.startsWith('fewerOffer:'))).toBe(false)
+    click(s, '13:00', { a: 'better' })
+    expect(view(s, '13:01').quiet).toBe(false)
+  })
+
   it('„Zacznij jeszcze raz” sesji skończonej przed planowanym końcem (D207)', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'ny', cat: 'sesja', at: '15:30', min: 120, fixed: true, bg: false })] }).observe('07:00', null)
     click(s, '15:30', { a: 'start', block: 'ny' })

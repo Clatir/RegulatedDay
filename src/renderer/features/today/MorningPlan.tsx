@@ -84,12 +84,22 @@ function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void }) {
       ))}
       <span className="text-[12px] text-muted">
         Wynik: {POOLS.map((p) => `${POOL_NAMES[p]} ${result[p]}`).join(' · ')}
-        {answers[2] === 2 ? ' · tryb „mniej pytań” zaproponuje pasek' : ''}
       </span>
       <div className="flex gap-2">
         <button type="button" className="btn btn-accent" onClick={() => void logEvents([{ k: 'energy.checkin', day: model.date, answers: byPool }])} data-testid="checkin-save">
           Zapisz
         </button>
+        {/* „Drażnią mnie pytania” – tak: the proposal of „mniej pytań” is here, in the check-in itself (spec „Cisza”). */}
+        {answers[2] === 2 && (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => void logEvents([{ k: 'energy.checkin', day: model.date, answers: byPool }]).then(() => window.rd.timer({ a: 'fewer', day: model.date }))}
+            data-testid="checkin-save-fewer"
+          >
+            Zapisz i włącz „mniej pytań”
+          </button>
+        )}
         <button type="button" className="btn" onClick={onSkip} data-testid="checkin-skip">
           Pomiń
         </button>
