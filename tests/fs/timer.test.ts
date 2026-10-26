@@ -35,8 +35,8 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make() {
-  const clock = { now: placeLogical(DAY, 10 * 60) }
+async function make(start = placeLogical(DAY, 10 * 60)) {
+  const clock = { now: start }
   const folder = await DataFolder.open({
     fs: nodeFs,
     dataDir,
@@ -87,6 +87,42 @@ describe('timer w folderze danych', () => {
     const start = read.events.find((e) => e.k === 'block.start' && (e as { block?: string }).block === 'w')!
     expect((await folder.timerClick({ a: 'undo', target: start.id })).ok).toBe(true)
     expect((await folder.timer(DAY)).fg?.info.id).not.toBe('w')
+  })
+
+  it('blok zapauzowany wczoraj nie trzyma kliknięć na wczorajszym dniu (biegnie tylko blok niezapauzowany)', async () => {
+    const yesterday = '2026-10-20'
+    const { folder, clock } = await make()
+    clock.now = placeLogical(yesterday, 20 * 60)
+    expect((await folder.timerClick({ a: 'startNew', block: 'y1', categoryId: 'inne', durationMin: 60, day: yesterday })).ok).toBe(true)
+    expect((await folder.timerClick({ a: 'pause', day: yesterday })).ok).toBe(true)
+    clock.now = placeLogical(DAY, 10 * 60)
+    expect((await folder.timerClick({ a: 'start', block: 'a' })).ok).toBe(true)
+    expect(await kinds(folder)).toContain('block.start:a')
+  })
+
+  it('blok biegnący przez 04:00: reguły wejścia czytają przerwy zapisane już w logu nowego dnia', async () => {
+    const yesterday = '2026-10-20'
+    // The app runs since yesterday evening (the clock never goes back: a computer is settled only forward).
+    const { folder, clock } = await make(placeLogical(yesterday, 26 * 60))
+    clock.now = placeLogical(yesterday, 27 * 60)
+    expect((await folder.timerClick({ a: 'startNew', block: 'n', categoryId: 'inne', durationMin: 60, day: yesterday })).ok).toBe(true)
+    expect((await folder.timer(yesterday)).fg?.info.id).toBe('n')
+    // Input stops at 03:50; the tracker splits the gap at 04:00 into the new day's log.
+    const four = placeLogical(DAY, 4 * 60)
+    folder.append({ day: yesterday, dom: 'meta', k: 'gap.open', gap: 'g1', kind: 'input', from: four - 10 * 60_000, lastOutside: null })
+    folder.append({ day: yesterday, dom: 'meta', k: 'gap.close', gap: 'g1', to: four })
+    folder.append({ day: DAY, dom: 'meta', k: 'gap.open', gap: 'g2', kind: 'input', from: four, lastOutside: null })
+    clock.now = four + 20 * 60_000
+    await folder.check()
+    clock.now += 61_000
+    await folder.check()
+    clock.now += 15_000
+    const r = await folder.check()
+    expect(r.problems).toEqual([])
+    expect(r.leader.iLead).toBe(true)
+    // Away from 03:50 for over 30 min, past the planned end (04:00): it ends when you left (without today's log it ran on).
+    const y = (await folder.readDay(yesterday)).events.find((e) => e.k === 'block.end')
+    expect(y).toMatchObject({ autoRule: 'absence', at: four - 10 * 60_000 })
   })
 
   it('pytanie „Dalej?” zobaczone zapisuje się raz; odpowiedź „Dalej” kończy blok', async () => {

@@ -5,7 +5,7 @@
  * 0–30 min, then installs; the next ones wait for 24 h of X on another computer. The hidden path installs (the app quits,
  * the install helper takes over).
  */
-import { nightDecision, MAX_WAIT_MS, type NightState, type PeerVersions } from '@shared/nightInstall'
+import { nightDecision, MAX_WAIT_MS, WAITING, type NightState, type PeerVersions } from '@shared/nightInstall'
 
 export interface NightDeps {
   now: () => number
@@ -57,9 +57,15 @@ export class NightInstaller {
         this.waitMs = Math.floor((this.d.random ?? Math.random)() * MAX_WAIT_MS)
         this.d.claim(decision.version)
       } else if (decision.act === 'yield') this.reset()
-      else if (decision.act === 'install') {
+      else if (decision.act === 'none' && this.waitFor && decision.why !== WAITING) {
+        // The night ended, the battery, a block, the setting off…: „instaluję” is taken back – it never holds the others.
+        this.reset()
+      } else if (decision.act === 'install') {
         this.d.claim(decision.version)
-        if (!this.d.install()) this.d.log('warn', `instalacja w nocy ${decision.version} nie wystartowała`)
+        if (!this.d.install()) {
+          this.d.log('warn', `instalacja w nocy ${decision.version} nie wystartowała`)
+          this.reset()
+        }
       }
     } catch (e) {
       this.d.log('warn', `instalacja w nocy: ${e instanceof Error ? e.message : String(e)}`)

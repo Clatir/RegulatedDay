@@ -14,7 +14,7 @@ import { createDay, dayPlan } from '@shared/engine/createDay'
 import { daySnapshotOf } from '@shared/model/events'
 import { dayStart, logicalDayOf, logicalMinuteOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
-import type { PowerNeed } from '@shared/engine/power'
+import { NO_POWER, type PowerNeed } from '@shared/engine/power'
 import type { VersionRun } from '@shared/sync/presence'
 import { LifeKeeper } from '../crash/lifeMarker'
 import { writePlan, PLAN_DAYS, type PlanBlock as GuardBlock } from '../update/files'
@@ -220,7 +220,14 @@ export class DataService {
       // The exact timer for the timer's next deadline (a fixed block's start, a planned end, the second „Dalej?”).
       if (r.nextAt != null) this.scheduler.at('timer', r.nextAt + 1_000, () => void this.tick())
       else this.scheduler.cancel('timer')
-      if (this.o.onPower) this.o.onPower(await this.folder.powerNeed(this.lastInput, now))
+      // Apart: a day that cannot be read now never stops the guard's plan and the backups below.
+      if (this.o.onPower) {
+        try {
+          this.o.onPower(await this.folder.powerNeed(this.lastInput, now))
+        } catch (e) {
+          this.o.log('warn', 'stan blokady usypiania nieznany', e)
+        }
+      }
       // The guard's plan: at the start, every hour, at the change of the day and when this computer made the day.
       if (r.created || now - this.lastGuardPlan >= GUARD_PLAN_EVERY_MS) await this.refreshGuardPlan()
       if (r.leader.iLead && r.settled) await this.backupIfDue(now)
@@ -340,6 +347,8 @@ export class DataService {
     this.scheduler.stop()
     if (this.sampler) clearInterval(this.sampler)
     this.sampler = null
+    // The folder closes (another chosen, the quit): nothing of it holds the computer awake any more.
+    this.o.onPower?.(NO_POWER)
     try {
       if (this.running) await withTimeout(this.running, STOP_TIMEOUT_MS)
       await withTimeout(this.folder.close(why), STOP_TIMEOUT_MS)

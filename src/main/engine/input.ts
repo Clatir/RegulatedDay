@@ -24,6 +24,8 @@ export const USE_MS = 30_000
 export const GAP_MS = 2 * 60_000
 /** Around a click of the desktop bar or the icon the input is the app's own. */
 export const APP_CLICK_MS = 10_000
+/** The presence's state turns „idle” only after this long without input (reading is no flapping of the file). */
+export const PRESENCE_IDLE_MS = 15_000
 
 export interface InputDeps {
   now: () => number
@@ -89,7 +91,7 @@ export class InputTracker {
           this.close('use', this.streak.from)
         }
       }
-    } else this.d.idle()
+    } else if (idleMs >= PRESENCE_IDLE_MS) this.d.idle()
     this.splitAtDay(now)
     // Gaps reaching 2 min are written (input: from the last input; use: from the last use, or the start of observation).
     const lastInput = this.lastInput ?? this.started

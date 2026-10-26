@@ -155,8 +155,10 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
     answers: new Map()
   }
   const idx = (at: number) => idxOf(grid, at)
-  // „Cofnij” (spec: the undo writes an event „korekta”): the events it points at are folded as if never written.
-  for (const e of events) if (isKnown(e) && e.k === 'undo') f.undone.add(e.target)
+  // „Cofnij” (spec: the undo writes an event „korekta”): the events it points at are folded as if never written. The
+  // latest undo first: an undo undone by a later one (its „Cofnij”) points at nothing.
+  const undos = events.filter((e): e is Extract<LogEvent, { k: 'undo' }> => isKnown(e) && e.k === 'undo').sort((a, b) => compareEvents(b, a))
+  for (const u of undos) if (!f.undone.has(u.id)) f.undone.add(u.target)
   const block = (id: string) => {
     let b = f.blocks.get(id)
     if (!b) f.blocks.set(id, (b = newBlock(id)))
@@ -323,8 +325,9 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
       default:
         break
     }
-    // An automatic action that changed something is listed (one that no longer fitted is only a problem).
-    if (typeof auto === 'string' && auto && f.problems.length === problemsBefore) {
+    // An automatic action that changed something is listed (one that no longer fitted is only a problem); the leader's
+    // own corrections of its automatic ends (a later log showed input) are not actions to undo.
+    if (typeof auto === 'string' && auto && e.k !== 'undo' && f.problems.length === problemsBefore) {
       const blockId = (e as { block?: unknown }).block
       f.autos.push({ id: e.id, k: e.k, rule: auto, block: typeof blockId === 'string' ? blockId : null, at: idx(eventAt(e)), c: e.c })
     }

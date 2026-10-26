@@ -21,9 +21,10 @@ export interface TimerModel {
   at: (idx: number) => number
 }
 
-export function timerModel(model: DayModel, computer: string | null, now: number): TimerModel {
+/** `after`: the next day's events when the day is over (a block running through 04:00 – its input after 04:00 is there). */
+export function timerModel(model: DayModel, computer: string | null, now: number, after: readonly DayModel['events'][number][] = []): TimerModel {
   const state = model.state
-  const activity = activityOf(model.events, state.grid.start, now, computer)
+  const activity = activityOf([...model.events, ...after], state.grid.start, now, computer)
   return {
     date: model.date,
     t: timerNow(state),

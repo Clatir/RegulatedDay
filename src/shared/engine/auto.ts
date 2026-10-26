@@ -174,18 +174,46 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
   return null
 }
 
-/** An absence (spec „Bezczynność i nieobecność”): from the threshold of the question on all computers during a work or project block. */
-export function absenceOf(state: DayState, activity: Activity, info: BlockInfo, f: BlockFact): { away: number; back: number | null } | null {
-  if (f.startedAt == null || isFixedLike(info) || placeOf(info) !== 'computer' || !(info.isWork || info.isProject)) return null
+/**
+ * The absences (spec „Bezczynność i nieobecność”) during a work or project block at the computer, in order: from the
+ * threshold of the question without input on all computers, since the block's last start or resume.
+ */
+export function absencesOf(state: DayState, activity: Activity, info: BlockInfo, f: BlockFact): Array<{ away: number; back: number | null }> {
+  if (f.startedAt == null || isFixedLike(info) || placeOf(info) !== 'computer' || !(info.isWork || info.isProject)) return []
   const threshold = state.settings.absenceQuestionMin * MIN
   const start = atOf(state.grid, f.runs.at(-1)?.from ?? f.startedAt)
+  const out: Array<{ away: number; back: number | null }> = []
   for (const x of activity.idle) {
+    if (x.to <= start) continue
     const away = Math.max(x.from, start)
     const back = x.to < activity.now ? x.to : null
-    if ((back ?? activity.now) - away < threshold) continue
-    return { away, back }
+    if ((back ?? activity.now) - away >= threshold) out.push({ away, back })
   }
-  return null
+  return out
+}
+
+/** The first absence of a block, or null. */
+export function absenceOf(state: DayState, activity: Activity, info: BlockInfo, f: BlockFact): { away: number; back: number | null } | null {
+  return absencesOf(state, activity, info, f)[0] ?? null
+}
+
+/**
+ * A session's end at the last input (D193, D210): once no computer had presence for 30 min since its start or resume,
+ * at the last input outside the app before that – due 30 min after the input stopped.
+ */
+function sessionLastInputEnd(activity: Activity, start: number, now: number): { at: number; due: number } | null {
+  const x = activity.idle.find((i) => i.to - Math.max(i.from, start) >= SESSION_IDLE_MIN * MIN && i.from < now)
+  if (!x) return null
+  const from = Math.max(x.from, start)
+  return { at: Math.max(start, Math.min(lastOutsideBefore(activity, x.from) ?? x.from, x.from)), due: from + SESSION_IDLE_MIN * MIN }
+}
+
+/**
+ * The first use of the computer in the day (spec „Użycie komputera”): the first use from an hour before the wake (not
+ * before 04:00) – night coding after 04:00 is not it. Null while nobody has used a computer yet.
+ */
+export function dayFirstUse(state: DayState, activity: Activity): number | null {
+  return firstUseFrom(activity, Math.max(state.grid.start, atOf(state.grid, state.wake) - 60 * MIN))
 }
 
 /** The automatic actions due now (each written once – derived ids – and only up to the gate). */
@@ -199,18 +227,33 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   const at = (idx: number) => atOf(state.grid, idx)
   const due = (ms: number) => ms <= gate && ms <= inp.now
   const c: Ctx = { inp, date, nowIdx, byId, idle: () => null }
+  const written = new Set(ctx.events.map((e) => e.id))
+  /**
+   * A rule's events: undone by „Cofnij” – the rule was overruled, the next rules judge the block (false); written
+   * already or new – this rule decides the block now (true), the new ones are written.
+   */
+  const take = (list: AutoEvent[]): boolean => {
+    if (list.some((e) => state.facts.undone.has(e.id))) return false
+    for (const e of list) {
+      if (written.has(e.id)) continue
+      written.add(e.id)
+      out.push(e)
+    }
+    return true
+  }
 
   // The boundary approves itself at the start of the first work block (spec „Granica i koniec pracy”): written once, so
   // the list shows it and „Cofnij” opens it again.
   if (state.boundary.approved != null && state.boundary.auto && !state.facts.approvals.length && state.boundary.approvedAt != null && !state.facts.undos.length) {
     const when = at(state.boundary.approvedAt)
-    if (due(when)) out.push(auto(date, 'boundary', { k: 'boundary.approve', at: when, boundary: at(state.boundary.approved), auto: true } as TimerDraft))
+    if (due(when)) take([auto(date, 'boundary', { k: 'boundary.approve', at: when, boundary: at(state.boundary.approved), auto: true } as TimerDraft)])
   }
 
   // Fixed blocks start by themselves at their planned time (sessions and blocks marked as second shift or weekly
   // analysis wait for „Zacznij”); in „Odcinam się” they do not; behind a running regeneration they wait for its end.
   const disconnected = state.facts.disconnect.some((d) => d.to === OPEN)
   const fg = t.fg
+  const firstUse = dayFirstUse(state, activity)
   for (const b of state.blocks) {
     if (!b.fixed || b.waits || !b.inPlan || disconnected) continue
     const f = state.facts.blocks.get(b.id)
@@ -218,20 +261,25 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     const span = plannedSpan(b, byId)
     if (!span || nowIdx < span.start || nowIdx >= span.end) continue
     let from = at(span.start)
-    // Before the first use of the day a fixed block at the computer is „do potwierdzenia” (spec „Bloki”): it starts at the use.
+    // Before the day's first use a fixed block at the computer is „do potwierdzenia” (spec „Bloki”): it starts at the use.
     if (placeOf(b) !== 'away') {
-      const use = firstUseFrom(activity, at(span.start))
-      if (use == null) continue
-      from = Math.max(from, use)
+      if (firstUse == null) continue
+      from = Math.max(from, firstUse)
     }
     if (!b.bg && fg?.info.isRegen) continue
+    // Held by a regeneration that has ended since its planned start: it starts at that end (spec „Bloki”).
+    for (const r of state.blocks) {
+      const rf = r.isRegen ? state.facts.blocks.get(r.id) : undefined
+      if (rf?.endedAt != null && rf.endedAt > span.start && rf.endedAt <= nowIdx && !(rf.runs.at(-1)?.bg ?? false)) from = Math.max(from, at(rf.endedAt))
+    }
     if (!due(from)) continue
     let bg = b.bg
+    const list: AutoEvent[] = []
     if (!bg && fg) {
       if (fg.info.protectedLife || isFixedLike(fg.info)) bg = true
-      else out.push(auto(date, 'fixedStart', { k: 'block.pause', block: fg.info.id, at: from }))
+      else list.push(auto(date, 'fixedStart', { k: 'block.pause', block: fg.info.id, at: from }))
     }
-    out.push(
+    list.push(
       auto(date, 'fixedStart', {
         k: 'block.start',
         block: b.id,
@@ -242,6 +290,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
         how: 'auto'
       })
     )
+    take(list)
   }
 
   // Running blocks.
@@ -253,8 +302,8 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     const runFrom = at(f.runs.at(-1)?.from ?? f.startedAt ?? 0)
     const closed = activity.unobserved.find((x) => x.from >= runFrom && x.to < inp.now && x.to - x.from >= MIN && closedThere(inp, x.from))
     if (closed) {
-      if (due(closed.to)) out.push(auto(date, 'shutdown', { k: 'block.end', block: b.id, at: Math.max(runFrom, closed.from), done: null, rule: 'shutdown' }))
-      continue
+      if (!due(closed.to)) continue
+      if (take([auto(date, 'shutdown', { k: 'block.end', block: b.id, at: Math.max(runFrom, closed.from), done: null, rule: 'shutdown' })])) continue
     }
     if (b.fixed || b.rules.kind === 'session') {
       // A fixed block in the background, a session (also in the foreground) and a second shift end at their planned end;
@@ -262,21 +311,12 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
       const inFg = tb === fg
       const session = b.rules.kind === 'session'
       const when = !inFg || session ? endAt : endAt + FIXED_REACTION_MIN * MIN
-      if (b.fixed || session) {
-        if (due(when) && nowIdx >= tb.plannedEnd) {
-          out.push(auto(date, inFg && !session ? 'fixedNoReaction' : 'plan', { k: 'block.end', block: b.id, at: endAt, done: null, rule: inFg && !session ? 'fixedNoReaction' : 'plan' }))
-          continue
-        }
-      }
+      const rule = inFg && !session ? 'fixedNoReaction' : 'plan'
+      if (due(when) && nowIdx >= tb.plannedEnd && take([auto(date, rule, { k: 'block.end', block: b.id, at: endAt, done: null, rule })])) continue
       // A session ends at the last input outside the app once no computer had presence for 30 min (D193, D210).
       if (session) {
-        const start = at(f.runs.at(-1)?.from ?? f.startedAt ?? 0)
-        const x = activity.idle.find((i) => i.to - Math.max(i.from, start) >= SESSION_IDLE_MIN * MIN && i.from < inp.now)
-        if (x) {
-          const last = Math.max(start, Math.min(lastOutsideBefore(activity, x.from) ?? x.from, x.from))
-          const when2 = Math.max(x.from, start) + SESSION_IDLE_MIN * MIN
-          if (due(when2)) out.push(auto(date, 'lastInput', { k: 'block.end', block: b.id, at: last, done: null, rule: 'lastInput' }))
-        }
+        const end = sessionLastInputEnd(activity, runFrom, inp.now)
+        if (end && due(end.due)) take([auto(date, 'lastInput', { k: 'block.end', block: b.id, at: end.at, done: null, rule: 'lastInput' })])
       }
       continue
     }
@@ -284,44 +324,46 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     // Away from the computer: the first use after at least 2 min without input, a limit, the bedtime.
     const away = awayEnd(c, b, f)
     if (away) {
-      if (due(away.at)) out.push(auto(date, away.rule, { k: 'block.end', block: b.id, at: away.at, done: null, rule: away.rule }))
-      continue
+      if (!due(away.at)) continue
+      if (take([auto(date, away.rule, { k: 'block.end', block: b.id, at: away.at, done: null, rule: away.rule })])) continue
     }
-    // An absence from the threshold of its question during a work or project block.
-    const abs = absenceOf(state, activity, b, f)
-    if (abs) {
+    // An absence from the threshold of its question during a work or project block (one overruled by „Cofnij” or an
+    // answer is passed over – a later one is judged).
+    let decided = false
+    for (const abs of absencesOf(state, activity, b, f)) {
       if (abs.back == null || abs.back > endAt) {
         // The planned end has passed (or will before any return): the block ends when you left (D256).
-        if (inp.now >= endAt && due(abs.away + state.settings.absenceQuestionMin * MIN)) {
-          out.push(auto(date, 'absence', { k: 'block.end', block: b.id, at: Math.max(abs.away, at(f.startedAt ?? 0)), done: null, rule: 'absence' }))
-          continue
+        if (inp.now < endAt || !due(abs.away + state.settings.absenceQuestionMin * MIN)) {
+          decided = true
+          break
+        }
+        if (take([auto(date, 'absence', { k: 'block.end', block: b.id, at: Math.max(abs.away, at(f.startedAt ?? 0)), done: null, rule: 'absence' })])) {
+          decided = true
+          break
         }
       } else if (due(abs.back)) {
         // Back before the planned end: the block goes on, the absence counted out as time without a block (D260).
-        out.push(auto(date, 'absence', { k: 'block.pause', block: b.id, at: abs.away }))
-        out.push(auto(date, 'absence', { k: 'block.resume', block: b.id, at: abs.back, confirmUntil: null }))
-        continue
+        if (take([auto(date, 'absence', { k: 'block.pause', block: b.id, at: abs.away }), auto(date, 'absence', { k: 'block.resume', block: b.id, at: abs.back, confirmUntil: null })])) {
+          decided = true
+          break
+        }
       }
     }
+    if (decided) continue
     const q = nextQuestions(state, t)
     if (q && q.block.id === b.id) {
-      // Two asks without an answer: the block ends at the last answer, not before the planned end, and an active block
-      // not before the first ask was seen (D238); a passive block at its planned end.
+      // Two asks without an answer: an hour after the first was seen (D238; the second ask 30 min after it, the end 30
+      // min after that), at the last answer, not before the planned end and – an active block – not before the first ask
+      // was seen; a passive block counts from the asking and ends at its planned end.
       if (q.q2) {
-        const from2 = q.passive ? q.q2.at : q.q2.seen
-        if (from2 != null) {
-          const when = from2 + QUESTION_GAP_MIN * MIN
-          const end = q.passive ? endAt : Math.max(lastAnswerAt(state, f), endAt, q.q1.seen ?? endAt)
-          if (due(when)) {
-            out.push(auto(date, 'twoQuestions', { k: 'block.end', block: b.id, at: end, done: null, rule: 'twoQuestions' }))
-            continue
-          }
-        }
+        const when = q.q2.at + QUESTION_GAP_MIN * MIN
+        const end = q.passive ? endAt : Math.max(lastAnswerAt(state, f), endAt, q.q1.seen ?? endAt)
+        if (due(when) && take([auto(date, 'twoQuestions', { k: 'block.end', block: b.id, at: end, done: null, rule: 'twoQuestions' })])) continue
       }
       // Nobody saw it: a block at the computer ends by the idle threshold, at the last input (D231).
       if (q.q1.seen == null) {
         const end = idleEnd(c, b, f)
-        if (end != null && due(end.due)) out.push(auto(date, 'idle', { k: 'block.end', block: b.id, at: end.at, done: null, rule: 'idle' }))
+        if (end != null && due(end.due)) take([auto(date, 'idle', { k: 'block.end', block: b.id, at: end.at, done: null, rule: 'idle' })])
       }
     }
   }
@@ -334,6 +376,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     const info = byId.get(a.block)
     if (!f || !info || f.endId !== a.id) continue
     const open = unended(f)
+    const revalidate = (reason: string): AutoEvent => ({ id: derivedId(date, 'auto', 'revalidate', a.id), k: 'undo', at: inp.now, target: a.id, reason, autoRule: 'revalidate' })
     let still: number | null = null
     if (a.rule === 'idle') {
       // An absence longer than its question's threshold that began before the planned end wins over the idle threshold
@@ -341,20 +384,22 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
       const abs = absenceOf(state, activity, info, open)
       const plannedEnd = atOf(state.grid, plannedEndOf(state, info, open))
       if (abs && abs.away < plannedEnd && due(abs.away + state.settings.absenceQuestionMin * MIN)) {
-        out.push({ id: derivedId(date, 'auto', 'revalidate', a.id), k: 'undo', at: inp.now, target: a.id, reason: 'absence', autoRule: 'revalidate' })
-        out.push(auto(date, 'absence', { k: 'block.end', block: a.block, at: Math.max(abs.away, at(f.startedAt ?? 0)), done: null, rule: 'absence' }))
+        take([revalidate('absence'), auto(date, 'absence', { k: 'block.end', block: a.block, at: Math.max(abs.away, at(f.startedAt ?? 0)), done: null, rule: 'absence' })])
         continue
       }
       still = idleEnd(c, info, open)?.at ?? null
     } else if (a.rule === 'firstUse' || a.rule === 'limit') {
       const r = awayEnd(c, info, open)
       still = r && r.rule === a.rule ? r.at : null
-    } else if (a.rule === 'absence') still = absenceOf(state, activity, info, open) ? at(f.endedAt!) : null
-    else still = at(f.endedAt!)
-    if (still == null || idxOf(state.grid, still) !== f.endedAt) out.push({ id: derivedId(date, 'auto', 'revalidate', a.id), k: 'undo', at: inp.now, target: a.id, reason: 'later log', autoRule: 'revalidate' })
+    } else if (a.rule === 'absence') {
+      still = absencesOf(state, activity, info, open).some((x) => idxOf(state.grid, Math.max(x.away, at(f.startedAt ?? 0))) === f.endedAt) ? at(f.endedAt!) : null
+    } else {
+      // The session's end at the last input: input within the 30 min that justified it (a later log) undoes it (T311, T330).
+      still = sessionLastInputEnd(activity, at(open.runs.at(-1)?.from ?? open.startedAt ?? 0), inp.now)?.at ?? null
+    }
+    if (still == null || idxOf(state.grid, still) !== f.endedAt) take([revalidate('later log')])
   }
-  void ctx
-  return dedupe(out, state)
+  return out
 }
 
 /** The stretch nobody observed began with a close or a crash (not a sleep): the observation ended there without „suspend”. */
@@ -365,17 +410,6 @@ function closedThere(inp: AutoInput, from: number): boolean {
   }
   // A crash leaves no „do” of its own: the next start writes it from the last life marker with „crash”.
   return false
-}
-
-/** Events already in the log (the same derived id) are not written again. */
-function dedupe(list: AutoEvent[], state: DayState): AutoEvent[] {
-  const known = new Set<string>([...state.facts.undone, ...state.facts.autos.map((a) => a.id)])
-  const seen = new Set<string>()
-  return list.filter((e) => {
-    if (known.has(e.id) || seen.has(e.id)) return false
-    seen.add(e.id)
-    return true
-  })
 }
 
 /** The questions open now (none of them answered), for the bar – in the order the bar shows them. */
@@ -463,7 +497,6 @@ function fixedWorkLeft(state: DayState): number {
 export function answerEvents(state: DayState, q: Question, answer: string, at: number, value: number | null = null): TimerDraft[] | null {
   const f = q.block ? state.facts.blocks.get(q.block) : undefined
   const mark: TimerDraft = { k: 'question.answer', at, question: q.id, answer, value }
-  const auto = q.block ? state.facts.autos.filter((a) => a.block === q.block && (a.rule === 'absence' || a.id === f?.endId)) : []
   switch (q.kind) {
     case 'next':
     case 'next2':
@@ -471,7 +504,9 @@ export function answerEvents(state: DayState, q: Question, answer: string, at: n
       return null
     case 'workEnd':
       if (answer === 'yes') return [{ k: 'work.end', at, end: q.askedAt }, ...workEndParking(state, null, at), mark]
-      if (answer === 'break') return [{ ...mark, value: Math.max(at + 60 * MIN, value ?? 0) }]
+      // „Przerwa” (T261): the later of the click plus 60 min and the planned end of the work left before the second shift
+      // (what it puts the 15-minute rule off to – its effect on the end of work comes with the ritual, T463).
+      if (answer === 'break') return [{ ...mark, value: Math.max(at + 60 * MIN, state.forecastWorkEnd != null ? atOf(state.grid, state.forecastWorkEnd) : 0) }]
       return null
     case 'return':
     case 'shutdown':
@@ -482,9 +517,13 @@ export function answerEvents(state: DayState, q: Question, answer: string, at: n
       return [mark]
     case 'absence': {
       if (!q.block || !f) return [mark]
-      const undoAll = auto.map((a) => ({ k: 'undo', at, target: a.id, reason: answer }) as TimerDraft)
-      const pause = auto.find((a) => a.k === 'block.pause')
-      const resume = auto.find((a) => a.k === 'block.resume')
+      // Only this absence's actions: the end when you left, or the pause and the resume that counted it out.
+      const askedIdx = idxOf(state.grid, q.askedAt)
+      const mine = state.facts.autos.filter((a) => a.block === q.block && a.rule === 'absence')
+      const pause = mine.find((a) => a.k === 'block.pause' && a.at === askedIdx)
+      const resume = pause ? mine.filter((a) => a.k === 'block.resume' && a.at >= pause.at).sort((a, b) => a.at - b.at)[0] : undefined
+      const end = !pause ? mine.find((a) => a.k === 'block.end' && a.id === f.endId && a.at === askedIdx) : undefined
+      const undoAll = [pause, resume, end].filter((a): a is NonNullable<typeof a> => !!a).map((a) => ({ k: 'undo', at, target: a.id, reason: answer }) as TimerDraft)
       const away = pause ? atOf(state.grid, pause.at) : f.endedAt != null ? atOf(state.grid, f.endedAt) : at
       if (answer === 'keep') return [mark]
       if (answer === 'leave') return [...undoAll, mark]
@@ -525,8 +564,7 @@ export function nextDeadline(state: DayState): number | null {
   if (q) {
     const from1 = q.passive ? q.q1.at : q.q1.seen
     if (from1 != null) out.push(from1 + QUESTION_GAP_MIN * MIN)
-    const from2 = q.q2 ? (q.passive ? q.q2.at : q.q2.seen) : null
-    if (from2 != null) out.push(from2 + QUESTION_GAP_MIN * MIN)
+    if (q.q2) out.push(q.q2.at + QUESTION_GAP_MIN * MIN)
   }
   const next = out.filter((x) => x > now).sort((a, b) => a - b)[0]
   return next ?? null

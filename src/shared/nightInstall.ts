@@ -15,6 +15,8 @@ import type { VersionRun } from './sync/presence'
 export const RUN_BEFORE_NEXT_MS = 24 * 60 * 60_000
 export const MAX_WAIT_MS = 30 * 60_000
 export const IDLE_FOR_NIGHT_MS = 30 * 60_000
+/** The reason while the first computer waits its random time (the claim stays). */
+export const WAITING = 'losowe czekanie przed instalacją'
 
 export interface PeerVersions {
   computer: string
@@ -111,6 +113,6 @@ export function nightDecision(inp: NightInput): NightDecision {
     return { act: 'claim', version: ready, why: 'pierwszy komputer – losowe czekanie przed instalacją' }
   }
   if (rivals.some((c) => c < inp.me)) return { act: 'yield', why: `remis z ${rivals.find((c) => c < inp.me)} – pierwszeństwo ma niższy identyfikator` }
-  if (state.now - inp.waitFrom < inp.waitMs) return { act: 'none', why: 'losowe czekanie przed instalacją' }
+  if (state.now - inp.waitFrom < inp.waitMs) return { act: 'none', why: WAITING }
   return { act: 'install', version: ready, why: 'pierwszy komputer – instalacja bez czekania 24 h' }
 }

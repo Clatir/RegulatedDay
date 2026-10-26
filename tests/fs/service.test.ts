@@ -78,6 +78,19 @@ describe('usługa folderu danych', () => {
     expect(ev.some((e) => e.k === 'observe.alive')).toBe(true)
   })
 
+  it('blokada usypiania: nieudane sprawdzenie nie pomija planu dla strażnika, a zamknięcie folderu ją zwalnia (E4a)', async () => {
+    const clock = { now: placeLogical(DAY, 10 * 60) }
+    const needs: Array<{ system: boolean; display: boolean }> = []
+    const s = await DataService.start(options(clock, { writeGuardPlan: true, onPower: (n) => needs.push(n) }))
+    s.folder.powerNeed = async () => {
+      throw new Error('dzień nieczytelny')
+    }
+    await s.tick()
+    expect(existsSync(join(userData, 'plan-blocks.json'))).toBe(true)
+    await s.stop('quit')
+    expect(needs.at(-1)).toEqual({ system: false, display: false, reason: null })
+  })
+
   it('plik planu dla strażnika odświeża się co godzinę (także na komputerze, który nie tworzy dnia)', async () => {
     const clock = { now: placeLogical(DAY, 10 * 60) }
     const s = await DataService.start(options(clock, { writeGuardPlan: true }))

@@ -22,7 +22,8 @@ import { NO_POWER, powerNeedOf, type PowerNeed } from '@shared/engine/power'
 import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft } from '@shared/engine/timer'
 import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
-import { atOf, idxOf } from '@shared/engine/grid'
+import { foldFacts, isRunning } from '@shared/engine/facts'
+import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
 import { daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type Domain } from '@shared/model/events'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
@@ -62,16 +63,13 @@ const COMPACT_EVERY_MS = 60 * 60_000
 /** Conflict copies of the records are looked for this often (and at the first check). */
 const COPY_SCAN_MS = 60_000
 
-/** A block started and not ended in these events: a block running through 04:00 keeps its day (spec „Timer”). */
-function hasRunning(events: readonly AnyEvent[]): boolean {
-  const started = new Set<string>()
-  const ended = new Set<string>()
-  for (const e of events) {
-    if (!isKnown(e)) continue
-    if (e.k === 'block.start') started.add(e.block)
-    else if (e.k === 'block.end') ended.add(e.block)
-  }
-  for (const b of started) if (!ended.has(b)) return true
+/**
+ * A block of the day runs now (started, not ended, not paused – „Cofnij” counted): one running through 04:00 keeps its
+ * day (spec „Timer”); a block left paused is no reason to stay on the day before.
+ */
+function hasRunning(day: string, events: readonly AnyEvent[]): boolean {
+  if (!events.some((e) => e.k === 'block.start')) return false
+  for (const f of foldFacts(gridOf(day), events).blocks.values()) if (f.endedAt == null && isRunning(f)) return true
   return false
 }
 
@@ -485,9 +483,10 @@ export class DataFolder {
           nextAt = r.nextAt
           const yesterday = addDays(day, -1)
           const yRead = await this.log.readDay(yesterday)
-          if (yRead.complete && hasRunning(yRead.events)) {
+          if (yRead.complete && hasRunning(yesterday, yRead.events)) {
             const yCtx = await this.dayContext(yesterday, yRead, now)
-            const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, minuteGate(now, yesterday, this.peers, yRead.lastByComputer))
+            // Input after 04:00 is in today's logs: both gates hold.
+            const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, Math.min(gate, minuteGate(now, yesterday, this.peers, yRead.lastByComputer)))
             autos += y.written
             if (y.nextAt != null) nextAt = nextAt == null ? y.nextAt : Math.min(nextAt, y.nextAt)
           }
@@ -509,9 +508,7 @@ export class DataFolder {
 
   /** The leader's automatic actions of one day up to the gate, and the day's next deadline. */
   private async autoTasks(day: string, read: DayRead, ctx: DayContext, state: DayState, now: number, gate: number): Promise<{ written: number; nextAt: number | null }> {
-    // The day before too: an observation or a gap through 04:00 began there.
-    const prev = await this.log.readDay(addDays(day, -1)).catch(() => null)
-    const activity = activityOf([...(prev?.events ?? []), ...read.events], dayStart(day), now, this.observing ? this.o.computer : null)
+    const activity = await this.activityFor(day, read, now)
     let written = 0
     for (const e of autoActions({ ctx, state, activity, now, gate: Math.min(gate, now) })) {
       this.append({ ...e, day, dom: 'timer' })
@@ -520,12 +517,24 @@ export class DataFolder {
     return { written, nextAt: nextDeadline(state) }
   }
 
+  /**
+   * Input and use of every computer from the day's 04:00 to now: the day before too (an observation or a gap through
+   * 04:00 began there) and, for a day that is over (a block running through 04:00), the days after it up to today –
+   * gaps and observations after 04:00 are written to the new day's logs.
+   */
+  private async activityFor(day: string, read: DayRead, now: number): Promise<ReturnType<typeof activityOf>> {
+    const events = [...((await this.log.readDay(addDays(day, -1)).catch(() => null))?.events ?? []), ...read.events]
+    const today = logicalDayOf(now)
+    for (let d = addDays(day, 1); d <= today; d = addDays(d, 1)) events.push(...((await this.log.readDay(d).catch(() => null))?.events ?? []))
+    return activityOf(events, dayStart(day), now, this.observing ? this.o.computer : null)
+  }
+
   /** The day a click concerns: the one with a block still running from before 04:00, else today. */
   private async activeDay(now: number): Promise<string> {
     const today = logicalDayOf(now)
     const yesterday = addDays(today, -1)
     const y = await this.log.readDay(yesterday).catch(() => null)
-    return y && hasRunning(y.events) ? yesterday : today
+    return y && hasRunning(yesterday, y.events) ? yesterday : today
   }
 
   /** The day as you see it (your queued edits laid over the files): clicks and answers are judged on it. */
@@ -577,8 +586,7 @@ export class DataFolder {
     const read = await this.log.readDay(day)
     const ctx = await this.ownContext(day, read, at)
     const state = computeDay(ctx)
-    const prev = await this.log.readDay(addDays(day, -1)).catch(() => null)
-    return questionsOf({ ctx, state, activity: activityOf([...(prev?.events ?? []), ...read.events], dayStart(day), at, this.observing ? this.o.computer : null), now: at })
+    return questionsOf({ ctx, state, activity: await this.activityFor(day, read, at), now: at })
   }
 
   /**
@@ -660,7 +668,7 @@ export class DataFolder {
     const today = logicalDayOf(at)
     for (const day of [addDays(today, -1), today]) {
       const read = await this.log.readDay(day)
-      if (hasRunning(read.events)) {
+      if (hasRunning(day, read.events)) {
         const t = timerNow(await this.dayState(day, read, at))
         if (t.fg || t.bg.length) return true
       }
@@ -680,7 +688,7 @@ export class DataFolder {
     let need: PowerNeed = NO_POWER
     for (const day of [addDays(today, -1), today]) {
       const read = await this.log.readDay(day)
-      if (day !== today && !hasRunning(read.events)) continue
+      if (day !== today && !hasRunning(day, read.events)) continue
       const ctx = await this.dayContext(day, read, at)
       const n = powerNeedOf(ctx, computeDay(ctx), { computer: this.o.computer, leads: this.leader.iLead, lastPresence: this.presence.own.lastPresence, lastInput, now: at })
       need = { system: need.system || n.system, display: need.display || n.display, reason: need.reason ?? n.reason }

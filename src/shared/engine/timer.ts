@@ -413,7 +413,9 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
     case 'undo': {
       const a = state.facts.autos.find((x) => x.id === act.target)
       if (!a) return no('tego działania nie ma już na liście')
-      if (a.k === 'boundary.approve') return yes([{ k: 'boundary.undo', at }])
+      // The boundary's own approval: the boundary opens again for the plan or the ritual (and never approves itself a
+      // second time that day); the approval leaves the list.
+      if (a.k === 'boundary.approve') return yes([{ k: 'undo', at, target: a.id, reason: 'user' }, { k: 'boundary.undo', at }])
       return yes([{ k: 'undo', at, target: a.id, reason: 'user' }])
     }
   }

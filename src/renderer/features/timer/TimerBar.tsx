@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TimerIn, TimerResult } from '@shared/api'
 import type { Question } from '@shared/engine/auto'
+import { isRunning } from '@shared/engine/facts'
 import { durationLabel, logicalClock } from '@shared/format'
 import { logicalMinuteOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -59,16 +60,19 @@ export function TimerBar() {
   const now = useNow(1000)
   const { rd, routines, requests } = useData()
   if (!view || view.status !== 'open' || !todayModel) return null
-  // A block running through 04:00 belongs to the day it began: the bar keeps that day until it ends (spec „Timer”).
-  const yRuns = yModel && [...yModel.state.facts.blocks.values()].some((f) => f.startedAt != null && f.endedAt == null)
+  // A block running through 04:00 belongs to the day it began: the bar keeps that day until it ends (spec „Timer”); a
+  // block left paused yesterday does not.
+  const yRuns = !!yModel && [...yModel.state.facts.blocks.values()].some((f) => f.endedAt == null && isRunning(f))
   const model = yRuns && yModel ? yModel : todayModel
   const names: Names = { rd, settings: model.state.settings, routines, requests }
-  return <TimerContent model={model} names={names} computer={view.computer} now={now} spill={model !== todayModel} />
+  return <TimerContent model={model} names={names} computer={view.computer} now={now} spill={model !== todayModel} after={model !== todayModel ? todayModel.events : NO_EVENTS} />
 }
 
-function TimerContent({ model, names, computer, now, spill }: { model: DayModel; names: Names; computer: string; now: number; spill: boolean }) {
+const NO_EVENTS: never[] = []
+
+function TimerContent({ model, names, computer, now, spill, after }: { model: DayModel; names: Names; computer: string; now: number; spill: boolean; after: DayModel['events'] }) {
   // The engine's view is recounted with the day (on every change and every 30 s); the countdown ticks every second.
-  const tm = useMemo(() => timerModel(model, computer, model.ctx.now), [model, computer])
+  const tm = useMemo(() => timerModel(model, computer, model.ctx.now, after), [model, computer, after])
   const [pending, setPending] = useState<Pending | null>(null)
   const [extendOpen, setExtendOpen] = useState<string | null>(null)
   const [showAutos, setShowAutos] = useState(false)

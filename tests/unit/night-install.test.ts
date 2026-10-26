@@ -110,4 +110,16 @@ describe('instalator nocy w aplikacji', () => {
     expect(claims).toEqual(['0.3.0', null])
     expect(installs).toBe(0)
   })
+
+  it('„instaluję” wraca, gdy noc przestaje sprzyjać (bateria, koniec ciszy, wyłączone ustawienie) – nie wstrzymuje innych', async () => {
+    let now = T0
+    let quiet = true
+    const claims: Array<string | null> = []
+    const n = new NightInstaller({ now: () => now, me: () => 'pcb', ready: () => '0.3.0', peers: () => [], unknownTimerEvents: async () => false, state: async () => night({ now, quiet }), claim: (v) => claims.push(v), install: () => true, random: () => 0.5, log: () => undefined })
+    await n.check()
+    quiet = false
+    now += 60_000
+    await n.check()
+    expect(claims).toEqual(['0.3.0', null])
+  })
 })

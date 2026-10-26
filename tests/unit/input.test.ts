@@ -64,6 +64,22 @@ describe('wejście i użycie komputera', () => {
     expect(s.written.at(-1)).toMatchObject({ k: 'gap.close' })
   })
 
+  it('obecność „bez wejścia” dopiero po 15 s bez wejścia: czytanie z ruchem myszy co kilka sekund jej nie przełącza', () => {
+    let idles = 0
+    const clock = { now: START, lastInput: START }
+    const t = new InputTracker({ now: () => clock.now, idleSeconds: () => Math.floor((clock.now - clock.lastInput) / 1000), appFocused: () => false, write: () => undefined, presence: () => undefined, idle: () => idles++, computer: 'pca' })
+    for (let i = 0; i < 12; i++) {
+      clock.now += SAMPLE_MS
+      // Input every 10 s: samples see 5 s of idle time between them.
+      if (i % 2 === 1) clock.lastInput = clock.now
+      t.sample()
+    }
+    expect(idles).toBe(0)
+    clock.now += 20_000
+    t.sample()
+    expect(idles).toBe(1)
+  })
+
   it('10 s po kliknięciu w pasek pulpitu wejście jest obsługą aplikacji', () => {
     const s = setup(START)
     s.t.clickedApp(START)
