@@ -1,13 +1,13 @@
 /**
- * The axis of a counted day: the plan's blocks at their planned times (an anchored one after its anchor), dimmed when
- * passed, parked or cancelled; the lines of the wake, the boundary (approved – solid, a proposal – dashed), the maximum,
- * the hard end, the bedtime's forecast and now; the energy's forecast (after the check-in).
- *
- * Until the timer of E4a writes starts and ends, blocks stand where the plan put them – the engine's numbers (boundary,
- * hard end, pool) are its own (T-decision of E3).
+ * The axis of a counted day: started blocks where they ran (a running one up to now or its planned end), blocks still
+ * to come where the forecast puts them today (other days: at their planned times, an anchored one after its anchor),
+ * dimmed when passed, parked or cancelled; the lines of the wake, the boundary (approved – solid, a proposal – dashed),
+ * the maximum, the hard end, the bedtime's forecast and now; the energy's forecast (after the check-in).
  */
 import { plannedSpan } from '@shared/engine/blocks'
 import { atOf } from '@shared/engine/grid'
+import { plannedEndOf } from '@shared/engine/timer'
+import { categoryName } from '@shared/model/rd'
 import { durationLabel, logicalClock } from '@shared/format'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -31,23 +31,52 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
   const yesterday = addDays(model.date, -1)
   const nowIdx = now != null ? Math.round((now - g.start) / 60_000) : null
   const items: TimelineItem[] = []
+  const placed = new Map(state.forecast.map((p) => [p.block.id, p]))
   for (const p of ctx.plan) {
     const info = byId.get(p.id)
     if (!info) continue
     const span = plannedSpan(info, byId)
-    if (!span) continue
     const f = state.facts.blocks.get(p.id)
-    const gone = f?.parkedAt != null ? 'zaparkowany' : f?.cancelledAt != null ? 'odwołany' : null
+    const gone = f?.parkedAt != null && f.startedAt == null ? 'zaparkowany' : f?.cancelledAt != null && f.startedAt == null ? 'odwołany' : null
+    // A started block stands where it ran (E4a); one still to come where the forecast puts it today, else at its plan.
+    let from = span?.start ?? null
+    let to = span?.end ?? null
+    if (f?.startedAt != null) {
+      from = f.startedAt
+      to = f.endedAt ?? Math.max(nowIdx ?? f.startedAt, plannedEndOf(state, info, f))
+    } else if (!gone && now != null && placed.has(p.id)) {
+      from = placed.get(p.id)!.from
+      to = placed.get(p.id)!.to
+    }
+    if (from == null || to == null) continue
     items.push({
       id: p.id,
-      startMin: lm(span.start),
-      endMin: lm(span.end),
+      startMin: lm(from),
+      endMin: lm(Math.max(to, from + 1)),
       title: gone ? `${blockName(p, names)} (${gone})` : blockName(p, names),
-      marks: blockMarks(p, { afterWork: info.afterWorkMark, fromYesterday: p.movedFrom === yesterday }),
+      marks: [...blockMarks(p, { afterWork: info.afterWorkMark, fromYesterday: p.movedFrom === yesterday }), ...(f?.startedAt != null && f.endedAt == null ? ['biegnie'] : [])],
       color: blockColor(p.categoryId, names),
       background: info.bg,
-      dim: gone != null || (nowIdx != null && span.end <= nowIdx),
+      dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),
       waits: info.waits
+    })
+  }
+  // Blocks begun outside the plan („Pracuję”, a block begun by hand): where they ran.
+  for (const info of state.blocks) {
+    if (info.inPlan) continue
+    const f = state.facts.blocks.get(info.id)
+    if (!f || f.startedAt == null) continue
+    const to = f.endedAt ?? Math.max(nowIdx ?? f.startedAt, plannedEndOf(state, info, f))
+    items.push({
+      id: info.id,
+      startMin: lm(f.startedAt),
+      endMin: lm(Math.max(to, f.startedAt + 1)),
+      title: categoryName(names.rd, info.categoryId),
+      marks: f.endedAt == null ? ['poza planem', 'biegnie'] : ['poza planem'],
+      color: blockColor(info.categoryId, names),
+      background: false,
+      dim: f.endedAt != null,
+      waits: false
     })
   }
   const markers: TimelineMarker[] = []

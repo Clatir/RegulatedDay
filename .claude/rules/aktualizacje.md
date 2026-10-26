@@ -47,6 +47,8 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
 - Wyjście / „Zainstaluj teraz” / noc: aplikacja kopiuje programy, pisze zadanie i wpis Run strażnika, zapis zamknięcia,
   startuje `rd-install.exe` odłączony i kończy się; właściciel czeka na koniec jej procesu.
 - Start Windows: strażnik z Run; plik planu z sesją lub zajęciami w ciągu 30 min → `postponed`.
+- Noc (E4a, D162, T469): `shared/nightInstall.ts` (warunki nocy i reguła kolejnych komputerów z obecności: `versions`,
+  `installing`) + `main/update/night.ts` (co minutę i przy blokadzie) → `install('night', 'hidden')`.
 - Bez pomocnika (niedostępny): ścieżka FI – instalator odłączony `--updated /S` (+`--force-run` tylko przy „teraz”),
   stan `fi` z `installerPid`, okno stanu w PowerShell (WPF bez aktywacji).
 - Start aplikacji (`src/main/update/startup.ts`): przed blokadą jednej kopii, bez pomocnika, czyta tylko task.json.

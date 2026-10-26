@@ -15,6 +15,7 @@ import { daySnapshotOf } from '@shared/model/events'
 import { dayStart, logicalDayOf, logicalMinuteOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import type { PowerNeed } from '@shared/engine/power'
+import type { VersionRun } from '@shared/sync/presence'
 import { LifeKeeper } from '../crash/lifeMarker'
 import { writePlan, PLAN_DAYS, type PlanBlock as GuardBlock } from '../update/files'
 import { InputTracker, SAMPLE_MS } from '../engine/input'
@@ -45,6 +46,8 @@ export interface ServiceOptions {
   oneDriveRunning?: () => boolean
   /** What this computer must hold against sleep, after every check (the helper and the app hold it, T290, T301). */
   onPower?: (need: PowerNeed) => void
+  /** The versions that ran here with their crashes (versions.json): into the presence (D162, D163). */
+  versions?: () => VersionRun[]
   log: (level: 'info' | 'warn' | 'error', msg: string, e?: unknown) => void
   /** Write the guard's plan file (only in identities that install updates). */
   writeGuardPlan: boolean
@@ -165,6 +168,7 @@ export class DataService {
     })
     life.start(o.runId, o.appVersion, clock.wall())
     if (previousRun && !previousRun.clean) o.log('warn', 'poprzednie uruchomienie folderu skończyło się bez zamknięcia – koniec obserwacji z ostatniego znacznika życia')
+    if (o.versions) folder.setVersions(o.versions())
     const s = new DataService(folder, life, o)
     s.scheduler.start()
     // Input every 5 s (tests drive the samples by hand with the checks).

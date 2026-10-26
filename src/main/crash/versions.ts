@@ -28,6 +28,16 @@ export function withRun(list: VersionRun[], version: string, crashedVersion: str
   return out.sort((a, b) => b.lastRun - a.lastRun).slice(0, KEPT_VERSIONS)
 }
 
+/** The versions recorded on this computer (none, or an unreadable file: an empty list). */
+export function readVersions(userData: string): VersionRun[] {
+  try {
+    const o = JSON.parse(readFileSync(join(userData, 'versions.json'), 'utf8')) as { versions?: VersionRun[] }
+    return Array.isArray(o.versions) ? o.versions.filter((v) => typeof v?.version === 'string' && typeof v.firstRun === 'number') : []
+  } catch {
+    return []
+  }
+}
+
 export function recordRun(userData: string, version: string, crashedVersion: string | null, log: (level: 'info' | 'warn', msg: string) => void, now = Date.now()): void {
   const file = join(userData, 'versions.json')
   let list: VersionRun[] = []

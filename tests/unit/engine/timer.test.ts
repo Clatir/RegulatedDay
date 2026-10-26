@@ -201,10 +201,17 @@ describe('działania automatyczne prowadzącego', () => {
   it('niezobaczone „Dalej?”: blok przy komputerze kończy próg bezczynności w chwili ostatniego wejścia, nie przed planowanym końcem', () => {
     const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })
-    // Input stops at 08:50 – before the planned end: the end is at the planned end.
+    // Input stops at 08:50 – before the planned end: at 09:00 the threshold has passed, the end is at the planned end.
     s.gap('08:50', null)
-    expect(leader(s, '09:09')).toEqual([])
-    expect(leader(s, '09:10')).toEqual([expect.objectContaining({ k: 'block.end', autoRule: 'idle', at: s.at('09:00') })])
+    expect(leader(s, '08:59')).toEqual([])
+    expect(leader(s, '09:00')).toEqual([expect.objectContaining({ k: 'block.end', autoRule: 'idle', at: s.at('09:00') })])
+    // Away longer than the absence question's threshold (from before the planned end): that end wins – when you left.
+    const out = leader(s, '09:20')
+    expect(out.map((e) => [e.k, e.autoRule])).toEqual([
+      ['undo', 'revalidate'],
+      ['block.end', 'absence']
+    ])
+    expect(out[1]!.at).toBe(s.at('08:50'))
   })
 
   it('próg bezczynności liczy wejście na wszystkich komputerach; log, który przyjdzie później z wejściem, cofa koniec', () => {
@@ -267,8 +274,12 @@ describe('działania automatyczne prowadzącego', () => {
     const s2 = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]).observe('07:00', null)
     click(s2, '08:00', { a: 'start', block: 'a' })
     s2.gap('08:40', null)
-    expect(leader(s2, '09:05')).toEqual([])
-    expect(leader(s2, '09:10')).toEqual([expect.objectContaining({ k: 'block.end', autoRule: 'absence', at: s2.at('08:40') })])
+    // At the planned end the idle threshold has passed: it ends there; once the absence reaches 30 min, it ends when you left.
+    expect(leader(s2, '09:05')).toEqual([expect.objectContaining({ k: 'block.end', autoRule: 'idle', at: s2.at('09:00') })])
+    expect(leader(s2, '09:10').map((e) => [e.k, e.autoRule, e.at])).toEqual([
+      ['undo', 'revalidate', s2.at('09:10')],
+      ['block.end', 'absence', s2.at('08:40')]
+    ])
   })
 
   it('zamknięcie aplikacji przy biegnącym bloku: koniec w chwili zamknięcia, pytanie bez kropki z „trwał do teraz”', () => {
@@ -300,6 +311,38 @@ describe('działania automatyczne prowadzącego', () => {
     const out = leader(s, '08:05', { boundary: true })
     expect(out).toEqual([expect.objectContaining({ k: 'boundary.approve', autoRule: 'boundary' })])
     expect(s.state('08:06').facts.autos.map((a) => a.rule)).toEqual(['boundary'])
+  })
+})
+
+describe('dwa komputery', () => {
+  it('dwa prowadzące po przerwie synchronizacji zapisują to samo działanie z tym samym identyfikatorem (bez podwójnych wpisów)', () => {
+    const plan = [block({ id: 'w', cat: 'zajecia-zdalne', at: '09:00', min: 60, fixed: true })]
+    const a = new Scenario({ date: DATE, plan }, 'pca').observe('07:00', null)
+    const b = new Scenario({ date: DATE, plan }, 'pcb').observe('07:30', null, 'pcb')
+    const at = a.at('09:01')
+    const run = (s: Scenario, self: string) => {
+      const ctx = s.contextAt(at)
+      const state = s.stateAt(at)
+      return autoActions({ ctx, state, activity: activityOf(ctx.events, state.grid.start, at, self), now: at, gate: at })
+    }
+    const ia = run(a, 'pca').map((e) => e.id)
+    const ib = run(b, 'pcb').map((e) => e.id)
+    expect(ia).toEqual(ib)
+    expect(ia.length).toBe(1)
+  })
+
+  it('pytanie ma stały identyfikator: po przejęciu prowadzenia drugi komputer zadaje to samo pytanie, już zobaczone', () => {
+    const plan = [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]
+    const s = new Scenario({ date: DATE, plan }, 'pca').observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const q1 = questions(s, '09:05')[0]!
+    s.seen(q1.id, '09:06')
+    // The laptop takes the lead: it reads the same log and asks the same question, seen already – no second „first” ask.
+    const t = s.at('09:10')
+    const ctx = s.contextAt(t)
+    const state = s.stateAt(t)
+    const onLaptop = questionsOf({ ctx, state, activity: activityOf(ctx.events, state.grid.start, t, 'lap'), now: t })
+    expect(onLaptop[0]).toMatchObject({ id: q1.id, seenAt: s.at('09:06') })
   })
 })
 

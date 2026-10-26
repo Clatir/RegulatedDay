@@ -37,6 +37,8 @@ export interface HubOptions {
   oneDriveRunning?: () => boolean
   /** What this computer must hold against sleep (after every check). */
   onPower?: ServiceOptions['onPower']
+  /** The versions that ran here (into the presence). */
+  versions?: ServiceOptions['versions']
   log: (level: 'info' | 'warn' | 'error', msg: string, e?: unknown) => void
   writeGuardPlan: boolean
   extraBackupDir: () => string | null
@@ -187,6 +189,7 @@ export class DataHub {
         appFocused: this.o.appFocused,
         oneDriveRunning: this.o.oneDriveRunning,
         onPower: this.o.onPower,
+        versions: this.o.versions,
         log: this.o.log,
         writeGuardPlan: this.o.writeGuardPlan,
         extraBackupDir: this.o.extraBackupDir,

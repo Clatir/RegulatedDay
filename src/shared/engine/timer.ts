@@ -71,6 +71,8 @@ export type TimerAction =
   | { a: 'cancel'; block: string }
   | { a: 'park'; block: string }
   | { a: 'confirm'; block: string }
+  /** „Cofnij” of an automatic action (spec: it writes an event „korekta”; the boundary's own approval opens it again). */
+  | { a: 'undo'; target: string }
 
 /** The cost a first click shows (spec: „przedłużenie · −40 min puli”, „pora snu +40 min”, „przekroczenie”). */
 export interface ActionCost {
@@ -88,7 +90,8 @@ export type ActionResult =
   | { ok: true; events: TimerDraft[]; confirm: ActionCost | null }
   | { ok: false; why: string; confirm: ActionCost | null }
 
-const isFixedLike = (b: BlockInfo) => b.fixed || b.waits
+/** Fixed by the plan (a session too): never paused, ends by its plan; a weekly analysis is flexible once begun. */
+const isFixedLike = (b: BlockInfo) => b.fixed || b.rules.kind === 'session'
 
 /** The planned end (index) of a started block now. */
 export function plannedEndOf(state: DayState, info: BlockInfo, f: BlockFact, now = state.now): number {
@@ -406,6 +409,12 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       const tb = [t.fg, ...t.bg].find((x) => x?.info.id === act.block)
       if (!tb) return no('ten blok nie biegnie')
       return yes([{ k: 'block.confirm', block: tb.info.id, at }])
+    }
+    case 'undo': {
+      const a = state.facts.autos.find((x) => x.id === act.target)
+      if (!a) return no('tego działania nie ma już na liście')
+      if (a.k === 'boundary.approve') return yes([{ k: 'boundary.undo', at }])
+      return yes([{ k: 'undo', at, target: a.id, reason: 'user' }])
     }
   }
 }

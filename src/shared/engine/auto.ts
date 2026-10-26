@@ -72,7 +72,8 @@ export function placeOf(b: BlockInfo): Place {
   return b.rules.variants.find((v) => v.id === b.variantId)?.place ?? b.rules.place
 }
 
-const isFixedLike = (b: BlockInfo) => b.fixed || b.waits
+/** Fixed by the plan (a session too): no pause, no „Dalej?” – it ends by its plan (a weekly analysis is flexible once begun). */
+const isFixedLike = (b: BlockInfo) => b.fixed || b.rules.kind === 'session'
 
 /** The moments the user reacted to a running block (start, resume, „Przedłuż”, „Potwierdź”) – the last answer (ms). */
 function lastAnswerAt(state: DayState, f: BlockFact): number {
@@ -135,7 +136,7 @@ interface Ctx {
  * The end of a block „przy komputerze” whose „Dalej?” nobody saw, by the idle threshold (D231): no input on any computer
  * for the threshold – at the last input, not before the planned end. Null while it holds on.
  */
-function idleEnd(c: Ctx, info: BlockInfo, f: BlockFact): number | null {
+function idleEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; due: number } | null {
   const { state, activity } = c.inp
   if (isFixedLike(info) || placeOf(info) !== 'computer' || f.startedAt == null) return null
   const plannedEnd = atOf(state.grid, plannedEndOf(state, info, f))
@@ -143,9 +144,10 @@ function idleEnd(c: Ctx, info: BlockInfo, f: BlockFact): number | null {
   const start = atOf(state.grid, f.runs.at(-1)?.from ?? f.startedAt)
   for (const x of activity.idle) {
     const from = Math.max(x.from, start)
-    if (x.to - from < threshold || x.to <= plannedEnd) continue
-    // The end at the last input, never before the planned end (nor the start of the run).
-    return Math.max(from, plannedEnd)
+    if (x.to - from < threshold || x.to < plannedEnd) continue
+    // The end at the last input, never before the planned end (nor the start of the run) – due once the threshold has
+    // passed and the planned end has come.
+    return { at: Math.max(from, plannedEnd), due: Math.max(from + threshold, plannedEnd) }
   }
   return null
 }
@@ -319,7 +321,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
       // Nobody saw it: a block at the computer ends by the idle threshold, at the last input (D231).
       if (q.q1.seen == null) {
         const end = idleEnd(c, b, f)
-        if (end != null && due(end + state.settings.idleThresholdMin * MIN)) out.push(auto(date, 'idle', { k: 'block.end', block: b.id, at: end, done: null, rule: 'idle' }))
+        if (end != null && due(end.due)) out.push(auto(date, 'idle', { k: 'block.end', block: b.id, at: end.at, done: null, rule: 'idle' }))
       }
     }
   }
@@ -333,8 +335,18 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     if (!f || !info || f.endId !== a.id) continue
     const open = unended(f)
     let still: number | null = null
-    if (a.rule === 'idle') still = idleEnd(c, info, open)
-    else if (a.rule === 'firstUse' || a.rule === 'limit') {
+    if (a.rule === 'idle') {
+      // An absence longer than its question's threshold that began before the planned end wins over the idle threshold
+      // (spec „ten koniec wygrywa z końcem progiem bezczynności”): the end moves to when you left.
+      const abs = absenceOf(state, activity, info, open)
+      const plannedEnd = atOf(state.grid, plannedEndOf(state, info, open))
+      if (abs && abs.away < plannedEnd && due(abs.away + state.settings.absenceQuestionMin * MIN)) {
+        out.push({ id: derivedId(date, 'auto', 'revalidate', a.id), k: 'undo', at: inp.now, target: a.id, reason: 'absence', autoRule: 'revalidate' })
+        out.push(auto(date, 'absence', { k: 'block.end', block: a.block, at: Math.max(abs.away, at(f.startedAt ?? 0)), done: null, rule: 'absence' }))
+        continue
+      }
+      still = idleEnd(c, info, open)?.at ?? null
+    } else if (a.rule === 'firstUse' || a.rule === 'limit') {
       const r = awayEnd(c, info, open)
       still = r && r.rule === a.rule ? r.at : null
     } else if (a.rule === 'absence') still = absenceOf(state, activity, info, open) ? at(f.endedAt!) : null

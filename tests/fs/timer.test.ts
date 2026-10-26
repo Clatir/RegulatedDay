@@ -1,0 +1,104 @@
+/**
+ * The timer in the data folder (E4a): a click is written once (the same click again does nothing – no two entries), the
+ * leader writes the automatic actions at its check (a fixed block by its plan) with derived ids, an answer closes a
+ * question, a question is seen once per id, and „Cofnij” of an automatic action undoes it.
+ */
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { marketDay } from '@shared/calendar/holidays'
+import { paths } from '@shared/data/paths'
+import { placeLogical } from '@shared/time/day'
+import { DataFolder } from '../../src/main/data/folder'
+import { nodeFs } from '../../src/main/data/fsio'
+
+const DAY = '2026-10-21'
+let root: string
+let dataDir: string
+beforeEach(() => {
+  root = mkdtempSync(join(tmpdir(), 'rd-timer-'))
+  dataDir = join(root, 'data')
+  mkdirSync(join(dataDir, 'days', '2026'), { recursive: true })
+  // A Wednesday without a template: the day's own blocks only.
+  writeFileSync(
+    join(dataDir, paths.day(DAY)),
+    JSON.stringify({
+      schema: 1,
+      date: DAY,
+      blocks: [
+        { id: 'a', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: false, origin: 'user' },
+        { id: 'w', categoryId: 'zajecia-zdalne', startMin: 10 * 60 + 30, durationMin: 30, fixed: true, origin: 'user' }
+      ]
+    })
+  )
+})
+afterEach(() => rmSync(root, { recursive: true, force: true }))
+
+async function make() {
+  const clock = { now: placeLogical(DAY, 10 * 60) }
+  const folder = await DataFolder.open({
+    fs: nodeFs,
+    dataDir,
+    stateDir: join(root, 'state'),
+    computer: 'pca',
+    computerName: 'PC A',
+    appVersion: '0.3.0',
+    clock: { wall: () => clock.now, mono: () => clock.now },
+    holidays: marketDay,
+    oneDriveRunning: () => true
+  })
+  return { folder, clock, at: (min: number) => (clock.now = placeLogical(DAY, min)) }
+}
+
+const kinds = async (f: DataFolder) => (await f.readDay(DAY)).events.filter((e) => e.dom === 'timer').map((e) => `${e.k}${(e as { block?: string }).block ? `:${(e as { block?: string }).block}` : ''}`)
+
+describe('timer w folderze danych', () => {
+  it('kliknięcie zapisuje się raz; to samo kliknięcie jeszcze raz nic nie robi', async () => {
+    const { folder } = await make()
+    const [r1, r2] = await Promise.all([folder.timerClick({ a: 'start', block: 'a' }), folder.timerClick({ a: 'start', block: 'a' })])
+    expect(r1.ok).toBe(true)
+    expect(r2).toMatchObject({ ok: false, why: 'ten blok już biegnie' })
+    expect((await kinds(folder)).filter((k) => k === 'block.start:a')).toHaveLength(1)
+  })
+
+  it('prowadzący zaczyna blok stały według planu i pauzuje biegnący; „Cofnij” to cofa', async () => {
+    const { folder, at } = await make()
+    await folder.timerClick({ a: 'start', block: 'a' })
+    // Settled: a check, then 60 s without changes.
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(10 * 60 + 31)
+    const r = await folder.check()
+    expect(r.leader.iLead).toBe(true)
+    expect(r.autos).toBeGreaterThanOrEqual(2)
+    const k = await kinds(folder)
+    expect(k).toContain('block.pause:a')
+    expect(k).toContain('block.start:w')
+    // Written once: the next check adds nothing for them.
+    at(10 * 60 + 32)
+    await folder.check()
+    expect((await kinds(folder)).filter((x) => x === 'block.start:w')).toHaveLength(1)
+    const t = await folder.timer(DAY)
+    expect(t.fg?.info.id).toBe('w')
+    // „Cofnij” of the automatic start.
+    const read = await folder.readDay(DAY)
+    const start = read.events.find((e) => e.k === 'block.start' && (e as { block?: string }).block === 'w')!
+    expect((await folder.timerClick({ a: 'undo', target: start.id })).ok).toBe(true)
+    expect((await folder.timer(DAY)).fg?.info.id).not.toBe('w')
+  })
+
+  it('pytanie „Dalej?” zobaczone zapisuje się raz; odpowiedź „Dalej” kończy blok', async () => {
+    const { folder, at } = await make()
+    await folder.timerClick({ a: 'start', block: 'a' })
+    at(11 * 60 + 5)
+    const q = (await folder.questions(DAY)).find((x) => x.kind === 'next')
+    expect(q).toBeDefined()
+    expect(await folder.markSeen([q!.id], 'main')).toBe(1)
+    expect(await folder.markSeen([q!.id], 'main')).toBe(0)
+    const r = await folder.answer(q!.id, 'next')
+    expect(r.ok).toBe(true)
+    expect((await folder.timer(DAY)).fg).toBeNull()
+  })
+})

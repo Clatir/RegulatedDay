@@ -22,13 +22,14 @@ import { NO_POWER, powerNeedOf, type PowerNeed } from '@shared/engine/power'
 import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft } from '@shared/engine/timer'
 import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
-import { idxOf } from '@shared/engine/grid'
+import { atOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
 import { daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type Domain } from '@shared/model/events'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { isDayTypeId, settingsOn, type SettingsChange } from '@shared/model/settings'
 import { decideLeader, minuteGate, type LeaderDecision, type Peer } from '@shared/sync/leader'
+import type { Presence } from '@shared/sync/presence'
 import { Settle, type SettleReason } from '@shared/sync/settle'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
@@ -429,7 +430,7 @@ export class DataFolder {
     const settled = this.settle.settled(now)
     this.leader = decideLeader({
       now,
-      self: { computer: this.o.computer, rulesVersion: this.rulesVersion, crashed: false, lastPresence: this.presence.own.lastPresence, oneDriveRunning: this.o.oneDriveRunning() },
+      self: { computer: this.o.computer, rulesVersion: this.rulesVersion, crashed: this.ownVersionCrashed, lastPresence: this.presence.own.lastPresence, oneDriveRunning: this.o.oneDriveRunning() },
       peers: this.peers,
       current: this.current,
       currentClaimed: this.leader.claimed
@@ -629,6 +630,48 @@ export class DataFolder {
       n += fresh.length
     }
     return n
+  }
+
+  /** The version running here has a crash recorded (spec D163: such a version never counts as the newest). */
+  get ownVersionCrashed(): boolean {
+    const own = this.presence.own
+    return (own.versions.find((v) => v.version === own.appVersion)?.crashes ?? 0) > 0
+  }
+
+  /** This computer's versions with their first and last runs and crashes (versions.json), in its presence. */
+  setVersions(versions: Presence['versions']): void {
+    this.presence.update({ versions: versions.slice(0, 10) })
+  }
+
+  /** „Instaluję wersję X” in this computer's presence (spec D162), null: nothing. */
+  setInstalling(version: string | null): void {
+    this.presence.update({ installing: version })
+  }
+
+  /** The night's quiet now (from the effective bedtime of the logical day to its wake), by today's day. */
+  async nightQuiet(at = this.clock.now()): Promise<boolean> {
+    const day = logicalDayOf(at)
+    const s = await this.dayState(day, undefined, at)
+    return at >= atOf(s.grid, s.bedtime.effective) || at < atOf(s.grid, s.wake)
+  }
+
+  /** A block runs now (today's, or yesterday's through 04:00). */
+  async anyBlockRunning(at = this.clock.now()): Promise<boolean> {
+    const today = logicalDayOf(at)
+    for (const day of [addDays(today, -1), today]) {
+      const read = await this.log.readDay(day)
+      if (hasRunning(read.events)) {
+        const t = timerNow(await this.dayState(day, read, at))
+        if (t.fg || t.bg.length) return true
+      }
+    }
+    return false
+  }
+
+  /** Events of the timer of a kind this version does not know, today (spec: install without the 24 h). */
+  async unknownTimerEvents(at = this.clock.now()): Promise<boolean> {
+    const read = await this.log.readDay(logicalDayOf(at))
+    return read.events.some((e) => !isKnown(e) && e.dom === 'timer')
   }
 
   /** What this computer must hold against sleep now (today's blocks and yesterday's still running). */

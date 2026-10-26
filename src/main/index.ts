@@ -50,7 +50,8 @@ import { UpdateController } from './update/controller'
 import { guardMode } from './update/install'
 import { LifeKeeper, judge } from './crash/lifeMarker'
 import { sessionAtStart } from './crash/session'
-import { recordRun } from './crash/versions'
+import { readVersions, recordRun } from './crash/versions'
+import { NightInstaller } from './update/night'
 import { marketDay } from '@shared/calendar/holidays'
 import { STOP_TIMEOUT_MS, type DataService } from './data/service'
 import { DataHub } from './data/hub'
@@ -214,7 +215,7 @@ function onHelperEvent(m: HelperMessage): void {
   }
 }
 
-const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm'])
+const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm', 'undo'])
 
 /** A click of the timer from a window, only with the fields an action takes (anything else is dropped). */
 function timerIn(c: TimerIn): TimerIn {
@@ -229,7 +230,8 @@ function timerIn(c: TimerIn): TimerIn {
     done: typeof c.done === 'boolean' ? c.done : undefined,
     confirm: c.confirm === true,
     categoryId: str(c.categoryId),
-    durationMin: num(c.durationMin)
+    durationMin: num(c.durationMin),
+    target: str(c.target)
   }
 }
 
@@ -248,6 +250,7 @@ function createHub(): DataHub {
     appFocused: () => (!!mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) || (!!panel?.isOpen && !!panel.webContents?.isFocused()),
     oneDriveRunning: () => oneDrive.running,
     onPower: (need) => power.want(need),
+    versions: () => readVersions(userData),
     log,
     writeGuardPlan: identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1',
     extraBackupDir: () => prefs().backupDir,
@@ -791,6 +794,37 @@ async function main(): Promise<void> {
     },
     log
   })
+  // The night installation (D162): judged every minute and at the lock of the screen (modern standby sleeps after it).
+  const night = new NightInstaller({
+    now: () => Date.now(),
+    me: () => thisComputer,
+    ready: () => updates?.updater?.readyRelease?.version ?? null,
+    peers: () => (data()?.folder.presence.peers() ?? []).map((p) => ({ computer: p.presence.computer, appVersion: p.presence.appVersion, versions: p.presence.versions, installing: p.presence.installing })),
+    unknownTimerEvents: async () => (await data()?.folder.unknownTimerEvents()) ?? false,
+    state: async () => {
+      const f = data()?.folder
+      const notif = helper?.running ? await helper.request('notificationState', {}, 3000).catch(() => null) : null
+      const caps = helper?.running ? await helper.request('powerState', {}, 3000).catch(() => null) : null
+      return {
+        now: Date.now(),
+        quiet: f ? await f.nightQuiet().catch(() => false) : false,
+        locked: powerMonitor.getSystemIdleState(1) === 'locked',
+        idleMs: powerMonitor.getSystemIdleTime() * 1000,
+        onMains: typeof caps?.onMains === 'boolean' ? caps.onMains : !powerMonitor.isOnBatteryPower(),
+        blockRunning: f ? await f.anyBlockRunning().catch(() => true) : false,
+        notificationState: typeof notif?.state === 'string' ? notif.state : null,
+        enabled: config.get().updates.nightInstall,
+        helperRunning: !!helper?.running
+      }
+    },
+    claim: (v) => data()?.folder.setInstalling(v),
+    install: () => !!updates?.install('night', 'hidden'),
+    log: (level, msg) => log(level, msg)
+  })
+  if (identity.updates && app.isPackaged && process.platform === 'win32') {
+    setInterval(() => void night.check(), 60_000).unref?.()
+    powerMonitor.on('lock-screen', () => void night.check())
+  }
   // The local plan of sessions and classes for the guard: E1 / E4a fill it; empty, it covers the next 7 days.
   // RD_TEST_KEEP_PLAN=1 (CI): the plan a test wrote for the guard stays.
   if (identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1') writePlan(userData, [])

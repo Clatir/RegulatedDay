@@ -207,6 +207,8 @@ export interface TimerIn {
   confirm?: boolean
   categoryId?: string
   durationMin?: number
+  /** „Cofnij”: the automatic action's event id. */
+  target?: string
 }
 
 /** What a click did: nothing (why), or a cost waiting for the second click within 10 s. */
