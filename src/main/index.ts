@@ -7,6 +7,7 @@
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
+import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { BrowserWindow, Menu, app, clipboard, crashReporter, ipcMain, net, powerMonitor, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
 import { CH, type AppInfo, type BarLayout, type TrialAction, type UpdateAction, type ViewKind, type WidgetAction } from '@shared/api'
@@ -37,6 +38,8 @@ import { guardMode } from './update/install'
 import { LifeKeeper, judge } from './crash/lifeMarker'
 import { sessionAtStart } from './crash/session'
 import { recordRun } from './crash/versions'
+import { marketDay } from '@shared/calendar/holidays'
+import { DataService, STOP_TIMEOUT_MS } from './data/service'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
 crashReporter.start({ uploadToServer: false, submitURL: '', compress: false })
@@ -60,6 +63,10 @@ let helper: HelperClient | null = null
 let autostart: Autostart | null = null
 let updates: UpdateController | null = null
 let thisComputer = ''
+/** The data folder at work (E1: only from RD_DATA_DIR – tests and the developer's version; the wizard of E3 chooses it). */
+let data: DataService | null = null
+let dataStarting: Promise<void> | null = null
+let dataClosing = false
 const trial = new Trial()
 let quitting = false
 /** Windows ends the session (logoff, shutdown): never an installer now (spec), the record of closing written at once. */
@@ -168,6 +175,36 @@ function onHelperEvent(m: HelperMessage): void {
   }
 }
 
+/** The data folder, when one is given (RD_DATA_DIR); a folder that cannot be opened leaves the app working without it. */
+async function startData(): Promise<void> {
+  const dir = process.env.RD_DATA_DIR
+  if (!dir || !thisComputer) return
+  try {
+    const s = await DataService.start({
+      dataDir: dir,
+      userData,
+      computer: thisComputer,
+      computerName: hostname(),
+      appVersion: app.getVersion(),
+      runId,
+      holidays: marketDay,
+      idleSeconds: () => powerMonitor.getSystemIdleTime(),
+      log,
+      writeGuardPlan: identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1'
+    })
+    // A quit came while it opened: it closes at once (the quit waits for that, with its limit of time).
+    if (quitting && dataClosing) {
+      await s.stop('quit')
+      return
+    }
+    data = s
+    void s.refreshGuardPlan()
+    log('info', `folder danych otwarty: ${dir}`)
+  } catch (e) {
+    log('error', `folder danych ${dir} nie otworzył się`, e)
+  }
+}
+
 function openPanel(target: PanelTarget | null): void {
   panel?.open(target)
 }
@@ -205,6 +242,12 @@ function onSystemEnd(ending: boolean): void {
   if (!sessionEnding) log('info', 'koniec sesji Windows – zapis zamknięcia')
   sessionEnding = true
   life.close('system')
+  // One synchronous line in the folder's journal (no fsync): Windows may end the process right after.
+  try {
+    data?.systemEnd()
+  } catch {
+    /* the journal could not be written – nothing to hold Windows up for */
+  }
   if (sessionResume) clearTimeout(sessionResume)
   sessionResume = null
   if (ending) return
@@ -212,6 +255,7 @@ function onSystemEnd(ending: boolean): void {
     sessionResume = null
     sessionEnding = false
     life.resume()
+    data?.systemResumed()
     log('info', 'koniec sesji Windows odwołany – działam dalej')
   }, Number(process.env.RD_TEST_SESSION_RESUME_MS) || SESSION_RESUME_MS)
   sessionResume.unref?.()
@@ -639,11 +683,23 @@ async function main(): Promise<void> {
   })
   screen.on('display-added', () => layoutBar())
   screen.on('display-removed', () => layoutBar())
-  powerMonitor.on('resume', () => layoutBar())
-  powerMonitor.on('unlock-screen', () => layoutBar())
+  powerMonitor.on('resume', () => {
+    layoutBar()
+    data?.resume()
+  })
+  powerMonitor.on('unlock-screen', () => {
+    layoutBar()
+    data?.unlock()
+  })
+  powerMonitor.on('suspend', () => data?.suspend())
+  powerMonitor.on('lock-screen', () => data?.lock())
 
   await judgePreviousRun()
   if (quitting) return
+  // The folder opens beside the rest of the start (a slow folder never holds the updates or an address back).
+  dataStarting = startData().finally(() => {
+    dataStarting = null
+  })
   if (banner) log('warn', `aktualizacja do ${banner.version}: ${banner.kind === 'failed' ? 'nie udała się' : 'nie dokończyła się'}`)
   updates.init(banner, whatsNew())
   banner = null
@@ -658,10 +714,26 @@ app.on('window-all-closed', () => {
   if (!quitting) quitApp()
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (e) => {
   quitting = true
   if (bar) bar.quitting = true
   if (panel) panel.quitting = true
+  // The data folder closes first, by any way out (its journal is on the disk already: this writes what OneDrive can take
+  // now and the presence „closed”), also while it is still opening – once, with a limit of time, and never at the end of
+  // the Windows session, which the app does not hold up.
+  if ((data || dataStarting) && !sessionEnding && !dataClosing) {
+    dataClosing = true
+    e.preventDefault()
+    const starting = dataStarting
+    void (async () => {
+      if (starting) await Promise.race([starting, new Promise((r) => setTimeout(r, STOP_TIMEOUT_MS))])
+      const d = data
+      data = null
+      if (d) await d.stop('quit')
+    })()
+      .catch((err) => log('warn', 'zamykanie folderu danych', err))
+      .finally(() => app.quit())
+  }
 })
 
 app.on('will-quit', () => {

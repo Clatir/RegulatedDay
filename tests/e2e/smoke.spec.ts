@@ -247,3 +247,26 @@ for (const [label, area, zoom] of [
     }
   })
 }
+
+test('folder danych (RD_DATA_DIR): obecność, lokalny dziennik i log dnia; przy zamknięciu obecność „zamknięty”', async () => {
+  const { mkdtemp } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const dataDir = await mkdtemp(join(tmpdir(), 'rd-e2e-data-'))
+  const { app, userData } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  let computer = ''
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => ''), { timeout: 30_000 }).toContain('folder danych otwarty')
+      computer = (JSON.parse(await readFile(join(userData, 'computer-id'), 'utf8')) as { id: string }).id
+      const presence = JSON.parse(await readFile(join(dataDir, '.presence', `${computer}.json`), 'utf8')) as { computer: string; state: string }
+      expect(presence.computer).toBe(computer)
+      // The observation's start goes to the log of the logical day on the folder (after the local journal).
+      const { readdir } = await import('node:fs/promises')
+      await expect.poll(async () => (await readdir(join(dataDir, 'log'), { recursive: true }).catch(() => [] as string[])).some((n) => String(n).endsWith(`${computer}.jsonl`)), { timeout: 30_000 }).toBe(true)
+    })
+  } finally {
+    await app.close()
+  }
+  const presence = JSON.parse(await readFile(join(dataDir, '.presence', `${computer}.json`), 'utf8')) as { state: string }
+  expect(presence.state).toBe('closed')
+})
