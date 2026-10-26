@@ -7,8 +7,9 @@
 - **Logika E5 w toku** na gałęzi `claude/e5-warianty` (wersja 0.5.0): prośby w dniu (`engine/requests.ts`, 16 testów),
   warianty z wyzwalaczami znacznika (`engine/variants.ts`, 12 testów), prośba przez 04:00 w folderze (2 testy),
   T478–T481, reguły `prosby-warianty.md`, CHANGELOG 0.5.0. `/code-review` (xhigh): 15 uwag, wszystkie poprawione
-  (T481). Testy: 594 jednostkowe i plikowe, E2E 15 + 2 tylko w CI; typecheck, build, lint zielone. Dalej: sprawdzenie
-  testów poprawek na kodzie sprzed nich, PR, CI, scalenie, wydanie 0.5.0.
+  (T481); każda poprawka ma test, który bez niej pada (19 prób mutacji, wszystkie wykryte). Testy: 594 jednostkowe
+  i plikowe, E2E 15 + 2 tylko w CI; typecheck, build, lint zielone. **PR #9** otwarty, CI w toku przy zapisie; dalej:
+  scalenie (D285), wydanie 0.5.0 na `main`.
 - Otwarte na etap elementów E5 w pasku: w czasie prośby pasek pokazuje przerwany blok jako „Wznów · Zaparkuj” (z kropką)
   – zamieni go linia prośby z „Koniec”; kropka po „Jeszcze trwa” (D247); pasek po 04:00 pokazuje dzisiejszy dzień,
   także gdy trwa wczorajsza prośba.
