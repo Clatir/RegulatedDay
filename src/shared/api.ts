@@ -50,7 +50,10 @@ export const CH = {
   pinFolder: 'rd:pinFolder',
   openSystemSettings: 'rd:openSystemSettings',
   openDataFolder: 'rd:openDataFolder',
-  setNightInstall: 'rd:setNightInstall'
+  setNightInstall: 'rd:setNightInstall',
+  timer: 'rd:timer',
+  answer: 'rd:answer',
+  seen: 'rd:seen'
 } as const
 
 /** Which window a renderer is (the preload reads it from its arguments). */
@@ -194,6 +197,25 @@ export interface EventIn {
   [field: string]: unknown
 }
 
+/** A click of the timer (`a`: start, startNew, pause, next, extend, workEnd, finish, cancel, park, confirm – engine/timer.ts). */
+export interface TimerIn {
+  a: string
+  day?: string
+  block?: string
+  minutes?: number
+  done?: boolean
+  confirm?: boolean
+  categoryId?: string
+  durationMin?: number
+}
+
+/** What a click did: nothing (why), or a cost waiting for the second click within 10 s. */
+export interface TimerResult {
+  ok: boolean
+  why: string | null
+  confirm: { block: string; minutes: number; overrun: boolean; bedtime: boolean } | null
+}
+
 export interface FolderProbe {
   path: string
   exists: boolean
@@ -295,4 +317,10 @@ export interface RdApi {
   openSystemSettings(page: SystemSettingsPage): Promise<void>
   openDataFolder(): Promise<void>
   setNightInstall(on: boolean): Promise<AppInfo>
+  /** A click of the timer (written by the main process; the same click twice does nothing the second time). */
+  timer(click: TimerIn): Promise<TimerResult>
+  /** Your answer to a question of the timer. */
+  answer(id: string, answer: string, value?: number | null): Promise<TimerResult>
+  /** Questions this window showed (seen only in the main window in the foreground with presence, D231). */
+  seen(ids: string[]): void
 }

@@ -175,6 +175,44 @@ export class Scenario {
     return this.push(e, at, computer)
   }
 
+  /** Events as the main process writes them (a click, an automatic action), written at the instant `t` (ms). */
+  write(drafts: ReadonlyArray<Record<string, unknown>>, t: number, computer = this.computer): this {
+    for (const d of drafts) {
+      const n = this.n++
+      const { id, ...rest } = d as { id?: string }
+      this.events.push({ id: id ?? `${computer}-${n}`, c: computer, n, t, l: t + n, v: RULES_VERSION, day: this.opts.date, dom: 'timer', ...rest } as unknown as TimerEvent)
+    }
+    return this
+  }
+
+  /** Observation and gaps of a computer (spec „Użycie komputera”), as its log has them. */
+  observe(from: string, to: string | null, computer = this.computer): this {
+    this.push({ k: 'observe.from', at: this.at(from), why: 'start' }, from, computer, 'meta')
+    return to ? this.push({ k: 'observe.to', at: this.at(to), why: 'quit' }, to, computer, 'meta') : this
+  }
+
+  /** „Obserwacja trwa” (every 5 min): an open stretch of another computer counts up to its last one. */
+  alive(at: string, computer = this.computer): this {
+    return this.push({ k: 'observe.alive', at: this.at(at) }, at, computer, 'meta')
+  }
+
+  /** A gap in input (and in use) from `from` to `to` (null: still open) on a computer. */
+  gap(from: string, to: string | null, o: { computer?: string; kind?: 'input' | 'use' | 'both'; lastOutside?: string } = {}): this {
+    const computer = o.computer ?? this.computer
+    const kinds: Array<'input' | 'use'> = o.kind === 'input' ? ['input'] : o.kind === 'use' ? ['use'] : ['input', 'use']
+    for (const kind of kinds) {
+      const gap = `${computer}-${kind}-${from}`
+      this.push({ k: 'gap.open', gap, kind, from: this.at(from), lastOutside: o.lastOutside ? this.at(o.lastOutside) : this.at(from) }, from, computer, 'meta')
+      if (to) this.push({ k: 'gap.close', gap, to: this.at(to) }, to, computer, 'meta')
+    }
+    return this
+  }
+
+  /** A question seen on a computer. */
+  seen(question: string, at: string, computer = this.computer): this {
+    return this.push({ k: 'question.seen', at: this.at(at), question, how: 'main' }, at, computer)
+  }
+
   /** The check-in: two answers per pool (0 no, 1 a little, 2 yes). */
   checkin(at: string, answers: Record<Pool, [Answer, Answer]>): this {
     return this.push({ k: 'energy.checkin', at: this.at(at), answers }, at, this.computer, 'energy')

@@ -14,8 +14,10 @@ import { createDay, dayPlan } from '@shared/engine/createDay'
 import { daySnapshotOf } from '@shared/model/events'
 import { dayStart, logicalDayOf, logicalMinuteOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
+import type { PowerNeed } from '@shared/engine/power'
 import { LifeKeeper } from '../crash/lifeMarker'
 import { writePlan, PLAN_DAYS, type PlanBlock as GuardBlock } from '../update/files'
+import { InputTracker, SAMPLE_MS } from '../engine/input'
 import { Scheduler } from '../engine/scheduler'
 import { backupDue, copyLatestTo, createDailyBackup } from './backup'
 import { DataFolder } from './folder'
@@ -35,8 +37,14 @@ export interface ServiceOptions {
   appVersion: string
   runId: string
   holidays: HolidayLookup
-  /** Seconds since the last input on this computer (powerMonitor.getSystemIdleTime): presence until the helper of E4a. */
+  /** Seconds since the last input on this computer (powerMonitor.getSystemIdleTime – GetLastInputInfo, T464). */
   idleSeconds: () => number
+  /** The main window or the icon's panel has the focus: input then is the app's own, never use (spec „Użycie komputera”). */
+  appFocused?: () => boolean
+  /** Whether OneDrive runs in this session (the helper; a folder outside OneDrive: always). */
+  oneDriveRunning?: () => boolean
+  /** What this computer must hold against sleep, after every check (the helper and the app hold it, T290, T301). */
+  onPower?: (need: PowerNeed) => void
   log: (level: 'info' | 'warn' | 'error', msg: string, e?: unknown) => void
   /** Write the guard's plan file (only in identities that install updates). */
   writeGuardPlan: boolean
@@ -84,9 +92,10 @@ export class DataService {
   private lastBackupTry = 0
   private lastGuardPlan = 0
   private lockedAt: number | null = null
-  private lastIdle = -1
   private lastExtraCopy = 0
   private systemEnding = false
+  private readonly tracker: InputTracker
+  private sampler: ReturnType<typeof setInterval> | null = null
 
   private constructor(
     readonly folder: DataFolder,
@@ -95,6 +104,18 @@ export class DataService {
   ) {
     const clock = o.clock ?? { wall: () => Date.now(), mono: () => performance.now() }
     this.now = clock.wall
+    this.tracker = new InputTracker({
+      now: clock.wall,
+      idleSeconds: o.idleSeconds,
+      appFocused: o.appFocused ?? (() => false),
+      write: (d) => {
+        // Nothing is observed while the system sleeps or the session ends: no gaps are written then.
+        if (this.folder.isObserving) this.folder.append(d)
+      },
+      presence: (at, outside) => this.folder.noteInput(at, outside),
+      idle: () => this.folder.noteIdle(),
+      computer: o.computer
+    })
     this.scheduler = new Scheduler({
       wall: clock.wall,
       mono: clock.mono,
@@ -139,14 +160,39 @@ export class DataService {
       appVersion: o.appVersion,
       clock,
       holidays: o.holidays,
-      oneDriveRunning: () => true,
+      oneDriveRunning: o.oneDriveRunning ?? (() => true),
       previousRun
     })
     life.start(o.runId, o.appVersion, clock.wall())
     if (previousRun && !previousRun.clean) o.log('warn', 'poprzednie uruchomienie folderu skończyło się bez zamknięcia – koniec obserwacji z ostatniego znacznika życia')
     const s = new DataService(folder, life, o)
     s.scheduler.start()
+    // Input every 5 s (tests drive the samples by hand with the checks).
+    if (!o.timers) {
+      s.sampler = setInterval(() => s.sample(), SAMPLE_MS)
+      s.sampler.unref?.()
+    }
     return s
+  }
+
+  /** One sample of input (every 5 s): presence, use, the gaps in the day's log. */
+  sample(): void {
+    if (this.stopped) return
+    try {
+      this.tracker.sample()
+    } catch (e) {
+      this.o.log('warn', 'próbka wejścia nie udała się', e)
+    }
+  }
+
+  /** A click of the desktop bar or the icon: the next 10 s are the app's own handling, not use. */
+  clickedApp(): void {
+    this.tracker.clickedApp()
+  }
+
+  /** This computer's last input (ms), for „zobaczone przy obecności” (spec D231). */
+  get lastInput(): number | null {
+    return this.folder.presence.own.lastPresence
   }
 
   /** One check (the scheduler's; never two at once): presence from the system's idle time, the folder, the backup. */
@@ -161,15 +207,16 @@ export class DataService {
 
   private async tickNow(): Promise<void> {
     try {
-      const idle = this.o.idleSeconds()
       const now = this.now()
-      if (idle < 15) {
-        if (idle !== this.lastIdle || idle === 0) this.folder.noteInput(now - idle * 1000, true)
-      } else this.folder.noteIdle()
-      this.lastIdle = idle
+      this.sample()
       const r = await this.folder.check()
       for (const p of r.problems) this.o.log('warn', `folder danych: ${p}`)
       if (r.created) this.o.log('info', `utworzony dzień ${r.created}`)
+      if (r.autos) this.o.log('info', `działania automatyczne: ${r.autos}`)
+      // The exact timer for the timer's next deadline (a fixed block's start, a planned end, the second „Dalej?”).
+      if (r.nextAt != null) this.scheduler.at('timer', r.nextAt + 1_000, () => void this.tick())
+      else this.scheduler.cancel('timer')
+      if (this.o.onPower) this.o.onPower(await this.folder.powerNeed(this.lastInput, now))
       // The guard's plan: at the start, every hour, at the change of the day and when this computer made the day.
       if (r.created || now - this.lastGuardPlan >= GUARD_PLAN_EVERY_MS) await this.refreshGuardPlan()
       if (r.leader.iLead && r.settled) await this.backupIfDue(now)
@@ -287,6 +334,8 @@ export class DataService {
   async stop(why: 'quit' | 'system'): Promise<void> {
     this.stopped = true
     this.scheduler.stop()
+    if (this.sampler) clearInterval(this.sampler)
+    this.sampler = null
     try {
       if (this.running) await withTimeout(this.running, STOP_TIMEOUT_MS)
       await withTimeout(this.folder.close(why), STOP_TIMEOUT_MS)

@@ -40,6 +40,17 @@
 3. Po Twoim powrocie: sprawdzenia na Windows – E3 (lista niżej), E4a, E4b (ich listy dopiszą etapy), wybór zestawu
    kolorów (D298); potem „dalej” – E5 (elementy w pasku).
 
+## Przed etapem E4a (26.10.2026, ok. 21:40)
+- Co trzeba wiedzieć: E1 ma zdarzenia timera i silnik dnia, E3 – „Dziś” bez startów. E4a dokłada: silnik timera
+  (Start, Pauza, Wznów, Dalej z dwoma kliknięciami po granicy, Przedłuż, Koniec pracy, Skończyłem, Zacznij · Odwołaj),
+  działania automatyczne prowadzącego z „Cofnij” (bloki stałe według planu, koniec bloku stałego 10 min po końcu,
+  koniec sesji o planie i przy ostatnim wejściu, dwa pytania „Dalej?”, próg bezczynności, bloki „poza komputerem”),
+  pytania „Dalej?” i „Koniec pracy?” z zobaczeniem w logu, wejście i użycie komputera co 5 s (przerwy w logu),
+  nieobecność, blokadę usypiania, zmianę dnia o 04:00, D162 (wersje w obecności, nocna instalacja), wykrywanie OneDrive.
+- Pasek z treścią silnika widać w E4a u góry okna głównego; panel ikony, pasek pulpitu, ikona, tryby ciszy,
+  powiadomienia według D230 i dźwięki – E4b (T463). Czas do wyjaśnienia i „byłem na prośbie” – później (T463).
+- Pytań nie zadaję (D296). Model: Opus 5.5 · xhigh. Gałąź `claude/e4a-timer-i-terminy`.
+
 ## Przed etapami E4a, E4b i logiką E5 (26.10.2026)
 - Odpowiedzi: praca ciągiem (D296), ekran komputera nagrywającego świeci cały wykład (D297, potwierdza D184), E4b na
   kolorach roboczych z 2–3 zestawami do porównania w „Próbie” (D298); scalanie i wydania jak zwykle (D285).
