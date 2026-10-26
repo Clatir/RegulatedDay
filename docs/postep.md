@@ -13,8 +13,10 @@
 - Runda 6: 16 z 21 scenariuszy i 2 z 5 ścieżek przechodzą. Przyczyny reszty: „close” Playwrighta dopiero po końcu
   pomocnika instalacji (okno postępu było, test patrzył za późno); Invoke z UI Automation nie klika w nieaktywnym oknie;
   konsola CI leży nad paskiem; w kodzie – zdarzenie pomocnika po wyjściu w zniszczonym panelu, instalator czekający na
-  kliknięcie przy nieudanej deinstalacji i znacznik instalacji kasowany przed nią (T407). Runda 7 w toku.
-- Otwarte: ścieżka FI – nowa wersja widzi pliki niezgodne z manifestem; runda 7 podaje w logu pierwszy niezgodny plik.
+  kliknięcie przy nieudanej deinstalacji i znacznik instalacji kasowany przed nią (T407).
+- Runda 7: 19 z 21 scenariuszy i 3 z 5 ścieżek. Reszta: SendInput w testach odrzucany (struktura INPUT 48 B zamiast
+  40 B – żaden ruch ani klik kursora nie działał); w kodzie – ścieżka FI: fs Electrona pokazuje `app.asar` jako folder
+  0 B, więc porównanie z manifestem zawsze widziało różnicę (teraz z `noAsar`). Runda 8 w toku.
 - Narzędzia Claude Code na tym komputerze działają poza pulpitem: kolejność okien, powłoka, OneDrive i powiadomienia
   tylko w CI na Windows.
 
