@@ -494,6 +494,9 @@ async function main(): Promise<void> {
   }
   app.on('second-instance', (_e, argv) => handleArgv(argv, false))
   await app.whenReady()
+  // A quit during the start (the tray's „Zakończ”, the end of the session, a test) stops it at every wait: nothing
+  // starts after the record of closing.
+  if (quitting) return
   Menu.setApplicationMenu(null)
   log('info', `start v${app.getVersion()} (${identity.kind}, ${identity.name}) Electron ${process.versions.electron}`)
   let banner: Banner | null = startup.kind === 'normal' ? (startup.afterLock?.() ?? startup.banner) : null
@@ -522,6 +525,7 @@ async function main(): Promise<void> {
   } catch (e) {
     log('error', 'identyfikator komputera nieczytelny', e)
   }
+  if (quitting) return
   denyPermissions(session.defaultSession)
   app.on('session-created', denyPermissions)
   if (identity.kind === 'test' && identity.protocol && process.platform === 'win32') app.setAsDefaultProtocolClient(identity.protocol)
@@ -625,6 +629,7 @@ async function main(): Promise<void> {
   powerMonitor.on('unlock-screen', () => layoutBar())
 
   await judgePreviousRun()
+  if (quitting) return
   if (banner) log('warn', `aktualizacja do ${banner.version}: ${banner.kind === 'failed' ? 'nie udała się' : 'nie dokończyła się'}`)
   updates.init(banner, whatsNew())
   banner = null

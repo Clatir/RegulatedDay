@@ -66,6 +66,8 @@ export function judge(prev: LifeMarker | null, close: CloseRecord | null, sessio
 export class LifeKeeper {
   private marker: LifeMarker | null = null
   private timer: ReturnType<typeof setInterval> | null = null
+  /** Closing began: a start that comes later (a quit during the start of the app) writes no marker. */
+  private closed = false
 
   constructor(private readonly dir: string) {}
 
@@ -130,6 +132,7 @@ export class LifeKeeper {
   }
 
   start(runId: string, version: string, now = Date.now()): void {
+    if (this.closed) return
     this.marker = { format: 1, runId, version, pid: process.pid, startedAt: now, lastAt: now }
     this.beat(now)
     this.timer = setInterval(() => this.beat(), LIFE_EVERY_MS)
@@ -148,6 +151,7 @@ export class LifeKeeper {
 
   /** The record of closing; `system`: at the end of the Windows session – one synchronous write, no fsync. */
   close(why: CloseRecord['why'], now = Date.now()): void {
+    this.closed = true
     if (!this.marker) return
     if (this.timer) clearInterval(this.timer)
     this.timer = null
@@ -165,6 +169,7 @@ export class LifeKeeper {
   /** A logoff was cancelled: the app lives on, the marker beats again (its record of closing is no longer valid). */
   resume(): void {
     if (!this.marker || this.timer) return
+    this.closed = false
     this.beat()
     this.timer = setInterval(() => this.beat(), LIFE_EVERY_MS)
     this.timer.unref?.()

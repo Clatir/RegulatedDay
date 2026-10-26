@@ -1,5 +1,8 @@
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { INSTALLER_WINDOW_MS, judge, type LifeMarker } from '../../src/main/crash/lifeMarker'
+import { INSTALLER_WINDOW_MS, LifeKeeper, judge, type LifeMarker } from '../../src/main/crash/lifeMarker'
 import { minidumpProcessType } from '../../src/main/crash/minidump'
 
 const prev: LifeMarker = { format: 1, runId: 'r1', version: '0.1.0', pid: 1, startedAt: 1000, lastAt: 100_000 }
@@ -28,6 +31,24 @@ describe('awaria czy zwykłe zamknięcie (Terminy, D181)', () => {
   it('zrzut procesu głównego to awaria, a po ważnym zapisie zamknięcia tylko wpis w logu', () => {
     expect(judge(prev, null, { prevRunId: null }, null, true).kind).toBe('crash')
     expect(judge(prev, { runId: 'r1', at: 100_100, why: 'quit' }, { prevRunId: 'r1' }, null, true).kind).toBe('crashWhileClosing')
+  })
+
+  it('zamknięcie w trakcie startu: znacznik życia nie powstaje po zapisie zamknięcia (to nie awaria przy następnym starcie)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rd-life-'))
+    try {
+      const life = new LifeKeeper(dir)
+      // The quit comes while the start still waits (the helper, the session key): the start that follows writes nothing.
+      life.close('quit', 1000)
+      life.start('r2', '0.1.0', 2000)
+      expect(existsSync(life.lifeFile)).toBe(false)
+      // A whole run: start, then close – the next start judges it clean.
+      const run = new LifeKeeper(dir)
+      run.start('r3', '0.1.0', 3000)
+      run.close('quit', 4000)
+      expect(judge(run.previous(), run.closeRecord(), { prevRunId: 'r3' }, null, false).kind).toBe('clean')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 
