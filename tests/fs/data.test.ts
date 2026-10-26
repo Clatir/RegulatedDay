@@ -265,7 +265,7 @@ describe('rekordy, historia i kolejka edycji', () => {
     q2.add({ id: 'e2', rel: 'templates/t1.json', at: 2, schema: 1, edits: [{ path: ['note'], base: 'y', value: 'z' }, { path: ['name'], base: 'b', value: 'c' }] })
     const out = await q2.apply(records)
     expect(out[0]).toMatchObject({ status: 'conflict', fields: [{ path: ['note'], now: 'x' }] })
-    expect(((await records.read('templates/t1.json')) as { value: { name: string } }).value.name).toBe('c')
+    expect(((await records.read('templates/t1.json')) as unknown as { value: { name: string } }).value.name).toBe('c')
     expect(q2.pending[0]!.edits.map((e) => e.path[0])).toEqual(['note'])
     q2.add({ id: 'e3', rel: 'templates/gone.json', at: 3, schema: 1, edits: [{ path: ['name'], base: 'a', value: 'b' }] })
     expect((await q2.apply(records)).find((o) => o.id === 'e3')!.status).toBe('removedElsewhere')

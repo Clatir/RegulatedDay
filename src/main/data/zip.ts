@@ -223,7 +223,7 @@ async function readOnce(abs: string): Promise<{ st: Stats; data: Buffer } | null
   }
   try {
     const st = await fh.stat()
-    // readFile stops at the size the stat saw: a log appended to meanwhile gives the prefix it had then.
+    // readFile reads the size the file has when it begins: a log appended to meanwhile gives the prefix it had then.
     return st.isFile() ? { st, data: await fh.readFile() } : null
   } finally {
     await fh.close()

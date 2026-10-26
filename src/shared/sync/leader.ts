@@ -38,6 +38,12 @@ export interface LeaderInput {
   peers: readonly Peer[]
   /** Who this computer took for the leader at its last decision (null at the start). */
   current: string | null
+  /**
+   * The current leader has been seen taking the lead itself (its presence pointing at itself) since this computer took it
+   * for the leader. Only then does its presence pointing elsewhere hand the lead over: right after a handover the new
+   * leader's file still names the old one, written before it saw the handover (T415).
+   */
+  currentClaimed?: boolean
 }
 
 export interface LeaderDecision {
@@ -45,6 +51,8 @@ export interface LeaderDecision {
   leader: string | null
   iLead: boolean
   why: string
+  /** For the next decision: the leader has been seen taking the lead. */
+  claimed: boolean
 }
 
 /** The local time of a peer's last presence (not after now). */
@@ -93,7 +101,10 @@ export function decideLeader(inp: LeaderInput): LeaderDecision {
     }
     return best
   }
-  const decide = (leader: string | null, why: string): LeaderDecision => ({ leader, iLead: leader === self.computer, why })
+  const decide = (leader: string | null, why: string): LeaderDecision => {
+    const claimsNow = leader === self.computer || inp.peers.some((p) => p.presence.computer === leader && p.presence.seenLeader === leader)
+    return { leader, iLead: leader === self.computer, why, claimed: claimsNow || (leader === inp.current && inp.currentClaimed === true) }
+  }
 
   if (!awake.length) return decide(self.computer, 'żaden inny komputer nie ma świeżej obecności')
 
@@ -133,7 +144,9 @@ export function decideLeader(inp: LeaderInput): LeaderDecision {
 
   // Another computer leads: its tasks pass only when it handed over, wrote „closed” or went silent for 10 min.
   const leaderPeer = current ? inp.peers.find((p) => p.presence.computer === current) : undefined
-  const handedTo = leaderPeer?.presence.seenLeader && leaderPeer.presence.seenLeader !== current ? leaderPeer.presence.seenLeader : null
+  // At the start (no belief yet) a leader found by its own claim has claimed; later only a claim seen counts.
+  const claimed = inp.current == null ? leaderPeer?.presence.seenLeader === current : inp.currentClaimed === true
+  const handedTo = claimed && leaderPeer?.presence.seenLeader && leaderPeer.presence.seenLeader !== current ? leaderPeer.presence.seenLeader : null
   const closed = leaderPeer?.presence.state === 'closed'
   const silent = !leaderPeer || now - leaderPeer.fileSeenAt >= SILENT_MS
   if (current && !mayLead(current) && mayLead(self.computer)) {

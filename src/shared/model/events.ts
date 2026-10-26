@@ -59,6 +59,8 @@ export type MinuteClass = 'in' | 'after' | 'max' | 'empty'
 
 export type TimerEvent =
   | (EventBase & { k: 'day.create'; snapshot: DaySnapshot })
+  /** The snapshot issued again (an older rd.json arrived after the creation, before any minute was classified). */
+  | (EventBase & { k: 'day.reissue'; snapshot: DaySnapshot })
   | (EventBase & { k: 'day.snapshot'; at: number; dayType: DayTypeId; settings: RulesSettings; reason: 'today' | 'type' | 'reissue' })
   | (EventBase & {
       k: 'block.start'
@@ -124,6 +126,7 @@ const DOMAINS = new Set(['timer', 'energy', 'game', 'meta'])
 /** The fields every kind needs beyond the base: name → check. */
 const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'day.create': { snapshot: isPlain },
+  'day.reissue': { snapshot: isPlain },
   'day.snapshot': { at: isNum, dayType: isStr, settings: isPlain },
   'block.start': { block: isStr, at: isNum, planned: isPlain },
   'block.pause': { block: isStr, at: isNum },
@@ -185,6 +188,16 @@ export function isKnown(e: AnyEvent): e is LogEvent {
 /** The full order of events (spec): logical clock, computer id, event number. */
 export function compareEvents(a: EventBase, b: EventBase): number {
   return a.l - b.l || (a.c < b.c ? -1 : a.c > b.c ? 1 : 0) || a.n - b.n
+}
+
+/** The day's snapshot in force: the last issued (a re-issue replaces the creation's), in the full order; null before. */
+export function daySnapshotOf(events: readonly AnyEvent[]): DaySnapshot | null {
+  let found: { e: EventBase; s: DaySnapshot } | null = null
+  for (const e of events) {
+    if (!isKnown(e) || (e.k !== 'day.create' && e.k !== 'day.reissue')) continue
+    if (!found || compareEvents(e, found.e) > 0) found = { e, s: e.snapshot }
+  }
+  return found?.s ?? null
 }
 
 /** The kind's own instant (`at`, `from` …) – what the rules place the event at. */
