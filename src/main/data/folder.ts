@@ -325,6 +325,12 @@ export class DataFolder {
     return { leader: this.leader, settled, created, segments, problems }
   }
 
+  /** The end of the Windows session: the observation's end as one synchronous line in the journal, without fsync. */
+  systemEnd(): void {
+    const now = this.clock.now()
+    this.append({ day: logicalDayOf(now), dom: 'meta', k: 'observe.to', at: now, why: 'system' }, { system: true })
+  }
+
   /** Closing the folder: the observation's end, the presence „closed”, everything written that can be. */
   async close(why: 'quit' | 'system' = 'quit'): Promise<void> {
     const now = this.clock.now()
