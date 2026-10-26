@@ -272,7 +272,7 @@ function onHelperEvent(m: HelperMessage): void {
   }
 }
 
-const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm', 'undo', 'cutOff', 'back', 'fewer', 'better', 'drink', 'restart', 'mark'])
+const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm', 'undo', 'cutOff', 'back', 'fewer', 'better', 'drink', 'restart', 'mark', 'requestNow', 'requestEnd', 'requestAfter'])
 
 /** A click of the timer from a window, only with the fields an action takes (anything else is dropped). */
 function timerIn(c: TimerIn): TimerIn {
@@ -291,7 +291,13 @@ function timerIn(c: TimerIn): TimerIn {
     variantId: str(c.variantId) ?? null,
     target: str(c.target),
     question: str(c.question),
-    answer: str(c.answer)
+    answer: str(c.answer),
+    request: str(c.request),
+    person: str(c.person) ?? null,
+    urgent: c.urgent === true,
+    estimateMin: num(c.estimateMin) ?? null,
+    from: num(c.from),
+    to: num(c.to)
   }
 }
 

@@ -142,6 +142,8 @@ export function forecast(inp: ForecastInput): Forecast {
   const runningFg = placed.filter((p) => p.running && !p.bg)
   let cursor = runningFg.length ? Math.max(...runningFg.map((p) => p.to)) : m
   let cursorDue = cursor
+  // An urgent request runs to its estimate (spec „Prośba”: the forecast knows it at once) – the foreground is free after it.
+  for (const r of view.requests) if (r.to === OPEN && r.mode === 'urgent' && r.estimateMin != null) cursor = Math.max(cursor, r.from + r.estimateMin)
   if (!runningFg.length) {
     let lastEnd = Number.NEGATIVE_INFINITY
     for (const [, f] of view.blocks) if (f.endedAt != null && !(f.runs.at(-1)?.bg ?? false)) lastEnd = Math.max(lastEnd, f.endedAt)

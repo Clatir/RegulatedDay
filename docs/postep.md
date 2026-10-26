@@ -1,64 +1,39 @@
 # Postęp
 
 ## Stan bieżący
-- E3 scalony, wydanie 0.2.0 opublikowane z runu 40395541803 na `main` (zielony, 26.10 ok. 22:06). E3 →
-  `docs/archiwum/postep-E3.md`, E2 → `docs/archiwum/postep-E2.md`.
-- **E4a scalony** (PR #7, 26.10 ok. 23:25; CI PR zielone, także Windows; test skali na Node 26 raz przekroczył 100 ms –
-  ponowienie zielone, lokalnie ~32 ms jak na `main`). CI na `main` (run 40412280420, wydanie 0.3.0) w toku przy zapisie.
-- **E4b w toku**: PR do `main` z gałęzi `claude/e4b-pasek-ikona-cisza` (wersja 0.4.0), `/code-review` (xhigh): 15 uwag,
-  wszystkie poprawione z testem, który na kodzie sprzed poprawek pada (14 testów, sprawdzone odłożeniem `src`; wyjątek:
-  chowanie paska przy wyłączeniu „Zawsze na wierzchu” – tylko sprawdzenie na Windows, punkt 9 listy E4b), T472–T477.
-  Testy: 564 jednostkowe i plikowe, E2E 17 (2 tylko w CI). Dalej: CI PR, scalenie, wydanie 0.4.0, potem logika E5.
-- Logika E5 (D296): silnik wariantów `engine/variants.ts` z 7 testami gotowy poza repozytorium (katalog roboczy sesji)
-  – trafi na gałąź `claude/e5-warianty` po scaleniu E4b.
-- Zakres E4a: silnik timera (`engine/timer.ts`), działania automatyczne prowadzącego z „Cofnij” i pytania ze
-  zobaczeniem (`engine/auto.ts`), aktywność wszystkich komputerów (`engine/activity.ts`), wejście co 5 s
-  (`main/engine/input.ts`), blokada usypiania (`engine/power.ts`, `main/power.ts`, pomocnik zwalnia po 30 s bez stanu),
-  nocna instalacja D162 (`shared/nightInstall.ts`, `main/update/night.ts`), OneDrive z pomocnika, pasek timera u góry
-  okna głównego, oś dnia z blokami tam, gdzie biegły. Decyzje T463–T471 (podział z E4b i później – T463).
-- Testy: 541 jednostkowych i plikowych (nowe: timer 30, folder 5, wejście 5, blokada usypiania 6, noc 10, usługa 1,
-  szybkie uruchamianie), E2E: 17 (nowy – timer Start → Pauza → Wznów → Dalej); lokalnie w pełnym przebiegu 1–2 testy
-  stają przy starcie okna, osobno przechodzą (narzędzia poza pulpitem).
-- Czas faktyczny: 26.10 ok. 21:30–22:20 (zegarowo, bez przeglądu i CI).
+- E4a scalony (PR #7), wydanie 0.3.0 opublikowane. **E4b scalony** (PR #8, b663153, 27.10 ok. 00:25; CI PR zielone za
+  pierwszym razem, także Windows); CI na `main` z wydaniem 0.4.0 – run 40419583256, w toku przy zapisie. Wpisy E4a
+  i E4b → `docs/archiwum/postep-E4.md`, E3 → `docs/archiwum/postep-E3.md`.
+- **Logika E5 w toku** na gałęzi `claude/e5-warianty` (wersja 0.5.0): prośby w dniu (`engine/requests.ts`, 16 testów),
+  warianty z wyzwalaczami znacznika (`engine/variants.ts`, 12 testów), prośba przez 04:00 w folderze (2 testy),
+  T478–T481, reguły `prosby-warianty.md`, CHANGELOG 0.5.0. `/code-review` (xhigh): 15 uwag, wszystkie poprawione
+  (T481). Testy: 594 jednostkowe i plikowe, E2E 15 + 2 tylko w CI; typecheck, build, lint zielone. Dalej: sprawdzenie
+  testów poprawek na kodzie sprzed nich, PR, CI, scalenie, wydanie 0.5.0.
+- Otwarte na etap elementów E5 w pasku: w czasie prośby pasek pokazuje przerwany blok jako „Wznów · Zaparkuj” (z kropką)
+  – zamieni go linia prośby z „Koniec”; kropka po „Jeszcze trwa” (D247); pasek po 04:00 pokazuje dzisiejszy dzień,
+  także gdy trwa wczorajsza prośba.
+- `docs/decyzje.md` ma 191 / 200 KB – przy następnym etapie zastąpione decyzje do archiwum.
 
 ## Kolejka
-1. E4a do końca: poprawki z `/code-review`, CI PR #7, scalenie, wydanie 0.3.0, lista „do sprawdzenia” niżej.
-2. **Praca ciągiem pod Twoją nieobecność (D296):** E4a → E4b → logika E5, bez pauzy i bez „dalej” między nimi; każdy
-   etap: komunikat „Przed etapem” zapisany tutaj (pytań nie zadaję – odpowiedzi niżej; nowe pytanie o zachowanie
-   widoczne dla Ciebie = stop), testy, `/code-review`, PR, CI, scalenie i wydanie (D285), wpis i lista „do sprawdzenia”.
-   Gałęzie `claude/e4a-...`, `claude/e4b-...`, `claude/e5-...`. Model: Opus 5.5 · xhigh przez cały ciąg.
-3. Po Twoim powrocie: sprawdzenia na Windows – E3 (lista niżej), E4a, E4b (ich listy dopiszą etapy), wybór zestawu
-   kolorów (D298); potem „dalej” – E5 (elementy w pasku).
+1. **Praca ciągiem pod Twoją nieobecność (D296):** E4a ✓ → E4b ✓ → logika E5 (w toku), bez pauzy i bez „dalej”
+   między nimi; każdy etap: komunikat „Przed etapem” zapisany tutaj, testy, `/code-review`, PR, CI, scalenie
+   i wydanie (D285), wpis i lista „do sprawdzenia”. Model: Opus 5.5 · xhigh przez cały ciąg.
+2. Po Twoim powrocie: sprawdzenia na Windows – E3, E4a, E4b, E5 (listy niżej), wybór zestawu kolorów (D298); potem
+   „dalej” – E5 (elementy w pasku: przyciski próśb, znacznik i panel wariantów).
 
-## Przed etapem E4b (26.10.2026, ok. 22:30 – zapisane przed jego startem)
-- Co trzeba wiedzieć: E4a daje silnik timera, pytania i działania automatyczne; pasek z nimi jest tylko u góry okna
-  głównego. E4b przenosi tę samą treść do panelu ikony i paska pulpitu (`WidgetView` z silnika zamiast próby; próba
-  zostaje na swojej stronie i z 2–3 zestawami kolorów do porównania, D298), ikona z kolorem klasy bloku, krokami
-  15 · 5 · 0 min i kropką (D232, D240), tryby ciszy (sesja, zajęcia, „mniej pytań”), cisza nocna, „Odcinam się”
-  z „Wracam” i końcem o 04:00, woda, propozycja przerwy po 90 min i samotności, sygnały i ocena względna w pasku,
-  powiadomienia według D230 ze stałym identyfikatorem w logu, dźwięki (domyślnie wyłączone), „Zawsze na wierzchu”
-  (D291), zobaczenie z panelu i kliknięcia paska pulpitu, „Zacznij jeszcze raz” sesji, grupy listy automatycznej.
-- Prośby w pasku i znacznik wariantów – E5 (w E4b ich przyciski są schowane). Pytań nie zadaję (D296).
-- Model: Opus 5.5 · xhigh. Gałąź `claude/e4b-pasek-ikona-cisza`.
+## Przed etapem E5 – logika (27.10.2026, ok. 00:00 – zapisane przed jego startem)
+- Co trzeba wiedzieć: E5 w planie to prośby w widgecie, przerwania, liczniki, znacznik i panel wariantów („gotowe, gdy
+  warianty dla prośby, przeciągniętego bloku i rezerwy energii przechodzą testy”). Pod D296 robię tylko logikę: silnik
+  próśb i wariantów z testami, kliknięcia próśb przez proces główny (ta sama droga co timer); przycisków w pasku,
+  znacznika i panelu nie dokładam – to po Twoim powrocie, razem z pytaniami o ich wygląd.
+- Pytań nie zadaję (D296). Model: Opus 5.5 · xhigh. Gałąź `claude/e5-warianty`.
+- Do przygotowania na powrót (bez zmian): laptop (nowoczesny tryb wstrzymania, szybkie uruchamianie, blokada ekranu),
+  TradingView i platforma brokera (pasek, ikona, powiadomienia).
 
-## Przed etapem E4a (26.10.2026, ok. 21:40)
-- Co trzeba wiedzieć: E1 ma zdarzenia timera i silnik dnia, E3 – „Dziś” bez startów. E4a dokłada: silnik timera
-  (Start, Pauza, Wznów, Dalej z dwoma kliknięciami po granicy, Przedłuż, Koniec pracy, Skończyłem, Zacznij · Odwołaj),
-  działania automatyczne prowadzącego z „Cofnij” (bloki stałe według planu, koniec bloku stałego 10 min po końcu,
-  koniec sesji o planie i przy ostatnim wejściu, dwa pytania „Dalej?”, próg bezczynności, bloki „poza komputerem”),
-  pytania „Dalej?” i „Koniec pracy?” z zobaczeniem w logu, wejście i użycie komputera co 5 s (przerwy w logu),
-  nieobecność, blokadę usypiania, zmianę dnia o 04:00, D162 (wersje w obecności, nocna instalacja), wykrywanie OneDrive.
-- Pasek z treścią silnika widać w E4a u góry okna głównego; panel ikony, pasek pulpitu, ikona, tryby ciszy,
-  powiadomienia według D230 i dźwięki – E4b (T463). Czas do wyjaśnienia i „byłem na prośbie” – później (T463).
-- Pytań nie zadaję (D296). Model: Opus 5.5 · xhigh. Gałąź `claude/e4a-timer-i-terminy`.
-
-## Przed etapami E4a, E4b i logiką E5 (26.10.2026)
-- Odpowiedzi: praca ciągiem (D296), ekran komputera nagrywającego świeci cały wykład (D297, potwierdza D184), E4b na
-  kolorach roboczych z 2–3 zestawami do porównania w „Próbie” (D298); scalanie i wydania jak zwykle (D285).
-- Oszacowanie (z czasów E0–E3, FI i ICTTJ): E4a 4–6 h (ok. 4 rundy CI na Windows), E4b 3,5–5 h, logika E5 1,5–2 h.
-- Do przygotowania na powrót: laptop (nowoczesny tryb wstrzymania, szybkie uruchamianie, blokada ekranu), TradingView
-  i platforma brokera (pasek, ikona, powiadomienia).
-- Otwarte bez zmian: baner „nie dokończyła się” (Pytania na później) – E4a go nie zmienia.
+## Do sprawdzenia na Windows (logika E5, wersja 0.5.0)
+1. Aktualizacja 0.5.0 przychodzi sama (w nocy albo „Zainstaluj teraz”) → „Co nowego” pokazuje 0.5.0 z dopiskiem, że
+   przyciski próśb i warianty pojawią się w następnej wersji.
+2. Pasek, panel ikony i pasek pulpitu działają jak w 0.4.0 (lista E4b) – w tej wersji nic w nich nie przybywa.
 
 ## Do sprawdzenia na Windows (E4b, wersja 0.4.0)
 1. Ten sam pasek u góry okna głównego, w panelu ikony (kliknięcie ikony) i na pasku pulpitu: blok, odliczanie,

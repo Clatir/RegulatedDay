@@ -64,5 +64,5 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - „Nauka”, „Oglądanie”, „Journaling” zaplanowane ≥ 30 min po innej pracy mają „po pracy” – w testach budżetu i
   granicy używaj „Inne obowiązki”.
 - Timer, pytania „Dalej?” i „Koniec pracy?”, nieobecność i bezczynność (E4a) – reguły `timer.md`; fakty znają `undo`,
-  `question.seen`, `question.answer` i `autoRule`. Jeszcze nie w silniku: czas do wyjaśnienia (E6), warianty (E5),
-  rytuał i zamrażanie (E6).
+  `question.seen`, `question.answer` i `autoRule`. Prośby w dniu i warianty (logika E5) – reguły `prosby-warianty.md`.
+  Jeszcze nie w silniku: czas do wyjaśnienia (E6), rytuał i zamrażanie (E6).

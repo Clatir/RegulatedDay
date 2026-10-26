@@ -125,6 +125,40 @@ describe('timer w folderze danych', () => {
     expect(y).toMatchObject({ autoRule: 'absence', at: four - 10 * 60_000 })
   })
 
+  it('prośba przez 04:00: prowadzący liczy wczorajszy dzień do jej końca, „Koniec” trafia do jej dnia, blok – do dzisiejszego', async () => {
+    const yesterday = '2026-10-20'
+    const { folder, clock } = await make(placeLogical(yesterday, 26 * 60))
+    clock.now = placeLogical(yesterday, 27 * 60 + 30)
+    expect((await folder.timerClick({ a: 'requestNow', request: 'r1', person: 'mama', day: yesterday })).ok).toBe(true)
+    // After 04:00: a block of today starts on today; „Koniec” of the request goes to yesterday.
+    clock.now = placeLogical(DAY, 10 * 60)
+    expect((await folder.timerClick({ a: 'start', block: 'a' })).ok).toBe(true)
+    expect(await kinds(folder)).toContain('block.start:a')
+    expect((await folder.timerClick({ a: 'requestEnd', request: 'r1' })).ok).toBe(true)
+    expect((await folder.readDay(yesterday)).events.filter((e) => e.k === 'request.end')).toHaveLength(1)
+  })
+
+  it('prośba bez „Koniec” z wczoraj: prowadzący kończy ją po 04:00 limitem przy pierwszym użyciu', async () => {
+    const yesterday = '2026-10-20'
+    const { folder, clock } = await make(placeLogical(yesterday, 26 * 60))
+    clock.now = placeLogical(yesterday, 27 * 60 + 30)
+    expect((await folder.timerClick({ a: 'requestNow', request: 'r1', person: null, day: yesterday })).ok).toBe(true)
+    // Away from 03:31 to 05:00 (the gap split at 04:00 into the new day's log), back at 05:00.
+    const four = placeLogical(DAY, 4 * 60)
+    folder.append({ day: yesterday, dom: 'meta', k: 'gap.open', gap: 'g1', kind: 'input', from: four - 29 * 60_000, lastOutside: null })
+    folder.append({ day: yesterday, dom: 'meta', k: 'gap.close', gap: 'g1', to: four })
+    folder.append({ day: DAY, dom: 'meta', k: 'gap.open', gap: 'g2', kind: 'input', from: four, lastOutside: null })
+    folder.append({ day: DAY, dom: 'meta', k: 'gap.close', gap: 'g2', to: four + 60 * 60_000 })
+    clock.now = four + 61 * 60_000
+    await folder.check()
+    clock.now += 61_000
+    await folder.check()
+    clock.now += 15_000
+    const r = await folder.check()
+    expect(r.problems).toEqual([])
+    expect((await folder.readDay(yesterday)).events.find((e) => e.k === 'request.end')).toMatchObject({ autoRule: 'limit', at: placeLogical(yesterday, 27 * 60 + 30) + 60 * 60_000 })
+  })
+
   it('pytanie „Dalej?” zobaczone zapisuje się raz; odpowiedź „Dalej” kończy blok', async () => {
     const { folder, at } = await make()
     await folder.timerClick({ a: 'start', block: 'a' })

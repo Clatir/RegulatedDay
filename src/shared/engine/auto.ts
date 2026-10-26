@@ -14,11 +14,14 @@ import { derivedId } from '../model/ids'
 import { lastInputAt, firstUseAfter, firstUseFrom, lastOutsideBefore, type Activity, type Interval } from './activity'
 import { isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
-import { blockAt, isRunning, OPEN, type BlockFact } from './facts'
+import { blockAt, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
+import { requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
 import { plannedEndOf, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
+/** The rules of a request's end without „Koniec” (`requestEndOf`). */
+const REQUEST_END_RULES: readonly string[] = ['firstUse', 'limit', 'bedtime']
 /** „Dalej?” is asked again this long after it was seen, and the block ends this long after the second one was seen. */
 export const QUESTION_GAP_MIN = 30
 /** A fixed block in the foreground without a reaction this long after its end ends at its planned end. */
@@ -54,7 +57,8 @@ export interface Answer {
 
 export interface Question {
   id: string
-  kind: 'next' | 'next2' | 'workEnd' | 'return' | 'absence' | 'shutdown'
+  kind: 'next' | 'next2' | 'workEnd' | 'return' | 'absence' | 'shutdown' | 'request'
+  /** The block it is about (a request's question: the request). */
   block: string | null
   /** When it was asked (ms). */
   askedAt: number
@@ -373,6 +377,9 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     }
   }
 
+  // Requests without „Koniec”: the first use after 2 min without input, the limit, the bedtime (spec „Prośba”).
+  for (const e of requestAutoEnds(state, activity, inp.now, gate)) take([e])
+
   // Automatic ends that a later log shows wrong (input within the threshold, an earlier first use): undone, and the rule
   // judges the block again (spec „log, który przyjdzie później i pokaże wejście w tym progu, go unieważnia”).
   for (const a of state.facts.autos) {
@@ -403,6 +410,16 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
       still = sessionLastInputEnd(activity, at(open.runs.at(-1)?.from ?? open.startedAt ?? 0), inp.now)?.at ?? null
     }
     if (still == null || idxOf(state.grid, still) !== f.endedAt) take([revalidate('later log')])
+  }
+  // The same for a request's end by input (the first use, the limit, the bedtime), with the block it resumed (the rule
+  // resumes it again at the new end).
+  for (const a of state.facts.autos) {
+    if (a.k !== 'request.end' || !a.request || !REQUEST_END_RULES.includes(a.rule)) continue
+    const r = state.facts.requests.find((x) => x.id === a.request)
+    if (!r || r.endId !== a.id) continue
+    const still = requestEndOf(state, activity, r)
+    if (still && still.rule === a.rule && idxOf(state.grid, still.at) === r.to) continue
+    take([a, ...resumedWith(state.facts, r)].map((x) => ({ id: derivedId(date, 'auto', 'revalidate', x.id), k: 'undo', at: inp.now, target: x.id, reason: 'later log', autoRule: 'revalidate' })))
   }
   return out
 }
@@ -467,6 +484,22 @@ export function questionsOf(inp: Omit<AutoInput, 'gate'>): Question[] {
           : [{ id: 'keep', label: 'Skończył się przy wyłączeniu' }, { id: 'untilNow', label: 'Trwał do teraz' }, { id: 'endedAt', label: 'Skończył się o …' }]
     out.push({ id, kind, block: a.block, askedAt: at(a.at), seenAt: state.facts.seen.get(id)?.at ?? null, text: '', answers, dot: false, silent: true })
   }
+  // A request ended without „Koniec” (spec „Po powrocie pasek pyta krótko”, D263, T372): at the first use – „trwała do
+  // teraz”, „skończyła się o…”, before its limit „jeszcze trwa” (it then lasts to „Koniec”, at most its limit); at its
+  // limit or the bedtime – „tak zostaje”, „trwała do teraz” (the limit goes), „skończyła się o…”.
+  for (const a of state.facts.autos) {
+    if (a.k !== 'request.end' || !a.request || !REQUEST_END_RULES.includes(a.rule)) continue
+    const r = state.facts.requests.find((x) => x.id === a.request)
+    if (!r || r.endId !== a.id) continue
+    const id = requestQuestionId(date, a.request)
+    if (state.facts.answers.has(id)) continue
+    const answers: Answer[] =
+      a.rule === 'firstUse'
+        ? [{ id: 'keep', label: 'Trwała do teraz' }, { id: 'endedAt', label: 'Skończyła się o …' }]
+        : [{ id: 'keep', label: 'Tak zostaje' }, { id: 'untilNow', label: 'Trwała do teraz' }, { id: 'endedAt', label: 'Skończyła się o …' }]
+    if (a.rule === 'firstUse' && inp.now < requestLimit(r, state.grid)) answers.push({ id: 'ongoing', label: 'Jeszcze trwa' })
+    out.push({ id, kind: 'request', block: a.request, askedAt: at(a.at), seenAt: state.facts.seen.get(id)?.at ?? null, text: '', answers, dot: false, silent: true })
+  }
   // An absence counted out while the block went on (back before its planned end): „Zostawić”, „Zakończyć” change it.
   for (const a of state.facts.autos) {
     if (a.rule !== 'absence' || a.k !== 'block.pause' || !a.block) continue
@@ -513,6 +546,19 @@ export function answerEvents(state: DayState, q: Question, answer: string, at: n
       // (what it puts the 15-minute rule off to – its effect on the end of work comes with the ritual, T463).
       if (answer === 'break') return [{ ...mark, value: Math.max(at + 60 * MIN, state.forecastWorkEnd != null ? atOf(state.grid, state.forecastWorkEnd) : 0) }]
       return null
+    case 'request': {
+      const r = q.block ? state.facts.requests.find((x) => x.id === q.block) : undefined
+      if (answer === 'keep' || !r?.endId) return [mark]
+      // „Jeszcze trwa”: the request runs again (to „Koniec”, at most its limit) and the block it resumed waits again;
+      // „trwała do teraz” after the limit, „skończyła się o…”: the end moves, and the block resumes then.
+      const resumed = resumedWith(state.facts, r)
+      const undo = [r.endId, ...resumed.map((x) => x.id)].map((target): TimerDraft => ({ k: 'undo', at, target, reason: answer }))
+      if (answer === 'ongoing') return [...undo, mark]
+      const end = answer === 'untilNow' ? at : answer === 'endedAt' ? value : null
+      if (end == null) return [mark]
+      const again = resumed.map((x): TimerDraft => (x.k === 'block.fg' ? { k: 'block.fg', block: x.block!, at: end, bg: false, autoRule: 'requestResume' } : { k: 'block.resume', block: x.block!, at: end, confirmUntil: null, autoRule: 'requestResume' }))
+      return [...undo, { k: 'request.end', request: r.id, at: end }, ...again, mark]
+    }
     case 'return':
     case 'shutdown':
       if (answer === 'keep') return [mark]
