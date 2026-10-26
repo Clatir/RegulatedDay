@@ -211,6 +211,11 @@ export class DataFolder {
     return { changes, templates, lectures }
   }
 
+  /** The records of a collection (requests, routines …), through the same cache. */
+  async collection(kind: keyof typeof ID_COLLECTIONS): Promise<Array<Record<string, unknown>>> {
+    return (await this.cachedDir(ID_COLLECTIONS[kind], (v) => v)) as Array<Record<string, unknown>>
+  }
+
   async dayFile(date: string): Promise<DayFile | null> {
     const v = await this.cachedJson(paths.day(date))
     return v === undefined ? null : dayFileFrom(v, date)
