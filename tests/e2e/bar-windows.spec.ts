@@ -27,6 +27,20 @@ const pidWindows = (pid: number) =>
 /** Index of a window in the z-order (0 = the top). */
 const zIndex = (list: TopWindow[], hwnd: string) => list.findIndex((w) => w.hwnd === hwnd)
 
+/**
+ * The visible windows that moved to the other side of the bar (above ↔ below) between two lists; windows in only one
+ * list (the test's own PowerShell consoles come and go) do not count – an absolute index changes with them.
+ */
+function movedAcross(before: TopWindow[], after: TopWindow[], hwnd: string): string[] {
+  const side = (list: TopWindow[]) => {
+    const at = zIndex(list, hwnd)
+    return new Map(list.flatMap((w, i) => (w.visible && w.hwnd !== hwnd ? [[w.hwnd, i < at] as const] : [])))
+  }
+  const a = side(before)
+  const b = side(after)
+  return [...a].filter(([h, above]) => b.has(h) && b.get(h) !== above).map(([h]) => `${h} ${after.find((w) => w.hwnd === h)?.cls ?? ''}`)
+}
+
 test('pasek pulpitu pod oknem, które na niego nachodzi, i tuż nad pulpitem', async () => {
   const { app, userData } = await launch()
   try {
@@ -61,7 +75,7 @@ test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejn
       const page = await viewPage(app, 'bar')
       const bar = await barInfo(app)
       const before = pidWindows(bar.pid)
-      const orderBefore = zIndex(topWindows(), bar.hwnd)
+      const orderBefore = topWindows()
       const rects = await page.evaluate(() => [...document.querySelectorAll('button')].map((b) => b.getBoundingClientRect()).map((r) => [r.x + r.width / 2, r.y + r.height / 2]))
       expect(rects.length).toBeGreaterThan(5)
       const k = bar.scale
@@ -70,7 +84,9 @@ test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejn
         1200
       )
       expect(pidWindows(bar.pid)).toEqual(before)
-      expect(zIndex(topWindows(), bar.hwnd)).toBe(orderBefore)
+      const orderAfter = topWindows()
+      expect(movedAcross(orderBefore, orderAfter, bar.hwnd)).toEqual([])
+      expect(zIndex(orderAfter, bar.hwnd)).toBeLessThan(orderAfter.findIndex((w) => w.cls === 'Progman' || w.cls === 'WorkerW'))
       // The control: the same kind of window with one title attribute must open a tooltip window.
       const probe = await app.evaluate(({ BrowserWindow }) => {
         const w = new BrowserWindow({ x: 300, y: 300, width: 300, height: 120, show: false, frame: false, type: 'toolbar', focusable: false, title: 'RD-CI-kontrola' })

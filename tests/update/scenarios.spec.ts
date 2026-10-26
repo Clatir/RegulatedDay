@@ -45,9 +45,9 @@ const readTaskNow = (v = NEXT): Task | null => {
 
 async function install(from: string, version: string): Promise<string> {
   await stopAll()
-  uninstall()
-  rmSync(join(productionData(), 'update'), { recursive: true, force: true })
-  for (const f of ['launched.json', 'closed-by-installer.json', 'plan-blocks.json']) rmSync(join(productionData(), f), { force: true })
+  expect(await uninstall()).toBe(true)
+  // Every test counts only its own log lines (the serial group repeats from the start after a failure).
+  for (const p of ['update', 'logs', 'launched.json', 'closed-by-installer.json', 'plan-blocks.json']) rmSync(join(productionData(), p), { recursive: true, force: true, maxRetries: 10 })
   const r = spawnSync(join(from, SETUP), ['/S'], { stdio: 'ignore', timeout: 600_000 })
   expect(r.status).toBe(0)
   await expect.poll(() => installed()?.version, { timeout: 120_000 }).toBe(version)

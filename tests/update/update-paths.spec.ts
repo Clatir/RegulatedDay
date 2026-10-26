@@ -72,9 +72,9 @@ const env = (extra: Record<string, string> = {}): Record<string, string> => ({
 /** A fresh installation of N with the production data folder cleaned (a user's data folder is never touched otherwise). */
 async function freshN(): Promise<string> {
   await stopAll()
-  uninstall()
-  rmSync(join(productionData(), 'update'), { recursive: true, force: true })
-  rmSync(join(productionData(), 'launched.json'), { force: true })
+  expect(await uninstall()).toBe(true)
+  // Every test reads only its own logs (the serial group repeats from the start after a failure).
+  for (const p of ['update', 'logs', 'launched.json']) rmSync(join(productionData(), p), { recursive: true, force: true, maxRetries: 10 })
   const r = spawnSync(join(FROM, SETUP), ['/S'], { stdio: 'ignore', timeout: 600_000 })
   expect(r.status).toBe(0)
   await expect.poll(() => installed()?.version, { timeout: 120_000 }).toBe(CURRENT)
@@ -228,7 +228,8 @@ test('przerwana: pomocnik instalacji i instalator zabite w trakcie – strażnik
     step.name = 'logowanie: strażnik z wpisu Run'
     const entry = runEntry('Regulated Day Guard')
     expect(entry).not.toBeNull()
-    spawn('cmd.exe', ['/C', `start "" ${entry}`], { detached: true, stdio: 'ignore', shell: false }).unref()
+    // Verbatim: the entry's own quotes reach cmd as Windows reads the Run key (Node would escape them as \").
+    spawn('cmd.exe', ['/C', `start "" ${entry}`], { detached: true, stdio: 'ignore', shell: false, windowsVerbatimArguments: true }).unref()
     await expectUpdated(dir, step)
     const guardLog = await readText(join(productionData(), 'logs', 'guard.log'))
     expect(guardLog).toMatch(/zainstalowano/)

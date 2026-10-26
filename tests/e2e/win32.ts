@@ -25,6 +25,16 @@ public static class RdWin {
   [DllImport("user32.dll")] static extern uint SendInput(uint n, INPUT[] inputs, int size);
   [DllImport("user32.dll")] static extern int GetSystemMetrics(int i);
   [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+  /** A JSON string's content: quotes, backslashes and control characters escaped (titles stay as they are). */
+  static string Esc(string s) {
+    var b = new StringBuilder();
+    foreach (var ch in s) {
+      if (ch == '"' || ch == '\\\\') { b.Append('\\\\'); b.Append(ch); }
+      else if (ch < ' ') b.Append("\\\\u" + ((int)ch).ToString("x4"));
+      else b.Append(ch);
+    }
+    return b.ToString();
+  }
   public static string Windows() {
     SetProcessDPIAware();
     var sb = new StringBuilder("[");
@@ -35,7 +45,7 @@ public static class RdWin {
       var c = new StringBuilder(256); GetClassName(h, c, 256);
       var t = new StringBuilder(256); GetWindowText(h, t, 256);
       if (!first) sb.Append(","); first = false;
-      sb.Append("{\\"hwnd\\":\\"" + h.ToInt64() + "\\",\\"pid\\":" + pid + ",\\"visible\\":" + (IsWindowVisible(h) ? "true" : "false") + ",\\"cls\\":\\"" + c.ToString().Replace("\\\\", "/").Replace("\\"", "'") + "\\",\\"title\\":\\"" + t.ToString().Replace("\\\\", "/").Replace("\\"", "'") + "\\",\\"rect\\":[" + r.L + "," + r.T + "," + r.R + "," + r.B + "]}");
+      sb.Append("{\\"hwnd\\":\\"" + h.ToInt64() + "\\",\\"pid\\":" + pid + ",\\"visible\\":" + (IsWindowVisible(h) ? "true" : "false") + ",\\"cls\\":\\"" + Esc(c.ToString()) + "\\",\\"title\\":\\"" + Esc(t.ToString()) + "\\",\\"rect\\":[" + r.L + "," + r.T + "," + r.R + "," + r.B + "]}");
       return true;
     }, IntPtr.Zero);
     return sb.Append("]").ToString();
@@ -59,8 +69,11 @@ public static class RdWin {
 }
 `
 
+/** UTF-8 output: PowerShell 5.1 writes the OEM code page otherwise („Regulated Day – aktualizacja” loses its „–”). */
+const UTF8_OUT = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; '
+
 function ps(call: string): string {
-  const script = `Add-Type -TypeDefinition @'\n${CS}\n'@ -Language CSharp; ${call}`
+  const script = `${UTF8_OUT}Add-Type -TypeDefinition @'\n${CS}\n'@ -Language CSharp; ${call}`
   const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', timeout: 60_000 })
   if (r.status !== 0) throw new Error(`Win32: ${r.stderr}`)
   return (r.stdout ?? '').trim()
@@ -88,7 +101,7 @@ export function click(x: number, y: number): void {
 
 /** The rectangle of a taskbar button found by UI Automation by a word of its name; null = no such button. */
 export function taskbarButton(word: string): { x: number; y: number; width: number; height: number; name: string } | null {
-  const script = `
+  const script = `${UTF8_OUT}
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 $root = [System.Windows.Automation.AutomationElement]::RootElement
 $cls = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'Shell_TrayWnd')

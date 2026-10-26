@@ -22,9 +22,13 @@ export async function sha256(file: string): Promise<string> {
 
 export const readText = (file: string) => fs.readFile(file, 'utf8').catch(() => '')
 
-/** Output of a Windows PowerShell command (the tests may read the text of tools – the app never does). */
+/**
+ * Output of a Windows PowerShell command (the tests may read the text of tools – the app never does). Its output is
+ * UTF-8 without BOM: PowerShell 5.1 writes the OEM code page otherwise („–” in a title becomes „?”).
+ */
 export function powershell(script: string): string {
-  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' })
+  const utf8 = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; '
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', utf8 + script], { encoding: 'utf8' })
   return (r.stdout ?? '').trim()
 }
 
@@ -66,11 +70,23 @@ export function runEntry(name: string): string | null {
   return out || null
 }
 
-/** Uninstalls the production app silently (the uninstall entry's quiet command). */
-export function uninstall(): void {
+/**
+ * Uninstalls the production app silently (the uninstall entry's quiet command) and waits for its end: the NSIS
+ * uninstaller copies itself to %TEMP% and goes on after its first process ended. Returns false if it did not finish.
+ */
+export async function uninstall(ms = 180_000): Promise<boolean> {
   const out = powershell(`(Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${GUID}' -ErrorAction SilentlyContinue).QuietUninstallString`)
-  if (!out) return
-  spawnSync('cmd.exe', ['/C', out], { stdio: 'ignore', timeout: 300_000 })
+  if (!out) return true
+  const dir = installed()?.dir
+  // `"…\Uninstall Regulated Day.exe" /currentuser /S` started directly: through `cmd /C` Node's quoting (\") breaks it.
+  const m = /^"([^"]+)"\s*(.*)$/.exec(out)
+  const [exe, rest] = m ? [m[1]!, m[2]!] : [out, '']
+  spawnSync(exe, rest.split(/\s+/).filter(Boolean), { stdio: 'ignore', timeout: 300_000 })
+  for (let t = 0; t < ms; t += 500) {
+    if (!installed() && !(dir && existsSync(join(dir, APP_EXE)))) return true
+    await sleep(500)
+  }
+  return false
 }
 
 export function readJson<T>(file: string): T | null {
