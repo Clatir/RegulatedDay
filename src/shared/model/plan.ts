@@ -39,6 +39,12 @@ export interface PlanBlock {
   recorder: string | null
   /** Moves you made yourself (spec „Licznik przeniesień”). */
   moves: number
+  /** Requests from the queue done in this block (several chosen in the morning are one block, one contact). */
+  requests: string[]
+  /** The routine whose steps this block is (spec „Rutyna”). */
+  routine: string | null
+  /** The day this block was moved from (the morning plan shows „z wczoraj”). */
+  movedFrom: string | null
 }
 
 export interface TemplateVersion {
@@ -95,6 +101,11 @@ export interface DayFile {
   cancelled: string[]
   /** Blocks moved to another day (id → date); their ids stay. */
   movedTo: Record<string, string>
+  /**
+   * Questions asked once for this day and their answers (e.g. „lateWake” → „yes”, „weeklyAnalysisMove” → „no”): a
+   * question answered on any computer is never asked again.
+   */
+  asked: Record<string, string>
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -137,7 +148,10 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     origin: origins.includes(v.origin as string) ? (v.origin as PlanBlock['origin']) : origin,
     sourceId: typeof v.sourceId === 'string' ? v.sourceId : null,
     recorder: typeof v.recorder === 'string' ? v.recorder : null,
-    moves: intIn(v.moves, 0, 1_000_000) ?? 0
+    moves: intIn(v.moves, 0, 1_000_000) ?? 0,
+    requests: Array.isArray(v.requests) ? [...new Set(v.requests.filter((x): x is string => typeof x === 'string' && !!x))].slice(0, 50) : [],
+    routine: typeof v.routine === 'string' && v.routine ? v.routine : null,
+    movedFrom: isIsoDate(v.movedFrom) ? v.movedFrom : null
   }
 }
 
@@ -158,6 +172,9 @@ export function planBlock(p: Partial<PlanBlock> & Pick<PlanBlock, 'id' | 'catego
     sourceId: null,
     recorder: null,
     moves: 0,
+    requests: [],
+    routine: null,
+    movedFrom: null,
     ...p
   }
 }
@@ -167,11 +184,13 @@ const isDayType = (v: unknown): v is DayTypeId => typeof v === 'string' && (DAY_
 export function templateFrom(v: unknown): Template | null {
   if (!isPlain(v) || typeof v.id !== 'string' || !isDayType(v.dayType)) return null
   const versions: TemplateVersion[] = []
-  for (const x of Array.isArray(v.versions) ? v.versions : []) {
-    if (!isPlain(x) || !isIsoDate(x.from)) continue
+  // A list (E1), or a map by the date a version applies from (written by the app: one version per date).
+  const rawVersions = Array.isArray(v.versions) ? v.versions : isPlain(v.versions) ? Object.entries(v.versions).map(([from, x]) => (isPlain(x) ? { from, ...x } : x)) : []
+  for (const x of rawVersions) {
+    if (!isPlain(x) || !isIsoDate(x.from) || versions.some((y) => y.from === x.from)) continue
     versions.push({
       from: x.from,
-      blocks: (Array.isArray(x.blocks) ? x.blocks : []).map((b) => planBlockFrom(b, 'template')).filter((b): b is PlanBlock => !!b),
+      blocks: blocksFrom(x.blocks, 'template'),
       budgetMin: intIn(x.budgetMin, 0, 16 * 60),
       maxMin: intIn(x.maxMin, 12 * 60, 23 * 60 + 59)
     })
@@ -236,16 +255,40 @@ export function dayFileFrom(v: unknown, date: string): DayFile {
   if (isPlain(r.sessions)) for (const [k, x] of Object.entries(r.sessions)) if (x === 'yes' || x === 'no') sessions[k] = x
   const movedTo: Record<string, string> = {}
   if (isPlain(r.movedTo)) for (const [k, x] of Object.entries(r.movedTo)) if (isIsoDate(x)) movedTo[k] = x
+  const asked: Record<string, string> = {}
+  if (isPlain(r.asked)) for (const [k, x] of Object.entries(r.asked)) if (typeof x === 'string') asked[k] = x.slice(0, 40)
   return {
     schema: 1,
     date,
     dayType: isDayType(r.dayType) ? r.dayType : null,
     wakeMin: intIn(r.wakeMin, 4 * 60, 12 * 60),
     sessions,
-    blocks: (Array.isArray(r.blocks) ? r.blocks : []).map((b) => planBlockFrom(b)).filter((b): b is PlanBlock => !!b),
-    cancelled: Array.isArray(r.cancelled) ? r.cancelled.filter((x): x is string => typeof x === 'string') : [],
-    movedTo
+    blocks: blocksFrom(r.blocks),
+    // A list (E1), or a map id → true written by the app (cancels from two computers merge).
+    cancelled: Array.isArray(r.cancelled)
+      ? r.cancelled.filter((x): x is string => typeof x === 'string')
+      : isPlain(r.cancelled)
+        ? Object.entries(r.cancelled)
+            .filter(([, x]) => x === true)
+            .map(([k]) => k)
+        : [],
+    movedTo,
+    asked
   }
+}
+
+/**
+ * The blocks of a file: a list (written by E1 tests and the generator) or a map by id (written by the app from E3 on:
+ * two computers adding blocks to the same day merge field by field instead of meeting on one list).
+ */
+export function blocksFrom(v: unknown, origin: PlanBlock['origin'] = 'user'): PlanBlock[] {
+  const raw = Array.isArray(v) ? v : isPlain(v) ? Object.entries(v).map(([id, b]) => (isPlain(b) ? { ...b, id: typeof b.id === 'string' ? b.id : id } : b)) : []
+  const out: PlanBlock[] = []
+  for (const b of raw) {
+    const p = planBlockFrom(b, origin)
+    if (p && !out.some((x) => x.id === p.id)) out.push(p)
+  }
+  return out
 }
 
 export const emptyDayFile = (date: string): DayFile => dayFileFrom({}, date)

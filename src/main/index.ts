@@ -9,8 +9,20 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
-import { BrowserWindow, Menu, app, clipboard, crashReporter, ipcMain, net, powerMonitor, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
-import { CH, type AppInfo, type BarLayout, type TrialAction, type UpdateAction, type ViewKind, type WidgetAction } from '@shared/api'
+import { BrowserWindow, Menu, app, clipboard, crashReporter, dialog, ipcMain, net, powerMonitor, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
+import {
+  CH,
+  type AppInfo,
+  type BarLayout,
+  type EditEntry,
+  type EventIn,
+  type SystemSettingsPage,
+  type TrialAction,
+  type UpdateAction,
+  type ViewKind,
+  type WidgetAction,
+  type WizardFinish
+} from '@shared/api'
 import type { MachinePrefs } from '@shared/machine'
 import { patchMachinePrefs } from '@shared/machine'
 import { barRect, cornerOffset, panelRect } from '@shared/placement'
@@ -39,7 +51,8 @@ import { LifeKeeper, judge } from './crash/lifeMarker'
 import { sessionAtStart } from './crash/session'
 import { recordRun } from './crash/versions'
 import { marketDay } from '@shared/calendar/holidays'
-import { DataService, STOP_TIMEOUT_MS } from './data/service'
+import { STOP_TIMEOUT_MS, type DataService } from './data/service'
+import { DataHub } from './data/hub'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
 crashReporter.start({ uploadToServer: false, submitURL: '', compress: false })
@@ -63,10 +76,13 @@ let helper: HelperClient | null = null
 let autostart: Autostart | null = null
 let updates: UpdateController | null = null
 let thisComputer = ''
-/** The data folder at work (E1: only from RD_DATA_DIR – tests and the developer's version; the wizard of E3 chooses it). */
-let data: DataService | null = null
-let dataStarting: Promise<void> | null = null
+/**
+ * The data folder at work: the one the wizard chose on this computer (config.json), or RD_DATA_DIR (tests and the
+ * developer's version), which wins.
+ */
+let hub: DataHub | null = null
 let dataClosing = false
+const data = (): DataService | null => hub?.service ?? null
 const trial = new Trial()
 let quitting = false
 /** Windows ends the session (logoff, shutdown): never an installer now (spec), the record of closing written at once. */
@@ -175,34 +191,51 @@ function onHelperEvent(m: HelperMessage): void {
   }
 }
 
-/** The data folder, when one is given (RD_DATA_DIR); a folder that cannot be opened leaves the app working without it. */
-async function startData(): Promise<void> {
-  const dir = process.env.RD_DATA_DIR
-  if (!dir || !thisComputer) return
-  try {
-    const s = await DataService.start({
-      dataDir: dir,
-      userData,
-      computer: thisComputer,
-      computerName: hostname(),
-      appVersion: app.getVersion(),
-      runId,
-      holidays: marketDay,
-      idleSeconds: () => powerMonitor.getSystemIdleTime(),
-      log,
-      writeGuardPlan: identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1'
-    })
-    // A quit came while it opened: it closes at once (the quit waits for that, with its limit of time).
-    if (quitting && dataClosing) {
-      await s.stop('quit')
-      return
-    }
-    data = s
-    void s.refreshGuardPlan()
-    log('info', `folder danych otwarty: ${dir}`)
-  } catch (e) {
-    log('error', `folder danych ${dir} nie otworzył się`, e)
+/** The data folder of this computer: RD_DATA_DIR (tests, the developer), else the wizard's choice; none – the wizard. */
+const dataFolderNow = (): string | null => process.env.RD_DATA_DIR || config.get().dataFolder
+
+function createHub(): DataHub {
+  return new DataHub({
+    userData,
+    computer: () => thisComputer,
+    computerName: hostname(),
+    appVersion: app.getVersion(),
+    runId,
+    holidays: marketDay,
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    log,
+    writeGuardPlan: identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1',
+    extraBackupDir: () => prefs().backupDir,
+    onChange: () => broadcast(CH.onData, null)
+  })
+}
+
+/**
+ * The wizard's end (spec „Kreator pierwszego komputera”, „Kreator kolejnego komputera”): this computer's settings, the
+ * folder opened, and – on the first computer only – the shared data written then, never before; the next computer
+ * writes nothing shared.
+ */
+async function wizardFinish(w: WizardFinish): Promise<{ ok: boolean; error: string | null }> {
+  if (!hub || !thisComputer) return { ok: false, error: 'Aplikacja jeszcze się uruchamia.' }
+  if (process.env.RD_DATA_DIR) return { ok: false, error: 'Folder danych jest ustawiony zmienną RD_DATA_DIR.' }
+  const probe = await DataHub.probe(w.folder)
+  if (probe.unreadable) return { ok: false, error: `Nie mogę odczytać folderu: ${probe.unreadable}` }
+  if (w.first && probe.hasData) return { ok: false, error: 'W tym folderze są już dane Regulated Day – ten komputer może do nich dołączyć.' }
+  if (!w.first && !probe.hasData) return { ok: false, error: 'W tym folderze nie ma danych Regulated Day.' }
+  await setPrefs(w.prefs)
+  if (w.autostart != null && autostart?.read().supported) {
+    autostart.set(w.autostart)
+    await config.update({ autostart: { enabled: w.autostart } }).catch(() => undefined)
   }
+  if (!(await hub.open(probe.path))) return { ok: false, error: hub.error ?? 'Folder danych nie otworzył się.' }
+  await config.update({ dataFolder: probe.path })
+  if (w.first && w.records.length) {
+    const out = await hub.edit(w.records.map((r) => ({ rel: r.rel, create: true, edits: Object.entries(r.value).map(([k, v]) => ({ path: [k], base: undefined, value: v })) })))
+    const waiting = out.filter((o) => o.status !== 'applied')
+    if (waiting.length) log('warn', `kreator: ${waiting.length} zapisów czeka w kolejce (${waiting[0]!.why ?? waiting[0]!.status})`)
+  }
+  log('info', `kreator zakończony (${w.first ? 'pierwszy komputer' : 'kolejny komputer'}): ${probe.path}`)
+  return { ok: true, error: null }
 }
 
 function openPanel(target: PanelTarget | null): void {
@@ -244,7 +277,7 @@ function onSystemEnd(ending: boolean): void {
   life.close('system')
   // One synchronous line in the folder's journal (no fsync): Windows may end the process right after.
   try {
-    data?.systemEnd()
+    data()?.systemEnd()
   } catch {
     /* the journal could not be written – nothing to hold Windows up for */
   }
@@ -255,7 +288,7 @@ function onSystemEnd(ending: boolean): void {
     sessionResume = null
     sessionEnding = false
     life.resume()
-    data?.systemResumed()
+    data()?.systemResumed()
     log('info', 'koniec sesji Windows odwołany – działam dalej')
   }, Number(process.env.RD_TEST_SESSION_RESUME_MS) || SESSION_RESUME_MS)
   sessionResume.unref?.()
@@ -437,6 +470,49 @@ function registerIpc(): void {
   handle(CH.trialLog, () => trial.history())
   handle(CH.update, () => updates!.view())
   handle(CH.updateAction, (_e, action: UpdateAction) => updates!.action(action))
+
+  // The data folder for the main window (E3).
+  const needHub = (): DataHub => {
+    if (!hub) throw new Error('Aplikacja jeszcze się uruchamia.')
+    return hub
+  }
+  handle(CH.dataView, () => needHub().view())
+  handle(CH.dayData, (_e, date: string) => needHub().day(String(date)))
+  handle(CH.edit, (_e, entries: EditEntry[]) => needHub().edit(Array.isArray(entries) ? entries : []))
+  handle(CH.logEvents, (_e, events: EventIn[]) => needHub().events(Array.isArray(events) ? events : []))
+  handle(CH.resolve, (_e, id: string, choice: 'mine' | 'theirs') => needHub().resolve(String(id), choice === 'theirs' ? 'theirs' : 'mine'))
+  handle(CH.monthEvents, (_e, month: string, kinds: string[]) => needHub().monthEvents(String(month), Array.isArray(kinds) ? kinds.map(String) : []))
+  handle(CH.historyList, () => needHub().historyList())
+  handle(CH.historyVersions, (_e, kind: string, id: string) => needHub().historyVersions(String(kind), String(id)))
+  handle(CH.historyRestore, (_e, kind: string, id: string, file: string) => needHub().historyRestore(String(kind), String(id), String(file)))
+  handle(CH.folderDefault, () => dataFolderNow() ?? DataHub.defaultFolder(app.getPath('documents')))
+  handle(CH.folderPick, async (e, current: string | null) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const opts = { title: 'Folder danych Regulated Day', defaultPath: typeof current === 'string' ? current : undefined, properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'> }
+    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    return r.canceled ? null : (r.filePaths[0] ?? null)
+  })
+  handle(CH.folderProbe, (_e, path: string) => DataHub.probe(String(path)))
+  handle(CH.wizardFinish, (_e, w: WizardFinish) => wizardFinish(w))
+  handle(CH.pinFolder, async () => {
+    const dir = dataFolderNow()
+    if (!dir || process.platform !== 'win32') return { ok: false, error: 'Przypięcie działa tylko w folderze OneDrive na Windows.' }
+    try {
+      await DataHub.pin(dir)
+      log('info', `folder danych przypięty („Zawsze przechowuj na tym urządzeniu”): ${dir}`)
+      return { ok: true, error: null }
+    } catch (err) {
+      log('warn', 'przypięcie folderu danych nie udało się', err)
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+  handle(CH.openSystemSettings, async (_e, page: SystemSettingsPage) => {
+    if (process.platform === 'win32') await shell.openExternal(page === 'taskbar' ? 'ms-settings:taskbar' : 'ms-settings:notifications')
+  })
+  handle(CH.openDataFolder, async () => {
+    const dir = dataFolderNow()
+    if (dir) await shell.openPath(dir)
+  })
 }
 
 // ------------------------------------------------------------------ the start
@@ -583,6 +659,7 @@ async function main(): Promise<void> {
   } catch (e) {
     log('error', 'identyfikator komputera nieczytelny', e)
   }
+  hub = createHub()
   if (quitting) return
   denyPermissions(session.defaultSession)
   app.on('session-created', denyPermissions)
@@ -685,21 +762,20 @@ async function main(): Promise<void> {
   screen.on('display-removed', () => layoutBar())
   powerMonitor.on('resume', () => {
     layoutBar()
-    data?.resume()
+    data()?.resume()
   })
   powerMonitor.on('unlock-screen', () => {
     layoutBar()
-    data?.unlock()
+    data()?.unlock()
   })
-  powerMonitor.on('suspend', () => data?.suspend())
-  powerMonitor.on('lock-screen', () => data?.lock())
+  powerMonitor.on('suspend', () => data()?.suspend())
+  powerMonitor.on('lock-screen', () => data()?.lock())
 
   await judgePreviousRun()
   if (quitting) return
   // The folder opens beside the rest of the start (a slow folder never holds the updates or an address back).
-  dataStarting = startData().finally(() => {
-    dataStarting = null
-  })
+  const folderNow = dataFolderNow()
+  if (folderNow && thisComputer) void hub?.open(folderNow)
   if (banner) log('warn', `aktualizacja do ${banner.version}: ${banner.kind === 'failed' ? 'nie udała się' : 'nie dokończyła się'}`)
   updates.init(banner, whatsNew())
   banner = null
@@ -721,16 +797,10 @@ app.on('before-quit', (e) => {
   // The data folder closes first, by any way out (its journal is on the disk already: this writes what OneDrive can take
   // now and the presence „closed”), also while it is still opening – once, with a limit of time, and never at the end of
   // the Windows session, which the app does not hold up.
-  if ((data || dataStarting) && !sessionEnding && !dataClosing) {
+  if (hub && (hub.service || hub.status === 'opening') && !sessionEnding && !dataClosing) {
     dataClosing = true
     e.preventDefault()
-    const starting = dataStarting
-    void (async () => {
-      if (starting) await Promise.race([starting, new Promise((r) => setTimeout(r, STOP_TIMEOUT_MS))])
-      const d = data
-      data = null
-      if (d) await d.stop('quit')
-    })()
+    void Promise.race([hub.close('quit'), new Promise((r) => setTimeout(r, 2 * STOP_TIMEOUT_MS))])
       .catch((err) => log('warn', 'zamykanie folderu danych', err))
       .finally(() => app.quit())
   }

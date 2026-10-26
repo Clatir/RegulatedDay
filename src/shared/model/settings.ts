@@ -58,6 +58,8 @@ export interface Reminders {
 
 export interface RulesSettings {
   dayTypes: Record<DayTypeId, DayTypeParams>
+  /** The type each weekday has unless the calendar says otherwise (index 0 = Monday … 6 = Sunday). */
+  weekTypes: DayTypeId[]
   targetSleepMin: number
   sessions: SessionDef[]
   categories: Record<string, CategoryRules>
@@ -96,8 +98,12 @@ export const DEFAULT_SESSIONS: SessionDef[] = [
   { id: 'ny', name: 'NY', zone: NY_ZONE, startMin: 8 * H, endMin: 11 * H, markets: ['NYSE', 'CME_FX'] }
 ]
 
+/** Monday to Friday ordinary days, Saturday and Sunday weekend days. */
+export const DEFAULT_WEEK_TYPES: DayTypeId[] = ['zwykly', 'zwykly', 'zwykly', 'zwykly', 'zwykly', 'weekend', 'weekend']
+
 export const DEFAULT_SETTINGS: RulesSettings = {
   dayTypes: DEFAULT_DAY_TYPES,
+  weekTypes: DEFAULT_WEEK_TYPES,
   targetSleepMin: 8 * H,
   sessions: DEFAULT_SESSIONS,
   categories: Object.fromEntries(DEFAULT_CATEGORIES.map((c) => [c.id, rulesOf(c)])),
@@ -145,6 +151,8 @@ export interface SettingsChange {
   from: string
   /** The instant of an „od dziś” change (ms UTC); null for a change from the start of a day. */
   at: number | null
+  /** When it was made (ms UTC): changes from the same date and instant apply in the order you made them. */
+  made?: number | null
   /** Only the fields changed, nested like RulesSettings; lists replaced whole. */
   patch: Record<string, unknown>
 }
@@ -166,6 +174,13 @@ const int = (v: unknown, range: readonly [number, number], fallback: number): nu
 function sessionChoices(v: unknown, fallback: SessionChoice[]): SessionChoice[] {
   if (!Array.isArray(v) || v.length !== 7) return fallback
   return v.map((x, i) => (x === 'yes' || x === 'no' || x === 'ask' ? x : fallback[i]!))
+}
+
+export const isDayTypeId = (v: unknown): v is DayTypeId => typeof v === 'string' && (DAY_TYPES as readonly string[]).includes(v)
+
+function weekTypesFrom(v: unknown, fallback: DayTypeId[]): DayTypeId[] {
+  if (!Array.isArray(v) || v.length !== 7) return fallback
+  return v.map((x, i) => (isDayTypeId(x) ? x : fallback[i]!))
 }
 
 function dayTypeFrom(v: unknown, fallback: DayTypeParams): DayTypeParams {
@@ -232,7 +247,8 @@ function categoryFrom(v: unknown, fallback: CategoryRules | undefined): Category
               id: x.id,
               name: x.name.slice(0, 80),
               ...(PLACES.has(x.place as string) ? { place: x.place as CategoryRules['place'] } : fv?.place ? { place: fv.place } : {}),
-              ...(x.costs !== undefined ? { costs: costsFrom(x.costs, fv?.costs ?? f.costs) } : fv?.costs ? { costs: fv.costs } : {})
+              ...(x.costs !== undefined ? { costs: costsFrom(x.costs, fv?.costs ?? f.costs) } : fv?.costs ? { costs: fv.costs } : {}),
+              ...(x.archived === true ? { archived: true } : {})
             }
           ]
         })
@@ -271,6 +287,7 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
   const sig = isPlain(r.signalEffects) ? r.signalEffects : {}
   return {
     dayTypes: Object.fromEntries(DAY_TYPES.map((t) => [t, dayTypeFrom(dt[t], fallback.dayTypes[t])])) as Record<DayTypeId, DayTypeParams>,
+    weekTypes: weekTypesFrom(r.weekTypes, fallback.weekTypes),
     targetSleepMin: int(r.targetSleepMin, RANGES.targetSleepMin, fallback.targetSleepMin),
     sessions: sessionsFrom(r.sessions, fallback.sessions),
     categories,
@@ -300,10 +317,14 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
 export function changeFrom(v: unknown): SettingsChange | null {
   if (!isPlain(v) || typeof v.id !== 'string' || !isIsoDate(v.from) || !isPlain(v.patch)) return null
   const at = typeof v.at === 'number' && Number.isFinite(v.at) ? v.at : null
-  return { id: v.id, from: v.from, at, patch: v.patch }
+  const made = typeof v.made === 'number' && Number.isFinite(v.made) ? v.made : null
+  return { id: v.id, from: v.from, at, made, patch: v.patch }
 }
 
-const order = (a: SettingsChange, b: SettingsChange) => (a.from < b.from ? -1 : a.from > b.from ? 1 : (a.at ?? 0) - (b.at ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+/** The order changes are laid on: by date, then instant („od dziś”), then when they were made, then id. */
+export const changeOrder = (a: SettingsChange, b: SettingsChange): number =>
+  a.from < b.from ? -1 : a.from > b.from ? 1 : (a.at ?? 0) - (b.at ?? 0) || (a.made ?? 0) - (b.made ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+const order = changeOrder
 
 /**
  * The settings in force on `date` – at its start, or at `at` within it (the „od dziś” changes of that day up to `at`

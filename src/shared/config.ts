@@ -24,6 +24,8 @@ export interface MachineConfig {
   prefs: MachinePrefs
   /** The switch „Uruchamiaj z Windows” as last set here; the real state is read from Windows (spec „Instalacja”). */
   autostart: { enabled: boolean }
+  /** The data folder this computer works in, chosen in the wizard (null: the wizard has not been done here). */
+  dataFolder: string | null
   updates: {
     /** The version that ran here last: „Co nowego” after an update. */
     lastRunVersion: string | null
@@ -38,6 +40,7 @@ export const DEFAULT_CONFIG: MachineConfig = {
   window: null,
   prefs: DEFAULT_MACHINE_PREFS,
   autostart: { enabled: false },
+  dataFolder: null,
   updates: { lastRunVersion: null, nightInstall: true }
 }
 
@@ -62,6 +65,7 @@ export function configFrom(raw: unknown): MachineConfig {
     window: windowFrom(r.window),
     prefs: machinePrefsFrom(r.prefs),
     autostart: { enabled: autostart.enabled === true },
+    dataFolder: typeof r.dataFolder === 'string' && r.dataFolder.trim() ? r.dataFolder : null,
     updates: {
       lastRunVersion: typeof updates.lastRunVersion === 'string' ? updates.lastRunVersion : null,
       nightInstall: typeof updates.nightInstall === 'boolean' ? updates.nightInstall : DEFAULT_CONFIG.updates.nightInstall

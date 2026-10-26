@@ -107,6 +107,8 @@ export interface DayState {
   /** Class of every minute of work after its start (index → info). */
   minutes: Map<number, MinuteInfo>
   budgetUsedMin: number
+  /** The work budget of the day and what the forecast adds to the minutes used (spec „Budżet pracy”). */
+  budget: { limitMin: number; forecastMin: number }
   extensionMin: number
   overrunMin: number
   projectsMin: number
@@ -152,6 +154,8 @@ function confirmWindows(c: Ctx, b: BlockInfo, facts: DayFacts): Array<{ at: numb
   const f = facts.blocks.get(b.id)
   if (!f || f.startedAt == null) return []
   const out = f.confirms.map((x) => ({ at: x.at, from: x.from, to: x.to === OPEN ? c.cap : x.to }))
+  // „Dodaj bez wymiany”: from its start, up to its planned length (spec „Wymiana”).
+  if (f.addConfirmedAt != null) out.push({ at: f.addConfirmedAt, from: f.startedAt, to: f.startedAt + (f.planned?.durationMin ?? b.durationMin) })
   let extended = 0
   for (const x of f.extends) {
     const paused = Math.max(0, x.at - f.startedAt - ranMinutes(f, x.at))
@@ -253,10 +257,14 @@ function paintUpfront(c: Ctx, flags: Uint16Array, facts: DayFacts, spans: readon
   for (const b of c.blocks) {
     if (!b.isWork) continue
     const wins = confirmWindows(c, b, facts)
-    if (!wins.length) continue
+    const f = facts.blocks.get(b.id)
+    // Added with „Dodaj bez wymiany” and not started yet: the forecast of it is confirmed in advance, up to its length.
+    const notStarted = f?.addConfirmedAt != null && f.startedAt == null ? f.addConfirmedAt : null
+    if (!wins.length && notStarted == null) continue
     for (const s of spans) {
       if (s.block !== b) continue
-      for (const w of wins) {
+      const own = notStarted != null ? [{ at: notStarted, from: s.from, to: s.from + b.durationMin }] : []
+      for (const w of [...wins, ...own]) {
         const a = Math.max(from, s.from, w.from, w.at)
         const z = Math.min(to, s.to, w.to)
         for (let k = a; k < z; k++) flags[k]! |= F_UPFRONT
@@ -431,9 +439,12 @@ export function computeDay(ctx: DayContext): DayState {
 
   // Boundary and maximum at m (spec „Granica i koniec pracy”).
   const maxAt = (m: number, view: DayFacts, fc: Forecast): number => {
-    const { settings, params } = settingsAt(m)
-    const base = idxOfLogical(g, m > 0 && view.snapshots.length ? params.maxMin : snapshot.maxMin)
-    const extra = Math.min(settings.exceptionMaxMin, view.exceptions.reduce((s, x) => s + x.minutes, 0))
+    const { settings, params, dayType } = settingsAt(m)
+    // A change of type fixes the maximum from its instant (the new type's, moved by the blocks it kept – spec „Zmiana typu
+    // w trakcie dnia”); exceptions made after it move that one.
+    const fixed = [...view.snapshots].reverse().find((s) => s.reason === 'type' && s.max != null)
+    const base = fixed ? fixed.max! : idxOfLogical(g, m > 0 && view.snapshots.length ? params.maxMin : snapshot.maxMin)
+    const extra = Math.min(settings.exceptionMaxMin, view.exceptions.filter((x) => !fixed || x.at >= fixed.at).reduce((s, x) => s + x.minutes, 0))
     let max = base + extra
     const buffer = settings.boundaryBufferMin
     // A fixed block of the plan of lectures or a „zjazd” ending after the maximum moves it to its end plus the buffer.
@@ -443,7 +454,7 @@ export function computeDay(ctx: DayContext): DayState {
       if (span && span.end > max) max = Math.max(max, span.end + buffer)
     }
     // A session of the layer on a day that by default has none moves it to the session's end (with blocks anchored to it).
-    const layer = snapshot.settings.dayTypes[snapshot.dayType].sessions[weekday(ctx.date) - 1]
+    const layer = (settings.dayTypes[dayType as keyof RulesSettings['dayTypes']] ?? snapshot.settings.dayTypes[snapshot.dayType]).sessions[weekday(ctx.date) - 1]
     if (layer === 'no') {
       for (const p of fc.placed) {
         if (p.block.origin !== 'session') continue
@@ -506,7 +517,11 @@ export function computeDay(ctx: DayContext): DayState {
   }
   const baseBedtime = (m: number): number => {
     const { settings, params } = settingsAt(m)
-    return Math.min(idxOfLogical(g, params.bedtimeMin), c.nextWake - settings.targetSleepMin)
+    const base = Math.min(idxOfLogical(g, params.bedtimeMin), c.nextWake - settings.targetSleepMin)
+    // A change that shortens tonight (a type, settings „od dziś”) never puts the bedtime before its own instant.
+    let floor = Number.NEGATIVE_INFINITY
+    for (const s of facts.snapshots) if (s.at < m || (m === 0 && s.at <= 0)) floor = s.at
+    return Math.max(base, floor)
   }
 
   // State of the day at the start of minute m (what the leader would have shown then).
@@ -632,6 +647,7 @@ export function computeDay(ctx: DayContext): DayState {
     noWorkDay: fin.noWork,
     minutes,
     budgetUsedMin: budget,
+    budget: { limitMin: fin.budgetMin, forecastMin: fin.forecastBudgetMin },
     extensionMin: ext,
     overrunMin: overrun,
     projectsMin,
@@ -764,7 +780,12 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   paintUpfront(c, flags, view, spans, m, cap)
 
   const ends = workEnds(c, view, flags, m, fcW, fcProjects)
-  const anyWork = c.blocks.some((b) => isBoundaryWork(b) && (b.inPlan || view.blocks.get(b.id)?.startedAt != null)) || (() => {
+  // A block parked or cancelled before it began is no work of the plan any more (a change of type, „Koniec pracy”).
+  const gone = (id: string) => {
+    const f = view.blocks.get(id)
+    return f != null && f.startedAt == null && (f.parkedAt != null || f.cancelledAt != null)
+  }
+  const anyWork = c.blocks.some((b) => isBoundaryWork(b) && ((b.inPlan && !gone(b.id)) || view.blocks.get(b.id)?.startedAt != null)) || (() => {
     for (let k = 0; k < m; k++) if (flags[k]! & F_END) return true
     return false
   })()
@@ -834,7 +855,10 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
       if (broke || (he != null && k >= he && wouldRest)) justified++
     }
   }
-  const required = Math.max(0, params.minRegenMin - justified)
+  // A switch to a regeneration day fixes the minimum it asks (counted once at the switch, spec „Zmiana typu”); a later
+  // change of type asks its own type's.
+  const fixedMin = [...view.snapshots].reverse().find((s) => s.reason === 'type')?.minRegen ?? null
+  const required = Math.max(0, (fixedMin ?? params.minRegenMin) - justified)
 
   // The bedtime: base plus the moves of minutes before m; with `simulateShifts` also of minutes confirmed for later.
   const base = d.baseBedtime(m)

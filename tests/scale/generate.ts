@@ -112,7 +112,7 @@ export function generate(dataDir: string, today: string, days = 1100, seed = 3):
     // Now and then a day of another type; today is an ordinary day.
     const type: DayTypeId | null = isToday ? null : random() < 0.04 ? 'regeneracyjny' : random() < 0.03 ? 'zjazd-zdalny' : null
     if (type || random() < 0.3) write(paths.day(date), JSON.stringify({ schema: 1, date, ...(type ? { dayType: type } : {}), ...(random() < 0.2 ? { wakeMin: 330 } : {}) }))
-    const dayFile = type ? { schema: 1 as const, date, dayType: type, wakeMin: null, sessions: {}, blocks: [], cancelled: [], movedTo: {} } : null
+    const dayFile = type ? { schema: 1 as const, date, dayType: type, wakeMin: null, sessions: {}, blocks: [], cancelled: [], movedTo: {}, asked: {} } : null
     const snapshot = createDay({ date, changes: CHANGES, templates: TEMPLATES, lectures: LECTURES, dayFile, holidays: marketDay, at: null })
     const lines: Record<string, string[]> = { pca: [], pcb: [] }
     const ev = (pc: 'pca' | 'pcb', at: number, e: Record<string, unknown>, id?: string) => {

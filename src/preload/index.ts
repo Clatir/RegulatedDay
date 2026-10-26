@@ -44,7 +44,24 @@ const api: RdApi = {
   showMain: (page) => ipcRenderer.send(CH.showMain, page),
   copyText: (text) => ipcRenderer.invoke(CH.copyText, text),
   onPanelTarget: (cb) => on('rd:panelTarget', cb),
-  onBarGrows: (cb) => on('rd:barGrows', cb)
+  onBarGrows: (cb) => on('rd:barGrows', cb),
+  dataView: () => ipcRenderer.invoke(CH.dataView),
+  onData: (cb) => on(CH.onData, cb),
+  dayData: (date) => ipcRenderer.invoke(CH.dayData, date),
+  edit: (entries) => ipcRenderer.invoke(CH.edit, entries),
+  logEvents: (events) => ipcRenderer.invoke(CH.logEvents, events),
+  resolve: (id, choice) => ipcRenderer.invoke(CH.resolve, id, choice),
+  monthEvents: (month, kinds) => ipcRenderer.invoke(CH.monthEvents, month, kinds),
+  historyList: () => ipcRenderer.invoke(CH.historyList),
+  historyVersions: (kind, id) => ipcRenderer.invoke(CH.historyVersions, kind, id),
+  historyRestore: (kind, id, file) => ipcRenderer.invoke(CH.historyRestore, kind, id, file),
+  folderDefault: () => ipcRenderer.invoke(CH.folderDefault),
+  folderPick: (current) => ipcRenderer.invoke(CH.folderPick, current),
+  folderProbe: (path) => ipcRenderer.invoke(CH.folderProbe, path),
+  wizardFinish: (w) => ipcRenderer.invoke(CH.wizardFinish, w),
+  pinFolder: () => ipcRenderer.invoke(CH.pinFolder),
+  openSystemSettings: (page) => ipcRenderer.invoke(CH.openSystemSettings, page),
+  openDataFolder: () => ipcRenderer.invoke(CH.openDataFolder)
 }
 
 contextBridge.exposeInMainWorld('rd', api)

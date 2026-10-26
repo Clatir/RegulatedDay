@@ -8,6 +8,7 @@
  * E1 opens a folder only from RD_DATA_DIR (tests and the developer's version); the wizard of E3 chooses it for real.
  */
 import { createHash } from 'node:crypto'
+import { copyFile, mkdir, readdir, rename, rm } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type { HolidayLookup } from '@shared/engine/createDay'
 import { createDay, dayPlan } from '@shared/engine/createDay'
@@ -46,7 +47,14 @@ export interface ServiceOptions {
   fs?: DataFs
   /** The scheduler's timers (tests drive the checks by hand). */
   timers?: { set: (fn: () => void, ms: number) => unknown; clear: (t: unknown) => void }
+  /** After every check of the folder (the main window reads what changed). */
+  onChecked?: () => void
+  /** This computer's extra place for backups (spec: it copies the newest one there itself, also when it does not lead). */
+  extraBackupDir?: () => string | null
 }
+
+/** Daily backups kept in the extra place, as in backups/ (spec „Przechowywanych jest 14 kopii dziennych”). */
+const EXTRA_KEEP = 14
 
 /** The folder's own state in the app data: one folder per data folder, by its resolved path. */
 export function stateDirFor(userData: string, dataDir: string): string {
@@ -81,6 +89,7 @@ export class DataService {
   private lastGuardPlan = 0
   private lockedAt: number | null = null
   private lastIdle = -1
+  private lastExtraCopy = 0
   private systemEnding = false
 
   private constructor(
@@ -168,9 +177,14 @@ export class DataService {
       // The guard's plan: at the start, every hour, at the change of the day and when this computer made the day.
       if (r.created || now - this.lastGuardPlan >= GUARD_PLAN_EVERY_MS) await this.refreshGuardPlan()
       if (r.leader.iLead && r.settled) await this.backupIfDue(now)
+      if (now - this.lastExtraCopy >= BACKUP_EVERY_MS) {
+        this.lastExtraCopy = now
+        await this.copyToExtra().catch((e) => this.o.log('warn', 'kopia w dodatkowym miejscu nie powiodła się', e))
+      }
     } catch (e) {
       this.o.log('error', 'sprawdzenie folderu danych nie udało się', e)
     }
+    this.o.onChecked?.()
   }
 
   /** The daily backup after 12:00 of the logical day, tried at most every hour (and at the start and after a wake). */
@@ -184,6 +198,25 @@ export class DataService {
     const r = await createDailyBackup(this.o.dataDir, backups, today)
     if (r.ok) this.o.log('info', `kopia zapasowa ${today}: ${r.files} plików`)
     else this.o.log('error', `kopia zapasowa ${today} nie powiodła się: ${r.error}`)
+  }
+
+  /** The newest daily backup copied to this computer's extra place (once; the oldest beyond 14 go). */
+  async copyToExtra(): Promise<void> {
+    const extra = this.o.extraBackupDir?.()
+    if (!extra) return
+    const daily = join(this.o.dataDir, 'backups', 'daily')
+    const names = (await readdir(daily).catch(() => [] as string[])).filter((n) => /^\d{4}-\d{2}-\d{2}\.zip$/.test(n)).sort()
+    const newest = names.at(-1)
+    if (!newest) return
+    await mkdir(extra, { recursive: true })
+    const have = (await readdir(extra)).filter((n) => /^\d{4}-\d{2}-\d{2}\.zip$/.test(n)).sort()
+    if (!have.includes(newest)) {
+      await copyFile(join(daily, newest), join(extra, `${newest}.tmp`))
+      await rename(join(extra, `${newest}.tmp`), join(extra, newest))
+      have.push(newest)
+      this.o.log('info', `kopia ${newest} skopiowana do dodatkowego miejsca`)
+    }
+    for (const old of have.sort().slice(0, Math.max(0, have.length - EXTRA_KEEP))) await rm(join(extra, old), { force: true })
   }
 
   /**

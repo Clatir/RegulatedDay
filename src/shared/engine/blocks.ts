@@ -128,7 +128,10 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
           origin: 'user',
           sourceId: null,
           recorder: null,
-          moves: 0
+          moves: 0,
+          requests: [],
+          routine: null,
+          movedFrom: null
         },
         false
       )
