@@ -56,6 +56,8 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
 - Manifest powstaje w `afterSign` (rcedit i podpis zmieniają exe, elevate.exe dochodzi później).
 - Szablon NSIS pokazuje „uninstallFailed” bez `/SD` – cichy instalator czekał na kliknięcie; własny `customUnInstallCheck`.
   Przy `--updated` znacznik `rd-installed` przenosi atomicRMDir razem z plikami (T407).
+- Kliknięcie aktywnego okna nie podnosi go nad okno pokazane bez aktywacji – okna właściciela kładzie pod kliknięte hak
+  myszy (T408). W `fs` Electrona `app.asar` to folder 0 B – rozmiary z `process.noAsar`.
 - Testy: „close” Playwrighta czeka na wszystkie kopie potoków aplikacji, a odłączony właściciel je dziedziczy – czekaj na
   koniec procesu (`processEnd`). Okno właściciela klikaj kursorem: Invoke z UI Automation to BM_CLICK, a nieaktywne okno
   go ignoruje.

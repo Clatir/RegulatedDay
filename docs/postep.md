@@ -16,7 +16,10 @@
   kliknięcie przy nieudanej deinstalacji i znacznik instalacji kasowany przed nią (T407).
 - Runda 7: 19 z 21 scenariuszy i 3 z 5 ścieżek. Reszta: SendInput w testach odrzucany (struktura INPUT 48 B zamiast
   40 B – żaden ruch ani klik kursora nie działał); w kodzie – ścieżka FI: fs Electrona pokazuje `app.asar` jako folder
-  0 B, więc porównanie z manifestem zawsze widziało różnicę (teraz z `noAsar`). Runda 8 w toku.
+  0 B, więc porównanie z manifestem zawsze widziało różnicę (teraz z `noAsar`).
+- Runda 8: E2E z prawdziwym pomocnikiem, wszystkie scenariusze i 4 z 5 ścieżek przechodzą. „Z oknem”: Windows nie
+  podnosi klikniętego okna, które już jest aktywne – okno postępu zostawało nad nim; hak myszy właściciela (T408).
+  Runda 9 w toku.
 - Narzędzia Claude Code na tym komputerze działają poza pulpitem: kolejność okien, powłoka, OneDrive i powiadomienia
   tylko w CI na Windows.
 
