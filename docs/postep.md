@@ -2,7 +2,8 @@
 
 ## Stan bieżący
 - Etap: **E3 scalony** (PR #6, 27c3535, 26.10 ok. 21:15; druga runda CI 40388633029 zielona, niestabilnych testów
-  brak). CI na `main` (run 40393794530) w toku przy zapisie tego wpisu – zadanie Windows publikuje wydanie 0.2.0.
+  brak). CI na `main` w toku przy zapisie tego wpisu (push dokumentów przerwał run 40393794530 – wydanie 0.2.0
+  publikuje najnowszy run na `main`, raz na wersję).
   E2 → `docs/archiwum/postep-E2.md`.
 - Zakres E3: kreator pierwszego komputera (15 kroków z podglądem dnia, nic nie zapisuje się przed „Zakończ”, folder
   w OneDrive z „Zawsze przechowuj na tym urządzeniu”) i kolejnego (3 kroki, nic wspólnego nie zmienia); „Dziś” jako oś
@@ -29,8 +30,9 @@
 - Czas faktyczny: 26.10 ok. 17:10–19:50 (zegarowo, bez CI), w tym przegląd w tle.
 
 ## Kolejka
-1. Sprawdzić run 40393794530 na `main` (`gh run view`) i wydanie 0.2.0 (`gh release list`); czerwone E2E na `main` =
-   brak wydania → poprawka przed E4a. Wynik dopisać w „Stan bieżący”.
+1. Sprawdzić najnowszy run CI na `main` (`gh run list --branch main`) i wydanie 0.2.0 (`gh release list`); czerwone E2E
+   na `main` = brak wydania → poprawka przed E4a. Wynik dopisać w „Stan bieżący” (razem z pierwszym commitem E4a – push
+   samych dokumentów na `main` przerywa trwający run).
 2. **Praca ciągiem pod Twoją nieobecność (D296):** E4a → E4b → logika E5, bez pauzy i bez „dalej” między nimi; każdy
    etap: komunikat „Przed etapem” zapisany tutaj (pytań nie zadaję – odpowiedzi niżej; nowe pytanie o zachowanie
    widoczne dla Ciebie = stop), testy, `/code-review`, PR, CI, scalenie i wydanie (D285), wpis i lista „do sprawdzenia”.
