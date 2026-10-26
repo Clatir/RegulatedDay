@@ -223,3 +223,23 @@ describe('Twoje zmiany dnia i determinizm', () => {
     expect(plan.some((b) => b.id === ds.id)).toBe(false)
   })
 })
+
+describe('plan dnia odporny na błędy', () => {
+  it('blok zakotwiczony do siebie albo w cyklu kotwic wypada z planu', () => {
+    const snap = createDay(inputs('2026-10-21'))
+    const file = dayFileFrom(
+      {
+        blocks: [
+          { id: 'self', categoryId: 'journaling', anchor: 'self', durationMin: 30 },
+          { id: 'x', categoryId: 'journaling', anchor: 'y', durationMin: 30 },
+          { id: 'y', categoryId: 'journaling', anchor: 'x', durationMin: 30 }
+        ]
+      },
+      '2026-10-21'
+    )
+    const ids = dayPlan(snap, file).map((b) => b.id)
+    expect(ids).not.toContain('self')
+    expect(ids).not.toContain('x')
+    expect(ids).not.toContain('y')
+  })
+})

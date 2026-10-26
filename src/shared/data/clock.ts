@@ -42,6 +42,8 @@ export class EventClock {
   rebase(): void {
     this.wallBase = this.src.wall()
     this.monoBase = this.src.mono()
+    // The clocks are compared anew: the next events seen tell again whether one is far ahead.
+    this.aheadSeen = false
   }
 
   /** The stamps of a new event of this computer. */

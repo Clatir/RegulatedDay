@@ -138,6 +138,14 @@ describe('log zdarzeń z lokalnym dziennikiem', () => {
     expect(readLogText(readFileSync(own(), 'utf8')).events.map((x) => x.id).sort()).toEqual([a.id, b.id].sort())
   })
 
+  it('zapis i sprawdzenie logu naraz nie dopisują tego samego zdarzenia dwa razy', async () => {
+    const { log } = make()
+    const e = log.append({ day: '2026-10-21', dom: 'timer', k: 'disconnect.start', at: 1 })
+    await Promise.all([log.flush(), log.ensure('2026-10-21'), log.ensure('2026-10-21')])
+    const lines = readFileSync(own(), 'utf8').split('\n').filter(Boolean)
+    expect(lines.filter((l) => l.includes(e.id))).toHaveLength(1)
+  })
+
   it('przed dopisaniem kończy linię, gdy plik nie kończy się znakiem nowej linii', async () => {
     const { log } = make()
     mkdirSync(join(dataDir, paths.logDir('2026-10-21')), { recursive: true })

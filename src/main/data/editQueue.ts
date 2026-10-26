@@ -49,28 +49,58 @@ export class EditQueue {
   private entries: QueuedEdit[] = []
   /** Fields the file held that this version does not know (kept when it writes the file). */
   private extra: Record<string, unknown> = {}
+  /**
+   * The file is there but could not be read (held by an antivirus at the start): nothing is written over it; new edits
+   * wait in memory and join the file's entries once it is read (spec: an unreadable file is never taken as empty).
+   */
+  private unread = false
 
-  constructor(private readonly o: { stateDir: string; computer: string }) {}
+  constructor(
+    private readonly o: { stateDir: string; computer: string; read?: (file: string) => string }
+  ) {}
 
   get file(): string {
     return join(this.o.stateDir, QUEUE_FILE)
   }
 
+  /** Reads the queue; a broken one is set aside (never dropped), an unreadable one is read again at the next apply. */
   load(): void {
-    if (!existsSync(this.file)) return
+    if (!existsSync(this.file)) {
+      this.unread = false
+      return
+    }
+    let text: string
     try {
-      const raw = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<QueueFile> & Record<string, unknown>
+      text = (this.o.read ?? ((f) => readFileSync(f, 'utf8')))(this.file)
+    } catch {
+      this.unread = true
+      return
+    }
+    const waiting = this.unread ? this.entries : []
+    this.unread = false
+    try {
+      const raw = JSON.parse(text) as Partial<QueueFile> & Record<string, unknown>
       const { format: _f, entries, ...extra } = raw
       this.extra = extra
-      this.entries = Array.isArray(entries) ? entries.filter((e) => e && typeof e.id === 'string' && typeof e.rel === 'string' && Array.isArray(e.edits)) : []
+      const read = Array.isArray(entries) ? entries.filter((e) => e && typeof e.id === 'string' && typeof e.rel === 'string' && Array.isArray(e.edits)) : []
+      const ids = new Set(read.map((e) => e.id))
+      this.entries = [...read, ...waiting.filter((e) => !ids.has(e.id))]
     } catch {
-      // A queue that cannot be read is set aside, never dropped: it stays for a look.
-      renameSync(this.file, join(this.o.stateDir, `queue.uszkodzona-${Date.now()}.json`))
-      this.entries = []
+      // A broken queue is set aside for a look; a rename that fails leaves it where it is (and nothing is written over).
+      try {
+        renameSync(this.file, join(this.o.stateDir, `queue.uszkodzona-${Date.now()}.json`))
+      } catch {
+        this.unread = true
+        this.entries = waiting
+        return
+      }
+      this.entries = waiting
     }
+    if (waiting.length) this.persist()
   }
 
   private persist(): void {
+    if (this.unread) return
     mkdirSync(this.o.stateDir, { recursive: true })
     const tmp = `${this.file}.tmp-${process.pid}`
     const fd = openSync(tmp, 'w')
@@ -95,6 +125,9 @@ export class EditQueue {
 
   /** Lays every queued edit onto its file; applied ones leave the queue, the others stay with why. */
   async apply(records: RecordStore): Promise<Outcome[]> {
+    // The file could not be read before: nothing is applied until it is (its entries come first).
+    if (this.unread) this.load()
+    if (this.unread) return this.entries.map((e) => ({ id: e.id, status: 'waiting' as const, why: 'kolejka nieczytelna' }))
     const out: Outcome[] = []
     const keep: QueuedEdit[] = []
     for (const edit of this.entries) {

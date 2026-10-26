@@ -196,6 +196,19 @@ export function dayPlan(snapshot: DaySnapshot, dayFile: DayFile | null): PlanBlo
   const out = new Map<string, PlanBlock>()
   for (const b of snapshot.blocks) if (!gone.has(b.id)) out.set(b.id, own.get(b.id) ?? b)
   for (const b of own.values()) if (!gone.has(b.id) && !out.has(b.id)) out.set(b.id, b)
+  // A block in a cycle of anchors (anchored to itself, or A→B→A) can never start: it leaves the plan.
+  const cyclic = new Set<string>()
+  for (const [id, b] of out) {
+    const seen = new Set<string>([id])
+    for (let a = b.anchor; a != null; a = out.get(a)?.anchor ?? null) {
+      if (seen.has(a)) {
+        cyclic.add(id)
+        break
+      }
+      seen.add(a)
+    }
+  }
+  for (const id of cyclic) out.delete(id)
   // Anchors to blocks that are gone take their blocks with them (repeated: chains of anchors).
   for (let changed = true; changed; ) {
     changed = false

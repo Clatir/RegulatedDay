@@ -29,6 +29,19 @@ import { PresenceStore } from './presenceStore'
 import { RecordStore } from './records'
 
 export const OBSERVE_EVERY_MS = 5 * 60_000
+/** The journal keeps own events of this many days back (spec: until the day's freeze plus 7 days – freezing is E6). */
+export const JOURNAL_KEEP_DAYS = 14
+const COMPACT_EVERY_MS = 60 * 60_000
+
+/** A record the day is made from that cannot be read now (or is broken) and was never read before: unknown. */
+export class UnknownRecordError extends Error {
+  constructor(
+    readonly rel: string,
+    why: string
+  ) {
+    super(`${rel}: ${why}`)
+  }
+}
 
 export interface FolderOptions {
   fs: DataFs
@@ -77,6 +90,8 @@ export class DataFolder {
   private readonly firstPresence = new Set<string>()
   private readonly cache = new Map<string, { size: number; mtimeMs: number; value: unknown }>()
   private lastSeenPeers = new Map<string, number>()
+  private observing = true
+  private lastCompact = 0
   private readonly listed = new Map<string, string[]>()
   private readonly rulesVersion: number
 
@@ -149,23 +164,42 @@ export class DataFolder {
     this.presence.update({ state: 'idle' })
   }
 
-  /** A wake, a lock longer than 10 min or the network's return: „nieustalony” again; after a sleep the observation resumes. */
-  unsettle(reason: SettleReason): void {
+  /**
+   * A wake, a lock longer than 10 min or the network's return: „nieustalony” again. After a sleep the observation
+   * starts again – once, whether the system's wake event or the scheduler's gap tells it first; a sleep nobody announced
+   * (`sleptFrom`: the last check before the gap) closes the observation there first.
+   */
+  unsettle(reason: SettleReason, sleptFrom: number | null = null): void {
+    if (reason === 'wake') this.clock.rebase()
     const now = this.clock.now()
     if (reason === 'wake') {
-      this.clock.rebase()
-      this.append({ day: logicalDayOf(now), dom: 'meta', k: 'observe.from', at: now, why: 'resume' })
+      if (this.observing && sleptFrom != null) this.append({ day: logicalDayOf(sleptFrom), dom: 'meta', k: 'observe.to', at: sleptFrom, why: 'suspend' })
+      if (!this.observing || sleptFrom != null) {
+        this.append({ day: logicalDayOf(now), dom: 'meta', k: 'observe.from', at: now, why: 'resume' })
+        this.observing = true
+      }
     }
     this.settle.begin(reason, now)
   }
 
   /** Going to sleep: the observation ends (nothing is known of the time after it). */
   suspend(): void {
+    if (!this.observing) return
     const now = this.clock.now()
     this.append({ day: logicalDayOf(now), dom: 'meta', k: 'observe.to', at: now, why: 'suspend' })
+    this.observing = false
     void this.log.flush()
   }
 
+  /** The observation is open (not ended by a sleep or the end of the session). */
+  get isObserving(): boolean {
+    return this.observing
+  }
+
+  /**
+   * A record through the cache. A file that cannot be read now, or is broken, keeps the version read before; without
+   * one it is unknown – never taken as missing (a day made from it would be made from defaults, for good).
+   */
   private async cachedJson(rel: string): Promise<unknown> {
     const abs = join(this.o.dataDir, rel)
     const st = await this.o.fs.stat(abs)
@@ -176,13 +210,20 @@ export class DataFolder {
     const old = this.cache.get(rel)
     if (old && old.size === st.size && old.mtimeMs === st.mtimeMs) return old.value
     const r = await this.records.read(rel)
-    if (r.status !== 'ok') return old?.value
+    if (r.status === 'missing') {
+      this.cache.delete(rel)
+      return undefined
+    }
+    if (r.status !== 'ok') {
+      if (old) return old.value
+      throw new UnknownRecordError(rel, r.why)
+    }
     this.cache.set(rel, { ...st, value: r.value })
     return r.value
   }
 
   /** A folder of records; a listing that fails keeps the names listed before (unknown is never empty). */
-  private async cachedDir(dir: string, parse: (v: unknown) => unknown): Promise<unknown[]> {
+  private async cachedDir(dir: string, parse: (v: unknown) => unknown, lenient = false): Promise<unknown[]> {
     let names: string[]
     try {
       names = (await this.o.fs.list(join(this.o.dataDir, dir))).filter((e) => !e.dir && e.name.endsWith('.json')).map((e) => e.name)
@@ -196,7 +237,15 @@ export class DataFolder {
     for (const name of names) {
       const c = classify(`${dir}/${name}`)
       if (!c || c.conflict) continue
-      const v = parse(await this.cachedJson(`${dir}/${name}`))
+      let raw: unknown
+      try {
+        raw = await this.cachedJson(`${dir}/${name}`)
+      } catch (e) {
+        // A list for showing (requests) goes on without the unknown record; what a day is made from does not.
+        if (lenient && e instanceof UnknownRecordError) continue
+        throw e
+      }
+      const v = parse(raw)
       if (v) out.push(v)
     }
     return out
@@ -213,7 +262,7 @@ export class DataFolder {
 
   /** The records of a collection (requests, routines …), through the same cache. */
   async collection(kind: keyof typeof ID_COLLECTIONS): Promise<Array<Record<string, unknown>>> {
-    return (await this.cachedDir(ID_COLLECTIONS[kind], (v) => v)) as Array<Record<string, unknown>>
+    return (await this.cachedDir(ID_COLLECTIONS[kind], (v) => v, true)) as Array<Record<string, unknown>>
   }
 
   async dayFile(date: string): Promise<DayFile | null> {
@@ -255,8 +304,19 @@ export class DataFolder {
       problems.push(String(e))
     }
     this.settle.oneDrive(this.o.oneDriveRunning(), now)
+    // One pass of writes: today's own log is compared with the journal at every check (OneDrive may swap it).
+    this.log.markPending(day)
     await this.log.flush()
-    for (const d of new Set([day, ...this.log.pendingDays])) await this.log.ensure(d).catch((e) => problems.push(`log ${d}: ${String(e)}`))
+    if (this.log.pendingDays.length) problems.push(`log: ${this.log.pendingDays.length} dni czeka na zapis w folderze`)
+    // The journal keeps the last days (confirmed ones older go; days not yet on OneDrive always stay).
+    if (now - this.lastCompact >= COMPACT_EVERY_MS) {
+      try {
+        this.log.compact(addDays(day, -JOURNAL_KEEP_DAYS))
+        this.lastCompact = now
+      } catch (e) {
+        problems.push(`dziennik: ${String(e)}`)
+      }
+    }
     let read: DayRead | null = null
     try {
       read = await this.log.readDay(day)
@@ -289,8 +349,9 @@ export class DataFolder {
 
     let created: string | null = null
     let segments = 0
-    // The leader's tasks need a settled computer, a complete view of the day's logs and a sane clock.
-    if (this.leader.iLead && settled && read?.complete && !this.clock.aheadSeen) {
+    // The leader's tasks need a settled computer, a complete view of the day's logs and clocks that agree.
+    if (read?.ahead) problems.push('zegar: zdarzenie innego komputera ponad 24 h przed zegarem tego komputera – działania automatyczne czekają')
+    if (this.leader.iLead && settled && read?.complete && !read.ahead) {
       try {
         // The day is made once, by the leader (a derived id: two leaders after a pause of sync write the same event).
         if (!daySnapshotOf(read.events)) {
@@ -300,12 +361,11 @@ export class DataFolder {
           created = day
           read = await this.log.readDay(day)
         }
-        // The segments of minutes: only minutes every computer with a fresh presence has caught up with.
+        // The segments of minutes: only minutes every computer with a fresh presence has caught up with – from the day's
+        // start, as minutes already written are skipped and a stale segment's minutes are written again (T416).
         const state = await this.dayState(day, read, now)
         const gate = minuteGate(now, day, this.peers, read.lastByComputer)
-        const writtenTo = state.facts.segments.reduce((m, s) => Math.max(m, s.to), 0)
-        const from = state.grid.start + writtenTo * 60_000
-        for (const seg of newSegments(state, from, Math.min(gate, now))) {
+        for (const seg of newSegments(state, state.grid.start, Math.min(gate, now))) {
           this.append({ day, dom: 'timer', k: 'minutes', ...seg })
           segments++
         }
@@ -327,8 +387,11 @@ export class DataFolder {
 
   /** The end of the Windows session: the observation's end as one synchronous line in the journal, without fsync. */
   systemEnd(): void {
+    // Asked and then ended (or asked in every window): one line.
+    if (!this.observing) return
     const now = this.clock.now()
     this.append({ day: logicalDayOf(now), dom: 'meta', k: 'observe.to', at: now, why: 'system' }, { system: true })
+    this.observing = false
   }
 
   /** Closing the folder: the observation's end, the presence „closed”, everything written that can be. */

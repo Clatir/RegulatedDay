@@ -127,10 +127,11 @@ export function forecast(inp: ForecastInput): Forecast {
   fixedFg.sort((a, b) => a.from - b.from)
 
   // 3. The foreground chain: flexible blocks (paused ones and not started) and anchored ones, in planned order.
-  const plannedKey = (b: BlockInfo): number => {
+  // Anchors in a cycle (a block anchored to itself, A→B→A) have no planned place: they sort last (never recurse forever).
+  const plannedKey = (b: BlockInfo, depth = 0): number => {
     if (b.start != null) return b.start
     const a = b.anchor ? byId.get(b.anchor) : undefined
-    return a ? plannedKey(a) + a.durationMin : Number.POSITIVE_INFINITY
+    return a && depth < 50 ? plannedKey(a, depth + 1) + a.durationMin : Number.POSITIVE_INFINITY
   }
   const chain = inp.blocks
     .filter((b) => (status(b) === 'open' && !b.bg && (b.anchor != null || (!b.fixed && !b.waits))) || paused.includes(b))

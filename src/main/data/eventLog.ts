@@ -30,6 +30,11 @@ export interface DayRead {
   problems: Array<{ file: string; why: string }>
   /** The logs seen, by computer: their last event number (what the presence's „last event” is checked against). */
   lastByComputer: Record<string, number>
+  /**
+   * An event of another computer more than 24 h ahead of this computer's clock is in the day (spec: automatic actions
+   * wait, the bar warns) – judged at every read, so it ends once the clocks agree again.
+   */
+  ahead: boolean
 }
 
 interface Cached {
@@ -123,18 +128,28 @@ export class EventLog {
 
   /** Writes what is queued to OneDrive (one write at a time; a failure leaves it queued for the next check). */
   flush(): Promise<void> {
-    const run = this.writing.then(async () => {
+    return this.serial(async () => {
       for (const day of [...this.pending]) {
         try {
-          await this.ensure(day)
+          await this.ensureNow(day)
           this.pending.delete(day)
         } catch {
           /* the folder is unavailable or the file held: the next check tries again */
         }
       }
     })
+  }
+
+  /** Every write of the own logs goes one after another (two at once would append the same missing events twice). */
+  private serial(fn: () => Promise<void>): Promise<void> {
+    const run = this.writing.then(fn)
     this.writing = run.catch(() => undefined)
     return run
+  }
+
+  /** The check of a day's own log against the journal (OneDrive may have swapped the file), in turn with the writes. */
+  ensure(day: string): Promise<void> {
+    return this.serial(() => this.ensureNow(day))
   }
 
   /** Days with own events not yet confirmed on OneDrive (the bar: „N zmian zapisze się po powrocie folderu”). */
@@ -146,7 +161,7 @@ export class EventLog {
    * Makes the own log of a day on OneDrive hold every journal event: joins own conflict copies into it, appends the
    * missing events (ending the last line first), and rewrites it whole when a copy had to be joined.
    */
-  async ensure(day: string): Promise<void> {
+  private async ensureNow(day: string): Promise<void> {
     const rel = paths.log(day, this.o.computer)
     const abs = join(this.o.dataDir, rel)
     const mine = this.own.get(day) ?? new Map<string, AnyEvent>()
@@ -246,12 +261,18 @@ export class EventLog {
       }
     }
     const events = mergeEvents(...lists)
+    // The last number of each computer over every line read – also of an event that lost to another computer's copy
+    // of the same derived id (its presence names it, and the gate of minutes must see it).
     const lastByComputer: Record<string, number> = {}
-    for (const e of events) {
-      lastByComputer[e.c] = Math.max(lastByComputer[e.c] ?? -1, e.n)
-      this.o.clock.observe(e.l)
-    }
-    return { events, complete, problems, lastByComputer }
+    for (const list of lists) for (const e of list) lastByComputer[e.c] = Math.max(lastByComputer[e.c] ?? -1, e.n)
+    let ahead = false
+    for (const e of events) if (!this.o.clock.observe(e.l)) ahead = true
+    return { events, complete, problems, lastByComputer, ahead }
+  }
+
+  /** A day to compare with OneDrive at the next write (every check does it for today). */
+  markPending(day: string): void {
+    this.pending.add(day)
   }
 
   /** A log file through the cache: read again only when its size or time of modification differs. */

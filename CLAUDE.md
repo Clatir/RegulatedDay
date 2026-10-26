@@ -42,8 +42,9 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
   Node 24.21.0 z `.tools\` (T388) – w sesji: `$env:Path = "C:\CC-Projekty\RegulatedDay\.tools\node-v24.21.0-win-x64;$env:Path"`.
 - `src/main/start.ts` ustala tożsamość (produkcyjna / deweloperska / testowa) i dopiero ładuje `index.ts`; start
   importuje tylko electron i Node (sprawdza `scripts/check-code.mjs`).
-- `src/shared` – czyste funkcje (formaty, motyw, widget, pozycje okien, aktualizacje, plik zadania); `src/main` – okna,
-  zasobnik, pomocnik, aktualizacje, awarie; `src/preload` – `window.rd`; `src/renderer` – okno główne, panel, pasek.
+- `src/shared` – czyste funkcje (formaty, motyw, widget, pozycje okien, aktualizacje, plik zadania; czas, model danych,
+  silnik dnia, kalendarz świąt, prowadzenie – reguły `silnik.md`); `src/main` – okna, zasobnik, pomocnik, aktualizacje,
+  awarie, folder danych i terminy (reguły `dane.md`); `src/preload` – `window.rd`; `src/renderer` – okno główne, panel, pasek.
 - **Pomocnik, strażnik i pomocnik instalacji: C# 5** (`helper/`, csc.exe z .NET Framework; w CI na Linuksie Roslyn
   z `-langversion:5` przeciw 4.7.2): bez interpolacji, `?.`, `nameof`, krotek i `out var`. Reguły: `.claude/rules/aktualizacje.md`.
 - Pasek pulpitu zmienia tylko `DesktopBar.apply` (showInactive, hide, setBounds, setContentProtection) – D229.

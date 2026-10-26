@@ -181,3 +181,15 @@ describe('zmiana czasu i 04:00', () => {
     expect(st.extensionMin).toBe(120)
   })
 })
+
+describe('plan odporny na błędy', () => {
+  it('blok zakotwiczony do siebie albo w cyklu kotwic nie wysypuje silnika i wypada z planu', () => {
+    const s = ordinary([
+      block({ id: 'a', cat: 'analiza', at: '08:00', min: 60 }),
+      block({ id: 'self', cat: 'journaling', after: 'self', min: 30 }),
+      block({ id: 'x', cat: 'journaling', after: 'y', min: 30 }),
+      block({ id: 'y', cat: 'journaling', after: 'x', min: 30 })
+    ])
+    expect(() => s.state('09:00')).not.toThrow()
+  })
+})
