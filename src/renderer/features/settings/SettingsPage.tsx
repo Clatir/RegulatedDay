@@ -90,6 +90,52 @@ export function SettingsPage() {
         <Field label="Pasek pulpitu" hint={barNote ?? 'Leży pod oknami innych aplikacji – widać go tam, gdzie nic go nie zasłania.'}>
           <Toggle checked={prefs.desktopBar} onChange={(v) => void setMachinePrefs({ desktopBar: v })} label={prefs.desktopBar ? 'włączony' : 'wyłączony'} data-testid="pref-desktop-bar" />
         </Field>
+        <Field
+          label="Zawsze na wierzchu"
+          hint="Domyślnie nic z Regulated Day nie wychodzi nad okna innych aplikacji. Możesz to zmienić na tym komputerze: pasek pulpitu nad oknami (bez zabierania fokusu, chowa się nad oknem na pełnym ekranie), albo pasek i panel ikony – panel zostaje wtedy na wierzchu, dopóki go nie zamkniesz."
+        >
+          <Segmented
+            value={prefs.onTop}
+            options={[
+              { value: 'off' as const, label: 'wyłączone' },
+              { value: 'bar' as const, label: 'pasek pulpitu' },
+              { value: 'barPanel' as const, label: 'pasek i panel' }
+            ]}
+            onChange={(v) => void setMachinePrefs({ onTop: v })}
+            aria-label="Zawsze na wierzchu"
+            data-testid="pref-on-top"
+          />
+        </Field>
+        <Field label="Tryb sesji i tryb zajęć" hint="W czasie sesji i zajęć pasek jest zwarty i przygaszony, a pytania czekają cicho. Wyłączony tryb na tym komputerze: pasek zachowuje się wtedy zwyczajnie.">
+          <div className="flex flex-wrap gap-3">
+            <Toggle checked={prefs.sessionMode} onChange={(v) => void setMachinePrefs({ sessionMode: v })} label={prefs.sessionMode ? 'tryb sesji włączony' : 'tryb sesji wyłączony'} data-testid="pref-session-mode" />
+            <Toggle checked={prefs.classMode} onChange={(v) => void setMachinePrefs({ classMode: v })} label={prefs.classMode ? 'tryb zajęć włączony' : 'tryb zajęć wyłączony'} data-testid="pref-class-mode" />
+          </div>
+        </Field>
+        <Field
+          label="Powiadomienia Windows"
+          hint="Pokazuje je tylko komputer prowadzący, każde raz. Wszystko widać też w pasku. Przez „Nie przeszkadzać” i nad pełnym ekranem przejdą tylko wtedy, gdy dodasz Regulated Day do powiadomień priorytetowych Windows."
+        >
+          <div className="flex flex-col gap-1.5">
+            <Toggle checked={prefs.notices.start5} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, start5: v } })} label="5 min przed sesją, drugą zmianą, analizą, zajęciami i dojazdem" data-testid="pref-notice-start5" />
+            <Toggle checked={prefs.notices.hardEnd} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, hardEnd: v } })} label="twardy koniec projektów" data-testid="pref-notice-hardend" />
+            <Toggle checked={prefs.notices.reserve} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, reserve: v } })} label="energia na poziomie rezerwy" data-testid="pref-notice-reserve" />
+          </div>
+        </Field>
+        <Field label="Dźwięk" hint="Cichy dźwięk 5 i 0 min przed końcem bloku i startem bloku stałego (gra także przy „Nie przeszkadzać”). Nigdy w trybie „mniej pytań”, w dniu zjazdu stacjonarnego ani na komputerze nagrywającym w czasie wykładu.">
+          <div className="flex flex-wrap items-center gap-3">
+            <Toggle checked={prefs.sound} onChange={(v) => void setMachinePrefs({ sound: v })} label={prefs.sound ? 'włączony' : 'wyłączony'} data-testid="pref-sound" />
+            {prefs.sound && (
+              <Segmented
+                value={prefs.soundVolume}
+                options={[0.2, 0.4, 0.7, 1].map((v) => ({ value: v, label: `${Math.round(v * 100)} %` }))}
+                onChange={(v) => void setMachinePrefs({ soundVolume: v })}
+                aria-label="Głośność"
+                data-testid="pref-sound-volume"
+              />
+            )}
+          </div>
+        </Field>
         <Field label="Na nagraniach ekranu" hint="Panel ikony i pasek pulpitu nie pojawiają się na nagraniach i udostępnianiu ekranu (przed Windows 10 2004 są tam czarnym prostokątem). Wyłącz np. do zrzutu ekranu z błędem.">
           <Toggle checked={prefs.hideFromCapture} onChange={(v) => void setMachinePrefs({ hideFromCapture: v })} label={prefs.hideFromCapture ? 'ukryte' : 'widoczne'} data-testid="pref-hide-capture" />
         </Field>

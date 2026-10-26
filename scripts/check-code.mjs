@@ -44,7 +44,14 @@ const BAR_ALLOWED = new Set(['showInactive', 'hide', 'setBounds', 'setContentPro
 /** The desktop bar's file: what it calls on its window. */
 export function checkBarWindow(text) {
   const problems = []
-  for (const m of text.matchAll(/this\.win\.(\w+)/g)) if (!BAR_ALLOWED.has(m[1])) problems.push(`pasek pulpitu: this.win.${m[1]} – dozwolone tylko showInactive, hide, setBounds, setContentProtection`)
+  for (const m of text.matchAll(/this\.win\.(\w+)/g)) {
+    if (BAR_ALLOWED.has(m[1])) continue
+    // D291: „Zawsze na wierzchu” only as your choice, once, from apply's `change.onTop`.
+    if (m[1] === 'setAlwaysOnTop') continue
+    problems.push(`pasek pulpitu: this.win.${m[1]} – dozwolone tylko showInactive, hide, setBounds, setContentProtection (i setAlwaysOnTop z wyboru, D291)`)
+  }
+  const top = [...text.matchAll(/this\.win\.setAlwaysOnTop\(([^)]*)\)/g)]
+  if (top.length > 1 || top.some((m) => !/^change\.onTop\b/.test(m[1].trim()))) problems.push('pasek pulpitu: setAlwaysOnTop tylko raz, z wyborem „Zawsze na wierzchu” (change.onTop)')
   return problems
 }
 
@@ -107,6 +114,8 @@ function selfTest() {
     [checkStart('require("electron");require("node:fs");require(node_path.join(__dirname, "index.js"))').length === 0, 'start: ok'],
     [checkBarWindow('this.win.focus()').length === 1, 'pasek: focus'],
     [checkBarWindow('this.win.showInactive(); this.win.setBounds(b)').length === 0, 'pasek: ok'],
+    [checkBarWindow('this.win.setAlwaysOnTop(true)').length === 1, 'pasek: setAlwaysOnTop bez wyboru'],
+    [checkBarWindow("this.win.setAlwaysOnTop(change.onTop, 'floating')").length === 0, 'pasek: setAlwaysOnTop z wyboru'],
     [checkBarComponent('<button title="x">').length === 1, 'title'],
     [checkBarComponent('<svg><title>x</title></svg>').length === 1, '<title>'],
     [checkBarComponent('<select>').length === 1, 'select'],

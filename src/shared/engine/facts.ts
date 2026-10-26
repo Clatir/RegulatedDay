@@ -129,7 +129,7 @@ const newBlock = (id: string): BlockFact => ({
 })
 
 /** Events that never change the timer's facts (they do not make segments stale either); energy never does either. */
-const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen'])
+const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown'])
 
 export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k) || e.dom === 'energy'
 
@@ -221,6 +221,21 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.done = e.done ?? null
         b.endRule = e.rule ?? null
         b.endId = e.id
+        break
+      }
+      case 'block.restart': {
+        // „Zacznij jeszcze raz” (D207): the ended block runs again from now – a new stretch of the same block.
+        const b = block(e.block)
+        if (b.startedAt == null || b.endedAt == null) {
+          stale(e, 'blok nie jest zakończony')
+          break
+        }
+        const at = Math.max(idx(e.at), b.endedAt)
+        b.runs.push({ from: at, to: OPEN, bg: b.runs.at(-1)?.bg ?? false })
+        b.endedAt = null
+        b.done = null
+        b.endRule = null
+        b.endId = null
         break
       }
       case 'block.fg': {

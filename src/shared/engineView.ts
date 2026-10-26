@@ -1,0 +1,231 @@
+/**
+ * The widget's view from the engine (spec „Widget”, „Cisza”, „Odcinam się”, „Woda”, D232, D240): what the bar at the top
+ * of the main window, the icon's panel and the desktop bar show, and the icon's colour, dot and drop – one pure function
+ * of the day, the activity of the computers and this computer's settings, so every window shows the same.
+ *
+ * The colour is the class of the block in the foreground (the reserve's when a pool is at the reserve), warmer 15 min
+ * before the end of the block or the start of a fixed block, a step darker at 5 and at 0 min (D225). The dot lights only
+ * for what stands without your click; the drop is the water. „Odcinam się” hides the widget (a grey icon, the panel only
+ * with its line); the quiet modes make the bar compact; the night's quiet leaves only the time and the running block.
+ */
+import { questionsOf, type Question } from './engine/auto'
+import type { Activity } from './engine/activity'
+import { plannedSpan } from './engine/blocks'
+import { answered, contactSince, waterDue, workRunStart, type CareSettings } from './engine/care'
+import type { DayContext, DayState } from './engine/day'
+import type { EnergyState } from './engine/energy'
+import type { AutoAction } from './engine/facts'
+import { atOf } from './engine/grid'
+import { modesOf, type ModePrefs, type Modes } from './engine/modes'
+import { timerNow, type TimerNow } from './engine/timer'
+import { iconColor, toneColor, type Tone, type WarnStep } from './theme'
+import type { BarLine, BarPending, WidgetView } from './widget'
+
+const MIN = 60_000
+
+export interface EngineInput {
+  ctx: DayContext
+  state: DayState
+  energy: EnergyState | null
+  activity: Activity
+  now: number
+  /** A block's name: its variant's or its category's (never an id). */
+  name: (categoryId: string, variantId: string | null) => string
+  care: CareSettings
+  modePrefs: ModePrefs
+  pending: BarPending | null
+  /** This computer (the recording computer of a lecture plays no sound and shows no notification then). */
+  computer?: string
+}
+
+const CLASS_TONE: Record<string, Tone> = { work: 'praca', life: 'zycie', free: 'wolne' }
+const CLASS_NAME: Record<string, string> = { work: 'praca', life: 'życie i opieka', free: 'wolne' }
+/** Automatic actions that are information only (spec: no „Cofnij”). */
+const INFO_RULES = new Set(['disconnect04'])
+
+const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
+
+/** What an automatic action did, in words („Zajęcia zdalne zaczęte o 09:00 (blok stały według planu)”). */
+export function autoText(a: AutoAction, name: string, clock: string): string {
+  switch (a.rule) {
+    case 'fixedStart':
+      return a.k === 'block.pause' ? `${name} – pauza o ${clock} (blok stały według planu)` : `${name} zaczęty o ${clock} (blok stały według planu)`
+    case 'plan':
+      return `${name} skończony o ${clock} (według planu)`
+    case 'fixedNoReaction':
+      return `${name} skończony o ${clock} (10 min po końcu bez reakcji)`
+    case 'lastInput':
+      return `${name} skończona o ${clock} (ostatnie wejście, 30 min bez obecności)`
+    case 'twoQuestions':
+      return `${name} skończony o ${clock} (dwa pytania bez odpowiedzi)`
+    case 'idle':
+      return `${name} skończony o ${clock} (próg bezczynności)`
+    case 'firstUse':
+      return `${name} do ${clock} (pierwsze użycie komputera)`
+    case 'limit':
+      return `${name} do ${clock} (najdłuższy czas bez odpowiedzi)`
+    case 'bedtime':
+      return `${name} do ${clock} (pora snu bez użycia komputera)`
+    case 'absence':
+      return a.k === 'block.end' ? `${name} skończony o ${clock} (w chwili odejścia)` : a.k === 'block.pause' ? `${name}: nieobecność od ${clock} odliczona` : `${name}: powrót o ${clock}`
+    case 'shutdown':
+      return `${name} skończony o ${clock} (zamknięcie aplikacji)`
+    case 'workEnd':
+      return `${name} zaparkowany („Koniec pracy”)`
+    case 'disconnect':
+      return a.k === 'block.pause' ? `${name} – pauza („Odcinam się” o ${clock})` : `${name} skończony („Odcinam się” o ${clock})`
+    case 'disconnect04':
+      return `„Odcinam się” skończone o ${clock} (nowy dzień)`
+    case 'boundary':
+      return `granica zatwierdzona sama o ${clock} (start pierwszego bloku pracy)`
+    default:
+      return `${name}: ${a.rule} o ${clock}`
+  }
+}
+
+/** The warning step: 15 · 5 · 0 min before the end of the block in the foreground or the start of a fixed block. */
+function warnOf(state: DayState, t: TimerNow, now: number): WarnStep {
+  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  const deadlines: number[] = []
+  if (t.fg) deadlines.push(atOf(state.grid, t.fg.plannedEnd))
+  for (const b of state.blocks) {
+    if (!(b.fixed || b.waits) || !b.inPlan) continue
+    const f = state.facts.blocks.get(b.id)
+    if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) continue
+    const span = plannedSpan(b, byId)
+    if (span && atOf(state.grid, span.start) > now) deadlines.push(atOf(state.grid, span.start))
+  }
+  if (!deadlines.length) return 'none'
+  const left = (Math.min(...deadlines) - now) / MIN
+  return left <= 0 ? 'zero' : left <= 5 ? 'five' : left <= 15 ? 'warm' : 'none'
+}
+
+/** Lines of the questions with a default answer and „Koniec pracy?” (the „Dalej?” has its own place). */
+function questionLine(q: Question, blockName: string, clock: (ms: number) => string): BarLine {
+  const text =
+    q.kind === 'workEnd'
+      ? 'Koniec pracy?'
+      : q.kind === 'return'
+        ? `${blockName} – po powrocie:`
+        : q.kind === 'absence'
+          ? `${blockName} – nieobecność od ${clock(q.askedAt)}:`
+          : `${blockName} – przerwany zamknięciem aplikacji o ${clock(q.askedAt)}:`
+  return { id: q.id, text, actions: q.answers.map((a) => ({ id: a.id, label: a.label })), dot: q.dot, at: q.askedAt }
+}
+
+export function engineView(i: EngineInput): WidgetView {
+  const { state, now } = i
+  const t = timerNow(state)
+  const events = i.ctx.events
+  const modes: Modes = modesOf(state, t, events, now, i.modePrefs)
+  const at = (idx: number) => atOf(state.grid, idx)
+  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  const nameOf = (id: string) => {
+    const b = byId.get(id)
+    return b ? i.name(b.categoryId, b.variantId) : i.name(state.facts.blocks.get(id)?.planned?.categoryId ?? 'inne', null)
+  }
+  const hidden = modes.disconnect != null
+  const questions = hidden ? [] : questionsOf({ ctx: i.ctx, state, activity: i.activity, now })
+  const reserve = !!i.energy && i.energy.known && i.energy.enabled && Object.values(i.energy.atReserve).some(Boolean)
+  const fg = t.fg
+  const tone: Tone = reserve ? 'rezerwa' : fg ? (CLASS_TONE[fg.info.rules.cls] ?? 'brak') : 'brak'
+  const warn = hidden ? 'none' : warnOf(state, t, now)
+
+  // „Dalej?” in its fixed place at the start.
+  const next = questions.find((q) => q.kind === 'next' || q.kind === 'next2')
+  const question: BarLine | null = next
+    ? { id: next.id, text: next.kind === 'next2' ? 'Dalej? (drugi raz)' : 'Dalej?', actions: next.answers.map((a) => ({ id: a.id, label: a.label })), dot: true, at: fg ? at(fg.plannedEnd) : null }
+    : null
+
+  const lines: BarLine[] = []
+  if (!hidden && !modes.night) {
+    for (const b of t.waiting) lines.push({ id: `wait:${b.id}`, text: `${nameOf(b.id)} ${b.start != null ? clockOf(at(b.start)) : ''}`.trim(), actions: [{ id: 'start', label: 'Zacznij' }, { id: 'cancel', label: 'Odwołaj' }], dot: true })
+    // A session ended before its planned end: „Zacznij jeszcze raz” to the planned end (D207), a quiet line.
+    for (const b of state.blocks) {
+      const f = state.facts.blocks.get(b.id)
+      const span = b.waits ? plannedSpan(b, byId) : null
+      if (!f || f.endedAt == null || !span || state.now >= span.end || f.endedAt >= span.end || fg?.info.id === b.id) continue
+      lines.push({ id: `restart:${b.id}`, text: `${nameOf(b.id)} · do ${clockOf(at(span.end))}`, actions: [{ id: 'restart', label: 'Zacznij jeszcze raz' }], dot: false })
+    }
+    // Paused blocks waiting with nothing in the foreground („Wznów · Zaparkuj”).
+    if (!fg) for (const p of t.paused) lines.push({ id: `paused:${p.info.id}`, text: nameOf(p.info.id), actions: [{ id: 'start', label: 'Wznów' }, { id: 'park', label: 'Zaparkuj' }], dot: true })
+    for (const q of questions) if (q !== next) lines.push(questionLine(q, q.block ? nameOf(q.block) : '', clockOf))
+    // The break after 90 min of continuous work (D234: a dot, no notification); in a session or a class it waits.
+    const run = i.care.breakAfterMin > 0 ? workRunStart(state, now) : null
+    if (run != null && now - run >= i.care.breakAfterMin * MIN && !modes.session && !modes.classMode) {
+      const id = `break:${state.grid.date}:${Math.round((run - state.grid.start) / MIN)}`
+      if (!answered(events, id)) lines.push({ id, text: `Przerwa? ${Math.round((now - run) / MIN)} min pracy ciągiem`, actions: [{ id: 'break', label: 'Przerwa' }, { id: 'continue', label: 'Kontynuuję' }], dot: !modes.fewer })
+    }
+    // The solitude after contact longer than 30 min, once.
+    const contact = i.care.solitudeAfterMin > 0 ? contactSince(state, t) : null
+    if (contact != null && now - contact > i.care.solitudeAfterMin * MIN) {
+      const id = `solitude:${state.grid.date}:${Math.round((contact - state.grid.start) / MIN)}`
+      if (!answered(events, id)) lines.push({ id, text: 'Po rozmowach – chwila samotności?', actions: [{ id: 'solitude', label: 'Chwila ciszy' }, { id: 'dismiss', label: 'Nie teraz' }], dot: false })
+    }
+  }
+
+  const water = waterDue(events, state, t, now, i.care, { night: modes.night, disconnect: hidden })
+  const session = !!fg && fg.info.rules.kind === 'session'
+  const sessionAny = session || t.bg.some((b) => b.info.rules.kind === 'session')
+  const start = !fg && t.next ? `${t.paused.some((p) => p.info.id === t.next!.id) ? 'Wznów' : 'Start'}: ${nameOf(t.next.id)}` : null
+  const fixedFg = !!fg && (fg.info.fixed || fg.info.rules.kind === 'session')
+
+  // „Zrobione automatycznie”: the actions as the plan said them in one row, the rest each with „Cofnij”.
+  const planned = state.facts.autos.filter((a) => a.rule === 'fixedStart' || a.rule === 'plan')
+  const groups = planned.length ? [`bloki stałe według planu: ${planned.length}`] : []
+  const items = state.facts.autos
+    .filter((a) => !(a.rule === 'fixedStart' || a.rule === 'plan'))
+    .map((a) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) }))
+    .reverse()
+
+  const block = fg ? { name: nameOf(fg.info.id), className: `${CLASS_NAME[fg.info.rules.cls] ?? ''}${reserve ? ' · rezerwa energii' : ''}`, endsAt: at(fg.plannedEnd) } : null
+  const nextFixed = state.blocks
+    .filter((b) => (b.fixed || b.waits) && b.inPlan && b.start != null && at(b.start) > now && state.facts.blocks.get(b.id)?.startedAt == null)
+    .sort((a, b) => a.start! - b.start!)[0]
+  const tooltip = hidden
+    ? `Odcinam się od ${clockOf(modes.disconnect!)}`
+    : [block ? `${block.name} · do ${clockOf(block.endsAt)} (${Math.max(0, Math.round((block.endsAt - now) / MIN))} min)` : 'bez bloku', nextFixed ? `Następny stały: ${nameOf(nextFixed.id)} ${clockOf(at(nextFixed.start!))}` : ''].filter(Boolean).join('\n')
+  const dot = !hidden && (!!question || lines.some((l) => l.dot))
+  // Sounds (spec „Powiadomienia i dźwięki”): never in „mniej pytań” nor „Odcinam się”, never on a day of stationary
+  // classes, never on the recording computer during a lecture.
+  const dayType = state.facts.snapshots.at(-1)?.dayType ?? i.ctx.snapshot.dayType
+  const recording = !!i.computer && [...(fg ? [fg] : []), ...t.bg].some((x) => x.info.rules.kind === 'lecture' && i.ctx.plan.find((p) => p.id === x.info.id)?.recorder === i.computer)
+  const soundOk = !hidden && !modes.fewer && dayType !== 'zjazd-stacjonarny' && !recording
+  return {
+    soundOk,
+    recording,
+    hidden,
+    quiet: !hidden && modes.quiet,
+    tone,
+    warn,
+    color: toneColor(tone, warn),
+    iconColor: iconColor(tone, warn, modes.quiet, hidden),
+    dot,
+    drop: !hidden && water.due,
+    muted: false,
+    block: hidden ? null : block,
+    question: hidden ? null : question,
+    lines,
+    session: sessionAny,
+    stateLine: hidden ? `Odcinam się od ${clockOf(modes.disconnect!)}` : null,
+    tooltip,
+    barNote: null,
+    buttons: {
+      next: !!fg,
+      pause: !!fg && !fixedFg && !modes.night,
+      extend: !!fg,
+      workEnd: (!!fg && fg.info.isWork) || (!fg && state.ends.length > 0 && !t.workEndConfirmed),
+      finished: sessionAny && !modes.night,
+      cutOff: !hidden && !modes.night,
+      start: modes.night ? null : start
+    },
+    background: hidden || modes.night ? [] : t.bg.map((b) => ({ id: b.info.id, name: nameOf(b.info.id), endsAt: at(b.plannedEnd) })),
+    autos: hidden ? { groups: [], items: [] } : { groups, items },
+    fewer: modes.fewer,
+    signals: !!i.energy?.enabled,
+    night: modes.night,
+    pending: i.pending && i.pending.until > now ? i.pending : null,
+    day: state.grid.date,
+    toneSet: 'robocze'
+  }
+}

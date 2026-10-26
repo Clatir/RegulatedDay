@@ -11,6 +11,7 @@ import './styles/index.css'
 import { App } from './app/App'
 import { DesktopBarApp } from './widget/DesktopBarApp'
 import { PanelApp } from './widget/PanelApp'
+import { SoundApp } from './widget/SoundApp'
 import { installEscape } from './lib/escape'
 import { loadMachinePrefs } from './store/machine'
 import { loadWidget } from './store/widget'
@@ -27,5 +28,5 @@ if (view === 'main') {
   void loadData()
 }
 
-const root = view === 'bar' ? <DesktopBarApp /> : view === 'panel' ? <PanelApp /> : <App />
+const root = view === 'bar' ? <DesktopBarApp /> : view === 'panel' ? <PanelApp /> : view === 'sound' ? <SoundApp /> : <App />
 createRoot(document.getElementById('root') as HTMLElement).render(<StrictMode>{root}</StrictMode>)

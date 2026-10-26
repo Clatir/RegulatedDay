@@ -25,7 +25,8 @@ import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/ene
 import { foldFacts, isRunning } from '@shared/engine/facts'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
-import { daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type Domain } from '@shared/model/events'
+import { daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type Domain, type Signal } from '@shared/model/events'
+import type { Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { isDayTypeId, settingsOn, type SettingsChange } from '@shared/model/settings'
@@ -71,6 +72,12 @@ function hasRunning(day: string, events: readonly AnyEvent[]): boolean {
   if (!events.some((e) => e.k === 'block.start')) return false
   for (const f of foldFacts(gridOf(day), events).blocks.values()) if (f.endedAt == null && isRunning(f)) return true
   return false
+}
+
+/** The day before still has something of now: a running block, or „Odcinam się” to be closed at 04:00. */
+function spillsOver(day: string, events: readonly AnyEvent[]): boolean {
+  if (hasRunning(day, events)) return true
+  return events.some((e) => e.k === 'disconnect.start') && foldFacts(gridOf(day), events).disconnect.some((d) => d.to === Number.POSITIVE_INFINITY)
 }
 
 /** A record the day is made from that cannot be read now (or is broken) and was never read before: unknown. */
@@ -483,7 +490,7 @@ export class DataFolder {
           nextAt = r.nextAt
           const yesterday = addDays(day, -1)
           const yRead = await this.log.readDay(yesterday)
-          if (yRead.complete && hasRunning(yesterday, yRead.events)) {
+          if (yRead.complete && spillsOver(yesterday, yRead.events)) {
             const yCtx = await this.dayContext(yesterday, yRead, now)
             // Input after 04:00 is in today's logs: both gates hold.
             const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, Math.min(gate, minuteGate(now, yesterday, this.peers, yRead.lastByComputer)))
@@ -694,6 +701,42 @@ export class DataFolder {
       need = { system: need.system || n.system, display: need.display || n.display, reason: need.reason ?? n.reason }
     }
     return need
+  }
+
+  /**
+   * What the widget is made from now (spec „Widget”): the day of the running block (a block through 04:00 keeps its day)
+   * as this computer sees it, its energy, the activity of every computer and rd.json (the names, the care settings).
+   */
+  async widgetModel(at = this.clock.now()): Promise<{ ctx: DayContext; state: DayState; energy: EnergyState; activity: ReturnType<typeof activityOf>; rd: ReturnType<typeof rdFrom> }> {
+    const day = await this.activeDay(at)
+    const read = await this.log.readDay(day)
+    const ctx = await this.ownContext(day, read, at)
+    const state = computeDay(ctx)
+    const rd = rdFrom(await this.recordView(paths.settings))
+    return { ctx, state, energy: computeEnergy(ctx, state, { moduleOn: rd.general.modules.energy }), activity: await this.activityFor(day, read, at), rd }
+  }
+
+  /**
+   * A signal or the relative assessment from the bar (spec „Sygnały w ciągu dnia”): an anchor with the exact state before
+   * it as this computer knows it now – later corrections of earlier times never change the state after it.
+   */
+  async energySignal(s: { signal: Signal } | { pool: Pool; delta: -10 | 0 | 10 }): Promise<void> {
+    const at = this.clock.now()
+    const day = logicalDayOf(at)
+    const read = await this.log.readDay(day)
+    const ctx = await this.ownContext(day, read, at)
+    const state = computeDay(ctx)
+    const before = computeEnergy(ctx, state).now
+    const draft: EventDraft = 'signal' in s ? { day, dom: 'energy', k: 'energy.signal', at, signal: s.signal, before } : { day, dom: 'energy', k: 'energy.relative', at, pool: s.pool, delta: s.delta, before }
+    const check = parseEvent(JSON.stringify({ ...draft, id: 'x', c: this.o.computer, n: 0, t: at, l: at, v: this.rulesVersion }))
+    if (!check.ok) throw new Error(`sygnał: ${check.why}`)
+    this.append(draft)
+    await this.log.flush()
+  }
+
+  /** A Windows notification the leader showed (its stable id in the day's log: shown once, also after a restart). */
+  markNotice(day: string, notice: string, at = this.clock.now()): void {
+    this.append({ day, dom: 'meta', k: 'notice.shown', at, notice })
   }
 
   /** The timer of a day as this computer sees it now (for the bar of the main process and the tests). */

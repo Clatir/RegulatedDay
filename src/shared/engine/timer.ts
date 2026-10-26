@@ -73,6 +73,18 @@ export type TimerAction =
   | { a: 'confirm'; block: string }
   /** „Cofnij” of an automatic action (spec: it writes an event „korekta”; the boundary's own approval opens it again). */
   | { a: 'undo'; target: string }
+  /** „Odcinam się” and „Wracam” (spec „Odcinam się”). */
+  | { a: 'cutOff' }
+  | { a: 'back' }
+  /** „Mniej pytań” and „Jest lepiej” (spec „Cisza”). */
+  | { a: 'fewer' }
+  | { a: 'better' }
+  /** „Wypite” (spec „Woda”). */
+  | { a: 'drink' }
+  /** „Zacznij jeszcze raz” of a session ended before its planned end (D207). */
+  | { a: 'restart'; block: string }
+  /** An answer to a proposal of the bar (the break, the solitude): recorded, so it is shown once. */
+  | { a: 'mark'; question: string; answer: string }
 
 /** The cost a first click shows (spec: „przedłużenie · −40 min puli”, „pora snu +40 min”, „przekroczenie”). */
 export interface ActionCost {
@@ -417,6 +429,41 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       // second time that day); the approval leaves the list.
       if (a.k === 'boundary.approve') return yes([{ k: 'undo', at, target: a.id, reason: 'user' }, { k: 'boundary.undo', at }])
       return yes([{ k: 'undo', at, target: a.id, reason: 'user' }])
+    }
+    case 'cutOff': {
+      if (state.facts.disconnect.some((d) => d.to === OPEN)) return no('„Odcinam się” już trwa')
+      // A flexible block in the foreground pauses (after „Wracam” it waits as „Wznów · Zaparkuj”); a running block waiting
+      // for „Zacznij” (a session, the second shift, a weekly analysis) ends at the click (D206). Nothing is parked.
+      const events: TimerDraft[] = [{ k: 'disconnect.start', at }]
+      for (const tb of [t.fg, ...t.bg]) {
+        if (!tb) continue
+        if (tb.info.waits) events.push({ k: 'block.end', block: tb.info.id, at, done: null, rule: 'disconnect', autoRule: 'disconnect' })
+        else if (tb === t.fg && !isFixedLike(tb.info)) events.push({ k: 'block.pause', block: tb.info.id, at, autoRule: 'disconnect' })
+      }
+      return yes(events)
+    }
+    case 'back':
+      if (!state.facts.disconnect.some((d) => d.to === OPEN)) return no('„Odcinam się” nie trwa')
+      return yes([{ k: 'disconnect.end', at }])
+    case 'fewer':
+      return yes([{ k: 'fewer.start', at }])
+    case 'better':
+      return yes([{ k: 'fewer.end', at }])
+    case 'drink':
+      return yes([{ k: 'water.drink', at }])
+    case 'mark':
+      if (state.facts.answers.has(act.question)) return no('już odpowiedziane')
+      return yes([{ k: 'question.answer', at, question: act.question, answer: act.answer, value: null }])
+    case 'restart': {
+      const info = byId.get(act.block)
+      const f = state.facts.blocks.get(act.block)
+      if (!info || !f || f.endedAt == null) return no('ten blok się nie skończył')
+      const span = plannedSpan(info, byId)
+      if (!info.waits || !span || m >= span.end) return no('po planowanym końcu blok nie zaczyna się jeszcze raz')
+      const events: TimerDraft[] = []
+      if (t.fg && !isFixedLike(t.fg.info) && !info.bg) events.push({ k: 'block.pause', block: t.fg.info.id, at })
+      events.push({ k: 'block.restart', block: info.id, at })
+      return yes(events)
     }
   }
 }

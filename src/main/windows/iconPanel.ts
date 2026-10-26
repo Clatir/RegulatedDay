@@ -22,6 +22,8 @@ export interface PanelDeps {
   helperRunning: () => boolean
   /** Out of recordings and screen sharing (this computer's setting, on by default). */
   hideFromCapture: () => boolean
+  /** „Zawsze na wierzchu” with the panel (D291): it stays on top until you close it (no closing by the foreground or 60 s). */
+  stayOnTop?: () => boolean
   log: (msg: string) => void
 }
 
@@ -126,7 +128,9 @@ export class IconPanel {
     this.unfolded = false
     this.win.webContents.send('rd:panelTarget', target)
     // Opened by your click: shown on top with the focus (an exception of D229); Windows may refuse the focus after a
-    // notification's click – the panel is there anyway, and the foreground's change still closes it.
+    // notification's click – the panel is there anyway, and the foreground's change still closes it. With „Zawsze na
+    // wierzchu” for the panel (D291) it stays on top until you close it.
+    this.win.setAlwaysOnTop(this.d.stayOnTop?.() === true)
     this.win.show()
     this.win.focus()
     this.armIdle()
@@ -144,7 +148,7 @@ export class IconPanel {
 
   /** The window in the foreground changed (the helper's event). */
   foreground(hwnd: string, shell: boolean): void {
-    if (!this.isOpen || hwnd === this.hwnd || shell) return
+    if (!this.isOpen || hwnd === this.hwnd || shell || this.d.stayOnTop?.() === true) return
     if (Date.now() - this.openedAt <= PANEL_GRACE_MS) return
     this.close('zmiana okna na pierwszym planie')
   }
@@ -169,7 +173,7 @@ export class IconPanel {
       const c = screen.getCursorScreenPoint()
       const b = this.win.getBounds()
       const inside = c.x >= b.x && c.x < b.x + b.width && c.y >= b.y && c.y < b.y + b.height
-      if (inside || this.unfolded) {
+      if (inside || this.unfolded || this.d.stayOnTop?.() === true) {
         this.touchedAt = Date.now()
         return
       }

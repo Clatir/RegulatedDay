@@ -33,7 +33,24 @@ export interface MachinePrefs {
   stationaryClasses: boolean
   /** An extra place for backups outside OneDrive: this computer copies the newest backup there (spec „Kopie zapasowe”). */
   backupDir: string | null
+  /** „Zawsze na wierzchu” (D291): off (D229), the desktop bar, or the desktop bar and the icon's panel. */
+  onTop: OnTop
+  /** The session mode and the class mode on this computer (off: the widget behaves as usual then). */
+  sessionMode: boolean
+  classMode: boolean
+  /** Windows notifications by event (spec „Powiadomienia i dźwięki”, D230: these on by default). */
+  notices: Record<NoticeKind, boolean>
+  /** The bar's quiet tones at 5 and 0 min (off by default), with their own volume (0.1–1). */
+  sound: boolean
+  soundVolume: number
 }
+
+export type OnTop = 'off' | 'bar' | 'barPanel'
+export const ON_TOP: readonly OnTop[] = ['off', 'bar', 'barPanel']
+
+/** The notifications on by default (D230): 5 min before a block waiting for „Zacznij”, classes and the commute; the hard end; the reserve. */
+export type NoticeKind = 'start5' | 'hardEnd' | 'reserve'
+export const NOTICE_KINDS: readonly NoticeKind[] = ['start5', 'hardEnd', 'reserve']
 
 export const ZOOM_STEPS = [0.9, 1, 1.1, 1.25, 1.5] as const
 export const BRIGHTNESS_STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1] as const
@@ -47,7 +64,13 @@ export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   barPlacement: null,
   filters: {},
   stationaryClasses: false,
-  backupDir: null
+  backupDir: null,
+  onTop: 'off',
+  sessionMode: true,
+  classMode: true,
+  notices: { start5: true, hardEnd: true, reserve: true },
+  sound: false,
+  soundVolume: 0.4
 }
 
 const num = (v: unknown, min: number, max: number, fallback: number): number =>
@@ -86,7 +109,13 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
     barPlacement: placementFrom(r.barPlacement),
     filters: filtersFrom(r.filters),
     stationaryClasses: bool(r.stationaryClasses, DEFAULT_MACHINE_PREFS.stationaryClasses),
-    backupDir: typeof r.backupDir === 'string' && r.backupDir.trim() ? r.backupDir.slice(0, 1000) : null
+    backupDir: typeof r.backupDir === 'string' && r.backupDir.trim() ? r.backupDir.slice(0, 1000) : null,
+    onTop: ON_TOP.includes(r.onTop as OnTop) ? (r.onTop as OnTop) : DEFAULT_MACHINE_PREFS.onTop,
+    sessionMode: bool(r.sessionMode, DEFAULT_MACHINE_PREFS.sessionMode),
+    classMode: bool(r.classMode, DEFAULT_MACHINE_PREFS.classMode),
+    notices: Object.fromEntries(NOTICE_KINDS.map((k) => [k, bool((r.notices as Record<string, unknown> | undefined)?.[k], DEFAULT_MACHINE_PREFS.notices[k])])) as Record<NoticeKind, boolean>,
+    sound: bool(r.sound, DEFAULT_MACHINE_PREFS.sound),
+    soundVolume: num(r.soundVolume, 0.1, 1, DEFAULT_MACHINE_PREFS.soundVolume)
   }
 }
 

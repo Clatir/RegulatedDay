@@ -10,7 +10,6 @@ import { navigate, PAGES, useUi, type Page } from '../store/ui'
 import { useWidget } from '../store/widget'
 import { commitActiveField } from '../lib/commit'
 import { Bar } from '../widget/Bar'
-import { TimerBar } from '../features/timer/TimerBar'
 import { Toasts } from '../components/Toasts'
 import { EmptyState, cx } from '../components/ui'
 import { SettingsPage } from '../features/settings/SettingsPage'
@@ -152,8 +151,8 @@ export function App() {
   return (
     // Below 1024×700 (a small work area, the scale 150 %) the whole window scrolls vertically.
     <div className="flex h-full min-h-[460px] flex-col overflow-y-auto" data-testid="main-window">
-      {/* The timer's bar once the folder is open (E4a); the trial's bar on its page and without a folder (E4b joins them). */}
-      <Header>{status === 'open' && !wizard && page !== 'trial' ? <TimerBar /> : view && <Bar view={view} mode="main" grows="down" />}</Header>
+      {/* The same bar as in the icon's panel and on the desktop bar (the engine's view, the trial's without a folder). */}
+      <Header>{view && <Bar view={view} mode="main" grows="down" />}</Header>
       <Banners />
       <QuestionsBanner />
       <ProblemsBanner />

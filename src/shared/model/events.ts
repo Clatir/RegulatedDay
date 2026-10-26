@@ -124,6 +124,15 @@ export type TimerEvent =
   | (EventBase & { k: 'question.seen'; at: number; question: string; how: 'panel' | 'main' | 'notification' | 'bar' })
   /** An answer that is no action of the timer („Przerwa” of „Koniec pracy?”, an absence …), with a value when it has one. */
   | (EventBase & { k: 'question.answer'; at: number; question: string; answer: string; value?: number | null })
+  /** „Zacznij jeszcze raz” (D207): another stretch of a session (or a weekly analysis) that ended before its planned end. */
+  | (EventBase & { k: 'block.restart'; block: string; at: number })
+  /** „Mniej pytań” (spec „Cisza”): a state of the day on every computer, until „Jest lepiej” (or 04:00). */
+  | (EventBase & { k: 'fewer.start'; at: number })
+  | (EventBase & { k: 'fewer.end'; at: number })
+  /** „Wypite” (spec „Woda”). */
+  | (EventBase & { k: 'water.drink'; at: number })
+  /** A Windows notification shown by the leader (spec: its stable id in the day's log – shown once, also after a restart). */
+  | (EventBase & { k: 'notice.shown'; at: number; notice: string })
 
 export type PresenceEvent =
   | (EventBase & { k: 'presence.first'; at: number })
@@ -205,6 +214,11 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   undo: { at: isNum, target: isStr },
   'question.seen': { at: isNum, question: isStr, how: (v) => v === 'panel' || v === 'main' || v === 'notification' || v === 'bar' },
   'question.answer': { at: isNum, question: isStr, answer: isStr, value: (v) => v == null || isNum(v) },
+  'block.restart': { block: isStr, at: isNum },
+  'fewer.start': { at: isNum },
+  'fewer.end': { at: isNum },
+  'water.drink': { at: isNum },
+  'notice.shown': { at: isNum, notice: isStr },
   'presence.first': { at: isNum },
   'gap.open': { gap: isStr, kind: (v) => v === 'input' || v === 'use', from: isNum },
   'gap.close': { gap: isStr, to: isNum },

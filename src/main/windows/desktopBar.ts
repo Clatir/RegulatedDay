@@ -4,10 +4,11 @@
  * lays it right above the desktop (Progman / WorkerW) before it is shown and keeps checking the order of the windows;
  * without its confirmation the bar stays hidden.
  *
- * The app changes this window through one function only – `apply` – which knows showInactive, hide, setBounds and
- * setContentProtection. Nothing here ever calls focus, blur, setFocusable, moveTop, moveAbove, show, restore,
- * setAlwaysOnTop or setParentWindow: each of them raises the window or activates another (scripts/check-code.mjs checks
- * this file). It is never destroyed, only hidden.
+ * The app changes this window through one function only – `apply` – which knows showInactive, hide, setBounds,
+ * setContentProtection and – only for „Zawsze na wierzchu” you choose on this computer (D291) – setAlwaysOnTop with
+ * that choice. Nothing here ever calls focus, blur, setFocusable, moveTop, moveAbove, show, restore or setParentWindow:
+ * each of them raises the window or activates another (scripts/check-code.mjs checks this file). It is never destroyed,
+ * only hidden.
  */
 import { BrowserWindow } from 'electron'
 import type { Rect } from '@shared/bounds'
@@ -17,12 +18,18 @@ export interface BarApply {
   visible?: boolean
   bounds?: Rect
   contentProtection?: boolean
+  /**
+   * „Zawsze na wierzchu” chosen on this computer (D291, changes D229): the bar above the other windows – still without
+   * activation, still never focused; off – under them again (the helper lays it before it shows).
+   */
+  onTop?: boolean
 }
 
 export class DesktopBar {
   private readonly win: BrowserWindow
   private visible = false
   private bounds: Rect | null = null
+  private top = false
 
   constructor(preload: string, load: (win: BrowserWindow) => Promise<void>) {
     this.win = new BrowserWindow({
@@ -106,6 +113,11 @@ export class DesktopBar {
   apply(change: BarApply): void {
     if (this.win.isDestroyed()) return
     if (change.contentProtection !== undefined) this.win.setContentProtection(change.contentProtection)
+    // Only by your choice (D291), and only here: the one place that may raise the bar.
+    if (change.onTop !== undefined && change.onTop !== this.top) {
+      this.win.setAlwaysOnTop(change.onTop, 'floating')
+      this.top = change.onTop
+    }
     if (change.bounds) {
       const b = change.bounds
       const same = this.bounds && this.bounds.x === b.x && this.bounds.y === b.y && this.bounds.width === b.width && this.bounds.height === b.height
