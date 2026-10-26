@@ -1,0 +1,23 @@
+<!-- CI on Linux only (scripts/build-helper.mjs with RD_HELPER_ROSLYN=1): Roslyn, C# 5, against the reference assemblies of
+     .NET Framework 4.7.2 – the Windows build uses csc.exe of .NET Framework. -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>5</LangVersion>
+    <AssemblyName>rd-guard</AssemblyName>
+    <RootNamespace>RegulatedDay</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="src/Common/*.cs" />
+    <Compile Include="src/Owner/*.cs" />
+    <Compile Include="src/Guard/*.cs" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

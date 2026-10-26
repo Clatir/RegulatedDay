@@ -33,7 +33,35 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
 - Szkielet bierzemy z `Clatir/FinancialIntel` (lokalnie `C:\CC-Projekty\FinancialIntel`, **tylko odczyt**):
   kopiuj + dostosuj, na początku pliku `// adapted from FI <ścieżka> @ <hash>`. Nic nie zapisuj w repozytorium FI.
 
+## Stos i architektura
+- Electron 44, React 19, TypeScript (strict), electron-vite, Tailwind 4; zod, zustand, luxon. Wersje przypięte (T391).
+  Node 24.21.0 z `.tools\` (T388) – w sesji: `$env:Path = "C:\CC-Projekty\RegulatedDay\.tools\node-v24.21.0-win-x64;$env:Path"`.
+- `src/main/start.ts` ustala tożsamość (produkcyjna / deweloperska / testowa) i dopiero ładuje `index.ts`; start
+  importuje tylko electron i Node (sprawdza `scripts/check-code.mjs`).
+- `src/shared` – czyste funkcje (formaty, motyw, widget, pozycje okien, aktualizacje, plik zadania); `src/main` – okna,
+  zasobnik, pomocnik, aktualizacje, awarie; `src/preload` – `window.rd`; `src/renderer` – okno główne, panel, pasek.
+- **Pomocnik, strażnik i pomocnik instalacji: C# 5** (`helper/`, csc.exe z .NET Framework; w CI na Linuksie Roslyn
+  z `-langversion:5` przeciw 4.7.2): bez interpolacji, `?.`, `nameof`, krotek i `out var`. Reguły: `.claude/rules/aktualizacje.md`.
+- Pasek pulpitu zmienia tylko `DesktopBar.apply` (showInactive, hide, setBounds, setContentProtection) – D229.
+
+## Komendy
+```
+npm ci
+npm run dev                # tryb deweloperski (tożsamość „Regulated Day Dev”)
+npm run typecheck
+npx vitest run tests/unit/<plik>.test.ts --reporter=dot   # w trakcie zmiany – tylko powiązany plik
+npm test                   # unit
+npm run build && npm run lint   # out/ i sprawdzenia kodu (start, pasek, powiadomienia)
+npx playwright test        # E2E (po build; z atrapą pomocnika); Linux: xvfb-run -a
+npm run build:helper       # build/helper/*.exe (csc.exe)
+npm run dist:win           # release/ – instalator i manifest
+build-windows.cmd          # jednym plikiem, bez wymagań co do Node
+node scripts/check-context.mjs  # limity CLAUDE.md, postep.md, decyzje.md, reguł
+```
+
 ## Testy
 - Każdy przykład ze specyfikacji jest testem. Wolne zegary, brak stałych opóźnień (czekanie na warunek).
 - Ciche reportery (`--reporter=dot`); w trakcie pracy tylko powiązany plik, pełny zestaw raz przed commitem.
 - Każda poprawka ma test, który na starym kodzie nie przechodzi.
+- Kolejność okien, powłokę, OneDrive i powiadomienia sprawdza tylko CI na Windows (lokalne narzędzia działają poza
+  pulpitem). Instalacja i aktualizacje: `tests/update` (tylko CI – instalują aplikację).

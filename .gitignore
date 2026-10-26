@@ -1,9 +1,14 @@
 # Zależności i build
 node_modules/
+out/
 dist/
 build/
 bin/
 obj/
+release/
+release-next/
+*.tsbuildinfo
+.tools/
 .venv/
 __pycache__/
 

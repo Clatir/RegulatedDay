@@ -1,0 +1,215 @@
+# adapted from FI .github/workflows/ci.yml @ e2cd030
+name: CI
+
+on:
+  # Branches are tested through their pull request (one run per change, not two); main also at the push (publishing).
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Testy (Linux, Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.12.0 = exact minimum (first 22.x with require() of ES modules by default), 24 = the pinned LTS, 26 = next.
+        node: ['22.12.0', '24', '26']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Code checks catch their cases
+        run: node scripts/check-code.mjs --self-test
+      - run: npm test
+      - run: npm run build
+      # The built start.js requires only electron and Node (T381); the bar and the windows' rules.
+      - run: npm run lint
+      - name: CHANGELOG.md has a section for this version
+        run: node scripts/release-notes.mjs > /dev/null
+      - name: Claude Code context files within limits
+        run: node scripts/check-context.mjs
+
+  helper:
+    name: Pomocnik C# 5 (Roslyn, .NET Framework 4.7.2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+      # The same sources the Windows build compiles with csc.exe: C# 5 only, and only the API of 4.7.2 (LTSC 2019).
+      - run: node scripts/build-helper.mjs
+        env:
+          RD_HELPER_ROSLYN: '1'
+
+  e2e:
+    name: E2E (Linux, Xvfb)
+    runs-on: ubuntu-latest
+    env:
+      # An empty folder of settings: the development identity's data never touches a real profile.
+      XDG_CONFIG_HOME: ${{ github.workspace }}/.xdg-config
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install-deps chromium
+      - run: npm run build
+      - run: mkdir -p "$XDG_CONFIG_HOME"
+      - run: xvfb-run -a npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        continue-on-error: true
+        with:
+          name: e2e-zrzuty-linux
+          path: test-results/
+          retention-days: 3
+
+  node-gate:
+    name: Blokada zbyt starego Node (22.11)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.11.0'
+      - name: npm ci stops with instructions
+        run: |
+          if npm ci > npm-ci.log 2>&1; then cat npm-ci.log; echo "npm ci should fail on Node 22.11"; exit 1; fi
+          grep -q "jest za stary" npm-ci.log
+
+  # Windows: pull requests, the default branch (releases) and by hand – a plain push to a working branch runs the Linux
+  # jobs only (its pull request runs the whole CI anyway).
+  windows:
+    name: Windows (instalator, pomocnik, E2E, aktualizacje)
+    needs: [test, helper, e2e, node-gate]
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      # An outdated system Node.js (like on the user's PC): build-windows.cmd must not depend on it.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20.12.0'
+          cache: npm
+      # The one-click build: pinned Node.js from .node-version into .tools\, npm ci, tests on real NTFS, csc.exe for the
+      # helper, the installer and its manifest.
+      - name: build-windows.cmd
+        shell: cmd
+        run: build-windows.cmd
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+      # The helper and the update paths run with the Polish culture and the Central European zone (spec „Testy”).
+      - name: Strefa i kultura jak u użytkownika
+        shell: pwsh
+        run: |
+          tzutil /s "Central European Standard Time"
+          Set-Culture pl-PL
+          Get-TimeZone | Select-Object Id
+          Get-Culture | Select-Object Name
+      - name: Samotest pomocnika
+        if: ${{ !cancelled() }}
+        run: npx playwright test -c playwright.update.config.ts tests/update/helper.spec.ts
+        env:
+          RD_REPORT: helper
+      - name: E2E spakowanej aplikacji z prawdziwym pomocnikiem
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $env:RD_E2E_EXECUTABLE = (Resolve-Path 'release\win-unpacked\Regulated Day.exe').Path
+          $env:RD_E2E_REAL_HELPER = '1'
+          npx playwright test
+      - name: Instalacja, tożsamości i deinstalacja
+        if: ${{ !cancelled() }}
+        timeout-minutes: 45
+        run: npx playwright test -c playwright.update.config.ts tests/update/install.spec.ts
+        env:
+          RD_REPORT: install
+      # The next patch version built like a future release (release-next\): the four update paths go N → N+1.
+      - name: Następna wersja do testu aktualizacji
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $next = node scripts/next-version.mjs
+          npx electron-builder --win --x64 --publish never '-c.directories.output=release-next'
+          $code = $LASTEXITCODE
+          git checkout -- package.json
+          if ($code -ne 0) { exit $code }
+          "RD_UPDATE_TO_VERSION=$next" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # Limits per step: a broken round ends in hours, not at the job's 6 h, and the steps after it still run.
+      - name: Cztery ścieżki aktualizacji i ścieżka FI
+        if: ${{ !cancelled() }}
+        timeout-minutes: 75
+        run: npx playwright test -c playwright.update.config.ts tests/update/update-paths.spec.ts
+        env:
+          RD_REPORT: paths
+          RD_UPDATE_FROM: ${{ github.workspace }}\release
+          RD_UPDATE_TO: ${{ github.workspace }}\release-next
+      - name: Scenariusze instalacji (strażnicy, wyjątki, odłożono, blokady, zrzuty)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 150
+        run: npx playwright test -c playwright.update.config.ts tests/update/scenarios.spec.ts
+        env:
+          RD_REPORT: scenarios
+          RD_UPDATE_FROM: ${{ github.workspace }}\release
+          RD_UPDATE_TO: ${{ github.workspace }}\release-next
+      - name: Dziennik niestabilnych testów
+        if: always()
+        run: node scripts/flaky.mjs test-results/e2e-report.json test-results/update-helper-report.json test-results/update-install-report.json test-results/update-paths-report.json test-results/update-scenarios-report.json
+      # Every new version on the default branch becomes a GitHub release – the app updates itself from it. Bump
+      # "version" in package.json and add a CHANGELOG.md section to release.
+      - name: Publish v<version> (once per version)
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if gh release view "v$version" > /dev/null 2>&1; then
+            echo "v$version is already published – bump the version in package.json to release a new one."
+            exit 0
+          fi
+          last=$(gh release view --json tagName -q .tagName 2>/dev/null | sed 's/^v//' || true)
+          node scripts/release-notes.mjs "$version" ${last:+--since "$last"} > notes.md
+          mkdir -p dist
+          cp release/Regulated-Day-Setup.exe release/Regulated-Day-manifest.json dist/
+          (cd dist && sha256sum Regulated-Day-Setup.exe Regulated-Day-manifest.json > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          gh release create "v$version" --target "$GITHUB_SHA" --title "Regulated Day $version" --notes-file notes.md \
+            dist/Regulated-Day-Setup.exe dist/Regulated-Day-manifest.json dist/SHA256SUMS.txt
+      # A build of a pull request to try out before merging.
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: Regulated-Day-windows-${{ github.sha }}
+          path: |
+            release/Regulated-Day-Setup.exe
+            release/Regulated-Day-manifest.json
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        continue-on-error: true
+        with:
+          name: e2e-zrzuty-windows
+          path: test-results/
+          retention-days: 3

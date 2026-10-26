@@ -290,6 +290,13 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D281 | Po projekcie czas do wyjaśnienia kończy dopiero przerwa od 30 min; krótsza przerwa jest odpoczynkiem, a czas do wyjaśnienia trwa po niej dalej (zmienia D250 dla projektów) |
 | D282 | Start E0: repozytorium Clatir/RegulatedDay zakładam sam, jeśli mam uprawnienia |
 | D283 | Kanał beta zostaje poza zakresem 1.0; „tożsamość testowa” służy wyłącznie testom w CI (25.10.2026) |
+| D284 | E0 w całości, bez podziału na części: jeden PR, jedno wydanie i jedna pauza na końcu etapu (25.10.2026) |
+| D285 | PR-y scala Claude, gdy CI na Linuksie i Windows jest zielone, nie ma konfliktu ani otwartych uwag i nic nie czeka na Twoją decyzję; po scaleniu sprawdza, że zadanie Windows opublikowało wydanie (25.10.2026) |
+| D286 | Próba widgetu w wersjach 0.x: ekran „Próba” w oknie głównym i „Próba ▸” w menu zasobnika (akcje i powiadomienie za 10 s, bez otwierania okna); usunięte przed 1.0 (25.10.2026) |
+| D287 | Nawigacja okna głównego: menu boczne z nazwami ekranów, u góry nazwa „Regulated Day” i pasek widgetu (25.10.2026) |
+| D288 | Ikona aplikacji: sylwetka lampki biurkowej w kolorze lampki (#F2B66D) na zaokrąglonym kwadracie w kolorze tła (#211B23) (25.10.2026) |
+| D289 | Ikona przy zegarze: pełne kółko w kolorze paska, kropka w prawym górnym rogu z ciemną obwódką, kropla w prawym dolnym (25.10.2026) |
+| D290 | Instalator tworzy skrót na pulpicie i w menu Start, jak w FI (26.10.2026) |
 
 **Decyzje techniczne (T)**, zaakceptowane 21.10.2026; szczegóły są w rozdziałach powyżej
 
@@ -682,3 +689,27 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T385 | Adnotacje rejestru: D155, D165, D167, D174, D231, D243, D256, D267, D268, D271–D273, T214, T250, T359, T373, T378, T380, T381 |
 | T386 | Przegląd zmian v28: uruchomienie spakowane bez znacznika najpierw czyta plik zadania tożsamości produkcyjnej i przy trwającej instalacji kończy się w 1 s; wersja nowsza niż X kończy zadanie bez manifestu X; „Uruchom ręcznie” dopiero przy martwym instalatorze; ścieżka z FI bez wpisu strażnika; test przycisku po tytule albo „PowerShell”; tożsamość testowa bez aktualizacji; „Koniec pracy?” – „sam” to koniec w chwili odejścia bez odpowiedzi albo z odpowiedzią, która tylko nazywa nieobecność; D275 tylko po bloku pracy albo projektu, „odliczyć” wznawia też inny blok elastyczny; takie bloki poza kalibracją i trafnością; drobne sformułowania |
 | T387 | Adnotacje rejestru: D28, D165, D167, D174, D243, D249, D250, D275, D276, T214, T250, T379, T384 |
+| T388 | Node przypięty w `.node-version` na 24.21.0, jak FI; praca lokalna i `build-windows.cmd` używają Node pobranego do `.tools\` (suma SHA-256 z nodejs.org), systemowy Node nie jest zmieniany |
+| T389 | Baza kodu: FI @ de81f2b oraz późniejsze poprawki infrastruktury z FI @ e2cd030 (`scripts/check-context.mjs`, `ci.yml`, `Segmented` w `ui.tsx`); nagłówek pliku podaje hash, z którego plik faktycznie pochodzi |
+| T390 | Numeracja wydań: E0 to 0.1.0, każdy kolejny etap podbija drugą liczbę, poprawki w etapie trzecią; do 1.0 bez wydań testowych (D283) |
+| T391 | Zależności przypięte dokładnie w wersjach rozwiązanych w FI @ e2cd030; czcionki @fontsource/outfit i dm-mono 5.3.0 |
+| T392 | Data bez roku: najbliższa taka data od dziś włącznie, 29.02 najbliższego roku przestępnego; długość z kropką albo przecinkiem odrzucona z komunikatem |
+| T393 | Tożsamość: stałe i rozstrzygnięcie w `identityRules.ts`, dołączanym tylko do `start.js`; `index.ts` czyta ustaloną tożsamość z globalnej zmiennej |
+| T394 | Pomocnik: linie JSON (`cmd`/`id` → `re`; zdarzenia `type`), `alive` co 2 s, cisza 10 s = zamknięcie i ponowny start; uchwyt okna jako liczba dziesiętna; pasek: `bar.watch` / `bar.unwatch` / `bar.retry` |
+| T395 | Pasek pulpitu: pomocnik sprawdza kolejność także ukrytego okna; aplikacja pokazuje pasek dopiero po „confirmed”, każde przeliczenie położenia wysyła `bar.watch` |
+| T396 | Zamknięcie z zewnątrz ukrytego okna (taskkill instalatora) kończy aplikację w 1 s; zwykłe zamknięcie widocznego okna chowa ją do zasobnika |
+| T397 | Instalacja przy starcie Windows: aplikacja z autostartu przekazuje gotową wersję strażnikowi (`--wait-pid`, `--autostart`); koniec sesji pisze tylko zapis zamknięcia; zadanie „odłożono” wstrzymuje kolejne przekazania do wyjścia albo nocy |
+| T398 | Pobrana wersja od razu kopiowana z programami do update\<X>, więc wyjście tylko uruchamia właściciela |
+| T399 | Stan „FI”: żywy instalator najwyżej 10 min zegarowo od zapisu zadania (startująca aplikacja nie zna czasu czuwania) |
+| T400 | Manifest w `afterSign` (rcedit i podpis zmieniają exe, elevate.exe dochodzi później); `publish: null` bez app-update.yml; CHANGELOG w pakiecie do „Co nowego” |
+| T401 | Właściciel instalacji: mutex `Local\RegulatedDay.Owner.<guid>`, guard.lock jako JSON dopełniony do 200 bajtów, sygnał co 1 s tylko w terminie kroku; wpis Run „Regulated Day Guard” z `--autostart`; strażnik uruchomiony przez aplikację dostaje `--hidden` |
+| T402 | Awarie: life.json co 30 s, closing.json, closed-by-installer.json (NSIS), versions.json z 10 wersjami lokalnie (E1 przenosi do obecności); typ procesu zrzutu z adnotacji strumienia Crashpad |
+| T403 | Limit `docs/decyzje.md`: 1000 linii i 200 KB w `scripts/check-context.mjs` |
+| T404 | Odłożone do E4a (potrzebują bloków): strażnik przy logowaniu w sesji trzyma żądania zasilania i ekranu do potwierdzenia pomocnika; pomocnik kończy się po 30 tyknięciach bez stanu blokady |
+| T405 | „Uruchom mimo to”: przerywa jeden instalator (naprawa po nim biegnie do końca, przerwanie nie liczy się jako próba); naciśnięte, zanim instalator tego zadania ruszył (także w czekaniu na mutex instalatora) – obecna wersja startuje od razu, zadanie „odłożono” (instalacja przy wyjściu, w nocy albo przy logowaniu) |
+| T406 | Wyjście w trakcie startu aplikacji (przed oknami, pomocnikiem, znacznikiem życia) zatrzymuje start po każdym czekaniu; znacznik życia nie powstaje po zapisie zamknięcia |
+| T407 | Instalator: nieudana deinstalacja starej wersji (zajęty plik) kończy go kodem 2 bez okna w trybie cichym (`customUnInstallCheck` z `/SD`); przy aktualizacji znacznik `rd-installed` przenosi się z plikami i wraca z nimi – stara wersja startuje dalej jako produkcyjna |
+| T408 | Okna właściciela instalacji: naciśnięcie przycisku myszy w innym oknie kładzie je tuż pod nim (hak WH_MOUSE_LL tylko, gdy okno jest pokazane; czyta wyłącznie miejsce naciśnięcia) – Windows nie podnosi klikniętego okna, które już jest aktywne; nigdy pod paskiem zadań, pulpitem ani oknem zawsze na wierzchu |
+| T409 | Koniec sesji Windows tylko zapytany (WM_QUERYENDSESSION) i odwołany: aplikacja działa dalej jak przed nim (zamykanie z zasobnika, okno do zasobnika), po 60 s bez „session-end” znacznik życia znów bije; przy prawdziwym końcu zapis zamknięcia jeszcze raz |
+| T410 | Instalacja: aplikacja nie zaczyna drugiej, gdy właściciel trzyma guard.lock wersji X (także przy „odłożono” – start przekazany); nieudany start właściciela albo instalatora cofa stan (pobranie gotowe, sprawdzanie, znacznik życia); handover.jsonl należy do jednej próby; kopie w update\<X> przez nazwę tymczasową, programy porównywane SHA-256 |
+| T411 | „Spróbuj ponownie” po niedokończonej instalacji uruchomionej wersji instaluje jeszcze raz jej własne pobranie z update\<X> (nowszego wydania nie ma) |

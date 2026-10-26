@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["electron.vite.config.mts", "vitest.config.mts", "src/main/**/*", "src/shared/**/*", "tests/unit/**/*", "tests/fs/**/*", "scripts/**/*"]
+}
