@@ -706,3 +706,5 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T402 | Awarie: life.json co 30 s, closing.json, closed-by-installer.json (NSIS), versions.json z 10 wersjami lokalnie (E1 przenosi do obecności); typ procesu zrzutu z adnotacji strumienia Crashpad |
 | T403 | Limit `docs/decyzje.md`: 1000 linii i 200 KB w `scripts/check-context.mjs` |
 | T404 | Odłożone do E4a (potrzebują bloków): strażnik przy logowaniu w sesji trzyma żądania zasilania i ekranu do potwierdzenia pomocnika; pomocnik kończy się po 30 tyknięciach bez stanu blokady |
+| T405 | „Uruchom mimo to”: przerywa jeden instalator (naprawa po nim biegnie do końca, przerwanie nie liczy się jako próba); naciśnięte, zanim instalator tego zadania ruszył (także w czekaniu na mutex instalatora) – obecna wersja startuje od razu, zadanie „odłożono” (instalacja przy wyjściu, w nocy albo przy logowaniu) |
+| T406 | Wyjście w trakcie startu aplikacji (przed oknami, pomocnikiem, znacznikiem życia) zatrzymuje start po każdym czekaniu; znacznik życia nie powstaje po zapisie zamknięcia |

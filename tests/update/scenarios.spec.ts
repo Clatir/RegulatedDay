@@ -2,7 +2,8 @@
  * Windows CI: the scenarios of the installation (spec „Testy”, „Instalacja, aktualizacje i log”) beyond the four paths:
  * the guard's modes and 10 000 parallel writes of the task file, two guards and the app at once, exceptions of the
  * guard (once while the installer works, at every start, a failed write of its count), four logons with „odłożono” and a
- * guard dying right after it, a hung and a missing guard, X+1 installed by hand while a task for X waits, the installer
+ * guard dying right after it, „Uruchom mimo to” while the files are copied and before the installer, a hung and a
+ * missing guard, X+1 installed by hand while a task for X waits, the installer
  * run by hand (its marker within 5 s of the clock), the app opened while the install helper works, a slowed installer,
  * the installer's mutex held by the test, a file locked before the uninstall, and the crash dumps of the main process,
  * the renderer and the GPU.
@@ -221,6 +222,86 @@ test('widoczny start strażnika i wymuszony wyjątek nie zmieniają okna na pier
     expect(await readText(join(productionData(), 'logs', 'guard.log'))).toContain('nieobsłużony wyjątek właściciela')
   })
   ;(probe as ChildProcess | null)?.kill()
+})
+
+/**
+ * „Uruchom mimo to” in the guard's window, pressed by UI Automation (Invoke) as soon as `marker` disappears (null: once
+ * the button is there). One PowerShell finds the button first and then watches the file every 20 ms, so the press falls
+ * into the copying of files. Answers „invoked”, „no-window” or „no-button”.
+ */
+function pressRunAnyway(marker: string | null): Promise<string> {
+  const script = `
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$A = [System.Windows.Automation.AutomationElement]
+$scope = [System.Windows.Automation.TreeScope]
+$byName = New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, 'Regulated Day – aktualizacja')
+$win = $null
+for ($i = 0; $i -lt 900 -and -not $win; $i++) { $win = $A::RootElement.FindFirst($scope::Children, $byName); if (-not $win) { Start-Sleep -Milliseconds 200 } }
+if (-not $win) { 'no-window'; exit }
+$btn = $win.FindFirst($scope::Descendants, (New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, 'Uruchom mimo to')))
+if (-not $btn) { 'no-button'; exit }
+${marker ? `for ($i = 0; $i -lt 15000 -and (Test-Path -LiteralPath '${marker}'); $i++) { Start-Sleep -Milliseconds 20 }` : ''}
+$btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+'invoked'`
+  return new Promise((r) => {
+    const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: ['ignore', 'pipe', 'ignore'] })
+    let out = ''
+    ps.stdout.on('data', (d: Buffer) => (out += d.toString('utf8')))
+    ps.on('exit', () => r(out.trim()))
+  })
+}
+
+test('„Uruchom mimo to” w czasie kopiowania plików: instalator przerwany, pliki naprawione według manifestu, nowa wersja uruchomiona', async () => {
+  test.setTimeout(20 * 60_000)
+  await guarded('Uruchom mimo to w czasie kopiowania', async () => {
+    const dir = await install(FROM, CURRENT)
+    stage(dir)
+    scheduleTask(dir, 'logon')
+    plan(false)
+    // The installation's marker goes with the old version's uninstall and comes back after the new files are in: while
+    // it is missing, the files are being replaced. The slowed start leaves the time to find the button.
+    const pressed = pressRunAnyway(join(dir, 'resources', 'rd-installed'))
+    spawn(join(taskDir(), 'rd-guard.exe'), [], { cwd: taskDir(), detached: true, stdio: 'ignore', env: env({ RD_TEST_INSTALLER_SLEEP_MS: '8000' }) }).unref()
+    expect(await pressed).toBe('invoked')
+    await expectNext(dir)
+    await expect.poll(() => readJson<{ version: string }>(join(productionData(), 'launched.json'))?.version, { timeout: 300_000, intervals: [1000] }).toBe(NEXT)
+    const log = await readText(join(productionData(), 'logs', 'guard.log'))
+    expect(log).toContain('„Uruchom mimo to”: przerywam instalator')
+    // The repair runs to the end: a second installer, not stopped again; the stopped one is no attempt.
+    expect(count(log, /instalator wystartował/)).toBe(2)
+    expect(log).toContain(`zainstalowano ${NEXT}`)
+    await expect.poll(() => existsSync(taskFile()), { timeout: 120_000, intervals: [1000] }).toBe(false)
+    expect(runEntry('Regulated Day Guard')).toBeNull()
+  })
+})
+
+test('„Uruchom mimo to” przed instalatorem: obecna wersja startuje od razu, instalacja odłożona', async () => {
+  test.setTimeout(20 * 60_000)
+  await guarded('Uruchom mimo to przed instalatorem', async () => {
+    const dir = await install(FROM, CURRENT)
+    stage(dir)
+    scheduleTask(dir, 'logon')
+    plan(false)
+    // Another installer's mutex: the guard waits for it (up to 60 s) – the press comes before its installer starts.
+    const holder = spawn('powershell.exe', ['-NoProfile', '-Command', `$m = New-Object System.Threading.Mutex($true, 'E2A45BEE-EF15-48BC-9498-F12E5B866145'); Start-Sleep -Seconds 90; $m.ReleaseMutex()`], { stdio: 'ignore' })
+    try {
+      await sleep(3000)
+      const pressed = pressRunAnyway(null)
+      spawn(join(taskDir(), 'rd-guard.exe'), [], { cwd: taskDir(), detached: true, stdio: 'ignore', env: env() }).unref()
+      expect(await pressed).toBe('invoked')
+      await expect.poll(appRunning, { timeout: 120_000 }).toBe(true)
+      await expect.poll(() => readTaskNow()?.state, { timeout: 60_000, intervals: [500] }).toBe('postponed')
+      expect(installed()!.version).toBe(CURRENT)
+      const log = await readText(join(productionData(), 'logs', 'guard.log'))
+      expect(log).toContain('„Uruchom mimo to” przed instalatorem')
+      expect(count(log, /instalator wystartował/)).toBe(0)
+      // „odłożono”: the guard's entry stays for the next logon.
+      expect(runEntry('Regulated Day Guard')).not.toBeNull()
+    } finally {
+      holder.kill()
+    }
+  })
 })
 
 test('wyjątek przy każdym starcie: najpóźniej przy czwartym starcie „nieudane” i uruchomiona aplikacja', async () => {

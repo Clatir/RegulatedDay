@@ -74,6 +74,8 @@ namespace RegulatedDay
         InstallerJob job;
         bool counterWritten;
         volatile bool runAnyway;
+        /// <summary>„Uruchom mimo to” stops one installer only: the repair after it runs to the end.</summary>
+        bool runAnywayKilled;
         string userData;
 
         public Owner(string role, OwnerArgs args)
@@ -187,6 +189,7 @@ namespace RegulatedDay
                 bool repair = Task.InstallerStarted;
                 string installed = Installed(true);
                 if (installed == "yes") { AfterInstalled(); return; }
+                if (RunAnywayBeforeInstaller()) return;
                 if (!repair && !runAnyway && (Task.Trigger == "logon" || args.Autostart) && Plan.WaitAtLogon(userData))
                 {
                     Postpone();
@@ -206,6 +209,7 @@ namespace RegulatedDay
                 Ui.Progress(repair ? "Naprawiam instalację…" : "Instaluję " + Task.Version + "…", Task.Trigger == "night");
                 Step("mutex instalatora", StepLimitMs);
                 WaitInstallerMutex();
+                if (RunAnywayBeforeInstaller()) return;
                 Test("beforeInstaller");
                 Task.Set("attempts", Task.Attempts + 1);
                 Task.Set("installerStartedAt", Native.NowMs());
@@ -214,8 +218,17 @@ namespace RegulatedDay
                 Step("instalator", InstallerLimitMs);
                 long started = awake.AwakeMs;
                 long startedWall = Environment.TickCount;
+                bool killedBefore = runAnywayKilled;
                 uint code = RunInstaller();
                 long took = unchecked(Environment.TickCount - startedWall);
+                if (runAnywayKilled && !killedBefore)
+                {
+                    // Stopped by the user, not failed: no attempt; the files are checked by the manifest at the loop's top
+                    // (X whole – it starts; otherwise the repair).
+                    Task.Set("attempts", Math.Max(0, Task.Attempts - 1));
+                    Task.Save();
+                    continue;
+                }
                 // Code 2 within 5 s is no attempt only while the installer's mutex exists right then (another installer
                 // runs); the old uninstaller gives code 2 too for a busy file. Such retries for at most 10 min awake.
                 if (code == 2 && took < 5000 && InstallerMutex.Exists(Task.Guid) && awake.AwakeMs < uncountedUntil)
@@ -301,7 +314,8 @@ namespace RegulatedDay
 
         void WaitInstallerMutex()
         {
-            for (int i = 0; i < 30 && InstallerMutex.Exists(Task.Guid); i++)
+            // „Uruchom mimo to” ends the wait at once (the app starts without waiting for another installer).
+            for (int i = 0; i < 30 && InstallerMutex.Exists(Task.Guid) && !runAnyway; i++)
             {
                 Beat();
                 Thread.Sleep(2000);
@@ -320,7 +334,14 @@ namespace RegulatedDay
                 while (!job.Wait(1000))
                 {
                     if (awake.AwakeMs > throwAt) Test("duringInstaller");
-                    if (runAnyway) { Log.Info("„Uruchom mimo to”: przerywam instalator"); job.Kill(); job.Wait(10000); break; }
+                    if (runAnyway && !runAnywayKilled)
+                    {
+                        runAnywayKilled = true;
+                        Log.Info("„Uruchom mimo to”: przerywam instalator, pliki sprawdzę według manifestu");
+                        job.Kill();
+                        job.Wait(10000);
+                        break;
+                    }
                     if (awake.AwakeMs > until) { Log.Warn("instalator przerwany po 10 min czuwania"); job.Kill(); job.Wait(10000); break; }
                 }
                 return job.ExitCode;
@@ -411,6 +432,22 @@ namespace RegulatedDay
             StartAppIfComplete(Task, false);
             CleanEnd();
             Release();
+        }
+
+        /// <summary>
+        /// „Uruchom mimo to” before any installer of this task touched the files: the version there starts as it is and the
+        /// installation waits for the exit, the night or the next logon („odłożono”, T405).
+        /// </summary>
+        bool RunAnywayBeforeInstaller()
+        {
+            if (!runAnyway || runAnywayKilled || Task.InstallerStarted || !FilesComplete()) return false;
+            Log.Info("„Uruchom mimo to” przed instalatorem: uruchamiam obecną wersję, instalacja odłożona");
+            Task.Set("state", "postponed");
+            Task.Save();
+            StartAppIfComplete(Task, false);
+            CleanEnd();
+            Release();
+            return true;
         }
 
         void FailAfterAttempts()

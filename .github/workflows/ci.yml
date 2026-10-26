@@ -2,7 +2,9 @@
 name: CI
 
 on:
+  # Branches are tested through their pull request (one run per change, not two); main also at the push (publishing).
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
