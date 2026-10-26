@@ -22,7 +22,12 @@ namespace RegulatedDay
         public static TaskFile Load(string path)
         {
             string text = SharedFile.Read(path);
-            if (text == null) return null;
+            return text == null ? null : FromText(path, text);
+        }
+
+        /// <summary>The task from its text (the self-test uses it without a file).</summary>
+        public static TaskFile FromText(string path, string text)
+        {
             Dictionary<string, object> o = Json.ParseObject(text);
             if (Json.Long(o, "format", -1) != Format) throw new InvalidDataException("nieznany format pliku zadania");
             if (Json.Str(o, "version") == null || Json.Str(o, "state") == null) throw new InvalidDataException("plik zadania bez wersji albo stanu");

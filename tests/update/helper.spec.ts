@@ -2,12 +2,13 @@
  * The self-test of the real helper on Windows CI (spec „Testy”): what it reads of the session, the layout of
  * SYSTEM_POWER_CAPABILITIES (CI machines report modern standby off – only the layout can be checked), the volatile key of
  * the logon session, the attributes of files on a path with Polish letters, the power requests – with the culture pl-PL
- * and the zone „Central European Standard Time” set by the job, so a Polish format never leaks into the JSON.
+ * and the zone „Central European Standard Time” set by the job, so a Polish format never leaks into the JSON; and the
+ * guard's self-test.
  */
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, existsSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { expect, test } from '@playwright/test'
 
@@ -88,4 +89,13 @@ test('samotest pomocnika: sesja, powiadomienia, układ SYSTEM_POWER_CAPABILITIES
 
   expect(await h.quit()).toBe(0)
   expect(readFileSync(join(cwd, 'logs', 'helper.log'), 'utf8')).toContain('koniec')
+})
+
+test('samotest strażnika: kultura niezmienna, licznik ustawiony przez właściciela czytany od razu (limit 4 startów)', () => {
+  const r = spawnSync(join(dirname(HELPER), 'rd-guard.exe'), ['--selftest'], { encoding: 'utf8', windowsHide: true })
+  const s = JSON.parse(r.stdout.trim()) as Record<string, unknown>
+  expect(s.ok).toBe(true)
+  expect(s.culture).toBe('')
+  expect(s.powerCapabilities).toEqual({ size: 76, aoAcOffset: 20, batteryScaleOffset: 32, acOnLineWakeOffset: 56 })
+  expect(s.startsAfterSet).toBe(4)
 })

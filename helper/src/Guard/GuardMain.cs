@@ -167,6 +167,10 @@ namespace RegulatedDay
             r.Set("modernStandby", ms.HasValue ? (object)ms.Value : null);
             r.Set("culture", CultureInfo.CurrentCulture.Name);
             r.Set("now", Native.NowMs());
+            // A count the owner sets reads back at once: the limit of 4 starts is checked right after the write.
+            TaskFile t = TaskFile.FromText("selftest", "{\"format\": 1, \"version\": \"0.0.1\", \"state\": \"scheduled\", \"starts\": 3}");
+            t.Set("starts", t.Starts + 1);
+            r.Set("startsAfterSet", t.Starts);
             return r;
         }
     }

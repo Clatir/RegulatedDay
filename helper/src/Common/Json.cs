@@ -152,7 +152,11 @@ namespace RegulatedDay
         public static long Long(Dictionary<string, object> o, string key, long fallback)
         {
             object v;
-            if (o == null || !o.TryGetValue(key, out v) || !(v is double)) return fallback;
+            if (o == null || !o.TryGetValue(key, out v) || v == null) return fallback;
+            // Parsed numbers are double; the ones the program sets itself (a count + 1, NowMs) are long or int.
+            if (v is long) return (long)v;
+            if (v is int) return (int)v;
+            if (!(v is double)) return fallback;
             double d = (double)v;
             return d >= long.MinValue && d <= long.MaxValue ? (long)d : fallback;
         }
