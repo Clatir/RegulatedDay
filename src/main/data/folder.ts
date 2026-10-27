@@ -24,6 +24,7 @@ import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerD
 import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
 import { foldFacts, isRunning, type DayFacts } from '@shared/engine/facts'
+import { correctionEnd, freezeDecision, gradeOf, openedAtOf, WRITERS_DAYS, type FreezeComputer } from '@shared/engine/freeze'
 import { CLOSE_WINDOW_H, closeEffect, closeEvents, closeRefusal, effectBase, ritualAnswer, ritualEffect, ritualRows, unclosedDays, type DayLog, type RitualEffect, type RitualRow, type RitualValue } from '@shared/engine/ritual'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
@@ -65,6 +66,10 @@ export const JOURNAL_KEEP_DAYS = 14
 const COMPACT_EVERY_MS = 60 * 60_000
 /** Conflict copies of the records are looked for this often (and at the first check). */
 const COPY_SCAN_MS = 60_000
+/** Days back the leader looks for one to freeze (72 h after a day's end reaches four of them). */
+const FREEZE_LOOKBACK_DAYS = 5
+/** A day's files quiet this long before its freeze (spec „nie zmieniają się od 1 min po przeskanowaniu folderu”). */
+const QUIET_MS = 60_000
 
 /**
  * A block of the day runs now (started, not ended, not paused – „Cofnij” counted): one running through 04:00 keeps its
@@ -116,6 +121,8 @@ export interface FolderOptions {
   oneDriveRunning: () => boolean
   /** How the previous run of this folder ended (its life marker): an end without a close writes the observation's end. */
   previousRun?: { lastAt: number; clean: boolean } | null
+  /** The first day of the ritual: days from it are closed and frozen (null – none yet, before its screens, T482). */
+  ritualFrom?: string | null
 }
 
 export interface CheckResult {
@@ -127,6 +134,8 @@ export interface CheckResult {
   autos: number
   /** The next instant the timer has something due (ms): the scheduler's exact timer. */
   nextAt: number | null
+  /** Days the leader froze in this check. */
+  frozen: string[]
   problems: string[]
 }
 
@@ -163,6 +172,8 @@ export class DataFolder {
   private lastCopyScan = 0
   /** Conflict copies with fields different on both sides (copy → the file and the fields). */
   readonly copyConflicts = new Map<string, { canonical: string; conflicts: MergeConflict[] }>()
+  /** The files of each day a freeze waits on: what they held at the last look and since when (spec: quiet for 1 min). */
+  private readonly dayQuiet = new Map<string, { sig: string; since: number }>()
 
   private constructor(private readonly o: FolderOptions) {
     this.rulesVersion = o.rulesVersion ?? RULES_VERSION
@@ -248,6 +259,8 @@ export class DataFolder {
         this.observing = true
       }
     }
+    // The day's files must be quiet for a minute after the folder is scanned again (spec „także po wybudzeniu”).
+    this.dayQuiet.clear()
     this.settle.begin(reason, now)
   }
 
@@ -458,6 +471,7 @@ export class DataFolder {
     let segments = 0
     let autos = 0
     let nextAt: number | null = null
+    let frozen: string[] = []
     // The leader's tasks need a settled computer, a complete view of the day's logs and clocks that agree.
     if (read?.ahead) problems.push('zegar: zdarzenie innego komputera ponad 24 h przed zegarem tego komputera – działania automatyczne czekają')
     if (this.leader.iLead && settled && read?.complete && !read.ahead) {
@@ -511,6 +525,12 @@ export class DataFolder {
         } catch (e) {
           problems.push(`timer: ${String(e)}`)
         }
+        // Freezing the days whose window of corrections has ended. Apart, so a day that cannot freeze stops nothing else.
+        try {
+          frozen = await this.freezeTasks(now, settled)
+        } catch (e) {
+          problems.push(`zamrażanie: ${String(e)}`)
+        }
       } catch (e) {
         problems.push(`zadania prowadzącego: ${String(e)}`)
       }
@@ -521,7 +541,66 @@ export class DataFolder {
     }
     await this.log.flush()
     await this.presence.tick().catch((e) => problems.push(`obecność: ${String(e)}`))
-    return { leader: this.leader, settled, created, segments, autos, nextAt, problems }
+    return { leader: this.leader, settled, created, segments, autos, nextAt, frozen, problems }
+  }
+
+  /**
+   * The leader freezes the days whose window of corrections has ended (spec „Ocena dnia”), from the first day of the
+   * ritual (none before the version with its screens, T482): the grade as written up to the last event of every computer
+   * it sees, in the day's log and in this computer's file of grades (derived – the logs can make it again).
+   */
+  private async freezeTasks(now: number, settled: boolean): Promise<string[]> {
+    const from = this.o.ritualFrom
+    if (from == null) return []
+    const today = logicalDayOf(now)
+    const out: string[] = []
+    for (let i = FREEZE_LOOKBACK_DAYS; i >= 1; i--) {
+      const day = addDays(today, -i)
+      if (day < from) continue
+      const read = await this.log.readDay(day)
+      if (!read.complete || read.events.some((e) => isKnown(e) && e.k === 'day.freeze')) continue
+      const quiet = this.quietFor(day, read, await this.dayFile(day), now)
+      const openedAt = openedAtOf((await this.log.readDay(addDays(day, 1))).events)
+      if (now < correctionEnd(day, openedAt)) continue
+      const decision = freezeDecision({ date: day, now, mayFreeze: this.mayFreeze(settled), openedAt, computers: await this.writers(today, read), filesQuiet: read.copies === 0 && quiet })
+      if (!decision.freeze) continue
+      const know = { ...read.lastByComputer }
+      const grade = gradeOf(await this.dayContext(day, read, now), know)
+      this.append({ id: derivedId(day, 'freeze', this.o.computer), day, dom: 'game', k: 'day.freeze', at: now, how: decision.how, know, missing: decision.missing, grade })
+      const line = { day, at: now, v: this.rulesVersion, how: decision.how, know, missing: decision.missing, grade }
+      await this.o.fs.append(join(this.o.dataDir, paths.grades(day.slice(0, 4), this.o.computer)), `${JSON.stringify(line)}\n`)
+      out.push(day)
+    }
+    return out
+  }
+
+  /** A day's files unchanged for a minute since this computer saw them so (spec „nie zmieniają się od 1 min”). */
+  private quietFor(day: string, read: DayRead, file: DayFile | null, now: number): boolean {
+    const sig = JSON.stringify([read.lastByComputer, read.events.length, file])
+    const was = this.dayQuiet.get(day)
+    if (!was || was.sig !== sig) {
+      this.dayQuiet.set(day, { sig, since: now })
+      return false
+    }
+    return now - was.since >= QUIET_MS
+  }
+
+  /** The leader, settled, with rules not older than the newest without a crash seen in the presences (spec, D163). */
+  private mayFreeze(settled: boolean): boolean {
+    if (!this.leader.iLead || !settled) return false
+    const versions = [{ v: this.rulesVersion, crashed: this.ownVersionCrashed }, ...this.peers.map((p) => ({ v: p.presence.rulesVersion, crashed: p.crashed }))]
+    const sane = versions.filter((x) => !x.crashed)
+    return this.rulesVersion >= Math.max(...(sane.length ? sane : versions).map((x) => x.v))
+  }
+
+  /** The computers that wrote to the folder in the last 7 days, with their presence and the day's last visible event. */
+  private async writers(today: string, read: DayRead): Promise<FreezeComputer[]> {
+    const ids = new Set(Object.keys(read.lastByComputer))
+    for (let i = 0; i <= WRITERS_DAYS; i++) {
+      const r = await this.log.readDay(addDays(today, -i)).catch(() => null)
+      for (const c of Object.keys(r?.lastByComputer ?? {})) ids.add(c)
+    }
+    return [...ids].map((id) => ({ id, self: id === this.o.computer, presence: this.peers.find((p) => p.presence.computer === id)?.presence ?? null, visibleLast: read.lastByComputer[id] ?? -1 }))
   }
 
   /** The leader's automatic actions of one day up to the gate, and the day's next deadline. */
