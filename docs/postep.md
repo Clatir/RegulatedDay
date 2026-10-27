@@ -24,9 +24,9 @@
   `check` 107 ms na `main` po PR #16): PR #17, 31f36bb, 27.10 ok. 21:32; CI PR zielone za pierwszym razem, także
   Windows; bez nowej wersji (CI na `main` przy wydanej 0.10.1 nic nie publikuje). Osobno: przed ekranami gry (`GAME_FROM`) `gameState` przyspieszyć albo liczyć raz na zmianę plików
   ocen (T492).
-- Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
-  (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
-  do folderu z `.moved.json`.
+- Na ekrany E6 rozstrzygnięte 27.10 (D318–D321): rytuał z karty w „Dziś” i pasku, wiersze po godzinach, odczuwany
+  koszt kategorii, rytuał od dnia instalacji, „Dane” w Ustawieniach z banerem przeniesienia folderu; czasy sesji
+  „było” z zapisanego wejścia – praca 0.2.
 - Rejestr decyzji w dwóch plikach (D308): `docs/decyzje.md` – D (54,7 / 200 KB), `docs/decyzje-techniczne.md` – T
   (146,1 / 200 KB); zastąpione w całości (31) w `docs/archiwum/decyzje-zastapione.md`. D188 cofnięta przez T303, ale
   cytowana w D150 i specyfikacji – zostaje w rejestrze.
@@ -46,21 +46,28 @@
   28.10 po 12:00; `main.log` – „kreator zakończony” 27.10 (E3.1), aktualizacje 0.7.0→0.10.1 czyste (E6b.1–E7b.1;
   0.2.0–0.6.0 przeskoczone, więc E5.1 i E6a.1 tylko „dane całe”).
 
-## Kolejka
-1. Ty: odbiór według `docs/odbior.md` (sekcja „Do odebrania”, 44 punkty; zwięzła lista w rozmowie 27.10); przed
-   elementami E5 – E4b.1–E4b.8 i E4b.10 (D310, D315). 27.10 odebrane E3.2, E3.6, E3.8, E3.11, E4a.12, E4b.9,
-   E4b.11, E4b.13, E4b.14.
-2. Elementy E5 w pasku według D311–D313 razem z poprawką E4b.12 (przyczyna na prawdziwej myszy – test w CI na
-   Windows z wejściem myszy systemu, który na 0.10.1 pada) i zestawem „cieplejsze” (D314) – jeden PR, jedno wydanie
-   (D315). Pytania „Przed etapem” o E5 zadane 27.10 (Opus 5.5 · xhigh, nic do przygotowania).
-3. Ekrany E6 (rytuał, niezamknięte dni, eksport, przywracanie) i ekrany gry E7 (z akceptacją listy pokoju i progów)
-   – z pytaniami o wygląd, każdy po „Przed etapem” (D309).
-4. Potem E8 w całości (stabilizacja, bramka 1.0) z jednym przeglądem wieloagentowym logiki i ekranów (D309).
+## Kolejka (według `docs/plan.md`, D317)
+1. **Ciąg A (w toku od 27.10 ok. 23:30):** praca 0 na gałęzi `claude/praca-0` – T492 (`gameState` raz na zmianę
+   plików ocen), czasy sesji „było” z wejścia, baner D316, plan i decyzje; PR bez osobnego wydania. Potem gałąź
+   0.11.0: E4b.12 (test w CI z wejściem myszy systemu, który na 0.10.1 pada) i „cieplejsze” (D314) – bez scalania.
+2. Ty: odbiór według `docs/odbior.md` (44 punkty); brama dla ciągu B – E4b.1–E4b.8 i E4b.10 (D310, D315).
+3. **Ciąg B → C → D jednym ciągiem (D317):** elementy E5 w pasku (D311–D313) → wydanie 0.11.0; ekrany E6 (D318–D321);
+   ekrany gry (D322). Pytania o wygląd zadane z góry 27.10 – w ciągu bez „Przed etapem” i bez pauz między PR-ami.
+4. Ciąg E: E8 (przegląd wieloagentowy na Twoją komendę, poprawki, bramka 1.0).
 
 ## Do odbioru na Windows
 - `docs/odbior.md` (układ z 27.10): na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
+
+## Przed ciągiem A i pytania na ciągi C, D (27.10.2026, ok. 23:00)
+- Plan z szacunkiem, rodzajem pracy i ciągami (prośba z 27.10) → `docs/plan.md`; stary plan → archiwum. Model każdej
+  pozycji Opus 5.5 · xhigh (D317).
+- Odpowiedzi: D316 (baner przy każdym starcie), D317 (praca 0, ciągi, B → C → D bez pauz), D318 (rytuał: karta
+  i pasek, lista po godzinach, „Popraw” rano), D319 (odczuwany koszt kategorii), D320 (rytuał od dnia instalacji),
+  D321 („Dane” w Ustawieniach, baner przeniesienia), D322 (pokój ×1,5, ilustracja, nagłówek „Dziś”, nakładka,
+  kasety, „Strona B” w tabeli).
+- Do przygotowania: nic – odbiór E4b w swoim tempie.
 
 ## Test skali – najlepsza z 3 rund (T499)
 - Prośba z 27.10 po wydaniu 0.10.1. Gałąź `claude/test-skali` od e598537 (ok. 20:00).
@@ -146,6 +153,3 @@
 ## Pytania na później
 - Przed E4a: punkt 15 listy E0 niesprawdzony – czy OBS nagrywa przy wygaszonym ekranie (Próba → „Bez usypiania
   systemu”); od tego zależy, czy komputer nagrywający trzyma ekran przez cały wykład (D184, „Ekran świeci”).
-- Baner „Aktualizacja do X nie dokończyła się” dla uruchomionej wersji X (ścieżka FI, pliki niezgodne) pokazuje się
-  tylko przy pierwszym starcie – czy ma wracać przy każdym, aż „Spróbuj ponownie” (T411) naprawi instalację?
-  Rekomendacja: tak, jak baner „nie udała się” dla starszej wersji.
