@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { rdFrom } from '@shared/model/rd'
-import { WorkerHost, type WorkerChild } from '../../src/main/worker/host'
+import { TASK_TIMEOUT_MS, WorkerHost, type WorkerChild } from '../../src/main/worker/host'
 import { runTask } from '../../src/main/worker/tasks'
 import { block, Scenario } from './engine/dsl'
 
@@ -62,6 +62,32 @@ describe('proces pomocniczy', () => {
     await expect(host.run({ kind: 'ping' })).rejects.toThrow('limit czasu')
     expect(children[0]!.killed()).toBe(true)
     expect(await host.run({ kind: 'ping' })).toBe('ok')
+  })
+
+  it('zadanie, którego nie da się wysłać, jest odrzucone od razu – bez zegara, który potem zabiłby zdrowy proces', async () => {
+    const lines: string[] = []
+    const child = fakeChild(() => undefined)
+    child.postMessage = () => {
+      throw new Error('DataCloneError')
+    }
+    const host = new WorkerHost({ fork: () => child, log: (_l, m) => lines.push(m), timeouts: { ping: 10 } })
+    await expect(host.run({ kind: 'ping' })).rejects.toThrow('DataCloneError')
+    await new Promise((r) => setTimeout(r, 30))
+    expect(lines).toEqual([])
+    expect(child.killed()).toBe(false)
+  })
+
+  it('zawieszone zadanie nie zabiera innych: po nowym starcie czekające idą do nowego procesu', async () => {
+    const children: Array<ReturnType<typeof fakeChild>> = []
+    const host = new WorkerHost({ fork: () => (children.push(fakeChild((t) => (children.length > 1 && t.kind === 'ping' ? 'ok' : undefined))), children.at(-1)!), log: () => undefined, timeouts: { grade: 20, ping: 1_000 } })
+    const hung = host.run({ kind: 'grade', ctx: {} as never, know: {} })
+    const other = host.run({ kind: 'ping' })
+    await expect(hung).rejects.toThrow('limit czasu')
+    expect(await other).toBe('ok')
+  })
+
+  it('kopia zapasowa ma limit co najmniej godziny (duży folder z OneDrive pobiera się długo)', () => {
+    expect(TASK_TIMEOUT_MS.backup).toBeGreaterThanOrEqual(60 * 60_000)
   })
 
   it('wyjście zatrzymuje proces; nowe zadanie jest odmówione', async () => {

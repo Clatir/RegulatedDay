@@ -14,7 +14,7 @@ paths:
 # Stany dnia, zamrażanie, proces pomocniczy, CSV, przywracanie (logika E6, część 2)
 
 Źródło prawdy: specyfikacja „Ocena dnia”, „Pliki na OneDrive” (grades), „Kopie zapasowe”, „Terminy” (proces
-pomocniczy), „Kilka komputerów” (przeniesienie folderu); D300, T117, T190. Decyzje T487–T490.
+pomocniczy), „Kilka komputerów” (przeniesienie folderu); D300, T117, T190. Decyzje T487–T491.
 
 ## Pliki
 - `engine/freeze.ts` – `dayStage`, `correctionEnd`, `openedAtOf`, `freezeDecision` (warunki z obecności), `gradeOf`
@@ -39,3 +39,9 @@ pomocniczy), „Kilka komputerów” (przeniesienie folderu); D300, T117, T190. 
 - Testy zamrażania w folderze potrzebują ustalenia (≥ 3 min sprawdzeń) i minuty spokoju plików – `checks(…, 12)`.
 - Dzień w folderze testowym ma z szablonu sesje warstwy (środa): w CSV i rytuale są jako niezaczęte.
 - Kontekst dnia dla procesu pomocniczego idzie przez klonowanie struktur: bez funkcji w `DayContext`.
+- Proces pomocniczy liczy też rytuał (`ritualView` – wiele przeliczeń dnia); zawieszone zadanie zabija proces, ale
+  pozostałe czekające idą do nowego, a po awarii odpadają wszystkie (nie wiadomo, które ją wywołało).
+- Zamrażanie: reguły tylko aktywnych komputerów (zamknięty z nowszymi nie blokuje), 60 dni wstecz z pamięcią dni
+  zamrożonych, najpierw linia ocen, potem `day.freeze` (T491).
+- Lokalne E2E po przerwanym przebiegu zostawiają procesy `node_modules\electron` – zatrzymaj je przed kolejnym
+  przebiegiem, inaczej losowe testy nie widzą okna w 30 s.

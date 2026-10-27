@@ -53,6 +53,8 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Symulator (`tests/sim/onedrive.ts`): nowsza wersja pliku w drodze nie może odkładać jego dostarczenia – plik pisany
   co minutę nigdy by nie dotarł. Test dwóch komputerów ~25 s, test skali ~15 s (generator 3 lat).
 - Zamrażanie, proces pomocniczy, CSV i przywracanie kopii (logika E6, część 2) – reguły `zamrazanie.md`.
+- Numery zdarzeń komputera nigdy nie wracają: przy otwarciu folderu licznik idzie dalej od najwyższego numeru w jego
+  logach z 14 dni (`continueOwnNumbers`) – folder przywrócony z kopii ma nowy katalog stanu, ale stare numery (T491).
 - Folder z kreatora (`config.dataFolder`) albo `RD_DATA_DIR` (pierwszeństwo, T445); niedostępny folder – nic nie
   powstaje w jego miejscu. Obecność i przerwy w wejściu z `InputTracker` (co 5 s, T464); timer i działania
   automatyczne – reguły `timer.md`.

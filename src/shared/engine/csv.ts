@@ -9,12 +9,13 @@ import { POOLS } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type Answer } from '../model/events'
 import type { PlanBlock } from '../model/plan'
 import { categoryName, personName } from '../model/rd'
-import { plDate } from '../format'
+import { logicalClock, plDate } from '../format'
+import { logicalMinuteOf } from '../time/day'
 import { plannedSpan } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
 import { checkinStates } from './energy'
 import { OPEN, ranMinutes, type BlockFact } from './facts'
-import { atOf } from './grid'
+import { atOf, idxOf } from './grid'
 
 export interface CsvDay {
   ctx: DayContext
@@ -51,22 +52,21 @@ const END_RULE: Record<string, string> = {
 }
 const EXPLAIN: Record<string, string> = { work: 'praca', project: 'projekt', rest: 'odpoczynek' }
 
-/** A field as CSV: quoted when it holds the separator, a quote or a line break. */
+/**
+ * A field as CSV: quoted when it holds the separator, a quote or a line break. Your text beginning with =, +, -, @ (or
+ * a tab, a carriage return) gets an apostrophe first – a spreadsheet never runs it as a formula (CSV injection).
+ */
 function field(v: string | number): string {
-  const s = typeof v === 'number' ? String(v).replace('.', ',') : v
+  const s = typeof v === 'number' ? String(v).replace('.', ',') : /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
   return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
 const line = (cells: ReadonlyArray<string | number>) => cells.map(field).join(';')
 
-const TIME = new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
-const DATE = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' })
-
-/** An instant of the day as „HH:MM”, with „+1” on the calendar day after the date (the night after 00:00). */
+/** An index of the day as „HH:MM”, with „+1” in the night after 00:00 (as the interface shows it). */
 function time(state: DayState, idx: number | null): string {
   if (idx == null) return ''
-  const at = atOf(state.grid, idx)
-  return DATE.format(at) === state.grid.date ? TIME.format(at) : `${TIME.format(at)} +1`
+  return logicalClock(logicalMinuteOf(state.grid.date, atOf(state.grid, idx)))
 }
 
 function stateOf(f: BlockFact | undefined): string {
@@ -125,8 +125,7 @@ function checkinRows(state: DayState, events: readonly AnyEvent[]): string[] {
     if (!isKnown(e) || e.k !== 'energy.checkin' || state.facts.undone.has(e.id)) continue
     const values = checkinStates(e.answers)
     const answers = POOLS.map((p) => e.answers[p].map((a: Answer) => ANSWER[a]).join('/')).join(', ')
-    const at = Math.round((e.at - state.grid.start) / 60_000)
-    out.push(line([plDate(state.grid.date), time(state, at), values.head, values.emotions, values.senses, answers]))
+    out.push(line([plDate(state.grid.date), time(state, idxOf(state.grid, e.at)), values.head, values.emotions, values.senses, answers]))
   }
   return out
 }

@@ -11,6 +11,7 @@ import { marketDay } from '@shared/calendar/holidays'
 import { newRequest } from '@shared/model/requests'
 import { createDailyBackup, listBackups } from '../../src/main/data/backup'
 import { DataHub, MOVED_FILE } from '../../src/main/data/hub'
+import { writeZipFile } from '../../src/main/data/zip'
 
 let root: string
 let dirA: string
@@ -46,6 +47,66 @@ async function backupOfA(): Promise<string> {
 }
 
 const note = async (hub: DataHub) => ((await hub.service!.folder.recordView('requests/r1.json')) as { note: string }).note
+
+describe('przywracanie kopii – przypadki z przeglądu', () => {
+  it('po przywróceniu całego folderu numery zdarzeń tego komputera idą dalej (nie od zera – identyfikatory się nie powtarzają)', async () => {
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dirA)).toBe(true)
+      for (let i = 0; i < 5; i++) hub.service!.folder.append({ day: '2026-10-27', dom: 'meta', k: 'observe.alive', at: Date.now() })
+      await hub.service!.folder.log.flush()
+      const before = hub.service!.folder.clock.last.n
+      const zip = await backupOfA()
+      expect(await hub.restoreWhole(zip, join(root, 'c'))).toBe(true)
+      expect(hub.service!.folder.clock.last.n).toBeGreaterThan(before)
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('nowy folder nie otworzył się od razu: znacznik w starym i zapis w ustawieniach dopiero po jego otwarciu', async () => {
+    const folders: string[] = []
+    let failFirst = true
+    const hub = new DataHub({
+      ...(hubFor(folders) as unknown as { o: ConstructorParameters<typeof DataHub>[0] }).o,
+      start: async (o) => {
+        if (failFirst && o.dataDir.endsWith('c')) {
+          failFirst = false
+          throw new Error('OneDrive jeszcze nie gotowy')
+        }
+        return (await import('../../src/main/data/service')).DataService.start(o)
+      }
+    })
+    const target = join(root, 'c')
+    try {
+      expect(await hub.open(dirA)).toBe(true)
+      const zip = await backupOfA()
+      expect(await hub.restoreWhole(zip, target, 7)).toBe(false)
+      expect(existsSync(join(dirA, MOVED_FILE))).toBe(false)
+      expect(folders).toEqual([])
+      expect(await hub.open(resolve(target))).toBe(true)
+      expect(folders).toEqual([resolve(target)])
+      expect(JSON.parse(readFileSync(join(dirA, MOVED_FILE), 'utf8'))).toMatchObject({ to: resolve(target), at: 7 })
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('kopia z nazwami wpisów „./…” – rekordy z listy dają się przywrócić', async () => {
+    const zip = join(root, 'odd.zip')
+    const bytes = Buffer.from(JSON.stringify(newRequest('r1', 0, { person: null, estimateMin: null, note: 'z kopii' })))
+    await writeZipFile(zip, [{ name: './requests/r1.json', read: () => ({ data: bytes, mtime: new Date() }) }])
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dirA)).toBe(true)
+      expect(await hub.backupRecords(zip)).toEqual(['requests/r1.json'])
+      await hub.restoreRecords(zip, ['requests/r1.json'])
+      expect(await note(hub)).toBe('z kopii')
+    } finally {
+      await hub.close('quit')
+    }
+  })
+})
 
 describe('przywracanie kopii', () => {
   it('wybrane rekordy wracają jako Twoja zmiana; rekordu spoza kopii nie ma', async () => {

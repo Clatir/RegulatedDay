@@ -219,8 +219,12 @@ function explainAnswer(state: DayState, x: Explain | null, choice: string, at: n
   return [answerDraft(at, x.id, choice, choice === 'rest' ? null : ms)]
 }
 
-/** The end of a block corrected: an automatic end goes („Cofnij”) and yours is written; your own end gets a „korekta”. */
-function endAt(state: DayState, b: BlockFact, at: number, end: number): TimerDraft[] {
+/**
+ * The end of a block corrected: an automatic end goes („Cofnij”) and yours is written; your own end gets a „korekta”.
+ * Null outside the block's start and now (later would paint work into the future, earlier a block of no length).
+ */
+function endAt(state: DayState, b: BlockFact, at: number, end: number): TimerDraft[] | null {
+  if (b.startedAt == null || end <= atOf(state.grid, b.startedAt) || end > atOf(state.grid, state.now)) return null
   if (b.endId && state.facts.autos.some((a) => a.id === b.endId)) return [{ k: 'undo', at, target: b.endId, reason: 'ritual' }, { k: 'block.end', block: b.id, at: end, done: true, rule: null }]
   return [{ k: 'block.fix', block: b.id, at, start: null, end }]
 }
@@ -370,6 +374,27 @@ export function closeEvents(state: DayState, how: CloseHow, at: number): TimerDr
 /** What „Jak zapisano” changes for the day (the morning's row shows it before the click). */
 export function closeEffect(ctx: DayContext, state: DayState, at: number, base: EffectBase = effectBase(ctx, state)): RitualEffect {
   return { changes: outcomeChanges(base.outcome, frozenOutcome(ctx, simEvents(ctx, closeEvents(state, 'asWritten', at), at), base.forecast)), forecast: base.forecast }
+}
+
+/** A day's ritual as the window shows it: its rows, what each ✓ changes, what „Jak zapisano” changes, how it was closed. */
+export interface RitualView {
+  rows: RitualRow[]
+  effects: Record<string, RitualEffect>
+  asWritten: RitualEffect
+  closed: { at: number; how: CloseHow } | null
+}
+
+/** The ritual of a day (several full counts of the day – the main process gives it to its helper process, T190). */
+export function ritualView(ctx: DayContext, at: number): RitualView {
+  const state = computeDay(ctx)
+  const rows = ritualRows(state)
+  const base = effectBase(ctx, state)
+  const effects: Record<string, RitualEffect> = {}
+  for (const r of rows) {
+    const e = ritualEffect(ctx, state, r, at, base)
+    if (e) effects[r.id] = e
+  }
+  return { rows, effects, asWritten: closeEffect(ctx, state, at, base), closed: state.facts.closed }
 }
 
 export interface DayLog {

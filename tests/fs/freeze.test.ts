@@ -4,7 +4,7 @@
  * computer whose records have not arrived, and after 72 h freezes without waiting, naming it. Nothing freezes before
  * the first day of the ritual (T482).
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -101,6 +101,43 @@ describe('zamrażanie w folderze danych', () => {
     const m = await workedDay(null)
     expect(await checks(m, dayEnd(DAY) + 75 * H, 12)).toEqual([])
     expect(await freezes(m.folder)).toEqual([])
+  })
+
+  it('wyłączony komputer z nowszymi regułami (zamknięty) nie blokuje zamrażania', async () => {
+    const m = await workedDay(DAY)
+    mkdirSync(join(dataDir, '.presence'), { recursive: true })
+    const at = placeLogical(DAY, 20 * 60)
+    writeFileSync(join(dataDir, '.presence', 'lap.json'), JSON.stringify({ format: 1, computer: 'lap', name: 'Laptop', appVersion: '0.9.0', rulesVersion: 9, versions: [], lastPresence: at, lastUse: at, state: 'closed', seenLeader: 'pca', settled: true, lastEvents: {}, writtenAt: at }))
+    expect(await checks(m, placeLogical(addDays(DAY, 1), 8 * 60) + 24 * H, 12)).toEqual([DAY])
+  })
+
+  it('dzień, którego okno minęło, gdy żaden komputer nie działał (tydzień przerwy), zamraża się przy powrocie', async () => {
+    const m = await workedDay(DAY)
+    const frozen = await checks(m, dayEnd(DAY) + 8 * 24 * H, 12)
+    expect(frozen[0]).toBe(DAY)
+    // The days nobody worked in meanwhile freeze too – as free (no presence, no answer).
+    expect(frozen).toEqual(['2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25'])
+  })
+
+  it('nieudany zapis do pliku ocen: dzień jeszcze nie zamrożony, próba ponowiona później', async () => {
+    const m = await workedDay(DAY)
+    let fail = true
+    const real = nodeFs.append.bind(nodeFs)
+    ;(m.folder as unknown as { o: { fs: typeof nodeFs } }).o.fs = { ...nodeFs, append: async (abs: string, text: string) => (fail && abs.includes('grades') ? Promise.reject(new Error('plik zajęty')) : real(abs, text)) }
+    const start = placeLogical(addDays(DAY, 1), 8 * 60) + 24 * H
+    expect(await checks(m, start, 12)).toEqual([])
+    expect(await freezes(m.folder)).toEqual([])
+    fail = false
+    expect(await checks(m, start + 30 * 60_000, 2)).toEqual([DAY])
+    expect(await freezes(m.folder)).toHaveLength(1)
+  })
+
+  it('kopia konfliktowa własnego logu z poprzednich dni łączy się (inaczej dzień czekałby na zamrożenie 72 h)', async () => {
+    const m = await workedDay(DAY)
+    const copy = join(dataDir, 'log', '2026', DAY, 'pca-LAPTOP.jsonl')
+    writeFileSync(copy, readFileSync(join(dataDir, 'log', '2026', DAY, 'pca.jsonl')))
+    await checks(m, placeLogical(addDays(DAY, 1), 9 * 60), 2)
+    expect(existsSync(copy)).toBe(false)
   })
 
   it('czeka na komputer, którego zapisy nie dotarły; po 72 h zamraża bez czekania i go wymienia', async () => {

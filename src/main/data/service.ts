@@ -256,7 +256,8 @@ export class DataService {
     this.lastBackupTry = now
     const backups = join(this.o.dataDir, 'backups')
     if (!(await backupDue(backups, today))) return
-    const r = await (this.o.worker ?? inProcess).run({ kind: 'backup', dataDir: this.o.dataDir, backupsDir: backups, date: today })
+    // In the helper process: a hung or crashed one is a failed backup (tried again in an hour), never a failed check.
+    const r = await (this.o.worker ?? inProcess).run({ kind: 'backup', dataDir: this.o.dataDir, backupsDir: backups, date: today }).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }))
     if (r.ok) this.o.log('info', `kopia zapasowa ${today}: ${r.files} plików`)
     else this.o.log('error', `kopia zapasowa ${today} nie powiodła się: ${r.error}`)
   }

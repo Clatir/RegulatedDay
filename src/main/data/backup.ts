@@ -376,9 +376,11 @@ export async function backupEntries(zipFile: string): Promise<string[]> {
  * in the data folder (either slash). A damaged or unreadable ZIP rejects.
  */
 export async function readBackupEntry(zipFile: string, relPath: string): Promise<Buffer | null> {
-  const name = relPath.replace(/\\/g, '/')
+  const name = safeRelPath(relPath.replace(/\\/g, '/'))
+  if (!name) return null
   return withZip(zipFile, async (zip) => {
-    const entry = zip.entries.find((e) => e.name === name)
+    // Matched by the same safe path `backupEntries` lists („./requests/r1.json” is „requests/r1.json”).
+    const entry = zip.entries.find((e) => !e.name.endsWith('/') && safeRelPath(e.name) === name)
     return entry ? zip.read(entry) : null
   })
 }

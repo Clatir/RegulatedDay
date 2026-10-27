@@ -104,6 +104,8 @@ export class DataHub {
   private openingDir: string | null = null
   /** The app quits: nothing opens any more. */
   private shutdown = false
+  /** A whole backup restored into a new folder, waiting for that folder to open (then the old one gets its marker). */
+  private moving: { from: string | null; to: string; at: number } | null = null
 
   constructor(private readonly o: HubOptions) {}
 
@@ -215,6 +217,7 @@ export class DataHub {
       this.status = 'open'
       void s.refreshGuardPlan()
       this.o.log('info', `folder danych otwarty: ${dir}`)
+      if (this.moving?.to === dir) await this.finishMove()
       this.changed()
       return true
     } catch (e) {
@@ -539,13 +542,25 @@ export class DataHub {
    * the move) and this computer works in the new one.
    */
   async restoreWhole(zipFile: string, target: string, at = Date.now()): Promise<boolean> {
-    const from = this.folder
-    const files = await restoreToFolder(zipFile, target)
-    this.o.log('info', `kopia ${zipFile} przywrócona do ${target}: ${files} plików`)
-    if (from) await writeFileAtomic(join(from, MOVED_FILE), `${JSON.stringify({ to: resolve(target), at, by: this.o.computer() }, null, 2)}\n`)
-    const opened = await this.open(resolve(target))
-    if (opened) this.o.onFolder?.(resolve(target))
-    return opened
+    const to = resolve(target)
+    const files = await restoreToFolder(zipFile, to)
+    this.o.log('info', `kopia ${zipFile} przywrócona do ${to}: ${files} plików`)
+    // The move finishes once the new folder opens – now or at a later retry (OneDrive not ready yet).
+    this.moving = { from: this.folder, to, at }
+    return this.open(to)
+  }
+
+  /** The new folder opened: the old one gets its marker (best effort – the restore stands), config.json the new one. */
+  private async finishMove(): Promise<void> {
+    const m = this.moving
+    if (!m) return
+    this.moving = null
+    if (m.from) {
+      await writeFileAtomic(join(m.from, MOVED_FILE), `${JSON.stringify({ to: m.to, at: m.at, by: this.o.computer() }, null, 2)}\n`).catch((e) =>
+        this.o.log('warn', `znacznik „przeniesiono do …” w ${m.from} nie zapisał się`, e)
+      )
+    }
+    this.o.onFolder?.(m.to)
   }
 
   /** The marker „przeniesiono do …” in the open folder (another computer restored a backup into a new one), or null. */

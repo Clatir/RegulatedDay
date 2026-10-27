@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { EventClock, type ClockSources } from '@shared/data/clock'
 import type { MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
+import { readLogText } from '@shared/data/logText'
 import { activityOf } from '@shared/engine/activity'
 import { answerEvents, autoActions, nextDeadline, questionsOf, type Question } from '@shared/engine/auto'
 import { createDay, type HolidayLookup } from '@shared/engine/createDay'
@@ -24,9 +25,9 @@ import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerD
 import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
 import { foldFacts, isRunning, type DayFacts } from '@shared/engine/facts'
-import { correctionEnd, freezeDecision, openedAtOf, WRITERS_DAYS, type FreezeComputer } from '@shared/engine/freeze'
+import { correctionEnd, freezeDecision, openedAtOf, WRITERS_DAYS } from '@shared/engine/freeze'
 import { inProcess, type Worker } from '../worker/host'
-import { CLOSE_WINDOW_H, closeEffect, closeEvents, closeRefusal, effectBase, ritualAnswer, ritualEffect, ritualRows, unclosedDays, type DayLog, type RitualEffect, type RitualRow, type RitualValue } from '@shared/engine/ritual'
+import { CLOSE_WINDOW_H, closeEvents, closeRefusal, ritualAnswer, ritualRows, unclosedDays, type DayLog, type RitualValue, type RitualView } from '@shared/engine/ritual'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
 import { daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type Signal } from '@shared/model/events'
@@ -37,7 +38,7 @@ import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { routineFrom, type Routine } from '@shared/model/routines'
 import type { CsvDay } from '@shared/engine/csv'
 import { isDayTypeId, settingsOn, type SettingsChange } from '@shared/model/settings'
-import { decideLeader, minuteGate, type LeaderDecision, type Peer } from '@shared/sync/leader'
+import { decideLeader, minuteGate, SILENT_MS, type LeaderDecision, type Peer } from '@shared/sync/leader'
 import type { Presence } from '@shared/sync/presence'
 import { Settle, type SettleReason } from '@shared/sync/settle'
 import { logicalDayOf } from '@shared/time/day'
@@ -70,8 +71,15 @@ export const JOURNAL_KEEP_DAYS = 14
 const COMPACT_EVERY_MS = 60 * 60_000
 /** Conflict copies of the records are looked for this often (and at the first check). */
 const COPY_SCAN_MS = 60_000
-/** Days back the leader looks for one to freeze (72 h after a day's end reaches four of them). */
-const FREEZE_LOOKBACK_DAYS = 5
+/**
+ * Days back the leader looks for one to freeze: 72 h after a day's end reaches four of them, but every computer may be
+ * off for weeks – a day frozen is remembered and not read again.
+ */
+const FREEZE_LOOKBACK_DAYS = 60
+/** A day whose freeze failed (a file held, the helper hung) is tried again after this. */
+const FREEZE_RETRY_MS = 15 * 60_000
+/** The days back whose own logs this computer checks for conflict copies (the days still to freeze). */
+const OWN_COPY_DAYS = 4
 /** A day's files quiet this long before its freeze (spec „nie zmieniają się od 1 min po przeskanowaniu folderu”). */
 const QUIET_MS = 60_000
 
@@ -180,6 +188,9 @@ export class DataFolder {
   readonly copyConflicts = new Map<string, { canonical: string; conflicts: MergeConflict[] }>()
   /** The files of each day a freeze waits on: what they held at the last look and since when (spec: quiet for 1 min). */
   private readonly dayQuiet = new Map<string, { sig: string; since: number }>()
+  /** Days known frozen (never read again for the freeze), and days whose freeze failed – tried again after this. */
+  private readonly frozenDays = new Set<string>()
+  private readonly freezeRetry = new Map<string, number>()
 
   private constructor(private readonly o: FolderOptions) {
     this.rulesVersion = o.rulesVersion ?? RULES_VERSION
@@ -219,6 +230,7 @@ export class DataFolder {
     f.log.open()
     f.queue.load()
     const now = f.clock.now()
+    await f.continueOwnNumbers(logicalDayOf(now))
     f.settle.begin('start', now)
     if (o.previousRun && !o.previousRun.clean) f.append({ day: logicalDayOf(o.previousRun.lastAt), dom: 'meta', k: 'observe.to', at: o.previousRun.lastAt, why: 'crash' })
     f.append({ day: logicalDayOf(now), dom: 'meta', k: 'observe.from', at: now, why: 'start' })
@@ -226,6 +238,18 @@ export class DataFolder {
     for (const e of f.log.ownEvents(logicalDayOf(now))) if (e.k === 'presence.first') f.firstPresence.add(e.day)
     await f.presence.tick(true).catch(() => undefined)
     return f
+  }
+
+  /**
+   * This computer's own logs of the last days may hold numbers its journal lacks (a whole backup restored into a new
+   * folder, a reinstall): the numbers go on after the highest – an id never repeats, a number never goes back.
+   */
+  private async continueOwnNumbers(today: string): Promise<void> {
+    for (let i = 0; i <= JOURNAL_KEEP_DAYS; i++) {
+      const bytes = await this.o.fs.read(join(this.o.dataDir, paths.log(addDays(today, -i), this.o.computer))).catch(() => null)
+      if (!bytes) continue
+      for (const e of readLogText(bytes.toString('utf8')).events) if (e.c === this.o.computer) this.clock.continueAfter(e.n, e.l)
+    }
   }
 
   /** A new event of this computer; the presence names its last event of the day. */
@@ -461,6 +485,9 @@ export class DataFolder {
     if (now - this.lastCopyScan >= COPY_SCAN_MS) {
       this.lastCopyScan = now
       await this.joinCopies(day).catch((e) => problems.push(`kopie konfliktowe: ${String(e)}`))
+      // Its own logs of the last days too: only this computer joins their copies, and a day with a copy freezes only
+      // after 72 h (spec „w plikach … nie ma kopii konfliktowych”).
+      for (let i = 1; i <= OWN_COPY_DAYS; i++) await this.log.ensure(addDays(day, -i)).catch((e) => problems.push(`kopie konfliktowe logu: ${String(e)}`))
     }
     const settled = this.settle.settled(now)
     this.leader = decideLeader({
@@ -533,7 +560,7 @@ export class DataFolder {
         }
         // Freezing the days whose window of corrections has ended. Apart, so a day that cannot freeze stops nothing else.
         try {
-          frozen = await this.freezeTasks(now, settled)
+          frozen = await this.freezeTasks(now, settled, problems)
         } catch (e) {
           problems.push(`zamrażanie: ${String(e)}`)
         }
@@ -555,27 +582,46 @@ export class DataFolder {
    * ritual (none before the version with its screens, T482): the grade as written up to the last event of every computer
    * it sees, in the day's log and in this computer's file of grades (derived – the logs can make it again).
    */
-  private async freezeTasks(now: number, settled: boolean): Promise<string[]> {
+  private async freezeTasks(now: number, settled: boolean, problems: string[]): Promise<string[]> {
     const from = this.o.ritualFrom
     if (from == null) return []
     const today = logicalDayOf(now)
+    const mayFreeze = this.mayFreeze(settled, now)
     const out: string[] = []
+    // The computers that wrote in the last 7 days: once per check, only when a day is due.
+    let writers: Promise<Set<string>> | null = null
     for (let i = FREEZE_LOOKBACK_DAYS; i >= 1; i--) {
       const day = addDays(today, -i)
-      if (day < from) continue
-      const read = await this.log.readDay(day)
-      if (!read.complete || read.events.some((e) => isKnown(e) && e.k === 'day.freeze')) continue
-      const quiet = this.quietFor(day, read, await this.dayFile(day), now)
-      const openedAt = openedAtOf((await this.log.readDay(addDays(day, 1))).events)
-      if (now < correctionEnd(day, openedAt)) continue
-      const decision = freezeDecision({ date: day, now, mayFreeze: this.mayFreeze(settled), openedAt, computers: await this.writers(today, read), filesQuiet: read.copies === 0 && quiet })
-      if (!decision.freeze) continue
-      const know = { ...read.lastByComputer }
-      const grade = await (this.o.worker ?? inProcess).run({ kind: 'grade', ctx: await this.dayContext(day, read, now), know })
-      this.append({ id: derivedId(day, 'freeze', this.o.computer), day, dom: 'game', k: 'day.freeze', at: now, how: decision.how, know, missing: decision.missing, grade })
-      const line = { day, at: now, v: this.rulesVersion, how: decision.how, know, missing: decision.missing, grade }
-      await this.o.fs.append(join(this.o.dataDir, paths.grades(day.slice(0, 4), this.o.computer)), `${JSON.stringify(line)}\n`)
-      out.push(day)
+      if (day < from || this.frozenDays.has(day) || (this.freezeRetry.get(day) ?? 0) > now) continue
+      // Each day apart: one that fails (a file held, the helper hung) is tried again later and stops no other.
+      try {
+        const read = await this.log.readDay(day)
+        if (!read.complete) continue
+        if (read.events.some((e) => isKnown(e) && e.k === 'day.freeze')) {
+          this.frozenDays.add(day)
+          continue
+        }
+        const quiet = this.quietFor(day, read, await this.dayFile(day), now)
+        const openedAt = openedAtOf((await this.log.readDay(addDays(day, 1))).events)
+        if (now < correctionEnd(day, openedAt)) continue
+        writers ??= this.writerIds(today)
+        const ids = new Set([...(await writers), ...Object.keys(read.lastByComputer)])
+        const computers = [...ids].map((id) => ({ id, self: id === this.o.computer, presence: this.peers.find((p) => p.presence.computer === id)?.presence ?? null, visibleLast: read.lastByComputer[id] ?? -1 }))
+        const decision = freezeDecision({ date: day, now, mayFreeze, openedAt, computers, filesQuiet: read.copies === 0 && quiet })
+        if (!decision.freeze) continue
+        const know = { ...read.lastByComputer }
+        const grade = await (this.o.worker ?? inProcess).run({ kind: 'grade', ctx: await this.dayContext(day, read, now), know })
+        // The file of grades first: a freeze in the log is never left without its line (the line is derived – a second
+        // one after a failed log write is harmless, the freeze event is what counts).
+        const line = { day, at: now, v: this.rulesVersion, how: decision.how, know, missing: decision.missing, grade }
+        await this.o.fs.append(join(this.o.dataDir, paths.grades(day.slice(0, 4), this.o.computer)), `${JSON.stringify(line)}\n`)
+        this.append({ id: derivedId(day, 'freeze', this.o.computer), day, dom: 'game', k: 'day.freeze', at: now, how: decision.how, know, missing: decision.missing, grade })
+        this.frozenDays.add(day)
+        out.push(day)
+      } catch (e) {
+        this.freezeRetry.set(day, now + FREEZE_RETRY_MS)
+        problems.push(`zamrażanie ${day}: ${String(e)}`)
+      }
     }
     return out
   }
@@ -591,22 +637,26 @@ export class DataFolder {
     return now - was.since >= QUIET_MS
   }
 
-  /** The leader, settled, with rules not older than the newest without a crash seen in the presences (spec, D163). */
-  private mayFreeze(settled: boolean): boolean {
+  /**
+   * The leader, settled, with rules not older than the newest without a crash among the computers awake (as in the rules
+   * of leading: a closed or long-silent computer with newer rules never stops the freezing, spec D163).
+   */
+  private mayFreeze(settled: boolean, now: number): boolean {
     if (!this.leader.iLead || !settled) return false
-    const versions = [{ v: this.rulesVersion, crashed: this.ownVersionCrashed }, ...this.peers.map((p) => ({ v: p.presence.rulesVersion, crashed: p.crashed }))]
+    const awake = this.peers.filter((p) => p.presence.state !== 'closed' && now - p.fileSeenAt < SILENT_MS)
+    const versions = [{ v: this.rulesVersion, crashed: this.ownVersionCrashed }, ...awake.map((p) => ({ v: p.presence.rulesVersion, crashed: p.crashed }))]
     const sane = versions.filter((x) => !x.crashed)
     return this.rulesVersion >= Math.max(...(sane.length ? sane : versions).map((x) => x.v))
   }
 
-  /** The computers that wrote to the folder in the last 7 days, with their presence and the day's last visible event. */
-  private async writers(today: string, read: DayRead): Promise<FreezeComputer[]> {
-    const ids = new Set(Object.keys(read.lastByComputer))
+  /** The computers that wrote to the folder in the last 7 days (their logs). */
+  private async writerIds(today: string): Promise<Set<string>> {
+    const ids = new Set<string>()
     for (let i = 0; i <= WRITERS_DAYS; i++) {
       const r = await this.log.readDay(addDays(today, -i)).catch(() => null)
       for (const c of Object.keys(r?.lastByComputer ?? {})) ids.add(c)
     }
-    return [...ids].map((id) => ({ id, self: id === this.o.computer, presence: this.peers.find((p) => p.presence.computer === id)?.presence ?? null, visibleLast: read.lastByComputer[id] ?? -1 }))
+    return ids
   }
 
   /** The leader's automatic actions of one day up to the gate, and the day's next deadline. */
@@ -645,9 +695,8 @@ export class DataFolder {
   }
 
   /** The day as you see it (your queued edits laid over the files): clicks and answers are judged on it. */
-  private async ownContext(date: string, read: DayRead, at: number): Promise<DayContext> {
-    const inp = await this.inputs(true)
-    return dayContextOf(inp, { date, events: read.events, dayFile: await this.dayFile(date, true), nextFile: await this.dayFile(addDays(date, 1), true) }, this.o.holidays, at)
+  private async ownContext(date: string, read: DayRead, at: number, inp?: Inputs): Promise<DayContext> {
+    return dayContextOf(inp ?? (await this.inputs(true)), { date, events: read.events, dayFile: await this.dayFile(date, true), nextFile: await this.dayFile(addDays(date, 1), true) }, this.o.holidays, at)
   }
 
   /** Writes drafts of the timer to a day's log, each checked as a line of the log first. */
@@ -849,20 +898,11 @@ export class DataFolder {
 
   /**
    * A day's closing ritual as this computer sees it (spec „Rytuał zamknięcia”): its rows, what each ✓ changes, what
-   * „Jak zapisano” changes, and how the day was closed.
+   * „Jak zapisano” changes, and how the day was closed – counted by the helper process (many counts of the day, T190).
    */
-  async ritual(day: string, at = this.clock.now()): Promise<{ rows: RitualRow[]; effects: Record<string, RitualEffect>; asWritten: RitualEffect; closed: DayFacts['closed'] }> {
+  async ritual(day: string, at = this.clock.now()): Promise<RitualView> {
     const read = await this.log.readDay(day)
-    const ctx = await this.ownContext(day, read, at)
-    const state = computeDay(ctx)
-    const rows = ritualRows(state)
-    const base = effectBase(ctx, state)
-    const effects: Record<string, RitualEffect> = {}
-    for (const r of rows) {
-      const e = ritualEffect(ctx, state, r, at, base)
-      if (e) effects[r.id] = e
-    }
-    return { rows, effects, asWritten: closeEffect(ctx, state, at, base), closed: state.facts.closed }
+    return (this.o.worker ?? inProcess).run({ kind: 'ritual', ctx: await this.ownContext(day, read, at), at })
   }
 
   /** Your answer to a row of a day's ritual: judged on the day as it is now and written to its log, one at a time. */
@@ -888,12 +928,13 @@ export class DataFolder {
     const rd = rdFrom(await this.recordView(paths.settings))
     const routines = (await this.collection('routine')).map(routineFrom).filter((r): r is Routine => !!r)
     const requests = (await this.collection('request')).map(requestFrom).filter((r): r is RequestRecord => !!r)
+    const inp = await this.inputs(true)
     const days: CsvDay[] = []
     for (let d = from; d <= to; d = addDays(d, 1)) {
       const read = await this.log.readDay(d)
       if (!read.complete) throw new Error(`log dnia ${d} jest teraz nieczytelny – spróbuj za chwilę`)
       if (!read.events.length) continue
-      const ctx = await this.ownContext(d, read, at)
+      const ctx = await this.ownContext(d, read, at, inp)
       days.push({ ctx, names: { rd, settings: ctx.snapshot.settings, routines, requests } })
     }
     return (this.o.worker ?? inProcess).run({ kind: 'csv', days, dir })

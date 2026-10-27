@@ -66,4 +66,10 @@ export class EventClock {
   get last(): { n: number; l: number } {
     return { n: this.nextN - 1, l: this.lastL }
   }
+
+  /** Numbers and order this computer already used (its own events found in the folder): never used again. */
+  continueAfter(n: number, l: number): void {
+    if (n >= this.nextN) this.nextN = n + 1
+    if (l > this.lastL) this.lastL = l
+  }
 }

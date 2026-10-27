@@ -21,6 +21,15 @@ function day() {
 
 const names = (s: Scenario) => ({ rd: rdFrom({ people: [{ id: 'mama', name: 'Mama; z „cudzysłowem”' }] }), settings: s.settings, routines: [], requests: [{ id: 'r1', person: 'mama', estimateMin: null, note: 'zakupy', createdAt: 0, state: 'done' as const, day: DATE, block: null }] })
 
+describe('eksport CSV – bezpieczeństwo', () => {
+  it('tekst zaczynający się od =, +, -, @ nie staje się formułą w Excelu (apostrof z przodu)', () => {
+    const s = day()
+    const n = { ...names(s), rd: rdFrom({ people: [{ id: 'mama', name: '=HYPERLINK("http://x";"klik")' }] }), requests: [{ ...names(s).requests[0]!, note: '@SUM(A1)' }] }
+    const row = csvOf([{ ctx: s.contextAt(s.at('20:00')), names: n }])['prosby.csv'].trim().split('\r\n')[1]!
+    expect(row).toBe(`28.10.2026;"'=HYPERLINK(""http://x"";""klik"")";'@SUM(A1);zrobione teraz;16:00;16:20;20;nie`)
+  })
+})
+
 describe('eksport CSV', () => {
   it('trzy pliki z BOM, średnikiem i nagłówkami z D300', () => {
     const s = day()

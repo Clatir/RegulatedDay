@@ -161,6 +161,26 @@ describe('widget w procesie głównym', () => {
     expect(w.shownQuestions()).toEqual([])
   })
 
+  it('powiadomienie o twardym końcu tylko świeże: nie godziny po jego minięciu (np. po starcie aplikacji)', async () => {
+    const { w, folder, shown, at } = await make()
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(16 * 60)
+    await folder.check()
+    const real = folder.widgetModel.bind(folder)
+    let ago = 200
+    folder.widgetModel = async (t?: number) => {
+      const m = await real(t)
+      return { ...m, state: { ...m.state, hardEnd: { ...m.state.hardEnd, passed: m.state.now - ago, message: true } } }
+    }
+    await w.refresh()
+    expect(shown.filter((n) => n.title === 'Twardy koniec projektów')).toHaveLength(0)
+    ago = 10
+    await w.refresh()
+    expect(shown.filter((n) => n.title === 'Twardy koniec projektów')).toHaveLength(1)
+  })
+
   it('powiadomienie o rezerwie raz dziennie dla puli: tylko zejście z komunikatem', async () => {
     const { w, folder, shown, at } = await make()
     await folder.check()

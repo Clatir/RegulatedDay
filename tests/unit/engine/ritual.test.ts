@@ -145,6 +145,19 @@ describe('wiersze rytuału – przypadki z przeglądu', () => {
     expect(ritualAnswer(st, r, 'workedUntil', t, s.at('10:00'))).not.toBeNull()
   })
 
+  it('„skończył się o …” tylko między startem bloku a teraz', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).using('07:00', '23:59')
+    s.start('a', '08:00')
+    silentEnd(s, 'a', '09:00', 'twoQuestions', '10:00')
+    s.gap('10:30', '11:15')
+    const t = s.at('12:00')
+    const st = s.stateAt(t)
+    const r = ritualRows(st).find((x) => x.kind === 'silent')!
+    expect(ritualAnswer(st, r, 'endedAt', t, s.at('13:00'), 'a')).toBeNull()
+    expect(ritualAnswer(st, r, 'endedAt', t, s.at('07:30'), 'a')).toBeNull()
+    expect(ritualAnswer(st, r, 'endedAt', t, s.at('08:50'), 'a')).not.toBeNull()
+  })
+
   it('zaparkowany blok zakotwiczony do bloku, który minął: „usuń” go odwołuje, „zostaw” zamyka wiersz', () => {
     const plan = [block({ id: 'ny', cat: 'inne', at: '14:00', min: 60 }), block({ id: 'j', cat: 'journaling', after: 'ny', min: 30 }), block({ id: 'k', cat: 'inne', after: 'ny', min: 30 })]
     const s = new Scenario({ date: DATE, plan }).using('07:00', '23:59')

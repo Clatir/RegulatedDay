@@ -15,10 +15,18 @@
   `block.fix`, `block.mark`, `request.person`, `rest.not`; T483–T485, reguły `rytual.md`, CHANGELOG 0.6.0, lista E6a
   w `docs/odbior.md`. `/code-review` (xhigh): 15 uwag, 14 poprawionych z testami (T486), 1 bez zmian (restart po
   cichym końcu nie występuje); mutacje: 22 próby, 21 wykrytych, 1 praktycznie równoważna (opis w PR). Testy: 634
-  jednostkowe i plikowe, E2E 15 + 2 tylko w CI; typecheck, build, lint zielone. Dalej: PR, CI, scalenie, wydanie 0.6.0.
+  jednostkowe i plikowe, E2E 15 + 2 tylko w CI. **Scalona** (PR #10, 16af18c, 27.10 ok. 09:17; CI PR zielone za
+  pierwszym razem, także Windows); wydanie 0.6.0 – run 40472467534 na `main` w toku.
+- **Logika E6, część 2 (dane)** – gałąź `claude/e6-dane` (od części 1, z `main`). Kod gotowy: stany dnia i zamrażanie
+  (`engine/freeze.ts`, 10 testów; zadanie prowadzącego w `DataFolder`, 3 testy plikowe), proces pomocniczy
+  (`main/worker/`, 5 testów + E2E), eksport CSV (`engine/csv.ts`, 3 testy + plikowy), przywracanie kopii (`DataHub`, 2
+  testy plikowe); T487–T490, reguły `zamrazanie.md`, CHANGELOG 0.7.0, lista E6b. Testy: 658 jednostkowe i plikowe;
+  typecheck, build, lint zielone. W toku: E2E, `/code-review` (xhigh); potem mutacje, PR, CI, scalenie, wydanie 0.7.0.
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
-  (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482).
-- Zastąpione decyzje (26) przeniesione do `docs/archiwum/decyzje-zastapione.md`.
+  (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
+  do folderu z `.moved.json`.
+- Zastąpione decyzje (26) przeniesione do `docs/archiwum/decyzje-zastapione.md`; `docs/decyzje.md` ma 194,8 / 200 KB –
+  przy następnym etapie kolejne zastąpione (także częściowo) do archiwum.
 
 ## Kolejka
 1. Logika E6 ciągiem (D299): część 1 – czas do wyjaśnienia w silniku dnia, komunikat o twardym końcu, rytuał (wiersze,
@@ -37,7 +45,7 @@
 - Do przygotowania: nic nowego – odbiór E3–E5 według `docs/odbior.md`.
 
 ## Do odbioru na Windows
-- Lista w `docs/odbior.md` (E3, E4a, E4b, logika E5 – każdy punkt z oczekiwanym efektem i błędami, które blokują
+- Lista w `docs/odbior.md` (E3, E4a, E4b, logika E5, E6a, E6b – każdy punkt z oczekiwanym efektem i błędami, które blokują
   odbiór; na dole punkty już odebrane, E0). Kolejne etapy dopisują tam swoje listy.
 
 ## Przed etapem E0 (25.10.2026)
