@@ -17,11 +17,12 @@
   40518727264 na `main` opublikowane (ok. 15:52).
 - **0.10.0 scalone** (D302–D305 z odbioru 27.10; PR #15, de87421, ok. 16:31; CI PR zielone w drugiej rundzie po
   ponowieniu) – wydanie 0.10.0 z runu 40531784915 na `main` opublikowane (ok. 17:12).
-- **0.10.1 w toku** (D306 – menu boczne: Ustawienia pod Historią, Próba pod Ustawieniami): gałąź
-  `claude/0.10.1-menu`; sekcja niżej. Potem pauza do „dalej”.
-- Otwarte (test skali): `gameState` z 3 lat danych trwa na CI ok. 100 ms – raz 101 ms przy limicie „codzienne
-  operacje < 0,1 s” (Node 26, PR #15, ponowienie zielone). Przed ekranami gry (ustawienie `GAME_FROM`) przyspieszyć
-  albo liczyć raz na zmianę plików ocen; dziś w aplikacji `gameState` = null (T492).
+- **0.10.1 scalone** (D306 – menu boczne: Ustawienia pod Historią, Próba pod Ustawieniami; PR #16, 94e5caa, 27.10
+  ok. 19:10; CI PR zielone za pierwszym razem, także Windows) – wydanie 0.10.1 z runu 40557338646 na `main`
+  opublikowane (ok. 19:43, po ponowieniu testu skali); sekcja niżej. Pauza do „dalej”.
+- Otwarte (test skali, niestabilny na Node 26 w CI): pojedynczy pomiar codziennej operacji raz ponad 100 ms –
+  `gameState` 101 ms (PR #15), `check` 107 ms (`main` po PR #16); ponowienia zielone. Naprawa w kolejce (pkt 2).
+  Osobno: przed ekranami gry (`GAME_FROM`) `gameState` przyspieszyć albo liczyć raz na zmianę plików ocen (T492).
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
   (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
   do folderu z `.moved.json`.
@@ -31,7 +32,10 @@
 ## Kolejka
 1. Ty: odbiór według `docs/odbior.md` (0.10.1, 0.10.0, 0.9.1, E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b), wybór zestawu kolorów (D298);
    27.10 odebrane E3.2, E3.6, E3.8, E3.11.
-2. Po „dalej”: elementy E5 w pasku (przyciski próśb, znacznik i panel wariantów), potem ekrany E6 (rytuał, niezamknięte
+2. Po „dalej”, przed etapem (technicznie, bez wersji dla użytkownika, jeśli CI pozwoli): zastąpione decyzje
+   → archiwum (rejestr 199,5 / 200 KB), potem T499 – test skali mierzy każdą codzienną operację jako najlepszy
+   z 3 pomiarów (limit 0,1 s bez zmian; szum runnera, nie kod).
+3. Potem: elementy E5 w pasku (przyciski próśb, znacznik i panel wariantów), potem ekrany E6 (rytuał, niezamknięte
    dni, eksport, przywracanie) – z pytaniami o wygląd; przed nimi komunikat „Przed etapem”.
 
 ## Do odbioru na Windows
@@ -49,6 +53,8 @@
   wspólna mapa dla Ctrl+, – kosmetyka, odstępy przy skali – test w 100 %).
 - Testy: typecheck, 788 jednostkowych, build, lint, E2E 17 + 4 tylko w CI. Lokalnie raz zawieszony przebieg (procesy
   Electrona po przerwanym teście) – po sprzątnięciu zielony.
+- CI: PR #16 zielone za pierwszym razem; na `main` run 40557338646 – test skali (Node 26, `check` 107 ms), Windows
+  pominięte; ponowienie nieudanych zadań zielone, wydanie opublikowane.
 
 ## 0.10.0 – miejsce paska, przeciąganie paska i bloków (D302–D305)
 - Gałąź `claude/0.10.0-pasek-bloki` od 0.9.1 (27.10 ok. 14:20). Odpowiedzi: D302 (pasek chowa się przy oknie głównym
