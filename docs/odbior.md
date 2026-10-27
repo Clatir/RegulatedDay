@@ -48,13 +48,19 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E4a.7 Koniec bloku po bezczynności
    - [ ] E4a.8 Posiłek z dala od komputera
    - [ ] E4a.9 Nieobecność w bloku pracy
-   - [ ] E5.2 Pasek bez zmian względem 0.4.0
+   - [ ] E4b.15 Kolory „cieplejsze” w pasku, ikonie i panelu
+   - [ ] E5b.1 „Prośba ▸” – „Zrobione teraz” i „Koniec”
+   - [ ] E5b.2 „Pilne” z szacunkiem
+   - [ ] E5b.3 Prośba w trybie ciszy
+   - [ ] E5b.5 Znacznik i warianty, „Przestawiono · Cofnij”
+   - [ ] E5b.6 „Zostaw” i „Przestaw plan”
    - [ ] E6a.4 W oknie nic nowego
    - [ ] E7a.2 Nowy blok i „Wymień” w „Dziś” działają jak dotąd
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
    - [ ] E4b.10 Dźwięk
+   - [ ] E5b.4 Prośba przez 04:00 (tylko gdy się zdarzy)
    - [ ] E6a.2 Czas po bloku pracy, który skończył się sam
    - [ ] E6a.3 Czas po projekcie, który skończył się sam – powiadomienie o twardym końcu
 5. Ustawienia i próba:
@@ -744,6 +750,14 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - pasek nie wraca po przejściu do innego okna;
   - pasek miga przy przełączaniu okien.
 
+#### E4b.15 Kolory „cieplejsze” w pasku, ikonie i panelu (0.11.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/widget-view.test.ts` (kolory z zestawu), kontrast `tests/unit/theme.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** wystartuj blok pracy, potem posiłek; spójrz na pasek, ikonę przy zegarze i panel ikony.
+- **Oczekiwany efekt:** kolory są takie jak zestaw „cieplejsze” w „Próbie” (D314): praca cieplejszy pomarańcz, życie
+  i opieka lawenda, wolne zieleń; kroki 15 · 5 · 0 min działają jak dotąd.
+- **Nie przechodzi, gdy:** pasek albo ikona mają kolory „roboczego” zestawu z E0 albo pasek i ikona różnią się kolorem.
+
 ### E5 – logika E5 (prośby w dniu i warianty pod spodem)
 
 #### E5.1 Aktualizacja do 0.5.0 (0.5.0)
@@ -760,7 +774,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - po aktualizacji brakuje danych: pusty plan dnia, zniknęły prośby lub szablony, kreator pyta o folder od nowa.
 
 #### E5.2 Pasek bez zmian względem 0.4.0 (0.5.0)
-- [ ] Odebrane
+- [x] Nie dotyczy od 0.11.0 (28.10.2026) – pasek zmienia się celowo, odbiór w E5b.1–E5b.6
 - **Automatycznie:** widok paska `tests/unit/engine/widget-view.test.ts`, pasek w oknie i panelu `tests/e2e/screens.spec.ts` („timer E4a/E4b”). Ty: rzut oka.
 - **Jak sprawdzić:** na 0.5.0 przejdź E4b.1–E4b.3.
 - **Oczekiwany efekt:** pasek u góry okna, panel ikony i pasek pulpitu wyglądają i działają dokładnie jak w 0.4.0 – w tej
@@ -769,6 +783,75 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - coś, co działało na 0.4.0, przestało działać (np. Pauza nie zatrzymuje odliczania, ikona straciła kolor);
   - w pasku są już przyciski próśb albo znacznik wariantów (mają przyjść dopiero w następnej wersji);
   - pasek pokazuje „Wznów · Zaparkuj”, choć niczego nie pauzowałeś i nie było „Odcinam się”.
+
+### E5b – elementy E5 w pasku (0.11.0)
+
+#### E5b.1 „Prośba ▸” – „Zrobione teraz” i „Koniec” (0.11.0)
+- [ ] Odebrane
+- **Automatycznie:** widok i przyciski `tests/fs/widget.test.ts` („prośby w pasku”), pasek w oknie `tests/e2e/screens.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w czasie bloku pracy kliknij w pasku „Prośba ▸”, potem przy „Zrobione teraz:” osobę. Po chwili
+  kliknij „Koniec”.
+- **Oczekiwany efekt:** rozwinięcie ma dwa wiersze – „Zrobione teraz:” i „Pilne:” – z trzema osobami, które proszą
+  najczęściej (bez historii: pierwsze trzy z listy osób), z „inna…”, a pod nimi „+ Prośba do kolejki”. Po kliknięciu
+  osoby w miejscu bloku stoi „Zrobione teraz · Ola · 0:00 · Koniec” (czas rośnie), a pod spodem cicha linia „Nauka –
+  pauza, wróci po „Koniec””. Po „Koniec” blok wraca sam i odlicza dalej.
+- **Nie przechodzi, gdy:**
+  - pod prośbą stoi „Wznów · Zaparkuj” z kropką albo ikona ma kropkę tylko dlatego, że prośba trwa;
+  - w czasie prośby pada „Koniec pracy?”;
+  - po „Koniec” blok nie wraca albo wraca z kosztem bez powodu;
+  - kliknięcie otwiera okno (poza „inna…” i „+ Prośba do kolejki”).
+
+#### E5b.2 „Pilne” z szacunkiem (0.11.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** „Prośba ▸” → przy „Pilne:” osoba → wybierz 30 → „Zacznij”.
+- **Oczekiwany efekt:** po osobie wiersz „Pilne · Mama · szacunek: 5 · 15 · 30 · 60 −5 30 min +5 Zacznij” (domyślnie
+  15 min). Po „Zacznij” w miejscu bloku stoi „Pilne · Mama · 0:00 z 30 min · Koniec”.
+- **Nie przechodzi, gdy:**
+  - prośba zaczyna się od razu po kliknięciu osoby, bez pytania o szacunek (poza trybami ciszy);
+  - ±5 przekracza 5 min w dół albo nie zmienia liczby;
+  - linia prośby nie pokazuje „z 30 min”.
+
+#### E5b.3 Prośba w trybie ciszy (0.11.0)
+- [ ] Odebrane
+- **Automatycznie:** zapis bez osoby `tests/fs/widget.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** włącz „Mniej pytań” (⋯). „Prośba ▸” → przy „Pilne:” osoba; potem „Prośba ▸” → „inna…” przy
+  „Zrobione teraz:”.
+- **Oczekiwany efekt:** „Pilne” zaczyna się od razu z 15 min (bez pytania o szacunek), „inna…” zaczyna prośbę „osoba: ?”
+  – żadne okno się nie otwiera. Poza trybami ciszy „inna…” otwiera ekran Prośby.
+- **Nie przechodzi, gdy:**
+  - w trybie ciszy otwiera się okno główne;
+  - „Pilne” w ciszy pyta o szacunek albo ma inny niż 15 min.
+
+#### E5b.4 Prośba przez 04:00 (0.11.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/widget.test.ts` („prośba sprzed 04:00”). Ty: tylko gdy się zdarzy.
+- **Jak sprawdzić:** zacznij prośbę przed 04:00 i kliknij „Koniec” po 04:00.
+- **Oczekiwany efekt:** po 04:00 pasek pokazuje już nowy dzień, a prośba stoi w nim dalej z „Koniec”; po kliknięciu
+  kończy się w dniu, w którym się zaczęła.
+- **Nie przechodzi, gdy:** prośba znika z paska o 04:00 albo „Koniec” mówi, że prośba nie trwa.
+
+#### E5b.5 Znacznik i warianty, „Przestawiono · Cofnij” (0.11.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/widget.test.ts` („warianty w pasku”). Ty: przy okazji.
+- **Jak sprawdzić:** w dniu z zatwierdzoną granicą zacznij długą prośbę „Pilne” (np. 60 min), tak żeby plan nie mieścił
+  się przed granicą. Kliknij „◆ warianty”, wybierz pierwszy wariant, potem „Cofnij”.
+- **Oczekiwany efekt:** zaraz po prośbie w pasku stoi „◆ warianty”. Kliknięcie rozwija w pasku 2–3 warianty (np. „Skróć
+  … o 45 min · koniec pracy 12:15”, „Przesuń … na jutro”, „Zostaw · przedłużenie 45 min”). Wybrany zmienia plan od razu
+  (oś dnia), znacznik znika, a w pasku stoi „Przestawiono: … · Cofnij”. „Cofnij” przywraca plan.
+- **Nie przechodzi, gdy:**
+  - znacznik pojawia się w trybie sesji albo zajęć (ma poczekać na ich koniec) albo wraca po zamknięciu;
+  - panel otwiera się w osobnym oknie albo zabiera fokus;
+  - plan nie zmienia się od razu albo „Cofnij” nie przywraca bloków.
+
+#### E5b.6 „Zostaw” i „Przestaw plan” (0.11.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/widget.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** przy znaczniku wybierz „Zostaw”. Potem ⋯ → „Przestaw plan” – raz przy planie za granicą, raz przy
+  planie, który się mieści.
+- **Oczekiwany efekt:** „Zostaw” zamyka panel i znacznik, plan bez zmian. „Przestaw plan” otwiera warianty także bez
+  znacznika; przy planie, który się mieści, pasek mówi „Plan się mieści – nie ma czego przestawiać.”.
+- **Nie przechodzi, gdy:** „Zostaw” zmienia plan albo znacznik wraca dla tej samej przyczyny.
 
 ### E6a – logika E6, część 1 (czas do wyjaśnienia, rytuał pod spodem)
 

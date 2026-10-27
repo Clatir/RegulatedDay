@@ -94,7 +94,41 @@ export interface WidgetView {
   recording: boolean
   /** Why a click did nothing (shown in the bar for a few seconds), null: nothing to say. */
   note: { text: string; until: number } | null
+  /** „Prośba ▸” and the request running now (D311, D312). */
+  requests: BarRequests
+  /** The marker of variants and, while its panel is open, the variants (D313). */
+  variants: BarVariants
 }
+
+/** A request running now: its line in place of the block (D312); `day` – the day its „Koniec” goes to (also before 04:00). */
+export interface RunningRequest {
+  id: string
+  day: string
+  mode: 'now' | 'urgent'
+  /** The person's name, „osoba: ?” without one. */
+  person: string
+  /** Its start (ms). */
+  from: number
+  estimateMin: number | null
+}
+
+export interface BarRequests {
+  /** The 3 people asked most often (D311). */
+  people: Array<{ id: string; name: string }>
+  running: RunningRequest | null
+  /** The block the running request interrupted: a quiet line under it („Nauka – pauza, wróci po „Koniec””). */
+  interrupted: string | null
+}
+
+export interface BarVariants {
+  /** The marker „◆ warianty” is in the bar (its cause holds). */
+  marker: boolean
+  /** The panel is open: its 2–3 variants (the last one leaves the plan). */
+  open: Array<{ id: string; label: string }> | null
+}
+
+export const NO_REQUESTS: BarRequests = { people: [], running: null, interrupted: null }
+export const NO_VARIANTS: BarVariants = { marker: false, open: null }
 
 export const ALL_BUTTONS: BarButtons = { next: true, pause: true, extend: true, workEnd: true, finished: false, cutOff: true, start: null }
 
@@ -191,6 +225,8 @@ export function trialView(t: TrialState, now: number): WidgetView {
     toneSet: t.toneSet,
     soundOk: !t.quiet,
     recording: false,
-    note: null
+    note: null,
+    requests: NO_REQUESTS,
+    variants: NO_VARIANTS
   }
 }

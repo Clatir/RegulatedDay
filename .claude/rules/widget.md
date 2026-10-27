@@ -14,7 +14,7 @@ paths:
 # Pasek, ikona, tryby ciszy (E4b)
 
 Źródło prawdy: specyfikacja „Widget”, „Cisza”, „Odcinam się”, „Woda”, „Powiadomienia i dźwięki”; D229, D232, D240,
-D291, D298. Decyzje T472–T476.
+D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 
 ## Przepływ
 - `shared/engineView.ts` – `engineView(input)` → `WidgetView` (ton, krok, kropka, kropla, przyciski, linie, tło, lista
@@ -24,6 +24,12 @@ D291, D298. Decyzje T472–T476.
   w widoku (idzie przez IPC); powiadomienia prowadzącego z `notice.shown`. Próba przez 10 min po zmianie (`trial.changedAt`).
 - `engine/modes.ts` (sesja, zajęcia, „mniej pytań”, noc, „Odcinam się”), `engine/care.ts` (woda, ciąg pracy, kontakt).
 - Linie mają id `rodzaj:…` – pytania silnika `reguła:dzień:blok:próg`; `line|akcja|wartość` w `widgetAction('line')`.
+- Prośby (D311, D312, T503): `WidgetView.requests` – 3 osoby (`folder.widgetModel().people`), trwająca prośba (także
+  sprzed 04:00 – `carried`, „Koniec” do jej dnia) i przerwany blok; akcje `request` (`now|urgent`, osoba – pusta =
+  „osoba: ?”, szacunek), `requestEnd`, `openMain` z `requests`. Szacunek „Pilne” i „inna…” rozstrzyga pasek
+  (`RequestUnfold`: w ciszy i „Odcinam się” bez okna, domyślne 15 min).
+- Warianty (D313, T502): `WidgetView.variants` (znacznik, panel) ustawia `WidgetEngine.variantsView` po `engineView`;
+  akcja `variants` `open` / `close` / `pick|i`, „Przestawiono … · Cofnij” to linia `moved:variant`.
 
 ## Pułapki
 - W ciszy nocnej pasek nie ma Start ani Pauzy – testy E2E zaczynają blok z panelu bloku (`block-timer-start`), bo

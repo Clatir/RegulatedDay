@@ -36,7 +36,7 @@ export const REQUEST_ESTIMATE_MAX_MIN = 8 * 60
 const goesOn = (b: BlockInfo) => b.fixed || b.waits
 
 /** A request that runs now (not one written in after the fact). */
-const runs = (r: RequestFact) => r.to === OPEN && r.mode !== 'after'
+export const isRunningRequest = (r: Pick<RequestFact, 'to' | 'mode'>): boolean => r.to === OPEN && r.mode !== 'after'
 
 export type RequestMode = 'now' | 'urgent' | 'queue' | 'evening' | 'after'
 
@@ -69,7 +69,7 @@ export function resumeAfter(state: DayState, r: RequestFact, at: number, autoRul
     const e = ending.get(x.id)
     return e != null && (e < at || (e === at && x.id < r.id))
   }
-  if (state.facts.requests.some((x) => x.id !== r.id && runs(x) && !endsFirst(x))) return []
+  if (state.facts.requests.some((x) => x.id !== r.id && isRunningRequest(x) && !endsFirst(x))) return []
   const f = state.facts.blocks.get(r.interrupts)
   const info = state.blocks.find((b) => b.id === r.interrupts)
   if (!f || !info || f.endedAt != null) return []
@@ -107,7 +107,7 @@ export function requestAction(state: DayState, act: RequestAction, at: number): 
       const events: TimerDraft[] = []
       const fg = t.fg
       // A request during another one takes over the block that one interrupted (it resumes after the last of them).
-      let interrupts: string | null = fg ? null : ([...state.facts.requests].reverse().find((r) => runs(r) && r.interrupts)?.interrupts ?? null)
+      let interrupts: string | null = fg ? null : ([...state.facts.requests].reverse().find((r) => isRunningRequest(r) && r.interrupts)?.interrupts ?? null)
       if (fg && !fg.info.isRequestCat) {
         interrupts = fg.info.id
         // A fixed block is never paused: it goes on in the background, with its full cost (spec „Przerwania”).
@@ -170,7 +170,7 @@ export function requestAutoEnds(state: DayState, activity: Activity, now: number
   const date = state.grid.date
   const ends = new Map<string, { r: RequestFact; at: number; rule: RequestEndRule }>()
   for (const r of state.facts.requests) {
-    if (!runs(r)) continue
+    if (!isRunningRequest(r)) continue
     const first = requestEndOf(state, activity, r)
     if (first && first.due <= now && first.due <= gate) ends.set(r.id, { r, at: first.at, rule: first.rule })
   }

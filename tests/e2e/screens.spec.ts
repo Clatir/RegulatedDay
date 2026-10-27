@@ -226,3 +226,43 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
     await app.close()
   }
 })
+
+test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z osobą i „Koniec”; „Pilne” z szacunkiem', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-requests-'))
+  seed(dataDir)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      // The engine's view, not the trial's (which always has „Prośba ▸”).
+      await expect.poll(() => page.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
+      // At night the bar shows only the time and what runs: no „Prośba ▸” then – the request through the main process.
+      const night = await page.evaluate(async () => (await window.rd.widget()).night)
+      await expect(page.getByTestId('bar-group-request')).toHaveCount(night ? 0 : 1)
+      if (night) await page.evaluate(() => window.rd.widgetAction('request', 'now|mama|'))
+      else {
+        await page.getByTestId('bar-group-request').click()
+        await expect(page.getByTestId('bar-request-group')).toContainText('Zrobione teraz:')
+        await page.getByTestId('bar-request-now-mama').click()
+      }
+      await expect(page.getByTestId('bar-request')).toContainText('Zrobione teraz · Mama · 0:0')
+      await page.getByTestId('bar-request-end').click()
+      await expect(page.getByTestId('bar-request')).toHaveCount(0)
+      if (night) await page.evaluate(() => window.rd.widgetAction('request', 'urgent|mama|30'))
+      else {
+        await page.getByTestId('bar-group-request').click()
+        await page.getByTestId('bar-request-urgent-mama').click()
+        await expect(page.getByTestId('bar-request-estimate-value')).toHaveText('15 min')
+        await page.getByTestId('bar-request-estimate-30').click()
+        await page.getByTestId('bar-request-start').click()
+      }
+      await expect(page.getByTestId('bar-request')).toContainText('Pilne · Mama · 0:0')
+      await expect(page.getByTestId('bar-request')).toContainText('z 30 min')
+      await shot(page, 'e5-01-request')
+      await page.getByTestId('bar-request-end').click()
+      await expect(page.getByTestId('bar-request')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

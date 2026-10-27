@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
 import { answerEvents, autoActions, questionsOf, type AutoEvent } from '@shared/engine/auto'
+import { requestAction } from '@shared/engine/requests'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { block, hhmm, lm, Scenario } from './dsl'
 
@@ -303,6 +304,16 @@ describe('działania automatyczne prowadzącego', () => {
     s.write(answerEvents(s.stateAt(t), q!, 'yes', t)!, t)
     expect(s.state('09:06').ends.at(-1)).toMatchObject({ confirmed: true })
     expect(questions(s, '09:07').some((x) => x.kind === 'workEnd')).toBe(false)
+  })
+
+  it('bez „Koniec pracy?” w czasie prośby, która przerwała blok pracy – wróci po jej końcu (T503)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 120 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const t = s.at('08:30')
+    const r = requestAction(s.stateAt(t), { a: 'requestNow', request: 'r1', person: null }, t)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, t)
+    expect(questions(s, '08:50').some((x) => x.kind === 'workEnd')).toBe(false)
   })
 
   it('granica zatwierdzona sama przy starcie pierwszego bloku pracy trafia na listę z „Cofnij”', () => {

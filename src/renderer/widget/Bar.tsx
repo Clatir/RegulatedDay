@@ -9,8 +9,9 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { WidgetAction } from '@shared/api'
+import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
 import { barBackground, TONE_SETS } from '@shared/theme'
-import { LONGEST, type BarLine, type WidgetView } from '@shared/widget'
+import { LONGEST, type BarLine, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
@@ -74,12 +75,13 @@ function BarButton({ mode, onAct, children, testId, pressed, accent }: { mode: B
 function DragHandle() {
   const held = useRef(false)
   const frame = useRef(0)
-  const end = () => {
+  // Why it ended goes with it (the main process logs it: the trace of a drag that never moved, E4b.12).
+  const end = (why: 'up' | 'cancel' | 'lost') => {
     if (!held.current) return
     held.current = false
     cancelAnimationFrame(frame.current)
     frame.current = 0
-    window.rd.barDrag('end')
+    window.rd.barDrag('end', why)
   }
   return (
     <span
@@ -102,13 +104,102 @@ function DragHandle() {
       }}
       onPointerUp={(e) => {
         e.stopPropagation()
-        end()
+        end('up')
       }}
-      onPointerCancel={end}
-      onLostPointerCapture={end}
+      onPointerCancel={() => end('cancel')}
+      onLostPointerCapture={() => end('lost')}
     >
       ⠿
     </span>
+  )
+}
+
+/** The time of a request so far as „0:12” (D312). */
+function elapsed(ms: number): string {
+  const m = Math.max(0, Math.floor(ms / 60_000))
+  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
+}
+
+/** The request running now, in place of the block (D312): „Pilne · Mama · 0:12 z 30 min · Koniec”. */
+function RequestLine({ run, mode, now }: { run: RunningRequest; mode: BarMode; now: number }) {
+  return (
+    <span className="flex min-w-[120px] flex-1 items-center gap-1.5" data-testid="bar-request">
+      <span className="min-w-0 truncate text-fg">
+        {run.mode === 'urgent' ? 'Pilne' : 'Zrobione teraz'} · {run.person} · <span className="num">{elapsed(now - run.from)}</span>
+        {run.mode === 'urgent' && run.estimateMin != null ? ` z ${run.estimateMin} min` : ''}
+      </span>
+      <BarButton mode={mode} accent testId="bar-request-end" onAct={() => act('requestEnd')}>
+        Koniec
+      </BarButton>
+    </span>
+  )
+}
+
+/** The estimates of „Pilne” to pick (D311), then ±5. */
+const ESTIMATES = [5, 15, 30, 60]
+
+/**
+ * „Prośba ▸” unfolded (D311): „Zrobione teraz:” and „Pilne:” with the 3 people asked most often and „inna…”, and
+ * „+ Prośba do kolejki”. „Pilne” asks for its estimate first. In the quiet modes (and „Odcinam się”) everything works
+ * without a window: another person is „osoba: ?” and „Pilne” takes its default 15 min (spec „Przerwania”); otherwise
+ * another person opens the screen of requests.
+ */
+function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode; close: () => void }) {
+  const [urgent, setUrgent] = useState<{ id: string; name: string } | null>(null)
+  const [estimate, setEstimate] = useState(REQUEST_ESTIMATE_MIN)
+  const quiet = view.quiet || view.hidden
+  const start = (m: 'now' | 'urgent', person: string, est = '') => {
+    act('request', `${m}|${person}|${est}`)
+    close()
+  }
+  const queue = () => {
+    act('openMain', 'requests')
+    close()
+  }
+  if (urgent)
+    return (
+      <div className="flex flex-wrap items-center gap-1.5" data-testid="bar-request-estimate">
+        <span className="text-[12px] text-muted">Pilne · {urgent.name} · szacunek:</span>
+        {ESTIMATES.map((m) => (
+          <BarButton key={m} mode={mode} testId={`bar-request-estimate-${m}`} pressed={estimate === m} onAct={() => setEstimate(m)}>
+            {m}
+          </BarButton>
+        ))}
+        <BarButton mode={mode} onAct={() => setEstimate((x) => Math.max(5, x - 5))}>
+          −5
+        </BarButton>
+        <span className="num text-[12px]" data-testid="bar-request-estimate-value">
+          {estimate} min
+        </span>
+        <BarButton mode={mode} onAct={() => setEstimate((x) => Math.min(REQUEST_ESTIMATE_MAX_MIN, x + 5))}>
+          +5
+        </BarButton>
+        <BarButton mode={mode} accent testId="bar-request-start" onAct={() => start('urgent', urgent.id, String(estimate))}>
+          Zacznij
+        </BarButton>
+      </div>
+    )
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="bar-request-group">
+      {(['now', 'urgent'] as const).map((m) => (
+        <div key={m} className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[12px] text-muted">{m === 'now' ? 'Zrobione teraz:' : 'Pilne:'}</span>
+          {view.requests.people.map((p) => (
+            <BarButton key={p.id} mode={mode} testId={`bar-request-${m}-${p.id}`} onAct={() => (m === 'urgent' && !quiet ? setUrgent(p) : start(m, p.id))}>
+              {p.name}
+            </BarButton>
+          ))}
+          <BarButton mode={mode} testId={`bar-request-${m}-other`} onAct={() => (quiet ? start(m, '') : queue())}>
+            inna…
+          </BarButton>
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-1.5">
+        <BarButton mode={mode} testId="bar-request-queue" onAct={queue}>
+          + Prośba do kolejki
+        </BarButton>
+      </div>
+    </div>
   )
 }
 
@@ -188,9 +279,19 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
   const brightness = useMachine((s) => s.prefs.brightness)
   const [unfold, setUnfold] = useState<Unfold>(null)
   const root = useRef<HTMLDivElement>(null)
-  const toggle = (u: Exclude<Unfold, null>) => setUnfold((x) => (x === u ? null : u))
   const quiet = view.quiet
   const trial = view.day == null
+  // The panel of variants belongs to the main process (D313): one for every window, open while the view has it.
+  const variantsOpen = !trial && view.variants.open != null
+  const toggle = (u: Exclude<Unfold, null>) => {
+    if (u === 'variants' && !trial) {
+      act('variants', variantsOpen ? 'close' : 'open')
+      setUnfold(null)
+      return
+    }
+    setUnfold((x) => (x === u ? null : u))
+  }
+  const running = trial ? null : view.requests.running
   // In the quiet modes one line fits, otherwise two; the rest gather in „⋯”.
   const fit = quiet ? 1 : 2
   const shownLines = view.lines.slice(0, fit)
@@ -206,9 +307,9 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
       (pending.button.startsWith('bgExtend:') && unfold === 'more' && view.background.some((b) => `bgExtend:${b.id}` === pending.button)))
 
   useEffect(() => {
-    onUnfold?.(unfold != null)
+    onUnfold?.(unfold != null || variantsOpen)
     if (mode === 'panel') window.rd.panelTouch()
-  }, [mode, unfold, onUnfold])
+  }, [mode, unfold, variantsOpen, onUnfold])
 
   /** A button of the bar's own, or its cost waiting for the second click in its place. */
   const own = (id: string, label: string, action: WidgetAction, testId: string, arg?: string) =>
@@ -222,8 +323,18 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
       </BarButton>
     )
 
-  const unfolded = unfold && (
-    <div className="flex flex-col gap-1.5 border-line px-2 py-2" data-testid={`bar-unfold-${unfold}`}>
+  const unfolded = (unfold || variantsOpen) && (
+    <div className="flex flex-col gap-1.5 border-line px-2 py-2" data-testid={`bar-unfold-${unfold ?? 'variants'}`}>
+      {variantsOpen && (
+        <div className="flex flex-col gap-1" data-testid="bar-variants-panel">
+          {view.variants.open!.map((v) => (
+            <BarButton key={v.id} mode={mode} testId={`bar-variant-${v.id}`} onAct={() => act('variants', `pick|${v.id}`)}>
+              {v.label}
+            </BarButton>
+          ))}
+        </div>
+      )}
+      {unfold === 'request' && !trial && <RequestUnfold view={view} mode={mode} close={() => setUnfold(null)} />}
       {unfold === 'request' && trial && (
         <div className="flex flex-wrap gap-1.5">
           {PEOPLE.map((p) => (
@@ -282,6 +393,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
             <BarButton mode={mode} testId="bar-fewer" onAct={() => act(view.fewer ? 'better' : 'fewer')}>
               {view.fewer ? 'Jest lepiej' : 'Mniej pytań'}
             </BarButton>
+            {!trial && (
+              <BarButton mode={mode} testId="bar-replan" onAct={() => toggle('variants')}>
+                Przestaw plan
+              </BarButton>
+            )}
           </div>
           {(view.autos.groups.length > 0 || view.autos.items.length > 0) && (
             <div className="flex flex-col gap-1" data-testid="bar-autos">
@@ -341,6 +457,18 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
             Wracam
           </BarButton>
         )}
+        {/* „Odcinam się”: a request starts and ends without a window, „Koniec prośby” in the icon's panel (D245). */}
+        {!trial && running && <RequestLine run={running} mode={mode} now={now} />}
+        {!trial && (
+          <BarButton mode={mode} testId="bar-group-request" pressed={unfold === 'request'} onAct={() => toggle('request')}>
+            Prośba ▸
+          </BarButton>
+        )}
+        {!trial && unfold === 'request' && (
+          <div className="w-full">
+            <RequestUnfold view={view} mode={mode} close={() => setUnfold(null)} />
+          </div>
+        )}
       </div>
     )
 
@@ -382,10 +510,14 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
               )}
             </div>
           )}
-          <span className="min-w-[120px] flex-1 truncate text-fg" data-testid="bar-block">
-            {view.block ? view.block.name : view.night ? clockOf(now) : 'Bez bloku'}
-            {view.block && !quiet && <span className="ml-1.5 text-[12px] text-muted">{view.block.className}</span>}
-          </span>
+          {running && !view.block ? (
+            <RequestLine run={running} mode={mode} now={now} />
+          ) : (
+            <span className="min-w-[120px] flex-1 truncate text-fg" data-testid="bar-block">
+              {view.block ? view.block.name : view.night ? clockOf(now) : 'Bez bloku'}
+              {view.block && !quiet && <span className="ml-1.5 text-[12px] text-muted">{view.block.className}</span>}
+            </span>
+          )}
           {view.block && (
             <span className={cx('num shrink-0 text-[14px]', left < 0 ? 'text-rose' : 'text-fg')} data-testid="bar-countdown">
               {left < 0 ? `+${Math.floor(-left / 60_000)} min` : countdown(left)}
@@ -403,12 +535,23 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
               🔇
             </span>
           )}
-          {trial && (
-            <BarButton mode={mode} testId="bar-variants" pressed={unfold === 'variants'} onAct={() => toggle('variants')}>
+          {(trial || view.variants.marker) && (
+            <BarButton mode={mode} testId="bar-variants" pressed={trial ? unfold === 'variants' : variantsOpen} onAct={() => toggle('variants')}>
               ◆ warianty
             </BarButton>
           )}
         </div>
+        {/* A request while a block stays in the foreground (a block of requests, a fixed block started by the plan). */}
+        {running && view.block && (
+          <div className="flex min-w-0">
+            <RequestLine run={running} mode={mode} now={now} />
+          </div>
+        )}
+        {view.requests.interrupted && (
+          <div className="text-[12px] text-muted" data-testid="bar-interrupted">
+            {view.requests.interrupted}
+          </div>
+        )}
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {view.buttons.next && own('next', 'Dalej', 'next', 'bar-next')}
           {view.buttons.pause && (
@@ -440,7 +583,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
               Odcinam się
             </BarButton>
           )}
-          {trial && (
+          {(trial || !view.night) && (
             <BarButton mode={mode} testId="bar-group-request" pressed={unfold === 'request'} onAct={() => toggle('request')}>
               Prośba ▸
             </BarButton>

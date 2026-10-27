@@ -14,13 +14,14 @@ import { plannedSpan } from './engine/blocks'
 import { answered, contactEnded, waterDue, workRunStart, type CareSettings } from './engine/care'
 import type { DayContext, DayState } from './engine/day'
 import type { EnergyState } from './engine/energy'
-import type { AutoAction } from './engine/facts'
-import { atOf } from './engine/grid'
+import type { AutoAction, RequestFact } from './engine/facts'
+import { atOf, type Grid } from './engine/grid'
+import { isRunningRequest } from './engine/requests'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
 import { timerNow, type TimerNow } from './engine/timer'
 import type { PlanBlock } from './model/plan'
 import { ENGINE_TONE_SET, iconColor, toneColor, type Tone, type WarnStep } from './theme'
-import type { BarLine, BarPending, WidgetView } from './widget'
+import { NO_VARIANTS, type BarLine, type BarPending, type RunningRequest, type WidgetView } from './widget'
 
 const MIN = 60_000
 
@@ -37,6 +38,20 @@ export interface EngineInput {
   pending: BarPending | null
   /** This computer (the recording computer of a lecture plays no sound and shows no notification then). */
   computer?: string
+  /** „Prośba ▸”: the 3 people asked most often (D311). */
+  people?: Array<{ id: string; name: string }>
+  /** A person's name by id (null: „osoba: ?”). */
+  person?: (id: string | null) => string
+  /** A request still running from the day before (through 04:00, D312): its line, its day for „Koniec”. */
+  carried?: RunningRequest | null
+}
+
+/** A request without a person (spec „osoba: ?”). */
+const NO_PERSON = 'osoba: ?'
+
+/** A request running now as the bar shows it (D312): its line and the day its „Koniec” goes to. */
+export function runningRequestOf(r: RequestFact, grid: Grid, person: (id: string | null) => string): RunningRequest {
+  return { id: r.id, day: grid.date, mode: r.mode === 'urgent' ? 'urgent' : 'now', person: person(r.person), from: atOf(grid, r.from), estimateMin: r.estimateMin }
 }
 
 const CLASS_TONE: Record<string, Tone> = { work: 'praca', life: 'zycie', free: 'wolne' }
@@ -146,6 +161,16 @@ export function engineView(i: EngineInput): WidgetView {
     ? { id: next.id, text: next.kind === 'next2' ? 'Dalej? (drugi raz)' : 'Dalej?', actions: next.answers.map((a) => ({ id: a.id, label: a.label })), dot: true, at: fg ? at(fg.plannedEnd) : null }
     : null
 
+  // The request running now – the latest – in the bar (D312); without one today, one from before 04:00.
+  const open = state.facts.requests.filter(isRunningRequest).sort((a, b) => a.from - b.from)
+  const live = open.at(-1)
+  const running: RunningRequest | null = live ? runningRequestOf(live, state.grid, i.person ?? ((id) => id ?? NO_PERSON)) : (i.carried ?? null)
+  // The block it interrupted waits for its end – paused, or a fixed one in the background: a quiet line, never „Wznów ·
+  // Zaparkuj” with a dot (D312, D247). Resumed, ended or parked meanwhile, it waits for nothing.
+  const interruptedId = [...open].reverse().find((r) => r.interrupts)?.interrupts ?? null
+  const waits = !interruptedId ? null : t.paused.some((p) => p.info.id === interruptedId) ? 'pauza' : t.bg.some((b) => b.info.id === interruptedId) ? 'w tle' : null
+  const interrupted = interruptedId && waits && !hidden ? `${nameOf(interruptedId)} – ${waits}, wróci po „Koniec”` : null
+
   const lines: BarLine[] = []
   if (!hidden && !modes.night) {
     for (const b of t.waiting) lines.push({ id: `wait:${b.id}`, text: `${nameOf(b.id)} ${b.start != null ? clockOf(at(b.start)) : ''}`.trim(), actions: [{ id: 'start', label: 'Zacznij' }, { id: 'cancel', label: 'Odwołaj' }], dot: true })
@@ -156,8 +181,8 @@ export function engineView(i: EngineInput): WidgetView {
       if (!f || f.endedAt == null || !span || state.now >= span.end || f.endedAt >= span.end || fg?.info.id === b.id) continue
       lines.push({ id: `restart:${b.id}`, text: `${nameOf(b.id)} · do ${clockOf(at(span.end))}`, actions: [{ id: 'restart', label: 'Zacznij jeszcze raz' }], dot: false })
     }
-    // Paused blocks waiting with nothing in the foreground („Wznów · Zaparkuj”).
-    if (!fg) for (const p of t.paused) lines.push({ id: `paused:${p.info.id}`, text: nameOf(p.info.id), actions: [{ id: 'start', label: 'Wznów' }, { id: 'park', label: 'Zaparkuj' }], dot: true })
+    // Paused blocks waiting with nothing in the foreground („Wznów · Zaparkuj”) – not one a running request will resume.
+    if (!fg) for (const p of t.paused) if (p.info.id !== interruptedId) lines.push({ id: `paused:${p.info.id}`, text: nameOf(p.info.id), actions: [{ id: 'start', label: 'Wznów' }, { id: 'park', label: 'Zaparkuj' }], dot: true })
     for (const q of questions) if (q !== next) lines.push(questionLine(q, q.block && q.kind !== 'request' ? nameOf(q.block) : '', clockOf))
     // The break after 90 min of continuous work (D234: a dot, no notification); in a session or a class it waits.
     const run = i.care.breakAfterMin > 0 ? workRunStart(state, now) : null
@@ -192,7 +217,8 @@ export function engineView(i: EngineInput): WidgetView {
   const water = waterDue(events, state, t, now, i.care, { night: modes.night, disconnect: hidden })
   const session = !!fg && fg.info.rules.kind === 'session'
   const sessionAny = session || t.bg.some((b) => b.info.rules.kind === 'session')
-  const start = !fg && t.next ? `${t.paused.some((p) => p.info.id === t.next!.id) ? 'Wznów' : 'Start'}: ${nameOf(t.next.id)}` : null
+  // While a request runs, its „Koniec” is the bar's action: no „Start” nor „Wznów” of a block beside it.
+  const start = !fg && t.next && !running ? `${t.paused.some((p) => p.info.id === t.next!.id) ? 'Wznów' : 'Start'}: ${nameOf(t.next.id)}` : null
   const fixedFg = !!fg && (fg.info.fixed || fg.info.rules.kind === 'session')
 
   // „Zrobione automatycznie”: the actions as the plan said them in one row, the rest each with „Cofnij”.
@@ -252,6 +278,8 @@ export function engineView(i: EngineInput): WidgetView {
     pending: i.pending && i.pending.until > now ? i.pending : null,
     day: state.grid.date,
     toneSet: ENGINE_TONE_SET,
-    note: null
+    note: null,
+    requests: { people: i.people ?? [], running, interrupted },
+    variants: NO_VARIANTS
   }
 }

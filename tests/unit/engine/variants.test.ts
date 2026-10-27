@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { EnergyState } from '@shared/engine/energy'
-import { applyVariant, markerCause, planWith, variantCauses, variantsFor } from '@shared/engine/variants'
+import { applyVariant, markerCause, planCause, planWith, variantCauses, variantsFor } from '@shared/engine/variants'
 import { dayFileFrom } from '@shared/model/plan'
 import { block, Scenario } from './dsl'
 
@@ -150,6 +150,16 @@ describe('warianty przy rezerwie energii', () => {
     expect(v[0]!.label).toMatch(/20 min teraz · Analiza na jutro$/)
     // The regeneration lands in the plan as a block.
     expect(planWith(s.contextAt(s.at('12:00')), v[0]!.changes).some((p) => p.categoryId === 'regeneracja')).toBe(true)
+  })
+
+  it('„Przestaw plan” bez znacznika: przyczyna z chwili – pula w rezerwie, ale nie w okresie kalibracji (reakcje tylko informują)', () => {
+    const plan = [block({ id: 'a', cat: 'inne', at: '13:00', min: 60 })]
+    const s = new Scenario({ date: DATE, plan }).observe('07:00', null)
+    const st = s.state('12:00')
+    const energy = (variants: boolean) => ({ known: true, enabled: true, variants, atReserve: { head: true, emotions: false, senses: false }, descents: [] }) as unknown as EnergyState
+    expect(planCause(st, energy(true), s.at('12:00'))).toMatchObject({ kind: 'energy', pool: 'head' })
+    expect(planCause(st, energy(false), s.at('12:00'))).toBeNull()
+    expect(planCause(st, null, s.at('12:00'))).toBeNull()
   })
 
   it('wybrany wariant jako pliki dni: krótszy blok, blok na jutro bez licznika przeniesień, regeneracja do startu', () => {

@@ -9,7 +9,7 @@ paths:
 # Prośby w dniu i warianty zmiany planu (logika E5)
 
 Źródło prawdy: specyfikacja „Prośba”, „Przerwania”, „Warianty zmiany planu” (Grep po nagłówkach); D22, D79, D242,
-D247, D263, D296, T202, T372. Decyzje T478–T481. Elementy w pasku (przyciski próśb, znacznik, panel) – po odbiorze E4b, wygląd według D311–D313 (D310).
+D247, D263, D296, T202, T372. Decyzje T478–T481, T502, T503. Elementy w pasku według D311–D313 (0.11.0).
 
 ## Pliki
 - `engine/requests.ts` – `requestAction(state, act, at)`: „zrobione teraz” i pilna (`requestNow`, `urgent`), „Koniec”
@@ -42,5 +42,5 @@ D247, D263, D296, T202, T372. Decyzje T478–T481. Elementy w pasku (przyciski p
   `lastWorkForecast`. `RequestFact.startT` / `endT` – zegar zapisu (pole `t`).
 - Indeksy minut (`from`, `to`, `descents[].at`, `autos[].at`) a chwile w ms (`at` zdarzeń, wyzwalaczy) – zamieniaj
   przez `atOf` / `idxOf`; identyfikatory pochodne liczone z ms.
-- Pasek w czasie prośby pokazuje jeszcze przerwany blok jako „Wznów · Zaparkuj” z kropką – do zmiany z elementami
-  próśb w pasku (D247: kropka po „Jeszcze trwa”).
+- W pasku (D311–D313, reguły `widget.md`): trwająca prośba w miejscu bloku, przerwany blok cichą linią – nigdy
+  „Wznów · Zaparkuj” z kropką ani „Koniec pracy?” w jej czasie (T503); znacznik i panel liczy `WidgetEngine` (T502).

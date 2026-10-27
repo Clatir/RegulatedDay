@@ -124,6 +124,7 @@ export type WidgetAction =
   | 'line'
   | 'openMain'
   | 'request'
+  | 'requestEnd'
   | 'doneNow'
   | 'urgent'
   | 'variants'
@@ -329,7 +330,7 @@ export interface RdApi {
   widgetAction(action: WidgetAction, arg?: string): Promise<void>
   barLayout(layout: BarLayout): void
   /** The desktop bar dragged by its handle (D303): the main process follows the cursor between start and end. */
-  barDrag(phase: 'start' | 'move' | 'end'): void
+  barDrag(phase: 'start' | 'move' | 'end', why?: 'up' | 'cancel' | 'lost'): void
   /** The monitors and where the desktop bar stands (D304): for the settings' mock-up. */
   barScreens(): Promise<BarScreens>
   /** The desktop bar to a place on a monitor (by its id), from the settings' mock-up. */

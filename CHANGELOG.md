@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0
+- Prośby w pasku: „Prośba ▸” rozwija „Zrobione teraz:” i „Pilne:” z trzema osobami, które proszą najczęściej (ostatnie 28 dni), oraz „inna…” i „+ Prośba do kolejki” (ekran Prośby). „Pilne” pyta o szacunek – 5 · 15 · 30 · 60 min, ±5 – i zaczyna się po „Zacznij”. W trybach ciszy i w „Odcinam się” wszystko działa bez otwierania okna: inna osoba to „osoba: ?” do uzupełnienia później, a „Pilne” dostaje 15 min.
+- Trwająca prośba stoi w pasku w miejscu bloku: „Pilne · Mama · 0:12 z 30 min · Koniec” albo „Zrobione teraz · Ola · 0:04 · Koniec”. Przerwany blok jest pod nią cichą linią („Nauka – pauza, wróci po „Koniec””) – bez kropki i bez „Wznów · Zaparkuj”, a „Koniec pracy?” nie pada, dopóki prośba trwa. Prośba zaczęta przed 04:00 trwa w pasku nowego dnia, a jej „Koniec” trafia do jej dnia.
+- Warianty zmiany planu w pasku: gdy prośba, przekroczony blok albo spadek energii wypycha koniec pracy za granicę, pojawia się „◆ warianty”. Kliknięcie otwiera 2–3 warianty w samym pasku; wybrany zmienia plan od razu, a w pasku zostaje na 15 min „Przestawiono: … · Cofnij”. „Zostaw” zamyka panel i znacznik. „Przestaw plan” (w „⋯”) otwiera warianty także bez znacznika.
+- Kolory klas bloków, rezerwy i kroków 15 · 5 · 0 min w pasku, ikonie i panelu to teraz zestaw „cieplejsze” wybrany w „Próbie”.
+- Baner „Aktualizacja do X nie dokończyła się” wraca przy każdym starcie, dopóki „Spróbuj ponownie” nie naprawi instalacji; gdy pliki są już w porządku (np. po ręcznej instalacji), baner znika sam.
+
 ## 0.10.1
 - Menu boczne okna głównego: „Ustawienia” są teraz zaraz pod „Historią”, a „Próba” pod „Ustawieniami”, zamiast na samym dole menu. Skróty bez zmian – Ctrl+, otwiera Ustawienia.
 
