@@ -20,27 +20,39 @@
 - **0.10.1 scalone** (D306 – menu boczne: Ustawienia pod Historią, Próba pod Ustawieniami; PR #16, 94e5caa, 27.10
   ok. 19:10; CI PR zielone za pierwszym razem, także Windows) – wydanie 0.10.1 z runu 40557338646 na `main`
   opublikowane (ok. 19:43, po ponowieniu testu skali); sekcja niżej. Pauza do „dalej”.
-- Otwarte (test skali, niestabilny na Node 26 w CI): pojedynczy pomiar codziennej operacji raz ponad 100 ms –
-  `gameState` 101 ms (PR #15), `check` 107 ms (`main` po PR #16); ponowienia zielone. Naprawa w kolejce (pkt 2).
-  Osobno: przed ekranami gry (`GAME_FROM`) `gameState` przyspieszyć albo liczyć raz na zmianę plików ocen (T492).
+- **Test skali w toku** (T499 – najlepsza z 3 rund; niestabilny na Node 26: `gameState` 101 ms w PR #15, `check`
+  107 ms na `main` po PR #16): gałąź `claude/test-skali`, bez nowej wersji (CI na `main` przy wydanej 0.10.1 nic nie
+  publikuje). Osobno: przed ekranami gry (`GAME_FROM`) `gameState` przyspieszyć albo liczyć raz na zmianę plików
+  ocen (T492).
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
   (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
   do folderu z `.moved.json`.
-- Zastąpione decyzje (31) przeniesione do `docs/archiwum/decyzje-zastapione.md`; `docs/decyzje.md` ma 199,5 / 200 KB –
-  przed kolejną decyzją kolejne (także częściowo zastąpione) do archiwum.
+- Zastąpione decyzje (31) w `docs/archiwum/decyzje-zastapione.md`; `docs/decyzje.md` ma 199,8 / 200 KB i zastąpionych
+  w całości już nie ma (pozostałe – w części; D188 cofnięta przez T303, ale cytowana w D150 i specyfikacji) – przed
+  kolejnym etapem decyzja, jak dzielić rejestr (kolejka, pkt 2).
 
 ## Kolejka
 1. Ty: odbiór według `docs/odbior.md` (0.10.1, 0.10.0, 0.9.1, E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b), wybór zestawu kolorów (D298);
    27.10 odebrane E3.2, E3.6, E3.8, E3.11.
-2. Po „dalej”, przed etapem (technicznie, bez wersji dla użytkownika, jeśli CI pozwoli): zastąpione decyzje
-   → archiwum (rejestr 199,5 / 200 KB), potem T499 – test skali mierzy każdą codzienną operację jako najlepszy
-   z 3 pomiarów (limit 0,1 s bez zmian; szum runnera, nie kod).
+2. Przed etapem: podział rejestru decyzji (miejsce na najwyżej jedną decyzję) – pytanie do Ciebie.
 3. Potem: elementy E5 w pasku (przyciski próśb, znacznik i panel wariantów), potem ekrany E6 (rytuał, niezamknięte
    dni, eksport, przywracanie) – z pytaniami o wygląd; przed nimi komunikat „Przed etapem”.
 
 ## Do odbioru na Windows
 - Lista w `docs/odbior.md` (0.10.1, 0.10.0, 0.9.1, E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b – każdy punkt z oczekiwanym efektem i błędami, które blokują
   odbiór; na dole punkty już odebrane, E0). Kolejne etapy dopisują tam swoje listy.
+
+## Test skali – najlepsza z 3 rund (T499)
+- Prośba z 27.10 po wydaniu 0.10.1. Gałąź `claude/test-skali` od e598537 (ok. 20:00).
+- `tests/scale/scale.test.ts`: codzienne operacje (klik, `check`, dzień, energia, gra) w 3 rundach po minucie, każda
+  z nowym kliknięciem („Odcinam się”, „Wracam”, „Odcinam się”) – każda operacja pracuje na zmienionym logu jak
+  w aplikacji; liczy się najlepsza runda, limit 0,1 s bez zmian. Pierwszy widok gry (pliki ocen 3 lat, zapis pokoju)
+  w otwarciu (3 s). Niestabilności nie da się odtworzyć na żądanie – dowodem jest CI.
+- `/code-review` (medium) pierwszej wersji (3 powtórzenia tej samej operacji): 7 uwag – powtórzenia mierzyły ścieżkę
+  z pamięci podręcznej (check, dzień, gra) i zostawiały 3 „Odcinam się” w logu → rundy z nowym kliknięciem; kolejność
+  T499 w rejestrze; D188 → archiwum cofnięte (cytowana w D150 i specyfikacji).
+- Testy: typecheck, test skali osobno; pełny zestaw lokalnie – otwarcie w teście skali ponad limit pod obciążeniem
+  (znana pułapka, `gra.md`), osobno zielony.
 
 ## 0.10.1 – menu boczne (D306)
 - Prośba z 27.10 (przed dalszą pracą): „Ustawienia” zaraz pod „Historią”, „Próba” pod „Ustawieniami”. Gałąź
