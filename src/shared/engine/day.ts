@@ -15,10 +15,12 @@ import type { PlanBlock } from '../model/plan'
 import type { DayTypeParams, RulesSettings } from '../model/settings'
 import { placeLogical } from '../time/day'
 import { addDays, weekday } from '../time/zone'
+import { activityOf, type Activity } from './activity'
 import { blockInfos, isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
+import { EXPLAIN_END_RULES, explainsOf, type Explain } from './explain'
 import { OPEN, foldFacts, isPassive, isRunning, ranMinutes, viewAt, type DayFacts, type Segment } from './facts'
 import { forecast, type Forecast, type Placed } from './forecast'
-import { gridOf, idxOf, idxOfLogical, type Grid } from './grid'
+import { atOf, gridOf, idxOf, idxOfLogical, type Grid } from './grid'
 
 /** How far past the day's end a block that runs through 04:00 may still be followed (it belongs to the day it began). */
 const SPILL_MIN = 12 * 60
@@ -37,6 +39,9 @@ const F_DISC = 512 // „Odcinam się”
 const F_BLOCK = 1024 // not „time without a block”
 const F_UPFRONT = 2048 // confirmed in advance (D253)
 const F_FORECAST = 4096
+const F_EXPLAIN = 8192 // time to explain (answered or not): the energy does not change in it
+const F_TENT_REST = 16384 // time to explain after a work block without an answer: rest for the hard end and the pool (D262)
+const F_FREE_REST = 32768 // a break of 10–30 min inside the time to explain after a project: rest (D281)
 /** The flags that tell whether the day went as its forecast said. */
 const SAME_MASK = 0xffff & ~F_FORECAST
 
@@ -66,6 +71,11 @@ export interface DayContext {
   now: number
   /** Typical length of a session of the layer (by the session's id), null = its whole window (fewer than 5 sessions). */
   typicalSessionMin?: Readonly<Record<string, number | null>>
+  /**
+   * The day as written (spec „Przy zamrożeniu niepotwierdzone dane przyjmowane są tak, jak zapisano”, the ritual's „Jak
+   * zapisano”): time to explain after a work block without an answer is rest also toward the minimum (D265).
+   */
+  asWritten?: boolean
 }
 
 export interface MinuteInfo {
@@ -112,7 +122,13 @@ export interface DayState {
   extensionMin: number
   overrunMin: number
   projectsMin: number
-  regen: { totalMin: number; towardMinMin: number; requiredMin: number; justifiedRequestMin: number; missingMin: number }
+  /**
+   * Regeneration so far (`totalMin`, `towardMinMin` – without time to explain that has no answer, unless `asWritten`),
+   * the minimum and what is missing; `explainMin` – minutes of time to explain without an answer so far.
+   */
+  regen: { totalMin: number; towardMinMin: number; requiredMin: number; justifiedRequestMin: number; missingMin: number; explainMin: number }
+  /** Times to explain (E6): after work and project blocks that ended by themselves. */
+  explains: Explain[]
   bedtime: { base: number; shiftMin: number; overLimitMin: number; effective: number; forecast: number }
   hardEnd: HardEnd & { passed: number | null; message: boolean }
   pool: { min: number; byLimit: number; byTime: number; empty: boolean }
@@ -145,6 +161,7 @@ interface Ctx {
   typical: (b: BlockInfo) => number | null
   noWorkPlanned: boolean
   events: readonly AnyEvent[]
+  asWritten: boolean
 }
 
 /** The planned end of a started block: fixed sessions end at their window, others after their length and pauses. */
@@ -255,6 +272,32 @@ function paintRequests(c: Ctx, flags: Uint16Array, facts: DayFacts, until: numbe
     const to = Math.min(d.to === OPEN ? until : d.to, until, c.cap)
     for (let k = Math.max(0, d.from); k < to; k++) flags[k]! |= F_DISC
   }
+}
+
+/**
+ * A time to explain on the minutes (`plain`: the day without it). Without an answer it is neither work, nor a project,
+ * nor rest – after a work block rest for the hard end and the pool (D262). Answered, it counts as the block would have
+ * run („praca”, „projekt”, up to „… do”) or as time without a block („odpoczynek”); the energy never changes in it.
+ * Breaks of 10–30 min inside it after a project are rest (D281).
+ */
+function paintExplain(c: Ctx, arr: Uint16Array, plain: Uint16Array, x: Explain, now: number, answered: boolean): void {
+  const to = Math.min(x.to, now, c.cap)
+  const info = c.byId.get(x.block)
+  const a = answered ? x.answer : null
+  for (let k = Math.max(0, x.from); k < to; k++) {
+    let v = plain[k]!
+    if (x.rests.some((r) => k >= r.from && k < r.to)) v |= F_FREE_REST
+    else if (!a) v |= F_EXPLAIN | F_BLOCK | (x.kind === 'work' ? F_TENT_REST : 0)
+    else if (a.cls === 'rest' || (a.until != null && k >= a.until)) v |= F_EXPLAIN
+    else if (a.cls === 'project') v |= F_EXPLAIN | F_BLOCK | F_PROJECT
+    else v |= F_EXPLAIN | F_BLOCK | F_BUDGET | F_END | (info?.lectureOrCommute ? 0 : F_EXT)
+    arr[k] = v
+  }
+}
+
+/** Every time to explain, with the answers given before `answeredBefore` (index). */
+function paintExplains(c: Ctx, arr: Uint16Array, plain: Uint16Array, list: readonly Explain[], now: number, answeredBefore: number): void {
+  for (const x of list) paintExplain(c, arr, plain, x, now, x.answer != null && x.answer.at < answeredBefore)
 }
 
 /** Minutes confirmed in advance, while a work block runs in them. */
@@ -421,7 +464,8 @@ export function computeDay(ctx: DayContext): DayState {
       const r = snapshot.settings.categories[p.categoryId]
       return r?.cls === 'work' && !r.keepsRegen && p.tag !== 'secondShift'
     }),
-    events
+    events,
+    asWritten: ctx.asWritten === true
   }
 
   // The actual flags of the past, with the blocks counted as projects (D195) decided at their start.
@@ -557,13 +601,34 @@ export function computeDay(ctx: DayContext): DayState {
     return base
   }
 
+  // Time to explain (E6): known once the projects are; its end at the effective bedtime with the moves the leader wrote.
+  const silentEnds = [...facts.blocks.values()].some((f) => f.endRule != null && EXPLAIN_END_RULES.includes(f.endRule))
+  const activity: Activity | null = silentEnds ? activityOf(events, g.start, ctx.now) : null
+  const recordedShift = (k: number): number => {
+    let s = 0
+    for (let x = 0; x < Math.min(k, now); x++) {
+      const seg = segmentFor(x)
+      if (seg?.cls === 'empty' && seg.upfront) s++
+    }
+    return Math.min(s, shiftLimit(k))
+  }
+  const explains = activity ? explainsOf({ grid: g, facts, blocks, projects, events, activity, now, bedtime: (k) => baseBedtime(k) + recordedShift(k) }) : []
+  // `actual` holds every answer; `known` is the day as it was known at the minute the loop below judges – an answer
+  // counts from the minute after it (T413), so it never makes the hard end pass back in time (D262).
+  const plain = actual.slice()
+  paintExplains(c, actual, plain, explains, now, Number.POSITIVE_INFINITY)
+  const known = plain.slice()
+  paintExplains(c, known, plain, explains, now, -1)
+  const pendingAnswers = explains.filter((x) => x.answer).sort((a, b) => a.answer!.at - b.answer!.at)
+  const hadInput = (k: number): boolean => !activity || !activity.idle.some((i) => i.from <= atOf(g, k) && i.to >= atOf(g, k + 1))
+
   // State of the day at the start of minute m (what the leader would have shown then).
-  const evaluate = (m: number, bedtimeShift: number, simulateShifts: boolean, inclusive = false) =>
+  const evaluate = (m: number, bedtimeShift: number, simulateShifts: boolean, inclusive = false, flags: Uint16Array = actual) =>
     evaluateAt(
       c,
       m,
       now,
-      actual,
+      flags,
       projects,
       {
         approvedAt: (k) => approvedAt(inclusive && k === m ? k + 1 : k),
@@ -580,6 +645,8 @@ export function computeDay(ctx: DayContext): DayState {
 
   let passed: number | null = facts.hardEndPass?.at ?? null
   let message = false
+  /** The hard end reached in time to explain after a project without input: it passes at the next input in it. */
+  let atInput = false
   const hardEndCheckFrom = Math.max(0, Math.min(c.wake, firstWorkStart ?? c.wake))
   let nextHardCheck = hardEndCheckFrom
   // Minutes from which the view changes: the minute after each event that is not only presence (T413).
@@ -591,13 +658,16 @@ export function computeDay(ctx: DayContext): DayState {
   const requestStarts = new Map<number, typeof facts.requests>()
   for (const r of facts.requests) if (r.hardEndAt == null) requestStarts.set(r.from, [...(requestStarts.get(r.from) ?? []), r])
   for (let k = 0; k < now; k++) {
+    // Answers to times to explain given before this minute are known from it on.
+    while (pendingAnswers.length && pendingAnswers[0]!.answer!.at < k) paintExplain(c, known, plain, pendingAnswers.shift()!, now, true)
     const f = actual[k]!
+    const fk = known[k]!
     const classifiable = (f & (F_EXT | F_SSOUT)) !== 0
     let ev: ReturnType<typeof evaluate> | null = null
     // A request without the hard end written at its start gets the one in force then (T82: requests are classified once).
     const starting = requestStarts.get(k)
     if (starting) {
-      const at = evaluate(k, shift, true)
+      const at = evaluate(k, shift, true, false, known)
       const he = passed != null ? passed : at.hardEnd.at
       for (const r of starting) r.hardEndAt = g.start + he * 60_000
     }
@@ -609,7 +679,7 @@ export function computeDay(ctx: DayContext): DayState {
         const appr = approvedAt(k)
         if (!appr || k < appr.boundary) info = { cls: 'in', upfront: (f & F_UPFRONT) !== 0, recorded: false }
         else {
-          ev = evaluate(k, shift, false)
+          ev = evaluate(k, shift, false, false, known)
           const empty = ev.pool.min <= 0
           const pastMax = k >= ev.max && !(f & F_SSOUT)
           info = { cls: empty ? 'empty' : pastMax ? 'max' : 'after', upfront: (f & F_UPFRONT) !== 0, recorded: false }
@@ -623,14 +693,29 @@ export function computeDay(ctx: DayContext): DayState {
         else overLimit++
       }
     }
-    // The hard end passes when the clock reaches it and no rest and no request goes on or begins in that minute.
-    if (passed == null && k >= nextHardCheck) {
-      ev = evaluate(k, shift, true)
-      if (!ev.hardEnd.unreachable && k >= ev.hardEnd.at) {
-        const rest = (f & (F_REGEN | F_DISC)) !== 0 || (f & F_BLOCK) === 0
-        if (!rest && !(f & F_REQUEST)) {
+    // The hard end passes when the clock reaches it and no rest and no request goes on or begins in that minute; time to
+    // explain after a work block moves it like rest (D255, D262). In time to explain after a project it passes at the
+    // first input from the minute it would have passed (D250): a gap in input only puts it off.
+    const explainProject = (fk & F_EXPLAIN) !== 0 && (fk & (F_TENT_REST | F_END | F_PROJECT)) === 0
+    if (passed == null && atInput) {
+      if (explainProject && !(fk & F_REQUEST)) {
+        if (hadInput(k)) {
           passed = k
-          message = (f & F_PROJECT) !== 0
+          message = true
+        }
+        nextHardCheck = k + 1
+      } else atInput = false
+    }
+    if (passed == null && !atInput && k >= nextHardCheck) {
+      ev = evaluate(k, shift, true, false, known)
+      if (!ev.hardEnd.unreachable && k >= ev.hardEnd.at) {
+        const rest = (fk & (F_REGEN | F_DISC | F_TENT_REST)) !== 0 || (fk & F_BLOCK) === 0
+        if (!rest && !(fk & F_REQUEST)) {
+          if (explainProject && !hadInput(k)) atInput = true
+          else {
+            passed = k
+            message = (fk & F_PROJECT) !== 0 || explainProject
+          }
         }
         nextHardCheck = k + 1
       } else {
@@ -638,8 +723,9 @@ export function computeDay(ctx: DayContext): DayState {
         // departs from the forecast made now – the next minute worth a look (T414).
         let j = ev.hardEnd.unreachable ? now : Math.min(ev.hardEnd.at, now)
         j = Math.min(j, nextEventFrom(k))
+        if (pendingAnswers.length) j = Math.min(j, pendingAnswers[0]!.answer!.at + 1)
         for (let x = k; x < j; x++) {
-          if ((actual[x]! ^ ev.flags[x]!) & SAME_MASK) {
+          if ((known[x]! ^ ev.flags[x]!) & SAME_MASK) {
             j = x
             break
           }
@@ -650,6 +736,12 @@ export function computeDay(ctx: DayContext): DayState {
   }
 
   const fin = evaluate(now, shift, true, true)
+  let explainMin = 0
+  for (const x of explains) {
+    if (x.answer) continue
+    const to = Math.min(x.to, now)
+    explainMin += Math.max(0, to - x.from) - x.rests.reduce((s, r) => s + Math.max(0, Math.min(r.to, to) - r.from), 0)
+  }
   let budget = 0
   let projectsMin = 0
   for (let k = 0; k < now; k++) {
@@ -684,7 +776,8 @@ export function computeDay(ctx: DayContext): DayState {
     extensionMin: ext,
     overrunMin: overrun,
     projectsMin,
-    regen: { totalMin: fin.regenTotal, towardMinMin: fin.towardMin, requiredMin: fin.required, justifiedRequestMin: fin.justified, missingMin: Math.max(0, fin.required - fin.towardMin) },
+    regen: { totalMin: fin.regenTotal, towardMinMin: fin.towardMin, requiredMin: fin.required, justifiedRequestMin: fin.justified, missingMin: Math.max(0, fin.required - fin.towardMin), explainMin },
+    explains,
     bedtime: { base: baseBedtime(now), shiftMin: shift, overLimitMin: overLimit, effective, forecast: fin.bedtimeForecast },
     hardEnd: { at: hardPassed ? passed! : fin.hardEnd.at, unreachable: !hardPassed && fin.hardEnd.unreachable, passed, message },
     pool: hardPassed ? { min: 0, byLimit: fin.pool.byLimit, byTime: 0, empty: true } : { ...fin.pool, empty: fin.pool.min <= 0 },
@@ -881,7 +974,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
       const between = seenBlock && z < cap
       for (let j = k; j < z; j++) {
         if (j < c.wake) continue
-        if (after[j] || (between && z - k >= 30)) regen[j] = REST_FREE
+        if (after[j] || (between && z - k >= 30) || flags[j]! & F_FREE_REST) regen[j] = REST_FREE
       }
       k = z
     }
@@ -909,15 +1002,21 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   const base = d.baseBedtime(m)
   let bedtime = base + d.bedtimeShift
 
+  // Time to explain after a work block without an answer: rest for the hard end and the pool (D262); toward the minimum
+  // and the reward only as written (D265).
+  const tentative = new Uint8Array(regen)
+  for (let k = 0; k < cap; k++) if (flags[k]! & F_TENT_REST) tentative[k] = REST_FREE
+  const strict = c.asWritten ? tentative : regen
+
   // Toward the minimum: regeneration before the later of the first end of work and the boundary approved in that minute
   // counts at most a third of the minimum (D208, D218).
   const firstEnd = ends[0]?.at ?? (noWork ? c.wake : workEndForecast)
-  const towardMinArr = (until: number) => {
+  const towardMinArr = (until: number, src: Uint8Array = tentative) => {
     const arr = new Uint8Array(cap)
     let pre = 0
     const third = Math.floor(params.minRegenMin / 3)
     for (let k = 0; k < Math.min(until, cap); k++) {
-      if (!regen[k]) continue
+      if (!src[k]) continue
       const appr = k < m ? d.approvedAt(k) : d.approvedAt(m)
       const capPoint = Math.max(firstEnd ?? OPEN, appr?.boundary ?? Number.NEGATIVE_INFINITY)
       if (k < capPoint && !noWork) {
@@ -1005,14 +1104,19 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   }
   const pool = poolWith(bedtimeForecast, toward, m, d.extBefore, projectsBefore)
 
+  // The regeneration of the day and toward its minimum: time to explain without an answer is not (yet) regeneration.
+  const towardStrict = strict === tentative ? toward : towardMinArr(bedtimeForecast, strict)
   let regenTotal = 0
   let towardMin = 0
   for (let k = 0; k < Math.min(m, bedtimeForecast); k++) {
-    if (regen[k]) regenTotal++
-    towardMin += toward[k]!
+    if (strict[k]) regenTotal++
+    towardMin += towardStrict[k]!
   }
   let budgetFc = 0
   for (let k = m; k < cap; k++) if (flags[k]! & (F_BUDGET | F_SECOND)) budgetFc++
+  // The energy does not change in time to explain, also after its answer (spec).
+  const rest = new Uint8Array(regen)
+  for (let k = 0; k < cap; k++) if (flags[k]! & F_EXPLAIN) rest[k] = 0
 
   return {
     max,
@@ -1034,6 +1138,6 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     budgetMin: c.snapshot.budgetMin,
     forecastBudgetMin: budgetFc,
     flags,
-    rest: regen
+    rest
   }
 }

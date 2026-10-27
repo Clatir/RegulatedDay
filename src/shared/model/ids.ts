@@ -37,6 +37,9 @@ export function derivedId(...parts: ReadonlyArray<string | number>): string {
   return `${cyrb53(text, 1).toString(36).padStart(11, '0')}${cyrb53(text, 2).toString(36).padStart(11, '0')}`
 }
 
+/** The id of a question (spec: day, rule, block, threshold) – shown once, answered once on any computer. */
+export const questionId = (date: string, rule: string, block: string | null, threshold: number): string => `${rule}:${date}:${block ?? '-'}:${threshold}`
+
 /** Ids in files and file names: letters, digits, dash and underscore (no editable fields in names, spec). */
 export const ID_PATTERN = /^[0-9a-z][0-9a-z_-]{0,63}$/i
 
