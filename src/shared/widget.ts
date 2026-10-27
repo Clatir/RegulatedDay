@@ -4,7 +4,7 @@
  * from E4b the engine does, with the same view.
  */
 import { clock } from './format'
-import { iconColor, TONE_SETS, toneColor, type Tone, type ToneSetId, type WarnStep } from './theme'
+import { ENGINE_TONE_SET, iconColor, TONE_SETS, toneColor, type Tone, type ToneSetId, type WarnStep } from './theme'
 
 /** A button of a line: its id goes back to the main process with the line's (`line` action, `<line>|<action>`). */
 export interface BarAction {
@@ -130,7 +130,7 @@ export const DEFAULT_TRIAL: TrialState = {
   session: false,
   question: false,
   minutesLeft: 42,
-  toneSet: 'robocze'
+  toneSet: ENGINE_TONE_SET
 }
 
 const TONE_BLOCK: Record<Tone, { name: string; className: string }> = {

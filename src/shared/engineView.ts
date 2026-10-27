@@ -19,7 +19,7 @@ import { atOf } from './engine/grid'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
 import { timerNow, type TimerNow } from './engine/timer'
 import type { PlanBlock } from './model/plan'
-import { iconColor, toneColor, type Tone, type WarnStep } from './theme'
+import { ENGINE_TONE_SET, iconColor, toneColor, type Tone, type WarnStep } from './theme'
 import type { BarLine, BarPending, WidgetView } from './widget'
 
 const MIN = 60_000
@@ -251,7 +251,7 @@ export function engineView(i: EngineInput): WidgetView {
     night: modes.night,
     pending: i.pending && i.pending.until > now ? i.pending : null,
     day: state.grid.date,
-    toneSet: 'robocze',
+    toneSet: ENGINE_TONE_SET,
     note: null
   }
 }

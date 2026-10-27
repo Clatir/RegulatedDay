@@ -49,6 +49,12 @@ describe('widok paska z silnika', () => {
     expect(view(s, '13:05').tone).toBe('zycie')
   })
 
+  it('kolory paska, ikony i panelu z zestawu „cieplejsze” (D314)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    expect(view(s, '08:30')).toMatchObject({ toneSet: 'cieple', color: '#E8A15A', iconColor: '#E8A15A' })
+  })
+
   it('kropka tylko przy tym, co czeka na kliknięcie: „Dalej?” i „Zacznij · Odwołaj”; lista automatyczna z „Cofnij”', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'ny', cat: 'sesja', at: '15:30', min: 60, fixed: true, bg: false })] }).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })
