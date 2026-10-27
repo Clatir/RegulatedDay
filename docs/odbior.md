@@ -24,22 +24,21 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
-- **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4a.12, E4b.4, E4b.9, E4b.9 ponownie, E4b.10,
-  E4b.11, E4b.12, E4b.13, E4b.14, E6a.3, E6b.2, E7a.2 (kliknięcie „Wymień”).
+- **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.4, E4b.10, E4b.12 (po poprawce), E6a.3,
+  E6b.2, E7a.2 (kliknięcie „Wymień”).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 
 **Kolejność, która oszczędza czas:**
 
 1. Raz, na start: E7b.1 (albo E7a.1 / E6b.1 / E6a.1 / E5.1, jeśli nowsza wersja jeszcze nie przyszła); następnego dnia
-   po 12:00 E6b.2; „E4b.9 ponownie”.
+   po 12:00 E6b.2.
    - [ ] E7b.1 Aktualizacja do 0.9.0
    - [ ] E7a.1 Aktualizacja do 0.8.0
    - [ ] E6b.1 Aktualizacja do 0.7.0
    - [ ] E6a.1 Aktualizacja do 0.6.0
    - [ ] E5.1 Aktualizacja do 0.5.0
    - [ ] E6b.2 Kopia dzienna z procesu w tle
-   - [ ] E4b.9 ponownie – film na pełnym ekranie w przeglądarce
 2. Zwykły dzień pracy:
    - [ ] E4a.1 Start bloku elastycznego
    - [ ] E4a.2 Pauza, Wznów, Dalej
@@ -73,16 +72,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E3.7 Ustawienia – budżet od jutra
    - [ ] E3.13 Przeciąganie bloków na osi
    - [ ] E3.14 Ustawienia i Próba w menu bocznym
-   - [ ] E4b.9 „Zawsze na wierzchu” – po poprawce (0.9.1), razem z „E4b.9 ponownie”
-   - [ ] E4b.11 Zestaw kolorów (Twoja decyzja D298)
-   - [ ] E4b.12 Pasek przeciągnięty za uchwyt
-   - [ ] E4b.13 Ustawienia → „Miejsce paska”
-   - [ ] E4b.14 „Zawsze na wierzchu” i okno główne
+   - [ ] E4b.12 Pasek przeciągnięty za uchwyt – po poprawce (27.10 nie przeszedł)
 6. Laptop i noc (gdy masz laptopa pod ręką):
    - [ ] E3.9 Laptop dołącza do danych
    - [ ] E3.10 Dwa komputery naraz – konflikt
    - [ ] E4a.11 Laptop – instalacja w nocy dopiero po 24 h
-   - [ ] E4a.12 Laptop – nowoczesny tryb wstrzymania
 7. Jednorazowe:
    - [ ] E0.15 Nagrywanie (OBS) przy wygaszonym ekranie
    - [ ] E3.1 Kreator po pierwszej aktualizacji (jednorazowe) – pomiń, jeśli kreator już przeszedłeś
@@ -91,7 +85,6 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E4a.13 Rozpoznawanie zamknięcia i awarii
 
 ## Do decyzji przy okazji
-- E4b.11 – zestaw kolorów (D298).
 - E0.15 – czy OBS nagrywa przy wygaszonym ekranie. Od tego zależy, czy komputer nagrywający musi trzymać ekran włączony
   przez cały wykład (D184, D297).
 
@@ -526,7 +519,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - instalacja startuje w dzień bez Twojego kliknięcia.
 
 #### E4a.12 Laptop – nowoczesny tryb wstrzymania (0.3.0)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026
 - **Tylko Ty:** warunki nocy (blokada, zasilanie) sprawdza `night-install.test.ts`; pokrywę i tryb wstrzymania laptopa – tylko Ty.
 - **Jak sprawdzić:** w nocy, na zasilaniu z sieci, gdy czeka aktualizacja, naciśnij Win+L. W trakcie instalacji zamknij
   pokrywę, po chwili ją otwórz.
@@ -655,9 +648,10 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - „Start” w panelu bloku nic nie robi.
 
 #### E4b.9 „Zawsze na wierzchu” (0.4.0)
-- [ ] Odebrane — **nie przechodzi (27.10.2026):** przy „pasek pulpitu” pasek widać nad filmem na pełnym ekranie w
-  przeglądarce (YouTube, Netflix). Przyczyna: pomocnik sprawdzał pełny ekran tylko przy zmianie okna na pierwszym
-  planie, a film przechodzi na pełny ekran w tym samym oknie – poprawka w 0.9.1, sprawdź według „E4b.9 ponownie”.
+- [x] Odebrane 27.10.2026 (w 0.10.1, razem z „E4b.9 ponownie”) — wcześniej **nie przechodził (27.10.2026):** przy
+  „pasek pulpitu” pasek widać nad filmem na pełnym ekranie w przeglądarce (YouTube, Netflix). Przyczyna: pomocnik
+  sprawdzał pełny ekran tylko przy zmianie okna na pierwszym planie, a film przechodzi na pełny ekran w tym samym
+  oknie – poprawka w 0.9.1.
 - **Tylko Ty:** pasek pod oknami sprawdza CI (`tests/e2e/bar-windows.spec.ts`), ale nie TradingView, film na pełnym ekranie ani fokus przy Twoich programach.
 - **Jak sprawdzić:** Ustawienia → „Zawsze na wierzchu” → „pasek pulpitu”. Zmaksymalizuj TradingView i kliknij pasek,
   pisząc coś w TradingView. Puść film na pełnym ekranie. Potem ustaw „pasek i panel” i otwórz panel ikony. Na koniec
@@ -672,7 +666,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - przy „wyłączone” pasek nadal leży nad oknami.
 
 #### E4b.9 ponownie – film na pełnym ekranie w przeglądarce (0.9.1)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026 (zgłoszone jako E4b.9)
 - **Tylko Ty:** pełny ekran w tym samym oknie sprawdza CI na Windows z prawdziwym pomocnikiem
   (`tests/e2e/bar-windows.spec.ts`, okno Electron); YouTube, Netflix i Twoja przeglądarka – tylko Ty.
 - **Jak sprawdzić:** po aktualizacji do 0.9.1 Ustawienia → „Zawsze na wierzchu” → „pasek pulpitu”. Puść film na
@@ -701,7 +695,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - dźwięk gra na dwóch komputerach naraz.
 
 #### E4b.11 Zestaw kolorów (Twoja decyzja D298) (0.4.0)
-- [ ] Odebrane, wybrany zestaw: ………
+- [x] Odebrane 27.10.2026, wybrany zestaw: cieplejsze (D314)
 - **Tylko Ty:** to Twoja decyzja (D298).
 - **Jak sprawdzić:** ekran „Próba” – w lewym menu na samym dole, tuż nad „Ustawienia” (bez skrótu Ctrl) → „Zestaw
   kolorów”: robocze, cieplejsze, chłodniejsze. Porównaj ikonę, pasek i panel.
@@ -711,7 +705,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - kolory zmieniają się tylko w jednym miejscu (np. w oknie tak, na ikonie nie).
 
 #### E4b.12 Pasek przeciągnięty za uchwyt (0.10.0)
-- [ ] Odebrane
+- [ ] Odebrane — **nie przechodzi (27.10.2026):** przeciągnięcie paska go nie przesuwa. E2E przeciąga z podstawionym
+  kursorem (bez prawdziwej myszy Windows) i tego nie widzi – poprawka z testem prawdziwej myszy w CI na Windows.
 - **Tylko Ty:** logikę miejsca sprawdzają testy (`placement.test.ts`), przeciąganie z podstawionym kursorem – E2E
   (`smoke.spec.ts`); prawdziwą mysz, drugi monitor i ponowne uruchomienie – tylko Ty.
 - **Jak sprawdzić:** najedź na pasek pulpitu, chwyć uchwyt ⠿ przy lewej krawędzi i przeciągnij pasek na środek
@@ -729,7 +724,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - część paska wychodzi poza ekran albo na pasek zadań.
 
 #### E4b.13 Ustawienia → „Miejsce paska” (0.10.0)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026
 - **Tylko Ty:** kliknięcie miejsca na makiecie sprawdza E2E (`screens.spec.ts`); rysunek Twoich monitorów – tylko Ty.
 - **Jak sprawdzić:** Ustawienia → sekcja „Pasek pulpitu” → „Miejsce paska”. Porównaj makietę z Ustawieniami Windows →
   System → Ekran. Kliknij kolejno środek górnej krawędzi, prawy dolny róg i (jeśli masz) róg drugiego monitora.
@@ -744,7 +739,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - zaznaczone jest inne miejsce niż to, w którym stoi pasek.
 
 #### E4b.14 „Zawsze na wierzchu” i okno główne (0.10.0)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026
 - **Tylko Ty:** CI na Windows klika w okno główne i inne okno (`bar-windows.spec.ts`); Twój układ okien – tylko Ty.
 - **Jak sprawdzić:** Ustawienia → „Zawsze na wierzchu” → „pasek pulpitu”. Kliknij w okno główne Regulated Day, potem
   w inne okno (np. przeglądarkę), potem zminimalizuj okno główne.
