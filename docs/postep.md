@@ -4,23 +4,23 @@
 - E4a scalony (PR #7), wydanie 0.3.0 opublikowane. **E4b scalony** (PR #8, b663153, 27.10 ok. 00:25; CI PR zielone za
   pierwszym razem, także Windows); wydanie 0.4.0 opublikowane z runu 40419583256 na `main` (27.10 ok. 00:58). Wpisy E4a
   i E4b → `docs/archiwum/postep-E4.md`, E3 → `docs/archiwum/postep-E3.md`.
-- **Logika E5 w toku** na gałęzi `claude/e5-warianty` (wersja 0.5.0): prośby w dniu (`engine/requests.ts`, 16 testów),
-  warianty z wyzwalaczami znacznika (`engine/variants.ts`, 12 testów), prośba przez 04:00 w folderze (2 testy),
-  T478–T481, reguły `prosby-warianty.md`, CHANGELOG 0.5.0. `/code-review` (xhigh): 15 uwag, wszystkie poprawione
-  (T481); każda poprawka ma test, który bez niej pada (19 prób mutacji, wszystkie wykryte). Testy: 594 jednostkowe
-  i plikowe, E2E 15 + 2 tylko w CI; typecheck, build, lint zielone. **PR #9** otwarty, CI w toku przy zapisie; dalej:
-  scalenie (D285), wydanie 0.5.0 na `main`.
+- **Logika E5 scalona** (PR #9, a8b6db8, 27.10 ok. 01:40); wydanie 0.5.0 opublikowane z runu 40427918867 na `main`
+  (27.10 ok. 02:08). Zakres: prośby w dniu (`engine/requests.ts`, 16 testów), warianty z wyzwalaczami znacznika
+  (`engine/variants.ts`, 12 testów), prośba przez 04:00 w folderze (2 testy), T478–T481, reguły `prosby-warianty.md`,
+  CHANGELOG 0.5.0. `/code-review` (xhigh): 15 uwag, wszystkie poprawione (T481); każda poprawka ma test, który bez niej
+  pada (19 prób mutacji, wszystkie wykryte). Testy: 594 jednostkowe i plikowe, E2E 15 + 2 tylko w CI; typecheck,
+  build, lint zielone. Test instalacji: sprzątanie z ponowieniem (przygotowanie w tle po `init` pisało jeszcze do
+  folderu – raz czerwone CI).
 - Otwarte na etap elementów E5 w pasku: w czasie prośby pasek pokazuje przerwany blok jako „Wznów · Zaparkuj” (z kropką)
   – zamieni go linia prośby z „Koniec”; kropka po „Jeszcze trwa” (D247); pasek po 04:00 pokazuje dzisiejszy dzień,
   także gdy trwa wczorajsza prośba.
-- `docs/decyzje.md` ma 191 / 200 KB – przy następnym etapie zastąpione decyzje do archiwum.
+- `docs/decyzje.md` ma 192 / 200 KB – przy następnym etapie zastąpione decyzje do archiwum.
 
 ## Kolejka
-1. **Praca ciągiem pod Twoją nieobecność (D296):** E4a ✓ → E4b ✓ → logika E5 (w toku), bez pauzy i bez „dalej”
-   między nimi; każdy etap: komunikat „Przed etapem” zapisany tutaj, testy, `/code-review`, PR, CI, scalenie
-   i wydanie (D285), wpis i lista „do sprawdzenia”. Model: Opus 5.5 · xhigh przez cały ciąg.
+1. Ciąg pod nieobecność (D296) **zakończony**: E4a ✓ (0.3.0) → E4b ✓ (0.4.0) → logika E5 ✓ (0.5.0). Teraz pauza –
+   bez „dalej” nie zaczynam kolejnego etapu.
 2. Po Twoim powrocie: sprawdzenia na Windows – E3, E4a, E4b, E5 (listy niżej), wybór zestawu kolorów (D298); potem
-   „dalej” – E5 (elementy w pasku: przyciski próśb, znacznik i panel wariantów).
+   „dalej” – E5 (elementy w pasku: przyciski próśb, znacznik i panel wariantów), z pytaniami o ich wygląd.
 
 ## Przed etapem E5 – logika (27.10.2026, ok. 00:00 – zapisane przed jego startem)
 - Co trzeba wiedzieć: E5 w planie to prośby w widgecie, przerwania, liczniki, znacznik i panel wariantów („gotowe, gdy
