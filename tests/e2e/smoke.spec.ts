@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { launch, viewPage, withMainLog } from './app'
 
-const PAGES = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history', 'trial', 'settings']
+const PAGES = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history', 'settings', 'trial']
 
 async function noHorizontalOverflow(page: Page): Promise<string[]> {
   return page.evaluate(() =>
@@ -21,6 +21,19 @@ test('start: okno główne z menu bocznym, nazwą i paskiem; tożsamość testow
       // „Bez bloku”, or the hour in the night's quiet (the test runs at any hour).
       await expect(page.getByTestId('bar-block')).toHaveText(/Bez bloku|^\d{2}:\d{2}$/)
       for (const p of PAGES) await expect(page.getByTestId(`nav-${p}`)).toBeVisible()
+      // One list in this order, without a gap: the settings right under the history, the trial under the settings (D306).
+      const items = page.getByTestId('side-menu').locator('[data-testid^="nav-"]')
+      expect(await items.evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')))).toEqual(PAGES.map((p) => `nav-${p}`))
+      const gaps = await items.evaluateAll((els) => els.slice(1).map((el, i) => el.getBoundingClientRect().top - els[i]!.getBoundingClientRect().bottom))
+      for (const gap of gaps) expect(Math.abs(gap)).toBeLessThan(1)
+      // The shortcuts by the physical keys, the same as next to the names: Ctrl+7 – the history, Ctrl+, – the settings.
+      await expect(page.getByTestId('nav-history')).toHaveAttribute('title', 'Historia (Ctrl 7)')
+      await expect(page.getByTestId('nav-settings')).toHaveAttribute('title', 'Ustawienia (Ctrl ,)')
+      await expect(page.getByTestId('nav-trial')).toHaveAttribute('title', 'Próba')
+      await page.keyboard.press('Control+Digit7')
+      await expect(page.getByTestId('page-history')).toBeVisible()
+      await page.keyboard.press('Control+Comma')
+      await expect(page.getByTestId('page-settings')).toBeVisible()
       await page.getByTestId('nav-settings').click()
       await expect(page.getByTestId('identity')).toHaveText('testowa (Regulated Day Test)')
       await expect(page.getByTestId('user-data')).toHaveText(userData)

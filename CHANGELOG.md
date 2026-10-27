@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.1
+- Menu boczne okna głównego: „Ustawienia” są teraz zaraz pod „Historią”, a „Próba” pod „Ustawieniami”, zamiast na samym dole menu. Skróty bez zmian – Ctrl+, otwiera Ustawienia.
+
 ## 0.10.0
 - Pasek pulpitu ma uchwyt ⠿ przy lewej krawędzi (widać go po najechaniu): przeciągnij za niego pasek w dowolne miejsce, także na inny monitor – zostaje tam, gdzie go puścisz, i wraca tam po ponownym uruchomieniu na tym komputerze. Gdy tego monitora nie ma, pasek staje w lewym dolnym rogu monitora głównego.
 - Ustawienia → „Miejsce paska”: Twoje monitory narysowane tak, jak ustawia je Windows. Kliknij jeden z rogów albo środek górnej lub dolnej krawędzi, żeby tam postawić pasek; obecne miejsce – także przeciągnięte – jest zaznaczone.

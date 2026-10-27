@@ -16,25 +16,39 @@
 - **Poprawka E4b.9 scalona** (PR #14, 89e21fe, ok. 15:10; CI PR zielone, także Windows) – wydanie 0.9.1 z runu
   40518727264 na `main` opublikowane (ok. 15:52).
 - **0.10.0 scalone** (D302–D305 z odbioru 27.10; PR #15, de87421, ok. 16:31; CI PR zielone w drugiej rundzie po
-  ponowieniu) – wydanie 0.10.0 z runu 40531784915 na `main` opublikowane (ok. 17:12); sekcja niżej. Pauza do „dalej”.
+  ponowieniu) – wydanie 0.10.0 z runu 40531784915 na `main` opublikowane (ok. 17:12).
+- **0.10.1 w toku** (D306 – menu boczne: Ustawienia pod Historią, Próba pod Ustawieniami): gałąź
+  `claude/0.10.1-menu`; sekcja niżej. Potem pauza do „dalej”.
 - Otwarte (test skali): `gameState` z 3 lat danych trwa na CI ok. 100 ms – raz 101 ms przy limicie „codzienne
   operacje < 0,1 s” (Node 26, PR #15, ponowienie zielone). Przed ekranami gry (ustawienie `GAME_FROM`) przyspieszyć
   albo liczyć raz na zmianę plików ocen; dziś w aplikacji `gameState` = null (T492).
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
   (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
   do folderu z `.moved.json`.
-- Zastąpione decyzje (31) przeniesione do `docs/archiwum/decyzje-zastapione.md`; `docs/decyzje.md` ma 198 / 200 KB –
-  w części 2 kolejne (także częściowo zastąpione) do archiwum, zanim przybędą nowe T.
+- Zastąpione decyzje (31) przeniesione do `docs/archiwum/decyzje-zastapione.md`; `docs/decyzje.md` ma 199,5 / 200 KB –
+  przed kolejną decyzją kolejne (także częściowo zastąpione) do archiwum.
 
 ## Kolejka
-1. Ty: odbiór według `docs/odbior.md` (0.10.0, 0.9.1, E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b), wybór zestawu kolorów (D298);
+1. Ty: odbiór według `docs/odbior.md` (0.10.1, 0.10.0, 0.9.1, E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b), wybór zestawu kolorów (D298);
    27.10 odebrane E3.2, E3.6, E3.8, E3.11.
 2. Po „dalej”: elementy E5 w pasku (przyciski próśb, znacznik i panel wariantów), potem ekrany E6 (rytuał, niezamknięte
    dni, eksport, przywracanie) – z pytaniami o wygląd; przed nimi komunikat „Przed etapem”.
 
 ## Do odbioru na Windows
-- Lista w `docs/odbior.md` (0.10.0, 0.9.1, E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b – każdy punkt z oczekiwanym efektem i błędami, które blokują
+- Lista w `docs/odbior.md` (0.10.1, 0.10.0, 0.9.1, E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b – każdy punkt z oczekiwanym efektem i błędami, które blokują
   odbiór; na dole punkty już odebrane, E0). Kolejne etapy dopisują tam swoje listy.
+
+## 0.10.1 – menu boczne (D306)
+- Prośba z 27.10 (przed dalszą pracą): „Ustawienia” zaraz pod „Historią”, „Próba” pod „Ustawieniami”. Gałąź
+  `claude/0.10.1-menu` od 0.10.0 (ok. 18:10).
+- Zakres: `SideMenu` w `App.tsx` – jedna lista w kolejności `PAGES` (bez dolnej grupy), skróty bez zmian; podpis
+  skrótu i obsługa klawiszy z jednej listy `DIGIT_PAGES`. E2E „start: okno główne…” sprawdza kolejność, brak przerwy
+  (na starym kodzie pada), podpisy i Ctrl+7 / Ctrl+,. Specyfikacja „Nawigacja” (D306), lista E3.14, CHANGELOG 0.10.1.
+- `/code-review` (high): 7 uwag – 4 poprawione (komentarz „Ctrl+1…9”, wspólna lista skrótów, specyfikacja; rejestr
+  decyzji – w limicie, archiwum przed kolejną decyzją), 3 bez zmian (test celowo trzyma własną oczekiwaną kolejność,
+  wspólna mapa dla Ctrl+, – kosmetyka, odstępy przy skali – test w 100 %).
+- Testy: typecheck, 788 jednostkowych, build, lint, E2E 17 + 4 tylko w CI. Lokalnie raz zawieszony przebieg (procesy
+  Electrona po przerwanym teście) – po sprzątnięciu zielony.
 
 ## 0.10.0 – miejsce paska, przeciąganie paska i bloków (D302–D305)
 - Gałąź `claude/0.10.0-pasek-bloki` od 0.9.1 (27.10 ok. 14:20). Odpowiedzi: D302 (pasek chowa się przy oknie głównym

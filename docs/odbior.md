@@ -26,9 +26,30 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
 2. Zwykły dzień pracy: E4a.1–E4a.4, E4a.6–E4a.9, E4b.1–E4b.3, E4b.5–E4b.7, E5.2, E6a.4, E7a.2.
 3. Dzień z sesją: E4a.5, E4b.4.
 4. Wieczór: E4b.8, E4b.10, E6a.2, E6a.3.
-5. Ustawienia i próba: E4b.9 (po poprawce), E4b.11–E4b.14, E3.3–E3.5, E3.7, E3.13.
+5. Ustawienia i próba: E3.14, E4b.9 (po poprawce), E4b.11–E4b.14, E3.3–E3.5, E3.7, E3.13.
 6. Laptop i noc (gdy masz laptopa pod ręką): E3.9, E3.10, E4a.11, E4a.12.
 7. Jednorazowe: E4a.10, E4a.13, E3.12.
+
+---
+
+## Wersja 0.10.1 – menu boczne
+
+Tylko Ty: nic – kolejność menu sprawdza E2E. Ty: rzut oka.
+
+### E3.14 Ustawienia i Próba w menu bocznym
+- [ ] Odebrane
+- **Automatycznie:** kolejność przycisków i brak przerwy między nimi – E2E (`smoke.spec.ts`, „start: okno główne…”).
+  Ty: rzut oka.
+- **Jak sprawdzić:** otwórz okno główne i spójrz na menu po lewej. Kliknij „Ustawienia”, potem „Próba”; naciśnij
+  Ctrl+, w innym ekranie.
+- **Oczekiwany efekt:** menu to jedna lista: Dziś, Kalendarz, Prośby, Szablony, Rutyny, Pokój, Historia, Ustawienia,
+  Próba – „Ustawienia” zaraz pod „Historią”, „Próba” zaraz pod „Ustawieniami”, pod nimi puste tło menu (bez kreski
+  i przycisków na samym dole). Przy „Ustawieniach” podpis „Ctrl ,”, przy „Próbie” bez skrótu. Oba przyciski otwierają
+  swoje ekrany, Ctrl+, otwiera Ustawienia.
+- **Nie przechodzi, gdy:**
+  - „Ustawienia” albo „Próba” zostały na dole menu albo są w innej kolejności;
+  - między „Historią” a „Ustawieniami” jest przerwa albo kreska;
+  - Ctrl+, nie otwiera Ustawień albo Ctrl+1…7 otwiera inny ekran niż dotąd.
 
 ---
 
