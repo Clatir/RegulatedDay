@@ -17,7 +17,8 @@ import type { HolidayLookup } from '@shared/engine/createDay'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
-import { createUpdateBackup } from './backup'
+import { writeFileAtomic } from '../datastore/atomic'
+import { backupEntries, createUpdateBackup, listBackups, readBackupEntry, restoreToFolder, type BackupInfo } from './backup'
 import type { TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
@@ -48,6 +49,12 @@ export interface HubOptions {
   onChange: () => void
   /** Starts the folder's service (tests: a slow or failing folder). */
   start?: (o: ServiceOptions) => Promise<DataService>
+  /** The helper process for the heavy work (T190). */
+  worker?: ServiceOptions['worker']
+  /** The first day of the ritual (none before its screens, T482). */
+  ritualFrom?: string | null
+  /** This computer now works in another folder (a whole backup restored into a new one): its config remembers it. */
+  onFolder?: (dir: string) => void
 }
 
 /** `a` is a newer version than `b` (versions that cannot be compared: no). */
@@ -70,6 +77,9 @@ const SEEN_PRESENCE_MS = 60_000
 
 /** Files OneDrive and Windows put in any folder: they do not make it „not empty”. */
 const NOISE = new Set(['desktop.ini', 'thumbs.db', '.ds_store'])
+
+/** The marker „przeniesiono do …” in a folder whose backup was restored into a new one (hidden: never in a backup). */
+export const MOVED_FILE = '.moved.json'
 
 /** Where a record kind of the history lives. */
 function relOf(kind: string, id: string): string | null {
@@ -94,6 +104,8 @@ export class DataHub {
   private openingDir: string | null = null
   /** The app quits: nothing opens any more. */
   private shutdown = false
+  /** A whole backup restored into a new folder, waiting for that folder to open (then the old one gets its marker). */
+  private moving: { from: string | null; to: string; at: number } | null = null
 
   constructor(private readonly o: HubOptions) {}
 
@@ -193,6 +205,8 @@ export class DataHub {
         log: this.o.log,
         writeGuardPlan: this.o.writeGuardPlan,
         extraBackupDir: this.o.extraBackupDir,
+        worker: this.o.worker,
+        ritualFrom: this.o.ritualFrom ?? null,
         onChecked: () => this.changed()
       })
       if (this.closing || this.shutdown) {
@@ -203,6 +217,7 @@ export class DataHub {
       this.status = 'open'
       void s.refreshGuardPlan()
       this.o.log('info', `folder danych otwarty: ${dir}`)
+      if (this.moving?.to === dir) await this.finishMove()
       this.changed()
       return true
     } catch (e) {
@@ -471,12 +486,92 @@ export class DataHub {
     if (!rel) throw new Error('nieznany rekord')
     const v = (await f.history.list(kind, id)).find((x) => x.file === file)
     if (!v || !isPlain(v.record)) throw new Error('nie ma takiej wersji')
-    const now = await f.recordView(rel)
+    const entry = await this.restoreEntry(rel, v.record)
+    return entry ? this.edit([entry]) : []
+  }
+
+  /** The edit that makes `rel` hold `value` again: the fields it differs in, or the record anew; null – the same already. */
+  private async restoreEntry(rel: string, value: RawRecord): Promise<EditEntry | null> {
+    const now = await this.need().recordView(rel)
     const entry: EditEntry = now
-      ? { rel, edits: diffRecords(now, v.record).map((c) => ({ path: c.path, base: c.before, value: c.after })) }
-      : { rel, create: true, edits: Object.entries(v.record).map(([k, x]) => ({ path: [k], base: undefined, value: x })) }
-    if (!entry.edits.length) return []
-    return this.edit([entry])
+      ? { rel, edits: diffRecords(now, value).map((c) => ({ path: c.path, base: c.before, value: c.after })) }
+      : { rel, create: true, edits: Object.entries(value).map(([k, x]) => ({ path: [k], base: undefined, value: x })) }
+    return entry.edits.length ? entry : null
+  }
+
+  /** The backups of the open folder, newest first (spec „Kopie zapasowe”). */
+  async backups(): Promise<BackupInfo[]> {
+    if (!this.folder) return []
+    return listBackups(join(this.folder, 'backups'))
+  }
+
+  /** The records a backup holds that can be taken back one by one (settings, templates, lectures, requests, routines, days). */
+  async backupRecords(zipFile: string): Promise<string[]> {
+    return (await backupEntries(zipFile)).filter((rel) => {
+      const c = classify(rel)
+      return !!c && !c.conflict && c.kind !== 'log' && c.kind !== 'presence' && c.kind !== 'grades'
+    })
+  }
+
+  /**
+   * Chosen records of a backup taken back (spec „Przywracanie w aplikacji: wybrane rekordy”): each is your edit of the
+   * fields it differs in (or the record anew), through the queue – so the history keeps what it was before.
+   */
+  async restoreRecords(zipFile: string, rels: readonly string[]): Promise<EditOutcome[]> {
+    const allowed = new Set(await this.backupRecords(zipFile))
+    const entries: EditEntry[] = []
+    for (const rel of rels) {
+      if (!allowed.has(rel)) throw new Error(`w kopii nie ma rekordu ${rel}`)
+      const bytes = await readBackupEntry(zipFile, rel)
+      let value: unknown
+      try {
+        value = bytes ? JSON.parse(bytes.toString('utf8')) : null
+      } catch {
+        throw new Error(`rekord ${rel} w kopii jest uszkodzony`)
+      }
+      if (!isPlain(value)) throw new Error(`rekord ${rel} w kopii jest uszkodzony`)
+      const entry = await this.restoreEntry(rel, value)
+      if (entry) entries.push(entry)
+    }
+    return entries.length ? this.edit(entries) : []
+  }
+
+  /**
+   * The whole backup into a new folder (spec „cały folder do nowego folderu”, T117): written there – never over a folder
+   * with anything in it – then the folder it came from gets the marker „przeniesiono do …” (the other computers propose
+   * the move) and this computer works in the new one.
+   */
+  async restoreWhole(zipFile: string, target: string, at = Date.now()): Promise<boolean> {
+    const to = resolve(target)
+    const files = await restoreToFolder(zipFile, to)
+    this.o.log('info', `kopia ${zipFile} przywrócona do ${to}: ${files} plików`)
+    // The move finishes once the new folder opens – now or at a later retry (OneDrive not ready yet).
+    this.moving = { from: this.folder, to, at }
+    return this.open(to)
+  }
+
+  /** The new folder opened: the old one gets its marker (best effort – the restore stands), config.json the new one. */
+  private async finishMove(): Promise<void> {
+    const m = this.moving
+    if (!m) return
+    this.moving = null
+    if (m.from) {
+      await writeFileAtomic(join(m.from, MOVED_FILE), `${JSON.stringify({ to: m.to, at: m.at, by: this.o.computer() }, null, 2)}\n`).catch((e) =>
+        this.o.log('warn', `znacznik „przeniesiono do …” w ${m.from} nie zapisał się`, e)
+      )
+    }
+    this.o.onFolder?.(m.to)
+  }
+
+  /** The marker „przeniesiono do …” in the open folder (another computer restored a backup into a new one), or null. */
+  async movedTo(): Promise<{ to: string; at: number; by: string } | null> {
+    if (!this.folder) return null
+    try {
+      const v = JSON.parse(await readFile(join(this.folder, MOVED_FILE), 'utf8')) as unknown
+      return isPlain(v) && typeof v.to === 'string' && typeof v.at === 'number' && typeof v.by === 'string' ? { to: v.to, at: v.at, by: v.by } : null
+    } catch {
+      return null
+    }
   }
 
   /**

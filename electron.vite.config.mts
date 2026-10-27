@@ -46,8 +46,9 @@ export default defineConfig({
       externalizeDeps: false,
       rollupOptions: {
         // Two entries (T381): `start` sets the identity (name, data folder, AppUserModelId) and only then loads `index`;
-        // it imports nothing but electron and Node modules – scripts/check-code.mjs checks the built file.
-        input: { start: resolve(root, 'src/main/start.ts'), index: resolve(root, 'src/main/index.ts') }
+        // it imports nothing but electron and Node modules – scripts/check-code.mjs checks the built file. `worker` is the
+        // helper process for the heavy work (Electron's utility process, T190).
+        input: { start: resolve(root, 'src/main/start.ts'), index: resolve(root, 'src/main/index.ts'), worker: resolve(root, 'src/main/worker/index.ts') }
       }
     }
   },

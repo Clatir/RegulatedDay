@@ -47,6 +47,23 @@ function options(clock: { now: number }, extra: Partial<ServiceOptions> = {}): S
 
 const journal = () => readLogText(readFileSync(join(stateDirFor(userData, dataDir), 'journal.v1.jsonl'), 'utf8')).events
 
+describe('usługa folderu danych – kopia w procesie pomocniczym', () => {
+  it('nieudane zadanie kopii to błąd kopii w logu, a reszta sprawdzenia idzie dalej', async () => {
+    const clock = { now: placeLogical(DAY, 12 * 60) }
+    const logs: string[] = []
+    const worker = { run: async () => Promise.reject(new Error('limit czasu zadania backup')) }
+    const s = await DataService.start(options(clock, { log: (level, msg) => logs.push(`${level} ${msg}`), worker: worker as never }))
+    // Settled (at least 3 min of checks), leading: the backup is due after 12:00.
+    for (let i = 0; i <= 5; i++) {
+      clock.now = placeLogical(DAY, 12 * 60) + i * 60_000
+      await s.tick()
+    }
+    expect(logs.some((l) => l.startsWith('error kopia zapasowa') && l.includes('limit czasu zadania backup'))).toBe(true)
+    expect(logs.some((l) => l.includes('sprawdzenie folderu danych nie udało się'))).toBe(false)
+    await s.stop('quit')
+  })
+})
+
 describe('usługa folderu danych', () => {
   it('koniec sesji Windows zapisuje zamknięcie znacznika życia folderu: następny start to nie awaria', async () => {
     const clock = { now: placeLogical(DAY, 10 * 60) }

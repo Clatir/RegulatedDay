@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
-import { BrowserWindow, Menu, app, clipboard, crashReporter, dialog, ipcMain, net, powerMonitor, powerSaveBlocker, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
+import { BrowserWindow, Menu, app, clipboard, crashReporter, dialog, ipcMain, net, powerMonitor, powerSaveBlocker, screen, session, shell, utilityProcess, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
 import {
   CH,
   type AppInfo,
@@ -59,6 +59,7 @@ import { PowerKeeper } from './power'
 import { OneDriveWatch } from './onedrive'
 import { toneOnChange, WidgetEngine } from './widget'
 import { SoundWindow } from './windows/soundWindow'
+import { WorkerHost, type WorkerChild } from './worker/host'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
 crashReporter.start({ uploadToServer: false, submitURL: '', compress: false })
@@ -304,6 +305,18 @@ function timerIn(c: TimerIn): TimerIn {
 /** The data folder of this computer: RD_DATA_DIR (tests, the developer), else the wizard's choice; none – the wizard. */
 const dataFolderNow = (): string | null => process.env.RD_DATA_DIR || config.get().dataFolder
 
+/**
+ * The first day of the ritual: days from it are closed and frozen. None until the version with the ritual's screens –
+ * till then every day closes itself as written (T482).
+ */
+const RITUAL_FROM: string | null = null
+
+/** The helper process for the heavy work of the data folder (T190): made at its first task, stopped at the quit. */
+const worker = new WorkerHost({
+  fork: () => utilityProcess.fork(join(__dirname, 'worker.js'), [], { serviceName: 'Regulated Day – zadania w tle', stdio: 'ignore' }) as unknown as WorkerChild,
+  log: (level, msg) => log(level, msg)
+})
+
 function createHub(): DataHub {
   return new DataHub({
     userData,
@@ -321,6 +334,9 @@ function createHub(): DataHub {
     writeGuardPlan: identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1',
     extraBackupDir: () => prefs().backupDir,
     previousVersion: () => lastRunVersion,
+    worker,
+    ritualFrom: RITUAL_FROM,
+    onFolder: (dir) => void config.update({ dataFolder: dir }).catch((e) => log('error', 'nowy folder danych nie zapisał się w ustawieniach', e)),
     onChange: () => {
       broadcast(CH.onData, null)
       void widget.refresh()
@@ -814,6 +830,13 @@ async function main(): Promise<void> {
     log('error', 'identyfikator komputera nieczytelny', e)
   }
   hub = createHub()
+  // E2E: the helper process answers from the built app (its script in app.asar, T190).
+  if (process.env.RD_E2E_WORKER === '1') {
+    worker.run({ kind: 'ping' }).then(
+      (r) => log('info', `proces pomocniczy: ${r}`),
+      (e) => log('error', 'proces pomocniczy nie odpowiada', e)
+    )
+  }
   const folderAtStart = dataFolderNow()
   if (folderAtStart) hub.expect(folderAtStart)
   else if (config.loadFailed) hub.unknownFolder('ustawienia tego komputera (config.json) są nieczytelne – czytam je ponownie')
@@ -1010,6 +1033,7 @@ app.on('will-quit', () => {
   widget.stop()
   sound?.destroy()
   helper?.stop()
+  worker.stop()
   if (!sessionEnding) life.close('quit')
   log('info', 'koniec pracy')
   flushLog()

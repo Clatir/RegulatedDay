@@ -126,7 +126,27 @@ export interface DayFacts {
   closed: { at: number; how: CloseHow } | null
   /** Stretches marked in the ritual as no rest, and when (indices): they count from the marking on (T413). */
   notRest: Array<{ from: number; to: number; at: number }>
+  /** The day's freeze: of two, the one by newer rules, then the one counting more events (spec „Ocena dnia”). */
+  frozen: FrozenFact | null
 }
+
+export interface FrozenFact {
+  id: string
+  /** The computer that froze it, its rules version and logical clock. */
+  c: string
+  v: number
+  l: number
+  /** Index. */
+  at: number
+  how: 'ready' | 'timeout'
+  /** The last event of every computer the grade counts (later ones are „poza oceną”). */
+  know: Record<string, number>
+  missing: string[]
+  grade: Record<string, unknown>
+}
+
+/** How many events a freeze counted. */
+const counted = (x: FrozenFact) => Object.values(x.know).reduce((s, n) => s + Math.max(0, n + 1), 0)
 
 const newBlock = (id: string): BlockFact => ({
   id,
@@ -171,7 +191,8 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
     seen: new Map(),
     answers: new Map(),
     closed: null,
-    notRest: []
+    notRest: [],
+    frozen: null
   }
   const fixes: Array<{ block: string; start: number | null; end: number | null; id: string }> = []
   const marks = new Map<string, boolean>()
@@ -378,6 +399,14 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
       case 'rest.not':
         if (e.to > e.from) f.notRest.push({ from: idx(e.from), to: idx(e.to), at: idx(e.at) })
         break
+      case 'day.freeze': {
+        const know: Record<string, number> = {}
+        for (const [c, n] of Object.entries(e.know)) if (typeof n === 'number' && Number.isInteger(n)) know[c] = n
+        const x: FrozenFact = { id: e.id, c: e.c, v: e.v, l: e.l, at: idx(e.at), how: e.how, know, missing: e.missing.filter((m): m is string => typeof m === 'string'), grade: e.grade }
+        const was = f.frozen
+        if (!was || x.v > was.v || (x.v === was.v && counted(x) > counted(was))) f.frozen = x
+        break
+      }
       default:
         break
     }

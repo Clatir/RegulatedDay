@@ -150,6 +150,11 @@ export type TimerEvent =
   | (EventBase & { k: 'request.person'; request: string; at: number; person: string })
   /** A stretch that was no rest (spec „W rytuale możesz oznaczyć odcinek, który odpoczynkiem nie był”): [from, to). */
   | (EventBase & { k: 'rest.not'; at: number; from: number; to: number })
+  /**
+   * The day frozen by the leader (spec „Ocena dnia”): the last event of every computer it counted (`know` – the grade
+   * counts only up to them), the computers whose records were missing (frozen without waiting after 72 h), and the grade.
+   */
+  | (EventBase & { k: 'day.freeze'; at: number; how: 'ready' | 'timeout'; know: Record<string, number>; missing: string[]; grade: Record<string, unknown> })
 
 /** How a day was closed: the evening ritual, or the morning's „Jak zapisano”, „Wolne”, „Nie pamiętam”. */
 export type CloseHow = 'ritual' | 'asWritten' | 'free' | 'unknown'
@@ -245,6 +250,7 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'block.mark': { block: isStr, at: isNum, done: (v) => typeof v === 'boolean' },
   'request.person': { request: isStr, at: isNum, person: isStr },
   'rest.not': { at: isNum, from: isNum, to: isNum },
+  'day.freeze': { at: isNum, how: (v) => v === 'ready' || v === 'timeout', know: isPlain, missing: Array.isArray, grade: isPlain },
   'presence.first': { at: isNum },
   'gap.open': { gap: isStr, kind: (v) => v === 'input' || v === 'use', from: isNum },
   'gap.close': { gap: isStr, to: isNum },

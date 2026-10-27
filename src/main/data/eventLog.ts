@@ -35,6 +35,8 @@ export interface DayRead {
    * wait, the bar warns) – judged at every read, so it ends once the clocks agree again.
    */
   ahead: boolean
+  /** Conflict copies of logs in the day's folder (joined into the events; the freeze waits until there are none). */
+  copies: number
 }
 
 interface Cached {
@@ -236,6 +238,7 @@ export class EventLog {
     const lists: AnyEvent[][] = [this.ownEvents(day)]
     let complete = true
     let entries: Array<{ name: string; dir: boolean }> = []
+    let copies = 0
     try {
       entries = await this.o.fs.list(join(this.o.dataDir, dir))
     } catch (e) {
@@ -249,6 +252,7 @@ export class EventLog {
       const rel = `${dir}/${entry.name}`
       const c = classify(rel)
       if (!c || c.kind !== 'log') continue
+      if (c.conflict) copies++
       try {
         const read = await this.readCached(rel)
         lists.push(read.events)
@@ -267,7 +271,7 @@ export class EventLog {
     for (const list of lists) for (const e of list) lastByComputer[e.c] = Math.max(lastByComputer[e.c] ?? -1, e.n)
     let ahead = false
     for (const e of events) if (!this.o.clock.observe(e.l)) ahead = true
-    return { events, complete, problems, lastByComputer, ahead }
+    return { events, complete, problems, lastByComputer, ahead, copies }
   }
 
   /** A day to compare with OneDrive at the next write (every check does it for today). */

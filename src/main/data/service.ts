@@ -20,7 +20,8 @@ import { LifeKeeper } from '../crash/lifeMarker'
 import { writePlan, PLAN_DAYS, type PlanBlock as GuardBlock } from '../update/files'
 import { InputTracker, SAMPLE_MS } from '../engine/input'
 import { Scheduler } from '../engine/scheduler'
-import { backupDue, copyLatestTo, createDailyBackup } from './backup'
+import { inProcess, type Worker } from '../worker/host'
+import { backupDue, copyLatestTo } from './backup'
 import { DataFolder } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 
@@ -61,6 +62,10 @@ export interface ServiceOptions {
   onChecked?: () => void
   /** This computer's extra place for backups (spec: it copies the newest one there itself, also when it does not lead). */
   extraBackupDir?: () => string | null
+  /** The helper process for the heavy work – the backup, the grades of days to freeze (T190); default: this process. */
+  worker?: Worker
+  /** The first day of the ritual (none before its screens, T482). */
+  ritualFrom?: string | null
 }
 
 /** The folder's own state in the app data: one folder per data folder, by its resolved path. */
@@ -164,7 +169,9 @@ export class DataService {
       clock,
       holidays: o.holidays,
       oneDriveRunning: o.oneDriveRunning ?? (() => true),
-      previousRun
+      previousRun,
+      worker: o.worker,
+      ritualFrom: o.ritualFrom ?? null
     })
     life.start(o.runId, o.appVersion, clock.wall())
     if (previousRun && !previousRun.clean) o.log('warn', 'poprzednie uruchomienie folderu skończyło się bez zamknięcia – koniec obserwacji z ostatniego znacznika życia')
@@ -249,7 +256,8 @@ export class DataService {
     this.lastBackupTry = now
     const backups = join(this.o.dataDir, 'backups')
     if (!(await backupDue(backups, today))) return
-    const r = await createDailyBackup(this.o.dataDir, backups, today)
+    // In the helper process: a hung or crashed one is a failed backup (tried again in an hour), never a failed check.
+    const r = await (this.o.worker ?? inProcess).run({ kind: 'backup', dataDir: this.o.dataDir, backupsDir: backups, date: today }).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }))
     if (r.ok) this.o.log('info', `kopia zapasowa ${today}: ${r.files} plików`)
     else this.o.log('error', `kopia zapasowa ${today} nie powiodła się: ${r.error}`)
   }

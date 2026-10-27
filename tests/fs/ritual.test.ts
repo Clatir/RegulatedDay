@@ -13,6 +13,7 @@ import { addDays } from '@shared/time/zone'
 import { placeLogical } from '@shared/time/day'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs } from '../../src/main/data/fsio'
+import { inProcess } from '../../src/main/worker/host'
 
 const DAY = '2026-10-21'
 let root: string
@@ -52,6 +53,28 @@ async function make(start = placeLogical(DAY, 10 * 60)) {
 }
 
 const kinds = async (f: DataFolder, day = DAY) => (await f.readDay(day)).events.filter((e) => e.dom === 'timer').map((e) => e.k)
+
+describe('rytuał w folderze danych – liczenie poza procesem głównym', () => {
+  it('wiersze i skutki rytuału liczy proces pomocniczy (wiele pełnych przeliczeń dnia)', async () => {
+    const kinds: string[] = []
+    const clock = { now: placeLogical(DAY, 20 * 60) }
+    const folder = await DataFolder.open({
+      fs: nodeFs,
+      dataDir,
+      stateDir: join(root, 'state'),
+      computer: 'pca',
+      computerName: 'PC A',
+      appVersion: '0.7.0',
+      clock: { wall: () => clock.now, mono: () => clock.now },
+      holidays: marketDay,
+      oneDriveRunning: () => true,
+      worker: { run: (t) => (kinds.push(t.kind), inProcess.run(t)) }
+    })
+    const r = await folder.ritual(DAY)
+    expect(r.rows.length).toBeGreaterThan(0)
+    expect(kinds).toEqual(['ritual'])
+  })
+})
 
 describe('rytuał w folderze danych', () => {
   it('wiersze dnia, odpowiedź zapisana raz, zamknięcie dnia potwierdza koniec pracy', async () => {

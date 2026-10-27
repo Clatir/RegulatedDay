@@ -204,7 +204,8 @@ export class WidgetEngine {
   /**
    * The notifications on by default (D230): 5 min before a block waiting for „Zacznij” and before classes and the commute
    * (not before an online lecture, D237; none in the class mode, D236, nor during stationary classes and the commute),
-   * the hard end of projects while a project runs, a pool at the reserve (the message of its first descent of the day).
+   * the hard end of projects (a project runs, or it passed in a project or in time to explain after one within the hour),
+   * a pool at the reserve (the message of its first descent of the day).
    * Each once: its id goes to the day's log.
    */
   private async notices(folder: DataFolder, m: Awaited<ReturnType<DataFolder['widgetModel']>>, name: (b: Parameters<typeof blockName>[0]) => string, now: number): Promise<void> {
@@ -234,8 +235,10 @@ export class WidgetEngine {
         out.push({ id: `notice:${date}:start5:${b.id}:${span.start}`, title: `${p ? name(p) : b.categoryId} o ${clock}`, body: b.waits ? 'Za 5 min – „Zacznij” czeka w pasku.' : 'Za 5 min.', line: `wait:${b.id}`, day: date })
       }
     }
-    // A project runs (or ran in the minute of the hard end), or it passed in time to explain after a project (D250).
-    if (on.hardEnd && state.hardEnd.passed != null && (state.hardEnd.message || t.fg?.info.isProject)) out.push({ id: `notice:${date}:hardEnd:-:${state.hardEnd.passed}`, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
+    // A project runs now (also one begun after the hard end), or one ran in its minute or it passed in time to explain
+    // after a project (D250) – then only within an hour of it, never hours late (the app started, the notice turned on).
+    const passedRecently = state.hardEnd.passed != null && atOf(state.grid, state.hardEnd.passed) >= now - 60 * MIN
+    if (on.hardEnd && state.hardEnd.passed != null && ((state.hardEnd.message && passedRecently) || t.fg?.info.isProject)) out.push({ id: `notice:${date}:hardEnd:-:${state.hardEnd.passed}`, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
     if (on.reserve && m.energy.enabled) {
       for (const d of m.energy.descents) {
         if (!d.message || atOf(state.grid, d.at) < now - 60 * MIN) continue

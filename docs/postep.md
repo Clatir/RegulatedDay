@@ -8,17 +8,20 @@
 - Otwarte na etap elementów E5 w pasku: w czasie prośby pasek pokazuje przerwany blok jako „Wznów · Zaparkuj” (z kropką)
   – zamieni go linia prośby z „Koniec”; kropka po „Jeszcze trwa” (D247); pasek po 04:00 pokazuje dzisiejszy dzień,
   także gdy trwa wczorajsza prośba.
-- **Logika E6, część 1 (silnik wieczoru i rytuału)** – gałąź `claude/e6-rytual`, start 27.10 ok. 07:20 (D299). Kod
-  gotowy: czas do wyjaśnienia w silniku dnia (`engine/explain.ts`, 15 testów), komunikat o twardym końcu w nim po
-  projekcie, ocena dnia bez gry (`engine/outcome.ts`), rytuał (`engine/ritual.ts`: wiersze, odpowiedzi, skutek ✓,
-  zamknięcie, niezamknięte dni; 15 testów), droga przez `DataFolder` (2 testy plikowe), nowe zdarzenia `ritual.close`,
-  `block.fix`, `block.mark`, `request.person`, `rest.not`; T483–T485, reguły `rytual.md`, CHANGELOG 0.6.0, lista E6a
-  w `docs/odbior.md`. `/code-review` (xhigh): 15 uwag, 14 poprawionych z testami (T486), 1 bez zmian (restart po
-  cichym końcu nie występuje); mutacje: 22 próby, 21 wykrytych, 1 praktycznie równoważna (opis w PR). Testy: 634
-  jednostkowe i plikowe, E2E 15 + 2 tylko w CI; typecheck, build, lint zielone. Dalej: PR, CI, scalenie, wydanie 0.6.0.
+- **Logika E6, część 1** scalona (PR #10), wydanie 0.6.0 opublikowane (27.10 ok. 09:47); wpis →
+  `docs/archiwum/postep-E6.md`.
+- **Logika E6, część 2 (dane)** – gałąź `claude/e6-dane` (od części 1, z `main`). Gotowe: stany dnia i zamrażanie
+  (`engine/freeze.ts`, 10 testów; zadanie prowadzącego w `DataFolder`, 10 testów plikowych), proces pomocniczy
+  (`main/worker/`, 5 testów + E2E), eksport CSV (`engine/csv.ts`, 3 testy + plikowy), przywracanie kopii (`DataHub`, 2
+  testy plikowe); T487–T490, reguły `zamrazanie.md`, CHANGELOG 0.7.0, lista E6b. `/code-review` (xhigh): 15 uwag,
+  wszystkie poprawione z testami (T491); mutacje: 25 prób, 23 wykryte, 2 przeżyłe zamknięte nowymi testami. Testy: 675
+  jednostkowe i plikowe, E2E 16 + 2 tylko w CI (lokalnie dwa razy zielone w ok. 45 s – wcześniejsze zawieszenia to
+  obciążenie maszyny równoległymi mutacjami). Dalej: PR, CI, scalenie, wydanie 0.7.0, pauza do „dalej”.
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
-  (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482).
-- Zastąpione decyzje (26) przeniesione do `docs/archiwum/decyzje-zastapione.md`.
+  (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
+  do folderu z `.moved.json`.
+- Zastąpione decyzje (26) przeniesione do `docs/archiwum/decyzje-zastapione.md`; `docs/decyzje.md` ma 194,8 / 200 KB –
+  przy następnym etapie kolejne zastąpione (także częściowo) do archiwum.
 
 ## Kolejka
 1. Logika E6 ciągiem (D299): część 1 – czas do wyjaśnienia w silniku dnia, komunikat o twardym końcu, rytuał (wiersze,
@@ -37,7 +40,7 @@
 - Do przygotowania: nic nowego – odbiór E3–E5 według `docs/odbior.md`.
 
 ## Do odbioru na Windows
-- Lista w `docs/odbior.md` (E3, E4a, E4b, logika E5 – każdy punkt z oczekiwanym efektem i błędami, które blokują
+- Lista w `docs/odbior.md` (E3, E4a, E4b, logika E5, E6a, E6b – każdy punkt z oczekiwanym efektem i błędami, które blokują
   odbiór; na dole punkty już odebrane, E0). Kolejne etapy dopisują tam swoje listy.
 
 ## Przed etapem E0 (25.10.2026)
