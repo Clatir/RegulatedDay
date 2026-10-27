@@ -95,7 +95,8 @@ export type TimerEvent =
    */
   | (EventBase & { k: 'block.addConfirm'; block: string; at: number })
   | (EventBase & { k: 'block.fg'; block: string; at: number; bg: boolean })
-  | (EventBase & { k: 'boundary.approve'; at: number; boundary: number; auto: boolean })
+  /** `plan` – the blocks of the plan then (the game: a block that gives way in an exchange was planned before the approval). */
+  | (EventBase & { k: 'boundary.approve'; at: number; boundary: number; auto: boolean; plan?: string[] })
   | (EventBase & { k: 'boundary.undo'; at: number })
   | (EventBase & { k: 'boundary.exception'; at: number; minutes: number; reason: string })
   | (EventBase & { k: 'work.end'; at: number; end: number })
@@ -199,7 +200,13 @@ export type UnknownEvent = EventBase & { k: string; unknown: true; raw: Record<s
  */
 export type MetaEvent = EventBase & { k: 'module.set'; at: number; module: string; on: boolean; was: boolean }
 
-export type LogEvent = TimerEvent | PresenceEvent | EnergyEvent | MetaEvent
+/**
+ * The game's facts that are no action of the timer. „Wymień” (spec „Wymiana”): the block added and the blocks that gave
+ * way to it, each with its planned length then (the yielding ones are parked by their own `block.park`).
+ */
+export type GameEvent = EventBase & { k: 'block.exchange'; at: number; block: string; minutes: number; yielding: Array<{ block: string; minutes: number }> }
+
+export type LogEvent = TimerEvent | PresenceEvent | EnergyEvent | MetaEvent | GameEvent
 export type AnyEvent = LogEvent | UnknownEvent
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -207,6 +214,8 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 const DOMAINS = new Set(['timer', 'energy', 'game', 'meta'])
 const isPool = (v: unknown): v is Pool => (POOLS as readonly unknown[]).includes(v)
+/** A planned length: whole minutes, at most a day. */
+const isLength = (v: unknown): v is number => Number.isInteger(v) && (v as number) > 0 && (v as number) <= 24 * 60
 const isAnswers = (v: unknown) => isPlain(v) && POOLS.every((p) => Array.isArray(v[p]) && (v[p] as unknown[]).length === 2 && (v[p] as unknown[]).every((a) => a === 0 || a === 1 || a === 2))
 const isValues = (v: unknown) => v == null || (isPlain(v) && POOLS.every((p) => isNum(v[p]) && (v[p] as number) >= 0 && (v[p] as number) <= 100))
 
@@ -224,9 +233,10 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'block.park': { block: isStr, at: isNum },
   'block.cancel': { block: isStr, at: isNum },
   'block.addConfirm': { block: isStr, at: isNum },
+  'block.exchange': { at: isNum, block: isStr, minutes: isLength, yielding: (v) => Array.isArray(v) && v.length > 0 && v.every((y) => isPlain(y) && isStr(y.block) && isLength(y.minutes)) },
   'module.set': { at: isNum, module: isStr, on: (v) => typeof v === 'boolean', was: (v) => typeof v === 'boolean' },
   'block.fg': { block: isStr, at: isNum },
-  'boundary.approve': { at: isNum, boundary: isNum },
+  'boundary.approve': { at: isNum, boundary: isNum, plan: (v) => v === undefined || (Array.isArray(v) && v.length <= 500 && v.every(isStr)) },
   'boundary.undo': { at: isNum },
   'boundary.exception': { at: isNum, minutes: (v) => isNum(v) && v > 0 && v <= 24 * 60 },
   'work.end': { at: isNum, end: isNum },

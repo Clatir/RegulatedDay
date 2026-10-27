@@ -131,7 +131,8 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
           moves: 0,
           requests: [],
           routine: null,
-          movedFrom: null
+          movedFrom: null,
+          byVariant: false
         },
         false
       )

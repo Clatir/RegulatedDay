@@ -32,7 +32,8 @@ const BLOCK_FIELDS: Record<string, string> = {
   moves: 'licznik przeniesień',
   requests: 'prośby',
   routine: 'rutyna',
-  movedFrom: 'przeniesiony z'
+  movedFrom: 'przeniesiony z',
+  byVariant: 'zmieniony wariantem'
 }
 
 const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok' }

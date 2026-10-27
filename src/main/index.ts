@@ -311,6 +311,12 @@ const dataFolderNow = (): string | null => process.env.RD_DATA_DIR || config.get
  */
 const RITUAL_FROM: string | null = null
 
+/**
+ * The first day in the game: days before it are outside the game. None until the version with the game's screens – the
+ * logic's versions show and count nothing (T492).
+ */
+const GAME_FROM: string | null = null
+
 /** The helper process for the heavy work of the data folder (T190): made at its first task, stopped at the quit. */
 const worker = new WorkerHost({
   fork: () => utilityProcess.fork(join(__dirname, 'worker.js'), [], { serviceName: 'Regulated Day – zadania w tle', stdio: 'ignore' }) as unknown as WorkerChild,
@@ -336,6 +342,7 @@ function createHub(): DataHub {
     previousVersion: () => lastRunVersion,
     worker,
     ritualFrom: RITUAL_FROM,
+    gameFrom: GAME_FROM,
     onFolder: (dir) => void config.update({ dataFolder: dir }).catch((e) => log('error', 'nowy folder danych nie zapisał się w ustawieniach', e)),
     onChange: () => {
       broadcast(CH.onData, null)

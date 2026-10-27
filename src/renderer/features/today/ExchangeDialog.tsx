@@ -40,7 +40,11 @@ export function ExchangeDialog({ model, names, block, proposal, onClose }: { mod
     if (exchange) for (const y of yielding) next = putBlock(next, { ...y.block, moves: y.block.moves + 1 })
     await saveEdits([editOf(paths.day(date), raw, next)])
     const events: Array<{ k: string; day: string; [k: string]: unknown }> = []
-    if (exchange) for (const y of yielding) events.push({ k: 'block.park', day: date, block: y.block.id, rule: 'exchange' })
+    if (exchange) {
+      // The game's record of the exchange (spec „Wymiana zamiast dokładania”): both sides with their lengths now.
+      events.push({ k: 'block.exchange', day: date, block: block.id, minutes: block.durationMin, yielding: yielding.map((y) => ({ block: y.block.id, minutes: y.minutes })) })
+      for (const y of yielding) events.push({ k: 'block.park', day: date, block: y.block.id, rule: 'exchange' })
+    }
     if (c.beyondMin > 0) events.push({ k: 'block.addConfirm', day: date, block: block.id })
     if (events.length) await logEvents(events)
     onClose(block.id)

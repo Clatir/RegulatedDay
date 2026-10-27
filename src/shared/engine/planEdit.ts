@@ -105,8 +105,9 @@ export function copiedDay(plan: readonly PlanBlock[]): PlanBlock[] {
       sourceId: null,
       moves: 0,
       movedFrom: null,
-      // A request belongs to one day: a copy is a plain block of its category.
-      requests: []
+      // A request belongs to one day: a copy is a plain block of its category; no variant changed it there.
+      requests: [],
+      byVariant: false
     })
   }
   return out

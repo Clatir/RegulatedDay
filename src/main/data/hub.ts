@@ -53,6 +53,8 @@ export interface HubOptions {
   worker?: ServiceOptions['worker']
   /** The first day of the ritual (none before its screens, T482). */
   ritualFrom?: string | null
+  /** The first day in the game (none before its screens, T492). */
+  gameFrom?: string | null
   /** This computer now works in another folder (a whole backup restored into a new one): its config remembers it. */
   onFolder?: (dir: string) => void
 }
@@ -207,6 +209,7 @@ export class DataHub {
         extraBackupDir: this.o.extraBackupDir,
         worker: this.o.worker,
         ritualFrom: this.o.ritualFrom ?? null,
+        gameFrom: this.o.gameFrom ?? null,
         onChecked: () => this.changed()
       })
       if (this.closing || this.shutdown) {

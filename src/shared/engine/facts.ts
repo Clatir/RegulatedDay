@@ -146,7 +146,17 @@ export interface FrozenFact {
 }
 
 /** How many events a freeze counted. */
-const counted = (x: FrozenFact) => Object.values(x.know).reduce((s, n) => s + Math.max(0, n + 1), 0)
+export const countedOf = (x: { know: Readonly<Record<string, number>> }): number => Object.values(x.know).reduce((s, n) => s + Math.max(0, n + 1), 0)
+
+/**
+ * Of two freezes of a day `a` wins (spec „Ocena dnia”): by newer rules, at the same rules the one counting more events;
+ * a tie goes to the lower computer id – the log and the files of grades choose the same one on every computer.
+ */
+export function betterFreeze(a: { v: number; c: string; know: Readonly<Record<string, number>> }, b: { v: number; c: string; know: Readonly<Record<string, number>> }): boolean {
+  if (a.v !== b.v) return a.v > b.v
+  const d = countedOf(a) - countedOf(b)
+  return d !== 0 ? d > 0 : a.c < b.c
+}
 
 const newBlock = (id: string): BlockFact => ({
   id,
@@ -166,7 +176,7 @@ const newBlock = (id: string): BlockFact => ({
 })
 
 /** Events that never change the timer's facts (they do not make segments stale either); energy never does either. */
-const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown'])
+const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown', 'block.exchange'])
 
 export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k) || e.dom === 'energy'
 
@@ -404,7 +414,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         for (const [c, n] of Object.entries(e.know)) if (typeof n === 'number' && Number.isInteger(n)) know[c] = n
         const x: FrozenFact = { id: e.id, c: e.c, v: e.v, l: e.l, at: idx(e.at), how: e.how, know, missing: e.missing.filter((m): m is string => typeof m === 'string'), grade: e.grade }
         const was = f.frozen
-        if (!was || x.v > was.v || (x.v === was.v && counted(x) > counted(was))) f.frozen = x
+        if (!was || betterFreeze(x, was)) f.frozen = x
         break
       }
       default:

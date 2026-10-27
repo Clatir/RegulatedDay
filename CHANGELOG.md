@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0
+- Pod spodem: regulamin gry – nuty za dotrzymaną granicę (3), wykorzystaną regenerację (3), reakcję na rezerwę (2), trafne szacowanie (1 za blok, najwyżej 3 dziennie) i wymianę zamiast dokładania (1); statusy dni (poza grą, niedotrzymany, bez danych, dotrzymany) i passa – dzień bez danych trzyma ją najwyżej dwa razy w tygodniu, a pierwszy niedotrzymany dzień tygodnia zastępuje dzień ochronny. Ocena dnia przy zamrożeniu zapisuje się z numerem reguł gry.
+- „Wymień” w oknie nowego bloku zapisuje wymianę w dzienniku dnia, a zatwierdzenie granicy – bloki, które były wtedy w planie; z tego liczy się nuta za wymianę.
+- Gra, pokój i kasety pojawią się w jednej z następnych wersji; do tego czasu nic się nie liczy i w oknie nic się nie zmienia.
+
 ## 0.7.0
 - Codzienna kopia zapasowa powstaje teraz w osobnym procesie w tle („Regulated Day – zadania w tle” w Menedżerze zadań, tylko na czas pracy), więc pakowanie dużego folderu nie przycina okna ani paska. Zawieszony albo przerwany proces uruchamia się sam przy następnym zadaniu.
 - Pod spodem: stany dnia (otwarty, wstępnie oceniony, zamrożony) i zamrażanie – 24 h od otwarcia dnia po jego końcu, najwyżej po 72 h – przez komputer prowadzący, gdy dotarły zapisy wszystkich komputerów; ocena dnia zapisuje się raz, późniejsze zdarzenia są „poza oceną”.

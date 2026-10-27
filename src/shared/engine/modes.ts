@@ -9,7 +9,7 @@
 import { compareEvents, isKnown, type AnyEvent } from '../model/events'
 import type { DayState } from './day'
 import { OPEN } from './facts'
-import { atOf } from './grid'
+import { atOf, idxOf, type Grid } from './grid'
 import type { TimerNow } from './timer'
 
 export interface Modes {
@@ -39,6 +39,22 @@ export function fewerOn(events: readonly AnyEvent[]): boolean {
     else if (e.k === 'fewer.end') on = false
   }
   return on
+}
+
+/** The stretches of „mniej pytań” in the day (indices, [from, to)); one still on lasts to the day's end. */
+export function fewerSpans(events: readonly AnyEvent[], grid: Grid): Array<{ from: number; to: number }> {
+  const out: Array<{ from: number; to: number }> = []
+  let from: number | null = null
+  for (const e of [...events].sort(compareEvents)) {
+    if (!isKnown(e)) continue
+    if (e.k === 'fewer.start' && from == null) from = idxOf(grid, e.at)
+    else if (e.k === 'fewer.end' && from != null) {
+      out.push({ from, to: Math.max(from, idxOf(grid, e.at)) })
+      from = null
+    }
+  }
+  if (from != null) out.push({ from, to: OPEN })
+  return out
 }
 
 export function modesOf(state: DayState, t: TimerNow, events: readonly AnyEvent[], now: number, prefs: ModePrefs = { sessionMode: true, classMode: true }): Modes {

@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
+import { addDays } from '@shared/time/zone'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs } from '../../src/main/data/fsio'
 import { generate, type Generated } from './generate'
@@ -58,7 +59,10 @@ describe('test skali (3 lata danych)', () => {
       appVersion: '0.2.0',
       clock: { wall: () => wall, mono: () => mono },
       holidays: marketDay,
-      oneDriveRunning: () => true
+      oneDriveRunning: () => true,
+      // The game over the whole folder; the ritual from today – its days are already frozen (the files of grades).
+      ritualFrom: TODAY,
+      gameFrom: addDays(TODAY, -gen.days)
     })
     await folder.check()
     const state = await folder.dayState(TODAY)
@@ -91,6 +95,11 @@ describe('test skali (3 lata danych)', () => {
     const check = await time(() => folder.check())
     const day = await time(() => folder.dayState(TODAY))
     const energy = await time(() => folder.energyState(TODAY))
-    for (const [what, ms] of Object.entries({ click, check, day, energy })) expect(ms, what).toBeLessThan(100 * factor)
+    // The game (E7): the streak and the notes of 3 years from the files of grades, today's notes so far.
+    let summary: Awaited<ReturnType<DataFolder['gameState']>> = null
+    const game = await time(async () => (summary = await folder.gameState()))
+    expect(summary!.steps).toHaveLength(gen.days - 1)
+    expect(summary!.notes.final).toBeGreaterThan(5_000)
+    for (const [what, ms] of Object.entries({ click, check, day, energy, game })) expect(ms, what).toBeLessThan(100 * factor)
   })
 })

@@ -321,7 +321,7 @@ function Boundary({ model, lm, approved, proposal }: { model: DayModel; lm: (i: 
           <span>
             Propozycja granicy: <span className="num text-lamp">{lm(proposal)}</span> (koniec ostatniego bloku pracy + {s.settings.boundaryBufferMin} min, najpóźniej {lm(s.boundary.max)})
           </span>
-          <button type="button" className="btn btn-accent" onClick={() => void logEvents([{ k: 'boundary.approve', day: date, boundary: atOf(s.grid, proposal), auto: false }])} data-testid="boundary-approve">
+          <button type="button" className="btn btn-accent" onClick={() => void logEvents([{ k: 'boundary.approve', day: date, boundary: atOf(s.grid, proposal), auto: false, plan: model.ctx.plan.map((b) => b.id) }])} data-testid="boundary-approve">
             Zatwierdź plan
           </button>
         </div>

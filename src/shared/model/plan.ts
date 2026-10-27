@@ -45,6 +45,8 @@ export interface PlanBlock {
   routine: string | null
   /** The day this block was moved from (the morning plan shows „z wczoraj”). */
   movedFrom: string | null
+  /** A variant of a change of the plan shortened it or moved it (the game: „niezmieniony przez warianty”). */
+  byVariant: boolean
 }
 
 export interface TemplateVersion {
@@ -151,7 +153,8 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     moves: intIn(v.moves, 0, 1_000_000) ?? 0,
     requests: Array.isArray(v.requests) ? [...new Set(v.requests.filter((x): x is string => typeof x === 'string' && !!x))].slice(0, 50) : [],
     routine: typeof v.routine === 'string' && v.routine ? v.routine : null,
-    movedFrom: isIsoDate(v.movedFrom) ? v.movedFrom : null
+    movedFrom: isIsoDate(v.movedFrom) ? v.movedFrom : null,
+    byVariant: v.byVariant === true
   }
 }
 
@@ -175,6 +178,7 @@ export function planBlock(p: Partial<PlanBlock> & Pick<PlanBlock, 'id' | 'catego
     requests: [],
     routine: null,
     movedFrom: null,
+    byVariant: false,
     ...p
   }
 }

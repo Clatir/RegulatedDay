@@ -249,7 +249,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   // the list shows it and „Cofnij” opens it again.
   if (state.boundary.approved != null && state.boundary.auto && !state.facts.approvals.length && state.boundary.approvedAt != null && !state.facts.undos.length) {
     const when = at(state.boundary.approvedAt)
-    if (due(when)) take([auto(date, 'boundary', { k: 'boundary.approve', at: when, boundary: at(state.boundary.approved), auto: true } as TimerDraft)])
+    if (due(when)) take([auto(date, 'boundary', { k: 'boundary.approve', at: when, boundary: at(state.boundary.approved), auto: true, plan: ctx.plan.map((b) => b.id) } as TimerDraft)])
   }
 
   // „Odcinam się” lasts at the latest to 04:00 (spec „Odcinam się”): the day that ended closes it – information only.
