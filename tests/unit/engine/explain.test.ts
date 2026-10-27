@@ -4,6 +4,7 @@
  * answer – neither work, nor a project, nor regeneration; after a work block rest for the hard end and the pool.
  */
 import { describe, expect, it } from 'vitest'
+import { computeDay } from '@shared/engine/day'
 import { block, hhmm, Scenario } from './dsl'
 
 const DATE = '2026-10-28' // a Wednesday
@@ -128,6 +129,82 @@ describe('czas do wyjaśnienia po projekcie', () => {
     const after = s.state('21:50')
     expect(after.projectsMin).toBe(90)
     expect(after.regen.explainMin).toBe(0)
+  })
+})
+
+describe('czas do wyjaśnienia – zapisy w środku minuty, poprawki z rytuału, druga zmiana', () => {
+  it('koniec progiem bezczynności w środku minuty (20:05:17): czas od powrotu, nie od końca bloku', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'p', cat: 'projekty', at: '19:00', min: 60 })] }).using('07:00', '23:59')
+    s.start('p', '19:00')
+    const away = s.at('20:05') + 17_000
+    const back = s.at('20:20') + 17_000
+    s.write([{ k: 'gap.open', gap: 'gi', kind: 'input', from: away, lastOutside: away }, { k: 'gap.open', gap: 'gu', kind: 'use', from: away, lastOutside: null }], away)
+    s.write([{ k: 'gap.close', gap: 'gi', to: back }, { k: 'gap.close', gap: 'gu', to: back }], back)
+    s.write([{ id: 'auto-p-idle', k: 'block.end', block: 'p', at: away, done: null, rule: 'idle', autoRule: 'idle' }], away + 10 * 60_000)
+    expect(span(s.state('21:00'))).toEqual({ from: '20:20', to: 'trwa', until: null, kind: 'project', answer: null })
+  })
+
+  it('minięcie twardego końca zapisane przez prowadzącego: komunikat zostaje (czas do wyjaśnienia po projekcie, D250)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'w', cat: 'inne', at: '08:00', min: 540 }), block({ id: 'p', cat: 'projekty', at: '17:30', min: 120 })] }).using('07:00', '23:59')
+    s.ran('w', '08:00', '17:00').workEnd('17:00')
+    s.start('p', '17:30')
+    silentEnd(s, 'p', '19:30', 'twoQuestions', '20:30')
+    s.gap('21:20', '22:10')
+    s.write([{ id: 'he', k: 'hardend.pass', at: s.at('21:00'), basis: 'prowadzący' }], s.at('21:01'))
+    const st = s.state('22:30')
+    expect(hhmm(st, st.hardEnd.passed)).toBe('21:00')
+    expect(st.hardEnd.message).toBe(true)
+  })
+
+  it('odcinek oznaczony w rytuale jako nie-odpoczynek w czasie do wyjaśnienia po pracy nie jest odpoczynkiem także „jak zapisano”', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).using('07:00', '23:00')
+    s.start('a', '08:00')
+    silentEnd(s, 'a', '09:00', 'twoQuestions', '10:00')
+    s.gap('10:30', '11:15')
+    s.write([{ k: 'rest.not', at: s.at('11:50'), from: s.at('09:00'), to: s.at('10:00') }], s.at('11:50'))
+    expect(s.state('12:00', { asWritten: true }).regen.totalMin).toBe(120)
+  })
+
+  it('oznaczenie „nie był odpoczynkiem” liczy się od swojej chwili: twardy koniec nie mija przez nie wstecz, energia się nie zmienia', () => {
+    // Work to 17:00 (confirmed), 17:00–19:00 free (the minimum reached), a project 19:00–20:45. Marked at 21:30: 17:00–19:00
+    // was no rest – judged at 20:30 with it, the hard end would have passed then.
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'w', cat: 'inne', at: '08:00', min: 540 }), block({ id: 'p', cat: 'projekty', at: '19:00', min: 30 })] }).using('07:00', '23:59')
+    s.ran('w', '08:00', '17:00').workEnd('17:00')
+    s.ran('p', '19:00', '20:45')
+    s.checkin('07:30', { head: [0, 0], emotions: [0, 0], senses: [0, 0] })
+    const at = (st: ReturnType<Scenario['state']>, time: string) => Math.round((s.at(time) - st.grid.start) / 60_000)
+    const before = s.energyWithDay('21:40')
+    s.write([{ k: 'rest.not', at: s.at('21:30'), from: s.at('17:00'), to: s.at('19:00') }], s.at('21:30'))
+    const after = s.energyWithDay('21:40')
+    expect(after.day.hardEnd.passed).toBeNull()
+    expect(after.day.regen.totalMin).toBe(before.day.regen.totalMin - 120)
+    expect(after.energy.series.head[at(after.day, '18:30')]).toBe(before.energy.series.head[at(before.day, '18:30')])
+  })
+
+  it('po drugiej zmianie odpowiedź „praca” liczy się jak druga zmiana poza swoim czasem – nie przesuwa końca pracy', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 's2', cat: 'inne', at: '20:00', min: 60, tag: 'secondShift' })] }).using('07:00', '23:59')
+    s.ran('a', '08:00', '09:00').workEnd('09:00')
+    s.start('s2', '20:00')
+    silentEnd(s, 's2', '21:00', 'twoQuestions', '22:00')
+    s.gap('21:40', '22:30')
+    answer(s, s.state('22:35').explains[0]!.id, 'work', '22:40')
+    const st = s.state('22:45')
+    expect(hhmm(st, st.workEnd)).toBe('09:00')
+  })
+
+  it('długi czas do wyjaśnienia nie spowalnia liczenia dnia (sprawdzanie twardego końca przeskakuje jego minuty)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'projekty', at: '08:00', min: 60 })] }).using('07:00', '23:59')
+    s.start('a', '08:00')
+    silentEnd(s, 'a', '09:00', 'twoQuestions', '10:00')
+    const ctx = s.contextAt(s.at('21:00'))
+    const times: number[] = []
+    for (let i = 0; i < 5; i++) {
+      const t0 = performance.now()
+      computeDay(ctx)
+      times.push(performance.now() - t0)
+    }
+    times.sort((a, b) => a - b)
+    expect(times[2]!).toBeLessThan(40)
   })
 })
 

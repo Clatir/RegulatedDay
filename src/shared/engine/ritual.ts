@@ -16,12 +16,12 @@ import { questionId } from '../model/ids'
 import { dayStart } from '../time/day'
 import { addDays } from '../time/zone'
 import { answerEvents, type Question } from './auto'
-import { plannedSpan } from './blocks'
+import { plannedSpan, startPlanned } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
-import type { Explain } from './explain'
-import { OPEN, type BlockFact } from './facts'
-import { atOf } from './grid'
-import { dayOutcome, outcomeChanges, type OutcomeChange } from './outcome'
+import { explainMinutes, inExplain, type Explain } from './explain'
+import { foldFacts, OPEN, type BlockFact } from './facts'
+import { atOf, gridOf } from './grid'
+import { dayOutcome, outcomeChanges, type DayOutcome, type OutcomeChange } from './outcome'
 import { plannedEndOf, type TimerDraft } from './timer'
 
 const HOUR = 3_600_000
@@ -60,7 +60,7 @@ export type RitualRow = RowBase &
     | { kind: 'shutdown'; block: string; at: number; question: string; answered: boolean }
     | { kind: 'fixedMinutes'; block: string; minutes: number; answered: boolean }
     | { kind: 'skipped'; block: string; fixed: boolean; from: number; to: number }
-    | { kind: 'parkedAnchored'; block: string; anchor: string }
+    | { kind: 'parkedAnchored'; block: string; anchor: string; answered: boolean }
     | { kind: 'person'; request: string; from: number; to: number }
     | { kind: 'rest'; from: number; to: number; marked: Array<{ from: number; to: number }>; answered: boolean }
   )
@@ -117,8 +117,10 @@ export function ritualRows(state: DayState): RitualRow[] {
   if (items.length) {
     items.sort((a, b) => a.plannedEnd - b.plannedEnd)
     const id = ritualRowId(date, 'silent', 'day')
-    const explainMin = items.reduce((s, x) => s + (x.explain ? explainLength(x.explain, state.now) : 0), 0)
-    const answered = touched(id) || items.every((x) => !x.explain || x.explain.answer?.how === 'answer')
+    const explainMin = items.reduce((s, x) => s + (x.explain ? explainMinutes(x.explain, state.now) : 0), 0)
+    // Answered by its ✓, or when every block has a time to explain you answered yourself (minutes over the plan with
+    // nothing to explain wait for the ✓ or „skończył się o …”).
+    const answered = touched(id) || items.every((x) => x.explain?.answer?.how === 'answer')
     out.push({ id, kind: 'silent', items, extraMin: items.reduce((s, x) => s + x.extraMin, 0), explainMin, answered, afterClose: items.every((x) => after(x.plannedEnd)) })
   }
 
@@ -178,10 +180,11 @@ export function ritualRows(state: DayState): RitualRow[] {
     if (info.inPlan && span && span.end <= state.now && b?.startedAt == null && b?.parkedAt == null && b?.cancelledAt == null) {
       out.push({ id: ritualRowId(date, 'skipped', info.id), kind: 'skipped', block: info.id, fixed: info.fixed, from: span.start, to: span.end, afterClose: after(span.end) })
     }
-    if (b?.parkedAt != null && info.anchor) {
+    if (b?.parkedAt != null && b.cancelledAt == null && info.anchor) {
       const anchor = f.blocks.get(info.anchor)
       const anchorSpan = byId.get(info.anchor) ? plannedSpan(byId.get(info.anchor)!, byId) : null
-      if (anchor?.endedAt != null || (anchorSpan && anchorSpan.end <= state.now)) out.push({ id: ritualRowId(date, 'parkedAnchored', info.id), kind: 'parkedAnchored', block: info.id, anchor: info.anchor, afterClose: false })
+      const id = ritualRowId(date, 'parkedAnchored', info.id)
+      if (anchor?.endedAt != null || (anchorSpan && anchorSpan.end <= state.now)) out.push({ id, kind: 'parkedAnchored', block: info.id, anchor: info.anchor, answered: touched(id), afterClose: false })
     }
   }
 
@@ -196,8 +199,6 @@ export function ritualRows(state: DayState): RitualRow[] {
   return out
 }
 
-const explainLength = (x: Explain, now: number) => Math.max(0, Math.min(x.to, now) - x.from) - x.rests.reduce((s, r) => s + Math.max(0, Math.min(r.to, now) - r.from), 0)
-
 /** A question of the bar as the ritual answers it (the same events as there). */
 function question(state: DayState, id: string, kind: Question['kind'], block: string, askedIdx: number): Question {
   return { id, kind, block, askedAt: atOf(state.grid, askedIdx), seenAt: null, text: '', answers: [], dot: false, silent: true }
@@ -207,6 +208,16 @@ const answerDraft = (at: number, questionId: string, answer: string, value: numb
 
 /** The ✓ of a time to explain: after a work block „odpoczynek”, after a project „projekt” (D249, D254, D266). */
 const explainCheck = (x: Explain, at: number): TimerDraft[] => (x.answer?.how === 'answer' ? [] : [answerDraft(at, x.id, x.kind === 'work' ? 'rest' : 'project')])
+
+/**
+ * Your answer to a time to explain („praca”, „projekt”, „odpoczynek”; with an instant – „… do”, inside it): null when
+ * there is none or the instant lies outside it.
+ */
+function explainAnswer(state: DayState, x: Explain | null, choice: string, at: number, ms: number | null): TimerDraft[] | null {
+  if (!x || (choice !== 'work' && choice !== 'project' && choice !== 'rest')) return null
+  if (choice !== 'rest' && ms != null && !inExplain(x, state.grid, state.now, ms)) return null
+  return [answerDraft(at, x.id, choice, choice === 'rest' ? null : ms)]
+}
 
 /** The end of a block corrected: an automatic end goes („Cofnij”) and yours is written; your own end gets a „korekta”. */
 function endAt(state: DayState, b: BlockFact, at: number, end: number): TimerDraft[] {
@@ -227,9 +238,11 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
     case 'workEnd': {
       if (choice === 'ok') return [{ k: 'work.end', at, end: atOf(g, row.end) }]
       if ((choice === 'workedUntil' || choice === 'projectUntil') && ms != null) {
-        // „Pracowałem do …” answers the time to explain „praca” and confirms the end then; „Projekt do …” (after a passive
-        // block counted as a project) answers it „projekt” and confirms the end of the work before it.
-        if (!row.explain) return choice === 'workedUntil' ? [{ k: 'work.end', at, end: ms }] : null
+        // „Pracowałem do …” answers the time to explain „praca” and confirms the end then; „Projekt do …” (only after a
+        // block counted as a project, D266) answers it „projekt” and confirms the end of the work before it. The instant
+        // lies in the time to explain (without one: from the end of work to now).
+        if (!row.explain) return choice === 'workedUntil' && ms >= atOf(g, row.end) && ms <= atOf(g, state.now) ? [{ k: 'work.end', at, end: ms }] : null
+        if (!inExplain(row.explain, g, state.now, ms) || (choice === 'projectUntil' && !row.explain.asProject)) return null
         return choice === 'workedUntil' ? [answerDraft(at, row.explain.id, 'work', ms), { k: 'work.end', at, end: ms }] : [answerDraft(at, row.explain.id, 'project', ms), { k: 'work.end', at, end: atOf(g, row.end) }]
       }
       return null
@@ -242,8 +255,7 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
       const x = row.items.find((i) => i.block === item)
       if (!x) return null
       if (choice === 'endedAt' && ms != null) return endAt(state, f.blocks.get(x.block)!, at, ms)
-      if ((choice === 'work' || choice === 'project' || choice === 'rest') && x.explain) return [answerDraft(at, x.explain.id, choice, choice === 'rest' ? null : ms)]
-      return null
+      return explainAnswer(state, x.explain, choice, at, ms)
     }
     case 'absence': {
       const q = question(state, row.question, 'absence', row.block, row.away)
@@ -254,8 +266,7 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
         return [...(row.explain ? explainCheck(row.explain, at) : []), mark]
       }
       if (choice === 'end' || choice === 'leave' || choice === 'subtract') return answerEvents(state, q, choice, at)
-      if ((choice === 'work' || choice === 'project' || choice === 'rest') && row.explain) return [answerDraft(at, row.explain.id, choice, choice === 'rest' ? null : ms)]
-      return null
+      return explainAnswer(state, row.explain, choice, at, ms)
     }
     case 'away':
     case 'shutdown': {
@@ -275,15 +286,17 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
       if (choice === 'happened') {
         // It happened at its planned time (a correction of times can follow).
         const info = state.blocks.find((b) => b.id === row.block)!
-        const planned = { categoryId: info.categoryId, variantId: info.variantId, durationMin: info.durationMin, tag: info.secondShift ? 'secondShift' : info.weeklyAnalysis ? 'weeklyAnalysis' : null, fixed: info.fixed, costs: info.costs, bgCostPct: info.bgCostPct }
         return [
-          { k: 'block.start', block: row.block, at: atOf(g, row.from), bg: info.bg, planned, confirmUntil: null, how: 'click' },
+          { k: 'block.start', block: row.block, at: atOf(g, row.from), bg: info.bg, planned: startPlanned(info), confirmUntil: null, how: 'click' },
           { k: 'block.end', block: row.block, at: atOf(g, row.to), done: true, rule: null }
         ]
       }
       return null
     }
     case 'parkedAnchored':
+      // „Usuń” – it goes off the list (cancelled); „zostaw” – it stays parked, without a day (spec).
+      if (choice === 'drop') return [{ k: 'block.cancel', block: row.block, at, rule: 'ritual' }]
+      if (choice === 'ok') return [mark]
       return null
     case 'person':
       return choice === 'person' && typeof value === 'string' && value.trim() ? [{ k: 'request.person', request: row.request, at, person: value.trim() }] : null
@@ -308,17 +321,34 @@ export interface RitualEffect {
 }
 
 /** The outcome of the day as it would be frozen now, with some more events. */
-function frozenOutcome(ctx: DayContext, extra: readonly AnyEvent[], forecast: boolean) {
+function frozenOutcome(ctx: DayContext, extra: readonly AnyEvent[], forecast: boolean): DayOutcome {
   return dayOutcome(computeDay({ ...ctx, events: extra.length ? [...ctx.events, ...extra] : ctx.events, asWritten: true }), { forecast })
 }
 
+/** The day's outcome as it would be frozen now – what every effect compares with (counted once for all rows). */
+export interface EffectBase {
+  outcome: DayOutcome
+  forecast: boolean
+}
+
+export function effectBase(ctx: DayContext, state: DayState): EffectBase {
+  const forecast = state.now < state.bedtime.effective
+  return { outcome: frozenOutcome(ctx, [], forecast), forecast }
+}
+
 /** What a row's ✓ changes in the day's outcome against the day with it untouched (spec); null – no ✓. */
-export function ritualEffect(ctx: DayContext, state: DayState, row: RitualRow, at: number): RitualEffect | null {
+export function ritualEffect(ctx: DayContext, state: DayState, row: RitualRow, at: number, base: EffectBase = effectBase(ctx, state)): RitualEffect | null {
   const check = CHECK[row.kind]
   const drafts = check ? ritualAnswer(state, row, check, at) : null
   if (!drafts) return null
-  const forecast = state.now < state.bedtime.effective
-  return { changes: outcomeChanges(frozenOutcome(ctx, [], forecast), frozenOutcome(ctx, simEvents(ctx, drafts, at), forecast)), forecast }
+  return { changes: outcomeChanges(base.outcome, frozenOutcome(ctx, simEvents(ctx, drafts, at), base.forecast)), forecast: base.forecast }
+}
+
+/** A day that cannot be closed now (a text: why), or null. A day closed once stays closed – its rows can still change. */
+export function closeRefusal(state: DayState, how: string): string | null {
+  if (!(CLOSE_HOWS as readonly string[]).includes(how)) return 'nieznany sposób zamknięcia dnia'
+  if (state.facts.closed) return 'ten dzień jest już zamknięty'
+  return null
 }
 
 /**
@@ -338,9 +368,8 @@ export function closeEvents(state: DayState, how: CloseHow, at: number): TimerDr
 }
 
 /** What „Jak zapisano” changes for the day (the morning's row shows it before the click). */
-export function closeEffect(ctx: DayContext, state: DayState, at: number): RitualEffect {
-  const forecast = state.now < state.bedtime.effective
-  return { changes: outcomeChanges(frozenOutcome(ctx, [], forecast), frozenOutcome(ctx, simEvents(ctx, closeEvents(state, 'asWritten', at), at), forecast)), forecast }
+export function closeEffect(ctx: DayContext, state: DayState, at: number, base: EffectBase = effectBase(ctx, state)): RitualEffect {
+  return { changes: outcomeChanges(base.outcome, frozenOutcome(ctx, simEvents(ctx, closeEvents(state, 'asWritten', at), at), base.forecast)), forecast: base.forecast }
 }
 
 export interface DayLog {
@@ -360,8 +389,8 @@ export function unclosedDays(days: readonly DayLog[], today: string, now: number
   for (const d of days) {
     if (d.date >= today || d.date < ritualFrom) continue
     if (now >= dayStart(addDays(d.date, 1)) + CLOSE_WINDOW_H * HOUR) continue
-    // A freeze (E6, part two) closes it too – also one written by a newer version.
-    if (d.events.some((e) => e.k === 'ritual.close' || e.k === 'day.freeze')) continue
+    // Closed as the facts say (a close undone by „Cofnij” is none); a freeze (E6, part two) closes it too.
+    if (foldFacts(gridOf(d.date), d.events).closed || d.events.some((e) => e.k === 'day.freeze')) continue
     out.push({ date: d.date, presence: d.events.some((e) => isKnown(e) && e.k === 'presence.first') })
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : 1))

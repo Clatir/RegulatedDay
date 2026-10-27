@@ -6,6 +6,7 @@
  * (spec „skutek ✓ dla dnia liczy ta sama funkcja oceny co zamrożenie”); the game (E7) turns them into notes and statuses.
  */
 import type { DayState } from './day'
+import { explainMinutes } from './explain'
 
 export type BoundaryOutcome = 'kept' | 'broken' | 'noData'
 
@@ -28,13 +29,7 @@ export function dayOutcome(state: DayState, opts: { forecast?: boolean } = {}): 
   const endConfirmed = state.noWorkDay || state.dayType === 'zjazd-stacjonarny' || (state.workEnd != null && last?.confirmed === true)
   const approved = state.boundary.approved
   let explainAfterBoundaryMin = 0
-  if (approved != null) {
-    for (const x of state.explains) {
-      if (x.kind !== 'work' || x.asProject || x.answer) continue
-      const to = Math.min(x.to, state.now)
-      explainAfterBoundaryMin += Math.max(0, to - Math.max(x.from, approved))
-    }
-  }
+  if (approved != null) for (const x of state.explains) if (x.kind === 'work' && !x.asProject && !x.answer) explainAfterBoundaryMin += explainMinutes(x, state.now, approved)
   const boundary: BoundaryOutcome = state.extensionMin > 0 ? 'broken' : !endConfirmed || explainAfterBoundaryMin > 0 ? 'noData' : 'kept'
   const towardMin = opts.forecast ? state.regen.forecastMin : state.regen.towardMinMin
   const counts = state.params.minRegenMin >= 30

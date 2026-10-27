@@ -8,8 +8,16 @@
 - Otwarte na etap elementów E5 w pasku: w czasie prośby pasek pokazuje przerwany blok jako „Wznów · Zaparkuj” (z kropką)
   – zamieni go linia prośby z „Koniec”; kropka po „Jeszcze trwa” (D247); pasek po 04:00 pokazuje dzisiejszy dzień,
   także gdy trwa wczorajsza prośba.
-- **Logika E6, część 1 (silnik wieczoru i rytuału) w toku** – gałąź `claude/e6-rytual`, start 27.10 ok. 07:20 (D299).
-  Zastąpione decyzje (26) przeniesione do `docs/archiwum/decyzje-zastapione.md`.
+- **Logika E6, część 1 (silnik wieczoru i rytuału)** – gałąź `claude/e6-rytual`, start 27.10 ok. 07:20 (D299). Kod
+  gotowy: czas do wyjaśnienia w silniku dnia (`engine/explain.ts`, 15 testów), komunikat o twardym końcu w nim po
+  projekcie, ocena dnia bez gry (`engine/outcome.ts`), rytuał (`engine/ritual.ts`: wiersze, odpowiedzi, skutek ✓,
+  zamknięcie, niezamknięte dni; 15 testów), droga przez `DataFolder` (2 testy plikowe), nowe zdarzenia `ritual.close`,
+  `block.fix`, `block.mark`, `request.person`, `rest.not`; T483–T485, reguły `rytual.md`, CHANGELOG 0.6.0, lista E6a
+  w `docs/odbior.md`. Testy: 625 jednostkowe i plikowe, E2E 15 + 2 tylko w CI; typecheck, build, lint zielone.
+  W toku: `/code-review` (xhigh), potem PR, CI, scalenie i wydanie 0.6.0.
+- Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
+  (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482).
+- Zastąpione decyzje (26) przeniesione do `docs/archiwum/decyzje-zastapione.md`.
 
 ## Kolejka
 1. Logika E6 ciągiem (D299): część 1 – czas do wyjaśnienia w silniku dnia, komunikat o twardym końcu, rytuał (wiersze,

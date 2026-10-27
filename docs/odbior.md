@@ -15,19 +15,71 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
-- **Tylko Ty** (testy tego nie widzą): E4b.4, E4b.9, E4b.10, E4b.11, E4a.5, E4a.11, E4a.12, E3.2, E3.9, E3.10, E3.11,
-  a w E3.6 „Dodaj do planu” i w E3.8 przywrócenie z ekranu.
+- **Tylko Ty** (testy tego nie widzą): E6a.3, E4b.4, E4b.9, E4b.10, E4b.11, E4a.5, E4a.11, E4a.12, E3.2, E3.9, E3.10,
+  E3.11, a w E3.6 „Dodaj do planu” i w E3.8 przywrócenie z ekranu.
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 
 **Kolejność, która oszczędza czas:**
-1. Raz, na start: E5.1.
-2. Zwykły dzień pracy: E4a.1–E4a.4, E4a.6–E4a.9, E4b.1–E4b.3, E4b.5–E4b.7, E5.2.
+1. Raz, na start: E6a.1 (albo E5.1, jeśli 0.6.0 jeszcze nie przyszła).
+2. Zwykły dzień pracy: E4a.1–E4a.4, E4a.6–E4a.9, E4b.1–E4b.3, E4b.5–E4b.7, E5.2, E6a.4.
 3. Dzień z sesją: E4a.5, E4b.4.
-4. Wieczór: E4b.8, E4b.10.
+4. Wieczór: E4b.8, E4b.10, E6a.2, E6a.3.
 5. Ustawienia i próba: E4b.9, E4b.11, E3.3–E3.8, E3.11.
 6. Laptop i noc (gdy masz laptopa pod ręką): E3.9, E3.10, E4a.11, E4a.12.
 7. Jednorazowe: E4a.10, E4a.13, E3.12.
+
+---
+
+## Wersja 0.6.0 – logika E6, część 1 (czas do wyjaśnienia, rytuał pod spodem)
+
+### E6a.1 Aktualizacja do 0.6.0
+- [ ] Odebrane
+- **Automatycznie:** ścieżki aktualizacji sprawdza CI na Windows (`tests/update/update-paths.spec.ts`). Ty: rzut oka.
+- **Jak sprawdzić:** aktualizacja przychodzi sama w nocy albo Ustawienia → Aktualizacje → „Zainstaluj teraz”; otwórz
+  okno główne.
+- **Oczekiwany efekt:** baner „Co nowego w wersji 0.6.0” z czterema punktami; ostatni mówi, że ekran rytuału i poranne
+  niezamknięte dni pojawią się w jednej z następnych wersji. Plan, prośby i ustawienia jak przed aktualizacją.
+- **Nie przechodzi, gdy:**
+  - po instalacji aplikacja się nie uruchamia albo pokazuje baner „nie udała się” / „nie dokończyła się”;
+  - „Co nowego” pokazuje starszą wersję albo nie pokazuje się przy pierwszym otwarciu okna;
+  - po aktualizacji brakuje danych dnia, próśb albo szablonów.
+
+### E6a.2 Czas po bloku pracy, który skończył się sam
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/explain.test.ts` (koniec przerwą ponad 10 min, „Koniec pracy” = odpoczynek,
+  energia bez zmian, twardy koniec nie mija). Ty: rzut oka przy okazji.
+- **Jak sprawdzić:** wieczorem zostaw blok pracy po planowanym końcu przy oknie na wierzchu i nie odpowiadaj na „Dalej?”
+  – po godzinie od zobaczenia blok kończy się sam. Dalej używaj komputera, potem kliknij „Koniec pracy”. Patrz na
+  „Twardy koniec projektów” i pulę w „Dziś”.
+- **Oczekiwany efekt:** dopóki używasz komputera po takim końcu, twardy koniec w „Dziś” przesuwa się na później (jak
+  przy odpoczynku) i nie mija, bez powiadomienia. „Koniec pracy” niczego nie zaczyna – ten czas liczy się jak odpoczynek.
+- **Nie przechodzi, gdy:**
+  - w czasie używania komputera po takim końcu przychodzi powiadomienie „Twardy koniec projektów”;
+  - twardy koniec w „Dziś” stoi w miejscu albo cofa się, choć używasz komputera po bloku pracy;
+  - po „Koniec pracy” pasek zaczyna jakiś blok albo pokazuje pytanie o ten czas.
+
+### E6a.3 Czas po projekcie, który skończył się sam – powiadomienie o twardym końcu
+- [ ] Odebrane
+- **Tylko Ty:** kiedy twardy koniec mija, sprawdza `explain.test.ts`; czy Windows pokazuje powiadomienie – tylko Ty.
+- **Jak sprawdzić:** wieczorem zacznij blok „Projekty” tak, żeby jego planowany koniec wypadł przed twardym końcem (widać
+  go w „Dziś”). Nie odpowiadaj na „Dalej?” – po godzinie od zobaczenia blok kończy się sam. Używaj komputera dalej, aż
+  minie godzina twardego końca.
+- **Oczekiwany efekt:** w chwili twardego końca (przy pierwszym ruchu myszy albo klawiatury) raz przychodzi
+  powiadomienie „Twardy koniec projektów”, a w „Dziś” twardy koniec jest minięty.
+- **Nie przechodzi, gdy:**
+  - powiadomienia nie ma, choć używasz komputera po twardym końcu (przełącznik w Ustawieniach włączony);
+  - powiadomienie przychodzi więcej niż raz;
+  - powiadomienie przychodzi, gdy od dłuższej chwili nie ruszasz myszy ani klawiatury (dopiero przy powrocie).
+
+### E6a.4 W oknie nic nowego
+- [ ] Odebrane
+- **Automatycznie:** ekrany i pasek sprawdzają `tests/e2e/screens.spec.ts` i `widget-view.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** przejrzyj okno główne, pasek i panel ikony jak zwykle, także rano po wczorajszym dniu.
+- **Oczekiwany efekt:** wszystko jak w 0.5.0; nigdzie nie ma ekranu rytuału ani pytań o niezamknięte dni.
+- **Nie przechodzi, gdy:**
+  - rano pojawia się lista niezamkniętych dni albo pytanie „Jak zapisano”;
+  - coś z list E4b albo E5 działa inaczej niż wcześniej.
 
 ---
 

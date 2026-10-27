@@ -121,6 +121,46 @@ describe('wiersze rytuału', () => {
   })
 })
 
+describe('wiersze rytuału – przypadki z przeglądu', () => {
+  it('wiersz zbiorczy bez czasu do wyjaśnienia (gra 40 min ponad plan) czeka na odpowiedź', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'g', cat: 'regeneracja', variant: 'gra', at: '19:00', min: 30 })] }).using('07:00', '23:59')
+    s.start('g', '19:00')
+    silentEnd(s, 'g', '20:10', 'twoQuestions', '20:50')
+    const r = row(s, '21:00', 'silent')!
+    expect([r.items[0]!.extraMin, r.items[0]!.explain, r.answered]).toEqual([40, null, false])
+  })
+
+  it('„Pracowałem do …” tylko w czasie do wyjaśnienia (od końca bloku do teraz); „Projekt do …” tylko po bloku liczonym jak projekt', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).using('07:00', '23:59')
+    s.start('a', '08:00')
+    silentEnd(s, 'a', '09:00', 'twoQuestions', '10:00')
+    s.gap('10:30', '11:15')
+    const t = s.at('12:00')
+    const st = s.stateAt(t)
+    const r = ritualRows(st).find((x) => x.kind === 'workEnd')!
+    expect(ritualAnswer(st, r, 'workedUntil', t, s.at('08:30'))).toBeNull()
+    expect(ritualAnswer(st, r, 'workedUntil', t, s.at('12:30'))).toBeNull()
+    expect(ritualAnswer(st, r, 'workedUntil', t, s.at('11:00'))).toBeNull()
+    expect(ritualAnswer(st, r, 'projectUntil', t, s.at('10:00'))).toBeNull()
+    expect(ritualAnswer(st, r, 'workedUntil', t, s.at('10:00'))).not.toBeNull()
+  })
+
+  it('zaparkowany blok zakotwiczony do bloku, który minął: „usuń” go odwołuje, „zostaw” zamyka wiersz', () => {
+    const plan = [block({ id: 'ny', cat: 'inne', at: '14:00', min: 60 }), block({ id: 'j', cat: 'journaling', after: 'ny', min: 30 }), block({ id: 'k', cat: 'inne', after: 'ny', min: 30 })]
+    const s = new Scenario({ date: DATE, plan }).using('07:00', '23:59')
+    s.ran('ny', '14:00', '15:00')
+    s.write([{ k: 'block.park', block: 'j', at: s.at('15:00'), rule: 'workEnd' }, { k: 'block.park', block: 'k', at: s.at('15:00'), rule: 'workEnd' }], s.at('15:00'))
+    const rows = ritualRows(s.state('20:00')).filter((r) => r.kind === 'parkedAnchored')
+    expect(rows.map((r) => (r as { block: string }).block)).toEqual(['j', 'k'])
+    const t = s.at('20:00')
+    const st = s.stateAt(t)
+    s.write(ritualAnswer(st, rows[0]!, 'drop', t)!, t)
+    s.write(ritualAnswer(st, rows[1]!, 'ok', t)!, t)
+    const after = ritualRows(s.state('20:05')).filter((r) => r.kind === 'parkedAnchored')
+    expect(after.map((r) => [(r as { block: string }).block, (r as { answered: boolean }).answered])).toEqual([['k', true]])
+  })
+})
+
 describe('wiersze nieobecności, powrotu i zamknięcia aplikacji', () => {
   it('nieobecność odliczona: ✓ to „odlicz” (D272)', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 180 })] }).using('07:00', '23:59')
@@ -225,6 +265,12 @@ describe('niezamknięte dni', () => {
     expect(unclosedDays(days, '2026-10-28', now, '2026-10-26')).toEqual([{ date: '2026-10-26', presence: true }])
     // Before the first version with the ritual nothing waits (T482).
     expect(unclosedDays(days, '2026-10-28', now, null)).toEqual([])
+    // A close undone („Cofnij”) does not close the day.
+    const undone = [
+      { id: 'c1', c: 'pca', n: 0, t: 0, l: 0, v: 1, day: '2026-10-27', dom: 'timer', k: 'ritual.close', at: 0, how: 'ritual' },
+      { id: 'u1', c: 'pca', n: 1, t: 1, l: 1, v: 1, day: '2026-10-27', dom: 'timer', k: 'undo', at: 1, target: 'c1' }
+    ] as never
+    expect(unclosedDays([{ date: '2026-10-27', events: undone }], '2026-10-28', now, '2026-10-26').map((d) => d.date)).toEqual(['2026-10-27'])
     // 72 h after the day's end it is no longer shown.
     expect(unclosedDays(days, '2026-10-30', new Scenario({ date: '2026-10-30', plan: [] }).at('05:00'), '2026-10-20').map((d) => d.date)).toEqual(['2026-10-28'])
   })

@@ -10,8 +10,7 @@
  * kliknięciem pokazuje koszt …, a drugim w ciągu 10 s je wykonuje”) – except „Dalej”, whose first click already ends the
  * running block.
  */
-import type { PlanBlock } from '../model/plan'
-import { isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
+import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
 import { OPEN, isRunning, ranMinutes, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
@@ -196,20 +195,6 @@ function nextBlock(state: DayState, fg: TimerBlock | null, paused: TimerBlock[],
   return null
 }
 
-/** The plan's description of a block for its start event (what the plan said then – later edits never change it). */
-function plannedOf(ctx: DayContext, info: BlockInfo): Record<string, unknown> {
-  const p: PlanBlock | undefined = ctx.plan.find((b) => b.id === info.id)
-  return {
-    categoryId: info.categoryId,
-    variantId: info.variantId,
-    durationMin: p?.durationMin ?? info.durationMin,
-    tag: p?.tag ?? (info.secondShift ? 'secondShift' : info.weeklyAnalysis ? 'weeklyAnalysis' : null),
-    fixed: info.fixed,
-    costs: info.costs,
-    bgCostPct: info.bgCostPct
-  }
-}
-
 /**
  * The cost of work in [from, to) (indexes) after the approved boundary that nobody confirmed: none before the approval,
  * none for blocks that do not set the boundary, the plan of lectures, a „zjazd”, or a block added without an exchange.
@@ -264,7 +249,7 @@ function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockI
   const left = leftOf(state, info, idxOf(state.grid, at))
   const confirmUntil = confirmed ? at + left * 60_000 : null
   if (f?.startedAt != null) out.push({ k: 'block.resume', block: info.id, at, confirmUntil })
-  else out.push({ k: 'block.start', block: info.id, at, bg: toBg, planned: plannedOf(ctx, info), confirmUntil, how: 'click' })
+  else out.push({ k: 'block.start', block: info.id, at, bg: toBg, planned: startPlanned(info, ctx.plan), confirmUntil, how: 'click' })
   return out
 }
 

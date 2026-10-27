@@ -24,7 +24,7 @@ import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerD
 import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
 import { foldFacts, isRunning, type DayFacts } from '@shared/engine/facts'
-import { CLOSE_WINDOW_H, closeEffect, closeEvents, ritualAnswer, ritualEffect, ritualRows, unclosedDays, type DayLog, type RitualEffect, type RitualRow, type RitualValue } from '@shared/engine/ritual'
+import { CLOSE_WINDOW_H, closeEffect, closeEvents, closeRefusal, effectBase, ritualAnswer, ritualEffect, ritualRows, unclosedDays, type DayLog, type RitualEffect, type RitualRow, type RitualValue } from '@shared/engine/ritual'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
 import { daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type Signal } from '@shared/model/events'
@@ -771,12 +771,13 @@ export class DataFolder {
     const ctx = await this.ownContext(day, read, at)
     const state = computeDay(ctx)
     const rows = ritualRows(state)
+    const base = effectBase(ctx, state)
     const effects: Record<string, RitualEffect> = {}
     for (const r of rows) {
-      const e = ritualEffect(ctx, state, r, at)
+      const e = ritualEffect(ctx, state, r, at, base)
       if (e) effects[r.id] = e
     }
-    return { rows, effects, asWritten: closeEffect(ctx, state, at), closed: state.facts.closed }
+    return { rows, effects, asWritten: closeEffect(ctx, state, at, base), closed: state.facts.closed }
   }
 
   /** Your answer to a row of a day's ritual: judged on the day as it is now and written to its log, one at a time. */
@@ -790,7 +791,7 @@ export class DataFolder {
 
   /** Closing a day: the evening ritual, or the morning's „Jak zapisano”, „Wolne”, „Nie pamiętam” (spec). */
   closeDay(day: string, how: CloseHow): Promise<ActionResult> {
-    return this.dayAction(day, (state, now) => (day > logicalDayOf(now) ? 'ten dzień jeszcze się nie zaczął' : closeEvents(state, how, now)))
+    return this.dayAction(day, (state, now) => (day > logicalDayOf(now) ? 'ten dzień jeszcze się nie zaczął' : (closeRefusal(state, how) ?? closeEvents(state, how, now))))
   }
 
   /** The days the morning shows to close (spec); `ritualFrom` – the first day with the ritual (null: none yet, T482). */

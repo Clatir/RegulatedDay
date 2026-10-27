@@ -124,8 +124,8 @@ export interface DayFacts {
   answers: Map<string, { at: number; answer: string; value: number | null }>
   /** The day closed (the ritual, the morning's choice): the last close written, `at` an index. */
   closed: { at: number; how: CloseHow } | null
-  /** Stretches marked in the ritual as no rest (indices). */
-  notRest: Array<{ from: number; to: number }>
+  /** Stretches marked in the ritual as no rest, and when (indices): they count from the marking on (T413). */
+  notRest: Array<{ from: number; to: number; at: number }>
 }
 
 const newBlock = (id: string): BlockFact => ({
@@ -376,7 +376,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         break
       }
       case 'rest.not':
-        if (e.to > e.from) f.notRest.push({ from: idx(e.from), to: idx(e.to) })
+        if (e.to > e.from) f.notRest.push({ from: idx(e.from), to: idx(e.to), at: idx(e.at) })
         break
       default:
         break

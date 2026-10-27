@@ -17,7 +17,7 @@ import { placeLogical } from '../time/day'
 import { addDays, weekday } from '../time/zone'
 import { activityOf, type Activity } from './activity'
 import { blockInfos, isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
-import { EXPLAIN_END_RULES, explainsOf, type Explain } from './explain'
+import { EXPLAIN_END_RULES, explainMinutes, explainsOf, type Explain } from './explain'
 import { OPEN, foldFacts, isPassive, isRunning, ranMinutes, viewAt, type DayFacts, type Segment } from './facts'
 import { forecast, type Forecast, type Placed } from './forecast'
 import { atOf, gridOf, idxOf, idxOfLogical, type Grid } from './grid'
@@ -293,6 +293,8 @@ function paintExplain(c: Ctx, arr: Uint16Array, plain: Uint16Array, x: Explain, 
     else if (!a) v |= F_EXPLAIN | F_BLOCK | (x.kind === 'work' ? F_TENT_REST : 0)
     else if (a.cls === 'rest' || (a.until != null && k >= a.until)) v |= F_EXPLAIN
     else if (a.cls === 'project') v |= F_EXPLAIN | F_BLOCK | F_PROJECT
+    // „praca” after the second shift counts as the second shift (outside its time: an extension, never the end of work).
+    else if (info?.secondShift) v |= F_EXPLAIN | blockFlags(c, info, k, false)
     else v |= F_EXPLAIN | F_BLOCK | F_BUDGET | F_END | (info?.lectureOrCommute ? 0 : F_EXT)
     arr[k] = v
   }
@@ -700,6 +702,8 @@ export function computeDay(ctx: DayContext): DayState {
     // explain after a work block moves it like rest (D255, D262). In time to explain after a project it passes at the
     // first input from the minute it would have passed (D250): a gap in input only puts it off.
     const explainProject = (fk & F_EXPLAIN) !== 0 && (fk & (F_TENT_REST | F_END | F_PROJECT)) === 0
+    // Passed as the leader wrote it: its message as the day was known in that minute.
+    if (facts.hardEndPass?.at === k) message = (fk & F_PROJECT) !== 0 || explainProject
     if (passed == null && atInput) {
       if (explainProject && !(fk & F_REQUEST)) {
         if (hadInput(k)) {
@@ -727,8 +731,12 @@ export function computeDay(ctx: DayContext): DayState {
         let j = ev.hardEnd.unreachable ? now : Math.min(ev.hardEnd.at, now)
         j = Math.min(j, nextEventFrom(k))
         if (pendingAnswers.length) j = Math.min(j, pendingAnswers[0]!.answer!.at + 1)
+        // Time to explain is never in the forecast, yet before the hard end judged now it cannot make it come sooner (it
+        // only adds to what was collected, or nothing): its minutes are compared without it – a planned block that did not
+        // start in it still departs from the forecast.
         for (let x = k; x < j; x++) {
-          if ((known[x]! ^ ev.flags[x]!) & SAME_MASK) {
+          const kx = known[x]!
+          if (((kx & (F_EXPLAIN | F_FREE_REST) ? plain[x]! : kx) ^ ev.flags[x]!) & SAME_MASK) {
             j = x
             break
           }
@@ -740,11 +748,7 @@ export function computeDay(ctx: DayContext): DayState {
 
   const fin = evaluate(now, shift, true, true)
   let explainMin = 0
-  for (const x of explains) {
-    if (x.answer) continue
-    const to = Math.min(x.to, now)
-    explainMin += Math.max(0, to - x.from) - x.rests.reduce((s, r) => s + Math.max(0, Math.min(r.to, to) - r.from), 0)
-  }
+  for (const x of explains) if (!x.answer) explainMin += explainMinutes(x, now)
   let budget = 0
   let projectsMin = 0
   for (let k = 0; k < now; k++) {
@@ -1008,12 +1012,18 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   const base = d.baseBedtime(m)
   let bedtime = base + d.bedtimeShift
 
-  // A stretch you marked in the ritual as no rest is none (spec „W rytuale możesz oznaczyć odcinek”).
-  for (const n of c.facts.notRest) for (let k = Math.max(0, n.from); k < Math.min(cap, n.to); k++) regen[k] = 0
+  // The energy: never changed back in time by an answer to time to explain or a marking of the ritual (spec).
+  const rest = new Uint8Array(regen)
+  for (let k = 0; k < cap; k++) if (flags[k]! & F_EXPLAIN) rest[k] = 0
   // Time to explain after a work block without an answer: rest for the hard end and the pool (D262); toward the minimum
   // and the reward only as written (D265).
   const tentative = new Uint8Array(regen)
   for (let k = 0; k < cap; k++) if (flags[k]! & F_TENT_REST) tentative[k] = REST_FREE
+  // A stretch you marked in the ritual as no rest is none – also in time to explain – from the marking on (T413).
+  for (const n of c.facts.notRest) {
+    if (n.at >= (inclusive ? m + 1 : m)) continue
+    for (let k = Math.max(0, n.from); k < Math.min(cap, n.to); k++) regen[k] = tentative[k] = 0
+  }
   const strict = c.asWritten ? tentative : regen
 
   // Toward the minimum: regeneration before the later of the first end of work and the boundary approved in that minute
@@ -1125,9 +1135,6 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   }
   let budgetFc = 0
   for (let k = m; k < cap; k++) if (flags[k]! & (F_BUDGET | F_SECOND)) budgetFc++
-  // The energy does not change in time to explain, also after its answer (spec).
-  const rest = new Uint8Array(regen)
-  for (let k = 0; k < cap; k++) if (flags[k]! & F_EXPLAIN) rest[k] = 0
 
   return {
     max,

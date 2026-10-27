@@ -87,15 +87,27 @@ export interface ExplainInput {
 
 export const explainId = (date: string, block: string, blockEnd: number): string => `explain:${date}:${block}:${blockEnd}`
 
+/** Minutes of a time to explain up to `now` and from `after` on (indices), without the rests inside it. */
+export function explainMinutes(x: Explain, now: number, after = Number.NEGATIVE_INFINITY): number {
+  const from = Math.max(x.from, after)
+  const to = Math.min(x.to, now)
+  if (to <= from) return 0
+  return to - from - x.rests.reduce((s, r) => s + Math.max(0, Math.min(r.to, to) - Math.max(r.from, from)), 0)
+}
+
+/** An instant (ms) inside a time to explain, up to now – what „Pracowałem do …” and „… do” may say. */
+export const inExplain = (x: Explain, grid: Grid, now: number, at: number): boolean => at >= atOf(grid, x.from) && at <= atOf(grid, Math.min(x.to, now))
+
 /** A question id of a time to explain. */
 export const isExplainId = (id: string): boolean => id.startsWith('explain:')
 
 /**
  * The first use after the stretch without input on every computer in which `at` falls (the return, D264, D271): the
- * return itself when a computer is used from it. Null while nobody is back or nobody uses a computer yet.
+ * return itself when a computer is used from it. Null while nobody is back or nobody uses a computer yet. `slack` – how
+ * far `at` may be from the stretch: a block's end on the minute grid is rounded, its gap began at any second (T412).
  */
-export function useAfter(a: Activity, at: number): number | null {
-  const away = a.idle.find((i) => i.from <= at && at <= i.to)
+export function useAfter(a: Activity, at: number, slack = 0): number | null {
+  const away = a.idle.find((i) => i.from <= at + slack && at - slack <= i.to)
   const back = away ? away.to : at
   if (away && back >= a.now) return null
   const unused = a.unused.find((u) => u.from <= back && back < u.to)
@@ -129,7 +141,7 @@ export function explainsOf(inp: ExplainInput): Explain[] {
     const endMs = atOf(grid, f.endedAt)
     let from = f.endedAt
     if (f.endRule !== 'twoQuestions') {
-      const use = useAfter(activity, endMs)
+      const use = useAfter(activity, endMs, MIN / 2)
       if (use == null) continue
       from = Math.max(f.endedAt, idxOf(grid, use))
     }

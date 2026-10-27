@@ -163,6 +163,23 @@ export function plannedSpan(b: BlockInfo, byId: Map<string, BlockInfo>, depth = 
   return s ? { start: s.end, end: s.end + b.durationMin } : null
 }
 
+/**
+ * What a block's start writes of its plan (spec „Zdarzenie startu bloku zapisuje planowaną długość, kategorię, koszty i
+ * miejsce z tej chwili”): the plan's entry (`plan`) wins over the block's info.
+ */
+export function startPlanned(info: BlockInfo, plan: readonly PlanBlock[] = []): Record<string, unknown> {
+  const p = plan.find((b) => b.id === info.id)
+  return {
+    categoryId: info.categoryId,
+    variantId: info.variantId,
+    durationMin: p?.durationMin ?? info.durationMin,
+    tag: p?.tag ?? (info.secondShift ? 'secondShift' : info.weeklyAnalysis ? 'weeklyAnalysis' : null),
+    fixed: info.fixed,
+    costs: info.costs,
+    bgCostPct: info.bgCostPct
+  }
+}
+
 /** Counts for the boundary, the end of work and its forecast (spec: no „nie przerywa regeneracji”, no „po pracy”). */
 export const isBoundaryWork = (b: BlockInfo): boolean => b.isWork && !b.rules.keepsRegen && !b.afterWorkMark && !b.secondShift
 
