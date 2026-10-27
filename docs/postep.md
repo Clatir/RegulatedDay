@@ -4,32 +4,28 @@
 - E4a scalony (PR #7), wydanie 0.3.0 opublikowane. **E4b scalony** (PR #8, b663153, 27.10 ok. 00:25; CI PR zielone za
   pierwszym razem, także Windows); wydanie 0.4.0 opublikowane z runu 40419583256 na `main` (27.10 ok. 00:58). Wpisy E4a
   i E4b → `docs/archiwum/postep-E4.md`, E3 → `docs/archiwum/postep-E3.md`.
-- **Logika E5 scalona** (PR #9, a8b6db8, 27.10 ok. 01:40); wydanie 0.5.0 opublikowane z runu 40427918867 na `main`
-  (27.10 ok. 02:08). Zakres: prośby w dniu (`engine/requests.ts`, 16 testów), warianty z wyzwalaczami znacznika
-  (`engine/variants.ts`, 12 testów), prośba przez 04:00 w folderze (2 testy), T478–T481, reguły `prosby-warianty.md`,
-  CHANGELOG 0.5.0. `/code-review` (xhigh): 15 uwag, wszystkie poprawione (T481); każda poprawka ma test, który bez niej
-  pada (19 prób mutacji, wszystkie wykryte). Testy: 594 jednostkowe i plikowe, E2E 15 + 2 tylko w CI; typecheck,
-  build, lint zielone. Test instalacji: sprzątanie z ponowieniem (przygotowanie w tle po `init` pisało jeszcze do
-  folderu – raz czerwone CI).
+- **Logika E5 scalona** (PR #9), wydanie 0.5.0 opublikowane (27.10 ok. 02:08); wpis → `docs/archiwum/postep-E5.md`.
 - Otwarte na etap elementów E5 w pasku: w czasie prośby pasek pokazuje przerwany blok jako „Wznów · Zaparkuj” (z kropką)
   – zamieni go linia prośby z „Koniec”; kropka po „Jeszcze trwa” (D247); pasek po 04:00 pokazuje dzisiejszy dzień,
   także gdy trwa wczorajsza prośba.
-- `docs/decyzje.md` ma 192 / 200 KB – przy następnym etapie zastąpione decyzje do archiwum.
+- **Logika E6, część 1 (silnik wieczoru i rytuału) w toku** – gałąź `claude/e6-rytual`, start 27.10 ok. 07:20 (D299).
+  Zastąpione decyzje (26) przeniesione do `docs/archiwum/decyzje-zastapione.md`.
 
 ## Kolejka
-1. Ciąg pod nieobecność (D296) **zakończony**: E4a ✓ (0.3.0) → E4b ✓ (0.4.0) → logika E5 ✓ (0.5.0). Teraz pauza –
-   bez „dalej” nie zaczynam kolejnego etapu.
-2. Po Twoim powrocie: sprawdzenia na Windows – E3, E4a, E4b, E5 (listy niżej), wybór zestawu kolorów (D298); potem
-   „dalej” – E5 (elementy w pasku: przyciski próśb, znacznik i panel wariantów), z pytaniami o ich wygląd.
+1. Logika E6 ciągiem (D299): część 1 – czas do wyjaśnienia w silniku dnia, komunikat o twardym końcu, rytuał (wiersze,
+   odpowiedzi, zamknięcie), niezamknięte dni → PR, wydanie 0.6.0; część 2 – stany dnia, okno korekty, zamrażanie
+   (prowadzący, plik ocen bez oceny gry, „poza oceną”), proces pomocniczy, eksport CSV (D300), przywracanie kopii →
+   PR, wydanie 0.7.0. Potem pauza do „dalej”.
+2. W tym czasie Ty: sprawdzenia na Windows – E3, E4a, E4b, E5 (listy niżej), wybór zestawu kolorów (D298).
+3. Po „dalej”: elementy E5 w pasku (przyciski próśb, znacznik i panel wariantów), potem ekrany E6 (rytuał, niezamknięte
+   dni, eksport, przywracanie) – z pytaniami o wygląd.
 
-## Przed etapem E5 – logika (27.10.2026, ok. 00:00 – zapisane przed jego startem)
-- Co trzeba wiedzieć: E5 w planie to prośby w widgecie, przerwania, liczniki, znacznik i panel wariantów („gotowe, gdy
-  warianty dla prośby, przeciągniętego bloku i rezerwy energii przechodzą testy”). Pod D296 robię tylko logikę: silnik
-  próśb i wariantów z testami, kliknięcia próśb przez proces główny (ta sama droga co timer); przycisków w pasku,
-  znacznika i panelu nie dokładam – to po Twoim powrocie, razem z pytaniami o ich wygląd.
-- Pytań nie zadaję (D296). Model: Opus 5.5 · xhigh. Gałąź `claude/e5-warianty`.
-- Do przygotowania na powrót (bez zmian): laptop (nowoczesny tryb wstrzymania, szybkie uruchamianie, blokada ekranu),
-  TradingView i platforma brokera (pasek, ikona, powiadomienia).
+## Przed etapem E6 – logika (27.10.2026, ok. 07:15)
+- Co trzeba wiedzieć: w kodzie nie ma jeszcze czasu do wyjaśnienia, rytuału, stanów dnia, zamrażania, CSV ani
+  przywracania – zakres ok. dwa razy większy niż szacunek z rozmowy (3–4 h), stąd dwie części (D299). Bez ekranów;
+  zamrażanie i zamykanie „jak zapisano” nie działają na danych przed wersją z ekranem rytuału (T482).
+- Odpowiedzi: D299 (dwie części ciągiem), D300 (CSV – trzy pliki za zakres dat). Model: Opus 5.5 · xhigh (T482).
+- Do przygotowania: nic nowego – odbiór E3–E5 według list niżej.
 
 ## Do sprawdzenia na Windows (logika E5, wersja 0.5.0)
 1. Aktualizacja 0.5.0 przychodzi sama (w nocy albo „Zainstaluj teraz”) → „Co nowego” pokazuje 0.5.0 z dopiskiem, że

@@ -1,6 +1,7 @@
 # Rejestr decyzji
 
-D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą zastępuje; zastąpione trafiają do `docs/archiwum/`.
+D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą zastępuje; zastąpione w całości trafiają
+do `docs/archiwum/decyzje-zastapione.md`.
 Źródło: `docs/specyfikacja.md` v29 (stan na 25.10.2026) plus D283.
 
 **Twoje decyzje (D)**, zatwierdzone 21–25.10.2026, D33–D282 w rundach audytu, wywiadu i przeglądów wersji 5–28
@@ -14,7 +15,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D5 | Przekroczenie (pusta pula albo po maksimum): podwójne potwierdzenie; minuty najpierw z puli, przy pustej puli przesuwają porę snu (porę snu przesuwają tylko minuty potwierdzone z góry według D253) |
 | D6 | Minimum regeneracji 90 min, zmieniane w ustawieniach; chroni je twardy koniec projektów (zob. D52) |
 | D7 | Bazowa pora snu dla typu dnia; efektywna przesuwa się przy przekroczeniu (uzupełnione przez D70) |
-| D8 | Regeneracja = bloki regeneracji + wolny wieczór bez aktywności na komputerach albo potwierdzony w rytuale (zastąpione przez D142) |
 | D9 | Projekty są czasem wolnym z nadwyżki, z timerem, ostrzeżeniami i twardym końcem |
 | D10 | Sesje przeliczane automatycznie przy zmianie czasu; bloki zakotwiczone idą za sesją |
 | D11 | Otwarta pozycja na koniec sesji: koszty jak przy zwykłym przedłużeniu i przekroczeniu, bez wyjątków; tylko potwierdzenie bez podawania minut (zapomniane potwierdzenie według D106; druga zmiana według D100; zastąpione przez D187: pozycja nie jest pracą) |
@@ -49,7 +49,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D40 | Trafność w obie strony |
 | D41 | Dzień bez danych neutralny, najwyżej 2 w tygodniu (kolejność statusów według D108) |
 | D42 | Projekty: bloki do 90 min z przerwą, dzienny limit na typ dnia |
-| D43 | Dzień regeneracyjny w trakcie chroni passę tylko przed granicą i bez przedłużeń (zastąpione przez D108: dzień regeneracyjny jest dotrzymany) |
 | D44 | Późne wstanie: granica zostaje; godzina pobudki dla typu dnia (pobudka dnia według D137, rutyna według D154; najpierw pytanie według D199) |
 | D45 | Każda sesja ma własną strefę, domyślnie czas NY (killzones ICT) |
 | D46 | Wyjątek granicy w planie porannym (wielkość według D59; od trzeciego w miesiącu tylko ostrzeżenie według D72) |
@@ -66,9 +65,7 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D57 | Prośba po twardym końcu projektów jest usprawiedliwiona: zmniejsza wymagane minimum regeneracji, pora snu bez zmian (zawężone przez D135) |
 | D58 | Dzień regeneracyjny i zjazd stacjonarny domyślnie bez sesji; warstwa sesji tak / nie / pytaj dla typu i dnia tygodnia; zostawiona albo dodana sesja przesuwa maksimum do swojego końca bez wyjątku i bez utraty neutralności; zjazd stacjonarny bez dźwięków (neutralność zastąpiona przez D108) |
 | D59 | Wyjątek granicy do +3 h (zastępuje +2 h z D46) |
-| D60 | Tydzień przesunięcia sesji: pobudka i pora snu tymczasowo o 1 h wcześniej, powrót automatyczny, zapowiedź tydzień wcześniej (zastąpione przez D102) |
 | D61 | Koszt sesji 2 / 2 / 2; nagroda za rezerwę wymaga pierwszego check-inu przed pierwszym blokiem pracy |
-| D62 | Nagroda „Reakcja na rezerwę”: żadna pula nie zeszła do rezerwy albo regeneracja z propozycji zaczęła się w ciągu 60 min (zastąpione przez D104) |
 | D63 | Check-in w ciągu dnia: wybór głowa / emocje / bodźce, dwa kliknięcia bez okna |
 | D64 | Stały koszt kontaktu: 2 psychiczne za prośbę, plus zwykłe przełączenie przy powrocie (tylko do pracy albo projektu według D205) |
 | D65 | Trafność: skończony albo niedokończony przy „Dalej” albo w rytuale; nuta tylko za skończone bloki od 20 min, najwyżej 3 dziennie; reszta jako powiązana kontynuacja, kalibracja sumuje realny czas |
@@ -120,7 +117,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D111 | Zjazd stacjonarny: plan jest zapisem i potwierdza się sam (widget według D129) |
 | D112 | Jasność przyciemnia tło, grafikę i akcenty; tekst zostaje czytelny |
 | D113 | Pasek w trybach ciszy jest zwarty i nie przepuszcza kliknięć |
-| D114 | Widget sprawdzany nad TradingView w przeglądarce (okno zmaksymalizowane) i nad platformą brokera (zastąpione przez D229: nic nad ich oknami; sprawdzane ikona, panel i pasek pulpitu) |
 | D115 | Przesiadka: nowy komputer przejmuje prowadzenie po potwierdzeniu poprzedniego, najwyżej po 10 min; bez podwójnych pytań i alarmów |
 | D116 | „Nie usypiaj” działa na jednym komputerze: przy wykładzie na wskazanym jako nagrywający, przy sesji na prowadzącym (dla sesji zmienione przez D150) |
 | D117 | Nieobecność do 30 min bez pytania |
@@ -128,7 +124,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D119 | Przegląd kalibracji: „Nie teraz” bez limitu; po trzecim odroczeniu aplikacja przestaje pytać, a przegląd czeka w ustawieniach |
 | D120 | Aktualizacje instalują się także same w nocy, przy bezczynności komputera (do wyłączenia) |
 | D121 | Przeglądy w trakcie budowy jak w planie: pauza i akceptacja po każdym etapie, przegląd wieloaspektowy w E8 |
-| D122 | Odpoczynek przy komputerze bez klawiatury i myszy (np. film): pytanie w rytuale, czy liczy się jako regeneracja (zastąpione przez D142) |
 | D123 | Odpoczynek z propozycji aplikacji (przerwa po 90 min, sugestia samotności, komunikat rezerwy) i „Odcinam się” przed końcem pracy przesuwają granicę o swoją długość, najwyżej do maksimum (o ile opóźniają koniec pracy, według T149) |
 | D124 | Dzień bez żadnej obecności komputera czeka w niezamkniętych dniach; bez odpowiedzi zamraża się jako „wolne” (obecność i ścieżki według T142) |
 | D125 | Zaksięgowane minuty przedłużenia zawsze dają „niedotrzymany”; „Odcinam się” albo przełączenie na dzień regeneracyjny bez późniejszej pracy to potwierdzony koniec pracy |
@@ -165,7 +160,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D156 | Biegnąca regeneracja zostaje na pierwszym planie, gdy ma się zacząć blok stały; blok stały jest do jej końca „do potwierdzenia” (po planowanym końcu odwołany według T262 i T275; zajęcia zdalne według D189; sesje według D192) |
 | D157 | W „mniej pytań” cicha ikona rezerwy nie liczy się jako pokazany komunikat: zejście do rezerwy nie odbiera wtedy nagrody (zobaczenie według T333, nagroda według D241) |
 | D158 | „Mniej pytań” nigdy nie włącza się samo: po sygnale przeciążenia i po „tak” w check-inie na „Drażnią mnie pytania i rozmowy?” pasek raz proponuje włączenie (zmienia D75; propozycja według T222, tryb na wszystkich komputerach według D169) |
-| D159 | „Odcinam się” przy przedłużeniu z otwartą pozycją: blokada usypiania trwa jeszcze 60 min od kliknięcia (zastąpione przez D187) |
 | D160 | Dzień, w którym wyłączasz grę po starcie pierwszego bloku pracy, ma zwykły status; gra nie liczy się od następnego dnia (doprecyzowane przez D170) |
 | D161 | E0 zostaje jednym etapem |
 | D162 | Pierwszy komputer instaluje nową wersję bez czekania, każdy kolejny w nocy dopiero po 24 h działania nowej wersji na innym komputerze (prowadzenie według D163, szczegóły według T219) |
@@ -219,7 +213,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D210 | Sesja kończy się przy ostatnim ruchu myszy albo klawiatury poza Regulated Day, na którymkolwiek komputerze, także krótkim (doprecyzowuje D193) (wejście według T345) |
 | D211 | Ekran w czasie bloku z opcją „nie usypiaj” trzyma tylko komputer z wejściem w ostatnich 10 min; potem ekran gaśnie według ustawień Windows, a system dalej nie zasypia (zawęża T303; blokada według D220) |
 | D212 | Każdy blok z oznaczeniem drugiej zmiany (np. piątkowa analiza przed zjazdem) zaczyna się dopiero po „Zacznij”, jak sesja (zmienia D130; zakotwiczone według D194) |
-| D213 | Po końcu pracy nad oknem na pełnym ekranie widget jest zwartym, przygaszonym paskiem bez ikony wody i koloru rezerwy; „Zacznij” drugiej zmiany zostaje, a przypomnienie o rytuale czeka do wyjścia z pełnego ekranu albo do rana (także w ciągu dnia według D223) (zastąpione przez D229: nic nad oknami innych aplikacji) |
 | D214 | Kreator pyta jednym kliknięciem, czy słuchanie nauki i posiłki są przy komputerze, czy z dala od niego |
 | D215 | Przed polskim świętem bez podpowiedzi „rodzina będzie w domu”; zostaje pytanie o wykłady |
 | D216 | „Koniec pracy”, które jest tylko przerwą (w planie zostaje blok stały pracy), niczego nie parkuje (zmienia T152) |
@@ -229,7 +222,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D220 | Aplikacja uczciwie mówi, czy Windows zablokuje zgaszony ekran, i podpowiada wygaszacz z hasłem; sama niczego w Windows nie zmienia (doprecyzowuje D211) |
 | D221 | Analiza tygodniowa (sobotnia i przeniesiona na piątek) czeka na „Zacznij”, a spóźnione „Zacznij” przesuwa ją na teraz z tą samą długością, bez kosztu |
 | D222 | „Sprawy domowe” mają wariant „przy komputerze” (opłaty, zamówienia, umawianie wizyt) |
-| D223 | Zwarty pasek nad pełnym ekranem także w przerwach w ciągu dnia, gdy nie biegnie blok pracy (rozszerza D213) (zastąpione przez D229) |
 | D224 | Kreator pyta, czy na zajęciach stacjonarnych używasz laptopa; jeśli tak, na nim nie ma pytania „Zajęcia skończyły się wcześniej?”, a koniec zajęć jest z planu (ustawienie każdego komputera według T329) |
 | D225 | Ostrzeżenia 5 i 0 min bez ruchu: pasek i ikona zmieniają kolor o stopień; pulsowanie paska do włączenia w ustawieniach |
 | D226 | Sobotnia analiza tygodniowa czeka na „Zacznij” do ostatniej chwili, w której zmieści się przed maksimum (w szablonie soboty do 15:00); spóźnione „Zacznij” przesuwa ją bez kosztu (rozszerza D221) |
@@ -305,6 +297,8 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | D296 | Pod Twoją nieobecność (ok. 12 h od 26.10 wieczorem) etapy ciągiem bez pauzy między nimi: E4a → E4b → logika E5 (silnik wariantów z testami, bez elementów w pasku – te po Twoim sprawdzeniu E4b); każdy etap z pełnym zamknięciem, PR scalany i wydawany jak zwykle (D285); pytanie o zachowanie widoczne dla Ciebie zatrzymuje pracę, czas, który się skończy, zostawia etap w toku opisany w postępie (26.10.2026) |
 | D297 | Komputer nagrywający wykład: ekran świeci przez cały wykład (D184) do Twojego sprawdzenia nagrywania OBS przy wygaszonym ekranie (punkt 15 z E0) (26.10.2026) |
 | D298 | E4b na roboczych kolorach z próby E0 (klasy bloków, rezerwa, kroki 15 / 5 / 0 min), a w „Próbie” 2–3 dodatkowe zestawy do porównania; wybór po Twoim powrocie (26.10.2026) |
+| D299 | Logika E6 przed Twoim odbiorem E3–E5 i przed elementami E5 w pasku, bez ekranów (rytuał, niezamknięte dni, przywracanie i eksport – po odbiorze, z pytaniami o wygląd); dwie części ciągiem, każda z PR i wydaniem: silnik wieczoru i rytuału, potem stany dnia, zamrażanie i dane; pauza po drugiej części (27.10.2026) |
+| D300 | Eksport CSV: wybrany zakres dat do wybranego folderu, trzy pliki – `bloki.csv` (Data; Blok; Kategoria; Klasa; Plan od; Plan do; Start; Koniec; Minuty; Po granicy (min); Po maksimum (min); Stan; Uwagi), `prosby.csv` (Data; Osoba; Nota; Rodzaj; Start; Koniec; Minuty; Usprawiedliwiona) i `checkiny.csv` (Data; Godzina; Głowa; Emocje; Bodźce; Odpowiedzi); wiersz = jeden blok, prośba albo check-in (doprecyzowuje D30) (27.10.2026) |
 
 **Decyzje techniczne (T)**, zaakceptowane 21.10.2026; szczegóły są w rozdziałach powyżej
 
@@ -319,11 +313,9 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T7 | Tolerancja trafności nie mniejsza niż 5 min; bloki stałe poza trafnością |
 | T8 | Wszystko jest blokiem, bez listy zadań; decyzja przy trzecim przeniesieniu (bez pytania według D201) |
 | T9 | Jednostki energii: 0–100, check-in 25–100, rezerwa 15, koszt przełączenia 2 (tylko przy wejściu w pracę albo projekt według D205) |
-| T10 | Komputer prowadzący to ten z ostatnim użyciem klawiatury albo myszy; zawsze dokładnie jeden (zastąpione przez D115) |
 | T11 | Jedna kopia aplikacji na komputer; zapis atomowy; log zdarzeń osobno dla komputera; scalanie po polach i identyfikatorach |
 | T12 | Ustawienia i szablony z datą obowiązywania, domyślnie od jutra |
 | T13 | Rekord z nowszej wersji tylko do odczytu; nieznane pola zachowane (doprecyzowane w T79) |
-| T14 | Codzienna kopia ZIP przy pierwszej okazji po stałej godzinie, 30 dni, przywracanie w aplikacji (zastąpione przez T81) |
 | T15 | Tylko instalator, identyfikator app.regulatedday.desktop, jeden kanał, okno postępu aktualizacji (postęp według T80) |
 | T16 | Widget: nie zabiera fokusu, akcje w procesie głównym, pozycja na komputer, powrót na ekran, odtwarzanie po awarii (fokus panelu ikony i pasek pulpitu według D229, T324, T336) |
 | T17 | Terminy w procesie głównym; alarm raz (zapis w logu dnia), podsumowanie po uśpieniu; dźwięk z widgetu, ciche powiadomienia systemowe |
@@ -360,7 +352,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T48 | Wymiana pełna, gdy ustępujące bloki są co najmniej tak długie jak nowy; brak to przedłużenie; ustępujące parkowane z licznikiem +1 (koszt według D103) |
 | T49 | Warianty: jeden warunek, kandydaci najpierw z tej samej przerwy między blokami stałymi, chroniony blok życia nie przeskakuje bloku stałego, panel w widgecie bez fokusu (dwa warunki znacznika według rozdziału Zakres) (panel ikony z fokusem od kliknięcia według T336) |
 | T50 | Rytuał za niezamknięte dni: „Jak zapisano”, „Popraw”, „Nie pamiętam” (= bez danych) |
-| T51 | Regeneracja wieczorna = przerwy co najmniej równe progowi bezczynności bez użycia żadnego komputera; obsługa samej aplikacji nie przerywa (zastąpione przez D142) |
 | T52 | Minuty ponad limit przesunięcia pory snu zapisywane jako „poza limitem”; blok przez 04:00 nie jest zamykany; „Pozycja nadal otwarta?” co 30 min (zapomniana pozycja według D106; usunięte przez D187) |
 | T53 | Kalibracja: 14 dni kwalifikujących się, najwyżej 28 kalendarzowych; propozycje czasu z co najmniej 5 skończonych bloków (mediana realny ÷ plan, długości do 5 min), kosztów z co najmniej 5 odczuwanych; zmiana reguł = nowa wersja reguł (koszty z sygnałów i porannych odpowiedzi według D99) |
 | T54 | Kategorie Zajęcia zdalne 2 / 2 / 2 i wariant „słuchanie”; święta USA według NYSE i CME ze skróconymi sesjami, Polska z 24.12; blok zakotwiczony idzie z odwołaną sesją; bez odpowiedzi o święto sesja zostaje |
@@ -386,10 +377,8 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T74 | Zdarzenie „zmiana dnia” o 04:00 i po wybudzeniu; widoki „dziś” idą za nim, poza dniem biegnącego bloku; „teraz” w formularzu czytane przy otwarciu |
 | T75 | Użycie komputera to odcinki wejścia od 30 s, próbkowane co 5 s, bez wejścia w samą aplikację; blokada ekranu z systemu (nie wpływa na regenerację, D142, poza czasem do wyjaśnienia, D166; definicje według T94) |
 | T76 | Widget: tylko kliknięcia, rośnie w górę w obszarze roboczym wybranego monitora, rozmiar w DIP, ochrona treści przed nagrywaniem ekranu (w części zastąpione przez D229: pasek pulpitu i panel ikony) |
-| T77 | Wylogowanie: zatwierdzenie pola i zapis, wstrzymanie zamknięcia systemu tylko na czas zapisów, zdarzenie „zamknięcie systemu” (zastąpione przez T104) |
 | T78 | Powiadomienia z identyfikatorem app.regulatedday.desktop, adres regulatedday:// do otwarcia dnia z Centrum akcji, stałe identyfikatory, nic tylko w powiadomieniu (kliknięcie otwiera panel ikony według T325) |
 | T79 | Tylko do odczytu wyłącznie przy wartości, której wersja nie umie przedstawić; „Zainstaluj teraz”; bez instalacji w trakcie sesji i zajęć |
-| T80 | Postęp aktualizacji pokazuje okno instalatora; test aktualizacji w CI sprawdza, że nowe okno się pojawiło (zastąpione przez T105) |
 | T81 | Kopia po 12:00 robiona przez prowadzącego, w backups/ poza skanem, 14 dziennych i 8 tygodniowych, dodatkowe miejsce dla komputera |
 | T82 | Twardy koniec liczony wstecz od efektywnej pory snu po czasie bez bloku i blokach regeneracji (D142); brakująca część 0 = pora snu; bez miejsca = minął, pula 0 do końca dnia (D143; zmienione przez T168, D164 i T212); prośby klasyfikowane według twardego końca w chwili ich startu |
 | T83 | Przyszły dzień przechowuje tylko Twoje edycje; szablon i ustawienia jego daty stosuje tworzenie dnia o 04:00 |
@@ -406,7 +395,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T94 | Obecność przy komputerze (każde wejście, także w aplikacji) wybiera prowadzącego; użycie komputera (wejście poza aplikacją) decyduje o pierwszym bloku pracy, późnym wstaniu, blokach „do potwierdzenia” i nadgodzinach (o nadgodzinach i końcu bloku bez odpowiedzi decyduje wejście według T345) |
 | T95 | Komputer „nieustalony” po starcie, wybudzeniu, blokadzie ponad 10 min i powrocie sieci: do 60 s bez nadchodzących zmian, najdłużej 3 min, bez zadań prowadzącego (po starcie i wybudzeniu według T124) |
 | T96 | „Nowsza obecność” według lokalnego czasu zobaczenia zmiany pliku; stan „zamknięty” to natychmiastowe przejęcie; ostrzeżenie o zegarze przy różnicy ponad 2 min (pierwszy odczyt według T123) |
-| T97 | Wykrywanie braku synchronizacji (ponad 15 min bez zmian obecności innych przy używaniu albo brak OneDrive): ostrzeżenie i oddanie zadań prowadzącego (zastąpione przez T122) |
 | T98 | Podział zadań: każdy komputer ma widget i własne zdarzenia, blokadę usypiania ma wskazany; tylko prowadzący pyta, powiadamia, gra dźwięki, tworzy dzień, robi kopię i zamraża (zamrażanie tylko z najnowszymi regułami, D163; pytanie niewidziane i dźwięk według T264 i T274) |
 | T99 | Pełna kolejność zdarzeń: zegar logiczny, komputer, numer; odrzucone kliknięcie pokazuje się raz z „Zastosuj teraz”; działania automatyczne z identyfikatorami z dnia, reguły i bloku |
 | T100 | Zdarzenie startu zapisuje planowaną długość, kategorię, koszty i miejsce; klasyfikację minut zapisuje komputer bloku, przy sprzeczności wygrywa wcześniejsze zdarzenie (zmienione przez T131 i T187) |
@@ -414,10 +402,8 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T102 | Migracje nie przepisują logów, zdarzenia tłumaczone przy odczycie; starsza wersja pomija nieznane zdarzenia innych komputerów, a przy zdarzeniu timera pokazuje „dzień liczony przez nowszą wersję” (zawężone przez T247) |
 | T103 | Start czyta otwarte dni i zapisane oceny; logi zamrożonych dni na żądanie; przeliczenie co minutę tylko dla dzisiejszego dnia |
 | T104 | Wylogowanie bez wstrzymywania systemu (szczegóły według T241): zdarzenie zapisane synchronicznie, lokalny szkic aktywnego pola, instalator nigdy przy zamykaniu Windows |
-| T105 | Instalator po cichu jak w FI, z małym oknem postępu aplikacji; noc tylko przy zablokowanym albo wygaszonym ekranie, bez multimediów, nie na baterii, bez usypiania w trakcie; start ukryty, „Co nowego” rano (zastąpione przez T129) |
 | T106 | Zamraża prowadzący, który się synchronizuje i ma najnowszą wersję reguł; czyste zamknięcie liczy się jak obecność; liczą się tylko konflikty w plikach oceny; zapis ostatniego uwzględnionego zdarzenia każdego komputera; z dwóch ocen zostaje ta z większą liczbą zdarzeń (najpierw wersja reguł według T269) |
 | T107 | Uśpienie: przerwa ponad 45 s między sprawdzeniami; zmiana zegara: rozjazd zegarów bez przerwy; blokada odczytywana przy starcie i przy każdym sprawdzeniu; ukryte okno bez odliczania |
-| T108 | Widget: ponawianie „zawsze na wierzchu”, ochrona przed nagrywaniem do wyłączenia na komputerze, panel w dół u góry ekranu, potwierdzenia w trybach ciszy drugim kliknięciem w pasku (zastąpione przez D229: brak okna zawsze na wierzchu) |
 | T109 | Lista „zrobione automatycznie” grupuje działania zgodne z planem |
 | T110 | Zapomniany blok: pytania w 30. i 60. min, koniec nie wcześniej niż planowany; w ciszy nocnej pytania liczą się jako zadane (pytania liczą się czasem według D145) (pytania od zobaczenia według D231, w bloku pasywnym od zadania według D239) |
 | T111 | Tryb sesji trwa do 30 min po końcu sesji, dopóki komputer jest używany (po „Skończyłem” i samoczynnym końcu kończy się od razu według D217) (zmienione przez D227: tryb sesji kończy się o planowanym końcu) |
@@ -436,7 +422,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T124 | „Nieustalony” po starcie i wybudzeniu co najmniej 3 min od działającego OneDrive plus 60 s ciszy, najdłużej 10 min; migawka dnia wydawana ponownie z „Cofnij” przed pierwszą sklasyfikowaną minutą, potem jako propozycja „od teraz” |
 | T125 | Lokalna trwała kolejka edycji; wyjście i aktualizacja czekają tylko na zapis lokalny, z informacją o zmianach czekających na folder |
 | T126 | Kreator proponuje „Zawsze przechowuj na tym urządzeniu”; ostrzeżenie o nieprzypiętym folderze; przy nieczytelnym folderze widget i timer działają z ostatniego stanu |
-| T127 | Okno na pełnym ekranie w trybie wyłącznym: widget niewidoczny, komunikaty jednorazowe czekają; stan z powiadomień Windows przez stałego pomocnika PowerShell (zastąpione przez D229) |
 | T128 | Zgodność akcji: koniec przy bloku biegnącym albo zapauzowanym, pauza przy biegnącym, wznowienie przy zapauzowanym; sprzeczne tylko dwa starty albo dwa końce |
 | T129 | Instalacja nocna: zablokowany ekran albo 30 min bez użycia, zasilanie z sieci, cisza nocna, bez bloku, bez gry i prezentacji; okno postępu pomocnika; znacznik startu ukrytego; plik „uruchomiono wersję X”; wpis RunOnce (zastąpiony przez T239 i T266); CI z czterema ścieżkami |
 | T130 | E8 jako kilka PR-ów poprawek, każdy z wydaniem 0.x |
@@ -484,7 +469,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T172 | Minimum po przełączeniu: większa z wartości minimum sprzed przełączenia albo mniejsza z minimum dnia regeneracyjnego i regeneracji możliwej do zebrania, policzonej raz funkcją twardego końca; prośby pomniejszają wynik; koniec pracy przy przełączeniu to rzeczywisty koniec; biegnący blok elastyczny przesuwa maksimum do swojego planowanego końca |
 | T173 | Po końcu bloku stałego przerwany blok elastyczny czeka jako następny i wznawia go „Dalej” albo start |
 | T174 | Blokada usypiania sesji na komputerze prowadzącym w chwili startu (ze zdarzenia startu) i na każdym, który poprowadzi w czasie sesji; „Odcinam się” obejmuje sesję w tle i drugą zmianę (także komputery z obecnością według T263, ekran według T281; „Odcinam się” kończy sesję według D206) |
-| T175 | „Pozycja nadal otwarta?”: koniec po 90 min bez odpowiedzi; planowany koniec obejmuje potwierdzone „Przedłuż”; po automatycznym końcu bloku sesji blokada i zwarty pasek do 30 min bez użycia, z „Przywróć”; bloki zakotwiczone od chwili automatycznego końca (zastąpione przez T259: czekają; pytania o pozycję usunięte przez D187) |
 | T176 | Reakcja na rezerwę: 10 min od późniejszej z chwil, zmiana formy nie przerywa; cisza nocna i ikona w „mniej pytań” nie odbierają nagrody; przy bloku sprzed pierwszego użycia liczy się chwila tego użycia |
 | T177 | Zwarty pasek: „Mniej pytań” i „Jest lepiej” w „⋯”; stałe miejsce pytań bloku; szerokość mniejsza z 480 DIP razy skala albo obszaru roboczego minus 16 DIP |
 | T178 | Dzień bez pracy: dodany blok nie otwiera pracy ponownie, a koniec po nim potwierdza się sam w granicy |
@@ -493,10 +477,8 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T181 | Bufory po końcu pracy odnawiają energię jak „gra, film”; sygnały działają poza ciszą nocną |
 | T182 | Znacznik wariantów po 2 min bez reakcji przy 0; rutyna przesuwa się o różnicę pobudek, w dniu bez bloków stałych wszystkie bloki elastyczne; pobudka ustawiona ręcznie wygrywa z przesunięciem o 1 h |
 | T183 | RunOnce z „!” i strażnikiem wersji, usuwany przez udany instalator; aplikacja zamyka się w czasie pracy strażnika; potwierdzenie instalacji na każdej ścieżce; dwie ścieżki CI symulowane (zamykanie i warunek wersji zastąpione przez T231 i T232, potem przez T266) |
-| T184 | Tylko gra Direct3D na pełnym ekranie oznacza niewidoczny widget i wstrzymuje „zawsze na wierzchu”; pozostałe stany pełnego ekranu wstrzymują tylko nocną instalację (zastępuje część T127) (zastąpione przez D229; stan powiadomień decyduje o ponownym wysłaniu powiadomień i nocnej instalacji według T340) |
 | T185 | Pomocnik jako mały program C# z CI: stan powiadomień, OneDrive, przypięcie, okno instalacji; ponawianie z coraz dłuższą przerwą i stan „niedostępny” (zastępuje pomocnika PowerShell z T127 i T129; blokada usypiania i tryby JSON według T301) |
 | T186 | Działania zależne od odpowiedzi zapisuje tylko prowadzący, z podstawą; Twoje zdarzenie je unieważnia; komputer nieustalony pokazuje dzień i startuje bloki stałe, a zapisuje je po ustaleniu |
-| T187 | Odcinki klasyfikacji z jawnym zakresem; minuta zapisana dopiero po zdarzeniach wszystkich świeżych komputerów; przy sprzeczności wygrywa nowszy stan wiedzy (zastąpione przez T220) |
 | T188 | Kolejka edycji jako zmiany pól scalane trójstronnie; usunięcie gdzie indziej to pytanie; edycja dnia zamrożonego w międzyczasie to korekta |
 | T189 | Prowadzenie: zmiana pola „ostatnia obecność”, 60 s histerezy, komputer ze starszymi regułami nie prowadzi (zmienione przez D163 i T218) |
 | T190 | Proces główny bez blokad dłuższych niż ok. 50 ms; nadrabianie, zamrażanie, ZIP i CSV w procesie pomocniczym |
@@ -510,7 +492,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T198 | Wygaszacz jak blokada; identyfikator Windows przeciw podwojonym identyfikatorom; wznowienie dźwięku przed każdym odtworzeniem |
 | T199 | Wstępna nadgodzina nie przesuwa pory snu i nie mija twardego końca; znika z pełnym przeliczeniem |
 | T200 | Plan poranny po automatycznym zatwierdzeniu przesuwa granicę najwyżej do prognozy bloków z planu; bloki dodane później z propozycją wymiany |
-| T201 | Pierwsze użycie komputera po co najmniej 3 h bez użycia; ta sama definicja w oknie korekty (zastąpione przez T213) |
 | T202 | Prośba trwająca przez twardy koniec dzielona w tej chwili; biegnąca „zrobione teraz” w prognozie kończona teraz |
 | T203 | Zmiana przesuwająca porę snu na mniej niż 30 min od teraz: linia z „Cofnij”, 15 min na pełne przywrócenie |
 | T204 | „Odcinam się” parkuje elastyczne bloki pracy dnia; start bloku z okna głównego pyta „Wracam i zaczynam?” (parkowanie usunięte przez D198) |
@@ -540,7 +521,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T228 | Komunikat rezerwy liczy się jako pokazany tylko wtedy, gdy pojawił się jako komunikat w chwili zejścia; ikona, „Jest lepiej” i późniejsze pokazanie nie odbierają nagrody (pokazany = na komputerze z obecnością w ostatnich 2 min, T275, T284 i T292) (zobaczenie według T333, 60 min od pierwszego zobaczenia według D241) |
 | T229 | „Cicho” znaczy bez okna; dźwięk pytań biegnącego bloku gra też w trybie sesji i w ciszy nocnej, nigdy w „mniej pytań”; edycja przywracająca wartość w 15 min działa jak „Cofnij”; pytania z ciszy nocnej o 04:00 do rytuału; ogon bloku sesji najwyżej 60 min i do pory snu (ogon usunięty przez D187) |
 | T230 | Dzień bez pracy: kolejny blok pracy po końcu pierwszego dodanego otwiera pracę ponownie |
-| T231 | Instalacja z kopii pomocnika, strażnika i instalatora w danych aplikacji; pomocnik instalacji odłączony; mutex strażnika, limit 10 min, „Uruchom mimo to” zamiast cichego zamknięcia aplikacji (zastąpione przez T238) |
 | T232 | Ścieżka z FI przy niedostępnym pomocniku; pomocnik na .NET Framework 4.8, UTF-8 i JSON, w CI podmieniony; RunOnce: wersja starsza niż X według DisplayVersion, strażnik działa tak samo przy każdym uruchomieniu, polecenie poniżej 260 znaków, pierwszeństwo przed autostartem, brak instalatora (RunOnce zastąpione przez T239; start i wersja według T266, T267, T276 i T277; .NET według T278) |
 | T233 | Błąd listy plików = nieznane; własny log porównywany z dziennikiem co 15 s; identyfikator komputera w osobnym pliku i „Zapomnij komputer”; kolejka z wartościami bazowymi pól; numer formatu lokalnych magazynów |
 | T234 | Proces pomocniczy tylko liczy, z limitem czasu i ponownym startem; obserwator odświeża tylko dotknięty podfolder; zamknięcie systemu na zdarzenie końca sesji Windows, zapis asynchroniczny (zapis zastąpiony przez T241) |
@@ -553,7 +533,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T241 | Zamknięcie systemu: jedna linia zapisana synchronicznie bez fsync na zapytanie o koniec i koniec sesji; awaria tylko bez zapisu zamknięcia i bez ponownego startu systemu (zastępuje zapis z T234; definicja awarii zastąpiona przez T268) |
 | T242 | Obecność z 10 ostatnimi wersjami; lista wydań bez szkiców, wersji testowych i niekompletnych wydań, z If-None-Match; wersja z awarią nie jest najnowszą; komputer z nieznanymi zdarzeniami timera instaluje bez czekania 24 h |
 | T243 | Oceny zamrożonych dni w pliku pochodnym grades/RRRR/\<komputer>.jsonl i lokalnej pamięci podręcznej (szczegóły w E1) |
-| T244 | Zdarzenie obserwatora bez nazwy pliku = pełne skanowanie w procesie pomocniczym; proces pomocniczy zapisuje tylko własne pliki wynikowe, przez plik tymczasowy; mutex sprawdzany przez pomocnika do 2 s (zastąpione przez T267) |
 | T245 | Pomocnik budowany w jednym pliku budowania kompilatorem .NET Framework; samotest prawdziwego pomocnika w CI na Windows i E2E z prawdziwym pomocnikiem |
 | T246 | Świeża obecność = plik odświeżony w 10 min; prowadzenie według obecności przy komputerze w 10 min (D171); prowadzący oddaje sam, nowy przejmuje po wskazaniu w obecności poprzedniego; pierwszy prowadzący z nowszymi regułami liczy otwarte dni od nowa |
 | T247 | Pierwszeństwo zapisów: wersja reguł, potem stan wiedzy, potem zegar logiczny; starsza wersja przestaje pytać tylko o blok z nieznanym zdarzeniem; nowe zdarzenia mają zapis zastępczy |
@@ -568,7 +547,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T256 | Doprecyzowania: tabela nagród i przykład energii według T228, 60 min od pierwszego pokazania, potwierdzenia końca pracy w regulaminie, tabela trybów ciszy, gra wyłączona i włączona tego samego dnia, propozycja przerwy znika po sesji bez dalszej pracy, kolejna propozycja „mniej pytań” czeka (zastąpione przez T265), adnotacje rejestru (od zejścia do 60 min po pierwszym zobaczeniu według D241 i D244) |
 | T257 | Pula pomniejszona też o potwierdzoną albo prognozowaną pracę w oknie poza planowanym czasem drugiej zmiany; pula pusta = 0 albo mniej; prognoza pory snu liczy pulę na początku każdej minuty |
 | T258 | Próg 30 min nagrody za regenerację według minimum typu dnia przed ograniczeniami z D173 i D178; wymagane minimum po prośbach najmniej 0 |
-| T259 | Bloki zakotwiczone po automatycznym końcu (dwa pytania; pytania o pozycję usunięte przez D187) zawsze czekają; po każdym innym końcu, także bloku stałego o czasie, według maksimum, pory snu i obecności (zastąpione przez D194: zawsze czekają) |
 | T260 | Start pracy po granicy (Start, „Zacznij”, „Dalej” do następnego bloku, „Pracuję”, wznowienie): koszt w pasku po pierwszym kliknięciu, start po drugim w 10 s, po maksimum to samo kliknięcie jako oba potwierdzenia; „Pracuję” znosi regułę 15 min od startu bloku, regeneracja policzona wcześniej zostaje (rozszerzone przez T271) |
 | T261 | „Koniec pracy” i poranne ✓ przy czasie do wyjaśnienia odpowiadają „odpoczynek”, z „Pracowałem do …”; „Koniec pracy?” 15 min po „Dalej” ostatniego bloku pracy; koniec odłożenia po „Przerwa” ustalony przy kliknięciu (kliknięcie + 60 min albo planowany koniec pracy) (✓ wiersza zbiorczego tak samo według D249) (czasu po projekcie nie zmienia według D254) |
 | T262 | Blok stały niezaczęty albo w całości niepotwierdzony do planowanego końca liczy się od tej chwili jak odwołany, a potwierdzenie go przywraca; przy zamrożeniu z bloku potwierdzonego w części liczy się tylko potwierdzona część |
@@ -631,7 +609,6 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T319 | Sesja w tle bez kosztu także za prośbą, chronionym blokiem życia i drugim blokiem stałym (D202); „Zakończ teraz” przy sesji jak „Skończyłem”; blokada systemu do rozpoznania końca przy ostatnim wejściu; blok odpoczynku w sesji zakończony sam kończy sesję w chwili swojego startu (także po końcu progiem bezczynności, D231) |
 | T320 | Pierwszy koniec pracy: sesja z samym „Zacznij jeszcze raz” nie zostaje w planie, a jej kolejny odcinek po potwierdzonym końcu otwiera pracę ponownie; dzień, w którym jedyna praca to niezaczęte sesje, ma do rytuału pierwszy koniec o planowanym końcu ostatniej; po „Odcinam się” i pracy przed granicą pierwszym końcem jest koniec tej pracy (każdy blok czekający na „Zacznij” według T349) |
 | T321 | Bloki liczone jak projekt bez czasu do wyjaśnienia i bez „Koniec pracy?” (D172); oznaczenie „po pracy” ustalane przy zatwierdzeniu granicy albo dodaniu bloku i poza budżetem; zakotwiczone z oznaczeniem drugiej zmiany czekają według D194; odpowiedź D214 „przy komputerze” = pasywnie przy komputerze; „Koniec pracy” będący tylko przerwą niczego nie parkuje, a zakotwiczone czekają według D194 (czas do wyjaśnienia także po blokach liczonych jak projekt według D238) |
-| T322 | Zwarty pasek nad pełnym ekranem poza pracą (D223): twardy koniec, przerwa po 90 min, samotność i „Koniec pracy?” jako cicha ikona, komunikat rezerwy czeka do wyjścia z pełnego ekranu bez utraty nagrody; wiersz w tabeli trybów ciszy (zastąpione przez D229) |
 | T323 | Przykład dnia: wiersz 183 z analizą dodaną po zatwierdzeniu granicy (potwierdzenia w oknie dodawania), wiersz 187 według D218 (pula 1 h); typowa długość sesji w prognozie od pięciu sesji (D219); adnotacje rejestru (T6, T43, T111, T140, T162, T174, T252, T276, T277, T280, T281, D64, D150, D198, D209) |
 | T324 | Pasek i ikona zamiast okna zawsze na wierzchu (D229): pasek u góry okna głównego, panel ikony przy zegarze otwierany kliknięciem ikony albo powiadomienia, pasek pulpitu pod oknami bez aktywacji; „widget” = pasek i ikona, ukryty widget = brak paska pulpitu i przygaszona ikona; kreator pokazania ikony; okno dźwięku; okna pomocnika i strażnika nigdy na wierzchu; zobaczone = panel albo okno główne przy obecności albo kliknięcie powiadomienia według T333 (zastępuje T108, T127, T184, T322 i część T16, T76) (zobaczone według T340 i T344) |
 | T325 | Powiadomienia domyślnie według D230, kliknięcie otwiera panel ikony; opis „Nie przeszkadzać” i listy priorytetowej Windows; nagroda za reakcję na rezerwę przy linii bez powiadomienia albo powiadomieniu nieprzyjętym; jedna lista stanów nocnej instalacji; bez powiadomień w czasie zajęć stacjonarnych i dojazdu; E0 i E4b z próbą ikony, panelu i powiadomień (nagroda według T333 i D241) |
@@ -791,3 +768,4 @@ D = decyzje użytkownika, T = decyzje techniczne. Nowa decyzja wskazuje, którą
 | T479 | Prośba bez „Koniec” kończy się (prowadzący, do bramki) przy pierwszym użyciu po ≥ 2 min bez wejścia, przy limicie (60 min; szacunek > 30 min – szacunek + 30) albo o efektywnej porze snu, co pierwsze; po końcu przy pierwszym użyciu pytanie „Trwała do teraz · Skończyła się o … · Jeszcze trwa” (ostatnie przed limitem; wyłącza pierwsze użycie); koniec przy pierwszym użyciu i limicie oceniany ponownie jak T465 i cofany razem ze wznowieniem bloku; liczniki dziś / tydzień / osoba z logów dni (prośba bez osoby – „?”) |
 | T480 | Warianty (`engine/variants.ts`): przyczyna = wyzwalacz przy spełnionym teraz warunku (koniec pracy przed drugą zmianą po zatwierdzonej granicy; pula na poziomie rezerwy po ostatnim zejściu, nie w kalibracji); wyzwalacze: start i koniec prośby (prośba dopisana później – chwila zapisu), blok pierwszego planu 2 min po 0 bez reakcji („Przedłuż” do 2 min po 0 przesuwa 0, pauza i koniec – reakcja), blok stały albo czekający, który zaczął się nad biegnącym elastycznym, zejście puli; nowy znacznik tylko do 5 min po wyzwalaczu albo po końcu trybu sesji i zajęć, w którym wypadł; pokazany zostaje, póki przyczyna trwa, zamknięty albo zgasły nie wraca; kandydaci – elastyczne niezaczęte bloki pracy w planie (bez chronionych, stałych, czekających), najpierw z bieżącej przerwy między stałymi (od najpóźniejszego), potem najpóźniejsze, skrócenie najwyżej do 15 min; energia – regeneracja 20 min teraz sposobem dobranym do puli i najdroższy blok tej puli na jutro albo o połowę krócej; przeniesienie wariantem bez licznika przeniesień |
 | T481 | E5 po przeglądzie: koniec prośby cofnięty („Cofnij”, „Jeszcze trwa”, późniejszy log) cofa też wznowienie bloku (`resumedWith`), „Skończyła się o …” wznawia blok wtedy; po cofniętym końcu działa następna reguła (limit, pora snu); koniec limitem zapisany dopiero przy pierwszym użyciu (T372), po nim i po porze snu pytanie „Tak zostaje · Trwała do teraz · Skończyła się o …”; druga prośba w trakcie pierwszej przejmuje przerwany blok (wraca po ostatniej); prośba po fakcie dzieli każdy blok elastyczny z przebiegiem w jej czasie (`request.start.splits`, fakty tną przebiegi niezależnie od kolejności zapisu), odmowa przy innej prośbie w tym czasie; prognoza zna szacunek pilnej prośby; warianty porównują z granicą ostatnią minutę pracy w prognozie (`lastWorkForecast`); znacznik pokazany przed sesją wraca po niej; szacunek 1–480 min; blok czekający na „Zacznij” idzie w tło; prośba przez 04:00 trzyma swój dzień dla prowadzącego i „Koniec”; licznik prośby bez końca – najwyżej do limitu; teksty próśb na liście „zrobione automatycznie”; „+1” w etykietach wariantów |
+| T482 | Logika E6 na Opus 5.5 · xhigh zamiast „high” z planu (czas do wyjaśnienia zmienia `computeDay`, zamrażanie jest nieodwracalne); zamrażanie i zamykanie dni „jak zapisano” nie działają na danych, dopóki wersja nie ma ekranu rytuału – dni sprzed niej zamykają się same „jak zapisano” (spec „Rytuał zamknięcia”) |
