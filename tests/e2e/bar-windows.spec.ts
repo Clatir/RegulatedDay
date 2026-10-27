@@ -73,7 +73,7 @@ test('„Zawsze na wierzchu”: pasek znika, gdy okno na pierwszym planie przech
     await withMainLog(userData, async () => {
       const barPage = await viewPage(app, 'bar')
       await barPage.evaluate(() => window.rd.setPrefs({ onTop: 'bar' }))
-      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      // The main window is in front after the start: the bar „na wierzchu” steps aside (D302) until the film's window is.
       const bar = await barInfo(app)
       const k = bar.scale
       // A normal window (the browser with the film), made the foreground by a real click away from the bar.
@@ -88,7 +88,7 @@ test('„Zawsze na wierzchu”: pasek znika, gdy okno na pierwszym planie przech
       await expect.poll(() => windowsAt([middle])[0], { timeout: 10_000 }).toBe(film.hwnd)
       click(...middle)
       await expect.poll(() => foreground(), { timeout: 10_000 }).toBe(film.hwnd)
-      expect((await barInfo(app)).visible).toBe(true)
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(true)
       // Its full screen in place: no change of the foreground window, the bar hides within the helper's check.
       await app.evaluate(() => (globalThis as unknown as { rdFilm: Electron.BrowserWindow }).rdFilm.setFullScreen(true))
       await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(false)

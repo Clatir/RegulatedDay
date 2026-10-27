@@ -14,7 +14,7 @@
 - **Logika E7 scalona** (D301): część 1 (regulamin, PR #12) – wydanie 0.8.0 (27.10 ok. 13:46); część 2 (pokój,
   kasety, świętowanie, „Strona B”, kalibracja, PR #13) – wydanie 0.9.0 z runu 40513568887 (ok. 15:08).
 - **Poprawka E4b.9 scalona** (PR #14, 89e21fe, ok. 15:10; CI PR zielone, także Windows) – wydanie 0.9.1 z runu
-  40518727264 na `main` (sprawdzić, że opublikowane).
+  40518727264 na `main` opublikowane (ok. 15:52).
 - **0.10.0 w toku** (D302–D305 z odbioru 27.10): PR #15 z gałęzi `claude/0.10.0-pasek-bloki` (od 0.9.1), CI w toku;
   po zielonym scalam (D285) i sprawdzam wydanie 0.10.0 – sekcja niżej.
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
@@ -47,6 +47,8 @@
   blok trzymany w nowym miejscu do nadejścia danych, uchwyt nie zasłania przycisków, D302 tylko przy „na wierzchu”.
   Testy: jednostkowe (`placement`, `tests/web/day-axis`, `settings-fields`, `e3-plan`), E2E (przeciągnięcie bloku,
   makieta, przeciągnięcie paska z podstawionym kursorem; D302 tylko w CI na Windows).
+- CI PR #15, runda 1: Windows czerwone – test pełnego ekranu z 0.9.1 czekał na pasek „na wierzchu” zaraz po starcie,
+  a okno główne jest wtedy z przodu (D302 słusznie go chowa); test czeka teraz na pasek po kliknięciu okna z filmem.
 
 ## Przed etapem E7 – logika (27.10.2026)
 - Odpowiedzi: D301 (dwie części ciągiem, robocza lista pokoju i progi nut – akceptacja przed ekranami gry). Model:
