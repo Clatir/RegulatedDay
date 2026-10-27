@@ -705,8 +705,9 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - kolory zmieniają się tylko w jednym miejscu (np. w oknie tak, na ikonie nie).
 
 #### E4b.12 Pasek przeciągnięty za uchwyt (0.10.0)
-- [ ] Odebrane — **nie przechodzi (27.10.2026):** przeciągnięcie paska go nie przesuwa. E2E przeciąga z podstawionym
-  kursorem (bez prawdziwej myszy Windows) i tego nie widzi – poprawka z testem prawdziwej myszy w CI na Windows.
+- [ ] Odebrane — **nie przechodzi (27.10.2026):** uchwyt ⠿ widać, ale po chwyceniu i ciągnięciu pasek nawet nie
+  drgnie. E2E przeciąga z podstawionym kursorem (bez prawdziwej myszy Windows) i tego nie widzi – poprawka z testem
+  prawdziwej myszy w CI na Windows, w jednym wydaniu z elementami E5 w pasku (D315).
 - **Tylko Ty:** logikę miejsca sprawdzają testy (`placement.test.ts`), przeciąganie z podstawionym kursorem – E2E
   (`smoke.spec.ts`); prawdziwą mysz, drugi monitor i ponowne uruchomienie – tylko Ty.
 - **Jak sprawdzić:** najedź na pasek pulpitu, chwyć uchwyt ⠿ przy lewej krawędzi i przeciągnij pasek na środek

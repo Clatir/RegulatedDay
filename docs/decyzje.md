@@ -310,3 +310,4 @@ którą zastępuje; zastąpione w całości trafiają do `docs/archiwum/decyzje-
 | D312 | Trwająca prośba w miejscu bloku: pierwszy wiersz „Pilne · Mama · 0:12 z 30 min · Koniec” albo „Zrobione teraz · Ola · 0:04 · Koniec”; przerwany blok cichą linią pod spodem („Nauka – pauza, wróci po „Koniec””), bez kropki – kropka tylko po „jeszcze trwa” (D247) (27.10.2026) |
 | D313 | Kliknięcie wariantu w panelu zmienia plan od razu, a w pasku zostaje „Przestawiono: … · Cofnij”; „Zostaw” zamyka panel i znacznik (27.10.2026) |
 | D314 | Zestaw kolorów klas bloków, rezerwy i kroków 15 / 5 / 0 min: „cieplejsze” z porównania w „Próbie” – w ikonie, pasku i panelu (rozstrzyga D298) (27.10.2026) |
+| D315 | Poprawka E4b.12 i zestaw „cieplejsze” (D314) bez osobnego wydania – w jednym PR i wydaniu z kolejną pracą (elementy E5 w pasku); E4b.12 odbierasz po tym wydaniu, reszta E4b przed nim (doprecyzowuje D310) (27.10.2026) |

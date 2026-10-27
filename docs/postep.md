@@ -36,19 +36,25 @@
   D310), procedura etapu dla nowego układu odbioru.
 - **Odbiór 27.10 wieczorem** (w 0.10.1): odebrane E4a.12, E4b.9 (z „E4b.9 ponownie”), E4b.11 – zestaw „cieplejsze”
   (D314, w kodzie wciąż `toneSet: 'robocze'` – `engineView.ts`, `widget.ts`), E4b.13, E4b.14. **E4b.12 nie
-  przechodzi:** przeciągnięcie paska za uchwyt go nie przesuwa. W kodzie nic oczywistego (pomocnik układa pasek
-  z `SWP_NOMOVE`, `draggedBounds` liczy drogę kursora); E2E podstawia kursor i zdarzenia CDP – prawdziwa mysz Windows
-  (przechwycenie myszy w oknie bez aktywacji, `requestAnimationFrame`, 12 px niewidocznego uchwytu) nietestowana.
+  przechodzi:** uchwyt ⠿ widać po najechaniu, ale po chwyceniu i ciągnięciu pasek nawet nie drgnie („Zawsze na
+  wierzchu” – nie pamiętasz, sprawdzić oba). W kodzie nic oczywistego (pomocnik układa pasek z `SWP_NOMOVE`,
+  `draggedBounds` liczy drogę kursora, `placeBar` z makiety przestawia pasek – E4b.13 odebrane); E2E podstawia kursor
+  i zdarzenia CDP – prawdziwa mysz Windows (przechwycenie myszy w oknie bez aktywacji, `pointermove` /
+  `requestAnimationFrame` po `pointerdown`) nietestowana.
+- Z plików 27.10 (dowody do odbioru, nie odhaczone): `backups\aktualizacje` – 5 ZIP-ów 0.1.1→0.7.0 … 0.10.0→0.10.1,
+  każdy otwiera się (7–10 plików) – E3.12; `backups\daily\2026-10-27.zip` (9 plików) – E6b.2 do sprawdzenia
+  28.10 po 12:00; `main.log` – „kreator zakończony” 27.10 (E3.1), aktualizacje 0.7.0→0.10.1 czyste (E6b.1–E7b.1;
+  0.2.0–0.6.0 przeskoczone, więc E5.1 i E6a.1 tylko „dane całe”).
 
 ## Kolejka
-1. Poprawka 0.10.2: E4b.12 (przyczyna na prawdziwej myszy – test w CI na Windows z wejściem myszy systemu, który na
-   0.10.1 pada) i zestaw „cieplejsze” w ikonie, pasku i panelu (D314). Szczegóły objawu – pytanie z 27.10.
-2. Ty: odbiór według `docs/odbior.md` (sekcja „Do odebrania”, 44 punkty); 27.10 odebrane E3.2, E3.6, E3.8, E3.11,
-   E4a.12, E4b.9, E4b.11, E4b.13, E4b.14.
-3. Po Twoim odbiorze E4b (D310; zostały E4b.1–E4b.8, E4b.10 i E4b.12): elementy E5 w pasku według D311–D313 –
-   pytania „Przed etapem” zadane 27.10 (Opus 5.5 · xhigh, nic do przygotowania); potem ekrany E6 (rytuał,
-   niezamknięte dni, eksport, przywracanie) i ekrany gry E7 (z akceptacją listy pokoju i progów) – z pytaniami
-   o wygląd, każdy po „Przed etapem” (D309).
+1. Ty: odbiór według `docs/odbior.md` (sekcja „Do odebrania”, 44 punkty; zwięzła lista w rozmowie 27.10); przed
+   elementami E5 – E4b.1–E4b.8 i E4b.10 (D310, D315). 27.10 odebrane E3.2, E3.6, E3.8, E3.11, E4a.12, E4b.9,
+   E4b.11, E4b.13, E4b.14.
+2. Elementy E5 w pasku według D311–D313 razem z poprawką E4b.12 (przyczyna na prawdziwej myszy – test w CI na
+   Windows z wejściem myszy systemu, który na 0.10.1 pada) i zestawem „cieplejsze” (D314) – jeden PR, jedno wydanie
+   (D315). Pytania „Przed etapem” o E5 zadane 27.10 (Opus 5.5 · xhigh, nic do przygotowania).
+3. Ekrany E6 (rytuał, niezamknięte dni, eksport, przywracanie) i ekrany gry E7 (z akceptacją listy pokoju i progów)
+   – z pytaniami o wygląd, każdy po „Przed etapem” (D309).
 4. Potem E8 w całości (stabilizacja, bramka 1.0) z jednym przeglądem wieloagentowym logiki i ekranów (D309).
 
 ## Do odbioru na Windows
