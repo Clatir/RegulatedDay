@@ -53,6 +53,11 @@ D160, D170, D176, D200, D241, D244, D269, D272, D275, D301. Decyzje T492–T496.
   oceny (`storedGame`, `storedWays`) – starsza wersja nie przelicza oceny nowszych reguł. Pokój i święta – tylko z dni
   zamrożonych (nuty „w toku” niczego nie odblokowują).
 - „Strona B” i kalibracja liczą dzień jak jego ocena: zdarzenia do `know` zamrożenia (`facts.frozen.know`).
+- Użycie komputera po końcu pracy („Strona B”) = czas bez bloku będący regeneracją (`REST_FREE`) i czas do wyjaśnienia
+  bez odpowiedzi (z odpowiedzią albo ✓ rytuału – nie), do pory snu. Dowody kosztów: okno do poprzedniej kotwicy albo
+  check-inu, najwyżej 3 h, kotwice z jednej minuty dzielą okno, skutek według ustawień z minuty sygnału.
+- Próbki czasu: start i koniec podane przez Ciebie (kliknięcie, odpowiedź, czas podany później, poprawka); wiersz
+  rytuału „odbył się” (`how: 'plan'`) nigdy. Trafność: tylko kliknięcia zapisane od razu (`live`).
 - Start i koniec „z kliknięcia” = zapisane najwyżej 60 s od swojej chwili (`live`); poza komputerem koniec z odpowiedzi
   po powrocie (także „Skończył się o …”). Nowa reguła końca bloku „w chwili odejścia” trafia do `LEFT_RULES`.
 - Nie porównuj zegara okna z chwilami zdarzeń innego komputera (np. „kiedy dodano blok”) – fakty gry idą przez log.

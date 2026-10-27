@@ -191,7 +191,7 @@ function showWidget(view: WidgetView): void {
   }
 }
 
-/** The window in the foreground covers its monitor (the helper's event): a bar „na wierzchu” hides over it (D291). */
+/** A window on full screen covers the bar's monitor (the helper's event): a bar „na wierzchu” hides over it (D291). */
 let fullscreenNow = false
 /** The desktop bar is „na wierzchu” now. */
 let barTop = false
@@ -206,6 +206,12 @@ const barWanted = (): boolean => prefs().desktopBar && !widgetView().hidden && !
 function layoutBar(): void {
   // Destroyed at the quit: the helper's last status and events come after the windows.
   if (!bar?.alive) return
+  // „Na wierzchu”: the helper watches the bar's monitor for a full screen (and says it at once); else nothing to watch.
+  if (prefs().onTop !== 'off') helper?.send('fullscreen.watch', { hwnd: bar.hwnd })
+  else {
+    helper?.send('fullscreen.unwatch')
+    fullscreenNow = false
+  }
   if (!barWanted()) {
     barProblem = null
     bar.apply({ visible: false })
@@ -236,6 +242,13 @@ function layoutBar(): void {
   helper.send('bar.watch', { hwnd: bar.hwnd })
 }
 
+/** A window on full screen over the bar's monitor or not (the helper watches it for a bar „na wierzchu”, D291). */
+function onFullscreen(full: boolean): void {
+  if (fullscreenNow === full) return
+  fullscreenNow = full
+  if (prefs().onTop !== 'off') layoutBar()
+}
+
 let lastBarState = ''
 function onHelperEvent(m: HelperMessage): void {
   if (m.type === 'bar') {
@@ -255,11 +268,10 @@ function onHelperEvent(m: HelperMessage): void {
     const hwnd = String(m.hwnd ?? '')
     trial.log(`pierwszy plan: ${String(m.cls ?? '?')} (${String(m.process ?? '?')})${m.shell ? ' – okno powłoki' : ''}${m.fullscreen ? ' – pełny ekran' : ''}`)
     panel?.foreground(hwnd, m.shell === true)
-    // An own window in the foreground keeps the state (the bar itself never takes it).
-    if (hwnd !== bar?.hwnd && hwnd !== panel?.hwnd && fullscreenNow !== (m.fullscreen === true)) {
-      fullscreenNow = m.fullscreen === true
-      if (prefs().onTop !== 'off') layoutBar()
-    }
+  } else if (m.type === 'fullscreen') {
+    // Over the bar's monitor: a full screen entered or left (also in place – a film in a browser – or on another monitor).
+    trial.log(`monitor paska: ${m.fullscreen === true ? 'pełny ekran' : 'bez pełnego ekranu'}`)
+    onFullscreen(m.fullscreen === true)
   } else if (m.type === 'shell') {
     trial.log('Eksplorator uruchomiony ponownie – ikona ustawiona jeszcze raz')
     tray?.refresh()
@@ -869,6 +881,9 @@ async function main(): Promise<void> {
       oneDrive.start()
       // The helper (re)started: it gets the state of the sleep block at once (T301).
       void data()?.tick()
+    } else {
+      // Nobody watches the full screen now: the bar is not kept hidden by a state that can no longer change.
+      fullscreenNow = false
     }
     layoutBar()
     broadcast(CH.onWidget, widgetView())

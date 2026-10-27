@@ -146,6 +146,15 @@ namespace RegulatedDay
                     return true;
                 case "foreground.watch":
                     return true;
+                case "fullscreen.watch":
+                    {
+                        IntPtr h = Hwnd(m);
+                        watcher.Post(delegate() { watcher.WatchFullscreen(h); });
+                        return true;
+                    }
+                case "fullscreen.unwatch":
+                    watcher.Post(delegate() { watcher.UnwatchFullscreen(); });
+                    return true;
                 case "notificationState":
                     {
                         int raw;

@@ -7,7 +7,7 @@
  */
 import { expect, test, type ElectronApplication } from '@playwright/test'
 import { launch, viewPage, withMainLog } from './app'
-import { click, hover, topWindows, uncover, windowsAt, type TopWindow } from './win32'
+import { click, foreground, hover, topWindows, uncover, windowsAt, type TopWindow } from './win32'
 
 test.skip(process.platform !== 'win32' || process.env.RD_E2E_REAL_HELPER !== '1', 'Windows with the real helper only')
 
@@ -61,6 +61,40 @@ test('pasek pulpitu pod oknem, które na niego nachodzi, i tuż nad pulpitem', a
       expect(zIndex(list, cover)).toBeLessThan(zIndex(list, bar.hwnd))
       expect(zIndex(list, bar.hwnd)).toBeLessThan(desktop)
       expect((await barInfo(app)).visible).toBe(true)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+test('„Zawsze na wierzchu”: pasek znika, gdy okno na pierwszym planie przechodzi na pełny ekran w miejscu (film w przeglądarce, E4b.9), i wraca po nim', async () => {
+  const { app, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      const barPage = await viewPage(app, 'bar')
+      await barPage.evaluate(() => window.rd.setPrefs({ onTop: 'bar' }))
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      const bar = await barInfo(app)
+      const k = bar.scale
+      // A normal window (the browser with the film), made the foreground by a real click away from the bar.
+      const film = await app.evaluate(({ BrowserWindow }) => {
+        const w = new BrowserWindow({ x: 60, y: 60, width: 640, height: 400, show: true, title: 'RD-CI-film' })
+        void w.loadURL('data:text/html,<title>RD-CI-film</title><body style="background:%23000;color:%23fff">film</body>')
+        ;(globalThis as unknown as { rdFilm: typeof w }).rdFilm = w
+        return { ...w.getBounds(), hwnd: w.getNativeWindowHandle().readBigUInt64LE(0).toString() }
+      })
+      uncover(film.hwnd)
+      const middle: [number, number] = [(film.x + film.width / 2) * k, (film.y + film.height / 2) * k]
+      await expect.poll(() => windowsAt([middle])[0], { timeout: 10_000 }).toBe(film.hwnd)
+      click(...middle)
+      await expect.poll(() => foreground(), { timeout: 10_000 }).toBe(film.hwnd)
+      expect((await barInfo(app)).visible).toBe(true)
+      // Its full screen in place: no change of the foreground window, the bar hides within the helper's check.
+      await app.evaluate(() => (globalThis as unknown as { rdFilm: Electron.BrowserWindow }).rdFilm.setFullScreen(true))
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(false)
+      expect(foreground()).toBe(film.hwnd)
+      await app.evaluate(() => (globalThis as unknown as { rdFilm: Electron.BrowserWindow }).rdFilm.setFullScreen(false))
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(true)
     })
   } finally {
     await app.close()

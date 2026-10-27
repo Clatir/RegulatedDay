@@ -22,7 +22,11 @@
 
 ## Kolejka
 0. Ja: poprawka E4b.9 (27.10 odbiór: pasek „na wierzchu” nad filmem na pełnym ekranie w przeglądarce – pomocnik nie
-   widzi pełnego ekranu w tym samym oknie) – osobny PR po części 2, wydanie 0.9.1, test w CI na Windows.
+   widział pełnego ekranu w tym samym oknie) na gałęzi `claude/0.9.1-pelny-ekran` (od części 2): pomocnik sprawdza
+   pełny ekran co 1 s na monitorze paska; PR po scaleniu części 2 (PR #13), wydanie 0.9.1, test w CI na Windows.
+0. Ja, potem: D302–D305 (27.10, z odbioru) – pasek chowa się przy oknie głównym na pierwszym planie („na wierzchu”),
+   uchwyt „przeciągnij” i dowolne miejsce paska, makieta monitorów w Ustawieniach, przeciąganie bloków na osi dnia
+   lewym przyciskiem (start co 5 min) – osobny PR, wydanie 0.10.0.
 1. Ty: odbiór według `docs/odbior.md` (E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b), wybór zestawu kolorów (D298);
    27.10 odebrane E3.2, E3.6, E3.8, E3.11.
 2. Po „dalej”: elementy E5 w pasku (przyciski próśb, znacznik i panel wariantów), potem ekrany E6 (rytuał, niezamknięte

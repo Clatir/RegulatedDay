@@ -22,13 +22,35 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
 
 **Kolejność, która oszczędza czas:**
 1. Raz, na start: E7b.1 (albo E7a.1 / E6b.1 / E6a.1 / E5.1, jeśli nowsza wersja jeszcze nie przyszła); następnego
-   dnia po 12:00 E6b.2.
+   dnia po 12:00 E6b.2. Po 0.9.1 – „E4b.9 ponownie”.
 2. Zwykły dzień pracy: E4a.1–E4a.4, E4a.6–E4a.9, E4b.1–E4b.3, E4b.5–E4b.7, E5.2, E6a.4, E7a.2.
 3. Dzień z sesją: E4a.5, E4b.4.
 4. Wieczór: E4b.8, E4b.10, E6a.2, E6a.3.
 5. Ustawienia i próba: E4b.9 (po poprawce), E4b.11, E3.3–E3.5, E3.7.
 6. Laptop i noc (gdy masz laptopa pod ręką): E3.9, E3.10, E4a.11, E4a.12.
 7. Jednorazowe: E4a.10, E4a.13, E3.12.
+
+---
+
+## Wersja 0.9.1 – poprawka E4b.9 (pasek nad filmem na pełnym ekranie)
+
+### E4b.9 ponownie – film na pełnym ekranie w przeglądarce
+- [ ] Odebrane
+- **Tylko Ty:** pełny ekran w tym samym oknie sprawdza CI na Windows z prawdziwym pomocnikiem
+  (`tests/e2e/bar-windows.spec.ts`, okno Electron); YouTube, Netflix i Twoja przeglądarka – tylko Ty.
+- **Jak sprawdzić:** po aktualizacji do 0.9.1 Ustawienia → „Zawsze na wierzchu” → „pasek pulpitu”. Puść film na
+  YouTube w przeglądarce i włącz pełny ekran (przycisk w odtwarzaczu albo „f”), potem Esc. To samo w Netflixie. Z
+  drugim monitorem: film na pełnym ekranie na monitorze paska i kliknięcie okna na drugim monitorze, potem film na
+  pełnym ekranie na drugim monitorze. Na koniec reszta punktu E4b.9 (TradingView, „pasek i panel”, „wyłączone”).
+- **Oczekiwany efekt:** najpóźniej sekundę po wejściu filmu na pełny ekran na monitorze paska pasek znika; po Esc
+  wraca nad zmaksymalizowanym oknem przeglądarki. Kliknięcie okna na drugim monitorze nie pokazuje go nad filmem;
+  film na pełnym ekranie na drugim monitorze go nie chowa. Panel ikony przy „pasek i panel” zostaje, jak dotąd.
+  Pozostałe zachowania jak w E4b.9.
+- **Nie przechodzi, gdy:**
+  - pasek widać nad filmem na pełnym ekranie dłużej niż kilka sekund;
+  - pasek nie wraca po wyjściu z pełnego ekranu;
+  - pasek pojawia się nad filmem po kliknięciu okna na drugim monitorze albo znika przez film na drugim monitorze;
+  - pasek miga albo chowa się nad zwykłym (niepełnoekranowym) oknem przeglądarki.
 
 ---
 
@@ -304,7 +326,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
 ### E4b.9 „Zawsze na wierzchu”
 - [ ] Odebrane — **nie przechodzi (27.10.2026):** przy „pasek pulpitu” pasek widać nad filmem na pełnym ekranie w
   przeglądarce (YouTube, Netflix). Przyczyna: pomocnik sprawdzał pełny ekran tylko przy zmianie okna na pierwszym
-  planie, a film przechodzi na pełny ekran w tym samym oknie – poprawka w następnej wersji, wtedy sprawdź ponownie.
+  planie, a film przechodzi na pełny ekran w tym samym oknie – poprawka w 0.9.1, sprawdź według „E4b.9 ponownie”.
 - **Tylko Ty:** pasek pod oknami sprawdza CI (`tests/e2e/bar-windows.spec.ts`), ale nie TradingView, film na pełnym ekranie ani fokus przy Twoich programach.
 - **Jak sprawdzić:** Ustawienia → „Zawsze na wierzchu” → „pasek pulpitu”. Zmaksymalizuj TradingView i kliknij pasek,
   pisząc coś w TradingView. Puść film na pełnym ekranie. Potem ustaw „pasek i panel” i otwórz panel ikony. Na koniec
