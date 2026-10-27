@@ -21,9 +21,10 @@ Wszystkie wiadomości do użytkownika po polsku. Pytania zawsze klikalne (AskUse
 4. Wpis w `docs/postep.md`: zakres, decyzje (D… / T…), testy, czas faktyczny, rzeczy otwarte; reguła albo pułapka
    modułu → `.claude/rules/<moduł>.md`; zmiany dla użytkownika → `CHANGELOG.md` (sekcja nowej wersji).
 5. Lista do odbioru na Windows na górze `docs/odbior.md` (sekcja „Wersja X.Y.Z – etap”), punkty `E<n>.<k>`, każdy
-   z polem `- [ ] Odebrane` i trzema częściami: **Jak sprawdzić** (kroki), **Oczekiwany efekt** (wprost, co ma się
-   stać), **Nie przechodzi, gdy** (2–4 konkretne błędy, które blokują odbiór). Odebrane punkty → sekcja „Odebrane
-   wcześniej” z datą; w `docs/postep.md` tylko odnośnik.
+   z polem `- [ ] Odebrane`, linią **Automatycznie:** (które testy już to sprawdzają – Ty: rzut oka) albo **Tylko Ty:**
+   (czego testy nie widzą: pulpit, powiadomienia, OneDrive, sprzęt) i trzema częściami: **Jak sprawdzić** (kroki),
+   **Oczekiwany efekt** (wprost, co ma się stać), **Nie przechodzi, gdy** (2–4 konkretne błędy, które blokują odbiór);
+   na górze sekcji lista „Tylko Ty”. Odebrane punkty → „Odebrane wcześniej” z datą; w `docs/postep.md` tylko odnośnik.
 6. Pauza do „dalej” – z informacją, czy `/clear` jest teraz bezpieczny (zasada w `CLAUDE.md`): PR-y w toku i CI zapisane
    w `docs/postep.md`, wszystko wypchnięte.
 

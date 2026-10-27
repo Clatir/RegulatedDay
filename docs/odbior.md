@@ -13,6 +13,13 @@ zepsuje, zgłoś to jako regresję (numer punktu). Każdy punkt ma trzy części
 **Jak zgłosić:** numer punktu (np. „E4b.3”), co zrobiłeś, co zobaczyłeś i o której (po godzinie znajdę to w logu).
 Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy pasku i ikonie.
 
+**Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
+testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
+- **Tylko Ty** (testy tego nie widzą): E4b.4, E4b.9, E4b.10, E4b.11, E4a.5, E4a.11, E4a.12, E3.2, E3.9, E3.10, E3.11,
+  a w E3.6 „Dodaj do planu” i w E3.8 przywrócenie z ekranu.
+- **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
+  pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
+
 **Kolejność, która oszczędza czas:**
 1. Raz, na start: E5.1.
 2. Zwykły dzień pracy: E4a.1–E4a.4, E4a.6–E4a.9, E4b.1–E4b.3, E4b.5–E4b.7, E5.2.
@@ -28,6 +35,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E5.1 Aktualizacja do 0.5.0
 - [ ] Odebrane
+- **Automatycznie:** „Zainstaluj teraz” i instalację w nocy sprawdza CI na Windows (`tests/update/update-paths.spec.ts`), kopię przed aktualizacją `tests/fs/e3-data.test.ts`. Ty: rzut oka, że przyszła i dane są całe.
 - **Jak sprawdzić:** nic nie rób – aktualizacja instaluje się w nocy; albo Ustawienia → Aktualizacje → „Zainstaluj
   teraz”. Po instalacji otwórz okno główne.
 - **Oczekiwany efekt:** aplikacja uruchamia się sama po instalacji. U góry okna baner „Co nowego w wersji 0.5.0” z trzema
@@ -40,6 +48,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E5.2 Pasek bez zmian względem 0.4.0
 - [ ] Odebrane
+- **Automatycznie:** widok paska `tests/unit/engine/widget-view.test.ts`, pasek w oknie i panelu `tests/e2e/screens.spec.ts` („timer E4a/E4b”). Ty: rzut oka.
 - **Jak sprawdzić:** na 0.5.0 przejdź E4b.1–E4b.3.
 - **Oczekiwany efekt:** pasek u góry okna, panel ikony i pasek pulpitu wyglądają i działają dokładnie jak w 0.4.0 – w tej
   wersji nic w nich nie przybywa.
@@ -54,6 +63,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4b.1 Ten sam pasek w trzech miejscach
 - [ ] Odebrane
+- **Automatycznie:** kolor klasy i kroki 15 · 5 · 0 (`widget-view.test.ts`, `tests/unit/theme.test.ts`), ten sam pasek w oknie i panelu (`screens.spec.ts`), piksele ikony (`tests/unit/tray-icon.test.ts`). Ty: rzut oka na ikonę przy zegarze i pasek pulpitu – testy nie widzą Twojego paska zadań.
 - **Jak sprawdzić:** w „Dziś” wystartuj blok pracy. Spójrz na pasek u góry okna głównego, kliknij ikonę przy zegarze
   (panel ikony) i spójrz na pasek pulpitu. Zostaw blok do 15, 5 i 0 min przed końcem.
 - **Oczekiwany efekt:** we wszystkich trzech miejscach ta sama nazwa bloku, to samo odliczanie i przyciski Dalej ·
@@ -68,6 +78,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4b.2 Kropka na ikonie
 - [ ] Odebrane
+- **Automatycznie:** `widget-view.test.ts` („kropka tylko przy tym, co czeka na kliknięcie”), `tray-icon.test.ts`. Ty: rzut oka.
 - **Jak sprawdzić:** doprowadź do trzech sytuacji: „Dalej?” (blok elastyczny po planowanym końcu, okno na wierzchu),
   sesja czekająca na „Zacznij · Odwołaj”, „Wznów · Zaparkuj” (np. „Odcinam się” → „Wracam”). Osobno otwórz „⋯” →
   „Zrobione automatycznie”, gdy coś aplikacja zrobiła sama (np. blok stały zaczął się o czasie).
@@ -81,6 +92,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4b.3 „Odcinam się”
 - [ ] Odebrane
+- **Automatycznie:** `widget-view.test.ts` („„Odcinam się”: widget ukryty, szara ikona…”). Ty: rzut oka.
 - **Jak sprawdzić:** przy biegnącym bloku elastycznym kliknij w pasku „Odcinam się”. Kliknij ikonę, potem w panelu
   „Wracam”.
 - **Oczekiwany efekt:** pasek pulpitu znika, ikona jest szara, w panelu „Odcinam się od HH:MM · Wracam” (godzina
@@ -94,6 +106,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4b.4 Sesja czekająca na „Zacznij”
 - [ ] Odebrane
+- **Tylko Ty:** że powiadomienie wychodzi raz, sprawdza `tests/fs/widget.test.ts`; czy Windows je pokazuje i na którym komputerze – tylko na Twoim pulpicie.
 - **Jak sprawdzić:** w dniu z sesją (np. NY o 14:00) nie klikaj „Zacznij”. Patrz na powiadomienia 5 min przed startem.
   Jeśli masz drugi komputer włączony, sprawdź też go.
 - **Oczekiwany efekt:** 5 min przed sesją jedno powiadomienie Windows „Sesja tradingowa o HH:MM”, tylko na komputerze
@@ -107,6 +120,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4b.5 „Mniej pytań”
 - [ ] Odebrane
+- **Automatycznie:** `widget-view.test.ts` („„Włączyć mniej pytań?” … chowa się po 15 min”). Ty: rzut oka.
 - **Jak sprawdzić:** „⋯” → „Mniej pytań”, potem „Jest lepiej”. Osobno: „Sygnały ▸” → „okulary” i nie odpowiadaj na
   propozycję.
 - **Oczekiwany efekt:** po „Mniej pytań” pasek jest przygaszony, aż klikniesz „Jest lepiej”. Po sygnale „okulary” raz
@@ -118,6 +132,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4b.6 Woda
 - [ ] Odebrane
+- **Automatycznie:** `widget-view.test.ts` („woda: 45 min po ostatnim „wypite””). Ty: rzut oka.
 - **Jak sprawdzić:** kliknij kroplę w pasku („wypite”) i odczekaj 45 min.
 - **Oczekiwany efekt:** 45 min po ostatnim „wypite” w pasku pojawia się kropla, a na ikonie znak kropli. Kliknięcie kropli
   ją chowa i liczy 45 min od nowa.
@@ -128,6 +143,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4b.7 Przerwa po 90 min pracy
 - [ ] Odebrane
+- **Automatycznie:** `widget-view.test.ts` („propozycja przerwy po 90 min ciągłej pracy”). Ty: rzut oka.
 - **Jak sprawdzić:** pracuj 90 min ciągiem (jeden albo kilka bloków pracy bez przerwy), potem kliknij „Przerwa”.
 - **Oczekiwany efekt:** po 90 min linia „Przerwa? … · Przerwa · Kontynuuję” z kropką. „Przerwa” zaczyna 15 min
   regeneracji z odliczaniem w pasku.
@@ -138,6 +154,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4b.8 Cisza nocna
 - [ ] Odebrane
+- **Automatycznie:** `widget-view.test.ts` („cisza nocna: tylko godzina i biegnący blok…”). Ty: rzut oka.
 - **Jak sprawdzić:** od Twojej pory snu (np. 22:00) spójrz na pasek – raz bez bloku, raz z biegnącym blokiem. Zacznij
   blok z „Dziś” → panel bloku → „Start”.
 - **Oczekiwany efekt:** w pasku tylko godzina, a przy biegnącym bloku – ten blok z Dalej, Przedłuż i Koniec pracy.
@@ -149,6 +166,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4b.9 „Zawsze na wierzchu”
 - [ ] Odebrane
+- **Tylko Ty:** pasek pod oknami sprawdza CI (`tests/e2e/bar-windows.spec.ts`), ale nie TradingView, film na pełnym ekranie ani fokus przy Twoich programach.
 - **Jak sprawdzić:** Ustawienia → „Zawsze na wierzchu” → „pasek pulpitu”. Zmaksymalizuj TradingView i kliknij pasek,
   pisząc coś w TradingView. Puść film na pełnym ekranie. Potem ustaw „pasek i panel” i otwórz panel ikony. Na koniec
   „wyłączone”.
@@ -163,6 +181,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4b.10 Dźwięk
 - [ ] Odebrane
+- **Tylko Ty:** kiedy gra dźwięk, sprawdza `widget-view.test.ts`; czy go słychać – tylko Ty.
 - **Jak sprawdzić:** Ustawienia → Dźwięk włączony. Doprowadź blok do 5 i 0 min przed końcem. Powtórz w trybie „mniej
   pytań”.
 - **Oczekiwany efekt:** cichy dźwięk 5 min i 0 min przed końcem bloku, na jednym komputerze. W „mniej pytań” cisza.
@@ -173,6 +192,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4b.11 Zestaw kolorów (Twoja decyzja D298)
 - [ ] Odebrane, wybrany zestaw: ………
+- **Tylko Ty:** to Twoja decyzja (D298).
 - **Jak sprawdzić:** „Próba” → „Zestaw kolorów”: robocze, cieplejsze, chłodniejsze. Porównaj ikonę, pasek i panel.
 - **Oczekiwany efekt:** wybór zmienia kolory od razu we wszystkich trzech miejscach. Napisz mi, który zestaw zostaje.
 - **Nie przechodzi, gdy:**
@@ -185,6 +205,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.1 Start bloku elastycznego
 - [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („timer E4a/E4b: Start, Pauza, Wznów i Dalej…, blok na osi tam, gdzie biegł”). Ty: rzut oka.
 - **Jak sprawdzić:** „Dziś” z blokiem elastycznym zaplanowanym na teraz. W pasku u góry kliknij „Start: …”.
 - **Oczekiwany efekt:** przed kliknięciem pasek pokazuje „Bez bloku” i „Start: <nazwa bloku>”. Po kliknięciu – nazwa
   bloku i odliczanie od jego długości, a blok na osi dnia przesuwa się na teraz.
@@ -195,6 +216,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.2 Pauza, Wznów, Dalej
 - [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer.test.ts` („Start, Pauza, Wznów i Dalej”), `screens.spec.ts`. Ty: rzut oka.
 - **Jak sprawdzić:** przy biegnącym bloku Pauza, odczekaj kilka minut, „Wznów: …”, potem Dalej.
 - **Oczekiwany efekt:** w pauzie odliczanie stoi. Po wznowieniu planowany koniec jest przesunięty o czas pauzy. Dalej
   kończy blok i pokazuje następny blok elastyczny z planu, a gdy go nie ma – „Bez bloku”.
@@ -205,6 +227,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.3 Koszt startu po granicy
 - [ ] Odebrane
+- **Automatycznie:** `timer.test.ts` („Start bloku pracy za granicą bez potwierdzenia…”), `tests/fs/widget.test.ts` („koszt pierwszego kliknięcia czeka 10 s…”). Ty: rzut oka.
 - **Jak sprawdzić:** zatwierdź plan. Kliknij „Start” przy bloku, którego koniec wychodzi za granicę. Raz kliknij drugi
   raz w ciągu 10 s, raz nie klikaj.
 - **Oczekiwany efekt:** pierwsze kliknięcie pokazuje koszt („przedłużenie · −N min puli”) i „Potwierdź”. Blok zaczyna
@@ -216,6 +239,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.4 Blok stały w czasie bloku elastycznego
 - [ ] Odebrane
+- **Automatycznie:** `timer.test.ts` („blok stały zaczyna się sam o czasie z planu…”), `tests/fs/timer.test.ts` („…„Cofnij” to cofa”). Ty: rzut oka.
 - **Jak sprawdzić:** zostaw biegnący blok elastyczny do startu bloku stałego (np. zajęć zdalnych). Po końcu bloku
   stałego nie reaguj przez 10 min.
 - **Oczekiwany efekt:** o czasie z planu blok stały zaczyna się sam, a elastyczny pauzuje. W „⋯” jest „Zrobione
@@ -229,6 +253,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.5 Sesja i nieusypianie komputera
 - [ ] Odebrane
+- **Tylko Ty:** kto trzyma blokadę usypiania, sprawdza `tests/unit/power.test.ts`, a pomocnik – samotest w CI; `powercfg` na Twoim komputerze – tylko Ty.
 - **Jak sprawdzić:** przy sesji kliknij „Zacznij”, później „Skończyłem”. W czasie sesji uruchom PowerShell jako
   administrator i wpisz `powercfg /requests`; powtórz po „Skończyłem”.
 - **Oczekiwany efekt:** pasek pokazuje „Sesja tradingowa HH:MM · Zacznij · Odwołaj”, po „Zacznij” sesja biegnie,
@@ -241,6 +266,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.6 „Dalej?” bez odpowiedzi
 - [ ] Odebrane
+- **Automatycznie:** `timer.test.ts` („„Dalej?” liczy się od zobaczenia…”). Ty: rzut oka.
 - **Jak sprawdzić:** zostaw blok elastyczny po planowanym końcu przy oknie na wierzchu i nie odpowiadaj.
 - **Oczekiwany efekt:** „Dalej?” z kropką. 30 min po jego zobaczeniu – „Dalej? (drugi raz)”. Po kolejnych 30 min blok
   kończy się sam, a w „Zrobione automatycznie” jest „dwa pytania bez odpowiedzi”.
@@ -253,6 +279,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.7 Koniec bloku po bezczynności
 - [ ] Odebrane
+- **Automatycznie:** `timer.test.ts` („niezobaczone „Dalej?”…”, „próg bezczynności liczy wejście na wszystkich komputerach…”). Ty: rzut oka.
 - **Jak sprawdzić:** blok elastyczny po planowanym końcu, okno schowane do zasobnika, 10 min bez myszy i klawiatury.
 - **Oczekiwany efekt:** blok kończy się sam w chwili ostatniego ruchu myszy albo klawisza, ale nie wcześniej niż
   o planowanym końcu.
@@ -263,6 +290,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.8 Posiłek z dala od komputera
 - [ ] Odebrane
+- **Automatycznie:** `timer.test.ts` („blok „poza komputerem” kończy się przy pierwszym użyciu…”). Ty: rzut oka.
 - **Jak sprawdzić:** zacznij posiłek, odejdź od komputera na ponad 2 min, wróć i użyj myszy.
 - **Oczekiwany efekt:** posiłek kończy się przy pierwszym użyciu komputera, a w pasku „Posiłek – po powrocie: Trwał do
   teraz · Skończył się o …”.
@@ -273,6 +301,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.9 Nieobecność w bloku pracy
 - [ ] Odebrane
+- **Automatycznie:** `timer.test.ts` („nieobecność dłuższa niż próg…”). Ty: rzut oka.
 - **Jak sprawdzić:** w bloku pracy odejdź na 40 min i wróć przed jego planowanym końcem.
 - **Oczekiwany efekt:** blok biegnie dalej, a w pasku „nieobecność od …: Odliczyć nieobecność · Zakończyć w chwili
   odejścia · Zostawić”.
@@ -283,6 +312,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.10 Blok przerwany zamknięciem aplikacji
 - [ ] Odebrane
+- **Automatycznie:** `timer.test.ts` („zamknięcie aplikacji przy biegnącym bloku…”). Ty: rzut oka.
 - **Jak sprawdzić:** przy biegnącym bloku zasobnik → „Zakończ”. Po kilku minutach uruchom aplikację.
 - **Oczekiwany efekt:** w pasku „przerwany zamknięciem aplikacji o …: Skończył się przy wyłączeniu · Trwał do teraz ·
   Skończył się o …”, z godziną zamknięcia.
@@ -293,6 +323,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.11 Laptop – instalacja w nocy dopiero po 24 h
 - [ ] Odebrane
+- **Tylko Ty:** regułę 24 h sprawdza `tests/unit/night-install.test.ts`; prawdziwą noc z dwoma komputerami – tylko Ty.
 - **Jak sprawdzić:** przy najbliższym wydaniu (0.6.0) zostaw na noc włączony pierwszy komputer i laptop. Po dwóch nocach
   zajrzyj do `main.log` laptopa.
 - **Oczekiwany efekt:** pierwszy komputer instaluje nową wersję pierwszej nocy (albo po „Zainstaluj teraz”). Laptop
@@ -304,6 +335,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.12 Laptop – nowoczesny tryb wstrzymania
 - [ ] Odebrane
+- **Tylko Ty:** warunki nocy (blokada, zasilanie) sprawdza `night-install.test.ts`; pokrywę i tryb wstrzymania laptopa – tylko Ty.
 - **Jak sprawdzić:** w nocy, na zasilaniu z sieci, gdy czeka aktualizacja, naciśnij Win+L. W trakcie instalacji zamknij
   pokrywę, po chwili ją otwórz.
 - **Oczekiwany efekt:** instalacja zaczyna się od razu po Win+L (okno „Instaluję…” pod innymi oknami). Po zamknięciu
@@ -315,6 +347,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E4a.13 Rozpoznawanie zamknięcia i awarii
 - [ ] Odebrane
+- **Automatycznie:** `tests/unit/crash.test.ts` (zamknięcie Windows, wylogowanie, Menedżer zadań, instalator), w CI też `tests/e2e/smoke.spec.ts` i `tests/update/scenarios.spec.ts` („ręcznie uruchomiony instalator… to nie awaria”). Ty: opcjonalnie.
 - **Jak sprawdzić:** po kolei: zamknij Windows (z szybkim uruchamianiem), wyloguj się, zamknij aplikację w Menedżerze
   zadań, uruchom instalator ręcznie. Po każdym starcie zajrzyj do `main.log` (Ustawienia → „Otwórz logi”).
 - **Oczekiwany efekt:** po zamknięciu Windows, wylogowaniu i instalatorze w logu „poprzednie uruchomienie: clean”, a po
@@ -330,6 +363,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.1 Kreator po pierwszej aktualizacji (jednorazowe)
 - [ ] Odebrane (pomiń, jeśli kreator już przeszedłeś)
+- **Automatycznie:** nie dotyczy – jednorazowe, już za Tobą.
 - **Jak sprawdzić:** pierwsze uruchomienie po aktualizacji z 0.1.1 albo po instalatorze 0.2.0.
 - **Oczekiwany efekt:** okno główne pokazuje kreator („Ten komputer nie ma jeszcze folderu danych”).
 - **Nie przechodzi, gdy:**
@@ -338,6 +372,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.2 Kreator – folder i kroki
 - [ ] Odebrane
+- **Tylko Ty:** kroki i zapis dopiero przy „Zakończ” sprawdza `tests/e2e/wizard.spec.ts`; zielone kółko OneDrive i strony ustawień Windows – tylko Ty.
 - **Jak sprawdzić:** przejdź kreator. Zmieniaj wartości i patrz na podgląd dnia. Kliknij przyciski ustawień systemu.
   Na końcu „Zakończ” i otwórz folder danych w Eksploratorze.
 - **Oczekiwany efekt:** proponowany folder to `OneDrive\RegulatedDay`. Podgląd dnia po prawej zmienia się z każdą
@@ -352,6 +387,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.3 Plan poranny i „+ Blok” po granicy
 - [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` (plan poranny, „Plan zatwierdzony”, wymiana, „Dodaj bez wymiany”). Ty: rzut oka.
 - **Jak sprawdzić:** „Dziś”: check-in albo „Pomiń”, „Zatwierdź plan”. Potem „+ Blok” z blokiem po granicy.
 - **Oczekiwany efekt:** po zatwierdzeniu „Plan zatwierdzony” i granica na osi. „+ Blok” po granicy otwiera okno wymiany
   z kosztem; „Dodaj bez wymiany” stawia blok na osi.
@@ -362,6 +398,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.4 Pobudka dnia
 - [ ] Odebrane
+- **Automatycznie:** odmowa 13:00 – `screens.spec.ts`; przesunięcie bloków – `tests/unit/engine/e3-plan.test.ts` („pobudka dnia o 07:30…”). Ty: rzut oka.
 - **Jak sprawdzić:** w nagłówku „Dziś” wpisz pobudkę 13:00, potem 7:30.
 - **Oczekiwany efekt:** 13:00 – odmowa „Dozwolone: 04:00–12:00” i stara wartość zostaje. 7:30 – zapisane, a bloki
   elastyczne przed pierwszym blokiem stałym przesuwają się o różnicę; bloki stałe zostają.
@@ -371,6 +408,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.5 Kalendarz – zjazd
 - [ ] Odebrane
+- **Automatycznie:** zaznaczanie z Ctrl i typ – `screens.spec.ts`; pytanie o analizę – `e3-plan.test.ts` („sobota zjazdem…”). Ty: rzut oka.
 - **Jak sprawdzić:** w kalendarzu zaznacz sobotę z Ctrl i oznacz „zjazd”.
 - **Oczekiwany efekt:** pytanie o przeniesienie analizy tygodniowej na piątek; dni mają kolory swoich typów.
 - **Nie przechodzi, gdy:**
@@ -380,6 +418,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.6 Prośby z kolejki
 - [ ] Odebrane
+- **Automatycznie:** lista próśb i nota – `screens.spec.ts`. „Dodaj do planu” nie ma testu na ekranie – to sprawdź Ty.
 - **Jak sprawdzić:** „+ Prośba” z osobą i notą. W planie porannym „Dziś” zaznacz ją na liście „Prośby z kolejki” i „Dodaj
   do planu”.
 - **Oczekiwany efekt:** prośba jest na liście, a po „Dodaj do planu” w planie jest jeden blok próśb w pierwszej wolnej
@@ -390,6 +429,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.7 Ustawienia – budżet od jutra
 - [ ] Odebrane
+- **Automatycznie:** odmowa 17h i zapis 7h – `screens.spec.ts`. Ty: rzut oka, że dzisiejszy plan się nie zmienił.
 - **Jak sprawdzić:** budżet dnia zwykłego 17h, potem 7h.
 - **Oczekiwany efekt:** 17h – odmowa z dozwolonym zakresem. 7h – zapisane „od jutra”: dzisiejszy plan bez zmian,
   jutrzejszy z 7 h.
@@ -399,6 +439,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.8 Historia rekordu
 - [ ] Odebrane
+- **Automatycznie:** wersje rekordów – `tests/fs/e3-data.test.ts`, ekran historii – `screens.spec.ts`. Przywrócenie z ekranu nie ma testu – to sprawdź Ty.
 - **Jak sprawdzić:** zmień notę prośby, potem w „Historia” przywróć poprzednią wersję.
 - **Oczekiwany efekt:** wraca poprzednia nota.
 - **Nie przechodzi, gdy:**
@@ -407,6 +448,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.9 Laptop dołącza do danych
 - [ ] Odebrane
+- **Tylko Ty:** dołączenie drugiego komputera do tych samych danych sprawdza `wizard.spec.ts`; prawdziwy laptop przez OneDrive – tylko Ty.
 - **Jak sprawdzić:** na laptopie zainstaluj aplikację i w kreatorze wskaż `OneDrive\RegulatedDay`.
 - **Oczekiwany efekt:** „W tym folderze są już dane Regulated Day…”, potem 3 kroki i te same szablony, plan i prośby.
   Na pierwszym komputerze w „Historia” nie ma nowych wersji od laptopa.
@@ -417,6 +459,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.10 Dwa komputery naraz – konflikt
 - [ ] Odebrane
+- **Tylko Ty:** łączenie zmian i pytanie sprawdzają `tests/sim/two-computers.test.ts` i `tests/fs/e3-data.test.ts`; prawdziwy OneDrive ze wstrzymaną synchronizacją – tylko Ty.
 - **Jak sprawdzić:** na laptopie wstrzymaj synchronizację OneDrive, zmień notę tej samej prośby na obu komputerach,
   wznów synchronizację.
 - **Oczekiwany efekt:** pasek „Jedna Twoja zmiana spotkała się ze zmianą z innego komputera” → „Pokaż” → „Zostaw moje”
@@ -428,6 +471,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.11 Autostart wyłączony w Windows
 - [ ] Odebrane
+- **Tylko Ty:** nie ma testu automatycznego (Menedżer zadań Windows).
 - **Jak sprawdzić:** Menedżer zadań → Aplikacje autostartu → wyłącz Regulated Day. Zrób dwa restarty.
 - **Oczekiwany efekt:** autostart nadal wyłączony, aplikacja nie uruchamia się sama.
 - **Nie przechodzi, gdy:**
@@ -436,6 +480,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 ### E3.12 Kopia przed aktualizacją
 - [ ] Odebrane
+- **Automatycznie:** `tests/fs/e3-data.test.ts` („kopia przed aktualizacją: raz na aktualizację…”). Ty: rzut oka.
 - **Jak sprawdzić:** po aktualizacji otwórz `OneDrive\RegulatedDay\backups\aktualizacje\`.
 - **Oczekiwany efekt:** jest plik `<stara>-do-<nowa>.zip` (np. `0.4.0-do-0.5.0.zip`), da się go otworzyć i są w nim
   `rd.json` oraz foldery danych.
