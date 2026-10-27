@@ -170,6 +170,8 @@ export interface DataView {
   leader: string | null
   /** The logical day now (by the main process's clock). */
   today: string
+  /** In the calibration period (spec „Kalibracja”): reactions of energy only inform, without variants. */
+  calibration: boolean
 }
 
 /** A question of the queue (spec „pola zmienione po obu stronach dają zwykłe pytanie”). */

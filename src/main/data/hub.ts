@@ -322,7 +322,8 @@ export class DataHub {
       questions,
       problems,
       leader: f?.leader.leader ?? null,
-      today: logicalDayOf(f ? f.clock.now() : Date.now())
+      today: logicalDayOf(f ? f.clock.now() : Date.now()),
+      calibration: f ? await f.calibrating() : false
     }
   }
 

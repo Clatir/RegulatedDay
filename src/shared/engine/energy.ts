@@ -143,6 +143,14 @@ function pickFront(spans: readonly Span[], s: RulesSettings): Span {
   return [...spans].sort((a, b) => rank(a) - rank(b) || sum(b) - sum(a) || a.from - b.from || (a.block.id < b.block.id ? -1 : 1))[0]!
 }
 
+/** What a signal or a relative assessment does to the pools (spec „Sygnały w ciągu dnia”), in units. */
+export function anchorEffect(e: Extract<EnergyEvent, { k: 'energy.signal' | 'energy.relative' }>, fx: RulesSettings['signalEffects']): PoolValues {
+  if (e.k === 'energy.relative') return pools((p) => (p === e.pool ? e.delta : 0))
+  if (e.signal === 'rocking') return pools(() => -fx.rockingAll)
+  if (e.signal === 'questions') return pools((p) => (p === 'emotions' ? -fx.questionsEmotions : 0))
+  return pools((p) => (p === 'senses' ? -fx.glassesSenses : 0))
+}
+
 export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOptions = {}): EnergyState {
   const g = day.grid
   const end = g.length
@@ -370,16 +378,8 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
       }
       for (const e of anchors) {
         if (e.k !== 'energy.signal' && e.k !== 'energy.relative') continue
-        const fx = settingsBy[k]!.signalEffects
         if (e.before) for (const p of POOLS) cur[p] = clamp(toUnits(e.before[p]))
-        const delta: PoolValues =
-          e.k === 'energy.relative'
-            ? pools((p) => (p === e.pool ? e.delta : 0))
-            : e.signal === 'rocking'
-              ? pools(() => -fx.rockingAll)
-              : e.signal === 'questions'
-                ? pools((p) => (p === 'emotions' ? -fx.questionsEmotions : 0))
-                : pools((p) => (p === 'senses' ? -fx.glassesSenses : 0))
+        const delta = anchorEffect(e, settingsBy[k]!.signalEffects)
         for (const p of POOLS) cur[p] = clamp(cur[p] + delta[p] * UNIT)
       }
       for (const p of POOLS) vals[p][k] = cur[p]

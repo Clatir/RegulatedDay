@@ -18,6 +18,8 @@ import { computeEnergy } from './energy'
 import type { DayFacts } from './facts'
 import { dayGame, type GameDayInput, type GameGrade } from './game'
 import { dayOutcome, type BoundaryOutcome } from './outcome'
+import { regenWaysOf } from './progress'
+import { modulesOfDay, type MeasureModules } from './sideB'
 
 const HOUR = 3_600_000
 /** The window of corrections after the opening of the day after it. */
@@ -123,6 +125,10 @@ export interface DayGrade {
   free: boolean
   /** The day in the game: what it earned, its status and notes. */
   game: GameGrade
+  /** Minutes of regeneration by way (the week's cassette, spec „ulubiona regeneracja tygodnia”). */
+  regenWays: Record<string, number>
+  /** The modules of the „Strona B” on all day (off at any moment – „brak pomiaru”). */
+  modules: MeasureModules
 }
 
 /** A free day (spec „Dzień bez obecności”, „wolne”): of the type „wolne”, closed „Wolne”, or without presence and not answered. */
@@ -185,5 +191,5 @@ export function gradeOf(ctx: DayContext, know: Readonly<Record<string, number>>,
   const free = isFreeDay(state, counted.events)
   const energy = computeEnergy(counted, state, { moduleOn: game.energyOn })
   const g = dayGame({ ctx: counted, state, energy, free, game, over: true })
-  return { boundary: o.boundary, extensionMin: o.extensionMin, endConfirmed: o.endConfirmed, explainAfterBoundaryMin: o.explainAfterBoundaryMin, regen: o.regen, projects: o.projects, dayType: state.dayType, closed: state.facts.closed?.how ?? null, free, game: g }
+  return { boundary: o.boundary, extensionMin: o.extensionMin, endConfirmed: o.endConfirmed, explainAfterBoundaryMin: o.explainAfterBoundaryMin, regen: o.regen, projects: o.projects, dayType: state.dayType, closed: state.facts.closed?.how ?? null, free, game: g, regenWays: regenWaysOf(state), modules: modulesOfDay(counted.events, { energy: game.energyOn, projects: game.projectsOn ?? true, requests: game.requestsOn ?? true }) }
 }

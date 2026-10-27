@@ -10,6 +10,8 @@ import { csvOf, type CsvDay } from '@shared/engine/csv'
 import type { DayContext } from '@shared/engine/day'
 import { gradeOf, type DayGrade } from '@shared/engine/freeze'
 import type { GameDayInput } from '@shared/engine/game'
+import { daySummary, type DaySummary } from '@shared/engine/daySummary'
+import type { MeasureModules } from '@shared/engine/sideB'
 import { ritualView, type RitualView } from '@shared/engine/ritual'
 import { writeFileAtomic } from '../datastore/atomic'
 import { createDailyBackup, type BackupResult } from '../data/backup'
@@ -17,6 +19,7 @@ import { createDailyBackup, type BackupResult } from '../data/backup'
 export type WorkerTask =
   | { kind: 'ping' }
   | { kind: 'grade'; ctx: DayContext; know: Record<string, number>; game: GameDayInput }
+  | { kind: 'summary'; ctx: DayContext; know: Record<string, number>; modules: MeasureModules }
   | { kind: 'csv'; days: CsvDay[]; dir: string }
   | { kind: 'backup'; dataDir: string; backupsDir: string; date: string }
   | { kind: 'ritual'; ctx: DayContext; at: number }
@@ -25,6 +28,7 @@ export type WorkerTask =
 export interface WorkerResults {
   ping: 'ok'
   grade: DayGrade
+  summary: DaySummary
   ritual: RitualView
   /** The names of the files written. */
   csv: string[]
@@ -41,6 +45,8 @@ export async function runTask<T extends WorkerTask>(t: T): Promise<WorkerResult<
         return 'ok'
       case 'grade':
         return gradeOf(t.ctx, t.know, t.game)
+      case 'summary':
+        return daySummary(t.ctx, t.know, t.modules)
       case 'csv': {
         const files = csvOf(t.days)
         for (const [name, text] of Object.entries(files)) await writeFileAtomic(join(t.dir, name), text)

@@ -80,7 +80,8 @@ export type TimerEvent =
       planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null }
       /** Minutes after the boundary confirmed in advance up to this instant (two clicks, „Dodaj bez wymiany”). */
       confirmUntil: number | null
-      how: 'click' | 'auto' | 'start'
+      /** 'plan' – it happened at its planned time, said afterwards (the ritual): its times are no measure. */
+      how: 'click' | 'auto' | 'start' | 'plan'
     })
   | (EventBase & { k: 'block.pause'; block: string; at: number })
   | (EventBase & { k: 'block.resume'; block: string; at: number; confirmUntil: number | null })

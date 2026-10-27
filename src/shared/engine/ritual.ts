@@ -288,10 +288,10 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
       if (choice === 'cancel') return [{ k: 'block.cancel', block: row.block, at, rule: 'ritual' }]
       if (choice === 'park' && !row.fixed) return [{ k: 'block.park', block: row.block, at, rule: 'ritual' }]
       if (choice === 'happened') {
-        // It happened at its planned time (a correction of times can follow).
+        // It happened at its planned time (a correction of times can follow): its times are the plan's, never a measure.
         const info = state.blocks.find((b) => b.id === row.block)!
         return [
-          { k: 'block.start', block: row.block, at: atOf(g, row.from), bg: info.bg, planned: startPlanned(info), confirmUntil: null, how: 'click' },
+          { k: 'block.start', block: row.block, at: atOf(g, row.from), bg: info.bg, planned: startPlanned(info), confirmUntil: null, how: 'plan' },
           { k: 'block.end', block: row.block, at: atOf(g, row.to), done: true, rule: null }
         ]
       }

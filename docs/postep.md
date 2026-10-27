@@ -11,8 +11,9 @@
 - **Logika E6 scalona w dwóch częściach** (D299): część 1 (PR #10) – wydanie 0.6.0 (27.10 ok. 09:47); część 2 (PR #11,
   91ce1d7, 27.10 ok. 11:04; CI PR zielone za pierwszym razem, także Windows) – wydanie 0.7.0 z runu 40485664059 na
   `main` (ok. 11:34). Wpisy → `docs/archiwum/postep-E6.md`. Ciąg D299 zakończony.
-- **Logika E7 w toku** (D301), równolegle z Twoim odbiorem: część 1 (regulamin) na gałęzi `claude/0.8.0-e7-regulamin`,
-  po niej część 2 (pokój, kasety, świętowanie, pomiar „Strony B”, kalibracja) – ciągiem, pauza po drugiej.
+- **Logika E7 w toku** (D301), równolegle z Twoim odbiorem: część 1 (regulamin) scalona (PR #12, 27.10 ok. 13:17),
+  wydanie 0.8.0 z CI na `main`; część 2 (pokój, kasety, świętowanie, „Strona B”, kalibracja) na gałęzi
+  `claude/0.9.0-e7-pokoj` – pauza po niej.
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
   (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
   do folderu z `.moved.json`.
@@ -32,8 +33,20 @@
 - Odpowiedzi: D301 (dwie części ciągiem, robocza lista pokoju i progi nut – akceptacja przed ekranami gry). Model:
   Opus 5.5 · xhigh. Gra liczy się od wydania z jej ekranami (jak T482); wydania z logiką niczego nie pokazują.
 
-## Logika E7, część 1 – regulamin (wydanie 0.8.0)
-- Gałąź `claude/0.8.0-e7-regulamin` od 27.10 ok. 11:42.
+## Logika E7, część 2 – pokój, kasety, „Strona B”, kalibracja (wydanie 0.9.0)
+- Gałąź `claude/0.9.0-e7-pokoj` (od części 1) od 27.10 ok. 12:50.
+- Zakres: `engine/progress.ts` (pokój z roboczej listy, kasety z naklejką, święta passy i pokoju, `gameView`),
+  `engine/sideB.ts` (miara dnia i tygodnia, „brak pomiaru”), `engine/calibration.ts` (okres, przegląd w planie
+  porannym / ustawieniach, próbki czasu, dowody i propozycje kosztów), `engine/daySummary.ts` + zadanie `summary`
+  procesu pomocniczego; ocena zapisuje `regenWays` i moduły dnia; `DataFolder.gameState` (widok gry), `sideB`,
+  `calibration`, flaga kalibracji dla energii paska i okna (`DataView.calibration`). T496, CHANGELOG 0.9.0, lista E7b.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione (m.in. pasek odporny na błąd plików ocen, koniec podany przez
+  Ciebie i „odbył się” w próbkach, kotwice z jednej minuty i kolejny check-in, koszty według wariantu, pokój na zawsze,
+  moduły w ocenie, dzień bez obecności bez pomiaru, okres z dni starszych niż 4); testy do każdej. Testy: 773.
+
+## Logika E7, część 1 – regulamin (PR #12, wydanie 0.8.0)
+- Gałąź `claude/0.8.0-e7-regulamin` od 27.10 ok. 11:42; CI PR zielone za pierwszym razem (także Windows), scalona
+  ok. 13:17.
 - Zakres: `engine/game.ts` – pięć nagród, statusy dni (poza grą: przed grą, dzień kreatora, wolny, moduł gry), passa
   z limitem dni bez danych i dniem ochronnym, numer reguł gry; ocena przy zamrożeniu niesie grę (`gradeOf`), passa
   i nuty z plików ocen (`DataFolder.gameState`), test skali z grą; zdarzenie `block.exchange` z okna wymiany, lista

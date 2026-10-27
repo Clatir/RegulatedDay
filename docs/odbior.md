@@ -21,14 +21,33 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 
 **Kolejność, która oszczędza czas:**
-1. Raz, na start: E7a.1 (albo E6b.1 / E6a.1 / E5.1, jeśli nowsza wersja jeszcze nie przyszła); następnego dnia po
-   12:00 E6b.2.
+1. Raz, na start: E7b.1 (albo E7a.1 / E6b.1 / E6a.1 / E5.1, jeśli nowsza wersja jeszcze nie przyszła); następnego
+   dnia po 12:00 E6b.2.
 2. Zwykły dzień pracy: E4a.1–E4a.4, E4a.6–E4a.9, E4b.1–E4b.3, E4b.5–E4b.7, E5.2, E6a.4, E7a.2.
 3. Dzień z sesją: E4a.5, E4b.4.
 4. Wieczór: E4b.8, E4b.10, E6a.2, E6a.3.
 5. Ustawienia i próba: E4b.9, E4b.11, E3.3–E3.8, E3.11.
 6. Laptop i noc (gdy masz laptopa pod ręką): E3.9, E3.10, E4a.11, E4a.12.
 7. Jednorazowe: E4a.10, E4a.13, E3.12.
+
+---
+
+## Wersja 0.9.0 – logika E7, część 2 (pokój, kasety, „Strona B”, kalibracja pod spodem)
+
+### E7b.1 Aktualizacja do 0.9.0
+- [ ] Odebrane
+- **Automatycznie:** ścieżki aktualizacji sprawdza CI na Windows (`tests/update/update-paths.spec.ts`); pokój, kasety,
+  święta, „Strona B” i kalibrację – `tests/unit/engine/progress.test.ts`, `sideB.test.ts`, `calibration.test.ts`,
+  `tests/fs/game.test.ts` i test skali. Ty: rzut oka.
+- **Jak sprawdzić:** aktualizacja przychodzi sama w nocy albo Ustawienia → Aktualizacje → „Zainstaluj teraz”; otwórz
+  okno główne; popracuj zwykle z paskiem przez godzinę.
+- **Oczekiwany efekt:** baner „Co nowego w wersji 0.9.0” z czterema punktami; ostatni mówi, że ekrany gry, „Strony B”
+  i przeglądu kalibracji pojawią się w jednej z następnych wersji. Okno, pasek i powiadomienia jak w 0.8.0.
+- **Nie przechodzi, gdy:**
+  - po instalacji aplikacja się nie uruchamia albo pokazuje baner „nie udała się” / „nie dokończyła się”;
+  - „Co nowego” pokazuje starszą wersję;
+  - pasek albo okno pokazują pokój, kasetę, „Stronę B” albo cokolwiek o kalibracji;
+  - pasek przestaje się odświeżać (stoi na starej godzinie) albo w `main.log` są nowe błędy przy pracy z paskiem.
 
 ---
 

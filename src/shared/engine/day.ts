@@ -124,6 +124,8 @@ export interface DayState {
   extensionMin: number
   overrunMin: number
   projectsMin: number
+  /** Work blocks counted as a project (D195: begun after the end of work, or marked „po pracy”), by id. */
+  asProject: string[]
   /**
    * Regeneration so far (`totalMin`, `towardMinMin` – without time to explain that has no answer, unless `asWritten`),
    * the minimum and what is missing; `explainMin` – minutes of time to explain without an answer so far; `forecastMin` –
@@ -786,6 +788,7 @@ export function computeDay(ctx: DayContext): DayState {
     extensionMin: ext,
     overrunMin: overrun,
     projectsMin,
+    asProject: [...projects],
     regen: { totalMin: fin.regenTotal, towardMinMin: fin.towardMin, requiredMin: fin.required, justifiedRequestMin: fin.justified, missingMin: Math.max(0, fin.required - fin.towardMin), explainMin, forecastMin: fin.towardForecast },
     justifiedBy: fin.justifiedBy,
     explains,
