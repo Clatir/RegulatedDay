@@ -61,6 +61,8 @@ D160, D170, D176, D200, D241, D244, D269, D272, D275, D301. Decyzje T492–T496.
 - Start i koniec „z kliknięcia” = zapisane najwyżej 60 s od swojej chwili (`live`); poza komputerem koniec z odpowiedzi
   po powrocie (także „Skończył się o …”). Nowa reguła końca bloku „w chwili odejścia” trafia do `LEFT_RULES`.
 - Nie porównuj zegara okna z chwilami zdarzeń innego komputera (np. „kiedy dodano blok”) – fakty gry idą przez log.
+- `gameState` liczy raz na zmianę (T501): podpis plików ocen, dzień otwarty według logu, rekordów (`contextSig`)
+  i wejść gry, dziś też minuta; bez zmian zwraca ten sam obiekt. Nowe wejście dnia gry musi trafić do klucza.
 
 ## Pułapki
 - W testach folderu dzień bez `presence.first` jest wolny (poza grą), a pierwszy dzień z logiem to dzień kreatora –

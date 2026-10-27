@@ -11,7 +11,8 @@ Wszystkie wiadomości do użytkownika po polsku. Pytania zawsze klikalne (AskUse
 1. **Co trzeba wiedzieć** – zakres z `docs/plan.md`, stan poprzedniego etapu, rzeczy otwarte, ryzyka.
 2. **Pytania** – tylko o zachowanie widoczne dla użytkownika (sprawy techniczne rozstrzygnij sam jako T-decyzję).
 3. **Co przygotować** – sprzęt, programy, uprawnienia, czas na ręczne sprawdzenia.
-4. **Model i thinking** – według `docs/plan.md` (domyślnie Opus 5.5 · xhigh); bez szacunków czasu (plan mierzy czas).
+4. **Model i thinking** – Opus 5.5 · xhigh (D317); szacunek z `docs/plan.md`, a po etapie czas faktyczny w postępie.
+   W ciągu (D317) „Przed etapem” tylko na jego początku – pytania o wygląd całego ciągu z góry.
 
 ## Po etapie
 1. Testy: w trakcie tylko powiązany plik (`--reporter=dot`); przed commitem raz `npm run typecheck`, `npm test`,
@@ -27,7 +28,7 @@ Wszystkie wiadomości do użytkownika po polsku. Pytania zawsze klikalne (AskUse
    konkretne błędy, które blokują odbiór). W „Do odebrania” krótki wpis `- [ ] E<n>.<k> Tytuł` w pasującej grupie
    kolejności, a punkt „Tylko Ty” także na tej liście. Odebrany: `- [x] Odebrane <data>` na miejscu, znika z „Do
    odebrania” (punkty nigdy się nie przenoszą); w `docs/postep.md` tylko odnośnik.
-6. Pauza do „dalej” – z informacją, czy `/clear` jest teraz bezpieczny (zasada w `CLAUDE.md`): PR-y w toku i CI zapisane
+6. Pauza do „dalej” (w ciągu z `docs/plan.md` dopiero na jego końcu albo przy bramie – D317) – z informacją, czy `/clear` jest teraz bezpieczny (zasada w `CLAUDE.md`): PR-y w toku i CI zapisane
    w `docs/postep.md`, wszystko wypchnięte.
 
 ## PR, scalanie (D285), wydanie

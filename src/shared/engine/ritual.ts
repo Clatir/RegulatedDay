@@ -15,6 +15,7 @@ import { CLOSE_HOWS, isKnown, RULES_VERSION, type AnyEvent, type CloseHow } from
 import { questionId } from '../model/ids'
 import { dayStart } from '../time/day'
 import { addDays } from '../time/zone'
+import { activityOf, useWithin, type Activity } from './activity'
 import { answerEvents, type Question } from './auto'
 import { plannedSpan, startPlanned } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
@@ -59,7 +60,15 @@ export type RitualRow = RowBase &
     | { kind: 'away'; block: string; rule: string; start: number; end: number; plannedEnd: number; question: string; answered: boolean }
     | { kind: 'shutdown'; block: string; at: number; question: string; answered: boolean }
     | { kind: 'fixedMinutes'; block: string; minutes: number; answered: boolean }
-    | { kind: 'skipped'; block: string; fixed: boolean; from: number; to: number }
+    | {
+        kind: 'skipped'
+        block: string
+        fixed: boolean
+        from: number
+        to: number
+        /** A session: the use of the computers within its window (ms) – its times when it happened, null: the plan's. */
+        used: { from: number; to: number } | null
+      }
     | { kind: 'parkedAnchored'; block: string; anchor: string; answered: boolean }
     | { kind: 'person'; request: string; from: number; to: number }
     | { kind: 'rest'; from: number; to: number; marked: Array<{ from: number; to: number }>; answered: boolean }
@@ -77,11 +86,31 @@ export const ritualRowId = (date: string, kind: RitualKind, key: string): string
 const SILENT_RULES = ['twoQuestions', 'idle']
 const AWAY_RULES = ['limit', 'bedtime']
 
-/** The rows of a day's ritual, in the order the ritual shows them. */
-export function ritualRows(state: DayState): RitualRow[] {
+/** The use of the computers as the engine reads it from a day's log (`computeDay` does the same): what rows measure. */
+export const ritualActivity = (ctx: DayContext, state: DayState): Activity => activityOf(ctx.events, state.grid.start, ctx.now)
+
+/**
+ * The end of work: one click „Koniec pracy o … ✓”, with „Pracowałem do …” when time to explain after a work block follows
+ * it (spec „Dzień bez potwierdzonego końca pracy ma w tym wierszu jedno kliknięcie”); null while work runs or without it.
+ */
+function workEndRow(state: DayState): Extract<RitualRow, { kind: 'workEnd' }> | null {
+  const last = state.ends.at(-1)
+  const running = [...state.facts.blocks.values()].some((b) => b.endedAt == null && b.runs.some((r) => r.to === OPEN) && state.blocks.find((x) => x.id === b.id)?.isWork)
+  if (state.noWorkDay || !last || running) return null
+  const closedAt = state.facts.closed?.at ?? null
+  const explain = state.explains.find((x) => x.kind === 'work' && x.from >= last.at) ?? null
+  return { id: ritualRowId(state.grid.date, 'workEnd', 'day'), kind: 'workEnd', end: last.at, confirmed: last.confirmed && state.workEnd != null, explain, afterClose: closedAt != null && last.at > closedAt }
+}
+
+/**
+ * The rows of a day's ritual, in the order the ritual shows them. `activity` – the use of the computers from the day's log
+ * (`ritualActivity`): a skipped session that happened takes its times from it; null – not known, the plan's times.
+ */
+export function ritualRows(state: DayState, activity: Activity | null): RitualRow[] {
   const g = state.grid
   const date = g.date
   const f = state.facts
+  const useOf = (from: number, to: number) => (activity ? useWithin(activity, atOf(g, from), atOf(g, to)) : null)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
   const explainOf = new Map(state.explains.map((x) => [x.block, x]))
   const closedAt = f.closed?.at ?? null
@@ -89,14 +118,8 @@ export function ritualRows(state: DayState): RitualRow[] {
   const touched = (id: string) => f.answers.has(id)
   const out: RitualRow[] = []
 
-  // The end of work: one click „Koniec pracy o … ✓”, with „Pracowałem do …” when time to explain after a work block
-  // follows it (spec „Dzień bez potwierdzonego końca pracy ma w tym wierszu jedno kliknięcie”).
-  const last = state.ends.at(-1)
-  const running = [...f.blocks.values()].some((b) => b.endedAt == null && b.runs.some((r) => r.to === OPEN) && byId.get(b.id)?.isWork)
-  if (!state.noWorkDay && last && !running) {
-    const explain = state.explains.find((x) => x.kind === 'work' && x.from >= last.at) ?? null
-    out.push({ id: ritualRowId(date, 'workEnd', 'day'), kind: 'workEnd', end: last.at, confirmed: last.confirmed && state.workEnd != null, explain, afterClose: after(last.at) })
-  }
+  const workEnd = workEndRow(state)
+  if (workEnd) out.push(workEnd)
   // The boundary open for approval (its automatic approval undone, spec „Cofnij … otwiera granicę do zatwierdzenia”).
   if (state.firstWorkStart != null && state.boundary.approved == null) out.push({ id: ritualRowId(date, 'boundary', 'day'), kind: 'boundary', proposal: state.boundary.proposal, approved: null, afterClose: false })
 
@@ -178,7 +201,8 @@ export function ritualRows(state: DayState): RitualRow[] {
     const b = f.blocks.get(info.id)
     const span = plannedSpan(info, byId)
     if (info.inPlan && span && span.end <= state.now && b?.startedAt == null && b?.parkedAt == null && b?.cancelledAt == null) {
-      out.push({ id: ritualRowId(date, 'skipped', info.id), kind: 'skipped', block: info.id, fixed: info.fixed, from: span.start, to: span.end, afterClose: after(span.end) })
+      const used = info.rules.kind === 'session' ? useOf(span.start, span.end) : null
+      out.push({ id: ritualRowId(date, 'skipped', info.id), kind: 'skipped', block: info.id, fixed: info.fixed, from: span.start, to: span.end, used, afterClose: after(span.end) })
     }
     if (b?.parkedAt != null && b.cancelledAt == null && info.anchor) {
       const anchor = f.blocks.get(info.anchor)
@@ -288,11 +312,12 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
       if (choice === 'cancel') return [{ k: 'block.cancel', block: row.block, at, rule: 'ritual' }]
       if (choice === 'park' && !row.fixed) return [{ k: 'block.park', block: row.block, at, rule: 'ritual' }]
       if (choice === 'happened') {
-        // It happened at its planned time (a correction of times can follow): its times are the plan's, never a measure.
+        // It happened (a correction of times can follow): a session while the computers were used within its window, else
+        // at its planned time – times never given by you, so never a sample nor a note (T500).
         const info = state.blocks.find((b) => b.id === row.block)!
         return [
-          { k: 'block.start', block: row.block, at: atOf(g, row.from), bg: info.bg, planned: startPlanned(info), confirmUntil: null, how: 'plan' },
-          { k: 'block.end', block: row.block, at: atOf(g, row.to), done: true, rule: null }
+          { k: 'block.start', block: row.block, at: row.used?.from ?? atOf(g, row.from), bg: info.bg, planned: startPlanned(info), confirmUntil: null, how: 'plan' },
+          { k: 'block.end', block: row.block, at: row.used?.to ?? atOf(g, row.to), done: true, rule: null }
         ]
       }
       return null
@@ -364,8 +389,8 @@ export function closeEvents(state: DayState, how: CloseHow, at: number): TimerDr
   if (!CLOSE_HOWS.includes(how)) return []
   const out: TimerDraft[] = []
   if (how === 'ritual' || how === 'asWritten') {
-    const row = ritualRows(state).find((r) => r.kind === 'workEnd')
-    if (row && row.kind === 'workEnd' && !row.confirmed) out.push({ k: 'work.end', at, end: atOf(state.grid, row.end) })
+    const row = workEndRow(state)
+    if (row && !row.confirmed) out.push({ k: 'work.end', at, end: atOf(state.grid, row.end) })
   }
   out.push({ k: 'ritual.close', at, how })
   return out
@@ -387,7 +412,7 @@ export interface RitualView {
 /** The ritual of a day (several full counts of the day – the main process gives it to its helper process, T190). */
 export function ritualView(ctx: DayContext, at: number): RitualView {
   const state = computeDay(ctx)
-  const rows = ritualRows(state)
+  const rows = ritualRows(state, ritualActivity(ctx, state))
   const base = effectBase(ctx, state)
   const effects: Record<string, RitualEffect> = {}
   for (const r of rows) {

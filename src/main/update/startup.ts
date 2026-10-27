@@ -95,6 +95,23 @@ function update(d: StartupDeps, dir: string, task: Task, raw: Record<string, unk
   return next
 }
 
+/**
+ * The running X after a failed installation of X: its files disagree with the manifest – the banner „nie dokończyła się”
+ * at every start until „Spróbuj ponownie” installs it again (D316); they agree (repaired, or installed again by hand) –
+ * „zakończono” and the guard's entry removed, no banner.
+ */
+function runningAfterFailure(d: StartupDeps, dir: string, task: Task, raw: Record<string, unknown>): Banner | null {
+  const bad = d.filesMismatch(dir, task)
+  if (bad != null) {
+    d.log('warn', `pliki niezgodne z manifestem ${task.version}: ${bad}`)
+    return { kind: 'unfinished', version: task.version }
+  }
+  update(d, dir, task, raw, { state: 'done' })
+  d.removeGuardEntry()
+  d.log('info', `pliki zgodne z manifestem ${task.version} – instalacja zakończona`)
+  return null
+}
+
 function lockCounter(d: StartupDeps, dir: string): { held: boolean; counter: number | null; pid: number; startMs: number } {
   const path = join(dir, 'guard.lock')
   const held = d.heldOpen(path)
@@ -112,7 +129,7 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
   const found = findTask(d)
   if (!found) return normal()
   const { dir, raw } = found
-  let task = found.task
+  const task = found.task
   const X = task.version
   const cmp = compareVersions(d.version, X)
   const updated = d.argv.includes('--updated')
@@ -121,7 +138,12 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
   // state changes): then its start is handed over as for a task under way.
   if (task.state === 'postponed' && !d.heldOpen(join(dir, 'guard.lock'))) return normal()
   // „nieudane” for a newer X: the banner „nie udała się · Spróbuj ponownie · Pobierz” until a retry or a newer release.
-  if (task.state === 'failed') return normal(cmp < 0 ? { kind: task.message === 'strażnik nie wystartował' || task.message === 'pliki niezgodne z manifestem' ? 'unfinished' : 'failed', version: X } : null)
+  if (task.state === 'failed') {
+    // X itself runs: after the lock its files against the manifest, at every start (D316) – whoever wrote the failure.
+    if (cmp === 0) return normal(null, () => runningAfterFailure(d, dir, task, raw))
+    const unfinished = task.message === 'strażnik nie wystartował' || task.message === 'pliki niezgodne z manifestem'
+    return normal(cmp < 0 ? { kind: unfinished ? 'unfinished' : 'failed', version: X } : null)
+  }
 
   if (task.state === 'fi') {
     const installer = join(dir, task.installer)
@@ -221,10 +243,15 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
   }
 
   // No owner in time: never closing without a trace.
-  d.log('warn', `strażnik ${X} nie przejął instalacji – zwykły start z banerem`)
-  task = update(d, dir, task, raw, { state: 'failed', message: 'strażnik nie wystartował' })
+  d.log('warn', `strażnik ${X} nie przejął instalacji`)
   d.removeGuardEntry()
   const bad = d.filesMismatch(dir, task)
   d.log('info', bad == null ? `pliki zgodne z manifestem ${X}` : `pliki niezgodne z manifestem ${X}: ${bad}`)
+  // X itself with its files in agreement: installed, only never confirmed by an owner – no banner (D316).
+  if (cmp === 0 && bad == null) {
+    update(d, dir, task, raw, { state: 'done' })
+    return normal()
+  }
+  update(d, dir, task, raw, { state: 'failed', message: 'strażnik nie wystartował' })
   return normal({ kind: 'unfinished', version: X })
 }

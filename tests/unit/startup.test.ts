@@ -168,6 +168,34 @@ describe('start aplikacji przy zadaniu instalacji (Instalacja, aktualizacje i lo
     expect(ro.kind === 'normal' && ro.afterLock?.()).toEqual({ kind: 'failed', version: '0.1.1' })
   })
 
+  it('X po nieudanej instalacji X: baner „nie dokończyła się” przy każdym starcie, aż pliki się zgodzą (D316), kto by nie zapisał błędu', async () => {
+    // The app's own failures and the owner's („Aktualizacja do X nie udała się.” after its attempts).
+    for (const message of ['pliki niezgodne z manifestem', 'strażnik nie wystartował', 'Aktualizacja do 0.1.1 nie udała się.']) {
+      const failed = task({ state: 'failed', message })
+      const again = world({ version: '0.1.1', task: failed, sizes: false })
+      const r = await runStartup(again.deps)
+      expect(r.kind === 'normal' && (r.afterLock?.() ?? r.banner)).toEqual({ kind: 'unfinished', version: '0.1.1' })
+      expect(state(again)).toBe('failed')
+      expect(again.log).toContain('pliki niezgodne z manifestem 0.1.1: resources/app.asar – 1 B zamiast 2 B')
+      // Installed again by hand: the files agree – the task done, the guard's entry removed, no banner.
+      const fixed = world({ version: '0.1.1', task: failed })
+      const rf = await runStartup(fixed.deps)
+      expect(rf.kind === 'normal' && (rf.afterLock?.() ?? rf.banner)).toBeNull()
+      expect(state(fixed)).toBe('done')
+      expect(fixed.removed).toBe(1)
+    }
+  })
+
+  it('bez właściciela w 60 s, a działa X ze zgodnymi plikami: „zakończono” bez banera (D316); z niezgodnymi – baner', async () => {
+    const ok = world({ version: '0.1.1', task: task(), lock: () => ({ held: false, counter: 0 }) })
+    expect(await runStartup(ok.deps)).toMatchObject({ kind: 'normal', banner: null })
+    expect(state(ok)).toBe('done')
+    expect(ok.removed).toBe(1)
+    const bad = world({ version: '0.1.1', task: task(), lock: () => ({ held: false, counter: 0 }), sizes: false })
+    expect(await runStartup(bad.deps)).toMatchObject({ kind: 'normal', banner: { kind: 'unfinished', version: '0.1.1' } })
+    expect(state(bad)).toBe('failed')
+  })
+
   it('wersja nowsza niż X kończy zadanie i usuwa wpis strażnika; X tylko przy „zakończono”', async () => {
     const newer = world({ version: '0.1.2', task: task() })
     const r = await runStartup(newer.deps)

@@ -109,6 +109,25 @@ describe('rytuał w folderze danych', () => {
     expect(after.rows.find((x) => x.kind === 'workEnd')).toMatchObject({ confirmed: true })
   })
 
+  it('sesja bez „Zacznij”, która „odbyła się”: czasy z użycia komputera zapisanego w logu (T500)', async () => {
+    const { folder, at } = await make()
+    // This computer observed 14:30–16:00 only (the NY session's window 14:00–17:00).
+    folder.append({ day: DAY, dom: 'meta', k: 'observe.from', at: placeLogical(DAY, 14 * 60 + 30), why: 'start' })
+    folder.append({ day: DAY, dom: 'meta', k: 'observe.to', at: placeLogical(DAY, 16 * 60), why: 'quit' })
+    await folder.log.flush()
+    at(DAY, 20 * 60)
+    // The layer's sessions (London, then NY) come first, fixed; the plan's own blocks after them.
+    const sessions = (await folder.ritual(DAY)).rows.filter((x) => x.kind === 'skipped' && x.fixed)
+    expect(sessions).toHaveLength(2)
+    expect(sessions[0]).toMatchObject({ used: null })
+    const ny = sessions[1]!
+    expect(ny).toMatchObject({ used: { from: placeLogical(DAY, 14 * 60 + 30), to: placeLogical(DAY, 16 * 60) } })
+    expect((await folder.ritualAnswer(DAY, ny.id, 'happened')).ok).toBe(true)
+    const b = (await folder.dayState(DAY)).facts.blocks.get((ny as { block: string }).block)!
+    // Minutes of the day from 04:00: 14:30 and 16:00.
+    expect([b.startedAt, b.endedAt]).toEqual([14 * 60 + 30 - 240, 16 * 60 - 240])
+  })
+
   it('rano: niezamknięty wczorajszy dzień, „Nie pamiętam” go zamyka bez potwierdzenia końca pracy', async () => {
     const { folder, at } = await make()
     await folder.timerClick({ a: 'start', block: 'a' })
