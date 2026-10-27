@@ -4,10 +4,19 @@
  */
 import type { Rect } from './bounds'
 
+/** The places the bar can be put to on a monitor (D304): the corners and the middles of the top and bottom edges. */
+export type BarSpot = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'
+export const BAR_SPOTS: readonly BarSpot[] = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right']
+
 /** Where the desktop bar stands on this computer (spec „Widget”): the monitor by its name and bounds, never its number. */
 export interface BarPlacement {
   display: { label: string; bounds: Rect }
-  /** The bar's top-left corner relative to the work area's top-left, in DIP. */
+  /**
+   * A place picked (D304) – counted anew with the bar's size and the scale, so it keeps its margin – or null: a place of
+   * your own, dragged by the handle (D303), at `offset`.
+   */
+  spot: BarSpot | null
+  /** The folded bar's top-left corner relative to the work area's top-left, in DIP. */
   offset: { x: number; y: number }
 }
 
@@ -85,7 +94,9 @@ function placementFrom(v: unknown): BarPlacement | null {
   const d = p.display
   const o = p.offset
   if (!d || typeof d.label !== 'string' || !isRect(d.bounds) || !o || typeof o.x !== 'number' || typeof o.y !== 'number' || !Number.isFinite(o.x) || !Number.isFinite(o.y)) return null
-  return { display: { label: d.label, bounds: { ...d.bounds } }, offset: { x: o.x, y: o.y } }
+  // Saved before 0.10.0 without a place: its own (the corner's offset then kept as it was).
+  const spot = BAR_SPOTS.includes(p.spot as BarSpot) ? (p.spot as BarSpot) : null
+  return { display: { label: d.label, bounds: { ...d.bounds } }, spot, offset: { x: o.x, y: o.y } }
 }
 
 function filtersFrom(v: unknown): Record<string, string[]> {

@@ -11,7 +11,7 @@ import { computeDay } from '@shared/engine/day'
 import { exchangeCost, isFullExchange, proposeExchange } from '@shared/engine/exchange'
 import { detectLateWake } from '@shared/engine/lateWake'
 import { fromYesterday, holidayQuestions, morningWarnings, sessionQuestions, shiftNotice, weeklyAnalysisMove, type MorningInputs } from '@shared/engine/morning'
-import { copiedDay, copiedTemplate, moveBetweenDays, movedBlock, newUserBlock } from '@shared/engine/planEdit'
+import { copiedDay, copiedTemplate, draggedBlock, moveBetweenDays, movedBlock, newUserBlock } from '@shared/engine/planEdit'
 import { applyTypeChange, planTypeChange } from '@shared/engine/typeChange'
 import { defaultTemplates, firstComputerRecords, settingsPatch } from '@shared/model/defaults'
 import { DEFAULT_GENERAL, rdFrom } from '@shared/model/rd'
@@ -371,6 +371,13 @@ describe('przenoszenie i kopiowanie', () => {
     const m = movedBlock(plan[1]!, plan, '2026-10-21', true)
     expect(m).toMatchObject({ id: 'j', startMin: lm('17:00'), anchor: null, movedFrom: '2026-10-21', moves: 1 })
     expect(movedBlock(plan[1]!, plan, '2026-10-21', false).moves).toBe(0)
+  })
+
+  it('blok przeciągnięty na osi (D305): nowy start w dniu logicznym, reszta bez zmian', () => {
+    const x = block({ id: 'x', cat: 'analiza', at: '09:00', min: 60, origin: 'template' })
+    expect(draggedBlock(x, lm('10:15'))).toEqual({ ...x, startMin: lm('10:15') })
+    expect(draggedBlock(x, 200).startMin).toBe(240)
+    expect(draggedBlock(x, 1700).startMin).toBe(1678)
   })
 
   it('blok przeniesiony z powrotem na dzień, z którego wyszedł, jest tam znowu (i nie ma go na drugim)', () => {

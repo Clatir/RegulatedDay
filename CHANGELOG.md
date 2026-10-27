@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0
+- Pasek pulpitu ma uchwyt ⠿ przy lewej krawędzi (widać go po najechaniu): przeciągnij za niego pasek w dowolne miejsce, także na inny monitor – zostaje tam, gdzie go puścisz, i wraca tam po ponownym uruchomieniu na tym komputerze. Gdy tego monitora nie ma, pasek staje w lewym dolnym rogu monitora głównego.
+- Ustawienia → „Miejsce paska”: Twoje monitory narysowane tak, jak ustawia je Windows. Kliknij jeden z rogów albo środek górnej lub dolnej krawędzi, żeby tam postawić pasek; obecne miejsce – także przeciągnięte – jest zaznaczone.
+- „Zawsze na wierzchu”: pasek pulpitu chowa się, gdy okno główne jest na pierwszym planie – ma ten sam pasek u góry, więc nie zasłania już np. „Ustawień” w lewym dolnym rogu. Wraca, gdy przejdziesz do innego okna.
+- Bloki na osi dnia i szablonu da się przeciągać lewym przyciskiem myszy – start przesuwa się co 5 min. Krótkie kliknięcie dalej otwiera edycję bloku. Przeciągać można blok z własną godziną, jeszcze niezaczęty, dziś albo w przyszłe dni; bloki po innym bloku, sesje, wykłady i minione dni stoją w miejscu.
+
 ## 0.9.1
 - „Zawsze na wierzchu”: pasek pulpitu chowa się teraz także wtedy, gdy film w przeglądarce – YouTube, Netflix – przechodzi na pełny ekran w tym samym oknie, i wraca, gdy z niego wyjdziesz. Liczy się pełny ekran na monitorze paska: film na drugim monitorze go nie chowa, a kliknięcie okna na drugim monitorze nie pokazuje go nad filmem. Wcześniej pasek zostawał nad filmem.
 

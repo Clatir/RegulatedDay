@@ -1,6 +1,7 @@
 /**
  * The screens of E3 on a folder set up like the wizard's: the morning plan and the approval of the boundary, a block
- * added after it with the exchange („Dodaj bez wymiany”, the second click for an overrun), the calendar (a „zjazd”
+ * added after it with the exchange („Dodaj bez wymiany”, the second click for an overrun), a block dragged an hour up
+ * (D305), the bar's place picked on the monitors' mock-up (D304), the calendar (a „zjazd”
  * marked on several dates), requests, routines, templates, the history with a restore, the settings (a value out of
  * its range refused with its message). Independent of the hour it runs at: today's work block is at 03:00 of the
  * night after (the end of the logical day), so the plan always has a boundary to approve.
@@ -72,8 +73,33 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       // Beyond the maximum: the second click confirms the overrun.
       if (await page.getByTestId('exchange').isVisible()) await page.getByTestId('exchange-add').click()
       await expect(page.getByTestId('exchange')).toBeHidden()
-      const day = JSON.parse(readFileSync(join(dataDir, 'days', logicalToday().slice(0, 4), `${logicalToday()}.json`), 'utf8')) as { blocks: unknown[] }
+      const dayPath = join(dataDir, 'days', logicalToday().slice(0, 4), `${logicalToday()}.json`)
+      const day = JSON.parse(readFileSync(dayPath, 'utf8')) as { blocks: unknown[] }
       expect(day.blocks).toHaveLength(2)
+      // D305: the block dragged with the left button an hour up (1.1 px a minute) – its start moves by 60 min.
+      const late = page.getByTestId('block-late')
+      await expect(late).toHaveAttribute('data-movable', 'true')
+      const shown = /(\d\d):(\d\d)/.exec((await late.textContent()) ?? '')!
+      const before = Number(shown[1]) * 60 + Number(shown[2]) + (Number(shown[1]) < 4 ? 1440 : 0)
+      await late.scrollIntoViewIfNeeded()
+      const box = (await late.boundingBox())!
+      await page.mouse.move(box.x + 40, box.y + 8)
+      await page.mouse.down()
+      await page.mouse.move(box.x + 40, box.y - 30, { steps: 4 })
+      await page.mouse.move(box.x + 40, box.y - 58, { steps: 4 })
+      await page.mouse.up()
+      // On the 5-min grid (the forecast may show it off the grid in the night).
+      await expect.poll(() => (JSON.parse(readFileSync(dayPath, 'utf8')) as { blocks: Array<{ id: string; startMin: number }> }).blocks.find((b) => b.id === 'late')?.startMin).toBe(Math.round((before - 60) / 5) * 5)
+      // The drop selected nothing; a click right after it still does.
+      await expect(late).not.toHaveAttribute('data-selected', 'true')
+      await late.click()
+      await expect(late).toHaveAttribute('data-selected', 'true')
+      // A day gone is history: none of its blocks drags.
+      await page.getByTestId('day-prev').click()
+      await expect(page.locator('[data-block-title]').first()).toBeVisible()
+      await expect(page.locator('[data-movable="true"]')).toHaveCount(0)
+      await page.getByTestId('day-today').click()
+      await expect(page.getByTestId('block-late')).toBeVisible()
       // The day's wake outside 04:00–12:00: refused with its message (never saved to be dropped by the day's schema).
       const wake = page.getByTestId('day-wake')
       const wakeBefore = await wake.inputValue()
@@ -139,6 +165,15 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await shot(page, 'e3-09-settings')
       const rd = JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { dayTypes?: { zwykly?: { budgetMin?: number } } } }> }
       expect(rd.settings.at(-1)!.patch.dayTypes?.zwykly?.budgetMin).toBe(420)
+      // D304: the bar's place on the monitors' mock-up – by default the left bottom corner of the primary one.
+      await expect(page.getByTestId('bar-place-map')).toBeVisible()
+      await expect(page.getByTestId('bar-place-1-bottom-left')).toHaveAttribute('aria-pressed', 'true')
+      await page.getByTestId('bar-place-1-top-center').click()
+      await expect(page.getByTestId('bar-place-1-top-center')).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.getByTestId('bar-place-1-bottom-left')).toHaveAttribute('aria-pressed', 'false')
+      const prefs = await page.evaluate(() => window.rd.prefs())
+      expect(prefs.barPlacement?.offset.y).toBe(8)
+      await shot(page, 'e3-10-bar-place')
     })
     expect(errors).toEqual([])
   } finally {

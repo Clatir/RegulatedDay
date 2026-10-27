@@ -9,7 +9,7 @@ import { setDayField } from '@shared/data/dayEdits'
 import { logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { detectLateWake } from '@shared/engine/lateWake'
-import { newUserBlock } from '@shared/engine/planEdit'
+import { draggedBlock, newUserBlock } from '@shared/engine/planEdit'
 import { categoryName } from '@shared/model/rd'
 import type { PlanBlock } from '@shared/model/plan'
 import { DAY_TYPE_NAMES, RANGES } from '@shared/model/settings'
@@ -198,6 +198,15 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                 setSelected(id)
               }}
               onCreate={create}
+              // D305: the dragged block's planned start, as an edit of the day – today and later (a day gone is history).
+              onMove={
+                date >= today
+                  ? (id, startMin) => {
+                      const p = plan.find((b) => b.id === id)
+                      if (p) void putDayBlock(date, raw, draggedBlock(p, startMin))
+                    }
+                  : undefined
+              }
               from={axis.from}
               to={axis.to}
             />

@@ -100,4 +100,12 @@ describe('ustawienia bez liczb', () => {
       desktopBar: true
     })
   })
+
+  it('miejsce paska: wybrane miejsce albo własne; zapis sprzed 0.10.0 i nieznane miejsce – własne', () => {
+    const display = { label: 'LG', bounds: { x: 1920, y: 0, width: 1280, height: 720 } }
+    expect(machinePrefsFrom({ barPlacement: { display, spot: 'top-center', offset: { x: 400, y: 8 } } }).barPlacement?.spot).toBe('top-center')
+    expect(machinePrefsFrom({ barPlacement: { display, offset: { x: 8, y: 600 } } }).barPlacement).toEqual({ display, spot: null, offset: { x: 8, y: 600 } })
+    expect(machinePrefsFrom({ barPlacement: { display, spot: 'middle', offset: { x: 8, y: 600 } } }).barPlacement?.spot).toBeNull()
+    expect(machinePrefsFrom({ barPlacement: { display, spot: 'top-left' } }).barPlacement).toBeNull()
+  })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { DisplayInfo } from '@shared/bounds'
-import { barRect, barWidth, cornerOffset, panelRect, usableIconRect } from '@shared/placement'
+import { BAR_SPOTS } from '@shared/machine'
+import { barRect, barWidth, draggedBounds, panelRect, placementAfterDrag, spotOffset, spotPlacement, usableIconRect } from '@shared/placement'
 import { appUrl, parseAppUrl, urlFromArgv } from '@shared/protocol'
 
 const primary: DisplayInfo = { id: 1, label: 'Dell U2720Q', bounds: { x: 0, y: 0, width: 1920, height: 1080 }, workArea: { x: 0, y: 0, width: 1920, height: 1032 }, scaleFactor: 1 }
@@ -45,19 +46,72 @@ describe('pasek pulpitu (Widget)', () => {
     expect(r.growsUp).toBe(true)
   })
 
-  it('zapamiętany monitor po nazwie i granicach; odłączony – ekran główny', () => {
-    const placement = { display: { label: 'LG', bounds: second.bounds }, offset: { x: 20, y: 30 } }
-    expect(barRect(placement, [primary, second], primary, 1, 64).bounds).toEqual({ x: 1940, y: 30, width: 480, height: 64 })
-    expect(barRect(placement, [primary], primary, 1, 64).display.id).toBe(1)
+  it('zapamiętany monitor po nazwie i granicach; odłączony – lewy dolny róg ekranu głównego (D303)', () => {
+    const placement = { display: { label: 'LG', bounds: second.bounds }, spot: null, offset: { x: 20, y: 30 } }
+    expect(barRect(placement, [primary, second], primary, 1, 64)).toMatchObject({ bounds: { x: 1940, y: 30, width: 480, height: 64 }, spot: null })
+    // Its monitor gone: the corner, not the same offset there.
+    expect(barRect(placement, [primary], primary, 1, 64)).toMatchObject({ display: { id: 1 }, bounds: { x: 8, y: 1032 - 8 - 64 }, spot: 'bottom-left' })
     // Stands at the top: unfolds downwards.
     const top = barRect(placement, [primary, second], primary, 1, 64, 300)
     expect(top.growsUp).toBe(false)
     expect(top.bounds.y).toBe(30)
   })
+})
 
-  it('narożniki', () => {
-    expect(cornerOffset('bottom-right', primary.workArea, { width: 480, height: 64 })).toEqual({ x: 1920 - 488, y: 1032 - 72 })
-    expect(cornerOffset('top-left', primary.workArea, { width: 480, height: 64 })).toEqual({ x: 8, y: 8 })
+describe('miejsce paska: makieta i przeciąganie (D303, D304)', () => {
+  const folded = { width: 480, height: 64 }
+
+  it('miejsca 8 DIP od krawędzi; środki krawędzi na środku szerokości', () => {
+    expect(spotOffset('bottom-right', primary.workArea, folded)).toEqual({ x: 1920 - 488, y: 1032 - 72 })
+    expect(spotOffset('top-left', primary.workArea, folded)).toEqual({ x: 8, y: 8 })
+    expect(spotOffset('top-center', primary.workArea, folded)).toEqual({ x: 720, y: 8 })
+    expect(spotOffset('bottom-center', primary.workArea, folded)).toEqual({ x: 720, y: 1032 - 72 })
+    expect(spotOffset('top-right', second.workArea, folded)).toEqual({ x: 1280 - 488, y: 8 })
+  })
+
+  it('wybrane miejsce liczy się z wysokością i skalą paska teraz: przy pytaniu i w skali 150% zostaje 8 DIP od krawędzi', () => {
+    const p = spotPlacement(second, 'bottom-right', folded)
+    expect(p.spot).toBe('bottom-right')
+    for (const s of BAR_SPOTS) expect(barRect(spotPlacement(primary, s, folded), [primary], primary, 1, 64).spot).toBe(s)
+    // The bar grew with a question (92 px): still 8 DIP above the taskbar, not pressed to it.
+    expect(barRect(p, [primary, second], primary, 1, 92).bounds).toEqual({ x: 3200 - 488, y: 672 - 8 - 92, width: 480, height: 92 })
+    // At 150 %: 720 wide, still 8 DIP from the right.
+    expect(barRect(p, [primary, second], primary, 1.5, 96).bounds).toMatchObject({ x: 3200 - 8 - 720, width: 720 })
+  })
+
+  it('przeciąganie: prostokąt idzie za kursorem także między monitorami (bez skoku), w obrębie obszarów roboczych', () => {
+    const start = { x: 8, y: 960, width: 480, height: 64 }
+    expect(draggedBounds(start, { x: 20, y: 980 }, { x: 520, y: 680 }, [primary, second])).toEqual({ x: 508, y: 660, width: 480, height: 64 })
+    // Past the bottom of the work areas: stops above the taskbar.
+    expect(draggedBounds(start, { x: 20, y: 980 }, { x: 20, y: 1075 }, [primary, second]).y).toBe(1032 - 64)
+    // From the second monitor back across the edge: follows the cursor, half on each.
+    const onSecond = { x: 1950, y: 200, width: 480, height: 64 }
+    expect(draggedBounds(onSecond, { x: 1956, y: 210 }, { x: 1910, y: 210 }, [primary, second]).x).toBe(1904)
+    expect(draggedBounds(onSecond, { x: 1956, y: 210 }, { x: 1900, y: 210 }, [primary, second]).x).toBe(1894)
+    // Past the right edge of all: stops there.
+    expect(draggedBounds(start, { x: 20, y: 980 }, { x: 3190, y: 600 }, [primary, second]).x).toBe(3200 - 480)
+  })
+
+  it('upuszczony pasek: własne miejsce na monitorze pod środkiem, w jego obszarze roboczym; po ponownym starcie stoi tam samo', () => {
+    const p = placementAfterDrag({ x: 2100, y: 200, width: 480, height: 64 }, [primary, second], 64, false)
+    expect(p).toEqual({ display: { label: 'LG', bounds: second.bounds }, spot: null, offset: { x: 180, y: 200 } })
+    expect(barRect(p, [primary, second], primary, 1, 64).bounds).toEqual({ x: 2100, y: 200, width: 480, height: 64 })
+    // Let go half on each monitor (middle on the first): put into the first.
+    expect(placementAfterDrag({ x: 1600, y: 200, width: 480, height: 64 }, [primary, second], 64, false)).toMatchObject({ display: { label: 'Dell U2720Q' }, offset: { x: 1920 - 480, y: 200 } })
+  })
+
+  it('rozwinięty w górę: zapamiętana jest dolna, złożona część okna', () => {
+    const p = placementAfterDrag({ x: 600, y: 500, width: 480, height: 300 }, [primary], 64, true)
+    expect(p.offset).toEqual({ x: 600, y: 500 + 300 - 64 })
+    const r = barRect(p, [primary], primary, 1, 64, 300)
+    expect(r.bounds).toEqual({ x: 600, y: 500, width: 480, height: 300 })
+  })
+
+  it('środek poza monitorami: najbliższy monitor, w jego obszarze roboczym', () => {
+    const p = placementAfterDrag({ x: 1900, y: 900, width: 480, height: 64 }, [primary, second], 64, false)
+    // The middle (2140, 932) is below the second monitor (720 high) – it is the nearest.
+    expect(p.display.label).toBe('LG')
+    expect(p.offset).toEqual({ x: 0, y: 672 - 64 })
   })
 })
 
