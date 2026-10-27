@@ -9,7 +9,10 @@
  * The scheduler calls `check()` every 15 s (and on events of the watcher); the sync simulator of E1 calls it on its own
  * virtual clock with a faulty file system.
  */
+import { readFileSync } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { writeFileAtomic } from '../datastore/atomic'
 import { EventClock, type ClockSources } from '@shared/data/clock'
 import type { MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
@@ -26,15 +29,20 @@ import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
 import { betterFreeze, foldFacts, isRunning, type DayFacts } from '@shared/engine/facts'
 import { correctionEnd, freezeDecision, gradeLineFrom, isFreeDay, lastEventsOf, openedAtOf, WRITERS_DAYS, type GradeLine } from '@shared/engine/freeze'
-import { dayGame, gameSummary, notesSum, storedGame, type GameDay, type GameDayInput, type GameSummary } from '@shared/engine/game'
+import { dayGame, notesSum, storedGame, weekOf, type GameDay, type GameDayInput } from '@shared/engine/game'
+import { gameView, regenWaysOf, ROOM_ITEMS, storedWays, type GameView } from '@shared/engine/progress'
+import { sideBOf, storedModules, type DayMeasure, type SideB } from '@shared/engine/sideB'
+import type { DaySummary } from '@shared/engine/daySummary'
+import { calibrationPeriod, costProposals, inCalibration, timeProposals, type CalibrationDay, type CalibrationPeriod, type CostEvidence, type CostProposal, type TimeProposal, type TimeSample } from '@shared/engine/calibration'
+
 import { inProcess, type Worker } from '../worker/host'
 import { CLOSE_WINDOW_H, closeEvents, closeRefusal, ritualAnswer, ritualRows, unclosedDays, type DayLog, type RitualValue, type RitualView } from '@shared/engine/ritual'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
-import { compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type LogEvent, type CloseHow, type Domain, type Signal } from '@shared/model/events'
+import { CLOSE_HOWS, compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type Signal } from '@shared/model/events'
 import type { Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
-import { rdFrom } from '@shared/model/rd'
+import { MODULES, rdFrom, type ModuleId } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { routineFrom, type Routine } from '@shared/model/routines'
 import type { CsvDay } from '@shared/engine/csv'
@@ -84,6 +92,9 @@ const FREEZE_RETRY_MS = 15 * 60_000
 const OWN_COPY_DAYS = 4
 /** A day's files quiet this long before its freeze (spec „nie zmieniają się od 1 min po przeskanowaniu folderu”). */
 const QUIET_MS = 60_000
+const CALIBRATION_RECHECK_MS = 10 * 60_000
+/** The room's items this computer has seen unlocked, in its state folder. */
+const ROOM_FILE = 'room.json'
 
 /**
  * A block of the day runs now (started, not ended, not paused – „Cofnij” counted): one running through 04:00 keeps its
@@ -197,6 +208,8 @@ export class DataFolder {
   private readonly freezeRetry = new Map<string, number>()
   /** The files of grades as last read (by size and time of modification). */
   private readonly gradeFiles = new Map<string, { size: number; mtimeMs: number; lines: GradeLine[] }>()
+  /** In the calibration period: last counted (the day, when), see `calibrating`. */
+  private calibrationNow: { day: string; at: number; on: boolean; retryMs: number } | null = null
 
   private constructor(private readonly o: FolderOptions) {
     this.rulesVersion = o.rulesVersion ?? RULES_VERSION
@@ -637,26 +650,147 @@ export class DataFolder {
   }
 
   /**
+   * The modules during each day from `from` to today before its first change that day (spec „Moduły”; the day's own
+   * changes the engine reads from its log) – one pass back from today: the first change on a later day says what it
+   * was, before any the setting now.
+   */
+  private async moduleStates(from: string, today: string): Promise<(day: string) => Record<ModuleId, boolean>> {
+    const cur = { ...rdFrom(await this.shared(paths.settings)).general.modules }
+    const during = new Map<string, Record<ModuleId, boolean>>()
+    for (let d = today; d >= from; d = addDays(d, -1)) {
+      during.set(d, { ...cur })
+      const firsts = new Set<ModuleId>()
+      for (const e of (await this.log.readDay(d)).events.filter(isKnown).sort(compareEvents)) {
+        const m = e.k === 'energy.module' ? 'energy' : e.k === 'module.set' && (MODULES as readonly string[]).includes(e.module) ? (e.module as ModuleId) : null
+        if (!m || firsts.has(m)) continue
+        firsts.add(m)
+        const t = e as { on: boolean; was?: boolean }
+        cur[m] = t.was ?? !t.on
+      }
+    }
+    return (day) => during.get(day) ?? cur
+  }
+
+  /**
    * What the days from `from` to today need for their place in the game besides their logs (spec „Statusy dni i passa”,
-   * „Moduły”): the first day with the game, the wizard's day, and the modules during each day before its first change
-   * that day (the day's own changes the engine reads from its log) – one pass back from today: the first change on a
-   * later day says what it was, before any the setting now.
+   * „Moduły”): the first day with the game, the wizard's day, the game and energy modules during each day.
    */
   private async gameInputs(from: string, today: string): Promise<(day: string) => GameDayInput> {
-    const now = rdFrom(await this.shared(paths.settings)).general.modules
-    let game = now.game
-    let energy = now.energy
-    const during = new Map<string, { game: boolean; energy: boolean }>()
-    for (let d = today; d >= from; d = addDays(d, -1)) {
-      during.set(d, { game, energy })
-      const events = (await this.log.readDay(d)).events.filter(isKnown).sort(compareEvents)
-      const g = events.find((e): e is Extract<LogEvent, { k: 'module.set' }> => e.k === 'module.set' && e.module === 'game')
-      const en = events.find((e): e is Extract<LogEvent, { k: 'energy.module' }> => e.k === 'energy.module')
-      if (g) game = g.was
-      if (en) energy = en.was ?? !en.on
-    }
+    const states = await this.moduleStates(from, today)
     const wizardDay = await this.firstLogDay()
-    return (day) => ({ from: this.o.gameFrom ?? null, wizardDay, gameOn: during.get(day)?.game ?? game, energyOn: during.get(day)?.energy ?? energy })
+    return (day) => {
+      const s = states(day)
+      return { from: this.o.gameFrom ?? null, wizardDay, gameOn: s.game, energyOn: s.energy, projectsOn: s.projects, requestsOn: s.requests }
+    }
+  }
+
+  /**
+   * Days counted as their grades count them, by the helper process (the „Strona B”, the calibration): a frozen day up to
+   * the events its freeze names, with the modules its grade keeps; one not frozen yet with all its events and the
+   * modules of one pass back from today (made at the first such day – call in the order of dates). Null: no record.
+   */
+  private summaries(today: string, at: number): (day: string) => Promise<{ summary: DaySummary; frozen: boolean } | null> {
+    let states: Promise<(day: string) => Record<ModuleId, boolean>> | null = null
+    let graded: Promise<Map<string, GradeLine>> | null = null
+    return async (day) => {
+      const read = await this.log.readDay(day)
+      if (!read.events.length) return null
+      const frozen = foldFacts(gridOf(day), read.events).frozen
+      graded ??= this.gradeLines()
+      let modules = storedModules(frozen?.grade) ?? storedModules((await graded).get(day)?.grade)
+      if (!modules) {
+        const s = (await (states ??= this.moduleStates(day, today)))(day)
+        modules = { energy: s.energy, projects: s.projects, requests: s.requests }
+      }
+      const summary = await (this.o.worker ?? inProcess).run({ kind: 'summary', ctx: await this.dayContext(day, read, at), know: frozen?.know ?? lastEventsOf(read.events), modules })
+      return { summary, frozen: frozen != null }
+    }
+  }
+
+  /**
+   * The „Strona B tygodnia” of the week before today's (spec: on Monday, the week that ended): its days and the week
+   * before them, each counted as its grade counts it; preliminary until its Sunday is frozen. A day without your
+   * presence is not measured.
+   */
+  async sideB(at = this.clock.now()): Promise<SideB> {
+    const today = logicalDayOf(at)
+    const week = addDays(weekOf(today), -7)
+    const sunday = addDays(week, 6)
+    const summaryOf = this.summaries(today, at)
+    const measures: DayMeasure[] = []
+    let sundayFrozen = false
+    for (let d = addDays(week, -7); d <= sunday; d = addDays(d, 1)) {
+      const s = await summaryOf(d)
+      if (d === sunday) sundayFrozen = s?.frozen ?? false
+      if (s?.summary.measure) measures.push(s.summary.measure)
+    }
+    return sideBOf(week, measures, sundayFrozen)
+  }
+
+  /**
+   * Every day's close and type (the calibration period): frozen days from their grades, the days the leader will still
+   * freeze (from the ritual's first day, within its look back) from their logs; without the ritual – none closed.
+   */
+  private async calibrationDays(today: string): Promise<CalibrationDay[]> {
+    const graded = await this.gradeLines()
+    const out: CalibrationDay[] = []
+    for (const [date, line] of graded) {
+      const closed = (CLOSE_HOWS as readonly unknown[]).includes(line.grade.closed) ? (line.grade.closed as CloseHow) : null
+      out.push({ date, closed, dayType: typeof line.grade.dayType === 'string' ? line.grade.dayType : 'zwykly' })
+    }
+    const ritualFrom = this.o.ritualFrom ?? null
+    if (ritualFrom == null) return out
+    for (let i = FREEZE_LOOKBACK_DAYS; i >= 0; i--) {
+      const date = addDays(today, -i)
+      if (date < ritualFrom || graded.has(date)) continue
+      const read = await this.log.readDay(date)
+      if (!read.events.length) continue
+      const f = foldFacts(gridOf(date), read.events)
+      out.push({ date, closed: f.closed?.how ?? null, dayType: f.snapshots.at(-1)?.dayType ?? daySnapshotOf(read.events)?.dayType ?? 'zwykly' })
+    }
+    return out
+  }
+
+  /**
+   * The calibration now (spec „Kalibracja”): its period and – once there is one – the proposals of its review from the
+   * period's qualifying days, each counted as its grade counts it: time for the templates as in force today, costs
+   * against the settings of today.
+   */
+  async calibration(at = this.clock.now()): Promise<{ period: CalibrationPeriod | null; time: TimeProposal[]; costs: CostProposal[] }> {
+    const today = logicalDayOf(at)
+    const period = calibrationPeriod(await this.calibrationDays(today), today)
+    if (!period) return { period, time: [], costs: [] }
+    const summaryOf = this.summaries(today, at)
+    const samples: TimeSample[] = []
+    const evidence: CostEvidence[] = []
+    for (const d of period.days) {
+      const s = await summaryOf(d)
+      if (!s) continue
+      samples.push(...s.summary.samples)
+      if (s.summary.costs) evidence.push(s.summary.costs)
+    }
+    const inp = await this.inputs()
+    return { period, time: timeProposals(samples, inp.templates, today), costs: costProposals(evidence, settingsOn(inp.changes, today)) }
+  }
+
+  /**
+   * In the calibration period now (reactions of energy only inform, without variants): counted at most every 10 min and
+   * at the change of the day – the period moves by whole days. Files that cannot be read now never stop the bar: the
+   * last answer stays (none yet – not in the period) and the count is tried again in a minute.
+   */
+  async calibrating(at = this.clock.now()): Promise<boolean> {
+    const today = logicalDayOf(at)
+    const c = this.calibrationNow
+    if (c && c.day === today && at - c.at < c.retryMs) return c.on
+    try {
+      const on = inCalibration(calibrationPeriod(await this.calibrationDays(today), today))
+      this.calibrationNow = { day: today, at, on, retryMs: CALIBRATION_RECHECK_MS }
+      return on
+    } catch {
+      const on = c?.on ?? false
+      this.calibrationNow = { day: today, at, on, retryMs: 60_000 }
+      return on
+    }
   }
 
   /**
@@ -679,14 +813,14 @@ export class DataFolder {
    * today's notes so far – both „w toku”. Null without the game (before the version with its screens, T492) or without
    * freezing (no ritual yet: no day would ever get its grade).
    */
-  async gameState(at = this.clock.now()): Promise<GameSummary | null> {
+  async gameState(at = this.clock.now()): Promise<GameView | null> {
     const ritualFrom = this.o.ritualFrom ?? null
     const gameFrom = this.o.gameFrom ?? null
     if (gameFrom == null || ritualFrom == null) return null
     const today = logicalDayOf(at)
     const graded = await this.gradeLines()
     const days: GameDay[] = []
-    for (const [date, line] of graded) if (date >= gameFrom && date < today) days.push({ date, ...storedGame(line.grade), frozen: true })
+    for (const [date, line] of graded) if (date >= gameFrom && date < today) days.push({ date, ...storedGame(line.grade), frozen: true, regenWays: storedWays(line.grade) })
     // Not frozen yet: only days the leader will still freeze (from the ritual's first day, within its look back).
     const from = gameFrom > ritualFrom ? gameFrom : ritualFrom
     const open: Array<{ date: string; read: DayRead }> = []
@@ -695,7 +829,7 @@ export class DataFolder {
       if (date < from || graded.has(date)) continue
       const read = await this.log.readDay(date)
       const frozen = foldFacts(gridOf(date), read.events).frozen
-      if (frozen) days.push({ date, ...storedGame(frozen.grade), frozen: true })
+      if (frozen) days.push({ date, ...storedGame(frozen.grade), frozen: true, regenWays: storedWays(frozen.grade) })
       else if (read.events.length) open.push({ date, read })
     }
     const inputs = open.length ? await this.gameInputs(open[0]!.date, today) : null
@@ -703,15 +837,33 @@ export class DataFolder {
       const ctx = await this.dayContext(date, read, at)
       const game = inputs!(date)
       if (date < today) {
-        const g = (await (this.o.worker ?? inProcess).run({ kind: 'grade', ctx, know: lastEventsOf(read.events), game })).game
-        days.push({ date, status: g.status, notes: notesSum(g.notes), frozen: false })
+        const grade = await (this.o.worker ?? inProcess).run({ kind: 'grade', ctx, know: lastEventsOf(read.events), game })
+        days.push({ date, status: grade.game.status, notes: notesSum(grade.game.notes), frozen: false, regenWays: grade.regenWays })
       } else {
         const state = computeDay(ctx)
         const g = dayGame({ ctx, state, energy: computeEnergy(ctx, state, { moduleOn: game.energyOn }), free: isFreeDay(state, ctx.events), game, over: false })
-        days.push({ date, status: null, notes: notesSum(g.notes), frozen: false })
+        days.push({ date, status: null, notes: notesSum(g.notes), frozen: false, regenWays: regenWaysOf(state) })
       }
     }
-    return gameSummary(days, today)
+    // Once unlocked, an item stays (spec): this computer remembers what its room had.
+    const kept = this.roomKept()
+    const view = gameView(days, today, ROOM_ITEMS, kept)
+    const fresh = view.room.unlocked.filter((x) => !kept.has(x.id))
+    if (fresh.length) {
+      await mkdir(this.o.stateDir, { recursive: true })
+      await writeFileAtomic(join(this.o.stateDir, ROOM_FILE), JSON.stringify({ unlocked: [...kept, ...fresh.map((x) => x.id)] }))
+    }
+    return view
+  }
+
+  /** The room's items this computer has seen unlocked (its state folder; unreadable – none). */
+  private roomKept(): Set<string> {
+    try {
+      const v = JSON.parse(readFileSync(join(this.o.stateDir, ROOM_FILE), 'utf8')) as { unlocked?: unknown }
+      return new Set(Array.isArray(v.unlocked) ? v.unlocked.filter((x): x is string => typeof x === 'string') : [])
+    } catch {
+      return new Set()
+    }
   }
 
   /** The grades of frozen days from every computer's file of grades (also conflict copies): of two, the better (spec). */
@@ -987,7 +1139,8 @@ export class DataFolder {
     const ctx = await this.ownContext(day, read, at)
     const state = computeDay(ctx)
     const rd = rdFrom(await this.recordView(paths.settings))
-    return { ctx, state, energy: computeEnergy(ctx, state, { moduleOn: rd.general.modules.energy }), activity: await this.activityFor(day, read, at), rd }
+    const calibration = await this.calibrating(at)
+    return { ctx, state, energy: computeEnergy(ctx, state, { moduleOn: rd.general.modules.energy, calibration }), activity: await this.activityFor(day, read, at), rd }
   }
 
   /**

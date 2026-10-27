@@ -15,20 +15,39 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
-- **Tylko Ty** (testy tego nie widzą): E7a.2 (kliknięcie „Wymień”), E6b.2, E6a.3, E4b.4, E4b.9, E4b.10, E4b.11, E4a.5, E4a.11, E4a.12, E3.2, E3.9,
-  E3.10, E3.11, a w E3.6 „Dodaj do planu” i w E3.8 przywrócenie z ekranu.
+- **Tylko Ty** (testy tego nie widzą): E7a.2 (kliknięcie „Wymień”), E6b.2, E6a.3, E4b.4, E4b.9 (po poprawce),
+  E4b.10, E4b.11, E4a.5, E4a.11, E4a.12, E3.9, E3.10.
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 
 **Kolejność, która oszczędza czas:**
-1. Raz, na start: E7a.1 (albo E6b.1 / E6a.1 / E5.1, jeśli nowsza wersja jeszcze nie przyszła); następnego dnia po
-   12:00 E6b.2.
+1. Raz, na start: E7b.1 (albo E7a.1 / E6b.1 / E6a.1 / E5.1, jeśli nowsza wersja jeszcze nie przyszła); następnego
+   dnia po 12:00 E6b.2.
 2. Zwykły dzień pracy: E4a.1–E4a.4, E4a.6–E4a.9, E4b.1–E4b.3, E4b.5–E4b.7, E5.2, E6a.4, E7a.2.
 3. Dzień z sesją: E4a.5, E4b.4.
 4. Wieczór: E4b.8, E4b.10, E6a.2, E6a.3.
-5. Ustawienia i próba: E4b.9, E4b.11, E3.3–E3.8, E3.11.
+5. Ustawienia i próba: E4b.9 (po poprawce), E4b.11, E3.3–E3.5, E3.7.
 6. Laptop i noc (gdy masz laptopa pod ręką): E3.9, E3.10, E4a.11, E4a.12.
 7. Jednorazowe: E4a.10, E4a.13, E3.12.
+
+---
+
+## Wersja 0.9.0 – logika E7, część 2 (pokój, kasety, „Strona B”, kalibracja pod spodem)
+
+### E7b.1 Aktualizacja do 0.9.0
+- [ ] Odebrane
+- **Automatycznie:** ścieżki aktualizacji sprawdza CI na Windows (`tests/update/update-paths.spec.ts`); pokój, kasety,
+  święta, „Strona B” i kalibrację – `tests/unit/engine/progress.test.ts`, `sideB.test.ts`, `calibration.test.ts`,
+  `tests/fs/game.test.ts` i test skali. Ty: rzut oka.
+- **Jak sprawdzić:** aktualizacja przychodzi sama w nocy albo Ustawienia → Aktualizacje → „Zainstaluj teraz”; otwórz
+  okno główne; popracuj zwykle z paskiem przez godzinę.
+- **Oczekiwany efekt:** baner „Co nowego w wersji 0.9.0” z czterema punktami; ostatni mówi, że ekrany gry, „Strony B”
+  i przeglądu kalibracji pojawią się w jednej z następnych wersji. Okno, pasek i powiadomienia jak w 0.8.0.
+- **Nie przechodzi, gdy:**
+  - po instalacji aplikacja się nie uruchamia albo pokazuje baner „nie udała się” / „nie dokończyła się”;
+  - „Co nowego” pokazuje starszą wersję;
+  - pasek albo okno pokazują pokój, kasetę, „Stronę B” albo cokolwiek o kalibracji;
+  - pasek przestaje się odświeżać (stoi na starej godzinie) albo w `main.log` są nowe błędy przy pracy z paskiem.
 
 ---
 
@@ -283,7 +302,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
   - „Start” w panelu bloku nic nie robi.
 
 ### E4b.9 „Zawsze na wierzchu”
-- [ ] Odebrane
+- [ ] Odebrane — **nie przechodzi (27.10.2026):** przy „pasek pulpitu” pasek widać nad filmem na pełnym ekranie w
+  przeglądarce (YouTube, Netflix). Przyczyna: pomocnik sprawdzał pełny ekran tylko przy zmianie okna na pierwszym
+  planie, a film przechodzi na pełny ekran w tym samym oknie – poprawka w następnej wersji, wtedy sprawdź ponownie.
 - **Tylko Ty:** pasek pod oknami sprawdza CI (`tests/e2e/bar-windows.spec.ts`), ale nie TradingView, film na pełnym ekranie ani fokus przy Twoich programach.
 - **Jak sprawdzić:** Ustawienia → „Zawsze na wierzchu” → „pasek pulpitu”. Zmaksymalizuj TradingView i kliknij pasek,
   pisząc coś w TradingView. Puść film na pełnym ekranie. Potem ustaw „pasek i panel” i otwórz panel ikony. Na koniec
@@ -311,7 +332,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
 ### E4b.11 Zestaw kolorów (Twoja decyzja D298)
 - [ ] Odebrane, wybrany zestaw: ………
 - **Tylko Ty:** to Twoja decyzja (D298).
-- **Jak sprawdzić:** „Próba” → „Zestaw kolorów”: robocze, cieplejsze, chłodniejsze. Porównaj ikonę, pasek i panel.
+- **Jak sprawdzić:** ekran „Próba” – w lewym menu na samym dole, tuż nad „Ustawienia” (bez skrótu Ctrl) → „Zestaw
+  kolorów”: robocze, cieplejsze, chłodniejsze. Porównaj ikonę, pasek i panel.
 - **Oczekiwany efekt:** wybór zmienia kolory od razu we wszystkich trzech miejscach. Napisz mi, który zestaw zostaje.
 - **Nie przechodzi, gdy:**
   - przełączenie nie zmienia kolorów;
@@ -488,21 +510,6 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
   - okno pokazuje pusty plan zamiast kreatora;
   - aplikacja sama zakłada folder danych bez pytania.
 
-### E3.2 Kreator – folder i kroki
-- [ ] Odebrane
-- **Tylko Ty:** kroki i zapis dopiero przy „Zakończ” sprawdza `tests/e2e/wizard.spec.ts`; zielone kółko OneDrive i strony ustawień Windows – tylko Ty.
-- **Jak sprawdzić:** przejdź kreator. Zmieniaj wartości i patrz na podgląd dnia. Kliknij przyciski ustawień systemu.
-  Na końcu „Zakończ” i otwórz folder danych w Eksploratorze.
-- **Oczekiwany efekt:** proponowany folder to `OneDrive\RegulatedDay`. Podgląd dnia po prawej zmienia się z każdą
-  wartością. Przyciski ustawień systemu otwierają właściwe strony Windows. Po „Zakończ” w folderze są `rd.json`,
-  `templates\` i `days\`. Przy zaznaczonym „Zawsze przechowuj na tym urządzeniu” folder ma w Eksploratorze pełne zielone
-  kółko.
-- **Nie przechodzi, gdy:**
-  - po „Zakończ” brakuje `rd.json`, `templates\` albo `days\`;
-  - przerwany w połowie kreator zostawia pliki w folderze (nic nie zapisuje się przed „Zakończ”);
-  - podgląd nie zmienia się po zmianie wartości;
-  - zamiast pełnego zielonego kółka jest chmurka albo puste kółko.
-
 ### E3.3 Plan poranny i „+ Blok” po granicy
 - [ ] Odebrane
 - **Automatycznie:** `tests/e2e/screens.spec.ts` (plan poranny, „Plan zatwierdzony”, wymiana, „Dodaj bez wymiany”). Ty: rzut oka.
@@ -534,17 +541,6 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
   - nie ma pytania o analizę tygodniową;
   - dni w kalendarzu nie mają kolorów typów.
 
-### E3.6 Prośby z kolejki
-- [ ] Odebrane
-- **Automatycznie:** lista próśb i nota – `screens.spec.ts`. „Dodaj do planu” nie ma testu na ekranie – to sprawdź Ty.
-- **Jak sprawdzić:** „+ Prośba” z osobą i notą. W planie porannym „Dziś” zaznacz ją na liście „Prośby z kolejki” i „Dodaj
-  do planu”.
-- **Oczekiwany efekt:** prośba jest na liście, a po „Dodaj do planu” w planie jest jeden blok próśb w pierwszej wolnej
-  przerwie.
-- **Nie przechodzi, gdy:**
-  - prośby nie ma na liście w planie porannym;
-  - po dodaniu powstaje kilka bloków albo blok nachodzi na inny blok.
-
 ### E3.7 Ustawienia – budżet od jutra
 - [ ] Odebrane
 - **Automatycznie:** odmowa 17h i zapis 7h – `screens.spec.ts`. Ty: rzut oka, że dzisiejszy plan się nie zmienił.
@@ -554,15 +550,6 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
 - **Nie przechodzi, gdy:**
   - 17h zapisuje się;
   - 7h zmienia już dzisiejszy dzień.
-
-### E3.8 Historia rekordu
-- [ ] Odebrane
-- **Automatycznie:** wersje rekordów – `tests/fs/e3-data.test.ts`, ekran historii – `screens.spec.ts`. Przywrócenie z ekranu nie ma testu – to sprawdź Ty.
-- **Jak sprawdzić:** zmień notę prośby, potem w „Historia” przywróć poprzednią wersję.
-- **Oczekiwany efekt:** wraca poprzednia nota.
-- **Nie przechodzi, gdy:**
-  - w historii nie ma poprzedniej wersji;
-  - przywrócenie nie zmienia noty albo zmienia inną prośbę.
 
 ### E3.9 Laptop dołącza do danych
 - [ ] Odebrane
@@ -587,15 +574,6 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
   - po wyborze komputery pokazują różne noty;
   - w folderze zostaje kopia konfliktowa OneDrive (plik z nazwą komputera).
 
-### E3.11 Autostart wyłączony w Windows
-- [ ] Odebrane
-- **Tylko Ty:** nie ma testu automatycznego (Menedżer zadań Windows).
-- **Jak sprawdzić:** Menedżer zadań → Aplikacje autostartu → wyłącz Regulated Day. Zrób dwa restarty.
-- **Oczekiwany efekt:** autostart nadal wyłączony, aplikacja nie uruchamia się sama.
-- **Nie przechodzi, gdy:**
-  - po restarcie autostart jest znowu włączony;
-  - aplikacja uruchamia się sama.
-
 ### E3.12 Kopia przed aktualizacją
 - [ ] Odebrane
 - **Automatycznie:** `tests/fs/e3-data.test.ts` („kopia przed aktualizacją: raz na aktualizację…”). Ty: rzut oka.
@@ -616,6 +594,27 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
 ---
 
 ## Odebrane wcześniej
+
+### E3 (0.2.0) – odebrane 27.10.2026
+
+#### E3.2 Kreator – folder i kroki
+- [x] Odebrane 27.10.2026
+- **Oczekiwany efekt:** proponowany folder to `OneDrive\RegulatedDay`; podgląd dnia zmienia się z każdą wartością;
+  przyciski ustawień systemu otwierają właściwe strony Windows; po „Zakończ” w folderze są `rd.json`, `templates\`
+  i `days\`; przy „Zawsze przechowuj na tym urządzeniu” pełne zielone kółko.
+
+#### E3.6 Prośby z kolejki
+- [x] Odebrane 27.10.2026
+- **Oczekiwany efekt:** prośba jest na liście, a po „Dodaj do planu” w planie jest jeden blok próśb w pierwszej wolnej
+  przerwie.
+
+#### E3.8 Historia rekordu
+- [x] Odebrane 27.10.2026
+- **Oczekiwany efekt:** po przywróceniu w „Historia” wraca poprzednia nota prośby.
+
+#### E3.11 Autostart wyłączony w Windows
+- [x] Odebrane 27.10.2026
+- **Oczekiwany efekt:** po dwóch restartach autostart nadal wyłączony, aplikacja nie uruchamia się sama.
 
 ### E1 i E2 (dane, silnik dnia, model energii)
 Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem są testy w CI.

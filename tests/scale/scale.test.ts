@@ -100,6 +100,9 @@ describe('test skali (3 lata danych)', () => {
     const game = await time(async () => (summary = await folder.gameState()))
     expect(summary!.steps).toHaveLength(gen.days - 1)
     expect(summary!.notes.final).toBeGreaterThan(5_000)
+    // A cassette for every week closed by its frozen Sunday (157 in 3 years), the room and the celebrations with them.
+    expect(summary!.cassettes.length).toBeGreaterThanOrEqual(155)
+    expect(summary!.room.next).toBeNull()
     for (const [what, ms] of Object.entries({ click, check, day, energy, game })) expect(ms, what).toBeLessThan(100 * factor)
   })
 })

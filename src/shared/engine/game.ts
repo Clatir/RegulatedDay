@@ -6,13 +6,13 @@
  * grade earns the same also with the game switched off: the „Strona B tygodnia” measures from it, the game only gives no
  * notes. Pure: the same day gives the same grade on every computer.
  */
-import { placeOf, type Pool } from '../model/categories'
+import { placeOf, type CategoryRules, type Pool } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type GameEvent, type LogEvent } from '../model/events'
 import { questionId } from '../model/ids'
 import { addDays, weekday } from '../time/zone'
 import type { DayContext, DayState } from './day'
 import type { Descent, EnergyState } from './energy'
-import { OPEN, ranMinutes } from './facts'
+import { OPEN, ranMinutes, type BlockFact } from './facts'
 import { idxOf } from './grid'
 import { fewerSpans } from './modes'
 import { dayOutcome } from './outcome'
@@ -75,6 +75,9 @@ export interface GameDayInput {
   gameOn: boolean
   /** The energy module likewise (`energy.module` events): the reward for the reserve. */
   energyOn: boolean
+  /** The modules of projects and requests likewise (the grade keeps the day's modules for the „Strona B”); default on. */
+  projectsOn?: boolean
+  requestsOn?: boolean
 }
 
 /** An event written within this of its own instant was written live – a click, not a time given later (the ritual, an edit). */
@@ -107,6 +110,77 @@ const LEFT_RULES: ReadonlySet<string> = new Set(['absenceAnswer'])
 
 const live = (e: LogEvent & { at: number }) => Math.abs(e.t - e.at) <= LIVE_MS
 
+/** What the log says of a started and ended block: how its start and end were given (the accuracy, the calibration). */
+export interface BlockEvidence {
+  f: BlockFact
+  start: Extract<LogEvent, { k: 'block.start' }>
+  end: Extract<LogEvent, { k: 'block.end' }>
+  rules: CategoryRules
+  away: boolean
+  /** Started by a click when it happened (not from the plan, not given later). */
+  clickStart: boolean
+  /** Its start is yours: a click, or a time you gave later – not an automatic start nor „it happened as planned”. */
+  givenStart: boolean
+  /** Its real end is known: a click or your answer then, away from the computer your answer after the return. */
+  realEnd: boolean
+  /** Its end is yours: a click or your answer (also a time given later, e.g. „skończył się o …”), never one when you left. */
+  givenEnd: boolean
+  /** Finished: marked done (away: kept by your answer after the return). */
+  done: boolean
+  /** Its times corrected („korekta”). */
+  corrected: { start: boolean; end: boolean }
+  /** An absence counted out while it went on, without your „odlicz” (D269, D272). */
+  absenceUnanswered: boolean
+}
+
+/**
+ * The evidence of every started and ended block of the day. An automatic end is a real end only away from the computer
+ * at the first use after it, kept by your answer after the return („Trwał do teraz”); an end when you left (also by
+ * your answer that only names the absence, D275) never is.
+ */
+export function blockEvidence(ctx: DayContext, state: DayState): BlockEvidence[] {
+  const { facts, grid } = state
+  const starts = new Map<string, Extract<LogEvent, { k: 'block.start' }>>()
+  const ends = new Map<string, Extract<LogEvent, { k: 'block.end' }>>()
+  const fixes = new Map<string, { start: boolean; end: boolean }>()
+  for (const e of ctx.events) {
+    if (!isKnown(e) || facts.undone.has(e.id)) continue
+    if (e.k === 'block.start') {
+      const was = starts.get(e.block)
+      if (!was || compareEvents(e, was) < 0) starts.set(e.block, e)
+    } else if (e.k === 'block.end') ends.set(e.id, e)
+    else if (e.k === 'block.fix') {
+      const x = fixes.get(e.block) ?? { start: false, end: false }
+      fixes.set(e.block, { start: x.start || e.start != null, end: x.end || e.end != null })
+    }
+  }
+  const out: BlockEvidence[] = []
+  for (const f of facts.blocks.values()) {
+    const p = f.planned
+    const start = starts.get(f.id)
+    const end = f.endId ? ends.get(f.endId) : undefined
+    const rules = p ? state.settings.categories[p.categoryId] : undefined
+    if (f.startedAt == null || f.endedAt == null || !p || !start || !end || !rules) continue
+    const away = placeOf(rules, p.variantId) === 'away'
+    let done = f.done === true
+    let realEnd: boolean
+    let givenEnd: boolean
+    if (end.autoRule) {
+      const kept = facts.answers.get(questionId(grid.date, 'return', f.id, idxOf(grid, end.at)))?.answer === 'keep'
+      realEnd = givenEnd = away && end.autoRule === 'firstUse' && kept
+      if (realEnd) done = true
+    } else {
+      // The end that came with „it happened as planned” is the plan's too.
+      givenEnd = !(end.rule != null && LEFT_RULES.has(end.rule)) && start.how !== 'plan'
+      realEnd = givenEnd && (live(end) || away)
+    }
+    const absenceUnanswered = facts.autos.some((a) => a.block === f.id && a.rule === 'absence' && a.k === 'block.pause' && facts.answers.get(questionId(grid.date, 'absence', f.id, a.at))?.answer !== 'keep')
+    const givenStart = !start.autoRule && start.how !== 'auto' && start.how !== 'plan'
+    out.push({ f, start, end, rules, away, clickStart: givenStart && start.how === 'click' && live(start), givenStart, realEnd, givenEnd, done, corrected: fixes.get(f.id) ?? { start: false, end: false }, absenceUnanswered })
+  }
+  return out
+}
+
 /**
  * „Trafne szacowanie” (spec, D65, D200, D269, D272, D275, T312, T386): the blocks whose real time came within the
  * tolerance of their length at the start – a finished flexible block of work or of life and care, at least 20 min long
@@ -116,43 +190,16 @@ const live = (e: LogEvent & { at: number }) => Math.abs(e.t - e.at) <= LIVE_MS
  * „odlicz”. The real time is without pauses.
  */
 export function accurateBlocks(ctx: DayContext, state: DayState, rules: GameRules = GAME_RULES): string[] {
-  const { facts, grid } = state
-  const starts = new Map<string, Extract<LogEvent, { k: 'block.start' }>>()
-  const ends = new Map<string, Extract<LogEvent, { k: 'block.end' }>>()
-  const corrected = new Set<string>()
-  for (const e of ctx.events) {
-    if (!isKnown(e) || facts.undone.has(e.id)) continue
-    if (e.k === 'block.start') {
-      const was = starts.get(e.block)
-      if (!was || compareEvents(e, was) < 0) starts.set(e.block, e)
-    } else if (e.k === 'block.end') ends.set(e.id, e)
-    else if (e.k === 'block.fix') corrected.add(e.block)
-  }
   const plan = new Map(ctx.plan.map((b) => [b.id, b]))
   const out: string[] = []
-  for (const f of facts.blocks.values()) {
-    const p = f.planned
-    if (f.startedAt == null || f.endedAt == null || !p || p.fixed || p.durationMin < rules.accuracy.minMin) continue
-    const cat = state.settings.categories[p.categoryId]
-    if (!cat || (cat.cls !== 'work' && cat.cls !== 'life')) continue
-    if (plan.get(f.id)?.byVariant || corrected.has(f.id)) continue
-    const start = starts.get(f.id)
-    const end = f.endId ? ends.get(f.endId) : undefined
-    if (!start || !end || start.how !== 'click' || start.autoRule || !live(start)) continue
-    const away = placeOf(cat, p.variantId) === 'away'
-    let done = f.done === true
-    if (end.autoRule) {
-      // Away: the end at the first use after it, kept by your answer after the return („Trwał do teraz”).
-      const kept = facts.answers.get(questionId(grid.date, 'return', f.id, idxOf(grid, end.at)))?.answer === 'keep'
-      if (!away || end.autoRule !== 'firstUse' || !kept) continue
-      done = true
-    } else if ((end.rule != null && LEFT_RULES.has(end.rule)) || !(live(end) || away)) continue
-    if (!done || (!away && start.c !== end.c)) continue
-    // An absence counted out while the block went on, without your „odlicz” (D269, D272).
-    if (facts.autos.some((a) => a.block === f.id && a.rule === 'absence' && a.k === 'block.pause' && facts.answers.get(questionId(grid.date, 'absence', f.id, a.at))?.answer !== 'keep')) continue
-    const real = ranMinutes(f, f.endedAt)
+  for (const x of blockEvidence(ctx, state)) {
+    const p = x.f.planned!
+    if (p.fixed || p.durationMin < rules.accuracy.minMin || (x.rules.cls !== 'work' && x.rules.cls !== 'life')) continue
+    if (plan.get(x.f.id)?.byVariant || x.corrected.start || x.corrected.end) continue
+    if (!x.clickStart || !x.realEnd || !x.done || (!x.away && x.start.c !== x.end.c) || x.absenceUnanswered) continue
+    const real = ranMinutes(x.f, x.f.endedAt!)
     const tolerance = Math.max(rules.accuracy.floorMin, (p.durationMin * rules.accuracy.pct) / 100)
-    if (Math.abs(real - p.durationMin) <= tolerance) out.push(f.id)
+    if (Math.abs(real - p.durationMin) <= tolerance) out.push(x.f.id)
   }
   return out
 }
@@ -282,6 +329,8 @@ export interface GameDay {
   status: DayStatus | null
   notes: number
   frozen: boolean
+  /** Minutes of regeneration by way (the cassette's cover), when known. */
+  regenWays?: Record<string, number>
 }
 
 /** What a day did to the streak: one more, held (without data, protected), broken, skipped (outside the game). */
@@ -292,6 +341,8 @@ export interface StreakStep {
   move: StreakMove
   /** The streak after the day. */
   streak: number
+  /** The day is frozen (a step of a day open to corrections may still change). */
+  frozen: boolean
 }
 
 export interface GameSummary {
@@ -343,7 +394,7 @@ export function gameSummary(days: readonly GameDay[], today: string, rules: Game
       move = 'protected'
     } else move = 'broken'
     streak = move === 'up' ? streak + 1 : move === 'broken' ? 0 : streak
-    steps.push({ date: d.date, move, streak })
+    steps.push({ date: d.date, move, streak, frozen: d.frozen })
   }
   const current = weekOf(today)
   const thisWeek = steps.filter((s) => weekOf(s.date) === current)

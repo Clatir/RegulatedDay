@@ -9,7 +9,7 @@
 import { runTask, type WorkerResult, type WorkerTask } from './tasks'
 
 /** How long a task may take before the helper counts as hung (ms) – the backup of a folder OneDrive must download first is long. */
-export const TASK_TIMEOUT_MS: Record<WorkerTask['kind'], number> = { ping: 30_000, grade: 60_000, ritual: 60_000, csv: 5 * 60_000, backup: 60 * 60_000 }
+export const TASK_TIMEOUT_MS: Record<WorkerTask['kind'], number> = { ping: 30_000, grade: 60_000, summary: 60_000, ritual: 60_000, csv: 5 * 60_000, backup: 60 * 60_000 }
 
 export interface Worker {
   run<T extends WorkerTask>(task: T): Promise<WorkerResult<T>>

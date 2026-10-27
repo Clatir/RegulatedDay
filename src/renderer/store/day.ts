@@ -87,18 +87,22 @@ export function useDay(date: string): DayModel | null {
   const rd = useData((s) => s.rd)
   const templates = useData((s) => s.templates)
   const lectures = useData((s) => s.lectures)
+  const calibration = useData((s) => s.view?.calibration === true)
   const tick = useNow(30_000)
   return useMemo(() => {
     if (!data || data.date !== date) return null
     // The day at this very instant (read when the data change or the clock ticks): an action written a moment ago – an
     // approval at 12:34:45 counts from the minute it rounds to – is in the day at once.
     void tick
-    return countDay(date, data, { changes: rd.settings, templates, lectures }, Date.now(), rd.general.modules.energy)
-  }, [data, date, rd, templates, lectures, tick])
+    return countDay(date, data, { changes: rd.settings, templates, lectures }, Date.now(), rd.general.modules.energy, calibration)
+  }, [data, date, rd, templates, lectures, tick, calibration])
 }
 
-/** The day from its data and the plan's inputs at `at` (also for previews: the wizard counts a day it has not written). */
-export function countDay(date: string, data: DayData, inputs: PlanInputs, at: number, energyOn = true): DayModel {
+/**
+ * The day from its data and the plan's inputs at `at` (also for previews: the wizard counts a day it has not written);
+ * `calibration` – the calibration period (reactions of energy only inform).
+ */
+export function countDay(date: string, data: DayData, inputs: PlanInputs, at: number, energyOn = true, calibration = false): DayModel {
   const events = data.events as AnyEvent[]
   const dayFile = data.dayFile ? dayFileFrom(data.dayFile, date) : null
   const nextFile = data.nextFile ? dayFileFrom(data.nextFile, addDays(date, 1)) : null
@@ -106,6 +110,6 @@ export function countDay(date: string, data: DayData, inputs: PlanInputs, at: nu
   const { snapshot, fromLog } = snapshotOf(inputs, src, marketDay, at)
   const ctx = dayContextOf(inputs, src, marketDay, at)
   const state = computeDay(ctx)
-  const energy = computeEnergy(ctx, state, { moduleOn: energyOn })
+  const energy = computeEnergy(ctx, state, { moduleOn: energyOn, calibration })
   return { date, data, dayFile, snapshot, fromLog, ctx, state, energy, events }
 }

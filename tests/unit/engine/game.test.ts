@@ -399,6 +399,14 @@ describe('ocena z wersją reguł', () => {
     expect(g.notes).toEqual({ boundary: 3, regen: 3, reserve: 2, accuracy: 1, exchange: 0 })
   })
 
+  it('ocena zapisuje moduły dnia „Strony B” (wyłączony choćby na chwilę – wyłączony) i minuty regeneracji według sposobu', () => {
+    const s = good()
+    s.raw({ k: 'module.set', at: s.at('12:00'), module: 'requests', on: false, was: true }, '12:00')
+    const g = gradeOf({ ...s.contextAt(AT), now: AT }, lastEventsOf(s.events), { ...GAME, projectsOn: false })
+    expect(g.modules).toEqual({ energy: true, projects: false, requests: false })
+    expect(g.regenWays).toEqual({})
+  })
+
   it('zapisana ocena: status i nuty takie, jak policzono; nieznane nuty nowszych reguł też; bez gry – poza grą', () => {
     expect(storedGame({ game: { status: 'kept', notes: { boundary: 3, regen: 3, future: 4 } } })).toEqual({ status: 'kept', notes: 10 })
     expect(storedGame({ boundary: 'kept' })).toEqual({ status: 'out', notes: 0 })

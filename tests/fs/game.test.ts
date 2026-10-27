@@ -160,7 +160,7 @@ describe('passa i nuty z folderu', () => {
     const m = await make('2026-10-01', '2026-10-01')
     const s = await m.folder.gameState()
     // Presence only, the template's work without „Koniec pracy”: without data, holding the streak.
-    expect(s!.steps).toEqual([{ date: d, move: 'held', streak: 0 }])
+    expect(s!.steps).toEqual([{ date: d, move: 'held', streak: 0, frozen: false }])
   })
 
   it('z plików ocen wszystkich komputerów (lepsza z dwóch ocen dnia), z dniami jeszcze otwartymi na poprawki i dzisiejszymi nutami „w toku”', async () => {
@@ -182,5 +182,128 @@ describe('passa i nuty z folderu', () => {
     expect(s!.streak).toBe(4)
     expect(s!.notes.final).toBe(18)
     expect(s!.notes.pending).toBeGreaterThan(0)
+    // The room from the frozen notes; the week of 12.10 closed by its Sunday? Not frozen – no cassette yet.
+    expect(s!.room.unlocked.map((x) => x.id)).toEqual(['roslina-1'])
+    expect(s!.cassettes).toEqual([])
+  })
+
+  it('kaseta tygodnia z zamrożoną niedzielą: ulubiona regeneracja z minut zapisanych w ocenach', async () => {
+    mkdirSync(join(dataDir, 'grades', '2026'), { recursive: true })
+    const withWays = (day: string, ways: Record<string, number>) =>
+      `${JSON.stringify({ day, at: placeLogical(addDays(day, 2), 9 * 60), v: 1, how: 'ready', know: { pca: 10 }, missing: [], grade: { boundary: 'kept', game: { v: 1, status: 'kept', out: null, notes: { boundary: 3 } }, regenWays: ways } })}\n`
+    writeFileSync(join(dataDir, paths.grades('2026', 'pca')), [5, 6, 7, 8, 9, 10, 11].map((d) => withWays(`2026-10-${String(d).padStart(2, '0')}`, d === 7 ? { spacer: 90 } : { drzemka: 20 })).join(''))
+    const m = await make('2026-10-01')
+    const s = await m.folder.gameState()
+    expect(s!.cassettes).toEqual([{ week: '2026-10-05', season: 'autumn', favourite: 'drzemka', kept: 7, counted: 7, sticker: true }])
+  })
+
+  it('zamrożenie zapisuje w ocenie minuty regeneracji według sposobu (okładka kasety)', async () => {
+    const m = await workedDay('2026-10-01')
+    m.folder.append({ day: DAY, dom: 'timer', k: 'disconnect.start', at: placeLogical(DAY, 20 * 60) })
+    m.folder.append({ day: DAY, dom: 'timer', k: 'disconnect.end', at: placeLogical(DAY, 20 * 60 + 30) })
+    await freeze(m)
+    const f = (await m.folder.readDay(DAY)).events.find((e) => isKnown(e) && e.k === 'day.freeze') as unknown as { grade: { regenWays: Record<string, number> } }
+    expect(f.grade.regenWays).toEqual({ odcinam: 30 })
+  })
+})
+
+describe('„Strona B tygodnia” i kalibracja z folderu', () => {
+  it('Strona B tygodnia, który się skończył: dni z ich miarą, wstępna do zamrożenia niedzieli', async () => {
+    const m = await workedDay('2026-10-01')
+    m.clock.now = placeLogical('2026-10-27', 9 * 60)
+    const b = await m.folder.sideB()
+    expect(b.week).toBe('2026-10-19')
+    expect(b.preliminary).toBe(true)
+    expect(b.days.find((d) => d.date === DAY)).toMatchObject({ boundary: 'kept', disconnects: 0, signals: 0, projectsMin: 0 })
+    expect(b.totals.boundaries.kept).toBeGreaterThanOrEqual(1)
+  })
+
+  /** A day closed by the ritual, frozen, with five blocks of analysis (60 min planned, 80 real) clicked on this computer. */
+  function calibrationDay(day: string): string {
+    const lines: string[] = []
+    let n = 0
+    const ev = (k: string, at: number, extra: Record<string, unknown> = {}) => lines.push(`${JSON.stringify({ id: `pca-${day}-${n}`, c: 'pca', n: n++, t: at, l: at, v: 1, day, dom: 'timer', k, at, ...extra })}`)
+    ev('presence.first', placeLogical(day, 7 * 60))
+    for (let i = 0; i < 5; i++) {
+      const from = placeLogical(day, 8 * 60 + i * 90)
+      ev('block.start', from, { block: `b${i}`, bg: false, planned: { categoryId: 'analiza', variantId: null, durationMin: 60, tag: null, fixed: false }, confirmUntil: null, how: 'click' })
+      ev('block.end', from + 80 * 60_000, { block: `b${i}`, done: true, rule: null })
+    }
+    ev('ritual.close', placeLogical(day, 21 * 60), { how: 'ritual' })
+    return lines.join('\n') + '\n'
+  }
+
+  it('okres kalibracji od pierwszego rytuału, propozycja czasu z bloków jego dni; w okresie reakcje energii bez wariantów', async () => {
+    mkdirSync(join(dataDir, 'grades', '2026'), { recursive: true })
+    const grade = (day: string) => `${JSON.stringify({ day, at: placeLogical(addDays(day, 2), 9 * 60), v: 1, how: 'ready', know: { pca: 100 }, missing: [], grade: { boundary: 'kept', closed: 'ritual', dayType: 'zwykly' } })}\n`
+    const first = '2026-10-12'
+    const list = [0, 1, 2, 3, 4].map((i) => addDays(first, i))
+    writeFileSync(join(dataDir, paths.grades('2026', 'pca')), list.map(grade).join(''))
+    for (const d of list) {
+      mkdirSync(join(dataDir, paths.logDir(d)), { recursive: true })
+      writeFileSync(join(dataDir, paths.log(d, 'pca')), calibrationDay(d))
+    }
+    const m = await make('2026-10-01')
+    const c = await m.folder.calibration()
+    expect(c.period).toMatchObject({ from: first, done: false, days: list })
+    // 25 samples of analysis, real ÷ planned = 80 / 60.
+    expect(c.time).toEqual([expect.objectContaining({ category: 'analiza', samples: 25, multiplier: 1.33 })])
+    // The bar's energy in the period: reactions only inform.
+    expect((await m.folder.widgetModel()).energy.variants).toBe(false)
+  })
+
+  it('poza okresem kalibracji (przed pierwszym rytuałem) reakcje energii mają warianty', async () => {
+    const m = await make('2026-10-01')
+    expect((await m.folder.calibration()).period).toBeNull()
+    expect((await m.folder.widgetModel()).energy.variants).toBe(true)
+  })
+
+  it('pliki ocen, których nie da się teraz przeczytać, nie zatrzymują paska (ostatnia odpowiedź zostaje)', async () => {
+    // „grades” is a file: listing it fails (as OneDrive mid-sync can).
+    writeFileSync(join(dataDir, 'grades'), 'x')
+    const m = await make('2026-10-01')
+    const w = await m.folder.widgetModel()
+    expect(w.energy.variants).toBe(true)
+  })
+
+  it('dzień sprzed pierwszego dnia rytuału nie liczy się do okresu, choć ma log z zamknięciem', async () => {
+    const d = '2026-10-11'
+    mkdirSync(join(dataDir, paths.logDir(d)), { recursive: true })
+    writeFileSync(join(dataDir, paths.log(d, 'pca')), `${JSON.stringify({ id: 'pca-1', c: 'pca', n: 1, t: placeLogical(d, 21 * 60), l: placeLogical(d, 21 * 60), v: 1, day: d, dom: 'timer', k: 'ritual.close', at: placeLogical(d, 21 * 60), how: 'ritual' })}\n`)
+    const m = await make('2026-10-01', '2026-10-15')
+    expect((await m.folder.calibration()).period).toBeNull()
+  })
+
+  it('dzień zamknięty rytuałem, a jeszcze bez oceny, liczy się do okresu także starszy niż 4 dni', async () => {
+    const d = '2026-10-11'
+    mkdirSync(join(dataDir, paths.logDir(d)), { recursive: true })
+    writeFileSync(join(dataDir, paths.log(d, 'pca')), line(d, 'pca', 0, 'presence.first', placeLogical(d, 8 * 60)) + `${JSON.stringify({ id: 'pca-1', c: 'pca', n: 1, t: placeLogical(d, 21 * 60), l: placeLogical(d, 21 * 60), v: 1, day: d, dom: 'timer', k: 'ritual.close', at: placeLogical(d, 21 * 60), how: 'ritual' })}\n`)
+    const m = await make('2026-10-01', '2026-10-01')
+    expect((await m.folder.calibration()).period).toMatchObject({ from: d, days: [d] })
+  })
+
+  it('Strona B nie mierzy dnia bez Twojej obecności (dzień utworzony, a nikogo przy komputerze)', async () => {
+    const m = await workedDay('2026-10-01')
+    const empty = '2026-10-20'
+    m.folder.append({ day: empty, dom: 'meta', k: 'observe.alive', at: placeLogical(empty, 9 * 60) })
+    m.clock.now = placeLogical('2026-10-27', 9 * 60)
+    const b = await m.folder.sideB()
+    expect(b.days.map((d) => d.date)).not.toContain(empty)
+    expect(b.days.map((d) => d.date)).toContain(DAY)
+  })
+})
+
+describe('pokój na zawsze', () => {
+  it('raz odblokowany element zostaje, choć nuty zamrożonych dni policzono potem niżej', async () => {
+    mkdirSync(join(dataDir, 'grades', '2026'), { recursive: true })
+    const line6 = (day: string, notes: number, v = 1) => `${JSON.stringify({ day, at: placeLogical(addDays(day, 2), 9 * 60), v, how: 'ready', know: { pca: 10 }, missing: [], grade: { boundary: 'kept', game: { v: 1, status: 'kept', out: null, notes: { boundary: notes } } } })}\n`
+    writeFileSync(join(dataDir, paths.grades('2026', 'pca')), ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15'].map((d) => line6(d, 6)).join(''))
+    const m = await make('2026-10-01')
+    expect((await m.folder.gameState())!.room.unlocked.map((x) => x.id)).toContain('plyta-1')
+    // A newer freeze of two days with fewer notes (12 instead of 24 in all): the record stays.
+    writeFileSync(join(dataDir, paths.grades('2026', 'lap')), ['2026-10-12', '2026-10-13'].map((d) => line6(d, 0, 2)).join(''))
+    const again = (await m.folder.gameState())!
+    expect(again.notes.final).toBe(12)
+    expect(again.room.unlocked.map((x) => x.id)).toContain('plyta-1')
   })
 })

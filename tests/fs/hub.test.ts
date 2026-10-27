@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
 import { logicalDayOf } from '@shared/time/day'
+import { addDays } from '@shared/time/zone'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
 import { DataHub, type HubOptions } from '../../src/main/data/hub'
 import { STOP_TIMEOUT_MS, type DataService, type ServiceOptions } from '../../src/main/data/service'
@@ -206,6 +207,27 @@ describe('folder danych okna głównego (DataHub)', () => {
       writeFileSync(join(dirA, paths.day(today)), JSON.stringify({ schema: 1, date: today, wakeMin: 7 * 60 }))
       hub.changed()
       await vi.waitFor(() => expect(o.changes).toBe(n + 1))
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('widok danych mówi oknu, czy trwa okres kalibracji (energia okna liczy się jak paska)', async () => {
+    const { hub } = hubWith()
+    expect(await hub.open(dirA)).toBe(true)
+    try {
+      expect((await hub.view()).calibration).toBe(false)
+      // A day closed by the ritual yesterday (its grade): the period started, it lasts.
+      const yesterday = addDays(logicalDayOf(hub.service!.folder.clock.now()), -1)
+      mkdirSync(join(dirA, 'grades', yesterday.slice(0, 4)), { recursive: true })
+      writeFileSync(join(dirA, paths.grades(yesterday.slice(0, 4), 'lap')), `${JSON.stringify({ day: yesterday, v: 1, know: { lap: 3 }, grade: { closed: 'ritual', dayType: 'zwykly' } })}\n`)
+      const fresh = hubWith()
+      expect(await fresh.hub.open(dirA)).toBe(true)
+      try {
+        expect((await fresh.hub.view()).calibration).toBe(true)
+      } finally {
+        await fresh.hub.close('quit')
+      }
     } finally {
       await hub.close('quit')
     }
