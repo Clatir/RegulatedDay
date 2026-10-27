@@ -27,8 +27,8 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
 - `docs/specyfikacja.md` – aktualne reguły (v29), ~420 KB. **Nie czytaj w całości:** Grep po nagłówku `##` albo
   identyfikatorze, potem `Read` z `offset`/`limit`. Rozdziały: Model dnia, Model energii, Bloki, Zakres 1.0, Timer,
   Grywalizacja, Wygląd, Dane i ustawienia, Konwencje interfejsu, Jakość i protokół, Plan budowy.
-- `docs/decyzje.md` – rejestr D (użytkownik) i T (techniczne); czytaj Grepem po numerze. Nie zmieniaj D bez pytania;
-  nowa decyzja wskazuje, którą zastępuje.
+- `docs/decyzje.md` – decyzje D (użytkownik), `docs/decyzje-techniczne.md` – T (techniczne) (D308); czytaj Grepem
+  po numerze. Nie zmieniaj D bez pytania; nowa decyzja wskazuje, którą zastępuje.
 - `docs/plan.md` – etapy E0–E8, K, E9–E12 i kryteria „gotowe, gdy”. `docs/postep.md` – stan bieżący i kolejka.
 - `docs/odbior.md` – listy do odbioru na Windows (oczekiwany efekt i błędy blokujące każdego punktu), także odebrane.
 - `CHANGELOG.md` – opis zmian dla użytkownika (pokazywany w aplikacji jako „Co nowego”).
@@ -62,7 +62,7 @@ npx playwright test        # E2E (po build; z atrapą pomocnika); Linux: xvfb-ru
 npm run build:helper       # build/helper/*.exe (csc.exe)
 npm run dist:win           # release/ – instalator i manifest
 build-windows.cmd          # jednym plikiem, bez wymagań co do Node
-node scripts/check-context.mjs  # limity CLAUDE.md, postep.md, decyzje.md, reguł
+node scripts/check-context.mjs  # limity CLAUDE.md, postep.md, rejestrów decyzji, reguł
 ```
 
 ## Testy

@@ -20,27 +20,32 @@
 - **0.10.1 scalone** (D306 – menu boczne: Ustawienia pod Historią, Próba pod Ustawieniami; PR #16, 94e5caa, 27.10
   ok. 19:10; CI PR zielone za pierwszym razem, także Windows) – wydanie 0.10.1 z runu 40557338646 na `main`
   opublikowane (ok. 19:43, po ponowieniu testu skali); sekcja niżej. Pauza do „dalej”.
-- **Test skali w toku** (T499 – najlepsza z 3 rund; niestabilny na Node 26: `gameState` 101 ms w PR #15, `check`
-  107 ms na `main` po PR #16): gałąź `claude/test-skali`, bez nowej wersji (CI na `main` przy wydanej 0.10.1 nic nie
-  publikuje). Osobno: przed ekranami gry (`GAME_FROM`) `gameState` przyspieszyć albo liczyć raz na zmianę plików
+- **Test skali scalony** (T499 – najlepsza z 3 rund; był niestabilny na Node 26: `gameState` 101 ms w PR #15,
+  `check` 107 ms na `main` po PR #16): PR #17, 31f36bb, 27.10 ok. 21:32; CI PR zielone za pierwszym razem, także
+  Windows; bez nowej wersji (CI na `main` przy wydanej 0.10.1 nic nie publikuje). Osobno: przed ekranami gry (`GAME_FROM`) `gameState` przyspieszyć albo liczyć raz na zmianę plików
   ocen (T492).
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
   (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
   do folderu z `.moved.json`.
-- Zastąpione decyzje (31) w `docs/archiwum/decyzje-zastapione.md`; `docs/decyzje.md` ma 199,8 / 200 KB i zastąpionych
-  w całości już nie ma (pozostałe – w części; D188 cofnięta przez T303, ale cytowana w D150 i specyfikacji) – przed
-  kolejnym etapem decyzja, jak dzielić rejestr (kolejka, pkt 2).
+- Rejestr decyzji w dwóch plikach (D308): `docs/decyzje.md` – D (54,7 / 200 KB), `docs/decyzje-techniczne.md` – T
+  (146,1 / 200 KB); zastąpione w całości (31) w `docs/archiwum/decyzje-zastapione.md`. D188 cofnięta przez T303, ale
+  cytowana w D150 i specyfikacji – zostaje w rejestrze.
+- **Dokumenty z 27.10 wieczorem** (gałąź `claude/dokumenty` od scalonego PR #17): nowy układ `docs/odbior.md` (D307),
+  podział rejestru (D308), kolejność przed E8 (D309), wygląd elementów E5 w pasku (D311–D313, czekają na odbiór E4b –
+  D310), procedura etapu dla nowego układu odbioru.
 
 ## Kolejka
-1. Ty: odbiór według `docs/odbior.md` (0.10.1, 0.10.0, 0.9.1, E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b), wybór zestawu kolorów (D298);
-   27.10 odebrane E3.2, E3.6, E3.8, E3.11.
-2. Przed etapem: podział rejestru decyzji (miejsce na najwyżej jedną decyzję) – pytanie do Ciebie.
-3. Potem: elementy E5 w pasku (przyciski próśb, znacznik i panel wariantów), potem ekrany E6 (rytuał, niezamknięte
-   dni, eksport, przywracanie) – z pytaniami o wygląd; przed nimi komunikat „Przed etapem”.
+1. Ty: odbiór według `docs/odbior.md` (sekcja „Do odebrania”), wybór zestawu kolorów (D298); 27.10 odebrane E3.2,
+   E3.6, E3.8, E3.11.
+2. Po Twoim odbiorze E4b (D310): elementy E5 w pasku według D311–D313 – pytania „Przed etapem” zadane 27.10
+   (Opus 5.5 · xhigh, nic do przygotowania); potem ekrany E6 (rytuał, niezamknięte dni, eksport, przywracanie)
+   i ekrany gry E7 (z akceptacją listy pokoju i progów) – z pytaniami o wygląd, każdy po „Przed etapem” (D309).
+3. Potem E8 w całości (stabilizacja, bramka 1.0) z jednym przeglądem wieloagentowym logiki i ekranów (D309).
 
 ## Do odbioru na Windows
-- Lista w `docs/odbior.md` (0.10.1, 0.10.0, 0.9.1, E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b – każdy punkt z oczekiwanym efektem i błędami, które blokują
-  odbiór; na dole punkty już odebrane, E0). Kolejne etapy dopisują tam swoje listy.
+- `docs/odbior.md` (układ z 27.10): na górze „Do odebrania” – krótka lista 50 punktów w kolejności, która oszczędza
+  czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
+  z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
 
 ## Test skali – najlepsza z 3 rund (T499)
 - Prośba z 27.10 po wydaniu 0.10.1. Gałąź `claude/test-skali` od e598537 (ok. 20:00).

@@ -20,11 +20,13 @@ Wszystkie wiadomości do użytkownika po polsku. Pytania zawsze klikalne (AskUse
 3. Commit, push gałęzi `claude/<wersja>-<opis>`, PR z opisem po polsku.
 4. Wpis w `docs/postep.md`: zakres, decyzje (D… / T…), testy, czas faktyczny, rzeczy otwarte; reguła albo pułapka
    modułu → `.claude/rules/<moduł>.md`; zmiany dla użytkownika → `CHANGELOG.md` (sekcja nowej wersji).
-5. Lista do odbioru na Windows na górze `docs/odbior.md` (sekcja „Wersja X.Y.Z – etap”), punkty `E<n>.<k>`, każdy
-   z polem `- [ ] Odebrane`, linią **Automatycznie:** (które testy już to sprawdzają – Ty: rzut oka) albo **Tylko Ty:**
-   (czego testy nie widzą: pulpit, powiadomienia, OneDrive, sprzęt) i trzema częściami: **Jak sprawdzić** (kroki),
-   **Oczekiwany efekt** (wprost, co ma się stać), **Nie przechodzi, gdy** (2–4 konkretne błędy, które blokują odbiór);
-   na górze sekcji lista „Tylko Ty”. Odebrane punkty → „Odebrane wcześniej” z datą; w `docs/postep.md` tylko odnośnik.
+5. Punkty do odbioru na Windows w `docs/odbior.md` (`E<n>.<k>`). Pełny opis w „Wszystkie punkty” przy swoim etapie,
+   po numerze (`#### E<n>.<k> Tytuł (wersja)`): pole `- [ ] Odebrane`, linia **Automatycznie:** (które testy już to
+   sprawdzają – Ty: rzut oka) albo **Tylko Ty:** (czego testy nie widzą: pulpit, powiadomienia, OneDrive, sprzęt)
+   i trzy części: **Jak sprawdzić** (kroki), **Oczekiwany efekt** (wprost, co ma się stać), **Nie przechodzi, gdy** (2–4
+   konkretne błędy, które blokują odbiór). W „Do odebrania” krótki wpis `- [ ] E<n>.<k> Tytuł` w pasującej grupie
+   kolejności, a punkt „Tylko Ty” także na tej liście. Odebrany: `- [x] Odebrane <data>` na miejscu, znika z „Do
+   odebrania” (punkty nigdy się nie przenoszą); w `docs/postep.md` tylko odnośnik.
 6. Pauza do „dalej” – z informacją, czy `/clear` jest teraz bezpieczny (zasada w `CLAUDE.md`): PR-y w toku i CI zapisane
    w `docs/postep.md`, wszystko wypchnięte.
 

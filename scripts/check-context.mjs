@@ -9,8 +9,10 @@ const root = new URL('../', import.meta.url)
 const limits = [
   { file: 'CLAUDE.md', lines: 200, kb: 20 },
   { file: 'docs/postep.md', lines: 400, kb: 60 },
-  // The register of decisions has a limit too (spec „Dokumenty w repozytorium”): replaced decisions go to the archive.
+  // The registers of decisions have a limit too (spec „Dokumenty w repozytorium”): replaced decisions go to the archive.
+  // D and T are in separate files (D308).
   { file: 'docs/decyzje.md', lines: 1000, kb: 200 },
+  { file: 'docs/decyzje-techniczne.md', lines: 1000, kb: 200 },
 ]
 const rules = new URL('.claude/rules/', root)
 if (existsSync(rules)) {

@@ -785,8 +785,8 @@ W FI zakres ze specyfikacji był gotowy po 2 dniach, a poprawki po przeglądzie 
 **Dokumenty w repozytorium**
 
 - Krótki CLAUDE.md jako indeks, bez mapy kodu (w ICTTJ urósł do około 157 KB, w FI do 123 KB).
-- docs/specyfikacja.md z aktualnymi regułami (bez osobistych treści z wywiadu, D279; pełna wersja zostaje w dokumencie specyfikacji poza repozytorium), docs/decyzje.md z numerami D (Twoje) i T (techniczne), w którym nowa decyzja wskazuje, którą zastępuje, oraz docs/plan.md i docs/postep.md.
-- CHANGELOG to opis zmian dla Ciebie, pokazywany w aplikacji jako „Co nowego”. Lista „do sprawdzenia” jest w docs/postep.md. Także postep.md i decyzje.md mają limit rozmiaru, a decyzje zastąpione trafiają do archiwum.
+- docs/specyfikacja.md z aktualnymi regułami (bez osobistych treści z wywiadu, D279; pełna wersja zostaje w dokumencie specyfikacji poza repozytorium), docs/decyzje.md z numerami D (Twoje) i docs/decyzje-techniczne.md z numerami T (techniczne, D308), w których nowa decyzja wskazuje, którą zastępuje, oraz docs/plan.md i docs/postep.md.
+- CHANGELOG to opis zmian dla Ciebie, pokazywany w aplikacji jako „Co nowego”. Lista „do sprawdzenia” jest w docs/odbior.md (D307). Także postep.md i decyzje.md mają limit rozmiaru, a decyzje zastąpione trafiają do archiwum.
 
 **Testy**
 
