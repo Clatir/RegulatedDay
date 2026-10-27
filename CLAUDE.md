@@ -30,6 +30,7 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
 - `docs/decyzje.md` – rejestr D (użytkownik) i T (techniczne); czytaj Grepem po numerze. Nie zmieniaj D bez pytania;
   nowa decyzja wskazuje, którą zastępuje.
 - `docs/plan.md` – etapy E0–E8, K, E9–E12 i kryteria „gotowe, gdy”. `docs/postep.md` – stan bieżący i kolejka.
+- `docs/odbior.md` – listy do odbioru na Windows (oczekiwany efekt i błędy blokujące każdego punktu), także odebrane.
 - `CHANGELOG.md` – opis zmian dla użytkownika (pokazywany w aplikacji jako „Co nowego”).
 - Wiedza modułów → `.claude/rules/*.md` z `paths:`. Historia → `docs/archiwum/`.
 
