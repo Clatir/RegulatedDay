@@ -361,6 +361,16 @@ export async function restoreToFolder(zipFile: string, targetDir: string): Promi
   })
 }
 
+/** The data's files a backup holds (safe paths only), e.g. to choose records from it. A damaged ZIP rejects. */
+export async function backupEntries(zipFile: string): Promise<string[]> {
+  return withZip(zipFile, async (zip) =>
+    zip.entries
+      .filter((e) => !e.name.endsWith('/'))
+      .map((e) => safeRelPath(e.name))
+      .filter((rel): rel is string => rel != null && isDataFile(rel))
+  )
+}
+
 /**
  * One record of a backup, to take chosen records back: its bytes, null when the backup has no such file. `relPath` as
  * in the data folder (either slash). A damaged or unreadable ZIP rejects.

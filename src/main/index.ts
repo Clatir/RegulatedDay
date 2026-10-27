@@ -336,6 +336,7 @@ function createHub(): DataHub {
     previousVersion: () => lastRunVersion,
     worker,
     ritualFrom: RITUAL_FROM,
+    onFolder: (dir) => void config.update({ dataFolder: dir }).catch((e) => log('error', 'nowy folder danych nie zapisał się w ustawieniach', e)),
     onChange: () => {
       broadcast(CH.onData, null)
       void widget.refresh()
