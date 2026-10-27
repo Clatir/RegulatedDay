@@ -1,9 +1,9 @@
 // adapted from FI src/renderer/app/App.tsx @ de81f2b
 /**
  * The main window (D287): the side menu with the screens' names; at the top the name „Regulated Day” and the bar. The
- * screens of 1.0 come with their stages – in E0 they say which version brings them. Ctrl+1…9 switch the screens by the
- * physical keys of the digits (any keyboard layout), Ctrl+S commits the active field, Ctrl+N creates a record in the
- * current view (when it has records).
+ * screens of 1.0 come with their stages – in E0 they say which version brings them. Ctrl+1…7 switch the screens by the
+ * physical keys of the digits (any keyboard layout), Ctrl+, opens the settings, Ctrl+S commits the active field, Ctrl+N
+ * creates a record in the current view (when it has records).
  */
 import { useEffect, type ReactNode } from 'react'
 import { navigate, PAGES, useUi, type Page } from '../store/ui'
@@ -46,13 +46,16 @@ const LATER: Partial<Record<Page, string>> = {
 /** Screens that need the data folder (without it they point to the wizard). */
 const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'requests', 'templates', 'routines', 'history'])
 
+/** The screens with Ctrl+digit, in the menu's order; the settings have Ctrl+, and the trial no shortcut. */
+const DIGIT_PAGES: Page[] = PAGES.filter((p) => p !== 'settings' && p !== 'trial')
+
 function useHotkeys(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.metaKey) return
-      const digit = /^Digit([1-7])$/.exec(e.code)?.[1]
+      const digit = /^Digit([1-9])$/.exec(e.code)?.[1]
       if (digit && !e.shiftKey) {
-        const page = PAGES[Number(digit) - 1]
+        const page = DIGIT_PAGES[Number(digit) - 1]
         if (page) {
           e.preventDefault()
           navigate(page)
@@ -88,19 +91,21 @@ function NavItem({ page, active, keys }: { page: Page; active: boolean; keys: st
   )
 }
 
+/** The shortcut shown next to the screen's name (the same keys as useHotkeys). */
+function keysOf(page: Page): string | null {
+  if (page === 'settings') return 'Ctrl ,'
+  const digit = DIGIT_PAGES.indexOf(page) + 1
+  return digit ? `Ctrl ${digit}` : null
+}
+
+// One list in the order of PAGES: the settings right under the history, the trial under the settings (D306).
 function SideMenu({ page }: { page: Page }) {
-  const main = PAGES.filter((p) => p !== 'settings' && p !== 'trial')
   return (
     <nav className="flex w-[176px] shrink-0 flex-col overflow-y-auto border-r border-line bg-panel" data-testid="side-menu">
       <div className="flex flex-col py-1">
-        {main.map((p) => (
-          <NavItem key={p} page={p} active={page === p} keys={`Ctrl ${PAGES.indexOf(p) + 1}`} />
+        {PAGES.map((p) => (
+          <NavItem key={p} page={p} active={page === p} keys={keysOf(p)} />
         ))}
-      </div>
-      <div className="flex-1" />
-      <div className="flex flex-col border-t border-line py-1">
-        <NavItem page="trial" active={page === 'trial'} keys={null} />
-        <NavItem page="settings" active={page === 'settings'} keys="Ctrl ," />
       </div>
     </nav>
   )
