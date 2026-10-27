@@ -23,10 +23,11 @@ import { requestAction, type RequestAction } from '@shared/engine/requests'
 import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft } from '@shared/engine/timer'
 import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
-import { foldFacts, isRunning } from '@shared/engine/facts'
+import { foldFacts, isRunning, type DayFacts } from '@shared/engine/facts'
+import { CLOSE_WINDOW_H, closeEffect, closeEvents, ritualAnswer, ritualEffect, ritualRows, unclosedDays, type DayLog, type RitualEffect, type RitualRow, type RitualValue } from '@shared/engine/ritual'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
-import { daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type Domain, type Signal } from '@shared/model/events'
+import { daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type Signal } from '@shared/model/events'
 import type { Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
@@ -759,6 +760,68 @@ export class DataFolder {
   async timer(day: string, at = this.clock.now()): Promise<ReturnType<typeof timerNow>> {
     const read = await this.log.readDay(day)
     return timerNow(computeDay(await this.ownContext(day, read, at)))
+  }
+
+  /**
+   * A day's closing ritual as this computer sees it (spec „Rytuał zamknięcia”): its rows, what each ✓ changes, what
+   * „Jak zapisano” changes, and how the day was closed.
+   */
+  async ritual(day: string, at = this.clock.now()): Promise<{ rows: RitualRow[]; effects: Record<string, RitualEffect>; asWritten: RitualEffect; closed: DayFacts['closed'] }> {
+    const read = await this.log.readDay(day)
+    const ctx = await this.ownContext(day, read, at)
+    const state = computeDay(ctx)
+    const rows = ritualRows(state)
+    const effects: Record<string, RitualEffect> = {}
+    for (const r of rows) {
+      const e = ritualEffect(ctx, state, r, at)
+      if (e) effects[r.id] = e
+    }
+    return { rows, effects, asWritten: closeEffect(ctx, state, at), closed: state.facts.closed }
+  }
+
+  /** Your answer to a row of a day's ritual: judged on the day as it is now and written to its log, one at a time. */
+  ritualAnswer(day: string, rowId: string, choice: string, value: RitualValue = null, item: string | null = null): Promise<ActionResult> {
+    return this.dayAction(day, (state, now) => {
+      const row = ritualRows(state).find((r) => r.id === rowId)
+      if (!row) return 'tego wiersza już nie ma'
+      return ritualAnswer(state, row, choice, now, value, item) ?? `nieznana odpowiedź ${choice}`
+    })
+  }
+
+  /** Closing a day: the evening ritual, or the morning's „Jak zapisano”, „Wolne”, „Nie pamiętam” (spec). */
+  closeDay(day: string, how: CloseHow): Promise<ActionResult> {
+    return this.dayAction(day, (state, now) => (day > logicalDayOf(now) ? 'ten dzień jeszcze się nie zaczął' : closeEvents(state, how, now)))
+  }
+
+  /** The days the morning shows to close (spec); `ritualFrom` – the first day with the ritual (null: none yet, T482). */
+  async unclosedDays(ritualFrom: string | null, at = this.clock.now()): Promise<Array<{ date: string; presence: boolean }>> {
+    if (ritualFrom == null) return []
+    const today = logicalDayOf(at)
+    const days: DayLog[] = []
+    for (let i = 1; i <= Math.ceil(CLOSE_WINDOW_H / 24) + 1; i++) {
+      const date = addDays(today, -i)
+      // A day whose logs cannot all be read now is not taken for closed nor for open: it waits for the next look.
+      const read = await this.log.readDay(date).catch(() => null)
+      if (read?.complete) days.push({ date, events: read.events })
+    }
+    return unclosedDays(days, today, at, ritualFrom)
+  }
+
+  /** An action on a day's log judged on the day as you see it now (a text: refused, why), one at a time like clicks. */
+  private dayAction(day: string, act: (state: DayState, now: number) => TimerDraft[] | string): Promise<ActionResult> {
+    const run = async (): Promise<ActionResult> => {
+      if (!isIsoDate(day)) return { ok: false, why: 'zły dzień', confirm: null }
+      const now = this.clock.now()
+      const read = await this.log.readDay(day)
+      if (!read.complete) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę', confirm: null }
+      const r = act(computeDay(await this.ownContext(day, read, now)), now)
+      if (typeof r === 'string') return { ok: false, why: r, confirm: null }
+      if (r.length) await this.writeTimer(day, r)
+      return { ok: true, events: r, confirm: null }
+    }
+    const p = this.clicks.then(run, run)
+    this.clicks = p.catch(() => undefined)
+    return p
   }
 
   /**
