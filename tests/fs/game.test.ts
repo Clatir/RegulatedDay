@@ -266,6 +266,14 @@ describe('„Strona B tygodnia” i kalibracja z folderu', () => {
     expect(w.energy.variants).toBe(true)
   })
 
+  it('dzień sprzed pierwszego dnia rytuału nie liczy się do okresu, choć ma log z zamknięciem', async () => {
+    const d = '2026-10-11'
+    mkdirSync(join(dataDir, paths.logDir(d)), { recursive: true })
+    writeFileSync(join(dataDir, paths.log(d, 'pca')), `${JSON.stringify({ id: 'pca-1', c: 'pca', n: 1, t: placeLogical(d, 21 * 60), l: placeLogical(d, 21 * 60), v: 1, day: d, dom: 'timer', k: 'ritual.close', at: placeLogical(d, 21 * 60), how: 'ritual' })}\n`)
+    const m = await make('2026-10-01', '2026-10-15')
+    expect((await m.folder.calibration()).period).toBeNull()
+  })
+
   it('dzień zamknięty rytuałem, a jeszcze bez oceny, liczy się do okresu także starszy niż 4 dni', async () => {
     const d = '2026-10-11'
     mkdirSync(join(dataDir, paths.logDir(d)), { recursive: true })

@@ -102,6 +102,9 @@ describe('świętowanie', () => {
     // A streak of only 5 that ended: 7 is celebrated again.
     const short = run('2026-10-05', [...new Array(5).fill('kept'), 'broken', 'broken', ...new Array(7).fill('kept')])
     expect(celebrationsOf(short, gameSummary(short, '2026-11-01').steps, []).map((x) => x.key)).toEqual(['streak:2026-10-18:7'])
+    // A streak of exactly 7 that ended: „co najmniej tej długości” – the next 7 is no celebration.
+    const same = run('2026-10-05', [...new Array(7).fill('kept'), 'broken', 'broken', ...new Array(7).fill('kept')])
+    expect(celebrationsOf(same, gameSummary(same, '2026-11-01').steps, []).map((x) => x.key)).toEqual(['streak:2026-10-11:7'])
   })
 
   it('po 30 dniach od końca dłuższej passy ta sama długość znów jest świętem', () => {
@@ -122,5 +125,8 @@ describe('świętowanie', () => {
       ['room:b', '2026-11-03'],
       ['room:c', '2026-11-03']
     ])
+    // Notes of a day still open to corrections unlock nothing – no celebration either.
+    const open = [day('2026-11-02', 'kept', { notes: 6 }), day('2026-11-03', 'kept', { notes: 7, frozen: false })]
+    expect(celebrationsOf(open, gameSummary(open, '2026-11-05').steps, items)).toEqual([])
   })
 })

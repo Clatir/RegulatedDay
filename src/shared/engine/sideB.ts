@@ -51,7 +51,7 @@ export interface DayMeasure {
   /** Work blocks counted as a project (study, journaling, watching after the end of work). */
   asProjectMin: number | null
   bedtimeShiftMin: number
-  /** Minutes a computer was used outside blocks after the end of work, up to the bedtime (not the time you said was rest). */
+  /** Minutes a computer was used outside blocks after the end of work, up to the bedtime (not time to explain you answered). */
   afterWorkUseMin: number
   projectsAfterBedMin: number | null
   /** Minutes after the effective bedtime of the last use of a computer that day; null – none after it. */
@@ -94,16 +94,14 @@ export function dayMeasure(state: DayState, events: readonly AnyEvent[], activit
     else counted += min
     projectsAfterBed += runsWithin(f.runs, bed, end, now)
   }
-  // After the end of work: time without a block that counts as regeneration, a computer in use, not answered „odpoczynek”.
+  // After the end of work, a computer in use: time without a block that counts as regeneration, and time to explain you
+  // have not answered (answered – „odpoczynek”, also the ritual's ✓, work or a project – it is not this measure's).
   const workEnd = state.workEnd ?? state.firstEnd ?? end
-  const rested = state.explains.filter((x) => x.answer?.cls === 'rest')
+  const open = state.explains.filter((x) => !x.answer)
+  const inOpen = (k: number) => open.some((x) => k >= x.from && k < (x.to === OPEN ? now : x.to) && !x.rests.some((r) => k >= r.from && k < r.to))
   const used = usedMinutes(state, activity, 0, now)
   let afterWork = 0
-  for (let k = workEnd; k < Math.min(bed, now); k++) {
-    if (state.rest[k] !== REST_FREE || !used[k]) continue
-    if (rested.some((x) => k >= x.from && k < (x.to === OPEN ? now : x.to))) continue
-    afterWork++
-  }
+  for (let k = workEnd; k < Math.min(bed, now); k++) if (used[k] && (state.rest[k] === REST_FREE || inOpen(k))) afterWork++
   let lastAfterBed: number | null = null
   for (let k = now - 1; k >= bed; k--) {
     if (used[k]) {

@@ -73,6 +73,29 @@ describe('miara dnia', () => {
     expect(measure(day(), ON, true).boundary).toBeNull()
   })
 
+  it('użycie komputera po końcu pracy bez czasu do wyjaśnienia, który nazwałeś „odpoczynek”', () => {
+    const day = () => {
+      const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })], settings: { transitionBufferMin: 0 } })
+      s.presence('07:00').using('07:00', '23:00').start('a', '08:00')
+      // Ended by itself after two asks; the computer used to 10:30 (time to explain), then a break.
+      s.write([{ id: 'auto-a', k: 'block.end', block: 'a', at: s.at('09:00'), done: null, rule: 'twoQuestions', autoRule: 'twoQuestions' }], s.at('10:00'))
+      return s.gap('10:30', '11:15')
+    }
+    const plain = measure(day())
+    const s = day()
+    const id = s.stateAt(dayEnd(DATE), { asWritten: true }).explains[0]!.id
+    s.write([{ k: 'question.answer', at: s.at('12:00'), question: id, answer: 'rest', value: null }], s.at('12:00'))
+    const rested = measure(s)
+    // 09:00–10:30 without an answer counts; named „odpoczynek” – not (11:15–22:00 counts either way).
+    expect(plain.afterWorkUseMin).toBe(90 + 645)
+    expect(rested.afterWorkUseMin).toBe(645)
+  })
+
+  it('stan modułu na początku dnia mówi jego pierwsza zmiana (włączony w ciągu dnia – rano był wyłączony)', () => {
+    const s = day().module(true, '12:00', false)
+    expect(modulesOfDay(s.events, ON).energy).toBe(false)
+  })
+
   it('projekty po porze snu i użycie komputera po końcu pracy bez czasu, który nazwałeś odpoczynkiem', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'p', cat: 'projekty', at: '21:30', min: 60 })], settings: { transitionBufferMin: 0 } })
     s.presence('07:30').using('07:30', '22:40').ran('p', '21:30', '22:30')

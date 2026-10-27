@@ -151,6 +151,18 @@ describe('dowody kosztów – szczegóły', () => {
     const e = evidence(s)!
     expect(e.residual.analiza).toBeUndefined()
     expect(e.residual.inne).toEqual({ head: -5, emotions: -5, senses: -5 })
+    // Within 3 h of the signal too: analysis 09:00–10:00, the check-in at 10:30, the signal at 11:00.
+    const near = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'analiza', at: '09:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '10:30', min: 30 })], settings: { transitionBufferMin: 0 } })
+    near.checkin('08:00', MID).ran('a', '09:00', '10:00').checkin('10:30', MID).ran('b', '10:30', '11:00').signal('rocking', '11:00')
+    expect(evidence(near)!.residual.analiza).toBeUndefined()
+  })
+
+  it('wspólna minuta należy do przebiegu zaczętego później, także przy wznowionym bloku zaczętym wcześniej', () => {
+    // „b” begun first and resumed at 10:30 over „a” (begun at 09:00): 10:30–11:00 is b's.
+    const s = base().checkin('08:00', MID)
+    s.raw({ k: 'block.start', block: 'b', at: s.at('08:00'), bg: false, planned: { categoryId: 'inne', variantId: null, durationMin: 60, tag: null, fixed: false }, confirmUntil: null, how: 'click' }, '08:00')
+    s.pause('b', '08:30').start('a', '09:00').resume('b', '10:30').end('b', '11:00').end('a', '11:00')
+    expect(evidence(s)!.minutes).toEqual({ inne: 60, analiza: 90 })
   })
 
   it('skutek sygnału według ustawień z jego minuty (zmiana „od dziś” później go nie zmienia)', () => {
@@ -176,5 +188,11 @@ describe('próbki czasu – koniec podany przez Ciebie', () => {
     s.write([{ k: 'undo', at: s.at('21:00'), target: 'auto-end', reason: 'ritual' }, { k: 'block.end', block: 'a', at: s.at('09:10'), done: true, rule: null }], s.at('21:00'))
     s.write([{ k: 'block.start', block: 'c', at: s.at('14:00'), bg: false, planned: { categoryId: 'analiza', variantId: null, durationMin: 30, tag: null, fixed: false }, confirmUntil: null, how: 'plan' }, { k: 'block.end', block: 'c', at: s.at('14:30'), done: true, rule: null }], s.at('21:05'))
     expect(timeSamples({ ...s.contextAt(at), now: at, asWritten: true }, s.stateAt(at, { asWritten: true }))).toEqual([{ category: 'analiza', plannedMin: 60, realMin: 70 }])
+  })
+
+  it('blok niedokończony – bez próbki, także gdy jego czasy podałeś później', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'analiza', at: '08:00', min: 60 })], settings: { transitionBufferMin: 0 } })
+    s.write([{ k: 'block.start', block: 'a', at: s.at('08:00'), bg: false, planned: { categoryId: 'analiza', variantId: null, durationMin: 60, tag: null, fixed: false }, confirmUntil: null, how: 'click' }, { k: 'block.end', block: 'a', at: s.at('09:10'), done: false, rule: null }], s.at('21:00'))
+    expect(timeSamples({ ...s.contextAt(at), now: at, asWritten: true }, s.stateAt(at, { asWritten: true }))).toEqual([])
   })
 })

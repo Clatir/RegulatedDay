@@ -12,7 +12,7 @@
   91ce1d7, 27.10 ok. 11:04; CI PR zielone za pierwszym razem, także Windows) – wydanie 0.7.0 z runu 40485664059 na
   `main` (ok. 11:34). Wpisy → `docs/archiwum/postep-E6.md`. Ciąg D299 zakończony.
 - **Logika E7 w toku** (D301), równolegle z Twoim odbiorem: część 1 (regulamin) scalona (PR #12, 27.10 ok. 13:17),
-  wydanie 0.8.0 z CI na `main`; część 2 (pokój, kasety, świętowanie, „Strona B”, kalibracja) na gałęzi
+  wydanie 0.8.0 z runu 40502501672 na `main` (ok. 13:46); część 2 (pokój, kasety, świętowanie, „Strona B”, kalibracja) na gałęzi
   `claude/0.9.0-e7-pokoj` – pauza po niej.
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
   (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
@@ -21,7 +21,10 @@
   w części 2 kolejne (także częściowo zastąpione) do archiwum, zanim przybędą nowe T.
 
 ## Kolejka
-1. Ty: odbiór według `docs/odbior.md` (E3, E4a, E4b, logika E5, E6a, E6b, E7a), wybór zestawu kolorów (D298).
+0. Ja: poprawka E4b.9 (27.10 odbiór: pasek „na wierzchu” nad filmem na pełnym ekranie w przeglądarce – pomocnik nie
+   widzi pełnego ekranu w tym samym oknie) – osobny PR po części 2, wydanie 0.9.1, test w CI na Windows.
+1. Ty: odbiór według `docs/odbior.md` (E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b), wybór zestawu kolorów (D298);
+   27.10 odebrane E3.2, E3.6, E3.8, E3.11.
 2. Po „dalej”: elementy E5 w pasku (przyciski próśb, znacznik i panel wariantów), potem ekrany E6 (rytuał, niezamknięte
    dni, eksport, przywracanie) – z pytaniami o wygląd; przed nimi komunikat „Przed etapem”.
 
@@ -42,7 +45,10 @@
   `calibration`, flaga kalibracji dla energii paska i okna (`DataView.calibration`). T496, CHANGELOG 0.9.0, lista E7b.
 - `/code-review` (xhigh): 15 uwag, wszystkie poprawione (m.in. pasek odporny na błąd plików ocen, koniec podany przez
   Ciebie i „odbył się” w próbkach, kotwice z jednej minuty i kolejny check-in, koszty według wariantu, pokój na zawsze,
-  moduły w ocenie, dzień bez obecności bez pomiaru, okres z dni starszych niż 4); testy do każdej. Testy: 773.
+  moduły w ocenie, dzień bez obecności bez pomiaru, okres z dni starszych niż 4); testy do każdej. Mutacje: 33 próby,
+  24 wykryte, 1 równoważna (naklejka: 70% przy najwyżej 7 dniach nigdy dokładnie), 8 przeżyłych zamkniętych testami
+  (jedna ujawniła martwe wykluczenie – czas do wyjaśnienia bez odpowiedzi liczy się teraz do użycia po końcu pracy).
+  Testy: 781.
 
 ## Logika E7, część 1 – regulamin (PR #12, wydanie 0.8.0)
 - Gałąź `claude/0.8.0-e7-regulamin` od 27.10 ok. 11:42; CI PR zielone za pierwszym razem (także Windows), scalona
