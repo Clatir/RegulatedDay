@@ -4,7 +4,7 @@
  * from the files of grades of every computer, with the days still open to corrections counted as they would freeze.
  * Nothing counts before the first day with the game (T492).
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -15,6 +15,7 @@ import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs } from '../../src/main/data/fsio'
+import { inProcess, type Worker } from '../../src/main/worker/host'
 
 const DAY = '2026-10-21'
 const H = 3_600_000
@@ -36,9 +37,10 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(gameFrom: string | null, ritualFrom: string | null = DAY) {
+async function make(gameFrom: string | null, ritualFrom: string | null = DAY, worker?: Worker) {
   const clock = { now: placeLogical(DAY, 10 * 60) }
   const folder = await DataFolder.open({
+    ...(worker ? { worker } : {}),
     fs: nodeFs,
     dataDir,
     stateDir: join(root, 'state'),
@@ -161,6 +163,41 @@ describe('passa i nuty z folderu', () => {
     const s = await m.folder.gameState()
     // Presence only, the template's work without „Koniec pracy”: without data, holding the streak.
     expect(s!.steps).toEqual([{ date: d, move: 'held', streak: 0, frozen: false }])
+  })
+
+  it('liczona raz na zmianę (T501): dzień otwarty ocenia proces pomocniczy tylko po zmianie jego logu albo pliku dnia, a bez zmian widok jest ten sam', async () => {
+    const d = '2026-10-15'
+    mkdirSync(join(dataDir, paths.logDir(d)), { recursive: true })
+    writeFileSync(join(dataDir, paths.log(d, 'lap')), line(d, 'lap', 0, 'presence.first', placeLogical(d, 8 * 60)))
+    let grades = 0
+    const counting: Worker = {
+      run: (task) => {
+        if (task.kind === 'grade') grades++
+        return inProcess.run(task)
+      }
+    }
+    const m = await make('2026-10-01', '2026-10-01', counting)
+    const first = await m.folder.gameState()
+    expect(await m.folder.gameState()).toBe(first)
+    expect(grades).toBe(1)
+    // The laptop's log of the day grows (OneDrive brought more): counted again.
+    appendFileSync(join(dataDir, paths.log(d, 'lap')), line(d, 'lap', 1, 'observe.alive', placeLogical(d, 9 * 60)))
+    await m.folder.gameState()
+    expect(grades).toBe(2)
+    // The day's file comes (a free day): counted again, now outside the game.
+    writeFileSync(join(dataDir, paths.day(d)), JSON.stringify({ schema: 1, date: d, dayType: 'wolne', blocks: [] }))
+    const free = await m.folder.gameState()
+    expect(grades).toBe(3)
+    expect(free!.steps.map((x) => x.move)).toEqual(['skip'])
+  })
+
+  it('liczona raz na zmianę (T501): nowa ocena w pliku ocen liczy się od razu', async () => {
+    mkdirSync(join(dataDir, 'grades', '2026'), { recursive: true })
+    writeFileSync(join(dataDir, paths.grades('2026', 'pca')), grade('2026-10-14', 'kept', 6))
+    const m = await make('2026-10-01')
+    expect((await m.folder.gameState())!.notes.final).toBe(6)
+    appendFileSync(join(dataDir, paths.grades('2026', 'pca')), grade('2026-10-15', 'kept', 3))
+    expect((await m.folder.gameState())!.notes.final).toBe(9)
   })
 
   it('z plików ocen wszystkich komputerów (lepsza z dwóch ocen dnia), z dniami jeszcze otwartymi na poprawki i dzisiejszymi nutami „w toku”', async () => {

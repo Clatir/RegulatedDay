@@ -24,7 +24,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
-- **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.4, E4b.10, E4b.12 (po poprawce), E6a.3,
+- **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
   E6b.2, E7a.2 (kliknięcie „Wymień”).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
@@ -48,20 +48,12 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E4a.7 Koniec bloku po bezczynności
    - [ ] E4a.8 Posiłek z dala od komputera
    - [ ] E4a.9 Nieobecność w bloku pracy
-   - [ ] E4b.1 Ten sam pasek w trzech miejscach
-   - [ ] E4b.2 Kropka na ikonie
-   - [ ] E4b.3 „Odcinam się”
-   - [ ] E4b.5 „Mniej pytań”
-   - [ ] E4b.6 Woda
-   - [ ] E4b.7 Przerwa po 90 min pracy
    - [ ] E5.2 Pasek bez zmian względem 0.4.0
    - [ ] E6a.4 W oknie nic nowego
    - [ ] E7a.2 Nowy blok i „Wymień” w „Dziś” działają jak dotąd
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
-   - [ ] E4b.4 Sesja czekająca na „Zacznij”
 4. Wieczór:
-   - [ ] E4b.8 Cisza nocna
    - [ ] E4b.10 Dźwięk
    - [ ] E6a.2 Czas po bloku pracy, który skończył się sam
    - [ ] E6a.3 Czas po projekcie, który skończył się sam – powiadomienie o twardym końcu
@@ -545,7 +537,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 ### E4b – pasek, ikona, cisza
 
 #### E4b.1 Ten sam pasek w trzech miejscach (0.4.0)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026
 - **Automatycznie:** kolor klasy i kroki 15 · 5 · 0 (`widget-view.test.ts`, `tests/unit/theme.test.ts`), ten sam pasek w oknie i panelu (`screens.spec.ts`), piksele ikony (`tests/unit/tray-icon.test.ts`). Ty: rzut oka na ikonę przy zegarze i pasek pulpitu – testy nie widzą Twojego paska zadań.
 - **Jak sprawdzić:** w „Dziś” wystartuj blok pracy. Spójrz na pasek u góry okna głównego, kliknij ikonę przy zegarze
   (panel ikony) i spójrz na pasek pulpitu. Zostaw blok do 15, 5 i 0 min przed końcem.
@@ -560,7 +552,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - pasek pulpitu leży nad innymi oknami, choć „Zawsze na wierzchu” jest wyłączone.
 
 #### E4b.2 Kropka na ikonie (0.4.0)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026
 - **Automatycznie:** `widget-view.test.ts` („kropka tylko przy tym, co czeka na kliknięcie”), `tray-icon.test.ts`. Ty: rzut oka.
 - **Jak sprawdzić:** doprowadź do trzech sytuacji: „Dalej?” (blok elastyczny po planowanym końcu, okno na wierzchu),
   sesja czekająca na „Zacznij · Odwołaj”, „Wznów · Zaparkuj” (np. „Odcinam się” → „Wracam”). Osobno otwórz „⋯” →
@@ -574,7 +566,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - przy „Dalej?” nie ma kropki.
 
 #### E4b.3 „Odcinam się” (0.4.0)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026
 - **Automatycznie:** `widget-view.test.ts` („„Odcinam się”: widget ukryty, szara ikona…”). Ty: rzut oka.
 - **Jak sprawdzić:** przy biegnącym bloku elastycznym kliknij w pasku „Odcinam się”. Kliknij ikonę, potem w panelu
   „Wracam”.
@@ -588,7 +580,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - w czasie „Odcinam się” przychodzi pytanie, powiadomienie albo dźwięk.
 
 #### E4b.4 Sesja czekająca na „Zacznij” (0.4.0)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026
 - **Tylko Ty:** że powiadomienie wychodzi raz, sprawdza `tests/fs/widget.test.ts`; czy Windows je pokazuje i na którym komputerze – tylko na Twoim pulpicie.
 - **Jak sprawdzić:** w dniu z sesją (np. NY o 14:00) nie klikaj „Zacznij”. Patrz na powiadomienia 5 min przed startem.
   Jeśli masz drugi komputer włączony, sprawdź też go.
@@ -602,7 +594,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - pasek w czasie czekania jest pełny i jasny.
 
 #### E4b.5 „Mniej pytań” (0.4.0)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026
 - **Automatycznie:** `widget-view.test.ts` („„Włączyć mniej pytań?” … chowa się po 15 min”). Ty: rzut oka.
 - **Jak sprawdzić:** „⋯” → „Mniej pytań”, potem „Jest lepiej”. Osobno: „Sygnały ▸” → „okulary” i nie odpowiadaj na
   propozycję.
@@ -614,7 +606,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - propozycja sama włącza tryb, bez Twojego kliknięcia.
 
 #### E4b.6 Woda (0.4.0)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026
 - **Automatycznie:** `widget-view.test.ts` („woda: 45 min po ostatnim „wypite””). Ty: rzut oka.
 - **Jak sprawdzić:** kliknij kroplę w pasku („wypite”) i odczekaj 45 min.
 - **Oczekiwany efekt:** 45 min po ostatnim „wypite” w pasku pojawia się kropla, a na ikonie znak kropli. Kliknięcie kropli
@@ -625,7 +617,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - kropla pojawia się przy wyłączonym module wody.
 
 #### E4b.7 Przerwa po 90 min pracy (0.4.0)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026
 - **Automatycznie:** `widget-view.test.ts` („propozycja przerwy po 90 min ciągłej pracy”). Ty: rzut oka.
 - **Jak sprawdzić:** pracuj 90 min ciągiem (jeden albo kilka bloków pracy bez przerwy), potem kliknij „Przerwa”.
 - **Oczekiwany efekt:** po 90 min linia „Przerwa? … · Przerwa · Kontynuuję” z kropką. „Przerwa” zaczyna 15 min
@@ -636,7 +628,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - „Przerwa” nie zaczyna regeneracji (np. kończy blok pracy bez nowego bloku).
 
 #### E4b.8 Cisza nocna (0.4.0)
-- [ ] Odebrane
+- [x] Odebrane 27.10.2026
 - **Automatycznie:** `widget-view.test.ts` („cisza nocna: tylko godzina i biegnący blok…”). Ty: rzut oka.
 - **Jak sprawdzić:** od Twojej pory snu (np. 22:00) spójrz na pasek – raz bez bloku, raz z biegnącym blokiem. Zacznij
   blok z „Dziś” → panel bloku → „Start”.

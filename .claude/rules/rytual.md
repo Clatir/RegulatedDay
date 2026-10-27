@@ -46,5 +46,7 @@ paths:
 - Przerwa w toku liczy się tak długo, jak trwa – o 21:30 przerwa od 21:20 to 10 min, jeszcze nie koniec.
 - Poprawka końca bloku zakończonego automatycznie: „Cofnij” + `block.end` (jak odpowiedzi paska), nie `block.fix` –
   prowadzący cofnąłby automatyczny koniec przy ponownej ocenie (T465).
-- Dzień ma z szablonu sesje warstwy: niezaczęte są w rytuale „pominięte” (do potwierdzenia albo odwołania).
-- Jeszcze nie: ekrany (rytuał, niezamknięte dni rano), odczuwany koszt, czasy sesji „było” z wejścia, zamrażanie (część 2).
+- Dzień ma z szablonu sesje warstwy: niezaczęte są w rytuale „pominięte” (do potwierdzenia albo odwołania); „odbyła
+  się” – czasy z użycia komputerów w oknie sesji (`used`, T500), więc wiersze licz z `ritualRows(state, events)` – bez
+  zdarzeń sesja dostaje godziny z planu.
+- Jeszcze nie: ekrany (rytuał, niezamknięte dni rano – D318–D320), odczuwany koszt (D319).

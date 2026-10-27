@@ -192,6 +192,15 @@ export function firstUseFrom(a: Activity, from: number): number | null {
   return t
 }
 
+/**
+ * The use of the computers within [from, to): from its first instant to the end of its last stretch, or null without
+ * any – the times of a session that happened without „Zacznij” (T500).
+ */
+export function useWithin(a: Activity, from: number, to: number): Interval | null {
+  const used = complement(a.unused, from, Math.min(to, a.now))
+  return used.length ? { from: used[0]!.from, to: used.at(-1)!.to } : null
+}
+
 /** The last input outside the app on any computer before t (spec D210: the session's end at the last input). */
 export function lastOutsideBefore(a: Activity, t: number): number | null {
   let best: number | null = null

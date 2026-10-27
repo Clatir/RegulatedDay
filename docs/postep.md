@@ -50,7 +50,8 @@
 1. **Ciąg A (w toku od 27.10 ok. 23:30):** praca 0 na gałęzi `claude/praca-0` – T492 (`gameState` raz na zmianę
    plików ocen), czasy sesji „było” z wejścia, baner D316, plan i decyzje; PR bez osobnego wydania. Potem gałąź
    0.11.0: E4b.12 (test w CI z wejściem myszy systemu, który na 0.10.1 pada) i „cieplejsze” (D314) – bez scalania.
-2. Ty: odbiór według `docs/odbior.md` (44 punkty); brama dla ciągu B – E4b.1–E4b.8 i E4b.10 (D310, D315).
+2. Ty: odbiór według `docs/odbior.md`. Brama ciągu B przeszła: E4b.1–E4b.8 odebrane 27.10 ok. 23:35 z prośbą „przystąp
+   do ciągu B → C → D”; E4b.10 (dźwięk) czeka, ciągu nie wstrzymuje.
 3. **Ciąg B → C → D jednym ciągiem (D317):** elementy E5 w pasku (D311–D313) → wydanie 0.11.0; ekrany E6 (D318–D321);
    ekrany gry (D322). Pytania o wygląd zadane z góry 27.10 – w ciągu bez „Przed etapem” i bez pauz między PR-ami.
 4. Ciąg E: E8 (przegląd wieloagentowy na Twoją komendę, poprawki, bramka 1.0).
@@ -68,6 +69,22 @@
   D321 („Dane” w Ustawieniach, baner przeniesienia), D322 (pokój ×1,5, ilustracja, nagłówek „Dziś”, nakładka,
   kasety, „Strona B” w tabeli).
 - Do przygotowania: nic – odbiór E4b w swoim tempie.
+
+## Praca 0 – gra raz na zmianę, sesje „było”, baner D316 (ciąg A, bez osobnego wydania)
+- Gałąź `claude/praca-0` od 27.10 ok. 23:30 (najpierw plan i D316–D322 – commit d4a56a5).
+- Zakres: `gameState` raz na zmianę (T501: podpis plików ocen, dzień otwarty według logu, rekordów i wejść gry, dziś
+  co minutę, kontekst dnia tylko po zmianie klucza); niezaczęta sesja „odbyła się” z czasami z użycia komputerów w jej
+  oknie (T500, `useWithin`, `ritualRows(state, activity)` – wymagane, `ritualActivity`); baner „nie dokończyła się” przy
+  każdym starcie uruchomionej X po nieudanym zadaniu X, aż pliki zgodzą się z manifestem – wtedy „zakończono” i bez
+  wpisu strażnika, także na ścieżce bez właściciela (D316, specyfikacja „Instalacja, aktualizacje i log”).
+- `/code-review` (high): 9 uwag, wszystkie poprawione – baner niezależny od tekstu błędu (także błędy właściciela),
+  ścieżka bez właściciela przy zgodnych plikach, usunięcie wpisu strażnika i log, wymagana aktywność w `ritualRows`
+  (bez pułapki domyślnego `[]`, ta sama chwila co silnik, `workEndRow` dla `closeEvents`), kontekst dnia tylko po
+  zmianie klucza, sprzątanie pamięci dni otwartych, numer T501 w kodzie i testach, bez opakowania `gradeLines`.
+- Testy: nowe – pamięć gry (proces pomocniczy raz na zmianę, ten sam widok, nowa ocena od razu), sesja „odbyła się”
+  (silnik i folder), baner D316 (trzy rodzaje błędów, ścieżka bez właściciela); każdy pada na starym kodzie.
+- Do CHANGELOG 0.11.0: baner „nie dokończyła się” przy każdym starcie (D316). Sesje „było” widać dopiero z ekranem
+  rytuału.
 
 ## Test skali – najlepsza z 3 rund (T499)
 - Prośba z 27.10 po wydaniu 0.10.1. Gałąź `claude/test-skali` od e598537 (ok. 20:00).

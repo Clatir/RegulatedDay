@@ -36,7 +36,7 @@ import type { DaySummary } from '@shared/engine/daySummary'
 import { calibrationPeriod, costProposals, inCalibration, timeProposals, type CalibrationDay, type CalibrationPeriod, type CostEvidence, type CostProposal, type TimeProposal, type TimeSample } from '@shared/engine/calibration'
 
 import { inProcess, type Worker } from '../worker/host'
-import { CLOSE_WINDOW_H, closeEvents, closeRefusal, ritualAnswer, ritualRows, unclosedDays, type DayLog, type RitualValue, type RitualView } from '@shared/engine/ritual'
+import { CLOSE_WINDOW_H, closeEvents, closeRefusal, ritualActivity, ritualAnswer, ritualRows, unclosedDays, type DayLog, type RitualValue, type RitualView } from '@shared/engine/ritual'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
 import { CLOSE_HOWS, compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type Signal } from '@shared/model/events'
@@ -208,6 +208,15 @@ export class DataFolder {
   private readonly freezeRetry = new Map<string, number>()
   /** The files of grades as last read (by size and time of modification). */
   private readonly gradeFiles = new Map<string, { size: number; mtimeMs: number; lines: GradeLine[] }>()
+  /** The grades merged from those files, by the signature of the files (T501). */
+  private gradedMemo: { sig: string; lines: Map<string, GradeLine> } | null = null
+  /**
+   * The game counted once per change of what it is made of (T501): the frozen days of the files of grades, each day
+   * still open (by its log, records and inputs; today also by the minute) and the view made of them.
+   */
+  private frozenGameDays: { key: string; days: GameDay[] } | null = null
+  private openGameDays = new Map<string, { key: string; day: GameDay }>()
+  private gameMemo: { key: string; view: GameView } | null = null
   /** In the calibration period: last counted (the day, when), see `calibrating`. */
   private calibrationNow: { day: string; at: number; on: boolean; retryMs: number } | null = null
 
@@ -696,7 +705,7 @@ export class DataFolder {
       const read = await this.log.readDay(day)
       if (!read.events.length) return null
       const frozen = foldFacts(gridOf(day), read.events).frozen
-      graded ??= this.gradeLines()
+      graded ??= this.gradeIndex().then((x) => x.lines)
       let modules = storedModules(frozen?.grade) ?? storedModules((await graded).get(day)?.grade)
       if (!modules) {
         const s = (await (states ??= this.moduleStates(day, today)))(day)
@@ -732,7 +741,7 @@ export class DataFolder {
    * freeze (from the ritual's first day, within its look back) from their logs; without the ritual – none closed.
    */
   private async calibrationDays(today: string): Promise<CalibrationDay[]> {
-    const graded = await this.gradeLines()
+    const graded = (await this.gradeIndex()).lines
     const out: CalibrationDay[] = []
     for (const [date, line] of graded) {
       const closed = (CLOSE_HOWS as readonly unknown[]).includes(line.grade.closed) ? (line.grade.closed as CloseHow) : null
@@ -818,42 +827,82 @@ export class DataFolder {
     const gameFrom = this.o.gameFrom ?? null
     if (gameFrom == null || ritualFrom == null) return null
     const today = logicalDayOf(at)
-    const graded = await this.gradeLines()
-    const days: GameDay[] = []
-    for (const [date, line] of graded) if (date >= gameFrom && date < today) days.push({ date, ...storedGame(line.grade), frozen: true, regenWays: storedWays(line.grade) })
+    const graded = await this.gradeIndex()
+    // The frozen days of the files of grades: made again only when a file changed (T501).
+    const frozenKey = `${graded.sig}|${gameFrom}|${today}`
+    if (this.frozenGameDays?.key !== frozenKey) {
+      const list: GameDay[] = []
+      for (const [date, line] of graded.lines) if (date >= gameFrom && date < today) list.push({ date, ...storedGame(line.grade), frozen: true, regenWays: storedWays(line.grade) })
+      this.frozenGameDays = { key: frozenKey, days: list }
+    }
     // Not frozen yet: only days the leader will still freeze (from the ritual's first day, within its look back).
     const from = gameFrom > ritualFrom ? gameFrom : ritualFrom
+    const later: GameDay[] = []
     const open: Array<{ date: string; read: DayRead }> = []
     for (let i = FREEZE_LOOKBACK_DAYS; i >= 0; i--) {
       const date = addDays(today, -i)
-      if (date < from || graded.has(date)) continue
+      if (date < from || graded.lines.has(date)) continue
       const read = await this.log.readDay(date)
       const frozen = foldFacts(gridOf(date), read.events).frozen
-      if (frozen) days.push({ date, ...storedGame(frozen.grade), frozen: true, regenWays: storedWays(frozen.grade) })
+      if (frozen) later.push({ date, ...storedGame(frozen.grade), frozen: true, regenWays: storedWays(frozen.grade) })
       else if (read.events.length) open.push({ date, read })
     }
     const inputs = open.length ? await this.gameInputs(open[0]!.date, today) : null
+    // The records the days are made from, read once (by stats, through the cache): their signatures below.
+    if (open.length) await this.inputs()
+    const openNow = new Map<string, { key: string; day: GameDay }>()
     for (const { date, read } of open) {
-      const ctx = await this.dayContext(date, read, at)
+      await this.dayFile(date)
+      await this.dayFile(addDays(date, 1))
       const game = inputs!(date)
-      if (date < today) {
-        const grade = await (this.o.worker ?? inProcess).run({ kind: 'grade', ctx, know: lastEventsOf(read.events), game })
-        days.push({ date, status: grade.game.status, notes: notesSum(grade.game.notes), frozen: false, regenWays: grade.regenWays })
-      } else {
-        const state = computeDay(ctx)
-        const g = dayGame({ ctx, state, energy: computeEnergy(ctx, state, { moduleOn: game.energyOn }), free: isFreeDay(state, ctx.events), game, over: false })
-        days.push({ date, status: null, notes: notesSum(g.notes), frozen: false, regenWays: regenWaysOf(state) })
+      // Counted again only when the day's log, its records or the game's inputs changed – today also every minute (its
+      // notes so far grow with the time).
+      const key = JSON.stringify([date < today ? null : Math.floor(at / 60_000), read.lastByComputer, read.events.length, read.copies, this.contextSig(date), game])
+      const was = this.openGameDays.get(date)
+      let day = was?.key === key ? was.day : null
+      if (!day) {
+        const ctx = await this.dayContext(date, read, at)
+        if (date < today) {
+          const grade = await (this.o.worker ?? inProcess).run({ kind: 'grade', ctx, know: lastEventsOf(read.events), game })
+          day = { date, status: grade.game.status, notes: notesSum(grade.game.notes), frozen: false, regenWays: grade.regenWays }
+        } else {
+          const state = computeDay(ctx)
+          const g = dayGame({ ctx, state, energy: computeEnergy(ctx, state, { moduleOn: game.energyOn }), free: isFreeDay(state, ctx.events), game, over: false })
+          day = { date, status: null, notes: notesSum(g.notes), frozen: false, regenWays: regenWaysOf(state) }
+        }
       }
+      openNow.set(date, { key, day })
+      later.push(day)
     }
+    // Only the days still open stay remembered.
+    this.openGameDays = openNow
     // Once unlocked, an item stays (spec): this computer remembers what its room had.
     const kept = this.roomKept()
-    const view = gameView(days, today, ROOM_ITEMS, kept)
-    const fresh = view.room.unlocked.filter((x) => !kept.has(x.id))
+    const keyOf = (room: Iterable<string>) => JSON.stringify([frozenKey, later, [...room].sort()])
+    if (this.gameMemo?.key === keyOf(kept)) return this.gameMemo.view
+    const view = gameView([...this.frozenGameDays.days, ...later], today, ROOM_ITEMS, kept)
+    const fresh = view.room.unlocked.filter((x) => !kept.has(x.id)).map((x) => x.id)
     if (fresh.length) {
       await mkdir(this.o.stateDir, { recursive: true })
-      await writeFileAtomic(join(this.o.stateDir, ROOM_FILE), JSON.stringify({ unlocked: [...kept, ...fresh.map((x) => x.id)] }))
+      await writeFileAtomic(join(this.o.stateDir, ROOM_FILE), JSON.stringify({ unlocked: [...kept, ...fresh] }))
     }
+    // The items just remembered were unlocked by the notes already: the same view with them kept.
+    this.gameMemo = { key: keyOf([...kept, ...fresh]), view }
     return view
+  }
+
+  /**
+   * What a day's context is made of in the folder – the settings, the templates, the plan of lectures, the day's file and
+   * the next one's – by size and time of modification as last read (call after reading them: `inputs`, `dayFile`): a day
+   * is counted again only when one of them changed (T501).
+   */
+  private contextSig(date: string): string {
+    const of = (rel: string) => {
+      const c = this.cache.get(rel)
+      return c ? `${c.size}:${c.mtimeMs}` : '-'
+    }
+    const dir = (d: string) => (this.listed.get(d) ?? []).map((n) => `${n}=${of(`${d}/${n}`)}`).join(',')
+    return [of(paths.settings), dir(ID_COLLECTIONS.template), dir(ID_COLLECTIONS.schedule), of(paths.day(date)), of(paths.day(addDays(date, 1)))].join('|')
   }
 
   /** The room's items this computer has seen unlocked (its state folder; unreadable – none). */
@@ -866,9 +915,12 @@ export class DataFolder {
     }
   }
 
-  /** The grades of frozen days from every computer's file of grades (also conflict copies): of two, the better (spec). */
-  private async gradeLines(): Promise<Map<string, GradeLine>> {
-    const out = new Map<string, GradeLine>()
+  /**
+   * The grades of frozen days from every computer's file of grades (also conflict copies): of two, the better (spec) –
+   * with the signature of the files, merged again only when a file changed (T501).
+   */
+  private async gradeIndex(): Promise<{ sig: string; lines: Map<string, GradeLine> }> {
+    const files: Array<{ sig: string; lines: GradeLine[] }> = []
     const root = join(this.o.dataDir, 'grades')
     for (const y of await this.o.fs.list(root)) {
       if (!y.dir) continue
@@ -876,29 +928,37 @@ export class DataFolder {
         const rel = `grades/${y.name}/${f.name}`
         const c = classify(rel)
         if (f.dir || c?.kind !== 'grades' || !c.computer) continue
-        for (const line of await this.gradeFile(rel, c.computer)) {
-          const was = out.get(line.day)
-          if (!was || betterFreeze(line, was)) out.set(line.day, line)
-        }
+        files.push(await this.gradeFile(rel, c.computer))
       }
     }
-    return out
+    const sig = files.map((f) => f.sig).join('|')
+    if (this.gradedMemo?.sig === sig) return this.gradedMemo
+    const lines = new Map<string, GradeLine>()
+    for (const f of files) {
+      for (const line of f.lines) {
+        const was = lines.get(line.day)
+        if (!was || betterFreeze(line, was)) lines.set(line.day, line)
+      }
+    }
+    this.gradedMemo = { sig, lines }
+    return this.gradedMemo
   }
 
   /** A file of grades through the cache: read again only when its size or time of modification differs. */
-  private async gradeFile(rel: string, computer: string): Promise<GradeLine[]> {
+  private async gradeFile(rel: string, computer: string): Promise<{ sig: string; lines: GradeLine[] }> {
     const abs = join(this.o.dataDir, rel)
     const st = await this.o.fs.stat(abs)
-    if (!st) return []
+    if (!st) return { sig: `${rel}:-`, lines: [] }
+    const sig = `${rel}:${st.size}:${st.mtimeMs}`
     const old = this.gradeFiles.get(rel)
-    if (old && old.size === st.size && old.mtimeMs === st.mtimeMs) return old.lines
+    if (old && old.size === st.size && old.mtimeMs === st.mtimeMs) return { sig, lines: old.lines }
     const bytes = await this.o.fs.read(abs)
     const lines = (bytes ? bytes.toString('utf8') : '').split('\n').flatMap((t) => {
       const line = t.trim() ? gradeLineFrom(t, computer) : null
       return line ? [line] : []
     })
     this.gradeFiles.set(rel, { size: st.size, mtimeMs: st.mtimeMs, lines })
-    return lines
+    return { sig, lines }
   }
 
   /** A day's files unchanged for a minute since this computer saw them so (spec „nie zmieniają się od 1 min”). */
@@ -1183,8 +1243,8 @@ export class DataFolder {
 
   /** Your answer to a row of a day's ritual: judged on the day as it is now and written to its log, one at a time. */
   ritualAnswer(day: string, rowId: string, choice: string, value: RitualValue = null, item: string | null = null): Promise<ActionResult> {
-    return this.dayAction(day, (state, now) => {
-      const row = ritualRows(state).find((r) => r.id === rowId)
+    return this.dayAction(day, (state, now, ctx) => {
+      const row = ritualRows(state, ritualActivity(ctx, state)).find((r) => r.id === rowId)
       if (!row) return 'tego wiersza już nie ma'
       return ritualAnswer(state, row, choice, now, value, item) ?? `nieznana odpowiedź ${choice}`
     })
@@ -1231,13 +1291,14 @@ export class DataFolder {
   }
 
   /** An action on a day's log judged on the day as you see it now (a text: refused, why), one at a time like clicks. */
-  private dayAction(day: string, act: (state: DayState, now: number) => TimerDraft[] | string): Promise<ActionResult> {
+  private dayAction(day: string, act: (state: DayState, now: number, ctx: DayContext) => TimerDraft[] | string): Promise<ActionResult> {
     const run = async (): Promise<ActionResult> => {
       if (!isIsoDate(day)) return { ok: false, why: 'zły dzień', confirm: null }
       const now = this.clock.now()
       const read = await this.log.readDay(day)
       if (!read.complete) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę', confirm: null }
-      const r = act(computeDay(await this.ownContext(day, read, now)), now)
+      const ctx = await this.ownContext(day, read, now)
+      const r = act(computeDay(ctx), now, ctx)
       if (typeof r === 'string') return { ok: false, why: r, confirm: null }
       if (r.length) await this.writeTimer(day, r)
       return { ok: true, events: r, confirm: null }

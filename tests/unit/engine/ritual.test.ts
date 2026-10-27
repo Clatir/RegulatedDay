@@ -3,7 +3,7 @@
  * effect of a ✓ (the outcome as frozen), closing the day (untouched rows as written), the days the morning shows.
  */
 import { describe, expect, it } from 'vitest'
-import { closeEffect, closeEvents, ritualAnswer, ritualEffect, ritualRows, unclosedDays, type RitualRow } from '@shared/engine/ritual'
+import { closeEffect, closeEvents, ritualActivity, ritualAnswer, ritualEffect, ritualRows, unclosedDays, type RitualRow } from '@shared/engine/ritual'
 import { dayOutcome } from '@shared/engine/outcome'
 import { block, hhmm, Scenario } from './dsl'
 
@@ -13,18 +13,23 @@ function silentEnd(s: Scenario, id: string, at: string, rule: string, written = 
   return s.write([{ id: `auto-${id}-${rule}`, k: 'block.end', block: id, at: s.at(at), done: null, rule, autoRule: rule }], s.at(written))
 }
 
+/** The use of the computers at t as the engine reads it (what the rows measure a skipped session by). */
+const useAt = (s: Scenario, t: number) => ritualActivity(s.contextAt(t), s.stateAt(t))
+/** The day's rows at a time. */
+const rowsAt = (s: Scenario, time: string) => ritualRows(s.state(time), useAt(s, s.at(time)))
+
 /** A row's answer written at `time` (asserting it is a choice of the row). */
 function answer(s: Scenario, time: string, kind: RitualRow['kind'], choice: string, value: Parameters<typeof ritualAnswer>[4] = null, item: string | null = null) {
   const t = s.at(time)
   const st = s.stateAt(t)
-  const row = ritualRows(st).find((r) => r.kind === kind)!
+  const row = ritualRows(st, useAt(s, t)).find((r) => r.kind === kind)!
   const drafts = ritualAnswer(st, row, choice, t, value, item)
   expect(drafts).not.toBeNull()
   s.write(drafts!, t)
   return drafts!
 }
 
-const row = <K extends RitualRow['kind']>(s: Scenario, time: string, kind: K) => ritualRows(s.state(time)).find((r) => r.kind === kind) as Extract<RitualRow, { kind: K }> | undefined
+const row = <K extends RitualRow['kind']>(s: Scenario, time: string, kind: K) => rowsAt(s, time).find((r) => r.kind === kind) as Extract<RitualRow, { kind: K }> | undefined
 
 describe('wiersze rytuału', () => {
   // Work 08:00–09:00 ended after two asks; you used the computer to 10:30. A project 19:00–20:00 ended the same way,
@@ -43,7 +48,7 @@ describe('wiersze rytuału', () => {
 
   it('koniec pracy, wiersz zbiorczy z czasem do wyjaśnienia, odpoczynek po końcu pracy', () => {
     const s = day()
-    const rows = ritualRows(s.state('21:40'))
+    const rows = rowsAt(s, '21:40')
     expect(rows.map((r) => r.kind)).toEqual(['workEnd', 'silent', 'rest'])
     const st = s.state('21:40')
     const end = rows[0] as Extract<RitualRow, { kind: 'workEnd' }>
@@ -57,7 +62,7 @@ describe('wiersze rytuału', () => {
     const s = day()
     const t = s.at('21:40')
     const st = s.stateAt(t)
-    const silent = ritualRows(st).find((r) => r.kind === 'silent')!
+    const silent = ritualRows(st, useAt(s, t)).find((r) => r.kind === 'silent')!
     const effect = ritualEffect(s.contextAt(t), st, silent, t)!
     expect(effect.changes).toContainEqual({ kind: 'projects', deltaMin: 40, limitMin: 240 })
     answer(s, '21:40', 'silent', 'ok')
@@ -137,7 +142,7 @@ describe('wiersze rytuału – przypadki z przeglądu', () => {
     s.gap('10:30', '11:15')
     const t = s.at('12:00')
     const st = s.stateAt(t)
-    const r = ritualRows(st).find((x) => x.kind === 'workEnd')!
+    const r = ritualRows(st, useAt(s, t)).find((x) => x.kind === 'workEnd')!
     expect(ritualAnswer(st, r, 'workedUntil', t, s.at('08:30'))).toBeNull()
     expect(ritualAnswer(st, r, 'workedUntil', t, s.at('12:30'))).toBeNull()
     expect(ritualAnswer(st, r, 'workedUntil', t, s.at('11:00'))).toBeNull()
@@ -152,7 +157,7 @@ describe('wiersze rytuału – przypadki z przeglądu', () => {
     s.gap('10:30', '11:15')
     const t = s.at('12:00')
     const st = s.stateAt(t)
-    const r = ritualRows(st).find((x) => x.kind === 'silent')!
+    const r = ritualRows(st, useAt(s, t)).find((x) => x.kind === 'silent')!
     expect(ritualAnswer(st, r, 'endedAt', t, s.at('13:00'), 'a')).toBeNull()
     expect(ritualAnswer(st, r, 'endedAt', t, s.at('07:30'), 'a')).toBeNull()
     expect(ritualAnswer(st, r, 'endedAt', t, s.at('08:50'), 'a')).not.toBeNull()
@@ -163,13 +168,13 @@ describe('wiersze rytuału – przypadki z przeglądu', () => {
     const s = new Scenario({ date: DATE, plan }).using('07:00', '23:59')
     s.ran('ny', '14:00', '15:00')
     s.write([{ k: 'block.park', block: 'j', at: s.at('15:00'), rule: 'workEnd' }, { k: 'block.park', block: 'k', at: s.at('15:00'), rule: 'workEnd' }], s.at('15:00'))
-    const rows = ritualRows(s.state('20:00')).filter((r) => r.kind === 'parkedAnchored')
+    const rows = rowsAt(s, '20:00').filter((r) => r.kind === 'parkedAnchored')
     expect(rows.map((r) => (r as { block: string }).block)).toEqual(['j', 'k'])
     const t = s.at('20:00')
     const st = s.stateAt(t)
     s.write(ritualAnswer(st, rows[0]!, 'drop', t)!, t)
     s.write(ritualAnswer(st, rows[1]!, 'ok', t)!, t)
-    const after = ritualRows(s.state('20:05')).filter((r) => r.kind === 'parkedAnchored')
+    const after = rowsAt(s, '20:05').filter((r) => r.kind === 'parkedAnchored')
     expect(after.map((r) => [(r as { block: string }).block, (r as { answered: boolean }).answered])).toEqual([['k', true]])
   })
 })
@@ -222,16 +227,38 @@ describe('bloki pominięte, prośby, odpoczynek, poprawki', () => {
     const plan = [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '10:00', min: 60 }), block({ id: 'c', cat: 'inne', at: '12:00', min: 30 })]
     const s = new Scenario({ date: DATE, plan }).using('07:00', '23:59')
     s.ran('a', '08:00', '09:00')
-    expect(ritualRows(s.state('20:00')).filter((r) => r.kind === 'skipped').map((r) => (r as { block: string }).block)).toEqual(['b', 'c'])
+    expect(rowsAt(s, '20:00').filter((r) => r.kind === 'skipped').map((r) => (r as { block: string }).block)).toEqual(['b', 'c'])
     const t = s.at('20:00')
     const st = s.stateAt(t)
-    const rows = ritualRows(st).filter((r) => r.kind === 'skipped')
+    const rows = ritualRows(st, useAt(s, t)).filter((r) => r.kind === 'skipped')
     s.write(ritualAnswer(st, rows[0]!, 'park', t)!, t)
     s.write(ritualAnswer(st, rows[1]!, 'happened', t)!, t)
     const after = s.state('20:05')
     expect(after.facts.blocks.get('b')!.parkedAt).not.toBeNull()
     expect([hhmm(after, after.facts.blocks.get('c')!.startedAt), hhmm(after, after.facts.blocks.get('c')!.endedAt)]).toEqual(['12:00', '12:30'])
-    expect(ritualRows(after).some((r) => r.kind === 'skipped')).toBe(false)
+    expect(rowsAt(s, '20:05').some((r) => r.kind === 'skipped')).toBe(false)
+  })
+
+  it('niezaczęta sesja „odbyła się”: czasy z użycia komputerów w jej oknie, bez użycia – z planu (T500)', () => {
+    const plan = [block({ id: 's', cat: 'sesja', at: '14:00', min: 180, fixed: true })]
+    const happened = (s: Scenario) => {
+      const t = s.at('20:00')
+      const st = s.stateAt(t)
+      const r = ritualRows(st, useAt(s, t)).find((x) => x.kind === 'skipped')!
+      s.write(ritualAnswer(st, r, 'happened', t)!, t)
+      const b = s.state('20:05').facts.blocks.get('s')!
+      return { used: (r as Extract<RitualRow, { kind: 'skipped' }>).used, times: [hhmm(s.state('20:05'), b.startedAt), hhmm(s.state('20:05'), b.endedAt)] }
+    }
+    // Used from 14:20 (a gap from 13:50) to 16:35 (a gap to 20:00) – never „Zacznij”.
+    const used = new Scenario({ date: DATE, plan }).using('07:00', '23:59').gap('13:50', '14:20').gap('16:35', '20:00')
+    const a = happened(used)
+    expect(a.used).toEqual({ from: used.at('14:20'), to: used.at('16:35') })
+    expect(a.times).toEqual(['14:20', '16:35'])
+    // Nobody at a computer the whole window: the plan's times.
+    const away = new Scenario({ date: DATE, plan }).using('07:00', '23:59').gap('13:30', '17:30')
+    const b = happened(away)
+    expect(b.used).toBeNull()
+    expect(b.times).toEqual(['14:00', '17:00'])
   })
 
   it('prośba z „osoba: ?” dostaje osobę', () => {
