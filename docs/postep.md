@@ -15,7 +15,8 @@
   kasety, świętowanie, „Strona B”, kalibracja, PR #13) – wydanie 0.9.0 z runu 40513568887 (ok. 15:08).
 - **Poprawka E4b.9 scalona** (PR #14, 89e21fe, ok. 15:10; CI PR zielone, także Windows) – wydanie 0.9.1 z runu
   40518727264 na `main` (sprawdzić, że opublikowane).
-- **0.10.0 w toku** (D302–D305 z odbioru 27.10) na gałęzi `claude/0.10.0-pasek-bloki` (od 0.9.1) – sekcja niżej.
+- **0.10.0 w toku** (D302–D305 z odbioru 27.10): PR #15 z gałęzi `claude/0.10.0-pasek-bloki` (od 0.9.1), CI w toku;
+  po zielonym scalam (D285) i sprawdzam wydanie 0.10.0 – sekcja niżej.
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
   (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
   do folderu z `.moved.json`.
@@ -23,7 +24,7 @@
   w części 2 kolejne (także częściowo zastąpione) do archiwum, zanim przybędą nowe T.
 
 ## Kolejka
-0. Ja: 0.10.0 (D302–D305) – PR, CI, scalenie, wydanie; potem pauza.
+0. Ja: 0.10.0 (D302–D305) – CI PR #15, scalenie, wydanie; potem pauza.
 1. Ty: odbiór według `docs/odbior.md` (E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b), wybór zestawu kolorów (D298);
    27.10 odebrane E3.2, E3.6, E3.8, E3.11.
 2. Po „dalej”: elementy E5 w pasku (przyciski próśb, znacznik i panel wariantów), potem ekrany E6 (rytuał, niezamknięte
