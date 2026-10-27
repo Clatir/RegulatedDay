@@ -15,8 +15,11 @@
   kasety, świętowanie, „Strona B”, kalibracja, PR #13) – wydanie 0.9.0 z runu 40513568887 (ok. 15:08).
 - **Poprawka E4b.9 scalona** (PR #14, 89e21fe, ok. 15:10; CI PR zielone, także Windows) – wydanie 0.9.1 z runu
   40518727264 na `main` opublikowane (ok. 15:52).
-- **0.10.0 w toku** (D302–D305 z odbioru 27.10): PR #15 z gałęzi `claude/0.10.0-pasek-bloki` (od 0.9.1), CI w toku;
-  po zielonym scalam (D285) i sprawdzam wydanie 0.10.0 – sekcja niżej.
+- **0.10.0 scalone** (D302–D305 z odbioru 27.10; PR #15, de87421, ok. 16:31; CI PR zielone w drugiej rundzie po
+  ponowieniu) – wydanie 0.10.0 z runu 40531784915 na `main` opublikowane (ok. 17:12); sekcja niżej. Pauza do „dalej”.
+- Otwarte (test skali): `gameState` z 3 lat danych trwa na CI ok. 100 ms – raz 101 ms przy limicie „codzienne
+  operacje < 0,1 s” (Node 26, PR #15, ponowienie zielone). Przed ekranami gry (ustawienie `GAME_FROM`) przyspieszyć
+  albo liczyć raz na zmianę plików ocen; dziś w aplikacji `gameState` = null (T492).
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
   (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
   do folderu z `.moved.json`.
@@ -24,8 +27,7 @@
   w części 2 kolejne (także częściowo zastąpione) do archiwum, zanim przybędą nowe T.
 
 ## Kolejka
-0. Ja: 0.10.0 (D302–D305) – CI PR #15, scalenie, wydanie; potem pauza.
-1. Ty: odbiór według `docs/odbior.md` (E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b), wybór zestawu kolorów (D298);
+1. Ty: odbiór według `docs/odbior.md` (0.10.0, 0.9.1, E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b), wybór zestawu kolorów (D298);
    27.10 odebrane E3.2, E3.6, E3.8, E3.11.
 2. Po „dalej”: elementy E5 w pasku (przyciski próśb, znacznik i panel wariantów), potem ekrany E6 (rytuał, niezamknięte
    dni, eksport, przywracanie) – z pytaniami o wygląd; przed nimi komunikat „Przed etapem”.
@@ -49,6 +51,7 @@
   makieta, przeciągnięcie paska z podstawionym kursorem; D302 tylko w CI na Windows).
 - CI PR #15, runda 1: Windows czerwone – test pełnego ekranu z 0.9.1 czekał na pasek „na wierzchu” zaraz po starcie,
   a okno główne jest wtedy z przodu (D302 słusznie go chowa); test czeka teraz na pasek po kliknięciu okna z filmem.
+  Runda 2: test skali na Node 26 (`gameState` 101 ms przy limicie 100 ms) – kod gry bez zmian, ponowienie zielone.
 
 ## Przed etapem E7 – logika (27.10.2026)
 - Odpowiedzi: D301 (dwie części ciągiem, robocza lista pokoju i progi nut – akceptacja przed ekranami gry). Model:
