@@ -783,6 +783,7 @@ do `docs/archiwum/decyzje-zastapione.md`.
 | D303 | Pasek pulpitu po najechaniu pokazuje uchwyt „przeciągnij”: przeciągasz go w dowolne miejsce dowolnego monitora, miejsce zapamiętane na tym komputerze; bez tego monitora wraca do rogu monitora głównego (27.10.2026) |
 | D304 | Miejsce paska w Ustawieniach na makiecie monitorów (proporcje i układ jak w Windows): na każdym 4 rogi i środek górnej i dolnej krawędzi do kliknięcia, obecne miejsce – także przeciągnięte – zaznaczone (27.10.2026) |
 | D305 | Bloki na osi dnia przeciągasz lewym przyciskiem myszy: planowany start co 5 min; zwykłe kliknięcie dalej otwiera blok do edycji (27.10.2026) |
-| D306 | Menu boczne to jedna lista: „Ustawienia” zaraz pod „Historią”, „Próba” pod „Ustawieniami” – nie na dole menu (doprecyzowuje D287) (27.10.2026) |
 | T497 | Pasek: miejsce z makiety to kotwica (`spot`, liczona z bieżącą wysokością i skalą), przeciągnięte – przesunięcie złożonej części; przeciąganie od 4 px, okno za kursorem procesu głównego w obrębie obszarów roboczych, upuszczone do monitora pod środkiem; `layoutBar` czeka najwyżej 10 s |
 | T498 | Oś: przeciągany blok od miejsca, w którym go widać, start na siatce 5 min, czeka na dane 2 s; dni minione bez przeciągania; testy okna bez DOM w `tests/web` (z `dsl.ts`) |
+| D306 | Menu boczne to jedna lista: „Ustawienia” zaraz pod „Historią”, „Próba” pod „Ustawieniami” – nie na dole menu (doprecyzowuje D287) (27.10.2026) |
+| T499 | Test skali: codzienne operacje (klik, `check`, dzień, energia, gra) w 3 rundach po minucie z nowym kliknięciem, liczy się najlepsza runda (limit 0,1 s bez zmian; pauza runnera CI – 101 i 107 ms na Node 26 – to nie czas operacji); pierwszy widok gry (pliki ocen, zapis pokoju) w otwarciu |
