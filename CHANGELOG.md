@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.1
+- „Zawsze na wierzchu”: pasek pulpitu chowa się teraz także wtedy, gdy film w przeglądarce – YouTube, Netflix – przechodzi na pełny ekran w tym samym oknie, i wraca, gdy z niego wyjdziesz. Liczy się pełny ekran na monitorze paska: film na drugim monitorze go nie chowa, a kliknięcie okna na drugim monitorze nie pokazuje go nad filmem. Wcześniej pasek zostawał nad filmem.
+
 ## 0.9.0
 - Pod spodem: pokój z elementami odblokowywanymi nutami zamrożonych dni (lista robocza – zaakceptujesz ją razem z progami i wyglądem naklejek przed ekranami gry), kaseta każdego tygodnia po zamrożeniu niedzieli (pora roku, ulubiona regeneracja tygodnia, naklejka przy co najmniej 70% dni dotrzymanych) i to, kiedy gra świętuje pełnym ekranem (passa 7, 14, 30, 60, 100 dni, nowy element pokoju).
 - Pod spodem: pomiar „Strony B tygodnia” – „Odcinam się”, sygnały, dotrzymane granice, godziny projektów, przesunięcia pory snu, użycie komputera po końcu pracy i po porze snu, regeneracja i prośby według osób, każde wobec poprzedniego tygodnia; dzień z wyłączonym modułem ma „brak pomiaru”.

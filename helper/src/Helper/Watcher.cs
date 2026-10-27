@@ -17,6 +17,10 @@ namespace RegulatedDay
         static readonly Guid GUID_ACDC_POWER_SOURCE = new Guid("5d3e9a59-e9d5-4b00-a6bd-ff34ff516548");
         // Thread timers (no window): Windows chooses their ids.
         UIntPtr checkTimer = UIntPtr.Zero, soonTimer = UIntPtr.Zero;
+        // The bar „na wierzchu” whose monitor is watched for a full screen (Zero: not watched – the bar lies under the
+        // windows), the window covering that monitor (a film on full screen) and the state last sent (-1: none yet).
+        IntPtr fullscreenBar = IntPtr.Zero, cover = IntPtr.Zero;
+        int fullscreenSent = -1;
 
         // Kept in static fields: a delegate passed to Windows and collected afterwards crashes the process.
         static WinEventDelegate eventCallback;
@@ -100,13 +104,61 @@ namespace RegulatedDay
 
         void OnTimer(UIntPtr id)
         {
-            if (id == checkTimer) Bar.Check(false);
+            if (id == checkTimer)
+            {
+                // Each apart: a failed check of the order never stops the one of the full screen (nor the loop).
+                try { Bar.Check(false); }
+                catch (Exception e) { Log.Error("pasek: " + e); }
+                CheckFullscreen();
+            }
             else if (id == soonTimer)
             {
                 Native.KillTimer(IntPtr.Zero, soonTimer);
                 soonTimer = UIntPtr.Zero;
                 Bar.Check(false);
             }
+        }
+
+        /// <summary>Watch the monitor of the bar „na wierzchu” for a full screen (the same bar again changes nothing).</summary>
+        public void WatchFullscreen(IntPtr bar)
+        {
+            if (bar == fullscreenBar) return;
+            fullscreenBar = bar;
+            cover = IntPtr.Zero;
+            fullscreenSent = -1;
+            CheckFullscreen();
+        }
+
+        public void UnwatchFullscreen()
+        {
+            fullscreenBar = IntPtr.Zero;
+            cover = IntPtr.Zero;
+            fullscreenSent = -1;
+        }
+
+        /// <summary>
+        /// A window on full screen over the monitor of the bar „na wierzchu” (D291): the foreground window on that monitor
+        /// decides – also one that entered the full screen in place (F11, a film in a browser: no foreground event); with
+        /// the foreground on another monitor, or none for a moment, the full-screen window there stays while it still
+        /// covers it. Checked every second and at every change of the foreground; only a change is sent.
+        /// </summary>
+        void CheckFullscreen()
+        {
+            if (fullscreenBar == IntPtr.Zero) return;
+            try
+            {
+                IntPtr monitor = Native.MonitorFromWindow(fullscreenBar, Native.MONITOR_DEFAULTTONEAREST);
+                IntPtr fg = Native.GetForegroundWindow();
+                if (fg != IntPtr.Zero && fg != fullscreenBar && Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST) == monitor)
+                    cover = Foreground.CoversMonitor(fg) ? fg : IntPtr.Zero;
+                if (cover != IntPtr.Zero && !(Native.IsWindowVisible(cover) && !Native.IsIconic(cover) && Native.MonitorFromWindow(cover, Native.MONITOR_DEFAULTTONEAREST) == monitor && Foreground.CoversMonitor(cover)))
+                    cover = IntPtr.Zero;
+                int full = cover != IntPtr.Zero ? 1 : 0;
+                if (full == fullscreenSent) return;
+                fullscreenSent = full;
+                send(new JObj().Set("type", "fullscreen").Set("fullscreen", full == 1));
+            }
+            catch (Exception e) { Log.Warn("pełny ekran: " + e.Message); }
         }
 
         /// <summary>Window events are gathered for 200 ms, then the bar is checked once.</summary>
@@ -134,6 +186,7 @@ namespace RegulatedDay
                         .Set("fullscreen", Foreground.CoversMonitor(hwnd)));
                 }
                 catch (Exception e) { Log.Warn("foreground: " + e.Message); }
+                CheckFullscreen();
             }
             CheckSoon();
         }
