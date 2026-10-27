@@ -251,6 +251,17 @@ for (const [label, area, zoom] of [
   })
 }
 
+test('proces pomocniczy (zadania w tle, T190) startuje ze zbudowanej aplikacji i odpowiada', async () => {
+  const { app, userData } = await launch({ env: { RD_E2E_WORKER: '1' } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => ''), { timeout: 30_000 }).toContain('proces pomocniczy: ok')
+    })
+  } finally {
+    await app.close()
+  }
+})
+
 test('folder danych (RD_DATA_DIR): obecność, lokalny dziennik i log dnia; przy zamknięciu obecność „zamknięty”', async () => {
   const { mkdtemp } = await import('node:fs/promises')
   const { tmpdir } = await import('node:os')

@@ -48,6 +48,10 @@ export interface HubOptions {
   onChange: () => void
   /** Starts the folder's service (tests: a slow or failing folder). */
   start?: (o: ServiceOptions) => Promise<DataService>
+  /** The helper process for the heavy work (T190). */
+  worker?: ServiceOptions['worker']
+  /** The first day of the ritual (none before its screens, T482). */
+  ritualFrom?: string | null
 }
 
 /** `a` is a newer version than `b` (versions that cannot be compared: no). */
@@ -193,6 +197,8 @@ export class DataHub {
         log: this.o.log,
         writeGuardPlan: this.o.writeGuardPlan,
         extraBackupDir: this.o.extraBackupDir,
+        worker: this.o.worker,
+        ritualFrom: this.o.ritualFrom ?? null,
         onChecked: () => this.changed()
       })
       if (this.closing || this.shutdown) {

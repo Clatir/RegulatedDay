@@ -69,6 +69,20 @@ async function checks(m: Awaited<ReturnType<typeof make>>, from: number, minutes
 
 const freezes = async (f: DataFolder) => (await f.readDay(DAY)).events.filter((e) => isKnown(e) && e.k === 'day.freeze') as unknown as Array<{ how: string; know: Record<string, number>; missing: string[]; grade: { boundary: string; endConfirmed: boolean } }>
 
+describe('eksport CSV z folderu danych', () => {
+  it('dni z zakresu do trzech plików; dzień bez zdarzeń bez wierszy; zły zakres – odmowa', async () => {
+    const m = await workedDay(null)
+    const out = join(root, 'export')
+    expect(await m.folder.exportCsv(addDays(DAY, -1), DAY, out)).toEqual(['bloki.csv', 'prosby.csv', 'checkiny.csv'])
+    const rows = readFileSync(join(out, 'bloki.csv'), 'utf8').trim().split('\r\n').slice(1)
+    // „a” and the Wednesday's sessions of the layer (London, NY), which did not start.
+    expect(rows).toHaveLength(3)
+    expect(rows).toContain('21.10.2026;Inne obowiązki;Inne obowiązki;praca;10:00;11:00;10:00;11:00;60;0;0;zrobiony;')
+    expect(rows.filter((r) => r.includes(';niezaczęty;'))).toHaveLength(2)
+    await expect(m.folder.exportCsv(DAY, addDays(DAY, -1), out)).rejects.toThrow('zły zakres dat')
+  })
+})
+
 describe('zamrażanie w folderze danych', () => {
   it('po oknie korekty (24 h od otwarcia dnia po jego końcu) prowadzący zamraża dzień raz, z oceną w logu i w pliku ocen', async () => {
     const m = await workedDay(DAY)

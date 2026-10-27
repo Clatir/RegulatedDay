@@ -130,6 +130,8 @@ export interface DayState {
    * toward the minimum up to the bedtime with the plan's forecast (the ritual's effects in the evening).
    */
   regen: { totalMin: number; towardMinMin: number; requiredMin: number; justifiedRequestMin: number; missingMin: number; explainMin: number; forecastMin: number }
+  /** Justified minutes of each request (spec „usprawiedliwione prośby”), by its id. */
+  justifiedBy: Record<string, number>
   /** Times to explain (E6): after work and project blocks that ended by themselves. */
   explains: Explain[]
   bedtime: { base: number; shiftMin: number; overLimitMin: number; effective: number; forecast: number }
@@ -785,6 +787,7 @@ export function computeDay(ctx: DayContext): DayState {
     overrunMin: overrun,
     projectsMin,
     regen: { totalMin: fin.regenTotal, towardMinMin: fin.towardMin, requiredMin: fin.required, justifiedRequestMin: fin.justified, missingMin: Math.max(0, fin.required - fin.towardMin), explainMin, forecastMin: fin.towardForecast },
+    justifiedBy: fin.justifiedBy,
     explains,
     bedtime: { base: baseBedtime(now), shiftMin: shift, overLimitMin: overLimit, effective, forecast: fin.bedtimeForecast },
     hardEnd: { at: hardPassed ? passed! : fin.hardEnd.at, unreachable: !hardPassed && fin.hardEnd.unreachable, passed, message },
@@ -876,6 +879,7 @@ interface Evaluation {
   towardForecast: number
   required: number
   justified: number
+  justifiedBy: Record<string, number>
   bedtimeForecast: number
   hardEnd: HardEnd
   pool: { min: number; byLimit: number; byTime: number }
@@ -993,6 +997,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   // Justified requests (spec „Wymagane minimum”): begun at the hard end in force at their start or later, in time that
   // would be regeneration, or breaking a regeneration block or „Odcinam się”; split at the hard end.
   let justified = 0
+  const justifiedBy: Record<string, number> = {}
   for (const r of view.requests) {
     const to = Math.min(r.to === OPEN ? m : r.to, m)
     const he = r.hardEndAt != null ? idxOf(g, r.hardEndAt) : null
@@ -1000,7 +1005,10 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
       const f = flags[k]!
       const broke = (f & F_DISC) !== 0 || (r.from > 0 && (flags[r.from - 1]! & F_REGEN) !== 0 && !(f & (F_END | F_PROJECT)))
       const wouldRest = after[k] === 1 && !(f & (F_END | F_PROJECT | F_LIFE | F_SECOND))
-      if (broke || (he != null && k >= he && wouldRest)) justified++
+      if (broke || (he != null && k >= he && wouldRest)) {
+        justified++
+        justifiedBy[r.id] = (justifiedBy[r.id] ?? 0) + 1
+      }
     }
   }
   // A switch to a regeneration day fixes the minimum it asks (counted once at the switch, spec „Zmiana typu”); a later
@@ -1150,6 +1158,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     towardForecast,
     required,
     justified,
+    justifiedBy,
     bedtimeForecast,
     hardEnd: pool.hardEnd,
     pool: { min: pool.min, byLimit: pool.byLimit, byTime: pool.byTime },

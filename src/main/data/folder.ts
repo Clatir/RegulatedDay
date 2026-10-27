@@ -24,7 +24,8 @@ import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerD
 import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
 import { foldFacts, isRunning, type DayFacts } from '@shared/engine/facts'
-import { correctionEnd, freezeDecision, gradeOf, openedAtOf, WRITERS_DAYS, type FreezeComputer } from '@shared/engine/freeze'
+import { correctionEnd, freezeDecision, openedAtOf, WRITERS_DAYS, type FreezeComputer } from '@shared/engine/freeze'
+import { inProcess, type Worker } from '../worker/host'
 import { CLOSE_WINDOW_H, closeEffect, closeEvents, closeRefusal, effectBase, ritualAnswer, ritualEffect, ritualRows, unclosedDays, type DayLog, type RitualEffect, type RitualRow, type RitualValue } from '@shared/engine/ritual'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
@@ -32,6 +33,9 @@ import { daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type 
 import type { Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
+import { requestFrom, type RequestRecord } from '@shared/model/requests'
+import { routineFrom, type Routine } from '@shared/model/routines'
+import type { CsvDay } from '@shared/engine/csv'
 import { isDayTypeId, settingsOn, type SettingsChange } from '@shared/model/settings'
 import { decideLeader, minuteGate, type LeaderDecision, type Peer } from '@shared/sync/leader'
 import type { Presence } from '@shared/sync/presence'
@@ -123,6 +127,8 @@ export interface FolderOptions {
   previousRun?: { lastAt: number; clean: boolean } | null
   /** The first day of the ritual: days from it are closed and frozen (null – none yet, before its screens, T482). */
   ritualFrom?: string | null
+  /** The helper process (T190): the grades of days to freeze, the CSV export; default: this process. */
+  worker?: Worker
 }
 
 export interface CheckResult {
@@ -565,7 +571,7 @@ export class DataFolder {
       const decision = freezeDecision({ date: day, now, mayFreeze: this.mayFreeze(settled), openedAt, computers: await this.writers(today, read), filesQuiet: read.copies === 0 && quiet })
       if (!decision.freeze) continue
       const know = { ...read.lastByComputer }
-      const grade = gradeOf(await this.dayContext(day, read, now), know)
+      const grade = await (this.o.worker ?? inProcess).run({ kind: 'grade', ctx: await this.dayContext(day, read, now), know })
       this.append({ id: derivedId(day, 'freeze', this.o.computer), day, dom: 'game', k: 'day.freeze', at: now, how: decision.how, know, missing: decision.missing, grade })
       const line = { day, at: now, v: this.rulesVersion, how: decision.how, know, missing: decision.missing, grade }
       await this.o.fs.append(join(this.o.dataDir, paths.grades(day.slice(0, 4), this.o.computer)), `${JSON.stringify(line)}\n`)
@@ -871,6 +877,26 @@ export class DataFolder {
   /** Closing a day: the evening ritual, or the morning's „Jak zapisano”, „Wolne”, „Nie pamiętam” (spec). */
   closeDay(day: string, how: CloseHow): Promise<ActionResult> {
     return this.dayAction(day, (state, now) => (day > logicalDayOf(now) ? 'ten dzień jeszcze się nie zaczął' : (closeRefusal(state, how) ?? closeEvents(state, how, now))))
+  }
+
+  /**
+   * The CSV export (spec „Eksport CSV”, D300): the days from `from` to `to` as this computer sees them (with your queued
+   * edits; a day nobody worked has no rows), three files to `dir`, counted and written by the helper process.
+   */
+  async exportCsv(from: string, to: string, dir: string, at = this.clock.now()): Promise<string[]> {
+    if (!isIsoDate(from) || !isIsoDate(to) || from > to) throw new Error('zły zakres dat')
+    const rd = rdFrom(await this.recordView(paths.settings))
+    const routines = (await this.collection('routine')).map(routineFrom).filter((r): r is Routine => !!r)
+    const requests = (await this.collection('request')).map(requestFrom).filter((r): r is RequestRecord => !!r)
+    const days: CsvDay[] = []
+    for (let d = from; d <= to; d = addDays(d, 1)) {
+      const read = await this.log.readDay(d)
+      if (!read.complete) throw new Error(`log dnia ${d} jest teraz nieczytelny – spróbuj za chwilę`)
+      if (!read.events.length) continue
+      const ctx = await this.ownContext(d, read, at)
+      days.push({ ctx, names: { rd, settings: ctx.snapshot.settings, routines, requests } })
+    }
+    return (this.o.worker ?? inProcess).run({ kind: 'csv', days, dir })
   }
 
   /** The days the morning shows to close (spec); `ritualFrom` – the first day with the ritual (null: none yet, T482). */
