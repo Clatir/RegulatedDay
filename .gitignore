@@ -34,3 +34,4 @@ Thumbs.db
 
 # Claude Code (lokalne)
 .claude/settings.local.json
+.claude/worktrees/
