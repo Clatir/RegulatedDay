@@ -13,8 +13,9 @@
   projekcie, ocena dnia bez gry (`engine/outcome.ts`), rytuał (`engine/ritual.ts`: wiersze, odpowiedzi, skutek ✓,
   zamknięcie, niezamknięte dni; 15 testów), droga przez `DataFolder` (2 testy plikowe), nowe zdarzenia `ritual.close`,
   `block.fix`, `block.mark`, `request.person`, `rest.not`; T483–T485, reguły `rytual.md`, CHANGELOG 0.6.0, lista E6a
-  w `docs/odbior.md`. Testy: 625 jednostkowe i plikowe, E2E 15 + 2 tylko w CI; typecheck, build, lint zielone.
-  W toku: `/code-review` (xhigh), potem PR, CI, scalenie i wydanie 0.6.0.
+  w `docs/odbior.md`. `/code-review` (xhigh): 15 uwag, 14 poprawionych z testami (T486), 1 bez zmian (restart po
+  cichym końcu nie występuje); mutacje: 22 próby, 21 wykrytych, 1 praktycznie równoważna (opis w PR). Testy: 634
+  jednostkowe i plikowe, E2E 15 + 2 tylko w CI; typecheck, build, lint zielone. Dalej: PR, CI, scalenie, wydanie 0.6.0.
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
   (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482).
 - Zastąpione decyzje (26) przeniesione do `docs/archiwum/decyzje-zastapione.md`.

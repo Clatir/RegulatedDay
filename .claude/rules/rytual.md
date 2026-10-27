@@ -11,7 +11,7 @@ paths:
 # Czas do wyjaśnienia, rytuał, ocena dnia (logika E6, część 1)
 
 Źródło prawdy: specyfikacja „Czas do wyjaśnienia” (w „Przedłużenie i przekroczenie”), „Rytuał zamknięcia”, „Nagrody”,
-„Statusy dni i passa”; D238, D243, D246, D249, D250, D254, D255, D262, D264–D266, D271, D272, D276, D281. T483–T485.
+„Statusy dni i passa”; D238, D243, D246, D249, D250, D254, D255, D262, D264–D266, D271, D272, D276, D281. T483–T486.
 
 ## Pliki
 - `engine/explain.ts` – `explainsOf` (z faktów i `activityOf` z logu dnia, bez `self`), `useAfter` (pierwsze użycie
@@ -37,6 +37,12 @@ paths:
 ## Pułapki
 - Silnik sam czyta użycie z logu: w testach komputer musi mieć „obserwacja trwa” (`Scenario.using`), inaczej otwarty
   odcinek kończy się na `observe.from` i nikt „nie używa” komputera.
+- Koniec bloku jest na siatce minut, przerwa w wejściu zaczyna się w dowolnej sekundzie: powrót szukany z tolerancją
+  pół minuty (`useAfter(…, MIN / 2)`); w testach DSL przerwy są w pełnych minutach – zapis w środku minuty: `write`.
+- Wszystko, co rytuał dopisuje po fakcie (odpowiedzi, `rest.not`), liczy się od swojej chwili w pętli minut
+  (`known`, `n.at`) – inaczej twardy koniec mija wstecz; energii nie zmienia nigdy.
+- Przeskok sprawdzania twardego końca (T414) porównuje minuty czasu do wyjaśnienia przez `plain` (dzień bez niego) –
+  bez tego długi czas do wyjaśnienia liczył dzień ~85 ms zamiast kilku.
 - Przerwa w toku liczy się tak długo, jak trwa – o 21:30 przerwa od 21:20 to 10 min, jeszcze nie koniec.
 - Poprawka końca bloku zakończonego automatycznie: „Cofnij” + `block.end` (jak odpowiedzi paska), nie `block.fix` –
   prowadzący cofnąłby automatyczny koniec przy ponownej ocenie (T465).
