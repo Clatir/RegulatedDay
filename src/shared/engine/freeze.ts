@@ -12,8 +12,11 @@
 import { compareEvents, isKnown, type AnyEvent, type CloseHow } from '../model/events'
 import type { Presence } from '../sync/presence'
 import { dayEnd, dayStart } from '../time/day'
-import { computeDay, type DayContext } from './day'
+import { isIsoDate } from '../time/zone'
+import { computeDay, type DayContext, type DayState } from './day'
+import { computeEnergy } from './energy'
 import type { DayFacts } from './facts'
+import { dayGame, type GameDayInput, type GameGrade } from './game'
 import { dayOutcome, type BoundaryOutcome } from './outcome'
 
 const HOUR = 3_600_000
@@ -106,7 +109,7 @@ export function freezeDecision(inp: FreezeInput): FreezeDecision {
   return { freeze: true, how: 'ready', missing: [] }
 }
 
-/** What the freeze stores of a day (spec: the grade with the rules version – the game counts from it, E7). */
+/** What the freeze stores of a day (spec: the grade with the rules version – the streak, notes, room and cassettes count from it). */
 export interface DayGrade {
   boundary: BoundaryOutcome
   extensionMin: number
@@ -118,6 +121,43 @@ export interface DayGrade {
   closed: CloseHow | null
   /** A free day: of the type „wolne”, closed „Wolne”, or without presence and not answered (not a stationary „zjazd”). */
   free: boolean
+  /** The day in the game: what it earned, its status and notes. */
+  game: GameGrade
+}
+
+/** A free day (spec „Dzień bez obecności”, „wolne”): of the type „wolne”, closed „Wolne”, or without presence and not answered. */
+export function isFreeDay(state: DayState, events: readonly AnyEvent[]): boolean {
+  const closed = state.facts.closed?.how ?? null
+  const presence = events.some((e) => isKnown(e) && e.k === 'presence.first')
+  return state.dayType === 'wolne' || closed === 'free' || (!presence && closed == null && state.dayType !== 'zjazd-stacjonarny')
+}
+
+/**
+ * A line of a computer's file of grades (spec „Pliki na OneDrive”: `grades/RRRR/<komputer>.jsonl`, derived from the
+ * logs): the day, the computer that froze it (the file's), the rules it was frozen by, the events it counted, the grade.
+ */
+export interface GradeLine {
+  day: string
+  c: string
+  v: number
+  know: Record<string, number>
+  grade: Record<string, unknown>
+}
+
+const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+
+/** A line of `computer`'s file of grades, or null when it is no grade (read tolerantly: a broken line is skipped). */
+export function gradeLineFrom(text: string, computer: string): GradeLine | null {
+  let v: unknown
+  try {
+    v = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (!isPlain(v) || !isIsoDate(v.day) || !Number.isInteger(v.v) || !isPlain(v.know) || !isPlain(v.grade)) return null
+  const know: Record<string, number> = {}
+  for (const [c, n] of Object.entries(v.know)) if (Number.isInteger(n)) know[c] = n as number
+  return { day: v.day, c: computer, v: v.v as number, know, grade: v.grade }
 }
 
 /** The last event of every computer in the events (−1 when none): what a freeze counts. */
@@ -137,13 +177,13 @@ export function outsideGrade(events: readonly AnyEvent[], know: Readonly<Record<
   return events.filter((e) => e.n > (know[e.c] ?? -1)).sort(compareEvents)
 }
 
-/** The grade of a day as it would freeze (as written, D265), counting the events `know` names. */
-export function gradeOf(ctx: DayContext, know: Readonly<Record<string, number>>): DayGrade {
-  const events = countedEvents(ctx.events, know)
-  const state = computeDay({ ...ctx, events, now: Math.max(ctx.now, dayEnd(ctx.date)), asWritten: true })
+/** The grade of a day as it would freeze (as written, D265), counting the events `know` names, with its place in the game. */
+export function gradeOf(ctx: DayContext, know: Readonly<Record<string, number>>, game: GameDayInput): DayGrade {
+  const counted: DayContext = { ...ctx, events: countedEvents(ctx.events, know), now: Math.max(ctx.now, dayEnd(ctx.date)), asWritten: true }
+  const state = computeDay(counted)
   const o = dayOutcome(state)
-  const closed = state.facts.closed?.how ?? null
-  const presence = events.some((e) => isKnown(e) && e.k === 'presence.first')
-  const free = state.dayType === 'wolne' || closed === 'free' || (!presence && closed == null && state.dayType !== 'zjazd-stacjonarny')
-  return { boundary: o.boundary, extensionMin: o.extensionMin, endConfirmed: o.endConfirmed, explainAfterBoundaryMin: o.explainAfterBoundaryMin, regen: o.regen, projects: o.projects, dayType: state.dayType, closed, free }
+  const free = isFreeDay(state, counted.events)
+  const energy = computeEnergy(counted, state, { moduleOn: game.energyOn })
+  const g = dayGame({ ctx: counted, state, energy, free, game, over: true })
+  return { boundary: o.boundary, extensionMin: o.extensionMin, endConfirmed: o.endConfirmed, explainAfterBoundaryMin: o.explainAfterBoundaryMin, regen: o.regen, projects: o.projects, dayType: state.dayType, closed: state.facts.closed?.how ?? null, free, game: g }
 }

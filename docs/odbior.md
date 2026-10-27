@@ -15,19 +15,54 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
-- **Tylko Ty** (testy tego nie widzą): E6b.2, E6a.3, E4b.4, E4b.9, E4b.10, E4b.11, E4a.5, E4a.11, E4a.12, E3.2, E3.9,
+- **Tylko Ty** (testy tego nie widzą): E7a.2 (kliknięcie „Wymień”), E6b.2, E6a.3, E4b.4, E4b.9, E4b.10, E4b.11, E4a.5, E4a.11, E4a.12, E3.2, E3.9,
   E3.10, E3.11, a w E3.6 „Dodaj do planu” i w E3.8 przywrócenie z ekranu.
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 
 **Kolejność, która oszczędza czas:**
-1. Raz, na start: E6b.1 (albo E6a.1 / E5.1, jeśli nowsza wersja jeszcze nie przyszła); następnego dnia po 12:00 E6b.2.
-2. Zwykły dzień pracy: E4a.1–E4a.4, E4a.6–E4a.9, E4b.1–E4b.3, E4b.5–E4b.7, E5.2, E6a.4.
+1. Raz, na start: E7a.1 (albo E6b.1 / E6a.1 / E5.1, jeśli nowsza wersja jeszcze nie przyszła); następnego dnia po
+   12:00 E6b.2.
+2. Zwykły dzień pracy: E4a.1–E4a.4, E4a.6–E4a.9, E4b.1–E4b.3, E4b.5–E4b.7, E5.2, E6a.4, E7a.2.
 3. Dzień z sesją: E4a.5, E4b.4.
 4. Wieczór: E4b.8, E4b.10, E6a.2, E6a.3.
 5. Ustawienia i próba: E4b.9, E4b.11, E3.3–E3.8, E3.11.
 6. Laptop i noc (gdy masz laptopa pod ręką): E3.9, E3.10, E4a.11, E4a.12.
 7. Jednorazowe: E4a.10, E4a.13, E3.12.
+
+---
+
+## Wersja 0.8.0 – logika E7, część 1 (regulamin gry pod spodem)
+
+### E7a.1 Aktualizacja do 0.8.0
+- [ ] Odebrane
+- **Automatycznie:** ścieżki aktualizacji sprawdza CI na Windows (`tests/update/update-paths.spec.ts`), regulamin gry –
+  `tests/unit/engine/game.test.ts`, `tests/fs/game.test.ts` i test skali. Ty: rzut oka.
+- **Jak sprawdzić:** aktualizacja przychodzi sama w nocy albo Ustawienia → Aktualizacje → „Zainstaluj teraz”; otwórz
+  okno główne.
+- **Oczekiwany efekt:** baner „Co nowego w wersji 0.8.0” z trzema punktami; ostatni mówi, że gra, pokój i kasety pojawią
+  się w jednej z następnych wersji. Dane jak przed aktualizacją, okno i pasek bez zmian, nigdzie nut ani passy.
+- **Nie przechodzi, gdy:**
+  - po instalacji aplikacja się nie uruchamia albo pokazuje baner „nie udała się” / „nie dokończyła się”;
+  - „Co nowego” pokazuje starszą wersję;
+  - gdziekolwiek w oknie albo pasku pojawiają się nuty, passa, pokój albo status dnia.
+
+### E7a.2 Nowy blok i „Wymień” w „Dziś” działają jak dotąd
+- [ ] Odebrane
+- **Automatycznie:** zdarzenie wymiany z okna sprawdza `tests/fs/game.test.ts`, nutę za wymianę
+  `tests/unit/engine/game.test.ts`, „Zatwierdź plan” i „Dodaj bez wymiany” – E2E okna „Dziś”; samo kliknięcie
+  „Wymień” – tylko Ty, rzut oka.
+- **Jak sprawdzić:** rano zatwierdź plan („Zatwierdź plan” w planie porannym). Potem dodaj w „Dziś” blok pracy, który
+  nie mieści się przed granicą (np. „Inne obowiązki” 60 min wieczorem) i w oknie wymiany kliknij „Wymień”. Drugi raz
+  dodaj zwykły blok, który się mieści.
+- **Oczekiwany efekt:** jak w wersji 0.7.0 – nowy blok jest w planie, ustępujące bloki są zaparkowane (licznik
+  przeniesień +1); blok, który się mieści, dodaje się bez okna wymiany. „Zatwierdź plan” w planie porannym działa jak
+  dotąd.
+- **Nie przechodzi, gdy:**
+  - „Wymień” albo „Dodaj” kończy się komunikatem „Nie zapisano …” albo blok nie pojawia się w planie;
+  - ustępujący blok nie jest zaparkowany po „Wymień”;
+  - okno wymiany pojawia się przy bloku, który mieści się przed granicą;
+  - „Zatwierdź plan” kończy się komunikatem o błędzie albo granica zostaje propozycją.
 
 ---
 

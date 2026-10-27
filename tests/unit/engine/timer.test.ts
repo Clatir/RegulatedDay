@@ -309,7 +309,8 @@ describe('działania automatyczne prowadzącego', () => {
     const s = day().observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })
     const out = leader(s, '08:05', { boundary: true })
-    expect(out).toEqual([expect.objectContaining({ k: 'boundary.approve', autoRule: 'boundary' })])
+    // It names the blocks of the plan then (the game: who may give way in an exchange).
+    expect(out).toEqual([expect.objectContaining({ k: 'boundary.approve', autoRule: 'boundary', plan: s.opts.plan.map((b) => b.id) })])
     expect(s.state('08:06').facts.autos.map((a) => a.rule)).toEqual(['boundary'])
   })
 })

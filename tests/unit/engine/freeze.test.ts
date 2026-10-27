@@ -13,6 +13,8 @@ import { block, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
 const H = 3_600_000
+/** The day in the game, both modules on. */
+const GAME = { from: '2026-10-01', wizardDay: null, gameOn: true, energyOn: true }
 const END = dayEnd(DATE)
 
 const presence = (o: Partial<Presence>): Presence => ({
@@ -100,33 +102,35 @@ describe('ocena przy zamrożeniu', () => {
 
   it('jak zapisano: bez potwierdzonego końca pracy granica bez danych; zamknięcie „Jak zapisano” – dotrzymana', () => {
     const s = day()
-    expect(gradeOf(ctx(s), lastEventsOf(s.events))).toMatchObject({ boundary: 'noData', endConfirmed: false, free: false, closed: null })
+    expect(gradeOf(ctx(s), lastEventsOf(s.events), GAME)).toMatchObject({ boundary: 'noData', endConfirmed: false, free: false, closed: null })
     s.write([{ k: 'work.end', at: s.at('22:00'), end: s.at('09:00') }, { k: 'ritual.close', at: s.at('22:00'), how: 'asWritten' }], s.at('22:00'))
-    expect(gradeOf(ctx(s), lastEventsOf(s.events))).toMatchObject({ boundary: 'kept', endConfirmed: true, closed: 'asWritten' })
+    expect(gradeOf(ctx(s), lastEventsOf(s.events), GAME)).toMatchObject({ boundary: 'kept', endConfirmed: true, closed: 'asWritten' })
   })
 
   it('ocena liczy tylko zdarzenia, które zamrożenie zna; późniejsze są „poza oceną”', () => {
     const s = day()
     const know = lastEventsOf(s.events)
     s.workEnd('22:00', '09:00')
-    expect(gradeOf(ctx(s), know).boundary).toBe('noData')
+    expect(gradeOf(ctx(s), know, GAME).boundary).toBe('noData')
     expect(outsideGrade(s.events, know).map((e) => e.k)).toEqual(['work.end'])
   })
 
   it('dzień bez obecności, bez odpowiedzi, jest wolny – poza zjazdem stacjonarnym', () => {
     const s = day({ presence: false })
-    expect(gradeOf(ctx(s), lastEventsOf(s.events)).free).toBe(true)
-    expect(gradeOf(ctx(day({ presence: false, dayType: 'zjazd-stacjonarny' })), lastEventsOf(day({ presence: false, dayType: 'zjazd-stacjonarny' }).events)).free).toBe(false)
+    expect(gradeOf(ctx(s), lastEventsOf(s.events), GAME).free).toBe(true)
+    expect(gradeOf(ctx(day({ presence: false, dayType: 'zjazd-stacjonarny' })), lastEventsOf(day({ presence: false, dayType: 'zjazd-stacjonarny' }).events), GAME).free).toBe(false)
     // Answered („Nie pamiętam”): not free.
     s.write([{ k: 'ritual.close', at: s.at('22:00'), how: 'unknown' }], s.at('22:00'))
-    expect(gradeOf(ctx(s), lastEventsOf(s.events)).free).toBe(false)
+    expect(gradeOf(ctx(s), lastEventsOf(s.events), GAME).free).toBe(false)
   })
 
-  it('z dwóch zamrożeń liczy się to według nowszych reguł, przy tych samych – to, które zna więcej zdarzeń', () => {
+  it('z dwóch zamrożeń liczy się to według nowszych reguł, przy tych samych – to, które zna więcej zdarzeń; remis – niższy identyfikator komputera', () => {
     const f = (id: string, c: string, v: number, l: number, know: Record<string, number>) => ({ id, c, n: 100, t: l, l, v, day: DATE, dom: 'timer', k: 'day.freeze', at: END + 30 * H, how: 'ready', know, missing: [], grade: { boundary: 'kept' } })
     const g = gridOf(DATE)
     expect(foldFacts(g, [f('a', 'pca', 1, 1, { pca: 10, lap: 5 }), f('b', 'lap', 1, 2, { pca: 10, lap: 8 })] as never).frozen?.id).toBe('b')
     expect(foldFacts(g, [f('a', 'pca', 2, 1, { pca: 10 }), f('b', 'lap', 1, 2, { pca: 10, lap: 8 })] as never).frozen?.id).toBe('a')
-    expect(foldFacts(g, [f('a', 'pca', 1, 1, { pca: 10 }), f('b', 'lap', 1, 2, { pca: 10 })] as never).frozen?.id).toBe('a')
+    // A tie: the lower computer id, whatever the order – the files of grades choose the same (`betterFreeze`).
+    expect(foldFacts(g, [f('a', 'pca', 1, 1, { pca: 10 }), f('b', 'lap', 1, 2, { pca: 10 })] as never).frozen?.id).toBe('b')
+    expect(foldFacts(g, [f('b', 'lap', 1, 1, { pca: 10 }), f('a', 'pca', 1, 2, { pca: 10 })] as never).frozen?.id).toBe('b')
   })
 })

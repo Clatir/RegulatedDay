@@ -261,9 +261,10 @@ export function applyVariant(ctx: DayContext, today: Raw | null, tomorrow: Raw |
   let start: string | null = null
   for (const c of v.changes) {
     const b = ctx.plan.find((x) => x.id === (c as { block?: string }).block)
-    if (c.k === 'shorten' && b) t = putBlock(t, { ...b, durationMin: c.toMin })
+    // A block a variant changed is marked: it gives no note for accuracy (the game).
+    if (c.k === 'shorten' && b) t = putBlock(t, { ...b, durationMin: c.toMin, byVariant: true })
     else if (c.k === 'tomorrow' && b) {
-      const moved = moveBetweenDays(t, next, b, ctx.plan, ctx.date, tomorrowDate, false)
+      const moved = moveBetweenDays(t, next, { ...b, byVariant: true }, ctx.plan, ctx.date, tomorrowDate, false)
       t = moved.source
       next = moved.target
     } else if (c.k === 'regen') {

@@ -253,7 +253,7 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
     }
     case 'boundary':
       if (choice !== 'approve') return null
-      return [{ k: 'boundary.approve', at, boundary: ms ?? (row.proposal != null ? atOf(g, row.proposal) : at), auto: false }]
+      return [{ k: 'boundary.approve', at, boundary: ms ?? (row.proposal != null ? atOf(g, row.proposal) : at), auto: false, plan: state.blocks.filter((b) => b.inPlan).map((b) => b.id) }]
     case 'silent': {
       if (choice === 'ok') return [...row.items.flatMap((x) => (x.explain ? explainCheck(x.explain, at) : [])), mark]
       const x = row.items.find((i) => i.block === item)

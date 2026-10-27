@@ -66,6 +66,8 @@ export interface ServiceOptions {
   worker?: Worker
   /** The first day of the ritual (none before its screens, T482). */
   ritualFrom?: string | null
+  /** The first day in the game (none before its screens, T492). */
+  gameFrom?: string | null
 }
 
 /** The folder's own state in the app data: one folder per data folder, by its resolved path. */
@@ -171,7 +173,8 @@ export class DataService {
       oneDriveRunning: o.oneDriveRunning ?? (() => true),
       previousRun,
       worker: o.worker,
-      ritualFrom: o.ritualFrom ?? null
+      ritualFrom: o.ritualFrom ?? null,
+      gameFrom: o.gameFrom ?? null
     })
     life.start(o.runId, o.appVersion, clock.wall())
     if (previousRun && !previousRun.clean) o.log('warn', 'poprzednie uruchomienie folderu skończyło się bez zamknięcia – koniec obserwacji z ostatniego znacznika życia')

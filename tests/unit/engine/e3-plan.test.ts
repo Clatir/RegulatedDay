@@ -387,12 +387,14 @@ describe('przenoszenie i kopiowanie', () => {
   it('kopia dnia: Twoje bloki i szablonu z nowymi identyfikatorami, bez sesji i wykładów; kotwice idą za nimi', () => {
     const plan = [
       block({ id: 'ny', cat: 'sesja', at: '14:00', min: 180, fixed: true, origin: 'session', source: 'ny' }),
-      block({ id: 'a', cat: 'analiza', at: '08:00', min: 60 }),
+      { ...block({ id: 'a', cat: 'analiza', at: '08:00', min: 60 }), byVariant: true },
       block({ id: 'b', cat: 'journaling', after: 'a', min: 30, origin: 'user' }),
       block({ id: 'w', cat: 'wyklad', at: '18:00', min: 90, fixed: true, origin: 'lecture' })
     ]
     const c = copiedDay(plan)
     expect(c).toHaveLength(2)
+    // A variant changed „a” on its day, not the copy (the game's note for accuracy).
+    expect(c.every((x) => !x.byVariant)).toBe(true)
     const a = c.find((x) => x.categoryId === 'analiza')!
     expect(a.id).not.toBe('a')
     expect(c.find((x) => x.categoryId === 'journaling')!.anchor).toBe(a.id)

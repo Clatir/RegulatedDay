@@ -80,7 +80,7 @@ describe('proces pomocniczy', () => {
   it('zawieszone zadanie nie zabiera innych: po nowym starcie czekające idą do nowego procesu', async () => {
     const children: Array<ReturnType<typeof fakeChild>> = []
     const host = new WorkerHost({ fork: () => (children.push(fakeChild((t) => (children.length > 1 && t.kind === 'ping' ? 'ok' : undefined))), children.at(-1)!), log: () => undefined, timeouts: { grade: 20, ping: 1_000 } })
-    const hung = host.run({ kind: 'grade', ctx: {} as never, know: {} })
+    const hung = host.run({ kind: 'grade', ctx: {} as never, know: {}, game: {} as never })
     const other = host.run({ kind: 'ping' })
     await expect(hung).rejects.toThrow('limit czasu')
     expect(await other).toBe('ok')

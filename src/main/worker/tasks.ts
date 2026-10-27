@@ -9,13 +9,14 @@ import { join } from 'node:path'
 import { csvOf, type CsvDay } from '@shared/engine/csv'
 import type { DayContext } from '@shared/engine/day'
 import { gradeOf, type DayGrade } from '@shared/engine/freeze'
+import type { GameDayInput } from '@shared/engine/game'
 import { ritualView, type RitualView } from '@shared/engine/ritual'
 import { writeFileAtomic } from '../datastore/atomic'
 import { createDailyBackup, type BackupResult } from '../data/backup'
 
 export type WorkerTask =
   | { kind: 'ping' }
-  | { kind: 'grade'; ctx: DayContext; know: Record<string, number> }
+  | { kind: 'grade'; ctx: DayContext; know: Record<string, number>; game: GameDayInput }
   | { kind: 'csv'; days: CsvDay[]; dir: string }
   | { kind: 'backup'; dataDir: string; backupsDir: string; date: string }
   | { kind: 'ritual'; ctx: DayContext; at: number }
@@ -39,7 +40,7 @@ export async function runTask<T extends WorkerTask>(t: T): Promise<WorkerResult<
       case 'ping':
         return 'ok'
       case 'grade':
-        return gradeOf(t.ctx, t.know)
+        return gradeOf(t.ctx, t.know, t.game)
       case 'csv': {
         const files = csvOf(t.days)
         for (const [name, text] of Object.entries(files)) await writeFileAtomic(join(t.dir, name), text)
