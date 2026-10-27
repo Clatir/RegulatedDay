@@ -9,7 +9,7 @@ paths:
 # Prośby w dniu i warianty zmiany planu (logika E5)
 
 Źródło prawdy: specyfikacja „Prośba”, „Przerwania”, „Warianty zmiany planu” (Grep po nagłówkach); D22, D79, D242,
-D247, D263, D296, T202, T372. Decyzje T478–T481. Elementy w pasku (przyciski próśb, znacznik, panel) – później (D296).
+D247, D263, D296, T202, T372. Decyzje T478–T481. Elementy w pasku (przyciski próśb, znacznik, panel) – po odbiorze E4b, wygląd według D311–D313 (D310).
 
 ## Pliki
 - `engine/requests.ts` – `requestAction(state, act, at)`: „zrobione teraz” i pilna (`requestNow`, `urgent`), „Koniec”
