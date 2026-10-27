@@ -30,7 +30,8 @@
 - Rejestr decyzji w dwóch plikach (D308): `docs/decyzje.md` – D (54,7 / 200 KB), `docs/decyzje-techniczne.md` – T
   (146,1 / 200 KB); zastąpione w całości (31) w `docs/archiwum/decyzje-zastapione.md`. D188 cofnięta przez T303, ale
   cytowana w D150 i specyfikacji – zostaje w rejestrze.
-- **Dokumenty z 27.10 wieczorem** (gałąź `claude/dokumenty` od scalonego PR #17): nowy układ `docs/odbior.md` (D307),
+- **Dokumenty z 27.10 wieczorem scalone** (PR #18, fdc20fd, ok. 22:03; CI PR zielone, także Windows; bez nowej
+  wersji): nowy układ `docs/odbior.md` (D307),
   podział rejestru (D308), kolejność przed E8 (D309), wygląd elementów E5 w pasku (D311–D313, czekają na odbiór E4b –
   D310), procedura etapu dla nowego układu odbioru.
 
