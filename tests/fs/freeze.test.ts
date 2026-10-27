@@ -140,6 +140,31 @@ describe('zamrażanie w folderze danych', () => {
     expect(existsSync(copy)).toBe(false)
   })
 
+  it('pliki dnia zmienione tuż przed końcem okna: zamrożenie czeka pełną minutę spokoju', async () => {
+    const m = await workedDay(DAY)
+    const end = placeLogical(addDays(DAY, 1), 8 * 60) + 24 * H
+    expect(await checks(m, end - 6 * 60_000, 5)).toEqual([])
+    writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'a', categoryId: 'inne', startMin: 10 * 60, durationMin: 45, fixed: false, origin: 'user' }] }))
+    m.clock.now = end
+    expect((await m.folder.check()).frozen).toEqual([])
+    m.clock.now = end + 30_000
+    expect((await m.folder.check()).frozen).toEqual([])
+    m.clock.now = end + 61_000
+    expect((await m.folder.check()).frozen).toEqual([DAY])
+  })
+
+  it('kopia konfliktowa logu innego komputera wstrzymuje zamrożenie „gotowe” (po 72 h – bez czekania)', async () => {
+    const m = await workedDay(DAY)
+    mkdirSync(join(dataDir, 'log', '2026', DAY), { recursive: true })
+    writeFileSync(join(dataDir, 'log', '2026', DAY, 'lap-LAPTOP.jsonl'), `${JSON.stringify({ id: 'lap-0', c: 'lap', n: 0, t: placeLogical(DAY, 9 * 60), l: placeLogical(DAY, 9 * 60), v: 1, day: DAY, dom: 'meta', k: 'presence.first', at: placeLogical(DAY, 9 * 60) })}\n`)
+    mkdirSync(join(dataDir, '.presence'), { recursive: true })
+    const at = dayEnd(DAY) + H
+    writeFileSync(join(dataDir, '.presence', 'lap.json'), JSON.stringify({ format: 1, computer: 'lap', name: 'Laptop', appVersion: '0.7.0', rulesVersion: 1, versions: [], lastPresence: at, lastUse: at, state: 'closed', seenLeader: 'pca', settled: true, lastEvents: { [DAY]: 0 }, writtenAt: at }))
+    expect(await checks(m, placeLogical(addDays(DAY, 1), 8 * 60) + 24 * H, 12)).toEqual([])
+    expect(await checks(m, dayEnd(DAY) + 72 * H, 2)).toEqual([DAY])
+    expect((await freezes(m.folder))[0]).toMatchObject({ how: 'timeout' })
+  })
+
   it('czeka na komputer, którego zapisy nie dotarły; po 72 h zamraża bez czekania i go wymienia', async () => {
     const m = await workedDay(DAY)
     // The laptop wrote to the day, and its presence (written before the day's end) names an event not visible yet.
