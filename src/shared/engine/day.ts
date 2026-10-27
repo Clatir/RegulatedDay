@@ -106,6 +106,8 @@ export interface DayState {
   facts: DayFacts
   settings: RulesSettings
   params: DayTypeParams
+  /** The day's type in force now (after a change of type, the new one). */
+  dayType: string
   wake: number
   firstWorkStart: number | null
   boundary: { proposal: number | null; approved: number | null; approvedAt: number | null; auto: boolean; max: number }
@@ -124,9 +126,10 @@ export interface DayState {
   projectsMin: number
   /**
    * Regeneration so far (`totalMin`, `towardMinMin` – without time to explain that has no answer, unless `asWritten`),
-   * the minimum and what is missing; `explainMin` – minutes of time to explain without an answer so far.
+   * the minimum and what is missing; `explainMin` – minutes of time to explain without an answer so far; `forecastMin` –
+   * toward the minimum up to the bedtime with the plan's forecast (the ritual's effects in the evening).
    */
-  regen: { totalMin: number; towardMinMin: number; requiredMin: number; justifiedRequestMin: number; missingMin: number; explainMin: number }
+  regen: { totalMin: number; towardMinMin: number; requiredMin: number; justifiedRequestMin: number; missingMin: number; explainMin: number; forecastMin: number }
   /** Times to explain (E6): after work and project blocks that ended by themselves. */
   explains: Explain[]
   bedtime: { base: number; shiftMin: number; overLimitMin: number; effective: number; forecast: number }
@@ -748,7 +751,7 @@ export function computeDay(ctx: DayContext): DayState {
     if (actual[k]! & (F_BUDGET | F_SECOND)) budget++
     if (actual[k]! & F_PROJECT) projectsMin++
   }
-  const { settings, params } = settingsAt(now)
+  const { settings, params, dayType } = settingsAt(now)
   const effective = baseBedtime(now) + shift
   const hardPassed = passed != null
   const warnings: string[] = []
@@ -763,6 +766,7 @@ export function computeDay(ctx: DayContext): DayState {
     facts,
     settings,
     params,
+    dayType,
     wake: c.wake,
     firstWorkStart,
     boundary: { proposal: fin.proposal, approved: fin.approved?.boundary ?? null, approvedAt: fin.approved?.at ?? null, auto: fin.approved?.auto ?? false, max: fin.max },
@@ -776,7 +780,7 @@ export function computeDay(ctx: DayContext): DayState {
     extensionMin: ext,
     overrunMin: overrun,
     projectsMin,
-    regen: { totalMin: fin.regenTotal, towardMinMin: fin.towardMin, requiredMin: fin.required, justifiedRequestMin: fin.justified, missingMin: Math.max(0, fin.required - fin.towardMin), explainMin },
+    regen: { totalMin: fin.regenTotal, towardMinMin: fin.towardMin, requiredMin: fin.required, justifiedRequestMin: fin.justified, missingMin: Math.max(0, fin.required - fin.towardMin), explainMin, forecastMin: fin.towardForecast },
     explains,
     bedtime: { base: baseBedtime(now), shiftMin: shift, overLimitMin: overLimit, effective, forecast: fin.bedtimeForecast },
     hardEnd: { at: hardPassed ? passed! : fin.hardEnd.at, unreachable: !hardPassed && fin.hardEnd.unreachable, passed, message },
@@ -864,6 +868,8 @@ interface Evaluation {
   lastWorkForecast: number | null
   regenTotal: number
   towardMin: number
+  /** Toward the minimum up to the bedtime: the past and the forecast. */
+  towardForecast: number
   required: number
   justified: number
   bedtimeForecast: number
@@ -1002,6 +1008,8 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   const base = d.baseBedtime(m)
   let bedtime = base + d.bedtimeShift
 
+  // A stretch you marked in the ritual as no rest is none (spec „W rytuale możesz oznaczyć odcinek”).
+  for (const n of c.facts.notRest) for (let k = Math.max(0, n.from); k < Math.min(cap, n.to); k++) regen[k] = 0
   // Time to explain after a work block without an answer: rest for the hard end and the pool (D262); toward the minimum
   // and the reward only as written (D265).
   const tentative = new Uint8Array(regen)
@@ -1108,7 +1116,10 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   const towardStrict = strict === tentative ? toward : towardMinArr(bedtimeForecast, strict)
   let regenTotal = 0
   let towardMin = 0
-  for (let k = 0; k < Math.min(m, bedtimeForecast); k++) {
+  let towardForecast = 0
+  for (let k = 0; k < Math.min(cap, bedtimeForecast); k++) {
+    towardForecast += towardStrict[k]!
+    if (k >= m) continue
     if (strict[k]) regenTotal++
     towardMin += towardStrict[k]!
   }
@@ -1129,6 +1140,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     lastWorkForecast: noWork ? null : workEndForecast,
     regenTotal,
     towardMin,
+    towardForecast,
     required,
     justified,
     bedtimeForecast,

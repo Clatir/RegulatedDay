@@ -11,8 +11,9 @@
  * After a work block (and a passive block counted as a project – lecture, watching, listening, D266) „Koniec pracy”,
  * „Odcinam się” and the switch to a regeneration day answer it „odpoczynek”; after a project they do not (D254). Your
  * own answer („praca”, „projekt”, „odpoczynek”, „Pracowałem do …”, „Projekt do …”) is a `question.answer` with the id of
- * the time to explain – the last one written counts. Pure: the input and use come from the day's records, the same on
- * every computer once the logs have arrived.
+ * the time to explain – the last one written counts. A day closed (the ritual, „Jak zapisano”) answers an untouched one
+ * with its row's ✓. Pure: the input and use come from the day's records, the same on every computer once the logs have
+ * arrived.
  */
 import { placeOf } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent } from '../model/events'
@@ -44,7 +45,8 @@ export interface ExplainAnswer {
   until: number | null
   /** When it was given (index): minutes before it were judged without it (T413). */
   at: number
-  how: 'answer' | 'workEnd' | 'disconnect' | 'regenDay'
+  /** Your answer; „Koniec pracy”, „Odcinam się”, a regeneration day (after a work block); the day closed with it untouched. */
+  how: 'answer' | 'workEnd' | 'disconnect' | 'regenDay' | 'close'
 }
 
 export interface Explain {
@@ -186,6 +188,10 @@ export function explainsOf(inp: ExplainInput): Explain[] {
       ].sort((x, y) => x.at - y.at)
       if (implicit[0]) answer = { cls: 'rest', until: null, at: implicit[0].at, how: implicit[0].how }
     }
+    // Closed by the ritual or „Jak zapisano” with its row untouched: the row's ✓ – after a work block „odpoczynek”, after a
+    // project „projekt” (D249, D254); one that began after the close stays for the morning's line.
+    const closed = facts.closed
+    if (!answer && closed && (closed.how === 'ritual' || closed.how === 'asWritten') && closed.at >= from) answer = { cls: kind === 'work' ? 'rest' : 'project', until: null, at: closed.at, how: 'close' }
     out.push({ id, block: b.id, kind, asProject, endRule: f.endRule, blockEnd: f.endedAt, from, to, until, rests: rests.filter((r) => r.from < to && r.to > r.from), answer })
   }
   return out.sort((a, b) => a.from - b.from)
