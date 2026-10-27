@@ -42,8 +42,10 @@
 - `/code-review` (xhigh): 14 uwag – 12 poprawionych z testami (m.in. „Zakończ” bloku w tle, cicha ikona po „Jest
   lepiej”, dzień bez pracy w chwili wyłączenia gry, zegar okna zamiast listy w zatwierdzeniu, remis zamrożeń, jedno
   przejście po modułach), 1 bez zmian w kodzie (wersja reguł – warunek dla wersji z ekranami w `gra.md` i T495),
-  1 w części (wspólne `betterFreeze` – tak; `fewerOn` z `fewerSpans` – nie, kosmetyka). Testy: 732 jednostkowe
-  i plikowe.
+  1 w części (wspólne `betterFreeze` – tak; `fewerOn` z `fewerSpans` – nie, kosmetyka). Mutacje: 28 prób, 25
+  wykrytych, 1 równoważna (kolejność statusów przy jednej wartości oceny granicy), 2 przeżyłe (wymiana przed pierwszym
+  zatwierdzeniem, dzień ochronny od poniedziałku) zamknięte nowymi testami. Testy: 734 jednostkowe i plikowe, E2E 16
+  + 2 tylko w CI.
 
 ## Przed etapem E0 (25.10.2026)
 - Odpowiedzi: D284–D289. Model: Opus 5.5 · xhigh. Sprzęt próby: drugi monitor, laptop, platforma brokera jako

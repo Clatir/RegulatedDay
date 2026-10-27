@@ -287,6 +287,10 @@ describe('wymiana zamiast dokładania (1 nuta, najwyżej raz dziennie)', () => {
     expect(grade(exchanged({ yieldMin: 45 })).notes.exchange).toBe(0)
     expect(grade(exchanged({ newMin: 10, yieldMin: 10 })).notes.exchange).toBe(0)
     expect(grade(exchanged({ approve: false })).notes.exchange).toBe(0)
+    // An exchange before the first approval (approved only at 11:00) – no note.
+    const late = exchanged({ approve: false })
+    late.raw({ k: 'boundary.approve', at: late.at('11:00'), boundary: late.at('17:00'), auto: false, plan: ['a', 'y'] }, '11:00')
+    expect(grade(late).notes.exchange).toBe(0)
   })
 
   it('ustępujący blok spoza planu w chwili pierwszego zatwierdzenia – bez nuty; zatwierdzenie bez listy (sprzed E7) – z nutą', () => {
@@ -428,6 +432,12 @@ describe('passa', () => {
       ['broken', 0],
       ['up', 1]
     ])
+  })
+
+  it('dzień ochronny wraca w każdym tygodniu: zużyty w jednym, w następnym znowu zastępuje pierwszy niedotrzymany dzień', () => {
+    const s = gameSummary(days([['2026-10-28', 'kept'], ['2026-10-29', 'broken'], ['2026-10-30', 'kept'], ['2026-11-03', 'broken'], ['2026-11-04', 'kept']]), '2026-11-05')
+    expect(s.steps.map((x) => x.move)).toEqual(['up', 'protected', 'up', 'protected', 'up'])
+    expect(s.streak).toBe(3)
   })
 
   it('niewykorzystany dzień ochronny nie przechodzi dalej; limit dni bez danych liczy się od poniedziałku', () => {
