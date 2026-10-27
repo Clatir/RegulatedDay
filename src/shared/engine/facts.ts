@@ -58,6 +58,8 @@ export interface AutoAction {
   /** The rule that did it ('fixedStart', 'plan', 'twoQuestions', 'idle', 'lastInput', 'workEnd' …). */
   rule: string
   block: string | null
+  /** The request it ended (a request's automatic end). */
+  request: string | null
   /** Index. */
   at: number
   /** The computer that wrote it. */
@@ -71,6 +73,17 @@ export interface RequestFact {
   mode: string
   /** The hard end in force at its start, as written (an instant), or null. */
   hardEndAt: number | null
+  person: string | null
+  estimateMin: number | null
+  /** The block it interrupted at its start (paused, or a fixed one sent to the background) – resumed at its end. */
+  interrupts: string | null
+  /** Written in after the fact: the flexible blocks whose runs lose its minutes. */
+  splits: string[]
+  /** The id of the event that ended it („Cofnij” of an automatic end points at it). */
+  endId: string | null
+  /** The clocks its start and its end were written at (ms) – a request written in later is checked then. */
+  startT: number
+  endT: number | null
 }
 
 export interface Segment {
@@ -293,7 +306,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
           stale(e, 'prośba już się zaczęła')
           break
         }
-        const r: RequestFact = { id: e.request, from: idx(e.at), to: OPEN, mode: e.mode, hardEndAt: e.hardEndAt ?? null }
+        const r: RequestFact = { id: e.request, from: idx(e.at), to: OPEN, mode: e.mode, hardEndAt: e.hardEndAt ?? null, person: e.person ?? null, estimateMin: e.estimateMin ?? null, interrupts: e.interrupts ?? null, splits: Array.isArray(e.splits) ? e.splits.filter((x): x is string => typeof x === 'string') : [], endId: null, startT: e.t, endT: null }
         requests.set(e.request, r)
         f.requests.push(r)
         break
@@ -305,6 +318,8 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
           break
         }
         r.to = Math.max(r.from, idx(e.at))
+        r.endId = e.id
+        r.endT = e.t
         break
       }
       case 'disconnect.start':
@@ -344,7 +359,17 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
     // own corrections of its automatic ends (a later log showed input) are not actions to undo.
     if (typeof auto === 'string' && auto && e.k !== 'undo' && f.problems.length === problemsBefore) {
       const blockId = (e as { block?: unknown }).block
-      f.autos.push({ id: e.id, k: e.k, rule: auto, block: typeof blockId === 'string' ? blockId : null, at: idx(eventAt(e)), c: e.c })
+      const requestId = (e as { request?: unknown }).request
+      f.autos.push({ id: e.id, k: e.k, rule: auto, block: typeof blockId === 'string' ? blockId : null, request: typeof requestId === 'string' ? requestId : null, at: idx(eventAt(e)), c: e.c })
+    }
+  }
+  // A request written in after the fact splits the flexible blocks it names (spec „nachodzi na blok elastyczny, dzieli
+  // go na dwie części”): whenever it was written, their runs in the foreground lose its minutes.
+  for (const r of f.requests) {
+    if (r.to === OPEN) continue
+    for (const id of r.splits) {
+      const b = f.blocks.get(id)
+      if (b) b.runs = b.runs.flatMap((x) => (x.bg || x.to <= r.from || x.from >= r.to ? [x] : [{ ...x, to: r.from }, { ...x, from: r.to }].filter((y) => y.to > y.from)))
     }
   }
   f.snapshots.sort((a, b) => a.at - b.at)
@@ -380,7 +405,7 @@ export function viewAt(f: DayFacts, m: number): DayFacts {
   return {
     ...f,
     blocks,
-    requests: f.requests.filter((r) => r.from < m).map((r) => (r.to >= m ? { ...r, to: OPEN } : r)),
+    requests: f.requests.filter((r) => r.from < m).map((r) => (r.to >= m ? { ...r, to: OPEN, endId: null, endT: null } : r)),
     disconnect: f.disconnect.filter((d) => d.from < m).map((d) => (d.to >= m ? { ...d, to: OPEN } : d)),
     approvals: f.approvals.filter((a) => a.at < m),
     undos: f.undos.filter((u) => u < m),
@@ -399,4 +424,13 @@ export function isRunning(b: BlockFact): boolean {
 /** Minutes the block has run so far in a view at m (runs cut at m). */
 export function ranMinutes(b: BlockFact, m: number): number {
   return b.runs.reduce((s, r) => s + Math.max(0, Math.min(r.to, m) - r.from), 0)
+}
+
+/**
+ * The automatic resume of the block a request interrupted, written with its end (rule 'requestResume', the same
+ * minute): an end undone („Cofnij”, an answer, a later log) takes it along – the request runs again, the block waits.
+ */
+export function resumedWith(f: DayFacts, r: RequestFact): AutoAction[] {
+  if (!r.interrupts || r.to === OPEN) return []
+  return f.autos.filter((x) => x.rule === 'requestResume' && x.block === r.interrupts && x.at === r.to)
 }

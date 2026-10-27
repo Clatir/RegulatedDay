@@ -13,7 +13,7 @@
 import type { PlanBlock } from '../model/plan'
 import { isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
-import { OPEN, isRunning, ranMinutes, type BlockFact } from './facts'
+import { OPEN, isRunning, ranMinutes, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
 
 /** „Przedłuż” of a fixed block works up to this long after its planned end (spec „Timer”, D227). */
@@ -269,7 +269,7 @@ function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockI
 }
 
 /** The cost of starting (or resuming) `info` now and running it for what is left of it. */
-function startCost(state: DayState, info: BlockInfo, at: number): ActionCost | null {
+export function startCost(state: DayState, info: BlockInfo, at: number): ActionCost | null {
   const m = idxOf(state.grid, at)
   return workCost(state, info, m, m + leftOf(state, info, m))
 }
@@ -431,7 +431,9 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       // The boundary's own approval: the boundary opens again for the plan or the ritual (and never approves itself a
       // second time that day); the approval leaves the list.
       if (a.k === 'boundary.approve') return yes([{ k: 'undo', at, target: a.id, reason: 'user' }, { k: 'boundary.undo', at }])
-      return yes([{ k: 'undo', at, target: a.id, reason: 'user' }])
+      // A request's end: the block it resumed waits again with it.
+      const r = a.k === 'request.end' ? state.facts.requests.find((x) => x.id === a.request && x.endId === a.id) : undefined
+      return yes([a, ...(r ? resumedWith(state.facts, r) : [])].map((x) => ({ k: 'undo', at, target: x.id, reason: 'user' })))
     }
     case 'cutOff': {
       if (state.facts.disconnect.some((d) => d.to === OPEN)) return no('„Odcinam się” już trwa')

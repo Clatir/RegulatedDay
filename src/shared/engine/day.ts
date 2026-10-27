@@ -119,6 +119,11 @@ export interface DayState {
   forecast: Placed[]
   /** The forecast end of work (index), null in a day without work. */
   forecastWorkEnd: number | null
+  /**
+   * The last minute of work before the second shift (index): the past and the forecast – also while an end of work is in
+   * force with work still to come (a last block paused by a request), as the variants compare it with the boundary.
+   */
+  lastWorkForecast: number | null
   /** The regeneration of every minute as known now – the past and the forecast (REST_*; 0: none). */
   rest: Uint8Array
   warnings: string[]
@@ -685,6 +690,7 @@ export function computeDay(ctx: DayContext): DayState {
     pool: hardPassed ? { min: 0, byLimit: fin.pool.byLimit, byTime: 0, empty: true } : { ...fin.pool, empty: fin.pool.min <= 0 },
     forecast: fin.forecast,
     forecastWorkEnd: fin.forecastWorkEnd,
+    lastWorkForecast: fin.lastWorkForecast,
     rest: fin.rest,
     warnings
   }
@@ -762,6 +768,7 @@ interface Evaluation {
   workEnd: number | null
   noWork: boolean
   forecastWorkEnd: number | null
+  lastWorkForecast: number | null
   regenTotal: number
   towardMin: number
   required: number
@@ -803,8 +810,10 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     return last
   })()
   paint(c, flags, m, cap, spans, fcProjects, F_FORECAST)
-  // Requests of the past; a running one is ended now in the forecast (spec „Biegnąca prośba … kończona teraz”).
+  // Requests of the past; a running one is ended now in the forecast (spec „Biegnąca prośba … kończona teraz”) – an urgent
+  // one runs to its estimate (spec „pilne: … prognoza … znane od razu”), as the forecast places the blocks after it.
   paintRequests(c, flags, view, m)
+  for (const r of view.requests) if (r.to === OPEN && r.mode === 'urgent' && r.estimateMin != null) for (let k = m; k < Math.min(r.from + r.estimateMin, cap); k++) flags[k]! |= F_REQUEST | F_BLOCK | F_FORECAST
   paintUpfront(c, flags, view, spans, m, cap)
 
   const ends = workEnds(c, view, flags, m, fcW, fcProjects)
@@ -1013,6 +1022,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     workEnd: workEndNow,
     noWork,
     forecastWorkEnd: noWork ? null : (workEndNow ?? workEndForecast),
+    lastWorkForecast: noWork ? null : workEndForecast,
     regenTotal,
     towardMin,
     required,

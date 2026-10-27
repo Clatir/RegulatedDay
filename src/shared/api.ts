@@ -237,6 +237,13 @@ export interface TimerIn {
   /** An answer to a proposal of the bar (`mark`). */
   question?: string
   answer?: string
+  /** Requests (`requestNow`, `requestEnd`, `requestAfter`): its id, the person, urgent with an estimate, after the fact [from, to). */
+  request?: string
+  person?: string | null
+  urgent?: boolean
+  estimateMin?: number | null
+  from?: number
+  to?: number
 }
 
 /** What a click did: nothing (why), or a cost waiting for the second click within 10 s. */

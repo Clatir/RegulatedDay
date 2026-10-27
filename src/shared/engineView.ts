@@ -47,7 +47,9 @@ const INFO_RULES = new Set(['disconnect04'])
 const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 
 /** What an automatic action did, in words („Zajęcia zdalne zaczęte o 09:00 (blok stały według planu)”). */
-export function autoText(a: AutoAction, name: string, clock: string): string {
+export function autoText(a: AutoAction, blockName: string, clock: string): string {
+  // A request's end names the request (it has no block).
+  const name = a.k === 'request.end' ? 'Prośba' : blockName
   switch (a.rule) {
     case 'fixedStart':
       return a.k === 'block.pause' ? `${name} – pauza o ${clock} (blok stały według planu)` : `${name} zaczęty o ${clock} (blok stały według planu)`
@@ -79,6 +81,8 @@ export function autoText(a: AutoAction, name: string, clock: string): string {
       return `„Odcinam się” skończone o ${clock} (nowy dzień)`
     case 'boundary':
       return `granica zatwierdzona sama o ${clock} (start pierwszego bloku pracy)`
+    case 'requestResume':
+      return a.k === 'block.fg' ? `${name} znów na pierwszym planie o ${clock} (po prośbie)` : `${name} wznowiony o ${clock} (po prośbie)`
     default:
       return `${name}: ${a.rule} o ${clock}`
   }
@@ -106,7 +110,9 @@ function questionLine(q: Question, blockName: string, clock: (ms: number) => str
   const text =
     q.kind === 'workEnd'
       ? 'Koniec pracy?'
-      : q.kind === 'return'
+      : q.kind === 'request'
+        ? 'Prośba – po powrocie:'
+        : q.kind === 'return'
         ? `${blockName} – po powrocie:`
         : q.kind === 'absence'
           ? `${blockName} – nieobecność od ${clock(q.askedAt)}:`
@@ -152,7 +158,7 @@ export function engineView(i: EngineInput): WidgetView {
     }
     // Paused blocks waiting with nothing in the foreground („Wznów · Zaparkuj”).
     if (!fg) for (const p of t.paused) lines.push({ id: `paused:${p.info.id}`, text: nameOf(p.info.id), actions: [{ id: 'start', label: 'Wznów' }, { id: 'park', label: 'Zaparkuj' }], dot: true })
-    for (const q of questions) if (q !== next) lines.push(questionLine(q, q.block ? nameOf(q.block) : '', clockOf))
+    for (const q of questions) if (q !== next) lines.push(questionLine(q, q.block && q.kind !== 'request' ? nameOf(q.block) : '', clockOf))
     // The break after 90 min of continuous work (D234: a dot, no notification); in a session or a class it waits.
     const run = i.care.breakAfterMin > 0 ? workRunStart(state, now) : null
     if (run != null && now - run >= i.care.breakAfterMin * MIN && !modes.session && !modes.classMode) {

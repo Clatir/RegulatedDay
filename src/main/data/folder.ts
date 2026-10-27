@@ -19,6 +19,7 @@ import { createDay, type HolidayLookup } from '@shared/engine/createDay'
 import { dayContextOf } from '@shared/engine/context'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
 import { NO_POWER, powerNeedOf, type PowerNeed } from '@shared/engine/power'
+import { requestAction, type RequestAction } from '@shared/engine/requests'
 import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft } from '@shared/engine/timer'
 import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
@@ -74,9 +75,18 @@ function hasRunning(day: string, events: readonly AnyEvent[]): boolean {
   return false
 }
 
-/** The day before still has something of now: a running block, or „Odcinam się” to be closed at 04:00. */
+/**
+ * A request of the day runs (not ended – „Cofnij” counted): one through 04:00, or from a day the computer slept through,
+ * keeps its day until its end (by „Koniec” or its rules).
+ */
+function hasOpenRequest(day: string, events: readonly AnyEvent[], id: string | null = null): boolean {
+  if (!events.some((e) => e.k === 'request.start')) return false
+  return foldFacts(gridOf(day), events).requests.some((r) => r.to === Number.POSITIVE_INFINITY && r.mode !== 'after' && (id == null || r.id === id))
+}
+
+/** The day before still has something of now: a running block or request, or „Odcinam się” to be closed at 04:00. */
 function spillsOver(day: string, events: readonly AnyEvent[]): boolean {
-  if (hasRunning(day, events)) return true
+  if (hasRunning(day, events) || hasOpenRequest(day, events)) return true
   return events.some((e) => e.k === 'disconnect.start') && foldFacts(gridOf(day), events).disconnect.some((d) => d.to === Number.POSITIVE_INFINITY)
 }
 
@@ -120,7 +130,7 @@ export interface CheckResult {
 }
 
 /** A click of the widget or the main window, with the day it concerns (default: the day of the running block, else today). */
-export type TimerClick = TimerAction & { day?: string }
+export type TimerClick = (TimerAction | RequestAction) & { day?: string }
 
 /** The records the day is made from, read through a cache checked by size and time of modification. */
 interface Inputs {
@@ -536,11 +546,15 @@ export class DataFolder {
     return activityOf(events, dayStart(day), now, this.observing ? this.o.computer : null)
   }
 
-  /** The day a click concerns: the one with a block still running from before 04:00, else today. */
-  private async activeDay(now: number): Promise<string> {
+  /**
+   * The day a click concerns: the one with a block still running from before 04:00, else today; „Koniec” of a request –
+   * the day it runs in (one from before 04:00 keeps its day).
+   */
+  private async activeDay(now: number, request: string | null = null): Promise<string> {
     const today = logicalDayOf(now)
     const yesterday = addDays(today, -1)
     const y = await this.log.readDay(yesterday).catch(() => null)
+    if (request != null) return y && hasOpenRequest(yesterday, y.events, request) ? yesterday : today
     return y && hasRunning(yesterday, y.events) ? yesterday : today
   }
 
@@ -573,13 +587,15 @@ export class DataFolder {
   timerClick(click: TimerClick): Promise<ActionResult> {
     const run = async (): Promise<ActionResult> => {
       const now = this.clock.now()
-      const day = click.day && isIsoDate(click.day) ? click.day : await this.activeDay(now)
+      const day = click.day && isIsoDate(click.day) ? click.day : await this.activeDay(now, click.a === 'requestEnd' ? click.request : null)
       const read = await this.log.readDay(day)
       if (!read.complete) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę', confirm: null }
       const ctx = await this.ownContext(day, read, now)
       const { day: _d, ...act } = click
       void _d
-      const r = timerAction(ctx, computeDay(ctx), act as TimerAction, now)
+      const state = computeDay(ctx)
+      // Requests („zrobione teraz”, urgent, after the fact, „Koniec”) and the rest of the timer.
+      const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now)
       if (r.ok && r.events.length) await this.writeTimer(day, r.events)
       return r
     }

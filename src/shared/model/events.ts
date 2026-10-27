@@ -108,6 +108,10 @@ export type TimerEvent =
       estimateMin: number | null
       /** The hard end in force at its start (spec: it decides whether a request is justified, written in the log). */
       hardEndAt: number | null
+      /** The block it interrupted (paused, or a fixed one sent to the background) – resumed at its end (spec „Przerwania”). */
+      interrupts?: string | null
+      /** Written in after the fact: the flexible blocks it splits – their runs lose its minutes (spec „Prośba”). */
+      splits?: string[]
     })
   | (EventBase & { k: 'request.end'; request: string; at: number })
   | (EventBase & { k: 'disconnect.start'; at: number })
