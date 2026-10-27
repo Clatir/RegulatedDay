@@ -137,6 +137,23 @@ export type TimerEvent =
   | (EventBase & { k: 'water.drink'; at: number })
   /** A Windows notification shown by the leader (spec: its stable id in the day's log – shown once, also after a restart). */
   | (EventBase & { k: 'notice.shown'; at: number; notice: string })
+  /**
+   * The day closed up to `at` (spec „Rytuał zamknięcia”): the evening ritual, or in the morning „Jak zapisano”, „Wolne”,
+   * „Nie pamiętam”. Rows left untouched are taken as written; what comes after `at` is taken as written too.
+   */
+  | (EventBase & { k: 'ritual.close'; at: number; how: CloseHow })
+  /** „Korekta” of a block's real times (spec „Poprawka czasu w rytuale albo w edycji to zdarzenie „korekta””). */
+  | (EventBase & { k: 'block.fix'; block: string; at: number; start: number | null; end: number | null })
+  /** A block marked done or not done after its end (the ritual). */
+  | (EventBase & { k: 'block.mark'; block: string; at: number; done: boolean })
+  /** The person of a request named later (the ritual's „osoba: ?”). */
+  | (EventBase & { k: 'request.person'; request: string; at: number; person: string })
+  /** A stretch that was no rest (spec „W rytuale możesz oznaczyć odcinek, który odpoczynkiem nie był”): [from, to). */
+  | (EventBase & { k: 'rest.not'; at: number; from: number; to: number })
+
+/** How a day was closed: the evening ritual, or the morning's „Jak zapisano”, „Wolne”, „Nie pamiętam”. */
+export type CloseHow = 'ritual' | 'asWritten' | 'free' | 'unknown'
+export const CLOSE_HOWS: readonly CloseHow[] = ['ritual', 'asWritten', 'free', 'unknown']
 
 export type PresenceEvent =
   | (EventBase & { k: 'presence.first'; at: number })
@@ -223,6 +240,11 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'fewer.end': { at: isNum },
   'water.drink': { at: isNum },
   'notice.shown': { at: isNum, notice: isStr },
+  'ritual.close': { at: isNum, how: (v) => (CLOSE_HOWS as readonly unknown[]).includes(v) },
+  'block.fix': { block: isStr, at: isNum, start: (v) => v == null || isNum(v), end: (v) => v == null || isNum(v) },
+  'block.mark': { block: isStr, at: isNum, done: (v) => typeof v === 'boolean' },
+  'request.person': { request: isStr, at: isNum, person: isStr },
+  'rest.not': { at: isNum, from: isNum, to: isNum },
   'presence.first': { at: isNum },
   'gap.open': { gap: isStr, kind: (v) => v === 'input' || v === 'use', from: isNum },
   'gap.close': { gap: isStr, to: isNum },

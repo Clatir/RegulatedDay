@@ -65,4 +65,4 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   granicy używaj „Inne obowiązki”.
 - Timer, pytania „Dalej?” i „Koniec pracy?”, nieobecność i bezczynność (E4a) – reguły `timer.md`; fakty znają `undo`,
   `question.seen`, `question.answer` i `autoRule`. Prośby w dniu i warianty (logika E5) – reguły `prosby-warianty.md`.
-  Jeszcze nie w silniku: czas do wyjaśnienia (E6), rytuał i zamrażanie (E6).
+  Czas do wyjaśnienia, rytuał i ocena dnia (logika E6) – reguły `rytual.md`. Jeszcze nie: zamrażanie (E6, część 2).

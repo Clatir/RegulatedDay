@@ -10,7 +10,7 @@
  * computer closes them on all. A question counts as seen only when a computer wrote that it showed it (D231).
  */
 import type { Place } from '../model/categories'
-import { derivedId } from '../model/ids'
+import { derivedId, questionId } from '../model/ids'
 import { lastInputAt, firstUseAfter, firstUseFrom, lastOutsideBefore, type Activity, type Interval } from './activity'
 import { isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
@@ -88,8 +88,7 @@ function lastAnswerAt(state: DayState, f: BlockFact): number {
   return last
 }
 
-/** The id of a question (spec: day, rule, block, threshold). */
-export const questionId = (date: string, rule: string, block: string | null, threshold: number): string => `${rule}:${date}:${block ?? '-'}:${threshold}`
+export { questionId }
 
 /** The two asks of „Dalej?” of the foreground block now, with when each was asked and seen (ms), or null. */
 export function nextQuestions(state: DayState, t: TimerNow): { block: BlockInfo; plannedEnd: number; q1: { id: string; at: number; seen: number | null }; q2: { id: string; at: number; seen: number | null } | null; passive: boolean } | null {

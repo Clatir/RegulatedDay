@@ -196,6 +196,16 @@ export class Scenario {
     return this.push({ k: 'observe.alive', at: this.at(at) }, at, computer, 'meta')
   }
 
+  /** A computer on from `from` to `to`: its observation and „obserwacja trwa” every 5 min (what the engine reads alone). */
+  using(from: string, to: string, computer = this.computer): this {
+    this.observe(from, null, computer)
+    for (let t = this.at(from) + 5 * MINUTE; t <= this.at(to); t += 5 * MINUTE) {
+      const n = this.n++
+      this.events.push({ id: `${computer}-${n}`, c: computer, n, t, l: t + n, v: RULES_VERSION, day: this.opts.date, dom: 'meta', k: 'observe.alive', at: t } as unknown as TimerEvent)
+    }
+    return this
+  }
+
   /** A gap in input (and in use) from `from` to `to` (null: still open) on a computer. */
   gap(from: string, to: string | null, o: { computer?: string; kind?: 'input' | 'use' | 'both'; lastOutside?: string } = {}): this {
     const computer = o.computer ?? this.computer

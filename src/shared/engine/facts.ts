@@ -9,7 +9,7 @@
  * every minute by the values in force when it began.
  */
 import type { Costs } from '../model/categories'
-import { compareEvents, eventAt, isKnown, type AnyEvent, type LogEvent, type MinuteClass } from '../model/events'
+import { compareEvents, eventAt, isKnown, type AnyEvent, type CloseHow, type LogEvent, type MinuteClass } from '../model/events'
 import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
 import type { PlanBlock } from '../model/plan'
 import { idxOf, type Grid } from './grid'
@@ -122,6 +122,10 @@ export interface DayFacts {
   seen: Map<string, { at: number; c: string; how: string }>
   /** Answers to questions that are not actions of the timer („Przerwa” of „Koniec pracy?”, absence …): id → answer. */
   answers: Map<string, { at: number; answer: string; value: number | null }>
+  /** The day closed (the ritual, the morning's choice): the last close written, `at` an index. */
+  closed: { at: number; how: CloseHow } | null
+  /** Stretches marked in the ritual as no rest, and when (indices): they count from the marking on (T413). */
+  notRest: Array<{ from: number; to: number; at: number }>
 }
 
 const newBlock = (id: string): BlockFact => ({
@@ -165,8 +169,12 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
     autos: [],
     undone: new Set(),
     seen: new Map(),
-    answers: new Map()
+    answers: new Map(),
+    closed: null,
+    notRest: []
   }
+  const fixes: Array<{ block: string; start: number | null; end: number | null; id: string }> = []
+  const marks = new Map<string, boolean>()
   const idx = (at: number) => idxOf(grid, at)
   // „Cofnij” (spec: the undo writes an event „korekta”): the events it points at are folded as if never written. The
   // latest undo first: an undo undone by a later one (its „Cofnij”) points at nothing.
@@ -352,6 +360,24 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
       case 'question.answer':
         if (!f.answers.has(e.question)) f.answers.set(e.question, { at: e.at, answer: e.answer, value: e.value ?? null })
         break
+      case 'ritual.close':
+        f.closed = { at: idx(e.at), how: e.how }
+        break
+      case 'block.fix':
+        fixes.push({ block: e.block, start: e.start ?? null, end: e.end ?? null, id: e.id })
+        break
+      case 'block.mark':
+        marks.set(e.block, e.done)
+        break
+      case 'request.person': {
+        const r = requests.get(e.request)
+        if (r) r.person = e.person
+        else stale(e, 'nie ma takiej prośby')
+        break
+      }
+      case 'rest.not':
+        if (e.to > e.from) f.notRest.push({ from: idx(e.from), to: idx(e.to), at: idx(e.at) })
+        break
       default:
         break
     }
@@ -371,6 +397,33 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
       const b = f.blocks.get(id)
       if (b) b.runs = b.runs.flatMap((x) => (x.bg || x.to <= r.from || x.from >= r.to ? [x] : [{ ...x, to: r.from }, { ...x, from: r.to }].filter((y) => y.to > y.from)))
     }
+  }
+  // Corrections of real times (spec „korekta”), after everything else and in their order: a start never at or after the
+  // end of the block's first run, an end never at or before the start of its last run – one that does not fit is a
+  // problem and changes nothing.
+  for (const x of fixes) {
+    const b = f.blocks.get(x.block)
+    if (!b || b.startedAt == null || !b.runs.length) continue
+    if (x.start != null) {
+      const first = b.runs[0]!
+      const s = idx(x.start)
+      if (s < first.to) {
+        first.from = s
+        b.startedAt = s
+      } else f.problems.push({ event: x.id, why: 'start po końcu bloku' })
+    }
+    if (x.end != null && b.endedAt != null) {
+      const last = b.runs.at(-1)!
+      const e = idx(x.end)
+      if (e > last.from) {
+        last.to = e
+        b.endedAt = e
+      } else f.problems.push({ event: x.id, why: 'koniec przed startem bloku' })
+    }
+  }
+  for (const [id, done] of marks) {
+    const b = f.blocks.get(id)
+    if (b?.endedAt != null) b.done = done
   }
   f.snapshots.sort((a, b) => a.at - b.at)
   return f

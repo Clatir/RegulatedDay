@@ -234,7 +234,8 @@ export class WidgetEngine {
         out.push({ id: `notice:${date}:start5:${b.id}:${span.start}`, title: `${p ? name(p) : b.categoryId} o ${clock}`, body: b.waits ? 'Za 5 min – „Zacznij” czeka w pasku.' : 'Za 5 min.', line: `wait:${b.id}`, day: date })
       }
     }
-    if (on.hardEnd && state.hardEnd.passed != null && t.fg?.info.isProject) out.push({ id: `notice:${date}:hardEnd:-:${state.hardEnd.passed}`, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
+    // A project runs (or ran in the minute of the hard end), or it passed in time to explain after a project (D250).
+    if (on.hardEnd && state.hardEnd.passed != null && (state.hardEnd.message || t.fg?.info.isProject)) out.push({ id: `notice:${date}:hardEnd:-:${state.hardEnd.passed}`, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
     if (on.reserve && m.energy.enabled) {
       for (const d of m.energy.descents) {
         if (!d.message || atOf(state.grid, d.at) < now - 60 * MIN) continue
