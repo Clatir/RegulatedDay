@@ -14,6 +14,7 @@ import {
   CH,
   type AppInfo,
   type BarLayout,
+  type BarScreens,
   type EditEntry,
   type EventIn,
   type SystemSettingsPage,
@@ -24,9 +25,10 @@ import {
   type WidgetAction,
   type WizardFinish
 } from '@shared/api'
-import type { MachinePrefs } from '@shared/machine'
-import { patchMachinePrefs } from '@shared/machine'
-import { barRect, cornerOffset, panelRect } from '@shared/placement'
+import type { BarSpot, MachinePrefs } from '@shared/machine'
+import { BAR_SPOTS, patchMachinePrefs } from '@shared/machine'
+import type { Rect } from '@shared/bounds'
+import { barRect, barWidth, draggedBounds, panelRect, placementAfterDrag, spotPlacement } from '@shared/placement'
 import { urlFromArgv, type PanelTarget } from '@shared/protocol'
 import { compareVersions } from '@shared/update'
 import type { UpdateView } from '@shared/updateView'
@@ -196,16 +198,44 @@ let fullscreenNow = false
 /** The desktop bar is „na wierzchu” now. */
 let barTop = false
 
-/** The settings and the widget want the desktop bar shown now. */
-const barWanted = (): boolean => prefs().desktopBar && !widgetView().hidden && !(prefs().onTop !== 'off' && fullscreenNow)
+/**
+ * The desktop bar being dragged by its handle (D303): the cursor and the bar where the drag began, whether it moved, and
+ * the last message – a drag whose end never came (the bar's view reloaded) holds the layout at most `DRAG_HOLD_MS`.
+ */
+let barDrag: { cursor: { x: number; y: number }; bounds: Rect; moved: boolean; last: number } | null = null
+const DRAG_HOLD_MS = 10_000
+/** The desktop bar unfolds upwards where it stands now (its folded part is then the bottom of the window). */
+let barGrowsUp = true
+
+/** The folded desktop bar's height at the interface's scale (DIP). */
+const barFolded = (): number => Math.ceil(barFoldedHeight * prefs().zoom)
+
+/** The monitors and the desktop bar on them (D304: the settings' mock-up). */
+function barScreens(): BarScreens {
+  const all = displays()
+  const primary = primaryDisplay()
+  const r = barRect(prefs().barPlacement, all, primary, prefs().zoom, barFolded())
+  return { displays: all.map((d) => ({ id: d.id, label: d.label, bounds: d.bounds, workArea: d.workArea, primary: d.id === primary.id })), bar: { bounds: r.bounds, display: r.display.id, spot: r.spot } }
+}
+
+/** The main window is in front (focused and shown): it has the same bar at its top. */
+const mainInFront = (): boolean => !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized() && mainWindow.isFocused()
+
+/**
+ * The settings and the widget want the desktop bar shown now; „na wierzchu” it hides over a full screen and while the
+ * main window is in front (D291, D302).
+ */
+const barWanted = (): boolean => prefs().desktopBar && !widgetView().hidden && !(prefs().onTop !== 'off' && (fullscreenNow || mainInFront()))
 
 /**
  * The desktop bar as the settings, the widget and the helper allow: laid under the windows before it shows – or, with
  * „Zawsze na wierzchu” chosen on this computer (D291), above them, still without activation, hidden over a full screen.
  */
 function layoutBar(): void {
-  // Destroyed at the quit: the helper's last status and events come after the windows.
+  // Destroyed at the quit: the helper's last status and events come after the windows. Dragged now: it follows the cursor.
   if (!bar?.alive) return
+  if (barDrag && Date.now() - barDrag.last < DRAG_HOLD_MS) return
+  barDrag = null
   // „Na wierzchu”: the helper watches the bar's monitor for a full screen (and says it at once); else nothing to watch.
   if (prefs().onTop !== 'off') helper?.send('fullscreen.watch', { hwnd: bar.hwnd })
   else {
@@ -220,7 +250,8 @@ function layoutBar(): void {
   }
   const primary = primaryDisplay()
   const zoom = prefs().zoom
-  const r = barRect(prefs().barPlacement, displays(), primary, zoom, Math.ceil(barFoldedHeight * zoom), Math.ceil(barLayoutNow.height * zoom))
+  const r = barRect(prefs().barPlacement, displays(), primary, zoom, barFolded(), Math.ceil(barLayoutNow.height * zoom))
+  barGrowsUp = r.growsUp
   const onTop = prefs().onTop !== 'off'
   // Off again: hidden first – dropping „topmost” would leave it above the windows until the helper lays it under them.
   if (!onTop && barTop) bar.apply({ visible: false })
@@ -541,9 +572,8 @@ async function trialAction(action: TrialAction, arg?: string): Promise<void> {
     const current = bar?.currentBounds
     const now = all.find((d) => current && current.x >= d.workArea.x && current.x < d.workArea.x + d.workArea.width) ?? primaryDisplay()
     const target = action === 'nextDisplay' ? all[(all.indexOf(now) + 1) % all.length]! : now
-    const corner = (action === 'corner' ? arg : 'bottom-left') as 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right'
-    const size = { width: current?.width ?? 480, height: Math.ceil(barFoldedHeight * prefs().zoom) }
-    await setPrefs({ barPlacement: { display: { label: target.label, bounds: target.bounds }, offset: cornerOffset(corner, target.workArea, size) } })
+    const spot = action === 'corner' && BAR_SPOTS.includes(arg as BarSpot) ? (arg as BarSpot) : 'bottom-left'
+    await setPrefs({ barPlacement: spotPlacement(target, spot, { width: barWidth(target.workArea, prefs().zoom), height: barFolded() }) })
   } else if (action === 'powerDisplay') {
     helper?.send('power', { display: true, system: true, reason: 'Regulated Day: próba nagrywania wykładu' })
   } else if (action === 'powerSystem') {
@@ -630,6 +660,35 @@ function registerIpc(): void {
       if (!barLayoutNow.unfolded) barFoldedHeight = barLayoutNow.height
       layoutBar()
     } else if (view === 'panel') panel?.layout(Math.max(80, Math.min(900, layout.height)), prefs().zoom, layout.unfolded === true)
+  })
+  // D303: the desktop bar dragged by its handle – it follows the cursor's way (past 4 px: a click on the handle moves
+  // nothing); where it is let go, it stays – at the cursor of that moment, also when the last frame's move never came.
+  ipcMain.on(CH.barDrag, (e, phase: unknown) => {
+    if (viewOf(e.sender) !== 'bar' || !bar?.alive) return
+    if (phase === 'start') {
+      const from = bar.currentBounds
+      barDrag = from ? { cursor: screen.getCursorScreenPoint(), bounds: from, moved: false, last: Date.now() } : null
+      return
+    }
+    if (!barDrag || (phase !== 'move' && phase !== 'end')) return
+    const drag = barDrag
+    const to = screen.getCursorScreenPoint()
+    drag.moved ||= Math.hypot(to.x - drag.cursor.x, to.y - drag.cursor.y) >= 4
+    drag.last = Date.now()
+    const at = drag.moved ? draggedBounds(drag.bounds, drag.cursor, to, displays()) : null
+    if (at) bar.apply({ bounds: at })
+    if (phase === 'end') {
+      barDrag = null
+      if (at) void setPrefs({ barPlacement: placementAfterDrag(at, displays(), barFolded(), barGrowsUp) })
+      else layoutBar()
+    }
+  })
+  handle(CH.barScreens, () => barScreens())
+  handle(CH.placeBar, async (_e, id: unknown, spot: unknown) => {
+    const d = displays().find((x) => x.id === id)
+    if (!d || !BAR_SPOTS.includes(spot as BarSpot)) return barScreens()
+    await setPrefs({ barPlacement: spotPlacement(d, spot as BarSpot, { width: barWidth(d.workArea, prefs().zoom), height: barFolded() }) })
+    return barScreens()
   })
   ipcMain.on(CH.panelTouch, (_e, unfolded?: boolean) => panel?.touch(typeof unfolded === 'boolean' ? unfolded : undefined))
   ipcMain.on(CH.panelClose, () => panel?.close('Esc'))
@@ -964,9 +1023,19 @@ async function main(): Promise<void> {
     if (startHidden) log('info', 'start w zasobniku (uruchomienie z Windows)')
     else showMainWindow()
   })
+  // D302: a bar „na wierzchu” steps aside while the main window – with the same bar at its top – is in front; under the
+  // windows nothing changes. Closed only at the quit: the bar is going too.
+  const mainMoved = () => {
+    if (!quitting && prefs().onTop !== 'off') layoutBar()
+  }
   mainWindow.on('closed', () => {
     mainWindow = null
+    mainMoved()
   })
+  mainWindow.on('focus', mainMoved)
+  mainWindow.on('blur', mainMoved)
+  mainWindow.on('hide', mainMoved)
+  mainWindow.on('minimize', mainMoved)
   mainWindow.on('query-session-end', () => onSystemEnd(false))
   mainWindow.on('session-end', () => onSystemEnd(true))
 
@@ -1065,6 +1134,8 @@ process.on('uncaughtException', (e) => log('error', 'nieobsłużony wyjątek w p
 process.on('unhandledRejection', (reason) => log('error', 'nieobsłużone odrzucenie w procesie głównym', reason))
 app.on('render-process-gone', (_e, contents, details) => {
   log('error', `okno przestało działać (${viewOf(contents)}): ${details.reason}, kod ${details.exitCode}`)
+  // The bar's drag ends with its view: the layout is free again.
+  if (viewOf(contents) === 'bar') barDrag = null
   if (details.reason !== 'clean-exit' && !quitting && !contents.isDestroyed()) contents.reload()
 })
 // A window that stops answering leaves a line in the log, for every window (the bar and the panel too).

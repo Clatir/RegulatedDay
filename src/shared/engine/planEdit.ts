@@ -13,12 +13,15 @@ import { plannedSpan, type BlockInfo } from './blocks'
 import type { DayState } from './day'
 import { atOf } from './grid'
 
+/** A start kept in the logical day (04:00–03:59). */
+const inDay = (startMin: number): number => Math.max(PLAN_MIN, Math.min(PLAN_MAX - 1, startMin))
+
 /** A new block of yours: flexible, in the place its category starts in, its id random. */
 export function newUserBlock(categoryId: string, startMin: number, durationMin: number, rules: CategoryRules | undefined, p: Partial<PlanBlock> = {}): PlanBlock {
   return planBlock({
     id: newId(),
     categoryId,
-    startMin: Math.max(PLAN_MIN, Math.min(PLAN_MAX - 1, startMin)),
+    startMin: inDay(startMin),
     durationMin: Math.max(1, Math.min(24 * 60, durationMin)),
     fixed: false,
     background: rules?.startsInBackground ? true : null,
@@ -42,6 +45,9 @@ export function freeStart(state: DayState, from: number, lengthMin: number): num
   return logicalMinuteOf(state.grid.date, atOf(state.grid, at))
 }
 
+/** A block dragged on the axis of a day or a template (D305) to a new start, kept in the logical day. */
+export const draggedBlock = (b: PlanBlock, startMin: number): PlanBlock => ({ ...b, startMin: inDay(startMin) })
+
 /** The planned start of a block (an anchored one: its anchor's planned end), a logical minute; null when unknown. */
 export function plannedStartMin(b: PlanBlock, plan: readonly PlanBlock[], depth = 0): number | null {
   if (b.startMin != null) return b.startMin
@@ -61,7 +67,7 @@ export function movedBlock(b: PlanBlock, plan: readonly PlanBlock[], fromDate: s
   const start = startMin ?? plannedStartMin(b, plan) ?? 9 * 60
   return {
     ...b,
-    startMin: Math.max(PLAN_MIN, Math.min(PLAN_MAX - 1, start)),
+    startMin: inDay(start),
     anchor: null,
     movedFrom: fromDate,
     moves: b.moves + (byYou ? 1 : 0),

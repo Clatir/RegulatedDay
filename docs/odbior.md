@@ -15,8 +15,8 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
-- **Tylko Ty** (testy tego nie widzą): E7a.2 (kliknięcie „Wymień”), E6b.2, E6a.3, E4b.4, E4b.9 (po poprawce),
-  E4b.10, E4b.11, E4a.5, E4a.11, E4a.12, E3.9, E3.10.
+- **Tylko Ty** (testy tego nie widzą): E4b.12–E4b.14, E7a.2 (kliknięcie „Wymień”), E6b.2, E6a.3, E4b.4, E4b.9 (po
+  poprawce), E4b.10, E4b.11, E4a.5, E4a.11, E4a.12, E3.9, E3.10.
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 
@@ -26,9 +26,78 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
 2. Zwykły dzień pracy: E4a.1–E4a.4, E4a.6–E4a.9, E4b.1–E4b.3, E4b.5–E4b.7, E5.2, E6a.4, E7a.2.
 3. Dzień z sesją: E4a.5, E4b.4.
 4. Wieczór: E4b.8, E4b.10, E6a.2, E6a.3.
-5. Ustawienia i próba: E4b.9 (po poprawce), E4b.11, E3.3–E3.5, E3.7.
+5. Ustawienia i próba: E4b.9 (po poprawce), E4b.11–E4b.14, E3.3–E3.5, E3.7, E3.13.
 6. Laptop i noc (gdy masz laptopa pod ręką): E3.9, E3.10, E4a.11, E4a.12.
 7. Jednorazowe: E4a.10, E4a.13, E3.12.
+
+---
+
+## Wersja 0.10.0 – miejsce paska pulpitu, przeciąganie paska i bloków
+
+Tylko Ty: E4b.12 (przeciąganie prawdziwą myszą), E4b.13 (Twoje monitory), E4b.14 (okno główne z przodu).
+
+### E4b.12 Pasek przeciągnięty za uchwyt
+- [ ] Odebrane
+- **Tylko Ty:** logikę miejsca sprawdzają testy (`placement.test.ts`), przeciąganie z podstawionym kursorem – E2E
+  (`smoke.spec.ts`); prawdziwą mysz, drugi monitor i ponowne uruchomienie – tylko Ty.
+- **Jak sprawdzić:** najedź na pasek pulpitu, chwyć uchwyt ⠿ przy lewej krawędzi i przeciągnij pasek na środek
+  ekranu, puść. Potem przeciągnij go na drugi monitor (jeśli masz) i daleko poza krawędź ekranu. Zamknij aplikację
+  z menu ikony i uruchom ją ponownie.
+- **Oczekiwany efekt:** uchwyt widać tylko po najechaniu na pasek. Pasek idzie płynnie za kursorem, także przez
+  granicę monitorów, i zostaje tam, gdzie go puścisz; przy krawędzi zatrzymuje się w obszarze ekranu (nie wchodzi na
+  pasek zadań), a puszczony na granicy dwóch monitorów wsuwa się na ten, na którym jest jego środek. Po ponownym
+  uruchomieniu stoi w tym samym miejscu. Samo kliknięcie uchwytu nic nie przestawia; puszczenie nie uruchamia żadnego
+  przycisku paska.
+- **Nie przechodzi, gdy:**
+  - pasek „ucieka” od kursora, skacze albo zostaje w tyle o więcej niż chwilę;
+  - po puszczeniu wraca na stare miejsce albo po ponownym uruchomieniu stoi gdzie indziej;
+  - przeciągnięcie klika przycisk paska (Start, Pauza…) albo otwiera okno;
+  - część paska wychodzi poza ekran albo na pasek zadań.
+
+### E4b.13 Ustawienia → „Miejsce paska”
+- [ ] Odebrane
+- **Tylko Ty:** kliknięcie miejsca na makiecie sprawdza E2E (`screens.spec.ts`); rysunek Twoich monitorów – tylko Ty.
+- **Jak sprawdzić:** Ustawienia → sekcja „Pasek pulpitu” → „Miejsce paska”. Porównaj makietę z Ustawieniami Windows →
+  System → Ekran. Kliknij kolejno środek górnej krawędzi, prawy dolny róg i (jeśli masz) róg drugiego monitora.
+  Na koniec przeciągnij pasek za uchwyt w inne miejsce i wróć do Ustawień.
+- **Oczekiwany efekt:** monitory w tym samym układzie i proporcjach co w Windows, główny podpisany „główny”. Każde
+  kliknięcie od razu przestawia pasek w to miejsce i zaznacza je na makiecie; pasek w miejscu na dole zostaje nad
+  paskiem zadań z małym odstępem także wtedy, gdy urośnie (pytanie w pasku). Po przeciągnięciu żadne miejsce nie jest
+  zaznaczone, prostokąt paska stoi tam, gdzie pasek, a pod makietą jest „Własne miejsce”.
+- **Nie przechodzi, gdy:**
+  - makieta ma inny układ monitorów niż Windows;
+  - kliknięcie miejsca nie przestawia paska albo stawia go gdzie indziej;
+  - zaznaczone jest inne miejsce niż to, w którym stoi pasek.
+
+### E4b.14 „Zawsze na wierzchu” i okno główne
+- [ ] Odebrane
+- **Tylko Ty:** CI na Windows klika w okno główne i inne okno (`bar-windows.spec.ts`); Twój układ okien – tylko Ty.
+- **Jak sprawdzić:** Ustawienia → „Zawsze na wierzchu” → „pasek pulpitu”. Kliknij w okno główne Regulated Day, potem
+  w inne okno (np. przeglądarkę), potem zminimalizuj okno główne.
+- **Oczekiwany efekt:** gdy okno główne jest z przodu, paska pulpitu nie ma – „Ustawienia” w lewym dolnym rogu są
+  odsłonięte. Po kliknięciu innego okna i po zminimalizowaniu głównego pasek wraca od razu. Bez „Zawsze na wierzchu”
+  pasek leży pod oknami jak dotąd.
+- **Nie przechodzi, gdy:**
+  - pasek zasłania okno główne, gdy to jest z przodu;
+  - pasek nie wraca po przejściu do innego okna;
+  - pasek miga przy przełączaniu okien.
+
+### E3.13 Przeciąganie bloków na osi
+- [ ] Odebrane
+- **Automatycznie:** które bloki da się przeciągać i krok 5 min – `tests/web/day-axis.test.ts`; przeciągnięcie o
+  godzinę i klik po nim – E2E (`screens.spec.ts`). Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” chwyć lewym przyciskiem blok z własną godziną, który jeszcze się nie zaczął, i przesuń
+  go w górę albo w dół; puść. Potem krótko kliknij blok. To samo w Szablonach. Spróbuj też chwycić blok zaczęty
+  i blok sesji.
+- **Oczekiwany efekt:** blok jedzie za myszą, godziny w bloku zmieniają się co 5 min (pełne 5 min: 10:15, 10:20…); po
+  puszczeniu zostaje w nowym miejscu bez cofania się (plan dnia albo szablon zapisany). Krótkie kliknięcie otwiera
+  edycję jak dotąd. Bloku zaczętego, minionego, z minionego dnia, sesji, wykładu i bloku „po innym bloku” nie da się
+  przeciągnąć (kursor nie zmienia się w rączkę). Uwaga: blok elastyczny przeciągnięty przed koniec bloku, który właśnie
+  trwa, prognoza i tak stawia po nim – to nie błąd.
+- **Nie przechodzi, gdy:**
+  - blok wraca na stare miejsce po puszczeniu albo ląduje o inną liczbę minut niż pokazana;
+  - przeciągnięcie otwiera edycję bloku albo krótkie kliknięcie jej nie otwiera;
+  - da się przeciągnąć blok zaczęty albo sesję.
 
 ---
 

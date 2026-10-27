@@ -97,6 +97,44 @@ test('pasek pulpitu: okno narzędziowe bez aktywacji, nigdy na wierzchu, pokazan
   }
 })
 
+test('pasek pulpitu przeciągnięty za uchwyt idzie za kursorem i zostaje tam, gdzie go puszczono (D303)', async () => {
+  const { app, page, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      const barBounds = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day – pasek')!.getBounds())
+      await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – pasek' && w.isVisible())), { timeout: 30_000 }).toBe(true)
+      const start = await barBounds()
+      // The cursor where the test puts it (the synthetic mouse moves no real cursor).
+      const wa = await app.evaluate(({ screen }, b) => {
+        const g = globalThis as unknown as { rdCursor: { x: number; y: number } }
+        g.rdCursor = { x: b.x + 6, y: b.y + 10 }
+        screen.getCursorScreenPoint = () => g.rdCursor
+        return screen.getPrimaryDisplay().workArea
+      }, start)
+      const bar = await viewPage(app, 'bar')
+      const handle = bar.getByTestId('bar-drag')
+      await expect(handle).toHaveAttribute('aria-label', 'przeciągnij pasek')
+      const box = (await handle.boundingBox())!
+      await bar.mouse.move(box.x + box.width / 2, box.y + 10)
+      // A click on the handle (the cursor where it was): nothing moves, nothing is saved.
+      await bar.mouse.down()
+      await bar.mouse.up()
+      expect((await page.evaluate(() => window.rd.prefs())).barPlacement).toBeNull()
+      expect(await barBounds()).toEqual(start)
+      await bar.mouse.down()
+      await app.evaluate((_e, b) => ((globalThis as unknown as { rdCursor: { x: number; y: number } }).rdCursor = { x: b.x + 6 + 200, y: b.y + 10 - 150 }), start)
+      await bar.mouse.move(box.x + box.width / 2 + 5, box.y + 5)
+      await expect.poll(barBounds).toMatchObject({ x: start.x + 200, y: start.y - 150 })
+      await bar.mouse.up()
+      // Remembered on this computer: the folded bar's place in the work area.
+      await expect.poll(async () => (await page.evaluate(() => window.rd.prefs())).barPlacement?.offset).toEqual({ x: start.x + 200 - wa.x, y: start.y - 150 - wa.y })
+      expect(await barBounds()).toMatchObject({ x: start.x + 200, y: start.y - 150 })
+    })
+  } finally {
+    await app.close()
+  }
+})
+
 test('pasek pulpitu wyłączony tuż po włączeniu: spóźnione potwierdzenie pomocnika go nie pokazuje', async () => {
   test.skip(process.env.RD_E2E_REAL_HELPER === '1', 'the stand-in helper only (it confirms 50 ms after a watch, even one taken back)')
   const { app, page, userData } = await launch()

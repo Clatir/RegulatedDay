@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { paths } from '@shared/data/paths'
-import { copiedTemplate } from '@shared/engine/planEdit'
+import { copiedTemplate, draggedBlock } from '@shared/engine/planEdit'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
@@ -218,10 +218,15 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
             Dzień z tego szablonu: {plDate(sample)} · budżet {durationLabel(model.state.budget.limitMin)} · granica {model.state.boundary.proposal != null ? logicalClock(axis.markers.find((m) => m.label.startsWith('propozycja'))?.at ?? 0) : '—'}. Kliknij wolne miejsce na osi, żeby dodać blok.
           </p>
           <Timeline
-            items={axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id) }))}
+            items={axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), movable: i.movable === true && byPlanId.has(i.id) }))}
             markers={axis.markers}
             selected={selected}
             onSelect={(id) => setSelected(version.blocks.some((b) => b.id === id) ? id : null)}
+            onMove={(id, startMin) => {
+              // D305: the template's block with its own start, moved in steps of 5 min.
+              const b = version.blocks.find((x) => x.id === id)
+              if (b && b.anchor == null && b.startMin != null) void putBlock(draggedBlock(b, startMin))
+            }}
             onCreate={(min) => {
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin: 60, origin: 'template' })
               void putBlock(b).then(() => setSelected(b.id))

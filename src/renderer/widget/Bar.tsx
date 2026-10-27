@@ -67,6 +67,51 @@ function BarButton({ mode, onAct, children, testId, pressed, accent }: { mode: B
   )
 }
 
+/**
+ * The handle the desktop bar is dragged by (D303), seen on hover, over the left padding of the bar's main part: the
+ * main process moves the bar after the cursor – one message a frame – and remembers where it is let go.
+ */
+function DragHandle() {
+  const held = useRef(false)
+  const frame = useRef(0)
+  const end = () => {
+    if (!held.current) return
+    held.current = false
+    cancelAnimationFrame(frame.current)
+    frame.current = 0
+    window.rd.barDrag('end')
+  }
+  return (
+    <span
+      aria-label="przeciągnij pasek"
+      data-testid="bar-drag"
+      className="absolute top-0 left-0 z-10 flex h-full w-3 cursor-grab items-center justify-center text-[12px] text-muted opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        e.stopPropagation()
+        e.currentTarget.setPointerCapture(e.pointerId)
+        held.current = true
+        window.rd.barDrag('start')
+      }}
+      onPointerMove={() => {
+        if (!held.current || frame.current) return
+        frame.current = requestAnimationFrame(() => {
+          frame.current = 0
+          if (held.current) window.rd.barDrag('move')
+        })
+      }}
+      onPointerUp={(e) => {
+        e.stopPropagation()
+        end()
+      }}
+      onPointerCancel={end}
+      onLostPointerCapture={end}
+    >
+      ⠿
+    </span>
+  )
+}
+
 /** A line with its answers; „Skończył się o …” unfolds steps of ±5 min in the line itself. */
 function Line({ line, mode, trial }: { line: BarLine; mode: BarMode; trial: boolean }) {
   const [pick, setPick] = useState<number | null>(null)
@@ -303,7 +348,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
   return (
     <div
       ref={root}
-      className={cx('flex flex-col overflow-hidden', mode === 'main' ? 'rounded-md border border-line' : '', quiet && 'opacity-95')}
+      className={cx('group flex flex-col overflow-hidden', mode === 'main' ? 'rounded-md border border-line' : '', quiet && 'opacity-95')}
       style={{ background: barBackground(view.tone, view.warn, quiet, brightness, TONE_SETS[view.toneSet].tones), boxShadow: `inset 4px 0 0 ${view.color}` }}
       data-testid={`bar-${mode}`}
       data-tone={view.tone}
@@ -313,7 +358,8 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
       onPointerUp={mode === 'desktop' ? () => act('barClick') : undefined}
     >
       {grows === 'up' && unfolded}
-      <div className={cx('flex flex-col gap-1.5 py-1.5 pr-2 pl-3', quiet && 'gap-1 py-1')}>
+      <div className={cx('relative flex flex-col gap-1.5 py-1.5 pr-2 pl-3', quiet && 'gap-1 py-1')}>
+        {mode === 'desktop' && <DragHandle />}
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           {view.question && (
             <div className="flex shrink-0 items-center gap-1.5" data-testid="bar-question">

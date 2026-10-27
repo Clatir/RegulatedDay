@@ -11,9 +11,12 @@
 - **Logika E6 scalona w dwóch częściach** (D299): część 1 (PR #10) – wydanie 0.6.0 (27.10 ok. 09:47); część 2 (PR #11,
   91ce1d7, 27.10 ok. 11:04; CI PR zielone za pierwszym razem, także Windows) – wydanie 0.7.0 z runu 40485664059 na
   `main` (ok. 11:34). Wpisy → `docs/archiwum/postep-E6.md`. Ciąg D299 zakończony.
-- **Logika E7 w toku** (D301), równolegle z Twoim odbiorem: część 1 (regulamin) scalona (PR #12, 27.10 ok. 13:17),
-  wydanie 0.8.0 z runu 40502501672 na `main` (ok. 13:46); część 2 (pokój, kasety, świętowanie, „Strona B”, kalibracja) na gałęzi
-  `claude/0.9.0-e7-pokoj` – pauza po niej.
+- **Logika E7 scalona** (D301): część 1 (regulamin, PR #12) – wydanie 0.8.0 (27.10 ok. 13:46); część 2 (pokój,
+  kasety, świętowanie, „Strona B”, kalibracja, PR #13) – wydanie 0.9.0 z runu 40513568887 (ok. 15:08).
+- **Poprawka E4b.9 scalona** (PR #14, 89e21fe, ok. 15:10; CI PR zielone, także Windows) – wydanie 0.9.1 z runu
+  40518727264 na `main` opublikowane (ok. 15:52).
+- **0.10.0 w toku** (D302–D305 z odbioru 27.10): PR #15 z gałęzi `claude/0.10.0-pasek-bloki` (od 0.9.1), CI w toku;
+  po zielonym scalam (D285) i sprawdzam wydanie 0.10.0 – sekcja niżej.
 - Otwarte na ekrany E6: forma „odczuwanego kosztu” w rytuale (pytanie o wygląd), czasy sesji „było” z zapisanego wejścia
   (teraz planowane godziny), dzień od którego działa rytuał (`ritualFrom` – teraz żaden, T482), propozycja przejścia
   do folderu z `.moved.json`.
@@ -21,20 +24,31 @@
   w części 2 kolejne (także częściowo zastąpione) do archiwum, zanim przybędą nowe T.
 
 ## Kolejka
-0. Ja: poprawka E4b.9 (27.10 odbiór: pasek „na wierzchu” nad filmem na pełnym ekranie w przeglądarce – pomocnik nie
-   widział pełnego ekranu w tym samym oknie) na gałęzi `claude/0.9.1-pelny-ekran` (od części 2): pomocnik sprawdza
-   pełny ekran co 1 s na monitorze paska; PR po scaleniu części 2 (PR #13), wydanie 0.9.1, test w CI na Windows.
-0. Ja, potem: D302–D305 (27.10, z odbioru) – pasek chowa się przy oknie głównym na pierwszym planie („na wierzchu”),
-   uchwyt „przeciągnij” i dowolne miejsce paska, makieta monitorów w Ustawieniach, przeciąganie bloków na osi dnia
-   lewym przyciskiem (start co 5 min) – osobny PR, wydanie 0.10.0.
+0. Ja: 0.10.0 (D302–D305) – CI PR #15, scalenie, wydanie; potem pauza.
 1. Ty: odbiór według `docs/odbior.md` (E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b), wybór zestawu kolorów (D298);
    27.10 odebrane E3.2, E3.6, E3.8, E3.11.
 2. Po „dalej”: elementy E5 w pasku (przyciski próśb, znacznik i panel wariantów), potem ekrany E6 (rytuał, niezamknięte
    dni, eksport, przywracanie) – z pytaniami o wygląd; przed nimi komunikat „Przed etapem”.
 
 ## Do odbioru na Windows
-- Lista w `docs/odbior.md` (E3, E4a, E4b, logika E5, E6a, E6b, E7a – każdy punkt z oczekiwanym efektem i błędami, które blokują
+- Lista w `docs/odbior.md` (0.10.0, 0.9.1, E3, E4a, E4b, logika E5, E6a, E6b, E7a, E7b – każdy punkt z oczekiwanym efektem i błędami, które blokują
   odbiór; na dole punkty już odebrane, E0). Kolejne etapy dopisują tam swoje listy.
+
+## 0.10.0 – miejsce paska, przeciąganie paska i bloków (D302–D305)
+- Gałąź `claude/0.10.0-pasek-bloki` od 0.9.1 (27.10 ok. 14:20). Odpowiedzi: D302 (pasek chowa się przy oknie głównym
+  z przodu, tylko „na wierzchu”), D303 (uchwyt, dowolne miejsce, bez monitora – róg głównego), D304 (makieta monitorów),
+  D305 (bloki lewym przyciskiem, start co 5 min). T497, T498.
+- Zakres: `placement.ts` (kotwica miejsca `spot`, `spotPlacement`, `placementAfterDrag`, `draggedBounds`), proces
+  główny (`barDrag`, `barScreens`, `placeBar`, `mainInFront`), uchwyt w `Bar.tsx`, `BarPlaceMap` w Ustawieniach,
+  przeciąganie w `Timeline` (`draggedStart`, `draggedBlock`), lista E4b.12–E4b.14 i E3.13, CHANGELOG 0.10.0.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. start od miejsca widocznego na siatce 5 min, miejsce
+  z makiety jako kotwica (margines przy rosnącym pasku), przeciąganie bez skoku między monitorami, dni minione bez
+  przeciągania, zabezpieczenie zawieszonego przeciągania, ostatnia klatka przy puszczeniu, klik w uchwyt bez zapisu,
+  blok trzymany w nowym miejscu do nadejścia danych, uchwyt nie zasłania przycisków, D302 tylko przy „na wierzchu”.
+  Testy: jednostkowe (`placement`, `tests/web/day-axis`, `settings-fields`, `e3-plan`), E2E (przeciągnięcie bloku,
+  makieta, przeciągnięcie paska z podstawionym kursorem; D302 tylko w CI na Windows).
+- CI PR #15, runda 1: Windows czerwone – test pełnego ekranu z 0.9.1 czekał na pasek „na wierzchu” zaraz po starcie,
+  a okno główne jest wtedy z przodu (D302 słusznie go chowa); test czeka teraz na pasek po kliknięciu okna z filmem.
 
 ## Przed etapem E7 – logika (27.10.2026)
 - Odpowiedzi: D301 (dwie części ciągiem, robocza lista pokoju i progi nut – akceptacja przed ekranami gry). Model:

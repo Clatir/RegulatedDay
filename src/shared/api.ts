@@ -3,7 +3,8 @@
  * main process answers `invoke` channels and pushes the `on*` events.
  */
 import type { IdentityKind } from './identity'
-import type { MachinePrefs } from './machine'
+import type { Rect } from './bounds'
+import type { BarSpot, MachinePrefs } from './machine'
 import type { TrialState, WidgetView } from './widget'
 import type { UpdateView } from './updateView'
 
@@ -19,6 +20,9 @@ export const CH = {
   onWidget: 'rd:onWidget',
   widgetAction: 'rd:widgetAction',
   barLayout: 'rd:barLayout',
+  barDrag: 'rd:barDrag',
+  barScreens: 'rd:barScreens',
+  placeBar: 'rd:placeBar',
   panelTouch: 'rd:panelTouch',
   panelClose: 'rd:panelClose',
   trial: 'rd:trial',
@@ -301,6 +305,13 @@ export interface HistoryVersion {
   record: unknown
 }
 
+/** The monitors as Windows lays them out (DIP) and the desktop bar on them (D304). */
+export interface BarScreens {
+  displays: Array<{ id: number; label: string; bounds: Rect; workArea: Rect; primary: boolean }>
+  /** The folded bar's rectangle, its monitor, and its place there (null: a place of your own, dragged). */
+  bar: { bounds: Rect; display: number; spot: BarSpot | null }
+}
+
 /** Windows' settings the wizard opens with one button: priority notifications (D233), the icons beside the clock (D229). */
 export type SystemSettingsPage = 'notifications' | 'taskbar'
 
@@ -317,6 +328,12 @@ export interface RdApi {
   onWidget(cb: (view: WidgetView) => void): () => void
   widgetAction(action: WidgetAction, arg?: string): Promise<void>
   barLayout(layout: BarLayout): void
+  /** The desktop bar dragged by its handle (D303): the main process follows the cursor between start and end. */
+  barDrag(phase: 'start' | 'move' | 'end'): void
+  /** The monitors and where the desktop bar stands (D304): for the settings' mock-up. */
+  barScreens(): Promise<BarScreens>
+  /** The desktop bar to a place on a monitor (by its id), from the settings' mock-up. */
+  placeBar(display: number, spot: BarSpot): Promise<BarScreens>
   panelTouch(): void
   panelClose(): void
   trial(): Promise<TrialState>

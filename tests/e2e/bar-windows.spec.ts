@@ -73,7 +73,7 @@ test('„Zawsze na wierzchu”: pasek znika, gdy okno na pierwszym planie przech
     await withMainLog(userData, async () => {
       const barPage = await viewPage(app, 'bar')
       await barPage.evaluate(() => window.rd.setPrefs({ onTop: 'bar' }))
-      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      // The main window is in front after the start: the bar „na wierzchu” steps aside (D302) until the film's window is.
       const bar = await barInfo(app)
       const k = bar.scale
       // A normal window (the browser with the film), made the foreground by a real click away from the bar.
@@ -88,12 +88,47 @@ test('„Zawsze na wierzchu”: pasek znika, gdy okno na pierwszym planie przech
       await expect.poll(() => windowsAt([middle])[0], { timeout: 10_000 }).toBe(film.hwnd)
       click(...middle)
       await expect.poll(() => foreground(), { timeout: 10_000 }).toBe(film.hwnd)
-      expect((await barInfo(app)).visible).toBe(true)
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(true)
       // Its full screen in place: no change of the foreground window, the bar hides within the helper's check.
       await app.evaluate(() => (globalThis as unknown as { rdFilm: Electron.BrowserWindow }).rdFilm.setFullScreen(true))
       await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(false)
       expect(foreground()).toBe(film.hwnd)
       await app.evaluate(() => (globalThis as unknown as { rdFilm: Electron.BrowserWindow }).rdFilm.setFullScreen(false))
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(true)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+test('„Zawsze na wierzchu”: pasek pulpitu chowa się, gdy okno główne (z tym samym paskiem u góry) jest na pierwszym planie (D302)', async () => {
+  const { app, page, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      await page.evaluate(() => window.rd.setPrefs({ onTop: 'bar' }))
+      const k = (await barInfo(app)).scale
+      // Another window, small, over the main window's top left part.
+      const other = await app.evaluate(({ BrowserWindow }) => {
+        const w = new BrowserWindow({ x: 60, y: 60, width: 300, height: 200, show: true, title: 'RD-CI-inne' })
+        void w.loadURL('data:text/html,<title>RD-CI-inne</title><body style="background:%23333">inne</body>')
+        ;(globalThis as unknown as { rdOther: typeof w }).rdOther = w
+        return { ...w.getBounds(), hwnd: w.getNativeWindowHandle().readBigUInt64LE(0).toString() }
+      })
+      const main = await (await app.browserWindow(page)).evaluate((w) => ({ ...w.getBounds(), hwnd: w.getNativeWindowHandle().readBigUInt64LE(0).toString() }))
+      // A real click in a window makes it the foreground (focus() from a test may be refused by Windows).
+      const activate = async (w: { x: number; y: number; width: number; height: number; hwnd: string }, at: [number, number]) => {
+        uncover(w.hwnd)
+        await expect.poll(() => windowsAt([at])[0], { timeout: 10_000 }).toBe(w.hwnd)
+        click(...at)
+        await expect.poll(() => foreground(), { timeout: 10_000 }).toBe(w.hwnd)
+      }
+      await activate(other, [(other.x + other.width / 2) * k, (other.y + other.height / 2) * k])
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(true)
+      // The main window's empty right bottom part (no button there); the other window is minimized as covering it.
+      await activate(main, [(main.x + main.width - 30) * k, (main.y + main.height - 30) * k])
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(false)
+      await app.evaluate(() => (globalThis as unknown as { rdOther: Electron.BrowserWindow }).rdOther.restore())
+      await activate(other, [(other.x + other.width / 2) * k, (other.y + other.height / 2) * k])
       await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(true)
     })
   } finally {

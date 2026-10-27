@@ -3,7 +3,7 @@
  * screen; the bar's width is the smaller of 480 DIP × the interface's scale and the work area's width less 16 DIP.
  */
 import { clampInto, findDisplay, type DisplayInfo, type Rect } from './bounds'
-import type { BarPlacement } from './machine'
+import type { BarPlacement, BarSpot } from './machine'
 
 export const BAR_BASE_WIDTH = 480
 const MARGIN = 8
@@ -68,31 +68,69 @@ export interface BarRect {
   display: DisplayInfo
   /** The bar unfolds upwards (a group, the variants), or downwards when it stands at the top of its screen. */
   growsUp: boolean
+  /** The place it stands at (D304), or null – a place of its own, dragged (D303). */
+  spot: BarSpot | null
 }
 
 /**
- * The desktop bar's rectangle: the saved place on its monitor (by name and bounds) or, by default, the left bottom
- * corner of the primary work area (above the taskbar). `height` is the folded bar's, `unfoldedHeight` the current one.
+ * The desktop bar's rectangle: the saved place on its monitor (by name and bounds) or, by default and when that monitor
+ * is gone (D303), the left bottom corner of the primary work area (above the taskbar). `height` is the folded bar's,
+ * `unfoldedHeight` the current one.
  */
 export function barRect(placement: BarPlacement | null, displays: readonly DisplayInfo[], primary: DisplayInfo, zoom: number, height: number, unfoldedHeight = height): BarRect {
-  const display = (placement && findDisplay(placement.display, displays)) ?? primary
+  const saved = placement ? findDisplay(placement.display, displays) : null
+  const display = saved ?? primary
   const wa = display.workArea
   const width = barWidth(wa, zoom)
-  const folded = placement
-    ? clampInto({ x: wa.x + placement.offset.x, y: wa.y + placement.offset.y, width, height }, wa)
-    : clampInto({ x: wa.x + MARGIN, y: wa.y + wa.height - height - MARGIN, width, height }, wa)
+  const kept = saved ? placement : null
+  const spot = kept ? kept.spot : 'bottom-left'
+  // A place picked is counted with the bar's size now (it grows with a question, with the scale): it keeps its margin.
+  const offset = kept && !kept.spot ? kept.offset : spotOffset(spot ?? 'bottom-left', wa, { width, height })
+  const folded = clampInto({ x: wa.x + offset.x, y: wa.y + offset.y, width, height }, wa)
   const growsUp = folded.y + folded.height / 2 >= wa.y + wa.height / 2
   const tall = Math.min(unfoldedHeight, wa.height)
   const y = growsUp ? folded.y + folded.height - tall : folded.y
-  return { bounds: clampInto({ x: folded.x, y, width, height: tall }, wa), display, growsUp }
+  return { bounds: clampInto({ x: folded.x, y, width, height: tall }, wa), display, growsUp, spot }
 }
 
-/** The corners the bar can be moved to (settings and the trial): the offset within the work area. */
-export function cornerOffset(corner: 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right', workArea: Rect, size: { width: number; height: number }): { x: number; y: number } {
+/** A place's offset within the work area (the folded bar's top left corner), 8 DIP from the edges (D304). */
+export function spotOffset(spot: BarSpot, workArea: Rect, size: { width: number; height: number }): { x: number; y: number } {
   const right = workArea.width - size.width - MARGIN
   const bottom = workArea.height - size.height - MARGIN
   return {
-    x: corner.endsWith('left') ? MARGIN : right,
-    y: corner.startsWith('top') ? MARGIN : bottom
+    x: spot.endsWith('left') ? MARGIN : spot.endsWith('right') ? right : Math.round((workArea.width - size.width) / 2),
+    y: spot.startsWith('top') ? MARGIN : bottom
   }
+}
+
+/** The bar put to a place of a monitor (the settings' mock-up, the wizard, the trial). */
+export function spotPlacement(display: DisplayInfo, spot: BarSpot, size: { width: number; height: number }): BarPlacement {
+  return { display: { label: display.label, bounds: display.bounds }, spot, offset: spotOffset(spot, display.workArea, size) }
+}
+
+/**
+ * Where a dragged bar stays (D303): a place of its own on the monitor under its middle (else the nearest), its folded
+ * rectangle kept in that work area – unfolded upwards, the folded part is the bottom of the window.
+ */
+export function placementAfterDrag(bounds: Rect, displays: readonly DisplayInfo[], foldedHeight: number, growsUp: boolean): BarPlacement {
+  const cx = bounds.x + bounds.width / 2
+  const cy = bounds.y + bounds.height / 2
+  const dist = (r: Rect) => Math.hypot(Math.max(r.x - cx, 0, cx - (r.x + r.width)), Math.max(r.y - cy, 0, cy - (r.y + r.height)))
+  const display = displays.find((d) => contains(d.bounds, cx, cy)) ?? [...displays].sort((a, b) => dist(a.bounds) - dist(b.bounds))[0]!
+  const wa = display.workArea
+  const top = growsUp ? bounds.y + bounds.height - foldedHeight : bounds.y
+  const folded = clampInto({ x: bounds.x, y: top, width: bounds.width, height: foldedHeight }, wa)
+  return { display: { label: display.label, bounds: display.bounds }, spot: null, offset: { x: folded.x - wa.x, y: folded.y - wa.y } }
+}
+
+/**
+ * A drag of the bar (D303): its rectangle moved by the cursor's way, free across the monitors – kept only within the
+ * box around their work areas; where it is let go, `placementAfterDrag` puts it into one of them.
+ */
+export function draggedBounds(start: Rect, from: { x: number; y: number }, to: { x: number; y: number }, displays: readonly DisplayInfo[]): Rect {
+  const areas = displays.map((d) => d.workArea)
+  const x = Math.min(...areas.map((a) => a.x))
+  const y = Math.min(...areas.map((a) => a.y))
+  const box = { x, y, width: Math.max(...areas.map((a) => a.x + a.width)) - x, height: Math.max(...areas.map((a) => a.y + a.height)) - y }
+  return clampInto({ ...start, x: start.x + to.x - from.x, y: start.y + to.y - from.y }, box)
 }

@@ -15,6 +15,7 @@ import { Field, Section, Segmented, Toggle } from '../../components/ui'
 import { SHORTCUTS } from '../../lib/shortcuts'
 import { phaseText, updateAction } from '../../store/update'
 import { toast } from '../../store/ui'
+import { BarPlaceMap } from './BarPlaceMap'
 import { CategoriesSection } from './CategoriesSection'
 import { LecturesSection } from './LecturesSection'
 import { DayTypesSection, FieldsSection, FromBar, ModulesSection, RegenWaysSection, SessionsSection } from './SharedSettings'
@@ -89,6 +90,9 @@ export function SettingsPage() {
         </Field>
         <Field label="Pasek pulpitu" hint={barNote ?? 'Leży pod oknami innych aplikacji – widać go tam, gdzie nic go nie zasłania.'}>
           <Toggle checked={prefs.desktopBar} onChange={(v) => void setMachinePrefs({ desktopBar: v })} label={prefs.desktopBar ? 'włączony' : 'wyłączony'} data-testid="pref-desktop-bar" />
+        </Field>
+        <Field label="Miejsce paska" hint="Monitory tak, jak ustawia je Windows. Pasek zostaje w wybranym miejscu na tym komputerze.">
+          <BarPlaceMap />
         </Field>
         <Field
           label="Zawsze na wierzchu"

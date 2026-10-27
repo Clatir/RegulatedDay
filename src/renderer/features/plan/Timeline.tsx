@@ -2,9 +2,10 @@
  * The plan of a day as a vertical axis of time (D293): a block's height follows its length, gaps without a block are
  * seen, collisions and blocks in the background go to a narrow column beside it, the energy forecast runs beside the
  * axis, and the lines of the wake, the boundary, the maximum, the hard end, the bedtime and now cross it. A click on a
- * block selects it (its editing panel opens on the right), a click on a gap creates a block there.
+ * block selects it (its editing panel opens on the right), a click on a gap creates a block there; a movable block is
+ * dragged with the left button to a new start, in steps of 5 min (D305).
  */
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { logicalClock } from '@shared/format'
 import type { Pool } from '@shared/model/categories'
 import { blockFill } from '@shared/theme'
@@ -23,6 +24,8 @@ export interface TimelineItem {
   dim?: boolean
   /** Waits for „Zacznij” (a session, the second shift, the weekly analysis). */
   waits?: boolean
+  /** Its planned start may be dragged (D305): not begun, with its own start time. */
+  movable?: boolean
 }
 
 export interface TimelineMarker {
@@ -44,6 +47,25 @@ const TONE: Record<TimelineMarker['tone'], string> = { lamp: '#F2B66D', rose: '#
 /** Pixels per minute of the axis. */
 const PPM = 1.1
 const MIN_H = 20
+/** A dragged start stands on the grid of these minutes (D305); a drag starts past 4 px – a shorter move is a click. */
+export const DRAG_STEP_MIN = 5
+const DRAG_FROM_PX = 4
+/** A dropped block waits this long at its new start for the day to bring it there (the edit refused: it goes back). */
+const DROP_HOLD_MS = 2000
+
+/** The start of a block shown at `startMin` and dragged by `dy` pixels: the minute under its top, on the 5-min grid. */
+export const draggedStart = (startMin: number, dy: number): number => Math.round((startMin + dy / PPM) / DRAG_STEP_MIN) * DRAG_STEP_MIN
+
+/** A block being dragged: its pointer, where it went down, its start then and now; dropped – waiting for the day. */
+interface Drag {
+  id: string
+  pointer: number
+  y0: number
+  from: number
+  start: number
+  moved: boolean
+  dropped: boolean
+}
 
 export function Timeline({
   items,
@@ -52,6 +74,7 @@ export function Timeline({
   selected,
   onSelect,
   onCreate,
+  onMove,
   from,
   to,
   ...rest
@@ -62,12 +85,42 @@ export function Timeline({
   selected: string | null
   onSelect: (id: string) => void
   onCreate?: (min: number) => void
+  /** A movable block dragged with the left button to a new start (logical minute). */
+  onMove?: (id: string, startMin: number) => void
   /** The range shown (logical minutes); the blocks and lines widen it. */
   from: number
   to: number
   'data-testid'?: string
 }) {
   const brightness = useMachine((s) => s.prefs.brightness)
+  // The block being dragged (the ref for the handlers, the state for drawing).
+  const dragRef = useRef<Drag | null>(null)
+  const [drag, setDragState] = useState<Drag | null>(null)
+  const setDrag = (d: Drag | null) => {
+    dragRef.current = d
+    setDragState(d)
+  }
+  // The click that ends a drag selects nothing.
+  const dropped = useRef(false)
+  // A dropped block stands at its new start until the day's next items (the edit read back).
+  useEffect(() => {
+    if (dragRef.current?.dropped) setDrag(null)
+  }, [items])
+  // Let go anywhere (the block drawn anew in another column loses the pointer): the drag ends without a move.
+  const holding = drag != null && !drag.dropped
+  useEffect(() => {
+    if (!holding) return
+    const end = (e: PointerEvent) => {
+      const d = dragRef.current
+      if (d && !d.dropped && d.pointer === e.pointerId) setDrag(null)
+    }
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+    return () => {
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+    }
+  }, [holding])
   const lo = Math.floor(Math.min(from, ...items.map((i) => i.startMin), ...markers.map((m) => m.at)) / 60) * 60
   const hi = Math.ceil(Math.max(to, ...items.map((i) => i.endMin), ...markers.map((m) => m.at)) / 60) * 60
   const y = (min: number) => (min - lo) * PPM
@@ -96,34 +149,77 @@ export function Timeline({
   for (let h = lo; h <= hi; h += 60) hours.push(h)
 
   const box = (i: TimelineItem, narrow: boolean) => {
-    const top = y(i.startMin)
+    const dragged = drag?.id === i.id && drag.moved
+    const moving = dragged ? drag.start - i.startMin : 0
+    const start = i.startMin + moving
+    const end = i.endMin + moving
+    const top = y(start)
     const h = Math.max(MIN_H, (i.endMin - i.startMin) * PPM - 1)
     const tiny = h < 34
+    const draggable = !!onMove && i.movable === true
     return (
       <button
         key={i.id}
         type="button"
         data-testid={`block-${i.id}`}
         data-block-title={i.title}
+        data-movable={draggable ? 'true' : undefined}
+        data-selected={selected === i.id ? 'true' : undefined}
         onClick={(e) => {
           e.stopPropagation()
+          if (dropped.current) {
+            dropped.current = false
+            return
+          }
           onSelect(i.id)
+        }}
+        // D305: the left button drags a movable block from where it is shown; its start goes on the 5-min grid.
+        onPointerDown={(e) => {
+          if (!draggable || e.button !== 0) return
+          dropped.current = false
+          e.currentTarget.setPointerCapture(e.pointerId)
+          setDrag({ id: i.id, pointer: e.pointerId, y0: e.clientY, from: i.startMin, start: i.startMin, moved: false, dropped: false })
+        }}
+        onPointerMove={(e) => {
+          const d = dragRef.current
+          if (!d || d.id !== i.id || d.pointer !== e.pointerId || d.dropped) return
+          const dy = e.clientY - d.y0
+          if (!d.moved && Math.abs(dy) < DRAG_FROM_PX) return
+          const start = draggedStart(d.from, dy)
+          if (!d.moved || start !== d.start) setDrag({ ...d, moved: true, start })
+        }}
+        onPointerUp={(e) => {
+          const d = dragRef.current
+          if (!d || d.id !== i.id || d.pointer !== e.pointerId || d.dropped) return
+          if (!d.moved || d.start === d.from) {
+            setDrag(null)
+            if (!d.moved) return
+          } else {
+            const held = { ...d, dropped: true }
+            setDrag(held)
+            onMove!(i.id, d.start)
+            setTimeout(() => dragRef.current === held && setDrag(null), DROP_HOLD_MS)
+          }
+          // The click comes right after this event, if at all: it alone is swallowed, never a later one.
+          dropped.current = true
+          setTimeout(() => (dropped.current = false), 0)
         }}
         className={cx(
           'absolute right-0 left-0 overflow-hidden rounded-[3px] border-l-[3px] px-1.5 text-left leading-tight transition-colors',
           selected === i.id ? 'ring-1 ring-lamp' : 'hover:brightness-110',
           i.dim && 'opacity-45',
-          i.waits && 'border-dashed'
+          i.waits && 'border-dashed',
+          draggable && (dragged ? 'z-20 cursor-grabbing shadow-lg' : 'cursor-grab')
         )}
         style={{ top, height: h, background: blockFill(i.color, brightness), borderLeftColor: i.color }}
       >
         <div className={cx('flex min-w-0 items-baseline gap-1.5', tiny ? 'text-[11px]' : 'pt-0.5 text-[12px]')}>
-          {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(i.startMin)}</span>}
+          {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(start)}</span>}
           <span className="truncate text-fg">{i.title}</span>
         </div>
         {!tiny && !narrow && (
           <div className="truncate text-[11px] text-muted">
-            {logicalClock(i.startMin)}–{logicalClock(i.endMin)}
+            {logicalClock(start)}–{logicalClock(end)}
             {i.marks.length ? ` · ${i.marks.join(' · ')}` : ''}
           </div>
         )}
