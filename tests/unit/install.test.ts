@@ -24,7 +24,8 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'rd-install-'))
   spawned.length = 0
 })
-afterEach(() => rmSync(root, { recursive: true, force: true }))
+// A controller's check started by `init` (its fetch rejected) may still write its state while the folder goes: retried.
+afterEach(() => rmSync(root, { recursive: true, force: true, maxRetries: 5 }))
 
 /** A ready download of 0.1.1 whose „installer” is no program (it cannot start). */
 function download(): { userData: string; updateDir: string; dl: string; helperDir: string } {
