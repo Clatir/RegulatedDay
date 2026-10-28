@@ -27,7 +27,7 @@ import { MonthGrid, MONTH_NAMES, monthOf, shiftMonth } from '../calendar/MonthGr
 import { dayAxis } from '../plan/dayItems'
 import { Timeline } from '../plan/Timeline'
 import { SettingNumber } from '../settings/SettingNumber'
-import { draftChanges, draftTemplates, finishRecords, newLecture, patchSettings, patchWizard, useWizard, type Corner } from './wizardStore'
+import { draftChanges, draftTemplates, failedFinish, finishRecords, newLecture, patchSettings, patchWizard, useWizard, type Corner } from './wizardStore'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 const SHORT_DAYS = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd']
@@ -66,10 +66,13 @@ export function Wizard() {
 
   useEffect(() => {
     if (w.folder) return
-    void window.rd.folderDefault().then((folder) => {
-      patchWizard({ folder })
-      void window.rd.folderProbe(folder).then((probe) => patchWizard({ probe }))
-    })
+    void window.rd
+      .folderDefault()
+      .then(async (folder) => {
+        patchWizard({ folder })
+        patchWizard({ probe: await window.rd.folderProbe(folder) })
+      })
+      .catch((e: unknown) => patchWizard({ error: `Nie sprawdzono folderu: ${e instanceof Error ? e.message : String(e)}` }))
   }, [w.folder])
 
   const canGoOn = step !== 'folder' || (!!w.probe && !w.probe.unreadable && (w.probe.hasData || w.firstConfirmed))
@@ -78,16 +81,20 @@ export function Wizard() {
   const finish = async () => {
     if (!w.probe || !view) return
     patchWizard({ busy: true, error: null })
-    const r = await window.rd.wizardFinish({
-      folder: w.probe.path,
-      first: !joining,
-      records: joining ? [] : finishRecords(w, Date.now(), view.computer),
-      prefs: { desktopBar: w.machine.desktopBar, stationaryClasses: w.machine.stationaryClasses },
-      autostart: w.machine.autostart,
-      pin: w.machine.pin
-    })
+    const r = await window.rd
+      .wizardFinish({
+        folder: w.probe.path,
+        first: !joining,
+        records: joining ? [] : finishRecords(w, Date.now(), view.computer),
+        prefs: { desktopBar: w.machine.desktopBar, stationaryClasses: w.machine.stationaryClasses },
+        autostart: w.machine.autostart,
+        pin: w.machine.pin
+      })
+      .catch((e: unknown) => ({ ok: false, error: `Nie zapisano: ${e instanceof Error ? e.message : String(e)}` }))
     if (!r.ok) {
-      patchWizard({ busy: false, error: r.error })
+      // Never „Zapisuję…” for good: the reason, and the folder looked at again (A7-11).
+      const probe = await window.rd.folderProbe(w.probe.path).catch(() => null)
+      patchWizard(failedFinish(w, r.error ?? 'Nie zapisano.', probe, NEXT.indexOf('summary')))
       return
     }
     if (w.machine.desktopBar) await window.rd.barAction('corner', w.machine.corner).catch(() => undefined)
@@ -186,6 +193,15 @@ function Lead({ children }: { children: ReactNode }) {
   return <p className="leading-relaxed text-muted">{children}</p>
 }
 
+/** The folder looked at (a failure says so in the wizard, never a promise left unhandled). */
+async function probeFolder(dir: string): Promise<void> {
+  try {
+    patchWizard({ probe: await window.rd.folderProbe(dir), error: null })
+  } catch (e) {
+    patchWizard({ error: `Nie sprawdzono folderu: ${e instanceof Error ? e.message : String(e)}` })
+  }
+}
+
 function StepFolder() {
   const w = useWizard()
   const p = w.probe
@@ -193,9 +209,9 @@ function StepFolder() {
     const dir = await window.rd.folderPick(w.folder || null)
     if (!dir) return
     patchWizard({ folder: dir, probe: null, firstConfirmed: false })
-    patchWizard({ probe: await window.rd.folderProbe(dir) })
+    await probeFolder(dir)
   }
-  const recheck = async () => patchWizard({ probe: await window.rd.folderProbe(w.folder) })
+  const recheck = () => probeFolder(w.folder)
   return (
     <div className="flex flex-col gap-3">
       <Lead>Dane Regulated Day leżą w jednym folderze, najlepiej w OneDrive – wtedy każdy Twój komputer widzi ten sam plan. Na tym komputerze aplikacja niczego nie zapisze w folderze, dopóki nie klikniesz „Zakończ”.</Lead>

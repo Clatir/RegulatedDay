@@ -56,6 +56,21 @@ export function patchWizard(p: Partial<WizardDraft>): void {
   useWizard.setState(p)
 }
 
+/**
+ * After „Zakończ” failed (A7-11): the button free again with the reason, and the folder looked at again – data there now
+ * (written by this very try before the folder failed to open, or meanwhile by another computer) turn the wizard into the
+ * next computer's, on its summary (`joinStep`), saying so: one more „Zakończ” joins them.
+ */
+export function failedFinish(w: Pick<WizardDraft, 'probe'>, error: string, probe: FolderProbe | null, joinStep: number): Partial<WizardDraft> {
+  const joinNow = !w.probe?.hasData && !!probe?.hasData
+  return {
+    busy: false,
+    probe: probe ?? w.probe,
+    error: joinNow ? `${error} W folderze są już dane – ten komputer do nich dołączy: kliknij „Zakończ” jeszcze raz.` : error,
+    ...(joinNow ? { step: joinStep } : {})
+  }
+}
+
 /** A change of the draft's settings (checked like the schema: a wrong value keeps the one before). */
 export function patchSettings(patch: Record<string, unknown>): void {
   const s = useWizard.getState().settings

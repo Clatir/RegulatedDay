@@ -18,9 +18,14 @@ import { toast } from '../../store/ui'
 const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Prośby', routine: 'Rutyny' }
 const REASONS: Record<string, string> = { edit: 'przed edycją', delete: 'przed usunięciem', merge: 'przed scaleniem', conflict: 'wersja z konfliktu', restore: 'przed przywróceniem' }
 
+/** The record chosen, by its key, from the list as it is now – after „Przywróć” no longer „usunięty” (A7-10). */
+export const recordKey = (r: { kind: string; id: string }): string => `${r.kind}/${r.id}`
+export const chosenRecord = (records: readonly HistoryRecord[] | null, key: string | null): HistoryRecord | null => (key && records?.find((r) => recordKey(r) === key)) || null
+
 export function HistoryPage() {
   const [records, setRecords] = useState<HistoryRecord[] | null>(null)
-  const [selected, setSelected] = useState<HistoryRecord | null>(null)
+  const [chosen, setChosen] = useState<string | null>(null)
+  const selected = chosenRecord(records, chosen)
   const stamp = useData((s) => s.stamp)
   useEffect(() => {
     void window.rd.historyList().then(setRecords).catch(() => setRecords([]))
@@ -38,9 +43,9 @@ export function HistoryPage() {
               .filter((r) => r.kind === k)
               .map((r) => (
                 <button
-                  key={`${r.kind}/${r.id}`}
+                  key={recordKey(r)}
                   type="button"
-                  onClick={() => setSelected(r)}
+                  onClick={() => setChosen(recordKey(r))}
                   className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selected?.id === r.id && selected.kind === r.kind ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover')}
                   data-testid="history-record"
                 >
@@ -54,7 +59,7 @@ export function HistoryPage() {
           </div>
         ))}
       </div>
-      <div className="min-w-0 flex-1 overflow-y-auto p-4">{selected ? <Versions key={`${selected.kind}/${selected.id}`} r={selected} /> : <EmptyState why="Wybierz rekord, żeby zobaczyć jego wcześniejsze wersje." />}</div>
+      <div className="min-w-0 flex-1 overflow-y-auto p-4">{selected ? <Versions key={recordKey(selected)} r={selected} /> : <EmptyState why="Wybierz rekord, żeby zobaczyć jego wcześniejsze wersje." />}</div>
     </div>
   )
 }
@@ -76,15 +81,31 @@ function RecordName({ r }: { r: HistoryRecord }) {
 function Versions({ r }: { r: HistoryRecord }) {
   const view = useData((s) => s.view)
   const rd = useData((s) => s.rd)
+  const stamp = useData((s) => s.stamp)
   const [versions, setVersions] = useState<HistoryVersion[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [tries, setTries] = useState(0)
+  // Read again with every change of the data (a version restored adds „przed przywróceniem”, A7-10); a read that fails
+  // says so with „Spróbuj ponownie” instead of „Czytam wersje…” for good.
   useEffect(() => {
-    void window.rd.historyVersions(r.kind, r.id).then(setVersions)
-  }, [r.kind, r.id])
+    let alive = true
+    window.rd
+      .historyVersions(r.kind, r.id)
+      .then((v) => alive && (setVersions(v), setFailed(false)))
+      .catch(() => alive && setFailed(true))
+    return () => {
+      alive = false
+    }
+  }, [r.kind, r.id, stamp, tries])
   const current = r.rel ? rawRecord(r.rel) : null
   const [currentDay, setCurrentDay] = useState<Record<string, unknown> | null>(null)
   useEffect(() => {
-    if (r.kind === 'day') void window.rd.dayFiles([r.id]).then((f) => setCurrentDay(f[r.id] ?? null))
-  }, [r.kind, r.id])
+    if (r.kind === 'day')
+      void window.rd
+        .dayFiles([r.id])
+        .then((f) => setCurrentDay(f[r.id] ?? null))
+        .catch(() => undefined)
+  }, [r.kind, r.id, stamp, tries])
   const now = r.kind === 'day' ? currentDay : current
   const names = useMemo(() => ({ rd }), [rd])
   const computer = (id: string) => view?.computers.find((c) => c.id === id)?.name ?? 'inny komputer'
@@ -92,12 +113,23 @@ function Versions({ r }: { r: HistoryRecord }) {
     try {
       await window.rd.historyRestore(r.kind, r.id, v.file)
       await reloadData()
+      setTries((x) => x + 1)
       toast('Wersja przywrócona.', 'success')
     } catch (e) {
       toast(`Nie przywrócono: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
   }
-  if (!versions) return <div className="text-muted">Czytam wersje…</div>
+  if (!versions)
+    return failed ? (
+      <div className="flex items-center gap-2 text-[12.5px]" data-testid="history-failed">
+        <span className="text-muted">Nie da się teraz odczytać wersji.</span>
+        <button type="button" className="btn" onClick={() => setTries((x) => x + 1)}>
+          Spróbuj ponownie
+        </button>
+      </div>
+    ) : (
+      <div className="text-muted">Czytam wersje…</div>
+    )
   return (
     <div className="flex max-w-[820px] flex-col gap-3" data-testid="history-versions">
       {!r.exists && <p className="rounded border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px]">Ten rekord jest usunięty – przywrócenie wersji tworzy go od nowa.</p>}

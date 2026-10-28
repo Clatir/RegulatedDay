@@ -4,6 +4,10 @@
  * „Strona B” step closes at once in the window (A6-15).
  */
 import { describe, expect, it } from 'vitest'
+import type { FolderProbe, HistoryRecord } from '@shared/api'
+import { failedFinish } from '@renderer/features/wizard/wizardStore'
+import { retryMessage } from '@renderer/features/settings/DataSection'
+import { chosenRecord, recordKey } from '@renderer/features/history/HistoryPage'
 import { dropSettled, type TimelineItem } from '@renderer/features/plan/Timeline'
 import { instantOf, savedInstant, SKIPPED_HOUR, typedOf } from '@renderer/features/ritual/dayTime'
 import { sideBShown } from '@renderer/features/today/SideBStep'
@@ -96,5 +100,40 @@ describe('okna dialogowe trzymają fokus i skróty stron czekają (A6-21)', () =
     off()
     off()
     expect(modalOpen()).toBe(false)
+  })
+})
+
+describe('Historia po „Przywróć tę wersję” (A7-10)', () => {
+  it('wybrany rekord jest brany z bieżącej listy – po przywróceniu nie jest już „usunięty”', () => {
+    const before: HistoryRecord[] = [{ kind: 'request', id: 'r1', rel: 'requests/r1.json', versions: 2, last: 1, exists: false }]
+    const after: HistoryRecord[] = [{ ...before[0]!, versions: 3, last: 2, exists: true }]
+    const key = recordKey(before[0]!)
+    expect(chosenRecord(before, key)?.exists).toBe(false)
+    expect(chosenRecord(after, key)).toEqual(after[0])
+    expect(chosenRecord(after, 'request/r2')).toBeNull()
+    expect(chosenRecord(null, key)).toBeNull()
+  })
+})
+
+describe('kreator po nieudanym „Zakończ” (A7-11)', () => {
+  const probe = (hasData: boolean): FolderProbe => ({ path: 'C:\OneDrive\RD', exists: true, empty: !hasData, hasData, unreadable: null, entries: hasData ? 5 : 0, inOneDrive: true })
+
+  it('przycisk wolny z powodem; dane zapisane przed błędem – kreator kolejnego komputera na podsumowaniu', () => {
+    const p = failedFinish({ probe: probe(false) }, 'Folder nie otworzył się w czasie.', probe(true), 2)
+    expect(p).toMatchObject({ busy: false, step: 2, probe: { hasData: true } })
+    expect(p.error).toContain('kliknij „Zakończ” jeszcze raz')
+  })
+
+  it('bez danych w folderze – zostaje pierwszym komputerem, sam powód', () => {
+    expect(failedFinish({ probe: probe(false) }, 'Brak miejsca.', probe(false), 2)).toEqual({ busy: false, probe: probe(false), error: 'Brak miejsca.' })
+    // The folder could not be looked at again: the probe before stays.
+    expect(failedFinish({ probe: probe(false) }, 'Brak miejsca.', null, 2).probe).toEqual(probe(false))
+  })
+})
+
+describe('„Spróbuj ponownie” przeniesienia (A7-20)', () => {
+  it('nieudana próba mówi, że znów się nie udało, i dlaczego', () => {
+    expect(retryMessage({ ok: false, error: 'brak dostępu' })).toEqual({ text: 'Folder dalej się nie otwiera: brak dostępu', kind: 'error' })
+    expect(retryMessage({ ok: true, error: null }).kind).toBe('success')
   })
 })

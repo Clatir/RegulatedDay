@@ -11,6 +11,7 @@ import { personName, type RdFile } from '@shared/model/rd'
 import { logicalDayOf } from '@shared/time/day'
 import { DateField } from '../../components/fields'
 import { Field, Section } from '../../components/ui'
+import { useBusy } from '../../lib/busy'
 import { useData } from '../../store/data'
 import { toast } from '../../store/ui'
 
@@ -224,18 +225,26 @@ function WholeRestore({ backup }: { backup: BackupItem }) {
 }
 
 /** A whole backup restored into a folder that did not open: this computer stayed in its folder; „Spróbuj ponownie”. */
+/** What „Spróbuj ponownie” of a move says – also when it fails again, never nothing (A7-20). */
+export function retryMessage(r: { ok: boolean; error: string | null }): { text: string; kind: 'success' | 'error' } {
+  return r.ok ? { text: MOVED_TEXT, kind: 'success' } : { text: `Folder dalej się nie otwiera: ${r.error ?? 'nieznany błąd'}`, kind: 'error' }
+}
+
 function PendingMove({ to, error }: { to: string; error: string }) {
-  const retry = async () => {
-    const r = await window.rd.moveTo(to).catch((e: unknown) => ({ ok: false, error: messageOf(e) }))
-    if (r.ok) toast(MOVED_TEXT, 'success', 10_000)
-  }
+  const [busy, run] = useBusy()
+  const retry = () =>
+    run(async () => {
+      const r = await window.rd.moveTo(to).catch((e: unknown) => ({ ok: false, error: messageOf(e) }))
+      const m = retryMessage(r)
+      toast(m.text, m.kind, 10_000)
+    })
   return (
     <span className="mb-1.5 flex flex-wrap items-center gap-2 text-[12.5px]" data-testid="pending-move">
       <span>
         Kopia jest już w {to}, ale ten folder nie otworzył się ({error}) – pracuję dalej w obecnym folderze.
       </span>
-      <button type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => void retry()}>
-        Spróbuj ponownie
+      <button type="button" className="btn h-[24px] px-2 text-[12px]" disabled={busy} onClick={() => void retry()} data-testid="pending-move-retry">
+        {busy ? 'Próbuję…' : 'Spróbuj ponownie'}
       </button>
     </span>
   )
