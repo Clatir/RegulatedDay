@@ -244,7 +244,10 @@ $byName = New-Object System.Windows.Automation.PropertyCondition($A::NamePropert
 $win = $null
 for ($i = 0; $i -lt 900 -and -not $win; $i++) { $win = $A::RootElement.FindFirst($scope::Children, $byName); if (-not $win) { Start-Sleep -Milliseconds 200 } }
 if (-not $win) { 'no-window'; exit }
-$btn = $win.FindFirst($scope::Descendants, (New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, 'Uruchom mimo to')))
+# The window comes before its controls reach UI Automation (a fast runner looks within 100 ms): asked again up to 30 s.
+$byButton = New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, 'Uruchom mimo to')
+$btn = $null
+for ($i = 0; $i -lt 150 -and -not $btn; $i++) { $btn = $win.FindFirst($scope::Descendants, $byButton); if (-not $btn) { Start-Sleep -Milliseconds 200 } }
 if (-not $btn) { 'no-button'; exit }
 $hwnd = [long]$win.Current.NativeWindowHandle
 $r = $btn.Current.BoundingRectangle
