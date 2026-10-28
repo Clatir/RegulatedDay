@@ -25,7 +25,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 
@@ -76,6 +76,10 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8e.2 Bez folderu danych – neutralny pasek, bez Próby
    - [ ] E8f.1 Odpowiedź „Posiłek” na pytanie o nieobecność
    - [ ] E8f.2 Linie paska: kotwica, „zostaje”, „nie przedłużono”, „Pracowałem do teraz”
+   - [ ] E8g.1 Odhaczanie rutyny w pasku i w „Dziś” (rano)
+   - [ ] E8g.2 Rytuał w dniu, w którym praca się nie zaczęła (gdy się zdarzy)
+   - [ ] E8g.3 Kopia dnia na dziś i dni minione z ostrzeżeniem
+   - [ ] E8g.4 Święta Wielkiej Brytanii w kalendarzu i pulsowanie paska
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
@@ -1357,3 +1361,43 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   pracy o 17:30 · Pracowałem do 18:30”.
 - **Nie przechodzi, gdy:** którejś linii brak, jej przycisk nic nie robi albo „zostaje · Odwołaj” wraca po pracy, która
   przyszła po „Koniec pracy”.
+
+### E8g – funkcje D325, część 2a (0.22.0)
+
+#### E8g.1 Odhaczanie rutyny w pasku i w „Dziś” (0.22.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/routine-check.test.ts`, `tests/fs/widget.test.ts` („rutyna w pasku”),
+  `tests/e2e/screens.spec.ts` („rutyny (D328)”). Ty: rano po porannej rutynie.
+- **Jak sprawdzić:** w planie dnia blok kategorii „Rutyny” z wybraną rutyną (dwie wersje); po jej czasie wróć do
+  komputera. W pasku kliknij „Kroki ▸”, wybierz „gorsze dni”, odhacz krok i „✓ Zapisz zaznaczone”; drugiego dnia
+  odhacz na karcie w „Dziś” („✓ Wszystkie”).
+- **Oczekiwany efekt:** pasek: „Rutyna poranna · ✓ Wszystkie · Kroki ▸ · gorsze dni” (bez kropki); w „Dziś” karta
+  z tymi samymi krokami i wyborem wersji; zapis w jednym miejscu zamyka oba, karta daje „Cofnij”.
+- **Nie przechodzi, gdy:** linii albo karty nie ma, zapis nie zamyka drugiego miejsca, „Kroki ▸” nic nie rozwija
+  albo linia wisi w pasku dłużej niż 3 h po rutynie.
+
+#### E8g.2 Rytuał w dniu, w którym praca się nie zaczęła (0.22.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/ritual.test.ts` („kiedy rytuał”). Ty: przy okazji takiego dnia.
+- **Jak sprawdzić:** dzień z pracą w planie, której nie zaczynasz; po planowanym końcu ostatniego bloku pracy spójrz na
+  „Dziś” i pasek.
+- **Oczekiwany efekt:** karta rytuału w „Dziś” i „Rytuał” w pasku, jak po „Koniec pracy” (D329).
+- **Nie przechodzi, gdy:** rytuału nie ma do końca dnia albo pojawia się przed planowanym końcem tej pracy.
+
+#### E8g.3 Kopia dnia na dziś i dni minione z ostrzeżeniem (0.22.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/screens-022.test.ts` („kopia dnia”). Ty: rzut oka.
+- **Jak sprawdzić:** „Skopiuj ten dzień do…”, zaznacz dziś i dzień w przyszłości, „Skopiuj”.
+- **Oczekiwany efekt:** zamiast kopii ostrzeżenie „Kopia zastąpi plan dnia, który już trwał (…)” z „Kopiuj mimo to”
+  i „Tylko dni po dziś (1)”; same dni po dziś – bez ostrzeżenia (D330).
+- **Nie przechodzi, gdy:** kopia na dziś idzie bez ostrzeżenia albo „Tylko dni po dziś” kopiuje też dziś.
+
+#### E8g.4 Święta Wielkiej Brytanii w kalendarzu i pulsowanie paska (0.22.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/screens-022.test.ts`. **Tylko Ty:** pulsowanie na pasku pulpitu.
+- **Jak sprawdzić:** kalendarz na sierpień 2027 (30.08); w Ustawieniach „Pulsowanie paska” włącz i poczekaj na 5 min
+  przed końcem bloku.
+- **Oczekiwany efekt:** 30.08.2027 z oznaczeniem „święto UK” i nazwą w podpowiedzi; pasek pulpitu przy 5 i przy 0 min
+  pulsuje obwódką trzy razy i przestaje (z wyłączonymi animacjami – sam kolor; w trybie sesji nie pulsuje).
+- **Nie przechodzi, gdy:** brak oznaczenia, pasek pulsuje bez końca, pulsuje mimo wyłączonego ustawienia albo
+  przygasza tekst.

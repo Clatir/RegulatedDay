@@ -351,6 +351,30 @@ describe('widget w procesie głównym', () => {
     expect(await extends_()).toEqual([15])
   })
 
+  it('rutyna w pasku: „✓ Wszystkie”, „gorsze dni” i „Zapisz zaznaczone” zapisują jeden stan – linia znika (D328)', async () => {
+    mkdirSync(join(dataDir, 'routines'), { recursive: true })
+    writeFileSync(join(dataDir, paths.record('routine', 'r')), JSON.stringify({ schema: 1, id: 'r', name: 'Poranna', normal: [{ id: 'woda', name: 'woda', min: 2 }, { id: 'kot', name: 'kot', min: 8 }], worse: [{ id: 'woda', name: 'woda', min: 2 }] }))
+    writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'rut', categoryId: 'rutyny', startMin: 8 * 60, durationMin: 10, fixed: false, origin: 'user', routine: 'r' }, { id: 'rut2', categoryId: 'rutyny', startMin: 9 * 60, durationMin: 10, fixed: false, origin: 'user', routine: 'r' }] }))
+    const { w, folder, clock } = await make()
+    await w.refresh()
+    const id = (b: string) => `routine:${DAY}:${b}`
+    expect(w.current().lines.filter((l) => l.id.startsWith('routine:')).map((l) => l.id)).toEqual([id('rut'), id('rut2')])
+    expect(w.current().routines.map((r) => r.name)).toEqual(['Poranna', 'Poranna'])
+    await w.act('line', `${id('rut')}|worse`, 'bar')
+    clock.now += 1_000
+    await w.act('routine', 'rut2|normal|kot', 'panel')
+    const done = (await folder.readDay(DAY)).events.filter((e) => e.k === 'routine.done') as unknown as Array<{ block: string; version: string; steps: string[]; dom: string }>
+    expect(done.map((e) => [e.block, e.version, e.steps, e.dom])).toEqual([
+      ['rut', 'worse', ['woda'], 'meta'],
+      ['rut2', 'normal', ['kot'], 'meta']
+    ])
+    expect(w.current().lines.some((l) => l.id.startsWith('routine:'))).toBe(false)
+    // A stale click (the card in „Dziś” saved it first) writes nothing more and says why.
+    clock.now += 1_000
+    await w.act('line', `${id('rut')}|all`, 'bar')
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'routine.done')).toHaveLength(2)
+  })
+
   it('„Przedłuż” z linii „nie przedłużono”: koszt jako „Przedłuż +15” z krokami ±15 min, potwierdzenie przedłuża ten blok (przegląd 0.21.0)', async () => {
     writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'f', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: true, origin: 'user' }] }))
     const { w, folder, at, clock } = await make()

@@ -1299,7 +1299,8 @@ export class DataFolder {
     const now = this.clock.now()
     const ready: EventDraft[] = []
     for (const d of drafts) {
-      const draft: EventDraft = { ...d, day, dom: 'timer' }
+      // A record that changes no timing (a routine ticked off) says so: an older version skips it without waiting for an update.
+      const draft: EventDraft = { ...d, day, dom: d.dom === 'meta' ? 'meta' : 'timer' }
       const check = parseEvent(JSON.stringify({ ...draft, id: 'x', c: this.o.computer, n: 0, t: now, l: now, v: this.rulesVersion }))
       if (!check.ok || !isKnown(check.event)) throw new Error(`zdarzenie ${d.k}: ${check.ok ? 'nieznane' : check.why}`)
       ready.push(draft)

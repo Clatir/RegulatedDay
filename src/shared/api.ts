@@ -201,6 +201,7 @@ export type WidgetAction =
   | 'request'
   | 'requestEnd'
   | 'variants'
+  | 'routine'
   | 'barClick'
   | 'extendStep'
 
@@ -336,6 +337,9 @@ export interface TimerIn {
   estimateMin?: number | null
   from?: number
   to?: number
+  /** A routine ticked off (`routineDone`, D328): its version and the steps done. */
+  version?: 'normal' | 'worse'
+  steps?: string[]
 }
 
 /** What a click did: nothing (why), or a cost waiting for the second click within 10 s. */

@@ -343,7 +343,7 @@ function onHelperEvent(m: HelperMessage): void {
   }
 }
 
-const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm', 'undo', 'cutOff', 'back', 'fewer', 'better', 'drink', 'restart', 'mark', 'requestNow', 'requestEnd', 'requestAfter'])
+const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm', 'undo', 'cutOff', 'back', 'fewer', 'better', 'drink', 'restart', 'mark', 'requestNow', 'requestEnd', 'requestAfter', 'routineDone', 'routineUndo'])
 
 /** A value of a ritual's answer from a window: an instant, a person (≤ 64 characters), a stretch [from, to) – else none. */
 function ritualValue(v: unknown): RitualValue {
@@ -379,7 +379,10 @@ function timerIn(c: TimerIn): TimerIn {
     urgent: c.urgent === true,
     estimateMin: num(c.estimateMin) ?? null,
     from: num(c.from),
-    to: num(c.to)
+    to: num(c.to),
+    // A routine ticked off in „Dziś” (D328): its version and at most 40 step ids.
+    version: c.version === 'worse' ? 'worse' : c.version === 'normal' ? 'normal' : undefined,
+    steps: Array.isArray(c.steps) ? c.steps.map(str).filter((s): s is string => !!s).slice(0, 40) : undefined
   }
 }
 

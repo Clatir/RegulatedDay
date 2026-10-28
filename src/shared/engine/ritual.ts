@@ -17,7 +17,7 @@ import { dayStart } from '../time/day'
 import { addDays } from '../time/zone'
 import { activityOf, useWithin, type Activity } from './activity'
 import { answerEvents, type Question } from './auto'
-import { plannedSpan, startPlanned } from './blocks'
+import { isBoundaryWork, plannedSpan, startPlanned } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
 import { explainMinutes, inExplain, type Explain } from './explain'
 import { foldFacts, OPEN, ranMinutes, type BlockFact } from './facts'
@@ -403,14 +403,33 @@ export function closeEffect(ctx: DayContext, state: DayState, at: number, base: 
 
 /**
  * The ritual is due (D318, T505) – one rule for the bar and the window: from its first day; today after the end of work
- * (confirmed, or counted) while no work runs – a day without work any time; a day before while it is not frozen.
+ * (confirmed, or counted) while no work runs – a day without work any time, a day whose planned work never began from
+ * the planned end of its last work block (D329); a day before while it is not frozen.
  */
 export function ritualDue(state: DayState, today: string, ritualFrom: string | null): boolean {
   const date = state.grid.date
   if (!ritualFrom || date < ritualFrom || state.facts.frozen || date > today) return false
   if (date < today || state.noWorkDay) return true
   const t = timerNow(state)
-  return (state.workEnd != null || state.ends.length > 0) && ![t.fg, ...t.bg].some((x) => x?.info.isWork)
+  if ([t.fg, ...t.bg].some((x) => x?.info.isWork)) return false
+  return state.workEnd != null || state.ends.length > 0 || unbegunWorkOver(state)
+}
+
+/**
+ * The planned work never began and the plan's last work block (by its own planned times – the forecast keeps moving
+ * an unstarted flexible block on) has ended (D329). A block parked or cancelled before it began is no work of the plan.
+ */
+function unbegunWorkOver(state: DayState): boolean {
+  if (state.blocks.some((b) => b.isWork && state.facts.blocks.get(b.id)?.startedAt != null)) return false
+  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  let last: number | null = null
+  for (const b of state.blocks) {
+    const f = state.facts.blocks.get(b.id)
+    if (!b.inPlan || !isBoundaryWork(b) || f?.parkedAt != null || f?.cancelledAt != null) continue
+    const span = plannedSpan(b, byId)
+    if (span) last = Math.max(last ?? span.end, span.end)
+  }
+  return last != null && state.now >= last
 }
 
 /** A category of the day for its felt cost (D319): the minutes it ran, the answer given (the last one), null – none. */

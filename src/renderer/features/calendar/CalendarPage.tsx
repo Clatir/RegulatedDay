@@ -22,7 +22,7 @@ import { dayFilesNow, editOf, isSaved, trySaveWith, useData } from '../../store/
 import { useBusy } from '../../lib/busy'
 import { useMachine } from '../../store/machine'
 import { openDay, toast } from '../../store/ui'
-import { DAY_TYPE_COLORS } from './dayTypes'
+import { DAY_TYPE_COLORS, holidayMarks } from './dayTypes'
 import { gridDates, MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
 
 export function CalendarPage() {
@@ -60,19 +60,15 @@ export function CalendarPage() {
     const type: DayTypeId = own?.dayType ?? s.weekTypes[weekday(d) - 1]!
     const marks: string[] = []
     if (own?.dayType) marks.push(DAY_TYPE_NAMES[type].replace('Zjazd ', 'zjazd ').toLowerCase())
-    // A holiday is a day with a holiday's name (a market closed on a weekend is not one).
-    const pl = marketDay('PL', d)
-    if (pl.closed && pl.names.length) marks.push('święto')
-    const us = [marketDay('NYSE', d), marketDay('CME_FX', d)]
-    if (us.some((h) => h.closed && h.names.length)) marks.push('święto USA')
-    else if (us.some((h) => h.earlyClose)) marks.push('skrócona sesja')
+    const holidays = holidayMarks(d)
+    marks.push(...holidays.marks)
     if (s.sessions.some((x) => {
       const w = sessionWindow(x, d)
       return w != null && sessionShiftMin(x, w.start) !== 0
     }))
       marks.push('sesje −1 h')
     if (own?.wakeMin != null) marks.push(`pobudka ${logicalClock(own.wakeMin)}`)
-    return { type, own: own?.dayType != null, marks, title: [...pl.names, ...us.flatMap((h) => h.names)].join(', ') || undefined }
+    return { type, own: own?.dayType != null, marks, title: holidays.names.join(', ') || undefined }
   }
 
   /**

@@ -101,7 +101,7 @@ function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => voi
           <Steps key={v} version={v} steps={routine[v]} onChange={(fn) => change((r) => ({ [v]: fn(r[v]) }))} />
         ))}
       </div>
-      <p className="text-[12px] text-muted">Wersję wybierasz jednym kliknięciem przy odhaczaniu kroków. Wersja na gorsze dni bez kroków znaczy: jak zwykła.</p>
+      <p className="text-[12px] text-muted">Kroki odhaczasz po powrocie do komputera – w pasku („✓ Wszystkie · Kroki ▸ · gorsze dni”) albo na karcie w „Dziś”; tam jednym kliknięciem wybierasz też wersję. Wersja na gorsze dni bez kroków znaczy: jak zwykła.</p>
     </div>
   )
 }

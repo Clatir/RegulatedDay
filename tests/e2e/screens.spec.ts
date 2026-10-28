@@ -134,6 +134,8 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('nav-calendar').click()
       await expect(page.getByTestId('calendar')).toBeVisible()
       const todayCell = page.getByTestId(`day-${logicalToday()}`)
+      // The days' files read first (today's own type „zwykły” is marked from its file) – then the text to keep.
+      await expect(todayCell).toContainText('zwykły')
       const todayText = (await todayCell.textContent()) ?? ''
       await todayCell.click({ modifiers: ['Control'] })
       await page.getByTestId('calendar-type-zjazd-zdalny').click()
@@ -483,6 +485,57 @@ test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z
       await shot(page, 'e5-01-request')
       await page.getByTestId('bar-request-end').click()
       await expect(page.getByTestId('bar-request')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+/** The logical minute now (04:00 = 240, after midnight + 1440). */
+function logicalMinuteNow(): number {
+  const [h, m] = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(Date.now()).split(':').map(Number)
+  const v = h! * 60 + m!
+  return v < 240 ? v + 1440 : v
+}
+
+test('rutyny (D328): karta w „Dziś” z wersją i krokami; „Kroki ▸” w pasku – zapis w jednym miejscu zamyka oba', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-routines-'))
+  seed(dataDir, { sessions: false })
+  const today = logicalToday()
+  const start = Math.max(240, logicalMinuteNow() - 20)
+  mkdirSync(join(dataDir, 'routines'), { recursive: true })
+  writeFileSync(join(dataDir, 'routines', 'r.json'), JSON.stringify({ schema: 1, id: 'r', name: 'Poranna', normal: [{ id: 'woda', name: 'woda', min: 2 }, { id: 'kot', name: 'kot', min: 8 }], worse: [{ id: 'woda', name: 'woda', min: 2 }], archived: false }))
+  const dayFile = join(dataDir, 'days', today.slice(0, 4), `${today}.json`)
+  const day = JSON.parse(readFileSync(dayFile, 'utf8'))
+  day.blocks.push({ id: 'rut', categoryId: 'rutyny', startMin: start, durationMin: 10, fixed: false, routine: 'r' }, { id: 'rut2', categoryId: 'rutyny', startMin: start, durationMin: 10, fixed: false, routine: 'r' })
+  writeFileSync(dayFile, JSON.stringify(day))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('routine-card')).toHaveCount(2, { timeout: 30_000 })
+      // The card: the version „na gorsze dni”, one step ticked, „Zapisz zaznaczone”.
+      const card = page.getByTestId('routine-card').first()
+      await card.getByTestId('routine-card-version').getByText('na gorsze dni').click()
+      await card.getByTestId('routine-card-step-woda').check()
+      await card.getByTestId('routine-card-save').click()
+      await expect(page.getByTestId('routine-card')).toHaveCount(1)
+      await shot(page, 'e8-routine-card')
+      // The bar (not in the night's quiet): „Kroki ▸” unfolds the steps of the other routine; its save closes the card.
+      await expect.poll(() => page.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
+      const night = await page.evaluate(async () => (await window.rd.widget()).night)
+      if (night) await page.getByTestId('routine-card-all').click()
+      else {
+        const line = page.getByTestId('bar-main').getByTestId(`bar-line-routine:${today}:rut2`)
+        await expect(line).toBeVisible()
+        await line.getByTestId('bar-act-routine-steps').click()
+        await page.getByTestId('bar-routine-step-kot').click()
+        await page.getByTestId('bar-routine-save').click()
+        await expect(line).toHaveCount(0)
+      }
+      await expect(page.getByTestId('routine-card')).toHaveCount(0)
+      const logDir = join(dataDir, 'log', today.slice(0, 4), today)
+      await expect.poll(() => readdirSync(logDir).map((f) => readFileSync(join(logDir, f), 'utf8')).join('').split('"k":"routine.done"').length - 1, { timeout: 15_000 }).toBe(2)
     })
     expect(errors).toEqual([])
   } finally {

@@ -11,6 +11,7 @@
 import { isIsoDate } from '../time/zone'
 import { POOLS, type Costs, type Pool, type PoolValues } from './categories'
 import type { PlanBlock } from './plan'
+import { MAX_STEPS, ROUTINE_VERSIONS, type RoutineVersion } from './routines'
 import { settingsFrom, type DayTypeId, type RulesSettings } from './settings'
 
 export type Domain = 'timer' | 'energy' | 'game' | 'meta'
@@ -161,6 +162,12 @@ export type TimerEvent =
   /** The felt cost of a category of the day, in the ritual (D319, optional): against its cost in the settings. */
   | (EventBase & { k: 'cost.felt'; at: number; category: string; feel: FeltCost })
   /**
+   * A routine's steps ticked off (D328, spec „Rutyna”: after you are back at the computer, all at once or one by one):
+   * the routine of a block of the plan, the version picked with it and the steps done (their ids). Only a record – the
+   * block's times stay as the timer and the plan have them.
+   */
+  | (EventBase & { k: 'routine.done'; block: string; at: number; routine: string; version: RoutineVersion; steps: string[] })
+  /**
    * The day frozen by the leader (spec „Ocena dnia”): the last event of every computer it counted (`know` – the grade
    * counts only up to them), the computers whose records were missing (frozen without waiting after 72 h), and the grade.
    */
@@ -274,6 +281,7 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'request.person': { request: isStr, at: isNum, person: isStr },
   'rest.not': { at: isNum, from: isNum, to: isNum },
   'cost.felt': { at: isNum, category: isStr, feel: (v) => (FELT_COSTS as readonly unknown[]).includes(v) },
+  'routine.done': { block: isStr, at: isNum, routine: isStr, version: (v) => (ROUTINE_VERSIONS as readonly unknown[]).includes(v), steps: (v) => Array.isArray(v) && v.length <= MAX_STEPS && v.every(isStr) },
   'day.freeze': { at: isNum, how: (v) => v === 'ready' || v === 'timeout', know: isPlain, missing: Array.isArray, grade: isPlain },
   'presence.first': { at: isNum },
   'gap.open': { gap: isStr, kind: (v) => v === 'input' || v === 'use', from: isNum },

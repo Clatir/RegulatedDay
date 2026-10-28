@@ -10,6 +10,7 @@
  * kliknięciem pokazuje koszt …, a drugim w ciągu 10 s je wykonuje”) – except „Dalej”, whose first click already ends the
  * running block.
  */
+import { ROUTINE_VERSIONS, type RoutineVersion } from '../model/routines'
 import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
 import { workedUntilOf } from './explain'
@@ -87,6 +88,9 @@ export type TimerAction =
   | { a: 'mark'; question: string; answer: string }
   /** „Pracowałem do teraz” on the bar: the time to explain after a work block answered „praca” to now, the end of work then. */
   | { a: 'workedUntil'; explain: string }
+  /** A routine's steps ticked off with its version (D328), and its „Cofnij”. */
+  | { a: 'routineDone'; block: string; version: RoutineVersion; steps: string[] }
+  | { a: 'routineUndo'; block: string }
 
 /** The cost a first click shows (spec: „przedłużenie · −40 min puli”, „pora snu +40 min”, „przekroczenie”). */
 export interface ActionCost {
@@ -483,6 +487,20 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
     case 'mark':
       if (state.facts.answers.has(act.question)) return no('już odpowiedziane')
       return yes([{ k: 'question.answer', at, question: act.question, answer: act.answer, value: null }])
+    case 'routineDone': {
+      // The bar and „Dziś” save one state (D328): the first save closes both, a second one finds it saved.
+      const routine = ctx.plan.find((p) => p.id === act.block)?.routine
+      if (!routine) return no('ten blok nie ma rutyny')
+      if (state.facts.routines.has(act.block)) return no('ta rutyna jest już zapisana')
+      const steps = [...new Set(Array.isArray(act.steps) ? act.steps : [])].filter((s) => typeof s === 'string' && s.length > 0)
+      if (!steps.length || !ROUTINE_VERSIONS.includes(act.version)) return no('zaznacz co najmniej jeden krok')
+      return yes([{ k: 'routine.done', dom: 'meta', at, block: act.block, routine, version: act.version, steps }])
+    }
+    case 'routineUndo': {
+      const done = state.facts.routines.get(act.block)
+      if (!done) return no('ta rutyna nie jest zapisana')
+      return yes([{ k: 'undo', at, target: done.id, reason: 'user' }])
+    }
     case 'restart': {
       const info = byId.get(act.block)
       const f = state.facts.blocks.get(act.block)

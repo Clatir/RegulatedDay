@@ -34,6 +34,7 @@ import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
 import { CopyDayDialog, MoveDialog } from './MoveDialogs'
+import { RoutineCards } from './RoutineCard'
 import { TypeChangeDialog } from './TypeChangeDialog'
 import { ritualDue } from '@shared/engine/ritual'
 import { GameLine } from '../game/GameLine'
@@ -193,6 +194,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             {lateWake && (lateWake.waitUntilMin == null || nowMin >= lateWake.waitUntilMin) && <LateWakeCard model={model} lw={lateWake} names={names} />}
             {isToday && ritualFrom && <UnclosedDays />}
             {isToday && <MorningPlan model={model} names={names} />}
+            {isToday && <RoutineCards model={model} names={names} />}
             {ritual && (
               <div ref={ritualRef}>
                 <RitualPanel key={date} model={model} names={names} onClosed={isToday ? undefined : () => openDay(null)} />

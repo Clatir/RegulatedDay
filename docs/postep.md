@@ -41,6 +41,12 @@
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
 
+## 0.22.0 – funkcje D325, część 2a (ciąg E, 5.2f)
+- Gałąź `claude/0.22.0-funkcje` (od 0.21.0) od 28.10 ok. 19:20, w osobnej kopii roboczej `C:\CC-Projekty\RD-022`.
+- Zakres (T520): odhaczanie rutyn w pasku i „Dziś” (D328, A6-10), rytuał bez zaczętej pracy (D329), kopia dnia
+  z ostrzeżeniem (D330, A6-13), święta UK (A7-18), pulsowanie paska (D225, A7-15). Reszta 5.2f (ostrzeżenia, dźwięk,
+  „Zapomnij komputer”: A3-06, A3-07, A3-13, A3-14, A8-02, A8-04, A8-07) – 0.23.0.
+
 ## 0.21.0 – funkcje D325, część 1b (ciąg E, 5.2e)
 - Gałąź `claude/0.21.0-funkcje` (od 0.20.0) od 28.10 ok. 18:40.
 - Zakres (T519): druga zmiana z kosztem i „Przesuń na teraz” (A1-04), odpowiedzi „Posiłek”, „Regeneracja”, „Byłem na

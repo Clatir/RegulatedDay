@@ -210,7 +210,8 @@ export class WidgetEngine {
           people: m.people,
           person: (id) => personName(rd, id),
           carried: m.carried,
-          ritualFrom: await folder.ritualDay()
+          ritualFrom: await folder.ritualDay(),
+          routines
         }),
         note: this.note
       }
@@ -560,6 +561,12 @@ export class WidgetEngine {
         if (!res.ok && res.why) this.say(res.why)
         return this.refresh()
       }
+      case 'routine': {
+        // „✓ Zapisz zaznaczone” of the unfolded steps (D328): `<block>|<normal|worse>|<step ids, comma-separated>`.
+        const [block, version, steps] = (arg ?? '').split('|')
+        if (!block || (version !== 'normal' && version !== 'worse')) return
+        return this.routineDone(day, block, version, (steps ?? '').split(',').filter(Boolean))
+      }
       case 'variants': {
         const [what, which] = (arg ?? '').split('|')
         if (what === 'open') return this.openVariants()
@@ -587,6 +594,13 @@ export class WidgetEngine {
           label = `Przedłuż +${click.minutes}`
         }
         else if (kind === 'workedUntil') click = { a: 'workedUntil', explain: id }
+        // A routine (D328): „✓ Wszystkie” – every step of the usual version, „gorsze dni” – every step of that one.
+        else if (kind === 'routine') {
+          const r = v.routines.find((x) => x.line === line)
+          if (!r || (act !== 'all' && act !== 'worse')) return
+          const version = act === 'worse' && r.worse.length ? 'worse' : 'normal'
+          return this.routineDone(day, r.block, version, r[version].map((s) => s.id))
+        }
         else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
         else if (kind === 'fewerOffer') {
           await this.d.timer({ a: 'mark', question: line, answer: act, day })
@@ -637,6 +651,13 @@ export class WidgetEngine {
       if (!r.ok && r.why) this.say(r.why)
     }
     await this.refresh()
+  }
+
+  /** A routine's steps saved (D328) – the same click as the card in „Dziś”, so the first save closes both (its line goes). */
+  private async routineDone(day: string | undefined, block: string, version: 'normal' | 'worse', steps: string[]): Promise<void> {
+    const r = await this.d.timer({ a: 'routineDone', block, version, steps, day })
+    if (!r.ok) this.say(r.why ?? 'rutyna nie zapisała się')
+    return this.refresh()
   }
 
   /** A cost waits for its second click within 10 s, in place of its button. */

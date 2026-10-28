@@ -27,6 +27,8 @@ export interface MachinePrefs {
   brightness: number
   /** The room's motion and the bar's optional pulse; off = the colour alone. */
   animations: boolean
+  /** The desktop bar beats softly at 5 and 0 min (D225, off by default; without animations the colour alone). */
+  barPulse: boolean
   /** The desktop bar under the windows (on by default, off on any computer). */
   desktopBar: boolean
   /** The icon's panel and the desktop bar stay out of recordings and screen sharing. */
@@ -68,6 +70,7 @@ export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   zoom: 1,
   brightness: 1,
   animations: true,
+  barPulse: false,
   desktopBar: true,
   hideFromCapture: true,
   barPlacement: null,
@@ -115,6 +118,7 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
     zoom: num(r.zoom, 0.9, 1.5, DEFAULT_MACHINE_PREFS.zoom),
     brightness: num(r.brightness, 0.5, 1, DEFAULT_MACHINE_PREFS.brightness),
     animations: bool(r.animations, DEFAULT_MACHINE_PREFS.animations),
+    barPulse: bool(r.barPulse, DEFAULT_MACHINE_PREFS.barPulse),
     desktopBar: bool(r.desktopBar, DEFAULT_MACHINE_PREFS.desktopBar),
     hideFromCapture: bool(r.hideFromCapture, DEFAULT_MACHINE_PREFS.hideFromCapture),
     barPlacement: placementFrom(r.barPlacement),

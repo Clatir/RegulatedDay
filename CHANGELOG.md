@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.22.0
+- Rutyny odhaczasz po powrocie do komputera: w pasku „Rutyna poranna · ✓ Wszystkie · Kroki ▸ · gorsze dni” – „Kroki ▸” rozwija listę kroków z wyborem wersji i „✓ Zapisz zaznaczone” – a w „Dziś” karta z tymi samymi krokami. Zapis w jednym miejscu zamyka oba; karta ma „Cofnij”. Linia w pasku stoi do 3 h po rutynie, karta – do końca dnia.
+- Dzień, w którym zaplanowana praca się nie zaczęła, ma wieczorny rytuał od planowanego końca ostatniego bloku pracy – karta w „Dziś” i „Rytuał” w pasku, jak po „Koniec pracy”.
+- „Skopiuj ten dzień do…” na dziś albo dzień miniony najpierw ostrzega, że kopia zastąpi plan dnia, który już trwał – „Kopiuj mimo to” albo „Tylko dni po dziś”.
+- Kalendarz oznacza święta Wielkiej Brytanii („święto UK”, skrócona sesja w Londynie).
+- Nowe ustawienie tego komputera „Pulsowanie paska” (domyślnie wyłączone): pasek pulpitu pulsuje obwódką trzy razy przy 5 min do końca i przy końcu; bez animacji zostaje sam kolor.
+
 ## 0.21.0
 - Druga zmiana zaczęta przed swoim czasem albo przedłużona za swój koniec liczy się jak zwykłe przedłużenie – z kosztem i drugim kliknięciem, a nie po cichu. Przy wcześniejszym starcie (z panelu bloku) obok „Potwierdź” jest „Przesuń na teraz”: przesuwa drugą zmianę na teraz, z tą samą długością, i zaczyna ją bez kosztu.
 - Pytanie o nieobecność ma nowe odpowiedzi: „Posiłek” (odhacza obiad z planu z czasami nieobecności – z „Cofnij”; bez posiłku w planie nieobecność nie liczy się jako odpoczynek), „Regeneracja” i „Byłem na prośbie” (osobę wybierzesz w rytuale). Blok kończy się wtedy w chwili odejścia.
