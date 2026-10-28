@@ -116,6 +116,10 @@ test('pasek pulpitu przeciągnięty za uchwyt idzie za kursorem i zostaje tam, g
     await withMainLog(userData, async () => {
       const barBounds = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day – pasek')!.getBounds())
       await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – pasek' && w.isVisible())), { timeout: 30_000 }).toBe(true)
+      const bar = await viewPage(app, 'bar')
+      const handle = bar.getByTestId('bar-drag')
+      await expect(handle).toHaveAttribute('aria-label', 'przeciągnij pasek')
+      // Its place once its view is drawn (a line coming at the start changes its height and so its place).
       const start = await settledBarBounds(app)
       // The cursor where the test puts it (the synthetic mouse moves no real cursor).
       const wa = await app.evaluate(({ screen }, b) => {
@@ -124,9 +128,6 @@ test('pasek pulpitu przeciągnięty za uchwyt idzie za kursorem i zostaje tam, g
         screen.getCursorScreenPoint = () => g.rdCursor
         return screen.getPrimaryDisplay().workArea
       }, start)
-      const bar = await viewPage(app, 'bar')
-      const handle = bar.getByTestId('bar-drag')
-      await expect(handle).toHaveAttribute('aria-label', 'przeciągnij pasek')
       const box = (await handle.boundingBox())!
       await bar.mouse.move(box.x + box.width / 2, box.y + 10)
       // A click on the handle (the cursor where it was): nothing moves, nothing is saved.
