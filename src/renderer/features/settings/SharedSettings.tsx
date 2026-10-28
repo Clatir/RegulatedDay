@@ -19,7 +19,7 @@ import { useData } from '../../store/data'
 import { countDay } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
 import { SettingNumber } from './SettingNumber'
-import { saveGeneral, saveSettings, setFromDate, setModule, useSettingsFrom, type FromMode } from './settingsStore'
+import { changeFrom, saveGeneral, saveSettings, saveSettingsFrom, setFromDate, setModule, useSettingsFrom, type FromMode } from './settingsStore'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 const SHORT_DAYS = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd']
@@ -160,13 +160,20 @@ const ZONES = [
 ]
 
 export function SessionsSection() {
-  const { s, save } = useShared()
+  const { s, today, save } = useShared()
   const setSession = (i: number, next: (x: SessionDef) => SessionDef) => void save({ sessions: s.sessions.map((x, j) => (j === i ? next(x) : x)) })
-  // „Cofnij” for 10 s gives the session back with its id – the blocks of templates anchored to it stay (A7-07).
+  // „Cofnij” for 10 s gives the session back with its id – the blocks of templates anchored to it stay (A7-07): into the
+  // list as it is then (other changes made meanwhile stay), from the same date as the removal.
   const remove = async (i: number) => {
-    const before = s.sessions
-    const x = before[i]!
-    if (await save({ sessions: before.filter((_, j) => j !== i) })) undoToast(`Usunięta sesja: ${x.name}`, () => void save({ sessions: before }))
+    const x = s.sessions[i]!
+    const f = changeFrom(today)
+    if (!(await saveSettingsFrom({ sessions: s.sessions.filter((_, j) => j !== i) }, f))) return
+    undoToast(`Usunięta sesja: ${x.name}`, () => {
+      const g = f.at != null ? { from: f.from, at: Date.now() } : f
+      const now = settingsOn(useData.getState().rd.settings, g.from, g.at).sessions
+      if (now.some((y) => y.id === x.id)) return
+      void saveSettingsFrom({ sessions: [...now.slice(0, i), x, ...now.slice(i)] }, g)
+    })
   }
   return (
     <Section title="Sesje" data-testid="settings-sessions">

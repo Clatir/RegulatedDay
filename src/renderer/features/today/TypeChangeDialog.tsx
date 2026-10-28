@@ -34,8 +34,10 @@ export function TypeChangeDialog({ model, names, isToday, onlyAdd, onClose }: { 
   const raw = model.data.dayFile
   const duringDay = isToday && model.fromLog
 
-  // A day gone (its plan is the morning's snapshot): its file's type would change nothing (A6-12).
-  if (!isToday && model.fromLog)
+  // A day gone: its type is its plan's (the morning's snapshot – a file's type changes nothing) and the past is not
+  // rewritten here; a free day is closed as „Wolne” (A6-12).
+  const today = useData((s) => s.view?.today ?? '')
+  if (!isToday && (model.fromLog || (today && date < today)))
     return (
       <Dialog title="Typ dnia" onClose={onClose} data-testid="type-dialog">
         <p className="text-[12.5px]" data-testid="type-past">

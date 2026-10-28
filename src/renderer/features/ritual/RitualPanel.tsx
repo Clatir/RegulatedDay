@@ -136,7 +136,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
   if (!view)
     return failed ? (
       <section className="flex flex-wrap items-center gap-2 rounded-lg border border-rose/40 bg-rose-soft px-4 py-3 text-[12.5px]" data-testid="ritual-failed">
-        <span className="flex-1">Nie da się teraz policzyć rytuału tego dnia (proces pomocniczy nie odpowiada) – spróbuj ponownie za chwilę.</span>
+        <span className="flex-1">Nie da się teraz policzyć rytuału tego dnia – spróbuj ponownie za chwilę.</span>
         <button type="button" className="btn" onClick={reload}>
           Spróbuj ponownie
         </button>
@@ -422,6 +422,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           {view.closed ? closedText(date, view.closed.at) : left ? `${countLabel(left, 'wiersz', 'wiersze', 'wierszy')} do wyboru` : 'wszystko wybrane'}
         </span>
       </div>
+      {failed && <p className="text-[12px] text-rose" data-testid="ritual-stale">Nie da się teraz odświeżyć rytuału – widać stan sprzed chwili.</p>}
       {list.length ? <ul className="flex flex-col gap-1.5">{list.map(row)}</ul> : <p className="text-[12.5px] text-muted">Nic z dnia nie czeka na wybór.</p>}
       {view.felt.length > 0 && (
         <div className="flex flex-col gap-1" data-testid="ritual-felt">

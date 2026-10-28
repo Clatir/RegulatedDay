@@ -148,10 +148,8 @@ function mergeAt(rawBase: unknown, mine: unknown, theirs: unknown, path: Path, c
     const mm = byIds(mine)
     const tm = byIds(theirs)
     const bm = b ? byIds(b) : undefined
-    // Order: theirs, then items only I added (in my order) – mine first when only I changed the order (A6-02).
-    const all = new Map([...mm, ...tm].filter(([id]) => mm.has(id) && tm.has(id) && (!bm || bm.has(id))))
-    const mineOrders = !!b && bm !== undefined && deepEqual(commonOrder(b, all), commonOrder(theirs, all)) && !deepEqual(commonOrder(b, all), commonOrder(mine, all))
-    const ids = mineOrders ? [...mine.map((x) => x.id), ...theirs.map((x) => x.id).filter((id) => !mm.has(id))] : [...theirs.map((x) => x.id), ...mine.map((x) => x.id).filter((id) => !tm.has(id))]
+    // Order: theirs, then items only I added (in my order).
+    const ids = [...theirs.map((x) => x.id), ...mine.map((x) => x.id).filter((id) => !tm.has(id))]
     const out: unknown[] = []
     for (const id of ids) {
       const m = mm.get(id)

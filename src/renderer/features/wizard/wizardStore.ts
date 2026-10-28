@@ -79,6 +79,12 @@ export function newLecture(today: string): LectureSeries {
   return { id: newId(), name: '', categoryId: 'wyklad', variantId: null, weekday: 1, startMin: 18 * 60, durationMin: 90, from: today, to: today, exceptions: [], recorder: null, background: null, archived: false }
 }
 
+/** A lecture still as „+ Wykład” made it: no name, and the day, time, length and dates of a new one. */
+export function untouchedLecture(l: LectureSeries): boolean {
+  const fresh = newLecture(l.from)
+  return !l.name.trim() && l.weekday === fresh.weekday && l.startMin === fresh.startMin && l.durationMin === fresh.durationMin && l.to === l.from && l.categoryId === fresh.categoryId
+}
+
 /** The records the first computer writes at „Zakończ”. */
 export function finishRecords(d: WizardDraft, at: number, computer: string) {
   return firstComputerRecords(
@@ -88,8 +94,9 @@ export function finishRecords(d: WizardDraft, at: number, computer: string) {
       categories: rdFrom(undefined).categories,
       people: d.people.filter((p) => p.name.trim()),
       templates: draftTemplates(d),
-      // A lecture added and left without a name is not written (its category is always set – A7-19).
-      lectures: d.lectures.filter((l) => l.name.trim()),
+      // A lecture added and left as it came (no name, nothing set) is not written – its category is always set (A7-19);
+      // one without a name but with its day, time or dates set is kept (the name is optional).
+      lectures: d.lectures.filter((l) => !untouchedLecture(l)),
       days: d.days
     },
     at,

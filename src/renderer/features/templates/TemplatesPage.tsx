@@ -18,7 +18,7 @@ import { placeLogical } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
 import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
-import { editOf, isSaved, rawRecord, saveRecord, trySaveEdits, updateRecord, useData } from '../../store/data'
+import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { countDay } from '../../store/day'
 import { undoToast } from '../../store/ui'
 import { BlockEditor } from '../plan/BlockEditor'
@@ -152,8 +152,8 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
     onCopied(id)
   }
   const remove = async () => {
-    const before = rawRecord(rel)
-    if (!isSaved(await trySaveEdits([editOf(rel, before, null)]))) return
+    const { saved, before } = await tryRemoveRecord(rel)
+    if (!saved) return
     onRemoved()
     undoToast(`Usunięty szablon: ${template.name}`, () => void saveRecord(rel, null, before))
   }

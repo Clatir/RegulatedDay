@@ -10,7 +10,7 @@ import { newId } from '@shared/model/ids'
 import { MAX_STEPS, ROUTINE_SCHEMA, ROUTINE_VERSION_NAMES, routineFrom, routineMinutes, STEP_RANGE, type Routine, type RoutineStep, type RoutineVersion } from '@shared/model/routines'
 import { DurationField, TextField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
-import { editOf, isSaved, rawRecord, saveRecord, trySaveEdits, updateRecord, useData } from '../../store/data'
+import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { undoToast } from '../../store/ui'
 
 export function RoutinesPage() {
@@ -79,8 +79,8 @@ function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => voi
     })
   const save = (patch: Partial<Routine>) => change(() => patch)
   const remove = async () => {
-    const before = rawRecord(rel)
-    if (!isSaved(await trySaveEdits([editOf(rel, before, null)]))) return
+    const { saved, before } = await tryRemoveRecord(rel)
+    if (!saved) return
     onRemoved()
     undoToast(`Usunięta rutyna: ${routine.name}`, () => void saveRecord(rel, null, before))
   }

@@ -58,8 +58,13 @@ export function CategoriesSection() {
       if (!n) return
       setName('')
       const id = newId(10)
+      // Its rules first: a change refused („od dziś” with today unreadable) leaves no category without rules, and the
+      // name typed comes back to the field.
+      if (!(await save({ categories: { [id]: { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1 } } } }))) {
+        setName(n)
+        return
+      }
       await setMeta(id, { name: n.slice(0, 60), color: null, archived: false })
-      void save({ categories: { [id]: { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1 } } } })
       setOpen(id)
     })
   return (

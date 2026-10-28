@@ -49,13 +49,17 @@ export function patchDayBlock(date: string, seen: RawRecord | null, b: PlanBlock
  */
 export async function removeDayBlock(date: string, seen: RawRecord | null, b: PlanBlock, inSnapshot: boolean, name: string): Promise<boolean> {
   let gone = b
-  const out = await saveDay(date, seen, (raw) => {
-    if (inSnapshot) return setCancelled(raw, b.id, true)
-    gone = blockNow(raw, date, b)
-    return takeBlock(raw, b.id)
+  // The file as this removal left it: what „Cofnij” stands on while the file cannot be read (never „no file”).
+  let left: RawRecord | null = null
+  const out = await trySaveWith(async () => {
+    const before = (await dayFilesNow([date], () => seen))[date] ?? null
+    const raw = dayRaw(before, date)
+    if (!inSnapshot) gone = blockNow(raw, date, b)
+    left = inSnapshot ? setCancelled(raw, b.id, true) : takeBlock(raw, b.id)
+    return [editOf(paths.day(date), before, left)]
   })
   if (!isSaved(out)) return false
-  undoToast(`${inSnapshot ? 'Odwołany' : 'Usunięty'}: ${name}`, () => void saveDay(date, null, (raw) => (inSnapshot ? setCancelled(raw, b.id, false) : putBlock(raw, gone))))
+  undoToast(`${inSnapshot ? 'Odwołany' : 'Usunięty'}: ${name}`, () => void saveDay(date, left, (raw) => (inSnapshot ? setCancelled(raw, b.id, false) : putBlock(raw, gone))))
   return true
 }
 

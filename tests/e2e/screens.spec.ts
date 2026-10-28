@@ -122,6 +122,14 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(wake).toHaveAttribute('data-error', /Dozwolone/)
       await expect(wake).toHaveValue(wakeBefore)
 
+      // A day gone: its type is its plan's – the dialog says so, nothing to save (A6-12).
+      await page.getByTestId('nav-today').click()
+      await page.getByTestId('day-prev').click()
+      await page.getByTestId('day-type').click()
+      await expect(page.getByTestId('type-past')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await page.getByTestId('day-today').click()
+
       // Kalendarz: today keeps its type here – it changes in „Dziś” (A7-03).
       await page.getByTestId('nav-calendar').click()
       await expect(page.getByTestId('calendar')).toBeVisible()
@@ -198,6 +206,13 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await shot(page, 'e3-09-settings')
       const rd = JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { dayTypes?: { zwykly?: { budgetMin?: number } } } }> }
       expect(rd.settings.at(-1)!.patch.dayTypes?.zwykly?.budgetMin).toBe(420)
+      // A session removed and given back by „Cofnij” – with its id (A7-07).
+      const sessions = page.getByTestId('settings-sessions')
+      const firstName = await sessions.getByLabel('Nazwa sesji').first().inputValue()
+      await page.getByTestId('session-remove-0').click()
+      await expect(sessions.getByLabel('Nazwa sesji').first()).not.toHaveValue(firstName)
+      await page.getByRole('button', { name: 'Cofnij' }).last().click()
+      await expect(sessions.getByLabel('Nazwa sesji').first()).toHaveValue(firstName)
       // D304: the bar's place on the monitors' mock-up – by default the left bottom corner of the primary one.
       await expect(page.getByTestId('bar-place-map')).toBeVisible()
       await expect(page.getByTestId('bar-place-1-bottom-left')).toHaveAttribute('aria-pressed', 'true')

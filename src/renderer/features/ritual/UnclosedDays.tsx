@@ -44,7 +44,7 @@ export function UnclosedDays() {
   if (!days.length)
     return failed ? (
       <section className="flex flex-wrap items-center gap-2 rounded-lg border border-rose/40 bg-rose-soft px-4 py-3 text-[12.5px]" data-testid="unclosed-failed">
-        <span className="flex-1">Nie da się teraz sprawdzić niezamkniętych dni (proces pomocniczy nie odpowiada).</span>
+        <span className="flex-1">Nie da się teraz sprawdzić niezamkniętych dni – spróbuj ponownie za chwilę.</span>
         <button type="button" className="btn" onClick={() => setTick((x) => x + 1)}>
           Spróbuj ponownie
         </button>
@@ -91,6 +91,7 @@ export function UnclosedDays() {
           Pomiń
         </button>
       </div>
+      {failed && <p className="text-[12px] text-rose" data-testid="unclosed-stale">Nie da się teraz odświeżyć listy – widać stan sprzed chwili (dzień mógł zostać zamknięty na innym komputerze).</p>}
       {days.map((d) => {
         const title = `${WEEKDAYS[weekday(d.date) - 1]} ${plDate(d.date)}`
         if (d.closed) {

@@ -189,6 +189,19 @@ export function tryUpdateRecord(rel: string, fn: (raw: RawRecord) => RawRecord |
   })
 }
 
+/**
+ * A record removed in its turn – after the edits sent before it – with what it was then (for „Cofnij”, never missing a
+ * change still queued ahead of the removal); `saved` false: not removed (the toast said why) or gone already.
+ */
+export async function tryRemoveRecord(rel: string): Promise<{ saved: boolean; before: RawRecord | null }> {
+  let before: RawRecord | null = null
+  const out = await trySaveWith(() => {
+    before = rawRecord(rel)
+    return before ? [editOf(rel, before, null)] : []
+  })
+  return { saved: before != null && isSaved(out), before }
+}
+
 /** As `tryUpdateRecord`, [] when nothing could be sent. */
 export async function updateRecord(rel: string, fn: (raw: RawRecord) => RawRecord | null): Promise<EditOutcome[]> {
   return (await tryUpdateRecord(rel, fn)) ?? []

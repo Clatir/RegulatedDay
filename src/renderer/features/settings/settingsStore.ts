@@ -47,7 +47,14 @@ export function changeFrom(today: string): { from: string; at: number | null } {
 export async function saveSettings(patch: Record<string, unknown>): Promise<boolean> {
   const today = useData.getState().view?.today
   if (!today) return false
-  const { from, at } = changeFrom(today)
+  return saveSettingsFrom(patch, changeFrom(today))
+}
+
+/** As `saveSettings`, from a date (and instant) chosen before – e.g. the „Cofnij” of a change made from that date. */
+export async function saveSettingsFrom(patch: Record<string, unknown>, f: { from: string; at: number | null }): Promise<boolean> {
+  const today = useData.getState().view?.today
+  if (!today) return false
+  const { from, at } = f
   let todayType: DayTypeId = 'zwykly'
   if (at != null) {
     const type = await todayTypeNow(today)

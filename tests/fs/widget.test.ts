@@ -258,6 +258,26 @@ describe('widget w procesie głównym', () => {
     expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'block.extend').map((e) => (e as { minutes?: number }).minutes)).toEqual([30])
   })
 
+  it('krok „−15” do długości bez kosztu niczego nie zapisuje – przedłużenie dopiero po „Potwierdź” (przegląd 0.19.0)', async () => {
+    const { w, folder, at, clock } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60 + 20), auto: false }])
+    at(10 * 60)
+    await w.refresh()
+    await w.act('start', undefined, 'main')
+    at(10 * 60 + 50)
+    await w.refresh()
+    await w.act('extend', '30', 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'extend' })
+    clock.now += 1_000
+    await w.act('extendStep', '-15', 'bar')
+    expect(w.current().pending!.text).toBe('Przedłuż +15: bez kosztu')
+    const extends_ = async () => (await folder.readDay(DAY)).events.filter((e) => e.k === 'block.extend').map((e) => (e as { minutes?: number }).minutes)
+    expect(await extends_()).toEqual([])
+    clock.now += 1_000
+    await w.act('confirm', undefined, 'bar')
+    expect(await extends_()).toEqual([15])
+  })
+
   it('koszt „Przedłuż” bloku w tle stoi w miejscu jego przycisku', async () => {
     writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'w', categoryId: 'inne', startMin: 9 * 60, durationMin: 90, fixed: true, background: true, origin: 'user' }] }))
     const { w, folder, at } = await make()

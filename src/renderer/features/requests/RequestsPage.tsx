@@ -15,7 +15,7 @@ import { FilterBar, useFilters } from '../../components/FilterBar'
 import { Choice, DurationField, TextField } from '../../components/fields'
 import { EmptyState, Section } from '../../components/ui'
 import { useNow } from '../../lib/clock'
-import { addPerson, editOf, isSaved, rawRecord, saveRd, saveRecord, trySaveEdits, updateRecord, useData } from '../../store/data'
+import { addPerson, saveRd, saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { undoToast } from '../../store/ui'
 
 const STATE_NAMES: Record<RequestState, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobione', dropped: 'porzucone' }
@@ -82,9 +82,8 @@ function Row({ r }: { r: RequestRecord }) {
   const rel = paths.record('request', r.id)
   const set = (patch: Partial<RequestRecord>) => void updateRecord(rel, (raw) => ({ ...raw, ...patch }))
   const remove = async () => {
-    const before = rawRecord(rel)
-    if (!isSaved(await trySaveEdits([editOf(rel, before, null)]))) return
-    undoToast('Prośba usunięta', () => void saveRecord(rel, null, before))
+    const { saved, before } = await tryRemoveRecord(rel)
+    if (saved) undoToast('Prośba usunięta', () => void saveRecord(rel, null, before))
   }
   return (
     <div className="grid items-center gap-2 rounded border border-line bg-panel px-3 py-1.5" style={{ gridTemplateColumns: '180px 110px minmax(0,1fr) 120px auto' }} data-testid="request-row">
@@ -195,6 +194,7 @@ function Counters() {
             </span>
           ))}
           {!c.complete && <span className="text-[11.5px] text-rose">Nie wszystkie logi tygodnia dało się teraz odczytać – liczby mogą być niepełne.</span>}
+          {failed && <span className="text-[11.5px] text-rose">Nie da się teraz odświeżyć liczników – widać stan sprzed chwili.</span>}
         </>
       )}
     </div>

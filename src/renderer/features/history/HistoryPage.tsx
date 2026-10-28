@@ -46,7 +46,7 @@ export function HistoryPage() {
                 >
                   <RecordName r={r} />
                   <span className="text-[11.5px] text-muted">
-                    {countLabel(r.versions, 'wersja', 'wersje', 'wersji')} ·{new Date(r.last).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', dateStyle: 'short', timeStyle: 'short' })}
+                    {countLabel(r.versions, 'wersja', 'wersje', 'wersji')} · {new Date(r.last).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', dateStyle: 'short', timeStyle: 'short' })}
                     {r.exists ? '' : ' · usunięty'}
                   </span>
                 </button>

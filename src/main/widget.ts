@@ -625,7 +625,8 @@ export class WidgetEngine {
 
   /**
    * „Przedłuż” waiting for its second click, 15 min longer or shorter (at least 15, at most `EXTEND_MAX_MIN`): its new cost
-   * with new 10 s; a length that costs nothing any more is no extension to confirm – the click of it as without a cost.
+   * with new 10 s – only judged, never written; a length that costs nothing still waits for „Potwierdź” (a step is never
+   * the extension itself).
    */
   private async extendStep(delta: number): Promise<void> {
     const p = this.pending
@@ -634,11 +635,14 @@ export class WidgetEngine {
     if (minutes === p.minutes) return
     const day = this.current().day ?? undefined
     const c: TimerIn = { a: 'extend', minutes, day }
-    const r = await this.d.timer(c)
+    const r = await this.d.timer({ ...c, probe: true })
     if (r.confirm) this.wait('extend', `Przedłuż +${minutes}`, r.confirm, () => this.d.timer({ ...c, confirm: true }), minutes)
-    else {
+    else if (r.ok) {
+      this.pending = { button: 'extend', text: `Przedłuż +${minutes}: bez kosztu`, until: this.now + CONFIRM_MS, redo: () => this.d.timer(c), minutes }
+      setTimeout(() => void this.refresh(), CONFIRM_MS + 50).unref?.()
+    } else {
       this.pending = null
-      if (!r.ok && r.why) this.say(r.why)
+      if (r.why) this.say(r.why)
     }
     await this.refresh()
   }

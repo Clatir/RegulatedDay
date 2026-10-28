@@ -12,7 +12,7 @@ import type { RawRecord, RdApi } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
 import { planBlock, type PlanBlock } from '@shared/model/plan'
-import { logicalDayOf } from '@shared/time/day'
+import { logicalDayOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { DataHub } from '../../src/main/data/hub'
 
@@ -133,7 +133,8 @@ describe('zapisy okna liczone od pliku w swojej kolejce', () => {
 describe('liczniki próśb z logów dni (A6-03, T479)', () => {
   it('prośba z paska innego komputera liczy się dziś, w tygodniu i przy osobie', async () => {
     const day = today()
-    const at = hub.service!.folder.clock.now() - 60 * 60_000
+    // A fixed hour of the day (any hour of the run): 04:10–04:30.
+    const at = placeLogical(day, 4 * 60 + 10)
     mkdirSync(join(dir, paths.log(day, 'lap'), '..'), { recursive: true })
     const line = (n: number, e: Record<string, unknown>) => appendFileSync(join(dir, paths.log(day, 'lap')), `${JSON.stringify({ id: `lap-${n}`, c: 'lap', n, t: e.at, l: e.at, v: 1, day, dom: 'timer', ...e })}\n`)
     line(1, { k: 'request.start', at, request: 'r1', mode: 'now', person: 'ania', estimateMin: null, hardEndAt: null, interrupts: null })

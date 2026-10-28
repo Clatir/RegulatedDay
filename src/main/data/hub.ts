@@ -485,6 +485,7 @@ export class DataHub {
    */
   async timer(click: TimerIn): Promise<TimerResult> {
     const r = await this.need().timerClick(click as TimerClick)
+    if (click.probe) return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
     this.changed()
     if (r.ok) void this.service?.tick()
     return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
@@ -646,14 +647,12 @@ export class DataHub {
     const now = f.clock.now()
     const today = logicalDayOf(now)
     const from = weekStart(today)
-    const days: Array<{ date: string; events: readonly AnyEvent[] }> = []
-    let complete = true
-    for (let d = from; d <= today; d = addDays(d, 1)) {
-      const read = await f.readDay(d)
-      complete &&= read.complete
-      days.push({ date: d, events: read.events as AnyEvent[] })
-    }
-    return { ...requestCounters(days, today, from, now), complete }
+    const dates: string[] = []
+    for (let d = from; d <= today; d = addDays(d, 1)) dates.push(d)
+    // The days of the week read side by side (a slow folder never waits for seven reads in a row).
+    const reads = await Promise.all(dates.map(async (date) => ({ date, read: await f.readDay(date) })))
+    const days = reads.map(({ date, read }) => ({ date, events: read.events as AnyEvent[] }))
+    return { ...requestCounters(days, today, from, now), complete: reads.every((r) => r.read.complete) }
   }
 
   async historyList(): Promise<HistoryRecord[]> {

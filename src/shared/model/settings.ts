@@ -261,8 +261,9 @@ function categoryFrom(v: unknown, fallback: CategoryRules | undefined): Category
  * is not after its start would leave every day without a word, and the blocks anchored to it with it (A7-02).
  */
 export function sessionWithStart(s: SessionDef, startMin: number): SessionDef {
-  const length = s.endMin - s.startMin
-  return { ...s, startMin, endMin: s.endMin > startMin ? s.endMin : startMin + length }
+  // The end stays when it is still within a day after the new start; otherwise the length stays (at most a day).
+  const keep = s.endMin > startMin && s.endMin - startMin <= 1440
+  return { ...s, startMin, endMin: keep ? s.endMin : startMin + Math.min(1440, s.endMin - s.startMin) }
 }
 
 /** A session with a new end on the clock (an end not after the start is the next day's). */

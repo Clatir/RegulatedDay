@@ -25,8 +25,9 @@
    - Runda pytań zamknięta: D325 (wszystkie brakujące funkcje przed 1.0), D326 (komunikat rezerwy – linia w pasku),
      D327 (bez folderu neutralny pasek), D328 (rutyny w pasku i „Dziś”), D329 (rytuał w dniu bez pracy), D330 (kopia
      dnia także na dziś i minione z ostrzeżeniem); T513 (podział PR-ów, rozstrzygnięcia A3-10, A5-12, A7-13).
-   - PR-y ciągiem bez pauz (D317) według `docs/plan.md` 5.2a–5.2f: 0.16.0 wydane; 0.17.0 – PR #27 (CI po poprawce
-     testu „Uruchom mimo to”, run 40712572823); 0.18.0 – gałąź `claude/0.18.0-proces` wypchnięta, PR po scaleniu #27;
+   - PR-y ciągiem bez pauz (D317) według `docs/plan.md` 5.2a–5.2f: 0.16.0 wydane; 0.17.0 – PR #27 scalony (268dfc2),
+     wydanie z runu 40718937159 na `main` (po ponowieniu testu skali); 0.18.0 – PR #28 (CI po poprawce testu skali,
+     run 40721025319);
      **teraz 5.2d – 0.19.0 ekrany** (gałąź `claude/0.19.0-ekrany` od 0.18.0), potem 5.2e.
    - 5.3 przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji.
    - 5.4 bramka 1.0 – bez czekania na Twój odbiór (D324).
@@ -45,6 +46,9 @@
   A7-20, A8-09; 5.2f: A6-10, A6-13, A7-15, A7-18; 5.2e: A7-06, A8-12.
 - Testy: 972 jednostkowych i plikowych (nowe: `tests/fs/window-edits.test.ts` – zapisy okna na prawdziwym folderze,
   `tests/web/screens-e8.test.ts`; w `widget.test.ts` kroki „Przedłuż” i „barClick”); E2E: kalendarz dziś, ↑ w rutynie.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. kalendarz, kalibracja i usunięcia w kolejce, „Cofnij”
+  sesji od tej samej daty, sesja przez północ, krok „Przedłuż” tylko liczony, kategoria bez osieroconej nazwy, wykład
+  w kreatorze, miniony dzień, widoki „sprzed chwili”, równoległe odczyty liczników. Testy: 974, E2E 24/24.
 
 ## 0.18.0 – poprawki procesu głównego i aktualizacji (ciąg E, 5.2c)
 - Gałąź `claude/0.18.0-proces` (od 0.17.0, przed jego scaleniem) od 28.10 ok. 15:15.

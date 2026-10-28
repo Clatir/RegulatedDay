@@ -333,6 +333,8 @@ export interface TimerIn {
   minutes?: number
   done?: boolean
   confirm?: boolean
+  /** Only judged (its cost or refusal), never written. */
+  probe?: boolean
   categoryId?: string
   durationMin?: number
   variantId?: string | null

@@ -5,8 +5,8 @@
  * blocks and say numbers in Polish (A6-20, A6-23).
  */
 import { describe, expect, it } from 'vitest'
-import type { EditQuestion } from '@shared/api'
-import { diffRecords, merge3, recordEdit, setAt } from '@shared/data/merge'
+import type { DataView, EditQuestion, RdApi } from '@shared/api'
+import { diffRecords, recordEdit, setAt } from '@shared/data/merge'
 import { rdFrom } from '@shared/model/rd'
 import { planBlock } from '@shared/model/plan'
 import { sessionWithEnd, sessionWithStart, type SessionDef } from '@shared/model/settings'
@@ -14,7 +14,9 @@ import { newerChoices, questionsText } from '@renderer/app/Questions'
 import { anchorCandidates } from '@renderer/features/plan/blockView'
 import { oneAtATime } from '@renderer/lib/busy'
 import { valueText } from '@renderer/lib/recordText'
-import { resetSettingsFrom, setFromDate, useSettingsFrom } from '@renderer/features/settings/settingsStore'
+import { resetSettingsFrom, saveSettings, setFromDate, useSettingsFrom } from '@renderer/features/settings/settingsStore'
+import { useData } from '@renderer/store/data'
+import { useUi } from '@renderer/store/ui'
 import { finishRecords, newLecture, patchWizard, resetWizard, useWizard } from '@renderer/features/wizard/wizardStore'
 
 describe('kolejność kroków rutyny (A6-02)', () => {
@@ -26,14 +28,6 @@ describe('kolejność kroków rutyny (A6-02)', () => {
     const e = recordEdit('routines/r.json', before, after)!
     expect(e.edits).toHaveLength(1)
     expect((setAt(before, e.edits[0]!.path, e.edits[0]!.value) as typeof before).normal.map((s) => s.id)).toEqual(['kot', 'woda'])
-  })
-
-  it('zmiana kolejności tylko po jednej stronie: scalenie bierze tę kolejność', () => {
-    const theirs = { ...before, name: 'Rano' }
-    const { merged, conflicts } = merge3(before, after, theirs)
-    expect(conflicts).toEqual([])
-    expect(merged.normal.map((s) => s.id)).toEqual(['kot', 'woda'])
-    expect(merged.name).toBe('Rano')
   })
 
   it('zmiana jednego kroku bez zmiany kolejności dalej idzie polem kroku', () => {
@@ -87,15 +81,20 @@ describe('sesja: początek po końcu (A7-02)', () => {
     expect(sessionWithStart(ny, 13 * 60)).toMatchObject({ startMin: 13 * 60, endMin: 16 * 60 })
     expect(sessionWithStart(ny, 9 * 60)).toMatchObject({ startMin: 9 * 60, endMin: 11 * 60 })
     expect(sessionWithEnd(ny, 7 * 60)).toMatchObject({ endMin: 7 * 60 + 1440 })
+    // Through midnight (23:00–07:00): a new start never makes it longer than a day nor past what a session can be.
+    const night: SessionDef = { ...ny, startMin: 23 * 60, endMin: 31 * 60 }
+    expect(sessionWithStart(night, 0)).toMatchObject({ startMin: 0, endMin: 8 * 60 })
+    expect(sessionWithStart(night, 22 * 60)).toMatchObject({ startMin: 22 * 60, endMin: 31 * 60 })
+    expect(sessionWithStart(night, 6 * 60).endMin - 6 * 60).toBeLessThanOrEqual(1440)
   })
 })
 
 describe('kreator: pusty wykład (A7-19)', () => {
-  it('wykład dodany i zostawiony bez nazwy nie trafia do folderu', () => {
+  it('wykład dodany i zostawiony jak powstał nie trafia do folderu; bez nazwy, ale ustawiony – trafia', () => {
     resetWizard()
-    patchWizard({ lectures: [newLecture('2026-10-28'), { ...newLecture('2026-10-28'), name: 'Analiza' }] })
+    patchWizard({ lectures: [newLecture('2026-10-28'), { ...newLecture('2026-10-28'), name: 'Analiza' }, { ...newLecture('2026-10-28'), weekday: 3, to: '2027-02-01' }] })
     const rels = finishRecords(useWizard.getState(), 1000, 'pca').map((r) => r.rel)
-    expect(rels.filter((r) => r.startsWith('schedule/'))).toHaveLength(1)
+    expect(rels.filter((r) => r.startsWith('schedule/'))).toHaveLength(2)
   })
 })
 
@@ -123,5 +122,25 @@ describe('teksty pytań kolejki (A6-20, A6-23)', () => {
     const n = { rd: rdFrom(undefined), blockName: () => null }
     expect(valueText('blocks', [{ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60 }], n)).toBe('Inne obowiązki 10:00, 1 h')
     expect(valueText('x', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22], n)).toBe('22 pozycje')
+  })
+})
+
+describe('zmiana „od dziś” przy dniu, którego nie da się teraz odczytać (A7-08, A7-09)', () => {
+  it('nic się nie zapisuje (nigdy zgadnięty typ dnia), komunikat mówi dlaczego', async () => {
+    let edits = 0
+    const rd: Partial<RdApi> = {
+      dayData: async () => {
+        throw new Error('folder zamknięty')
+      },
+      edit: async () => (edits++, [])
+    }
+    ;(globalThis as unknown as { window: { rd: Partial<RdApi> } }).window = { rd }
+    useData.setState({ view: { today: '2026-10-28' } as DataView })
+    useUi.setState({ toasts: [] })
+    useSettingsFrom.setState({ mode: 'today', date: null })
+    expect(await saveSettings({ dayTypes: { zwykly: { budgetMin: 420 } } })).toBe(false)
+    expect(edits).toBe(0)
+    expect(useUi.getState().toasts.some((t) => t.text.includes('„od dziś” nie została zapisana'))).toBe(true)
+    resetSettingsFrom()
   })
 })
