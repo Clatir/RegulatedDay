@@ -88,6 +88,8 @@ export const JOURNAL_KEEP_DAYS = 14
 const COMPACT_EVERY_MS = 60 * 60_000
 /** Conflict copies of the records are looked for this often (and at the first check). */
 const COPY_SCAN_MS = 60_000
+/** Own changes waiting this long with the folder there are said too (A3-07 review). */
+export const UNSYNCED_SAY_MS = 5 * 60_000
 /** Files of a folder of records read side by side (A3-08). */
 const DIR_CONCURRENCY = 16
 /**
@@ -1713,7 +1715,7 @@ export class DataFolder {
    * questions may come too), a computer seen with a fresh presence that stopped refreshing it, a clock ahead. `battery` –
    * the main process's own (the power of this computer).
    */
-  syncState(now = this.clock.now()): Omit<SyncState, 'battery'> {
+  syncState(now = this.clock.now()): Omit<SyncState, 'battery' | 'backupFailed'> {
     const name = (p: Peer) => p.presence.name || p.presence.computer
     const oneDriveDown = !this.o.oneDriveRunning()
     const awake = this.peers.filter((p) => p.presence.state !== 'closed')
@@ -1724,7 +1726,10 @@ export class DataFolder {
       // wake the others' files come first).
       asleep: oneDriveDown || !this.settle.settled(now) ? [] : awake.filter((p) => this.freshSeen.has(p.presence.computer) && now - p.fileSeenAt >= SILENT_MS).map((p) => ({ id: p.presence.computer, name: name(p), since: p.fileSeenAt })),
       clockAhead: this.peers.filter((p) => this.presence.clockAhead.has(p.presence.computer)).map((p) => ({ id: p.presence.computer, name: name(p), minutes: Math.round(this.presence.clockAhead.get(p.presence.computer)! / 60_000) })),
-      dayAhead: this.dayAhead
+      dayAhead: this.dayAhead,
+      // Changes waiting: while the folder is away, or for long with it there (A3-07).
+      unsynced: this.unavailable || (this.unsyncedSince != null && now - this.unsyncedSince >= UNSYNCED_SAY_MS) ? this.unsynced : 0,
+      folderAway: this.unavailable
     }
   }
 
@@ -1818,9 +1823,24 @@ export class DataFolder {
     await this.presence.tick(true).catch(() => undefined)
   }
 
-  /** Own events of a day not yet on OneDrive (the bar: „N zmian zapisze się po powrocie folderu”). */
+  /**
+   * Your own changes not yet in the folder (spec „N zmian zapisze się po powrocie folderu”, A3-07): your events not in its
+   * logs (no bookkeeping of the app's own – A3-07 review) and the queue's edits waiting for the folder – none of a file with
+   * a question (its edits wait for your answer, not for the folder).
+   */
   get unsynced(): number {
-    return this.log.pendingDays.length + this.queue.pending.length
+    const asked = new Set(this.queue.questions().map((q) => q.edit.rel))
+    return this.log.pendingEvents + this.queue.pending.filter((e) => !asked.has(e.rel)).length
+  }
+
+  /**
+   * The oldest of those changes (ms, null: none): one waiting longer than `UNSYNCED_SAY_MS` with the folder there (a file
+   * held by OneDrive or an antivirus, a share failing) is said too – nothing pretends to be saved.
+   */
+  get unsyncedSince(): number | null {
+    const asked = new Set(this.queue.questions().map((q) => q.edit.rel))
+    const times = [this.log.pendingSince, ...this.queue.pending.filter((e) => !asked.has(e.rel)).map((e) => e.at)].filter((x): x is number => x != null)
+    return times.length ? Math.min(...times) : null
   }
 
   /** The events of a day as this computer sees them now. */

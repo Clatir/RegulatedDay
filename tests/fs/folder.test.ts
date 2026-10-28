@@ -12,7 +12,7 @@ import { marketDay } from '@shared/calendar/holidays'
 import { eventLine, readLogText } from '@shared/data/logText'
 import { paths } from '@shared/data/paths'
 import type { AnyEvent } from '@shared/model/events'
-import { placeLogical } from '@shared/time/day'
+import { logicalDayOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { DataFolder, LIST_TRUST_MS } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
@@ -161,6 +161,39 @@ describe('folder danych', () => {
     mkdirSync(dataDir, { recursive: true })
     await f.advance(1)
     expect(events().some((e) => e.k === 'observe.alive' && (e as { at: number }).at > f.now - 3 * 60_000)).toBe(true)
+  })
+
+  it('„N zmian zapisze się”: liczy Twoje zmiany czekające na folder – nie dni, nie zapisy samej aplikacji (A3-07)', async () => {
+    const f = await make()
+    await f.advance(2)
+    expect(f.folder.unsynced).toBe(0)
+    rmSync(dataDir, { recursive: true, force: true })
+    await f.advance(3)
+    const day = logicalDayOf(f.now)
+    for (let i = 0; i < 3; i++) f.folder.append({ day, dom: 'timer', k: 'water.drink', at: f.now + i })
+    await f.folder.check()
+    expect(f.folder.unavailable).toBe(true)
+    // The observation's own lines of these minutes (observe.alive, gaps) are no change of yours.
+    expect(f.folder.unsynced).toBe(3)
+    expect(f.folder.syncState(f.now)).toMatchObject({ unsynced: 3, folderAway: true })
+    mkdirSync(dataDir, { recursive: true })
+    await f.advance(1)
+    expect(f.folder.unsynced).toBe(0)
+  })
+
+  it('folder jest, ale plik zajęty: każda edycja tego pliku czeka (bez pytania) i po 5 min pasek to mówi (A3-07, przegląd 0.24.0)', async () => {
+    let held = false
+    const fs: DataFs = { ...nodeFs, writeAtomic: (p, t) => (held ? Promise.reject(Object.assign(new Error('EBUSY'), { code: 'EBUSY' })) : nodeFs.writeAtomic(p, t)) }
+    const f = await make({ fs })
+    await f.advance(1)
+    held = true
+    const rel = 'requests/r1.json'
+    for (let i = 0; i < 3; i++) expect((await f.folder.edit([{ rel, create: i === 0, edits: [{ path: [i === 0 ? 'id' : `note${i}`], base: undefined, value: 'r1' }] }]))[0]!.status).toBe('waiting')
+    // Three edits of one held file: three changes waiting for it – never taken for ones behind a question.
+    expect(f.folder.unsynced).toBe(3)
+    expect(f.folder.syncState(f.now)).toMatchObject({ unsynced: 0, folderAway: false })
+    f.now += 6 * 60_000
+    expect(f.folder.syncState(f.now)).toMatchObject({ unsynced: 3, folderAway: false })
   })
 
   it('ucięta ostatnia linia dziennika (twarde wyłączenie) nie zabiera pierwszego zdarzenia po starcie (A3-12)', async () => {

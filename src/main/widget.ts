@@ -25,9 +25,10 @@ import { newId } from '@shared/model/ids'
 import { personName } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { ROUTINE_VERSION_NAMES, ROUTINE_VERSIONS, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
+import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { answered } from '@shared/engine/care'
-import { batteryLine, syncLines } from '@shared/sync/syncLines'
+import { batteryLine, NO_SYNC, syncLines } from '@shared/sync/syncLines'
 import { noFolderView, SEEN_LINE, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
@@ -70,6 +71,8 @@ export interface WidgetDeps {
   now?: () => number
   /** The battery saver is on, on a battery, with the data folder in OneDrive (spec „Kilka komputerów”, once a day). */
   batterySaver?: () => boolean
+  /** The backups as the data service knows them (its last daily backup failed – A3-06). */
+  backup?: () => { failed: { error: string } | null } | null
 }
 
 interface Pending extends BarPending {
@@ -237,6 +240,7 @@ export class WidgetEngine {
       this.failing = true
       this.model = null
       this.view = unknownView()
+      this.awayView(folder)
     }
     this.d.emit(this.current())
   }
@@ -273,15 +277,24 @@ export class WidgetEngine {
   }
 
   /**
-   * The quiet lines of the computers and their files (A8-02, A8-07) after the day's own: OneDrive, questions on another
-   * computer too, a computer taken for asleep, a clock ahead, the battery once a day („OK” hides it to the day's end).
+   * The quiet lines of the computers and their files (A8-02, A8-07, A3-06, A3-07) after the day's own: changes waiting
+   * for a folder that is not there, a failed backup, OneDrive, questions on another computer too, a computer taken for
+   * asleep, a clock ahead, the battery once a day („OK” hides it to the day's end).
    */
   private syncView(folder: DataFolder, now: number): void {
     const v = this.view!
     if (v.hidden || v.night || v.day == null) return
     // Its „OK” is the day's answer in the log (per computer): never again that day, also after a start of the app.
     const battery = (this.d.batterySaver?.() ?? false) && !answered(this.model?.ctx.events ?? [], batteryLine(v.day, folder.presence.own.computer))
-    v.lines = [...v.lines, ...syncLines({ ...folder.syncState(now), battery }, now, v.day, folder.presence.own.computer)]
+    v.lines = [...v.lines, ...syncLines({ ...folder.syncState(now), battery, backupFailed: this.d.backup?.()?.failed != null }, now, v.day, folder.presence.own.computer)]
+  }
+
+  /** A day not counted now while the folder is away: the changes waiting for it still say so (A3-07). */
+  private awayView(folder: DataFolder): void {
+    const v = this.view!
+    const s = folder.syncState(this.now)
+    if (!s.unsynced) return
+    v.lines = [...v.lines, ...syncLines({ ...NO_SYNC, unsynced: s.unsynced, folderAway: s.folderAway }, this.now, logicalDayOf(this.now))]
   }
 
   /** The marker closed – „Zostaw” or a variant done: every cause holding now with it (it never comes back for them). */

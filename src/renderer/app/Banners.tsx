@@ -5,9 +5,10 @@
  */
 import { useState } from 'react'
 import type { MovedTo } from '@shared/api'
-import { formatNumber } from '@shared/format'
+import { formatNumber, plDate } from '@shared/format'
+import { unsyncedText } from '@shared/sync/syncLines'
 import { useData } from '../store/data'
-import { setMovedLater, toast, useUi } from '../store/ui'
+import { navigate, setMovedLater, toast, useUi } from '../store/ui'
 import { updateAction, useUpdate } from '../store/update'
 import { useWidget } from '../store/widget'
 
@@ -46,9 +47,43 @@ function MovedBanner() {
 /** One marker of a move: „Nie teraz” hides this one, a later move shows again. */
 const movedKey = (m: MovedTo) => `${m.to}|${m.at}`
 
+/**
+ * The data folder not there now (spec „nic nie udaje sukcesu”, A3-07): what was changed meanwhile waits in the journal
+ * and the queue – „N zmian zapisze się po powrocie folderu”.
+ */
+function AwayBanner() {
+  const away = useData((s) => s.view?.away ?? false)
+  const n = useData((s) => s.view?.unsynced ?? 0)
+  if (!away) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-rose/40 bg-rose-soft px-4 py-2 text-[12.5px]" data-testid="banner-away">
+      Folder danych jest teraz niedostępny{n ? ` – ${unsyncedText(n, true)}` : ''}.
+    </div>
+  )
+}
+
+/** No daily backup for 3 days (spec „po 3 dniach bez kopii także w oknie głównym”, A3-06): since when, and where to look. */
+function BackupBanner() {
+  const b = useData((s) => (s.view?.status === 'open' ? s.view.backup : null))
+  if (!b?.stale) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-rose/40 bg-rose-soft px-4 py-2 text-[12.5px]" data-testid="banner-backup">
+      <span>
+        {b.lastOk ? `Brak kopii zapasowej od ${plDate(b.lastOk)}` : 'Brak kopii zapasowej'}
+        {b.failed ? ` – ostatnia próba: ${b.failed}` : ''}.
+      </span>
+      <button type="button" className="btn" onClick={() => navigate('settings')}>
+        Ustawienia
+      </button>
+    </div>
+  )
+}
+
 export function Banners() {
   return (
     <div className="flex shrink-0 flex-col">
+      <AwayBanner />
+      <BackupBanner />
       <MovedBanner />
       <UpdateBanners />
     </div>

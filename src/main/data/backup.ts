@@ -264,6 +264,12 @@ export async function createUpdateBackup(dataDir: string, backupsDir: string, fr
  * that day's backup was made again), then the same rotation as in backups/ (14 daily, 8 weekly). Returns the name
  * copied, null when there was nothing to copy; an unreachable place rejects.
  */
+/** The day of the newest daily backup in `backupsDir` (null: none – also no folder of backups yet). */
+export async function latestDaily(backupsDir: string): Promise<string | null> {
+  const newest = (await listNames(join(backupsDir, 'daily'), 'daily'))[0]
+  return newest ? newest.replace(/.zip$/i, '') : null
+}
+
 export async function copyLatestTo(backupsDir: string, extraDir: string): Promise<string | null> {
   const newest = (await listNames(join(backupsDir, 'daily'), 'daily'))[0]
   if (!newest) return null

@@ -233,8 +233,15 @@ export interface DataView {
   routines: RawRecord[]
   /** Computers that have written a presence (for „komputer nagrywający”), this one first. */
   computers: Array<{ id: string; name: string }>
-  /** Own changes not yet in the folder (events and edits). */
+  /** Own changes not yet in the folder (events and edits waiting for it, A3-07). */
   unsynced: number
+  /** The data folder is not there now (its changes wait in the journal and the queue). */
+  away: boolean
+  /**
+   * The backups (A3-06): this computer's last try failed (why), the newest daily backup of the folder, and none for 3 days
+   * or more (the window warns then).
+   */
+  backup: { failed: string | null; lastOk: string | null; stale: boolean }
   questions: EditQuestion[]
   /** Records that cannot be read now or are broken (never written over). */
   problems: string[]

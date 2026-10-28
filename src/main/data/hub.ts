@@ -22,7 +22,7 @@ import type { SideB } from '@shared/engine/sideB'
 import { keptOnRestore, rdFrom } from '@shared/model/rd'
 import { requestCounters } from '@shared/engine/requests'
 import type { AnyEvent } from '@shared/model/events'
-import { logicalDayOf, weekStart } from '@shared/time/day'
+import { logicalDayOf, placeLogical, weekStart } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { writeFileAtomic } from '../datastore/atomic'
@@ -32,6 +32,19 @@ import type { DataFolder, TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
 import { DataService, STOP_TIMEOUT_MS, type ServiceOptions } from './service'
+
+/** No daily backup for this many days: the window warns (spec „po 3 dniach bez kopii także w oknie głównym”). */
+export const BACKUP_STALE_DAYS = 3
+
+/**
+ * The backups as the window shows them (A3-06): the last own failure, the newest daily backup and „none for 3 days” – 3
+ * whole days from the newest one (made after 12:00 of its day), or without any from the folder's setup (a folder of a day
+ * or two has none yet by right); not known yet (the first look at the backups comes with the first check) – no warning.
+ */
+export function backupStatus(b: { failed: { error: string } | null; lastOk: string | null; known?: boolean }, setupAt: number | null, now: number): DataView['backup'] {
+  const since = b.lastOk ? placeLogical(b.lastOk, 12 * 60) : setupAt
+  return { failed: b.failed?.error ?? null, lastOk: b.lastOk, stale: b.known !== false && since != null && now - since >= BACKUP_STALE_DAYS * 86_400_000 }
+}
 
 export interface HubOptions {
   userData: string
@@ -345,7 +358,7 @@ export class DataHub {
     const days = await Promise.all([-1, 0, 1].map((d) => f.recordView(paths.day(addDays(today, d))).catch((e: unknown) => `?${String(e)}`)))
     // The marker „przeniesiono do …” OneDrive brings from another computer shows without any other change.
     const moved = await this.movedTo()
-    return `${head}|${today}|${JSON.stringify(await this.records())}|${JSON.stringify(days)}|${read.events.length}|${f.unsynced}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}|${JSON.stringify(moved)}`
+    return `${head}|${today}|${JSON.stringify(await this.records())}|${JSON.stringify(days)}|${read.events.length}|${f.unsynced}|${f.unavailable}|${JSON.stringify(this.service?.backup ?? null)}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}|${JSON.stringify(moved)}`
   }
 
   private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines'>> {
@@ -383,6 +396,8 @@ export class DataHub {
       ...records,
       computers: f?.computers ?? [{ id: this.o.computer(), name: this.o.computerName }],
       unsynced: f?.unsynced ?? 0,
+      away: f?.unavailable ?? false,
+      backup: this.backupView(records.rd, f ? f.clock.now() : Date.now()),
       questions,
       problems,
       leader: f?.leader.leader ?? null,
@@ -391,6 +406,11 @@ export class DataHub {
       moved: f ? await this.movedTo() : null,
       pendingMove: this.pendingMove()
     }
+  }
+
+  /** The backups for the window (A3-06), from what the data service knows and the folder's setup. */
+  private backupView(rd: RawRecord | null, now: number): DataView['backup'] {
+    return backupStatus(this.service?.backup ?? { failed: null, lastOk: null, known: false }, rdFrom(rd ?? undefined).setup?.at ?? null, now)
   }
 
   /** The restored backup's folder that did not open (once tried): where it is and why. */
