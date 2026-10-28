@@ -64,9 +64,12 @@ describe('identyfikator komputera i identyfikator Windows (A3-05)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'rd-id-'))
     try {
       const first = await computerId(dir, null, 'aaaaaaaa-0000-0000-0000-000000000001')
+      // Nothing can be written there: a read-only file (Windows does not replace it), a read-only folder (Linux).
       chmodSync(join(dir, 'computer-id'), 0o444)
+      chmodSync(dir, 0o555)
       await expect(computerId(dir, first.id, 'bbbbbbbb-0000-0000-0000-000000000002')).rejects.toThrow()
     } finally {
+      chmodSync(dir, 0o755)
       chmodSync(join(dir, 'computer-id'), 0o666)
       rmSync(dir, { recursive: true, force: true })
     }
