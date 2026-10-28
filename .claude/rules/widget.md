@@ -27,6 +27,9 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 - Komunikat rezerwy (D326): linia `reserve:<dzień>:<pula>:<at>` (= `reserveMessageId`) w `engineView`, „Zacznij” =
   `startNew` regeneracji sposobem z `suggestRegen` na 15 min, „nie dziś” = `mark`; zobaczenie przez `QUESTION_ID`
   (panel, okno, kliknięcie paska) i kliknięcie powiadomienia (`handleArgv` → `seen(…, notification)`).
+- Rutyny (D328, T520): `engine/routineCheck.ts` (`routinesDue`) – linia `routine:<dzień>:<blok>` z akcjami `all`, `steps`
+  (rozwinięcie w pasku z `WidgetView.routines`, akcja `routine` `<blok>|<wersja>|<kroki>`), `worse`; ten sam zapis
+  `routineDone` co karta w „Dziś” (`RoutineCard`). Pulsowanie (D225): `pulseClass` w `Bar`, klasy w `index.css`.
 - `engine/modes.ts` (sesja, zajęcia, „mniej pytań”, noc, „Odcinam się”), `engine/care.ts` (woda, ciąg pracy, kontakt).
 - Linie mają id `rodzaj:…` – pytania silnika `reguła:dzień:blok:próg`; `line|akcja|wartość` w `widgetAction('line')`.
 - Prośby (D311, D312, T503): `WidgetView.requests` – 3 osoby (`folder.widgetModel().people`), trwająca prośba (także

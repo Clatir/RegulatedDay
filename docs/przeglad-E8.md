@@ -910,7 +910,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dopisać pozycję do docs/plan.md przed 1.0 (zdarzenie odhaczenia z wersją, miejsce w pasku albo w panelu bloku, wpływ na długość bloku) albo jawną decyzję D o przesunięciu po 1.0 i do tego czasu usunąć zdanie z ekranu Rutyny.
 - **Weryfikacja:** Specyfikacja (Bloki → Rutyna) i D93/D139 przewidują wybór wersji jednym kliknięciem przy odhaczaniu kroków. Zakres 1.0 obejmuje „Rutyny krok po kroku”. T458 odłożył odhaczanie do E4a/E4b, ale w src nie ma ani zdarzenia, ani interfejsu (brak trafień „odhacz”), a docs/plan.md i docs/postep.md tej pozycji nie mają. Długość bloku rutyny bierze zawsze wersję zwykłą (`routineMinutes(r)`), więc wersja na gorsze dni na nic nie wpływa, a ekran Rutyny zapowiada funkcję, której nie ma. Potrzebna decyzja użytkownika: przed 1.0 czy po.
 - **Dowód:** docs/specyfikacja.md:327, :383 (Zakres 1.0 „Rutyny krok po kroku”); docs/decyzje.md:98 (D93), :142 (D139); docs/decyzje-techniczne.md:448 (T458); src/renderer/features/routines/RoutinesPage.tsx:101; src/renderer/features/plan/BlockEditor.tsx:147; grep „odhacz” w src – brak
-- **Status:** do 5.2f (D328, D330, D225, A7-18 – T517)
+- **Status:** poprawione w 0.22.0 (testy w `tests/unit/engine/routine-check.test.ts`, `tests/unit/engine/ritual.test.ts`, `tests/web/screens-022.test.ts`, `tests/e2e/screens.spec.ts`, T520)
 
 #### A6-09 · medium → low · potwierdzone – Błędy IPC rytuału i niezamkniętych dni chowają całe karty; inne akcje dnia gubią odrzucone obietnice
 - **Plik:** `src/renderer/features/ritual/RitualPanel.tsx:73` · rodzaj: bug · pewność recenzenta: high
@@ -944,7 +944,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** MonthGrid w oknie kopii pozwala zaznaczyć każdy dzień miesiąca, także zakresem przeciąganiem. `copyDayTo` odwołuje w celu wszystkie bloki szablonu (także te, które dziś już biegły) i wstawia kopię. Na dziś bloki, które biegły, stają się „poza planem” i zmieniają się granica i budżet. Na niezamrożonym minionym dniu zmienia się plan, od którego liczy się jego ocena.
 - **Scenariusz:** Przeciągasz zaznaczenie od 20. do 31. dnia miesiąca, a dziś jest 28. – kopia zastępuje plan 20–28 (z dzisiejszym włącznie) i zmienia ocenę niezamkniętych dni. Toast z Cofnij trwa 10 s.
 - **Poprawka:** Ogranicz cele do dni po dziś (wyłączone komórki w MonthGrid) albo przy dziś i dniach minionych pokaż wyraźne ostrzeżenie – do decyzji.
-- **Status:** do 5.2f (D328, D330, D225, A7-18 – T517)
+- **Status:** poprawione w 0.22.0 (testy w `tests/unit/engine/routine-check.test.ts`, `tests/unit/engine/ritual.test.ts`, `tests/web/screens-022.test.ts`, `tests/e2e/screens.spec.ts`, T520)
 
 #### A6-14 · low · bez weryfikacji – Odrzucona godzina w „Pracowałem do …” / „skończył się o …” – „Zapisz” wysyła domyślną godzinę
 - **Plik:** `src/renderer/features/ritual/RitualPanel.tsx:170` · rodzaj: bug · pewność recenzenta: medium
@@ -1171,7 +1171,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** D225 i macierz ustawień przewidują pulsowanie paska do włączenia w ustawieniach komputera (domyślnie wyłączone). W Ustawieniach nie ma przełącznika, a w kodzie nie ma żadnego pulsowania. Komentarz w shared/machine.ts:28 sugeruje, że obejmują je „Animacje”, ale pasek nigdy nie pulsuje. Plan i odbiór o tym milczą.
 - **Scenariusz:** Użytkownik szuka w Ustawieniach opcji pulsowania paska przy 5 i 0 min, opisanej w specyfikacji – nie ma jej.
 - **Poprawka:** Dodać pref barPulse (domyślnie false) i przełącznik w „Ten komputer”. W Bar przy warn five/zero dodać klasę animacji, wyłączaną przez data-motion='off'. Albo zapisać decyzję, że D225 przesuwa się poza 1.0.
-- **Status:** do 5.2f (D328, D330, D225, A7-18 – T517)
+- **Status:** poprawione w 0.22.0 (testy w `tests/unit/engine/routine-check.test.ts`, `tests/unit/engine/ritual.test.ts`, `tests/web/screens-022.test.ts`, `tests/e2e/screens.spec.ts`, T520)
 
 #### A7-16 · low · bez weryfikacji – Podpowiedź „Pasek pulpitu: Leży pod oknami innych aplikacji” nieprawdziwa przy „Zawsze na wierzchu”
 - **Plik:** `src/renderer/features/settings/SettingsPage.tsx:95` · rodzaj: ux-text · pewność recenzenta: high
@@ -1195,7 +1195,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** info() oznacza święta PL („święto”) oraz NYSE i CME_FX („święto USA”, „skrócona sesja”). Kalendarza UK nie sprawdza, choć domyślna sesja „Londyn” ma markets ['UK'], a wbudowany kalendarz świąt obejmuje Wielką Brytanię. Dni z zamkniętym LSE (np. Easter Monday, bank holidays) nie mają żadnego oznaczenia.
 - **Scenariusz:** 25.08.2027 (Summer bank holiday) sesja londyńska nie działa, a w kalendarzu dzień wygląda jak zwykły.
 - **Poprawka:** Dodać marketDay('UK', d) z oznaczeniem „święto UK” i nazwą w title, tak jak dla USA.
-- **Status:** do 5.2f (D328, D330, D225, A7-18 – T517)
+- **Status:** poprawione w 0.22.0 (testy w `tests/unit/engine/routine-check.test.ts`, `tests/unit/engine/ritual.test.ts`, `tests/web/screens-022.test.ts`, `tests/e2e/screens.spec.ts`, T520)
 
 #### A7-19 · low · bez weryfikacji – Kreator: filtr pustych wykładów nigdy nie działa; nowy wykład ma semestr „dziś–dziś”
 - **Plik:** `src/renderer/features/wizard/wizardStore.ts:91` · rodzaj: bug · pewność recenzenta: high

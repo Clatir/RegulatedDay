@@ -100,6 +100,17 @@ export interface WidgetView {
   variants: BarVariants
   /** „Rytuał” in the bar (D318): after the end of work, the day not closed – a quiet item, no dot. */
   ritual: boolean
+  /** The routines whose lines the bar shows (D328): „Kroki ▸” unfolds the steps of the line's routine. */
+  routines: BarRoutine[]
+}
+
+/** A routine to tick off (D328): its line, its block, and its steps in each version (`worse` empty: none to pick). */
+export interface BarRoutine {
+  line: string
+  block: string
+  name: string
+  normal: Array<{ id: string; name: string; min: number }>
+  worse: Array<{ id: string; name: string; min: number }>
 }
 
 /** A request running now: its line in place of the block (D312); `day` – the day its „Koniec” goes to (also before 04:00). */
@@ -176,7 +187,8 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
     note: null,
     requests: NO_REQUESTS,
     variants: NO_VARIANTS,
-    ritual: false
+    ritual: false,
+    routines: []
   }
 }
 

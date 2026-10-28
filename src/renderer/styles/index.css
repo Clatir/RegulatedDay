@@ -228,6 +228,43 @@
   }
 }
 
+/*
+ * The desktop bar's optional pulse at 5 and 0 min (D225, off by default): three soft beats of its outline when the step
+ * comes – each step its own animation's name, so the next one beats again; an outline, never a fill over the text.
+ */
+@keyframes rd-bar-pulse-five {
+  0%,
+  100% {
+    outline-color: transparent;
+  }
+  50% {
+    outline-color: rgb(242 182 109 / 0.8);
+  }
+}
+@keyframes rd-bar-pulse-zero {
+  0%,
+  100% {
+    outline-color: transparent;
+  }
+  50% {
+    outline-color: rgb(242 182 109 / 0.8);
+  }
+}
+.rd-bar-pulse-five,
+.rd-bar-pulse-zero {
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  animation-duration: 1.2s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: 3;
+}
+.rd-bar-pulse-five {
+  animation-name: rd-bar-pulse-five;
+}
+.rd-bar-pulse-zero {
+  animation-name: rd-bar-pulse-zero;
+}
+
 /* Animations off (this computer's setting) or the system asks for less motion: the colour alone stays. */
 :root[data-motion='off'] *,
 :root[data-motion='off'] *::before,
@@ -245,7 +282,9 @@
   /* The room's endless loops would jitter every frame at 1 ms, and „+3 ♪” would end unseen: no motion at all. */
   .rd-rain,
   .rd-lamp-glow,
-  .rd-note-rise {
+  .rd-note-rise,
+  .rd-bar-pulse-five,
+  .rd-bar-pulse-zero {
     animation: none !important;
   }
 }

@@ -12,6 +12,7 @@ import type { Costs } from '../model/categories'
 import { compareEvents, eventAt, isKnown, type AnyEvent, type CloseHow, type LogEvent, type MinuteClass } from '../model/events'
 import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
 import type { PlanBlock } from '../model/plan'
+import type { RoutineVersion } from '../model/routines'
 import { idxOf, type Grid } from './grid'
 
 /** An open run or interval: still going. */
@@ -129,6 +130,8 @@ export interface DayFacts {
   notRest: Array<{ from: number; to: number; at: number }>
   /** The day's freeze: of two, the one by newer rules, then the one counting more events (spec „Ocena dnia”). */
   frozen: FrozenFact | null
+  /** Routines ticked off by their block (D328): the last record of each; `at` ms, `id` – the event (its „Cofnij”). */
+  routines: Map<string, { id: string; at: number; routine: string; version: RoutineVersion; steps: string[] }>
 }
 
 export interface FrozenFact {
@@ -177,7 +180,7 @@ const newBlock = (id: string): BlockFact => ({
 })
 
 /** Events that never change the timer's facts (they do not make segments stale either); energy never does either. */
-const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown', 'block.exchange', 'cost.felt'])
+const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown', 'block.exchange', 'cost.felt', 'routine.done'])
 
 export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k) || e.dom === 'energy'
 
@@ -203,7 +206,8 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
     answers: new Map(),
     closed: null,
     notRest: [],
-    frozen: null
+    frozen: null,
+    routines: new Map()
   }
   const fixes: Array<{ block: string; start: number | null; end: number | null; id: string }> = []
   const marks = new Map<string, boolean>()
@@ -409,6 +413,9 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
       }
       case 'rest.not':
         if (e.to > e.from) f.notRest.push({ from: idx(e.from), to: idx(e.to), at: idx(e.at) })
+        break
+      case 'routine.done':
+        f.routines.set(e.block, { id: e.id, at: e.at, routine: e.routine, version: e.version, steps: [...e.steps] })
         break
       case 'day.freeze': {
         const know: Record<string, number> = {}

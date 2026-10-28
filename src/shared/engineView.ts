@@ -21,13 +21,15 @@ import { OPEN, type AutoAction, type RequestFact } from './engine/facts'
 import { atOf, type Grid } from './engine/grid'
 import { isRunningRequest } from './engine/requests'
 import { ritualDue } from './engine/ritual'
+import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
 import { plannedEndOf, secondShiftStart, timerNow, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
 import type { PlanBlock } from './model/plan'
+import type { Routine } from './model/routines'
 import { ENGINE_TONE_SET, iconColor, toneColor, type Tone, type WarnStep } from './theme'
-import { NO_VARIANTS, type BarLine, type BarPending, type RunningRequest, type WidgetView } from './widget'
+import { NO_VARIANTS, type BarLine, type BarPending, type BarRoutine, type RunningRequest, type WidgetView } from './widget'
 
 const MIN = 60_000
 
@@ -52,6 +54,8 @@ export interface EngineInput {
   carried?: RunningRequest | null
   /** The first day of the ritual (D320): from it the bar has „Rytuał” after the end of work. */
   ritualFrom?: string | null
+  /** The routines (D328): a routine of a block begun today and not ticked off has its line. */
+  routines?: readonly Routine[]
 }
 
 /** A request without a person (spec „osoba: ?”). */
@@ -312,6 +316,16 @@ export function engineView(i: EngineInput): WidgetView {
     lines.push(...reserveLines(i, modes))
     lines.push(...dayLines(i, t, modes, nameOf, clockOf))
   }
+  // Routines to tick off (D328): quiet lines after all the others (no dot – in a quiet mode they fold into „⋯”), today,
+  // for 3 h after the routine; the card in „Dziś” keeps them to the day's end (T520).
+  const routines: BarRoutine[] = []
+  if (!hidden && !modes.night && state.grid.date === logicalDayOf(now))
+    for (const r of routinesDue(i.ctx, state, i.routines ?? [])) {
+      if (state.now >= r.to + ROUTINE_LINE_MIN) continue
+      const line = `routine:${state.grid.date}:${r.block}`
+      routines.push({ line, block: r.block, name: nameOf(r.block), normal: r.normal, worse: r.worse })
+      lines.push({ id: line, text: nameOf(r.block), actions: [{ id: 'all', label: '✓ Wszystkie' }, { id: 'steps', label: 'Kroki ▸' }, ...(r.worse.length ? [{ id: 'worse', label: 'gorsze dni' }] : [])], dot: false })
+    }
 
   const water = waterDue(events, state, t, now, i.care, { night: modes.night, disconnect: hidden })
   const session = !!fg && fg.info.rules.kind === 'session'
@@ -382,6 +396,7 @@ export function engineView(i: EngineInput): WidgetView {
     requests: { people: i.people ?? [], running, interrupted },
     variants: NO_VARIANTS,
     // Today's ritual due and not closed, not in the night – also in „Odcinam się” (D318, T505).
-    ritual: !modes.night && !state.facts.closed && state.grid.date === logicalDayOf(now) && ritualDue(state, logicalDayOf(now), i.ritualFrom ?? null)
+    ritual: !modes.night && !state.facts.closed && state.grid.date === logicalDayOf(now) && ritualDue(state, logicalDayOf(now), i.ritualFrom ?? null),
+    routines
   }
 }
