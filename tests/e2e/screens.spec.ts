@@ -122,9 +122,17 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(wake).toHaveAttribute('data-error', /Dozwolone/)
       await expect(wake).toHaveValue(wakeBefore)
 
-      // Kalendarz: two dates marked as a remote „zjazd”.
+      // Kalendarz: today keeps its type here – it changes in „Dziś” (A7-03).
       await page.getByTestId('nav-calendar').click()
       await expect(page.getByTestId('calendar')).toBeVisible()
+      const todayCell = page.getByTestId(`day-${logicalToday()}`)
+      const todayText = (await todayCell.textContent()) ?? ''
+      await todayCell.click({ modifiers: ['Control'] })
+      await page.getByTestId('calendar-type-zjazd-zdalny').click()
+      await expect(page.getByText('Typ dzisiejszego dnia zmienisz w „Dziś”', { exact: false })).toBeVisible()
+      await expect(todayCell).toHaveText(todayText)
+      // Two dates of the next month (days to come) marked as a remote „zjazd”.
+      await page.getByTestId('month-next').click()
       const cells = page.locator('[data-testid^="day-"]')
       await cells.nth(10).click({ modifiers: ['Control'] })
       await cells.nth(11).click({ modifiers: ['Control'] })
@@ -153,6 +161,17 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(page.getByTestId('routine-editor')).toBeVisible()
       await page.getByTestId('step-add-normal').click()
       await expect(page.getByTestId('steps-normal')).toContainText('10 min')
+      // The order is yours: ↑ moves the second step first – saved (A6-02).
+      const steps = page.getByTestId('steps-normal')
+      for (const [i, name] of [[1, 'woda'], [2, 'kot']] as const) {
+        const f = steps.getByLabel(`Krok ${i}`, { exact: true })
+        await f.fill(name)
+        await f.press('Enter')
+        await expect(f).toHaveValue(name)
+      }
+      await page.getByTestId('step-up-normal-1').click()
+      await expect(steps.getByLabel('Krok 1', { exact: true })).toHaveValue('kot')
+      await expect(steps.getByLabel('Krok 2', { exact: true })).toHaveValue('woda')
       await shot(page, 'e3-06-routines')
 
       // Szablony: the ordinary day with its second shift.

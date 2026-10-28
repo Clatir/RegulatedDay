@@ -106,19 +106,24 @@ export function editOf(rel: string, before: RawRecord | null, after: RawRecord |
   return recordEdit(rel, before, after)
 }
 
+let turn: Promise<unknown> = Promise.resolve()
+
 /**
- * Saves edits; what met a change on another computer stays a question (the banner shows it), what waits for the folder
- * is saved later – nothing pretends a success (spec „nic nie udaje sukcesu”).
+ * The window's edits go one at a time, each made when its turn comes from the records as they are then (the view is read
+ * again after every edit): two quick changes of one block never meet as if the second came from another computer, and
+ * the second never brings back what the first changed (A6-01).
  */
-export async function saveEdits(entries: ReadonlyArray<EditEntry | null>): Promise<EditOutcome[]> {
-  return (await trySaveEdits(entries)) ?? []
+function inTurn<T>(fn: () => Promise<T>): Promise<T> {
+  const run = turn.then(fn)
+  turn = run.catch(() => undefined)
+  return run
 }
 
-/** As `saveEdits`, but null when nothing could be sent (the toast said why): for a caller that must know it saved. */
-export async function trySaveEdits(entries: ReadonlyArray<EditEntry | null>): Promise<EditOutcome[] | null> {
-  const list = entries.filter((e): e is EditEntry => !!e)
-  if (!list.length) return []
+/** Sends edits made by `make` (in its turn); null when nothing could be sent – the toast said why. */
+async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>): Promise<EditOutcome[] | null> {
   try {
+    const list = (await make()).filter((e): e is EditEntry => !!e)
+    if (!list.length) return []
     const out = await window.rd.edit(list)
     await reloadData()
     if (out.some((o) => o.status === 'conflict' || o.status === 'removedElsewhere')) toast('Ta zmiana spotkała się ze zmianą z innego komputera – odpowiedz na pytanie u góry okna.', 'info', 8000)
@@ -130,19 +135,63 @@ export async function trySaveEdits(entries: ReadonlyArray<EditEntry | null>): Pr
   }
 }
 
+/**
+ * Saves edits; what met a change on another computer stays a question (the banner shows it), what waits for the folder
+ * is saved later – nothing pretends a success (spec „nic nie udaje sukcesu”).
+ */
+export async function saveEdits(entries: ReadonlyArray<EditEntry | null>): Promise<EditOutcome[]> {
+  return (await trySaveEdits(entries)) ?? []
+}
+
+/** As `saveEdits`, but null when nothing could be sent (the toast said why): for a caller that must know it saved. */
+export function trySaveEdits(entries: ReadonlyArray<EditEntry | null>): Promise<EditOutcome[] | null> {
+  return inTurn(() => send(() => entries))
+}
+
+/**
+ * Edits made in their turn by `make` – from the records (`rawRecord`) and the days' files (`dayFilesNow`) as they are
+ * then – and saved; null when nothing could be sent.
+ */
+export function trySaveWith(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>): Promise<EditOutcome[] | null> {
+  return inTurn(() => send(make))
+}
+
+/**
+ * The days' files as this computer sees them now (the folder's with the edits still queued); a file that cannot be read
+ * now is the one the window saw (`seen`) – its edit waits until it can be read, as the day says.
+ */
+export async function dayFilesNow(dates: readonly string[], seen: (date: string) => RawRecord | null): Promise<Record<string, RawRecord | null>> {
+  const files = await window.rd.dayFiles([...dates])
+  return Object.fromEntries(dates.map((d) => [d, d in files ? (files[d] ?? null) : seen(d)]))
+}
+
 /** Saved – written, or waiting for the folder – never a question, a broken file or an error. */
 export const isSaved = (out: readonly EditOutcome[] | null): boolean => out != null && out.every((o) => o.status === 'applied' || o.status === 'waiting')
 
 /** rd.json changed by `fn` (made when there is none yet – the defaults are never written unless you change something). */
-export function saveRd(fn: (raw: RawRecord) => RawRecord): Promise<EditOutcome[]> {
-  const before = rawRecord('rd.json')
-  return saveRecord('rd.json', before, fn(before ? { ...before } : { schema: 1 }))
+export async function saveRd(fn: (raw: RawRecord) => RawRecord): Promise<EditOutcome[]> {
+  return (await trySaveRd(fn)) ?? []
 }
 
 /** As `saveRd`, null when nothing could be sent. */
 export function trySaveRd(fn: (raw: RawRecord) => RawRecord): Promise<EditOutcome[] | null> {
-  const before = rawRecord('rd.json')
-  return trySaveEdits([editOf('rd.json', before, fn(before ? { ...before } : { schema: 1 }))])
+  return trySaveWith(() => {
+    const before = rawRecord('rd.json')
+    return [editOf('rd.json', before, fn(before ? { ...before } : { schema: 1 }))]
+  })
+}
+
+/** A record changed by `fn` from what it is in its turn (a record gone by then is not made again); null: not sent. */
+export function tryUpdateRecord(rel: string, fn: (raw: RawRecord) => RawRecord | null): Promise<EditOutcome[] | null> {
+  return trySaveWith(() => {
+    const before = rawRecord(rel)
+    return before ? [editOf(rel, before, fn({ ...before }))] : []
+  })
+}
+
+/** As `tryUpdateRecord`, [] when nothing could be sent. */
+export async function updateRecord(rel: string, fn: (raw: RawRecord) => RawRecord | null): Promise<EditOutcome[]> {
+  return (await tryUpdateRecord(rel, fn)) ?? []
 }
 
 /** A new person of the list (spec „Słowniki: … z „+ dodaj””); answers its id. */

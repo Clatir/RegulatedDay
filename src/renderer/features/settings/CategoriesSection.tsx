@@ -14,6 +14,7 @@ import { Choice, TextField } from '../../components/fields'
 import { Section, Toggle, cx } from '../../components/ui'
 import { saveRd, useData } from '../../store/data'
 import { useMachine } from '../../store/machine'
+import { useBusy } from '../../lib/busy'
 import { CLASS_NAMES, blockColor } from '../plan/blockView'
 import { SettingNumber } from './SettingNumber'
 import { useShared } from './SharedSettings'
@@ -49,15 +50,18 @@ export function CategoriesSection() {
   const [showArchived, setShowArchived] = useState(false)
   const [name, setName] = useState('')
   const ids = Object.keys(s.categories).filter((id) => showArchived || !rd.categories[id]?.archived)
-  const add = async () => {
-    const n = name.trim()
-    if (!n) return
-    const id = newId(10)
-    await setMeta(id, { name: n.slice(0, 60), color: null, archived: false })
-    save({ categories: { [id]: { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1 } } } })
-    setName('')
-    setOpen(id)
-  }
+  const [busy, run] = useBusy()
+  // The name is taken at once: a second click (or Enter and a click) while it saves adds no second category (A7-14).
+  const add = () =>
+    run(async () => {
+      const n = name.trim()
+      if (!n) return
+      setName('')
+      const id = newId(10)
+      await setMeta(id, { name: n.slice(0, 60), color: null, archived: false })
+      void save({ categories: { [id]: { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1 } } } })
+      setOpen(id)
+    })
   return (
     <Section title="Kategorie" data-testid="settings-categories">
       {ids.map((id) => {
@@ -65,7 +69,7 @@ export function CategoriesSection() {
         const meta = rd.categories[id]
         const color = blockColor(id, { rd, settings: s })
         return (
-          <div key={id} className={cx('flex flex-col gap-2 rounded border border-line px-2.5 py-1.5', meta?.archived && 'opacity-60')} data-testid="category-row">
+          <div key={id} className={cx('flex flex-col gap-2 rounded border border-line px-2.5 py-1.5', meta?.archived && 'border-dashed')} data-testid="category-row">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: blockFill(color, brightness), border: `1px solid ${color}` }} />
               <TextField value={meta?.name ?? ''} onCommit={(n) => void setMeta(id, { name: n })} required max={60} className="w-[200px]" aria-label="Nazwa kategorii" />
@@ -121,7 +125,7 @@ export function CategoriesSection() {
       })}
       <div className="flex items-center gap-2">
         <input className="input w-[220px]" value={name} maxLength={60} placeholder="+ dodaj kategorię" onChange={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} data-testid="category-new" />
-        <button type="button" className="btn" disabled={!name.trim()} onClick={() => void add()}>
+        <button type="button" className="btn" disabled={!name.trim() || busy} onClick={() => void add()}>
           Dodaj
         </button>
         {Object.values(rd.categories).some((m) => m.archived) && (

@@ -49,6 +49,7 @@ export const CH = {
   logEvents: 'rd:logEvents',
   resolve: 'rd:resolve',
   monthEvents: 'rd:monthEvents',
+  requestCounters: 'rd:requestCounters',
   historyList: 'rd:historyList',
   historyVersions: 'rd:historyVersions',
   historyRestore: 'rd:historyRestore',
@@ -107,6 +108,15 @@ export interface UnclosedDay {
   /** Closed already – shown for what came after its close (one line of information). */
   closed: boolean
   ritual: RitualView
+}
+
+/** Requests counted from the logs of the days (T479): today, this week, per person in the week („?” – no person). */
+export interface RequestCounters {
+  today: { count: number; minutes: number }
+  week: { count: number; minutes: number }
+  byPerson: Record<string, { count: number; minutes: number }>
+  /** Every log of the week was read (false: the numbers may be short now). */
+  complete: boolean
 }
 
 /** A backup of the folder (D321): daily or weekly, its file, size and time. */
@@ -198,6 +208,7 @@ export type WidgetAction =
   | 'urgent'
   | 'variants'
   | 'barClick'
+  | 'extendStep'
 
 export type TrialAction =
   | 'notifyIn10s'
@@ -442,13 +453,14 @@ export interface RdApi {
   /** Something in the data changed (a check of the folder, an edit, another computer's file). */
   onData(cb: () => void): () => void
   dayData(date: string): Promise<DayData>
-  /** The files of several days (the calendar's month), null where a day has none. */
+  /** The files of several days (the calendar's month), null where a day has none; a day whose file cannot be read now is left out. */
   dayFiles(dates: string[]): Promise<Record<string, RawRecord | null>>
   edit(entries: EditEntry[]): Promise<EditOutcome[]>
   logEvents(events: EventIn[]): Promise<void>
   resolve(id: string, choice: 'mine' | 'theirs'): Promise<void>
   /** The events of every day of a month (kinds asked) – e.g. the exceptions of the boundary this month. */
   monthEvents(month: string, kinds: string[]): Promise<unknown[]>
+  requestCounters(): Promise<RequestCounters>
   historyList(): Promise<HistoryRecord[]>
   historyVersions(kind: string, id: string): Promise<HistoryVersion[]>
   historyRestore(kind: string, id: string, file: string): Promise<EditOutcome[]>

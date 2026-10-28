@@ -6,7 +6,7 @@
  * with its cost. Nothing changes until „Zmień typ”; closing the window changes nothing.
  */
 import { useMemo, useState } from 'react'
-import { putBlock, setDayField, setSessionAnswer, takeBlock } from '@shared/data/dayEdits'
+import { dayRaw, putBlock, setDayField, setSessionAnswer, takeBlock } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { addTypeBlocks, applyTypeChange, planTypeChange, type TypeChangeInput } from '@shared/engine/typeChange'
 import { durationLabel, logicalClock } from '@shared/format'
@@ -17,7 +17,8 @@ import { logicalMinuteOf } from '@shared/time/day'
 import { weekday } from '@shared/time/zone'
 import { Dialog } from '../../components/Dialog'
 import { Segmented, cx } from '../../components/ui'
-import { editOf, logEvents, rawRecord, saveEdits, useData } from '../../store/data'
+import { useBusy } from '../../lib/busy'
+import { dayFilesNow, editOf, isSaved, logEvents, rawRecord, trySaveWith, useData } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { toast } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
@@ -33,6 +34,15 @@ export function TypeChangeDialog({ model, names, isToday, onlyAdd, onClose }: { 
   const raw = model.data.dayFile
   const duringDay = isToday && model.fromLog
 
+  // A day gone (its plan is the morning's snapshot): its file's type would change nothing (A6-12).
+  if (!isToday && model.fromLog)
+    return (
+      <Dialog title="Typ dnia" onClose={onClose} data-testid="type-dialog">
+        <p className="text-[12.5px]" data-testid="type-past">
+          Ten dzień już minął – jego typ ({DAY_TYPE_NAMES[current].toLowerCase()}) pochodzi z planu z rana i nie zmienia się wstecz. Dzień, który był wolny, oznaczysz jako „Wolne” w niezamkniętych dniach (rano na „Dziś”) albo w rytuale.
+        </p>
+      </Dialog>
+    )
   // A day to come, or today before it is made: the type of its file (the default again for the weekday's own type).
   if (!duringDay) {
     const weekdayType = settingsOn(rd.settings, date).weekTypes[weekday(date) - 1]
@@ -85,24 +95,31 @@ function DuringDay({ model, names, to, onlyAdd, onClose }: { model: DayModel; na
   const [add, setAdd] = useState<string[]>(plan.add.filter((a) => a.checked).map((a) => a.block.id))
   const lm = (idx: number) => logicalClock(logicalMinuteOf(date, atOf(model.state.grid, idx)))
 
-  const apply = async () => {
-    const r = onlyAdd ? addTypeBlocks(inp, plan, add) : applyTypeChange(inp, plan, { park, cancel, returnRequests: ret, add })
-    let next = raw ?? { schema: 1, date }
-    for (const b of r.blocks) next = putBlock(next, b)
-    for (const s of r.sessionsYes) next = setSessionAnswer(next, s, 'yes')
-    for (const b of r.requestBlocks) next = takeBlock(next, b.id)
-    const reqEdits = r.requestBlocks.flatMap((b) =>
-      b.requests.map((id) => {
-        const rel = paths.record('request', id)
-        const before = rawRecord(rel)
-        return before ? editOf(rel, before, { ...before, state: 'queued', day: null, block: null }) : null
+  const [busy, run] = useBusy()
+  // The day's events (the new type, the parking) only after its file was saved; the window stays open otherwise (A6-08).
+  const apply = () =>
+    run(async () => {
+      const r = onlyAdd ? addTypeBlocks(inp, plan, add) : applyTypeChange(inp, plan, { park, cancel, returnRequests: ret, add })
+      const out = await trySaveWith(async () => {
+        const before = (await dayFilesNow([date], () => raw))[date] ?? null
+        let next = dayRaw(before, date)
+        for (const b of r.blocks) next = putBlock(next, b)
+        for (const s of r.sessionsYes) next = setSessionAnswer(next, s, 'yes')
+        for (const b of r.requestBlocks) next = takeBlock(next, b.id)
+        const reqEdits = r.requestBlocks.flatMap((b) =>
+          b.requests.map((id) => {
+            const rel = paths.record('request', id)
+            const was = rawRecord(rel)
+            return was ? editOf(rel, was, { ...was, state: 'queued', day: null, block: null }) : null
+          })
+        )
+        return [editOf(paths.day(date), before, next), ...reqEdits]
       })
-    )
-    await saveEdits([editOf(paths.day(date), raw, next), ...reqEdits])
-    if (r.events.length) await logEvents(r.events.map((e) => ({ ...e, day: date }) as { k: string; day: string }))
-    if (r.boundary) toast(`Granica ${lm(r.boundary.before)} → ${lm(r.boundary.after)}`, 'info', 10_000, { label: 'Cofnij', run: () => void logEvents([{ k: 'boundary.approve', day: date, boundary: atOf(model.state.grid, r.boundary!.before), auto: false }]) })
-    onClose()
-  }
+      if (!isSaved(out)) return
+      if (r.events.length && !(await logEvents(r.events.map((e) => ({ ...e, day: date }) as { k: string; day: string })))) return
+      if (r.boundary) toast(`Granica ${lm(r.boundary.before)} → ${lm(r.boundary.after)}`, 'info', 10_000, { label: 'Cofnij', run: () => void logEvents([{ k: 'boundary.approve', day: date, boundary: atOf(model.state.grid, r.boundary!.before), auto: false }]) })
+      onClose()
+    })
 
   return (
     <Dialog title={onlyAdd ? `Dodaj bloki typu: ${DAY_TYPE_NAMES[to].toLowerCase()}` : `${DAY_TYPE_NAMES[plan.from]} → ${DAY_TYPE_NAMES[to]}`} onClose={onClose} wide data-testid="type-change">
@@ -163,7 +180,7 @@ function DuringDay({ model, names, to, onlyAdd, onClose }: { model: DayModel; na
         <button type="button" className="btn" onClick={onClose}>
           Anuluj
         </button>
-        <button type="button" className="btn btn-accent" onClick={() => void apply()} disabled={onlyAdd && !add.length} data-testid="type-apply">
+        <button type="button" className="btn btn-accent" onClick={() => void apply()} disabled={(onlyAdd && !add.length) || busy} data-testid="type-apply">
           {onlyAdd ? 'Dodaj' : 'Zmień typ'}
         </button>
       </div>

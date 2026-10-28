@@ -79,7 +79,7 @@ export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   classMode: true,
   notices: { start5: true, hardEnd: true, reserve: true },
   sound: false,
-  soundVolume: 0.4
+  soundVolume: 0.5
 }
 
 const num = (v: unknown, min: number, max: number, fallback: number): number =>

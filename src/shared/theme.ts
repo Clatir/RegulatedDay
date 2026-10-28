@@ -118,6 +118,17 @@ export function blockFill(color: string, brightness = 1): string {
   return darken(mix(PALETTE.surface, color, 0.15), Math.min(1, Math.max(0.5, brightness)))
 }
 
+/**
+ * A block (or a day) dimmed – ended, gone, parked, outside the month: its fill closer to the surface and its edge
+ * fainter, never its text (opacity took the text down to ~3:1 – A8-05).
+ */
+export function blockFillDim(color: string, brightness = 1): string {
+  return darken(mix(PALETTE.surface, color, 0.05), Math.min(1, Math.max(0.5, brightness)))
+}
+
+/** The edge colour of a dimmed block. */
+export const blockEdgeDim = (color: string): string => mix(PALETTE.surface, color, 0.45)
+
 /** A colour of the room's illustration (D322): muted toward the surface, dimmed with the brightness – graphics only, never under text. */
 export function artFill(color: string, brightness = 1): string {
   return darken(mix(PALETTE.surface, color, 0.55), Math.min(1, Math.max(0.5, brightness)))
@@ -181,8 +192,16 @@ export function contrastPairs(brightness: number): Array<{ name: string; text: s
   const out: Array<{ name: string; text: string; bg: string }> = []
   for (const [bn, bg] of windowBgs) for (const [tn, text] of [...plainTexts, ...accentTexts]) out.push({ name: `${tn} na ${bn}`, text, bg })
   for (const [bn, bg] of barBgs) for (const [tn, text] of plainTexts) out.push({ name: `${tn} na ${bn}`, text, bg })
-  // Blocks on the plan's axis: the text and the muted text on every category colour's fill.
-  for (const color of BLOCK_COLORS) for (const [tn, text] of plainTexts) out.push({ name: `${tn} na bloku ${color}`, text, bg: blockFill(color, brightness) })
+  // The bar's accents (the overrun „+N min”, a note, „wypite”) on the bar of the engine's set (A7-17).
+  for (const [bn, bg] of barBgs.filter(([n]) => n.startsWith(`pasek ${ENGINE_TONE_SET} `)))
+    for (const [tn, text] of accentTexts.filter(([n]) => n !== 'lampka')) out.push({ name: `${tn} na ${bn}`, text, bg })
+  // Blocks on the plan's axis and days of the calendar (their colours are of this palette): the text and the muted text
+  // on every colour's fill, dimmed too (A8-05).
+  for (const color of BLOCK_COLORS)
+    for (const [tn, text] of plainTexts) {
+      out.push({ name: `${tn} na bloku ${color}`, text, bg: blockFill(color, brightness) })
+      out.push({ name: `${tn} na przygaszonym bloku ${color}`, text, bg: blockFillDim(color, brightness) })
+    }
   // A primary button: its accent as text on a soft fill of the accent (never dark text on a full fill – that fill dims
   // with brightness and the dark text would lose its contrast).
   for (const [name, accent] of accentTexts) {

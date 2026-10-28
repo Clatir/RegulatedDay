@@ -4,7 +4,7 @@
  * the questions of the queue use them.
  */
 import { classify } from '@shared/data/paths'
-import { durationLabel, logicalClock, plDate } from '@shared/format'
+import { countLabel, durationLabel, logicalClock, plDate } from '@shared/format'
 import { fieldByKey } from '@shared/model/fields'
 import { categoryName, MODULE_NAMES, personName, type ModuleId, type RdFile } from '@shared/model/rd'
 import { DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
@@ -65,7 +65,15 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
     if (key === 'variantId' || key === 'routine' || key === 'recorder' || key === 'id') return 'wybrany'
     return v.length > 80 ? `${v.slice(0, 80)}…` : v
   }
-  if (Array.isArray(v)) return v.length ? `${v.length} ${v.length === 1 ? 'pozycja' : v.length < 5 ? 'pozycje' : 'pozycji'}` : 'brak'
+  if (Array.isArray(v)) {
+    if (!v.length) return 'brak'
+    // Blocks of a day or a template: by their names – a count says nothing of which one changed (A6-20).
+    if (v.every((x) => isPlain(x) && typeof x.categoryId === 'string')) {
+      const names = v.slice(0, 3).map((x) => valueText(key, x, n))
+      return v.length > 3 ? `${names.join(', ')} i ${countLabel(v.length - 3, 'inny', 'inne', 'innych')}` : names.join(', ')
+    }
+    return countLabel(v.length, 'pozycja', 'pozycje', 'pozycji')
+  }
   if (isPlain(v)) {
     if (typeof v.categoryId === 'string') {
       const start = typeof v.startMin === 'number' ? ` ${logicalClock(v.startMin)}` : ''

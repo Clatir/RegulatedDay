@@ -1,27 +1,27 @@
 /**
  * Prośby (spec „Prośba”, „Prośby”): the queue – a person from the list (with „+ dodaj osobę”), an estimate of time and a
  * note; chosen in the morning plan they go into a block of the day. Filters by state and person, counters of number and
- * minutes (today, this week, per person – by the estimates; the real minutes come with the requests in the bar, E5).
- * Ctrl+N makes a new request; removing one has „Cofnij” for 10 s.
+ * minutes (today, this week, per person – from the days' logs, T479). Ctrl+N makes a new request; removing one has
+ * „Cofnij” for 10 s.
  */
 import { useEffect, useState } from 'react'
+import type { RequestCounters } from '@shared/api'
 import { paths } from '@shared/data/paths'
 import { durationLabel, plDate } from '@shared/format'
 import { newId } from '@shared/model/ids'
+import { personName } from '@shared/model/rd'
 import { DEFAULT_ESTIMATE_MIN, ESTIMATE_RANGE, newRequest, type RequestRecord, type RequestState } from '@shared/model/requests'
-import { weekStart } from '@shared/time/day'
-import { addDays } from '@shared/time/zone'
 import { FilterBar, useFilters } from '../../components/FilterBar'
 import { Choice, DurationField, TextField } from '../../components/fields'
 import { EmptyState, Section } from '../../components/ui'
-import { addPerson, rawRecord, saveRd, saveRecord, useData } from '../../store/data'
+import { useNow } from '../../lib/clock'
+import { addPerson, editOf, isSaved, rawRecord, saveRd, saveRecord, trySaveEdits, updateRecord, useData } from '../../store/data'
 import { undoToast } from '../../store/ui'
 
 const STATE_NAMES: Record<RequestState, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobione', dropped: 'porzucone' }
 
 export function RequestsPage() {
   const { requests, rd } = useData()
-  const today = useData((s) => s.view?.today ?? '')
   const [filters] = useFilters('requests')
   const create = async () => {
     const id = newId()
@@ -52,7 +52,7 @@ export function RequestsPage() {
   ].filter((o) => o.count > 0 || filters.includes(o.id))
   return (
     <div className="flex flex-col gap-4 p-4" data-testid="requests">
-      <Counters requests={requests} today={today} />
+      <Counters />
       <div className="flex items-center gap-2">
         <button type="button" className="btn btn-accent" onClick={() => void create()} data-testid="request-new">
           + Prośba
@@ -80,13 +80,10 @@ const order = (r: RequestRecord) => ({ queued: 0, planned: 1, done: 2, dropped: 
 
 function Row({ r }: { r: RequestRecord }) {
   const rel = paths.record('request', r.id)
-  const set = (patch: Partial<RequestRecord>) => {
-    const before = rawRecord(rel)
-    if (before) void saveRecord(rel, before, { ...before, ...patch })
-  }
+  const set = (patch: Partial<RequestRecord>) => void updateRecord(rel, (raw) => ({ ...raw, ...patch }))
   const remove = async () => {
     const before = rawRecord(rel)
-    await saveRecord(rel, before, null)
+    if (!isSaved(await trySaveEdits([editOf(rel, before, null)]))) return
     undoToast('Prośba usunięta', () => void saveRecord(rel, null, before))
   }
   return (
@@ -158,29 +155,48 @@ export function PersonChoice({ value, onChange }: { value: string | null; onChan
   )
 }
 
-/** The counters of number and minutes (spec „Licznik liczby i minut: dziś, w tygodniu i dla każdej osoby”). */
-function Counters({ requests, today }: { requests: RequestRecord[]; today: string }) {
+/**
+ * The counters of number and minutes (spec „Licznik liczby i minut: dziś, w tygodniu i dla każdej osoby”): the requests
+ * of the days' logs with their real minutes (T479, A6-03) – read again when the data change and every 30 s.
+ */
+function Counters() {
   const rd = useData((s) => s.rd)
-  const week = weekStart(today)
-  const sum = (list: RequestRecord[]) => `${list.length} · ${durationLabel(list.reduce((m, r) => m + (r.estimateMin ?? DEFAULT_ESTIMATE_MIN), 0))}`
-  const inPlan = requests.filter((r) => r.day && (r.state === 'planned' || r.state === 'done'))
-  const todayList = inPlan.filter((r) => r.day === today)
-  const weekList = inPlan.filter((r) => r.day! >= week && r.day! <= addDays(week, 6))
-  const people = rd.people.map((p) => ({ p, list: weekList.filter((r) => r.person === p.id) })).filter((x) => x.list.length)
+  const stamp = useData((s) => s.stamp)
+  const tick = useNow(30_000)
+  const [c, setC] = useState<RequestCounters | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let alive = true
+    window.rd
+      .requestCounters()
+      .then((x) => alive && (setC(x), setFailed(false)))
+      .catch(() => alive && setFailed(true))
+    return () => {
+      alive = false
+    }
+  }, [stamp, tick])
+  const sum = (x: { count: number; minutes: number }) => `${x.count} · ${durationLabel(x.minutes)}`
+  const people = c ? Object.entries(c.byPerson).sort(([a], [b]) => (a === '?' ? 1 : b === '?' ? -1 : personName(rd, a).localeCompare(personName(rd, b), 'pl'))) : []
   return (
     <div className="flex flex-wrap gap-4 rounded border border-line bg-panel px-3 py-2 text-[12.5px]" data-testid="request-counters">
-      <span>
-        Dziś: <span className="num">{sum(todayList)}</span>
-      </span>
-      <span>
-        W tym tygodniu: <span className="num">{sum(weekList)}</span>
-      </span>
-      {people.map(({ p, list }) => (
-        <span key={p.id} className="text-muted">
-          {p.name}: <span className="num">{sum(list)}</span>
-        </span>
-      ))}
-      <span className="text-[11.5px] text-muted">(według szacunków; rzeczywisty czas próśb przyjdzie z paskiem)</span>
+      {!c ? (
+        <span className="text-muted">{failed ? 'Nie da się teraz policzyć próśb z logów dni.' : 'Liczę prośby…'}</span>
+      ) : (
+        <>
+          <span>
+            Dziś: <span className="num" data-testid="request-count-today">{sum(c.today)}</span>
+          </span>
+          <span>
+            W tym tygodniu: <span className="num">{sum(c.week)}</span>
+          </span>
+          {people.map(([id, x]) => (
+            <span key={id} className="text-muted">
+              {id === '?' ? 'osoba: ?' : personName(rd, id)}: <span className="num">{sum(x)}</span>
+            </span>
+          ))}
+          {!c.complete && <span className="text-[11.5px] text-rose">Nie wszystkie logi tygodnia dało się teraz odczytać – liczby mogą być niepełne.</span>}
+        </>
+      )}
     </div>
   )
 }

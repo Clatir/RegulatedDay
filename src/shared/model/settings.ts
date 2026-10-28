@@ -256,6 +256,20 @@ function categoryFrom(v: unknown, fallback: CategoryRules | undefined): Category
   }
 }
 
+/**
+ * A session with a new start: a start at or after its end moves the end too, keeping the length – a session whose end
+ * is not after its start would leave every day without a word, and the blocks anchored to it with it (A7-02).
+ */
+export function sessionWithStart(s: SessionDef, startMin: number): SessionDef {
+  const length = s.endMin - s.startMin
+  return { ...s, startMin, endMin: s.endMin > startMin ? s.endMin : startMin + length }
+}
+
+/** A session with a new end on the clock (an end not after the start is the next day's). */
+export function sessionWithEnd(s: SessionDef, clockMin: number): SessionDef {
+  return { ...s, endMin: clockMin > s.startMin ? clockMin : clockMin + 1440 }
+}
+
 function sessionsFrom(v: unknown, fallback: SessionDef[]): SessionDef[] {
   if (!Array.isArray(v)) return fallback
   const out: SessionDef[] = []

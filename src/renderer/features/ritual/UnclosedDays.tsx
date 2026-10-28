@@ -28,17 +28,28 @@ export function UnclosedDays() {
   const [tick, setTick] = useState(0)
   const [editing, setEditing] = useState<{ date: string; choice: string; min: number } | null>(null)
   const typed = useRef<number | null>(null)
+  // A read that fails keeps the days read before and says so – the section never vanishes quietly (A6-09).
+  const [failed, setFailed] = useState(false)
   useEffect(() => {
     let alive = true
     window.rd
       .unclosedDays()
-      .then((d) => alive && setDays(d))
-      .catch(() => alive && setDays([]))
+      .then((d) => alive && (setDays(d), setFailed(false)))
+      .catch(() => alive && setFailed(true))
     return () => {
       alive = false
     }
   }, [stamp, tick])
-  if (!days.length || skipped) return null
+  if (skipped) return null
+  if (!days.length)
+    return failed ? (
+      <section className="flex flex-wrap items-center gap-2 rounded-lg border border-rose/40 bg-rose-soft px-4 py-3 text-[12.5px]" data-testid="unclosed-failed">
+        <span className="flex-1">Nie da się teraz sprawdzić niezamkniętych dni (proces pomocniczy nie odpowiada).</span>
+        <button type="button" className="btn" onClick={() => setTick((x) => x + 1)}>
+          Spróbuj ponownie
+        </button>
+      </section>
+    ) : null
   const run = async (what: () => Promise<{ ok: boolean; why: string | null }>) => {
     setEditing(null)
     try {

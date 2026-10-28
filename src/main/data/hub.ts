@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { BackupRecord, CalibrationScreen, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
+import type { BackupRecord, CalibrationScreen, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords } from '@shared/data/merge'
@@ -20,7 +20,9 @@ import { CSV_HEADERS } from '@shared/engine/csv'
 import { reviewPrompt } from '@shared/engine/calibration'
 import type { SideB } from '@shared/engine/sideB'
 import { keptOnRestore, rdFrom } from '@shared/model/rd'
-import { logicalDayOf } from '@shared/time/day'
+import { requestCounters } from '@shared/engine/requests'
+import type { AnyEvent } from '@shared/model/events'
+import { logicalDayOf, weekStart } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { writeFileAtomic } from '../datastore/atomic'
@@ -448,7 +450,15 @@ export class DataHub {
   async dayFiles(dates: string[]): Promise<Record<string, RawRecord | null>> {
     const f = this.need()
     const out: Record<string, RawRecord | null> = {}
-    for (const d of dates.slice(0, 62)) if (isIsoDate(d)) out[d] = (await f.recordView(paths.day(d)).catch(() => undefined)) ?? null
+    // A file that cannot be read now is left out: unknown is never „no file” (an edit made against nothing would meet it).
+    for (const d of dates.slice(0, 62)) {
+      if (!isIsoDate(d)) continue
+      try {
+        out[d] = (await f.recordView(paths.day(d))) ?? null
+      } catch {
+        /* unreadable now */
+      }
+    }
     return out
   }
 
@@ -624,6 +634,26 @@ export class DataHub {
   async monthEvents(month: string, kinds: string[]): Promise<unknown[]> {
     if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('miesiąc')
     return this.need().monthEvents(month, kinds)
+  }
+
+  /**
+   * The counters of requests – today, this week (from Monday), per person in the week – from the logs of the days (T479,
+   * A6-03): requests from the bar are there, the queue's estimates are not the time. `complete` false: a day's logs could
+   * not all be read now (the numbers may be short).
+   */
+  async requestCounters(): Promise<RequestCounters> {
+    const f = this.need()
+    const now = f.clock.now()
+    const today = logicalDayOf(now)
+    const from = weekStart(today)
+    const days: Array<{ date: string; events: readonly AnyEvent[] }> = []
+    let complete = true
+    for (let d = from; d <= today; d = addDays(d, 1)) {
+      const read = await f.readDay(d)
+      complete &&= read.complete
+      days.push({ date: d, events: read.events as AnyEvent[] })
+    }
+    return { ...requestCounters(days, today, from, now), complete }
   }
 
   async historyList(): Promise<HistoryRecord[]> {

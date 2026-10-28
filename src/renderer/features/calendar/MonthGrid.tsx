@@ -111,7 +111,8 @@ export function MonthGrid({
               className={cx(
                 'relative flex h-[58px] flex-col items-start rounded border px-1.5 py-1 text-left',
                 sel ? 'border-lamp ring-1 ring-lamp' : 'border-line',
-                !inMonth && 'opacity-40',
+                // Outside the month: a dashed edge and a muted number – its text keeps its contrast (A8-05).
+                !inMonth && 'border-dashed text-muted',
                 d === today && 'outline outline-1 outline-fg/60'
               )}
               style={{ background: c.tone ?? undefined }}

@@ -88,7 +88,8 @@ export function finishRecords(d: WizardDraft, at: number, computer: string) {
       categories: rdFrom(undefined).categories,
       people: d.people.filter((p) => p.name.trim()),
       templates: draftTemplates(d),
-      lectures: d.lectures.filter((l) => l.name.trim() || l.categoryId),
+      // A lecture added and left without a name is not written (its category is always set – A7-19).
+      lectures: d.lectures.filter((l) => l.name.trim()),
       days: d.days
     },
     at,

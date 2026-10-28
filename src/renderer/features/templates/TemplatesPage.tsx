@@ -12,13 +12,13 @@ import { copiedTemplate, draggedBlock } from '@shared/engine/planEdit'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
-import { planBlock, templateVersionOn, type PlanBlock, type Template } from '@shared/model/plan'
+import { planBlock, templateFrom, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn } from '@shared/model/settings'
 import { placeLogical } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
 import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
-import { rawRecord, saveRecord, useData } from '../../store/data'
+import { editOf, isSaved, rawRecord, saveRecord, trySaveEdits, updateRecord, useData } from '../../store/data'
 import { countDay } from '../../store/day'
 import { undoToast } from '../../store/ui'
 import { BlockEditor } from '../plan/BlockEditor'
@@ -71,7 +71,7 @@ export function TemplatesPage() {
                   key={t.id}
                   type="button"
                   onClick={() => setSelected(t.id)}
-                  className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selected === t.id ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover', t.archived && 'opacity-60')}
+                  className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selected === t.id ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover', t.archived && 'border-dashed text-muted')}
                   data-testid="template-item"
                 >
                   <span>{t.name}</span>
@@ -110,17 +110,21 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   const settings = settingsOn(rd.settings, from)
   const names: Names = { rd, settings, routines, requests }
 
-  /** Saves the template with the version from `from` (made when it is not there yet). */
-  const saveVersion = (patch: Partial<typeof version>) => {
-    const next = { ...version, ...patch }
-    const versions = [...template.versions.filter((v) => v.from !== from), next].sort((a, b) => (a.from < b.from ? -1 : 1))
-    return saveTemplate({ versions })
-  }
-  const saveTemplate = (patch: Partial<Template>) => {
-    const before = rawRecord(rel)
-    const t = { ...template, ...patch }
-    return saveRecord(rel, before, templateJson(t, before))
-  }
+  /** The template changed by `fn` from what it is when the change's turn comes (two quick changes both stay – A6-01). */
+  const change = (fn: (t: Template) => Template) =>
+    updateRecord(rel, (raw) => {
+      const t = templateFrom(raw)
+      return t ? templateJson(fn(t), raw) : raw
+    })
+  const saveTemplate = (patch: Partial<Template>) => change((t) => ({ ...t, ...patch }))
+  /** Saves the template with the version from `from` (made when it is not there yet – a copy of the one in force then). */
+  const saveVersion = (patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)) =>
+    change((t) => {
+      const inForceThen = templateVersionOn(t, from)
+      const v = t.versions.find((x) => x.from === from) ?? (inForceThen ? { ...inForceThen, from } : { from, blocks: [], budgetMin: null, maxMin: null })
+      const next = { ...v, ...(typeof patch === 'function' ? patch(v) : patch) }
+      return { ...t, versions: [...t.versions.filter((x) => x.from !== from), next].sort((a, b) => (a.from < b.from ? -1 : 1)) }
+    })
 
   // The day this version would make: the first date from the chosen one with its weekday, counted by the engine.
   const sample = useMemo(() => {
@@ -138,7 +142,8 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   // Template blocks have the day's derived ids: the block of the version is found by its source.
   const byPlanId = new Map(model.ctx.plan.filter((b) => b.origin === 'template' && b.sourceId).map((b) => [b.id, b.sourceId!]))
   const block = version.blocks.find((b) => b.id === selected) ?? null
-  const putBlock = (b: PlanBlock) => saveVersion({ blocks: version.blocks.some((x) => x.id === b.id) ? version.blocks.map((x) => (x.id === b.id ? b : x)) : [...version.blocks, b] })
+  const putBlock = (b: PlanBlock) => saveVersion((v) => ({ blocks: v.blocks.some((x) => x.id === b.id) ? v.blocks.map((x) => (x.id === b.id ? b : x)) : [...v.blocks, b] }))
+  const patchBlock = (id: string, patch: Partial<PlanBlock>) => saveVersion((v) => ({ blocks: v.blocks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))
 
   const copy = async () => {
     const id = newId()
@@ -148,7 +153,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   }
   const remove = async () => {
     const before = rawRecord(rel)
-    await saveRecord(rel, before, null)
+    if (!isSaved(await trySaveEdits([editOf(rel, before, null)]))) return
     onRemoved()
     undoToast(`Usunięty szablon: ${template.name}`, () => void saveRecord(rel, null, before))
   }
@@ -186,7 +191,10 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
                   type="button"
                   className="chip"
                   aria-pressed={template.weekdays.includes(i + 1)}
-                  onClick={() => void saveTemplate({ weekdays: template.weekdays.includes(i + 1) ? template.weekdays.filter((x) => x !== i + 1) : [...template.weekdays, i + 1].sort() })}
+                  onClick={() => {
+                    const on = !template.weekdays.includes(i + 1)
+                    void change((t) => ({ ...t, weekdays: on ? [...new Set([...t.weekdays, i + 1])].sort() : t.weekdays.filter((x) => x !== i + 1) }))
+                  }}
                 >
                   {d}
                 </button>
@@ -225,7 +233,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
             onMove={(id, startMin) => {
               // D305: the template's block with its own start, moved in steps of 5 min.
               const b = version.blocks.find((x) => x.id === id)
-              if (b && b.anchor == null && b.startMin != null) void putBlock(draggedBlock(b, startMin))
+              if (b && b.anchor == null && b.startMin != null) void patchBlock(b.id, { startMin: draggedBlock(b, startMin).startMin })
             }}
             onCreate={(min) => {
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin: 60, origin: 'template' })
@@ -245,10 +253,10 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
           names={names}
           computers={view.computers}
           sessions={settings.sessions}
-          onChange={(b) => void putBlock(b)}
+          onChange={(patch) => void patchBlock(block.id, patch)}
           onClose={() => setSelected(null)}
           actions={
-            <button type="button" className="btn" onClick={() => void saveVersion({ blocks: version.blocks.filter((b) => b.id !== block.id) }).then(() => setSelected(null))} data-testid="template-block-remove">
+            <button type="button" className="btn" onClick={() => void saveVersion((v) => ({ blocks: v.blocks.filter((b) => b.id !== block.id) })).then(() => setSelected(null))} data-testid="template-block-remove">
               Usuń z szablonu ({blockName(block, names)})
             </button>
           }

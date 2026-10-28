@@ -10,32 +10,34 @@ import { DAY_TYPE_FIELDS, FIELD_GROUP_NAMES, NUMBER_FIELDS, type FieldGroup } fr
 import { plDate } from '@shared/format'
 import { newId } from '@shared/model/ids'
 import { MODULES, MODULE_NAMES } from '@shared/model/rd'
-import { DAY_TYPES, DAY_TYPE_NAMES, NY_ZONE, RANGES, settingsOn, type DayTypeId, type RulesSettings, type SessionChoice } from '@shared/model/settings'
+import { DAY_TYPES, DAY_TYPE_NAMES, NY_ZONE, RANGES, sessionWithEnd, sessionWithStart, settingsOn, type DayTypeId, type RulesSettings, type SessionChoice, type SessionDef } from '@shared/model/settings'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { Choice, ClockField, DateField, TextField } from '../../components/fields'
 import { Field, Section, Segmented, Toggle, cx } from '../../components/ui'
 import { useData } from '../../store/data'
-import { countDay, dayTypeNow, useDay } from '../../store/day'
+import { countDay } from '../../store/day'
+import { toast, undoToast } from '../../store/ui'
 import { SettingNumber } from './SettingNumber'
-import { saveGeneral, saveSettings, setModule, useSettingsFrom, type FromMode } from './settingsStore'
+import { saveGeneral, saveSettings, setFromDate, setModule, useSettingsFrom, type FromMode } from './settingsStore'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 const SHORT_DAYS = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd']
 
-/** The settings in force from the chosen date, and the function that saves a change of them. */
-export function useShared(): { s: RulesSettings; today: string; save: (patch: Record<string, unknown>) => void } {
+/**
+ * The settings in force from the chosen date, and the function that saves a change of them (today's type is read only
+ * when a change „od dziś” is saved – no section counts the day by itself, A7-08).
+ */
+export function useShared(): { s: RulesSettings; today: string; save: (patch: Record<string, unknown>) => Promise<boolean> } {
   const rd = useData((x) => x.rd)
   const today = useData((x) => x.view?.today ?? '')
   const mode = useSettingsFrom((x) => x.mode)
   const date = useSettingsFrom((x) => x.date)
-  const model = useDay(today)
-  const todayType = dayTypeNow(model)
   const s = useMemo(() => {
     const f = mode === 'today' ? { from: today, at: Date.now() } : mode === 'date' && date && date > today ? { from: date, at: null } : { from: addDays(today, 1), at: null }
     return settingsOn(rd.settings, f.from, f.at)
   }, [rd.settings, today, mode, date])
-  return { s, today, save: (patch) => void saveSettings(patch, todayType) }
+  return { s, today, save: saveSettings }
 }
 
 export function FromBar() {
@@ -58,7 +60,16 @@ export function FromBar() {
         aria-label="Od kiedy"
         data-testid="settings-from-mode"
       />
-      {mode === 'date' && <DateField today={today} value={date} onCommit={(d) => useSettingsFrom.setState({ date: d > today ? d : addDays(today, 1) })} className="w-[120px]" aria-label="Od daty" />}
+      {mode === 'date' && (
+        <DateField
+          today={today}
+          value={date}
+          onCommit={(d) => void (setFromDate(d, today) || toast('Data zmian musi być po dzisiejszej – na dziś wybierz „od dziś”.', 'error'))}
+          className="w-[120px]"
+          aria-label="Od daty"
+          data-testid="settings-from-date"
+        />
+      )}
       <span className="text-[12px] text-muted">
         {mode === 'today' ? 'Reszta dzisiejszego dnia liczy się według nowych wartości; minuty już sklasyfikowane się nie zmieniają.' : 'Dni wcześniejsze się nie zmieniają. Moduły i przerwy działają zawsze od razu.'}
         {future.length ? ` Zaplanowane zmiany: od ${future.map(plDate).join(', od ')}.` : ''}
@@ -150,17 +161,23 @@ const ZONES = [
 
 export function SessionsSection() {
   const { s, save } = useShared()
-  const setSession = (i: number, p: Partial<RulesSettings['sessions'][number]>) => save({ sessions: s.sessions.map((x, j) => (j === i ? { ...x, ...p } : x)) })
+  const setSession = (i: number, next: (x: SessionDef) => SessionDef) => void save({ sessions: s.sessions.map((x, j) => (j === i ? next(x) : x)) })
+  // „Cofnij” for 10 s gives the session back with its id – the blocks of templates anchored to it stay (A7-07).
+  const remove = async (i: number) => {
+    const before = s.sessions
+    const x = before[i]!
+    if (await save({ sessions: before.filter((_, j) => j !== i) })) undoToast(`Usunięta sesja: ${x.name}`, () => void save({ sessions: before }))
+  }
   return (
     <Section title="Sesje" data-testid="settings-sessions">
       {s.sessions.map((x, i) => (
         <div key={x.id} className="flex flex-wrap items-center gap-2">
-          <TextField value={x.name} onCommit={(name) => setSession(i, { name })} required max={40} className="w-[110px]" aria-label="Nazwa sesji" />
-          <ClockField value={x.startMin} onCommit={(startMin) => setSession(i, { startMin })} className="w-[76px]" aria-label={`${x.name}: początek`} />
+          <TextField value={x.name} onCommit={(name) => setSession(i, (y) => ({ ...y, name }))} required max={40} className="w-[110px]" aria-label="Nazwa sesji" />
+          <ClockField value={x.startMin} onCommit={(v) => setSession(i, (y) => sessionWithStart(y, v))} className="w-[76px]" aria-label={`${x.name}: początek`} />
           <span className="text-muted">–</span>
-          <ClockField value={x.endMin % 1440} onCommit={(v) => setSession(i, { endMin: v > x.startMin ? v : v + 1440 })} className="w-[76px]" aria-label={`${x.name}: koniec`} />
-          <Choice value={x.zone} options={ZONES} onChange={(zone) => setSession(i, { zone })} className="w-[150px]" aria-label={`${x.name}: strefa`} />
-          <button type="button" className="text-[12px] text-muted hover:text-rose" onClick={() => save({ sessions: s.sessions.filter((_, j) => j !== i) })}>
+          <ClockField value={x.endMin % 1440} onCommit={(v) => setSession(i, (y) => sessionWithEnd(y, v))} className="w-[76px]" aria-label={`${x.name}: koniec`} />
+          <Choice value={x.zone} options={ZONES} onChange={(zone) => setSession(i, (y) => ({ ...y, zone }))} className="w-[150px]" aria-label={`${x.name}: strefa`} />
+          <button type="button" className="text-[12px] text-muted hover:text-rose" onClick={() => void remove(i)} data-testid={`session-remove-${i}`}>
             Usuń
           </button>
         </div>

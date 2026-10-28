@@ -19,7 +19,7 @@ import { atOf } from '@shared/engine/grid'
 import { TimeField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
 import { useNow } from '../../lib/clock'
-import { useData } from '../../store/data'
+import { isSaved, useData } from '../../store/data'
 import { useDay, type DayModel } from '../../store/day'
 import { openDay, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
@@ -29,7 +29,7 @@ import { dayAxis, daySummary } from '../plan/dayItems'
 import { EnergyLegend, Timeline } from '../plan/Timeline'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
-import { saveDay, putDayBlock, removeDayBlock } from './dayActions'
+import { patchDayBlock, saveDay, putDayBlock, removeDayBlock } from './dayActions'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -120,7 +120,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
         return
       }
     }
-    await putDayBlock(date, raw, b)
+    if (!isSaved(await putDayBlock(date, raw, b))) return
     setDraft(null)
     setSelected(b.id)
   }
@@ -225,7 +225,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                 date >= today
                   ? (id, startMin) => {
                       const p = plan.find((b) => b.id === id)
-                      if (p) void putDayBlock(date, raw, draggedBlock(p, startMin))
+                      if (p) void patchDayBlock(date, raw, p, { startMin: draggedBlock(p, startMin).startMin })
                     }
                   : undefined
               }
@@ -241,7 +241,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             plan={plan}
             names={names}
             computers={view.computers}
-            onChange={(b) => (draft ? setDraft(b) : void putDayBlock(date, raw, b))}
+            onChange={(patch) => (draft ? setDraft((d) => d && { ...d, ...patch }) : void patchDayBlock(date, raw, block, patch))}
             onClose={() => {
               setDraft(null)
               setSelected(null)
@@ -365,11 +365,16 @@ function canStart(model: DayModel, id: string): boolean {
 
 /** „Start” from the block's panel: the main process writes it; a cost after the boundary asks the second click. */
 async function startBlock(date: string, block: string): Promise<void> {
-  const r = await window.rd.timer({ a: 'start', block, day: date })
-  if (r.confirm) {
-    const c = r.confirm
-    toast(`${c.overrun ? 'Przekroczenie' : 'Przedłużenie'}: ${c.minutes} min${c.bedtime ? ' (pora snu się przesunie)' : ' z puli projektów'}`, 'info', 10_000, { label: 'Potwierdź', run: () => void window.rd.timer({ a: 'start', block, day: date, confirm: true }) })
-  } else if (!r.ok && r.why) toast(r.why, 'info')
+  const failed = (e: unknown) => void toast(`Nie zaczęto bloku: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
+  try {
+    const r = await window.rd.timer({ a: 'start', block, day: date })
+    if (r.confirm) {
+      const c = r.confirm
+      toast(`${c.overrun ? 'Przekroczenie' : 'Przedłużenie'}: ${c.minutes} min${c.bedtime ? ' (pora snu się przesunie)' : ' z puli projektów'}`, 'info', 10_000, { label: 'Potwierdź', run: () => void window.rd.timer({ a: 'start', block, day: date, confirm: true }).catch(failed) })
+    } else if (!r.ok && r.why) toast(r.why, 'info')
+  } catch (e) {
+    failed(e)
+  }
 }
 
 /** Names of categories for texts (the side panel and dialogs). */

@@ -72,10 +72,13 @@ export function diffRecords(a: unknown, b: unknown, path: Path = []): FieldChang
     return out
   }
   if (isIdArray(a) && isIdArray(b) && (a.length || b.length)) {
-    const out: FieldChange[] = []
-    const ids = [...new Set([...a.map((x) => x.id), ...b.map((x) => x.id)])]
     const ma = byIds(a)
     const mb = byIds(b)
+    // The order changed (the steps of a routine moved up): item by item it would be no change at all – the whole array
+    // is the change (A6-02).
+    if (!deepEqual(commonOrder(a, mb), commonOrder(b, ma))) return [{ path, before: a, after: b }]
+    const out: FieldChange[] = []
+    const ids = [...new Set([...a.map((x) => x.id), ...b.map((x) => x.id)])]
     for (const id of ids) {
       const x = ma.get(id)
       const y = mb.get(id)
@@ -94,6 +97,11 @@ function byIds<T extends { id: string }>(arr: readonly T[]): Map<string, T> {
   const out = new Map<string, T>()
   for (const x of arr) if (!out.has(x.id)) out.set(x.id, x)
   return out
+}
+
+/** The order of the ids of `arr` that `other` has too. */
+function commonOrder(arr: ReadonlyArray<{ id: string }>, other: ReadonlyMap<string, unknown>): string[] {
+  return [...new Set(arr.map((x) => x.id))].filter((id) => other.has(id))
 }
 
 interface MergeResult<T> {
@@ -140,8 +148,10 @@ function mergeAt(rawBase: unknown, mine: unknown, theirs: unknown, path: Path, c
     const mm = byIds(mine)
     const tm = byIds(theirs)
     const bm = b ? byIds(b) : undefined
-    // Order: theirs, then items only I added (in my order).
-    const ids = [...theirs.map((x) => x.id), ...mine.map((x) => x.id).filter((id) => !tm.has(id))]
+    // Order: theirs, then items only I added (in my order) – mine first when only I changed the order (A6-02).
+    const all = new Map([...mm, ...tm].filter(([id]) => mm.has(id) && tm.has(id) && (!bm || bm.has(id))))
+    const mineOrders = !!b && bm !== undefined && deepEqual(commonOrder(b, all), commonOrder(theirs, all)) && !deepEqual(commonOrder(b, all), commonOrder(mine, all))
+    const ids = mineOrders ? [...mine.map((x) => x.id), ...theirs.map((x) => x.id).filter((id) => !mm.has(id))] : [...theirs.map((x) => x.id), ...mine.map((x) => x.id).filter((id) => !tm.has(id))]
     const out: unknown[] = []
     for (const id of ids) {
       const m = mm.get(id)

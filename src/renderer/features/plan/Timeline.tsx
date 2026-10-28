@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { logicalClock } from '@shared/format'
 import type { Pool } from '@shared/model/categories'
-import { blockFill } from '@shared/theme'
+import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { cx } from '../../components/ui'
 import { useMachine } from '../../store/machine'
 
@@ -207,11 +207,12 @@ export function Timeline({
         className={cx(
           'absolute right-0 left-0 overflow-hidden rounded-[3px] border-l-[3px] px-1.5 text-left leading-tight transition-colors',
           selected === i.id ? 'ring-1 ring-lamp' : 'hover:brightness-110',
-          i.dim && 'opacity-45',
           i.waits && 'border-dashed',
           draggable && (dragged ? 'z-20 cursor-grabbing shadow-lg' : 'cursor-grab')
         )}
-        style={{ top, height: h, background: blockFill(i.color, brightness), borderLeftColor: i.color }}
+        // Dimmed by its fill and edge, never its text (A8-05).
+        style={{ top, height: h, background: i.dim ? blockFillDim(i.color, brightness) : blockFill(i.color, brightness), borderLeftColor: i.dim ? blockEdgeDim(i.color) : i.color }}
+        data-dim={i.dim ? 'on' : undefined}
       >
         <div className={cx('flex min-w-0 items-baseline gap-1.5', tiny ? 'text-[11px]' : 'pt-0.5 text-[12px]')}>
           {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(start)}</span>}

@@ -13,12 +13,13 @@ import { FELT_COSTS, type FeltCost } from '@shared/model/events'
 import { categoryName } from '@shared/model/rd'
 import { logicalMinuteOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
-import { Choice, TimeField } from '../../components/fields'
+import { TimeField } from '../../components/fields'
 import { cx } from '../../components/ui'
 import { logEvents, useData } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { openDay, toast } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
+import { PersonChoice } from '../requests/RequestsPage'
 
 const BOUNDARY: Record<string, string> = { kept: 'dotrzymana', broken: 'niedotrzymana', noData: 'bez danych' }
 const FELT: Record<FeltCost, string> = { lighter: 'lżej', usual: 'jak zwykle', heavier: 'ciężej' }
@@ -61,16 +62,24 @@ export function untouched(r: RitualRow): boolean {
 }
 
 /** The day's ritual as the main process counts it, again after every change of the data and every minute. */
-export function useRitual(date: string): [RitualView | null, () => void] {
+/**
+ * The ritual of a day, counted by the helper: read again when the data change and every minute. A count that fails keeps
+ * the last good view and says so (`failed`) – the card never vanishes quietly (A6-09).
+ */
+export function useRitual(date: string): [RitualView | null, () => void, boolean] {
   const stamp = useData((s) => s.stamp)
   const [view, setView] = useState<RitualView | null>(null)
+  const [failed, setFailed] = useState(false)
   const [tick, setTick] = useState(0)
+  useEffect(() => {
+    setView(null)
+  }, [date])
   useEffect(() => {
     let alive = true
     window.rd
       .ritual(date)
-      .then((v) => alive && setView(v))
-      .catch(() => alive && setView(null))
+      .then((v) => alive && (setView(v), setFailed(false)))
+      .catch(() => alive && setFailed(true))
     return () => {
       alive = false
     }
@@ -79,7 +88,7 @@ export function useRitual(date: string): [RitualView | null, () => void] {
     const t = setInterval(() => setTick((x) => x + 1), 60_000)
     return () => clearInterval(t)
   }, [])
-  return [view, () => setTick((x) => x + 1)]
+  return [view, () => setTick((x) => x + 1), failed]
 }
 
 /** The minute of the day a row belongs to (the list goes by the time of day, D318); rows without one go last. */
@@ -116,7 +125,7 @@ interface Editing {
 
 export function RitualPanel({ model, names, onClosed }: { model: DayModel; names: Names; onClosed?: () => void }) {
   const date = model.date
-  const [view, reload] = useRitual(date)
+  const [view, reload, failed] = useRitual(date)
   const { rd } = useData()
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<Editing | null>(null)
@@ -124,7 +133,15 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
   const typed = useRef<number | null>(null)
   const [stretch, setStretch] = useState<{ row: string; from: number; to: number } | null>(null)
   const [confirm, setConfirm] = useState(false)
-  if (!view) return null
+  if (!view)
+    return failed ? (
+      <section className="flex flex-wrap items-center gap-2 rounded-lg border border-rose/40 bg-rose-soft px-4 py-3 text-[12.5px]" data-testid="ritual-failed">
+        <span className="flex-1">Nie da się teraz policzyć rytuału tego dnia (proces pomocniczy nie odpowiada) – spróbuj ponownie za chwilę.</span>
+        <button type="button" className="btn" onClick={reload}>
+          Spróbuj ponownie
+        </button>
+      </section>
+    ) : null
   const grid = gridOf(date)
   const t = (idx: number) => logicalClock(logicalMinuteOf(date, atOf(grid, idx)))
   const tm = (ms: number) => logicalClock(logicalMinuteOf(date, ms))
@@ -343,15 +360,9 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
       case 'person':
         return {
           text: `Prośba ${t(r.from)}–${r.to === Number.POSITIVE_INFINITY || r.to == null ? '…' : t(r.to)} · osoba: ?`,
-          acts: (
-            <Choice
-              value={null}
-              options={rd.people.filter((p) => !p.archived).map((p) => ({ value: p.id, label: p.name }))}
-              onChange={(id) => void answer(r, 'person', id)}
-              placeholder="— kto prosił —"
-              aria-label="Osoba prośby"
-            />
-          )
+          // With „+ dodaj osobę…” (spec „Słowniki”): a new person is added here, not on the screen of requests (A6-18).
+          acts: <PersonChoice value={null} onChange={(id) => id && void answer(r, 'person', id)} />
+
         }
       case 'rest':
         return {

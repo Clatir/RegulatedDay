@@ -21,6 +21,7 @@ import { LecturesSection } from './LecturesSection'
 import { DayTypesSection, FieldsSection, FromBar, ModulesSection, RegenWaysSection, SessionsSection } from './SharedSettings'
 import { CalibrationSection } from '../calibration/CalibrationEntry'
 import { DataSection } from './DataSection'
+import { resetSettingsFrom } from './settingsStore'
 
 const IDENTITY_LABEL: Record<AppInfo['identity'], string> = {
   production: 'zainstalowana',
@@ -50,6 +51,13 @@ export function SettingsPage() {
     void window.rd.update().then(setUpdate)
     return window.rd.onUpdate(setUpdate)
   }, [])
+  // „Od dziś” / „od daty” lasts only for this visit and this day: then „od jutra” again (T513, A7-13).
+  const today = useData((s) => s.view?.today ?? '')
+  const [visitDay] = useState(today)
+  useEffect(() => resetSettingsFrom, [])
+  useEffect(() => {
+    if (today && visitDay && today !== visitDay) resetSettingsFrom()
+  }, [today, visitDay])
   return (
     <div className="mx-auto flex max-w-[900px] flex-col gap-4 p-4" data-testid="settings">
       {dataOpen && (
@@ -92,7 +100,7 @@ export function SettingsPage() {
             data-testid="autostart"
           />
         </Field>
-        <Field label="Pasek pulpitu" hint={barNote ?? 'Leży pod oknami innych aplikacji – widać go tam, gdzie nic go nie zasłania.'}>
+        <Field label="Pasek pulpitu" hint={barNote ?? (prefs.onTop !== 'off' ? 'Leży nad oknami (Zawsze na wierzchu), bez zabierania fokusu; chowa się nad pełnym ekranem i przy oknie głównym na pierwszym planie.' : 'Leży pod oknami innych aplikacji – widać go tam, gdzie nic go nie zasłania.')}>
           <Toggle checked={prefs.desktopBar} onChange={(v) => void setMachinePrefs({ desktopBar: v })} label={prefs.desktopBar ? 'włączony' : 'wyłączony'} data-testid="pref-desktop-bar" />
         </Field>
         <Field label="Miejsce paska" hint="Monitory tak, jak ustawia je Windows. Pasek zostaje w wybranym miejscu na tym komputerze.">
@@ -136,7 +144,7 @@ export function SettingsPage() {
             {prefs.sound && (
               <Segmented
                 value={prefs.soundVolume}
-                options={[0.2, 0.4, 0.7, 1].map((v) => ({ value: v, label: `${Math.round(v * 100)} %` }))}
+                options={[0.2, 0.4, 0.5, 0.7, 1].map((v) => ({ value: v, label: `${Math.round(v * 100)} %` }))}
                 onChange={(v) => void setMachinePrefs({ soundVolume: v })}
                 aria-label="Głośność"
                 data-testid="pref-sound-volume"

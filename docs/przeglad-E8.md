@@ -831,7 +831,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W dayActions (i analogicznie w saveTemplate) trzymaj per plik ostatnią wysłaną wersję (optymistyczne `latest = after`, ważne do czasu, gdy dayData/rawRecord ją dogoni) i licz `before`/`next` od niej. Zapisy jednego pliku serializuj łańcuchem obietnic. BlockEditor niech wysyła łatkę (`onChange(patch)`) nakładaną na najnowszy blok, nie cały blok z propsa. Dodaj test: dwa `putDayBlock` z tym samym starym raw na bloku migawki zapisują obie zmiany bez pytania.
 - **Weryfikacja:** BlockEditor składa zmianę z propsa `block`, a TodayPage zapisuje ją z `raw` z ostatniego renderu. Oba odświeżają się dopiero po łańcuchu edit → reloadData → stamp → dayData, a ten trwa porównywalnie z czasem między mousedown (blur zatwierdza pole) a click. Blok migawki, którego nie ma w pliku, idzie przy pierwszej edycji w całości z bazą undefined (`['blocks']` albo `['blocks','#id']`). Druga edycja liczona od starego raw trafia na wartość z pierwszej i kolejka zwraca 'conflict' (sprawdzone testem na prawdziwych EditQueue i RecordStore, dla pliku bez `blocks` i z innymi blokami). Jedna poprawka do opisu: gdy pliku dnia w ogóle nie ma (raw null), druga edycja ma `create` i `folder.edit` ją odrzuca wyjątkiem („ten rekord już jest w folderze…”). Zamiast pytania jest wtedy toast „Nie zapisano”, ale zmiana tak samo ginie. „Zostaw moje” po cichu cofa pierwszą zmianę (90→60).
 - **Dowód:** src/renderer/features/plan/BlockEditor.tsx:43; src/renderer/features/today/TodayPage.tsx:89,244; src/shared/data/dayEdits.ts:24-31; src/shared/data/merge.ts:74-89; src/main/data/editQueue.ts:290-302; src/main/data/folder.ts:466-471; test tmp-e8-a6-verify: s1=applied, s2=conflict, w pliku durationMin 90 / fixed false
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-02 · high → medium · potwierdzone – Przestawianie kroków rutyny (↑/↓) nigdy się nie zapisuje
 - **Plik:** `src/renderer/features/routines/RoutinesPage.tsx:108` · rodzaj: bug · pewność recenzenta: high
@@ -841,7 +841,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Zapisuj kolejność jawnie. W `diffRecords` zmiana samej kolejności tablicy z id (te same id, inna kolejność) powinna dawać jedną zmianę całej tablicy pod jej ścieżką, a `mergeAt` przy zmianie kolejności tylko po jednej stronie powinien brać tę kolejność. Alternatywa: osobne pole `order` kroków. Dodaj test (web albo e2e): ↑ zmienia zapisaną kolejność.
 - **Weryfikacja:** `move` zamienia kroki i wysyła `save({[v]: steps})`. Kroki zawsze mają id (stepsFrom odrzuca kroki bez id), więc `diffRecords` porównuje je po id bez kolejności: każda para po id jest deepEqual i nie ma żadnej zmiany. `recordEdit` zwraca null (sprawdzone testem) i nic nie trafia do kolejki. Funkcja jest zepsuta po cichu, ale nie gubi danych: można zamienić nazwy i czasy kroków, a kolejność kroków na nic dziś nie wpływa (odhaczania nie ma, A6-10). Dlatego medium zamiast high.
 - **Dowód:** src/renderer/features/routines/RoutinesPage.tsx:108-114,74-77; src/shared/model/routines.ts:35-44; src/shared/data/merge.ts:74-88; test: recordEdit(zamienione kroki) === null; brak testu ↑/↓ w tests/
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-03 · high → medium · potwierdzone – Liczniki próśb liczą szacunki rekordów kolejki zamiast logów dni – prośby z paska w nich nie występują
 - **Plik:** `src/renderer/features/requests/RequestsPage.tsx:162` · rodzaj: spec · pewność recenzenta: high
@@ -851,7 +851,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodaj IPC (hub): dni tygodnia → `requestCounters(days, today, weekStart(today), now)`, a w `Counters` pokazuj jego wyniki (liczba, minuty, osoby, „?”). Usuń dopisek o szacunkach albo pokaż szacunek kolejki osobno. Dodaj test E2E: prośba z paska zwiększa licznik „Dziś”.
 - **Weryfikacja:** `Counters` sumuje `estimateMin` rekordów próśb ze stanem planned/done. Prośby z paska (`requestNow` w widget.ts) są tylko zdarzeniami `request.start/end` w logu dnia, bez rekordu, więc liczniki ich nie widzą. T479 każe liczyć dziś / tydzień / osobę z logów dni, a gotowe `requestCounters` ma wywołanie tylko w teście. CHANGELOG 0.5.0 opisuje liczniki jako „pod spodem”, a w 0.11.0 i później ekran ich nie dostał. Dopisek „rzeczywisty czas próśb przyjdzie z paskiem” jest nieaktualny. Liczniki pokazują błędne liczby, ale nie psują danych, dlatego medium.
 - **Dowód:** src/renderer/features/requests/RequestsPage.tsx:162-185; src/shared/engine/requests.ts:199-217 (grep: brak wywołań w src); src/main/widget.ts:536; docs/decyzje-techniczne.md:448 (T458), :469 (T479)
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-04 · medium · potwierdzone – Podwójne kliknięcie duplikuje: wyjątek granicy się sumuje, prośby trafiają do dwóch bloków, kopia dnia może podwoić bloki
 - **Plik:** `src/renderer/features/today/MorningPlan.tsx:367` · rodzaj: bug · pewność recenzenta: high
@@ -861,7 +861,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Wspólny hook `useBusy` (wyłączony przycisk i ignorowanie kliknięć do końca obietnicy) dla: exception-add, queue-add, copy-apply, checkin-save, boundary-approve, exchange-swap/add, type-apply, move-apply, late-wake-apply. Do kopii dnia dodaj test na podwójne kliknięcie.
 - **Weryfikacja:** Przyciski nie blokują się na czas zapisu. „Dodaj wyjątek” chowa formularz dopiero w `.then` po logEvents i reloadData, więc drugi klik podwójnego kliknięcia dopisuje drugie `boundary.exception`. `userEvents` niczego nie odduplikowuje (usuwa nawet `id`), a `maxAt` sumuje wyjątki (do limitu exceptionMaxMin). W `addRequests` drugi klik ma to samo domknięcie: `requestsBlock` z nowym id, a pole `block` prośby (baza null, teraz b1) daje konflikt. `copiedDay` losuje nowe id przy każdym wywołaniu, więc przy pliku z blokami druga kopia dodaje drugi zestaw bloków, a przy pliku bez bloków daje konflikt `['blocks']`. Jest to sprzeczne ze specyfikacją („podwójne kliknięcie nie duplikuje”).
 - **Dowód:** src/renderer/features/today/MorningPlan.tsx:178-197,364-370; src/main/data/folder.ts:1596-1618; src/shared/engine/day.ts:535; src/shared/engine/planEdit.ts:97-99,148; src/renderer/features/today/MoveDialogs.tsx:55-61; docs/specyfikacja.md:767
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-05 · medium · potwierdzone – „Przyjmij nowsze” przywraca rekordy usunięte na innym komputerze i po cichu połyka błędy
 - **Plik:** `src/renderer/app/Questions.tsx:60` · rodzaj: data · pewność recenzenta: high
@@ -871,7 +871,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W `newer()` rozstrzygaj tylko `kind === 'conflict'`, a pytania removed/broken zostaw do wyboru pojedynczego. Zbieraj błędy `resolve` i pokaż toast, a przy błędzie nie zamykaj okna. Test: „Przyjmij nowsze” nie odtwarza rekordu usuniętego.
 - **Weryfikacja:** Dla pytania 'removed' plik nie istnieje, więc `hub.questions` daje `theirsAt = null` i `newer()` zawsze wybiera 'mine'. `hub.resolve` z 'mine' przy `removedElsewhere` odtwarza wtedy rekord z historii (`restoreFrom`, `create: true`). Narusza to T448 (rekord wraca tylko na „Przywróć”) i specyfikację („nigdy po cichu nie przywraca”). `.catch(() => undefined)` gubi błędy, a okno zamyka się zawsze.
 - **Dowód:** src/renderer/app/Questions.tsx:60-64; src/main/data/hub.ts:391-401 (theirsAt null przy braku pliku), :599-611; src/main/data/editQueue.ts:247-251; docs/decyzje-techniczne.md:438 (T448); docs/specyfikacja.md:643
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-06 · medium · potwierdzone – Panel bloku pozwala na cykl kotwic przez trzy bloki – wszystkie bloki cyklu znikają z planu i z osi
 - **Plik:** `src/renderer/features/plan/BlockEditor.tsx:46` · rodzaj: bug · pewność recenzenta: high
@@ -880,7 +880,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Wyklucz z `anchors` wszystkie bloki, których łańcuch kotwic prowadzi do edytowanego (przejście po `anchor` w planie). Ewentualnie odrzuć wybór z komunikatem. Test bez DOM na funkcji listy kotwic.
 - **Weryfikacja:** Lista kotwic wyklucza tylko edytowany blok i bloki zakotwiczone do niego bezpośrednio (`b.anchor !== block.id`). Przy łańcuchu Obiad→Praca, Spacer→Obiad Spacer jest na liście. Do tego „po bloku” od razu ustawia `anchors[0]`, więc cykl może powstać nawet bez wyboru z listy. `dayPlan` usuwa każdy blok, którego łańcuch kotwic wraca do już odwiedzonego (wszystkie trzy), a potem kaskadowo zakotwiczone do nich. Bloku nie ma wtedy w `ctx.plan`, panel się zamyka, a oś go nie pokazuje. W kodzie i testach nie ma żadnej ochrony przed cyklem.
 - **Dowód:** src/renderer/features/plan/BlockEditor.tsx:44-47,79; src/shared/engine/createDay.ts:220-241; src/renderer/features/today/TodayPage.tsx:92; src/renderer/features/templates/TemplatesPage.tsx:140,241
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-07 · medium · potwierdzone – „Cofnij” po odwołaniu bloku daje konflikt, gdy w ciągu 10 s odwołano drugi blok (mapa `cancelled` cofana w całości)
 - **Plik:** `src/renderer/features/today/dayActions.ts:36` · rodzaj: bug · pewność recenzenta: high
@@ -890,7 +890,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Cofnięcie licz jako odwrotność jednej operacji na aktualnym raw z chwili kliknięcia, np. `saveDay(date, latestRaw, r => setCancelled(r, id, false))`, a dla własnego bloku `putBlock(r, b)`. Nie licz różnicy after→before. Test: dwa odwołania i cofnięcie pierwszego.
 - **Weryfikacja:** Gdy plik dnia nie ma mapy `cancelled`, pierwsze odwołanie zapisuje całą mapę. Cofnięcie (`editOf(rel, after, before)`) ma wtedy ścieżkę `['cancelled']` z bazą `{A:true}` i wartością undefined. Po drugim odwołaniu w pliku jest `{A:true,B:true}` i cofnięcie A jest konfliktem (sprawdzone testem: 'conflict'). Co gorsza, „Zostaw moje” usuwa całą mapę, więc po cichu cofa też odwołanie B.
 - **Dowód:** src/renderer/features/today/dayActions.ts:32-37,66; src/shared/data/dayEdits.ts:46-51; src/shared/data/merge.ts:64-89; test tmp-e8-a6-verify: undo = {path:['cancelled'], base:{A:true}} → conflict
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-08 · medium · potwierdzone – Zapis bez sukcesu pokazany jako sukces: toast „Usunięty · Cofnij” i kolejne zdarzenia mimo nieudanej edycji
 - **Plik:** `src/renderer/features/today/dayActions.ts:35` · rodzaj: bug · pewność recenzenta: high
@@ -900,7 +900,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Użyj `trySaveEdits` + `isSaved`. Toast z Cofnij, zdarzenia logu i zamknięcie okna dopiero po sukcesie (stan 'waiting' też jest sukcesem). Przy porażce zostaw okno otwarte. Test: nieudany `rd.edit` w oknie wymiany nie zapisuje `block.park`.
 - **Weryfikacja:** `saveEdits` po wyjątku zwraca [] (z toastem błędu), a 'broken' i 'conflict' zwraca jako wyniki. `removeDayBlock`, `copyDayTo` oraz `remove` w Requests, Routines i Templates nie sprawdzają wyniku i zawsze pokazują „… · Cofnij”. ExchangeDialog po nieudanym zapisie i tak pisze `block.park`, `block.exchange` i `addConfirm`, a LateWakeCard pisze `block.park`. Dzieje się to tylko przy rzadkich porażkach: offline to 'waiting', czyli sukces; porażka to uszkodzony plik, wyjątek IPC albo konflikt. Jednak w oknie wymiany zostają nieodwracalne zdarzenia logu bez nowego bloku, dlatego zostaje medium. `trySaveEdits`/`isSaved` istnieją i nie są tu użyte.
 - **Dowód:** src/renderer/store/data.ts:113-134; src/renderer/features/today/dayActions.ts:35-36,65-66; src/renderer/features/today/ExchangeDialog.tsx:41-50; src/renderer/features/today/LateWakeCard.tsx:21-27; src/renderer/features/requests/RequestsPage.tsx:87-91; src/renderer/features/routines/RoutinesPage.tsx:78-83; src/renderer/features/templates/TemplatesPage.tsx:149-154
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-10 · medium · potwierdzone – Odhaczanie kroków rutyny z wyborem wersji (Zakres 1.0) nie istnieje, a ekran Rutyny je zapowiada
 - **Plik:** `src/renderer/features/routines/RoutinesPage.tsx:101` · rodzaj: spec · pewność recenzenta: high · **wymaga Twojej decyzji**
@@ -910,7 +910,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dopisać pozycję do docs/plan.md przed 1.0 (zdarzenie odhaczenia z wersją, miejsce w pasku albo w panelu bloku, wpływ na długość bloku) albo jawną decyzję D o przesunięciu po 1.0 i do tego czasu usunąć zdanie z ekranu Rutyny.
 - **Weryfikacja:** Specyfikacja (Bloki → Rutyna) i D93/D139 przewidują wybór wersji jednym kliknięciem przy odhaczaniu kroków. Zakres 1.0 obejmuje „Rutyny krok po kroku”. T458 odłożył odhaczanie do E4a/E4b, ale w src nie ma ani zdarzenia, ani interfejsu (brak trafień „odhacz”), a docs/plan.md i docs/postep.md tej pozycji nie mają. Długość bloku rutyny bierze zawsze wersję zwykłą (`routineMinutes(r)`), więc wersja na gorsze dni na nic nie wpływa, a ekran Rutyny zapowiada funkcję, której nie ma. Potrzebna decyzja użytkownika: przed 1.0 czy po.
 - **Dowód:** docs/specyfikacja.md:327, :383 (Zakres 1.0 „Rutyny krok po kroku”); docs/decyzje.md:98 (D93), :142 (D139); docs/decyzje-techniczne.md:448 (T458); src/renderer/features/routines/RoutinesPage.tsx:101; src/renderer/features/plan/BlockEditor.tsx:147; grep „odhacz” w src – brak
-- **Status:** otwarte
+- **Status:** do 5.2f (D328, D330, D225, A7-18 – T517)
 
 #### A6-09 · medium → low · potwierdzone – Błędy IPC rytuału i niezamkniętych dni chowają całe karty; inne akcje dnia gubią odrzucone obietnice
 - **Plik:** `src/renderer/features/ritual/RitualPanel.tsx:73` · rodzaj: bug · pewność recenzenta: high
@@ -920,7 +920,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Trzymaj ostatni dobry widok i pokazuj stan błędu („Nie da się teraz policzyć rytuału · Spróbuj ponownie”) w RitualPanel i UnclosedDays. Dodaj `catch` z toastem w startBlock, MoveDialog, CopyDayDialog, monthEvents i timer 'fewer'.
 - **Weryfikacja:** Kod rzeczywiście chowa błędy. `useRitual` przy odrzuceniu ustawia null i panel znika. `UnclosedDays` ustawia []. Do tego `hub.unclosedDays` sam połyka błąd rytuału dnia (`catch → null`) i pomija ten dzień. Brak catch w startBlock, MoveDialog/CopyDayDialog, monthEvents i timer 'fewer' też jest prawdziwy. Scenariusz recenzenta jest jednak przesadzony: awaria pomocnika jest przejściowa (proces startuje sam przy następnym zadaniu), rytuał pyta ponownie co minutę, a niezamknięte dni przy każdej zmianie stamp. Okno do zamrożenia to co najmniej 24 h, więc jedna awaria nie prowadzi do cichego zamrożenia. Problem dotyczy widoczności błędów, nie danych, dlatego low.
 - **Dowód:** src/renderer/features/ritual/RitualPanel.tsx:64-82,127; src/renderer/features/ritual/UnclosedDays.tsx:30-39; src/main/data/hub.ts:497-513; src/main/worker/host.ts:51-131; src/renderer/features/today/TodayPage.tsx:367-373; src/renderer/features/today/MoveDialogs.tsx:19,58
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-11 · low · bez weryfikacji – „Cofnij zatwierdzenie” w planie porannym pisze tylko `boundary.undo` – nagłówek dalej mówi „zatwierdzony”
 - **Plik:** `src/renderer/features/today/MorningPlan.tsx:323` · rodzaj: bug · pewność recenzenta: medium
@@ -928,7 +928,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Okno nie może zapisać `undo` (brak w USER_EVENTS), więc cofnięcie z planu porannego zostawia zatwierdzenie w `facts.approvals`. Pasek cofa inaczej (timer.ts:418: `undo` z celem + `boundary.undo`) i zatwierdzenie znika z faktów. Po cofnięciu z okna `approvedByYou` jest dalej true: nagłówek „Plan poranny · zatwierdzony” przeczy sekcji „Propozycja granicy … Zatwierdź plan”. `detectLateWake` dalej uważa plan za zrobiony, a `exchangeOf` (gra) bierze cofnięte zatwierdzenie za pierwsze.
 - **Scenariusz:** Zatwierdzasz plan i klikasz „Cofnij zatwierdzenie” w planie porannym. Granica nie jest zatwierdzona (widać „Zatwierdź plan”), a nagłówek karty mówi „zatwierdzony”. Ten sam ruch w pasku daje inny stan faktów.
 - **Poprawka:** Jedna droga cofnięcia: wywołaj akcję timera przez `window.rd.timer` (ta sama co w pasku) albo dopuść w USER_EVENTS `undo` z celem `boundary.approve`. Test: po cofnięciu z okna `facts.approvals` jest pusty.
-- **Status:** otwarte
+- **Status:** do 5.3 (T517)
 
 #### A6-12 · low · bez weryfikacji – Zmiana typu dnia na minionym dniu zapisuje plik bez żadnego skutku
 - **Plik:** `src/renderer/features/today/TypeChangeDialog.tsx:37` · rodzaj: ux-text · pewność recenzenta: high
@@ -936,7 +936,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Dla dnia innego niż dziś okno idzie ścieżką `!duringDay` i zapisuje `dayType` w pliku dnia. Dzień miniony ma migawkę z logu (`snapshotOf` → fromLog), więc typ w pliku jest ignorowany. Okno się zamyka, przycisk typu pokazuje dawny typ, a w pliku zostaje martwa zmiana.
 - **Scenariusz:** Otwierasz wczoraj (‹), klikasz typ „Zwykły” → „Wolne”. Okno się zamyka, a typ i ocena dnia są bez zmian, bez komunikatu. Po fakcie dzień oznacza się „Wolne” w niezamkniętych dniach.
 - **Poprawka:** Dla dni minionych (`date < today`, `fromLog`) pokaż przycisk typu tylko do odczytu albo okno z wyjaśnieniem i odesłaniem do „Wolne” w niezamkniętych dniach.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-13 · low · bez weryfikacji – „Skopiuj ten dzień do…” przyjmuje dziś i dni minione – zastępuje plan dnia, który już trwał
 - **Plik:** `src/renderer/features/today/MoveDialogs.tsx:92` · rodzaj: data · pewność recenzenta: medium · **wymaga Twojej decyzji**
@@ -944,7 +944,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** MonthGrid w oknie kopii pozwala zaznaczyć każdy dzień miesiąca, także zakresem przeciąganiem. `copyDayTo` odwołuje w celu wszystkie bloki szablonu (także te, które dziś już biegły) i wstawia kopię. Na dziś bloki, które biegły, stają się „poza planem” i zmieniają się granica i budżet. Na niezamrożonym minionym dniu zmienia się plan, od którego liczy się jego ocena.
 - **Scenariusz:** Przeciągasz zaznaczenie od 20. do 31. dnia miesiąca, a dziś jest 28. – kopia zastępuje plan 20–28 (z dzisiejszym włącznie) i zmienia ocenę niezamkniętych dni. Toast z Cofnij trwa 10 s.
 - **Poprawka:** Ogranicz cele do dni po dziś (wyłączone komórki w MonthGrid) albo przy dziś i dniach minionych pokaż wyraźne ostrzeżenie – do decyzji.
-- **Status:** otwarte
+- **Status:** do 5.2f (D328, D330, D225, A7-18 – T517)
 
 #### A6-14 · low · bez weryfikacji – Odrzucona godzina w „Pracowałem do …” / „skończył się o …” – „Zapisz” wysyła domyślną godzinę
 - **Plik:** `src/renderer/features/ritual/RitualPanel.tsx:170` · rodzaj: bug · pewność recenzenta: medium
@@ -952,7 +952,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** TimeField odrzuca błędną wartość toastem i wraca do poprzedniej, a `typed.current` zostaje null. „Zapisz” wysyła wtedy `editing.min`, czyli godzinę startową wiersza, jako Twoją odpowiedź. Tak samo jest w UnclosedDays.tsx:61. Dla „Pracowałem do …” po bloku pracy domyślna jest `explain.from`, co zmienia rozstrzygnięcie czasu do wyjaśnienia na odpowiedź, której nie wybrałeś.
 - **Scenariusz:** W rytuale klikasz „Pracowałem do …”, wpisujesz „25:30” i klikasz „Zapisz”. Pole pokazuje błąd, ale zapisuje się „Pracowałem do 17:30” (początek czasu do wyjaśnienia) i dzień zmienia ocenę.
 - **Poprawka:** Przy odrzuceniu ustaw flagę błędu (np. `onError` w CommitField albo odczyt `data-error`) i nie wysyłaj odpowiedzi, dopóki pole jest błędne.
-- **Status:** otwarte
+- **Status:** do 5.3 (T517)
 
 #### A6-15 · low · bez weryfikacji – Poniedziałkowa „Strona B” zasłania check-in i plan: bez „Pomiń” w trakcie liczenia, „Dalej” nie działa przy nieczytelnym pliku dnia
 - **Plik:** `src/renderer/features/today/SideBStep.tsx:36` · rodzaj: spec · pewność recenzenta: medium
@@ -960,7 +960,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Dopóki `rd.sideB()` liczy (proces pomocniczy, 14 dni podsumowań), krok pokazuje tylko „Liczę „Stronę B”…” – nie ma „Pomiń”, a check-in i plan są niedostępne. „Dalej” zapisuje `asked.sideB` w pliku dnia. Gdy plik jest nieczytelny (OneDrive), edycja czeka, `dayFile` w widoku jest null i krok się nie chowa.
 - **Scenariusz:** Poniedziałek rano, OneDrive jeszcze pobiera plik dnia. Klikasz „Dalej” i „Strona B” zostaje, a do pytań o objawy i „Zatwierdź plan” nie da się dojść.
 - **Poprawka:** Pokazuj „Pomiń” także w trakcie liczenia. Po „Dalej”/„Pomiń” chowaj krok od razu stanem okna (niezależnie od zapisu), a zapis `asked.sideB` niech idzie w tle.
-- **Status:** otwarte
+- **Status:** do 5.3 (T517)
 
 #### A6-16 · low · bez weryfikacji – Przeciągnięty blok na chwilę wraca na stare miejsce – blokada upuszczenia czyści się przed nowymi danymi dnia
 - **Plik:** `src/renderer/features/plan/Timeline.tsx:106` · rodzaj: bug · pewność recenzenta: medium
@@ -968,7 +968,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Blok upuszczony czeka do nowych `items` (T498). Po zapisie `trySaveEdits` → `reloadData(news=true)` → `apply` zawsze tworzy nowe obiekty `rd/templates/lectures`. `useDay` przelicza model na starych danych dnia (dayData czyta się dopiero po zmianie stamp), `items` są nowe i efekt czyści przeciąganie. Blok wskakuje na stare miejsce, a po odczycie dayData na nowe. Dwusekundowe czekanie nie działa tak, jak zamierzono.
 - **Scenariusz:** Przeciągasz blok z 10:00 na 11:00. Po upuszczeniu blok mignie z powrotem na 10:00 i po chwili stanie na 11:00.
 - **Poprawka:** Czyść blokadę dopiero, gdy element o tym id ma `startMin === drag.start` (albo po DROP_HOLD_MS). Alternatywnie w `apply` nie podmieniaj `rd/templates/lectures`, gdy ich JSON się nie zmienił.
-- **Status:** otwarte
+- **Status:** do 5.3 (T517)
 
 #### A6-17 · low · bez weryfikacji – Nowy blok przed „Dodaj” ginie przy przejściu na inny ekran
 - **Plik:** `src/renderer/features/today/TodayPage.tsx:66` · rodzaj: spec · pewność recenzenta: high
@@ -976,7 +976,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Szkic nowego bloku (`draft`) jest stanem DayView. `<main key={page}>` w App odmontowuje stronę przy przejściu, a `useEffect([date])` czyści szkic przy zmianie dnia. Konwencja mówi, że niezapisany formularz przetrwa przejście na inny ekran.
 - **Scenariusz:** Klikasz wolne miejsce na osi, ustawiasz kategorię, długość i notatkę, przechodzisz Ctrl 2 do Kalendarza i wracasz – panel nowego bloku zniknął z ustawieniami.
 - **Poprawka:** Trzymaj szkic (data + blok) w `useUi` i odtwarzaj go po powrocie na ten sam dzień.
-- **Status:** otwarte
+- **Status:** do 5.3 (T517)
 
 #### A6-18 · low · bez weryfikacji – Wybór osoby w rytuale („osoba: ?”) bez „+ dodaj osobę”
 - **Plik:** `src/renderer/features/ritual/RitualPanel.tsx:347` · rodzaj: ux-text · pewność recenzenta: high
@@ -984,7 +984,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Wiersz prośby bez osoby ma `Choice` tylko z nieodarchiwizowanymi osobami. Nie ma „+ dodaj osobę”, choć konwencja słowników tego wymaga, a gotowy `PersonChoice` jest w RequestsPage. Przy pustej liście osób wiersza nie da się rozstrzygnąć.
 - **Scenariusz:** Pilna prośba nowej osoby z paska. Wieczorem w rytuale nie ma jej na liście – trzeba wyjść do ekranu Prośby, dodać osobę i wrócić.
 - **Poprawka:** Użyj `PersonChoice` (z „+ dodaj osobę…”) w wierszu 'person'.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-19 · low · bez weryfikacji – Za duży szacunek prośby i czas kroku rutyny są obcinane po cichu zamiast odrzucone z komunikatem
 - **Plik:** `src/renderer/features/requests/RequestsPage.tsx:95` · rodzaj: ux-text · pewność recenzenta: high
@@ -1000,7 +1000,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `names = { rd, blockName: () => null }`, więc pola dnia mają opis „blok: długość” albo „blok”, a kotwice „inny blok”. Przy ścieżce `['blocks']` (zob. A6-01) wartości to „1 pozycja” obok „1 pozycja”. Nie da się rozpoznać, o który blok chodzi, i podjąć decyzji.
 - **Scenariusz:** Pytanie po dwóch szybkich zmianach bloku pokazuje „blok | tutaj: 1 pozycja | tam: 1 pozycja”.
 - **Poprawka:** Dla plików dnia buduj `blockName` z planu tego dnia (`countDay`/`dayPlan` z wartości „tutaj”/„tam”), a dla tablicy bloków pokazuj nazwy bloków zamiast liczby pozycji.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-21 · low · bez weryfikacji – Okna dialogowe nie trzymają fokusu w środku i nie oddają go po zamknięciu
 - **Plik:** `src/renderer/components/Dialog.tsx:26` · rodzaj: maintainability · pewność recenzenta: medium
@@ -1008,7 +1008,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Dialog ma `aria-modal` i ustawia fokus na pierwszym polu, ale Tab wychodzi do strony pod nakładką, a po zamknięciu fokus trafia na body. Przy otwartym oknie skrót Ctrl+N na „Dziś” tworzy szkic bloku pod oknem, a jego warstwa Esc staje nad warstwą okna – Esc zamyka wtedy panel pod spodem, nie okno.
 - **Scenariusz:** W oknie „Przenieś na…” Tab przechodzi na przyciski osi pod nakładką. Po „Anuluj” fokus ginie i klawiatura zaczyna od początku okna.
 - **Poprawka:** Pułapka fokusu (Tab/Shift+Tab w obrębie pudełka), zapamiętany i oddany element aktywny po zamknięciu. Skróty stron (Ctrl+N) ignoruj, gdy otwarta jest warstwa okna.
-- **Status:** otwarte
+- **Status:** do 5.3 (T517)
 
 #### A6-22 · low · bez weryfikacji – Plan poranny co 30 s czyta pełne dane 9 dni (logi), choć potrzebuje tylko plików dni
 - **Plik:** `src/renderer/store/day.ts:61` · rodzaj: perf · pewność recenzenta: high
@@ -1016,14 +1016,14 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `useDayFiles` dla każdej daty woła `window.rd.dayData(d)`, czyli `readDay` (lista katalogu logów i odczyt logów) plus trzy pliki dni. Robi to przy każdej zmianie danych (każdy klik timera) i co 30 s. Istnieje lżejsze IPC `dayFiles`. Przy OneDrive to 9 list katalogów i kilkadziesiąt odczytów na każdy przebieg.
 - **Scenariusz:** Rano z otwartym planem porannym każde kliknięcie w pasku powoduje 9 odczytów logów dni w procesie głównym.
 - **Poprawka:** Użyj `window.rd.dayFiles(dates)`, ale zachowaj rozróżnienie „nieczytelny” ≠ „brak” (dziś `dayFiles` zamienia błąd na null – zwracaj na przykład `undefined` dla nieczytelnych).
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-23 · nit · bez weryfikacji – Polska odmiana: „2 Twoich zmian spotkało się”, „22 pozycji”
 - **Plik:** `src/renderer/app/Questions.tsx:39` · rodzaj: ux-text · pewność recenzenta: high
 - **Opis:** Baner pytań ma dwie formy zamiast trzech: dla 2–4 (i 22–24 …) powinno być „2 Twoje zmiany spotkały się”. `valueText` w lib/recordText.ts:68 daje „22 pozycji” zamiast „22 pozycje”. W `@shared/format` jest `plural`/`countLabel`.
 - **Scenariusz:** Dwie zmiany w konflikcie → baner „2 Twoich zmian spotkało się ze zmianą z innego komputera.”
 - **Poprawka:** Użyj `plural(n, 'Twoja zmiana spotkała się', 'Twoje zmiany spotkały się', 'Twoich zmian spotkało się')` i `countLabel(n, 'pozycja', 'pozycje', 'pozycji')`.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A6-24 · nit · bez weryfikacji – Podpowiedź „Ctrl N – w najbliższym wolnym miejscu” nie zgadza się z działaniem
 - **Plik:** `src/renderer/features/today/TodayPage.tsx:355` · rodzaj: ux-text · pewność recenzenta: high
@@ -1031,7 +1031,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `newHere` stawia nowy blok na „teraz” zaokrąglonym do 15 min (albo na pobudkę + 1 h). Nie szuka wolnego miejsca, więc blok może nachodzić na biegnący. Tekst panelu i komentarz mówią o najbliższym wolnym miejscu.
 - **Scenariusz:** O 10:05 przy bloku do 11:00 Ctrl+N tworzy szkic na 10:15, nachodzący na trwający blok.
 - **Poprawka:** Użyj `freeStart(model.state, model.state.now, 60)` dla dziś albo zmień tekst na „od najbliższego kwadransa”.
-- **Status:** otwarte
+- **Status:** do 5.3 (T517)
 
 ### A7 – Pozostałe ekrany i pasek – Ustawienia, „Dane”, kalendarz, historia, kreator, gra, kalibracja, próba
 
@@ -1045,7 +1045,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W korzeniu paska pomijać barClick, gdy cel zdarzenia leży w przycisku: if (!(e.target as Element).closest('button')) act('barClick'). Akcja przycisku z widoku 'bar' i tak liczy clickedApp i seen w actNow. Dodatkowo w WidgetEngine.act nie nadpisywać lastClick dla 'barClick'. Do testu fs dopisać w.act('barClick', undefined, 'bar') między dwoma 'next'.
 - **Weryfikacja:** BarButton w trybie 'desktop' woła onAct w onPointerUp bez stopPropagation, więc zdarzenie dochodzi do korzenia paska, który wysyła act('barClick'). WidgetEngine.act synchronicznie nadpisuje lastClick kluczem 'barClick|', przez co drugie 'next' w 200 ms nie jest odrzucane. Silnik timera nie ma własnej ochrony: DOUBLE_CLICK_MS w timer.ts jest zdefiniowane, ale nigdzie nieużywane. Odtworzyłem to testem z kolejnością IPC next→barClick→next→barClick: w logu są 2 zdarzenia block.end i fg=null, czyli „a” też się skończył. Ten sam scenariusz bez barClick (tests/fs/widget.test.ts:118) przechodzi.
 - **Dowód:** src/renderer/widget/Bar.tsx:49-51 (BarButton onPointerUp bez stopPropagation), :491 (onPointerUp korzenia → act('barClick')); src/main/widget.ts:431-432 (lastClick = {key, at} także dla barClick); src/shared/engine/timer.ts:21 (DOUBLE_CLICK_MS bez użycia); test tymczasowy tests/unit/tmp-e8-a7-barclick.test.ts: 'block.end count 2 fg null' (usunięty)
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-02 · high · potwierdzone – Zmiana początku sesji na godzinę po jej końcu po cichu usuwa sesję (Ustawienia i kreator)
 - **Plik:** `src/renderer/features/settings/SharedSettings.tsx:159` · rodzaj: data · pewność recenzenta: high
@@ -1055,7 +1055,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W polu początku (Ustawienia i kreator) nie dopuszczać stanu end <= start. Zgodnie ze specyfikacją można odrzucić wartość z komunikatem („Początek po końcu sesji – najpierw zmień koniec”). Można też przesunąć koniec o tę samą różnicę, zachowując długość. Do tego test: zmiana początku za koniec nie usuwa sesji z settingsOn.
 - **Weryfikacja:** Pole początku (Ustawienia i kreator) zapisuje samo startMin. ClockField nie ma zakresu, a sessionsFrom po cichu pomija sesję z endMin <= startMin. Lista sesji idzie w łatce w całości (deepMerge), więc od daty zmiany sesja znika. Test potwierdził: settingsOn z łatką, w której start sesji leży godzinę po jej końcu, zwraca tylko drugą sesję. Pole końca zawsze wymusza end > start, więc psuje to tylko pole początku, ale kolejność „najpierw początek” przy przesuwaniu sesji na później jest naturalna. Kreator nie ma „+ Sesja”. Ponowne dodanie w Ustawieniach daje nowe id (newId(10)), więc kotwice `session:<id>`, odpowiedzi warstwy sesji w plikach dni i historia typowej długości nie wracają. Jedyny pełny ratunek to przywrócenie rd.json w Historii.
 - **Dowód:** src/renderer/features/settings/SharedSettings.tsx:159 i :161; src/renderer/features/wizard/Wizard.tsx:317; src/shared/model/settings.ts:264 (s.endMin <= s.startMin → continue), :338; src/renderer/components/fields.tsx:101-113 (ClockField bez range); test tymczasowy tmp-e8-a7-misc: 'before [londyn, ny] after [ny]' (usunięty)
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-03 · high · potwierdzone – Kalendarz zmienia typ dzisiejszego i minionych dni tylko w pliku dnia – silnik tego nie widzi, a kalendarz pokazuje nowy typ
 - **Plik:** `src/renderer/features/calendar/CalendarPage.tsx:71` · rodzaj: spec · pewność recenzenta: high
@@ -1065,7 +1065,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W setType rozdzielić daty. Dla dziś z migawką (model.fromLog) otworzyć TypeChangeDialog, tak jak „Dziś”. Dni minione niezamknięte kierować do ścieżki „Wolne” niezamkniętych dni, a zamknięte zablokować z wyjaśnieniem. Komórkę dnia z migawką kolorować typem z migawki, nie z pliku. Dodać test E2E: kalendarz → dziś → „Wolne” zmienia typ dnia w silniku.
 - **Weryfikacja:** Kiedy prowadzący zapisze day.create (o 04:00 albo przy pierwszym sprawdzeniu), snapshotOf zwraca migawkę z logu i createDay nie jest już wołane. dayPlan nie czyta dayFile.dayType, a day.reissue nie ma w main żadnego zapisującego, więc nic nie wydaje migawki ponownie. Typ w trakcie dnia zmienia tylko migawka 'type' (TypeChangeDialog). CalendarPage.setType zapisuje dayType w pliku każdego zaznaczonego dnia bez sprawdzania dat, a MonthGrid nie blokuje dziś ani dni minionych. info() koloruje i oznacza dzień typem z pliku, więc kalendarz pokazuje „wolne”, a silnik, pasek i gra liczą dzień zwykły. Specyfikacja przewiduje kalendarz do oznaczania „wcześniej”, a „po fakcie” w niezamkniętych dniach, więc ta ścieżka dla dziś i dni minionych powinna przekierować albo odmówić z wyjaśnieniem.
 - **Dowód:** src/renderer/features/calendar/CalendarPage.tsx:50, :69-71; src/shared/engine/context.ts:29-33; src/main/data/folder.ts:570-573 (day.create raz); src/shared/engine/createDay.ts:114, :202-219 (dayPlan bez dayType); src/renderer/store/day.ts:86-88; docs/specyfikacja.md:51, :74-77
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-04 · medium · potwierdzone – „Przedłuż”: brak kroków ±15 min przed drugim kliknięciem (T289)
 - **Plik:** `src/renderer/widget/Bar.tsx:567` · rodzaj: spec · pewność recenzenta: high
@@ -1075,7 +1075,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Przy pending.button === 'extend' pokazać „−15 · <koszt> · +15 · Potwierdź”. Akcja 'extendStep|±15' w WidgetEngine liczy nowy koszt (timer z confirm) i nowe 10 s. Kroki nie są reakcją ani kliknięciem w widget (T289). Test w tests/fs/widget.test.ts.
 - **Weryfikacja:** Specyfikacja (linia 116) i T289 wymagają kroków ±15 min przed drugim kliknięciem, każdy z nowym kosztem i nowymi 10 s. Pasek po wyborze +15/+30/+60 pokazuje w miejscu „Przedłuż” tylko own('extend'), czyli „<koszt> · Potwierdź”. WidgetEngine.actNow nie ma akcji kroku, a 'extend' zawsze liczy nowy koszt od wybranej długości. Tekst „−15 · +15” jest tylko w LONGEST.extend próby. plan.md tego nie odkłada. Obejście istnieje (wybrać +60 albo poczekać 10 s), więc ważność medium.
 - **Dowód:** src/renderer/widget/Bar.tsx:34, :427-436, :567-574, :315-324; src/main/widget.ts:471-474, :601-602; src/shared/widget.ts:184; docs/specyfikacja.md:116; docs/decyzje-techniczne.md:280 (T289)
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-06 · medium · potwierdzone – „Próba” (ekran, menu zasobnika i widok paska bez folderu) bez pozycji usunięcia przed 1.0 (D286); bez folderu pasek pokazuje fikcyjny blok
 - **Plik:** `src/renderer/features/trial/TrialPage.tsx:227` · rodzaj: spec · pewność recenzenta: high · **wymaga Twojej decyzji**
@@ -1085,7 +1085,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dopisać do planu (5.3/5.4) usunięcie ekranu „Próba”, menu „Próba ▸” i gałęzi trial w Bar. Widok bez folderu zastąpić neutralnym paskiem bez akcji, np. jak unknownView: „Brak folderu danych · Otwórz okno główne”. Przenieść 'corner' i 'placeBar' do zwykłych akcji ustawień paska.
 - **Weryfikacja:** D286 mówi wprost, że Próba (ekran i „Próba ▸” w zasobniku) zostaje usunięta przed 1.0. Ciąg E w plan.md (5.1–5.4) ani postep.md nie mają takiej pozycji, a D306 zmienia tylko miejsce w menu, nie odwołuje usunięcia. Pokazywanie próby bez folderu danych jest zamierzone decyzją T472, ale tylko w 0.x. Po 1.0 zostałby fikcyjny blok: WidgetEngine.current() zwraca trial.view przy braku folderu. desktopBar jest domyślnie włączony, a Trial.viewAt jest stały, więc „Analiza tygodnia” odlicza 42 min, a potem pokazuje +N min. Od próby zależą też 'corner' w kreatorze i 'placeBar' w „Pokaż pasek”. Zachowanie widoczne dla użytkownika (czym zastąpić widok bez folderu) wymaga pytania.
 - **Dowód:** docs/decyzje.md:284 (D286), :304 (D306), :322 (D324); docs/decyzje-techniczne.md:462 (T472); docs/plan.md:64-74; src/main/widget.ts:162-166, :196-200; src/main/trial.ts:36, :44-46; src/shared/widget.ts:158-235; src/shared/machine.ts:71 (desktopBar: true); src/renderer/widget/Bar.tsx:631
-- **Status:** otwarte
+- **Status:** do 5.2e (D327 – Próba znika, T517)
 
 #### A7-07 · medium · potwierdzone – „Usuń” sesji w Ustawieniach bez „Cofnij” przez 10 s
 - **Plik:** `src/renderer/features/settings/SharedSettings.tsx:163` · rodzaj: spec · pewność recenzenta: high
@@ -1095,7 +1095,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Po usunięciu pokazać undoToast(`Usunięta sesja: ${x.name}`, …), który zapisuje poprzednią listę z tym samym id (save({ sessions: przed })). Tak samo zrobić dla innych usuwań w ustawieniach bez archiwizacji.
 - **Weryfikacja:** Konwencje interfejsu obejmują wprost także „ustawienie” („Usuwanie: zawsze z przyciskiem „Cofnij” przez 10 s”). „Usuń” sesji od razu zapisuje listę bez tej sesji, bez undoToast. W tym samym ekranie usuwanie wykładu ma undoToast (LecturesSection.tsx:50), podobnie szablony, rutyny i prośby. Ponowne „+ Sesja” daje nowe id, więc kotwice i odpowiedzi warstwy sesji nie wracają. Ratunkiem jest tylko Historia rd.json.
 - **Dowód:** src/renderer/features/settings/SharedSettings.tsx:163-165, :168 (newId(10)); src/renderer/features/settings/LecturesSection.tsx:50; docs/specyfikacja.md:752, :757
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-08 · medium · potwierdzone – Ustawienia liczą dzień ok. 11 razy (plus 6 w ostrzeżeniu typów) przy każdej zmianie danych i co 30 s
 - **Plik:** `src/renderer/features/settings/SharedSettings.tsx:32` · rodzaj: perf · pewność recenzenta: medium
@@ -1105,7 +1105,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Liczyć dzień raz, np. jeden useDay w SettingsPage przekazany kontekstem. Jeszcze lepiej pobierać todayType dopiero w chwili zapisu: saveSettings czyta ostatnią migawkę z dayData albo główny proces wypełnia dayType sam, tak jak settings.
 - **Weryfikacja:** Na stronie Ustawień jest 10 wywołań useShared (DayTypes, Sessions, 6× FieldsSection, Categories, RegenWays) i każde woła useDay(today). CalibrationSection ma 11. useDay. Każda instancja ma własny useDayData (IPC dayData na każdą zmianę stamp i co 30 s) i useMemo z countDay zależnym od całego rd. Po zapisie ustawienia przeliczenie idzie więc ok. 11× przy zmianie rd, 11× po nowym stamp i 5× w ostrzeżeniu DayTypesSection (typy bez 'wolne'). Pomiar countDay na prostym dniu (szablony domyślne, bez zdarzeń) dał ok. 19 ms (mediana), więc to ok. 0,5 s pracy wątku okna na jedno zatwierdzenie pola, a z logiem prawdziwego dnia więcej. Wynik służy tylko do todayType przy zapisie.
 - **Dowód:** src/renderer/features/settings/SharedSettings.tsx:27-39, :86-93; src/renderer/features/settings/SettingsPage.tsx:58-70; src/renderer/features/settings/CategoriesSection.tsx:45; src/renderer/features/calibration/CalibrationEntry.tsx:80; src/renderer/store/day.ts:28-51, :91-105; test tymczasowy tmp-e8-a7-perf: 'countDay ms: min 17.3 median 19.2 max 22.4' (usunięty)
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-05 · medium → low · obalone – Panel ikony pokazuje surowy identyfikator linii: „Otwarte z powiadomienia: wait:<id bloku>”
 - **Plik:** `src/renderer/widget/PanelApp.tsx:51` · rodzaj: ux-text · pewność recenzenta: high
@@ -1123,7 +1123,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** todayType = dayTypeNow(model), a przy model null wychodzi 'zwykly' (store/day.ts:87). saveSettingsChange zapisuje day.snapshot z tym typem, a główny proces sprawdza tylko poprawność id typu (folder.ts:1608). Model jest null do odczytu dayData: świeże okno bez pamięci, po 04:00 przy otwartych Ustawieniach, przy błędzie odczytu dayData (catch bez ponowienia). Tak samo działa CalibrationSection → applyCost.
 - **Scenariusz:** Sobota (weekend), Ustawienia otwarte zaraz po starcie albo dayData chwilowo nie odpowiada. Zmiana „od dziś” zapisuje migawkę z typem 'zwykly' i reszta dnia liczy się jak dzień zwykły (budżet 9 h, maksimum 19:00).
 - **Poprawka:** Przy model == null nie zapisywać w trybie „od dziś” (komunikat „Czekam na dzień…”). Albo nie wysyłać dayType z okna i niech główny proces weźmie typ z ostatniej migawki dnia w chwili `at`.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-10 · low · bez weryfikacji – Historia po „Przywróć tę wersję” pokazuje stary stan (usunięty, różnice dnia, brak nowej wersji)
 - **Plik:** `src/renderer/features/history/HistoryPage.tsx:86` · rodzaj: ux-text · pewność recenzenta: high
@@ -1131,7 +1131,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** selected to obiekt zapamiętany przy kliknięciu: po reloadData lista się odświeża, a selected zostaje stary (exists, versions). Versions pobiera wersje i bieżący plik dnia tylko przy zmianie [r.kind, r.id]. Po przywróceniu zostaje więc baner „Ten rekord jest usunięty”, nowa wersja „przed przywróceniem” się nie pojawia, a przy planie dnia „teraz:” pokazuje treść sprzed przywrócenia. historyVersions nie ma catch, więc przy błędzie zostaje na zawsze „Czytam wersje…”.
 - **Scenariusz:** Użytkownik przywraca wersję planu dnia i dostaje toast „Wersja przywrócona”. Lista dalej pokazuje różnice „teraz: X / w tej wersji: Y” jak przed przywróceniem, więc klika jeszcze raz i tworzy kolejne wersje.
 - **Poprawka:** Przechowywać wybór jako klucz kind/id i brać rekord z bieżącej listy. Wersje i currentDay pobierać ponownie przy zmianie stamp (albo po restore). Dodać catch z komunikatem.
-- **Status:** otwarte
+- **Status:** do 5.3 (T517)
 
 #### A7-11 · low · bez weryfikacji – Kreator: „Zakończ” bez obsługi wyjątku zostaje na „Zapisuję…”; po częściowym niepowodzeniu nie sprawdza folderu ponownie
 - **Plik:** `src/renderer/features/wizard/Wizard.tsx:81` · rodzaj: crash · pewność recenzenta: medium
@@ -1139,7 +1139,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** finish() wywołuje window.rd.wizardFinish bez try/catch. Gdy IPC odrzuci (np. config.update({ dataFolder }) w main/index.ts:434 rzuci przy zapisie), busy zostaje true, przycisk jest zablokowany jako „Zapisuję…” i nie ma komunikatu. Gdy createFirst zapisał dane, a hub.open się nie udał, ponowne „Zakończ” daje „W tym folderze są już dane… może do nich dołączyć”. Stan kreatora (probe.hasData false) zostaje jednak pierwszym komputerem i bez ponownego wyboru folderu „Zmień…” nie da się dołączyć. Ten sam problem dotyczy folderDefault/folderProbe bez catch.
 - **Scenariusz:** Pierwszy komputer: „Zakończ” zapisuje dane, ale otwarcie folderu przekracza czas oczekiwania. Kolejne „Zakończ” odmawia, a kreator nie mówi, że wystarczy dołączyć – użytkownik musi sam wrócić do kroku 1 i wybrać ten sam folder.
 - **Poprawka:** Objąć wizardFinish try/catch (busy:false, error z komunikatem). Po każdym niepowodzeniu wywołać folderProbe(w.folder) i, jeśli folder ma już dane, przejść w tryb dołączania z wyjaśnieniem.
-- **Status:** otwarte
+- **Status:** do 5.3 (T517)
 
 #### A7-12 · low · bez weryfikacji – setModule zapisuje zdarzenie modułu w logu także wtedy, gdy zapis rd.json się nie udał
 - **Plik:** `src/renderer/features/settings/settingsStore.ts:72` · rodzaj: data · pewność recenzenta: high
@@ -1147,7 +1147,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Wynik saveRd jest ignorowany, a logEvents(module.set / energy.module) idzie zawsze. Przy wyjątku (saveEdits zwraca []), konflikcie albo uszkodzonym rd.json (ekran pokazuje wtedy wartości domyślne) log mówi o zmianie, której w ustawieniach nie ma. moduleStates i energia czytają te zdarzenia.
 - **Scenariusz:** rd.json jest chwilowo uszkodzony: wyłączenie „Gra” kończy się toastem o uszkodzonym pliku, ale module.set {on:false} trafia do logu dnia. Dzień staje się dniem zmiany modułu (nagrody dnia się nie liczą), choć gra nadal jest włączona.
 - **Poprawka:** Użyć trySaveRd i logować zdarzenie tylko przy isSaved(out), tak jak saveSettingsChange.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-13 · low · bez weryfikacji – Tryb „od dziś / od daty” zostaje między wizytami i dniami; data ≤ dziś po cichu zamienia się na jutro
 - **Plik:** `src/renderer/features/settings/settingsStore.ts:23` · rodzaj: ux-text · pewność recenzenta: high · **wymaga Twojej decyzji**
@@ -1155,7 +1155,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** useSettingsFrom to globalny stan zustand, którego nic nie zeruje. Wybrane „od dziś” obowiązuje przy kolejnym otwarciu Ustawień, także następnego dnia, w aplikacji działającej w zasobniku. „Od daty” z datą, która już minęła, albo wpisaną ≤ dziś (FromBar: d > today ? d : jutro) po cichu działa od jutra, a pole i przełącznik pokazują inną datę niż ta, od której liczy się zmiana.
 - **Scenariusz:** W poniedziałek użytkownik ustawia „od dziś”, a w środę otwiera Ustawienia i zmienia budżet, spodziewając się domyślnego „od jutra”. Zmiana działa od razu i dopisuje migawkę dnia. Albo przy „od daty 05.11” po 05.11 zmiany idą od jutra, choć pole pokazuje 05.11.
 - **Poprawka:** Zerować tryb na 'tomorrow' przy wyjściu z Ustawień i przy zmianie dnia logicznego. Datę ≤ dziś odrzucać z komunikatem zamiast cicho zamieniać, a minioną datę trybu „od daty” pokazywać jako nieaktualną.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-14 · low · bez weryfikacji – Podwójne kliknięcie „Dodaj” kategorii (i „+ Wykład”) tworzy duplikaty
 - **Plik:** `src/renderer/features/settings/CategoriesSection.tsx:52` · rodzaj: bug · pewność recenzenta: high
@@ -1163,7 +1163,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** add() czyści pole nazwy dopiero po await setMeta. Między kliknięciami przycisk jest więc aktywny i drugie kliknięcie (albo Enter i klik) tworzy drugą kategorię o tej samej nazwie z nowym id. LecturesSection „+ Wykład” bez blokady też tworzy dwa puste wykłady przy podwójnym kliknięciu.
 - **Scenariusz:** Wpisanie „Sprzątanie” i podwójne kliknięcie „Dodaj” daje dwie kategorie „Sprzątanie” na liście wyboru bloku.
 - **Poprawka:** Czyścić nazwę i ustawiać flagę busy synchronicznie przed await (albo blokować przycisk do końca zapisu). Dla „+ Wykład” dodać blokadę na czas zapisu.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-15 · low · bez weryfikacji – Brak ustawienia „pulsowanie paska przy 5 i 0 min” (D225)
 - **Plik:** `src/renderer/features/settings/SettingsPage.tsx:162` · rodzaj: spec · pewność recenzenta: high · **wymaga Twojej decyzji**
@@ -1171,7 +1171,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** D225 i macierz ustawień przewidują pulsowanie paska do włączenia w ustawieniach komputera (domyślnie wyłączone). W Ustawieniach nie ma przełącznika, a w kodzie nie ma żadnego pulsowania. Komentarz w shared/machine.ts:28 sugeruje, że obejmują je „Animacje”, ale pasek nigdy nie pulsuje. Plan i odbiór o tym milczą.
 - **Scenariusz:** Użytkownik szuka w Ustawieniach opcji pulsowania paska przy 5 i 0 min, opisanej w specyfikacji – nie ma jej.
 - **Poprawka:** Dodać pref barPulse (domyślnie false) i przełącznik w „Ten komputer”. W Bar przy warn five/zero dodać klasę animacji, wyłączaną przez data-motion='off'. Albo zapisać decyzję, że D225 przesuwa się poza 1.0.
-- **Status:** otwarte
+- **Status:** do 5.2f (D328, D330, D225, A7-18 – T517)
 
 #### A7-16 · low · bez weryfikacji – Podpowiedź „Pasek pulpitu: Leży pod oknami innych aplikacji” nieprawdziwa przy „Zawsze na wierzchu”
 - **Plik:** `src/renderer/features/settings/SettingsPage.tsx:95` · rodzaj: ux-text · pewność recenzenta: high
@@ -1179,7 +1179,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Podpowiedź pola „Pasek pulpitu” jest stała i nie zależy od prefs.onTop. Przy 'bar' albo 'barPanel' pasek leży nad oknami.
 - **Scenariusz:** Po włączeniu „Zawsze na wierzchu: pasek pulpitu” Ustawienia dalej mówią, że pasek leży pod oknami innych aplikacji.
 - **Poprawka:** Gdy prefs.onTop !== 'off', pokazywać tekst „Leży nad oknami (Zawsze na wierzchu), bez zabierania fokusu”.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-17 · low · bez weryfikacji – Kontrast tekstów akcentu na tle paska nie jest testowany (margines 4,54:1)
 - **Plik:** `src/renderer/widget/Bar.tsx:527` · rodzaj: test-gap · pewność recenzenta: high
@@ -1187,7 +1187,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Pasek używa text-rose (przekroczenie „+N min”, bar-note-click) i text-sea („💧 wypite”) na barBackground. contrastPairs (shared/theme.ts:183) sprawdza na tłach paska tylko tekst i tekst przygaszony. Pomiar: najgorszy kontrast morskiego w zestawie 'cieple' to 4,54:1, w 'robocze' 4,44:1, w 'chlodne' 4,34:1 – oba ostatnie są do wybrania w Próbie. Każda drobna zmiana palety może bez sygnału zejść poniżej 4,5.
 - **Scenariusz:** Zmiana koloru 'wolne' albo tła paska obniża kontrast „wypite” lub „+12 min” poniżej 4,5:1, a test kontrastu dalej przechodzi.
 - **Poprawka:** Dopisać do contrastPairs pary róż i morski na każdym barBackground zestawu silnika, przy każdej jasności.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-18 · low · bez weryfikacji – Kalendarz nie oznacza świąt Wielkiej Brytanii (sesja Londyn)
 - **Plik:** `src/renderer/features/calendar/CalendarPage.tsx:56` · rodzaj: spec · pewność recenzenta: medium
@@ -1195,7 +1195,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** info() oznacza święta PL („święto”) oraz NYSE i CME_FX („święto USA”, „skrócona sesja”). Kalendarza UK nie sprawdza, choć domyślna sesja „Londyn” ma markets ['UK'], a wbudowany kalendarz świąt obejmuje Wielką Brytanię. Dni z zamkniętym LSE (np. Easter Monday, bank holidays) nie mają żadnego oznaczenia.
 - **Scenariusz:** 25.08.2027 (Summer bank holiday) sesja londyńska nie działa, a w kalendarzu dzień wygląda jak zwykły.
 - **Poprawka:** Dodać marketDay('UK', d) z oznaczeniem „święto UK” i nazwą w title, tak jak dla USA.
-- **Status:** otwarte
+- **Status:** do 5.2f (D328, D330, D225, A7-18 – T517)
 
 #### A7-19 · low · bez weryfikacji – Kreator: filtr pustych wykładów nigdy nie działa; nowy wykład ma semestr „dziś–dziś”
 - **Plik:** `src/renderer/features/wizard/wizardStore.ts:91` · rodzaj: bug · pewność recenzenta: high
@@ -1203,7 +1203,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** finishRecords filtruje d.lectures.filter((l) => l.name.trim() || l.categoryId). categoryId jest zawsze ustawione ('wyklad'), więc pusty, niewypełniony wykład trafia do folderu. newLecture (i „+ Wykład” w Ustawieniach) ustawia from = to = dziś, a pola dat nie sprawdzają, czy from ≤ to – seria bez żadnego terminu nie daje komunikatu.
 - **Scenariusz:** Użytkownik klika „+ Dodaj wykład”, rezygnuje i przechodzi dalej. Po „Zakończ” w schedule/ zostaje bezimienny wykład. Albo wpisuje „do” wcześniej niż „od” i wykład nigdy się nie pojawia, bez ostrzeżenia.
 - **Poprawka:** Filtrować po l.name.trim() (albo ostrzegać przed „Dalej”). W polach dat odrzucać to < from z komunikatem. Domyślny koniec semestru ustawić np. na from + 15 tygodni.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-20 · low · bez weryfikacji – „Dane”: „Spróbuj ponownie” przy nieudanym przeniesieniu nic nie mówi, gdy znów się nie uda
 - **Plik:** `src/renderer/features/settings/DataSection.tsx:228` · rodzaj: ux-text · pewność recenzenta: high
@@ -1211,7 +1211,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** PendingMove.retry pokazuje toast tylko przy r.ok. Przy ponownym niepowodzeniu z tym samym błędem widok się nie zmienia (pendingMove.error ten sam), nie ma też stanu „próbuję…” ani blokady przycisku. Kliknięcie wygląda jak brak reakcji.
 - **Scenariusz:** Folder po przywróceniu kopii dalej się nie otwiera (OneDrive). Użytkownik klika „Spróbuj ponownie” i nic się nie dzieje, więc nie wie, czy próba w ogóle była.
 - **Poprawka:** Na czas próby ustawić busy (przycisk „Próbuję…”), a przy !r.ok pokazać toast z r.error.
-- **Status:** otwarte
+- **Status:** do 5.3 (T517)
 
 #### A7-21 · nit · bez weryfikacji – Historia: zła forma liczby mnogiej „wersji” dla 22–24, 32–34…
 - **Plik:** `src/renderer/features/history/HistoryPage.tsx:49` · rodzaj: ux-text · pewność recenzenta: high
@@ -1219,7 +1219,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Licznik wersji używa r.versions === 1 ? 'wersja' : r.versions < 5 ? 'wersje' : 'wersji', co daje „22 wersji” zamiast „22 wersje”. W shared/format jest countLabel z polskimi formami.
 - **Scenariusz:** Rekord z 23 wersjami pokazuje „23 wersji”.
 - **Poprawka:** Użyć countLabel(r.versions, 'wersja', 'wersje', 'wersji').
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A7-22 · nit · bez weryfikacji – Domyślna głośność dźwięku 40 % zamiast 50 % z macierzy ustawień
 - **Plik:** `src/renderer/features/settings/SettingsPage.tsx:139` · rodzaj: spec · pewność recenzenta: high
@@ -1227,7 +1227,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** DEFAULT_MACHINE_PREFS.soundVolume = 0.4, a pole oferuje 20/40/70/100 %. Macierz ustawień podaje domyślnie 50 % i zakres 0–100 %. Żadna decyzja T tego nie zmienia.
 - **Scenariusz:** Po włączeniu dźwięku głośność to 40 %, a specyfikacja mówi o 50 %.
 - **Poprawka:** Ustawić domyślnie 0.5 i dodać 50 % do opcji. Albo zapisać T-decyzję o 40 %.
-- **Status:** otwarte
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 ### A8 – Przekrojowo – czas, zegary komputerów, kolejność zdarzeń, przesiadka, kontrast
 
@@ -1281,7 +1281,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Przygaszać tylko tło i obramowanie: osobna funkcja `blockFillDim` w theme.ts, np. słabszy `mix` z powierzchnią, albo opacity tylko na warstwie tła, a tekst zostawić w `text-fg` / `text-muted`. Tak samo w MonthGrid i w wierszach archiwalnych. Dopisać do `contrastPairs` przygaszone wypełnienia bloków i dni oraz teksty akcentu na tle paska (rose, sea) dla wszystkich zestawów tonów.
 - **Weryfikacja:** `opacity-45` jest na całym przycisku bloku, więc przygasza też tekst. To przeczy komentarzowi w theme.ts („Text colours are never dimmed”) oraz zasadzie 4,5:1 przy każdej jasności (specyfikacja, linia 580; T88). T459 każe przygaszać minione bloki, ale nie robi wyjątku od kontrastu, a bloki są klikalne. `contrastPairs` nie zawiera tych przygaszonych teł, więc test przechodzi. Część o pasku jest słabsza: `text-sea` poniżej 4,5:1 występuje tylko w zestawach próby „robocze” i „chłodniejsze”, a silnik używa „cieplejszych” (4,54 i więcej). W wierszach archiwalnych z opacity-60 tekst `text-fg` ma 5,3:1 i więcej, a przygaszony `text-muted` 3,4–3,8:1.
 - **Dowód:** src/renderer/features/plan/Timeline.tsx:210,217-222; src/renderer/features/calendar/MonthGrid.tsx:114; src/shared/theme.ts:154-194. Tymczasowy test obliczeń (mieszanie przy 45% i 40% na --color-bg i --color-panel, wszystkie BRIGHTNESS_STEPS i BLOCK_COLORS): nazwa bloku przygaszonego 3,12–3,67:1, godziny 2,16–2,52:1, dni spoza miesiąca 3,16–3,28 i 2,27–2,35:1, muted przy opacity-60 3,40–3,78:1. Pasek: sea w zestawie robocze min 4,44, chlodne min 4,34, cieple min 4,54; rose wszędzie ≥ 4,51.
-- **Status:** do 5.2d (ekrany)
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A8-07 · medium · potwierdzone – Brak linii stanu synchronizacji z rozdziału „Kilka komputerów” (OneDrive nie działa, Brak zmian z PC A, dane sprzed N s, Pytania mogą pojawić się też na PC B)
 - **Plik:** `src/main/onedrive.ts:43` · rodzaj: spec · pewność recenzenta: high
@@ -1315,7 +1315,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Rytuał (linie 170 i 371) i niezamknięte dni (UnclosedDays.tsx:61) zamieniają wpisaną godzinę na chwilę przez `placeLogical`. Ta funkcja przesuwa godzinę nieistniejącą za lukę i zawsze bierze pierwsze wystąpienie godziny podwójnej. `resolveLogical` (odrzucenie z komunikatem, wybór drugiego wystąpienia) nie jest używane nigdzie poza modułem czasu. Pole czasu startuje z `logicalMinuteOf`, które dla drugiego wystąpienia daje tę samą liczbę co dla pierwszego. Zapisanie godziny bez zmian przesuwa więc koniec z drugiego wystąpienia o 1 h wcześniej.
 - **Scenariusz:** W nocy 24/25.10.2026 blok skończył się o 02:40 drugiego wystąpienia (CET). W rytuale klikasz „popraw” i „Zapisz” bez zmiany godziny. Zapisuje się 02:40 CEST, czyli godzinę wcześniej. 28.03.2027 wpisujesz 02:30, a aplikacja po cichu zapisuje 03:00 zamiast komunikatu.
 - **Poprawka:** W rytuale i w niezamkniętych dniach używać `resolveLogical(date, min, pick)`: przy `nonexistent` komunikat w polu, przy `ambiguous` wybór pierwszej albo drugiej. Wartość startową pola brać z chwili zdarzenia razem z informacją, które to wystąpienie. Testy w `tests/web` dla obu nocy zmiany czasu.
-- **Status:** do 5.2d (ekrany)
+- **Status:** do 5.3 (T517)
 
 #### A8-10 · low · bez weryfikacji – Ręcznie pisane formy liczby mnogiej łamią polską odmianę (2–4, 22–24)
 - **Plik:** `src/renderer/app/Questions.tsx:39` · rodzaj: ux-text · pewność recenzenta: high
@@ -1323,7 +1323,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Baner pytań dla 2–4 zmian pokazuje „2 Twoich zmian spotkało się”, a powinno być „2 Twoje zmiany spotkały się”. HistoryPage.tsx:49 i recordText.ts:68 liczą formę warunkiem `< 5`, więc 22–24 dają „22 wersji” i „23 pozycji” zamiast „22 wersje” i „23 pozycje”. W `format.ts` jest gotowe `plural`/`countLabel`.
 - **Scenariusz:** Dwie Twoje edycje spotkały się ze zmianą z innego komputera i baner mówi „2 Twoich zmian spotkało się ze zmianą z innego komputera.”. Rekord z 22 migawkami w Historii pokazuje „22 wersji”.
 - **Poprawka:** Użyć `countLabel(n, 'Twoja zmiana spotkała', 'Twoje zmiany spotkały', 'Twoich zmian spotkało')` itp. oraz `countLabel(r.versions, 'wersja', 'wersje', 'wersji')` i `countLabel(v.length, 'pozycja', 'pozycje', 'pozycji')`. Dodać przypadki 2, 5, 12, 22 do testów tekstów.
-- **Status:** do 5.2d (ekrany)
+- **Status:** poprawione w 0.19.0 (testy w `tests/fs/window-edits.test.ts`, `tests/web/screens-e8.test.ts`, `tests/fs/widget.test.ts`, `tests/e2e/screens.spec.ts`, T517)
 
 #### A8-11 · low · bez weryfikacji – Test kolejności przy różnicy zegarów do 5 min nie obejmuje komputera z tyłu ani bloku zaczętego na jednym i skończonego na drugim
 - **Plik:** `tests/sim/two-computers.test.ts:81` · rodzaj: test-gap · pewność recenzenta: high
@@ -1339,4 +1339,4 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `trialView` liczy `clock((endsAt - new Date(now).setHours(0, 0, 0, 0)) / 60_000)`, czyli od północy strefy komputera, z jej zmianą czasu. Wszędzie indziej wyświetlanie jest w Europe/Warsaw (`clockOf` przez Intl, `logicalMinuteOf`).
 - **Scenariusz:** 25.10 po 03:00 (albo na komputerze ustawionym w innej strefie) podpowiedź próby pokazuje „do 11:42” zamiast „do 10:42”.
 - **Poprawka:** Użyć `logicalClock(logicalMinuteOf(logicalDayOf(endsAt), endsAt))` albo tego samego `Intl.DateTimeFormat` z `timeZone: 'Europe/Warsaw'` co w `engineView`.
-- **Status:** do 5.2d (ekrany)
+- **Status:** do 5.2e (D327 – Próba znika, T517)

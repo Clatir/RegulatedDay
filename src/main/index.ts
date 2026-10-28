@@ -737,6 +737,7 @@ function registerIpc(): void {
   handle(CH.logEvents, (_e, events: EventIn[]) => needHub().events(Array.isArray(events) ? events : []))
   handle(CH.resolve, (_e, id: string, choice: 'mine' | 'theirs') => needHub().resolve(String(id), choice === 'theirs' ? 'theirs' : 'mine'))
   handle(CH.monthEvents, (_e, month: string, kinds: string[]) => needHub().monthEvents(String(month), Array.isArray(kinds) ? kinds.map(String) : []))
+  handle(CH.requestCounters, () => needHub().requestCounters())
   handle(CH.timer, (_e, click: TimerIn) => needHub().timer(timerIn(click)))
   // The closing ritual (D318): a day's rows, an answer to one, the close; the morning's days to close.
   handle(CH.ritual, (_e, day: unknown) => needHub().ritual(String(day)))

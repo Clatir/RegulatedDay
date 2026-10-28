@@ -18,9 +18,9 @@ import { blockFill } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
 import { Dialog } from '../../components/Dialog'
 import { TimeField } from '../../components/fields'
-import { editOf, saveEdits, useData } from '../../store/data'
+import { editOf, isSaved, saveEdits, trySaveEdits, useData } from '../../store/data'
 import { useMachine } from '../../store/machine'
-import { openDay } from '../../store/ui'
+import { openDay, toast } from '../../store/ui'
 import { DAY_TYPE_COLORS } from './dayTypes'
 import { gridDates, MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
 
@@ -65,10 +65,23 @@ export function CalendarPage() {
     return { type, own: own?.dayType != null, marks, title: [...pl.names, ...us.flatMap((h) => h.names)].join(', ') || undefined }
   }
 
-  /** The selected days take a type (null: their weekday's own again). */
+  /**
+   * The selected days to come take a type (null: their weekday's own again). Today's type changes in „Dziś” (a change
+   * during the day with its proposals) and a day gone keeps the type of its plan – a type in their files would change
+   * nothing the engine counts (A7-03).
+   */
   const setType = async (t: DayTypeId | null) => {
-    const list = [...sel].sort()
-    await saveEdits(list.map((d) => editOf(paths.day(d), files[d] ?? null, setDayField(dayRaw(files[d], d), 'dayType', t))))
+    const all = [...sel].sort()
+    const list = all.filter((d) => d > today)
+    if (list.length < all.length)
+      toast(
+        all.includes(today) ? 'Typ dzisiejszego dnia zmienisz w „Dziś” (przycisk typu u góry) – z propozycjami zmiany w trakcie dnia. Dni minione mają typ z planu z rana.' : 'Dni minione mają typ z planu z rana – zmieniają się tylko dni od jutra.',
+        'info',
+        10_000,
+        all.includes(today) ? { label: 'Otwórz Dziś', run: () => openDay(null) } : undefined
+      )
+    if (!list.length) return
+    if (!isSaved(await trySaveEdits(list.map((d) => editOf(paths.day(d), files[d] ?? null, setDayField(dayRaw(files[d], d), 'dayType', t)))))) return
     setSel(new Set())
     // A Saturday marked as a „zjazd”: the weekly analysis to Friday – asked once, here or in Friday's morning plan.
     if (t === 'zjazd-stacjonarny' || t === 'zjazd-zdalny') {
