@@ -17,7 +17,7 @@ import type { DayContext, DayState } from './day'
 import { blockAt, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
 import { isRunningRequest, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
-import { plannedEndOf, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
+import { plannedEndOf, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
 /** The rules of a request's end without „Koniec” (`requestEndOf`). */
@@ -133,6 +133,8 @@ interface Ctx {
   nowIdx: number
   byId: Map<string, BlockInfo>
   idle: (from: number) => Interval | null
+  /** A fixed block waits behind a regeneration now (timerNow's `held`). */
+  fixedHeld: boolean
 }
 
 /**
@@ -171,9 +173,10 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
     if (limit != null && use.use > limit) return { at: limit, rule: 'limit' }
     return { at: use.use, rule: 'firstUse' }
   }
-  // Nobody used a computer up to the bedtime: it ends after its planned length (D261).
+  // Nobody used a computer up to the bedtime: it ends after its planned length (D261) – a regeneration too, unless a fixed
+  // block waits behind it (T349).
   const bedtime = atOf(state.grid, state.bedtime.effective)
-  if (c.inp.now >= bedtime && !info.isRegen) return { at: Math.min(start + length * MIN, bedtime), rule: 'bedtime' }
+  if (c.inp.now >= bedtime && (!info.isRegen || !c.fixedHeld)) return { at: Math.min(start + length * MIN, bedtime), rule: 'bedtime' }
   return null
 }
 
@@ -229,7 +232,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   const t = timerNow(state)
   const at = (idx: number) => atOf(state.grid, idx)
   const due = (ms: number) => ms <= gate && ms <= inp.now
-  const c: Ctx = { inp, date, nowIdx, byId, idle: () => null }
+  const c: Ctx = { inp, date, nowIdx, byId, idle: () => null, fixedHeld: t.held.length > 0 }
   const written = new Set(ctx.events.map((e) => e.id))
   /**
    * A rule's events: undone by „Cofnij” – the rule was overruled, the next rules judge the block (false); written
@@ -269,6 +272,9 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     const span = plannedSpan(b, byId)
     if (!span || nowIdx < span.start || nowIdx >= span.end) continue
     let from = at(span.start)
+    // Due in „Odcinam się”, it did not start and was „do potwierdzenia”: after „Wracam” it runs from that instant (spec
+    // „Odcinam się”); a recorded lecture runs on through it.
+    if (!b.recorded) for (const d of [...state.facts.disconnect].sort((x, y) => x.from - y.from)) if (d.to !== OPEN && at(d.from) <= from && at(d.to) > from) from = at(d.to)
     // Before the day's first use a fixed block at the computer is „do potwierdzenia” (spec „Bloki”): it starts at the use.
     if (placeOf(b) !== 'away') {
       if (firstUse == null) continue
@@ -460,8 +466,14 @@ export function questionsOf(inp: Omit<AutoInput, 'gate'>): Question[] {
     const workRuns = [t.fg, ...t.bg].some((x) => x?.info.isWork && !x.info.rules.keepsRegen) || state.facts.requests.some((r) => isRunningRequest(r) && r.interrupts != null && byIdWork(state, r.interrupts))
     const lastWork = [...state.facts.blocks.values()].filter((f) => f.endedAt != null && f.endedAt <= end.at && byIdWork(state, f.id)).sort((a, b) => b.endedAt! - a.endedAt!)[0]
     const silentEnd = lastWork && ['twoQuestions', 'idle', 'absence', 'shutdown'].includes(lastWork.endRule ?? '')
+    // After „Dalej” on „Dalej?” of the last work block (ended by a click at or after its planned end) it asks 15 min later
+    // (spec „Koniec pracy?”, T261).
+    const lastInfo = lastWork ? state.blocks.find((b) => b.id === lastWork.id) : undefined
+    const afterNext = !!lastWork && !!lastInfo && lastWork.endRule == null && lastWork.done === true && lastWork.endedAt! >= plannedEndOf(state, lastInfo, lastWork)
+    const askAt = afterNext ? end.at + 15 : end.at
     const id = questionId(date, 'workEnd', null, end.at)
-    if (!workRuns && !silentEnd && !state.facts.answers.has(id) && fixedWorkLeft(state) === 0) {
+    if (!workRuns && !silentEnd && askAt <= state.now && !state.facts.answers.has(id) && fixedWorkLeft(state) === 0) {
+      // `askedAt` is the end „Tak” confirms.
       out.push({ id, kind: 'workEnd', block: null, askedAt: at(end.at), seenAt: state.facts.seen.get(id)?.at ?? null, text: 'Koniec pracy?', answers: [{ id: 'yes', label: 'Tak' }, { id: 'break', label: 'Przerwa' }, { id: 'working', label: 'Pracuję' }], dot: true, silent: true })
     }
   }
@@ -580,9 +592,12 @@ export function answerEvents(state: DayState, q: Question, answer: string, at: n
       if (answer === 'leave') return [...undoAll, mark]
       if (answer === 'end') return [...undoAll, { k: 'block.end', block: q.block, at: away, done: null, rule: 'absenceAnswer' }, mark]
       if (answer === 'subtract' && f.endId && f.endedAt != null) {
-        // Counted out: from the return the block goes on (a work block that would create unconfirmed minutes waits, T463).
+        // Counted out: from the return the block goes on – a work block that would create unconfirmed minutes after the
+        // boundary waits paused, „Wznów” then shows the cost (T463).
         const back = resume ? atOf(state.grid, resume.at) : at
-        return [...undoAll, { k: 'block.pause', block: q.block, at: away }, { k: 'block.resume', block: q.block, at: back, confirmUntil: null }, mark]
+        const info = state.blocks.find((b) => b.id === q.block)
+        const cost = info ? startCost(state, info, back) : null
+        return [...undoAll, { k: 'block.pause', block: q.block, at: away }, ...(cost ? [] : [{ k: 'block.resume', block: q.block, at: back, confirmUntil: null }]), mark]
       }
       return [mark]
     }

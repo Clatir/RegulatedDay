@@ -37,6 +37,23 @@
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
 
+## 0.16.0 – poprawki silnika dnia (ciąg E, 5.2a)
+- Gałąź `claude/0.16.0-silnik` od 28.10 ok. 13:30.
+- Zakres (T514): A1-01 (pauza ostatniego bloku – 15 min, prośba od jej końca), A1-02 („Koniec pracy” przy
+  zapauzowanym bloku – koniec ostatniego przebiegu, blok kończy się z „Cofnij”; tak samo przełączenie na dzień
+  regeneracyjny), A1-03 („Odcinam się” z pracą po „Wracam” przed granicą – przerwa), A1-05 (oznaczenie „po pracy”:
+  największy zbiór, plan zatwierdzonej granicy), A1-06 („Dalej” bez bloków czekających), A1-07 (bloki stałe
+  i „Odcinam się”), A1-08 (regeneracja o porze snu), A1-10 (późne wstanie z pierwszego użycia), A1-11 (maksimum
+  szablonu – `maxFromTemplate`), A2-02 (`rewardRest`) i low A1-13, A1-14, A1-16, A1-17, A1-18. A1-15 → 5.3.
+- `/code-review` (xhigh): 14 uwag, wszystkie poprawione – m.in. oznaczenia niezależne od kolejności planu,
+  „Odcinam się” po pracy nie zabiera wcześniejszego końca, granica z tabeli zatwierdzeń (z niejawną i „Cofnij”), prośba
+  dopisana po fakcie, nagrywany wykład, sesja w prognozie okna, minimum ustalone przy zmianie typu, testy brakujących
+  ścieżek; liczenie limitu 1/3 tylko przy migawkach (test skali bez spowolnienia).
+- Testy: 899 jednostkowych i plikowych (nowe: `work-end.test.ts`, `day-rules-e8.test.ts`; każda poprawka pada na
+  starym kodzie). Test skali w pełnym zestawie lokalnie przekroczył czas otwarcia pod obciążeniem (zostawione procesy
+  Electrona po E2E – zatrzymane), osobno przechodzi. E2E pełne: 18 przeszło, 4 `smoke` przekroczyły czas przy przeglądzie
+  w tle – ponowione osobno.
+
 ## Przed etapem E8 (28.10.2026)
 - Odpowiedzi: przegląd wieloagentowy teraz, 8 obszarów (T512); 1.0 bez czekania na odbiór (D324). Model: Opus 5.5 ·
   xhigh (D317), recenzenci Opus xhigh (D309).

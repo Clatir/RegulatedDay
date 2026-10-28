@@ -10,7 +10,7 @@
  * variants' marker); 'typical' – from now with the typical length (energy, budget, hard end, pool).
  */
 import { OPEN, isRunning, ranMinutes, type DayFacts } from './facts'
-import type { BlockInfo } from './blocks'
+import { plannedSpan, type BlockInfo } from './blocks'
 
 export type ForecastMode = 'window' | 'typical'
 
@@ -75,9 +75,13 @@ export function forecast(inp: ForecastInput): Forecast {
     const planned = f.planned?.durationMin ?? b.durationMin
     const extended = f.extends.reduce((s, x) => s + x.minutes, 0)
     let length = planned + extended
-    if (mode === 'typical' && b.rules.kind === 'session') {
-      const t = inp.typicalMin(b)
-      if (t != null) length = t + extended
+    const typical = mode === 'typical' && b.rules.kind === 'session' ? inp.typicalMin(b) : null
+    if (typical != null) length = typical + extended
+    else {
+      // A fixed block ends at its window's end with its extensions, also begun late – where the timer ends it (spec
+      // „Timer”); a session in 'typical' mode with a typical length counts by it instead.
+      const span = b.fixed ? plannedSpan(b, byId) : null
+      if (span) return Math.max(m, Math.max(span.end, f.startedAt!) + extended)
     }
     // Paused time does not count to the block: what is left of its length runs from now; past its length it ends now.
     return m + Math.max(0, length - ranMinutes(f, m))

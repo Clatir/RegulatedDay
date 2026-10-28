@@ -20,6 +20,7 @@ import { isBoundaryWork } from './blocks'
 import { sessionBlock, SESSION_ANCHOR } from './createDay'
 import { computeDay, settingsAtMinute, type DayContext, type DayState } from './day'
 import { exchangeCost } from './exchange'
+import { isRunning, lastRunEnd } from './facts'
 import { atOf, idxOfLogical } from './grid'
 
 export interface TypeChangeInput {
@@ -260,9 +261,17 @@ export function applyTypeChange(inp: TypeChangeInput, plan: TypeChangePlan, choi
     for (const b of state.blocks) {
       if (!isBoundaryWork(b)) continue
       const f = state.facts.blocks.get(b.id)
-      if (f?.endedAt != null) lastEnd = Math.max(lastEnd ?? 0, f.endedAt)
+      const stop = f ? lastRunEnd(f) : null
+      if (stop != null) lastEnd = Math.max(lastEnd ?? 0, stop)
     }
-    if (!runningWork && !staying && lastEnd != null) events.push({ k: 'work.end', day, at, end: atOf(g, lastEnd) })
+    if (!runningWork && !staying && lastEnd != null) {
+      events.push({ k: 'work.end', day, at, end: atOf(g, lastEnd) })
+      // A paused work block ends there, not done – as „Koniec pracy” ends it.
+      for (const b of state.blocks) {
+        const f = state.facts.blocks.get(b.id)
+        if (isBoundaryWork(b) && !b.fixed && !b.rules.afterWorkAsProject && f?.startedAt != null && f.endedAt == null && !isRunning(f)) events.push({ k: 'block.end', day, block: b.id, at, done: false, rule: 'type' })
+      }
+    }
   }
   return { events, blocks, sessionsYes, requestBlocks, boundary }
 }

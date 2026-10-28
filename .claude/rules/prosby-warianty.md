@@ -38,7 +38,8 @@ D247, D263, D296, T202, T372. Decyzje T478–T481, T502, T503. Elementy w pasku 
   w testach wznowienia po prośbie zostaw zapas albo zatwierdź granicę jawnie.
 - Log porządkuje zegar logiczny (`l`), nie `at`: zdarzenie dopisane później z wcześniejszym `at` (pauza w skończonym
   bloku) jest nieaktualne – stąd `splits` cięte w faktach zamiast pauzy i wznowienia.
-- `forecastWorkEnd` to koniec pracy w mocy (przy pauzie ostatniego bloku – chwila pauzy); warianty biorą
+- `forecastWorkEnd` to koniec pracy w mocy (przy pauzie ostatniego bloku – chwila pauzy, gdy minie 15 min bez
+  wznowienia; blok przerwany prośbą liczy je od jej końca); warianty biorą
   `lastWorkForecast`. `RequestFact.startT` / `endT` – zegar zapisu (pole `t`).
 - Indeksy minut (`from`, `to`, `descents[].at`, `autos[].at`) a chwile w ms (`at` zdarzeń, wyzwalaczy) – zamieniaj
   przez `atOf` / `idxOf`; identyfikatory pochodne liczone z ms.

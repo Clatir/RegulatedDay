@@ -189,7 +189,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W workEnds() traktuj blok zapauzowany (startedAt != null, endedAt == null, !isRunning) tak samo bez względu na to, czy zaczął się przed odcinkiem, czy w nim: resolve = max(resolve, e + 15 <= m ? e + 15 : OPEN). Test: pauza ostatniego bloku → przez 15 min brak końca i brak „Koniec pracy?”; wznowienie przed 15 min → brak końca w chwili pauzy.
 - **Weryfikacja:** Blok zaczęty w odcinku i zapauzowany wpada w gałąź „it ran in this stretch” (day.ts:414), więc nie przedłuża rozstrzygnięcia o 15 min. Regułę 15 min dostaje tylko blok zaczęty przed odcinkiem (409–412). Specyfikacja mówi wprost „nie został wznowiony w ciągu 15 min”, a T308 każe liczyć od linii „Wznów · Zaparkuj”, którą engineView pokazuje dla takiego bloku. Test to potwierdził: koniec 09:30 pojawia się od razu, „Koniec pracy?” pada o 09:31, a po wznowieniu koniec zostaje i liczy się do regeneracji.
 - **Dowód:** Tymczasowy test DSL: start 09:00, pauza 09:30 → o 09:31 ends=[09:30?], firstEnd=09:30, rest[09:30]=REST_FREE, questionsOf=[workEnd]. Po wznowieniu 09:45 i końcu 10:15 jest ends=[09:30, 10:15], firstEnd=09:30, regen.totalMin=60. Kod: src/shared/engine/day.ts:409-414, src/shared/engine/auto.ts:457-466, src/shared/engineView.ts:189
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-02 · high · potwierdzone – „Koniec pracy” przy zapauzowanym bloku potwierdza wcześniejszy koniec i zostawia blok w pauzie
 - **Plik:** `src/shared/engine/timer.ts:376` · rodzaj: bug · pewność recenzenta: high
@@ -199,7 +199,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W 'workEnd' licz `last` także z bloków zapauzowanych (koniec ich ostatniego przebiegu). Zapauzowane bloki pracy przed drugą zmianą kończ jak „Zaparkuj” (block.end done:false, rule 'workEnd', autoRule 'workEnd', z „Cofnij”); bloków „po końcu pracy jak projekt” nie ruszaj. Tę samą poprawkę lastEnd zrób w applyTypeChange.
 - **Weryfikacja:** Gdy na pierwszym planie nie biegnie praca, gałąź else w 'workEnd' bierze `last` tylko z bloków z endedAt i pomija zapauzowany B. workEndParking parkuje tylko bloki niezaczęte, więc B zostaje w pauzie. Kliknięcie potwierdza więc wcześniejszy koniec A, a ostatni odcinek zostaje niepotwierdzony. Wystarczą dwa bloki pracy i pauza (albo przerwa z paska) przy ostatnim, czyli przebieg częsty. Ten sam wzorzec lastEnd jest w applyTypeChange.
 - **Dowód:** Test: A 09:00–10:00, B start 11:00, pauza 11:30, timerAction workEnd o 12:00 → events [work.end end=10:00], bez parkowania. O 12:30 ends=['10:00+','11:30?'], workEndConfirmed=false, paused=[b], questionsOf=[workEnd]; dayOutcome daje wtedy noData. Przy jednym bloku i przerwie koniec potwierdza się, ale B zostaje zapauzowany. Kod: timer.ts:373-384 i 467-488, typeChange.ts:259-265
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-03 · high · potwierdzone – „Odcinam się” w trakcie pracy potwierdza koniec pracy mimo pracy po „Wracam” przed granicą
 - **Plik:** `src/shared/engine/day.ts:446` · rodzaj: spec · pewność recenzenta: high
@@ -209,7 +209,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W workEnds() „Odcinam się” ma potwierdzać koniec odcinka tylko wtedy, gdy między disconnect.end a zatwierdzoną granicą nie zaczyna się kolejny odcinek pracy. W przeciwnym razie potwierdzenie przechodzi na koniec tej późniejszej pracy. W pętli projektów blok zaczęty po „Wracam” przed granicą zostaje pracą. Dodaj test z przykładu.
 - **Weryfikacja:** Warunek potwierdzenia w workEnds() (day.ts:446) bierze każde disconnect.start w odcinku. Nie sprawdza, czy po „Wracam” przed granicą wróciła praca. Pętla projektów (504–522) uznaje więc journaling zaczęty po „Wracam” za projekt. Specyfikacja (wiersze 100 i 132) oraz T307 i T320 mówią wprost, że taki blok jest pracą, a pierwszym końcem jest koniec tej pracy. Także przy zwykłym bloku pracy po „Wracam” firstEnd zostaje w chwili odcięcia.
 - **Dowód:** Test: inne 09:00, journaling 10:00, inne 11:00, granica 17:00. Klik cutOff 09:50, back 10:20, start j 10:21 → o 10:40 ends=['09:50+'], firstEnd=09:50, asProject=['j']. Kontrola: cutOff 09:50, back 10:20, inne 11:00–12:00 → ends=['09:50+','12:00?'], firstEnd=09:50. Kod: src/shared/engine/day.ts:446, 503-522
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-04 · high · potwierdzone – Druga zmiana: wcześniejszy start i „Przedłuż” bez kosztu i drugiego kliknięcia, brak „Przesuń na teraz”
 - **Plik:** `src/shared/engine/timer.ts:204` · rodzaj: spec · pewność recenzenta: high
@@ -219,7 +219,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W workCost() licz koszt dla bloku z secondShift tylko z minut poza jego planowanym oknem (secondWindows) po zatwierdzonej granicy. Bez overrun: nigdy przekroczenie, przy pustej puli bedtime. Przy wcześniejszym starcie zwracaj w ActionCost znacznik „Przesuń na teraz”, a w timerAction dodaj akcję, która przesuwa planowany czas (edycja pliku dnia, ta sama długość) i startuje bez kosztu.
 - **Weryfikacja:** workCost() zwraca null dla bloku, który nie jest isBoundaryWork, a druga zmiana nim nie jest (secondShift). Wcześniejszy start i „Przedłuż” drugiej zmiany wykonują się więc pierwszym kliknięciem, bez kosztu. Silnik i tak liczy te minuty jako przedłużenie i nagroda za granicę przepada. Specyfikacja (wiersze 108 i 116) i T271/T284 wymagają drugiego kliknięcia i „Przesuń na teraz”, a w kodzie tego nie ma. Druga zmiana jest domyślnie w każdy dzień roboczy, więc „Przedłuż” sesji często po cichu odbiera nagrodę.
 - **Dowód:** Test: granica 10:15, ds sesja 20:00–21:00 tag secondShift. timerAction start o 19:40 → ok:true, confirm:null; o 20:30 extensionMin=20; extend +30 o 20:55 → ok:true, confirm:null. Grep 'Przesuń na teraz|moveToNow' w src: brak. Kod: src/shared/engine/timer.ts:202-209
-- **Status:** otwarte
+- **Status:** do 5.2e – funkcja ze specyfikacji (D325)
 
 #### A1-05 · high · potwierdzone – Oznaczenie „po pracy” znika przy dwóch blokach „po końcu pracy jak projekt” i jest liczone na nowo przy każdej zmianie planu
 - **Plik:** `src/shared/engine/blocks.ts:203` · rodzaj: spec · pewność recenzenta: high
@@ -229,7 +229,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W markAfterWork() pomijaj jako odniesienie bloki z afterWorkAsProject niezakotwiczone do pracy, tak by odniesieniem była ostatnia praca, która sama nie dostanie oznaczenia. Oznaczenie zapisuj w bloku (pole w PlanBlock albo w zdarzeniu zatwierdzenia lub dodania) i czytaj z zapisu, a nie liczy na nowo.
 - **Weryfikacja:** markAfterWork() bierze jako odniesienie każdy inny blok pracy, także blok kategorii afterWorkAsProject, który sam powinien dostać oznaczenie. Specyfikacja (wiersz 87) definiuje „blok pracy” w regułach granicy jako blok bez oznaczenia „po pracy”, więc dwa wieczorne bloki nauki tracą je oba. Druga część jest bezsporna: T321 i specyfikacja ustalają oznaczenie przy zatwierdzeniu granicy albo dodaniu bloku, a kod liczy je od nowa z bieżącego planu. Dodanie późniejszego bloku zabiera więc oznaczenie wstecz.
 - **Dowód:** Test: inne 09:00–16:00, nauka 17:00, oglądanie 18:00, ds 20:00 → marks=[], proposal 19:00, budget fc 600. Sama nauka → marks=[n], proposal 16:15, fc 480. Nauka plus analiza 18:30 dodana po zatwierdzeniu → marks=[]. Kod: src/shared/engine/blocks.ts:192-209; docs T321, T420
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-06 · high → medium · potwierdzone – „Dalej” i „Start” uruchamiają elastyczny blok czekający na „Zacznij” (analiza tygodniowa, piątkowa analiza z oznaczeniem drugiej zmiany)
 - **Plik:** `src/shared/engine/timer.ts:189` · rodzaj: spec · pewność recenzenta: high
@@ -239,7 +239,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W nextBlock() dodaj warunek `|| b.waits`. Bloki czekające uruchamia tylko ich linia „Zacznij · Odwołaj” (t.waiting). Dodaj test na sobotni plan.
 - **Weryfikacja:** nextBlock() pomija tylko isFixedLike, więc analiza tygodniowa (niestała, waits=true) i piątkowa analiza z tagiem secondShift są celem „Dalej” i „Start: …”. Specyfikacja mówi, że bloki czekające na „Zacznij” zaczynają się tylko po nim (wiersze 405 i 409). Ważność obniżam do medium: blok startuje przed czasem, ale nic nie ginie. Utratę nagrody w piątek daje dopiero połączenie z A1-04, a piątkowa analiza zdarza się tylko przed zjazdem.
 - **Dowód:** Test: sobota, rutyna 08:00–08:30, analiza 09:00 (tag weeklyAnalysis). O 08:20 waits=true, timerNow.next='w', waiting=[]; „Dalej” o 08:20 → [block.end:r, block.start:w]. Kod: src/shared/engine/timer.ts:189; defaults.ts:44; morning.ts:181
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-07 · medium · potwierdzone – Po „Wracam” blok stały zaczyna się wstecz od planowanego startu; biegnący blok stały liczy się w „Odcinam się” jako praca i odpoczynek naraz
 - **Plik:** `src/shared/engine/auto.ts:271` · rodzaj: spec · pewność recenzenta: high
@@ -249,7 +249,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W fixedStart ustaw from = max(from, koniec ostatniego odcinka disconnect nachodzącego na okno bloku). W cutOff zapisz biegnący blok stały (poza nagrywaniem) jako przerwany: block.end z regułą 'disconnect' i „do potwierdzenia” w rytuale, a po „Wracam” niech fixedStart go wznowi. Do potwierdzenia minuty z F_DISC nie mogą mieć F_END ani F_BUDGET.
 - **Weryfikacja:** Po „Wracam” reguła fixedStart zapisuje start bloku stałego z from = planowany start, czyli wstecz w czas odcięcia. Specyfikacja każe takiemu blokowi biec od chwili „Wracam”. cutOff nie robi biegnącego bloku stałego blokiem „do potwierdzenia”, tylko zostawia go biegnącego. W obu przypadkach minuty z F_DISC liczą się naraz do regeneracji (REST_DISCONNECT) i do budżetu pracy.
 - **Dowód:** Test: zajęcia zdalne 14:00–15:30, cutOff 13:30, back 14:30 → leader o 14:31: block.start z@14:00. O 15:00 rest[14:10]=2 i budgetUsed=120 (60+60). Wariant: cutOff o 14:20 przy biegnącym z → zdarzenia tylko disconnect.start, fg=z, rest[14:30]=2, budget 110. Kod: auto.ts:265-301, timer.ts:428-432
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-08 · medium · potwierdzone – Blok regeneracji „poza komputerem” nigdy nie kończy się o porze snu
 - **Plik:** `src/shared/engine/auto.ts:176` · rodzaj: spec · pewność recenzenta: high
@@ -259,7 +259,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Zamień warunek na `!info.isRegen || !fixedWaitsBehind(info)`, gdzie fixedWaitsBehind sprawdza blok stały „do potwierdzenia” czekający na tę regenerację (jak `held` w timerNow). Dodaj test.
 - **Weryfikacja:** awayEnd() wyłącza z końca o porze snu każdą regenerację (`!info.isRegen`). Specyfikacja i T349 wyłączają tylko regenerację, na którą czeka blok stały. Wieczorny spacer bez użycia komputera biegnie więc przez 04:00 do porannego pierwszego użycia.
 - **Dowód:** Test: spacer 21:00–21:30 zaczęty o 21:00, użycie do 20:59, leader o 21:31, 22:00, 22:30, 23:30, 01:00, 03:59 → brak zdarzeń; o 03:59+1 w nadal biegnie (endedAt null), pora snu 22:00. Kod: src/shared/engine/auto.ts:176; spec Timer „Bezczynność i nieobecność” (koniec po planowanej długości), T349
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-09 · medium · potwierdzone – Pytanie o nieobecność nie ma odpowiedzi „posiłek”, „regeneracja” ani „byłem na prośbie”
 - **Plik:** `src/shared/engine/auto.ts:483` · rodzaj: spec · pewność recenzenta: high
@@ -269,7 +269,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodaj odpowiedzi 'meal', 'regen' i 'request' (z osobą). Po planowanym końcu blok kończy się w chwili odejścia z czasem do wyjaśnienia od powrotu (D280). 'meal' oznacza posiłek z planu według D277 (start i koniec z czasami nieobecności, autoRule z „Cofnij”). 'request' dopisuje request.start/end w trybie 'after'. 'regen' oznacza nieobecność jako regenerację.
 - **Weryfikacja:** questionsOf() daje przy nieobecności tylko keep/subtract/leave (i keep/end/leave po odliczeniu), a answerEvents() obsługuje tylko te odpowiedzi. Specyfikacja (D268, D273, D277, D280, T371) wymaga też „posiłek”, „regeneracja” i „byłem na prośbie”. T463 przesunął je do E5, E5 się skończył, a w docs/plan.md ani w postep.md nie ma po nich pozycji. To zgubiona funkcja z decyzji.
 - **Dowód:** src/shared/engine/auto.ts:482-484 i 508 (tylko trzy odpowiedzi), 569-588 (answerEvents bez meal/regen/request); docs/decyzje-techniczne.md T463 (odłożone do E5), T371; grep w docs/plan.md bez pozycji
-- **Status:** otwarte
+- **Status:** do 5.2e – funkcja ze specyfikacji (D325)
 
 #### A1-10 · medium · potwierdzone – Późne wstanie liczone od pierwszej obecności zamiast od pierwszego użycia komputera w dniu
 - **Plik:** `src/shared/engine/lateWake.ts:62` · rodzaj: spec · pewność recenzenta: high
@@ -279,7 +279,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Przekazuj do detectLateWake aktywność (activityOf z logu dnia i poprzedniego) i licz pierwsze użycie przez dayFirstUse(state, activity) według reguły trzech chwil, jak przy blokach „do potwierdzenia”. presence.first zostaw tylko jako zapas, gdy brak zapisów obserwacji.
 - **Weryfikacja:** detectLateWake() bierze firstUseOf(), czyli najwcześniejsze presence.first. folder.noteInput zapisuje je przy pierwszym wejściu dnia, także w aplikacji. T454 przewidywało to tylko do pomocnika E4a, a choć pomocnik i dayFirstUse już istnieją, lateWake nadal czyta obecność. Nocne kodowanie po 04:00 i krótkie kliknięcie przed snem blokują więc propozycję, wbrew specyfikacji „Użycie komputera”.
 - **Dowód:** src/shared/engine/lateWake.ts:9, 39-43, 62; src/main/data/folder.ts:319-324 (presence.first przy każdym wejściu); src/shared/engine/auto.ts:218-220 (dayFirstUse nieużywane w lateWake); docs T454
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-11 · medium · potwierdzone – Maksimum z szablonu znika po każdej zmianie ustawień „od dziś”
 - **Plik:** `src/shared/engine/day.ts:535` · rodzaj: bug · pewność recenzenta: high
@@ -289,7 +289,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Przy migawce 'today' albo 'reissue' bierz maksimum z nadpisania szablonu dnia (snapshot.maxMin, gdy szablon je ma), a params.maxMin tylko bez nadpisania. Najprościej: zapamiętaj w migawce dnia, czy maxMin pochodzi z szablonu.
 - **Weryfikacja:** maxAt() bierze snapshot.maxMin (nadpisanie z szablonu) tylko wtedy, gdy nie ma żadnej późniejszej migawki. Po day.snapshot reason 'today', zapisywanej przy zmianie ustawień „od dziś” i przy zastosowaniu kalibracji, bierze params.maxMin typu. Budżet zostaje przy tym z snapshot.budgetMin. Nadpisanie maksimum z szablonu (D69, edytowalne w TemplatesPage) znika więc w połowie dnia. Potrzebne są dwa rzadsze warunki naraz, więc medium wystarczy.
 - **Dowód:** Test: snapshot.maxMin=18:00 (typ 19:00) → boundary.max 18:00. Po raw day.snapshot reason 'today' o 10:00 → o 10:30 boundary.max=19:00, budget.limitMin=540. Kod: src/shared/engine/day.ts:535; settingsStore.ts:50
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-12 · medium · potwierdzone – Pasek nie ma kilku linii opisanych w specyfikacji
 - **Plik:** `src/shared/engineView.ts:180` · rodzaj: spec · pewność recenzenta: medium
@@ -299,7 +299,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodaj w engineView linie: `anchor:<id>` (Zacznij, Zaparkuj, Koniec pracy; kropka; od rzeczywistego końca kotwicy), `fixedLeft:<id>` (zostaje / Odwołaj, raz, także w ciszy, znika przy starcie bloku albo jego planowanym starcie), `notExtended:<id>` i `workedUntil`. Akcje mapuj na istniejące timerAction (start, park, cancel, extend) i odpowiedzi czasu do wyjaśnienia. Testy w widget-view.test.ts.
 - **Weryfikacja:** engineView buduje linie tylko dla t.waiting (bloki z waits), „Zacznij jeszcze raz”, bloków zapauzowanych i pytań. Blok zakotwiczony (np. journaling po sesji) nie ma waits, więc po końcu kotwicy jest tylko przycisk „Start: …”, bez Zaparkuj, „Koniec pracy” i kropki, a przy innym biegnącym bloku nie ma nic. W kodzie nie ma linii „… zostaje · Odwołaj”, „… czeka do … · Odwołaj”, „Nie przedłużono · Przedłuż” ani „Koniec pracy o … · Pracowałem do …”. Nie ma ich też w docs/plan.md jako odłożonych.
 - **Dowód:** src/shared/engineView.ts:179-190 i 225 (jedyne linie i przycisk start); grep 'Nie przedłużono|zostaje · Odwołaj|Pracowałem do' w src – tylko rytuał (RitualPanel, UnclosedDays), nie pasek; spec wiersze 71, 99, 98, 116, 417; D194, D216, D227, D254, T308
-- **Status:** otwarte
+- **Status:** do 5.2e – funkcja ze specyfikacji (D325)
 
 #### A1-13 · low · bez weryfikacji – „Odliczyć nieobecność” wznawia blok pracy bez sprawdzenia kosztu po granicy
 - **Plik:** `src/shared/engine/auto.ts:585` · rodzaj: spec · pewność recenzenta: medium
@@ -307,7 +307,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** answerEvents('absence', 'subtract') zawsze zapisuje block.pause i block.resume z confirmUntil: null. Nie sprawdza startCost, choć komentarz mówi, że taki blok czeka. Tak samo automatyczne odliczenie przy powrocie przed planowanym końcem (linia 354) przesuwa resztę bloku za potwierdzone minuty.
 - **Scenariusz:** Blok pracy 16:00–17:00, granica 17:15. Odejście 16:20, powrót 17:30 (koniec w chwili odejścia), odpowiedź „Odliczyć”. Blok wznawia się od 17:30 i jego 40 min jest w całości po granicy, bez kosztu i bez „Wznów · Zaparkuj”.
 - **Poprawka:** Przy 'subtract' wylicz startCost(state, info, back). Gdy jest koszt, zapisz tylko pauzę (blok czeka jako „Wznów · Zaparkuj”), a wznowienie zostaw kliknięciu z drugim potwierdzeniem.
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-14 · low · bez weryfikacji – Limit 1/3 minimum przed granicą liczony z typu „teraz”, także dla regeneracji sprzed zmiany typu
 - **Plik:** `src/shared/engine/day.ts:1057` · rodzaj: spec · pewność recenzenta: high
@@ -315,7 +315,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** towardMinArr() bierze `third` z params w minucie m (bieżąca migawka) dla wszystkich minut. Po przełączeniu na dzień regeneracyjny (150 min) regeneracja zebrana wcześniej w dniu zwykłym (limit 30) liczy się wstecz do 50.
 - **Scenariusz:** Dzień zwykły, granica 16:15, regeneracja 09:00–09:45 i przerwa 10:45–11:00. Przełączenie na regeneracyjny o 11:00. O 11:01 towardMinMin = 50 zamiast 30 (bez przełączenia: 30), co przesuwa twardy koniec i pulę.
 - **Poprawka:** Licz limit dla minuty k z settingsAt(k).params.minRegenMin. Licznik `pre` zostaje wspólny, a każda minuta wchodzi do niego tylko poniżej limitu swojej migawki.
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-15 · low · bez weryfikacji – Po „Cofnij” automatycznego zatwierdzenia granicy każda minuta pracy jest „w granicy”, także po maksimum
 - **Plik:** `src/shared/engine/day.ts:700` · rodzaj: spec · pewność recenzenta: medium
@@ -323,7 +323,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Bez zatwierdzonej granicy (approvedAt = null po boundary.undo) pętla klasyfikacji daje każdej minucie cls 'in'. Specyfikacja każe po cofnięciu liczyć minuty według propozycji. Propozycja nie wychodzi poza maksimum, więc minuty po maksimum powinny być przekroczeniem.
 - **Scenariusz:** „Cofnij” auto-zatwierdzenia o 08:20, potem praca do 20:00 przy maksimum 19:00. extensionMin = 0, a dayOutcome.boundary = 'kept'. Zatwierdzenie w rytuale ma at = chwila rytuału i nie przelicza minut wcześniejszych.
 - **Poprawka:** Gdy granica jest otwarta po cofnięciu, klasyfikuj minuty według proposalAt(k) z widoku przy k (po propozycji 'after', po maksimum 'max', przy pustej puli 'empty'). Dodaj test.
-- **Status:** otwarte
+- **Status:** do 5.3 (T514)
 
 #### A1-16 · low · bez weryfikacji – „Koniec pracy?” pada od razu po odpowiedzi „Dalej” na „Dalej?” ostatniego bloku pracy, a nie 15 min później
 - **Plik:** `src/shared/engine/auto.ts:458` · rodzaj: spec · pewność recenzenta: medium
@@ -331,7 +331,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** questionsOf() zadaje „Koniec pracy?”, gdy tylko ends.at(-1) jest niepotwierdzony. Nie odróżnia końca po odpowiedzi „Dalej” na już zadane „Dalej?” (koniec ≥ planowany koniec, rule null). Test timer.test.ts:301 utrwala to zachowanie.
 - **Scenariusz:** Ostatni blok pracy 08:00–09:00. O 09:00 przychodzi „Dalej?”, użytkownik klika „Dalej”, a o 09:01 pasek już pyta „Koniec pracy?”, choć ma pytać o 09:15, jeśli nie zaczął się blok pracy.
 - **Poprawka:** W questionsOf przesuń askedAt na end.at + 15 min, gdy ostatni blok pracy skończył się przez 'next' w chwili ≥ swojego planowanego końca (pytanie „Dalej?” było zadane), i nie pokazuj pytania przed tą chwilą. Popraw test 297.
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-17 · low · bez weryfikacji – Warianty przenoszą na jutro bloki kategorii z ochroną „nie przenosić na jutro”
 - **Plik:** `src/shared/engine/variants.ts:157` · rodzaj: spec · pewność recenzenta: medium
@@ -339,7 +339,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** candidates() pomija tylko bloki chronione (rules.protected) i chronione bloki życia, a rules.noMoveTomorrow nie sprawdza. Warianty 'tomorrow' i 'regenTomorrow' mogą więc proponować przeniesienie takiego bloku.
 - **Scenariusz:** Kategoria „Sprawy domowe” albo kategoria pracy z zaznaczonym w ustawieniach „nie przenosić na jutro”. Pula schodzi do rezerwy, a wariant energii proponuje „… na jutro” właśnie dla tego bloku.
 - **Poprawka:** Dla zmian 'tomorrow' filtruj kandydatów po `!b.rules.noMoveTomorrow`. Skracać wolno nadal. W wariancie energii wtedy tylko 'regenShorter' albo samo 'regen'.
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A1-18 · low · bez weryfikacji – Planowany koniec bloku stałego zaczętego później liczony w trzech miejscach na dwa sposoby
 - **Plik:** `src/shared/engine/day.ts:177` · rodzaj: bug · pewność recenzenta: medium
@@ -347,7 +347,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** timer.plannedEndOf (i koniec z planu w auto.ts) kończy blok stały o planowanym końcu okna (max(span.end, start) + przedłużenia). day.plannedEndOf dla stałego bloku innego niż sesja oraz forecast.runningEnd liczą start + długość + pauzy. Blok stały zaczęty później (po regeneracji, przy pierwszym użyciu) dostaje więc w prognozie i w oknach potwierdzeń „Przedłuż” inny koniec niż ten, w którym naprawdę się skończy.
 - **Scenariusz:** Zajęcia zdalne 14:00–15:30 wstrzymane regeneracją i zaczęte o 14:20. Timer kończy je o 15:30, a prognoza (koniec pracy, pula, propozycja) zakłada 15:50. Okno „Przedłuż +30” kliknięte o 15:35 zaczyna się w day.ts o 15:50, więc minuty 15:30–15:50 nie są potwierdzone z góry.
 - **Poprawka:** Jedna funkcja planowanego końca bloku stałego (max(span.end, start) + przedłużenia) w day.plannedEndOf i forecast.runningEnd dla b.fixed, tak jak w timer.plannedEndOf.
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 ### A2 – Energia, rytuał, zamrażanie, gra, kalibracja, „Strona B”, CSV
 
@@ -371,7 +371,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dać nagrodzie osobną tablicę regeneracji, np. `DayState.rewardRest`: `regen` (w trybie `asWritten` – `tentative`) z minutami czasu do wyjaśnienia z odpowiedzią „odpoczynek” albo „… do” (część po chwili „do”) jako REST_FREE i z zastosowanym `rest.not`. Dla energii zostaje `rest`, który stoi w czasie do wyjaśnienia. `restStretches` przełączyć na nią i dodać testy obu przypadków (odpowiedź „odpoczynek” daje 'met'; odcinek `rest.not` nie daje).
 - **Weryfikacja:** Potwierdzone testem. Czas do wyjaśnienia 12:20–13:30 po bloku pracy zakończonym twoQuestions, z odpowiedzią 'rest' i z komunikatem zobaczonym o 12:25, ma 0 minut w day.rest, a zejście z 12:20 dostaje 'missed'. Tak samo jest bez odpowiedzi przy asWritten (D265). Przyczyna: day.ts:1038-1039 zeruje rest w każdej minucie z F_EXPLAIN, a paintExplain ustawia F_EXPLAIN także po odpowiedzi „odpoczynek”. Specyfikacja (linia 209), T370 i T383 („reakcja na rezerwę także w czasie do wyjaśnienia jak odpoczynek”) wprost to wliczają. Drugi zarzut, że rest.not nie działa na rest (kopia z 1038 powstaje przed pętlą z 1045), też zgadza się z kodem, ale specyfikacja nie mówi wprost o nagrodzie, więc ta część jest tylko prawdopodobna. Dziś skutek zasłania A2-01 (bez zobaczenia wszystko jest 'excused'), ale po naprawie A2-01 ujawni się w częstym przypadku: „Koniec pracy” albo ✓ rytuału po automatycznym końcu bloku.
 - **Dowód:** Test tymczasowy tests/unit/tmp-e8-a2-explainrest.test.ts (usunięty): 'explains [12:20,13:30,work] … answered [rest] descents [12:20] [missed] missed; rest minutes 12:20-13:30: 0'; 'noanswer asWritten [12:20] [missed] … rest 0 totalRegen 120'. src/shared/engine/day.ts:297-298, 1038-1048; src/shared/engine/reserve.ts:61-73; docs/specyfikacja.md:209; docs/decyzje-techniczne.md T370, T383
-- **Status:** otwarte
+- **Status:** poprawione w 0.16.0 (test w `tests/unit/engine/work-end.test.ts` albo `day-rules-e8.test.ts`, T514)
 
 #### A2-03 · medium · potwierdzone – Zamrożenie nie czeka na nierozstrzygnięte kopie konfliktowe pliku dnia, rd.json i szablonów, które czyta ocena
 - **Plik:** `src/main/data/folder.ts:746` · rodzaj: data · pewność recenzenta: medium
@@ -391,7 +391,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodać odpowiedzi `meal`, `regen`, `request` do pytania o nieobecność w pasku i wierszu rytuału. Po planowanym końcu: koniec w chwili odejścia (reguła z `LEFT_RULES`), czas od powrotu jako czas do wyjaśnienia. `meal` oznacza najbliższy pasujący posiłek z planu (D277) z czasami nieobecności i z „Cofnij”; `regen` robi z nieobecności regenerację w `regen`/`rest`. W `accurateBlocks` i `timeSamples` wykluczyć posiłki odhaczone tą odpowiedzią. Testy z przykładów D277.
 - **Weryfikacja:** Pytanie o nieobecność daje w questionsOf tylko keep/subtract/leave (koniec) i keep/end/leave (odliczona), a answerEvents zna tylko keep, leave, end i subtract. W src nie ma odpowiedzi „posiłek”, „regeneracja” ani „byłem na prośbie” ani linijki „… zjedzony … · Cofnij”, a wiersz rytuału 'absence' ma tylko ✓. Specyfikacja („Bezczynność i nieobecność”), T371, T378 i T383 wymagają tych odpowiedzi. T463 odłożył je do E5 („odpowiedzi nieobecności „posiłek”, „regeneracja”, „byłem na prośbie” (E5 …)”), E5 ich nie dodał, a docs/plan.md i docs/postep.md o nich milczą, więc to nie jest zaplanowane odroczenie.
 - **Dowód:** src/shared/engine/auto.ts:479-485, 508, 569-588; src/shared/engine/ritual.ts:82, 156-167; docs/specyfikacja.md:430; docs/decyzje-techniczne.md T463 (odroczenie do E5), T371, T378, T383; grep 'byłem na prośbie|zjedzony' w src: brak
-- **Status:** otwarte
+- **Status:** do 5.2e – funkcja ze specyfikacji (D325)
 
 #### A2-05 · low · bez weryfikacji – „Zaznacz odcinek” (rest.not) nie jest ograniczony do wieczoru ani „Odcinam się” – może skasować regenerację z dnia
 - **Plik:** `src/shared/engine/ritual.ts:334` · rodzaj: bug · pewność recenzenta: high

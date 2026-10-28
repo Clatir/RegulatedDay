@@ -51,6 +51,8 @@ export interface DaySnapshot {
   /** The day's own budget and maximum when its template overrides its type's. */
   budgetMin: number
   maxMin: number
+  /** The maximum is the template's own – a change „od dziś” keeps it (absent in snapshots written before 0.16.0). */
+  maxFromTemplate?: boolean
   wakeMin: number
   /** The wake time from the template and type (without the day's own wake): what blocks before the first fixed one follow. */
   templateWakeMin: number

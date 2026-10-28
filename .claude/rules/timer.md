@@ -44,5 +44,9 @@ paths:
   stały „przy komputerze” nie zacznie się (czeka na pierwsze użycie).
 - Otwarty odcinek innego komputera liczy się tylko do jego ostatniego `observe.alive` (`alive` w DSL).
 - `firstUseFrom` przy `t === now` zwraca now tylko, gdy użycie trwa od `from` – nie, gdy przerwa sięga teraz.
+- „Koniec pracy?” po „Dalej” (kliknięcie w chwili planowanego końca albo po nim) dopiero 15 min później (T261);
+  `askedAt` pytania to dalej koniec, który „Tak” potwierdza. „Koniec pracy” kończy zapauzowane bloki pracy
+  (`workEndParking`: `block.end` z `autoRule: 'workEnd'`, z „Cofnij”).
+- Późne wstanie (`lateWake.ts`) – pierwsze użycie z `dayFirstUse`; `presence.first` tylko bez zapisów obserwacji.
 - Prowadzący sprawdza `idle`, `firstUse`, `limit`, `absence`, `lastInput` przy każdym sprawdzeniu i cofa je, gdy
   późniejszy log z wejściem im przeczy (T465) – nowa reguła końca zależna od wejścia musi tam trafić.

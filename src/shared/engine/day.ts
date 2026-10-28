@@ -149,6 +149,11 @@ export interface DayState {
   lastWorkForecast: number | null
   /** The regeneration of every minute as known now – the past and the forecast (REST_*; 0: none). */
   rest: Uint8Array
+  /**
+   * The regeneration the reward „Reakcja na rezerwę” reads (spec „Reakcje aplikacji”, T370): `rest` with time to explain
+   * answered „odpoczynek” (as written, D265: also unanswered after a work block), less what the ritual marked no rest.
+   */
+  rewardRest: Uint8Array
   warnings: string[]
 }
 
@@ -169,12 +174,14 @@ interface Ctx {
   noWorkPlanned: boolean
   events: readonly AnyEvent[]
   asWritten: boolean
+  /** A third of the minimum of regeneration in force at each minute (the limit before the end of work, D208, D218). */
+  regenThird: Uint16Array
 }
 
-/** The planned end of a started block: fixed sessions end at their window, others after their length and pauses. */
+/** The planned end of a started block: fixed ones end at their window (as the timer ends them), others after their length and pauses. */
 function plannedEndOf(c: Ctx, b: BlockInfo, startedAt: number, plannedMin: number, pausedMin: number, extendedMin: number): number {
   const span = plannedSpan(b, c.byId)
-  if (b.rules.kind === 'session' && b.fixed && span) return Math.max(span.end, startedAt) + extendedMin
+  if (b.fixed && span) return Math.max(span.end, startedAt) + extendedMin
   return startedAt + plannedMin + pausedMin + extendedMin
 }
 
@@ -255,15 +262,28 @@ function paint(c: Ctx, flags: Uint16Array, from: number, to: number, spans: read
   }
 }
 
-/** The runs of the facts as spans (cut at `until`). */
+/**
+ * The runs of the facts as spans (cut at `until`). A fixed block running through „Odcinam się” is „do potwierdzenia”
+ * from the click (spec „Odcinam się”): its minutes in it are no work but the regeneration of the cut – a recorded
+ * lecture runs on.
+ */
 function actualSpans(c: Ctx, facts: DayFacts, until: number): Span[] {
   const out: Span[] = []
+  const disconnect = [...facts.disconnect].sort((x, y) => x.from - y.from)
   for (const b of c.blocks) {
     const f = facts.blocks.get(b.id)
     if (!f) continue
+    const cuts = b.fixed && !b.waits && !b.recorded ? disconnect : []
     for (const r of f.runs) {
+      let from = Math.max(0, r.from)
       const to = Math.min(r.to === OPEN ? until : r.to, until, c.cap)
-      if (to > r.from) out.push({ block: b, from: Math.max(0, r.from), to, bg: r.bg })
+      for (const d of cuts) {
+        const dTo = Math.min(d.to === OPEN ? until : d.to, until)
+        if (dTo <= from || d.from >= to) continue
+        if (d.from > from) out.push({ block: b, from, to: d.from, bg: r.bg })
+        from = dTo
+      }
+      if (to > from) out.push({ block: b, from, to, bg: r.bg })
     }
   }
   return out
@@ -368,11 +388,15 @@ function stretches(flags: Uint16Array, flag: number, until: number): Array<{ fro
 /**
  * Valid ends of work as known at m (spec „Koniec pracy”, „Pierwszy koniec pracy”): a stretch of work ends with a
  * confirmation („Koniec pracy”, „Odcinam się”), or when after it no work block runs and none is left in the plan
- * before the second shift that can still start – a flexible or anchored one that did not start within 15 min of when
- * it was due no longer counts, a waiting one counts until its window ends. An end after which a fixed work block is
- * left is only a break. The end is the stretch's end, also when it becomes known later (regeneration is added back).
+ * before the second shift that can still start – a flexible or anchored one that did not start (or was not resumed)
+ * within 15 min of when it was due no longer counts, a waiting one counts until its window ends. An end after which a
+ * fixed work block is left is only a break, and so is „Odcinam się” clicked in a stretch and followed by work begun
+ * after „Wracam” before the boundary (that work's end is the end); clicked after the stretch, it then only confirms
+ * nothing. The end is the stretch's end, also when it becomes known later (regeneration is added back). `starting`: a
+ * block starting at m, not yet in the view (whether it counts as a project is being decided); `boundaryAt`: the boundary
+ * approved at an instant (OPEN: none).
  */
-function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindow: Forecast, projects: ReadonlySet<string>): WorkEnd[] {
+function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindow: Forecast, projects: ReadonlySet<string>, starting: string | null = null, boundaryAt: (t: number) => number = writtenBoundary(view)): WorkEnd[] {
   const runningWork = c.blocks.some((b) => {
     const f = view.blocks.get(b.id)
     return isBoundaryWork(b) && !projects.has(b.id) && !!f && isRunning(f)
@@ -392,26 +416,47 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
   list.sort((a, b) => a.from - b.from)
   const out: WorkEnd[] = []
   const dueOf = new Map(fcWindow.placed.map((p) => [p.block.id, p.due]))
+  // Work in [t, before) up to m – or the block starting at m (counted as a project only by the end it would make).
+  const workFrom = (t: number, before: number): boolean => {
+    if (starting != null && m >= t && m < before) return true
+    for (let k = Math.max(0, t); k < Math.min(before, m, flags.length); k++) if (flags[k]! & F_END) return true
+    return false
+  }
+  // „Odcinam się” followed by work begun after „Wracam” before the boundary confirms no end before it (spec „Pierwszy
+  // koniec pracy”, T307, T320).
+  const workedAfter = (d: { to: number }) => d.to !== OPEN && workFrom(d.to, boundaryAt(d.to))
   for (let i = 0; i < list.length; i++) {
     const s = list[i]!
     const e = s.to
     const next = list[i + 1]?.from ?? OPEN
+    // Clicked during this stretch: it did not end – only a break; the work after „Wracam” ends the day's work.
+    if (view.disconnect.some((d) => d.from >= s.from && d.from <= e && workedAfter(d))) continue
     // Blocks of work left in the plan before the second shift as of e.
     let resolve = e
     let fixedLeft = false
     for (const b of c.blocks) {
-      if (!isBoundaryWork(b) || !b.inPlan) continue
+      if (!isBoundaryWork(b) || !b.inPlan || projects.has(b.id)) continue
       const span = plannedSpan(b, c.byId)
       if (span && span.start >= c.secondShiftStart) continue
       const f = view.blocks.get(b.id)
       if (f?.endedAt != null && f.endedAt <= e) continue
-      if (f?.startedAt != null && f.startedAt < e && f.endedAt != null) continue
-      if (f?.startedAt != null && f.startedAt < s.from) {
-        // Started before this stretch and not ended (paused): it is left, due from e.
-        if (f.endedAt == null && !isRunning(f)) resolve = Math.max(resolve, e + 15 <= m ? e + 15 : OPEN)
+      if (f?.startedAt != null && f.startedAt < e) {
+        // It ran up to e and is left (paused by you, a break, a request): it counts while it may be resumed within 15
+        // min (spec „nie został wznowiony w ciągu 15 min”); a request that interrupted it – live or written in after
+        // the fact (its splits) – returns it at its end (T503).
+        let due = e
+        for (const r of view.requests) if ((r.interrupts === b.id || r.splits.includes(b.id)) && r.from >= s.from && r.from <= e) due = Math.max(due, r.to)
+        if (due === OPEN) {
+          resolve = OPEN
+          continue
+        }
+        const expiry = due + 15
+        const back = f.runs.find((r) => r.from >= e)?.from ?? null
+        if (back != null) resolve = back >= expiry ? Math.max(resolve, expiry) : OPEN
+        else if (f.endedAt != null) resolve = Math.max(resolve, Math.min(f.endedAt, expiry))
+        else if (!isRunning(f)) resolve = Math.max(resolve, expiry <= m ? expiry : OPEN)
         continue
       }
-      if (f?.startedAt != null && f.startedAt < e) continue // it ran in this stretch
       const gone = f?.parkedAt ?? f?.cancelledAt ?? null
       if (b.fixed && !b.waits) {
         if (!span || span.end <= e) continue
@@ -443,11 +488,21 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
       else resolve = Math.max(resolve, expiry <= m ? expiry : OPEN)
     }
     // „Koniec pracy” (or „Odcinam się”) clicked in this stretch ends it; clicked after it, before work came back, confirms it.
-    const confirmed = view.workEnds.some((w) => w.end >= s.from && w.end < next) || view.disconnect.some((d) => d.from >= s.from && d.from < next)
+    const confirmed = view.workEnds.some((w) => w.end >= s.from && w.end < next) || view.disconnect.some((d) => d.from >= s.from && d.from < next && !workedAfter(d))
     if (confirmed && !fixedLeft) out.push({ at: e, confirmed: true })
     else if (resolve <= Math.min(m, next)) out.push({ at: e, confirmed: false })
   }
   return out
+}
+
+/** The boundary approved at an instant by the written approvals (OPEN: none, or opened again by „Cofnij”). */
+function writtenBoundary(view: DayFacts): (t: number) => number {
+  return (t) => {
+    let found: { at: number; boundary: number } | null = null
+    for (const a of view.approvals) if (a.at <= t) found = a
+    if (!found || view.undos.some((u) => u >= found!.at && u <= t)) return OPEN
+    return found.boundary
+  }
 }
 
 export function computeDay(ctx: DayContext): DayState {
@@ -485,7 +540,17 @@ export function computeDay(ctx: DayContext): DayState {
       return r?.cls === 'work' && !r.keepsRegen && p.tag !== 'secondShift'
     }),
     events,
-    asWritten: ctx.asWritten === true
+    asWritten: ctx.asWritten === true,
+    regenThird: new Uint16Array(cap)
+  }
+  // The minimum in force at k: the one a change of type fixed (as `required` reads it), else its settings' (T514).
+  // It changes only in the minute after a snapshot.
+  const changes = [...new Set([0, ...facts.snapshots.map((s) => Math.min(cap, Math.max(1, s.at + 1)))])].sort((a, b) => a - b)
+  for (let i = 0; i < changes.length; i++) {
+    const k = changes[i]!
+    let fixedMin: number | null = null
+    for (const s of facts.snapshots) if (s.reason === 'type' && (s.at < k || (k === 0 && s.at <= 0))) fixedMin = s.minRegen ?? null
+    c.regenThird.fill(Math.floor((fixedMin ?? settingsAt(k).params.minRegenMin) / 3), k, changes[i + 1] ?? cap)
   }
 
   // The actual flags of the past, with the blocks counted as projects (D195) decided at their start.
@@ -512,7 +577,7 @@ export function computeDay(ctx: DayContext): DayState {
       const fc = forecast({ blocks, view, m: at, mode: 'window', transitionBufferMin: settingsAt(at).settings.transitionBufferMin, typicalMin: c.typical })
       const before = new Uint16Array(actual)
       for (let k = at; k < cap; k++) before[k] = 0
-      if (workEnds(c, view, before, at, fc, projects).length) {
+      if (workEnds(c, view, before, at, fc, projects, b.id).length) {
         projects.add(b.id)
         changed = true
       }
@@ -532,7 +597,11 @@ export function computeDay(ctx: DayContext): DayState {
     // A change of type fixes the maximum from its instant (the new type's, moved by the blocks it kept – spec „Zmiana typu
     // w trakcie dnia”); exceptions made after it move that one.
     const fixed = [...view.snapshots].reverse().find((s) => s.reason === 'type' && s.max != null)
-    const base = fixed ? fixed.max! : idxOfLogical(g, m > 0 && view.snapshots.length ? params.maxMin : snapshot.maxMin)
+    // The day's template may set its own maximum (spec „Typy dni i szablony”): a change „od dziś” keeps it (a snapshot
+    // written before 0.16.0 does not say – a maximum other than its type's is the template's).
+    const fromTemplate = snapshot.maxFromTemplate ?? snapshot.maxMin !== snapshot.settings.dayTypes[snapshot.dayType].maxMin
+    const templateMax = fromTemplate ? snapshot.maxMin : null
+    const base = fixed ? fixed.max! : idxOfLogical(g, m > 0 && view.snapshots.length ? (templateMax ?? params.maxMin) : snapshot.maxMin)
     const extra = Math.min(settings.exceptionMaxMin, view.exceptions.filter((x) => !fixed || x.at >= fixed.at).reduce((s, x) => s + x.minutes, 0))
     let max = base + extra
     const buffer = settings.boundaryBufferMin
@@ -810,6 +879,7 @@ export function computeDay(ctx: DayContext): DayState {
     forecastWorkEnd: fin.forecastWorkEnd,
     lastWorkForecast: fin.lastWorkForecast,
     rest: fin.rest,
+    rewardRest: fin.rewardRest,
     warnings
   }
 }
@@ -904,6 +974,7 @@ interface Evaluation {
   flags: Uint16Array
   /** Regeneration per minute (REST_*). */
   rest: Uint8Array
+  rewardRest: Uint8Array
 }
 
 /**
@@ -937,7 +1008,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   for (const r of view.requests) if (r.to === OPEN && r.mode === 'urgent' && r.estimateMin != null) for (let k = m; k < Math.min(r.from + r.estimateMin, cap); k++) flags[k]! |= F_REQUEST | F_BLOCK | F_FORECAST
   paintUpfront(c, flags, view, spans, m, cap)
 
-  const ends = workEnds(c, view, flags, m, fcW, fcProjects)
+  const ends = workEnds(c, view, flags, m, fcW, fcProjects, null, (t) => d.approvedAt(t + 1)?.boundary ?? OPEN)
   // No other work before the second shift (past nor forecast) and the waiting blocks expired unstarted: their planned
   // end is the first end of work until the ritual (spec „Pierwszy koniec pracy”).
   if (!ends.length) {
@@ -1049,18 +1120,19 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   const strict = c.asWritten ? tentative : regen
 
   // Toward the minimum: regeneration before the later of the first end of work and the boundary approved in that minute
-  // counts at most a third of the minimum (D208, D218).
+  // counts at most a third of the minimum (D208, D218) – of the minimum in force in its own minute (after a change of type,
+  // by the snapshot of that regeneration); the forecast by the values of now.
   const firstEnd = ends[0]?.at ?? (noWork ? c.wake : workEndForecast)
+  const thirdNow = Math.floor((fixedMin ?? params.minRegenMin) / 3)
   const towardMinArr = (until: number, src: Uint8Array = tentative) => {
     const arr = new Uint8Array(cap)
     let pre = 0
-    const third = Math.floor(params.minRegenMin / 3)
     for (let k = 0; k < Math.min(until, cap); k++) {
       if (!src[k]) continue
       const appr = k < m ? d.approvedAt(k) : d.approvedAt(m)
       const capPoint = Math.max(firstEnd ?? OPEN, appr?.boundary ?? Number.NEGATIVE_INFINITY)
       if (k < capPoint && !noWork) {
-        if (pre < third) {
+        if (pre < (k < m ? c.regenThird[k]! : thirdNow)) {
           pre++
           arr[k] = 1
         }
@@ -1180,6 +1252,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     budgetMin: c.snapshot.budgetMin,
     forecastBudgetMin: budgetFc,
     flags,
-    rest
+    rest,
+    rewardRest: strict
   }
 }

@@ -186,6 +186,7 @@ export function createDay(inp: DayInputs): DaySnapshot {
     templateFrom: tpl?.version.from ?? null,
     budgetMin: tpl?.version.budgetMin ?? params.budgetMin,
     maxMin: tpl?.version.maxMin ?? params.maxMin,
+    maxFromTemplate: tpl?.version.maxMin != null,
     wakeMin,
     templateWakeMin,
     blocks,

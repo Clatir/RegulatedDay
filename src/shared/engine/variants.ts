@@ -234,8 +234,10 @@ export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCaus
     }
     let moved = 0
     const tomorrow: VariantChange[] = []
+    // A category „nie przenosić na jutro” may be shortened, never moved (spec „Kategorie”).
     for (const c of ordered) {
       if (moved >= cause.minutes) break
+      if (c.info.rules.noMoveTomorrow) continue
       tomorrow.push({ k: 'tomorrow', block: c.info.id })
       moved += c.info.durationMin
     }
@@ -253,11 +255,12 @@ export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCaus
   const regen: VariantChange = { k: 'regen', startMin: nowMin, durationMin: REGEN_VARIANT_MIN, variantId: way }
   const costOf = (b: BlockInfo) => (b.costs ?? costsOf(b.rules, b.variantId))[cause.pool]
   const costly = candidates(state, (b) => costOf(b) > 0).sort((a, b) => costOf(b.info) - costOf(a.info) || a.from - b.from)[0]
-  if (costly) {
-    add('regenTomorrow', () => `${capital(regenName)} ${REGEN_VARIANT_MIN} min teraz · ${names(costly.info)} na jutro`, [regen, { k: 'tomorrow', block: costly.info.id }])
-    if (costly.info.durationMin >= 2 * MIN_BLOCK_MIN)
-      add('regenShorter', () => `${capital(regenName)} ${REGEN_VARIANT_MIN} min teraz · ${names(costly.info)} krócej o połowę`, [regen, { k: 'shorten', block: costly.info.id, toMin: Math.ceil(costly.info.durationMin / 2) }])
-  } else add('regen', () => `${capital(regenName)} ${REGEN_VARIANT_MIN} min teraz`, [regen])
+  // A category „nie przenosić na jutro” may be shortened, never moved (spec „Kategorie”).
+  const movable = costly != null && !costly.info.rules.noMoveTomorrow
+  const shortenable = costly != null && costly.info.durationMin >= 2 * MIN_BLOCK_MIN
+  if (movable) add('regenTomorrow', () => `${capital(regenName)} ${REGEN_VARIANT_MIN} min teraz · ${names(costly.info)} na jutro`, [regen, { k: 'tomorrow', block: costly.info.id }])
+  if (shortenable) add('regenShorter', () => `${capital(regenName)} ${REGEN_VARIANT_MIN} min teraz · ${names(costly!.info)} krócej o połowę`, [regen, { k: 'shorten', block: costly!.info.id, toMin: Math.ceil(costly!.info.durationMin / 2) }])
+  if (!movable && !shortenable) add('regen', () => `${capital(regenName)} ${REGEN_VARIANT_MIN} min teraz`, [regen])
   add('keep', () => 'Zostaw plan', [])
   return out.slice(0, 3)
 }

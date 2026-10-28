@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.16.0
+- Koniec pracy liczy się dokładniej. Pauza ostatniego bloku pracy nie kończy już pracy od razu: przez 15 min blok czeka jako „Wznów · Zaparkuj” i dopiero potem pada „Koniec pracy?”. Wznowienie w tym czasie znaczy, że pracy nie przerwano, a blok przerwany prośbą czeka na jej koniec.
+- „Koniec pracy” kliknięty przy zapauzowanym bloku potwierdza chwilę, w której naprawdę przestałeś pracować, i kończy ten blok – z „Cofnij”, jak inne działania automatyczne. Wcześniej potwierdzał koniec wcześniejszego bloku, a zapauzowany wisiał do wieczora.
+- „Odcinam się” w trakcie pracy, a po „Wracam” znów praca przed granicą (także journaling, nauka, oglądanie): to była przerwa, a końcem pracy jest koniec tej późniejszej pracy.
+- Po „Dalej” na „Dalej?” ostatniego bloku pracy pytanie „Koniec pracy?” przychodzi 15 min później, nie od razu.
+- Nauka, oglądanie i journaling zaplanowane wieczorem po pracy mają oznaczenie „po pracy” także wtedy, gdy jest ich kilka, a blok dodany po zatwierdzeniu granicy już im go nie zabiera.
+- „Dalej” nie zaczyna sobotniej analizy tygodniowej ani innego bloku, który czeka na „Zacznij” – zaczyna go tylko jego linia w pasku.
+- Zajęcia zdalne w czasie „Odcinam się” są „do potwierdzenia”, nie pracą, a po „Wracam” zaczynają się od tej chwili, nie od planowanej godziny. Zajęcia zaczęte później kończą się w prognozie o swojej planowanej godzinie, jak naprawdę.
+- Spacer i inna regeneracja „poza komputerem” kończy się o porze snu po swojej długości, gdy nikt już nie używa komputera – nie biegnie przez noc.
+- „Wstałeś później?” liczy się od pierwszego użycia komputera rano, a nie od nocnego kodowania po 04:00.
+- Maksimum z szablonu dnia zostaje po zmianie ustawień „od dziś”.
+- Nagroda „Reakcja na rezerwę” liczy jako odpoczynek także czas do wyjaśnienia z odpowiedzią „odpoczynek”, a nie liczy odcinka, który w rytuale oznaczyłeś jako „nie był odpoczynkiem”.
+- Warianty nie przenoszą na jutro bloków kategorii „nie przenosić na jutro” – najwyżej je skracają. „Odliczyć nieobecność” po granicy zostawia blok pracy w pauzie, a „Wznów” pokazuje jego koszt.
+
 ## 0.15.0
 - „Strona B tygodnia”: w poniedziałek plan poranny zaczyna się od tabeli minionego tygodnia obok poprzedniego – „Odcinam się”, sygnały przeciążenia, dotrzymane granice, godziny projektów, przesunięcia pory snu z neutralną strzałką, a bez oceny: komputer po końcu pracy i po porze snu, regeneracja i prośby według osób. Dni z wyłączonym modułem mają „brak pomiaru”; dopóki niedziela nie jest zamrożona, tabela jest wstępna. „Dalej” przechodzi do pytań o objawy.
 - Przegląd kalibracji: dzień po okresie kalibracji plan poranny proponuje przegląd – „Otwórz przegląd · Nie teraz”; po trzecim „Nie teraz” przestaje pytać, a przegląd czeka w Ustawieniach → „Kalibracja” (tam też widać, ile dni okresu minęło). Przegląd pokazuje propozycje długości bloków i kosztów kategorii z odczuwanym kosztem z rytuału obok; każdą zatwierdzasz albo pomijasz osobno, zmiany obowiązują od dnia przeglądu.

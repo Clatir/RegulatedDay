@@ -62,6 +62,10 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E7c.4 Świętowanie (przy okazji)
    - [ ] E7d.1 „Strona B tygodnia” w poniedziałek
    - [ ] E7d.2 Przegląd kalibracji – rano i w Ustawieniach (przy okazji)
+   - [ ] E8a.1 Pauza ostatniego bloku pracy i „Koniec pracy?”
+   - [ ] E8a.2 „Koniec pracy” przy zapauzowanym bloku
+   - [ ] E8a.3 „Odcinam się” i praca po „Wracam” (gdy się zdarzy)
+   - [ ] E8a.4 Analiza tygodniowa i „Dalej” (w sobotę)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
@@ -1166,3 +1170,45 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   „Przegląd zrobiony …”.
 - **Nie przechodzi, gdy:** zatwierdzona zmiana działa wstecz, propozycje stosują się bez kliknięcia, po trzecim „Nie
   teraz” karta dalej wraca albo przegląd pokazuje identyfikatory zamiast nazw.
+
+### E8a – poprawki silnika dnia po przeglądzie E8 (0.16.0)
+
+#### E8a.1 Pauza ostatniego bloku pracy i „Koniec pracy?” (0.16.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/work-end.test.ts`, `tests/unit/engine/timer.test.ts` („Koniec pracy?”). Ty: rzut
+  oka przy zwykłej pracy.
+- **Jak sprawdzić:** w ostatnim bloku pracy dnia kliknij „Pauza” i odejdź na kwadrans; innego dnia skończ ostatni blok
+  pracy przez „Dalej” na „Dalej?”.
+- **Oczekiwany efekt:** po pauzie pasek przez 15 min pokazuje „Wznów · Zaparkuj”, a „Koniec pracy?” pojawia się dopiero
+  po 15 min (wznowienie wcześniej – pytania nie ma). Po „Dalej” na „Dalej?” ostatniego bloku „Koniec pracy?” przychodzi
+  15 min później; „Tak” potwierdza koniec w chwili końca bloku.
+- **Nie przechodzi, gdy:** „Koniec pracy?” pada od razu po pauzie albo po „Dalej”, po wznowieniu w ciągu 15 min karta
+  rytuału albo „Rytuał” w pasku pokazuje koniec pracy w chwili pauzy, albo „Tak” zapisuje koniec 15 min za późno.
+
+#### E8a.2 „Koniec pracy” przy zapauzowanym bloku (0.16.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/work-end.test.ts` („Koniec pracy” przy zapauzowanym bloku). Ty: rzut oka.
+- **Jak sprawdzić:** zapauzuj blok pracy (albo zacznij przerwę z paska) i kliknij „Koniec pracy”.
+- **Oczekiwany efekt:** pasek nie pokazuje już „Wznów · Zaparkuj” zapauzowanego bloku ani „Koniec pracy?”; koniec pracy
+  stoi w chwili pauzy, a na liście działań automatycznych jest zakończenie bloku z „Cofnij”.
+- **Nie przechodzi, gdy:** zapauzowany blok wisi dalej z kropką, pada „Koniec pracy?” albo rytuał pokazuje koniec pracy
+  wcześniejszego bloku.
+
+#### E8a.3 „Odcinam się” i praca po „Wracam” (0.16.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/work-end.test.ts`, `tests/unit/engine/day-rules-e8.test.ts` (zajęcia zdalne).
+  Ty: rzut oka, gdy się zdarzy.
+- **Jak sprawdzić:** w trakcie pracy „Odcinam się”, po „Wracam” przed granicą zacznij blok pracy albo journaling.
+- **Oczekiwany efekt:** to była przerwa – koniec pracy (rytuał, „Koniec pracy?”) jest dopiero po tej późniejszej pracy,
+  journaling liczy się jako praca, nie projekt. Zajęcia zdalne, które trwały w czasie „Odcinam się”, nie liczą się wtedy
+  do budżetu, a po „Wracam” biegną od tej chwili.
+- **Nie przechodzi, gdy:** rytuał pokazuje koniec pracy w chwili „Odcinam się”, journaling po „Wracam” zmniejsza pulę
+  projektów albo zajęcia zaczynają się wstecz od planowanej godziny.
+
+#### E8a.4 Analiza tygodniowa i „Dalej” (0.16.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/day-rules-e8.test.ts` („Dalej” i bloki czekające na „Zacznij”). Ty: rzut oka
+  w sobotę.
+- **Jak sprawdzić:** w sobotę skończ blok przed analizą tygodniową przez „Dalej”.
+- **Oczekiwany efekt:** „Dalej” nie zaczyna analizy – pasek pokazuje jej linię „Zacznij · Odwołaj” o jej godzinie.
+- **Nie przechodzi, gdy:** analiza zaczyna się po „Dalej” przed swoją godziną.

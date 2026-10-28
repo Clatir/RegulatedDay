@@ -33,6 +33,8 @@ export interface BlockInfo {
   waitUntil: number | null
   /** From the plan of lectures or a „zjazd” (commute, class): work, but never an extension (spec). */
   lectureOrCommute: boolean
+  /** A lecture recorded on a computer (it runs on in „Odcinam się”). */
+  recorded: boolean
   origin: PlanBlock['origin']
   sourceId: string | null
   isWork: boolean
@@ -89,6 +91,7 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
       weeklyAnalysis: p.tag === 'weeklyAnalysis',
       waitUntil: p.waitUntilMin != null ? idxOfLogical(grid, p.waitUntilMin) : null,
       lectureOrCommute: p.origin === 'lecture' || rules.kind === 'commute' || rules.kind === 'lecture',
+      recorded: p.recorder != null,
       origin: p.origin,
       sourceId: p.sourceId,
       isWork: rules.cls === 'work',
@@ -151,7 +154,10 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
       }
     }
   }
-  markAfterWork(out, byId)
+  // The approval in force (not opened again since): the plan it names (T321); one that names none – the plan as it is.
+  const last = facts.approvals.at(-1)
+  const inForce = last && !facts.undos.some((u) => u >= last.at) ? last : null
+  markAfterWork(out, byId, inForce?.plan ? new Set(inForce.plan) : null)
   return out
 }
 
@@ -187,23 +193,48 @@ export const isBoundaryWork = (b: BlockInfo): boolean => b.isWork && !b.rules.ke
 /**
  * The mark „po pracy” (D209), from the planned hours: a block of a category „po końcu pracy jak projekt” planned at
  * least 30 min after the planned end of the last other work block before the second shift; never one anchored to a
- * work block.
+ * work block. Other blocks with the mark are no work for this rule (spec: „blok pracy” has no mark), so two evening
+ * blocks keep it both – the largest set of marks that holds, whatever the order of the plan: every candidate starts
+ * marked, one too close to unmarked work loses it (which can only take marks away from others), and while no unmarked
+ * work is left at all the earliest candidate is the day's work. A block of the plan approved with the boundary is judged
+ * by the blocks of that plan (T321: set at the approval – a block added later never takes its mark away).
  */
-function markAfterWork(blocks: BlockInfo[], byId: Map<string, BlockInfo>): void {
+function markAfterWork(blocks: BlockInfo[], byId: Map<string, BlockInfo>, approvedPlan: ReadonlySet<string> | null): void {
   const second = blocks.filter((b) => b.secondShift && b.start != null).map((b) => b.start!)
   const secondStart = second.length ? Math.min(...second) : Number.POSITIVE_INFINITY
+  const candidates: Array<{ b: BlockInfo; start: number }> = []
   for (const b of blocks) {
     if (!b.rules.afterWorkAsProject || !b.inPlan) continue
     const anchor = b.anchor ? byId.get(b.anchor) : undefined
     if (anchor?.isWork) continue
     const own = plannedSpan(b, byId)
     if (!own || own.start >= secondStart) continue
-    let lastEnd = Number.NEGATIVE_INFINITY
-    for (const o of blocks) {
-      if (o === b || !o.isWork || o.rules.keepsRegen || o.secondShift || !o.inPlan) continue
-      const s = plannedSpan(o, byId)
-      if (s && s.start < secondStart) lastEnd = Math.max(lastEnd, s.end)
-    }
-    if (lastEnd > Number.NEGATIVE_INFINITY && own.start >= lastEnd + 30) b.afterWorkMark = true
+    candidates.push({ b, start: own.start })
+    b.afterWorkMark = true
   }
+  candidates.sort((x, y) => x.start - y.start || (x.b.id < y.b.id ? -1 : 1))
+  const work = (o: BlockInfo) => o.isWork && !o.rules.keepsRegen && !o.secondShift && o.inPlan && !o.afterWorkMark && (plannedSpan(o, byId)?.start ?? secondStart) < secondStart
+  const settle = (mine: typeof candidates, pool: readonly BlockInfo[]) => {
+    for (;;) {
+      for (let changed = true; changed; ) {
+        changed = false
+        for (const { b, start } of mine) {
+          if (!b.afterWorkMark) continue
+          let lastEnd = Number.NEGATIVE_INFINITY
+          for (const o of pool) if (o !== b && work(o)) lastEnd = Math.max(lastEnd, plannedSpan(o, byId)!.end)
+          if (start < lastEnd + 30) {
+            b.afterWorkMark = false
+            changed = true
+          }
+        }
+      }
+      if (pool.some(work)) return
+      const first = mine.find((x) => x.b.afterWorkMark)
+      if (!first) return
+      first.b.afterWorkMark = false
+    }
+  }
+  // The blocks of the approved plan as they were judged then, among themselves; the rest against the whole plan.
+  if (approvedPlan) settle(candidates.filter((x) => approvedPlan.has(x.b.id)), blocks.filter((o) => approvedPlan.has(o.id)))
+  settle(candidates.filter((x) => !approvedPlan?.has(x.b.id)), blocks)
 }

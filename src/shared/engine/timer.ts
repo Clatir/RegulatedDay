@@ -12,7 +12,7 @@
  */
 import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
-import { OPEN, isRunning, ranMinutes, resumedWith, type BlockFact } from './facts'
+import { OPEN, isRunning, lastRunEnd, ranMinutes, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
 
 /** „Przedłuż” of a fixed block works up to this long after its planned end (spec „Timer”, D227). */
@@ -178,7 +178,8 @@ export function timerNow(state: DayState): TimerNow {
 /**
  * What „Dalej” starts: after a regeneration with a fixed block waiting behind it, that fixed block; otherwise the next
  * flexible block of the plan in the forecast's order (a paused one first when it comes first). Never a fixed block
- * before its time, never a work block after a confirmed end of work, never a block anchored to one not ended yet.
+ * before its time, never one waiting for „Zacznij” (only its own line starts it), never a work block after a confirmed
+ * end of work, never a block anchored to one not ended yet.
  */
 function nextBlock(state: DayState, fg: TimerBlock | null, paused: TimerBlock[], held: BlockInfo[], workEnded: boolean): BlockInfo | null {
   if (fg?.info.isRegen && held.length) return held[0]!
@@ -186,7 +187,7 @@ function nextBlock(state: DayState, fg: TimerBlock | null, paused: TimerBlock[],
   const pausedIds = new Set(paused.map((p) => p.info.id))
   for (const p of [...state.forecast].sort((a, b) => a.from - b.from)) {
     const b = p.block
-    if (p.running || p.bg || b.bg || isFixedLike(b) || b.id === fg?.info.id) continue
+    if (p.running || p.bg || b.bg || isFixedLike(b) || (b.waits && !pausedIds.has(b.id)) || b.id === fg?.info.id) continue
     if (!b.inPlan && !pausedIds.has(b.id)) continue
     if (b.anchor && !ended(b.anchor)) continue
     if (workEnded && b.isWork && !b.rules.afterWorkAsProject) continue
@@ -300,6 +301,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
         weeklyAnalysis: false,
         waitUntil: null,
         lectureOrCommute: rules.kind === 'commute' || rules.kind === 'lecture',
+        recorded: false,
         origin: 'user',
         sourceId: null,
         isWork: rules.cls === 'work',
@@ -371,12 +373,13 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
         end = endInstant(state, fg, at)
         events.push({ k: 'block.end', block: fg.info.id, at: end, done: isFixedLike(fg.info) ? null : true, rule: null })
       } else {
-        // Clicked when no work runs: it only confirms the earlier end (the last work block's real end).
+        // Clicked when no work runs: it only confirms the earlier end – where the last work block's work stopped, a paused
+        // one's too (it ends with the parking below).
         let last: number | null = null
         for (const b of state.blocks) {
           const f = state.facts.blocks.get(b.id)
-          if (!f || f.endedAt == null || !isBoundaryWork(b)) continue
-          last = Math.max(last ?? 0, f.endedAt)
+          const stop = f && isBoundaryWork(b) ? lastRunEnd(f) : null
+          if (stop != null) last = Math.max(last ?? 0, stop)
         }
         end = last != null ? Math.min(at, atOf(state.grid, last)) : at
       }
@@ -462,7 +465,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
 /**
  * „Koniec pracy” parks the rest of the day's flexible work blocks before the second shift and the blocks anchored to the
  * one it ends – but not blocks of „po końcu pracy jak projekt” (D195), and nothing while a fixed work block is left in
- * the plan before the second shift (D216).
+ * the plan before the second shift (D216). A paused work block ends there, not done, as „Zaparkuj” ends it.
  */
 export function workEndParking(state: DayState, ending: string | null, at: number): TimerDraft[] {
   const second = secondShiftStart(state)
@@ -481,7 +484,13 @@ export function workEndParking(state: DayState, ending: string | null, at: numbe
   if (state.blocks.some((b) => open(b) && b.fixed && isBoundaryWork(b) && before(b))) return []
   const out: TimerDraft[] = []
   for (const b of state.blocks) {
-    if (!open(b) || b.fixed || b.waits || b.rules.afterWorkAsProject) continue
+    if (b.fixed || b.waits || b.rules.afterWorkAsProject || b.id === ending) continue
+    const f = state.facts.blocks.get(b.id)
+    if (f?.startedAt != null && f.endedAt == null && !isRunning(f) && isBoundaryWork(b)) {
+      out.push({ k: 'block.end', block: b.id, at, done: false, rule: 'workEnd', autoRule: 'workEnd' })
+      continue
+    }
+    if (!open(b)) continue
     const anchoredToEnding = ending != null && b.anchor === ending
     if ((isBoundaryWork(b) && before(b)) || anchoredToEnding) out.push({ k: 'block.park', block: b.id, at, rule: 'workEnd', autoRule: 'workEnd' })
   }

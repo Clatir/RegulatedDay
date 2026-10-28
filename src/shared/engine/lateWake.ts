@@ -6,11 +6,15 @@
  * delay and the work blocks shortened or parked so the day fits the boundary again; the plan changes only when you
  * accept. Blocks that passed before the first use are listed for confirmation.
  *
- * Until the helper of E4a tells the use of a computer, the first use is the day's first presence (T-decision).
+ * The first use is the day's first use of a computer as the helper recorded it (spec „Użycie komputera”: from an hour
+ * before the wake, so night coding after 04:00 is not it); a day without records of observation falls back to the first
+ * presence (T454).
  */
 import { isKnown, type AnyEvent } from '../model/events'
 import type { DayFile, PlanBlock } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
+import { activityOf } from './activity'
+import { dayFirstUse } from './auto'
 import { isBoundaryWork } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
 import { atOf, idxOf } from './grid'
@@ -59,7 +63,9 @@ export function detectLateWake(ctx: DayContext, state: DayState, dayFile: DayFil
   const dayType = state.facts.snapshots.at(-1)?.dayType ?? ctx.snapshot.dayType
   if (dayType === 'zjazd-stacjonarny' || dayType === 'wolne') return null
   if (dayFile?.asked.lateWake) return null
-  const firstUse = firstUseOf(ctx.events)
+  const activity = activityOf(ctx.events, state.grid.start, ctx.now)
+  const observed = activity.computers.some((x) => x.observed.length > 0)
+  const firstUse = observed ? dayFirstUse(state, activity) : firstUseOf(ctx.events)
   if (firstUse == null) return null
   // The morning plan done before the first use (its approval of the boundary, not the automatic one): no proposal.
   const g = state.grid
