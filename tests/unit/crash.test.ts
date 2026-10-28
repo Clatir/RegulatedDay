@@ -1,9 +1,18 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { INSTALLER_WINDOW_MS, LifeKeeper, judge, type LifeMarker } from '../../src/main/crash/lifeMarker'
 import { minidumpProcessType } from '../../src/main/crash/minidump'
+
+// The files written through a temporary file (the real writer still writes).
+const atomic = vi.hoisted(() => [] as string[])
+vi.mock('../../src/main/update/files', async (importOriginal) => {
+  const m = await importOriginal<typeof import('../../src/main/update/files')>()
+  return { ...m, writeSyncAtomic: (path: string, text: string) => (atomic.push(path), m.writeSyncAtomic(path, text)) }
+})
+
+const { readVersions, recordRun } = await import('../../src/main/crash/versions')
 
 const prev: LifeMarker = { format: 1, runId: 'r1', version: '0.1.0', pid: 1, startedAt: 1000, lastAt: 100_000 }
 
@@ -97,5 +106,37 @@ describe('typ procesu zrzutu (adnotacja process_type)', () => {
     expect(minidumpProcessType(fakeDump('browser'))).toBe('browser')
     expect(minidumpProcessType(fakeDump('renderer', true))).toBe('renderer')
     expect(minidumpProcessType(Buffer.from('not a dump'))).toBeNull()
+  })
+})
+
+describe('pliki awarii przy starcie, których nie da się odczytać albo zapisać (A5-09, A5-11)', () => {
+  it('zrzuty: wpis, który zniknął albo jest nieczytelny (zerwane dowiązanie), jest pomijany – start idzie dalej', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rd-dumps-'))
+    try {
+      const dumps = join(dir, 'Crashpad', 'reports')
+      mkdirSync(dumps, { recursive: true })
+      writeFileSync(join(dumps, 'a.dmp'), fakeDump('browser'))
+      const gone = join(dir, 'gone')
+      mkdirSync(gone)
+      symlinkSync(gone, join(dumps, 'link'), 'junction')
+      rmSync(gone, { recursive: true })
+      const r = LifeKeeper.mainDumpSince(join(dir, 'Crashpad'), 0)
+      expect(r.found).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('historia wersji zapisana przez plik tymczasowy (przerwany zapis nie zostawia pustej historii)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rd-versions-'))
+    try {
+      atomic.length = 0
+      recordRun(dir, '0.18.0', null, () => undefined, 1000)
+      expect(atomic).toEqual([join(dir, 'versions.json')])
+      expect(readVersions(dir).map((v) => v.version)).toEqual(['0.18.0'])
+      expect(readdirSync(dir).filter((n) => n.endsWith('.tmp'))).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

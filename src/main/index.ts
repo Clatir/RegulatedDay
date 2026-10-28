@@ -31,7 +31,7 @@ import type { CloseHow } from '@shared/model/events'
 import type { BarSpot, MachinePrefs } from '@shared/machine'
 import { BAR_SPOTS, patchMachinePrefs } from '@shared/machine'
 import { displayAt, type Rect } from '@shared/bounds'
-import { barRect, barWidth, draggedBounds, panelRect, placementAfterDrag, spotPlacement } from '@shared/placement'
+import { barRect, barWidth, draggedBounds, dragHolds, panelDisplay, panelRect, placementAfterDrag, spotPlacement } from '@shared/placement'
 import { urlFromArgv, type PanelTarget } from '@shared/protocol'
 import { compareVersions } from '@shared/update'
 import { systemSettingsUrl } from '@shared/systemSettings'
@@ -51,9 +51,9 @@ import { helperProgram } from './helper/program'
 import { notify } from './notify'
 import { Trial } from './trial'
 import { runStartup, type Banner, type StartupResult } from './update/startup'
-import { cleanUpdateFolders, fsDeps, manifestOf, planBlocking, writeLaunched, writePlan } from './update/files'
+import { cleanUpdateFolders, emptyPlanAtStart, fsDeps, manifestOf, planBlocking, writeLaunched, writePlan } from './update/files'
 import { UpdateController } from './update/controller'
-import { guardMode } from './update/install'
+import { guardMode, startDetached } from './update/install'
 import { LifeKeeper, judge } from './crash/lifeMarker'
 import { sessionAtStart } from './crash/session'
 import { readVersions, recordRun } from './crash/versions'
@@ -208,11 +208,9 @@ let barTop = false
 /**
  * The desktop bar being dragged by its handle (D303): the cursor and the bar where the drag began, whether it moved, and
  * the last message – a drag whose end never came (the bar's view reloaded) holds the layout at most `DRAG_HOLD_MS`. Its
- * end („up”, „cancel”, „lost”) ends it; the limit is only the fallback, long enough for a hand that holds the bar still
- * while choosing its place (A4-12).
+ * end („up”, „cancel”, „lost”) ends it; the limit is only the fallback (`dragHolds`, A4-12).
  */
 let barDrag: { cursor: { x: number; y: number }; bounds: Rect; moved: boolean; last: number; moves: number } | null = null
-const DRAG_HOLD_MS = 2 * 60_000
 /** The desktop bar unfolds upwards where it stands now (its folded part is then the bottom of the window). */
 let barGrowsUp = true
 
@@ -243,7 +241,7 @@ const barWanted = (): boolean => prefs().desktopBar && !widgetView().hidden && !
 function layoutBar(): void {
   // Destroyed at the quit: the helper's last status and events come after the windows. Dragged now: it follows the cursor.
   if (!bar?.alive) return
-  if (barDrag && Date.now() - barDrag.last < DRAG_HOLD_MS) return
+  if (barDrag && dragHolds(barDrag.last, Date.now())) return
   barDrag = null
   // „Na wierzchu”: the helper watches the bar's monitor for a full screen (and says it at once); else nothing to watch.
   if (prefs().onTop !== 'off') helper?.send('fullscreen.watch', { hwnd: bar.hwnd })
@@ -859,7 +857,14 @@ async function startupGate(): Promise<StartupResult> {
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     ...fsDeps(),
     startGuard: (dir) => {
-      const child = spawn(guardExe(dir), ['--task', join(dir, 'task.json'), '--hidden'], { cwd: dir, detached: true, stdio: 'ignore' })
+      let child: ReturnType<typeof spawn>
+      try {
+        child = spawn(guardExe(dir), ['--task', join(dir, 'task.json'), '--hidden'], { cwd: dir, detached: true, stdio: 'ignore' })
+      } catch (e) {
+        // Node throws at once for some failures (a file that is no program): no guard, never the end of the start.
+        log('error', 'strażnik nie wystartował', e)
+        return null
+      }
       child.on('error', (e) => log('error', `strażnik nie wystartował: ${e.message}`))
       child.unref()
       let exited = false
@@ -944,8 +949,8 @@ async function main(): Promise<void> {
   let banner: Banner | null = startup.kind === 'normal' ? step('stan zadania instalacji', () => startup.afterLock?.() ?? startup.banner, startup.banner) : null
   if (startup.kind === 'normal' && startup.confirmed) {
     const confirmed = startup.confirmed
-    step('zapis „uruchomiono wersję”', () => writeLaunched(userData, confirmed.version, confirmed.attemptId), undefined)
-    log('info', `uruchomiono wersję ${confirmed.version} (próba ${confirmed.attemptId})`)
+    // Logged only when written: the owner reads the file, not the log.
+    if (step('zapis „uruchomiono wersję”', () => (writeLaunched(userData, confirmed.version, confirmed.attemptId), true), false)) log('info', `uruchomiono wersję ${confirmed.version} (próba ${confirmed.attemptId})`)
   }
   if (identity.updates) {
     step('sprzątanie folderów aktualizacji', () => cleanUpdateFolders(updateDir, app.getVersion(), (m) => log('info', m)), undefined)
@@ -954,7 +959,9 @@ async function main(): Promise<void> {
     const m = manifestOf(updateDir, app.getVersion())
     if (m && (m.version !== app.getVersion() || m.electron !== process.versions.electron)) {
       log('warn', `wersja niezgodna z manifestem (${m.version}/${m.electron}) – strażnik naprawia instalację`)
-      spawn(guardExe(join(updateDir, app.getVersion())), ['--task', join(updateDir, app.getVersion(), 'task.json'), '--hidden'], { detached: true, stdio: 'ignore' }).unref()
+      // A guard that cannot start (a broken file, an antivirus) is logged – never the end of the start (A5-11).
+      const dir = join(updateDir, app.getVersion())
+      startDetached(guardExe(dir), ['--task', join(dir, 'task.json'), '--hidden'], dir, 'strażnik naprawy', (level, msg) => log(level, msg))
     }
   }
   // Windows' id of this computer is read beside the rest of the start (a slow reg.exe never holds it back).
@@ -1101,7 +1108,7 @@ async function main(): Promise<void> {
   // The local plan of sessions and classes for the guard: the data folder writes it every hour. Only a computer without
   // a folder gets an empty one here – the last real plan is never written over before the folder opens (A5-02).
   // RD_TEST_KEEP_PLAN=1 (CI): the plan a test wrote for the guard stays.
-  if (identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1' && !dataFolderNow()) {
+  if (identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1' && emptyPlanAtStart({ dataFolder: dataFolderNow(), configUnreadable: config.loadFailed != null })) {
     try {
       writePlan(userData, [])
     } catch (e) {
@@ -1151,9 +1158,8 @@ async function main(): Promise<void> {
     place: (height, cursor) => {
       const all = displays()
       const icon = tray?.bounds() ?? null
-      // The icon's display (an icon under the arrow of hidden icons has no place: the cursor's).
-      const point = icon && icon.width > 0 ? { x: icon.x, y: icon.y } : cursor
-      const wa = ((point ? displayAt(all, (d) => d.bounds, point) : null) ?? primaryDisplay()).workArea
+      // The display the panel opens on – the same one its rectangle is put on (an icon under the arrow: the cursor's).
+      const wa = panelDisplay(icon, cursor, all).workArea
       const width = Math.floor(Math.min(480 * prefs().zoom, wa.width - 16))
       return panelRect(icon, cursor, all, { width, height: Math.min(height, wa.height) })
     },

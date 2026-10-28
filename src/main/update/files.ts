@@ -136,15 +136,27 @@ export function writePlan(userData: string, blocks: PlanBlock[], now = Date.now(
   writeSyncAtomic(join(userData, 'plan-blocks.json'), `${JSON.stringify({ format: 1, from: now, to: now + PLAN_DAYS * 24 * 60 * 60_000, blocks }, null, 2)}\n`)
 }
 
-/** A session or a class runs now or starts within 30 min by the plan file (as the guard judges the logon, A5-03). */
+/**
+ * No installation now by the plan file, as the guard judges the logon (A5-03): a session or a class runs now or starts
+ * within 30 min, or the file does not cover now (missing, unreadable – also while it is being replaced – or old).
+ */
 export function planBlocking(userData: string, now = Date.now()): boolean {
   try {
-    const p = JSON.parse(readFileSync(join(userData, 'plan-blocks.json'), 'utf8')) as { blocks?: Array<Partial<PlanBlock>> }
+    const text = readSharedSync(join(userData, 'plan-blocks.json'))
+    if (text == null) return true
+    const p = JSON.parse(text) as { from?: unknown; to?: unknown; blocks?: Array<Partial<PlanBlock>> }
+    if (typeof p.from !== 'number' || typeof p.to !== 'number' || now < p.from || now >= p.to) return true
     return (p.blocks ?? []).some((b) => typeof b.start === 'number' && typeof b.end === 'number' && now >= b.start - 30 * 60_000 && now < b.end)
   } catch {
-    return false
+    return true
   }
 }
+
+/**
+ * At the start an empty plan for the guard only on a computer known to have no data folder: an unreadable config.json
+ * says nothing of the folder, and the last real plan stays (A5-02).
+ */
+export const emptyPlanAtStart = (o: { dataFolder: string | null; configUnreadable: boolean }): boolean => !o.dataFolder && !o.configUnreadable
 
 // ------------------------------------------------------------------ cleaning
 

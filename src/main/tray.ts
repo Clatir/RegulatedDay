@@ -96,7 +96,12 @@ export class AppTray {
   /** Explorer restarted or the screens changed: the icon is set again. */
   refresh(): void {
     if (!this.active) return
-    this.tray!.setImage(this.iconFile(this.state))
+    // As in `set`: an icon file that cannot be written now never stops the change of screens or of a download.
+    try {
+      this.tray!.setImage(this.iconFile(this.state))
+    } catch (e) {
+      this.d.log('warn', 'ikona zasobnika nie odświeżona', e)
+    }
     if (this.tooltip) this.tray!.setToolTip(this.tooltip)
   }
 

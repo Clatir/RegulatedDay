@@ -145,7 +145,16 @@ export async function runStartup(d: StartupDeps, depth = 0): Promise<StartupResu
 
   // „odłożono”: a normal start – unless an owner holds the task now (the guard of the logon took it up just before its
   // state changes): then its start is handed over as for a task under way.
-  if (task.state === 'postponed' && !d.heldOpen(join(dir, 'guard.lock'))) return normal()
+  // A newer version than the one put off runs (installed by hand): the task is over – „zakończone” and the guard's entry
+  // removed, before the cleaning takes its folder (with the program the entry points at).
+  if (task.state === 'postponed' && !d.heldOpen(join(dir, 'guard.lock')))
+    return cmp > 0
+      ? normal(null, () => {
+          update(d, dir, task, raw, { state: 'done' })
+          d.removeGuardEntry()
+          return null
+        })
+      : normal()
   // „nieudane” for a newer X: the banner „nie udała się · Spróbuj ponownie · Pobierz” until a retry or a newer release.
   if (task.state === 'failed') {
     // X itself runs: after the lock its files against the manifest, at every start (D316) – whoever wrote the failure.
@@ -201,8 +210,14 @@ export async function runStartup(d: StartupDeps, depth = 0): Promise<StartupResu
   // Four starts of an owner without a clean end, the lock free: the app does what the owner itself would at that count
   // (spec „licznik 4”) – „nieudane”, the guard's entry removed, a start with the banner (A5-08).
   if (task.starts >= 4 && !d.heldOpen(join(dir, 'guard.lock'))) {
-    d.log('warn', `właściciel instalacji ${X} uruchomiony ${task.starts} razy bez czystego końca – instalacja nieudana`)
     d.removeGuardEntry()
+    // X itself with its files in agreement: installed, only never confirmed by an owner – no banner (D316).
+    if (cmp === 0 && d.filesMismatch(dir, task) == null) {
+      d.log('info', `właściciel instalacji ${X} uruchomiony ${task.starts} razy bez czystego końca – pliki zgodne z manifestem, instalacja zakończona`)
+      update(d, dir, task, raw, { state: 'done' })
+      return normal()
+    }
+    d.log('warn', `właściciel instalacji ${X} uruchomiony ${task.starts} razy bez czystego końca – instalacja nieudana`)
     update(d, dir, task, raw, { state: 'failed', message: 'strażnik nie wystartował' })
     return normal({ kind: 'unfinished', version: X })
   }

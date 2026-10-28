@@ -785,7 +785,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Specyfikacja: „aplikacja, która widzi licznik 4, robi to samo” (zapisuje „nieudane”, usuwa wpis Run, startuje z banerem). runStartup nigdy nie czyta task.starts, tylko uruchamia kolejnego strażnika i czeka na niego (do 60 s, gdy ten nie startuje). W Owner.RunOwner kontrola Starts >= MaxStarts stoi za TakeLock, power.Set i new OwnerUi. Wyjątek powtarzany w TakeLock (np. stały konflikt dostępu do guard.lock) uruchamia więc Crash → nowy właściciel → licznik 5, 6… bez końca, a limit 4 startów nie działa.
 - **Scenariusz:** Zadanie ma starts=4 po serii awarii, a strażnik nie może już wystartować. Każdy start aplikacji czeka 60 s, zanim zapisze „nieudane”. Wariant: guard.lock stale niedostępny do zapisu, każdy właściciel pada w TakeLock i startuje następnego, który zwiększa licznik bez końca.
 - **Poprawka:** W runStartup dla stanów scheduled/installing przy task.starts >= 4 i wolnym locku od razu zapisać 'failed', usunąć wpis Run i wrócić normal z banerem. W Owner przenieść kontrolę MaxStarts tuż za zapis licznika (przed TakeLock). Dodać testy.
-- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
+- **Status:** poprawione w 0.18.0 (aplikacja – `tests/unit/startup.test.ts`; właściciel sprawdza limit przed blokadą – `tests/update/scenarios.spec.ts` „wyjątek przy każdym zajęciu guard.lock”, T516)
 
 #### A5-09 · low · bez weryfikacji – Plik zadania (i versions.json) zapisywane przez aplikację bez pliku tymczasowego
 - **Plik:** `src/main/update/install.ts:172` · rodzaj: data · pewność recenzenta: high

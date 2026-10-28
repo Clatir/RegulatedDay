@@ -338,6 +338,22 @@ test('wyjątek przy każdym starcie: najpóźniej przy czwartym starcie „nieud
   })
 })
 
+test('wyjątek przy każdym zajęciu guard.lock: limit startów działa przed blokadą – „nieudane”, bez kolejnych właścicieli (A5-08)', async () => {
+  test.setTimeout(15 * 60_000)
+  await guarded('wyjątek przy blokadzie', async () => {
+    const dir = await install(FROM, CURRENT)
+    stage(dir)
+    scheduleTask(dir, 'logon')
+    plan(false)
+    logon({ RD_TEST_OWNER_THROW: 'every-lock' }).unref()
+    await expect.poll(() => readTaskNow()?.state, { timeout: 300_000, intervals: [1000] }).toBe('failed')
+    expect(readTaskNow()!.starts).toBe(4)
+    await expect.poll(appRunning, { timeout: 120_000 }).toBe(true)
+    expect(installed()!.version).toBe(CURRENT)
+    expect(runEntry('Regulated Day Guard')).toBeNull()
+  })
+})
+
 test('nieudany zapis licznika: bez instalacji i bez nowego strażnika; kończy się „nieudane” i uruchomioną aplikacją', async () => {
   test.setTimeout(15 * 60_000)
   await guarded('nieudany zapis licznika', async () => {

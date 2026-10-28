@@ -120,6 +120,31 @@ describe('instalator nocy w aplikacji', () => {
     expect(installs).toBe(0)
   })
 
+  it('nowoczesne czuwanie: instalacja, która nie wystartowała, cofa „instaluję” od razu (przegląd 0.18.0)', async () => {
+    const claims: Array<string | null> = []
+    const n = new NightInstaller({ now: () => T0, me: () => 'pcb', ready: () => '0.3.0', peers: () => [], unknownTimerEvents: async () => false, state: async () => night({ modernStandby: true }), claim: (v) => claims.push(v), install: () => false, log: () => undefined })
+    await n.check()
+    expect(claims).toEqual(['0.3.0', null])
+  })
+
+  it('po starcie instalacji w nocy żadne sprawdzenie nie cofa „instaluję” (wersja gotowa znika w trakcie wychodzenia)', async () => {
+    let now = T0
+    let ready: string | null = '0.3.0'
+    let installs = 0
+    const claims: Array<string | null> = []
+    const n = new NightInstaller({ now: () => now, me: () => 'pcb', ready: () => ready, peers: () => [], unknownTimerEvents: async () => false, state: async () => night({ now }), claim: (v) => claims.push(v), install: () => (installs++, true), random: () => 0, log: () => undefined })
+    await n.check()
+    now += 60_000
+    await n.check()
+    expect(installs).toBe(1)
+    // Quitting: the controller says no version is ready while it installs.
+    ready = null
+    now += 60_000
+    await n.check()
+    expect(claims).toEqual(['0.3.0', '0.3.0'])
+    expect(installs).toBe(1)
+  })
+
   it('„instaluję” wraca, gdy noc przestaje sprzyjać (bateria, koniec ciszy, wyłączone ustawienie) – nie wstrzymuje innych', async () => {
     let now = T0
     let quiet = true

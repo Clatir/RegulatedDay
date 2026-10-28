@@ -47,7 +47,7 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   i skalą (margines 8 DIP zostaje); `spot: null` – własne przesunięcie złożonej części. Uchwyt `bar-drag` (nad lewym
   odstępem głównej części – nie zasłania przycisków) wysyła `barDrag` start / move (raz na klatkę) / end; proces główny
   przesuwa okno o drogę kursora (`getCursorScreenPoint`, od 4 px), przy końcu bierze kursor z tej chwili i zapisuje
-  `placementAfterDrag`; samo kliknięcie nic nie zapisuje. `layoutBar` w trakcie czeka (najwyżej 10 s, awaria widoku
+  `placementAfterDrag`; samo kliknięcie nic nie zapisuje. `layoutBar` w trakcie czeka (`dragHolds`, najwyżej 2 min, awaria widoku
   paska zeruje). Makieta: `barScreens()`, `placeBar(id, miejsce)`. E2E podstawia `getCursorScreenPoint`.
 - „Na wierzchu” pasek chowa się też przy oknie głównym na pierwszym planie (D302, `mainInFront`; focus, blur, hide,
   minimize okna głównego wołają `layoutBar` tylko przy „na wierzchu”). Test tylko w CI (prawdziwe kliknięcia).

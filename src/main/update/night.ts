@@ -28,11 +28,13 @@ export class NightInstaller {
   private waitMs = 0
   private lastWhy = ''
   private busy = false
+  /** The installation started (the app quits): no check takes its „instaluję” back meanwhile. */
+  private started = false
 
   constructor(private readonly d: NightDeps) {}
 
   async check(): Promise<void> {
-    if (this.busy) return
+    if (this.busy || this.started) return
     this.busy = true
     try {
       const ready = this.d.ready()
@@ -61,8 +63,11 @@ export class NightInstaller {
         // The night ended, the battery, a block, the setting off…: „instaluję” is taken back – it never holds the others.
         this.reset()
       } else if (decision.act === 'install') {
+        // Claimed also without a wait (modern standby): a start that fails takes it back.
+        this.waitFor = decision.version
         this.d.claim(decision.version)
-        if (!this.d.install()) {
+        if (this.d.install()) this.started = true
+        else {
           this.d.log('warn', `instalacja w nocy ${decision.version} nie wystartowała`)
           this.reset()
         }

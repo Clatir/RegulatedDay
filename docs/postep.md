@@ -43,8 +43,13 @@
   adresie, tekst linii w panelu), A4-05 (Alt+F4 w panelu), A5-01 (noc przy blokadzie), A5-02 (plan strażnika), A5-03
   (wyjście w sesji), A5-04 (sekwencja startu po zwolnieniu blokady), A5-05, A5-06, A5-12 (T513) i low A4-08–A4-13,
   A5-08–A5-11. Do 5.3: A4-07, A5-07. A4-04 (komunikat rezerwy) – 5.2e.
-- Testy: 939 jednostkowych i plikowych; E2E nowe: „start z Windows w zasobniku”, „Alt+F4 w panelu” (oba padają na
-  starym kodzie).
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione z testami poza jedną (przyjęte ryzyko w T516: dwa laptopy
+  z nowoczesnym czuwaniem w tej samej minucie) – m.in. okno niepokazane zapisane jako zmaksymalizowane, „instaluję”
+  przy instalacji bez czekania, limit 4 startów właściciela przed blokadą (C#, test w `tests/update`), plan strażnika
+  przy nieczytelnym config.json, `planBlocking` jak strażnik, licznik 4 przy zgodnych plikach, „odłożono” przy nowszej
+  wersji, strażnik naprawy, linie w camelCase, ekran panelu, brakujące testy A4-08, A4-10, A4-12, A5-09, A5-11.
+- Testy: 955 jednostkowych i plikowych (nowe: `tray`, `panel-rules`, `main-window`; każdy pada na starym kodzie);
+  E2E 24/24 lokalnie (nowe: „start z Windows w zasobniku”, „Alt+F4 w panelu”).
 
 ## 0.17.0 – poprawki danych i zegarów (ciąg E, 5.2b)
 - Gałąź `claude/0.17.0-dane` (od 0.16.0, przed jego scaleniem) od 28.10 ok. 14:40.

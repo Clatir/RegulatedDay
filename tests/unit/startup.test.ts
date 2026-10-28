@@ -130,6 +130,22 @@ describe('start aplikacji przy zadaniu instalacji (Instalacja, aktualizacje i lo
     expect(state(w)).toBe('done')
   })
 
+  it('„odłożono” X, a działa nowsza wersja (zainstalowana ręcznie): zadanie zakończone, wpis strażnika usunięty po blokadzie', async () => {
+    const w = world({ version: '0.1.2', task: task({ state: 'postponed' }), lock: () => ({ held: false, counter: 0 }) })
+    const r = await runStartup(w.deps)
+    expect(r).toMatchObject({ kind: 'normal', banner: null })
+    expect(w.removed).toBe(0)
+    if (r.kind === 'normal') r.afterLock?.()
+    expect(state(w)).toBe('done')
+    expect(w.removed).toBe(1)
+    // The same version or an older one: „odłożono” stays for the next logon.
+    const same = world({ version: '0.1.1', task: task({ state: 'postponed' }), lock: () => ({ held: false, counter: 0 }) })
+    const s = await runStartup(same.deps)
+    if (s.kind === 'normal') s.afterLock?.()
+    expect(state(same)).toBe('postponed')
+    expect(same.removed).toBe(0)
+  })
+
   it('„odłożono” z żywym właścicielem (strażnik logowania właśnie je podjął): start przekazany, bez drugiego strażnika', async () => {
     const w = world({ version: '0.1.0', task: task({ state: 'postponed' }), lock: (now) => ({ held: true, counter: now }) })
     const r = await runStartup(w.deps)
@@ -278,6 +294,18 @@ describe('start aplikacji przy zadaniu instalacji (Instalacja, aktualizacje i lo
     expect(state(w)).toBe('failed')
     expect(w.removed).toBe(1)
     expect(w.guardStarts).toBe(0)
+  })
+
+  it('licznik 4, a działa sama wersja X z plikami zgodnymi z manifestem: zakończona, bez banera (D316)', async () => {
+    const w = world({ version: '0.1.1', task: task({ state: 'installing', starts: 4 }), lock: () => ({ held: false, counter: 0 }) })
+    const r = await runStartup(w.deps)
+    expect(r).toMatchObject({ kind: 'normal', banner: null })
+    expect(state(w)).toBe('done')
+    expect(w.removed).toBe(1)
+    // Files not in agreement: „nieudane” as before.
+    const bad = world({ version: '0.1.1', task: task({ state: 'installing', starts: 4 }), lock: () => ({ held: false, counter: 0 }), sizes: false })
+    expect(await runStartup(bad.deps)).toMatchObject({ kind: 'normal', banner: { kind: 'unfinished', version: '0.1.1' } })
+    expect(state(bad)).toBe('failed')
   })
 
   it('strażnik, który nie wystartował, nie jest czekany 60 s (A5-06)', async () => {

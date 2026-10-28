@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { displayAt, type DisplayInfo } from '@shared/bounds'
 import { BAR_SPOTS } from '@shared/machine'
-import { barRect, barWidth, draggedBounds, panelRect, placementAfterDrag, spotOffset, spotPlacement, usableIconRect } from '@shared/placement'
+import { barRect, barWidth, draggedBounds, panelDisplay, panelRect, placementAfterDrag, spotOffset, spotPlacement, usableIconRect } from '@shared/placement'
 import { appUrl, parseAppUrl, urlFromArgv } from '@shared/protocol'
 
 const primary: DisplayInfo = { id: 1, label: 'Dell U2720Q', bounds: { x: 0, y: 0, width: 1920, height: 1080 }, workArea: { x: 0, y: 0, width: 1920, height: 1032 }, scaleFactor: 1 }
@@ -126,6 +126,17 @@ describe('miejsce paska: makieta i przeciąganie (D303, D304)', () => {
     expect(displayAt([primary, above], (d) => d.bounds, { x: 5000, y: 300 })).toBeNull()
   })
 
+  it('panel: ekran do rozmiaru ten sam co do miejsca – ikona „gdzie indziej” (w obszarze roboczym) liczy się jak brak ikony', () => {
+    const above: DisplayInfo = { id: 4, label: 'VG27B', bounds: { x: 0, y: -1440, width: 2560, height: 1440 }, workArea: { x: 0, y: -1440, width: 2560, height: 1400 }, scaleFactor: 1.25 }
+    const all = [primary, above]
+    // Windows gave a rectangle inside the upper monitor's work area for an icon under the arrow; the cursor is on the main one.
+    const icon = { x: 100, y: -700, width: 24, height: 24 }
+    const cursor = { x: 1800, y: 1070 }
+    expect(panelDisplay(icon, cursor, all).label).toBe('Dell U2720Q')
+    const r = panelRect(icon, cursor, all, { width: 480, height: 600 })
+    expect(r.y).toBeGreaterThanOrEqual(0)
+  })
+
   it('środek poza monitorami: najbliższy monitor, w jego obszarze roboczym', () => {
     const p = placementAfterDrag({ x: 1900, y: 900, width: 480, height: 64 }, [primary, second], 64, false)
     // The middle (2140, 932) is below the second monitor (720 high) – it is the nearest.
@@ -143,14 +154,16 @@ describe('adres regulatedday:// (tylko w ścisłym formacie)', () => {
   })
 
   it('linie paska z dwukropkiem (powiadomienia „5 min przed”, pytania) przechodzą w obie strony (A4-03)', () => {
-    for (const line of ['wait:k3j2h1g0f9e8d7c6', 'next:2026-10-28:k3j2h1g0f9e8d7c6:1', 'reserve:2026-10-28:head:1020']) {
+    for (const line of ['wait:k3j2h1g0f9e8d7c6', 'next:2026-10-28:k3j2h1g0f9e8d7c6:1', 'reserve:2026-10-28:head:1020', 'workEnd:2026-10-28:-:1020', 'firstUse:2026-10-28:blok_1:600']) {
       expect(urlFromArgv(['app.exe', appUrl('regulatedday', { line, day: '2026-10-28' })], 'regulatedday')).toEqual({ line, day: '2026-10-28' })
     }
   })
 
   it('wszystko inne jest odrzucane', () => {
     for (const bad of [
-      'regulatedday://panel?line=X',
+      'regulatedday://panel?line=a/b',
+      'regulatedday://panel?line=a%20b',
+      'regulatedday://panel?line=:a',
       'regulatedday://panel?line=a&line=b',
       'regulatedday://panel?cmd=quit',
       'regulatedday://settings',

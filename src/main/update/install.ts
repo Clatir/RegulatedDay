@@ -146,7 +146,7 @@ export async function stageInstallAsync(i: StageInput): Promise<string> {
  * A detached process; its id, or null when it did not start – Node throws at once for some failures (a file that is no
  * program: „spawn UNKNOWN”) and reports others by „error”.
  */
-function startDetached(exe: string, args: string[], cwd: string, what: string, log: InstallInput['log']): number | null {
+export function startDetached(exe: string, args: string[], cwd: string, what: string, log: InstallInput['log']): number | null {
   try {
     const child = spawn(exe, args, { cwd, detached: true, stdio: 'ignore' })
     child.on('error', (e) => log('error', `${what} nie wystartował: ${e.message}`))

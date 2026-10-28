@@ -71,7 +71,8 @@ export function createMainWindow(d: MainWindowDeps): BrowserWindow {
   })
   const place = () => {
     const b = win.getNormalBounds()
-    d.savePlace({ ...b, maximized: win.isMaximized() })
+    // Never shown since a start in the tray: still maximized for its first showing.
+    d.savePlace({ ...b, maximized: win.isMaximized() || maximizeAtShow.has(win) })
   }
   win.on('close', (e) => {
     if (d.quitting()) {
