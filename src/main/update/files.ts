@@ -136,6 +136,16 @@ export function writePlan(userData: string, blocks: PlanBlock[], now = Date.now(
   writeSyncAtomic(join(userData, 'plan-blocks.json'), `${JSON.stringify({ format: 1, from: now, to: now + PLAN_DAYS * 24 * 60 * 60_000, blocks }, null, 2)}\n`)
 }
 
+/** A session or a class runs now or starts within 30 min by the plan file (as the guard judges the logon, A5-03). */
+export function planBlocking(userData: string, now = Date.now()): boolean {
+  try {
+    const p = JSON.parse(readFileSync(join(userData, 'plan-blocks.json'), 'utf8')) as { blocks?: Array<Partial<PlanBlock>> }
+    return (p.blocks ?? []).some((b) => typeof b.start === 'number' && typeof b.end === 'number' && now >= b.start - 30 * 60_000 && now < b.end)
+  } catch {
+    return false
+  }
+}
+
 // ------------------------------------------------------------------ cleaning
 
 /**
@@ -150,7 +160,10 @@ export function cleanUpdateFolders(updateDir: string, current: string, log: (msg
       if (!statSync(dir).isDirectory()) continue
       if (!/^\d+\.\d+\.\d+/.test(name) || compareVersions(name, current) > 0) continue
       const t = readTask(readSharedSync(join(dir, 'task.json')))
-      if (t.kind === 'task' && t.task.state !== 'done') continue
+      // An older version „nieudane” or „odłożono” will never install now – a newer one runs (A5-10); the running one's
+      // failure stays for its banner (D316).
+      const over = compareVersions(name, current) < 0 && t.kind === 'task' && (t.task.state === 'failed' || t.task.state === 'postponed')
+      if (t.kind === 'task' && t.task.state !== 'done' && !over) continue
       if (heldOpen(join(dir, 'guard.lock'))) continue
       rmSync(dir, { recursive: true, force: true, maxRetries: 2 })
       log(`usunięty folder aktualizacji ${name}`)

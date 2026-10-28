@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { rename } from 'node:fs/promises'
-import { hostname } from 'node:os'
+import { hostname, release } from 'node:os'
 import { join } from 'node:path'
 import { BrowserWindow, Menu, app, clipboard, crashReporter, dialog, ipcMain, net, powerMonitor, powerSaveBlocker, screen, session, shell, utilityProcess, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
 import {
@@ -30,10 +30,11 @@ import type { RitualValue } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import type { BarSpot, MachinePrefs } from '@shared/machine'
 import { BAR_SPOTS, patchMachinePrefs } from '@shared/machine'
-import type { Rect } from '@shared/bounds'
+import { displayAt, type Rect } from '@shared/bounds'
 import { barRect, barWidth, draggedBounds, panelRect, placementAfterDrag, spotPlacement } from '@shared/placement'
 import { urlFromArgv, type PanelTarget } from '@shared/protocol'
 import { compareVersions } from '@shared/update'
+import { systemSettingsUrl } from '@shared/systemSettings'
 import type { UpdateView } from '@shared/updateView'
 import { BAR_NOTE_FAILED, BAR_NOTE_HELPER, type WidgetView } from '@shared/widget'
 import { identity } from './identity'
@@ -42,7 +43,7 @@ import { ConfigStore, computerId, presenceWindowsId, renewComputerId, windowsMac
 import { Autostart, HIDDEN_ARG } from './autostart'
 import { AppTray } from './tray'
 import { displays, primaryDisplay } from './displays'
-import { createMainWindow } from './windows/mainWindow'
+import { createMainWindow, revealMainWindow } from './windows/mainWindow'
 import { DesktopBar } from './windows/desktopBar'
 import { IconPanel } from './windows/iconPanel'
 import { HelperClient, type HelperMessage } from './helper/client'
@@ -50,7 +51,7 @@ import { helperProgram } from './helper/program'
 import { notify } from './notify'
 import { Trial } from './trial'
 import { runStartup, type Banner, type StartupResult } from './update/startup'
-import { cleanUpdateFolders, fsDeps, manifestOf, writeLaunched, writePlan } from './update/files'
+import { cleanUpdateFolders, fsDeps, manifestOf, planBlocking, writeLaunched, writePlan } from './update/files'
 import { UpdateController } from './update/controller'
 import { guardMode } from './update/install'
 import { LifeKeeper, judge } from './crash/lifeMarker'
@@ -206,10 +207,12 @@ let barTop = false
 
 /**
  * The desktop bar being dragged by its handle (D303): the cursor and the bar where the drag began, whether it moved, and
- * the last message – a drag whose end never came (the bar's view reloaded) holds the layout at most `DRAG_HOLD_MS`.
+ * the last message – a drag whose end never came (the bar's view reloaded) holds the layout at most `DRAG_HOLD_MS`. Its
+ * end („up”, „cancel”, „lost”) ends it; the limit is only the fallback, long enough for a hand that holds the bar still
+ * while choosing its place (A4-12).
  */
 let barDrag: { cursor: { x: number; y: number }; bounds: Rect; moved: boolean; last: number; moves: number } | null = null
-const DRAG_HOLD_MS = 10_000
+const DRAG_HOLD_MS = 2 * 60_000
 /** The desktop bar unfolds upwards where it stands now (its folded part is then the bottom of the window). */
 let barGrowsUp = true
 
@@ -472,7 +475,7 @@ function quitApp(): void {
 function showMainWindow(page?: string): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized()) mainWindow.restore()
-  mainWindow.show()
+  revealMainWindow(mainWindow)
   mainWindow.focus()
   if (page) mainWindow.webContents.send(CH.onNavigate, page)
 }
@@ -586,7 +589,7 @@ async function trialAction(action: TrialAction, arg?: string): Promise<void> {
   } else if (action === 'nextDisplay' || action === 'corner') {
     const all = displays()
     const current = bar?.currentBounds
-    const now = all.find((d) => current && current.x >= d.workArea.x && current.x < d.workArea.x + d.workArea.width) ?? primaryDisplay()
+    const now = (current ? displayAt(all, (d) => d.workArea, { x: current.x + current.width / 2, y: current.y + current.height / 2 }) : null) ?? primaryDisplay()
     const target = action === 'nextDisplay' ? all[(all.indexOf(now) + 1) % all.length]! : now
     const spot = action === 'corner' && BAR_SPOTS.includes(arg as BarSpot) ? (arg as BarSpot) : 'bottom-left'
     await setPrefs({ barPlacement: spotPlacement(target, spot, { width: barWidth(target.workArea, prefs().zoom), height: barFolded() }) })
@@ -813,7 +816,7 @@ function registerIpc(): void {
     }
   })
   handle(CH.openSystemSettings, async (_e, page: SystemSettingsPage) => {
-    if (process.platform === 'win32') await shell.openExternal(page === 'taskbar' ? 'ms-settings:taskbar' : 'ms-settings:notifications')
+    if (process.platform === 'win32') await shell.openExternal(systemSettingsUrl(page === 'taskbar' ? 'taskbar' : 'notifications', release()))
   })
   handle(CH.openDataFolder, async () => {
     const dir = dataFolderNow()
@@ -929,13 +932,23 @@ async function main(): Promise<void> {
   if (quitting) return
   Menu.setApplicationMenu(null)
   log('info', `start v${app.getVersion()} (${identity.kind}, ${identity.name}) Electron ${process.versions.electron}`)
-  let banner: Banner | null = startup.kind === 'normal' ? (startup.afterLock?.() ?? startup.banner) : null
+  // The files of the installation after the lock: one that fails (held, gone) is logged – the start goes on (A5-11).
+  const step = <T,>(what: string, fn: () => T, fallback: T): T => {
+    try {
+      return fn()
+    } catch (e) {
+      log('error', `start: ${what} nie powiódł się – idę dalej`, e)
+      return fallback
+    }
+  }
+  let banner: Banner | null = startup.kind === 'normal' ? step('stan zadania instalacji', () => startup.afterLock?.() ?? startup.banner, startup.banner) : null
   if (startup.kind === 'normal' && startup.confirmed) {
-    writeLaunched(userData, startup.confirmed.version, startup.confirmed.attemptId)
-    log('info', `uruchomiono wersję ${startup.confirmed.version} (próba ${startup.confirmed.attemptId})`)
+    const confirmed = startup.confirmed
+    step('zapis „uruchomiono wersję”', () => writeLaunched(userData, confirmed.version, confirmed.attemptId), undefined)
+    log('info', `uruchomiono wersję ${confirmed.version} (próba ${confirmed.attemptId})`)
   }
   if (identity.updates) {
-    cleanUpdateFolders(updateDir, app.getVersion(), (m) => log('info', m))
+    step('sprzątanie folderów aktualizacji', () => cleanUpdateFolders(updateDir, app.getVersion(), (m) => log('info', m)), undefined)
     // The first start of a new version: its version and Electron's against the manifest; a mismatch repairs like an
     // interrupted installation (the guard).
     const m = manifestOf(updateDir, app.getVersion())
@@ -1044,6 +1057,7 @@ async function main(): Promise<void> {
     nightInstall: () => config.get().updates.nightInstall,
     beforeInstall: () => life.close('update'),
     installFailed: () => life.resume(),
+    sessionOrClass: () => planBlocking(userData),
     quit: quitApp,
     openExternal: (url) => void shell.openExternal(url),
     broadcast: (v) => {
@@ -1056,7 +1070,7 @@ async function main(): Promise<void> {
   const night = new NightInstaller({
     now: () => Date.now(),
     me: () => thisComputer,
-    ready: () => updates?.updater?.readyRelease?.version ?? null,
+    ready: () => updates?.automaticReady() ?? null,
     peers: () => (data()?.folder.presence.peers() ?? []).map((p) => ({ computer: p.presence.computer, appVersion: p.presence.appVersion, versions: p.presence.versions, installing: p.presence.installing })),
     unknownTimerEvents: async () => (await data()?.folder.unknownTimerEvents()) ?? false,
     state: async () => {
@@ -1072,7 +1086,8 @@ async function main(): Promise<void> {
         blockRunning: f ? await f.anyBlockRunning().catch(() => true) : false,
         notificationState: typeof notif?.state === 'string' ? notif.state : null,
         enabled: config.get().updates.nightInstall,
-        helperRunning: !!helper?.running
+        helperRunning: !!helper?.running,
+        modernStandby: caps?.modernStandby === true
       }
     },
     claim: (v) => data()?.folder.setInstalling(v),
@@ -1083,9 +1098,16 @@ async function main(): Promise<void> {
     setInterval(() => void night.check(), 60_000).unref?.()
     powerMonitor.on('lock-screen', () => void night.check())
   }
-  // The local plan of sessions and classes for the guard: E1 / E4a fill it; empty, it covers the next 7 days.
+  // The local plan of sessions and classes for the guard: the data folder writes it every hour. Only a computer without
+  // a folder gets an empty one here – the last real plan is never written over before the folder opens (A5-02).
   // RD_TEST_KEEP_PLAN=1 (CI): the plan a test wrote for the guard stays.
-  if (identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1') writePlan(userData, [])
+  if (identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1' && !dataFolderNow()) {
+    try {
+      writePlan(userData, [])
+    } catch (e) {
+      log('warn', 'plan strażnika nie zapisany', e)
+    }
+  }
 
   registerIpc()
   tray = new AppTray({ title: APP_TITLE, iconDir: join(userData, 'icons'), click: () => panel?.toggle(), menu: trayMenu, log })
@@ -1129,7 +1151,9 @@ async function main(): Promise<void> {
     place: (height, cursor) => {
       const all = displays()
       const icon = tray?.bounds() ?? null
-      const wa = (all.find((d) => icon && icon.x >= d.bounds.x && icon.x < d.bounds.x + d.bounds.width) ?? primaryDisplay()).workArea
+      // The icon's display (an icon under the arrow of hidden icons has no place: the cursor's).
+      const point = icon && icon.width > 0 ? { x: icon.x, y: icon.y } : cursor
+      const wa = ((point ? displayAt(all, (d) => d.bounds, point) : null) ?? primaryDisplay()).workArea
       const width = Math.floor(Math.min(480 * prefs().zoom, wa.width - 16))
       return panelRect(icon, cursor, all, { width, height: Math.min(height, wa.height) })
     },

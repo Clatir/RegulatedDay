@@ -25,7 +25,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 
@@ -68,6 +68,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8a.4 Analiza tygodniowa i „Dalej” (w sobotę)
    - [ ] E8b.2 Aktualizacja do 0.17.0 – kopia i identyfikator
    - [ ] E8b.1 Folder danych znika w trakcie pracy (tylko na folderze testowym, jeśli chcesz)
+   - [ ] E8c.2 Kliknięcie powiadomienia „za 5 min” i Alt+F4 w panelu
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
@@ -96,6 +97,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E3.9 Laptop dołącza do danych
    - [ ] E3.10 Dwa komputery naraz – konflikt
    - [ ] E4a.11 Laptop – instalacja w nocy dopiero po 24 h
+   - [ ] E8c.3 Instalacja w nocy przy zablokowanym ekranie
+   - [ ] E8c.1 Start z Windows w zasobniku po zmaksymalizowanym oknie
 7. Jednorazowe:
    - [ ] E0.15 Nagrywanie (OBS) przy wygaszonym ekranie
    - [ ] E3.1 Kreator po pierwszej aktualizacji (jednorazowe) – pomiń, jeśli kreator już przeszedłeś
@@ -1237,3 +1240,32 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   skopiowane” (ten komputer zostaje sobą), a pasek i okno pokazują Twój dzień jak dotąd.
 - **Nie przechodzi, gdy:** kopii brak, w logu jest „dane aplikacji skopiowane z innego komputera” albo dzisiejsze
   zdarzenia znikają.
+
+### E8c – poprawki procesu głównego i aktualizacji po przeglądzie E8 (0.18.0)
+
+#### E8c.1 Start z Windows w zasobniku po zmaksymalizowanym oknie (0.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/smoke.spec.ts` („start z Windows w zasobniku”). Ty: rzut oka przy logowaniu.
+- **Jak sprawdzić:** zmaksymalizuj okno główne, zamknij je krzyżykiem (do zasobnika), wyloguj się i zaloguj (autostart
+  włączony).
+- **Oczekiwany efekt:** po logowaniu okno główne się nie pokazuje – jest ikona i pasek; kliknięcie ikony → „Otwórz okno
+  główne” otwiera je zmaksymalizowane.
+- **Nie przechodzi, gdy:** po logowaniu okno główne wyskakuje na cały ekran albo po otwarciu nie jest zmaksymalizowane.
+
+#### E8c.2 Kliknięcie powiadomienia „za 5 min” i Alt+F4 w panelu (0.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/placement.test.ts` (adres z linią), `tests/e2e/smoke.spec.ts` (Alt+F4). Ty: rzut oka
+  przy najbliższej sesji.
+- **Jak sprawdzić:** kliknij powiadomienie „… za 5 min”; potem w otwartym panelu naciśnij Alt+F4.
+- **Oczekiwany efekt:** otwiera się panel przy ikonie z linią „Zacznij · Odwołaj” i podpisem „Otwarte z powiadomienia:
+  …” z tekstem linii; Alt+F4 zamyka sam panel – ikona, pasek i okno działają dalej.
+- **Nie przechodzi, gdy:** zamiast panelu otwiera się okno główne, podpis pokazuje identyfikator („wait:k3j…”) albo
+  Alt+F4 zamyka całą aplikację.
+
+#### E8c.3 Instalacja w nocy przy zablokowanym ekranie (0.18.0)
+- [ ] Odebrane
+- **Tylko Ty:** stan powiadomień przy blokadzie i nocne okno widzi tylko Twój komputer.
+- **Jak sprawdzić:** gdy czeka nowa wersja, zostaw komputer na noc zablokowany (Win+L) i na zasilaniu z sieci.
+- **Oczekiwany efekt:** rano działa nowa wersja; w `logs\update.log` jest instalacja „night”, a w `main.log` noc nie
+  pisze „stan powiadomień: notPresent”.
+- **Nie przechodzi, gdy:** wersja czeka rano mimo spełnionych warunków, a w logu jest „stan powiadomień: notPresent”.

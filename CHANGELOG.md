@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.18.0
+- Aplikacja uruchamia się także wtedy, gdy pomocnik nie może wystartować (np. zablokował go antywirus) – działa bez niego i próbuje go uruchomić ponownie. Wcześniej cały start się kończył.
+- Start z Windows „w zasobniku” nie pokazuje już okna głównego, gdy ostatnio było zmaksymalizowane; zmaksymalizuje się dopiero, gdy je otworzysz.
+- Kliknięcie powiadomienia „za 5 min” otwiera panel przy ikonie z właściwą linią (zamiast okna głównego), a panel pokazuje jej tekst, nie identyfikator.
+- Alt+F4 w panelu ikony zamyka tylko panel – aplikacja działa dalej. Panel „Zawsze na wierzchu” nie znika po kliknięciu w inny program, gdy pomocnik nie działa.
+- Instalacja w nocy rusza przy zablokowanym ekranie (wcześniej blokada ją wstrzymywała), a laptop z nowoczesnym czuwaniem instaluje od razu po zablokowaniu. Aktualizacja nie instaluje się przy wyjściu ani przy starcie Windows w czasie sesji albo zajęć (ani 30 min przed nimi), a nieudana wersja nie blokuje nocą innych komputerów.
+- Start po instalacji odłożonej przez strażnika nie pokazuje fałszywego „nie dokończyła się” i nie czeka minuty na strażnika, który nie wystartował. Foldery nieudanych starszych wersji (ok. 200 MB każdy) są sprzątane.
+- Drobne: przycisk ustawień powiadomień w Windows 10 otwiera Asystenta koncentracji; panel i próba pasek na monitorze nad głównym wybierają właściwy ekran; przytrzymanie paska bez ruchu nie przerywa przeciągania; błąd zapisu ikony zasobnika nie zatrzymuje odświeżenia paska.
+
 ## 0.17.0
 - Gdy folder danych zniknie w trakcie pracy (przeniesiony, usunięty, OneDrive jeszcze niegotowy), aplikacja niczego nie tworzy w jego miejscu: zmiany czekają na tym komputerze i trafiają do folderu, gdy wróci. Wcześniej powstawał nowy, pusty folder, a dzień mógł się utworzyć z ustawień domyślnych.
 - Po pomyłkowym przestawieniu daty o dni do przodu i z powrotem działania automatyczne (tworzenie dnia, zamrażanie, koniec bloków) nie stają już na długo.

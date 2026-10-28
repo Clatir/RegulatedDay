@@ -37,6 +37,15 @@
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
 
+## 0.18.0 – poprawki procesu głównego i aktualizacji (ciąg E, 5.2c)
+- Gałąź `claude/0.18.0-proces` (od 0.17.0, przed jego scaleniem) od 28.10 ok. 15:15.
+- Zakres (T516): A4-01 (pomocnik nie do uruchomienia), A4-02 (zasobnik a maksymalizacja), A4-03 (linia „wait:” w
+  adresie, tekst linii w panelu), A4-05 (Alt+F4 w panelu), A5-01 (noc przy blokadzie), A5-02 (plan strażnika), A5-03
+  (wyjście w sesji), A5-04 (sekwencja startu po zwolnieniu blokady), A5-05, A5-06, A5-12 (T513) i low A4-08–A4-13,
+  A5-08–A5-11. Do 5.3: A4-07, A5-07. A4-04 (komunikat rezerwy) – 5.2e.
+- Testy: 939 jednostkowych i plikowych; E2E nowe: „start z Windows w zasobniku”, „Alt+F4 w panelu” (oba padają na
+  starym kodzie).
+
 ## 0.17.0 – poprawki danych i zegarów (ciąg E, 5.2b)
 - Gałąź `claude/0.17.0-dane` (od 0.16.0, przed jego scaleniem) od 28.10 ok. 14:40.
 - Zakres (T515): A8-01 (zegar logiczny po skoku zegara), A3-01 (folder bez korzenia – `rootGuarded`), A8-03
@@ -66,8 +75,8 @@
   starym kodzie). Test skali w pełnym zestawie lokalnie przekroczył czas otwarcia pod obciążeniem (zostawione procesy
   Electrona po E2E – zatrzymane), osobno przechodzi. E2E lokalnie: `smoke` przekraczały czas pod obciążeniem (za każdym
   razem inne testy, osobno przechodzą).
-- PR #26 scalony (efbe55e, 28.10 ok. 15:30; CI PR zielone za pierwszym razem, także Windows) – wydanie 0.16.0 z runu
-  40703787892 na `main`.
+- PR #26 scalony (efbe55e, 28.10 ok. 15:00; CI PR zielone za pierwszym razem, także Windows) – wydanie 0.16.0 z runu
+  40703787892 na `main` opublikowane (ok. 15:43).
 
 ## Przed etapem E8 (28.10.2026)
 - Odpowiedzi: przegląd wieloagentowy teraz, 8 obszarów (T512); 1.0 bez czekania na odbiór (D324). Model: Opus 5.5 ·

@@ -30,6 +30,8 @@ export interface ControllerDeps {
   installFailed: () => void
   /** guard.lock held open by an owner (tests stand in for it). */
   lockHeld?: (path: string) => boolean
+  /** A session or a class runs now or starts within 30 min (no installation at the exit or the logon, A5-03). */
+  sessionOrClass?: () => boolean
   quit: () => void
   openExternal: (url: string) => void
   broadcast: (view: UpdateView) => void
@@ -177,9 +179,13 @@ export class UpdateController {
     return this.install('now', 'visible', null, { version, notes: '', dir })
   }
 
-  /** The full exit: a ready download installs (the app is quitting anyway). */
+  /** The full exit: a ready download installs (the app is quitting anyway) – never in a session or a class (spec, A5-03). */
   onQuit(sessionEnding: boolean): void {
     if (sessionEnding || this.installing) return
+    if (this.d.sessionOrClass?.()) {
+      this.d.log('info', 'wyjście w czasie sesji albo zajęć (albo 30 min przed nimi) – instalacja przy kolejnym wyjściu albo w nocy')
+      return
+    }
     this.install('exit', 'none')
   }
 
@@ -190,7 +196,20 @@ export class UpdateController {
     // Put off by the guard (a session or a class): it waits for the exit or the night, never a loop of starts.
     const t = readTask(readSharedSync(join(this.updateDir, ready.version, 'task.json')))
     if (t.kind === 'task' && t.task.state === 'postponed') return false
+    // A session or a class now or soon by the plan as it stands: nothing is handed over (A5-02).
+    if (this.d.sessionOrClass?.()) return false
     return this.install('logon', 'hidden')
+  }
+
+  /**
+   * The ready version an automatic installation could install now (the night's): none without the helper or while
+   * „nieudane” holds it on this computer – never a claim „instaluję X” all night that it cannot keep (A5-05).
+   */
+  automaticReady(): string | null {
+    const ready = this.updater?.readyRelease
+    if (!ready || this.installing || !this.d.helperRunning()) return null
+    const t = readTask(readSharedSync(join(this.updateDir, ready.version, 'task.json')))
+    return t.kind === 'task' && t.task.state === 'failed' ? null : ready.version
   }
 
   async action(a: UpdateAction): Promise<UpdateView> {

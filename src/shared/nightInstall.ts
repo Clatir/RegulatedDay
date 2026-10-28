@@ -36,12 +36,20 @@ export interface NightState {
   onMains: boolean | null
   /** A block runs (in the foreground or the background) on any day this computer sees. */
   blockRunning: boolean
-  /** The state of notifications (the helper): only „accepts” lets it install („quietTime” and unknown too). */
+  /**
+   * The state of notifications (the helper): a game, a presentation, a busy state or a full-screen app holds it; any other
+   * lets it install – „notPresent” is the locked screen or the screen saver itself (A5-01).
+   */
   notificationState: string | null
   /** „Automatyczna instalacja aktualizacji w nocy” on this computer. */
   enabled: boolean
   helperRunning: boolean
+  /** Modern standby: it sleeps soon after the lock – no random wait, it installs at once (spec, A5-12, T513). */
+  modernStandby?: boolean
 }
+
+/** The states of notifications that hold the night's installation (spec: a game, a presentation, busy, a full-screen app). */
+const HOLDING_STATES = ['busy', 'd3dFullscreen', 'presentation', 'app']
 
 export interface NightInput {
   me: string
@@ -73,7 +81,7 @@ export function nightReady(s: NightState): string | null {
   if (!s.locked && s.idleMs < IDLE_FOR_NIGHT_MS) return 'komputer używany w ostatnich 30 min'
   if (s.onMains === false) return 'zasilanie z baterii'
   if (s.blockRunning) return 'biegnie blok'
-  if (s.notificationState && !['accepts', 'quietTime', 'unknown'].includes(s.notificationState)) return `stan powiadomień: ${s.notificationState}`
+  if (s.notificationState && HOLDING_STATES.includes(s.notificationState)) return `stan powiadomień: ${s.notificationState}`
   return null
 }
 
@@ -110,6 +118,8 @@ export function nightDecision(inp: NightInput): NightDecision {
   const rivals = v.claimedBy.filter((c) => c !== inp.me)
   if (inp.waitFrom == null) {
     if (rivals.length) return { act: 'none', why: `inny komputer (${rivals[0]}) instaluje wersję ${ready} jako pierwszy` }
+    // A laptop in modern standby sleeps soon after the lock: no wait to lose, it installs at once.
+    if (state.modernStandby) return { act: 'install', version: ready, why: 'pierwszy komputer, nowoczesne czuwanie – instalacja od razu' }
     return { act: 'claim', version: ready, why: 'pierwszy komputer – losowe czekanie przed instalacją' }
   }
   if (rivals.some((c) => c < inp.me)) return { act: 'yield', why: `remis z ${rivals.find((c) => c < inp.me)} – pierwszeństwo ma niższy identyfikator` }

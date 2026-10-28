@@ -71,15 +71,17 @@ export class IconPanel {
     this.win.on('page-title-updated', (e) => e.preventDefault())
     this.win.on('blur', () => {
       // Only without the helper: with it, the change of the foreground window decides (a notification's click may
-      // leave the panel without the focus at all).
-      if (!this.d.helperRunning() && Date.now() - this.openedAt > PANEL_GRACE_MS) this.close('utrata fokusu')
+      // leave the panel without the focus at all); a panel kept on top (D291) stays until you close it (A4-08).
+      if (!this.d.helperRunning() && this.d.stayOnTop?.() !== true && Date.now() - this.openedAt > PANEL_GRACE_MS) this.close('utrata fokusu')
     })
     this.win.on('close', (e) => {
-      if (!this.quitting) {
-        e.preventDefault()
-        this.close('zamknięcie okna')
-        this.onExternalClose?.()
-      }
+      if (this.quitting) return
+      e.preventDefault()
+      // Open, its close is yours (Alt+F4): only the panel goes. Hidden, nobody could click it – a close from outside (an
+      // installer, taskkill) ends the app (A4-05).
+      const open = this.isOpen
+      this.close(open ? 'Alt+F4' : 'zamknięcie okna')
+      if (!open) this.onExternalClose?.()
     })
     void load(this.win)
   }

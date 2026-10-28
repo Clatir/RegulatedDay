@@ -8,7 +8,8 @@ export interface PanelTarget {
   day: string | null
 }
 
-const LINE = /^[a-z0-9][a-z0-9-]{0,63}$/
+/** A line's id as the bar names it: `rodzaj:…` – a block's „wait:<id>”, a question's „next:<dzień>:<blok>:<próg>” (A4-03). */
+const LINE = /^[a-z0-9][a-z0-9:-]{0,127}$/
 const DAY = /^\d{4}-\d{2}-\d{2}$/
 
 /** The target of an address of `scheme`; null = not an address of the app (or not in its exact format). */

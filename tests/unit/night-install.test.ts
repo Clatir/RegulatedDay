@@ -23,12 +23,21 @@ describe('warunki nocy na tym komputerze', () => {
     expect(nightReady(night({ onMains: false }))).toBe('zasilanie z baterii')
     expect(nightReady(night({ blockRunning: true }))).toBe('biegnie blok')
     expect(nightReady(night({ notificationState: 'd3dFullscreen' }))).toBe('stan powiadomień: d3dFullscreen')
+    // The locked screen itself is „notPresent” in the state of notifications (A5-01).
+    expect(nightReady(night({ locked: true, notificationState: 'notPresent' }))).toBeNull()
+    for (const s of ['busy', 'presentation', 'app']) expect(nightReady(night({ notificationState: s }))).toBe(`stan powiadomień: ${s}`)
     expect(nightReady(night({ enabled: false }))).toBe('instalacja w nocy wyłączona')
     expect(nightReady(night({ helperRunning: false }))).toBe('pomocnik nie działa')
   })
 })
 
 describe('dwa komputery', () => {
+  it('laptop z nowoczesnym czuwaniem jako pierwszy instaluje od razu po blokadzie – bez losowego czekania (A5-12, T513)', () => {
+    expect(nightDecision(input({ state: night({ modernStandby: true }) }))).toMatchObject({ act: 'install', version: '0.3.0' })
+    // Another computer claimed it first: it waits as every other.
+    expect(nightDecision(input({ state: night({ modernStandby: true }), peers: [peer({ installing: '0.3.0' })] }))).toMatchObject({ act: 'none' })
+  })
+
   it('pierwszy instaluje bez czekania 24 h – po swoim losowym czekaniu', () => {
     const claim = nightDecision(input({ me: 'pca', peers: [peer({ computer: 'pcb' })] }))
     expect(claim).toMatchObject({ act: 'claim', version: '0.3.0' })

@@ -124,8 +124,17 @@ function lockCounter(d: StartupDeps, dir: string): { held: boolean; counter: num
   return { held, counter: lock?.counter ?? null, pid: lock?.pid ?? 0, startMs: lock?.startMs ?? 0 }
 }
 
-export async function runStartup(d: StartupDeps): Promise<StartupResult> {
+/** The task as it was read still the same (its owner wrote nothing meanwhile: no other state, no other attempt). */
+function unchanged(d: StartupDeps, dir: string, task: Task): boolean {
+  const now = findTask(d)
+  return now != null && now.dir === dir && now.task.state === task.state && now.task.attemptId === task.attemptId
+}
+
+export async function runStartup(d: StartupDeps, depth = 0): Promise<StartupResult> {
   const normal = (banner: Banner | null = null, afterLock: (() => Banner | null) | null = null, confirmed: Task | null = null): StartupResult => ({ kind: 'normal', banner, afterLock, confirmed })
+  // A wait over and the task changed meanwhile (an owner put it off, finished it, began another attempt): judged anew,
+  // never by what was read before the wait (A5-04).
+  const again = (): Promise<StartupResult> => (depth < 3 ? runStartup(d, depth + 1) : Promise.resolve(normal()))
   const found = findTask(d)
   if (!found) return normal()
   const { dir, raw } = found
@@ -189,6 +198,15 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
   // X done while an older version starts (installed again by hand): nothing to hand over or to repair.
   if (task.state === 'done') return normal()
 
+  // Four starts of an owner without a clean end, the lock free: the app does what the owner itself would at that count
+  // (spec „licznik 4”) – „nieudane”, the guard's entry removed, a start with the banner (A5-08).
+  if (task.starts >= 4 && !d.heldOpen(join(dir, 'guard.lock'))) {
+    d.log('warn', `właściciel instalacji ${X} uruchomiony ${task.starts} razy bez czystego końca – instalacja nieudana`)
+    d.removeGuardEntry()
+    update(d, dir, task, raw, { state: 'failed', message: 'strażnik nie wystartował' })
+    return normal({ kind: 'unfinished', version: X })
+  }
+
   const handover = join(dir, 'handover.jsonl')
   const handOver = (why: string): StartupResult => {
     d.appendText(handover, myHandover(d))
@@ -224,11 +242,14 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
     }
   }
 
+  // The lock was held and is free now: its owner may have changed the task before it let go.
+  if (first.held && needGuard && !unchanged(d, dir, task)) return again()
   if (needGuard) {
     d.appendText(handover, myHandover(d))
     const started = d.startGuard(dir)
     d.log('info', `strażnik ${X} uruchomiony przez aplikację${started ? ` (pid ${started.pid})` : ' – nie wystartował'}`)
-    const until = d.now() + OWNER_WAIT_MS
+    // A guard that did not start is not waited for (A5-06).
+    const until = started ? d.now() + OWNER_WAIT_MS : d.now()
     let last = lockCounter(d, dir)
     while (d.now() < until) {
       await d.sleep(500)
@@ -242,7 +263,8 @@ export async function runStartup(d: StartupDeps): Promise<StartupResult> {
     }
   }
 
-  // No owner in time: never closing without a trace.
+  // No owner in time: never closing without a trace – unless an owner wrote the task meanwhile (then it is judged anew).
+  if (!unchanged(d, dir, task)) return again()
   d.log('warn', `strażnik ${X} nie przejął instalacji`)
   d.removeGuardEntry()
   const bad = d.filesMismatch(dir, task)
