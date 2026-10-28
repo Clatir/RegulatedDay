@@ -3,12 +3,12 @@
  * its steps one by one with the version („zwykła” or „gorsze dni”), „✓ Wszystkie” and „Zapisz zaznaczone”. The same
  * click as the bar's line (`routineDone`), so a save in either place closes both; „Cofnij” takes it back.
  */
-import { useState } from 'react'
 import { routinesDue, type RoutineDue } from '@shared/engine/routineCheck'
 import { durationLabel } from '@shared/format'
-import { ROUTINE_VERSION_NAMES, type RoutineVersion } from '@shared/model/routines'
+import { ROUTINE_VERSION_NAMES } from '@shared/model/routines'
 import { Segmented } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
+import { useStepPicks } from '../../lib/stepPicks'
 import { useData } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
@@ -27,25 +27,27 @@ export function RoutineCards({ model, names }: { model: DayModel; names: Names }
   )
 }
 
+/** „Cofnij” of a saved routine: what the main process says when it cannot (never a promise left unhandled). */
+export async function undoRoutine(block: string, day: string): Promise<void> {
+  try {
+    const r = await window.rd.timer({ a: 'routineUndo', block, day })
+    if (!r.ok) toast(`Nie cofnięto: ${r.why ?? 'rutyna nie jest zapisana'}`, 'info')
+  } catch (e) {
+    toast(`Nie cofnięto: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
+  }
+}
+
 function RoutineCard({ model, due, name }: { model: DayModel; due: RoutineDue; name: string }) {
-  const [version, setVersion] = useState<RoutineVersion>('normal')
-  const [done, setDone] = useState<ReadonlySet<string>>(new Set())
+  const { version, steps, done, setVersion, flip } = useStepPicks(due)
   const [busy, run] = useBusy()
-  const steps = due[version]
   const date = model.date
-  const flip = (id: string) =>
-    setDone((s) => {
-      const next = new Set(s)
-      if (!next.delete(id)) next.add(id)
-      return next
-    })
   const save = (ids: string[]) =>
     run(async () => {
       if (!ids.length) return
       try {
         const r = await window.rd.timer({ a: 'routineDone', block: due.block, version, steps: ids, day: date })
         if (!r.ok) return void toast(r.why ?? 'Rutyna nie zapisała się', 'info')
-        undoToast(`Zapisano: ${name} (${ROUTINE_VERSION_NAMES[version]}) – ${ids.length} z ${steps.length}`, () => void window.rd.timer({ a: 'routineUndo', block: due.block, day: date }))
+        undoToast(`Zapisano: ${name} (${ROUTINE_VERSION_NAMES[version]}) – ${ids.length} z ${steps.length}`, () => void undoRoutine(due.block, date))
       } catch (e) {
         toast(`Nie zapisano rutyny: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
       }
@@ -58,10 +60,7 @@ function RoutineCard({ model, due, name }: { model: DayModel; due: RoutineDue; n
           <Segmented
             value={version}
             options={(['normal', 'worse'] as const).map((v) => ({ value: v, label: ROUTINE_VERSION_NAMES[v] }))}
-            onChange={(v) => {
-              setVersion(v)
-              setDone(new Set())
-            }}
+            onChange={setVersion}
             aria-label="Wersja rutyny"
             data-testid="routine-card-version"
           />

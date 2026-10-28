@@ -15,6 +15,7 @@ import { SEEN_LINE, type BarLine, type BarRoutine, type RunningRequest, type Wid
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
+import { useStepPicks } from '../lib/stepPicks'
 
 export type BarMode = 'main' | 'panel' | 'desktop'
 type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | null
@@ -204,22 +205,15 @@ function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode;
 
 /**
  * „Kroki ▸” of a routine unfolded (D328): its steps ticked one by one, the version („zwykła” or „gorsze dni”) and
- * „✓ Zapisz zaznaczone” – the same save as the card in „Dziś”. Another version starts with nothing ticked.
+ * „✓ Zapisz zaznaczone” – the same save as the card in „Dziś”. Another version starts with nothing ticked. The steps go
+ * by their places in the version (an action's argument is short – 40 ids would not fit, A6-10 review).
  */
 function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: BarMode; close: () => void }) {
-  const [version, setVersion] = useState<'normal' | 'worse'>('normal')
-  const [done, setDone] = useState<ReadonlySet<string>>(new Set())
-  const steps = routine[version]
-  const flip = (id: string) =>
-    setDone((s) => {
-      const next = new Set(s)
-      if (!next.delete(id)) next.add(id)
-      return next
-    })
+  const { version, steps, done, setVersion, flip } = useStepPicks(routine)
   const save = () => {
-    const ids = steps.filter((s) => done.has(s.id)).map((s) => s.id)
-    if (!ids.length) return
-    act('routine', `${routine.block}|${version}|${ids.join(',')}`)
+    const places = steps.flatMap((s, k) => (done.has(s.id) ? [k] : []))
+    if (!places.length) return
+    act('routine', `${routine.block}|${version}|${places.join(',')}`)
     close()
   }
   return (
@@ -228,7 +222,7 @@ function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: Ba
         <span className="text-[12px] text-muted">{routine.name}</span>
         {routine.worse.length > 0 &&
           (['normal', 'worse'] as const).map((v) => (
-            <BarButton key={v} mode={mode} pressed={version === v} testId={`bar-routine-version-${v}`} onAct={() => (setVersion(v), setDone(new Set()))}>
+            <BarButton key={v} mode={mode} pressed={version === v} testId={`bar-routine-version-${v}`} onAct={() => setVersion(v)}>
               {v === 'normal' ? 'zwykła' : 'gorsze dni'}
             </BarButton>
           ))}
@@ -335,6 +329,49 @@ export function pulseClass(warn: WidgetView['warn'], on: boolean, mode: BarMode,
   return warn === 'five' ? 'rd-bar-pulse-five' : warn === 'zero' ? 'rd-bar-pulse-zero' : null
 }
 
+/** The three beats of the pulse (`index.css`: 3 × 1.2 s). */
+const PULSE_MS = 3_600
+
+/**
+ * The pulse's class while its step beats – once for each step of each block: a bar drawn anew in the same step (a day not
+ * counted for a while, „Odcinam się” and „Wracam”) does not beat it again.
+ */
+function usePulse(step: string | null, key: string): string | null {
+  const beaten = useRef<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [beat, setBeat] = useState<string | null>(null)
+  const id = step ? `${key}|${step}` : null
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    []
+  )
+  useEffect(() => {
+    if (!beatsNow(beaten.current, id)) return
+    beaten.current = id
+    setBeat(id)
+    // The beats end by their own time – a view that flips meanwhile never keeps the class on for good.
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => setBeat(null), PULSE_MS)
+  }, [id])
+  return id && beat === id ? step : null
+}
+
+/** A step beats when it comes: a step of a block (`<block>|<step>`) once – never again when the bar is drawn anew in it. */
+export const beatsNow = (beaten: string | null, id: string | null): boolean => id != null && id !== beaten
+
+/**
+ * The lines on view and those gathered in „⋯”: in a quiet mode one fits, otherwise two; a routine's line (D328) in a
+ * quiet mode always waits in „⋯” – never in the only row beside the session's countdown.
+ */
+export function barLines(lines: readonly BarLine[], quiet: boolean): { shown: BarLine[]; extra: BarLine[] } {
+  const fit = quiet ? 1 : 2
+  const folds = (l: BarLine) => quiet && l.id.startsWith('routine:')
+  const front = lines.filter((l) => !folds(l))
+  return { shown: front.slice(0, fit), extra: [...front.slice(fit), ...lines.filter(folds)] }
+}
+
 export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; mode: BarMode; grows?: 'up' | 'down'; onUnfold?: (unfolded: boolean) => void }) {
   const now = useNow()
   const brightness = useMachine((s) => s.prefs.brightness)
@@ -342,6 +379,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
   const [unfold, setUnfold] = useState<Unfold>(null)
   const root = useRef<HTMLDivElement>(null)
   const quiet = view.quiet
+  const beat = usePulse(pulseClass(view.warn, pulse, mode, quiet), `${view.block?.name ?? ''}|${view.block?.endsAt ?? ''}`)
   // The panel of variants belongs to the main process (D313): one for every window, open while the view has it.
   const variantsOpen = view.variants.open != null
   const toggle = (u: Exclude<Unfold, null>) => {
@@ -360,10 +398,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
   }
   const routineOpen = unfold === 'routine' ? (view.routines.find((r) => r.line === routineLine) ?? null) : null
   const running = view.requests.running
-  // In the quiet modes one line fits, otherwise two; the rest gather in „⋯”.
-  const fit = quiet ? 1 : 2
-  const shownLines = view.lines.slice(0, fit)
-  const extra = view.lines.slice(fit)
+  const { shown: shownLines, extra } = barLines(view.lines, quiet)
   const pending = view.pending && view.pending.until > now ? view.pending : null
   useSeen(view, mode, unfold === 'more' ? view.lines : shownLines)
   // The cost stands in place of its button when that button is on view; otherwise in the row under the buttons.
@@ -568,7 +603,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
   return (
     <div
       ref={root}
-      className={cx('group flex flex-col overflow-hidden', mode === 'main' ? 'rounded-md border border-line' : '', quiet && 'opacity-95', pulseClass(view.warn, pulse, mode, quiet))}
+      className={cx('group flex flex-col overflow-hidden', mode === 'main' ? 'rounded-md border border-line' : '', quiet && 'opacity-95', beat)}
       style={{ background: barBackground(view.tone, view.warn, quiet, brightness, TONE_SETS[view.toneSet].tones), boxShadow: `inset 4px 0 0 ${view.color}` }}
       data-testid={`bar-${mode}`}
       data-tone={view.tone}

@@ -6,6 +6,7 @@
 - „Skopiuj ten dzień do…” na dziś albo dzień miniony najpierw ostrzega, że kopia zastąpi plan dnia, który już trwał – „Kopiuj mimo to” albo „Tylko dni po dziś”.
 - Kalendarz oznacza święta Wielkiej Brytanii („święto UK”, skrócona sesja w Londynie).
 - Nowe ustawienie tego komputera „Pulsowanie paska” (domyślnie wyłączone): pasek pulpitu pulsuje obwódką trzy razy przy 5 min do końca i przy końcu; bez animacji zostaje sam kolor.
+- Zapis rutyny z paska zostawia na minutę „Zapisano: … · Cofnij”. W trybie sesji, zajęć i „mniej pytań” linia rutyny czeka w „⋯”. Ostrzeżenie kopii dnia ma też „Anuluj”.
 
 ## 0.21.0
 - Druga zmiana zaczęta przed swoim czasem albo przedłużona za swój koniec liczy się jak zwykłe przedłużenie – z kosztem i drugim kliknięciem, a nie po cichu. Przy wcześniejszym starcie (z panelu bloku) obok „Potwierdź” jest „Przesuń na teraz”: przesuwa drugą zmianę na teraz, z tą samą długością, i zaczyna ją bez kosztu.

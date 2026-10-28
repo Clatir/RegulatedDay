@@ -420,7 +420,9 @@ export function ritualDue(state: DayState, today: string, ritualFrom: string | n
  * an unstarted flexible block on) has ended (D329). A block parked or cancelled before it began is no work of the plan.
  */
 function unbegunWorkOver(state: DayState): boolean {
-  if (state.blocks.some((b) => b.isWork && state.facts.blocks.get(b.id)?.startedAt != null)) return false
+  // The work that sets the end of work (as `anyWork` in day.ts): an evening block „po pracy”, a recorded lecture or the
+  // second shift begun since is no work begun.
+  if (state.blocks.some((b) => isBoundaryWork(b) && state.facts.blocks.get(b.id)?.startedAt != null)) return false
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
   let last: number | null = null
   for (const b of state.blocks) {

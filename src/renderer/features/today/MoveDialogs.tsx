@@ -91,6 +91,9 @@ export function CopyDayDialog({ model, today, onClose }: { model: DayModel; toda
             <span className="mr-auto text-[12px] text-rose" data-testid="copy-warning">
               Kopia zastąpi plan dnia, który już trwał ({began.map(plDate).join(', ')}) – zaczęte bloki będą „poza planem”, zmienią się granica i budżet.
             </span>
+            <button type="button" className="btn" onClick={() => setWarn(false)} data-testid="copy-back">
+              Anuluj
+            </button>
             <button type="button" className="btn" disabled={busy} onClick={() => void copy(targets)} data-testid="copy-anyway">
               Kopiuj mimo to
             </button>

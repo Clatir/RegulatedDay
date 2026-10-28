@@ -77,6 +77,11 @@ describe('rutyny do odhaczenia (D328)', () => {
     expect(click(s, '08:10', { a: 'routineDone', block: 'rut', version: 'normal', steps: [] }).ok).toBe(false)
     expect(click(s, '08:10', { a: 'routineDone', block: 'a', version: 'normal', steps: ['woda'] }).ok).toBe(false)
   })
+
+  it('nieznana wersja mówi o wersji, nie o krokach (przegląd 0.22.0)', () => {
+    const r = click(day(), '08:10', { a: 'routineDone', block: 'rut', version: undefined as unknown as 'normal', steps: ['woda'] })
+    expect(r).toMatchObject({ ok: false, why: 'nieznana wersja rutyny' })
+  })
 })
 
 describe('linia rutyny w pasku (D328)', () => {

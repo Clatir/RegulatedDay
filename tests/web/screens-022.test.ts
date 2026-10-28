@@ -5,7 +5,11 @@
 import { describe, expect, it } from 'vitest'
 import { holidayMarks } from '@renderer/features/calendar/dayTypes'
 import { copyTargets } from '@renderer/features/today/MoveDialogs'
-import { pulseClass } from '@renderer/widget/Bar'
+import { barLines, beatsNow, pulseClass } from '@renderer/widget/Bar'
+import { undoRoutine } from '@renderer/features/today/RoutineCard'
+import { versionOf } from '@renderer/lib/stepPicks'
+import { useUi } from '@renderer/store/ui'
+import type { RdApi } from '@shared/api'
 import { DEFAULT_MACHINE_PREFS, machinePrefsFrom } from '@shared/machine'
 
 describe('pulsowanie paska przy 5 i 0 min (D225)', () => {
@@ -53,5 +57,47 @@ describe('święta w kalendarzu (D295, A7-18)', () => {
     const christmas = holidayMarks('2026-12-25')
     expect(christmas.marks).toEqual(['święto', 'święto USA', 'święto UK'])
     expect(new Set(christmas.names).size).toBe(christmas.names.length)
+  })
+})
+
+describe('poprawki po przeglądzie 0.22.0', () => {
+  it('w trybie ciszy linia rutyny zawsze czeka w „⋯”, także sama; poza ciszą – jak inne linie', () => {
+    const routine = { id: 'routine:2026-10-28:rut', text: 'Poranna', actions: [], dot: false }
+    const q = { id: 'next:2026-10-28:a:1', text: 'Dalej?', actions: [], dot: true }
+    expect(barLines([routine], true)).toEqual({ shown: [], extra: [routine] })
+    expect(barLines([q, routine], true)).toEqual({ shown: [q], extra: [routine] })
+    expect(barLines([q, routine], false)).toEqual({ shown: [q, routine], extra: [] })
+  })
+
+  it('pulsowanie raz na krok bloku: pasek narysowany od nowa w tym samym kroku nie pulsuje drugi raz', () => {
+    expect(beatsNow(null, 'Nauka|1|rd-bar-pulse-zero')).toBe(true)
+    expect(beatsNow('Nauka|1|rd-bar-pulse-zero', 'Nauka|1|rd-bar-pulse-zero')).toBe(false)
+    expect(beatsNow('Nauka|1|rd-bar-pulse-five', 'Nauka|1|rd-bar-pulse-zero')).toBe(true)
+    expect(beatsNow('Nauka|1|rd-bar-pulse-five', null)).toBe(false)
+  })
+
+  it('wersja „na gorsze dni”, która straciła kroki, wraca do zwykłej', () => {
+    expect(versionOf('worse', [])).toBe('normal')
+    expect(versionOf('worse', [{ id: 'w' }])).toBe('worse')
+  })
+
+  it('„Cofnij” zapisu rutyny mówi, gdy się nie udało – także przy błędzie IPC', async () => {
+    const calls: unknown[] = []
+    let fail: 'refuse' | 'throw' = 'refuse'
+    ;(globalThis as unknown as { window: { rd: Partial<RdApi> } }).window = {
+      rd: {
+        timer: async (c) => {
+          calls.push(c)
+          if (fail === 'throw') throw new Error('folder zamknięty')
+          return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne', confirm: null }
+        }
+      }
+    }
+    await undoRoutine('rut', '2026-10-28')
+    expect(calls).toEqual([{ a: 'routineUndo', block: 'rut', day: '2026-10-28' }])
+    expect(useUi.getState().toasts.at(-1)?.text).toContain('Nie cofnięto: nie wszystkie logi')
+    fail = 'throw'
+    await undoRoutine('rut', '2026-10-28')
+    expect(useUi.getState().toasts.at(-1)?.text).toContain('folder zamknięty')
   })
 })

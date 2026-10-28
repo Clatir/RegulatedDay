@@ -376,4 +376,11 @@ describe('kiedy rytuał (D318, T505)', () => {
     late.start('b', '16:00')
     expect(ritualDue(late.state('16:30'), DATE, DATE)).toBe(false)
   })
+
+  it('blok „po pracy” zaczęty wieczorem nie jest zaczętą pracą – rytuał zostaje (D329, przegląd 0.22.0)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'n', cat: 'nauka', at: '20:00', min: 60 })] }).using('07:00', '23:59')
+    expect(ritualDue(s.state('19:00'), DATE, DATE)).toBe(true)
+    s.ran('n', '20:00', '21:00')
+    expect(ritualDue(s.state('21:30'), DATE, DATE)).toBe(true)
+  })
 })

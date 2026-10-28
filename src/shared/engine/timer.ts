@@ -492,8 +492,9 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       const routine = ctx.plan.find((p) => p.id === act.block)?.routine
       if (!routine) return no('ten blok nie ma rutyny')
       if (state.facts.routines.has(act.block)) return no('ta rutyna jest już zapisana')
+      if (!ROUTINE_VERSIONS.includes(act.version)) return no('nieznana wersja rutyny')
       const steps = [...new Set(Array.isArray(act.steps) ? act.steps : [])].filter((s) => typeof s === 'string' && s.length > 0)
-      if (!steps.length || !ROUTINE_VERSIONS.includes(act.version)) return no('zaznacz co najmniej jeden krok')
+      if (!steps.length) return no('zaznacz co najmniej jeden krok')
       return yes([{ k: 'routine.done', dom: 'meta', at, block: act.block, routine, version: act.version, steps }])
     }
     case 'routineUndo': {

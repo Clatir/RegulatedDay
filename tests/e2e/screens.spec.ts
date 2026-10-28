@@ -14,6 +14,8 @@ import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
 import { DEFAULT_SESSIONS, DEFAULT_SETTINGS } from '../../src/shared/model/settings'
 import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
 import { createDailyBackup } from '../../src/main/data/backup'
+import { logicalMinuteOf } from '../../src/shared/time/day'
+import { addDays } from '../../src/shared/time/zone'
 import { launch, viewPage, withMainLog } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
@@ -493,11 +495,7 @@ test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z
 })
 
 /** The logical minute now (04:00 = 240, after midnight + 1440). */
-function logicalMinuteNow(): number {
-  const [h, m] = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(Date.now()).split(':').map(Number)
-  const v = h! * 60 + m!
-  return v < 240 ? v + 1440 : v
-}
+const logicalMinuteNow = (): number => Math.floor(logicalMinuteOf(logicalToday(), Date.now()))
 
 test('rutyny (D328): karta w „Dziś” z wersją i krokami; „Kroki ▸” w pasku – zapis w jednym miejscu zamyka oba', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-routines-'))
@@ -536,6 +534,21 @@ test('rutyny (D328): karta w „Dziś” z wersją i krokami; „Kroki ▸” w 
       await expect(page.getByTestId('routine-card')).toHaveCount(0)
       const logDir = join(dataDir, 'log', today.slice(0, 4), today)
       await expect.poll(() => readdirSync(logDir).map((f) => readFileSync(join(logDir, f), 'utf8')).join('').split('"k":"routine.done"').length - 1, { timeout: 15_000 }).toBe(2)
+
+      // „Skopiuj ten dzień do…” onto yesterday (D330, a day that already ran): the warning first, „Anuluj” goes back
+      // without copying.
+      const yesterday = addDays(today, -1)
+      await page.getByTestId('day-menu').click()
+      await page.getByTestId('day-copy').click()
+      const grid = page.getByTestId('copy-dialog')
+      if (!(await grid.getByTestId(`day-${yesterday}`).isVisible())) await grid.getByLabel('Poprzedni miesiąc').click()
+      await grid.getByTestId(`day-${yesterday}`).click()
+      await grid.getByTestId('copy-apply').click()
+      await expect(grid.getByTestId('copy-warning')).toContainText('Kopia zastąpi plan dnia, który już trwał')
+      await expect(grid.getByTestId('copy-ahead')).toBeDisabled()
+      await grid.getByTestId('copy-back').click()
+      await expect(grid.getByTestId('copy-warning')).toHaveCount(0)
+      await expect(grid.getByTestId('copy-apply')).toBeVisible()
     })
     expect(errors).toEqual([])
   } finally {

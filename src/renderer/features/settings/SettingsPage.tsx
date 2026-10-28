@@ -170,7 +170,7 @@ export function SettingsPage() {
         <Field label="Animacje" hint="Bez animacji zostaje sam kolor ostrzeżeń.">
           <Toggle checked={prefs.animations} onChange={(v) => void setMachinePrefs({ animations: v })} label={prefs.animations ? 'włączone' : 'wyłączone'} data-testid="pref-animations" />
         </Field>
-        <Field label="Pulsowanie paska" hint={prefs.animations ? 'Pasek pulpitu pulsuje trzy razy, gdy do końca zostaje 5 min i przy końcu (poza trybem sesji i zajęć).' : 'Bez animacji pasek tylko zmienia kolor.'}>
+        <Field label="Pulsowanie paska" hint={prefs.animations ? 'Pasek pulpitu pulsuje trzy razy, gdy do końca zostaje 5 min i przy końcu (poza trybem sesji, zajęć i „mniej pytań”).' : 'Bez animacji pasek tylko zmienia kolor.'}>
           <Toggle checked={prefs.barPulse} onChange={(v) => void setMachinePrefs({ barPulse: v })} label={prefs.barPulse ? 'włączone' : 'wyłączone'} data-testid="pref-bar-pulse" />
         </Field>
         <Field label="Zajęcia stacjonarne" hint="Używasz tego komputera na zajęciach stacjonarnych: koniec zajęć i dojazdu jest wtedy z planu, bez pytania, czy skończyły się wcześniej.">

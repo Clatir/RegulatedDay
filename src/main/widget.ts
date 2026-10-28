@@ -24,9 +24,9 @@ import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
 import { personName } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
-import { routineFrom, type Routine } from '@shared/model/routines'
+import { ROUTINE_VERSION_NAMES, ROUTINE_VERSIONS, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
 import { addDays } from '@shared/time/zone'
-import { noFolderView, SEEN_LINE, type BarPending, type WidgetView } from '@shared/widget'
+import { noFolderView, SEEN_LINE, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
 const CONFIRM_MS = 10_000
@@ -92,6 +92,8 @@ export function toneOnChange(prev: { block: string; warn: string } | null, view:
 
 /** „Przestawiono: … · Cofnij” stays this long after a variant (D313), as the bar's other lines with „Cofnij”. */
 const MOVED_MS = 15 * MIN
+/** „Zapisano: … · Cofnij” of a routine saved from the bar stays this long. */
+const ROUTINE_UNDO_MS = 60_000
 
 /**
  * The edit that takes a variant's own edit back (T502): each field to its value before, with its value after as the base
@@ -137,6 +139,8 @@ export class WidgetEngine {
   private panel: { cause: VariantCause; variants: Variant[] } | null = null
   /** „Przestawiono: … · Cofnij” after a variant: its own edits, the files it created, the regeneration it started (T502). */
   private moved: { label: string; day: string; edits: Array<{ entry: EditEntry; made: RawRecord | null }>; started: string | null; until: number } | null = null
+  /** „Zapisano: … · Cofnij” after a routine saved from the bar (D328). */
+  private routineSaved: { block: string; day: string; text: string; until: number } | null = null
 
   constructor(private readonly d: WidgetDeps) {}
 
@@ -258,6 +262,9 @@ export class WidgetEngine {
     v.variants = { marker: !!this.markerNow && !v.hidden && !v.night, open: this.panel && !v.hidden ? this.panel.variants.map((x) => ({ id: x.id, label: x.label })) : null }
     if (this.moved && this.moved.until <= now) this.moved = null
     if (this.moved && !v.hidden) v.lines = [{ id: 'moved:variant', text: `Przestawiono: ${this.moved.label}`, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }, ...v.lines]
+    // A routine saved from the bar (D328): its „Cofnij” for a while, in place of its line.
+    if (this.routineSaved && (this.routineSaved.until <= now || this.routineSaved.day !== date)) this.routineSaved = null
+    if (this.routineSaved && !v.hidden) v.lines = [...v.lines, { id: `routineSaved:${this.routineSaved.block}`, text: this.routineSaved.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }]
   }
 
   /** The marker closed – „Zostaw” or a variant done: every cause holding now with it (it never comes back for them). */
@@ -562,10 +569,14 @@ export class WidgetEngine {
         return this.refresh()
       }
       case 'routine': {
-        // „✓ Zapisz zaznaczone” of the unfolded steps (D328): `<block>|<normal|worse>|<step ids, comma-separated>`.
-        const [block, version, steps] = (arg ?? '').split('|')
-        if (!block || (version !== 'normal' && version !== 'worse')) return
-        return this.routineDone(day, block, version, (steps ?? '').split(',').filter(Boolean))
+        // „✓ Zapisz zaznaczone” of the unfolded steps (D328): `<block>|<version>|<places of the steps in it, comma-separated>`
+        // – the steps' ids from the view (40 ids would not fit an action's argument).
+        const [block, version, places] = (arg ?? '').split('|')
+        const r = v.routines.find((x) => x.block === block)
+        if (!r || !(ROUTINE_VERSIONS as readonly string[]).includes(version ?? '')) return
+        const steps = r[version as RoutineVersion]
+        const ids = [...new Set((places ?? '').split(',').map(num))].flatMap((k) => (k != null && steps[k] ? [steps[k]!.id] : []))
+        return this.routineDone(day, r, version as RoutineVersion, ids)
       }
       case 'variants': {
         const [what, which] = (arg ?? '').split('|')
@@ -599,8 +610,8 @@ export class WidgetEngine {
           const r = v.routines.find((x) => x.line === line)
           if (!r || (act !== 'all' && act !== 'worse')) return
           const version = act === 'worse' && r.worse.length ? 'worse' : 'normal'
-          return this.routineDone(day, r.block, version, r[version].map((s) => s.id))
-        }
+          return this.routineDone(day, r, version, r[version].map((s) => s.id))
+        } else if (kind === 'routineSaved') return act === 'undo' ? this.undoRoutine() : undefined
         else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
         else if (kind === 'fewerOffer') {
           await this.d.timer({ a: 'mark', question: line, answer: act, day })
@@ -653,10 +664,25 @@ export class WidgetEngine {
     await this.refresh()
   }
 
-  /** A routine's steps saved (D328) – the same click as the card in „Dziś”, so the first save closes both (its line goes). */
-  private async routineDone(day: string | undefined, block: string, version: 'normal' | 'worse', steps: string[]): Promise<void> {
-    const r = await this.d.timer({ a: 'routineDone', block, version, steps, day })
+  /**
+   * A routine's steps saved (D328) – the same click as the card in „Dziś”, so the first save closes both (its line goes);
+   * „Zapisano: … · Cofnij” stays in its place for a while (one click of the bar is easily the wrong one).
+   */
+  private async routineDone(day: string | undefined, routine: BarRoutine, version: RoutineVersion, steps: string[]): Promise<void> {
+    const r = await this.d.timer({ a: 'routineDone', block: routine.block, version, steps, day })
     if (!r.ok) this.say(r.why ?? 'rutyna nie zapisała się')
+    else if (day) this.routineSaved = { block: routine.block, day, text: `Zapisano: ${routine.name} (${ROUTINE_VERSION_NAMES[version]}) – ${steps.length} z ${routine[version].length}`, until: this.now + ROUTINE_UNDO_MS }
+    return this.refresh()
+  }
+
+  /** „Cofnij” of a routine saved from the bar: it waits to be ticked off again (its line and card come back). */
+  private async undoRoutine(): Promise<void> {
+    const saved = this.routineSaved
+    this.routineSaved = null
+    if (saved) {
+      const r = await this.d.timer({ a: 'routineUndo', block: saved.block, day: saved.day })
+      if (!r.ok && r.why) this.say(r.why)
+    }
     return this.refresh()
   }
 
