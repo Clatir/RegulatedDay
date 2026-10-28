@@ -12,11 +12,11 @@ import type { RitualRow } from '@shared/engine/ritual'
 import { atOf, gridOf } from '@shared/engine/grid'
 import { countLabel, logicalClock, plDate } from '@shared/format'
 import type { CloseHow } from '@shared/model/events'
-import { logicalMinuteOf, placeLogical } from '@shared/time/day'
+import { logicalMinuteOf } from '@shared/time/day'
 import { weekday } from '@shared/time/zone'
-import { TimeField } from '../../components/fields'
 import { useData } from '../../store/data'
 import { openDay, toast } from '../../store/ui'
+import { DayTime, savedInstant, typedOf, type Typed, type TypedTime } from './dayTime'
 import { effectText } from './RitualPanel'
 
 const WEEKDAYS = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
@@ -26,8 +26,8 @@ export function UnclosedDays() {
   const [days, setDays] = useState<UnclosedDay[]>([])
   const [skipped, setSkipped] = useState(false)
   const [tick, setTick] = useState(0)
-  const [editing, setEditing] = useState<{ date: string; choice: string; min: number } | null>(null)
-  const typed = useRef<number | null>(null)
+  const [editing, setEditing] = useState<{ date: string; choice: string; t: TypedTime } | null>(null)
+  const typed = useRef<Typed | null>(null)
   // A read that fails keeps the days read before and says so – the section never vanishes quietly (A6-09).
   const [failed, setFailed] = useState(false)
   useEffect(() => {
@@ -65,11 +65,28 @@ export function UnclosedDays() {
   const clockOf = (date: string, idx: number) => logicalClock(logicalMinuteOf(date, atOf(gridOf(date), idx)))
 
   /** „Pracowałem do …” / „Projekt do …”: the time set in the field, written by „Zapisz”. */
-  const until = (d: UnclosedDay, row: RitualRow, choice: string, label: string, min: number) =>
+  const until = (d: UnclosedDay, row: RitualRow, choice: string, label: string, at: number) =>
     editing?.date === d.date && editing.choice === choice ? (
       <span className="inline-flex items-center gap-1.5">
-        <TimeField value={editing.min} onCommit={(m) => ((typed.current = m), setEditing({ ...editing, min: m }))} className="w-[76px]" aria-label={label} />
-        <button type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => void answer(d.date, row.id, choice, placeLogical(d.date, typed.current ?? editing.min))}>
+        <DayTime
+          date={d.date}
+          value={editing.t}
+          onTyped={(x) => {
+            typed.current = x
+            if (!('refused' in x)) setEditing({ ...editing, t: x })
+          }}
+          label={label}
+        />
+        <button
+          type="button"
+          className="btn h-[24px] px-2 text-[12px]"
+          onClick={() => {
+            // Never the field's start after a refused text (A6-14); a skipped hour is refused, a doubled one chosen (A8-09).
+            const r = savedInstant(d.date, typed.current, editing.t)
+            if (!r.ok) toast(r.message, 'error', 6000)
+            else void answer(d.date, row.id, choice, r.at)
+          }}
+        >
           Zapisz
         </button>
         <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => setEditing(null)}>
@@ -77,7 +94,7 @@ export function UnclosedDays() {
         </button>
       </span>
     ) : (
-      <button type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => ((typed.current = null), setEditing({ date: d.date, choice, min }))} data-testid={`unclosed-${choice}-${d.date}`}>
+      <button type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => ((typed.current = null), setEditing({ date: d.date, choice, t: typedOf(d.date, at) }))} data-testid={`unclosed-${choice}-${d.date}`}>
         {label}
       </button>
     )
@@ -110,7 +127,7 @@ export function UnclosedDays() {
         const work = d.ritual.rows.find((r) => r.kind === 'workEnd')
         const end = work && work.kind === 'workEnd' && !work.confirmed ? work : null
         const effect = effectText(d.ritual.asWritten)
-        const explainFrom = end?.explain ? logicalMinuteOf(d.date, atOf(gridOf(d.date), end.explain.from)) : null
+        const explainFrom = end?.explain ? atOf(gridOf(d.date), end.explain.from) : null
         return (
           <div key={d.date} className="flex flex-col gap-1" data-testid={`unclosed-${d.date}`}>
             <div className="flex flex-wrap items-center gap-1.5 text-[13px]">

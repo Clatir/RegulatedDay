@@ -11,7 +11,7 @@ import { dayFileFrom, PLAN_MAX, PLAN_MIN, planBlock, type PlanBlock, type Templa
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan, type BlockInfo } from './blocks'
 import type { DayState } from './day'
-import { atOf } from './grid'
+import { atOf, idxOfLogical } from './grid'
 
 /** A start kept in the logical day (04:00–03:59). */
 const inDay = (startMin: number): number => Math.max(PLAN_MIN, Math.min(PLAN_MAX - 1, startMin))
@@ -43,6 +43,14 @@ export function freeStart(state: DayState, from: number, lengthMin: number): num
     at = Math.max(at, p.to)
   }
   return logicalMinuteOf(state.grid.date, atOf(state.grid, at))
+}
+
+/**
+ * Ctrl+N (spec „Tworzenie”): a new block of `lengthMin` in the nearest free place of the day's forecast from the logical
+ * minute `fromMin` – never over a block planned or running there (A6-24).
+ */
+export function newBlockStart(state: DayState, fromMin: number, lengthMin = 60): number {
+  return freeStart(state, idxOfLogical(state.grid, fromMin), lengthMin)
 }
 
 /** A block dragged on the axis of a day or a template (D305) to a new start, kept in the logical day. */

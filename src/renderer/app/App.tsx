@@ -9,6 +9,7 @@ import { useEffect, type ReactNode } from 'react'
 import { navigate, openRitual, PAGES, useUi, type Page } from '../store/ui'
 import { useWidget } from '../store/widget'
 import { commitActiveField } from '../lib/commit'
+import { modalOpen } from '../lib/escape'
 import { Bar } from '../widget/Bar'
 import { Toasts } from '../components/Toasts'
 import { EmptyState, cx } from '../components/ui'
@@ -50,6 +51,8 @@ function useHotkeys(): void {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.metaKey) return
       const digit = /^Digit([1-9])$/.exec(e.code)?.[1]
+      // A dialog open: no other screen under it (A6-21); Ctrl+S still commits its field.
+      if ((digit || e.code === 'Comma') && modalOpen()) return
       if (digit && !e.shiftKey) {
         const page = DIGIT_PAGES[Number(digit) - 1]
         if (page) {

@@ -20,6 +20,7 @@ import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { countDay } from '../../store/day'
+import { modalOpen } from '../../lib/escape'
 import { undoToast } from '../../store/ui'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
@@ -45,7 +46,7 @@ export function TemplatesPage() {
   }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN') {
+      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN' && !modalOpen()) {
         e.preventDefault()
         void create()
       }

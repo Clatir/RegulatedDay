@@ -19,11 +19,15 @@ interface CommitFieldProps<T> {
   placeholder?: string
   className?: string
   readOnly?: boolean
+  /** A value parsed but still refused (a skipped hour of the change of time): its message, null – accepted. */
+  check?: (value: T) => string | null
+  /** A refused text: the saved value came back (an answer waiting for „Zapisz” must not take it, A6-14). */
+  onReject?: (message: string) => void
   'aria-label'?: string
   'data-testid'?: string
 }
 
-export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, readOnly, ...rest }: CommitFieldProps<T>) {
+export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, readOnly, check, onReject, ...rest }: CommitFieldProps<T>) {
   const [draft, setDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Esc: the blur it causes runs with this render's draft – it must not apply it.
@@ -37,14 +41,18 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
       return
     }
     if (draft == null || readOnly) return
-    const r = parse(draft)
-    if (!r.ok) {
+    const parsed = parse(draft)
+    const refused = parsed.ok ? (check?.(parsed.value) ?? null) : parsed.message
+    if (!parsed.ok || refused != null) {
       // Refused: the saved value comes back, the message says why.
-      toast(r.message, 'error', 6000)
-      setError(r.message)
+      const message = refused ?? ''
+      toast(message, 'error', 6000)
+      setError(message)
       setDraft(null)
+      onReject?.(message)
       return
     }
+    const r = parsed
     setDraft(null)
     setError(null)
     if (value == null || format(r.value) !== format(value)) onCommit(r.value)

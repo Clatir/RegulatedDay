@@ -104,7 +104,7 @@ export interface DayFacts {
   requests: RequestFact[]
   disconnect: Array<{ from: number; to: number }>
   /** `plan`: the blocks of the plan when it was approved (null: an approval that does not say). */
-  approvals: Array<{ at: number; boundary: number; auto: boolean; plan: string[] | null }>
+  approvals: Array<{ id: string; at: number; boundary: number; auto: boolean; plan: string[] | null }>
   undos: number[]
   exceptions: Array<{ at: number; minutes: number }>
   workEnds: Array<{ at: number; end: number }>
@@ -334,7 +334,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         break
       }
       case 'boundary.approve':
-        f.approvals.push({ at: idx(e.at), boundary: idx(e.boundary), auto: e.auto === true, plan: Array.isArray(e.plan) ? e.plan : null })
+        f.approvals.push({ id: e.id, at: idx(e.at), boundary: idx(e.boundary), auto: e.auto === true, plan: Array.isArray(e.plan) ? e.plan : null })
         break
       case 'boundary.undo':
         f.undos.push(idx(e.at))

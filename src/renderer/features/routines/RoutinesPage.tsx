@@ -11,6 +11,7 @@ import { MAX_STEPS, ROUTINE_SCHEMA, ROUTINE_VERSION_NAMES, routineFrom, routineM
 import { DurationField, TextField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
 import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
+import { modalOpen } from '../../lib/escape'
 import { undoToast } from '../../store/ui'
 
 export function RoutinesPage() {
@@ -24,7 +25,7 @@ export function RoutinesPage() {
   }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN') {
+      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN' && !modalOpen()) {
         e.preventDefault()
         void create()
       }

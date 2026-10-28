@@ -45,6 +45,31 @@ export function installEscape(): void {
   })
 }
 
+/** Open dialogs (aria-modal): the pages' own shortcuts (Ctrl+N, Ctrl+1 …) wait while one is open (A6-21). */
+let modals = 0
+
+export function onModal(): () => void {
+  modals++
+  let done = false
+  return () => {
+    if (!done) modals--
+    done = true
+  }
+}
+
+export const modalOpen = (): boolean => modals > 0
+
+/**
+ * Tab inside a dialog (A6-21): from its last element to its first, Shift+Tab from its first (or the box) to its last;
+ * null – the browser's own step. `index` −1: the focus is on the box itself or outside.
+ */
+export function tabTarget(count: number, index: number, shift: boolean): number | null {
+  if (count === 0) return -1
+  if (shift && index <= 0) return count - 1
+  if (!shift && (index === count - 1 || index < 0)) return 0
+  return null
+}
+
 /** A layer while `open`: Esc closes it. */
 export function useEscapeLayer(open: boolean, close: () => void): void {
   const ref = useRef(close)

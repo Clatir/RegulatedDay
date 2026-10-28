@@ -11,15 +11,15 @@ import { atOf, gridOf } from '@shared/engine/grid'
 import { countLabel, durationLabel, logicalClock } from '@shared/format'
 import { FELT_COSTS, type FeltCost } from '@shared/model/events'
 import { categoryName } from '@shared/model/rd'
-import { logicalMinuteOf, placeLogical } from '@shared/time/day'
+import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
-import { TimeField } from '../../components/fields'
 import { cx } from '../../components/ui'
 import { logEvents, useData } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { openDay, toast } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { PersonChoice } from '../requests/RequestsPage'
+import { DayTime, savedInstant, typedOf, type Typed, type TypedTime } from './dayTime'
 
 const BOUNDARY: Record<string, string> = { kept: 'dotrzymana', broken: 'niedotrzymana', noData: 'bez danych' }
 const FELT: Record<FeltCost, string> = { lighter: 'lżej', usual: 'jak zwykle', heavier: 'ciężej' }
@@ -119,8 +119,8 @@ interface Editing {
   row: string
   choice: string
   item: string | null
-  /** The minute a time starts from (logical). */
-  min: number
+  /** The time the field starts from (or the one typed). */
+  t: TypedTime
 }
 
 export function RitualPanel({ model, names, onClosed }: { model: DayModel; names: Names; onClosed?: () => void }) {
@@ -129,9 +129,10 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
   const { rd } = useData()
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<Editing | null>(null)
-  // The time just typed: the field commits it on leaving, right before „Zapisz” is clicked.
-  const typed = useRef<number | null>(null)
-  const [stretch, setStretch] = useState<{ row: string; from: number; to: number } | null>(null)
+  // The time just typed (or refused): the field commits it on leaving, right before „Zapisz” is clicked.
+  const typed = useRef<Typed | null>(null)
+  const [stretch, setStretch] = useState<{ row: string; from: TypedTime; to: TypedTime } | null>(null)
+  const stretchTyped = useRef<{ from: Typed | null; to: Typed | null }>({ from: null, to: null })
   const [confirm, setConfirm] = useState(false)
   if (!view)
     return failed ? (
@@ -145,7 +146,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
   const grid = gridOf(date)
   const t = (idx: number) => logicalClock(logicalMinuteOf(date, atOf(grid, idx)))
   const tm = (ms: number) => logicalClock(logicalMinuteOf(date, ms))
-  const minOf = (idx: number) => logicalMinuteOf(date, atOf(grid, idx))
+  const instant = (idx: number) => atOf(grid, idx)
   const name = (id: string) => {
     const p = model.ctx.plan.find((b) => b.id === id)
     if (p) return blockName(p, names)
@@ -179,12 +180,21 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
     reload()
   }
 
-  const timeEditor = (row: RitualRow, choice: string, label: string, min: number, item: string | null = null) =>
+  /** „Zapisz” of a time: the instant typed, never the field's start after a refused text (A6-14, A8-09). */
+  const saveTime = (row: RitualRow, choice: string, start: TypedTime, item: string | null) => {
+    const r = savedInstant(date, typed.current, start)
+    if (!r.ok) toast(r.message, 'error', 6000)
+    else void answer(row, choice, r.at, item)
+  }
+  const timeEditor = (row: RitualRow, choice: string, label: string, at: number, item: string | null = null) =>
     editing && editing.row === row.id && editing.choice === choice && editing.item === item ? (
       // The field only sets the time (its commit on leaving it); „Zapisz” writes it, „anuluj” writes nothing.
       <span className="inline-flex items-center gap-1.5">
-        <TimeField value={editing.min} onCommit={(m) => ((typed.current = m), setEditing({ ...editing, min: m }))} className="w-[76px]" aria-label={label} data-testid={`ritual-time-${choice}`} />
-        <Act onClick={() => void answer(row, choice, placeLogical(date, typed.current ?? editing.min), item)} testId={`ritual-time-save-${choice}`}>
+        <DayTime date={date} value={editing.t} onTyped={(x) => {
+            typed.current = x
+            if (!('refused' in x)) setEditing({ ...editing, t: x })
+          }} label={label} testId={`ritual-time-${choice}`} />
+        <Act onClick={() => saveTime(row, choice, editing.t, item)} testId={`ritual-time-save-${choice}`}>
           Zapisz
         </Act>
         <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => setEditing(null)}>
@@ -192,7 +202,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
         </button>
       </span>
     ) : (
-      <Act onClick={() => ((typed.current = null), setEditing({ row: row.id, choice, item, min }))} testId={`ritual-${row.kind}-${choice}`}>
+      <Act onClick={() => ((typed.current = null), setEditing({ row: row.id, choice, item, t: typedOf(date, at) }))} testId={`ritual-${row.kind}-${choice}`}>
         {label}
       </Act>
     )
@@ -208,8 +218,8 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
               <Act onClick={() => void answer(r, 'ok')} testId="ritual-workEnd-ok">
                 ✓
               </Act>
-              {timeEditor(r, 'workedUntil', 'Pracowałem do …', minOf(r.explain ? r.explain.from : r.end))}
-              {r.explain?.asProject && timeEditor(r, 'projectUntil', 'Projekt do …', minOf(r.explain.from))}
+              {timeEditor(r, 'workedUntil', 'Pracowałem do …', instant(r.explain ? r.explain.from : r.end))}
+              {r.explain?.asProject && timeEditor(r, 'projectUntil', 'Projekt do …', instant(r.explain.from))}
             </>
           )
         }
@@ -245,7 +255,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
                     {name(x.block)} {t(x.plannedEnd)}–{t(x.end)} bez odpowiedzi
                     {x.seenAt != null ? ` (widziane ${tm(x.seenAt)}${x.seenOn ? ` na ${x.seenOn}` : ''})` : ''}
                   </span>
-                  {timeEditor(r, 'endedAt', 'skończył się o …', minOf(x.end), x.block)}
+                  {timeEditor(r, 'endedAt', 'skończył się o …', instant(x.end), x.block)}
                   {x.explain && (
                     <>
                       <Act onClick={() => void answer(r, 'work', null, x.block)}>praca</Act>
@@ -299,7 +309,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
                   ✓
                 </Act>
               )}
-              {timeEditor(r, 'endedAt', 'skończył się o …', minOf(r.end))}
+              {timeEditor(r, 'endedAt', 'skończył się o …', instant(r.end))}
             </>
           )
         }
@@ -314,7 +324,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
                   ✓
                 </Act>
               )}
-              {timeEditor(r, 'endedAt', 'skończył się o …', minOf(r.at))}
+              {timeEditor(r, 'endedAt', 'skończył się o …', instant(r.at))}
             </>
           )
         }
@@ -328,7 +338,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
                   ✓
                 </Act>
               )}
-              {timeEditor(r, 'endedAt', 'skończył się o …', minOf(model.state.now))}
+              {timeEditor(r, 'endedAt', 'skończył się o …', instant(model.state.now))}
             </>
           )
         }
@@ -376,13 +386,29 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
               )}
               {stretch?.row === r.id ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <TimeField value={stretch.from} onCommit={(m) => setStretch({ ...stretch, from: m })} className="w-[76px]" aria-label="Od" />
+                  <DayTime date={date} value={stretch.from} onTyped={(x) => {
+                      stretchTyped.current.from = x
+                      if (!('refused' in x)) setStretch({ ...stretch, from: x })
+                    }} label="Od" />
                   –
-                  <TimeField value={stretch.to} onCommit={(m) => setStretch({ ...stretch, to: m })} className="w-[76px]" aria-label="Do" />
-                  <Act onClick={() => void answer(r, 'notRest', { from: placeLogical(date, stretch.from), to: placeLogical(date, stretch.to) })}>Zapisz</Act>
+                  <DayTime date={date} value={stretch.to} onTyped={(x) => {
+                      stretchTyped.current.to = x
+                      if (!('refused' in x)) setStretch({ ...stretch, to: x })
+                    }} label="Do" />
+                  <Act
+                    onClick={() => {
+                      const from = savedInstant(date, stretchTyped.current.from, stretch.from)
+                      const to = savedInstant(date, stretchTyped.current.to, stretch.to)
+                      if (!from.ok) toast(from.message, 'error', 6000)
+                      else if (!to.ok) toast(to.message, 'error', 6000)
+                      else void answer(r, 'notRest', { from: from.at, to: to.at })
+                    }}
+                  >
+                    Zapisz
+                  </Act>
                 </span>
               ) : (
-                <Act onClick={() => setStretch({ row: r.id, from: minOf(r.from), to: minOf(r.to) })} testId="ritual-rest-mark">
+                <Act onClick={() => ((stretchTyped.current = { from: null, to: null }), setStretch({ row: r.id, from: typedOf(date, instant(r.from)), to: typedOf(date, instant(r.to)) }))} testId="ritual-rest-mark">
                   zaznacz odcinek
                 </Act>
               )}

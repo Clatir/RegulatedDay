@@ -74,6 +74,8 @@ export type TimerAction =
   | { a: 'confirm'; block: string }
   /** „Cofnij” of an automatic action (spec: it writes an event „korekta”; the boundary's own approval opens it again). */
   | { a: 'undo'; target: string }
+  /** „Cofnij zatwierdzenie” of the morning plan: as the bar's „Cofnij” of the approval (A6-11). */
+  | { a: 'undoApproval' }
   /** „Odcinam się” and „Wracam” (spec „Odcinam się”). */
   | { a: 'cutOff' }
   | { a: 'back' }
@@ -451,6 +453,12 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       // A meal or a regeneration an answer to an absence made: its start and its end go back together (A1-09).
       const pair = a.rule === 'absenceMeal' || a.rule === 'absenceRegen' ? state.facts.autos.filter((x) => x.rule === a.rule && x.block === a.block && x.id !== a.id) : []
       return yes([a, ...pair, ...(r ? resumedWith(state.facts, r) : [])].map((x) => ({ k: 'undo', at, target: x.id, reason: 'user' })))
+    }
+    case 'undoApproval': {
+      // Every approval written leaves the list (not only the boundary opened again), so the plan, the late wake and the
+      // game read it as never approved – the same facts as after the bar's „Cofnij” (A6-11).
+      if (state.boundary.approved == null) return no('granica nie jest zatwierdzona')
+      return yes([...state.facts.approvals.map((a) => ({ k: 'undo', at, target: a.id, reason: 'user' })), { k: 'boundary.undo', at }])
     }
     case 'cutOff': {
       if (state.facts.disconnect.some((d) => d.to === OPEN)) return no('„Odcinam się” już trwa')

@@ -20,14 +20,14 @@ import { dayFileFrom } from '@shared/model/plan'
 import { DEFAULT_ESTIMATE_MIN } from '@shared/model/requests'
 import { personName } from '@shared/model/rd'
 import { logicalMinuteOf } from '@shared/time/day'
-import { addDays, weekday } from '@shared/time/zone'
+import { addDays } from '@shared/time/zone'
 import { Segmented, cx } from '../../components/ui'
 import { CalibrationCard } from '../calibration/CalibrationEntry'
-import { SideBStep } from './SideBStep'
+import { SideBStep, sideBShown } from './SideBStep'
 import { dayFilesNow, editOf, isSaved, logEvents, rawRecord, trySaveWith, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
-import { toast } from '../../store/ui'
+import { toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { saveDay } from './dayActions'
 
@@ -44,13 +44,15 @@ const EXCEPTION_REASONS = ['NFP', 'CPI', 'FOMC', 'inne dane']
 
 export function MorningPlan({ model, names }: { model: DayModel; names: Names }) {
   const s = model.state
-  const approvedByYou = s.facts.approvals.some((a) => !a.auto)
+  // The approval in force is yours (not one the first work block made, nor one opened again by „Cofnij”).
+  const approvedByYou = s.boundary.approved != null && !s.boundary.auto
   const [open, setOpen] = useState(!approvedByYou)
   const energyOn = names.rd.general.modules.energy
   const needCheckin = energyOn && model.energy.checkinAt == null
   const [skipCheckin, setSkipCheckin] = useState(false)
   // On Monday „Strona B tygodnia” comes first (spec „Plan poranny”), until „Dalej” on any computer.
-  const sideB = weekday(model.date) === 1 && !model.dayFile?.asked.sideB
+  const sideBClosed = useUi((u) => u.sideBClosed)
+  const sideB = sideBShown(model.date, !!model.dayFile?.asked.sideB, sideBClosed)
   return (
     <section className="rounded-lg border border-line bg-panel" data-testid="morning-plan">
       <button type="button" className="flex w-full items-center gap-2 px-4 py-2.5 text-left" onClick={() => setOpen(!open)}>
@@ -323,7 +325,17 @@ function Boundary({ model, lm, approved, proposal }: { model: DayModel; lm: (i: 
   const maxMin = s.settings.exceptionMaxMin
   const steps = [30, 60, 90, 120, 180].filter((m) => m <= maxMin)
   const warnFrom = s.settings.exceptionWarnFrom
-  const approvedByYou = s.facts.approvals.some((a) => !a.auto)
+  const approvedByYou = approved != null && !s.boundary.auto
+  // The bar's way (A6-11): the approvals leave the facts, not only the boundary opened again.
+  const undo = () =>
+    run(async () => {
+      try {
+        const r = await window.rd.timer({ a: 'undoApproval', day: date })
+        if (!r.ok) toast(`Nie cofnięto: ${r.why ?? 'granica nie jest zatwierdzona'}`, 'info')
+      } catch (e) {
+        toast(`Nie cofnięto: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
+      }
+    })
   return (
     <div className="flex flex-col gap-2 rounded border border-line-strong px-3 py-2.5" data-testid="boundary">
       {approved != null ? (
@@ -333,7 +345,7 @@ function Boundary({ model, lm, approved, proposal }: { model: DayModel; lm: (i: 
             {s.boundary.auto ? ' (zatwierdzona sama przy starcie pierwszego bloku pracy)' : ''}
           </span>
           {approvedByYou && (
-            <button type="button" className="btn" disabled={busy} onClick={() => void log([{ k: 'boundary.undo', day: date }])} data-testid="boundary-undo">
+            <button type="button" className="btn" disabled={busy} onClick={() => void undo()} data-testid="boundary-undo">
               Cofnij zatwierdzenie
             </button>
           )}

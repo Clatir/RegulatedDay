@@ -16,6 +16,7 @@ import { Choice, DurationField, TextField } from '../../components/fields'
 import { EmptyState, Section } from '../../components/ui'
 import { useNow } from '../../lib/clock'
 import { addPerson, saveRd, saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
+import { modalOpen } from '../../lib/escape'
 import { undoToast } from '../../store/ui'
 
 const STATE_NAMES: Record<RequestState, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobione', dropped: 'porzucone' }
@@ -29,7 +30,7 @@ export function RequestsPage() {
   }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN') {
+      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN' && !modalOpen()) {
         e.preventDefault()
         void create()
       }

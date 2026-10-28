@@ -425,6 +425,20 @@ describe('poprawki po przeglądzie E4a', () => {
     expect(times[2]!).toBeLessThan(40)
   })
 
+  it('„Cofnij zatwierdzenie” z planu porannego zdejmuje zatwierdzenie z faktów – jak „Cofnij” w pasku (A6-11)', () => {
+    const s = day().observe('07:00', null)
+    s.approve('16:00', '07:30')
+    expect(s.state('07:31').boundary.approved).not.toBeNull()
+    expect(click(s, '07:40', { a: 'undoApproval' }).ok).toBe(true)
+    const st = s.state('07:41')
+    expect(st.facts.approvals).toEqual([])
+    expect(st.boundary.approved).toBeNull()
+    expect(click(s, '07:42', { a: 'undoApproval' })).toMatchObject({ ok: false })
+    // The first work block does not approve it on its own afterwards.
+    click(s, '08:00', { a: 'start', block: 'a' })
+    expect(leader(s, '08:05', { boundary: true })).toEqual([])
+  })
+
   it('cofnięcie korekty przywraca cofnięte działanie; korekty prowadzącego nie ma na liście', () => {
     const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })

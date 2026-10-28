@@ -56,6 +56,15 @@ const DROP_HOLD_MS = 2000
 /** The start of a block shown at `startMin` and dragged by `dy` pixels: the minute under its top, on the 5-min grid. */
 export const draggedStart = (startMin: number, dy: number): number => Math.round((startMin + dy / PPM) / DRAG_STEP_MIN) * DRAG_STEP_MIN
 
+/**
+ * A dropped block's hold ends when the day's items show it at its new start (or no longer at all) – new items counted
+ * from the day before the edit came back would put it at its old place for a moment (A6-16).
+ */
+export const dropSettled = (items: readonly TimelineItem[], d: { id: string; start: number }): boolean => {
+  const i = items.find((x) => x.id === d.id)
+  return !i || i.startMin === d.start
+}
+
 /** A block being dragged: its pointer, where it went down, its start then and now; dropped – waiting for the day. */
 interface Drag {
   id: string
@@ -102,9 +111,10 @@ export function Timeline({
   }
   // The click that ends a drag selects nothing.
   const dropped = useRef(false)
-  // A dropped block stands at its new start until the day's next items (the edit read back).
+  // A dropped block stands at its new start until the day's items bring it there (the edit read back).
   useEffect(() => {
-    if (dragRef.current?.dropped) setDrag(null)
+    const d = dragRef.current
+    if (d?.dropped && dropSettled(items, d)) setDrag(null)
   }, [items])
   // Let go anywhere (the block drawn anew in another column loses the pointer): the drag ends without a move.
   const holding = drag != null && !drag.dropped
