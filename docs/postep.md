@@ -47,8 +47,8 @@
   0.2.0–0.6.0 przeskoczone, więc E5.1 i E6a.1 tylko „dane całe”).
 
 ## Kolejka (według `docs/plan.md`, D317)
-1. Ciąg A zakończony: praca 0 scalona (PR #19). **Ciąg B w toku:** 0.11.0 na `claude/0.11.0-pasek-prosby` – PR
-   z CI (wariant E4b.12 „na wierzchu”); po zielonym scalenie i wydanie 0.11.0, potem ciąg C (ekrany E6).
+1. Ciągi A i B zakończone (0.11.0 wydane 28.10 ok. 02:00). **Ciąg C w toku:** 0.12.0 scalone, wydanie czeka na PR
+   `claude/0.12.0-e2e-sesje` (T507); 0.13.0 („Dane”) na `claude/0.13.0-dane` – po wydaniu 0.12.0; potem ciąg D.
 2. Ty: odbiór według `docs/odbior.md`. Brama ciągu B przeszła: E4b.1–E4b.8 odebrane 27.10 ok. 23:35 z prośbą „przystąp
    do ciągu B → C → D”; E4b.10 (dźwięk) czeka, ciągu nie wstrzymuje.
 3. **Ciąg B → C → D jednym ciągiem (D317):** elementy E5 w pasku (D311–D313) → wydanie 0.11.0; ekrany E6 (D318–D321);
@@ -102,6 +102,10 @@
   pamięć widoku rytuału, `isIsoDate`, odczuwany koszt każdej kategorii (jak D319).
 - Testy: 815+ jednostkowych i plikowych (nowe: `ritualDue`, odczuwany koszt, pierwszy dzień, kolejka, data nie-dzień,
   powód odmowy, pamięć widoku, `cost.felt` bierne, „Rytuał” w „Odcinam się”, godzina zamknięcia), E2E karty rytuału.
+- PR #21 scalony (28.10 ok. 06:10, CI PR zielone). **CI na `main` czerwone** (run 40637338638, E2E rytuału o 06:20):
+  w środę przed końcem sesji „Koniec pracy” jest przerwą (stała praca w planie), a blok testu trwał < 1 min – silnik
+  gubił „Koniec pracy” bez minuty pracy (T507). Poprawka silnika i testu (bez sesji dnia) – PR `claude/0.12.0-e2e-sesje`,
+  wersja dalej 0.12.0 (nie wyszła).
 
 ## Praca 0 – gra raz na zmianę, sesje „było”, baner D316 (ciąg A, bez osobnego wydania)
 - Gałąź `claude/praca-0` od 27.10 ok. 23:30 (najpierw plan i D316–D322 – commit d4a56a5).
