@@ -179,7 +179,7 @@ const widget = new WidgetEngine({
   showMain: (page) => showMainWindow(page),
   emit: (view) => showWidget(view),
   log,
-  onBattery: () => powerMonitor.isOnBatteryPower()
+  batterySaver: () => batterySaverOn && inOneDriveNow()
 })
 
 function widgetView(): WidgetView {
@@ -187,6 +187,23 @@ function widgetView(): WidgetView {
   const barNote = !prefs().desktopBar || view.hidden ? null : barProblem === 'failed' ? BAR_NOTE_FAILED : barProblem === 'helper' ? BAR_NOTE_HELPER : null
   return { ...view, barNote }
 }
+
+/**
+ * The battery saver on a battery (spec „Oszczędzanie baterii może wstrzymać OneDrive”): asked of the helper every 5 min –
+ * into this computer's presence too (its power) – and shown only for a data folder in OneDrive.
+ */
+let batterySaverOn = false
+async function refreshPower(): Promise<void> {
+  const caps = helper?.running ? await helper.request('powerState', {}, 3000).catch(() => null) : null
+  const battery = typeof caps?.onMains === 'boolean' ? !caps.onMains : powerMonitor.isOnBatteryPower()
+  batterySaverOn = battery && caps?.batterySaver === true
+  hub?.service?.folder.presence.update({ power: { source: battery ? 'battery' : 'ac', saver: caps?.batterySaver === true } })
+}
+const inOneDriveNow = () => {
+  const dir = dataFolderNow()
+  return !!dir && DataHub.inOneDrive(dir)
+}
+setInterval(() => void refreshPower(), 5 * 60_000).unref?.()
 
 /** The block and the step of the warning last shown (a tone plays when the step of the same block turns to 5 or 0 min). */
 let lastWarn: { block: string; warn: string } | null = null
@@ -199,7 +216,7 @@ function showWidget(view: WidgetView): void {
   lastWarn = tone.next
   // One computer plays (A8-04): the one with the latest presence among those awake, never the recording one.
   const folder = hub?.service?.folder
-  if (tone.play && prefs().sound && (!folder || folder.soundHere(view.recorder))) sound?.play(tone.play, prefs().soundVolume)
+  if (tone.play && prefs().sound && (!folder || folder.soundHere(view.recorders))) sound?.play(tone.play, prefs().soundVolume)
   // The open icon's panel shows the questions: they count as seen (spec D231).
   if (panel?.isOpen) {
     const ids = widget.shownQuestions()
@@ -416,6 +433,7 @@ function createHub(): DataHub {
     idleSeconds: () => powerMonitor.getSystemIdleTime(),
     appFocused: () => (!!mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) || (!!panel?.isOpen && !!panel.webContents?.isFocused()),
     oneDriveRunning: () => oneDrive.running,
+    oneDriveProcess: () => oneDrive.processRunning,
     onPower: (need) => power.want(need),
     versions: () => readVersions(userData),
     log,

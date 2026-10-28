@@ -24,6 +24,41 @@ export function computerStatus(c: ComputerRow, now: number): string {
   return age < 60_000 ? `dane sprzed ${Math.round(age / 1000)} s` : `dane sprzed ${Math.round(age / 60_000)} min`
 }
 
+/**
+ * „dane z PC B sprzed 40 s” (spec „Gdy dane z innego komputera nie są jeszcze zsynchronizowane, widok pokazuje znacznik”):
+ * every other computer awake – not this one, not forgotten, not closed, its file changed within 10 min – with the age of
+ * what this computer has from it.
+ */
+export function freshnessText(rows: readonly ComputerRow[], now: number): string | null {
+  const parts = rows
+    .filter((c) => !c.self && !c.forgotten && c.state !== 'closed' && c.seenAt != null && now - c.seenAt < SILENT_MS)
+    .map((c) => {
+      const age = Math.max(0, now - c.seenAt!)
+      return `dane z ${c.name} sprzed ${age < 60_000 ? `${Math.round(age / 1000)} s` : `${Math.round(age / 60_000)} min`}`
+    })
+  return parts.length ? parts.join(' · ') : null
+}
+
+/** The freshness of the other computers' data in the day's view (the list every 15 s). */
+export function PeersFreshness() {
+  const [text, setText] = useState<string | null>(null)
+  useEffect(() => {
+    const load = () =>
+      void window.rd
+        .computerList()
+        .then((r) => setText(freshnessText(r, Date.now())))
+        .catch(() => undefined)
+    load()
+    const t = setInterval(load, 15_000)
+    return () => clearInterval(t)
+  }, [])
+  return text ? (
+    <span className="text-[12px] text-muted" data-testid="peers-freshness">
+      {text}
+    </span>
+  ) : null
+}
+
 /** rd.json with a computer forgotten (by its „last presence” now) or taken back (null). */
 export function withForgotten(raw: RawRecord, id: string, forget: { lastPresence: number | null; at: number } | null): RawRecord {
   const map = { ...((raw.forgotten as Record<string, unknown> | undefined) ?? {}) }

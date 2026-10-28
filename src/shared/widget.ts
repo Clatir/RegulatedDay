@@ -92,8 +92,8 @@ export interface WidgetView {
   soundOk: boolean
   /** This computer records a lecture now: no notifications, no sounds. */
   recording: boolean
-  /** The computer recording a lecture now (null: none) – the tones never play on it (A8-04). */
-  recorder: string | null
+  /** The computers recording a lecture now – the tones never play on them (A8-04). */
+  recorders: string[]
   /** Why a click did nothing (shown in the bar for a few seconds), null: nothing to say. */
   note: { text: string; until: number } | null
   /** „Prośba ▸” and the request running now (D311, D312). */
@@ -186,7 +186,7 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
     toneSet: ENGINE_TONE_SET,
     soundOk: false,
     recording: false,
-    recorder: null,
+    recorders: [],
     note: null,
     requests: NO_REQUESTS,
     variants: NO_VARIANTS,

@@ -45,6 +45,8 @@
 - Gałąź `claude/0.23.0-funkcje` (od 0.22.0) od 28.10 ok. 20:00.
 - Zakres (T521): dźwięk na jednym komputerze (A8-04), „Komputery” i „Zapomnij komputer” (A3-13), OneDrive po 5 min
   (A3-14), ciche linie synchronizacji i zegara (A8-02, A8-07). Reszta 5.2f (A3-06, A3-07) – 0.24.0.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione; trzy odstępstwa od specyfikacji zrobione według niej (bateria z
+  pomocnika, znacznik w „Dziś”, odblokowanie ekranu – D331 po pytaniu).
 
 ## 0.22.0 – funkcje D325, część 2a (ciąg E, 5.2f)
 - Gałąź `claude/0.22.0-funkcje` (od 0.21.0) od 28.10 ok. 19:20.

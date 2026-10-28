@@ -126,8 +126,8 @@ describe('bramka minut', () => {
 })
 
 describe('dźwięk na jednym komputerze (A8-04)', () => {
-  const sound = (peers: Peer[], o: { selfAt?: number | null; leader?: string | null; recorder?: string | null } = {}) =>
-    soundComputer({ now: T, self: { computer: 'pca', lastPresence: o.selfAt === undefined ? T - 60_000 : o.selfAt }, peers, leader: o.leader ?? 'pca', recorder: o.recorder ?? null })
+  const sound = (peers: Peer[], o: { selfAt?: number | null; leader?: string | null; recorder?: string | null; oneDrive?: boolean } = {}) =>
+    soundComputer({ now: T, self: { computer: 'pca', lastPresence: o.selfAt === undefined ? T - 60_000 : o.selfAt }, peers, leader: o.leader ?? 'pca', recorders: o.recorder ? [o.recorder] : [], oneDriveRunning: o.oneDrive ?? true })
 
   it('gra komputer z najnowszą obecnością, bez względu na jej wiek', () => {
     expect(sound([peer('pcb', T - 10_000, T - 10_000)])).toBe('pcb')
@@ -140,6 +140,19 @@ describe('dźwięk na jednym komputerze (A8-04)', () => {
     expect(sound([peer('pcb', T - 10_000, T - 10_000, { state: 'closed' })])).toBe('pca')
     expect(sound([peer('pcb', T - 10_000, T - 10_000)], { recorder: 'pcb' })).toBe('pca')
     expect(sound([], { recorder: 'pca' })).toBeNull()
+  })
+
+  it('plik bez „ostatniej obecności” (aplikacja uruchomiona bez nikogo) nie ma obecności; bez OneDrive nikt nie jest uśpiony (przegląd 0.23.0)', () => {
+    expect(sound([peer('pcb', T - 1_000, T - 1_000, { lastPresence: null })])).toBe('pca')
+    expect(sound([peer('pcb', T - 10_000, T - 11 * 60_000)], { oneDrive: false })).toBe('pcb')
+  })
+
+  it('odblokowanie ekranu na komputerze z blokadą usypiania bloku pasywnego liczy się jak obecność – tylko tu (D331)', () => {
+    // The user watches a lecture on pcb (screen unlocked, no input); pca had input a minute ago.
+    expect(sound([peer('pcb', T - 10 * 60_000, T - 10_000, { soundPresence: T - 20_000 })], { selfAt: T - 60_000 })).toBe('pcb')
+    // Seen changing by this computer's clock: its own clock is never trusted.
+    expect(sound([{ ...peer('pcb', T - 10 * 60_000, T - 10_000, { soundPresence: T + 3_600_000 }), soundSeenAt: T - 90_000 }], { selfAt: T - 60_000 })).toBe('pca')
+    expect(soundComputer({ now: T, self: { computer: 'pca', lastPresence: T - 60_000, soundPresence: T - 5_000 }, peers: [peer('pcb', T - 20_000, T - 20_000)], leader: 'pcb', recorders: [], oneDriveRunning: true })).toBe('pca')
   })
 
   it('remis – prowadzący, potem niższy identyfikator', () => {

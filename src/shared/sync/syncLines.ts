@@ -11,9 +11,9 @@ export interface SyncState {
   /** This computer leads without OneDrive: the others' names (their questions may come too). */
   sharedWith: string[]
   /** Computers with a fresh presence that stopped refreshing it without „closed” (10 min): since when (this clock, ms). */
-  asleep: Array<{ name: string; since: number }>
+  asleep: Array<{ id: string; name: string; since: number }>
   /** Computers whose clock is ahead of this one's by more than 2 min (minutes). */
-  clockAhead: Array<{ name: string; minutes: number }>
+  clockAhead: Array<{ id: string; name: string; minutes: number }>
   /** An event of another computer more than 24 h ahead: the leader's tasks wait. */
   dayAhead: boolean
   /** On a battery – the day's line about saving the battery not answered yet. */
@@ -26,14 +26,17 @@ const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Eu
 const dateOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', day: 'numeric', month: 'numeric' }).format(ms)
 const sameDay = (a: number, b: number) => dateOf(a) === dateOf(b) && Math.abs(a - b) < 86_400_000
 
+/** The line about saving the battery of a day on a computer: its id is also its answer's in the day's log (its „OK”). */
+export const batteryLine = (day: string, computer: string): string => `battery:${day}:${computer}`
+
 /** The quiet lines of the state, in the order of weight (the clock first: it stops the leader's tasks). `day` – their day. */
-export function syncLines(s: SyncState, now: number, day: string): BarLine[] {
+export function syncLines(s: SyncState, now: number, day: string, computer = ''): BarLine[] {
   const out: BarLine[] = []
   if (s.dayAhead) out.push({ id: `sync:clockDay`, text: 'Zegar innego komputera jest ponad dobę z przodu – działania automatyczne czekają', actions: [], dot: false })
-  for (const c of s.clockAhead) out.push({ id: `sync:clock:${c.name}`, text: `Zegar ${c.name} wyprzedza ten komputer o ${c.minutes} min – sprawdź czas w Windows`, actions: [], dot: false })
+  for (const c of s.clockAhead) out.push({ id: `sync:clock:${c.id}`, text: `Zegar ${c.name} wyprzedza ten komputer o ${c.minutes} min – sprawdź czas w Windows`, actions: [], dot: false })
   if (s.oneDriveDown) out.push({ id: 'sync:onedrive', text: 'OneDrive nie działa na tym komputerze', actions: [], dot: false })
   if (s.sharedWith.length) out.push({ id: 'sync:shared', text: `Pytania mogą pojawić się też na ${s.sharedWith.join(', ')}`, actions: [], dot: false })
-  for (const a of s.asleep) out.push({ id: `sync:asleep:${a.name}`, text: `Brak zmian z ${a.name} od ${sameDay(a.since, now) ? clockOf(a.since) : `${dateOf(a.since)} ${clockOf(a.since)}`}`, actions: [], dot: false })
-  if (s.battery) out.push({ id: `battery:${day}`, text: 'Oszczędzanie baterii może wstrzymać OneDrive', actions: [{ id: 'ok', label: 'OK' }], dot: false })
+  for (const a of s.asleep) out.push({ id: `sync:asleep:${a.id}`, text: `Brak zmian z ${a.name} od ${sameDay(a.since, now) ? clockOf(a.since) : `${dateOf(a.since)} ${clockOf(a.since)}`}`, actions: [], dot: false })
+  if (s.battery) out.push({ id: batteryLine(day, computer), text: 'Oszczędzanie baterii może wstrzymać OneDrive', actions: [{ id: 'ok', label: 'OK' }], dot: false })
   return out
 }

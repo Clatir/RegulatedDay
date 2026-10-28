@@ -47,6 +47,8 @@ export interface ServiceOptions {
   appFocused?: () => boolean
   /** Whether OneDrive runs in this session (the helper; a folder outside OneDrive: always). */
   oneDriveRunning?: () => boolean
+  /** The OneDrive process runs by the last answer (the unsettled state counts from it). */
+  oneDriveProcess?: () => boolean
   /** What this computer must hold against sleep, after every check (the helper and the app hold it, T290, T301). */
   onPower?: (need: PowerNeed) => void
   /** The versions that ran here with their crashes (versions.json): into the presence (D162, D163). */
@@ -179,6 +181,7 @@ export class DataService {
       clock,
       holidays: o.holidays,
       oneDriveRunning: o.oneDriveRunning ?? (() => true),
+      oneDriveProcess: o.oneDriveProcess,
       previousRun,
       worker: o.worker,
       ritualFrom: o.ritualFrom ?? null,
@@ -338,6 +341,7 @@ export class DataService {
 
   /** A lock longer than 10 min makes the computer „nieustalony” again. */
   unlock(): void {
+    this.folder.noteUnlock(this.now())
     if (this.lockedAt != null && this.now() - this.lockedAt > LOCK_UNSETTLES_MS) this.folder.unsettle('lock')
     this.lockedAt = null
     this.scheduler.hint()

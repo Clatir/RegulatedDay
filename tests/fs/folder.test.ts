@@ -34,7 +34,7 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 /** A folder on a fake clock, with an optional faulty file system. */
-async function make(o: { fs?: DataFs; at?: string } = {}) {
+async function make(o: { fs?: DataFs; at?: string; oneDriveProcess?: () => boolean } = {}) {
   let now = placeLogical(DAY, Number((o.at ?? '10:00').split(':')[0]) * 60 + Number((o.at ?? '10:00').split(':')[1]))
   const folder = await DataFolder.open({
     fs: o.fs ?? nodeFs,
@@ -45,7 +45,8 @@ async function make(o: { fs?: DataFs; at?: string } = {}) {
     appVersion: '0.2.0',
     clock: { wall: () => now, mono: () => now },
     holidays: marketDay,
-    oneDriveRunning: () => true
+    oneDriveRunning: () => true,
+    ...(o.oneDriveProcess ? { oneDriveProcess: o.oneDriveProcess } : {})
   })
   const advance = async (min: number) => {
     let last = await folder.check()
@@ -122,6 +123,30 @@ describe('folder danych', () => {
     f.now += 7 * 3_600_000
     await f.advance(4)
     expect(events().some((e) => e.k === 'day.create')).toBe(true)
+  })
+
+  it('odblokowanie ekranu przy nagrywanym wykładzie (blokada usypiania tego komputera) to obecność dla dźwięku (D331)', async () => {
+    mkdirSync(join(dataDir, 'days', '2026'), { recursive: true })
+    writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'w', categoryId: 'wyklad', startMin: 10 * 60, durationMin: 90, fixed: true, origin: 'user', recorder: 'pca' }] }))
+    const f = await make()
+    await f.advance(1)
+    // Before the lecture: no block of sleep – an unlock is no presence for the sound.
+    await f.folder.powerNeed(null, f.now)
+    f.folder.noteUnlock(f.now)
+    expect(f.folder.presence.own.soundPresence ?? null).toBeNull()
+    expect((await f.folder.timerClick({ a: 'start', block: 'w' })).ok).toBe(true)
+    expect((await f.folder.powerNeed(null, f.now)).system).toBe(true)
+    f.folder.noteUnlock(f.now)
+    expect(f.folder.presence.own.soundPresence).toBe(f.now)
+  })
+
+  it('stan nieustalony liczy się od chwili, gdy proces OneDrive działa – nie od 5 min „nie działa” (przegląd 0.23.0)', async () => {
+    let process = false
+    const f = await make({ oneDriveProcess: () => process })
+    const r = await f.advance(5)
+    expect(r.settled).toBe(false)
+    process = true
+    expect((await f.advance(5)).settled).toBe(true)
   })
 
   it('folder danych znika w trakcie pracy: nic nie powstaje w jego miejscu, zapisy czekają i wracają z folderem (A3-01)', async () => {

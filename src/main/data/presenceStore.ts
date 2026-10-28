@@ -13,12 +13,20 @@ import type { DataFs } from './fsio'
 /** A clock ahead by more than this is a warning (spec „o ponad 2 min”). */
 export const CLOCK_AHEAD_MS = 2 * 60_000
 
+/**
+ * A forgotten computer is not used again while its „last presence” is the one it had when forgotten – or none at all: an
+ * app started again with nobody at it writes none (A3-13 review); only a new presence brings it back.
+ */
+export const stillForgotten = (atForget: number | null, now: number | null): boolean => now == null || now === atForget
+
 interface Seen {
   size: number
   mtimeMs: number
   presence: Presence
   fileSeenAt: number
   presenceSeenAt: number | null
+  /** When this computer saw its presence for the sound change (D331). */
+  soundSeenAt: number | null
 }
 
 export class PresenceStore {
@@ -59,6 +67,7 @@ export class PresenceStore {
       before.seenLeader !== this.mine.seenLeader ||
       before.settled !== this.mine.settled ||
       before.installing !== this.mine.installing ||
+      before.soundPresence !== this.mine.soundPresence ||
       JSON.stringify(before.lastEvents) !== JSON.stringify(this.mine.lastEvents)
     if (stateChanged) this.changed = true
   }
@@ -124,7 +133,8 @@ export class PresenceStore {
           // First read after the start: the age comes from the time in the content (never in the future).
           fileSeenAt: !old ? Math.min(now, presence.writtenAt) : old.presence.writtenAt === presence.writtenAt ? old.fileSeenAt : now,
           // The first read after the start has not seen a change: the age comes from the content (leader.ts).
-          presenceSeenAt: old ? (presenceChanged ? now : old.presenceSeenAt) : null
+          presenceSeenAt: old ? (presenceChanged ? now : old.presenceSeenAt) : null,
+          soundSeenAt: old ? ((old.presence.soundPresence ?? null) !== (presence.soundPresence ?? null) ? now : old.soundSeenAt) : null
         })
       } catch (e) {
         this.problems.push({ file: rel, why: e instanceof Error ? e.message : String(e) })
@@ -135,16 +145,14 @@ export class PresenceStore {
 
   /** A computer forgotten and not used since (its „last presence” as when it was forgotten). */
   isForgotten(id: string): boolean {
-    if (!this.forgotten.has(id)) return false
-    const seen = this.seen.get(id)
-    return !seen || seen.presence.lastPresence === this.forgotten.get(id)
+    return this.forgotten.has(id) && stillForgotten(this.forgotten.get(id)!, this.seen.get(id)?.presence.lastPresence ?? null)
   }
 
   /** The peers as last seen (without forgotten computers). */
   peers(crashedVersion: (p: Presence) => boolean = (p) => (p.versions.find((v) => v.version === p.appVersion)?.crashes ?? 0) > 0): Peer[] {
     return [...this.seen.values()]
       .filter((s) => !this.isForgotten(s.presence.computer))
-      .map((s) => ({ presence: s.presence, presenceSeenAt: s.presenceSeenAt, fileSeenAt: s.fileSeenAt, crashed: crashedVersion(s.presence) }))
+      .map((s) => ({ presence: s.presence, presenceSeenAt: s.presenceSeenAt, fileSeenAt: s.fileSeenAt, crashed: crashedVersion(s.presence), soundSeenAt: s.soundSeenAt }))
   }
 
   /** Every other computer seen, forgotten ones too (the settings' list of computers). */
