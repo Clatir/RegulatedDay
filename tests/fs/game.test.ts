@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
+import type { GameView } from '@shared/engine/progress'
 import { isKnown } from '@shared/model/events'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -37,10 +38,11 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(gameFrom: string | null, ritualFrom: string | null = DAY, worker?: Worker) {
+async function make(gameFrom: string | null, ritualFrom: string | null = DAY, worker?: Worker, rulesVersion?: number) {
   const clock = { now: placeLogical(DAY, 10 * 60) }
   const folder = await DataFolder.open({
     ...(worker ? { worker } : {}),
+    ...(rulesVersion ? { rulesVersion } : {}),
     fs: nodeFs,
     dataDir,
     stateDir: join(root, 'state'),
@@ -57,8 +59,8 @@ async function make(gameFrom: string | null, ritualFrom: string | null = DAY, wo
 }
 
 /** A worked day: „a” 10:00–11:00 with „Koniec pracy”; the next morning a presence (the day is opened after its end). */
-async function workedDay(gameFrom: string | null) {
-  const m = await make(gameFrom)
+async function workedDay(gameFrom: string | null, rulesVersion?: number) {
+  const m = await make(gameFrom, DAY, undefined, rulesVersion)
   m.folder.noteInput(m.clock.now, true)
   await m.folder.check()
   await m.folder.timerClick({ a: 'start', block: 'a' })
@@ -91,6 +93,28 @@ describe('gra przy zamrożeniu', () => {
   it('przed pierwszym dniem z grą (T492) dzień jest poza grą, ale ocena zapisuje, co zdobył', async () => {
     const game = await freeze(await workedDay(null))
     expect(game).toMatchObject({ status: 'out', out: 'beforeGame', earned: { boundary: true }, notes: { boundary: 0 } })
+  })
+
+  it('dzień gry zamrożony przez starszą wersję reguł jako „przed grą”: wersja z grą ocenia go ponownie do tych samych zdarzeń, nowsza ocena wygrywa (z przeglądu)', async () => {
+    // A computer still on the version before the game (rules 1) froze the day while this one was closed.
+    const old = await workedDay(null, 1)
+    expect(await freeze(old)).toMatchObject({ status: 'out', out: 'beforeGame' })
+    const at = old.clock.now
+    await old.folder.close('quit')
+    const m = await make('2026-10-01')
+    for (let i = 1; i <= 12; i++) {
+      m.clock.now = at + i * 60_000
+      await m.folder.check()
+    }
+    const freezes = (await m.folder.readDay(DAY)).events.filter((e) => isKnown(e) && e.k === 'day.freeze') as unknown as Array<{ v: number; know: Record<string, number>; grade: { game: { status: string } } }>
+    expect(freezes.map((f) => [f.v, f.grade.game.status])).toEqual([
+      [1, 'out'],
+      [2, 'kept']
+    ])
+    expect(freezes[1]!.know).toEqual(freezes[0]!.know)
+    const game = (await m.folder.gameState())!
+    expect(game.notes.final).toBeGreaterThanOrEqual(3)
+    expect(game.steps.find((s) => s.date === DAY)?.move).toBe('up')
   })
 
   it('moduł gry w dniu bez zmian: według pierwszej późniejszej zmiany (wyłączona następnego dnia – w tym dniu włączona)', async () => {
@@ -330,17 +354,48 @@ describe('„Strona B tygodnia” i kalibracja z folderu', () => {
   })
 })
 
+describe('świętowanie raz na tym komputerze (T510)', () => {
+  const cel = (date: string, key: string) => ({ key, kind: 'room' as const, date, streak: null, item: { id: key, name: key, notes: 30 } })
+
+  it('pierwszy raz (komputer bez pamięci): święta sprzed wczoraj uznane za pokazane; pokazane już nie wracają', async () => {
+    const m = await make('2026-10-01')
+    const view = { celebrations: [cel('2026-10-10', 'old'), cel('2026-10-20', 'yesterday'), cel('2026-10-21', 'today')] } as unknown as GameView
+    expect((await m.folder.celebrationsDue(view, '2026-10-21')).map((c) => c.key)).toEqual(['yesterday', 'today'])
+    await m.folder.markCelebrated(['yesterday'])
+    expect((await m.folder.celebrationsDue(view, '2026-10-21')).map((c) => c.key)).toEqual(['today'])
+    // A later celebration is news again.
+    const later = { celebrations: [...view.celebrations, cel('2026-10-25', 'later')] } as unknown as GameView
+    expect((await m.folder.celebrationsDue(later, '2026-10-26')).map((c) => c.key)).toEqual(['today', 'later'])
+  })
+
+  it('pamięć, której nie da się odczytać: żadnego świętowania teraz i nic jej nie nadpisuje (z przeglądu: seria starych świąt)', async () => {
+    const m = await make('2026-10-01')
+    mkdirSync(join(root, 'state'), { recursive: true })
+    writeFileSync(join(root, 'state', 'celebrated.json'), '{"shown": ["a"')
+    const view = { celebrations: [cel('2026-10-21', 'today')] } as unknown as GameView
+    expect(await m.folder.celebrationsDue(view, '2026-10-21')).toEqual([])
+    await expect(m.folder.markCelebrated(['today'])).rejects.toThrow()
+    expect(readFileSync(join(root, 'state', 'celebrated.json'), 'utf8')).toBe('{"shown": ["a"')
+  })
+
+  it('zapisy pamięci po kolei: dwa naraz nie gubią żadnego klucza (z przeglądu)', async () => {
+    const m = await make('2026-10-01')
+    await Promise.all([m.folder.markCelebrated(['a']), m.folder.markCelebrated(['b']), m.folder.markCelebrated(['c'])])
+    expect((JSON.parse(readFileSync(join(root, 'state', 'celebrated.json'), 'utf8')) as { shown: string[] }).shown.sort()).toEqual(['a', 'b', 'c'])
+  })
+})
+
 describe('pokój na zawsze', () => {
   it('raz odblokowany element zostaje, choć nuty zamrożonych dni policzono potem niżej', async () => {
     mkdirSync(join(dataDir, 'grades', '2026'), { recursive: true })
     const line6 = (day: string, notes: number, v = 1) => `${JSON.stringify({ day, at: placeLogical(addDays(day, 2), 9 * 60), v, how: 'ready', know: { pca: 10 }, missing: [], grade: { boundary: 'kept', game: { v: 1, status: 'kept', out: null, notes: { boundary: notes } } } })}\n`
-    writeFileSync(join(dataDir, paths.grades('2026', 'pca')), ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15'].map((d) => line6(d, 6)).join(''))
+    writeFileSync(join(dataDir, paths.grades('2026', 'pca')), ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15'].map((d) => line6(d, 8)).join(''))
     const m = await make('2026-10-01')
     expect((await m.folder.gameState())!.room.unlocked.map((x) => x.id)).toContain('plyta-1')
-    // A newer freeze of two days with fewer notes (12 instead of 24 in all): the record stays.
+    // A newer freeze of two days with fewer notes (16 instead of 32 in all, below 30): the record stays.
     writeFileSync(join(dataDir, paths.grades('2026', 'lap')), ['2026-10-12', '2026-10-13'].map((d) => line6(d, 0, 2)).join(''))
     const again = (await m.folder.gameState())!
-    expect(again.notes.final).toBe(12)
+    expect(again.notes.final).toBe(16)
     expect(again.room.unlocked.map((x) => x.id)).toContain('plyta-1')
   })
 })

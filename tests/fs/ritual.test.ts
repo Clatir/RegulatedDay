@@ -242,3 +242,41 @@ describe('pierwszy dzień rytuału (D320, T504)', () => {
     expect(existsSync(join(dataDir, paths.settings))).toBe(false)
   })
 })
+
+describe('pierwszy dzień gry (T509)', () => {
+  async function game(gameScreens: boolean) {
+    const clock = { now: placeLogical(DAY, 10 * 60) }
+    const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, 'state-g'), computer: 'pca', computerName: 'pca', appVersion: '0.14.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => true, ritualScreens: true, gameScreens })
+    const settle = async () => {
+      for (let i = 0; i < 6; i++) {
+        clock.now += 60_000
+        await folder.check()
+      }
+    }
+    return { folder, clock, settle }
+  }
+  const rdNow = () => JSON.parse(readFileSync(join(dataDir, paths.settings), 'utf8')) as { ritualFrom?: string; gameFrom?: string }
+
+  it('wersja z ekranami gry: prowadzący zapisuje raz jutro (dzień instalacji jest poza grą); gra od tego dnia', async () => {
+    writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, people: [] }))
+    const a = await game(true)
+    expect(await a.folder.gameDay()).toBeNull()
+    expect(await a.folder.gameState()).toBeNull()
+    await a.settle()
+    expect(rdNow()).toMatchObject({ ritualFrom: DAY, gameFrom: addDays(DAY, 1) })
+    expect(await a.folder.gameDay()).toBe(addDays(DAY, 1))
+    expect(await a.folder.gameState()).not.toBeNull()
+    // The next day it stays.
+    a.clock.now = placeLogical(addDays(DAY, 1), 10 * 60)
+    await a.settle()
+    expect(rdNow().gameFrom).toBe(addDays(DAY, 1))
+  })
+
+  it('wersja bez ekranów gry nic nie zapisuje i nic nie liczy', async () => {
+    writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, people: [] }))
+    const a = await game(false)
+    await a.settle()
+    expect(rdNow().gameFrom).toBeUndefined()
+    expect(await a.folder.gameState()).toBeNull()
+  })
+})

@@ -324,6 +324,52 @@ test('„Dane” w Ustawieniach (D321): eksport CSV do wybranego folderu, kopia 
   }
 })
 
+test('gra (D322): „Passa · nuty” w nagłówku „Dziś”, świętowanie passy 7 dni znika po klawiszu, pokój z płytą i statusami dni', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-game-'))
+  seed(dataDir, { sessions: false })
+  const today = logicalToday()
+  const day = (d: number) => new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)) + d)).toISOString().slice(0, 10)
+  // The ritual and the game from three weeks back (D320, T509), seven kept days frozen up to yesterday – 8 notes each.
+  const rdFile = join(dataDir, 'rd.json')
+  writeFileSync(rdFile, JSON.stringify({ ...JSON.parse(readFileSync(rdFile, 'utf8')), ritualFrom: day(-20), gameFrom: day(-20) }, null, 2))
+  const lines = [-7, -6, -5, -4, -3, -2, -1].map((d) => JSON.stringify({ day: day(d), at: Date.now(), v: 2, how: 'ready', know: { seed: 10 }, missing: [], grade: { boundary: 'kept', game: { v: 1, status: 'kept', out: null, notes: { boundary: 3, regen: 3, reserve: 2 } } } }))
+  for (const y of new Set(lines.map((l) => (JSON.parse(l) as { day: string }).day.slice(0, 4)))) {
+    mkdirSync(join(dataDir, 'grades', y), { recursive: true })
+    writeFileSync(join(dataDir, 'grades', y, 'seed.jsonl'), `${lines.filter((l) => l.includes(`"day":"${y}`)).join('\n')}\n`)
+  }
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('game-line')).toContainText('Passa 7 · 56 nut', { timeout: 30_000 })
+      // The streak of 7 reached yesterday: celebrated full-screen – not in a quiet mode, the night or „Odcinam się”, and
+      // only with the main window in front (a runner may leave a new window without the focus).
+      await page.bringToFront()
+      const calm = await page.evaluate(async () => {
+        const v = await window.rd.widget()
+        return !v.quiet && !v.hidden && !v.night && document.hasFocus()
+      })
+      if (calm) {
+        await expect(page.getByTestId('celebration')).toContainText('Passa 7 dni')
+        await shot(page, 'e7-02-celebration')
+        await page.keyboard.press('Space')
+        await expect(page.getByTestId('celebration')).toHaveCount(0)
+      } else await expect(page.getByTestId('celebration')).toHaveCount(0)
+      // Once on this computer: not again.
+      await page.getByTestId('nav-room').click()
+      await expect(page.getByTestId('room-art')).toBeVisible()
+      await expect(page.getByTestId('room-plyta-1')).toHaveCount(1)
+      await expect(page.getByTestId('room-roslina-1')).toHaveCount(1)
+      await expect(page.getByTestId(`room-day-${day(-1)}`)).toContainText('dotrzymany')
+      await expect(page.getByTestId('room-next')).toContainText('Następny: Roślina – pierwsze liście – jeszcze 19 nut')
+      await expect(page.getByTestId('celebration')).toHaveCount(0)
+      await shot(page, 'e7-01-room')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z osobą i „Koniec”; „Pilne” z szacunkiem', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-requests-'))
   // Without today's sessions: in a session (a quiet mode) „Pilne” starts with 15 min without asking (D311).

@@ -377,6 +377,41 @@ describe('przywracanie kopii', () => {
   })
 })
 
+describe('dni zapisane raz w rd.json (D320, T509)', () => {
+  it('przywrócenie starszego rd.json (z kopii, bez nich) nie zabiera pierwszego dnia rytuału ani gry (z przeglądu: gra od nowa)', async () => {
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dirA)).toBe(true)
+      const zip = await backupOfA()
+      await hub.edit([{ rel: 'rd.json', edits: [{ path: ['ritualFrom'], base: undefined, value: '2026-10-01' }, { path: ['gameFrom'], base: undefined, value: '2026-10-02' }, { path: ['note'], base: undefined, value: 'nowa' }] }])
+      await hub.restoreRecords(zip, ['rd.json'])
+      const rd = (await hub.service!.folder.recordView('rd.json'))!
+      expect(rd).toMatchObject({ ritualFrom: '2026-10-01', gameFrom: '2026-10-02' })
+      expect(rd.note).toBeUndefined()
+    } finally {
+      await hub.close('quit')
+    }
+  })
+})
+
+describe('gra dla okna (T510)', () => {
+  it('pytania okna w trakcie liczenia gry dostają to samo liczenie – nigdy drugie obok (z przeglądu)', async () => {
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dirA)).toBe(true)
+      const spy = vi.spyOn(hub.service!.folder, 'gameState')
+      const [a, b] = await Promise.all([hub.game(), hub.game()])
+      expect(a).toBe(b)
+      expect(spy).toHaveBeenCalledTimes(1)
+      // After it ended, a new ask counts again.
+      await hub.game()
+      expect(spy).toHaveBeenCalledTimes(2)
+    } finally {
+      await hub.close('quit')
+    }
+  })
+})
+
 describe('eksport CSV do folderu z poprzednim eksportem (D323)', () => {
   it('pliki eksportu już w folderze – zastąpienie po pytaniu; inne pliki i brak folderu nie liczą się', async () => {
     const dir = join(root, 'csv')

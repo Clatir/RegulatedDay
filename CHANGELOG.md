@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.0
+- Gra na ekranach: od jutra po instalacji tej wersji dni liczą się w grze – ta sama data na wszystkich Twoich komputerach. W nagłówku „Dziś” stoi „Passa 5 · 142 nuty · dziś +6 w toku”, a gdy dzisiejsze nuty rosną, na chwilę pojawia się „+3 ♪”. W pasku i ikonie nic z gry.
+- „Pokój” w menu bocznym: ilustracja lo-fi – okno z deszczem, biurko z lampką, roślina, która rośnie, płyty, plakaty i lampki odblokowywane nutami zamrożonych dni (pierwsza płyta przy 30 nutach), półka z kasetami. Pod nią następny element, statusy ostatnich dni i kasety zamkniętych tygodni w kolorze pory roku z ulubioną regeneracją i naklejką z nutą. Bez „Animacji” deszcz i światło lampki stoją.
+- Świętowanie: przy passie 7, 14, 30, 60 i 100 dni oraz przy każdym nowym elemencie pokoju nakładka na okno główne – najwyżej 5 s, znika po dowolnym klawiszu i nie pojawia się w trybach ciszy ani w „Odcinam się”.
+
 ## 0.13.0
 - Ustawienia → „Dane”: eksport CSV za wybrany zakres dat (domyślnie bieżący miesiąc) – trzy pliki (bloki, prośby, check-iny) do folderu, który wskażesz. Gdy w tym folderze są już pliki poprzedniego eksportu, aplikacja najpierw pyta, czy je zastąpić.
 - Tam też kopie zapasowe od najnowszej. „Wybrane rekordy…” pokazuje rekordy kopii tak, jak nazywa je aplikacja (np. „Prośba: zakupy (Mama, dodana 12.10.2026)”, „Plan dnia 27.10.2026”) – zaznaczone wracają do Twojego folderu, a poprzednie wersje zostają w Historii. „Cały folder do nowego…” przywraca całą kopię do nowego, pustego folderu, w którym ten komputer zaczyna pracować; folder poza OneDrive najpierw dostaje ostrzeżenie, że inne komputery go nie zobaczą.

@@ -70,6 +70,8 @@ export interface ServiceOptions {
   ritualScreens?: boolean
   /** The first day in the game (none before its screens, T492). */
   gameFrom?: string | null
+  /** The game's screens: its first day from rd.json (T509). */
+  gameScreens?: boolean
 }
 
 /** The folder's own state in the app data: one folder per data folder, by its resolved path. */
@@ -177,7 +179,8 @@ export class DataService {
       worker: o.worker,
       ritualFrom: o.ritualFrom ?? null,
       ritualScreens: o.ritualScreens === true,
-      gameFrom: o.gameFrom ?? null
+      gameFrom: o.gameFrom ?? null,
+      gameScreens: o.gameScreens === true
     })
     life.start(o.runId, o.appVersion, clock.wall())
     if (previousRun && !previousRun.clean) o.log('warn', 'poprzednie uruchomienie folderu skończyło się bez zamknięcia – koniec obserwacji z ostatniego znacznika życia')

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BRIGHTNESS_STEPS } from '@shared/machine'
-import { contrast, contrastPairs, iconColor, toneColor, TONES, HIDDEN_ICON } from '@shared/theme'
+import { BLOCK_COLORS, contrast, contrastPairs, iconColor, SEASON_COLORS, toneColor, TONES, HIDDEN_ICON } from '@shared/theme'
 
 describe('kontrast (Wygląd i nazwy: co najmniej 4,5:1 przy każdej jasności)', () => {
   for (const step of BRIGHTNESS_STEPS) {
@@ -12,6 +12,10 @@ describe('kontrast (Wygląd i nazwy: co najmniej 4,5:1 przy każdej jasności)',
       expect(bad).toEqual([])
     })
   }
+
+  it('okładki kaset (D322) to kolory bloków – napis na nich ma sprawdzony kontrast', () => {
+    for (const c of Object.values(SEASON_COLORS)) expect(BLOCK_COLORS).toContain(c)
+  })
 })
 
 describe('kolor paska i ikony', () => {

@@ -10,6 +10,8 @@ paths:
   - "src/main/data/folder.ts"
   - "src/main/worker/**"
   - "src/renderer/features/today/ExchangeDialog.tsx"
+  - "src/renderer/features/game/**"
+  - "src/renderer/store/game.ts"
   - "tests/unit/engine/game.test.ts"
   - "tests/unit/engine/progress.test.ts"
   - "tests/unit/engine/sideB.test.ts"
@@ -46,9 +48,10 @@ D160, D170, D176, D200, D241, D244, D269, D272, D275, D301. Decyzje T492–T496.
   przeniósł blok; kopia dnia go nie niesie); `DayState.asProject` (bloki liczone jak projekt, D195).
 
 ## Zasady
-- Nic nie liczy się przed `gameFrom` (w aplikacji `GAME_FROM = null` w `index.ts` do ekranów gry, T492), a bez
-  `ritualFrom` (brak zamrażania) `gameState` = null. Wersja, która ustawi `GAME_FROM`, musi podnieść `RULES_VERSION`,
-  jeśli jakakolwiek starsza wersja już zamraża (inaczej taka zamrozi dni gry jako „przed grą” na zawsze).
+- Nic nie liczy się przed `gameFrom`: w aplikacji (`gameScreens`) dzień z `rd.json` (`folder.gameDay()`), zapisany raz
+  przez prowadzącego – jutro (`gameStart`, T509); w testach opcja `gameFrom`. Bez `ritualFrom` (brak zamrażania)
+  `gameState` = null. Zmiana reguł gry podnosi `RULES_VERSION` (2 od 0.14.0) – starsza wersja nie może zamrozić dni
+  według starych reguł.
 - Ocena zapisuje `earned` i `regenWays` także poza grą; nuty poza grą = 0. Passa, nuty, pokój i kasety tylko z zapisanej
   oceny (`storedGame`, `storedWays`) – starsza wersja nie przelicza oceny nowszych reguł. Pokój i święta – tylko z dni
   zamrożonych (nuty „w toku” niczego nie odblokowują).
@@ -74,5 +77,8 @@ D160, D170, D176, D200, D241, D244, D269, D272, D275, D301. Decyzje T492–T496.
   ponowienie po minucie). Wiersz rytuału „odbył się” pisze start `how: 'plan'` (bez próbki i nuty).
 - Test skali w pełnym zestawie lokalnie: otwarcie ~18 s pod obciążeniem równoległych plików (osobno ~1,6 s) – przy
   przekroczeniu najpierw uruchom go osobno.
-- Jeszcze nie: ekrany (pokój, kasety, święta z pamięcią pokazanych, „Strona B” w planie porannym, przegląd kalibracji
-  z „Nie teraz”), poranne odpowiedzi i odczuwany koszt w propozycjach kosztów – po odbiorze.
+- Ekrany (0.14.0): `renderer/features/game/` – `GameLine` (nagłówek „Dziś”, „+N ♪”), `RoomPage` + `RoomArt` (SVG,
+  ruch tylko z „Animacjami”), `Celebration` (nakładka, T510), `gameText` (słowa – testy `tests/web/game-text.test.ts`);
+  `store/game.ts` (`useGameFeed` w `App`). IPC `game` (widok + `due`), `celebrated`; pamięć świąt – `celebrated.json`.
+- Jeszcze nie: „Strona B” w planie porannym, przegląd kalibracji z „Nie teraz”, poranne odpowiedzi i odczuwany koszt
+  w propozycjach kosztów (0.15.0).

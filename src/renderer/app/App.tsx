@@ -1,7 +1,7 @@
 // adapted from FI src/renderer/app/App.tsx @ de81f2b
 /**
- * The main window (D287): the side menu with the screens' names; at the top the name „Regulated Day” and the bar. The
- * screens of 1.0 come with their stages – in E0 they say which version brings them. Ctrl+1…7 switch the screens by the
+ * The main window (D287): the side menu with the screens' names; at the top the name „Regulated Day” and the bar; the
+ * game's celebration over everything (D322). Ctrl+1…7 switch the screens by the
  * physical keys of the digits (any keyboard layout), Ctrl+, opens the settings, Ctrl+S commits the active field, Ctrl+N
  * creates a record in the current view (when it has records).
  */
@@ -20,6 +20,9 @@ import { RequestsPage } from '../features/requests/RequestsPage'
 import { TemplatesPage } from '../features/templates/TemplatesPage'
 import { RoutinesPage } from '../features/routines/RoutinesPage'
 import { HistoryPage } from '../features/history/HistoryPage'
+import { Celebration } from '../features/game/Celebration'
+import { RoomPage } from '../features/game/RoomPage'
+import { useGameFeed } from '../store/game'
 import { Wizard } from '../features/wizard/Wizard'
 import { patchWizard, useWizard } from '../features/wizard/wizardStore'
 import { useData } from '../store/data'
@@ -38,13 +41,8 @@ export const PAGE_LABEL: Record<Page, string> = {
   trial: 'Próba'
 }
 
-/** The screens that come later, and the stage that brings them (spec „Plan budowy”). */
-const LATER: Partial<Record<Page, string>> = {
-  room: 'Pokój, nuty i kasety przyjdą z etapem gry (E7).'
-}
-
 /** Screens that need the data folder (without it they point to the wizard). */
-const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'requests', 'templates', 'routines', 'history'])
+const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history'])
 
 /** The screens with Ctrl+digit, in the menu's order; the settings have Ctrl+, and the trial no shortcut. */
 const DIGIT_PAGES: Page[] = PAGES.filter((p) => p !== 'settings' && p !== 'trial')
@@ -138,8 +136,8 @@ function PageView({ page }: { page: Page }) {
   if (page === 'requests') return <RequestsPage />
   if (page === 'templates') return <TemplatesPage />
   if (page === 'routines') return <RoutinesPage />
-  if (page === 'history') return <HistoryPage />
-  return <EmptyState why={LATER[page] ?? ''} data-testid={`later-${page}`} />
+  if (page === 'room') return <RoomPage />
+  return <HistoryPage />
 }
 
 export function App() {
@@ -149,6 +147,7 @@ export function App() {
   const wizardOpen = useWizard((s) => s.open)
   const wizardAsked = useWizard((s) => s.asked)
   useHotkeys()
+  useGameFeed()
   useEffect(() => window.rd.onNavigate((p) => (p === 'ritual' ? openRitual() : (PAGES as string[]).includes(p) && navigate(p as Page))), [])
   // No folder on this computer: the wizard (until „Później”). A folder that did not open (OneDrive not ready at the
   // start) is tried again by itself – the wizard only when you ask for it.
@@ -172,6 +171,7 @@ export function App() {
         </div>
       )}
       <Toasts />
+      <Celebration />
     </div>
   )
 }
