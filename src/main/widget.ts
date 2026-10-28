@@ -70,7 +70,12 @@ export interface WidgetDeps {
 
 interface Pending extends BarPending {
   redo: () => Promise<TimerResult>
+  /** „Przedłuż”: the length waiting for the second click (changed in steps of 15 min – T289). */
+  minutes?: number
 }
+
+/** The longest extension of „Przedłuż” by its steps. */
+export const EXTEND_MAX_MIN = 180
 
 const costText = (label: string, c: NonNullable<TimerResult['confirm']>) => `${label}: ${c.overrun ? 'przekroczenie' : 'przedłużenie'} · ${c.bedtime ? `pora snu +${c.minutes} min` : `−${c.minutes} min puli`}`
 
@@ -431,7 +436,8 @@ export class WidgetEngine {
     const at = this.now
     // Two clicks within 0.5 s are one – also the second click of a cost that comes too soon after its first.
     if ((this.lastClick.key === key && at - this.lastClick.at < DOUBLE_MS) || (action === 'confirm' && this.pending && at - (this.pending.until - CONFIRM_MS) < DOUBLE_MS)) return
-    this.lastClick = { key, at }
+    // A click of the bar itself (the desktop bar's background) is no action: it never parts the two clicks of one (A7-01).
+    if (action !== 'barClick') this.lastClick = { key, at }
     try {
       await this.actNow(action, arg, from)
     } catch (e) {
@@ -449,6 +455,8 @@ export class WidgetEngine {
 
   private async actNow(action: string, arg: string | undefined, from: ViewKind): Promise<void> {
     const v = this.current()
+    // A step of „Przedłuż” before its second click: a new cost and new 10 s – no reaction and no click of the widget (T289).
+    if (action === 'extendStep') return this.extendStep(arg === '-15' ? -15 : 15)
     if (from === 'bar') {
       // A click of the desktop bar counts as seeing what it shows (spec), and its next 10 s are the app's own.
       this.d.clickedApp()
@@ -601,7 +609,7 @@ export class WidgetEngine {
       const cost = r.confirm
       // „Dalej”: its first click ended the running block; the cost belongs to starting the next one – shown at „Start”.
       if (action === 'next') this.wait('start', 'Start', cost, () => this.d.timer({ a: 'start', block: cost.block, day, confirm: true }))
-      else this.wait(button, label || 'Start', cost, () => this.d.timer({ ...c, confirm: true }))
+      else this.wait(button, label || 'Start', cost, () => this.d.timer({ ...c, confirm: true }), action === 'extend' ? c.minutes : undefined)
     } else {
       this.pending = null
       if (!r.ok && r.why) this.say(r.why)
@@ -610,9 +618,33 @@ export class WidgetEngine {
   }
 
   /** A cost waits for its second click within 10 s, in place of its button. */
-  private wait(button: string, label: string, cost: NonNullable<TimerResult['confirm']>, redo: () => Promise<TimerResult>): void {
-    this.pending = { button, text: costText(label, cost), until: this.now + CONFIRM_MS, redo }
+  private wait(button: string, label: string, cost: NonNullable<TimerResult['confirm']>, redo: () => Promise<TimerResult>, minutes?: number): void {
+    this.pending = { button, text: costText(label, cost), until: this.now + CONFIRM_MS, redo, ...(minutes != null ? { minutes } : {}) }
     setTimeout(() => void this.refresh(), CONFIRM_MS + 50).unref?.()
+  }
+
+  /**
+   * „Przedłuż” waiting for its second click, 15 min longer or shorter (at least 15, at most `EXTEND_MAX_MIN`): its new cost
+   * with new 10 s – only judged, never written; a length that costs nothing still waits for „Potwierdź” (a step is never
+   * the extension itself).
+   */
+  private async extendStep(delta: number): Promise<void> {
+    const p = this.pending
+    if (!p || p.button !== 'extend' || p.minutes == null || p.until <= this.now) return
+    const minutes = Math.min(EXTEND_MAX_MIN, Math.max(15, p.minutes + delta))
+    if (minutes === p.minutes) return
+    const day = this.current().day ?? undefined
+    const c: TimerIn = { a: 'extend', minutes, day }
+    const r = await this.d.timer({ ...c, probe: true })
+    if (r.confirm) this.wait('extend', `Przedłuż +${minutes}`, r.confirm, () => this.d.timer({ ...c, confirm: true }), minutes)
+    else if (r.ok) {
+      this.pending = { button: 'extend', text: `Przedłuż +${minutes}: bez kosztu`, until: this.now + CONFIRM_MS, redo: () => this.d.timer(c), minutes }
+      setTimeout(() => void this.refresh(), CONFIRM_MS + 50).unref?.()
+    } else {
+      this.pending = null
+      if (r.why) this.say(r.why)
+    }
+    await this.refresh()
   }
 
   /** The questions a window that sees them shows (D231): „Dalej?” and the lines the bar shows, not those folded in „⋯”. */

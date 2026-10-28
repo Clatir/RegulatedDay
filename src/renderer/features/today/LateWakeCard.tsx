@@ -7,25 +7,29 @@ import { useState } from 'react'
 import { putBlock, setAsked } from '@shared/data/dayEdits'
 import type { LateWake } from '@shared/engine/lateWake'
 import { durationLabel, logicalClock } from '@shared/format'
-import { logEvents } from '../../store/data'
+import { useBusy } from '../../lib/busy'
+import { isSaved, logEvents } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { blockName, type Names } from '../plan/blockView'
-import { saveDay } from './dayActions'
+import { blockNow, saveDay } from './dayActions'
 
 export function LateWakeCard({ model, lw, names }: { model: DayModel; lw: LateWake; names: Names }) {
   const [stage, setStage] = useState<'ask' | 'proposal'>('ask')
   const date = model.date
   const raw = model.data.dayFile
   const answer = (a: string) => saveDay(date, raw, (r) => setAsked(r, 'lateWake', a))
-  const apply = async () => {
-    await saveDay(date, raw, (r) => {
-      let next = r
-      for (const s of lw.shifts) next = putBlock(next, { ...s.block, startMin: s.toStartMin })
-      for (const s of lw.shortens) next = putBlock(next, { ...s.block, durationMin: s.toMin })
-      return setAsked(next, 'lateWake', 'yes')
+  const [busy, run] = useBusy()
+  // The blocks are parked only when the moves were saved (A6-08).
+  const apply = () =>
+    run(async () => {
+      const out = await saveDay(date, raw, (r) => {
+        let next = r
+        for (const s of lw.shifts) next = putBlock(next, { ...blockNow(next, date, s.block), startMin: s.toStartMin })
+        for (const s of lw.shortens) next = putBlock(next, { ...blockNow(next, date, s.block), durationMin: s.toMin })
+        return setAsked(next, 'lateWake', 'yes')
+      })
+      if (isSaved(out) && lw.parks.length) await logEvents(lw.parks.map((b) => ({ k: 'block.park', day: date, block: b.id, rule: 'lateWake' })))
     })
-    if (lw.parks.length) await logEvents(lw.parks.map((b) => ({ k: 'block.park', day: date, block: b.id, rule: 'lateWake' })))
-  }
   return (
     <section className="flex flex-col gap-2 rounded-lg border border-lamp/50 bg-lamp-soft px-4 py-3 text-[12.5px]" data-testid="late-wake">
       {stage === 'ask' ? (
@@ -65,7 +69,7 @@ export function LateWakeCard({ model, lw, names }: { model: DayModel; lw: LateWa
             {!lw.shifts.length && !lw.shortens.length && !lw.parks.length && <li>Plan mieści się bez zmian.</li>}
           </ul>
           <div className="flex gap-2">
-            <button type="button" className="btn btn-accent" onClick={() => void apply()} data-testid="late-wake-apply">
+            <button type="button" className="btn btn-accent" disabled={busy} onClick={() => void apply()} data-testid="late-wake-apply">
               Zastosuj
             </button>
             <button type="button" className="btn" onClick={() => void answer('kept')}>

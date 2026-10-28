@@ -9,17 +9,20 @@ import { addDays } from '@shared/time/zone'
 import { Dialog } from '../../components/Dialog'
 import { DateField } from '../../components/fields'
 import type { DayModel } from '../../store/day'
+import { isSaved } from '../../store/data'
+import { useBusy } from '../../lib/busy'
 import { MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from '../calendar/MonthGrid'
 import { copyDayTo, moveDayBlock } from './dayActions'
 
 export function MoveDialog({ model, block, today, onClose }: { model: DayModel; block: PlanBlock; today: string; onClose: () => void }) {
   const [to, setTo] = useState(addDays(model.date, 1))
-  const move = async () => {
-    if (to === model.date) return onClose()
-    const target = await window.rd.dayData(to)
-    await moveDayBlock(model.date, model.data.dayFile, model.ctx.plan, block, to, target.dayFile)
-    onClose()
-  }
+  const [busy, run] = useBusy()
+  // The window stays open when the move was not saved (the toast says why).
+  const move = () =>
+    run(async () => {
+      if (to === model.date) return onClose()
+      if (isSaved(await moveDayBlock(model.date, model.data.dayFile, model.ctx.plan, block, to, null))) onClose()
+    })
   return (
     <Dialog
       title="Przenieś blok na inny dzień"
@@ -30,7 +33,7 @@ export function MoveDialog({ model, block, today, onClose }: { model: DayModel; 
           <button type="button" className="btn" onClick={onClose}>
             Anuluj
           </button>
-          <button type="button" className="btn btn-accent" onClick={() => void move()} data-testid="move-apply">
+          <button type="button" className="btn btn-accent" disabled={busy} onClick={() => void move()} data-testid="move-apply">
             Przenieś na {plDate(to)}
           </button>
         </>
@@ -52,13 +55,14 @@ export function MoveDialog({ model, block, today, onClose }: { model: DayModel; 
 export function CopyDayDialog({ model, today, onClose }: { model: DayModel; today: string; onClose: () => void }) {
   const [month, setMonth] = useState(monthOf(addDays(model.date, 1)))
   const [sel, setSel] = useState<Set<string>>(new Set())
-  const copy = async () => {
-    const targets = [...sel].filter((d) => d !== model.date).sort()
-    if (!targets.length) return
-    const raws = Object.fromEntries(await Promise.all(targets.map(async (d) => [d, (await window.rd.dayData(d)).dayFile] as const)))
-    await copyDayTo({ date: model.date, plan: model.ctx.plan, dayType: model.dayFile?.dayType ?? null, wakeMin: model.dayFile?.wakeMin ?? null }, targets, (d) => raws[d] ?? null)
-    onClose()
-  }
+  const [busy, run] = useBusy()
+  // One copy at a time (a double click made each target twice the blocks – A6-04); open until it is saved.
+  const copy = () =>
+    run(async () => {
+      const targets = [...sel].filter((d) => d !== model.date).sort()
+      if (!targets.length) return
+      if (await copyDayTo({ date: model.date, plan: model.ctx.plan, dayType: model.dayFile?.dayType ?? null, wakeMin: model.dayFile?.wakeMin ?? null }, targets, () => null)) onClose()
+    })
   const [y, m] = month.split('-')
   return (
     <Dialog
@@ -72,7 +76,7 @@ export function CopyDayDialog({ model, today, onClose }: { model: DayModel; toda
           <button type="button" className="btn" onClick={onClose}>
             Anuluj
           </button>
-          <button type="button" className="btn btn-accent" disabled={!sel.size} onClick={() => void copy()} data-testid="copy-apply">
+          <button type="button" className="btn btn-accent" disabled={!sel.size || busy} onClick={() => void copy()} data-testid="copy-apply">
             Skopiuj ({sel.size})
           </button>
         </>

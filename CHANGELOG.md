@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.19.0
+- Szybkie zmiany jednego bloku (np. długość i zaraz „stały”) zapisują się obie – bez fałszywego pytania o zmianę „z innego komputera”. Tak samo w szablonach (kilka dni tygodnia po kolei) i w rutynach.
+- Strzałki ↑ ↓ przy krokach rutyny naprawdę zmieniają ich kolejność.
+- Liczniki na ekranie Prośby liczą prośby z paska (zrobione teraz, pilne, po fakcie) z ich rzeczywistym czasem – dziś, w tym tygodniu i dla każdej osoby.
+- Podwójne kliknięcie nie dubluje już wyjątku granicy, bloku próśb, kopii dnia ani zmiany typu – przycisk czeka na zapis.
+- „Cofnij” po odwołaniu bloku przywraca tylko ten blok, także gdy zaraz odwołałeś drugi. Komunikat „Usunięty · Cofnij” pokazuje się tylko po udanym zapisie, a nieudana wymiana albo późne wstanie nie parkują bloków.
+- „Przyjmij nowsze” nie przywraca rekordów usuniętych na innym komputerze, a w panelu bloku nie da się już wybrać kotwicy, która tworzy pętlę (bloki znikały z dnia).
+- Pasek pulpitu: podwójne „Dalej” nie kończy też następnego bloku. „Przedłuż” przed potwierdzeniem zmienisz krokami −15 / +15 min, każdy z nowym kosztem.
+- Ustawienia: zmiana początku sesji za jej koniec przesuwa koniec (sesja nie znika), usunięcie sesji ma „Cofnij”, a zmiana pola nie przelicza już dnia kilkanaście razy. Wybór „od dziś” / „od daty” wraca do „od jutra” po wyjściu z Ustawień i następnego dnia.
+- Kalendarz zmienia typ tylko dni od jutra – dzisiejszy zmienisz w „Dziś”, a dni minione mają typ z planu z rana.
+- Zakończone bloki na osi dnia są przygaszone tłem, a ich nazwy i godziny dają się czytać (wcześniej kontrast ok. 3:1).
+- Drobne: karta rytuału i niezamknięte dni przy chwilowym błędzie mówią „Spróbuj ponownie” zamiast znikać; w rytuale „+ dodaj osobę”; pytania o zmiany nazywają bloki i odmieniają liczby po polsku; domyślna głośność dźwięku 50 %.
+
 ## 0.18.0
 - Aplikacja uruchamia się także wtedy, gdy pomocnik nie może wystartować (np. zablokował go antywirus) – działa bez niego i próbuje go uruchomić ponownie. Wcześniej cały start się kończył.
 - Start z Windows „w zasobniku” nie pokazuje już okna głównego, gdy ostatnio było zmaksymalizowane; zmaksymalizuje się dopiero, gdy je otworzysz – także po wyłączeniu komputera bez otwierania okna.

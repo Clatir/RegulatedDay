@@ -203,7 +203,8 @@ export interface CheckResult {
 }
 
 /** A click of the widget or the main window, with the day it concerns (default: the day of the running block, else today). */
-export type TimerClick = (TimerAction | RequestAction) & { day?: string }
+/** `probe`: only judged – its cost or refusal – never written (a step of „Przedłuż” before its second click). */
+export type TimerClick = (TimerAction | RequestAction) & { day?: string; probe?: boolean }
 
 /** The records the day is made from, read through a cache checked by size and time of modification. */
 interface Inputs {
@@ -1320,12 +1321,12 @@ export class DataFolder {
       const read = await this.log.readDay(day)
       if (!read.complete) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę', confirm: null }
       const ctx = await this.ownContext(day, read, now)
-      const { day: _d, ...act } = click
+      const { day: _d, probe, ...act } = click
       void _d
       const state = computeDay(ctx)
       // Requests („zrobione teraz”, urgent, after the fact, „Koniec”) and the rest of the timer.
       const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now)
-      if (r.ok && r.events.length) await this.writeTimer(day, r.events)
+      if (r.ok && r.events.length && !probe) await this.writeTimer(day, r.events)
       return r
     }
     const p = this.clicks.then(run, run)

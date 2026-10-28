@@ -56,6 +56,7 @@ const api: RdApi = {
   logEvents: (events) => ipcRenderer.invoke(CH.logEvents, events),
   resolve: (id, choice) => ipcRenderer.invoke(CH.resolve, id, choice),
   monthEvents: (month, kinds) => ipcRenderer.invoke(CH.monthEvents, month, kinds),
+  requestCounters: () => ipcRenderer.invoke(CH.requestCounters),
   historyList: () => ipcRenderer.invoke(CH.historyList),
   historyVersions: (kind, id) => ipcRenderer.invoke(CH.historyVersions, kind, id),
   historyRestore: (kind, id, file) => ipcRenderer.invoke(CH.historyRestore, kind, id, file),

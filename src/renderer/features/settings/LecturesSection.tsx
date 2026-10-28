@@ -11,24 +11,28 @@ import { newId } from '@shared/model/ids'
 import type { LectureSeries } from '@shared/model/plan'
 import { Choice, DateField, DurationField, TextField, TimeField } from '../../components/fields'
 import { Section } from '../../components/ui'
-import { rawRecord, saveRecord, useData } from '../../store/data'
+import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { undoToast } from '../../store/ui'
+import { useBusy } from '../../lib/busy'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 
 export function LecturesSection() {
   const lectures = useData((s) => s.lectures)
   const today = useData((s) => s.view?.today ?? '')
-  const add = () => {
-    const id = newId()
-    void saveRecord(paths.record('schedule', id), null, lectureJson({ id, name: '', categoryId: 'wyklad', variantId: null, weekday: 1, startMin: 18 * 60, durationMin: 90, from: today, to: today, exceptions: [], recorder: null, background: null, archived: false }))
-  }
+  const [busy, run] = useBusy()
+  // One new lecture per click, however quick the second one (A7-14).
+  const add = () =>
+    void run(async () => {
+      const id = newId()
+      await saveRecord(paths.record('schedule', id), null, lectureJson({ id, name: '', categoryId: 'wyklad', variantId: null, weekday: 1, startMin: 18 * 60, durationMin: 90, from: today, to: today, exceptions: [], recorder: null, background: null, archived: false }))
+    })
   return (
     <Section title="Plan wykładów" data-testid="settings-lectures">
       {lectures.filter((l) => !l.archived).map((l) => (
         <Lecture key={l.id} l={l} today={today} />
       ))}
-      <button type="button" className="btn self-start" onClick={add} data-testid="lecture-new">
+      <button type="button" className="btn self-start" disabled={busy} onClick={add} data-testid="lecture-new">
         + Wykład
       </button>
     </Section>
@@ -40,14 +44,11 @@ function Lecture({ l, today }: { l: LectureSeries; today: string }) {
   const computers = view?.computers ?? []
   const rel = paths.record('schedule', l.id)
   const [ex, setEx] = useState<string | null>(null)
-  const set = (patch: Partial<LectureSeries>) => {
-    const before = rawRecord(rel)
-    if (before) void saveRecord(rel, before, { ...before, ...patch })
-  }
+  // Over the record as it is in the change's turn (T517).
+  const set = (patch: Partial<LectureSeries>) => void updateRecord(rel, (raw) => ({ ...raw, ...patch }))
   const remove = async () => {
-    const before = rawRecord(rel)
-    await saveRecord(rel, before, null)
-    undoToast(`Usunięty wykład: ${l.name || 'bez nazwy'}`, () => void saveRecord(rel, null, before))
+    const { saved, before } = await tryRemoveRecord(rel)
+    if (saved) undoToast(`Usunięty wykład: ${l.name || 'bez nazwy'}`, () => void saveRecord(rel, null, before))
   }
   return (
     <div className="flex flex-col gap-2 rounded border border-line p-2.5" data-testid="lecture-row">

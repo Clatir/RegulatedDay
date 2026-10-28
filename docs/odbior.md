@@ -69,6 +69,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8b.2 Aktualizacja do 0.17.0 – kopia i identyfikator
    - [ ] E8b.1 Folder danych znika w trakcie pracy (tylko na folderze testowym, jeśli chcesz)
    - [ ] E8c.2 Kliknięcie powiadomienia „za 5 min” i Alt+F4 w panelu
+   - [ ] E8d.1 Szybkie zmiany bloku, kroki rutyny i liczniki próśb
+   - [ ] E8d.2 „Przedłuż” krokami ±15 min i podwójne „Dalej” na pasku
+   - [ ] E8d.3 Sesje i kalendarz w Ustawieniach
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
@@ -1269,3 +1272,35 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Oczekiwany efekt:** rano działa nowa wersja; w `logs\update.log` jest instalacja „night”, a w `main.log` noc nie
   pisze „stan powiadomień: notPresent”.
 - **Nie przechodzi, gdy:** wersja czeka rano mimo spełnionych warunków, a w logu jest „stan powiadomień: notPresent”.
+
+### E8d – poprawki ekranów po przeglądzie E8 (0.19.0)
+
+#### E8d.1 Szybkie zmiany bloku, kroki rutyny i liczniki próśb (0.19.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/window-edits.test.ts`, `tests/e2e/screens.spec.ts` (↑ w rutynie), `tests/web/screens-e8.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” zaznacz blok z szablonu, wpisz nową długość i od razu kliknij „stały”; w Rutynach kliknij ↑
+  przy drugim kroku; po prośbie „Zrobione teraz” z paska otwórz ekran Prośby.
+- **Oczekiwany efekt:** blok ma nową długość i jest stały, bez baneru „spotkała się ze zmianą z innego komputera”; krok
+  przechodzi na górę i zostaje tam po przejściu na inny ekran; „Dziś” w licznikach pokazuje prośbę z jej minutami.
+- **Nie przechodzi, gdy:** pojawia się pytanie o zmianę z innego komputera, jedna z dwóch zmian znika, kolejność kroków
+  wraca albo licznik „Dziś” stoi na 0 po prośbie z paska.
+
+#### E8d.2 „Przedłuż” krokami ±15 min i podwójne „Dalej” na pasku (0.19.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/widget.test.ts` (kroki, podwójne „Dalej” z kliknięciem paska). Ty: przy końcu bloku po granicy.
+- **Jak sprawdzić:** pod koniec bloku po granicy kliknij na pasku pulpitu „Przedłuż” → +15 i potem „+15” obok kosztu;
+  innym razem kliknij dwa razy szybko „Dalej”.
+- **Oczekiwany efekt:** koszt zmienia się na „Przedłuż +30 …”, „Potwierdź” przedłuża o 30 min; podwójne „Dalej” kończy
+  tylko bieżący blok i zaczyna następny.
+- **Nie przechodzi, gdy:** obok kosztu nie ma −15 / +15, potwierdzenie przedłuża o 15 min albo podwójne „Dalej” kończy też
+  następny blok.
+
+#### E8d.3 Sesje i kalendarz w Ustawieniach (0.19.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/screens-e8.test.ts` (sesja, „od daty”), `tests/e2e/screens.spec.ts` (kalendarz). Ty: rzut oka.
+- **Jak sprawdzić:** w Ustawieniach wpisz początek sesji NY późniejszy niż jej koniec; usuń sesję i kliknij „Cofnij”;
+  w Kalendarzu zaznacz dziś i kliknij typ.
+- **Oczekiwany efekt:** sesja zostaje, a jej koniec przesuwa się o tyle samo; po „Cofnij” sesja wraca z blokami
+  zakotwiczonymi w szablonach; kalendarz mówi, że dzisiejszy typ zmienisz w „Dziś”, i nie zmienia komórki.
+- **Nie przechodzi, gdy:** sesja znika z listy, po „Cofnij” bloki „po sesji” nie wracają albo dzisiejsza komórka
+  zmienia kolor na nowy typ.

@@ -7,14 +7,15 @@
  */
 import { useMemo, useState } from 'react'
 import { putBlock } from '@shared/data/dayEdits'
-import { paths } from '@shared/data/paths'
 import { exchangeCost, isFullExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { durationLabel, logicalClock } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
 import { Dialog } from '../../components/Dialog'
-import { editOf, logEvents, saveEdits } from '../../store/data'
+import { useBusy } from '../../lib/busy'
+import { isSaved, logEvents } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { blockName, type Names } from '../plan/blockView'
+import { blockNow, saveDay } from './dayActions'
 
 export function ExchangeDialog({ model, names, block, proposal, onClose }: { model: DayModel; names: Names; block: PlanBlock; proposal: ExchangeProposal; onClose: (added: string | null) => void }) {
   const [chosen, setChosen] = useState<string[]>(proposal.preselected)
@@ -29,26 +30,39 @@ export function ExchangeDialog({ model, names, block, proposal, onClose }: { mod
   const costText = (c: { beyondMin: number; overBudgetMin: number; overrun: boolean }) =>
     c.beyondMin > 0 ? `${c.overrun ? 'przekroczenie' : 'przedłużenie'} · ${durationLabel(c.beyondMin)} po granicy` : c.overBudgetMin > 0 ? `budżet pracy +${durationLabel(c.overBudgetMin)} (tylko ostrzeżenie)` : 'bez kosztu'
 
-  /** Adds the block (with the yielding parked, one move more each); the minutes beyond the boundary confirmed in advance. */
-  const commit = async (exchange: boolean) => {
-    const c = exchange ? cost : without
-    if (c.overrun && armed !== (exchange ? 'exchange' : 'add')) {
-      setArmed(exchange ? 'exchange' : 'add')
-      return
-    }
-    let next = putBlock(raw ?? { schema: 1, date }, block)
-    if (exchange) for (const y of yielding) next = putBlock(next, { ...y.block, moves: y.block.moves + 1 })
-    await saveEdits([editOf(paths.day(date), raw, next)])
-    const events: Array<{ k: string; day: string; [k: string]: unknown }> = []
-    if (exchange) {
-      // The game's record of the exchange (spec „Wymiana zamiast dokładania”): both sides with their lengths now.
-      events.push({ k: 'block.exchange', day: date, block: block.id, minutes: block.durationMin, yielding: yielding.map((y) => ({ block: y.block.id, minutes: y.minutes })) })
-      for (const y of yielding) events.push({ k: 'block.park', day: date, block: y.block.id, rule: 'exchange' })
-    }
-    if (c.beyondMin > 0) events.push({ k: 'block.addConfirm', day: date, block: block.id })
-    if (events.length) await logEvents(events)
-    onClose(block.id)
-  }
+  const [busy, run] = useBusy()
+  /**
+   * Adds the block (with the yielding parked, one move more each); the minutes beyond the boundary confirmed in advance.
+   * The parking and the exchange are written only when the block was saved – the plan never loses the yielding blocks
+   * without the new one (A6-08); the window stays open then.
+   */
+  const commit = (exchange: boolean) =>
+    run(async () => {
+      const c = exchange ? cost : without
+      if (c.overrun && armed !== (exchange ? 'exchange' : 'add')) {
+        setArmed(exchange ? 'exchange' : 'add')
+        return
+      }
+      const out = await saveDay(date, raw, (r) => {
+        let next = putBlock(r, block)
+        if (exchange)
+          for (const y of yielding) {
+            const now = blockNow(next, date, y.block)
+            next = putBlock(next, { ...now, moves: now.moves + 1 })
+          }
+        return next
+      })
+      if (!isSaved(out)) return
+      const events: Array<{ k: string; day: string; [k: string]: unknown }> = []
+      if (exchange) {
+        // The game's record of the exchange (spec „Wymiana zamiast dokładania”): both sides with their lengths now.
+        events.push({ k: 'block.exchange', day: date, block: block.id, minutes: block.durationMin, yielding: yielding.map((y) => ({ block: y.block.id, minutes: y.minutes })) })
+        for (const y of yielding) events.push({ k: 'block.park', day: date, block: y.block.id, rule: 'exchange' })
+      }
+      if (c.beyondMin > 0) events.push({ k: 'block.addConfirm', day: date, block: block.id })
+      if (events.length) await logEvents(events)
+      onClose(block.id)
+    })
 
   return (
     <Dialog title={`Nowy blok: ${blockName(block, names)}`} onClose={() => onClose(null)} data-testid="exchange">
@@ -82,12 +96,12 @@ export function ExchangeDialog({ model, names, block, proposal, onClose }: { mod
       )}
       <div className="flex flex-col gap-2 border-t border-line pt-3">
         {proposal.candidates.length > 0 && (
-          <button type="button" className="btn btn-accent justify-between" disabled={!chosen.length} onClick={() => void commit(true)} data-testid="exchange-swap">
+          <button type="button" className="btn btn-accent justify-between" disabled={!chosen.length || busy} onClick={() => void commit(true)} data-testid="exchange-swap">
             <span>{armed === 'exchange' ? 'Potwierdź przekroczenie' : 'Wymień'}</span>
             <span className="text-[12px]">{costText(cost)}</span>
           </button>
         )}
-        <button type="button" className="btn justify-between" onClick={() => void commit(false)} data-testid="exchange-add">
+        <button type="button" className="btn justify-between" disabled={busy} onClick={() => void commit(false)} data-testid="exchange-add">
           <span>{armed === 'add' ? 'Potwierdź przekroczenie' : proposal.candidates.length ? 'Dodaj bez wymiany' : 'Dodaj'}</span>
           <span className="text-[12px]">{costText(without)}</span>
         </button>

@@ -5,8 +5,10 @@
  */
 import { useState } from 'react'
 import type { EditQuestion } from '@shared/api'
+import { countLabel, plural } from '@shared/format'
 import { dayFileFrom } from '@shared/model/plan'
 import { Dialog } from '../components/Dialog'
+import { useBusy } from '../lib/busy'
 import { fieldText, keyOf, valueText } from '../lib/recordText'
 import { reloadData, useData } from '../store/data'
 import { toast } from '../store/ui'
@@ -35,9 +37,7 @@ export function QuestionsBanner() {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 border-b border-lamp/40 bg-lamp-soft px-4 py-2 text-[12.5px]" data-testid="banner-questions">
-        <span>
-          {questions.length === 1 ? 'Jedna Twoja zmiana spotkała się' : `${questions.length} Twoich zmian spotkało się`} ze zmianą z innego komputera.
-        </span>
+        <span>{questionsText(questions.length)}</span>
         <button type="button" className="btn" onClick={() => setOpen(true)} data-testid="questions-open">
           Pokaż
         </button>
@@ -57,11 +57,22 @@ function QuestionsDialog({ questions, onClose }: { questions: EditQuestion[]; on
       toast(`Nie udało się: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
   }
-  const newer = async () => {
-    for (const q of questions) await window.rd.resolve(q.id, q.theirsAt != null && q.theirsAt > q.at ? 'theirs' : 'mine').catch(() => undefined)
-    await reloadData()
-    onClose()
-  }
+  const [busy, run] = useBusy()
+  // Every answer is tried; the window closes only when all went through (a failure says so and stays open – A6-05).
+  const newer = () =>
+    run(async () => {
+      const failed: string[] = []
+      for (const { id, choice } of newerChoices(questions)) {
+        try {
+          await window.rd.resolve(id, choice)
+        } catch (e) {
+          failed.push(e instanceof Error ? e.message : String(e))
+        }
+      }
+      await reloadData()
+      if (failed.length) toast(`Nie udało się odpowiedzieć na ${countLabel(failed.length, 'pytanie', 'pytania', 'pytań')}: ${failed[0]}`, 'error', 8000)
+      else onClose()
+    })
   const names = { rd, blockName: () => null }
   return (
     <Dialog
@@ -74,7 +85,7 @@ function QuestionsDialog({ questions, onClose }: { questions: EditQuestion[]; on
           <button type="button" className="btn" onClick={onClose}>
             Zamknij
           </button>
-          <button type="button" className="btn btn-accent" onClick={() => void newer()} data-testid="questions-newer">
+          <button type="button" className="btn btn-accent" disabled={busy || !newerChoices(questions).length} onClick={() => void newer()} data-testid="questions-newer">
             Przyjmij nowsze
           </button>
         </>
@@ -107,6 +118,19 @@ function QuestionsDialog({ questions, onClose }: { questions: EditQuestion[]; on
       ))}
     </Dialog>
   )
+}
+
+/** The banner's sentence with the Polish forms of the number (A6-23). */
+export function questionsText(n: number): string {
+  return n === 1 ? 'Jedna Twoja zmiana spotkała się ze zmianą z innego komputera.' : `${n} ${plural(n, 'Twoja zmiana spotkała', 'Twoje zmiany spotkały', 'Twoich zmian spotkało')} się ze zmianą z innego komputera.`
+}
+
+/**
+ * „Przyjmij nowsze”: each field conflict by the time of the two changes. A record removed elsewhere comes back only by
+ * its own „Przywróć z moją zmianą” (T448), and a broken file waits for its restoring – neither is answered here (A6-05).
+ */
+export function newerChoices(questions: readonly EditQuestion[]): Array<{ id: string; choice: 'mine' | 'theirs' }> {
+  return questions.filter((q) => q.kind === 'conflict').map((q) => ({ id: q.id, choice: q.theirsAt != null && q.theirsAt > q.at ? 'theirs' : 'mine' }))
 }
 
 /** The record a question is about, named for the interface. */

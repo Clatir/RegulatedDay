@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { HistoryRecord, HistoryVersion } from '@shared/api'
 import { diffRecords } from '@shared/data/merge'
-import { plDate } from '@shared/format'
+import { countLabel, plDate } from '@shared/format'
 import { personName } from '@shared/model/rd'
 import { EmptyState, cx } from '../../components/ui'
 import { fieldText, keyOf, valueText } from '../../lib/recordText'
@@ -46,7 +46,7 @@ export function HistoryPage() {
                 >
                   <RecordName r={r} />
                   <span className="text-[11.5px] text-muted">
-                    {r.versions} {r.versions === 1 ? 'wersja' : r.versions < 5 ? 'wersje' : 'wersji'} · {new Date(r.last).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', dateStyle: 'short', timeStyle: 'short' })}
+                    {countLabel(r.versions, 'wersja', 'wersje', 'wersji')} · {new Date(r.last).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', dateStyle: 'short', timeStyle: 'short' })}
                     {r.exists ? '' : ' · usunięty'}
                   </span>
                 </button>

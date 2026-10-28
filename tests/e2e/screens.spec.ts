@@ -122,9 +122,25 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(wake).toHaveAttribute('data-error', /Dozwolone/)
       await expect(wake).toHaveValue(wakeBefore)
 
-      // Kalendarz: two dates marked as a remote „zjazd”.
+      // A day gone: its type is its plan's – the dialog says so, nothing to save (A6-12).
+      await page.getByTestId('nav-today').click()
+      await page.getByTestId('day-prev').click()
+      await page.getByTestId('day-type').click()
+      await expect(page.getByTestId('type-past')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await page.getByTestId('day-today').click()
+
+      // Kalendarz: today keeps its type here – it changes in „Dziś” (A7-03).
       await page.getByTestId('nav-calendar').click()
       await expect(page.getByTestId('calendar')).toBeVisible()
+      const todayCell = page.getByTestId(`day-${logicalToday()}`)
+      const todayText = (await todayCell.textContent()) ?? ''
+      await todayCell.click({ modifiers: ['Control'] })
+      await page.getByTestId('calendar-type-zjazd-zdalny').click()
+      await expect(page.getByText('Typ dzisiejszego dnia zmienisz w „Dziś”', { exact: false })).toBeVisible()
+      await expect(todayCell).toHaveText(todayText)
+      // Two dates of the next month (days to come) marked as a remote „zjazd”.
+      await page.getByTestId('month-next').click()
       const cells = page.locator('[data-testid^="day-"]')
       await cells.nth(10).click({ modifiers: ['Control'] })
       await cells.nth(11).click({ modifiers: ['Control'] })
@@ -153,6 +169,17 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(page.getByTestId('routine-editor')).toBeVisible()
       await page.getByTestId('step-add-normal').click()
       await expect(page.getByTestId('steps-normal')).toContainText('10 min')
+      // The order is yours: ↑ moves the second step first – saved (A6-02).
+      const steps = page.getByTestId('steps-normal')
+      for (const [i, name] of [[1, 'woda'], [2, 'kot']] as const) {
+        const f = steps.getByLabel(`Krok ${i}`, { exact: true })
+        await f.fill(name)
+        await f.press('Enter')
+        await expect(f).toHaveValue(name)
+      }
+      await page.getByTestId('step-up-normal-1').click()
+      await expect(steps.getByLabel('Krok 1', { exact: true })).toHaveValue('kot')
+      await expect(steps.getByLabel('Krok 2', { exact: true })).toHaveValue('woda')
       await shot(page, 'e3-06-routines')
 
       // Szablony: the ordinary day with its second shift.
@@ -179,6 +206,13 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await shot(page, 'e3-09-settings')
       const rd = JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { dayTypes?: { zwykly?: { budgetMin?: number } } } }> }
       expect(rd.settings.at(-1)!.patch.dayTypes?.zwykly?.budgetMin).toBe(420)
+      // A session removed and given back by „Cofnij” – with its id (A7-07).
+      const sessions = page.getByTestId('settings-sessions')
+      const firstName = await sessions.getByLabel('Nazwa sesji').first().inputValue()
+      await page.getByTestId('session-remove-0').click()
+      await expect(sessions.getByLabel('Nazwa sesji').first()).not.toHaveValue(firstName)
+      await page.getByRole('button', { name: 'Cofnij' }).last().click()
+      await expect(sessions.getByLabel('Nazwa sesji').first()).toHaveValue(firstName)
       // D304: the bar's place on the monitors' mock-up – by default the left bottom corner of the primary one.
       await expect(page.getByTestId('bar-place-map')).toBeVisible()
       await expect(page.getByTestId('bar-place-1-bottom-left')).toHaveAttribute('aria-pressed', 'true')

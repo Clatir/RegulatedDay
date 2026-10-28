@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { marketDay } from '@shared/calendar/holidays'
-import { putBlock, setAsked, setCancelled, setSessionAnswer } from '@shared/data/dayEdits'
+import { dayRaw, putBlock, setAsked, setCancelled, setSessionAnswer } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { checkinStates } from '@shared/engine/energy'
 import { atOf } from '@shared/engine/grid'
@@ -24,8 +24,10 @@ import { addDays, weekday } from '@shared/time/zone'
 import { Segmented, cx } from '../../components/ui'
 import { CalibrationCard } from '../calibration/CalibrationEntry'
 import { SideBStep } from './SideBStep'
-import { editOf, logEvents, rawRecord, saveEdits, useData } from '../../store/data'
+import { dayFilesNow, editOf, isSaved, logEvents, rawRecord, trySaveWith, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
+import { useBusy } from '../../lib/busy'
+import { toast } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { saveDay } from './dayActions'
 
@@ -71,6 +73,12 @@ function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void }) {
   const [answers, setAnswers] = useState<Answer[]>([0, 0, 0, 0, 0, 0])
   const byPool = Object.fromEntries(POOLS.map((p) => [p, QUESTIONS.flatMap((q, i) => (q.pool === p ? [answers[i]!] : []))])) as Record<Pool, [Answer, Answer]>
   const result = checkinStates(byPool)
+  const [busy, run] = useBusy()
+  const save = (fewer: boolean) =>
+    run(async () => {
+      if (!(await logEvents([{ k: 'energy.checkin', day: model.date, answers: byPool }])) || !fewer) return
+      await window.rd.timer({ a: 'fewer', day: model.date }).catch((e: unknown) => toast(`Nie włączono „mniej pytań”: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000))
+    })
   return (
     <div className="flex flex-col gap-2" data-testid="checkin">
       <span className="text-[12.5px] text-muted">Pytania o objawy – z nich aplikacja wylicza energię na dziś (nie oceniasz jej liczbą).</span>
@@ -94,17 +102,12 @@ function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void }) {
         Wynik: {POOLS.map((p) => `${POOL_NAMES[p]} ${result[p]}`).join(' · ')}
       </span>
       <div className="flex gap-2">
-        <button type="button" className="btn btn-accent" onClick={() => void logEvents([{ k: 'energy.checkin', day: model.date, answers: byPool }])} data-testid="checkin-save">
+        <button type="button" className="btn btn-accent" disabled={busy} onClick={() => void save(false)} data-testid="checkin-save">
           Zapisz
         </button>
         {/* „Drażnią mnie pytania” – tak: the proposal of „mniej pytań” is here, in the check-in itself (spec „Cisza”). */}
         {answers[2] === 2 && (
-          <button
-            type="button"
-            className="btn"
-            onClick={() => void logEvents([{ k: 'energy.checkin', day: model.date, answers: byPool }]).then(() => window.rd.timer({ a: 'fewer', day: model.date }))}
-            data-testid="checkin-save-fewer"
-          >
+          <button type="button" className="btn" disabled={busy} onClick={() => void save(true)} data-testid="checkin-save-fewer">
             Zapisz i włącz „mniej pytań”
           </button>
         )}
@@ -175,26 +178,30 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
     })
   }
 
-  const addRequests = async () => {
-    const list = queued.filter((r) => chosen.includes(r.id))
-    if (!list.length) return
-    const minutes = list.reduce((sum, r) => sum + (r.estimateMin ?? DEFAULT_ESTIMATE_MIN), 0)
-    const start = freeStart(s, s.now, minutes)
-    const b = requestsBlock(
-      list.map((r) => r.id),
-      minutes,
-      start,
-      s.settings.categories.prosby
-    )
-    const dayEdit = editOf(paths.day(date), raw, putBlock(raw ?? { schema: 1, date }, b))
-    const reqEdits = list.map((r) => {
-      const rel = paths.record('request', r.id)
-      const before = rawRecord(rel)
-      return before ? editOf(rel, before, { ...before, state: 'planned', day: date, block: b.id }) : null
+  const [busy, run] = useBusy()
+  // In its turn: only requests still in the queue (a second click finds them planned and adds nothing).
+  const addRequests = () =>
+    run(async () => {
+      const out = await trySaveWith(async () => {
+        const list = queued.filter((r) => chosen.includes(r.id) && rawRecord(paths.record('request', r.id))?.state === 'queued')
+        if (!list.length) return []
+        const minutes = list.reduce((sum, r) => sum + (r.estimateMin ?? DEFAULT_ESTIMATE_MIN), 0)
+        const b = requestsBlock(
+          list.map((r) => r.id),
+          minutes,
+          freeStart(s, s.now, minutes),
+          s.settings.categories.prosby
+        )
+        const day = (await dayFilesNow([date], () => raw))[date] ?? null
+        const reqEdits = list.map((r) => {
+          const rel = paths.record('request', r.id)
+          const before = rawRecord(rel)
+          return before ? editOf(rel, before, { ...before, state: 'planned', day: date, block: b.id }) : null
+        })
+        return [editOf(paths.day(date), day, putBlock(dayRaw(day, date), b)), ...reqEdits]
+      })
+      if (isSaved(out)) setChosen([])
     })
-    await saveEdits([dayEdit, ...reqEdits])
-    setChosen([])
-  }
 
   return (
     <div className="flex flex-col gap-3 text-[12.5px]" data-testid="morning-steps">
@@ -272,7 +279,7 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
               <span className="num ml-auto text-muted">{durationLabel(r.estimateMin ?? DEFAULT_ESTIMATE_MIN)}</span>
             </label>
           ))}
-          <button type="button" className="btn self-start" disabled={!chosen.length} onClick={() => void addRequests()} data-testid="queue-add">
+          <button type="button" className="btn self-start" disabled={!chosen.length || busy} onClick={() => void addRequests()} data-testid="queue-add">
             Dodaj do planu
           </button>
         </div>
@@ -303,10 +310,16 @@ function Boundary({ model, lm, approved, proposal }: { model: DayModel; lm: (i: 
   const [minutes, setMinutes] = useState(60)
   const [reason, setReason] = useState('NFP')
   const [thisMonth, setThisMonth] = useState<number | null>(null)
+  const [busy, run] = useBusy()
   useEffect(() => {
     if (!exception) return
-    void window.rd.monthEvents(date.slice(0, 7), ['boundary.exception']).then((e) => setThisMonth(e.length))
+    // Unknown now: no count and no warning (the exception is still possible).
+    void window.rd
+      .monthEvents(date.slice(0, 7), ['boundary.exception'])
+      .then((e) => setThisMonth(e.length))
+      .catch(() => setThisMonth(null))
   }, [exception, date])
+  const log = (events: Parameters<typeof logEvents>[0], then?: () => void) => run(async () => void ((await logEvents(events)) && then?.()))
   const maxMin = s.settings.exceptionMaxMin
   const steps = [30, 60, 90, 120, 180].filter((m) => m <= maxMin)
   const warnFrom = s.settings.exceptionWarnFrom
@@ -320,7 +333,7 @@ function Boundary({ model, lm, approved, proposal }: { model: DayModel; lm: (i: 
             {s.boundary.auto ? ' (zatwierdzona sama przy starcie pierwszego bloku pracy)' : ''}
           </span>
           {approvedByYou && (
-            <button type="button" className="btn" onClick={() => void logEvents([{ k: 'boundary.undo', day: date }])} data-testid="boundary-undo">
+            <button type="button" className="btn" disabled={busy} onClick={() => void log([{ k: 'boundary.undo', day: date }])} data-testid="boundary-undo">
               Cofnij zatwierdzenie
             </button>
           )}
@@ -330,7 +343,7 @@ function Boundary({ model, lm, approved, proposal }: { model: DayModel; lm: (i: 
           <span>
             Propozycja granicy: <span className="num text-lamp">{lm(proposal)}</span> (koniec ostatniego bloku pracy + {s.settings.boundaryBufferMin} min, najpóźniej {lm(s.boundary.max)})
           </span>
-          <button type="button" className="btn btn-accent" onClick={() => void logEvents([{ k: 'boundary.approve', day: date, boundary: atOf(s.grid, proposal), auto: false, plan: model.ctx.plan.map((b) => b.id) }])} data-testid="boundary-approve">
+          <button type="button" className="btn btn-accent" disabled={busy} onClick={() => void log([{ k: 'boundary.approve', day: date, boundary: atOf(s.grid, proposal), auto: false, plan: model.ctx.plan.map((b) => b.id) }])} data-testid="boundary-approve">
             Zatwierdź plan
           </button>
         </div>
@@ -361,12 +374,7 @@ function Boundary({ model, lm, approved, proposal }: { model: DayModel; lm: (i: 
             </p>
           )}
           <div className="flex gap-2">
-            <button
-              type="button"
-              className="btn btn-accent"
-              onClick={() => void logEvents([{ k: 'boundary.exception', day: date, minutes, reason }]).then(() => setException(false))}
-              data-testid="exception-add"
-            >
+            <button type="button" className="btn btn-accent" disabled={busy} onClick={() => void log([{ k: 'boundary.exception', day: date, minutes, reason }], () => setException(false))} data-testid="exception-add">
               Dodaj wyjątek
             </button>
             <button type="button" className="btn" onClick={() => setException(false)}>

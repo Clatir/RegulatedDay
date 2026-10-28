@@ -13,7 +13,7 @@ import { SESSION_ANCHOR } from '@shared/engine/createDay'
 import { Choice, DurationField, TextField, TimeField } from '../../components/fields'
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
-import { blockName, categoryOptions, type Names } from './blockView'
+import { anchorCandidates, blockName, categoryOptions, type Names } from './blockView'
 
 export function BlockEditor({
   block,
@@ -32,7 +32,8 @@ export function BlockEditor({
   computers: Array<{ id: string; name: string }>
   /** In a template a block may follow a session of the layer („po sesji NY”). */
   sessions?: readonly SessionDef[]
-  onChange: (b: PlanBlock) => void
+  /** The fields changed (over the block as it is when the change is saved – a change made a moment before stays). */
+  onChange: (patch: Partial<PlanBlock>) => void
   onClose: () => void
   actions?: ReactNode
   readOnly?: boolean
@@ -40,10 +41,10 @@ export function BlockEditor({
   useEscapeLayer(true, onClose)
   const rules = names.settings.categories[block.categoryId]
   const variants = (rules?.variants ?? []).filter((v) => !v.archived || v.id === block.variantId)
-  const set = (patch: Partial<PlanBlock>) => !readOnly && onChange({ ...block, ...patch })
+  const set = (patch: Partial<PlanBlock>) => !readOnly && onChange(patch)
   const anchors = [
     ...(sessions ?? []).map((s) => ({ value: `${SESSION_ANCHOR}${s.id}`, label: `po sesji ${s.name}` })),
-    ...plan.filter((b) => b.id !== block.id && b.anchor !== block.id).map((b) => ({ value: b.id, label: `po: ${blockName(b, names)}${b.startMin != null ? ` (${logicalClock(b.startMin)})` : ''}` }))
+    ...anchorCandidates(plan, block.id).map((b) => ({ value: b.id, label: `po: ${blockName(b, names)}${b.startMin != null ? ` (${logicalClock(b.startMin)})` : ''}` }))
   ]
   const routine = block.routine ? names.routines.find((r) => r.id === block.routine) : undefined
   return (

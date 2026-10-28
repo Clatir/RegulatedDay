@@ -144,8 +144,11 @@ describe('widget w procesie głównym', () => {
     await w.refresh()
     clock.now += 60_000
     await w.act('next', undefined, 'bar')
+    // The desktop bar's own click comes between the two (A7-01): still one action.
+    await w.act('barClick', undefined, 'bar')
     clock.now += 200
     await w.act('next', undefined, 'bar')
+    await w.act('barClick', undefined, 'bar')
     expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'block.end')).toHaveLength(1)
     expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
   })
@@ -224,6 +227,55 @@ describe('widget w procesie głównym', () => {
     }
     await w.refresh()
     expect(shown.filter((n) => n.title === 'Energia na poziomie rezerwy')).toHaveLength(1)
+  })
+
+  it('„Przedłuż” przed drugim kliknięciem: kroki ±15 min, każdy z nowym kosztem i nowymi 10 s; potwierdzenie przedłuża o wybraną długość (A7-04, T289)', async () => {
+    const { w, folder, at, clock } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    at(10 * 60)
+    await w.refresh()
+    await w.act('start', undefined, 'main')
+    at(10 * 60 + 50)
+    await w.refresh()
+    await w.act('extend', '15', 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'extend' })
+    expect(w.current().pending!.text).toContain('−15 min puli')
+    const first = w.current().pending!.until
+    clock.now += 4_000
+    await w.act('extendStep', '15', 'bar')
+    expect(w.current().pending!.text).toContain('Przedłuż +30')
+    expect(w.current().pending!.text).toContain('−30 min puli')
+    expect(w.current().pending!.until).toBeGreaterThan(first)
+    // Not shorter than 15 min.
+    await w.act('extendStep', '-15', 'bar')
+    clock.now += 600
+    await w.act('extendStep', '-15', 'bar')
+    expect(w.current().pending!.text).toContain('Przedłuż +15')
+    clock.now += 600
+    await w.act('extendStep', '15', 'bar')
+    clock.now += 1_000
+    await w.act('confirm', undefined, 'bar')
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'block.extend').map((e) => (e as { minutes?: number }).minutes)).toEqual([30])
+  })
+
+  it('krok „−15” do długości bez kosztu niczego nie zapisuje – przedłużenie dopiero po „Potwierdź” (przegląd 0.19.0)', async () => {
+    const { w, folder, at, clock } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60 + 20), auto: false }])
+    at(10 * 60)
+    await w.refresh()
+    await w.act('start', undefined, 'main')
+    at(10 * 60 + 50)
+    await w.refresh()
+    await w.act('extend', '30', 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'extend' })
+    clock.now += 1_000
+    await w.act('extendStep', '-15', 'bar')
+    expect(w.current().pending!.text).toBe('Przedłuż +15: bez kosztu')
+    const extends_ = async () => (await folder.readDay(DAY)).events.filter((e) => e.k === 'block.extend').map((e) => (e as { minutes?: number }).minutes)
+    expect(await extends_()).toEqual([])
+    clock.now += 1_000
+    await w.act('confirm', undefined, 'bar')
+    expect(await extends_()).toEqual([15])
   })
 
   it('koszt „Przedłuż” bloku w tle stoi w miejscu jego przycisku', async () => {

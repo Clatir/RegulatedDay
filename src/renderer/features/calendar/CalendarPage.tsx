@@ -18,9 +18,10 @@ import { blockFill } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
 import { Dialog } from '../../components/Dialog'
 import { TimeField } from '../../components/fields'
-import { editOf, saveEdits, useData } from '../../store/data'
+import { dayFilesNow, editOf, isSaved, trySaveWith, useData } from '../../store/data'
+import { useBusy } from '../../lib/busy'
 import { useMachine } from '../../store/machine'
-import { openDay } from '../../store/ui'
+import { openDay, toast } from '../../store/ui'
 import { DAY_TYPE_COLORS } from './dayTypes'
 import { gridDates, MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
 
@@ -43,6 +44,15 @@ export function CalendarPage() {
     }
   }, [dates, stamp])
   const fileOf = (d: string) => (files[d] ? dayFileFrom(files[d], d) : null)
+  const [busy, run] = useBusy()
+  /** The days' files changed by `next`, each in its turn from the file as it is then (T517); one save at a time. */
+  const saveDays = (dates: readonly string[], next: (raw: RawRecord) => RawRecord) =>
+    run(() =>
+      trySaveWith(async () => {
+        const now = await dayFilesNow(dates, (d) => files[d] ?? null)
+        return dates.map((d) => editOf(paths.day(d), now[d] ?? null, next(dayRaw(now[d], d))))
+      })
+    ).then((out) => out ?? null)
 
   const info = (d: string) => {
     const s = settingsOn(rd.settings, d)
@@ -65,10 +75,23 @@ export function CalendarPage() {
     return { type, own: own?.dayType != null, marks, title: [...pl.names, ...us.flatMap((h) => h.names)].join(', ') || undefined }
   }
 
-  /** The selected days take a type (null: their weekday's own again). */
+  /**
+   * The selected days to come take a type (null: their weekday's own again). Today's type changes in „Dziś” (a change
+   * during the day with its proposals) and a day gone keeps the type of its plan – a type in their files would change
+   * nothing the engine counts (A7-03).
+   */
   const setType = async (t: DayTypeId | null) => {
-    const list = [...sel].sort()
-    await saveEdits(list.map((d) => editOf(paths.day(d), files[d] ?? null, setDayField(dayRaw(files[d], d), 'dayType', t))))
+    const all = [...sel].sort()
+    const list = all.filter((d) => d > today)
+    if (list.length < all.length)
+      toast(
+        all.includes(today) ? 'Typ dzisiejszego dnia zmienisz w „Dziś” (przycisk typu u góry) – z propozycjami zmiany w trakcie dnia. Dni minione mają typ z planu z rana.' : 'Dni minione mają typ z planu z rana – zmieniają się tylko dni od jutra.',
+        'info',
+        10_000,
+        all.includes(today) ? { label: 'Otwórz Dziś', run: () => openDay(null) } : undefined
+      )
+    if (!list.length) return
+    if (!isSaved(await saveDays(list, (r) => setDayField(r, 'dayType', t)))) return
     setSel(new Set())
     // A Saturday marked as a „zjazd”: the weekly analysis to Friday – asked once, here or in Friday's morning plan.
     if (t === 'zjazd-stacjonarny' || t === 'zjazd-zdalny') {
@@ -87,19 +110,19 @@ export function CalendarPage() {
   }
 
   const setWakeOf = async (v: number | null) => {
-    await saveEdits([...sel].map((d) => editOf(paths.day(d), files[d] ?? null, setDayField(dayRaw(files[d], d), 'wakeMin', v))))
-    setSel(new Set())
+    if (isSaved(await saveDays([...sel].filter((d) => d >= today), (r) => setDayField(r, 'wakeMin', v)))) setSel(new Set())
   }
 
   const answerAnalysis = async (a: (typeof ask)[number], yes: boolean) => {
-    const raw = (await window.rd.dayFiles([a.friday]))[a.friday] ?? null
-    let next = setAsked(dayRaw(raw, a.friday), 'weeklyAnalysisMove', yes ? 'yes' : 'no')
-    if (yes) {
-      next = putBlock(next, a.analysis)
-      if (a.secondShift) next = setCancelled(next, a.secondShift, true)
-    }
-    await saveEdits([editOf(paths.day(a.friday), raw, next)])
-    setAsk(ask.filter((x) => x !== a))
+    const out = await saveDays([a.friday], (r) => {
+      let next = setAsked(r, 'weeklyAnalysisMove', yes ? 'yes' : 'no')
+      if (yes) {
+        next = putBlock(next, a.analysis)
+        if (a.secondShift) next = setCancelled(next, a.secondShift, true)
+      }
+      return next
+    })
+    if (isSaved(out)) setAsk(ask.filter((x) => x !== a))
   }
 
   const [y, m] = month.split('-')
@@ -150,19 +173,19 @@ export function CalendarPage() {
         <span className="text-[12px] text-muted">Zaznaczone dni: {sel.size} (przeciągnij albo klikaj z Ctrl; zwykłe kliknięcie otwiera plan dnia)</span>
         <span className="flex-1" />
         {DAY_TYPES.map((t) => (
-          <button key={t} type="button" className="btn" disabled={!sel.size} onClick={() => void setType(t)} data-testid={`calendar-type-${t}`}>
+          <button key={t} type="button" className="btn" disabled={!sel.size || busy} onClick={() => void setType(t)} data-testid={`calendar-type-${t}`}>
             {DAY_TYPE_NAMES[t]}
           </button>
         ))}
-        <button type="button" className="btn" disabled={!sel.size} onClick={() => void setType(null)} data-testid="calendar-type-default">
+        <button type="button" className="btn" disabled={!sel.size || busy} onClick={() => void setType(null)} data-testid="calendar-type-default">
           Typ z tygodnia
         </button>
         <span className="inline-flex items-center gap-1.5">
           <TimeField value={wake} range={RANGES.wakeMin} onCommit={setWake} className="w-[76px]" aria-label="Pobudka zaznaczonych dni" placeholder="pobudka" />
-          <button type="button" className="btn" disabled={!sel.size || wake == null} onClick={() => void setWakeOf(wake)}>
+          <button type="button" className="btn" disabled={!sel.size || wake == null || busy} onClick={() => void setWakeOf(wake)}>
             Ustaw pobudkę
           </button>
-          <button type="button" className="btn" disabled={!sel.size} onClick={() => void setWakeOf(null)}>
+          <button type="button" className="btn" disabled={!sel.size || busy} onClick={() => void setWakeOf(null)}>
             Pobudka z typu
           </button>
         </span>

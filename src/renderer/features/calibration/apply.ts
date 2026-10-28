@@ -8,10 +8,10 @@
 import type { CostProposal, TimeProposal } from '@shared/engine/calibration'
 import { paths } from '@shared/data/paths'
 import { templateJson } from '@shared/model/defaults'
-import { templateVersionOn, type Template } from '@shared/model/plan'
+import { templateFrom, templateVersionOn, type Template } from '@shared/model/plan'
 import { calibrationReviewFrom, proposalKey } from '@shared/model/rd'
 import type { DayTypeId, RulesSettings } from '@shared/model/settings'
-import { editOf, isSaved, rawRecord, trySaveEdits, trySaveRd } from '../../store/data'
+import { editOf, isSaved, rawRecord, trySaveRd, trySaveWith } from '../../store/data'
 import { saveSettingsChange } from '../settings/settingsStore'
 
 /**
@@ -44,14 +44,17 @@ export function costPatch(settings: RulesSettings, p: CostProposal): Record<stri
 export async function applyTime(p: TimeProposal, templates: readonly Template[], today: string): Promise<boolean> {
   const byTemplate = new Map<string, Array<{ block: string; fromMin: number; toMin: number }>>()
   for (const b of p.blocks) byTemplate.set(b.template, [...(byTemplate.get(b.template) ?? []), { block: b.block, fromMin: b.fromMin, toMin: b.toMin }])
-  const edits = [...byTemplate].map(([id, changes]) => {
-    const t = templates.find((x) => x.id === id)
-    if (!t) return null
-    const rel = paths.record('template', id)
-    const before = rawRecord(rel)
-    return editOf(rel, before, templateJson(templateWithTimes(t, changes, today), before))
-  })
-  return isSaved(await trySaveEdits(edits)) && remember(proposalKey('time', p.category))
+  // Each template as it is in the change's turn (T517).
+  const out = await trySaveWith(() =>
+    [...byTemplate].map(([id, changes]) => {
+      const rel = paths.record('template', id)
+      const before = rawRecord(rel)
+      const t = before ? templateFrom(before) : templates.find((x) => x.id === id)
+      if (!t) return null
+      return editOf(rel, before, templateJson(templateWithTimes(t, changes, today), before))
+    })
+  )
+  return isSaved(out) && remember(proposalKey('time', p.category))
 }
 
 /** A proposal of cost approved: a change of the settings from now; false – not saved, or it cannot apply any more. */

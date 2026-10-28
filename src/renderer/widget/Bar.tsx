@@ -488,7 +488,8 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
       data-warn={view.warn}
       data-quiet={quiet ? 'on' : 'off'}
       onPointerMove={mode === 'panel' ? () => window.rd.panelTouch() : undefined}
-      onPointerUp={mode === 'desktop' ? () => act('barClick') : undefined}
+      // A button's own click is its action – only a click beside the buttons is a click of the bar (A7-01).
+      onPointerUp={mode === 'desktop' ? (e) => !(e.target as Element).closest('button') && act('barClick') : undefined}
     >
       {grows === 'up' && unfolded}
       <div className={cx('relative flex flex-col gap-1.5 py-1.5 pr-2 pl-3', quiet && 'gap-1 py-1')}>
@@ -566,7 +567,16 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
           )}
           {view.buttons.extend &&
             (pending?.button === 'extend' ? (
-              own('extend', '', 'extend', 'bar-extend')
+              // Before the second click the length goes by 15 min, each step with its own cost (T289).
+              <span key="extend" className="inline-flex items-center gap-1">
+                <BarButton mode={mode} testId="bar-extend-less" onAct={() => act('extendStep', '-15')}>
+                  −15
+                </BarButton>
+                {own('extend', '', 'extend', 'bar-extend')}
+                <BarButton mode={mode} testId="bar-extend-more" onAct={() => act('extendStep', '15')}>
+                  +15
+                </BarButton>
+              </span>
             ) : (
               <BarButton mode={mode} testId="bar-extend" pressed={unfold === 'extend'} onAct={() => toggle('extend')}>
                 Przedłuż

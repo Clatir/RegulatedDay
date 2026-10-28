@@ -38,4 +38,21 @@ export function categoryOptions(n: Pick<Names, 'rd' | 'settings'>, keep?: string
     .map(({ id, name }) => ({ value: id, label: name }))
 }
 
+/**
+ * The blocks a block may follow: neither itself nor one whose chain of anchors leads to it – a cycle takes every block
+ * of it out of the plan, with no way left to pick one of them on the axis (A6-06).
+ */
+export function anchorCandidates(plan: readonly PlanBlock[], id: string): PlanBlock[] {
+  const byId = new Map(plan.map((b) => [b.id, b]))
+  const leadsTo = (b: PlanBlock): boolean => {
+    const seen = new Set<string>()
+    for (let x: PlanBlock | undefined = b; x?.anchor && !seen.has(x.id); x = byId.get(x.anchor)) {
+      if (x.anchor === id) return true
+      seen.add(x.id)
+    }
+    return false
+  }
+  return plan.filter((b) => b.id !== id && !leadsTo(b))
+}
+
 export const CLASS_NAMES = { work: 'praca', life: 'życie i opieka', free: 'wolne' } as const

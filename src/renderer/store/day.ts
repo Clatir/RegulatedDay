@@ -50,7 +50,10 @@ export function useDayData(date: string): DayData | null {
   return data
 }
 
-/** The raw files of several days (the morning plan looks at yesterday and the week ahead); null until read. */
+/**
+ * The raw files of several days (the morning plan looks at yesterday and the week ahead); null until read. Only the
+ * files – one read, no logs (A6-22); a day whose file cannot be read now is left out (unknown, never „no changes”).
+ */
 export function useDayFiles(dates: readonly string[]): Record<string, RawRecord | null> | null {
   const stamp = useData((s) => s.stamp)
   const reread = useNow(REREAD_MS)
@@ -58,9 +61,10 @@ export function useDayFiles(dates: readonly string[]): Record<string, RawRecord 
   const [files, setFiles] = useState<Record<string, RawRecord | null> | null>(null)
   useEffect(() => {
     let alive = true
-    void Promise.all(dates.map(async (d) => [d, (await window.rd.dayData(d).catch(() => null))?.dayFile ?? null] as const)).then((list) => {
-      if (alive) setFiles(Object.fromEntries(list))
-    })
+    void window.rd.dayFiles([...dates]).then(
+      (f) => alive && setFiles(f),
+      () => undefined
+    )
     return () => {
       alive = false
     }
