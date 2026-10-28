@@ -25,6 +25,8 @@ import {
   type WidgetAction,
   type WizardFinish
 } from '@shared/api'
+import type { RitualValue } from '@shared/engine/ritual'
+import type { CloseHow } from '@shared/model/events'
 import type { BarSpot, MachinePrefs } from '@shared/machine'
 import { BAR_SPOTS, patchMachinePrefs } from '@shared/machine'
 import type { Rect } from '@shared/bounds'
@@ -319,6 +321,17 @@ function onHelperEvent(m: HelperMessage): void {
 
 const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm', 'undo', 'cutOff', 'back', 'fewer', 'better', 'drink', 'restart', 'mark', 'requestNow', 'requestEnd', 'requestAfter'])
 
+/** A value of a ritual's answer from a window: an instant, a person (≤ 64 characters), a stretch [from, to) – else none. */
+function ritualValue(v: unknown): RitualValue {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (typeof v === 'string' && v.length <= 64) return v
+  if (v && typeof v === 'object') {
+    const s = v as { from?: unknown; to?: unknown }
+    if (typeof s.from === 'number' && typeof s.to === 'number' && Number.isFinite(s.from) && Number.isFinite(s.to)) return { from: s.from, to: s.to }
+  }
+  return null
+}
+
 /** A click of the timer from a window, only with the fields an action takes (anything else is dropped). */
 function timerIn(c: TimerIn): TimerIn {
   if (!c || typeof c !== 'object' || !TIMER_ACTIONS.has(String(c.a))) throw new Error('nieznane działanie timera')
@@ -350,12 +363,6 @@ function timerIn(c: TimerIn): TimerIn {
 const dataFolderNow = (): string | null => process.env.RD_DATA_DIR || config.get().dataFolder
 
 /**
- * The first day of the ritual: days from it are closed and frozen. None until the version with the ritual's screens –
- * till then every day closes itself as written (T482).
- */
-const RITUAL_FROM: string | null = null
-
-/**
  * The first day in the game: days before it are outside the game. None until the version with the game's screens – the
  * logic's versions show and count nothing (T492).
  */
@@ -385,7 +392,8 @@ function createHub(): DataHub {
     extraBackupDir: () => prefs().backupDir,
     previousVersion: () => lastRunVersion,
     worker,
-    ritualFrom: RITUAL_FROM,
+    // The ritual's screens are here: its first day comes from rd.json, written once by the leader (D320, T504).
+    ritualScreens: true,
     gameFrom: GAME_FROM,
     onFolder: (dir) => void config.update({ dataFolder: dir }).catch((e) => log('error', 'nowy folder danych nie zapisał się w ustawieniach', e)),
     onChange: () => {
@@ -722,6 +730,11 @@ function registerIpc(): void {
   handle(CH.resolve, (_e, id: string, choice: 'mine' | 'theirs') => needHub().resolve(String(id), choice === 'theirs' ? 'theirs' : 'mine'))
   handle(CH.monthEvents, (_e, month: string, kinds: string[]) => needHub().monthEvents(String(month), Array.isArray(kinds) ? kinds.map(String) : []))
   handle(CH.timer, (_e, click: TimerIn) => needHub().timer(timerIn(click)))
+  // The closing ritual (D318): a day's rows, an answer to one, the close; the morning's days to close.
+  handle(CH.ritual, (_e, day: unknown) => needHub().ritual(String(day)))
+  handle(CH.ritualAnswer, (_e, day: unknown, row: unknown, choice: unknown, value: unknown, item: unknown) => needHub().ritualAnswer(String(day), String(row), String(choice), ritualValue(value), typeof item === 'string' ? item : null))
+  handle(CH.closeDay, (_e, day: unknown, how: unknown) => needHub().closeDay(String(day), String(how) as CloseHow))
+  handle(CH.unclosedDays, () => needHub().unclosedDays())
   handle(CH.answer, (_e, id: string, answer: string, value: number | null) => needHub().answer(String(id), String(answer), typeof value === 'number' && Number.isFinite(value) ? value : null))
   ipcMain.on(CH.seen, (e, ids: unknown) => {
     // Seen only in the main window in the foreground (spec D231); the panel counts while it is open (E4b).

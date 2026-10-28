@@ -76,7 +76,9 @@ const USER_EVENTS: Record<string, Domain> = {
   'day.snapshot': 'timer',
   'energy.checkin': 'energy',
   'energy.module': 'energy',
-  'module.set': 'meta'
+  'module.set': 'meta',
+  // The ritual's felt cost of a category (D319): passive, never the timer's (an older version installs no faster for it).
+  'cost.felt': 'energy'
 }
 /** The journal keeps own events of this many days back (spec: until the day's freeze plus 7 days – freezing is E6). */
 export const JOURNAL_KEEP_DAYS = 14
@@ -101,6 +103,16 @@ const ROOM_FILE = 'room.json'
 const PEOPLE_DAYS = 28
 /** The days before today are counted again this often (late logs of other computers). */
 const PEOPLE_RECOUNT_MS = 15 * 60_000
+/** The rituals of this many days back are remembered (the morning shows at most 72 h of days to close). */
+const RITUAL_MEMO_DAYS = 4
+
+/** Why an answer of the ritual was refused, in words (never the choice's id). */
+function refusalOf(choice: string): string {
+  if (choice === 'endedAt' || choice === 'workedUntil' || choice === 'projectUntil' || choice === 'work' || choice === 'project') return 'ta godzina jest poza czasem bloku albo po teraz'
+  if (choice === 'notRest') return 'odcinek: „od” musi być przed „do”'
+  if (choice === 'person') return 'wybierz osobę z listy'
+  return 'tego wyboru nie ma w tym wierszu'
+}
 
 /**
  * A block of the day runs now (started, not ended, not paused – „Cofnij” counted): one running through 04:00 keeps its
@@ -154,6 +166,8 @@ export interface FolderOptions {
   previousRun?: { lastAt: number; clean: boolean } | null
   /** The first day of the ritual: days from it are closed and frozen (null – none yet, before its screens, T482). */
   ritualFrom?: string | null
+  /** The version has the ritual's screens: its first day comes from rd.json (written once by the leader, D320). */
+  ritualScreens?: boolean
   /** The first day in the game: days before it are outside (null – no game yet, before its screens, T492). */
   gameFrom?: string | null
   /** The helper process (T190): the grades of days to freeze, the CSV export; default: this process. */
@@ -227,6 +241,8 @@ export class DataFolder {
   private calibrationNow: { day: string; at: number; on: boolean; retryMs: number } | null = null
   /** The starts of requests by person on the days before today (counted once a day, D311). */
   private peopleCounts: { day: string; at: number; before: Map<string, number> } | null = null
+  /** The rituals of the last days, each counted again only on a change of what it is made of (the morning asks often). */
+  private readonly ritualMemo = new Map<string, { key: string; view: RitualView }>()
 
   private constructor(private readonly o: FolderOptions) {
     this.rulesVersion = o.rulesVersion ?? RULES_VERSION
@@ -594,8 +610,10 @@ export class DataFolder {
         } catch (e) {
           problems.push(`timer: ${String(e)}`)
         }
-        // Freezing the days whose window of corrections has ended. Apart, so a day that cannot freeze stops nothing else.
+        // The first day of the ritual, once (D320); then freezing the days whose window of corrections has ended. Apart,
+        // so a day that cannot freeze stops nothing else.
         try {
+          await this.ritualStart(now)
           frozen = await this.freezeTasks(now, settled, problems)
         } catch (e) {
           problems.push(`zamrażanie: ${String(e)}`)
@@ -614,12 +632,34 @@ export class DataFolder {
   }
 
   /**
+   * The first day of the ritual (D320): the option, or – with the ritual's screens – rd.json's as this computer sees it
+   * (its own edit still in the queue included: the bar, the window and the leader agree), read each time.
+   */
+  async ritualDay(): Promise<string | null> {
+    if (!this.o.ritualScreens) return this.o.ritualFrom ?? null
+    return rdFrom(await this.recordView(paths.settings).catch(() => undefined)).ritualFrom
+  }
+
+  /**
+   * D320, T504: the leader of a version with the ritual's screens writes its first day into rd.json once – today; an
+   * older version ignores the field (it never freezes). A folder without rd.json (no wizard yet) waits; an edit of it
+   * still in the queue (waiting, or a question) is not written again.
+   */
+  private async ritualStart(now: number): Promise<void> {
+    if (!this.o.ritualScreens) return
+    const raw = await this.recordView(paths.settings)
+    if (!raw || rdFrom(raw).ritualFrom || this.queue.pending.some((e) => e.rel === paths.settings)) return
+    // The base is what the file holds (a value that is no date is replaced, never a question).
+    await this.edit([{ rel: paths.settings, edits: [{ path: ['ritualFrom'], base: raw.ritualFrom, value: logicalDayOf(now) }] }])
+  }
+
+  /**
    * The leader freezes the days whose window of corrections has ended (spec „Ocena dnia”), from the first day of the
    * ritual (none before the version with its screens, T482): the grade as written up to the last event of every computer
    * it sees, in the day's log and in this computer's file of grades (derived – the logs can make it again).
    */
   private async freezeTasks(now: number, settled: boolean, problems: string[]): Promise<string[]> {
-    const from = this.o.ritualFrom
+    const from = await this.ritualDay()
     if (from == null) return []
     const today = logicalDayOf(now)
     const mayFreeze = this.mayFreeze(settled, now)
@@ -755,7 +795,7 @@ export class DataFolder {
       const closed = (CLOSE_HOWS as readonly unknown[]).includes(line.grade.closed) ? (line.grade.closed as CloseHow) : null
       out.push({ date, closed, dayType: typeof line.grade.dayType === 'string' ? line.grade.dayType : 'zwykly' })
     }
-    const ritualFrom = this.o.ritualFrom ?? null
+    const ritualFrom = await this.ritualDay()
     if (ritualFrom == null) return out
     for (let i = FREEZE_LOOKBACK_DAYS; i >= 0; i--) {
       const date = addDays(today, -i)
@@ -831,7 +871,7 @@ export class DataFolder {
    * freezing (no ritual yet: no day would ever get its grade).
    */
   async gameState(at = this.clock.now()): Promise<GameView | null> {
-    const ritualFrom = this.o.ritualFrom ?? null
+    const ritualFrom = await this.ritualDay()
     const gameFrom = this.o.gameFrom ?? null
     if (gameFrom == null || ritualFrom == null) return null
     const today = logicalDayOf(at)
@@ -1305,7 +1345,16 @@ export class DataFolder {
    */
   async ritual(day: string, at = this.clock.now()): Promise<RitualView> {
     const read = await this.log.readDay(day)
-    return (this.o.worker ?? inProcess).run({ kind: 'ritual', ctx: await this.ownContext(day, read, at), at })
+    const ctx = await this.ownContext(day, read, at)
+    // Counted again only when the day's log, its records or your queued edits changed – today also every minute (the
+    // evening's effects count with the forecast to the bedtime).
+    const key = JSON.stringify([day < logicalDayOf(at) ? null : Math.floor(at / 60_000), read.lastByComputer, read.events.length, read.copies, this.contextSig(day), this.queue.pending.length])
+    const was = this.ritualMemo.get(day)
+    if (was?.key === key) return was.view
+    const view = await (this.o.worker ?? inProcess).run({ kind: 'ritual', ctx, at })
+    this.ritualMemo.set(day, { key, view })
+    for (const d of this.ritualMemo.keys()) if (d < addDays(logicalDayOf(at), -RITUAL_MEMO_DAYS)) this.ritualMemo.delete(d)
+    return view
   }
 
   /** Your answer to a row of a day's ritual: judged on the day as it is now and written to its log, one at a time. */
@@ -1313,7 +1362,7 @@ export class DataFolder {
     return this.dayAction(day, (state, now, ctx) => {
       const row = ritualRows(state, ritualActivity(ctx, state)).find((r) => r.id === rowId)
       if (!row) return 'tego wiersza już nie ma'
-      return ritualAnswer(state, row, choice, now, value, item) ?? `nieznana odpowiedź ${choice}`
+      return ritualAnswer(state, row, choice, now, value, item) ?? refusalOf(choice)
     })
   }
 

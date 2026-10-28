@@ -28,7 +28,8 @@ pomocniczy), „Kilka komputerów” (przeniesienie folderu); D300, T117, T190. 
   `restoreRecords`, `restoreWhole`, `movedTo` (`.moved.json`).
 
 ## Zasady
-- Nic się nie zamraża przed `ritualFrom` (w aplikacji `RITUAL_FROM = null` w `index.ts` do ekranów rytuału, T482).
+- Nic się nie zamraża przed `ritualFrom`: w aplikacji (`ritualScreens`) dzień z `rd.json` (`folder.ritualDay()`), zapisany raz
+  przez prowadzącego (`ritualStart`, D320, T504); w testach opcja `ritualFrom`.
 - Zamrożenie zapisuje ocenę raz; późniejsze zdarzenia są „poza oceną” (nie zmieniają jej), poprawki czasów działają
   dalej w `computeDay`.
 - Proces pomocniczy nie zapisuje rekordów danych – tylko własne pliki wynikowe (ZIP, CSV) przez plik tymczasowy.

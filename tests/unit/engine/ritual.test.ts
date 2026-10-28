@@ -3,7 +3,7 @@
  * effect of a ✓ (the outcome as frozen), closing the day (untouched rows as written), the days the morning shows.
  */
 import { describe, expect, it } from 'vitest'
-import { closeEffect, closeEvents, ritualActivity, ritualAnswer, ritualEffect, ritualRows, unclosedDays, type RitualRow } from '@shared/engine/ritual'
+import { closeEffect, closeEvents, feltRows, ritualActivity, ritualAnswer, ritualDue, ritualEffect, ritualRows, unclosedDays, type RitualRow } from '@shared/engine/ritual'
 import { dayOutcome } from '@shared/engine/outcome'
 import { block, hhmm, Scenario } from './dsl'
 
@@ -313,5 +313,48 @@ describe('niezamknięte dni', () => {
     expect(unclosedDays([{ date: '2026-10-27', events: undone }], '2026-10-28', now, '2026-10-26').map((d) => d.date)).toEqual(['2026-10-27'])
     // 72 h after the day's end it is no longer shown.
     expect(unclosedDays(days, '2026-10-30', new Scenario({ date: '2026-10-30', plan: [] }).at('05:00'), '2026-10-20').map((d) => d.date)).toEqual(['2026-10-28'])
+  })
+})
+
+describe('odczuwany koszt (D319)', () => {
+  it('wiersz na każdą kategorię dnia, w kolejności startów; ostatnia odpowiedź wygrywa', () => {
+    const plan = [
+      block({ id: 'a', cat: 'analiza', at: '08:00', min: 60 }),
+      block({ id: 'b', cat: 'inne', at: '10:00', min: 10 }),
+      block({ id: 'r', cat: 'regeneracja', at: '11:00', min: 30 }),
+      block({ id: 'c', cat: 'inne', at: '12:00', min: 30 })
+    ]
+    const s = new Scenario({ date: DATE, plan }).using('07:00', '23:59')
+    s.ran('a', '08:00', '09:00')
+    s.ran('b', '10:00', '10:10')
+    s.ran('r', '11:00', '11:30')
+    s.ran('c', '12:00', '12:30')
+    s.raw({ k: 'cost.felt', at: s.at('20:00'), category: 'analiza', feel: 'heavier' }, '20:00')
+    s.raw({ k: 'cost.felt', at: s.at('20:01'), category: 'analiza', feel: 'usual' }, '20:01')
+    const t = s.at('20:05')
+    expect(feltRows(s.contextAt(t), s.stateAt(t))).toEqual([
+      { category: 'analiza', minutes: 60, feel: 'usual' },
+      { category: 'inne', minutes: 40, feel: null },
+      { category: 'regeneracja', minutes: 30, feel: null }
+    ])
+  })
+})
+
+describe('kiedy rytuał (D318, T505)', () => {
+  it('dziś po końcu pracy, gdy nic z pracy nie biegnie; dzień bez pracy – zawsze; wcześniej od pierwszego dnia; nigdy przed nim', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '18:00', min: 60 })] }).using('07:00', '23:59')
+    expect(ritualDue(s.state('08:30'), DATE, DATE)).toBe(false)
+    s.ran('a', '08:00', '09:00')
+    s.workEnd('09:00')
+    expect(ritualDue(s.state('09:05'), DATE, DATE)).toBe(true)
+    // Work again: not while it runs.
+    s.start('b', '18:00')
+    expect(ritualDue(s.state('18:10'), DATE, DATE)).toBe(false)
+    expect(ritualDue(s.state('18:10'), DATE, null)).toBe(false)
+    expect(ritualDue(s.state('09:05'), DATE, '2026-10-29')).toBe(false)
+    // A day before: from the first day, while not frozen.
+    expect(ritualDue(s.state('09:05'), '2026-10-29', DATE)).toBe(true)
+    const free = new Scenario({ date: DATE, plan: [] }).using('07:00', '23:59')
+    expect(ritualDue(free.state('10:00'), DATE, DATE)).toBe(true)
   })
 })

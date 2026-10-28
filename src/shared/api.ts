@@ -2,6 +2,8 @@
  * The contract between the main process and the windows (preload `window.rd`). Every channel name lives here; the
  * main process answers `invoke` channels and pushes the `on*` events.
  */
+import type { RitualValue, RitualView } from './engine/ritual'
+import type { CloseHow } from './model/events'
 import type { IdentityKind } from './identity'
 import type { Rect } from './bounds'
 import type { BarSpot, MachinePrefs } from './machine'
@@ -57,8 +59,21 @@ export const CH = {
   setNightInstall: 'rd:setNightInstall',
   timer: 'rd:timer',
   answer: 'rd:answer',
-  seen: 'rd:seen'
+  seen: 'rd:seen',
+  ritual: 'rd:ritual',
+  ritualAnswer: 'rd:ritualAnswer',
+  closeDay: 'rd:closeDay',
+  unclosedDays: 'rd:unclosedDays'
 } as const
+
+/** A day the morning shows to close: your presence that day, and its ritual (the effect of „Jak zapisano”, its rows). */
+export interface UnclosedDay {
+  date: string
+  presence: boolean
+  /** Closed already – shown for what came after its close (one line of information). */
+  closed: boolean
+  ritual: RitualView
+}
 
 /** Which window a renderer is (the preload reads it from its arguments); `sound` – the hidden window of sound. */
 export type ViewKind = 'main' | 'bar' | 'panel' | 'sound'
@@ -380,6 +395,14 @@ export interface RdApi {
   answer(id: string, answer: string, value?: number | null): Promise<TimerResult>
   /** Questions this window showed (seen only in the main window in the foreground with presence, D231). */
   seen(ids: string[]): void
+  /** A day's closing ritual (D318): its rows by time, what each ✓ changes, the felt cost, how it was closed. */
+  ritual(day: string): Promise<RitualView>
+  /** An answer to a row of a day's ritual (`value`: an instant, a person, a stretch; `item`: a block of the summary row). */
+  ritualAnswer(day: string, row: string, choice: string, value?: RitualValue, item?: string | null): Promise<TimerResult>
+  /** Closing a day: the ritual, or the morning's „Jak zapisano”, „Wolne”, „Nie pamiętam”. */
+  closeDay(day: string, how: CloseHow): Promise<TimerResult>
+  /** The days the morning shows to close (D318, spec „Rano aplikacja pokazuje wszystkie niezamknięte dni naraz”). */
+  unclosedDays(): Promise<UnclosedDay[]>
   /** The window of sound: a tone to play (5 min, 0 min). */
   onSound(cb: (s: { kind: 'five' | 'zero'; volume: number }) => void): () => void
 }

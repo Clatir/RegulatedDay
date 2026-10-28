@@ -23,14 +23,22 @@ interface UiState {
   toasts: Toast[]
   /** The day the plan screen shows (null: today). */
   day: string | null
+  /** A part of the screen to bring into view once (the bar's „Rytuał”, D318). */
+  focus: 'ritual' | null
 }
 
-export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null }))
+export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null }))
 
 /** Every change of view first commits the active field (spec „Zatwierdzanie przed przejściem”). */
 export function navigate(page: Page): void {
   commitActiveField()
   useUi.setState({ page })
+}
+
+/** Today's ritual brought into view (the bar's „Rytuał”, D318). */
+export function openRitual(): void {
+  commitActiveField()
+  useUi.setState({ page: 'today', day: null, focus: 'ritual' })
 }
 
 /** The plan of a day (a click in the calendar opens it, D295); null: today. Commits the active field first. */

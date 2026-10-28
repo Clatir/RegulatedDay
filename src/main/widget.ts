@@ -225,7 +225,8 @@ export class WidgetEngine {
           computer: folder.computers[0]?.id,
           people: m.people,
           person: (id) => personName(rd, id),
-          carried: m.carried
+          carried: m.carried,
+          ritualFrom: await folder.ritualDay()
         }),
         note: this.note
       }
@@ -525,8 +526,8 @@ export class WidgetEngine {
         return this.refresh()
       }
       case 'openMain':
-        // „+ Prośba do kolejki” and another person outside the quiet modes (D311): the screen of requests.
-        this.d.showMain(arg === 'requests' ? 'requests' : 'today')
+        // „+ Prośba do kolejki” and another person outside the quiet modes (D311): the screen of requests; „Rytuał” (D318).
+        this.d.showMain(arg === 'requests' || arg === 'ritual' ? arg : 'today')
         return
       case 'request': {
         // „Zrobione teraz” or „Pilne” for a person (D311): `<now|urgent>|<person, empty: „osoba: ?”>|<estimate, empty: default>`.

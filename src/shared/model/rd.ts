@@ -10,6 +10,7 @@
 import { BLOCK_COLORS } from '../theme'
 import { DEFAULT_CATEGORIES } from './categories'
 import { changeFrom, changeOrder, type SettingsChange } from './settings'
+import { isIsoDate } from '../time/zone'
 
 export const RD_SCHEMA = 1
 
@@ -73,6 +74,11 @@ export interface RdFile {
   people: Person[]
   /** The first computer's wizard finished (when, on which computer): the folder holds this app's data. */
   setup: { at: number; by: string } | null
+  /**
+   * The first day of the closing ritual (D320): the day the first version with its screen ran on any computer – written
+   * once by the leader; earlier days close themselves „jak zapisano”. Null: none yet.
+   */
+  ritualFrom: string | null
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -146,7 +152,8 @@ export function rdFrom(v: unknown): RdFile {
     general: generalFrom(r.general),
     categories: categoriesFrom(r.categories),
     people: peopleFrom(r.people),
-    setup
+    setup,
+    ritualFrom: isIsoDate(r.ritualFrom) ? r.ritualFrom : null
   }
 }
 

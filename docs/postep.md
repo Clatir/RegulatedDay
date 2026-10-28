@@ -83,8 +83,25 @@
 - E4b.12: test prawdziwą myszą (SendInput) w CI na Windows **przechodzi na 0.10.1** (pasek idzie za kursorem) – w CI
   nie widać objawu. Na tym komputerze: „Zawsze na wierzchu” (`barPanel`), pasek na drugim monitorze VG27B nad głównym.
   Dodane: wariant testu z „na wierzchu” i innym oknem na pierwszym planie oraz ślad w `main.log` („pasek: chwycony za
-  uchwyt …”, „pasek: puszczony (up|cancel|lost) po N ruchach …”). Wynik CI tego wariantu – niżej.
-- Testy: 809 jednostkowych i plikowych, E2E 18 + 6 tylko w CI (w tym prośby w pasku).
+  uchwyt …”, „pasek: puszczony (up|cancel|lost) po N ruchach …”). **CI PR #20: oba warianty przechodzą** – objawu nie
+  da się odtworzyć poza Twoim układem (drugi monitor nad głównym, współrzędne ujemne). 0.11.0 wychodzi ze śladem;
+  po Twojej próbie E4b.12 czytam `main.log` (ten komputer: `%APPDATA%\Regulated Day\logs`).
+- Testy: 809 jednostkowych i plikowych, E2E 18 + 6 tylko w CI (w tym prośby w pasku). PR #20 scalony (CI zielone).
+
+## 0.12.0 – ekrany rytuału (ciąg C, część 1)
+- Gałąź `claude/0.12.0-rytual` (od 0.11.0) od 28.10 ok. 01:05.
+- Zakres: pierwszy dzień rytuału w `rd.json` (D320, T504: zapisuje raz prowadzący z `ritualScreens`, bez dokładania
+  wpisów przy czekającej edycji, przywrócenie starszego `rd.json` go nie zabiera); karta „Rytuał zamknięcia” w „Dziś”
+  (wiersze po godzinach, skutek ✓, „rozwiń”, odczuwany koszt, niezrobione, szkic jutra, „Zamknij dzień” z „Wróć”) i
+  „Rytuał” w pasku – jedna reguła `ritualDue` (D318, T505); rano „Niezamknięte dni” z „Jak zapisano · Popraw · Wolne ·
+  Nie pamiętam”, „Koniec pracy o … ✓”, „Pracowałem do …”, linią „po zamknięciu”; zdarzenie bierne `cost.felt` (D319);
+  IPC `ritual`, `ritualAnswer`, `closeDay`, `unclosedDays`; widok rytuału w pamięci według dnia.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. godzina zamknięcia z indeksu, kolejka bez wpisów co
+  15 s, ochrona `ritualFrom` przy przywracaniu, jedna reguła karty i paska, „Rytuał” w „Odcinam się”, „anuluj” bez
+  zapisu, karta od nowa przy zmianie dnia, `cost.felt` bierne (energia), polskie powody odmowy, „Pracowałem do …” rano,
+  pamięć widoku rytuału, `isIsoDate`, odczuwany koszt każdej kategorii (jak D319).
+- Testy: 815+ jednostkowych i plikowych (nowe: `ritualDue`, odczuwany koszt, pierwszy dzień, kolejka, data nie-dzień,
+  powód odmowy, pamięć widoku, `cost.felt` bierne, „Rytuał” w „Odcinam się”, godzina zamknięcia), E2E karty rytuału.
 
 ## Praca 0 – gra raz na zmianę, sesje „było”, baner D316 (ciąg A, bez osobnego wydania)
 - Gałąź `claude/praca-0` od 27.10 ok. 23:30 (najpierw plan i D316–D322 – commit d4a56a5).
