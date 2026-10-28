@@ -22,9 +22,11 @@
    - 5.1 przegląd wieloagentowy (D309, T512) – **zakończony** 28.10 ok. 12:40 (16 agentów, 67 min, 4,3 mln tokenów):
      127 zgłoszeń – high 16 i medium 36 potwierdzonych, 5 obniżonych do low, 2 obalone, 68 low / nit bez weryfikacji;
      critical brak. Pełny opis z weryfikacją → `docs/przeglad-E8.md` (Grep po numerze `A1-01`; pole `Status:`).
-   - Teraz: runda pytań o zmiany widocznego zachowania i zakres 1.0 (funkcje ze specyfikacji, których nie ma w kodzie –
-     m.in. komunikat rezerwy A2-01, odpowiedzi na nieobecność A1-09, druga zmiana A1-04, linie paska A1-12, rutyny
-     A6-10, usunięcie Próby A7-06). Potem PR-y poprawek ciągiem, każdy z wydaniem 0.16.0+ (bez pauz, D317).
+   - Runda pytań zamknięta: D325 (wszystkie brakujące funkcje przed 1.0), D326 (komunikat rezerwy – linia w pasku),
+     D327 (bez folderu neutralny pasek), D328 (rutyny w pasku i „Dziś”), D329 (rytuał w dniu bez pracy), D330 (kopia
+     dnia także na dziś i minione z ostrzeżeniem); T513 (podział PR-ów, rozstrzygnięcia A3-10, A5-12, A7-13).
+   - PR-y ciągiem bez pauz (D317) według `docs/plan.md` 5.2a–5.2f: **teraz 5.2a – 0.16.0 silnik dnia** (gałąź
+     `claude/0.16.0-silnik`).
    - 5.3 przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji.
    - 5.4 bramka 1.0 – bez czekania na Twój odbiór (D324).
 2. Ty: aktualizacja do 0.15.0 i odbiór według `docs/odbior.md` (nowe E5b–E7d; E4b.12 po poprawce, E4b.10 dźwięk). Odbiór
