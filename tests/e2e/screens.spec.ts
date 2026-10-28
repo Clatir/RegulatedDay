@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
-import { DEFAULT_SETTINGS } from '../../src/shared/model/settings'
+import { DEFAULT_SESSIONS, DEFAULT_SETTINGS } from '../../src/shared/model/settings'
 import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
 import { launch, viewPage, withMainLog } from './app'
 
@@ -26,7 +26,8 @@ function logicalToday(): string {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 }
 
-function seed(dir: string): void {
+/** `sessions: false` – today's sessions answered „Nie”: no fixed work still to come makes „Koniec pracy” a break. */
+function seed(dir: string, o: { sessions?: boolean } = {}): void {
   const today = logicalToday()
   const records = firstComputerRecords(
     { settings: DEFAULT_SETTINGS, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [{ id: 'mama', name: 'Mama', archived: false }], templates: defaultTemplates(), lectures: [], days: {} },
@@ -38,7 +39,13 @@ function seed(dir: string): void {
     writeFileSync(join(dir, r.rel), JSON.stringify(r.value, null, 2))
   }
   // Today: an ordinary day with a work block at 03:00 of the night after (always still to come).
-  const day = { schema: 1, date: today, dayType: 'zwykly', blocks: [{ id: 'late', categoryId: 'inne', startMin: 27 * 60, durationMin: 30, fixed: false }] }
+  const day = {
+    schema: 1,
+    date: today,
+    dayType: 'zwykly',
+    ...(o.sessions === false ? { sessions: Object.fromEntries(DEFAULT_SESSIONS.map((s) => [s.id, 'no'])) } : {}),
+    blocks: [{ id: 'late', categoryId: 'inne', startMin: 27 * 60, durationMin: 30, fixed: false }]
+  }
   mkdirSync(join(dir, 'days', today.slice(0, 4)), { recursive: true })
   writeFileSync(join(dir, 'days', today.slice(0, 4), `${today}.json`), JSON.stringify(day))
   mkdirSync(join(dir, 'requests'), { recursive: true })
@@ -229,7 +236,9 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
 
 test('rytuał zamknięcia (D318): po „Koniec pracy” karta w „Dziś” i „Rytuał” w pasku; „Zamknij dzień” mówi o wierszach bez wyboru', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-ritual-'))
-  seed(dataDir)
+  // Without today's sessions: on a weekday before the last one ends „Koniec pracy” is only a break (a fixed work block
+  // still to come) – no ritual yet, whatever hour the test runs at.
+  seed(dataDir, { sessions: false })
   // The ritual's first day already written by a leader (D320): today.
   const rdFile = join(dataDir, 'rd.json')
   writeFileSync(rdFile, JSON.stringify({ ...JSON.parse(readFileSync(rdFile, 'utf8')), ritualFrom: logicalToday() }, null, 2))
@@ -264,7 +273,8 @@ test('rytuał zamknięcia (D318): po „Koniec pracy” karta w „Dziś” i �
 
 test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z osobą i „Koniec”; „Pilne” z szacunkiem', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-requests-'))
-  seed(dataDir)
+  // Without today's sessions: in a session (a quiet mode) „Pilne” starts with 15 min without asking (D311).
+  seed(dataDir, { sessions: false })
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {

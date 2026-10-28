@@ -5,6 +5,7 @@
 - Odczuwany koszt (nieobowiązkowo): przy każdej kategorii dnia „lżej · jak zwykle · ciężej” niż jej koszt w ustawieniach – posłuży przeglądowi kalibracji.
 - Rano przed planem porannym stoją niezamknięte dni: „Jak zapisano” (ze skutkiem przed kliknięciem), „Popraw” – rytuał tego dnia, po którym wracasz do planu porannego – „Wolne” i „Nie pamiętam”; dzień bez potwierdzonego końca pracy ma „Koniec pracy o … ✓”.
 - Rytuał działa od dnia, w którym ta wersja pierwszy raz pracowała na którymkolwiek z Twoich komputerów – ta sama data na wszystkich. Wcześniejsze dni zamykają się same „jak zapisano”, więc rano nie czekają tygodnie dni do zamknięcia. Od tego dnia dni zamykają się i zamrażają według rytuału.
+- „Koniec pracy” kliknięty zaraz po „Zacznij” (blok krótszy od minuty) potwierdza teraz koniec pracy – wcześniej dzień zostawał bez potwierdzonego końca, a karta rytuału się nie pokazywała.
 
 ## 0.11.0
 - Prośby w pasku: „Prośba ▸” rozwija „Zrobione teraz:” i „Pilne:” z trzema osobami, które proszą najczęściej (ostatnie 28 dni), oraz „inna…” i „+ Prośba do kolejki” (ekran Prośby). „Pilne” pyta o szacunek – 5 · 15 · 30 · 60 min, ±5 – i zaczyna się po „Zacznij”. W trybach ciszy i w „Odcinam się” wszystko działa bez otwierania okna: inna osoba to „osoba: ?” do uzupełnienia później, a „Pilne” dostaje 15 min.

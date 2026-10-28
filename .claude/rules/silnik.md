@@ -63,6 +63,9 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   pierwszym końcem pracy (`expiredWaitEnd`, T455) – bez tego dzień bez timera ma „minimum nie mieści się”.
 - „Nauka”, „Oglądanie”, „Journaling” zaplanowane ≥ 30 min po innej pracy mają „po pracy” – w testach budżetu i
   granicy używaj „Inne obowiązki”.
+- Odcinki pracy to pełne minuty: blok zaczęty i skończony w jednej minucie nie ma odcinka – „Koniec pracy” po nim daje
+  pusty odcinek w minucie bloku (T507). W dzień roboczy sesje szablonu są stałą pracą: E2E z „Koniec pracy” bez sesji
+  dnia (`seed(…, { sessions: false })`), inaczej przed końcem ostatniej sesji koniec jest przerwą.
 - Timer, pytania „Dalej?” i „Koniec pracy?”, nieobecność i bezczynność (E4a) – reguły `timer.md`; fakty znają `undo`,
   `question.seen`, `question.answer` i `autoRule`. Prośby w dniu i warianty (logika E5) – reguły `prosby-warianty.md`.
   Czas do wyjaśnienia, rytuał i ocena dnia (logika E6) – reguły `rytual.md`. Jeszcze nie: zamrażanie (E6, część 2).
