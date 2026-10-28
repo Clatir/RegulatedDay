@@ -29,6 +29,18 @@ export function Toasts() {
               {t.action.label}
             </button>
           )}
+          {t.action2 && (
+            <button
+              className="ml-3 font-medium text-lamp hover:underline"
+              onClick={() => {
+                closeToast(t.id)
+                t.action2!.run()
+              }}
+              data-testid="toast-action2"
+            >
+              {t.action2.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

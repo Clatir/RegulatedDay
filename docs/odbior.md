@@ -74,6 +74,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8d.3 Sesje i kalendarz w Ustawieniach
    - [ ] E8e.1 Komunikat rezerwy w pasku (gdy pula zejdzie do rezerwy)
    - [ ] E8e.2 Bez folderu danych – neutralny pasek, bez Próby
+   - [ ] E8f.1 Odpowiedź „Posiłek” na pytanie o nieobecność
+   - [ ] E8f.2 Linie paska: kotwica, „zostaje”, „nie przedłużono”, „Pracowałem do teraz”
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
@@ -1330,3 +1332,25 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   i bez odliczania; „Otwórz okno” otwiera okno główne.
 - **Nie przechodzi, gdy:** gdziekolwiek jest „Próba”, bez folderu pasek odlicza „Analiza tygodnia” albo pokazuje inne
   przyciski niż „Otwórz okno”.
+
+### E8f – funkcje D325, część 1b (0.21.0)
+
+#### E8f.1 Odpowiedź „Posiłek” na pytanie o nieobecność (0.21.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer.test.ts` („czym była nieobecność”). Ty: przy najbliższym obiedzie w trakcie
+  bloku pracy przy komputerze.
+- **Jak sprawdzić:** w trakcie bloku pracy odejdź od komputera na obiad dłużej niż próg pytania (30 min); po powrocie
+  w pasku przy pytaniu o nieobecność kliknij „Posiłek”.
+- **Oczekiwany efekt:** blok pracy kończy się w chwili odejścia, obiad z planu jest odhaczony z czasami nieobecności,
+  a na liście „zrobione automatycznie” jest „Posiłek zjedzony do …” z „Cofnij”.
+- **Nie przechodzi, gdy:** nie ma przycisku „Posiłek”, blok pracy biegnie dalej albo obiad z planu zostaje niezaczęty.
+
+#### E8f.2 Linie paska: kotwica, „zostaje”, „nie przedłużono”, „Pracowałem do teraz” (0.21.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/widget-view.test.ts` („linie chwil dnia”), `tests/unit/engine/explain.test.ts`.
+  Ty: rzut oka, gdy się zdarzą.
+- **Jak sprawdzić:** po końcu bloku, do którego jest zakotwiczony inny, spójrz na pasek; kliknij „Koniec pracy” przy
+  sesji NY później w planie; po końcu sesji z planu (bez „Przedłuż”) spójrz na pasek przez 30 min.
+- **Oczekiwany efekt:** „<blok> · Zacznij · Zaparkuj · Koniec pracy” z kropką; „NY o 14:00 zostaje · Odwołaj”; „NY – nie
+  przedłużono · Przedłuż”.
+- **Nie przechodzi, gdy:** którejś linii brak albo jej przycisk nic nie robi.

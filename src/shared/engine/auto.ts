@@ -9,10 +9,10 @@
  * closed) have stable ids too: shown once, also after a restart or another computer taking the lead; an answer on one
  * computer closes them on all. A question counts as seen only when a computer wrote that it showed it (D231).
  */
-import type { Place } from '../model/categories'
+import { REGEN_CATEGORY, type Place } from '../model/categories'
 import { derivedId, questionId } from '../model/ids'
 import { lastInputAt, firstUseAfter, firstUseFrom, lastOutsideBefore, type Activity, type Interval } from './activity'
-import { isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
+import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
 import { blockAt, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
@@ -69,6 +69,8 @@ export interface Question {
   dot: boolean
   /** Shown quietly in the bar only (the second ask, the questions with a default answer). */
   silent: boolean
+  /** An absence's stretch (ms): from leaving to the return (null: not back yet) – what „posiłek”, „regeneracja” and „byłem na prośbie” name. */
+  span?: { from: number; to: number | null }
 }
 
 /** Where a block happens: its variant's place, else its category's. */
@@ -492,9 +494,9 @@ export function questionsOf(inp: Omit<AutoInput, 'gate'>): Question[] {
       kind === 'return'
         ? [{ id: 'keep', label: a.rule === 'firstUse' ? 'Trwał do teraz' : 'Tak zostaje' }, { id: 'endedAt', label: 'Skończył się o …' }]
         : kind === 'absence'
-          ? [{ id: 'keep', label: 'Zakończyć w chwili odejścia' }, { id: 'subtract', label: 'Odliczyć nieobecność' }, { id: 'leave', label: 'Zostawić' }]
+          ? [{ id: 'keep', label: 'Zakończyć w chwili odejścia' }, { id: 'subtract', label: 'Odliczyć nieobecność' }, { id: 'leave', label: 'Zostawić' }, ...ABSENCE_WHAT]
           : [{ id: 'keep', label: 'Skończył się przy wyłączeniu' }, { id: 'untilNow', label: 'Trwał do teraz' }, { id: 'endedAt', label: 'Skończył się o …' }]
-    out.push({ id, kind, block: a.block, askedAt: at(a.at), seenAt: state.facts.seen.get(id)?.at ?? null, text: '', answers, dot: false, silent: true })
+    out.push({ id, kind, block: a.block, askedAt: at(a.at), seenAt: state.facts.seen.get(id)?.at ?? null, text: '', answers, dot: false, silent: true, ...(kind === 'absence' ? { span: absenceSpan(activity, at(a.at)) } : {}) })
   }
   // A request ended without „Koniec” (spec „Po powrocie pasek pyta krótko”, D263, T372): at the first use – „trwała do
   // teraz”, „skończyła się o…”, before its limit „jeszcze trwa” (it then lasts to „Koniec”, at most its limit); at its
@@ -517,10 +519,62 @@ export function questionsOf(inp: Omit<AutoInput, 'gate'>): Question[] {
     if (a.rule !== 'absence' || a.k !== 'block.pause' || !a.block) continue
     const id = questionId(date, 'absence', a.block, a.at)
     if (state.facts.answers.has(id) || out.some((x) => x.id === id)) continue
-    out.push({ id, kind: 'absence', block: a.block, askedAt: at(a.at), seenAt: state.facts.seen.get(id)?.at ?? null, text: '', answers: [{ id: 'keep', label: 'Odliczyć nieobecność' }, { id: 'end', label: 'Zakończyć w chwili odejścia' }, { id: 'leave', label: 'Zostawić' }], dot: false, silent: true })
+    out.push({ id, kind: 'absence', block: a.block, askedAt: at(a.at), seenAt: state.facts.seen.get(id)?.at ?? null, text: '', answers: [{ id: 'keep', label: 'Odliczyć nieobecność' }, { id: 'end', label: 'Zakończyć w chwili odejścia' }, { id: 'leave', label: 'Zostawić' }, ...ABSENCE_WHAT], dot: false, silent: true, span: absenceSpan(activity, at(a.at)) })
   }
-  void activity
   return out
+}
+
+/** „Posiłek”, „regeneracja”, „byłem na prośbie”: what an absence was (spec „Bezczynność i nieobecność”, A1-09). */
+const ABSENCE_WHAT: Answer[] = [
+  { id: 'meal', label: 'Posiłek' },
+  { id: 'regen', label: 'Regeneracja' },
+  { id: 'request', label: 'Byłem na prośbie' }
+]
+
+/** How long after an absence a planned meal may start to be the one it was (spec, D277). */
+const MEAL_AFTER_MIN = 45
+
+/**
+ * What an absence [away, back) was, as events (ms): „posiłek” – the earliest meal of the plan not started that overlaps
+ * it or starts within 45 min after it, ended with its times (no note of accuracy, no sample: `how: 'plan'`; with
+ * „Cofnij”), else the stretch is no rest; „regeneracja” – a block of regeneration over it; „byłem na prośbie” – a
+ * request after the fact (its person asked in the ritual).
+ */
+function absenceWhat(state: DayState, block: string, answer: 'meal' | 'regen' | 'request', away: number, back: number, now: number): TimerDraft[] {
+  const a = idxOf(state.grid, away)
+  const b = idxOf(state.grid, back)
+  const id = (kind: string) => derivedId(state.grid.date, 'absence', kind, block, a)
+  if (answer === 'meal') {
+    const byId = new Map(state.blocks.map((x) => [x.id, x]))
+    const meal = state.blocks
+      .filter((x) => x.inPlan && x.rules.kind === 'meal' && state.facts.blocks.get(x.id)?.startedAt == null)
+      .map((x) => ({ x, span: plannedSpan(x, byId) }))
+      .filter((m): m is { x: BlockInfo; span: { start: number; end: number } } => !!m.span && m.span.start <= b + MEAL_AFTER_MIN && m.span.end > a)
+      .sort((p, q) => p.span.start - q.span.start)[0]
+    if (!meal) return [{ k: 'rest.not', at: now, from: away, to: back }]
+    return [
+      { k: 'block.start', block: meal.x.id, at: away, bg: false, planned: startPlanned(meal.x), confirmUntil: null, how: 'plan', autoRule: 'absenceMeal' },
+      { k: 'block.end', block: meal.x.id, at: back, done: true, rule: 'absenceMeal', autoRule: 'absenceMeal' }
+    ]
+  }
+  if (answer === 'regen') {
+    const rid = id('regen')
+    return [
+      { k: 'block.start', block: rid, at: away, bg: false, planned: { categoryId: REGEN_CATEGORY, variantId: null, durationMin: Math.max(1, b - a), tag: null, fixed: false }, confirmUntil: null, how: 'plan', autoRule: 'absenceRegen' },
+      { k: 'block.end', block: rid, at: back, done: true, rule: 'absenceRegen', autoRule: 'absenceRegen' }
+    ]
+  }
+  const rq = id('request')
+  return [
+    { k: 'request.start', request: rq, at: away, mode: 'after', person: null, estimateMin: null, hardEndAt: null, interrupts: null, splits: [] },
+    { k: 'request.end', request: rq, at: back }
+  ]
+}
+
+/** The stretch without input that began at `away` (the absence): to the return, null while it lasts. */
+function absenceSpan(activity: Activity, away: number): { from: number; to: number | null } {
+  const x = activity.idle.find((i) => i.from <= away + MIN && i.to >= away)
+  return { from: away, to: x && x.to < activity.now ? x.to : null }
 }
 
 function byIdWork(state: DayState, id: string): boolean {
@@ -598,6 +652,13 @@ export function answerEvents(state: DayState, q: Question, answer: string, at: n
         const info = state.blocks.find((b) => b.id === q.block)
         const cost = info ? startCost(state, info, back) : null
         return [...undoAll, { k: 'block.pause', block: q.block, at: away }, ...(cost ? [] : [{ k: 'block.resume', block: q.block, at: back, confirmUntil: null }]), mark]
+      }
+      if (answer === 'meal' || answer === 'regen' || answer === 'request') {
+        // What the absence was (D268, D273, D277, D280): the block ends when you left – resumed only by „odliczyć” – and
+        // after a work or project block the time from the return stays time to explain, as without an answer.
+        const back = resume ? atOf(state.grid, resume.at) : (q.span?.to ?? at)
+        const ended = pause ? [{ k: 'undo', at, target: pause.id, reason: answer } as TimerDraft, ...(resume ? [{ k: 'undo', at, target: resume.id, reason: answer } as TimerDraft] : []), { k: 'block.end', block: q.block, at: away, done: null, rule: 'absence' }] : []
+        return [...ended, ...absenceWhat(state, q.block, answer, away, Math.max(away + MIN, back), at), mark]
       }
       return [mark]
     }

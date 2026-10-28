@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.21.0
+- Druga zmiana zaczęta przed swoim czasem albo przedłużona za swój koniec liczy się jak zwykłe przedłużenie – z kosztem i drugim kliknięciem, a nie po cichu. Przy wcześniejszym starcie (z panelu bloku) obok „Potwierdź” jest „Przesuń na teraz”: przesuwa drugą zmianę na teraz, z tą samą długością, i zaczyna ją bez kosztu.
+- Pytanie o nieobecność ma nowe odpowiedzi: „Posiłek” (odhacza obiad z planu z czasami nieobecności – z „Cofnij”; bez posiłku w planie nieobecność nie liczy się jako odpoczynek), „Regeneracja” i „Byłem na prośbie” (osobę wybierzesz w rytuale). Blok kończy się wtedy w chwili odejścia.
+- Nowe linie w pasku: blok zakotwiczony po końcu swojej kotwicy („Zacznij · Zaparkuj · Koniec pracy”), po „Koniec pracy” stały blok pracy przed sobą („NY o 14:00 zostaje · Odwołaj”), blok stały skończony planem („nie przedłużono · Przedłuż” przez 30 min) i „Koniec pracy o 17:30 · Pracowałem do teraz” przy czasie do wyjaśnienia.
+
 ## 0.20.0
 - Komunikat rezerwy energii: gdy pula zejdzie do rezerwy, w pasku i panelu pojawia się linia „Głowa na rezerwie – może 15 min regeneracji (…)? · Zacznij · nie dziś” ze sposobem regeneracji najtańszym dla tej puli. „Zacznij” zaczyna regenerację od razu i przesuwa zatwierdzoną granicę o jej 15 min (najwyżej do maksimum), więc odpoczynek nie odbiera nagrody za granicę; „nie dziś” chowa linię do końca dnia. W sesji i zajęciach komunikat czeka na ich koniec, w „mniej pytań” jest bez kropki – w obu bez powiadomienia Windows.
 - Nagroda „Reakcja na rezerwę” liczy się teraz od chwili, gdy komunikat zobaczysz: w panelu, w oknie, po kliknięciu paska albo powiadomienia (kliknięcie powiadomienia otwiera panel na tej linii). Wcześniej przyznawała się zawsze, bez reakcji.

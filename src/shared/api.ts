@@ -324,6 +324,8 @@ export interface TimerIn {
   variantId?: string | null
   /** „Cofnij”: the automatic action's event id. */
   target?: string
+  /** „Pracowałem do teraz”: the time to explain it answers. */
+  explain?: string
   /** An answer to a proposal of the bar (`mark`). */
   question?: string
   answer?: string
@@ -340,7 +342,7 @@ export interface TimerIn {
 export interface TimerResult {
   ok: boolean
   why: string | null
-  confirm: { block: string; minutes: number; overrun: boolean; bedtime: boolean } | null
+  confirm: { block: string; minutes: number; overrun: boolean; bedtime: boolean; moveToNow?: boolean } | null
 }
 
 export interface FolderProbe {

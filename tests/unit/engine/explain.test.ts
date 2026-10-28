@@ -4,7 +4,10 @@
  * answer – neither work, nor a project, nor regeneration; after a work block rest for the hard end and the pool.
  */
 import { describe, expect, it } from 'vitest'
+import { activityOf } from '@shared/engine/activity'
 import { computeDay } from '@shared/engine/day'
+import { timerAction } from '@shared/engine/timer'
+import { engineView } from '@shared/engineView'
 import { block, hhmm, Scenario } from './dsl'
 
 const DATE = '2026-10-28' // a Wednesday
@@ -277,5 +280,25 @@ describe('twardy koniec w czasie do wyjaśnienia', () => {
     expect(st.hardEnd.passed).toBeNull()
     // The minutes are work now: 19:30–21:20 after the boundary.
     expect(st.extensionMin).toBeGreaterThan(0)
+  })
+})
+
+describe('„Pracowałem do teraz” w pasku (A1-12, D254)', () => {
+  it('linia „Koniec pracy o … · Pracowałem do teraz” przy trwającym czasie do wyjaśnienia; kliknięcie odpowiada „praca” i potwierdza koniec', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).using('07:00', '23:00')
+    s.start('a', '08:00')
+    silentEnd(s, 'a', '09:00', 'twoQuestions', '10:00')
+    const t = s.at('10:20')
+    const ctx = s.contextAt(t)
+    const st = s.stateAt(t)
+    const v = engineView({ ctx, state: st, energy: null, activity: activityOf(ctx.events, st.grid.start, t, 'pca'), now: t, name: () => 'Inne obowiązki', care: { waterOn: false, waterEveryMin: 45, breakAfterMin: 0, solitudeAfterMin: 0 }, modePrefs: { sessionMode: true, classMode: true }, pending: null })
+    const line = v.lines.find((l) => l.id.startsWith('workedUntil:'))!
+    expect(line).toMatchObject({ text: 'Koniec pracy o 09:00', actions: [{ id: 'now', label: 'Pracowałem do teraz' }] })
+    const r = timerAction(ctx, st, { a: 'workedUntil', explain: line.id.slice('workedUntil:'.length) }, t)
+    expect(r.ok).toBe(true)
+    if (r.ok) s.write(r.events, t)
+    const after = s.state('10:25')
+    expect(after.explains[0]!.answer).toMatchObject({ cls: 'work', how: 'answer' })
+    expect(hhmm(after, after.workEnd)).toBe('10:20')
   })
 })

@@ -220,3 +220,29 @@ describe('widok paska z silnika', () => {
     expect(view(s, '16:25').block?.name).toBe('Sesja tradingowa')
   })
 })
+
+describe('linie chwil dnia w pasku (A1-12)', () => {
+  it('blok zakotwiczony po końcu kotwicy: „Zacznij · Zaparkuj · Koniec pracy” z kropką; znika po starcie', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'j', cat: 'inne', after: 'a', min: 30 })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    expect(view(s, '08:30').lines.some((l) => l.id === 'anchor:j')).toBe(false)
+    s.write([{ k: 'block.end', block: 'a', at: s.at('09:05'), done: true, rule: null }], s.at('09:05'))
+    const line = view(s, '09:06').lines.find((l) => l.id === 'anchor:j')!
+    expect(line).toMatchObject({ dot: true })
+    expect(line.actions.map((a) => a.label)).toEqual(['Zacznij', 'Zaparkuj', 'Koniec pracy'])
+    click(s, '09:07', { a: 'start', block: 'j' })
+    expect(view(s, '09:08').lines.some((l) => l.id === 'anchor:j')).toBe(false)
+  })
+
+  it('po „Koniec pracy” stały blok pracy przed sobą: „… o 14:00 zostaje · Odwołaj”; blok stały skończony planem: „nie przedłużono · Przedłuż” przez 30 min', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'f', cat: 'inne', at: '14:00', min: 60, fixed: true })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    click(s, '09:00', { a: 'workEnd' })
+    expect(view(s, '09:05').lines.find((l) => l.id === 'fixedLeft:f')).toMatchObject({ text: 'Inne obowiązki o 14:00 zostaje', actions: [{ id: 'cancel', label: 'Odwołaj' }] })
+    const s2 = new Scenario({ date: DATE, plan: [block({ id: 'f', cat: 'inne', at: '14:00', min: 60, fixed: true })] }).observe('07:00', null)
+    leader(s2, '14:00')
+    leader(s2, '15:11')
+    expect(view(s2, '15:12').lines.some((l) => l.id === 'notExtended:f')).toBe(true)
+    expect(view(s2, '15:31').lines.some((l) => l.id === 'notExtended:f')).toBe(false)
+  })
+})

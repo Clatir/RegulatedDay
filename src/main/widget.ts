@@ -577,6 +577,12 @@ export class WidgetEngine {
         if (kind === 'moved') return act === 'undo' ? this.undoVariant() : undefined
         if (kind === 'wait') click = act === 'start' ? { a: 'start', block: id } : { a: 'cancel', block: id }
         else if (kind === 'restart') click = { a: 'restart', block: id }
+        // The day's moments (A1-12): an anchored block's „Zacznij · Zaparkuj · Koniec pracy”, a fixed block cancelled after
+        // „Koniec pracy”, a fixed block extended after its plan ended it, „Pracowałem do teraz”.
+        else if (kind === 'anchor') click = act === 'start' ? { a: 'start', block: id } : act === 'park' ? { a: 'park', block: id } : { a: 'workEnd' }
+        else if (kind === 'fixedLeft') click = { a: 'cancel', block: id }
+        else if (kind === 'notExtended') click = { a: 'extend', block: id, minutes: num(value) ?? 15 }
+        else if (kind === 'workedUntil') click = { a: 'workedUntil', explain: id }
         else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
         else if (kind === 'fewerOffer') {
           await this.d.timer({ a: 'mark', question: line, answer: act, day })

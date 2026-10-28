@@ -17,7 +17,7 @@ import type { EnergyState } from './engine/energy'
 import { reserveMessageId } from './engine/game'
 import { suggestRegen } from './engine/reserve'
 import { REGEN_CATEGORY, type Pool } from './model/categories'
-import type { AutoAction, RequestFact } from './engine/facts'
+import { OPEN, type AutoAction, type RequestFact } from './engine/facts'
 import { atOf, type Grid } from './engine/grid'
 import { isRunningRequest } from './engine/requests'
 import { ritualDue } from './engine/ritual'
@@ -95,6 +95,10 @@ export function autoText(a: AutoAction, blockName: string, clock: string): strin
       return a.k === 'block.end' ? `${name} skończony o ${clock} (w chwili odejścia)` : a.k === 'block.pause' ? `${name}: nieobecność od ${clock} odliczona` : `${name}: powrót o ${clock}`
     case 'shutdown':
       return `${name} skończony o ${clock} (zamknięcie aplikacji)`
+    case 'absenceMeal':
+      return `${name} zjedzony do ${clock} (nieobecność)`
+    case 'absenceRegen':
+      return `${name} do ${clock} (nieobecność jako regeneracja)`
     case 'workEnd':
       return `${name} zaparkowany („Koniec pracy”)`
     case 'disconnect':
@@ -164,6 +168,53 @@ function reserveLines(i: EngineInput, modes: Modes): BarLine[] {
     const wayId = suggestRegen(i.state.settings, d.pool)
     const way = i.state.settings.categories[REGEN_CATEGORY]?.variants.find((v) => v.id === wayId)?.name
     out.push({ id, text: `${POOL_TEXT[d.pool]} na rezerwie – może ${RESERVE_REGEN_MIN} min regeneracji${way ? ` (${way})` : ''}?`, actions: [{ id: 'start', label: 'Zacznij' }, { id: 'notToday', label: 'nie dziś' }], dot: !modes.fewer })
+  }
+  return out
+}
+
+/** A fixed block ended by its plan may still be extended within this long after its planned end (D227). */
+const NOT_EXTENDED_MIN = 30
+
+/**
+ * The lines of the day's moments (A1-12; spec „Sesje tradingowe”, „Granica i koniec pracy”, Timer):
+ * - `anchor:<id>` – a block anchored to one that ended: „Zacznij · Zaparkuj · Koniec pracy”, with the dot (D194);
+ * - `fixedLeft:<id>` – after „Koniec pracy” a fixed block of work still ahead: „NY o 14:00 zostaje · Odwołaj” (D216);
+ * - `notExtended:<id>` – a fixed block ended by its plan, within 30 min: „Nie przedłużono · Przedłuż” (D227);
+ * - `workedUntil:<explain>` – time to explain after a work block now: „Koniec pracy o 17:30 · Pracowałem do teraz” (D254).
+ */
+function dayLines(i: EngineInput, t: TimerNow, nameOf: (id: string) => string, clockOf: (ms: number) => string): BarLine[] {
+  const { state } = i
+  const at = (idx: number) => atOf(state.grid, idx)
+  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  const fact = (id: string) => state.facts.blocks.get(id)
+  const untouched = (id: string) => {
+    const f = fact(id)
+    return !f || (f.startedAt == null && f.parkedAt == null && f.cancelledAt == null)
+  }
+  const running = new Set([t.fg?.info.id, ...t.bg.map((b) => b.info.id)].filter((x): x is string => !!x))
+  // „Koniec pracy” clicked and no work running since – a fixed block of work later makes it a break, never a question.
+  const afterWorkEnd = state.facts.workEnds.length > 0 && !t.fg?.info.isWork
+  const out: BarLine[] = []
+  for (const b of state.blocks) {
+    if (!b.inPlan) continue
+    // Anchored to a block that ended (not to a session of the layer): its own moment came.
+    if (!b.waits && b.anchor && !b.anchor.startsWith('session:') && untouched(b.id) && fact(b.anchor)?.endedAt != null && !running.has(b.id)) {
+      out.push({ id: `anchor:${b.id}`, text: nameOf(b.id), actions: [{ id: 'start', label: 'Zacznij' }, { id: 'park', label: 'Zaparkuj' }, ...(b.isWork ? [{ id: 'workEnd', label: 'Koniec pracy' }] : [])], dot: true })
+      continue
+    }
+    const span = plannedSpan(b, byId)
+    if (!span) continue
+    // After „Koniec pracy”: a fixed block of work still ahead stays – or one click cancels it.
+    if (afterWorkEnd && (b.fixed || b.waits) && b.isWork && untouched(b.id) && state.now < span.start) out.push({ id: `fixedLeft:${b.id}`, text: `${nameOf(b.id)} o ${clockOf(at(span.start))} zostaje`, actions: [{ id: 'cancel', label: 'Odwołaj' }], dot: false })
+    // A fixed block ended by its plan: „Przedłuż” still possible for 30 min after its planned end.
+    const f = fact(b.id)
+    if (b.fixed && !b.waits && f?.endedAt != null && (f.endRule === 'plan' || f.endRule === 'fixedNoReaction') && state.now < span.end + NOT_EXTENDED_MIN)
+      out.push({ id: `notExtended:${b.id}`, text: `${nameOf(b.id)} – nie przedłużono`, actions: [{ id: 'extend', label: 'Przedłuż' }], dot: false })
+  }
+  // Time to explain after a work block, going on now: the end of work it starts from, „Pracowałem do teraz”.
+  for (const x of state.explains) {
+    if (x.kind !== 'work' || x.to !== OPEN || x.answer) continue
+    out.push({ id: `workedUntil:${x.id}`, text: `Koniec pracy o ${clockOf(at(x.blockEnd))}`, actions: [{ id: 'now', label: 'Pracowałem do teraz' }], dot: false })
   }
   return out
 }
@@ -246,6 +297,7 @@ export function engineView(i: EngineInput): WidgetView {
       if (!answered(events, id)) lines.push({ id, text: 'Po rozmowach – chwila samotności?', actions: [{ id: 'solitude', label: 'Chwila ciszy' }, { id: 'dismiss', label: 'Nie teraz' }], dot: false })
     }
     lines.push(...reserveLines(i, modes))
+    lines.push(...dayLines(i, t, nameOf, clockOf))
   }
 
   const water = waterDue(events, state, t, now, i.care, { night: modes.night, disconnect: hidden })
@@ -259,7 +311,8 @@ export function engineView(i: EngineInput): WidgetView {
   const planned = state.facts.autos.filter((a) => a.rule === 'fixedStart' || a.rule === 'plan')
   const groups = planned.length ? [`bloki stałe według planu: ${planned.length}`] : []
   const items = state.facts.autos
-    .filter((a) => !(a.rule === 'fixedStart' || a.rule === 'plan'))
+    // A meal or a regeneration of an absence: one line, at its end (its „Cofnij” takes the start back too).
+    .filter((a) => !(a.rule === 'fixedStart' || a.rule === 'plan') && !(a.k === 'block.start' && (a.rule === 'absenceMeal' || a.rule === 'absenceRegen')))
     .map((a) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) }))
     .reverse()
 

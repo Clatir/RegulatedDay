@@ -259,7 +259,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               ) : (
                 <>
                   {isToday && canStart(model, block.id) && (
-                    <button type="button" className="btn btn-accent" onClick={() => void startBlock(date, block.id)} data-testid="block-timer-start">
+                    <button type="button" className="btn btn-accent" onClick={() => void startBlock(model, block)} data-testid="block-timer-start">
                       {model.state.facts.blocks.get(block.id)?.startedAt != null ? 'Wznów' : 'Start'}
                     </button>
                   )}
@@ -364,13 +364,26 @@ function canStart(model: DayModel, id: string): boolean {
 }
 
 /** „Start” from the block's panel: the main process writes it; a cost after the boundary asks the second click. */
-async function startBlock(date: string, block: string): Promise<void> {
+async function startBlock(model: DayModel, b: PlanBlock): Promise<void> {
+  const date = model.date
+  const block = b.id
   const failed = (e: unknown) => void toast(`Nie zaczęto bloku: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
   try {
     const r = await window.rd.timer({ a: 'start', block, day: date })
     if (r.confirm) {
       const c = r.confirm
-      toast(`${c.overrun ? 'Przekroczenie' : 'Przedłużenie'}: ${c.minutes} min${c.bedtime ? ' (pora snu się przesunie)' : ' z puli projektów'}`, 'info', 10_000, { label: 'Potwierdź', run: () => void window.rd.timer({ a: 'start', block, day: date, confirm: true }).catch(failed) })
+      // The second shift before its time: „Przesuń na teraz” moves its planned time (the same length) and starts it
+      // without the cost (spec „Druga zmiana”, A1-04).
+      const move = c.moveToNow
+        ? {
+            label: 'Przesuń na teraz',
+            run: () =>
+              void patchDayBlock(date, model.data.dayFile, b, { startMin: logicalMinuteOf(date, Date.now()), anchor: null })
+                .then((out) => (isSaved(out) ? window.rd.timer({ a: 'start', block, day: date }) : null))
+                .catch(failed)
+          }
+        : undefined
+      toast(`${c.overrun ? 'Przekroczenie' : 'Przedłużenie'}: ${c.minutes} min${c.bedtime ? ' (pora snu się przesunie)' : ' z puli projektów'}`, 'info', 10_000, { label: 'Potwierdź', run: () => void window.rd.timer({ a: 'start', block, day: date, confirm: true }).catch(failed) }, move)
     } else if (!r.ok && r.why) toast(r.why, 'info')
   } catch (e) {
     failed(e)

@@ -84,6 +84,8 @@ export type TimerAction =
   | { a: 'restart'; block: string }
   /** An answer to a proposal of the bar (the break, the solitude): recorded, so it is shown once. */
   | { a: 'mark'; question: string; answer: string }
+  /** „Pracowałem do teraz” on the bar: the time to explain after a work block answered „praca” to now, the end of work then. */
+  | { a: 'workedUntil'; explain: string }
 
 /** The cost a first click shows (spec: „przedłużenie · −40 min puli”, „pora snu +40 min”, „przekroczenie”). */
 export interface ActionCost {
@@ -95,6 +97,8 @@ export interface ActionCost {
   overrun: boolean
   /** The pool of projects is empty: they move the bedtime. */
   bedtime: boolean
+  /** The second shift started before its planned time: „Przesuń na teraz” moves it and starts it without the cost. */
+  moveToNow?: boolean
 }
 
 export type ActionResult =
@@ -202,8 +206,18 @@ function nextBlock(state: DayState, fg: TimerBlock | null, paused: TimerBlock[],
  */
 export function workCost(state: DayState, info: BlockInfo, from: number, to: number): ActionCost | null {
   const boundary = state.boundary.approved
-  if (boundary == null || !isBoundaryWork(info) || info.lectureOrCommute || to <= from) return null
+  if (boundary == null || to <= from) return null
   if (state.facts.blocks.get(info.id)?.addConfirmedAt != null) return null
+  // The second shift's own minutes outside its planned time (an earlier start, „Przedłuż”): an ordinary extension – one
+  // confirmation, never an overrun; „Przesuń na teraz” beside the cost of an earlier start (spec „Druga zmiana”, A1-04).
+  if (info.secondShift) {
+    const span = plannedSpan(info, new Map(state.blocks.map((b) => [b.id, b])))
+    if (!span) return null
+    const minutes = Math.max(0, Math.min(to, span.start) - from) + Math.max(0, to - Math.max(from, span.end))
+    if (minutes <= 0) return null
+    return { block: info.id, minutes, overrun: false, bedtime: state.pool.empty, ...(from < span.start ? { moveToNow: true } : {}) }
+  }
+  if (!isBoundaryWork(info) || info.lectureOrCommute) return null
   const minutes = Math.max(0, to - Math.max(from, boundary))
   if (minutes <= 0) return null
   return { block: info.id, minutes, overrun: to > state.boundary.max, bedtime: state.pool.empty }
@@ -421,7 +435,9 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (a.k === 'boundary.approve') return yes([{ k: 'undo', at, target: a.id, reason: 'user' }, { k: 'boundary.undo', at }])
       // A request's end: the block it resumed waits again with it.
       const r = a.k === 'request.end' ? state.facts.requests.find((x) => x.id === a.request && x.endId === a.id) : undefined
-      return yes([a, ...(r ? resumedWith(state.facts, r) : [])].map((x) => ({ k: 'undo', at, target: x.id, reason: 'user' })))
+      // A meal or a regeneration an answer to an absence made: its start and its end go back together (A1-09).
+      const pair = a.rule === 'absenceMeal' || a.rule === 'absenceRegen' ? state.facts.autos.filter((x) => x.rule === a.rule && x.block === a.block && x.id !== a.id) : []
+      return yes([a, ...pair, ...(r ? resumedWith(state.facts, r) : [])].map((x) => ({ k: 'undo', at, target: x.id, reason: 'user' })))
     }
     case 'cutOff': {
       if (state.facts.disconnect.some((d) => d.to === OPEN)) return no('„Odcinam się” już trwa')
@@ -444,6 +460,11 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       return yes([{ k: 'fewer.end', at }])
     case 'drink':
       return yes([{ k: 'water.drink', at }])
+    case 'workedUntil': {
+      const x = state.explains.find((e) => e.id === act.explain)
+      if (!x || x.kind !== 'work' || x.answer?.how === 'answer' || m < x.from) return no('nie ma czasu do wyjaśnienia po bloku pracy')
+      return yes([{ k: 'question.answer', at, question: x.id, answer: 'work', value: at }, { k: 'work.end', at, end: at }])
+    }
     case 'mark':
       if (state.facts.answers.has(act.question)) return no('już odpowiedziane')
       return yes([{ k: 'question.answer', at, question: act.question, answer: act.answer, value: null }])
