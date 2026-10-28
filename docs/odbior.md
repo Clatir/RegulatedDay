@@ -1350,7 +1350,10 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Automatycznie:** `tests/unit/engine/widget-view.test.ts` („linie chwil dnia”), `tests/unit/engine/explain.test.ts`.
   Ty: rzut oka, gdy się zdarzą.
 - **Jak sprawdzić:** po końcu bloku, do którego jest zakotwiczony inny, spójrz na pasek; kliknij „Koniec pracy” przy
-  sesji NY później w planie; po końcu sesji z planu (bez „Przedłuż”) spójrz na pasek przez 30 min.
-- **Oczekiwany efekt:** „<blok> · Zacznij · Zaparkuj · Koniec pracy” z kropką; „NY o 14:00 zostaje · Odwołaj”; „NY – nie
-  przedłużono · Przedłuż”.
-- **Nie przechodzi, gdy:** którejś linii brak albo jej przycisk nic nie robi.
+  sesji NY później w planie; po końcu sesji z planu (bez „Przedłuż”) spójrz na pasek przez 30 min; po bloku pracy bez
+  odpowiedzi na „Dalej?” kliknij później „Koniec pracy”.
+- **Oczekiwany efekt:** „<blok> · Zacznij · Zaparkuj · Koniec pracy” z kropką (bez kropki, gdy coś biegnie); „NY o 14:00
+  zostaje · Odwołaj” (druga zmiana nigdy); „NY – nie przedłużono · Przedłuż” (koszt jako „Przedłuż +15” z ±15); „Koniec
+  pracy o 17:30 · Pracowałem do 18:30”.
+- **Nie przechodzi, gdy:** którejś linii brak, jej przycisk nic nie robi albo „zostaje · Odwołaj” wraca po pracy, która
+  przyszła po „Koniec pracy”.
