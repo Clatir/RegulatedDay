@@ -14,7 +14,7 @@ import { paths } from '@shared/data/paths'
 import type { AnyEvent } from '@shared/model/events'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
-import { DataFolder } from '../../src/main/data/folder'
+import { DataFolder, LIST_TRUST_MS } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
 import { EditQueue } from '../../src/main/data/editQueue'
 import type { RecordStore } from '../../src/main/data/records'
@@ -245,6 +245,34 @@ describe('folder danych', () => {
     lists = 0
     await f.folder.check()
     expect(lists).toBe(2)
+  })
+
+  it('lista do pokazania (prośby): plik sprawdzony przed chwilą z pamięci; własna zmiana od razu, cudza najpóźniej po LIST_TRUST_MS', async () => {
+    mkdirSync(join(dataDir, 'requests'), { recursive: true })
+    const file = join(dataDir, paths.record('request', 'r1'))
+    writeFileSync(file, JSON.stringify({ schema: 1, id: 'r1', createdAt: 1, state: 'queued', person: null, estimateMin: 15, note: 'a' }))
+    let stats = 0
+    const fs: DataFs = { ...nodeFs, stat: async (abs) => (abs.includes('requests') && stats++, nodeFs.stat(abs)) }
+    const f = await make({ fs })
+    const note = async () => ((await f.folder.collection('request')).find((r) => r.id === 'r1') as { note?: string } | undefined)?.note
+    expect(await note()).toBe('a')
+    stats = 0
+    expect(await note()).toBe('a')
+    expect(stats).toBe(0)
+    // Another computer's change of the file: within the trust it is not looked at, after it – it is.
+    writeFileSync(file, JSON.stringify({ schema: 1, id: 'r1', createdAt: 1, state: 'queued', person: null, estimateMin: 15, note: 'z laptopa' }))
+    expect(await note()).toBe('a')
+    f.now += LIST_TRUST_MS
+    expect(await note()).toBe('z laptopa')
+    // This computer's own edit: shown at once, also after the queue wrote it.
+    await f.folder.edit([{ rel: paths.record('request', 'r1'), edits: [{ path: ['note'], base: 'z laptopa', value: 'moja' }], create: false, remove: false }])
+    expect(await note()).toBe('moja')
+    await f.folder.check()
+    expect(await note()).toBe('moja')
+    expect(JSON.parse(readFileSync(file, 'utf8')).note).toBe('moja')
+    // A new file of another computer is looked at at once (the listing is read every time).
+    writeFileSync(join(dataDir, paths.record('request', 'r2')), JSON.stringify({ schema: 1, id: 'r2', createdAt: 2, state: 'queued', person: null, estimateMin: 15, note: 'nowa' }))
+    expect((await f.folder.collection('request')).map((r) => r.id)).toEqual(['r1', 'r2'])
   })
 })
 

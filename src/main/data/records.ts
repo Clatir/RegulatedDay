@@ -35,7 +35,8 @@ export function historyKey(c: Classified): { kind: string; id: string } {
 export class RecordStore {
   readonly problems = new Map<string, string>()
 
-  constructor(private readonly o: { fs: DataFs; dataDir: string; computer: string; history: RecordHistory; now: () => number }) {}
+  /** `written`: a record this computer wrote or removed (its cached copy is known stale at once). */
+  constructor(private readonly o: { fs: DataFs; dataDir: string; computer: string; history: RecordHistory; now: () => number; written?: (rel: string) => void }) {}
 
   async read(rel: string): Promise<RecordRead> {
     let bytes: Buffer | null
@@ -70,7 +71,11 @@ export class RecordStore {
       const { kind, id } = historyKey(c)
       await this.o.history.snapshot(kind, id, before.value, reason === 'merge' ? 'merge' : 'edit')
     }
-    await this.o.fs.writeAtomic(join(this.o.dataDir, rel), `${JSON.stringify(value, null, 2)}\n`)
+    try {
+      await this.o.fs.writeAtomic(join(this.o.dataDir, rel), `${JSON.stringify(value, null, 2)}\n`)
+    } finally {
+      this.o.written?.(rel)
+    }
   }
 
   /** Removes a record, keeping its last version in the history. */
@@ -81,7 +86,11 @@ export class RecordStore {
       const { kind, id } = historyKey(c)
       await this.o.history.snapshot(kind, id, before.value, 'delete')
     }
-    await this.o.fs.remove(join(this.o.dataDir, rel))
+    try {
+      await this.o.fs.remove(join(this.o.dataDir, rel))
+    } finally {
+      this.o.written?.(rel)
+    }
   }
 
   /** Conflict copies in a folder of the data (relative paths with the file each is a copy of). */

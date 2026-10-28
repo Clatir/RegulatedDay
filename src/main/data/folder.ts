@@ -89,6 +89,13 @@ const COPY_SCAN_MS = 60_000
 /** Files of a folder of records read side by side (A3-08). */
 const DIR_CONCURRENCY = 16
 /**
+ * A record of a list for showing (the requests of years, routines, templates in the window) looked at this recently is
+ * taken from memory without looking at its file again – one look at thousands of files per change was over 0.1 s on a
+ * plain disk (spec „Skala”). This computer's own writes are known at once; another computer's change shows at most this
+ * much later. What a day is made from is always looked at.
+ */
+export const LIST_TRUST_MS = 60_000
+/**
  * Days back the leader looks for one to freeze: 72 h after a day's end reaches four of them, but every computer may be
  * off for weeks – a day frozen is remembered and not read again.
  */
@@ -226,6 +233,8 @@ export class DataFolder {
   }
   private readonly firstPresence = new Set<string>()
   private readonly cache = new Map<string, { size: number; mtimeMs: number; value: unknown }>()
+  /** When a cached record was last looked at on the disk (the monotonic clock) – for the lists for showing. */
+  private readonly lookedAt = new Map<string, number>()
   private lastSeenPeers = new Map<string, number>()
   private observing = true
   private lastCompact = 0
@@ -265,7 +274,7 @@ export class DataFolder {
     const now = () => this.clock.now()
     this.log = new EventLog({ fs: o.fs, dataDir: o.dataDir, stateDir: o.stateDir, computer: o.computer, clock: this.clock, rulesVersion: this.rulesVersion })
     this.history = new RecordHistory({ fs: o.fs, dataDir: o.dataDir, computer: o.computer, now })
-    this.records = new RecordStore({ fs: o.fs, dataDir: o.dataDir, computer: o.computer, history: this.history, now })
+    this.records = new RecordStore({ fs: o.fs, dataDir: o.dataDir, computer: o.computer, history: this.history, now, written: (rel) => this.lookedAt.delete(rel) })
     this.queue = new EditQueue({ stateDir: o.stateDir, computer: o.computer })
     this.presence = new PresenceStore(
       { fs: o.fs, dataDir: o.dataDir, computer: o.computer, now },
@@ -390,24 +399,39 @@ export class DataFolder {
    */
   private async cachedJson(rel: string): Promise<unknown> {
     const abs = join(this.o.dataDir, rel)
+    const looked = this.o.clock.mono()
     const st = await this.o.fs.stat(abs)
     if (!st) {
       this.cache.delete(rel)
+      this.lookedAt.delete(rel)
       return undefined
     }
     const old = this.cache.get(rel)
-    if (old && old.size === st.size && old.mtimeMs === st.mtimeMs) return old.value
+    if (old && old.size === st.size && old.mtimeMs === st.mtimeMs) {
+      this.lookedAt.set(rel, looked)
+      return old.value
+    }
     const r = await this.records.read(rel)
     if (r.status === 'missing') {
       this.cache.delete(rel)
+      this.lookedAt.delete(rel)
       return undefined
     }
     if (r.status !== 'ok') {
+      this.lookedAt.delete(rel)
       if (old) return old.value
       throw new UnknownRecordError(rel, r.why)
     }
     this.cache.set(rel, { ...st, value: r.value })
+    this.lookedAt.set(rel, looked)
     return r.value
+  }
+
+  /** A cached record looked at within `LIST_TRUST_MS` (undefined: look at its file). */
+  private trusted(rel: string): { value: unknown } | undefined {
+    const at = this.lookedAt.get(rel)
+    const c = this.cache.get(rel)
+    return at != null && c && this.o.clock.mono() - at < LIST_TRUST_MS ? { value: c.value } : undefined
   }
 
   /** A record as this computer sees it: the file with your queued edits laid over it (shown at once, also offline). */
@@ -440,9 +464,12 @@ export class DataFolder {
       const c = classify(rel)
       return !!c && !c.conflict
     })
-    // Thousands of requests after years: their files are looked at side by side, not one after another (A3-08).
+    // Thousands of requests after years: their files are looked at side by side, not one after another (A3-08) – and a
+    // list for showing takes a file looked at a moment ago from memory (`LIST_TRUST_MS`).
     const raws = await mapLimit(list, DIR_CONCURRENCY, async (rel) => {
       try {
+        const known = lenient ? this.trusted(rel) : undefined
+        if (known) return own ? this.queue.overlay(rel, known.value as Record<string, unknown> | undefined) : known.value
         return own ? await this.recordView(rel) : await this.shared(rel)
       } catch (e) {
         // A list for showing (requests) goes on without the unknown record; what a day is made from does not.

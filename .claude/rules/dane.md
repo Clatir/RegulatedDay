@@ -67,3 +67,6 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Rozjazd zegara (`read.ahead`) tylko po `t` zdarzeń innych komputerów; zegar logiczny ponad 24 h z przodu wraca do
   zegara komputera przy `stamp()` (`onClamp` – log). Szablon: `templateJson(t, before)` na surowym pliku.
 - Odczyt i zapis rekordów obok kolejki (łączenie kopii konfliktowych) – tylko przez `queue.exclusive`.
+- Listy do pokazania (`collection`: prośby, rutyny, szablony, wykłady w oknie) biorą plik sprawdzony w ciągu
+  `LIST_TRUST_MS` (60 s) z pamięci; zapis i usunięcie przez `RecordStore` unieważnia go od razu (`written`) – zapis
+  pliku rekordu inną drogą musi zrobić to samo. Silnik dnia (`inputs`, `dayFile`) zawsze sprawdza plik.
