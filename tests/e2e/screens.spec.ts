@@ -526,9 +526,11 @@ test('rutyny (D328): karta w „Dziś” z wersją i krokami; „Kroki ▸” w 
       await shot(page, 'e8-routine-card')
       // The bar (not in the night's quiet): „Kroki ▸” unfolds the steps of the other routine; its save closes the card.
       await expect.poll(() => page.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
-      const night = await page.evaluate(async () => (await window.rd.widget()).night)
+      const { night, quiet } = await page.evaluate(async () => await window.rd.widget())
       if (night) await page.getByTestId('routine-card-all').click()
       else {
+        // In a quiet mode (the evening's second shift waits for „Zacznij”) the routine's line waits in „⋯”.
+        if (quiet) await page.getByTestId('bar-main').getByTestId('bar-group-more').click()
         const line = page.getByTestId('bar-main').getByTestId(`bar-line-routine:${today}:rut2`)
         await expect(line).toBeVisible()
         await line.getByTestId('bar-act-routine-steps').click()
