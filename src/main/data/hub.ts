@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { BackupRecord, CalibrationScreen, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
+import type { BackupRecord, CalibrationScreen, ComputerRow, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords } from '@shared/data/merge'
@@ -511,6 +511,11 @@ export class DataHub {
     this.changed()
     if (r.ok) void this.service?.tick()
     return { ok: r.ok, why: r.ok ? null : r.why, confirm: null }
+  }
+
+  /** The computers of the folder for the settings (A3-13); without a folder only this one. */
+  computerList(): ComputerRow[] {
+    return this.service?.folder?.computerList() ?? [{ id: this.o.computer(), name: this.o.computerName, self: true, seenAt: null, state: 'used', forgotten: false, lastPresence: null }]
   }
 
   /** The days the morning shows to close, each with its ritual (from the ritual's first day, D320). */

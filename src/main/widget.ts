@@ -26,6 +26,7 @@ import { personName } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { ROUTINE_VERSION_NAMES, ROUTINE_VERSIONS, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
 import { addDays } from '@shared/time/zone'
+import { syncLines } from '@shared/sync/syncLines'
 import { noFolderView, SEEN_LINE, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
@@ -66,6 +67,8 @@ export interface WidgetDeps {
   emit: (view: WidgetView) => void
   log: (level: 'info' | 'warn' | 'error', msg: string, e?: unknown) => void
   now?: () => number
+  /** This computer runs on its battery (the line about saving it, once a day – spec „Kilka komputerów”). */
+  onBattery?: () => boolean
 }
 
 interface Pending extends BarPending {
@@ -139,6 +142,8 @@ export class WidgetEngine {
   private panel: { cause: VariantCause; variants: Variant[] } | null = null
   /** „Przestawiono: … · Cofnij” after a variant: its own edits, the files it created, the regeneration it started (T502). */
   private moved: { label: string; day: string; edits: Array<{ entry: EditEntry; made: RawRecord | null }>; started: string | null; until: number } | null = null
+  /** The day the line about saving the battery was answered „OK” (it comes back the next day). */
+  private batteryDone: string | null = null
   /** „Zapisano: … · Cofnij” after a routine saved from the bar (D328). */
   private routineSaved: { block: string; day: string; text: string; until: number } | null = null
 
@@ -221,6 +226,7 @@ export class WidgetEngine {
       }
       this.names = names
       this.variantsView(m, now)
+      this.syncView(folder, now)
       if (this.failing) this.d.log('info', 'widget: dzień znów policzony')
       this.failing = false
       // Notifications are the leader's, and only once settled – after a start or a wake the other computers' logs (their
@@ -265,6 +271,17 @@ export class WidgetEngine {
     // A routine saved from the bar (D328): its „Cofnij” for a while, in place of its line.
     if (this.routineSaved && (this.routineSaved.until <= now || this.routineSaved.day !== date)) this.routineSaved = null
     if (this.routineSaved && !v.hidden) v.lines = [...v.lines, { id: `routineSaved:${this.routineSaved.block}`, text: this.routineSaved.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }]
+  }
+
+  /**
+   * The quiet lines of the computers and their files (A8-02, A8-07) after the day's own: OneDrive, questions on another
+   * computer too, a computer taken for asleep, a clock ahead, the battery once a day („OK” hides it to the day's end).
+   */
+  private syncView(folder: DataFolder, now: number): void {
+    const v = this.view!
+    if (v.hidden || v.night || v.day == null) return
+    const battery = (this.d.onBattery?.() ?? false) && this.batteryDone !== v.day
+    v.lines = [...v.lines, ...syncLines({ ...folder.syncState(now), battery }, now, v.day)]
   }
 
   /** The marker closed – „Zostaw” or a variant done: every cause holding now with it (it never comes back for them). */
@@ -612,6 +629,10 @@ export class WidgetEngine {
           const version = act === 'worse' && r.worse.length ? 'worse' : 'normal'
           return this.routineDone(day, r, version, r[version].map((s) => s.id))
         } else if (kind === 'routineSaved') return act === 'undo' ? this.undoRoutine() : undefined
+        else if (kind === 'battery') {
+          this.batteryDone = id
+          return this.refresh()
+        }
         else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
         else if (kind === 'fewerOffer') {
           await this.d.timer({ a: 'mark', question: line, answer: act, day })

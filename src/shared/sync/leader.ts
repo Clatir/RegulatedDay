@@ -160,6 +160,32 @@ export function decideLeader(inp: LeaderInput): LeaderDecision {
 }
 
 /**
+ * The computer the bar's tones play on (spec „Włączony dźwięk gra na jednym komputerze”, A8-04): of the computers awake
+ * – this one, and others whose presence file was refreshed in the last 10 min, not „closed” – the one with the latest
+ * presence, whatever its age (by this computer's clock: its own, the others' as seen changing); never the one recording
+ * a lecture now; a tie goes to the leader, then to the lower id. Null: none (only the recording one).
+ */
+export function soundComputer(inp: { now: number; self: { computer: string; lastPresence: number | null }; peers: readonly Peer[]; leader: string | null; recorder: string | null }): string | null {
+  const { now } = inp
+  const times = new Map<string, number>([[inp.self.computer, inp.self.lastPresence ?? Number.NEGATIVE_INFINITY]])
+  for (const p of inp.peers) {
+    if (p.presence.state === 'closed' || (now - p.fileSeenAt >= SILENT_MS && p.fileSeenAt <= now)) continue
+    times.set(p.presence.computer, presenceTime(p, now) ?? Number.NEGATIVE_INFINITY)
+  }
+  if (inp.recorder) times.delete(inp.recorder)
+  let best: string | null = null
+  let bestT = Number.NEGATIVE_INFINITY
+  for (const [id, t] of times) {
+    const tie = best != null && t === bestT
+    if (best == null || t > bestT || (tie && best !== inp.leader && (id === inp.leader || id < best))) {
+      best = id
+      bestT = t
+    }
+  }
+  return best
+}
+
+/**
  * The gate of the minutes (spec „Minuta jest zapisywana dopiero wtedy …”): the latest instant up to which every computer
  * with a fresh presence has written its presence after it, and the last event that presence names is already visible in
  * its log. A computer nobody uses writes its presence every 5 min, so minutes never wait for its events.

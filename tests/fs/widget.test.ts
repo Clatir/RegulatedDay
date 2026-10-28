@@ -37,7 +37,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make() {
+async function make(o: { onBattery?: boolean } = {}) {
   const clock = { now: placeLogical(DAY, 10 * 60) }
   const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => true })
   const shown: NotifyIn[] = []
@@ -66,7 +66,8 @@ async function make() {
     showMain: () => undefined,
     emit: (v) => views.push(v),
     log: () => undefined,
-    now: () => clock.now
+    now: () => clock.now,
+    onBattery: () => o.onBattery ?? false
   })
   return { folder, clock, w, shown, views, closeFolder: () => (open = false), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
 }
@@ -394,6 +395,24 @@ describe('widget w procesie głównym', () => {
     await w.act('line', `${saved.id}|undo`, 'bar')
     expect(w.current().lines.some((l) => l.id === `routine:${DAY}:rut0000000000000000000`)).toBe(true)
     expect(w.current().lines.some((l) => l.id.startsWith('routineSaved:'))).toBe(false)
+  })
+
+  it('ciche linie komputerów: „Brak zmian z PC B od …” po 10 min ciszy świeżej obecności; bateria raz dziennie z „OK” (A8-07)', async () => {
+    const { w, folder, at } = await make({ onBattery: true })
+    const since = placeLogical(DAY, 10 * 60)
+    mkdirSync(join(dataDir, '.presence'), { recursive: true })
+    writeFileSync(join(dataDir, '.presence', 'pcb.json'), JSON.stringify({ format: 1, computer: 'pcb', name: 'PC B', appVersion: '0.4.0', rulesVersion: 1, versions: [], lastPresence: since, lastUse: since, state: 'used', seenLeader: null, settled: true, lastEvents: {}, writtenAt: since }))
+    await folder.check()
+    await w.refresh()
+    const texts = () => w.current().lines.map((l) => l.text)
+    expect(texts()).not.toContain('Brak zmian z PC B od 10:00')
+    expect(texts()).toContain('Oszczędzanie baterii może wstrzymać OneDrive')
+    await w.act('line', `battery:${DAY}|ok`, 'bar')
+    expect(texts()).not.toContain('Oszczędzanie baterii może wstrzymać OneDrive')
+    at(10 * 60 + 11)
+    await folder.check()
+    await w.refresh()
+    expect(texts()).toContain('Brak zmian z PC B od 10:00')
   })
 
   it('„Przedłuż” z linii „nie przedłużono”: koszt jako „Przedłuż +15” z krokami ±15 min, potwierdzenie przedłuża ten blok (przegląd 0.21.0)', async () => {

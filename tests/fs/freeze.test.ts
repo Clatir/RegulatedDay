@@ -200,4 +200,27 @@ describe('zamrażanie w folderze danych', () => {
     expect(await checks(m, dayEnd(DAY) + 72 * H, 12)).toEqual([DAY])
     expect((await freezes(m.folder))[0]).toMatchObject({ how: 'timeout', missing: ['lap'] })
   })
+
+  it('„Zapomnij komputer”: zamrażanie na niego nie czeka; użyty znowu (nowa obecność) – znów się liczy (A3-13)', async () => {
+    const lap = (lastPresence: number) => {
+      mkdirSync(join(dataDir, '.presence'), { recursive: true })
+      writeFileSync(join(dataDir, '.presence', 'lap.json'), JSON.stringify({ format: 1, computer: 'lap', name: 'Laptop', appVersion: '0.7.0', rulesVersion: 1, versions: [], lastPresence, lastUse: lastPresence, state: 'idle', seenLeader: 'pca', settled: true, lastEvents: { [DAY]: 5 }, writtenAt: lastPresence }))
+    }
+    const m = await workedDay(DAY)
+    mkdirSync(join(dataDir, 'log', '2026', DAY), { recursive: true })
+    writeFileSync(join(dataDir, 'log', '2026', DAY, 'lap.jsonl'), `${JSON.stringify({ id: 'lap-0', c: 'lap', n: 0, t: placeLogical(DAY, 9 * 60), l: placeLogical(DAY, 9 * 60), v: 1, day: DAY, dom: 'meta', k: 'presence.first', at: placeLogical(DAY, 9 * 60) })}\n`)
+    const at = placeLogical(DAY, 20 * 60)
+    lap(at)
+    await m.folder.check()
+    // Forgotten in the settings with the „last presence” its file has: the day freezes when ready, not after 72 h.
+    await m.folder.edit([{ rel: paths.settings, create: true, edits: [{ path: ['forgotten'], base: undefined, value: { lap: { lastPresence: at, at: m.clock.now } } }] }])
+    expect(m.folder.computerList().find((c) => c.id === 'lap')).toMatchObject({ forgotten: false })
+    expect(await checks(m, placeLogical(addDays(DAY, 1), 8 * 60) + 30 * H, 12)).toEqual([DAY])
+    expect(m.folder.computerList().find((c) => c.id === 'lap')).toMatchObject({ forgotten: true })
+    expect((await freezes(m.folder))[0]).toMatchObject({ how: 'ready', missing: [] })
+    // Used again: its presence changed – it counts again.
+    lap(at + H)
+    await m.folder.check()
+    expect(m.folder.computerList().find((c) => c.id === 'lap')).toMatchObject({ forgotten: false })
+  })
 })

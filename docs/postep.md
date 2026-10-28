@@ -27,11 +27,10 @@
      dnia także na dziś i minione z ostrzeżeniem); T513 (podział PR-ów, rozstrzygnięcia A3-10, A5-12, A7-13).
    - PR-y ciągiem bez pauz (D317) według `docs/plan.md` 5.2a–5.2f: 0.16.0 i 0.17.0 wydane (v0.17.0 28.10 16:17);
      0.18.0 i 0.19.0 wydane (v0.19.0 28.10 18:16); 0.20.0 – PR #30, po czerwonym Windows (testy paska po D327)
-     poprawka testów b0e5e9a, run 40744452560; 0.21.0 i 0.22.0 – gałęzie wypchnięte (z tą samą poprawką testów), PR-y po
-     kolei po scaleniu poprzedniego; 0.23.0 (5.2f, część 2b) – gałąź `claude/0.23.0-funkcje` w osobnej kopii roboczej
-     `C:\CC-Projekty\RD-020` (`git worktree`, od 0.22.0 przed poprawkami po przeglądzie – przed pracą zrób rebase);
-     **teraz 5.2f, część 2b – 0.23.0**: ostrzeżenia o kopii, zegarze i synchronizacji, „N zmian zapisze się”, dźwięk na
-     jednym komputerze, „Zapomnij komputer” (A3-06, A3-07, A3-13, A3-14, A8-02, A8-04, A8-07), potem 5.3 i 5.4.
+     poprawka testów b0e5e9a, run 40744452560; 0.21.0, 0.22.0 i 0.23.0 – gałęzie wypchnięte (z tą samą poprawką testów),
+     PR-y po kolei po scaleniu poprzedniego;
+     **teraz 5.2f, część 2c – 0.24.0** (gałąź od 0.23.0): ostrzeżenie o kopii zapasowej (A3-06) i „N zmian zapisze się po
+     powrocie folderu” (A3-07); potem 5.3 i 5.4.
    - 5.3 przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji.
    - 5.4 bramka 1.0 – bez czekania na Twój odbiór (D324).
 2. Ty: aktualizacja do 0.15.0 i odbiór według `docs/odbior.md` (nowe E5b–E7d; E4b.12 po poprawce, E4b.10 dźwięk). Odbiór
@@ -41,6 +40,11 @@
 - `docs/odbior.md` (układ z 27.10): na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
+
+## 0.23.0 – funkcje D325, część 2b: komputery i synchronizacja (ciąg E, 5.2f)
+- Gałąź `claude/0.23.0-funkcje` (od 0.22.0) od 28.10 ok. 20:00.
+- Zakres (T521): dźwięk na jednym komputerze (A8-04), „Komputery” i „Zapomnij komputer” (A3-13), OneDrive po 5 min
+  (A3-14), ciche linie synchronizacji i zegara (A8-02, A8-07). Reszta 5.2f (A3-06, A3-07) – 0.24.0.
 
 ## 0.22.0 – funkcje D325, część 2a (ciąg E, 5.2f)
 - Gałąź `claude/0.22.0-funkcje` (od 0.21.0) od 28.10 ok. 19:20.

@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeFileAtomic } from '../datastore/atomic'
+import type { ComputerRow } from '@shared/api'
 import { EventClock, type ClockSources } from '@shared/data/clock'
 import type { MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
@@ -49,7 +50,8 @@ import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { routineFrom, type Routine } from '@shared/model/routines'
 import type { CsvDay } from '@shared/engine/csv'
 import { isDayTypeId, settingsOn, type SettingsChange } from '@shared/model/settings'
-import { decideLeader, minuteGate, SILENT_MS, type LeaderDecision, type Peer } from '@shared/sync/leader'
+import { decideLeader, minuteGate, SILENT_MS, soundComputer, type LeaderDecision, type Peer } from '@shared/sync/leader'
+import type { SyncState } from '@shared/sync/syncLines'
 import type { Presence } from '@shared/sync/presence'
 import { Settle, type SettleReason } from '@shared/sync/settle'
 import { logicalDayOf } from '@shared/time/day'
@@ -237,6 +239,10 @@ export class DataFolder {
   /** When a cached record was last looked at on the disk (the monotonic clock) – for the lists for showing. */
   private readonly lookedAt = new Map<string, number>()
   private lastSeenPeers = new Map<string, number>()
+  /** Computers seen with a fresh presence in this run: one that stops refreshing it is „Brak zmian z … od …” (A8-07). */
+  private readonly freshSeen = new Set<string>()
+  /** The last check saw an event of another computer more than 24 h ahead (A8-02). */
+  private dayAhead = false
   private observing = true
   private lastCompact = 0
   private readonly listed = new Map<string, string[]>()
@@ -588,10 +594,14 @@ export class DataFolder {
       this.unsettle('network')
     }
     try {
+      // Computers forgotten in the settings (A3-13): nobody waits for them while they are not used again.
+      const forgotten = rdFrom(await this.recordView(paths.settings).catch(() => undefined)).forgotten
+      this.presence.forgotten = new Map(Object.entries(forgotten).map(([id, f]) => [id, f.lastPresence]))
       this.peers = await this.presence.scan()
       for (const p of this.peers) {
         if (this.lastSeenPeers.get(p.presence.computer) !== p.fileSeenAt) this.settle.changeSeen(now)
         this.lastSeenPeers.set(p.presence.computer, p.fileSeenAt)
+        if (now - p.fileSeenAt < SILENT_MS) this.freshSeen.add(p.presence.computer)
       }
     } catch (e) {
       problems.push(String(e))
@@ -643,6 +653,7 @@ export class DataFolder {
     let nextAt: number | null = null
     let frozen: string[] = []
     // The leader's tasks need a settled computer, a complete view of the day's logs and clocks that agree.
+    if (read) this.dayAhead = read.ahead
     if (read?.ahead) problems.push('zegar: zdarzenie innego komputera ponad 24 h przed zegarem tego komputera – działania automatyczne czekają')
     if (this.leader.iLead && settled && read?.complete && !read.ahead) {
       try {
@@ -832,7 +843,8 @@ export class DataFolder {
         for (let i = 1; i <= 3 && openedAt == null; i++) if (addDays(day, i) <= today) openedAt = openedAtOf((await this.log.readDay(addDays(day, i))).events)
         if (now < correctionEnd(day, openedAt)) continue
         writers ??= this.writerIds(today)
-        const ids = new Set([...(await writers), ...Object.keys(read.lastByComputer)])
+        // A computer forgotten in the settings is not waited for (spec „zamrażanie przestaje na niego czekać”).
+        const ids = new Set([...(await writers), ...Object.keys(read.lastByComputer)].filter((id) => id === this.o.computer || !this.presence.isForgotten(id)))
         const computers = [...ids].map((id) => ({ id, self: id === this.o.computer, presence: this.peers.find((p) => p.presence.computer === id)?.presence ?? null, visibleLast: read.lastByComputer[id] ?? -1 }))
         // No conflict copies in the files its grade reads – the log, the day's and the next day's file, rd.json, the
         // templates and the plan of lectures – until you answer them (spec „Ocena dnia”, A2-03); after 72 h it freezes
@@ -1675,6 +1687,42 @@ export class DataFolder {
     if (!q) return
     const r = await this.queue.exclusive(() => this.records.joinCopy(copyRel, q.canonical, () => choice))
     if (r.joined) this.copyConflicts.delete(copyRel)
+  }
+
+  /**
+   * What the bar says quietly of the computers (A8-02, A8-07): OneDrive not running here, leading without it (the others'
+   * questions may come too), a computer seen with a fresh presence that stopped refreshing it, a clock ahead. `battery` –
+   * the main process's own (the power of this computer).
+   */
+  syncState(now = this.clock.now()): Omit<SyncState, 'battery'> {
+    const name = (p: Peer) => p.presence.name || p.presence.computer
+    const oneDriveDown = !this.o.oneDriveRunning()
+    const awake = this.peers.filter((p) => p.presence.state !== 'closed')
+    return {
+      oneDriveDown,
+      sharedWith: oneDriveDown && this.leader.iLead ? awake.map(name) : [],
+      asleep: awake.filter((p) => this.freshSeen.has(p.presence.computer) && now - p.fileSeenAt >= SILENT_MS).map((p) => ({ name: name(p), since: p.fileSeenAt })),
+      clockAhead: this.peers.filter((p) => this.presence.clockAhead.has(p.presence.computer)).map((p) => ({ name: name(p), minutes: Math.round(this.presence.clockAhead.get(p.presence.computer)! / 60_000) })),
+      dayAhead: this.dayAhead
+    }
+  }
+
+  /** The bar's tones play here (spec „Włączony dźwięk gra na jednym komputerze”, A8-04); `recorder` – recording a lecture now. */
+  soundHere(recorder: string | null, now = this.clock.now()): boolean {
+    return soundComputer({ now, self: { computer: this.o.computer, lastPresence: this.presence.own.lastPresence }, peers: this.peers, leader: this.leader.leader, recorder }) === this.o.computer
+  }
+
+  /**
+   * The computers for the settings (A3-13): this one first, then every other that wrote a presence – when this computer
+   * last saw its file change (its own clock), its state, whether it is forgotten, its „last presence” (kept when it is
+   * forgotten: a change of it means it is used again).
+   */
+  computerList(): ComputerRow[] {
+    const own = this.presence.own
+    return [
+      { id: this.o.computer, name: this.o.computerName, self: true, seenAt: null, state: own.state, forgotten: false, lastPresence: own.lastPresence },
+      ...this.presence.all().map((s) => ({ id: s.presence.computer, name: s.presence.name || s.presence.computer, self: false, seenAt: s.fileSeenAt, state: s.presence.state, forgotten: s.forgotten, lastPresence: s.presence.lastPresence }))
+    ]
   }
 
   /** The computers that wrote a presence, this one first (names as each computer calls itself). */

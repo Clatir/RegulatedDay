@@ -10,6 +10,9 @@ import { presenceDue, presenceFrom, type Presence } from '@shared/sync/presence'
 import type { Peer } from '@shared/sync/leader'
 import type { DataFs } from './fsio'
 
+/** A clock ahead by more than this is a warning (spec „o ponad 2 min”). */
+export const CLOCK_AHEAD_MS = 2 * 60_000
+
 interface Seen {
   size: number
   mtimeMs: number
@@ -23,8 +26,16 @@ export class PresenceStore {
   private lastWrite: number | null = null
   private changed = true
   private readonly seen = new Map<string, Seen>()
-  /** Computers forgotten in the settings („Zapomnij komputer”): nobody waits for them. */
-  forgotten = new Set<string>()
+  /**
+   * Computers forgotten in the settings („Zapomnij komputer”, rd.json): by id, the „last presence” their file had then –
+   * nobody waits for them while it is the same (used again, a computer counts again).
+   */
+  forgotten = new Map<string, number | null>()
+  /**
+   * The clocks of other computers ahead of this one (spec „wyprzedza chwilę jej nadejścia o ponad 2 min”): by id, how far
+   * the time written in its presence was ahead of this computer's clock when the file arrived (also at the first read).
+   */
+  readonly clockAhead = new Map<string, number>()
   problems: Array<{ file: string; why: string }> = []
 
   constructor(
@@ -102,6 +113,11 @@ export class PresenceStore {
           continue
         }
         const presenceChanged = !old || old.presence.lastPresence !== presence.lastPresence
+        if (!old || old.presence.writtenAt !== presence.writtenAt) {
+          const ahead = presence.writtenAt - now
+          if (ahead > CLOCK_AHEAD_MS) this.clockAhead.set(c.computer, ahead)
+          else this.clockAhead.delete(c.computer)
+        }
         this.seen.set(c.computer, {
           ...st,
           presence,
@@ -117,10 +133,22 @@ export class PresenceStore {
     return this.peers()
   }
 
+  /** A computer forgotten and not used since (its „last presence” as when it was forgotten). */
+  isForgotten(id: string): boolean {
+    if (!this.forgotten.has(id)) return false
+    const seen = this.seen.get(id)
+    return !seen || seen.presence.lastPresence === this.forgotten.get(id)
+  }
+
   /** The peers as last seen (without forgotten computers). */
   peers(crashedVersion: (p: Presence) => boolean = (p) => (p.versions.find((v) => v.version === p.appVersion)?.crashes ?? 0) > 0): Peer[] {
     return [...this.seen.values()]
-      .filter((s) => !this.forgotten.has(s.presence.computer))
+      .filter((s) => !this.isForgotten(s.presence.computer))
       .map((s) => ({ presence: s.presence, presenceSeenAt: s.presenceSeenAt, fileSeenAt: s.fileSeenAt, crashed: crashedVersion(s.presence) }))
+  }
+
+  /** Every other computer seen, forgotten ones too (the settings' list of computers). */
+  all(): Array<{ presence: Presence; fileSeenAt: number; forgotten: boolean }> {
+    return [...this.seen.values()].map((s) => ({ presence: s.presence, fileSeenAt: s.fileSeenAt, forgotten: this.isForgotten(s.presence.computer) }))
   }
 }

@@ -307,3 +307,12 @@ describe('linie chwil dnia po przeglądzie 0.21.0', () => {
     expect(st.ends.at(-1)?.confirmed).toBe(true)
   })
 })
+
+describe('komputer nagrywający w widoku paska (A8-04)', () => {
+  it('nagrywany wykład biegnie: widok podaje komputer nagrywający; poza wykładem – nikt', () => {
+    const s = new Scenario({ date: DATE, plan: [{ ...block({ id: 'w', cat: 'wyklad', at: '10:00', min: 90, fixed: true }), recorder: 'pcb' }] }).observe('07:00', null)
+    expect(view(s, '09:30').recorder).toBeNull()
+    click(s, '10:00', { a: 'start', block: 'w' })
+    expect(view(s, '10:30')).toMatchObject({ recorder: 'pcb', recording: false })
+  })
+})

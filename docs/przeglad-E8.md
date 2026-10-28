@@ -543,7 +543,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Specyfikacja przewiduje w Ustawieniach „Zapomnij komputer” (zamrażanie przestaje na niego czekać). Pole `forgotten` istnieje, ale nic go nie wypełnia ani nie zapisuje (brak IPC, ekranu i trwałego zapisu), a `writerIds` w `freezeTasks` i tak go nie uwzględnia. Wycofany komputer, który pisał w ostatnich 7 dniach, przez tydzień opóźnia zamrażanie każdego dnia do granicy 72 h.
 - **Scenariusz:** Użytkownik przestaje używać starego laptopa (bez stanu „zamknięty”, np. zabrany uśpiony). Przez kolejne 7 dni każdy dzień zamraża się dopiero po 72 h, a gra i passa długo pokazują „w toku”. Nie ma jak tego wyłączyć.
 - **Poprawka:** Lista zapomnianych w rd.json (wspólna), wczytywana do `presence.forgotten`. Pomijać ją w `writerIds` i w `computers` w `freezeTasks` oraz w `minuteGate`. Pozycja w Ustawieniach na liście `computers`.
-- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
+- **Status:** poprawione w 0.23.0 (testy w `tests/unit/leader.test.ts`, `tests/unit/sync-lines.test.ts`, `tests/fs/freeze.test.ts`, `tests/fs/widget.test.ts`, `tests/fs/data.test.ts`, T521)
 
 #### A3-14 · low · bez weryfikacji – OneDrive „nie działa” już po jednym sprawdzeniu (60 s) zamiast po 5 min
 - **Plik:** `src/main/onedrive.ts:42` · rodzaj: spec · pewność recenzenta: medium
@@ -551,7 +551,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `OneDriveWatch.check` przestawia `last` na false po pierwszej odpowiedzi pomocnika „nie działa”, a `running` od razu zmienia reguły prowadzenia i ustalenia (`settle.oneDrive` zeruje `oneDriveSince`). Specyfikacja liczy stan „OneDrive nie działa” dopiero od 5 min bez procesu. Krótki restart OneDrive (aktualizacja klienta) cofa ustalenie i zmienia reguły prowadzenia.
 - **Scenariusz:** OneDrive aktualizuje się i restartuje (ok. 30–60 s bez procesu). Komputer na chwilę przestaje uznawać inne za uśpione, a odliczanie „co najmniej 3 min od chwili, gdy działa proces OneDrive” zaczyna się od nowa i wstrzymuje zadania prowadzącego.
 - **Poprawka:** Pamiętać chwilę pierwszego „nie działa” i zgłaszać `running = false` dopiero po 5 min ciągłego braku. Odstępy sprawdzeń jak w specyfikacji (10 s w stanie nieustalonym).
-- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
+- **Status:** poprawione w 0.23.0 (testy w `tests/unit/leader.test.ts`, `tests/unit/sync-lines.test.ts`, `tests/fs/freeze.test.ts`, `tests/fs/widget.test.ts`, `tests/fs/data.test.ts`, T521)
 
 #### A3-15 · low · bez weryfikacji – Zapis kolejki bez ponowienia przy blokadzie, a nieudany `add` zostawia wpis w pamięci – okno mówi „nie zapisano”, a zmiana zapisuje się później
 - **Plik:** `src/main/data/editQueue.ts:124` · rodzaj: bug · pewność recenzenta: medium
@@ -1251,7 +1251,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W `PresenceStore.scan` liczyć różnicę `presence.writtenAt − now` dla każdego zobaczonego zapisu (także pierwszego) i trzymać stan „zegar rozjechany z PC X o N min”. Przekazać go razem z `read.ahead` do widoku widgetu (`engineView`/`WidgetView`) jako cichą linię paska. Rozjazd ponad 24 h wykrywać też po obecności, a nie tylko w logu lokalnego dnia. Treść linii w duchu specyfikacji, np. „Zegar tego komputera różni się od PC A o 4 min”, wymaga potwierdzenia tekstu.
 - **Weryfikacja:** Specyfikacja (Dane, linie 637, 661, 667) oraz T96 i T123 wymagają ostrzeżenia o zegarze w pasku: przy rozjeździe ponad 24 h, przy różnicy w obecności ponad 2 min i przy pierwszym odczycie. W kodzie nie ma żadnego z nich. `aheadSeen` nikt nie czyta, `read.ahead` trafia tylko do `problems`, które `service.ts` wpisuje do logu, a `PresenceStore.scan` nie porównuje `writtenAt` z chwilą zobaczenia. Nigdzie w renderer ani w engineView nie ma tekstu o zegarze. Nie jest to odłożone w planie ani w decyzjach. Wykrywanie ponad 24 h działa tylko na logu lokalnego „dziś”, więc komputer, którego zegar jest o kilka dni z tyłu, nie widzi rozjazdu.
 - **Dowód:** Grep 'aheadSeen' – tylko src/shared/data/clock.ts:24,46,59; folder.ts:566 (tylko problems); service.ts:233 (o.log); hub.ts:353 (DataView.problems tylko z records); presenceStore.ts:109 (writtenAt używane tylko do fileSeenAt); Grep '[Zz]egar' w src – brak tekstu ostrzeżenia w UI; docs/plan.md, postep.md – brak odłożenia.
-- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
+- **Status:** poprawione w 0.23.0 (testy w `tests/unit/leader.test.ts`, `tests/unit/sync-lines.test.ts`, `tests/fs/freeze.test.ts`, `tests/fs/widget.test.ts`, `tests/fs/data.test.ts`, T521)
 
 #### A8-03 · medium · potwierdzone – Powiadomienia prowadzącego wychodzą także w stanie „nieustalonym” – podwójne powiadomienia po wybudzeniu i starcie
 - **Plik:** `src/main/widget.ts:237` · rodzaj: race · pewność recenzenta: high
@@ -1271,7 +1271,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodać czystą funkcję `soundComputer(peers, self, leader)` (np. w `shared/sync/`): nieuśpieni (obecność odświeżona w ostatnich 10 min, bez stanu „zamknięty”), najnowsza obecność, remis – prowadzący, z wyłączeniem nagrywającego. Wołać ją w `showWidget` przed `sound.play`. Do tego test jednostkowy jak w `leader.test.ts`.
 - **Weryfikacja:** Specyfikacja (linia 662 i tabela w linii 675) oraz T274, T281 i T291 wymagają, żeby dźwięk grał na jednym komputerze: nieuśpionym, z najnowszą obecnością, przy remisie na prowadzącym, nigdy na nagrywającym. `showWidget` gra ton, gdy tylko `toneOnChange` zmieni krok i dźwięk jest włączony w ustawieniach tego komputera. `soundOk` wyklucza tylko ukrycie, „mniej pytań”, zjazd stacjonarny i nagrywanie. Nigdzie nie ma wyboru komputera dźwięku. T475 opisuje dźwięk bez tej reguły, ale jej nie zastępuje. Skutek łagodzi to, że dźwięk jest domyślnie wyłączony i ustawia się go osobno na każdym komputerze. Mimo to przy włączeniu na obu ton gra podwójnie, a to sprzeczne z jawną regułą.
 - **Dowód:** src/main/index.ts:185-191; src/main/widget.ts:81-84; src/shared/engineView.ts:248; src/shared/machine.ts:53 (sound jako ustawienie komputera); Grep 'soundComputer|komputer dźwięku' w src – brak; docs/decyzje-techniczne.md T281 (l.272), T291 (l.282), T475 (l.465).
-- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
+- **Status:** poprawione w 0.23.0 (testy w `tests/unit/leader.test.ts`, `tests/unit/sync-lines.test.ts`, `tests/fs/freeze.test.ts`, `tests/fs/widget.test.ts`, `tests/fs/data.test.ts`, T521)
 
 #### A8-05 · medium · potwierdzone – Tekst zakończonych bloków na osi dnia ma kontrast ok. 3:1 (opacity-45) – test kontrastu tego nie widzi
 - **Plik:** `src/renderer/features/plan/Timeline.tsx:210` · rodzaj: spec · pewność recenzenta: high
@@ -1291,7 +1291,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** `OneDriveWatch`: stan „nie działa” dopiero po 5 min bez procesu, odpytywanie co 10 s w stanie nieustalonym. Przekazać do `WidgetView` cichą linię stanu (OneDrive, przejęcie bez OneDrive, komputer uznany za uśpiony z godziną ostatniej zmiany) i znacznik wieku danych innego komputera w widoku dnia. Teksty są w specyfikacji.
 - **Weryfikacja:** Specyfikacja (linie 664 i 666) wymaga cichych linii: „OneDrive nie działa na tym komputerze”, „Pytania mogą pojawić się też na PC B”, „Brak zmian z PC A od …”, „Oszczędzanie baterii może wstrzymać OneDrive” oraz znacznika „dane z PC A sprzed 40 s”. W src nie ma żadnego z tych tekstów ani linii synchronizacji w engineView. Stan OneDrive trafia tylko do logu. `OneDriveWatch` odpytuje stale co 60 s, bez 10 s w stanie nieustalonym (wbrew T192), i zmienia stan od razu po pierwszej odpowiedzi „nie działa” zamiast po 5 min. Plan, postęp ani decyzje tego nie odkładają (T311 tylko wspomina cichą linię o OneDrive).
 - **Dowód:** src/main/onedrive.ts:7,39-46; Grep 'OneDrive nie działa|Pytania mogą|Brak zmian z|sprzed|Oszczędzanie baterii' w src – tylko log w onedrive.ts:43 i powody w leader.ts:116-118; src/shared/engineView.ts:180-217 (linie paska bez stanu synchronizacji); docs/decyzje-techniczne.md T192 (l.188), T311 (l.302).
-- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
+- **Status:** poprawione w 0.23.0 (testy w `tests/unit/leader.test.ts`, `tests/unit/sync-lines.test.ts`, `tests/fs/freeze.test.ts`, `tests/fs/widget.test.ts`, `tests/fs/data.test.ts`, T521)
 
 #### A8-06 · low · bez weryfikacji – Obecność po restarcie nie podaje ostatniego zdarzenia dni sprzed restartu – zamrożenie może nie czekać na log tego komputera
 - **Plik:** `src/main/data/folder.ts:278` · rodzaj: spec · pewność recenzenta: medium

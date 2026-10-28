@@ -64,6 +64,7 @@ export const CH = {
   ritualAnswer: 'rd:ritualAnswer',
   closeDay: 'rd:closeDay',
   unclosedDays: 'rd:unclosedDays',
+  computerList: 'rd:computerList',
   exportCsv: 'rd:exportCsv',
   backups: 'rd:backups',
   backupContents: 'rd:backupContents',
@@ -246,6 +247,20 @@ export interface DataView {
   moved: MovedTo | null
   /** A whole backup restored here into a folder that did not open: this computer stayed in its folder („Spróbuj ponownie”). */
   pendingMove: { to: string; error: string } | null
+}
+
+/**
+ * A computer of the folder in the settings (A3-13): this one first, the others by their presence – when this computer last
+ * saw its file change (its own clock, null for itself), its state, whether it is forgotten, its „last presence”.
+ */
+export interface ComputerRow {
+  id: string
+  name: string
+  self: boolean
+  seenAt: number | null
+  state: string
+  forgotten: boolean
+  lastPresence: number | null
 }
 
 /** Where the data of a folder moved: the new folder (as found from this computer), when and by which computer. */
@@ -474,6 +489,8 @@ export interface RdApi {
   closeDay(day: string, how: CloseHow): Promise<TimerResult>
   /** The days the morning shows to close (D318, spec „Rano aplikacja pokazuje wszystkie niezamknięte dni naraz”). */
   unclosedDays(): Promise<UnclosedDay[]>
+  /** The computers of the folder for the settings (A3-13, „Zapomnij komputer”): this one first. */
+  computerList(): Promise<ComputerRow[]>
   /** The CSV export of [from, to] (D300, D321): a folder picked in a window of Windows; null – none picked. */
   exportCsv(from: string, to: string): Promise<{ dir: string; files: number } | null>
   /** The backups of the folder, newest first (D321). */

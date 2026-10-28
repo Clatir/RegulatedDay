@@ -117,6 +117,11 @@ const oneDrive = new OneDriveWatch({
     const dir = dataFolderNow()
     return !!dir && DataHub.inOneDrive(dir)
   },
+  // Every 10 s while the folder's computer is unsettled (a start, a wake), else every 5 min (spec, A3-14).
+  unsettled: () => {
+    const f = hub?.service?.folder
+    return !!f && !f.settle.settled(f.clock.now())
+  },
   log: (level, msg) => log(level, msg)
 })
 let quitting = false
@@ -173,7 +178,8 @@ const widget = new WidgetEngine({
   notify: (n) => notify(n, log),
   showMain: (page) => showMainWindow(page),
   emit: (view) => showWidget(view),
-  log
+  log,
+  onBattery: () => powerMonitor.isOnBatteryPower()
 })
 
 function widgetView(): WidgetView {
@@ -191,7 +197,9 @@ function showWidget(view: WidgetView): void {
   layoutBar()
   const tone = toneOnChange(lastWarn, view)
   lastWarn = tone.next
-  if (tone.play && prefs().sound) sound?.play(tone.play, prefs().soundVolume)
+  // One computer plays (A8-04): the one with the latest presence among those awake, never the recording one.
+  const folder = hub?.service?.folder
+  if (tone.play && prefs().sound && (!folder || folder.soundHere(view.recorder))) sound?.play(tone.play, prefs().soundVolume)
   // The open icon's panel shows the questions: they count as seen (spec D231).
   if (panel?.isOpen) {
     const ids = widget.shownQuestions()
@@ -698,6 +706,7 @@ function registerIpc(): void {
   handle(CH.ritualAnswer, (_e, day: unknown, row: unknown, choice: unknown, value: unknown, item: unknown) => needHub().ritualAnswer(String(day), String(row), String(choice), ritualValue(value), typeof item === 'string' ? item : null))
   handle(CH.closeDay, (_e, day: unknown, how: unknown) => needHub().closeDay(String(day), String(how) as CloseHow))
   handle(CH.unclosedDays, () => needHub().unclosedDays())
+  handle(CH.computerList, () => needHub().computerList())
   // A folder picked in a window of Windows over the window that asked (the wizard's data folder, „Dane” in the settings).
   const pickDir = async (e: Electron.IpcMainInvokeEvent, title: string, defaultPath?: string): Promise<string | null> => {
     const win = BrowserWindow.fromWebContents(e.sender)

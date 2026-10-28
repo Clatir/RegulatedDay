@@ -4,7 +4,7 @@
  * older rules give way, a crashed version is never the newest, OneDrive not running.
  */
 import { describe, expect, it } from 'vitest'
-import { decideLeader, minuteGate, type LeaderInput, type Peer } from '@shared/sync/leader'
+import { decideLeader, minuteGate, soundComputer, type LeaderInput, type Peer } from '@shared/sync/leader'
 import type { Presence } from '@shared/sync/presence'
 
 const T = 10_000_000
@@ -122,5 +122,28 @@ describe('bramka minut', () => {
     // A computer without a fresh presence (10 min) is not waited for.
     const stale = peer('pcc', T - 11 * 60_000, T - 11 * 60_000, { lastEvents: { '2026-10-21': 9 } })
     expect(minuteGate(T, '2026-10-21', [stale], {})).toBe(T)
+  })
+})
+
+describe('dźwięk na jednym komputerze (A8-04)', () => {
+  const sound = (peers: Peer[], o: { selfAt?: number | null; leader?: string | null; recorder?: string | null } = {}) =>
+    soundComputer({ now: T, self: { computer: 'pca', lastPresence: o.selfAt === undefined ? T - 60_000 : o.selfAt }, peers, leader: o.leader ?? 'pca', recorder: o.recorder ?? null })
+
+  it('gra komputer z najnowszą obecnością, bez względu na jej wiek', () => {
+    expect(sound([peer('pcb', T - 10_000, T - 10_000)])).toBe('pcb')
+    expect(sound([peer('pcb', T - 3 * 3_600_000, T - 60_000)], { selfAt: T - 4 * 3_600_000 })).toBe('pcb')
+    expect(sound([peer('pcb', T - 120_000, T - 60_000)])).toBe('pca')
+  })
+
+  it('uśpiony (plik starszy niż 10 min) i zamknięty nie grają; nagrywający w czasie wykładu nigdy', () => {
+    expect(sound([peer('pcb', T - 10_000, T - 11 * 60_000)])).toBe('pca')
+    expect(sound([peer('pcb', T - 10_000, T - 10_000, { state: 'closed' })])).toBe('pca')
+    expect(sound([peer('pcb', T - 10_000, T - 10_000)], { recorder: 'pcb' })).toBe('pca')
+    expect(sound([], { recorder: 'pca' })).toBeNull()
+  })
+
+  it('remis – prowadzący, potem niższy identyfikator', () => {
+    expect(sound([peer('pcb', T - 60_000, T - 60_000)], { leader: 'pcb' })).toBe('pcb')
+    expect(sound([peer('pcb', T - 60_000, T - 60_000)], { leader: null })).toBe('pca')
   })
 })

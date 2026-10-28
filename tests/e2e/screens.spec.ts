@@ -207,6 +207,9 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await budget.fill('7h')
       await budget.press('Enter')
       await expect(budget).toHaveValue('7 h')
+      // „Komputery” (A3-13): this computer first, without „Zapomnij”.
+      await expect(page.getByTestId('settings-computers')).toContainText('ten komputer')
+      await expect(page.getByTestId('settings-computers').getByRole('button', { name: 'Zapomnij' })).toHaveCount(0)
       await shot(page, 'e3-09-settings')
       const rd = JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { dayTypes?: { zwykly?: { budgetMin?: number } } } }> }
       expect(rd.settings.at(-1)!.patch.dayTypes?.zwykly?.budgetMin).toBe(420)
