@@ -68,9 +68,10 @@ Brama: Twój odbiór E4b.1–E4b.8 i E4b.10 (D310, D315).
 | 5.1 | Jeden przegląd wieloagentowy logiki i ekranów (D309): ok. 8 obszarów, weryfikacja critical / high / medium | Całość (przegląd) | 2–3 h | na Twoją komendę; w tle, duży koszt tokenów |
 | 5.2 | Poprawki po przeglądzie: 25–50 uwag, 4–7 PR-ów z wydaniami 0.x | różnie | 8–18 h | największa niepewność; zmiany widocznego zachowania – jedna runda pytań |
 | 5.3 | Przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji | Logika | 2–4 h | plus Twój odbiór całości |
-| 5.4 | Bramka 1.0: kanał stabilny (D283), CHANGELOG, wydanie | – | 1–2 h | |
+| 5.4 | Bramka 1.0: kanał stabilny (D283), CHANGELOG, wydanie | – | 1–2 h | bez czekania na Twój odbiór (D324) |
 
-**Do 1.0: ok. 52–91 h.** Wąskie gardło – odbiór i pytania; przy odbiorze na bieżąco 1.0 realnie w połowie listopada.
+**Do 1.0: ok. 13–27 h (ciąg E).** Odbiór i jego poprawki (pozycje 2, 3.8, 4.9) nie wstrzymują 1.0 – idą dalej
+w wersjach 1.0.x (D324). Wąskie gardło – runda pytań po przeglądzie.
 
 ## Po 1.0
 
@@ -86,8 +87,9 @@ Brama: Twój odbiór E4b.1–E4b.8 i E4b.10 (D310, D315).
 - **E5:** warianty dla prośby, przeciągniętego bloku i rezerwy energii przechodzą testy, elementy w pasku odebrane.
 - **E6:** pełny dzień przechodzi od szkicu do zamrożenia, kopia przywraca się do nowego folderu.
 - **E7:** regulamin z rozdziału Grywalizacja pokryty testami, test skali przechodzi z grą.
-- **E8:** wydanie 1.0. Kilka osobnych PR-ów poprawek, każdy z własnym wydaniem 0.x (w FI poprawki po przeglądzie
-  zajęły ok. 2,4 raza więcej czasu niż budowa).
+- **E8:** wydanie 1.0 po poprawkach z przeglądu i przypadkach brzegowych, bez czekania na odbiór (D324). Kilka
+  osobnych PR-ów poprawek, każdy z własnym wydaniem 0.x (w FI poprawki po przeglądzie zajęły ok. 2,4 raza więcej czasu
+  niż budowa).
 - Testy, które pilnują reguł: kontrast każdej pary tekst i tło przy każdym kroku jasności, kolejność zdarzeń przy
   różnicy zegarów do 5 min, zamrożenie dopiero po dotarciu logów każdego komputera, brak podwójnych pytań i alarmów
   przy przesiadce.
