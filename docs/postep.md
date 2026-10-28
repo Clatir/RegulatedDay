@@ -48,10 +48,10 @@
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ciągi A, B i C zakończone: 0.11.0, 0.12.0 (z T507, 28.10 08:23) i 0.13.0 („Dane”, 28.10 09:03) wydane. **Ciąg D
-   w toku:** 0.14.0 scalone (PR #24, 28.10 ok. 10:15; CI PR zielone po ponowieniu zadania Windows – test skali na
-   wolnym runnerze) – wydanie z CI na `main` (run 40659409168) sprawdzić; **0.15.0 („Strona B”, przegląd kalibracji)
-   – PR z `claude/0.15.0-strona-b`**: po zielonym CI (wynik z pliku obserwatora) scalić, sprawdzić wydanie; potem
-   pauza ciągu D do „dalej” (ciąg E – E8 na Twoją komendę).
+   zakończony:** 0.14.0 (PR #24, scalony 28.10 ok. 09:48; CI PR zielone po ponowieniu zadania Windows – test skali na
+   wolnym runnerze) wydane z runu 40659409168 na `main` (ok. 10:19); 0.15.0 (PR #25, 162a025, scalony ok. 10:28; CI PR
+   zielone za pierwszym razem, także Windows) wydane z runu 40664496608 na `main` (ok. 10:58). **Pauza do „dalej”** –
+   ciąg E (E8) na Twoją komendę; odbiór 0.14.0 i 0.15.0: E7c.1–E7c.4, E7d.1–E7d.2 w `docs/odbior.md`.
 2. Ty: odbiór według `docs/odbior.md`. Brama ciągu B przeszła: E4b.1–E4b.8 odebrane 27.10 ok. 23:35 z prośbą „przystąp
    do ciągu B → C → D”; E4b.10 (dźwięk) czeka, ciągu nie wstrzymuje.
 3. **Ciąg B → C → D jednym ciągiem (D317):** elementy E5 w pasku (D311–D313) → wydanie 0.11.0; ekrany E6 (D318–D321);
@@ -126,6 +126,8 @@
 - Testy: 867 jednostkowych i plikowych (test skali w pełnym zestawie lokalnie – pod obciążeniem; osobno przechodzi);
   E2E `screens` 7/7 (nowy: kalibracja; w poniedziałek „Strona B” w teście E3), kreator; `smoke` – dwa testy paska
   przekroczyły czas w pełnym przebiegu, osobno przechodzą.
+- PR #25 scalony (162a025, 28.10 ok. 10:28; CI PR zielone za pierwszym razem, także Windows) – wydanie 0.15.0 z runu
+  40664496608 na `main` opublikowane (ok. 10:58).
 
 ## 0.14.0 – ekrany gry, część 1 (ciąg D)
 - Gałąź `claude/0.14.0-gra` (od 0.13.0) od 28.10 ok. 08:00.
@@ -140,6 +142,8 @@
   „Pokoju” (liczę / błąd / od kiedy).
 - Testy: 858 jednostkowych i plikowych (test skali w pełnym zestawie lokalnie przekracza czas pod obciążeniem –
   osobno przechodzi); E2E `screens` 6/6 (w tym gra), `smoke` 14/14, kreator.
+- PR #24 scalony (d19ad48, 28.10 ok. 09:48; CI PR zielone po ponowieniu zadania Windows) – wydanie 0.14.0 z runu
+  40659409168 na `main` opublikowane (ok. 10:19).
 
 ## 0.13.0 – Ustawienia → „Dane” (ciąg C, część 2)
 - Gałąź `claude/0.13.0-dane` (od 0.12.0, `main` wciągnięty po PR #22).
