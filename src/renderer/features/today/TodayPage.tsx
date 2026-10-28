@@ -35,6 +35,9 @@ import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
 import { CopyDayDialog, MoveDialog } from './MoveDialogs'
 import { TypeChangeDialog } from './TypeChangeDialog'
+import { ritualDue } from '@shared/engine/ritual'
+import { RitualPanel } from '../ritual/RitualPanel'
+import { UnclosedDays } from '../ritual/UnclosedDays'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 
@@ -89,6 +92,17 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const currentType = model.state.facts.snapshots.at(-1)?.dayType ?? model.snapshot.dayType
   const lateWake = useMemo(() => (isToday ? detectLateWake(model.ctx, model.state, model.dayFile) : null), [isToday, model])
   const nowMin = logicalMinuteOf(date, now)
+  // The ritual (D318): today after the end of work (a day without work: any time), a day before from the ritual's first
+  // day while it is not frozen (the morning's „Popraw” opens it, D320).
+  const ritualFrom = rd.ritualFrom
+  const ritual = ritualDue(model.state, today, ritualFrom)
+  const focus = useUi((s) => s.focus)
+  const ritualRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (focus !== 'ritual' || !ritualRef.current) return
+    ritualRef.current.scrollIntoView({ block: 'start' })
+    useUi.setState({ focus: null })
+  }, [focus, ritual])
 
   /** A new block: in the panel first (nothing is saved until „Dodaj”). */
   const create = (startMin: number) => {
@@ -175,7 +189,13 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
         <div className="min-w-0 flex-1 overflow-y-auto">
           <div className="flex flex-col gap-3 p-4">
             {lateWake && (lateWake.waitUntilMin == null || nowMin >= lateWake.waitUntilMin) && <LateWakeCard model={model} lw={lateWake} names={names} />}
+            {isToday && ritualFrom && <UnclosedDays />}
             {isToday && <MorningPlan model={model} names={names} />}
+            {ritual && (
+              <div ref={ritualRef}>
+                <RitualPanel key={date} model={model} names={names} onClosed={isToday ? undefined : () => openDay(null)} />
+              </div>
+            )}
             {model.data.unknown && (
               <p className="rounded border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px]" data-testid="day-unknown">
                 Plik tego dnia jest teraz nieczytelny (OneDrive może go jeszcze pobierać) – jego zmian nie widać, a nowe zmiany poczekają, aż da się go odczytać.

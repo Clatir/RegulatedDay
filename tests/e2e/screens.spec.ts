@@ -227,6 +227,41 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
   }
 })
 
+test('rytuał zamknięcia (D318): po „Koniec pracy” karta w „Dziś” i „Rytuał” w pasku; „Zamknij dzień” mówi o wierszach bez wyboru', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-ritual-'))
+  seed(dataDir)
+  // The ritual's first day already written by a leader (D320): today.
+  const rdFile = join(dataDir, 'rd.json')
+  writeFileSync(rdFile, JSON.stringify({ ...JSON.parse(readFileSync(rdFile, 'utf8')), ritualFrom: logicalToday() }, null, 2))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('block-late')).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByTestId('ritual')).toHaveCount(0)
+      await page.getByTestId('block-late').click()
+      await page.getByTestId('block-timer-start').click()
+      await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
+      await page.evaluate(() => window.rd.widgetAction('endWork'))
+      // The card after the end of work, its rows by the time of day; the bar's quiet „Rytuał” (not in the night).
+      await expect(page.getByTestId('ritual')).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByTestId('ritual-row-workEnd')).toContainText('Koniec pracy o')
+      const night = await page.evaluate(async () => (await window.rd.widget()).night)
+      await expect(page.getByTestId('bar-ritual')).toHaveCount(night ? 0 : 1)
+      await shot(page, 'e6-01-ritual')
+      await page.getByTestId('ritual-close').click()
+      const left = await page.getByTestId('ritual-close-left').count()
+      if (left) await page.getByTestId('ritual-close-confirm').click()
+      await expect(page.getByTestId('ritual-left')).toContainText('dzień zamknięty o')
+      await expect(page.getByTestId('bar-ritual')).toHaveCount(0)
+      const log = readFileSync(join(dataDir, 'log', logicalToday().slice(0, 4), logicalToday(), `${(await page.evaluate(() => window.rd.dataView())).computer}.jsonl`), 'utf8')
+      expect(log).toContain('"k":"ritual.close"')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z osobą i „Koniec”; „Pilne” z szacunkiem', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-requests-'))
   seed(dataDir)

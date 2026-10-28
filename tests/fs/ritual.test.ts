@@ -3,7 +3,7 @@
  * day's log, the day closed (yesterday's too, in the morning), the days the morning shows – none before the version with
  * the ritual's screens (T482).
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -143,5 +143,102 @@ describe('rytuał w folderze danych', () => {
     expect((await kinds(folder)).slice(-1)).toEqual(['ritual.close'])
     // A day not begun yet cannot be closed.
     expect(await folder.closeDay(addDays(next, 1), 'ritual')).toMatchObject({ ok: false, why: 'ten dzień jeszcze się nie zaczął' })
+  })
+})
+
+describe('rytuał dla okna (D318)', () => {
+  it('odrzucona odpowiedź: powód słowami, nie identyfikator wyboru', async () => {
+    const { folder, at } = await make()
+    at(DAY, 20 * 60)
+    // The layer's session did not start: a skipped row; a time for it it does not take.
+    const skipped = (await folder.ritual(DAY)).rows.find((r) => r.kind === 'skipped')!
+    expect(await folder.ritualAnswer(DAY, skipped.id, 'endedAt', placeLogical(DAY, 15 * 60))).toMatchObject({ ok: false, why: 'ta godzina jest poza czasem bloku albo po teraz' })
+    expect(await folder.ritualAnswer(DAY, skipped.id, 'nonsense')).toMatchObject({ ok: false, why: 'tego wyboru nie ma w tym wierszu' })
+  })
+
+  it('odczuwany koszt z okna: zdarzenie bierne energii – nie timera (starsza wersja nie instaluje przez nie szybciej)', async () => {
+    const { folder, at } = await make()
+    at(DAY, 20 * 60)
+    await folder.userEvents([{ k: 'cost.felt', day: DAY, at: placeLogical(DAY, 20 * 60), category: 'inne', feel: 'heavier' }])
+    const e = (await folder.readDay(DAY)).events.find((x) => x.k === 'cost.felt')
+    expect(e).toMatchObject({ dom: 'energy', category: 'inne', feel: 'heavier' })
+    await expect(folder.userEvents([{ k: 'cost.felt', day: DAY, at: placeLogical(DAY, 20 * 60), category: 'inne', feel: 'bardzo' }])).rejects.toThrow()
+  })
+
+  it('widok rytuału liczony raz na zmianę dnia: bez zmian proces pomocniczy nie liczy go znowu', async () => {
+    const kinds: string[] = []
+    const clock = { now: placeLogical(DAY, 20 * 60) }
+    const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.12.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => true, worker: { run: (t) => (kinds.push(t.kind), inProcess.run(t)) } })
+    const v1 = await folder.ritual(DAY)
+    expect(await folder.ritual(DAY)).toBe(v1)
+    expect(kinds.filter((k) => k === 'ritual')).toHaveLength(1)
+    folder.append({ day: DAY, dom: 'timer', k: 'rest.not', at: clock.now, from: placeLogical(DAY, 19 * 60), to: placeLogical(DAY, 19 * 60 + 30) })
+    await folder.log.flush()
+    await folder.ritual(DAY)
+    expect(kinds.filter((k) => k === 'ritual')).toHaveLength(2)
+  })
+})
+
+describe('pierwszy dzień rytuału (D320, T504)', () => {
+  async function screens(ritualScreens: boolean, computer = 'pca') {
+    const clock = { now: placeLogical(DAY, 10 * 60) }
+    const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, `state-${computer}`), computer, computerName: computer, appVersion: '0.12.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => true, ritualScreens })
+    // The leader's tasks run once it leads, settled (a few checks a minute apart).
+    const settle = async () => {
+      for (let i = 0; i < 6; i++) {
+        clock.now += 60_000
+        await folder.check()
+      }
+    }
+    return { folder, clock, settle }
+  }
+  const rdNow = () => JSON.parse(readFileSync(join(dataDir, paths.settings), 'utf8')) as { ritualFrom?: string }
+
+  it('wersja z ekranem rytuału: prowadzący zapisuje w rd.json dzień instalacji raz; każdy komputer czyta go stamtąd', async () => {
+    writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, people: [] }))
+    const a = await screens(true)
+    expect(await a.folder.ritualDay()).toBeNull()
+    await a.settle()
+    expect(rdNow().ritualFrom).toBe(DAY)
+    expect(await a.folder.ritualDay()).toBe(DAY)
+    // A day later it stays the first day.
+    a.clock.now = placeLogical(addDays(DAY, 1), 10 * 60)
+    await a.settle()
+    expect(rdNow().ritualFrom).toBe(DAY)
+  })
+
+  it('wersja bez ekranu rytuału niczego nie zapisuje (stary sposób – dzień z opcji)', async () => {
+    writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, people: [] }))
+    const a = await screens(false)
+    await a.settle()
+    expect(rdNow().ritualFrom).toBeUndefined()
+    expect(await a.folder.ritualDay()).toBeNull()
+  })
+
+  it('pytanie o rd.json w kolejce: prowadzący nie dokłada wpisów przy każdym sprawdzeniu, czeka', async () => {
+    writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, people: [] }))
+    const a = await screens(true)
+    // An edit of rd.json that met another change: a question, held in the queue.
+    await a.folder.edit([{ rel: paths.settings, edits: [{ path: ['note'], base: 'było inaczej', value: 'moja zmiana' }] }])
+    const held = () => a.folder.queue.pending.filter((e) => e.rel === paths.settings).length
+    expect(held()).toBe(1)
+    await a.settle()
+    expect(held()).toBe(1)
+    expect(rdNow().ritualFrom).toBeUndefined()
+  })
+
+  it('w rd.json data, która nie jest dniem: zastąpiona dniem instalacji, bez pytania', async () => {
+    writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, people: [], ritualFrom: '2026-13-45' }))
+    const a = await screens(true)
+    expect(await a.folder.ritualDay()).toBeNull()
+    await a.settle()
+    expect(rdNow().ritualFrom).toBe(DAY)
+    expect(a.folder.queue.pending).toEqual([])
+  })
+
+  it('folder bez rd.json (kreator jeszcze nieskończony): nic nie powstaje', async () => {
+    const a = await screens(true)
+    await a.settle()
+    expect(existsSync(join(dataDir, paths.settings))).toBe(false)
   })
 })

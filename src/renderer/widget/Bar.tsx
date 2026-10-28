@@ -464,6 +464,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
             Prośba ▸
           </BarButton>
         )}
+        {!trial && view.ritual && (
+          <BarButton mode={mode} testId="bar-ritual" onAct={() => act('openMain', 'ritual')}>
+            Rytuał
+          </BarButton>
+        )}
         {!trial && unfold === 'request' && (
           <div className="w-full">
             <RequestUnfold view={view} mode={mode} close={() => setUnfold(null)} />
@@ -581,6 +586,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
           {view.buttons.cutOff && (
             <BarButton mode={mode} testId="bar-cut-off" onAct={() => act('cutOff')}>
               Odcinam się
+            </BarButton>
+          )}
+          {!trial && view.ritual && (
+            <BarButton mode={mode} testId="bar-ritual" onAct={() => act('openMain', 'ritual')}>
+              Rytuał
             </BarButton>
           )}
           {(trial || !view.night) && (

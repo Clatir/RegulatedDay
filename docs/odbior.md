@@ -60,6 +60,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
    - [ ] E4b.10 Dźwięk
+   - [ ] E6c.1 Pierwszy dzień rytuału
+   - [ ] E6c.2 Rytuał po końcu pracy – karta i „Rytuał” w pasku
+   - [ ] E6c.3 „Zamknij dzień” z wierszami bez wyboru
+   - [ ] E6c.4 Odczuwany koszt
+   - [ ] E6c.5 Rano: niezamknięte dni
    - [ ] E5b.4 Prośba przez 04:00 (tylko gdy się zdarzy)
    - [ ] E6a.2 Czas po bloku pracy, który skończył się sam
    - [ ] E6a.3 Czas po projekcie, który skończył się sam – powiadomienie o twardym końcu
@@ -931,6 +936,59 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
     powiodła się” albo „proces pomocniczy …”;
   - ZIP się nie otwiera albo jest pusty;
   - proces „Regulated Day – zadania w tle” zostaje po zamknięciu aplikacji.
+
+### E6c – ekrany rytuału (0.12.0)
+
+#### E6c.1 Pierwszy dzień rytuału (0.12.0)
+- [ ] Odebrane
+- **Automatycznie:** zapis daty w `rd.json` `tests/fs/ritual.test.ts` („pierwszy dzień rytuału”). Ty: rzut oka.
+- **Jak sprawdzić:** po aktualizacji do 0.12.0 popracuj chwilę; następnego ranka otwórz „Dziś”.
+- **Oczekiwany efekt:** dni sprzed aktualizacji nie czekają rano na zamknięcie. Dzień instalacji ma wieczorem rytuał,
+  a następnego ranka – jeśli go nie zamknąłeś – stoi w „Niezamkniętych dniach”. Na laptopie ta sama data (po jego
+  aktualizacji).
+- **Nie przechodzi, gdy:** rano czekają dni sprzed aktualizacji albo dzień instalacji nie ma rytuału.
+
+#### E6c.2 Rytuał po końcu pracy – karta i „Rytuał” w pasku (0.12.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („rytuał zamknięcia”), wiersze `tests/unit/engine/ritual.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** kliknij „Koniec pracy”. Spójrz na pasek i na „Dziś”; kliknij w pasku „Rytuał”.
+- **Oczekiwany efekt:** w pasku stoi cicha pozycja „Rytuał” (bez kropki); kliknięcie otwiera okno na karcie „Rytuał
+  zamknięcia”. Wiersze stoją jedną listą po godzinach dnia (np. „Koniec pracy o 16:45”, „Sesja 14:00–17:00 niezaczęta ·
+  Odbył się · Odwołany”), przy wierszach ze ✓ – „skutek: …”. Pod listą: odczuwany koszt, niezrobione, „Szkic jutra”,
+  „Zamknij dzień”.
+- **Nie przechodzi, gdy:**
+  - „Rytuał” w pasku ma kropkę albo pokazuje się przed końcem pracy albo w ciszy nocnej (w „Odcinam się” ma być);
+  - wiersze są w grupach zamiast po godzinach;
+  - kliknięcie wyboru nie zapisuje się (wiersz nie znika albo nie zmienia się na „wybrane”).
+
+#### E6c.3 „Zamknij dzień” z wierszami bez wyboru (0.12.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** zostaw jeden wiersz bez wyboru i kliknij „Zamknij dzień”, potem „Wróć”, potem znów „Zamknij dzień”
+  i „Zamknij dzień” w potwierdzeniu.
+- **Oczekiwany efekt:** najpierw „1 wiersz bez wyboru · zostaną jak zapisano · Wróć · Zamknij dzień”; „Wróć” wraca do
+  listy; po potwierdzeniu karta mówi „dzień zamknięty o …”, a „Rytuał” znika z paska.
+- **Nie przechodzi, gdy:** dzień zamyka się od razu mimo wierszy bez wyboru albo po zamknięciu „Rytuał” zostaje w pasku.
+
+#### E6c.4 Odczuwany koszt (0.12.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/ritual.test.ts` („odczuwany koszt”). Ty: rzut oka.
+- **Jak sprawdzić:** w rytuale przy kategorii kliknij „ciężej”, potem „jak zwykle”.
+- **Oczekiwany efekt:** wiersz dla każdej kategorii dnia z jej czasem; wybrany przycisk jest
+  zaznaczony i zostaje po ponownym otwarciu – liczy się ostatni wybór.
+- **Nie przechodzi, gdy:** brak kategorii z dnia albo wybór nie zostaje.
+
+#### E6c.5 Rano: niezamknięte dni (0.12.0)
+- [ ] Odebrane
+- **Automatycznie:** zamknięcie dnia `tests/fs/ritual.test.ts`. Ty: rzut oka przez kilka poranków.
+- **Jak sprawdzić:** nie zamykaj wieczorem dnia; rano otwórz „Dziś”. Wypróbuj kolejno „Popraw” (zamknij tam dzień),
+  innego ranka „Jak zapisano”, „Wolne” albo „Nie pamiętam”.
+- **Oczekiwany efekt:** przed planem porannym karta „Niezamknięte dni” z dniem, jego „Jak zapisano – skutek: …” i
+  przyciskami; „Koniec pracy o … ✓”, gdy koniec pracy nie był potwierdzony. „Popraw” otwiera rytuał tamtego dnia, a po
+  „Zamknij dzień” wracasz do dzisiejszego planu. Gdy po końcu pracy został czas do wyjaśnienia, obok jest „Pracowałem do …”.
+  Wczoraj zamknięty, a po zamknięciu coś doszło: jedna linia „… po zamknięciu 1 wiersz czeka – zostaną jak zapisano ·
+  Popraw”. „Pomiń” chowa kartę.
+- **Nie przechodzi, gdy:** dzień zamknięty dalej stoi w karcie albo „Popraw” nie wraca do dzisiejszego planu.
 
 ### E7a – logika E7, część 1 (regulamin gry pod spodem)
 

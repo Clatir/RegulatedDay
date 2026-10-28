@@ -6,7 +6,7 @@
  * creates a record in the current view (when it has records).
  */
 import { useEffect, type ReactNode } from 'react'
-import { navigate, PAGES, useUi, type Page } from '../store/ui'
+import { navigate, openRitual, PAGES, useUi, type Page } from '../store/ui'
 import { useWidget } from '../store/widget'
 import { commitActiveField } from '../lib/commit'
 import { Bar } from '../widget/Bar'
@@ -149,7 +149,7 @@ export function App() {
   const wizardOpen = useWizard((s) => s.open)
   const wizardAsked = useWizard((s) => s.asked)
   useHotkeys()
-  useEffect(() => window.rd.onNavigate((p) => (PAGES as string[]).includes(p) && navigate(p as Page)), [])
+  useEffect(() => window.rd.onNavigate((p) => (p === 'ritual' ? openRitual() : (PAGES as string[]).includes(p) && navigate(p as Page))), [])
   // No folder on this computer: the wizard (until „Później”). A folder that did not open (OneDrive not ready at the
   // start) is tried again by itself – the wizard only when you ask for it.
   const wizard = wizardOpen && (status === 'none' || (status === 'failed' && wizardAsked))

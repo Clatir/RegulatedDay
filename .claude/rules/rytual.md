@@ -47,6 +47,8 @@ paths:
 - Poprawka końca bloku zakończonego automatycznie: „Cofnij” + `block.end` (jak odpowiedzi paska), nie `block.fix` –
   prowadzący cofnąłby automatyczny koniec przy ponownej ocenie (T465).
 - Dzień ma z szablonu sesje warstwy: niezaczęte są w rytuale „pominięte” (do potwierdzenia albo odwołania); „odbyła
-  się” – czasy z użycia komputerów w oknie sesji (`used`, T500), więc wiersze licz z `ritualRows(state, events)` – bez
-  zdarzeń sesja dostaje godziny z planu.
-- Jeszcze nie: ekrany (rytuał, niezamknięte dni rano – D318–D320), odczuwany koszt (D319).
+  się” – czasy z użycia komputerów w oknie sesji (`used`, T500), więc wiersze licz z `ritualRows(state,
+  ritualActivity(ctx, state))` – z `null` sesja dostaje godziny z planu.
+- Ekrany (0.12.0): `renderer/features/ritual/` – `RitualPanel` (karta w „Dziś”, wiersze po godzinach, `effectText`,
+  `untouched`), `UnclosedDays` (rano); IPC `ritual`, `ritualAnswer`, `closeDay`, `unclosedDays` (hub). Odczuwany koszt –
+  zdarzenie `cost.felt` (`feltRows`); do propozycji kosztów wchodzi z ekranem kalibracji (T505).

@@ -11,7 +11,7 @@
  * the evening with the plan's forecast to the bedtime (spec „skutek ✓ dla dnia liczy ta sama funkcja oceny co
  * zamrożenie”). Pure: the main process writes what it returns.
  */
-import { CLOSE_HOWS, isKnown, RULES_VERSION, type AnyEvent, type CloseHow } from '../model/events'
+import { CLOSE_HOWS, isKnown, RULES_VERSION, type AnyEvent, type CloseHow, type FeltCost } from '../model/events'
 import { questionId } from '../model/ids'
 import { dayStart } from '../time/day'
 import { addDays } from '../time/zone'
@@ -20,10 +20,10 @@ import { answerEvents, type Question } from './auto'
 import { plannedSpan, startPlanned } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
 import { explainMinutes, inExplain, type Explain } from './explain'
-import { foldFacts, OPEN, type BlockFact } from './facts'
+import { foldFacts, OPEN, ranMinutes, type BlockFact } from './facts'
 import { atOf, gridOf } from './grid'
 import { dayOutcome, outcomeChanges, type DayOutcome, type OutcomeChange } from './outcome'
-import { plannedEndOf, type TimerDraft } from './timer'
+import { plannedEndOf, timerNow, type TimerDraft } from './timer'
 
 const HOUR = 3_600_000
 /** A day not closed waits in the morning at most this long after its end (spec „Okno korekty … najwyżej 72 h”). */
@@ -401,12 +401,51 @@ export function closeEffect(ctx: DayContext, state: DayState, at: number, base: 
   return { changes: outcomeChanges(base.outcome, frozenOutcome(ctx, simEvents(ctx, closeEvents(state, 'asWritten', at), at), base.forecast)), forecast: base.forecast }
 }
 
+/**
+ * The ritual is due (D318, T505) – one rule for the bar and the window: from its first day; today after the end of work
+ * (confirmed, or counted) while no work runs – a day without work any time; a day before while it is not frozen.
+ */
+export function ritualDue(state: DayState, today: string, ritualFrom: string | null): boolean {
+  const date = state.grid.date
+  if (!ritualFrom || date < ritualFrom || state.facts.frozen || date > today) return false
+  if (date < today || state.noWorkDay) return true
+  const t = timerNow(state)
+  return (state.workEnd != null || state.ends.length > 0) && ![t.fg, ...t.bg].some((x) => x?.info.isWork)
+}
+
+/** A category of the day for its felt cost (D319): the minutes it ran, the answer given (the last one), null – none. */
+export interface FeltRow {
+  category: string
+  minutes: number
+  feel: FeltCost | null
+}
+
+/**
+ * The felt cost of the ritual (D319, optional): one row for every category that ran in the day, in the order of its
+ * first start, with its last answer.
+ */
+export function feltRows(ctx: DayContext, state: DayState): FeltRow[] {
+  const minutes = new Map<string, number>()
+  for (const b of [...state.facts.blocks.values()].sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0))) {
+    const cat = b.planned?.categoryId
+    if (b.startedAt == null || !cat) continue
+    minutes.set(cat, (minutes.get(cat) ?? 0) + ranMinutes(b, state.now))
+  }
+  const feel = new Map<string, FeltCost>()
+  for (const e of [...ctx.events].filter((x) => isKnown(x) && x.k === 'cost.felt').sort((a, b) => a.l - b.l)) {
+    const f = e as unknown as { category: string; feel: FeltCost }
+    feel.set(f.category, f.feel)
+  }
+  return [...minutes].filter(([, m]) => m > 0).map(([category, m]) => ({ category, minutes: m, feel: feel.get(category) ?? null }))
+}
+
 /** A day's ritual as the window shows it: its rows, what each ✓ changes, what „Jak zapisano” changes, how it was closed. */
 export interface RitualView {
   rows: RitualRow[]
   effects: Record<string, RitualEffect>
   asWritten: RitualEffect
   closed: { at: number; how: CloseHow } | null
+  felt: FeltRow[]
 }
 
 /** The ritual of a day (several full counts of the day – the main process gives it to its helper process, T190). */
@@ -419,7 +458,7 @@ export function ritualView(ctx: DayContext, at: number): RitualView {
     const e = ritualEffect(ctx, state, r, at, base)
     if (e) effects[r.id] = e
   }
-  return { rows, effects, asWritten: closeEffect(ctx, state, at, base), closed: state.facts.closed }
+  return { rows, effects, asWritten: closeEffect(ctx, state, at, base), closed: state.facts.closed, felt: feltRows(ctx, state) }
 }
 
 export interface DayLog {

@@ -69,6 +69,10 @@ const api: RdApi = {
   setNightInstall: (on) => ipcRenderer.invoke(CH.setNightInstall, on),
   timer: (click) => ipcRenderer.invoke(CH.timer, click),
   answer: (id, answer, value) => ipcRenderer.invoke(CH.answer, id, answer, value ?? null),
+  ritual: (day) => ipcRenderer.invoke(CH.ritual, day),
+  ritualAnswer: (day, row, choice, value, item) => ipcRenderer.invoke(CH.ritualAnswer, day, row, choice, value ?? null, item ?? null),
+  closeDay: (day, how) => ipcRenderer.invoke(CH.closeDay, day, how),
+  unclosedDays: () => ipcRenderer.invoke(CH.unclosedDays),
   seen: (ids) => ipcRenderer.send(CH.seen, ids),
   onSound: (cb) => on('rd:sound', cb)
 }

@@ -83,6 +83,23 @@ describe('widok paska z silnika', () => {
     expect(named('09:01').requests.running).toMatchObject({ id: 'r2', mode: 'now', person: 'osoba: ?', estimateMin: null })
   })
 
+  it('„Rytuał” w pasku po końcu pracy – także w „Odcinam się”, nie przed pierwszym dniem rytuału (D318, T505)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).observe('07:00', null)
+    const at = (time: string, ritualFrom: string | null) => {
+      const t = s.at(time)
+      const ctx = s.contextAt(t)
+      const state = s.stateAt(t)
+      return engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, name: () => 'Inne obowiązki', care, modePrefs: { sessionMode: true, classMode: true }, pending: null, ritualFrom })
+    }
+    click(s, '08:00', { a: 'start', block: 'a' })
+    expect(at('08:30', DATE).ritual).toBe(false)
+    click(s, '09:00', { a: 'workEnd' })
+    expect(at('09:05', DATE).ritual).toBe(true)
+    expect(at('09:05', '2026-10-29').ritual).toBe(false)
+    click(s, '19:00', { a: 'cutOff' })
+    expect(at('19:05', DATE)).toMatchObject({ hidden: true, ritual: true })
+  })
+
   it('kolory paska, ikony i panelu z zestawu „cieplejsze” (D314)', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })

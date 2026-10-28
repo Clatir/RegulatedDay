@@ -152,6 +152,8 @@ export type TimerEvent =
   | (EventBase & { k: 'request.person'; request: string; at: number; person: string })
   /** A stretch that was no rest (spec „W rytuale możesz oznaczyć odcinek, który odpoczynkiem nie był”): [from, to). */
   | (EventBase & { k: 'rest.not'; at: number; from: number; to: number })
+  /** The felt cost of a category of the day, in the ritual (D319, optional): against its cost in the settings. */
+  | (EventBase & { k: 'cost.felt'; at: number; category: string; feel: FeltCost })
   /**
    * The day frozen by the leader (spec „Ocena dnia”): the last event of every computer it counted (`know` – the grade
    * counts only up to them), the computers whose records were missing (frozen without waiting after 72 h), and the grade.
@@ -160,6 +162,10 @@ export type TimerEvent =
 
 /** How a day was closed: the evening ritual, or the morning's „Jak zapisano”, „Wolne”, „Nie pamiętam”. */
 export type CloseHow = 'ritual' | 'asWritten' | 'free' | 'unknown'
+/** The felt cost of a category against its settings (D319): lighter, as usual, heavier. */
+export const FELT_COSTS = ['lighter', 'usual', 'heavier'] as const
+export type FeltCost = (typeof FELT_COSTS)[number]
+
 export const CLOSE_HOWS: readonly CloseHow[] = ['ritual', 'asWritten', 'free', 'unknown']
 
 export type PresenceEvent =
@@ -261,6 +267,7 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'block.mark': { block: isStr, at: isNum, done: (v) => typeof v === 'boolean' },
   'request.person': { request: isStr, at: isNum, person: isStr },
   'rest.not': { at: isNum, from: isNum, to: isNum },
+  'cost.felt': { at: isNum, category: isStr, feel: (v) => (FELT_COSTS as readonly unknown[]).includes(v) },
   'day.freeze': { at: isNum, how: (v) => v === 'ready' || v === 'timeout', know: isPlain, missing: Array.isArray, grade: isPlain },
   'presence.first': { at: isNum },
   'gap.open': { gap: isStr, kind: (v) => v === 'input' || v === 'use', from: isNum },

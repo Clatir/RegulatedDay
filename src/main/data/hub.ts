@@ -10,7 +10,9 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import type { DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, HistoryRecord, HistoryVersion, RawRecord, TimerIn, TimerResult } from '@shared/api'
+import type { DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, HistoryRecord, HistoryVersion, RawRecord, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
+import type { RitualValue, RitualView } from '@shared/engine/ritual'
+import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords } from '@shared/data/merge'
 import { classify, ID_COLLECTIONS, paths, SETTINGS_FILE, type IdKind } from '@shared/data/paths'
 import type { HolidayLookup } from '@shared/engine/createDay'
@@ -53,6 +55,8 @@ export interface HubOptions {
   worker?: ServiceOptions['worker']
   /** The first day of the ritual (none before its screens, T482). */
   ritualFrom?: string | null
+  /** The ritual's screens: its first day from rd.json (D320). */
+  ritualScreens?: boolean
   /** The first day in the game (none before its screens, T492). */
   gameFrom?: string | null
   /** This computer now works in another folder (a whole backup restored into a new one): its config remembers it. */
@@ -209,6 +213,7 @@ export class DataHub {
         extraBackupDir: this.o.extraBackupDir,
         worker: this.o.worker,
         ritualFrom: this.o.ritualFrom ?? null,
+        ritualScreens: this.o.ritualScreens === true,
         gameFrom: this.o.gameFrom ?? null,
         onChecked: () => this.changed()
       })
@@ -413,6 +418,48 @@ export class DataHub {
     return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
   }
 
+  /** A day's ritual (D318) – counted by the helper process. */
+  ritual(day: string): Promise<RitualView> {
+    return this.need().ritual(day)
+  }
+
+  /** An answer to a row of a day's ritual, written to its log. */
+  async ritualAnswer(day: string, row: string, choice: string, value: RitualValue, item: string | null): Promise<TimerResult> {
+    const r = await this.need().ritualAnswer(day, row, choice, value, item)
+    this.changed()
+    // The leader's own effects of an answer (an automatic end undone, the end of work) at once, not at the next check.
+    if (r.ok) void this.service?.tick()
+    return { ok: r.ok, why: r.ok ? null : r.why, confirm: null }
+  }
+
+  /** A day closed (the ritual, „Jak zapisano”, „Wolne”, „Nie pamiętam”). */
+  async closeDay(day: string, how: CloseHow): Promise<TimerResult> {
+    const r = await this.need().closeDay(day, how)
+    this.changed()
+    if (r.ok) void this.service?.tick()
+    return { ok: r.ok, why: r.ok ? null : r.why, confirm: null }
+  }
+
+  /** The days the morning shows to close, each with its ritual (from the ritual's first day, D320). */
+  async unclosedDays(): Promise<UnclosedDay[]> {
+    const f = this.need()
+    const from = await f.ritualDay()
+    const out: UnclosedDay[] = []
+    const open = await f.unclosedDays(from)
+    // A day that cannot be counted now (its log not readable) waits; the others are shown.
+    for (const d of open) {
+      const ritual = await f.ritual(d.date).catch(() => null)
+      if (ritual) out.push({ ...d, closed: false, ritual })
+    }
+    // Yesterday closed, with what came after the close (spec „rano widać je w jednym wierszu informacji”).
+    const yesterday = addDays(logicalDayOf(f.clock.now()), -1)
+    if (from && yesterday >= from && !open.some((d) => d.date === yesterday)) {
+      const ritual = await f.ritual(yesterday).catch(() => null)
+      if (ritual?.closed && ritual.rows.some((r) => r.afterClose)) out.push({ date: yesterday, presence: true, closed: true, ritual })
+    }
+    return out
+  }
+
   /** Your answer to a question of the timer (its id names its day). */
   async answer(id: string, answer: string, value: number | null): Promise<TimerResult> {
     const r = await this.need().answer(id, answer, value)
@@ -497,6 +544,8 @@ export class DataHub {
   /** The edit that makes `rel` hold `value` again: the fields it differs in, or the record anew; null – the same already. */
   private async restoreEntry(rel: string, value: RawRecord): Promise<EditEntry | null> {
     const now = await this.need().recordView(rel)
+    // The first day of the ritual is written once (D320): an older version of rd.json never takes it away (T504).
+    if (rel === SETTINGS_FILE && now && now.ritualFrom !== undefined && value.ritualFrom === undefined) value = { ...value, ritualFrom: now.ritualFrom }
     const entry: EditEntry = now
       ? { rel, edits: diffRecords(now, value).map((c) => ({ path: c.path, base: c.before, value: c.after })) }
       : { rel, create: true, edits: Object.entries(value).map(([k, x]) => ({ path: [k], base: undefined, value: x })) }

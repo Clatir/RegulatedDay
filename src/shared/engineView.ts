@@ -17,6 +17,8 @@ import type { EnergyState } from './engine/energy'
 import type { AutoAction, RequestFact } from './engine/facts'
 import { atOf, type Grid } from './engine/grid'
 import { isRunningRequest } from './engine/requests'
+import { ritualDue } from './engine/ritual'
+import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
 import { timerNow, type TimerNow } from './engine/timer'
 import type { PlanBlock } from './model/plan'
@@ -44,6 +46,8 @@ export interface EngineInput {
   person?: (id: string | null) => string
   /** A request still running from the day before (through 04:00, D312): its line, its day for „Koniec”. */
   carried?: RunningRequest | null
+  /** The first day of the ritual (D320): from it the bar has „Rytuał” after the end of work. */
+  ritualFrom?: string | null
 }
 
 /** A request without a person (spec „osoba: ?”). */
@@ -280,6 +284,8 @@ export function engineView(i: EngineInput): WidgetView {
     toneSet: ENGINE_TONE_SET,
     note: null,
     requests: { people: i.people ?? [], running, interrupted },
-    variants: NO_VARIANTS
+    variants: NO_VARIANTS,
+    // Today's ritual due and not closed, not in the night – also in „Odcinam się” (D318, T505).
+    ritual: !modes.night && !state.facts.closed && state.grid.date === logicalDayOf(now) && ritualDue(state, logicalDayOf(now), i.ritualFrom ?? null)
   }
 }

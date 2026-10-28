@@ -66,6 +66,8 @@ export interface ServiceOptions {
   worker?: Worker
   /** The first day of the ritual (none before its screens, T482). */
   ritualFrom?: string | null
+  /** The ritual's screens: its first day from rd.json (D320). */
+  ritualScreens?: boolean
   /** The first day in the game (none before its screens, T492). */
   gameFrom?: string | null
 }
@@ -174,6 +176,7 @@ export class DataService {
       previousRun,
       worker: o.worker,
       ritualFrom: o.ritualFrom ?? null,
+      ritualScreens: o.ritualScreens === true,
       gameFrom: o.gameFrom ?? null
     })
     life.start(o.runId, o.appVersion, clock.wall())

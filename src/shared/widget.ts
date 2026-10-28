@@ -98,6 +98,8 @@ export interface WidgetView {
   requests: BarRequests
   /** The marker of variants and, while its panel is open, the variants (D313). */
   variants: BarVariants
+  /** „Rytuał” in the bar (D318): after the end of work, the day not closed – a quiet item, no dot. */
+  ritual: boolean
 }
 
 /** A request running now: its line in place of the block (D312); `day` – the day its „Koniec” goes to (also before 04:00). */
@@ -227,6 +229,7 @@ export function trialView(t: TrialState, now: number): WidgetView {
     recording: false,
     note: null,
     requests: NO_REQUESTS,
-    variants: NO_VARIANTS
+    variants: NO_VARIANTS,
+    ritual: false
   }
 }
