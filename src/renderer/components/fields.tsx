@@ -88,8 +88,14 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
   )
 }
 
-export function DurationField(p: Omit<CommitFieldProps<number>, 'parse' | 'format'>) {
-  return <CommitField {...p} parse={(t) => parseDuration(t)} format={durationLabel} placeholder={p.placeholder ?? 'np. 90, 1:30, 1h30'} />
+/** A length typed, at most `range[1]`: one longer is refused with its message – never cut to the bound in silence (A6-19). */
+export const durationParser =
+  (range?: readonly [number, number]) =>
+  (t: string): Parsed<number> =>
+    parseDuration(t, range?.[1])
+
+export function DurationField({ range, ...p }: Omit<CommitFieldProps<number>, 'parse' | 'format'> & { range?: readonly [number, number] }) {
+  return <CommitField {...p} parse={durationParser(range)} format={durationLabel} placeholder={p.placeholder ?? 'np. 90, 1:30, 1h30'} />
 }
 
 export function IntegerField({ min, max, ...p }: Omit<CommitFieldProps<number>, 'parse' | 'format'> & { min: number; max: number }) {

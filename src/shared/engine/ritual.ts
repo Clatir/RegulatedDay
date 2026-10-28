@@ -11,6 +11,7 @@
  * the evening with the plan's forecast to the bedtime (spec „skutek ✓ dla dnia liczy ta sama funkcja oceny co
  * zamrożenie”). Pure: the main process writes what it returns.
  */
+import { REQUEST_CATEGORY } from '../model/categories'
 import { CLOSE_HOWS, isKnown, RULES_VERSION, type AnyEvent, type CloseHow, type FeltCost } from '../model/events'
 import { questionId } from '../model/ids'
 import { dayStart } from '../time/day'
@@ -329,11 +330,31 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
       return null
     case 'person':
       return choice === 'person' && typeof value === 'string' && value.trim() ? [{ k: 'request.person', request: row.request, at, person: value.trim() }] : null
-    case 'rest':
+    case 'rest': {
       if (choice === 'ok') return [mark]
-      if (choice === 'notRest' && value != null && typeof value === 'object' && value.to > value.from) return [{ k: 'rest.not', at, from: value.from, to: value.to }]
-      return null
+      if (choice !== 'notRest' || value == null || typeof value !== 'object' || !(value.to > value.from)) return null
+      // Only a stretch of the evening or of „Odcinam się” (spec): the one typed is cut to them, nothing left – refused, so
+      // a mistaken 12:00–18:00 never takes the day's regeneration before the end of work (A2-05).
+      const out: TimerDraft[] = []
+      for (const s of joined([{ from: row.from, to: row.to }, ...f.disconnect.map((d) => ({ from: d.from, to: Math.min(d.to, state.now) }))])) {
+        const lo = Math.max(value.from, atOf(g, s.from))
+        const hi = Math.min(value.to, atOf(g, s.to))
+        if (hi > lo) out.push({ k: 'rest.not', at, from: lo, to: hi })
+      }
+      return out.length ? out : null
+    }
   }
+}
+
+/** Stretches of minutes joined where they meet or overlap, in order. */
+function joined(spans: ReadonlyArray<{ from: number; to: number }>): Array<{ from: number; to: number }> {
+  const out: Array<{ from: number; to: number }> = []
+  for (const s of [...spans].filter((x) => x.to > x.from).sort((a, b) => a.from - b.from)) {
+    const last = out.at(-1)
+    if (last && s.from <= last.to) last.to = Math.max(last.to, s.to)
+    else out.push({ ...s })
+  }
+  return out
 }
 
 /** Drafts as log events for a simulation (after every event of the day). */
@@ -446,12 +467,13 @@ export interface FeltRow {
  * first start, with its last answer.
  */
 export function feltRows(ctx: DayContext, state: DayState): FeltRow[] {
+  // The blocks run and the requests done (now, urgent, after the fact – facts of their own, under „Prośby domowe”,
+  // A2-08), in the order of their first start.
+  const ran: Array<{ at: number; category: string; minutes: number }> = []
+  for (const b of state.facts.blocks.values()) if (b.startedAt != null && b.planned?.categoryId) ran.push({ at: b.startedAt, category: b.planned.categoryId, minutes: ranMinutes(b, state.now) })
+  for (const r of state.facts.requests) ran.push({ at: r.from, category: REQUEST_CATEGORY, minutes: Math.max(0, Math.min(r.to, state.now) - r.from) })
   const minutes = new Map<string, number>()
-  for (const b of [...state.facts.blocks.values()].sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0))) {
-    const cat = b.planned?.categoryId
-    if (b.startedAt == null || !cat) continue
-    minutes.set(cat, (minutes.get(cat) ?? 0) + ranMinutes(b, state.now))
-  }
+  for (const x of ran.sort((a, b) => a.at - b.at)) minutes.set(x.category, (minutes.get(x.category) ?? 0) + x.minutes)
   const feel = new Map<string, FeltCost>()
   for (const e of [...ctx.events].filter((x) => isKnown(x) && x.k === 'cost.felt').sort((a, b) => a.l - b.l)) {
     const f = e as unknown as { category: string; feel: FeltCost }

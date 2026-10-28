@@ -89,7 +89,7 @@ function Row({ r }: { r: RequestRecord }) {
   return (
     <div className="grid items-center gap-2 rounded border border-line bg-panel px-3 py-1.5" style={{ gridTemplateColumns: '180px 110px minmax(0,1fr) 120px auto' }} data-testid="request-row">
       <PersonChoice value={r.person} onChange={(person) => set({ person })} />
-      <DurationField value={r.estimateMin} onCommit={(estimateMin) => set({ estimateMin: Math.min(ESTIMATE_RANGE[1], estimateMin) })} placeholder="szacunek" aria-label="Szacunek" data-testid="request-estimate" />
+      <DurationField value={r.estimateMin} range={ESTIMATE_RANGE} onCommit={(estimateMin) => set({ estimateMin })} placeholder="szacunek" aria-label="Szacunek" data-testid="request-estimate" />
       <TextField value={r.note} onCommit={(note) => set({ note })} max={500} placeholder="czego dotyczy" aria-label="Notatka" data-testid="request-note" />
       <span className="text-[12px] text-muted">
         {STATE_NAMES[r.state]}

@@ -129,7 +129,7 @@ function Steps({ version, steps, onChange }: { version: RoutineVersion; steps: R
         <div key={s.id} className="flex items-center gap-1.5">
           <span className="num w-[18px] text-right text-[11px] text-muted">{i + 1}.</span>
           <TextField value={s.name} onCommit={(name) => set(s.id, { name })} max={80} placeholder="krok" className="min-w-0 flex-1" aria-label={`Krok ${i + 1}`} />
-          <DurationField value={s.min} onCommit={(min) => set(s.id, { min: Math.max(STEP_RANGE[0], Math.min(STEP_RANGE[1], min)) })} className="w-[84px]" aria-label={`Czas kroku ${i + 1}`} />
+          <DurationField value={s.min} range={STEP_RANGE} onCommit={(min) => set(s.id, { min })} className="w-[84px]" aria-label={`Czas kroku ${i + 1}`} />
           <button type="button" className="px-1 text-muted hover:text-fg" onClick={() => move(s.id, -1)} aria-label="Wyżej" data-testid={`step-up-${version}-${i}`}>
             ↑
           </button>

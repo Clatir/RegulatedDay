@@ -12,6 +12,9 @@ import { dropSettled, type TimelineItem } from '@renderer/features/plan/Timeline
 import { instantOf, savedInstant, SKIPPED_HOUR, typedOf } from '@renderer/features/ritual/dayTime'
 import { sideBShown } from '@renderer/features/today/SideBStep'
 import { newUserBlock } from '@shared/engine/planEdit'
+import { ESTIMATE_RANGE } from '@shared/model/requests'
+import { STEP_RANGE } from '@shared/model/routines'
+import { durationParser } from '@renderer/components/fields'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { modalOpen, onModal, tabTarget } from '@renderer/lib/escape'
 import { closeSideB, patchBlockDraft, setBlockDraft, useUi } from '@renderer/store/ui'
@@ -135,5 +138,13 @@ describe('„Spróbuj ponownie” przeniesienia (A7-20)', () => {
   it('nieudana próba mówi, że znów się nie udało, i dlaczego', () => {
     expect(retryMessage({ ok: false, error: 'brak dostępu' })).toEqual({ text: 'Folder dalej się nie otwiera: brak dostępu', kind: 'error' })
     expect(retryMessage({ ok: true, error: null }).kind).toBe('success')
+  })
+})
+
+describe('szacunek prośby i czas kroku spoza zakresu (A6-19)', () => {
+  it('za długa wartość jest odrzucana z komunikatem, a nie obcinana po cichu', () => {
+    expect(durationParser(ESTIMATE_RANGE)('10h')).toEqual({ ok: false, message: 'Najdłużej 8 h.' })
+    expect(durationParser(ESTIMATE_RANGE)('1h30')).toEqual({ ok: true, value: 90 })
+    expect(durationParser(STEP_RANGE)('5h')).toMatchObject({ ok: false })
   })
 })
