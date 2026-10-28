@@ -131,9 +131,13 @@ export interface PlanBlock {
 
 export const PLAN_DAYS = 7
 
-/** The local plan of sessions and classes for the next 7 logical days, with absolute times (E1/E4a fill the blocks). */
-export function writePlan(userData: string, blocks: PlanBlock[], now = Date.now()): void {
-  writeSyncAtomic(join(userData, 'plan-blocks.json'), `${JSON.stringify({ format: 1, from: now, to: now + PLAN_DAYS * 24 * 60 * 60_000, blocks }, null, 2)}\n`)
+/**
+ * The local plan of sessions and classes for the next 7 logical days, with absolute times (E1/E4a fill the blocks);
+ * `disconnectedUntil` – „Odcinam się” runs, the guard holds no lock of sleep before this moment (T523).
+ */
+export function writePlan(userData: string, blocks: PlanBlock[], now = Date.now(), disconnectedUntil: number | null = null): void {
+  const plan = { format: 1, from: now, to: now + PLAN_DAYS * 24 * 60 * 60_000, blocks, ...(disconnectedUntil != null ? { disconnectedUntil } : {}) }
+  writeSyncAtomic(join(userData, 'plan-blocks.json'), `${JSON.stringify(plan, null, 2)}\n`)
 }
 
 /**

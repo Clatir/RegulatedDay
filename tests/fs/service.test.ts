@@ -158,6 +158,24 @@ describe('usługa folderu danych', () => {
     expect(needs.at(-1)).toEqual({ system: false, display: false, reason: null })
   })
 
+  it('plik planu dla strażnika mówi o „Odcinam się” od razu – do końca dnia logicznego – i przestaje po „Wracam” (A5-07)', async () => {
+    const clock = { now: placeLogical(DAY, 10 * 60) }
+    const s = await DataService.start(options(clock, { writeGuardPlan: true, onPower: () => undefined }))
+    await s.tick()
+    const file = join(userData, 'plan-blocks.json')
+    const plan = () => JSON.parse(readFileSync(file, 'utf8')) as { disconnectedUntil?: number }
+    expect(plan().disconnectedUntil).toBeUndefined()
+    clock.now += 60_000
+    s.folder.append({ day: DAY, dom: 'timer', k: 'disconnect.start', at: clock.now })
+    await s.tick()
+    expect(plan().disconnectedUntil).toBe(placeLogical('2026-10-22', 4 * 60))
+    clock.now += 60_000
+    s.folder.append({ day: DAY, dom: 'timer', k: 'disconnect.end', at: clock.now })
+    await s.tick()
+    expect(plan().disconnectedUntil).toBeUndefined()
+    await s.stop('quit')
+  })
+
   it('plik planu dla strażnika odświeża się co godzinę (także na komputerze, który nie tworzy dnia)', async () => {
     const clock = { now: placeLogical(DAY, 10 * 60) }
     const s = await DataService.start(options(clock, { writeGuardPlan: true }))

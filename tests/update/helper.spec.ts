@@ -82,8 +82,19 @@ test('samotest pomocnika: sesja, powiadomienia, układ SYSTEM_POWER_CAPABILITIES
   expect(attrs[cwd]! & 0x10).toBe(0x10)
   expect(attrs[join(cwd, 'brak')]).toBe(-1)
 
+  // The confirmation the guard waits for at a logon in a session (T523): the helper's working folder, by any spelling
+  // (the runner's short 8.3 path, the long one, another case), held only with the lock of sleep.
+  const sleepHeld = (dir: string) => {
+    const r = spawnSync(join(dirname(HELPER), 'rd-guard.exe'), ['--query', 'sleepHeld', '--user-data', dir], { encoding: 'utf8', windowsHide: true })
+    return JSON.parse(r.stdout.trim()) as { ok: boolean; held: boolean }
+  }
+  expect(sleepHeld(cwd)).toMatchObject({ ok: true, held: false })
   const power = await h.request('power', { display: true, system: true, reason: 'Regulated Day: samotest' })
   expect(power).toMatchObject({ display: true, system: true })
+  expect(sleepHeld(cwd).held).toBe(true)
+  expect(sleepHeld(realpathSync.native(cwd).toUpperCase() + '\\').held).toBe(true)
+  expect(await h.request('power', { display: true, system: false })).toMatchObject({ display: true, system: false })
+  expect(sleepHeld(cwd).held).toBe(false)
   expect(await h.request('power', { display: false, system: false })).toMatchObject({ display: false, system: false })
   expect(await h.request('powerState')).toHaveProperty('modernStandby')
 

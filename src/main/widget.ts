@@ -64,7 +64,12 @@ export interface WidgetDeps {
   clickedApp: () => void
   modePrefs: () => ModePrefs
   notices: () => Record<NoticeKind, boolean>
-  notify: (n: NotifyIn) => boolean
+  /** A notification shown (false: not shown at all); `onFailed` – Windows did not take it after all. */
+  notify: (n: NotifyIn, onFailed?: () => void) => boolean
+  /** Windows takes notifications now (its notification state „accepts”, A4-07); undefined: always. */
+  notificationsTaken?: () => Promise<boolean>
+  /** You are at the computer now: a notification Windows did not take comes again only then (A4-07); undefined: always. */
+  present?: () => boolean
   showMain: (page?: string) => void
   emit: (view: WidgetView) => void
   log: (level: 'info' | 'warn' | 'error', msg: string, e?: unknown) => void
@@ -107,7 +112,7 @@ const ROUTINE_UNDO_MS = 60_000
  * – a field changed since is a question, not overwritten; a file the variant created goes only while it is as it made it.
  */
 function inverseEdit(e: EditEntry, now: RawRecord | null, made: RawRecord | null): EditEntry | null {
-  if (e.create) return now && sameContentAs(now, made) ? { rel: e.rel, remove: true, edits: [] } : null
+  if (e.create) return now && sameContentAs(now, made) ? { rel: e.rel, remove: true, edits: [], base: made } : null
   return { rel: e.rel, edits: e.edits.map((x) => ({ path: x.path, base: x.value, value: x.base })) }
 }
 
@@ -432,11 +437,28 @@ export class WidgetEngine {
         out.push({ id: `notice:${date}:reserve:${d.pool}:${d.at}`, title: 'Energia na poziomie rezerwy', body: `${POOL_TEXT[d.pool]} – czas na regenerację.`, line: reserveMessageId(date, d.pool, d.at), day: date })
       }
     }
-    for (const n of out) {
-      if (shown.has(n.id)) continue
-      if (this.d.notify(n)) folder.markNotice(date, n.id, now)
+    // Not taken by Windows (its state held them – a full screen, a presentation, quiet hours – or it failed): once more,
+    // with the same id and time, when it takes them again and you are here, while the notification still holds (A4-07).
+    const held = out.filter((n) => this.notTaken.has(n.id))
+    for (const id of [...this.notTaken]) if (!out.some((n) => n.id === id)) this.notTaken.delete(id)
+    if (held.length && (this.d.present?.() ?? true) && (await (this.d.notificationsTaken?.() ?? Promise.resolve(true)))) {
+      for (const n of held) {
+        this.notTaken.delete(n.id)
+        this.d.notify(n)
+      }
+    }
+    const fresh = out.filter((n) => !shown.has(n.id))
+    if (!fresh.length) return
+    const taken = await (this.d.notificationsTaken?.() ?? Promise.resolve(true))
+    for (const n of fresh) {
+      if (!this.d.notify(n, () => this.notTaken.add(n.id))) continue
+      folder.markNotice(date, n.id, now)
+      if (!taken) this.notTaken.add(n.id)
     }
   }
+
+  /** Notifications Windows did not take (by id): each comes once more (A4-07). */
+  private readonly notTaken = new Set<string>()
 
   /** The way of a break: from the screen after a project, else the lowest cost in the lowest pool (spec „Timer”). */
   /**

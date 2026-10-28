@@ -429,7 +429,7 @@ export class DataHub {
       out.push({
         id: edit.id,
         rel: edit.rel,
-        kind: outcome.status === 'conflict' ? 'conflict' : outcome.status === 'removedElsewhere' ? 'removed' : 'broken',
+        kind: outcome.status === 'conflict' ? 'conflict' : outcome.status === 'removedElsewhere' ? 'removed' : outcome.status === 'changedElsewhere' ? 'changed' : 'broken',
         at: edit.at,
         theirsAt,
         fields: outcome.status === 'conflict' ? outcome.fields.map((x) => ({ path: x.path, mine: x.value, theirs: x.now })) : edit.edits.map((x) => ({ path: x.path, mine: x.value, theirs: undefined }))
@@ -490,7 +490,7 @@ export class DataHub {
     const clean = entries.map((e) => {
       const c = classify(e.rel)
       if (!c || c.conflict || c.kind === 'log' || c.kind === 'presence' || c.kind === 'grades') throw new Error(`nie można edytować ${e.rel}`)
-      return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true }
+      return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true, ...(e.remove === true && e.base !== undefined ? { base: e.base } : {}) }
     })
     const out = await f.edit(clean)
     this.changed()

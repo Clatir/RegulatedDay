@@ -3,8 +3,11 @@
 // attributes of files kept on the device. Every reading has an answer for „nie wiadomo” instead of a crash.
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Win32;
 
 namespace RegulatedDay
@@ -202,12 +205,51 @@ namespace RegulatedDay
             get { return display || system || execution; }
         }
 
+        /// <summary>The lock of sleep (the system request) is held now.</summary>
+        public bool Sleep
+        {
+            get { return system; }
+        }
+
         public void Dispose()
         {
             if (handle == IntPtr.Zero) return;
             Set(false, false, false, null);
             Native.CloseHandle(handle);
             handle = IntPtr.Zero;
+        }
+    }
+
+    /// <summary>
+    /// The confirmation of the lock of sleep (T309, T318, T523): the app's helper keeps a named mutex while it holds the
+    /// system request; the guard only checks that it exists. One per data folder of the app, named from its path.
+    /// </summary>
+    public static class PowerConfirm
+    {
+        public static string Name(string userData)
+        {
+            // The same folder by any spelling: a short 8.3 name, another case, a separator at the end.
+            string full = Path.GetFullPath(userData);
+            StringBuilder longPath = new StringBuilder(1024);
+            uint n = Native.GetLongPathName(full, longPath, (uint)longPath.Capacity);
+            if (n > 0 && n < longPath.Capacity) full = longPath.ToString();
+            string key = full.TrimEnd('\\', '/').ToLowerInvariant();
+            using (SHA1 sha = SHA1.Create())
+            {
+                byte[] h = sha.ComputeHash(Encoding.UTF8.GetBytes(key));
+                StringBuilder sb = new StringBuilder("Local\\RegulatedDay.SleepHeld.");
+                for (int i = 0; i < 10; i++) sb.Append(h[i].ToString("x2", CultureInfo.InvariantCulture));
+                return sb.ToString();
+            }
+        }
+
+        /// <summary>The mutex exists – only opened and closed, never created or waited on.</summary>
+        public static bool Exists(string userData)
+        {
+            IntPtr h = Native.OpenMutex(Native.SYNCHRONIZE_ACCESS, false, Name(userData));
+            if (h == IntPtr.Zero) return false;
+            Native.CloseHandle(h);
+            return true;
         }
     }
 

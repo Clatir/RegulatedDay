@@ -26,6 +26,10 @@ namespace RegulatedDay
         const int PowerSilentMs = 30000;
         static int lastPowerTick = Environment.TickCount;
         static readonly object PowerGate = new object();
+        /// <summary>The app's data folder: the name of the confirmation mutex of the lock of sleep.</summary>
+        static string userData;
+        /// <summary>The confirmation mutex (T523), kept while the system request is held; never owned, only its existence counts.</summary>
+        static Mutex sleepHeld;
 
         static void Send(JObj o)
         {
@@ -74,6 +78,7 @@ namespace RegulatedDay
             Dictionary<string, object> init = Json.ParseObject(first);
             identity = Json.Str(init, "identity") ?? identity;
             aumid = Json.Str(init, "aumid") ?? aumid;
+            userData = Json.Str(init, "userData") ?? Environment.CurrentDirectory;
             string logs = Json.Str(init, "logs") ?? Path.Combine(Environment.CurrentDirectory, "logs");
             Log.Init(Path.Combine(logs, "helper.log"));
             Log.Info("start (" + identity + ", pid " + System.Diagnostics.Process.GetCurrentProcess().Id + ")");
@@ -87,6 +92,7 @@ namespace RegulatedDay
                 {
                     if (!power.Any || unchecked(Environment.TickCount - lastPowerTick) < PowerSilentMs) return;
                     power.Set(false, false, false, null);
+                    ConfirmSleep();
                 }
                 Log.Info("blokada usypiania zwolniona: aplikacja nie podała stanu od 30 s");
                 JObj st = power.State();
@@ -112,9 +118,31 @@ namespace RegulatedDay
             }
             GC.KeepAlive(alive);
             GC.KeepAlive(powerWatch);
-            power.Dispose();
+            lock (PowerGate)
+            {
+                power.Dispose();
+                ConfirmSleep();
+            }
             Log.Info("koniec");
             return 0;
+        }
+
+        /// <summary>
+        /// The confirmation mutex follows the system request (under PowerGate): the guard holds its requests at a logon in
+        /// a session until it exists (spec „Instalacja, aktualizacje i log”, T523).
+        /// </summary>
+        static void ConfirmSleep()
+        {
+            if (power.Sleep && sleepHeld == null)
+            {
+                try { sleepHeld = new Mutex(false, PowerConfirm.Name(userData)); }
+                catch (Exception e) { Log.Warn("mutex potwierdzenia blokady: " + e.Message); }
+            }
+            else if (!power.Sleep && sleepHeld != null)
+            {
+                sleepHeld.Dispose();
+                sleepHeld = null;
+            }
         }
 
         static IntPtr Hwnd(Dictionary<string, object> m)
@@ -170,6 +198,7 @@ namespace RegulatedDay
                     {
                         lastPowerTick = Environment.TickCount;
                         power.Set(Json.Bool(m, "display", false), Json.Bool(m, "system", false), Json.Bool(m, "execution", false), Json.Str(m, "reason"));
+                        ConfirmSleep();
                     }
                     {
                         JObj st = power.State();

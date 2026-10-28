@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.25.0
+- Rekord usunięty na tym komputerze, a w tym czasie zmieniony na innym, nie znika już bez pytania: okno pyta „Ten rekord usunąłeś tutaj, a na innym komputerze go w tym czasie zmieniono” – „Usuń mimo to” albo „Zostaw zmieniony”.
+- Zmiana bloku w pliku dnia zapisuje tylko to, co zmieniłeś – wartości zapisane przez nowszą wersję aplikacji (np. na innym komputerze) zostają, jak były.
+- Powiadomienie, którego Windows nie pokazał (np. w trybie „Nie przeszkadzać”), wraca raz, gdy znów przyjmuje powiadomienia, a Ty jesteś przy komputerze – zamiast zniknąć bez śladu.
+- „Cofnij” automatycznego zatwierdzenia granicy nie robi już z całej dalszej pracy pracy „w granicy” – przedłużenie i praca po maksimum liczą się jak zwykle.
+- Logowanie do Windows w czasie sesji albo zajęć: strażnik aktualizacji trzyma ekran i blokadę usypiania, dopóki aplikacja sama jej nie przejmie (najwyżej minutę), więc komputer nie zaśnie w tej chwili przerwy. W „Odcinam się” – nigdy.
+- Przy dwóch komputerach z różnymi wersjami aplikacji prowadzenie przechodzi na nowszą wersję dopiero, gdy starsza je odda – bez chwili, w której prowadzą oba.
+
 ## 0.24.0
 - Nieudana kopia zapasowa od razu daje cichą linię w pasku („Kopia zapasowa się nie udała – następna próba za godzinę”), a po 3 dniach bez żadnej kopii okno główne pokazuje u góry „Brak kopii zapasowej od …” z przyczyną ostatniej próby. Dotąd błąd był tylko w dzienniku.
 - Gdy folder danych jest niedostępny, pasek i okno mówią, ile zmian zapisze się po jego powrocie („3 zmiany zapiszą się po powrocie folderu danych”), a wyjście z aplikacji pokazuje to samo w powiadomieniu – nic nie udaje, że jest już zapisane. Gdy folder jest, ale plik długo nie daje się zapisać (np. trzyma go OneDrive), po 5 min pasek mówi „N zmian czeka na zapis w folderze danych”. Liczą się tylko Twoje zmiany.

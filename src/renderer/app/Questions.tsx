@@ -95,6 +95,7 @@ function QuestionsDialog({ questions, onClose }: { questions: EditQuestion[]; on
         <div key={q.id} className="flex flex-col gap-1.5 rounded border border-line p-3 text-[12.5px]">
           <span className="font-medium">{recordTitle(q.rel)}</span>
           {q.kind === 'removed' && <span>Ten rekord usunięto na innym komputerze, a tutaj go zmieniłeś.</span>}
+          {q.kind === 'changed' && <span>Ten rekord usunąłeś tutaj, a na innym komputerze go w tym czasie zmieniono.</span>}
           {q.kind === 'broken' && <span>Plik jest uszkodzony – przywróć go z historii; Twoja zmiana czeka.</span>}
           {q.kind === 'conflict' &&
             q.fields.map((f) => (
@@ -107,10 +108,10 @@ function QuestionsDialog({ questions, onClose }: { questions: EditQuestion[]; on
           {q.kind !== 'broken' && (
             <div className="flex gap-2">
               <button type="button" className="btn" onClick={() => void answer(q, 'mine')}>
-                {q.kind === 'removed' ? 'Przywróć z moją zmianą' : 'Zostaw moje'}
+                {q.kind === 'removed' ? 'Przywróć z moją zmianą' : q.kind === 'changed' ? 'Usuń mimo to' : 'Zostaw moje'}
               </button>
               <button type="button" className="btn" onClick={() => void answer(q, 'theirs')}>
-                {q.kind === 'removed' ? 'Zostaw usunięty' : 'Przyjmij z innego komputera'}
+                {q.kind === 'removed' ? 'Zostaw usunięty' : q.kind === 'changed' ? 'Zostaw zmieniony' : 'Przyjmij z innego komputera'}
               </button>
             </div>
           )}

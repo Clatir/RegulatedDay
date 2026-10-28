@@ -8,7 +8,7 @@
  */
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
-import { deepEqual, setAt, valueAt, type Path } from '@shared/data/merge'
+import { deepEqual, sameContentAs, setAt, valueAt, type Path } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { earlierOnce } from '@shared/model/rd'
 import { BrokenRecordError, type RecordStore } from './records'
@@ -35,6 +35,8 @@ export interface QueuedEdit {
   create?: boolean
   /** The record removed. */
   remove?: boolean
+  /** A removal: the record as you saw it (undefined – an entry written before 0.25.0: removed as it is). */
+  base?: unknown
 }
 
 /** Why an entry waits behind an earlier one for the same file that is still a question (it never goes by itself). */
@@ -44,6 +46,8 @@ export type Outcome =
   | { id: string; status: 'applied' }
   | { id: string; status: 'conflict'; fields: Array<FieldEdit & { now: unknown }> }
   | { id: string; status: 'removedElsewhere' }
+  /** You removed the record here, and it changed elsewhere since you saw it (A3-09): a question. */
+  | { id: string; status: 'changedElsewhere' }
   | { id: string; status: 'broken' }
   | { id: string; status: 'waiting'; why: string }
 
@@ -239,7 +243,7 @@ export class EditQueue {
     const out: Array<{ edit: QueuedEdit; outcome: Outcome }> = []
     for (const e of this.entries) {
       const o = this.outcomes.get(e.id)
-      if (o && (o.status === 'conflict' || o.status === 'removedElsewhere' || o.status === 'broken')) out.push({ edit: e, outcome: o })
+      if (o && (o.status === 'conflict' || o.status === 'removedElsewhere' || o.status === 'changedElsewhere' || o.status === 'broken')) out.push({ edit: e, outcome: o })
     }
     return out
   }
@@ -267,6 +271,9 @@ export class EditQueue {
         const met = o.fields.find((x) => pathEq(x.path, f.path))
         if (met) f.base = met.now
       }
+    } else if (o.status === 'changedElsewhere') {
+      // „Usuń mimo to”: removed as it is now.
+      e.base = undefined
     } else if (o.status === 'removedElsewhere') {
       let value: unknown = restoreFrom ?? {}
       for (const f of e.edits) value = setAt(value, f.path, f.value)
@@ -304,6 +311,8 @@ export class EditQueue {
     // nowsze” compares it).
     const stamp = Math.max(edit.at, typeof cur.value.updatedAt === 'number' ? cur.value.updatedAt : 0)
     if (edit.remove) {
+      // „Usunięcie na jednym komputerze przy edycji na drugim zawsze kończy się pytaniem” (spec, A3-09).
+      if (edit.base !== undefined && !sameContentAs(cur.value, edit.base)) return { id: edit.id, status: 'changedElsewhere' }
       await records.remove(edit.rel)
       return { id: edit.id, status: 'applied' }
     }

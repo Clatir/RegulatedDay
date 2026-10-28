@@ -275,6 +275,7 @@ namespace RegulatedDay
         public static extern bool CreateProcess(string app, StringBuilder cmd, IntPtr pattrs, IntPtr tattrs, bool inherit, uint flags, IntPtr env, string dir, ref STARTUPINFO si, out PROCESS_INFORMATION pi);
         [DllImport("kernel32.dll", SetLastError = true)] public static extern uint ResumeThread(IntPtr thread);
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern IntPtr OpenMutex(uint access, bool inherit, string name);
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern uint GetLongPathName(string path, StringBuilder longPath, uint size);
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool MoveFileEx(string from, string to, uint flags);
         [DllImport("kernel32.dll", SetLastError = true)] public static extern bool SetFileInformationByHandle(Microsoft.Win32.SafeHandles.SafeFileHandle file, int infoClass, IntPtr info, uint size);
         [DllImport("kernel32.dll")] public static extern ulong GetTickCount64();

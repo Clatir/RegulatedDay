@@ -323,7 +323,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Bez zatwierdzonej granicy (approvedAt = null po boundary.undo) pętla klasyfikacji daje każdej minucie cls 'in'. Specyfikacja każe po cofnięciu liczyć minuty według propozycji. Propozycja nie wychodzi poza maksimum, więc minuty po maksimum powinny być przekroczeniem.
 - **Scenariusz:** „Cofnij” auto-zatwierdzenia o 08:20, potem praca do 20:00 przy maksimum 19:00. extensionMin = 0, a dayOutcome.boundary = 'kept'. Zatwierdzenie w rytuale ma at = chwila rytuału i nie przelicza minut wcześniejszych.
 - **Poprawka:** Gdy granica jest otwarta po cofnięciu, klasyfikuj minuty według proposalAt(k) z widoku przy k (po propozycji 'after', po maksimum 'max', przy pustej puli 'empty'). Dodaj test.
-- **Status:** do 5.3 (T514)
+- **Status:** poprawione w 0.25.0 (test w `tests/unit/engine/timer.test.ts`, T523)
 
 #### A1-16 · low · bez weryfikacji – „Koniec pracy?” pada od razu po odpowiedzi „Dalej” na „Dalej?” ostatniego bloku pracy, a nie 15 min później
 - **Plik:** `src/shared/engine/auto.ts:458` · rodzaj: spec · pewność recenzenta: medium
@@ -511,7 +511,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `recordEdit` tworzy wpis usunięcia bez wartości bazowej (`{remove: true, edits: []}`). `applyOneNow` usuwa plik zawsze, gdy jest czytelny, niezależnie od tego, czy zmienił się od chwili, w której go usunąłeś. Odwrotny kierunek (edycja tu, usunięcie gdzie indziej) daje pytanie, ten nie. Treść nie ginie całkiem (migawka „delete” w historii), ale reguła „zawsze kończy się pytaniem” jest złamana i brak na nią testu.
 - **Scenariusz:** PC A: wpis usunięcia prośby r1 czeka w kolejce (za pytaniem o ten plik albo przy niedostępnym folderze). W tym czasie PC B dopisuje do r1 notatkę i OneDrive dostarcza ją na A. Gdy kolejka A rusza, usuwa r1 razem z notatką z B. Nikt nie dostaje pytania.
 - **Poprawka:** W wpisie usunięcia zapisać bazę (np. treść rekordu albo `updatedAt` widziane przy usuwaniu). Przy zastosowaniu, gdy `!sameContentAs(cur.value, base)`, zwracać pytanie (np. `changedElsewhere`) zamiast usuwać. Test w e3-data.
-- **Status:** do 5.3 (T515)
+- **Status:** poprawione w 0.25.0 (testy w `tests/fs/e3-data.test.ts`, T523)
 
 #### A3-10 · low · bez weryfikacji – Pola zapisywane raz (`ritualFrom`, `gameFrom`) od dwóch prowadzących z różnymi datami kończą się pytaniem o pole techniczne
 - **Plik:** `src/main/data/folder.ts:682` · rodzaj: bug · pewność recenzenta: medium · **wymaga Twojej decyzji**
@@ -567,7 +567,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `blockJson(b, before)` = `{...before, ...b}`. Nieznane POLA zostają, ale znane pola z wartością spoza możliwości tej wersji (np. nowy `tag`, `origin`, nowy kształt `costs`, `startMin` spoza zakresu) są w `b` już znormalizowane przez `planBlockFrom` (null albo domyślne) i nadpisują wartość z pliku. Specyfikacja wymaga, by taki plik dnia był tylko do odczytu – tego sprawdzenia nie ma (`ReadOnlyMark` używa tylko TrialPage).
 - **Scenariusz:** Wersja 1.1 zapisuje w pliku dnia blok z `tag: 'nowyRodzaj'`. Komputer z 1.0 zmienia długość tego bloku. Diff zawiera też `tag: 'nowyRodzaj' → null`, więc znacznik ginie, a 1.1 traci sens bloku.
 - **Poprawka:** Przy parsowaniu pliku dnia oznaczać bloki lub pola nieprzedstawialne (wartość obecna, a model daje null lub domyślną). Okno pokazuje wtedy dzień „tylko do odczytu” albo `putBlock` zapisuje tylko pola faktycznie zmienione przez użytkownika (diff modelu przed i po, nałożony na surowy blok).
-- **Status:** do 5.3 (T515)
+- **Status:** poprawione w 0.25.0 (test w `tests/unit/day-edits.test.ts`, T523)
 
 #### A3-17 · low · bez weryfikacji – Kopia przed aktualizacją może nie powstać: `lastRunVersion` zapisywany przy starcie, zanim folder się otworzy
 - **Plik:** `src/main/data/hub.ts:219` · rodzaj: data · pewność recenzenta: high
@@ -647,7 +647,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Zapisywać rodzaj i ważność powiadomienia razem ze stanem z pomocnika (notificationState przed wysłaniem) albo osobnym zdarzeniem „nieprzyjęte”. W notices() wysłać je ponownie raz, gdy stan znów „accepts” i jest obecność, dopóki jest aktualne. Alternatywnie dopisać pozycję w docs/plan.md przed bramką 1.0.
 - **Weryfikacja:** Opis kodu się zgadza. notify() zwraca true zaraz po note.show(), 'failed' tylko pisze w logu (index.ts przekazuje notify(n, log) bez onFailed), a markNotice od razu zapisuje notice.shown. Ponownego wysłania nie ma, choć specyfikacja (linia 492) i T334/T340 go wymagają. Brak jest jednak świadomie odłożony decyzją T475 („ponowne wysłanie powiadomienia odrzuconego przez Windows – później”). Skutek jest mały: przy „Nie przeszkadzać” Windows i tak zostawia powiadomienie w Centrum powiadomień, a pasek pokazuje linię „Zacznij”. Realny problem to tylko brak pozycji w docs/plan.md przed 1.0, dlatego ważność obniżam do low.
 - **Dowód:** src/main/notify.ts:45–58; src/main/index.ts:170; src/main/widget.ts:408–411; docs/specyfikacja.md:492; docs/decyzje-techniczne.md:465 (T475), 324 (T334), 330 (T340); docs/plan.md (brak pozycji)
-- **Status:** do 5.3 (T516)
+- **Status:** poprawione w 0.25.0 (test w `tests/fs/widget.test.ts`, T523)
 
 #### A4-08 · low · bez weryfikacji – Panel „Zawsze na wierzchu” (barPanel) bez pomocnika zamyka się przy utracie fokusu
 - **Plik:** `src/main/windows/iconPanel.ts:72` · rodzaj: spec · pewność recenzenta: high
@@ -777,7 +777,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Właściciel ustawia tylko power.Set(false, true, true), bez żądania ekranu, i zwalnia wszystko w Release zaraz po Postpone/StartAppIfComplete. Specyfikacja wymaga, by przy starcie z autostartu w czasie bloku sesji albo zajęć i 30 min przed nim strażnik trzymał żądania zasilania i ekranu od startu, aż pomocnik uruchomionej aplikacji potwierdzi blokadę nazwanym mutexem (najwyżej 60 s), i nigdy w „Odcinam się”. W helper/src nie ma mutexu potwierdzenia ani czekania na niego (T309, T318).
 - **Scenariusz:** Logowanie w trakcie sesji: strażnik odkłada i od razu zwalnia żądania. Aplikacja otwiera folder z OneDrive przez dłuższą chwilę, zanim jej pomocnik ustawi blokadę usypiania. W tym czasie ekran może się wygasić albo komputer uśpić, wbrew zamierzonej ciągłości blokady sesji.
 - **Poprawka:** W pomocniku aplikacji tworzyć nazwany mutex potwierdzenia po ustawieniu blokady. W Owner przy Plan.QuietNow trzymać power.Set(true, true, true) aż do istnienia tego mutexu albo 60 s, a nie w „Odcinam się”. Alternatywa: decyzja T, że to wymaganie odpada.
-- **Status:** do 5.3 (T516)
+- **Status:** poprawione w 0.25.0 (testy w `tests/fs/service.test.ts`, CI Windows `tests/update/helper.spec.ts` i `scenarios.spec.ts`, T523)
 
 #### A5-08 · low · bez weryfikacji – Aplikacja nie reaguje na licznik startów 4, a właściciel sprawdza limit dopiero po TakeLock i oknach
 - **Plik:** `src/main/update/startup.ts:179` · rodzaj: spec · pewność recenzenta: high
@@ -1307,7 +1307,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Gdy prowadzący ma starsze reguły, a ten komputer nowsze i obecność, `decideLeader` od razu zwraca `latest()`, czyli zwykle siebie. Dotychczasowy prowadzący O w `mayLead` traktuje `seenLeader === O` w starym pliku N jako „oddał mu prowadzenie” i prowadzi dalej, dopóki nie zobaczy pliku N wskazującego N. Przez opóźnienie synchronizacji obecności (do ok. 1–2 min) prowadzą obaj. Przy zwykłej przesiadce T415 tego unika, bo nowy czeka na wskazanie przez poprzedniego.
 - **Scenariusz:** Po aktualizacji desktop N ma reguły 3, laptop O ma 2 i prowadził, bo N nie był używany. Wracasz do desktopu (ustalonego). N od razu prowadzi i pokazuje „Analiza tygodnia o 10:00 – Za 5 min”. O nie widzi jeszcze nowej obecności N i też ją pokazuje, z własnym `notice.shown`, bo log N jeszcze nie dotarł.
 - **Poprawka:** W gałęzi „prowadzący ma starszą wersję reguł” przejmować jak przy przesiadce: nowszy wpisuje się jako widziany prowadzący, ale zadania wykonuje dopiero, gdy O wskaże go w obecności, albo po 10 min ciszy O. Albo O ma ustępować od razu, gdy obecność N jest świeża, bez traktowania starego `seenLeader` jako oddania. Test w `leader.test.ts`.
-- **Status:** do 5.3 (T515)
+- **Status:** poprawione w 0.25.0 (test w `tests/unit/leader.test.ts`, T523)
 
 #### A8-09 · low · bez weryfikacji – Godziny wpisane w rytuale przy zmianie czasu: godzina nieistniejąca nie jest odrzucana, podwójna zawsze oznacza pierwszą
 - **Plik:** `src/renderer/features/ritual/RitualPanel.tsx:170` · rodzaj: spec · pewność recenzenta: high

@@ -55,6 +55,8 @@ namespace RegulatedDay
         const long InstallerLimitMs = 10 * 60 * 1000;
         const long StepLimitMs = 60 * 1000;
         const long ConfirmLimitMs = 180 * 1000;
+        /// <summary>The requests held for the app last at most this long after its start without its helper's confirmation.</summary>
+        const int ConfirmSleepMs = 60 * 1000;
 
         public readonly string Role;
         readonly OwnerArgs args;
@@ -77,6 +79,10 @@ namespace RegulatedDay
         /// <summary>„Uruchom mimo to” stops one installer only: the repair after it runs to the end.</summary>
         bool runAnywayKilled;
         string userData;
+        /// <summary>The requests of sleep and of the screen are held for the app until its helper confirms its lock (T523).</summary>
+        bool holdForApp;
+        /// <summary>When this owner started the app (Environment.TickCount); null: it did not.</summary>
+        int? appStartedTick;
 
         public Owner(string role, OwnerArgs args)
         {
@@ -153,7 +159,10 @@ namespace RegulatedDay
                 Thread.Sleep(Timeout.Infinite);
             }
             heartbeat = new Timer(delegate(object s) { TickSignal(); }, null, 1000, 1000);
-            power.Set(false, true, true, "Regulated Day: instalacja aktualizacji");
+            // In a session or a class and 30 min before (never in „Odcinam się”) the screen too, from the start until the
+            // helper of the app started confirms its lock of sleep (T523).
+            holdForApp = Plan.HoldForApp(userData);
+            power.Set(holdForApp, true, true, holdForApp ? "Regulated Day: sesja albo zajęcia" : "Regulated Day: instalacja aktualizacji");
             Ui = new OwnerUi(this);
             // After the count: a start that throws every time still reaches the limit of 4 starts.
             Test("start");
@@ -512,9 +521,25 @@ namespace RegulatedDay
             ReleaseLocks();
         }
 
+        /// <summary>
+        /// The requests held for the app stay until its helper confirms its lock of sleep (a named mutex), at most 60 s after
+        /// this owner started it – not after the owner's start, an installation takes longer – and end at „Odcinam się”
+        /// (T523). An app found running already sent its helper its state: nothing to wait for.
+        /// </summary>
+        void HoldUntilConfirmed()
+        {
+            if (!holdForApp || appStartedTick == null) return;
+            holdForApp = false;
+            Step("potwierdzenie blokady", StepLimitMs + 5000);
+            bool confirmed;
+            while (!(confirmed = PowerConfirm.Exists(userData)) && unchecked(Environment.TickCount - appStartedTick.Value) < ConfirmSleepMs && Plan.HoldForApp(userData)) Thread.Sleep(500);
+            Log.Info(confirmed ? "pomocnik aplikacji potwierdził blokadę usypiania" : "blokada usypiania bez potwierdzenia pomocnika – zwalniam");
+        }
+
         /// <summary>The power request, the signal, guard.lock and the mutex (each once; the windows stay).</summary>
         void ReleaseLocks()
         {
+            HoldUntilConfirmed();
             power.Dispose();
             if (heartbeat != null) { heartbeat.Dispose(); heartbeat = null; }
             lock (lockGate)
@@ -562,6 +587,7 @@ namespace RegulatedDay
             string line = "";
             foreach (string s in a) line += (line.Length > 0 ? " " : "") + Launch.Quote(s);
             int pid = Launch.Detached(exe, line, Path.GetDirectoryName(exe));
+            appStartedTick = Environment.TickCount;
             Log.Info("aplikacja uruchomiona (pid " + pid + ", " + line + ")");
             return true;
         }
@@ -669,8 +695,16 @@ namespace RegulatedDay
         /// <summary>covered: the file covers now; blocking: a session or a class runs now or starts within 30 min.</summary>
         public static void Read(string userData, out bool covered, out bool blocking)
         {
+            bool disconnected;
+            Read(userData, out covered, out blocking, out disconnected);
+        }
+
+        /// <summary>… and disconnected: „Odcinam się” runs now (the app writes `disconnectedUntil`, the end of its day).</summary>
+        public static void Read(string userData, out bool covered, out bool blocking, out bool disconnected)
+        {
             covered = false;
             blocking = false;
+            disconnected = false;
             string text;
             try { text = SharedFile.Read(Path.Combine(userData, "plan-blocks.json")); }
             catch (Exception) { return; }
@@ -679,6 +713,7 @@ namespace RegulatedDay
             try { o = Json.ParseObject(text); } catch (FormatException) { return; }
             long now = Native.NowMs();
             covered = now >= Json.Long(o, "from", long.MaxValue) && now < Json.Long(o, "to", 0);
+            disconnected = now < Json.Long(o, "disconnectedUntil", 0);
             List<object> blocks = o.ContainsKey("blocks") ? o["blocks"] as List<object> : null;
             if (blocks == null) return;
             foreach (object b in blocks)
@@ -706,6 +741,17 @@ namespace RegulatedDay
             bool covered, blocking;
             Read(userData, out covered, out blocking);
             return blocking;
+        }
+
+        /// <summary>
+        /// The guard holds the requests of sleep and of the screen for the app it starts: in a session or a class and 30 min
+        /// before, never in „Odcinam się” (spec „Instalacja, aktualizacje i log”, T523).
+        /// </summary>
+        public static bool HoldForApp(string userData)
+        {
+            bool covered, blocking, disconnected;
+            Read(userData, out covered, out blocking, out disconnected);
+            return blocking && !disconnected;
         }
     }
 

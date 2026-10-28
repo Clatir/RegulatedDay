@@ -176,7 +176,13 @@ const widget = new WidgetEngine({
   clickedApp: () => hub?.clickedApp(),
   modePrefs: () => ({ sessionMode: prefs().sessionMode, classMode: prefs().classMode }),
   notices: () => prefs().notices,
-  notify: (n) => notify(n, log),
+  notify: (n, onFailed) => notify(n, log, onFailed),
+  notificationsTaken: async () => {
+    if (!helper?.running) return true
+    const s = await helper.request('notificationState', {}, 3000).catch(() => null)
+    return typeof s?.state !== 'string' || s.state === 'accepts' || s.state === 'unknown'
+  },
+  present: () => powerMonitor.getSystemIdleTime() < 120 && powerMonitor.getSystemIdleState(120) !== 'locked',
   showMain: (page) => showMainWindow(page),
   emit: (view) => showWidget(view),
   log,

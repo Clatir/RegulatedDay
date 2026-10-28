@@ -90,6 +90,14 @@ describe('komputer prowadzący', () => {
     expect(decideLeader(input({ current: 'pca', peers: [handedOver] })).iLead).toBe(true)
   })
 
+  it('komputer z nowszymi regułami przejmuje dopiero, gdy prowadzący ze starszymi go wskaże – nigdy dwaj naraz (A8-08)', () => {
+    const self = { rulesVersion: 2 }
+    const oldLeading = peer('pcb', T - 60_000, T - 60_000, { rulesVersion: 1, seenLeader: 'pcb' })
+    expect(decideLeader(input({ current: 'pcb', currentClaimed: true, self, peers: [oldLeading] })).iLead).toBe(false)
+    const handed = peer('pcb', T - 60_000, T - 30_000, { rulesVersion: 1, seenLeader: 'pca' })
+    expect(decideLeader(input({ current: 'pcb', currentClaimed: true, self, peers: [handed] })).iLead).toBe(true)
+  })
+
   it('wersja z zapisaną awarią nie liczy się jako najnowsza', () => {
     const crashedNewer = peer('pcb', T - 5 * 60_000, T - 60_000, { rulesVersion: 2 }, true)
     expect(decideLeader(input({ current: 'pca', peers: [crashedNewer] })).iLead).toBe(true)

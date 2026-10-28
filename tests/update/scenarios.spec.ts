@@ -391,6 +391,9 @@ test('cztery logowania z „odłożono”, strażnik padający po „odłożono�
     }
     await expect.poll(appRunning, { timeout: 60_000 }).toBe(true)
     expect(installed()!.version).toBe(CURRENT)
+    // In the session the guard held the lock of sleep and the screen for the app it started, until its helper's
+    // confirmation – the app has no data folder here, so none came: at most 60 s (A5-07).
+    expect(await readText(join(productionData(), 'logs', 'guard.log'))).toContain('blokada usypiania bez potwierdzenia pomocnika')
     // The session is over: the next logon installs X.
     await stopAll()
     plan(false)

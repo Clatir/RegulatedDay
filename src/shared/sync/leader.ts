@@ -151,12 +151,10 @@ export function decideLeader(inp: LeaderInput): LeaderDecision {
   const handedTo = claimed && leaderPeer?.presence.seenLeader && leaderPeer.presence.seenLeader !== current ? leaderPeer.presence.seenLeader : null
   const closed = leaderPeer?.presence.state === 'closed'
   const silent = !leaderPeer || now - leaderPeer.fileSeenAt >= SILENT_MS
-  if (current && !mayLead(current) && mayLead(self.computer)) {
-    // The leader runs older rules while this one has the newest and presence: it gives way to the latest present.
-    const next = latest()
-    return decide(next, 'prowadzący ma starszą wersję reguł')
-  }
-  if (handedTo) return decide(handedTo, 'prowadzący oddał prowadzenie')
+  // The leader runs older rules while this one has the newest and presence: it gives way by itself (its own `mayLead`),
+  // pointing at the latest present – taken over only then, as at any change of computers, so two never lead at once
+  // while its file comes (A8-08); silent or closed – as below.
+  if (handedTo) return decide(handedTo, current && !mayLead(current) ? 'prowadzący ze starszymi regułami oddał prowadzenie' : 'prowadzący oddał prowadzenie')
   if (closed || silent) return decide(latest(current), closed ? 'prowadzący zamknięty' : 'prowadzący bez obecności od 10 min')
   return decide(current, 'prowadzi inny komputer')
 }

@@ -546,7 +546,7 @@ export class DataFolder {
     for (const e of entries) {
       const id = `${this.o.computer}-${at.toString(36)}-${(this.editSeq++).toString(36)}`
       ids.push(id)
-      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true } : {}) })
+      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}) })
     }
     // All of them on the disk at once, or none (A3-15): a save that fails leaves no part of it to be written later.
     this.queue.add(...queued)
@@ -1470,10 +1470,14 @@ export class DataFolder {
       need = { system: need.system || n.system, display: need.display || n.display, reason: need.reason ?? n.reason }
       const t = timerNow(state)
       passive ||= n.system && [t.fg, ...t.bg].some((x) => x != null && placeOf(x.info.rules, x.info.variantId) === 'passive')
+      if (day === today) this.disconnectedNow = state.facts.disconnect.some((d) => d.to === Number.POSITIVE_INFINITY)
     }
     this.passiveHold = passive
     return need
   }
+
+  /** „Odcinam się” runs on today's day (by the last `powerNeed`): the guard never holds the lock of sleep then (T523). */
+  disconnectedNow = false
 
   /** This computer holds the block of sleep of a passive block running now (by the last `powerNeed`, D331). */
   private passiveHold = false

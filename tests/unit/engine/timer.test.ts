@@ -399,6 +399,17 @@ describe('poprawki po przeglądzie E4a', () => {
     expect(leader(s, '08:10', { boundary: true })).toEqual([])
   })
 
+  it('po „Cofnij” zatwierdzenia minuty liczą się według propozycji: praca po maksimum to przekroczenie (A1-15)', () => {
+    const s = day().observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    leader(s, '08:05', { boundary: true })
+    click(s, '08:07', { a: 'undo', target: s.state('08:06').facts.autos[0]!.id })
+    const st = s.state('23:30')
+    expect(st.boundary.approved).toBeNull()
+    expect(st.extensionMin).toBeGreaterThan(0)
+    expect(st.overrunMin).toBeGreaterThan(0)
+  })
+
   it('cofnięcie korekty przywraca cofnięte działanie; korekty prowadzącego nie ma na liście', () => {
     const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })

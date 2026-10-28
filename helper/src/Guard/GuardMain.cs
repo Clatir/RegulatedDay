@@ -101,6 +101,13 @@ namespace RegulatedDay
                     .Set("onMains", mains.HasValue ? (object)mains.Value : null)
                     .Set("batterySaver", saver.HasValue ? (object)saver.Value : null);
             }
+            if (query == "sleepHeld")
+            {
+                // CI: the confirmation of the app helper's lock of sleep, as the owner waits for it (T523).
+                string dir = Arg(args, "--user-data");
+                if (dir == null) throw new ArgumentException("brak --user-data");
+                return new JObj().Set("ok", true).Set("held", PowerConfirm.Exists(dir)).Set("name", PowerConfirm.Name(dir));
+            }
             if (query == "process")
             {
                 int pid = int.Parse(Arg(args, "--pid"), CultureInfo.InvariantCulture);

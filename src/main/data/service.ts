@@ -109,6 +109,8 @@ export class DataService {
   private stopped = false
   private lastBackupTry = 0
   private lastGuardPlan = 0
+  /** „Odcinam się” as the guard's plan file says it now. */
+  private planDisconnected = false
   private lockedAt: number | null = null
   private lastExtraCopy = 0
   private systemEnding = false
@@ -247,6 +249,8 @@ export class DataService {
       if (this.o.onPower) {
         try {
           this.o.onPower(await this.folder.powerNeed(this.lastInput, now))
+          // „Odcinam się” began or ended: the guard's plan says it at once (T523).
+          if (this.folder.disconnectedNow !== this.planDisconnected) this.lastGuardPlan = 0
         } catch (e) {
           this.o.log('warn', 'stan blokady usypiania nieznany', e)
         }
@@ -323,6 +327,7 @@ export class DataService {
   async refreshGuardPlan(): Promise<void> {
     if (!this.o.writeGuardPlan) return
     this.lastGuardPlan = this.now()
+    const disconnected = this.folder.disconnectedNow
     try {
       const blocks: GuardBlock[] = []
       const today = logicalDayOf(this.now())
@@ -341,7 +346,9 @@ export class DataService {
           blocks.push({ kind, start, end: start + b.durationMin * 60_000 })
         }
       }
-      writePlan(this.o.userData, blocks, dayStart(today))
+      // „Odcinam się” lasts at most to the end of its logical day for the guard.
+      writePlan(this.o.userData, blocks, dayStart(today), disconnected ? dayStart(addDays(today, 1)) : null)
+      this.planDisconnected = disconnected
     } catch (e) {
       // Unknown records (a file that cannot be read now): the next hour tries again.
       this.lastGuardPlan = 0

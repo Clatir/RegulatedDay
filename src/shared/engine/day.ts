@@ -766,12 +766,19 @@ export function computeDay(ctx: DayContext): DayState {
       if (seg) info = { cls: seg.cls, upfront: seg.upfront, recorded: true }
       else {
         const appr = approvedAt(k)
-        if (!appr || k < appr.boundary) info = { cls: 'in', upfront: (f & F_UPFRONT) !== 0, recorded: false }
+        // An approval undone („Cofnij”) leaves the boundary open: the minutes count by the proposal in force then (spec),
+        // so work past the maximum is still an overrun (A1-15).
+        const reopened = !appr && facts.undos.some((u) => u < k) && (facts.approvals.some((a) => a.at < k) || (implicit != null && implicit.at < k))
+        if (!appr && !reopened) info = { cls: 'in', upfront: (f & F_UPFRONT) !== 0, recorded: false }
         else {
           ev = evaluate(k, shift, false, false, known)
-          const empty = ev.pool.min <= 0
-          const pastMax = k >= ev.max && !(f & F_SSOUT)
-          info = { cls: empty ? 'empty' : pastMax ? 'max' : 'after', upfront: (f & F_UPFRONT) !== 0, recorded: false }
+          const boundary = appr ? appr.boundary : ev.proposal
+          if (boundary == null || k < boundary) info = { cls: 'in', upfront: (f & F_UPFRONT) !== 0, recorded: false }
+          else {
+            const empty = ev.pool.min <= 0
+            const pastMax = k >= ev.max && !(f & F_SSOUT)
+            info = { cls: empty ? 'empty' : pastMax ? 'max' : 'after', upfront: (f & F_UPFRONT) !== 0, recorded: false }
+          }
         }
       }
       minutes.set(k, info)
