@@ -220,3 +220,90 @@ describe('widok paska z silnika', () => {
     expect(view(s, '16:25').block?.name).toBe('Sesja tradingowa')
   })
 })
+
+describe('linie chwil dnia w pasku (A1-12)', () => {
+  it('blok zakotwiczony po końcu kotwicy: „Zacznij · Zaparkuj · Koniec pracy” z kropką; znika po starcie', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'j', cat: 'inne', after: 'a', min: 30 })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    expect(view(s, '08:30').lines.some((l) => l.id === 'anchor:j')).toBe(false)
+    s.write([{ k: 'block.end', block: 'a', at: s.at('09:05'), done: true, rule: null }], s.at('09:05'))
+    const line = view(s, '09:06').lines.find((l) => l.id === 'anchor:j')!
+    expect(line).toMatchObject({ dot: true })
+    expect(line.actions.map((a) => a.label)).toEqual(['Zacznij', 'Zaparkuj', 'Koniec pracy'])
+    click(s, '09:07', { a: 'start', block: 'j' })
+    expect(view(s, '09:08').lines.some((l) => l.id === 'anchor:j')).toBe(false)
+  })
+
+  it('po „Koniec pracy” stały blok pracy przed sobą: „… o 14:00 zostaje · Odwołaj”; blok stały skończony planem: „nie przedłużono · Przedłuż” przez 30 min', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'f', cat: 'inne', at: '14:00', min: 60, fixed: true })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    click(s, '09:00', { a: 'workEnd' })
+    expect(view(s, '09:05').lines.find((l) => l.id === 'fixedLeft:f')).toMatchObject({ text: 'Inne obowiązki o 14:00 zostaje', actions: [{ id: 'cancel', label: 'Odwołaj' }] })
+    const s2 = new Scenario({ date: DATE, plan: [block({ id: 'f', cat: 'inne', at: '14:00', min: 60, fixed: true })] }).observe('07:00', null)
+    leader(s2, '14:00')
+    leader(s2, '15:11')
+    expect(view(s2, '15:12').lines.some((l) => l.id === 'notExtended:f')).toBe(true)
+    expect(view(s2, '15:31').lines.some((l) => l.id === 'notExtended:f')).toBe(false)
+  })
+})
+
+describe('linie chwil dnia po przeglądzie 0.21.0', () => {
+  it('druga zmiana po „Koniec pracy” zostaje bez pytania – żadnego „Odwołaj”', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'ds', cat: 'inne', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    click(s, '09:00', { a: 'workEnd' })
+    expect(view(s, '09:05').lines.filter((l) => l.id.startsWith('fixedLeft:'))).toEqual([])
+  })
+
+  it('„nie przedłużono” liczy 30 min od końca z przedłużeniem', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'f', cat: 'inne', at: '14:00', min: 60, fixed: true })] }).observe('07:00', null)
+    leader(s, '14:00')
+    expect(click(s, '14:50', { a: 'extend', minutes: 30, confirm: true }).ok).toBe(true)
+    leader(s, '15:41')
+    expect(s.state('15:42').facts.blocks.get('f')!.endedAt).not.toBeNull()
+    expect(view(s, '15:42').lines.some((l) => l.id === 'notExtended:f')).toBe(true)
+    expect(view(s, '16:01').lines.some((l) => l.id === 'notExtended:f')).toBe(false)
+  })
+
+  it('sesja skończona planem: „Sesja … – nie przedłużono · Przedłuż” przez 30 min (D227)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'ny', cat: 'sesja', at: '14:00', min: 60, fixed: true })] }).observe('07:00', null)
+    click(s, '14:00', { a: 'start', block: 'ny' })
+    leader(s, '15:01')
+    expect(s.state('15:02').facts.blocks.get('ny')!.endedAt).not.toBeNull()
+    expect(view(s, '15:05').lines.find((l) => l.id === 'notExtended:ny')).toMatchObject({ text: 'Sesja tradingowa – nie przedłużono' })
+    expect(view(s, '15:31').lines.some((l) => l.id === 'notExtended:ny')).toBe(false)
+  })
+
+  it('„… zostaje · Odwołaj” pyta raz: praca po „Koniec pracy” zabiera linię na dobre', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '13:00', min: 60 }), block({ id: 'f', cat: 'inne', at: '15:30', min: 60, fixed: true })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    click(s, '11:00', { a: 'workEnd' })
+    expect(view(s, '11:05').lines.some((l) => l.id === 'fixedLeft:f')).toBe(true)
+    click(s, '13:00', { a: 'start', block: 'b' })
+    click(s, '14:00', { a: 'finish', block: 'b' })
+    expect(view(s, '14:05').lines.some((l) => l.id === 'fixedLeft:f')).toBe(false)
+  })
+
+  it('blok zakotwiczony: kropka tylko, gdy nic nie biegnie, i nigdy w „mniej pytań”', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'j', cat: 'inne', after: 'a', min: 30 }), block({ id: 'k', cat: 'inne', at: '10:00', min: 60 })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    click(s, '09:00', { a: 'finish', block: 'a' })
+    expect(view(s, '09:05').lines.find((l) => l.id === 'anchor:j')?.dot).toBe(true)
+    click(s, '09:10', { a: 'start', block: 'k' })
+    expect(view(s, '09:20').lines.find((l) => l.id === 'anchor:j')?.dot).toBe(false)
+    click(s, '09:30', { a: 'finish', block: 'k' })
+    click(s, '09:31', { a: 'fewer' })
+    expect(view(s, '09:35').lines.find((l) => l.id === 'anchor:j')?.dot).toBe(false)
+  })
+
+  it('„Odwołaj” ostatniego stałego bloku pracy potwierdza koniec i dopiero wtedy parkuje elastyczną pracę (D216)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'f', cat: 'inne', at: '14:00', min: 60, fixed: true }), block({ id: 'b', cat: 'inne', at: '16:00', min: 60 })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    click(s, '09:00', { a: 'workEnd' })
+    expect(s.state('09:01').facts.blocks.get('b')?.parkedAt ?? null).toBeNull()
+    expect(click(s, '09:05', { a: 'cancel', block: 'f' }).ok).toBe(true)
+    const st = s.state('09:06')
+    expect(st.facts.blocks.get('b')?.parkedAt ?? null).not.toBeNull()
+    expect(st.ends.at(-1)?.confirmed).toBe(true)
+  })
+})

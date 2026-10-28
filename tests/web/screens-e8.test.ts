@@ -18,6 +18,8 @@ import { resetSettingsFrom, saveSettings, setFromDate, useSettingsFrom } from '@
 import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 import { finishRecords, newLecture, patchWizard, resetWizard, useWizard } from '@renderer/features/wizard/wizardStore'
+import { moveToNowPatch } from '@renderer/features/today/TodayPage'
+import { placeLogical } from '@shared/time/day'
 
 describe('kolejność kroków rutyny (A6-02)', () => {
   const before = { id: 'r', name: 'Poranna', normal: [{ id: 'woda', name: 'woda', min: 2 }, { id: 'kot', name: 'kot', min: 5 }] }
@@ -142,5 +144,13 @@ describe('zmiana „od dziś” przy dniu, którego nie da się teraz odczytać 
     expect(edits).toBe(0)
     expect(useUi.getState().toasts.some((t) => t.text.includes('„od dziś” nie została zapisana'))).toBe(true)
     resetSettingsFrom()
+  })
+})
+
+describe('„Przesuń na teraz” (A1-04, przegląd 0.21.0)', () => {
+  it('nowy start to pełna minuta teraz – plik dnia przyjmuje tylko pełne minuty – bez kotwicy', () => {
+    const p = moveToNowPatch('2026-10-28', placeLogical('2026-10-28', 19 * 60 + 40) + 37_000)
+    expect(p).toEqual({ startMin: 19 * 60 + 40, anchor: null })
+    expect(planBlock({ id: 'ds', categoryId: 'inne', durationMin: 60, ...p })?.startMin).toBe(19 * 60 + 40)
   })
 })

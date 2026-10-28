@@ -351,6 +351,29 @@ describe('widget w procesie głównym', () => {
     expect(await extends_()).toEqual([15])
   })
 
+  it('„Przedłuż” z linii „nie przedłużono”: koszt jako „Przedłuż +15” z krokami ±15 min, potwierdzenie przedłuża ten blok (przegląd 0.21.0)', async () => {
+    writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'f', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: true, origin: 'user' }] }))
+    const { w, folder, at, clock } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 10 * 60 + 30), auto: false }])
+    at(10 * 60)
+    await folder.check()
+    expect((await folder.timerClick({ a: 'start', block: 'f', confirm: true })).ok).toBe(true)
+    at(11 * 60 + 11)
+    await folder.check()
+    await w.refresh()
+    const line = w.current().lines.find((l) => l.id === 'notExtended:f')!
+    expect(line).toBeTruthy()
+    await w.act('line', `${line.id}|extend`, 'bar')
+    expect(w.current().pending).toMatchObject({ steps: true })
+    expect(w.current().pending!.text).toMatch(/^Przedłuż \+15: /)
+    clock.now += 1_000
+    await w.act('extendStep', '15', 'bar')
+    expect(w.current().pending!.text).toMatch(/^Przedłuż \+30: /)
+    clock.now += 1_000
+    await w.act('confirm', undefined, 'bar')
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'block.extend').map((e) => [(e as { block?: string }).block, (e as { minutes?: number }).minutes])).toEqual([['f', 30]])
+  })
+
   it('koszt „Przedłuż” bloku w tle stoi w miejscu jego przycisku', async () => {
     writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'w', categoryId: 'inne', startMin: 9 * 60, durationMin: 90, fixed: true, background: true, origin: 'user' }] }))
     const { w, folder, at } = await make()

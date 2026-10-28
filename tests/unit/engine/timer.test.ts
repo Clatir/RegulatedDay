@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
 import { answerEvents, autoActions, questionsOf, type AutoEvent } from '@shared/engine/auto'
+import { blockEvidence } from '@shared/engine/game'
 import { requestAction } from '@shared/engine/requests'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { block, hhmm, lm, Scenario } from './dsl'
@@ -266,7 +267,7 @@ describe('działania automatyczne prowadzącego', () => {
     ])
     expect(fgId(s, '09:20')).toBe('a')
     const q = questions(s, '09:20').find((x) => x.kind === 'absence')!
-    expect(q.answers.map((x) => x.id)).toEqual(['keep', 'end', 'leave'])
+    expect(q.answers.map((x) => x.id)).toEqual(['keep', 'end', 'leave', 'meal', 'regen', 'request'])
     // „Zostawić”: the absence counts to the block.
     const t = s.at('09:21')
     s.write(answerEvents(s.stateAt(t), q, 'leave', t)!, t)
@@ -481,5 +482,148 @@ describe('dwa komputery', () => {
 describe('liczby pomocnicze', () => {
   it('lm i godziny w testach', () => {
     expect(lm('08:00')).toBe(480)
+  })
+})
+
+describe('druga zmiana poza swoim planowanym czasem (spec „Druga zmiana”, A1-04)', () => {
+  const plan = () => [block({ id: 'a', cat: 'inne', at: '08:00', min: 120 }), block({ id: 'ds', cat: 'sesja', at: '20:00', min: 60, tag: 'secondShift' })]
+
+  it('wcześniejszy start: koszt minut przed oknem (nigdy przekroczenie) z „Przesuń na teraz”; w oknie – bez kosztu', () => {
+    const s = day(plan()).approve('09:15', '10:15')
+    const early = click(s, '19:40', { a: 'start', block: 'ds' })
+    expect(early.ok).toBe(false)
+    expect(early.confirm).toMatchObject({ block: 'ds', minutes: 20, overrun: false, moveToNow: true })
+    const s2 = day(plan()).approve('09:15', '10:15')
+    expect(click(s2, '20:00', { a: 'start', block: 'ds' }).ok).toBe(true)
+  })
+
+  it('„Przedłuż” drugiej zmiany za jej planowany koniec: zwykłe przedłużenie z kosztem, bez „Przesuń na teraz”', () => {
+    const s = day(plan()).approve('09:15', '10:15')
+    expect(click(s, '20:00', { a: 'start', block: 'ds' }).ok).toBe(true)
+    const r = click(s, '20:55', { a: 'extend', minutes: 30 })
+    expect(r.ok).toBe(false)
+    expect(r.confirm).toMatchObject({ block: 'ds', minutes: 30, overrun: false })
+    expect(r.confirm!.moveToNow).toBeUndefined()
+  })
+
+  // A flexible second shift in its window of „Zacznij”, and a template block anchored to it.
+  const flex = () => [block({ id: 'a', cat: 'inne', at: '08:00', min: 120 }), block({ id: 'ds', cat: 'inne', at: '20:00', min: 60, tag: 'secondShift' }), block({ id: 'po', cat: 'inne', after: 'ds', min: 30 })]
+
+  it('start później w swoim oknie kosztuje nic – tylko wcześniejszy start i „Przedłuż” (przegląd 0.21.0)', () => {
+    const s = day(flex()).approve('09:15', '10:15')
+    const r = click(s, '20:05', { a: 'start', block: 'ds' })
+    expect([r.ok, r.confirm]).toEqual([true, null])
+  })
+
+  it('blok zakotwiczony do drugiej zmiany nie jest drugą zmianą: bez kosztu i bez „Przesuń na teraz” (przegląd 0.21.0)', () => {
+    const s = day(flex()).approve('09:15', '10:15')
+    const r = click(s, '19:00', { a: 'start', block: 'po' })
+    expect([r.ok, r.confirm]).toEqual([true, null])
+  })
+})
+
+describe('odpowiedzi na nieobecność po przeglądzie 0.21.0', () => {
+  const answer = (s: Scenario, time: string, answerId: string) => {
+    const q = questions(s, time).find((x) => x.kind === 'absence')!
+    const t = s.at(time)
+    s.write(answerEvents(s.stateAt(t), q, answerId, t)!, t)
+  }
+  // Work 08:00–11:00 with lunch at 09:00 in the plan; away 08:30–09:15, counted out by the leader.
+  const away = () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 180 }), block({ id: 'obiad', cat: 'posilek', at: '09:00', min: 30 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    s.gap('08:30', '09:15')
+    leader(s, '09:16')
+    return s
+  }
+
+  it('blok, który po powrocie biegł dalej i się skończył, zostaje z odliczoną nieobecnością – minuty nie liczą się dwa razy', () => {
+    const s = away()
+    expect(click(s, '10:00', { a: 'finish', block: 'a' }).ok).toBe(true)
+    answer(s, '10:05', 'meal')
+    const st = s.state('10:06')
+    const a = st.facts.blocks.get('a')!
+    expect(a.endedAt).toBe(lm('10:00') - 240)
+    expect(a.runs.map((r) => [r.from, r.to])).toEqual([
+      [lm('08:00') - 240, lm('08:30') - 240],
+      [lm('09:15') - 240, lm('10:00') - 240]
+    ])
+    const meal = st.facts.blocks.get('obiad')!
+    expect([meal.startedAt, meal.endedAt]).toEqual([lm('08:30') - 240, lm('09:15') - 240])
+  })
+
+  it('koniec w chwili odejścia z odpowiedzi, która tylko nazywa nieobecność, nie jest Twoim końcem (LEFT_RULES)', () => {
+    const s = away()
+    answer(s, '09:20', 'regen')
+    const t = s.at('09:21')
+    const ev = blockEvidence(s.contextAt(t), s.stateAt(t)).find((e) => e.f.id === 'a')!
+    expect(ev.f.endedAt).toBe(lm('08:30') - 240)
+    expect(ev.givenEnd).toBe(false)
+  })
+
+  it('„byłem na prośbie”, gdy prośba po fakcie już obejmuje ten czas: druga się nie dopisuje', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    s.gap('08:40', '09:30')
+    leader(s, '09:05')
+    leader(s, '09:31')
+    const t = s.at('09:32')
+    const r = requestAction(s.stateAt(t), { a: 'requestAfter', request: 'r1', person: null, from: s.at('08:40'), to: s.at('09:30') }, t)
+    expect(r.ok).toBe(true)
+    if (r.ok) s.write(r.events, t)
+    answer(s, '09:35', 'request')
+    expect(s.state('09:36').facts.requests.map((x) => x.id)).toEqual(['r1'])
+  })
+})
+
+describe('czym była nieobecność: posiłek, regeneracja, prośba (spec „Bezczynność i nieobecność”, A1-09)', () => {
+  const answer = (s: Scenario, time: string, answerId: string) => {
+    const q = questions(s, time).find((x) => x.kind === 'absence')!
+    const t = s.at(time)
+    s.write(answerEvents(s.stateAt(t), q, answerId, t)!, t)
+  }
+
+  it('„posiłek” przy powrocie przed planowanym końcem: blok kończy się w chwili odejścia, obiad z planu odhaczony z czasami nieobecności, z „Cofnij” obu', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 180 }), block({ id: 'obiad', cat: 'posilek', at: '09:00', min: 30 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    s.gap('08:30', '09:15')
+    leader(s, '09:16')
+    answer(s, '09:20', 'meal')
+    const st = s.state('09:21')
+    expect(st.facts.blocks.get('a')!.endedAt).toBe(lm('08:30') - 240)
+    const meal = st.facts.blocks.get('obiad')!
+    expect([meal.startedAt, meal.endedAt]).toEqual([lm('08:30') - 240, lm('09:15') - 240])
+    // One line in „zrobione automatycznie”; its „Cofnij” takes the meal's start back too.
+    const end = st.facts.autos.find((x) => x.rule === 'absenceMeal' && x.k === 'block.end')!
+    click(s, '09:22', { a: 'undo', target: end.id })
+    expect(s.state('09:23').facts.blocks.get('obiad')?.startedAt ?? null).toBeNull()
+  })
+
+  it('„posiłek” bez posiłku w planie: żaden blok, ale nieobecność nie jest odpoczynkiem', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 180 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    s.gap('08:30', '09:15')
+    leader(s, '09:16')
+    answer(s, '09:20', 'meal')
+    expect(s.state('09:21').facts.notRest).toEqual([expect.objectContaining({ from: lm('08:30') - 240, to: lm('09:15') - 240 })])
+  })
+
+  it('„regeneracja” i „byłem na prośbie” po planowanym końcu: koniec w chwili odejścia zostaje, nieobecność jest regeneracją albo prośbą po fakcie', () => {
+    const make = () => {
+      const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]).observe('07:00', null)
+      click(s, '08:00', { a: 'start', block: 'a' })
+      s.gap('08:40', '09:30')
+      leader(s, '09:05')
+      leader(s, '09:31')
+      return s
+    }
+    const r = make()
+    answer(r, '09:35', 'regen')
+    const regen = [...r.state('09:36').facts.blocks.values()].find((b) => b.planned?.categoryId === 'regeneracja')!
+    expect([regen.startedAt, regen.endedAt]).toEqual([lm('08:40') - 240, lm('09:30') - 240])
+    expect(r.state('09:36').facts.blocks.get('a')!.endedAt).toBe(lm('08:40') - 240)
+    const q = make()
+    answer(q, '09:35', 'request')
+    expect(q.state('09:36').facts.requests).toEqual([expect.objectContaining({ mode: 'after', person: null, from: lm('08:40') - 240, to: lm('09:30') - 240 })])
   })
 })

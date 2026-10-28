@@ -14,6 +14,8 @@ export interface Toast {
   text: string
   kind: 'info' | 'error' | 'success'
   action?: { label: string; run: () => void }
+  /** A second way out (the second shift's „Przesuń na teraz” beside „Potwierdź”). */
+  action2?: { label: string; run: () => void }
   /** How long it stays (ms). */
   ms: number
 }
@@ -62,9 +64,9 @@ export function closeToast(id: number): void {
   useUi.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
 }
 
-export function toast(text: string, kind: Toast['kind'] = 'info', ms = 5000, action?: Toast['action']): number {
+export function toast(text: string, kind: Toast['kind'] = 'info', ms = 5000, action?: Toast['action'], action2?: Toast['action2']): number {
   const id = nextToast++
-  useUi.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, kind, ms, action }] }))
+  useUi.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, kind, ms, action, ...(action2 ? { action2 } : {}) }] }))
   timers.set(
     id,
     setTimeout(() => closeToast(id), ms)

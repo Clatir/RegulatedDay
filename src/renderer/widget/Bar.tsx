@@ -630,9 +630,19 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
         {pending && !inPlace && (
           <div className="flex flex-wrap items-center gap-1.5" data-testid="bar-pending">
             <span className="text-[12px] text-fg">{pending.text}</span>
+            {pending.steps && (
+              <BarButton mode={mode} testId="bar-pending-less" onAct={() => act('extendStep', '-15')}>
+                −15
+              </BarButton>
+            )}
             <BarButton mode={mode} accent testId="bar-confirm" onAct={() => act('confirm')}>
               Potwierdź
             </BarButton>
+            {pending.steps && (
+              <BarButton mode={mode} testId="bar-pending-more" onAct={() => act('extendStep', '15')}>
+                +15
+              </BarButton>
+            )}
           </div>
         )}
         {view.note && view.note.until > now && (

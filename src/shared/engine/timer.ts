@@ -12,6 +12,7 @@
  */
 import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
+import { workedUntilOf } from './explain'
 import { OPEN, isRunning, lastRunEnd, ranMinutes, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
 
@@ -84,6 +85,8 @@ export type TimerAction =
   | { a: 'restart'; block: string }
   /** An answer to a proposal of the bar (the break, the solitude): recorded, so it is shown once. */
   | { a: 'mark'; question: string; answer: string }
+  /** „Pracowałem do teraz” on the bar: the time to explain after a work block answered „praca” to now, the end of work then. */
+  | { a: 'workedUntil'; explain: string }
 
 /** The cost a first click shows (spec: „przedłużenie · −40 min puli”, „pora snu +40 min”, „przekroczenie”). */
 export interface ActionCost {
@@ -95,6 +98,8 @@ export interface ActionCost {
   overrun: boolean
   /** The pool of projects is empty: they move the bedtime. */
   bedtime: boolean
+  /** The second shift started before its planned time: „Przesuń na teraz” moves it and starts it without the cost. */
+  moveToNow?: boolean
 }
 
 export type ActionResult =
@@ -117,7 +122,7 @@ export function plannedEndOf(state: DayState, info: BlockInfo, f: BlockFact, now
 }
 
 /** The first instant of the second shift (index), or the end of the grid. */
-function secondShiftStart(state: DayState): number {
+export function secondShiftStart(state: DayState): number {
   const s = state.blocks.filter((b) => b.secondShift && b.start != null).map((b) => b.start!)
   return s.length ? Math.min(...s) : Number.POSITIVE_INFINITY
 }
@@ -200,10 +205,24 @@ function nextBlock(state: DayState, fg: TimerBlock | null, paused: TimerBlock[],
  * The cost of work in [from, to) (indexes) after the approved boundary that nobody confirmed: none before the approval,
  * none for blocks that do not set the boundary, the plan of lectures, a „zjazd”, or a block added without an exchange.
  */
-export function workCost(state: DayState, info: BlockInfo, from: number, to: number): ActionCost | null {
+export function workCost(state: DayState, info: BlockInfo, from: number, to: number, extend = false): ActionCost | null {
   const boundary = state.boundary.approved
-  if (boundary == null || !isBoundaryWork(info) || info.lectureOrCommute || to <= from) return null
+  if (boundary == null || to <= from) return null
   if (state.facts.blocks.get(info.id)?.addConfirmedAt != null) return null
+  // The second shift's own minutes outside its planned time – those of an earlier start, and those of „Przedłuż”: an
+  // ordinary extension, one confirmation, never an overrun; „Przesuń na teraz” beside the cost of an earlier start (spec
+  // „Druga zmiana”, A1-04). A start later in its window, or a resume, costs nothing; a block anchored to it is no second
+  // shift of its own (it never sets the boundary).
+  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  if (info.secondShift) {
+    if (info.anchor && byId.get(info.anchor)?.secondShift) return null
+    const span = plannedSpan(info, byId)
+    if (!span) return null
+    const minutes = extend ? to - from : Math.max(0, Math.min(to, span.start) - from)
+    if (minutes <= 0) return null
+    return { block: info.id, minutes, overrun: false, bedtime: state.pool.empty, ...(!extend && from < span.start ? { moveToNow: true } : {}) }
+  }
+  if (!isBoundaryWork(info) || info.lectureOrCommute) return null
   const minutes = Math.max(0, to - Math.max(from, boundary))
   if (minutes <= 0) return null
   return { block: info.id, minutes, overrun: to > state.boundary.max, bedtime: state.pool.empty }
@@ -350,7 +369,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
         if (info?.fixed && ended?.endedAt != null && ended.endId && (ended.endRule === 'plan' || ended.endRule === 'fixedNoReaction')) {
           const end = plannedEndOf(state, info, ended)
           if (m > end + FIXED_EXTEND_WINDOW_MIN) return no('po 30 min od planowanego końca blok stały się nie przedłuża')
-          const cost = workCost(state, info, Math.max(end, m), end + act.minutes)
+          const cost = workCost(state, info, Math.max(end, m), end + act.minutes, true)
           if (cost && !act.confirm) return no('koszt do potwierdzenia', cost)
           return yes([
             { k: 'undo', at, target: ended.endId, reason: 'extend' },
@@ -361,7 +380,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       }
       if (target.info.fixed && m > target.plannedEnd + FIXED_EXTEND_WINDOW_MIN) return no('po 30 min od planowanego końca blok stały się nie przedłuża')
       const from = Math.max(target.plannedEnd, m)
-      const cost = workCost(state, target.info, from, from + act.minutes - Math.max(0, m - target.plannedEnd))
+      const cost = workCost(state, target.info, from, from + act.minutes - Math.max(0, m - target.plannedEnd), true)
       if (cost && !act.confirm) return no('koszt do potwierdzenia', cost)
       return yes([{ k: 'block.extend', block: target.info.id, at, minutes: act.minutes }])
     }
@@ -397,7 +416,11 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       const f = state.facts.blocks.get(act.block)
       if (!info) return no('nie ma takiego bloku w planie dnia')
       if (f?.startedAt != null) return no('ten blok już się zaczął')
-      return yes([{ k: 'block.cancel', block: info.id, at, rule: 'user' }])
+      // After „Koniec pracy” that was only a break: cancelling the last fixed block of work left confirms the end, and
+      // only then the flexible work before the second shift is parked (D216).
+      const lastEnd = state.facts.workEnds.at(-1)
+      const after = lastEnd != null && info.fixed && isBoundaryWork(info) && !state.blocks.some((b) => b.isWork && (state.facts.blocks.get(b.id)?.runs.some((r) => r.from >= lastEnd.at) ?? false))
+      return yes([{ k: 'block.cancel', block: info.id, at, rule: 'user' }, ...(after ? workEndParking(state, null, at, info.id) : [])])
     }
     case 'park': {
       const info = byId.get(act.block)
@@ -421,7 +444,9 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (a.k === 'boundary.approve') return yes([{ k: 'undo', at, target: a.id, reason: 'user' }, { k: 'boundary.undo', at }])
       // A request's end: the block it resumed waits again with it.
       const r = a.k === 'request.end' ? state.facts.requests.find((x) => x.id === a.request && x.endId === a.id) : undefined
-      return yes([a, ...(r ? resumedWith(state.facts, r) : [])].map((x) => ({ k: 'undo', at, target: x.id, reason: 'user' })))
+      // A meal or a regeneration an answer to an absence made: its start and its end go back together (A1-09).
+      const pair = a.rule === 'absenceMeal' || a.rule === 'absenceRegen' ? state.facts.autos.filter((x) => x.rule === a.rule && x.block === a.block && x.id !== a.id) : []
+      return yes([a, ...pair, ...(r ? resumedWith(state.facts, r) : [])].map((x) => ({ k: 'undo', at, target: x.id, reason: 'user' })))
     }
     case 'cutOff': {
       if (state.facts.disconnect.some((d) => d.to === OPEN)) return no('„Odcinam się” już trwa')
@@ -444,6 +469,17 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       return yes([{ k: 'fewer.end', at }])
     case 'drink':
       return yes([{ k: 'water.drink', at }])
+    case 'workedUntil': {
+      // The time to explain as the bar shows it now (a stale click finds nothing): „praca” to now while it goes on, to its
+      // end after „Koniec pracy” – and the end of work then; after a passive block counted as a project „projekt”, the
+      // end of work stays the block's (D254, as the ritual's „Projekt do …”).
+      const x = state.explains.find((e) => e.id === act.explain)
+      const until = x ? workedUntilOf(x, m) : null
+      if (!x || until == null) return no('nie ma czasu do wyjaśnienia po bloku pracy')
+      const ms = x.to === OPEN ? at : atOf(state.grid, until)
+      if (x.asProject) return yes([{ k: 'question.answer', at, question: x.id, answer: 'project', value: ms }, { k: 'work.end', at, end: atOf(state.grid, x.blockEnd) }])
+      return yes([{ k: 'question.answer', at, question: x.id, answer: 'work', value: ms }, { k: 'work.end', at, end: ms }])
+    }
     case 'mark':
       if (state.facts.answers.has(act.question)) return no('już odpowiedziane')
       return yes([{ k: 'question.answer', at, question: act.question, answer: act.answer, value: null }])
@@ -467,12 +503,13 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
  * one it ends – but not blocks of „po końcu pracy jak projekt” (D195), and nothing while a fixed work block is left in
  * the plan before the second shift (D216). A paused work block ends there, not done, as „Zaparkuj” ends it.
  */
-export function workEndParking(state: DayState, ending: string | null, at: number): TimerDraft[] {
+export function workEndParking(state: DayState, ending: string | null, at: number, cancelling: string | null = null): TimerDraft[] {
   const second = secondShiftStart(state)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  // `cancelling`: a block cancelled with these events – no longer open.
   const open = (b: BlockInfo) => {
     const f = state.facts.blocks.get(b.id)
-    return b.inPlan && (!f || (f.startedAt == null && f.parkedAt == null && f.cancelledAt == null))
+    return b.inPlan && b.id !== cancelling && (!f || (f.startedAt == null && f.parkedAt == null && f.cancelledAt == null))
   }
   const placed = new Map(state.forecast.map((p) => [p.block.id, p]))
   const before = (b: BlockInfo) => {

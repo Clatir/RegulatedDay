@@ -219,7 +219,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W workCost() licz koszt dla bloku z secondShift tylko z minut poza jego planowanym oknem (secondWindows) po zatwierdzonej granicy. Bez overrun: nigdy przekroczenie, przy pustej puli bedtime. Przy wcześniejszym starcie zwracaj w ActionCost znacznik „Przesuń na teraz”, a w timerAction dodaj akcję, która przesuwa planowany czas (edycja pliku dnia, ta sama długość) i startuje bez kosztu.
 - **Weryfikacja:** workCost() zwraca null dla bloku, który nie jest isBoundaryWork, a druga zmiana nim nie jest (secondShift). Wcześniejszy start i „Przedłuż” drugiej zmiany wykonują się więc pierwszym kliknięciem, bez kosztu. Silnik i tak liczy te minuty jako przedłużenie i nagroda za granicę przepada. Specyfikacja (wiersze 108 i 116) i T271/T284 wymagają drugiego kliknięcia i „Przesuń na teraz”, a w kodzie tego nie ma. Druga zmiana jest domyślnie w każdy dzień roboczy, więc „Przedłuż” sesji często po cichu odbiera nagrodę.
 - **Dowód:** Test: granica 10:15, ds sesja 20:00–21:00 tag secondShift. timerAction start o 19:40 → ok:true, confirm:null; o 20:30 extensionMin=20; extend +30 o 20:55 → ok:true, confirm:null. Grep 'Przesuń na teraz|moveToNow' w src: brak. Kod: src/shared/engine/timer.ts:202-209
-- **Status:** do 5.2e – funkcja ze specyfikacji (D325)
+- **Status:** poprawione w 0.21.0 (testy w `tests/unit/engine/timer.test.ts`, `widget-view.test.ts`, `explain.test.ts`, T519)
 
 #### A1-05 · high · potwierdzone – Oznaczenie „po pracy” znika przy dwóch blokach „po końcu pracy jak projekt” i jest liczone na nowo przy każdej zmianie planu
 - **Plik:** `src/shared/engine/blocks.ts:203` · rodzaj: spec · pewność recenzenta: high
@@ -269,7 +269,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodaj odpowiedzi 'meal', 'regen' i 'request' (z osobą). Po planowanym końcu blok kończy się w chwili odejścia z czasem do wyjaśnienia od powrotu (D280). 'meal' oznacza posiłek z planu według D277 (start i koniec z czasami nieobecności, autoRule z „Cofnij”). 'request' dopisuje request.start/end w trybie 'after'. 'regen' oznacza nieobecność jako regenerację.
 - **Weryfikacja:** questionsOf() daje przy nieobecności tylko keep/subtract/leave (i keep/end/leave po odliczeniu), a answerEvents() obsługuje tylko te odpowiedzi. Specyfikacja (D268, D273, D277, D280, T371) wymaga też „posiłek”, „regeneracja” i „byłem na prośbie”. T463 przesunął je do E5, E5 się skończył, a w docs/plan.md ani w postep.md nie ma po nich pozycji. To zgubiona funkcja z decyzji.
 - **Dowód:** src/shared/engine/auto.ts:482-484 i 508 (tylko trzy odpowiedzi), 569-588 (answerEvents bez meal/regen/request); docs/decyzje-techniczne.md T463 (odłożone do E5), T371; grep w docs/plan.md bez pozycji
-- **Status:** do 5.2e – funkcja ze specyfikacji (D325)
+- **Status:** poprawione w 0.21.0 (testy w `tests/unit/engine/timer.test.ts`, `widget-view.test.ts`, `explain.test.ts`, T519)
 
 #### A1-10 · medium · potwierdzone – Późne wstanie liczone od pierwszej obecności zamiast od pierwszego użycia komputera w dniu
 - **Plik:** `src/shared/engine/lateWake.ts:62` · rodzaj: spec · pewność recenzenta: high
@@ -299,7 +299,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodaj w engineView linie: `anchor:<id>` (Zacznij, Zaparkuj, Koniec pracy; kropka; od rzeczywistego końca kotwicy), `fixedLeft:<id>` (zostaje / Odwołaj, raz, także w ciszy, znika przy starcie bloku albo jego planowanym starcie), `notExtended:<id>` i `workedUntil`. Akcje mapuj na istniejące timerAction (start, park, cancel, extend) i odpowiedzi czasu do wyjaśnienia. Testy w widget-view.test.ts.
 - **Weryfikacja:** engineView buduje linie tylko dla t.waiting (bloki z waits), „Zacznij jeszcze raz”, bloków zapauzowanych i pytań. Blok zakotwiczony (np. journaling po sesji) nie ma waits, więc po końcu kotwicy jest tylko przycisk „Start: …”, bez Zaparkuj, „Koniec pracy” i kropki, a przy innym biegnącym bloku nie ma nic. W kodzie nie ma linii „… zostaje · Odwołaj”, „… czeka do … · Odwołaj”, „Nie przedłużono · Przedłuż” ani „Koniec pracy o … · Pracowałem do …”. Nie ma ich też w docs/plan.md jako odłożonych.
 - **Dowód:** src/shared/engineView.ts:179-190 i 225 (jedyne linie i przycisk start); grep 'Nie przedłużono|zostaje · Odwołaj|Pracowałem do' w src – tylko rytuał (RitualPanel, UnclosedDays), nie pasek; spec wiersze 71, 99, 98, 116, 417; D194, D216, D227, D254, T308
-- **Status:** do 5.2e – funkcja ze specyfikacji (D325)
+- **Status:** poprawione w 0.21.0 (testy w `tests/unit/engine/timer.test.ts`, `widget-view.test.ts`, `explain.test.ts`, T519)
 
 #### A1-13 · low · bez weryfikacji – „Odliczyć nieobecność” wznawia blok pracy bez sprawdzenia kosztu po granicy
 - **Plik:** `src/shared/engine/auto.ts:585` · rodzaj: spec · pewność recenzenta: medium
