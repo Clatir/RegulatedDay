@@ -13,7 +13,6 @@ import { Bar } from '../widget/Bar'
 import { Toasts } from '../components/Toasts'
 import { EmptyState, cx } from '../components/ui'
 import { SettingsPage } from '../features/settings/SettingsPage'
-import { TrialPage } from '../features/trial/TrialPage'
 import { TodayPage } from '../features/today/TodayPage'
 import { CalendarPage } from '../features/calendar/CalendarPage'
 import { RequestsPage } from '../features/requests/RequestsPage'
@@ -37,15 +36,14 @@ export const PAGE_LABEL: Record<Page, string> = {
   routines: 'Rutyny',
   room: 'Pokój',
   history: 'Historia',
-  settings: 'Ustawienia',
-  trial: 'Próba'
+  settings: 'Ustawienia'
 }
 
 /** Screens that need the data folder (without it they point to the wizard). */
 const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history'])
 
-/** The screens with Ctrl+digit, in the menu's order; the settings have Ctrl+, and the trial no shortcut. */
-const DIGIT_PAGES: Page[] = PAGES.filter((p) => p !== 'settings' && p !== 'trial')
+/** The screens with Ctrl+digit, in the menu's order; the settings have Ctrl+,. */
+const DIGIT_PAGES: Page[] = PAGES.filter((p) => p !== 'settings')
 
 function useHotkeys(): void {
   useEffect(() => {
@@ -96,7 +94,7 @@ function keysOf(page: Page): string | null {
   return digit ? `Ctrl ${digit}` : null
 }
 
-// One list in the order of PAGES: the settings right under the history, the trial under the settings (D306).
+// One list in the order of PAGES: the settings right under the history (D306).
 function SideMenu({ page }: { page: Page }) {
   return (
     <nav className="flex w-[176px] shrink-0 flex-col overflow-y-auto border-r border-line bg-panel" data-testid="side-menu">
@@ -124,7 +122,6 @@ function PageView({ page }: { page: Page }) {
   const status = useData((s) => s.view?.status ?? null)
   const error = useData((s) => s.view?.error ?? null)
   if (page === 'settings') return <SettingsPage />
-  if (page === 'trial') return <TrialPage />
   if (NEEDS_DATA.has(page) && status !== 'open') {
     if (status === 'opening' || status == null) return <EmptyState why="Otwieram folder danych…" data-testid="data-opening" />
     if (status === 'failed')
@@ -155,7 +152,7 @@ export function App() {
   return (
     // Below 1024×700 (a small work area, the scale 150 %) the whole window scrolls vertically.
     <div className="flex h-full min-h-[460px] flex-col overflow-y-auto" data-testid="main-window">
-      {/* The same bar as in the icon's panel and on the desktop bar (the engine's view, the trial's without a folder). */}
+      {/* The same bar as in the icon's panel and on the desktop bar (the engine's view, a neutral line without a folder). */}
       <Header>{view && <Bar view={view} mode="main" grows="down" />}</Header>
       <Banners />
       <QuestionsBanner />

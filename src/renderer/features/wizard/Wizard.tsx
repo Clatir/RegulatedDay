@@ -90,7 +90,7 @@ export function Wizard() {
       patchWizard({ busy: false, error: r.error })
       return
     }
-    if (w.machine.desktopBar) await window.rd.trialAction('corner', w.machine.corner).catch(() => undefined)
+    if (w.machine.desktopBar) await window.rd.barAction('corner', w.machine.corner).catch(() => undefined)
     await reloadData()
     patchWizard({ busy: false, open: false })
     navigate('today')

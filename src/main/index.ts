@@ -1,7 +1,7 @@
 // adapted from FI src/main/index.ts @ de81f2b
 /**
  * The main process: loaded by start.ts once the identity of this run is fixed. It owns the windows (main, icon panel,
- * desktop bar), the tray icon, the helper, updates, the life marker, the trial of E0 and, from E1 on, the timer and the
+ * desktop bar), the tray icon, the helper, updates, the life marker and, from E1 on, the timer and the
  * deadlines (spec „Baza kodu i technika”: the timer, the deadlines and the widget's writes belong to the main process).
  */
 import { spawn } from 'node:child_process'
@@ -20,7 +20,7 @@ import {
   type EventIn,
   type SystemSettingsPage,
   type TimerIn,
-  type TrialAction,
+  type BarActionId,
   type UpdateAction,
   type ViewKind,
   type WidgetAction,
@@ -49,7 +49,6 @@ import { IconPanel } from './windows/iconPanel'
 import { HelperClient, type HelperMessage } from './helper/client'
 import { helperProgram } from './helper/program'
 import { notify } from './notify'
-import { Trial } from './trial'
 import { runStartup, type Banner, type StartupResult } from './update/startup'
 import { cleanUpdateFolders, emptyPlanAtStart, fsDeps, manifestOf, planBlocking, writeLaunched, writePlan } from './update/files'
 import { UpdateController } from './update/controller'
@@ -101,7 +100,6 @@ let dataClosing = false
 /** The version that ran on this computer before this start (read before it is overwritten): a backup after an update. */
 let lastRunVersion: string | null = null
 const data = (): DataService | null => hub?.service ?? null
-const trial = new Trial()
 /** The block of sleep: the helper holds the system, the app the screen (T290, T301). */
 const power = new PowerKeeper({
   request: (cmd, args, timeoutMs) => (helper ? helper.request(cmd, args, timeoutMs) : Promise.reject(new Error('pomocnik nie działa'))),
@@ -158,11 +156,12 @@ function viewOf(sender: Electron.WebContents): ViewKind {
 // ------------------------------------------------------------------ the widget
 
 /**
- * The widget's engine (E4b): the engine's view once a data folder is open (the trial while none is, and for 10 min
- * after a change of the trial), the bar's clicks as actions of the timer, the notifications of the leader.
+ * The widget's engine (E4b): the engine's view once a data folder is open (one neutral line while none is, D327), the
+ * bar's clicks as actions of the timer, the notifications of the leader.
  */
 const widget = new WidgetEngine({
   folder: () => hub?.service?.folder ?? null,
+  folderStatus: () => (hub?.status === 'opening' ? 'opening' : hub?.status === 'failed' ? 'failed' : 'none'),
   timer: (click) => (hub ? hub.timer(click) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
   edit: (entries) => (hub ? hub.edit(entries) : Promise.reject(new Error('folder danych nie jest otwarty'))),
   answer: (id, a, value) => (hub ? hub.answer(id, a, value) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
@@ -170,7 +169,6 @@ const widget = new WidgetEngine({
   clickedApp: () => hub?.clickedApp(),
   modePrefs: () => ({ sessionMode: prefs().sessionMode, classMode: prefs().classMode }),
   notices: () => prefs().notices,
-  trial: () => ({ view: trial.view(), changedAt: trial.changedAt }),
   notify: (n) => notify(n, log),
   showMain: (page) => showMainWindow(page),
   emit: (view) => showWidget(view),
@@ -198,6 +196,23 @@ function showWidget(view: WidgetView): void {
     const ids = widget.shownQuestions()
     if (ids.length) void hub?.seen(ids, 'panel').catch(() => undefined)
   }
+  sightNotification()
+}
+
+/** The line of a notification clicked, waiting to be shown by the bar (its sighting). */
+let notificationSighting: { line: string; until: number } | null = null
+
+function sightNotification(): void {
+  const n = notificationSighting
+  if (!n) return
+  if (Date.now() > n.until) {
+    notificationSighting = null
+    return
+  }
+  const ids = hub?.service ? widget.notificationSighting(n.line) : []
+  if (!ids.length) return
+  notificationSighting = null
+  void hub?.seen(ids, 'notification').catch(() => undefined)
 }
 
 /** A window on full screen covers the bar's monitor (the helper's event): a bar „na wierzchu” hides over it (D291). */
@@ -288,9 +303,9 @@ function onFullscreen(full: boolean): void {
 }
 
 let lastBarState = ''
+const helperKindsLogged = new Set<string>(['hello'])
 function onHelperEvent(m: HelperMessage): void {
   if (m.type === 'bar') {
-    trial.log(`pasek: ${String(m.state)}${m.detail ? ` – ${String(m.detail)}` : ''}`)
     if (m.state !== lastBarState) log('info', `pasek pulpitu: ${String(m.state)}${m.detail ? ` (${String(m.detail)})` : ''}`)
     lastBarState = String(m.state)
     if (m.state === 'confirmed') {
@@ -304,22 +319,27 @@ function onHelperEvent(m: HelperMessage): void {
     broadcast(CH.onWidget, widgetView())
   } else if (m.type === 'foreground') {
     const hwnd = String(m.hwnd ?? '')
-    trial.log(`pierwszy plan: ${String(m.cls ?? '?')} (${String(m.process ?? '?')})${m.shell ? ' – okno powłoki' : ''}${m.fullscreen ? ' – pełny ekran' : ''}`)
     panel?.foreground(hwnd, m.shell === true)
   } else if (m.type === 'fullscreen') {
     // Over the bar's monitor: a full screen entered or left (also in place – a film in a browser – or on another monitor).
-    trial.log(`monitor paska: ${m.fullscreen === true ? 'pełny ekran' : 'bez pełnego ekranu'}`)
+    log('info', `monitor paska: ${m.fullscreen === true ? 'pełny ekran' : 'bez pełnego ekranu'}`)
     onFullscreen(m.fullscreen === true)
   } else if (m.type === 'shell') {
-    trial.log('Eksplorator uruchomiony ponownie – ikona ustawiona jeszcze raz')
+    log('info', 'Eksplorator uruchomiony ponownie – ikona ustawiona jeszcze raz')
     tray?.refresh()
     layoutBar()
   } else if (m.type === 'power') {
-    trial.log(`zasilanie: ${String(m.event)}${m.value !== undefined ? ` = ${String(m.value)}` : ''}`)
+    // The helper answers every request of power (each check of the folder) with its state: only the system's own events.
+    if (m.event !== 'requests') log('info', `zasilanie: ${String(m.event)}${m.value !== undefined ? ` = ${String(m.value)}` : ''}`)
   } else if (m.type === 'session' || m.type === 'display') {
-    trial.log(`${m.type === 'session' ? 'sesja' : 'ekrany'}: ${String(m.event ?? 'zmiana')}`)
+    log('info', `${m.type === 'session' ? 'sesja' : 'ekrany'}: ${String(m.event ?? 'zmiana')}`)
   } else {
-    trial.log(`pomocnik: ${JSON.stringify(m)}`)
+    // Another message of the helper: once per kind (the log never fills with a repeated one).
+    const kind = String(m.type)
+    if (!helperKindsLogged.has(kind)) {
+      helperKindsLogged.add(kind)
+      log('info', `pomocnik: ${JSON.stringify(m).slice(0, 300)}`)
+    }
   }
 }
 
@@ -509,98 +529,32 @@ function onSystemEnd(ending: boolean): void {
 
 // ------------------------------------------------------------------ the tray's menu
 
-function trialMenu(): MenuItemConstructorOptions[] {
-  const t = trial.state
-  const radio = <T extends string>(label: string, values: Array<[T, string]>, now: T, key: 'tone' | 'warn'): MenuItemConstructorOptions => ({
-    label,
-    submenu: values.map(([v, text]) => ({ label: text, type: 'radio', checked: now === v, click: () => trial.set({ [key]: v }) }))
-  })
-  const check = (label: string, key: 'dot' | 'drop' | 'hidden' | 'quiet' | 'long' | 'session' | 'question'): MenuItemConstructorOptions => ({
-    label,
-    type: 'checkbox',
-    checked: t[key],
-    click: () => trial.set({ [key]: !t[key] })
-  })
-  return [
-    { label: 'Powiadomienie za 10 s', click: () => void trialAction('notifyIn10s') },
-    { label: 'Otwórz panel', click: () => openPanel({ line: 'trial', day: null }) },
-    { label: 'Połóż pasek pulpitu ponownie', click: () => void trialAction('placeBar') },
-    { label: 'Pasek pulpitu na następnym ekranie', click: () => void trialAction('nextDisplay') },
-    { type: 'separator' },
-    radio('Kolor', [['praca', 'praca'], ['zycie', 'życie i opieka'], ['wolne', 'wolne'], ['rezerwa', 'rezerwa energii'], ['brak', 'bez bloku']], t.tone, 'tone'),
-    radio('Ostrzeżenie', [['none', 'brak'], ['warm', '15 min'], ['five', '5 min'], ['zero', '0 min']], t.warn, 'warn'),
-    check('Kropka', 'dot'),
-    check('Kropla', 'drop'),
-    check('Pytanie „Dalej?”', 'question'),
-    check('Tryb ciszy (zwarty pasek)', 'quiet'),
-    check('Sesja (Skończyłem)', 'session'),
-    check('Najdłuższe teksty', 'long'),
-    check('Widget ukryty', 'hidden'),
-    { type: 'separator' },
-    { label: 'Ekran świeci (nagrywanie)', click: () => void trialAction('powerDisplay') },
-    { label: 'Bez usypiania systemu', click: () => void trialAction('powerSystem') },
-    { label: 'Zwolnij blokady usypiania', click: () => void trialAction('powerOff') }
-  ]
-}
-
 function trayMenu(): MenuItemConstructorOptions[] {
   const ready = updates?.updater?.readyRelease
   return [
     { label: 'Otwórz Regulated Day', click: () => showMainWindow() },
-    { label: 'Próba', submenu: trialMenu() },
     ...(ready ? [{ label: `Zainstaluj teraz (${ready.version})`, click: () => void updates?.action('installNow') }] : []),
     { type: 'separator' },
     { label: 'Zakończ', click: () => quitApp() }
   ]
 }
 
-// ------------------------------------------------------------------ the trial's actions
+// ------------------------------------------------------------------ the bar's actions
 
-async function trialAction(action: TrialAction, arg?: string): Promise<void> {
-  trial.log(`akcja próby: ${action}${arg ? ` (${arg})` : ''}`)
-  if (action === 'notifyIn10s') {
-    setTimeout(() => {
-      void helper
-        ?.request('notificationState')
-        .then((m) => trial.log(`stan powiadomień przed wysłaniem: ${String(m.state)}`))
-        .catch(() => trial.log('stan powiadomień: pomocnik nie odpowiedział'))
-      // Refused by Windows: why (the app's setting, the user's, a group policy) goes to the log and the trial's log.
-      const sent = notify({ id: `trial-${Date.now()}`, title: 'Próba Regulated Day', body: 'Kliknij, żeby otworzyć panel ikony na linii próby.', line: 'trial', day: null }, log, () =>
-        void helper
-          ?.request('toastSetting')
-          .then((m) => {
-            log('warn', `powiadomienie odrzucone – ustawienie Windows: ${String(m.setting)}`)
-            trial.log(`ustawienie powiadomień Windows: ${String(m.setting)}`)
-          })
-          .catch(() => trial.log('ustawienie powiadomień: pomocnik nie odpowiedział'))
-      )
-      trial.log(sent ? 'powiadomienie wysłane' : 'powiadomienie niedostępne w tej tożsamości')
-    }, 10_000).unref?.()
-  } else if (action === 'showBar') {
-    await setPrefs({ desktopBar: true })
-  } else if (action === 'hideBar') {
-    await setPrefs({ desktopBar: false })
-  } else if (action === 'placeBar') {
+/** The desktop bar laid again (its „Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests). */
+async function barAction(action: BarActionId, arg?: string): Promise<void> {
+  if (action === 'placeBar') {
     barProblem = null
     helper?.send('bar.retry')
     layoutBar()
-  } else if (action === 'nextDisplay' || action === 'corner') {
+  } else if (action === 'corner') {
     const all = displays()
     const current = bar?.currentBounds
     const now = (current ? displayAt(all, (d) => d.workArea, { x: current.x + current.width / 2, y: current.y + current.height / 2 }) : null) ?? primaryDisplay()
-    const target = action === 'nextDisplay' ? all[(all.indexOf(now) + 1) % all.length]! : now
-    const spot = action === 'corner' && BAR_SPOTS.includes(arg as BarSpot) ? (arg as BarSpot) : 'bottom-left'
-    await setPrefs({ barPlacement: spotPlacement(target, spot, { width: barWidth(target.workArea, prefs().zoom), height: barFolded() }) })
-  } else if (action === 'powerDisplay') {
-    helper?.send('power', { display: true, system: true, reason: 'Regulated Day: próba nagrywania wykładu' })
-  } else if (action === 'powerSystem') {
-    helper?.send('power', { display: false, system: true, reason: 'Regulated Day: próba blokady usypiania' })
-  } else if (action === 'powerOff') {
-    helper?.send('power', { display: false, system: false })
+    const spot = BAR_SPOTS.includes(arg as BarSpot) ? (arg as BarSpot) : 'bottom-left'
+    await setPrefs({ barPlacement: spotPlacement(now, spot, { width: barWidth(now.workArea, prefs().zoom), height: barFolded() }) })
   } else if (action === 'openPanel') {
-    openPanel({ line: 'trial', day: null })
-  } else if (action === 'clearLog') {
-    trial.clear()
+    openPanel({ line: null, day: null })
   }
 }
 
@@ -666,7 +620,6 @@ function registerIpc(): void {
   })
   handle(CH.widgetAction, async (e, action: WidgetAction, arg?: string) => {
     const from = viewOf(e.sender)
-    trial.log(`przycisk paska (${from}): ${action}${arg ? ` ${arg}` : ''}`)
     await widget.act(String(action), typeof arg === 'string' ? arg.slice(0, 200) : undefined, from)
   })
   ipcMain.on(CH.barLayout, (e, layout: BarLayout) => {
@@ -718,10 +671,7 @@ function registerIpc(): void {
     panel?.close('otwarcie okna głównego')
     showMainWindow(typeof page === 'string' ? page : undefined)
   })
-  handle(CH.trial, () => trial.state)
-  handle(CH.setTrial, (_e, patch: unknown) => trial.set(patch))
-  handle(CH.trialAction, (_e, action: TrialAction, arg?: string) => trialAction(action, arg))
-  handle(CH.trialLog, () => trial.history())
+  handle(CH.barAction, (_e, action: BarActionId, arg?: string) => barAction(action, typeof arg === 'string' ? arg.slice(0, 40) : undefined))
   handle(CH.update, () => updates!.view())
   handle(CH.updateAction, (_e, action: UpdateAction) => updates!.action(action))
 
@@ -839,6 +789,10 @@ function handleArgv(argv: readonly string[], firstStart: boolean): void {
   if (target) {
     log('info', `adres aplikacji: panel${target.line ? ` (linia ${target.line})` : ''}`)
     openPanel(target)
+    // A notification's click is a sighting of its line (a question, the reserve's message – D241) once the bar shows it –
+    // also when the click started the app and the folder opens only now (within 10 min).
+    notificationSighting = target.line ? { line: target.line, until: Date.now() + 10 * 60_000 } : null
+    sightNotification()
     return
   }
   if (!firstStart && !argv.includes(HIDDEN_ARG)) showMainWindow()
@@ -1038,7 +992,6 @@ async function main(): Promise<void> {
   })
   helper.on('event', onHelperEvent)
   helper.on('status', (s) => {
-    trial.log(`pomocnik: ${s.state}${s.note ? ` (${s.note})` : ''}`)
     if (s.state === 'running') {
       helper?.send('foreground.watch')
       oneDrive.start()
@@ -1167,14 +1120,12 @@ async function main(): Promise<void> {
     helperRunning: () => !!helper?.running,
     hideFromCapture: () => prefs().hideFromCapture,
     stayOnTop: () => prefs().onTop === 'barPanel',
-    log: (m) => trial.log(m)
+    log: (m) => log('info', `panel: ${m}`)
   })
   panel.onExternalClose = quitApp
   panel.onSystemEnd(onSystemEnd)
 
   sound = new SoundWindow(preload, loadView)
-  trial.on('change', () => showWidget(widgetView()))
-  trial.on('log', (line: string) => broadcast(CH.onTrialLog, line))
   showWidget(widgetView())
   widget.start()
 

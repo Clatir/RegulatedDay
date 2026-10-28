@@ -617,7 +617,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodać w engineView linię `reserve:<dzień>:<pula>:<at>` z tekstem regeneracji (suggestRegen) i akcją „nie dziś” (cicha ikona w „mniej pytań”). Rozszerzyć QUESTION_ID (proces główny i renderer) o `reserve:`, żeby panel, okno główne i kliknięcie paska zapisywały zobaczenie. Powiadomieniu rezerwy dać tę linię, a w handleArgv po otwarciu panelu z adresu wołać hub.seen([linia], 'notification'), gdy linia jest pytaniem albo komunikatem. Test folderu: zejście, potem zobaczenie, potem brak odpoczynku przez 60 min → „missed”.
 - **Weryfikacja:** Specyfikacja (Model energii, linia 207) wymaga ciepłego komunikatu z regeneracją i przyciskiem „nie dziś”. W src nie ma takiej linii: engineView daje przy rezerwie tylko ton i dopisek „· rezerwa energii”, a powiadomienie rezerwy ma line:null. Zobaczenie nie ma żadnej drogi zapisu: QUESTION_ID w widget.ts i Bar.tsx obejmuje tylko next|next2|workEnd|return|absence|shutdown, handleArgv i openPanel nie wołają seen, a nikt nie zapisuje id reserveMessageId. W efekcie sightingOf zawsze daje seenAt null. reserveReaction przy over albo po bedLimit oznacza każde zejście jako „excused”, więc werdykt to „reward”. Gra jest włączona (0.14.0) i zamrożone oceny trwale zapisują earned.reserve=true. W docs/plan.md nie ma pozycji na ten komunikat, a energia.md przypisywała zobaczenie do E4b.
 - **Dowód:** docs/specyfikacja.md:207, 209; src/shared/engineView.ts:157–159, 236; src/main/widget.ts:41, 405, 454, 620; src/renderer/widget/Bar.tsx:36, 259–264; src/main/index.ts:193–196, 445–447, 781–787; src/shared/engine/game.ts:91–105, 285, 290; src/shared/engine/reserve.ts:106–124
-- **Status:** do 5.2e – funkcja ze specyfikacji (D325, D326)
+- **Status:** poprawione w 0.20.0 (testy w `tests/fs/widget.test.ts`, `tests/e2e/smoke.spec.ts`, T518)
 
 #### A4-03 · high → medium · potwierdzone – Kliknięcie powiadomienia „5 min przed” otwiera okno główne zamiast panelu: adres z linią „wait:<blok>” odrzuca ścisły parser
 - **Plik:** `src/shared/protocol.ts:11` · rodzaj: spec · pewność recenzenta: high
@@ -1085,7 +1085,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dopisać do planu (5.3/5.4) usunięcie ekranu „Próba”, menu „Próba ▸” i gałęzi trial w Bar. Widok bez folderu zastąpić neutralnym paskiem bez akcji, np. jak unknownView: „Brak folderu danych · Otwórz okno główne”. Przenieść 'corner' i 'placeBar' do zwykłych akcji ustawień paska.
 - **Weryfikacja:** D286 mówi wprost, że Próba (ekran i „Próba ▸” w zasobniku) zostaje usunięta przed 1.0. Ciąg E w plan.md (5.1–5.4) ani postep.md nie mają takiej pozycji, a D306 zmienia tylko miejsce w menu, nie odwołuje usunięcia. Pokazywanie próby bez folderu danych jest zamierzone decyzją T472, ale tylko w 0.x. Po 1.0 zostałby fikcyjny blok: WidgetEngine.current() zwraca trial.view przy braku folderu. desktopBar jest domyślnie włączony, a Trial.viewAt jest stały, więc „Analiza tygodnia” odlicza 42 min, a potem pokazuje +N min. Od próby zależą też 'corner' w kreatorze i 'placeBar' w „Pokaż pasek”. Zachowanie widoczne dla użytkownika (czym zastąpić widok bez folderu) wymaga pytania.
 - **Dowód:** docs/decyzje.md:284 (D286), :304 (D306), :322 (D324); docs/decyzje-techniczne.md:462 (T472); docs/plan.md:64-74; src/main/widget.ts:162-166, :196-200; src/main/trial.ts:36, :44-46; src/shared/widget.ts:158-235; src/shared/machine.ts:71 (desktopBar: true); src/renderer/widget/Bar.tsx:631
-- **Status:** do 5.2e (D327 – Próba znika, T517)
+- **Status:** poprawione w 0.20.0 (testy w `tests/fs/widget.test.ts`, `tests/e2e/smoke.spec.ts`, T518)
 
 #### A7-07 · medium · potwierdzone – „Usuń” sesji w Ustawieniach bez „Cofnij” przez 10 s
 - **Plik:** `src/renderer/features/settings/SharedSettings.tsx:163` · rodzaj: spec · pewność recenzenta: high
@@ -1339,4 +1339,4 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `trialView` liczy `clock((endsAt - new Date(now).setHours(0, 0, 0, 0)) / 60_000)`, czyli od północy strefy komputera, z jej zmianą czasu. Wszędzie indziej wyświetlanie jest w Europe/Warsaw (`clockOf` przez Intl, `logicalMinuteOf`).
 - **Scenariusz:** 25.10 po 03:00 (albo na komputerze ustawionym w innej strefie) podpowiedź próby pokazuje „do 11:42” zamiast „do 10:42”.
 - **Poprawka:** Użyć `logicalClock(logicalMinuteOf(logicalDayOf(endsAt), endsAt))` albo tego samego `Intl.DateTimeFormat` z `timeZone: 'Europe/Warsaw'` co w `engineView`.
-- **Status:** do 5.2e (D327 – Próba znika, T517)
+- **Status:** poprawione w 0.20.0 (testy w `tests/fs/widget.test.ts`, `tests/e2e/smoke.spec.ts`, T518)

@@ -5,9 +5,9 @@
 import { create } from 'zustand'
 import { commitActiveField } from '../lib/commit'
 
-export type Page = 'today' | 'calendar' | 'requests' | 'templates' | 'routines' | 'room' | 'history' | 'settings' | 'trial'
+export type Page = 'today' | 'calendar' | 'requests' | 'templates' | 'routines' | 'room' | 'history' | 'settings'
 
-export const PAGES: Page[] = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history', 'settings', 'trial']
+export const PAGES: Page[] = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history', 'settings']
 
 export interface Toast {
   id: number

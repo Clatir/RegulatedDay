@@ -72,6 +72,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8d.1 Szybkie zmiany bloku, kroki rutyny i liczniki próśb
    - [ ] E8d.2 „Przedłuż” krokami ±15 min i podwójne „Dalej” na pasku
    - [ ] E8d.3 Sesje i kalendarz w Ustawieniach
+   - [ ] E8e.1 Komunikat rezerwy w pasku (gdy pula zejdzie do rezerwy)
+   - [ ] E8e.2 Bez folderu danych – neutralny pasek, bez Próby
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
@@ -398,6 +400,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 
 #### E3.14 Ustawienia i Próba w menu bocznym (0.10.1)
 - [ ] Odebrane
+- **Od 0.20.0:** Próby nie ma (D286, D327) – sprawdzasz tylko Ustawienia zaraz pod Historią.
 - **Automatycznie:** kolejność przycisków i brak przerwy między nimi – E2E (`smoke.spec.ts`, „start: okno główne…”).
   Ty: rzut oka.
 - **Jak sprawdzić:** otwórz okno główne i spójrz na menu po lewej. Kliknij „Ustawienia”, potem „Próba”; naciśnij
@@ -1304,3 +1307,26 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   zakotwiczonymi w szablonach; kalendarz mówi, że dzisiejszy typ zmienisz w „Dziś”, i nie zmienia komórki.
 - **Nie przechodzi, gdy:** sesja znika z listy, po „Cofnij” bloki „po sesji” nie wracają albo dzisiejsza komórka
   zmienia kolor na nowy typ.
+
+### E8e – funkcje D325, część 1a (0.20.0)
+
+#### E8e.1 Komunikat rezerwy w pasku (0.20.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/widget.test.ts` („komunikat rezerwy”, powiadomienie z linią). Ty: przy najbliższym zejściu
+  puli do rezerwy.
+- **Jak sprawdzić:** gdy pasek zmieni kolor na rezerwę, spójrz na pasek albo panel; kliknij „Zacznij” albo „nie dziś”.
+- **Oczekiwany efekt:** linia „<Pula> na rezerwie – może 15 min regeneracji (<sposób>)? · Zacznij · nie dziś”; „Zacznij”
+  zaczyna regenerację od razu, „nie dziś” chowa linię do końca dnia; kliknięcie powiadomienia o rezerwie otwiera panel
+  na tej linii.
+- **Nie przechodzi, gdy:** linii brak mimo koloru rezerwy (poza sesją i zajęciami), „Zacznij” nic nie zaczyna albo po
+  „nie dziś” linia wraca tego samego dnia.
+
+#### E8e.2 Bez folderu danych – neutralny pasek, bez Próby (0.20.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/smoke.spec.ts` („bez folderu danych”, menu bez Próby), `tests/fs/widget.test.ts`. Ty:
+  rzut oka po starcie Windows, zanim OneDrive udostępni folder (gdy się zdarzy).
+- **Jak sprawdzić:** spójrz na menu boczne i menu ikony w zasobniku; przy starcie bez dostępnego folderu – na pasek.
+- **Oczekiwany efekt:** w menu nie ma „Próba”; bez folderu pasek pokazuje „Brak folderu danych · Otwórz okno”, bez bloku
+  i bez odliczania; „Otwórz okno” otwiera okno główne.
+- **Nie przechodzi, gdy:** gdziekolwiek jest „Próba”, bez folderu pasek odlicza „Analiza tygodnia” albo pokazuje inne
+  przyciski niż „Otwórz okno”.

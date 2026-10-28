@@ -39,6 +39,15 @@
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
 
+## 0.20.0 – funkcje D325, część 1a (ciąg E, 5.2e)
+- Gałąź `claude/0.20.0-funkcje` (od 0.19.0) od 28.10 ok. 17:10.
+- Zakres (T518): Próba usunięta (D286) – bez folderu neutralny pasek (D327, A7-06, A8-12); komunikat rezerwy (D326,
+  A4-04) z zapisem zobaczenia i przesunięciem granicy przez „Zacznij”. Reszta 5.2e (A1-04, A1-09, A1-12) – 0.21.0.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. zobaczenie tylko pokazanej linii, bez powiadomień
+  w trybach ciszy, „Zacznij” najpierw start, przesunięcie granicy, pasek „Otwieram folder danych…”, `main.log` bez
+  zalewu wpisów pomocnika.
+- Testy: 975 jednostkowych i plikowych, E2E 25/25 (nowe: „bez folderu danych”, konwencje na ekranie Prośby).
+
 ## 0.19.0 – poprawki ekranów (ciąg E, 5.2d)
 - Gałąź `claude/0.19.0-ekrany` (od 0.18.0, przed scaleniem 0.17.0 i 0.18.0) od 28.10 ok. 16:00.
 - Zakres (T517): A6-01–A6-09, A7-01–A7-04, A7-07, A7-08, A8-05 i low A6-12, A6-18, A6-20, A6-22, A6-23, A7-09, A7-12,
@@ -110,5 +119,5 @@
   osobny program, nagrywanie wykładów na tym komputerze.
 
 ## Pytania na później
-- Przed E4a: punkt 15 listy E0 niesprawdzony – czy OBS nagrywa przy wygaszonym ekranie (Próba → „Bez usypiania
-  systemu”); od tego zależy, czy komputer nagrywający trzyma ekran przez cały wykład (D184, „Ekran świeci”).
+- Przed E4a: punkt 15 listy E0 niesprawdzony – czy OBS nagrywa przy wygaszonym ekranie; od 0.20.0 bez Próby sprawdzisz
+  to przy prawdziwym wykładzie nagrywanym na tym komputerze (D184, „Ekran świeci”).
