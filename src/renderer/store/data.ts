@@ -6,7 +6,7 @@
  */
 import { create } from 'zustand'
 import type { DataView, EditEntry, EditOutcome, EventIn, RawRecord } from '@shared/api'
-import { diffRecords } from '@shared/data/merge'
+import { recordEdit } from '@shared/data/merge'
 import { newId } from '@shared/model/ids'
 import { lectureFrom, templateFrom, type LectureSeries, type Template } from '@shared/model/plan'
 import { rdFrom, type RdFile } from '@shared/model/rd'
@@ -103,10 +103,7 @@ export function rawRecord(rel: string): RawRecord | null {
 
 /** The edit that turns `before` into `after`: the fields that differ, each with its value before (its base). */
 export function editOf(rel: string, before: RawRecord | null, after: RawRecord | null): EditEntry | null {
-  if (!after) return before ? { rel, remove: true, edits: [] } : null
-  if (!before) return { rel, create: true, edits: Object.entries(after).map(([k, v]) => ({ path: [k], base: undefined, value: v })) }
-  const edits = diffRecords(before, after).map((c) => ({ path: c.path, base: c.before, value: c.after }))
-  return edits.length ? { rel, edits } : null
+  return recordEdit(rel, before, after)
 }
 
 /**

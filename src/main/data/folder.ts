@@ -23,7 +23,7 @@ import { createDay, type HolidayLookup } from '@shared/engine/createDay'
 import { dayContextOf } from '@shared/engine/context'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
 import { NO_POWER, powerNeedOf, type PowerNeed } from '@shared/engine/power'
-import { requestAction, type RequestAction } from '@shared/engine/requests'
+import { isRunningRequest, requestAction, type RequestAction } from '@shared/engine/requests'
 import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft } from '@shared/engine/timer'
 import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
@@ -42,7 +42,9 @@ import { derivedId } from '@shared/model/ids'
 import { CLOSE_HOWS, compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type Signal } from '@shared/model/events'
 import type { Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
-import { MODULES, rdFrom, type ModuleId } from '@shared/model/rd'
+import { MODULES, personName, rdFrom, type ModuleId } from '@shared/model/rd'
+import { runningRequestOf } from '@shared/engineView'
+import type { RunningRequest } from '@shared/widget'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { routineFrom, type Routine } from '@shared/model/routines'
 import type { CsvDay } from '@shared/engine/csv'
@@ -95,6 +97,10 @@ const QUIET_MS = 60_000
 const CALIBRATION_RECHECK_MS = 10 * 60_000
 /** The room's items this computer has seen unlocked, in its state folder. */
 const ROOM_FILE = 'room.json'
+/** „Prośba ▸” ranks the people by the requests of this many days (D311). */
+const PEOPLE_DAYS = 28
+/** The days before today are counted again this often (late logs of other computers). */
+const PEOPLE_RECOUNT_MS = 15 * 60_000
 
 /**
  * A block of the day runs now (started, not ended, not paused – „Cofnij” counted): one running through 04:00 keeps its
@@ -219,6 +225,8 @@ export class DataFolder {
   private gameMemo: { key: string; view: GameView } | null = null
   /** In the calibration period: last counted (the day, when), see `calibrating`. */
   private calibrationNow: { day: string; at: number; on: boolean; retryMs: number } | null = null
+  /** The starts of requests by person on the days before today (counted once a day, D311). */
+  private peopleCounts: { day: string; at: number; before: Map<string, number> } | null = null
 
   private constructor(private readonly o: FolderOptions) {
     this.rulesVersion = o.rulesVersion ?? RULES_VERSION
@@ -1193,14 +1201,73 @@ export class DataFolder {
    * What the widget is made from now (spec „Widget”): the day of the running block (a block through 04:00 keeps its day)
    * as this computer sees it, its energy, the activity of every computer and rd.json (the names, the care settings).
    */
-  async widgetModel(at = this.clock.now()): Promise<{ ctx: DayContext; state: DayState; energy: EnergyState; activity: ReturnType<typeof activityOf>; rd: ReturnType<typeof rdFrom> }> {
+  async widgetModel(at = this.clock.now()): Promise<{
+    ctx: DayContext
+    state: DayState
+    energy: EnergyState
+    activity: ReturnType<typeof activityOf>
+    rd: ReturnType<typeof rdFrom>
+    people: Array<{ id: string; name: string }>
+    carried: RunningRequest | null
+  }> {
     const day = await this.activeDay(at)
     const read = await this.log.readDay(day)
     const ctx = await this.ownContext(day, read, at)
     const state = computeDay(ctx)
     const rd = rdFrom(await this.recordView(paths.settings))
     const calibration = await this.calibrating(at)
-    return { ctx, state, energy: computeEnergy(ctx, state, { moduleOn: rd.general.modules.energy, calibration }), activity: await this.activityFor(day, read, at), rd }
+    const today = logicalDayOf(at)
+    return {
+      ctx,
+      state,
+      energy: computeEnergy(ctx, state, { moduleOn: rd.general.modules.energy, calibration }),
+      activity: await this.activityFor(day, read, at),
+      rd,
+      // Today's log only for ranking the people: one not readable now never stops the bar.
+      people: await this.topPeople(rd, today, day === today ? read.events : ((await this.log.readDay(today).catch(() => null))?.events ?? []), at),
+      carried: day === today ? await this.carriedRequest(addDays(today, -1), rd) : null
+    }
+  }
+
+  /**
+   * „Prośba ▸” (D311): the people asked most often in the last 28 days (the starts of requests in the logs), never an
+   * archived one; with less history the dictionary's order fills up to 3. The days before today are counted together,
+   * again every 15 min (logs of other computers come late) – and not kept while one of them cannot be read in full.
+   */
+  private async topPeople(rd: ReturnType<typeof rdFrom>, today: string, todayEvents: readonly AnyEvent[], at: number): Promise<Array<{ id: string; name: string }>> {
+    const count = (events: readonly AnyEvent[], into: Map<string, number>) => {
+      for (const e of events) {
+        const p = e.k === 'request.start' ? (e as { person?: unknown }).person : null
+        if (typeof p === 'string') into.set(p, (into.get(p) ?? 0) + 1)
+      }
+    }
+    let before = this.peopleCounts?.day === today && at - this.peopleCounts.at < PEOPLE_RECOUNT_MS ? this.peopleCounts.before : null
+    if (!before) {
+      const reads = await Promise.all(Array.from({ length: PEOPLE_DAYS - 1 }, (_, i) => this.log.readDay(addDays(today, -(i + 1))).catch(() => null)))
+      before = new Map<string, number>()
+      for (const r of reads) count(r?.events ?? [], before)
+      this.peopleCounts = reads.every((r) => r?.complete) ? { day: today, at, before } : null
+    }
+    const counts = new Map(before)
+    count(todayEvents, counts)
+    const active = rd.people.filter((p) => !p.archived)
+    const order = new Map(active.map((p, i) => [p.id, i]))
+    return [...active]
+      .sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0) || order.get(a.id)! - order.get(b.id)!)
+      .slice(0, 3)
+      .map((p) => ({ id: p.id, name: p.name }))
+  }
+
+  /** A request of the day before still running after 04:00 (D312): the bar of today shows it, its „Koniec” goes to its day. */
+  private async carriedRequest(day: string, rd: ReturnType<typeof rdFrom>): Promise<RunningRequest | null> {
+    const read = await this.log.readDay(day).catch(() => null)
+    if (!read?.events.some((e) => e.k === 'request.start')) return null
+    const grid = gridOf(day)
+    const r = foldFacts(grid, read.events)
+      .requests.filter(isRunningRequest)
+      .sort((a, b) => a.from - b.from)
+      .at(-1)
+    return r ? runningRequestOf(r, grid, (id) => personName(rd, id)) : null
   }
 
   /**

@@ -47,9 +47,8 @@
   0.2.0–0.6.0 przeskoczone, więc E5.1 i E6a.1 tylko „dane całe”).
 
 ## Kolejka (według `docs/plan.md`, D317)
-1. **Ciąg A (w toku od 27.10 ok. 23:30):** praca 0 na gałęzi `claude/praca-0` – T492 (`gameState` raz na zmianę
-   plików ocen), czasy sesji „było” z wejścia, baner D316, plan i decyzje; PR bez osobnego wydania. Potem gałąź
-   0.11.0: E4b.12 (test w CI z wejściem myszy systemu, który na 0.10.1 pada) i „cieplejsze” (D314) – bez scalania.
+1. Ciąg A zakończony: praca 0 scalona (PR #19). **Ciąg B w toku:** 0.11.0 na `claude/0.11.0-pasek-prosby` – PR
+   z CI (wariant E4b.12 „na wierzchu”); po zielonym scalenie i wydanie 0.11.0, potem ciąg C (ekrany E6).
 2. Ty: odbiór według `docs/odbior.md`. Brama ciągu B przeszła: E4b.1–E4b.8 odebrane 27.10 ok. 23:35 z prośbą „przystąp
    do ciągu B → C → D”; E4b.10 (dźwięk) czeka, ciągu nie wstrzymuje.
 3. **Ciąg B → C → D jednym ciągiem (D317):** elementy E5 w pasku (D311–D313) → wydanie 0.11.0; ekrany E6 (D318–D321);
@@ -69,6 +68,23 @@
   D321 („Dane” w Ustawieniach, baner przeniesienia), D322 (pokój ×1,5, ilustracja, nagłówek „Dziś”, nakładka,
   kasety, „Strona B” w tabeli).
 - Do przygotowania: nic – odbiór E4b w swoim tempie.
+
+## 0.11.0 – elementy E5 w pasku, „cieplejsze”, E4b.12 (ciąg B)
+- Gałąź `claude/0.11.0-pasek-prosby` (od pracy 0) od 28.10 ok. 00:00; praca 0 scalona (PR #19, CI zielone; bez wydania).
+- Zakres: „Prośba ▸” (D311: 3 osoby z 28 dni logów, „inna…”, szacunek „Pilne”, w ciszy i „Odcinam się” bez okna),
+  trwająca prośba w miejscu bloku (pod blokiem, gdy blok zostaje na pierwszym planie) i przerwany blok cichą linią,
+  prośba sprzed 04:00 w pasku nowego dnia (D312); bez „Koniec pracy?” w czasie prośby (T503); znacznik i panel wariantów
+  w procesie głównym, wybór po id, „Przestawiono · Cofnij” odwraca tylko zmiany wariantu, „Zostaw”, „Przestaw plan”
+  (D313, T502, `planCause` w silniku); zestaw „cieplejsze” (D314, `ENGINE_TONE_SET`); `recordEdit` wspólne z oknem.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. „Cofnij” bez nadpisywania późniejszych zmian, panel
+  wariantów jeden dla wszystkich okien, „Koniec” prośby przy bloku na pierwszym planie, „Zostaw” zamyka każdą przyczynę
+  z chwili, kalibracja bez wariantów energii, zapis przez hub (okno widzi od razu), osoby bez zapamiętanego zera przy
+  nieczytelnym logu, przyczyna zamknięta dopiero po zapisie; testy do każdej zmiany zachowania.
+- E4b.12: test prawdziwą myszą (SendInput) w CI na Windows **przechodzi na 0.10.1** (pasek idzie za kursorem) – w CI
+  nie widać objawu. Na tym komputerze: „Zawsze na wierzchu” (`barPanel`), pasek na drugim monitorze VG27B nad głównym.
+  Dodane: wariant testu z „na wierzchu” i innym oknem na pierwszym planie oraz ślad w `main.log` („pasek: chwycony za
+  uchwyt …”, „pasek: puszczony (up|cancel|lost) po N ruchach …”). Wynik CI tego wariantu – niżej.
+- Testy: 809 jednostkowych i plikowych, E2E 18 + 6 tylko w CI (w tym prośby w pasku).
 
 ## Praca 0 – gra raz na zmianę, sesje „było”, baner D316 (ciąg A, bez osobnego wydania)
 - Gałąź `claude/praca-0` od 27.10 ok. 23:30 (najpierw plan i D316–D322 – commit d4a56a5).

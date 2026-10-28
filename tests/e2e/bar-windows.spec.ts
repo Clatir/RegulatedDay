@@ -3,11 +3,14 @@
  * right above the desktop; the real cursor (SendInput) over every button of the bar – each one records that it was
  * entered – opens no new window and changes no order of windows; the control – an active window with one title
  * attribute – must open a tooltip window, or the check proves nothing. The windows lying over the bar (CI's console)
- * are minimized first, and every point must be the bar's own – or the cursor never reaches it.
+ * are minimized first, and every point must be the bar's own – or the cursor never reaches it. The bar dragged by its
+ * handle with the real mouse follows it and stays where it is let go (E4b.12).
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, test, type ElectronApplication } from '@playwright/test'
 import { launch, viewPage, withMainLog } from './app'
-import { click, foreground, hover, topWindows, uncover, windowsAt, type TopWindow } from './win32'
+import { click, drag, foreground, hover, topWindows, uncover, windowsAt, type TopWindow } from './win32'
 
 test.skip(process.platform !== 'win32' || process.env.RD_E2E_REAL_HELPER !== '1', 'Windows with the real helper only')
 
@@ -202,3 +205,73 @@ test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejn
     await app.close()
   }
 })
+
+/**
+ * The bar dragged by its handle with the real mouse (E4b.12): it follows the cursor and stays where it is let go. With
+ * „Zawsze na wierzchu” the main window steps aside first (D302 – the bar hides while it is in front): another window is
+ * made the foreground by a real click, as on a desktop with TradingView in front.
+ */
+async function dragByHandle(onTop: boolean): Promise<void> {
+  const { app, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      const page = await viewPage(app, 'bar')
+      if (onTop) {
+        await page.evaluate(() => window.rd.setPrefs({ onTop: 'bar' }))
+        const other = await app.evaluate(({ BrowserWindow }) => {
+          const w = new BrowserWindow({ x: 60, y: 60, width: 400, height: 260, show: true, title: 'RD-CI-inne' })
+          void w.loadURL('data:text/html,<title>RD-CI-inne</title><body style="background:%23333">inne</body>')
+          return { ...w.getBounds(), hwnd: w.getNativeWindowHandle().readBigUInt64LE(0).toString() }
+        })
+        const k0 = (await barInfo(app)).scale
+        const middle: [number, number] = [(other.x + other.width / 2) * k0, (other.y + other.height / 2) * k0]
+        uncover(other.hwnd)
+        await expect.poll(() => windowsAt([middle])[0], { timeout: 10_000 }).toBe(other.hwnd)
+        click(...middle)
+        await expect.poll(() => foreground(), { timeout: 10_000 }).toBe(other.hwnd)
+        await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(true)
+      }
+      const bar = await barInfo(app)
+      const covers = uncover(bar.hwnd)
+      await new Promise((r) => setTimeout(r, 1000))
+      // What the handle hears of the pointer and what the main process gets – the cause when the bar stays put.
+      await app.evaluate(({ ipcMain }) => {
+        const g = globalThis as unknown as { rdDrag: string[] }
+        g.rdDrag = []
+        ipcMain.on('rd:barDrag', (_e, phase: string, why?: string) => g.rdDrag.push(why ? `${phase}(${why})` : phase))
+      })
+      const grip = await page.evaluate(() => {
+        const el = document.querySelector('[data-testid="bar-drag"]')!
+        const w = window as unknown as { rdGrip: string[] }
+        w.rdGrip = []
+        let moves = 0
+        for (const t of ['pointerdown', 'gotpointercapture', 'lostpointercapture', 'pointerup', 'pointercancel']) el.addEventListener(t, () => w.rdGrip.push(t))
+        el.addEventListener('pointermove', () => void (moves++ % 4 === 0 && w.rdGrip.push('pointermove')))
+        const r = el.getBoundingClientRect()
+        return [r.x + r.width / 2, r.y + r.height / 2]
+      })
+      const k = bar.scale
+      const from: [number, number] = [(bar.bounds.x + grip[0]! * bar.zoom) * k, (bar.bounds.y + grip[1]! * bar.zoom) * k]
+      expect(windowsAt([from]), `uchwyt zasłonięty (${covers.join(', ') || 'nic nie zminimalizowano'})`).toEqual([bar.hwnd])
+      // Up by 120 DIP – into the work area (the bar stands at its bottom at the start).
+      drag(from, [from[0], from[1] - 120 * k])
+      const heard = async () => `uchwyt: ${(await page.evaluate(() => (window as unknown as { rdGrip: string[] }).rdGrip)).join(' ')}; proces główny: ${(await app.evaluate(() => (globalThis as unknown as { rdDrag: string[] }).rdDrag)).join(' ')}`
+      await expect.poll(async () => (await barInfo(app)).bounds.y, { timeout: 5_000, message: await heard() }).toBeLessThan(bar.bounds.y - 100)
+      // Let go there, it stays: the place is saved (the mock-up's bar comes from it).
+      const moved = (await barInfo(app)).bounds
+      expect(Math.abs(moved.x - bar.bounds.x), await heard()).toBeLessThanOrEqual(4)
+      await expect.poll(async () => (await page.evaluate(() => window.rd.barScreens())).bar.bounds.y, { timeout: 5_000 }).toBe(moved.y)
+      // The trace in main.log (what a drag on your computer tells, E4b.12): grabbed, let go with the button's release.
+      const log = () => readFileSync(join(userData, 'logs', 'main.log'), 'utf8')
+      await expect.poll(log, { timeout: 5_000 }).toContain('pasek: chwycony za uchwyt')
+      await expect.poll(log, { timeout: 5_000 }).toMatch(/pasek: puszczony \(up\) po \d+ ruchach/)
+    })
+  } finally {
+    await app.close()
+  }
+}
+
+test('pasek pulpitu przeciągnięty za uchwyt prawdziwą myszą idzie za kursorem i zostaje tam, gdzie go puszczono (E4b.12)', () => dragByHandle(false))
+
+test('„Zawsze na wierzchu”: pasek przeciągnięty za uchwyt prawdziwą myszą, gdy na pierwszym planie jest inne okno (E4b.12)', () => dragByHandle(true))

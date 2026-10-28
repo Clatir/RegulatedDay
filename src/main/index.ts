@@ -158,6 +158,7 @@ function viewOf(sender: Electron.WebContents): ViewKind {
 const widget = new WidgetEngine({
   folder: () => hub?.service?.folder ?? null,
   timer: (click) => (hub ? hub.timer(click) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
+  edit: (entries) => (hub ? hub.edit(entries) : Promise.reject(new Error('folder danych nie jest otwarty'))),
   answer: (id, a, value) => (hub ? hub.answer(id, a, value) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
   seen: (ids, how) => hub?.seen(ids, how) ?? Promise.resolve(0),
   clickedApp: () => hub?.clickedApp(),
@@ -202,7 +203,7 @@ let barTop = false
  * The desktop bar being dragged by its handle (D303): the cursor and the bar where the drag began, whether it moved, and
  * the last message – a drag whose end never came (the bar's view reloaded) holds the layout at most `DRAG_HOLD_MS`.
  */
-let barDrag: { cursor: { x: number; y: number }; bounds: Rect; moved: boolean; last: number } | null = null
+let barDrag: { cursor: { x: number; y: number }; bounds: Rect; moved: boolean; last: number; moves: number } | null = null
 const DRAG_HOLD_MS = 10_000
 /** The desktop bar unfolds upwards where it stands now (its folded part is then the bottom of the window). */
 let barGrowsUp = true
@@ -663,11 +664,14 @@ function registerIpc(): void {
   })
   // D303: the desktop bar dragged by its handle – it follows the cursor's way (past 4 px: a click on the handle moves
   // nothing); where it is let go, it stays – at the cursor of that moment, also when the last frame's move never came.
-  ipcMain.on(CH.barDrag, (e, phase: unknown) => {
+  ipcMain.on(CH.barDrag, (e, phase: unknown, why: unknown) => {
     if (viewOf(e.sender) !== 'bar' || !bar?.alive) return
     if (phase === 'start') {
       const from = bar.currentBounds
-      barDrag = from ? { cursor: screen.getCursorScreenPoint(), bounds: from, moved: false, last: Date.now() } : null
+      const cursor = screen.getCursorScreenPoint()
+      barDrag = from ? { cursor, bounds: from, moved: false, last: Date.now(), moves: 0 } : null
+      // The trace of a drag (E4b.12: on a real mouse the bar never moved) – its start, and at its end what came.
+      log('info', `pasek: chwycony za uchwyt – pasek ${from ? `${from.x},${from.y}` : 'bez miejsca'}, kursor ${cursor.x},${cursor.y}, na wierzchu: ${prefs().onTop}`)
       return
     }
     if (!barDrag || (phase !== 'move' && phase !== 'end')) return
@@ -675,10 +679,12 @@ function registerIpc(): void {
     const to = screen.getCursorScreenPoint()
     drag.moved ||= Math.hypot(to.x - drag.cursor.x, to.y - drag.cursor.y) >= 4
     drag.last = Date.now()
+    if (phase === 'move') drag.moves++
     const at = drag.moved ? draggedBounds(drag.bounds, drag.cursor, to, displays()) : null
     if (at) bar.apply({ bounds: at })
     if (phase === 'end') {
       barDrag = null
+      log('info', `pasek: puszczony (${typeof why === 'string' ? why : '?'}) po ${drag.moves} ruchach, kursor ${to.x},${to.y}${at ? ` – pasek ${at.x},${at.y}` : ' – bez przesunięcia'}`)
       if (at) void setPrefs({ barPlacement: placementAfterDrag(at, displays(), barFolded(), barGrowsUp) })
       else layoutBar()
     }

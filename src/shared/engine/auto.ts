@@ -16,7 +16,7 @@ import { isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
 import { blockAt, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
-import { requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
+import { isRunningRequest, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
 import { plannedEndOf, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
@@ -456,7 +456,8 @@ export function questionsOf(inp: Omit<AutoInput, 'gate'>): Question[] {
   // „Koniec pracy?” – once, after the last work block, when the end is not confirmed and no fixed work block is left.
   const end = state.ends.at(-1)
   if (end && !end.confirmed && end.at <= state.now && !t.workEndConfirmed) {
-    const workRuns = [t.fg, ...t.bg].some((x) => x?.info.isWork && !x.info.rules.keepsRegen)
+    // A request that interrupted a work block resumes it at its end: no „Koniec pracy?” meanwhile (T503).
+    const workRuns = [t.fg, ...t.bg].some((x) => x?.info.isWork && !x.info.rules.keepsRegen) || state.facts.requests.some((r) => isRunningRequest(r) && r.interrupts != null && byIdWork(state, r.interrupts))
     const lastWork = [...state.facts.blocks.values()].filter((f) => f.endedAt != null && f.endedAt <= end.at && byIdWork(state, f.id)).sort((a, b) => b.endedAt! - a.endedAt!)[0]
     const silentEnd = lastWork && ['twoQuestions', 'idle', 'absence', 'shutdown'].includes(lastWork.endRule ?? '')
     const id = questionId(date, 'workEnd', null, end.at)

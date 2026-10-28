@@ -9,6 +9,8 @@
  * Changed against FI: the labels for the interface stay in FI (this app shows conflicts from E3 on), `setAt` added for
  * the queue of edits; the bookkeeping fields of this app (`updatedAt`, `updatedBy`, `schema`).
  */
+import type { EditEntry } from '../api'
+
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 export type Path = Array<string>
 
@@ -213,4 +215,15 @@ export function setAt(root: unknown, path: Path, value: unknown): unknown {
   if (next === undefined) delete out[part]
   else out[part] = next
   return out
+}
+
+/**
+ * The edit that turns `before` into `after` (the window's writes and the bar's variants): the fields that differ, each
+ * with its value before (its base); a new record – every field; none after – the record removed.
+ */
+export function recordEdit(rel: string, before: Record<string, unknown> | null, after: Record<string, unknown> | null): EditEntry | null {
+  if (!after) return before ? { rel, remove: true, edits: [] } : null
+  if (!before) return { rel, create: true, edits: Object.entries(after).map(([k, v]) => ({ path: [k], base: undefined, value: v })) }
+  const edits = diffRecords(before, after).map((c) => ({ path: c.path, base: c.before, value: c.after }))
+  return edits.length ? { rel, edits } : null
 }

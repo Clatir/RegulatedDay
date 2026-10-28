@@ -135,6 +135,20 @@ export function variantCauses(state: DayState, energy: EnergyState | null): Vari
   return out.sort((a, b) => a.at - b.at)
 }
 
+/**
+ * „Przestaw plan” without the marker (spec „Przestaw plan otwiera go także bez znacznika”): the cause there is now, as
+ * `variantCauses` judges it – the forecast end of work after the approved boundary, else a pool at the reserve outside
+ * the calibration (`energy.variants`); null – the plan fits.
+ */
+export function planCause(state: DayState, energy: EnergyState | null, now: number): VariantCause | null {
+  const id = `variants:${state.grid.date}:plan:${now}`
+  const end = state.lastWorkForecast
+  const boundary = state.boundary.approved
+  if (boundary != null && end != null && end > boundary) return { kind: 'time', minutes: end - boundary, id, at: now }
+  const pool = energy?.known && energy.enabled && energy.variants ? (Object.keys(energy.atReserve) as Pool[]).find((p) => energy.atReserve[p]) : undefined
+  return pool ? { kind: 'energy', pool, id, at: now } : null
+}
+
 /** Flexible blocks still to come (not begun, not parked), in the plan, never protected: the candidates of a variant. */
 function candidates(state: DayState, filter: (b: BlockInfo) => boolean): Array<{ info: BlockInfo; from: number; to: number }> {
   const out: Array<{ info: BlockInfo; from: number; to: number }> = []

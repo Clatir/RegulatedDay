@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
 import { autoActions } from '@shared/engine/auto'
+import { requestAction } from '@shared/engine/requests'
 import { timerAction, type TimerAction } from '@shared/engine/timer'
 import { engineView } from '@shared/engineView'
 import { toneOnChange } from '../../../src/main/widget'
@@ -47,6 +48,45 @@ describe('widok paska z silnika', () => {
     click(s, '09:00', { a: 'next' })
     click(s, '13:00', { a: 'start', block: 'm' })
     expect(view(s, '13:05').tone).toBe('zycie')
+  })
+
+  it('trwająca prośba w miejscu bloku, przerwany blok cichą linią bez kropki i bez „Wznów · Zaparkuj” (D312, D247)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 120 })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const t = s.at('08:30')
+    const r = requestAction(s.stateAt(t), { a: 'requestNow', request: 'r1', person: 'mama', urgent: true, estimateMin: 30 }, t)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, t)
+    const named = (time: string) => {
+      const at = s.at(time)
+      const ctx = s.contextAt(at)
+      const state = s.stateAt(at)
+      return engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, at, 'pca'), now: at, name: () => 'Inne obowiązki', care, modePrefs: { sessionMode: true, classMode: true }, pending: null, person: (id) => (id === 'mama' ? 'Mama' : (id ?? 'osoba: ?')) })
+    }
+    const v = named('08:42')
+    expect(v.requests.running).toMatchObject({ id: 'r1', day: DATE, mode: 'urgent', person: 'Mama', from: s.at('08:30'), estimateMin: 30 })
+    expect(v.requests.interrupted).toBe('Inne obowiązki – pauza, wróci po „Koniec”')
+    expect(v.lines.some((l) => l.id === 'paused:a')).toBe(false)
+    expect(v.buttons.start).toBeNull()
+    expect(v.dot).toBe(false)
+    // Resumed from the main window meanwhile: it waits for nothing – no line.
+    expect(click(s, '08:45', { a: 'start', block: 'a' }).ok).toBe(true)
+    expect(named('08:46').requests.interrupted).toBeNull()
+    // Without a person: „osoba: ?”.
+    const t2 = s.at('08:50')
+    const end = requestAction(s.stateAt(t2), { a: 'requestEnd', request: 'r1' }, t2)
+    if (!end.ok) throw new Error(end.why)
+    s.write(end.events, t2)
+    const n = requestAction(s.stateAt(s.at('09:00')), { a: 'requestNow', request: 'r2', person: null }, s.at('09:00'))
+    if (!n.ok) throw new Error(n.why)
+    s.write(n.events, s.at('09:00'))
+    expect(named('09:01').requests.running).toMatchObject({ id: 'r2', mode: 'now', person: 'osoba: ?', estimateMin: null })
+  })
+
+  it('kolory paska, ikony i panelu z zestawu „cieplejsze” (D314)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    expect(view(s, '08:30')).toMatchObject({ toneSet: 'cieple', color: '#E8A15A', iconColor: '#E8A15A' })
   })
 
   it('kropka tylko przy tym, co czeka na kliknięcie: „Dalej?” i „Zacznij · Odwołaj”; lista automatyczna z „Cofnij”', () => {

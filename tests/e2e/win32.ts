@@ -122,6 +122,19 @@ public static class RdWin {
     var up = new INPUT(); up.type = 0; up.mi.flags = 0x0004;
     Send(new INPUT[] { down, up });
   }
+  /** A real drag: the left button down at (x1, y1), the cursor in \`steps\` moves to (x2, y2) \`stepMs\` apart, up there. */
+  public static void Drag(int x1, int y1, int x2, int y2, int steps, int stepMs) {
+    Move(x1, y1);
+    var down = new INPUT(); down.type = 0; down.mi.flags = 0x0002;
+    var up = new INPUT(); up.type = 0; up.mi.flags = 0x0004;
+    Send(new INPUT[] { down });
+    System.Threading.Thread.Sleep(stepMs);
+    for (int i = 1; i <= steps; i++) {
+      Move(x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps);
+      System.Threading.Thread.Sleep(stepMs);
+    }
+    Send(new INPUT[] { up });
+  }
 }
 `
 
@@ -166,6 +179,10 @@ export function hover(points: Array<[number, number]>, dwellMs: number): void {
 }
 export function click(x: number, y: number): void {
   ps(`[RdWin]::Click(${Math.round(x)}, ${Math.round(y)})`)
+}
+/** A real drag with the left button (physical px): down at `from`, `steps` moves `stepMs` apart, up at `to`. */
+export function drag(from: [number, number], to: [number, number], steps = 24, stepMs = 25): void {
+  ps(`[RdWin]::Drag(${Math.round(from[0])}, ${Math.round(from[1])}, ${Math.round(to[0])}, ${Math.round(to[1])}, ${steps}, ${stepMs})`)
 }
 
 /** The rectangle of a taskbar button found by UI Automation by a word of its name; null = no such button. */

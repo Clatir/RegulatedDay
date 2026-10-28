@@ -22,22 +22,24 @@ export type Tone = 'praca' | 'zycie' | 'wolne' | 'rezerwa' | 'brak'
 export type WarnStep = 'none' | 'warm' | 'five' | 'zero'
 
 /**
- * The tones of the E0 trial – working colours only: the final ones are asked before E4b (docs/postep.md). The life class
+ * The tones of the bar, the icon and the panel: the set „cieplejsze” from the trial's comparison (D314). The life class
  * is lavender, not grey: a grey icon means the widget is hidden.
  */
 export const TONES: Record<Tone, string> = {
-  praca: PALETTE.lamp,
-  zycie: '#B49FCC',
-  wolne: PALETTE.sea,
-  rezerwa: PALETTE.rose,
+  praca: '#E8A15A',
+  zycie: '#C9A2D6',
+  wolne: '#8CC4A8',
+  rezerwa: '#E08A7E',
   brak: '#8C7F87'
 }
 
-/** The sets of tones to compare in the trial (D298): the working one (the engine's until you choose) and two more. */
+/** The sets of tones compared in the trial (D298): the engine's – „cieplejsze” (D314) – and the two others. */
 export type ToneSetId = 'robocze' | 'cieple' | 'chlodne'
+/** The set the engine colours by (D314). */
+export const ENGINE_TONE_SET: ToneSetId = 'cieple'
 export const TONE_SETS: Record<ToneSetId, { name: string; tones: Record<Tone, string> }> = {
-  robocze: { name: 'robocze (z próby E0)', tones: TONES },
-  cieple: { name: 'cieplejsze', tones: { praca: '#E8A15A', zycie: '#C9A2D6', wolne: '#8CC4A8', rezerwa: '#E08A7E', brak: '#8C7F87' } },
+  robocze: { name: 'robocze (z próby E0)', tones: { praca: PALETTE.lamp, zycie: '#B49FCC', wolne: PALETTE.sea, rezerwa: PALETTE.rose, brak: '#8C7F87' } },
+  cieple: { name: 'cieplejsze', tones: TONES },
   chlodne: { name: 'chłodniejsze', tones: { praca: '#F0C674', zycie: '#9FA8DA', wolne: '#6FB3C8', rezerwa: '#D98BA0', brak: '#8C7F87' } }
 }
 
