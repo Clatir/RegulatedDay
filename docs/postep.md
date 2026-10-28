@@ -26,10 +26,10 @@
      D327 (bez folderu neutralny pasek), D328 (rutyny w pasku i „Dziś”), D329 (rytuał w dniu bez pracy), D330 (kopia
      dnia także na dziś i minione z ostrzeżeniem); T513 (podział PR-ów, rozstrzygnięcia A3-10, A5-12, A7-13).
    - PR-y ciągiem bez pauz (D317) według `docs/plan.md` 5.2a–5.2f: 0.16.0 i 0.17.0 wydane (v0.17.0 28.10 16:17);
-     0.18.0 i 0.19.0 wydane (v0.19.0 28.10 18:16); 0.20.0 – PR #30, po czerwonym Windows (testy paska po D327)
-     poprawka testów b0e5e9a, run 40744452560; 0.21.0, 0.22.0 i 0.23.0 – gałęzie wypchnięte (z tą samą poprawką testów),
-     PR-y po kolei po scaleniu poprzedniego;
-     0.24.0 – gałąź wypchnięta po przeglądzie; **teraz 5.3** – przypadki brzegowe i drobne uwagi (T515, T517: A1-15, A3-09,
+     0.18.0, 0.19.0 i 0.20.0 wydane (v0.20.0 28.10 19:25); 0.21.0 – PR #31 scalony (df35cdc), wydanie z runu
+     40760939184; 0.22.0 – PR #32 (run 40761017873); 0.23.0 i 0.24.0 – gałęzie wypchnięte po przeglądach, PR-y po kolei
+     po scaleniu poprzedniego (w PR-ach CI Windows biegnie ~30 min; wieczorem tryb sesji – testy E2E to uwzględniają);
+     **teraz 5.3** (gałąź `claude/0.25.0-brzegi` od 0.24.0) – przypadki brzegowe i drobne uwagi (T515, T517: A1-15, A3-09,
      A3-16, A4-07, A5-07, A6-11, A6-14–A6-17, A6-21, A6-24, A7-10, A7-11, A7-20, A8-08, A8-09), potem 5.4.
    - 5.3 przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji.
    - 5.4 bramka 1.0 – bez czekania na Twój odbiór (D324).
