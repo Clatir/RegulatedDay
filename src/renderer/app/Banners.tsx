@@ -5,7 +5,8 @@
  */
 import { useState } from 'react'
 import type { MovedTo } from '@shared/api'
-import { countLabel, formatNumber, plDate } from '@shared/format'
+import { formatNumber, plDate } from '@shared/format'
+import { unsyncedText } from '@shared/sync/syncLines'
 import { useData } from '../store/data'
 import { navigate, setMovedLater, toast, useUi } from '../store/ui'
 import { updateAction, useUpdate } from '../store/update'
@@ -56,7 +57,7 @@ function AwayBanner() {
   if (!away) return null
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-rose/40 bg-rose-soft px-4 py-2 text-[12.5px]" data-testid="banner-away">
-      Folder danych jest teraz niedostępny{n ? ` – ${countLabel(n, 'zmiana zapisze się', 'zmiany zapiszą się', 'zmian zapisze się')} po jego powrocie` : ''}.
+      Folder danych jest teraz niedostępny{n ? ` – ${unsyncedText(n, true)}` : ''}.
     </div>
   )
 }

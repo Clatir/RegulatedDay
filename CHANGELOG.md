@@ -1,8 +1,8 @@
 # Changelog
 
 ## 0.24.0
-- Nieudana kopia zapasowa od razu daje cichą linię w pasku („Kopia zapasowa się nie udała – spróbuję znowu za godzinę”), a po 3 dniach bez żadnej kopii okno główne pokazuje u góry „Brak kopii zapasowej od …” z przyczyną ostatniej próby. Dotąd błąd był tylko w dzienniku.
-- Gdy folder danych jest niedostępny, pasek i okno mówią, ile zmian zapisze się po jego powrocie („3 zmiany zapiszą się po powrocie folderu danych”), a wyjście z aplikacji pokazuje to samo w powiadomieniu – nic nie udaje, że jest już zapisane.
+- Nieudana kopia zapasowa od razu daje cichą linię w pasku („Kopia zapasowa się nie udała – następna próba za godzinę”), a po 3 dniach bez żadnej kopii okno główne pokazuje u góry „Brak kopii zapasowej od …” z przyczyną ostatniej próby. Dotąd błąd był tylko w dzienniku.
+- Gdy folder danych jest niedostępny, pasek i okno mówią, ile zmian zapisze się po jego powrocie („3 zmiany zapiszą się po powrocie folderu danych”), a wyjście z aplikacji pokazuje to samo w powiadomieniu – nic nie udaje, że jest już zapisane. Gdy folder jest, ale plik długo nie daje się zapisać (np. trzyma go OneDrive), po 5 min pasek mówi „N zmian czeka na zapis w folderze danych”. Liczą się tylko Twoje zmiany.
 
 ## 0.23.0
 - Dźwięk 5 i 0 min gra na jednym komputerze – tym, przy którym byłeś ostatnio (przy remisie na prowadzącym; przy oglądaniu wykładu liczy się też samo odblokowanie ekranu na komputerze, który go odtwarza), nigdy na komputerze, który nagrywa wykład. Dotąd grał na każdym komputerze z włączonym dźwiękiem.

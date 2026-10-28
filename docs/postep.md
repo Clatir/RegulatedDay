@@ -29,8 +29,8 @@
      0.18.0 i 0.19.0 wydane (v0.19.0 28.10 18:16); 0.20.0 – PR #30, po czerwonym Windows (testy paska po D327)
      poprawka testów b0e5e9a, run 40744452560; 0.21.0, 0.22.0 i 0.23.0 – gałęzie wypchnięte (z tą samą poprawką testów),
      PR-y po kolei po scaleniu poprzedniego;
-     **teraz 5.2f, część 2c – 0.24.0** (gałąź od 0.23.0): ostrzeżenie o kopii zapasowej (A3-06) i „N zmian zapisze się po
-     powrocie folderu” (A3-07); potem 5.3 i 5.4.
+     0.24.0 – gałąź wypchnięta po przeglądzie; **teraz 5.3** – przypadki brzegowe i drobne uwagi (T515, T517: A1-15, A3-09,
+     A3-16, A4-07, A5-07, A6-11, A6-14–A6-17, A6-21, A6-24, A7-10, A7-11, A7-20, A8-08, A8-09), potem 5.4.
    - 5.3 przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji.
    - 5.4 bramka 1.0 – bez czekania na Twój odbiór (D324).
 2. Ty: aktualizacja do 0.15.0 i odbiór według `docs/odbior.md` (nowe E5b–E7d; E4b.12 po poprawce, E4b.10 dźwięk). Odbiór
@@ -40,6 +40,12 @@
 - `docs/odbior.md` (układ z 27.10): na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
+
+## 0.24.0 – funkcje D325, część 2c: kopia zapasowa i niedostępny folder (ciąg E, 5.2f)
+- Gałąź `claude/0.24.0-funkcje` (od 0.23.0) od 28.10 ok. 21:00.
+- Zakres (T522): ostrzeżenie o kopii zapasowej (A3-06), „N zmian zapisze się po powrocie folderu” (A3-07).
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. liczenie tylko Twoich zmian, plik zajęty przy
+  obecnym folderze, fałszywe „brak kopii” przy starcie i przy niedostępnym folderze, 3 dni w czasie.
 
 ## 0.23.0 – funkcje D325, część 2b: komputery i synchronizacja (ciąg E, 5.2f)
 - Gałąź `claude/0.23.0-funkcje` (od 0.22.0) od 28.10 ok. 20:00.

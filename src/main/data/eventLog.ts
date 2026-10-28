@@ -39,6 +39,12 @@ export interface DayRead {
   copies: number
 }
 
+/** The app's own bookkeeping in the log: no change of yours (A3-07). */
+const BOOKKEEPING = new Set(['observe.from', 'observe.alive', 'observe.to', 'gap.open', 'gap.close', 'presence.first', 'minutes', 'hardend.pass', 'day.create', 'notice.shown', 'question.seen', 'energy.reserve', 'day.freeze'])
+
+/** A change you made (a click, an answer, an action of a window), never an automatic action of the app. */
+const isYourChange = (e: AnyEvent): boolean => !BOOKKEEPING.has(e.k) && !(e as { autoRule?: unknown }).autoRule
+
 interface Cached {
   size: number
   mtimeMs: number
@@ -52,6 +58,8 @@ export class EventLog {
   /** What this computer last saw of its own file on OneDrive (an unexpected change means it was swapped). */
   private readonly ownStat = new Map<string, { size: number; mtimeMs: number }>()
   private writing: Promise<void> = Promise.resolve()
+  /** When this run began (its computer's clock): what counts as written in it. */
+  private readonly openedAt: number
 
   constructor(
     private readonly o: {
@@ -63,7 +71,9 @@ export class EventLog {
       clock: EventClock
       rulesVersion: number
     }
-  ) {}
+  ) {
+    this.openedAt = o.clock.now()
+  }
 
   get journalPath(): string {
     return join(this.o.stateDir, JOURNAL_FILE)
@@ -173,14 +183,32 @@ export class EventLog {
     return [...this.pending]
   }
 
-  /** Own events of those days not in the folder's log as last seen – what „N zmian” counts (A3-07). */
-  get pendingEvents(): number {
-    let n = 0
+  /**
+   * Your own changes of those days not in the folder's log as last seen – what „N zmian” counts (A3-07): never the app's
+   * own bookkeeping (observation, gaps of input, minutes, notices – A3-07 review). A day whose file this run has not read
+   * yet is not known to be empty: only events written in this run count there.
+   */
+  private unsyncedEvents(): AnyEvent[] {
+    const out: AnyEvent[] = []
     for (const day of this.pending) {
-      const there = new Set(this.cache.get(paths.log(day, this.o.computer))?.read.events.map((e) => e.id) ?? [])
-      for (const id of this.own.get(day)?.keys() ?? []) if (!there.has(id)) n++
+      const cached = this.cache.get(paths.log(day, this.o.computer))
+      const there = new Set(cached?.read.events.map((e) => e.id) ?? [])
+      for (const e of this.own.get(day)?.values() ?? []) {
+        if (there.has(e.id) || !isYourChange(e) || (!cached && e.t < this.openedAt)) continue
+        out.push(e)
+      }
     }
-    return n
+    return out
+  }
+
+  get pendingEvents(): number {
+    return this.unsyncedEvents().length
+  }
+
+  /** The oldest of them (its computer's clock, ms), null: none. */
+  get pendingSince(): number | null {
+    const ts = this.unsyncedEvents().map((e) => e.t)
+    return ts.length ? Math.min(...ts) : null
   }
 
   /**

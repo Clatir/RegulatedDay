@@ -286,14 +286,15 @@ export class WidgetEngine {
     if (v.hidden || v.night || v.day == null) return
     // Its „OK” is the day's answer in the log (per computer): never again that day, also after a start of the app.
     const battery = (this.d.batterySaver?.() ?? false) && !answered(this.model?.ctx.events ?? [], batteryLine(v.day, folder.presence.own.computer))
-    v.lines = [...v.lines, ...syncLines({ ...folder.syncState(now), battery, backupFailed: this.d.backup?.()?.failed != null, unsynced: folder.unavailable ? folder.unsynced : 0 }, now, v.day, folder.presence.own.computer)]
+    v.lines = [...v.lines, ...syncLines({ ...folder.syncState(now), battery, backupFailed: this.d.backup?.()?.failed != null }, now, v.day, folder.presence.own.computer)]
   }
 
   /** A day not counted now while the folder is away: the changes waiting for it still say so (A3-07). */
   private awayView(folder: DataFolder): void {
     const v = this.view!
-    if (!folder.unavailable || !folder.unsynced) return
-    v.lines = [...v.lines, ...syncLines({ ...NO_SYNC, unsynced: folder.unsynced }, this.now, logicalDayOf(this.now))]
+    const s = folder.syncState(this.now)
+    if (!s.unsynced) return
+    v.lines = [...v.lines, ...syncLines({ ...NO_SYNC, unsynced: s.unsynced, folderAway: s.folderAway }, this.now, logicalDayOf(this.now))]
   }
 
   /** The marker closed – „Zostaw” or a variant done: every cause holding now with it (it never comes back for them). */

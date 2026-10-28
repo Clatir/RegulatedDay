@@ -79,7 +79,37 @@ describe('usługa folderu danych – kopia w procesie pomocniczym', () => {
     clock.now += 61 * 60_000
     fail = false
     await s.tick()
-    expect(s.backup).toEqual({ failed: null, lastOk: DAY })
+    expect(s.backup).toEqual({ failed: null, lastOk: DAY, known: true })
+    await s.stop('quit')
+  })
+
+  it('stan kopii po przeglądzie: udana próba zdejmuje ostrzeżenie; niedostępny folder nie zmienia znanej kopii; przed pierwszym spojrzeniem – nieznany', async () => {
+    const clock = { now: placeLogical(DAY, 11 * 60) }
+    let fail = true
+    const worker = { run: async (t: { backupsDir: string; date: string }) => {
+      if (fail) return { ok: false, error: 'plik zajęty: rd.json' }
+      mkdirSync(join(t.backupsDir, 'daily'), { recursive: true })
+      writeFileSync(join(t.backupsDir, 'daily', `${t.date}.zip`), 'zip')
+      return { ok: true, files: 3 }
+    } }
+    const s = await DataService.start(options(clock, { worker: worker as never }))
+    expect(s.backup.known).toBe(false)
+    for (let i = 0; i <= 5; i++) {
+      clock.now = placeLogical(DAY, 12 * 60) + i * 60_000
+      await s.tick()
+    }
+    expect(s.backup.failed).toMatchObject({ day: DAY })
+    fail = false
+    clock.now += 61 * 60_000
+    await s.tick()
+    expect(s.backup).toEqual({ failed: null, lastOk: DAY, known: true })
+    // The folder away for an hour: its backups would read as none – what was known stays.
+    rmSync(dataDir, { recursive: true, force: true })
+    clock.now += 61 * 60_000
+    await s.tick()
+    clock.now += 61 * 60_000
+    await s.tick()
+    expect(s.backup.lastOk).toBe(DAY)
     await s.stop('quit')
   })
 })

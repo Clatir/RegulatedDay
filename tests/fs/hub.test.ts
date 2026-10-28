@@ -245,4 +245,22 @@ describe('folder danych okna głównego (DataHub)', () => {
       await hub.close('quit')
     }
   })
+
+  it('widok danych: folder jest, kopie jeszcze nieznane – bez ostrzeżenia; po spojrzeniu na kopie – stan z folderu (A3-06, A3-07)', async () => {
+    // A folder set up long ago, its newest daily backup from long ago too.
+    writeFileSync(join(dirA, 'rd.json'), JSON.stringify({ schema: 1, setup: { at: Date.parse('2026-01-01T10:00:00Z'), by: 'pca' } }))
+    mkdirSync(join(dirA, 'backups', 'daily'), { recursive: true })
+    writeFileSync(join(dirA, 'backups', 'daily', '2026-01-02.zip'), 'zip')
+    const { hub } = hubWith()
+    expect(await hub.open(dirA)).toBe(true)
+    try {
+      const before = await hub.view()
+      expect(before.away).toBe(false)
+      if (!hub.service!.backup.known) expect(before.backup.stale).toBe(false)
+      await hub.service!.tick()
+      expect((await hub.view()).backup).toMatchObject({ lastOk: '2026-01-02', stale: true, failed: null })
+    } finally {
+      await hub.close('quit')
+    }
+  })
 })

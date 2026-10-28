@@ -22,7 +22,7 @@ import type { SideB } from '@shared/engine/sideB'
 import { keptOnRestore, rdFrom } from '@shared/model/rd'
 import { requestCounters } from '@shared/engine/requests'
 import type { AnyEvent } from '@shared/model/events'
-import { logicalDayOf, weekStart } from '@shared/time/day'
+import { logicalDayOf, placeLogical, weekStart } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { writeFileAtomic } from '../datastore/atomic'
@@ -37,12 +37,13 @@ import { DataService, STOP_TIMEOUT_MS, type ServiceOptions } from './service'
 export const BACKUP_STALE_DAYS = 3
 
 /**
- * The backups as the window shows them (A3-06): the last own failure, the newest daily backup and „none for 3 days” – from
- * the newest one, or without any from the folder's setup (a folder of a day or two has none yet by right).
+ * The backups as the window shows them (A3-06): the last own failure, the newest daily backup and „none for 3 days” – 3
+ * whole days from the newest one (made after 12:00 of its day), or without any from the folder's setup (a folder of a day
+ * or two has none yet by right); not known yet (the first look at the backups comes with the first check) – no warning.
  */
-export function backupStatus(b: { failed: { error: string } | null; lastOk: string | null }, setupAt: number | null, now: number): DataView['backup'] {
-  const since = b.lastOk ?? (setupAt != null ? logicalDayOf(setupAt) : null)
-  return { failed: b.failed?.error ?? null, lastOk: b.lastOk, stale: since != null && since <= addDays(logicalDayOf(now), -BACKUP_STALE_DAYS) }
+export function backupStatus(b: { failed: { error: string } | null; lastOk: string | null; known?: boolean }, setupAt: number | null, now: number): DataView['backup'] {
+  const since = b.lastOk ? placeLogical(b.lastOk, 12 * 60) : setupAt
+  return { failed: b.failed?.error ?? null, lastOk: b.lastOk, stale: b.known !== false && since != null && now - since >= BACKUP_STALE_DAYS * 86_400_000 }
 }
 
 export interface HubOptions {
@@ -409,7 +410,7 @@ export class DataHub {
 
   /** The backups for the window (A3-06), from what the data service knows and the folder's setup. */
   private backupView(rd: RawRecord | null, now: number): DataView['backup'] {
-    return backupStatus(this.service?.backup ?? { failed: null, lastOk: null }, rdFrom(rd ?? undefined).setup?.at ?? null, now)
+    return backupStatus(this.service?.backup ?? { failed: null, lastOk: null, known: false }, rdFrom(rd ?? undefined).setup?.at ?? null, now)
   }
 
   /** The restored backup's folder that did not open (once tried): where it is and why. */

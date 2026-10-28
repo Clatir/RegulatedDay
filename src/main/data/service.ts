@@ -21,7 +21,7 @@ import { writePlan, PLAN_DAYS, type PlanBlock as GuardBlock } from '../update/fi
 import { InputTracker, SAMPLE_MS } from '../engine/input'
 import { Scheduler } from '../engine/scheduler'
 import { inProcess, type Worker } from '../worker/host'
-import { backupDue, copyLatestTo, listBackups } from './backup'
+import { backupDue, copyLatestTo, latestDaily } from './backup'
 import { DataFolder } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 
@@ -272,17 +272,20 @@ export class DataService {
     if (logicalMinuteOf(today, now) < 12 * 60) return
     this.lastBackupTry = now
     const backups = join(this.o.dataDir, 'backups')
-    if (!(await backupDue(backups, today))) return
+    if (!(await backupDue(backups, today))) {
+      // Today's backup is there (made by another computer meanwhile): this computer's failure of today is no more.
+      this.backup = { known: true, lastOk: today, failed: this.backup.failed?.day === today ? null : this.backup.failed }
+      return
+    }
     // In the helper process: a hung or crashed one is a failed backup (tried again in an hour), never a failed check.
     const r = await (this.o.worker ?? inProcess).run({ kind: 'backup', dataDir: this.o.dataDir, backupsDir: backups, date: today }).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }))
     if (r.ok) {
       this.o.log('info', `kopia zapasowa ${today}: ${r.files} plików`)
-      this.backup = { failed: null, lastOk: today }
+      this.backup = { failed: null, lastOk: today, known: true }
     } else {
       this.o.log('error', `kopia zapasowa ${today} nie powiodła się: ${r.error}`)
-      this.backup = { ...this.backup, failed: { at: now, error: r.error } }
+      this.backup = { ...this.backup, failed: { at: now, error: r.error, day: today } }
     }
-    this.o.onChecked?.()
   }
 
   /**
@@ -290,16 +293,19 @@ export class DataService {
    * kopii także w oknie głównym”, A3-06): its own last try's failure (null: none, or the next one made it), the newest
    * daily backup of the folder – also one another computer made.
    */
-  backup: { failed: { at: number; error: string } | null; lastOk: string | null } = { failed: null, lastOk: null }
+  backup: { failed: { at: number; error: string; day: string } | null; lastOk: string | null; known: boolean } = { failed: null, lastOk: null, known: false }
 
-  /** The newest daily backup of the folder (every hour, and at the start): a listing that fails keeps what was known. */
+  /**
+   * The newest daily backup of the folder (every hour, and at the start): a listing that fails – or a folder that is not
+   * there (no backups would read as none, A3-06 review) – keeps what was known.
+   */
   private async lookAtBackups(): Promise<void> {
-    const list = await listBackups(join(this.o.dataDir, 'backups')).catch(() => null)
-    if (!list) return
-    const days = list.filter((b) => b.kind === 'daily').map((b) => b.name.replace(/\.zip$/i, '')).filter(isIsoDate).sort()
-    const lastOk = days.at(-1) ?? null
+    if (this.folder.unavailable) return
+    const lastOk = await latestDaily(join(this.o.dataDir, 'backups')).catch(() => undefined)
+    if (lastOk === undefined) return
     // A backup of this computer's failed day made since (another computer, a later try) takes its warning away.
-    this.backup = { failed: this.backup.failed && lastOk === logicalDayOf(this.now()) ? null : this.backup.failed, lastOk }
+    const failed = this.backup.failed && lastOk != null && lastOk >= this.backup.failed.day ? null : this.backup.failed
+    this.backup = { failed, lastOk, known: true }
   }
 
   /** The newest daily backup copied to this computer's extra place (spec: also when it does not lead). */
