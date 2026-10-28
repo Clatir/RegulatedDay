@@ -3,7 +3,7 @@
  * the folder at the next start, a stop waits for a check under way (no events after the observation's end), and the
  * guard's plan of sessions and classes is refreshed every hour.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -60,6 +60,26 @@ describe('usługa folderu danych – kopia w procesie pomocniczym', () => {
     }
     expect(logs.some((l) => l.startsWith('error kopia zapasowa') && l.includes('limit czasu zadania backup'))).toBe(true)
     expect(logs.some((l) => l.includes('sprawdzenie folderu danych nie udało się'))).toBe(false)
+    await s.stop('quit')
+  })
+
+  it('stan kopii (A3-06): nieudana – od razu do ostrzeżenia; udana albo kopia tego dnia z innego komputera ją zdejmuje', async () => {
+    const clock = { now: placeLogical(DAY, 12 * 60) }
+    let fail = true
+    const worker = { run: async () => (fail ? { ok: false, error: 'plik zajęty: rd.json' } : { ok: true, files: 3 }) }
+    const s = await DataService.start(options(clock, { worker: worker as never }))
+    for (let i = 0; i <= 5; i++) {
+      clock.now = placeLogical(DAY, 12 * 60) + i * 60_000
+      await s.tick()
+    }
+    expect(s.backup.failed).toMatchObject({ error: 'plik zajęty: rd.json' })
+    // Another computer made today's backup meanwhile: seen within the hour, the warning goes.
+    mkdirSync(join(dataDir, 'backups', 'daily'), { recursive: true })
+    writeFileSync(join(dataDir, 'backups', 'daily', `${DAY}.zip`), 'zip')
+    clock.now += 61 * 60_000
+    fail = false
+    await s.tick()
+    expect(s.backup).toEqual({ failed: null, lastOk: DAY })
     await s.stop('quit')
   })
 })

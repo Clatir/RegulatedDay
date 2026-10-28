@@ -467,7 +467,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Zapamiętać w procesie głównym wynik ostatniej próby i datę ostatniej udanej kopii (z `listBackups`/`backupDue`, także gdy kopię zrobił inny komputer). Dodać do modelu widgetu linię ostrzeżenia przy błędzie, a do `DataView` stan „brak kopii od ≥ 3 dni” dla okna głównego. Test usługi z wadliwym plikiem.
 - **Weryfikacja:** Wynik `{ok:false}` kopii dziennej trafia tylko do `o.log('error', …)`. Nigdzie (widget, DataView, powiadomienia) nie ma stanu ostatniej udanej kopii ani ostrzeżenia, a komentarz „the widget warns” w backup.ts nie ma pokrycia w kodzie. Spec 655 wymaga ostrzeżenia w widgecie od razu i w oknie głównym po 3 dniach. Spec 490 wymienia „brak kopii zapasowej” wśród powiadomień, a Zakres 1.0 obejmuje codzienne kopie. Plan nie odkłada tego na po 1.0. `createDailyBackup` celowo przerywa kopię przy trwale nieczytelnym pliku, więc taki plik daje ciche, codzienne niepowodzenie. Lista odbioru E6b.2 też każe szukać błędu w main.log.
 - **Dowód:** src/main/data/service.ts:261-272 (backupIfDue tylko loguje); src/main/data/backup.ts:205-229 (komentarz „the widget warns”, przerwanie przy nieczytelnym pliku); grep „backup|kopi” w src/main/widget.ts – brak; docs/specyfikacja.md:490, 655, Zakres 1.0 (codzienne kopie); docs/odbior.md E6b.2
-- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
+- **Status:** poprawione w 0.24.0 (testy w `tests/fs/service.test.ts`, `tests/fs/folder.test.ts`, `tests/unit/sync-lines.test.ts`, `tests/fs/widget.test.ts`, T522)
 
 #### A3-08 · medium · potwierdzone – Widok okna i jego podpis czytają wszystkie prośby po kolei (`stat` każdego pliku) przy każdym sprawdzeniu i każdej edycji – przy skali 3 lat to znacznie ponad 0,1 s
 - **Plik:** `src/main/data/folder.ts:420` · rodzaj: perf · pewność recenzenta: medium
@@ -503,7 +503,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `DataFolder.unsynced` i `DataView.unsynced` istnieją, ale żaden ekran ani pasek ich nie czyta (grep w renderer: brak). Edycja, która czeka na folder (status `waiting`), jest w oknie traktowana jak zapisana (`isSaved`), bez żadnej informacji. Do tego `unsynced` liczy dni z oczekującymi zdarzeniami, a nie zdarzenia, a wpisy czekające na odpowiedź na pytanie liczy jak czekające na folder.
 - **Scenariusz:** Folder chwilowo niedostępny (dysk sieciowy, plik trzymany przez OneDrive). Użytkownik zmienia plan jutra i zamyka aplikację przekonany, że zmiana jest w folderze. Na drugim komputerze jej nie widzi i wprowadza ją jeszcze raz, co później daje pytania o konflikt.
 - **Poprawka:** Pokazać licznik w pasku lub oknie (i przy zamykaniu, gdy > 0). Liczyć zdarzenia oczekujące (suma po dniach) plus wpisy kolejki ze statusem `waiting` z innego powodu niż `BEHIND_QUESTION`.
-- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
+- **Status:** poprawione w 0.24.0 (testy w `tests/fs/service.test.ts`, `tests/fs/folder.test.ts`, `tests/unit/sync-lines.test.ts`, `tests/fs/widget.test.ts`, T522)
 
 #### A3-09 · low · bez weryfikacji – Usunięcie z kolejki nie ma bazy – rekord zmieniony w międzyczasie na innym komputerze jest usuwany bez pytania
 - **Plik:** `src/main/data/editQueue.ts:283` · rodzaj: spec · pewność recenzenta: high

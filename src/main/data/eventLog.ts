@@ -173,6 +173,16 @@ export class EventLog {
     return [...this.pending]
   }
 
+  /** Own events of those days not in the folder's log as last seen – what „N zmian” counts (A3-07). */
+  get pendingEvents(): number {
+    let n = 0
+    for (const day of this.pending) {
+      const there = new Set(this.cache.get(paths.log(day, this.o.computer))?.read.events.map((e) => e.id) ?? [])
+      for (const id of this.own.get(day)?.keys() ?? []) if (!there.has(id)) n++
+    }
+    return n
+  }
+
   /**
    * Makes the own log of a day on OneDrive hold every journal event: joins own conflict copies into it, appends the
    * missing events (ending the last line first), and rewrites it whole when a copy had to be joined.

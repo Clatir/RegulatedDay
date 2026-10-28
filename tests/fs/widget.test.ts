@@ -37,7 +37,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean } = {}) {
   const clock = { now: placeLogical(DAY, 10 * 60) }
   const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => o.oneDrive ?? true })
   const shown: NotifyIn[] = []
@@ -67,7 +67,8 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean } = {}) {
     emit: (v) => views.push(v),
     log: () => undefined,
     now: () => clock.now,
-    batterySaver: () => o.batterySaver ?? false
+    batterySaver: () => o.batterySaver ?? false,
+    backup: () => (o.backupFailed ? { failed: { error: 'plik zajęty' } } : null)
   })
   return { folder, clock, w, shown, views, closeFolder: () => (open = false), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
 }
@@ -395,6 +396,20 @@ describe('widget w procesie głównym', () => {
     await w.act('line', `${saved.id}|undo`, 'bar')
     expect(w.current().lines.some((l) => l.id === `routine:${DAY}:rut0000000000000000000`)).toBe(true)
     expect(w.current().lines.some((l) => l.id.startsWith('routineSaved:'))).toBe(false)
+  })
+
+  it('nieudana kopia – cicha linia od razu; folder niedostępny – „N zmian zapisze się po powrocie folderu danych” (A3-06, A3-07)', async () => {
+    const { w, folder, at } = await make({ backupFailed: true })
+    await folder.check()
+    await w.refresh()
+    expect(w.current().lines.map((l) => l.text)).toContain('Kopia zapasowa się nie udała – spróbuję znowu za godzinę')
+    rmSync(dataDir, { recursive: true, force: true })
+    at(10 * 60 + 1)
+    await folder.check()
+    folder.append({ day: DAY, dom: 'meta', k: 'observe.alive', at: placeLogical(DAY, 10 * 60 + 1) })
+    await folder.check()
+    await w.refresh()
+    expect(w.current().lines.some((l) => /zapisz(e|ą) się po powrocie folderu danych/.test(l.text))).toBe(true)
   })
 
   it('ciche linie komputerów: „Brak zmian z PC B od …” po 10 min ciszy świeżej obecności; bateria raz dziennie z „OK” (A8-07)', async () => {

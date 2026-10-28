@@ -29,6 +29,7 @@ import {
 import type { RitualValue } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import type { BarSpot, MachinePrefs } from '@shared/machine'
+import { countLabel } from '@shared/format'
 import { MAX_STEPS, ROUTINE_VERSIONS } from '@shared/model/routines'
 import { BAR_SPOTS, patchMachinePrefs } from '@shared/machine'
 import { displayAt, type Rect } from '@shared/bounds'
@@ -179,7 +180,8 @@ const widget = new WidgetEngine({
   showMain: (page) => showMainWindow(page),
   emit: (view) => showWidget(view),
   log,
-  batterySaver: () => batterySaverOn && inOneDriveNow()
+  batterySaver: () => batterySaverOn && inOneDriveNow(),
+  backup: () => hub?.service?.backup ?? null
 })
 
 function widgetView(): WidgetView {
@@ -1210,6 +1212,10 @@ app.on('before-quit', (e) => {
   if (hub && (hub.service || hub.status === 'opening') && !sessionEnding && !dataClosing) {
     dataClosing = true
     e.preventDefault()
+    // A folder that is not there: the app does not wait for it – it says what will be written on its return (spec
+    // „N zmian zapisze się po powrocie folderu … nic nie udaje sukcesu”, A3-07).
+    const f = hub.service?.folder
+    if (f?.unavailable && f.unsynced > 0) notify({ id: `unsynced:${Date.now()}`, title: 'Folder danych niedostępny', body: `${countLabel(f.unsynced, 'zmiana zapisze się', 'zmiany zapiszą się', 'zmian zapisze się')} po powrocie folderu (przy następnym starcie).`, line: null, day: null }, log)
     void Promise.race([hub.close('quit'), new Promise((r) => setTimeout(r, 2 * STOP_TIMEOUT_MS))])
       .catch((err) => log('warn', 'zamykanie folderu danych', err))
       .finally(() => app.quit())

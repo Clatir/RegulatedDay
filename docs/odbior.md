@@ -25,7 +25,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 
@@ -83,6 +83,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8h.1 Dźwięk na jednym komputerze (dwa komputery)
    - [ ] E8h.2 „Komputery” w Ustawieniach i „Zapomnij”
    - [ ] E8h.3 Ciche linie: OneDrive, zegar, „Brak zmian z …”, bateria (laptop)
+   - [ ] E8i.1 Ostrzeżenie o kopii zapasowej (gdy się zdarzy)
+   - [ ] E8i.2 Niedostępny folder: „N zmian zapisze się” (folder testowy)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
@@ -1432,3 +1434,25 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   na tym komputerze”; „Brak zmian z <komputer> od <godzina>”; wszystkie bez kropki i bez powiadomienia.
 - **Nie przechodzi, gdy:** linia OneDrive pojawia się po krótkim restarcie OneDrive, linia baterii wraca po „OK” tego
   samego dnia albo linie mają kropkę.
+
+### E8i – funkcje D325, część 2c: kopia zapasowa i niedostępny folder (0.24.0)
+
+#### E8i.1 Ostrzeżenie o kopii zapasowej (0.24.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/service.test.ts` („stan kopii”), `tests/unit/sync-lines.test.ts`, `tests/fs/widget.test.ts`.
+  Ty: rzut oka, gdy się zdarzy.
+- **Jak sprawdzić:** po 12:00 zablokuj na chwilę plik w folderze danych (np. otwarty w programie, który go trzyma)
+  i poczekaj na próbę kopii.
+- **Oczekiwany efekt:** w pasku cicho „Kopia zapasowa się nie udała – spróbuję znowu za godzinę”; po udanej kopii linia
+  znika. Po 3 dniach bez kopii w oknie u góry „Brak kopii zapasowej od …”.
+- **Nie przechodzi, gdy:** błąd jest tylko w dzienniku, linia ma kropkę albo baner pojawia się przy świeżej kopii.
+
+#### E8i.2 Niedostępny folder: „N zmian zapisze się” (0.24.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/folder.test.ts` („N zmian zapisze się”), `tests/fs/widget.test.ts`.
+  **Tylko Ty:** folder testowy na dysku wymiennym albo zmieniona nazwa folderu na chwilę.
+- **Jak sprawdzić:** przy pracy na folderze testowym zmień na chwilę nazwę folderu danych, kliknij „Start” bloku, zamknij
+  aplikację, przywróć nazwę i uruchom ją znowu.
+- **Oczekiwany efekt:** pasek i okno: „N zmian zapisze się po powrocie folderu danych”; przy wyjściu powiadomienie z tym
+  samym; po powrocie folderu zmiany są w nim.
+- **Nie przechodzi, gdy:** aplikacja udaje zapis, liczba nie rośnie z kliknięciami albo zmiany giną po powrocie folderu.

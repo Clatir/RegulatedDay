@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { NO_SYNC, syncLines } from '@shared/sync/syncLines'
 import { ONEDRIVE_DOWN_MS, OneDriveWatch } from '../../src/main/onedrive'
+import { backupStatus } from '../../src/main/data/hub'
 
 const at = (hhmm: string, day = '2026-10-28') => Date.parse(`${day}T${hhmm}:00+01:00`)
 
@@ -14,7 +15,7 @@ describe('ciche linie synchronizacji', () => {
   })
 
   it('teksty ze specyfikacji, bez kropki; „Brak zmian” z godziną, z innego dnia z datą', () => {
-    const lines = syncLines({ oneDriveDown: true, sharedWith: ['PC B'], asleep: [{ id: 'pca', name: 'PC A', since: at('14:20') }], clockAhead: [{ id: 'pcb', name: 'PC B', minutes: 4 }], dayAhead: true, battery: true }, at('14:40'), '2026-10-28', 'pca')
+    const lines = syncLines({ oneDriveDown: true, sharedWith: ['PC B'], asleep: [{ id: 'pca', name: 'PC A', since: at('14:20') }], clockAhead: [{ id: 'pcb', name: 'PC B', minutes: 4 }], dayAhead: true, battery: true, backupFailed: false, unsynced: 0 }, at('14:40'), '2026-10-28', 'pca')
     expect(lines.map((l) => l.text)).toEqual([
       'Zegar innego komputera jest ponad dobę z przodu – działania automatyczne czekają',
       'Zegar PC B wyprzedza ten komputer o 4 min – sprawdź czas w Windows',
@@ -73,5 +74,24 @@ describe('OneDrive po przeglądzie 0.23.0', () => {
     answer = async () => Promise.reject(new Error('pomocnik nie działa'))
     await w.check()
     expect(w.running).toBe(true)
+  })
+})
+
+describe('kopia zapasowa i zmiany czekające na folder (A3-06, A3-07)', () => {
+  it('nieudana kopia – cicha linia od razu; zmiany czekające – z polską liczbą', () => {
+    const lines = (s: Partial<typeof NO_SYNC>) => syncLines({ ...NO_SYNC, ...s }, at('14:40'), '2026-10-28').map((l) => l.text)
+    expect(lines({ backupFailed: true })).toEqual(['Kopia zapasowa się nie udała – spróbuję znowu za godzinę'])
+    expect(lines({ unsynced: 1 })).toEqual(['1 zmiana zapisze się po powrocie folderu danych'])
+    expect(lines({ unsynced: 3 })).toEqual(['3 zmiany zapiszą się po powrocie folderu danych'])
+    expect(lines({ unsynced: 12 })).toEqual(['12 zmian zapisze się po powrocie folderu danych'])
+  })
+
+  it('okno ostrzega po 3 dniach bez kopii – od najnowszej kopii, bez żadnej od założenia folderu', () => {
+    const now = at('14:40')
+    expect(backupStatus({ failed: null, lastOk: '2026-10-26' }, null, now).stale).toBe(false)
+    expect(backupStatus({ failed: null, lastOk: '2026-10-25' }, null, now).stale).toBe(true)
+    expect(backupStatus({ failed: { error: 'plik zajęty' }, lastOk: null }, at('10:00', '2026-10-27'), now)).toEqual({ failed: 'plik zajęty', lastOk: null, stale: false })
+    expect(backupStatus({ failed: null, lastOk: null }, at('10:00', '2026-10-24'), now).stale).toBe(true)
+    expect(backupStatus({ failed: null, lastOk: null }, null, now).stale).toBe(false)
   })
 })

@@ -3,6 +3,7 @@
  * A8-07): OneDrive not running here, questions that may come on another computer too, a computer taken for asleep, a
  * clock ahead, and – once a day on a battery – that saving it may pause OneDrive. Quiet lines: no dot, no notification.
  */
+import { countLabel } from '../format'
 import type { BarLine } from '../widget'
 
 export interface SyncState {
@@ -18,9 +19,13 @@ export interface SyncState {
   dayAhead: boolean
   /** On a battery – the day's line about saving the battery not answered yet. */
   battery: boolean
+  /** This computer's last daily backup failed (spec „Nieudana kopia daje ostrzeżenie w widgecie od razu”, A3-06). */
+  backupFailed: boolean
+  /** The data folder is not there: own changes waiting for it (A3-07); 0 while it is there. */
+  unsynced: number
 }
 
-export const NO_SYNC: SyncState = { oneDriveDown: false, sharedWith: [], asleep: [], clockAhead: [], dayAhead: false, battery: false }
+export const NO_SYNC: SyncState = { oneDriveDown: false, sharedWith: [], asleep: [], clockAhead: [], dayAhead: false, battery: false, backupFailed: false, unsynced: 0 }
 
 const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 const dateOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', day: 'numeric', month: 'numeric' }).format(ms)
@@ -34,6 +39,8 @@ export function syncLines(s: SyncState, now: number, day: string, computer = '')
   const out: BarLine[] = []
   if (s.dayAhead) out.push({ id: `sync:clockDay`, text: 'Zegar innego komputera jest ponad dobę z przodu – działania automatyczne czekają', actions: [], dot: false })
   for (const c of s.clockAhead) out.push({ id: `sync:clock:${c.id}`, text: `Zegar ${c.name} wyprzedza ten komputer o ${c.minutes} min – sprawdź czas w Windows`, actions: [], dot: false })
+  if (s.unsynced > 0) out.push({ id: 'sync:unsynced', text: `${countLabel(s.unsynced, 'zmiana zapisze się', 'zmiany zapiszą się', 'zmian zapisze się')} po powrocie folderu danych`, actions: [], dot: false })
+  if (s.backupFailed) out.push({ id: 'sync:backup', text: 'Kopia zapasowa się nie udała – spróbuję znowu za godzinę', actions: [], dot: false })
   if (s.oneDriveDown) out.push({ id: 'sync:onedrive', text: 'OneDrive nie działa na tym komputerze', actions: [], dot: false })
   if (s.sharedWith.length) out.push({ id: 'sync:shared', text: `Pytania mogą pojawić się też na ${s.sharedWith.join(', ')}`, actions: [], dot: false })
   for (const a of s.asleep) out.push({ id: `sync:asleep:${a.id}`, text: `Brak zmian z ${a.name} od ${sameDay(a.since, now) ? clockOf(a.since) : `${dateOf(a.since)} ${clockOf(a.since)}`}`, actions: [], dot: false })

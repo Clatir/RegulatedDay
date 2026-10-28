@@ -56,7 +56,7 @@ import type { Presence } from '@shared/sync/presence'
 import { Settle, type SettleReason } from '@shared/sync/settle'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
-import { EditQueue, type Outcome, type QueuedEdit } from './editQueue'
+import { BEHIND_QUESTION, EditQueue, type Outcome, type QueuedEdit } from './editQueue'
 import { EventLog, type DayRead, type EventDraft } from './eventLog'
 import { rootGuarded, type DataFs } from './fsio'
 import { RecordHistory } from './history'
@@ -1713,7 +1713,7 @@ export class DataFolder {
    * questions may come too), a computer seen with a fresh presence that stopped refreshing it, a clock ahead. `battery` –
    * the main process's own (the power of this computer).
    */
-  syncState(now = this.clock.now()): Omit<SyncState, 'battery'> {
+  syncState(now = this.clock.now()): Omit<SyncState, 'battery' | 'backupFailed' | 'unsynced'> {
     const name = (p: Peer) => p.presence.name || p.presence.computer
     const oneDriveDown = !this.o.oneDriveRunning()
     const awake = this.peers.filter((p) => p.presence.state !== 'closed')
@@ -1818,9 +1818,16 @@ export class DataFolder {
     await this.presence.tick(true).catch(() => undefined)
   }
 
-  /** Own events of a day not yet on OneDrive (the bar: „N zmian zapisze się po powrocie folderu”). */
+  /**
+   * Own changes not yet in the folder (spec „N zmian zapisze się po powrocie folderu”, A3-07): the events not in its logs
+   * and the edits waiting in the queue – not those waiting for your answer to a question (they are no wait for the folder).
+   */
   get unsynced(): number {
-    return this.log.pendingDays.length + this.queue.pending.length
+    const queued = this.queue.pending.filter((e) => {
+      const o = this.queue.outcomeOf(e.id)
+      return !(o.status === 'waiting' && o.why === BEHIND_QUESTION) && o.status !== 'conflict' && o.status !== 'removedElsewhere'
+    })
+    return this.log.pendingEvents + queued.length
   }
 
   /** The events of a day as this computer sees them now. */

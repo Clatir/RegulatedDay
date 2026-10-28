@@ -12,7 +12,7 @@ import { marketDay } from '@shared/calendar/holidays'
 import { eventLine, readLogText } from '@shared/data/logText'
 import { paths } from '@shared/data/paths'
 import type { AnyEvent } from '@shared/model/events'
-import { placeLogical } from '@shared/time/day'
+import { logicalDayOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { DataFolder, LIST_TRUST_MS } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
@@ -161,6 +161,22 @@ describe('folder danych', () => {
     mkdirSync(dataDir, { recursive: true })
     await f.advance(1)
     expect(events().some((e) => e.k === 'observe.alive' && (e as { at: number }).at > f.now - 3 * 60_000)).toBe(true)
+  })
+
+  it('„N zmian zapisze się”: liczy zdarzenia czekające na folder, nie dni (A3-07)', async () => {
+    const f = await make()
+    await f.advance(2)
+    expect(f.folder.unsynced).toBe(0)
+    rmSync(dataDir, { recursive: true, force: true })
+    await f.advance(1)
+    const day = logicalDayOf(f.now)
+    for (let i = 0; i < 3; i++) f.folder.append({ day, dom: 'meta', k: 'observe.alive', at: f.now + i })
+    await f.folder.check()
+    expect(f.folder.unavailable).toBe(true)
+    expect(f.folder.unsynced).toBeGreaterThanOrEqual(3)
+    mkdirSync(dataDir, { recursive: true })
+    await f.advance(1)
+    expect(f.folder.unsynced).toBe(0)
   })
 
   it('ucięta ostatnia linia dziennika (twarde wyłączenie) nie zabiera pierwszego zdarzenia po starcie (A3-12)', async () => {
