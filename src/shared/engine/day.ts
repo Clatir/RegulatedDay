@@ -498,9 +498,9 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
 /** The boundary approved at an instant by the written approvals (OPEN: none, or opened again by „Cofnij”). */
 function writtenBoundary(view: DayFacts): (t: number) => number {
   return (t) => {
-    let found: { at: number; boundary: number } | null = null
+    let found: DayFacts['approvals'][number] | null = null
     for (const a of view.approvals) if (a.at <= t) found = a
-    if (!found || view.undos.some((u) => u >= found!.at && u <= t)) return OPEN
+    if (!found || (found.undoneAt != null && found.undoneAt <= t)) return OPEN
     return found.boundary
   }
 }
@@ -656,10 +656,10 @@ export function computeDay(ctx: DayContext): DayState {
    * m: its minutes count by the proposal in force then (spec), not as „in the boundary” (A1-15).
    */
   const approvalSlow = (m: number): { approval: InForce | null; reopened: boolean } => {
-    let found: InForce | null = null
-    for (const a of facts.approvals) if (a.at < m || (a.at === 0 && m === 0)) found = { boundary: a.boundary, at: a.at, auto: a.auto }
-    const undone = found ? facts.undos.some((u) => u >= found!.at && u < m) : false
-    if (found && !undone) return { approval: found, reopened: false }
+    let found: DayFacts['approvals'][number] | null = null
+    for (const a of facts.approvals) if (a.at < m || (a.at === 0 && m === 0)) found = a
+    const undone = found?.undoneAt != null && found.undoneAt < m
+    if (found && !undone) return { approval: { boundary: found.boundary, at: found.at, auto: found.auto }, reopened: false }
     const undoneBefore = facts.undos.some((u) => u < m)
     const ownBefore = implicit != null && implicit.at <= m
     if (!found && ownBefore && !undoneBefore) return { approval: { boundary: implicit!.boundary, at: implicit!.at, auto: true }, reopened: false }

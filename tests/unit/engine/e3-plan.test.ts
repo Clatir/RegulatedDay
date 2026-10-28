@@ -296,6 +296,10 @@ describe('późne wstanie', () => {
     const planned = new Scenario({ date: '2026-10-21', plan }).approve('14:15', '06:30').presence('08:30')
     const c2 = planned.contextAt(planned.at('08:31'))
     expect(detectLateWake(c2, computeDay(c2), null)).toBeNull()
+    // The plan approved and undone before the first use is not done (A6-11): the proposal comes.
+    const undone = new Scenario({ date: '2026-10-21', plan }).approve('14:15', '06:30').raw({ k: 'boundary.undo', at: new Scenario({ date: '2026-10-21', plan }).at('06:40') }, '06:40').presence('08:30')
+    const cu = undone.contextAt(undone.at('08:31'))
+    expect(detectLateWake(cu, computeDay(cu), null)).not.toBeNull()
     const zjazd = new Scenario({ date: '2026-10-21', dayType: 'zjazd-stacjonarny', plan }).presence('08:30')
     const c3 = zjazd.contextAt(zjazd.at('08:31'))
     expect(detectLateWake(c3, computeDay(c3), null)).toBeNull()

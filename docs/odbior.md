@@ -1502,9 +1502,11 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 #### E8k.1 „Cofnij zatwierdzenie” w planie porannym (0.26.0)
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/timer.test.ts` (A6-11). Ty: rzut oka rano.
-- **Jak sprawdzić:** w planie porannym kliknij „Zatwierdź plan”, potem „Cofnij zatwierdzenie”.
-- **Oczekiwany efekt:** nagłówek karty mówi „do zrobienia”, wraca „Propozycja granicy … Zatwierdź plan”; ponowne
-  zatwierdzenie działa jak pierwsze.
+- **Automatycznie także:** `tests/e2e/screens.spec.ts` (cofnięcie i ponowne zatwierdzenie od razu).
+- **Jak sprawdzić:** w planie porannym kliknij „Zatwierdź plan”, potem „Cofnij zatwierdzenie” i od razu znowu „Zatwierdź
+  plan”.
+- **Oczekiwany efekt:** po cofnięciu nagłówek karty mówi „do zrobienia”, wraca „Propozycja granicy … Zatwierdź plan”;
+  ponowne zatwierdzenie działa od razu jak pierwsze.
 - **Nie przechodzi, gdy:** nagłówek dalej mówi „zatwierdzony”, „Cofnij” w pasku i w oknie dają różny stan albo plan
   zatwierdza się sam przy starcie pierwszego bloku pracy.
 
@@ -1524,7 +1526,9 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Automatycznie:** `tests/web/screens-026.test.ts` (A6-14, A8-09), `tests/unit/engine/ritual.test.ts` (A2-05, A2-08).
 - **Jak sprawdzić:** w rytuale kliknij „Pracowałem do …”, wpisz „25:30”, kliknij „Zapisz”; potem „zaznacz odcinek” z
   godzinami od rana do wieczoru.
-- **Oczekiwany efekt:** po „25:30” komunikat błędu i nic się nie zapisuje (także po drugim „Zapisz”); odcinek liczy się
-  tylko od końca pracy; dzień z prośbami „zrobione teraz” ma wiersz odczuwanego kosztu „Prośby domowe”.
-- **Nie przechodzi, gdy:** po błędnej godzinie zapisuje się godzina początkowa wiersza, regeneracja sprzed końca pracy
-  znika albo nie ma wiersza „Prośby domowe”.
+- **Oczekiwany efekt:** po „25:30” komunikat błędu i nic się nie zapisuje (także po drugim „Zapisz”), a po poprawnej
+  godzinie – także tej samej, co była – „Zapisz” działa; odcinek od rana jest odrzucony z komunikatem „tylko wieczór od
+  końca pracy albo czas „Odcinam się””, odcinek wieczoru się zapisuje; dzień z prośbami „zrobione teraz” ma wiersz
+  odczuwanego kosztu „Prośby domowe”.
+- **Nie przechodzi, gdy:** po błędnej godzinie zapisuje się godzina początkowa wiersza, „Zapisz” zostaje zablokowane po
+  poprawnej godzinie, regeneracja sprzed końca pracy znika albo nie ma wiersza „Prośby domowe”.

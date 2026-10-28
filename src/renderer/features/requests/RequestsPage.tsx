@@ -16,7 +16,7 @@ import { Choice, DurationField, TextField } from '../../components/fields'
 import { EmptyState, Section } from '../../components/ui'
 import { useNow } from '../../lib/clock'
 import { addPerson, saveRd, saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
-import { modalOpen } from '../../lib/escape'
+import { useNewShortcut } from '../../lib/escape'
 import { undoToast } from '../../store/ui'
 
 const STATE_NAMES: Record<RequestState, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobione', dropped: 'porzucone' }
@@ -28,16 +28,7 @@ export function RequestsPage() {
     const id = newId()
     await saveRecord(paths.record('request', id), null, newRequest(id, Date.now(), { person: null, estimateMin: DEFAULT_ESTIMATE_MIN, note: '' }))
   }
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN' && !modalOpen()) {
-        e.preventDefault()
-        void create()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  useNewShortcut(() => void create())
   if (!rd.general.modules.requests) return <EmptyState why="Moduł próśb jest wyłączony – włączysz go w ustawieniach." />
 
   const stateFilters = filters.filter((f) => f.startsWith('state:')).map((f) => f.slice(6))

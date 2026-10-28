@@ -77,6 +77,13 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('boundary-approve').click()
       await expect(page.getByTestId('boundary')).toContainText('Plan zatwierdzony')
       await shot(page, 'e3-02-approved')
+      // „Cofnij zatwierdzenie” (A6-11): the card says „do zrobienia” again and offers the approval; approved once more.
+      await page.getByTestId('boundary-undo').click()
+      await expect(page.getByTestId('boundary-approve')).toBeVisible()
+      await expect(page.getByTestId('morning-plan')).toContainText('do zrobienia')
+      await page.getByTestId('boundary-approve').click()
+      await expect(page.getByTestId('boundary')).toContainText('Plan zatwierdzony')
+      await expect(page.getByTestId('morning-plan')).toContainText('zatwierdzony')
       // A work block added after the approval, beyond the boundary: the exchange, „Dodaj bez wymiany”.
       await page.getByTestId('day-add').click()
       await expect(page.getByTestId('block-editor')).toBeVisible()
@@ -110,6 +117,19 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(late).not.toHaveAttribute('data-selected', 'true')
       await late.click()
       await expect(late).toHaveAttribute('data-selected', 'true')
+      // A dialog keeps the keyboard (A6-21): Tab never leaves it, Ctrl+N of the page waits, Esc gives the focus back.
+      await page.getByTestId('block-move').click()
+      const moveDialog = page.getByRole('dialog')
+      await expect(moveDialog).toBeVisible()
+      for (let i = 0; i < 12; i++) {
+        await page.keyboard.press(i % 4 === 3 ? 'Shift+Tab' : 'Tab')
+        expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true)
+      }
+      await page.keyboard.press('Control+KeyN')
+      await expect(page.getByTestId('block-add')).toHaveCount(0)
+      await page.keyboard.press('Escape')
+      await expect(moveDialog).toBeHidden()
+      expect(await page.evaluate(() => document.activeElement?.getAttribute('data-testid'))).toBe('block-move')
       // A day gone is history: none of its blocks drags.
       await page.getByTestId('day-prev').click()
       await expect(page.locator('[data-block-title]').first()).toBeVisible()

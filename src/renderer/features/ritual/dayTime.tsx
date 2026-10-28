@@ -4,10 +4,12 @@
  * occurrence, with the choice of the second (spec „Dzień i czas”). The field starts from the instant the row says, with
  * the occurrence it is.
  */
+import { useRef, useState } from 'react'
 import { logicalMinuteOf, resolveLogical } from '@shared/time/day'
 import type { WallPick } from '@shared/time/zone'
 import { TimeField } from '../../components/fields'
 import { Segmented } from '../../components/ui'
+import { toast } from '../../store/ui'
 
 export interface TypedTime {
   /** The minute of the logical day as the clock shows it. */
@@ -48,13 +50,42 @@ export function savedInstant(date: string, typed: Typed | null, start: TypedTime
   return 'refused' in t ? { ok: false, message: t.refused } : instantOf(date, t)
 }
 
+/**
+ * One time field of an answer: what it shows and what it took or refused – the field commits on leaving it, right before
+ * „Zapisz” is clicked (the ref, not the state, is read then). `take` – the instant to write, or the refusal said again.
+ */
+export function useTypedTime() {
+  const [shown, setShown] = useState<TypedTime | null>(null)
+  const typed = useRef<Typed | null>(null)
+  return {
+    shown,
+    start(t: TypedTime) {
+      typed.current = null
+      setShown(t)
+    },
+    onTyped(x: Typed) {
+      typed.current = x
+      if (!('refused' in x)) setShown(x)
+    },
+    take(date: string): number | null {
+      if (!shown) return null
+      const r = savedInstant(date, typed.current, shown)
+      if (r.ok) return r.at
+      toast(r.message, 'error', 6000)
+      return null
+    }
+  }
+}
+
 export function DayTime({ date, value, onTyped, label, testId }: { date: string; value: TypedTime; onTyped: (t: Typed) => void; label: string; testId?: string }) {
   return (
     <>
       <TimeField
         value={value.min}
         check={(m) => (resolveLogical(date, m).ok ? null : SKIPPED_HOUR)}
-        onCommit={(m) => onTyped({ min: m, pick: 'first' })}
+        onCommit={() => undefined}
+        // Taken also when equal to what it shows (typed again after a refusal) – the occurrence picked stays then.
+        onAccept={(m) => onTyped({ min: m, pick: m === value.min ? value.pick : 'first' })}
         onReject={(message) => onTyped({ refused: message })}
         className="w-[76px]"
         aria-label={label}

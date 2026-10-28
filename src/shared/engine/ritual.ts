@@ -16,7 +16,7 @@ import { CLOSE_HOWS, isKnown, RULES_VERSION, type AnyEvent, type CloseHow, type 
 import { questionId } from '../model/ids'
 import { dayStart } from '../time/day'
 import { addDays } from '../time/zone'
-import { activityOf, useWithin, type Activity } from './activity'
+import { activityOf, merge, useWithin, type Activity } from './activity'
 import { answerEvents, type Question } from './auto'
 import { isBoundaryWork, plannedSpan, startPlanned } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
@@ -333,28 +333,13 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
     case 'rest': {
       if (choice === 'ok') return [mark]
       if (choice !== 'notRest' || value == null || typeof value !== 'object' || !(value.to > value.from)) return null
-      // Only a stretch of the evening or of „Odcinam się” (spec): the one typed is cut to them, nothing left – refused, so
-      // a mistaken 12:00–18:00 never takes the day's regeneration before the end of work (A2-05).
-      const out: TimerDraft[] = []
-      for (const s of joined([{ from: row.from, to: row.to }, ...f.disconnect.map((d) => ({ from: d.from, to: Math.min(d.to, state.now) }))])) {
-        const lo = Math.max(value.from, atOf(g, s.from))
-        const hi = Math.min(value.to, atOf(g, s.to))
-        if (hi > lo) out.push({ k: 'rest.not', at, from: lo, to: hi })
-      }
-      return out.length ? out : null
+      // Only a stretch of the evening or of „Odcinam się” (spec): one reaching outside them is refused with its message –
+      // never cut in silence – so a mistaken 12:00–18:00 never takes the day's regeneration before the end of work (A2-05).
+      const markable = merge([{ from: row.from, to: row.to }, ...f.disconnect.map((d) => ({ from: d.from, to: Math.min(d.to, state.now) }))])
+      const inside = markable.some((x) => value.from >= atOf(g, x.from) && value.to <= atOf(g, x.to))
+      return inside ? [{ k: 'rest.not', at, from: value.from, to: value.to }] : null
     }
   }
-}
-
-/** Stretches of minutes joined where they meet or overlap, in order. */
-function joined(spans: ReadonlyArray<{ from: number; to: number }>): Array<{ from: number; to: number }> {
-  const out: Array<{ from: number; to: number }> = []
-  for (const s of [...spans].filter((x) => x.to > x.from).sort((a, b) => a.from - b.from)) {
-    const last = out.at(-1)
-    if (last && s.from <= last.to) last.to = Math.max(last.to, s.to)
-    else out.push({ ...s })
-  }
-  return out
 }
 
 /** Drafts as log events for a simulation (after every event of the day). */

@@ -1,18 +1,18 @@
 # Changelog
 
 ## 0.26.0
-- „Cofnij zatwierdzenie” w planie porannym działa jak „Cofnij” w pasku – nagłówek przestaje mówić „zatwierdzony”, a plan, późne wstanie i gra widzą dzień bez zatwierdzenia.
+- „Cofnij zatwierdzenie” w planie porannym otwiera granicę od tej chwili: nagłówek przestaje mówić „zatwierdzony”, praca sprzed cofnięcia zostaje w granicy, którą zatwierdziłeś, a ponowne zatwierdzenie zaraz po cofnięciu działa (dotąd w tej samej minucie granica zostawała niezatwierdzona).
 - Godzina wpisana w rytuale („Pracowałem do …”, „skończył się o …”, odcinek „nie odpoczynek”) i w niezamkniętych dniach: błędny tekst nie zapisuje już godziny, do której wróciło pole – „Zapisz” powtarza komunikat. W dniu zmiany czasu godzina, której nie ma (2:30 w marcu), jest odrzucana, a przy podwójnej (2:40 w październiku) wybierasz „pierwsza” albo „druga”.
-- Odcinek „nie odpoczynek” w rytuale obejmuje tylko wieczór i „Odcinam się” – pomyłka typu 12:00–18:00 nie zabiera regeneracji sprzed końca pracy.
+- Odcinek „nie odpoczynek” w rytuale można zaznaczyć tylko wieczorem albo w czasie „Odcinam się” – sięgający wcześniej (np. pomyłka 12:00–18:00) jest odrzucany z komunikatem i nie zabiera regeneracji sprzed końca pracy.
 - Poniedziałkowa „Strona B” ma „Pomiń” także w trakcie liczenia i znika od razu po „Dalej” – nawet gdy OneDrive jeszcze pobiera plik dnia.
 - Przeciągnięty blok nie miga już na starym miejscu po upuszczeniu.
 - Nowy blok przed „Dodaj” przetrwa przejście na inny ekran i powrót. Ctrl N stawia go w najbliższym wolnym miejscu, nie na trwającym bloku.
 - Okna dialogowe trzymają fokus klawiatury w środku i oddają go po zamknięciu; skróty stron (Ctrl N, Ctrl 1 …) czekają, aż okno się zamknie.
 - Historia po „Przywróć tę wersję” od razu pokazuje stan po przywróceniu (nowa wersja „przed przywróceniem”, bez „Ten rekord jest usunięty”), a błąd odczytu wersji ma „Spróbuj ponownie”.
-- Kreator: nieudane „Zakończ” mówi dlaczego i pozwala spróbować znowu – a gdy dane zdążyły się zapisać, dokańcza jako kolejny komputer.
+- Kreator: nieudane „Zakończ” mówi dlaczego i pozwala spróbować znowu – a gdy dane zdążyły się zapisać, dokańcza jako kolejny komputer. Spóźnione sprawdzenie folderu domyślnego nie podmienia już folderu, który wybrałeś.
 - „Spróbuj ponownie” przy nieudanym przeniesieniu folderu mówi, że znów się nie udało, i dlaczego.
 - Rytuał ma wiersz odczuwanego kosztu „Prośby domowe” także wtedy, gdy prośby były poza blokiem próśb.
-- Za długi szacunek prośby albo czas kroku rutyny jest odrzucany z komunikatem, a nie obcinany po cichu.
+- Za długi szacunek prośby albo czas kroku rutyny jest odrzucany z komunikatem, a nie obcinany po cichu. „Przywróć tę wersję” w Historii działa raz także przy podwójnym kliknięciu.
 
 ## 0.25.0
 - Rekord usunięty na tym komputerze, a w tym czasie zmieniony na innym, nie znika już bez pytania: okno pyta „Ten rekord usunąłeś tutaj, a na innym komputerze go w tym czasie zmieniono” – „Usuń mimo to” albo „Zostaw zmieniony”.

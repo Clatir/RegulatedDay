@@ -27,7 +27,7 @@ import { MonthGrid, MONTH_NAMES, monthOf, shiftMonth } from '../calendar/MonthGr
 import { dayAxis } from '../plan/dayItems'
 import { Timeline } from '../plan/Timeline'
 import { SettingNumber } from '../settings/SettingNumber'
-import { draftChanges, draftTemplates, failedFinish, finishRecords, newLecture, patchSettings, patchWizard, useWizard, type Corner } from './wizardStore'
+import { draftChanges, draftTemplates, failedFinish, finishRecords, newLecture, patchSettings, patchWizard, takeProbe, useWizard, type Corner } from './wizardStore'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 const SHORT_DAYS = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd']
@@ -69,8 +69,10 @@ export function Wizard() {
     void window.rd
       .folderDefault()
       .then(async (folder) => {
+        // A folder picked meanwhile stays.
+        if (useWizard.getState().folder) return
         patchWizard({ folder })
-        patchWizard({ probe: await window.rd.folderProbe(folder) })
+        takeProbe(folder, await window.rd.folderProbe(folder))
       })
       .catch((e: unknown) => patchWizard({ error: `Nie sprawdzono folderu: ${e instanceof Error ? e.message : String(e)}` }))
   }, [w.folder])
@@ -196,7 +198,7 @@ function Lead({ children }: { children: ReactNode }) {
 /** The folder looked at (a failure says so in the wizard, never a promise left unhandled). */
 async function probeFolder(dir: string): Promise<void> {
   try {
-    patchWizard({ probe: await window.rd.folderProbe(dir), error: null })
+    takeProbe(dir, await window.rd.folderProbe(dir))
   } catch (e) {
     patchWizard({ error: `Nie sprawdzono folderu: ${e instanceof Error ? e.message : String(e)}` })
   }

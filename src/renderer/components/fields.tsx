@@ -23,11 +23,25 @@ interface CommitFieldProps<T> {
   check?: (value: T) => string | null
   /** A refused text: the saved value came back (an answer waiting for „Zapisz” must not take it, A6-14). */
   onReject?: (message: string) => void
+  /** Every text accepted – also one equal to the value – and an edit cancelled (Esc): what the field holds now. */
+  onAccept?: (value: T) => void
   'aria-label'?: string
   'data-testid'?: string
 }
 
-export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, readOnly, check, onReject, ...rest }: CommitFieldProps<T>) {
+/**
+ * What leaving a field with `draft` does: refused (its message – also a value parsed but failing `check`), or accepted
+ * – `changed` when it differs from `value` (only then is it committed; an equal one is still accepted, ending a refusal).
+ */
+export function fieldCommit<T>(draft: string, value: T | null, parse: (t: string) => Parsed<T>, format: (v: T) => string, check?: (v: T) => string | null): { refused: string } | { value: T; changed: boolean } {
+  const parsed = parse(draft)
+  if (!parsed.ok) return { refused: parsed.message }
+  const refused = check?.(parsed.value) ?? null
+  if (refused != null) return { refused }
+  return { value: parsed.value, changed: value == null || format(parsed.value) !== format(value) }
+}
+
+export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, readOnly, check, onReject, onAccept, ...rest }: CommitFieldProps<T>) {
   const [draft, setDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Esc: the blur it causes runs with this render's draft – it must not apply it.
@@ -38,24 +52,22 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
       cancelled.current = false
       setDraft(null)
       setError(null)
+      if (value != null) onAccept?.(value)
       return
     }
     if (draft == null || readOnly) return
-    const parsed = parse(draft)
-    const refused = parsed.ok ? (check?.(parsed.value) ?? null) : parsed.message
-    if (!parsed.ok || refused != null) {
+    const r = fieldCommit(draft, value, parse, format, check)
+    setDraft(null)
+    if ('refused' in r) {
       // Refused: the saved value comes back, the message says why.
-      const message = refused ?? ''
-      toast(message, 'error', 6000)
-      setError(message)
-      setDraft(null)
-      onReject?.(message)
+      toast(r.refused, 'error', 6000)
+      setError(r.refused)
+      onReject?.(r.refused)
       return
     }
-    const r = parsed
-    setDraft(null)
     setError(null)
-    if (value == null || format(r.value) !== format(value)) onCommit(r.value)
+    onAccept?.(r.value)
+    if (r.changed) onCommit(r.value)
   }
   return (
     <input
@@ -88,11 +100,14 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
   )
 }
 
-/** A length typed, at most `range[1]`: one longer is refused with its message – never cut to the bound in silence (A6-19). */
+/** A length typed within `range`: one outside is refused with its message – never cut to the bound in silence (A6-19). */
 export const durationParser =
   (range?: readonly [number, number]) =>
-  (t: string): Parsed<number> =>
-    parseDuration(t, range?.[1])
+  (t: string): Parsed<number> => {
+    const r = parseDuration(t, range?.[1])
+    // Shorter than the range: refused too (the model's schema would drop it in silence).
+    return r.ok && range && r.value < range[0] ? { ok: false, message: `Najkrócej ${durationLabel(range[0])}.` } : r
+  }
 
 export function DurationField({ range, ...p }: Omit<CommitFieldProps<number>, 'parse' | 'format'> & { range?: readonly [number, number] }) {
   return <CommitField {...p} parse={durationParser(range)} format={durationLabel} placeholder={p.placeholder ?? 'np. 90, 1:30, 1h30'} />

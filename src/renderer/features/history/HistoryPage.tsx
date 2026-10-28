@@ -12,6 +12,7 @@ import { countLabel, plDate } from '@shared/format'
 import { personName } from '@shared/model/rd'
 import { EmptyState, cx } from '../../components/ui'
 import { fieldText, keyOf, valueText } from '../../lib/recordText'
+import { useBusy } from '../../lib/busy'
 import { rawRecord, reloadData, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 
@@ -81,12 +82,12 @@ function RecordName({ r }: { r: HistoryRecord }) {
 function Versions({ r }: { r: HistoryRecord }) {
   const view = useData((s) => s.view)
   const rd = useData((s) => s.rd)
-  const stamp = useData((s) => s.stamp)
   const [versions, setVersions] = useState<HistoryVersion[] | null>(null)
   const [failed, setFailed] = useState(false)
   const [tries, setTries] = useState(0)
-  // Read again with every change of the data (a version restored adds „przed przywróceniem”, A7-10); a read that fails
-  // says so with „Spróbuj ponownie” instead of „Czytam wersje…” for good.
+  const [busy, run] = useBusy()
+  // Read again when the record has a new version (a version restored adds „przed przywróceniem”, A7-10) – the list
+  // says so – not at every change of the data; a read that fails says so with „Spróbuj ponownie”.
   useEffect(() => {
     let alive = true
     window.rd
@@ -96,29 +97,34 @@ function Versions({ r }: { r: HistoryRecord }) {
     return () => {
       alive = false
     }
-  }, [r.kind, r.id, stamp, tries])
+  }, [r.kind, r.id, r.versions, r.last, tries])
   const current = r.rel ? rawRecord(r.rel) : null
   const [currentDay, setCurrentDay] = useState<Record<string, unknown> | null>(null)
   useEffect(() => {
-    if (r.kind === 'day')
-      void window.rd
-        .dayFiles([r.id])
-        .then((f) => setCurrentDay(f[r.id] ?? null))
-        .catch(() => undefined)
-  }, [r.kind, r.id, stamp, tries])
+    if (r.kind !== 'day') return
+    let alive = true
+    window.rd
+      .dayFiles([r.id])
+      .then((f) => alive && setCurrentDay(f[r.id] ?? null))
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [r.kind, r.id, r.versions, r.last, tries])
   const now = r.kind === 'day' ? currentDay : current
   const names = useMemo(() => ({ rd }), [rd])
   const computer = (id: string) => view?.computers.find((c) => c.id === id)?.name ?? 'inny komputer'
-  const restore = async (v: HistoryVersion) => {
-    try {
-      await window.rd.historyRestore(r.kind, r.id, v.file)
-      await reloadData()
-      setTries((x) => x + 1)
-      toast('Wersja przywrócona.', 'success')
-    } catch (e) {
-      toast(`Nie przywrócono: ${e instanceof Error ? e.message : String(e)}`, 'error')
-    }
-  }
+  // One restore at a time (a double click restores once); the list read again brings the new version.
+  const restore = (v: HistoryVersion) =>
+    run(async () => {
+      try {
+        await window.rd.historyRestore(r.kind, r.id, v.file)
+        await reloadData()
+        toast('Wersja przywrócona.', 'success')
+      } catch (e) {
+        toast(`Nie przywrócono: ${e instanceof Error ? e.message : String(e)}`, 'error')
+      }
+    })
   if (!versions)
     return failed ? (
       <div className="flex items-center gap-2 text-[12.5px]" data-testid="history-failed">
@@ -143,7 +149,7 @@ function Versions({ r }: { r: HistoryRecord }) {
                 {REASONS[v.reason] ?? 'wersja'} · {computer(v.savedBy)}
               </span>
               <span className="flex-1" />
-              <button type="button" className="btn" onClick={() => void restore(v)} data-testid="history-restore">
+              <button type="button" className="btn" disabled={busy} onClick={() => void restore(v)} data-testid="history-restore">
                 Przywróć tę wersję
               </button>
             </div>

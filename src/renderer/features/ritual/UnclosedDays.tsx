@@ -6,7 +6,7 @@
  * time to explain follows it. A day without your presence, left unanswered, freezes as free. Yesterday closed, with
  * what came after its close, has one line of information with „Popraw”.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { UnclosedDay } from '@shared/api'
 import type { RitualRow } from '@shared/engine/ritual'
 import { atOf, gridOf } from '@shared/engine/grid'
@@ -16,7 +16,7 @@ import { logicalMinuteOf } from '@shared/time/day'
 import { weekday } from '@shared/time/zone'
 import { useData } from '../../store/data'
 import { openDay, toast } from '../../store/ui'
-import { DayTime, savedInstant, typedOf, type Typed, type TypedTime } from './dayTime'
+import { DayTime, typedOf, useTypedTime } from './dayTime'
 import { effectText } from './RitualPanel'
 
 const WEEKDAYS = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
@@ -26,8 +26,8 @@ export function UnclosedDays() {
   const [days, setDays] = useState<UnclosedDay[]>([])
   const [skipped, setSkipped] = useState(false)
   const [tick, setTick] = useState(0)
-  const [editing, setEditing] = useState<{ date: string; choice: string; t: TypedTime } | null>(null)
-  const typed = useRef<Typed | null>(null)
+  const [editing, setEditing] = useState<{ date: string; choice: string } | null>(null)
+  const time = useTypedTime()
   // A read that fails keeps the days read before and says so – the section never vanishes quietly (A6-09).
   const [failed, setFailed] = useState(false)
   useEffect(() => {
@@ -68,23 +68,14 @@ export function UnclosedDays() {
   const until = (d: UnclosedDay, row: RitualRow, choice: string, label: string, at: number) =>
     editing?.date === d.date && editing.choice === choice ? (
       <span className="inline-flex items-center gap-1.5">
-        <DayTime
-          date={d.date}
-          value={editing.t}
-          onTyped={(x) => {
-            typed.current = x
-            if (!('refused' in x)) setEditing({ ...editing, t: x })
-          }}
-          label={label}
-        />
+        {time.shown && <DayTime date={d.date} value={time.shown} onTyped={time.onTyped} label={label} />}
         <button
           type="button"
           className="btn h-[24px] px-2 text-[12px]"
           onClick={() => {
             // Never the field's start after a refused text (A6-14); a skipped hour is refused, a doubled one chosen (A8-09).
-            const r = savedInstant(d.date, typed.current, editing.t)
-            if (!r.ok) toast(r.message, 'error', 6000)
-            else void answer(d.date, row.id, choice, r.at)
+            const at = time.take(d.date)
+            if (at != null) void answer(d.date, row.id, choice, at)
           }}
         >
           Zapisz
@@ -94,7 +85,7 @@ export function UnclosedDays() {
         </button>
       </span>
     ) : (
-      <button type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => ((typed.current = null), setEditing({ date: d.date, choice, t: typedOf(d.date, at) }))} data-testid={`unclosed-${choice}-${d.date}`}>
+      <button type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => (time.start(typedOf(d.date, at)), setEditing({ date: d.date, choice }))} data-testid={`unclosed-${choice}-${d.date}`}>
         {label}
       </button>
     )

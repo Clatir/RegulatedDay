@@ -48,6 +48,9 @@
   (A6-15), przeciąganie bez mignięcia (A6-16), szkic bloku (A6-17), okna dialogowe (A6-21), Ctrl N (A6-24), Historia
   (A7-10), kreator (A7-11), „Spróbuj ponownie” przeniesienia (A7-20), zakres długości (A6-19). Przegląd E8: wszystkie
   uwagi zamknięte (poprawione albo obalone). Test kopii i skali – w każdym `npm test`. Odbiór: E8k.1–E8k.3.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. „Cofnij zatwierdzenie” zmieniało przeszłość dnia (teraz tylko
+  otwiera granicę), ponowne zatwierdzenie w tej samej minucie nie działało (kolejność logu), pole godziny po odmowie,
+  kreator kolejnego komputera, Tab w oknach także z fokusem na body; E2E dla okien i „Cofnij zatwierdzenie”.
 
 ## 0.25.0 – brzegi przed 1.0, część 1 (ciąg E, 5.3)
 - Gałąź `claude/0.25.0-brzegi` (od 0.24.0) od 28.10 ok. 21:10.

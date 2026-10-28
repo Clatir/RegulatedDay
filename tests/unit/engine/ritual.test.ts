@@ -280,16 +280,15 @@ describe('bloki pominięte, prośby, odpoczynek, poprawki', () => {
     expect(row(s, '21:05', 'rest')!.answered).toBe(true)
   })
 
-  it('odcinek „nie odpoczynek” przycinany do wieczoru i „Odcinam się” – drzemka przed końcem pracy zostaje (A2-05)', () => {
+  it('odcinek „nie odpoczynek” tylko wieczorem albo w „Odcinam się” – sięgający przed koniec pracy odrzucony, drzemka zostaje (A2-05)', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'n', cat: 'regeneracja', at: '13:00', min: 30 }), block({ id: 'b', cat: 'inne', at: '14:00', min: 180 })] }).using('07:00', '23:59')
     s.ran('a', '08:00', '09:00').ran('n', '13:00', '13:30').ran('b', '14:00', '17:00').workEnd('17:00')
     const before = s.state('21:05').regen.totalMin
-    // Typed 12:00–18:00: only 17:00–18:00 is the evening.
-    answer(s, '21:00', 'rest', 'notRest', { from: s.at('12:00'), to: s.at('18:00') })
+    // Typed 12:00–18:00: refused (never cut in silence), the nap stays.
+    expect(ritualAnswer(s.state('21:00'), row(s, '21:00', 'rest')!, 'notRest', s.at('21:00'), { from: s.at('12:00'), to: s.at('18:00') })).toBeNull()
+    // 17:00–18:00 – the evening: taken.
+    answer(s, '21:00', 'rest', 'notRest', { from: s.at('17:00'), to: s.at('18:00') })
     expect(s.state('21:05').regen.totalMin).toBe(before - 60)
-    expect(s.state('21:05').facts.notRest.map((n) => [n.from, n.to])).toEqual([[13 * 60, 14 * 60]])
-    // A stretch all before the evening is refused.
-    expect(ritualAnswer(s.state('21:10'), row(s, '21:10', 'rest')!, 'notRest', s.at('21:10'), { from: s.at('10:00'), to: s.at('12:00') })).toBeNull()
   })
 
   it('korekta realnych czasów bloku i oznaczenie „niedokończony”', () => {

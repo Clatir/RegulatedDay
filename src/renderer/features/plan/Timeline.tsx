@@ -57,12 +57,14 @@ const DROP_HOLD_MS = 2000
 export const draggedStart = (startMin: number, dy: number): number => Math.round((startMin + dy / PPM) / DRAG_STEP_MIN) * DRAG_STEP_MIN
 
 /**
- * A dropped block's hold ends when the day's items show it at its new start (or no longer at all) – new items counted
- * from the day before the edit came back would put it at its old place for a moment (A6-16).
+ * A dropped block's hold ends when the day's items no longer show it at its old place (or at all) – items counted again
+ * from the day before the edit came back would put it there for a moment (A6-16). Its new place may differ from the one
+ * dropped on (kept in the logical day, a flexible block before now placed at now): any other place is the edit read back;
+ * the edit refused – the hold's time runs out.
  */
-export const dropSettled = (items: readonly TimelineItem[], d: { id: string; start: number }): boolean => {
+export const dropSettled = (items: readonly TimelineItem[], d: { id: string; from: number }): boolean => {
   const i = items.find((x) => x.id === d.id)
-  return !i || i.startMin === d.start
+  return !i || i.startMin !== d.from
 }
 
 /** A block being dragged: its pointer, where it went down, its start then and now; dropped – waiting for the day. */

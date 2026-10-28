@@ -19,7 +19,7 @@ import { atOf } from '@shared/engine/grid'
 import { TimeField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
 import { useNow } from '../../lib/clock'
-import { modalOpen } from '../../lib/escape'
+import { useNewShortcut } from '../../lib/escape'
 import { isSaved, useData } from '../../store/data'
 import { useDay, type DayModel } from '../../store/day'
 import { openDay, patchBlockDraft, setBlockDraft, toast, useUi } from '../../store/ui'
@@ -79,18 +79,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // Ctrl+N: a new block in the nearest free place (spec „Tworzenie”) – today from the next quarter, another day an hour
   // after the wake (A6-24).
   const newHere = () => create(newBlockStart(model.state, isToday ? Math.ceil(Math.max(logicalMinuteOf(date, Date.now()), model.ctx.wakeMin) / 15) * 15 : model.ctx.wakeMin + 60))
-  const newRef = useRef(newHere)
-  newRef.current = newHere
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN' && !modalOpen()) {
-        e.preventDefault()
-        newRef.current()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  useNewShortcut(newHere)
 
   const raw = model.data.dayFile
   const plan = model.ctx.plan

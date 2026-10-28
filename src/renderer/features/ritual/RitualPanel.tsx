@@ -4,7 +4,7 @@
  * tomorrow's sketch and „Zamknij dzień”. Rows left without a choice stay as written; the close says so first („Wróć”).
  * The main process counts the ritual (its helper process) and writes every answer to the day's log.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { OutcomeChange } from '@shared/engine/outcome'
 import type { FeltRow, RitualEffect, RitualRow, RitualValue, RitualView } from '@shared/engine/ritual'
 import { atOf, gridOf } from '@shared/engine/grid'
@@ -19,7 +19,7 @@ import type { DayModel } from '../../store/day'
 import { openDay, toast } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { PersonChoice } from '../requests/RequestsPage'
-import { DayTime, savedInstant, typedOf, type Typed, type TypedTime } from './dayTime'
+import { DayTime, typedOf, useTypedTime } from './dayTime'
 
 const BOUNDARY: Record<string, string> = { kept: 'dotrzymana', broken: 'niedotrzymana', noData: 'bez danych' }
 const FELT: Record<FeltCost, string> = { lighter: 'lżej', usual: 'jak zwykle', heavier: 'ciężej' }
@@ -119,8 +119,6 @@ interface Editing {
   row: string
   choice: string
   item: string | null
-  /** The time the field starts from (or the one typed). */
-  t: TypedTime
 }
 
 export function RitualPanel({ model, names, onClosed }: { model: DayModel; names: Names; onClosed?: () => void }) {
@@ -129,10 +127,10 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
   const { rd } = useData()
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<Editing | null>(null)
-  // The time just typed (or refused): the field commits it on leaving, right before „Zapisz” is clicked.
-  const typed = useRef<Typed | null>(null)
-  const [stretch, setStretch] = useState<{ row: string; from: TypedTime; to: TypedTime } | null>(null)
-  const stretchTyped = useRef<{ from: Typed | null; to: Typed | null }>({ from: null, to: null })
+  const time = useTypedTime()
+  const [stretch, setStretch] = useState<string | null>(null)
+  const stretchFrom = useTypedTime()
+  const stretchTo = useTypedTime()
   const [confirm, setConfirm] = useState(false)
   if (!view)
     return failed ? (
@@ -181,20 +179,16 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
   }
 
   /** „Zapisz” of a time: the instant typed, never the field's start after a refused text (A6-14, A8-09). */
-  const saveTime = (row: RitualRow, choice: string, start: TypedTime, item: string | null) => {
-    const r = savedInstant(date, typed.current, start)
-    if (!r.ok) toast(r.message, 'error', 6000)
-    else void answer(row, choice, r.at, item)
+  const saveTime = (row: RitualRow, choice: string, item: string | null) => {
+    const at = time.take(date)
+    if (at != null) void answer(row, choice, at, item)
   }
   const timeEditor = (row: RitualRow, choice: string, label: string, at: number, item: string | null = null) =>
     editing && editing.row === row.id && editing.choice === choice && editing.item === item ? (
       // The field only sets the time (its commit on leaving it); „Zapisz” writes it, „anuluj” writes nothing.
       <span className="inline-flex items-center gap-1.5">
-        <DayTime date={date} value={editing.t} onTyped={(x) => {
-            typed.current = x
-            if (!('refused' in x)) setEditing({ ...editing, t: x })
-          }} label={label} testId={`ritual-time-${choice}`} />
-        <Act onClick={() => saveTime(row, choice, editing.t, item)} testId={`ritual-time-save-${choice}`}>
+        {time.shown && <DayTime date={date} value={time.shown} onTyped={time.onTyped} label={label} testId={`ritual-time-${choice}`} />}
+        <Act onClick={() => saveTime(row, choice, item)} testId={`ritual-time-save-${choice}`}>
           Zapisz
         </Act>
         <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => setEditing(null)}>
@@ -202,7 +196,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
         </button>
       </span>
     ) : (
-      <Act onClick={() => ((typed.current = null), setEditing({ row: row.id, choice, item, t: typedOf(date, at) }))} testId={`ritual-${row.kind}-${choice}`}>
+      <Act onClick={() => (time.start(typedOf(date, at)), setEditing({ row: row.id, choice, item }))} testId={`ritual-${row.kind}-${choice}`}>
         {label}
       </Act>
     )
@@ -384,31 +378,30 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
                   ✓
                 </Act>
               )}
-              {stretch?.row === r.id ? (
+              {stretch === r.id && stretchFrom.shown && stretchTo.shown ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <DayTime date={date} value={stretch.from} onTyped={(x) => {
-                      stretchTyped.current.from = x
-                      if (!('refused' in x)) setStretch({ ...stretch, from: x })
-                    }} label="Od" />
+                  <DayTime date={date} value={stretchFrom.shown} onTyped={stretchFrom.onTyped} label="Od" />
                   –
-                  <DayTime date={date} value={stretch.to} onTyped={(x) => {
-                      stretchTyped.current.to = x
-                      if (!('refused' in x)) setStretch({ ...stretch, to: x })
-                    }} label="Do" />
+                  <DayTime date={date} value={stretchTo.shown} onTyped={stretchTo.onTyped} label="Do" />
                   <Act
                     onClick={() => {
-                      const from = savedInstant(date, stretchTyped.current.from, stretch.from)
-                      const to = savedInstant(date, stretchTyped.current.to, stretch.to)
-                      if (!from.ok) toast(from.message, 'error', 6000)
-                      else if (!to.ok) toast(to.message, 'error', 6000)
-                      else void answer(r, 'notRest', { from: from.at, to: to.at })
+                      const from = stretchFrom.take(date)
+                      const to = from == null ? null : stretchTo.take(date)
+                      if (from != null && to != null) void answer(r, 'notRest', { from, to })
                     }}
                   >
                     Zapisz
                   </Act>
                 </span>
               ) : (
-                <Act onClick={() => ((stretchTyped.current = { from: null, to: null }), setStretch({ row: r.id, from: typedOf(date, instant(r.from)), to: typedOf(date, instant(r.to)) }))} testId="ritual-rest-mark">
+                <Act
+                  onClick={() => {
+                    stretchFrom.start(typedOf(date, instant(r.from)))
+                    stretchTo.start(typedOf(date, instant(r.to)))
+                    setStretch(r.id)
+                  }}
+                  testId="ritual-rest-mark"
+                >
                   zaznacz odcinek
                 </Act>
               )}

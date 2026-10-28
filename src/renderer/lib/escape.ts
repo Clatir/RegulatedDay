@@ -45,19 +45,42 @@ export function installEscape(): void {
   })
 }
 
-/** Open dialogs (aria-modal): the pages' own shortcuts (Ctrl+N, Ctrl+1 …) wait while one is open (A6-21). */
-let modals = 0
+/**
+ * Open dialogs (aria-modal), the newest last: the pages' own shortcuts (Ctrl+N, Ctrl+1 …) wait while one is open, and
+ * only the newest keeps Tab inside it (A6-21).
+ */
+const modals: number[] = []
+let nextModal = 1
 
-export function onModal(): () => void {
-  modals++
-  let done = false
-  return () => {
-    if (!done) modals--
-    done = true
+export function onModal(): { id: number; off: () => void } {
+  const id = nextModal++
+  modals.push(id)
+  return {
+    id,
+    off: () => {
+      const i = modals.indexOf(id)
+      if (i >= 0) modals.splice(i, 1)
+    }
   }
 }
 
-export const modalOpen = (): boolean => modals > 0
+export const modalOpen = (): boolean => modals.length > 0
+export const topModal = (): number | null => modals.at(-1) ?? null
+
+/** Ctrl+N of a page (spec „Tworzenie”): one way for every page, waiting while a dialog is open (A6-21). */
+export function useNewShortcut(create: () => void): void {
+  const ref = useRef(create)
+  ref.current = create
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.altKey || e.shiftKey || e.code !== 'KeyN' || modalOpen()) return
+      e.preventDefault()
+      ref.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+}
 
 /**
  * Tab inside a dialog (A6-21): from its last element to its first, Shift+Tab from its first (or the box) to its last;

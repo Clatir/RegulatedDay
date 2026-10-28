@@ -3,8 +3,8 @@
  * and by its own buttons. The main window's dialogs open only on your click (never by themselves, D229). Tab stays inside
  * it, the focus goes back where it was when it closes, and the pages' shortcuts wait meanwhile (A6-21).
  */
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
-import { onModal, tabTarget, useEscapeLayer } from '../lib/escape'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { onModal, tabTarget, topModal, useEscapeLayer } from '../lib/escape'
 import { cx } from './ui'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -28,23 +28,30 @@ export function Dialog({
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const before = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const off = onModal()
+    const modal = onModal()
     // The first field (or the box) takes the focus, so keys go to the dialog.
     const first = box.current?.querySelector<HTMLElement>('input, textarea, select, button[data-autofocus]')
     ;(first ?? box.current)?.focus()
+    // Tab of the whole document while this is the newest dialog: also with the focus gone to the body (a button that
+    // went away or was disabled), it comes back in – never to the page under the overlay.
+    const onKey = (e: KeyboardEvent) => {
+      const b = box.current
+      if (e.key !== 'Tab' || e.defaultPrevented || !b || topModal() !== modal.id) return
+      const items = Array.from(b.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((x) => x.offsetParent !== null)
+      const active = document.activeElement
+      const index = active instanceof HTMLElement && b.contains(active) ? items.indexOf(active) : -1
+      const to = tabTarget(items.length, index, e.shiftKey)
+      if (to == null) return
+      e.preventDefault()
+      ;(items[to] ?? b).focus()
+    }
+    document.addEventListener('keydown', onKey, true)
     return () => {
-      off()
+      document.removeEventListener('keydown', onKey, true)
+      modal.off()
       if (before?.isConnected) before.focus()
     }
   }, [])
-  const trapTab = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== 'Tab' || !box.current) return
-    const items = Array.from(box.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((x) => x.offsetParent !== null)
-    const to = tabTarget(items.length, items.indexOf(document.activeElement as HTMLElement), e.shiftKey)
-    if (to == null) return
-    e.preventDefault()
-    ;(items[to] ?? box.current).focus()
-  }
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-10" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
@@ -52,7 +59,6 @@ export function Dialog({
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        onKeyDown={trapTab}
         data-testid={rest['data-testid']}
         className={cx('flex w-full animate-fade-in flex-col rounded-lg border border-line-strong bg-panel outline-none', wide ? 'max-w-[760px]' : 'max-w-[520px]')}
       >

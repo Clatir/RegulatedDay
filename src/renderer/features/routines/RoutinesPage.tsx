@@ -3,7 +3,7 @@
  * days. You set the order here; the app never changes it, at most it moves the whole routine in time. A block of the
  * plan points at its routine (the panel of a block of the „Rutyny” category). Ctrl+N makes a new routine.
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { paths } from '@shared/data/paths'
 import { durationLabel } from '@shared/format'
 import { newId } from '@shared/model/ids'
@@ -11,7 +11,7 @@ import { MAX_STEPS, ROUTINE_SCHEMA, ROUTINE_VERSION_NAMES, routineFrom, routineM
 import { DurationField, TextField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
 import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
-import { modalOpen } from '../../lib/escape'
+import { useNewShortcut } from '../../lib/escape'
 import { undoToast } from '../../store/ui'
 
 export function RoutinesPage() {
@@ -23,16 +23,7 @@ export function RoutinesPage() {
     await saveRecord(paths.record('routine', id), null, { schema: ROUTINE_SCHEMA, id, name: 'Nowa rutyna', normal: [{ id: newId(10), name: '', min: 5 }], worse: [], archived: false })
     setSelected(id)
   }
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN' && !modalOpen()) {
-        e.preventDefault()
-        void create()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  useNewShortcut(() => void create())
   const list = routines.filter((r) => showArchived || !r.archived).sort((a, b) => a.name.localeCompare(b.name, 'pl'))
   const current = routines.find((r) => r.id === selected) ?? null
   return (

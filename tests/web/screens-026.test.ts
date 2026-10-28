@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { FolderProbe, HistoryRecord } from '@shared/api'
-import { failedFinish } from '@renderer/features/wizard/wizardStore'
+import { failedFinish, patchWizard, resetWizard, takeProbe, useWizard } from '@renderer/features/wizard/wizardStore'
 import { retryMessage } from '@renderer/features/settings/DataSection'
 import { chosenRecord, recordKey } from '@renderer/features/history/HistoryPage'
 import { dropSettled, type TimelineItem } from '@renderer/features/plan/Timeline'
@@ -14,9 +14,9 @@ import { sideBShown } from '@renderer/features/today/SideBStep'
 import { newUserBlock } from '@shared/engine/planEdit'
 import { ESTIMATE_RANGE } from '@shared/model/requests'
 import { STEP_RANGE } from '@shared/model/routines'
-import { durationParser } from '@renderer/components/fields'
+import { durationParser, fieldCommit } from '@renderer/components/fields'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
-import { modalOpen, onModal, tabTarget } from '@renderer/lib/escape'
+import { modalOpen, onModal, tabTarget, topModal } from '@renderer/lib/escape'
 import { closeSideB, patchBlockDraft, setBlockDraft, useUi } from '@renderer/store/ui'
 
 describe('godzina wpisana w rytuale (A6-14, A8-09)', () => {
@@ -49,12 +49,18 @@ describe('przeciągnięty blok nie wraca na chwilę na stare miejsce (A6-16)', (
   const item = (startMin: number): TimelineItem => ({ id: 'a', startMin, endMin: startMin + 60, title: 'Praca', marks: [], color: '#888', background: false })
 
   it('blokada upuszczenia trwa, dopóki nowe elementy dnia pokazują blok na starym miejscu', () => {
-    const drop = { id: 'a', start: 11 * 60 }
+    const drop = { id: 'a', from: 10 * 60 }
     // Items counted again from the day before the edit came back: the old start – still held.
     expect(dropSettled([item(10 * 60)], drop)).toBe(false)
     // The edit read back: the block at its new start – the hold ends.
     expect(dropSettled([item(11 * 60)], drop)).toBe(true)
     expect(dropSettled([], drop)).toBe(true)
+  })
+
+  it('nowe miejsce inne niż upuszczone (przed 04:00 – w dniu, blok elastyczny przed teraz – na teraz) też kończy blokadę (przegląd 0.26.0)', () => {
+    // Dropped at 03:50 (230), saved at 04:00 (240); dropped before now, placed at now (13:07).
+    expect(dropSettled([item(240)], { id: 'a', from: 6 * 60 })).toBe(true)
+    expect(dropSettled([item(13 * 60 + 7)], { id: 'a', from: 14 * 60 })).toBe(true)
   })
 })
 
@@ -96,13 +102,18 @@ describe('okna dialogowe trzymają fokus i skróty stron czekają (A6-21)', () =
     expect(tabTarget(0, -1, false)).toBe(-1)
   })
 
-  it('póki okno jest otwarte, Ctrl+N i Ctrl+1 … stron nie działają; dwa zamknięcia tego samego okna liczą się raz', () => {
+  it('póki okno jest otwarte, Ctrl+N i Ctrl+1 … stron nie działają; Tab trzyma tylko najnowsze okno; dwa zamknięcia liczą się raz', () => {
     expect(modalOpen()).toBe(false)
-    const off = onModal()
+    const a = onModal()
+    const b = onModal()
     expect(modalOpen()).toBe(true)
-    off()
-    off()
+    expect(topModal()).toBe(b.id)
+    b.off()
+    b.off()
+    expect(topModal()).toBe(a.id)
+    a.off()
     expect(modalOpen()).toBe(false)
+    expect(topModal()).toBeNull()
   })
 })
 
@@ -146,5 +157,37 @@ describe('szacunek prośby i czas kroku spoza zakresu (A6-19)', () => {
     expect(durationParser(ESTIMATE_RANGE)('10h')).toEqual({ ok: false, message: 'Najdłużej 8 h.' })
     expect(durationParser(ESTIMATE_RANGE)('1h30')).toEqual({ ok: true, value: 90 })
     expect(durationParser(STEP_RANGE)('5h')).toMatchObject({ ok: false })
+  })
+})
+
+describe('poprawki po przeglądzie 0.26.0', () => {
+  it('pole po odrzuconym tekście: ta sama godzina wpisana jeszcze raz jest przyjęta (kończy odmowę), choć nic się nie zmienia', () => {
+    const parse = (t: string) => (/^\d+$/.test(t) ? { ok: true as const, value: Number(t) } : { ok: false as const, message: 'liczba' })
+    expect(fieldCommit('18x', 18, parse, String)).toEqual({ refused: 'liczba' })
+    expect(fieldCommit('18', 18, parse, String)).toEqual({ value: 18, changed: false })
+    expect(fieldCommit('19', 18, parse, String)).toEqual({ value: 19, changed: true })
+    expect(fieldCommit('5', 18, parse, String, (v) => (v < 10 ? 'za mało' : null))).toEqual({ refused: 'za mało' })
+  })
+
+  it('długość krótsza niż zakres też jest odrzucana z komunikatem (A6-19)', () => {
+    expect(durationParser([5, 60])('3')).toEqual({ ok: false, message: 'Najkrócej 5 min.' })
+    expect(durationParser([5, 60])('5')).toEqual({ ok: true, value: 5 })
+  })
+
+  it('kreator kolejnego komputera nie staje się pierwszym, gdy rd.json na chwilę zniknął (A7-11)', () => {
+    const probe = (hasData: boolean): FolderProbe => ({ path: 'C:\OneDrive\RD', exists: true, empty: !hasData, hasData, unreadable: null, entries: hasData ? 5 : 0, inOneDrive: true })
+    const p = failedFinish({ probe: probe(true) }, 'W tym folderze nie ma danych.', probe(false), 2)
+    expect(p.probe).toEqual(probe(true))
+    expect(p.step).toBeUndefined()
+  })
+
+  it('spóźnione sprawdzenie innego folderu nie nadpisuje wybranego (A7-11)', () => {
+    resetWizard()
+    patchWizard({ folder: 'D:\RD' })
+    const late: FolderProbe = { path: 'C:\OneDrive\RegulatedDay', exists: true, empty: true, hasData: false, unreadable: null, entries: 0, inOneDrive: true }
+    takeProbe('C:\OneDrive\RegulatedDay', late)
+    expect(useWizard.getState().probe).toBeNull()
+    takeProbe('D:\RD', { ...late, path: 'D:\RD', inOneDrive: false })
+    expect(useWizard.getState().probe?.path).toBe('D:\RD')
   })
 })

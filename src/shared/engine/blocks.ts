@@ -156,7 +156,7 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
   }
   // The approval in force (not opened again since): the plan it names (T321); one that names none – the plan as it is.
   const last = facts.approvals.at(-1)
-  const inForce = last && !facts.undos.some((u) => u >= last.at) ? last : null
+  const inForce = last && last.undoneAt == null ? last : null
   markAfterWork(out, byId, inForce?.plan ? new Set(inForce.plan) : null)
   return out
 }
