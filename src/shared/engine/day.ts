@@ -379,6 +379,12 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
   })
   const list = stretches(flags, F_END, m)
   if (runningWork && list.length && list.at(-1)!.to === m) list.pop()
+  // „Koniec pracy” after work that never filled a minute (a block started and ended within one – a mistaken „Zacznij”):
+  // an empty stretch at the end you confirmed, judged like any other (a fixed work block left makes it a break, T507).
+  if (!list.length && !runningWork && view.workEnds.length && c.blocks.some((b) => isBoundaryWork(b) && !projects.has(b.id) && view.blocks.get(b.id)?.startedAt != null)) {
+    const e = Math.min(...view.workEnds.map((w) => w.end))
+    list.push({ from: e, to: e })
+  }
   const out: WorkEnd[] = []
   const dueOf = new Map(fcWindow.placed.map((p) => [p.block.id, p.due]))
   for (let i = 0; i < list.length; i++) {

@@ -85,6 +85,23 @@ describe('koniec pracy', () => {
     expect(st.workEnd).toBeNull()
   })
 
+  it('„Koniec pracy” po bloku pracy krótszym od minuty (np. „Zacznij” przez pomyłkę) potwierdza koniec w tej chwili (T507)', () => {
+    const s = ordinary([block({ id: 'a', cat: 'inne', at: '09:00', min: 60 })])
+    s.ran('a', '09:00', '09:00').workEnd('09:00')
+    const st = s.state('09:30')
+    expect(hhmm(st, st.workEnd)).toBe('09:00')
+    expect(st.ends).toEqual([{ at: st.workEnd, confirmed: true }])
+    expect(st.extensionMin).toBe(0)
+    // A fixed work block still to come makes it a break, as after any work.
+    const fixed = ordinary([block({ id: 'a', cat: 'inne', at: '09:00', min: 60 }), block({ id: 'w', cat: 'zajecia-zdalne', at: '15:00', min: 90, fixed: true, origin: 'lecture' })])
+    fixed.ran('a', '09:00', '09:00').workEnd('09:00')
+    expect(fixed.state('09:30').workEnd).toBeNull()
+    // Without „Koniec pracy” nothing is confirmed by itself.
+    const plain = ordinary([block({ id: 'a', cat: 'inne', at: '09:00', min: 60 })])
+    plain.ran('a', '09:00', '09:00')
+    expect(plain.state('09:05').ends.some((e) => e.confirmed)).toBe(false)
+  })
+
   it('dzień bez bloków pracy: koniec pracy to pobudka, regeneracja od pobudki', () => {
     const s = new Scenario({ date: '2026-10-24', dayType: 'weekend', plan: [block({ id: 'm', cat: 'posilek', at: '09:00', min: 30 })], nextWake: '08:00' })
     s.ran('m', '09:00', '09:30')
