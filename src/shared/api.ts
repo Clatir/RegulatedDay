@@ -281,8 +281,11 @@ export interface MovedTo {
 export interface EditQuestion {
   id: string
   rel: string
-  /** conflict – a field changed here and elsewhere; removed – the record was removed elsewhere; broken – the file is broken. */
-  kind: 'conflict' | 'removed' | 'broken'
+  /**
+   * conflict – a field changed here and elsewhere; removed – the record was removed elsewhere; changed – you removed it
+   * here while it changed elsewhere (A3-09); broken – the file is broken.
+   */
+  kind: 'conflict' | 'removed' | 'changed' | 'broken'
   /** When you made your change, and when the file was changed elsewhere (null: unknown) – „Przyjmij nowsze” compares them. */
   at: number
   theirsAt: number | null
@@ -315,9 +318,11 @@ export interface EditEntry {
   edits: FieldEditIn[]
   create?: boolean
   remove?: boolean
+  /** A removal: the record as you saw it when you removed it (A3-09). */
+  base?: unknown
 }
 
-export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'broken' | 'waiting'; why?: string }
+export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting'; why?: string }
 
 /**
  * A record chosen from a backup: what the queue did with it, `behindQuestion` – it waits for your answer to an earlier

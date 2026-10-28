@@ -64,7 +64,12 @@ export interface WidgetDeps {
   clickedApp: () => void
   modePrefs: () => ModePrefs
   notices: () => Record<NoticeKind, boolean>
-  notify: (n: NotifyIn) => boolean
+  /** A notification shown (false: not shown at all); `onFailed` – Windows did not take it after all. */
+  notify: (n: NotifyIn, onFailed?: () => void) => boolean
+  /** Windows takes notifications now (its notification state „accepts”, A4-07); undefined: always. */
+  notificationsTaken?: () => Promise<boolean>
+  /** You are at the computer now: a notification Windows did not take comes again only then (A4-07); undefined: always. */
+  present?: () => boolean
   showMain: (page?: string) => void
   emit: (view: WidgetView) => void
   log: (level: 'info' | 'warn' | 'error', msg: string, e?: unknown) => void
@@ -107,7 +112,7 @@ const ROUTINE_UNDO_MS = 60_000
  * – a field changed since is a question, not overwritten; a file the variant created goes only while it is as it made it.
  */
 function inverseEdit(e: EditEntry, now: RawRecord | null, made: RawRecord | null): EditEntry | null {
-  if (e.create) return now && sameContentAs(now, made) ? { rel: e.rel, remove: true, edits: [] } : null
+  if (e.create) return now && sameContentAs(now, made) ? { rel: e.rel, remove: true, edits: [], base: made } : null
   return { rel: e.rel, edits: e.edits.map((x) => ({ path: x.path, base: x.value, value: x.base })) }
 }
 
@@ -195,6 +200,7 @@ export class WidgetEngine {
       return
     }
     const now = this.now
+    let notices: (() => Promise<void>) | null = null
     try {
       const m = await folder.widgetModel(now)
       this.model = m
@@ -232,8 +238,9 @@ export class WidgetEngine {
       if (this.failing) this.d.log('info', 'widget: dzień znów policzony')
       this.failing = false
       // Notifications are the leader's, and only once settled – after a start or a wake the other computers' logs (their
-      // shown notices) come first, so nothing is shown twice (spec „Kilka komputerów”, A8-03).
-      if (folder.leader.iLead && !folder.unavailable && folder.settle.settled(folder.clock.now())) await this.notices(folder, m, (b) => blockName(b, names), now)
+      // shown notices) come first, so nothing is shown twice (spec „Kilka komputerów”, A8-03). After the view is out: a
+      // slow helper (the state of notifications) never holds the bar back.
+      if (folder.leader.iLead && !folder.unavailable && folder.settle.settled(folder.clock.now())) notices = () => this.notices(folder, m, (b) => blockName(b, names), now)
     } catch (e) {
       // The day cannot be counted now: a bar without actions says so (never the last view with a stale countdown).
       if (!this.failing) this.d.log('warn', 'widok widgetu nie policzył się', e)
@@ -243,6 +250,7 @@ export class WidgetEngine {
       this.awayView(folder)
     }
     this.d.emit(this.current())
+    if (notices) await notices().catch((e) => this.d.log('warn', 'powiadomienia nie policzyły się', e))
   }
 
   /** The marker and the open panel of variants in the view, and the line „Przestawiono: … · Cofnij” (D313). */
@@ -427,16 +435,42 @@ export class WidgetEngine {
     // notification in any quiet mode (spec „Model energii”, D326).
     if (on.reserve && m.energy.enabled && !view.quiet) {
       for (const d of m.energy.descents) {
-        if (!d.message || atOf(state.grid, d.at) < now - 60 * MIN) continue
+        const line = reserveMessageId(date, d.pool, d.at)
+        // Not once the pool is above the reserve again or its line was answered („Zacznij”, „nie dziś” – here or elsewhere).
+        if (!d.message || atOf(state.grid, d.at) < now - 60 * MIN || !m.energy.atReserve[d.pool] || answered(m.ctx.events, line)) continue
         // Its click opens the panel on the reserve's line – the sighting that counts (D241, A4-04).
-        out.push({ id: `notice:${date}:reserve:${d.pool}:${d.at}`, title: 'Energia na poziomie rezerwy', body: `${POOL_TEXT[d.pool]} – czas na regenerację.`, line: reserveMessageId(date, d.pool, d.at), day: date })
+        out.push({ id: `notice:${date}:reserve:${d.pool}:${d.at}`, title: 'Energia na poziomie rezerwy', body: `${POOL_TEXT[d.pool]} – czas na regenerację.`, line, day: date })
       }
     }
-    for (const n of out) {
-      if (shown.has(n.id)) continue
-      if (this.d.notify(n)) folder.markNotice(date, n.id, now)
+    // The state of notifications – one read of the helper per refresh, only when a notification needs it.
+    let takes: Promise<boolean> | null = null
+    const taken = () => (takes ??= this.d.notificationsTaken?.() ?? Promise.resolve(true))
+    // Not taken by Windows (its state held them – a full screen, a presentation – or showing it failed): once more, with
+    // the same id and time, when it takes them again and you are here, while the notification still holds and its line
+    // was not seen meanwhile (A4-07).
+    const seen = new Set(m.ctx.events.filter((e) => e.k === 'question.seen').map((e) => (e as unknown as { question: string }).question))
+    const held = out.filter((n) => this.notTaken.has(n.id) && !(n.line && seen.has(n.line)))
+    for (const id of [...this.notTaken]) if (!held.some((n) => n.id === id)) this.notTaken.delete(id)
+    if (held.length && (this.d.present?.() ?? true) && (await taken())) {
+      for (const n of held) {
+        this.notTaken.delete(n.id)
+        this.d.notify(n)
+      }
+    }
+    const fresh = out.filter((n) => !shown.has(n.id))
+    if (!fresh.length) return
+    const takenNow = await taken()
+    for (const n of fresh) {
+      const ok = this.d.notify(n, () => this.notTaken.add(n.id))
+      // Refused at once (an error of Windows): written like one shown, so only the way above tries it again – once.
+      if (!ok && !this.notTaken.has(n.id)) continue
+      folder.markNotice(date, n.id, now)
+      if (!takenNow) this.notTaken.add(n.id)
     }
   }
+
+  /** Notifications Windows did not take (by id): each comes once more (A4-07). */
+  private readonly notTaken = new Set<string>()
 
   /** The way of a break: from the screen after a project, else the lowest cost in the lowest pool (spec „Timer”). */
   /**

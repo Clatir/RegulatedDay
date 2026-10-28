@@ -27,7 +27,7 @@ import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { writeFileAtomic } from '../datastore/atomic'
 import { backupEntries, createUpdateBackup, listBackups, readBackupFiles, restoreToFolder, type BackupInfo } from './backup'
-import { BEHIND_QUESTION } from './editQueue'
+import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
 import type { DataFolder, TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
@@ -102,6 +102,16 @@ function isNewer(a: string, b: string): boolean {
 
 /** The questions of conflict copies have ids of their own (the copy's path after this). */
 const COPY_PREFIX = 'copy:'
+
+/**
+ * The fields a question shows: a conflict – yours and theirs; a removal of a record changed elsewhere – what changed
+ * since you saw it (as you removed it, as it is now, A3-09 review); else your change.
+ */
+export function questionFields(edit: QueuedEdit, outcome: Outcome, now: unknown): EditQuestion['fields'] {
+  if (outcome.status === 'conflict') return outcome.fields.map((x) => ({ path: x.path, mine: x.value, theirs: x.now }))
+  if (outcome.status === 'changedElsewhere' && now !== undefined) return diffRecords(edit.base, now).map((x) => ({ path: x.path, mine: x.before, theirs: x.after }))
+  return edit.edits.map((x) => ({ path: x.path, mine: x.value, theirs: undefined }))
+}
 
 /** A folder that did not open is tried again this often (spec: „ponawia otwarcie co 30 s”). */
 const RETRY_MS = 30_000
@@ -429,10 +439,10 @@ export class DataHub {
       out.push({
         id: edit.id,
         rel: edit.rel,
-        kind: outcome.status === 'conflict' ? 'conflict' : outcome.status === 'removedElsewhere' ? 'removed' : 'broken',
+        kind: outcome.status === 'conflict' ? 'conflict' : outcome.status === 'removedElsewhere' ? 'removed' : outcome.status === 'changedElsewhere' ? 'changed' : 'broken',
         at: edit.at,
         theirsAt,
-        fields: outcome.status === 'conflict' ? outcome.fields.map((x) => ({ path: x.path, mine: x.value, theirs: x.now })) : edit.edits.map((x) => ({ path: x.path, mine: x.value, theirs: undefined }))
+        fields: questionFields(edit, outcome, now?.status === 'ok' ? now.value : undefined)
       })
     }
     // OneDrive's conflict copies with fields different on both sides: the file („tutaj”) against the copy („tam”).
@@ -490,7 +500,7 @@ export class DataHub {
     const clean = entries.map((e) => {
       const c = classify(e.rel)
       if (!c || c.conflict || c.kind === 'log' || c.kind === 'presence' || c.kind === 'grades') throw new Error(`nie można edytować ${e.rel}`)
-      return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true }
+      return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true, ...(e.remove === true && e.base !== undefined ? { base: e.base } : {}) }
     })
     const out = await f.edit(clean)
     this.changed()

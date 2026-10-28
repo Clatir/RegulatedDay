@@ -230,7 +230,8 @@ export function setAt(root: unknown, path: Path, value: unknown): unknown {
  * with its value before (its base); a new record – every field; none after – the record removed.
  */
 export function recordEdit(rel: string, before: Record<string, unknown> | null, after: Record<string, unknown> | null): EditEntry | null {
-  if (!after) return before ? { rel, remove: true, edits: [] } : null
+  // A removal carries the record as you saw it: changed elsewhere since, it is a question, never removed quietly (A3-09).
+  if (!after) return before ? { rel, remove: true, edits: [], base: before } : null
   if (!before) return { rel, create: true, edits: Object.entries(after).map(([k, v]) => ({ path: [k], base: undefined, value: v })) }
   const edits = diffRecords(before, after).map((c) => ({ path: c.path, base: c.before, value: c.after }))
   return edits.length ? { rel, edits } : null

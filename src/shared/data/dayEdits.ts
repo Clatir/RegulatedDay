@@ -4,7 +4,8 @@
  * field (a block by its id, a cancel and a move by the block's id), so the queue sends field edits that merge with a
  * change of another field on another computer.
  */
-import type { PlanBlock } from '../model/plan'
+import { planBlockFrom, type PlanBlock } from '../model/plan'
+import { deepEqual } from './merge'
 
 export type Raw = Record<string, unknown>
 
@@ -15,9 +16,18 @@ export function dayRaw(raw: Raw | null | undefined, date: string): Raw {
   return isPlain(raw) ? { ...raw } : { schema: 1, date }
 }
 
-/** A block as written: every field of PlanBlock, plus what the file held for it that this version does not know. */
+/**
+ * A block as written: the file's block with only the fields you changed (A3-16) – a value this version cannot show (a
+ * newer `tag`, a newer shape of `costs`) reads as its default and, untouched, stays as the file holds it; fields this
+ * version does not know stay too.
+ */
 export function blockJson(b: PlanBlock, before?: Raw): Raw {
-  return { ...(before ?? {}), ...b }
+  if (!before) return { ...b }
+  // Read as the day's file reads its blocks (an origin unknown to this version is „user” there too).
+  const was = planBlockFrom(before) as unknown as Raw | null
+  const out: Raw = { ...before }
+  for (const [k, v] of Object.entries(b)) if (!was || !(k in before) || !deepEqual(was[k], v)) out[k] = v
+  return out
 }
 
 /** The block put into the day (replacing one with its id, keeping its unknown fields). */

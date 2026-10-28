@@ -119,6 +119,14 @@ function inTurn<T>(fn: () => Promise<T>): Promise<T> {
   return run
 }
 
+/** What the window says after edits that did not simply apply (spec „nic nie udaje sukcesu”); null – nothing. */
+export function editNotice(out: readonly EditOutcome[]): { text: string; kind: 'info' | 'error' } | null {
+  if (out.some((o) => o.status === 'changedElsewhere')) return { text: 'Tego rekordu nie usunięto – w tym czasie zmieniono go na innym komputerze. Odpowiedz na pytanie u góry okna.', kind: 'info' }
+  if (out.some((o) => o.status === 'conflict' || o.status === 'removedElsewhere')) return { text: 'Ta zmiana spotkała się ze zmianą z innego komputera – odpowiedz na pytanie u góry okna.', kind: 'info' }
+  if (out.some((o) => o.status === 'broken')) return { text: 'Plik jest uszkodzony i nie jest nadpisywany – przywróć go z historii.', kind: 'error' }
+  return null
+}
+
 /** Sends edits made by `make` (in its turn); null when nothing could be sent – the toast said why. */
 async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>): Promise<EditOutcome[] | null> {
   try {
@@ -126,8 +134,8 @@ async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | Reado
     if (!list.length) return []
     const out = await window.rd.edit(list)
     await reloadData()
-    if (out.some((o) => o.status === 'conflict' || o.status === 'removedElsewhere')) toast('Ta zmiana spotkała się ze zmianą z innego komputera – odpowiedz na pytanie u góry okna.', 'info', 8000)
-    else if (out.some((o) => o.status === 'broken')) toast('Plik jest uszkodzony i nie jest nadpisywany – przywróć go z historii.', 'error', 8000)
+    const notice = editNotice(out)
+    if (notice) toast(notice.text, notice.kind, 8000)
     return out
   } catch (e) {
     toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)

@@ -46,7 +46,10 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
 ## Ścieżki
 - Wyjście / „Zainstaluj teraz” / noc: aplikacja kopiuje programy, pisze zadanie i wpis Run strażnika, zapis zamknięcia,
   startuje `rd-install.exe` odłączony i kończy się; właściciel czeka na koniec jej procesu.
-- Start Windows: strażnik z Run; plik planu z sesją lub zajęciami w ciągu 30 min → `postponed`.
+- Start Windows: strażnik z Run; plik planu z sesją lub zajęciami w ciągu 30 min → `postponed`. Wtedy (poza „Odcinam
+  się” – `disconnectedUntil` w pliku planu) trzyma też ekran i przed zwolnieniem czeka na mutex potwierdzenia pomocnika
+  aplikacji (`PowerConfirm`, nazwa z folderu danych), najwyżej 60 s od uruchomienia aplikacji (T523) – czeka już bez
+  guard.lock i mutexu właściciela: przy żywym właścicielu uruchomiona aplikacja oddaje start i się kończy.
 - Noc (E4a, D162, T469, T516): `shared/nightInstall.ts` (warunki nocy i reguła kolejnych komputerów z obecności:
   `versions`, `installing`; wstrzymują tylko stany powiadomień gry, prezentacji, zajętości i aplikacji na cały ekran –
   „notPresent” to sama blokada; nowoczesne czuwanie – od razu) + `main/update/night.ts` (co minutę i przy blokadzie,

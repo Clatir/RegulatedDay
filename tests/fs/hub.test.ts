@@ -13,7 +13,7 @@ import { paths } from '@shared/data/paths'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
-import { DataHub, type HubOptions } from '../../src/main/data/hub'
+import { DataHub, questionFields, type HubOptions } from '../../src/main/data/hub'
 import { STOP_TIMEOUT_MS, type DataService, type ServiceOptions } from '../../src/main/data/service'
 
 let root: string
@@ -262,5 +262,17 @@ describe('folder danych okna głównego (DataHub)', () => {
     } finally {
       await hub.close('quit')
     }
+  })
+})
+
+describe('pytanie „usunąłeś tutaj, zmieniono tam” pokazuje zmiany (A3-09, przegląd 0.25.0)', () => {
+  it('pola: jak rekord wyglądał, gdy go usuwałeś, i jaki jest teraz – bez pól księgowych', () => {
+    const base = { id: 'r1', person: 'mama', estimateMin: 15, note: '', updatedAt: 1 }
+    const now = { id: 'r1', person: 'mama', estimateMin: 30, note: 'leki', updatedAt: 2 }
+    const edit = { id: 'e1', rel: 'requests/r1.json', at: 5, schema: 1, edits: [], remove: true, base }
+    expect(questionFields(edit, { id: 'e1', status: 'changedElsewhere' }, now)).toEqual([
+      { path: ['estimateMin'], mine: 15, theirs: 30 },
+      { path: ['note'], mine: '', theirs: 'leki' }
+    ])
   })
 })

@@ -11,6 +11,8 @@ import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import type { HolidayLookup } from '@shared/engine/createDay'
 import { createDay, dayPlan } from '@shared/engine/createDay'
+import { foldFacts, OPEN } from '@shared/engine/facts'
+import { gridOf } from '@shared/engine/grid'
 import { daySnapshotOf } from '@shared/model/events'
 import { dayStart, logicalDayOf, logicalMinuteOf, placeLogical } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
@@ -109,6 +111,8 @@ export class DataService {
   private stopped = false
   private lastBackupTry = 0
   private lastGuardPlan = 0
+  /** „Odcinam się” as the last computed state of the lock of sleep said it (its change writes the guard's plan). */
+  private disconnectSeen = false
   private lockedAt: number | null = null
   private lastExtraCopy = 0
   private systemEnding = false
@@ -247,6 +251,11 @@ export class DataService {
       if (this.o.onPower) {
         try {
           this.o.onPower(await this.folder.powerNeed(this.lastInput, now))
+          // „Odcinam się” began or ended: the guard's plan says it at once (T523).
+          if (this.folder.disconnectedNow !== this.disconnectSeen) {
+            this.disconnectSeen = this.folder.disconnectedNow
+            this.lastGuardPlan = 0
+          }
         } catch (e) {
           this.o.log('warn', 'stan blokady usypiania nieznany', e)
         }
@@ -341,7 +350,10 @@ export class DataService {
           blocks.push({ kind, start, end: start + b.durationMin * 60_000 })
         }
       }
-      writePlan(this.o.userData, blocks, dayStart(today))
+      // „Odcinam się” by today's own log (never a state left from yesterday), at most to the end of its logical day.
+      const todays = (await this.folder.readDay(today)).events
+      const disconnected = foldFacts(gridOf(today), todays).disconnect.some((d) => d.to === OPEN)
+      writePlan(this.o.userData, blocks, dayStart(today), disconnected ? dayStart(addDays(today, 1)) : null)
     } catch (e) {
       // Unknown records (a file that cannot be read now): the next hour tries again.
       this.lastGuardPlan = 0

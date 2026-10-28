@@ -68,6 +68,41 @@ describe('folder danych dla okna głównego', () => {
     expect(read(req).note).toBe('b')
   })
 
+  it('usunięcie rekordu, który w tym czasie zmienił się gdzie indziej: pytanie – „Usuń mimo to” usuwa, „Zostaw zmieniony” zostawia (A3-09)', async () => {
+    const seen = { schema: 1, id: 'r1', note: 'a' }
+    write(req, seen)
+    let away = false
+    const fs: DataFs = { ...nodeFs, remove: (p) => (away ? Promise.reject(Object.assign(new Error('EBUSY'), { code: 'EBUSY' })) : nodeFs.remove(p)) }
+    const { folder } = await make({ fs })
+    // Removed here while the file is held: the removal waits with the record as you saw it.
+    away = true
+    expect((await folder.edit([{ rel: req, edits: [], remove: true, base: seen }]))[0]!.status).toBe('waiting')
+    // Meanwhile another computer added a note to it.
+    write(req, { schema: 1, id: 'r1', note: 'z drugiego komputera' })
+    away = false
+    await folder.queue.apply(folder.records)
+    const [q] = folder.queue.questions()
+    expect(q!.outcome.status).toBe('changedElsewhere')
+    expect(read(req).note).toBe('z drugiego komputera')
+    await folder.queue.resolve(q!.edit.id, 'theirs')
+    await folder.queue.apply(folder.records)
+    expect(read(req).note).toBe('z drugiego komputera')
+    // Removed again, seen as it is now: no question – „Usuń mimo to” is the same as a removal of what you see.
+    expect((await folder.edit([{ rel: req, edits: [], remove: true, base: { schema: 1, id: 'r1', note: 'z drugiego komputera' } }]))[0]!.status).toBe('applied')
+    expect(existsSync(join(dataDir, req))).toBe(false)
+  })
+
+  it('„Usuń mimo to” usuwa rekord zmieniony gdzie indziej (A3-09)', async () => {
+    write(req, { schema: 1, id: 'r1', note: 'a' })
+    const { folder } = await make()
+    write(req, { schema: 1, id: 'r1', note: 'b' })
+    expect((await folder.edit([{ rel: req, edits: [], remove: true, base: { schema: 1, id: 'r1', note: 'a' } }]))[0]!.status).toBe('changedElsewhere')
+    const [q] = folder.queue.questions()
+    await folder.queue.resolve(q!.edit.id, 'mine')
+    await folder.queue.apply(folder.records)
+    expect(existsSync(join(dataDir, req))).toBe(false)
+  })
+
   it('pole zmienione tu i gdzie indziej: pytanie; „moje” zapisuje moje, „ich” zostawia tamto', async () => {
     write(req, { schema: 1, id: 'r1', note: 'a', estimateMin: 10 })
     const { folder } = await make()

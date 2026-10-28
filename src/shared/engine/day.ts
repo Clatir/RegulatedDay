@@ -650,17 +650,29 @@ export function computeDay(ctx: DayContext): DayState {
     const p = proposalAt(firstWorkStart, view, actual, fcW)
     if (p != null) implicit = { at: firstWorkStart, boundary: p }
   }
-  const approvedAtSlow = (m: number): { boundary: number; at: number; auto: boolean } | null => {
-    let found: { boundary: number; at: number; auto: boolean } | null = null
+  type InForce = { boundary: number; at: number; auto: boolean }
+  /**
+   * The approval in force at minute m, or none – `reopened` when „Cofnij” opened one written (or the day's own) before
+   * m: its minutes count by the proposal in force then (spec), not as „in the boundary” (A1-15).
+   */
+  const approvalSlow = (m: number): { approval: InForce | null; reopened: boolean } => {
+    let found: InForce | null = null
     for (const a of facts.approvals) if (a.at < m || (a.at === 0 && m === 0)) found = { boundary: a.boundary, at: a.at, auto: a.auto }
     const undone = found ? facts.undos.some((u) => u >= found!.at && u < m) : false
-    if (found && !undone) return found
-    if (!found && implicit && implicit.at <= m && !facts.undos.some((u) => u < m)) return { boundary: implicit.boundary, at: implicit.at, auto: true }
-    return null
+    if (found && !undone) return { approval: found, reopened: false }
+    const undoneBefore = facts.undos.some((u) => u < m)
+    const ownBefore = implicit != null && implicit.at <= m
+    if (!found && ownBefore && !undoneBefore) return { approval: { boundary: implicit!.boundary, at: implicit!.at, auto: true }, reopened: false }
+    return { approval: null, reopened: undone || (undoneBefore && ownBefore) }
   }
   // The approval in force at every minute, once (it is read per minute of regeneration).
-  const approvals: Array<{ boundary: number; at: number; auto: boolean } | null> = new Array(cap + 2)
-  for (let k = 0; k < cap + 2; k++) approvals[k] = approvedAtSlow(k)
+  const approvals: Array<InForce | null> = new Array(cap + 2)
+  const reopenedAt = new Uint8Array(cap + 2)
+  for (let k = 0; k < cap + 2; k++) {
+    const a = approvalSlow(k)
+    approvals[k] = a.approval
+    reopenedAt[k] = a.reopened ? 1 : 0
+  }
   const approvedAt = (m: number) => approvals[Math.max(0, Math.min(cap + 1, m))] ?? null
 
   // The classification of minutes, done in order: every minute by the values in force when it began.
@@ -766,12 +778,19 @@ export function computeDay(ctx: DayContext): DayState {
       if (seg) info = { cls: seg.cls, upfront: seg.upfront, recorded: true }
       else {
         const appr = approvedAt(k)
-        if (!appr || k < appr.boundary) info = { cls: 'in', upfront: (f & F_UPFRONT) !== 0, recorded: false }
+        // Before the approved boundary, or with none and none undone: „in” without evaluating the minute (T414). An
+        // approval undone leaves the boundary open – the proposal in force then decides, so work past the maximum is
+        // still an overrun (A1-15).
+        if (appr ? k < appr.boundary : !reopenedAt[k]) info = { cls: 'in', upfront: (f & F_UPFRONT) !== 0, recorded: false }
         else {
           ev = evaluate(k, shift, false, false, known)
-          const empty = ev.pool.min <= 0
-          const pastMax = k >= ev.max && !(f & F_SSOUT)
-          info = { cls: empty ? 'empty' : pastMax ? 'max' : 'after', upfront: (f & F_UPFRONT) !== 0, recorded: false }
+          const boundary = appr ? appr.boundary : ev.proposal
+          if (boundary == null || k < boundary) info = { cls: 'in', upfront: (f & F_UPFRONT) !== 0, recorded: false }
+          else {
+            const empty = ev.pool.min <= 0
+            const pastMax = k >= ev.max && !(f & F_SSOUT)
+            info = { cls: empty ? 'empty' : pastMax ? 'max' : 'after', upfront: (f & F_UPFRONT) !== 0, recorded: false }
+          }
         }
       }
       minutes.set(k, info)
