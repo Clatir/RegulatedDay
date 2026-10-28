@@ -11,6 +11,7 @@ import { computeDay, type DayContext, type DayState } from '@shared/engine/day'
 import { computeEnergy, type EnergyState } from '@shared/engine/energy'
 import type { AnyEvent, DaySnapshot } from '@shared/model/events'
 import { dayFileFrom, type DayFile } from '@shared/model/plan'
+import type { DayTypeId } from '@shared/model/settings'
 import { addDays } from '@shared/time/zone'
 import { useNow } from '../lib/clock'
 import { useData } from './data'
@@ -79,6 +80,11 @@ export interface DayModel {
   state: DayState
   energy: EnergyState
   events: AnyEvent[]
+}
+
+/** The day's type now: its last snapshot's (a change of type during the day), or the day's own; a change „od dziś” keeps it. */
+export function dayTypeNow(model: DayModel | null): DayTypeId {
+  return (model?.state.facts.snapshots.at(-1)?.dayType ?? model?.snapshot.dayType ?? 'zwykly') as DayTypeId
 }
 
 /** The day counted now (null until its data are read). */

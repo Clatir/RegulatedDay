@@ -11,6 +11,9 @@ paths:
   - "src/main/worker/**"
   - "src/renderer/features/today/ExchangeDialog.tsx"
   - "src/renderer/features/game/**"
+  - "src/renderer/features/calibration/**"
+  - "src/renderer/features/today/SideBStep.tsx"
+  - "src/renderer/features/today/sideBRows.ts"
   - "src/renderer/store/game.ts"
   - "tests/unit/engine/game.test.ts"
   - "tests/unit/engine/progress.test.ts"
@@ -80,5 +83,7 @@ D160, D170, D176, D200, D241, D244, D269, D272, D275, D301. Decyzje T492–T496.
 - Ekrany (0.14.0): `renderer/features/game/` – `GameLine` (nagłówek „Dziś”, „+N ♪”), `RoomPage` + `RoomArt` (SVG,
   ruch tylko z „Animacjami”), `Celebration` (nakładka, T510), `gameText` (słowa – testy `tests/web/game-text.test.ts`);
   `store/game.ts` (`useGameFeed` w `App`). IPC `game` (widok + `due`), `celebrated`; pamięć świąt – `celebrated.json`.
-- Jeszcze nie: „Strona B” w planie porannym, przegląd kalibracji z „Nie teraz”, poranne odpowiedzi i odczuwany koszt
-  w propozycjach kosztów (0.15.0).
+- Ekrany (0.15.0, T511): `features/today/SideBStep.tsx` + `sideBRows.ts` (poniedziałek, przed check-inem, `asked.sideB`),
+  `features/calibration/` – `CalibrationReview` (propozycje pojedynczo), `CalibrationEntry` (karta rano, sekcja w
+  Ustawieniach), `apply.ts` (wersja szablonu i zmiana ustawień od dziś, `calibrationReview` w rd.json), `calibrationText`.
+  IPC `sideB`, `calibration` (z `prompt`, `felt`). Odczuwany koszt tylko obok propozycji (bez zmiany wyliczenia).

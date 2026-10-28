@@ -48,9 +48,10 @@
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ciągi A, B i C zakończone: 0.11.0, 0.12.0 (z T507, 28.10 08:23) i 0.13.0 („Dane”, 28.10 09:03) wydane. **Ciąg D
-   w toku:** 0.14.0 (pokój, nagłówek „Dziś”, świętowanie, gra od jutra) – PR z `claude/0.14.0-gra`: po zielonym CI
-   (wynik czytać z pliku obserwatora / `gh run view`) scalić i sprawdzić wydanie; potem 0.15.0 („Strona B” w planie
-   porannym, przegląd kalibracji).
+   w toku:** 0.14.0 scalone (PR #24, 28.10 ok. 10:15; CI PR zielone po ponowieniu zadania Windows – test skali na
+   wolnym runnerze) – wydanie z CI na `main` (run 40659409168) sprawdzić; **0.15.0 („Strona B”, przegląd kalibracji)
+   – PR z `claude/0.15.0-strona-b`**: po zielonym CI (wynik z pliku obserwatora) scalić, sprawdzić wydanie; potem
+   pauza ciągu D do „dalej” (ciąg E – E8 na Twoją komendę).
 2. Ty: odbiór według `docs/odbior.md`. Brama ciągu B przeszła: E4b.1–E4b.8 odebrane 27.10 ok. 23:35 z prośbą „przystąp
    do ciągu B → C → D”; E4b.10 (dźwięk) czeka, ciągu nie wstrzymuje.
 3. **Ciąg B → C → D jednym ciągiem (D317):** elementy E5 w pasku (D311–D313) → wydanie 0.11.0; ekrany E6 (D318–D321);
@@ -110,6 +111,21 @@
   wersja dalej 0.12.0 (nie wyszła).
 - PR #22 (T507 po przeglądzie: pusty odcinek w kolejności czasu, „Odcinam się”; E2E próśb też bez sesji – w sesji
   „Pilne” nie pyta o szacunek) scalony po trzech zielonych rundach CI.
+
+## 0.15.0 – ekrany gry, część 2: „Strona B”, przegląd kalibracji (ciąg D)
+- Gałąź `claude/0.15.0-strona-b` (od 0.14.0) od 28.10 ok. 09:30.
+- Zakres (D322, D119, T511): „Strona B tygodnia” jako tabela w poniedziałkowym planie porannym przed pytaniami o objawy
+  (ten i poprzedni tydzień, neutralne strzałki, „brak pomiaru”, „Dalej” raz na wszystkich komputerach); przegląd
+  kalibracji – karta rano („Otwórz przegląd · Nie teraz”, po trzecim „Nie teraz” w Ustawieniach), sekcja „Kalibracja”
+  w Ustawieniach, propozycje czasu (nowa wersja szablonu od dziś) i kosztu (zmiana ustawień od teraz) zatwierdzane
+  pojedynczo, odczuwany koszt z rytuału obok; stan w `rd.json` (`calibrationReview`); IPC `sideB`, `calibration`.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. zatwierdzone propozycje zapamiętane (bez podwójnego
+  zastosowania po ponownym otwarciu), ustawienia z dzisiejszymi „od dziś” (dwa warianty się nie nadpisują), późniejsze
+  wersje szablonu, zapis bez sukcesu nie udaje „zatwierdzone”, propozycje z widoku okna (z kolejką), stan przeglądu
+  przy przywracaniu i przy nieczytelnym rd.json, odczuwany koszt do `know`, „brak pomiaru” w tygodniu bez pomiaru.
+- Testy: 867 jednostkowych i plikowych (test skali w pełnym zestawie lokalnie – pod obciążeniem; osobno przechodzi);
+  E2E `screens` 7/7 (nowy: kalibracja; w poniedziałek „Strona B” w teście E3), kreator; `smoke` – dwa testy paska
+  przekroczyły czas w pełnym przebiegu, osobno przechodzą.
 
 ## 0.14.0 – ekrany gry, część 1 (ciąg D)
 - Gałąź `claude/0.14.0-gra` (od 0.13.0) od 28.10 ok. 08:00.

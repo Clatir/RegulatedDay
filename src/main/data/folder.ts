@@ -28,18 +28,18 @@ import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerD
 import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
 import { betterFreeze, foldFacts, isRunning, type DayFacts } from '@shared/engine/facts'
-import { correctionEnd, freezeDecision, gradeLineFrom, isFreeDay, lastEventsOf, openedAtOf, WRITERS_DAYS, type GradeLine } from '@shared/engine/freeze'
+import { correctionEnd, countedEvents, freezeDecision, gradeLineFrom, isFreeDay, lastEventsOf, openedAtOf, WRITERS_DAYS, type GradeLine } from '@shared/engine/freeze'
 import { dayGame, notesSum, storedGame, weekOf, type GameDay, type GameDayInput } from '@shared/engine/game'
 import { gameView, regenWaysOf, ROOM_ITEMS, storedWays, type Celebration, type GameView } from '@shared/engine/progress'
 import { sideBOf, storedModules, type DayMeasure, type SideB } from '@shared/engine/sideB'
 import type { DaySummary } from '@shared/engine/daySummary'
-import { calibrationPeriod, costProposals, inCalibration, timeProposals, type CalibrationDay, type CalibrationPeriod, type CostEvidence, type CostProposal, type TimeProposal, type TimeSample } from '@shared/engine/calibration'
+import { calibrationPeriod, costProposals, inCalibration, timeProposals, type CalibrationDay, type CalibrationPeriod, type CostEvidence, type CostProposal, type FeltCounts, type TimeProposal, type TimeSample } from '@shared/engine/calibration'
 
 import { inProcess, type Worker } from '../worker/host'
 import { CLOSE_WINDOW_H, closeEvents, closeRefusal, ritualActivity, ritualAnswer, ritualRows, unclosedDays, type DayLog, type RitualValue, type RitualView } from '@shared/engine/ritual'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
-import { CLOSE_HOWS, compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type Signal } from '@shared/model/events'
+import { CLOSE_HOWS, compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type FeltCost, type Signal } from '@shared/model/events'
 import type { Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
 import { MODULES, personName, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
@@ -873,21 +873,31 @@ export class DataFolder {
    * period's qualifying days, each counted as its grade counts it: time for the templates as in force today, costs
    * against the settings of today.
    */
-  async calibration(at = this.clock.now()): Promise<{ period: CalibrationPeriod | null; time: TimeProposal[]; costs: CostProposal[] }> {
+  async calibration(at = this.clock.now()): Promise<{ period: CalibrationPeriod | null; time: TimeProposal[]; costs: CostProposal[]; felt: FeltCounts }> {
     const today = logicalDayOf(at)
     const period = calibrationPeriod(await this.calibrationDays(today), today)
-    if (!period) return { period, time: [], costs: [] }
+    if (!period) return { period, time: [], costs: [], felt: {} }
     const summaryOf = this.summaries(today, at)
     const samples: TimeSample[] = []
     const evidence: CostEvidence[] = []
+    const felt: FeltCounts = {}
     for (const d of period.days) {
       const s = await summaryOf(d)
-      if (!s) continue
-      samples.push(...s.summary.samples)
-      if (s.summary.costs) evidence.push(s.summary.costs)
+      if (s) {
+        samples.push(...s.summary.samples)
+        if (s.summary.costs) evidence.push(s.summary.costs)
+      }
+      // The felt cost of the ritual (D319): a source beside the signals (spec „dodatkowe źródło”) – the day's last answer
+      // for each category, a frozen day's up to the events its freeze counted (as the rest of the review).
+      const events = (await this.log.readDay(d)).events
+      const frozen = foldFacts(gridOf(d), events).frozen
+      const last = new Map<string, FeltCost>()
+      for (const e of (frozen ? countedEvents(events, frozen.know) : events).filter(isKnown).sort(compareEvents)) if (e.k === 'cost.felt') last.set(e.category, e.feel)
+      for (const [cat, feel] of last) (felt[cat] ??= { lighter: 0, usual: 0, heavier: 0 })[feel]++
     }
-    const inp = await this.inputs()
-    return { period, time: timeProposals(samples, inp.templates, today), costs: costProposals(evidence, settingsOn(inp.changes, today)) }
+    // The proposals go against the values the window changes – its own view, with your edits still in the queue.
+    const inp = await this.inputs(true)
+    return { period, time: timeProposals(samples, inp.templates, today), costs: costProposals(evidence, settingsOn(inp.changes, today, at)), felt }
   }
 
   /**

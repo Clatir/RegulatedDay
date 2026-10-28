@@ -60,6 +60,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E7c.2 Nagłówek „Dziś” i „+3 ♪”
    - [ ] E7c.3 Pokój
    - [ ] E7c.4 Świętowanie (przy okazji)
+   - [ ] E7d.1 „Strona B tygodnia” w poniedziałek
+   - [ ] E7d.2 Przegląd kalibracji – rano i w Ustawieniach (przy okazji)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
@@ -1135,3 +1137,32 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   nocą ani w „Odcinam się”.
 - **Nie przechodzi, gdy:** nakładka wraca po zamknięciu, pojawia się w czasie sesji albo „Odcinam się”, miga albo
   trwa dłużej niż 5 s.
+
+### E7d – ekrany gry, część 2: „Strona B” i przegląd kalibracji (0.15.0)
+
+#### E7d.1 „Strona B tygodnia” w poniedziałek (0.15.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/side-b-calibration.test.ts`, `tests/e2e/screens.spec.ts` (w poniedziałek). Ty: rzut oka
+  w poniedziałek rano.
+- **Jak sprawdzić:** w poniedziałek otwórz „Dziś” – plan poranny.
+- **Oczekiwany efekt:** pierwsza jest tabela „Strona B tygodnia” minionego tygodnia (daty od poniedziałku do niedzieli)
+  z kolumnami „ten tydzień” i „poprzedni” oraz neutralną strzałką przy „Odcinam się”, sygnałach, granicach, projektach
+  i przesunięciach pory snu; niżej bez strzałek: komputer po końcu pracy, po porze snu, regeneracja, prośby według osób.
+  Gdy niedziela nie jest zamrożona – „wstępna”. Miara z dni z wyłączonym modułem – „brak pomiaru”. „Dalej” przechodzi do
+  pytań o objawy i tabela nie wraca tego dnia (także na laptopie).
+- **Nie przechodzi, gdy:** tabela pojawia się w inny dzień niż poniedziałek, coś jest pokolorowane jak ocena, zamiast
+  „brak pomiaru” stoi 0 albo po „Dalej” tabela wraca.
+
+#### E7d.2 Przegląd kalibracji – rano i w Ustawieniach (0.15.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („kalibracja”), `tests/web/side-b-calibration.test.ts`,
+  `tests/fs/game.test.ts` („odczuwany koszt”). Ty: przy okazji, gdy okres kalibracji się skończy.
+- **Jak sprawdzić:** Ustawienia → „Kalibracja” (stan okresu); dzień po końcu okresu – plan poranny.
+- **Oczekiwany efekt:** w Ustawieniach „Okres kalibracji trwa: N dni z 14”; po okresie rano karta „Otwórz przegląd ·
+  Nie teraz” – „Nie teraz” chowa ją do jutra, po trzecim razie rano już nie pyta, a przegląd czeka w Ustawieniach.
+  Przegląd: propozycje długości („Analiza: realny czas to ×1,25 planowanego” i bloki szablonów „1 h → 1 h 15 min”)
+  i kosztów („głowa 2 → 3 …” z odczuwanym kosztem z rytuału obok), każda „Zatwierdź” albo „Pomiń”; zatwierdzona
+  obowiązuje od dziś (szablon ma nową wersję od dziś), dni przeszłe bez zmian. „Zakończ przegląd” – w Ustawieniach
+  „Przegląd zrobiony …”.
+- **Nie przechodzi, gdy:** zatwierdzona zmiana działa wstecz, propozycje stosują się bez kliknięcia, po trzecim „Nie
+  teraz” karta dalej wraca albo przegląd pokazuje identyfikatory zamiast nazw.

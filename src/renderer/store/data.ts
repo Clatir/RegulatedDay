@@ -111,6 +111,11 @@ export function editOf(rel: string, before: RawRecord | null, after: RawRecord |
  * is saved later – nothing pretends a success (spec „nic nie udaje sukcesu”).
  */
 export async function saveEdits(entries: ReadonlyArray<EditEntry | null>): Promise<EditOutcome[]> {
+  return (await trySaveEdits(entries)) ?? []
+}
+
+/** As `saveEdits`, but null when nothing could be sent (the toast said why): for a caller that must know it saved. */
+export async function trySaveEdits(entries: ReadonlyArray<EditEntry | null>): Promise<EditOutcome[] | null> {
   const list = entries.filter((e): e is EditEntry => !!e)
   if (!list.length) return []
   try {
@@ -121,14 +126,23 @@ export async function saveEdits(entries: ReadonlyArray<EditEntry | null>): Promi
     return out
   } catch (e) {
     toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
-    return []
+    return null
   }
 }
+
+/** Saved – written, or waiting for the folder – never a question, a broken file or an error. */
+export const isSaved = (out: readonly EditOutcome[] | null): boolean => out != null && out.every((o) => o.status === 'applied' || o.status === 'waiting')
 
 /** rd.json changed by `fn` (made when there is none yet – the defaults are never written unless you change something). */
 export function saveRd(fn: (raw: RawRecord) => RawRecord): Promise<EditOutcome[]> {
   const before = rawRecord('rd.json')
   return saveRecord('rd.json', before, fn(before ? { ...before } : { schema: 1 }))
+}
+
+/** As `saveRd`, null when nothing could be sent. */
+export function trySaveRd(fn: (raw: RawRecord) => RawRecord): Promise<EditOutcome[] | null> {
+  const before = rawRecord('rd.json')
+  return trySaveEdits([editOf('rd.json', before, fn(before ? { ...before } : { schema: 1 }))])
 }
 
 /** A new person of the list (spec „Słowniki: … z „+ dodaj””); answers its id. */

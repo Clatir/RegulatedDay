@@ -775,6 +775,8 @@ function registerIpc(): void {
   handle(CH.moveTo, (_e, dir: unknown) => needHub().moveTo(String(dir)))
   handle(CH.game, () => needHub().game())
   handle(CH.celebrated, (_e, keys: unknown) => needHub().celebrated(Array.isArray(keys) ? keys.map(String) : []))
+  handle(CH.sideB, () => needHub().sideB())
+  handle(CH.calibration, () => needHub().calibration())
   handle(CH.answer, (_e, id: string, answer: string, value: number | null) => needHub().answer(String(id), String(answer), typeof value === 'number' && Number.isFinite(value) ? value : null))
   ipcMain.on(CH.seen, (e, ids: unknown) => {
     // Seen only in the main window in the foreground (spec D231); the panel counts while it is open (E4b).

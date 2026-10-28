@@ -383,10 +383,12 @@ describe('dni zapisane raz w rd.json (D320, T509)', () => {
     try {
       expect(await hub.open(dirA)).toBe(true)
       const zip = await backupOfA()
-      await hub.edit([{ rel: 'rd.json', edits: [{ path: ['ritualFrom'], base: undefined, value: '2026-10-01' }, { path: ['gameFrom'], base: undefined, value: '2026-10-02' }, { path: ['note'], base: undefined, value: 'nowa' }] }])
+      const review = { deferrals: 3, reviewed: '2026-10-20', applied: ['time:analiza:'] }
+      await hub.edit([{ rel: 'rd.json', edits: [{ path: ['ritualFrom'], base: undefined, value: '2026-10-01' }, { path: ['gameFrom'], base: undefined, value: '2026-10-02' }, { path: ['calibrationReview'], base: undefined, value: review }, { path: ['note'], base: undefined, value: 'nowa' }] }])
       await hub.restoreRecords(zip, ['rd.json'])
       const rd = (await hub.service!.folder.recordView('rd.json'))!
-      expect(rd).toMatchObject({ ritualFrom: '2026-10-01', gameFrom: '2026-10-02' })
+      // The review's state too: a review done would be proposed again (z przeglądu 0.15.0).
+      expect(rd).toMatchObject({ ritualFrom: '2026-10-01', gameFrom: '2026-10-02', calibrationReview: review })
       expect(rd.note).toBeUndefined()
     } finally {
       await hub.close('quit')
@@ -406,6 +408,17 @@ describe('gra dla okna (T510)', () => {
       // After it ended, a new ask counts again.
       await hub.game()
       expect(spy).toHaveBeenCalledTimes(2)
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('kalibracja dla okna: stan przeglądu z rd.json (D119), bez okresu – przegląd nigdzie nie czeka', async () => {
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dirA)).toBe(true)
+      await hub.edit([{ rel: 'rd.json', edits: [{ path: ['calibrationReview'], base: undefined, value: { deferrals: 2, reviewed: null } }] }])
+      expect(await hub.calibration()).toMatchObject({ period: null, time: [], costs: [], felt: {}, prompt: 'none', deferrals: 2, reviewed: null })
     } finally {
       await hub.close('quit')
     }
