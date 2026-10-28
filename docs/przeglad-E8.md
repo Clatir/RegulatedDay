@@ -361,7 +361,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** (1) Dodać w pasku (i panelu) linię komunikatu rezerwy o id `reserveMessageId(date, pool, at)` dla zejścia z `message: true`: sposób z `suggestRegen`, przycisk „nie dziś” chowający ją do końca dnia, w trybie sesji i zajęć czekająca do ich końca, w „mniej pytań” cicha ikona. (2) Dopisać `reserve` do obu wyrażeń `QUESTION_ID`, żeby panel, okno z obecnością i kliknięcie paska zapisywały `question.seen`. (3) Kliknięcie powiadomienia `notice:…:reserve:…` zapisuje zobaczenie z `how: 'notification'` (T333). (4) Test E2E albo folderu: zejście → widok → `question.seen` z tym id → brak regeneracji w 60 min → nagroda 0.
 - **Weryfikacja:** W kodzie nie ma ciepłego komunikatu rezerwy. engineView nie buduje dla niego żadnej linii (daje tylko ton „rezerwa” i dopisek w nazwie klasy), nie ma też przycisku „nie dziś”. Oba wyrażenia QUESTION_ID przepuszczają wyłącznie next/next2/workEnd/return/absence/shutdown, a nikt nie wywołuje seen(…, 'notification'). Zdarzenie question.seen z id reserve:… nigdy więc nie powstaje, sightingOf zawsze daje seenAt = null, a reserveReaction przy over albo po bedLimit zamienia każde niespełnione zejście na 'excused', czyli werdykt 'reward'. Luki nie śledzą ani docs/plan.md, ani docs/postep.md. Komentarz w game.ts:90 („the message comes with E5's bar”) i energia.md („Jeszcze nie: zobaczenie komunikatu … (E4b)”) pokazują, że komunikat odkładano z etapu na etap i w końcu nie powstał.
 - **Dowód:** src/shared/engineView.ts:157-236 (tylko ton i className, brak linii reserve); src/main/widget.ts:41 i src/renderer/widget/Bar.tsx:36 (QUESTION_ID bez reserve); src/main/widget.ts:405 (powiadomienie z line: null, nic nie oznacza jako zobaczone); src/main/data/hub.ts:577 (seen 'notification' bez wywołującego); src/shared/engine/game.ts:90-104; src/shared/engine/reserve.ts:116-117; tests/unit/engine/reserve.test.ts:113 (seen=null, over → 'reward'); grep 'nie dziś|notToday' w src: brak (poza DataSection)
-- **Status:** otwarte
+- **Status:** poprawione w 0.20.0 (komunikat rezerwy D326, T518)
 
 #### A2-02 · medium · potwierdzone – Odpoczynek do nagrody za rezerwę pomija czas do wyjaśnienia z odpowiedzią „odpoczynek” (i D265 przy zamrożeniu), a liczy odcinki oznaczone w rytuale jako „nie odpoczynek”
 - **Plik:** `src/shared/engine/reserve.ts:65` · rodzaj: spec · pewność recenzenta: high
@@ -391,7 +391,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodać odpowiedzi `meal`, `regen`, `request` do pytania o nieobecność w pasku i wierszu rytuału. Po planowanym końcu: koniec w chwili odejścia (reguła z `LEFT_RULES`), czas od powrotu jako czas do wyjaśnienia. `meal` oznacza najbliższy pasujący posiłek z planu (D277) z czasami nieobecności i z „Cofnij”; `regen` robi z nieobecności regenerację w `regen`/`rest`. W `accurateBlocks` i `timeSamples` wykluczyć posiłki odhaczone tą odpowiedzią. Testy z przykładów D277.
 - **Weryfikacja:** Pytanie o nieobecność daje w questionsOf tylko keep/subtract/leave (koniec) i keep/end/leave (odliczona), a answerEvents zna tylko keep, leave, end i subtract. W src nie ma odpowiedzi „posiłek”, „regeneracja” ani „byłem na prośbie” ani linijki „… zjedzony … · Cofnij”, a wiersz rytuału 'absence' ma tylko ✓. Specyfikacja („Bezczynność i nieobecność”), T371, T378 i T383 wymagają tych odpowiedzi. T463 odłożył je do E5 („odpowiedzi nieobecności „posiłek”, „regeneracja”, „byłem na prośbie” (E5 …)”), E5 ich nie dodał, a docs/plan.md i docs/postep.md o nich milczą, więc to nie jest zaplanowane odroczenie.
 - **Dowód:** src/shared/engine/auto.ts:479-485, 508, 569-588; src/shared/engine/ritual.ts:82, 156-167; docs/specyfikacja.md:430; docs/decyzje-techniczne.md T463 (odroczenie do E5), T371, T378, T383; grep 'byłem na prośbie|zjedzony' w src: brak
-- **Status:** do 5.2e – funkcja ze specyfikacji (D325)
+- **Status:** poprawione w 0.21.0 (odpowiedzi na nieobecność, T519)
 
 #### A2-05 · low · bez weryfikacji – „Zaznacz odcinek” (rest.not) nie jest ograniczony do wieczoru ani „Odcinam się” – może skasować regenerację z dnia
 - **Plik:** `src/shared/engine/ritual.ts:334` · rodzaj: bug · pewność recenzenta: high
@@ -399,7 +399,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `ritualAnswer` dla wiersza `rest` sprawdza tylko `value.to > value.from`. Pola „Od – Do” w `RitualPanel` przyjmują dowolne godziny, a `day.ts:1045-1048` zeruje `regen` i `tentative` dla każdej minuty odcinka, także minut bloku regeneracji i przerw ≥ 30 min przed końcem pracy. Specyfikacja dopuszcza oznaczenie tylko „odcinka wieczoru albo czasu w „Odcinam się””.
 - **Scenariusz:** Wiersz „Po końcu pracy · odpoczynek ✓ · zaznacz odcinek” od 17:00. Użytkownik wpisuje 12:00–18:00 (pomyłka albo chce oznaczyć tylko 17:00–18:00). Drzemka 13:00–13:30 z bloku regeneracji przestaje się liczyć do minimum (1/3 przed końcem pracy) i twardy koniec przesuwa się wcześniej – bez ostrzeżenia.
 - **Poprawka:** W `ritualAnswer` przyciąć odcinek do sumy [row.from, row.to) i odcinków „Odcinam się” dnia (pusty po przycięciu → odmowa z tekstem); to samo w `day.ts` przy stosowaniu `notRest` (zapisy z innego komputera). Test: odcinek sprzed końca pracy nie zmienia `regen.totalMin`.
-- **Status:** otwarte
+- **Status:** poprawione w 0.26.0 (testy w `tests/unit/engine/ritual.test.ts`, T524)
 
 #### A2-06 · low · bez weryfikacji – Dzień z zaplanowaną, ale niezaczętą pracą nie ma wieczornego rytuału (ritualDue = false do 04:00)
 - **Plik:** `src/shared/engine/ritual.ts:413` · rodzaj: spec · pewność recenzenta: medium · **wymaga Twojej decyzji**
@@ -407,7 +407,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Dla dzisiejszego dnia `ritualDue` wymaga `state.workEnd != null || state.ends.length > 0`. Koniec pracy wylicza się tylko po odcinku pracy, a niezaczęte bloki elastyczne prognoza przesuwa zawsze za „teraz”. W dniu, w którym zaplanowano pracę, ale żadnej nie zrobiono (dzień typu „zwykły” bez zmiany na regeneracyjny), karta „Rytuał zamknięcia” i pozycja „Rytuał” w pasku nie pojawiają się wcale, a dzień czeka na poranek. Specyfikacja mówi „Rytuał można zrobić kiedykolwiek przed snem albo rano”.
 - **Scenariusz:** Chory dzień: plan ma „Analiza 9:00” i „Nauka 14:00”, nic nie zostaje zaczęte. O 21:30 użytkownik chce zamknąć dzień – nie ma karty ani pozycji w pasku (obejście: kliknąć „Koniec pracy”, co tworzy pusty odcinek). Rytuał pokazuje się dopiero rano w niezamkniętych dniach.
 - **Poprawka:** Rozszerzyć regułę T505, np. o dzień bez żadnego odcinka pracy od efektywnej pory snu minus N min albo od chwili, gdy nie ma już okna dla bloków pracy. Wybór chwili to widoczne zachowanie – do pytania.
-- **Status:** otwarte
+- **Status:** poprawione w 0.22.0 (rytuał w dniu bez pracy D329, T520)
 
 #### A2-07 · low · bez weryfikacji – Okno korekty liczone tylko od obecności w dniu następnym – przy dniu przerwy trwa 72 h zamiast 24 h od faktycznego otwarcia
 - **Plik:** `src/main/data/folder.ts:741` · rodzaj: spec · pewność recenzenta: medium
@@ -423,7 +423,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `feltRows` zbiera kategorie tylko z `state.facts.blocks`. Prośby („zrobione teraz”, pilne, po fakcie) są osobnymi faktami (`facts.requests`), więc kategoria „Prośby domowe” (koszt 1/3/2, główne źródło kosztu psychicznego) nie dostaje wiersza, choć tego dnia biegła. D319 mówi o jednym wierszu na każdą kategorię z dnia.
 - **Scenariusz:** Dzień z trzema prośbami „Zrobione teraz” (razem 50 min) i bez bloku próśb w planie. Pod wierszami rytuału nie ma wiersza „Prośby domowe · lżej · jak zwykle · ciężej”, więc przegląd kalibracji nie ma odczuwanego kosztu dla tej kategorii.
 - **Poprawka:** Dodać do `feltRows` minuty `facts.requests` (do teraz) pod `REQUEST_CATEGORY`, w kolejności pierwszego startu; test w `ritual.test.ts`.
-- **Status:** otwarte
+- **Status:** poprawione w 0.26.0 (testy w `tests/unit/engine/ritual.test.ts`, T524)
 
 ### A3 – Dane – folder, zapis, kolejka edycji, kopie, przywracanie, migracje, OneDrive
 
@@ -928,7 +928,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Okno nie może zapisać `undo` (brak w USER_EVENTS), więc cofnięcie z planu porannego zostawia zatwierdzenie w `facts.approvals`. Pasek cofa inaczej (timer.ts:418: `undo` z celem + `boundary.undo`) i zatwierdzenie znika z faktów. Po cofnięciu z okna `approvedByYou` jest dalej true: nagłówek „Plan poranny · zatwierdzony” przeczy sekcji „Propozycja granicy … Zatwierdź plan”. `detectLateWake` dalej uważa plan za zrobiony, a `exchangeOf` (gra) bierze cofnięte zatwierdzenie za pierwsze.
 - **Scenariusz:** Zatwierdzasz plan i klikasz „Cofnij zatwierdzenie” w planie porannym. Granica nie jest zatwierdzona (widać „Zatwierdź plan”), a nagłówek karty mówi „zatwierdzony”. Ten sam ruch w pasku daje inny stan faktów.
 - **Poprawka:** Jedna droga cofnięcia: wywołaj akcję timera przez `window.rd.timer` (ta sama co w pasku) albo dopuść w USER_EVENTS `undo` z celem `boundary.approve`. Test: po cofnięciu z okna `facts.approvals` jest pusty.
-- **Status:** do 5.3 (T517)
+- **Status:** poprawione w 0.26.0 (test w `tests/unit/engine/timer.test.ts`, T524)
 
 #### A6-12 · low · bez weryfikacji – Zmiana typu dnia na minionym dniu zapisuje plik bez żadnego skutku
 - **Plik:** `src/renderer/features/today/TypeChangeDialog.tsx:37` · rodzaj: ux-text · pewność recenzenta: high
@@ -952,7 +952,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** TimeField odrzuca błędną wartość toastem i wraca do poprzedniej, a `typed.current` zostaje null. „Zapisz” wysyła wtedy `editing.min`, czyli godzinę startową wiersza, jako Twoją odpowiedź. Tak samo jest w UnclosedDays.tsx:61. Dla „Pracowałem do …” po bloku pracy domyślna jest `explain.from`, co zmienia rozstrzygnięcie czasu do wyjaśnienia na odpowiedź, której nie wybrałeś.
 - **Scenariusz:** W rytuale klikasz „Pracowałem do …”, wpisujesz „25:30” i klikasz „Zapisz”. Pole pokazuje błąd, ale zapisuje się „Pracowałem do 17:30” (początek czasu do wyjaśnienia) i dzień zmienia ocenę.
 - **Poprawka:** Przy odrzuceniu ustaw flagę błędu (np. `onError` w CommitField albo odczyt `data-error`) i nie wysyłaj odpowiedzi, dopóki pole jest błędne.
-- **Status:** do 5.3 (T517)
+- **Status:** poprawione w 0.26.0 (testy w `tests/web/screens-026.test.ts`, T524)
 
 #### A6-15 · low · bez weryfikacji – Poniedziałkowa „Strona B” zasłania check-in i plan: bez „Pomiń” w trakcie liczenia, „Dalej” nie działa przy nieczytelnym pliku dnia
 - **Plik:** `src/renderer/features/today/SideBStep.tsx:36` · rodzaj: spec · pewność recenzenta: medium
@@ -960,7 +960,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Dopóki `rd.sideB()` liczy (proces pomocniczy, 14 dni podsumowań), krok pokazuje tylko „Liczę „Stronę B”…” – nie ma „Pomiń”, a check-in i plan są niedostępne. „Dalej” zapisuje `asked.sideB` w pliku dnia. Gdy plik jest nieczytelny (OneDrive), edycja czeka, `dayFile` w widoku jest null i krok się nie chowa.
 - **Scenariusz:** Poniedziałek rano, OneDrive jeszcze pobiera plik dnia. Klikasz „Dalej” i „Strona B” zostaje, a do pytań o objawy i „Zatwierdź plan” nie da się dojść.
 - **Poprawka:** Pokazuj „Pomiń” także w trakcie liczenia. Po „Dalej”/„Pomiń” chowaj krok od razu stanem okna (niezależnie od zapisu), a zapis `asked.sideB` niech idzie w tle.
-- **Status:** do 5.3 (T517)
+- **Status:** poprawione w 0.26.0 (testy w `tests/web/screens-026.test.ts`, T524)
 
 #### A6-16 · low · bez weryfikacji – Przeciągnięty blok na chwilę wraca na stare miejsce – blokada upuszczenia czyści się przed nowymi danymi dnia
 - **Plik:** `src/renderer/features/plan/Timeline.tsx:106` · rodzaj: bug · pewność recenzenta: medium
@@ -968,7 +968,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Blok upuszczony czeka do nowych `items` (T498). Po zapisie `trySaveEdits` → `reloadData(news=true)` → `apply` zawsze tworzy nowe obiekty `rd/templates/lectures`. `useDay` przelicza model na starych danych dnia (dayData czyta się dopiero po zmianie stamp), `items` są nowe i efekt czyści przeciąganie. Blok wskakuje na stare miejsce, a po odczycie dayData na nowe. Dwusekundowe czekanie nie działa tak, jak zamierzono.
 - **Scenariusz:** Przeciągasz blok z 10:00 na 11:00. Po upuszczeniu blok mignie z powrotem na 10:00 i po chwili stanie na 11:00.
 - **Poprawka:** Czyść blokadę dopiero, gdy element o tym id ma `startMin === drag.start` (albo po DROP_HOLD_MS). Alternatywnie w `apply` nie podmieniaj `rd/templates/lectures`, gdy ich JSON się nie zmienił.
-- **Status:** do 5.3 (T517)
+- **Status:** poprawione w 0.26.0 (testy w `tests/web/screens-026.test.ts`, T524)
 
 #### A6-17 · low · bez weryfikacji – Nowy blok przed „Dodaj” ginie przy przejściu na inny ekran
 - **Plik:** `src/renderer/features/today/TodayPage.tsx:66` · rodzaj: spec · pewność recenzenta: high
@@ -976,7 +976,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Szkic nowego bloku (`draft`) jest stanem DayView. `<main key={page}>` w App odmontowuje stronę przy przejściu, a `useEffect([date])` czyści szkic przy zmianie dnia. Konwencja mówi, że niezapisany formularz przetrwa przejście na inny ekran.
 - **Scenariusz:** Klikasz wolne miejsce na osi, ustawiasz kategorię, długość i notatkę, przechodzisz Ctrl 2 do Kalendarza i wracasz – panel nowego bloku zniknął z ustawieniami.
 - **Poprawka:** Trzymaj szkic (data + blok) w `useUi` i odtwarzaj go po powrocie na ten sam dzień.
-- **Status:** do 5.3 (T517)
+- **Status:** poprawione w 0.26.0 (testy w `tests/web/screens-026.test.ts`, T524)
 
 #### A6-18 · low · bez weryfikacji – Wybór osoby w rytuale („osoba: ?”) bez „+ dodaj osobę”
 - **Plik:** `src/renderer/features/ritual/RitualPanel.tsx:347` · rodzaj: ux-text · pewność recenzenta: high
@@ -992,7 +992,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `estimateMin` jest obcinany do 480 min (`Math.min(ESTIMATE_RANGE[1], …)`), a czas kroku do STEP_RANGE (RoutinesPage.tsx:125) bez komunikatu. Pole pokazuje potem inną wartość niż wpisana.
 - **Scenariusz:** Wpisujesz szacunek „10h” – zapisuje się 8 h bez słowa.
 - **Poprawka:** Przekaż zakres do parsera (`parseDuration(t, max)` w DurationField z propsem `max`/`min`), żeby wartość spoza zakresu była odrzucona z komunikatem.
-- **Status:** otwarte
+- **Status:** poprawione w 0.26.0 (testy w `tests/web/screens-026.test.ts`, T524)
 
 #### A6-20 · low · bez weryfikacji – Pytania kolejki o plik dnia nie nazywają bloku („blok”, „inny blok”, „1 pozycja”)
 - **Plik:** `src/renderer/app/Questions.tsx:65` · rodzaj: ux-text · pewność recenzenta: high
@@ -1008,7 +1008,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Dialog ma `aria-modal` i ustawia fokus na pierwszym polu, ale Tab wychodzi do strony pod nakładką, a po zamknięciu fokus trafia na body. Przy otwartym oknie skrót Ctrl+N na „Dziś” tworzy szkic bloku pod oknem, a jego warstwa Esc staje nad warstwą okna – Esc zamyka wtedy panel pod spodem, nie okno.
 - **Scenariusz:** W oknie „Przenieś na…” Tab przechodzi na przyciski osi pod nakładką. Po „Anuluj” fokus ginie i klawiatura zaczyna od początku okna.
 - **Poprawka:** Pułapka fokusu (Tab/Shift+Tab w obrębie pudełka), zapamiętany i oddany element aktywny po zamknięciu. Skróty stron (Ctrl+N) ignoruj, gdy otwarta jest warstwa okna.
-- **Status:** do 5.3 (T517)
+- **Status:** poprawione w 0.26.0 (testy w `tests/web/screens-026.test.ts`, T524)
 
 #### A6-22 · low · bez weryfikacji – Plan poranny co 30 s czyta pełne dane 9 dni (logi), choć potrzebuje tylko plików dni
 - **Plik:** `src/renderer/store/day.ts:61` · rodzaj: perf · pewność recenzenta: high
@@ -1031,7 +1031,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `newHere` stawia nowy blok na „teraz” zaokrąglonym do 15 min (albo na pobudkę + 1 h). Nie szuka wolnego miejsca, więc blok może nachodzić na biegnący. Tekst panelu i komentarz mówią o najbliższym wolnym miejscu.
 - **Scenariusz:** O 10:05 przy bloku do 11:00 Ctrl+N tworzy szkic na 10:15, nachodzący na trwający blok.
 - **Poprawka:** Użyj `freeStart(model.state, model.state.now, 60)` dla dziś albo zmień tekst na „od najbliższego kwadransa”.
-- **Status:** do 5.3 (T517)
+- **Status:** poprawione w 0.26.0 (test w `tests/unit/engine/e3-plan.test.ts`, T524)
 
 ### A7 – Pozostałe ekrany i pasek – Ustawienia, „Dane”, kalendarz, historia, kreator, gra, kalibracja, próba
 
@@ -1115,7 +1115,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Zamiast tekstu id zaznaczyć wskazaną linię w Bar (np. prop highlight={target.line} i obramowanie data-testid bar-line-…). Jeśli linii już nie ma, pokazać nazwę bloku albo „Powiadomienie: <tytuł>” – po ludzku, bez id. Dodać test E2E dla panel-target.
 - **Weryfikacja:** Opisany scenariusz nie może się zdarzyć. Adres powiadomienia to `regulatedday://panel?line=wait:<id>&day=…`, a parseAppUrl dopuszcza linię tylko według /^[a-z0-9][a-z0-9-]{0,63}$/, bez dwukropka. Dla takiej linii cały adres jest odrzucany (return null), więc handleArgv nie otwiera panelu z celem, tylko okno główne. Napis „Otwarte z powiadomienia: wait:…” nigdy się nie pojawia. Pozostałe powiadomienia (twardy koniec, rezerwa) mają line: null, a 'trial' daje „linia próby”. Test potwierdził: parseAppUrl(appUrl(…wait:k3f9…)) === null. Jest natomiast inny, prawdziwy błąd, wart osobnego zgłoszenia (ok. medium): kliknięcie powiadomienia 5 min przed blokiem otwiera okno główne zamiast panelu ikony z właściwą linią. Specyfikacja wymaga panelu, a test placement.test.ts:122 sprawdza tylko linię bez dwukropka.
 - **Dowód:** src/shared/protocol.ts:11 (LINE bez ':'), :26-28 (inaczej return null); src/main/widget.ts:395 (line: `wait:${b.id}`); src/main/notify.ts:49; src/main/index.ts:827-835 (target null → showMainWindow); src/renderer/widget/PanelApp.tsx:49-52; test tymczasowy tmp-e8-a7-misc: '…line=wait:k3f9a0b1c2&day=2026-10-21 null' (usunięty)
-- **Status:** otwarte
+- **Status:** obalone przy weryfikacji – bez zmian
 
 #### A7-09 · low · bez weryfikacji – Zapis „od dziś” bierze typ dnia 'zwykly', gdy model dnia jeszcze się nie wczytał
 - **Plik:** `src/renderer/features/settings/settingsStore.ts:50` · rodzaj: data · pewność recenzenta: medium
@@ -1131,7 +1131,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** selected to obiekt zapamiętany przy kliknięciu: po reloadData lista się odświeża, a selected zostaje stary (exists, versions). Versions pobiera wersje i bieżący plik dnia tylko przy zmianie [r.kind, r.id]. Po przywróceniu zostaje więc baner „Ten rekord jest usunięty”, nowa wersja „przed przywróceniem” się nie pojawia, a przy planie dnia „teraz:” pokazuje treść sprzed przywrócenia. historyVersions nie ma catch, więc przy błędzie zostaje na zawsze „Czytam wersje…”.
 - **Scenariusz:** Użytkownik przywraca wersję planu dnia i dostaje toast „Wersja przywrócona”. Lista dalej pokazuje różnice „teraz: X / w tej wersji: Y” jak przed przywróceniem, więc klika jeszcze raz i tworzy kolejne wersje.
 - **Poprawka:** Przechowywać wybór jako klucz kind/id i brać rekord z bieżącej listy. Wersje i currentDay pobierać ponownie przy zmianie stamp (albo po restore). Dodać catch z komunikatem.
-- **Status:** do 5.3 (T517)
+- **Status:** poprawione w 0.26.0 (testy w `tests/web/screens-026.test.ts`, T524)
 
 #### A7-11 · low · bez weryfikacji – Kreator: „Zakończ” bez obsługi wyjątku zostaje na „Zapisuję…”; po częściowym niepowodzeniu nie sprawdza folderu ponownie
 - **Plik:** `src/renderer/features/wizard/Wizard.tsx:81` · rodzaj: crash · pewność recenzenta: medium
@@ -1139,7 +1139,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** finish() wywołuje window.rd.wizardFinish bez try/catch. Gdy IPC odrzuci (np. config.update({ dataFolder }) w main/index.ts:434 rzuci przy zapisie), busy zostaje true, przycisk jest zablokowany jako „Zapisuję…” i nie ma komunikatu. Gdy createFirst zapisał dane, a hub.open się nie udał, ponowne „Zakończ” daje „W tym folderze są już dane… może do nich dołączyć”. Stan kreatora (probe.hasData false) zostaje jednak pierwszym komputerem i bez ponownego wyboru folderu „Zmień…” nie da się dołączyć. Ten sam problem dotyczy folderDefault/folderProbe bez catch.
 - **Scenariusz:** Pierwszy komputer: „Zakończ” zapisuje dane, ale otwarcie folderu przekracza czas oczekiwania. Kolejne „Zakończ” odmawia, a kreator nie mówi, że wystarczy dołączyć – użytkownik musi sam wrócić do kroku 1 i wybrać ten sam folder.
 - **Poprawka:** Objąć wizardFinish try/catch (busy:false, error z komunikatem). Po każdym niepowodzeniu wywołać folderProbe(w.folder) i, jeśli folder ma już dane, przejść w tryb dołączania z wyjaśnieniem.
-- **Status:** do 5.3 (T517)
+- **Status:** poprawione w 0.26.0 (testy w `tests/web/screens-026.test.ts`, T524)
 
 #### A7-12 · low · bez weryfikacji – setModule zapisuje zdarzenie modułu w logu także wtedy, gdy zapis rd.json się nie udał
 - **Plik:** `src/renderer/features/settings/settingsStore.ts:72` · rodzaj: data · pewność recenzenta: high
@@ -1211,7 +1211,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** PendingMove.retry pokazuje toast tylko przy r.ok. Przy ponownym niepowodzeniu z tym samym błędem widok się nie zmienia (pendingMove.error ten sam), nie ma też stanu „próbuję…” ani blokady przycisku. Kliknięcie wygląda jak brak reakcji.
 - **Scenariusz:** Folder po przywróceniu kopii dalej się nie otwiera (OneDrive). Użytkownik klika „Spróbuj ponownie” i nic się nie dzieje, więc nie wie, czy próba w ogóle była.
 - **Poprawka:** Na czas próby ustawić busy (przycisk „Próbuję…”), a przy !r.ok pokazać toast z r.error.
-- **Status:** do 5.3 (T517)
+- **Status:** poprawione w 0.26.0 (testy w `tests/web/screens-026.test.ts`, T524)
 
 #### A7-21 · nit · bez weryfikacji – Historia: zła forma liczby mnogiej „wersji” dla 22–24, 32–34…
 - **Plik:** `src/renderer/features/history/HistoryPage.tsx:49` · rodzaj: ux-text · pewność recenzenta: high
@@ -1315,7 +1315,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Rytuał (linie 170 i 371) i niezamknięte dni (UnclosedDays.tsx:61) zamieniają wpisaną godzinę na chwilę przez `placeLogical`. Ta funkcja przesuwa godzinę nieistniejącą za lukę i zawsze bierze pierwsze wystąpienie godziny podwójnej. `resolveLogical` (odrzucenie z komunikatem, wybór drugiego wystąpienia) nie jest używane nigdzie poza modułem czasu. Pole czasu startuje z `logicalMinuteOf`, które dla drugiego wystąpienia daje tę samą liczbę co dla pierwszego. Zapisanie godziny bez zmian przesuwa więc koniec z drugiego wystąpienia o 1 h wcześniej.
 - **Scenariusz:** W nocy 24/25.10.2026 blok skończył się o 02:40 drugiego wystąpienia (CET). W rytuale klikasz „popraw” i „Zapisz” bez zmiany godziny. Zapisuje się 02:40 CEST, czyli godzinę wcześniej. 28.03.2027 wpisujesz 02:30, a aplikacja po cichu zapisuje 03:00 zamiast komunikatu.
 - **Poprawka:** W rytuale i w niezamkniętych dniach używać `resolveLogical(date, min, pick)`: przy `nonexistent` komunikat w polu, przy `ambiguous` wybór pierwszej albo drugiej. Wartość startową pola brać z chwili zdarzenia razem z informacją, które to wystąpienie. Testy w `tests/web` dla obu nocy zmiany czasu.
-- **Status:** do 5.3 (T517)
+- **Status:** poprawione w 0.26.0 (testy w `tests/web/screens-026.test.ts`, T524)
 
 #### A8-10 · low · bez weryfikacji – Ręcznie pisane formy liczby mnogiej łamią polską odmianę (2–4, 22–24)
 - **Plik:** `src/renderer/app/Questions.tsx:39` · rodzaj: ux-text · pewność recenzenta: high
