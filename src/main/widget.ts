@@ -11,7 +11,7 @@ import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind 
 import { blockName } from '@shared/blockName'
 import { recordEdit, sameContentAs } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
-import { engineView, RESERVE_REGEN_MIN } from '@shared/engineView'
+import { engineView, POOL_TEXT, RESERVE_REGEN_MIN } from '@shared/engineView'
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
 import { reserveMessageId } from '@shared/engine/game'
 import { atOf } from '@shared/engine/grid'
@@ -26,7 +26,7 @@ import { personName } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { routineFrom, type Routine } from '@shared/model/routines'
 import { addDays } from '@shared/time/zone'
-import { ALL_BUTTONS, noFolderView, type BarPending, type WidgetView } from '@shared/widget'
+import { noFolderView, SEEN_LINE, type BarPending, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
 const CONFIRM_MS = 10_000
@@ -37,8 +37,7 @@ const REFRESH_MS = 15_000
 const NOTE_MS = 6_000
 const MIN = 60_000
 /** The questions of the engine (their ids: rule:day:block:threshold) – only they are marked seen. */
-// The reserve's message too: its sighting starts the 60 min of the reward (D241, A4-04).
-const QUESTION_ID = /^(next|next2|workEnd|return|absence|shutdown|reserve):\d{4}-\d{2}-\d{2}:/
+const QUESTION_ID = SEEN_LINE
 /** The bar shows this many lines (one in the quiet modes); the rest gathers in „⋯”. */
 export const shownLineCount = (v: Pick<WidgetView, 'quiet'>): number => (v.quiet ? 1 : 2)
 
@@ -52,6 +51,8 @@ export interface NotifyIn {
 
 export interface WidgetDeps {
   folder: () => DataFolder | null
+  /** Without an open folder: none chosen, one opening, one failing (the bar says which – the window says the same). */
+  folderStatus?: () => 'none' | 'opening' | 'failed'
   timer: (click: TimerIn) => Promise<TimerResult>
   /** Edits of records as the window writes them (the hub tells the windows at once). */
   edit: (entries: EditEntry[]) => Promise<EditOutcome[]>
@@ -102,27 +103,7 @@ function inverseEdit(e: EditEntry, now: RawRecord | null, made: RawRecord | null
 
 /** The bar while the day cannot be counted (a file not readable now): no actions, one line why. */
 function unknownView(): WidgetView {
-  return {
-    ...noFolderView(),
-    hidden: false,
-    quiet: false,
-    tone: 'brak',
-    warn: 'none',
-    dot: false,
-    drop: false,
-    block: null,
-    question: null,
-    lines: [{ id: 'unknown', text: 'Dnia nie da się teraz policzyć (plik jeszcze nieczytelny) – pasek wróci sam.', actions: [], dot: false }],
-    session: false,
-    stateLine: null,
-    tooltip: 'Dzień nieznany – czekam na pliki',
-    buttons: { ...ALL_BUTTONS, next: false, pause: false, extend: false, workEnd: false, cutOff: false },
-    background: [],
-    autos: { groups: [], items: [] },
-    pending: null,
-    day: null,
-    note: null
-  }
+  return { ...noFolderView(), lines: [{ id: 'unknown', text: 'Dnia nie da się teraz policzyć (plik jeszcze nieczytelny) – pasek wróci sam.', actions: [], dot: false }], tooltip: 'Dzień nieznany – czekam na pliki' }
 }
 
 export class WidgetEngine {
@@ -164,7 +145,7 @@ export class WidgetEngine {
 
   /** The view now (the neutral bar until the engine has one). */
   current(): WidgetView {
-    return this.view ?? noFolderView()
+    return this.view ?? noFolderView(this.d.folderStatus?.() ?? 'none')
   }
 
   start(): void {
@@ -403,11 +384,13 @@ export class WidgetEngine {
     // after a project (D250) – then only within an hour of it, never hours late (the app started, the notice turned on).
     const passedRecently = state.hardEnd.passed != null && atOf(state.grid, state.hardEnd.passed) >= now - 60 * MIN
     if (on.hardEnd && state.hardEnd.passed != null && ((state.hardEnd.message && passedRecently) || t.fg?.info.isProject)) out.push({ id: `notice:${date}:hardEnd:-:${state.hardEnd.passed}`, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
-    if (on.reserve && m.energy.enabled) {
+    // In a session or a class the reserve shows only in the colour, with „mniej pytań” its message is a quiet line – no
+    // notification in any quiet mode (spec „Model energii”, D326).
+    if (on.reserve && m.energy.enabled && !view.quiet) {
       for (const d of m.energy.descents) {
         if (!d.message || atOf(state.grid, d.at) < now - 60 * MIN) continue
         // Its click opens the panel on the reserve's line – the sighting that counts (D241, A4-04).
-        out.push({ id: `notice:${date}:reserve:${d.pool}:${d.at}`, title: 'Energia na poziomie rezerwy', body: { head: 'Głowa', emotions: 'Emocje', senses: 'Bodźce' }[d.pool] + ' – czas na regenerację.', line: reserveMessageId(date, d.pool, d.at), day: date })
+        out.push({ id: `notice:${date}:reserve:${d.pool}:${d.at}`, title: 'Energia na poziomie rezerwy', body: `${POOL_TEXT[d.pool]} – czas na regenerację.`, line: reserveMessageId(date, d.pool, d.at), day: date })
       }
     }
     for (const n of out) {
@@ -417,6 +400,30 @@ export class WidgetEngine {
   }
 
   /** The way of a break: from the screen after a project, else the lowest cost in the lowest pool (spec „Timer”). */
+  /**
+   * A line's regeneration started (the reserve's message, a break): the start first – the line is answered only once it
+   * started, never hidden with nothing running. From the reserve's message the approved boundary moves by the length of
+   * the regeneration while work is still ahead in the forecast, at most to the maximum – the rest never costs the
+   * boundary's reward (spec „Model energii”).
+   */
+  private async startFromLine(line: string, day: string | undefined, click: TimerIn & { durationMin: number }, answer: string, moveBoundary: boolean): Promise<void> {
+    const before = this.model
+    const r = await this.d.timer({ ...click, day })
+    if (!r.ok) {
+      this.say(r.why ?? 'regeneracja nie zaczęła się')
+      return this.refresh()
+    }
+    await this.d.timer({ a: 'mark', question: line, answer, day })
+    const s = before?.state
+    const folder = this.d.folder()
+    if (moveBoundary && s && day && folder && s.boundary.approved != null && s.forecastWorkEnd != null && s.now < s.forecastWorkEnd) {
+      const to = Math.min(s.boundary.max, s.boundary.approved + click.durationMin)
+      if (to > s.boundary.approved)
+        await folder.userEvents([{ k: 'boundary.approve', day, boundary: atOf(s.grid, to), auto: s.boundary.auto, plan: before!.ctx.plan.map((b) => b.id) }]).catch((e) => this.d.log('warn', 'przesunięcie granicy po regeneracji z komunikatu', e))
+    }
+    await this.refresh()
+  }
+
   private breakWay(): string | null {
     const m = this.model
     if (!m) return null
@@ -575,16 +582,14 @@ export class WidgetEngine {
           await this.d.timer({ a: 'mark', question: line, answer: act, day })
           if (act === 'yes') click = { a: 'fewer' }
         } else if (kind === 'reserve') {
-          // „Zacznij” – the regeneration by the way cheapest in the pool, from now; „nie dziś” – the line hides until the day ends.
-          await this.d.timer({ a: 'mark', question: line, answer: act, day })
-          if (act === 'start') {
-            const pool = id.split(':')[1] as Pool
-            click = { a: 'startNew', block: line.replace(/[^a-z0-9]/gi, '').slice(0, 40), categoryId: REGEN_CATEGORY, variantId: this.model ? suggestRegen(this.model.state.settings, pool) : null, durationMin: RESERVE_REGEN_MIN }
-          }
+          // „Zacznij” – the regeneration by the way cheapest in the pool, from now, the boundary moved by it; „nie dziś” –
+          // the line hides until the day ends.
+          if (act !== 'start') await this.d.timer({ a: 'mark', question: line, answer: act, day })
+          else return this.startFromLine(line, day, { a: 'startNew', block: line.replace(/[^a-z0-9]/gi, '').slice(0, 40), categoryId: REGEN_CATEGORY, variantId: this.model ? suggestRegen(this.model.state.settings, id.split(':')[1] as Pool) : null, durationMin: RESERVE_REGEN_MIN }, act, true)
         } else if (kind === 'break' || kind === 'solitude') {
-          await this.d.timer({ a: 'mark', question: line, answer: act, day })
           // A break pauses the running work (it waits as the next in the plan), never ends it.
-          if (act === 'break' || act === 'solitude') click = { a: 'startNew', block: line.replace(/[^a-z0-9]/gi, '').slice(0, 40), categoryId: 'regeneracja', variantId: act === 'solitude' ? 'cisza' : this.breakWay(), durationMin: 15 }
+          if (act === 'break' || act === 'solitude') return this.startFromLine(line, day, { a: 'startNew', block: line.replace(/[^a-z0-9]/gi, '').slice(0, 40), categoryId: 'regeneracja', variantId: act === 'solitude' ? 'cisza' : this.breakWay(), durationMin: 15 }, act, false)
+          await this.d.timer({ a: 'mark', question: line, answer: act, day })
         } else if (act === 'extend') click = { a: 'extend', minutes: num(value) ?? 15 }
         else if (act === 'next') {
           click = { a: 'next' }
@@ -651,6 +656,17 @@ export class WidgetEngine {
       if (r.why) this.say(r.why)
     }
     await this.refresh()
+  }
+
+  /**
+   * A notification's line clicked (its panel opened on it): a sighting only of a question or the reserve's message the
+   * bar shows now – a line held back (a session, a class) or not there, or any other text of an address, writes nothing
+   * (the address only opens a view).
+   */
+  notificationSighting(line: string): string[] {
+    const v = this.current()
+    if (v.day == null || !SEEN_LINE.test(line)) return []
+    return v.question?.id === line || v.lines.some((l) => l.id === line) ? [line] : []
   }
 
   /** The questions a window that sees them shows (D231): „Dalej?” and the lines the bar shows, not those folded in „⋯”. */

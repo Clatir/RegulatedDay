@@ -76,7 +76,7 @@ to punkty przeglądu; w każdym PR-ze także tanie low swojego obszaru.
 | 5.2d | 0.19.0 – ekrany: szybkie zmiany bloku, rutyny ↑/↓, liczniki próśb, podwójne kliknięcie, „Przyjmij nowsze”, cykl kotwic, „Cofnij” odwołania, zapis bez sukcesu, „barClick”, sesja po końcu, typ dnia w kalendarzu, ±15 min, „Usuń” sesji, liczenie dnia w Ustawieniach, kontrast osi (A6-01–09, A7-01–04, 07, 08, A8-05) | Interfejs | 1,5–2 h | |
 | 5.2e | Funkcje D325, część 1: 0.20.0 – Próba → neutralny pasek (D327, D286), komunikat rezerwy (D326); 0.21.0 – odpowiedzi na nieobecność (A1-09), druga zmiana z „Przesuń na teraz” (A1-04), linie paska (A1-12) | Całość | 2–3 h | 2 wydania |
 | 5.2f | Funkcje D325, część 2: rutyny (D328), ostrzeżenia o kopii, zegarze i synchronizacji, „N zmian zapisze się”, dźwięk na jednym komputerze, pulsowanie (D225), „Zapomnij komputer”, święta UK, rytuał bez pracy (D329), kopia dnia (D330) | Całość | 2–3 h | 1–2 wydania |
-| 5.3 | Przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji; regeneracja zaczęta z komunikatu rezerwy przesuwa granicę (spec „Model energii”, T518); low z T517 | Logika | 1–1,5 h | |
+| 5.3 | Przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji; low z T517 | Logika | 1–1,5 h | |
 | 5.4 | Bramka 1.0: kanał stabilny (D283), CHANGELOG, wydanie | – | 0,5 h | bez czekania na Twój odbiór (D324) |
 
 **Do 1.0: ok. 12–16 h (ciąg E).** Kalibracja 28.10: ciągi B–D miały szacunek 25,5–39,5 h, a zajęły ok. 11 h z CI

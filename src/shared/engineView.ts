@@ -142,7 +142,8 @@ function questionLine(q: Question, blockName: string, clock: (ms: number) => str
   return { id: q.id, text, actions: q.answers.map((a) => ({ id: a.id, label: a.label })), dot: q.dot, at: q.askedAt }
 }
 
-const POOL_TEXT: Record<Pool, string> = { head: 'Głowa', emotions: 'Emocje', senses: 'Bodźce' }
+/** The pools as the bar and the notifications name them. */
+export const POOL_TEXT: Record<Pool, string> = { head: 'Głowa', emotions: 'Emocje', senses: 'Bodźce' }
 
 /** How long the regeneration „Zacznij” of the reserve's message starts (D326). */
 export const RESERVE_REGEN_MIN = 15

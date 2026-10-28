@@ -11,7 +11,7 @@ import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
-import { NO_FOLDER_LINE, type WidgetView } from '@shared/widget'
+import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs } from '../../src/main/data/fsio'
 import { WidgetEngine, type NotifyIn } from '../../src/main/widget'
@@ -216,7 +216,8 @@ describe('widget w procesie głównym', () => {
     await folder.check()
     at(10 * 60 + 2)
     await folder.check()
-    at(16 * 60)
+    // After the session NY (15:30–16:30): in a session the reserve shows only in the colour, without a notification.
+    at(17 * 60)
     await folder.check()
     const real = folder.widgetModel.bind(folder)
     folder.widgetModel = async (t?: number) => {
@@ -249,18 +250,56 @@ describe('widget w procesie głównym', () => {
     const lines = () => w.current().lines.filter((l) => l.id.startsWith('reserve:'))
     expect(lines().map((l) => l.text)).toEqual([expect.stringMatching(/^Głowa na rezerwie – może 15 min regeneracji/), expect.stringMatching(/^Emocje na rezerwie – może 15 min regeneracji/)])
     expect(lines()[0]!.actions.map((a) => a.label)).toEqual(['Zacznij', 'nie dziś'])
-    // On view: a sighting of the message (the 60 min of the reward start from it).
+    // On view: a sighting of the message (the 60 min of the reward start from it) – written to the day's log.
     expect(w.shownQuestions()).toEqual(expect.arrayContaining([lines()[0]!.id]))
     const head = lines()[0]!.id
     const emotions = lines()[1]!.id
+    await folder.markSeen(w.shownQuestions(), 'panel')
+    expect((await folder.readDay(DAY)).events.some((e) => e.k === 'question.seen' && (e as { question?: string }).question === head)).toBe(true)
+    // A notification's click: only a line the bar shows, never any text of an address.
+    expect(w.notificationSighting(head)).toEqual([head])
+    expect(w.notificationSighting('reserve:2026-10-21:senses:1')).toEqual([])
+    expect(w.notificationSighting('next:2031-01-01:x:1')).toEqual([])
+    // With the boundary approved and work still ahead, „Zacznij” moves it by the regeneration's 15 min.
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 17 * 60 + 30), auto: false }])
+    await folder.timerClick({ a: 'startNew', block: 'praca1', categoryId: 'inne', durationMin: 60 })
+    await w.refresh()
     await w.act('line', `${head}|start`, 'panel')
     expect((await folder.timer(DAY)).fg?.info.categoryId).toBe('regeneracja')
+    const approvals = (await folder.readDay(DAY)).events.filter((e) => e.k === 'boundary.approve').map((e) => (e as { boundary: number }).boundary)
+    expect(approvals.at(-1)).toBe(placeLogical(DAY, 17 * 60 + 45))
     await w.act('line', `${emotions}|notToday`, 'panel')
     expect(lines()).toEqual([])
     // Still at the reserve later that day: the message does not come back.
     pools = ['head', 'emotions']
     await w.refresh()
     expect(lines()).toEqual([])
+  })
+
+  it('komunikat rezerwy: regeneracja, która nie wystartowała, nie odpowiada na linię; w trybach ciszy bez powiadomienia', async () => {
+    const { w, folder, at, shown } = await make()
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(17 * 60)
+    await folder.check()
+    const real = folder.widgetModel.bind(folder)
+    folder.widgetModel = async (t?: number) => {
+      const m = await real(t)
+      return { ...m, energy: { ...m.energy, enabled: true, known: true, atReserve: { head: true, emotions: false, senses: false }, descents: [{ pool: 'head', at: m.state.now - 5, recorded: true, silent: false, message: true }] } }
+    }
+    // „Mniej pytań”: the message is a quiet line, no notification.
+    await folder.timerClick({ a: 'fewer' })
+    await w.refresh()
+    expect(shown.filter((n) => n.title === 'Energia na poziomie rezerwy')).toEqual([])
+    const line = w.current().lines.find((l) => l.id.startsWith('reserve:'))!
+    expect(line.dot).toBe(false)
+    // The start refused: the line stays (nothing answered, nothing hidden with nothing running).
+    const timerReal = folder.timerClick.bind(folder)
+    folder.timerClick = async (c) => (c.a === 'startNew' ? { ok: false, why: 'nie wolno teraz', confirm: null } : timerReal(c))
+    await w.act('line', `${line.id}|start`, 'panel')
+    expect(w.current().lines.some((l) => l.id === line.id)).toBe(true)
+    expect((await folder.readDay(DAY)).events.some((e) => e.k === 'question.answer' && (e as { question?: string }).question === line.id)).toBe(false)
   })
 
   it('„Przedłuż” przed drugim kliknięciem: kroki ±15 min, każdy z nowym kosztem i nowymi 10 s; potwierdzenie przedłuża o wybraną długość (A7-04, T289)', async () => {
@@ -337,6 +376,9 @@ describe('widget w procesie głównym', () => {
     expect(v).toMatchObject({ day: null, block: null, question: null, tone: 'brak', dot: false })
     expect(v.lines.map((l) => [l.id, l.text, l.actions.map((a) => a.label)])).toEqual([[NO_FOLDER_LINE, 'Brak folderu danych', ['Otwórz okno']]])
     expect(v.buttons).toMatchObject({ next: false, pause: false, extend: false, workEnd: false, cutOff: false, start: null })
+    // A folder chosen but still opening, or failing: said so (the window says the same), never „Brak folderu”.
+    expect(noFolderView('opening').lines[0]).toMatchObject({ text: 'Otwieram folder danych…', actions: [] })
+    expect(noFolderView('failed').lines[0]!.text).toBe('Folder danych jest teraz niedostępny – ponawiam')
   })
 })
 

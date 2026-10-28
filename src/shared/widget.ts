@@ -139,8 +139,10 @@ export const BAR_NOTE_FAILED = 'Paska pulpitu nie udało się położyć pod okn
  * The bar without a data folder (the first start before the wizard, OneDrive not ready yet – D327, in place of the trial,
  * D286): one neutral line with the way to the window, no countdown, no other action.
  */
-export function noFolderView(): WidgetView {
+export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): WidgetView {
   const tones = TONE_SETS[ENGINE_TONE_SET].tones
+  // A folder chosen but not open yet (a start, OneDrive slow) is no „Brak folderu” – the window says the same.
+  const text = status === 'opening' ? 'Otwieram folder danych…' : status === 'failed' ? 'Folder danych jest teraz niedostępny – ponawiam' : 'Brak folderu danych'
   return {
     hidden: false,
     quiet: false,
@@ -153,10 +155,10 @@ export function noFolderView(): WidgetView {
     muted: false,
     block: null,
     question: null,
-    lines: [{ id: NO_FOLDER_LINE, text: 'Brak folderu danych', actions: [{ id: 'open', label: 'Otwórz okno' }], dot: false }],
+    lines: [{ id: NO_FOLDER_LINE, text, actions: status === 'opening' ? [] : [{ id: 'open', label: 'Otwórz okno' }], dot: false }],
     session: false,
     stateLine: null,
-    tooltip: 'Brak folderu danych – otwórz okno główne',
+    tooltip: status === 'none' ? 'Brak folderu danych – otwórz okno główne' : text,
     barNote: null,
     buttons: { ...ALL_BUTTONS, next: false, pause: false, extend: false, workEnd: false, finished: false, cutOff: false, start: null },
     background: [],
@@ -178,3 +180,9 @@ export function noFolderView(): WidgetView {
 
 /** The id of the line of the bar without a data folder (its „Otwórz okno” opens the main window). */
 export const NO_FOLDER_LINE = 'nofolder'
+
+/**
+ * The lines whose sighting is written (the panel, the window in front, a click of the bar or of a notification): the
+ * questions and the reserve's message (D231, D241). One place for the main process and the windows.
+ */
+export const SEEN_LINE = /^(next|next2|workEnd|return|absence|shutdown|reserve):\d{4}-\d{2}-\d{2}:/

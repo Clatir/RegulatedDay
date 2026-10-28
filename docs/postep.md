@@ -42,8 +42,10 @@
 ## 0.20.0 – funkcje D325, część 1a (ciąg E, 5.2e)
 - Gałąź `claude/0.20.0-funkcje` (od 0.19.0) od 28.10 ok. 17:10.
 - Zakres (T518): Próba usunięta (D286) – bez folderu neutralny pasek (D327, A7-06, A8-12); komunikat rezerwy (D326,
-  A4-04) z zapisem zobaczenia. Reszta 5.2e (A1-04, A1-09, A1-12) – 0.21.0; przesunięcie granicy przez regenerację
-  z komunikatu – 5.3.
+  A4-04) z zapisem zobaczenia i przesunięciem granicy przez „Zacznij”. Reszta 5.2e (A1-04, A1-09, A1-12) – 0.21.0.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. zobaczenie tylko pokazanej linii, bez powiadomień
+  w trybach ciszy, „Zacznij” najpierw start, przesunięcie granicy, pasek „Otwieram folder danych…”, `main.log` bez
+  zalewu wpisów pomocnika.
 - Testy: 975 jednostkowych i plikowych, E2E 25/25 (nowe: „bez folderu danych”, konwencje na ekranie Prośby).
 
 ## 0.19.0 – poprawki ekranów (ciąg E, 5.2d)

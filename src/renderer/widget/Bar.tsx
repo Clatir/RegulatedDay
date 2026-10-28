@@ -11,7 +11,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import type { WidgetAction } from '@shared/api'
 import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
 import { barBackground, TONE_SETS } from '@shared/theme'
-import { type BarLine, type RunningRequest, type WidgetView } from '@shared/widget'
+import { SEEN_LINE, type BarLine, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
@@ -32,7 +32,7 @@ const POOLS: Array<[string, string]> = [
 ]
 const EXTEND = [15, 30, 60]
 /** The engine's questions (their id: rule:day:block:threshold) count as seen where they are shown – not the bar's proposals. */
-const QUESTION_ID = /^(next|next2|workEnd|return|absence|shutdown|reserve):\d{4}-\d{2}-\d{2}:/
+const QUESTION_ID = SEEN_LINE
 
 function act(action: WidgetAction, arg?: string): void {
   void window.rd.widgetAction(action, arg)
@@ -308,6 +308,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
     onUnfold?.(unfold != null || variantsOpen)
     if (mode === 'panel') window.rd.panelTouch()
   }, [mode, unfold, variantsOpen, onUnfold])
+  // A day gone from the view (no folder, a day not counted now): nothing stays unfolded – the panel's 60 s run again and
+  // the day's return shows no old unfold.
+  useEffect(() => {
+    if (view.day == null) setUnfold(null)
+  }, [view.day])
 
   /** A button of the bar's own, or its cost waiting for the second click in its place. */
   const own = (id: string, label: string, action: WidgetAction, testId: string, arg?: string) =>
@@ -466,7 +471,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
               {/* The window itself needs no way to the window. */}
               {mode !== 'main' &&
                 l.actions.map((a) => (
-                  <BarButton key={a.id} mode={mode} testId={`bar-act-${l.id}-${a.id}`} onAct={() => act('openMain')}>
+                  <BarButton key={a.id} mode={mode} testId={`bar-act-${l.id}-${a.id}`} onAct={() => window.rd.showMain()}>
                     {a.label}
                   </BarButton>
                 ))}

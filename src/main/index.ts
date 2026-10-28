@@ -161,6 +161,7 @@ function viewOf(sender: Electron.WebContents): ViewKind {
  */
 const widget = new WidgetEngine({
   folder: () => hub?.service?.folder ?? null,
+  folderStatus: () => (hub?.status === 'opening' ? 'opening' : hub?.status === 'failed' ? 'failed' : 'none'),
   timer: (click) => (hub ? hub.timer(click) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
   edit: (entries) => (hub ? hub.edit(entries) : Promise.reject(new Error('folder danych nie jest otwarty'))),
   answer: (id, a, value) => (hub ? hub.answer(id, a, value) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
@@ -195,6 +196,23 @@ function showWidget(view: WidgetView): void {
     const ids = widget.shownQuestions()
     if (ids.length) void hub?.seen(ids, 'panel').catch(() => undefined)
   }
+  sightNotification()
+}
+
+/** The line of a notification clicked, waiting to be shown by the bar (its sighting). */
+let notificationSighting: { line: string; until: number } | null = null
+
+function sightNotification(): void {
+  const n = notificationSighting
+  if (!n) return
+  if (Date.now() > n.until) {
+    notificationSighting = null
+    return
+  }
+  const ids = hub?.service ? widget.notificationSighting(n.line) : []
+  if (!ids.length) return
+  notificationSighting = null
+  void hub?.seen(ids, 'notification').catch(() => undefined)
 }
 
 /** A window on full screen covers the bar's monitor (the helper's event): a bar „na wierzchu” hides over it (D291). */
@@ -285,6 +303,7 @@ function onFullscreen(full: boolean): void {
 }
 
 let lastBarState = ''
+const helperKindsLogged = new Set<string>(['hello'])
 function onHelperEvent(m: HelperMessage): void {
   if (m.type === 'bar') {
     if (m.state !== lastBarState) log('info', `pasek pulpitu: ${String(m.state)}${m.detail ? ` (${String(m.detail)})` : ''}`)
@@ -310,11 +329,17 @@ function onHelperEvent(m: HelperMessage): void {
     tray?.refresh()
     layoutBar()
   } else if (m.type === 'power') {
-    log('info', `zasilanie: ${String(m.event)}${m.value !== undefined ? ` = ${String(m.value)}` : ''}`)
+    // The helper answers every request of power (each check of the folder) with its state: only the system's own events.
+    if (m.event !== 'requests') log('info', `zasilanie: ${String(m.event)}${m.value !== undefined ? ` = ${String(m.value)}` : ''}`)
   } else if (m.type === 'session' || m.type === 'display') {
     log('info', `${m.type === 'session' ? 'sesja' : 'ekrany'}: ${String(m.event ?? 'zmiana')}`)
   } else {
-    log('info', `pomocnik: ${JSON.stringify(m).slice(0, 300)}`)
+    // Another message of the helper: once per kind (the log never fills with a repeated one).
+    const kind = String(m.type)
+    if (!helperKindsLogged.has(kind)) {
+      helperKindsLogged.add(kind)
+      log('info', `pomocnik: ${JSON.stringify(m).slice(0, 300)}`)
+    }
   }
 }
 
@@ -764,9 +789,10 @@ function handleArgv(argv: readonly string[], firstStart: boolean): void {
   if (target) {
     log('info', `adres aplikacji: panel${target.line ? ` (linia ${target.line})` : ''}`)
     openPanel(target)
-    // A notification's click is a sighting of its line (a question, the reserve's message – D241); a line without a day
-    // (`wait:<blok>`) writes nothing.
-    if (target.line) void hub?.seen([target.line], 'notification').catch(() => undefined)
+    // A notification's click is a sighting of its line (a question, the reserve's message – D241) once the bar shows it –
+    // also when the click started the app and the folder opens only now (within 10 min).
+    notificationSighting = target.line ? { line: target.line, until: Date.now() + 10 * 60_000 } : null
+    sightNotification()
     return
   }
   if (!firstStart && !argv.includes(HIDDEN_ARG)) showMainWindow()

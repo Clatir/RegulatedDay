@@ -188,13 +188,16 @@ test('pasek we wszystkich oknach z widoku silnika; panel ikony otwiera się i za
   try {
     await withMainLog(userData, async () => {
       const bar = await viewPage(app, 'bar')
-      // The same view in the window and on the desktop: its tone and the „Bez bloku” (or the night's hour).
-      const tone = await page.getByTestId('bar-main').getAttribute('data-tone')
-      await expect(bar.getByTestId('bar-desktop')).toHaveAttribute('data-tone', tone!)
-      await expect(bar.getByTestId('bar-block')).toHaveText(/Bez bloku|^d{2}:d{2}$/)
+      // The engine's view (a day, its block line) in the window, on the desktop and in the panel – never the bar without
+      // a folder; „Bez bloku” or the night's hour.
+      for (const b of [page.getByTestId('bar-main'), bar.getByTestId('bar-desktop')]) await expect(b).not.toHaveAttribute('data-day', 'none', { timeout: 30_000 })
+      await expect(page.getByTestId('bar-block')).toHaveText(/Bez bloku|^\d{2}:\d{2}$/)
+      await expect(bar.getByTestId('bar-block')).toHaveText(/Bez bloku|^\d{2}:\d{2}$/)
+      await expect.poll(async () => (await bar.getByTestId('bar-desktop').getAttribute('data-tone')) === (await page.getByTestId('bar-main').getAttribute('data-tone'))).toBe(true)
       await page.evaluate(() => window.rd.barAction('openPanel'))
       const panel = await viewPage(app, 'panel')
       await expect(panel.getByTestId('panel')).toBeVisible()
+      await expect(panel.getByTestId('bar-block')).toHaveText(/Bez bloku|^\d{2}:\d{2}$/)
       await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – panel' && w.isVisible()))).toBe(true)
       await panel.keyboard.press('Escape')
       await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – panel' && w.isVisible()))).toBe(false)

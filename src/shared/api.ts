@@ -200,8 +200,6 @@ export type WidgetAction =
   | 'openMain'
   | 'request'
   | 'requestEnd'
-  | 'doneNow'
-  | 'urgent'
   | 'variants'
   | 'barClick'
   | 'extendStep'
