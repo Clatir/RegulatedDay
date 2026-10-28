@@ -1467,19 +1467,20 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Automatycznie:** `tests/fs/e3-data.test.ts` (A3-09). Ty: rzut oka przy dwóch komputerach.
 - **Jak sprawdzić:** przy wyłączonym OneDrive na PC A usuń prośbę (albo rutynę), a na PC B zmień w tym czasie jej nazwę;
   włącz OneDrive na obu.
-- **Oczekiwany efekt:** na PC A okno pyta „Ten rekord usunąłeś tutaj, a na innym komputerze go w tym czasie zmieniono”
-  z „Usuń mimo to” i „Zostaw zmieniony”; wybór robi dokładnie to, co mówi.
+- **Oczekiwany efekt:** na PC A komunikat „Tego rekordu nie usunięto – w tym czasie zmieniono go na innym komputerze”,
+  a okno pyta „Ten rekord usunąłeś tutaj, a na innym komputerze go w tym czasie zmieniono” z listą zmian („gdy
+  usuwałeś: … / tam teraz: …”), „Usuń mimo to” i „Zostaw zmieniony”; wybór robi dokładnie to, co mówi.
 - **Nie przechodzi, gdy:** rekord znika bez pytania, „Zostaw zmieniony” traci zmianę z PC B albo pytanie wraca po
   odpowiedzi.
 
 #### E8j.2 Powiadomienie odrzucone przez Windows wraca raz (0.25.0)
 - [ ] Odebrane
 - **Automatycznie:** `tests/fs/widget.test.ts` (A4-07). **Tylko Ty:** powiadomienia Windows.
-- **Jak sprawdzić:** włącz „Nie przeszkadzać” przed końcem bloku (powiadomienie 0 min), wyłącz je po minucie i wróć
-  do komputera.
-- **Oczekiwany efekt:** powiadomienie pokazuje się raz po wyłączeniu „Nie przeszkadzać”, gdy jesteś przy komputerze
-  i blok wciąż czeka na odpowiedź.
-- **Nie przechodzi, gdy:** powiadomienie nie wraca, wraca kilka razy albo wraca po odpowiedzi w pasku.
+- **Jak sprawdzić:** 6–7 min przed blokiem sesji (powiadomienie „za 5 min”) włącz pokaz slajdów w PowerPoincie albo
+  grę na pełnym ekranie; po 2 min wyjdź z niego i wróć do komputera.
+- **Oczekiwany efekt:** powiadomienie „… o 15:30” pokazuje się raz po wyjściu z pełnego ekranu, gdy blok jeszcze się
+  nie zaczął.
+- **Nie przechodzi, gdy:** powiadomienie nie wraca, pokazuje się dwa razy naraz albo wraca po kliknięciu „Zacznij”.
 
 #### E8j.3 Logowanie w czasie sesji: komputer nie zasypia (0.25.0)
 - [ ] Odebrane
@@ -1487,8 +1488,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   („odłożono”), `tests/fs/service.test.ts` („Odcinam się” w pliku planu). **Tylko Ty:** usypianie i ekran.
 - **Jak sprawdzić:** w czasie sesji z aktualizacją czekającą na instalację wyloguj się i zaloguj ponownie; potem
   w wierszu poleceń `powercfg /requests`.
-- **Oczekiwany efekt:** zaraz po zalogowaniu na liście jest „Regulated Day: sesja albo zajęcia” (ekran i system), po
-  chwili zostaje tylko żądanie pomocnika aplikacji; w dzienniku strażnika „pomocnik aplikacji potwierdził blokadę
-  usypiania”. W „Odcinam się” strażnik nie trzyma niczego.
-- **Nie przechodzi, gdy:** przez pierwszą minutę po logowaniu nie ma żadnego żądania, żądanie strażnika zostaje dłużej
-  niż minutę albo pojawia się w „Odcinam się”.
+- **Oczekiwany efekt:** aplikacja startuje i zostaje (ikona w zasobniku); zaraz po zalogowaniu na liście jest
+  „Regulated Day: sesja albo zajęcia” (ekran i system), po chwili zostaje tylko żądanie pomocnika aplikacji; w dzienniku
+  strażnika „pomocnik aplikacji potwierdził blokadę usypiania”. W „Odcinam się” strażnik nie trzyma niczego.
+- **Nie przechodzi, gdy:** aplikacja nie startuje albo zamyka się po kilku sekundach, przez pierwszą minutę po
+  logowaniu nie ma żadnego żądania, żądanie strażnika zostaje dłużej niż minutę albo pojawia się w „Odcinam się”.

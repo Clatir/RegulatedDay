@@ -159,9 +159,9 @@ namespace RegulatedDay
                 Thread.Sleep(Timeout.Infinite);
             }
             heartbeat = new Timer(delegate(object s) { TickSignal(); }, null, 1000, 1000);
-            // In a session or a class and 30 min before (never in „Odcinam się”) the screen too, from the start until the
-            // helper of the app started confirms its lock of sleep (T523).
-            holdForApp = Plan.HoldForApp(userData);
+            // The guard in a session or a class and 30 min before (never in „Odcinam się”): the screen too, from the start
+            // until the helper of the app it started confirms its lock of sleep (T523).
+            holdForApp = Role == "guard" && Plan.HoldForApp(userData);
             power.Set(holdForApp, true, true, holdForApp ? "Regulated Day: sesja albo zajęcia" : "Regulated Day: instalacja aktualizacji");
             Ui = new OwnerUi(this);
             // After the count: a start that throws every time still reaches the limit of 4 starts.
@@ -425,7 +425,9 @@ namespace RegulatedDay
             RunEntry.Remove();
             CleanEnd();
             try { File.Delete(Task.Path); } catch (Exception e) { Log.Warn("plik zadania: " + e.Message); }
-            // The window „Uruchom ręcznie” waits for you: no lock is held meanwhile (another owner may start at once).
+            // The window „Uruchom ręcznie” waits for you: no lock is held meanwhile (another owner may start at once); an
+            // app that did not confirm its start has no helper to confirm its lock either.
+            if (startNotConfirmed) holdForApp = false;
             ReleaseLocks();
             if (startNotConfirmed)
             {
@@ -524,23 +526,24 @@ namespace RegulatedDay
         /// <summary>
         /// The requests held for the app stay until its helper confirms its lock of sleep (a named mutex), at most 60 s after
         /// this owner started it – not after the owner's start, an installation takes longer – and end at „Odcinam się”
-        /// (T523). An app found running already sent its helper its state: nothing to wait for.
+        /// (T523). An app found running already sent its helper its state: nothing to wait for. Only the power request is
+        /// held meanwhile: guard.lock and the mutex are free (the app started sees no live owner).
         /// </summary>
         void HoldUntilConfirmed()
         {
             if (!holdForApp || appStartedTick == null) return;
             holdForApp = false;
-            Step("potwierdzenie blokady", StepLimitMs + 5000);
             bool confirmed;
             while (!(confirmed = PowerConfirm.Exists(userData)) && unchecked(Environment.TickCount - appStartedTick.Value) < ConfirmSleepMs && Plan.HoldForApp(userData)) Thread.Sleep(500);
             Log.Info(confirmed ? "pomocnik aplikacji potwierdził blokadę usypiania" : "blokada usypiania bez potwierdzenia pomocnika – zwalniam");
         }
 
-        /// <summary>The power request, the signal, guard.lock and the mutex (each once; the windows stay).</summary>
+        /// <summary>
+        /// The signal, guard.lock and the mutex, then the power request (each once; the windows stay). The locks go first: the
+        /// app started meanwhile reading a live owner would hand its start over and end (A5-07).
+        /// </summary>
         void ReleaseLocks()
         {
-            HoldUntilConfirmed();
-            power.Dispose();
             if (heartbeat != null) { heartbeat.Dispose(); heartbeat = null; }
             lock (lockGate)
             {
@@ -552,6 +555,8 @@ namespace RegulatedDay
                 }
             }
             if (mutex != null) { try { mutex.ReleaseMutex(); } catch { } mutex.Dispose(); mutex = null; }
+            HoldUntilConfirmed();
+            power.Dispose();
         }
 
         /// <summary>Another owner lives: this start is handed over to it (a guard from the autostart: hidden).</summary>

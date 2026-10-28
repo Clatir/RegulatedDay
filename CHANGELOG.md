@@ -3,7 +3,7 @@
 ## 0.25.0
 - Rekord usunięty na tym komputerze, a w tym czasie zmieniony na innym, nie znika już bez pytania: okno pyta „Ten rekord usunąłeś tutaj, a na innym komputerze go w tym czasie zmieniono” – „Usuń mimo to” albo „Zostaw zmieniony”.
 - Zmiana bloku w pliku dnia zapisuje tylko to, co zmieniłeś – wartości zapisane przez nowszą wersję aplikacji (np. na innym komputerze) zostają, jak były.
-- Powiadomienie, którego Windows nie pokazał (np. w trybie „Nie przeszkadzać”), wraca raz, gdy znów przyjmuje powiadomienia, a Ty jesteś przy komputerze – zamiast zniknąć bez śladu.
+- Powiadomienie, którego Windows nie przyjął (pełny ekran, prezentacja albo błąd przy pokazaniu), wraca raz, gdy znów je przyjmuje, a Ty jesteś przy komputerze – chyba że w tym czasie odpowiedziałeś już na jego linię.
 - „Cofnij” automatycznego zatwierdzenia granicy nie robi już z całej dalszej pracy pracy „w granicy” – przedłużenie i praca po maksimum liczą się jak zwykle.
 - Logowanie do Windows w czasie sesji albo zajęć: strażnik aktualizacji trzyma ekran i blokadę usypiania, dopóki aplikacja sama jej nie przejmie (najwyżej minutę), więc komputer nie zaśnie w tej chwili przerwy. W „Odcinam się” – nigdy.
 - Przy dwóch komputerach z różnymi wersjami aplikacji prowadzenie przechodzi na nowszą wersję dopiero, gdy starsza je odda – bez chwili, w której prowadzą oba.

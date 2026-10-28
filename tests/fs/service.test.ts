@@ -176,6 +176,27 @@ describe('usługa folderu danych', () => {
     await s.stop('quit')
   })
 
+  it('„Odcinam się” z wczoraj nie przechodzi na nowy dzień planu, także gdy stan blokady nie da się policzyć (przegląd 0.25.0)', async () => {
+    const clock = { now: placeLogical(DAY, 27 * 60 + 40) }
+    const s = await DataService.start(options(clock, { writeGuardPlan: true, onPower: () => undefined }))
+    await s.tick()
+    clock.now += 60_000
+    s.folder.append({ day: DAY, dom: 'timer', k: 'disconnect.start', at: clock.now })
+    await s.tick()
+    const file = join(userData, 'plan-blocks.json')
+    const plan = () => JSON.parse(readFileSync(file, 'utf8')) as { from: number; disconnectedUntil?: number }
+    expect(plan().disconnectedUntil).toBe(placeLogical('2026-10-22', 4 * 60))
+    // After 04:00 the new day cannot be counted for the lock of sleep: its plan still says nothing of yesterday.
+    s.folder.powerNeed = async () => {
+      throw new Error('dzień nieczytelny')
+    }
+    clock.now = placeLogical('2026-10-22', 4 * 60 + 10)
+    await s.tick()
+    expect(plan().from).toBe(placeLogical('2026-10-22', 4 * 60))
+    expect(plan().disconnectedUntil).toBeUndefined()
+    await s.stop('quit')
+  })
+
   it('plik planu dla strażnika odświeża się co godzinę (także na komputerze, który nie tworzy dnia)', async () => {
     const clock = { now: placeLogical(DAY, 10 * 60) }
     const s = await DataService.start(options(clock, { writeGuardPlan: true }))

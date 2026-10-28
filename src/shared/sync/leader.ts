@@ -6,7 +6,8 @@
  * presence of another computer – so two computers used at once do not pass it to each other. A new computer takes the
  * leader's tasks only when the leader's presence points at it, when the leader wrote „closed”, or when the leader did
  * not refresh its presence for 10 min. A computer with older rules leads only when no computer with the newest rules had
- * presence in the last 10 min, or one handed over to it; a version with a recorded crash never counts as the newest.
+ * presence in the last 10 min, or one handed over to it (pointing at it without presence for 150 s – one in use pointing
+ * at it follows it, and the older one gives way); a version with a recorded crash never counts as the newest.
  * Without a running OneDrive a computer does not take others for asleep for lack of changes; it keeps leading if it
  * leads, and takes over when it has presence in the last 150 s and no other computer had any in the last 10 min.
  * Pure: the scheduler feeds it what the files and this computer's clock say.
@@ -77,13 +78,18 @@ export function decideLeader(inp: LeaderInput): LeaderDecision {
   const sane = versions.filter((x) => !x.crashed)
   const newest = Math.max(...(sane.length ? sane : versions).map((x) => x.v))
   const versionOf = (id: string) => versions.find((x) => x.id === id)?.v ?? 0
-  /** May `id` lead under the rule of versions: newest rules, or no newest-rules computer present in 10 min, or handed over to. */
+  /**
+   * May `id` lead under the rule of versions: newest rules, or no newest-rules computer present in 10 min, or one handed
+   * over to it – pointing at it while without presence for 150 s (one in use pointing at it only follows it: the older
+   * leader gives way to it, A8-08).
+   */
   const mayLead = (id: string): boolean => {
     if (versionOf(id) >= newest) return true
     for (const x of versions) {
       if (x.v < newest || x.crashed || x.id === id) continue
       const t = times.get(x.id)
-      const handedOver = x.id === self.computer ? false : byId.get(x.id)?.presence.seenLeader === id
+      const idle = t == null || now - t >= HANDOVER_MS
+      const handedOver = x.id !== self.computer && idle && byId.get(x.id)?.presence.seenLeader === id
       if (handedOver) continue
       if (t != null && now - t < SILENT_MS) return false
     }

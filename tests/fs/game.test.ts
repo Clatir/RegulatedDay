@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
 import type { GameView } from '@shared/engine/progress'
-import { isKnown } from '@shared/model/events'
+import { isKnown, RULES_VERSION } from '@shared/model/events'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { DataFolder } from '../../src/main/data/folder'
@@ -109,7 +109,7 @@ describe('gra przy zamrożeniu', () => {
     const freezes = (await m.folder.readDay(DAY)).events.filter((e) => isKnown(e) && e.k === 'day.freeze') as unknown as Array<{ v: number; know: Record<string, number>; grade: { game: { status: string } } }>
     expect(freezes.map((f) => [f.v, f.grade.game.status])).toEqual([
       [1, 'out'],
-      [2, 'kept']
+      [RULES_VERSION, 'kept']
     ])
     expect(freezes[1]!.know).toEqual(freezes[0]!.know)
     const game = (await m.folder.gameState())!

@@ -90,6 +90,16 @@ describe('komputer prowadzący', () => {
     expect(decideLeader(input({ current: 'pca', peers: [handedOver] })).iLead).toBe(true)
   })
 
+  it('komputer z nowszymi regułami w użyciu, który idzie za prowadzącym ze starszymi, dostaje prowadzenie (A8-08)', () => {
+    // pcb follows pca (its file names pca) while you use it: that is no handover – pca gives way and points at pcb.
+    const following = peer('pcb', T - 30_000, T - 30_000, { rulesVersion: 2, seenLeader: 'pca' })
+    const old = decideLeader(input({ current: 'pca', peers: [following] }))
+    expect(old).toMatchObject({ leader: 'pcb', iLead: false, why: 'starsza wersja reguł oddaje prowadzenie' })
+    // pcb sees pca (seen leading) point at it: it takes the lead.
+    const pcaGave = peer('pca', T - 60_000, T - 10_000, { rulesVersion: 1, seenLeader: 'pcb' })
+    expect(decideLeader(input({ current: 'pca', currentClaimed: true, self: { computer: 'pcb', rulesVersion: 2 }, peers: [pcaGave] })).iLead).toBe(true)
+  })
+
   it('komputer z nowszymi regułami przejmuje dopiero, gdy prowadzący ze starszymi go wskaże – nigdy dwaj naraz (A8-08)', () => {
     const self = { rulesVersion: 2 }
     const oldLeading = peer('pcb', T - 60_000, T - 60_000, { rulesVersion: 1, seenLeader: 'pcb' })

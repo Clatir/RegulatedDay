@@ -97,12 +97,18 @@ function QuestionsDialog({ questions, onClose }: { questions: EditQuestion[]; on
           {q.kind === 'removed' && <span>Ten rekord usunięto na innym komputerze, a tutaj go zmieniłeś.</span>}
           {q.kind === 'changed' && <span>Ten rekord usunąłeś tutaj, a na innym komputerze go w tym czasie zmieniono.</span>}
           {q.kind === 'broken' && <span>Plik jest uszkodzony – przywróć go z historii; Twoja zmiana czeka.</span>}
-          {q.kind === 'conflict' &&
+          {(q.kind === 'conflict' || q.kind === 'changed') &&
             q.fields.map((f) => (
               <div key={f.path.join('.')} className="grid grid-cols-[1fr_1fr_1fr] gap-2">
                 <span className="text-muted">{fieldText(q.rel, f.path, names)}</span>
-                <span>tutaj: {valueText(keyOf(f.path), f.mine, names)}</span>
-                <span>tam: {valueText(keyOf(f.path), f.theirs, names)}</span>
+                <span>
+                  {q.kind === 'changed' ? 'gdy usuwałeś: ' : 'tutaj: '}
+                  {valueText(keyOf(f.path), f.mine, names)}
+                </span>
+                <span>
+                  {q.kind === 'changed' ? 'tam teraz: ' : 'tam: '}
+                  {valueText(keyOf(f.path), f.theirs, names)}
+                </span>
               </div>
             ))}
           {q.kind !== 'broken' && (

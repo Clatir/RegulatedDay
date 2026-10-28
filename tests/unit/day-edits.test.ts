@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { putBlock } from '@shared/data/dayEdits'
-import { planBlockFrom } from '@shared/model/plan'
+import { blocksFrom, planBlockFrom } from '@shared/model/plan'
 
 describe('blok zapisany z powrotem do pliku dnia (A3-16)', () => {
   const raw = { schema: 1, date: '2026-10-28', blocks: [{ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60, fixed: false, origin: 'user', tag: 'nowyZnacznik', fromNewer: { x: 1 } }] }
@@ -14,6 +14,14 @@ describe('blok zapisany z powrotem do pliku dnia (A3-16)', () => {
     expect(b.tag).toBeNull()
     const next = putBlock(raw, { ...b, durationMin: 90 })
     expect((next.blocks as Array<Record<string, unknown>>)[0]).toMatchObject({ durationMin: 90, tag: 'nowyZnacznik', fromNewer: { x: 1 } })
+  })
+
+  it('pochodzenie bloku nieznane tej wersji zostaje przy zmianie innego pola (przegląd 0.25.0)', () => {
+    const imported = { ...raw.blocks[0]!, origin: 'imported' }
+    const b = blocksFrom([imported])[0]!
+    expect(b.origin).toBe('user')
+    const next = putBlock({ ...raw, blocks: [imported] }, { ...b, durationMin: 90 })
+    expect((next.blocks as Array<Record<string, unknown>>)[0]).toMatchObject({ durationMin: 90, origin: 'imported' })
   })
 
   it('pole zmienione przez Ciebie wygrywa, także gdy wcześniej było nieznane tej wersji', () => {

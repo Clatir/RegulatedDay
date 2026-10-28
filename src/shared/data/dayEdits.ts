@@ -23,7 +23,8 @@ export function dayRaw(raw: Raw | null | undefined, date: string): Raw {
  */
 export function blockJson(b: PlanBlock, before?: Raw): Raw {
   if (!before) return { ...b }
-  const was = planBlockFrom(before, typeof before.origin === 'string' ? (before.origin as PlanBlock['origin']) : 'user') as unknown as Raw | null
+  // Read as the day's file reads its blocks (an origin unknown to this version is „user” there too).
+  const was = planBlockFrom(before) as unknown as Raw | null
   const out: Raw = { ...before }
   for (const [k, v] of Object.entries(b)) if (!was || !(k in before) || !deepEqual(was[k], v)) out[k] = v
   return out

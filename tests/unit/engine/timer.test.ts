@@ -9,6 +9,7 @@ import { activityOf } from '@shared/engine/activity'
 import { answerEvents, autoActions, questionsOf, type AutoEvent } from '@shared/engine/auto'
 import { blockEvidence } from '@shared/engine/game'
 import { requestAction } from '@shared/engine/requests'
+import { computeDay } from '@shared/engine/day'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { block, hhmm, lm, Scenario } from './dsl'
 
@@ -408,6 +409,20 @@ describe('poprawki po przeglądzie E4a', () => {
     expect(st.boundary.approved).toBeNull()
     expect(st.extensionMin).toBeGreaterThan(0)
     expect(st.overrunMin).toBeGreaterThan(0)
+  })
+
+  it('minuty pracy przed zatwierdzoną granicą nie są oceniane po kolei – 8 h pracy liczy się szybko (A1-15, T414)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 480 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const ctx = s.contextAt(s.at('16:30'))
+    const times: number[] = []
+    for (let i = 0; i < 5; i++) {
+      const t0 = performance.now()
+      computeDay(ctx)
+      times.push(performance.now() - t0)
+    }
+    times.sort((a, b) => a - b)
+    expect(times[2]!).toBeLessThan(40)
   })
 
   it('cofnięcie korekty przywraca cofnięte działanie; korekty prowadzącego nie ma na liście', () => {

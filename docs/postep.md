@@ -26,9 +26,9 @@
      D327 (bez folderu neutralny pasek), D328 (rutyny w pasku i „Dziś”), D329 (rytuał w dniu bez pracy), D330 (kopia
      dnia także na dziś i minione z ostrzeżeniem); T513 (podział PR-ów, rozstrzygnięcia A3-10, A5-12, A7-13).
    - PR-y ciągiem bez pauz (D317) według `docs/plan.md` 5.2a–5.2f: 0.16.0 i 0.17.0 wydane (v0.17.0 28.10 16:17);
-     0.18.0, 0.19.0 i 0.20.0 wydane (v0.20.0 28.10 19:25); 0.21.0 – PR #31 scalony (df35cdc), wydanie z runu
-     40760939184; 0.22.0 – PR #32 (run 40761017873); 0.23.0 i 0.24.0 – gałęzie wypchnięte po przeglądach, PR-y po kolei
-     po scaleniu poprzedniego (w PR-ach CI Windows biegnie ~30 min; wieczorem tryb sesji – testy E2E to uwzględniają);
+     0.18.0, 0.19.0 i 0.20.0 wydane (v0.20.0 28.10 19:25); 0.21.0 wydane (v0.21.0 20:42); 0.22.0 – PR #32 scalony
+     (19cdda3), wydanie z runu 40765911413; 0.23.0 – PR #33 (run 40766021468); 0.24.0 i 0.25.0 – gałęzie wypchnięte po
+     przeglądach, PR-y po kolei po scaleniu poprzedniego (w PR-ach CI Windows biegnie ~30 min; wieczorem tryb sesji);
      **teraz 5.3**: 0.25.0 (gałąź `claude/0.25.0-brzegi`, część 1 – logika i pomocnik), potem 0.26.0 (część 2 – ekrany:
      A6-11, A6-14–A6-17, A6-21, A6-24, A7-10, A7-11, A7-20, A8-09), potem 5.4.
    - 5.3 przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji.
@@ -47,6 +47,10 @@
   (A3-09), plik dnia – tylko zmienione pola bloku (A3-16), powiadomienie odrzucone przez Windows wraca raz (A4-07),
   strażnik trzyma ekran i blokadę do potwierdzenia pomocnika aplikacji (A5-07, mutex `SleepHeld`), prowadzenie przy
   nowszych regułach tylko po wskazaniu (A8-08). Odbiór: E8j.1–E8j.3.
+- `/code-review` (xhigh): 14 uwag, wszystkie poprawione z testami – m.in. krytyczna: strażnik czekający na potwierdzenie
+  trzymał guard.lock, więc uruchomiona aplikacja oddawała start i się zamykała (teraz najpierw zwalnia blokady); starszy
+  prowadzący nie oddawał prowadzenia nowszemu w użyciu; minuty przed granicą znowu bez oceniania (wydajność);
+  `RULES_VERSION` 3.
 - Reszta 5.3 (ekrany: A6-11, A6-14–A6-17, A6-21, A6-24, A7-10, A7-11, A7-20, A8-09) – 0.26.0.
 
 ## 0.24.0 – funkcje D325, część 2c: kopia zapasowa i niedostępny folder (ciąg E, 5.2f)

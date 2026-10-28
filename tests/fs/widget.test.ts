@@ -37,7 +37,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean } = {}) {
   const clock = { now: placeLogical(DAY, 10 * 60) }
   const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => o.oneDrive ?? true })
   const shown: NotifyIn[] = []
@@ -62,7 +62,15 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
     clickedApp: () => undefined,
     modePrefs: () => ({ sessionMode: true, classMode: true }),
     notices: () => ({ start5: true, hardEnd: true, reserve: true }),
-    notify: (n) => (shown.push(n), true),
+    notify: (n, onFailed) => {
+      // Refused at once (an error of Windows): the failure is said before the answer.
+      if (o.refuse?.()) {
+        onFailed?.()
+        return false
+      }
+      shown.push(n)
+      return true
+    },
     ...(o.taken ? { notificationsTaken: async () => o.taken!() } : {}),
     ...(o.present ? { present: o.present } : {}),
     showMain: () => undefined,
@@ -140,6 +148,48 @@ describe('widget w procesie głównym', () => {
     await w.refresh()
     expect(shown).toHaveLength(2)
     expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'notice.shown')).toHaveLength(1)
+  })
+
+  it('powiadomienie odrzucone od razu wraca dokładnie raz – nie dwa naraz (A4-07, przegląd 0.25.0)', async () => {
+    let refuse = true
+    const { w, folder, shown, at } = await make({ taken: () => true, present: () => true, refuse: () => refuse })
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(15 * 60 + 26)
+    await folder.check()
+    await w.refresh()
+    expect(shown).toEqual([])
+    refuse = false
+    await w.refresh()
+    expect(shown.map((n) => n.title)).toEqual(['Sesja tradingowa o 15:30'])
+    await w.refresh()
+    expect(shown).toHaveLength(1)
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'notice.shown')).toHaveLength(1)
+  })
+
+  it('powiadomienie o rezerwie, którego Windows nie przyjął, nie wraca po odpowiedzi na jej linię (A4-07, przegląd 0.25.0)', async () => {
+    let taken = false
+    const { w, folder, shown, at } = await make({ taken: () => taken, present: () => true })
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(17 * 60)
+    await folder.check()
+    const real = folder.widgetModel.bind(folder)
+    folder.widgetModel = async (t?: number) => {
+      const m = await real(t)
+      return { ...m, energy: { ...m.energy, enabled: true, known: true, atReserve: { head: false, emotions: true, senses: false }, descents: [{ pool: 'emotions', at: m.state.now - 30, recorded: true, silent: false, message: true }] } }
+    }
+    await w.refresh()
+    const reserve = () => shown.filter((n) => n.title === 'Energia na poziomie rezerwy')
+    expect(reserve()).toHaveLength(1)
+    // „nie dziś” on the line (here or on another computer) before Windows takes notifications again.
+    const line = w.current().lines.find((l) => l.id.startsWith('reserve:'))!
+    await w.act('line', `${line.id}|notToday`, 'bar')
+    taken = true
+    await w.refresh()
+    expect(reserve()).toHaveLength(1)
   })
 
   it('prowadzący po wybudzeniu nie pokazuje powiadomień, dopóki się nie ustali (A8-03)', async () => {
@@ -251,7 +301,7 @@ describe('widget w procesie głównym', () => {
     folder.widgetModel = async (t?: number) => {
       const m = await real(t)
       const idx = m.state.now
-      return { ...m, energy: { ...m.energy, enabled: true, known: true, descents: [{ pool: 'emotions', at: idx - 30, recorded: true, silent: false, message: true }, { pool: 'emotions', at: idx - 5, recorded: true, silent: false, message: false }] } }
+      return { ...m, energy: { ...m.energy, enabled: true, known: true, atReserve: { head: false, emotions: true, senses: false }, descents: [{ pool: 'emotions', at: idx - 30, recorded: true, silent: false, message: true }, { pool: 'emotions', at: idx - 5, recorded: true, silent: false, message: false }] } }
     }
     await w.refresh()
     expect(shown.filter((n) => n.title === 'Energia na poziomie rezerwy')).toHaveLength(1)
