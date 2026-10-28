@@ -102,7 +102,8 @@ export interface DayFacts {
   blocks: Map<string, BlockFact>
   requests: RequestFact[]
   disconnect: Array<{ from: number; to: number }>
-  approvals: Array<{ at: number; boundary: number; auto: boolean }>
+  /** `plan`: the blocks of the plan when it was approved (null: an approval that does not say). */
+  approvals: Array<{ at: number; boundary: number; auto: boolean; plan: string[] | null }>
   undos: number[]
   exceptions: Array<{ at: number; minutes: number }>
   workEnds: Array<{ at: number; end: number }>
@@ -329,7 +330,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         break
       }
       case 'boundary.approve':
-        f.approvals.push({ at: idx(e.at), boundary: idx(e.boundary), auto: e.auto === true })
+        f.approvals.push({ at: idx(e.at), boundary: idx(e.boundary), auto: e.auto === true, plan: Array.isArray(e.plan) ? e.plan : null })
         break
       case 'boundary.undo':
         f.undos.push(idx(e.at))
@@ -511,6 +512,12 @@ export function viewAt(f: DayFacts, m: number): DayFacts {
 /** Is the block running (not paused, not ended) at the start of m, in a view at m. */
 export function isRunning(b: BlockFact): boolean {
   return b.endedAt == null && b.runs.some((r) => r.to === OPEN)
+}
+
+/** The end of the block's last run (index) – where its work stopped, also while it is paused; null: none or running. */
+export function lastRunEnd(b: BlockFact): number | null {
+  if (!b.runs.length || b.runs.some((r) => r.to === OPEN)) return null
+  return Math.max(...b.runs.map((r) => r.to))
 }
 
 /** Minutes the block has run so far in a view at m (runs cut at m). */

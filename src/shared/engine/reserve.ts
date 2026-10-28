@@ -57,12 +57,12 @@ export interface ReactionInput {
   over?: boolean
 }
 
-/** Stretches of rest without a break, up to now (the day engine's regeneration, as known now). */
+/** Stretches of rest without a break, up to now (the day engine's regeneration for this reward, as known now). */
 function restStretches(day: DayState): Array<{ from: number; to: number }> {
   const out: Array<{ from: number; to: number }> = []
   let start = -1
   for (let k = 0; k <= day.now; k++) {
-    const on = k < day.now && day.rest[k]! !== 0
+    const on = k < day.now && day.rewardRest[k]! !== 0
     if (on && start < 0) start = k
     if (!on && start >= 0) {
       out.push({ from: start, to: k })

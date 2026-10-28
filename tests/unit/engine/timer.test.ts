@@ -294,16 +294,27 @@ describe('działania automatyczne prowadzącego', () => {
     expect(q.answers[0]!.label).toBe('Skończył się przy wyłączeniu')
   })
 
-  it('„Koniec pracy?” raz po ostatnim bloku pracy; „Tak” potwierdza koniec', () => {
+  it('„Koniec pracy?” raz po ostatnim bloku pracy – po „Dalej” na „Dalej?” 15 min później (T261); „Tak” potwierdza koniec', () => {
     const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })
     click(s, '09:00', { a: 'next' })
-    const q = questions(s, '09:01').find((x) => x.kind === 'workEnd')
-    expect(q).toBeDefined()
-    const t = s.at('09:05')
+    expect(questions(s, '09:01').some((x) => x.kind === 'workEnd')).toBe(false)
+    expect(questions(s, '09:14').some((x) => x.kind === 'workEnd')).toBe(false)
+    const q = questions(s, '09:15').find((x) => x.kind === 'workEnd')
+    expect(q).toMatchObject({ askedAt: s.at('09:00') })
+    const t = s.at('09:16')
     s.write(answerEvents(s.stateAt(t), q!, 'yes', t)!, t)
-    expect(s.state('09:06').ends.at(-1)).toMatchObject({ confirmed: true })
-    expect(questions(s, '09:07').some((x) => x.kind === 'workEnd')).toBe(false)
+    const st = s.state('09:17')
+    expect(st.ends.at(-1)).toMatchObject({ confirmed: true })
+    expect(hhmm(st, st.ends.at(-1)!.at)).toBe('09:00')
+    expect(questions(s, '09:18').some((x) => x.kind === 'workEnd')).toBe(false)
+  })
+
+  it('„Koniec pracy?” od razu po zakończeniu ostatniego bloku pracy przed jego planowanym końcem', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    click(s, '08:40', { a: 'next' })
+    expect(questions(s, '08:41').some((x) => x.kind === 'workEnd')).toBe(true)
   })
 
   it('bez „Koniec pracy?” w czasie prośby, która przerwała blok pracy – wróci po jej końcu (T503)', () => {

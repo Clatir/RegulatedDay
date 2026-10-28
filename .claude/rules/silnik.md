@@ -41,8 +41,14 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - Klasy minut pracy po granicy: `after` (przedłużenie), `max` (po maksimum), `empty` (przy pustej puli); `in` w granicy.
   Porę snu przesuwają tylko `empty` z `upfront` (potwierdzone z góry), najwyżej 2 h i nie po 03:59.
 - Koniec pracy: potwierdzony (`work.end`, `disconnect.start` w odcinku pracy) albo wyliczony – po odcinku pracy, gdy
-  żaden blok pracy nie może się już zacząć (elastyczny: 15 min od „due”, czekający: do końca okna); stały blok pracy
-  w planie robi z końca przerwę.
+  żaden blok pracy nie może się już zacząć (elastyczny: 15 min od „due”, zapauzowany: 15 min od pauzy, przerwany
+  prośbą: od jej końca, czekający: do końca okna); stały blok pracy w planie robi z końca przerwę, a „Odcinam się”
+  z pracą po „Wracam” przed zatwierdzoną granicą – też (T307, T320; blok zaczynający się w minucie: `starting`).
+- Oznaczenie „po pracy” (`markAfterWork`): największy zbiór oznaczeń (inne oznaczone nie są „pracą” dla reguły); blok
+  z planu ostatniego `boundary.approve.plan` porównywany tylko z tym planem (T321). `DayState.rewardRest` – regeneracja
+  nagrody za rezerwę (czas do wyjaśnienia „odpoczynek”, bez `rest.not`); `rest` – tylko dla energii.
+- Bieg bloku stałego (poza nagrywanym wykładem) w czasie „Odcinam się” nie jest pracą (`actualSpans`); jego planowany
+  koniec – koniec okna z przedłużeniami, także w prognozie (jak timer).
 - Regeneracja do minimum: przed późniejszą z chwil (pierwszy koniec pracy, zatwierdzona granica w tej minucie) najwyżej
   1/3 minimum (D208, D218). Twardy koniec: od pory snu (z prognozą przesunięć) wstecz po minutach regeneracji.
 - Wydajność: sprawdzanie minięcia twardego końca przeskakuje minuty zgodne z prognozą (T414); pełny dzień ~15 ms.
