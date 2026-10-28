@@ -474,16 +474,21 @@ test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z
       await expect(page.getByTestId('bar-request')).toContainText('Zrobione teraz · Mama · 0:0')
       await page.getByTestId('bar-request-end').click()
       await expect(page.getByTestId('bar-request')).toHaveCount(0)
+      // A quiet mode (the template's second shift waits for „Zacznij” in the evening – the session mode): „Pilne” starts
+      // with 15 min without asking (D311).
+      const quiet = await page.evaluate(async () => (await window.rd.widget()).quiet)
       if (night) await page.evaluate(() => window.rd.widgetAction('request', 'urgent|mama|30'))
       else {
         await page.getByTestId('bar-group-request').click()
         await page.getByTestId('bar-request-urgent-mama').click()
-        await expect(page.getByTestId('bar-request-estimate-value')).toHaveText('15 min')
-        await page.getByTestId('bar-request-estimate-30').click()
-        await page.getByTestId('bar-request-start').click()
+        if (!quiet) {
+          await expect(page.getByTestId('bar-request-estimate-value')).toHaveText('15 min')
+          await page.getByTestId('bar-request-estimate-30').click()
+          await page.getByTestId('bar-request-start').click()
+        }
       }
       await expect(page.getByTestId('bar-request')).toContainText('Pilne · Mama · 0:0')
-      await expect(page.getByTestId('bar-request')).toContainText('z 30 min')
+      await expect(page.getByTestId('bar-request')).toContainText(quiet && !night ? 'z 15 min' : 'z 30 min')
       await shot(page, 'e5-01-request')
       await page.getByTestId('bar-request-end').click()
       await expect(page.getByTestId('bar-request')).toHaveCount(0)
