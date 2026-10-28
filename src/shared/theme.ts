@@ -118,8 +118,19 @@ export function blockFill(color: string, brightness = 1): string {
   return darken(mix(PALETTE.surface, color, 0.15), Math.min(1, Math.max(0.5, brightness)))
 }
 
+/** A colour of the room's illustration (D322): muted toward the surface, dimmed with the brightness – graphics only, never under text. */
+export function artFill(color: string, brightness = 1): string {
+  return darken(mix(PALETTE.surface, color, 0.55), Math.min(1, Math.max(0.5, brightness)))
+}
+
 /** The palette of category colours (rd.ts keeps the same list): the classes' own colours first. */
 export const BLOCK_COLORS = ['#F2B66D', '#B49FCC', '#79AFAB', '#D49A97', '#C9B27A', '#8FB3D9', '#A3C49A', '#D6A2C4'] as const
+
+/**
+ * The cassettes' covers by season (D322) – colours of the blocks' palette, so their label (the text on `blockFill`) has
+ * its contrast checked with every block colour.
+ */
+export const SEASON_COLORS = { winter: '#8FB3D9', spring: '#A3C49A', summer: '#C9B27A', autumn: '#D49A97' } as const
 
 /** The CSS variables of the windows for a brightness (50–100 %): backgrounds, lines and accent fills only. */
 export function themeVars(brightness: number): Record<string, string> {

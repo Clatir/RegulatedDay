@@ -36,6 +36,7 @@ import { MorningPlan } from './MorningPlan'
 import { CopyDayDialog, MoveDialog } from './MoveDialogs'
 import { TypeChangeDialog } from './TypeChangeDialog'
 import { ritualDue } from '@shared/engine/ritual'
+import { GameLine } from '../game/GameLine'
 import { RitualPanel } from '../ritual/RitualPanel'
 import { UnclosedDays } from '../ritual/UnclosedDays'
 
@@ -163,6 +164,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             data-testid="day-wake"
           />
         </label>
+        {isToday && <GameLine />}
         <span className="flex-1" />
         <button type="button" className="btn h-[26px]" onClick={newHere} data-testid="day-add">
           + Blok

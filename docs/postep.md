@@ -47,9 +47,10 @@
   0.2.0–0.6.0 przeskoczone, więc E5.1 i E6a.1 tylko „dane całe”).
 
 ## Kolejka (według `docs/plan.md`, D317)
-1. Ciągi A i B zakończone (0.11.0 wydane 28.10 ok. 02:00). **Ciąg C w toku:** 0.12.0 z poprawką T507 scalone (PR #22,
-   28.10 ok. 07:55), wydanie z CI na `main` (run 40647006198) – sprawdzić; **0.13.0 („Dane”) – PR z
-   `claude/0.13.0-dane`**: po zielonym CI scalić i sprawdzić wydanie 0.13.0; potem ciąg D (ekrany gry, D322).
+1. Ciągi A, B i C zakończone: 0.11.0, 0.12.0 (z T507, 28.10 08:23) i 0.13.0 („Dane”, 28.10 09:03) wydane. **Ciąg D
+   w toku:** 0.14.0 (pokój, nagłówek „Dziś”, świętowanie, gra od jutra) – PR z `claude/0.14.0-gra`: po zielonym CI
+   (wynik czytać z pliku obserwatora / `gh run view`) scalić i sprawdzić wydanie; potem 0.15.0 („Strona B” w planie
+   porannym, przegląd kalibracji).
 2. Ty: odbiór według `docs/odbior.md`. Brama ciągu B przeszła: E4b.1–E4b.8 odebrane 27.10 ok. 23:35 z prośbą „przystąp
    do ciągu B → C → D”; E4b.10 (dźwięk) czeka, ciągu nie wstrzymuje.
 3. **Ciąg B → C → D jednym ciągiem (D317):** elementy E5 w pasku (D311–D313) → wydanie 0.11.0; ekrany E6 (D318–D321);
@@ -109,6 +110,20 @@
   wersja dalej 0.12.0 (nie wyszła).
 - PR #22 (T507 po przeglądzie: pusty odcinek w kolejności czasu, „Odcinam się”; E2E próśb też bez sesji – w sesji
   „Pilne” nie pyta o szacunek) scalony po trzech zielonych rundach CI.
+
+## 0.14.0 – ekrany gry, część 1 (ciąg D)
+- Gałąź `claude/0.14.0-gra` (od 0.13.0) od 28.10 ok. 08:00.
+- Zakres (D322): gra od jutra po instalacji – `gameFrom` w `rd.json` zapisany raz przez prowadzącego, `RULES_VERSION`
+  2 (T509); progi pokoju ×1,5; nagłówek „Dziś” „Passa · nuty · dziś +N w toku” z „+N ♪”; „Pokój” – ilustracja SVG
+  (deszcz i lampka tylko z „Animacjami”), następny element, statusy 14 dni, kasety w kolorze pory roku z ulubioną
+  regeneracją i naklejką; nakładka świętowania raz na komputerze (T510); IPC `game`, `celebrated`.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. przywrócenie rd.json nie zabiera `gameFrom`
+  (`WRITE_ONCE_FIELDS`), dzień gry zamrożony starszymi regułami oceniany ponownie (nowsza ocena wygrywa), oceny z
+  `gameFrom` pliku folderu i bez „poza grą” przy błędzie odczytu, pamięć świąt bez nadpisania przy błędzie i po kolei,
+  nakładka – moduł gry, własny stan, klawisz przechwycony, „mniej ruchu” Windows, jedno liczenie gry naraz, stany
+  „Pokoju” (liczę / błąd / od kiedy).
+- Testy: 858 jednostkowych i plikowych (test skali w pełnym zestawie lokalnie przekracza czas pod obciążeniem –
+  osobno przechodzi); E2E `screens` 6/6 (w tym gra), `smoke` 14/14, kreator.
 
 ## 0.13.0 – Ustawienia → „Dane” (ciąg C, część 2)
 - Gałąź `claude/0.13.0-dane` (od 0.12.0, `main` wciągnięty po PR #22).

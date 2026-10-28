@@ -362,12 +362,6 @@ function timerIn(c: TimerIn): TimerIn {
 /** The data folder of this computer: RD_DATA_DIR (tests, the developer), else the wizard's choice; none – the wizard. */
 const dataFolderNow = (): string | null => process.env.RD_DATA_DIR || config.get().dataFolder
 
-/**
- * The first day in the game: days before it are outside the game. None until the version with the game's screens – the
- * logic's versions show and count nothing (T492).
- */
-const GAME_FROM: string | null = null
-
 /** The helper process for the heavy work of the data folder (T190): made at its first task, stopped at the quit. */
 const worker = new WorkerHost({
   fork: () => utilityProcess.fork(join(__dirname, 'worker.js'), [], { serviceName: 'Regulated Day – zadania w tle', stdio: 'ignore' }) as unknown as WorkerChild,
@@ -394,7 +388,8 @@ function createHub(): DataHub {
     worker,
     // The ritual's screens are here: its first day comes from rd.json, written once by the leader (D320, T504).
     ritualScreens: true,
-    gameFrom: GAME_FROM,
+    // The game's screens (T509): its first day from rd.json, written once by the leader.
+    gameScreens: true,
     // RD_DATA_DIR wins at every start (tests, the developer): another folder only for this run, config.json untouched.
     onFolder: (dir) =>
       process.env.RD_DATA_DIR
@@ -778,6 +773,8 @@ function registerIpc(): void {
     }
   })
   handle(CH.moveTo, (_e, dir: unknown) => needHub().moveTo(String(dir)))
+  handle(CH.game, () => needHub().game())
+  handle(CH.celebrated, (_e, keys: unknown) => needHub().celebrated(Array.isArray(keys) ? keys.map(String) : []))
   handle(CH.answer, (_e, id: string, answer: string, value: number | null) => needHub().answer(String(id), String(answer), typeof value === 'number' && Number.isFinite(value) ? value : null))
   ipcMain.on(CH.seen, (e, ids: unknown) => {
     // Seen only in the main window in the foreground (spec D231); the panel counts while it is open (E4b).

@@ -20,23 +20,23 @@ export interface RoomItem {
 }
 
 /**
- * The room's items (spec: „roślina rośnie, pojawiają się płyty, lampki i plakaty”) – a working list (D301): you accept
- * it with the thresholds and the stickers' look before the game's screens. About 6–9 notes on an ordinary good day.
+ * The room's items (spec: „roślina rośnie, pojawiają się płyty, lampki i plakaty”) – the list of D301 with the
+ * thresholds ×1.5 (D322). About 6–9 notes on an ordinary good day.
  */
 export const ROOM_ITEMS: readonly RoomItem[] = [
   { id: 'roslina-1', name: 'Roślina – sadzonka', notes: 0 },
-  { id: 'plyta-1', name: 'Pierwsza płyta', notes: 20 },
-  { id: 'roslina-2', name: 'Roślina – pierwsze liście', notes: 50 },
-  { id: 'plakat-1', name: 'Plakat', notes: 80 },
-  { id: 'plyta-2', name: 'Druga płyta', notes: 120 },
-  { id: 'lampki', name: 'Lampki', notes: 170 },
-  { id: 'roslina-3', name: 'Roślina – większa', notes: 230 },
-  { id: 'plyta-3', name: 'Trzecia płyta', notes: 300 },
-  { id: 'plakat-2', name: 'Drugi plakat', notes: 380 },
-  { id: 'roslina-4', name: 'Roślina – kwitnie', notes: 470 },
-  { id: 'plyta-4', name: 'Czwarta płyta', notes: 570 },
-  { id: 'plakat-3', name: 'Trzeci plakat', notes: 680 },
-  { id: 'plyta-5', name: 'Półka płyt', notes: 800 }
+  { id: 'plyta-1', name: 'Pierwsza płyta', notes: 30 },
+  { id: 'roslina-2', name: 'Roślina – pierwsze liście', notes: 75 },
+  { id: 'plakat-1', name: 'Plakat', notes: 120 },
+  { id: 'plyta-2', name: 'Druga płyta', notes: 180 },
+  { id: 'lampki', name: 'Lampki', notes: 255 },
+  { id: 'roslina-3', name: 'Roślina – większa', notes: 345 },
+  { id: 'plyta-3', name: 'Trzecia płyta', notes: 450 },
+  { id: 'plakat-2', name: 'Drugi plakat', notes: 570 },
+  { id: 'roslina-4', name: 'Roślina – kwitnie', notes: 705 },
+  { id: 'plyta-4', name: 'Czwarta płyta', notes: 855 },
+  { id: 'plakat-3', name: 'Trzeci plakat', notes: 1020 },
+  { id: 'plyta-5', name: 'Półka płyt', notes: 1200 }
 ]
 
 /**
@@ -177,8 +177,12 @@ export function celebrationsOf(days: readonly GameDay[], steps: readonly StreakS
   return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
 }
 
-/** The game as its screens show it: the streak and notes, the room, the shelf of cassettes, the celebrations so far. */
+/**
+ * The game as its screens show it: the streak and notes (today's so far apart – „dziś +6 w toku”, D322), the room, the
+ * shelf of cassettes, the celebrations so far.
+ */
 export interface GameView extends GameSummary {
+  notesToday: number
   room: ReturnType<typeof roomOf>
   cassettes: Cassette[]
   celebrations: Celebration[]
@@ -186,5 +190,6 @@ export interface GameView extends GameSummary {
 
 export function gameView(days: readonly GameDay[], today: string, items: readonly RoomItem[] = ROOM_ITEMS, kept: ReadonlySet<string> = new Set()): GameView {
   const summary = gameSummary(days, today)
-  return { ...summary, room: roomOf(summary.notes.final, items, kept), cassettes: cassettesOf(days, summary.steps), celebrations: celebrationsOf(days, summary.steps, items) }
+  const notesToday = days.find((d) => d.date === today)?.notes ?? 0
+  return { ...summary, notesToday, room: roomOf(summary.notes.final, items, kept), cassettes: cassettesOf(days, summary.steps), celebrations: celebrationsOf(days, summary.steps, items) }
 }

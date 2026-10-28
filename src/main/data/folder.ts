@@ -30,7 +30,7 @@ import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/ene
 import { betterFreeze, foldFacts, isRunning, type DayFacts } from '@shared/engine/facts'
 import { correctionEnd, freezeDecision, gradeLineFrom, isFreeDay, lastEventsOf, openedAtOf, WRITERS_DAYS, type GradeLine } from '@shared/engine/freeze'
 import { dayGame, notesSum, storedGame, weekOf, type GameDay, type GameDayInput } from '@shared/engine/game'
-import { gameView, regenWaysOf, ROOM_ITEMS, storedWays, type GameView } from '@shared/engine/progress'
+import { gameView, regenWaysOf, ROOM_ITEMS, storedWays, type Celebration, type GameView } from '@shared/engine/progress'
 import { sideBOf, storedModules, type DayMeasure, type SideB } from '@shared/engine/sideB'
 import type { DaySummary } from '@shared/engine/daySummary'
 import { calibrationPeriod, costProposals, inCalibration, timeProposals, type CalibrationDay, type CalibrationPeriod, type CostEvidence, type CostProposal, type TimeProposal, type TimeSample } from '@shared/engine/calibration'
@@ -42,7 +42,7 @@ import { derivedId } from '@shared/model/ids'
 import { CLOSE_HOWS, compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type Signal } from '@shared/model/events'
 import type { Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
-import { MODULES, personName, rdFrom, type ModuleId } from '@shared/model/rd'
+import { MODULES, personName, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
 import { runningRequestOf } from '@shared/engineView'
 import type { RunningRequest } from '@shared/widget'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
@@ -99,6 +99,8 @@ const QUIET_MS = 60_000
 const CALIBRATION_RECHECK_MS = 10 * 60_000
 /** The room's items this computer has seen unlocked, in its state folder. */
 const ROOM_FILE = 'room.json'
+/** The full-screen celebrations shown on this computer (its state folder, T510). */
+const CELEBRATED_FILE = 'celebrated.json'
 /** „Prośba ▸” ranks the people by the requests of this many days (D311). */
 const PEOPLE_DAYS = 28
 /** The days before today are counted again this often (late logs of other computers). */
@@ -170,6 +172,8 @@ export interface FolderOptions {
   ritualScreens?: boolean
   /** The first day in the game: days before it are outside (null – no game yet, before its screens, T492). */
   gameFrom?: string | null
+  /** The version has the game's screens: its first day comes from rd.json (written once by the leader, T509). */
+  gameScreens?: boolean
   /** The helper process (T190): the grades of days to freeze, the CSV export; default: this process. */
   worker?: Worker
 }
@@ -615,6 +619,7 @@ export class DataFolder {
         // so a day that cannot freeze stops nothing else.
         try {
           await this.ritualStart(now)
+          await this.gameStart(now)
           frozen = await this.freezeTasks(now, settled, problems)
         } catch (e) {
           problems.push(`zamrażanie: ${String(e)}`)
@@ -647,11 +652,38 @@ export class DataFolder {
    * still in the queue (waiting, or a question) is not written again.
    */
   private async ritualStart(now: number): Promise<void> {
-    if (!this.o.ritualScreens) return
+    if (this.o.ritualScreens) await this.writeOnce('ritualFrom', logicalDayOf(now))
+  }
+
+  /**
+   * The first day in the game: the option, or – with the game's screens – rd.json's. For the screens as this computer
+   * sees it; for the leader's grades (`files`) as the folder holds it – never an edit not written yet – and a read that
+   * fails rejects: the day waits, never graded as „outside the game” (T509).
+   */
+  async gameDay(files = false): Promise<string | null> {
+    if (!this.o.gameScreens) return this.o.gameFrom ?? null
+    if (files) return rdFrom(await this.shared(paths.settings)).gameFrom
+    return rdFrom(await this.recordView(paths.settings).catch(() => undefined)).gameFrom
+  }
+
+  /**
+   * T509: the leader of a version with the game's screens writes the game's first day into rd.json once – tomorrow (the
+   * spec: the day before the version with the game and the day of its installation are outside the game), one date for
+   * every computer; an older version ignores the field.
+   */
+  private async gameStart(now: number): Promise<void> {
+    if (this.o.gameScreens) await this.writeOnce('gameFrom', addDays(logicalDayOf(now), 1))
+  }
+
+  /**
+   * A day of rd.json written once (D320, T504, T509): only when there is none. A folder without rd.json (no wizard yet)
+   * waits; an edit of it still in the queue (waiting, or a question) is not written again.
+   */
+  private async writeOnce(field: WriteOnceField, value: string): Promise<void> {
     const raw = await this.recordView(paths.settings)
-    if (!raw || rdFrom(raw).ritualFrom || this.queue.pending.some((e) => e.rel === paths.settings)) return
+    if (!raw || isIsoDate(raw[field]) || this.queue.pending.some((e) => e.rel === paths.settings)) return
     // The base is what the file holds (a value that is no date is replaced, never a question).
-    await this.edit([{ rel: paths.settings, edits: [{ path: ['ritualFrom'], base: raw.ritualFrom, value: logicalDayOf(now) }] }])
+    await this.edit([{ rel: paths.settings, edits: [{ path: [field], base: raw[field], value }] }])
   }
 
   /**
@@ -669,6 +701,7 @@ export class DataFolder {
     // due (the first due day is the earliest – the inputs cover every later one).
     let writers: Promise<Set<string>> | null = null
     let inputs: Promise<(day: string) => GameDayInput> | null = null
+    let gameFrom: Promise<string | null> | null = null
     for (let i = FREEZE_LOOKBACK_DAYS; i >= 1; i--) {
       const day = addDays(today, -i)
       if (day < from || this.frozenDays.has(day) || (this.freezeRetry.get(day) ?? 0) > now) continue
@@ -676,8 +709,32 @@ export class DataFolder {
       try {
         const read = await this.log.readDay(day)
         if (!read.complete) continue
-        if (read.events.some((e) => isKnown(e) && e.k === 'day.freeze')) {
+        const freezes = read.events.filter((e) => isKnown(e) && e.k === 'day.freeze')
+        if (freezes.some((e) => e.v >= this.rulesVersion)) {
           this.frozenDays.add(day)
+          continue
+        }
+        if (freezes.length) {
+          // Frozen by an older version (rules before this one – e.g. while this computer was closed): a day of the game is
+          // graded again by these rules up to the events that freeze counted, and the newer grade wins (spec „zostaje
+          // ocena według nowszej wersji reguł”, T509). Days before the game stay as they are.
+          if (!mayFreeze) continue
+          gameFrom ??= this.gameDay(true)
+          const from = await gameFrom
+          const was = foldFacts(gridOf(day), read.events).frozen
+          // No game day yet in the folder's rd.json: asked again at a later check (the leader may be writing it now).
+          if (from == null) continue
+          if (day < from || !was) {
+            this.frozenDays.add(day)
+            continue
+          }
+          inputs ??= this.gameInputs(day, today)
+          const grade = await (this.o.worker ?? inProcess).run({ kind: 'grade', ctx: await this.dayContext(day, read, now), know: was.know, game: (await inputs)(day) })
+          const line = { day, at: now, v: this.rulesVersion, how: was.how, know: was.know, missing: was.missing, grade }
+          await this.o.fs.append(join(this.o.dataDir, paths.grades(day.slice(0, 4), this.o.computer)), `${JSON.stringify(line)}\n`)
+          this.append({ id: derivedId(day, 'freeze', this.o.computer, String(this.rulesVersion)), day, dom: 'game', k: 'day.freeze', at: now, how: was.how, know: was.know, missing: was.missing, grade })
+          this.frozenDays.add(day)
+          out.push(day)
           continue
         }
         const quiet = this.quietFor(day, read, await this.dayFile(day), now)
@@ -736,9 +793,11 @@ export class DataFolder {
   private async gameInputs(from: string, today: string): Promise<(day: string) => GameDayInput> {
     const states = await this.moduleStates(from, today)
     const wizardDay = await this.firstLogDay()
+    // As the folder holds it: grades are shared, and a read that fails stops them (never „no game”).
+    const gameFrom = await this.gameDay(true)
     return (day) => {
       const s = states(day)
-      return { from: this.o.gameFrom ?? null, wizardDay, gameOn: s.game, energyOn: s.energy, projectsOn: s.projects, requestsOn: s.requests }
+      return { from: gameFrom, wizardDay, gameOn: s.game, energyOn: s.energy, projectsOn: s.projects, requestsOn: s.requests }
     }
   }
 
@@ -873,7 +932,7 @@ export class DataFolder {
    */
   async gameState(at = this.clock.now()): Promise<GameView | null> {
     const ritualFrom = await this.ritualDay()
-    const gameFrom = this.o.gameFrom ?? null
+    const gameFrom = await this.gameDay()
     if (gameFrom == null || ritualFrom == null) return null
     const today = logicalDayOf(at)
     const graded = await this.gradeIndex()
@@ -954,14 +1013,61 @@ export class DataFolder {
     return [of(paths.settings), dir(ID_COLLECTIONS.template), dir(ID_COLLECTIONS.schedule), of(paths.day(date)), of(paths.day(addDays(date, 1)))].join('|')
   }
 
-  /** The room's items this computer has seen unlocked (its state folder; unreadable – none). */
-  private roomKept(): Set<string> {
+  /**
+   * The full-screen celebrations not shown on this computer yet (spec „raz”, T510): the memory of shown ones is in its
+   * state folder, like the room. Without one (the first time, a computer that just joined) the celebrations of days
+   * before yesterday count as shown – no series of old news.
+   */
+  async celebrationsDue(view: GameView, today: string): Promise<Celebration[]> {
+    let shown: string[] | null
     try {
-      const v = JSON.parse(readFileSync(join(this.o.stateDir, ROOM_FILE), 'utf8')) as { unlocked?: unknown }
-      return new Set(Array.isArray(v.unlocked) ? v.unlocked.filter((x): x is string => typeof x === 'string') : [])
+      shown = this.stateList(CELEBRATED_FILE, 'shown')
     } catch {
-      return new Set()
+      // Unreadable now (held, damaged): nothing to celebrate rather than every celebration again.
+      return []
     }
+    if (shown == null) {
+      shown = view.celebrations.filter((c) => c.date < addDays(today, -1)).map((c) => c.key)
+      await this.markCelebrated(shown)
+    }
+    const seen = new Set(shown)
+    return view.celebrations.filter((c) => !seen.has(c.key))
+  }
+
+  /** Celebrations shown in the main window: never again on this computer. One write at a time; an unreadable file is never written over. */
+  markCelebrated(keys: readonly string[]): Promise<void> {
+    const run = this.celebratedWrites.then(async () => {
+      const shown = this.stateList(CELEBRATED_FILE, 'shown') ?? []
+      if (keys.every((k) => shown.includes(k))) return
+      await mkdir(this.o.stateDir, { recursive: true })
+      await writeFileAtomic(join(this.o.stateDir, CELEBRATED_FILE), JSON.stringify({ shown: [...new Set([...shown, ...keys])] }))
+    })
+    this.celebratedWrites = run.catch(() => undefined)
+    return run
+  }
+
+  private celebratedWrites: Promise<void> = Promise.resolve()
+
+  /** The room's items this computer has seen unlocked (its state folder); unreadable now – rejects, never „none” (it would be written over). */
+  private roomKept(): Set<string> {
+    return new Set(this.stateList(ROOM_FILE, 'unlocked') ?? [])
+  }
+
+  /**
+   * A list of strings in a JSON file of the state folder (the room, the celebrations shown): null – no such file (the
+   * first time); a file that cannot be read or parsed rejects – never taken for an empty list.
+   */
+  private stateList(file: string, key: string): string[] | null {
+    let text: string
+    try {
+      text = readFileSync(join(this.o.stateDir, file), 'utf8')
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw e
+    }
+    const v = JSON.parse(text) as Record<string, unknown>
+    const list = v?.[key]
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : []
   }
 
   /**

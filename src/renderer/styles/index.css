@@ -47,6 +47,49 @@
     transform: translateY(0);
   }
 }
+/* The room (D322): rain on the window, the lamp's light breathing slowly – no flashes; „Animacje” off stops both. */
+@keyframes rain-fall {
+  from {
+    transform: translateY(-40px);
+  }
+  to {
+    transform: translateY(40px);
+  }
+}
+@keyframes lamp-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+/* „+3 ♪” beside the notes of „Dziś”: rises a little and fades. */
+@keyframes note-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  15%,
+  70% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.rd-rain {
+  animation: rain-fall 1.6s linear infinite;
+}
+.rd-lamp-glow {
+  animation: lamp-breathe 6s ease-in-out infinite;
+}
+.rd-note-rise {
+  animation: note-rise 4s ease-out forwards;
+}
 
 @layer base {
   :root {
@@ -198,5 +241,11 @@
   *::after {
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
+  }
+  /* The room's endless loops would jitter every frame at 1 ms, and „+3 ♪” would end unseen: no motion at all. */
+  .rd-rain,
+  .rd-lamp-glow,
+  .rd-note-rise {
+    animation: none !important;
   }
 }

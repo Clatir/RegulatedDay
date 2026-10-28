@@ -10,20 +10,21 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { BackupRecord, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
+import type { BackupRecord, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords } from '@shared/data/merge'
 import { classify, ID_COLLECTIONS, paths, SETTINGS_FILE, type IdKind } from '@shared/data/paths'
 import type { HolidayLookup } from '@shared/engine/createDay'
 import { CSV_HEADERS } from '@shared/engine/csv'
+import { WRITE_ONCE_FIELDS } from '@shared/model/rd'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { writeFileAtomic } from '../datastore/atomic'
 import { backupEntries, createUpdateBackup, listBackups, readBackupFiles, restoreToFolder, type BackupInfo } from './backup'
 import { BEHIND_QUESTION } from './editQueue'
-import type { TimerClick } from './folder'
+import type { DataFolder, TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
 import { DataService, STOP_TIMEOUT_MS, type ServiceOptions } from './service'
@@ -61,6 +62,8 @@ export interface HubOptions {
   ritualScreens?: boolean
   /** The first day in the game (none before its screens, T492). */
   gameFrom?: string | null
+  /** The game's screens: its first day from rd.json (T509). */
+  gameScreens?: boolean
   /** This computer now works in another folder (a whole backup restored into a new one): its config remembers it. */
   onFolder?: (dir: string) => void
 }
@@ -239,6 +242,7 @@ export class DataHub {
         ritualFrom: this.o.ritualFrom ?? null,
         ritualScreens: this.o.ritualScreens === true,
         gameFrom: this.o.gameFrom ?? null,
+        gameScreens: this.o.gameScreens === true,
         onChecked: () => this.changed()
       })
       if (this.closing || this.shutdown) {
@@ -507,6 +511,33 @@ export class DataHub {
     return out
   }
 
+  /**
+   * The game for the window (D322): the streak, the notes, the room, the cassettes, and the full-screen celebrations not
+   * shown on this computer yet; null – no game (before its first day is written, no ritual yet).
+   */
+  game(): Promise<GameScreen | null> {
+    const f = this.need()
+    // One count at a time for the window's asks (every change of the data, every minute): a slow first count – days
+    // graded by the helper process – is never started again beside itself.
+    if (this.gameRun?.folder === f) return this.gameRun.run
+    const run = (async () => {
+      const view = await f.gameState()
+      if (!view) return null
+      return { ...view, due: await f.celebrationsDue(view, logicalDayOf(f.clock.now())) }
+    })().finally(() => {
+      if (this.gameRun?.run === run) this.gameRun = null
+    })
+    this.gameRun = { folder: f, run }
+    return run
+  }
+
+  private gameRun: { folder: DataFolder; run: Promise<GameScreen | null> } | null = null
+
+  /** Celebrations the main window showed (or let go): never again on this computer. */
+  celebrated(keys: readonly string[]): Promise<void> {
+    return this.need().markCelebrated(keys)
+  }
+
   /** Your answer to a question of the timer (its id names its day). */
   async answer(id: string, answer: string, value: number | null): Promise<TimerResult> {
     const r = await this.need().answer(id, answer, value)
@@ -591,8 +622,9 @@ export class DataHub {
   /** The edit that makes `rel` hold `value` again: the fields it differs in, or the record anew; null – the same already. */
   private async restoreEntry(rel: string, value: RawRecord): Promise<EditEntry | null> {
     const now = await this.need().recordView(rel)
-    // The first day of the ritual is written once (D320): an older version of rd.json never takes it away (T504).
-    if (rel === SETTINGS_FILE && now && now.ritualFrom !== undefined && value.ritualFrom === undefined) value = { ...value, ritualFrom: now.ritualFrom }
+    // The days written once (the ritual's and the game's first, D320, T509): an older version of rd.json never takes
+    // them away (T504) – the game would start again and drop every day before.
+    if (rel === SETTINGS_FILE && now) for (const k of WRITE_ONCE_FIELDS) if (now[k] !== undefined && value[k] === undefined) value = { ...value, [k]: now[k] }
     const entry: EditEntry = now
       ? { rel, edits: diffRecords(now, value).map((c) => ({ path: c.path, base: c.before, value: c.after })) }
       : { rel, create: true, edits: Object.entries(value).map(([k, x]) => ({ path: [k], base: undefined, value: x })) }

@@ -2,6 +2,7 @@
  * The contract between the main process and the windows (preload `window.rd`). Every channel name lives here; the
  * main process answers `invoke` channels and pushes the `on*` events.
  */
+import type { Celebration, GameView } from './engine/progress'
 import type { RitualValue, RitualView } from './engine/ritual'
 import type { CloseHow } from './model/events'
 import type { IdentityKind } from './identity'
@@ -69,8 +70,15 @@ export const CH = {
   backupContents: 'rd:backupContents',
   restoreRecords: 'rd:restoreRecords',
   restoreWhole: 'rd:restoreWhole',
-  moveTo: 'rd:moveTo'
+  moveTo: 'rd:moveTo',
+  game: 'rd:game',
+  celebrated: 'rd:celebrated'
 } as const
+
+/** The game for the window (D322): its view and the full-screen celebrations not shown on this computer yet. */
+export interface GameScreen extends GameView {
+  due: Celebration[]
+}
 
 /** A day the morning shows to close: your presence that day, and its ritual (the effect of „Jak zapisano”, its rows). */
 export interface UnclosedDay {
@@ -462,6 +470,10 @@ export interface RdApi {
   restoreWhole(path: string): Promise<{ ok: boolean; restored: boolean; to: string | null; error: string | null } | null>
   /** This computer to the folder the data moved to (the banner's „Przejdź”); not opened – it stays in its folder. */
   moveTo(dir: string): Promise<{ ok: boolean; error: string | null }>
+  /** The game (D322): streak, notes, room, cassettes, celebrations due; null – no game yet. */
+  game(): Promise<GameScreen | null>
+  /** Celebrations shown (or let go) in the main window – never again on this computer. */
+  celebrated(keys: string[]): Promise<void>
   /** The window of sound: a tone to play (5 min, 0 min). */
   onSound(cb: (s: { kind: 'five' | 'zero'; volume: number }) => void): () => void
 }

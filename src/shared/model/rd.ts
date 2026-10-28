@@ -79,7 +79,19 @@ export interface RdFile {
    * once by the leader; earlier days close themselves „jak zapisano”. Null: none yet.
    */
   ritualFrom: string | null
+  /**
+   * The first day in the game (T509): the day after the first version with the game's screens ran on any computer –
+   * written once by the leader; earlier days are outside the game. Null: no game yet.
+   */
+  gameFrom: string | null
 }
+
+/**
+ * rd.json's days written once by the leader (D320, T509): the ritual's and the game's first day. Never taken away – also
+ * not by a restore of an older rd.json (its version from before them lacks them).
+ */
+export const WRITE_ONCE_FIELDS = ['ritualFrom', 'gameFrom'] as const
+export type WriteOnceField = (typeof WRITE_ONCE_FIELDS)[number]
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const intIn = (v: unknown, [min, max]: readonly [number, number], fallback: number): number =>
@@ -153,7 +165,8 @@ export function rdFrom(v: unknown): RdFile {
     categories: categoriesFrom(r.categories),
     people: peopleFrom(r.people),
     setup,
-    ritualFrom: isIsoDate(r.ritualFrom) ? r.ritualFrom : null
+    ritualFrom: isIsoDate(r.ritualFrom) ? r.ritualFrom : null,
+    gameFrom: isIsoDate(r.gameFrom) ? r.gameFrom : null
   }
 }
 

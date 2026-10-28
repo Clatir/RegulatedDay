@@ -15,8 +15,12 @@ import { settingsFrom, type DayTypeId, type RulesSettings } from './settings'
 
 export type Domain = 'timer' | 'energy' | 'game' | 'meta'
 
-/** The rules version of this build (spec „wersja reguł”): a newer one wins segments and automatic actions. */
-export const RULES_VERSION = 1
+/**
+ * The rules version of this build (spec „wersja reguł”): a newer one wins segments and automatic actions, and only a
+ * leader with the newest one seen freezes. 2 – the game counts from its first day (T509): a version before it would
+ * freeze the game's days as „before the game” for good.
+ */
+export const RULES_VERSION = 2
 
 export interface EventBase {
   /** Unique: `<computer>-<n>` for your actions, derived from the data for automatic ones (both computers write the same). */

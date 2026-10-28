@@ -79,6 +79,8 @@ const api: RdApi = {
   restoreRecords: (path, rels) => ipcRenderer.invoke(CH.restoreRecords, path, rels),
   restoreWhole: (path) => ipcRenderer.invoke(CH.restoreWhole, path),
   moveTo: (dir) => ipcRenderer.invoke(CH.moveTo, dir),
+  game: () => ipcRenderer.invoke(CH.game),
+  celebrated: (keys) => ipcRenderer.invoke(CH.celebrated, keys),
   seen: (ids) => ipcRenderer.send(CH.seen, ids),
   onSound: (cb) => on('rd:sound', cb)
 }

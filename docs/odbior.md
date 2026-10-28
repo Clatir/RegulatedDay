@@ -56,6 +56,10 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E5b.6 „Zostaw” i „Przestaw plan”
    - [ ] E6a.4 W oknie nic nowego
    - [ ] E7a.2 Nowy blok i „Wymień” w „Dziś” działają jak dotąd
+   - [ ] E7c.1 Gra od jutra po aktualizacji
+   - [ ] E7c.2 Nagłówek „Dziś” i „+3 ♪”
+   - [ ] E7c.3 Pokój
+   - [ ] E7c.4 Świętowanie (przy okazji)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
@@ -1088,3 +1092,46 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - „Co nowego” pokazuje starszą wersję;
   - pasek albo okno pokazują pokój, kasetę, „Stronę B” albo cokolwiek o kalibracji;
   - pasek przestaje się odświeżać (stoi na starej godzinie) albo w `main.log` są nowe błędy przy pracy z paskiem.
+
+### E7c – ekrany gry, część 1: pokój, nagłówek „Dziś”, świętowanie (0.14.0)
+
+#### E7c.1 Gra od jutra po aktualizacji (0.14.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/ritual.test.ts` („pierwszy dzień gry”), `tests/fs/game.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** po aktualizacji do 0.14.0 otwórz „Pokój” w menu bocznym; następnego dnia zajrzyj tam znowu.
+- **Oczekiwany efekt:** w dniu aktualizacji pokój mówi, od kiedy gra liczy dni (jutro – dzień instalacji jest poza
+  grą); ta sama data na laptopie. Od jutra w nagłówku „Dziś” pojawia się „Passa … · … nut”.
+- **Nie przechodzi, gdy:** gra liczy już dzień instalacji, laptop pokazuje inną datę startu albo w nagłówku widać grę,
+  choć moduł „Gra” jest wyłączony.
+
+#### E7c.2 Nagłówek „Dziś” i „+3 ♪” (0.14.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („gra”), `tests/web/game-text.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w dniu gry popracuj zwykle; zatwierdź granicę, skończ blok, kliknij „Koniec pracy”.
+- **Oczekiwany efekt:** obok pobudki „Passa 5 · 142 nuty · dziś +6 w toku”; gdy dzisiejsze nuty rosną, na chwilę
+  „+3 ♪” (z „Animacjami” unosi się i znika, bez nich stoi kilka sekund). W pasku i ikonie nic z gry.
+- **Nie przechodzi, gdy:** pasek albo ikona pokazują nuty czy passę, „+N ♪” miga albo zostaje na stałe, liczba nut nie
+  zgadza się z pokojem.
+
+#### E7c.3 Pokój (0.14.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („gra”), `tests/web/game-text.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** menu boczne → „Pokój”; przełącz „Animacje” w Ustawieniach.
+- **Oczekiwany efekt:** ilustracja – okno z deszczem, biurko z lampką, roślina, półka z kasetami; elementy odblokowane
+  nutami zamrożonych dni (pierwsza płyta przy 30 nutach); pod nią „Następny: … – jeszcze N nut”, statusy ostatnich dni
+  („dotrzymany”, „bez danych”, „dzień ochronny”, „niedotrzymany”, „poza grą”, dni otwarte „· w toku”) i kasety
+  zamkniętych tygodni w kolorze pory roku z tygodniem, ulubioną regeneracją i naklejką z nutą przy co najmniej 70%
+  dni dotrzymanych. Bez „Animacji” deszcz i światło lampki stoją.
+- **Nie przechodzi, gdy:** element znika po odblokowaniu, nuty „w toku” odblokowują element, deszcz rusza się mimo
+  wyłączonych „Animacji” albo coś w pokoju brzmi jak wyrzut.
+
+#### E7c.4 Świętowanie (0.14.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („gra”), `tests/fs/game.test.ts` („świętowanie raz”). Ty: przy
+  okazji (passa 7 dni albo nowy element pokoju).
+- **Jak sprawdzić:** gdy zamrozi się 7. dotrzymany dzień z rzędu albo dzień, który odblokuje element, otwórz okno główne.
+- **Oczekiwany efekt:** nakładka na okno główne „Passa 7 dni” albo „Nowe w pokoju: …”, najwyżej 5 s, bez błysków,
+  znika po dowolnym klawiszu albo kliknięciu i nie wraca; czeka na otwarcie okna i nie pojawia się w trybach ciszy,
+  nocą ani w „Odcinam się”.
+- **Nie przechodzi, gdy:** nakładka wraca po zamknięciu, pojawia się w czasie sesji albo „Odcinam się”, miga albo
+  trwa dłużej niż 5 s.
