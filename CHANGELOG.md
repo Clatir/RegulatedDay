@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.0
+- Pierwsza wersja stabilna. Wszystkie funkcje zaplanowane na 1.0 są na miejscu, a uwagi z pełnego przeglądu aplikacji przed wydaniem – poprawione (wersje 0.16.0–0.26.0). Kolejne poprawki przyjdą jako 1.0.x.
+
 ## 0.26.0
 - „Cofnij zatwierdzenie” w planie porannym otwiera granicę od tej chwili: nagłówek przestaje mówić „zatwierdzony”, praca sprzed cofnięcia zostaje w granicy, którą zatwierdziłeś, a ponowne zatwierdzenie zaraz po cofnięciu działa (dotąd w tej samej minucie granica zostawała niezatwierdzona).
 - Godzina wpisana w rytuale („Pracowałem do …”, „skończył się o …”, odcinek „nie odpoczynek”) i w niezamkniętych dniach: błędny tekst nie zapisuje już godziny, do której wróciło pole – „Zapisz” powtarza komunikat. W dniu zmiany czasu godzina, której nie ma (2:30 w marcu), jest odrzucana, a przy podwójnej (2:40 w październiku) wybierasz „pierwsza” albo „druga”.
