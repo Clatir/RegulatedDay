@@ -53,6 +53,27 @@ export async function launch(opts: { userData?: string; env?: Record<string, str
   return { app, page, userData, errors }
 }
 
+/**
+ * The desktop bar's bounds once they hold still: its window takes the height of its content after the view is drawn
+ * (without a data folder one line – D327), so bounds read right after it shows may still change.
+ */
+export async function settledBarBounds(app: ElectronApplication): Promise<{ x: number; y: number; width: number; height: number }> {
+  const read = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day – pasek')!.getBounds())
+  let last = await read()
+  await expect
+    .poll(
+      async () => {
+        const b = await read()
+        const same = JSON.stringify(b) === JSON.stringify(last)
+        last = b
+        return same
+      },
+      { intervals: [700], timeout: 15_000 }
+    )
+    .toBe(true)
+  return last
+}
+
 /** The main window's page (the bar and the panel have pages of their own). */
 export async function mainPage(app: ElectronApplication): Promise<Page> {
   for (let i = 0; i < 200; i++) {

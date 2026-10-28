@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication } from '@playwright/test'
-import { launch, viewPage, withMainLog } from './app'
+import { launch, settledBarBounds, viewPage, withMainLog } from './app'
 import { click, drag, foreground, hover, topWindows, uncover, windowsAt, type TopWindow } from './win32'
 
 test.skip(process.platform !== 'win32' || process.env.RD_E2E_REAL_HELPER !== '1', 'Windows with the real helper only')
@@ -141,11 +141,16 @@ test('„Zawsze na wierzchu”: pasek pulpitu chowa się, gdy okno główne (z t
 
 test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejności; próba kontrolna z title daje okno', async () => {
   test.setTimeout(180_000)
-  const { app, userData } = await launch()
+  // A data folder and a block running: the bar's own buttons stand (without a folder it has one line, D327).
+  const { app, page: main, userData } = await launch({ data: true })
   try {
     await withMainLog(userData, async () => {
       await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
+      await main.evaluate(() => window.rd.timer({ a: 'startNew', block: 'e2e-hover', categoryId: 'inne', durationMin: 60 }))
       const page = await viewPage(app, 'bar')
+      await expect(page.getByTestId('bar-next')).toBeVisible({ timeout: 30_000 })
+      await settledBarBounds(app)
       const bar = await barInfo(app)
       const covers = uncover(bar.hwnd)
       await new Promise((r) => setTimeout(r, 1000))
@@ -159,7 +164,8 @@ test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejn
         shown.forEach((b, i) => b.addEventListener('pointerenter', () => w.rdEntered.add(i)))
         return shown.map((b) => b.getBoundingClientRect()).map((r) => [r.x + r.width / 2, r.y + r.height / 2])
       })
-      expect(rects.length).toBeGreaterThan(5)
+      // At least Dalej, Przedłuż and Koniec pracy (the night's quiet keeps only these and what runs).
+      expect(rects.length).toBeGreaterThan(2)
       const k = bar.scale
       const points = rects.map(([x, y]) => [(bar.bounds.x + x! * bar.zoom) * k, (bar.bounds.y + y! * bar.zoom) * k] as [number, number])
       const atPoints = windowsAt(points)
