@@ -37,6 +37,19 @@
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
 
+## 0.17.0 – poprawki danych i zegarów (ciąg E, 5.2b)
+- Gałąź `claude/0.17.0-dane` (od 0.16.0, przed jego scaleniem) od 28.10 ok. 14:40.
+- Zakres (T515): A8-01 (zegar logiczny po skoku zegara), A3-01 (folder bez korzenia – `rootGuarded`), A8-03
+  (powiadomienia po ustaleniu), A2-03 (zamrożenie a kopie konfliktowe plików oceny), A3-04 (szablon na surowym pliku),
+  A3-05 (identyfikator Windows, `folders-<stary>`), A3-08 (prośby równolegle, pomiar w teście skali) i low A3-02, A3-03,
+  A3-10, A3-11, A3-12, A3-15, A3-17 (`dataVersion`), A3-18, A2-07, A8-06, A8-11. Do 5.3: A3-09, A3-16, A8-08.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione z testami poza jedną (pełny odczyt pliku ocen przy zamrożeniu –
+  raz na dzień, bez zmian) – m.in. druga kopia usuniętego rekordu, nowa wersja szablonu od wersji obowiązującej, rozjazd
+  zegara tylko po najnowszym zdarzeniu komputera, odczyty bez korzenia „nieznane”, ustalanie po wybudzeniu nieskracane
+  przez powrót sieci, identyfikator profilu skopiowanego przed 0.17.0 z obecności w folderze, kolejka zapisuje wszystkie
+  wpisy jednej zmiany naraz, `mapLimit` w `datastore/concurrency.ts`.
+- Testy: 925 jednostkowych i plikowych; każdy nowy test pada na kodzie 0.16.0.
+
 ## 0.16.0 – poprawki silnika dnia (ciąg E, 5.2a)
 - Gałąź `claude/0.16.0-silnik` od 28.10 ok. 13:30.
 - Zakres (T514): A1-01 (pauza ostatniego bloku – 15 min, prośba od jej końca), A1-02 („Koniec pracy” przy
@@ -51,8 +64,10 @@
   ścieżek; liczenie limitu 1/3 tylko przy migawkach (test skali bez spowolnienia).
 - Testy: 899 jednostkowych i plikowych (nowe: `work-end.test.ts`, `day-rules-e8.test.ts`; każda poprawka pada na
   starym kodzie). Test skali w pełnym zestawie lokalnie przekroczył czas otwarcia pod obciążeniem (zostawione procesy
-  Electrona po E2E – zatrzymane), osobno przechodzi. E2E pełne: 18 przeszło, 4 `smoke` przekroczyły czas przy przeglądzie
-  w tle – ponowione osobno.
+  Electrona po E2E – zatrzymane), osobno przechodzi. E2E lokalnie: `smoke` przekraczały czas pod obciążeniem (za każdym
+  razem inne testy, osobno przechodzą).
+- PR #26 scalony (efbe55e, 28.10 ok. 15:30; CI PR zielone za pierwszym razem, także Windows) – wydanie 0.16.0 z runu
+  40703787892 na `main`.
 
 ## Przed etapem E8 (28.10.2026)
 - Odpowiedzi: przegląd wieloagentowy teraz, 8 obszarów (T512); 1.0 bez czekania na odbiór (D324). Model: Opus 5.5 ·

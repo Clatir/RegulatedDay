@@ -394,6 +394,22 @@ describe('dni zapisane raz w rd.json (D320, T509)', () => {
       await hub.close('quit')
     }
   })
+
+  it('kopia ze starszym stanem przeglądu kalibracji nie cofa go: zrobiony przegląd zostaje, propozycje zastosowane (A3-02)', async () => {
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dirA)).toBe(true)
+      const older = { deferrals: 1, reviewed: null, applied: [] as string[] }
+      await hub.edit([{ rel: 'rd.json', edits: [{ path: ['calibrationReview'], base: undefined, value: older }] }])
+      const zip = await backupOfA()
+      const done = { deferrals: 3, reviewed: '2026-10-20', applied: ['time:analiza:'] }
+      await hub.edit([{ rel: 'rd.json', edits: [{ path: ['calibrationReview'], base: older, value: done }] }])
+      await hub.restoreRecords(zip, ['rd.json'])
+      expect((await hub.service!.folder.recordView('rd.json'))!.calibrationReview).toEqual(done)
+    } finally {
+      await hub.close('quit')
+    }
+  })
 })
 
 describe('gra dla okna (T510)', () => {

@@ -8,7 +8,7 @@
 import type { RawRecord } from '../api'
 import { paths } from '../data/paths'
 import { ANALYSIS_CATEGORY, SESSION_CATEGORY } from './categories'
-import { planBlock, type LectureSeries, type PlanBlock, type Template, type TemplateVersion } from './plan'
+import { planBlock, templateFrom, type LectureSeries, type PlanBlock, type Template, type TemplateVersion } from './plan'
 import { RD_SCHEMA, type CategoryMeta, type GeneralSettings, type Person } from './rd'
 import { DEFAULT_SETTINGS, type DayTypeId, type RulesSettings } from './settings'
 
@@ -50,16 +50,43 @@ export function defaultTemplates(secondShift: { on: boolean; startMin: number; d
   ]
 }
 
-/** A template as written: its versions as a map by the date each applies from (one version per date). */
-export function templateJson(t: Template): RawRecord {
+/**
+ * A template as written: its versions as a map by the date each applies from (one version per date). Over the file as it
+ * was (`before`) every level keeps what this version cannot show (spec „nieznane wartości zachowywane”, A3-04): unknown
+ * fields of the template, of a version and of a block, and versions and blocks this version cannot read at all – only
+ * what the model holds is written over, and only what it removed is gone.
+ */
+export function templateJson(t: Template, before?: RawRecord | null): RawRecord {
+  const read = before ? templateFrom(before) : null
+  const rawVersions = new Map<string, Record<string, unknown>>()
+  const list = Array.isArray(before?.versions) ? before.versions : isPlain(before?.versions) ? Object.entries(before.versions).map(([from, x]) => (isPlain(x) ? { from, ...x } : x)) : []
+  for (const x of list) if (isPlain(x) && typeof x.from === 'string' && !rawVersions.has(x.from)) rawVersions.set(x.from, x)
+  const versions: Record<string, unknown> = {}
+  for (const [from, raw] of rawVersions) {
+    if (read?.versions.some((v) => v.from === from)) continue
+    const { from: _f, ...rest } = raw
+    versions[from] = rest
+  }
+  for (const v of t.versions) {
+    // A new version (from tomorrow, a review's) is a copy of the one in force at its date: what that one keeps of a newer
+    // version goes on in it too.
+    const source = rawVersions.has(v.from) ? v.from : [...rawVersions.keys()].filter((from) => from < v.from).sort().at(-1)
+    const { from: _f, ...raw } = (source != null ? rawVersions.get(source) : undefined) ?? {}
+    const rawBlocks = Array.isArray(raw.blocks) ? raw.blocks.filter(isPlain) : isPlain(raw.blocks) ? Object.values(raw.blocks).filter(isPlain) : []
+    const readIds = new Set(read?.versions.find((x) => x.from === source)?.blocks.map((b) => b.id) ?? [])
+    const unreadable = rawBlocks.filter((x) => !(typeof x.id === 'string' && readIds.has(x.id)) && !v.blocks.some((b) => b.id === x.id))
+    const blocks = [...v.blocks.map((b) => ({ ...(rawBlocks.find((x) => x.id === b.id) ?? {}), ...b })), ...unreadable]
+    versions[v.from] = { ...raw, blocks, budgetMin: v.budgetMin, maxMin: v.maxMin }
+  }
   return {
+    ...(before ?? {}),
     schema: 1,
     id: t.id,
     name: t.name,
     dayType: t.dayType,
     weekdays: t.weekdays,
     archived: t.archived,
-    versions: Object.fromEntries(t.versions.map((v) => [v.from, { blocks: v.blocks.map((b) => ({ ...b })), budgetMin: v.budgetMin, maxMin: v.maxMin }]))
+    versions
   }
 }
 

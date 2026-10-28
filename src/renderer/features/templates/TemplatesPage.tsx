@@ -119,7 +119,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   const saveTemplate = (patch: Partial<Template>) => {
     const before = rawRecord(rel)
     const t = { ...template, ...patch }
-    return saveRecord(rel, before, { ...(before ?? {}), ...templateJson(t) })
+    return saveRecord(rel, before, templateJson(t, before))
   }
 
   // The day this version would make: the first date from the chosen one with its weekday, counted by the engine.

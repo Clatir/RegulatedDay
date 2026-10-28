@@ -76,6 +76,18 @@ export class RecordHistory {
     }
   }
 
+  /**
+   * Why the newest version of a record was kept, from the file names (nothing is read), passing over `ignore` (e.g. the
+   * conflict copies kept on the way); null – no other version.
+   */
+  async lastReason(kind: string, id: string, ignore: readonly HistoryReason[] = []): Promise<HistoryReason | null> {
+    for (const name of (await this.names(this.dir(kind, id))).reverse()) {
+      const reason = name.split('_')[1] as HistoryReason | undefined
+      if (reason && !ignore.includes(reason)) return reason
+    }
+    return null
+  }
+
   private async prune(dir: string): Promise<void> {
     const names = await this.names(dir)
     for (const n of names.slice(0, Math.max(0, names.length - MAX_PER_RECORD))) await this.o.fs.remove(join(dir, n))

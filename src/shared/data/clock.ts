@@ -3,7 +3,9 @@
  * clock while the app runs (used for lengths – a jump of the wall clock does not stretch a block), and the logical clock
  * – the larger of that and the last event seen plus 1 ms, restored at the start from the local journal – used only for
  * order. Events of another computer more than 24 h ahead of this computer's clock do not move the logical clock: the
- * clock warning is raised and automatic actions wait.
+ * clock warning is raised and automatic actions wait. A logical clock more than 24 h ahead of this computer's own clock
+ * (its wall clock was far ahead and came back) follows it back – one anomaly of order instead of a day or a year in the
+ * future for good (A8-01, T515).
  */
 
 export const AHEAD_LIMIT_MS = 24 * 60 * 60 * 1000
@@ -13,6 +15,8 @@ export interface ClockSources {
   wall: () => number
   /** A monotonic clock in ms (performance.now). */
   mono: () => number
+  /** The logical clock was far ahead and followed this computer's clock back (for the log). */
+  onClamp?: (from: number, to: number) => void
 }
 
 export class EventClock {
@@ -49,6 +53,10 @@ export class EventClock {
   /** The stamps of a new event of this computer. */
   stamp(): { t: number; l: number; n: number } {
     const t = this.now()
+    if (this.lastL > t + AHEAD_LIMIT_MS) {
+      this.src.onClamp?.(this.lastL, t)
+      this.lastL = t - 1
+    }
     this.lastL = Math.max(t, this.lastL + 1)
     return { t, l: this.lastL, n: this.nextN++ }
   }
@@ -70,6 +78,6 @@ export class EventClock {
   /** Numbers and order this computer already used (its own events found in the folder): never used again. */
   continueAfter(n: number, l: number): void {
     if (n >= this.nextN) this.nextN = n + 1
-    if (l > this.lastL) this.lastL = l
+    if (l > this.lastL && l <= this.now() + AHEAD_LIMIT_MS) this.lastL = l
   }
 }

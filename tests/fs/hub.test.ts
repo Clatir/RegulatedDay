@@ -146,6 +146,19 @@ describe('folder danych okna głównego (DataHub)', () => {
     expect(logs.some((l) => l.startsWith('info kopia przed aktualizacją 0.2.0 → 0.3.0'))).toBe(true)
   })
 
+  it('folder liczy się jako tej wersji dopiero z kopią przed aktualizacją – inaczej następne uruchomienie ją robi (A3-17)', async () => {
+    const stops: string[] = []
+    const opened: string[] = []
+    const { hub } = hubWith({ previousVersion: () => '0.2.0', dataOpened: (v: string) => opened.push(v), start: async (o: ServiceOptions) => fakeService(stops, o.dataDir) })
+    writeFileSync(join(dirA, 'backups'), 'x')
+    writeFileSync(join(dirA, paths.settings), '{"schema":1}')
+    writeFileSync(join(dirB, paths.settings), '{"schema":1}')
+    expect(await hub.open(dirA)).toBe(true)
+    expect(opened).toEqual([])
+    expect(await hub.open(dirB)).toBe(true)
+    expect(opened).toEqual(['0.3.0'])
+  })
+
   it('ustawienia komputera nieczytelne: folder nieznany (nie kreator); odczytane bez folderu – kreator', () => {
     const { hub } = hubWith()
     hub.unknownFolder('config.json nieczytelny')

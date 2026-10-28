@@ -66,6 +66,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8a.2 „Koniec pracy” przy zapauzowanym bloku
    - [ ] E8a.3 „Odcinam się” i praca po „Wracam” (gdy się zdarzy)
    - [ ] E8a.4 Analiza tygodniowa i „Dalej” (w sobotę)
+   - [ ] E8b.2 Aktualizacja do 0.17.0 – kopia i identyfikator
+   - [ ] E8b.1 Folder danych znika w trakcie pracy (tylko na folderze testowym, jeśli chcesz)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
@@ -1212,3 +1214,26 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Jak sprawdzić:** w sobotę skończ blok przed analizą tygodniową przez „Dalej”.
 - **Oczekiwany efekt:** „Dalej” nie zaczyna analizy – pasek pokazuje jej linię „Zacznij · Odwołaj” o jej godzinie.
 - **Nie przechodzi, gdy:** analiza zaczyna się po „Dalej” przed swoją godziną.
+
+### E8b – poprawki danych i zegarów po przeglądzie E8 (0.17.0)
+
+#### E8b.1 Folder danych znika w trakcie pracy (0.17.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/folder.test.ts` („folder danych znika w trakcie pracy”). Ty: tylko jeśli chcesz – na
+  folderze testowym, nigdy na prawdziwym.
+- **Jak sprawdzić:** przy działającej aplikacji zmień nazwę folderu danych w Eksploratorze na minutę, potem przywróć
+  nazwę.
+- **Oczekiwany efekt:** w miejscu starej nazwy nie powstaje nowy folder; po przywróceniu nazwy zmiany z tej minuty (np.
+  kliknięcia w pasku) są w folderze, a dzień ma swoje ustawienia (nie domyślne).
+- **Nie przechodzi, gdy:** pod starą nazwą pojawia się nowy folder z `.presence` albo `log`, albo po przywróceniu dzień
+  ma inne ustawienia niż Twoje.
+
+#### E8b.2 Aktualizacja do 0.17.0 – kopia i identyfikator (0.17.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/hub.test.ts` (kopia przed aktualizacją), `tests/unit/config.test.ts` (identyfikator
+  Windows). Ty: rzut oka po aktualizacji.
+- **Jak sprawdzić:** po aktualizacji do 0.17.0 zajrzyj do `backups\aktualizacje` i do `main.log`.
+- **Oczekiwany efekt:** jest ZIP „…-do-0.17.0”; w `main.log` nie ma „nowy identyfikator komputera” ani „dane aplikacji
+  skopiowane” (ten komputer zostaje sobą), a pasek i okno pokazują Twój dzień jak dotąd.
+- **Nie przechodzi, gdy:** kopii brak, w logu jest „dane aplikacji skopiowane z innego komputera” albo dzisiejsze
+  zdarzenia znikają.

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.17.0
+- Gdy folder danych zniknie w trakcie pracy (przeniesiony, usunięty, OneDrive jeszcze niegotowy), aplikacja niczego nie tworzy w jego miejscu: zmiany czekają na tym komputerze i trafiają do folderu, gdy wróci. Wcześniej powstawał nowy, pusty folder, a dzień mógł się utworzyć z ustawień domyślnych.
+- Po pomyłkowym przestawieniu daty o dni do przodu i z powrotem działania automatyczne (tworzenie dnia, zamrażanie, koniec bloków) nie stają już na długo.
+- Po wybudzeniu albo starcie komputera powiadomienia czekają, aż aplikacja zobaczy zmiany z innych komputerów – to samo powiadomienie nie przychodzi drugi raz.
+- Dzień nie zamraża się, dopóki czeka pytanie o kopię konfliktową jego pliku, ustawień albo szablonu (najdłużej 72 h). Dzień otwarty dopiero po dniu przerwy zamraża się 24 h od tego otwarcia, a nie po 72 h.
+- Szablon zmieniony w tej wersji zachowuje pola i bloki zapisane przez nowszą wersję na innym komputerze.
+- Dane aplikacji skopiowane na inny komputer (np. przeniesiony profil Windows) dostają nowy identyfikator komputera – dwa komputery nie mieszają już swoich zdarzeń.
+- Lista próśb i odświeżanie okna po latach używania są szybsze (pliki czytane równolegle).
+- Przywrócenie starszego rd.json z kopii albo Historii nie cofa przeglądu kalibracji, a dwie różne daty startu rytuału lub gry z dwóch komputerów rozstrzygają się same (wcześniejsza) zamiast pytać.
+- Kopia przed aktualizacją powstaje także wtedy, gdy pierwsze uruchomienie nowej wersji nie zdążyło otworzyć folderu. Kopia konfliktowa rekordu, który usunąłeś, nie przywraca go – jej treść jest w Historii.
+- Drobne: przy uszkodzonym pliku okno mówi, że trzeba go przywrócić z Historii; dziennik i plik ocen po twardym wyłączeniu nie gubią następnej linii; zapis kolejki ponawia się przy chwilowej blokadzie antywirusa.
+
 ## 0.16.0
 - Koniec pracy liczy się dokładniej. Pauza ostatniego bloku pracy nie kończy już pracy od razu: przez 15 min blok czeka jako „Wznów · Zaparkuj” i dopiero potem pada „Koniec pracy?”. Wznowienie w tym czasie znaczy, że pracy nie przerwano, a blok przerwany prośbą czeka na jej koniec.
 - „Koniec pracy” kliknięty przy zapauzowanym bloku potwierdza chwilę, w której naprawdę przestałeś pracować, i kończy ten blok – z „Cofnij”, jak inne działania automatyczne. Wcześniej potwierdzał koniec wcześniejszego bloku, a zapauzowany wisiał do wieczora.

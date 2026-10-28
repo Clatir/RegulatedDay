@@ -165,6 +165,29 @@ describe('zamrażanie w folderze danych', () => {
     expect((await freezes(m.folder))[0]).toMatchObject({ how: 'timeout' })
   })
 
+  it('dzień otwarty dopiero po dniu przerwy: okno korekty 24 h od tego otwarcia, nie 72 h od końca dnia (A2-07)', async () => {
+    const m = await make(DAY)
+    await m.folder.timerClick({ a: 'start', block: 'a' })
+    m.clock.now = placeLogical(DAY, 11 * 60)
+    await m.folder.timerClick({ a: 'workEnd' })
+    // Nobody at a computer on the 22nd; the 23rd at 10:00.
+    m.clock.now = placeLogical(addDays(DAY, 2), 10 * 60)
+    m.folder.noteInput(m.clock.now, true)
+    await m.folder.check()
+    const opened = placeLogical(addDays(DAY, 2), 10 * 60)
+    expect(await checks(m, opened + 23 * H, 10)).toEqual([])
+    expect(await checks(m, opened + 24 * H, 12)).toContain(DAY)
+  })
+
+  it('nierozstrzygnięta kopia konfliktowa pliku dnia wstrzymuje zamrożenie „gotowe” (po 72 h – bez czekania, A2-03)', async () => {
+    const m = await workedDay(DAY)
+    writeFileSync(join(dataDir, 'days', '2026', `${DAY}-LAPTOP.json`), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'a', categoryId: 'inne', startMin: 10 * 60, durationMin: 45, fixed: false, origin: 'user' }] }))
+    expect(await checks(m, placeLogical(addDays(DAY, 1), 8 * 60) + 24 * H, 12)).toEqual([])
+    expect([...m.folder.copyConflicts.values()].some((c) => c.canonical === paths.day(DAY))).toBe(true)
+    expect(await checks(m, dayEnd(DAY) + 72 * H, 2)).toEqual([DAY])
+    expect((await freezes(m.folder))[0]).toMatchObject({ how: 'timeout' })
+  })
+
   it('czeka na komputer, którego zapisy nie dotarły; po 72 h zamraża bez czekania i go wymienia', async () => {
     const m = await workedDay(DAY)
     // The laptop wrote to the day, and its presence (written before the day's end) names an event not visible yet.

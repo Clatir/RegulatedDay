@@ -9,6 +9,8 @@
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { deepEqual, setAt, valueAt, type Path } from '@shared/data/merge'
+import { paths } from '@shared/data/paths'
+import { earlierOnce } from '@shared/model/rd'
 import { BrokenRecordError, type RecordStore } from './records'
 
 const pathEq = (a: Path, b: Path): boolean => a.length === b.length && a.every((x, i) => x === b[i])
@@ -106,24 +108,35 @@ export class EditQueue {
     if (waiting.length) this.persist()
   }
 
-  private persist(): void {
+  private persist(entries: readonly QueuedEdit[] = this.entries): void {
     if (this.unread) return
     mkdirSync(this.o.stateDir, { recursive: true })
     const tmp = `${this.file}.tmp-${process.pid}`
-    const fd = openSync(tmp, 'w')
-    try {
-      writeSync(fd, `${JSON.stringify({ ...this.extra, format: QUEUE_FORMAT, entries: this.entries }, null, 2)}\n`)
-      fsyncSync(fd)
-    } finally {
-      closeSync(fd)
+    const text = `${JSON.stringify({ ...this.extra, format: QUEUE_FORMAT, entries }, null, 2)}\n`
+    // The file held a moment by an antivirus or the indexer (EPERM, EBUSY): tried again, as every write of the data (A3-15).
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const fd = openSync(tmp, 'w')
+        try {
+          writeSync(fd, text)
+          fsyncSync(fd)
+        } finally {
+          closeSync(fd)
+        }
+        renameSync(tmp, this.file)
+        return
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code
+        if (attempt >= 4 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) throw e
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50 * (attempt + 1))
+      }
     }
-    renameSync(tmp, this.file)
   }
 
-  /** Queues an edit (on disk before it returns). */
-  add(edit: QueuedEdit): void {
-    this.entries.push(edit)
-    this.persist()
+  /** Queues edits, all at once (on disk before it returns; a write that fails leaves none behind – nothing saves them later). */
+  add(...edits: QueuedEdit[]): void {
+    this.persist([...this.entries, ...edits])
+    this.entries.push(...edits)
   }
 
   /**
@@ -174,6 +187,16 @@ export class EditQueue {
   }
 
   private running: Promise<unknown> = Promise.resolve()
+
+  /**
+   * Another read, join and write of records (a conflict copy joined, your answer to it) in the same line as the queue's
+   * runs: never between one's read and write, so neither writes over the other (A3-03).
+   */
+  exclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.running.then(fn)
+    this.running = run.catch(() => undefined)
+    return run
+  }
 
   private async applyNow(records: RecordStore): Promise<Outcome[]> {
     // The file could not be read before: nothing is applied until it is (its entries come first).
@@ -290,6 +313,15 @@ export class EditQueue {
     for (const f of edit.edits) {
       const now = valueAt(value, f.path)
       if (deepEqual(now, f.value)) continue
+      // A day of rd.json written once that another leader wrote meanwhile: the earlier stays, never a question (A3-10).
+      const once = edit.rel === paths.settings ? earlierOnce(f.path, now, f.value) : null
+      if (once != null) {
+        if (once !== now) {
+          value = setAt(value, f.path, once)
+          applied.push(f)
+        }
+        continue
+      }
       if (deepEqual(now, f.base)) {
         value = setAt(value, f.path, f.value)
         applied.push(f)

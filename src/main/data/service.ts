@@ -36,6 +36,8 @@ export interface ServiceOptions {
   userData: string
   computer: string
   computerName: string
+  /** Windows' own id of this computer (its presence names it, A3-05). */
+  windowsId?: string | null
   appVersion: string
   runId: string
   holidays: HolidayLookup
@@ -164,13 +166,15 @@ export class DataService {
     const prev = life.previous()
     const close = life.closeRecord()
     const previousRun = prev ? { lastAt: prev.lastAt, clean: !!close && close.runId === prev.runId && close.at >= prev.lastAt } : null
-    const clock = o.clock ?? { wall: () => Date.now(), mono: () => performance.now() }
+    const base = o.clock ?? { wall: () => Date.now(), mono: () => performance.now() }
+    const clock = { ...base, onClamp: (from: number, to: number) => o.log('warn', `zegar logiczny ${new Date(from).toISOString()} cofnięty do zegara komputera ${new Date(to).toISOString()} (zegar był ponad 24 h z przodu)`) }
     const folder = await DataFolder.open({
       fs: o.fs ?? nodeFs,
       dataDir: o.dataDir,
       stateDir,
       computer: o.computer,
       computerName: o.computerName,
+      windowsId: o.windowsId ?? null,
       appVersion: o.appVersion,
       clock,
       holidays: o.holidays,

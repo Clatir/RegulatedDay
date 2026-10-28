@@ -19,7 +19,7 @@ import type { HolidayLookup } from '@shared/engine/createDay'
 import { CSV_HEADERS } from '@shared/engine/csv'
 import { reviewPrompt } from '@shared/engine/calibration'
 import type { SideB } from '@shared/engine/sideB'
-import { KEPT_ON_RESTORE, rdFrom } from '@shared/model/rd'
+import { keptOnRestore, rdFrom } from '@shared/model/rd'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
@@ -35,6 +35,8 @@ export interface HubOptions {
   userData: string
   computer: () => string
   computerName: string
+  /** Windows' own id of this computer (its presence names it, A3-05). */
+  windowsId?: () => string | null
   appVersion: string
   runId: string
   holidays: HolidayLookup
@@ -52,6 +54,8 @@ export interface HubOptions {
   extraBackupDir: () => string | null
   /** The version that ran here before this one (config.json): a newer one backs the folder up before opening it. */
   previousVersion: () => string | null
+  /** The folder opened by this version, its backup before the update there (config.json's `dataVersion`, A3-17). */
+  dataOpened?: (version: string) => void
   /** Something the window shows changed (the hub tells it once per change of what it would read). */
   onChange: () => void
   /** Starts the folder's service (tests: a slow or failing folder). */
@@ -217,18 +221,23 @@ export class DataHub {
       if (!st?.isDirectory()) throw new Error('folder jest niedostępny')
       // The first opening by a newer version: a backup before it touches anything (the data still in the old format).
       const prev = this.o.previousVersion()
-      if (prev && !this.backedUp && isNewer(this.o.appVersion, prev)) {
+      const due = !!prev && isNewer(this.o.appVersion, prev)
+      if (due && !this.backedUp) {
         const r = await createUpdateBackup(dir, join(dir, 'backups'), prev, this.o.appVersion)
         // Made (or there already): not again; failed: tried again at the next opening.
         if (!r || r.ok) this.backedUp = true
         if (r?.ok) this.o.log('info', `kopia przed aktualizacją ${prev} → ${this.o.appVersion}: ${r.files} plików`)
         else if (r) this.o.log('error', `kopia przed aktualizacją nie powiodła się: ${r.error}`)
       }
+      // Only with the backup there the folder counts as this version's: a session that never opened it (OneDrive not
+      // ready after a night's install) leaves the backup to the next one (A3-17).
+      if (!due || this.backedUp) this.o.dataOpened?.(this.o.appVersion)
       const s = await (this.o.start ?? ((o: ServiceOptions) => DataService.start(o)))({
         dataDir: dir,
         userData: this.o.userData,
         computer: this.o.computer(),
         computerName: this.o.computerName,
+        windowsId: this.o.windowsId?.() ?? null,
         appVersion: this.o.appVersion,
         runId: this.o.runId,
         holidays: this.o.holidays,
@@ -647,8 +656,8 @@ export class DataHub {
   private async restoreEntry(rel: string, value: RawRecord): Promise<EditEntry | null> {
     const now = await this.need().recordView(rel)
     // The days written once (the ritual's and the game's first, D320, T509) and the review's state: an older version of
-    // rd.json never takes them away (T504) – the game would start again, a done review be proposed again.
-    if (rel === SETTINGS_FILE && now) for (const k of KEPT_ON_RESTORE) if (now[k] !== undefined && value[k] === undefined) value = { ...value, [k]: now[k] }
+    // rd.json never takes them away nor back (T504, A3-02) – the game would start again, a done review be proposed again.
+    if (rel === SETTINGS_FILE && now) value = keptOnRestore(now, value)
     const entry: EditEntry = now
       ? { rel, edits: diffRecords(now, value).map((c) => ({ path: c.path, base: c.before, value: c.after })) }
       : { rel, create: true, edits: Object.entries(value).map(([k, x]) => ({ path: [k], base: undefined, value: x })) }

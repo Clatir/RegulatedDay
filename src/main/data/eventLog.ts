@@ -10,11 +10,11 @@
  * modification (compared only for being different: OneDrive sets them by the other computer's clock); a log that got
  * shorter is read from its start; a listing that fails makes the day „unknown”, never empty.
  */
-import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, fstatSync, fsyncSync, mkdirSync, openSync, readFileSync, readSync, renameSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { classify, paths } from '@shared/data/paths'
 import { eventLine, mergeEvents, readLogText, type ReadLog } from '@shared/data/logText'
-import type { EventClock } from '@shared/data/clock'
+import { AHEAD_LIMIT_MS, type EventClock } from '@shared/data/clock'
 import { type AnyEvent, type Domain } from '@shared/model/events'
 import type { DataFs } from './fsio'
 
@@ -86,6 +86,20 @@ export class EventLog {
   /** Loads the journal (own events of every day it still keeps); every day in it is checked against OneDrive. */
   open(): void {
     mkdirSync(this.o.stateDir, { recursive: true })
+    // A last line cut by a hard power-off: the line is ended first, so the next event never sticks to its rest and is
+    // lost with it (spec „kończy linię, jeśli plik nie kończy się znakiem nowej linii”, A3-12).
+    if (existsSync(this.journalPath)) {
+      const fd = openSync(this.journalPath, 'r')
+      let cut = false
+      try {
+        const size = fstatSync(fd).size
+        const last = Buffer.alloc(1)
+        cut = size > 0 && readSync(fd, last, 0, 1, size - 1) === 1 && last[0] !== 0x0a
+      } finally {
+        closeSync(fd)
+      }
+      if (cut) appendFileSync(this.journalPath, '\n')
+    }
     for (const e of EventLog.readJournal(this.o.stateDir).events) {
       if (e.c !== this.o.computer) continue
       this.ownDay(e.day).set(e.id, e)
@@ -269,8 +283,17 @@ export class EventLog {
     // of the same derived id (its presence names it, and the gate of minutes must see it).
     const lastByComputer: Record<string, number> = {}
     for (const list of lists) for (const e of list) lastByComputer[e.c] = Math.max(lastByComputer[e.c] ?? -1, e.n)
-    let ahead = false
-    for (const e of events) if (!this.o.clock.observe(e.l)) ahead = true
+    // Only another computer's clock far ahead stops the automatic actions, and only while it lasts (T435): its newest
+    // event, by its own time `t` – never this computer's events, nor an older one from a clock that has come back
+    // (A8-01, T515).
+    const newest = new Map<string, AnyEvent>()
+    for (const e of events) {
+      this.o.clock.observe(e.l)
+      if (e.c === this.o.computer) continue
+      const was = newest.get(e.c)
+      if (!was || e.n > was.n) newest.set(e.c, e)
+    }
+    const ahead = [...newest.values()].some((e) => e.t > this.o.clock.now() + AHEAD_LIMIT_MS)
     return { events, complete, problems, lastByComputer, ahead, copies }
   }
 
