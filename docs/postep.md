@@ -29,8 +29,8 @@
      0.18.0, 0.19.0 i 0.20.0 wydane (v0.20.0 28.10 19:25); 0.21.0 wydane (v0.21.0 20:42); 0.22.0 – PR #32 scalony
      (19cdda3), wydanie z runu 40765911413; 0.23.0 – PR #33 (run 40766021468); 0.24.0 i 0.25.0 – gałęzie wypchnięte po
      przeglądach, PR-y po kolei po scaleniu poprzedniego (w PR-ach CI Windows biegnie ~30 min; wieczorem tryb sesji);
-     **teraz 5.3**: 0.25.0 (gałąź `claude/0.25.0-brzegi`, część 1 – logika i pomocnik), potem 0.26.0 (część 2 – ekrany:
-     A6-11, A6-14–A6-17, A6-21, A6-24, A7-10, A7-11, A7-20, A8-09), potem 5.4.
+     **5.3**: 0.25.0 (gałąź `claude/0.25.0-brzegi`, logika i pomocnik) i 0.26.0 (`claude/0.26.0-ekrany`, ekrany) po
+     przeglądach; **teraz 5.4** (1.0).
    - 5.3 przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji.
    - 5.4 bramka 1.0 – bez czekania na Twój odbiór (D324).
 2. Ty: aktualizacja do 0.15.0 i odbiór według `docs/odbior.md` (nowe E5b–E7d; E4b.12 po poprawce, E4b.10 dźwięk). Odbiór
@@ -40,6 +40,17 @@
 - `docs/odbior.md` (układ z 27.10): na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
+
+## 0.26.0 – brzegi przed 1.0, część 2: ekrany (ciąg E, 5.3)
+- Gałąź `claude/0.26.0-ekrany` (od 0.25.0 po przeglądzie) od 28.10 ok. 21:35.
+- Zakres (T524): „Cofnij zatwierdzenie” jak w pasku (A6-11), godzina w rytuale i niezamkniętych dniach – błędny tekst,
+  zmiana czasu (A6-14, A8-09), odcinek „nie odpoczynek” (A2-05), „Prośby domowe” w odczuwanym koszcie (A2-08), „Strona B”
+  (A6-15), przeciąganie bez mignięcia (A6-16), szkic bloku (A6-17), okna dialogowe (A6-21), Ctrl N (A6-24), Historia
+  (A7-10), kreator (A7-11), „Spróbuj ponownie” przeniesienia (A7-20), zakres długości (A6-19). Przegląd E8: wszystkie
+  uwagi zamknięte (poprawione albo obalone). Test kopii i skali – w każdym `npm test`. Odbiór: E8k.1–E8k.3.
+- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. „Cofnij zatwierdzenie” zmieniało przeszłość dnia (teraz tylko
+  otwiera granicę), ponowne zatwierdzenie w tej samej minucie nie działało (kolejność logu), pole godziny po odmowie,
+  kreator kolejnego komputera, Tab w oknach także z fokusem na body; E2E dla okien i „Cofnij zatwierdzenie”.
 
 ## 0.25.0 – brzegi przed 1.0, część 1 (ciąg E, 5.3)
 - Gałąź `claude/0.25.0-brzegi` (od 0.24.0) od 28.10 ok. 21:10.

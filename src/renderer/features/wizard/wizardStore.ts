@@ -56,6 +56,28 @@ export function patchWizard(p: Partial<WizardDraft>): void {
   useWizard.setState(p)
 }
 
+/**
+ * After „Zakończ” failed (A7-11): the button free again with the reason, and the folder looked at again – data there now
+ * (written by this very try before the folder failed to open, or meanwhile by another computer) turn the wizard into the
+ * next computer's, on its summary (`joinStep`), saying so: one more „Zakończ” joins them.
+ */
+export function failedFinish(w: Pick<WizardDraft, 'probe'>, error: string, probe: FolderProbe | null, joinStep: number): Partial<WizardDraft> {
+  const joinNow = !w.probe?.hasData && !!probe?.hasData
+  // Only towards joining: a joining computer's folder without rd.json for a moment (OneDrive) never makes it the first –
+  // a second data set would be written into the folder.
+  return {
+    busy: false,
+    probe: joinNow ? probe : w.probe,
+    error: joinNow ? `${error} W folderze są już dane – ten komputer do nich dołączy: kliknij „Zakończ” jeszcze raz.` : error,
+    ...(joinNow ? { step: joinStep } : {})
+  }
+}
+
+/** A folder's probe – taken only while that folder is still the one chosen (a late answer for another never wins). */
+export function takeProbe(dir: string, probe: FolderProbe): void {
+  if (useWizard.getState().folder === dir) patchWizard({ probe, error: null })
+}
+
 /** A change of the draft's settings (checked like the schema: a wrong value keeps the one before). */
 export function patchSettings(patch: Record<string, unknown>): void {
   const s = useWizard.getState().settings

@@ -377,7 +377,7 @@ function onHelperEvent(m: HelperMessage): void {
   }
 }
 
-const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm', 'undo', 'cutOff', 'back', 'fewer', 'better', 'drink', 'restart', 'mark', 'requestNow', 'requestEnd', 'requestAfter', 'routineDone', 'routineUndo'])
+const TIMER_ACTIONS = new Set(['start', 'startNew', 'pause', 'next', 'extend', 'workEnd', 'finish', 'cancel', 'park', 'confirm', 'undo', 'undoApproval', 'cutOff', 'back', 'fewer', 'better', 'drink', 'restart', 'mark', 'requestNow', 'requestEnd', 'requestAfter', 'routineDone', 'routineUndo'])
 
 /** A value of a ritual's answer from a window: an instant, a person (≤ 64 characters), a stretch [from, to) – else none. */
 function ritualValue(v: unknown): RitualValue {

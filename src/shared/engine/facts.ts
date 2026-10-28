@@ -103,8 +103,12 @@ export interface DayFacts {
   blocks: Map<string, BlockFact>
   requests: RequestFact[]
   disconnect: Array<{ from: number; to: number }>
-  /** `plan`: the blocks of the plan when it was approved (null: an approval that does not say). */
-  approvals: Array<{ at: number; boundary: number; auto: boolean; plan: string[] | null }>
+  /**
+   * `plan`: the blocks of the plan when it was approved (null: an approval that does not say); `undoneAt` – the minute of
+   * the first „Cofnij” written after it (by the order of the log, so an approval, its „Cofnij” and a new approval in one
+   * minute keep the new one).
+   */
+  approvals: Array<{ at: number; boundary: number; auto: boolean; plan: string[] | null; undoneAt: number | null }>
   undos: number[]
   exceptions: Array<{ at: number; minutes: number }>
   workEnds: Array<{ at: number; end: number }>
@@ -334,10 +338,11 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         break
       }
       case 'boundary.approve':
-        f.approvals.push({ at: idx(e.at), boundary: idx(e.boundary), auto: e.auto === true, plan: Array.isArray(e.plan) ? e.plan : null })
+        f.approvals.push({ at: idx(e.at), boundary: idx(e.boundary), auto: e.auto === true, plan: Array.isArray(e.plan) ? e.plan : null, undoneAt: null })
         break
       case 'boundary.undo':
         f.undos.push(idx(e.at))
+        for (const a of f.approvals) a.undoneAt ??= idx(e.at)
         break
       case 'boundary.exception':
         f.exceptions.push({ at: idx(e.at), minutes: e.minutes })
@@ -507,7 +512,7 @@ export function viewAt(f: DayFacts, m: number): DayFacts {
     blocks,
     requests: f.requests.filter((r) => r.from < m).map((r) => (r.to >= m ? { ...r, to: OPEN, endId: null, endT: null } : r)),
     disconnect: f.disconnect.filter((d) => d.from < m).map((d) => (d.to >= m ? { ...d, to: OPEN } : d)),
-    approvals: f.approvals.filter((a) => a.at < m),
+    approvals: f.approvals.filter((a) => a.at < m).map((a) => (a.undoneAt != null && a.undoneAt >= m ? { ...a, undoneAt: null } : a)),
     undos: f.undos.filter((u) => u < m),
     exceptions: f.exceptions.filter((x) => x.at < m),
     workEnds: f.workEnds.filter((w) => w.at < m),

@@ -9,7 +9,7 @@ import { setDayField } from '@shared/data/dayEdits'
 import { logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { detectLateWake } from '@shared/engine/lateWake'
-import { draggedBlock, newUserBlock } from '@shared/engine/planEdit'
+import { draggedBlock, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
 import { categoryName } from '@shared/model/rd'
 import type { PlanBlock } from '@shared/model/plan'
 import { DAY_TYPE_NAMES, RANGES } from '@shared/model/settings'
@@ -19,9 +19,10 @@ import { atOf } from '@shared/engine/grid'
 import { TimeField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
 import { useNow } from '../../lib/clock'
+import { useNewShortcut } from '../../lib/escape'
 import { isSaved, useData } from '../../store/data'
 import { useDay, type DayModel } from '../../store/day'
-import { openDay, toast, useUi } from '../../store/ui'
+import { openDay, patchBlockDraft, setBlockDraft, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
@@ -65,28 +66,20 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const names: Names = useMemo(() => ({ rd, settings: model.state.settings, routines, requests }), [rd, model.state.settings, routines, requests])
   const axis = useMemo(() => dayAxis(model, names, isToday ? now : null), [model, names, isToday, now])
   const [selected, setSelected] = useState<string | null>(null)
-  const [draft, setDraft] = useState<PlanBlock | null>(null)
+  // The new block before „Dodaj” lives in the window's state: it comes back after another screen (A6-17).
+  const stored = useUi((s) => s.blockDraft)
+  const draft = stored?.date === date ? stored.block : null
+  const setDraft = (b: PlanBlock | null) => setBlockDraft(date, b)
   const [exchange, setExchange] = useState<{ block: PlanBlock; proposal: ExchangeProposal } | null>(null)
   const [dialog, setDialog] = useState<null | 'type' | 'copy' | { move: PlanBlock } | 'addType'>(null)
   const [menu, setMenu] = useState(false)
   useEffect(() => {
     setSelected(null)
-    setDraft(null)
   }, [date])
-  // Ctrl+N: a new block in the nearest free place (spec „Tworzenie”).
-  const newHere = () => create(isToday ? Math.ceil(Math.max(logicalMinuteOf(date, Date.now()), model.ctx.wakeMin) / 15) * 15 : model.ctx.wakeMin + 60)
-  const newRef = useRef(newHere)
-  newRef.current = newHere
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN') {
-        e.preventDefault()
-        newRef.current()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  // Ctrl+N: a new block in the nearest free place (spec „Tworzenie”) – today from the next quarter, another day an hour
+  // after the wake (A6-24).
+  const newHere = () => create(newBlockStart(model.state, isToday ? Math.ceil(Math.max(logicalMinuteOf(date, Date.now()), model.ctx.wakeMin) / 15) * 15 : model.ctx.wakeMin + 60))
+  useNewShortcut(newHere)
 
   const raw = model.data.dayFile
   const plan = model.ctx.plan
@@ -245,7 +238,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             plan={plan}
             names={names}
             computers={view.computers}
-            onChange={(patch) => (draft ? setDraft((d) => d && { ...d, ...patch }) : void patchDayBlock(date, raw, block, patch))}
+            onChange={(patch) => (draft ? patchBlockDraft(date, patch) : void patchDayBlock(date, raw, block, patch))}
             onClose={() => {
               setDraft(null)
               setSelected(null)

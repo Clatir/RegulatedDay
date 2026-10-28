@@ -6,7 +6,7 @@
  * the engine) with the same panel of a block as the day; a template block may follow a session („po sesji NY”), carry
  * the second shift or the weekly analysis. Ctrl+N makes a new template; a template can be copied.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { paths } from '@shared/data/paths'
 import { copiedTemplate, draggedBlock } from '@shared/engine/planEdit'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
@@ -20,6 +20,7 @@ import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { countDay } from '../../store/day'
+import { useNewShortcut } from '../../lib/escape'
 import { undoToast } from '../../store/ui'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
@@ -43,16 +44,7 @@ export function TemplatesPage() {
     await saveRecord(paths.record('template', id), null, templateJson(t))
     setSelected(id)
   }
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN') {
-        e.preventDefault()
-        void create()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  })
+  useNewShortcut(() => void create())
   const current = templates.find((t) => t.id === selected) ?? null
   return (
     <div className="flex min-h-0 flex-1" data-testid="templates">

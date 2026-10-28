@@ -16,6 +16,7 @@ import { Choice, DurationField, TextField } from '../../components/fields'
 import { EmptyState, Section } from '../../components/ui'
 import { useNow } from '../../lib/clock'
 import { addPerson, saveRd, saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
+import { useNewShortcut } from '../../lib/escape'
 import { undoToast } from '../../store/ui'
 
 const STATE_NAMES: Record<RequestState, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobione', dropped: 'porzucone' }
@@ -27,16 +28,7 @@ export function RequestsPage() {
     const id = newId()
     await saveRecord(paths.record('request', id), null, newRequest(id, Date.now(), { person: null, estimateMin: DEFAULT_ESTIMATE_MIN, note: '' }))
   }
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyN') {
-        e.preventDefault()
-        void create()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  useNewShortcut(() => void create())
   if (!rd.general.modules.requests) return <EmptyState why="Moduł próśb jest wyłączony – włączysz go w ustawieniach." />
 
   const stateFilters = filters.filter((f) => f.startsWith('state:')).map((f) => f.slice(6))
@@ -88,7 +80,7 @@ function Row({ r }: { r: RequestRecord }) {
   return (
     <div className="grid items-center gap-2 rounded border border-line bg-panel px-3 py-1.5" style={{ gridTemplateColumns: '180px 110px minmax(0,1fr) 120px auto' }} data-testid="request-row">
       <PersonChoice value={r.person} onChange={(person) => set({ person })} />
-      <DurationField value={r.estimateMin} onCommit={(estimateMin) => set({ estimateMin: Math.min(ESTIMATE_RANGE[1], estimateMin) })} placeholder="szacunek" aria-label="Szacunek" data-testid="request-estimate" />
+      <DurationField value={r.estimateMin} range={ESTIMATE_RANGE} onCommit={(estimateMin) => set({ estimateMin })} placeholder="szacunek" aria-label="Szacunek" data-testid="request-estimate" />
       <TextField value={r.note} onCommit={(note) => set({ note })} max={500} placeholder="czego dotyczy" aria-label="Notatka" data-testid="request-note" />
       <span className="text-[12px] text-muted">
         {STATE_NAMES[r.state]}

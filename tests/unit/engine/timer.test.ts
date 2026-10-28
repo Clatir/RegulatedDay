@@ -425,6 +425,40 @@ describe('poprawki po przeglądzie E4a', () => {
     expect(times[2]!).toBeLessThan(40)
   })
 
+  it('„Cofnij zatwierdzenie” z planu porannego otwiera granicę od teraz – przeszłość dnia się nie zmienia (A6-11)', () => {
+    const s = day().observe('07:00', null)
+    s.approve('16:00', '07:30')
+    expect(s.state('07:31').boundary.approved).not.toBeNull()
+    expect(click(s, '07:40', { a: 'undoApproval' }).ok).toBe(true)
+    expect(s.state('07:41').boundary.approved).toBeNull()
+    expect(click(s, '07:42', { a: 'undoApproval' })).toMatchObject({ ok: false })
+    // The first work block does not approve it on its own afterwards.
+    click(s, '08:00', { a: 'start', block: 'a' })
+    expect(leader(s, '08:05', { boundary: true })).toEqual([])
+  })
+
+  it('zatwierdzenie, „Cofnij” i zatwierdzenie jeszcze raz w tej samej minucie – granica zatwierdzona (kolejność logu, nie minuty)', () => {
+    const s = day().observe('07:00', null)
+    s.approve('16:00', '07:30')
+    expect(click(s, '07:30', { a: 'undoApproval' }).ok).toBe(true)
+    s.approve('16:30', '07:30')
+    const st = s.state('07:31')
+    expect(st.boundary.approved).not.toBeNull()
+    expect(hhmm(st, st.boundary.approved!)).toBe('16:30')
+  })
+
+  it('„Cofnij zatwierdzenie” wieczorem: praca przed nim zostaje w granicy, którą zatwierdziłeś (A6-11, przegląd 0.26.0)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '09:00', min: 420 })]).observe('07:00', null)
+    s.approve('18:00', '07:30')
+    s.ran('a', '09:00', '17:30')
+    expect(s.state('17:40').extensionMin).toBe(0)
+    expect(click(s, '17:45', { a: 'undoApproval' }).ok).toBe(true)
+    const st = s.state('17:50')
+    expect(st.boundary.approved).toBeNull()
+    // Not the day's own approval at the first work block (the proposal 16:15) rebuilt for the minutes before.
+    expect(st.extensionMin).toBe(0)
+  })
+
   it('cofnięcie korekty przywraca cofnięte działanie; korekty prowadzącego nie ma na liście', () => {
     const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })

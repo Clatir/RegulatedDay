@@ -45,6 +45,54 @@ export function installEscape(): void {
   })
 }
 
+/**
+ * Open dialogs (aria-modal), the newest last: the pages' own shortcuts (Ctrl+N, Ctrl+1 …) wait while one is open, and
+ * only the newest keeps Tab inside it (A6-21).
+ */
+const modals: number[] = []
+let nextModal = 1
+
+export function onModal(): { id: number; off: () => void } {
+  const id = nextModal++
+  modals.push(id)
+  return {
+    id,
+    off: () => {
+      const i = modals.indexOf(id)
+      if (i >= 0) modals.splice(i, 1)
+    }
+  }
+}
+
+export const modalOpen = (): boolean => modals.length > 0
+export const topModal = (): number | null => modals.at(-1) ?? null
+
+/** Ctrl+N of a page (spec „Tworzenie”): one way for every page, waiting while a dialog is open (A6-21). */
+export function useNewShortcut(create: () => void): void {
+  const ref = useRef(create)
+  ref.current = create
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.altKey || e.shiftKey || e.code !== 'KeyN' || modalOpen()) return
+      e.preventDefault()
+      ref.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+}
+
+/**
+ * Tab inside a dialog (A6-21): from its last element to its first, Shift+Tab from its first (or the box) to its last;
+ * null – the browser's own step. `index` −1: the focus is on the box itself or outside.
+ */
+export function tabTarget(count: number, index: number, shift: boolean): number | null {
+  if (count === 0) return -1
+  if (shift && index <= 0) return count - 1
+  if (!shift && (index === count - 1 || index < 0)) return 0
+  return null
+}
+
 /** A layer while `open`: Esc closes it. */
 export function useEscapeLayer(open: boolean, close: () => void): void {
   const ref = useRef(close)

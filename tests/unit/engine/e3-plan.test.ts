@@ -11,7 +11,7 @@ import { computeDay } from '@shared/engine/day'
 import { exchangeCost, isFullExchange, proposeExchange } from '@shared/engine/exchange'
 import { detectLateWake } from '@shared/engine/lateWake'
 import { fromYesterday, holidayQuestions, morningWarnings, sessionQuestions, shiftNotice, weeklyAnalysisMove, type MorningInputs } from '@shared/engine/morning'
-import { copiedDay, copiedTemplate, draggedBlock, moveBetweenDays, movedBlock, newUserBlock } from '@shared/engine/planEdit'
+import { copiedDay, copiedTemplate, draggedBlock, moveBetweenDays, movedBlock, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
 import { applyTypeChange, planTypeChange } from '@shared/engine/typeChange'
 import { defaultTemplates, firstComputerRecords, settingsPatch } from '@shared/model/defaults'
 import { DEFAULT_GENERAL, rdFrom } from '@shared/model/rd'
@@ -296,6 +296,10 @@ describe('późne wstanie', () => {
     const planned = new Scenario({ date: '2026-10-21', plan }).approve('14:15', '06:30').presence('08:30')
     const c2 = planned.contextAt(planned.at('08:31'))
     expect(detectLateWake(c2, computeDay(c2), null)).toBeNull()
+    // The plan approved and undone before the first use is not done (A6-11): the proposal comes.
+    const undone = new Scenario({ date: '2026-10-21', plan }).approve('14:15', '06:30').raw({ k: 'boundary.undo', at: new Scenario({ date: '2026-10-21', plan }).at('06:40') }, '06:40').presence('08:30')
+    const cu = undone.contextAt(undone.at('08:31'))
+    expect(detectLateWake(cu, computeDay(cu), null)).not.toBeNull()
     const zjazd = new Scenario({ date: '2026-10-21', dayType: 'zjazd-stacjonarny', plan }).presence('08:30')
     const c3 = zjazd.contextAt(zjazd.at('08:31'))
     expect(detectLateWake(c3, computeDay(c3), null)).toBeNull()
@@ -371,6 +375,16 @@ describe('przenoszenie i kopiowanie', () => {
     const m = movedBlock(plan[1]!, plan, '2026-10-21', true)
     expect(m).toMatchObject({ id: 'j', startMin: lm('17:00'), anchor: null, movedFrom: '2026-10-21', moves: 1 })
     expect(movedBlock(plan[1]!, plan, '2026-10-21', false).moves).toBe(0)
+  })
+
+  it('Ctrl N: nowy blok w najbliższym wolnym miejscu, nie na trwającym bloku (A6-24)', () => {
+    const s = new Scenario({ date: '2026-10-21', plan: [block({ id: 'a', cat: 'inne', at: '10:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '11:30', min: 60 })] }).observe('07:00', null)
+    s.start('a', '10:00')
+    const st = s.state('10:05')
+    // From 10:15: after „a” (11:00) only 30 min before „b” – the hour fits after it, at 12:30.
+    expect(newBlockStart(st, lm('10:15'))).toBe(lm('12:30'))
+    expect(newBlockStart(st, lm('10:15'), 30)).toBe(lm('11:00'))
+    expect(newBlockStart(st, lm('14:00'))).toBe(lm('14:00'))
   })
 
   it('blok przeciągnięty na osi (D305): nowy start w dniu logicznym, reszta bez zmian', () => {

@@ -87,6 +87,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8i.2 Niedostępny folder: „N zmian zapisze się” (folder testowy)
    - [ ] E8j.1 Usunięcie rekordu zmienionego na innym komputerze (dwa komputery)
    - [ ] E8j.2 Powiadomienie odrzucone przez Windows wraca raz
+   - [ ] E8k.1 „Cofnij zatwierdzenie” w planie porannym
+   - [ ] E8k.2 Nowy blok: szkic po innym ekranie, Ctrl N w wolnym miejscu, okna i Tab
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -96,6 +98,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E6c.2 Rytuał po końcu pracy – karta i „Rytuał” w pasku
    - [ ] E6c.3 „Zamknij dzień” z wierszami bez wyboru
    - [ ] E6c.4 Odczuwany koszt
+   - [ ] E8k.3 Godzina w rytuale: błędny tekst i odcinek „nie odpoczynek”
    - [ ] E6c.5 Rano: niezamknięte dni
    - [ ] E5b.4 Prośba przez 04:00 (tylko gdy się zdarzy)
    - [ ] E6a.2 Czas po bloku pracy, który skończył się sam
@@ -1493,3 +1496,39 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   strażnika „pomocnik aplikacji potwierdził blokadę usypiania”. W „Odcinam się” strażnik nie trzyma niczego.
 - **Nie przechodzi, gdy:** aplikacja nie startuje albo zamyka się po kilku sekundach, przez pierwszą minutę po
   logowaniu nie ma żadnego żądania, żądanie strażnika zostaje dłużej niż minutę albo pojawia się w „Odcinam się”.
+
+### E8k – brzegi przed 1.0, część 2: ekrany (0.26.0)
+
+#### E8k.1 „Cofnij zatwierdzenie” w planie porannym (0.26.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer.test.ts` (A6-11). Ty: rzut oka rano.
+- **Automatycznie także:** `tests/e2e/screens.spec.ts` (cofnięcie i ponowne zatwierdzenie od razu).
+- **Jak sprawdzić:** w planie porannym kliknij „Zatwierdź plan”, potem „Cofnij zatwierdzenie” i od razu znowu „Zatwierdź
+  plan”.
+- **Oczekiwany efekt:** po cofnięciu nagłówek karty mówi „do zrobienia”, wraca „Propozycja granicy … Zatwierdź plan”;
+  ponowne zatwierdzenie działa od razu jak pierwsze.
+- **Nie przechodzi, gdy:** nagłówek dalej mówi „zatwierdzony”, „Cofnij” w pasku i w oknie dają różny stan albo plan
+  zatwierdza się sam przy starcie pierwszego bloku pracy.
+
+#### E8k.2 Nowy blok: szkic po innym ekranie, Ctrl N w wolnym miejscu, okna i Tab (0.26.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/screens-026.test.ts` (A6-17, A6-21), `tests/unit/engine/e3-plan.test.ts` (A6-24).
+- **Jak sprawdzić:** w czasie bloku naciśnij Ctrl N; zmień w panelu długość i notatkę, przejdź Ctrl 2 do Kalendarza
+  i wróć Ctrl 1. Otwórz „Przenieś na…” przy bloku i naciskaj Tab, potem Esc.
+- **Oczekiwany efekt:** szkic stoi po trwającym bloku (nie na nim) i po powrocie ma Twoje zmiany; w oknie „Przenieś
+  na…” Tab krąży tylko po jego polach i przyciskach, po Esc fokus wraca na „Przenieś na…”; Ctrl N przy otwartym oknie
+  nic nie robi.
+- **Nie przechodzi, gdy:** szkic znika po zmianie ekranu, Ctrl N stawia blok na trwającym, Tab wychodzi pod okno albo
+  Esc zamyka coś pod oknem.
+
+#### E8k.3 Godzina w rytuale: błędny tekst i odcinek „nie odpoczynek” (0.26.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/screens-026.test.ts` (A6-14, A8-09), `tests/unit/engine/ritual.test.ts` (A2-05, A2-08).
+- **Jak sprawdzić:** w rytuale kliknij „Pracowałem do …”, wpisz „25:30”, kliknij „Zapisz”; potem „zaznacz odcinek” z
+  godzinami od rana do wieczoru.
+- **Oczekiwany efekt:** po „25:30” komunikat błędu i nic się nie zapisuje (także po drugim „Zapisz”), a po poprawnej
+  godzinie – także tej samej, co była – „Zapisz” działa; odcinek od rana jest odrzucony z komunikatem „tylko wieczór od
+  końca pracy albo czas „Odcinam się””, odcinek wieczoru się zapisuje; dzień z prośbami „zrobione teraz” ma wiersz
+  odczuwanego kosztu „Prośby domowe”.
+- **Nie przechodzi, gdy:** po błędnej godzinie zapisuje się godzina początkowa wiersza, „Zapisz” zostaje zablokowane po
+  poprawnej godzinie, regeneracja sprzed końca pracy znika albo nie ma wiersza „Prośby domowe”.

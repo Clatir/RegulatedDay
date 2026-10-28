@@ -67,15 +67,17 @@ export function detectLateWake(ctx: DayContext, state: DayState, dayFile: DayFil
   const observed = activity.computers.some((x) => x.observed.length > 0)
   const firstUse = observed ? dayFirstUse(state, activity) : firstUseOf(ctx.events)
   if (firstUse == null) return null
-  // The morning plan done before the first use (its approval of the boundary, not the automatic one): no proposal.
+  // The morning plan done before the first use (its approval of the boundary, not the automatic one, nor one undone
+  // before it – A6-11): no proposal.
   const g = state.grid
-  if (state.facts.approvals.some((a) => !a.auto && a.at <= idxOf(g, firstUse))) return null
+  const used = idxOf(g, firstUse)
+  if (state.facts.approvals.some((a) => !a.auto && a.at <= used && !(a.undoneAt != null && a.undoneAt <= used))) return null
   const routine = morningRoutine(ctx, state)
   const routineEndMin = routine ? routine.startMin! + routine.durationMin : ctx.wakeMin
   const useMin = logicalMinuteOf(ctx.date, firstUse)
   if (useMin <= routineEndMin + LATE_WAKE_MIN) return null
   const delayMin = useMin - routineEndMin
-  const useIdx = idxOf(g, firstUse)
+  const useIdx = used
 
   // A session waiting for „Zacznij” or running at the first use: the proposal waits for its end.
   let waitUntilMin: number | null = null

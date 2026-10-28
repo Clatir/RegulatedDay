@@ -125,7 +125,7 @@ const RITUAL_MEMO_DAYS = 4
 /** Why an answer of the ritual was refused, in words (never the choice's id). */
 function refusalOf(choice: string): string {
   if (choice === 'endedAt' || choice === 'workedUntil' || choice === 'projectUntil' || choice === 'work' || choice === 'project') return 'ta godzina jest poza czasem bloku albo po teraz'
-  if (choice === 'notRest') return 'odcinek: „od” musi być przed „do”'
+  if (choice === 'notRest') return 'odcinek: tylko wieczór od końca pracy albo czas „Odcinam się”, a „od” przed „do”'
   if (choice === 'person') return 'wybierz osobę z listy'
   return 'tego wyboru nie ma w tym wierszu'
 }
