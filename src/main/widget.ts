@@ -70,8 +70,9 @@ export interface WidgetDeps {
 
 interface Pending extends BarPending {
   redo: () => Promise<TimerResult>
-  /** „Przedłuż”: the length waiting for the second click (changed in steps of 15 min – T289). */
+  /** „Przedłuż”: the length waiting for the second click (changed in steps of 15 min – T289), and its block (none: the one in front). */
   minutes?: number
+  block?: string
 }
 
 /** The longest extension of „Przedłuż” by its steps. */
@@ -204,7 +205,7 @@ export class WidgetEngine {
           care: { waterOn: rd.general.modules.water, waterEveryMin: rd.general.waterEveryMin, breakAfterMin: rd.general.breakAfterMin, solitudeAfterMin: rd.general.solitudeAfterMin },
           modePrefs: this.d.modePrefs(),
           // Only what the windows show (the view goes over IPC – no function in it).
-          pending: this.pending ? { button: this.pending.button, text: this.pending.text, until: this.pending.until } : null,
+          pending: this.pending ? { button: this.pending.button, text: this.pending.text, until: this.pending.until, ...(this.pending.minutes != null ? { steps: true } : {}) } : null,
           computer: folder.computers[0]?.id,
           people: m.people,
           person: (id) => personName(rd, id),
@@ -581,7 +582,10 @@ export class WidgetEngine {
         // „Koniec pracy”, a fixed block extended after its plan ended it, „Pracowałem do teraz”.
         else if (kind === 'anchor') click = act === 'start' ? { a: 'start', block: id } : act === 'park' ? { a: 'park', block: id } : { a: 'workEnd' }
         else if (kind === 'fixedLeft') click = { a: 'cancel', block: id }
-        else if (kind === 'notExtended') click = { a: 'extend', block: id, minutes: num(value) ?? 15 }
+        else if (kind === 'notExtended') {
+          click = { a: 'extend', block: id, minutes: num(value) ?? 15 }
+          label = `Przedłuż +${click.minutes}`
+        }
         else if (kind === 'workedUntil') click = { a: 'workedUntil', explain: id }
         else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
         else if (kind === 'fewerOffer') {
@@ -612,7 +616,7 @@ export class WidgetEngine {
           } else if (!r.ok && r.why) this.say(r.why)
           return this.refresh()
         }
-        label = act === 'start' ? 'Zacznij' : label
+        label = act === 'start' ? 'Zacznij' : act === 'extend' && !label ? `Przedłuż +${num(value) ?? 15}` : label
         break
       }
       default:
@@ -626,7 +630,8 @@ export class WidgetEngine {
       const cost = r.confirm
       // „Dalej”: its first click ended the running block; the cost belongs to starting the next one – shown at „Start”.
       if (action === 'next') this.wait('start', 'Start', cost, () => this.d.timer({ a: 'start', block: cost.block, day, confirm: true }))
-      else this.wait(button, label || 'Start', cost, () => this.d.timer({ ...c, confirm: true }), action === 'extend' ? c.minutes : undefined)
+      // „Przedłuż” – of the block in front, in the background or from a line – keeps its length's steps (T289).
+      else this.wait(button, label || 'Start', cost, () => this.d.timer({ ...c, confirm: true }), c.a === 'extend' ? c.minutes : undefined, c.a === 'extend' ? c.block : undefined)
     } else {
       this.pending = null
       if (!r.ok && r.why) this.say(r.why)
@@ -635,8 +640,8 @@ export class WidgetEngine {
   }
 
   /** A cost waits for its second click within 10 s, in place of its button. */
-  private wait(button: string, label: string, cost: NonNullable<TimerResult['confirm']>, redo: () => Promise<TimerResult>, minutes?: number): void {
-    this.pending = { button, text: costText(label, cost), until: this.now + CONFIRM_MS, redo, ...(minutes != null ? { minutes } : {}) }
+  private wait(button: string, label: string, cost: NonNullable<TimerResult['confirm']>, redo: () => Promise<TimerResult>, minutes?: number, block?: string): void {
+    this.pending = { button, text: costText(label, cost), until: this.now + CONFIRM_MS, redo, ...(minutes != null ? { minutes } : {}), ...(block ? { block } : {}) }
     setTimeout(() => void this.refresh(), CONFIRM_MS + 50).unref?.()
   }
 
@@ -647,15 +652,15 @@ export class WidgetEngine {
    */
   private async extendStep(delta: number): Promise<void> {
     const p = this.pending
-    if (!p || p.button !== 'extend' || p.minutes == null || p.until <= this.now) return
+    if (!p || p.minutes == null || p.until <= this.now) return
     const minutes = Math.min(EXTEND_MAX_MIN, Math.max(15, p.minutes + delta))
     if (minutes === p.minutes) return
     const day = this.current().day ?? undefined
-    const c: TimerIn = { a: 'extend', minutes, day }
+    const c: TimerIn = { a: 'extend', minutes, day, ...(p.block ? { block: p.block } : {}) }
     const r = await this.d.timer({ ...c, probe: true })
-    if (r.confirm) this.wait('extend', `Przedłuż +${minutes}`, r.confirm, () => this.d.timer({ ...c, confirm: true }), minutes)
+    if (r.confirm) this.wait(p.button, `Przedłuż +${minutes}`, r.confirm, () => this.d.timer({ ...c, confirm: true }), minutes, p.block)
     else if (r.ok) {
-      this.pending = { button: 'extend', text: `Przedłuż +${minutes}: bez kosztu`, until: this.now + CONFIRM_MS, redo: () => this.d.timer(c), minutes }
+      this.pending = { button: p.button, text: `Przedłuż +${minutes}: bez kosztu`, until: this.now + CONFIRM_MS, redo: () => this.d.timer(c), minutes, ...(p.block ? { block: p.block } : {}) }
       setTimeout(() => void this.refresh(), CONFIRM_MS + 50).unref?.()
     } else {
       this.pending = null

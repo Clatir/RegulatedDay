@@ -16,7 +16,7 @@ import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blo
 import type { DayContext, DayState } from './day'
 import { blockAt, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
-import { isRunningRequest, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
+import { isRunningRequest, requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
 import { plannedEndOf, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
@@ -564,11 +564,9 @@ function absenceWhat(state: DayState, block: string, answer: 'meal' | 'regen' | 
       { k: 'block.end', block: rid, at: back, done: true, rule: 'absenceRegen', autoRule: 'absenceRegen' }
     ]
   }
-  const rq = id('request')
-  return [
-    { k: 'request.start', request: rq, at: away, mode: 'after', person: null, estimateMin: null, hardEndAt: null, interrupts: null, splits: [] },
-    { k: 'request.end', request: rq, at: back }
-  ]
+  // The request after the fact by its own action (the window's „po fakcie”): its splits, and none over another request.
+  const r = requestAction(state, { a: 'requestAfter', request: id('request'), person: null, from: away, to: back }, now)
+  return r.ok ? r.events : []
 }
 
 /** The stretch without input that began at `away` (the absence): to the return, null while it lasts. */
@@ -657,7 +655,12 @@ export function answerEvents(state: DayState, q: Question, answer: string, at: n
         // What the absence was (D268, D273, D277, D280): the block ends when you left – resumed only by „odliczyć” – and
         // after a work or project block the time from the return stays time to explain, as without an answer.
         const back = resume ? atOf(state.grid, resume.at) : (q.span?.to ?? at)
-        const ended = pause ? [{ k: 'undo', at, target: pause.id, reason: answer } as TimerDraft, ...(resume ? [{ k: 'undo', at, target: resume.id, reason: answer } as TimerDraft] : []), { k: 'block.end', block: q.block, at: away, done: null, rule: 'absence' }] : []
+        // Only a block nothing happened to since the absence counted it out (still paused, or running on from that
+        // resume) ends when you left; one that ended, was paused again or met a later absence since keeps this absence
+        // counted out – an end written back then would come after its later facts and count the minutes twice.
+        const last = f.runs.at(-1)
+        const still = !!pause && f.endedAt == null && (resume ? last?.from === resume.at && last.to === OPEN : last?.to === pause.at)
+        const ended = still ? [{ k: 'undo', at, target: pause.id, reason: answer } as TimerDraft, ...(resume ? [{ k: 'undo', at, target: resume.id, reason: answer } as TimerDraft] : []), { k: 'block.end', block: q.block, at: away, done: null, rule: 'absence' }] : []
         return [...ended, ...absenceWhat(state, q.block, answer, away, Math.max(away + MIN, back), at), mark]
       }
       return [mark]

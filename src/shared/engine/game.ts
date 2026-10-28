@@ -105,8 +105,11 @@ export function sightingOf(state: DayState, events: readonly AnyEvent[]): (d: De
   }
 }
 
-/** Ends that are no real end even when you gave them: when you left (the answer „Zakończyć” to an absence, D275, T386). */
-const LEFT_RULES: ReadonlySet<string> = new Set(['absenceAnswer'])
+/**
+ * Ends that are no real end even when you gave them: when you left (the answer „Zakończyć” to an absence, D275, T386;
+ * an answer that only names the absence – „Posiłek”, „Regeneracja”, „Byłem na prośbie”, A1-09).
+ */
+const LEFT_RULES: ReadonlySet<string> = new Set(['absenceAnswer', 'absence'])
 
 const live = (e: LogEvent & { at: number }) => Math.abs(e.t - e.at) <= LIVE_MS
 

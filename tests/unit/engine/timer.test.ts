@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
 import { answerEvents, autoActions, questionsOf, type AutoEvent } from '@shared/engine/auto'
+import { blockEvidence } from '@shared/engine/game'
 import { requestAction } from '@shared/engine/requests'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { block, hhmm, lm, Scenario } from './dsl'
@@ -503,6 +504,75 @@ describe('druga zmiana poza swoim planowanym czasem (spec „Druga zmiana”, A1
     expect(r.ok).toBe(false)
     expect(r.confirm).toMatchObject({ block: 'ds', minutes: 30, overrun: false })
     expect(r.confirm!.moveToNow).toBeUndefined()
+  })
+
+  // A flexible second shift in its window of „Zacznij”, and a template block anchored to it.
+  const flex = () => [block({ id: 'a', cat: 'inne', at: '08:00', min: 120 }), block({ id: 'ds', cat: 'inne', at: '20:00', min: 60, tag: 'secondShift' }), block({ id: 'po', cat: 'inne', after: 'ds', min: 30 })]
+
+  it('start później w swoim oknie kosztuje nic – tylko wcześniejszy start i „Przedłuż” (przegląd 0.21.0)', () => {
+    const s = day(flex()).approve('09:15', '10:15')
+    const r = click(s, '20:05', { a: 'start', block: 'ds' })
+    expect([r.ok, r.confirm]).toEqual([true, null])
+  })
+
+  it('blok zakotwiczony do drugiej zmiany nie jest drugą zmianą: bez kosztu i bez „Przesuń na teraz” (przegląd 0.21.0)', () => {
+    const s = day(flex()).approve('09:15', '10:15')
+    const r = click(s, '19:00', { a: 'start', block: 'po' })
+    expect([r.ok, r.confirm]).toEqual([true, null])
+  })
+})
+
+describe('odpowiedzi na nieobecność po przeglądzie 0.21.0', () => {
+  const answer = (s: Scenario, time: string, answerId: string) => {
+    const q = questions(s, time).find((x) => x.kind === 'absence')!
+    const t = s.at(time)
+    s.write(answerEvents(s.stateAt(t), q, answerId, t)!, t)
+  }
+  // Work 08:00–11:00 with lunch at 09:00 in the plan; away 08:30–09:15, counted out by the leader.
+  const away = () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 180 }), block({ id: 'obiad', cat: 'posilek', at: '09:00', min: 30 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    s.gap('08:30', '09:15')
+    leader(s, '09:16')
+    return s
+  }
+
+  it('blok, który po powrocie biegł dalej i się skończył, zostaje z odliczoną nieobecnością – minuty nie liczą się dwa razy', () => {
+    const s = away()
+    expect(click(s, '10:00', { a: 'finish', block: 'a' }).ok).toBe(true)
+    answer(s, '10:05', 'meal')
+    const st = s.state('10:06')
+    const a = st.facts.blocks.get('a')!
+    expect(a.endedAt).toBe(lm('10:00') - 240)
+    expect(a.runs.map((r) => [r.from, r.to])).toEqual([
+      [lm('08:00') - 240, lm('08:30') - 240],
+      [lm('09:15') - 240, lm('10:00') - 240]
+    ])
+    const meal = st.facts.blocks.get('obiad')!
+    expect([meal.startedAt, meal.endedAt]).toEqual([lm('08:30') - 240, lm('09:15') - 240])
+  })
+
+  it('koniec w chwili odejścia z odpowiedzi, która tylko nazywa nieobecność, nie jest Twoim końcem (LEFT_RULES)', () => {
+    const s = away()
+    answer(s, '09:20', 'regen')
+    const t = s.at('09:21')
+    const ev = blockEvidence(s.contextAt(t), s.stateAt(t)).find((e) => e.f.id === 'a')!
+    expect(ev.f.endedAt).toBe(lm('08:30') - 240)
+    expect(ev.givenEnd).toBe(false)
+  })
+
+  it('„byłem na prośbie”, gdy prośba po fakcie już obejmuje ten czas: druga się nie dopisuje', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    s.gap('08:40', '09:30')
+    leader(s, '09:05')
+    leader(s, '09:31')
+    const t = s.at('09:32')
+    const r = requestAction(s.stateAt(t), { a: 'requestAfter', request: 'r1', person: null, from: s.at('08:40'), to: s.at('09:30') }, t)
+    expect(r.ok).toBe(true)
+    if (r.ok) s.write(r.events, t)
+    answer(s, '09:35', 'request')
+    expect(s.state('09:36').facts.requests.map((x) => x.id)).toEqual(['r1'])
   })
 })
 

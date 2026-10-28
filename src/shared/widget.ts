@@ -39,6 +39,8 @@ export interface BarPending {
   button: string
   text: string
   until: number
+  /** A length of „Przedłuż”: steps of ±15 min stand beside it before the second click (T289). */
+  steps?: boolean
 }
 
 export interface WidgetView {

@@ -126,6 +126,17 @@ function explicitAnswers(grid: Grid, facts: DayFacts, events: readonly AnyEvent[
   return out
 }
 
+/**
+ * „Pracowałem do …” on the bar (D254, A1-12): the index a time to explain after a work block is answered „praca” up to
+ * – now while it goes on unanswered, its end once „Koniec pracy” answered it „odpoczynek”; null – none (after a project,
+ * after your own answer). After a passive block counted as a project it reads „Projekt do …”.
+ */
+export function workedUntilOf(x: Explain, now: number): number | null {
+  if (x.kind !== 'work') return null
+  if (x.to === OPEN) return !x.answer && now >= x.from ? now : null
+  return x.answer?.how === 'workEnd' ? x.to : null
+}
+
 /** The times to explain of a day, in the order of their start. */
 export function explainsOf(inp: ExplainInput): Explain[] {
   const { grid, facts, activity } = inp

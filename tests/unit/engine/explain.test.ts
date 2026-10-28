@@ -301,4 +301,57 @@ describe('„Pracowałem do teraz” w pasku (A1-12, D254)', () => {
     expect(after.explains[0]!.answer).toMatchObject({ cls: 'work', how: 'answer' })
     expect(hhmm(after, after.workEnd)).toBe('10:20')
   })
+
+  const viewAt = (s: Scenario, time: string) => {
+    const t = s.at(time)
+    const ctx = s.contextAt(t)
+    const st = s.stateAt(t)
+    const v = engineView({ ctx, state: st, energy: null, activity: activityOf(ctx.events, st.grid.start, t, 'pca'), now: t, name: () => 'Blok', care: { waterOn: false, waterEveryMin: 45, breakAfterMin: 0, solitudeAfterMin: 0 }, modePrefs: { sessionMode: true, classMode: true }, pending: null })
+    return { t, ctx, st, line: v.lines.find((l) => l.id.startsWith('workedUntil:')) }
+  }
+
+  it('po „Koniec pracy” (odpowiedź „odpoczynek”) linia „Pracowałem do <kliknięcie>” zamienia ją na „praca” do tej chwili (D254, przegląd 0.21.0)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).using('07:00', '23:00')
+    s.start('a', '08:00')
+    silentEnd(s, 'a', '09:00', 'twoQuestions', '10:00')
+    s.workEnd('10:20')
+    const { t, ctx, st, line } = viewAt(s, '10:25')
+    expect(line).toMatchObject({ text: 'Koniec pracy o 09:00', actions: [{ id: 'now', label: 'Pracowałem do 10:20' }] })
+    const r = timerAction(ctx, st, { a: 'workedUntil', explain: line!.id.slice('workedUntil:'.length) }, t)
+    expect(r.ok).toBe(true)
+    if (r.ok) s.write(r.events, t)
+    const after = s.state('10:30')
+    expect(after.explains[0]!.answer).toMatchObject({ cls: 'work', how: 'answer' })
+    expect(hhmm(after, after.explains[0]!.answer!.until)).toBe('10:20')
+    expect(hhmm(after, after.workEnd)).toBe('10:20')
+  })
+
+  it('kliknięcie z nieaktualnego paska po starcie innego bloku nic nie pisze (przegląd 0.21.0)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '10:15', min: 60 })] }).using('07:00', '23:00')
+    s.start('a', '08:00')
+    silentEnd(s, 'a', '09:00', 'twoQuestions', '10:00')
+    const id = viewAt(s, '10:05').line!.id.slice('workedUntil:'.length)
+    s.start('b', '10:15')
+    const { t, ctx, st, line } = viewAt(s, '10:30')
+    expect(line).toBeUndefined()
+    expect(timerAction(ctx, st, { a: 'workedUntil', explain: id }, t).ok).toBe(false)
+  })
+
+  it('po bloku pasywnym liczonym jak projekt: „Projekt do teraz” – odpowiedź „projekt”, koniec pracy zostaje końcem bloku (przegląd 0.21.0)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'w', cat: 'ogladanie', at: '18:00', min: 60 })] }).using('07:00', '23:00')
+    s.ran('a', '08:00', '09:00')
+    s.start('w', '18:00')
+    silentEnd(s, 'w', '19:00', 'twoQuestions', '19:30')
+    const { t, ctx, st, line } = viewAt(s, '19:40')
+    expect(line?.actions).toEqual([{ id: 'now', label: 'Projekt do teraz' }])
+    const r = timerAction(ctx, st, { a: 'workedUntil', explain: line!.id.slice('workedUntil:'.length) }, t)
+    expect(r.ok).toBe(true)
+    if (r.ok) s.write(r.events, t)
+    const after = s.state('19:45')
+    const x = after.explains.find((e) => e.block === 'w')!
+    expect(x.answer).toMatchObject({ cls: 'project', how: 'answer' })
+    // The end of work stays the work's own (09:00), now confirmed – the passive block is a project, never work.
+    expect(hhmm(after, after.workEnd)).toBe('09:00')
+    expect(after.ends.at(-1)?.confirmed).toBe(true)
+  })
 })

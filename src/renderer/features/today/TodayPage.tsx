@@ -363,8 +363,16 @@ function canStart(model: DayModel, id: string): boolean {
   return !f || (f.endedAt == null && !f.runs.some((r) => r.to === Number.POSITIVE_INFINITY))
 }
 
-/** „Start” from the block's panel: the main process writes it; a cost after the boundary asks the second click. */
-async function startBlock(model: DayModel, b: PlanBlock): Promise<void> {
+/** „Przesuń na teraz” (A1-04): the block's planned start at the whole minute of now – a day file keeps whole minutes only. */
+export function moveToNowPatch(date: string, now: number): { startMin: number; anchor: null } {
+  return { startMin: Math.floor(logicalMinuteOf(date, now)), anchor: null }
+}
+
+/**
+ * „Start” from the block's panel: the main process writes it; a cost after the boundary asks the second click. `move`
+ * – „Przesuń na teraz” may stand beside the cost (not again after the move itself).
+ */
+async function startBlock(model: DayModel, b: PlanBlock, move = true): Promise<void> {
   const date = model.date
   const block = b.id
   const failed = (e: unknown) => void toast(`Nie zaczęto bloku: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
@@ -373,17 +381,18 @@ async function startBlock(model: DayModel, b: PlanBlock): Promise<void> {
     if (r.confirm) {
       const c = r.confirm
       // The second shift before its time: „Przesuń na teraz” moves its planned time (the same length) and starts it
-      // without the cost (spec „Druga zmiana”, A1-04).
-      const move = c.moveToNow
-        ? {
-            label: 'Przesuń na teraz',
-            run: () =>
-              void patchDayBlock(date, model.data.dayFile, b, { startMin: logicalMinuteOf(date, Date.now()), anchor: null })
-                .then((out) => (isSaved(out) ? window.rd.timer({ a: 'start', block, day: date }) : null))
-                .catch(failed)
-          }
-        : undefined
-      toast(`${c.overrun ? 'Przekroczenie' : 'Przedłużenie'}: ${c.minutes} min${c.bedtime ? ' (pora snu się przesunie)' : ' z puli projektów'}`, 'info', 10_000, { label: 'Potwierdź', run: () => void window.rd.timer({ a: 'start', block, day: date, confirm: true }).catch(failed) }, move)
+      // without the cost (spec „Druga zmiana”, A1-04) – what that start says (a cost, why not) shows as from „Start”.
+      const moveNow =
+        c.moveToNow && move
+          ? {
+              label: 'Przesuń na teraz',
+              run: () =>
+                void patchDayBlock(date, model.data.dayFile, b, moveToNowPatch(date, Date.now()))
+                  .then((out) => (isSaved(out) ? startBlock(model, b, false) : undefined))
+                  .catch(failed)
+            }
+          : undefined
+      toast(`${c.overrun ? 'Przekroczenie' : 'Przedłużenie'}: ${c.minutes} min${c.bedtime ? ' (pora snu się przesunie)' : ' z puli projektów'}`, 'info', 10_000, { label: 'Potwierdź', run: () => void window.rd.timer({ a: 'start', block, day: date, confirm: true }).catch(failed) }, moveNow)
     } else if (!r.ok && r.why) toast(r.why, 'info')
   } catch (e) {
     failed(e)

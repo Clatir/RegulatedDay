@@ -10,7 +10,7 @@
  */
 import { questionsOf, type Question } from './engine/auto'
 import type { Activity } from './engine/activity'
-import { plannedSpan } from './engine/blocks'
+import { isBoundaryWork, plannedSpan } from './engine/blocks'
 import { answered, contactEnded, waterDue, workRunStart, type CareSettings } from './engine/care'
 import type { DayContext, DayState } from './engine/day'
 import type { EnergyState } from './engine/energy'
@@ -23,7 +23,8 @@ import { isRunningRequest } from './engine/requests'
 import { ritualDue } from './engine/ritual'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
-import { timerNow, type TimerNow } from './engine/timer'
+import { plannedEndOf, secondShiftStart, timerNow, type TimerNow } from './engine/timer'
+import { workedUntilOf } from './engine/explain'
 import type { PlanBlock } from './model/plan'
 import { ENGINE_TONE_SET, iconColor, toneColor, type Tone, type WarnStep } from './theme'
 import { NO_VARIANTS, type BarLine, type BarPending, type RunningRequest, type WidgetView } from './widget'
@@ -182,7 +183,7 @@ const NOT_EXTENDED_MIN = 30
  * - `notExtended:<id>` – a fixed block ended by its plan, within 30 min: „Nie przedłużono · Przedłuż” (D227);
  * - `workedUntil:<explain>` – time to explain after a work block now: „Koniec pracy o 17:30 · Pracowałem do teraz” (D254).
  */
-function dayLines(i: EngineInput, t: TimerNow, nameOf: (id: string) => string, clockOf: (ms: number) => string): BarLine[] {
+function dayLines(i: EngineInput, t: TimerNow, modes: Modes, nameOf: (id: string) => string, clockOf: (ms: number) => string): BarLine[] {
   const { state } = i
   const at = (idx: number) => atOf(state.grid, idx)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
@@ -192,29 +193,41 @@ function dayLines(i: EngineInput, t: TimerNow, nameOf: (id: string) => string, c
     return !f || (f.startedAt == null && f.parkedAt == null && f.cancelledAt == null)
   }
   const running = new Set([t.fg?.info.id, ...t.bg.map((b) => b.info.id)].filter((x): x is string => !!x))
-  // „Koniec pracy” clicked and no work running since – a fixed block of work later makes it a break, never a question.
-  const afterWorkEnd = state.facts.workEnds.length > 0 && !t.fg?.info.isWork
+  // The latest „Koniec pracy” (or „Pracowałem do …”) with no work begun since: the bar asks once – work that came back
+  // after it takes its lines away (spec „raz cicho pyta”).
+  const lastEnd = state.facts.workEnds.at(-1)
+  const workSince = lastEnd != null && state.blocks.some((b) => b.isWork && (fact(b.id)?.runs.some((r) => r.from >= lastEnd.at) ?? false))
+  const afterWorkEnd = lastEnd != null && !workSince && !t.fg?.info.isWork
+  const second = secondShiftStart(state)
   const out: BarLine[] = []
   for (const b of state.blocks) {
     if (!b.inPlan) continue
-    // Anchored to a block that ended (not to a session of the layer): its own moment came.
+    // Anchored to a block that ended (not to a session of the layer): its own moment came. It waits through a session or
+    // a class; its dot only while nothing runs, never in „mniej pytań” (D194).
     if (!b.waits && b.anchor && !b.anchor.startsWith('session:') && untouched(b.id) && fact(b.anchor)?.endedAt != null && !running.has(b.id)) {
-      out.push({ id: `anchor:${b.id}`, text: nameOf(b.id), actions: [{ id: 'start', label: 'Zacznij' }, { id: 'park', label: 'Zaparkuj' }, ...(b.isWork ? [{ id: 'workEnd', label: 'Koniec pracy' }] : [])], dot: true })
+      if (!modes.session && !modes.classMode)
+        out.push({ id: `anchor:${b.id}`, text: nameOf(b.id), actions: [{ id: 'start', label: 'Zacznij' }, { id: 'park', label: 'Zaparkuj' }, ...(b.isWork ? [{ id: 'workEnd', label: 'Koniec pracy' }] : [])], dot: !modes.fewer && !t.fg })
       continue
     }
     const span = plannedSpan(b, byId)
     if (!span) continue
-    // After „Koniec pracy”: a fixed block of work still ahead stays – or one click cancels it.
-    if (afterWorkEnd && (b.fixed || b.waits) && b.isWork && untouched(b.id) && state.now < span.start) out.push({ id: `fixedLeft:${b.id}`, text: `${nameOf(b.id)} o ${clockOf(at(span.start))} zostaje`, actions: [{ id: 'cancel', label: 'Odwołaj' }], dot: false })
-    // A fixed block ended by its plan: „Przedłuż” still possible for 30 min after its planned end.
+    // After „Koniec pracy”: a fixed block of work still ahead before the second shift – the one that makes the click a
+    // break (D216; never the second shift, a block after work or one that keeps regeneration) – stays, or one click
+    // cancels it.
+    if (afterWorkEnd && b.fixed && isBoundaryWork(b) && !state.asProject.includes(b.id) && span.start < second && untouched(b.id) && state.now < span.start)
+      out.push({ id: `fixedLeft:${b.id}`, text: `${nameOf(b.id)} o ${clockOf(at(span.start))} zostaje`, actions: [{ id: 'cancel', label: 'Odwołaj' }], dot: false })
+    // A fixed block – a session too (D227) – ended by its plan (with its confirmed extensions): „Przedłuż” still possible
+    // for 30 min after that end.
     const f = fact(b.id)
-    if (b.fixed && !b.waits && f?.endedAt != null && (f.endRule === 'plan' || f.endRule === 'fixedNoReaction') && state.now < span.end + NOT_EXTENDED_MIN)
+    if (b.fixed && f?.endedAt != null && (f.endRule === 'plan' || f.endRule === 'fixedNoReaction') && state.now < plannedEndOf(state, b, f) + NOT_EXTENDED_MIN)
       out.push({ id: `notExtended:${b.id}`, text: `${nameOf(b.id)} – nie przedłużono`, actions: [{ id: 'extend', label: 'Przedłuż' }], dot: false })
   }
-  // Time to explain after a work block, going on now: the end of work it starts from, „Pracowałem do teraz”.
+  // Time to explain after a work block: going on now – „Pracowałem do teraz”; answered „odpoczynek” by „Koniec pracy” –
+  // „Pracowałem do <its end>” while no work came since (D254); after a passive block counted as a project „Projekt do …”.
   for (const x of state.explains) {
-    if (x.kind !== 'work' || x.to !== OPEN || x.answer) continue
-    out.push({ id: `workedUntil:${x.id}`, text: `Koniec pracy o ${clockOf(at(x.blockEnd))}`, actions: [{ id: 'now', label: 'Pracowałem do teraz' }], dot: false })
+    const until = workedUntilOf(x, state.now)
+    if (until == null || (x.to !== OPEN && !afterWorkEnd)) continue
+    out.push({ id: `workedUntil:${x.id}`, text: `Koniec pracy o ${clockOf(at(x.blockEnd))}`, actions: [{ id: 'now', label: `${x.asProject ? 'Projekt do' : 'Pracowałem do'} ${x.to === OPEN ? 'teraz' : clockOf(at(until))}` }], dot: false })
   }
   return out
 }
@@ -297,7 +310,7 @@ export function engineView(i: EngineInput): WidgetView {
       if (!answered(events, id)) lines.push({ id, text: 'Po rozmowach – chwila samotności?', actions: [{ id: 'solitude', label: 'Chwila ciszy' }, { id: 'dismiss', label: 'Nie teraz' }], dot: false })
     }
     lines.push(...reserveLines(i, modes))
-    lines.push(...dayLines(i, t, nameOf, clockOf))
+    lines.push(...dayLines(i, t, modes, nameOf, clockOf))
   }
 
   const water = waterDue(events, state, t, now, i.care, { night: modes.night, disconnect: hidden })
