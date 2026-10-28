@@ -19,8 +19,9 @@
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. **Ciąg E (E8) zakończony – 1.0.0** (28.10): przegląd 5.1 (127 zgłoszeń, `docs/przeglad-E8.md` – wszystkie zamknięte),
-   decyzje D325–D331, wydania 0.16.0–0.22.0, potem PR-y #33 (0.23.0, scalony), #34 (0.24.0), #35 (0.25.0), 0.26.0 i
-   1.0.0 – scalane po kolei, gdy CI jest zielone (T525: wersja bez własnego wydania trafia do notatek następnej).
+   decyzje D325–D331, wydania 0.16.0–0.23.0 (v0.23.0 28.10 22:46); PR-y #34 (0.24.0) i #35 (0.25.0) scalone 28.10 ok.
+   22:58, #36 (0.26.0) i #37 (1.0.0) – scalane po kolei, gdy CI jest zielone (T525: wersja bez własnego wydania trafia do
+   notatek następnej).
    **Po scaleniu PR-u 1.0.0:** sprawdź, że runda `main` opublikowała v1.0.0 (`gh release view v1.0.0`); jeśli PR-y
    #34–#35 lub 0.26.0 / 1.0.0 nie są jeszcze scalone – `gh pr list`, scal po kolei przy zielonym CI.
 2. Ty: aktualizacja do 1.0.0 i odbiór według `docs/odbior.md` (E4b–E8k). Poprawki z odbioru – wersje 1.0.x (D324).
