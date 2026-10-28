@@ -47,8 +47,9 @@
   0.2.0–0.6.0 przeskoczone, więc E5.1 i E6a.1 tylko „dane całe”).
 
 ## Kolejka (według `docs/plan.md`, D317)
-1. Ciągi A i B zakończone (0.11.0 wydane 28.10 ok. 02:00). **Ciąg C w toku:** 0.12.0 scalone, wydanie czeka na PR
-   `claude/0.12.0-e2e-sesje` (T507); 0.13.0 („Dane”) na `claude/0.13.0-dane` – po wydaniu 0.12.0; potem ciąg D.
+1. Ciągi A i B zakończone (0.11.0 wydane 28.10 ok. 02:00). **Ciąg C w toku:** 0.12.0 z poprawką T507 scalone (PR #22,
+   28.10 ok. 07:55), wydanie z CI na `main` (run 40647006198) – sprawdzić; **0.13.0 („Dane”) – PR z
+   `claude/0.13.0-dane`**: po zielonym CI scalić i sprawdzić wydanie 0.13.0; potem ciąg D (ekrany gry, D322).
 2. Ty: odbiór według `docs/odbior.md`. Brama ciągu B przeszła: E4b.1–E4b.8 odebrane 27.10 ok. 23:35 z prośbą „przystąp
    do ciągu B → C → D”; E4b.10 (dźwięk) czeka, ciągu nie wstrzymuje.
 3. **Ciąg B → C → D jednym ciągiem (D317):** elementy E5 w pasku (D311–D313) → wydanie 0.11.0; ekrany E6 (D318–D321);
@@ -106,6 +107,23 @@
   w środę przed końcem sesji „Koniec pracy” jest przerwą (stała praca w planie), a blok testu trwał < 1 min – silnik
   gubił „Koniec pracy” bez minuty pracy (T507). Poprawka silnika i testu (bez sesji dnia) – PR `claude/0.12.0-e2e-sesje`,
   wersja dalej 0.12.0 (nie wyszła).
+- PR #22 (T507 po przeglądzie: pusty odcinek w kolejności czasu, „Odcinam się”; E2E próśb też bez sesji – w sesji
+  „Pilne” nie pyta o szacunek) scalony po trzech zielonych rundach CI.
+
+## 0.13.0 – Ustawienia → „Dane” (ciąg C, część 2)
+- Gałąź `claude/0.13.0-dane` (od 0.12.0, `main` wciągnięty po PR #22).
+- Zakres: eksport CSV za zakres dat (D300, data bez roku wstecz), kopie od najnowszej z „Wybrane rekordy…” (nazwy jak
+  w aplikacji, prośba z osobą i dniem dodania, wynik na rekord) i „Cały folder do nowego…”; baner „Dane przeniesiono
+  do … · Przejdź · Nie teraz” z widoku danych (D321); zmiana folderu jak w specyfikacji – nowy otwiera się, zanim stary
+  się zamknie, nieotwarty nowy czeka w „Dane” także po ponownym uruchomieniu, znacznik z drogą od starego folderu (T508);
+  kolejka edycji zwraca wynik każdego wpisu (`outcomeOf`).
+- Pytania z przeglądu (D323): CSV do folderu z poprzednim eksportem – pytanie „zastąpić?”; folder poza OneDrive –
+  ostrzeżenie i pytanie; „Nie teraz” na banerze – do ponownego uruchomienia.
+- `/code-review` (xhigh) dwa razy: 15 + 15 uwag, wszystkie poprawione z testami (w drugim m.in. zmiana folderu bez
+  zamykania starego, T507 w kolejności czasu, wynik kolejki, liczba mnoga, „czeka na pytanie”, błąd listy plików,
+  createdAt 0, podwójne kliknięcie, `RD_DATA_DIR` bez zapisu config.json).
+- Testy: 844 jednostkowe i plikowe; E2E lokalnie: `screens` 5/5, `smoke` 14/14, kreator (pełny przebieg naraz dławił
+  się zostawionymi procesami Electrona po przekroczeniach czasu – zatrzymywać je przed każdym przebiegiem).
 
 ## Praca 0 – gra raz na zmianę, sesje „było”, baner D316 (ciąg A, bez osobnego wydania)
 - Gałąź `claude/praca-0` od 27.10 ok. 23:30 (najpierw plan i D316–D322 – commit d4a56a5).
