@@ -19,10 +19,12 @@
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. **Ciąg E (E8) – w toku od 28.10:**
-   - 5.1 przegląd wieloagentowy (D309, T512) – **w toku, w tle** (Workflow w sesji z 28.10); wynik →
-     `docs/przeglad-E8.md`. Gdy sesja się urwie przed wynikiem, przegląd uruchomić od nowa (kod bez zmian od 2a3892b).
-   - Po przeglądzie: jedna runda pytań o zmiany widocznego zachowania; poprawki techniczne od razu; PR-y poprawek ciągiem,
-     każdy z wydaniem 0.16.0+ (bez pauz między PR-ami, D317).
+   - 5.1 przegląd wieloagentowy (D309, T512) – **zakończony** 28.10 ok. 12:40 (16 agentów, 67 min, 4,3 mln tokenów):
+     127 zgłoszeń – high 16 i medium 36 potwierdzonych, 5 obniżonych do low, 2 obalone, 68 low / nit bez weryfikacji;
+     critical brak. Pełny opis z weryfikacją → `docs/przeglad-E8.md` (Grep po numerze `A1-01`; pole `Status:`).
+   - Teraz: runda pytań o zmiany widocznego zachowania i zakres 1.0 (funkcje ze specyfikacji, których nie ma w kodzie –
+     m.in. komunikat rezerwy A2-01, odpowiedzi na nieobecność A1-09, druga zmiana A1-04, linie paska A1-12, rutyny
+     A6-10, usunięcie Próby A7-06). Potem PR-y poprawek ciągiem, każdy z wydaniem 0.16.0+ (bez pauz, D317).
    - 5.3 przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji.
    - 5.4 bramka 1.0 – bez czekania na Twój odbiór (D324).
 2. Ty: aktualizacja do 0.15.0 i odbiór według `docs/odbior.md` (nowe E5b–E7d; E4b.12 po poprawce, E4b.10 dźwięk). Odbiór
