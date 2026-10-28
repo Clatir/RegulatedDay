@@ -18,28 +18,23 @@
   cytowana w D150 i specyfikacji – zostaje w rejestrze.
 
 ## Kolejka (według `docs/plan.md`, D317)
-1. **Ciąg E (E8) – w toku od 28.10:**
-   - 5.1 przegląd wieloagentowy (D309, T512) – **zakończony** 28.10 ok. 12:40 (16 agentów, 67 min, 4,3 mln tokenów):
-     127 zgłoszeń – high 16 i medium 36 potwierdzonych, 5 obniżonych do low, 2 obalone, 68 low / nit bez weryfikacji;
-     critical brak. Pełny opis z weryfikacją → `docs/przeglad-E8.md` (Grep po numerze `A1-01`; pole `Status:`).
-   - Runda pytań zamknięta: D325 (wszystkie brakujące funkcje przed 1.0), D326 (komunikat rezerwy – linia w pasku),
-     D327 (bez folderu neutralny pasek), D328 (rutyny w pasku i „Dziś”), D329 (rytuał w dniu bez pracy), D330 (kopia
-     dnia także na dziś i minione z ostrzeżeniem); T513 (podział PR-ów, rozstrzygnięcia A3-10, A5-12, A7-13).
-   - PR-y ciągiem bez pauz (D317) według `docs/plan.md` 5.2a–5.2f: 0.16.0 i 0.17.0 wydane (v0.17.0 28.10 16:17);
-     0.18.0, 0.19.0 i 0.20.0 wydane (v0.20.0 28.10 19:25); 0.21.0 wydane (v0.21.0 20:42); 0.22.0 – PR #32 scalony
-     (19cdda3), wydanie z runu 40765911413; 0.23.0 – PR #33 (run 40766021468); 0.24.0 i 0.25.0 – gałęzie wypchnięte po
-     przeglądach, PR-y po kolei po scaleniu poprzedniego (w PR-ach CI Windows biegnie ~30 min; wieczorem tryb sesji);
-     **5.3**: 0.25.0 (gałąź `claude/0.25.0-brzegi`, logika i pomocnik) i 0.26.0 (`claude/0.26.0-ekrany`, ekrany) po
-     przeglądach; **teraz 5.4** (1.0).
-   - 5.3 przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji.
-   - 5.4 bramka 1.0 – bez czekania na Twój odbiór (D324).
-2. Ty: aktualizacja do 0.15.0 i odbiór według `docs/odbior.md` (nowe E5b–E7d; E4b.12 po poprawce, E4b.10 dźwięk). Odbiór
-   idzie dalej w wersjach 1.0.x (D324); poprawki z odbioru wchodzą między PR-y ciągu.
+1. **Ciąg E (E8) zakończony – 1.0.0** (28.10): przegląd 5.1 (127 zgłoszeń, `docs/przeglad-E8.md` – wszystkie zamknięte),
+   decyzje D325–D331, wydania 0.16.0–0.23.0 (v0.23.0 28.10 22:46); PR-y #34 (0.24.0) i #35 (0.25.0) scalone 28.10 ok.
+   22:58, #36 (0.26.0) i #37 (1.0.0) – scalane po kolei, gdy CI jest zielone (T525: wersja bez własnego wydania trafia do
+   notatek następnej).
+   **Po scaleniu PR-u 1.0.0:** sprawdź, że runda `main` opublikowała v1.0.0 (`gh release view v1.0.0`); jeśli PR-y
+   #34–#35 lub 0.26.0 / 1.0.0 nie są jeszcze scalone – `gh pr list`, scal po kolei przy zielonym CI.
+2. Ty: aktualizacja do 1.0.0 i odbiór według `docs/odbior.md` (E4b–E8k). Poprawki z odbioru – wersje 1.0.x (D324).
+3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Do odbioru na Windows
 - `docs/odbior.md` (układ z 27.10): na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
+
+## 1.0.0 – bramka 1.0 (ciąg E, 5.4)
+- Gałąź `claude/1.0.0` (od 0.26.0): wersja 1.0.0, CHANGELOG, T525, zakończone ciągi A–E w `docs/archiwum/plan-E0-E8.md`.
+  Bez kanału beta (D283) – wydania i tak są zwykłymi wydaniami GitHub; aplikacja pomija wersje testowe.
 
 ## 0.26.0 – brzegi przed 1.0, część 2: ekrany (ciąg E, 5.3)
 - Gałąź `claude/0.26.0-ekrany` (od 0.25.0 po przeglądzie) od 28.10 ok. 21:35.
