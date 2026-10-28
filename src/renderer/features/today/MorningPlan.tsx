@@ -20,8 +20,10 @@ import { dayFileFrom } from '@shared/model/plan'
 import { DEFAULT_ESTIMATE_MIN } from '@shared/model/requests'
 import { personName } from '@shared/model/rd'
 import { logicalMinuteOf } from '@shared/time/day'
-import { addDays } from '@shared/time/zone'
+import { addDays, weekday } from '@shared/time/zone'
 import { Segmented, cx } from '../../components/ui'
+import { CalibrationCard } from '../calibration/CalibrationEntry'
+import { SideBStep } from './SideBStep'
 import { editOf, logEvents, rawRecord, saveEdits, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
 import { blockName, type Names } from '../plan/blockView'
@@ -45,6 +47,8 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   const energyOn = names.rd.general.modules.energy
   const needCheckin = energyOn && model.energy.checkinAt == null
   const [skipCheckin, setSkipCheckin] = useState(false)
+  // On Monday „Strona B tygodnia” comes first (spec „Plan poranny”), until „Dalej” on any computer.
+  const sideB = weekday(model.date) === 1 && !model.dayFile?.asked.sideB
   return (
     <section className="rounded-lg border border-line bg-panel" data-testid="morning-plan">
       <button type="button" className="flex w-full items-center gap-2 px-4 py-2.5 text-left" onClick={() => setOpen(!open)}>
@@ -53,7 +57,11 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
         <span className="flex-1" />
         <span className="text-muted">{open ? '▴' : '▾'}</span>
       </button>
-      {open && <div className="flex flex-col gap-3 border-t border-line px-4 py-3">{needCheckin && !skipCheckin ? <Checkin model={model} onSkip={() => setSkipCheckin(true)} /> : <Plan model={model} names={names} />}</div>}
+      {open && (
+        <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
+          {sideB ? <SideBStep model={model} /> : needCheckin && !skipCheckin ? <Checkin model={model} onSkip={() => setSkipCheckin(true)} /> : <Plan model={model} names={names} />}
+        </div>
+      )}
     </section>
   )
 }
@@ -190,6 +198,7 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
 
   return (
     <div className="flex flex-col gap-3 text-[12.5px]" data-testid="morning-steps">
+      <CalibrationCard model={model} />
       {yesterday.length > 0 && (
         <Card>
           Z wczoraj: {yesterday.map((b) => blockName(b, names)).join(', ')} (+{durationLabel(yesterday.reduce((m, b) => m + b.durationMin, 0))})

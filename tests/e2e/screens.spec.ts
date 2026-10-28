@@ -64,6 +64,12 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
       await expect(page.getByTestId('morning-plan')).toBeVisible()
       await shot(page, 'e3-01-today')
+      // On Monday „Strona B tygodnia” comes first (spec „Plan poranny”): its table, then „Dalej”.
+      if (new Date(`${logicalToday()}T12:00:00Z`).getUTCDay() === 1) {
+        await expect(page.getByTestId('side-b')).toContainText('Dotrzymane granice')
+        await shot(page, 'e7-03-side-b')
+        await page.getByTestId('side-b-done').click()
+      }
       await page.getByTestId('checkin-skip').click()
       await expect(page.getByTestId('queue-pick')).toContainText('Mama')
       await page.getByTestId('boundary-approve').click()
@@ -363,6 +369,45 @@ test('gra (D322): „Passa · nuty” w nagłówku „Dziś”, świętowanie pa
       await expect(page.getByTestId('room-next')).toContainText('Następny: Roślina – pierwsze liście – jeszcze 19 nut')
       await expect(page.getByTestId('celebration')).toHaveCount(0)
       await shot(page, 'e7-01-room')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('kalibracja (D119): po okresie karta w planie porannym – „Nie teraz” liczy odroczenie; przegląd z Ustawień – „Zakończ przegląd”', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-calibration-'))
+  seed(dataDir, { sessions: false })
+  const today = logicalToday()
+  const day = (d: number) => new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)) + d)).toISOString().slice(0, 10)
+  const rdFile = join(dataDir, 'rd.json')
+  writeFileSync(rdFile, JSON.stringify({ ...JSON.parse(readFileSync(rdFile, 'utf8')), ritualFrom: day(-30), gameFrom: day(-30) }, null, 2))
+  // 14 ordinary days closed by the ritual, ended a week ago: the period is over, the review waits in the morning.
+  const lines = Array.from({ length: 14 }, (_, i) => JSON.stringify({ day: day(-20 + i), at: Date.now(), v: 2, how: 'ready', know: { seed: 10 }, missing: [], grade: { boundary: 'kept', closed: 'ritual', dayType: 'zwykly' } }))
+  for (const y of new Set(lines.map((l) => (JSON.parse(l) as { day: string }).day.slice(0, 4)))) {
+    mkdirSync(join(dataDir, 'grades', y), { recursive: true })
+    writeFileSync(join(dataDir, 'grades', y, 'seed.jsonl'), `${lines.filter((l) => l.includes(`"day":"${y}`)).join('\n')}\n`)
+  }
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  const review = () => (JSON.parse(readFileSync(rdFile, 'utf8')) as { calibrationReview?: { deferrals: number; reviewed: string | null } }).calibrationReview
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('morning-plan')).toBeVisible({ timeout: 30_000 })
+      if (new Date(`${today}T12:00:00Z`).getUTCDay() === 1) await page.getByTestId('side-b-done').click()
+      await page.getByTestId('checkin-skip').click()
+      await expect(page.getByTestId('calibration-card')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('calibration-later').click()
+      await expect(page.getByTestId('calibration-card')).toHaveCount(0)
+      await expect.poll(() => review()?.deferrals, { timeout: 15_000 }).toBe(1)
+      // The settings say where it is and open it.
+      await page.getByTestId('nav-settings').click()
+      await page.getByTestId('settings-calibration-open').click()
+      await expect(page.getByTestId('calibration-review')).toContainText('Za mało danych na propozycje')
+      await shot(page, 'e7-04-calibration')
+      await page.getByTestId('calibration-finish').click()
+      await expect.poll(() => review()?.reviewed, { timeout: 15_000 }).toBe(today)
+      await expect(page.getByTestId('calibration-state')).toContainText('Przegląd zrobiony')
     })
     expect(errors).toEqual([])
   } finally {

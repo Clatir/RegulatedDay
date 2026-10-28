@@ -10,7 +10,7 @@ import { newId } from '@shared/model/ids'
 import { DEFAULT_GENERAL, type ModuleId } from '@shared/model/rd'
 import type { DayTypeId } from '@shared/model/settings'
 import { addDays } from '@shared/time/zone'
-import { logEvents, saveRd, useData } from '../../store/data'
+import { isSaved, logEvents, saveRd, trySaveRd, useData } from '../../store/data'
 
 export type FromMode = 'tomorrow' | 'today' | 'date'
 
@@ -32,13 +32,22 @@ export async function saveSettings(patch: Record<string, unknown>, todayType: Da
   const today = useData.getState().view?.today
   if (!today) return
   const { from, at } = changeFrom(today)
+  await saveSettingsChange(patch, todayType, today, from, at)
+}
+
+/**
+ * A change of the dated shared settings from `from` (with `at` – „od dziś”, from that instant): true once saved. „Od
+ * dziś” also writes today's snapshot – only after the change itself was saved.
+ */
+export async function saveSettingsChange(patch: Record<string, unknown>, todayType: DayTypeId, today: string, from: string, at: number | null): Promise<boolean> {
   const made = Date.now()
-  await saveRd((raw) => {
+  const out = await trySaveRd((raw) => {
     const list = Array.isArray(raw.settings) ? raw.settings : []
     return { ...raw, settings: [...list, { id: newId(), from, at, made, patch }] }
   })
+  if (!isSaved(out)) return false
   // „Od dziś”: the rest of today counts by the new settings (the main process fills them in at the instant).
-  if (at != null) await logEvents([{ k: 'day.snapshot', day: today, at, dayType: todayType, reason: 'today' }])
+  return at == null || (await logEvents([{ k: 'day.snapshot', day: today, at, dayType: todayType, reason: 'today' }]))
 }
 
 /** A shared setting without a date (it works at once). */

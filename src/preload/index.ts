@@ -81,6 +81,8 @@ const api: RdApi = {
   moveTo: (dir) => ipcRenderer.invoke(CH.moveTo, dir),
   game: () => ipcRenderer.invoke(CH.game),
   celebrated: (keys) => ipcRenderer.invoke(CH.celebrated, keys),
+  sideB: () => ipcRenderer.invoke(CH.sideB),
+  calibration: () => ipcRenderer.invoke(CH.calibration),
   seen: (ids) => ipcRenderer.send(CH.seen, ids),
   onSound: (cb) => on('rd:sound', cb)
 }

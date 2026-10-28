@@ -10,14 +10,16 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { BackupRecord, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
+import type { BackupRecord, CalibrationScreen, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords } from '@shared/data/merge'
 import { classify, ID_COLLECTIONS, paths, SETTINGS_FILE, type IdKind } from '@shared/data/paths'
 import type { HolidayLookup } from '@shared/engine/createDay'
 import { CSV_HEADERS } from '@shared/engine/csv'
-import { WRITE_ONCE_FIELDS } from '@shared/model/rd'
+import { reviewPrompt } from '@shared/engine/calibration'
+import type { SideB } from '@shared/engine/sideB'
+import { KEPT_ON_RESTORE, rdFrom } from '@shared/model/rd'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
@@ -538,6 +540,28 @@ export class DataHub {
     return this.need().markCelebrated(keys)
   }
 
+  /** „Strona B tygodnia” of the week that ended (spec „Plan poranny”): its days and the week before, each as its grade counts it. */
+  sideB(): Promise<SideB> {
+    return this.need().sideB()
+  }
+
+  /**
+   * The calibration (spec „Kalibracja”): its period, the proposals of its review with the felt cost gathered, and where
+   * the review waits today – the morning plan, the settings after 3 × „Nie teraz” (D119), or nowhere.
+   */
+  async calibration(): Promise<CalibrationScreen> {
+    const f = this.need()
+    const c = await f.calibration()
+    // rd.json not readable now: its review's state is unknown – proposed nowhere (a review done would come back).
+    const raw = await f.recordView(SETTINGS_FILE).then(
+      (v) => ({ ok: true as const, v }),
+      () => ({ ok: false as const, v: undefined })
+    )
+    const review = rdFrom(raw.v).calibrationReview
+    const prompt = raw.ok ? reviewPrompt(c.period, logicalDayOf(f.clock.now()), { deferrals: review.deferrals, reviewed: review.reviewed != null }) : 'none'
+    return { ...c, prompt, ...review }
+  }
+
   /** Your answer to a question of the timer (its id names its day). */
   async answer(id: string, answer: string, value: number | null): Promise<TimerResult> {
     const r = await this.need().answer(id, answer, value)
@@ -622,9 +646,9 @@ export class DataHub {
   /** The edit that makes `rel` hold `value` again: the fields it differs in, or the record anew; null – the same already. */
   private async restoreEntry(rel: string, value: RawRecord): Promise<EditEntry | null> {
     const now = await this.need().recordView(rel)
-    // The days written once (the ritual's and the game's first, D320, T509): an older version of rd.json never takes
-    // them away (T504) – the game would start again and drop every day before.
-    if (rel === SETTINGS_FILE && now) for (const k of WRITE_ONCE_FIELDS) if (now[k] !== undefined && value[k] === undefined) value = { ...value, [k]: now[k] }
+    // The days written once (the ritual's and the game's first, D320, T509) and the review's state: an older version of
+    // rd.json never takes them away (T504) – the game would start again, a done review be proposed again.
+    if (rel === SETTINGS_FILE && now) for (const k of KEPT_ON_RESTORE) if (now[k] !== undefined && value[k] === undefined) value = { ...value, [k]: now[k] }
     const entry: EditEntry = now
       ? { rel, edits: diffRecords(now, value).map((c) => ({ path: c.path, base: c.before, value: c.after })) }
       : { rel, create: true, edits: Object.entries(value).map(([k, x]) => ({ path: [k], base: undefined, value: x })) }

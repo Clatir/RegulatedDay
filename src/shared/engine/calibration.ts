@@ -8,7 +8,7 @@
  * it waits in the settings. Pure.
  */
 import { POOLS, type Costs, type Pool } from '../model/categories'
-import { compareEvents, isKnown, type AnyEvent, type CloseHow, type EnergyEvent } from '../model/events'
+import { compareEvents, isKnown, type AnyEvent, type CloseHow, type EnergyEvent, type FeltCost } from '../model/events'
 import { templateVersionOn, type Template } from '../model/plan'
 import type { RulesSettings } from '../model/settings'
 import { addDays } from '../time/zone'
@@ -25,6 +25,9 @@ export const MIN_SAMPLES = 5
 export const MIN_COST_DAYS = 5
 /** After this many „Nie teraz” the morning plan stops asking (D119). */
 export const REVIEW_DEFERRALS = 3
+
+/** The felt cost the ritual gathered in the period (D319, spec „dodatkowe źródło”): by category, the days of each answer. */
+export type FeltCounts = Record<string, Record<FeltCost, number>>
 /** A signal is set against the blocks of at most this many minutes before it (since the anchor before it). */
 const ANCHOR_WINDOW_MIN = 180
 

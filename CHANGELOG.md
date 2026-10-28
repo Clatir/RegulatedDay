@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.0
+- „Strona B tygodnia”: w poniedziałek plan poranny zaczyna się od tabeli minionego tygodnia obok poprzedniego – „Odcinam się”, sygnały przeciążenia, dotrzymane granice, godziny projektów, przesunięcia pory snu z neutralną strzałką, a bez oceny: komputer po końcu pracy i po porze snu, regeneracja i prośby według osób. Dni z wyłączonym modułem mają „brak pomiaru”; dopóki niedziela nie jest zamrożona, tabela jest wstępna. „Dalej” przechodzi do pytań o objawy.
+- Przegląd kalibracji: dzień po okresie kalibracji plan poranny proponuje przegląd – „Otwórz przegląd · Nie teraz”; po trzecim „Nie teraz” przestaje pytać, a przegląd czeka w Ustawieniach → „Kalibracja” (tam też widać, ile dni okresu minęło). Przegląd pokazuje propozycje długości bloków i kosztów kategorii z odczuwanym kosztem z rytuału obok; każdą zatwierdzasz albo pomijasz osobno, zmiany obowiązują od dnia przeglądu.
+
 ## 0.14.0
 - Gra na ekranach: od jutra po instalacji tej wersji dni liczą się w grze – ta sama data na wszystkich Twoich komputerach. W nagłówku „Dziś” stoi „Passa 5 · 142 nuty · dziś +6 w toku”, a gdy dzisiejsze nuty rosną, na chwilę pojawia się „+3 ♪”. W pasku i ikonie nic z gry.
 - „Pokój” w menu bocznym: ilustracja lo-fi – okno z deszczem, biurko z lampką, roślina, która rośnie, płyty, plakaty i lampki odblokowywane nutami zamrożonych dni (pierwsza płyta przy 30 nutach), półka z kasetami. Pod nią następny element, statusy ostatnich dni i kasety zamkniętych tygodni w kolorze pory roku z ulubioną regeneracją i naklejką z nutą. Bez „Animacji” deszcz i światło lampki stoją.

@@ -313,6 +313,22 @@ describe('„Strona B tygodnia” i kalibracja z folderu', () => {
     expect((await m.folder.widgetModel()).energy.variants).toBe(false)
   })
 
+  it('odczuwany koszt z rytuału w kalibracji: ostatnia odpowiedź dnia dla każdej kategorii, dni każdej odpowiedzi (D319)', async () => {
+    mkdirSync(join(dataDir, 'grades', '2026'), { recursive: true })
+    const grade = (day: string) => `${JSON.stringify({ day, at: placeLogical(addDays(day, 2), 9 * 60), v: 1, how: 'ready', know: { pca: 100 }, missing: [], grade: { boundary: 'kept', closed: 'ritual', dayType: 'zwykly' } })}\n`
+    const days = ['2026-10-12', '2026-10-13']
+    writeFileSync(join(dataDir, paths.grades('2026', 'pca')), days.map(grade).join(''))
+    const felt = (d: string, n: number, feel: string) => line(d, 'pca', n, 'cost.felt', placeLogical(d, 21 * 60 + n), { dom: 'energy', category: 'analiza', feel })
+    for (const d of days) mkdirSync(join(dataDir, paths.logDir(d)), { recursive: true })
+    // The first day changed its mind: „lżej”, then „ciężej” – the last counts.
+    writeFileSync(join(dataDir, paths.log(days[0]!, 'pca')), felt(days[0]!, 0, 'lighter') + felt(days[0]!, 1, 'heavier'))
+    // The second day frozen after its „jak zwykle”: an answer that came after the freeze is outside it (z przeglądu).
+    const freeze = line(days[1]!, 'pca', 1, 'day.freeze', placeLogical(addDays(days[1]!, 2), 9 * 60), { dom: 'game', how: 'ready', know: { pca: 0 }, missing: [], grade: { boundary: 'kept', closed: 'ritual', dayType: 'zwykly' } })
+    writeFileSync(join(dataDir, paths.log(days[1]!, 'pca')), felt(days[1]!, 0, 'usual') + freeze + felt(days[1]!, 2, 'lighter'))
+    const m = await make('2026-10-01')
+    expect((await m.folder.calibration()).felt).toEqual({ analiza: { lighter: 0, usual: 1, heavier: 1 } })
+  })
+
   it('poza okresem kalibracji (przed pierwszym rytuałem) reakcje energii mają warianty', async () => {
     const m = await make('2026-10-01')
     expect((await m.folder.calibration()).period).toBeNull()

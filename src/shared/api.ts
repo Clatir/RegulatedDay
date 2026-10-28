@@ -2,7 +2,9 @@
  * The contract between the main process and the windows (preload `window.rd`). Every channel name lives here; the
  * main process answers `invoke` channels and pushes the `on*` events.
  */
+import type { CalibrationPeriod, CostProposal, FeltCounts, ReviewPrompt, TimeProposal } from './engine/calibration'
 import type { Celebration, GameView } from './engine/progress'
+import type { SideB } from './engine/sideB'
 import type { RitualValue, RitualView } from './engine/ritual'
 import type { CloseHow } from './model/events'
 import type { IdentityKind } from './identity'
@@ -72,12 +74,30 @@ export const CH = {
   restoreWhole: 'rd:restoreWhole',
   moveTo: 'rd:moveTo',
   game: 'rd:game',
-  celebrated: 'rd:celebrated'
+  celebrated: 'rd:celebrated',
+  sideB: 'rd:sideB',
+  calibration: 'rd:calibration'
 } as const
 
 /** The game for the window (D322): its view and the full-screen celebrations not shown on this computer yet. */
 export interface GameScreen extends GameView {
   due: Celebration[]
+}
+
+/**
+ * The calibration for the window (spec „Kalibracja”): its period, the review's proposals, the felt cost gathered, where
+ * the review waits today and its state in rd.json (D119).
+ */
+export interface CalibrationScreen {
+  period: CalibrationPeriod | null
+  time: TimeProposal[]
+  costs: CostProposal[]
+  felt: FeltCounts
+  prompt: ReviewPrompt
+  deferrals: number
+  reviewed: string | null
+  /** The proposals approved so far (`proposalKey`): shown as done, never offered again. */
+  applied: string[]
 }
 
 /** A day the morning shows to close: your presence that day, and its ritual (the effect of „Jak zapisano”, its rows). */
@@ -474,6 +494,10 @@ export interface RdApi {
   game(): Promise<GameScreen | null>
   /** Celebrations shown (or let go) in the main window – never again on this computer. */
   celebrated(keys: string[]): Promise<void>
+  /** „Strona B tygodnia” of the week that ended (Monday's morning plan). */
+  sideB(): Promise<SideB>
+  /** The calibration: period, proposals of the review, felt cost, where the review waits. */
+  calibration(): Promise<CalibrationScreen>
   /** The window of sound: a tone to play (5 min, 0 min). */
   onSound(cb: (s: { kind: 'five' | 'zero'; volume: number }) => void): () => void
 }

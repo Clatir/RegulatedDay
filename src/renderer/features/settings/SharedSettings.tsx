@@ -16,7 +16,7 @@ import { addDays } from '@shared/time/zone'
 import { Choice, ClockField, DateField, TextField } from '../../components/fields'
 import { Field, Section, Segmented, Toggle, cx } from '../../components/ui'
 import { useData } from '../../store/data'
-import { countDay, useDay } from '../../store/day'
+import { countDay, dayTypeNow, useDay } from '../../store/day'
 import { SettingNumber } from './SettingNumber'
 import { saveGeneral, saveSettings, setModule, useSettingsFrom, type FromMode } from './settingsStore'
 
@@ -30,7 +30,7 @@ export function useShared(): { s: RulesSettings; today: string; save: (patch: Re
   const mode = useSettingsFrom((x) => x.mode)
   const date = useSettingsFrom((x) => x.date)
   const model = useDay(today)
-  const todayType = (model?.state.facts.snapshots.at(-1)?.dayType ?? model?.snapshot.dayType ?? 'zwykly') as DayTypeId
+  const todayType = dayTypeNow(model)
   const s = useMemo(() => {
     const f = mode === 'today' ? { from: today, at: Date.now() } : mode === 'date' && date && date > today ? { from: date, at: null } : { from: addDays(today, 1), at: null }
     return settingsOn(rd.settings, f.from, f.at)

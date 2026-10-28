@@ -84,7 +84,16 @@ export interface RdFile {
    * written once by the leader; earlier days are outside the game. Null: no game yet.
    */
   gameFrom: string | null
+  /**
+   * The review of the calibration (spec „Kalibracja”, D119): how many times „Nie teraz” put it off (from the third on
+   * the morning stops asking – it waits in the settings), the day it was done (null – not yet) and the proposals
+   * approved so far (`proposalKey` – a review opened again never takes one in twice).
+   */
+  calibrationReview: { deferrals: number; reviewed: string | null; applied: string[] }
 }
+
+/** The key of a proposal of the review: its kind, category and variant – the same when counted again on the changed values. */
+export const proposalKey = (kind: 'time' | 'cost', category: string, variant: string | null = null): string => `${kind}:${category}:${variant ?? ''}`
 
 /**
  * rd.json's days written once by the leader (D320, T509): the ritual's and the game's first day. Never taken away – also
@@ -92,6 +101,12 @@ export interface RdFile {
  */
 export const WRITE_ONCE_FIELDS = ['ritualFrom', 'gameFrom'] as const
 export type WriteOnceField = (typeof WRITE_ONCE_FIELDS)[number]
+
+/**
+ * rd.json's fields a restore of an older version never takes away: the days written once and the state of the
+ * calibration's review (a review done, or put off three times, would be proposed again).
+ */
+export const KEPT_ON_RESTORE = [...WRITE_ONCE_FIELDS, 'calibrationReview'] as const
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const intIn = (v: unknown, [min, max]: readonly [number, number], fallback: number): number =>
@@ -166,7 +181,17 @@ export function rdFrom(v: unknown): RdFile {
     people: peopleFrom(r.people),
     setup,
     ritualFrom: isIsoDate(r.ritualFrom) ? r.ritualFrom : null,
-    gameFrom: isIsoDate(r.gameFrom) ? r.gameFrom : null
+    gameFrom: isIsoDate(r.gameFrom) ? r.gameFrom : null,
+    calibrationReview: calibrationReviewFrom(r.calibrationReview)
+  }
+}
+
+export function calibrationReviewFrom(v: unknown): RdFile['calibrationReview'] {
+  const r = isPlain(v) ? v : {}
+  return {
+    deferrals: typeof r.deferrals === 'number' && Number.isInteger(r.deferrals) && r.deferrals >= 0 ? r.deferrals : 0,
+    reviewed: isIsoDate(r.reviewed) ? r.reviewed : null,
+    applied: Array.isArray(r.applied) ? r.applied.filter((x): x is string => typeof x === 'string') : []
   }
 }
 
