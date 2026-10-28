@@ -4,7 +4,7 @@
  * leader's tasks only while it lasts, the observation after a sleep, the queue held by an antivirus, the gate of minutes
  * with a lost copy of a derived event, and one pass of writes per check.
  */
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -17,6 +17,7 @@ import { addDays } from '@shared/time/zone'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
 import { EditQueue } from '../../src/main/data/editQueue'
+import type { RecordStore } from '../../src/main/data/records'
 import { EventLog } from '../../src/main/data/eventLog'
 import { EventClock } from '@shared/data/clock'
 
@@ -123,6 +124,98 @@ describe('folder danych', () => {
     expect(events().some((e) => e.k === 'day.create')).toBe(true)
   })
 
+  it('folder danych znika w trakcie pracy: nic nie powstaje w jego miejscu, zapisy czekają i wracają z folderem (A3-01)', async () => {
+    const f = await make()
+    await f.advance(2)
+    rmSync(dataDir, { recursive: true, force: true })
+    const r = await f.advance(3)
+    expect(r.problems.some((p) => p.startsWith('folder danych niedostępny'))).toBe(true)
+    expect(r.settled).toBe(false)
+    expect(existsSync(dataDir)).toBe(false)
+    // Back (restored from the bin): the events written meanwhile reach it.
+    mkdirSync(dataDir, { recursive: true })
+    await f.advance(1)
+    expect(events().some((e) => e.k === 'observe.alive' && (e as { at: number }).at > f.now - 3 * 60_000)).toBe(true)
+  })
+
+  it('ucięta ostatnia linia dziennika (twarde wyłączenie) nie zabiera pierwszego zdarzenia po starcie (A3-12)', async () => {
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(join(stateDir, 'journal.v1.jsonl'), '{"id":"pca-0","c":"pca","n":0,"t":1')
+    await make()
+    expect(EventLog.readJournal(stateDir).events.some((e) => e.k === 'observe.from')).toBe(true)
+  })
+
+  it('obecność po ponownym uruchomieniu znów podaje ostatnie zdarzenie dni sprzed niego (A8-06)', async () => {
+    const f = await make()
+    const yesterday = addDays(DAY, -1)
+    const e = f.folder.append({ day: yesterday, dom: 'meta', k: 'observe.alive', at: placeLogical(yesterday, 23 * 60) })
+    await f.advance(2)
+    const again = await make({ at: '11:00' })
+    expect(again.folder.presence.own.lastEvents[yesterday]).toBe(e.n)
+  })
+
+  it('kopia konfliktowa rekordu usuniętego celowo nie przywraca go po cichu – jej treść idzie do historii (A3-11)', async () => {
+    const f = await make()
+    const rel = paths.record('request', 'r1')
+    await f.folder.edit([{ rel, create: true, edits: [{ path: ['id'], base: undefined, value: 'r1' }, { path: ['title'], base: undefined, value: 'zakupy' }] }])
+    await f.advance(1)
+    await f.folder.edit([{ rel, remove: true, edits: [] }])
+    await f.advance(1)
+    expect(existsSync(join(dataDir, rel))).toBe(false)
+    writeFileSync(join(dataDir, 'requests', 'r1-LAPTOP.json'), JSON.stringify({ id: 'r1', title: 'zakupy i apteka' }))
+    await f.advance(2)
+    expect(existsSync(join(dataDir, rel))).toBe(false)
+    expect(existsSync(join(dataDir, 'requests', 'r1-LAPTOP.json'))).toBe(false)
+    expect((await f.folder.history.list('request', 'r1')).some((s) => s.reason === 'conflict' && (s.record as { title: string }).title === 'zakupy i apteka')).toBe(true)
+    // A second copy coming later finds the deletion still (the first copy's version in the history does not count).
+    writeFileSync(join(dataDir, 'requests', 'r1-LAPTOP2.json'), JSON.stringify({ id: 'r1', title: 'zakupy, apteka i poczta' }))
+    f.now += 61_000
+    await f.advance(1)
+    expect(existsSync(join(dataDir, rel))).toBe(false)
+  })
+
+  it('stare zdarzenie innego komputera z zegara, który był rok z przodu, nie wstrzymuje zadań, gdy jego nowsze są zgodne', async () => {
+    const f = await make()
+    mkdirSync(join(dataDir, paths.logDir(DAY)), { recursive: true })
+    const far = f.now + 365 * 24 * 3_600_000
+    const line = (n: number, t: number) => eventLine({ id: `pcb-${n}`, c: 'pcb', n, t, l: Math.max(far, t) + n, v: 1, day: DAY, dom: 'meta', k: 'observe.alive', at: t } as unknown as AnyEvent)
+    appendFileSync(join(dataDir, paths.log(DAY, 'pcb')), line(0, far) + line(1, f.now))
+    const r = await f.advance(5)
+    expect(r.problems.some((p) => p.startsWith('zegar'))).toBe(false)
+    expect(events().some((e) => e.k === 'day.create')).toBe(true)
+  })
+
+  it('nowy rekord nad uszkodzonym plikiem: komunikat mówi, że trzeba go przywrócić z Historii (A3-18)', async () => {
+    mkdirSync(join(dataDir, 'days', '2026'), { recursive: true })
+    writeFileSync(join(dataDir, paths.day('2026-11-03')), '{"schema":1,')
+    const f = await make()
+    await expect(f.folder.edit([{ rel: paths.day('2026-11-03'), create: true, edits: [{ path: ['date'], base: undefined, value: '2026-11-03' }] }])).rejects.toThrow('uszkodzony')
+  })
+
+  it('dni zapisywane raz od dwóch prowadzących (kopia konfliktowa rd.json): wcześniejszy wygrywa bez pytania (A3-10)', async () => {
+    writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, settings: [], gameFrom: '2026-11-16', note: 'a' }))
+    writeFileSync(join(dataDir, 'rd-LAPTOP.json'), JSON.stringify({ schema: 1, settings: [], gameFrom: '2026-11-15', note: 'a' }))
+    const f = await make()
+    await f.advance(1)
+    expect(f.folder.copyConflicts.size).toBe(0)
+    expect(JSON.parse(readFileSync(join(dataDir, paths.settings), 'utf8')).gameFrom).toBe('2026-11-15')
+    expect(existsSync(join(dataDir, 'rd-LAPTOP.json'))).toBe(false)
+  })
+
+  it('własny zegar rok do przodu i z powrotem: zegar logiczny wraca, zadania prowadzącego nie stają (A8-01)', async () => {
+    const f = await make()
+    const right = f.now
+    f.now = right + 365 * 24 * 3_600_000
+    f.folder.clock.rebase()
+    f.folder.append({ day: DAY, dom: 'meta', k: 'observe.alive', at: f.now })
+    f.now = right
+    f.folder.clock.rebase()
+    const r = await f.advance(5)
+    expect(r.problems.some((p) => p.startsWith('zegar'))).toBe(false)
+    expect(events().some((e) => e.k === 'day.create')).toBe(true)
+    expect(f.folder.log.ownEvents(DAY).at(-1)!.l).toBeLessThan(right + 24 * 3_600_000)
+  })
+
   it('obserwacja po uśpieniu: koniec przy uśpieniu, początek po wybudzeniu – raz, którakolwiek droga powie pierwsza', async () => {
     const f = await make()
     f.folder.suspend()
@@ -169,6 +262,45 @@ describe('kolejka edycji zablokowana przy starcie', () => {
     q.load()
     expect(q.pending.map((e) => e.id)).toEqual(['e1', 'e2'])
     expect(JSON.parse(readFileSync(join(stateDir, 'queue.v1.json'), 'utf8')).entries.map((e: { id: string }) => e.id)).toEqual(['e1', 'e2'])
+  })
+
+  it('łączenie kopii konfliktowej idzie po przebiegu kolejki – nigdy między jego odczytem a zapisem (A3-03)', async () => {
+    mkdirSync(stateDir, { recursive: true })
+    const q = new EditQueue({ stateDir, computer: 'pca' })
+    q.load()
+    const order: string[] = []
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const records = {
+      read: async () => {
+        order.push('kolejka: odczyt')
+        await gate
+        order.push('kolejka: zapis')
+        return { status: 'missing' }
+      },
+      write: async () => undefined,
+      remove: async () => undefined
+    } as unknown as RecordStore
+    q.add({ id: 'e1', rel: 'requests/r.json', at: 1, schema: 1, create: true, edits: [{ path: ['id'], base: undefined, value: 'r' }] })
+    const a = q.apply(records)
+    const b = q.exclusive(async () => void order.push('kopia'))
+    await new Promise((r) => setTimeout(r, 10))
+    release()
+    await Promise.all([a, b])
+    expect(order).toEqual(['kolejka: odczyt', 'kolejka: zapis', 'kopia'])
+  })
+
+  it('wpis, którego nie udało się zapisać, nie zostaje w pamięci – nic go nie zapisze później (A3-15)', () => {
+    mkdirSync(stateDir, { recursive: true })
+    const q = new EditQueue({ stateDir, computer: 'pca' })
+    q.load()
+    // The queue's file is a folder: the write fails (not a lock – no retry).
+    mkdirSync(join(stateDir, 'queue.v1.json'))
+    expect(() => q.add({ id: 'e1', rel: 'templates/t.json', at: 1, schema: 1, edits: [{ path: ['name'], base: 'a', value: 'b' }] })).toThrow()
+    expect(q.pending).toEqual([])
+    // A save of several records is one write: none of them stays behind.
+    expect(() => q.add({ id: 'e2', rel: 'templates/t.json', at: 2, schema: 1, edits: [] }, { id: 'e3', rel: 'rd.json', at: 2, schema: 1, edits: [] })).toThrow()
+    expect(q.pending).toEqual([])
   })
 })
 

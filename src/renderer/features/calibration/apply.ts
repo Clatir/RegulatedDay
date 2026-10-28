@@ -49,7 +49,7 @@ export async function applyTime(p: TimeProposal, templates: readonly Template[],
     if (!t) return null
     const rel = paths.record('template', id)
     const before = rawRecord(rel)
-    return editOf(rel, before, { ...(before ?? {}), ...templateJson(templateWithTimes(t, changes, today)) })
+    return editOf(rel, before, templateJson(templateWithTimes(t, changes, today), before))
   })
   return isSaved(await trySaveEdits(edits)) && remember(proposalKey('time', p.category))
 }

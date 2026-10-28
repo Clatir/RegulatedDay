@@ -29,6 +29,11 @@ export interface MachineConfig {
   updates: {
     /** The version that ran here last: „Co nowego” after an update. */
     lastRunVersion: string | null
+    /**
+     * The version that last opened the data folder here, after its backup before an update (A3-17): a newer one makes
+     * that backup until a session of it opens the folder (null: written before 0.17.0 – `lastRunVersion` stands in).
+     */
+    dataVersion: string | null
     /** Automatic installation at night (on by default, spec „Aktualizacja instaluje się”). */
     nightInstall: boolean
   }
@@ -41,7 +46,7 @@ export const DEFAULT_CONFIG: MachineConfig = {
   prefs: DEFAULT_MACHINE_PREFS,
   autostart: { enabled: false },
   dataFolder: null,
-  updates: { lastRunVersion: null, nightInstall: true }
+  updates: { lastRunVersion: null, dataVersion: null, nightInstall: true }
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -68,6 +73,7 @@ export function configFrom(raw: unknown): MachineConfig {
     dataFolder: typeof r.dataFolder === 'string' && r.dataFolder.trim() ? r.dataFolder : null,
     updates: {
       lastRunVersion: typeof updates.lastRunVersion === 'string' ? updates.lastRunVersion : null,
+      dataVersion: typeof updates.dataVersion === 'string' ? updates.dataVersion : null,
       nightInstall: typeof updates.nightInstall === 'boolean' ? updates.nightInstall : DEFAULT_CONFIG.updates.nightInstall
     }
   }

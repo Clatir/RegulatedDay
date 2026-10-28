@@ -4,9 +4,11 @@
  * every level (FI dropped them), the file has a format number, and the computer's id lives in its own file – an
  * unreadable config.json never makes a new one.
  */
+import { execFile } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { DEFAULT_CONFIG, configFrom, mergePreserving, type MachineConfig } from '@shared/config'
 import { withRetry, writeFileAtomic } from './datastore/atomic'
 
@@ -145,23 +147,71 @@ function withValueAt(obj: unknown, path: readonly string[], value: unknown): unk
 /**
  * This computer's id (spec „Kilka komputerów”): a random id in its own file in the app data, with a copy in config.json.
  * The file missing, the copy restores it; both missing, a new id. A file that cannot be read now is read again – it never
- * makes a new id (the computer would turn into another one for the others).
+ * makes a new id (the computer would turn into another one for the others). The file keeps Windows' own id of the
+ * computer it was made on: another one there (the app data copied from another computer) makes a new id – the old one is
+ * that computer's (`copiedFrom`, spec „Obecność zapisuje też identyfikator Windows komputera”, A3-05).
  */
-export async function computerId(userDataDir: string, copy: string | null): Promise<{ id: string; created: boolean }> {
+export async function computerId(userDataDir: string, copy: string | null, windowsId: string | null = null): Promise<{ id: string; created: boolean; copiedFrom: string | null }> {
   const file = join(userDataDir, 'computer-id')
+  const write = (id: string) => writeFileAtomic(file, `${JSON.stringify(windowsId ? { id, windowsId } : { id }, null, 2)}\n`)
+  let parsed: { id?: unknown; windowsId?: unknown } | null = null
   try {
-    const text = (await withRetry(() => fs.readFile(file, 'utf8'), 20)).trim()
-    const id = (JSON.parse(text) as { id?: unknown }).id
-    if (typeof id === 'string' && /^[0-9a-z]{8,64}$/i.test(id)) return { id, created: false }
+    parsed = JSON.parse((await withRetry(() => fs.readFile(file, 'utf8'), 20)).trim()) as { id?: unknown; windowsId?: unknown }
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code
     // There but not readable (EBUSY after the retries): the copy, never a new id.
     if (code && code !== 'ENOENT') {
-      if (copy) return { id: copy, created: false }
+      if (copy) return { id: copy, created: false, copiedFrom: null }
       throw e
     }
   }
-  const id = copy ?? randomBytes(10).toString('hex')
-  await writeFileAtomic(file, `${JSON.stringify({ id }, null, 2)}\n`)
-  return { id, created: !copy }
+  const id = parsed?.id
+  if (typeof id === 'string' && /^[0-9a-z]{8,64}$/i.test(id)) {
+    const was = typeof parsed!.windowsId === 'string' ? parsed!.windowsId : null
+    // Another computer's (a write that fails throws – never the other one's id again with nothing said).
+    if (windowsId && was && was !== windowsId) return renewComputerId(userDataDir, windowsId, id)
+    // Made before the id was kept: it is this computer's from now on.
+    if (windowsId && !was) await write(id).catch(() => undefined)
+    return { id, created: false, copiedFrom: null }
+  }
+  const fresh = copy ?? randomBytes(10).toString('hex')
+  await write(fresh)
+  return { id: fresh, created: !copy, copiedFrom: null }
+}
+
+/** A new id for this computer, its old one being another computer's (`from`); a write that fails throws. */
+export async function renewComputerId(userDataDir: string, windowsId: string | null, from: string): Promise<{ id: string; created: boolean; copiedFrom: string }> {
+  const id = randomBytes(10).toString('hex')
+  await writeFileAtomic(join(userDataDir, 'computer-id'), `${JSON.stringify(windowsId ? { id, windowsId } : { id }, null, 2)}\n`)
+  return { id, created: true, copiedFrom: from }
+}
+
+/**
+ * Windows' id the data folder's presence of `computer` names (spec: „gdy się nie zgadza … nowy identyfikator”): a profile
+ * copied before 0.17.0 has no id of its own to compare – the presence its first computer wrote tells. null: none.
+ */
+export async function presenceWindowsId(dataDir: string, computer: string): Promise<string | null> {
+  try {
+    const v = JSON.parse(await fs.readFile(join(dataDir, '.presence', `${computer}.json`), 'utf8')) as { windowsId?: unknown }
+    return typeof v.windowsId === 'string' ? v.windowsId : null
+  } catch {
+    return null
+  }
+}
+
+/** Windows' own id of this computer (MachineGuid); null off Windows or when it cannot be read. */
+export async function windowsMachineId(): Promise<string | null> {
+  if (process.platform !== 'win32') return null
+  try {
+    const { stdout } = await promisify(execFile)('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'], { timeout: 5_000, windowsHide: true })
+    return machineGuidOf(stdout)
+  } catch {
+    return null
+  }
+}
+
+/** The MachineGuid in the output of `reg query`. */
+export function machineGuidOf(output: string): string | null {
+  const m = /MachineGuid\s+REG_SZ\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(output)
+  return m ? m[1]!.toLowerCase() : null
 }

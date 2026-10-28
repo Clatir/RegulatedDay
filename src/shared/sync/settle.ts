@@ -20,6 +20,13 @@ export class Settle {
   private oneDriveSince: number | null = null
 
   begin(reason: SettleReason, now: number): void {
+    // A lighter reason never shortens a heavier one under way (the network back during the settling after a wake): the
+    // folder is scanned and kept quiet again, the rest stays.
+    if (this.since != null && (this.reason === 'start' || this.reason === 'wake') && (reason === 'lock' || reason === 'network')) {
+      this.lastChange = now
+      this.scanned = false
+      return
+    }
     this.since = now
     this.reason = reason
     this.lastChange = now

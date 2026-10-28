@@ -56,10 +56,11 @@ import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { EditQueue, type Outcome, type QueuedEdit } from './editQueue'
 import { EventLog, type DayRead, type EventDraft } from './eventLog'
-import type { DataFs } from './fsio'
+import { rootGuarded, type DataFs } from './fsio'
 import { RecordHistory } from './history'
 import { PresenceStore } from './presenceStore'
 import { RecordStore } from './records'
+import { mapLimit } from '../datastore/concurrency'
 
 export const OBSERVE_EVERY_MS = 5 * 60_000
 
@@ -85,6 +86,8 @@ export const JOURNAL_KEEP_DAYS = 14
 const COMPACT_EVERY_MS = 60 * 60_000
 /** Conflict copies of the records are looked for this often (and at the first check). */
 const COPY_SCAN_MS = 60_000
+/** Files of a folder of records read side by side (A3-08). */
+const DIR_CONCURRENCY = 16
 /**
  * Days back the leader looks for one to freeze: 72 h after a day's end reaches four of them, but every computer may be
  * off for weeks – a day frozen is remembered and not read again.
@@ -214,6 +217,13 @@ export class DataFolder {
   private current: string | null = null
   private peers: Peer[] = []
   private lastObserve = 0
+  /** The data folder's root was gone at the last check (it is unsettled again when it comes back). */
+  private rootGone = false
+
+  /** The data folder is not there now (the leader does nothing of its own meanwhile – the bar's notifications neither). */
+  get unavailable(): boolean {
+    return this.rootGone
+  }
   private readonly firstPresence = new Set<string>()
   private readonly cache = new Map<string, { size: number; mtimeMs: number; value: unknown }>()
   private lastSeenPeers = new Map<string, number>()
@@ -282,7 +292,7 @@ export class DataFolder {
 
   /** Opens the folder: the journal and the queue, the observation's start (and the end a crash left unwritten). */
   static async open(o: FolderOptions): Promise<DataFolder> {
-    const f = new DataFolder(o)
+    const f = new DataFolder({ ...o, fs: rootGuarded(o.fs, o.dataDir) })
     f.log.open()
     f.queue.load()
     const now = f.clock.now()
@@ -301,11 +311,21 @@ export class DataFolder {
    * folder, a reinstall): the numbers go on after the highest – an id never repeats, a number never goes back.
    */
   private async continueOwnNumbers(today: string): Promise<void> {
+    // The presence names the last event of each day again (its logs, the journal's events not there yet): after a restart
+    // a freeze still waits for this computer's log of a day that has not reached the others (spec „.presence”, A8-06).
+    const last: Record<string, number> = {}
     for (let i = 0; i <= JOURNAL_KEEP_DAYS; i++) {
-      const bytes = await this.o.fs.read(join(this.o.dataDir, paths.log(addDays(today, -i), this.o.computer))).catch(() => null)
+      const day = addDays(today, -i)
+      const bytes = await this.o.fs.read(join(this.o.dataDir, paths.log(day, this.o.computer))).catch(() => null)
+      for (const e of this.log.ownEvents(day)) last[day] = Math.max(last[day] ?? -1, e.n)
       if (!bytes) continue
-      for (const e of readLogText(bytes.toString('utf8')).events) if (e.c === this.o.computer) this.clock.continueAfter(e.n, e.l)
+      for (const e of readLogText(bytes.toString('utf8')).events) {
+        if (e.c !== this.o.computer) continue
+        this.clock.continueAfter(e.n, e.l)
+        last[e.day] = Math.max(last[e.day] ?? -1, e.n)
+      }
     }
+    if (Object.keys(last).length) this.presence.update({ lastEvents: { ...last, ...this.presence.own.lastEvents } })
   }
 
   /** A new event of this computer; the presence names its last event of the day. */
@@ -416,18 +436,22 @@ export class DataFolder {
     }
     const rels = new Set(names.map((n) => `${dir}/${n}`))
     if (own) for (const rel of this.queue.relsUnder(dir)) rels.add(rel)
-    const out: unknown[] = []
-    for (const rel of [...rels].sort()) {
+    const list = [...rels].sort().filter((rel) => {
       const c = classify(rel)
-      if (!c || c.conflict) continue
-      let raw: unknown
+      return !!c && !c.conflict
+    })
+    // Thousands of requests after years: their files are looked at side by side, not one after another (A3-08).
+    const raws = await mapLimit(list, DIR_CONCURRENCY, async (rel) => {
       try {
-        raw = own ? await this.recordView(rel) : await this.shared(rel)
+        return own ? await this.recordView(rel) : await this.shared(rel)
       } catch (e) {
         // A list for showing (requests) goes on without the unknown record; what a day is made from does not.
-        if (lenient && e instanceof UnknownRecordError) continue
+        if (lenient && e instanceof UnknownRecordError) return undefined
         throw e
       }
+    })
+    const out: unknown[] = []
+    for (const raw of raws) {
       if (raw === undefined) continue
       const v = parse(raw)
       if (v) out.push(v)
@@ -467,15 +491,24 @@ export class DataFolder {
       if (!e.create) continue
       const now = await this.records.read(e.rel)
       if (now.status !== 'missing' || this.queue.overlay(e.rel, undefined) !== undefined)
-        throw new Error(now.status === 'ok' ? 'ten rekord już jest w folderze (zmienił się w międzyczasie) – zmiana nie została zapisana, spróbuj jeszcze raz' : 'plik jest teraz nieczytelny – zmiana nie została zapisana, spróbuj za chwilę')
+        throw new Error(
+          now.status === 'ok'
+            ? 'ten rekord już jest w folderze (zmienił się w międzyczasie) – zmiana nie została zapisana, spróbuj jeszcze raz'
+            : now.status === 'broken'
+              ? 'plik jest uszkodzony – przywróć go z Historii; zmiana nie została zapisana'
+              : 'plik jest teraz nieczytelny – zmiana nie została zapisana, spróbuj za chwilę'
+        )
     }
     const at = this.clock.now()
     const ids: string[] = []
+    const queued: QueuedEdit[] = []
     for (const e of entries) {
       const id = `${this.o.computer}-${at.toString(36)}-${(this.editSeq++).toString(36)}`
       ids.push(id)
-      this.queue.add({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true } : {}) })
+      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true } : {}) })
     }
+    // All of them on the disk at once, or none (A3-15): a save that fails leaves no part of it to be written later.
+    this.queue.add(...queued)
     const outcomes = await this.queue.apply(this.records)
     // One outcome per entry, in their order: an entry a run chained before this one laid has its outcome in the queue.
     return ids.map((id) => outcomes.find((o) => o.id === id) ?? this.queue.outcomeOf(id))
@@ -507,6 +540,25 @@ export class DataFolder {
     const now = this.clock.now()
     const problems: string[] = []
     const day = logicalDayOf(now)
+    // A data folder gone while the app works (moved, deleted, OneDrive not there) is unavailable, never empty: no leader's
+    // tasks and no writes – they wait in the journal and the queue (spec „Kilka komputerów”, A3-01). Back, the computer
+    // is unsettled first, as after the network's return.
+    let root: 'here' | 'gone' | 'unknown' = 'here'
+    try {
+      if (!(await this.o.fs.stat(this.o.dataDir))) root = 'gone'
+    } catch (e) {
+      // Only a root that is not there is gone; one that cannot be looked at now (a lock) only skips this check.
+      root = (e as NodeJS.ErrnoException).code === 'ENOENT' ? 'gone' : 'unknown'
+    }
+    if (root !== 'here') {
+      if (root === 'gone') this.rootGone = true
+      problems.push(root === 'gone' ? 'folder danych niedostępny – zapisy czekają w dzienniku i kolejce' : 'folder danych chwilowo nieczytelny – sprawdzenie pominięte')
+      return { leader: this.leader, settled: false, created: null, segments: 0, autos: 0, nextAt: null, frozen: [], problems }
+    }
+    if (this.rootGone) {
+      this.rootGone = false
+      this.unsettle('network')
+    }
     try {
       this.peers = await this.presence.scan()
       for (const p of this.peers) {
@@ -675,6 +727,14 @@ export class DataFolder {
     if (this.o.gameScreens) await this.writeOnce('gameFrom', addDays(logicalDayOf(now), 1))
   }
 
+  /** A line of this computer's file of grades – after ending a last line a hard power-off cut (A3-12). */
+  private async appendGrade(day: string, line: unknown): Promise<void> {
+    const abs = join(this.o.dataDir, paths.grades(day.slice(0, 4), this.o.computer))
+    const bytes = await this.o.fs.read(abs)
+    const cut = !!bytes && bytes.length > 0 && bytes[bytes.length - 1] !== 0x0a
+    await this.o.fs.append(abs, `${cut ? '\n' : ''}${JSON.stringify(line)}\n`)
+  }
+
   /**
    * A day of rd.json written once (D320, T504, T509): only when there is none. A folder without rd.json (no wizard yet)
    * waits; an edit of it still in the queue (waiting, or a question) is not written again.
@@ -731,19 +791,26 @@ export class DataFolder {
           inputs ??= this.gameInputs(day, today)
           const grade = await (this.o.worker ?? inProcess).run({ kind: 'grade', ctx: await this.dayContext(day, read, now), know: was.know, game: (await inputs)(day) })
           const line = { day, at: now, v: this.rulesVersion, how: was.how, know: was.know, missing: was.missing, grade }
-          await this.o.fs.append(join(this.o.dataDir, paths.grades(day.slice(0, 4), this.o.computer)), `${JSON.stringify(line)}\n`)
+          await this.appendGrade(day, line)
           this.append({ id: derivedId(day, 'freeze', this.o.computer, String(this.rulesVersion)), day, dom: 'game', k: 'day.freeze', at: now, how: was.how, know: was.know, missing: was.missing, grade })
           this.frozenDays.add(day)
           out.push(day)
           continue
         }
         const quiet = this.quietFor(day, read, await this.dayFile(day), now)
-        const openedAt = openedAtOf((await this.log.readDay(addDays(day, 1))).events)
+        // The day opened after its end: the first presence of the next days – a day with nobody at a computer between
+        // counts on to the first one used (spec „24 h od otwarcia dnia po jego końcu … najwyżej 72 h”, A2-07).
+        let openedAt: number | null = null
+        for (let i = 1; i <= 3 && openedAt == null; i++) if (addDays(day, i) <= today) openedAt = openedAtOf((await this.log.readDay(addDays(day, i))).events)
         if (now < correctionEnd(day, openedAt)) continue
         writers ??= this.writerIds(today)
         const ids = new Set([...(await writers), ...Object.keys(read.lastByComputer)])
         const computers = [...ids].map((id) => ({ id, self: id === this.o.computer, presence: this.peers.find((p) => p.presence.computer === id)?.presence ?? null, visibleLast: read.lastByComputer[id] ?? -1 }))
-        const decision = freezeDecision({ date: day, now, mayFreeze, openedAt, computers, filesQuiet: read.copies === 0 && quiet })
+        // No conflict copies in the files its grade reads – the log, the day's and the next day's file, rd.json, the
+        // templates and the plan of lectures – until you answer them (spec „Ocena dnia”, A2-03); after 72 h it freezes
+        // without waiting, as with the log's copies.
+        const readsCopy = [...this.copyConflicts.values()].some(({ canonical: c }) => c === paths.day(day) || c === paths.day(addDays(day, 1)) || c === paths.settings || c.startsWith(`${ID_COLLECTIONS.template}/`) || c.startsWith(`${ID_COLLECTIONS.schedule}/`))
+        const decision = freezeDecision({ date: day, now, mayFreeze, openedAt, computers, filesQuiet: read.copies === 0 && !readsCopy && quiet })
         if (!decision.freeze) continue
         const know = { ...read.lastByComputer }
         inputs ??= this.gameInputs(day, today)
@@ -752,7 +819,7 @@ export class DataFolder {
         // The file of grades first: a freeze in the log is never left without its line (the line is derived – a second
         // one after a failed log write is harmless, the freeze event is what counts).
         const line = { day, at: now, v: this.rulesVersion, how: decision.how, know, missing: decision.missing, grade }
-        await this.o.fs.append(join(this.o.dataDir, paths.grades(day.slice(0, 4), this.o.computer)), `${JSON.stringify(line)}\n`)
+        await this.appendGrade(day, line)
         this.append({ id: derivedId(day, 'freeze', this.o.computer), day, dom: 'game', k: 'day.freeze', at: now, how: decision.how, know, missing: decision.missing, grade })
         this.frozenDays.add(day)
         out.push(day)
@@ -1563,7 +1630,7 @@ export class DataFolder {
       }
       for (const c of copies) {
         seen.add(c.copy)
-        const r = await this.records.joinCopy(c.copy, c.canonical)
+        const r = await this.queue.exclusive(() => this.records.joinCopy(c.copy, c.canonical))
         if (r.joined) this.copyConflicts.delete(c.copy)
         else if (r.conflicts.length) this.copyConflicts.set(c.copy, { canonical: c.canonical, conflicts: r.conflicts })
       }
@@ -1577,7 +1644,7 @@ export class DataFolder {
   async resolveCopy(copyRel: string, choice: 'mine' | 'theirs'): Promise<void> {
     const q = this.copyConflicts.get(copyRel)
     if (!q) return
-    const r = await this.records.joinCopy(copyRel, q.canonical, () => choice)
+    const r = await this.queue.exclusive(() => this.records.joinCopy(copyRel, q.canonical, () => choice))
     if (r.joined) this.copyConflicts.delete(copyRel)
   }
 

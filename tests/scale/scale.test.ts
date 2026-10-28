@@ -104,7 +104,9 @@ describe('test skali (3 lata danych)', () => {
         check: await time(() => folder.check()),
         day: await time(() => folder.dayState(TODAY)),
         energy: await time(() => folder.energyState(TODAY)),
-        game: await time(async () => (summary = await folder.gameState()))
+        game: await time(async () => (summary = await folder.gameState())),
+        // The window's view and its signature read every request at each change (A3-08).
+        requests: await time(() => folder.collection('request'))
       })
     }
     expect(summary!.steps).toHaveLength(gen.days - 1)

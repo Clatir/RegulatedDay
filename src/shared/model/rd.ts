@@ -103,10 +103,31 @@ export const WRITE_ONCE_FIELDS = ['ritualFrom', 'gameFrom'] as const
 export type WriteOnceField = (typeof WRITE_ONCE_FIELDS)[number]
 
 /**
- * rd.json's fields a restore of an older version never takes away: the days written once and the state of the
- * calibration's review (a review done, or put off three times, would be proposed again).
+ * Two days of a field written once that met (two leaders apart in a pause of sync): the earlier wins – the same rule on
+ * every computer, never a question about a technical field (T513, A3-10). null: no such field, or not two days.
  */
-export const KEPT_ON_RESTORE = [...WRITE_ONCE_FIELDS, 'calibrationReview'] as const
+export function earlierOnce(path: readonly unknown[], a: unknown, b: unknown): string | null {
+  if (path.length !== 1 || !(WRITE_ONCE_FIELDS as readonly unknown[]).includes(path[0]) || !isIsoDate(a) || !isIsoDate(b)) return null
+  return a <= b ? a : b
+}
+
+/**
+ * An older rd.json (`older`, from a backup or the history) as it is restored over the one now (`now`) – the fields a
+ * restore never takes away nor back: the days written once stay as they are, and the calibration review's state is
+ * joined – the more „Nie teraz”, the later review, every proposal applied – so a review done is never proposed again,
+ * nor a proposal applied twice (T511, A3-02).
+ */
+export function keptOnRestore(now: Record<string, unknown>, older: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...older }
+  for (const k of WRITE_ONCE_FIELDS) if (now[k] !== undefined) out[k] = now[k]
+  if (now.calibrationReview !== undefined) {
+    const a = calibrationReviewFrom(now.calibrationReview)
+    const b = calibrationReviewFrom(older.calibrationReview)
+    const reviewed = a.reviewed && b.reviewed ? (a.reviewed > b.reviewed ? a.reviewed : b.reviewed) : (a.reviewed ?? b.reviewed)
+    out.calibrationReview = { ...(isPlain(now.calibrationReview) ? now.calibrationReview : {}), deferrals: Math.max(a.deferrals, b.deferrals), reviewed, applied: [...new Set([...a.applied, ...b.applied])] }
+  }
+  return out
+}
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const intIn = (v: unknown, [min, max]: readonly [number, number], fallback: number): number =>

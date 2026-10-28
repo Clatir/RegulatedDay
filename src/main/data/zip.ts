@@ -15,6 +15,7 @@ import { promises as fs, type Stats } from 'node:fs'
 import { dirname, join } from 'node:path'
 import zlib from 'node:zlib'
 import { tempPathFor, withRetry } from '../datastore/atomic'
+import { mapLimit } from '../datastore/concurrency'
 
 /**
  * Compression of one small file: in place, a file at a time – handing ~1 KB to the thread pool costs more than
@@ -255,23 +256,6 @@ export function diskSource(abs: string, name: string): ZipSource {
       return f && { data: f.data, mtime: f.st.mtime }
     }
   }
-}
-
-/**
- * Run `fn` over items with bounded concurrency, preserving the order of results (FI fsutil `mapLimit`, without the
- * abort signal nobody here uses).
- */
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length)
-  let next = 0
-  async function worker(): Promise<void> {
-    while (next < items.length) {
-      const i = next++
-      results[i] = await fn(items[i] as T, i)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return results
 }
 
 /**

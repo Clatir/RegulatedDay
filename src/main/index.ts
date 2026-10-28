@@ -7,6 +7,7 @@
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
+import { rename } from 'node:fs/promises'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { BrowserWindow, Menu, app, clipboard, crashReporter, dialog, ipcMain, net, powerMonitor, powerSaveBlocker, screen, session, shell, utilityProcess, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
@@ -37,7 +38,7 @@ import type { UpdateView } from '@shared/updateView'
 import { BAR_NOTE_FAILED, BAR_NOTE_HELPER, type WidgetView } from '@shared/widget'
 import { identity } from './identity'
 import { flushLog, initLog, log } from './log'
-import { ConfigStore, computerId } from './config'
+import { ConfigStore, computerId, presenceWindowsId, renewComputerId, windowsMachineId } from './config'
 import { Autostart, HIDDEN_ARG } from './autostart'
 import { AppTray } from './tray'
 import { displays, primaryDisplay } from './displays'
@@ -88,6 +89,8 @@ let helper: HelperClient | null = null
 let autostart: Autostart | null = null
 let updates: UpdateController | null = null
 let thisComputer = ''
+/** Windows' own id of this computer (its presence names it, A3-05). */
+let thisWindowsId: string | null = null
 /**
  * The data folder at work: the one the wizard chose on this computer (config.json), or RD_DATA_DIR (tests and the
  * developer's version), which wins.
@@ -373,6 +376,7 @@ function createHub(): DataHub {
     userData,
     computer: () => thisComputer,
     computerName: hostname(),
+    windowsId: () => thisWindowsId,
     appVersion: app.getVersion(),
     runId,
     holidays: marketDay,
@@ -384,7 +388,11 @@ function createHub(): DataHub {
     log,
     writeGuardPlan: identity.updates && process.env.RD_TEST_KEEP_PLAN !== '1',
     extraBackupDir: () => prefs().backupDir,
-    previousVersion: () => lastRunVersion,
+    previousVersion: () => config.get().updates.dataVersion ?? lastRunVersion,
+    dataOpened: (version) => {
+      const u = config.get().updates
+      if (u.dataVersion !== version && !config.loadFailed) void config.update({ updates: { ...u, dataVersion: version } }).catch(() => undefined)
+    },
     worker,
     // The ritual's screens are here: its first day comes from rd.json, written once by the leader (D320, T504).
     ritualScreens: true,
@@ -936,6 +944,8 @@ async function main(): Promise<void> {
       spawn(guardExe(join(updateDir, app.getVersion())), ['--task', join(updateDir, app.getVersion(), 'task.json'), '--hidden'], { detached: true, stdio: 'ignore' }).unref()
     }
   }
+  // Windows' id of this computer is read beside the rest of the start (a slow reg.exe never holds it back).
+  const windowsIdRead = windowsMachineId()
   await config.load()
   lastRunVersion = config.get().updates.lastRunVersion
   if (config.setAside) log('warn', `config.json uszkodzony – odłożony jako ${config.setAside}, ustawienia domyślne`)
@@ -949,17 +959,34 @@ async function main(): Promise<void> {
       if (hub && dir && thisComputer && hub.status === 'failed' && hub.folder === null) void hub.open(dir)
       else if (!dir) hub?.noFolder()
       if (thisComputer && c.computerId !== thisComputer) void config.update({ computerId: thisComputer }).catch(() => undefined)
-      if (c.updates.lastRunVersion !== app.getVersion()) void config.update({ updates: { ...c.updates, lastRunVersion: app.getVersion() } }).catch(() => undefined)
+      if (c.updates.lastRunVersion !== app.getVersion()) void config.update({ updates: { ...c.updates, lastRunVersion: app.getVersion(), dataVersion: c.updates.dataVersion ?? c.updates.lastRunVersion } }).catch(() => undefined)
       for (const w of appWindows()) w.setZoomFactor(c.prefs.zoom)
       broadcast(CH.onPrefs, c.prefs)
       layoutBar()
     })
   }
   try {
-    const id = await computerId(userData, config.get().computerId)
+    thisWindowsId = await windowsIdRead
+    let id = await computerId(userData, config.get().computerId, thisWindowsId)
+    // A profile copied before 0.17.0 has no Windows id of its own: the folder's presence of this id tells whose it is.
+    const dir = dataFolderNow()
+    if (!id.copiedFrom && thisWindowsId && dir) {
+      const other = await presenceWindowsId(dir, id.id)
+      if (other && other !== thisWindowsId) id = await renewComputerId(userData, thisWindowsId, id.id)
+    }
     thisComputer = id.id
-    if (id.created) log('info', `nowy identyfikator komputera ${id.id}`)
-    if (config.get().computerId !== id.id && !config.loadFailed) await config.update({ computerId: id.id })
+    if (id.copiedFrom) {
+      // The app data came from another computer: its folders' state (journal, queue) is that computer's – set aside;
+      // when it cannot be, no folder opens this session (never its queue written as this computer's).
+      log('warn', `dane aplikacji skopiowane z innego komputera (${id.copiedFrom}) – nowy identyfikator ${id.id}`)
+      const aside = join(userData, `folders-${id.copiedFrom}-${Date.now()}`)
+      await rename(join(userData, 'folders'), aside).catch((e: NodeJS.ErrnoException) => {
+        if (e.code === 'ENOENT') return
+        log('error', `stan folderów innego komputera nie został odłożony (${aside}) – folder danych otworzy się po ponownym uruchomieniu`, e)
+        thisComputer = ''
+      })
+    } else if (id.created) log('info', `nowy identyfikator komputera ${id.id}`)
+    if (thisComputer && config.get().computerId !== id.id && !config.loadFailed) await config.update({ computerId: id.id })
   } catch (e) {
     log('error', 'identyfikator komputera nieczytelny', e)
   }
@@ -1145,7 +1172,11 @@ async function main(): Promise<void> {
   if (banner) log('warn', `aktualizacja do ${banner.version}: ${banner.kind === 'failed' ? 'nie udała się' : 'nie dokończyła się'}`)
   updates.init(banner, whatsNew())
   banner = null
-  if (config.get().updates.lastRunVersion !== app.getVersion() && !config.loadFailed) void config.update({ updates: { ...config.get().updates, lastRunVersion: app.getVersion() } })
+  // The version before this one stays the folder's until the backup before the update is there (A3-17).
+  if (config.get().updates.lastRunVersion !== app.getVersion() && !config.loadFailed) {
+    const u = config.get().updates
+    void config.update({ updates: { ...u, lastRunVersion: app.getVersion(), dataVersion: u.dataVersion ?? u.lastRunVersion } })
+  }
   // Started by the autostart with a downloaded update: the guard installs it at the start of Windows.
   if (startHidden && updates.atAutostart()) return
   handleArgv(process.argv, true)

@@ -115,6 +115,28 @@ describe('widget w procesie głównym', () => {
     expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'notice.shown')).toHaveLength(1)
   })
 
+  it('prowadzący po wybudzeniu nie pokazuje powiadomień, dopóki się nie ustali (A8-03)', async () => {
+    const { w, folder, shown, at, clock } = await make()
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    // Woken at 15:25 – the notice „5 min przed” is due, but the other computers' logs come first.
+    at(15 * 60 + 25)
+    folder.unsettle('wake')
+    await folder.check()
+    at(15 * 60 + 26)
+    await folder.check()
+    expect(folder.leader.iLead).toBe(true)
+    await w.refresh()
+    expect(shown).toEqual([])
+    for (let i = 0; i < 3; i++) {
+      clock.now += 60_000
+      await folder.check()
+    }
+    await w.refresh()
+    expect(shown.map((n) => n.title)).toEqual(['Sesja tradingowa o 15:30'])
+  })
+
   it('dwa kliknięcia w 0,5 s to jedno: podwójne „Dalej” nie kończy też następnego bloku, a drugie kliknięcie kosztu za szybko nic nie potwierdza', async () => {
     const { w, folder, clock } = await make()
     // „x” runs; „Dalej” ends it and starts „a” – a second „Dalej” of the same double click must not end „a”.

@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
 import { answerEvents, autoActions, questionsOf } from '@shared/engine/auto'
 import { computeDay } from '@shared/engine/day'
-import { viewAt } from '@shared/engine/facts'
+import { ranMinutes, viewAt } from '@shared/engine/facts'
+import { RULES_VERSION } from '@shared/model/events'
 import { forecast } from '@shared/engine/forecast'
 import { detectLateWake } from '@shared/engine/lateWake'
 import { timerNow } from '@shared/engine/timer'
@@ -193,6 +194,23 @@ describe('„Odliczyć nieobecność” po granicy (A1-13)', () => {
     const q = questionsOf({ ctx, state, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t }).find((x) => x.kind === 'absence')!
     const out = answerEvents(state, q, 'subtract', t)!
     expect(out.map((e) => e.k)).toEqual(['undo', 'block.pause', 'question.answer'])
+  })
+})
+
+describe('zegary komputerów do 5 min różnicy (A8-11)', () => {
+  it('blok zaczęty na A i skończony na B z zegarem 5 min z tyłu: koniec po starcie, długość nigdy ujemna', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '10:00', min: 60 })] }).observe('07:00', null)
+    s.start('a', '10:00')
+    const startL = s.events.at(-1)!.l
+    // On B two minutes later for real – its clock says 09:57; its logical clock is past A's start it has seen.
+    const t = s.at('09:57')
+    s.events.push({ id: 'pcb-0', c: 'pcb', n: 0, t, l: startL + 1, v: RULES_VERSION, day: DATE, dom: 'timer', k: 'block.end', block: 'a', at: t, done: true, rule: null } as never)
+    const st = s.state('10:30')
+    const f = st.facts.blocks.get('a')!
+    expect(f.endedAt).not.toBeNull()
+    expect(f.endedAt! - f.startedAt!).toBeGreaterThanOrEqual(0)
+    expect(ranMinutes(f, st.now)).toBeGreaterThanOrEqual(0)
+    expect(timerNow(st).fg).toBeNull()
   })
 })
 

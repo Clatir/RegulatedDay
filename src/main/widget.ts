@@ -234,7 +234,9 @@ export class WidgetEngine {
       this.variantsView(m, now)
       if (this.failing) this.d.log('info', 'widget: dzień znów policzony')
       this.failing = false
-      if (folder.leader.iLead) await this.notices(folder, m, (b) => blockName(b, names), now)
+      // Notifications are the leader's, and only once settled – after a start or a wake the other computers' logs (their
+      // shown notices) come first, so nothing is shown twice (spec „Kilka komputerów”, A8-03).
+      if (folder.leader.iLead && !folder.unavailable && folder.settle.settled(folder.clock.now())) await this.notices(folder, m, (b) => blockName(b, names), now)
     } catch (e) {
       // The day cannot be counted now: a bar without actions says so (never the last view with a stale countdown).
       if (!this.failing) this.d.log('warn', 'widok widgetu nie policzył się', e)

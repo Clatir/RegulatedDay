@@ -381,7 +381,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W `freezeTasks` dołożyć do `filesQuiet` warunek: brak wpisu w `copyConflicts`, którego `canonical` to `paths.day(day)`, `paths.day(addDays(day, 1))`, `paths.settings` albo rekord z katalogów szablonów i planu wykładów. Po 72 h zamrażać bez czekania (jak teraz) i dopisać plik do `missing`. Test w `tests/fs/freeze.test.ts` z kopią pliku dnia.
 - **Weryfikacja:** freezeTasks przekazuje filesQuiet = read.copies === 0 && quiet, a read.copies z eventLog.readDay liczy tylko kopie konfliktowe logu (classify(rel).kind === 'log'). Kopie konfliktowe pliku dnia, rd.json i szablonów z różnymi polami czekają jako pytania w copyConflicts (joinCopies skanuje days/<rok> i katalogi rekordów), a freezeTasks ani freezeDecision ich nie sprawdzają. dayFile czyta wersję kanoniczną bez żadnej blokady. Ocena (dayContext: inputs(), dayFile dnia i następnego) zamraża się więc po oknie korekty z plikiem kanonicznym, wbrew specyfikacji: „w plikach, które czyta ocena tego dnia, nie ma kopii konfliktowych”. Żadna decyzja T tego nie wyłącza, a test tests/fs/freeze.test.ts obejmuje tylko kopie logu. Ważność medium jest uczciwa: potrzebna jest kopia z polami różnymi po obu stronach, nierozstrzygnięta przez ponad 24 h.
 - **Dowód:** src/main/data/folder.ts:740-746 (filesQuiet), 485-491 (dayContext czyta inputs, dayFile, nextFile), 1549-1574 (copyConflicts), 454-457 (dayFile bez sprawdzenia kopii); src/main/data/eventLog.ts:38-39, 253-255 (copies tylko dla kind 'log'); src/shared/engine/freeze.ts:104-111; docs/specyfikacja.md:545; tests/fs/freeze.test.ts:135-156
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A2-04 · medium · potwierdzone – Pytanie o nieobecność nie ma odpowiedzi „posiłek”, „regeneracja” ani „byłem na prośbie” – reguły nagród i kalibracji, które z nich korzystają, nie mają wejścia
 - **Plik:** `src/shared/engine/auto.ts:483` · rodzaj: spec · pewność recenzenta: high
@@ -415,7 +415,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `openedAt` to `openedAtOf` zdarzeń wyłącznie z dnia `day + 1`. Gdy użytkownik nie używa komputera w dniu następnym i wraca dzień później, `openedAt` = null, a `correctionEnd` = 72 h od końca dnia. Specyfikacja liczy 24 h od otwarcia dnia po jego końcu, czyli od pierwszego użycia po końcu, najwyżej 72 h. Skutek: zamrożenie później niż powinno (dzień i nuty dłużej „w toku”), bez utraty danych.
 - **Scenariusz:** Piątek kończy się w sobotę o 04:00. W sobotę komputer nie jest używany, w niedzielę o 10:00 tak. Według specyfikacji okno kończy się w poniedziałek o 10:00, kod zamraża dopiero we wtorek o 04:00. Nuty piątku są „w toku” 18 h dłużej, a kaseta tygodnia z niedzielą przesuwa się o ten czas.
 - **Poprawka:** W `freezeTasks` szukać pierwszego `presence.first` w dniach `day+1 … day+3` (pierwszy znaleziony) i podać go do `correctionEnd`. Test z pustym dniem następnym.
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A2-08 · low · bez weryfikacji – Odczuwany koszt w rytuale pomija „Prośby domowe”, gdy prośby biegły poza blokiem
 - **Plik:** `src/shared/engine/ritual.ts:429` · rodzaj: spec · pewność recenzenta: medium
@@ -437,7 +437,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Na początku `check()` (i przed `flush`, `presence.tick`, `queue.apply`) robić `stat(dataDir)`. Brak albo błąd oznacza stan „folder niedostępny”: brak zadań prowadzącego i ustalenia, zapisy czekają w dzienniku i kolejce, problem trafia do widoku. W `writeFileAtomic` i `append` nie tworzyć samego `dataDir` (mkdir rekursywny tylko poniżej istniejącego korzenia). Dodać test: folder usunięty po otwarciu – nic nie powstaje, `day.create` i `day.freeze` nie są zapisywane.
 - **Weryfikacja:** Potwierdzone testem: po usunięciu dataDir w trakcie pracy pierwsze `check()` od razu odtwarza folder (`log.flush` → `ensureNow` → `fs.append` z `mkdir` rekursywnym), a potem `.presence`. Nikt nie zgłasza żadnego problemu, a prowadzący zapisał `day.create` następnego dnia z ustawień domyślnych: `boundaryBufferMin` 15 zamiast 25 z rd.json. Część o zamrażaniu jest błędna: w aplikacji `ritualScreens: true`, więc `freezeTasks` bierze `ritualDay()` z rd.json. Bez rd.json dostaje null i nic nie zamraża. `writeOnce` też nic nie pisze. Rdzeń znaleziska (folder odtworzony, dzień z ustawień domyślnych zapisany raz, na stałe) narusza „W niedostępnym folderze niczego nie tworzy” i jest prawdziwy.
 - **Dowód:** src/main/data/fsio.ts:50 (ENOENT→[]), :65 (mkdir recursive w append); src/main/datastore/atomic.ts:42 (mkdir w writeFileAtomic); src/main/data/eventLog.ts:166-197 (ensureNow dopisuje cały dziennik do nieistniejącego pliku); src/main/data/folder.ts:371-376 (cachedJson: brak pliku → undefined), :567-575 (day.create z inputs()), :695-696 (freezeTasks: ritualDay null → []); hub.ts:216 sprawdza folder tylko przy otwarciu. Test tymczasowy tmp-e8-a3-vanish: po rmSync(dataDir) folder wrócił z ['log'], potem ['.presence','log']; day.create 2026-10-22 z boundaryBufferMin 15; day.freeze: 0; problems: []
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A3-04 · medium · potwierdzone – Edycja szablonu w starszej wersji usuwa pola i bloki, których ta wersja nie zna (`templateJson` przepisuje wszystkie wersje)
 - **Plik:** `src/shared/model/defaults.ts:62` · rodzaj: data · pewność recenzenta: high
@@ -447,7 +447,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Zapisywać szablon tak jak plik dnia: wersje i bloki nakładać na surowy JSON (`{...rawVersion, blocks: blocks.map(b => ({...rawBlock(b.id), ...b}))}`), a wersje nieedytowane zostawiać nietknięte. Bloków, których model nie umie przedstawić, nie usuwać. Test: szablon z nieznanym polem bloku i wersji po zmianie nazwy zachowuje je w pliku.
 - **Weryfikacja:** Potwierdzone testem na prawdziwych funkcjach. Model szablonu po samej zmianie nazwy, zapisany przez `{...before, ...templateJson(t)}`, daje w `recordEdit` edycje usuwające nieznane pole bloku, nieznane pole wersji i cały blok odrzucony przez `planBlockFrom` (startMin poza zakresem). Dotyczy to także wersji, której nie edytowano. To narusza T13 (nieznane pola zachowane) i spec „nieznane wartości zachowywane”. Szablon nie ma też trybu tylko do odczytu z T79. Problem ujawni się przy mieszanych wersjach (1.0 obok 1.x), ale poprawka musi wejść do 1.0, bo to starsza wersja niszczy dane.
 - **Dowód:** src/shared/model/defaults.ts:54-64 (versions tylko z modelu); src/shared/model/plan.ts:129-159, 188-211; src/renderer/features/templates/TemplatesPage.tsx:119-122; src/renderer/features/calibration/apply.ts:52; src/shared/data/merge.ts:64-90, 224-229. Test tymczasowy tmp-e8-a3-template: zmiana nazwy dała edycje [versions,2020-01-01,blocks,#a,futureField] → undefined, [versions,2020-01-01,futureVersionField] → undefined, [versions,2026-11-01,blocks,#b] → undefined
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A3-05 · medium · potwierdzone – Identyfikator Windows w obecności nie jest zapisywany ani sprawdzany – skopiowane dane aplikacji dają dwa komputery z jednym id
 - **Plik:** `src/main/data/service.ts:168` · rodzaj: spec · pewność recenzenta: high
@@ -457,7 +457,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Odczytać MachineGuid (pomocnik albo `reg query HKLM\SOFTWARE\Microsoft\Cryptography /v MachineGuid`) i zapisać go obok `computer-id` oraz w obecności. Przy starcie, gdy zapisany różni się od bieżącego, utworzyć nowy identyfikator (nowy katalog stanu i dziennik) przed otwarciem folderu. Test na zmienionym identyfikatorze Windows.
 - **Weryfikacja:** Specyfikacja (linia 640) i T198 wymagają identyfikatora Windows w obecności i nowego identyfikatora, gdy się nie zgadza. W kodzie nie ma żadnego odczytu MachineGuid. `DataService.start` nie przekazuje `windowsId`, więc obecność ma zawsze null, a `computerId()` czyta tylko plik `computer-id` i jego kopię w config.json (obie w userData, kopiowane razem). Przy skopiowanym %APPDATA% oba komputery dziedziczą dziennik z tym samym `lastN` i budują identyfikatory zdarzeń `<id>-<n>`, a `mergeEvents` przy tym samym id zostawia jedno zdarzenie. Scenariusz jest rzadki, ale skutek to ciche gubienie zdarzeń i podwójne prowadzenie. Uwaga do poprawki: klon całego dysku kopiuje też MachineGuid, więc ochrona dotyczy tylko kopii profilu.
 - **Dowód:** docs/specyfikacja.md:640; docs/decyzje-techniczne.md:194 (T198); src/main/data/service.ts:168-184 (brak windowsId); src/main/data/folder.ts:160,265; src/main/config.ts:150-167; src/main/data/eventLog.ts:109 (id `${computer}-${n}`), :184, :267 (mergeEvents); grep MachineGuid/windowsId w src – brak odczytu
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A3-06 · medium · potwierdzone – Nieudana kopia zapasowa trafia tylko do logu – brak ostrzeżenia w widgecie i w oknie po 3 dniach bez kopii
 - **Plik:** `src/main/data/service.ts:271` · rodzaj: spec · pewność recenzenta: high
@@ -467,7 +467,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Zapamiętać w procesie głównym wynik ostatniej próby i datę ostatniej udanej kopii (z `listBackups`/`backupDue`, także gdy kopię zrobił inny komputer). Dodać do modelu widgetu linię ostrzeżenia przy błędzie, a do `DataView` stan „brak kopii od ≥ 3 dni” dla okna głównego. Test usługi z wadliwym plikiem.
 - **Weryfikacja:** Wynik `{ok:false}` kopii dziennej trafia tylko do `o.log('error', …)`. Nigdzie (widget, DataView, powiadomienia) nie ma stanu ostatniej udanej kopii ani ostrzeżenia, a komentarz „the widget warns” w backup.ts nie ma pokrycia w kodzie. Spec 655 wymaga ostrzeżenia w widgecie od razu i w oknie głównym po 3 dniach. Spec 490 wymienia „brak kopii zapasowej” wśród powiadomień, a Zakres 1.0 obejmuje codzienne kopie. Plan nie odkłada tego na po 1.0. `createDailyBackup` celowo przerywa kopię przy trwale nieczytelnym pliku, więc taki plik daje ciche, codzienne niepowodzenie. Lista odbioru E6b.2 też każe szukać błędu w main.log.
 - **Dowód:** src/main/data/service.ts:261-272 (backupIfDue tylko loguje); src/main/data/backup.ts:205-229 (komentarz „the widget warns”, przerwanie przy nieczytelnym pliku); grep „backup|kopi” w src/main/widget.ts – brak; docs/specyfikacja.md:490, 655, Zakres 1.0 (codzienne kopie); docs/odbior.md E6b.2
-- **Status:** otwarte
+- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
 
 #### A3-08 · medium · potwierdzone – Widok okna i jego podpis czytają wszystkie prośby po kolei (`stat` każdego pliku) przy każdym sprawdzeniu i każdej edycji – przy skali 3 lat to znacznie ponad 0,1 s
 - **Plik:** `src/main/data/folder.ts:420` · rodzaj: perf · pewność recenzenta: medium
@@ -477,7 +477,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Statystyki plików kolekcji czytać równolegle z limitem (jak `mapLimit` w zip.ts) albo pomijać przegląd plików, gdy czas modyfikacji katalogu się nie zmienił (zapis atomowy przez rename go zmienia). Do podpisu brać listę nazw plus podpis katalogu zamiast pełnych rekordów. Dopisać do testu skali pomiar `hub.view()` i `signature()` jako operacji codziennej.
 - **Weryfikacja:** Ścieżka potwierdzona: `trySaveEdits` → `window.rd.edit` → `hub.edit` → `changed()` (`signature` → `records()`) oraz równolegle `reloadData` → `view()` → `records()`. Potem nowy podpis wywołuje jeszcze jedno `reloadData`. `records()` → `collection('request')` → `cachedDir` robi `stat` każdego pliku po kolei, także przy ciepłej pamięci. Pomiar na zestawie skali (3060 próśb) przy mocno obciążonej maszynie (współczynnik kalibracji 15,45): ciepłe `records()` 1,8–5,1 s, surowe 3060 kolejnych `stat` 3,26 s. Po normalizacji wychodzi ok. 0,12–0,34 s na jedno `records()`, czyli powyżej limitu 0,1 s na operację codzienną. Liczby recenzenta (0,7–2 s) są zawyżone obciążeniem. W folderze OneDrive (filtr chmury) może być wolniej. Test skali nie mierzy `view`/`signature`.
 - **Dowód:** src/main/data/hub.ts:323-348 (signature i records), :350-352 (view), :446-455 (edit → changed); src/main/data/folder.ts:407-436 (cachedDir: sekwencyjny stat przez cachedJson), :371-379; src/renderer/store/data.ts:118-123 (reloadData po edit); tests/scale/scale.test.ts:96-115 (brak pomiaru view/signature). Test tymczasowy tmp-e8-a3-perf: records() warm [3606,1819,1825,5079,5126] ms, raw stat 3255 ms, współczynnik 15,45
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A3-02 · medium → low · potwierdzone – Przywrócenie starszego rd.json (kopia, historia) cofa stan przeglądu kalibracji, gdy starsza wersja już go miała
 - **Plik:** `src/main/data/hub.ts:651` · rodzaj: spec · pewność recenzenta: high
@@ -487,7 +487,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dla `WRITE_ONCE_FIELDS` zawsze brać `now[k]`, gdy jest. Dla `calibrationReview` scalać: max(`deferrals`), `reviewed` = nowszy niepusty, `applied` = suma zbiorów. Dopisać test przywrócenia kopii ze starszym, ale obecnym `calibrationReview` (hub.restoreRecords i historyRestore).
 - **Weryfikacja:** `restoreEntry` przenosi pola `KEPT_ON_RESTORE` tylko wtedy, gdy przywracana wersja ich nie ma (`value[k] === undefined`). Starsza, ale obecna wartość `calibrationReview` przechodzi więc przez `diffRecords` i cofa `deferrals`, `reviewed` i `applied`. Komentarz w kodzie i T511 mówią wprost, że przegląd już zrobiony nie może wrócić. Test `restore.test.ts:381` sprawdza tylko kopię bez tego pola. Ważność obniżam: okno czasowe jest wąskie (kopia albo wersja z historii z czasu między pierwszym „Nie teraz” a zakończeniem przeglądu), a skutek to głównie ponowna propozycja przeglądu. Ponowne zastosowanie propozycji jest prawie nieszkodliwe: `templateWithTimes` daje te same długości, `costPatch` te same koszty.
 - **Dowód:** src/main/data/hub.ts:647-656 (warunek `value[k] === undefined`); src/shared/model/rd.ts:102,109; src/shared/engine/calibration.ts:73-76 (reviewPrompt zależny od reviewed/deferrals); src/renderer/features/calibration/CalibrationReview.tsx:52 (applied); tests/fs/restore.test.ts:381-396 (kopia bez calibrationReview); docs/decyzje-techniczne.md T511
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A3-03 · low · bez weryfikacji – Łączenie kopii konfliktowych (`joinCopy`, `resolveCopy`) nie idzie w kolejce z przebiegami kolejki edycji – możliwa cicha utrata zapisu
 - **Plik:** `src/main/data/folder.ts:1566` · rodzaj: race · pewność recenzenta: high
@@ -495,7 +495,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `joinCopy` czyta plik i kopię, robi dwie migawki historii (writeAtomic z fsync) i dopiero potem zapisuje scalony plik. W tym czasie `hub.edit` → `queue.apply` może zapisać ten sam rekord: `apply` jest szeregowane tylko z `resolve`, nie z `joinCopies` w `check()` ani z `resolveCopy` z okna. Obie kolejności gubią dane. Kolejka zapisuje, a `joinCopy` nadpisuje plik wersją sprzed edycji – wpis kolejki jest już „applied” i usunięty. Albo kolejka nadpisuje scalony plik wersją sprzed scalenia, a kopia jest już usunięta. To ta sama klasa błędu, którą dane.md opisuje dla dwóch przebiegów kolejki.
 - **Scenariusz:** rd.json ma kopię konfliktową rd-DESKTOP-B.json z polami tylko po jednej stronie. Przy sprawdzeniu co 60 s `joinCopies` zaczyna ją łączyć. W tej samej chwili użytkownik zmienia ustawienie „Woda co”: kolejka zapisuje rd.json, po czym `joinCopy` zapisuje scalenie ze starej wersji. Zmiana użytkownika znika bez pytania i nie ma jej w historii.
 - **Poprawka:** Puszczać `joinCopies` i `resolveCopy` przez ten sam łańcuch co `EditQueue.apply`/`resolve` (np. `queue.exclusive(fn)` na `this.running`), tak aby odczyt, scalenie i zapis rekordu nigdy nie przeplatały się z wpisem kolejki. Test z wolnym `DataFs` (zapis historii opóźniony) i równoległą edycją.
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A3-07 · low · bez weryfikacji – „N zmian zapisze się po powrocie folderu” jest liczone (`unsynced`), ale nigdzie nie pokazywane
 - **Plik:** `src/main/data/folder.ts:1651` · rodzaj: spec · pewność recenzenta: high
@@ -503,7 +503,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `DataFolder.unsynced` i `DataView.unsynced` istnieją, ale żaden ekran ani pasek ich nie czyta (grep w renderer: brak). Edycja, która czeka na folder (status `waiting`), jest w oknie traktowana jak zapisana (`isSaved`), bez żadnej informacji. Do tego `unsynced` liczy dni z oczekującymi zdarzeniami, a nie zdarzenia, a wpisy czekające na odpowiedź na pytanie liczy jak czekające na folder.
 - **Scenariusz:** Folder chwilowo niedostępny (dysk sieciowy, plik trzymany przez OneDrive). Użytkownik zmienia plan jutra i zamyka aplikację przekonany, że zmiana jest w folderze. Na drugim komputerze jej nie widzi i wprowadza ją jeszcze raz, co później daje pytania o konflikt.
 - **Poprawka:** Pokazać licznik w pasku lub oknie (i przy zamykaniu, gdy > 0). Liczyć zdarzenia oczekujące (suma po dniach) plus wpisy kolejki ze statusem `waiting` z innego powodu niż `BEHIND_QUESTION`.
-- **Status:** otwarte
+- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
 
 #### A3-09 · low · bez weryfikacji – Usunięcie z kolejki nie ma bazy – rekord zmieniony w międzyczasie na innym komputerze jest usuwany bez pytania
 - **Plik:** `src/main/data/editQueue.ts:283` · rodzaj: spec · pewność recenzenta: high
@@ -511,7 +511,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `recordEdit` tworzy wpis usunięcia bez wartości bazowej (`{remove: true, edits: []}`). `applyOneNow` usuwa plik zawsze, gdy jest czytelny, niezależnie od tego, czy zmienił się od chwili, w której go usunąłeś. Odwrotny kierunek (edycja tu, usunięcie gdzie indziej) daje pytanie, ten nie. Treść nie ginie całkiem (migawka „delete” w historii), ale reguła „zawsze kończy się pytaniem” jest złamana i brak na nią testu.
 - **Scenariusz:** PC A: wpis usunięcia prośby r1 czeka w kolejce (za pytaniem o ten plik albo przy niedostępnym folderze). W tym czasie PC B dopisuje do r1 notatkę i OneDrive dostarcza ją na A. Gdy kolejka A rusza, usuwa r1 razem z notatką z B. Nikt nie dostaje pytania.
 - **Poprawka:** W wpisie usunięcia zapisać bazę (np. treść rekordu albo `updatedAt` widziane przy usuwaniu). Przy zastosowaniu, gdy `!sameContentAs(cur.value, base)`, zwracać pytanie (np. `changedElsewhere`) zamiast usuwać. Test w e3-data.
-- **Status:** otwarte
+- **Status:** do 5.3 (T515)
 
 #### A3-10 · low · bez weryfikacji – Pola zapisywane raz (`ritualFrom`, `gameFrom`) od dwóch prowadzących z różnymi datami kończą się pytaniem o pole techniczne
 - **Plik:** `src/main/data/folder.ts:682` · rodzaj: bug · pewność recenzenta: medium · **wymaga Twojej decyzji**
@@ -519,7 +519,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `writeOnce` pisze przez zwykłą kolejkę z bazą „brak pola”. Gdy dwaj prowadzący w różne dni logiczne (np. przerwa synchronizacji: A zapisał `gameFrom` i uśpił się przed wysłaniem pliku) zapiszą różne daty, OneDrive tworzy kopię konfliktową rd.json. `joinCopy` (bez bazy) robi z tego pytanie `copyConflicts` „inne ustawienie: 15.11 / 16.11”, na które użytkownik nie umie odpowiedzieć sensownie. W ścieżce kolejki taki wpis staje się pytaniem, a wszystkie kolejne zmiany rd.json czekają za nim (`BEHIND_QUESTION`). Ani specyfikacja, ani T504/T509 nie mówią, która data wygrywa.
 - **Scenariusz:** A (0.14) prowadzi 14.11 i zapisuje `gameFrom: 15.11`, po czym laptop zasypia przed wysłaniem pliku przez OneDrive. B prowadzi 15.11 i zapisuje `gameFrom: 16.11`. Po synchronizacji okno pyta o „inne ustawienie”. Wybór zmienia pierwszy dzień gry, a różne komputery mogą do odpowiedzi liczyć grę od różnych dni.
 - **Poprawka:** Rozstrzygać pola `WRITE_ONCE_FIELDS` automatycznie w `joinCopy` i w `applyOneNow` (np. wcześniejsza data wygrywa, jedna reguła na wszystkich komputerach), nigdy jako pytanie. Wymaga potwierdzenia, która data ma wygrywać.
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A3-11 · low · bez weryfikacji – Kopia konfliktowa rekordu usuniętego na tym komputerze po cichu przywraca rekord
 - **Plik:** `src/main/data/records.ts:106` · rodzaj: spec · pewność recenzenta: medium
@@ -527,7 +527,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `joinCopy`: gdy brak pliku głównego (`canon.status === 'missing'`), kopia jest zapisywana jako rekord i usuwana – bez pytania i bez sprawdzenia, czy rekord nie został celowo usunięty. Kopia konfliktowa z wcześniejszego konfliktu (pytanie w `copyConflicts`) zostaje w folderze po usunięciu rekordu przez użytkownika.
 - **Scenariusz:** Szablon T ma nierozstrzygniętą kopię konfliktową T-DESKTOP-B.json (pytanie u góry okna). Użytkownik zamiast odpowiadać usuwa szablon T. Przy kolejnym `joinCopies` (≤ 60 s) kopia staje się z powrotem `templates/T.json` – szablon wraca bez pytania.
 - **Poprawka:** Przy brakującym pliku głównym sprawdzić historię (ostatnia migawka `delete` późniejsza niż kopia) albo zrobić z tego pytanie „usunięty tutaj, zmieniony tam”. Przy usuwaniu rekordu usuwać też jego otwarte pytanie z kopii (albo pytać).
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A3-12 · low · bez weryfikacji – Dopisanie do dziennika (i pliku ocen) po uciętej ostatniej linii skleja zdarzenie z resztką – zdarzenie ginie z dziennika
 - **Plik:** `src/main/data/eventLog.ts:111` · rodzaj: data · pewność recenzenta: high
@@ -535,7 +535,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Log na OneDrive jest chroniony („kończy linię, jeśli plik nie kończy się znakiem nowej linii”), ale lokalny dziennik nie. `EventLog.open` ani `append` nie sprawdzają końca pliku. Zapis „zamknięcie systemu” jest synchroniczny i bez fsync (spec), więc twarde wyłączenie może zostawić uciętą linię. Pierwsze zdarzenie następnego uruchomienia dokleja się do niej i jest odrzucane przy `readJournal` jako linia uszkodzona w środku (a `compact` usuwa je na stałe). To samo z `fs.append` pliku ocen w `freezeTasks` (sklejona linia oceny znika z `gradeIndex`, a po 60 dniach dzień wypada z gry).
 - **Scenariusz:** Wymuszone wyłączenie w trakcie zapisu „zamknięcie systemu”. Przy starcie folder jeszcze niedostępny (OneDrive), a pierwsze zdarzenia (`observe.to crash`, `observe.from`) są tylko w dzienniku. Zdarzenie sklejone z resztką linii przepada przy kolejnym uruchomieniu, a jego numer wraca do użycia.
 - **Poprawka:** W `EventLog.open` sprawdzić ostatni bajt dziennika i w razie potrzeby dopisać '\n' (albo zapisać dziennik od nowa z `readJournal`). Dla pliku ocen używać tej samej ochrony co `appendTo` (odczyt `endsWithNewline` przed dopisaniem).
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A3-13 · low · bez weryfikacji – „Zapomnij komputer” nie istnieje – `PresenceStore.forgotten` nigdy nie jest ustawiane
 - **Plik:** `src/main/data/presenceStore.ts:27` · rodzaj: spec · pewność recenzenta: high
@@ -543,7 +543,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Specyfikacja przewiduje w Ustawieniach „Zapomnij komputer” (zamrażanie przestaje na niego czekać). Pole `forgotten` istnieje, ale nic go nie wypełnia ani nie zapisuje (brak IPC, ekranu i trwałego zapisu), a `writerIds` w `freezeTasks` i tak go nie uwzględnia. Wycofany komputer, który pisał w ostatnich 7 dniach, przez tydzień opóźnia zamrażanie każdego dnia do granicy 72 h.
 - **Scenariusz:** Użytkownik przestaje używać starego laptopa (bez stanu „zamknięty”, np. zabrany uśpiony). Przez kolejne 7 dni każdy dzień zamraża się dopiero po 72 h, a gra i passa długo pokazują „w toku”. Nie ma jak tego wyłączyć.
 - **Poprawka:** Lista zapomnianych w rd.json (wspólna), wczytywana do `presence.forgotten`. Pomijać ją w `writerIds` i w `computers` w `freezeTasks` oraz w `minuteGate`. Pozycja w Ustawieniach na liście `computers`.
-- **Status:** otwarte
+- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
 
 #### A3-14 · low · bez weryfikacji – OneDrive „nie działa” już po jednym sprawdzeniu (60 s) zamiast po 5 min
 - **Plik:** `src/main/onedrive.ts:42` · rodzaj: spec · pewność recenzenta: medium
@@ -551,7 +551,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `OneDriveWatch.check` przestawia `last` na false po pierwszej odpowiedzi pomocnika „nie działa”, a `running` od razu zmienia reguły prowadzenia i ustalenia (`settle.oneDrive` zeruje `oneDriveSince`). Specyfikacja liczy stan „OneDrive nie działa” dopiero od 5 min bez procesu. Krótki restart OneDrive (aktualizacja klienta) cofa ustalenie i zmienia reguły prowadzenia.
 - **Scenariusz:** OneDrive aktualizuje się i restartuje (ok. 30–60 s bez procesu). Komputer na chwilę przestaje uznawać inne za uśpione, a odliczanie „co najmniej 3 min od chwili, gdy działa proces OneDrive” zaczyna się od nowa i wstrzymuje zadania prowadzącego.
 - **Poprawka:** Pamiętać chwilę pierwszego „nie działa” i zgłaszać `running = false` dopiero po 5 min ciągłego braku. Odstępy sprawdzeń jak w specyfikacji (10 s w stanie nieustalonym).
-- **Status:** otwarte
+- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
 
 #### A3-15 · low · bez weryfikacji – Zapis kolejki bez ponowienia przy blokadzie, a nieudany `add` zostawia wpis w pamięci – okno mówi „nie zapisano”, a zmiana zapisuje się później
 - **Plik:** `src/main/data/editQueue.ts:124` · rodzaj: bug · pewność recenzenta: medium
@@ -559,7 +559,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `persist()` (`openSync`/`renameSync`) i dopisanie do dziennika nie mają `withRetry`, w przeciwieństwie do reszty warstwy (EPERM/EBUSY od antywirusa lub indeksera w %APPDATA%). `add()` najpierw dodaje wpis do `entries`, potem zapisuje. Gdy zapis rzuci wyjątek, `DataFolder.edit` przerywa i okno pokazuje „Nie zapisano”, ale wpis zostaje w pamięci i najbliższe `apply` (np. w `check()`) zapisuje go do folderu.
 - **Scenariusz:** Antywirus trzyma queue.v1.json w chwili zapisu i `renameSync` daje EPERM. Okno pokazuje „Nie zapisano: …”, użytkownik tworzy prośbę jeszcze raz. Po 15 s kolejka zapisuje też pierwszy wpis i powstają dwie prośby.
 - **Poprawka:** W `add()` zapisywać listę z nowym wpisem przed wstawieniem go do `entries` (przy błędzie wpis nie istnieje), a `persist` i `renameSync` ponawiać jak `withRetry` (wersja synchroniczna albo `persist` asynchroniczny w łańcuchu kolejki).
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A3-16 · low · bez weryfikacji – Plik dnia z wartością, której ta wersja nie umie przedstawić, nie jest tylko do odczytu – edycja bloku nadpisuje ją wartością znormalizowaną
 - **Plik:** `src/shared/data/dayEdits.ts:20` · rodzaj: spec · pewność recenzenta: medium
@@ -567,7 +567,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `blockJson(b, before)` = `{...before, ...b}`. Nieznane POLA zostają, ale znane pola z wartością spoza możliwości tej wersji (np. nowy `tag`, `origin`, nowy kształt `costs`, `startMin` spoza zakresu) są w `b` już znormalizowane przez `planBlockFrom` (null albo domyślne) i nadpisują wartość z pliku. Specyfikacja wymaga, by taki plik dnia był tylko do odczytu – tego sprawdzenia nie ma (`ReadOnlyMark` używa tylko TrialPage).
 - **Scenariusz:** Wersja 1.1 zapisuje w pliku dnia blok z `tag: 'nowyRodzaj'`. Komputer z 1.0 zmienia długość tego bloku. Diff zawiera też `tag: 'nowyRodzaj' → null`, więc znacznik ginie, a 1.1 traci sens bloku.
 - **Poprawka:** Przy parsowaniu pliku dnia oznaczać bloki lub pola nieprzedstawialne (wartość obecna, a model daje null lub domyślną). Okno pokazuje wtedy dzień „tylko do odczytu” albo `putBlock` zapisuje tylko pola faktycznie zmienione przez użytkownika (diff modelu przed i po, nałożony na surowy blok).
-- **Status:** otwarte
+- **Status:** do 5.3 (T515)
 
 #### A3-17 · low · bez weryfikacji – Kopia przed aktualizacją może nie powstać: `lastRunVersion` zapisywany przy starcie, zanim folder się otworzy
 - **Plik:** `src/main/data/hub.ts:219` · rodzaj: data · pewność recenzenta: high
@@ -575,7 +575,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `index.ts:1148` od razu zapisuje w config.json `lastRunVersion = bieżąca`, a kopia przed aktualizacją robi się dopiero w `openNow` (asynchronicznie, po dostępności folderu). Gdy folder nie otworzy się w tej sesji (OneDrive niegotowy po nocnej instalacji, wyjście przed otwarciem) albo `createUpdateBackup` się nie uda (folder i tak się otwiera), następny start nie widzi już nowszej wersji i kopii przed aktualizacją nie ma.
 - **Scenariusz:** Nocna instalacja 0.16 i start z Windows, a OneDrive jeszcze się nie zalogował. Użytkownik wyłącza komputer, zanim folder się otworzy. Następnego dnia 0.16 otwiera folder bez kopii „0.15.0-do-0.16.0.zip” – migracji formatu (gdyby była) nie da się cofnąć.
 - **Poprawka:** Zapisywać `lastRunVersion` (albo osobny znacznik „kopia przed aktualizacją zrobiona dla X”) dopiero po udanym `createUpdateBackup` lub po stwierdzeniu, że kopia już jest. Do tego czasu każde uruchomienie próbuje jeszcze raz.
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A3-18 · nit · bez weryfikacji – Nowy rekord nad plikiem uszkodzonym dostaje komunikat „plik jest teraz nieczytelny – spróbuj za chwilę”
 - **Plik:** `src/main/data/folder.ts:470` · rodzaj: ux-text · pewność recenzenta: high
@@ -583,7 +583,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** W `DataFolder.edit` sprawdzenie nowego rekordu łączy statusy `broken` i `unreadable` w jeden komunikat o chwilowej nieczytelności. Plik uszkodzony nie naprawi się sam – trzeba go przywrócić z historii.
 - **Scenariusz:** days/2026/2026-11-03.json ma błąd składni. Okno, które widzi dzień jako „nieznany”, próbuje go utworzyć i dostaje „spróbuj za chwilę”. Ponawianie nic nie daje.
 - **Poprawka:** Dla `status === 'broken'` komunikat „plik jest uszkodzony – przywróć go z Historii”.
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 ### A4 – Proces główny – okna, pasek pulpitu, zasobnik, powiadomienia, IPC, proces w tle
 
@@ -1241,7 +1241,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** (1) „Rozjazd” oceniać po czasie komputera `t` zdarzeń innych komputerów, bez własnych (T435 mówi „innego komputera”), a nie po `l`. (2) W `stamp()` i `rebase()` wykrywać `lastL > now() + AHEAD_LIMIT_MS` (zegar był z przodu i się cofnął): ograniczyć `lastL` do `now()`, zgodzić się na jednorazową anomalię kolejności, zalogować ją i pokazać ostrzeżenie o zegarze. Zapisać to jako T-decyzję. Test: skok o +2 dni i powrót, potem `check()` prowadzącego wykonuje zadania, a kolejność kliknięć z dwóch komputerów jest poprawna.
 - **Weryfikacja:** Skok zegara ściennego o rok w przód scheduler zgłasza jako wybudzenie (dWall > 45 s), a `unsettle('wake')` robi `rebase()`. Zdarzenia dostają wtedy `t` i `l` z przyszłości. Po cofnięciu zegara `rebase()` nie rusza `lastL`, więc każde kolejne `stamp()` daje `l = lastL+1` (rok do przodu). `readDay` woła `observe(e.l)` także dla własnych zdarzeń, wychodzi `ahead = true`, a `check()` pomija wszystkie zadania prowadzącego. `lastL` wraca z dziennika i z `continueAfter`, więc stan nie mija ani po restarcie, ani następnego dnia. Narusza to T435 („czekają tylko, dopóki rozjazd trwa”). Istniejący test (folder.test.ts:112) sprawdza tylko zegar innego komputera, który był z przodu, nie zegar własny, który się cofnął.
 - **Dowód:** src/shared/data/clock.ts:42-54 (rebase nie ogranicza lastL, stamp = max(t, lastL+1)); src/main/engine/scheduler.ts:96-101; src/main/data/folder.ts:339, 307, 566-567; src/main/data/eventLog.ts:272-273. Tymczasowy test (DataFolder, wall +365 dni → unsettle('wake') → noteInput → wall z powrotem → rebase → 8 min sprawdzeń): lastL=1824105601002 przy now=1792570081000, problems=['zegar: … działania automatyczne czekają'], brak day.create; bez skoku day.create powstaje, problems=[].
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A8-02 · medium · potwierdzone – Ostrzeżenia o zegarze nie ma nigdzie w interfejsie (różnica ponad 2 min, pierwszy odczyt, ponad 24 h)
 - **Plik:** `src/main/data/folder.ts:566` · rodzaj: spec · pewność recenzenta: high
@@ -1251,7 +1251,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W `PresenceStore.scan` liczyć różnicę `presence.writtenAt − now` dla każdego zobaczonego zapisu (także pierwszego) i trzymać stan „zegar rozjechany z PC X o N min”. Przekazać go razem z `read.ahead` do widoku widgetu (`engineView`/`WidgetView`) jako cichą linię paska. Rozjazd ponad 24 h wykrywać też po obecności, a nie tylko w logu lokalnego dnia. Treść linii w duchu specyfikacji, np. „Zegar tego komputera różni się od PC A o 4 min”, wymaga potwierdzenia tekstu.
 - **Weryfikacja:** Specyfikacja (Dane, linie 637, 661, 667) oraz T96 i T123 wymagają ostrzeżenia o zegarze w pasku: przy rozjeździe ponad 24 h, przy różnicy w obecności ponad 2 min i przy pierwszym odczycie. W kodzie nie ma żadnego z nich. `aheadSeen` nikt nie czyta, `read.ahead` trafia tylko do `problems`, które `service.ts` wpisuje do logu, a `PresenceStore.scan` nie porównuje `writtenAt` z chwilą zobaczenia. Nigdzie w renderer ani w engineView nie ma tekstu o zegarze. Nie jest to odłożone w planie ani w decyzjach. Wykrywanie ponad 24 h działa tylko na logu lokalnego „dziś”, więc komputer, którego zegar jest o kilka dni z tyłu, nie widzi rozjazdu.
 - **Dowód:** Grep 'aheadSeen' – tylko src/shared/data/clock.ts:24,46,59; folder.ts:566 (tylko problems); service.ts:233 (o.log); hub.ts:353 (DataView.problems tylko z records); presenceStore.ts:109 (writtenAt używane tylko do fileSeenAt); Grep '[Zz]egar' w src – brak tekstu ostrzeżenia w UI; docs/plan.md, postep.md – brak odłożenia.
-- **Status:** otwarte
+- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
 
 #### A8-03 · medium · potwierdzone – Powiadomienia prowadzącego wychodzą także w stanie „nieustalonym” – podwójne powiadomienia po wybudzeniu i starcie
 - **Plik:** `src/main/widget.ts:237` · rodzaj: race · pewność recenzenta: high
@@ -1261,7 +1261,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W `WidgetEngine.refreshNow` wołać `notices` tylko przy `folder.leader.iLead && folder.presence.own.settled` (albo przy zapamiętanym `settled` z ostatniego `check`). Dodać test w `tests/fs/widget.test.ts`: prowadzący po `unsettle('wake')` nie wywołuje `notify`, dopóki się nie ustali.
 - **Weryfikacja:** `refreshNow` woła `notices`, sprawdzając tylko `folder.leader.iLead`. `decideLeader` liczy się przy każdym `check()` niezależnie od stanu „nieustalonego”, więc po wybudzeniu albo przy starcie komputer bywa prowadzącym, choć jeszcze się nie ustalił. Przykład: B nie ma świeżego `fileSeenAt` po uśpieniu A, wtedy `awake` jest puste i A prowadzi. Specyfikacja (linie 662–663 i tabela w linii 676) zalicza powiadomienia do zadań prowadzącego, których komputer nieustalony nie wykonuje, właśnie po to, żeby nie wychodziły podwójnie. `notice.shown` z logu B może jeszcze nie dotrzeć, więc A pokaże powiadomienie drugi raz. Stałe id chroni tylko przed podwójnym zapisem, nie przed drugim toastem. Symulator liczy podwójne prowadzenie tylko przy `iLead && settled`.
 - **Dowód:** src/main/widget.ts:237 (`if (folder.leader.iLead) await this.notices(...)`), 371-411; src/main/data/folder.ts:549-558 (leader liczony przed bramką settled), 567; src/shared/sync/leader.ts:68,109; tests/sim/two-computers.test.ts:202. W tymczasowym teście A8-01 widać iLead=true przy settled=false. Brak testu powiadomień przy unsettle w tests/fs/widget*.
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A8-04 · medium · potwierdzone – Brak wyboru jednego komputera dla dźwięku – tony 5 i 0 min grają na każdym komputerze z włączonym dźwiękiem
 - **Plik:** `src/main/index.ts:191` · rodzaj: spec · pewność recenzenta: high
@@ -1271,7 +1271,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodać czystą funkcję `soundComputer(peers, self, leader)` (np. w `shared/sync/`): nieuśpieni (obecność odświeżona w ostatnich 10 min, bez stanu „zamknięty”), najnowsza obecność, remis – prowadzący, z wyłączeniem nagrywającego. Wołać ją w `showWidget` przed `sound.play`. Do tego test jednostkowy jak w `leader.test.ts`.
 - **Weryfikacja:** Specyfikacja (linia 662 i tabela w linii 675) oraz T274, T281 i T291 wymagają, żeby dźwięk grał na jednym komputerze: nieuśpionym, z najnowszą obecnością, przy remisie na prowadzącym, nigdy na nagrywającym. `showWidget` gra ton, gdy tylko `toneOnChange` zmieni krok i dźwięk jest włączony w ustawieniach tego komputera. `soundOk` wyklucza tylko ukrycie, „mniej pytań”, zjazd stacjonarny i nagrywanie. Nigdzie nie ma wyboru komputera dźwięku. T475 opisuje dźwięk bez tej reguły, ale jej nie zastępuje. Skutek łagodzi to, że dźwięk jest domyślnie wyłączony i ustawia się go osobno na każdym komputerze. Mimo to przy włączeniu na obu ton gra podwójnie, a to sprzeczne z jawną regułą.
 - **Dowód:** src/main/index.ts:185-191; src/main/widget.ts:81-84; src/shared/engineView.ts:248; src/shared/machine.ts:53 (sound jako ustawienie komputera); Grep 'soundComputer|komputer dźwięku' w src – brak; docs/decyzje-techniczne.md T281 (l.272), T291 (l.282), T475 (l.465).
-- **Status:** otwarte
+- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
 
 #### A8-05 · medium · potwierdzone – Tekst zakończonych bloków na osi dnia ma kontrast ok. 3:1 (opacity-45) – test kontrastu tego nie widzi
 - **Plik:** `src/renderer/features/plan/Timeline.tsx:210` · rodzaj: spec · pewność recenzenta: high
@@ -1281,7 +1281,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Przygaszać tylko tło i obramowanie: osobna funkcja `blockFillDim` w theme.ts, np. słabszy `mix` z powierzchnią, albo opacity tylko na warstwie tła, a tekst zostawić w `text-fg` / `text-muted`. Tak samo w MonthGrid i w wierszach archiwalnych. Dopisać do `contrastPairs` przygaszone wypełnienia bloków i dni oraz teksty akcentu na tle paska (rose, sea) dla wszystkich zestawów tonów.
 - **Weryfikacja:** `opacity-45` jest na całym przycisku bloku, więc przygasza też tekst. To przeczy komentarzowi w theme.ts („Text colours are never dimmed”) oraz zasadzie 4,5:1 przy każdej jasności (specyfikacja, linia 580; T88). T459 każe przygaszać minione bloki, ale nie robi wyjątku od kontrastu, a bloki są klikalne. `contrastPairs` nie zawiera tych przygaszonych teł, więc test przechodzi. Część o pasku jest słabsza: `text-sea` poniżej 4,5:1 występuje tylko w zestawach próby „robocze” i „chłodniejsze”, a silnik używa „cieplejszych” (4,54 i więcej). W wierszach archiwalnych z opacity-60 tekst `text-fg` ma 5,3:1 i więcej, a przygaszony `text-muted` 3,4–3,8:1.
 - **Dowód:** src/renderer/features/plan/Timeline.tsx:210,217-222; src/renderer/features/calendar/MonthGrid.tsx:114; src/shared/theme.ts:154-194. Tymczasowy test obliczeń (mieszanie przy 45% i 40% na --color-bg i --color-panel, wszystkie BRIGHTNESS_STEPS i BLOCK_COLORS): nazwa bloku przygaszonego 3,12–3,67:1, godziny 2,16–2,52:1, dni spoza miesiąca 3,16–3,28 i 2,27–2,35:1, muted przy opacity-60 3,40–3,78:1. Pasek: sea w zestawie robocze min 4,44, chlodne min 4,34, cieple min 4,54; rose wszędzie ≥ 4,51.
-- **Status:** otwarte
+- **Status:** do 5.2d (ekrany)
 
 #### A8-07 · medium · potwierdzone – Brak linii stanu synchronizacji z rozdziału „Kilka komputerów” (OneDrive nie działa, Brak zmian z PC A, dane sprzed N s, Pytania mogą pojawić się też na PC B)
 - **Plik:** `src/main/onedrive.ts:43` · rodzaj: spec · pewność recenzenta: high
@@ -1291,7 +1291,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** `OneDriveWatch`: stan „nie działa” dopiero po 5 min bez procesu, odpytywanie co 10 s w stanie nieustalonym. Przekazać do `WidgetView` cichą linię stanu (OneDrive, przejęcie bez OneDrive, komputer uznany za uśpiony z godziną ostatniej zmiany) i znacznik wieku danych innego komputera w widoku dnia. Teksty są w specyfikacji.
 - **Weryfikacja:** Specyfikacja (linie 664 i 666) wymaga cichych linii: „OneDrive nie działa na tym komputerze”, „Pytania mogą pojawić się też na PC B”, „Brak zmian z PC A od …”, „Oszczędzanie baterii może wstrzymać OneDrive” oraz znacznika „dane z PC A sprzed 40 s”. W src nie ma żadnego z tych tekstów ani linii synchronizacji w engineView. Stan OneDrive trafia tylko do logu. `OneDriveWatch` odpytuje stale co 60 s, bez 10 s w stanie nieustalonym (wbrew T192), i zmienia stan od razu po pierwszej odpowiedzi „nie działa” zamiast po 5 min. Plan, postęp ani decyzje tego nie odkładają (T311 tylko wspomina cichą linię o OneDrive).
 - **Dowód:** src/main/onedrive.ts:7,39-46; Grep 'OneDrive nie działa|Pytania mogą|Brak zmian z|sprzed|Oszczędzanie baterii' w src – tylko log w onedrive.ts:43 i powody w leader.ts:116-118; src/shared/engineView.ts:180-217 (linie paska bez stanu synchronizacji); docs/decyzje-techniczne.md T192 (l.188), T311 (l.302).
-- **Status:** otwarte
+- **Status:** do 5.2f – funkcja ze specyfikacji (D325)
 
 #### A8-06 · low · bez weryfikacji – Obecność po restarcie nie podaje ostatniego zdarzenia dni sprzed restartu – zamrożenie może nie czekać na log tego komputera
 - **Plik:** `src/main/data/folder.ts:278` · rodzaj: spec · pewność recenzenta: medium
@@ -1299,7 +1299,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Własna obecność startuje z `lastEvents: {}` i nie jest odtwarzana z dziennika ani z poprzedniego pliku obecności. `append` dopisuje do niej tylko dni zdarzeń zapisanych od otwarcia. Specyfikacja każe podawać ostatnie zdarzenie każdego otwartego dnia, także bez zdarzeń. `waitingFor` (freeze.ts:97) bierze `named = lastEvents[date] ?? -1`, więc po restarcie komputer B przestaje „nazywać” wczorajsze zdarzenia. Prowadzący uznaje warunek „ostatnie zdarzenie widać w jego logu” za spełniony, choć log B za ten dzień jeszcze nie dotarł.
 - **Scenariusz:** B pracował do 23:30 dnia D i wyłączył się bez czystego zamknięcia, albo jego log D utknął w kolejce OneDrive. Rano B startuje i zapisuje obecność z `writtenAt` po końcu D i z `lastEvents` bez D. Jeśli przez okno korekty (24 h od otwarcia dnia) log D z B nie dotrze do prowadzącego A, A zamrozi D bez zdarzeń B, a te zostaną na stałe „poza oceną”.
 - **Poprawka:** Przy `DataFolder.open` wypełnić `lastEvents` z dziennika (`log.ownEvents` dla dni w dzienniku, niezamrożonych) albo z ostatnich logów 14 dni, tak jak `continueOwnNumbers`. Dni bez zdarzeń wpisywać z −1, a dni zamrożone po potwierdzeniu usuwać. Test w `tests/fs/freeze.test.ts`: restart B przed dotarciem jego logu, prowadzący czeka.
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A8-08 · low · bez weryfikacji – Komputer z nowszymi regułami przejmuje prowadzenie od razu, bez wskazania przez dotychczasowego – krótkie podwójne prowadzenie
 - **Plik:** `src/shared/sync/leader.ts:152` · rodzaj: race · pewność recenzenta: medium
@@ -1307,7 +1307,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Gdy prowadzący ma starsze reguły, a ten komputer nowsze i obecność, `decideLeader` od razu zwraca `latest()`, czyli zwykle siebie. Dotychczasowy prowadzący O w `mayLead` traktuje `seenLeader === O` w starym pliku N jako „oddał mu prowadzenie” i prowadzi dalej, dopóki nie zobaczy pliku N wskazującego N. Przez opóźnienie synchronizacji obecności (do ok. 1–2 min) prowadzą obaj. Przy zwykłej przesiadce T415 tego unika, bo nowy czeka na wskazanie przez poprzedniego.
 - **Scenariusz:** Po aktualizacji desktop N ma reguły 3, laptop O ma 2 i prowadził, bo N nie był używany. Wracasz do desktopu (ustalonego). N od razu prowadzi i pokazuje „Analiza tygodnia o 10:00 – Za 5 min”. O nie widzi jeszcze nowej obecności N i też ją pokazuje, z własnym `notice.shown`, bo log N jeszcze nie dotarł.
 - **Poprawka:** W gałęzi „prowadzący ma starszą wersję reguł” przejmować jak przy przesiadce: nowszy wpisuje się jako widziany prowadzący, ale zadania wykonuje dopiero, gdy O wskaże go w obecności, albo po 10 min ciszy O. Albo O ma ustępować od razu, gdy obecność N jest świeża, bez traktowania starego `seenLeader` jako oddania. Test w `leader.test.ts`.
-- **Status:** otwarte
+- **Status:** do 5.3 (T515)
 
 #### A8-09 · low · bez weryfikacji – Godziny wpisane w rytuale przy zmianie czasu: godzina nieistniejąca nie jest odrzucana, podwójna zawsze oznacza pierwszą
 - **Plik:** `src/renderer/features/ritual/RitualPanel.tsx:170` · rodzaj: spec · pewność recenzenta: high
@@ -1315,7 +1315,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Rytuał (linie 170 i 371) i niezamknięte dni (UnclosedDays.tsx:61) zamieniają wpisaną godzinę na chwilę przez `placeLogical`. Ta funkcja przesuwa godzinę nieistniejącą za lukę i zawsze bierze pierwsze wystąpienie godziny podwójnej. `resolveLogical` (odrzucenie z komunikatem, wybór drugiego wystąpienia) nie jest używane nigdzie poza modułem czasu. Pole czasu startuje z `logicalMinuteOf`, które dla drugiego wystąpienia daje tę samą liczbę co dla pierwszego. Zapisanie godziny bez zmian przesuwa więc koniec z drugiego wystąpienia o 1 h wcześniej.
 - **Scenariusz:** W nocy 24/25.10.2026 blok skończył się o 02:40 drugiego wystąpienia (CET). W rytuale klikasz „popraw” i „Zapisz” bez zmiany godziny. Zapisuje się 02:40 CEST, czyli godzinę wcześniej. 28.03.2027 wpisujesz 02:30, a aplikacja po cichu zapisuje 03:00 zamiast komunikatu.
 - **Poprawka:** W rytuale i w niezamkniętych dniach używać `resolveLogical(date, min, pick)`: przy `nonexistent` komunikat w polu, przy `ambiguous` wybór pierwszej albo drugiej. Wartość startową pola brać z chwili zdarzenia razem z informacją, które to wystąpienie. Testy w `tests/web` dla obu nocy zmiany czasu.
-- **Status:** otwarte
+- **Status:** do 5.2d (ekrany)
 
 #### A8-10 · low · bez weryfikacji – Ręcznie pisane formy liczby mnogiej łamią polską odmianę (2–4, 22–24)
 - **Plik:** `src/renderer/app/Questions.tsx:39` · rodzaj: ux-text · pewność recenzenta: high
@@ -1323,7 +1323,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Baner pytań dla 2–4 zmian pokazuje „2 Twoich zmian spotkało się”, a powinno być „2 Twoje zmiany spotkały się”. HistoryPage.tsx:49 i recordText.ts:68 liczą formę warunkiem `< 5`, więc 22–24 dają „22 wersji” i „23 pozycji” zamiast „22 wersje” i „23 pozycje”. W `format.ts` jest gotowe `plural`/`countLabel`.
 - **Scenariusz:** Dwie Twoje edycje spotkały się ze zmianą z innego komputera i baner mówi „2 Twoich zmian spotkało się ze zmianą z innego komputera.”. Rekord z 22 migawkami w Historii pokazuje „22 wersji”.
 - **Poprawka:** Użyć `countLabel(n, 'Twoja zmiana spotkała', 'Twoje zmiany spotkały', 'Twoich zmian spotkało')` itp. oraz `countLabel(r.versions, 'wersja', 'wersje', 'wersji')` i `countLabel(v.length, 'pozycja', 'pozycje', 'pozycji')`. Dodać przypadki 2, 5, 12, 22 do testów tekstów.
-- **Status:** otwarte
+- **Status:** do 5.2d (ekrany)
 
 #### A8-11 · low · bez weryfikacji – Test kolejności przy różnicy zegarów do 5 min nie obejmuje komputera z tyłu ani bloku zaczętego na jednym i skończonego na drugim
 - **Plik:** `tests/sim/two-computers.test.ts:81` · rodzaj: test-gap · pewność recenzenta: high
@@ -1331,7 +1331,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Niezmiennik z planu („kolejność zdarzeń przy różnicy zegarów do 5 min”) sprawdzają `data.test.ts` (obserwacja +5 min przesuwa zegar logiczny) i symulator, w którym laptop ma zegar 3 min z przodu. Każdy blok w symulatorze zaczyna się i kończy na tym samym komputerze. Nie ma przypadku komputera z zegarem 5 min z tyłu, który kończy blok zaczęty na drugim. Nie jest więc sprawdzone, że koniec sortuje się po starcie, długość nigdy nie jest ujemna, a blok nie liczy się do trafności (`accurateBlocks` ma regułę `start.c !== end.c`, ale bez testu z różnicą zegarów).
 - **Scenariusz:** Regresja, np. sortowanie po `at` albo `t` zamiast `l`, albo zdjęcie `Math.max(run.from, …)` w facts.ts, nie złamałaby żadnego testu. Blok zaczęty na A (+0) i skończony na B (−5 min) dostałby wtedy ujemną albo zerową długość albo zostałby pominięty.
 - **Poprawka:** Dodać do symulatora (albo do testu silnika z DSL) komputer z zegarem −5 min: start na A, koniec na B dwie minuty później w czasie prawdziwym. Oczekiwanie: koniec sortuje się po starcie, długość ≥ 0, blok poza trafnością, oba komputery liczą ten sam dzień.
-- **Status:** otwarte
+- **Status:** poprawione w 0.17.0 (testy w `tests/fs`, `tests/unit`, T515)
 
 #### A8-12 · nit · bez weryfikacji – Podpowiedź paska w próbie liczy godzinę końca od lokalnej północy komputera, nie w czasie polskim
 - **Plik:** `src/shared/widget.ts:201` · rodzaj: bug · pewność recenzenta: high
@@ -1339,4 +1339,4 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** `trialView` liczy `clock((endsAt - new Date(now).setHours(0, 0, 0, 0)) / 60_000)`, czyli od północy strefy komputera, z jej zmianą czasu. Wszędzie indziej wyświetlanie jest w Europe/Warsaw (`clockOf` przez Intl, `logicalMinuteOf`).
 - **Scenariusz:** 25.10 po 03:00 (albo na komputerze ustawionym w innej strefie) podpowiedź próby pokazuje „do 11:42” zamiast „do 10:42”.
 - **Poprawka:** Użyć `logicalClock(logicalMinuteOf(logicalDayOf(endsAt), endsAt))` albo tego samego `Intl.DateTimeFormat` z `timeZone: 'Europe/Warsaw'` co w `engineView`.
-- **Status:** otwarte
+- **Status:** do 5.2d (ekrany)

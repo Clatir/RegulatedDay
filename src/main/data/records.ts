@@ -7,8 +7,9 @@
  * (E3 asks, „Przyjmij nowsze” answers many at once). Fields this version does not know stay in the file.
  */
 import { join } from 'node:path'
-import { classify, type Classified } from '@shared/data/paths'
+import { classify, paths, type Classified } from '@shared/data/paths'
 import { deepEqual, merge3, type MergeConflict } from '@shared/data/merge'
+import { earlierOnce } from '@shared/model/rd'
 import type { DataFs } from './fsio'
 import type { RecordHistory } from './history'
 
@@ -104,7 +105,15 @@ export class RecordStore {
     const [copy, canon] = await Promise.all([this.read(copyRel), this.read(canonicalRel)])
     if (copy.status !== 'ok') return { joined: false, conflicts: [] }
     if (canon.status === 'missing') {
-      await this.o.fs.writeAtomic(join(this.o.dataDir, canonicalRel), `${JSON.stringify(copy.value, null, 2)}\n`)
+      // The record was removed on purpose (its last version in the history is the deletion): it stays removed and the
+      // copy's content goes to the history – a copy never brings back quietly a record removed (spec, A3-11).
+      // (Other copies kept on the way never count – a second copy of the record finds the deletion still.) A copy whose
+      // content could not be kept stays where it is, tried again later.
+      const c = classify(canonicalRel)
+      const key = c ? historyKey(c) : null
+      if (key && (await this.o.history.lastReason(key.kind, key.id, ['conflict'])) === 'delete') {
+        if (!(await this.o.history.snapshot(key.kind, key.id, copy.value, 'conflict'))) return { joined: false, conflicts: [] }
+      } else await this.o.fs.writeAtomic(join(this.o.dataDir, canonicalRel), `${JSON.stringify(copy.value, null, 2)}\n`)
       await this.o.fs.remove(join(this.o.dataDir, copyRel))
       return { joined: true, conflicts: [] }
     }
@@ -119,6 +128,9 @@ export class RecordStore {
     const { merged } = merge3<Record<string, unknown>>(undefined, canon.value, copy.value, (c) => {
       if (c.mine === undefined) return 'theirs'
       if (c.theirs === undefined) return 'mine'
+      // A day of rd.json written once by two leaders apart: the earlier wins, never a question (T513, A3-10).
+      const once = canonicalRel === paths.settings ? earlierOnce(c.path, c.mine, c.theirs) : null
+      if (once != null) return once === c.mine ? 'mine' : 'theirs'
       if (answer) return answer(c)
       asked.push(c)
       return 'mine'

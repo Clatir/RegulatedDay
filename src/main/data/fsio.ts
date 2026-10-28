@@ -69,3 +69,41 @@ export const nodeFs: DataFs = {
     await withRetry(() => fs.rm(abs, { force: true }), 10)
   }
 }
+
+/**
+ * The data folder whose root may go away (spec „W niedostępnym folderze niczego nie tworzy”, „nieznane nigdy nie jest
+ * puste”, A3-01): a write into it fails – it waits in the journal or the queue – instead of making a new, empty folder in
+ * its place, which OneDrive would send to the other computers; a read that finds nothing there is „unknown” (it
+ * throws), never a missing file or an empty folder. The root itself is looked at only when something is missing.
+ */
+export function rootGuarded(base: DataFs, root: string): DataFs {
+  const present = async () => {
+    if (!(await base.stat(root))) throw Object.assign(new Error(`folder danych niedostępny: ${root}`), { code: 'ENOROOT' })
+  }
+  return {
+    read: async (abs) => {
+      const bytes = await base.read(abs)
+      if (bytes === null) await present()
+      return bytes
+    },
+    list: async (abs) => {
+      const entries = await base.list(abs)
+      if (!entries.length && abs !== root) await present()
+      return entries
+    },
+    stat: async (abs) => {
+      const st = await base.stat(abs)
+      if (st === null && abs !== root) await present()
+      return st
+    },
+    writeAtomic: async (abs, data) => {
+      await present()
+      return base.writeAtomic(abs, data)
+    },
+    append: async (abs, text) => {
+      await present()
+      return base.append(abs, text)
+    },
+    remove: (abs) => base.remove(abs)
+  }
+}
