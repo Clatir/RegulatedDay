@@ -4,17 +4,64 @@
  * update, shown at the first opening of the window (D229).
  */
 import { useState } from 'react'
+import type { MovedTo } from '@shared/api'
 import { formatNumber } from '@shared/format'
+import { useData } from '../store/data'
+import { setMovedLater, toast, useUi } from '../store/ui'
 import { updateAction, useUpdate } from '../store/update'
 import { useWidget } from '../store/widget'
 
+const stampOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
+
+/**
+ * The data moved to another folder (D321): another computer restored a whole backup into a new folder and left the
+ * marker „przeniesiono do …” here. „Przejdź” opens that folder on this computer; „Nie teraz” hides it until the app
+ * starts again. Never a dot in the bar, never a move by itself (D72).
+ */
+function MovedBanner() {
+  const moved = useData((s) => (s.view?.status === 'open' ? s.view.moved : null))
+  const computers = useData((s) => s.view?.computers)
+  const later = useUi((s) => s.movedLater)
+  if (!moved || later === movedKey(moved)) return null
+  const by = computers?.find((c) => c.id === moved.by)?.name ?? 'inny komputer'
+  const go = async () => {
+    const r = await window.rd.moveTo(moved.to).catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }))
+    if (!r.ok) toast(`Folder ${moved.to} nie otworzył się: ${r.error ?? 'nieznany błąd'} – zostaję przy obecnym.`, 'error', 10_000)
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-line bg-panel px-4 py-2 text-[12.5px]" data-testid="banner-moved">
+      <span>
+        Dane przeniesiono do {moved.to} ({by}, {stampOf(moved.at)}).
+      </span>
+      <button type="button" className="btn btn-accent" onClick={() => void go()} data-testid="banner-moved-go">
+        Przejdź
+      </button>
+      <button type="button" className="btn" onClick={() => setMovedLater(movedKey(moved))} data-testid="banner-moved-later">
+        Nie teraz
+      </button>
+    </div>
+  )
+}
+
+/** One marker of a move: „Nie teraz” hides this one, a later move shows again. */
+const movedKey = (m: MovedTo) => `${m.to}|${m.at}`
+
 export function Banners() {
+  return (
+    <div className="flex shrink-0 flex-col">
+      <MovedBanner />
+      <UpdateBanners />
+    </div>
+  )
+}
+
+function UpdateBanners() {
   const view = useUpdate((s) => s.view)
   const quiet = useWidget((s) => s.view?.quiet ?? false)
   const [notesOpen, setNotesOpen] = useState(true)
   if (!view) return null
   return (
-    <div className="flex shrink-0 flex-col">
+    <>
       {view.banner && (
         <div className="flex flex-wrap items-center gap-2 border-b border-rose/40 bg-rose-soft px-4 py-2 text-[12.5px]" data-testid="banner-update-failed">
           <span>
@@ -60,6 +107,6 @@ export function Banners() {
           <div className="text-[12.5px] leading-relaxed whitespace-pre-wrap text-fg">{view.whatsNew.notes || 'Poprawki i drobne zmiany.'}</div>
         </div>
       )}
-    </div>
+    </>
   )
 }

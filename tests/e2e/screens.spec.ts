@@ -6,13 +6,14 @@
  * its range refused with its message). Independent of the hour it runs at: today's work block is at 03:00 of the
  * night after (the end of the logical day), so the plan always has a boundary to approve.
  */
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
-import { DEFAULT_SETTINGS } from '../../src/shared/model/settings'
+import { DEFAULT_SESSIONS, DEFAULT_SETTINGS } from '../../src/shared/model/settings'
 import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
+import { createDailyBackup } from '../../src/main/data/backup'
 import { launch, viewPage, withMainLog } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
@@ -26,7 +27,8 @@ function logicalToday(): string {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 }
 
-function seed(dir: string): void {
+/** `sessions: false` – today's sessions answered „Nie”: no fixed work still to come makes „Koniec pracy” a break. */
+function seed(dir: string, o: { sessions?: boolean } = {}): void {
   const today = logicalToday()
   const records = firstComputerRecords(
     { settings: DEFAULT_SETTINGS, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [{ id: 'mama', name: 'Mama', archived: false }], templates: defaultTemplates(), lectures: [], days: {} },
@@ -38,7 +40,13 @@ function seed(dir: string): void {
     writeFileSync(join(dir, r.rel), JSON.stringify(r.value, null, 2))
   }
   // Today: an ordinary day with a work block at 03:00 of the night after (always still to come).
-  const day = { schema: 1, date: today, dayType: 'zwykly', blocks: [{ id: 'late', categoryId: 'inne', startMin: 27 * 60, durationMin: 30, fixed: false }] }
+  const day = {
+    schema: 1,
+    date: today,
+    dayType: 'zwykly',
+    ...(o.sessions === false ? { sessions: Object.fromEntries(DEFAULT_SESSIONS.map((s) => [s.id, 'no'])) } : {}),
+    blocks: [{ id: 'late', categoryId: 'inne', startMin: 27 * 60, durationMin: 30, fixed: false }]
+  }
   mkdirSync(join(dir, 'days', today.slice(0, 4)), { recursive: true })
   writeFileSync(join(dir, 'days', today.slice(0, 4), `${today}.json`), JSON.stringify(day))
   mkdirSync(join(dir, 'requests'), { recursive: true })
@@ -229,7 +237,9 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
 
 test('rytuał zamknięcia (D318): po „Koniec pracy” karta w „Dziś” i „Rytuał” w pasku; „Zamknij dzień” mówi o wierszach bez wyboru', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-ritual-'))
-  seed(dataDir)
+  // Without today's sessions: on a weekday before the last one ends „Koniec pracy” is only a break (a fixed work block
+  // still to come) – no ritual yet, whatever hour the test runs at.
+  seed(dataDir, { sessions: false })
   // The ritual's first day already written by a leader (D320): today.
   const rdFile = join(dataDir, 'rd.json')
   writeFileSync(rdFile, JSON.stringify({ ...JSON.parse(readFileSync(rdFile, 'utf8')), ritualFrom: logicalToday() }, null, 2))
@@ -262,9 +272,62 @@ test('rytuał zamknięcia (D318): po „Koniec pracy” karta w „Dziś” i �
   }
 })
 
+test('„Dane” w Ustawieniach (D321): eksport CSV do wybranego folderu, kopia z „Wybranymi rekordami” przywraca prośbę', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-data-'))
+  seed(dataDir)
+  const backup = await createDailyBackup(dataDir, join(dataDir, 'backups'), logicalToday())
+  expect(backup.ok).toBe(true)
+  // The request changed after the backup: the backup holds „zakupy”.
+  const reqFile = join(dataDir, 'requests', 'r1.json')
+  writeFileSync(reqFile, JSON.stringify({ ...JSON.parse(readFileSync(reqFile, 'utf8')), note: 'apteka' }))
+  const csvDir = mkdtempSync(join(tmpdir(), 'rd-e2e-csv-'))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      // The window of Windows that picks a folder: here the test's folder.
+      await app.evaluate(({ dialog }, dir) => {
+        dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as unknown as typeof dialog.showOpenDialog
+      }, csvDir)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-settings').click()
+      await expect(page.getByTestId('settings-data')).toBeVisible()
+      await page.getByTestId('csv-export').click()
+      await expect.poll(() => readdirSync(csvDir).filter((f) => f.endsWith('.csv')).length, { timeout: 15_000 }).toBe(3)
+      // Again into the same folder (D323): asked first – „Anuluj” keeps the files, „Zastąp” writes them anew.
+      const blocks = join(csvDir, 'bloki.csv')
+      writeFileSync(blocks, 'stare')
+      const answer = (response: number) =>
+        app.evaluate(({ dialog }, r) => {
+          const w = globalThis as unknown as { asked: number }
+          w.asked = 0
+          dialog.showMessageBox = (async () => (w.asked++, { response: r, checkboxChecked: false })) as unknown as typeof dialog.showMessageBox
+        }, response)
+      const asked = () => app.evaluate(() => (globalThis as unknown as { asked: number }).asked)
+      await answer(1)
+      await page.getByTestId('csv-export').click()
+      await expect.poll(asked, { timeout: 15_000 }).toBe(1)
+      expect(readFileSync(blocks, 'utf8')).toBe('stare')
+      await answer(0)
+      await page.getByTestId('csv-export').click()
+      await expect.poll(() => readFileSync(blocks, 'utf8'), { timeout: 15_000 }).not.toBe('stare')
+      // The backup: its records named as in the interface; the request taken back.
+      await page.getByTestId(`backup-records-${logicalToday()}.zip`).click()
+      await expect(page.getByTestId('backup-contents')).toContainText('Prośba: zakupy')
+      await page.getByTestId('backup-contents').getByText('Prośba: zakupy').click()
+      await page.getByTestId('backup-restore-chosen').click()
+      await expect.poll(() => (JSON.parse(readFileSync(reqFile, 'utf8')) as { note: string }).note, { timeout: 15_000 }).toBe('zakupy')
+      await shot(page, 'e6-02-data')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z osobą i „Koniec”; „Pilne” z szacunkiem', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-requests-'))
-  seed(dataDir)
+  // Without today's sessions: in a session (a quiet mode) „Pilne” starts with 15 min without asking (D311).
+  seed(dataDir, { sessions: false })
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {

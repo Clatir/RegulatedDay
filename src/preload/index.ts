@@ -73,6 +73,12 @@ const api: RdApi = {
   ritualAnswer: (day, row, choice, value, item) => ipcRenderer.invoke(CH.ritualAnswer, day, row, choice, value ?? null, item ?? null),
   closeDay: (day, how) => ipcRenderer.invoke(CH.closeDay, day, how),
   unclosedDays: () => ipcRenderer.invoke(CH.unclosedDays),
+  exportCsv: (from, to) => ipcRenderer.invoke(CH.exportCsv, from, to),
+  backups: () => ipcRenderer.invoke(CH.backups),
+  backupContents: (path) => ipcRenderer.invoke(CH.backupContents, path),
+  restoreRecords: (path, rels) => ipcRenderer.invoke(CH.restoreRecords, path, rels),
+  restoreWhole: (path) => ipcRenderer.invoke(CH.restoreWhole, path),
+  moveTo: (dir) => ipcRenderer.invoke(CH.moveTo, dir),
   seen: (ids) => ipcRenderer.send(CH.seen, ids),
   onSound: (cb) => on('rd:sound', cb)
 }

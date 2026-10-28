@@ -8,19 +8,21 @@
  * closes it and answers the window.
  */
 import { execFile } from 'node:child_process'
-import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
-import type { DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, HistoryRecord, HistoryVersion, RawRecord, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
+import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import type { BackupRecord, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords } from '@shared/data/merge'
 import { classify, ID_COLLECTIONS, paths, SETTINGS_FILE, type IdKind } from '@shared/data/paths'
 import type { HolidayLookup } from '@shared/engine/createDay'
+import { CSV_HEADERS } from '@shared/engine/csv'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { writeFileAtomic } from '../datastore/atomic'
-import { backupEntries, createUpdateBackup, listBackups, readBackupEntry, restoreToFolder, type BackupInfo } from './backup'
+import { backupEntries, createUpdateBackup, listBackups, readBackupFiles, restoreToFolder, type BackupInfo } from './backup'
+import { BEHIND_QUESTION } from './editQueue'
 import type { TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
@@ -86,6 +88,8 @@ const NOISE = new Set(['desktop.ini', 'thumbs.db', '.ds_store'])
 
 /** The marker „przeniesiono do …” in a folder whose backup was restored into a new one (hidden: never in a backup). */
 export const MOVED_FILE = '.moved.json'
+/** In this computer's app data: a restored backup whose folder did not open yet – it waits there also after a restart. */
+export const PENDING_MOVE_FILE = 'pending-move.json'
 
 /** Where a record kind of the history lives. */
 function relOf(kind: string, id: string): string | null {
@@ -96,6 +100,18 @@ function relOf(kind: string, id: string): string | null {
 }
 
 const isPlain = (v: unknown): v is RawRecord => !!v && typeof v === 'object' && !Array.isArray(v)
+
+/** A record a backup can give back one by one: settings, templates, lectures, requests, routines, days. */
+function isRecordRel(rel: string): boolean {
+  const c = classify(rel)
+  return !!c && !c.conflict && c.kind !== 'log' && c.kind !== 'presence' && c.kind !== 'grades'
+}
+
+/** `dir` is `root` or lies inside it (Windows: letters of either case). */
+export function within(dir: string, root: string): boolean {
+  const r = relative(resolve(root), resolve(dir))
+  return r === '' || (r !== '..' && !r.startsWith(`..${sep}`) && !isAbsolute(r))
+}
 
 export class DataHub {
   status: DataView['status'] = 'none'
@@ -110,8 +126,15 @@ export class DataHub {
   private openingDir: string | null = null
   /** The app quits: nothing opens any more. */
   private shutdown = false
-  /** A whole backup restored into a new folder, waiting for that folder to open (then the old one gets its marker). */
-  private moving: { from: string | null; to: string; at: number } | null = null
+  /**
+   * A whole backup restored into a new folder that did not open yet (then the old one gets its marker): the window offers
+   * „Spróbuj ponownie” with why it did not open.
+   */
+  private moving: { from: string | null; to: string; at: number; error: string | null } | null = null
+  /** Why the last opening failed (also when the folder before stayed open). */
+  private lastOpenError: string | null = null
+  /** The waiting move of a restored backup was looked for (once, at the first folder opened). */
+  private pendingLoaded = false
 
   constructor(private readonly o: HubOptions) {}
 
@@ -173,13 +196,14 @@ export class DataHub {
 
   private async openNow(dir: string): Promise<boolean> {
     if (this.shutdown) return false
-    // Another folder open before (the wizard on a computer that had one): it closes first.
+    // Another folder open before (the wizard, „Przejdź”, a restored backup): it keeps working until the new one opens and
+    // closes only after (spec „najpierw otwiera nowy folder, a stary zamyka dopiero po sukcesie”).
     const old = this.service
-    this.service = null
-    if (old) await old.stop('quit')
+    const oldFolder = this.folder
     this.status = 'opening'
     this.folder = dir
     this.error = null
+    this.lastOpenError = null
     this.changed()
     try {
       // A folder that is not there (OneDrive not ready yet): nothing is created in its place (spec „W niedostępnym folderze
@@ -223,15 +247,28 @@ export class DataHub {
       }
       this.service = s
       this.status = 'open'
+      if (old) {
+        await old.stop('quit')
+        // Its stop let the computer sleep: the new folder says at once what it holds.
+        s.hint()
+      }
       void s.refreshGuardPlan()
       this.o.log('info', `folder danych otwarty: ${dir}`)
-      if (this.moving?.to === dir) await this.finishMove()
+      await this.loadPendingMove(dir)
       this.changed()
       return true
     } catch (e) {
-      this.status = 'failed'
-      this.error = e instanceof Error ? e.message : String(e)
+      this.lastOpenError = e instanceof Error ? e.message : String(e)
       this.o.log('error', `folder danych ${dir} nie otworzył się`, e)
+      if (old && this.service === old) {
+        // The folder before stays as it was – nothing of it closed.
+        this.status = 'open'
+        this.folder = oldFolder
+        this.changed()
+        return false
+      }
+      this.status = 'failed'
+      this.error = this.lastOpenError
       this.changed()
       // OneDrive not ready at the start: the app tries again every 30 s by itself (spec „czekam na folder”).
       if (!this.closing && !this.shutdown) {
@@ -279,14 +316,16 @@ export class DataHub {
 
   private async signature(): Promise<string> {
     const f = this.service?.folder
-    const head = `${this.status}|${this.folder}|${this.error}`
+    const head = `${this.status}|${this.folder}|${this.error}|${JSON.stringify(this.pendingMove())}`
     if (!f) return head
     const today = logicalDayOf(f.clock.now())
     const read = await f.readDay(today)
     // The day files the window reads with today (yesterday's and tomorrow's beside it): a change of the plan made on
     // another computer reaches the window like a change of the settings.
     const days = await Promise.all([-1, 0, 1].map((d) => f.recordView(paths.day(addDays(today, d))).catch((e: unknown) => `?${String(e)}`)))
-    return `${head}|${today}|${JSON.stringify(await this.records())}|${JSON.stringify(days)}|${read.events.length}|${f.unsynced}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}`
+    // The marker „przeniesiono do …” OneDrive brings from another computer shows without any other change.
+    const moved = await this.movedTo()
+    return `${head}|${today}|${JSON.stringify(await this.records())}|${JSON.stringify(days)}|${read.events.length}|${f.unsynced}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}|${JSON.stringify(moved)}`
   }
 
   private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines'>> {
@@ -328,8 +367,16 @@ export class DataHub {
       problems,
       leader: f?.leader.leader ?? null,
       today: logicalDayOf(f ? f.clock.now() : Date.now()),
-      calibration: f ? await f.calibrating() : false
+      calibration: f ? await f.calibrating() : false,
+      moved: f ? await this.movedTo() : null,
+      pendingMove: this.pendingMove()
     }
+  }
+
+  /** The restored backup's folder that did not open (once tried): where it is and why. */
+  private pendingMove(): DataView['pendingMove'] {
+    const m = this.moving
+    return m?.error != null ? { to: m.to, error: m.error } : null
   }
 
   private async questions(): Promise<EditQuestion[]> {
@@ -560,22 +607,125 @@ export class DataHub {
 
   /** The records a backup holds that can be taken back one by one (settings, templates, lectures, requests, routines, days). */
   async backupRecords(zipFile: string): Promise<string[]> {
-    return (await backupEntries(zipFile)).filter((rel) => {
-      const c = classify(rel)
-      return !!c && !c.conflict && c.kind !== 'log' && c.kind !== 'presence' && c.kind !== 'grades'
+    return (await backupEntries(zipFile)).filter(isRecordRel)
+  }
+
+  /**
+   * The records of a backup as the window lists them (D321): each with its kind and what names it in the interface –
+   * a day its date, a template, routine or lecture its name, a request its note, person and day it was added – never an
+   * id. The ZIP is read once.
+   */
+  async backupContents(zipFile: string): Promise<BackupRecord[]> {
+    const named = (rel: string) => isRecordRel(rel) && !['settings', 'day'].includes(classify(rel)!.kind)
+    const { entries, files } = await readBackupFiles(zipFile, named)
+    return entries.filter(isRecordRel).map((rel) => {
+      const c = classify(rel)!
+      let v: unknown = null
+      try {
+        v = JSON.parse(files.get(rel)?.toString('utf8') ?? 'null')
+      } catch {
+        v = null
+      }
+      const r = isPlain(v) ? v : {}
+      const text = (x: unknown) => (typeof x === 'string' && x.trim()) || null
+      return {
+        rel,
+        kind: c.kind,
+        date: c.date,
+        name: text(r.name) ?? text(r.note),
+        person: c.kind === 'request' ? text(r.person) : null,
+        // 0 – the model's „unknown” (`requestFrom`), never a date.
+        at: c.kind === 'request' && typeof r.createdAt === 'number' && Number.isFinite(r.createdAt) && r.createdAt > 0 ? r.createdAt : null
+      }
     })
+  }
+
+  /**
+   * This computer to another folder (the banner „Dane przeniesiono do …”, D321, or the move of a restored backup tried
+   * again): opened, and config.json remembers it; the folder it worked in stays when the new one does not open.
+   */
+  async moveTo(dir: string): Promise<{ ok: boolean; error: string | null }> {
+    const to = resolve(dir)
+    const r = await this.switchTo(to)
+    if (!r.ok) {
+      if (this.moving?.to === to) {
+        this.moving.error = r.error
+        await this.savePendingMove()
+        this.changed()
+      }
+      return r
+    }
+    const m = this.moving
+    if (m?.to === to) {
+      this.moving = null
+      await this.savePendingMove()
+      if (m.from) await this.markMoved(m.from, to, m.at)
+    }
+    this.o.onFolder?.(to)
+    return r
+  }
+
+  /** The restored backup's folder that did not open, kept in this computer's app data (gone once it opened). */
+  private async savePendingMove(): Promise<void> {
+    const file = join(this.o.userData, PENDING_MOVE_FILE)
+    const m = this.moving
+    await (m?.error != null ? mkdir(this.o.userData, { recursive: true }).then(() => writeFileAtomic(file, JSON.stringify(m))) : rm(file, { force: true })).catch((e) =>
+      this.o.log('warn', 'stan przywróconej kopii nie zapisał się', e)
+    )
+  }
+
+  /** After a restart: the restored backup's folder that did not open waits again in „Dane” of the folder it came from. */
+  private async loadPendingMove(dir: string): Promise<void> {
+    if (this.pendingLoaded || this.moving) return
+    this.pendingLoaded = true
+    try {
+      const v = JSON.parse(await readFile(join(this.o.userData, PENDING_MOVE_FILE), 'utf8')) as unknown
+      if (!isPlain(v) || v.from !== dir || typeof v.to !== 'string' || typeof v.at !== 'number') return
+      // The restored folder removed meanwhile: nothing left to move to.
+      if (!(await stat(v.to).catch(() => null))) return void (await rm(join(this.o.userData, PENDING_MOVE_FILE), { force: true }).catch(() => undefined))
+      this.moving = { from: dir, to: v.to, at: v.at, error: typeof v.error === 'string' ? v.error : 'folder nie otworzył się' }
+    } catch {
+      // None (or unreadable): nothing waits.
+    }
+  }
+
+  /**
+   * Opens another folder the way the spec changes it („najpierw otwiera nowy folder, a stary zamyka dopiero po
+   * sukcesie”): one without this app's data – not there, or OneDrive still bringing its rd.json – is refused at once;
+   * one that still does not open leaves the folder before working (`openNow`) – or, when that one was not open either,
+   * tried again instead of the new one.
+   */
+  private async switchTo(to: string): Promise<{ ok: boolean; error: string | null }> {
+    const probe = await DataHub.probe(to)
+    if (!probe.exists) return { ok: false, error: 'tego folderu nie ma na tym komputerze (OneDrive mógł go jeszcze nie pobrać)' }
+    if (probe.unreadable) return { ok: false, error: `nie mogę go teraz odczytać (${probe.unreadable})` }
+    if (!probe.hasData) return { ok: false, error: 'nie ma w nim (jeszcze) danych Regulated Day – gdy OneDrive je pobierze, spróbuj ponownie' }
+    const before = this.folder
+    if (await this.open(to)) return { ok: true, error: null }
+    const error = this.lastOpenError ?? 'folder nie otworzył się'
+    if (!this.service && before && before !== to) void this.open(before)
+    return { ok: false, error }
+  }
+
+  /** The CSV export of a range of days into a folder (D300, D321): the paths of its files. */
+  exportCsv(from: string, to: string, dir: string): Promise<string[]> {
+    return this.need().exportCsv(from, to, dir)
   }
 
   /**
    * Chosen records of a backup taken back (spec „Przywracanie w aplikacji: wybrane rekordy”): each is your edit of the
    * fields it differs in (or the record anew), through the queue – so the history keeps what it was before.
    */
-  async restoreRecords(zipFile: string, rels: readonly string[]): Promise<EditOutcome[]> {
-    const allowed = new Set(await this.backupRecords(zipFile))
+  async restoreRecords(zipFile: string, rels: readonly string[]): Promise<RestoreOutcome[]> {
+    const wanted = new Set(rels)
+    const backup = await readBackupFiles(zipFile, (rel) => wanted.has(rel))
+    const files = backup.files
+    const allowed = new Set(backup.entries.filter(isRecordRel))
+    for (const rel of rels) if (!allowed.has(rel)) throw new Error(`w kopii nie ma rekordu ${rel}`)
     const entries: EditEntry[] = []
-    for (const rel of rels) {
-      if (!allowed.has(rel)) throw new Error(`w kopii nie ma rekordu ${rel}`)
-      const bytes = await readBackupEntry(zipFile, rel)
+    const same: string[] = []
+    for (const rel of [...wanted]) {
+      const bytes = files.get(rel)
       let value: unknown
       try {
         value = bytes ? JSON.parse(bytes.toString('utf8')) : null
@@ -585,43 +735,52 @@ export class DataHub {
       if (!isPlain(value)) throw new Error(`rekord ${rel} w kopii jest uszkodzony`)
       const entry = await this.restoreEntry(rel, value)
       if (entry) entries.push(entry)
+      else same.push(rel)
     }
-    return entries.length ? this.edit(entries) : []
+    // One outcome per record chosen: what the queue did with it – waiting behind a question is its own (it never goes by
+    // itself) – or „the same already” (nothing written).
+    const done = entries.length ? await this.edit(entries) : []
+    const statusOf = (o: EditOutcome | undefined): RestoreOutcome['status'] => (!o ? 'waiting' : o.status === 'waiting' && o.why === BEHIND_QUESTION ? 'behindQuestion' : o.status)
+    return [...entries.map((e, i) => ({ rel: e.rel, status: statusOf(done[i]) })), ...same.map((rel) => ({ rel, status: 'same' as const }))]
   }
 
   /**
    * The whole backup into a new folder (spec „cały folder do nowego folderu”, T117): written there – never over a folder
-   * with anything in it – then the folder it came from gets the marker „przeniesiono do …” (the other computers propose
-   * the move) and this computer works in the new one.
+   * with anything in it, nor inside the open folder (each of its backups would carry the copy) – then the folder it came
+   * from gets the marker „przeniesiono do …” (the other computers propose the move) and this computer works in the new
+   * one. A new folder that does not open leaves this computer in the one before; the move waits for `moveTo` (its
+   * „Spróbuj ponownie”).
    */
-  async restoreWhole(zipFile: string, target: string, at = Date.now()): Promise<boolean> {
+  async restoreWhole(zipFile: string, target: string, at = Date.now()): Promise<{ to: string; ok: boolean; error: string | null }> {
     const to = resolve(target)
+    if (this.folder && within(to, this.folder)) throw new Error('Nowy folder leży w obecnym folderze danych – wybierz folder poza nim.')
     const files = await restoreToFolder(zipFile, to)
     this.o.log('info', `kopia ${zipFile} przywrócona do ${to}: ${files} plików`)
-    // The move finishes once the new folder opens – now or at a later retry (OneDrive not ready yet).
-    this.moving = { from: this.folder, to, at }
-    return this.open(to)
+    this.moving = { from: this.folder, to, at, error: null }
+    return { to, ...(await this.moveTo(to)) }
   }
 
-  /** The new folder opened: the old one gets its marker (best effort – the restore stands), config.json the new one. */
-  private async finishMove(): Promise<void> {
-    const m = this.moving
-    if (!m) return
-    this.moving = null
-    if (m.from) {
-      await writeFileAtomic(join(m.from, MOVED_FILE), `${JSON.stringify({ to: m.to, at: m.at, by: this.o.computer() }, null, 2)}\n`).catch((e) =>
-        this.o.log('warn', `znacznik „przeniesiono do …” w ${m.from} nie zapisał się`, e)
-      )
-    }
-    this.o.onFolder?.(m.to)
+  /**
+   * The marker „przeniesiono do …” in the folder moved from (best effort – the restore stands): the new folder also by
+   * its path from the old one, so a computer whose OneDrive lies elsewhere (another user's profile) finds it.
+   */
+  private async markMoved(from: string, to: string, at: number): Promise<void> {
+    const marker = { to, rel: relative(from, to), at, by: this.o.computer() }
+    await writeFileAtomic(join(from, MOVED_FILE), `${JSON.stringify(marker, null, 2)}\n`).catch((e) => this.o.log('warn', `znacznik „przeniesiono do …” w ${from} nie zapisał się`, e))
   }
 
-  /** The marker „przeniesiono do …” in the open folder (another computer restored a backup into a new one), or null. */
-  async movedTo(): Promise<{ to: string; at: number; by: string } | null> {
-    if (!this.folder) return null
+  /**
+   * The marker „przeniesiono do …” in the open folder (another computer restored a backup into a new one), or null:
+   * the new folder found from this one by the marker's relative path (the absolute one of the computer that wrote it
+   * only without it).
+   */
+  async movedTo(): Promise<MovedTo | null> {
+    const folder = this.folder
+    if (!folder) return null
     try {
-      const v = JSON.parse(await readFile(join(this.folder, MOVED_FILE), 'utf8')) as unknown
-      return isPlain(v) && typeof v.to === 'string' && typeof v.at === 'number' && typeof v.by === 'string' ? { to: v.to, at: v.at, by: v.by } : null
+      const v = JSON.parse(await readFile(join(folder, MOVED_FILE), 'utf8')) as unknown
+      if (!isPlain(v) || typeof v.to !== 'string' || typeof v.at !== 'number' || typeof v.by !== 'string') return null
+      return { to: typeof v.rel === 'string' && v.rel ? resolve(folder, v.rel) : v.to, at: v.at, by: v.by }
     } catch {
       return null
     }
@@ -667,15 +826,25 @@ export class DataHub {
     return join(od || documents, 'RegulatedDay')
   }
 
+  /**
+   * The files of a CSV export (D300) already in `dir`: an earlier export there. A folder that is not there has none; one
+   * whose list cannot be read rejects – never taken for an empty one (its files would be replaced without the question).
+   */
+  static async csvFilesIn(dir: string): Promise<string[]> {
+    let list: string[]
+    try {
+      list = await readdir(dir)
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw new Error(`nie mogę odczytać folderu ${dir} (${e instanceof Error ? e.message : String(e)})`)
+    }
+    const names = new Set(list.map((n) => n.toLowerCase()))
+    return Object.keys(CSV_HEADERS).filter((n) => names.has(n))
+  }
+
   /** Inside one of this user's OneDrive folders (by the environment; E4a reads the registry). */
   static inOneDrive(dir: string): boolean {
-    const p = resolve(dir).toLowerCase()
-    return [process.env.OneDrive, process.env.OneDriveConsumer, process.env.OneDriveCommercial]
-      .filter((x): x is string => !!x)
-      .some((root) => {
-        const r = resolve(root).toLowerCase()
-        return p === r || p.startsWith(`${r}\\`) || p.startsWith(`${r}/`)
-      })
+    return [process.env.OneDrive, process.env.OneDriveConsumer, process.env.OneDriveCommercial].filter((x): x is string => !!x).some((root) => within(dir, root))
   }
 
   /** What is in a folder the wizard is pointed at: nothing, this app's data (rd.json), or something else. */

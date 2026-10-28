@@ -395,7 +395,11 @@ function createHub(): DataHub {
     // The ritual's screens are here: its first day comes from rd.json, written once by the leader (D320, T504).
     ritualScreens: true,
     gameFrom: GAME_FROM,
-    onFolder: (dir) => void config.update({ dataFolder: dir }).catch((e) => log('error', 'nowy folder danych nie zapisał się w ustawieniach', e)),
+    // RD_DATA_DIR wins at every start (tests, the developer): another folder only for this run, config.json untouched.
+    onFolder: (dir) =>
+      process.env.RD_DATA_DIR
+        ? log('warn', `folder danych ustawiony zmienną RD_DATA_DIR – ${dir} tylko do końca tego uruchomienia`)
+        : void config.update({ dataFolder: dir }).catch((e) => log('error', 'nowy folder danych nie zapisał się w ustawieniach', e)),
     onChange: () => {
       broadcast(CH.onData, null)
       void widget.refresh()
@@ -735,6 +739,45 @@ function registerIpc(): void {
   handle(CH.ritualAnswer, (_e, day: unknown, row: unknown, choice: unknown, value: unknown, item: unknown) => needHub().ritualAnswer(String(day), String(row), String(choice), ritualValue(value), typeof item === 'string' ? item : null))
   handle(CH.closeDay, (_e, day: unknown, how: unknown) => needHub().closeDay(String(day), String(how) as CloseHow))
   handle(CH.unclosedDays, () => needHub().unclosedDays())
+  // A folder picked in a window of Windows over the window that asked (the wizard's data folder, „Dane” in the settings).
+  const pickDir = async (e: Electron.IpcMainInvokeEvent, title: string, defaultPath?: string): Promise<string | null> => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const opts = { title, defaultPath, properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'> }
+    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    return r.canceled ? null : (r.filePaths[0] ?? null)
+  }
+  // A question in a window of Windows over the main window: the first button does it, „Anuluj” (and Esc) does not.
+  const confirm = async (e: Electron.IpcMainInvokeEvent, message: string, detail: string, ok: string): Promise<boolean> => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const opts = { type: 'warning' as const, message, detail, buttons: [ok, 'Anuluj'], defaultId: 1, cancelId: 1, noLink: true }
+    const r = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
+    return r.response === 0
+  }
+  handle(CH.exportCsv, async (e, from: unknown, to: unknown) => {
+    const dir = await pickDir(e, 'Folder na eksport CSV')
+    if (!dir) return null
+    // The files of an earlier export there are replaced only when you say so (D323).
+    const there = await DataHub.csvFilesIn(dir)
+    if (there.length && !(await confirm(e, 'W tym folderze są już pliki eksportu', `${there.join(', ')} – zastąpić je nowym eksportem?`, 'Zastąp'))) return null
+    const files = await needHub().exportCsv(String(from), String(to), dir)
+    return { dir, files: files.length }
+  })
+  handle(CH.backups, () => needHub().backups())
+  handle(CH.backupContents, (_e, path: unknown) => needHub().backupContents(String(path)))
+  handle(CH.restoreRecords, (_e, path: unknown, rels: unknown) => needHub().restoreRecords(String(path), Array.isArray(rels) ? rels.map(String) : []))
+  handle(CH.restoreWhole, async (e, path: unknown) => {
+    const dir = await pickDir(e, 'Pusty folder na przywróconą kopię')
+    if (!dir) return null
+    // A folder the other computers will not see: said first, restored only when you say so (D323).
+    if (!DataHub.inOneDrive(dir) && !(await confirm(e, 'Ten folder nie leży w OneDrive', 'Inne komputery go nie zobaczą – zostaną przy obecnym folderze. Przywrócić mimo to?', 'Przywróć'))) return null
+    try {
+      const r = await needHub().restoreWhole(String(path), dir)
+      return { ok: r.ok, restored: true, to: r.to, error: r.error }
+    } catch (err) {
+      return { ok: false, restored: false, to: null, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+  handle(CH.moveTo, (_e, dir: unknown) => needHub().moveTo(String(dir)))
   handle(CH.answer, (_e, id: string, answer: string, value: number | null) => needHub().answer(String(id), String(answer), typeof value === 'number' && Number.isFinite(value) ? value : null))
   ipcMain.on(CH.seen, (e, ids: unknown) => {
     // Seen only in the main window in the foreground (spec D231); the panel counts while it is open (E4b).
@@ -747,12 +790,7 @@ function registerIpc(): void {
   handle(CH.historyVersions, (_e, kind: string, id: string) => needHub().historyVersions(String(kind), String(id)))
   handle(CH.historyRestore, (_e, kind: string, id: string, file: string) => needHub().historyRestore(String(kind), String(id), String(file)))
   handle(CH.folderDefault, () => dataFolderNow() ?? DataHub.defaultFolder(app.getPath('documents')))
-  handle(CH.folderPick, async (e, current: string | null) => {
-    const win = BrowserWindow.fromWebContents(e.sender)
-    const opts = { title: 'Folder danych Regulated Day', defaultPath: typeof current === 'string' ? current : undefined, properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'> }
-    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
-    return r.canceled ? null : (r.filePaths[0] ?? null)
-  })
+  handle(CH.folderPick, (e, current: string | null) => pickDir(e, 'Folder danych Regulated Day', typeof current === 'string' ? current : undefined))
   handle(CH.folderProbe, (_e, path: string) => DataHub.probe(String(path)))
   handle(CH.wizardFinish, (_e, w: WizardFinish) => wizardFinish(w))
   handle(CH.pinFolder, async () => {

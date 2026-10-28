@@ -19,6 +19,7 @@ import { BarPlaceMap } from './BarPlaceMap'
 import { CategoriesSection } from './CategoriesSection'
 import { LecturesSection } from './LecturesSection'
 import { DayTypesSection, FieldsSection, FromBar, ModulesSection, RegenWaysSection, SessionsSection } from './SharedSettings'
+import { DataSection } from './DataSection'
 
 const IDENTITY_LABEL: Record<AppInfo['identity'], string> = {
   production: 'zainstalowana',
@@ -65,6 +66,7 @@ export function SettingsPage() {
           <FieldsSection group="reminders" />
           <FieldsSection group="timer" />
           <FieldsSection group="care" />
+          <DataSection />
         </>
       )}
       <Section title="Ten komputer">

@@ -35,6 +35,9 @@ export interface QueuedEdit {
   remove?: boolean
 }
 
+/** Why an entry waits behind an earlier one for the same file that is still a question (it never goes by itself). */
+export const BEHIND_QUESTION = 'czeka na odpowiedź na wcześniejsze pytanie'
+
 export type Outcome =
   | { id: string; status: 'applied' }
   | { id: string; status: 'conflict'; fields: Array<FieldEdit & { now: unknown }> }
@@ -151,6 +154,16 @@ export class EditQueue {
   }
 
   /**
+   * The last outcome of an entry: stored while it stays queued; gone from the queue – applied (an earlier run, already
+   * under way when it was added, laid it).
+   */
+  outcomeOf(id: string): Outcome {
+    const o = this.outcomes.get(id)
+    if (o) return o
+    return this.entries.some((e) => e.id === id) ? { id, status: 'waiting', why: 'czeka w kolejce' } : { id, status: 'applied' }
+  }
+
+  /**
    * Lays every queued edit onto its file; applied ones leave the queue, the others stay with why. One run at a time: the
    * check of the folder and an edit of the window never lay the same entry twice nor lose one between them.
    */
@@ -172,7 +185,7 @@ export class EditQueue {
     const blocked = new Set<string>()
     for (const edit of [...this.entries]) {
       if (blocked.has(edit.rel)) {
-        const waiting: Outcome = { id: edit.id, status: 'waiting', why: 'czeka na odpowiedź na wcześniejsze pytanie' }
+        const waiting: Outcome = { id: edit.id, status: 'waiting', why: BEHIND_QUESTION }
         out.push(waiting)
         this.outcomes.set(edit.id, waiting)
         keep.push(edit)

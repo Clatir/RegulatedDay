@@ -653,7 +653,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 - Kopia ZIP powstaje raz na dzień logiczny, po 12:00. Tworzy ją komputer prowadzący: co godzinę, przy starcie i po wybudzeniu sprawdza, czy kopia z tego dnia już jest, i tworzy ją przy pierwszej okazji. Kopia jest odporna na zapisy w trakcie pakowania.
 - Domyślnie trafia do podfolderu backups/ w folderze danych; każdy komputer może wskazać dodatkowe miejsce poza OneDrive i sam kopiuje tam najnowszą kopię, także gdy nie prowadzi. Przechowywanych jest 14 kopii dziennych i 8 tygodniowych.
 - Nieudana kopia daje ostrzeżenie w widgecie od razu, a po 3 dniach bez kopii także w oknie głównym.
-- Przywracanie w aplikacji: wybrane rekordy albo cały folder do nowego folderu.
+- Przywracanie w aplikacji: wybrane rekordy albo cały folder do nowego folderu – w Ustawieniach → „Dane” razem z eksportem CSV (zakres dat, domyślnie bieżący miesiąc): lista kopii od najnowszej, przy każdej „Wybrane rekordy…” (rekordy nazwane jak w interfejsie, zaznaczone wracają do tego folderu jako Twoja zmiana) i „Cały folder do nowego…” (nowy, pusty folder, w którym ten komputer zaczyna pracować; folder poza OneDrive najpierw ostrzega i pyta). Eksport do folderu z plikami poprzedniego eksportu najpierw pyta „zastąpić?”. Komputer, którego folder przeniesiono, pokazuje w oknie głównym baner „Dane przeniesiono do … (komputer, data) · Przejdź · Nie teraz” – bez kropki w pasku i nigdy sam się nie przełącza (D321); „Nie teraz” chowa go do ponownego uruchomienia (D323).
 
 **Kilka komputerów**
 

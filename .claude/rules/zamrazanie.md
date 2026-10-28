@@ -25,7 +25,9 @@ pomocniczy), „Kilka komputerów” (przeniesienie folderu); D300, T117, T190. 
   `host.ts` (`WorkerHost`: limit czasu, start od nowa, stop; `inProcess` w testach). Wejście `worker` w
   `electron.vite.config.mts`.
 - `engine/csv.ts` – `csvOf` (trzy pliki, BOM, średnik, CRLF). `main/data/hub.ts` – `backups`, `backupRecords`,
-  `restoreRecords`, `restoreWhole`, `movedTo` (`.moved.json`).
+  `backupContents`, `restoreRecords` (wynik na rekord), `restoreWhole`, `moveTo` / `switchTo` (T508), `movedTo`
+  (`.moved.json` z `rel` od starego folderu), `csvFilesIn`. Okno: `renderer/features/settings/DataSection.tsx`,
+  baner w `app/Banners.tsx` z `DataView.moved`; pytania „zastąpić?” i „poza OneDrive” w `index.ts` (D323).
 
 ## Zasady
 - Nic się nie zamraża przed `ritualFrom`: w aplikacji (`ritualScreens`) dzień z `rd.json` (`folder.ritualDay()`), zapisany raz
@@ -46,3 +48,6 @@ pomocniczy), „Kilka komputerów” (przeniesienie folderu); D300, T117, T190. 
   zamrożonych, najpierw linia ocen, potem `day.freeze` (T491).
 - Lokalne E2E po przerwanym przebiegu zostawiają procesy `node_modules\electron` – zatrzymaj je przed kolejnym
   przebiegiem, inaczej losowe testy nie widzą okna w 30 s.
+- Zmiana folderu nigdy przez samo `open` (zamyka stary przed otwarciem nowego) – przez `switchTo`: sprawdzenie danych
+  przed zamknięciem, powrót do poprzedniego przy niepowodzeniu. Sekcja „Dane” znika na czas otwierania folderu – stan,
+  który ma przetrwać przełączenie, trzyma proces główny (`pendingMove`).

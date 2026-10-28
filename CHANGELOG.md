@@ -1,10 +1,16 @@
 # Changelog
 
+## 0.13.0
+- Ustawienia → „Dane”: eksport CSV za wybrany zakres dat (domyślnie bieżący miesiąc) – trzy pliki (bloki, prośby, check-iny) do folderu, który wskażesz. Gdy w tym folderze są już pliki poprzedniego eksportu, aplikacja najpierw pyta, czy je zastąpić.
+- Tam też kopie zapasowe od najnowszej. „Wybrane rekordy…” pokazuje rekordy kopii tak, jak nazywa je aplikacja (np. „Prośba: zakupy (Mama, dodana 12.10.2026)”, „Plan dnia 27.10.2026”) – zaznaczone wracają do Twojego folderu, a poprzednie wersje zostają w Historii. „Cały folder do nowego…” przywraca całą kopię do nowego, pustego folderu, w którym ten komputer zaczyna pracować; folder poza OneDrive najpierw dostaje ostrzeżenie, że inne komputery go nie zobaczą.
+- Gdy na innym komputerze przywrócisz całą kopię do nowego folderu, ten komputer pokaże baner „Dane przeniesiono do … · Przejdź · Nie teraz” – sam się nie przełącza. „Przejdź” zostawia Cię w obecnym folderze, gdy nowy jeszcze się nie otwiera (np. OneDrive go nie pobrał); „Nie teraz” chowa baner do ponownego uruchomienia.
+
 ## 0.12.0
 - Rytuał zamknięcia: po końcu pracy na ekranie „Dziś” jest karta „Rytuał zamknięcia”, a w pasku cicha pozycja „Rytuał”, która otwiera okno na tej karcie. Wiersze dnia stoją jedną listą po godzinach – każdy z wyborem i tym, co zmienia ✓ (np. „skutek: granica dotrzymana zamiast bez danych”); pod nimi odczuwany koszt, niezrobione bloki, szkic jutra i „Zamknij dzień”. Gdy zostały wiersze bez wyboru, rytuał mówi to przed zamknięciem: „2 wiersze bez wyboru · zostaną jak zapisano · Wróć”.
 - Odczuwany koszt (nieobowiązkowo): przy każdej kategorii dnia „lżej · jak zwykle · ciężej” niż jej koszt w ustawieniach – posłuży przeglądowi kalibracji.
 - Rano przed planem porannym stoją niezamknięte dni: „Jak zapisano” (ze skutkiem przed kliknięciem), „Popraw” – rytuał tego dnia, po którym wracasz do planu porannego – „Wolne” i „Nie pamiętam”; dzień bez potwierdzonego końca pracy ma „Koniec pracy o … ✓”.
 - Rytuał działa od dnia, w którym ta wersja pierwszy raz pracowała na którymkolwiek z Twoich komputerów – ta sama data na wszystkich. Wcześniejsze dni zamykają się same „jak zapisano”, więc rano nie czekają tygodnie dni do zamknięcia. Od tego dnia dni zamykają się i zamrażają według rytuału.
+- „Koniec pracy” kliknięty zaraz po „Zacznij” (blok krótszy od minuty) potwierdza teraz koniec pracy – wcześniej dzień zostawał bez potwierdzonego końca, a karta rytuału się nie pokazywała.
 
 ## 0.11.0
 - Prośby w pasku: „Prośba ▸” rozwija „Zrobione teraz:” i „Pilne:” z trzema osobami, które proszą najczęściej (ostatnie 28 dni), oraz „inna…” i „+ Prośba do kolejki” (ekran Prośby). „Pilne” pyta o szacunek – 5 · 15 · 30 · 60 min, ±5 – i zaczyna się po „Zacznij”. W trybach ciszy i w „Odcinam się” wszystko działa bez otwierania okna: inna osoba to „osoba: ?” do uzupełnienia później, a „Pilne” dostaje 15 min.
