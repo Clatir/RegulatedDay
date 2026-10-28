@@ -273,7 +273,8 @@ test('rytuał zamknięcia (D318): po „Koniec pracy” karta w „Dziś” i �
 
 test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z osobą i „Koniec”; „Pilne” z szacunkiem', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-requests-'))
-  seed(dataDir)
+  // Without today's sessions: in a session (a quiet mode) „Pilne” starts with 15 min without asking (D311).
+  seed(dataDir, { sessions: false })
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
