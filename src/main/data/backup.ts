@@ -24,6 +24,7 @@
  */
 import { promises as fs } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
+import type { BackupItem } from '@shared/api'
 import { isIgnoredPath, sanitizeRelPath } from '@shared/data/paths'
 import { addDays, daysBetween, isIsoDate, weekday } from '@shared/time/zone'
 import { pathExists, removeFile, tempPathFor, withRetry } from '../datastore/atomic'
@@ -52,13 +53,8 @@ export type BackupResult =
     }
   | { ok: false; error: string }
 
-export interface BackupInfo {
-  kind: BackupKind
-  name: string
-  path: string
-  bytes: number
-  mtimeMs: number
-}
+/** A backup as listed (the window's `BackupItem`). */
+export type BackupInfo = BackupItem
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 const errCode = (e: unknown) => (e as NodeJS.ErrnoException | null)?.code
@@ -378,9 +374,25 @@ export async function backupEntries(zipFile: string): Promise<string[]> {
 export async function readBackupEntry(zipFile: string, relPath: string): Promise<Buffer | null> {
   const name = safeRelPath(relPath.replace(/\\/g, '/'))
   if (!name) return null
+  return (await readBackupFiles(zipFile, (rel) => rel === name)).files.get(name) ?? null
+}
+
+/**
+ * The data's files a backup holds (as `backupEntries`) and the bytes of the files `wanted` takes, by their safe path –
+ * the ZIP opened once (a backup of years holds thousands of entries). A damaged or unreadable ZIP rejects.
+ */
+export async function readBackupFiles(zipFile: string, wanted: (rel: string) => boolean): Promise<{ entries: string[]; files: Map<string, Buffer> }> {
   return withZip(zipFile, async (zip) => {
-    // Matched by the same safe path `backupEntries` lists („./requests/r1.json” is „requests/r1.json”).
-    const entry = zip.entries.find((e) => !e.name.endsWith('/') && safeRelPath(e.name) === name)
-    return entry ? zip.read(entry) : null
+    const entries: string[] = []
+    const files = new Map<string, Buffer>()
+    for (const e of zip.entries) {
+      if (e.name.endsWith('/')) continue
+      // Matched by the same safe path `backupEntries` lists („./requests/r1.json” is „requests/r1.json”).
+      const rel = safeRelPath(e.name)
+      if (rel == null) continue
+      if (isDataFile(rel)) entries.push(rel)
+      if (!files.has(rel) && wanted(rel)) files.set(rel, await zip.read(e))
+    }
+    return { entries, files }
   })
 }

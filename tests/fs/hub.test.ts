@@ -43,7 +43,7 @@ function deferred<T>() {
 
 /** A service that only counts its stops (the folder's own work is not what these tests look at). */
 function fakeService(stops: string[], dir: string): DataService {
-  return { stop: async () => void stops.push(dir), refreshGuardPlan: async () => undefined } as unknown as DataService
+  return { stop: async () => void stops.push(dir), refreshGuardPlan: async () => undefined, hint: () => undefined } as unknown as DataService
 }
 
 function hubWith(extra: Partial<HubOptions> = {}) {

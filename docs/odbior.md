@@ -69,6 +69,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E6a.2 Czas po bloku pracy, który skończył się sam
    - [ ] E6a.3 Czas po projekcie, który skończył się sam – powiadomienie o twardym końcu
 5. Ustawienia i próba:
+   - [ ] E6d.1 Eksport CSV
+   - [ ] E6d.2 Kopia – wybrane rekordy
    - [ ] E3.3 Plan poranny i „+ Blok” po granicy
    - [ ] E3.4 Pobudka dnia
    - [ ] E3.5 Kalendarz – zjazd
@@ -77,6 +79,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E3.14 Ustawienia i Próba w menu bocznym
    - [ ] E4b.12 Pasek przeciągnięty za uchwyt – po poprawce (27.10 nie przeszedł)
 6. Laptop i noc (gdy masz laptopa pod ręką):
+   - [ ] E6d.3 Kopia – cały folder do nowego
+   - [ ] E6d.4 Baner przeniesienia na drugim komputerze
    - [ ] E3.9 Laptop dołącza do danych
    - [ ] E3.10 Dwa komputery naraz – konflikt
    - [ ] E4a.11 Laptop – instalacja w nocy dopiero po 24 h
@@ -989,6 +993,52 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   Wczoraj zamknięty, a po zamknięciu coś doszło: jedna linia „… po zamknięciu 1 wiersz czeka – zostaną jak zapisano ·
   Popraw”. „Pomiń” chowa kartę.
 - **Nie przechodzi, gdy:** dzień zamknięty dalej stoi w karcie albo „Popraw” nie wraca do dzisiejszego planu.
+
+### E6d – „Dane”: eksport CSV i kopie (0.13.0)
+
+#### E6d.1 Eksport CSV (0.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („Dane w Ustawieniach”), pliki `tests/unit/engine/csv.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** Ustawienia → „Dane” → zostaw zakres (bieżący miesiąc) → „Eksportuj…” → wskaż folder. Otwórz pliki w Excelu.
+- **Oczekiwany efekt:** okno Windows pyta o folder; po wyborze komunikat „Zapisano 3 pliki CSV w …”; w folderze trzy pliki
+  (bloki, prośby, check-iny) z polskimi datami i przecinkiem dziesiętnym, które Excel otwiera w kolumnach. Drugi eksport
+  do tego samego folderu najpierw pyta „W tym folderze są już pliki eksportu … – zastąpić?” (D323): „Anuluj” zostawia
+  stare pliki. Data bez roku w polu („1.10”) to najbliższy taki dzień do dziś, nie za rok.
+- **Nie przechodzi, gdy:** pliki są w jednej kolumnie, brakuje któregoś z trzech, zakres „od” po „do” przechodzi albo
+  drugi eksport nadpisuje pliki bez pytania.
+
+#### E6d.2 Kopia – wybrane rekordy (0.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts`, `tests/fs/restore.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** zmień notatkę prośby, potem Ustawienia → „Dane” → przy wczorajszej kopii „Wybrane rekordy…” → zaznacz
+  tę prośbę → „Przywróć zaznaczone”.
+- **Oczekiwany efekt:** lista rekordów nazwanych jak w aplikacji („Ustawienia”, szablony, „Prośba: … (osoba, dodana …)”,
+  „Plan dnia 27.10.2026” – dni i prośby od najnowszych), bez identyfikatorów i nazw plików; po przywróceniu prośba ma
+  notatkę z kopii, a w Historii jest też wersja sprzed przywrócenia. Rekord taki sam jak w kopii – komunikat „był już
+  taki jak w kopii”, nie „przywrócono”.
+- **Nie przechodzi, gdy:** na liście widać nazwy plików albo identyfikatory, poprzednia wersja znika z Historii albo
+  komunikat mówi o przywróceniu, którego nie było.
+
+#### E6d.3 Kopia – cały folder do nowego (0.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/restore.test.ts`. Ty: przy okazji (najlepiej na kopii, której nie potrzebujesz).
+- **Jak sprawdzić:** „Cały folder do nowego…” → przeczytaj opis → „Wybierz folder i przywróć” → utwórz nowy pusty folder.
+- **Oczekiwany efekt:** aplikacja pracuje w nowym folderze z danymi z kopii; Ustawienia pokazują nowy folder. Folder poza
+  OneDrive – najpierw pytanie „Ten folder nie leży w OneDrive – inne komputery go nie zobaczą…” (D323). Folder z czymkolwiek
+  w środku albo leżący w obecnym folderze danych – odmowa z komunikatem.
+- **Nie przechodzi, gdy:** przywrócenie nadpisuje folder z danymi, aplikacja zostaje przy starym folderze albo folder
+  poza OneDrive przechodzi bez pytania.
+
+#### E6d.4 Baner przeniesienia na drugim komputerze (0.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/restore.test.ts` („przejście tego komputera”). Ty: tylko gdy zrobisz E6d.3 i masz laptopa.
+- **Jak sprawdzić:** po E6d.3 na komputerze stacjonarnym otwórz aplikację na laptopie (w starym folderze).
+- **Oczekiwany efekt:** u góry okna baner „Dane przeniesiono do … (komputer, data) · Przejdź · Nie teraz”, bez kropki
+  w pasku, najpóźniej kilkanaście sekund po tym, jak OneDrive przyniesie znacznik; ścieżka to nowy folder w OneDrive
+  laptopa (także gdy OneDrive leży tam w innym miejscu niż na stacjonarnym). „Przejdź” otwiera nowy folder; folder
+  jeszcze bez danych – komunikat i laptop zostaje w starym. „Nie teraz” chowa baner do ponownego uruchomienia (D323).
+- **Nie przechodzi, gdy:** laptop sam przechodzi do nowego folderu, ikona ma kropkę z tego powodu albo nieudane
+  „Przejdź” zostawia laptopa bez folderu danych.
 
 ### E7a – logika E7, część 1 (regulamin gry pod spodem)
 

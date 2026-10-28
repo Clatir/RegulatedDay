@@ -63,7 +63,13 @@ export const CH = {
   ritual: 'rd:ritual',
   ritualAnswer: 'rd:ritualAnswer',
   closeDay: 'rd:closeDay',
-  unclosedDays: 'rd:unclosedDays'
+  unclosedDays: 'rd:unclosedDays',
+  exportCsv: 'rd:exportCsv',
+  backups: 'rd:backups',
+  backupContents: 'rd:backupContents',
+  restoreRecords: 'rd:restoreRecords',
+  restoreWhole: 'rd:restoreWhole',
+  moveTo: 'rd:moveTo'
 } as const
 
 /** A day the morning shows to close: your presence that day, and its ritual (the effect of „Jak zapisano”, its rows). */
@@ -73,6 +79,26 @@ export interface UnclosedDay {
   /** Closed already – shown for what came after its close (one line of information). */
   closed: boolean
   ritual: RitualView
+}
+
+/** A backup of the folder (D321): daily or weekly, its file, size and time. */
+export interface BackupItem {
+  kind: 'daily' | 'weekly'
+  name: string
+  path: string
+  bytes: number
+  mtimeMs: number
+}
+
+/** A record of a backup as the window lists it: its kind, a day's date, the name it has in the interface. */
+export interface BackupRecord {
+  rel: string
+  kind: string
+  date: string | null
+  name: string | null
+  /** A request's person (its id – the window names it) and when it was added: requests with one note told apart. */
+  person: string | null
+  at: number | null
 }
 
 /** Which window a renderer is (the preload reads it from its arguments); `sound` – the hidden window of sound. */
@@ -192,6 +218,17 @@ export interface DataView {
   today: string
   /** In the calibration period (spec „Kalibracja”): reactions of energy only inform, without variants. */
   calibration: boolean
+  /** The marker „przeniesiono do …” of the open folder (another computer restored a whole backup, D321), or null. */
+  moved: MovedTo | null
+  /** A whole backup restored here into a folder that did not open: this computer stayed in its folder („Spróbuj ponownie”). */
+  pendingMove: { to: string; error: string } | null
+}
+
+/** Where the data of a folder moved: the new folder (as found from this computer), when and by which computer. */
+export interface MovedTo {
+  to: string
+  at: number
+  by: string
 }
 
 /** A question of the queue (spec „pola zmienione po obu stronach dają zwykłe pytanie”). */
@@ -235,6 +272,12 @@ export interface EditEntry {
 }
 
 export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'broken' | 'waiting'; why?: string }
+
+/**
+ * A record chosen from a backup: what the queue did with it, `behindQuestion` – it waits for your answer to an earlier
+ * question about the file, `same` – it already was as in the backup.
+ */
+export type RestoreOutcome = { rel: string; status: EditOutcome['status'] | 'behindQuestion' | 'same' }
 
 /** An action of the main window written to the day's log (spec: facts you set live only in the log). */
 export interface EventIn {
@@ -403,6 +446,22 @@ export interface RdApi {
   closeDay(day: string, how: CloseHow): Promise<TimerResult>
   /** The days the morning shows to close (D318, spec „Rano aplikacja pokazuje wszystkie niezamknięte dni naraz”). */
   unclosedDays(): Promise<UnclosedDay[]>
+  /** The CSV export of [from, to] (D300, D321): a folder picked in a window of Windows; null – none picked. */
+  exportCsv(from: string, to: string): Promise<{ dir: string; files: number } | null>
+  /** The backups of the folder, newest first (D321). */
+  backups(): Promise<BackupItem[]>
+  /** The records of a backup to take back one by one. */
+  backupContents(path: string): Promise<BackupRecord[]>
+  /** Chosen records of a backup taken back into the folder (each your edit: the history keeps what was). */
+  restoreRecords(path: string, rels: string[]): Promise<RestoreOutcome[]>
+  /**
+   * The whole backup into a new, empty folder picked in a window of Windows; this computer then works in it. `restored`
+   * without `ok`: the copy is in `to`, but that folder did not open – this computer stays in its folder (`moveTo(to)`
+   * tries again). null – no folder picked.
+   */
+  restoreWhole(path: string): Promise<{ ok: boolean; restored: boolean; to: string | null; error: string | null } | null>
+  /** This computer to the folder the data moved to (the banner's „Przejdź”); not opened – it stays in its folder. */
+  moveTo(dir: string): Promise<{ ok: boolean; error: string | null }>
   /** The window of sound: a tone to play (5 min, 0 min). */
   onSound(cb: (s: { kind: 'five' | 'zero'; volume: number }) => void): () => void
 }

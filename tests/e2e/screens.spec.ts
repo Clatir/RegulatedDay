@@ -6,13 +6,14 @@
  * its range refused with its message). Independent of the hour it runs at: today's work block is at 03:00 of the
  * night after (the end of the logical day), so the plan always has a boundary to approve.
  */
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
 import { DEFAULT_SESSIONS, DEFAULT_SETTINGS } from '../../src/shared/model/settings'
 import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
+import { createDailyBackup } from '../../src/main/data/backup'
 import { launch, viewPage, withMainLog } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
@@ -264,6 +265,58 @@ test('rytuał zamknięcia (D318): po „Koniec pracy” karta w „Dziś” i �
       await expect(page.getByTestId('bar-ritual')).toHaveCount(0)
       const log = readFileSync(join(dataDir, 'log', logicalToday().slice(0, 4), logicalToday(), `${(await page.evaluate(() => window.rd.dataView())).computer}.jsonl`), 'utf8')
       expect(log).toContain('"k":"ritual.close"')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('„Dane” w Ustawieniach (D321): eksport CSV do wybranego folderu, kopia z „Wybranymi rekordami” przywraca prośbę', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-data-'))
+  seed(dataDir)
+  const backup = await createDailyBackup(dataDir, join(dataDir, 'backups'), logicalToday())
+  expect(backup.ok).toBe(true)
+  // The request changed after the backup: the backup holds „zakupy”.
+  const reqFile = join(dataDir, 'requests', 'r1.json')
+  writeFileSync(reqFile, JSON.stringify({ ...JSON.parse(readFileSync(reqFile, 'utf8')), note: 'apteka' }))
+  const csvDir = mkdtempSync(join(tmpdir(), 'rd-e2e-csv-'))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      // The window of Windows that picks a folder: here the test's folder.
+      await app.evaluate(({ dialog }, dir) => {
+        dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as unknown as typeof dialog.showOpenDialog
+      }, csvDir)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-settings').click()
+      await expect(page.getByTestId('settings-data')).toBeVisible()
+      await page.getByTestId('csv-export').click()
+      await expect.poll(() => readdirSync(csvDir).filter((f) => f.endsWith('.csv')).length, { timeout: 15_000 }).toBe(3)
+      // Again into the same folder (D323): asked first – „Anuluj” keeps the files, „Zastąp” writes them anew.
+      const blocks = join(csvDir, 'bloki.csv')
+      writeFileSync(blocks, 'stare')
+      const answer = (response: number) =>
+        app.evaluate(({ dialog }, r) => {
+          const w = globalThis as unknown as { asked: number }
+          w.asked = 0
+          dialog.showMessageBox = (async () => (w.asked++, { response: r, checkboxChecked: false })) as unknown as typeof dialog.showMessageBox
+        }, response)
+      const asked = () => app.evaluate(() => (globalThis as unknown as { asked: number }).asked)
+      await answer(1)
+      await page.getByTestId('csv-export').click()
+      await expect.poll(asked, { timeout: 15_000 }).toBe(1)
+      expect(readFileSync(blocks, 'utf8')).toBe('stare')
+      await answer(0)
+      await page.getByTestId('csv-export').click()
+      await expect.poll(() => readFileSync(blocks, 'utf8'), { timeout: 15_000 }).not.toBe('stare')
+      // The backup: its records named as in the interface; the request taken back.
+      await page.getByTestId(`backup-records-${logicalToday()}.zip`).click()
+      await expect(page.getByTestId('backup-contents')).toContainText('Prośba: zakupy')
+      await page.getByTestId('backup-contents').getByText('Prośba: zakupy').click()
+      await page.getByTestId('backup-restore-chosen').click()
+      await expect.poll(() => (JSON.parse(readFileSync(reqFile, 'utf8')) as { note: string }).note, { timeout: 15_000 }).toBe('zakupy')
+      await shot(page, 'e6-02-data')
     })
     expect(errors).toEqual([])
   } finally {

@@ -25,9 +25,15 @@ interface UiState {
   day: string | null
   /** A part of the screen to bring into view once (the bar's „Rytuał”, D318). */
   focus: 'ritual' | null
+  /** The move whose banner „Nie teraz” hid (D321): until the window starts again. */
+  movedLater: string | null
 }
 
-export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null }))
+export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null }))
+
+export function setMovedLater(key: string): void {
+  useUi.setState({ movedLater: key })
+}
 
 /** Every change of view first commits the active field (spec „Zatwierdzanie przed przejściem”). */
 export function navigate(page: Page): void {

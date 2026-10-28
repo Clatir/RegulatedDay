@@ -113,8 +113,8 @@ export function ClockField(p: Omit<CommitFieldProps<number>, 'parse' | 'format'>
 }
 
 /** A date: „21.10.2026”, or „3.01” – the nearest such date from `today` on. */
-export function DateField({ today, ...p }: Omit<CommitFieldProps<string>, 'parse' | 'format'> & { today: string }) {
-  return <CommitField {...p} parse={(t) => parseDate(t, today)} format={plDate} placeholder={p.placeholder ?? 'np. 21.10.2026 albo 3.01'} />
+export function DateField({ today, past, ...p }: Omit<CommitFieldProps<string>, 'parse' | 'format'> & { today: string; past?: boolean }) {
+  return <CommitField {...p} parse={(t) => parseDate(t, today, { past })} format={plDate} placeholder={p.placeholder ?? 'np. 21.10.2026 albo 3.01'} />
 }
 
 /** A text (a name, a note): saved on leaving the field or Enter, Esc throws the edit away; trimmed, at most `max` characters. */

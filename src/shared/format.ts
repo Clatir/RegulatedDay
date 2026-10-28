@@ -124,9 +124,10 @@ export function isoDay(y: number, mo: number, d: number): string | null {
 
 /**
  * A date typed (spec „Czas i długość”): „21.10.2026”, „2026-10-21”, or without its year – „3.01” is the nearest such
- * date from `today` on (today included: a plan for today is typed as today), 29.02 the nearest leap year's (T392).
+ * date from `today` on (today included: a plan for today is typed as today), 29.02 the nearest leap year's (T392);
+ * with `past` the nearest one up to today (a range of past days, e.g. the CSV export).
  */
-export function parseDate(text: string, today: string): Parsed<string> {
+export function parseDate(text: string, today: string, o: { past?: boolean } = {}): Parsed<string> {
   const t = text.trim()
   if (!t) return refuse('Wpisz datę, np. 21.10.2026 albo 3.01.')
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t)
@@ -139,10 +140,11 @@ export function parseDate(text: string, today: string): Parsed<string> {
     const day = isoDay(Number(m[3]), mo, d)
     return day ? ok(day) : refuse('Nie ma takiego dnia.')
   }
+  // Without the year: the nearest such day from today on – or, for a date of the past (an export), back from today.
   const year = Number(today.slice(0, 4))
-  for (let y = year; y <= year + 8; y++) {
-    const day = isoDay(y, mo, d)
-    if (day && day >= today) return ok(day)
+  for (let i = 0; i <= 8; i++) {
+    const day = isoDay(o.past ? year - i : year + i, mo, d)
+    if (day && (o.past ? day <= today : day >= today)) return ok(day)
   }
   return refuse('Nie ma takiego dnia.')
 }

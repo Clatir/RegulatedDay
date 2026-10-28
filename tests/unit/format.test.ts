@@ -108,6 +108,14 @@ describe('Czas i długość (Konwencje interfejsu)', () => {
     expect(parseDate('jutro', '2026-10-25').ok).toBe(false)
   })
 
+  it('data bez roku w zakresie przeszłych dni (eksport CSV) to najbliższa taka data do dziś', () => {
+    expect(value(parseDate('1.10', '2026-10-28', { past: true }))).toBe('2026-10-01')
+    expect(value(parseDate('28.10', '2026-10-28', { past: true }))).toBe('2026-10-28')
+    expect(value(parseDate('29.10', '2026-10-28', { past: true }))).toBe('2025-10-29')
+    expect(value(parseDate('29.02', '2026-10-28', { past: true }))).toBe('2024-02-29')
+    expect(value(parseDate('15.10.2027', '2026-10-28', { past: true }))).toBe('2027-10-15')
+  })
+
   it('pola liczb całkowitych odrzucają ułamki', () => {
     expect(value(parseInteger('12', 0, 100))).toBe(12)
     expect(value(parseInteger(`1${NBSP}200`, 0, 5000))).toBe(1200)

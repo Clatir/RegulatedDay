@@ -473,7 +473,8 @@ export class DataFolder {
       this.queue.add({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true } : {}) })
     }
     const outcomes = await this.queue.apply(this.records)
-    return outcomes.filter((o) => ids.includes(o.id))
+    // One outcome per entry, in their order: an entry a run chained before this one laid has its outcome in the queue.
+    return ids.map((id) => outcomes.find((o) => o.id === id) ?? this.queue.outcomeOf(id))
   }
 
   /** What the engine counts a day from: the snapshot from the log, or – before the leader wrote it – the one this computer computes. */
