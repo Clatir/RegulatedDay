@@ -347,10 +347,15 @@ test('wyjątek przy każdym zajęciu guard.lock: limit startów działa przed bl
     plan(false)
     logon({ RD_TEST_OWNER_THROW: 'every-lock' }).unref()
     await expect.poll(() => readTaskNow()?.state, { timeout: 300_000, intervals: [1000] }).toBe('failed')
-    expect(readTaskNow()!.starts).toBe(4)
     await expect.poll(appRunning, { timeout: 120_000 }).toBe(true)
     expect(installed()!.version).toBe(CURRENT)
     expect(runEntry('Regulated Day Guard')).toBeNull()
+    // The count is cleared by the clean end of „nieudane”: the owners started are in the guard's log – four, and the
+    // fourth gave up before the lock (no fifth one).
+    await new Promise((r) => setTimeout(r, 5_000))
+    const log = await readText(join(productionData(), 'logs', 'guard.log'))
+    expect(log).toContain('licznik startów 4 – nie instaluję')
+    expect(count(log, /start guard/)).toBe(4)
   })
 })
 
