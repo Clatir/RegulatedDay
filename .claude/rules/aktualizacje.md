@@ -47,11 +47,16 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
 - Wyjście / „Zainstaluj teraz” / noc: aplikacja kopiuje programy, pisze zadanie i wpis Run strażnika, zapis zamknięcia,
   startuje `rd-install.exe` odłączony i kończy się; właściciel czeka na koniec jej procesu.
 - Start Windows: strażnik z Run; plik planu z sesją lub zajęciami w ciągu 30 min → `postponed`.
-- Noc (E4a, D162, T469): `shared/nightInstall.ts` (warunki nocy i reguła kolejnych komputerów z obecności: `versions`,
-  `installing`) + `main/update/night.ts` (co minutę i przy blokadzie) → `install('night', 'hidden')`.
+- Noc (E4a, D162, T469, T516): `shared/nightInstall.ts` (warunki nocy i reguła kolejnych komputerów z obecności:
+  `versions`, `installing`; wstrzymują tylko stany powiadomień gry, prezentacji, zajętości i aplikacji na cały ekran –
+  „notPresent” to sama blokada; nowoczesne czuwanie – od razu) + `main/update/night.ts` (co minutę i przy blokadzie,
+  wersja z `automaticReady`) → `install('night', 'hidden')`. Wyjście i logowanie w sesji albo zajęciach (`planBlocking`
+  z `plan-blocks.json`, ten sam warunek co strażnik) – bez instalacji. Pusty plan przy starcie tylko bez folderu danych.
 - Bez pomocnika (niedostępny): ścieżka FI – instalator odłączony `--updated /S` (+`--force-run` tylko przy „teraz”),
   stan `fi` z `installerPid`, okno stanu w PowerShell (WPF bez aktywacji).
-- Start aplikacji (`src/main/update/startup.ts`): przed blokadą jednej kopii, bez pomocnika, czyta tylko task.json.
+- Start aplikacji (`src/main/update/startup.ts`): przed blokadą jednej kopii, bez pomocnika, czyta tylko task.json – po
+  każdym czekaniu na blokadę i przed zapisem „nieudane” od nowa (`unchanged`, A5-04); licznik `starts` ≥ 4 przy wolnej
+  blokadzie – „nieudane” od razu. Pliki zadania i `versions.json` tylko przez `writeSyncAtomic`.
 
 ## Pułapki
 - Instalator electron-buildera w trybie cichym po 5 próbach podmiany zablokowanego pliku kończy się sukcesem – zawsze

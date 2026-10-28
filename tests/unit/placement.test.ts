@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { DisplayInfo } from '@shared/bounds'
+import { displayAt, type DisplayInfo } from '@shared/bounds'
 import { BAR_SPOTS } from '@shared/machine'
-import { barRect, barWidth, draggedBounds, panelRect, placementAfterDrag, spotOffset, spotPlacement, usableIconRect } from '@shared/placement'
+import { barRect, barWidth, draggedBounds, panelDisplay, panelRect, placementAfterDrag, spotOffset, spotPlacement, usableIconRect } from '@shared/placement'
 import { appUrl, parseAppUrl, urlFromArgv } from '@shared/protocol'
 
 const primary: DisplayInfo = { id: 1, label: 'Dell U2720Q', bounds: { x: 0, y: 0, width: 1920, height: 1080 }, workArea: { x: 0, y: 0, width: 1920, height: 1032 }, scaleFactor: 1 }
@@ -107,6 +107,36 @@ describe('miejsce paska: makieta i przeciąganie (D303, D304)', () => {
     expect(r.bounds).toEqual({ x: 600, y: 500, width: 480, height: 300 })
   })
 
+  it('monitor nad głównym (ujemne y, inna skala): przeciąganie, przejście przez krawędź i powrót na to samo miejsce (A4-13)', () => {
+    const above: DisplayInfo = { id: 4, label: 'VG27B', bounds: { x: 0, y: -1440, width: 2560, height: 1440 }, workArea: { x: 0, y: -1440, width: 2560, height: 1400 }, scaleFactor: 1.25 }
+    const all = [primary, above]
+    // A drag up from the main monitor onto the upper one: the bar follows the cursor into negative y.
+    const start = { x: 8, y: 960, width: 480, height: 64 }
+    expect(draggedBounds(start, { x: 20, y: 980 }, { x: 420, y: -600 }, all)).toEqual({ x: 408, y: -620, width: 480, height: 64 })
+    // Let go on the upper one: its own place there, back on the same rectangle after a start.
+    const p = placementAfterDrag({ x: 408, y: -620, width: 480, height: 64 }, all, 64, false)
+    expect(p.display.label).toBe('VG27B')
+    expect(barRect(p, all, primary, 1, 64).bounds).toEqual({ x: 408, y: -620, width: 480, height: 64 })
+  })
+
+  it('ekran pod punktem po x i y – monitor nad głównym ma te same x (A4-11)', () => {
+    const above: DisplayInfo = { id: 4, label: 'VG27B', bounds: { x: 0, y: -1440, width: 2560, height: 1440 }, workArea: { x: 0, y: -1440, width: 2560, height: 1400 }, scaleFactor: 1.25 }
+    expect(displayAt([primary, above], (d) => d.bounds, { x: 100, y: -300 })?.label).toBe('VG27B')
+    expect(displayAt([primary, above], (d) => d.bounds, { x: 100, y: 300 })?.label).toBe('Dell U2720Q')
+    expect(displayAt([primary, above], (d) => d.bounds, { x: 5000, y: 300 })).toBeNull()
+  })
+
+  it('panel: ekran do rozmiaru ten sam co do miejsca – ikona „gdzie indziej” (w obszarze roboczym) liczy się jak brak ikony', () => {
+    const above: DisplayInfo = { id: 4, label: 'VG27B', bounds: { x: 0, y: -1440, width: 2560, height: 1440 }, workArea: { x: 0, y: -1440, width: 2560, height: 1400 }, scaleFactor: 1.25 }
+    const all = [primary, above]
+    // Windows gave a rectangle inside the upper monitor's work area for an icon under the arrow; the cursor is on the main one.
+    const icon = { x: 100, y: -700, width: 24, height: 24 }
+    const cursor = { x: 1800, y: 1070 }
+    expect(panelDisplay(icon, cursor, all).label).toBe('Dell U2720Q')
+    const r = panelRect(icon, cursor, all, { width: 480, height: 600 })
+    expect(r.y).toBeGreaterThanOrEqual(0)
+  })
+
   it('środek poza monitorami: najbliższy monitor, w jego obszarze roboczym', () => {
     const p = placementAfterDrag({ x: 1900, y: 900, width: 480, height: 64 }, [primary, second], 64, false)
     // The middle (2140, 932) is below the second monitor (720 high) – it is the nearest.
@@ -123,9 +153,17 @@ describe('adres regulatedday:// (tylko w ścisłym formacie)', () => {
     expect(appUrl('regulatedday', { line: 'x1', day: '2026-10-25' })).toBe('regulatedday://panel?line=x1&day=2026-10-25')
   })
 
+  it('linie paska z dwukropkiem (powiadomienia „5 min przed”, pytania) przechodzą w obie strony (A4-03)', () => {
+    for (const line of ['wait:k3j2h1g0f9e8d7c6', 'next:2026-10-28:k3j2h1g0f9e8d7c6:1', 'reserve:2026-10-28:head:1020', 'workEnd:2026-10-28:-:1020', 'firstUse:2026-10-28:blok_1:600']) {
+      expect(urlFromArgv(['app.exe', appUrl('regulatedday', { line, day: '2026-10-28' })], 'regulatedday')).toEqual({ line, day: '2026-10-28' })
+    }
+  })
+
   it('wszystko inne jest odrzucane', () => {
     for (const bad of [
-      'regulatedday://panel?line=X',
+      'regulatedday://panel?line=a/b',
+      'regulatedday://panel?line=a%20b',
+      'regulatedday://panel?line=:a',
       'regulatedday://panel?line=a&line=b',
       'regulatedday://panel?cmd=quit',
       'regulatedday://settings',
@@ -142,5 +180,15 @@ describe('adres regulatedday:// (tylko w ścisłym formacie)', () => {
     expect(urlFromArgv(['Regulated Day.exe', 'regulatedday://panel?line=a'], 'regulatedday')).toEqual({ line: 'a', day: null })
     expect(urlFromArgv(['x', 'regulatedday://panel', 'regulatedday://panel'], 'regulatedday')).toBeNull()
     expect(urlFromArgv(['x', '--hidden'], 'regulatedday')).toBeNull()
+  })
+})
+
+describe('ustawienia Windows z przycisku (A4-09)', () => {
+  it('lista priorytetowa: Asystent koncentracji przed kompilacją 22621, Powiadomienia od niej', async () => {
+    const { systemSettingsUrl } = await import('@shared/systemSettings')
+    expect(systemSettingsUrl('notifications', '10.0.19045')).toBe('ms-settings:quiethours')
+    expect(systemSettingsUrl('notifications', '10.0.22000')).toBe('ms-settings:quiethours')
+    expect(systemSettingsUrl('notifications', '10.0.22631')).toBe('ms-settings:notifications')
+    expect(systemSettingsUrl('taskbar', '10.0.19045')).toBe('ms-settings:taskbar')
   })
 })

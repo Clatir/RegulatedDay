@@ -48,7 +48,11 @@ export function PanelApp() {
         ))}
       {target?.line && (
         <div className="rounded border border-lamp/50 bg-lamp-soft px-2 py-1 text-[12px] text-lamp" data-testid="panel-target">
-          Otwarte z powiadomienia: {target.line === 'trial' ? 'linia próby' : target.line}
+          {/* The line's own words – never its id; gone meanwhile (answered, started): only where it came from. */}
+          Otwarte z powiadomienia{target.line === 'trial' ? ': linia próby' : (() => {
+            const line = view?.lines.find((l) => l.id === target.line)
+            return line ? `: ${line.text}` : ''
+          })()}
         </div>
       )}
       <div className="flex justify-end">

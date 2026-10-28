@@ -93,9 +93,13 @@ describe('test skali (3 lata danych)', () => {
     mono += 4 * 60_000
     await folder.check()
     const rounds: Record<string, number>[] = []
+    const fullLooks: number[] = []
     for (const k of ['disconnect.start', 'disconnect.end', 'disconnect.start'] as const) {
       wall += 60_000
       mono += 60_000
+      // A minute on: the requests' files are looked at again once (the window's first view after it); every view after
+      // that within LIST_TRUST_MS takes them from memory.
+      fullLooks.push(await time(() => folder.collection('request')))
       rounds.push({
         click: await time(async () => {
           folder.append({ day: TODAY, dom: 'timer', k, at: wall })
@@ -115,5 +119,7 @@ describe('test skali (3 lata danych)', () => {
     expect(summary!.cassettes.length).toBeGreaterThanOrEqual(155)
     expect(summary!.room.next).toBeNull()
     for (const what of Object.keys(rounds[0]!)) expect(Math.min(...rounds.map((r) => r[what]!)), what).toBeLessThan(100 * factor)
+    // The look at all 3000 files, once a minute at most: under 0.3 s.
+    expect(Math.min(...fullLooks), 'requests (pełne przejrzenie)').toBeLessThan(300 * factor)
   })
 })

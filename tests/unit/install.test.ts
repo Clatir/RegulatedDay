@@ -15,6 +15,12 @@ vi.mock('node:child_process', async (importOriginal) => {
   }) as typeof m.spawn
   return { ...m, spawn }
 })
+// The files written through a temporary file (the real writer still writes).
+const atomic = vi.hoisted(() => [] as string[])
+vi.mock('../../src/main/update/files', async (importOriginal) => {
+  const m = await importOriginal<typeof import('../../src/main/update/files')>()
+  return { ...m, writeSyncAtomic: (path: string, text: string) => (atomic.push(path), m.writeSyncAtomic(path, text)) }
+})
 
 const { guardModeAsync, stageInstall, stageInstallAsync, startInstall } = await import('../../src/main/update/install')
 const { UpdateController } = await import('../../src/main/update/controller')
@@ -168,6 +174,101 @@ describe('instalacja, która nie wystartowała', () => {
     expect(c.atAutostart()).toBe(false)
     expect(calls.before).toBe(0)
     expect(existsSync(join(updateDir, '0.1.1', 'task.json'))).toBe(false)
+    c.updater?.stopAuto()
+  })
+
+  it('pomocnik instalacji, który nie wystartował: zadanie „nieudane”, nie „zaplanowane” (A5-06)', () => {
+    const { userData, updateDir, dl, helperDir } = download()
+    writeFileSync(join(helperDir, 'rd-guard.exe'), '')
+    writeFileSync(join(helperDir, 'rd-install.exe'), '')
+    atomic.length = 0
+    const ok = startInstall({ version: '0.1.1', downloadDir: dl, updateDir, helperDir, trigger: 'exit', start: 'none', url: null, autostart: true, appPid: process.pid, owner: true, userDataDir: userData, log: () => undefined })
+    // The task file only through a temporary file – the owner reads it meanwhile (A5-09).
+    expect(atomic.filter((p) => p.endsWith('task.json')).length).toBeGreaterThan(0)
+    if (ok) return // a platform that starts an empty file (it cannot be told here)
+    const t = readTask(readFileSync(join(updateDir, '0.1.1', 'task.json'), 'utf8'))
+    expect(t.kind === 'task' && t.task.state).toBe('failed')
+  })
+})
+
+describe('proces odłączony, który nie wystartował (A5-11, strażnik naprawy przy starcie)', () => {
+  it('plik, który nie jest programem: bez wyjątku, null i wpis w logu', async () => {
+    const { startDetached } = await import('../../src/main/update/install')
+    const file = join(root, 'rd-guard.exe')
+    writeFileSync(file, 'to nie jest program')
+    const logs: string[] = []
+    expect(() => startDetached(file, ['--task', 'x'], root, 'strażnik naprawy', (_l, m) => void logs.push(m))).not.toThrow()
+    await vi.waitFor(() => expect(logs.some((m) => m.startsWith('strażnik naprawy nie wystartował'))).toBe(true))
+  })
+})
+
+describe('instalacja a sesja i zajęcia (A5-02, A5-03, A5-05)', () => {
+  const controller = (o: { userData: string; helperDir: string; sessionOrClass?: () => boolean; before: { n: number } }) =>
+    new UpdateController({
+      enabled: true,
+      version: '0.1.0',
+      userData: o.userData,
+      helperDir: o.helperDir,
+      fetch: () => Promise.reject(new Error('bez sieci')),
+      helperRunning: () => true,
+      autostartOn: () => true,
+      nightInstall: () => false,
+      beforeInstall: () => void o.before.n++,
+      installFailed: () => undefined,
+      sessionOrClass: o.sessionOrClass,
+      quit: () => undefined,
+      openExternal: () => undefined,
+      broadcast: () => undefined,
+      log: () => undefined
+    })
+
+  it('wyjście i start z Windows w czasie sesji albo zajęć: nic się nie instaluje', () => {
+    const { userData, helperDir } = download()
+    const before = { n: 0 }
+    const c = controller({ userData, helperDir, sessionOrClass: () => true, before })
+    c.init(null, null)
+    c.onQuit(false)
+    expect(c.atAutostart()).toBe(false)
+    expect(before.n).toBe(0)
+    c.updater?.stopAuto()
+  })
+
+  it('plan strażnika: sesja teraz albo w ciągu 30 min blokuje, później nie', async () => {
+    const { planBlocking, writePlan } = await import('../../src/main/update/files')
+    const { userData } = download()
+    const now = Date.UTC(2026, 9, 28, 12, 0)
+    writePlan(userData, [{ start: now + 20 * 60_000, end: now + 80 * 60_000, kind: 'session' }], now - 60 * 60_000)
+    expect(planBlocking(userData, now)).toBe(true)
+    expect(planBlocking(userData, now - 15 * 60_000)).toBe(false)
+    expect(planBlocking(userData, now + 81 * 60_000)).toBe(false)
+  })
+
+  it('plan strażnika, którego nie ma, nie da się odczytać albo który nie obejmuje tej chwili: jak strażnik – bez instalacji', async () => {
+    const { planBlocking, writePlan } = await import('../../src/main/update/files')
+    const { userData } = download()
+    const now = Date.UTC(2026, 9, 28, 12, 0)
+    expect(planBlocking(userData, now)).toBe(true)
+    writeFileSync(join(userData, 'plan-blocks.json'), '{"format":1,')
+    expect(planBlocking(userData, now)).toBe(true)
+    writePlan(userData, [], now - 8 * 24 * 60 * 60_000)
+    expect(planBlocking(userData, now)).toBe(true)
+    writePlan(userData, [], now - 60_000)
+    expect(planBlocking(userData, now)).toBe(false)
+  })
+
+  it('pusty plan przy starcie tylko bez folderu danych – nieczytelny config.json zostawia ostatni plan (A5-02)', async () => {
+    const { emptyPlanAtStart } = await import('../../src/main/update/files')
+    expect(emptyPlanAtStart({ dataFolder: null, configUnreadable: false })).toBe(true)
+    expect(emptyPlanAtStart({ dataFolder: 'C:\\OneDrive\\RD', configUnreadable: false })).toBe(false)
+    expect(emptyPlanAtStart({ dataFolder: null, configUnreadable: true })).toBe(false)
+  })
+
+  it('„nieudane” dla X: noc nie zgłasza „instaluję X”', () => {
+    const { userData, updateDir, helperDir } = download()
+    writeFileSync(join(updateDir, '0.1.1', 'task.json'), `${JSON.stringify({ format: 1, version: '0.1.1', state: 'failed', message: 'x' })}\n`)
+    const c = controller({ userData, helperDir, before: { n: 0 } })
+    c.init(null, null)
+    expect(c.automaticReady()).toBeNull()
     c.updater?.stopAuto()
   })
 })

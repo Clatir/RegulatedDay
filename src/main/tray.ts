@@ -71,10 +71,20 @@ export class AppTray {
   }
 
   set(state: TrayIconState, tooltip: string): void {
-    const changed = trayIconKey(state) !== trayIconKey(this.state)
+    const before = this.state
+    const changed = trayIconKey(state) !== trayIconKey(before)
     this.state = state
     if (!this.active) return
-    if (changed) this.tray!.setImage(this.iconFile(state))
+    // An icon file held a moment (an antivirus): the old image stays and is tried again at the next view – never the rest
+    // of the view stopped by it (A4-10).
+    if (changed) {
+      try {
+        this.tray!.setImage(this.iconFile(state))
+      } catch (e) {
+        this.d.log('warn', 'ikona zasobnika nie zmieniona – spróbuję przy następnym widoku', e)
+        this.state = before
+      }
+    }
     // Windows cuts a tooltip at 127 characters.
     const tip = `${this.d.title}\n${tooltip}`.slice(0, 127)
     if (tip !== this.tooltip) {
@@ -86,7 +96,12 @@ export class AppTray {
   /** Explorer restarted or the screens changed: the icon is set again. */
   refresh(): void {
     if (!this.active) return
-    this.tray!.setImage(this.iconFile(this.state))
+    // As in `set`: an icon file that cannot be written now never stops the change of screens or of a download.
+    try {
+      this.tray!.setImage(this.iconFile(this.state))
+    } catch (e) {
+      this.d.log('warn', 'ikona zasobnika nie odświeżona', e)
+    }
     if (this.tooltip) this.tray!.setToolTip(this.tooltip)
   }
 

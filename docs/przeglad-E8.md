@@ -597,7 +597,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Objąć spawn w spawnChild blokiem try/catch. Błąd traktować jak awarię: zapis w crashTimes, restartDelay, status starting albo unavailable, kolejny timer. W child.on('error') przy child.pid === undefined wołać tę samą ścieżkę, co onExit (z guardem this.child === child). Test jednostkowy z RD_HELPER_PATH wskazującym pusty plik .exe: start() nie rzuca, status przechodzi w „starting”, a po 3 próbach w „unavailable”.
 - **Weryfikacja:** Sprawdziłem to tymczasowym testem: HelperClient.start() z pustym rd-helper.exe rzuca synchronicznie „spawn EFTYPE”, a z plikiem niebędącym PE rzuca „spawn UNKNOWN”. Status zostaje wtedy „off”. Wcześniej existsSync przechodzi, więc stan „missing” nie zadziała. helper.start() stoi w main() przed zasobnikiem i oknami, więc wyjątek trafia do main().catch, a ten wykonuje app.exit(1). Przy ponownym starcie z setTimeout wyjątek kończy się tylko logiem uncaughtException, a status zostaje „starting” bez kolejnych prób. Taka sytuacja zdarza się rzadko (np. antywirus odmawia uruchomienia albo plik jest uszkodzony), ale skutek to całkowity brak startu, choć specyfikacja przewiduje pracę bez pomocnika. Dlatego ważność high zostaje.
 - **Dowód:** src/main/helper/client.ts:94 (spawn bez try/catch), :108–109 (tylko 'exit' woła onExit; przy ujemnym kodzie Node emituje samo 'error'); src/main/index.ts:1007, 1217–1221; tymczasowy test tests/unit/tmp-e8-a4-spawn.test.ts (usunięty): „ERR Error: spawn EFTYPE status {state:off}” i „ERR2 Error: spawn UNKNOWN”
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A4-02 · high · potwierdzone – win.maximize() na ukrytym oknie pokazuje je: autostart „w zasobniku” otwiera zmaksymalizowane okno główne
 - **Plik:** `src/main/windows/mainWindow.ts:54` · rodzaj: bug · pewność recenzenta: high
@@ -607,7 +607,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Nie maksymalizować w createMainWindow. Zapamiętać flagę i przy pierwszym pokazaniu w showMainWindow wywołać win.maximize() (pokazuje okno) zamiast show(), potem focus(). Test E2E: config z window.maximized=true i start z --hidden → okno główne niewidoczne; showMain → widoczne i zmaksymalizowane.
 - **Weryfikacja:** createMainWindow woła win.maximize() na oknie z show:false, gdy zapamiętane miejsce ma maximized:true. Typy Electrona 44 mówią wprost: „This will also show (but not focus) the window if it isn't being displayed already”. Flagę zapisuje place() przy każdym chowaniu okna krzyżykiem (isMaximized). Przy --hidden ready-to-show tylko pisze w logu, a handleArgv(…, true) okna nie chowa, więc nic go potem nie ukrywa. Żaden test E2E nie sprawdza startu z zapisanym maximized:true. Ścieżka jest częsta: każde logowanie z autostartem po zamknięciu zmaksymalizowanego okna.
 - **Dowód:** src/main/windows/mainWindow.ts:36, 54, 62–65, 78; src/main/index.ts:1067–1081, 834; node_modules/electron/electron.d.ts:3106–3109; src/shared/config.ts:54
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A4-04 · high · potwierdzone – Komunikat rezerwy z „nie dziś” nie istnieje, a jego zobaczenie nigdy się nie zapisuje – „Reakcja na rezerwę” jest zawsze nagrodą
 - **Plik:** `src/main/widget.ts:41` · rodzaj: spec · pewność recenzenta: high
@@ -617,7 +617,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodać w engineView linię `reserve:<dzień>:<pula>:<at>` z tekstem regeneracji (suggestRegen) i akcją „nie dziś” (cicha ikona w „mniej pytań”). Rozszerzyć QUESTION_ID (proces główny i renderer) o `reserve:`, żeby panel, okno główne i kliknięcie paska zapisywały zobaczenie. Powiadomieniu rezerwy dać tę linię, a w handleArgv po otwarciu panelu z adresu wołać hub.seen([linia], 'notification'), gdy linia jest pytaniem albo komunikatem. Test folderu: zejście, potem zobaczenie, potem brak odpoczynku przez 60 min → „missed”.
 - **Weryfikacja:** Specyfikacja (Model energii, linia 207) wymaga ciepłego komunikatu z regeneracją i przyciskiem „nie dziś”. W src nie ma takiej linii: engineView daje przy rezerwie tylko ton i dopisek „· rezerwa energii”, a powiadomienie rezerwy ma line:null. Zobaczenie nie ma żadnej drogi zapisu: QUESTION_ID w widget.ts i Bar.tsx obejmuje tylko next|next2|workEnd|return|absence|shutdown, handleArgv i openPanel nie wołają seen, a nikt nie zapisuje id reserveMessageId. W efekcie sightingOf zawsze daje seenAt null. reserveReaction przy over albo po bedLimit oznacza każde zejście jako „excused”, więc werdykt to „reward”. Gra jest włączona (0.14.0) i zamrożone oceny trwale zapisują earned.reserve=true. W docs/plan.md nie ma pozycji na ten komunikat, a energia.md przypisywała zobaczenie do E4b.
 - **Dowód:** docs/specyfikacja.md:207, 209; src/shared/engineView.ts:157–159, 236; src/main/widget.ts:41, 405, 454, 620; src/renderer/widget/Bar.tsx:36, 259–264; src/main/index.ts:193–196, 445–447, 781–787; src/shared/engine/game.ts:91–105, 285, 290; src/shared/engine/reserve.ts:106–124
-- **Status:** otwarte
+- **Status:** do 5.2e – funkcja ze specyfikacji (D325, D326)
 
 #### A4-03 · high → medium · potwierdzone – Kliknięcie powiadomienia „5 min przed” otwiera okno główne zamiast panelu: adres z linią „wait:<blok>” odrzuca ścisły parser
 - **Plik:** `src/shared/protocol.ts:11` · rodzaj: spec · pewność recenzenta: high
@@ -627,7 +627,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dopuścić w LINE dwukropek (np. /^[a-z0-9][a-z0-9:-]{0,63}$/) albo kodować linię w appUrl i dekodować w parseAppUrl; adres dalej tylko otwiera widok. W panelu pokazywać tekst linii z widoku (view.lines znalezione po id), nigdy samo id. Test: dla każdego rodzaju powiadomienia z notices() round-trip appUrl → urlFromArgv daje tę samą linię.
 - **Weryfikacja:** Powiadomienie start5 ma line `wait:${b.id}` (to samo id co linia w engineView). appUrl wstawia linię bez zmian, a LINE = /^[a-z0-9][a-z0-9-]{0,63}$/ nie dopuszcza dwukropka. parseAppUrl zwraca więc null, a handleArgv przy second-instance woła showMainWindow() zamiast openPanel. Potwierdziłem to tymczasowym testem: round-trip appUrl → urlFromArgv dla „wait:k3j2h1g0f9e8d7c6” daje null, a adres bez linii przechodzi. Błąd dotyczy tylko start5, bo pozostałe powiadomienia mają line:null i ich adres otwiera panel. Okno główne też pokazuje pasek z „Zacznij”, więc ważność obniżam do medium. Uwaga o surowym „Otwarte z powiadomienia: wait:…” w PanelApp.tsx:51 jest trafna, ale ujawni się dopiero po poprawce parsera.
 - **Dowód:** src/main/widget.ts:395; src/shared/engineView.ts:180; src/shared/protocol.ts:11, 26–28, 35; src/main/notify.ts:49; src/main/index.ts:827–835; src/renderer/widget/PanelApp.tsx:51; tymczasowy test tests/unit/tmp-e8-a4-protocol.test.ts (usunięty) przeszedł z expect(...).toBeNull()
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A4-05 · medium · potwierdzone – Alt+F4 w otwartym panelu ikony zamyka całą aplikację
 - **Plik:** `src/main/windows/iconPanel.ts:77` · rodzaj: bug · pewność recenzenta: high
@@ -637,7 +637,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W handlerze 'close' panelu: gdy this.isOpen, wykonać e.preventDefault() i this.close('Alt+F4') bez onExternalClose; quitApp tylko dla panelu ukrytego, tak jak w oknie głównym. Test E2E: Alt+F4 w panelu → panel zamknięty, aplikacja działa.
 - **Weryfikacja:** Handler 'close' panelu poza wyjściem zawsze chowa panel i woła onExternalClose, a to jest quitApp (index.ts:1114). Nie odróżnia otwartego panelu od ukrytego, czyli inaczej niż okno główne (mainWindow.ts:72). Panel otwiera się z show() i focus(). Renderer nie przechwytuje Alt+F4: PanelApp tylko woła panelTouch. Zwykłe przetwarzanie Windows (WM_SYSKEYDOWN, potem SC_CLOSE, potem WM_CLOSE) daje więc zdarzenie 'close' także w oknie bez ramki. Specyfikacja nie przewiduje zamykania aplikacji z panelu. Części systemowej nie dało się uruchomić lokalnie, ale ścieżka w kodzie od 'close' do quitApp jest jednoznaczna.
 - **Dowód:** src/main/windows/iconPanel.ts:77–83, 130–135; src/main/index.ts:1114, 451–462; src/main/windows/mainWindow.ts:66–80; src/renderer/widget/PanelApp.tsx:16–26
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A4-07 · medium → low · potwierdzone – Powiadomienie odrzucone przez Windows jest zapisane jako pokazane i nigdy nie wraca (T475 „później” bez pozycji w planie)
 - **Plik:** `src/main/widget.ts:410` · rodzaj: spec · pewność recenzenta: high
@@ -647,7 +647,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Zapisywać rodzaj i ważność powiadomienia razem ze stanem z pomocnika (notificationState przed wysłaniem) albo osobnym zdarzeniem „nieprzyjęte”. W notices() wysłać je ponownie raz, gdy stan znów „accepts” i jest obecność, dopóki jest aktualne. Alternatywnie dopisać pozycję w docs/plan.md przed bramką 1.0.
 - **Weryfikacja:** Opis kodu się zgadza. notify() zwraca true zaraz po note.show(), 'failed' tylko pisze w logu (index.ts przekazuje notify(n, log) bez onFailed), a markNotice od razu zapisuje notice.shown. Ponownego wysłania nie ma, choć specyfikacja (linia 492) i T334/T340 go wymagają. Brak jest jednak świadomie odłożony decyzją T475 („ponowne wysłanie powiadomienia odrzuconego przez Windows – później”). Skutek jest mały: przy „Nie przeszkadzać” Windows i tak zostawia powiadomienie w Centrum powiadomień, a pasek pokazuje linię „Zacznij”. Realny problem to tylko brak pozycji w docs/plan.md przed 1.0, dlatego ważność obniżam do low.
 - **Dowód:** src/main/notify.ts:45–58; src/main/index.ts:170; src/main/widget.ts:408–411; docs/specyfikacja.md:492; docs/decyzje-techniczne.md:465 (T475), 324 (T334), 330 (T340); docs/plan.md (brak pozycji)
-- **Status:** otwarte
+- **Status:** do 5.3 (T516)
 
 #### A4-08 · low · bez weryfikacji – Panel „Zawsze na wierzchu” (barPanel) bez pomocnika zamyka się przy utracie fokusu
 - **Plik:** `src/main/windows/iconPanel.ts:72` · rodzaj: spec · pewność recenzenta: high
@@ -655,7 +655,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Handler 'blur' zamyka panel, gdy pomocnik nie działa, i nie sprawdza stayOnTop. foreground() i licznik 60 s go sprawdzają. D291 mówi, że panel przy wyborze „pasek pulpitu i panel ikony” zostaje na wierzchu, dopóki go nie zamkniesz.
 - **Scenariusz:** onTop = 'barPanel', pomocnik niedostępny (3 awarie) → użytkownik otwiera panel i klika w inny program → panel znika, choć miał zostać.
 - **Poprawka:** W handlerze blur dodać warunek `this.d.stayOnTop?.() !== true`.
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A4-09 · low · bez weryfikacji – Przycisk ustawień powiadomień priorytetowych zawsze otwiera ms-settings:notifications, także w Windows 10 i 11 21H2
 - **Plik:** `src/main/index.ts:808` · rodzaj: spec · pewność recenzenta: high
@@ -663,7 +663,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Spec, T347 i T353: poniżej kompilacji 22621 ma się otwierać ms-settings:quiethours (Asystent koncentracji, gdzie jest lista priorytetowa), od tej kompilacji ms-settings:notifications. Kod nie sprawdza wersji systemu.
 - **Scenariusz:** Kreator na laptopie z Windows 10 → „Otwórz ustawienia” prowadzi do „Powiadomienia i akcje”, a nie do Asystenta koncentracji z listą priorytetową. Instrukcja z kreatora nie zgadza się z tym, co widać.
 - **Poprawka:** Odczytać numer kompilacji z os.release() (trzecia liczba) i dla < 22621 otwierać 'ms-settings:quiethours'. Test jednostkowy funkcji wyboru adresu.
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A4-10 · low · bez weryfikacji – Błąd zapisu pliku .ico ikony przerywa showWidget: okna i pasek nie dostają nowego widoku
 - **Plik:** `src/main/tray.ts:77` · rodzaj: bug · pewność recenzenta: medium
@@ -671,7 +671,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** AppTray.set wywołuje iconFile, a ten writeFileSync, bez try/catch. Try/catch jest tylko w ensure. showWidget (index.ts:185) woła tray.set przed broadcast(CH.onWidget) i layoutBar, więc wyjątek (plik zablokowany przez antywirus, brak miejsca) przerywa całe rozesłanie widoku. W refreshNow emit leży poza try, więc refresh() kończy się odrzuceniem, które trafia tylko do logu. Przy trial.on('change') wyjątek przechodzi do IPC setTrial.
 - **Scenariusz:** Antywirus na chwilę blokuje nowy plik tray-<kolor>-d.ico przy zmianie stanu ikony → przez ten czas, przy każdym odświeżeniu z tym stanem, pasek, panel i okno główne pokazują stary widok ze starym odliczaniem.
 - **Poprawka:** W set i refresh objąć iconFile i setImage blokiem try/catch z logiem (stan zostaje do następnej zmiany); w showWidget wywołać tray.set po broadcast i layoutBar albo w try.
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A4-11 · low · bez weryfikacji – Monitor dobierany tylko po x: przy monitorach jeden nad drugim (układ użytkownika) panel i „Pasek na następnym ekranie” biorą zły ekran
 - **Plik:** `src/main/index.ts:1105` · rodzaj: bug · pewność recenzenta: high
@@ -679,7 +679,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** place panelu szuka monitora ikony warunkiem `icon.x >= d.bounds.x && icon.x < d.bounds.x + d.bounds.width`, bez y. Gdy ikona jest ukryta pod strzałką, prostokąt jest pusty i x = 0. trialAction 'nextDisplay' i 'corner' (index.ts:581) ustala bieżący ekran paska tak samo. Przy VG27B nad głównym monitorem zakresy x się pokrywają, więc find zwraca pierwszy ekran z listy. panelRect sam dobiera ekran poprawnie, więc w panelu szerokość i limit wysokości mogą pochodzić z innego ekranu. W próbie „następny ekran” może wybrać ten sam monitor.
 - **Scenariusz:** Pasek na VG27B (y < 0), menu zasobnika „Próba ▸ Pasek pulpitu na następnym ekranie” → bieżącym ekranem okazuje się główny (pierwszy z pasującym x), więc „następny” to VG27B i pasek zostaje na tym samym monitorze.
 - **Poprawka:** Użyć wspólnej funkcji „ekran pod punktem lub prostokątem” (contains po x i y, jak usableIconRect albo placementAfterDrag), a dla paska brać barRect(...).display zamiast porównywania x.
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A4-12 · low · bez weryfikacji – Przeciąganie paska przerywa się po 10 s bez ruchu myszy – upuszczenie nic nie zapisuje, a pasek wraca na stare miejsce
 - **Plik:** `src/main/index.ts:240` · rodzaj: bug · pewność recenzenta: high
@@ -687,7 +687,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** layoutBar zeruje barDrag, gdy od ostatniego komunikatu minęło DRAG_HOLD_MS. drag.last odświeża się tylko przy 'move' i 'end', a renderer wysyła 'move' wyłącznie przy ruchu kursora. Wystarczy, że użytkownik trzyma przycisk bez ruchu dłużej niż 10 s i przyjdzie jakiekolwiek wywołanie layoutBar (odświeżenie widgetu co 15 s, zdarzenie pomocnika). Wtedy barDrag = null, pasek wraca do zapisanego miejsca, kolejne 'move' i 'end' są ignorowane, a miejsce się nie zapisuje.
 - **Scenariusz:** Użytkownik chwyta pasek, przesuwa nad drugi monitor i zatrzymuje się na ~12 s, wybierając miejsce → pasek odskakuje na stare miejsce, dalsze ruchy nic nie robią, puszczenie nie zapisuje nowego miejsca.
 - **Poprawka:** Odświeżać drag.last także w odpowiedzi na sygnał „wciąż trzymam” z renderera (np. co 2 s przy held) albo zerować barDrag tylko przy render-process-gone i utracie przechwycenia ('lost' i 'cancel' już przychodzą), z dłuższym limitem awaryjnym.
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A4-13 · low · bez weryfikacji – Brak testów dla monitora nad głównym (ujemne y) w placement i dla zachowania procesu HelperClient
 - **Plik:** `tests/unit/placement.test.ts:82` · rodzaj: test-gap · pewność recenzenta: high
@@ -695,7 +695,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Testy draggedBounds, placementAfterDrag i barRect obejmują tylko monitory obok siebie z y ≥ 0. Układ, w którym zgłoszono E4b.12 (VG27B nad głównym, y < 0, możliwa inna skala), nie ma żadnego testu. Analiza czystych funkcji nie wykazała błędu, ale regresji nic nie pilnuje. helper-client.test.ts sprawdza tylko restartDelay i helperUnavailable, a start, awaria, watchdog i niewykonalny exe (A4-01) nie mają testu.
 - **Scenariusz:** Zmiana w clampInto albo draggedBounds psująca ujemne współrzędne (np. Math.max(0, …)) przechodzi CI i trafia na komputer użytkownika z monitorem nad głównym.
 - **Poprawka:** Dodać przypadki: main {0,0,1920,1032} + górny {0,-1440,2560,1400}. Sprawdzić przeciąganie w górnym, przejście przez krawędź między monitorami, placementAfterDrag i powrót barRect na ten sam prostokąt. Dla HelperClient napisać test z RD_HELPER_PATH: skrypt .mjs, który pada, milknie i się zawiesza, oraz pusty .exe.
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A4-06 · medium → nit · obalone – Pasek pulpitu i panel nie blokują nawigacji: upuszczony plik albo link podmienia stronę okna, a nowa strona dostaje window.rd
 - **Plik:** `src/main/windows/desktopBar.ts:63` · rodzaj: security · pewność recenzenta: medium
@@ -705,7 +705,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Dodać app.on('web-contents-created', (_e, wc) => { wc.on('will-navigate', e => { if (!devUrl || !url.startsWith(devUrl)) e.preventDefault() }); wc.setWindowOpenHandler(() => ({ action: 'deny' })) }), wspólne dla wszystkich okien. W uchwytach IPC odrzucać nadawcę, którego e.senderFrame.url nie jest stroną aplikacji. Opcjonalnie dodać CSP w index.html oraz dragover i drop z preventDefault w rendererze.
 - **Weryfikacja:** Opisany scenariusz awarii nie zachodzi. W Electronie 44 webPreferences.navigateOnDragDrop ma domyślnie wartość false („Whether dragging and dropping a file or link onto the page causes a navigation. Default is false”), a żadne okno go nie włącza. Upuszczony plik albo link nie nawiguje więc paska ani panelu. Renderer nie ma też żadnych linków (brak href) ani kodu zmieniającego location. Bez XSS strona aplikacji nie może trafić na obcy adres. Brak will-navigate i sprawdzania e.senderFrame to tylko brakująca obrona w głąb, bez realnej ścieżki.
 - **Dowód:** node_modules/electron/electron.d.ts:19581–19585 (navigateOnDragDrop, Default is false); grep src: brak navigateOnDragDrop i href= w src/renderer; src/main/windows/desktopBar.ts:35–64, iconPanel.ts:48–71
-- **Status:** otwarte
+- **Status:** obalone przy weryfikacji – bez zmian
 
 ### A5 – Aktualizacje, instalacja, awarie, tożsamość, pomocnik C#
 
@@ -719,7 +719,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Blokować tylko jawnie wymienione stany: 'busy', 'd3dFullscreen', 'presentation', 'app'. 'notPresent' traktować jak dozwolony, bo oznacza blokadę albo wygaszacz. Dopisać T-decyzję zastępującą część T469. Dodać test nightReady({ locked: true, notificationState: 'notPresent' }) === null.
 - **Weryfikacja:** nightReady przepuszcza tylko stany 'accepts', 'quietTime' i 'unknown', a pomocnik zamienia QUNS_NOT_PRESENT (1) na 'notPresent'. Według dokumentacji Microsoftu (QUERY_USER_NOTIFICATION_STATE) Windows zwraca ten stan, gdy działa wygaszacz, komputer jest zablokowany albo trwa nieaktywna sesja szybkiego przełączania użytkowników. index.ts przekazuje ten stan bez żadnej zmiany, więc gałąź „ekran zablokowany” i ścieżka nowoczesnego trybu wstrzymania (sprawdzenie przy 'lock-screen') zawsze dają 'none'. Specyfikacja (linia 691) blokuje tylko grę, prezentację, zajętość i okno aplikacji ze Sklepu na cały monitor, więc T469 jest z nią sprzeczna. Instalacja w nocy działa tylko przy 30 min bez wejścia i bez blokady ani wygaszacza. Zachowania samego Windows nie sprawdziłem na żywo (nie da się zablokować ekranu z sesji), ale dokumentacja mówi o tym wprost.
 - **Dowód:** src/shared/nightInstall.ts:76; helper/src/Common/System.cs:23; src/main/index.ts:1037-1046, 1057; docs/specyfikacja.md:691; docs/decyzje-techniczne.md:459 (T469); tests/unit/night-install.test.ts:13 (locked:true + 'accepts'). Tymczasowy test: nightReady({locked:true, notificationState:'notPresent'}) zwraca 'stan powiadomień: notPresent' (przeszedł). Dokumentacja: learn.microsoft.com/windows/win32/api/shellapi/ne-shellapi-query_user_notification_state
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A5-02 · high · potwierdzone – Każdy start nadpisuje plik planu strażnika pustym planem na 7 dni – instalacja przy logowaniu w trakcie sesji lub zajęć
 - **Plik:** `src/main/index.ts:1061` · rodzaj: bug · pewność recenzenta: medium
@@ -729,7 +729,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Nie nadpisywać istniejącego planu przy starcie. Pusty plan pisać tylko wtedy, gdy na komputerze nie ma wybranego folderu danych (dataFolderNow() === null). Przed install('logon') w atAutostart sprawdzić blokadę samemu (anyBlockRunning albo plan w ciągu 30 min, wtedy nie przekazywać) albo zaczekać na refreshGuardPlan. Dodać test: przy otwartym folderze start nie zastępuje pliku planu z blokami.
 - **Weryfikacja:** main() przy każdym starcie wywołuje writePlan(userData, []) z from=now i to=now+7 dni (linia 1061). W ścieżce autostartu z gotowym pobraniem kod robi tylko `void hub.open()`, a zaraz po nim synchronicznie atAutostart() → install('logon') → quit(). openNow jest asynchroniczne (stat, DataFolder.open). before-quit wywołuje hub.close, które ustawia shutdown, a otwarcie zakończone po tym robi s.stop() i pomija `void s.refreshGuardPlan()`. Strażnik czeka na koniec procesu aplikacji i czyta pusty plan, który obejmuje chwilę: covered=true, blocking=false, więc Plan.WaitAtLogon zwraca false i instaluje. Dzieje się tak w każdym takim logowaniu, nie tylko przy wolnym OneDrive. Ochrona „nigdy w trakcie bloku sesji ani zajęć” przy logowaniu jest więc martwa, a CI tego nie widzi (RD_TEST_KEEP_PLAN=1).
 - **Dowód:** src/main/index.ts:1061, 1144, 1150; src/main/update/files.ts:135-136; src/main/update/controller.ts:187-194; src/main/data/hub.ts:250-253, 261, 295-303; src/main/data/service.ts:286-307; helper/src/Owner/Owner.cs:193, 658-689; src/main/update/install.ts:176-177
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A5-03 · medium · potwierdzone – Instalacja przy pełnym wyjściu nie sprawdza bloku sesji ani zajęć
 - **Plik:** `src/main/update/controller.ts:181` · rodzaj: spec · pewność recenzenta: high
@@ -739,7 +739,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W onQuit pominąć instalację, gdy folder mówi, że biegnie albo w ciągu 30 min zaczyna się blok sesji lub zajęć (to samo kryterium co plan strażnika). Alternatywa: w Owner.Loop stosować Plan (blocking) także dla wyzwalacza 'exit' i zapisywać „odłożono”, bez warunku !covered. Dodać test.
 - **Weryfikacja:** onQuit wywołuje install('exit','none') i nic nie sprawdza poza sessionEnding i installing. controller.install też nie sprawdza bloków. Owner.Loop stosuje Plan.WaitAtLogon tylko dla Trigger=='logon' albo --autostart, więc przy wyzwalaczu 'exit' instalator rusza zawsze. Specyfikacja (linia 689) mówi wprost: „przy pełnym wyjściu albo przy starcie Windows, ale nigdy w trakcie bloku sesji ani zajęć”. Nie znalazłem decyzji D ani T, która by to łagodziła, ani testu tej reguły dla wyjścia. Ważność medium jest trafna: wyjście jest świadomym kliknięciem, a skutkiem jest instalacja trwająca około minuty w trakcie bloku.
 - **Dowód:** src/main/update/controller.ts:116-131, 181-184; src/main/index.ts:1175-1177; helper/src/Owner/Owner.cs:193; docs/specyfikacja.md:689; folder.anyBlockRunning używane tylko w nocy (index.ts:1045)
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A5-04 · medium · potwierdzone – Sekwencja startu po zwolnieniu guard.lock nie czyta zadania ponownie – „odłożono” zamienia się w fałszywe „nieudane” albo aplikacja w ogóle nie startuje
 - **Plik:** `src/main/update/startup.ts:204` · rodzaj: race · pewność recenzenta: medium
@@ -749,7 +749,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Po każdym czekaniu (drugi odczyt, pętla zawieszenia, czekanie na właściciela) przeczytać task.json ponownie i rozstrzygnąć od nowa (runStartup rekurencyjnie albo pętlą). Dla 'postponed', 'done' i 'failed' oraz dla innego attemptId: zwykły start bez nowego strażnika. Przed zapisem 'failed' sprawdzić, że stan i attemptId są nadal te same. Dodać test jednostkowy.
 - **Weryfikacja:** Przy 'postponed' i zajętym guard.lock runStartup wchodzi w ścieżkę przekazania (linia 139). Gdy po 6 s blokada jest wolna, ustawia needGuard=true i nie czyta task.json ponownie. Strażnik z Run, który w tym czasie odłożył instalację, nie uruchomił aplikacji, bo AppRuns() widzi proces czekający w bramce startu. Drugi strażnik (bez --autostart, ale z trigger 'logon') znów odkłada i też jej nie uruchamia. Po jego końcu kod zapisuje nieaktualny obiekt zadania jako 'failed' z message 'strażnik nie wystartował', usuwa wpis Run i daje baner „nie dokończyła się”. Stan 'failed' wstrzymuje potem atAutostart i instalację w nocy. Okno wyścigu jest realne: start .NET i Installed(true) przy logowaniu nachodzą na zimny start Electrona.
 - **Dowód:** src/main/update/startup.ts:139, 198-204, 227-256; helper/src/Owner/Owner.cs:424-437, 535-539, 583-595; src/main/index.ts:851 (drugi strażnik '--hidden'). Tymczasowy test (task 'postponed', lock zajęty tylko przy pierwszym odczycie, strażnik kończy się od razu): guardStarts=1, removed=1, state 'failed', message 'strażnik nie wystartował', baner unfinished – przeszedł
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A5-05 · medium → low · potwierdzone – Nocna instalacja przy „nieudane” dla X pisze „instaluję X” całą noc i blokuje pozostałe komputery
 - **Plik:** `src/main/update/night.ts:63` · rodzaj: bug · pewność recenzenta: high
@@ -759,7 +759,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** W index.ts (ready dla NightInstaller) albo w NightInstaller podawać null, gdy zadanie update\<X>\task.json jest 'failed'. Ogólniej: przed 'claim' sprawdzać, czy controller w ogóle mógłby zainstalować (metoda canInstall(trigger)). Dodać test: 'failed' nie daje żadnego claim.
 - **Weryfikacja:** NightInstaller bierze ready = readyRelease, a Updater nie patrzy na stan zadania. nightDecision daje więc 'claim' (obecność dostaje 'instaluję X'), po losowym czekaniu 'install', a controller.install('night') zwraca false dla 'failed' (linia 125). Wtedy następuje reset → claim(null), a minutę później znów 'claim'. Test potwierdził, że zgłoszenie wisi przez ponad 70% nocy i wraca kilkanaście razy. Inny komputer z wyższym identyfikatorem widzi rywala i nie zaczyna. Ważność obniżam: warunek wstępny jest rzadki (dwie nieudane próby X na jednym komputerze), a skutkiem jest tylko brak nocnej instalacji na innych komputerach (wciąż instalują przy wyjściu i logowaniu) i szum w logu.
 - **Dowód:** src/main/index.ts:1032, 1052; src/main/update/night.ts:54-68, 77-82; src/main/update/controller.ts:124-125; src/main/update/updater.ts:125-137; src/shared/nightInstall.ts:110-113. Tymczasowy test NightInstaller z install: () => false przez 360 minut: >10 claimów '0.3.0', zgłoszenie aktywne >70% minut – przeszedł
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A5-06 · medium → low · potwierdzone – Nieudany start właściciela instalacji zostawia zadanie „scheduled” i wpis Run strażnika – następny start czeka do 60 s i pokazuje fałszywe „nie dokończyła się”
 - **Plik:** `src/main/update/install.ts:180` · rodzaj: bug · pewność recenzenta: high
@@ -769,7 +769,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Poprawka:** Przy pid == null w ścieżce właściciela usunąć wpis Run (guardMode --run-entry remove) i zapisać zadanie jako 'failed' z message 'pomocnik instalacji nie wystartował' (atomowo), tak jak w ścieżce FI. Albo usunąć task.json. W startupGate dać pętli czekania wcześniejsze wyjście, gdy startGuard zwrócił null. Dodać test.
 - **Weryfikacja:** W ścieżce właściciela przy pid == null startInstall zwraca false, ale task.json zostaje 'scheduled', a wpis Run jest już ustawiony. Ścieżka FI w tej samej sytuacji zapisuje 'failed', a test install.test.ts sprawdza tylko ją. Przy następnym starcie runStartup widzi 'scheduled' z wolnym lockiem i uruchamia strażnika. Gdy startGuard zwróci null, warunek `started?.exited()` nigdy nie kończy pętli, więc aplikacja czeka pełne 60 s bez okna, a potem zapisuje 'failed' i pokazuje baner. Recenzent przypisuje T410 trochę za dużo: „cofa stan (pobranie gotowe, sprawdzanie, znacznik życia)” mówi o stanie aplikacji, nie o pliku zadania. Asymetria z FI jest jednak realna. Ważność obniżam, bo spawn exe sprawdzonego chwilę wcześniej przez existsSync zawodzi rzadko (np. antywirus).
 - **Dowód:** src/main/update/install.ts:170-180 vs 186-190; src/main/update/startup.ts:227-243, 255-256; src/main/index.ts:850-858; tests/unit/install.test.ts:77-88 (tylko ścieżka FI); docs/decyzje-techniczne.md:400 (T410)
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A5-07 · low · bez weryfikacji – Strażnik w sesji nie trzyma żądań zasilania i ekranu do potwierdzenia pomocnika aplikacji (brak mutexu potwierdzenia)
 - **Plik:** `helper/src/Owner/Owner.cs:148` · rodzaj: spec · pewność recenzenta: high
@@ -777,7 +777,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Właściciel ustawia tylko power.Set(false, true, true), bez żądania ekranu, i zwalnia wszystko w Release zaraz po Postpone/StartAppIfComplete. Specyfikacja wymaga, by przy starcie z autostartu w czasie bloku sesji albo zajęć i 30 min przed nim strażnik trzymał żądania zasilania i ekranu od startu, aż pomocnik uruchomionej aplikacji potwierdzi blokadę nazwanym mutexem (najwyżej 60 s), i nigdy w „Odcinam się”. W helper/src nie ma mutexu potwierdzenia ani czekania na niego (T309, T318).
 - **Scenariusz:** Logowanie w trakcie sesji: strażnik odkłada i od razu zwalnia żądania. Aplikacja otwiera folder z OneDrive przez dłuższą chwilę, zanim jej pomocnik ustawi blokadę usypiania. W tym czasie ekran może się wygasić albo komputer uśpić, wbrew zamierzonej ciągłości blokady sesji.
 - **Poprawka:** W pomocniku aplikacji tworzyć nazwany mutex potwierdzenia po ustawieniu blokady. W Owner przy Plan.QuietNow trzymać power.Set(true, true, true) aż do istnienia tego mutexu albo 60 s, a nie w „Odcinam się”. Alternatywa: decyzja T, że to wymaganie odpada.
-- **Status:** otwarte
+- **Status:** do 5.3 (T516)
 
 #### A5-08 · low · bez weryfikacji – Aplikacja nie reaguje na licznik startów 4, a właściciel sprawdza limit dopiero po TakeLock i oknach
 - **Plik:** `src/main/update/startup.ts:179` · rodzaj: spec · pewność recenzenta: high
@@ -785,7 +785,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Specyfikacja: „aplikacja, która widzi licznik 4, robi to samo” (zapisuje „nieudane”, usuwa wpis Run, startuje z banerem). runStartup nigdy nie czyta task.starts, tylko uruchamia kolejnego strażnika i czeka na niego (do 60 s, gdy ten nie startuje). W Owner.RunOwner kontrola Starts >= MaxStarts stoi za TakeLock, power.Set i new OwnerUi. Wyjątek powtarzany w TakeLock (np. stały konflikt dostępu do guard.lock) uruchamia więc Crash → nowy właściciel → licznik 5, 6… bez końca, a limit 4 startów nie działa.
 - **Scenariusz:** Zadanie ma starts=4 po serii awarii, a strażnik nie może już wystartować. Każdy start aplikacji czeka 60 s, zanim zapisze „nieudane”. Wariant: guard.lock stale niedostępny do zapisu, każdy właściciel pada w TakeLock i startuje następnego, który zwiększa licznik bez końca.
 - **Poprawka:** W runStartup dla stanów scheduled/installing przy task.starts >= 4 i wolnym locku od razu zapisać 'failed', usunąć wpis Run i wrócić normal z banerem. W Owner przenieść kontrolę MaxStarts tuż za zapis licznika (przed TakeLock). Dodać testy.
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (aplikacja – `tests/unit/startup.test.ts`; właściciel sprawdza limit przed blokadą – `tests/update/scenarios.spec.ts` „wyjątek przy każdym zajęciu guard.lock”, T516)
 
 #### A5-09 · low · bez weryfikacji – Plik zadania (i versions.json) zapisywane przez aplikację bez pliku tymczasowego
 - **Plik:** `src/main/update/install.ts:172` · rodzaj: data · pewność recenzenta: high
@@ -793,7 +793,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** startInstall zapisuje task.json przez writeFileSync w czterech miejscach (172, 184, 189, 192), choć w files.ts jest gotowe writeSyncAtomic. Specyfikacja wymaga, by plik zadania i inne pliki wspólne aplikacji, pomocnika i strażnika były zapisywane przez plik tymczasowy i zamianę nazwy, bo właściciel (np. okno „nie udała się” po „Spróbuj ponownie”) może je czytać równolegle. Podobnie crash/versions.ts:51 zapisuje versions.json w miejscu: przerwany zapis zeruje historię wersji i awarii, z której korzysta reguła 24 h i wstrzymania nocnej instalacji.
 - **Scenariusz:** Przerwany albo równoległy zapis daje ucięty task.json. Aplikacja go pomija (nieczytelny), ale strażnik z wpisu Run pada przy TaskFile.Load bez nowego właściciela i bez startu aplikacji. Ucięty versions.json daje pustą listę: znika zapis awarii X, który miał wstrzymać nocną instalację innych komputerów.
 - **Poprawka:** Zastąpić writeFileSync przez writeSyncAtomic w startInstall i w recordRun.
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A5-10 · low · bez weryfikacji – Foldery update\<X> z „nieudane” (i nierozstrzygniętym „odłożono”) starszych wersji nigdy nie są sprzątane (~200 MB każdy)
 - **Plik:** `src/main/update/files.ts:153` · rodzaj: bug · pewność recenzenta: high
@@ -801,7 +801,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** cleanUpdateFolders pomija każdy folder z zadaniem w stanie innym niż 'done'. Sekwencja startu dla 'failed' przy działającej wersji nowszej niż X (startup.ts:141–146) zwraca tylko normal(null) i nigdy nie kończy zadania. Fail() w C# usunął już wpis Run, więc żaden strażnik go nie rozstrzygnie. update\<X> z kopią instalatora i update\<X>\download zostają na zawsze. To samo dotyczy 'postponed' po wyłączeniu wpisu strażnika.
 - **Scenariusz:** Instalacja 0.16.0 nie udała się, a potem użytkownik zainstalował 0.17.0 („Spróbuj ponownie” na nowszym wydaniu albo ręcznie). Folder update\0.16.0 (instalator ×2, ~200 MB) zostaje w %APPDATA% bez końca i kolejne nieudane wersje się kumulują.
 - **Poprawka:** W runStartup dla 'failed' i 'postponed' przy cmp > 0 dodać afterLock, który zapisuje 'done' (i usuwa wpis Run), tak jak dla pozostałych stanów. Wtedy cleanUpdateFolders usunie folder przy kolejnym starcie. Dodać test.
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A5-11 · low · bez weryfikacji – Synchroniczne wyjątki plikowe w sekwencji startu kończą aplikację przez app.exit(1)
 - **Plik:** `src/main/crash/lifeMarker.ts:105` · rodzaj: crash · pewność recenzenta: medium
@@ -809,7 +809,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** main() kończy się w catch przez app.exit(1) (index.ts:1217). Kilka kroków bez osłony może rzucić. LifeKeeper.mainDumpSince wywołuje readdirSync i statSync bez try (plik albo podfolder znikający lub niedostępny w crashes\). startup.afterLock() (index.ts:924) i writeLaunched zapisują przez writeSyncAtomic, który rzuca po 2 s zajętego pliku. cleanUpdateFolders wywołuje readdirSync(updateDir), a writePlan zapisuje w ten sam sposób. Każdy taki wyjątek zatrzymuje start całej aplikacji. Przy przyczynie trwałej (np. odmowa dostępu do podfolderu crashes) aplikacja nie uruchamia się wcale.
 - **Scenariusz:** Podfolder w crashes\ bez prawa odczytu (albo plik zajęty dłużej niż 2 s przy zapisie zadania po blokadzie jednej kopii). judgePreviousRun albo afterLock rzuca, main() kończy się app.exit(1) i aplikacja znika bez okna, a po kolejnym starcie dzieje się to samo.
 - **Poprawka:** W mainDumpSince opakować readdir i stat każdego wpisu w try/catch (pominąć wpis). afterLock, writeLaunched, cleanUpdateFolders i writePlan w main() wywoływać w try z wpisem w logu, żeby start szedł dalej. Dodać test z rzucającym fs.
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 #### A5-12 · low · bez weryfikacji – Pierwszy komputer z modern standby nie dochodzi do instalacji w nocy z powodu losowego czekania 0–30 min
 - **Plik:** `src/shared/nightInstall.ts:116` · rodzaj: spec · pewność recenzenta: medium · **wymaga Twojej decyzji**
@@ -817,7 +817,7 @@ poprawce (`Status:` – otwarte / poprawione w X.Y.Z / bez zmian, powód).
 - **Opis:** Dla pierwszego komputera decyzja to 'claim', a potem losowe czekanie do 30 min, sprawdzane timerem co minutę w aplikacji. Laptop z nowoczesnym trybem wstrzymania usypia się zaraz po zablokowaniu ekranu, a aplikacja nie trzyma wtedy żadnego żądania zasilania. Czekanie nie upływa w czuwaniu, a rano (poza ciszą nocną) zgłoszenie jest cofane. Specyfikacja mówi jednocześnie „każdy przed instalacją czeka losowo 0–30 min” i „na laptopie z nowoczesnym trybem wstrzymania instalacja w nocy zaczyna się od razu po zablokowaniu ekranu”. Te dwa zdania są sprzeczne dla laptopa, który jest pierwszym komputerem. Uwaga: dziś gałąź blokady i tak jest martwa (A5-01).
 - **Scenariusz:** Po naprawie A5-01: laptop jako pierwszy komputer widzi nowe wydanie, przy blokadzie dostaje claim z waitMs = 17 min i usypia się. Rano decyzja 'none' z resetem, i tak co noc. Wersja instaluje się tylko przy wyjściu albo logowaniu.
 - **Poprawka:** Do wyboru użytkownika. (a) Na komputerze z modern standby (powerState.modernStandby) pomijać losowe czekanie albo skracać je do kilku sekund. (b) Na czas czekania trzymać żądanie zasilania przez pomocnika. (c) Zostawić tak, jak jest, i zapisać w specyfikacji, że laptop jako pierwszy komputer nie instaluje w nocy.
-- **Status:** otwarte
+- **Status:** poprawione w 0.18.0 (testy w `tests/unit`, `tests/e2e/smoke.spec.ts`, T516)
 
 ### A6 – Ekrany dnia – „Dziś”, plan poranny, rytuał, prośby, szablony, rutyny; stan okna
 

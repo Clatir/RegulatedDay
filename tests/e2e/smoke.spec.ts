@@ -335,3 +335,39 @@ test('folder danych (RD_DATA_DIR): obecność, lokalny dziennik i log dnia; przy
   const presence = JSON.parse(await readFile(join(dataDir, '.presence', `${computer}.json`), 'utf8')) as { state: string }
   expect(presence.state).toBe('closed')
 })
+
+test('start z Windows w zasobniku: zapamiętane zmaksymalizowane okno się nie pokazuje (A4-02)', async () => {
+  const { mkdtemp, mkdir, writeFile } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const userData = join(await mkdtemp(join(tmpdir(), 'rd-e2e-')), 'userData')
+  await mkdir(userData, { recursive: true })
+  await writeFile(join(userData, 'config.json'), JSON.stringify({ format: 1, window: { x: 100, y: 100, width: 1200, height: 800, maximized: true } }))
+  const { app } = await launch({ userData, args: ['--hidden'], hidden: true })
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => ''), { timeout: 30_000 }).toContain('start w zasobniku')
+      expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.isVisible() && w.getTitle() === 'Regulated Day Test'))).toBe(false)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+test('Alt+F4 w otwartym panelu ikony zamyka tylko panel – aplikacja działa dalej (A4-05)', async () => {
+  const { app, page, userData } = await launch({ data: true })
+  const panelVisible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – panel' && w.isVisible()))
+  try {
+    await withMainLog(userData, async () => {
+      await page.evaluate(() => window.rd.trialAction('openPanel'))
+      await expect.poll(panelVisible).toBe(true)
+      // Alt+F4 is WM_CLOSE to the window with the focus – the panel.
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day – panel')?.close())
+      await expect.poll(panelVisible).toBe(false)
+      // The quit would be written at once, in the same close.
+      expect(await readFile(join(userData, 'logs', 'main.log'), 'utf8')).not.toContain('zamykanie: wyjście z aplikacji')
+      expect(await page.evaluate(() => document.title.length > 0)).toBe(true)
+    })
+  } finally {
+    await app.close()
+  }
+})

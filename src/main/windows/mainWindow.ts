@@ -24,6 +24,15 @@ export interface MainWindowDeps {
   log: (msg: string) => void
 }
 
+/** Main windows to maximize at their first showing (kept maximized when last closed to the tray). */
+const maximizeAtShow = new WeakSet<BrowserWindow>()
+
+/** Shows the main window – the first time maximized when it was so (maximize() shows it). */
+export function revealMainWindow(win: BrowserWindow): void {
+  if (maximizeAtShow.delete(win)) win.maximize()
+  else win.show()
+}
+
 export function createMainWindow(d: MainWindowDeps): BrowserWindow {
   const primary = primaryDisplay()
   const all = displays()
@@ -51,7 +60,8 @@ export function createMainWindow(d: MainWindowDeps): BrowserWindow {
   if (bounds.width > primary.workArea.width || bounds.height > primary.workArea.height || process.env.RD_WORK_AREA) {
     win.setBounds({ ...primary.workArea })
   }
-  if (d.saved?.maximized && !process.env.RD_WORK_AREA) win.maximize()
+  // Maximized at its first showing, never now: maximize() shows a hidden window – a start in the tray would open it (A4-02).
+  if (d.saved?.maximized && !process.env.RD_WORK_AREA) maximizeAtShow.add(win)
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   // The window keeps its own title (the identity's name), not the page's.
   win.on('page-title-updated', (e) => e.preventDefault())
@@ -61,7 +71,8 @@ export function createMainWindow(d: MainWindowDeps): BrowserWindow {
   })
   const place = () => {
     const b = win.getNormalBounds()
-    d.savePlace({ ...b, maximized: win.isMaximized() })
+    // Never shown since a start in the tray: still maximized for its first showing.
+    d.savePlace({ ...b, maximized: win.isMaximized() || maximizeAtShow.has(win) })
   }
   win.on('close', (e) => {
     if (d.quitting()) {

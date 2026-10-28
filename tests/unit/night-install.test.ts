@@ -23,12 +23,21 @@ describe('warunki nocy na tym komputerze', () => {
     expect(nightReady(night({ onMains: false }))).toBe('zasilanie z baterii')
     expect(nightReady(night({ blockRunning: true }))).toBe('biegnie blok')
     expect(nightReady(night({ notificationState: 'd3dFullscreen' }))).toBe('stan powiadomień: d3dFullscreen')
+    // The locked screen itself is „notPresent” in the state of notifications (A5-01).
+    expect(nightReady(night({ locked: true, notificationState: 'notPresent' }))).toBeNull()
+    for (const s of ['busy', 'presentation', 'app']) expect(nightReady(night({ notificationState: s }))).toBe(`stan powiadomień: ${s}`)
     expect(nightReady(night({ enabled: false }))).toBe('instalacja w nocy wyłączona')
     expect(nightReady(night({ helperRunning: false }))).toBe('pomocnik nie działa')
   })
 })
 
 describe('dwa komputery', () => {
+  it('laptop z nowoczesnym czuwaniem jako pierwszy instaluje od razu po blokadzie – bez losowego czekania (A5-12, T513)', () => {
+    expect(nightDecision(input({ state: night({ modernStandby: true }) }))).toMatchObject({ act: 'install', version: '0.3.0' })
+    // Another computer claimed it first: it waits as every other.
+    expect(nightDecision(input({ state: night({ modernStandby: true }), peers: [peer({ installing: '0.3.0' })] }))).toMatchObject({ act: 'none' })
+  })
+
   it('pierwszy instaluje bez czekania 24 h – po swoim losowym czekaniu', () => {
     const claim = nightDecision(input({ me: 'pca', peers: [peer({ computer: 'pcb' })] }))
     expect(claim).toMatchObject({ act: 'claim', version: '0.3.0' })
@@ -109,6 +118,31 @@ describe('instalator nocy w aplikacji', () => {
     await m.check()
     expect(claims).toEqual(['0.3.0', null])
     expect(installs).toBe(0)
+  })
+
+  it('nowoczesne czuwanie: instalacja, która nie wystartowała, cofa „instaluję” od razu (przegląd 0.18.0)', async () => {
+    const claims: Array<string | null> = []
+    const n = new NightInstaller({ now: () => T0, me: () => 'pcb', ready: () => '0.3.0', peers: () => [], unknownTimerEvents: async () => false, state: async () => night({ modernStandby: true }), claim: (v) => claims.push(v), install: () => false, log: () => undefined })
+    await n.check()
+    expect(claims).toEqual(['0.3.0', null])
+  })
+
+  it('po starcie instalacji w nocy żadne sprawdzenie nie cofa „instaluję” (wersja gotowa znika w trakcie wychodzenia)', async () => {
+    let now = T0
+    let ready: string | null = '0.3.0'
+    let installs = 0
+    const claims: Array<string | null> = []
+    const n = new NightInstaller({ now: () => now, me: () => 'pcb', ready: () => ready, peers: () => [], unknownTimerEvents: async () => false, state: async () => night({ now }), claim: (v) => claims.push(v), install: () => (installs++, true), random: () => 0, log: () => undefined })
+    await n.check()
+    now += 60_000
+    await n.check()
+    expect(installs).toBe(1)
+    // Quitting: the controller says no version is ready while it installs.
+    ready = null
+    now += 60_000
+    await n.check()
+    expect(claims).toEqual(['0.3.0', '0.3.0'])
+    expect(installs).toBe(1)
   })
 
   it('„instaluję” wraca, gdy noc przestaje sprzyjać (bateria, koniec ciszy, wyłączone ustawienie) – nie wstrzymuje innych', async () => {

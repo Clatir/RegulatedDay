@@ -13,6 +13,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { MANIFEST_ASSET, NSIS_GUID, SETUP_ASSET, UNINSTALL_KEY } from '@shared/update'
+import { writeSyncAtomic } from './files'
 import { TASK_FORMAT, writeTask, type Task, type TaskStart, type TaskTrigger } from '@shared/task'
 
 export const PROGRAMS = ['rd-guard.exe', 'rd-install.exe', 'rd-helper.exe']
@@ -145,7 +146,7 @@ export async function stageInstallAsync(i: StageInput): Promise<string> {
  * A detached process; its id, or null when it did not start – Node throws at once for some failures (a file that is no
  * program: „spawn UNKNOWN”) and reports others by „error”.
  */
-function startDetached(exe: string, args: string[], cwd: string, what: string, log: InstallInput['log']): number | null {
+export function startDetached(exe: string, args: string[], cwd: string, what: string, log: InstallInput['log']): number | null {
   try {
     const child = spawn(exe, args, { cwd, detached: true, stdio: 'ignore' })
     child.on('error', (e) => log('error', `${what} nie wystartował: ${e.message}`))
@@ -167,9 +168,10 @@ export function startInstall(i: InstallInput): boolean {
   const now = Date.now()
   // A new attempt: starts handed over to an earlier one never shape this one's start.
   rmSync(join(dir, 'handover.jsonl'), { force: true })
+  // The task file, read by the owner meanwhile too: always through a temporary file (spec, A5-09).
   if (i.owner && existsSync(join(dir, 'rd-guard.exe')) && existsSync(join(dir, 'rd-install.exe'))) {
     const task = newTask(i, 'scheduled', now)
-    writeFileSync(taskFile, writeTask(task))
+    writeSyncAtomic(taskFile, writeTask(task))
     const entry = guardMode(join(dir, 'rd-guard.exe'), ['--run-entry', 'set'])
     if (entry.ok !== true) i.log('warn', `wpis strażnika nie zapisany: ${JSON.stringify(entry)}`)
     // At the start of Windows the guard owns the installation (as from its Run entry); otherwise the install helper.
@@ -177,19 +179,26 @@ export function startInstall(i: InstallInput): boolean {
     const args = ['--task', taskFile, '--wait-pid', String(i.appPid), ...(i.trigger === 'logon' ? ['--autostart'] : [])]
     const pid = startDetached(owner, args, dir, 'właściciel instalacji', i.log)
     i.log('info', `instalacja ${i.version} (${i.trigger}): ${i.trigger === 'logon' ? 'strażnik' : 'pomocnik instalacji'} pid ${pid ?? '?'}`)
-    return pid != null
+    if (pid == null) {
+      // No owner: the state goes back (T410) – never a „scheduled” left with the guard's entry for the next start to
+      // wait 60 s on and take for an installation that did not finish (A5-06).
+      guardMode(join(dir, 'rd-guard.exe'), ['--run-entry', 'remove'])
+      writeSyncAtomic(taskFile, writeTask({ ...task, state: 'failed', message: 'pomocnik instalacji nie wystartował', updatedAt: Date.now() }))
+      return false
+    }
+    return true
   }
   // The FI path: no owner, no power request, no guard's entry (the settings say it).
   const task = newTask(i, 'fi', now)
-  writeFileSync(taskFile, writeTask(task))
+  writeSyncAtomic(taskFile, writeTask(task))
   const args = ['--updated', '/S', ...(i.trigger === 'now' ? ['--force-run'] : [])]
   const pid = startDetached(join(dir, SETUP_ASSET), args, dir, 'instalator', i.log)
   if (pid == null) {
     // Never a fresh „FI” without an installer (a start within 60 s would take it for one under way and end at once).
-    writeFileSync(taskFile, writeTask({ ...task, state: 'failed', message: 'instalator nie wystartował', updatedAt: Date.now() }))
+    writeSyncAtomic(taskFile, writeTask({ ...task, state: 'failed', message: 'instalator nie wystartował', updatedAt: Date.now() }))
     return false
   }
-  writeFileSync(taskFile, writeTask({ ...task, installerPid: pid, installerStartedAt: Date.now(), updatedAt: Date.now() }))
+  writeSyncAtomic(taskFile, writeTask({ ...task, installerPid: pid, installerStartedAt: Date.now(), updatedAt: Date.now() }))
   i.log('info', `instalacja ${i.version} ścieżką FI (${i.trigger}), instalator pid ${pid}`)
   try {
     startFiStatus({ version: i.version, appPid: i.appPid, installerPid: pid, restart: i.trigger === 'now', attemptId: task.attemptId, launchedFile: join(i.userDataDir, 'launched.json'), logFile: join(i.userDataDir, 'logs', 'update.log'), appExe: process.execPath })

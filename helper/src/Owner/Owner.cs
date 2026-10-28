@@ -137,6 +137,14 @@ namespace RegulatedDay
                 StartAppIfComplete(Task, false);
                 return 0;
             }
+            // The limit before any step that may throw (the lock, the power request, the window): an owner that crashes
+            // there every time never starts owners without end (A5-08).
+            if (Task.Starts >= MaxStarts)
+            {
+                GiveUpAfterStarts();
+                return 0;
+            }
+            Test("lock");
             TakeLock();
             // CI: a hung owner – the lock held, the signal standing still (the app closes it after 30 s).
             if (Environment.GetEnvironmentVariable("RD_TEST_OWNER_HANG") == "1" && args.AfterPid == 0)
@@ -147,11 +155,6 @@ namespace RegulatedDay
             heartbeat = new Timer(delegate(object s) { TickSignal(); }, null, 1000, 1000);
             power.Set(false, true, true, "Regulated Day: instalacja aktualizacji");
             Ui = new OwnerUi(this);
-            if (Task.Starts >= MaxStarts)
-            {
-                GiveUpAfterStarts();
-                return 0;
-            }
             // After the count: a start that throws every time still reaches the limit of 4 starts.
             Test("start");
             Loop();
@@ -160,12 +163,14 @@ namespace RegulatedDay
 
         /// <summary>
         /// Test hooks of CI (RD_TEST_OWNER_THROW=&lt;step&gt;): an exception at that step of the first owner only (the one
-        /// started after it, with --after, goes on); „every-start” – at every start.
+        /// started after it, with --after, goes on); „every-start” – at every start, „every-lock” – at every taking of
+        /// guard.lock.
         /// </summary>
         void Test(string where)
         {
             string at = Environment.GetEnvironmentVariable("RD_TEST_OWNER_THROW");
             if (at == "every-start" && where == "start") throw new InvalidOperationException("RD_TEST_OWNER_THROW: every-start");
+            if (at == "every-lock" && where == "lock") throw new InvalidOperationException("RD_TEST_OWNER_THROW: every-lock");
             if (at == where && args.AfterPid == 0) throw new InvalidOperationException("RD_TEST_OWNER_THROW: " + where);
         }
 
@@ -463,6 +468,12 @@ namespace RegulatedDay
         {
             Log.Warn("licznik startów " + Task.Starts + " – nie instaluję");
             bool broken = Task.InstallerStarted && Installed(false) != "yes";
+            // The window only when it can be made: the state „nieudane” is what matters (the app shows the banner).
+            if (broken && Ui == null)
+            {
+                try { Ui = new OwnerUi(this); }
+                catch (Exception e) { Log.Error("okno „nie udała się” nie powstało: " + e.Message); broken = false; }
+            }
             Fail("Aktualizacja do " + Task.Version + " nie udała się.", broken);
         }
 
@@ -635,7 +646,8 @@ namespace RegulatedDay
             try { if (job != null) job.Dispose(); } catch { }
             try { if (lockStream != null) lockStream.Dispose(); } catch { }
             try { if (mutex != null) { mutex.ReleaseMutex(); mutex.Dispose(); } } catch { }
-            if (counterWritten)
+            // No new owner past the limit of starts: the next start of the app reads „nieudane” from the count (A5-08).
+            if (counterWritten && (Task == null || Task.Starts < MaxStarts))
             {
                 try
                 {

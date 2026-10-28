@@ -136,6 +136,28 @@ export function writePlan(userData: string, blocks: PlanBlock[], now = Date.now(
   writeSyncAtomic(join(userData, 'plan-blocks.json'), `${JSON.stringify({ format: 1, from: now, to: now + PLAN_DAYS * 24 * 60 * 60_000, blocks }, null, 2)}\n`)
 }
 
+/**
+ * No installation now by the plan file, as the guard judges the logon (A5-03): a session or a class runs now or starts
+ * within 30 min, or the file does not cover now (missing, unreadable – also while it is being replaced – or old).
+ */
+export function planBlocking(userData: string, now = Date.now()): boolean {
+  try {
+    const text = readSharedSync(join(userData, 'plan-blocks.json'))
+    if (text == null) return true
+    const p = JSON.parse(text) as { from?: unknown; to?: unknown; blocks?: Array<Partial<PlanBlock>> }
+    if (typeof p.from !== 'number' || typeof p.to !== 'number' || now < p.from || now >= p.to) return true
+    return (p.blocks ?? []).some((b) => typeof b.start === 'number' && typeof b.end === 'number' && now >= b.start - 30 * 60_000 && now < b.end)
+  } catch {
+    return true
+  }
+}
+
+/**
+ * At the start an empty plan for the guard only on a computer known to have no data folder: an unreadable config.json
+ * says nothing of the folder, and the last real plan stays (A5-02).
+ */
+export const emptyPlanAtStart = (o: { dataFolder: string | null; configUnreadable: boolean }): boolean => !o.dataFolder && !o.configUnreadable
+
 // ------------------------------------------------------------------ cleaning
 
 /**
@@ -150,7 +172,10 @@ export function cleanUpdateFolders(updateDir: string, current: string, log: (msg
       if (!statSync(dir).isDirectory()) continue
       if (!/^\d+\.\d+\.\d+/.test(name) || compareVersions(name, current) > 0) continue
       const t = readTask(readSharedSync(join(dir, 'task.json')))
-      if (t.kind === 'task' && t.task.state !== 'done') continue
+      // An older version „nieudane” or „odłożono” will never install now – a newer one runs (A5-10); the running one's
+      // failure stays for its banner (D316).
+      const over = compareVersions(name, current) < 0 && t.kind === 'task' && (t.task.state === 'failed' || t.task.state === 'postponed')
+      if (t.kind === 'task' && t.task.state !== 'done' && !over) continue
       if (heldOpen(join(dir, 'guard.lock'))) continue
       rmSync(dir, { recursive: true, force: true, maxRetries: 2 })
       log(`usunięty folder aktualizacji ${name}`)

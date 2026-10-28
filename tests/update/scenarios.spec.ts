@@ -338,6 +338,27 @@ test('wyjątek przy każdym starcie: najpóźniej przy czwartym starcie „nieud
   })
 })
 
+test('wyjątek przy każdym zajęciu guard.lock: limit startów działa przed blokadą – „nieudane”, bez kolejnych właścicieli (A5-08)', async () => {
+  test.setTimeout(15 * 60_000)
+  await guarded('wyjątek przy blokadzie', async () => {
+    const dir = await install(FROM, CURRENT)
+    stage(dir)
+    scheduleTask(dir, 'logon')
+    plan(false)
+    logon({ RD_TEST_OWNER_THROW: 'every-lock' }).unref()
+    await expect.poll(() => readTaskNow()?.state, { timeout: 300_000, intervals: [1000] }).toBe('failed')
+    await expect.poll(appRunning, { timeout: 120_000 }).toBe(true)
+    expect(installed()!.version).toBe(CURRENT)
+    expect(runEntry('Regulated Day Guard')).toBeNull()
+    // The count is cleared by the clean end of „nieudane”: the owners started are in the guard's log – four, and the
+    // fourth gave up before the lock (no fifth one).
+    await new Promise((r) => setTimeout(r, 5_000))
+    const log = await readText(join(productionData(), 'logs', 'guard.log'))
+    expect(log).toContain('licznik startów 4 – nie instaluję')
+    expect(count(log, /start guard/)).toBe(4)
+  })
+})
+
 test('nieudany zapis licznika: bez instalacji i bez nowego strażnika; kończy się „nieudane” i uruchomioną aplikacją', async () => {
   test.setTimeout(15 * 60_000)
   await guarded('nieudany zapis licznika', async () => {

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -130,6 +130,22 @@ describe('start aplikacji przy zadaniu instalacji (Instalacja, aktualizacje i lo
     expect(state(w)).toBe('done')
   })
 
+  it('„odłożono” X, a działa nowsza wersja (zainstalowana ręcznie): zadanie zakończone, wpis strażnika usunięty po blokadzie', async () => {
+    const w = world({ version: '0.1.2', task: task({ state: 'postponed' }), lock: () => ({ held: false, counter: 0 }) })
+    const r = await runStartup(w.deps)
+    expect(r).toMatchObject({ kind: 'normal', banner: null })
+    expect(w.removed).toBe(0)
+    if (r.kind === 'normal') r.afterLock?.()
+    expect(state(w)).toBe('done')
+    expect(w.removed).toBe(1)
+    // The same version or an older one: „odłożono” stays for the next logon.
+    const same = world({ version: '0.1.1', task: task({ state: 'postponed' }), lock: () => ({ held: false, counter: 0 }) })
+    const s = await runStartup(same.deps)
+    if (s.kind === 'normal') s.afterLock?.()
+    expect(state(same)).toBe('postponed')
+    expect(same.removed).toBe(0)
+  })
+
   it('„odłożono” z żywym właścicielem (strażnik logowania właśnie je podjął): start przekazany, bez drugiego strażnika', async () => {
     const w = world({ version: '0.1.0', task: task({ state: 'postponed' }), lock: (now) => ({ held: true, counter: now }) })
     const r = await runStartup(w.deps)
@@ -252,6 +268,56 @@ describe('start aplikacji przy zadaniu instalacji (Instalacja, aktualizacje i lo
     expect(w.removed).toBe(1)
     expect(w.clock.now - 1_000_000).toBeGreaterThanOrEqual(60_000)
   })
+
+  it('blokada zwolniona po „odłożono” właściciela: zwykły start, bez drugiego strażnika i fałszywego „nieudane” (A5-04)', async () => {
+    let w: World
+    // The guard of the logon holds the lock and puts the installation off while the app waits its 6 s.
+    w = world({
+      version: '0.1.0',
+      task: task(),
+      lock: (now) => {
+        if (now < 1_000_000 + 3000) return { held: true, counter: 1 }
+        w.files.set(`${T}\\task.json`, writeTask(task({ state: 'postponed' })))
+        return { held: false, counter: 1 }
+      }
+    })
+    const r = await runStartup(w.deps)
+    expect(r).toMatchObject({ kind: 'normal', banner: null })
+    expect(w.guardStarts).toBe(0)
+    expect(state(w)).toBe('postponed')
+  })
+
+  it('licznik 4 startów właściciela bez czystego końca: „nieudane”, wpis strażnika usunięty, start z banerem (A5-08)', async () => {
+    const w = world({ version: '0.1.0', task: task({ state: 'installing', starts: 4 }), lock: () => ({ held: false, counter: 0 }) })
+    const r = await runStartup(w.deps)
+    expect(r).toMatchObject({ kind: 'normal', banner: { kind: 'unfinished', version: '0.1.1' } })
+    expect(state(w)).toBe('failed')
+    expect(w.removed).toBe(1)
+    expect(w.guardStarts).toBe(0)
+  })
+
+  it('licznik 4, a działa sama wersja X z plikami zgodnymi z manifestem: zakończona, bez banera (D316)', async () => {
+    const w = world({ version: '0.1.1', task: task({ state: 'installing', starts: 4 }), lock: () => ({ held: false, counter: 0 }) })
+    const r = await runStartup(w.deps)
+    expect(r).toMatchObject({ kind: 'normal', banner: null })
+    expect(state(w)).toBe('done')
+    expect(w.removed).toBe(1)
+    // Files not in agreement: „nieudane” as before.
+    const bad = world({ version: '0.1.1', task: task({ state: 'installing', starts: 4 }), lock: () => ({ held: false, counter: 0 }), sizes: false })
+    expect(await runStartup(bad.deps)).toMatchObject({ kind: 'normal', banner: { kind: 'unfinished', version: '0.1.1' } })
+    expect(state(bad)).toBe('failed')
+  })
+
+  it('strażnik, który nie wystartował, nie jest czekany 60 s (A5-06)', async () => {
+    const w = world({ version: '0.1.0', task: task(), lock: () => ({ held: false, counter: 0 }) })
+    w.deps.startGuard = () => {
+      w.guardStarts++
+      return null
+    }
+    const r = await runStartup(w.deps)
+    expect(r).toMatchObject({ kind: 'normal', banner: { kind: 'unfinished' } })
+    expect(w.clock.now - 1_000_000).toBeLessThan(5_000)
+  })
 })
 
 describe('pliki instalacji według manifestu (rozmiary)', () => {
@@ -278,6 +344,23 @@ describe('pliki instalacji według manifestu (rozmiary)', () => {
       expect(manifestMismatch(root, t)).toMatch(/^manifest nieczytelny/)
     } finally {
       rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('sprzątanie folderów aktualizacji (A5-10)', () => {
+  it('starsza wersja „nieudane” albo „odłożono” znika, gdy działa nowsza; nieudana uruchomiona zostaje dla banera', async () => {
+    const { cleanUpdateFolders } = await import('../../src/main/update/files')
+    const dir = mkdtempSync(join(tmpdir(), 'rd-upd-'))
+    try {
+      for (const [v, s] of [['0.16.0', 'failed'], ['0.15.0', 'postponed'], ['0.17.0', 'failed'], ['0.18.0', 'scheduled']] as const) {
+        mkdirSync(join(dir, v))
+        writeFileSync(join(dir, v, 'task.json'), writeTask(task({ version: v, state: s })))
+      }
+      cleanUpdateFolders(dir, '0.17.0', () => undefined)
+      expect(['0.15.0', '0.16.0', '0.17.0', '0.18.0'].filter((v) => existsSync(join(dir, v)))).toEqual(['0.17.0', '0.18.0'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
     }
   })
 })

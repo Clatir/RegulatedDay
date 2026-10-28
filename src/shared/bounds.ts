@@ -11,6 +11,16 @@ export interface Rect {
   height: number
 }
 
+/**
+ * The display under a point, by x and y – a monitor above the main one has the same x (A4-11); none: null.
+ */
+export function displayAt<T>(all: readonly T[], area: (d: T) => Rect, p: { x: number; y: number }): T | null {
+  return all.find((d) => {
+    const r = area(d)
+    return p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height
+  }) ?? null
+}
+
 /** The main window's smallest size (spec „Dostępność”); a smaller work area gets the whole work area. */
 export const MIN_WINDOW = { width: 1024, height: 700 }
 export const DEFAULT_WINDOW_SIZE = { width: 1280, height: 800 }

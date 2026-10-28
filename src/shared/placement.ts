@@ -39,6 +39,11 @@ export function usableIconRect(icon: Rect | null, displays: readonly DisplayInfo
   return { rect: icon, display }
 }
 
+/** The screen the panel opens on (its size is measured on it too): the usable icon's, or the cursor's. */
+export function panelDisplay(icon: Rect | null, cursor: { x: number; y: number }, displays: readonly DisplayInfo[]): DisplayInfo {
+  return usableIconRect(icon, displays)?.display ?? displays.find((d) => contains(d.bounds, cursor.x, cursor.y)) ?? displays[0]!
+}
+
 /** The panel's rectangle: by the icon, toward the screen's centre – or by the cursor; always inside the work area. */
 export function panelRect(icon: Rect | null, cursor: { x: number; y: number }, displays: readonly DisplayInfo[], size: { width: number; height: number }): Rect {
   const at = usableIconRect(icon, displays)
@@ -57,8 +62,7 @@ export function panelRect(icon: Rect | null, cursor: { x: number; y: number }, d
             : { x: wa.x + wa.width - size.width - MARGIN, y: cy - size.height / 2 }
     return clampInto({ ...r, ...size }, wa)
   }
-  const display = displays.find((d) => contains(d.bounds, cursor.x, cursor.y)) ?? displays[0]!
-  const wa = display.workArea
+  const wa = panelDisplay(null, cursor, displays).workArea
   // The cursor at the panel's bottom right corner (it was clicked from the taskbar, usually at the bottom right).
   return clampInto({ x: cursor.x - size.width, y: cursor.y - size.height, ...size }, wa)
 }
@@ -122,6 +126,15 @@ export function placementAfterDrag(bounds: Rect, displays: readonly DisplayInfo[
   const folded = clampInto({ x: bounds.x, y: top, width: bounds.width, height: foldedHeight }, wa)
   return { display: { label: display.label, bounds: display.bounds }, spot: null, offset: { x: folded.x - wa.x, y: folded.y - wa.y } }
 }
+
+/**
+ * A drag of the bar whose end never came (its view reloaded) holds the layout at most this long after its last message
+ * – long enough for a hand that holds the bar still while choosing its place (A4-12).
+ */
+export const DRAG_HOLD_MS = 2 * 60_000
+
+/** The drag still holds the bar's layout (its last message `last`). */
+export const dragHolds = (last: number, now: number): boolean => now - last < DRAG_HOLD_MS
 
 /**
  * A drag of the bar (D303): its rectangle moved by the cursor's way, free across the monitors – kept only within the

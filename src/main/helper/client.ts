@@ -91,12 +91,21 @@ export class HelperClient extends EventEmitter {
   private spawnChild(): void {
     const program = this.d.program!
     const script = /\.(m?js|cjs)$/i.test(program)
-    const child = spawn(script ? process.execPath : program, script ? [program] : [], {
-      cwd: this.d.cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-      env: script ? { ...process.env, ELECTRON_RUN_AS_NODE: '1' } : process.env
-    })
+    let child: ChildProcess
+    try {
+      child = spawn(script ? process.execPath : program, script ? [program] : [], {
+        cwd: this.d.cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+        env: script ? { ...process.env, ELECTRON_RUN_AS_NODE: '1' } : process.env
+      })
+    } catch (e) {
+      // There but not runnable (blocked by an antivirus, empty after a broken update – Windows throws at once): a crash
+      // like any other – the app goes on without it, tried again later, „niedostępny” after 3 (A4-01).
+      this.d.log('warn', 'pomocnik nie wystartował', e)
+      this.crashed(String((e as NodeJS.ErrnoException).code ?? 'spawn'))
+      return
+    }
     this.child = child
     this.hello = false
     this.lastAlive = this.now
@@ -105,7 +114,11 @@ export class HelperClient extends EventEmitter {
     child.stdin!.on('error', () => undefined)
     createInterface({ input: child.stdout! }).on('line', (line) => this.onLine(line))
     createInterface({ input: child.stderr! }).on('line', (line) => this.d.log('warn', `pomocnik: ${line.slice(0, 500)}`))
-    child.on('error', (e) => this.d.log('warn', 'pomocnik nie wystartował', e))
+    child.on('error', (e) => {
+      this.d.log('warn', 'pomocnik nie wystartował', e)
+      // No process at all (ENOENT, EACCES): no 'exit' follows – this is its end.
+      if (child.pid === undefined) this.onExit(child, null, null)
+    })
     child.on('exit', (code, signal) => this.onExit(child, code, signal))
     this.write({ cmd: 'init', ...this.d.init })
     this.watchdog = setInterval(() => {
@@ -166,11 +179,16 @@ export class HelperClient extends EventEmitter {
       this.setStatus({ state: 'off', note: null })
       return
     }
+    this.crashed(String(code ?? signal ?? 'brak procesu'))
+  }
+
+  /** A crash (an end not asked for, or a start that failed): counted, and the next start after its delay. */
+  private crashed(what: string): void {
     this.crashTimes = [...this.crashTimes.filter((t) => this.now - t < HELPER_CRASH_WINDOW_MS), this.now]
     this.crashesInRow++
     const delay = restartDelay(this.crashesInRow)
     const unavailable = helperUnavailable(this.crashTimes, this.now)
-    this.d.log('warn', `pomocnik zakończył się (kod ${code ?? signal}) – ponowny start za ${Math.round(delay / 1000)} s${unavailable ? ', niedostępny (3 awarie w 10 min)' : ''}`)
+    this.d.log('warn', `pomocnik zakończył się (kod ${what}) – ponowny start za ${Math.round(delay / 1000)} s${unavailable ? ', niedostępny (3 awarie w 10 min)' : ''}`)
     this.setStatus(unavailable ? { state: 'unavailable', note: 'Pomocnik kilka razy przestał działać – działam bez niego.' } : { state: 'starting', note: null })
     this.restartTimer = setTimeout(() => {
       this.restartTimer = null

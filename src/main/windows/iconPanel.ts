@@ -16,6 +16,13 @@ export const PANEL_IDLE_MS = 60_000
 /** A click of the icon this soon after the panel closed itself does not reopen it (the click that closed it). */
 export const REOPEN_BLOCK_MS = 500
 
+/**
+ * Losing the focus closes the panel only without the helper (with it, the change of the foreground window decides – a
+ * notification's click may leave the panel without the focus at all), never in its first 500 ms, and never while it is
+ * kept on top (D291): then it stays until you close it (A4-08).
+ */
+export const closesOnBlur = (o: { helperRunning: boolean; stayOnTop: boolean; sinceOpenMs: number }): boolean => !o.helperRunning && !o.stayOnTop && o.sinceOpenMs > PANEL_GRACE_MS
+
 export interface PanelDeps {
   /** The rectangle to open at for a content height (CSS px); `cursor` – where it was when the panel opened. */
   place: (height: number, cursor: { x: number; y: number }) => Rect
@@ -70,16 +77,16 @@ export class IconPanel {
     this.win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     this.win.on('page-title-updated', (e) => e.preventDefault())
     this.win.on('blur', () => {
-      // Only without the helper: with it, the change of the foreground window decides (a notification's click may
-      // leave the panel without the focus at all).
-      if (!this.d.helperRunning() && Date.now() - this.openedAt > PANEL_GRACE_MS) this.close('utrata fokusu')
+      if (closesOnBlur({ helperRunning: this.d.helperRunning(), stayOnTop: this.d.stayOnTop?.() === true, sinceOpenMs: Date.now() - this.openedAt })) this.close('utrata fokusu')
     })
     this.win.on('close', (e) => {
-      if (!this.quitting) {
-        e.preventDefault()
-        this.close('zamknięcie okna')
-        this.onExternalClose?.()
-      }
+      if (this.quitting) return
+      e.preventDefault()
+      // Open, its close is yours (Alt+F4): only the panel goes. Hidden, nobody could click it – a close from outside (an
+      // installer, taskkill) ends the app (A4-05).
+      const open = this.isOpen
+      this.close(open ? 'Alt+F4' : 'zamknięcie okna')
+      if (!open) this.onExternalClose?.()
     })
     void load(this.win)
   }

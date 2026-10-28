@@ -3,8 +3,9 @@
  * OneDrive”, .presence: E1 copies this into the computer's presence; the rules of leading, freezing and installing at
  * night read it from there). Kept locally in versions.json of the app data.
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { writeSyncAtomic } from '../update/files'
 
 export interface VersionRun {
   version: string
@@ -48,7 +49,8 @@ export function recordRun(userData: string, version: string, crashedVersion: str
     list = []
   }
   try {
-    writeFileSync(file, `${JSON.stringify({ format: 1, versions: withRun(list, version, crashedVersion, now) }, null, 2)}\n`)
+    // Through a temporary file: a cut write would empty the history of versions and crashes (A5-09).
+    writeSyncAtomic(file, `${JSON.stringify({ format: 1, versions: withRun(list, version, crashedVersion, now) }, null, 2)}\n`)
     if (crashedVersion) log('warn', `awaria wersji ${crashedVersion} zapisana`)
   } catch (e) {
     log('warn', `versions.json: ${e instanceof Error ? e.message : String(e)}`)

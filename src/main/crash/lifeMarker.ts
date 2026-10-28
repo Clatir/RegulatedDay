@@ -98,11 +98,22 @@ export class LifeKeeper {
   static mainDumpSince(dumpDir: string, since: number): { found: boolean; types: string[] } {
     const types: string[] = []
     let found = false
+    // An entry that goes away or cannot be read is passed over – the start never ends on it (A5-11).
     const walk = (d: string) => {
-      if (!existsSync(d)) return
-      for (const n of readdirSync(d)) {
+      let names: string[]
+      try {
+        names = existsSync(d) ? readdirSync(d) : []
+      } catch {
+        return
+      }
+      for (const n of names) {
         const p = join(d, n)
-        const st = statSync(p)
+        let st: ReturnType<typeof statSync>
+        try {
+          st = statSync(p)
+        } catch {
+          continue
+        }
         if (st.isDirectory()) walk(p)
         else if (n.endsWith('.dmp') && st.mtimeMs >= since) {
           let type: string | null = null
