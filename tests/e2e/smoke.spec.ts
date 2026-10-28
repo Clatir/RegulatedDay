@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import { launch, viewPage, withMainLog } from './app'
+import { launch, settledBarBounds, viewPage, withMainLog } from './app'
 
 const PAGES = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history', 'settings']
 
@@ -116,7 +116,7 @@ test('pasek pulpitu przeciągnięty za uchwyt idzie za kursorem i zostaje tam, g
     await withMainLog(userData, async () => {
       const barBounds = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day – pasek')!.getBounds())
       await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – pasek' && w.isVisible())), { timeout: 30_000 }).toBe(true)
-      const start = await barBounds()
+      const start = await settledBarBounds(app)
       // The cursor where the test puts it (the synthetic mouse moves no real cursor).
       const wa = await app.evaluate(({ screen }, b) => {
         const g = globalThis as unknown as { rdCursor: { x: number; y: number } }
