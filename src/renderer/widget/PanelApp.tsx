@@ -28,20 +28,9 @@ export function PanelApp() {
     <div ref={ref} className="flex flex-col gap-2 border border-line-strong bg-panel p-2" data-testid="panel">
       {view &&
         (view.hidden ? (
-          // The widget hidden („Odcinam się”): the state line with „Wracam” (the bar's own hidden state); the trial's
-          // request buttons only in the trial (the requests of the bar come with E5).
+          // The widget hidden („Odcinam się”): the state line with „Wracam” (the bar's own hidden state).
           <div className="flex flex-col gap-1.5 px-1 py-1" data-testid="panel-hidden">
             <Bar view={view} mode="panel" grows="down" onUnfold={setUnfolded} />
-            {view.day == null && (
-              <div className="flex gap-1.5">
-                <button type="button" className="btn" onClick={() => void window.rd.widgetAction('request')}>
-                  Prośba ▸
-                </button>
-                <button type="button" className="btn" onClick={() => void window.rd.widgetAction('doneNow')}>
-                  Zrobione teraz
-                </button>
-              </div>
-            )}
           </div>
         ) : (
           <Bar view={view} mode="panel" grows="down" onUnfold={setUnfolded} />
@@ -49,7 +38,7 @@ export function PanelApp() {
       {target?.line && (
         <div className="rounded border border-lamp/50 bg-lamp-soft px-2 py-1 text-[12px] text-lamp" data-testid="panel-target">
           {/* The line's own words – never its id; gone meanwhile (answered, started): only where it came from. */}
-          Otwarte z powiadomienia{target.line === 'trial' ? ': linia próby' : (() => {
+          Otwarte z powiadomienia{(() => {
             const line = view?.lines.find((l) => l.id === target.line)
             return line ? `: ${line.text}` : ''
           })()}

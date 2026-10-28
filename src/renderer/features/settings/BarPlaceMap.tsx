@@ -33,7 +33,7 @@ const pct = (v: number) => `${v * 100}%`
 
 export function BarPlaceMap() {
   const [screens, setScreens] = useState<BarScreens | null>(null)
-  // A place changed elsewhere (a drag, the trial, another window): the mock-up follows (each change of the settings
+  // A place changed elsewhere (a drag, the wizard, another window): the mock-up follows (each change of the settings
   // reads the place anew – the key keeps the other settings from asking).
   const placement = useMachine((s) => JSON.stringify(s.prefs.barPlacement))
   const zoom = useMachine((s) => s.prefs.zoom)

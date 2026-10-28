@@ -5,27 +5,28 @@
  * within 0.5 s are one); the Windows notifications on by default (D230) – shown only by the leader, each once by its
  * stable id in the day's log.
  *
- * Until a data folder is open, and for 10 min after a change of the trial (E0, D298), the widget shows the trial.
+ * Until a data folder is open the widget shows one neutral line („Brak folderu danych · Otwórz okno”, D327).
  */
 import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind } from '@shared/api'
 import { blockName } from '@shared/blockName'
 import { recordEdit, sameContentAs } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
-import { engineView } from '@shared/engineView'
+import { engineView, RESERVE_REGEN_MIN } from '@shared/engineView'
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
+import { reserveMessageId } from '@shared/engine/game'
 import { atOf } from '@shared/engine/grid'
 import { modesOf, type ModePrefs } from '@shared/engine/modes'
 import { suggestRegen } from '@shared/engine/reserve'
 import { timerNow } from '@shared/engine/timer'
 import { applyVariant, markerCause, planCause, variantCauses, variantsFor, type Variant, type VariantCause } from '@shared/engine/variants'
 import type { NoticeKind } from '@shared/machine'
-import { POOLS, type Pool } from '@shared/model/categories'
+import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
 import { personName } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { routineFrom, type Routine } from '@shared/model/routines'
 import { addDays } from '@shared/time/zone'
-import { ALL_BUTTONS, type BarPending, type WidgetView } from '@shared/widget'
+import { ALL_BUTTONS, noFolderView, type BarPending, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
 const CONFIRM_MS = 10_000
@@ -34,11 +35,10 @@ export const DOUBLE_MS = 500
 const REFRESH_MS = 15_000
 /** A refused or failed click says why in the bar this long. */
 const NOTE_MS = 6_000
-/** A change of the trial shows it instead of the engine for this long (the trial's checks, D298). */
-export const TRIAL_HOLD_MS = 10 * 60_000
 const MIN = 60_000
 /** The questions of the engine (their ids: rule:day:block:threshold) – only they are marked seen. */
-const QUESTION_ID = /^(next|next2|workEnd|return|absence|shutdown):\d{4}-\d{2}-\d{2}:/
+// The reserve's message too: its sighting starts the 60 min of the reward (D241, A4-04).
+const QUESTION_ID = /^(next|next2|workEnd|return|absence|shutdown|reserve):\d{4}-\d{2}-\d{2}:/
 /** The bar shows this many lines (one in the quiet modes); the rest gathers in „⋯”. */
 export const shownLineCount = (v: Pick<WidgetView, 'quiet'>): number => (v.quiet ? 1 : 2)
 
@@ -60,7 +60,6 @@ export interface WidgetDeps {
   clickedApp: () => void
   modePrefs: () => ModePrefs
   notices: () => Record<NoticeKind, boolean>
-  trial: () => { view: WidgetView; changedAt: number }
   notify: (n: NotifyIn) => boolean
   showMain: (page?: string) => void
   emit: (view: WidgetView) => void
@@ -81,7 +80,7 @@ const costText = (label: string, c: NonNullable<TimerResult['confirm']>) => `${l
 
 /**
  * The tone of a warning (spec: quiet at 5 and 0 min): only when the step of the same block (and plan) changes to 5 or 0
- * – never at the start of the app, nor when the view comes back from the trial with a block already over its end.
+ * – never at the start of the app, nor when the view comes back from no folder with a block already over its end.
  */
 export function toneOnChange(prev: { block: string; warn: string } | null, view: WidgetView): { next: { block: string; warn: string } | null; play: 'five' | 'zero' | null } {
   const next = view.day ? { block: `${view.day}|${view.block?.name ?? ''}|${view.block?.endsAt ?? ''}`, warn: view.warn } : null
@@ -102,9 +101,9 @@ function inverseEdit(e: EditEntry, now: RawRecord | null, made: RawRecord | null
 }
 
 /** The bar while the day cannot be counted (a file not readable now): no actions, one line why. */
-function unknownView(trial: WidgetView): WidgetView {
+function unknownView(): WidgetView {
   return {
-    ...trial,
+    ...noFolderView(),
     hidden: false,
     quiet: false,
     tone: 'brak',
@@ -163,11 +162,9 @@ export class WidgetEngine {
     return this.d.now?.() ?? Date.now()
   }
 
-  /** The view now (the trial until the engine has one). */
+  /** The view now (the neutral bar until the engine has one). */
   current(): WidgetView {
-    const trial = this.d.trial()
-    if (!this.view || this.now - trial.changedAt < TRIAL_HOLD_MS) return trial.view
-    return this.view
+    return this.view ?? noFolderView()
   }
 
   start(): void {
@@ -247,7 +244,7 @@ export class WidgetEngine {
       if (!this.failing) this.d.log('warn', 'widok widgetu nie policzył się', e)
       this.failing = true
       this.model = null
-      this.view = unknownView(this.d.trial().view)
+      this.view = unknownView()
     }
     this.d.emit(this.current())
   }
@@ -409,7 +406,8 @@ export class WidgetEngine {
     if (on.reserve && m.energy.enabled) {
       for (const d of m.energy.descents) {
         if (!d.message || atOf(state.grid, d.at) < now - 60 * MIN) continue
-        out.push({ id: `notice:${date}:reserve:${d.pool}:${d.at}`, title: 'Energia na poziomie rezerwy', body: { head: 'Głowa', emotions: 'Emocje', senses: 'Bodźce' }[d.pool] + ' – czas na regenerację.', line: null, day: date })
+        // Its click opens the panel on the reserve's line – the sighting that counts (D241, A4-04).
+        out.push({ id: `notice:${date}:reserve:${d.pool}:${d.at}`, title: 'Energia na poziomie rezerwy', body: { head: 'Głowa', emotions: 'Emocje', senses: 'Bodźce' }[d.pool] + ' – czas na regenerację.', line: reserveMessageId(date, d.pool, d.at), day: date })
       }
     }
     for (const n of out) {
@@ -576,6 +574,13 @@ export class WidgetEngine {
         else if (kind === 'fewerOffer') {
           await this.d.timer({ a: 'mark', question: line, answer: act, day })
           if (act === 'yes') click = { a: 'fewer' }
+        } else if (kind === 'reserve') {
+          // „Zacznij” – the regeneration by the way cheapest in the pool, from now; „nie dziś” – the line hides until the day ends.
+          await this.d.timer({ a: 'mark', question: line, answer: act, day })
+          if (act === 'start') {
+            const pool = id.split(':')[1] as Pool
+            click = { a: 'startNew', block: line.replace(/[^a-z0-9]/gi, '').slice(0, 40), categoryId: REGEN_CATEGORY, variantId: this.model ? suggestRegen(this.model.state.settings, pool) : null, durationMin: RESERVE_REGEN_MIN }
+          }
         } else if (kind === 'break' || kind === 'solitude') {
           await this.d.timer({ a: 'mark', question: line, answer: act, day })
           // A break pauses the running work (it waits as the next in the plan), never ends it.
@@ -602,7 +607,8 @@ export class WidgetEngine {
       default:
         return
     }
-    if (!click) return
+    // An answer alone (a mark – „nie dziś”, „Kontynuuję”): the view without its line at once.
+    if (!click) return this.refresh()
     const c = { ...click, day }
     r = await this.d.timer(c)
     if (r.confirm) {

@@ -107,7 +107,7 @@ export function spotOffset(spot: BarSpot, workArea: Rect, size: { width: number;
   }
 }
 
-/** The bar put to a place of a monitor (the settings' mock-up, the wizard, the trial). */
+/** The bar put to a place of a monitor (the settings' mock-up, the wizard). */
 export function spotPlacement(display: DisplayInfo, spot: BarSpot, size: { width: number; height: number }): BarPlacement {
   return { display: { label: display.label, bounds: display.bounds }, spot, offset: spotOffset(spot, display.workArea, size) }
 }

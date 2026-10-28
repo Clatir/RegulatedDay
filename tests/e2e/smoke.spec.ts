@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { launch, viewPage, withMainLog } from './app'
 
-const PAGES = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history', 'settings', 'trial']
+const PAGES = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history', 'settings']
 
 async function noHorizontalOverflow(page: Page): Promise<string[]> {
   return page.evaluate(() =>
@@ -21,7 +21,7 @@ test('start: okno główne z menu bocznym, nazwą i paskiem; tożsamość testow
       // „Bez bloku”, or the hour in the night's quiet (the test runs at any hour).
       await expect(page.getByTestId('bar-block')).toHaveText(/Bez bloku|^\d{2}:\d{2}$/)
       for (const p of PAGES) await expect(page.getByTestId(`nav-${p}`)).toBeVisible()
-      // One list in this order, without a gap: the settings right under the history, the trial under the settings (D306).
+      // One list in this order, without a gap: the settings right under the history (D306); no „Próba” (D286, D327).
       const items = page.getByTestId('side-menu').locator('[data-testid^="nav-"]')
       expect(await items.evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')))).toEqual(PAGES.map((p) => `nav-${p}`))
       const gaps = await items.evaluateAll((els) => els.slice(1).map((el, i) => el.getBoundingClientRect().top - els[i]!.getBoundingClientRect().bottom))
@@ -29,7 +29,7 @@ test('start: okno główne z menu bocznym, nazwą i paskiem; tożsamość testow
       // The shortcuts by the physical keys, the same as next to the names: Ctrl+7 – the history, Ctrl+, – the settings.
       await expect(page.getByTestId('nav-history')).toHaveAttribute('title', 'Historia (Ctrl 7)')
       await expect(page.getByTestId('nav-settings')).toHaveAttribute('title', 'Ustawienia (Ctrl ,)')
-      await expect(page.getByTestId('nav-trial')).toHaveAttribute('title', 'Próba')
+      await expect(page.getByTestId('nav-trial')).toHaveCount(0)
       await page.keyboard.press('Control+Digit7')
       await expect(page.getByTestId('page-history')).toBeVisible()
       await page.keyboard.press('Control+Comma')
@@ -183,25 +183,41 @@ test('pasek pulpitu bez potwierdzenia pomocnika zostaje ukryty z komunikatem', a
   }
 })
 
-test('próba: kolor, kroki i kropka zmieniają pasek we wszystkich oknach; panel ikony otwiera się i zamyka Esc', async () => {
+test('pasek we wszystkich oknach z widoku silnika; panel ikony otwiera się i zamyka Esc', async () => {
   const { app, page, userData } = await launch({ data: true })
   try {
     await withMainLog(userData, async () => {
-      await page.getByTestId('nav-trial').click()
-      await page.getByTestId('trial-tone').getByRole('radio', { name: 'wolne' }).click()
-      await page.getByTestId('trial-warn').getByRole('radio', { name: '5 min', exact: true }).click()
       const bar = await viewPage(app, 'bar')
-      await expect(bar.getByTestId('bar-desktop')).toHaveAttribute('data-tone', 'wolne')
-      await expect(bar.getByTestId('bar-desktop')).toHaveAttribute('data-warn', 'five')
-      await expect(page.getByTestId('bar-main')).toHaveAttribute('data-tone', 'wolne')
-      await page.getByTestId('trial-quiet').click()
-      await expect(bar.getByTestId('bar-desktop')).toHaveAttribute('data-quiet', 'on')
-      await page.evaluate(() => window.rd.trialAction('openPanel'))
+      // The same view in the window and on the desktop: its tone and the „Bez bloku” (or the night's hour).
+      const tone = await page.getByTestId('bar-main').getAttribute('data-tone')
+      await expect(bar.getByTestId('bar-desktop')).toHaveAttribute('data-tone', tone!)
+      await expect(bar.getByTestId('bar-block')).toHaveText(/Bez bloku|^d{2}:d{2}$/)
+      await page.evaluate(() => window.rd.barAction('openPanel'))
       const panel = await viewPage(app, 'panel')
       await expect(panel.getByTestId('panel')).toBeVisible()
       await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – panel' && w.isVisible()))).toBe(true)
       await panel.keyboard.press('Escape')
       await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – panel' && w.isVisible()))).toBe(false)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+test('bez folderu danych: pasek pulpitu i panel z jedną linią „Brak folderu danych · Otwórz okno” (D327)', async () => {
+  const { app, page, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      const bar = await viewPage(app, 'bar')
+      await expect(bar.getByTestId('bar-desktop')).toHaveAttribute('data-day', 'none')
+      await expect(bar.getByTestId('bar-line-nofolder')).toContainText('Brak folderu danych')
+      await expect(bar.getByTestId('bar-countdown')).toHaveCount(0)
+      // In the window itself no way to the window.
+      await expect(page.getByTestId('bar-main')).toContainText('Brak folderu danych')
+      await expect(page.getByTestId('bar-act-nofolder-open')).toHaveCount(0)
+      await page.evaluate(() => window.rd.barAction('openPanel'))
+      const panel = await viewPage(app, 'panel')
+      await expect(panel.getByTestId('bar-act-nofolder-open')).toHaveText('Otwórz okno')
     })
   } finally {
     await app.close()
@@ -220,7 +236,7 @@ test('panel przy kursorze (ikona pod strzałką ukrytych ikon): rośnie w miejsc
         screen.getCursorScreenPoint = () => p
         return p
       })
-      await page.evaluate(() => window.rd.trialAction('openPanel'))
+      await page.evaluate(() => window.rd.barAction('openPanel'))
       const panel = await viewPage(app, 'panel')
       await expect(panel.getByTestId('panel')).toBeVisible()
       const bounds = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day – panel')!.getBounds())
@@ -244,12 +260,14 @@ test('panel przy kursorze (ikona pod strzałką ukrytych ikon): rośnie w miejsc
   }
 })
 
-test('konwencje: długość „1h30”, ułamek odrzucony z komunikatem, Esc cofa edycję, usunięcie z „Cofnij”', async () => {
+test('konwencje: długość „1h30”, ułamek odrzucony z komunikatem, Esc cofa edycję, usunięcie z „Cofnij”, filtry', async () => {
   const { app, page, userData } = await launch({ data: true })
   try {
     await withMainLog(userData, async () => {
-      await page.getByTestId('nav-trial').click()
-      const d = page.getByTestId('demo-duration')
+      await page.getByTestId('nav-requests').click()
+      for (let i = 0; i < 3; i++) await page.getByTestId('request-new').click()
+      await expect(page.getByTestId('request-row')).toHaveCount(3)
+      const d = page.getByTestId('request-estimate').first()
       await d.fill('1h30')
       await d.press('Enter')
       await expect(d).toHaveValue('1 h 30 min')
@@ -260,18 +278,21 @@ test('konwencje: długość „1h30”, ułamek odrzucony z komunikatem, Esc cof
       await d.fill('45')
       await d.press('Escape')
       await expect(d).toHaveValue('1 h 30 min')
-      const i = page.getByTestId('demo-integer')
-      await i.fill('2,5')
-      await i.press('Enter')
-      await expect(i).toHaveValue('3')
-      await page.getByTestId('demo-delete-b').click()
-      await expect(page.getByTestId('demo-list')).not.toContainText('Spacer')
+      const note = page.getByTestId('request-note').first()
+      await note.fill('spacer z psem')
+      await note.press('Enter')
+      await expect(note).toHaveValue('spacer z psem')
+      await page.getByTestId('request-remove').first().click()
+      await expect(page.getByTestId('request-row')).toHaveCount(2)
       await page.getByTestId('toast-action').click()
-      await expect(page.getByTestId('demo-list')).toContainText('Spacer')
-      await page.getByTestId('filter-wolne').click()
-      await expect(page.getByTestId('count-trial-demo')).toHaveText('1 z 3')
+      await expect(page.getByTestId('request-row')).toHaveCount(3)
+      await expect(page.getByTestId('request-note').first()).toHaveValue('spacer z psem')
+      // A filter by state: one of three, then all again.
+      await page.getByTestId('request-row').first().getByRole('button', { name: 'Zrobiona' }).click()
+      await page.getByTestId('filter-state:done').click()
+      await expect(page.getByTestId('count-requests')).toHaveText('1 z 3')
       await page.getByTestId('filters-clear').click()
-      await expect(page.getByTestId('count-trial-demo')).toHaveText('3 z 3')
+      await expect(page.getByTestId('count-requests')).toHaveText('3 z 3')
     })
   } finally {
     await app.close()
@@ -358,7 +379,7 @@ test('Alt+F4 w otwartym panelu ikony zamyka tylko panel – aplikacja działa da
   const panelVisible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – panel' && w.isVisible()))
   try {
     await withMainLog(userData, async () => {
-      await page.evaluate(() => window.rd.trialAction('openPanel'))
+      await page.evaluate(() => window.rd.barAction('openPanel'))
       await expect.poll(panelVisible).toBe(true)
       // Alt+F4 is WM_CLOSE to the window with the focus – the panel.
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day – panel')?.close())

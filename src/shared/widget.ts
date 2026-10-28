@@ -1,9 +1,7 @@
 /**
  * What the widget shows (spec „Widget”: the bar at the top of the main window, in the icon's panel and on the desktop,
- * and the icon by the clock). In E0 the trial (D286) drives it: `trialView` builds the view from the trial's switches;
- * from E4b the engine does, with the same view.
+ * and the icon by the clock): the engine's view (E4b) – without a data folder one neutral line (`noFolderView`, D327).
  */
-import { clock } from './format'
 import { ENGINE_TONE_SET, iconColor, TONE_SETS, toneColor, type Tone, type ToneSetId, type WarnStep } from './theme'
 
 /** A button of a line: its id goes back to the main process with the line's (`line` action, `<line>|<action>`). */
@@ -70,7 +68,7 @@ export interface WidgetView {
   tooltip: string
   /** Why the desktop bar is hidden although it is on (the panel, the main window and the settings say it, D270). */
   barNote: string | null
-  /** The bar's own buttons now (the trial: all of them). */
+  /** The bar's own buttons now. */
   buttons: BarButtons
   /** Blocks in the background with „Zakończ teraz” and „Przedłuż” (in „⋯”). */
   background: Array<{ id: string; name: string; endsAt: number }>
@@ -84,9 +82,9 @@ export interface WidgetView {
   night: boolean
   /** The cost of a first click waiting for the second. */
   pending: BarPending | null
-  /** The day the bar's actions concern (a block running through 04:00 keeps its day), null: the trial. */
+  /** The day the bar's actions concern (a block running through 04:00 keeps its day), null: no folder, no day. */
   day: string | null
-  /** The set of tones (the working one; another only in the trial's comparison, D298). */
+  /** The set of tones (the engine's, D314). */
   toneSet: ToneSetId
   /** A sound may play now (not in „mniej pytań”, a day of stationary classes, on the recording computer in a lecture). */
   soundOk: boolean
@@ -137,95 +135,39 @@ export const ALL_BUTTONS: BarButtons = { next: true, pause: true, extend: true, 
 export const BAR_NOTE_HELPER = 'Pasek pulpitu ukryty: pomocnik nie działa'
 export const BAR_NOTE_FAILED = 'Paska pulpitu nie udało się położyć pod oknami (inny program trzyma okno na dole)'
 
-/** The trial's switches (E0, D286): every state of the colour, the dot, the drop and the longest texts. */
-export interface TrialState {
-  tone: Tone
-  warn: WarnStep
-  dot: boolean
-  drop: boolean
-  hidden: boolean
-  quiet: boolean
-  /** The longest texts of cost, lengths, „Przedłuż” steps and „Pracowałem do …”. */
-  long: boolean
-  session: boolean
-  question: boolean
-  /** Minutes left of the trial's block (its countdown). */
-  minutesLeft: number
-  /** The set of tones compared (D298). */
-  toneSet: ToneSetId
-}
-
-export const DEFAULT_TRIAL: TrialState = {
-  tone: 'praca',
-  warn: 'none',
-  dot: false,
-  drop: false,
-  hidden: false,
-  quiet: false,
-  long: false,
-  session: false,
-  question: false,
-  minutesLeft: 42,
-  toneSet: ENGINE_TONE_SET
-}
-
-const TONE_BLOCK: Record<Tone, { name: string; className: string }> = {
-  praca: { name: 'Analiza tygodnia', className: 'praca' },
-  zycie: { name: 'Obiad', className: 'życie i opieka' },
-  wolne: { name: 'Spacer', className: 'regeneracja' },
-  rezerwa: { name: 'Studia', className: 'praca · rezerwa energii' },
-  brak: { name: 'Bez bloku', className: '' }
-}
-
-/** The longest texts the bar must fit (spec, Plan budowy E0: „najdłuższymi tekstami kosztu, długościami i krokami”). */
-export const LONGEST = {
-  cost: 'Koszt: +1 h 45 min przedłużenia · −2 h 30 min regeneracji · pora snu 23:45',
-  workedUntil: 'Koniec pracy o 17:30 · Pracowałem do 18:30',
-  extend: 'Przedłuż o 1 h 45 min · −15 · +15',
-  done: 'Projekt 17:30–21:30 bez odpowiedzi · popraw'
-}
-
-/** The view of the trial at `now`. */
-export function trialView(t: TrialState, now: number): WidgetView {
-  const block = t.tone === 'brak' ? null : { ...TONE_BLOCK[t.tone], endsAt: now + t.minutesLeft * 60_000 }
-  const lines: BarLine[] = []
-  const acts = (...labels: string[]): BarAction[] => labels.map((label) => ({ id: label, label }))
-  if (t.long) {
-    lines.push({ id: 'trial-cost', text: LONGEST.cost, actions: acts('Potwierdź'), dot: false })
-    lines.push({ id: 'trial-worked', text: LONGEST.workedUntil, actions: acts('Tak', 'Popraw'), dot: false })
-    lines.push({ id: 'trial-done', text: LONGEST.done, actions: acts('popraw'), dot: false })
-  }
-  if (t.dot) lines.push({ id: 'trial-start', text: 'NY 14:00 · Zacznij · Odwołaj', actions: acts('Zacznij', 'Odwołaj'), dot: true })
-  const question = t.question ? { id: 'trial-next', text: 'Dalej?', actions: acts('Dalej', 'Przedłuż', 'Koniec pracy'), dot: true } : null
-  const dot = !t.hidden && (lines.some((l) => l.dot) || !!question)
-  const end = block ? clock(Math.round((block.endsAt - new Date(now).setHours(0, 0, 0, 0)) / 60_000)) : null
+/**
+ * The bar without a data folder (the first start before the wizard, OneDrive not ready yet – D327, in place of the trial,
+ * D286): one neutral line with the way to the window, no countdown, no other action.
+ */
+export function noFolderView(): WidgetView {
+  const tones = TONE_SETS[ENGINE_TONE_SET].tones
   return {
-    hidden: t.hidden,
-    quiet: t.quiet,
-    tone: t.tone,
-    warn: t.warn,
-    color: toneColor(t.tone, t.warn, TONE_SETS[t.toneSet].tones),
-    iconColor: iconColor(t.tone, t.warn, t.quiet, t.hidden, TONE_SETS[t.toneSet].tones),
-    dot,
-    drop: !t.hidden && t.drop,
-    muted: t.quiet,
-    block,
-    question,
-    lines,
-    session: t.session,
-    stateLine: t.hidden ? 'Odcinam się od 15:10 · Wracam' : null,
-    tooltip: block ? `${block.name} · do ${end} (${t.minutesLeft} min)\nNastępny stały: NY 14:00` : 'bez bloku',
+    hidden: false,
+    quiet: false,
+    tone: 'brak',
+    warn: 'none',
+    color: toneColor('brak', 'none', tones),
+    iconColor: iconColor('brak', 'none', false, false, tones),
+    dot: false,
+    drop: false,
+    muted: false,
+    block: null,
+    question: null,
+    lines: [{ id: NO_FOLDER_LINE, text: 'Brak folderu danych', actions: [{ id: 'open', label: 'Otwórz okno' }], dot: false }],
+    session: false,
+    stateLine: null,
+    tooltip: 'Brak folderu danych – otwórz okno główne',
     barNote: null,
-    buttons: { ...ALL_BUTTONS, finished: t.session },
-    background: [{ id: 'trial-bg', name: 'NY', endsAt: now + 90 * 60_000 }],
-    autos: { groups: ['bloki stałe według planu: 6'], items: [] },
+    buttons: { ...ALL_BUTTONS, next: false, pause: false, extend: false, workEnd: false, finished: false, cutOff: false, start: null },
+    background: [],
+    autos: { groups: [], items: [] },
     fewer: false,
-    signals: true,
+    signals: false,
     night: false,
     pending: null,
     day: null,
-    toneSet: t.toneSet,
-    soundOk: !t.quiet,
+    toneSet: ENGINE_TONE_SET,
+    soundOk: false,
     recording: false,
     note: null,
     requests: NO_REQUESTS,
@@ -233,3 +175,6 @@ export function trialView(t: TrialState, now: number): WidgetView {
     ritual: false
   }
 }
+
+/** The id of the line of the bar without a data folder (its „Otwórz okno” opens the main window). */
+export const NO_FOLDER_LINE = 'nofolder'

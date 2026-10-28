@@ -14,6 +14,9 @@ import { plannedSpan } from './engine/blocks'
 import { answered, contactEnded, waterDue, workRunStart, type CareSettings } from './engine/care'
 import type { DayContext, DayState } from './engine/day'
 import type { EnergyState } from './engine/energy'
+import { reserveMessageId } from './engine/game'
+import { suggestRegen } from './engine/reserve'
+import { REGEN_CATEGORY, type Pool } from './model/categories'
 import type { AutoAction, RequestFact } from './engine/facts'
 import { atOf, type Grid } from './engine/grid'
 import { isRunningRequest } from './engine/requests'
@@ -139,6 +142,31 @@ function questionLine(q: Question, blockName: string, clock: (ms: number) => str
   return { id: q.id, text, actions: q.answers.map((a) => ({ id: a.id, label: a.label })), dot: q.dot, at: q.askedAt }
 }
 
+const POOL_TEXT: Record<Pool, string> = { head: 'Głowa', emotions: 'Emocje', senses: 'Bodźce' }
+
+/** How long the regeneration „Zacznij” of the reserve's message starts (D326). */
+export const RESERVE_REGEN_MIN = 15
+
+/**
+ * The reserve's message (D326, spec „Model energii”): a short line for the first descent of the day of each pool still
+ * at the reserve – the way of regeneration cheapest in it, „Zacznij” and „nie dziś” (which hides it until the day ends).
+ * In a session or a class it waits for their end; with „mniej pytań” it is quiet (no dot).
+ */
+function reserveLines(i: EngineInput, modes: Modes): BarLine[] {
+  const e = i.energy
+  if (!e?.known || !e.enabled || modes.session || modes.classMode) return []
+  const out: BarLine[] = []
+  for (const d of e.descents) {
+    if (!d.message || !e.atReserve[d.pool]) continue
+    const id = reserveMessageId(i.state.grid.date, d.pool, d.at)
+    if (answered(i.ctx.events, id)) continue
+    const wayId = suggestRegen(i.state.settings, d.pool)
+    const way = i.state.settings.categories[REGEN_CATEGORY]?.variants.find((v) => v.id === wayId)?.name
+    out.push({ id, text: `${POOL_TEXT[d.pool]} na rezerwie – może ${RESERVE_REGEN_MIN} min regeneracji${way ? ` (${way})` : ''}?`, actions: [{ id: 'start', label: 'Zacznij' }, { id: 'notToday', label: 'nie dziś' }], dot: !modes.fewer })
+  }
+  return out
+}
+
 export function engineView(i: EngineInput): WidgetView {
   const { state, now } = i
   const t = timerNow(state)
@@ -216,6 +244,7 @@ export function engineView(i: EngineInput): WidgetView {
       const id = `solitude:${state.grid.date}:${Math.round((contact - state.grid.start) / MIN)}`
       if (!answered(events, id)) lines.push({ id, text: 'Po rozmowach – chwila samotności?', actions: [{ id: 'solitude', label: 'Chwila ciszy' }, { id: 'dismiss', label: 'Nie teraz' }], dot: false })
     }
+    lines.push(...reserveLines(i, modes))
   }
 
   const water = waterDue(events, state, t, now, i.care, { night: modes.night, disconnect: hidden })

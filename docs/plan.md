@@ -74,9 +74,9 @@ to punkty przeglądu; w każdym PR-ze także tanie low swojego obszaru.
 | 5.2b | 0.17.0 – dane i zegary: znikający folder, szablony ze starszej wersji, identyfikator Windows, prośby w widoku (skala), zamrożenie przy kopiach konfliktowych, zegar logiczny po skoku, powiadomienia przy nieustalonym prowadzeniu (A3-01, 04, 05, 08, A2-03, A8-01, 03) | Logika | 1,5–2 h | granica danych |
 | 5.2c | 0.18.0 – proces główny i aktualizacje: pomocnik przy starcie, autostart z maksymalizacją, „wait:” z powiadomienia, Alt+F4 w panelu, nocna instalacja przy blokadzie, plan strażnika, instalacja przy wyjściu, sekwencja startu (A4-01–03, 05, 07, A5-01–06) | Logika (okna, pomocnik C#) | 1,5–2,5 h | rundy CI na Windows |
 | 5.2d | 0.19.0 – ekrany: szybkie zmiany bloku, rutyny ↑/↓, liczniki próśb, podwójne kliknięcie, „Przyjmij nowsze”, cykl kotwic, „Cofnij” odwołania, zapis bez sukcesu, „barClick”, sesja po końcu, typ dnia w kalendarzu, ±15 min, „Usuń” sesji, liczenie dnia w Ustawieniach, kontrast osi (A6-01–09, A7-01–04, 07, 08, A8-05) | Interfejs | 1,5–2 h | |
-| 5.2e | Funkcje D325, część 1: komunikat rezerwy (D326), odpowiedzi na nieobecność, druga zmiana z „Przesuń na teraz”, linie paska (A1-12), Próba → neutralny pasek (D327, D286) | Całość | 2–3 h | 1–2 wydania |
+| 5.2e | Funkcje D325, część 1: 0.20.0 – Próba → neutralny pasek (D327, D286), komunikat rezerwy (D326); 0.21.0 – odpowiedzi na nieobecność (A1-09), druga zmiana z „Przesuń na teraz” (A1-04), linie paska (A1-12) | Całość | 2–3 h | 2 wydania |
 | 5.2f | Funkcje D325, część 2: rutyny (D328), ostrzeżenia o kopii, zegarze i synchronizacji, „N zmian zapisze się”, dźwięk na jednym komputerze, pulsowanie (D225), „Zapomnij komputer”, święta UK, rytuał bez pracy (D329), kopia dnia (D330) | Całość | 2–3 h | 1–2 wydania |
-| 5.3 | Przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji | Logika | 1 h | |
+| 5.3 | Przypadki brzegowe, test kopii, test skali, odbiór względem specyfikacji; regeneracja zaczęta z komunikatu rezerwy przesuwa granicę (spec „Model energii”, T518); low z T517 | Logika | 1–1,5 h | |
 | 5.4 | Bramka 1.0: kanał stabilny (D283), CHANGELOG, wydanie | – | 0,5 h | bez czekania na Twój odbiór (D324) |
 
 **Do 1.0: ok. 12–16 h (ciąg E).** Kalibracja 28.10: ciągi B–D miały szacunek 25,5–39,5 h, a zajęły ok. 11 h z CI

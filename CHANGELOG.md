@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.20.0
+- Komunikat rezerwy energii: gdy pula zejdzie do rezerwy, w pasku i panelu pojawia się linia „Głowa na rezerwie – może 15 min regeneracji (…)? · Zacznij · nie dziś” ze sposobem regeneracji najtańszym dla tej puli. „Zacznij” zaczyna regenerację od razu, „nie dziś” chowa linię do końca dnia. W sesji i zajęciach komunikat czeka na ich koniec, w „mniej pytań” jest bez kropki.
+- Nagroda „Reakcja na rezerwę” liczy się teraz od chwili, gdy komunikat zobaczysz: w panelu, w oknie, po kliknięciu paska albo powiadomienia (kliknięcie powiadomienia otwiera panel na tej linii). Wcześniej przyznawała się zawsze, bez reakcji.
+- Próba zniknęła (ekran i „Próba ▸” w menu zasobnika). Bez folderu danych – przy pierwszym uruchomieniu albo zanim OneDrive udostępni folder – pasek pokazuje „Brak folderu danych · Otwórz okno” zamiast wymyślonego bloku z odliczaniem.
+- Drobne: „nie dziś”, „Kontynuuję” i podobne odpowiedzi chowają swoją linię od razu, nie po kilkunastu sekundach.
+
 ## 0.19.0
 - Szybkie zmiany jednego bloku (np. długość i zaraz „stały”) zapisują się obie – bez fałszywego pytania o zmianę „z innego komputera”. Tak samo w szablonach (kilka dni tygodnia po kolei) i w rutynach.
 - Strzałki ↑ ↓ przy krokach rutyny naprawdę zmieniają ich kolejność.

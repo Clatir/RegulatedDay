@@ -10,7 +10,7 @@ import type { CloseHow } from './model/events'
 import type { IdentityKind } from './identity'
 import type { Rect } from './bounds'
 import type { BarSpot, MachinePrefs } from './machine'
-import type { TrialState, WidgetView } from './widget'
+import type { WidgetView } from './widget'
 import type { UpdateView } from './updateView'
 
 export const CH = {
@@ -30,11 +30,7 @@ export const CH = {
   placeBar: 'rd:placeBar',
   panelTouch: 'rd:panelTouch',
   panelClose: 'rd:panelClose',
-  trial: 'rd:trial',
-  setTrial: 'rd:setTrial',
-  trialAction: 'rd:trialAction',
-  trialLog: 'rd:trialLog',
-  onTrialLog: 'rd:onTrialLog',
+  barAction: 'rd:barAction',
   update: 'rd:update',
   onUpdate: 'rd:onUpdate',
   updateAction: 'rd:updateAction',
@@ -210,18 +206,8 @@ export type WidgetAction =
   | 'barClick'
   | 'extendStep'
 
-export type TrialAction =
-  | 'notifyIn10s'
-  | 'showBar'
-  | 'hideBar'
-  | 'placeBar'
-  | 'openPanel'
-  | 'nextDisplay'
-  | 'corner'
-  | 'powerDisplay'
-  | 'powerSystem'
-  | 'powerOff'
-  | 'clearLog'
+/** The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests). */
+export type BarActionId = 'placeBar' | 'corner' | 'openPanel'
 
 export type UpdateAction = 'check' | 'installNow' | 'retry' | 'download' | 'dismissNotes'
 
@@ -436,18 +422,14 @@ export interface RdApi {
   placeBar(display: number, spot: BarSpot): Promise<BarScreens>
   panelTouch(): void
   panelClose(): void
-  trial(): Promise<TrialState>
-  setTrial(patch: Partial<TrialState>): Promise<TrialState>
-  trialAction(action: TrialAction, arg?: string): Promise<void>
-  trialLog(): Promise<string[]>
-  onTrialLog(cb: (line: string) => void): () => void
+  barAction(action: BarActionId, arg?: string): Promise<void>
   update(): Promise<UpdateView>
   onUpdate(cb: (view: UpdateView) => void): () => void
   updateAction(action: UpdateAction): Promise<UpdateView>
   onNavigate(cb: (page: string) => void): () => void
   showMain(page?: string): void
   copyText(text: string): Promise<void>
-  /** The icon's panel: the line a click opened it for (a notification, the trial). */
+  /** The icon's panel: the line a click opened it for (a notification). */
   onPanelTarget(cb: (target: { line: string | null; day: string | null } | null) => void): () => void
   /** The desktop bar: which way it unfolds (up, or down when it stands at the top). */
   onBarGrows(cb: (dir: 'up' | 'down') => void): () => void

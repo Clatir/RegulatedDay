@@ -243,7 +243,7 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
       await expect(page.getByTestId('bar-main')).toHaveAttribute('data-tone', 'praca')
       await shot(page, 'e4a-01-running')
       // The icon's panel shows the same bar (the engine's view in every window).
-      await page.evaluate(() => window.rd.trialAction('openPanel'))
+      await page.evaluate(() => window.rd.barAction('openPanel'))
       const panel = await viewPage(app, 'panel')
       await expect(panel.getByTestId('bar-block')).toContainText('Inne obowiązki')
       // Pauza through the main process (the bar hides it at night), „Wznów” from the block's panel.
@@ -256,7 +256,7 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
       await page.getByTestId('bar-next').click()
       await expect(page.getByTestId('bar-block')).not.toContainText('Inne obowiązki')
       // „Odcinam się”: the panel shows its line with „Wracam”, which ends it.
-      await page.evaluate(() => window.rd.trialAction('openPanel'))
+      await page.evaluate(() => window.rd.barAction('openPanel'))
       await page.evaluate(() => window.rd.widgetAction('cutOff'))
       await expect(panel.getByTestId('bar-state')).toContainText('Odcinam się od')
       await panel.getByTestId('bar-back').click()
@@ -456,7 +456,7 @@ test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
-      // The engine's view, not the trial's (which always has „Prośba ▸”).
+      // The engine's view (the night's quiet has no „Prośba ▸”).
       await expect.poll(() => page.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
       // At night the bar shows only the time and what runs: no „Prośba ▸” then – the request through the main process.
       const night = await page.evaluate(async () => (await window.rd.widget()).night)

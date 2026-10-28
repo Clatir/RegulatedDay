@@ -21,7 +21,12 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   automatyczna, tryby); ten sam widok w oknie głównym (`Bar mode="main"`), panelu ikony i na pasku pulpitu.
 - `main/widget.ts` – `WidgetEngine`: `refresh()` (po każdym sprawdzeniu folderu, co 15 s, po kliknięciu) z
   `folder.widgetModel()`, `act(action, arg, from)` → kliknięcia timera i odpowiedzi; koszt (`pending`) bez funkcji
-  w widoku (idzie przez IPC); powiadomienia prowadzącego z `notice.shown`. Próba przez 10 min po zmianie (`trial.changedAt`).
+  w widoku (idzie przez IPC); powiadomienia prowadzącego z `notice.shown`. Bez folderu `noFolderView` (D327): jedna
+  linia „Brak folderu danych · Otwórz okno”, pasek bez dnia (`data-day=none`). Próby nie ma (D286); akcje paska spoza
+  silnika – IPC `barAction` (`placeBar`, `corner`, `openPanel` dla testów).
+- Komunikat rezerwy (D326): linia `reserve:<dzień>:<pula>:<at>` (= `reserveMessageId`) w `engineView`, „Zacznij” =
+  `startNew` regeneracji sposobem z `suggestRegen` na 15 min, „nie dziś” = `mark`; zobaczenie przez `QUESTION_ID`
+  (panel, okno, kliknięcie paska) i kliknięcie powiadomienia (`handleArgv` → `seen(…, notification)`).
 - `engine/modes.ts` (sesja, zajęcia, „mniej pytań”, noc, „Odcinam się”), `engine/care.ts` (woda, ciąg pracy, kontakt).
 - Linie mają id `rodzaj:…` – pytania silnika `reguła:dzień:blok:próg`; `line|akcja|wartość` w `widgetAction('line')`.
 - Prośby (D311, D312, T503): `WidgetView.requests` – 3 osoby (`folder.widgetModel().people`), trwająca prośba (także
