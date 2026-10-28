@@ -26,6 +26,8 @@ import { personName } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { ROUTINE_VERSION_NAMES, ROUTINE_VERSIONS, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
 import { addDays } from '@shared/time/zone'
+import { answered } from '@shared/engine/care'
+import { batteryLine, syncLines } from '@shared/sync/syncLines'
 import { noFolderView, SEEN_LINE, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
@@ -66,6 +68,8 @@ export interface WidgetDeps {
   emit: (view: WidgetView) => void
   log: (level: 'info' | 'warn' | 'error', msg: string, e?: unknown) => void
   now?: () => number
+  /** The battery saver is on, on a battery, with the data folder in OneDrive (spec „Kilka komputerów”, once a day). */
+  batterySaver?: () => boolean
 }
 
 interface Pending extends BarPending {
@@ -221,6 +225,7 @@ export class WidgetEngine {
       }
       this.names = names
       this.variantsView(m, now)
+      this.syncView(folder, now)
       if (this.failing) this.d.log('info', 'widget: dzień znów policzony')
       this.failing = false
       // Notifications are the leader's, and only once settled – after a start or a wake the other computers' logs (their
@@ -265,6 +270,18 @@ export class WidgetEngine {
     // A routine saved from the bar (D328): its „Cofnij” for a while, in place of its line.
     if (this.routineSaved && (this.routineSaved.until <= now || this.routineSaved.day !== date)) this.routineSaved = null
     if (this.routineSaved && !v.hidden) v.lines = [...v.lines, { id: `routineSaved:${this.routineSaved.block}`, text: this.routineSaved.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }]
+  }
+
+  /**
+   * The quiet lines of the computers and their files (A8-02, A8-07) after the day's own: OneDrive, questions on another
+   * computer too, a computer taken for asleep, a clock ahead, the battery once a day („OK” hides it to the day's end).
+   */
+  private syncView(folder: DataFolder, now: number): void {
+    const v = this.view!
+    if (v.hidden || v.night || v.day == null) return
+    // Its „OK” is the day's answer in the log (per computer): never again that day, also after a start of the app.
+    const battery = (this.d.batterySaver?.() ?? false) && !answered(this.model?.ctx.events ?? [], batteryLine(v.day, folder.presence.own.computer))
+    v.lines = [...v.lines, ...syncLines({ ...folder.syncState(now), battery }, now, v.day, folder.presence.own.computer)]
   }
 
   /** The marker closed – „Zostaw” or a variant done: every cause holding now with it (it never comes back for them). */
@@ -612,6 +629,8 @@ export class WidgetEngine {
           const version = act === 'worse' && r.worse.length ? 'worse' : 'normal'
           return this.routineDone(day, r, version, r[version].map((s) => s.id))
         } else if (kind === 'routineSaved') return act === 'undo' ? this.undoRoutine() : undefined
+        // „OK” of the line about saving the battery: the day's answer in the log – it never comes back that day.
+        else if (kind === 'battery') await this.d.timer({ a: 'mark', question: line, answer: 'ok', day })
         else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
         else if (kind === 'fewerOffer') {
           await this.d.timer({ a: 'mark', question: line, answer: act, day })

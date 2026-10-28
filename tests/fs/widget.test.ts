@@ -37,9 +37,9 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make() {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean } = {}) {
   const clock = { now: placeLogical(DAY, 10 * 60) }
-  const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => true })
+  const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => o.oneDrive ?? true })
   const shown: NotifyIn[] = []
   const views: WidgetView[] = []
   let open = true
@@ -66,7 +66,8 @@ async function make() {
     showMain: () => undefined,
     emit: (v) => views.push(v),
     log: () => undefined,
-    now: () => clock.now
+    now: () => clock.now,
+    batterySaver: () => o.batterySaver ?? false
   })
   return { folder, clock, w, shown, views, closeFolder: () => (open = false), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
 }
@@ -394,6 +395,40 @@ describe('widget w procesie głównym', () => {
     await w.act('line', `${saved.id}|undo`, 'bar')
     expect(w.current().lines.some((l) => l.id === `routine:${DAY}:rut0000000000000000000`)).toBe(true)
     expect(w.current().lines.some((l) => l.id.startsWith('routineSaved:'))).toBe(false)
+  })
+
+  it('ciche linie komputerów: „Brak zmian z PC B od …” po 10 min ciszy świeżej obecności; bateria raz dziennie z „OK” (A8-07)', async () => {
+    const { w, folder, at } = await make({ batterySaver: true })
+    const since = placeLogical(DAY, 10 * 60)
+    mkdirSync(join(dataDir, '.presence'), { recursive: true })
+    writeFileSync(join(dataDir, '.presence', 'pcb.json'), JSON.stringify({ format: 1, computer: 'pcb', name: 'PC B', appVersion: '0.4.0', rulesVersion: 1, versions: [], lastPresence: since, lastUse: since, state: 'used', seenLeader: null, settled: true, lastEvents: {}, writtenAt: since }))
+    await folder.check()
+    await w.refresh()
+    const texts = () => w.current().lines.map((l) => l.text)
+    expect(texts()).not.toContain('Brak zmian z PC B od 10:00')
+    expect(texts()).toContain('Oszczędzanie baterii może wstrzymać OneDrive')
+    await w.act('line', `battery:${DAY}:pca|ok`, 'bar')
+    expect(texts()).not.toContain('Oszczędzanie baterii może wstrzymać OneDrive')
+    // Its „OK” is in the day's log: a new engine (the app started again) does not show it that day.
+    expect((await folder.readDay(DAY)).events.some((e) => e.k === 'question.answer' && (e as { question?: string }).question === `battery:${DAY}:pca`)).toBe(true)
+    at(10 * 60 + 11)
+    await folder.check()
+    await w.refresh()
+    expect(texts()).toContain('Brak zmian z PC B od 10:00')
+  })
+
+  it('bez OneDrive nikt nie jest „uśpiony z braku zmian” – tylko „OneDrive nie działa na tym komputerze” (przegląd 0.23.0)', async () => {
+    const { w, folder, at } = await make({ oneDrive: false })
+    const since = placeLogical(DAY, 10 * 60)
+    mkdirSync(join(dataDir, '.presence'), { recursive: true })
+    writeFileSync(join(dataDir, '.presence', 'pcb.json'), JSON.stringify({ format: 1, computer: 'pcb', name: 'PC B', appVersion: '0.4.0', rulesVersion: 1, versions: [], lastPresence: since, lastUse: since, state: 'used', seenLeader: null, settled: true, lastEvents: {}, writtenAt: since }))
+    await folder.check()
+    at(10 * 60 + 11)
+    await folder.check()
+    await w.refresh()
+    const texts = w.current().lines.map((l) => l.text)
+    expect(texts).toContain('OneDrive nie działa na tym komputerze')
+    expect(texts.some((t) => t.startsWith('Brak zmian z'))).toBe(false)
   })
 
   it('„Przedłuż” z linii „nie przedłużono”: koszt jako „Przedłuż +15” z krokami ±15 min, potwierdzenie przedłuża ten blok (przegląd 0.21.0)', async () => {

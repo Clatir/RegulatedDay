@@ -39,6 +39,11 @@ export interface Presence {
   state: PresenceState
   locked: boolean
   power: { source: 'ac' | 'battery'; saver: boolean } | null
+  /**
+   * The screen unlocked on this computer while it held the block of sleep of a passive block (spec „tylko przy tym wyborze
+   * … liczy się jak obecność także samo odblokowanie ekranu”, D331): a presence for the choice of the sound only.
+   */
+  soundPresence?: number | null
   /** The computer this one sees as the leader; pointing at another one hands leadership over. */
   seenLeader: string | null
   /** Settled (scanned the folder and saw 60 s without incoming changes) or not. */
@@ -79,6 +84,7 @@ export function presenceFrom(raw: unknown): Presence | null {
     state: STATES.has(raw.state as string) ? (raw.state as PresenceState) : 'idle',
     locked: raw.locked === true,
     power,
+    soundPresence: num(raw.soundPresence),
     seenLeader: typeof raw.seenLeader === 'string' ? raw.seenLeader : null,
     settled: raw.settled === true,
     lastEvents,

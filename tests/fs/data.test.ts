@@ -320,4 +320,21 @@ describe('obecność', () => {
     expect(second.presenceSeenAt).toBe(now)
     expect(second.fileSeenAt).toBe(now)
   })
+
+  it('zegar innego komputera z przodu o ponad 2 min – także przy pierwszym odczycie – zapamiętany do ostrzeżenia (A8-02)', async () => {
+    let now = 1_000_000
+    let skew = 7 * 60_000
+    const base = { format: 1, name: 'x', windowsId: null, appVersion: '0.1.1', rulesVersion: 1, versions: [], installing: null, lastUse: 0, lastOutsideInput: 0, state: 'used' as const, locked: false, power: null, seenLeader: null, settled: true, lastEvents: {} }
+    const a = new PresenceStore({ fs: nodeFs, dataDir, computer: 'pca', now: () => now }, { ...base, lastPresence: now })
+    const b = new PresenceStore({ fs: nodeFs, dataDir, computer: 'pcb', now: () => now + skew }, { ...base, lastPresence: now })
+    await b.tick()
+    await a.scan()
+    expect(a.clockAhead.get('pcb')).toBe(7 * 60_000)
+    // Its clock set right: the next file it writes takes the warning away (a delay of sync is no clock ahead).
+    now += 60_000
+    skew = 0
+    await b.tick(true)
+    await a.scan()
+    expect(a.clockAhead.has('pcb')).toBe(false)
+  })
 })

@@ -200,4 +200,33 @@ describe('zamrażanie w folderze danych', () => {
     expect(await checks(m, dayEnd(DAY) + 72 * H, 12)).toEqual([DAY])
     expect((await freezes(m.folder))[0]).toMatchObject({ how: 'timeout', missing: ['lap'] })
   })
+
+  it('„Zapomnij komputer”: zamrażanie na niego nie czeka; użyty znowu (nowa obecność) – znów się liczy (A3-13)', async () => {
+    const lap = (lastPresence: number | null, writtenAt = lastPresence ?? 0) => {
+      mkdirSync(join(dataDir, '.presence'), { recursive: true })
+      writeFileSync(join(dataDir, '.presence', 'lap.json'), JSON.stringify({ format: 1, computer: 'lap', name: 'Laptop', appVersion: '0.7.0', rulesVersion: 1, versions: [], lastPresence, lastUse: lastPresence, state: 'idle', seenLeader: 'pca', settled: true, lastEvents: { [DAY]: 5 }, writtenAt }))
+    }
+    const m = await workedDay(DAY)
+    mkdirSync(join(dataDir, 'log', '2026', DAY), { recursive: true })
+    writeFileSync(join(dataDir, 'log', '2026', DAY, 'lap.jsonl'), `${JSON.stringify({ id: 'lap-0', c: 'lap', n: 0, t: placeLogical(DAY, 9 * 60), l: placeLogical(DAY, 9 * 60), v: 1, day: DAY, dom: 'meta', k: 'presence.first', at: placeLogical(DAY, 9 * 60) })}\n`)
+    const at = placeLogical(DAY, 20 * 60)
+    lap(at)
+    await m.folder.check()
+    // Forgotten in the settings with the „last presence” its file has: the day freezes when ready, not after 72 h.
+    await m.folder.edit([{ rel: paths.settings, create: true, edits: [{ path: ['forgotten'], base: undefined, value: { lap: { lastPresence: at, at: m.clock.now } } }] }])
+    const row = async () => (await m.folder.computerList()).find((c) => c.id === 'lap')
+    // The settings show it at once (your edit), the leader counts it once the folder holds it.
+    expect(await row()).toMatchObject({ forgotten: true, name: 'Laptop' })
+    expect(await checks(m, placeLogical(addDays(DAY, 1), 8 * 60) + 30 * H, 12)).toEqual([DAY])
+    expect((await freezes(m.folder))[0]).toMatchObject({ how: 'ready', missing: [] })
+    // Its app started again with nobody at it (no presence written): still forgotten; its name stays among the computers.
+    lap(null, at + H)
+    await m.folder.check()
+    expect(await row()).toMatchObject({ forgotten: true })
+    expect(m.folder.computers.map((c) => c.id)).toContain('lap')
+    // Used again: a new presence – it counts again.
+    lap(at + 2 * H)
+    await m.folder.check()
+    expect(await row()).toMatchObject({ forgotten: false })
+  })
 })

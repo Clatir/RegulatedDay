@@ -307,3 +307,24 @@ describe('linie chwil dnia po przeglądzie 0.21.0', () => {
     expect(st.ends.at(-1)?.confirmed).toBe(true)
   })
 })
+
+describe('komputer nagrywający w widoku paska (A8-04)', () => {
+  it('dwa wykłady naraz: każdy komputer nagrywający, także ten w tle (przegląd 0.23.0)', () => {
+    const s = new Scenario({ date: DATE, plan: [{ ...block({ id: 'w', cat: 'wyklad', at: '10:00', min: 90, fixed: true }), recorder: 'pcb' }, { ...block({ id: 'v', cat: 'wyklad', at: '10:00', min: 90, fixed: true, bg: true }), recorder: 'pca' }] }).observe('07:00', null)
+    click(s, '10:00', { a: 'start', block: 'w' })
+    click(s, '10:00', { a: 'start', block: 'v' })
+    const t = s.at('10:30')
+    const ctx = s.contextAt(t)
+    const state = s.stateAt(t)
+    const v = engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, name: () => 'Wykład', care, modePrefs: { sessionMode: true, classMode: true }, pending: null, computer: 'pca' })
+    expect([...v.recorders].sort()).toEqual(['pca', 'pcb'])
+    expect(v.recording).toBe(true)
+  })
+
+  it('nagrywany wykład biegnie: widok podaje komputer nagrywający; poza wykładem – nikt', () => {
+    const s = new Scenario({ date: DATE, plan: [{ ...block({ id: 'w', cat: 'wyklad', at: '10:00', min: 90, fixed: true }), recorder: 'pcb' }] }).observe('07:00', null)
+    expect(view(s, '09:30').recorders).toEqual([])
+    click(s, '10:00', { a: 'start', block: 'w' })
+    expect(view(s, '10:30')).toMatchObject({ recorders: ['pcb'], recording: false })
+  })
+})

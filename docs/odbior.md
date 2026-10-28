@@ -25,7 +25,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 
@@ -80,6 +80,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8g.2 Rytuał w dniu, w którym praca się nie zaczęła (gdy się zdarzy)
    - [ ] E8g.3 Kopia dnia na dziś i dni minione z ostrzeżeniem
    - [ ] E8g.4 Święta Wielkiej Brytanii w kalendarzu i pulsowanie paska
+   - [ ] E8h.1 Dźwięk na jednym komputerze (dwa komputery)
+   - [ ] E8h.2 „Komputery” w Ustawieniach i „Zapomnij”
+   - [ ] E8h.3 Ciche linie: OneDrive, zegar, „Brak zmian z …”, bateria (laptop)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
 4. Wieczór:
@@ -1401,3 +1404,31 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   pulsuje obwódką trzy razy i przestaje (z wyłączonymi animacjami – sam kolor; w trybie sesji nie pulsuje).
 - **Nie przechodzi, gdy:** brak oznaczenia, pasek pulsuje bez końca, pulsuje mimo wyłączonego ustawienia albo
   przygasza tekst.
+
+### E8h – funkcje D325, część 2b: komputery i synchronizacja (0.23.0)
+
+#### E8h.1 Dźwięk na jednym komputerze (0.23.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/leader.test.ts` („dźwięk na jednym komputerze”). **Tylko Ty:** dwa komputery naraz.
+- **Jak sprawdzić:** dźwięk włączony na obu komputerach, oba z aplikacją; pracuj na jednym do 5 min przed końcem bloku.
+- **Oczekiwany efekt:** ton gra tylko na komputerze, przy którym pracujesz; na drugim cisza.
+- **Nie przechodzi, gdy:** ton gra na obu albo na tym, którego nie używasz.
+
+#### E8h.2 „Komputery” w Ustawieniach i „Zapomnij” (0.23.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/freeze.test.ts` („Zapomnij komputer”), `tests/web/computers.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** Ustawienia → „Komputery”; przy starym komputerze, którego już nie używasz, kliknij „Zapomnij”.
+- **Oczekiwany efekt:** lista komputerów z „dane sprzed … s” albo „uśpiony – brak zmian od …”; po „Zapomnij” – „zapomniany –
+  nic na niego nie czeka” i „Przywróć”; dni zamrażają się bez czekania 72 h na ten komputer.
+- **Nie przechodzi, gdy:** listy nie ma, „Zapomnij” nic nie zmienia albo ten komputer da się zapomnieć.
+
+#### E8h.3 Ciche linie: OneDrive, zegar, „Brak zmian z …”, bateria (0.23.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/sync-lines.test.ts`, `tests/fs/widget.test.ts` („ciche linie komputerów”).
+  **Tylko Ty:** OneDrive i bateria laptopa.
+- **Jak sprawdzić:** na laptopie na baterii spójrz na pasek; zamknij OneDrive na ponad 5 min; uśpij drugi komputer na
+  ponad 10 min (bez zamykania aplikacji).
+- **Oczekiwany efekt:** raz dziennie „Oszczędzanie baterii może wstrzymać OneDrive · OK”; po 5 min „OneDrive nie działa
+  na tym komputerze”; „Brak zmian z <komputer> od <godzina>”; wszystkie bez kropki i bez powiadomienia.
+- **Nie przechodzi, gdy:** linia OneDrive pojawia się po krótkim restarcie OneDrive, linia baterii wraca po „OK” tego
+  samego dnia albo linie mają kropkę.

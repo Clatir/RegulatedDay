@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.23.0
+- Dźwięk 5 i 0 min gra na jednym komputerze – tym, przy którym byłeś ostatnio (przy remisie na prowadzącym; przy oglądaniu wykładu liczy się też samo odblokowanie ekranu na komputerze, który go odtwarza), nigdy na komputerze, który nagrywa wykład. Dotąd grał na każdym komputerze z włączonym dźwiękiem.
+- Ustawienia mają sekcję „Komputery”: każdy komputer folderu ze świeżością jego danych („dane sprzed 40 s”, „uśpiony – brak zmian od 14:20”; ten sam znacznik „dane z PC B sprzed 40 s” jest w nagłówku „Dziś”) i „Zapomnij” – zamrażanie dni i prowadzenie przestają na niego czekać, dopóki znów go nie użyjesz („Przywróć” cofa).
+- Ciche linie w pasku: „OneDrive nie działa na tym komputerze” (dopiero po 5 min bez procesu OneDrive – krótki restart niczego nie zmienia), „Pytania mogą pojawić się też na PC B”, „Brak zmian z PC A od 14:20”, „Zegar PC B wyprzedza ten komputer o 4 min”, a na baterii z włączonym oszczędzaniem energii raz dziennie „Oszczędzanie baterii może wstrzymać OneDrive · OK”.
+
 ## 0.22.0
 - Rutyny odhaczasz po powrocie do komputera: w pasku „Rutyna poranna · ✓ Wszystkie · Kroki ▸ · gorsze dni” – „Kroki ▸” rozwija listę kroków z wyborem wersji i „✓ Zapisz zaznaczone” – a w „Dziś” karta z tymi samymi krokami. Zapis w jednym miejscu zamyka oba; karta ma „Cofnij”. Linia w pasku stoi do 3 h po rutynie, karta – do końca dnia.
 - Dzień, w którym zaplanowana praca się nie zaczęła, ma wieczorny rytuał od planowanego końca ostatniego bloku pracy – karta w „Dziś” i „Rytuał” w pasku, jak po „Koniec pracy”.

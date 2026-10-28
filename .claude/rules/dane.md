@@ -19,7 +19,9 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   małymi literami). `shared/data/logText.ts` – tekst logu (ucięta ostatnia linia, uszkodzone w środku), suma po id.
 - `shared/data/clock.ts` – `EventClock`: zegar komputera poprawiany monotonicznym (`t`), zegar logiczny (`l`), +24 h
   innego komputera nie przesuwa zegara (ostrzeżenie). `shared/data/merge.ts` – scalanie pól z FI + `setAt`.
-- `shared/sync/presence.ts`, `leader.ts` (`decideLeader`, `minuteGate`), `settle.ts` (stan „nieustalony”).
+- `shared/sync/presence.ts`, `leader.ts` (`decideLeader`, `minuteGate`, `soundComputer` – dźwięk na jednym komputerze),
+  `settle.ts` (stan „nieustalony”), `syncLines.ts` (ciche linie: OneDrive, zegar, „Brak zmian z …”, bateria – `folder.syncState`).
+  Zapomniane komputery: `rd.json` `forgotten` (id → „ostatnia obecność”) – `PresenceStore.isForgotten`, `computerList`.
 - `main/data/fsio.ts` – `DataFs` (prawdziwy i w testach wadliwy); błąd listy = wyjątek („nieznane”), brak = [].
 - `main/data/eventLog.ts` – lokalny dziennik → log na OneDrive, `ensure` (brakujące zdarzenia, własne kopie
   konfliktowe), `readDay` (wszystkie komputery, pamięć po rozmiarze i czasie modyfikacji).

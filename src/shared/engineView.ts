@@ -354,11 +354,15 @@ export function engineView(i: EngineInput): WidgetView {
   // Sounds (spec „Powiadomienia i dźwięki”): never in „mniej pytań” nor „Odcinam się”, never on a day of stationary
   // classes, never on the recording computer during a lecture.
   const dayType = state.facts.snapshots.at(-1)?.dayType ?? i.ctx.snapshot.dayType
-  const recording = !!i.computer && [...(fg ? [fg] : []), ...t.bg].some((x) => x.info.rules.kind === 'lecture' && i.ctx.plan.find((p) => p.id === x.info.id)?.recorder === i.computer)
+  // The computers recording a lecture running now – of every lecture running (no tones there, nor notifications on this
+  // one; never chosen for the tones, A8-04).
+  const recorders = [...new Set([...(fg ? [fg] : []), ...t.bg].flatMap((x) => (x.info.rules.kind === 'lecture' ? [i.ctx.plan.find((p) => p.id === x.info.id)?.recorder ?? null] : [])).filter((x): x is string => x != null))]
+  const recording = !!i.computer && recorders.includes(i.computer)
   const soundOk = !hidden && !modes.fewer && dayType !== 'zjazd-stacjonarny' && !recording
   return {
     soundOk,
     recording,
+    recorders,
     hidden,
     quiet: !hidden && modes.quiet,
     tone,

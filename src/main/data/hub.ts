@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { BackupRecord, CalibrationScreen, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
+import type { BackupRecord, CalibrationScreen, ComputerRow, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords } from '@shared/data/merge'
@@ -47,6 +47,8 @@ export interface HubOptions {
   appFocused?: () => boolean
   /** OneDrive runs in this session (the helper). */
   oneDriveRunning?: () => boolean
+  /** The OneDrive process runs by the last answer (the unsettled state counts from it). */
+  oneDriveProcess?: () => boolean
   /** What this computer must hold against sleep (after every check). */
   onPower?: ServiceOptions['onPower']
   /** The versions that ran here (into the presence). */
@@ -246,6 +248,7 @@ export class DataHub {
         idleSeconds: this.o.idleSeconds,
         appFocused: this.o.appFocused,
         oneDriveRunning: this.o.oneDriveRunning,
+        oneDriveProcess: this.o.oneDriveProcess,
         onPower: this.o.onPower,
         versions: this.o.versions,
         log: this.o.log,
@@ -511,6 +514,11 @@ export class DataHub {
     this.changed()
     if (r.ok) void this.service?.tick()
     return { ok: r.ok, why: r.ok ? null : r.why, confirm: null }
+  }
+
+  /** The computers of the folder for the settings (A3-13); without a folder only this one. */
+  async computerList(): Promise<ComputerRow[]> {
+    return (await this.service?.folder?.computerList()) ?? [{ id: this.o.computer(), name: this.o.computerName, self: true, seenAt: null, state: 'used', forgotten: false, lastPresence: null }]
   }
 
   /** The days the morning shows to close, each with its ritual (from the ritual's first day, D320). */

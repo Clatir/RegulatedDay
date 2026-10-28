@@ -24,6 +24,8 @@ export interface Peer {
   fileSeenAt: number
   /** The peer's running version has a recorded crash. */
   crashed: boolean
+  /** This computer's clock when it saw the peer's presence for the sound (`soundPresence`) change; null: not seen changing. */
+  soundSeenAt?: number | null
 }
 
 export interface LeaderInput {
@@ -157,6 +159,38 @@ export function decideLeader(inp: LeaderInput): LeaderDecision {
   if (handedTo) return decide(handedTo, 'prowadzący oddał prowadzenie')
   if (closed || silent) return decide(latest(current), closed ? 'prowadzący zamknięty' : 'prowadzący bez obecności od 10 min')
   return decide(current, 'prowadzi inny komputer')
+}
+
+/**
+ * The computer the bar's tones play on (spec „Włączony dźwięk gra na jednym komputerze”, A8-04): of the computers awake
+ * – this one, and others whose presence file was refreshed in the last 10 min, not „closed” – the one with the latest
+ * presence, whatever its age (by this computer's clock: its own, the others' as seen changing); never the one recording
+ * a lecture now; a tie goes to the leader, then to the lower id. Null: none (only the recording ones). Without OneDrive
+ * running here no computer is taken for asleep for lack of changes (as for leading); a presence file without a „last
+ * presence” (an app started again with nobody at it) has none, whenever this computer saw it change.
+ */
+export function soundComputer(inp: { now: number; self: { computer: string; lastPresence: number | null; soundPresence?: number | null }; peers: readonly Peer[]; leader: string | null; recorders: readonly string[]; oneDriveRunning: boolean }): string | null {
+  const { now } = inp
+  const NONE = Number.NEGATIVE_INFINITY
+  // The screen unlocked on the computer holding a passive block's sleep counts as a presence here only (D331).
+  const times = new Map<string, number>([[inp.self.computer, Math.max(inp.self.lastPresence ?? NONE, inp.self.soundPresence ?? NONE)]])
+  for (const p of inp.peers) {
+    if (p.presence.state === 'closed' || (inp.oneDriveRunning && now - p.fileSeenAt >= SILENT_MS && p.fileSeenAt <= now)) continue
+    const presence = (p.presence.lastPresence == null ? null : presenceTime(p, now)) ?? NONE
+    const sound = p.presence.soundPresence == null ? NONE : Math.min(p.soundSeenAt ?? p.presence.soundPresence, now)
+    times.set(p.presence.computer, Math.max(presence, sound))
+  }
+  for (const r of inp.recorders) times.delete(r)
+  let best: string | null = null
+  let bestT = Number.NEGATIVE_INFINITY
+  for (const [id, t] of times) {
+    const tie = best != null && t === bestT
+    if (best == null || t > bestT || (tie && best !== inp.leader && (id === inp.leader || id < best))) {
+      best = id
+      bestT = t
+    }
+  }
+  return best
 }
 
 /**

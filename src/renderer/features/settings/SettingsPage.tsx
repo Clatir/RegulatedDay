@@ -20,6 +20,7 @@ import { CategoriesSection } from './CategoriesSection'
 import { LecturesSection } from './LecturesSection'
 import { DayTypesSection, FieldsSection, FromBar, ModulesSection, RegenWaysSection, SessionsSection } from './SharedSettings'
 import { CalibrationSection } from '../calibration/CalibrationEntry'
+import { ComputersSection } from './ComputersSection'
 import { DataSection } from './DataSection'
 import { resetSettingsFrom } from './settingsStore'
 
@@ -77,6 +78,7 @@ export function SettingsPage() {
           <FieldsSection group="care" />
           <CalibrationSection />
           <DataSection />
+          <ComputersSection />
         </>
       )}
       <Section title="Ten komputer">

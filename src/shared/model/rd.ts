@@ -90,6 +90,11 @@ export interface RdFile {
    * approved so far (`proposalKey` – a review opened again never takes one in twice).
    */
   calibrationReview: { deferrals: number; reviewed: string | null; applied: string[] }
+  /**
+   * Computers forgotten in the settings (spec „Zapomnij komputer”, A3-13): by id, the „last presence” its file had when
+   * it was forgotten – nobody waits for it (freezing, leading) until that presence changes (it is used again).
+   */
+  forgotten: Record<string, { lastPresence: number | null; at: number }>
 }
 
 /** The key of a proposal of the review: its kind, category and variant – the same when counted again on the changed values. */
@@ -203,8 +208,19 @@ export function rdFrom(v: unknown): RdFile {
     setup,
     ritualFrom: isIsoDate(r.ritualFrom) ? r.ritualFrom : null,
     gameFrom: isIsoDate(r.gameFrom) ? r.gameFrom : null,
-    calibrationReview: calibrationReviewFrom(r.calibrationReview)
+    calibrationReview: calibrationReviewFrom(r.calibrationReview),
+    forgotten: forgottenFrom(r.forgotten)
   }
+}
+
+function forgottenFrom(v: unknown): RdFile['forgotten'] {
+  const out: RdFile['forgotten'] = {}
+  if (!isPlain(v)) return out
+  for (const [id, x] of Object.entries(v)) {
+    if (!id || !isPlain(x) || typeof x.at !== 'number' || !Number.isFinite(x.at)) continue
+    out[id] = { lastPresence: typeof x.lastPresence === 'number' && Number.isFinite(x.lastPresence) ? x.lastPresence : null, at: x.at }
+  }
+  return out
 }
 
 export function calibrationReviewFrom(v: unknown): RdFile['calibrationReview'] {
