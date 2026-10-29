@@ -1,8 +1,8 @@
 # Odbiór w maszynie wirtualnej (Cowork)
 
 Cowork w maszynie wirtualnej z Windows sprawdza punkty z `docs/odbior.md` na świeżej instalacji i pisze raport
-(T526). Twoje dane, gra, kalibracja i OneDrive zostają nietknięte. Część 1 robisz Ty (raz), części 2–4 – Cowork, część 5
-zostaje dla Ciebie. Raport to nie odbiór: punkt w `docs/odbior.md` dostaje `[x]` dopiero po Twojej akceptacji.
+(T526). Twoje dane, gra, kalibracja i OneDrive zostają nietknięte. Część 1 robisz Ty (przygotowanie raz, potem start
+każdego dnia), części 2–4 – Cowork, część 5 zostaje dla Ciebie. Raport to nie odbiór: punkt w `docs/odbior.md` dostaje `[x]` dopiero po Twojej akceptacji.
 
 Pełny opis każdego punktu („Jak sprawdzić”, „Oczekiwany efekt”, „Nie przechodzi, gdy”):
 https://raw.githubusercontent.com/Clatir/RegulatedDay/main/docs/odbior.md – tutaj jest tylko kolejność, przygotowanie
@@ -31,18 +31,46 @@ warunków i różnice w maszynie. W maszynie Cowork może sprawdzić 68 z 87 pun
    Jeśli Cowork w maszynie potrzebuje wirtualizacji: `... modifyvm "RD-test" --nested-hw-virt on`. To nie działa, gdy
    VirtualBox pracuje na Hyper-V (zielony żółw w pasku stanu okna maszyny) – wtedy Cowork w maszynie nie wystartuje.
 5. Folder na raport: Ustawienia maszyny → Foldery współdzielone → ścieżka na komputerze `C:\RD-vm-raport`, nazwa
-   `RD-raport`, „Automatyczne montowanie”, „Stały”. W maszynie to dysk sieciowy (zwykle `Z:`; inna litera – podaj ją
-   w poleceniu dla Cowork). Tylko raport, zrzuty i logi – nigdy dane aplikacji.
-6. Claude Desktop w maszynie: zalogowanie, Cowork ze sterowaniem komputerem; sprawdź, że robi zrzut ekranu i klika.
-7. Migawka „czysta” (Maszyna → Zrób migawkę) – przed instalacją Regulated Day. Powrót do niej to start od nowa.
+   `RD-raport`, „Automatyczne montowanie”, „Stały”. W maszynie to dysk sieciowy (zwykle `Z:`; inna litera – zmień ją
+   w poleceniu z części 3). W maszynie utwórz też folder roboczy Cowork `C:\RD-raport` – na koniec dnia Cowork kopiuje
+   go na `Z:`. Tylko raport, zrzuty i logi – nigdy dane aplikacji.
+6. Okno maszyny: Widok → wyłącz „Automatyczne dopasowanie rozmiaru ekranu gościa” (rozdzielczość zostaje 1920×1080,
+   pasek nie zmienia miejsca); Urządzenia → Wspólny schowek → „Dwukierunkowy” (wkleisz polecenie z tego komputera).
+7. Claude Desktop w maszynie: zalogowanie, Cowork ze sterowaniem komputerem; na próbę zadanie „zrób zrzut ekranu
+   i otwórz Notatnik” – sprawdź, że widzi ekran i klika.
+8. Migawka „czysta” (Maszyna → Zrób migawkę) – przed instalacją Regulated Day. Powrót do niej to start od nowa.
 
 **Między sesjami Cowork** nie wyłączaj maszyny i nie uruchamiaj jej ponownie aż do „Na samym końcu” (część 4). Pauza to
 „Zapisz stan maszyny” (zegar maszyny stoi) albo maszyna włączona (zegar biegnie – też do przodu). Wyłączenie Windows
 ustawia przy następnym starcie zegar maszyny na prawdziwą datę, czyli go cofa.
 
-**Polecenie na start każdej sesji Cowork** (w maszynie):
-> Przeczytaj https://raw.githubusercontent.com/Clatir/RegulatedDay/main/docs/odbior-vm.md i wykonaj Dzień 2. Raport
-> dopisuj do Z:\raport.md.
+**Każdy dzień maszyny – krok po kroku (Ty):**
+1. W maszynie: Claude Desktop → Cowork → nowe zadanie (każdy dzień to nowe zadanie – świeży kontekst).
+2. Dostęp do folderu `C:\RD-raport` i zgoda na sterowanie komputerem; gdy pyta o aplikacje – Regulated Day, Ustawienia,
+   PowerShell, Edge, Eksplorator plików, Menedżer zadań, Notatnik. Nazwy przycisków w Cowork mogą być inne.
+3. Wklej polecenie poniżej, zmień N na numer dnia, wyślij. Popatrz pierwsze minuty i odpowiadaj na prośby o zgodę.
+4. W tym czasie pracujesz normalnie na swoim komputerze – Cowork steruje tylko maszyną. Okna maszyny nie zmieniaj.
+5. Po dniu: raport w `C:\RD-vm-raport\raport.md` na Twoim komputerze – napisz mi „Dzień N gotowy”.
+
+**Polecenie do wklejenia** (N – numer dnia):
+
+```text
+Testujesz aplikację Regulated Day w tej maszynie wirtualnej z Windows. Wykonaj Dzień N z instrukcji:
+https://raw.githubusercontent.com/Clatir/RegulatedDay/main/docs/odbior-vm.md
+Opisy punktów („Jak sprawdzić”, „Oczekiwany efekt”, „Nie przechodzi, gdy”):
+https://raw.githubusercontent.com/Clatir/RegulatedDay/main/docs/odbior.md
+
+Najpierw przeczytaj w instrukcji część 2 (zasady), część 3 (raport) i swój dzień w części 4. Najważniejsze:
+1. Zegar Windows zmieniasz tylko do przodu i tylko przy zamkniętej aplikacji (ikona w zasobniku → „Zakończ”).
+   Czasu automatycznego nigdy nie włączasz. Zegar wcześniejszy niż ostatni wpis w raporcie – przerwij i zapisz to.
+2. Gdy punkt każe odejść od komputera: tylko patrzysz na ekran – żadnych kliknięć, klawiszy ani ruchu myszy.
+3. Każdy punkt oceniasz dosłownie według „Oczekiwany efekt” i „Nie przechodzi, gdy”: ZGODNE, NIEZGODNE, UWAGA,
+   DO OCENY albo NIE DO SPRAWDZENIA.
+4. Raport dopisujesz po każdym punkcie do C:\RD-raport\raport.md; na koniec dnia uruchamiasz polecenie z części 3.
+5. Niczego nie naprawiasz ani nie obchodzisz: błąd → zrzut, godzina, wpis, następny punkt. Nie logujesz się do żadnych
+   kont i nie zmieniasz Windows poza tym, co opisuje instrukcja.
+Na koniec napisz krótko: ile punktów ZGODNE, NIEZGODNE i pozostałych, i które są NIEZGODNE.
+```
 
 ## 2. Zasady dla Cowork
 
@@ -55,8 +83,8 @@ ustawia przy następnym starcie zegar maszyny na prawdziwą datę, czyli go cofa
    Czas i język → Data i godzina → „Ustaw ręcznie datę i godzinę” → „Zmień”. Przed „Zakończ” skończ biegnący blok
    („Dalej”), chyba że punkt mówi inaczej. Czasu automatycznego nigdy nie włączasz. Gdy zegar maszyny pokazuje chwilę
    wcześniejszą niż ostatni wpis w raporcie – przerwij i zapisz to.
-4. **Nieobecność:** gdy punkt każe odejść od komputera albo nie ruszać myszy i klawiatury, przez ten czas robisz tylko
-   zrzuty ekranu – żadnych kliknięć, klawiszy ani ruchu myszy. Czas mierzysz zegarem maszyny.
+4. **Nieobecność:** gdy punkt każe odejść od komputera albo nie ruszać myszy i klawiatury, przez ten czas tylko patrzysz
+   na ekran – żadnych kliknięć, klawiszy (także Win+PrtScn) ani ruchu myszy. Czas mierzysz zegarem maszyny.
 5. **Okna:** okno główne Regulated Day niezmaksymalizowane (chyba że punkt mówi inaczej), okno Claude obok; pasek pulpitu
    ustaw w Ustawieniach → „Miejsce paska” tam, gdzie nic go nie zasłania. „Okno na wierzchu” w punkcie to okno główne
    z przodu, nie okno Claude.
@@ -69,16 +97,26 @@ ustawia przy następnym starcie zegar maszyny na prawdziwą datę, czyli go cofa
 
 ## 3. Raport
 
-`Z:\raport.md`; zrzuty w `Z:\zrzuty\` (`E4a.1-1.png`, `E4a.1-2.png`…); na koniec każdego dnia kopia
-`%APPDATA%\Regulated Day\logs\` do `Z:\logi\dzien-N\`. Na początku dnia nagłówek `## Dzień N – <data i godzina
-maszyny>, wersja <z Ustawień>`, a każdy punkt tak:
+Folder roboczy `C:\RD-raport`, raport `C:\RD-raport\raport.md`. Zrzut do raportu: Win+PrtScn – Windows zapisuje go
+w Obrazy → Zrzuty ekranu, w raporcie podajesz nazwę pliku (w czasie nieobecności bez Win+PrtScn, tylko opis).
+`main.log` czytasz w Notatniku (`%APPDATA%\Regulated Day\logs\`). Na koniec dnia w PowerShell (N – numer dnia):
+
+```
+$n = N
+New-Item -ItemType Directory -Force "C:\RD-raport\logi\dzien-$n", "C:\RD-raport\zrzuty" | Out-Null
+Copy-Item "$env:APPDATA\Regulated Day\logs\*" "C:\RD-raport\logi\dzien-$n\" -Recurse -Force
+Copy-Item "$env:USERPROFILE\Pictures\Screenshots\*" "C:\RD-raport\zrzuty\" -Force
+Copy-Item "C:\RD-raport\*" "Z:\" -Recurse -Force
+```
+
+Na początku dnia nagłówek `## Dzień N – <data i godzina maszyny>, wersja <z Ustawień>`, a każdy punkt tak:
 
 ```
 ### E4a.1 – ZGODNE
 - Godzina (zegar maszyny): 9:12–9:20
 - Zrobione: …
 - Widać: … (teksty dosłownie, w cudzysłowie)
-- Zrzuty: zrzuty/E4a.1-1.png
+- Zrzuty: Zrzut ekranu (12).png, Zrzut ekranu (13).png
 ```
 
 Wyniki: **ZGODNE** – dokładnie „Oczekiwany efekt”; **NIEZGODNE** – który przykład z „Nie przechodzi, gdy” albo czym
@@ -116,7 +154,7 @@ Rano:
 4. Plan i ekrany: E3.3, E8k.1, E3.4, E7a.2, E8g.3 (dzień w przyszłości co najmniej 6 tygodni od dziś), E3.5 (sobota co
    najmniej 6 tygodni od dziś – nie jutrzejsza), E8d.3 (zrzut sesji NY przed testem; na koniec godziny jak przed nim),
    E8g.4 część 1 (kalendarz, sierpień 2027), E3.7 część 1, E3.13, E8d.1, E8k.2, E6d.1 (eksport do `C:\RD-eksport`,
-   pliki skopiuj do `Z:\eksport\`; Excela w maszynie nie ma – w Notatniku sprawdź średnik, polskie daty i przecinek
+   pliki skopiuj do `C:\RD-raport\eksport\`; Excela w maszynie nie ma – w Notatniku sprawdź średnik, polskie daty i przecinek
    dziesiętny, a „Excel otwiera w kolumnach” – DO OCENY).
 5. Pasek i timer: E4a.1, E4a.2, E8d.2 część 1 (podwójne „Dalej”), E5b.1, E5b.2, E5b.3, E5b.5, E5b.6, E4b.15 (DO OCENY:
    zrzuty paska, ikony i panelu przy pracy i przy posiłku).
