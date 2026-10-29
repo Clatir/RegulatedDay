@@ -28,6 +28,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
   E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
+- **W maszynie wirtualnej** (opcjonalnie): 68 z tych punktów może sprawdzić Cowork na świeżej instalacji, bez Twoich
+  danych – `docs/odbior-vm.md`. Jego raport to nie odbiór: `[x]` po Twojej akceptacji.
 
 **Kolejność, która oszczędza czas:**
 
@@ -54,7 +56,6 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E5b.3 Prośba w trybie ciszy
    - [ ] E5b.5 Znacznik i warianty, „Przestawiono · Cofnij”
    - [ ] E5b.6 „Zostaw” i „Przestaw plan”
-   - [ ] E6a.4 W oknie nic nowego
    - [ ] E7a.2 Nowy blok i „Wymień” w „Dziś” działają jak dotąd
    - [ ] E7c.1 Gra od jutra po aktualizacji
    - [ ] E7c.2 Nagłówek „Dziś” i „+3 ♪”
@@ -942,7 +943,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - powiadomienie przychodzi, gdy od dłuższej chwili nie ruszasz myszy ani klawiatury (dopiero przy powrocie).
 
 #### E6a.4 W oknie nic nowego (0.6.0)
-- [ ] Odebrane
+- [x] Nie dotyczy od 0.12.0 (29.10.2026) – rytuał i niezamknięte dni pojawiają się celowo, odbiór w E6c.1–E6c.5
 - **Automatycznie:** ekrany i pasek sprawdzają `tests/e2e/screens.spec.ts` i `widget-view.test.ts`. Ty: rzut oka.
 - **Jak sprawdzić:** przejrzyj okno główne, pasek i panel ikony jak zwykle, także rano po wczorajszym dniu.
 - **Oczekiwany efekt:** wszystko jak w 0.5.0; nigdzie nie ma ekranu rytuału ani pytań o niezamknięte dni.

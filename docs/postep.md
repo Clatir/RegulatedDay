@@ -3,7 +3,8 @@
 ## Stan bieżący
 - Ciągi A–D zakończone: wydania 0.11.0–0.15.0 (28.10; 0.15.0 z runu 40664496608 na `main` ok. 10:58). Wpisy ciągów,
   0.10.x i logiki E7 → `docs/archiwum/postep-ciagi-A-D.md`; E0–E6 → `docs/archiwum/postep-E0.md` … `postep-E6.md`.
-- Na tym komputerze aplikacja ostatnio działała 27.10 o 23:41 w 0.10.1 (`main.log`) – 0.11.0–0.15.0 jeszcze nie przyszły.
+- Na tym komputerze aplikacja ostatnio działała 27.10 o 23:41 w 0.10.1 (`main.log`, stan 29.10) – 0.11.0–1.0.0 jeszcze
+  nie przyszły.
 - **E4b.12 nie przechodzi (27.10):** uchwyt ⠿ widać po najechaniu, ale po chwyceniu pasek nawet nie drgnie („Zawsze na
   wierzchu”, pasek na drugim monitorze VG27B nad głównym – współrzędne ujemne). Test prawdziwą myszą (SendInput) w CI
   na Windows przechodzi w obu wariantach (także „na wierzchu” z innym oknem z przodu). Od 0.11.0 ślad w `main.log`
@@ -18,13 +19,13 @@
   cytowana w D150 i specyfikacji – zostaje w rejestrze.
 
 ## Kolejka (według `docs/plan.md`, D317)
-1. **Ciąg E (E8) zakończony – 1.0.0** (28.10): przegląd 5.1 (127 zgłoszeń, `docs/przeglad-E8.md` – wszystkie zamknięte),
-   decyzje D325–D331, wydania 0.16.0–0.23.0 (v0.23.0 28.10 22:46); PR-y #34 (0.24.0) i #35 (0.25.0) scalone 28.10 ok.
-   22:58, #36 (0.26.0) i #37 (1.0.0) – scalane po kolei, gdy CI jest zielone (T525: wersja bez własnego wydania trafia do
-   notatek następnej).
-   **Po scaleniu PR-u 1.0.0:** sprawdź, że runda `main` opublikowała v1.0.0 (`gh release view v1.0.0`); jeśli PR-y
-   #34–#35 lub 0.26.0 / 1.0.0 nie są jeszcze scalone – `gh pr list`, scal po kolei przy zielonym CI.
-2. Ty: aktualizacja do 1.0.0 i odbiór według `docs/odbior.md` (E4b–E8k). Poprawki z odbioru – wersje 1.0.x (D324).
+1. **Ciąg E (E8) zakończony – v1.0.0 opublikowane** 29.10 ok. 0:00 (run 40780293831 na `main` zielony): przegląd 5.1
+   (127 zgłoszeń, `docs/przeglad-E8.md` – wszystkie zamknięte), decyzje D325–D331, PR-y #26–#37 scalone, otwartych brak
+   (T525: wersja bez własnego wydania trafia do notatek następnej).
+2. Ty: aktualizacja do 1.0.0 i odbiór według `docs/odbior.md`. Opcjonalnie Cowork w maszynie wirtualnej
+   (`docs/odbior-vm.md`, T526: 68 z 87 punktów na świeżej instalacji, raport w `C:\RD-vm-raport`) – po raporcie czytam
+   go z logami, każde NIEZGODNE sprawdzam w kodzie. Poza maszyną od razu: E4b.12 (godzina próby → `main.log`).
+   Poprawki z odbioru – wersje 1.0.x (D324).
 3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Do odbioru na Windows
