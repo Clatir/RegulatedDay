@@ -27,6 +27,8 @@
    go z logami, każde NIEZGODNE sprawdzam w kodzie. Poza maszyną od razu: E4b.12 (godzina próby → `main.log`).
    Dzień 1 (1.11) do powtórki: przy „Zakończ” 0.10.1 zainstalowała pobraną 1.0.0, więc Dzień 2 nie miał czego
    testować; instrukcja przepisana (T527) – maszyna od migawki „czysta” z `docs/vm/przygotuj.ps1`.
+   Wariant „bez Ciebie” (nieobecność ok. 12 h): Dzień 2 albo Dzień 5 (Dni 3–5 jednym ciągiem się nie da); Cowork
+   najpierw próbuje sam przestawić zegar ikoną „Ustaw zegar” (+3 min przy Tobie), bez tego czeka w czasie rzeczywistym.
    Poprawki z odbioru – wersje 1.0.x (D324).
 3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 

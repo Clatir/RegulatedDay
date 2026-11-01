@@ -122,39 +122,107 @@ Na koniec napisz krótko: ile punktów ZGODNE, NIEZGODNE i pozostałych, i któr
 
 ### Wariant „bez Ciebie” (długa nieobecność, np. 12 h)
 
-Zegar zmieniasz Ty, więc w nieobecności robi się jeden dzień maszyny (najlepiej Dzień 2, ok. 12 h) – zegar maszyny
-biegnie normalnie, a Cowork zamiast prośby o zegar czeka w czasie rzeczywistym.
+W nieobecności robi się jeden dzień maszyny – **Dzień 2 albo Dzień 5** (ok. 11–12 h każdy): zegar maszyny biegnie
+normalnie, Cowork próbuje przestawiać go sam ikoną „Ustaw zegar” (niżej, „Próba zegara”), a gdy się nie da – czeka
+w czasie rzeczywistym. Dni 3 i 4 – nie: mają w środku „Zakończ”, które jest tylko pod prawym przyciskiem ikony, a noc
+3:45 bez skoku zegara to kilkanaście godzin czekania. Kilka dni jednym ciągiem – też nie: w czasie rzeczywistym Dni 3–5
+to ok. 60 h jednego zadania (limit użycia, a punkty z godziną przepadają bez powrotu). Dwie nieobecności: Dzień 2
+i Dzień 5.
+
+Wspólne dla obu dni – Twój komputer: uśpienie „Nigdy”, Windows Update wstrzymany, laptop na zasilaniu (uśpienie
+wstrzymuje maszynę, restart po aktualizacji ją zamyka i cofa zegar).
+
+**Próba zegara** (Cowork, na samym początku dnia – jesteś jeszcze przy maszynie, ok. 5 min). W wariancie „bez Ciebie”
+ta część zastępuje zasadę „zegar zmienia użytkownik” (część 2, zasada 3) i dopisek „TYLKO UZYTKOWNIK” w `CZYTAJ.txt`.
+1. Dwuklik „Ustaw zegar” na pulpicie. Aplikacja działa, więc skrypt czeka 2 min i pyta „Zmienić zegar mimo to? (t/n)” –
+   wpisz `t`, Enter; potem data: zegar maszyny + 3 min (`RRRR-MM-DD GG:MM`), Enter. Taki skok niczego nie psuje.
+2. Wynik w raporcie (`### Próba zegara – <wynik>`) i dalej:
+   - w oknie skryptu nie da się pisać (to okno PowerShell) albo skrypt odmówił → zamknij je krzyżykiem; cały dzień
+     czekasz w czasie rzeczywistym;
+   - zegar przestawiony (ostatnia linia `C:\RD-raport\skrypty.log` „zegar: … -> …”), ale zgody wygasły – użytkownik
+     zatwierdza je ponownie; cały dzień czekasz w czasie rzeczywistym (każdy następny skok zatrzymałby zadanie);
+   - zegar przestawiony, zgody działają → w ciągu dnia przestawiasz zegar sam, tak samo, tylko na godziny z instrukcji
+     („Ty: zegar na …”), tylko do przodu i dopiero gdy przed tą godziną nie zostało nic do zrobienia. Po każdym skoku:
+     zegar w pasku zadań i ostatnia linia `skrypty.log`. Gdy skok się nie uda – od tego miejsca czekasz w czasie
+     rzeczywistym, a skok, którego nie da się doczekać (sobota, czwartek), idzie do „Czeka na użytkownika”.
+3. Skok przy działającej aplikacji: kroki „Zakończ → zegar → uruchom” skracają się do samego zegara – aplikacja zostaje
+   włączona. W `skrypty.log` „UWAGA: zegar zmieniany przy dzialajacym procesie” jest wtedy oczekiwane. Punkt sprawdzany
+   zaraz po takim skoku ma w raporcie dopisek „po skoku zegara przy działającej aplikacji”.
+
+#### Dzień 2 bez Ciebie
 
 **Przed wyjściem (ok. 45–60 min):**
-1. Twój komputer: uśpienie „Nigdy”, Windows Update wstrzymany, laptop na zasilaniu (uśpienie wstrzymuje maszynę,
-   restart po aktualizacji ją zamyka i cofa zegar).
+1. Twój komputer – jak wyżej („Wspólne dla obu dni”).
 2. Maszyna po powrocie do migawki „czysta”: Windows Update → „Wstrzymaj” (`przygotuj.ps1` tego nie robi).
 3. Dzień 1 z Cowork razem z zegarem na piątek 7:30; bez „Zapisz stan maszyny” – od razu Dzień 2 (bez nocy 0.10.1 nie
    zainstaluje sama 1.0.0).
 4. Dzień 2: zwykłe polecenie z części 1 (N=2) i pod nim dodatek poniżej.
-5. Zostań na kroku 1 Dnia 2 (ok. 15 min: „Zainstaluj teraz”, start 1.0.0) – zgodę po aktualizacji zatwierdzasz
-   jeszcze przed wyjściem.
+5. Zostań na próbie zegara i kroku 1 Dnia 2 (ok. 20 min: „Zainstaluj teraz”, start 1.0.0) – zgody po próbie i po
+   aktualizacji zatwierdzasz jeszcze przed wyjściem.
 
 **Dodatek do polecenia** (GG:MM – godzina powrotu):
 
 ```text
 DODATEK – jestem nieobecny do ok. GG:MM (czas rzeczywisty). Zegar maszyny biegnie normalnie.
-1. Nie zadawaj mi pytań w trakcie dnia – nie odpowiem, a pytanie zatrzyma zadanie. Zamiast prośby o zegar czekasz
-   w czasie rzeczywistym: w kroku 7 (8 min przed sesją z planu) i w kroku 8 (17:00) doczekaj tej godziny zegara maszyny.
+0. Zaczynasz od „Próby zegara” z instrukcji (część 1, wariant „bez Ciebie”) – jestem jeszcze przy maszynie. Po udanej
+   próbie przestawiasz zegar sam według tej części; bez niej – czekasz w czasie rzeczywistym jak w punkcie 1.
+1. Nie zadawaj mi pytań w trakcie dnia – nie odpowiem, a pytanie zatrzyma zadanie. Bez udanej próby zegara zamiast prośby
+   o zegar czekasz w czasie rzeczywistym: w kroku 7 (8 min przed sesją z planu) i w kroku 8 (17:00) doczekaj tej godziny
+   zegara maszyny.
 2. W czasie czekania rób zrzut Cowork co 10–15 min (zgody wygasają po 30 min bez zrzutów). Nie kończ zadania
    ani tury, gdy czekasz – czekanie to kolejne zrzuty aż do potrzebnej godziny. Czas do sesji wypełniaj punktami
    z kroków 2–5, które nie zależą od godziny.
-3. Wszystko, co wymaga mojej ręki (E8e.2 część 1 – „Próba” w menu ikony; zgoda na aplikację; krok 11 – zegar na sobotę),
-   zapisz w raporcie w sekcji „## Czeka na użytkownika” i rób dalej następne punkty.
+3. Wszystko, co wymaga mojej ręki (E8e.2 część 1 – „Próba” w menu ikony; zgoda na aplikację; krok 11 – zegar na sobotę,
+   gdy nie przestawiasz go sam), zapisz w raporcie w sekcji „## Czeka na użytkownika” i rób dalej następne punkty.
 4. Gdy stracisz wątek (długa praca, skrót kontekstu) – przeczytaj C:\RD-raport\raport.md i kontynuuj od pierwszego
    punktu bez wpisu; punktów z wpisem nie powtarzaj.
 5. Na koniec dnia: najpierw koniec-dnia-2.cmd, potem JEDNO klikalne pytanie ze wszystkim z „Czeka na użytkownika”
-   razem z zegarem na sobotę (krok 11). Po „Gotowe” – jeszcze raz koniec-dnia-2.cmd.
+   razem z zegarem na sobotę (krok 11 – chyba że już go przestawiłeś). Po „Gotowe” – jeszcze raz koniec-dnia-2.cmd.
 ```
 
 **Ryzyka:** limit użycia Claude (wznowienie od raportu – punkt 4 dodatku); spóźnienie na sesję (E8c.2 i E4a.5 przechodzą
 do Dnia 6); zakończenie zadania mimo dodatku (reszta okna przepada). **Po powrocie:** odpowiedz na pytanie Cowork
 („Zakończ” w menu ikony – sprawdź, czy jest tam „Próba”), zegar na sobotę, „Zapisz stan maszyny”, napisz „Dzień 2 gotowy”.
+
+#### Dzień 5 bez Ciebie
+
+Dzień 5 nie potrzebuje „Zakończ”, a 15:22 i sesja NY o 15:30 to tylko czekanie. Dni 1–4 są już zrobione z Tobą.
+
+**Przed wyjściem (ok. 10 min):**
+1. Twój komputer – jak wyżej („Wspólne dla obu dni”); w maszynie Windows Update wstrzymany (jak w Dniu 2 bez Ciebie –
+   gdy go wtedy nie wstrzymałeś, zrób to teraz).
+2. Zegar maszyny: poniedziałek 8:00 z Dnia 4 (krok 6) – po Dniu 4 „Zapisz stan maszyny”, żeby stał. Jeśli maszyna była
+   włączona i zegar poszedł dalej, wystarczy, że jest przed 11:00 (krok 5 Dnia 5 zaczyna się o 11:55); później –
+   Dzień 5 rób z Tobą.
+3. Sesja NY w Ustawieniach na 15:30–15:50 (z Dnia 4, krok 3) – rzuć okiem, że jest.
+4. Dzień 5: zwykłe polecenie z części 1 (N=5) i pod nim dodatek poniżej. Zostań do końca próby zegara (ok. 5 min)
+   i zatwierdzenia zgód.
+
+**Dodatek do polecenia** (GG:MM – godzina powrotu):
+
+```text
+DODATEK – jestem nieobecny do ok. GG:MM (czas rzeczywisty). Zegar maszyny biegnie normalnie.
+0. Zaczynasz od „Próby zegara” z instrukcji (część 1, wariant „bez Ciebie”) – jestem jeszcze przy maszynie. Po udanej
+   próbie przestawiasz zegar sam według tej części; bez niej – czekasz w czasie rzeczywistym jak w punkcie 1.
+1. Nie zadawaj mi pytań w trakcie dnia – nie odpowiem, a pytanie zatrzyma zadanie. W kroku 6 (bez udanej próby zegara)
+   zamiast prośby o zegar doczekaj 15:22 zegara maszyny; aplikacja zostaje włączona („uruchom” odpada) – także przy
+   skoku zegara (część 1, „Próba zegara”, punkt 3). Kroki 1–4 rób w dowolnej kolejności
+   wokół kroku 5 (o 11:55 – blokada-zaloz.cmd, to ma pierwszeństwo). Czas do 15:22 wypełniaj E8g.4 częścią 2
+   (pulsowanie przy końcu dowolnego bloku); punkty kroku 7 zależą od granicy – rób je po sesji.
+2. W czasie czekania rób zrzut Cowork co 10–15 min (zgody wygasają po 30 min bez zrzutów). Nie kończ zadania
+   ani tury, gdy czekasz – czekanie to kolejne zrzuty aż do potrzebnej godziny.
+3. Wszystko, co wymaga mojej ręki (zgoda na aplikację; krok 9 – zegar na czwartek 12:30, gdy nie przestawiasz go sam),
+   zapisz w raporcie w sekcji „## Czeka na użytkownika” i rób dalej następne punkty.
+4. Gdy stracisz wątek (długa praca, skrót kontekstu) – przeczytaj C:\RD-raport\raport.md i kontynuuj od pierwszego
+   punktu bez wpisu; punktów z wpisem nie powtarzaj.
+5. Na koniec dnia: najpierw koniec-dnia-5.cmd, potem JEDNO klikalne pytanie ze wszystkim z „Czeka na użytkownika”
+   razem z zegarem na czwartek 12:30 (krok 9 – chyba że już go przestawiłeś; okno blokady zostaje otwarte). Po „Gotowe”
+   – jeszcze raz koniec-dnia-5.cmd.
+```
+
+**Ryzyka:** limit użycia Claude (wznowienie od raportu – punkt 4 dodatku); zatrzymanie przed 11:55 albo 15:22 (E8i.1
+część 1, E8j.2 i E8f.2 część 3 – NIE DO SPRAWDZENIA, zegar nie wraca); zakończenie zadania mimo dodatku. **Po powrocie:**
+odpowiedz na pytanie Cowork, zegar na czwartek 12:30, „Zapisz stan maszyny”, napisz „Dzień 5 gotowy”.
 
 ## 2. Zasady dla Cowork
 
@@ -163,7 +231,7 @@ do Dnia 6); zakończenie zadania mimo dodatku (reszta okna przepada). **Po powro
 2. Każdy punkt oceniasz wyłącznie według „Oczekiwanego efektu” i „Nie przechodzi, gdy” z `docs/odbior.md`; linie
    „Automatycznie” i „Tylko Ty” pomijasz. TradingView i platforma brokera to dowolne inne okno (np. Notatnik),
    `OneDrive\RegulatedDay` to `C:\RD-test`.
-3. **Zegar** zmienia użytkownik (część 1, „Zegar”) – tylko do przodu i tylko przy zamkniętej aplikacji. Przed prośbą
+3. **Zegar** zmienia użytkownik (część 1, „Zegar”; w wariancie „bez Ciebie” – najpierw „Próba zegara”) – tylko do przodu i tylko przy zamkniętej aplikacji. Przed prośbą
    skończ biegnący blok („Dalej”), chyba że punkt mówi inaczej, i zamknij aplikację, jeśli umiesz (menu „⋯” panelu
    ikony → „Zakończ”). W pytaniu podaj datę i godzinę `RRRR-MM-DD GG:MM`. Po zmianie: zegar w pasku zadań i ostatnia
    linia `C:\RD-raport\skrypty.log` („zegar: … -> …”). Zegar maszyny wcześniejszy niż ostatni wpis w raporcie –
@@ -190,7 +258,7 @@ do Dnia 6); zakończenie zadania mimo dodatku (reszta okna przepada). **Po powro
     | „Nowy folder” w oknach plików | foldery są gotowe (przygotowanie, `e6d3-foldery.cmd`) |
     | klikać w Edge | `pelny-ekran-start.cmd` / `pelny-ekran-stop.cmd` |
     | Win+PrtScn | Win+Shift+S → przycisk trybu → „Pełny ekran” |
-    | zmienić zegar | prośba do użytkownika |
+    | zmienić zegar | prośba do użytkownika (w wariancie „bez Ciebie” – „Próba zegara”) |
     | klikać w oknach Claude (np. „Zapisz” w jego przeglądarce) | nic nie pobierasz przeglądarką Claude |
 
     Skrypty piszą wynik w oknie i do `C:\RD-raport\skrypty.log`; okno zamyka się samo po kilkunastu sekundach (poza
