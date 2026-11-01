@@ -120,6 +120,42 @@ i swój dzień w części 4. Najważniejsze:
 Na koniec napisz krótko: ile punktów ZGODNE, NIEZGODNE i pozostałych, i które są NIEZGODNE.
 ```
 
+### Wariant „bez Ciebie” (długa nieobecność, np. 12 h)
+
+Zegar zmieniasz Ty, więc w nieobecności robi się jeden dzień maszyny (najlepiej Dzień 2, ok. 12 h) – zegar maszyny
+biegnie normalnie, a Cowork zamiast prośby o zegar czeka w czasie rzeczywistym.
+
+**Przed wyjściem (ok. 45–60 min):**
+1. Twój komputer: uśpienie „Nigdy”, Windows Update wstrzymany, laptop na zasilaniu (uśpienie wstrzymuje maszynę,
+   restart po aktualizacji ją zamyka i cofa zegar).
+2. Maszyna po powrocie do migawki „czysta”: Windows Update → „Wstrzymaj” (`przygotuj.ps1` tego nie robi).
+3. Dzień 1 z Cowork razem z zegarem na piątek 7:30; bez „Zapisz stan maszyny” – od razu Dzień 2 (bez nocy 0.10.1 nie
+   zainstaluje sama 1.0.0).
+4. Dzień 2: zwykłe polecenie z części 1 (N=2) i pod nim dodatek poniżej.
+5. Zostań na kroku 1 Dnia 2 (ok. 15 min: „Zainstaluj teraz”, start 1.0.0) – zgodę po aktualizacji zatwierdzasz
+   jeszcze przed wyjściem.
+
+**Dodatek do polecenia** (GG:MM – godzina powrotu):
+
+```text
+DODATEK – jestem nieobecny do ok. GG:MM (czas rzeczywisty). Zegar maszyny biegnie normalnie.
+1. Nie zadawaj mi pytań w trakcie dnia – nie odpowiem, a pytanie zatrzyma zadanie. Zamiast prośby o zegar czekasz
+   w czasie rzeczywistym: w kroku 7 (8 min przed sesją z planu) i w kroku 8 (17:00) doczekaj tej godziny zegara maszyny.
+2. W czasie czekania rób zrzut Cowork co 10–15 min (zgody wygasają po 30 min bez zrzutów). Nie kończ zadania
+   ani tury, gdy czekasz – czekanie to kolejne zrzuty aż do potrzebnej godziny. Czas do sesji wypełniaj punktami
+   z kroków 2–5, które nie zależą od godziny.
+3. Wszystko, co wymaga mojej ręki (E8e.2 część 1 – „Próba” w menu ikony; zgoda na aplikację; krok 11 – zegar na sobotę),
+   zapisz w raporcie w sekcji „## Czeka na użytkownika” i rób dalej następne punkty.
+4. Gdy stracisz wątek (długa praca, skrót kontekstu) – przeczytaj C:\RD-raport\raport.md i kontynuuj od pierwszego
+   punktu bez wpisu; punktów z wpisem nie powtarzaj.
+5. Na koniec dnia: najpierw koniec-dnia-2.cmd, potem JEDNO klikalne pytanie ze wszystkim z „Czeka na użytkownika”
+   razem z zegarem na sobotę (krok 11). Po „Gotowe” – jeszcze raz koniec-dnia-2.cmd.
+```
+
+**Ryzyka:** limit użycia Claude (wznowienie od raportu – punkt 4 dodatku); spóźnienie na sesję (E8c.2 i E4a.5 przechodzą
+do Dnia 6); zakończenie zadania mimo dodatku (reszta okna przepada). **Po powrocie:** odpowiedz na pytanie Cowork
+(„Zakończ” w menu ikony – sprawdź, czy jest tam „Próba”), zegar na sobotę, „Zapisz stan maszyny”, napisz „Dzień 2 gotowy”.
+
 ## 2. Zasady dla Cowork
 
 1. Pracujesz tylko w tej maszynie: bez logowania do kont poza Claude, bez zmian w Windows poza opisanymi tutaj, bez
