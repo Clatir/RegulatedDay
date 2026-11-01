@@ -22,6 +22,7 @@
 1. **Ciąg E (E8) zakończony – v1.0.0 opublikowane** 29.10 ok. 0:00 (run 40780293831 na `main` zielony): przegląd 5.1
    (127 zgłoszeń, `docs/przeglad-E8.md` – wszystkie zamknięte), decyzje D325–D331, PR-y #26–#37 scalone, otwartych brak
    (T525: wersja bez własnego wydania trafia do notatek następnej).
+   CI w weekend (T528): poprawka testów na `claude/determined-shannon-ordir7` – PR do scalenia po „dalej”.
 2. Ty: aktualizacja do 1.0.0 i odbiór według `docs/odbior.md`. Opcjonalnie Cowork w maszynie wirtualnej
    (`docs/odbior-vm.md`, T526: 68 z 87 punktów na świeżej instalacji, raport w `C:\RD-vm-raport`) – po raporcie czytam
    go z logami, każde NIEZGODNE sprawdzam w kodzie. Poza maszyną od razu: E4b.12 (godzina próby → `main.log`).
@@ -43,9 +44,15 @@
   roboczego), kreator „z 3 h” zamiast „z 8 h” (niedziela = weekend). Poprawka tylko w testach: typ dnia w danych dla
   `logicalToday()`, odwołana dzisiejsza druga zmiana (granica z bloku o 03:00), blok wczoraj (krok „dzień miniony”
   padał w każdy poniedziałek – wykryte symulacją), w kreatorze dzisiejszy dzień tygodnia „zwykły”.
-- Testy: oba E2E przechodzą w prawdziwą niedzielę-święto 1.11 (23:00) i pod `faketime`: poniedziałek 10:00 („Strona B”),
-  sobota, wtorek wieczorem, 11.11 i niedziela rano – w toku.
+- Testy: oba E2E przechodzą w prawdziwą niedzielę-święto 1.11 (23:00) i pod `faketime` (T528): poniedziałek 10:00
+  („Strona B”), sobota 12:00, wtorek 21:30 (po drugiej zmianie), środa 11.11 9:00 (święto), niedziela 8.11 7:00.
+  Pełny zestaw: typecheck, build, lint, E2E (26 + 6 pominiętych) zielone; unit 1092/1093 – `config.test.ts`
+  „nieudany zapis nowego identyfikatora” pada tylko w kontenerze jako root (chmod nie blokuje roota), w CI nie.
+- `/code-review` (high): 5 uwag – placeholder w tym wpisie poprawiony, okno 03:30–04:00 obalone (prognoza trzyma
+  niezaczęty blok do 03:59), reszta pominięta świadomie (wyścig o 04:00 jak w dotychczasowym `seed`, brak zegara testowego – T528).
 - Bez zmian dla użytkownika (bez wersji, CHANGELOG i punktów odbioru). Czas faktyczny: ok. 1 h.
+- **Dalej:** PR z gałęzi do `main` (czeka na Twoje „dalej”), po scaleniu sprawdzić, że run `ci.yml` na `main` jest
+  zielony i zadanie Windows opublikowało wydanie.
 
 ## 1.0.0 – bramka 1.0 (ciąg E, 5.4)
 - Gałąź `claude/1.0.0` (od 0.26.0): wersja 1.0.0, CHANGELOG, T525, zakończone ciągi A–E w `docs/archiwum/plan-E0-E8.md`.
