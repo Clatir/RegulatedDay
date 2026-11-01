@@ -5,7 +5,8 @@
 #
 # Co robi:
 #   1. foldery C:\RD-raport, C:\RD-test (pusty), C:\RD-eksport, C:\RD-skrypty,
-#   2. pobiera instalator 0.10.1 do Pobranych (curl.exe - plik bez znacznika "z internetu", wiec bez SmartScreen)
+#   2. pobiera instalator 0.10.1 do Pobranych (curl.exe - plik bez znacznika "z internetu", wiec bez SmartScreen;
+#      --ssl-revoke-best-effort: przy przestawionym zegarze serwer odwolan certyfikatow bywa "offline")
 #      i sprawdza jego SHA-256 z wydania,
 #   3. zapisuje skrypty do C:\RD-skrypty - Cowork uruchamia je dwuklikiem w Eksploratorze
 #      (w PowerShell nie moze pisac),
@@ -49,7 +50,7 @@ try {
     if (-not (Test-Path $plik0)) {
         $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
         if (-not $curl) { throw 'brak curl.exe' }
-        & $curl.Source -L --fail --silent --show-error -o $plik0 $Url0
+        & $curl.Source -L --fail --silent --show-error --ssl-revoke-best-effort -o $plik0 $Url0
         if ($LASTEXITCODE -ne 0) { throw "curl.exe zakonczyl sie kodem $LASTEXITCODE" }
     }
     $hash = (Get-FileHash -Algorithm SHA256 -Path $plik0).Hash.ToLower()
@@ -238,7 +239,7 @@ Cmd 'e6d3-foldery.cmd' 'e6d3-foldery.ps1'
 # pobierz-najnowszy: E4a.13 cz. 1 - instalator najnowszego wydania do recznego uruchomienia.
 Skrypt 'pobierz-najnowszy.ps1' 'pobierz' -cialo @'
 $plik = Join-Path $env:USERPROFILE 'Downloads\Regulated-Day-Setup-najnowszy.exe'
-& curl.exe -L --fail --silent --show-error -o $plik 'https://github.com/Clatir/RegulatedDay/releases/latest/download/Regulated-Day-Setup.exe'
+& curl.exe -L --fail --silent --show-error --ssl-revoke-best-effort -o $plik 'https://github.com/Clatir/RegulatedDay/releases/latest/download/Regulated-Day-Setup.exe'
 if ($LASTEXITCODE -eq 0) { Log ("pobrano $plik (" + (Get-Item $plik).Length + ' B)') }
 else { Log "BLAD: curl.exe zakonczyl sie kodem $LASTEXITCODE" }
 Start-Sleep -Seconds 15
