@@ -3,8 +3,10 @@
  * added after it with the exchange („Dodaj bez wymiany”, the second click for an overrun), a block dragged an hour up
  * (D305), the bar's place picked on the monitors' mock-up (D304), the calendar (a „zjazd”
  * marked on several dates), requests, routines, templates, the history with a restore, the settings (a value out of
- * its range refused with its message). Independent of the hour it runs at: today's work block is at 03:00 of the
- * night after (the end of the logical day), so the plan always has a boundary to approve.
+ * its range refused with its message). Independent of the hour and the day it runs at (T528): today is an ordinary day
+ * from its file, its second shift cancelled, so its work block at 03:00 of the night after (the end of the logical day,
+ * always still to come) proposes the boundary – the sessions do it only on weekdays, and only before the second shift;
+ * yesterday has a block of its own from `seed` (a Sunday has none from a template).
  */
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -12,25 +14,23 @@ import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
 import { DEFAULT_SESSIONS, DEFAULT_SETTINGS } from '../../src/shared/model/settings'
-import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
+import { defaultTemplates, firstComputerRecords, SECOND_SHIFT_BLOCK } from '../../src/shared/model/defaults'
+import { templateBlockId } from '../../src/shared/engine/createDay'
 import { createDailyBackup } from '../../src/main/data/backup'
 import { logicalMinuteOf } from '../../src/shared/time/day'
 import { addDays } from '../../src/shared/time/zone'
-import { launch, viewPage, withMainLog } from './app'
+import { launch, logicalToday, viewPage, withMainLog } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
 async function shot(page: Page, name: string): Promise<void> {
   if (shots) await page.screenshot({ path: join(shots, `${name}.png`) })
 }
 
-/** The logical day now (04:00–04:00 Polish time). */
-function logicalToday(): string {
-  const now = new Date(Date.now() - 4 * 3600_000)
-  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
-}
-
-/** `sessions: false` – today's sessions answered „Nie”: no fixed work still to come makes „Koniec pracy” a break. */
-function seed(dir: string, o: { sessions?: boolean } = {}): void {
+/**
+ * `sessions: false` – today's sessions answered „Nie”: no fixed work still to come makes „Koniec pracy” a break.
+ * `secondShift: false` – today's second shift cancelled: the work block at 03:00 then proposes the boundary on any day.
+ */
+function seed(dir: string, o: { sessions?: boolean; secondShift?: boolean } = {}): void {
   const today = logicalToday()
   const records = firstComputerRecords(
     { settings: DEFAULT_SETTINGS, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [{ id: 'mama', name: 'Mama', archived: false }], templates: defaultTemplates(), lectures: [], days: {} },
@@ -47,6 +47,7 @@ function seed(dir: string, o: { sessions?: boolean } = {}): void {
     date: today,
     dayType: 'zwykly',
     ...(o.sessions === false ? { sessions: Object.fromEntries(DEFAULT_SESSIONS.map((s) => [s.id, 'no'])) } : {}),
+    ...(o.secondShift === false ? { cancelled: [templateBlockId(today, 'zwykly', SECOND_SHIFT_BLOCK)] } : {}),
     blocks: [{ id: 'late', categoryId: 'inne', startMin: 27 * 60, durationMin: 30, fixed: false }]
   }
   mkdirSync(join(dir, 'days', today.slice(0, 4)), { recursive: true })
@@ -65,7 +66,7 @@ function seed(dir: string, o: { sessions?: boolean } = {}): void {
 
 test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, historia, ustawienia', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-screens-'))
-  seed(dataDir)
+  seed(dataDir, { secondShift: false })
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {

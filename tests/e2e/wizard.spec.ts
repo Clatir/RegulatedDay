@@ -1,7 +1,8 @@
 /**
  * The wizard (plan E3: „dzień planuje się od zera w kreatorze, drugi komputer dołącza bez zmian w danych”): the first
  * computer chooses an empty folder, goes through the steps with their defaults and „Zakończ” writes the shared data –
- * nothing before; the day plans itself from it. A second computer (another app data) joins the same folder: it writes
+ * nothing before; the day plans itself from it (today's weekday set to „zwykły” in the week's step, so on a Saturday,
+ * Sunday or holiday too – T528). A second computer (another app data) joins the same folder: it writes
  * nothing shared – every file it did not write itself stays byte for byte.
  */
 import { createHash } from 'node:crypto'
@@ -9,7 +10,8 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'no
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import { launch, withMainLog } from './app'
+import { weekday } from '../../src/shared/time/zone'
+import { launch, logicalToday, withMainLog } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
 async function shot(page: Page, name: string): Promise<void> {
@@ -50,6 +52,8 @@ test('kreator pierwszego komputera: pusty folder, kroki z wartościami domyślny
       await page.getByTestId('wizard-next').click()
       await expect(page.getByTestId('wizard-step')).toContainText('2 z 15')
       await expect(page.getByTestId('wizard-preview')).toBeVisible()
+      // Today's weekday is an ordinary day (by default Monday–Friday): the day below counts by the ordinary day's budget.
+      await page.getByTestId(`wizard-weektype-${weekday(logicalToday()) - 1}`).selectOption('zwykly')
       await shot(page, '02-week')
       // The work: an ordinary day's budget changed – the preview counts it at once.
       await page.getByTestId('wizard-next').click()

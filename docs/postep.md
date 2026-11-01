@@ -37,6 +37,16 @@
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
 
+## CI w weekend – E2E niezależne od dnia (1.11, T528)
+- Gałąź `claude/determined-shannon-ordir7` (od `main` c353c6a). Na `main` od niedzieli 1.11 czerwone runy 130, 131,
+  133 `ci.yml` (zmiany tylko w dokumentach): „ekrany E3” bez „Zatwierdź plan” (granicę dawały tylko sesje dnia
+  roboczego), kreator „z 3 h” zamiast „z 8 h” (niedziela = weekend). Poprawka tylko w testach: typ dnia w danych dla
+  `logicalToday()`, odwołana dzisiejsza druga zmiana (granica z bloku o 03:00), blok wczoraj (krok „dzień miniony”
+  padał w każdy poniedziałek – wykryte symulacją), w kreatorze dzisiejszy dzień tygodnia „zwykły”.
+- Testy: oba E2E przechodzą w prawdziwą niedzielę-święto 1.11 (23:00) i pod `faketime`: poniedziałek 10:00 („Strona B”),
+  sobota, wtorek wieczorem, 11.11 i niedziela rano – w toku.
+- Bez zmian dla użytkownika (bez wersji, CHANGELOG i punktów odbioru). Czas faktyczny: ok. 1 h.
+
 ## 1.0.0 – bramka 1.0 (ciąg E, 5.4)
 - Gałąź `claude/1.0.0` (od 0.26.0): wersja 1.0.0, CHANGELOG, T525, zakończone ciągi A–E w `docs/archiwum/plan-E0-E8.md`.
   Bez kanału beta (D283) – wydania i tak są zwykłymi wydaniami GitHub; aplikacja pomija wersje testowe.

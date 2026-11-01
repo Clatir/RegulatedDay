@@ -72,6 +72,9 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - Odcinki pracy to pełne minuty: blok zaczęty i skończony w jednej minucie nie ma odcinka – „Koniec pracy” po nim daje
   pusty odcinek w minucie bloku (T507). W dzień roboczy sesje szablonu są stałą pracą: E2E z „Koniec pracy” bez sesji
   dnia (`seed(…, { sessions: false })`), inaczej przed końcem ostatniej sesji koniec jest przerwą.
+- E2E biorą dzień z prawdziwego zegara (CI także w weekend i święta): typ dnia ustaw w danych dla `logicalToday()`
+  (T528). Propozycję granicy dają tylko bloki pracy przed drugą zmianą – w dzień roboczy sesje, w weekend nic;
+  niedziela nie ma szablonu (pusty plan). Inne dni lokalnie: `faketime -f "@<data UTC>"` z `FAKETIME_DONT_FAKE_MONOTONIC=1`.
 - Timer, pytania „Dalej?” i „Koniec pracy?”, nieobecność i bezczynność (E4a) – reguły `timer.md`; fakty znają `undo`,
   `question.seen`, `question.answer` i `autoRule`. Prośby w dniu i warianty (logika E5) – reguły `prosby-warianty.md`.
   Czas do wyjaśnienia, rytuał i ocena dnia (logika E6) – reguły `rytual.md`. Jeszcze nie: zamrażanie (E6, część 2).
