@@ -25,6 +25,8 @@
 2. Ty: aktualizacja do 1.0.0 i odbiór według `docs/odbior.md`. Opcjonalnie Cowork w maszynie wirtualnej
    (`docs/odbior-vm.md`, T526: 68 z 87 punktów na świeżej instalacji, raport w `C:\RD-vm-raport`) – po raporcie czytam
    go z logami, każde NIEZGODNE sprawdzam w kodzie. Poza maszyną od razu: E4b.12 (godzina próby → `main.log`).
+   Dzień 1 (1.11) do powtórki: przy „Zakończ” 0.10.1 zainstalowała pobraną 1.0.0, więc Dzień 2 nie miał czego
+   testować; instrukcja przepisana (T527) – maszyna od migawki „czysta” z `docs/vm/przygotuj.ps1`.
    Poprawki z odbioru – wersje 1.0.x (D324).
 3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
