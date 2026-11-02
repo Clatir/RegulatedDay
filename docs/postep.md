@@ -25,12 +25,13 @@
    CI w weekend (T528): PR #40 (`claude/determined-shannon-ordir7`) – scalam po zielonym CI (zgoda 2.11); po scaleniu
    sprawdzić run `ci.yml` na `main` i wydanie z zadania Windows.
 2. Ty: aktualizacja do 1.0.0 i odbiór według `docs/odbior.md`. Opcjonalnie Cowork w maszynie wirtualnej
-   (`docs/odbior-vm.md`, T526: 68 z 87 punktów na świeżej instalacji, raport w `C:\RD-vm-raport`) – po raporcie czytam
-   go z logami, każde NIEZGODNE sprawdzam w kodzie. Poza maszyną od razu: E4b.12 (godzina próby → `main.log`).
+   (`docs/odbior-vm.md`, T526: 68 z 87 punktów na świeżej instalacji, raport w `C:\RD-vm-raport`, po każdym dniu
+   kopia w `docs/vm/raport.md` – T529) – po raporcie czytam go z logami, każde NIEZGODNE sprawdzam w kodzie. Poza maszyną od razu: E4b.12 (godzina próby → `main.log`).
    Dzień 1 (1.11) do powtórki: przy „Zakończ” 0.10.1 zainstalowała pobraną 1.0.0, więc Dzień 2 nie miał czego
    testować; instrukcja przepisana (T527) – maszyna od migawki „czysta” z `docs/vm/przygotuj.ps1`.
-   Wariant „bez Ciebie” (nieobecność ok. 12 h): Dzień 2 albo Dzień 5 (Dni 3–5 jednym ciągiem się nie da); Cowork
-   najpierw próbuje sam przestawić zegar ikoną „Ustaw zegar” (+3 min przy Tobie), bez tego czeka w czasie rzeczywistym.
+   Od 2.11 (T529) zegar przestawia Cowork (`zegar.cmd`, data w `zegar.txt`), skoki „przez noc” na początku sesji po
+   Twoim „Zakończ” – Dni 2–5 bez Ciebie w trakcie dnia. Przebieg w toku (Dni 1–3 zrobione 2.11 według starej
+   instrukcji) idzie dalej od Dnia 4 – „Przebieg zaczęty przed T529” w `docs/odbior-vm.md`, bez powrotu do migawki.
    Poprawki z odbioru – wersje 1.0.x (D324).
 3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
@@ -38,6 +39,25 @@
 - `docs/odbior.md` (układ z 27.10): na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
+
+## Odbiór w VM – zegar u Cowork, raport w repozytorium (2.11, T529)
+- Zlecenie: Cowork domyślnie przestawia zegar skryptem, jak najmniej rąk użytkownika, raport z testów częścią repozytorium.
+- `docs/vm/przygotuj.ps1`: `zegar.cmd` – data z `C:\RD-raport\zegar.txt` (bez pisania w PowerShell), tylko do przodu,
+  najwyżej 10 dni, linia `przy-aplikacji`, wynik w `zegar-wynik.txt`; „Ustaw zegar” zostaje zapasowo.
+- `docs/odbior-vm.md`: część 1 „Zegar” od nowa, tabela „Kiedy jesteś potrzebny” (Dni 2–5 – tylko start sesji z jednym
+  „Zakończ”), skoki „przez noc” w krokach „Początek” Dni 3–6, E8e.2 cz. 2 → Dzień 3, E4a.10 + E5b.4 + koniec E6b.2 →
+  Dzień 4, E8i.2 → koniec Dnia 4 / początek Dnia 5; wariant „bez Ciebie” skrócony; część 6 – raport do `docs/vm/`.
+- Testy: `check-context` zielone; PowerShell niedostępny w kontenerze – składnia `zegar.ps1` sprawdzona tylko czytaniem
+  (sprawdzi go Dzień 1, krok 6). Bez zmian w aplikacji (bez wersji i CHANGELOG).
+- `/code-review` (medium): 9 uwag, wszystkie poprawione – blokada dwóch uruchomień (mutex) i stan „W TOKU”, `zegar.txt`
+  kasowany dopiero po udanej zmianie, cudzysłowy przy `przy-aplikacji`, nazwa konta poza `skrypty.log`
+  (`%USERPROFILE%`), błąd podniesienia uprawnień w `zegar-wynik.txt`, wspólna logika `zegar` / `ustaw-zegar` (te same
+  granice), UAC „konieczne”, 15:20 w ryzykach.
+- PR #41 (`claude/odbior-vm-zegar`) – scalenie po zielonym CI i Twoim „dalej” (instrukcja w maszynie czyta `main`).
+- Przebieg w toku (Dni 1–3 już zrobione, 2.11): bez powrotu do migawki – w działającej maszynie krok 8 części 1
+  (dopisuje `zegar.cmd`), Dzień 4 z „Początkiem” z części „Przebieg zaczęty przed T529” (E8e.2 cz. 2 i próba zegara
+  +40 min); raport Dni 1–3 do `docs/vm/raport.md` z lokalnej sesji.
+- **Dalej:** po scaleniu PR #41 – Ty: krok 8 w maszynie, „Dni 1–3 gotowe” w lokalnej sesji Claude Code, Dzień 4.
 
 ## CI w weekend – E2E niezależne od dnia (1.11, T528)
 - Gałąź `claude/determined-shannon-ordir7` (od `main` c353c6a). Na `main` od niedzieli 1.11 czerwone runy 130, 131,
