@@ -52,6 +52,7 @@
   kasowany dopiero po udanej zmianie, cudzysłowy przy `przy-aplikacji`, nazwa konta poza `skrypty.log`
   (`%USERPROFILE%`), błąd podniesienia uprawnień w `zegar-wynik.txt`, wspólna logika `zegar` / `ustaw-zegar` (te same
   granice), UAC „konieczne”, 15:20 w ryzykach.
+- PR #41 (`claude/odbior-vm-zegar`) – scalenie po zielonym CI i Twoim „dalej” (instrukcja w maszynie czyta `main`).
 - **Dalej:** Ty – w maszynie powtórzyć krok 8 części 1 i migawkę „czysta”, potem Dzień 1; po każdym dniu „Dzień N
   gotowy” w lokalnej sesji Claude Code (kopiuje raport do `docs/vm/raport.md`).
 
