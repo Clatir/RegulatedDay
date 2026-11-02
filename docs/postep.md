@@ -57,7 +57,7 @@
   (dopisuje `zegar.cmd`), Dzień 4 z „Początkiem” z części „Przebieg zaczęty przed T529” (E8e.2 cz. 2 i próba zegara
   +40 min); raport Dni 1–3 do `docs/vm/raport.md` z lokalnej sesji.
 - **Dalej:** Ty: krok 8 w maszynie, „Dni 1–3 gotowe” w lokalnej sesji Claude Code, Dzień 4 (polecenie z części 1,
-  N=4). Run `ci.yml` na `main` po scaleniu – do potwierdzenia zielonego.
+  N=4). CI na `main` po scaleniu zielone (c8d3e8d, Linux i Windows).
 
 ## CI w weekend – E2E niezależne od dnia (1.11, T528)
 - Gałąź `claude/determined-shannon-ordir7` (od `main` c353c6a). Na `main` od niedzieli 1.11 czerwone runy 130, 131,
