@@ -133,8 +133,9 @@ Opisy punktów („Jak sprawdzić”, „Oczekiwany efekt”, „Nie przechodzi,
 https://raw.githubusercontent.com/Clatir/RegulatedDay/main/docs/odbior.md
 
 Najpierw przeczytaj w instrukcji część 1 („Zegar”, „Kiedy jesteś potrzebny”), część 2 (zasady), część 3 (raport)
-i swój dzień w części 4, a w C:\RD-raport\raport.md – wynik „Próby zegara” z Dnia 1 i sekcje „Czeka na użytkownika”.
-Najważniejsze:
+i swój dzień w części 4, a w C:\RD-raport\raport.md – wynik „Próby zegara” i sekcje „Czeka na użytkownika”.
+Gdy raport ma Dni 1–3 bez „Próby zegara”, to przebieg zaczęty przed T529 – przeczytaj też „Przebieg zaczęty przed T529”
+w części 4 (Dzień 4 zaczyna się od jego kroku 3). Najważniejsze:
 1. Zegar przestawiasz sam: data RRRR-MM-DD GG:MM w pierwszej linii C:\RD-raport\zegar.txt (przy skoku w ciągu dnia
    druga linia: przy-aplikacji – bez cudzysłowów), dwuklik C:\RD-skrypty\zegar.cmd, potem czekasz, aż
    C:\RD-raport\zegar-wynik.txt przestanie mówić W TOKU (do 3 min) – ma być OK zegar: … -> … – i patrzysz na zegar
