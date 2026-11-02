@@ -51,6 +51,14 @@ function seed(dir: string, o: { sessions?: boolean } = {}): void {
   }
   mkdirSync(join(dir, 'days', today.slice(0, 4)), { recursive: true })
   writeFileSync(join(dir, 'days', today.slice(0, 4), `${today}.json`), JSON.stringify(day))
+  // Yesterday: a block of its own – after a Sunday (a weekend without sessions or a template block) the day gone would
+  // otherwise have none to check that it does not drag.
+  const yesterday = addDays(today, -1)
+  mkdirSync(join(dir, 'days', yesterday.slice(0, 4)), { recursive: true })
+  writeFileSync(
+    join(dir, 'days', yesterday.slice(0, 4), `${yesterday}.json`),
+    JSON.stringify({ schema: 1, date: yesterday, blocks: [{ id: 'past', categoryId: 'inne', startMin: 10 * 60, durationMin: 30, fixed: false }] })
+  )
   mkdirSync(join(dir, 'requests'), { recursive: true })
   writeFileSync(join(dir, 'requests', 'r1.json'), JSON.stringify({ schema: 1, id: 'r1', person: 'mama', estimateMin: 20, note: 'zakupy', createdAt: Date.now(), state: 'queued', day: null, block: null }))
 }
