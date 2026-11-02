@@ -30,7 +30,8 @@
    Dzień 1 (1.11) do powtórki: przy „Zakończ” 0.10.1 zainstalowała pobraną 1.0.0, więc Dzień 2 nie miał czego
    testować; instrukcja przepisana (T527) – maszyna od migawki „czysta” z `docs/vm/przygotuj.ps1`.
    Od 2.11 (T529) zegar przestawia Cowork (`zegar.cmd`, data w `zegar.txt`), skoki „przez noc” na początku sesji po
-   Twoim „Zakończ” – Dni 2–5 bez Ciebie w trakcie dnia. Migawka „czysta” sprzed 2.11 – powtórzyć krok 8 części 1.
+   Twoim „Zakończ” – Dni 2–5 bez Ciebie w trakcie dnia. Przebieg w toku (Dni 1–3 zrobione 2.11 według starej
+   instrukcji) idzie dalej od Dnia 4 – „Przebieg zaczęty przed T529” w `docs/odbior-vm.md`, bez powrotu do migawki.
    Poprawki z odbioru – wersje 1.0.x (D324).
 3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
@@ -53,8 +54,10 @@
   (`%USERPROFILE%`), błąd podniesienia uprawnień w `zegar-wynik.txt`, wspólna logika `zegar` / `ustaw-zegar` (te same
   granice), UAC „konieczne”, 15:20 w ryzykach.
 - PR #41 (`claude/odbior-vm-zegar`) – scalenie po zielonym CI i Twoim „dalej” (instrukcja w maszynie czyta `main`).
-- **Dalej:** Ty – w maszynie powtórzyć krok 8 części 1 i migawkę „czysta”, potem Dzień 1; po każdym dniu „Dzień N
-  gotowy” w lokalnej sesji Claude Code (kopiuje raport do `docs/vm/raport.md`).
+- Przebieg w toku (Dni 1–3 już zrobione, 2.11): bez powrotu do migawki – w działającej maszynie krok 8 części 1
+  (dopisuje `zegar.cmd`), Dzień 4 z „Początkiem” z części „Przebieg zaczęty przed T529” (E8e.2 cz. 2 i próba zegara
+  +40 min); raport Dni 1–3 do `docs/vm/raport.md` z lokalnej sesji.
+- **Dalej:** po scaleniu PR #41 – Ty: krok 8 w maszynie, „Dni 1–3 gotowe” w lokalnej sesji Claude Code, Dzień 4.
 
 ## CI w weekend – E2E niezależne od dnia (1.11, T528)
 - Gałąź `claude/determined-shannon-ordir7` (od `main` c353c6a). Na `main` od niedzieli 1.11 czerwone runy 130, 131,

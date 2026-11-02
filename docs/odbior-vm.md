@@ -56,8 +56,9 @@ ikony), zgody Cowork, gdy wygasną, i kroki z tabeli „Kiedy jesteś potrzebny�
    ma znacznika „z internetu”, więc SmartScreen się nie pokazuje), kładzie na pulpicie ikonę „Ustaw zegar” (zapasowo
    dla Ciebie) i sprawdza dysk `Z:` i czas automatyczny. Na końcu „GOTOWE” albo lista błędów.
 9. Migawka „czysta” (Maszyna → Zrób migawkę) – po kroku 8, przed instalacją Regulated Day. Powrót do niej to start od
-   nowa razem ze skryptami. **Migawka sprzed 2.11.2026** nie ma `zegar.cmd`: wróć do niej, powtórz krok 8 (nadpisuje
-   skrypty, niczego nie kasuje) i zrób migawkę „czysta” na nowo (starą usuń).
+   nowa razem ze skryptami. **Maszyna przygotowana przed 2.11.2026** nie ma `zegar.cmd` – w przebiegu w toku nie wracaj
+   do migawki: powtórz tylko krok 8 w działającej maszynie (część 4, „Przebieg zaczęty przed T529”). Migawkę „czysta”
+   odśwież dopiero przed następnym przebiegiem od zera (powrót do niej, krok 8, nowa migawka).
 
 **Między sesjami Cowork** nie wyłączaj maszyny i nie uruchamiaj jej ponownie aż do „Na samym końcu” (część 4). Pauza to
 zawsze **„Zapisz stan maszyny”** (zegar maszyny stoi): aplikacja zostaje na noc włączona, a skok „przez noc” robi Cowork
@@ -341,7 +342,26 @@ Początek (z użytkownikiem, ok. 3 min):
 9. Rytuał soboty – zamknij dzień.
 10. `koniec-dnia-3.cmd`. Aplikacja zostaje włączona.
 
+### Przebieg zaczęty przed T529 (Dni 1–3 według poprzedniej instrukcji)
+Dni 1–3 zostają – nic nie powtarzasz. Dzień 3 według poprzedniej instrukcji zrobił już E4a.10, E6b.2 (razem z
+Menedżerem zadań po „Zakończ”) i E5b.4 i skończył się skokiem na niedzielę 9:00 przy włączonej aplikacji.
+1. **Ty, przed Dniem 4 (ok. 3 min):** w działającej maszynie, bez powrotu do migawki, krok 8 części 1 (`irm … | iex`
+   w zwykłym PowerShell). Skrypt dopisuje `zegar.cmd` i nadpisuje pozostałe skrypty; `C:\RD-test`, `C:\RD-raport`
+   (raport, `skrypty.log`) i aplikacja zostają bez zmian, a uwaga „C:\RD-test nie jest pusty” jest tu normalna. Sprawdź
+   też, że UAC to „Nigdy nie powiadamiaj” (część 1, krok 3).
+2. **Raport z Dni 1–3:** napisz „Dni 1–3 gotowe” w lokalnej sesji Claude Code – kopiuje go do repozytorium (część 6).
+3. **Dzień 4 – Początek zamiast opisanego niżej** (z użytkownikiem, ok. 5 min; zegar już jest w niedzieli):
+   - E8e.2 część 2: pytanie do użytkownika: „Zakończ” w menu ikony → `folder-ukryj.cmd` → uruchom (bez skoku zegara):
+     „Brak folderu danych · Otwórz okno” → `folder-przywroc.cmd`. Gdy po minucie pasek nadal pokazuje „Brak folderu
+     danych”, poproś o „Zakończ” i uruchom aplikację (obserwacja, poza oceną E8e.2).
+   - **Próba zegara** (w raporcie jej nie ma): zegar o 40 min do przodu z `przy-aplikacji` (`zegar.cmd`, część 1
+     „Zegar”) – dłużej niż 30 min, jak skoki w kolejnych dniach. Wpis `### Próba zegara – zgody zostały` albo
+     `… – zgody wygasły` (wtedy poproś użytkownika o ich zatwierdzenie, póki jest przy maszynie).
+   Dalej Dzień 4 od kroku 1; od Dnia 5 – jak w instrukcji.
+
 ### Dzień 4 (niedziela) – folder danych (ok. 2–3 h)
+Przebieg zaczęty przed T529 – zamiast „Początku” niżej: „Przebieg zaczęty przed T529”, krok 3.
+
 Początek (z użytkownikiem, ok. 25 min – 3:45–4:05 to czekanie w czasie rzeczywistym; użytkownik potrzebny tylko na
 „Zakończ”):
 - E4a.10: „+ Blok” na 15 min → „Start”; od razu pytanie do użytkownika: „Zakończ” w menu ikony.
