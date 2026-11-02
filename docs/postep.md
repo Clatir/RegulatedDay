@@ -22,8 +22,7 @@
 1. **Ciąg E (E8) zakończony – v1.0.0 opublikowane** 29.10 ok. 0:00 (run 40780293831 na `main` zielony): przegląd 5.1
    (127 zgłoszeń, `docs/przeglad-E8.md` – wszystkie zamknięte), decyzje D325–D331, PR-y #26–#37 scalone, otwartych brak
    (T525: wersja bez własnego wydania trafia do notatek następnej).
-   CI w weekend (T528): PR #40 (`claude/determined-shannon-ordir7`) – scalam po zielonym CI (zgoda 2.11); po scaleniu
-   sprawdzić run `ci.yml` na `main` i wydanie z zadania Windows.
+   CI w weekend (T528): PR #40 scalony 2.11 (eb90643).
 2. Ty: aktualizacja do 1.0.0 i odbiór według `docs/odbior.md`. Opcjonalnie Cowork w maszynie wirtualnej
    (`docs/odbior-vm.md`, T526: 68 z 87 punktów na świeżej instalacji, raport w `C:\RD-vm-raport`, po każdym dniu
    kopia w `docs/vm/raport.md` – T529) – po raporcie czytam go z logami, każde NIEZGODNE sprawdzam w kodzie. Poza maszyną od razu: E4b.12 (godzina próby → `main.log`).
@@ -53,11 +52,12 @@
   kasowany dopiero po udanej zmianie, cudzysłowy przy `przy-aplikacji`, nazwa konta poza `skrypty.log`
   (`%USERPROFILE%`), błąd podniesienia uprawnień w `zegar-wynik.txt`, wspólna logika `zegar` / `ustaw-zegar` (te same
   granice), UAC „konieczne”, 15:20 w ryzykach.
-- PR #41 (`claude/odbior-vm-zegar`) – scalenie po zielonym CI i Twoim „dalej” (instrukcja w maszynie czyta `main`).
+- PR #41 (`claude/odbior-vm-zegar`) scalony 2.11 (764f87c) po zielonym CI (Linux, E2E, Windows); bez wersji – bez wydania.
 - Przebieg w toku (Dni 1–3 już zrobione, 2.11): bez powrotu do migawki – w działającej maszynie krok 8 części 1
   (dopisuje `zegar.cmd`), Dzień 4 z „Początkiem” z części „Przebieg zaczęty przed T529” (E8e.2 cz. 2 i próba zegara
   +40 min); raport Dni 1–3 do `docs/vm/raport.md` z lokalnej sesji.
-- **Dalej:** po scaleniu PR #41 – Ty: krok 8 w maszynie, „Dni 1–3 gotowe” w lokalnej sesji Claude Code, Dzień 4.
+- **Dalej:** Ty: krok 8 w maszynie, „Dni 1–3 gotowe” w lokalnej sesji Claude Code, Dzień 4 (polecenie z części 1,
+  N=4). Run `ci.yml` na `main` po scaleniu – do potwierdzenia zielonego.
 
 ## CI w weekend – E2E niezależne od dnia (1.11, T528)
 - Gałąź `claude/determined-shannon-ordir7` (od `main` c353c6a). Na `main` od niedzieli 1.11 czerwone runy 130, 131,
