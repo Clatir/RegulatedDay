@@ -42,7 +42,8 @@ export function defaultDayType(date: string, settings: Pick<RulesSettings, 'week
 export const SESSION_ANCHOR = 'session:'
 
 const sessionBlockId = (date: string, sessionId: string) => derivedId(date, 'ses', sessionId)
-const templateBlockId = (date: string, templateId: string, blockId: string) => derivedId(date, 'tpl', templateId, blockId)
+/** The id a template block gets on a day (a day file cancels or changes it by this id). */
+export const templateBlockId = (date: string, templateId: string, blockId: string) => derivedId(date, 'tpl', templateId, blockId)
 const lectureBlockId = (date: string, seriesId: string) => derivedId(date, 'lec', seriesId)
 
 /** A session's window on a logical day, as instants (its zone's wall times on the date that falls in the day). */

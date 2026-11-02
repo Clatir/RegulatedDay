@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { logicalDayOf } from '../../src/shared/time/day'
 
 export interface Launched {
   app: ElectronApplication
@@ -14,6 +15,14 @@ export interface Launched {
 }
 
 export const FAKE_HELPER = resolve('tests/fakes/fake-helper.mjs')
+
+/**
+ * The logical day now (04:00–04:00 Polish time) by the app's own rule. CI runs on any day: a test that needs a type of
+ * day sets it for this date (T528) – a Saturday, Sunday or holiday would otherwise give the weekend's plan.
+ */
+export function logicalToday(): string {
+  return logicalDayOf(Date.now())
+}
 
 /**
  * Launch the built app (out/) or a packaged executable (RD_E2E_EXECUTABLE, Windows CI) with an isolated folder of app
