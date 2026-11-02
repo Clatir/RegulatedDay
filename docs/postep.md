@@ -42,8 +42,9 @@
 - Gałąź `claude/determined-shannon-ordir7` (od `main` c353c6a). Na `main` od niedzieli 1.11 czerwone runy 130, 131,
   133 `ci.yml` (zmiany tylko w dokumentach): „ekrany E3” bez „Zatwierdź plan” (granicę dawały tylko sesje dnia
   roboczego), kreator „z 3 h” zamiast „z 8 h” (niedziela = weekend). Poprawka tylko w testach: typ dnia w danych dla
-  `logicalToday()`, odwołana dzisiejsza druga zmiana (granica z bloku o 03:00), blok wczoraj (krok „dzień miniony”
-  padał w każdy poniedziałek – wykryte symulacją), w kreatorze dzisiejszy dzień tygodnia „zwykły”.
+  `logicalToday()`, odwołana dzisiejsza druga zmiana (granica z bloku o 03:00), w kreatorze dzisiejszy dzień tygodnia
+  „zwykły”. Blok wczoraj (krok „dzień miniony” padał w każdy poniedziałek) – z PR #39 (3129834, scalony 2.11 w nocy);
+  ta gałąź przeniesiona na niego, własna opcja `yesterday` usunięta.
 - Testy: oba E2E przechodzą w prawdziwą niedzielę-święto 1.11 (23:00) i pod `faketime` (T528): poniedziałek 10:00
   („Strona B”), sobota 12:00, wtorek 21:30 (po drugiej zmianie), środa 11.11 9:00 (święto), niedziela 8.11 7:00.
   Pełny zestaw: typecheck, build, lint, E2E (26 + 6 pominiętych) zielone; unit 1092/1093 – `config.test.ts`
