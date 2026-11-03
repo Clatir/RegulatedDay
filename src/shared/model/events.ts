@@ -20,9 +20,11 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * The rules version of this build (spec „wersja reguł”): a newer one wins segments and automatic actions, and only a
  * leader with the newest one seen freezes. 2 – the game counts from its first day (T509): a version before it would
  * freeze the game's days as „before the game” for good. 3 – after an approval undone the minutes count by the proposal
- * (A1-15): an older version would write them all „in the boundary”.
+ * (A1-15): an older version would write them all „in the boundary”. 4 – the end of work and time to explain of G1
+ * (1.0.1): an older version would confirm an end by a click before later work, keep time to explain begun after a block
+ * and leave a paused block after the close.
  */
-export const RULES_VERSION = 3
+export const RULES_VERSION = 4
 
 export interface EventBase {
   /** Unique: `<computer>-<n>` for your actions, derived from the data for automatic ones (both computers write the same). */
@@ -327,7 +329,7 @@ export function isKnown(e: AnyEvent): e is LogEvent {
 }
 
 /** The full order of events (spec): logical clock, computer id, event number. */
-export function compareEvents(a: EventBase, b: EventBase): number {
+export function compareEvents(a: Pick<EventBase, 'l' | 'c' | 'n'>, b: Pick<EventBase, 'l' | 'c' | 'n'>): number {
   return a.l - b.l || (a.c < b.c ? -1 : a.c > b.c ? 1 : 0) || a.n - b.n
 }
 

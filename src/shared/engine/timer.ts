@@ -11,10 +11,10 @@
  * running block.
  */
 import { ROUTINE_VERSIONS, type RoutineVersion } from '../model/routines'
-import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
+import { isBoundaryWork, plannedSpan, setsWorkEndBlock, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
 import { workedUntilOf } from './explain'
-import { OPEN, isRunning, lastRunEnd, ranMinutes, resumedWith, type BlockFact } from './facts'
+import { OPEN, isRunning, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, workSince, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
 
 /** „Przedłuż” of a fixed block works up to this long after its planned end (spec „Timer”, D227). */
@@ -136,6 +136,121 @@ export function secondShiftStart(state: DayState): number {
 /** The end of work is confirmed now (a „Koniec pracy” or „Odcinam się” after the last work, with no work running). */
 function workEndConfirmed(state: DayState): boolean {
   return state.workEnd != null && state.ends.length > 0 && state.ends.at(-1)!.confirmed
+}
+
+/**
+ * Work that sets the end of work now (`setsWorkEndBlock` – the rule of `day.ts`) by a block's id: it decides where the
+ * work stopped (`lastWorkOf`) and whether work came back after „Koniec pracy” for „Odwołaj” (`workSince`, D216). Built
+ * once per state – pass it on.
+ */
+export function setsWorkEnd(state: DayState): (id: string) => boolean {
+  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  const projects = new Set(state.asProject)
+  return (id) => setsWorkEndBlock(byId.get(id), projects)
+}
+
+/**
+ * Where the day's work stopped (D165, G1): of the blocks that set the end of work (`setsWorkEnd`) the one whose work
+ * stopped last – at its end, or a paused one's at its last run's end – with that instant (index), up to `until`; null –
+ * none yet (no work, or only running work). A tie goes to the block whose last run began later.
+ */
+export function lastWorkOf(state: DayState, until = OPEN, isWork: (id: string) => boolean = setsWorkEnd(state)): { fact: BlockFact; stop: number } | null {
+  let best: { fact: BlockFact; stop: number } | null = null
+  for (const [id, f] of state.facts.blocks) {
+    if (!isWork(id)) continue
+    const stop = f.endedAt ?? lastRunEnd(f)
+    if (stop == null || stop > until) continue
+    if (!best || stop > best.stop || (stop === best.stop && (f.runs.at(-1)?.from ?? 0) > (best.fact.runs.at(-1)?.from ?? 0))) best = { fact: f, stop }
+  }
+  return best
+}
+
+/**
+ * Where the day's work stopped (index), null – none yet: the later of the last block's stop (`lastWorkOf`) and the last
+ * end of the engine not confirmed – work without a run of a block counts too (time to explain answered „praca”, G1). The
+ * button, its click and the close of the day confirm this one.
+ */
+export function lastWorkStop(state: DayState, isWork: (id: string) => boolean = setsWorkEnd(state)): number | null {
+  const block = lastWorkOf(state, OPEN, isWork)?.stop ?? null
+  const last = state.ends.at(-1)
+  // Only on a day with work: a session that never began gives the engine an end, not work.
+  const worked = block != null || state.explains.some((x) => x.answer?.cls === 'work')
+  const engine = worked && last && !last.confirmed ? last.at : null
+  return block == null ? engine : engine == null ? block : Math.max(block, engine)
+}
+
+/**
+ * The blocks a running request interrupted that are still to come back at its end (T503): started, not ended (one ended
+ * or parked meanwhile comes back no more).
+ */
+export function heldByRequests(state: DayState): string[] {
+  const out: string[] = []
+  for (const r of state.facts.requests) {
+    const f = r.interrupts != null && isRunningRequest(r) ? state.facts.blocks.get(r.interrupts) : undefined
+    if (f?.startedAt != null && f.endedAt == null) out.push(f.id)
+  }
+  return out
+}
+
+/**
+ * A request that interrupted work (`setsWorkEnd`) runs and the work comes back at its end (T503): no „Koniec pracy?”
+ * meanwhile (`workRuns` in `questionsOf`), no „Koniec pracy” beside the request's „Koniec” and no end of work at the
+ * close of the day (G1).
+ */
+export function requestHoldsWork(state: DayState, isWork: (id: string) => boolean = setsWorkEnd(state), held: readonly string[] = heldByRequests(state)): boolean {
+  return held.some(isWork)
+}
+
+/**
+ * A „Koniec pracy” (or what writes one) reaches the stop – as the engine judges it: its end at the stop or later and no
+ * work begun after it up to the stop (`workSince`, an empty run in the stop's minute too) – not by the minute alone.
+ */
+export function workEndReaches(state: DayState, stop: number, isWork: (id: string) => boolean = setsWorkEnd(state)): boolean {
+  return state.facts.workEnds.some((w) => w.end >= stop && !workSince(state.facts, w, isWork, stop))
+}
+
+/**
+ * Work begun in the foreground at `from` or later (`setsWorkEnd`): a time to explain from before it is no longer the
+ * time after the day's last work (G1, obs. 866) – its line in the bar and its „Pracowałem do …” click find nothing; a
+ * session going on in the background takes nothing.
+ */
+export function laterWork(state: DayState, from: number, isWork: (id: string) => boolean = setsWorkEnd(state)): boolean {
+  for (const [id, f] of state.facts.blocks) if (isWork(id) && f.runs.some((r) => !r.bg && r.from >= from)) return true
+  return false
+}
+
+/**
+ * A fixed work block is still left before the second shift (D216): in the plan, not begun, parked or cancelled (nor
+ * `cancelling`), its window not over yet – a waiting one (a session) while it may still begin (`waitUntil`, else its
+ * end), another to its end – as `workEnds` in `day.ts` counts it; a session skipped is no longer one. „Koniec pracy” is
+ * then only a break that parks and ends nothing, „Koniec pracy?” waits, the close of the day ends nothing either.
+ */
+export function fixedWorkLeft(state: DayState, cancelling: string | null = null): boolean {
+  const second = secondShiftStart(state)
+  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  return state.blocks.some((b) => {
+    if (!b.fixed || !isBoundaryWork(b) || !b.inPlan || b.id === cancelling) return false
+    const f = state.facts.blocks.get(b.id)
+    if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) return false
+    const span = plannedSpan(b, byId)
+    if (!span || span.start >= second) return false
+    return (b.waits ? (b.waitUntil ?? span.end) : span.end) > state.now
+  })
+}
+
+/**
+ * Whether „Koniec pracy” is shown with no work in the foreground (spec „Granica i koniec pracy”: „kliknięte później, gdy
+ * żaden blok pracy już nie biegnie, tylko potwierdza wcześniejszy koniec”, T152, G1): the end of work is not confirmed
+ * now, no work runs (`setsWorkEnd` in the foreground or the background) nor waits for a request's end
+ * (`requestHoldsWork`), work stopped today (`lastWorkStop` – a paused block too, at once, not 15 min later as the end
+ * counts it, T514; an end of the engine without a block, e.g. time to explain answered „praca”) and no `work.end` reaches
+ * that stop – the close of the day hides it only so (by its own `work.end`). It is shown in a break between work too – a
+ * click then ends the work of the day there.
+ */
+export function workEndOpen(state: DayState, t: TimerNow = timerNow(state), isWork: (id: string) => boolean = setsWorkEnd(state)): boolean {
+  if (t.workEndConfirmed || [t.fg, ...t.bg].some((x) => x != null && isWork(x.info.id)) || requestHoldsWork(state, isWork)) return false
+  const stop = lastWorkStop(state, isWork)
+  return stop != null && !workEndReaches(state, stop, isWork)
 }
 
 export function timerNow(state: DayState): TimerNow {
@@ -398,18 +513,14 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
         end = endInstant(state, fg, at)
         events.push({ k: 'block.end', block: fg.info.id, at: end, done: isFixedLike(fg.info) ? null : true, rule: null })
       } else {
-        // Clicked when no work runs: it only confirms the earlier end – where the last work block's work stopped, a paused
-        // one's too (it ends with the parking below).
-        let last: number | null = null
-        for (const b of state.blocks) {
-          const f = state.facts.blocks.get(b.id)
-          const stop = f && isBoundaryWork(b) ? lastRunEnd(f) : null
-          if (stop != null) last = Math.max(last ?? 0, stop)
-        }
+        // Clicked when no work runs: it only confirms the earlier end – where the work stopped (`lastWorkStop`: a paused
+        // block's too, which ends with the parking below; an end of the engine without a block).
+        const last = lastWorkStop(state)
         end = last != null ? Math.min(at, atOf(state.grid, last)) : at
       }
       events.push({ k: 'work.end', at, end })
-      events.push(...workEndParking(state, fg?.info.id ?? null, at))
+      // Blocks anchored to the one ending go with it – only a work block ends here (a meal in the foreground goes on).
+      events.push(...workEndParking(state, fg?.info.isWork ? fg.info.id : null, at))
       return yes(events)
     }
     case 'finish': {
@@ -425,7 +536,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       // After „Koniec pracy” that was only a break: cancelling the last fixed block of work left confirms the end, and
       // only then the flexible work before the second shift is parked (D216).
       const lastEnd = state.facts.workEnds.at(-1)
-      const after = lastEnd != null && info.fixed && isBoundaryWork(info) && !state.blocks.some((b) => b.isWork && (state.facts.blocks.get(b.id)?.runs.some((r) => r.from >= lastEnd.at) ?? false))
+      const after = lastEnd != null && info.fixed && isBoundaryWork(info) && !workSince(state.facts, lastEnd, setsWorkEnd(state))
       return yes([{ k: 'block.cancel', block: info.id, at, rule: 'user' }, ...(after ? workEndParking(state, null, at, info.id) : [])])
     }
     case 'park': {
@@ -486,7 +597,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       // The time to explain as the bar shows it now (a stale click finds nothing): „praca” to now while it goes on, to its
       // end after „Koniec pracy” – and the end of work then; after a passive block counted as a project „projekt”, the
       // end of work stays the block's (D254, as the ritual's „Projekt do …”).
-      const x = state.explains.find((e) => e.id === act.explain)
+      const x = state.explains.find((e) => e.id === act.explain && !laterWork(state, e.from))
       const until = x ? workedUntilOf(x, m) : null
       if (!x || until == null) return no('nie ma czasu do wyjaśnienia po bloku pracy')
       const ms = x.to === OPEN ? at : atOf(state.grid, until)
@@ -532,9 +643,29 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
  * the plan before the second shift (D216). A paused work block ends there, not done, as „Zaparkuj” ends it.
  */
 export function workEndParking(state: DayState, ending: string | null, at: number, cancelling: string | null = null): TimerDraft[] {
+  if (fixedWorkLeft(state, cancelling)) return []
+  const scope = workEndScope(state, cancelling)
+  const out: TimerDraft[] = []
+  for (const b of state.blocks) {
+    if (b.id === ending) continue
+    if (pausedWork(state, b)) {
+      out.push(pausedWorkEnd(b, at))
+      continue
+    }
+    if (b.fixed || b.waits || b.rules.afterWorkAsProject || !scope.open(b)) continue
+    const anchoredToEnding = ending != null && b.anchor === ending
+    if ((isBoundaryWork(b) && scope.before(b)) || anchoredToEnding) out.push({ k: 'block.park', block: b.id, at, rule: 'workEnd', autoRule: 'workEnd' })
+  }
+  return out
+}
+
+/**
+ * What „Koniec pracy” parks: blocks open in the plan (not begun, parked or cancelled; `cancelling` – a block cancelled
+ * with these events), placed before the second shift.
+ */
+function workEndScope(state: DayState, cancelling: string | null): { open: (b: BlockInfo) => boolean; before: (b: BlockInfo) => boolean } {
   const second = secondShiftStart(state)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
-  // `cancelling`: a block cancelled with these events – no longer open.
   const open = (b: BlockInfo) => {
     const f = state.facts.blocks.get(b.id)
     return b.inPlan && b.id !== cancelling && (!f || (f.startedAt == null && f.parkedAt == null && f.cancelledAt == null))
@@ -546,18 +677,26 @@ export function workEndParking(state: DayState, ending: string | null, at: numbe
     const from = p?.from ?? span?.start ?? null
     return from != null && from < second
   }
-  if (state.blocks.some((b) => open(b) && b.fixed && isBoundaryWork(b) && before(b))) return []
-  const out: TimerDraft[] = []
-  for (const b of state.blocks) {
-    if (b.fixed || b.waits || b.rules.afterWorkAsProject || b.id === ending) continue
-    const f = state.facts.blocks.get(b.id)
-    if (f?.startedAt != null && f.endedAt == null && !isRunning(f) && isBoundaryWork(b)) {
-      out.push({ k: 'block.end', block: b.id, at, done: false, rule: 'workEnd', autoRule: 'workEnd' })
-      continue
-    }
-    if (!open(b)) continue
-    const anchoredToEnding = ending != null && b.anchor === ending
-    if ((isBoundaryWork(b) && before(b)) || anchoredToEnding) out.push({ k: 'block.park', block: b.id, at, rule: 'workEnd', autoRule: 'workEnd' })
-  }
-  return out
+  return { open, before }
+}
+
+/**
+ * A paused flexible work block – begun, not ended, not running (paused by you, „Odcinam się”, a request – a conscious
+ * „Koniec pracy” in a request ends the block it interrupted, as in 1.0.0), not one of „po końcu pracy jak projekt”
+ * (D195) nor a weekly analysis: what „Koniec pracy” ends (T514) and the close of the day.
+ */
+function pausedWork(state: DayState, b: BlockInfo): boolean {
+  if (b.fixed || b.waits || b.rules.afterWorkAsProject || !isBoundaryWork(b)) return false
+  const f = state.facts.blocks.get(b.id)
+  return f?.startedAt != null && f.endedAt == null && !isRunning(f)
+}
+
+const pausedWorkEnd = (b: BlockInfo, at: number): TimerDraft => ({ k: 'block.end', block: b.id, at, done: false, rule: 'workEnd', autoRule: 'workEnd' })
+
+/**
+ * The close of the day (the ritual, „Jak zapisano”, G1) ends the paused work blocks as „Tak” on „Koniec pracy?” does
+ * (`pausedWork`, not done, rule `workEnd` with „Cofnij”) – never while a request holds work (it writes nothing then).
+ */
+export function closePausedEnds(state: DayState, at: number): TimerDraft[] {
+  return state.blocks.filter((b) => pausedWork(state, b)).map((b) => pausedWorkEnd(b, at))
 }

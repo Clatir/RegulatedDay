@@ -34,9 +34,9 @@
    Poprawki z odbioru – wersje 1.0.x (D324).
 3. **Ciąg F w toku (od 3.11, D349)** – `docs/plan.md`: główna sesja Opus 5.5 · xhigh, wykonawcy z `.claude/agents/`
    (Haiku F1–F2, Opus G1–G5, Sonnet H1–H3), zadania F1–H3, wersje 1.0.1–1.0.8; przyczyny w `docs/vm/przyczyny.md`,
-   decyzje D334–D347, D350. „Przed ciągiem F” zrobione. **Teraz:** PR F1–F3 (`claude/ciag-f-opisy-logi`, bez wydania)
-   – scalenie po zielonym CI (Linux i Windows); **następne:** G1 (1.0.1, `wykonawca-opus`), potem G2, H1, H2, G3, G4,
-   G5, H3 – bez pauzy do końca ciągu.
+   decyzje D334–D347, D350. „Przed ciągiem F” zrobione, F1–F3 scalone (PR #44). **Teraz:** G1 (1.0.1,
+   `wykonawca-opus`, gałąź `claude/1.0.1-koniec-pracy`); **następne:** G2, H1, H2, G3, G4, G5, H3 – bez pauzy do końca
+   ciągu.
 4. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Do odbioru na Windows
@@ -64,6 +64,30 @@
   - Testy: typecheck, build, lint, E2E 27 + 6 pominiętych; unit 1096/1097 – `tests/sim/two-computers.test.ts` lokalnie
     przekracza 240 s także osobno (nie dotyka zmienionych plików; na `main` w CI zielone) – rozstrzyga CI.
   - Czas faktyczny: ok. 1 h (szacunek 1,25–2 h).
+  - PR #44 scalony 3.11 (b33a9f0) po zielonym CI (Linux, E2E, Windows; `two-computers` w CI zielony); CI na `main`
+    zielone (run 41666814304, także Windows), bez wydania.
+- **G1 – 1.0.1 koniec pracy** (`wykonawca-opus`): gałąź `claude/1.0.1-koniec-pracy` od b33a9f0, 3.11 ok. 16:50.
+  - A–D i E8a.1 według `przyczyny.md` (T531): przycisk „Koniec pracy” od razu przy pauzie i po samoczynnym końcu bloku
+    (`workEndOpen`), `workSince` w `day.ts`, pasku i „Odwołaj” (zamiast `>=` → `>` – psuło T507), czas do wyjaśnienia od
+    powrotu, zamknięcie dnia kończy zapauzowaną pracę, „Koniec pracy?” po pauzie ostatniego bloku.
+  - Odbiór: E8a.1, E8a.2, E8f.2, E6a.2 – opisy po zmianie (nagłówki „zmiana w 1.0.1”).
+  - `/code-review` xhigh siedem razy (każda runda poprawek przez tego samego wykonawcę, z testami): m.in. zamknięcie dnia
+    przy krótkiej pauzie, praca w tle i prośba przy przycisku, kolejność zdarzeń zamiast minut (zegary dwóch komputerów,
+    zdarzenia z datą wsteczną), pominięta sesja przy D216, wiersz rytuału = godzina zamknięcia, `RULES_VERSION` 4.
+    Cofnięte rozszerzenia spoza szkicu (analiza i bloki „po pracy” przy zamknięciu, `ritualClose`, dzień regeneracyjny).
+  - Propozycje na później (architektura, bez zmian w działaniu): reguły końca pracy z `computeDay` w `DayState` zamiast
+    odtwarzania w `timer.ts`; `laterWork` w `explainsOf`; wspólne `notBegun`; jeden `workRunning` z `ritualDue`;
+    strażniki zamknięcia liczone raz; pamięć widoków startu bloków „po pracy”. Zachowanie sprzed G1 do decyzji: ✓ wiersza
+    „Koniec pracy o …” (rytuał, rano „Niezamknięte dni”) potwierdza koniec, ale nie kończy zapauzowanego bloku. Sprzed G1
+    (do osobnej poprawki): akcja `workEnd` z linii `anchor:` / „Dalej?” przy pracy w tle nie sprawdza warunku przycisku;
+    odpowiedź niejawna czasu do wyjaśnienia bierze każdy późniejszy `work.end` (`w.at >= from`, bez ograniczenia do `to`);
+    `heldByRequests` zakłada wznowienie także wtedy, gdy `resumeAfter` czeka na „Wznów · Zaparkuj”.
+  - Przegląd 9 znalazł krytyczne `TypeError` w `startViews` (blok bez przebiegu po prośbie po fakcie) – poprawione z testem
+    i przejrzane przeze mnie; dalszych rund nie było.
+  - Testy: unit ok. 1160, E2E 27 + 6 pominiętych, typecheck, build, lint, `check-context`. Lokalnie pod obciążeniem
+    (sesje innych projektów na tym komputerze) `two-computers` przekracza 240 s, a hak sprzątania testu skali 10 s – tak samo
+    na b33a9f0; rozstrzyga CI.
+  - Czas faktyczny: ok. 7 h (szacunek 2–3 h) – dziewięć rund przeglądu.
 
 ## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)
 - Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji. Kolejno: bloki według modelu
@@ -263,5 +287,11 @@
   osobny program, nagrywanie wykładów na tym komputerze.
 
 ## Pytania na później
+- Po G1 (1.0.1): czy zamknięcie dnia ma kończyć też zapauzowaną analizę tygodniową i bloki „po końcu pracy jak projekt”
+  (dziś – jak „Koniec pracy”, D195 – zostają zapauzowane z kropką do 04:00)? Wyszło w przeglądzie G1, poza szkicem D.
+- Po G1: czy „Koniec pracy?” ma padać po czasie do wyjaśnienia odpowiedzianym „praca” po bloku, który skończył się sam
+  (D165 – dziś milczy; koniec potwierdzasz przyciskiem „Koniec pracy”)?
+- Po G1: zapauzowany blok kończony przez „Koniec pracy”, „Tak” na „Koniec pracy?” i zamknięcie dnia ma na liście
+  „zrobione automatycznie” tekst „<blok> zaparkowany („Koniec pracy”)”, choć jest zakończony – zmienić na „zakończony”?
 - Przed E4a: punkt 15 listy E0 niesprawdzony – czy OBS nagrywa przy wygaszonym ekranie; od 0.20.0 bez Próby sprawdzisz
   to przy prawdziwym wykładzie nagrywanym na tym komputerze (D184, „Ekran świeci”).

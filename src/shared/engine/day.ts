@@ -10,15 +10,15 @@
  * leader writes its classification of the minutes of work as segments; a written segment is the truth for its minutes
  * unless the log now holds a timer event its state of knowledge did not include, or a newer rules version counts them.
  */
-import { compareEvents, isKnown, type AnyEvent, type DaySnapshot, type MinuteClass } from '../model/events'
+import { compareEvents, eventAt, isKnown, type AnyEvent, type DaySnapshot, type MinuteClass } from '../model/events'
 import type { PlanBlock } from '../model/plan'
 import type { DayTypeParams, RulesSettings } from '../model/settings'
 import { placeLogical } from '../time/day'
 import { addDays, weekday } from '../time/zone'
 import { activityOf, type Activity } from './activity'
-import { blockInfos, isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
+import { blockInfos, isBoundaryWork, plannedSpan, setsWorkEndBlock, type BlockInfo } from './blocks'
 import { EXPLAIN_END_RULES, explainMinutes, explainsOf, type Explain } from './explain'
-import { OPEN, foldFacts, isPassive, isRunning, ranMinutes, viewAt, type DayFacts, type Segment } from './facts'
+import { OPEN, compareOrder, foldFacts, isPassive, isRunning, orderOf, ranMinutes, sameClick, viewAt, workSince, type DayFacts, type Segment } from './facts'
 import { forecast, type Forecast, type Placed } from './forecast'
 import { atOf, gridOf, idxOf, idxOfLogical, type Grid } from './grid'
 
@@ -392,14 +392,16 @@ function stretches(flags: Uint16Array, flag: number, until: number): Array<{ fro
  * within 15 min of when it was due no longer counts, a waiting one counts until its window ends. An end after which a
  * fixed work block is left is only a break, and so is „Odcinam się” clicked in a stretch and followed by work begun
  * after „Wracam” before the boundary (that work's end is the end); clicked after the stretch, it then only confirms
- * nothing. The end is the stretch's end, also when it becomes known later (regeneration is added back). `starting`: a
+ * nothing. „Koniec pracy” followed by work begun after it in the same stretch (the runs touch) confirms nothing either.
+ * The end is the stretch's end, also when it becomes known later (regeneration is added back). `starting`: a
  * block starting at m, not yet in the view (whether it counts as a project is being decided); `boundaryAt`: the boundary
  * approved at an instant (OPEN: none).
  */
 function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindow: Forecast, projects: ReadonlySet<string>, starting: string | null = null, boundaryAt: (t: number) => number = writtenBoundary(view)): WorkEnd[] {
+  const isWorkHere = (id: string) => setsWorkEndBlock(c.byId.get(id), projects)
   const runningWork = c.blocks.some((b) => {
     const f = view.blocks.get(b.id)
-    return isBoundaryWork(b) && !projects.has(b.id) && !!f && isRunning(f)
+    return isWorkHere(b.id) && !!f && isRunning(f)
   })
   const list = stretches(flags, F_END, m)
   if (runningWork && list.length && list.at(-1)!.to === m) list.pop()
@@ -407,7 +409,7 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
   // its minute, in the order of time, unless real work touches it – judged like any other: „Koniec pracy” or „Odcinam
   // się” after it confirm it, a fixed work block left makes it a break (T507).
   for (const b of c.blocks) {
-    if (!isBoundaryWork(b) || projects.has(b.id)) continue
+    if (!isWorkHere(b.id)) continue
     const f = view.blocks.get(b.id)
     if (f?.startedAt == null || f.endedAt == null || f.endedAt > f.startedAt) continue
     const k = f.startedAt
@@ -435,7 +437,7 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
     let resolve = e
     let fixedLeft = false
     for (const b of c.blocks) {
-      if (!isBoundaryWork(b) || !b.inPlan || projects.has(b.id)) continue
+      if (!isWorkHere(b.id) || !b.inPlan) continue
       const span = plannedSpan(b, c.byId)
       if (span && span.start >= c.secondShiftStart) continue
       const f = view.blocks.get(b.id)
@@ -475,10 +477,10 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
         if (!span) continue
         const until = b.waitUntil ?? span.end
         if (until <= e) continue
-        if (f?.startedAt != null) resolve = OPEN
-        else if (gone != null) resolve = Math.max(resolve, Math.min(gone, until))
-        else resolve = Math.max(resolve, until <= m ? until : OPEN)
-        if (b.fixed && resolve === OPEN) fixedLeft = true
+        // Left as a fixed block only by its own window (G1) – not by work another block still keeps open.
+        const own = f?.startedAt != null ? OPEN : gone != null ? Math.min(gone, until) : until <= m ? until : OPEN
+        resolve = Math.max(resolve, own)
+        if (b.fixed && own === OPEN) fixedLeft = true
         continue
       }
       const due = Math.max(dueOf.get(b.id) ?? span?.start ?? e, e)
@@ -488,7 +490,8 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
       else resolve = Math.max(resolve, expiry <= m ? expiry : OPEN)
     }
     // „Koniec pracy” (or „Odcinam się”) clicked in this stretch ends it; clicked after it, before work came back, confirms it.
-    const confirmed = view.workEnds.some((w) => w.end >= s.from && w.end < next) || view.disconnect.some((d) => d.from >= s.from && d.from < next && !workedAfter(d))
+    // Work begun after the click within the stretch (in its minute or the next – the runs touch) reopened it (G1).
+    const confirmed = view.workEnds.some((w) => w.end >= s.from && w.end < next && !workSince(view, w, isWorkHere, e)) || view.disconnect.some((d) => d.from >= s.from && d.from < next && !workedAfter(d))
     if (confirmed && !fixedLeft) out.push({ at: e, confirmed: true })
     else if (resolve <= Math.min(m, next)) out.push({ at: e, confirmed: false })
   }
@@ -565,20 +568,49 @@ export function computeDay(ctx: DayContext): DayState {
     paintUpfront(c, actual, facts, spans, 0, now)
   }
   paintActual()
-  // A block of a category „po końcu pracy jak projekt” begun after the first end of work counts as a project.
+  // A block of a category „po końcu pracy jak projekt” begun after the first end of work counts as a project – judged on
+  // what was known when it began: the minutes before it and the events of its own minute that came before its start
+  // (`compareOrder`, G1) – a „Koniec pracy” a few seconds earlier counts, whatever the minute rounds to. Its view does not
+  // depend on the projects: once per block, folded again only when its minute has such an event (else the view at the
+  // minute, as before).
+  // A block without a run (a request written in after the fact took all its minutes) has nothing to count.
+  const candidates = blocks.filter((b) => {
+    const f = facts.blocks.get(b.id)
+    return b.isWork && b.rules.afterWorkAsProject && !b.secondShift && !projects.has(b.id) && f?.startedAt != null && f.startedAt < now && f.runs.length > 0
+  })
+  // The non-passive events by their minute – built only on a day with such a block.
+  const byMinute = new Map<number, AnyEvent[]>()
+  if (candidates.length)
+    for (const e of events) {
+      if (!isKnown(e) || e.k === 'undo' || isPassive(e)) continue
+      const k = idxOf(g, eventAt(e))
+      const list = byMinute.get(k)
+      if (list) list.push(e)
+      else byMinute.set(k, [e])
+    }
+  const startViews = candidates.map((b) => {
+    const f = facts.blocks.get(b.id)!
+    const at = f.startedAt!
+    const start = f.runs[0]!.begun
+    const inMinute = byMinute.get(at) ?? []
+    // The start's own click (the block it ended in the foreground) is not „before” it.
+    const after = inMinute.filter((e) => compareOrder(orderOf(e), start) >= 0 || sameClick(e, start))
+    // Folded again without them and without the block's own events from its start on – the start, a correction of it
+    // written later (`block.fix`, whatever minute) and what came after; it is the block starting at the minute
+    // (`starting`). What it had before (parked, cancelled, confirmed in advance) stays.
+    const drop = new Set(after)
+    const own = (e: AnyEvent) => (e as { block?: unknown }).block === b.id && compareOrder(orderOf(e), start) >= 0
+    const view = after.length < inMinute.length ? viewAt(foldFacts(g, events.filter((e) => !drop.has(e) && !own(e))), at + 1) : viewAt(facts, at)
+    return { id: b.id, at, view, fc: forecast({ blocks, view, m: at, mode: 'window', transitionBufferMin: settingsAt(at).settings.transitionBufferMin, typicalMin: c.typical }) }
+  })
   for (let pass = 0; pass < 3; pass++) {
     let changed = false
-    for (const b of blocks) {
-      if (!b.isWork || !b.rules.afterWorkAsProject || b.secondShift || projects.has(b.id)) continue
-      const f = facts.blocks.get(b.id)
-      if (f?.startedAt == null || f.startedAt >= now) continue
-      const at = f.startedAt
-      const view = viewAt(facts, at)
-      const fc = forecast({ blocks, view, m: at, mode: 'window', transitionBufferMin: settingsAt(at).settings.transitionBufferMin, typicalMin: c.typical })
+    for (const { id, at, view, fc } of startViews) {
+      if (projects.has(id)) continue
       const before = new Uint16Array(actual)
       for (let k = at; k < cap; k++) before[k] = 0
-      if (workEnds(c, view, before, at, fc, projects, b.id).length) {
-        projects.add(b.id)
+      if (workEnds(c, view, before, at, fc, projects, id).length) {
+        projects.add(id)
         changed = true
       }
     }
@@ -751,7 +783,7 @@ export function computeDay(ctx: DayContext): DayState {
   const hardEndCheckFrom = Math.max(0, Math.min(c.wake, firstWorkStart ?? c.wake))
   let nextHardCheck = hardEndCheckFrom
   // Minutes from which the view changes: the minute after each event that is not only presence (T413).
-  const eventMinutes = [...new Set(events.filter((e) => !isPassive(e)).map((e) => idxOf(g, eventInstant(e)) + 1))].sort((a, b) => a - b)
+  const eventMinutes = [...new Set(events.filter((e) => !isPassive(e)).map((e) => idxOf(g, eventAt(e)) + 1))].sort((a, b) => a - b)
   const nextEventFrom = (k: number): number => {
     for (const e of eventMinutes) if (e > k) return e
     return OPEN
@@ -937,7 +969,7 @@ function recordedSegments(c: Ctx, facts: DayFacts): (k: number) => Segment | nul
   if (!facts.segments.length) return () => null
   // A segment is stale when the log holds a timer event of a computer, from before its end, it did not know.
   const late = c.events.filter((e) => isKnown(e) && !isPassive(e))
-  const fresh = facts.segments.filter((s) => !late.some((e) => (e.n > (s.know[e.c] ?? -1)) && idxOf(c.g, eventInstant(e)) < s.to))
+  const fresh = facts.segments.filter((s) => !late.some((e) => (e.n > (s.know[e.c] ?? -1)) && idxOf(c.g, eventAt(e)) < s.to))
   const covers = (a: Segment, b: Segment) => Object.entries(b.know).every(([cid, n]) => (a.know[cid] ?? -1) >= n)
   return (k) => {
     let best: Segment | null = null
@@ -947,11 +979,6 @@ function recordedSegments(c: Ctx, facts: DayFacts): (k: number) => Segment | nul
     }
     return best
   }
-}
-
-function eventInstant(e: AnyEvent): number {
-  const r = e as unknown as Record<string, unknown>
-  return typeof r.at === 'number' ? r.at : typeof r.from === 'number' ? r.from : e.t
 }
 
 interface EvalDeps {

@@ -308,6 +308,187 @@ describe('linie chwil dnia po przeglądzie 0.21.0', () => {
   })
 })
 
+describe('„Koniec pracy” bez biegnącego bloku pracy (G1, spec „Granica i koniec pracy”, T152)', () => {
+  it('przy zapauzowanym bloku pracy od razu, nie dopiero po 15 min; kliknięcie kończy blok i przycisk znika (E8a.2)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '09:00', min: 60 })] }).observe('07:00', null)
+    click(s, '09:00', { a: 'start', block: 'a' })
+    click(s, '09:30', { a: 'pause' })
+    expect(view(s, '09:31').buttons.workEnd).toBe(true)
+    expect(click(s, '09:32', { a: 'workEnd' }).ok).toBe(true)
+    const after = view(s, '09:33')
+    expect(after.buttons.workEnd).toBe(false)
+    expect(after.lines.some((l) => l.id === 'paused:a')).toBe(false)
+  })
+
+  it('po samoczynnym końcu bloku, gdy w planie przed drugą zmianą zostaje elastyczna praca (E6a.2, E8f.2 cz. 1)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '16:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '17:30', min: 60 }), block({ id: 'ds', cat: 'inne', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })] }).observe('07:00', null)
+    click(s, '16:00', { a: 'start', block: 'a' })
+    s.write([{ id: 'auto-a-two', k: 'block.end', block: 'a', at: s.at('17:00'), done: null, rule: 'twoQuestions', autoRule: 'twoQuestions' }], s.at('17:05'))
+    expect(view(s, '17:10').buttons.workEnd).toBe(true)
+    const r = click(s, '17:10', { a: 'workEnd' })
+    expect(r.ok && r.events.map((e) => `${e.k} ${(e.block as string | undefined) ?? ''}`.trim())).toEqual(['work.end', 'block.park b'])
+    expect(r.ok && r.events[0]!.end).toBe(s.at('17:00'))
+    expect(view(s, '17:11').buttons.workEnd).toBe(false)
+  })
+
+  it('bez pracy dnia i po potwierdzonym końcu pracy – nie ma go', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '09:00', min: 60 })] }).observe('07:00', null)
+    expect(view(s, '08:30').buttons.workEnd).toBe(false)
+    click(s, '09:00', { a: 'start', block: 'a' })
+    click(s, '09:40', { a: 'workEnd' })
+    expect(view(s, '09:45').buttons.workEnd).toBe(false)
+  })
+
+  it('pusty przebieg po kliknięciu w jego minucie: silnik nie bierze kliknięcia za koniec – przycisk zostaje (jak silnik, nie po minucie)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '14:00', min: 90 }), block({ id: 'b', cat: 'inne', at: '17:00', min: 30 })] }).observe('07:00', null)
+    const at = (t: number, act: TimerAction) => {
+      const r = timerAction(s.contextAt(t), s.stateAt(t), act, t)
+      if (r.ok) s.write(r.events, t)
+      return r
+    }
+    s.start('a', '14:00')
+    at(s.at('15:30') + 10_000, { a: 'workEnd' })
+    at(s.at('15:30') + 20_000, { a: 'start', block: 'b', confirm: true })
+    at(s.at('15:30') + 25_000, { a: 'finish', block: 'b' })
+    const st = s.state('15:35')
+    expect(st.ends.map((e) => e.confirmed)).toEqual([false])
+    expect(view(s, '15:35').buttons.workEnd).toBe(true)
+  })
+
+  it('dzień bez pracy (sama niezaczęta sesja) – nie ma go, choć silnik ma koniec po końcu okna sesji', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'ny', cat: 'sesja', at: '15:30', min: 60, fixed: true })] }).observe('07:00', null)
+    expect(s.state('17:00').ends.length).toBe(1)
+    expect(view(s, '17:00').buttons.workEnd).toBe(false)
+  })
+
+  it('blok pracy biegnący w tle przy pustym pierwszym planie – nie ma go (jak przed G1)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'g', cat: 'inne', at: '09:30', min: 120, bg: true })] }).observe('07:00', null)
+    s.ran('a', '08:00', '09:00').start('g', '09:30', { bg: true })
+    const v = view(s, '10:00')
+    expect(v.block).toBeNull()
+    expect(v.buttons.workEnd).toBe(false)
+  })
+
+  it('w czasie prośby, która przerwała blok pracy – nie ma go (blok wraca po „Koniec” prośby, T503)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '09:00', min: 120 })] }).observe('07:00', null)
+    click(s, '09:00', { a: 'start', block: 'a' })
+    const t = s.at('10:00')
+    const r = requestAction(s.stateAt(t), { a: 'requestNow', request: 'r1', person: null }, t)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, t)
+    expect(view(s, '10:05').buttons.workEnd).toBe(false)
+  })
+
+  it('prośba, która przerwała „Naukę” zaczętą przed końcem pracy (praca, nie projekt) – też go nie ma', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'n', cat: 'nauka', at: '16:55', min: 60 })] }).observe('07:00', null)
+    click(s, '16:55', { a: 'start', block: 'n' })
+    const t = s.at('17:00')
+    const r = requestAction(s.stateAt(t), { a: 'requestNow', request: 'r1', person: null }, t)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, t)
+    expect(s.state('17:05').asProject).not.toContain('n')
+    expect(view(s, '17:05').buttons.workEnd).toBe(false)
+  })
+
+  it('koniec silnika z czasu do wyjaśnienia odpowiedzianego „praca” – przycisk potwierdza go, nie wcześniejszy koniec bloku', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '16:00', min: 90 })] }).using('07:00', '23:59')
+    s.start('a', '16:00')
+    s.gap('17:30', '18:00')
+    s.write([{ id: 'auto-a-idle', k: 'block.end', block: 'a', at: s.at('17:30'), done: null, rule: 'idle', autoRule: 'idle' }], s.at('17:40'))
+    s.gap('19:00', '19:30')
+    const x = s.state('19:35').explains[0]!
+    s.write([{ k: 'question.answer', at: s.at('19:35'), question: x.id, answer: 'work', value: null }], s.at('19:35'))
+    const before = s.state('19:40')
+    expect(before.ends.map((e) => `${e.confirmed}`).at(-1)).toBe('false')
+    expect(view(s, '19:40').buttons.workEnd).toBe(true)
+    const r = click(s, '19:40', { a: 'workEnd' })
+    expect(r.ok && r.events[0]).toMatchObject({ k: 'work.end', end: s.at('19:00') })
+    const st = s.state('19:45')
+    expect(st.ends.at(-1)).toMatchObject({ at: before.ends.at(-1)!.at, confirmed: true })
+  })
+
+  it('przerwany blok zakończony w czasie prośby nic nie wstrzymuje: jest „Koniec pracy” i „Koniec pracy?”', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '09:00', min: 120 })] }).observe('07:00', null)
+    click(s, '09:00', { a: 'start', block: 'a' })
+    const t = s.at('10:00')
+    const r = requestAction(s.stateAt(t), { a: 'requestNow', request: 'r1', person: null }, t)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, t)
+    expect(click(s, '10:05', { a: 'park', block: 'a' }).ok).toBe(true)
+    const v = view(s, '10:06')
+    expect(v.buttons.workEnd).toBe(true)
+    expect(v.lines.some((l) => l.text === 'Koniec pracy?')).toBe(true)
+  })
+})
+
+describe('minuta kliknięcia „Koniec pracy” (G1, E8f.2 cz. 4)', () => {
+  it('blok zaczęty i zakończony „Koniec pracy” w tej samej minucie: „… o 15:30 zostaje · Odwołaj” jest', () => {
+    const s = new Scenario({ date: '2026-11-12', plan: [block({ id: 'b', cat: 'inne', at: '12:59', min: 15 }), block({ id: 'ny', cat: 'sesja', at: '15:30', min: 20, fixed: true })] }).observe('07:00', null)
+    const ms = (time: string, sec: number) => s.at(time) + sec * 1000
+    const at = (t: number, act: TimerAction) => {
+      const r = timerAction(s.contextAt(t), s.stateAt(t), act, t)
+      if (r.ok) s.write(r.events, t)
+      return r
+    }
+    at(ms('12:59', 19), { a: 'start', block: 'b' })
+    at(ms('12:59', 26), { a: 'workEnd' })
+    expect(view(s, '13:00').lines.find((l) => l.id === 'fixedLeft:ny')).toMatchObject({ text: 'Sesja tradingowa o 15:30 zostaje', actions: [{ id: 'cancel', label: 'Odwołaj' }] })
+    // A block begun after the click, in the same minute too, is work after it: the line goes.
+    expect(at(ms('12:59', 28), { a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 10 }).ok).toBe(true)
+    expect(view(s, '13:01').lines.some((l) => l.id === 'fixedLeft:ny')).toBe(false)
+  })
+
+  it('blok pracy w tle zaczęty przed kliknięciem w tej samej minucie nie zabiera linii (kolejność, nie minuta)', () => {
+    const s = new Scenario({ date: '2026-11-12', plan: [block({ id: 'a', cat: 'inne', at: '12:00', min: 60 }), block({ id: 'g', cat: 'inne', at: '12:00', min: 120, bg: true }), block({ id: 'ny', cat: 'sesja', at: '15:30', min: 20, fixed: true }), block({ id: 'c', cat: 'inne', at: '17:00', min: 60 })] }).observe('07:00', null)
+    const ms = (time: string, sec: number) => s.at(time) + sec * 1000
+    const at = (t: number, act: TimerAction) => {
+      const r = timerAction(s.contextAt(t), s.stateAt(t), act, t)
+      if (r.ok) s.write(r.events, t)
+      return r
+    }
+    click(s, '12:00', { a: 'start', block: 'a' })
+    expect(at(ms('12:29', 35), { a: 'start', block: 'g', confirm: true }).ok).toBe(true)
+    at(ms('12:29', 50), { a: 'workEnd' })
+    at(ms('12:40', 0), { a: 'finish', block: 'g' })
+    expect(view(s, '12:45').lines.some((l) => l.id === 'fixedLeft:ny')).toBe(true)
+    // „Odwołaj” reads the same: no work came back, so the flexible work is parked.
+    const r = click(s, '12:50', { a: 'cancel', block: 'ny' })
+    expect(r.ok && r.events.map((e) => `${e.k} ${e.block as string}`)).toEqual(['block.cancel ny', 'block.park c'])
+  })
+
+  it('pusty przebieg zaczęty po kliknięciu w jego minucie: silnik, pasek i „Odwołaj” oceniają kliknięcie tak samo', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '14:00', min: 90 }), block({ id: 'b', cat: 'inne', at: '17:00', min: 30 }), block({ id: 'ny', cat: 'sesja', at: '16:00', min: 30, fixed: true }), block({ id: 'c', cat: 'inne', at: '18:00', min: 60 })] }).observe('07:00', null)
+    const at = (t: number, act: TimerAction) => {
+      const r = timerAction(s.contextAt(t), s.stateAt(t), act, t)
+      if (r.ok) s.write(r.events, t)
+      return r
+    }
+    s.start('a', '14:00')
+    expect(at(s.at('15:30') + 10_000, { a: 'workEnd' }).ok).toBe(true)
+    expect(at(s.at('15:30') + 20_000, { a: 'start', block: 'b', confirm: true }).ok).toBe(true)
+    expect(at(s.at('15:30') + 25_000, { a: 'finish', block: 'b' }).ok).toBe(true)
+    // b ran after the click, within its minute: work came back – no line, „Odwołaj” parks nothing …
+    expect(view(s, '15:31').lines.some((l) => l.id === 'fixedLeft:ny')).toBe(false)
+    const r = click(s, '15:32', { a: 'cancel', block: 'ny' })
+    expect(r.ok && r.events.map((e) => e.k)).toEqual(['block.cancel'])
+    // … and the engine does not take the click as the end either.
+    expect(s.state('15:33').ends.some((e) => e.confirmed)).toBe(false)
+  })
+
+  it('po „Koniec pracy” każdy blok pracy (też wykład w tle) zabiera linię „zostaje · Odwołaj” – pasek pyta raz; „Odwołaj” liczy pracę jak silnik i parkuje (D216)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'w', cat: 'wyklad', at: '10:00', min: 60 }), block({ id: 'ny', cat: 'sesja', at: '15:30', min: 20, fixed: true }), block({ id: 'c', cat: 'inne', at: '17:00', min: 60 })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    click(s, '09:00', { a: 'workEnd' })
+    expect(view(s, '09:05').lines.some((l) => l.id === 'fixedLeft:ny')).toBe(true)
+    expect(click(s, '10:00', { a: 'start', block: 'w' }).ok).toBe(true)
+    click(s, '11:00', { a: 'finish', block: 'w' })
+    expect(view(s, '11:05').lines.some((l) => l.id === 'fixedLeft:ny')).toBe(false)
+    // A lecture that keeps regeneration is no work back for the engine: cancelling the session confirms the end and parks.
+    const r = click(s, '11:10', { a: 'cancel', block: 'ny' })
+    expect(r.ok && r.events.map((e) => `${e.k} ${e.block as string}`)).toEqual(['block.cancel ny', 'block.park c'])
+  })
+})
+
 describe('komputer nagrywający w widoku paska (A8-04)', () => {
   it('dwa wykłady naraz: każdy komputer nagrywający, także ten w tle (przegląd 0.23.0)', () => {
     const s = new Scenario({ date: DATE, plan: [{ ...block({ id: 'w', cat: 'wyklad', at: '10:00', min: 90, fixed: true }), recorder: 'pcb' }, { ...block({ id: 'v', cat: 'wyklad', at: '10:00', min: 90, fixed: true, bg: true }), recorder: 'pca' }] }).observe('07:00', null)

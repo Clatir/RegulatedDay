@@ -10,21 +10,20 @@
  */
 import { questionsOf, type Question } from './engine/auto'
 import type { Activity } from './engine/activity'
-import { isBoundaryWork, plannedSpan } from './engine/blocks'
+import { plannedSpan } from './engine/blocks'
 import { answered, contactEnded, waterDue, workRunStart, type CareSettings } from './engine/care'
 import type { DayContext, DayState } from './engine/day'
 import type { EnergyState } from './engine/energy'
 import { reserveMessageId } from './engine/game'
 import { suggestRegen } from './engine/reserve'
 import { REGEN_CATEGORY, type Pool } from './model/categories'
-import { OPEN, type AutoAction, type RequestFact } from './engine/facts'
+import { isRunningRequest, OPEN, workSince, type AutoAction, type RequestFact } from './engine/facts'
 import { atOf, type Grid } from './engine/grid'
-import { isRunningRequest } from './engine/requests'
 import { ritualDue } from './engine/ritual'
 import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
-import { plannedEndOf, secondShiftStart, timerNow, type TimerNow } from './engine/timer'
+import { laterWork, plannedEndOf, secondShiftStart, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
 import type { PlanBlock } from './model/plan'
 import type { Routine } from './model/routines'
@@ -187,7 +186,7 @@ const NOT_EXTENDED_MIN = 30
  * - `notExtended:<id>` – a fixed block ended by its plan, within 30 min: „Nie przedłużono · Przedłuż” (D227);
  * - `workedUntil:<explain>` – time to explain after a work block now: „Koniec pracy o 17:30 · Pracowałem do teraz” (D254).
  */
-function dayLines(i: EngineInput, t: TimerNow, modes: Modes, nameOf: (id: string) => string, clockOf: (ms: number) => string): BarLine[] {
+function dayLines(i: EngineInput, t: TimerNow, modes: Modes, nameOf: (id: string) => string, clockOf: (ms: number) => string, setsEnd: (id: string) => boolean): BarLine[] {
   const { state } = i
   const at = (idx: number) => atOf(state.grid, idx)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
@@ -197,11 +196,12 @@ function dayLines(i: EngineInput, t: TimerNow, modes: Modes, nameOf: (id: string
     return !f || (f.startedAt == null && f.parkedAt == null && f.cancelledAt == null)
   }
   const running = new Set([t.fg?.info.id, ...t.bg.map((b) => b.info.id)].filter((x): x is string => !!x))
-  // The latest „Koniec pracy” (or „Pracowałem do …”) with no work begun since: the bar asks once – work that came back
-  // after it takes its lines away (spec „raz cicho pyta”).
+  // The latest „Koniec pracy” (or „Pracowałem do …”) with no work begun since: the bar asks once – any work block begun
+  // after the click (by the order of the log, not the block the click ended in its own minute; a project-counted one too)
+  // takes its lines away for good, and one in the foreground hides them (spec „raz cicho pyta”). „Odwołaj” counts work
+  // as the engine does (`setsWorkEnd`, D216).
   const lastEnd = state.facts.workEnds.at(-1)
-  const workSince = lastEnd != null && state.blocks.some((b) => b.isWork && (fact(b.id)?.runs.some((r) => r.from >= lastEnd.at) ?? false))
-  const afterWorkEnd = lastEnd != null && !workSince && !t.fg?.info.isWork
+  const afterWorkEnd = lastEnd != null && !workSince(state.facts, lastEnd, (id) => byId.get(id)?.isWork === true) && !t.fg?.info.isWork
   const second = secondShiftStart(state)
   const out: BarLine[] = []
   for (const b of state.blocks) {
@@ -218,7 +218,7 @@ function dayLines(i: EngineInput, t: TimerNow, modes: Modes, nameOf: (id: string
     // After „Koniec pracy”: a fixed block of work still ahead before the second shift – the one that makes the click a
     // break (D216; never the second shift, a block after work or one that keeps regeneration) – stays, or one click
     // cancels it.
-    if (afterWorkEnd && b.fixed && isBoundaryWork(b) && !state.asProject.includes(b.id) && span.start < second && untouched(b.id) && state.now < span.start)
+    if (afterWorkEnd && b.fixed && setsEnd(b.id) && span.start < second && untouched(b.id) && state.now < span.start)
       out.push({ id: `fixedLeft:${b.id}`, text: `${nameOf(b.id)} o ${clockOf(at(span.start))} zostaje`, actions: [{ id: 'cancel', label: 'Odwołaj' }], dot: false })
     // A fixed block – a session too (D227) – ended by its plan (with its confirmed extensions): „Przedłuż” still possible
     // for 30 min after that end.
@@ -228,9 +228,11 @@ function dayLines(i: EngineInput, t: TimerNow, modes: Modes, nameOf: (id: string
   }
   // Time to explain after a work block: going on now – „Pracowałem do teraz”; answered „odpoczynek” by „Koniec pracy” –
   // „Pracowałem do <its end>” while no work came since (D254); after a passive block counted as a project „Projekt do …”.
+  // Not one from before later work (G1, obs. 866): a work block begun in the foreground after it began took its place –
+  // a session going on in the background does not.
   for (const x of state.explains) {
     const until = workedUntilOf(x, state.now)
-    if (until == null || (x.to !== OPEN && !afterWorkEnd)) continue
+    if (until == null || laterWork(state, x.from, setsEnd) || (x.to !== OPEN && !afterWorkEnd)) continue
     out.push({ id: `workedUntil:${x.id}`, text: `Koniec pracy o ${clockOf(at(x.blockEnd))}`, actions: [{ id: 'now', label: `${x.asProject ? 'Projekt do' : 'Pracowałem do'} ${x.to === OPEN ? 'teraz' : clockOf(at(until))}` }], dot: false })
   }
   return out
@@ -239,6 +241,7 @@ function dayLines(i: EngineInput, t: TimerNow, modes: Modes, nameOf: (id: string
 export function engineView(i: EngineInput): WidgetView {
   const { state, now } = i
   const t = timerNow(state)
+  const isWork = setsWorkEnd(state)
   const events = i.ctx.events
   const modes: Modes = modesOf(state, t, events, now, i.modePrefs)
   const at = (idx: number) => atOf(state.grid, idx)
@@ -250,7 +253,7 @@ export function engineView(i: EngineInput): WidgetView {
     return i.name({ categoryId: b?.categoryId ?? state.facts.blocks.get(id)?.planned?.categoryId ?? 'inne', variantId: b?.variantId ?? null, routine: null, requests: [], note: '' })
   }
   const hidden = modes.disconnect != null
-  const questions = hidden ? [] : questionsOf({ ctx: i.ctx, state, activity: i.activity, now })
+  const questions = hidden ? [] : questionsOf({ ctx: i.ctx, state, activity: i.activity, now, setsWorkEnd: isWork })
   const reserve = !!i.energy && i.energy.known && i.energy.enabled && Object.values(i.energy.atReserve).some(Boolean)
   const fg = t.fg
   const tone: Tone = reserve ? 'rezerwa' : fg ? (CLASS_TONE[fg.info.rules.cls] ?? 'brak') : 'brak'
@@ -314,7 +317,7 @@ export function engineView(i: EngineInput): WidgetView {
       if (!answered(events, id)) lines.push({ id, text: 'Po rozmowach – chwila samotności?', actions: [{ id: 'solitude', label: 'Chwila ciszy' }, { id: 'dismiss', label: 'Nie teraz' }], dot: false })
     }
     lines.push(...reserveLines(i, modes))
-    lines.push(...dayLines(i, t, modes, nameOf, clockOf))
+    lines.push(...dayLines(i, t, modes, nameOf, clockOf, isWork))
   }
   // Routines to tick off (D328): quiet lines after all the others (no dot – in a quiet mode they fold into „⋯”), today,
   // for 3 h after the routine; the card in „Dziś” keeps them to the day's end (T520).
@@ -383,7 +386,7 @@ export function engineView(i: EngineInput): WidgetView {
       next: !!fg,
       pause: !!fg && !fixedFg && !modes.night,
       extend: !!fg,
-      workEnd: (!!fg && fg.info.isWork) || (!fg && state.ends.length > 0 && !t.workEndConfirmed),
+      workEnd: (!!fg && fg.info.isWork) || (!fg && workEndOpen(state, t, isWork)),
       finished: sessionAny && !modes.night,
       cutOff: !hidden && !modes.night,
       start: modes.night ? null : start

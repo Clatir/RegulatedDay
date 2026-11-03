@@ -44,6 +44,26 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   żaden blok pracy nie może się już zacząć (elastyczny: 15 min od „due”, zapauzowany: 15 min od pauzy, przerwany
   prośbą: od jej końca, czekający: do końca okna); stały blok pracy w planie robi z końca przerwę, a „Odcinam się”
   z pracą po „Wracam” przed zatwierdzoną granicą – też (T307, T320; blok zaczynający się w minucie: `starting`).
+  `work.end` nie potwierdza odcinka, w którym po kliknięciu zaczęła się praca (przebiegi stykają się w minucie
+  kliknięcia albo następnej) – `workSince` w `facts.ts`: kolejność `compareOrder` (`Run.begun`, `workEnds.order`:
+  chwila zdarzenia przesunięta na zegar logiczny – `at + (l − t)`, potem kolejność logu; nie minuta) – zdarzenie
+  dopisane później z wcześniejszą chwilą (start stały z planu, wznowienie) zostaje przed kliknięciem, a zegar innego
+  komputera z tyłu poprawia jego zegar logiczny; przeniesienie bloku między tłem a pierwszym planem i druga połowa
+  przebiegu podzielonego prośbą po fakcie to ten sam przebieg; poprawiony start (`block.fix`) ma miejsce z poprawionej
+  chwili przesuniętej zegarem poprawki, na całym przebiegu (obie połowy podziału); `Run.begun` jest zawsze (bez
+  liczenia po minutach); przebieg pusty w minucie końca odcinka należy
+  do odcinka (`until` włącznie, T507). Sesja robi z końca przerwę (`fixedLeft`) tylko własnym oknem, nie przez `resolve`
+  innego bloku – jak `fixedWorkLeft` w `timer.ts`. Praca w `workSince`: tu
+  `isWorkHere` i w „Odwołaj” – `setsWorkEnd` (oba `setsWorkEndBlock` z `blocks.ts`, D216); linie paska po „Koniec
+  pracy” („zostaje · Odwołaj”, „Pracowałem do …”) – każdy blok `isWork`, jak przed G1 (pasek pyta raz), i blok pracy na
+  pierwszym planie je chowa.
+- „Po końcu pracy jak projekt” (`projects`) rozstrzyga widok z chwili startu: minuty przed nim i zdarzenia jego minuty
+  sprzed startu (`compareOrder`, G1) – „Koniec pracy” kilka sekund wcześniej się liczy. Widok raz na blok przed
+  przebiegami (nie zależy od `projects`); fakty składane od nowa tylko, gdy w minucie startu jest takie zdarzenie (nie
+  bierne, mapa minut `byMinute`; zdarzenia tego samego kliknięcia co start – `sameClick`, np. koniec bloku z
+  pierwszego planu – nie są „sprzed”; składane bez zdarzeń samego bloku od jego startu – start może pochodzić z
+  poprawki zapisanej później – a jego wcześniejsze zaparkowanie zostaje); inaczej `viewAt(facts, at)` jak dawniej. Blok
+  bez przebiegu (prośba po fakcie zabrała wszystkie minuty) nie jest kandydatem.
 - Oznaczenie „po pracy” (`markAfterWork`): największy zbiór oznaczeń (inne oznaczone nie są „pracą” dla reguły); blok
   z planu ostatniego `boundary.approve.plan` porównywany tylko z tym planem (T321). `DayState.rewardRest` – regeneracja
   nagrody za rezerwę (czas do wyjaśnienia „odpoczynek”, bez `rest.not`); `rest` – tylko dla energii.

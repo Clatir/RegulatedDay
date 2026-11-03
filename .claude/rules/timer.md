@@ -46,7 +46,25 @@ paths:
 - `firstUseFrom` przy `t === now` zwraca now tylko, gdy użycie trwa od `from` – nie, gdy przerwa sięga teraz.
 - „Koniec pracy?” po „Dalej” (kliknięcie w chwili planowanego końca albo po nim) dopiero 15 min później (T261);
   `askedAt` pytania to dalej koniec, który „Tak” potwierdza. „Koniec pracy” kończy zapauzowane bloki pracy
-  (`workEndParking`: `block.end` z `autoRule: 'workEnd'`, z „Cofnij”).
+  (`workEndParking`: `block.end` z `autoRule: 'workEnd'`, z „Cofnij”; `ending` tylko blok pracy z pierwszego planu –
+  posiłek się nie kończy; świadome kliknięcie w czasie prośby kończy też przerwany blok, jak w 1.0.0); zamknięcie dnia
+  te same bloki (`pausedWork`), ale przy prośbie trzymającej pracę nic nie robi. Przełączenie na dzień regeneracyjny –
+  bez zmian od 1.0.0 (`typeChange.ts`).
+- Praca kończąca pracę: `setsWorkEndBlock` w `blocks.ts` (`isBoundaryWork && !projects`) – `day.ts` i `setsWorkEnd`.
+- Gdzie stanęła praca: `lastWorkOf` (blok `setsWorkEnd`, `endedAt ?? lastRunEnd`) – ostatnia praca „Koniec pracy?” (D165
+  tylko dla bloku naprawdę zakończonego); `lastWorkStop` – późniejsze z tego bloku i niepotwierdzonego końca silnika
+  (praca bez przebiegu bloku: czas do wyjaśnienia „praca”; koniec silnika tylko w dniu z pracą) – przycisk, kliknięcie
+  i zamknięcie dnia. Czy praca biegnie, to osobne warunki: „Koniec pracy?” – `workRuns` (`isWork && !keepsRegen` albo
+  `requestHoldsWork` – celowo inne: czeka też przy drugiej zmianie, nie przy nagrywanym wykładzie); przycisk – blok
+  `setsWorkEnd` na pierwszym planie albo w tle albo `requestHoldsWork`; wiersz końca pracy i zamknięcie dnia –
+  `workRunning` (każdy `isWork`) albo `requestHoldsWork` (wiersza wtedy nie ma, zamknięcie nic nie zapisuje).
+  `requestHoldsWork`: trwająca prośba przerwała blok `setsWorkEnd`, który jeszcze wróci (nie zakończony ani zaparkowany
+  w jej czasie, T503). Stały blok pracy, który jeszcze zostaje (`fixedWorkLeft`: niezaczęty, okno – dla
+  sesji `waitUntil` – jeszcze trwa; pominięta sesja już nie, jak `workEnds`): „Koniec pracy”, „Tak” i zamknięcie nic
+  nie kończą (D216), „Koniec pracy?” czeka. Przycisk bez biegnącej pracy: `workEndOpen` – koniec niepotwierdzony,
+  żaden `work.end` nie sięga tej chwili (`workEndReaches` – jak silnik, z `workSince`; po zamknięciu dnia znika tylko
+  tak – z jego `work.end`); nie czeka na wyliczony koniec (15 min). „Pracowałem do …”: linia i kliknięcie pomijają czas
+  sprzed późniejszej pracy (`laterWork`).
 - Późne wstanie (`lateWake.ts`) – pierwsze użycie z `dayFirstUse`; `presence.first` tylko bez zapisów obserwacji.
 - Prowadzący sprawdza `idle`, `firstUse`, `limit`, `absence`, `lastInput` przy każdym sprawdzeniu i cofa je, gdy
   późniejszy log z wejściem im przeczy (T465) – nowa reguła końca zależna od wejścia musi tam trafić.

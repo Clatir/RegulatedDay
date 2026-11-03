@@ -16,8 +16,8 @@ import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blo
 import type { DayContext, DayState } from './day'
 import { blockAt, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
-import { isRunningRequest, requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
-import { plannedEndOf, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
+import { requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
+import { fixedWorkLeft, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
 /** The rules of a request's end without „Koniec” (`requestEndOf`). */
@@ -442,7 +442,7 @@ function closedThere(inp: AutoInput, from: number): boolean {
 }
 
 /** The questions open now (none of them answered), for the bar – in the order the bar shows them. */
-export function questionsOf(inp: Omit<AutoInput, 'gate'>): Question[] {
+export function questionsOf(inp: Omit<AutoInput, 'gate'> & { setsWorkEnd?: (id: string) => boolean }): Question[] {
   const { state, activity } = inp
   const date = state.grid.date
   const t = timerNow(state)
@@ -463,18 +463,22 @@ export function questionsOf(inp: Omit<AutoInput, 'gate'>): Question[] {
 
   // „Koniec pracy?” – once, after the last work block, when the end is not confirmed and no fixed work block is left.
   const end = state.ends.at(-1)
+  // After the day's close it is gone only with the end the close confirmed (its own `work.end`, G1).
   if (end && !end.confirmed && end.at <= state.now && !t.workEndConfirmed) {
     // A request that interrupted a work block resumes it at its end: no „Koniec pracy?” meanwhile (T503).
-    const workRuns = [t.fg, ...t.bg].some((x) => x?.info.isWork && !x.info.rules.keepsRegen) || state.facts.requests.some((r) => isRunningRequest(r) && r.interrupts != null && byIdWork(state, r.interrupts))
-    const lastWork = [...state.facts.blocks.values()].filter((f) => f.endedAt != null && f.endedAt <= end.at && byIdWork(state, f.id)).sort((a, b) => b.endedAt! - a.endedAt!)[0]
-    const silentEnd = lastWork && ['twoQuestions', 'idle', 'absence', 'shutdown'].includes(lastWork.endRule ?? '')
+    const isWork = inp.setsWorkEnd ?? setsWorkEnd(state)
+    const workRuns = [t.fg, ...t.bg].some((x) => x?.info.isWork && !x.info.rules.keepsRegen) || requestHoldsWork(state, isWork)
+    // The last work block, where it stopped – its end, or a paused one's last run (G1, E8a.1, `lastWorkOf`). Only a block
+    // that really ended by itself keeps the question back (D165).
+    const lastWork = lastWorkOf(state, end.at, isWork)?.fact
+    const silentEnd = lastWork?.endedAt != null && ['twoQuestions', 'idle', 'absence', 'shutdown'].includes(lastWork.endRule ?? '')
     // After „Dalej” on „Dalej?” of the last work block (ended by a click at or after its planned end) it asks 15 min later
     // (spec „Koniec pracy?”, T261).
     const lastInfo = lastWork ? state.blocks.find((b) => b.id === lastWork.id) : undefined
-    const afterNext = !!lastWork && !!lastInfo && lastWork.endRule == null && lastWork.done === true && lastWork.endedAt! >= plannedEndOf(state, lastInfo, lastWork)
+    const afterNext = !!lastWork && !!lastInfo && lastWork.endedAt != null && lastWork.endRule == null && lastWork.done === true && lastWork.endedAt >= plannedEndOf(state, lastInfo, lastWork)
     const askAt = afterNext ? end.at + 15 : end.at
     const id = questionId(date, 'workEnd', null, end.at)
-    if (!workRuns && !silentEnd && askAt <= state.now && !state.facts.answers.has(id) && fixedWorkLeft(state) === 0) {
+    if (!workRuns && !silentEnd && askAt <= state.now && !state.facts.answers.has(id) && !fixedWorkLeft(state)) {
       // `askedAt` is the end „Tak” confirms.
       out.push({ id, kind: 'workEnd', block: null, askedAt: at(end.at), seenAt: state.facts.seen.get(id)?.at ?? null, text: 'Koniec pracy?', answers: [{ id: 'yes', label: 'Tak' }, { id: 'break', label: 'Przerwa' }, { id: 'working', label: 'Pracuję' }], dot: true, silent: true })
     }
@@ -573,26 +577,6 @@ function absenceWhat(state: DayState, block: string, answer: 'meal' | 'regen' | 
 function absenceSpan(activity: Activity, away: number): { from: number; to: number | null } {
   const x = activity.idle.find((i) => i.from <= away + MIN && i.to >= away)
   return { from: away, to: x && x.to < activity.now ? x.to : null }
-}
-
-function byIdWork(state: DayState, id: string): boolean {
-  const b = state.blocks.find((x) => x.id === id)
-  return !!b && isBoundaryWork(b) && !b.rules.afterWorkAsProject
-}
-
-/** Fixed work blocks still open before the second shift (D216: „Koniec pracy” parks nothing then, „Koniec pracy?” waits). */
-function fixedWorkLeft(state: DayState): number {
-  const byId = new Map(state.blocks.map((b) => [b.id, b]))
-  const second = Math.min(...state.blocks.filter((x) => x.secondShift && x.start != null).map((x) => x.start!), Number.POSITIVE_INFINITY)
-  let n = 0
-  for (const b of state.blocks) {
-    if (!b.fixed || !isBoundaryWork(b) || !b.inPlan) continue
-    const f = state.facts.blocks.get(b.id)
-    if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) continue
-    const span = plannedSpan(b, byId)
-    if (span && span.end > state.now && span.start < second) n++
-  }
-  return n
 }
 
 /** What an answer to a question writes (the main process adds the base fields); null: the answer is a timer action. */

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1
+- „Koniec pracy” jest w pasku zawsze, gdy nic nie biegnie na pierwszym planie, w tle nie biegnie praca, która wyznacza koniec pracy (nagrywany wykład i bloki liczone jak projekt się nie liczą), i nic nie czeka na koniec prośby, a dzisiejsza praca nie ma jeszcze potwierdzonego końca – od razu przy pauzie i po bloku, który skończył się sam (dotąd dopiero po 15 minutach albo wcale). Kliknięte w przerwie potwierdza koniec pracy w chwili, w której praca stanęła, i parkuje resztę planu (z „Cofnij”).
+- „Koniec pracy?” przychodzi po 15 minutach pauzy ostatniego bloku także wtedy, gdy wcześniej tego dnia inny blok skończył się sam.
+- „Koniec pracy” kliknięte w minucie startu bloku: pasek pokazuje „NY o 15:30 zostaje · Odwołaj”, a „Odwołaj” parkuje resztę pracy. Blok zaczęty zaraz po „Koniec pracy” nie dostaje już potwierdzonego końca od tamtego kliknięcia.
+- „Koniec pracy o … · Pracowałem do …” nie pojawia się już po czasie sprzed późniejszej pracy ani po bloku zaczętym w oknie aplikacji zaraz po powrocie.
+- Zamknięcie dnia potwierdza koniec pracy tam, gdzie praca stanęła – także zaraz po pauzie – i kończy zapauzowany blok pracy tak jak „Koniec pracy” (z „Cofnij” na liście „zrobione automatycznie”) – także w dniu z pominiętą sesją. „Koniec pracy” i „Koniec pracy?” nie wracają już po zamknięciu dnia.
+- Blok w tle zaczęty tuż przed „Koniec pracy” nie odbiera już kliknięciu potwierdzenia.
+- Dni zamrożone przez 1.0.0 w ostatnich 60 dniach oceniają się od nowa według poprawionych reguł końca pracy.
+- Dziennik aplikacji: „aplikacja zamknięta” zamiast „koniec pracy” przy wyjściu, osobny wpis przy drugim uruchomieniu i wpisy o powiadomieniach, których Windows nie przyjął.
+
 ## 1.0.0
 - Pierwsza wersja stabilna. Wszystkie funkcje zaplanowane na 1.0 są na miejscu, a uwagi z pełnego przeglądu aplikacji przed wydaniem – poprawione (wersje 0.16.0–0.26.0). Kolejne poprawki przyjdą jako 1.0.x.
 
