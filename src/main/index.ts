@@ -162,6 +162,12 @@ function viewOf(sender: Electron.WebContents): ViewKind {
 
 // ------------------------------------------------------------------ the widget
 
+/** The notification state of Windows from the helper (`accepts`, `busy`…); null – no helper or no answer. */
+async function notificationStateNow(): Promise<string | null> {
+  const s = helper?.running ? await helper.request('notificationState', {}, 3000).catch(() => null) : null
+  return typeof s?.state === 'string' ? s.state : null
+}
+
 /**
  * The widget's engine (E4b): the engine's view once a data folder is open (one neutral line while none is, D327), the
  * bar's clicks as actions of the timer, the notifications of the leader.
@@ -177,11 +183,7 @@ const widget = new WidgetEngine({
   modePrefs: () => ({ sessionMode: prefs().sessionMode, classMode: prefs().classMode }),
   notices: () => prefs().notices,
   notify: (n, onFailed) => notify(n, log, onFailed),
-  notificationsTaken: async () => {
-    if (!helper?.running) return true
-    const s = await helper.request('notificationState', {}, 3000).catch(() => null)
-    return typeof s?.state !== 'string' || s.state === 'accepts' || s.state === 'unknown'
-  },
+  notificationState: async () => (await notificationStateNow()) ?? 'unknown',
   present: () => powerMonitor.getSystemIdleTime() < 120 && powerMonitor.getSystemIdleState(120) !== 'locked',
   showMain: (page) => showMainWindow(page),
   emit: (view) => showWidget(view),
@@ -921,7 +923,12 @@ async function main(): Promise<void> {
   // One instance per identity (the lock is tied to the folder of app data): a second start only shows the window – one
   // from the autostart (--hidden) not even that – or opens the panel for an address.
   if (!app.requestSingleInstanceLock()) {
-    app.quit()
+    // The second copy only hands its start over: its argv went to the running app (`second-instance`) within the call.
+    // It started nothing and owns nothing of the running app's, so it ends without the ways out (`before-quit`,
+    // `will-quit`) – their „aplikacja zamknięta” in the shared log would read as the running app's.
+    log('info', 'druga kopia – przekazano do działającej')
+    flushLog()
+    app.exit(0)
     return
   }
   app.on('second-instance', (_e, argv) => handleArgv(argv, false))
@@ -1075,7 +1082,7 @@ async function main(): Promise<void> {
     unknownTimerEvents: async () => (await data()?.folder.unknownTimerEvents()) ?? false,
     state: async () => {
       const f = data()?.folder
-      const notif = helper?.running ? await helper.request('notificationState', {}, 3000).catch(() => null) : null
+      const notificationState = await notificationStateNow()
       const caps = helper?.running ? await helper.request('powerState', {}, 3000).catch(() => null) : null
       return {
         now: Date.now(),
@@ -1084,7 +1091,7 @@ async function main(): Promise<void> {
         idleMs: powerMonitor.getSystemIdleTime() * 1000,
         onMains: typeof caps?.onMains === 'boolean' ? caps.onMains : !powerMonitor.isOnBatteryPower(),
         blockRunning: f ? await f.anyBlockRunning().catch(() => true) : false,
-        notificationState: typeof notif?.state === 'string' ? notif.state : null,
+        notificationState,
         enabled: config.get().updates.nightInstall,
         helperRunning: !!helper?.running,
         modernStandby: caps?.modernStandby === true
@@ -1241,7 +1248,8 @@ app.on('will-quit', () => {
   helper?.stop()
   worker.stop()
   if (!sessionEnding) life.close('quit')
-  log('info', 'koniec pracy')
+  // Not „koniec pracy”: that is the button of the day (F2).
+  log('info', 'aplikacja zamknięta')
   flushLog()
 })
 

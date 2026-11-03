@@ -203,7 +203,7 @@ describe('proces odłączony, który nie wystartował (A5-11, strażnik naprawy 
 })
 
 describe('instalacja a sesja i zajęcia (A5-02, A5-03, A5-05)', () => {
-  const controller = (o: { userData: string; helperDir: string; sessionOrClass?: () => boolean; before: { n: number } }) =>
+  const controller = (o: { userData: string; helperDir: string; sessionOrClass?: () => boolean; before: { n: number }; logs?: string[] }) =>
     new UpdateController({
       enabled: true,
       version: '0.1.0',
@@ -219,7 +219,7 @@ describe('instalacja a sesja i zajęcia (A5-02, A5-03, A5-05)', () => {
       quit: () => undefined,
       openExternal: () => undefined,
       broadcast: () => undefined,
-      log: () => undefined
+      log: (_level, msg) => void o.logs?.push(msg)
     })
 
   it('wyjście i start z Windows w czasie sesji albo zajęć: nic się nie instaluje', () => {
@@ -230,6 +230,31 @@ describe('instalacja a sesja i zajęcia (A5-02, A5-03, A5-05)', () => {
     c.onQuit(false)
     expect(c.atAutostart()).toBe(false)
     expect(before.n).toBe(0)
+    c.updater?.stopAuto()
+  })
+
+  it('wyjście w sesji bez pobranego wydania: nie ma czego czekać, więc bez wpisu „wyjście w czasie sesji” (F2)', () => {
+    const { helperDir } = download()
+    // A data folder without any download: nothing waits for the exit.
+    const userData = join(root, 'pusty')
+    mkdirSync(userData, { recursive: true })
+    const logs: string[] = []
+    const c = controller({ userData, helperDir, sessionOrClass: () => true, before: { n: 0 }, logs })
+    c.init(null, null)
+    expect(c.updater?.readyRelease).toBeNull()
+    c.onQuit(false)
+    expect(logs.some((m) => m.startsWith('wyjście w czasie sesji'))).toBe(false)
+    c.updater?.stopAuto()
+  })
+
+  it('wyjście w sesji z pobranym wydaniem: wpis „wyjście w czasie sesji” zostaje (F2)', () => {
+    const { userData, helperDir } = download()
+    const logs: string[] = []
+    const c = controller({ userData, helperDir, sessionOrClass: () => true, before: { n: 0 }, logs })
+    c.init(null, null)
+    expect(c.updater?.readyRelease?.version).toBe('0.1.1')
+    c.onQuit(false)
+    expect(logs.some((m) => m.startsWith('wyjście w czasie sesji albo zajęć'))).toBe(true)
     c.updater?.stopAuto()
   })
 

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import { launch, settledBarBounds, viewPage, withMainLog } from './app'
+import { launch, launchSecondCopy, settledBarBounds, viewPage, withMainLog } from './app'
 
 const PAGES = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history', 'settings']
 
@@ -49,7 +49,7 @@ test('start: okno główne z menu bocznym, nazwą i paskiem; tożsamość testow
   }
 })
 
-test('zamknięcie: koniec pracy bez nieobsłużonych wyjątków, także gdy pomocnik kończy się po oknach', async () => {
+test('zamknięcie: aplikacja zamknięta bez nieobsłużonych wyjątków, także gdy pomocnik kończy się po oknach', async () => {
   const { app, page, userData } = await launch()
   await expect(page.getByTestId('bar-main')).toBeVisible()
   await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => ''), { timeout: 30_000 }).toContain('pomocnik działa')
@@ -57,8 +57,32 @@ test('zamknięcie: koniec pracy bez nieobsłużonych wyjątków, także gdy pomo
   // foreground, the bar) come after the windows are gone – none may reach a destroyed window.
   await app.close()
   const log = await readFile(join(userData, 'logs', 'main.log'), 'utf8')
-  expect(log).toContain('koniec pracy')
+  expect(log).toContain('aplikacja zamknięta')
   expect(log.split('\n').filter((l) => /nieobsłużon/.test(l)), log).toEqual([])
+})
+
+test('druga kopia na tej samej tożsamości: przekazuje start działającej (okno wraca) i kończy się bez „koniec pracy” i „aplikacja zamknięta” (F2)', async () => {
+  const { app, page, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('bar-main')).toBeVisible()
+      // The running copy's window goes to the tray: the second start hands its argv over, and that shows it again.
+      const win = await app.browserWindow(page)
+      await win.evaluate((w) => w.hide())
+      await expect.poll(() => win.evaluate((w) => w.isVisible())).toBe(false)
+      expect(await launchSecondCopy(userData)).toBe(0)
+      await expect.poll(() => win.evaluate((w) => w.isVisible()), { timeout: 15_000 }).toBe(true)
+      const log = await readFile(join(userData, 'logs', 'main.log'), 'utf8')
+      expect(log).toContain('druga kopia – przekazano do działającej')
+      expect(log).not.toMatch(/koniec pracy|aplikacja zamknięta/)
+    })
+  } finally {
+    await app.close()
+  }
+  const log = await readFile(join(userData, 'logs', 'main.log'), 'utf8')
+  expect(log.split('\n').filter((l) => /druga kopia/.test(l)).length).toBe(1)
+  expect(log.split('\n').filter((l) => /aplikacja zamknięta/.test(l)).length).toBe(1)
+  expect(log).not.toMatch(/koniec pracy/)
 })
 
 test('koniec sesji Windows odwołany: zapis zamknięcia, potem znacznik życia znowu bije, okno chowa się do zasobnika', async () => {
