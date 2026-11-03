@@ -10,7 +10,8 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
   → lista „do sprawdzenia” na Windows → pauza do „dalej”. Bez „dalej” nie zaczynaj kolejnego etapu.
 - Zachowanie widoczne dla użytkownika zmienia się tylko po pytaniu, nigdy zgodą hurtem. Sprawy techniczne rozstrzygaj
   sam i dopisz jako T-decyzję.
-- Do `main` pisze naraz jedna sesja; po scaleniu sprawdź, że zadanie Windows w CI opublikowało wydanie.
+- PR-y otwieraj i scalaj bez pytania, gdy CI jest zielone i nic nie czeka na decyzję (D285, D333). Do `main` pisze
+  naraz jedna sesja; po scaleniu sprawdź, że zadanie Windows w CI opublikowało wydanie.
 - Po wznowieniu (limit, nowa sesja) najpierw przeczytaj `docs/postep.md`.
 - **`/clear`:** przy każdej pauzie i po każdym zamkniętym kroku powiedz wprost, czy można go teraz bezpiecznie wykonać.
   Bezpiecznie = wszystko jest w commitach wypchniętych na GitHuba, `docs/postep.md` mówi, co dalej (także PR do scalenia
@@ -29,10 +30,11 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
   Grywalizacja, Wygląd, Dane i ustawienia, Konwencje interfejsu, Jakość i protokół, Plan budowy.
 - `docs/decyzje.md` – decyzje D (użytkownik), `docs/decyzje-techniczne.md` – T (techniczne) (D308); czytaj Grepem
   po numerze. Nie zmieniaj D bez pytania; nowa decyzja wskazuje, którą zastępuje.
-- `docs/plan.md` – tylko praca do zrobienia: ciągi, rodzaj, szacunek, „gotowe, gdy” (D317). `docs/postep.md` – stan
-  bieżący i kolejka.
+- `docs/plan.md` – tylko praca do zrobienia: ciągi, rodzaj, model, szacunek, „gotowe, gdy” (D317, D332).
+  `docs/postep.md` – stan bieżący i kolejka.
 - `docs/odbior.md` – listy do odbioru na Windows (oczekiwany efekt i błędy blokujące każdego punktu), także odebrane.
-- `docs/odbior-vm.md` – odbiór w maszynie wirtualnej (Cowork); raport z testów w `docs/vm/raport.md` (T529).
+- `docs/odbior-vm.md` – odbiór w maszynie wirtualnej (Cowork); raport z testów w `docs/vm/raport.md` (T529),
+  przyczyny jego niezgodności w `docs/vm/przyczyny.md`.
 - `CHANGELOG.md` – opis zmian dla użytkownika (pokazywany w aplikacji jako „Co nowego”).
 - Wiedza modułów → `.claude/rules/*.md` z `paths:`. Historia → `docs/archiwum/`.
 
