@@ -21,10 +21,10 @@ import { answerEvents, type Question } from './auto'
 import { isBoundaryWork, plannedSpan, startPlanned } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
 import { explainMinutes, inExplain, type Explain } from './explain'
-import { foldFacts, OPEN, ranMinutes, type BlockFact } from './facts'
+import { foldFacts, isRunning, ranMinutes, type BlockFact } from './facts'
 import { atOf, gridOf } from './grid'
 import { dayOutcome, outcomeChanges, type DayOutcome, type OutcomeChange } from './outcome'
-import { plannedEndOf, timerNow, type TimerDraft } from './timer'
+import { closePausedEnds, fixedWorkLeft, heldByRequests, lastWorkStop, plannedEndOf, requestHoldsWork, setsWorkEnd, timerNow, workEndReaches, type TimerDraft } from './timer'
 
 const HOUR = 3_600_000
 /** A day not closed waits in the morning at most this long after its end (spec „Okno korekty … najwyżej 72 h”). */
@@ -91,16 +91,42 @@ const AWAY_RULES = ['limit', 'bedtime']
 export const ritualActivity = (ctx: DayContext, state: DayState): Activity => activityOf(ctx.events, state.grid.start, ctx.now)
 
 /**
- * The end of work: one click „Koniec pracy o … ✓”, with „Pracowałem do …” when time to explain after a work block follows
- * it (spec „Dzień bez potwierdzonego końca pracy ma w tym wierszu jedno kliknięcie”); null while work runs or without it.
+ * A block of work (of any kind – a project-counted one too) runs now: the row of the end of work waits, and the close
+ * of the day writes no end (it also waits for a request that interrupted work, `requestHoldsWork`).
  */
-function workEndRow(state: DayState): Extract<RitualRow, { kind: 'workEnd' }> | null {
+function workRunning(state: DayState): boolean {
+  const work = new Set(state.blocks.filter((b) => b.isWork).map((b) => b.id))
+  for (const [id, f] of state.facts.blocks) if (work.has(id) && isRunning(f)) return true
+  return false
+}
+
+/**
+ * The end the close of the day confirms when no work runs nor waits for a request's end – where the work stopped
+ * (`lastWorkStop`), as „Koniec pracy” clicked then – or null: a fixed work block is left (D216), or a „Koniec pracy” or
+ * a confirmed end of the engine („Odcinam się” too) reaches it already.
+ */
+function stopToConfirm(state: DayState, isWork: (id: string) => boolean): number | null {
+  if (fixedWorkLeft(state)) return null
+  const stop = lastWorkStop(state, isWork)
+  if (stop == null || workEndReaches(state, stop, isWork) || state.ends.some((e) => e.confirmed && e.at >= stop)) return null
+  return stop
+}
+
+/**
+ * The end of work: one click „Koniec pracy o … ✓”, with „Pracowałem do …” when time to explain after a work block follows
+ * it (spec „Dzień bez potwierdzonego końca pracy ma w tym wierszu jedno kliknięcie”) – the end the close confirms
+ * (`stopToConfirm`), else the engine's last; null while work runs or without either.
+ */
+function workEndRow(state: DayState, isWork: (id: string) => boolean = setsWorkEnd(state), held: readonly string[] = heldByRequests(state)): Extract<RitualRow, { kind: 'workEnd' }> | null {
   const last = state.ends.at(-1)
-  const running = [...state.facts.blocks.values()].some((b) => b.endedAt == null && b.runs.some((r) => r.to === OPEN) && state.blocks.find((x) => x.id === b.id)?.isWork)
-  if (state.noWorkDay || !last || running) return null
+  // A request that interrupted work holds it as running work does (it comes back at the request's end, T503).
+  if (state.noWorkDay || workRunning(state) || requestHoldsWork(state, isWork, held)) return null
+  const stop = stopToConfirm(state, isWork)
+  const end = stop ?? last?.at
+  if (end == null) return null
   const closedAt = state.facts.closed?.at ?? null
-  const explain = state.explains.find((x) => x.kind === 'work' && x.from >= last.at) ?? null
-  return { id: ritualRowId(state.grid.date, 'workEnd', 'day'), kind: 'workEnd', end: last.at, confirmed: last.confirmed && state.workEnd != null, explain, afterClose: closedAt != null && last.at > closedAt }
+  const explain = state.explains.find((x) => x.kind === 'work' && x.from >= end) ?? null
+  return { id: ritualRowId(state.grid.date, 'workEnd', 'day'), kind: 'workEnd', end, confirmed: stop == null && !!last?.confirmed && state.workEnd != null, explain, afterClose: closedAt != null && end > closedAt }
 }
 
 /**
@@ -388,15 +414,25 @@ export function closeRefusal(state: DayState, how: string): string | null {
 
 /**
  * Closing the day (`how`): the evening ritual and „Jak zapisano” confirm the end of work (spec „Jak zapisano … potwierdza
- * koniec pracy jak „Koniec pracy o … ✓””) and take untouched rows as written; „Nie pamiętam” confirms nothing (a day
- * without data); „Wolne” marks the day free.
+ * koniec pracy jak „Koniec pracy o … ✓””) – while no work runs, where the work stopped last, as „Koniec pracy” clicked
+ * then (a paused block too, whose end the 15-minute rule has not counted yet, G1) – end the paused work blocks (not done,
+ * with „Cofnij”) and take untouched rows as written; „Nie pamiętam” confirms nothing (a day without data); „Wolne” marks
+ * the day free.
  */
 export function closeEvents(state: DayState, how: CloseHow, at: number): TimerDraft[] {
   if (!CLOSE_HOWS.includes(how)) return []
   const out: TimerDraft[] = []
   if (how === 'ritual' || how === 'asWritten') {
-    const row = workEndRow(state)
-    if (row && !row.confirmed) out.push({ k: 'work.end', at, end: atOf(state.grid, row.end) })
+    // Nothing while work runs (as the row: `workRunning`) or waits for a request's end (T503). Otherwise what „Koniec
+    // pracy” does in this state: the row's end (`stopToConfirm` – where the work stopped; while a fixed work block is
+    // left, D216, the engine's end when not confirmed, as before G1) and the paused work ended, unless that block is left.
+    const isWork = setsWorkEnd(state)
+    const held = heldByRequests(state)
+    if (!workRunning(state) && !requestHoldsWork(state, isWork, held)) {
+      const row = workEndRow(state, isWork, held)
+      if (row && !row.confirmed) out.push({ k: 'work.end', at, end: Math.min(at, atOf(state.grid, row.end)) })
+      if (!fixedWorkLeft(state)) out.push(...closePausedEnds(state, at))
+    }
   }
   out.push({ k: 'ritual.close', at, how })
   return out

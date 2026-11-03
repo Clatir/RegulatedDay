@@ -4,7 +4,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import { closeEffect, closeEvents, feltRows, ritualActivity, ritualAnswer, ritualDue, ritualEffect, ritualRows, unclosedDays, type RitualRow } from '@shared/engine/ritual'
+import { activityOf } from '@shared/engine/activity'
+import { answerEvents, questionsOf } from '@shared/engine/auto'
 import { dayOutcome } from '@shared/engine/outcome'
+import { requestAction } from '@shared/engine/requests'
+import { timerAction, timerNow, workEndOpen, type TimerAction } from '@shared/engine/timer'
+import { engineView } from '@shared/engineView'
 import { block, hhmm, Scenario } from './dsl'
 
 const DATE = '2026-10-28' // a Wednesday
@@ -104,6 +109,233 @@ describe('wiersze rytuału', () => {
       ['a', 'rest'],
       ['p', 'project']
     ])
+  })
+
+  it('zamknięcie rytuału kończy zapauzowany blok pracy (niezrobiony, z „Cofnij”) – także przy potwierdzonym już końcu (G1)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '13:00', min: 60 })] }).using('07:00', '23:59')
+    s.approve('15:00', '07:30')
+    s.ran('a', '08:00', '09:00').workEnd('09:00')
+    s.start('b', '13:00').pause('b', '13:20')
+    const t = s.at('17:00')
+    const drafts = closeEvents(s.stateAt(t), 'ritual', t)
+    expect(drafts.map((d) => `${d.k} ${(d.block as string | undefined) ?? ''}`.trim())).toEqual(['work.end', 'block.end b', 'ritual.close'])
+    expect(drafts[1]).toMatchObject({ done: false, rule: 'workEnd', autoRule: 'workEnd' })
+    s.write(drafts, t)
+    const st = s.state('17:05')
+    const b = st.facts.blocks.get('b')!
+    expect(hhmm(st, b.endedAt)).toBe('13:20')
+    expect(b.done).toBe(false)
+    expect(timerNow(st).paused).toEqual([])
+    // On the list „zrobione automatycznie” with „Cofnij”, as after „Tak” on „Koniec pracy?”.
+    const t2 = s.at('17:05')
+    const ctx = s.contextAt(t2)
+    const v = engineView({ ctx, state: st, energy: null, activity: activityOf(ctx.events, st.grid.start, t2, 'pca'), now: t2, name: () => 'Inne obowiązki', care: { waterOn: false, waterEveryMin: 45, breakAfterMin: 0, solitudeAfterMin: 0 }, modePrefs: { sessionMode: true, classMode: true }, pending: null })
+    expect(v.autos.items).toContainEqual(expect.objectContaining({ text: 'Inne obowiązki zaparkowany („Koniec pracy”)', undo: true }))
+    // The end already confirmed (the paused block after it, as E8a.2): only the paused block ends.
+    const c = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).using('07:00', '23:59')
+    c.start('a', '08:00').pause('a', '08:30')
+    c.workEnd('08:40', '08:30')
+    const ct = c.at('17:00')
+    expect(closeEvents(c.stateAt(ct), 'ritual', ct).map((d) => d.k)).toEqual(['block.end', 'ritual.close'])
+  })
+
+  for (const how of ['ritual', 'asWritten'] as const) {
+    it(`zamknięcie (${how}) przy pauzie krótszej niż 15 min potwierdza koniec tej pracy; „Koniec pracy” ani „Koniec pracy?” nie wracają`, () => {
+      const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '13:00', min: 300 })] }).using('07:00', '23:59')
+      s.approve('19:00', '07:30')
+      s.ran('a', '08:00', '09:00').workEnd('09:00')
+      s.start('b', '13:00').pause('b', '16:55')
+      const t = s.at('17:00')
+      const drafts = closeEvents(s.stateAt(t), how, t)
+      expect(drafts.find((d) => d.k === 'work.end')).toMatchObject({ end: s.at('16:55') })
+      s.write(drafts, t)
+      const ends = (time: string) => s.state(time).ends.map((e) => `${hhmm(s.state(time), e.at)}${e.confirmed ? '+' : '?'}`)
+      expect(ends('17:05')).toEqual(['09:00+', '16:55+'])
+      for (const time of ['17:05', '17:20']) {
+        const st = s.state(time)
+        expect(workEndOpen(st)).toBe(false)
+        const ctx = s.contextAt(s.at(time))
+        expect(questionsOf({ ctx, state: st, activity: activityOf(ctx.events, st.grid.start, s.at(time), 'pca'), now: s.at(time) }).some((q) => q.kind === 'workEnd')).toBe(false)
+      }
+    })
+  }
+
+  it('koniec potwierdzony przez „Odcinam się”: zamknięcie nie dopisuje drugiego „Koniec pracy”', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '13:00', min: 300 })] }).using('07:00', '23:59')
+    s.ran('a', '08:00', '09:00').workEnd('09:00')
+    s.start('b', '13:00').pause('b', '16:55').disconnect('16:55', null)
+    const t = s.at('22:00')
+    const before = s.stateAt(t)
+    expect(before.ends.at(-1)).toMatchObject({ confirmed: true })
+    expect(closeEvents(before, 'ritual', t).map((d) => d.k)).toEqual(['block.end', 'ritual.close'])
+  })
+
+  it('w czasie prośby, która przerwała pracę, zamknięcie nie dopisuje „Koniec pracy” i nie kończy przerwanego bloku (T503)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '16:00', min: 120 })] }).using('07:00', '23:59')
+    s.start('a', '16:00')
+    const t0 = s.at('17:00')
+    const r = requestAction(s.stateAt(t0), { a: 'requestNow', request: 'r1', person: null }, t0)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, t0)
+    const t = s.at('17:30')
+    expect(closeEvents(s.stateAt(t), 'ritual', t).map((d) => d.k)).toEqual(['ritual.close'])
+  })
+
+  it('w czasie prośby, po której blok pracy wróci, zamknięcie nie dopisuje „Koniec pracy” także z wiersza (wcześniejszy niepotwierdzony koniec)', () => {
+    // b planned at 13:00, begun at 14:00 – more than 15 min late, so 09:00 is a valid (unconfirmed) end.
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '13:00', min: 120 })] }).using('07:00', '23:59')
+    s.ran('a', '08:00', '09:00')
+    s.start('b', '14:00')
+    const t0 = s.at('15:00')
+    const r = requestAction(s.stateAt(t0), { a: 'requestNow', request: 'r1', person: null }, t0)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, t0)
+    const t = s.at('15:30')
+    const st = s.stateAt(t)
+    expect(st.ends.map((e) => `${hhmm(st, e.at)}${e.confirmed ? '+' : '?'}`)).toEqual(['09:00?'])
+    expect(closeEvents(st, 'ritual', t).map((d) => d.k)).toEqual(['ritual.close'])
+    // The row waits as while work runs – its ✓ would write the end the close leaves (G1).
+    expect(ritualRows(st, useAt(s, t)).some((x) => x.kind === 'workEnd')).toBe(false)
+  })
+
+  it('pominięta sesja (okno minęło) to nie stały blok, który zostaje: zamknięcie, „Koniec pracy” i „Tak” kończą zapauzowaną pracę', () => {
+    const day = () => {
+      const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '09:00', min: 60 }), block({ id: 'ny', cat: 'sesja', at: '15:30', min: 60, fixed: true })] }).using('07:00', '23:59')
+      s.start('a', '09:00').pause('a', '09:30')
+      return s
+    }
+    const t = (s: Scenario) => s.at('21:00')
+    const close = day()
+    expect(closeEvents(close.stateAt(t(close)), 'ritual', t(close)).map((d) => `${d.k} ${(d.block as string | undefined) ?? ''}`.trim())).toEqual(['work.end', 'block.end a', 'ritual.close'])
+    const click = day()
+    const r = timerAction(click.contextAt(t(click)), click.stateAt(t(click)), { a: 'workEnd' }, t(click))
+    expect(r.ok && r.events.map((e) => `${e.k} ${(e.block as string | undefined) ?? ''}`.trim())).toEqual(['work.end', 'block.end a'])
+    const yes = day()
+    const st = yes.stateAt(t(yes))
+    const ctx = yes.contextAt(t(yes))
+    const q = questionsOf({ ctx, state: st, activity: activityOf(ctx.events, st.grid.start, t(yes), 'pca'), now: t(yes) }).find((x) => x.kind === 'workEnd')!
+    expect(answerEvents(st, q, 'yes', t(yes))!.map((e) => `${e.k} ${(e.block as string | undefined) ?? ''}`.trim())).toEqual(['work.end', 'block.end a', 'question.answer'])
+  })
+
+  it('pominięta sesja za blokiem wciąż „due” w planie: silnik nie robi z niej stałego bloku, który zostaje – zamknięcie potwierdza koniec', () => {
+    // b (21:30) still due keeps the stretch open; ny, skipped, comes after it in the plan.
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '09:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '21:30', min: 30 }), block({ id: 'ny', cat: 'sesja', at: '15:30', min: 60, fixed: true })] }).using('07:00', '23:59')
+    s.ran('a', '09:00', '10:00')
+    const t = s.at('21:00')
+    const drafts = closeEvents(s.stateAt(t), 'ritual', t)
+    expect(drafts.find((d) => d.k === 'work.end')).toMatchObject({ end: s.at('10:00') })
+    s.write(drafts, t)
+    expect(s.state('21:05').ends.at(-1)).toMatchObject({ confirmed: true })
+  })
+
+  it('wiersz „Koniec pracy o …” pokazuje i jego ✓ potwierdza tę godzinę, którą potwierdzi zamknięcie', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '13:00', min: 300 })] }).using('07:00', '23:59')
+    s.ran('a', '08:00', '09:00')
+    s.start('b', '14:00').pause('b', '16:55')
+    const t = s.at('17:00')
+    const st = s.stateAt(t)
+    const workRow = ritualRows(st, useAt(s, t)).find((x) => x.kind === 'workEnd') as Extract<RitualRow, { kind: 'workEnd' }>
+    expect(hhmm(st, workRow.end)).toBe('16:55')
+    expect(closeEvents(st, 'ritual', t).find((d) => d.k === 'work.end')).toMatchObject({ end: s.at('16:55') })
+    expect(ritualAnswer(st, workRow, 'ok', t)).toEqual([{ k: 'work.end', at: t, end: s.at('16:55') }])
+  })
+
+  it('przy biegnącej pracy zamknięcie nie kończy zapauzowanych bloków', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '09:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '10:00', min: 60 })] }).using('07:00', '23:59')
+    s.start('a', '09:00').pause('a', '09:30').start('b', '10:00')
+    const t = s.at('10:30')
+    expect(closeEvents(s.stateAt(t), 'ritual', t).map((d) => d.k)).toEqual(['ritual.close'])
+  })
+
+  it('przy stałym bloku pracy przed drugą zmianą (D216) zamknięcie robi to, co „Koniec pracy”: nic nie kończy i nie potwierdza', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '09:00', min: 60 }), block({ id: 'f', cat: 'inne', at: '15:30', min: 60, fixed: true })] }).using('07:00', '23:59')
+    s.start('a', '09:00').pause('a', '09:30')
+    const t = s.at('12:00')
+    expect(closeEvents(s.stateAt(t), 'ritual', t).map((d) => d.k)).toEqual(['ritual.close'])
+  })
+
+  it('przy biegnącym bloku liczonym jak projekt zamknięcie nie dopisuje „Koniec pracy” (jak wiersz końca pracy)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '13:00', min: 60 }), block({ id: 'n', cat: 'nauka', at: '15:00', min: 120 })] }).using('07:00', '23:59')
+    s.ran('a', '08:00', '09:00').workEnd('09:00')
+    s.ran('b', '13:00', '14:00').start('n', '15:00')
+    const t = s.at('16:00')
+    const st = s.stateAt(t)
+    expect(st.asProject).toContain('n')
+    expect(closeEvents(st, 'ritual', t).map((d) => d.k)).toEqual(['ritual.close'])
+  })
+
+  const askedAt = (s: Scenario, time: string) => {
+    const st = s.state(time)
+    const ctx = s.contextAt(s.at(time))
+    return questionsOf({ ctx, state: st, activity: activityOf(ctx.events, st.grid.start, s.at(time), 'pca'), now: s.at(time) }).some((q) => q.kind === 'workEnd')
+  }
+
+  it('po zamknięciu dnia przycisk i „Koniec pracy?” znikają tylko z końcem, który zamknięcie przyjęło; „Nie pamiętam” niczego nie przyjmuje', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).using('07:00', '23:59')
+    s.ran('a', '08:00', '09:00')
+    expect(workEndOpen(s.state('16:55'))).toBe(true)
+    const t = s.at('17:00')
+    s.write(closeEvents(s.stateAt(t), 'unknown', t), t)
+    expect(s.state('17:05').ends.at(-1)?.confirmed).toBe(false)
+    expect(workEndOpen(s.state('17:05'))).toBe(true)
+    // The ritual's close confirms it: nothing comes back.
+    const r = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).using('07:00', '23:59')
+    r.ran('a', '08:00', '09:00')
+    r.write(closeEvents(r.stateAt(t), 'ritual', t), t)
+    expect(workEndOpen(r.state('17:05'))).toBe(false)
+    expect(askedAt(r, '17:05')).toBe(false)
+    // A block outside the plan begun after the close: its end counts as before.
+    r.ran('b', '18:00', '18:30', { cat: 'inne', min: 30 })
+    expect(workEndOpen(r.state('18:35'))).toBe(true)
+    // Ended at its planned end („Dalej”): asked 15 min later (T261).
+    expect(askedAt(r, '18:50')).toBe(true)
+  })
+
+  it('zamknięcie w czasie prośby nic nie przyjęło: po jej końcu i „Zaparkuj” pytanie i przycisk wracają', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '13:00', min: 120 })] }).using('07:00', '23:59')
+    s.ran('a', '08:00', '09:00')
+    s.start('b', '14:00')
+    const t0 = s.at('15:00')
+    const req = requestAction(s.stateAt(t0), { a: 'requestNow', request: 'r1', person: null }, t0)
+    if (!req.ok) throw new Error(req.why)
+    s.write(req.events, t0)
+    const t = s.at('15:30')
+    s.write(closeEvents(s.stateAt(t), 'ritual', t), t)
+    // The request ends without resuming b; b is parked.
+    s.raw({ k: 'request.end', request: 'r1', at: s.at('15:40') }, '15:40')
+    const park = timerAction(s.contextAt(s.at('15:45')), s.stateAt(s.at('15:45')), { a: 'park', block: 'b' }, s.at('15:45'))
+    if (park.ok) s.write(park.events, s.at('15:45'))
+    const st = s.state('16:30')
+    expect(st.ends.map((e) => `${hhmm(st, e.at)}${e.confirmed ? '+' : '?'}`)).toEqual(['09:00?', '15:00?'])
+    expect(workEndOpen(st)).toBe(true)
+    expect(askedAt(s, '16:30')).toBe(true)
+  })
+
+  it('praca zaczęta po zamknięciu w jego minucie (kolejność zdarzeń, nie minuta) ma przycisk', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).using('07:00', '23:59')
+    s.ran('a', '08:00', '09:00').workEnd('09:00')
+    const t = s.at('17:00') + 20_000
+    s.write(closeEvents(s.stateAt(t), 'ritual', t), t)
+    // „Zacznij” by mistake at 17:00:25, ended at 17:00:28 – after the close, in its minute.
+    const at = (ms: number, act: TimerAction) => {
+      const r = timerAction(s.contextAt(ms), s.stateAt(ms), act, ms)
+      if (r.ok) s.write(r.events, ms)
+      return r
+    }
+    expect(at(s.at('17:00') + 25_000, { a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 10, confirm: true }).ok).toBe(true)
+    expect(at(s.at('17:00') + 28_000, { a: 'finish', block: 'x' }).ok).toBe(true)
+    expect(workEndOpen(s.state('17:02'))).toBe(true)
+  })
+
+  it('zamknięcie dnia kończy te zapauzowane bloki pracy, które kończy „Koniec pracy” – analiza tygodniowa i „po końcu pracy jak projekt” zostają (D195)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'wa', cat: 'analiza', at: '10:00', min: 60, tag: 'weeklyAnalysis' }), block({ id: 'b', cat: 'inne', at: '12:00', min: 60 }), block({ id: 'n', cat: 'nauka', at: '13:00', min: 60 })] }).using('07:00', '23:59')
+    s.ran('a', '08:00', '09:00')
+    s.start('wa', '10:00').pause('wa', '10:30')
+    s.start('b', '12:00').pause('b', '12:30')
+    s.start('n', '13:00').pause('n', '13:20')
+    const t = s.at('17:00')
+    const ended = closeEvents(s.stateAt(t), 'ritual', t).filter((d) => d.k === 'block.end').map((d) => d.block)
+    expect(ended).toEqual(['b'])
   })
 
   it('„Nie pamiętam” niczego nie potwierdza: granica bez danych', () => {

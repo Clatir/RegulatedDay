@@ -191,6 +191,12 @@ export function startPlanned(info: BlockInfo, plan: readonly PlanBlock[] = []): 
 export const isBoundaryWork = (b: BlockInfo): boolean => b.isWork && !b.rules.keepsRegen && !b.afterWorkMark && !b.secondShift
 
 /**
+ * Work that sets the end of work: boundary work not counted as a project (`projects`, D195) – a block of „po końcu pracy
+ * jak projekt” begun before the end of work is work. The one rule of `day.ts` (its ends) and the timer (G1).
+ */
+export const setsWorkEndBlock = (b: BlockInfo | undefined, projects: ReadonlySet<string>): boolean => !!b && isBoundaryWork(b) && !projects.has(b.id)
+
+/**
  * The mark „po pracy” (D209), from the planned hours: a block of a category „po końcu pracy jak projekt” planned at
  * least 30 min after the planned end of the last other work block before the second shift; never one anchored to a
  * work block. Other blocks with the mark are no work for this rule (spec: „blok pracy” has no mark), so two evening

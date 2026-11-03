@@ -920,13 +920,13 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - „Co nowego” pokazuje starszą wersję albo nie pokazuje się przy pierwszym otwarciu okna;
   - po aktualizacji brakuje danych dnia, próśb albo szablonów.
 
-#### E6a.2 Czas po bloku pracy, który skończył się sam (0.6.0)
+#### E6a.2 Czas po bloku pracy, który skończył się sam (0.6.0, zmiana w 1.0.1)
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/explain.test.ts` (koniec przerwą ponad 10 min, „Koniec pracy” = odpoczynek,
   energia bez zmian, twardy koniec nie mija). Ty: rzut oka przy okazji.
 - **Jak sprawdzić:** wieczorem zostaw blok pracy po planowanym końcu przy oknie na wierzchu i nie odpowiadaj na „Dalej?”
   – po godzinie od zobaczenia blok kończy się sam. Dalej używaj komputera w innym programie (okno Regulated Day nie
-  liczy się jako użycie), potem kliknij „Koniec pracy”. Czas po bloku
+  liczy się jako użycie), potem kliknij „Koniec pracy” (jest w pasku od razu po samoczynnym końcu bloku). Czas po bloku
   liczy się wstępnie jak odpoczynek, więc twardy koniec idzie razem z zegarem. Patrz na „Twardy koniec projektów”
   i pulę w „Dziś”.
 - **Oczekiwany efekt:** dopóki używasz komputera po takim końcu, twardy koniec w „Dziś” przesuwa się na później (jak
@@ -934,6 +934,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Nie przechodzi, gdy:**
   - w czasie używania komputera po takim końcu przychodzi powiadomienie „Twardy koniec projektów”;
   - twardy koniec w „Dziś” stoi w miejscu albo cofa się, choć używasz komputera po bloku pracy;
+  - po samoczynnym końcu bloku w pasku nie ma „Koniec pracy”;
   - po „Koniec pracy” pasek zaczyna jakiś blok albo pokazuje pytanie o ten czas.
 
 #### E6a.3 Czas po projekcie, który skończył się sam – powiadomienie o twardym końcu (0.6.0)
@@ -1213,27 +1214,34 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 
 ### E8a – poprawki silnika dnia po przeglądzie E8 (0.16.0)
 
-#### E8a.1 Pauza ostatniego bloku pracy i „Koniec pracy?” (0.16.0)
+#### E8a.1 Pauza ostatniego bloku pracy i „Koniec pracy?” (0.16.0, zmiana w 1.0.1)
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/work-end.test.ts`, `tests/unit/engine/timer.test.ts` („Koniec pracy?”). Ty: rzut
   oka przy zwykłej pracy.
 - **Jak sprawdzić:** w ostatnim bloku pracy dnia kliknij „Pauza” i odejdź na kwadrans; innego dnia skończ ostatni blok
   pracy przez „Dalej” na „Dalej?”.
-- **Oczekiwany efekt:** po pauzie pasek przez 15 min pokazuje „Wznów · Zaparkuj”, a „Koniec pracy?” pojawia się dopiero
-  po 15 min (wznowienie wcześniej – pytania nie ma). Po „Dalej” na „Dalej?” ostatniego bloku „Koniec pracy?” przychodzi
-  15 min później; „Tak” potwierdza koniec w chwili końca bloku.
-- **Nie przechodzi, gdy:** „Koniec pracy?” pada od razu po pauzie albo po „Dalej”, po wznowieniu w ciągu 15 min karta
-  rytuału albo „Rytuał” w pasku pokazuje koniec pracy w chwili pauzy, albo „Tak” zapisuje koniec 15 min za późno.
+- **Oczekiwany efekt:** po pauzie pasek od razu ma „Koniec pracy”, a przez 15 min także „Wznów · Zaparkuj”; „Koniec
+  pracy?” pojawia się dopiero po 15 min (wznowienie wcześniej – pytania nie ma), także gdy wcześniej tego dnia inny blok
+  pracy skończył się sam. Po „Dalej” na „Dalej?” ostatniego bloku „Koniec pracy?” przychodzi 15 min później; „Tak”
+  potwierdza koniec w chwili końca bloku.
+- **Nie przechodzi, gdy:** „Koniec pracy?” pada od razu po pauzie albo po „Dalej” albo nie przychodzi wcale po 15 min
+  pauzy, po wznowieniu w ciągu 15 min karta rytuału albo „Rytuał” w pasku pokazuje koniec pracy w chwili pauzy, albo
+  „Tak” zapisuje koniec 15 min za późno.
 
-#### E8a.2 „Koniec pracy” przy zapauzowanym bloku (0.16.0)
+#### E8a.2 „Koniec pracy” przy zapauzowanym bloku (0.16.0, zmiana w 1.0.1)
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/work-end.test.ts` („Koniec pracy” przy zapauzowanym bloku). Ty: rzut oka.
-- **Jak sprawdzić:** zapauzuj blok pracy (albo zacznij przerwę z paska) i kliknij „Koniec pracy”. Sprawdzaj bez stałego
-  bloku pracy później w planie – przy nim „Koniec pracy” jest tylko przerwą (D216).
-- **Oczekiwany efekt:** pasek nie pokazuje już „Wznów · Zaparkuj” zapauzowanego bloku ani „Koniec pracy?”; koniec pracy
-  stoi w chwili pauzy, a na liście działań automatycznych jest zakończenie bloku z „Cofnij”.
-- **Nie przechodzi, gdy:** zapauzowany blok wisi dalej z kropką, pada „Koniec pracy?” albo rytuał pokazuje koniec pracy
-  wcześniejszego bloku.
+- **Jak sprawdzić:** zapauzuj blok pracy (albo zacznij przerwę z paska) i od razu kliknij „Koniec pracy” w pasku.
+  Sprawdzaj bez stałego bloku pracy później w planie – przy nim „Koniec pracy” jest tylko przerwą (D216). Innego dnia
+  zostaw zapauzowany blok pracy do wieczora i zamknij dzień rytuałem.
+- **Oczekiwany efekt:** „Koniec pracy” jest w pasku od razu po pauzie. Po kliknięciu pasek nie pokazuje już „Wznów ·
+  Zaparkuj” zapauzowanego bloku ani „Koniec pracy?”; koniec pracy stoi w chwili pauzy, a na liście działań
+  automatycznych jest zakończenie bloku z „Cofnij”. Po zamknięciu dnia zapauzowany blok też jest zakończony (z „Cofnij”
+  na liście działań automatycznych) – także w dniu z pominiętą sesją – a „Koniec pracy” ani „Koniec pracy?” już nie
+  wracają.
+- **Nie przechodzi, gdy:** przy zapauzowanym bloku nie ma „Koniec pracy”, „Koniec pracy” bez bloku na pierwszym planie
+  jest widoczne, choć blok pracy biegnie w tle albo przerwała go trwająca prośba, zapauzowany blok wisi dalej z kropką
+  (także po zamknięciu dnia), pada „Koniec pracy?” albo rytuał pokazuje koniec pracy wcześniejszego bloku.
 
 #### E8a.3 „Odcinam się” i praca po „Wracam” (0.16.0)
 - [ ] Odebrane
@@ -1375,19 +1383,22 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   a na liście „zrobione automatycznie” jest „Posiłek zjedzony do …” z „Cofnij”.
 - **Nie przechodzi, gdy:** nie ma przycisku „Posiłek”, blok pracy biegnie dalej albo obiad z planu zostaje niezaczęty.
 
-#### E8f.2 Linie paska: kotwica, „zostaje”, „nie przedłużono”, „Pracowałem do teraz” (0.21.0)
+#### E8f.2 Linie paska: kotwica, „zostaje”, „nie przedłużono”, „Pracowałem do teraz” (0.21.0, zmiana w 1.0.1)
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/widget-view.test.ts` („linie chwil dnia”), `tests/unit/engine/explain.test.ts`.
   Ty: rzut oka, gdy się zdarzą.
 - **Jak sprawdzić:** po końcu bloku, do którego jest zakotwiczony inny, spójrz na pasek; kliknij „Koniec pracy” przy
   sesji NY później w planie; po końcu sesji z planu (bez „Przedłuż”) spójrz na pasek przez 30 min; po bloku pracy bez
   odpowiedzi na „Dalej?” przez 15 min pracuj w innym programie (okno Regulated Day nie liczy się jako użycie), potem
-  kliknij „Koniec pracy”.
+  kliknij „Koniec pracy” – przycisk jest w pasku od razu po samoczynnym końcu bloku. „Koniec pracy” przy sesji NY
+  sprawdź też zaraz po starcie krótkiego bloku pracy (w tej samej minucie).
 - **Oczekiwany efekt:** „<blok> · Zacznij · Zaparkuj · Koniec pracy” z kropką (bez kropki, gdy coś biegnie); „NY o 14:00
-  zostaje · Odwołaj” (druga zmiana nigdy); „NY – nie przedłużono · Przedłuż” (koszt jako „Przedłuż +15” z ±15); „Koniec
-  pracy o 17:30 · Pracowałem do 18:30”.
-- **Nie przechodzi, gdy:** którejś linii brak, jej przycisk nic nie robi albo „zostaje · Odwołaj” wraca po pracy, która
-  przyszła po „Koniec pracy”.
+  zostaje · Odwołaj” (druga zmiana nigdy) – także po bloku zakończonym tym kliknięciem w minucie jego startu; „NY – nie
+  przedłużono · Przedłuż” (koszt jako „Przedłuż +15” z ±15); „Koniec pracy o 17:30 · Pracowałem do 18:30”. „Pracowałem
+  do …” nie wraca po czasie sprzed późniejszej pracy.
+- **Nie przechodzi, gdy:** którejś linii brak, jej przycisk nic nie robi, po samoczynnym końcu bloku nie ma „Koniec
+  pracy”, „zostaje · Odwołaj” wraca po pracy, która przyszła po „Koniec pracy”, albo „Koniec pracy o 09:30 · Pracowałem
+  do …” pojawia się mimo późniejszej pracy.
 
 ### E8g – funkcje D325, część 2a (0.22.0)
 

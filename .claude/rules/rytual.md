@@ -14,8 +14,8 @@ paths:
 „Statusy dni i passa”; D238, D243, D246, D249, D250, D254, D255, D262, D264–D266, D271, D272, D276, D281. T483–T486.
 
 ## Pliki
-- `engine/explain.ts` – `explainsOf` (z faktów i `activityOf` z logu dnia, bez `self`), `useAfter` (pierwsze użycie
-  po powrocie), id `explain:<dzień>:<blok>:<koniec bloku>`; odpowiedzi to `question.answer` (`work`, `project`,
+- `engine/explain.ts` – `explainsOf` (z faktów i `activityOf` z logu dnia, bez `self`), `returnAfter` (powrót) i
+  `useFrom` (pierwsze użycie od niego), id `explain:<dzień>:<blok>:<koniec bloku>`; odpowiedzi to `question.answer` (`work`, `project`,
   `rest`, `value` = „… do”), ostatnia wygrywa.
 - `engine/day.ts` – flagi `F_EXPLAIN`, `F_TENT_REST` (po pracy: odpoczynek przy twardym końcu i puli), `F_FREE_REST`
   (przerwa 10–30 min po projekcie); `actual` z odpowiedziami, `known` – odpowiedzi od minuty po nich (T413);
@@ -28,6 +28,20 @@ paths:
 ## Zasady
 - Czas do wyjaśnienia tylko po bloku pracy albo projektu zakończonym `twoQuestions`, `idle`, `absence` (bez
   odpowiedzi „Zakończyć” = `keep`); „po projekcie” = projekt albo blok liczony jak projekt, poza pasywnym (D266).
+- Chwile końca liczą się od powrotu (koniec przerwy w wejściu; po `twoQuestions` od końca bloku), nie od pierwszego
+  użycia: blok zaczęty w oknie RD przed użyciem – czasu do wyjaśnienia nie ma (`to <= from`). Posiłku i regeneracji
+  z odpowiedzi na nieobecność (`absenceMeal`, `absenceRegen`) nie liczą (G1). Linia „Pracowałem do …” w pasku i wiersz
+  rytuału – tylko czas sprzed którego nie zaczęła się na pierwszym planie praca (`setsWorkEnd`; sesja w tle go nie
+  zabiera); wiersz rytuału – czas od ostatniego końca pracy. Przerwy w użyciu liczą się od samego pierwszego użycia
+  (ms), nie od jego minuty – nieobecność kończąca się powrotem nie jest przerwą. Z zapisaną odpowiedzią chwile końca
+  liczą się od pierwszego użycia (jak przed G1) – zapis wsteczny przed nim nie usuwa czasu ani odpowiedzi. Zamknięcie
+  dnia (rytuał, „Jak zapisano”): gdy biegnie blok pracy (`workRunning`, jak wiersz) albo prośba przerwała pracę –
+  nic; inaczej `work.end` z godziną wiersza końca pracy, gdy niepotwierdzony, i zapauzowane bloki pracy jak „Tak” na
+  „Koniec pracy?” (`closePausedEnds`, reguła `workEnd`, z „Cofnij”) – przy stałym bloku pracy, który jeszcze zostaje
+  (`fixedWorkLeft`, D216), bez nich. Wiersz (`workEndRow`) – nie ma go przy biegnącej pracy i przy prośbie, która
+  przerwała pracę (jego ✓ zapisałby koniec, którego zamknięcie celowo nie zapisuje); pokazuje tę godzinę, którą zamknięcie potwierdzi
+  (`stopToConfirm`: gdzie praca stanęła, `lastWorkStop`, jeśli nie sięga jej `work.end` – `workEndReaches` – ani
+  potwierdzony koniec, np. „Odcinam się”), inaczej ostatni koniec silnika; jego ✓ potwierdza ją.
 - Odpowiedź niejawna po pracy: `work.end`, `disconnect.start`, migawka typu „regeneracyjny” od jego startu → odpoczynek;
   zamknięcie dnia z nieruszonym wierszem → ✓ (po pracy odpoczynek, po projekcie projekt).
 - Twardy koniec w czasie do wyjaśnienia po projekcie mija przy pierwszym wejściu (`atInput`, także gdy w międzyczasie
@@ -38,7 +52,7 @@ paths:
 - Silnik sam czyta użycie z logu: w testach komputer musi mieć „obserwacja trwa” (`Scenario.using`), inaczej otwarty
   odcinek kończy się na `observe.from` i nikt „nie używa” komputera.
 - Koniec bloku jest na siatce minut, przerwa w wejściu zaczyna się w dowolnej sekundzie: powrót szukany z tolerancją
-  pół minuty (`useAfter(…, MIN / 2)`); w testach DSL przerwy są w pełnych minutach – zapis w środku minuty: `write`.
+  pół minuty (`returnAfter(…, MIN / 2)`); w testach DSL przerwy są w pełnych minutach – zapis w środku minuty: `write`.
 - Wszystko, co rytuał dopisuje po fakcie (odpowiedzi, `rest.not`), liczy się od swojej chwili w pętli minut
   (`known`, `n.at`) – inaczej twardy koniec mija wstecz; energii nie zmienia nigdy.
 - Przeskok sprawdzania twardego końca (T414) porównuje minuty czasu do wyjaśnienia przez `plain` (dzień bez niego) –

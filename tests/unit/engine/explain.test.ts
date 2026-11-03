@@ -147,6 +147,17 @@ describe('czas do wyjaśnienia – zapisy w środku minuty, poprawki z rytuału,
     expect(span(s.state('21:00'))).toEqual({ from: '20:20', to: 'trwa', until: null, kind: 'project', answer: null })
   })
 
+  it('po bloku pracy powrót w pierwszych 30 s minuty: sama nieobecność nie jest przerwą, czas do wyjaśnienia trwa (G1)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '19:00', min: 60 })] }).using('07:00', '23:59')
+    s.start('a', '19:00')
+    const away = s.at('20:05') + 17_000
+    const back = s.at('20:20') + 17_000
+    s.write([{ k: 'gap.open', gap: 'gi', kind: 'input', from: away, lastOutside: away }, { k: 'gap.open', gap: 'gu', kind: 'use', from: away, lastOutside: null }], away)
+    s.write([{ k: 'gap.close', gap: 'gi', to: back }, { k: 'gap.close', gap: 'gu', to: back }], back)
+    s.write([{ id: 'auto-a-idle', k: 'block.end', block: 'a', at: away, done: null, rule: 'idle', autoRule: 'idle' }], away + 10 * 60_000)
+    expect(span(s.state('21:00'))).toEqual({ from: '20:20', to: 'trwa', until: null, kind: 'work', answer: null })
+  })
+
   it('minięcie twardego końca zapisane przez prowadzącego: komunikat zostaje (czas do wyjaśnienia po projekcie, D250)', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'w', cat: 'inne', at: '08:00', min: 540 }), block({ id: 'p', cat: 'projekty', at: '17:30', min: 120 })] }).using('07:00', '23:59')
     s.ran('w', '08:00', '17:00').workEnd('17:00')
@@ -239,6 +250,79 @@ describe('czas do wyjaśnienia – kiedy go nie ma', () => {
   })
 })
 
+describe('czas do wyjaśnienia – momenty końca od powrotu (G1, obs. 781, 866)', () => {
+  it('blok zaczęty w oknie RD po powrocie, przed pierwszym użyciem poza nim, go kończy – czasu do wyjaśnienia nie ma', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '09:30', min: 60 }), block({ id: 'm', cat: 'posilek', at: '09:40', min: 30 }), block({ id: 'b', cat: 'inne', at: '10:09', min: 10 })] }).using('07:00', '23:00')
+    s.start('a', '09:30')
+    // Away 09:30–10:04 (no input, no use); back in the window of RD (input, no use outside it) until 10:25.
+    s.gap('09:30', '10:04', { kind: 'input' })
+    s.gap('09:30', '10:25', { kind: 'use' })
+    silentEnd(s, 'a', '09:30', 'absence', '10:04')
+    // „Posiłek” to the absence: the meal over it, as the answer writes it.
+    const planned = { categoryId: 'posilek', variantId: null, durationMin: 30, tag: null, fixed: false }
+    s.write([{ id: 'meal-start', k: 'block.start', block: 'm', at: s.at('09:30'), bg: false, planned, confirmUntil: null, how: 'plan', autoRule: 'absenceMeal' }, { id: 'meal-end', k: 'block.end', block: 'm', at: s.at('10:04'), done: true, rule: 'absenceMeal', autoRule: 'absenceMeal' }], s.at('10:05'))
+    s.ran('b', '10:09', '10:20')
+    expect(s.state('11:00').explains).toEqual([])
+  })
+
+  it('czas z zapisaną odpowiedzią nie znika przez prośbę dopisaną później od chwili przed pierwszym użyciem', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '14:00', min: 60 })] }).using('07:00', '23:59')
+    s.start('a', '14:00')
+    // Away 15:00–15:30 (no input); back in the window of RD to 15:31, then used; a break from 16:00.
+    s.gap('15:00', '15:30', { kind: 'input' })
+    s.gap('15:00', '15:31', { kind: 'use' })
+    silentEnd(s, 'a', '15:00', 'idle', '15:10')
+    s.gap('16:00', '16:30')
+    const id = s.state('16:35').explains[0]!.id
+    answer(s, id, 'work', '16:35')
+    expect(span(s.state('16:38'))).toMatchObject({ from: '15:31', to: '16:00', answer: 'work' })
+    // A request written in after the fact, from 15:30 – before the first use.
+    s.write([{ k: 'request.start', request: 'r1', at: s.at('15:30'), mode: 'after', person: null, estimateMin: null, hardEndAt: null, splits: [] }, { k: 'request.end', request: 'r1', at: s.at('15:45') }], s.at('16:40'))
+    expect(span(s.state('16:45'))).toMatchObject({ from: '15:31', answer: 'work' })
+  })
+
+  it('posiłek albo regeneracja z odpowiedzi na nieobecność go nie kończą (po projekcie przerwa 10–30 min jest odpoczynkiem)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'p', cat: 'projekty', at: '19:00', min: 60 }), block({ id: 'm', cat: 'posilek', at: '20:20', min: 20 })] }).using('07:00', '23:59')
+    s.start('p', '19:00')
+    silentEnd(s, 'p', '20:00', 'twoQuestions', '21:00')
+    s.gap('20:20', '20:40')
+    const planned = { categoryId: 'posilek', variantId: null, durationMin: 20, tag: null, fixed: false }
+    s.write([{ id: 'meal-start', k: 'block.start', block: 'm', at: s.at('20:20'), bg: false, planned, confirmUntil: null, how: 'plan', autoRule: 'absenceMeal' }, { id: 'meal-end', k: 'block.end', block: 'm', at: s.at('20:40'), done: true, rule: 'absenceMeal', autoRule: 'absenceMeal' }], s.at('20:41'))
+    const st = s.state('21:10')
+    expect(span(st)).toEqual({ from: '20:00', to: 'trwa', until: null, kind: 'project', answer: null })
+    expect(st.explains[0]!.rests.map((r) => [hhmm(st, r.from), hhmm(st, r.to)])).toEqual([['20:20', '20:40']])
+  })
+
+  it('sesja w tle kończy się po powrocie: trwający czas do wyjaśnienia zostaje w pasku jako „Pracowałem do teraz”', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'ny', cat: 'sesja', at: '17:00', min: 120, fixed: true }), block({ id: 'a', cat: 'inne', at: '17:00', min: 30 })] }).using('07:00', '23:59')
+    s.start('ny', '17:00', { bg: true }).start('a', '17:00')
+    s.gap('17:30', '18:00')
+    silentEnd(s, 'a', '17:30', 'idle', '17:40')
+    s.end('ny', '19:00')
+    const t = s.at('19:10')
+    const ctx = s.contextAt(t)
+    const st = s.stateAt(t)
+    expect(span(st)).toMatchObject({ from: '18:00', to: 'trwa', kind: 'work', answer: null })
+    const v = engineView({ ctx, state: st, energy: null, activity: activityOf(ctx.events, st.grid.start, t, 'pca'), now: t, name: () => 'Inne obowiązki', care: { waterOn: false, waterEveryMin: 45, breakAfterMin: 0, solitudeAfterMin: 0 }, modePrefs: { sessionMode: true, classMode: true }, pending: null })
+    expect(v.lines.find((l) => l.id.startsWith('workedUntil:'))).toMatchObject({ actions: [{ id: 'now', label: 'Pracowałem do teraz' }] })
+  })
+
+  it('linia „Pracowałem do …” tylko po ostatnim końcu pracy – nie po czasie do wyjaśnienia sprzed późniejszej pracy (jak w rytuale)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '13:00', min: 240 })] }).using('07:00', '23:00')
+    s.start('a', '08:00')
+    silentEnd(s, 'a', '09:00', 'twoQuestions', '10:00')
+    s.gap('10:30', '11:15')
+    s.ran('b', '13:00', '17:00').workEnd('17:00')
+    const t = s.at('17:05')
+    const ctx = s.contextAt(t)
+    const st = s.stateAt(t)
+    const v = engineView({ ctx, state: st, energy: null, activity: activityOf(ctx.events, st.grid.start, t, 'pca'), now: t, name: () => 'Inne obowiązki', care: { waterOn: false, waterEveryMin: 45, breakAfterMin: 0, solitudeAfterMin: 0 }, modePrefs: { sessionMode: true, classMode: true }, pending: null })
+    expect(v.lines.filter((l) => l.id.startsWith('workedUntil:'))).toEqual([])
+    // A stale click of that line (another computer, a bar not refreshed) finds nothing either.
+    expect(timerAction(ctx, st, { a: 'workedUntil', explain: st.explains[0]!.id }, t).ok).toBe(false)
+  })
+})
+
 describe('twardy koniec w czasie do wyjaśnienia', () => {
   // Work to 17:00, a project 17:30–19:30 that ends by itself; you use the computer to 21:20. Minimum 90 min, bedtime
   // 22:00: 17:00–17:30 gives 30 min, the hard end is 21:00 (60 min before the bedtime).
@@ -324,6 +408,21 @@ describe('„Pracowałem do teraz” w pasku (A1-12, D254)', () => {
     expect(after.explains[0]!.answer).toMatchObject({ cls: 'work', how: 'answer' })
     expect(hhmm(after, after.explains[0]!.answer!.until)).toBe('10:20')
     expect(hhmm(after, after.workEnd)).toBe('10:20')
+  })
+
+  it('blok pracy na pierwszym planie po „Koniec pracy” chowa linię – także „Nauka” liczona jak projekt (jak przed G1)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'n', cat: 'nauka', at: '10:30', min: 30 })] }).using('07:00', '23:00')
+    s.start('a', '08:00')
+    silentEnd(s, 'a', '09:00', 'twoQuestions', '10:00')
+    s.workEnd('10:20')
+    expect(viewAt(s, '10:25').line).toBeDefined()
+    s.start('n', '10:30')
+    const { st, line } = viewAt(s, '10:40')
+    expect(st.asProject).toContain('n')
+    expect(line).toBeUndefined()
+    // The bar asks once: any work block after „Koniec pracy” takes the line for good (as before G1).
+    s.end('n', '11:00')
+    expect(viewAt(s, '11:10').line).toBeUndefined()
   })
 
   it('kliknięcie z nieaktualnego paska po starcie innego bloku nic nie pisze (przegląd 0.21.0)', () => {

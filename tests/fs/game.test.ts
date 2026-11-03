@@ -117,6 +117,38 @@ describe('gra przy zamrożeniu', () => {
     expect(game.steps.find((s) => s.date === DAY)?.move).toBe('up')
   })
 
+  it('dzień zamrożony przez 1.0.0 (reguły 3) ocenia się od nowa według reguł końca pracy z 1.0.1 (G1): granica „bez danych”, nie „dotrzymana”', async () => {
+    // „Koniec pracy” at 11:00:10 and another block begun at 11:00:20 – 1.0.0 took the click as confirming the later end.
+    const old = await make('2026-10-01', DAY, undefined, 3)
+    old.folder.noteInput(old.clock.now, true)
+    await old.folder.check()
+    await old.folder.timerClick({ a: 'start', block: 'a' })
+    old.clock.now = placeLogical(DAY, 11 * 60) + 10_000
+    await old.folder.timerClick({ a: 'workEnd' })
+    old.clock.now = placeLogical(DAY, 11 * 60) + 20_000
+    await old.folder.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 5, confirm: true })
+    old.clock.now = placeLogical(DAY, 11 * 60 + 5)
+    await old.folder.timerClick({ a: 'finish', block: 'x' })
+    old.clock.now = placeLogical(addDays(DAY, 1), 8 * 60)
+    old.folder.noteInput(old.clock.now, true)
+    await old.folder.check()
+    // The freeze 1.0.0 wrote for it: the end confirmed, the boundary kept.
+    const know = (await old.folder.readDay(DAY)).lastByComputer
+    old.folder.append({ day: DAY, dom: 'game', k: 'day.freeze', at: old.clock.now, how: 'ready', know, missing: [], grade: { boundary: 'kept', game: { v: 1, status: 'kept', out: null } } })
+    const at = old.clock.now
+    await old.folder.close('quit')
+    const m = await make('2026-10-01')
+    for (let i = 1; i <= 12; i++) {
+      m.clock.now = at + i * 60_000
+      await m.folder.check()
+    }
+    const freezes = (await m.folder.readDay(DAY)).events.filter((e) => isKnown(e) && e.k === 'day.freeze') as unknown as Array<{ v: number; grade: { boundary: string } }>
+    expect(freezes.map((f) => [f.v, f.grade.boundary])).toEqual([
+      [3, 'kept'],
+      [RULES_VERSION, 'noData']
+    ])
+  })
+
   it('moduł gry w dniu bez zmian: według pierwszej późniejszej zmiany (wyłączona następnego dnia – w tym dniu włączona)', async () => {
     writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, general: { modules: { game: false } } }))
     const m = await workedDay('2026-10-01')

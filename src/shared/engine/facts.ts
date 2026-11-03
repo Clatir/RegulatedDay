@@ -9,7 +9,7 @@
  * every minute by the values in force when it began.
  */
 import type { Costs } from '../model/categories'
-import { compareEvents, eventAt, isKnown, type AnyEvent, type CloseHow, type LogEvent, type MinuteClass } from '../model/events'
+import { compareEvents, eventAt, isKnown, type AnyEvent, type CloseHow, type EventBase, type LogEvent, type MinuteClass } from '../model/events'
 import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
 import type { PlanBlock } from '../model/plan'
 import type { RoutineVersion } from '../model/routines'
@@ -18,10 +18,45 @@ import { idxOf, type Grid } from './grid'
 /** An open run or interval: still going. */
 export const OPEN = Number.POSITIVE_INFINITY
 
+/**
+ * When an event happened among the others (G1): its own instant moved onto the logical clock – `at + (l − t)` – then the
+ * log's order (`compareEvents`). An event written later with an earlier instant (an automatic start at the planned
+ * instant, a resume at the return or at a request's end) keeps its instant; a computer whose clock runs behind but has
+ * seen a later event is moved forward by as much as its logical clock ran ahead of its own clock.
+ */
+export interface EventOrder extends Pick<EventBase, 'l' | 'c' | 'n'> {
+  instant: number
+  /** The event's own instant (`eventAt`, ms): with `c` it tells the events of one click (written together) apart. */
+  at: number
+}
+
+export const orderOf = (e: AnyEvent): EventOrder => {
+  const at = eventAt(e)
+  return { instant: at + e.l - e.t, at, l: e.l, c: e.c, n: e.n }
+}
+
+/** Written with the same click as the event of `o` (`startEvents` ends the block in the foreground and starts the next). */
+export const sameClick = (e: AnyEvent, o: EventOrder): boolean => e.c === o.c && eventAt(e) === o.at
+
+/** Which of two events came first (`EventOrder`). */
+export const compareOrder = (a: EventOrder, b: EventOrder): number => a.instant - b.instant || compareEvents(a, b)
+
 export interface Run {
   from: number
   to: number
   bg: boolean
+  /**
+   * When the event that began it happened (`EventOrder`, `workSince`): its start, resume, restart or switch of the
+   * foreground; both halves of a run a request cuts keep it, a corrected start (`block.fix`) sets it on the whole run.
+   */
+  begun: EventOrder
+}
+
+export interface WorkEndFact {
+  at: number
+  end: number
+  /** When the `work.end` event happened (`EventOrder`). */
+  order: EventOrder
 }
 
 /** Minutes after the boundary confirmed in advance (spec D253): [from, to) known from `at`. */
@@ -111,7 +146,8 @@ export interface DayFacts {
   approvals: Array<{ at: number; boundary: number; auto: boolean; plan: string[] | null; undoneAt: number | null }>
   undos: number[]
   exceptions: Array<{ at: number; minutes: number }>
-  workEnds: Array<{ at: number; end: number }>
+  /** „Koniec pracy” and what writes it: the click (index, and its place in the log) and the end it confirms (index). */
+  workEnds: WorkEndFact[]
   /** Snapshots after the day's creation: „od dziś” and changes of type (with the maximum and minimum a change fixed, index / min). */
   snapshots: Array<{ at: number; dayType: DayTypeId; settings: RulesSettings; reason: string; max: number | null; minRegen: number | null }>
   segments: Segment[]
@@ -213,7 +249,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
     frozen: null,
     routines: new Map()
   }
-  const fixes: Array<{ block: string; start: number | null; end: number | null; id: string }> = []
+  const fixes: Array<{ block: string; start: number | null; end: number | null; id: string; order: EventOrder }> = []
   const marks = new Map<string, boolean>()
   const idx = (at: number) => idxOf(grid, at)
   // „Cofnij” (spec: the undo writes an event „korekta”): the events it points at are folded as if never written. The
@@ -244,7 +280,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         const at = idx(e.at)
         b.startedAt = at
         b.planned = { ...e.planned, variantId: e.planned.variantId ?? null, tag: e.planned.tag ?? null, fixed: e.planned.fixed === true }
-        b.runs.push({ from: at, to: OPEN, bg: e.bg === true })
+        b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })
         if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil) })
         break
       }
@@ -265,7 +301,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
           break
         }
         const at = Math.max(idx(e.at), b.runs.at(-1)?.to ?? 0)
-        b.runs.push({ from: at, to: OPEN, bg: b.runs.at(-1)?.bg ?? false })
+        b.runs.push({ from: at, to: OPEN, bg: b.runs.at(-1)?.bg ?? false, begun: orderOf(e) })
         if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil) })
         break
       }
@@ -292,7 +328,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
           break
         }
         const at = Math.max(idx(e.at), b.endedAt)
-        b.runs.push({ from: at, to: OPEN, bg: b.runs.at(-1)?.bg ?? false })
+        b.runs.push({ from: at, to: OPEN, bg: b.runs.at(-1)?.bg ?? false, begun: orderOf(e) })
         b.endedAt = null
         b.done = null
         b.endRule = null
@@ -305,7 +341,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         if (!run || run.bg === (e.bg === true)) break
         const at = Math.max(run.from, idx(e.at))
         run.to = at
-        b.runs.push({ from: at, to: OPEN, bg: e.bg === true })
+        b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })
         break
       }
       case 'block.extend':
@@ -348,7 +384,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         f.exceptions.push({ at: idx(e.at), minutes: e.minutes })
         break
       case 'work.end':
-        f.workEnds.push({ at: idx(e.at), end: idx(e.end) })
+        f.workEnds.push({ at: idx(e.at), end: idx(e.end), order: orderOf(e) })
         break
       case 'request.start': {
         if (requests.has(e.request)) {
@@ -405,7 +441,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         f.closed = { at: idx(e.at), how: e.how }
         break
       case 'block.fix':
-        fixes.push({ block: e.block, start: e.start ?? null, end: e.end ?? null, id: e.id })
+        fixes.push({ block: e.block, start: e.start ?? null, end: e.end ?? null, id: e.id, order: orderOf(e) })
         break
       case 'block.mark':
         marks.set(e.block, e.done)
@@ -461,6 +497,11 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
       const s = idx(x.start)
       if (s < first.to) {
         first.from = s
+        // The corrected instant, moved by the correction's own clock (`at + l − t`) – on the whole run, both halves of
+        // one a request written in after the fact cut too.
+        const was = first.begun
+        const begun = { ...x.order, instant: x.order.instant - x.order.at + x.start, at: x.start }
+        for (const r of b.runs) if (r.begun === was) r.begun = begun
         b.startedAt = s
       } else f.problems.push({ event: x.id, why: 'start po końcu bloku' })
     }
@@ -531,6 +572,38 @@ export function lastRunEnd(b: BlockFact): number | null {
   if (!b.runs.length || b.runs.some((r) => r.to === OPEN)) return null
   return Math.max(...b.runs.map((r) => r.to))
 }
+
+/**
+ * Work begun since a „Koniec pracy” `w` (its click: the index `w.at`, when it happened `w.order`; the end it confirmed
+ * `w.end`): a run of a work block (`isWork`) begun by `until` (a minute index, inclusive – a stretch of work takes in an
+ * empty run in its end minute, T507) whose event happened after the click (`compareOrder` – the instants on the logical
+ * clock, so neither an event written later with an earlier instant nor a few seconds between two computers' clocks turn
+ * it round), not by the minute both round to (T412): a block begun and ended by the click in one minute, or begun in the
+ * background a few seconds before it, is no work since it; one begun after it in that minute is. A run that only
+ * continues the block's run going on through the click (moved between the foreground and the background) began with that
+ * run. The engine asks about the click's stretch (`until` – its end), the bar and „Odwołaj” about the whole day.
+ */
+export function workSince(f: DayFacts, w: WorkEndFact, isWork: (id: string) => boolean, until = OPEN): boolean {
+  for (const [id, b] of f.blocks) {
+    if (!isWork(id)) continue
+    for (let i = 0; i < b.runs.length; i++) {
+      const r = b.runs[i]!
+      if (r.from > until) continue
+      const first = b.runs[begunIndex(b.runs, i)]!
+      if (compareOrder(first.begun, w.order) > 0) return true
+    }
+  }
+  return false
+}
+
+/** The run a block's run `i` began with: back through the runs it continues by a switch of the foreground (runs are in order). */
+function begunIndex(runs: readonly Run[], i: number): number {
+  while (i > 0 && runs[i - 1]!.to === runs[i]!.from && runs[i - 1]!.bg !== runs[i]!.bg) i--
+  return i
+}
+
+/** A request that runs now (not one written in after the fact). */
+export const isRunningRequest = (r: Pick<RequestFact, 'to' | 'mode'>): boolean => r.to === OPEN && r.mode !== 'after'
 
 /** Minutes the block has run so far in a view at m (runs cut at m). */
 export function ranMinutes(b: BlockFact, m: number): number {

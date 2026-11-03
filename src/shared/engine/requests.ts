@@ -17,7 +17,7 @@ import { derivedId } from '../model/ids'
 import { firstUseAfter, type Activity } from './activity'
 import type { BlockInfo } from './blocks'
 import type { DayState } from './day'
-import { foldFacts, OPEN, type RequestFact } from './facts'
+import { foldFacts, isRunningRequest, OPEN, type RequestFact } from './facts'
 import { atOf, gridOf, idxOf } from './grid'
 import { startCost, timerNow, type ActionResult, type TimerDraft, type TimerNow } from './timer'
 
@@ -34,9 +34,6 @@ export const REQUEST_ESTIMATE_MAX_MIN = 8 * 60
 
 /** A block a request never pauses (spec „Przerwania”): a fixed one, one waiting for „Zacznij” – it goes on in the background. */
 const goesOn = (b: BlockInfo) => b.fixed || b.waits
-
-/** A request that runs now (not one written in after the fact). */
-export const isRunningRequest = (r: Pick<RequestFact, 'to' | 'mode'>): boolean => r.to === OPEN && r.mode !== 'after'
 
 export type RequestMode = 'now' | 'urgent' | 'queue' | 'evening' | 'after'
 

@@ -114,6 +114,40 @@ describe('kliknięcia timera', () => {
     expect(r.ok && r.events.map((e) => e.k)).toEqual(['block.end', 'work.end'])
   })
 
+  it('„Odwołaj” po „Koniec pracy”, które zakończyło blok zaczęty w tej samej minucie, parkuje elastyczną pracę (G1, D216)', () => {
+    const s = new Scenario({ date: '2026-11-12', plan: [block({ id: 'b', cat: 'inne', at: '12:59', min: 15 }), block({ id: 'ny', cat: 'sesja', at: '15:30', min: 20, fixed: true }), block({ id: 'c', cat: 'inne', at: '16:00', min: 60 })] }).observe('07:00', null)
+    const at = (ms: number, act: TimerAction) => {
+      const r = timerAction(s.contextAt(ms), s.stateAt(ms), act, ms)
+      if (r.ok) s.write(r.events, ms)
+      return r
+    }
+    at(s.at('12:59') + 19_000, { a: 'start', block: 'b' })
+    const end = at(s.at('12:59') + 26_000, { a: 'workEnd' })
+    expect(end.ok && end.events.map((e) => e.k)).toEqual(['block.end', 'work.end'])
+    const r = click(s, '13:01', { a: 'cancel', block: 'ny' })
+    expect(r.ok && r.events.map((e) => `${e.k} ${e.block as string}`)).toEqual(['block.cancel ny', 'block.park c'])
+    expect(s.state('13:02').ends.at(-1)?.confirmed).toBe(true)
+  })
+
+  it('„Koniec pracy” przy posiłku na pierwszym planie nie parkuje bloków zakotwiczonych do posiłku (posiłek się nie kończy)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'm', cat: 'posilek', at: '12:00', min: 30 }), block({ id: 'r', cat: 'rutyny', after: 'm', min: 15 })]).observe('07:00', null)
+    s.ran('a', '08:00', '09:00')
+    click(s, '12:00', { a: 'start', block: 'm' })
+    const r = click(s, '12:10', { a: 'workEnd' })
+    expect(r.ok && r.events.map((e) => `${e.k} ${(e.block as string | undefined) ?? ''}`.trim())).toEqual(['work.end'])
+  })
+
+  it('świadome „Koniec pracy” w czasie prośby kończy przerwany blok – nie wraca po niej po potwierdzonym końcu (jak w 1.0.0)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '09:00', min: 120 })]).observe('07:00', null)
+    click(s, '09:00', { a: 'start', block: 'a' })
+    const t = s.at('10:00')
+    const req = requestAction(s.stateAt(t), { a: 'requestNow', request: 'r1', person: null }, t)
+    if (!req.ok) throw new Error(req.why)
+    s.write(req.events, t)
+    const r = click(s, '10:05', { a: 'workEnd' })
+    expect(r.ok && r.events.some((e) => e.k === 'block.end' && e.block === 'a')).toBe(true)
+  })
+
   it('blok stały się nie pauzuje; Skończyłem kończy sesję i niczego nie zaczyna', () => {
     const s = day([block({ id: 'ny', cat: 'sesja', at: '15:30', min: 120, fixed: true, bg: false }), block({ id: 'b', cat: 'inne', at: '18:00', min: 60 })]).observe('07:00', null)
     expect(timerNow(s.state('15:40')).waiting.map((b) => b.id)).toEqual(['ny'])

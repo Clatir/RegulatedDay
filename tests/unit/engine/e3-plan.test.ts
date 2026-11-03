@@ -221,6 +221,15 @@ describe('zmiana typu w trakcie dnia', () => {
     expect(hhmm(after, after.workEnd)).toBe('10:00')
   })
 
+  it('na dzień regeneracyjny: zapauzowana analiza tygodniowa kończy się jak każdy zapauzowany blok pracy (jak w 1.0.0)', () => {
+    const s = new Scenario({ date: '2026-10-21', plan: [block({ id: 'wa', cat: 'analiza', at: '08:00', min: 120, tag: 'weeklyAnalysis' })] }).observe('07:00', null)
+    s.start('wa', '08:00').pause('wa', '09:00')
+    const ctx = s.contextAt(s.at('09:30'))
+    const inp = { ctx, state: computeDay(ctx), energyNow: null, to: 'regeneracyjny' as const, settings: s.settings, templates: [] }
+    const r = applyTypeChange(inp, planTypeChange(inp), { park: [], cancel: [], returnRequests: [], add: [] })
+    expect(r.events.filter((e) => e.k === 'block.end').map((e) => e.block)).toEqual(['wa'])
+  })
+
   it('pora snu po zmianie nigdy przed chwilą zmiany', () => {
     const s = new Scenario({ date: '2026-10-21', plan: [], settings: { dayTypes: { regeneracyjny: { bedtimeMin: 20 * 60 } } } })
     s.raw({ k: 'day.snapshot', at: s.at('21:00'), dayType: 'regeneracyjny', settings: s.settings, reason: 'type', max: null, minRegen: null }, '21:00')

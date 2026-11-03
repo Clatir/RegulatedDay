@@ -5,8 +5,10 @@
  * the return, once a computer is used again) – the further use of the computers is neither work, nor a project, nor
  * regeneration until you say what it was. It lasts to the earliest of: a break in the use of every computer longer than
  * 10 min (after a project only one from 30 min, a shorter one from 10 min is rest and the time goes on after it), the
- * start of a block in the foreground or a request (a block in the background and one that keeps regeneration do not end
- * it), „Odcinam się”, a switch to a regeneration day, a click of „Koniec pracy”, the effective bedtime, 04:00.
+ * start of a block in the foreground or a request (a block in the background, one that keeps regeneration and the meal
+ * or regeneration an answer to an absence wrote do not end it), „Odcinam się”, a switch to a regeneration day, a click of
+ * „Koniec pracy”, the effective bedtime, 04:00. These moments count from the return, so one before the first use (a block
+ * begun in the window of RD) leaves no time to explain at all.
  *
  * After a work block (and a passive block counted as a project – lecture, watching, listening, D266) „Koniec pracy”,
  * „Odcinam się” and the switch to a regeneration day answer it „odpoczynek”; after a project they do not (D254). Your
@@ -102,14 +104,18 @@ export const inExplain = (x: Explain, grid: Grid, now: number, at: number): bool
 export const isExplainId = (id: string): boolean => id.startsWith('explain:')
 
 /**
- * The first use after the stretch without input on every computer in which `at` falls (the return, D264, D271): the
- * return itself when a computer is used from it. Null while nobody is back or nobody uses a computer yet. `slack` – how
- * far `at` may be from the stretch: a block's end on the minute grid is rounded, its gap began at any second (T412).
+ * The return (D264, D271) – the end of the stretch without input on every computer in which `at` falls; `at` itself
+ * without one; null while nobody is back. `slack` – how far `at` may be from the stretch: a block's end on the minute
+ * grid is rounded, its gap began at any second (T412).
  */
-export function useAfter(a: Activity, at: number, slack = 0): number | null {
+function returnAfter(a: Activity, at: number, slack = 0): number | null {
   const away = a.idle.find((i) => i.from <= at + slack && at - slack <= i.to)
-  const back = away ? away.to : at
-  if (away && back >= a.now) return null
+  if (!away) return at
+  return away.to >= a.now ? null : away.to
+}
+
+/** The first use from the return `back` on: `back` when a computer is used from it; null while nobody uses one yet. */
+function useFrom(a: Activity, back: number): number | null {
   const unused = a.unused.find((u) => u.from <= back && back < u.to)
   if (!unused) return back
   return unused.to >= a.now ? null : unused.to
@@ -142,6 +148,8 @@ export function explainsOf(inp: ExplainInput): Explain[] {
   const { grid, facts, activity } = inp
   const byId = new Map(inp.blocks.map((b) => [b.id, b]))
   const answers = explicitAnswers(grid, facts, inp.events)
+  // Blocks an answer to an absence wrote over it (A1-09): what the absence was, not a block you began.
+  const fromAbsence = new Set(facts.autos.filter((a) => a.k === 'block.start' && (a.rule === 'absenceMeal' || a.rule === 'absenceRegen') && a.block).map((a) => a.block!))
   const out: Explain[] = []
   for (const f of facts.blocks.values()) {
     if (f.endedAt == null || !f.endRule || !EXPLAIN_END_RULES.includes(f.endRule)) continue
@@ -150,11 +158,23 @@ export function explainsOf(inp: ExplainInput): Explain[] {
     // „Zakończyć” given to the absence question: the time from the return counts by the usual rules (D276).
     if (f.endRule === 'absence' && facts.answers.get(questionId(grid.date, 'absence', f.id, f.endedAt))?.answer === 'keep') continue
     const endMs = atOf(grid, f.endedAt)
+    const id = explainId(grid.date, b.id, f.endedAt)
+    const own = answers.get(id) ?? null
+    // From: the recorded end after two questions, else the first use after the return. The moments that end it count
+    // from the return (G1): a block begun in the window of RD before the first use outside it ends it there. Once you
+    // answered it, from the first use (as before G1): nothing written in later before it takes the time and the answer away.
     let from = f.endedAt
+    let since = f.endedAt
+    // The instant breaks in use are looked for from: the first use itself, not its minute – the stretch away that ends at
+    // the return is no break of the time to explain (G1).
+    let fromMs = endMs
     if (f.endRule !== 'twoQuestions') {
-      const use = useAfter(activity, endMs, MIN / 2)
-      if (use == null) continue
+      const back = returnAfter(activity, endMs, MIN / 2)
+      const use = back == null ? null : useFrom(activity, back)
+      if (back == null || use == null) continue
       from = Math.max(f.endedAt, idxOf(grid, use))
+      since = own ? from : Math.max(f.endedAt, idxOf(grid, back))
+      fromMs = Math.max(endMs, use)
     }
     if (from >= inp.now) continue
     const asProject = b.isProject || inp.projects.has(b.id)
@@ -164,25 +184,25 @@ export function explainsOf(inp: ExplainInput): Explain[] {
     let to = OPEN
     let until: ExplainUntil | null = null
     const end = (idx: number, why: ExplainUntil) => {
-      if (idx >= from && idx < to) {
+      if (idx >= since && idx < to) {
         to = idx
         until = why
       }
     }
     for (const g of facts.blocks.values()) {
       const gi = byId.get(g.id)
-      if (gi?.rules.keepsRegen) continue
-      for (const r of g.runs) if (!r.bg && r.from >= from) end(r.from, 'block')
+      // A block that keeps regeneration, and a meal or a regeneration an answer to an absence wrote over it, end nothing.
+      if (gi?.rules.keepsRegen || fromAbsence.has(g.id)) continue
+      for (const r of g.runs) if (!r.bg) end(r.from, 'block')
     }
-    for (const r of facts.requests) if (r.from >= from) end(r.from, 'request')
-    for (const d of facts.disconnect) if (d.from >= from) end(d.from, 'disconnect')
-    for (const s of facts.snapshots) if (s.reason === 'type' && s.dayType === 'regeneracyjny' && s.at >= from) end(s.at, 'regenDay')
-    for (const w of facts.workEnds) if (w.at >= from) end(w.at, 'workEnd')
+    for (const r of facts.requests) end(r.from, 'request')
+    for (const d of facts.disconnect) end(d.from, 'disconnect')
+    for (const s of facts.snapshots) if (s.reason === 'type' && s.dayType === 'regeneracyjny') end(s.at, 'regenDay')
+    for (const w of facts.workEnds) end(w.at, 'workEnd')
     end(Math.max(from, inp.bedtime(from)), 'bedtime')
     end(grid.length, 'dayEnd')
     // A break in the use of every computer (an open one counts as long as it has lasted).
     const rests: Array<{ from: number; to: number }> = []
-    const fromMs = atOf(grid, from)
     const breakMin = kind === 'work' ? EXPLAIN_WORK_BREAK_MIN : EXPLAIN_PROJECT_BREAK_MIN
     for (const u of activity.unused) {
       if (u.to <= fromMs) continue
@@ -196,12 +216,13 @@ export function explainsOf(inp: ExplainInput): Explain[] {
       }
       if (kind === 'project' && len >= EXPLAIN_PROJECT_REST_MIN * MIN) rests.push({ from: idxOf(grid, at), to: idxOf(grid, Math.min(u.to, activity.now)) })
     }
+    // Ended before the first use (a block begun after the return): there is none.
+    if (to <= from) continue
     if (to > inp.now) {
       to = OPEN
       until = null
     }
-    const id = explainId(grid.date, b.id, f.endedAt)
-    let answer = answers.get(id) ?? null
+    let answer = own
     if (!answer && kind === 'work') {
       // „Koniec pracy”, „Odcinam się”, the switch to a regeneration day: „odpoczynek” (D249, D254).
       const implicit: Array<{ at: number; how: ExplainAnswer['how'] }> = [
