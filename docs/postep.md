@@ -32,8 +32,8 @@
    Twoim „Zakończ” – Dni 2–5 bez Ciebie w trakcie dnia. Przebieg w toku (Dni 1–3 zrobione 2.11 według starej
    instrukcji) idzie dalej od Dnia 4 – „Przebieg zaczęty przed T529” w `docs/odbior-vm.md`, bez powrotu do migawki.
    Poprawki z odbioru – wersje 1.0.x (D324).
-3. **Plan napraw po raporcie VM gotowy (3.11, D332)** – `docs/plan.md`, ciągi F (Haiku) → G (Opus) → H (Sonnet), przyczyny
-   w `docs/vm/przyczyny.md`. Następny krok: Twoje odpowiedzi P1–P11 („Przed ciągiem F”), potem ciąg F na Haiku 5.5 · high.
+3. **Plan napraw po raporcie VM gotowy (3.11, D332)** – `docs/plan.md`: bloki F (Haiku) → G (Opus) → H (Sonnet), 6 ciągów,
+   przyczyny w `docs/vm/przyczyny.md`, decyzje D334–D347. Następny krok: „dalej” → „Przed ciągiem F” na Haiku 5.5 · high.
 4. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Do odbioru na Windows
@@ -48,12 +48,15 @@
   sześć równoległych analiz (bloki i timer; koniec pracy; energia i powiadomienia; folder danych; proces główny i Windows;
   ekrany), część hipotez potwierdzona testem na kopii repozytorium, kluczowe miejsca sprawdzone ponownie przeze mnie.
   Wynik w `docs/vm/przyczyny.md`: 22 błędy w kodzie, 15 opisów odbioru do poprawy, 11 decyzji (P1–P11).
-- `docs/plan.md`: ciąg F – Haiku 5.5 · high (opisy odbioru, logi; 1–2 h, bez wydania), G – Opus 5.5 · xhigh (koniec
-  pracy, folder danych, odliczanie, pasek nad oknami, instalator; 8–12,5 h, 1.0.1–1.0.5), H – Sonnet 5.5 · high (warianty,
-  „Zrobione automatycznie”, ekrany po decyzjach, autostart; 5,5–7,5 h, 1.0.6–1.0.8). Razem 14,5–22 h.
-- D332 (zmienia D317 w części „każda pozycja na Opus”); skill `etap` i `CLAUDE.md` biorą model z planu. Bez zmian
-  w aplikacji (bez wersji i CHANGELOG). Testy: `check-context` zielone.
-- **Dalej:** Twoje odpowiedzi P1–P11, potem „dalej” → „Przed ciągiem F” na Haiku 5.5 · high.
+- `docs/plan.md` – bloki według modelu, w bloku ciągi jednego obszaru (pauza do „dalej” po każdym): F – Haiku 5.5 · high
+  (ciąg F: opisy odbioru, logi; 1–2 h, bez wydania), G – Opus 5.5 · xhigh (G-silnik: koniec pracy, pasek od pierwszej
+  chwili; G-dane: folder niedostępny; G-Windows: pasek pulpitu, instalator; 9–14 h, 1.0.1–1.0.5), H – Sonnet 5.5 · high
+  (H-ekrany: warianty, „Zrobione automatycznie”, ekrany po decyzjach; H-Windows: autostart, znacznik życia; 6,5–8,5 h,
+  1.0.6–1.0.8). Razem 16,5–24,5 h.
+- Decyzje: D332 (model przy pozycji, bloki ciągów; zmienia D317), D333 (domyślna zgoda na PR-y i scalanie), D334–D347
+  (odpowiedzi P1–P11 i zmiany E4a.10, E5b.4, E8k.3 – tabela w planie). Skill `etap` i `CLAUDE.md` biorą model z planu.
+  Bez zmian w aplikacji (bez wersji i CHANGELOG). Testy: `check-context` zielone. PR #42.
+- **Dalej:** PR #42 – scalenie po zielonym CI (D333), potem „dalej” → „Przed ciągiem F” na Haiku 5.5 · high.
 
 ## Odbiór w VM – zegar u Cowork, raport w repozytorium (2.11, T529)
 - Zlecenie: Cowork domyślnie przestawia zegar skryptem, jak najmniej rąk użytkownika, raport z testów częścią repozytorium.

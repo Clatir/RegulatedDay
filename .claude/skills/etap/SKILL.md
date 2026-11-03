@@ -11,8 +11,8 @@ Wszystkie wiadomości do użytkownika po polsku. Pytania zawsze klikalne (AskUse
 1. **Co trzeba wiedzieć** – zakres z `docs/plan.md`, stan poprzedniego etapu, rzeczy otwarte, ryzyka.
 2. **Pytania** – tylko o zachowanie widoczne dla użytkownika (sprawy techniczne rozstrzygnij sam jako T-decyzję).
 3. **Co przygotować** – sprzęt, programy, uprawnienia, czas na ręczne sprawdzenia.
-4. **Model i thinking** – z pozycji w `docs/plan.md` (D332; ciąg = jeden model, przełączany na jego początku); szacunek
-   z planu, a po etapie czas faktyczny w postępie.
+4. **Model i thinking** – z pozycji w `docs/plan.md` (D332; blok ciągów = jeden model, przełączany na początku bloku);
+   szacunek z planu, a po etapie czas faktyczny w postępie.
    W ciągu (D317) „Przed etapem” tylko na jego początku – pytania o wygląd całego ciągu z góry.
 
 ## Po etapie
