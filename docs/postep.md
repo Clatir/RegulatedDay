@@ -56,8 +56,12 @@
 - Przebieg w toku (Dni 1–3 już zrobione, 2.11): bez powrotu do migawki – w działającej maszynie krok 8 części 1
   (dopisuje `zegar.cmd`), Dzień 4 z „Początkiem” z części „Przebieg zaczęty przed T529” (E8e.2 cz. 2 i próba zegara
   +40 min); raport Dni 1–3 do `docs/vm/raport.md` z lokalnej sesji.
-- **Dalej:** Ty: krok 8 w maszynie, „Dni 1–3 gotowe” w lokalnej sesji Claude Code, Dzień 4 (polecenie z części 1,
-  N=4). CI na `main` po scaleniu zielone (c8d3e8d, Linux i Windows).
+- CI na `main` po scaleniu zielone (c8d3e8d, Linux i Windows).
+- **Raport VM (3.11):** `docs/vm/raport.md` – Dni 1–6 i część dodatkowa (13–26.11 w maszynie) w jednym pliku, na górze
+  zestawienie: 68 z 68 punktów z wpisem – ZGODNE 41, NIEZGODNE 14, UWAGA 6, DO OCENY 2, NIE DO SPRAWDZENIA 5;
+  `docs/vm/skrypty.txt`. Zrzuty i logi zostają w `C:\RD-vm-raport`.
+- **Dalej:** każde NIEZGODNE z zestawienia sprawdzić w logu i w kodzie (część 6, krok 4) → wersje 1.0.x (D324). Ty:
+  „Na samym końcu” (E4a.13 cz. 3), potem akceptacja punktów (`[x]` w `docs/odbior.md`).
 
 ## CI w weekend – E2E niezależne od dnia (1.11, T528)
 - Gałąź `claude/determined-shannon-ordir7` (od `main` c353c6a). Na `main` od niedzieli 1.11 czerwone runy 130, 131,

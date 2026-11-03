@@ -1,0 +1,106 @@
+2026-11-06 10:00:00 | zegar | zegar: 2026-11-01 16:18 -> 2026-11-06 10:00
+2026-11-06 10:40:53 | eksport | C:\RD-eksport -> C:\RD-raport\eksport: bloki.csv, checkiny.csv, prosby.csv
+2026-11-06 12:00:00 | zegar | zegar: 2026-11-01 18:03 -> 2026-11-06 12:00
+2026-11-06 13:52:00 | zegar | zegar: 2026-11-06 13:09 -> 2026-11-06 13:52
+2026-11-06 14:01:45 | powercfg | powercfg /requests -> C:\RD-raport\powercfg-20261106-140145.txt
+2026-11-06 14:02:52 | powercfg | powercfg /requests -> C:\RD-raport\powercfg-20261106-140252.txt
+2026-11-06 17:00:00 | zegar | zegar: 2026-11-06 14:24 -> 2026-11-06 17:00
+2026-11-06 18:25:00 | zegar | zegar: 2026-11-01 21:16 -> 2026-11-06 18:25
+2026-11-07 08:00:00 | zegar | zegar: 2026-11-06 19:08 -> 2026-11-07 08:00
+2026-11-07 08:16:06 | koniec-dnia | logi aplikacji -> C:\RD-raport\logi\dzien-2 (3 plikow)
+2026-11-07 08:16:06 | koniec-dnia | zrzuty -> C:\RD-raport\zrzuty (10 plikow)
+2026-11-07 08:16:06 | koniec-dnia | kopiuje C:\RD-raport na Z:\
+2026-11-07 08:16:06 | koniec-dnia | skopiowano na Z:\
+2026-11-07 08:17:25 | koniec-dnia | logi aplikacji -> C:\RD-raport\logi\dzien-2 (3 plikow)
+2026-11-07 08:17:25 | koniec-dnia | zrzuty -> C:\RD-raport\zrzuty (10 plikow)
+2026-11-07 08:17:25 | koniec-dnia | kopiuje C:\RD-raport na Z:\
+2026-11-07 08:17:25 | koniec-dnia | skopiowano na Z:\
+2026-11-07 22:30:00 | zegar | zegar: 2026-11-07 16:23 -> 2026-11-07 22:30
+2026-11-08 00:06:47 | koniec-dnia | logi aplikacji -> C:\RD-raport\logi\dzien-3 (3 plikow)
+2026-11-08 00:06:47 | koniec-dnia | zrzuty -> C:\RD-raport\zrzuty (14 plikow)
+2026-11-08 00:06:47 | koniec-dnia | kopiuje C:\RD-raport na Z:\
+2026-11-08 00:06:48 | koniec-dnia | skopiowano na Z:\
+2026-11-08 03:45:00 | zegar | zegar: 2026-11-08 01:09 -> 2026-11-08 03:45
+2026-11-08 09:00:00 | zegar | zegar: 2026-11-08 03:50 -> 2026-11-08 09:00
+2026-11-08 09:03:53 | koniec-dnia | logi aplikacji -> C:\RD-raport\logi\dzien-3 (3 plikow)
+2026-11-08 09:03:54 | koniec-dnia | zrzuty -> C:\RD-raport\zrzuty (14 plikow)
+2026-11-08 09:03:54 | koniec-dnia | kopiuje C:\RD-raport na Z:\
+2026-11-08 09:03:54 | koniec-dnia | skopiowano na Z:\
+2026-11-02 11:21:56 | folder | C:\RD-test -> C:\RD-test-ukryty
+2026-11-08 09:05:00 | zegar | OK zegar: 2026-11-02 11:22 -> 2026-11-08 09:05
+2026-11-08 09:08:27 | folder | C:\RD-test-ukryty -> C:\RD-test
+2026-11-08 09:10:06 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-08 09:50:00 | zegar | OK zegar: 2026-11-08 09:10 -> 2026-11-08 09:50
+2026-11-08 10:00:56 | folder | C:\RD-test -> C:\RD-test-ukryty
+2026-11-08 10:02:06 | folder | C:\RD-test-ukryty -> C:\RD-test
+2026-11-08 13:03:12 | folder | C:\RD-test -> C:\RD-test-ukryty
+2026-11-08 13:06:01 | koniec-dnia | logi aplikacji -> C:\RD-raport\logi\dzien-4 (3 plikow)
+2026-11-08 13:06:01 | koniec-dnia | zrzuty -> C:\RD-raport\zrzuty (17 plikow)
+2026-11-08 13:06:01 | koniec-dnia | kopiuje C:\RD-raport na Z:\
+2026-11-08 13:06:01 | koniec-dnia | skopiowano na Z:\
+2026-11-08 13:06:56 | koniec-dnia | logi aplikacji -> C:\RD-raport\logi\dzien-4 (3 plikow)
+2026-11-08 13:06:56 | koniec-dnia | zrzuty -> C:\RD-raport\zrzuty (17 plikow)
+2026-11-08 13:06:56 | koniec-dnia | kopiuje C:\RD-raport na Z:\
+2026-11-08 13:06:57 | koniec-dnia | skopiowano na Z:\
+2026-11-08 14:11:07 | folder | C:\RD-test-ukryty -> C:\RD-test
+2026-11-09 08:00:00 | zegar | OK zegar: 2026-11-08 14:11 -> 2026-11-09 08:00
+2026-11-09 10:34:00 | zegar | Regulated Day dziala - czekam do 2 min na zamkniecie
+2026-11-09 10:36:01 | zegar | BLAD: Regulated Day dziala - zegar bez zmian (druga linia przy-aplikacji pozwala zmienic mimo to)
+2026-11-09 10:36:32 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-09 11:50:00 | zegar | OK zegar: 2026-11-09 10:36 -> 2026-11-09 11:50
+2026-11-09 11:55:50 | blokada | zalozona: C:\RD-test\blokada.json otwarty bez wspoldzielenia
+2026-11-09 12:02:49 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-09 15:20:00 | zegar | OK zegar: 2026-11-09 12:02 -> 2026-11-09 15:20
+2026-11-09 15:23:17 | pelny-ekran | start: Edge na pelnym ekranie (kiosk, YouTube)
+2026-11-09 15:26:34 | pelny-ekran | stop: zamkniety Edge z pelnego ekranu (9 procesow)
+2026-11-09 17:24:33 | koniec-dnia | logi aplikacji -> C:\RD-raport\logi\dzien-5 (3 plikow)
+2026-11-09 17:24:34 | koniec-dnia | zrzuty -> C:\RD-raport\zrzuty (42 plikow)
+2026-11-09 17:24:34 | koniec-dnia | kopiuje C:\RD-raport na Z:\
+2026-11-09 17:24:38 | koniec-dnia | skopiowano na Z:\
+2026-11-12 12:30:01 | zegar | OK zegar: 2026-11-09 17:44 -> 2026-11-12 12:30
+2026-11-12 12:37:51 | blokada | znak do zdjecia blokady - okno blokady zamknie plik w ciagu 2 s
+2026-11-12 12:37:52 | blokada | zdjeta: plik zamkniety, blokada.json usuniety
+2026-11-12 13:37:06 | pobierz | pobrano %USERPROFILE%\Downloads\Regulated-Day-Setup-najnowszy.exe (103363516 B)
+2026-11-12 15:32:56 | e6d3 | gotowe: C:\RD-test-zplikiem (z plikiem), C:\RD-test\folder-wewnatrz, C:\RD-test-2 (pusty)
+2026-11-12 15:41:01 | koniec-dnia | logi aplikacji -> C:\RD-raport\logi\dzien-6 (3 plikow)
+2026-11-12 15:41:01 | koniec-dnia | zrzuty -> C:\RD-raport\zrzuty (62 plikow)
+2026-11-12 15:41:01 | koniec-dnia | kopiuje C:\RD-raport na Z:\
+2026-11-12 15:41:02 | koniec-dnia | skopiowano na Z:\
+2026-11-12 19:03:23 | koniec-dnia | logi aplikacji -> C:\RD-raport\logi\dzien-6 (3 plikow)
+2026-11-12 19:03:23 | koniec-dnia | zrzuty -> C:\RD-raport\zrzuty (65 plikow)
+2026-11-12 19:03:23 | koniec-dnia | kopiuje C:\RD-raport na Z:\
+2026-11-12 19:03:24 | koniec-dnia | skopiowano na Z:\
+2026-11-12 19:33:01 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-13 08:00:00 | zegar | OK zegar: 2026-11-12 19:33 -> 2026-11-13 08:00
+2026-11-13 08:09:31 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-13 08:09:31 | zegar | BLAD: odmowa - zegar tylko do przodu (teraz 2026-11-13 08:09)
+2026-11-13 08:10:15 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-14 08:00:00 | zegar | OK zegar: 2026-11-13 08:10 -> 2026-11-14 08:00
+2026-11-14 08:35:00 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-15 08:00:00 | zegar | OK zegar: 2026-11-14 08:35 -> 2026-11-15 08:00
+2026-11-15 08:45:17 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-16 08:00:00 | zegar | OK zegar: 2026-11-15 08:45 -> 2026-11-16 08:00
+2026-11-16 08:14:31 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-17 08:00:00 | zegar | OK zegar: 2026-11-16 08:14 -> 2026-11-17 08:00
+2026-11-17 08:06:38 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-18 08:00:00 | zegar | OK zegar: 2026-11-17 08:06 -> 2026-11-18 08:00
+2026-11-18 08:13:10 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-19 08:00:00 | zegar | OK zegar: 2026-11-18 08:13 -> 2026-11-19 08:00
+2026-11-19 08:06:40 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-20 08:00:00 | zegar | OK zegar: 2026-11-19 08:06 -> 2026-11-20 08:00
+2026-11-20 08:05:25 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-21 08:00:00 | zegar | OK zegar: 2026-11-20 08:05 -> 2026-11-21 08:00
+2026-11-21 08:10:47 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-22 08:00:00 | zegar | OK zegar: 2026-11-21 08:10 -> 2026-11-22 08:00
+2026-11-22 08:08:31 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-23 08:00:00 | zegar | OK zegar: 2026-11-22 08:08 -> 2026-11-23 08:00
+2026-11-23 08:06:13 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-24 08:00:00 | zegar | OK zegar: 2026-11-23 08:06 -> 2026-11-24 08:00
+2026-11-24 08:05:02 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-25 08:00:00 | zegar | OK zegar: 2026-11-24 08:05 -> 2026-11-25 08:00
+2026-11-25 08:05:04 | zegar | UWAGA: zegar zmieniany przy dzialajacym procesie Regulated Day (przy-aplikacji)
+2026-11-26 08:00:00 | zegar | OK zegar: 2026-11-25 08:05 -> 2026-11-26 08:00
+2026-11-26 08:25:52 | koniec-dnia | logi aplikacji -> C:\RD-raport\logi\dzien-dodatkowy-2026-11-26 (3 plikow)
+2026-11-26 08:25:52 | koniec-dnia | zrzuty -> C:\RD-raport\zrzuty (107 plikow)
+2026-11-26 08:25:52 | koniec-dnia | kopiuje C:\RD-raport na Z:\
+2026-11-26 08:25:53 | koniec-dnia | skopiowano na Z:\
