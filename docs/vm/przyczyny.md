@@ -1,14 +1,14 @@
 # Przyczyny – raport z odbioru w maszynie (3.11.2026)
 
 Każda niezgodność, uwaga i obserwacja z `docs/vm/raport.md` sprawdzona w kodzie (3.11, `main` 4f494a4; część hipotez
-potwierdzona testem na kopii repozytorium). Plan napraw – `docs/plan.md`, bloki F–H (jeden model na blok, D332). Numery linii – stan 4f494a4;
+potwierdzona testem na kopii repozytorium). Plan napraw – `docs/plan.md`: jeden ciąg na Opus 5.5 · xhigh (D348), kolejność wykonania i wersje – tam. Numery linii – stan 4f494a4;
 po zmianach szukaj po nazwie funkcji.
 
 **Werdykt:** **Błąd** – kod niezgodny ze specyfikacją; **Instrukcja** – kod zgodny, opis w `docs/odbior.md` /
 `docs/odbior-vm.md` do poprawy; **Decyzja** – zachowanie widoczne, spec milczy albo T-decyzja zawęziła je bez pytania;
 **Maszyna** – wina środowiska VM; **Ty** – ocena gołym okiem.
 
-## Blok F – Haiku 5.5 · high (ciąg F)
+## F – opisy odbioru i ślady w logach
 
 ### F1 – instrukcje odbioru (bez kodu)
 | Punkt | Werdykt | Co poprawić w opisie |
@@ -39,9 +39,9 @@ po zmianach szukaj po nazwie funkcji.
   pomocnik zgłosił przy pokazaniu stan inny niż „accepts”/„unknown”; stanu nic nie zapisuje. Linia w `main.log` przy
   dodaniu do `notTaken` (ze stanem) i przy ponowieniu – T-decyzja; powtórka z wyłączonym „Nie przeszkadzać”.
 
-## Blok G – Opus 5.5 · xhigh (ciągi G-silnik: G1, G2; G-dane: G3; G-Windows: G4, G5)
+## G – silnik dnia, folder danych, pasek pulpitu, instalator
 
-### G1 – koniec pracy (1.0.1) – ciąg G-silnik
+### G1 – koniec pracy (1.0.1)
 Cztery wspólne przyczyny w silniku:
 - **A – przycisk bez biegnącego bloku** (`engineView.ts:386`): `!fg && state.ends.length > 0 && !workEndConfirmed` –
   koniec pracy przy pauzie wylicza się dopiero po 15 min (T514), a po samoczynnym końcu bloku przy elastycznej pracy
@@ -68,7 +68,7 @@ Cztery wspólne przyczyny w silniku:
 - Testy: `work-end.test.ts`, `widget-view.test.ts`, `ritual.test.ts`, `explain.test.ts`, `timer.test.ts` (cancel);
   ok. 60 linii kodu, ok. 110 linii testów. Ryzyko: `day.ts` liczy koniec pracy (T507, D216, przykłady „Model dnia”).
 
-### G2 – pasek od pierwszej chwili: odliczanie i blok przerwany zamknięciem (1.0.2) – ciąg G-silnik
+### G2 – pasek od pierwszej chwili: odliczanie i blok przerwany zamknięciem (1.0.2)
 - **E4a.1** (i obs. 347, 841): start 10:46:32 zapisuje się jako 10:47 (`grid.ts:23`, `facts.ts:218`), pasek liczy
   `at(plannedEnd) - now` (`engineView.ts:346`, `Bar.tsx:602`) → 15:28; „Dalej?” od hh:mm:30 poprzedniej minuty
   (`auto.ts:98`, `day.ts:513`).
@@ -83,7 +83,7 @@ Cztery wspólne przyczyny w silniku:
   ustaleniu. Ryzyko: przy dwóch komputerach log drugiego może pokazać, że blok tam biegł – linia znika (T-decyzja,
   jak to pokazać). Spec 663 – wyjątek. Ok. 40 linii + `tests/fs/widget.test.ts`.
 
-### G3 – folder danych niedostępny (1.0.3) – ciąg G-dane
+### G3 – folder danych niedostępny (1.0.5)
 Spec 648, 669, T432, T462, T517, T522: zapisy przy niedostępnym folderze czekają w kolejce, licznik „N zmian zapisze
 się po powrocie folderu danych”. Kolejka i licznik działają (`folder.ts:1735, 1835-1838`, `widget.ts:300-306`,
 `Banners.tsx:54-62`, powiadomienie `index.ts:1224-1227`), ale nic do nich nie dochodzi:
@@ -103,7 +103,7 @@ się po powrocie folderu danych”. Kolejka i licznik działają (`folder.ts:173
   `tests/fs/widget.test.ts:477` (dziś zakłada „unknown”). Ok. 35 linii kodu, ok. 140 linii testów. Prototyp
   potwierdził zmianę na kopii repozytorium.
 
-### G4 – pasek pulpitu nad oknami (1.0.4, D229) – ciąg G-Windows
+### G4 – pasek pulpitu nad oknami (1.0.6, D229)
 - `helper/src/Common/WindowOrder.cs:40-43, 58`: każde okno klasy WorkerW (także niewidoczne) jest „oknem pulpitu”;
   `Check` (82, 86-100) bierze pierwsze od góry, więc ukryte WorkerW Eksploratora na szczycie daje „WorkerW nad
   paskiem”, a `LayAboveDesktop` (125-137) kładzie pasek nad wszystkimi zwykłymi oknami – pasek nad Edge na pełnym
@@ -115,7 +115,7 @@ się po powrocie folderu danych”. Kolejka i licznik działają (`folder.ts:173
   doprecyzować (T). Test `tests/e2e/bar-windows.spec.ts` (tylko CI Windows): ukryte okno „WorkerW” na szczycie i zwykłe
   okno nad paskiem → pasek zostaje pod nim. Ok. 30 linii C#, ok. 40 linii testu.
 
-### G5 – instalator nie zamyka aplikacji (1.0.5) – ciąg G-Windows
+### G5 – instalator nie zamyka aplikacji (1.0.7)
 - **E4a.13 cz. 1**: `resources/installer.nsh:56-89` używa FIND/KILL_PROCESS electron-buildera; z PowerShellem to
   `Stop-Process` (twarde TerminateProcess) każdego procesu spod `$INSTDIR`, także `rd-helper.exe` – bez łagodnego
   zamknięcia, które zakłada komentarz `installer.nsh:65` i `DesktopBar.onExternalClose`. Który proces został po dwóch
@@ -125,9 +125,9 @@ się po powrocie folderu danych”. Kolejka i licznik działają (`folder.ts:173
   `$INSTDIR` (nazwa, PID, rodzic, czas startu, wiersz poleceń) do `%APPDATA%\Regulated Day\logs\installer-check.log`;
   skrypt do `docs/vm`, który to listuje. Ok. 30 linii NSIS/TS, ok. 50 linii w `tests/update` (tylko CI).
 
-## Blok H – Sonnet 5.5 · high (ciągi H-ekrany: H1, H2; H-Windows: H3)
+## H – plan, pasek, ekrany po decyzjach, autostart
 
-### H1 – plan i pasek (1.0.6) – ciąg H-ekrany
+### H1 – plan i pasek (1.0.3)
 - **E5b.5** – Błąd: `variants.ts:214-247` tnie najpóźniejszy blok o `cause.minutes` liniowo, a prognoza
   (`forecast.ts:191-199`) przestawia elastyczny blok, który nie mieści się przed stałym, w całości za stały – „Skróć
   o 5 min” nie zmienia końca. Poprawka: po przybliżeniu `judge` (`variants.ts:197-205`); gdy się nie mieści – większe
@@ -154,7 +154,7 @@ się po powrocie folderu danych”. Kolejka i licznik działają (`folder.ts:173
   i biegnący blok (`Bar.tsx:724` `!view.night`); dodać „Prośba ▸” w pasku i panelu, poprawić listę w spec 464. Test
   `tests/fs/widget.test.ts:644` (prośba przez 04:00) zostaje, nowy – przycisk w nocy.
 
-### H2 – ekrany po decyzjach (1.0.7) – ciąg H-ekrany
+### H2 – ekrany po decyzjach (1.0.4)
 - **E6c.4** – Błąd: wybrany przycisk odczuwanego kosztu dostaje `bg-raised` (`RitualPanel.tsx:509`), a `.btn` ma już
   to tło (`index.css:185`). Zapis i odczyt działają (`ritual.ts:462-467`). Poprawka: `.btn[aria-pressed='true']` jak
   `.chip[aria-pressed='true']` (`index.css:213`, lampka; para kontrastu jest w `theme.ts:207-209`), test `tests/web`.
@@ -184,7 +184,7 @@ się po powrocie folderu danych”. Kolejka i licznik działają (`folder.ts:173
   w rogu okna (`toast`, 6 s) i czerwoną ramkę; dodać tekst błędu pod polem, dopóki wartość jest odrzucona – we wspólnej
   obsłudze pól (wszystkie pola), także `dayTime.tsx`. Test `tests/web`; spec 771 i „Konwencje interfejsu” – dopisać.
 
-### H3 – Windows: autostart i znacznik życia (1.0.8) – ciąg H-Windows
+### H3 – Windows: autostart i znacznik życia (1.0.8)
 - **„Uruchamiaj z Windows” zawsze „wyłączone”** – Błąd (spec 686): `autostart.ts:27` podaje
   `getLoginItemSettings({ path: process.execPath })` bez cudzysłowu, Electron 44.5.1 (`browser_win.cc:194-212`) tnie
   ścieżkę na spacji („…\Regulated”), a wpis Run ma `"…\Regulated Day.exe" --hidden` → `launchItems` puste. Skutki:
