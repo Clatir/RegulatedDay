@@ -65,6 +65,7 @@ PR-y. Szacunek – czas do wydania, jak dotąd.
 | – | E4a.10: linia „przerwany zamknięciem” po starcie | Od razu, bez czekania na ustalenie (D345) | G2 |
 | – | E5b.4: „Prośba ▸” w ciszy nocnej | Tak (D346) | H1 |
 | – | E8k.3: komunikat odrzuconej wartości | Także pod polem, we wszystkich polach (D347) | H2 |
+| – | E4a.4: „Zrobione automatycznie” (3.11, „Przed ciągiem F”) | Nagłówek bez liczby; grupa zgodna z planem rozwijana, „Cofnij” przy każdym działaniu (D350) | H1 |
 
 Bez zmian (zgodne ze specyfikacją, nie było osobnego pytania): rytuał od rana w dniu bez pracy (T505), „Passa 0 · 0 nut”
 w dniu instalacji (E7c.1), nieobecność odliczana przed odpowiedzią (D260).

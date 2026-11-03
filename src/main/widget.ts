@@ -66,8 +66,9 @@ export interface WidgetDeps {
   notices: () => Record<NoticeKind, boolean>
   /** A notification shown (false: not shown at all); `onFailed` – Windows did not take it after all. */
   notify: (n: NotifyIn, onFailed?: () => void) => boolean
-  /** Windows takes notifications now (its notification state „accepts”, A4-07); undefined: always. */
-  notificationsTaken?: () => Promise<boolean>
+  /** The notification state of Windows from the helper (`accepts`, `busy`, `quietTime`…; `unknown` – not read, A4-07);
+   *  undefined: always `accepts`. */
+  notificationState?: () => Promise<string>
   /** You are at the computer now: a notification Windows did not take comes again only then (A4-07); undefined: always. */
   present?: () => boolean
   showMain: (page?: string) => void
@@ -91,6 +92,9 @@ interface Pending extends BarPending {
 export const EXTEND_MAX_MIN = 180
 
 const costText = (label: string, c: NonNullable<TimerResult['confirm']>) => `${label}: ${c.overrun ? 'przekroczenie' : 'przedłużenie'} · ${c.bedtime ? `pora snu +${c.minutes} min` : `−${c.minutes} min puli`}`
+
+/** Windows shows a notification in this state (A4-07): it accepts them, or the state could not be read. */
+const takesNotifications = (state: string): boolean => state === 'accepts' || state === 'unknown'
 
 /**
  * The tone of a warning (spec: quiet at 5 and 0 min): only when the step of the same block (and plan) changes to 5 or 0
@@ -442,35 +446,50 @@ export class WidgetEngine {
         out.push({ id: `notice:${date}:reserve:${d.pool}:${d.at}`, title: 'Energia na poziomie rezerwy', body: `${POOL_TEXT[d.pool]} – czas na regenerację.`, line, day: date })
       }
     }
-    // The state of notifications – one read of the helper per refresh, only when a notification needs it.
-    let takes: Promise<boolean> | null = null
-    const taken = () => (takes ??= this.d.notificationsTaken?.() ?? Promise.resolve(true))
+    // The state of notifications – one read of the helper per refresh, only when a notification needs it. Windows takes
+    // them when it „accepts”; an unread state (`unknown`) never holds a notification back.
+    let reads: Promise<string> | null = null
+    const notifState = () => (reads ??= this.d.notificationState?.() ?? Promise.resolve('accepts'))
     // Not taken by Windows (its state held them – a full screen, a presentation – or showing it failed): once more, with
     // the same id and time, when it takes them again and you are here, while the notification still holds and its line
     // was not seen meanwhile (A4-07).
     const seen = new Set(m.ctx.events.filter((e) => e.k === 'question.seen').map((e) => (e as unknown as { question: string }).question))
     const held = out.filter((n) => this.notTaken.has(n.id) && !(n.line && seen.has(n.line)))
     for (const id of [...this.notTaken]) if (!held.some((n) => n.id === id)) this.notTaken.delete(id)
-    if (held.length && (this.d.present?.() ?? true) && (await taken())) {
+    for (const id of [...this.retried]) if (!out.some((n) => n.id === id)) this.retried.delete(id)
+    if (held.length && (this.d.present?.() ?? true) && takesNotifications(await notifState())) {
       for (const n of held) {
         this.notTaken.delete(n.id)
-        this.d.notify(n)
+        this.retried.add(n.id)
+        // Its failure is said by id too: the log tells whether the retry came up (E8j.2).
+        const ok = this.d.notify(n, () => this.d.log('info', `ponowione powiadomienie też nieprzyjęte: ${n.id}`))
+        this.d.log('info', ok ? `powiadomienie ponowione: ${n.id}` : `ponowienie powiadomienia odrzucone: ${n.id}`)
       }
     }
     const fresh = out.filter((n) => !shown.has(n.id))
     if (!fresh.length) return
-    const takenNow = await taken()
+    const stateNow = await notifState()
     for (const n of fresh) {
-      const ok = this.d.notify(n, () => this.notTaken.add(n.id))
+      const ok = this.d.notify(n, () => this.holdBack(n, 'odrzucone przy pokazaniu'))
       // Refused at once (an error of Windows): written like one shown, so only the way above tries it again – once.
       if (!ok && !this.notTaken.has(n.id)) continue
       folder.markNotice(date, n.id, now)
-      if (!takenNow) this.notTaken.add(n.id)
+      if (!takesNotifications(stateNow)) this.holdBack(n, `stan powiadomień ${stateNow}`)
     }
   }
 
   /** Notifications Windows did not take (by id): each comes once more (A4-07). */
   private readonly notTaken = new Set<string>()
+  /** Notifications already shown once more (by id, while they hold): a late failure of the first showing does not bring a
+   *  second retry (A4-07 – once). */
+  private readonly retried = new Set<string>()
+
+  /** Keeps a notification for its one retry; its line in the log comes once per notification, not per refresh (F2). */
+  private holdBack(n: NotifyIn, reason: string): void {
+    if (this.notTaken.has(n.id) || this.retried.has(n.id)) return
+    this.notTaken.add(n.id)
+    this.d.log('info', `powiadomienie nieprzyjęte przez Windows: ${n.id} (${reason}) – ponowię raz`)
+  }
 
   /** The way of a break: from the screen after a project, else the lowest cost in the lowest pool (spec „Timer”). */
   /**

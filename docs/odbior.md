@@ -317,11 +317,12 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Automatycznie:** `tests/e2e/screens.spec.ts` (plan poranny, „Plan zatwierdzony”, wymiana, „Dodaj bez wymiany”). Ty: rzut oka.
 - **Jak sprawdzić:** „Dziś”: check-in albo „Pomiń”, „Zatwierdź plan”. Potem „+ Blok” z blokiem po granicy.
 - **Oczekiwany efekt:** po zatwierdzeniu „Plan zatwierdzony” i granica na osi. „+ Blok” po granicy otwiera okno wymiany
-  z kosztem; „Dodaj bez wymiany” stawia blok na osi.
+  z kosztem; „Dodaj bez wymiany” stawia blok na osi. Gdy żaden blok pracy nie może ustąpić miejsca, okno pokazuje tylko
+  koszt i „Dodaj”.
 - **Nie przechodzi, gdy:**
   - po zatwierdzeniu nie ma granicy na osi;
   - blok po granicy dodaje się bez okna wymiany i bez kosztu;
-  - „Dodaj bez wymiany” nie dodaje bloku.
+  - „Dodaj bez wymiany” albo „Dodaj” (gdy nic nie może ustąpić) nie dodaje bloku.
 
 #### E3.4 Pobudka dnia (0.2.0)
 - [ ] Odebrane
@@ -522,7 +523,9 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 #### E4a.8 Posiłek z dala od komputera (0.3.0)
 - [ ] Odebrane
 - **Automatycznie:** `timer.test.ts` („blok „poza komputerem” kończy się przy pierwszym użyciu…”). Ty: rzut oka.
-- **Jak sprawdzić:** zacznij posiłek, odejdź od komputera na ponad 2 min, wróć i użyj myszy.
+- **Jak sprawdzić:** zacznij posiłek, odejdź od komputera na ponad 2 min, wróć i przez co najmniej 30 s pracuj w innym
+  programie (np. Notatnik) – pisz albo przesuwaj mysz. Ruch myszy nad oknem Regulated Day to tylko wejście, nie koniec
+  posiłku. Linia w pasku pojawia się do ok. 15 s po tych 30 s.
 - **Oczekiwany efekt:** posiłek kończy się przy pierwszym użyciu komputera, a w pasku „Posiłek – po powrocie: Trwał do
   teraz · Skończył się o …”.
 - **Nie przechodzi, gdy:**
@@ -535,7 +538,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Automatycznie:** `timer.test.ts` („nieobecność dłuższa niż próg…”). Ty: rzut oka.
 - **Jak sprawdzić:** w bloku pracy odejdź na 40 min i wróć przed jego planowanym końcem.
 - **Oczekiwany efekt:** blok biegnie dalej, a w pasku „nieobecność od …: Odliczyć nieobecność · Zakończyć w chwili
-  odejścia · Zostawić”.
+  odejścia · Zostawić”. Nieobecność odlicza się od razu, bez czekania na odpowiedź – pytanie służy tylko poprawce.
 - **Nie przechodzi, gdy:**
   - blok skończył się w chwili odejścia, choć wróciłeś przed jego planowanym końcem;
   - po powrocie nie ma linii o nieobecności;
@@ -581,8 +584,10 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Automatycznie:** `tests/unit/crash.test.ts` (zamknięcie Windows, wylogowanie, Menedżer zadań, instalator), w CI też `tests/e2e/smoke.spec.ts` i `tests/update/scenarios.spec.ts` („ręcznie uruchomiony instalator… to nie awaria”). Ty: opcjonalnie.
 - **Jak sprawdzić:** po kolei: zamknij Windows (z szybkim uruchamianiem), wyloguj się, zamknij aplikację w Menedżerze
   zadań, uruchom instalator ręcznie. Po każdym starcie zajrzyj do `main.log` (Ustawienia → „Otwórz logi”).
-- **Oczekiwany efekt:** po zamknięciu Windows, wylogowaniu i instalatorze w logu „poprzednie uruchomienie: clean”, a po
-  Menedżerze zadań „crash”.
+- **Oczekiwany efekt:** po zamknięciu Windows i wylogowaniu w logu „poprzednie uruchomienie: clean (…)” – w nawiasie
+  „zamknięcie (system)” albo „inna sesja logowania (wylogowanie albo restart)”; po instalatorze „installer (zamknięte
+  przez instalator)” – osobny rodzaj, nie awaria – albo „clean (…)”; po Menedżerze zadań „crash”. Twardy reset też
+  daje „clean (inna sesja logowania …)”; do 1.0.8 może dać „first (brak znacznika życia)” (poprawka H3).
 - **Nie przechodzi, gdy:**
   - „crash” po zwykłym zamknięciu Windows albo wylogowaniu;
   - „clean” po zamknięciu w Menedżerze zadań;
@@ -802,8 +807,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/widget-view.test.ts` (kolory z zestawu), kontrast `tests/unit/theme.test.ts`. Ty: rzut oka.
 - **Jak sprawdzić:** wystartuj blok pracy, potem posiłek; spójrz na pasek, ikonę przy zegarze i panel ikony.
-- **Oczekiwany efekt:** kolory są takie jak zestaw „cieplejsze” w „Próbie” (D314): praca cieplejszy pomarańcz, życie
-  i opieka lawenda, wolne zieleń; kroki 15 · 5 · 0 min działają jak dotąd.
+- **Oczekiwany efekt:** kolory z zestawu „cieplejsze”: praca #E8A15A (pomarańcz), życie i opieka #C9A2D6 (lawenda),
+  wolne #8CC4A8 (zieleń); kroki 15 · 5 · 0 min działają jak dotąd.
 - **Nie przechodzi, gdy:** pasek albo ikona mają kolory „roboczego” zestawu z E0 albo pasek i ikona różnią się kolorem.
 
 ### E5 – logika E5 (prośby w dniu i warianty pod spodem)
@@ -920,8 +925,10 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Automatycznie:** `tests/unit/engine/explain.test.ts` (koniec przerwą ponad 10 min, „Koniec pracy” = odpoczynek,
   energia bez zmian, twardy koniec nie mija). Ty: rzut oka przy okazji.
 - **Jak sprawdzić:** wieczorem zostaw blok pracy po planowanym końcu przy oknie na wierzchu i nie odpowiadaj na „Dalej?”
-  – po godzinie od zobaczenia blok kończy się sam. Dalej używaj komputera, potem kliknij „Koniec pracy”. Patrz na
-  „Twardy koniec projektów” i pulę w „Dziś”.
+  – po godzinie od zobaczenia blok kończy się sam. Dalej używaj komputera w innym programie (okno Regulated Day nie
+  liczy się jako użycie), potem kliknij „Koniec pracy”. Czas po bloku
+  liczy się wstępnie jak odpoczynek, więc twardy koniec idzie razem z zegarem. Patrz na „Twardy koniec projektów”
+  i pulę w „Dziś”.
 - **Oczekiwany efekt:** dopóki używasz komputera po takim końcu, twardy koniec w „Dziś” przesuwa się na później (jak
   przy odpoczynku) i nie mija, bez powiadomienia. „Koniec pracy” niczego nie zaczyna – ten czas liczy się jak odpoczynek.
 - **Nie przechodzi, gdy:**
@@ -932,11 +939,14 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 #### E6a.3 Czas po projekcie, który skończył się sam – powiadomienie o twardym końcu (0.6.0)
 - [ ] Odebrane
 - **Tylko Ty:** kiedy twardy koniec mija, sprawdza `explain.test.ts`; czy Windows pokazuje powiadomienie – tylko Ty.
-- **Jak sprawdzić:** wieczorem zacznij blok „Projekty” tak, żeby jego planowany koniec wypadł przed twardym końcem (widać
-  go w „Dziś”). Nie odpowiadaj na „Dalej?” – po godzinie od zobaczenia blok kończy się sam. Używaj komputera dalej, aż
-  minie godzina twardego końca.
+- **Jak sprawdzić:** wieczorem, w dniu z niezebranym minimum projektów (na osi w „Dziś” linia „twardy koniec” przed porą
+  snu; w sobotę, gdy minimum zebrano przed południem, twardy koniec to pora snu i komunikatu nie będzie). Zacznij blok
+  „Projekty” tak, żeby jego planowany koniec wypadł przed twardym końcem (widać go w „Dziś”). Nie odpowiadaj na „Dalej?” –
+  po godzinie od zobaczenia blok kończy się sam. Potem pracuj w innym programie (np. Notatnik), nie w oknie Regulated Day,
+  aż minie godzina twardego końca.
 - **Oczekiwany efekt:** w chwili twardego końca (przy pierwszym ruchu myszy albo klawiatury) raz przychodzi
-  powiadomienie „Twardy koniec projektów”, a w „Dziś” twardy koniec jest minięty.
+  powiadomienie „Twardy koniec projektów”, a w „Dziś” twardy koniec jest minięty: jego godzina przestaje iść, a pula
+  projektów to „0 min”.
 - **Nie przechodzi, gdy:**
   - powiadomienia nie ma, choć używasz komputera po twardym końcu (przełącznik w Ustawieniach włączony);
   - powiadomienie przychodzi więcej niż raz;
@@ -1135,7 +1145,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Automatycznie:** `tests/fs/ritual.test.ts` („pierwszy dzień gry”), `tests/fs/game.test.ts`. Ty: rzut oka.
 - **Jak sprawdzić:** po aktualizacji do 0.14.0 otwórz „Pokój” w menu bocznym; następnego dnia zajrzyj tam znowu.
 - **Oczekiwany efekt:** w dniu aktualizacji pokój mówi, od kiedy gra liczy dni (jutro – dzień instalacji jest poza
-  grą); ta sama data na laptopie. Od jutra w nagłówku „Dziś” pojawia się „Passa … · … nut”.
+  grą); ta sama data na laptopie. W dniu aktualizacji nagłówek „Dziś” już pokazuje „Passa 0 · 0 nut”; od jutra liczby
+  rosną.
 - **Nie przechodzi, gdy:** gra liczy już dzień instalacji, laptop pokazuje inną datę startu albo w nagłówku widać grę,
   choć moduł „Gra” jest wyłączony.
 
@@ -1217,7 +1228,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 #### E8a.2 „Koniec pracy” przy zapauzowanym bloku (0.16.0)
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/work-end.test.ts` („Koniec pracy” przy zapauzowanym bloku). Ty: rzut oka.
-- **Jak sprawdzić:** zapauzuj blok pracy (albo zacznij przerwę z paska) i kliknij „Koniec pracy”.
+- **Jak sprawdzić:** zapauzuj blok pracy (albo zacznij przerwę z paska) i kliknij „Koniec pracy”. Sprawdzaj bez stałego
+  bloku pracy później w planie – przy nim „Koniec pracy” jest tylko przerwą (D216).
 - **Oczekiwany efekt:** pasek nie pokazuje już „Wznów · Zaparkuj” zapauzowanego bloku ani „Koniec pracy?”; koniec pracy
   stoi w chwili pauzy, a na liście działań automatycznych jest zakończenie bloku z „Cofnij”.
 - **Nie przechodzi, gdy:** zapauzowany blok wisi dalej z kropką, pada „Koniec pracy?” albo rytuał pokazuje koniec pracy
@@ -1343,11 +1355,13 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - [ ] Odebrane
 - **Automatycznie:** `tests/e2e/smoke.spec.ts` („bez folderu danych”, menu bez Próby), `tests/fs/widget.test.ts`. Ty:
   rzut oka po starcie Windows, zanim OneDrive udostępni folder (gdy się zdarzy).
-- **Jak sprawdzić:** spójrz na menu boczne i menu ikony w zasobniku; przy starcie bez dostępnego folderu – na pasek.
-- **Oczekiwany efekt:** w menu nie ma „Próba”; bez folderu pasek pokazuje „Brak folderu danych · Otwórz okno”, bez bloku
-  i bez odliczania; „Otwórz okno” otwiera okno główne.
+- **Jak sprawdzić:** spójrz na menu boczne i menu ikony w zasobniku; przy starcie bez dostępnego folderu (OneDrive jeszcze
+  nie gotowy) albo bez wybranego folderu – na pasek.
+- **Oczekiwany efekt:** w menu nie ma „Próba”. Gdy folder danych jest wybrany, ale niedostępny, pasek pokazuje
+  „Folder danych jest teraz niedostępny – ponawiam · Otwórz okno”; „Brak folderu danych · Otwórz okno” tylko wtedy, gdy
+  żaden folder nie jest wybrany. Bez folderu pasek nie ma bloku ani odliczania; „Otwórz okno” otwiera okno główne.
 - **Nie przechodzi, gdy:** gdziekolwiek jest „Próba”, bez folderu pasek odlicza „Analiza tygodnia” albo pokazuje inne
-  przyciski niż „Otwórz okno”.
+  przyciski niż „Otwórz okno”; przy wybranym, ale niedostępnym folderze pasek pisze „Brak folderu danych”.
 
 ### E8f – funkcje D325, część 1b (0.21.0)
 
@@ -1367,7 +1381,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   Ty: rzut oka, gdy się zdarzą.
 - **Jak sprawdzić:** po końcu bloku, do którego jest zakotwiczony inny, spójrz na pasek; kliknij „Koniec pracy” przy
   sesji NY później w planie; po końcu sesji z planu (bez „Przedłuż”) spójrz na pasek przez 30 min; po bloku pracy bez
-  odpowiedzi na „Dalej?” kliknij później „Koniec pracy”.
+  odpowiedzi na „Dalej?” przez 15 min pracuj w innym programie (okno Regulated Day nie liczy się jako użycie), potem
+  kliknij „Koniec pracy”.
 - **Oczekiwany efekt:** „<blok> · Zacznij · Zaparkuj · Koniec pracy” z kropką (bez kropki, gdy coś biegnie); „NY o 14:00
   zostaje · Odwołaj” (druga zmiana nigdy); „NY – nie przedłużono · Przedłuż” (koszt jako „Przedłuż +15” z ±15); „Koniec
   pracy o 17:30 · Pracowałem do 18:30”.

@@ -32,15 +32,38 @@
    Twoim „Zakończ” – Dni 2–5 bez Ciebie w trakcie dnia. Przebieg w toku (Dni 1–3 zrobione 2.11 według starej
    instrukcji) idzie dalej od Dnia 4 – „Przebieg zaczęty przed T529” w `docs/odbior-vm.md`, bez powrotu do migawki.
    Poprawki z odbioru – wersje 1.0.x (D324).
-3. **Plan napraw po raporcie VM gotowy (3.11)** – `docs/plan.md`: ciąg F jako jedno zadanie (D349) – główna sesja
-   Opus 5.5 · xhigh, wykonawcy z `.claude/agents/` (Haiku F1–F2, Opus G1–G5, Sonnet H1–H3), zadania F1–H3, wersje
-   1.0.1–1.0.8; przyczyny w `docs/vm/przyczyny.md`, decyzje D334–D347. Następny krok: „Przed ciągiem F”.
+3. **Ciąg F w toku (od 3.11, D349)** – `docs/plan.md`: główna sesja Opus 5.5 · xhigh, wykonawcy z `.claude/agents/`
+   (Haiku F1–F2, Opus G1–G5, Sonnet H1–H3), zadania F1–H3, wersje 1.0.1–1.0.8; przyczyny w `docs/vm/przyczyny.md`,
+   decyzje D334–D347, D350. „Przed ciągiem F” zrobione. **Teraz:** PR F1–F3 (`claude/ciag-f-opisy-logi`, bez wydania)
+   – scalenie po zielonym CI (Linux i Windows); **następne:** G1 (1.0.1, `wykonawca-opus`), potem G2, H1, H2, G3, G4,
+   G5, H3 – bez pauzy do końca ciągu.
 4. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Do odbioru na Windows
 - `docs/odbior.md` (układ z 27.10): na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
+
+## Ciąg F – poprawki po odbiorze w maszynie (od 3.11, D349)
+- **Przed ciągiem F (3.11):** zakres F1–H3 (`docs/plan.md`), 9 PR-ów, wersje 1.0.1–1.0.8, szacunek 16,5–24,5 h.
+  Ryzyka: G1 (koniec pracy, T507, D216), G2 (D345 przy dwóch komputerach – T), G4/G5/H3 tylko CI na Windows.
+  Odpowiedź: D350 (E4a.4 – nagłówek bez liczby, grupa rozwijana z „Cofnij”). Rejestr T ok. 192 / 200 KB – zastąpione
+  T450, T467 do archiwum w H2.
+- Wykonawcy: na starcie sesji agenci `.claude/agents/` niewidoczni (przyszli z `git pull`) – F1 przez `general-purpose`
+  z `model: haiku`, `effort: high` i treścią pliku wykonawcy; od F2 agenci widoczni – zlecenia wprost do `wykonawca-*`.
+- **F1–F3 (bez wydania, T525 – trafia z 1.0.1):** gałąź `claude/ciag-f-opisy-logi` od 3.11 ok. 15:15.
+  - F1 (`wykonawca-haiku`): opisy odbioru według `przyczyny.md` (E3.3, E4a.8, E4a.9, E4a.13, E4b.15, E6a.2, E6a.3, E7c.1,
+    E8a.2, E8e.2 – D342, E8f.2 cz. 1, wersja w `odbior-vm.md`). Poprawione po przeglądzie: w Dniu 6 E8a.2 dopiero po
+    sesji NY (sesja to stały blok pracy – „Koniec pracy” przed nią to przerwa, D216), E4a.13 z dokładnymi tekstami logu.
+  - F2 (`wykonawca-haiku`): T530 – „aplikacja zamknięta” zamiast „koniec pracy”, druga kopia `app.exit(0)` z jednym
+    wpisem, wyjście bez wydania bez wpisu o sesji, powiadomienie nieprzyjęte w logu ze stanem pomocnika i wynikiem
+    ponowienia. Ode mnie: stan pomocnika zamiast `boolean`, druga kopia bez flagi.
+  - `/code-review` (xhigh): 11 uwag, poprawione z testami – m.in. spóźnione „failed” dawało drugie ponowienie (A4-07,
+    test pada na starym kodzie), E2E sprawdza przekazanie startu (okno wraca), limit drugiej kopii 30 s, wspólne
+    `appCommand` i `notificationStateNow`, E4a.13.
+  - Testy: typecheck, build, lint, E2E 27 + 6 pominiętych; unit 1096/1097 – `tests/sim/two-computers.test.ts` lokalnie
+    przekracza 240 s także osobno (nie dotyka zmienionych plików; na `main` w CI zielone) – rozstrzyga CI.
+  - Czas faktyczny: ok. 1 h (szacunek 1,25–2 h).
 
 ## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)
 - Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji. Kolejno: bloki według modelu

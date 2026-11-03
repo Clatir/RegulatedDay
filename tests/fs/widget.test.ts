@@ -37,10 +37,11 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[] } = {}) {
   const clock = { now: placeLogical(DAY, 10 * 60) }
   const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => o.oneDrive ?? true })
   const shown: NotifyIn[] = []
+  const failLater: Array<() => void> = []
   const views: WidgetView[] = []
   let open = true
   let editFails = false
@@ -69,18 +70,20 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
         return false
       }
       shown.push(n)
+      // Windows can still say „failed” later (`onFailed` of a shown one): the test calls it when it wants.
+      if (onFailed) failLater.push(onFailed)
       return true
     },
-    ...(o.taken ? { notificationsTaken: async () => o.taken!() } : {}),
+    ...(o.taken ? { notificationState: async () => (o.taken!() ? 'accepts' : 'presentation') } : {}),
     ...(o.present ? { present: o.present } : {}),
     showMain: () => undefined,
     emit: (v) => views.push(v),
-    log: () => undefined,
+    log: (_level, msg) => void o.logs?.push(msg),
     now: () => clock.now,
     batterySaver: () => o.batterySaver ?? false,
     backup: () => (o.backupFailed ? { failed: { error: 'plik zajęty' } } : null)
   })
-  return { folder, clock, w, shown, views, closeFolder: () => (open = false), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
+  return { folder, clock, w, shown, failLater, views, closeFolder: () => (open = false), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
 }
 
 describe('widget w procesie głównym', () => {
@@ -166,6 +169,87 @@ describe('widget w procesie głównym', () => {
     await w.refresh()
     expect(shown).toHaveLength(1)
     expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'notice.shown')).toHaveLength(1)
+  })
+
+  it('nieprzyjęte przez Windows: jeden wpis w logu przy dodaniu do ponowienia, jeden przy ponowieniu (A4-07, F2 / E8j.2)', async () => {
+    let taken = false
+    const logs: string[] = []
+    const { w, folder, shown, at } = await make({ taken: () => taken, present: () => true, logs })
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(15 * 60 + 26)
+    await folder.check()
+    await w.refresh()
+    expect(shown).toHaveLength(1)
+    const id = shown[0]!.id
+    const lines = () => logs.filter((m) => m.startsWith('powiadomienie'))
+    expect(lines()).toEqual([`powiadomienie nieprzyjęte przez Windows: ${id} (stan powiadomień presentation) – ponowię raz`])
+    // Still not taken on the next refreshes: no new line for the same notification.
+    await w.refresh()
+    await w.refresh()
+    expect(lines()).toHaveLength(1)
+    taken = true
+    await w.refresh()
+    expect(shown).toHaveLength(2)
+    expect(lines()).toEqual([`powiadomienie nieprzyjęte przez Windows: ${id} (stan powiadomień presentation) – ponowię raz`, `powiadomienie ponowione: ${id}`])
+    await w.refresh()
+    expect(shown).toHaveLength(2)
+    expect(lines()).toHaveLength(2)
+  })
+
+  it('odrzucone przy pokazaniu: wpis w logu raz, także gdy Windows nie przyjmuje; ponowienie też zapisane (A4-07, F2 / E8j.2)', async () => {
+    let refuse = true
+    let taken = false
+    const logs: string[] = []
+    const { w, folder, shown, at } = await make({ taken: () => taken, present: () => true, refuse: () => refuse, logs })
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(15 * 60 + 26)
+    await folder.check()
+    await w.refresh()
+    expect(shown).toEqual([])
+    const lines = () => logs.filter((m) => m.startsWith('powiadomienie'))
+    expect(lines()).toHaveLength(1)
+    const id = /: (\S+) \(odrzucone przy pokazaniu\)/.exec(lines()[0]!)?.[1]
+    expect(id).toMatch(/^notice:/)
+    expect(lines()).toEqual([`powiadomienie nieprzyjęte przez Windows: ${id} (odrzucone przy pokazaniu) – ponowię raz`])
+    refuse = false
+    taken = true
+    await w.refresh()
+    expect(shown.map((n) => n.id)).toEqual([id])
+    expect(lines()).toEqual([`powiadomienie nieprzyjęte przez Windows: ${id} (odrzucone przy pokazaniu) – ponowię raz`, `powiadomienie ponowione: ${id}`])
+    await w.refresh()
+    expect(lines()).toHaveLength(2)
+  })
+
+  it('spóźnione „failed” pierwszego pokazania po ponowieniu: bez drugiego ponowienia i bez drugiego wpisu (A4-07 – raz, F2)', async () => {
+    let taken = false
+    const logs: string[] = []
+    const { w, folder, shown, failLater, at } = await make({ taken: () => taken, present: () => true, logs })
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(15 * 60 + 26)
+    await folder.check()
+    await w.refresh()
+    expect(shown).toHaveLength(1)
+    const id = shown[0]!.id
+    taken = true
+    await w.refresh()
+    expect(shown).toHaveLength(2)
+    const lines = () => logs.filter((m) => /powiadomieni/.test(m))
+    expect(lines()).toHaveLength(2)
+    // Windows says „failed” for the first showing only now: it was retried already – nothing more.
+    failLater[0]!()
+    await w.refresh()
+    await w.refresh()
+    expect(shown).toHaveLength(2)
+    expect(lines()).toEqual([`powiadomienie nieprzyjęte przez Windows: ${id} (stan powiadomień presentation) – ponowię raz`, `powiadomienie ponowione: ${id}`])
+    // The retry's own failure is said by id.
+    failLater[1]!()
+    expect(lines().at(-1)).toBe(`ponowione powiadomienie też nieprzyjęte: ${id}`)
   })
 
   it('powiadomienie o rezerwie, którego Windows nie przyjął, nie wraca po odpowiedzi na jej linię (A4-07, przegląd 0.25.0)', async () => {

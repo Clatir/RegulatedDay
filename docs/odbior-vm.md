@@ -122,7 +122,7 @@ dnia; tabela niżej, kolumna „Gdy zgody wygasają”).
 | koniec | – | zamknięcie Windows i start (E4a.13 cz. 3) | – |
 
 W nawiasach – tylko gdy trzeba. Część dodatkowa: tylko start sesji (skoki przy włączonej aplikacji). Rzadkie wyjątki
-(np. pasek dalej „Brak folderu danych” po przywróceniu nazwy) – klikalne pytanie, jak zawsze.
+(np. pasek dalej „Folder danych jest teraz niedostępny” po przywróceniu nazwy) – klikalne pytanie, jak zawsze.
 
 **Polecenie do wklejenia** (N – numer dnia):
 
@@ -215,8 +215,7 @@ SPRAWDZENIA); zakończenie zadania mimo dodatku (reszta dnia przepada). **Po pow
    godzina, wpis i następny punkt. Niczego nie naprawiasz ani nie obchodzisz.
 8. Wygląd, kolory i ton tekstu ocenia użytkownik – zapisujesz, co widać, z wynikiem „DO OCENY”.
 9. Nowsza wersja niż 1.0.0 po Dniu 2 – zapisz wersję i godzinę w raporcie i pracuj dalej; „Zainstaluj teraz” tylko
-   w Dniu 2. Numer wersji: baner „Co nowego w wersji …” albo `main.log` (w 1.0.0 Ustawienia → Informacje pokazują tylko
-   „zainstalowana”).
+   w Dniu 2. Numer wersji: baner „Co nowego w wersji …”, Ustawienia → Aktualizacje („Wersja …”) albo `main.log`.
 10. **Czego nie zrobisz i co zamiast:**
 
     | Nie da się | Zamiast tego |
@@ -316,8 +315,8 @@ Wieczór (gdy trzeba – zegar na 16:55):
 
 8. E4a.6 + E6a.2 + E8f.2 część 1: blok pracy po planowanym końcu przy oknie głównym z przodu, bez odpowiedzi na
    „Dalej?” – godzinę po zobaczeniu pytania kończy się sam (w czasie czekania zrzuty Cowork nie rzadziej niż co 20 min).
-   Potem przez 15 min używaj okna (Ctrl 1, Ctrl 2…) i rób zrzuty „Twardego końca projektów” i puli w „Dziś”, potem
-   „Koniec pracy” – w pasku „Koniec pracy o … · Pracowałem do …”.
+   Potem przez 15 min pracuj w innym programie (np. Notatnik, nie okno Regulated Day) i rób zrzuty „Twardego końca
+   projektów” i puli w „Dziś”, potem „Koniec pracy” – w pasku „Koniec pracy o … · Pracowałem do …”.
 9. E6c.1 część 1 (dzień aktualizacji ma rytuał), E6c.2, E6c.4, E8k.3. **Dnia nie zamykaj** – czeka na Dzień 3.
 10. Rutyny: „Rutyna poranna” z dwiema wersjami (zwykła i „gorsze dni”) po 3 kroki – do E8g.1.
 11. `koniec-dnia-2.cmd`. Aplikacji nie zamykasz – skok na sobotę jest na początku Dnia 3.
@@ -326,8 +325,9 @@ Wieczór (gdy trzeba – zegar na 16:55):
 Początek (z użytkownikiem, ok. 3 min):
 - Pytanie do użytkownika: „Zakończ” w menu ikony i czy w tym menu jest „Próba” (E8e.2 część 1 – menu ikony).
 - E8e.2 część 2: `folder-ukryj.cmd` → zegar na sobotę, godzinę przed „Analizą tygodnia” (Dzień 2, krok 3), nie później
-  niż 8:00 → uruchom: „Brak folderu danych · Otwórz okno” → `folder-przywroc.cmd`. Gdy po minucie pasek nadal
-  pokazuje „Brak folderu danych”, poproś o „Zakończ” i uruchom aplikację (to obserwacja, poza oceną E8e.2).
+  niż 8:00 → uruchom: „Folder danych jest teraz niedostępny – ponawiam · Otwórz okno” → `folder-przywroc.cmd`. Gdy po
+  minucie pasek nadal pokazuje „…niedostępny”, poproś o „Zakończ” i uruchom aplikację (to obserwacja, poza oceną
+  E8e.2).
 
 1. E6c.5 („Niezamknięte dni” → „Popraw”) razem z E6c.3 (w rytuale piątku zostaw jeden wiersz bez wyboru → „Zamknij
    dzień” → „Wróć” → „Zamknij dzień” → potwierdź) i E6c.1 część 2 (w karcie jest piątek, nie ma Dnia 1).
@@ -338,8 +338,9 @@ Początek (z użytkownikiem, ok. 3 min):
 6. E6b.2 (po 12:00, aplikacja włączona godzinę: `C:\RD-test\backups\daily\<data>.zip`, proces „Regulated Day – zadania
    w tle” w Menedżerze zadań; że po „Zakończ” go nie ma – na początku Dnia 4) i E6d.2 (kopia z piątku).
 7. E7c.2: zatwierdź granicę, blok, „Koniec pracy” – „+3 ♪”.
-8. E6a.3: zegar na ok. 1 h 35 min przed „Twardym końcem projektów” → blok „Projekty” na 15 min, bez odpowiedzi na
-   „Dalej?” → używaj okna, aż minie twardy koniec.
+8. E6a.3 (tylko gdy minimum projektów nie jest jeszcze zebrane – inaczej komunikatu nie będzie, zapisz to w raporcie):
+   zegar na ok. 1 h 35 min przed „Twardym końcem projektów” → blok „Projekty” na 15 min, bez odpowiedzi na
+   „Dalej?” → pracuj w innym programie (nie w oknie Regulated Day), aż minie twardy koniec.
 9. Rytuał soboty – zamknij dzień.
 10. `koniec-dnia-3.cmd`. Aplikacja zostaje włączona.
 
@@ -353,8 +354,8 @@ Menedżerem zadań po „Zakończ”) i E5b.4 i skończył się skokiem na niedz
 2. **Raport z Dni 1–3:** napisz „Dni 1–3 gotowe” w lokalnej sesji Claude Code – kopiuje go do repozytorium (część 6).
 3. **Dzień 4 – Początek zamiast opisanego niżej** (z użytkownikiem, ok. 5 min; zegar już jest w niedzieli):
    - E8e.2 część 2: pytanie do użytkownika: „Zakończ” w menu ikony → `folder-ukryj.cmd` → uruchom (bez skoku zegara):
-     „Brak folderu danych · Otwórz okno” → `folder-przywroc.cmd`. Gdy po minucie pasek nadal pokazuje „Brak folderu
-     danych”, poproś o „Zakończ” i uruchom aplikację (obserwacja, poza oceną E8e.2).
+     „Folder danych jest teraz niedostępny – ponawiam · Otwórz okno” → `folder-przywroc.cmd`. Gdy po minucie pasek
+     nadal pokazuje „…niedostępny”, poproś o „Zakończ” i uruchom aplikację (obserwacja, poza oceną E8e.2).
    - **Próba zegara** (w raporcie jej nie ma): zegar o 40 min do przodu z `przy-aplikacji` (`zegar.cmd`, część 1
      „Zegar”) – dłużej niż 30 min, jak skoki w kolejnych dniach. Wpis `### Próba zegara – zgody zostały` albo
      `… – zgody wygasły` (wtedy poproś użytkownika o ich zatwierdzenie, póki jest przy maszynie).
@@ -416,11 +417,14 @@ więcej będzie potrzebne.
 
 1. E8i.1 część 2: baner „Brak kopii zapasowej od …”; potem `blokada-zdejmij.cmd` (okno blokady zamyka plik i usuwa
    `blokada.json`) i czekaj na następną próbę – linia i baner znikają.
-2. E8a.2 + E8f.2 część 4: przed sesją NY blok pracy → „Pauza” → „Koniec pracy”: E8a.2 i „NY o 15:30 zostaje · Odwołaj”.
-3. E8c.2 i E4a.5, jeśli nie były w Dniu 2 (sesja NY jak w Dniu 2, krok 7).
+2. E8f.2 część 4: przed sesją NY blok pracy → „Koniec pracy” – w pasku „NY o 15:30 zostaje · Odwołaj” („Odwołaj” nie
+   klikaj).
+3. E8c.2 i E4a.5, jeśli nie były w Dniu 2 (sesja NY jak w Dniu 2, krok 7). Po końcu sesji NY – E8a.2: blok pracy →
+   „Pauza” → „Koniec pracy”. Nie przed sesją: sesja NY to stały blok pracy, a przy nim „Koniec pracy” jest tylko
+   przerwą (D216).
 4. E4a.13 część 1: Menedżer zadań → „Regulated Day” → „Zakończ zadanie” → uruchom → w `main.log` „poprzednie
    uruchomienie: crash”; `pobierz-najnowszy.cmd` → dwuklik `Regulated-Day-Setup-najnowszy.exe` w Pobranych →
-   „clean”.
+   „installer (zamknięte przez instalator)” albo „clean (…)” (oba to nie awaria).
 5. E6d.3: `e6d3-foldery.cmd`; najpierw odmowy – `C:\RD-test-zplikiem` (folder z plikiem) i `C:\RD-test\folder-wewnatrz`
    (folder w obecnym folderze danych), potem `C:\RD-test-2` (pusty). Od teraz aplikacja pracuje w `C:\RD-test-2`.
 6. Rytuał – zamknij dzień.

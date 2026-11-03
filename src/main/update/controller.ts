@@ -181,6 +181,7 @@ export class UpdateController {
 
   /** The full exit: a ready download installs (the app is quitting anyway) – never in a session or a class (spec, A5-03). */
   onQuit(sessionEnding: boolean): void {
+    if (!this.updater?.readyRelease) return
     if (sessionEnding || this.installing) return
     if (this.d.sessionOrClass?.()) {
       this.d.log('info', 'wyjście w czasie sesji albo zajęć (albo 30 min przed nimi) – instalacja przy kolejnym wyjściu albo w nocy')
