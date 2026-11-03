@@ -1,7 +1,8 @@
 # Plan – do zrobienia
 
 Tylko praca, która została (D317); zakończone etapy → `docs/archiwum/plan-E0-E8.md`, pełna tabela etapów – specyfikacja
-„Plan budowy”. Model każdej pozycji: **Opus 5.5 · xhigh** (D317, D348).
+„Plan budowy”. Model: główna sesja **Opus 5.5 · xhigh**; w planie napraw kod piszą wykonawcy z `.claude/agents/`
+według kolumny „Wykonawca” (D349).
 
 - **Rodzaj:** **Interfejs** – ekran na gotowej logice; **Logika** – bez widocznych zmian; **Całość** – logika, interfejs,
   okna i komunikacja procesów.
@@ -12,7 +13,7 @@ Tylko praca, która została (D317); zakończone etapy → `docs/archiwum/plan-E
 - **Ciągi** (D317): pozycje jednego ciągu idą bez pauzy do „dalej”; każdy PR kończy się jak zwykle (testy,
   `/code-review`, commit, `docs/postep.md`, `docs/odbior.md`). Poprawki z odbioru wchodzą między PR-y bieżącego ciągu.
 
-## Poprawki po odbiorze w maszynie – jeden ciąg na Opus 5.5 · xhigh, wersje 1.0.1–1.0.8 (D324, D348)
+## Poprawki po odbiorze w maszynie – jedno zadanie, wersje 1.0.1–1.0.8 (D324, D349)
 
 Źródło: `docs/vm/raport.md` (3.11) – 14 NIEZGODNE, 6 UWAGA, 2 DO OCENY, 5 NIE DO SPRAWDZENIA i ok. 30 obserwacji.
 Każda sprawdzona w kodzie: przyczyna (`plik:linia`), szkic poprawki i test – `docs/vm/przyczyny.md` (sekcja = numer
@@ -20,27 +21,31 @@ zadania). Wynik: 22 błędy w kodzie (część ze wspólną przyczyną, 2 tylko 
 11 zachowań do Twojej decyzji (P1–P11), reszta zgodna ze specyfikacją albo wina maszyny. Decyzje podjęte 3.11:
 D334–D344 (P1–P11) i trzy zmiany zachowań dotąd zgodnych ze specyfikacją (D345–D347) – tabela niżej.
 
-**Jeden ciąg (D348):** wszystkie zadania na Opus 5.5 · xhigh, bez pauzy do „dalej” między nimi – pauza dopiero na końcu
-ciągu. Kolejność według obszarów: opisy odbioru i logi (bez własnego wydania), silnik dnia i pasek, ekrany po
-decyzjach, folder danych, na końcu trzy zadania sprawdzane tylko w CI na Windows (rundy CI obok siebie). Każdy PR:
-testy, `/code-review` xhigh, PR i scalenie po zielonym CI (D333), wydanie sprawdzone na `main`, `docs/postep.md`,
-`docs/odbior.md`. Numery zadań jak w `docs/vm/przyczyny.md`; poprawki z odbioru wchodzą między PR-y ciągu.
+**Jedno zadanie (D349):** cały ciąg bez pauzy do „dalej” – pauza dopiero na końcu. **Główna sesja – Opus 5.5 · xhigh**
+– prowadzi i sprawdza: „Przed ciągiem F”, gałąź, zlecenie zadania wykonawcy, przegląd jego zmian, pełne testy,
+`/code-review` xhigh (poprawki sama albo przez tego samego wykonawcę), wersja i `CHANGELOG.md`, punkty w
+`docs/odbior.md`, T-decyzje, `docs/postep.md`, commit, PR i scalenie po zielonym CI (D333), wydanie sprawdzone na
+`main`. **Wykonawca** (agent z `.claude/agents/`, model i thinking w jego nagłówku) pisze test, który na starym kodzie
+pada, i poprawkę według `docs/vm/przyczyny.md` – bez commitów i PR. Zadania po kolei, bez równoległych gałęzi (wspólne
+pliki). Kolejność według obszarów: opisy odbioru i logi (bez własnego wydania), silnik dnia i pasek, ekrany po
+decyzjach, folder danych, na końcu trzy zadania sprawdzane tylko w CI na Windows. Poprawki z odbioru wchodzą między
+PR-y. Szacunek – czas do wydania, jak dotąd.
 
-### Ciąg F – poprawki po odbiorze w maszynie (Opus 5.5 · xhigh) – 16,5–24,5 h, 8 wydań
+### Ciąg F – poprawki po odbiorze w maszynie – 16,5–24,5 h, 8 wydań
 
-| # | Zadanie | Rodzaj | Szacunek | Uwagi |
-| --- | --- | --- | --- | --- |
-| F1 | Opisy odbioru: E3.3, E4a.8, E4a.9, E4a.13, E4b.15, E6a.2, E6a.3, E7c.1, E8a.2, E8e.2 (D342), E8f.2 cz. 1, wersja w `odbior-vm.md` | Dokumenty | 0,5–1 h | jeden PR z F2, bez wydania (trafia z 1.0.1, T525); punkty, które zmienia późniejszy kod (E3.4, E4a.10, E5b.4, E8k.3, nazwy sesji), poprawia PR tej zmiany |
-| F2 | Ślady w logach: wyjście bez czekającej aktualizacji, druga uruchomiona kopia („koniec pracy” → „aplikacja zamknięta”), powiadomienie nieprzyjęte przez Windows (E8j.2) | Logika | 0,5 h | bez zmian widocznych; unit i E2E (xvfb) |
-| F3 | `/code-review`, CI, scalenie F1–F2 | – | 0,25–0,5 h | |
-| G1 | 1.0.1 – koniec pracy: „Koniec pracy” przy pauzie i po samoczynnym końcu bloku, „Koniec pracy?” po 15 min pauzy, „Sesja NY o … zostaje · Odwołaj” po bloku z tej samej minuty, „Pracowałem do …” mimo późniejszej pracy, zapauzowany blok po zamknięciu dnia (E8a.1, E8a.2, E8f.2 cz. 1 i 4, E6a.2) | Logika | 2–3 h | cztery wspólne przyczyny A–D; ryzyko wysokie – liczenie końca pracy (T507, D216) |
-| G2 | 1.0.2 – pasek liczy jak trzeba od pierwszej chwili: odliczanie od faktycznej chwili startu (15:00, nie 15:28), „Dalej?” nie przed 0:00, kroki 15 · 5 · 0, puls i dźwięk z tej samej chwili (E4a.1); blok przerwany zamknięciem aplikacji od razu po starcie (E4a.10, D345) | Całość | 2–3 h | odliczanie – tylko widok, rachunek dnia na minutach (T412); D345 – nakładka bez zapisu przed ustaleniem, ryzyko przy dwóch komputerach |
-| H1 | 1.0.3 – plan i pasek: warianty szukają cięcia, które mieści plan, a wariant bez poprawy zostaje z prawdziwym końcem (E5b.5, D340), „Zrobione automatycznie” z „Cofnij” przy każdym działaniu (E4a.4), druga zmiana nieprzeciągalna jak sesja (E3.13), „+15 min” z kosztem po bloku dodanym z kosztem, „Dalej” działa po cofnięciu zegara, komunikat twardego końca tylko przy brakującym minimum, „Prośba ▸” w ciszy nocnej (E5b.4, D346) | Całość | 2,5–3 h | spec: lista elementów paska w ciszy nocnej (D346) |
-| H2 | 1.0.4 – ekrany po decyzjach: widać wybrany odczuwany koszt (E6c.4), „Sesja NY”, „Sesja Londyn” (E8f.2 cz. 3, D338), koszt w panelu bloku jak w pasku (E4a.3, D339), pobudka przesuwa bloki ręczne (E3.4, D334), „Start” bloku życia pauzuje pracę (D335), „Usuń” zaczętego bloku kończy go i zdejmuje z planu (D336), „Wstałeś później?” czeka (D337), numer wersji w Ustawieniach (D344), komunikat pod każdym odrzuconym polem (E8k.3, D347) | Całość | 3–4 h | spec: przykłady „NY o …” → „Sesja NY o …”, T450 i T467 zastąpione |
-| G3 | 1.0.5 – folder danych niedostępny: zmiany i „Start” czekają w kolejce, pasek z przyciskami, „N zmian zapisze się po powrocie folderu danych” w oknie i przy wyjściu (E8b.1, E8i.2) | Logika | 1,5–2,5 h | `tests/fs` na prawdziwym folderze; tekst dnia bez znanej wersji – D343 |
-| G4 | 1.0.6 – pasek pulpitu nigdy nad oknami innych programów (D229: był nad Edge na pełnym ekranie), powrót po „nie udało się położyć pod oknami” co 5 min (D341) | Logika (okna, pomocnik C#) | 2–3 h | tylko CI na Windows, 2–4 rundy |
-| G5 | 1.0.7 – instalator uruchomiony ręcznie zamyka aplikację łagodnie, przy „Nie można zamknąć” zapisuje listę procesów (E4a.13 cz. 1) | Logika (instalator) | 1,5–2,5 h | `tests/update` tylko w CI; proces, który został w maszynie, pokaże dopiero ten log |
-| H3 | 1.0.8 – „Uruchamiaj z Windows” pokazuje prawdziwy stan i da się wyłączyć (dziś zawsze „wyłączone”), znacznik życia przeżywa twardy reset | Logika | 1–1,5 h | `tests/update` tylko w CI |
+| # | Zadanie | Rodzaj | Wykonawca | Szacunek | Uwagi |
+| --- | --- | --- | --- | --- | --- |
+| F1 | Opisy odbioru: E3.3, E4a.8, E4a.9, E4a.13, E4b.15, E6a.2, E6a.3, E7c.1, E8a.2, E8e.2 (D342), E8f.2 cz. 1, wersja w `odbior-vm.md` | Dokumenty | `wykonawca-haiku` – Haiku 5.5 · high | 0,5–1 h | jeden PR z F2, bez wydania (trafia z 1.0.1, T525); punkty, które zmienia późniejszy kod (E3.4, E4a.10, E5b.4, E8k.3, nazwy sesji), poprawia PR tej zmiany |
+| F2 | Ślady w logach: wyjście bez czekającej aktualizacji, druga uruchomiona kopia („koniec pracy” → „aplikacja zamknięta”), powiadomienie nieprzyjęte przez Windows (E8j.2) | Logika | `wykonawca-haiku` – Haiku 5.5 · high | 0,5 h | bez zmian widocznych; unit i E2E (xvfb) |
+| F3 | `/code-review`, CI, scalenie F1–F2 | – | główna sesja – Opus 5.5 · xhigh | 0,25–0,5 h | |
+| G1 | 1.0.1 – koniec pracy: „Koniec pracy” przy pauzie i po samoczynnym końcu bloku, „Koniec pracy?” po 15 min pauzy, „Sesja NY o … zostaje · Odwołaj” po bloku z tej samej minuty, „Pracowałem do …” mimo późniejszej pracy, zapauzowany blok po zamknięciu dnia (E8a.1, E8a.2, E8f.2 cz. 1 i 4, E6a.2) | Logika | `wykonawca-opus` – Opus 5.5 · xhigh | 2–3 h | cztery wspólne przyczyny A–D; ryzyko wysokie – liczenie końca pracy (T507, D216) |
+| G2 | 1.0.2 – pasek liczy jak trzeba od pierwszej chwili: odliczanie od faktycznej chwili startu (15:00, nie 15:28), „Dalej?” nie przed 0:00, kroki 15 · 5 · 0, puls i dźwięk z tej samej chwili (E4a.1); blok przerwany zamknięciem aplikacji od razu po starcie (E4a.10, D345) | Całość | `wykonawca-opus` – Opus 5.5 · xhigh | 2–3 h | odliczanie – tylko widok, rachunek dnia na minutach (T412); D345 – nakładka bez zapisu przed ustaleniem, ryzyko przy dwóch komputerach |
+| H1 | 1.0.3 – plan i pasek: warianty szukają cięcia, które mieści plan, a wariant bez poprawy zostaje z prawdziwym końcem (E5b.5, D340), „Zrobione automatycznie” z „Cofnij” przy każdym działaniu (E4a.4), druga zmiana nieprzeciągalna jak sesja (E3.13), „+15 min” z kosztem po bloku dodanym z kosztem, „Dalej” działa po cofnięciu zegara, komunikat twardego końca tylko przy brakującym minimum, „Prośba ▸” w ciszy nocnej (E5b.4, D346) | Całość | `wykonawca-sonnet` – Sonnet 5.5 · high | 2,5–3 h | spec: lista elementów paska w ciszy nocnej (D346) |
+| H2 | 1.0.4 – ekrany po decyzjach: widać wybrany odczuwany koszt (E6c.4), „Sesja NY”, „Sesja Londyn” (E8f.2 cz. 3, D338), koszt w panelu bloku jak w pasku (E4a.3, D339), pobudka przesuwa bloki ręczne (E3.4, D334), „Start” bloku życia pauzuje pracę (D335), „Usuń” zaczętego bloku kończy go i zdejmuje z planu (D336), „Wstałeś później?” czeka (D337), numer wersji w Ustawieniach (D344), komunikat pod każdym odrzuconym polem (E8k.3, D347) | Całość | `wykonawca-sonnet` – Sonnet 5.5 · high | 3–4 h | spec: przykłady „NY o …” → „Sesja NY o …”, T450 i T467 zastąpione |
+| G3 | 1.0.5 – folder danych niedostępny: zmiany i „Start” czekają w kolejce, pasek z przyciskami, „N zmian zapisze się po powrocie folderu danych” w oknie i przy wyjściu (E8b.1, E8i.2) | Logika | `wykonawca-opus` – Opus 5.5 · xhigh | 1,5–2,5 h | `tests/fs` na prawdziwym folderze; tekst dnia bez znanej wersji – D343 |
+| G4 | 1.0.6 – pasek pulpitu nigdy nad oknami innych programów (D229: był nad Edge na pełnym ekranie), powrót po „nie udało się położyć pod oknami” co 5 min (D341) | Logika (okna, pomocnik C#) | `wykonawca-opus` – Opus 5.5 · xhigh | 2–3 h | tylko CI na Windows, 2–4 rundy |
+| G5 | 1.0.7 – instalator uruchomiony ręcznie zamyka aplikację łagodnie, przy „Nie można zamknąć” zapisuje listę procesów (E4a.13 cz. 1) | Logika (instalator) | `wykonawca-opus` – Opus 5.5 · xhigh | 1,5–2,5 h | `tests/update` tylko w CI; proces, który został w maszynie, pokaże dopiero ten log |
+| H3 | 1.0.8 – „Uruchamiaj z Windows” pokazuje prawdziwy stan i da się wyłączyć (dziś zawsze „wyłączone”), znacznik życia przeżywa twardy reset | Logika | `wykonawca-sonnet` – Sonnet 5.5 · high | 1–1,5 h | `tests/update` tylko w CI |
 
 ### Decyzje (3.11) – D334–D347
 

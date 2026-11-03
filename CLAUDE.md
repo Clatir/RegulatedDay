@@ -12,6 +12,8 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
   sam i dopisz jako T-decyzję.
 - PR-y otwieraj i scalaj bez pytania, gdy CI jest zielone i nic nie czeka na decyzję (D285, D333). Do `main` pisze
   naraz jedna sesja; po scaleniu sprawdź, że zadanie Windows w CI opublikowało wydanie.
+- Plan napraw (D349): główna sesja na Opus 5.5 · xhigh zleca test i poprawkę każdego zadania wykonawcy z `.claude/agents/`
+  według kolumny „Wykonawca” w `docs/plan.md`, a sama sprawdza, robi `/code-review`, PR i scalanie.
 - Po wznowieniu (limit, nowa sesja) najpierw przeczytaj `docs/postep.md`.
 - **`/clear`:** przy każdej pauzie i po każdym zamkniętym kroku powiedz wprost, czy można go teraz bezpiecznie wykonać.
   Bezpiecznie = wszystko jest w commitach wypchniętych na GitHuba, `docs/postep.md` mówi, co dalej (także PR do scalenia
@@ -30,7 +32,7 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
   Grywalizacja, Wygląd, Dane i ustawienia, Konwencje interfejsu, Jakość i protokół, Plan budowy.
 - `docs/decyzje.md` – decyzje D (użytkownik), `docs/decyzje-techniczne.md` – T (techniczne) (D308); czytaj Grepem
   po numerze. Nie zmieniaj D bez pytania; nowa decyzja wskazuje, którą zastępuje.
-- `docs/plan.md` – tylko praca do zrobienia: ciągi, rodzaj, model, szacunek, „gotowe, gdy” (D317, D348).
+- `docs/plan.md` – tylko praca do zrobienia: ciągi, rodzaj, model, szacunek, „gotowe, gdy” (D317, D349).
   `docs/postep.md` – stan bieżący i kolejka.
 - `docs/odbior.md` – listy do odbioru na Windows (oczekiwany efekt i błędy blokujące każdego punktu), także odebrane.
 - `docs/odbior-vm.md` – odbiór w maszynie wirtualnej (Cowork); raport z testów w `docs/vm/raport.md` (T529),

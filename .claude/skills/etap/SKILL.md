@@ -11,7 +11,8 @@ Wszystkie wiadomości do użytkownika po polsku. Pytania zawsze klikalne (AskUse
 1. **Co trzeba wiedzieć** – zakres z `docs/plan.md`, stan poprzedniego etapu, rzeczy otwarte, ryzyka.
 2. **Pytania** – tylko o zachowanie widoczne dla użytkownika (sprawy techniczne rozstrzygnij sam jako T-decyzję).
 3. **Co przygotować** – sprzęt, programy, uprawnienia, czas na ręczne sprawdzenia.
-4. **Model i thinking** – Opus 5.5 · xhigh (D317, D348); szacunek z `docs/plan.md`, a po etapie czas faktyczny w postępie.
+4. **Model i thinking** – główna sesja Opus 5.5 · xhigh; test i poprawkę pisze wykonawca z kolumny „Wykonawca”
+   w `docs/plan.md` (`.claude/agents/`, D349); szacunek z planu, a po etapie czas faktyczny w postępie.
    W ciągu (D317) „Przed etapem” tylko na jego początku – pytania o wygląd całego ciągu z góry.
 
 ## Po etapie

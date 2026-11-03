@@ -32,9 +32,9 @@
    Twoim „Zakończ” – Dni 2–5 bez Ciebie w trakcie dnia. Przebieg w toku (Dni 1–3 zrobione 2.11 według starej
    instrukcji) idzie dalej od Dnia 4 – „Przebieg zaczęty przed T529” w `docs/odbior-vm.md`, bez powrotu do migawki.
    Poprawki z odbioru – wersje 1.0.x (D324).
-3. **Plan napraw po raporcie VM gotowy (3.11)** – `docs/plan.md`: ciąg F, jeden na Opus 5.5 · xhigh (D348), zadania
-   F1–H3, wersje 1.0.1–1.0.8; przyczyny w `docs/vm/przyczyny.md`, decyzje D334–D347. Następny krok: „dalej” →
-   „Przed ciągiem F”.
+3. **Plan napraw po raporcie VM gotowy (3.11)** – `docs/plan.md`: ciąg F jako jedno zadanie (D349) – główna sesja
+   Opus 5.5 · xhigh, wykonawcy z `.claude/agents/` (Haiku F1–F2, Opus G1–G5, Sonnet H1–H3), zadania F1–H3, wersje
+   1.0.1–1.0.8; przyczyny w `docs/vm/przyczyny.md`, decyzje D334–D347. Następny krok: „Przed ciągiem F”.
 4. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Do odbioru na Windows
@@ -42,21 +42,24 @@
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
 
-## Plan napraw po raporcie VM – jeden ciąg na Opus (3.11, D348)
-- Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji; potem: cały plan jednym ciągiem
-  na Opus 5.5 · xhigh (D348 – zastępuje D332, podział na bloki Haiku / Opus / Sonnet, przeniesiony do archiwum).
+## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)
+- Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji. Kolejno: bloki według modelu
+  (D332), jeden ciąg na Opus (D348), w końcu jedno zadanie z wykonawcami według modelu (D349 – limity sesji zniesione;
+  D332 i D348 w archiwum). Wykonawcy: `.claude/agents/wykonawca-{haiku,sonnet,opus}.md` (`model`, `effort` w nagłówku,
+  bez commitów i PR; pola sprawdzone w dokumentacji Claude Code – agenci dostają CLAUDE.md i reguły modułów).
 - Każda pozycja raportu (14 NIEZGODNE, 6 UWAGA, 2 DO OCENY, 5 NIE DO SPRAWDZENIA, obserwacje) sprawdzona w kodzie przez
   sześć równoległych analiz (bloki i timer; koniec pracy; energia i powiadomienia; folder danych; proces główny i Windows;
   ekrany), część hipotez potwierdzona testem na kopii repozytorium, kluczowe miejsca sprawdzone ponownie przeze mnie.
   Wynik w `docs/vm/przyczyny.md`: 22 błędy w kodzie, 15 opisów odbioru do poprawy, 11 decyzji (P1–P11).
 - Decyzje: D333 (domyślna zgoda na PR-y i scalanie), D334–D347 (odpowiedzi P1–P11 i zmiany E4a.10, E5b.4, E8k.3 –
-  tabela w planie), D348. Bez zmian w aplikacji (bez wersji i CHANGELOG). Testy: `check-context` zielone.
+  tabela w planie), D349. Bez zmian w aplikacji (bez wersji i CHANGELOG). Testy: `check-context` zielone.
 - PR #42 (plan, D332–D347) scalony 3.11 (16e64ea) po zielonym CI (run 149); CI na `main` zielone (run 150, także
-  Windows), bez wydania. D348 – osobny PR.
+  Windows), bez wydania. D348 i D349 – PR #43.
 - `docs/plan.md`: ciąg F – F1–F3 (opisy odbioru, logi; PR bez wydania), G1 1.0.1 (koniec pracy), G2 1.0.2 (pasek od
   pierwszej chwili), H1 1.0.3 (plan i pasek), H2 1.0.4 (ekrany po decyzjach), G3 1.0.5 (folder danych), G4 1.0.6 (pasek
   pulpitu), G5 1.0.7 (instalator), H3 1.0.8 (autostart, znacznik życia); 16,5–24,5 h.
-- **Dalej:** „dalej” → „Przed ciągiem F” (Opus 5.5 · xhigh), potem cały ciąg bez pauzy.
+- **Dalej:** PR #43 – scalenie po zielonym CI (D333), potem „Przed ciągiem F” (główna sesja Opus 5.5 · xhigh) i cały
+  ciąg bez pauzy, zadania przez wykonawców z kolumny „Wykonawca”.
 
 ## Odbiór w VM – zegar u Cowork, raport w repozytorium (2.11, T529)
 - Zlecenie: Cowork domyślnie przestawia zegar skryptem, jak najmniej rąk użytkownika, raport z testów częścią repozytorium.
