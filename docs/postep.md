@@ -32,12 +32,28 @@
    Twoim „Zakończ” – Dni 2–5 bez Ciebie w trakcie dnia. Przebieg w toku (Dni 1–3 zrobione 2.11 według starej
    instrukcji) idzie dalej od Dnia 4 – „Przebieg zaczęty przed T529” w `docs/odbior-vm.md`, bez powrotu do migawki.
    Poprawki z odbioru – wersje 1.0.x (D324).
-3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
+3. **Plan napraw po raporcie VM gotowy (3.11, D332)** – `docs/plan.md`, ciągi F (Haiku) → G (Opus) → H (Sonnet), przyczyny
+   w `docs/vm/przyczyny.md`. Następny krok: Twoje odpowiedzi P1–P11 („Przed ciągiem F”), potem ciąg F na Haiku 5.5 · high.
+4. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Do odbioru na Windows
 - `docs/odbior.md` (układ z 27.10): na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza
   czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
   z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
+
+## Plan napraw po raporcie VM – podział na modele (3.11, D332)
+- Gałąź `claude/plan-napraw-modele-iyrrp6` (od `main` 4f494a4). Zlecenie: plan napraw według audytu (raport VM)
+  z podziałem na model i czas trwania, pozycje jednego modelu obok siebie w jednym ciągu.
+- Każda pozycja raportu (14 NIEZGODNE, 6 UWAGA, 2 DO OCENY, 5 NIE DO SPRAWDZENIA, obserwacje) sprawdzona w kodzie przez
+  sześć równoległych analiz (bloki i timer; koniec pracy; energia i powiadomienia; folder danych; proces główny i Windows;
+  ekrany), część hipotez potwierdzona testem na kopii repozytorium, kluczowe miejsca sprawdzone ponownie przeze mnie.
+  Wynik w `docs/vm/przyczyny.md`: 22 błędy w kodzie, 15 opisów odbioru do poprawy, 11 decyzji (P1–P11).
+- `docs/plan.md`: ciąg F – Haiku 5.5 · high (opisy odbioru, logi; 1–2 h, bez wydania), G – Opus 5.5 · xhigh (koniec
+  pracy, folder danych, odliczanie, pasek nad oknami, instalator; 8–12,5 h, 1.0.1–1.0.5), H – Sonnet 5.5 · high (warianty,
+  „Zrobione automatycznie”, ekrany po decyzjach, autostart; 5,5–7,5 h, 1.0.6–1.0.8). Razem 14,5–22 h.
+- D332 (zmienia D317 w części „każda pozycja na Opus”); skill `etap` i `CLAUDE.md` biorą model z planu. Bez zmian
+  w aplikacji (bez wersji i CHANGELOG). Testy: `check-context` zielone.
+- **Dalej:** Twoje odpowiedzi P1–P11, potem „dalej” → „Przed ciągiem F” na Haiku 5.5 · high.
 
 ## Odbiór w VM – zegar u Cowork, raport w repozytorium (2.11, T529)
 - Zlecenie: Cowork domyślnie przestawia zegar skryptem, jak najmniej rąk użytkownika, raport z testów częścią repozytorium.
@@ -60,8 +76,8 @@
 - **Raport VM (3.11):** `docs/vm/raport.md` – Dni 1–6 i część dodatkowa (13–26.11 w maszynie) w jednym pliku, na górze
   zestawienie: 68 z 68 punktów z wpisem – ZGODNE 41, NIEZGODNE 14, UWAGA 6, DO OCENY 2, NIE DO SPRAWDZENIA 5;
   `docs/vm/skrypty.txt`. Zrzuty i logi zostają w `C:\RD-vm-raport`.
-- **Dalej:** każde NIEZGODNE z zestawienia sprawdzić w logu i w kodzie (część 6, krok 4) → wersje 1.0.x (D324). Ty:
-  „Na samym końcu” (E4a.13 cz. 3), potem akceptacja punktów (`[x]` w `docs/odbior.md`).
+- **Dalej:** zrobione 3.11 – plan napraw (wpis niżej). Ty: „Na samym końcu” (E4a.13 cz. 3), potem akceptacja punktów
+  (`[x]` w `docs/odbior.md`).
 
 ## CI w weekend – E2E niezależne od dnia (1.11, T528)
 - Gałąź `claude/determined-shannon-ordir7` (od `main` c353c6a). Na `main` od niedzieli 1.11 czerwone runy 130, 131,
