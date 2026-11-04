@@ -8,8 +8,8 @@ import { activityOf } from '@shared/engine/activity'
 import { autoActions } from '@shared/engine/auto'
 import { requestAction } from '@shared/engine/requests'
 import { timerAction, type TimerAction } from '@shared/engine/timer'
-import { engineView } from '@shared/engineView'
-import { toneOnChange } from '../../../src/main/widget'
+import { engineView, warnDeadlines } from '@shared/engineView'
+import { stepDelay, toneOnChange } from '../../../src/main/widget'
 import { block, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
@@ -218,6 +218,103 @@ describe('widok paska z silnika', () => {
     expect(view(s, '16:10').lines.find((l) => l.id === 'restart:ny')).toMatchObject({ actions: [{ label: 'Zacznij jeszcze raz' }] })
     expect(click(s, '16:20', { a: 'restart', block: 'ny' }).ok).toBe(true)
     expect(view(s, '16:25').block?.name).toBe('Sesja tradingowa')
+  })
+})
+
+describe('odliczanie od faktycznej chwili startu (E4a.1; dzień liczy się dalej w minutach, T412)', () => {
+  const SEC = 1000
+  const MIN = 60 * SEC
+  const viewMs = (s: Scenario, t: number) => {
+    const ctx = s.contextAt(t)
+    const state = s.stateAt(t)
+    return engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, name: () => 'Inne obowiązki', care, modePrefs: { sessionMode: true, classMode: true }, pending: null })
+  }
+  const startAt = (s: Scenario, t: number, act: TimerAction) => {
+    const r = timerAction(s.contextAt(t), s.stateAt(t), act, t)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, t)
+  }
+  const isNext = (id: string) => id.startsWith('next:') || id.startsWith('next2:')
+  /** How long the main process waits for its refresh at the next step (`stepDelay` of the view's `warnDeadlines`). */
+  const stepIn = (s: Scenario, t: number) => stepDelay(warnDeadlines(s.stateAt(t), viewMs(s, t).block?.endsAt ?? null, t), t)
+
+  it('start 10:46:32 (minuta 10:47): na starcie 15:00, kroki 5 i 0 oraz „Dalej?” w chwili 0:00, nie wcześniej', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '10:45', min: 15 })] }).observe('07:00', null)
+    const t0 = s.at('10:46') + 32 * SEC
+    startAt(s, t0, { a: 'start', block: 'a' })
+    // The day counts the block from 10:47 (T412); the bar from the click.
+    expect(s.stateAt(t0).facts.blocks.get('a')!.startedAt).toBe(s.stateAt(t0).now)
+    const ends = t0 + 15 * MIN
+    expect(viewMs(s, t0 + 2 * SEC).block!.endsAt).toBe(ends)
+    expect(viewMs(s, ends - 5 * MIN - SEC).warn).toBe('warm')
+    expect(viewMs(s, ends - 5 * MIN).warn).toBe('five')
+    // 11:01:31 – the day's minute is already 11:02 (its planned end), the countdown still 0:01: no „Dalej?” yet.
+    const before = viewMs(s, ends - SEC)
+    expect(before).toMatchObject({ warn: 'five', question: null, dot: false })
+    expect(before.lines.some((l) => isNext(l.id))).toBe(false)
+    const at0 = viewMs(s, ends)
+    expect(at0).toMatchObject({ warn: 'zero', question: { text: 'Dalej?' }, dot: true })
+    expect(at0.lines.some((l) => isNext(l.id))).toBe(false)
+    // The tone at 5 and 0 goes with the same steps.
+    expect(toneOnChange(toneOnChange(null, viewMs(s, ends - 5 * MIN - SEC)).next, viewMs(s, ends - 5 * MIN)).play).toBe('five')
+    expect(toneOnChange(toneOnChange(null, before).next, at0).play).toBe('zero')
+    // The main process counts the view again at the step itself, not up to 15 s after the countdown.
+    expect(stepIn(s, t0 + 2 * SEC)).toBeNull()
+    expect(stepIn(s, ends - 5 * MIN - 3 * SEC)).toBe(3 * SEC)
+    expect(stepIn(s, ends - SEC)).toBe(SEC)
+    expect(stepIn(s, ends)).toBeNull()
+  })
+
+  it('krok w chwili kroku także przed startem bloku stałego (15 · 5 · 0 min przed nim), bez biegnącego bloku', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'ny', cat: 'sesja', at: '15:30', min: 60, fixed: true, bg: false })] }).observe('07:00', null)
+    expect(stepIn(s, s.at('15:14') + 50 * SEC)).toBe(10 * SEC)
+    expect(viewMs(s, s.at('15:15')).warn).toBe('warm')
+    expect(stepIn(s, s.at('15:24') + 57 * SEC)).toBe(3 * SEC)
+    expect(viewMs(s, s.at('15:25')).warn).toBe('five')
+    expect(stepIn(s, s.at('15:29') + 59 * SEC)).toBe(SEC)
+    expect(stepIn(s, s.at('15:20'))).toBeNull()
+  })
+
+  it('start 10:46:20 (minuta 10:46): „Dalej?” i krok 0 dopiero o 11:01:20, nie od 11:00:30', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '10:45', min: 15 })] }).observe('07:00', null)
+    const t0 = s.at('10:46') + 20 * SEC
+    startAt(s, t0, { a: 'start', block: 'a' })
+    const ends = t0 + 15 * MIN
+    expect(viewMs(s, t0).block!.endsAt).toBe(ends)
+    expect(viewMs(s, s.at('11:01'))).toMatchObject({ warn: 'five', question: null })
+    expect(viewMs(s, ends - SEC)).toMatchObject({ warn: 'five', question: null })
+    expect(viewMs(s, ends)).toMatchObject({ warn: 'zero', question: { text: 'Dalej?' } })
+  })
+
+  it('po pauzie od chwili wznowienia; przejście przez tło nie zmienia odliczania; blok stały kończy się z oknem', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '10:00', min: 30 })] }).observe('07:00', null)
+    startAt(s, s.at('10:00') + 10 * SEC, { a: 'start', block: 'a' })
+    startAt(s, s.at('10:10') + 5 * SEC, { a: 'pause' })
+    // Resumed at 10:20:40 (minute 10:21): 20 min were left by the minutes – from the click.
+    const back = s.at('10:20') + 40 * SEC
+    startAt(s, back, { a: 'start', block: 'a' })
+    expect(viewMs(s, back + SEC).block!.endsAt).toBe(back + 20 * MIN)
+
+    // To the background and back (one stretch): counted from its start, not from the switch.
+    const b = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '10:00', min: 30 })] }).observe('07:00', null)
+    const t0 = b.at('10:00') + 10 * SEC
+    startAt(b, t0, { a: 'start', block: 'a' })
+    b.write([{ k: 'block.fg', block: 'a', at: b.at('10:05') + 40 * SEC, bg: true }], b.at('10:05') + 40 * SEC)
+    b.write([{ k: 'block.fg', block: 'a', at: b.at('10:08') + 20 * SEC, bg: false }], b.at('10:08') + 20 * SEC)
+    expect(viewMs(b, b.at('10:09')).block!.endsAt).toBe(t0 + 30 * MIN)
+
+    // The hours in words stay those of the day's minutes, as in 1.0.1 (only the countdown and the steps take δ): the
+    // tooltip „do 10:30” in front, „W tle: … do 10:30” in the background.
+    const g = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '10:00', min: 30 })] }).observe('07:00', null)
+    startAt(g, g.at('10:00') + 40 * SEC, { a: 'start', block: 'a' })
+    expect(viewMs(g, g.at('10:05')).tooltip).toContain('do 10:31')
+    g.write([{ k: 'block.fg', block: 'a', at: g.at('10:05') + 40 * SEC, bg: true }], g.at('10:05') + 40 * SEC)
+    expect(viewMs(g, g.at('10:06')).background).toEqual([expect.objectContaining({ id: 'a', endsAt: g.at('10:31') })])
+
+    // A fixed block ends with its window, whenever its start was clicked.
+    const f = new Scenario({ date: DATE, plan: [block({ id: 'ny', cat: 'sesja', at: '15:30', min: 60, fixed: true, bg: false })] }).observe('07:00', null)
+    startAt(f, f.at('15:30') + 25 * SEC, { a: 'start', block: 'ny' })
+    expect(viewMs(f, f.at('15:40')).block!.endsAt).toBe(f.at('16:30'))
   })
 })
 

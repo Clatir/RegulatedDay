@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+- Pasek odlicza blok od chwili kliknięcia „Start”: blok 15 min pokazuje na starcie 15:00 (dotąd np. 15:28), a zmiana koloru przy 15 i 5 min, pulsowanie, dźwięk i „Dalej?” przychodzą dokładnie wtedy, gdy odliczanie do nich dojdzie – „Dalej?” nie wcześniej niż przy 0:00. Tak samo kroki 15 · 5 · 0 przed startem bloku stałego.
+- Po uruchomieniu aplikacji blok, który biegł przy jej zamknięciu, od razu przestaje się liczyć w pasku i od razu widać „… przerwany zamknięciem aplikacji o …” – bez czekania ok. 3 min.
+- Kliknięcie i odpowiedź zaraz po starcie aplikacji zostają tak, jak widać je na pasku – także „Skończył się przy wyłączeniu” i „Zacznij jeszcze raz” – nawet gdy później dotrą dane z drugiego komputera. Blok z poprzedniego dnia przerwany zamknięciem – także biegnący przez 04:00 i zamknięty po 04:00 – nie trzyma rano paska na wczorajszym dniu.
+- Blok stały, którego pora przypadła na czas, gdy aplikacja była zamknięta, nie przesuwa już końca przerwanego bloku – ten kończy się w chwili zamknięcia.
+
 ## 1.0.1
 - „Koniec pracy” jest w pasku zawsze, gdy nic nie biegnie na pierwszym planie, w tle nie biegnie praca, która wyznacza koniec pracy (nagrywany wykład i bloki liczone jak projekt się nie liczą), i nic nie czeka na koniec prośby, a dzisiejsza praca nie ma jeszcze potwierdzonego końca – od razu przy pauzie i po bloku, który skończył się sam (dotąd dopiero po 15 minutach albo wcale). Kliknięte w przerwie potwierdza koniec pracy w chwili, w której praca stanęła, i parkuje resztę planu (z „Cofnij”).
 - „Koniec pracy?” przychodzi po 15 minutach pauzy ostatniego bloku także wtedy, gdy wcześniej tego dnia inny blok skończył się sam.

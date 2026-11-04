@@ -13,7 +13,7 @@ import { compareEvents, eventAt, isKnown, type AnyEvent, type CloseHow, type Eve
 import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
 import type { PlanBlock } from '../model/plan'
 import type { RoutineVersion } from '../model/routines'
-import { idxOf, type Grid } from './grid'
+import { atOf, idxOf, type Grid } from './grid'
 
 /** An open run or interval: still going. */
 export const OPEN = Number.POSITIVE_INFINITY
@@ -600,6 +600,20 @@ export function workSince(f: DayFacts, w: WorkEndFact, isWork: (id: string) => b
 function begunIndex(runs: readonly Run[], i: number): number {
   while (i > 0 && runs[i - 1]!.to === runs[i]!.from && runs[i - 1]!.bg !== runs[i]!.bg) i--
   return i
+}
+
+/**
+ * How far the real start of a block's running stretch is off its minute (ms, only for the view – E4a.1; the day counts in
+ * minutes, T412): the instant of the event that began its open run – back through switches of the foreground, one
+ * stretch – minus that run's minute: a start at 10:46:32 counted from 10:47 is −28 s. 0 without an open run, or when the
+ * run's minute is not its event's (a resume held at the end of its pause, the second half of a run a request written in
+ * later cut).
+ */
+export function runShift(grid: Grid, b: BlockFact): number {
+  const last = b.runs.length - 1
+  if (last < 0 || b.runs[last]!.to !== OPEN) return 0
+  const first = b.runs[begunIndex(b.runs, last)]!
+  return idxOf(grid, first.begun.at) === first.from ? first.begun.at - atOf(grid, first.from) : 0
 }
 
 /** A request that runs now (not one written in after the fact). */

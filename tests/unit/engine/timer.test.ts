@@ -330,6 +330,34 @@ describe('działania automatyczne prowadzącego', () => {
     expect(q.answers[0]!.label).toBe('Skończył się przy wyłączeniu')
   })
 
+  it('zamknięcie aplikacji, a w jego czasie okno bloku stałego: blok kończy się w chwili zamknięcia, stały zaczyna się bez pauzy bloku (G2)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '10:00', min: 60 }), block({ id: 'f', cat: 'inne', at: '10:22', min: 30, fixed: true })])
+    s.observe('07:00', '10:20')
+    click(s, '10:00', { a: 'start', block: 'a' })
+    s.observe('10:25', null)
+    const out = leader(s, '10:26')
+    expect(out.map((e) => [e.k, e.block, e.autoRule, e.at])).toEqual([
+      ['block.start', 'f', 'fixedStart', s.at('10:22')],
+      ['block.end', 'a', 'shutdown', s.at('10:20')]
+    ])
+    const st = s.state('10:27')
+    expect(hhmm(st, st.facts.blocks.get('a')!.endedAt!)).toBe('10:20')
+    expect(timerNow(st).fg?.info.id).toBe('f')
+  })
+
+  it('blok stały w tle nie czeka na koniec przy zamknięciu, który jeszcze nie przeszedł bramki – czeka tylko ten, który pauzowałby blok z pierwszego planu (G2)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '10:00', min: 60 }), block({ id: 'f', cat: 'inne', at: '10:22', min: 30, fixed: true, bg: true }), block({ id: 'g', cat: 'inne', at: '10:22', min: 30, fixed: true })])
+    s.observe('07:00', '10:20')
+    click(s, '10:00', { a: 'start', block: 'a' })
+    s.observe('10:25', null)
+    // The gate at 10:23: the end at the close (due from 10:25, the start) not yet – f in the background starts, g waits.
+    const t = s.at('10:26')
+    const ctx = s.contextAt(t)
+    const state = s.stateAt(t)
+    const out = autoActions({ ctx, state, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, gate: s.at('10:23') })
+    expect(out.filter((e) => e.autoRule !== 'boundary').map((e) => [e.k, e.block, e.at, e.bg])).toEqual([['block.start', 'f', s.at('10:22'), true]])
+  })
+
   it('„Koniec pracy?” raz po ostatnim bloku pracy – po „Dalej” na „Dalej?” 15 min później (T261); „Tak” potwierdza koniec', () => {
     const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })]).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })

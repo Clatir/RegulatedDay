@@ -15,7 +15,7 @@ import { lastInputAt, firstUseAfter, firstUseFrom, lastOutsideBefore, type Activ
 import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
 import { blockAt, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
-import { atOf, idxOf } from './grid'
+import { atOf, idxOf, type Grid } from './grid'
 import { requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
 import { fixedWorkLeft, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
@@ -224,6 +224,119 @@ export function dayFirstUse(state: DayState, activity: Activity): number | null 
   return firstUseFrom(activity, Math.max(state.grid.start, atOf(state.grid, state.wake) - 60 * MIN))
 }
 
+/** The end of a block the app's close interrupted (`shutdownActions`): may it be written now (up to the gate). */
+export interface ShutdownEnd {
+  end: AutoEvent
+  due: boolean
+}
+
+/**
+ * The stretch the app's close (or a crash) interrupted since `runFrom` (ms): nobody observed for at least a minute, up to
+ * before now, and it began with a close, not a sleep (`activity.closes` – of the next days' logs too); null – none.
+ */
+export function closedSince(activity: Activity, runFrom: number, now: number): Interval | null {
+  return activity.unobserved.find((x) => x.from >= runFrom && x.to < now && x.to - x.from >= MIN && activity.closes.includes(x.from)) ?? null
+}
+
+/**
+ * The rule 'shutdown' (D252): a running block (by `t`) the app's close or a crash interrupted (`closedSince` its run
+ * began) ended at the close; by block. Not `due` yet (the gate): the block waits for it and no other rule judges it
+ * meanwhile. The leader writes it (`autoActions`); the bar lays it over the day before (D345, `folder.ts`).
+ */
+export function shutdownActions(inp: AutoInput, t: TimerNow = timerNow(inp.state)): Map<string, ShutdownEnd> {
+  const { state, activity } = inp
+  const out = new Map<string, ShutdownEnd>()
+  for (const tb of [...(t.fg ? [t.fg] : []), ...t.bg]) {
+    const runFrom = runFromOf(state.grid, tb.fact)
+    const closed = closedSince(activity, runFrom, inp.now)
+    if (!closed) continue
+    const end = auto(state.grid.date, 'shutdown', { k: 'block.end', block: tb.info.id, at: Math.max(runFrom, closed.from), done: null, rule: 'shutdown' })
+    out.set(tb.info.id, { end, due: closed.to <= inp.gate })
+  }
+  return out
+}
+
+/** Where a running block's last run began (ms) – the rule 'shutdown' looks for a close from there. */
+export const runFromOf = (grid: Grid, f: BlockFact): number => atOf(grid, f.runs.at(-1)?.from ?? f.startedAt ?? 0)
+
+/**
+ * The starts of fixed blocks due now (spec „Bloki”), each with the pause of the block in front it makes – not yet taken
+ * (`autoActions` takes them in order). Sessions and blocks marked as second shift or weekly analysis wait for „Zacznij”;
+ * in „Odcinam się” nothing starts; behind a running regeneration they wait for its end.
+ */
+function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, ShutdownEnd>): AutoEvent[][] {
+  const { state, activity } = inp
+  const date = state.grid.date
+  const nowIdx = state.now
+  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  const at = (idx: number) => atOf(state.grid, idx)
+  const due = (ms: number) => ms <= inp.gate && ms <= inp.now
+  const out: AutoEvent[][] = []
+  const disconnected = state.facts.disconnect.some((d) => d.to === OPEN)
+  const fg = t.fg
+  const firstUse = dayFirstUse(state, activity)
+  for (const b of state.blocks) {
+    if (!b.fixed || b.waits || !b.inPlan || disconnected) continue
+    const f = state.facts.blocks.get(b.id)
+    if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) continue
+    const span = plannedSpan(b, byId)
+    if (!span || nowIdx < span.start || nowIdx >= span.end) continue
+    let from = at(span.start)
+    // Due in „Odcinam się”, it did not start and was „do potwierdzenia”: after „Wracam” it runs from that instant (spec
+    // „Odcinam się”); a recorded lecture runs on through it.
+    if (!b.recorded) for (const d of [...state.facts.disconnect].sort((x, y) => x.from - y.from)) if (d.to !== OPEN && at(d.from) <= from && at(d.to) > from) from = at(d.to)
+    // Before the day's first use a fixed block at the computer is „do potwierdzenia” (spec „Bloki”): it starts at the use.
+    if (placeOf(b) !== 'away') {
+      if (firstUse == null) continue
+      from = Math.max(from, firstUse)
+    }
+    // The block in front the app's close ended before this start (the rule 'shutdown', in the same pass) is not in front
+    // then: it holds nothing back and is not paused – a pause after its end would move the end to the pause (G2). A start
+    // in the foreground (the one that would pause it) waits for that end until it is due; one in the background touches
+    // it not and does not wait.
+    const closedFg = fg ? shutdowns.get(fg.info.id) : undefined
+    const closedBefore = closedFg && !state.facts.undone.has(closedFg.end.id) && closedFg.end.at <= from ? closedFg : null
+    if (closedBefore && !closedBefore.due && !b.bg) continue
+    const front = closedBefore ? null : fg
+    if (!b.bg && front?.info.isRegen) continue
+    // Held by a regeneration that has ended since its planned start: it starts at that end (spec „Bloki”).
+    for (const r of state.blocks) {
+      const rf = r.isRegen ? state.facts.blocks.get(r.id) : undefined
+      if (rf?.endedAt != null && rf.endedAt > span.start && rf.endedAt <= nowIdx && !(rf.runs.at(-1)?.bg ?? false)) from = Math.max(from, at(rf.endedAt))
+    }
+    if (!due(from)) continue
+    let bg = b.bg
+    const list: AutoEvent[] = []
+    if (!bg && front) {
+      if (front.info.protectedLife || isFixedLike(front.info)) bg = true
+      else list.push(auto(date, 'fixedStart', { k: 'block.pause', block: front.info.id, at: from }))
+    }
+    list.push(
+      auto(date, 'fixedStart', {
+        k: 'block.start',
+        block: b.id,
+        at: from,
+        bg,
+        planned: { categoryId: b.categoryId, variantId: b.variantId, durationMin: b.durationMin, tag: b.secondShift ? 'secondShift' : b.weeklyAnalysis ? 'weeklyAnalysis' : null, fixed: true, costs: b.costs, bgCostPct: b.bgCostPct },
+        confirmUntil: null,
+        how: 'auto'
+      })
+    )
+    out.push(list)
+  }
+  return out
+}
+
+/**
+ * The leader's same pass starts a fixed block that pauses a running block the app's close interrupted (the start due
+ * before the close, not written yet): its pause comes before that end – the bar lays nothing over the day then and waits
+ * for the settling, as in 1.0.1 (D345).
+ */
+export function fixedStartPausesClosed(inp: AutoInput, t: TimerNow, shutdowns: Map<string, ShutdownEnd>): boolean {
+  const undone = inp.state.facts.undone
+  return fixedStartLists(inp, t, shutdowns).some((list) => !list.some((e) => undone.has(e.id)) && list.some((e) => e.k === 'block.pause' && typeof e.block === 'string' && shutdowns.has(e.block)))
+}
+
 /** The automatic actions due now (each written once – derived ids – and only up to the gate). */
 export function autoActions(inp: AutoInput): AutoEvent[] {
   const { state, ctx, activity, gate } = inp
@@ -232,6 +345,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
   const out: AutoEvent[] = []
   const t = timerNow(state)
+  const shutdowns = shutdownActions(inp, t)
   const at = (idx: number) => atOf(state.grid, idx)
   const due = (ms: number) => ms <= gate && ms <= inp.now
   const c: Ctx = { inp, date, nowIdx, byId, idle: () => null, fixedHeld: t.held.length > 0 }
@@ -262,64 +376,21 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   const dayEnd = state.grid.start + state.grid.length * MIN
   if (openCut && inp.now >= dayEnd && due(dayEnd)) take([auto(date, 'disconnect04', { k: 'disconnect.end', at: dayEnd })])
 
-  // Fixed blocks start by themselves at their planned time (sessions and blocks marked as second shift or weekly
-  // analysis wait for „Zacznij”); in „Odcinam się” they do not; behind a running regeneration they wait for its end.
-  const disconnected = state.facts.disconnect.some((d) => d.to === OPEN)
+  // Fixed blocks start by themselves at their planned time (`fixedStartLists`).
+  for (const list of fixedStartLists(inp, t, shutdowns)) take(list)
   const fg = t.fg
-  const firstUse = dayFirstUse(state, activity)
-  for (const b of state.blocks) {
-    if (!b.fixed || b.waits || !b.inPlan || disconnected) continue
-    const f = state.facts.blocks.get(b.id)
-    if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) continue
-    const span = plannedSpan(b, byId)
-    if (!span || nowIdx < span.start || nowIdx >= span.end) continue
-    let from = at(span.start)
-    // Due in „Odcinam się”, it did not start and was „do potwierdzenia”: after „Wracam” it runs from that instant (spec
-    // „Odcinam się”); a recorded lecture runs on through it.
-    if (!b.recorded) for (const d of [...state.facts.disconnect].sort((x, y) => x.from - y.from)) if (d.to !== OPEN && at(d.from) <= from && at(d.to) > from) from = at(d.to)
-    // Before the day's first use a fixed block at the computer is „do potwierdzenia” (spec „Bloki”): it starts at the use.
-    if (placeOf(b) !== 'away') {
-      if (firstUse == null) continue
-      from = Math.max(from, firstUse)
-    }
-    if (!b.bg && fg?.info.isRegen) continue
-    // Held by a regeneration that has ended since its planned start: it starts at that end (spec „Bloki”).
-    for (const r of state.blocks) {
-      const rf = r.isRegen ? state.facts.blocks.get(r.id) : undefined
-      if (rf?.endedAt != null && rf.endedAt > span.start && rf.endedAt <= nowIdx && !(rf.runs.at(-1)?.bg ?? false)) from = Math.max(from, at(rf.endedAt))
-    }
-    if (!due(from)) continue
-    let bg = b.bg
-    const list: AutoEvent[] = []
-    if (!bg && fg) {
-      if (fg.info.protectedLife || isFixedLike(fg.info)) bg = true
-      else list.push(auto(date, 'fixedStart', { k: 'block.pause', block: fg.info.id, at: from }))
-    }
-    list.push(
-      auto(date, 'fixedStart', {
-        k: 'block.start',
-        block: b.id,
-        at: from,
-        bg,
-        planned: { categoryId: b.categoryId, variantId: b.variantId, durationMin: b.durationMin, tag: b.secondShift ? 'secondShift' : b.weeklyAnalysis ? 'weeklyAnalysis' : null, fixed: true, costs: b.costs, bgCostPct: b.bgCostPct },
-        confirmUntil: null,
-        how: 'auto'
-      })
-    )
-    take(list)
-  }
 
   // Running blocks.
   for (const tb of [...(fg ? [fg] : []), ...t.bg]) {
     const b = tb.info
     const f = tb.fact
     const endAt = at(tb.plannedEnd)
+    const runFrom = runFromOf(state.grid, f)
     // The app was closed (or crashed) with the block running and no computer observed since: it ended at the close (D252).
-    const runFrom = at(f.runs.at(-1)?.from ?? f.startedAt ?? 0)
-    const closed = activity.unobserved.find((x) => x.from >= runFrom && x.to < inp.now && x.to - x.from >= MIN && closedThere(inp, x.from))
+    const closed = shutdowns.get(b.id)
     if (closed) {
-      if (!due(closed.to)) continue
-      if (take([auto(date, 'shutdown', { k: 'block.end', block: b.id, at: Math.max(runFrom, closed.from), done: null, rule: 'shutdown' })])) continue
+      if (!closed.due) continue
+      if (take([closed.end])) continue
     }
     if (b.fixed || b.rules.kind === 'session') {
       // A fixed block in the background, a session (also in the foreground) and a second shift end at their planned end;
@@ -429,16 +500,6 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     take([a, ...resumedWith(state.facts, r)].map((x) => ({ id: derivedId(date, 'auto', 'revalidate', x.id), k: 'undo', at: inp.now, target: x.id, reason: 'later log', autoRule: 'revalidate' })))
   }
   return out
-}
-
-/** The stretch nobody observed began with a close or a crash (not a sleep): the observation ended there without „suspend”. */
-function closedThere(inp: AutoInput, from: number): boolean {
-  for (const e of inp.ctx.events) {
-    const k = (e as { k?: string }).k
-    if (k === 'observe.to' && (e as unknown as { at: number }).at === from) return (e as unknown as { why: string }).why !== 'suspend'
-  }
-  // A crash leaves no „do” of its own: the next start writes it from the last life marker with „crash”.
-  return false
 }
 
 /** The questions open now (none of them answered), for the bar – in the order the bar shows them. */

@@ -435,15 +435,19 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 
 ### E4a – timer i działania automatyczne
 
-#### E4a.1 Start bloku elastycznego (0.3.0)
+#### E4a.1 Start bloku elastycznego (0.3.0, zmiana w 1.0.2)
 - [ ] Odebrane
-- **Automatycznie:** `tests/e2e/screens.spec.ts` („timer E4a/E4b: Start, Pauza, Wznów i Dalej…, blok na osi tam, gdzie biegł”). Ty: rzut oka.
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („timer E4a/E4b: Start, Pauza, Wznów i Dalej…, blok na osi tam, gdzie biegł”),
+  `tests/unit/engine/widget-view.test.ts` („odliczanie od faktycznej chwili startu”). Ty: rzut oka.
 - **Jak sprawdzić:** „Dziś” z blokiem elastycznym zaplanowanym na teraz. W pasku u góry kliknij „Start: …”.
 - **Oczekiwany efekt:** przed kliknięciem pasek pokazuje „Bez bloku” i „Start: <nazwa bloku>”. Po kliknięciu – nazwa
-  bloku i odliczanie od jego długości, a blok na osi dnia przesuwa się na teraz.
+  bloku i odliczanie od jego długości niezależnie od sekundy kliknięcia (15 min → 15:00), a blok na osi dnia przesuwa
+  się na teraz (od pełnej minuty, np. 10:47 – to nie błąd). Przy 5 min i 0:00 zmienia się kolor (puls i dźwięk, jeśli
+  włączone), a „Dalej?” przychodzi dopiero, gdy odliczanie dojdzie do 0:00.
 - **Nie przechodzi, gdy:**
   - brak „Start” przy bloku, który jest w planie;
-  - odliczanie startuje od innej długości niż długość bloku;
+  - odliczanie startuje od innej długości niż długość bloku (np. 15:28);
+  - „Dalej?” albo zmiana koloru wyraźnie (o ponad 2 s) przed tym, jak odliczanie do tego dojdzie;
   - blok na osi zostaje na planowanej godzinie albo pojawia się dwa razy.
 
 #### E4a.2 Pauza, Wznów, Dalej (0.3.0)
@@ -544,14 +548,17 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - po powrocie nie ma linii o nieobecności;
   - „Zakończyć w chwili odejścia” nie kończy bloku o godzinie odejścia.
 
-#### E4a.10 Blok przerwany zamknięciem aplikacji (0.3.0)
+#### E4a.10 Blok przerwany zamknięciem aplikacji (0.3.0, zmiana w 1.0.2)
 - [ ] Odebrane
-- **Automatycznie:** `timer.test.ts` („zamknięcie aplikacji przy biegnącym bloku…”). Ty: rzut oka.
+- **Automatycznie:** `timer.test.ts` („zamknięcie aplikacji przy biegnącym bloku…”), `tests/fs/widget.test.ts` („blok
+  przerwany zamknięciem aplikacji: zaraz po starcie…”). Ty: rzut oka.
 - **Jak sprawdzić:** przy biegnącym bloku zasobnik → „Zakończ”. Po kilku minutach uruchom aplikację.
-- **Oczekiwany efekt:** w pasku „przerwany zamknięciem aplikacji o …: Skończył się przy wyłączeniu · Trwał do teraz ·
-  Skończył się o …”, z godziną zamknięcia.
+- **Oczekiwany efekt:** od razu po starcie (bez czekania ok. 3 min) w pasku „przerwany zamknięciem aplikacji o …:
+  Skończył się przy wyłączeniu · Trwał do teraz · Skończył się o …”, z godziną zamknięcia, a blok w pasku już nie
+  odlicza. W „Dziś” na osi blok może do ok. 3 min wyglądać na biegnący – to nie błąd.
 - **Nie przechodzi, gdy:**
   - blok liczy się, jakby biegł przez cały czas zamknięcia, bez pytania;
+  - po starcie pasek przez chwilę liczy blok dalej albo linia pojawia się dopiero po kilku minutach;
   - godzina w pytaniu nie zgadza się z chwilą zamknięcia;
   - wybrana odpowiedź nic nie zmienia w bloku.
 

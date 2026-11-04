@@ -37,7 +37,11 @@ paths:
 - „Cofnij” = `undo` z celem; fakty (`foldFacts`) pomijają cofnięte zdarzenia. Cofnięty identyfikator nie wraca –
   reguła, która ma zadziałać ponownie, musi dać inny `at` (np. nowy planowany koniec po „Przedłuż”).
 - Pytanie ma id `reguła:dzień:blok:próg`; zobaczone = `question.seen` (pierwsze w logu); dzień pytania z jego id.
-- Klik oceniany na dniu z Twoimi edycjami (`ownContext`), prowadzący – na plikach folderu (`dayContext`).
+- Klik oceniany na dniu z Twoimi edycjami i wstępnym końcem bloku przerwanego zamknięciem (`barDay`, D345 – reguły
+  `dane.md`), prowadzący – na plikach folderu (`dayContext`). Reguła `shutdown` to `shutdownActions` (jedna kopia dla
+  prowadzącego i nakładki; zamknięcie z `activity.closes` – także z logu następnego dnia, `closedSince`); `fixedStart`
+  nie pauzuje bloku, który `shutdown` kończy wcześniej (start na pierwszym planie czeka, aż ten koniec przejdzie
+  bramkę; blok stały w tle nie czeka) – poza tym jak w 1.0.1 (G2).
 
 ## Pułapki
 - `activityOf` bez żadnego komputera = cały czas bez wejścia; w testach dodaj `observe(...)` (DSL) – inaczej blok

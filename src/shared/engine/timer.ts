@@ -14,7 +14,7 @@ import { ROUTINE_VERSIONS, type RoutineVersion } from '../model/routines'
 import { isBoundaryWork, plannedSpan, setsWorkEndBlock, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
 import { workedUntilOf } from './explain'
-import { OPEN, isRunning, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, workSince, type BlockFact } from './facts'
+import { OPEN, isRunning, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
 
 /** „Przedłuż” of a fixed block works up to this long after its planned end (spec „Timer”, D227). */
@@ -125,6 +125,17 @@ export function plannedEndOf(state: DayState, info: BlockInfo, f: BlockFact, now
   const until = f.endedAt ?? now
   const paused = Math.max(0, until - (f.startedAt ?? until) - ranMinutes(f, until))
   return (f.startedAt ?? now) + planned + paused + extended
+}
+
+/**
+ * When a running block's planned end comes for the bar (ms, E4a.1 – only the view, the day counts in minutes, T412): its
+ * planned end moved by as much as its running stretch began off its minute (`runShift`) – a 15-minute block clicked at
+ * 10:46:32 counts down from 15:00 to 11:01:32, its steps 15 · 5 · 0 and „Dalej?” with it. A fixed block ends with its
+ * window. `byId` – the day's blocks by id, when the caller has them.
+ */
+export function endsAtOf(state: DayState, tb: TimerBlock, byId: Map<string, BlockInfo> = new Map(state.blocks.map((b) => [b.id, b]))): number {
+  const fixed = tb.info.fixed && plannedSpan(tb.info, byId) != null
+  return atOf(state.grid, tb.plannedEnd) + (fixed ? 0 : runShift(state.grid, tb.fact))
 }
 
 /** The first instant of the second shift (index), or the end of the grid. */

@@ -34,9 +34,9 @@
    Poprawki z odbioru – wersje 1.0.x (D324).
 3. **Ciąg F w toku (od 3.11, D349)** – `docs/plan.md`: główna sesja Opus 5.5 · xhigh, wykonawcy z `.claude/agents/`
    (Haiku F1–F2, Opus G1–G5, Sonnet H1–H3), zadania F1–H3, wersje 1.0.1–1.0.8; przyczyny w `docs/vm/przyczyny.md`,
-   decyzje D334–D347, D350. „Przed ciągiem F” zrobione, F1–F3 scalone (PR #44). **Teraz:** G1 (1.0.1,
-   `wykonawca-opus`, gałąź `claude/1.0.1-koniec-pracy`); **następne:** G2, H1, H2, G3, G4, G5, H3 – bez pauzy do końca
-   ciągu.
+   decyzje D334–D347, D350. „Przed ciągiem F” zrobione, F1–F3 scalone (PR #44), G1 – 1.0.1 wydane (PR #45).
+   **Teraz:** G2 – PR 1.0.2 (`claude/1.0.2-pasek-od-startu`) do scalenia po zielonym CI, potem wydanie 1.0.2 na `main`;
+   **następne:** H1 (1.0.3, `wykonawca-sonnet`), potem H2, G3, G4, G5, H3 – bez pauzy do końca ciągu.
 4. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Do odbioru na Windows
@@ -88,6 +88,18 @@
     (sesje innych projektów na tym komputerze) `two-computers` przekracza 240 s, a hak sprzątania testu skali 10 s – tak samo
     na b33a9f0; rozstrzyga CI.
   - Czas faktyczny: ok. 7 h (szacunek 2–3 h) – dziewięć rund przeglądu.
+  - PR #45 scalony 4.11 (6bcf039) po zielonym CI (Linux, E2E, Windows – `two-computers` i skala w CI zielone); run
+    41739662020 na `main` zielony, **wydanie 1.0.1 opublikowane** (4.11 ok. 1:05).
+- **G2 – 1.0.2 pasek od pierwszej chwili** (`wykonawca-opus`): gałąź `claude/1.0.2-pasek-od-startu` od 6bcf039, 4.11 ok. 1:10.
+  - E4a.1: odliczanie i kroki 15 · 5 · 0 (puls, dźwięk, „Dalej?”) od faktycznej chwili startu, widok przeliczany w chwili
+    kroku; E4a.10 (D345): wstępny koniec bloku przerwanego zamknięciem nałożony na pasek od startu, zapisywany razem
+    z kliknięciem albo przez prowadzącego po ustaleniu (T532, `RULES_VERSION` 5). Odbiór: E4a.1, E4a.10 („zmiana w 1.0.2”).
+  - `/code-review` xhigh cztery razy – m.in. kolejność zapisu kliknięć na nakładce (gubione „Zacznij jeszcze raz”, dwa
+    bloki naraz), pasek na wczorajszym dniu, warunki prowadzącego (pełny odczyt, skan obecności, bramka), blok przez
+    04:00 zamknięty po 04:00, `fixedStart` a `shutdown`; ogólna reguła `fixedStart` z rundy 2 cofnięta (zmiana widoczna).
+    Ostatnią deltę (refaktor `fixedStartLists`) przejrzałam sama. Propozycje: nakładka w jednym dostępie do dnia,
+    reguła regeneracji z `inFront`.
+  - Czas faktyczny: ok. 4 h (szacunek 2–3 h).
 
 ## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)
 - Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji. Kolejno: bloki według modelu

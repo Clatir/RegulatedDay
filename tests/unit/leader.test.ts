@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { decideLeader, minuteGate, soundComputer, type LeaderInput, type Peer } from '@shared/sync/leader'
 import type { Presence } from '@shared/sync/presence'
+import { RULES_VERSION } from '@shared/model/events'
 
 const T = 10_000_000
 const presence = (computer: string, p: Partial<Presence> = {}): Presence => ({
@@ -88,6 +89,11 @@ describe('komputer prowadzący', () => {
     expect(decideLeader(input({ current: 'pca', peers: [silentNewer] })).iLead).toBe(true)
     const handedOver = peer('pcb', T - 5 * 60_000, T - 60_000, { rulesVersion: 2, seenLeader: 'pca' })
     expect(decideLeader(input({ current: 'pca', peers: [handedOver] })).iLead).toBe(true)
+  })
+
+  it('komputer z 1.0.1 (reguły 4) nie prowadzi przy komputerze z 1.0.2 w użyciu – działania automatyczne G2 (start bloku stałego przy zamknięciu, zamknięcie po 04:00) pisze nowsza wersja', () => {
+    const newer = peer('pcb', T - 5 * 60_000, T - 60_000, { rulesVersion: RULES_VERSION })
+    expect(decideLeader(input({ current: 'pca', self: { rulesVersion: 4 }, peers: [newer] })).iLead).toBe(false)
   })
 
   it('komputer z nowszymi regułami w użyciu, który idzie za prowadzącym ze starszymi, dostaje prowadzenie (A8-08)', () => {
