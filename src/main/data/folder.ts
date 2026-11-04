@@ -18,8 +18,9 @@ import { EventClock, type ClockSources } from '@shared/data/clock'
 import type { MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { readLogText } from '@shared/data/logText'
-import { activityOf } from '@shared/engine/activity'
-import { answerEvents, autoActions, nextDeadline, questionsOf, type Question } from '@shared/engine/auto'
+import { activityOf, type Activity } from '@shared/engine/activity'
+import { answerEvents, autoActions, closedSince, fixedStartPausesClosed, nextDeadline, questionsOf, runFromOf, shutdownActions, type AutoEvent, type Question } from '@shared/engine/auto'
+import { simEvents } from '@shared/engine/sim'
 import { createDay, type HolidayLookup } from '@shared/engine/createDay'
 import { dayContextOf } from '@shared/engine/context'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
@@ -28,7 +29,7 @@ import { requestAction, type RequestAction } from '@shared/engine/requests'
 import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft } from '@shared/engine/timer'
 import { dayStart } from '@shared/time/day'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
-import { betterFreeze, foldFacts, isRunning, isRunningRequest, type DayFacts } from '@shared/engine/facts'
+import { betterFreeze, foldFacts, isRunning, isRunningRequest, type BlockFact, type DayFacts } from '@shared/engine/facts'
 import { correctionEnd, countedEvents, freezeDecision, gradeLineFrom, isFreeDay, lastEventsOf, openedAtOf, WRITERS_DAYS, type GradeLine } from '@shared/engine/freeze'
 import { dayGame, notesSum, storedGame, weekOf, type GameDay, type GameDayInput } from '@shared/engine/game'
 import { gameView, regenWaysOf, ROOM_ITEMS, storedWays, type Celebration, type GameView } from '@shared/engine/progress'
@@ -130,14 +131,29 @@ function refusalOf(choice: string): string {
   return 'tego wyboru nie ma w tym wierszu'
 }
 
+/** The day as the bar shows it (`DataFolder.barDay`, D345): its activity (null – not counted), the ends laid over it. */
+interface BarDay {
+  ctx: DayContext
+  state: DayState
+  activity: Activity | null
+  laid: AutoEvent[]
+}
+
+/** `BarDay` with the activity always counted. */
+type BarDayWith = BarDay & { activity: Activity }
+
 /**
  * A block of the day runs now (started, not ended, not paused – „Cofnij” counted): one running through 04:00 keeps its
  * day (spec „Timer”); a block left paused is no reason to stay on the day before.
  */
 function hasRunning(day: string, events: readonly AnyEvent[]): boolean {
-  if (!events.some((e) => e.k === 'block.start')) return false
-  for (const f of foldFacts(gridOf(day), events).blocks.values()) if (f.endedAt == null && isRunning(f)) return true
-  return false
+  return runningFacts(day, events).length > 0
+}
+
+/** The blocks of the day running now by its log (`hasRunning`). */
+function runningFacts(day: string, events: readonly AnyEvent[]): BlockFact[] {
+  if (!events.some((e) => e.k === 'block.start')) return []
+  return [...foldFacts(gridOf(day), events).blocks.values()].filter((f) => f.endedAt == null && isRunning(f))
 }
 
 /**
@@ -233,6 +249,8 @@ export class DataFolder {
   leader: LeaderDecision = { leader: null, iLead: false, why: 'start', claimed: false }
   private current: string | null = null
   private peers: Peer[] = []
+  /** The other computers' presences were scanned once (`check`): before that the leader's gate is not known (D345). */
+  private peersScanned = false
   private lastObserve = 0
   /** The data folder's root was gone at the last check (it is unsettled again when it comes back). */
   private rootGone = false
@@ -391,6 +409,8 @@ export class DataFolder {
     // The day's files must be quiet for a minute after the folder is scanned again (spec „także po wybudzeniu”).
     this.dayQuiet.clear()
     this.settle.begin(reason, now)
+    // The other computers' presences are known again only after the next scan: nothing laid over the bar till then (D345).
+    this.peersScanned = false
   }
 
   /** Going to sleep: the observation ends (nothing is known of the time after it). */
@@ -606,6 +626,7 @@ export class DataFolder {
       const forgotten = rdFrom(await this.shared(paths.settings).catch(() => undefined)).forgotten
       this.presence.forgotten = new Map(Object.entries(forgotten).map(([id, f]) => [id, f.lastPresence]))
       this.peers = await this.presence.scan()
+      this.peersScanned = true
       for (const p of this.peers) {
         if (this.lastSeenPeers.get(p.presence.computer) !== p.fileSeenAt) this.settle.changeSeen(now)
         this.lastSeenPeers.set(p.presence.computer, p.fileSeenAt)
@@ -677,7 +698,7 @@ export class DataFolder {
         // start, as minutes already written are skipped and a stale segment's minutes are written again (T416).
         const ctx = await this.dayContext(day, read, now)
         const state = computeDay(ctx)
-        const gate = minuteGate(now, day, this.peers, read.lastByComputer)
+        const gate = await this.gateOf(day, read, now)
         for (const seg of newSegments(state, state.grid.start, Math.min(gate, now))) {
           this.append({ day, dom: 'timer', k: 'minutes', ...seg })
           segments++
@@ -706,8 +727,8 @@ export class DataFolder {
           const yRead = await this.log.readDay(yesterday)
           if (yRead.complete && spillsOver(yesterday, yRead.events)) {
             const yCtx = await this.dayContext(yesterday, yRead, now)
-            // Input after 04:00 is in today's logs: both gates hold.
-            const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, Math.min(gate, minuteGate(now, yesterday, this.peers, yRead.lastByComputer)))
+            // Input after 04:00 is in today's logs: both gates hold (`gateOf` – the bar's overlay takes the same, D345).
+            const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, await this.gateOf(yesterday, yRead, now))
             autos += y.written
             if (y.nextAt != null) nextAt = nextAt == null ? y.nextAt : Math.min(nextAt, y.nextAt)
           }
@@ -1298,15 +1319,33 @@ export class DataFolder {
   }
 
   /**
-   * The day a click concerns: the one with a block still running from before 04:00, else today; „Koniec” of a request –
-   * the day it runs in (one from before 04:00 keeps its day).
+   * The day a click and the bar concern: the one with a block still running from before 04:00, else today; „Koniec” of
+   * a request – the day it runs in (one from before 04:00 keeps its day). A block of the day before the app's close
+   * interrupted runs no more for the bar either (D345). With what it counted: the day before chosen – its read and its
+   * `barDay`, for the caller to take again.
    */
-  private async activeDay(now: number, request: string | null = null): Promise<string> {
+  private async barActiveDay(now: number, request: string | null = null): Promise<{ day: string; read?: DayRead; bar?: BarDayWith; before?: AutoEvent[] }> {
     const today = logicalDayOf(now)
     const yesterday = addDays(today, -1)
     const y = await this.log.readDay(yesterday).catch(() => null)
-    if (request != null) return y && hasOpenRequest(yesterday, y.events, request) ? yesterday : today
-    return y && hasRunning(yesterday, y.events) ? yesterday : today
+    if (request != null) return { day: y && hasOpenRequest(yesterday, y.events, request) ? yesterday : today }
+    if (!y || !hasRunning(yesterday, y.events)) return { day: today }
+    const bar = await this.barDay(yesterday, y, now, true)
+    const t = timerNow(bar.state)
+    // Today by the ends laid over the day before: what is written on today's bar writes them first (`writeOn`).
+    return t.fg || t.bg.length ? { day: yesterday, read: y, bar } : { day: today, before: bar.laid }
+  }
+
+  /**
+   * The leader's gate for a day's automatic actions (`check`): the day's own, and for a day before today also today's
+   * (input after 04:00 is in today's logs).
+   */
+  private async gateOf(day: string, read: DayRead, now: number): Promise<number> {
+    const today = logicalDayOf(now)
+    const own = minuteGate(now, day, this.peers, read.lastByComputer)
+    if (day >= today) return own
+    const t = await this.log.readDay(today).catch(() => null)
+    return Math.min(own, t ? minuteGate(now, today, this.peers, t.lastByComputer) : Number.NEGATIVE_INFINITY)
   }
 
   /** The day as you see it (your queued edits laid over the files): clicks and answers are judged on it. */
@@ -1314,8 +1353,99 @@ export class DataFolder {
     return dayContextOf(inp ?? (await this.inputs(true)), { date, events: read.events, dayFile: await this.dayFile(date, true), nextFile: await this.dayFile(addDays(date, 1), true) }, this.o.holidays, at)
   }
 
-  /** Writes drafts of the timer to a day's log, each checked as a line of the log first. */
-  private async writeTimer(day: string, drafts: readonly TimerDraft[]): Promise<void> {
+  /**
+   * The day as the bar shows it (`ownContext`) with the ends of blocks the app's close interrupted laid over it (D345):
+   * the rule 'shutdown' of the leader (`shutdownActions`, up to the same gate – `gateOf`, the same derived ids), due and
+   * not written yet, never written by itself – a computer just started is unsettled for at least 3 min and writes
+   * nothing meanwhile (spec „Kilka komputerów”). The bar, its questions, the answers, the clicks and the actions of the
+   * day are judged on it, so the block no longer counts and its line „… przerwany zamknięciem aplikacji o …” stands
+   * from the start. Whatever writes on it writes `laid` first (`writeOn`): what you clicked stays as the bar showed it.
+   * Without a click the leader writes the ends once settled; a log of another computer that comes before that and shows
+   * the block running there takes them away – the line goes and the block counts on. Nothing is laid where the leader
+   * writes nothing either – a day whose logs are not all readable now or with another computer's clock far ahead, before
+   * the first scan of the other computers' presences (the gate) – nor when the leader's same pass starts a fixed block
+   * that pauses the interrupted one (its pause comes before the end at the close): the bar waits for the settling then, as
+   * in 1.0.1. The activity is counted only while a block runs (`withActivity` – always; `known` – counted already).
+   */
+  private async barDay(day: string, read: DayRead, at: number, withActivity: true, known?: Activity | null): Promise<BarDayWith>
+  private async barDay(day: string, read: DayRead, at: number, withActivity?: boolean, known?: Activity | null): Promise<BarDay>
+  private async barDay(day: string, read: DayRead, at: number, withActivity = false, known: Activity | null = null): Promise<BarDay> {
+    const ctx = await this.ownContext(day, read, at)
+    const state = computeDay(ctx)
+    const t = timerNow(state)
+    const runs = t.fg != null || t.bg.length > 0
+    const activity = known ?? (runs || withActivity ? await this.activityFor(day, read, at) : null)
+    if (!runs || !activity || !(await this.mayLay(day, read, at))) return { ctx, state, activity, laid: [] }
+    const written = new Set(ctx.events.map((e) => e.id))
+    const inp = { ctx, state, activity, now: at, gate: await this.gateOf(day, read, at) }
+    const shutdowns = shutdownActions(inp, t)
+    const laid = [...shutdowns.values()].filter((x) => x.due && !written.has(x.end.id) && !state.facts.undone.has(x.end.id)).map((x) => x.end)
+    if (!laid.length || fixedStartPausesClosed(inp, t, shutdowns)) return { ctx, state, activity, laid: [] }
+    // As the leader would write them now: after every event seen, the next numbers of this computer.
+    const n = ctx.events.reduce((m, e) => (e.c === this.o.computer ? Math.max(m, e.n + 1) : m), 0)
+    const over = { ...ctx, events: [...ctx.events, ...simEvents(ctx, laid, at, { c: this.o.computer, n })] }
+    return { ctx: over, state: computeDay(over), activity, laid }
+  }
+
+  /**
+   * The leader would write automatic actions of a day so read (`check`) and its gate is known (D345): the presences
+   * scanned since the computer last became unsettled; today's logs readable in full with no other clock far ahead (the
+   * leader does nothing without it, yesterday's tasks neither) and, for yesterday, its logs too. Only today and yesterday –
+   * the leader judges no older day.
+   */
+  private async mayLay(day: string, read: DayRead, at: number): Promise<boolean> {
+    const readable = (r: DayRead | null) => !!r && r.complete && !r.ahead
+    if (!this.peersScanned || !readable(read)) return false
+    const today = logicalDayOf(at)
+    if (day === today) return true
+    if (day !== addDays(today, -1)) return false
+    return readable(await this.log.readDay(today).catch(() => null))
+  }
+
+  /**
+   * `barDay` may lay something over the day – its cheap part first (`ritual`): the leader's conditions (`mayLay`), a
+   * block running by the log and a stretch the app's close interrupted since its run began (`closedSince`). The
+   * activity counted for it (to pass on), null – nothing to lay.
+   */
+  private async mayLayOn(day: string, read: DayRead, at: number): Promise<Activity | null> {
+    if (!(await this.mayLay(day, read, at))) return null
+    const grid = gridOf(day)
+    const runs = runningFacts(day, read.events).map((f) => runFromOf(grid, f))
+    if (!runs.length) return null
+    const activity = await this.activityFor(day, read, at)
+    return closedSince(activity, Math.min(...runs), at) ? activity : null
+  }
+
+  /**
+   * What a click, an answer, an action of the day or a signal judged on `barDay` writes (one at a time – `serial`): the
+   * laid ends first – only those not in the day's log yet (the leader's check may have written them meanwhile) – then its
+   * own events. On today's bar the ends laid over the day before go first, to its log: the bar left that day by them
+   * (`barActiveDay` – `before`, counted again when not given). All checked first and written in one go: with an end laid,
+   * the days' logs readable in full now; a part that fails leaves nothing behind (the click fails, as it did).
+   */
+  private async writeOn(day: string, laid: readonly AutoEvent[], drafts: readonly TimerDraft[], before?: readonly AutoEvent[]): Promise<void> {
+    const at = this.clock.now()
+    const yesterday = addDays(day, -1)
+    const carried = before ?? (day === logicalDayOf(at) ? ((await this.barActiveDay(at)).before ?? []) : [])
+    const seen = new Set<string>()
+    if (carried.length || laid.length) {
+      for (const d of carried.length ? [yesterday, day] : [day]) {
+        const read = await this.log.readDay(d)
+        if (!read.complete) throw new Error('nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę')
+        for (const e of read.events) seen.add(`${d}|${e.id}`)
+      }
+    }
+    // Nothing awaited from here to the writes: this computer's own writes since the reads (the leader's check) are in
+    // its journal.
+    for (const d of [yesterday, day]) for (const e of this.log.ownEvents(d)) seen.add(`${d}|${e.id}`)
+    const fresh = (d: string, list: readonly AutoEvent[]) => list.filter((e) => !seen.has(`${d}|${e.id}`))
+    const ready = [...this.checked(yesterday, fresh(yesterday, carried)), ...this.checked(day, [...fresh(day, laid), ...drafts])]
+    for (const d of ready) this.append(d)
+    if (ready.length) await this.log.flush()
+  }
+
+  /** Drafts of the timer as lines of a day's log, each checked first (an error: none of them). */
+  private checked(day: string, drafts: readonly TimerDraft[]): EventDraft[] {
     const now = this.clock.now()
     const ready: EventDraft[] = []
     for (const d of drafts) {
@@ -1325,11 +1455,23 @@ export class DataFolder {
       if (!check.ok || !isKnown(check.event)) throw new Error(`zdarzenie ${d.k}: ${check.ok ? 'nieznane' : check.why}`)
       ready.push(draft)
     }
-    for (const d of ready) this.append(d)
+    return ready
+  }
+
+  /** Writes drafts of the timer to a day's log, each checked as a line of the log first. */
+  private async writeTimer(day: string, drafts: readonly TimerDraft[]): Promise<void> {
+    for (const d of this.checked(day, drafts)) this.append(d)
     await this.log.flush()
   }
 
   private clicks: Promise<unknown> = Promise.resolve()
+
+  /** One at a time with the other clicks, answers, actions of the day and signals (`clicks`). */
+  private serial<T>(run: () => Promise<T>): Promise<T> {
+    const p = this.clicks.then(run, run)
+    this.clicks = p.catch(() => undefined)
+    return p
+  }
 
   /**
    * A click of the timer (spec „Akcje widgetu wykonuje proces główny i zapisuje je jako zdarzenia w logu”): judged on the
@@ -1338,29 +1480,27 @@ export class DataFolder {
   timerClick(click: TimerClick): Promise<ActionResult> {
     const run = async (): Promise<ActionResult> => {
       const now = this.clock.now()
-      const day = click.day && isIsoDate(click.day) ? click.day : await this.activeDay(now, click.a === 'requestEnd' ? click.request : null)
-      const read = await this.log.readDay(day)
+      // The day before chosen – counted once, by the choice itself (as `widgetModel`).
+      const chosen = click.day && isIsoDate(click.day) ? { day: click.day } : await this.barActiveDay(now, click.a === 'requestEnd' ? click.request : null)
+      const day = chosen.day
+      const read = chosen.read ?? (await this.log.readDay(day))
       if (!read.complete) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę', confirm: null }
-      const ctx = await this.ownContext(day, read, now)
+      const { ctx, state, laid } = chosen.bar ?? (await this.barDay(day, read, now))
       const { day: _d, probe, ...act } = click
       void _d
-      const state = computeDay(ctx)
       // Requests („zrobione teraz”, urgent, after the fact, „Koniec”) and the rest of the timer.
       const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now)
-      if (r.ok && r.events.length && !probe) await this.writeTimer(day, r.events)
+      if (r.ok && r.events.length && !probe) await this.writeOn(day, laid, r.events, chosen.before)
       return r
     }
-    const p = this.clicks.then(run, run)
-    this.clicks = p.catch(() => undefined)
-    return p
+    return this.serial(run)
   }
 
   /** The questions open now on a day, as this computer sees them. */
   async questions(day: string, at = this.clock.now()): Promise<Question[]> {
     const read = await this.log.readDay(day)
-    const ctx = await this.ownContext(day, read, at)
-    const state = computeDay(ctx)
-    return questionsOf({ ctx, state, activity: await this.activityFor(day, read, at), now: at })
+    const { ctx, state, activity } = await this.barDay(day, read, at, true)
+    return questionsOf({ ctx, state, activity, now: at })
   }
 
   /**
@@ -1372,26 +1512,23 @@ export class DataFolder {
       const day = id.split(':')[1] ?? ''
       if (!isIsoDate(day)) return { ok: false, why: 'pytanie bez dnia', confirm: null }
       const now = this.clock.now()
-      const q = (await this.questions(day, now)).find((x) => x.id === id)
-      if (!q) return { ok: false, why: 'to pytanie już nie czeka', confirm: null }
       const read = await this.log.readDay(day)
-      const ctx = await this.ownContext(day, read, now)
-      const state = computeDay(ctx)
+      const { ctx, state, activity, laid } = await this.barDay(day, read, now, true)
+      const q = questionsOf({ ctx, state, activity, now }).find((x) => x.id === id)
+      if (!q) return { ok: false, why: 'to pytanie już nie czeka', confirm: null }
       const drafts = answerEvents(state, q, answer, now, value)
       if (drafts) {
-        await this.writeTimer(day, drafts)
+        await this.writeOn(day, laid, drafts)
         return { ok: true, events: drafts, confirm: null }
       }
       const act: TimerAction | null =
         answer === 'next' ? { a: 'next', confirm: value === 1 } : answer === 'extend' ? { a: 'extend', minutes: value ?? 15, confirm: false } : answer === 'workEnd' ? { a: 'workEnd' } : answer === 'working' ? { a: 'startNew', block: `${this.o.computer}-${now.toString(36)}`, categoryId: 'inne', durationMin: 30, confirm: value === 1 } : null
       if (!act) return { ok: false, why: `nieznana odpowiedź ${answer}`, confirm: null }
       const r = timerAction(ctx, state, act, now)
-      if (r.ok && r.events.length) await this.writeTimer(day, [...r.events, ...(q.kind === 'workEnd' ? [{ k: 'question.answer', at: now, question: q.id, answer, value: null }] : [])])
+      if (r.ok && r.events.length) await this.writeOn(day, laid, [...r.events, ...(q.kind === 'workEnd' ? [{ k: 'question.answer', at: now, question: q.id, answer, value: null }] : [])])
       return r
     }
-    const p = this.clicks.then(run, run)
-    this.clicks = p.catch(() => undefined)
-    return p
+    return this.serial(run)
   }
 
   /** Questions seen on this computer (spec D231): each written once, to its day's log. */
@@ -1500,10 +1637,11 @@ export class DataFolder {
     people: Array<{ id: string; name: string }>
     carried: RunningRequest | null
   }> {
-    const day = await this.activeDay(at)
-    const read = await this.log.readDay(day)
-    const ctx = await this.ownContext(day, read, at)
-    const state = computeDay(ctx)
+    // The day before chosen – counted once, by the choice itself.
+    const chosen = await this.barActiveDay(at)
+    const day = chosen.day
+    const read = chosen.read ?? (await this.log.readDay(day))
+    const { ctx, state, activity } = chosen.bar ?? (await this.barDay(day, read, at, true))
     const rd = rdFrom(await this.recordView(paths.settings))
     const calibration = await this.calibrating(at)
     const today = logicalDayOf(at)
@@ -1511,7 +1649,7 @@ export class DataFolder {
       ctx,
       state,
       energy: computeEnergy(ctx, state, { moduleOn: rd.general.modules.energy, calibration }),
-      activity: await this.activityFor(day, read, at),
+      activity,
       rd,
       // Today's log only for ranking the people: one not readable now never stops the bar.
       people: await this.topPeople(rd, today, day === today ? read.events : ((await this.log.readDay(today).catch(() => null))?.events ?? []), at),
@@ -1564,18 +1702,23 @@ export class DataFolder {
    * A signal or the relative assessment from the bar (spec „Sygnały w ciągu dnia”): an anchor with the exact state before
    * it as this computer knows it now – later corrections of earlier times never change the state after it.
    */
-  async energySignal(s: { signal: Signal } | { pool: Pool; delta: -10 | 0 | 10 }): Promise<void> {
-    const at = this.clock.now()
-    const day = logicalDayOf(at)
-    const read = await this.log.readDay(day)
-    const ctx = await this.ownContext(day, read, at)
-    const state = computeDay(ctx)
-    const before = computeEnergy(ctx, state).now
-    const draft: EventDraft = 'signal' in s ? { day, dom: 'energy', k: 'energy.signal', at, signal: s.signal, before } : { day, dom: 'energy', k: 'energy.relative', at, pool: s.pool, delta: s.delta, before }
-    const check = parseEvent(JSON.stringify({ ...draft, id: 'x', c: this.o.computer, n: 0, t: at, l: at, v: this.rulesVersion }))
-    if (!check.ok) throw new Error(`sygnał: ${check.why}`)
-    this.append(draft)
-    await this.log.flush()
+  energySignal(s: { signal: Signal } | { pool: Pool; delta: -10 | 0 | 10 }): Promise<void> {
+    // One at a time with the clicks: both may write the ends laid over the day (D345).
+    const run = async (): Promise<void> => {
+      const at = this.clock.now()
+      const day = logicalDayOf(at)
+      const read = await this.log.readDay(day)
+      // The state before it as the bar shows the day (D345): with the ends the app's close made, written first.
+      const { ctx, state, laid } = await this.barDay(day, read, at)
+      const before = computeEnergy(ctx, state).now
+      const draft: EventDraft = 'signal' in s ? { day, dom: 'energy', k: 'energy.signal', at, signal: s.signal, before } : { day, dom: 'energy', k: 'energy.relative', at, pool: s.pool, delta: s.delta, before }
+      const check = parseEvent(JSON.stringify({ ...draft, id: 'x', c: this.o.computer, n: 0, t: at, l: at, v: this.rulesVersion }))
+      if (!check.ok) throw new Error(`sygnał: ${check.why}`)
+      await this.writeOn(day, laid, [])
+      this.append(draft)
+      await this.log.flush()
+    }
+    return this.serial(run)
   }
 
   /** A Windows notification the leader showed (its stable id in the day's log: shown once, also after a restart). */
@@ -1586,7 +1729,7 @@ export class DataFolder {
   /** The timer of a day as this computer sees it now (for the bar of the main process and the tests). */
   async timer(day: string, at = this.clock.now()): Promise<ReturnType<typeof timerNow>> {
     const read = await this.log.readDay(day)
-    return timerNow(computeDay(await this.ownContext(day, read, at)))
+    return timerNow((await this.barDay(day, read, at)).state)
   }
 
   /**
@@ -1595,10 +1738,15 @@ export class DataFolder {
    */
   async ritual(day: string, at = this.clock.now()): Promise<RitualView> {
     const read = await this.log.readDay(day)
-    const ctx = await this.ownContext(day, read, at)
+    // The day as the bar shows it (D345: with the ends the app's close made) – counted in full only when something may be
+    // laid over it (cheaply first, `mayLayOn`).
+    const activity = await this.mayLayOn(day, read, at)
+    const bar = activity ? await this.barDay(day, read, at, false, activity) : null
+    const ctx = bar?.ctx ?? (await this.ownContext(day, read, at))
+    const laid = bar?.laid ?? []
     // Counted again only when the day's log, its records or your queued edits changed – today also every minute (the
-    // evening's effects count with the forecast to the bedtime).
-    const key = JSON.stringify([day < logicalDayOf(at) ? null : Math.floor(at / 60_000), read.lastByComputer, read.events.length, read.copies, this.contextSig(day), this.queue.pending.length])
+    // evening's effects count with the forecast to the bedtime) – or the ends laid over it.
+    const key = JSON.stringify([day < logicalDayOf(at) ? null : Math.floor(at / 60_000), read.lastByComputer, read.events.length, read.copies, this.contextSig(day), this.queue.pending.length, laid.map((e) => e.id)])
     const was = this.ritualMemo.get(day)
     if (was?.key === key) return was.view
     const view = await (this.o.worker ?? inProcess).run({ kind: 'ritual', ctx, at })
@@ -1656,22 +1804,23 @@ export class DataFolder {
     return unclosedDays(days, today, at, ritualFrom)
   }
 
-  /** An action on a day's log judged on the day as you see it now (a text: refused, why), one at a time like clicks. */
+  /**
+   * An action on a day's log judged on the day as you see it now – as the bar shows it (`barDay`, D345) – (a text:
+   * refused, why), one at a time like clicks.
+   */
   private dayAction(day: string, act: (state: DayState, now: number, ctx: DayContext) => TimerDraft[] | string): Promise<ActionResult> {
     const run = async (): Promise<ActionResult> => {
       if (!isIsoDate(day)) return { ok: false, why: 'zły dzień', confirm: null }
       const now = this.clock.now()
       const read = await this.log.readDay(day)
       if (!read.complete) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę', confirm: null }
-      const ctx = await this.ownContext(day, read, now)
-      const r = act(computeDay(ctx), now, ctx)
+      const { ctx, state, laid } = await this.barDay(day, read, now)
+      const r = act(state, now, ctx)
       if (typeof r === 'string') return { ok: false, why: r, confirm: null }
-      if (r.length) await this.writeTimer(day, r)
+      if (r.length) await this.writeOn(day, laid, r)
       return { ok: true, events: r, confirm: null }
     }
-    const p = this.clicks.then(run, run)
-    this.clicks = p.catch(() => undefined)
-    return p
+    return this.serial(run)
   }
 
   /**

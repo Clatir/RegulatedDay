@@ -3,17 +3,17 @@
  * a cost waiting for its second click in place of its button, a notification of the leader shown once (its id in the
  * day's log), one neutral line without a data folder (D327).
  */
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
-import { nodeFs } from '../../src/main/data/fsio'
+import { nodeFs, type DataFs } from '../../src/main/data/fsio'
 import { WidgetEngine, type NotifyIn } from '../../src/main/widget'
 
 const DAY = '2026-10-21'
@@ -37,9 +37,9 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[] } = {}) {
-  const clock = { now: placeLogical(DAY, 10 * 60) }
-  const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => o.oneDrive ?? true })
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs } = {}) {
+  const clock = { now: o.from ?? placeLogical(DAY, 10 * 60) }
+  const folder = await DataFolder.open({ fs: o.fs ?? nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => o.oneDrive ?? true })
   const shown: NotifyIn[] = []
   const failLater: Array<() => void> = []
   const views: WidgetView[] = []
@@ -61,7 +61,11 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
     },
     seen: (ids, how) => folder.markSeen(ids, how),
     clickedApp: () => undefined,
-    modePrefs: () => ({ sessionMode: true, classMode: true }),
+    modePrefs: () => {
+      // A hook inside a refresh, after the folder was read (a slow refresh: the clock goes on meanwhile).
+      o.during?.()
+      return { sessionMode: true, classMode: true }
+    },
     notices: () => ({ start5: true, hardEnd: true, reserve: true }),
     notify: (n, onFailed) => {
       // Refused at once (an error of Windows): the failure is said before the answer.
@@ -296,6 +300,338 @@ describe('widget w procesie głównym', () => {
     }
     await w.refresh()
     expect(shown.map((n) => n.title)).toEqual(['Sesja tradingowa o 15:30'])
+  })
+
+  /**
+   * „Inne obowiązki” started at 10:00 (or `start` at `from`), the app closed at `close` („Zakończ”) and started again at
+   * `again` – unsettled (≥ 3 min); `peer` – PC B's presence before the start.
+   */
+  async function closedAndStarted(o: { from?: number; start?: (f: DataFolder) => Promise<unknown>; close?: number; again?: number; peer?: () => void; fs?: DataFs; check?: boolean } = {}) {
+    const first = await make({ from: o.from ?? placeLogical(DAY, 10 * 60) })
+    await first.folder.check()
+    await first.w.refresh()
+    if (o.start) await o.start(first.folder)
+    else await first.w.act('start', undefined, 'panel')
+    first.clock.now = o.close ?? placeLogical(DAY, 10 * 60 + 20)
+    await first.folder.close('quit')
+    o.peer?.()
+    const again = await make({ from: o.again ?? placeLogical(DAY, 10 * 60 + 25), ...(o.fs ? { fs: o.fs } : {}) })
+    again.clock.now += 30_000
+    if (o.check !== false) await again.folder.check()
+    const ends = async () => (await again.folder.readDay(DAY)).events.filter((e) => e.k === 'block.end') as unknown as Array<{ id: string; at: number; autoRule?: string }>
+    const settle = async () => {
+      for (let i = 0; i < 5; i++) {
+        again.clock.now += 60_000
+        await again.folder.check()
+      }
+    }
+    return { ...again, ends, settle }
+  }
+
+  /** PC B's log of a day (meta events at the instants, numbered from 0). */
+  const peerLog = (day: string, ats: number[]) => {
+    const lines = ats.map((at, n) => JSON.stringify({ id: `pcb-${n}`, c: 'pcb', n, t: at, l: at, v: 1, day, dom: 'meta', ...(n === 0 ? { k: 'observe.from', at, why: 'start' } : { k: 'observe.alive', at }) }))
+    mkdirSync(join(dataDir, paths.logDir(day)), { recursive: true })
+    writeFileSync(join(dataDir, paths.log(day, 'pcb')), `${lines.join('\n')}\n`)
+  }
+  /** PC B observed 10:15–10:25: nobody's „unobserved” stretch at the close – the rule 'shutdown' no longer holds. */
+  const pcbWasThere = () => peerLog(DAY, [10 * 60 + 15, 10 * 60 + 20, 10 * 60 + 25].map((m) => placeLogical(DAY, m)))
+
+  it('blok przerwany zamknięciem aplikacji: zaraz po starcie, przed ustaleniem – linia w pasku, blok już się nie liczy, nic nie zapisane; po ustaleniu zapis jak dotąd (D345, E4a.10)', async () => {
+    const { w, folder, clock, ends, settle } = await closedAndStarted()
+    expect(folder.settle.settled(clock.now)).toBe(false)
+    await w.refresh()
+    const line = () => w.current().lines.find((l) => l.id.startsWith('shutdown:'))
+    expect(w.current().block).toBeNull()
+    expect(line()).toMatchObject({ text: 'Inne obowiązki – przerwany zamknięciem aplikacji o 10:20:', dot: false })
+    expect(line()!.actions.map((a) => a.label)).toEqual(['Skończył się przy wyłączeniu', 'Trwał do teraz', 'Skończył się o …'])
+    expect((await folder.timer(DAY)).fg).toBeNull()
+    expect(await ends()).toEqual([])
+    const shownEnd = w.current().autos.items.find((x) => x.text === 'Inne obowiązki skończony o 10:20 (zamknięcie aplikacji)')
+    expect(shownEnd).toMatchObject({ undo: true })
+    // Once settled, the leader writes the end – the same event the bar showed (its id), at the close.
+    await settle()
+    expect(folder.settle.settled(clock.now)).toBe(true)
+    expect((await ends()).map((e) => [e.id, e.autoRule, e.at])).toEqual([[shownEnd!.id, 'shutdown', placeLogical(DAY, 10 * 60 + 20)]])
+    await w.refresh()
+    expect(w.current().block).toBeNull()
+    expect(line()?.text).toBe('Inne obowiązki – przerwany zamknięciem aplikacji o 10:20:')
+  })
+
+  it('odpowiedź na linię przed ustaleniem liczy się na tym samym dniu: „Trwał do teraz” kończy blok teraz, prowadzący nie dopisuje końca przy zamknięciu (D345)', async () => {
+    const { w, folder, ends, settle } = await closedAndStarted()
+    await w.refresh()
+    const id = w.current().lines.find((l) => l.id.startsWith('shutdown:'))!.id
+    await w.act('line', `${id}|untilNow`, 'bar')
+    expect(w.current().lines.some((l) => l.id === id)).toBe(false)
+    await settle()
+    // The end the bar showed is written before the answer and taken back by it: the block ran to the answer.
+    const st = await folder.dayState(DAY)
+    // Answered at 10:25:30 – the minute 10:26.
+    expect(st.facts.blocks.get('a')).toMatchObject({ endRule: null, done: true, endedAt: st.facts.blocks.get('a')!.startedAt! + 26 })
+    expect((await ends()).filter((e) => e.autoRule === 'shutdown')).toHaveLength(1)
+  })
+
+  it('log drugiego komputera, który przyjdzie później i pokaże, że w czasie zamknięcia ktoś był przy komputerze: bez kliknięcia linia znika, blok liczy się dalej (D345)', async () => {
+    const { w, ends, settle } = await closedAndStarted()
+    await w.refresh()
+    expect(w.current().lines.some((l) => l.id.startsWith('shutdown:'))).toBe(true)
+    pcbWasThere()
+    await w.refresh()
+    expect(w.current().lines.some((l) => l.id.startsWith('shutdown:'))).toBe(false)
+    expect(w.current().block?.name).toBe('Inne obowiązki')
+    await settle()
+    expect(await ends()).toEqual([])
+  })
+
+  it('kliknięcie na pasku z nałożonym końcem zapisuje najpierw ten koniec: „Start” innego bloku, a potem log PC B – blok ma koniec przy zamknięciu, nie biegnie w tle (D345)', async () => {
+    const { folder, w, settle } = await closedAndStarted()
+    await w.refresh()
+    expect((await folder.timerClick({ a: 'startNew', block: 'b', categoryId: 'inne', durationMin: 30, confirm: true })).ok).toBe(true)
+    pcbWasThere()
+    await settle()
+    const t = await folder.timer(DAY)
+    expect([t.fg?.info.id, t.bg.map((x) => x.info.id)]).toEqual(['b', []])
+    const st = await folder.dayState(DAY)
+    expect(st.facts.blocks.get('a')).toMatchObject({ endRule: 'shutdown', endedAt: st.facts.blocks.get('a')!.startedAt! + 20 })
+  })
+
+  it('„Skończył się przy wyłączeniu” przed ustaleniem wiąże: log PC B, który przyjdzie później, nie przywraca bloku (D345)', async () => {
+    const { folder, w, settle } = await closedAndStarted()
+    await w.refresh()
+    const id = w.current().lines.find((l) => l.id.startsWith('shutdown:'))!.id
+    await w.act('line', `${id}|keep`, 'bar')
+    pcbWasThere()
+    await settle()
+    await w.refresh()
+    expect(w.current().block).toBeNull()
+    expect(w.current().lines.some((l) => l.id === id)).toBe(false)
+    expect((await folder.dayState(DAY)).facts.blocks.get('a')).toMatchObject({ endRule: 'shutdown' })
+  })
+
+  it('„Zacznij jeszcze raz” sesji przerwanej zamknięciem: kliknięte przed ustaleniem zostaje ważne po nim (D345, D207)', async () => {
+    const { folder, w, settle } = await closedAndStarted({
+      from: placeLogical(DAY, 15 * 60 + 30),
+      start: async (f) => expect((await f.timerClick({ a: 'start', block: 'ny', confirm: true })).ok).toBe(true),
+      close: placeLogical(DAY, 15 * 60 + 40),
+      again: placeLogical(DAY, 15 * 60 + 45)
+    })
+    await w.refresh()
+    expect(w.current().block).toBeNull()
+    expect(w.current().lines.some((l) => l.id === 'restart:ny')).toBe(true)
+    await w.act('line', 'restart:ny|restart', 'bar')
+    await settle()
+    const t = await folder.timer(DAY)
+    expect([t.fg, ...t.bg].map((x) => x?.info.id)).toContain('ny')
+  })
+
+  it('blok z wczoraj przerwany zamknięciem: rano pasek od razu na dzisiejszym dniu, nie na wczorajszym przez czas ustalania (D345)', async () => {
+    const { w } = await closedAndStarted({ again: placeLogical(addDays(DAY, 1), 8 * 60) })
+    await w.refresh()
+    expect(w.current().day).toBe(addDays(DAY, 1))
+  })
+
+  it('wstępny koniec bloku z wczoraj z bramką prowadzącego (wczoraj i dziś): bez widocznych dzisiejszych zdarzeń PC B – jeszcze nie (D345)', async () => {
+    const today = addDays(DAY, 1)
+    const morning = placeLogical(today, 8 * 60)
+    const { w, folder, clock } = await closedAndStarted({
+      again: morning,
+      // PC B is fresh and names an event of today its log here does not have yet.
+      peer: () => {
+        mkdirSync(join(dataDir, '.presence'), { recursive: true })
+        writeFileSync(join(dataDir, '.presence', 'pcb.json'), JSON.stringify({ format: 1, computer: 'pcb', name: 'PC B', appVersion: '0.4.0', rulesVersion: 1, versions: [], lastPresence: morning, lastUse: morning, state: 'used', seenLeader: null, settled: true, lastEvents: { [today]: 3 }, writtenAt: morning }))
+      }
+    })
+    await w.refresh()
+    expect(w.current().day).toBe(DAY)
+    expect(w.current().block?.name).toBe('Inne obowiązki')
+    expect(w.current().lines.some((l) => l.id.startsWith('shutdown:'))).toBe(false)
+    // Its log of today comes (it started at 07:50): the gate opens – yesterday's block ended at the close.
+    peerLog(today, [7 * 60 + 50, 7 * 60 + 55, 8 * 60, 8 * 60].map((m, i) => placeLogical(today, m) + i * 1000))
+    await folder.check()
+    clock.now += 1000
+    await w.refresh()
+    expect(w.current().day).toBe(today)
+  })
+
+  it('rytuał i zamknięcie dnia przed ustaleniem liczą się na dniu paska: wiersz „przerwany zamknięciem”, koniec przy zamknięciu zapisany najpierw, koniec pracy potwierdzony w chwili zamknięcia (D345)', async () => {
+    // In the evening, after the sessions' windows (no fixed work left that would make the close a break, D216).
+    const { folder, ends } = await closedAndStarted({
+      from: placeLogical(DAY, 22 * 60 + 30),
+      start: async (f) => expect((await f.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 30, confirm: true })).ok).toBe(true),
+      close: placeLogical(DAY, 22 * 60 + 40),
+      again: placeLogical(DAY, 22 * 60 + 45)
+    })
+    expect((await folder.ritual(DAY)).rows.some((r) => r.kind === 'shutdown')).toBe(true)
+    expect((await folder.closeDay(DAY, 'ritual')).ok).toBe(true)
+    const timer = (await folder.readDay(DAY)).events.filter((e) => e.dom === 'timer').map((e) => e.k)
+    expect(timer.slice(-3)).toEqual(['block.end', 'work.end', 'ritual.close'])
+    expect((await ends()).map((e) => e.autoRule)).toEqual(['shutdown'])
+    const st = await folder.dayState(DAY)
+    expect(st.facts.workEnds.map((x) => x.end)).toEqual([st.facts.blocks.get('x')!.endedAt])
+  })
+
+  it('start bloku stałego należny w czasie zamknięcia, który pauzowałby przerwany blok: bez wstępnego końca – pasek czeka na ustalenie jak w 1.0.1, potem jak prowadzący (D345)', async () => {
+    writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'a', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: false, origin: 'user' }, { id: 'f', categoryId: 'inne', startMin: 10 * 60 + 22, durationMin: 30, fixed: true, origin: 'user' }] }))
+    const { w, folder, settle } = await closedAndStarted({ close: placeLogical(DAY, 10 * 60 + 25), again: placeLogical(DAY, 10 * 60 + 35) })
+    await w.refresh()
+    expect(w.current().block?.name).toBe('Inne obowiązki')
+    expect(w.current().lines.some((l) => l.id.startsWith('shutdown:'))).toBe(false)
+    await settle()
+    // The leader in one pass: the fixed block from 10:22 pauses „a” there, the close ends it – „a” to 10:22.
+    const st = await folder.dayState(DAY)
+    expect(st.facts.blocks.get('a')).toMatchObject({ endRule: 'shutdown', endedAt: st.facts.blocks.get('a')!.startedAt! + 22 })
+    expect(st.facts.blocks.get('f')!.startedAt).toBe(st.facts.blocks.get('a')!.startedAt! + 22)
+  })
+
+  it('kliknięcie na dzisiejszym pasku zapisuje też wstępny koniec wczorajszego bloku: log PC B, który przyjdzie później, nie cofa paska na wczoraj (D345)', async () => {
+    const today = addDays(DAY, 1)
+    const { w, folder } = await closedAndStarted({
+      from: placeLogical(DAY, 22 * 60),
+      start: async (f) => expect((await f.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 120, confirm: true })).ok).toBe(true),
+      close: placeLogical(DAY, 23 * 60),
+      again: placeLogical(today, 8 * 60)
+    })
+    await w.refresh()
+    expect(w.current().day).toBe(today)
+    expect((await folder.timerClick({ a: 'startNew', block: 'y', categoryId: 'inne', durationMin: 30, confirm: true })).ok).toBe(true)
+    // PC B observed 22:50–23:05: no close at 23:00 for the rule – only what the click wrote ends „x”.
+    peerLog(DAY, [22 * 60 + 50, 23 * 60, 23 * 60 + 5].map((m) => placeLogical(DAY, m)))
+    await w.refresh()
+    expect(w.current().day).toBe(today)
+    const st = await folder.dayState(DAY)
+    expect(st.facts.blocks.get('x')).toMatchObject({ endRule: 'shutdown', endedAt: st.facts.blocks.get('x')!.startedAt! + 60 })
+  })
+
+  it('blok przez 04:00 zamknięty po 04:00: koniec przy zamknięciu od razu w pasku i u prowadzącego, choć zamknięcie jest w logu nowego dnia (D345, D252)', async () => {
+    const today = addDays(DAY, 1)
+    const { w, folder, settle } = await closedAndStarted({
+      from: placeLogical(DAY, 27 * 60 + 30),
+      start: async (f) => expect((await f.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 120, confirm: true })).ok).toBe(true),
+      close: placeLogical(today, 4 * 60 + 30),
+      again: placeLogical(today, 5 * 60)
+    })
+    await w.refresh()
+    expect(w.current().day).toBe(today)
+    await settle()
+    const st = await folder.dayState(DAY)
+    expect(st.facts.blocks.get('x')).toMatchObject({ endRule: 'shutdown', endedAt: st.facts.blocks.get('x')!.startedAt! + 60 })
+  })
+
+  it('zegar innego komputera ponad 24 h z przodu: bez wstępnego końca, jak bez działań prowadzącego (D345)', async () => {
+    const { w, folder } = await closedAndStarted({
+      peer: () => {
+        const at = placeLogical(DAY, 8 * 60)
+        mkdirSync(join(dataDir, paths.logDir(DAY)), { recursive: true })
+        writeFileSync(join(dataDir, paths.log(DAY, 'pcb')), `${JSON.stringify({ id: 'pcb-0', c: 'pcb', n: 0, t: at + 30 * 3_600_000, l: at + 30 * 3_600_000, v: 1, day: DAY, dom: 'meta', k: 'observe.alive', at })}\n`)
+      }
+    })
+    expect((await folder.readDay(DAY)).ahead).toBe(true)
+    await w.refresh()
+    expect(w.current().block?.name).toBe('Inne obowiązki')
+    expect(w.current().lines.some((l) => l.id.startsWith('shutdown:'))).toBe(false)
+  })
+
+  it('blok z wczoraj, a dzisiejsze logi nieczytelne: bez wstępnego końca – pasek zostaje na wczoraj, jak u prowadzącego (D345)', async () => {
+    const today = addDays(DAY, 1)
+    // PC B's log of today cannot be read now: the leader does nothing then, yesterday's tasks neither.
+    peerLog(today, [7 * 60].map((m) => placeLogical(today, m)))
+    const fs: DataFs = { ...nodeFs, read: async (abs) => (abs.includes(today) && abs.endsWith('pcb.jsonl') ? Promise.reject(Object.assign(new Error('EIO'), { code: 'EIO' })) : nodeFs.read(abs)) }
+    const { w, folder } = await closedAndStarted({ again: placeLogical(today, 8 * 60), fs })
+    expect((await folder.readDay(today)).complete).toBe(false)
+    await w.refresh()
+    expect(w.current().day).toBe(DAY)
+    expect(w.current().block?.name).toBe('Inne obowiązki')
+  })
+
+  it('dzień starszy niż wczoraj: nic nie nakłada (prowadzący stosuje regułę tylko dziś i wczoraj) – rytuał i zamknięcie bez wstępnego końca (D345)', async () => {
+    const { folder, ends } = await closedAndStarted({ again: placeLogical(addDays(DAY, 2), 8 * 60) })
+    expect((await folder.ritual(DAY)).rows.some((r) => r.kind === 'shutdown')).toBe(false)
+    expect((await folder.closeDay(DAY, 'ritual')).ok).toBe(true)
+    expect(await ends()).toEqual([])
+  })
+
+  it('stan nieustalony od nowa (wybudzenie): bez wstępnego końca do najbliższego odczytu obecności (D345)', async () => {
+    const { w, folder } = await closedAndStarted()
+    await w.refresh()
+    expect(w.current().block).toBeNull()
+    folder.unsettle('wake')
+    await w.refresh()
+    expect(w.current().block?.name).toBe('Inne obowiązki')
+    await folder.check()
+    await w.refresh()
+    expect(w.current().block).toBeNull()
+  })
+
+  it('kliknięcie, którego nie da się zapisać w całości: nic nie zapisane – także wstępny koniec wczorajszego bloku (D345)', async () => {
+    const today = addDays(DAY, 1)
+    peerLog(today, [7 * 60].map((m) => placeLogical(today, m)))
+    let broken = false
+    const fails = (abs: string) => broken && abs.includes(today) && abs.endsWith('pcb.jsonl')
+    const eio = () => Promise.reject(Object.assign(new Error('EIO'), { code: 'EIO' }))
+    const fs: DataFs = { ...nodeFs, read: async (abs) => (fails(abs) ? eio() : nodeFs.read(abs)), stat: async (abs) => (fails(abs) ? eio() : nodeFs.stat(abs)) }
+    const { w, folder } = await closedAndStarted({ again: placeLogical(today, 8 * 60), fs })
+    await w.refresh()
+    expect(w.current().day).toBe(today)
+    // Today's logs become unreadable while the click is judged (before its write).
+    const f = folder as unknown as { barDay: (...a: unknown[]) => Promise<unknown> }
+    const judged = f.barDay.bind(folder)
+    f.barDay = async (...a) => {
+      const r = await judged(...a)
+      if (a[0] === today) broken = true
+      return r
+    }
+    await expect(folder.timerClick({ a: 'startNew', block: 'y', categoryId: 'inne', durationMin: 30, confirm: true })).rejects.toThrow()
+    broken = false
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'block.end')).toEqual([])
+    expect((await folder.readDay(today)).events.some((e) => e.k === 'block.start')).toBe(false)
+  })
+
+  it('niepełny odczyt logów dnia: bez wstępnego końca w pasku, a sygnał energii nie dopisuje go (D345)', async () => {
+    // PC B's log of the day cannot be read now (its content does not matter).
+    peerLog(DAY, [8 * 60].map((m) => placeLogical(DAY, m)))
+    const fs: DataFs = { ...nodeFs, read: async (abs) => (abs.endsWith('pcb.jsonl') ? Promise.reject(Object.assign(new Error('EIO'), { code: 'EIO' })) : nodeFs.read(abs)) }
+    const { w, folder, ends } = await closedAndStarted({ fs })
+    expect((await folder.readDay(DAY)).complete).toBe(false)
+    await w.refresh()
+    expect(w.current().block?.name).toBe('Inne obowiązki')
+    expect(w.current().lines.some((l) => l.id.startsWith('shutdown:'))).toBe(false)
+    await folder.energySignal({ signal: 'glasses' })
+    expect(await ends()).toEqual([])
+  })
+
+  it('przed pierwszym sprawdzeniem folderu (obecności innych komputerów jeszcze nieznane) – bez wstępnego końca; po nim jest (D345)', async () => {
+    const { w, folder } = await closedAndStarted({ check: false })
+    await w.refresh()
+    expect(w.current().block?.name).toBe('Inne obowiązki')
+    expect(w.current().lines.some((l) => l.id.startsWith('shutdown:'))).toBe(false)
+    await folder.check()
+    await w.refresh()
+    expect(w.current().block).toBeNull()
+    expect(w.current().lines.some((l) => l.id.startsWith('shutdown:'))).toBe(true)
+  })
+
+  /** The lines of this computer's journal with an end at the close (reading the day joins the same id into one). */
+  const shutdownLines = () => readFileSync(join(root, 'state', 'journal.v1.jsonl'), 'utf8').split('\n').filter((x) => x.includes('"autoRule":"shutdown"')).length
+
+  it('sygnał energii i „Start” naraz zaraz po starcie: wstępny koniec zapisany raz (D345)', async () => {
+    const { folder } = await closedAndStarted()
+    await Promise.all([folder.energySignal({ signal: 'glasses' }), folder.timerClick({ a: 'startNew', block: 'b', categoryId: 'inne', durationMin: 30, confirm: true }), folder.energySignal({ signal: 'earplugs' })])
+    expect(shutdownLines()).toBe(1)
+  })
+
+  it('prowadzący dopisał koniec między oceną kliknięcia a jego zapisem: kliknięcie nie dopisuje go drugi raz (D345)', async () => {
+    const { folder } = await closedAndStarted()
+    // The leader's own write of the same end (derived id) just after the click was judged.
+    const f = folder as unknown as { barDay: (...a: unknown[]) => Promise<{ laid: Array<Record<string, unknown>> }> }
+    const judged = f.barDay.bind(folder)
+    f.barDay = async (...a) => {
+      const r = await judged(...a)
+      for (const e of r.laid) folder.append({ ...e, day: DAY, dom: 'timer' } as never)
+      return r
+    }
+    expect((await folder.timerClick({ a: 'startNew', block: 'b', categoryId: 'inne', durationMin: 30, confirm: true })).ok).toBe(true)
+    expect(shutdownLines()).toBe(1)
   })
 
   it('dwa kliknięcia w 0,5 s to jedno: podwójne „Dalej” nie kończy też następnego bloku, a drugie kliknięcie kosztu za szybko nic nie potwierdza', async () => {
@@ -642,6 +978,77 @@ describe('widget w procesie głównym', () => {
     expect(w.current().background.map((b) => b.id)).toEqual(['w'])
     await w.act('bgExtend', 'w|15', 'panel')
     expect(w.current().pending).toMatchObject({ button: 'bgExtend:w' })
+  })
+
+  it('widok przeliczany w chwili kroku – licząc od ustawienia zegara, także po wolnym odświeżeniu; stop() czyści zegar kroku (E4a.1)', async () => {
+    let slow = 0
+    const m = await make({
+      during: () => {
+        m.clock.now += slow
+        slow = 0
+      }
+    })
+    const running = () => (m.w as unknown as { running: Promise<void> | null }).running
+    await m.folder.check()
+    m.clock.now = placeLogical(DAY, 10 * 60) + 10_000
+    expect((await m.folder.timerClick({ a: 'start', block: 'a', confirm: true })).ok).toBe(true)
+    const ends = m.clock.now + 60 * 60_000
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    try {
+      // 10 s before the countdown's 0:00: the refresh every 15 s and the one at the step.
+      m.w.start()
+      m.clock.now = ends - 10_000
+      await m.w.refresh()
+      expect(vi.getTimerCount()).toBe(2)
+      m.w.stop()
+      expect(vi.getTimerCount()).toBe(0)
+      m.w.start()
+      // A refresh that took 3 s (the folder read slowly): the step still comes at 0:00, 7 s after it was set.
+      m.clock.now = ends - 10_000
+      slow = 3_000
+      await m.w.refresh()
+      expect(m.w.current().question).toBeNull()
+      m.clock.now = ends + 5
+      vi.advanceTimersByTime(7_005)
+      expect(running()).not.toBeNull()
+      await running()
+      expect(m.w.current()).toMatchObject({ warn: 'zero', question: { text: 'Dalej?' } })
+    } finally {
+      m.w.stop()
+      vi.useRealTimers()
+    }
+  })
+
+  it('krok, który minął w czasie wolnego odświeżenia, przychodzi zaraz po nim, nie 15 s później (E4a.1)', async () => {
+    let slow = 0
+    const m = await make({
+      during: () => {
+        m.clock.now += slow
+        slow = 0
+      }
+    })
+    const running = () => (m.w as unknown as { running: Promise<void> | null }).running
+    await m.folder.check()
+    m.clock.now = placeLogical(DAY, 10 * 60) + 10_000
+    expect((await m.folder.timerClick({ a: 'start', block: 'a', confirm: true })).ok).toBe(true)
+    const ends = m.clock.now + 60 * 60_000
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    try {
+      m.w.start()
+      // Counted for 1 s before 0:00, read for 3 s: 0:00 passed meanwhile.
+      m.clock.now = ends - 1_000
+      slow = 3_000
+      await m.w.refresh()
+      expect(m.w.current().question).toBeNull()
+      expect(vi.getTimerCount()).toBe(2)
+      vi.advanceTimersByTime(5)
+      expect(running()).not.toBeNull()
+      await running()
+      expect(m.w.current()).toMatchObject({ warn: 'zero', question: { text: 'Dalej?' } })
+    } finally {
+      m.w.stop()
+      vi.useRealTimers()
+    }
   })
 
   it('bez folderu danych: jedna neutralna linia „Brak folderu danych · Otwórz okno”, bez bloku i odliczania (D327)', async () => {

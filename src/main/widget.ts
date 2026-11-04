@@ -11,7 +11,7 @@ import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind 
 import { blockName } from '@shared/blockName'
 import { recordEdit, sameContentAs } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
-import { engineView, POOL_TEXT, RESERVE_REGEN_MIN } from '@shared/engineView'
+import { engineView, POOL_TEXT, RESERVE_REGEN_MIN, warnDeadlines } from '@shared/engineView'
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
 import { reserveMessageId } from '@shared/engine/game'
 import { atOf } from '@shared/engine/grid'
@@ -106,6 +106,17 @@ export function toneOnChange(prev: { block: string; warn: string } | null, view:
   return { next, play: changed && view.soundOk && (view.warn === 'five' || view.warn === 'zero') ? view.warn : null }
 }
 
+/**
+ * How long until the next warning step (ms) – 15 · 5 · 0 min before each of `warnDeadlines`: the countdown's 0:00 of the
+ * block in front („Dalej?” too, E4a.1) and the start of a fixed block – when it comes before the next refresh, else null:
+ * the view is counted again at that instant, not up to 15 s after the countdown reached it. The next step after the
+ * view's own instant (`viewAt`), from `now` – one that passed while the view was being counted comes at once (0).
+ */
+export function stepDelay(deadlines: readonly number[], viewAt: number, now = viewAt): number | null {
+  const at = Math.min(...deadlines.flatMap((d) => [d - 15 * MIN, d - 5 * MIN, d]).filter((x) => x > viewAt))
+  return Number.isFinite(at) && at - viewAt <= REFRESH_MS ? Math.max(0, at - now) : null
+}
+
 /** „Przestawiono: … · Cofnij” stays this long after a variant (D313), as the bar's other lines with „Cofnij”. */
 const MOVED_MS = 15 * MIN
 /** „Zapisano: … · Cofnij” of a routine saved from the bar stays this long. */
@@ -178,6 +189,21 @@ export class WidgetEngine {
   stop(): void {
     if (this.timer) clearInterval(this.timer)
     this.timer = null
+    this.stepAt([], 0)
+  }
+
+  /** The refresh at the next warning step (`stepDelay`) – only while the engine runs (`start`). */
+  private step: ReturnType<typeof setTimeout> | null = null
+
+  /** The steps after the view's instant (`viewAt`), waited for from the instant the timer is set (a slow refresh). */
+  private stepAt(deadlines: readonly number[], viewAt: number): void {
+    if (this.step) clearTimeout(this.step)
+    this.step = null
+    const delay = this.timer ? stepDelay(deadlines, viewAt, this.now) : null
+    if (delay == null) return
+    // A few ms past the step: the refresh never comes just before it.
+    this.step = setTimeout(() => void this.refresh(), delay + 5)
+    this.step.unref?.()
   }
 
   /** The view counted again (after a check of the folder, a click, a change of a setting); one at a time. */
@@ -200,6 +226,7 @@ export class WidgetEngine {
     const folder = this.d.folder()
     if (!folder) {
       this.view = null
+      this.stepAt([], 0)
       this.d.emit(this.current())
       return
     }
@@ -253,7 +280,10 @@ export class WidgetEngine {
       this.view = unknownView()
       this.awayView(folder)
     }
-    this.d.emit(this.current())
+    // The warning steps of the view's own day (none while the widget is hidden or the day not counted).
+    const v = this.current()
+    this.stepAt(this.model && !v.hidden ? warnDeadlines(this.model.state, v.block?.endsAt ?? null, now) : [], now)
+    this.d.emit(v)
     if (notices) await notices().catch((e) => this.d.log('warn', 'powiadomienia nie policzyły się', e))
   }
 

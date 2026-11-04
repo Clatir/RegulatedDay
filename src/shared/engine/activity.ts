@@ -36,6 +36,12 @@ export interface Activity {
   unused: Interval[]
   /** Nothing observed on any computer (the app closed, a sleep, a crash). */
   unobserved: Interval[]
+  /**
+   * The instants an observation ended with a close of the app or a crash, not a sleep (`observe.to` without „suspend”; a
+   * crash's own the next start writes from the last life marker) – of every day the events come from: a block through
+   * 04:00 closed after it has its close in the next day's log.
+   */
+  closes: number[]
 }
 
 /** Sorted and merged; empty and reversed intervals dropped. */
@@ -84,9 +90,11 @@ function intersect(a: readonly Interval[], b: readonly Interval[]): Interval[] {
  */
 export function activityOf(events: readonly AnyEvent[], from: number, now: number, self: string | null = null): Activity {
   const byComputer = new Map<string, AnyEvent[]>()
+  const closes: number[] = []
   for (const e of events) {
     if (!isKnown(e)) continue
     if (e.k !== 'observe.from' && e.k !== 'observe.alive' && e.k !== 'observe.to' && e.k !== 'gap.open' && e.k !== 'gap.close') continue
+    if (e.k === 'observe.to' && e.why !== 'suspend') closes.push(e.at)
     const list = byComputer.get(e.c) ?? []
     list.push(e)
     byComputer.set(e.c, list)
@@ -140,7 +148,8 @@ export function activityOf(events: readonly AnyEvent[], from: number, now: numbe
     computers,
     idle: all((c) => c.noInput),
     unused: all((c) => c.noUse),
-    unobserved: all((c) => complement(c.observed, from, now))
+    unobserved: all((c) => complement(c.observed, from, now)),
+    closes
   }
 }
 

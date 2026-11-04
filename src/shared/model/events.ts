@@ -22,9 +22,11 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * freeze the game's days as „before the game” for good. 3 – after an approval undone the minutes count by the proposal
  * (A1-15): an older version would write them all „in the boundary”. 4 – the end of work and time to explain of G1
  * (1.0.1): an older version would confirm an end by a click before later work, keep time to explain begun after a block
- * and leave a paused block after the close.
+ * and leave a paused block after the close. 5 – the automatic actions of G2 (1.0.2): an older version would pause a block
+ * the close ended before a fixed block's start (its end moved to the pause) and never end a block through 04:00 closed
+ * after it (its close is in the next day's log).
  */
-export const RULES_VERSION = 4
+export const RULES_VERSION = 5
 
 export interface EventBase {
   /** Unique: `<computer>-<n>` for your actions, derived from the data for automatic ones (both computers write the same). */

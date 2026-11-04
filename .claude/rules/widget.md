@@ -19,11 +19,17 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 ## Przepływ
 - `shared/engineView.ts` – `engineView(input)` → `WidgetView` (ton, krok, kropka, kropla, przyciski, linie, tło, lista
   automatyczna, tryby); ten sam widok w oknie głównym (`Bar mode="main"`), panelu ikony i na pasku pulpitu.
-- `main/widget.ts` – `WidgetEngine`: `refresh()` (po każdym sprawdzeniu folderu, co 15 s, po kliknięciu) z
-  `folder.widgetModel()`, `act(action, arg, from)` → kliknięcia timera i odpowiedzi; koszt (`pending`) bez funkcji
-  w widoku (idzie przez IPC); powiadomienia prowadzącego z `notice.shown`. Bez folderu `noFolderView` (D327): jedna
-  linia „Brak folderu danych · Otwórz okno”, pasek bez dnia (`data-day=none`). Próby nie ma (D286); akcje paska spoza
-  silnika – IPC `barAction` (`placeBar`, `corner`, `openPanel` dla testów).
+- Odliczanie (E4a.1): `block.endsAt` = `endsAtOf` (`timer.ts`) – planowany koniec przesunięty o `runShift` (`facts.ts`:
+  chwila zdarzenia, które otworzyło bieg, minus jego minuta; blok stały – koniec okna); z niego `warnOf` (kroki, puls,
+  dźwięk), a „Dalej?” silnika (z minut, od hh:mm:30) pasek chowa do `now >= endsAt`. Godziny słowami (podpowiedź „do
+  HH:MM”, „W tle: … do HH:MM”) – z minuty `plannedEnd`, jak w 1.0.1. Dzień liczy dalej w minutach (T412).
+- `main/widget.ts` – `WidgetEngine`: `refresh()` po każdym sprawdzeniu folderu, co 15 s, po kliknięciu i w chwili
+  kroku (`stepDelay` z `warnDeadlines`: kroki po chwili widoku, czekanie od ustawienia zegara – krok, który minął w
+  czasie odświeżenia, od razu; tylko po `start()`), z `folder.widgetModel()`; `act(action, arg, from)` → kliknięcia
+  timera i odpowiedzi; koszt (`pending`) bez funkcji w widoku (idzie przez IPC); powiadomienia prowadzącego z
+  `notice.shown`. Bez folderu `noFolderView` (D327): jedna linia „Brak folderu danych · Otwórz okno”, pasek bez dnia
+  (`data-day=none`). Próby nie ma (D286); akcje paska spoza silnika – IPC `barAction` (`placeBar`, `corner`,
+  `openPanel` dla testów).
 - Komunikat rezerwy (D326): linia `reserve:<dzień>:<pula>:<at>` (= `reserveMessageId`) w `engineView`, „Zacznij” =
   `startNew` regeneracji sposobem z `suggestRegen` na 15 min, „nie dziś” = `mark`; zobaczenie przez `QUESTION_ID`
   (panel, okno, kliknięcie paska) i kliknięcie powiadomienia (`handleArgv` → `seen(…, notification)`).

@@ -10,7 +10,7 @@
  */
 import { questionsOf, type Question } from './engine/auto'
 import type { Activity } from './engine/activity'
-import { plannedSpan } from './engine/blocks'
+import { plannedSpan, type BlockInfo } from './engine/blocks'
 import { answered, contactEnded, waterDue, workRunStart, type CareSettings } from './engine/care'
 import type { DayContext, DayState } from './engine/day'
 import type { EnergyState } from './engine/energy'
@@ -23,7 +23,7 @@ import { ritualDue } from './engine/ritual'
 import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
-import { laterWork, plannedEndOf, secondShiftStart, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
+import { endsAtOf, laterWork, plannedEndOf, secondShiftStart, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
 import type { PlanBlock } from './model/plan'
 import type { Routine } from './model/routines'
@@ -118,11 +118,14 @@ export function autoText(a: AutoAction, blockName: string, clock: string): strin
   }
 }
 
-/** The warning step: 15 · 5 · 0 min before the end of the block in the foreground or the start of a fixed block. */
-function warnOf(state: DayState, t: TimerNow, now: number): WarnStep {
-  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+/**
+ * The instants the warning steps count to (ms): the end of the block in the foreground – `endsAt`, the instant its
+ * countdown reaches 0:00 (E4a.1) – and the starts of fixed blocks still ahead. `warnOf`, and the main process counts the
+ * view again at each step (`stepDelay`). `byId` – the day's blocks by id, when the caller has them.
+ */
+export function warnDeadlines(state: DayState, endsAt: number | null, now: number, byId: Map<string, BlockInfo> = new Map(state.blocks.map((b) => [b.id, b]))): number[] {
   const deadlines: number[] = []
-  if (t.fg) deadlines.push(atOf(state.grid, t.fg.plannedEnd))
+  if (endsAt != null) deadlines.push(endsAt)
   for (const b of state.blocks) {
     if (!(b.fixed || b.waits) || !b.inPlan) continue
     const f = state.facts.blocks.get(b.id)
@@ -130,6 +133,12 @@ function warnOf(state: DayState, t: TimerNow, now: number): WarnStep {
     const span = plannedSpan(b, byId)
     if (span && atOf(state.grid, span.start) > now) deadlines.push(atOf(state.grid, span.start))
   }
+  return deadlines
+}
+
+/** The warning step: 15 · 5 · 0 min before the nearest of `warnDeadlines`. */
+function warnOf(state: DayState, endsAt: number | null, now: number, byId: Map<string, BlockInfo>): WarnStep {
+  const deadlines = warnDeadlines(state, endsAt, now, byId)
   if (!deadlines.length) return 'none'
   const left = (Math.min(...deadlines) - now) / MIN
   return left <= 0 ? 'zero' : left <= 5 ? 'five' : left <= 15 ? 'warm' : 'none'
@@ -253,11 +262,16 @@ export function engineView(i: EngineInput): WidgetView {
     return i.name({ categoryId: b?.categoryId ?? state.facts.blocks.get(id)?.planned?.categoryId ?? 'inne', variantId: b?.variantId ?? null, routine: null, requests: [], note: '' })
   }
   const hidden = modes.disconnect != null
-  const questions = hidden ? [] : questionsOf({ ctx: i.ctx, state, activity: i.activity, now, setsWorkEnd: isWork })
-  const reserve = !!i.energy && i.energy.known && i.energy.enabled && Object.values(i.energy.atReserve).some(Boolean)
   const fg = t.fg
+  // The countdown's 0:00 – from the click, not from the minute the day counts the block from (E4a.1): „Dalej?” is asked by
+  // the minutes (from hh:mm:30 of the minute before), the bar shows it only from then on.
+  const front = fg ? { fg, endsAt: endsAtOf(state, fg, byId) } : null
+  const endsAt = front?.endsAt ?? null
+  const early = (q: Question) => (q.kind === 'next' || q.kind === 'next2') && endsAt != null && now < endsAt
+  const questions = hidden ? [] : questionsOf({ ctx: i.ctx, state, activity: i.activity, now, setsWorkEnd: isWork }).filter((q) => !early(q))
+  const reserve = !!i.energy && i.energy.known && i.energy.enabled && Object.values(i.energy.atReserve).some(Boolean)
   const tone: Tone = reserve ? 'rezerwa' : fg ? (CLASS_TONE[fg.info.rules.cls] ?? 'brak') : 'brak'
-  const warn = hidden ? 'none' : warnOf(state, t, now)
+  const warn = hidden ? 'none' : warnOf(state, endsAt, now, byId)
 
   // „Dalej?” in its fixed place at the start.
   const next = questions.find((q) => q.kind === 'next' || q.kind === 'next2')
@@ -346,13 +360,13 @@ export function engineView(i: EngineInput): WidgetView {
     .map((a) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) }))
     .reverse()
 
-  const block = fg ? { name: nameOf(fg.info.id), className: `${CLASS_NAME[fg.info.rules.cls] ?? ''}${reserve ? ' · rezerwa energii' : ''}`, endsAt: at(fg.plannedEnd) } : null
+  const block = front ? { name: nameOf(front.fg.info.id), className: `${CLASS_NAME[front.fg.info.rules.cls] ?? ''}${reserve ? ' · rezerwa energii' : ''}`, endsAt: front.endsAt } : null
   const nextFixed = state.blocks
     .filter((b) => (b.fixed || b.waits) && b.inPlan && b.start != null && at(b.start) > now && state.facts.blocks.get(b.id)?.startedAt == null)
     .sort((a, b) => a.start! - b.start!)[0]
   const tooltip = hidden
     ? `Odcinam się od ${clockOf(modes.disconnect!)}`
-    : [block ? `${block.name} · do ${clockOf(block.endsAt)} (${Math.max(0, Math.round((block.endsAt - now) / MIN))} min)` : 'bez bloku', nextFixed ? `Następny stały: ${nameOf(nextFixed.id)} ${clockOf(at(nextFixed.start!))}` : ''].filter(Boolean).join('\n')
+    : [front ? `${nameOf(front.fg.info.id)} · do ${clockOf(at(front.fg.plannedEnd))} (${Math.max(0, Math.round((front.endsAt - now) / MIN))} min)` : 'bez bloku', nextFixed ? `Następny stały: ${nameOf(nextFixed.id)} ${clockOf(at(nextFixed.start!))}` : ''].filter(Boolean).join('\n')
   const dot = !hidden && (!!question || lines.some((l) => l.dot))
   // Sounds (spec „Powiadomienia i dźwięki”): never in „mniej pytań” nor „Odcinam się”, never on a day of stationary
   // classes, never on the recording computer during a lecture.
@@ -391,6 +405,7 @@ export function engineView(i: EngineInput): WidgetView {
       cutOff: !hidden && !modes.night,
       start: modes.night ? null : start
     },
+    // Only its hour in words („W tle: … do 10:30”): the day's minute, as in 1.0.1 – no countdown, no steps (E4a.1).
     background: hidden || modes.night ? [] : t.bg.map((b) => ({ id: b.info.id, name: nameOf(b.info.id), endsAt: at(b.plannedEnd) })),
     autos: hidden ? { groups: [], items: [] } : { groups, items },
     fewer: modes.fewer,

@@ -64,6 +64,17 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   pliku czeka. Błąd zapisu jednego wpisu (także nowego rekordu) = „czeka”, nigdy wyjątek przerywający przebieg.
 - Prowadzący liczy dzień z plików folderu (`inputs()`, `dayFile(d)`), okno – z kolejką (`inputs(true)`, `recordView`):
   edycja jeszcze niezapisana nie może trafić do wspólnej migawki dnia. `updatedAt` pliku nigdy się nie cofa.
+- Pasek (też wybór dnia – `barActiveDay`), pytania, odpowiedzi, kliknięcia timera, akcje dnia (`dayAction`), `ritual()`
+  i sygnał energii liczą się na `barDay` (D345): `ownContext` + końce `shutdownActions` z `auto.ts` (bramka `gateOf` –
+  ta sama co w `check()`, te same id; zdarzenia przez `simEvents` z `engine/sim.ts`), bez zapisu, także w stanie
+  nieustalonym; nic, gdy prowadzący też by nie pisał (`mayLay`: dziś i wczoraj, odczyt pełny i bez `ahead` – dla
+  wczoraj też dzisiejszy, po skanie obecności – `peersScanned`, zerowane w `unsettle`) ani gdy ten sam jego przebieg
+  pauzuje przerwany blok startem bloku stałego (`fixedStartPausesClosed`, jak 1.0.1); `activity` tylko przy biegnącym
+  bloku; `ritual()` najpierw tanio (`mayLayOn`). Co na nim zapisuje, idzie `serial` przez `writeOn` – na dzisiejszym
+  pasku najpierw końce wczoraj (`barActiveDay().before`), potem dnia (`laid`, bez tych już w logu i dzienniku), potem
+  swoje; wszystko sprawdzone przed zapisem (logi pełne, zdarzenia poprawne), inaczej nic. Bez kliknięcia zapisuje je
+  prowadzący w `check()` (bez nakładki). Nowe miejsce, które ocenia kliknięcie, też przez `barDay`, `writeOn` i
+  `serial`. Zapisy okna wprost do logu (`userEvents`) – bez nakładki. Zmiana reguł działań automatycznych – `RULES_VERSION`.
 - Folder bez korzenia (T515): `DataFolder.open` owija `fs` w `rootGuarded` – zapis nie tworzy samego folderu danych;
   `check()` bez korzenia zwraca od razu („nieustalony”). Testy, które otwierają folder, muszą go najpierw utworzyć.
 - Rozjazd zegara (`read.ahead`) tylko po `t` zdarzeń innych komputerów; zegar logiczny ponad 24 h z przodu wraca do

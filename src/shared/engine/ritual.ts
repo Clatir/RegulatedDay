@@ -12,7 +12,7 @@
  * zamrożenie”). Pure: the main process writes what it returns.
  */
 import { REQUEST_CATEGORY } from '../model/categories'
-import { CLOSE_HOWS, isKnown, RULES_VERSION, type AnyEvent, type CloseHow, type FeltCost } from '../model/events'
+import { CLOSE_HOWS, isKnown, type AnyEvent, type CloseHow, type FeltCost } from '../model/events'
 import { questionId } from '../model/ids'
 import { dayStart } from '../time/day'
 import { addDays } from '../time/zone'
@@ -24,6 +24,7 @@ import { explainMinutes, inExplain, type Explain } from './explain'
 import { foldFacts, isRunning, ranMinutes, type BlockFact } from './facts'
 import { atOf, gridOf } from './grid'
 import { dayOutcome, outcomeChanges, type DayOutcome, type OutcomeChange } from './outcome'
+import { simEvents } from './sim'
 import { closePausedEnds, fixedWorkLeft, heldByRequests, lastWorkStop, plannedEndOf, requestHoldsWork, setsWorkEnd, timerNow, workEndReaches, type TimerDraft } from './timer'
 
 const HOUR = 3_600_000
@@ -366,13 +367,6 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
       return inside ? [{ k: 'rest.not', at, from: value.from, to: value.to }] : null
     }
   }
-}
-
-/** Drafts as log events for a simulation (after every event of the day). */
-function simEvents(ctx: DayContext, drafts: readonly TimerDraft[], at: number): AnyEvent[] {
-  let l = at
-  for (const e of ctx.events) l = Math.max(l, e.l)
-  return drafts.map((d, i) => ({ id: `sim-ritual-${i}`, c: '~sim', n: i, t: at, l: l + 1 + i, v: RULES_VERSION, day: ctx.date, dom: 'timer', ...d }) as unknown as AnyEvent)
 }
 
 export interface RitualEffect {
