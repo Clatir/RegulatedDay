@@ -11,6 +11,7 @@ import { blockEvidence } from '@shared/engine/game'
 import { requestAction } from '@shared/engine/requests'
 import { computeDay } from '@shared/engine/day'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
+import { variantTriggers } from '@shared/engine/variants'
 import { block, hhmm, lm, Scenario } from './dsl'
 
 const DATE = '2026-10-28' // a Wednesday
@@ -201,6 +202,17 @@ describe('działania automatyczne prowadzącego', () => {
     // A new end at the new planned end, with a new id.
     expect(leader(s, '10:30')).toEqual([expect.objectContaining({ k: 'block.end', at: s.at('10:30') })])
     expect(click(s, '11:01', { a: 'extend', block: 'w', minutes: 15 }).ok).toBe(false)
+  })
+
+  it('„Przedłuż” bloku dodanego bez wymiany: potwierdzone są minuty do planowanej długości, przedłużenie ma koszt (raport 816)', () => {
+    const x = block({ id: 'x', cat: 'inne', at: '12:30', min: 60, origin: 'user' })
+    const s = new Scenario({ date: DATE, plan: [x], settings: { transitionBufferMin: 0 } }).observe('07:00', null).approve('12:45', '07:30')
+    s.raw({ k: 'block.addConfirm', block: 'x', at: s.at('09:00') }, '09:00')
+    // The start inside the confirmed length costs nothing …
+    expect(click(s, '12:30', { a: 'start', block: 'x' }).ok).toBe(true)
+    // … but 15 more minutes past its planned end (13:30–13:45) are after the boundary and nobody confirmed them.
+    expect(click(s, '13:20', { a: 'extend', minutes: 15 })).toMatchObject({ ok: false, confirm: { block: 'x', minutes: 15 } })
+    expect(click(s, '13:20', { a: 'extend', minutes: 15, confirm: true }).ok).toBe(true)
   })
 
   it('sesja kończy się o planowanym końcu, także gdy dalej używasz komputera', () => {
@@ -446,6 +458,47 @@ describe('poprawki po przeglądzie E4a', () => {
     const s = day([block({ id: 'w', cat: 'zajecia-zdalne', at: '09:00', min: 60, fixed: true })]).observe('07:00', null)
     s.gap('08:56', null)
     expect(leader(s, '09:02')).toEqual([expect.objectContaining({ k: 'block.start', block: 'w', at: s.at('09:00') })])
+  })
+
+  /** A flexible „a” running, a fixed „w” (not in the background) starting over it at 09:00 by the leader: the pause and the start written. */
+  function fixedOverFlexible() {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 180 }), block({ id: 'w', cat: 'inne', at: '09:00', min: 60, fixed: true, bg: false })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    leader(s, '09:00')
+    const autos = s.state('09:05').facts.autos
+    return { s, pause: autos.find((x) => x.k === 'block.pause')!, start: autos.find((x) => x.k === 'block.start' && x.block === 'w')! }
+  }
+
+  it.each([['pauzy', 'pause'], ['startu bloku stałego', 'start']] as const)('„Cofnij” %s przy starcie bloku stałego cofa parę (w czasie bloku stałego): elastyczny biegnie jak przed startem, stały niezaczęty, bez wyzwalacza wariantów (D350)', (_name, which) => {
+    const { s, pause, start } = fixedOverFlexible()
+    const before = s.state('09:05')
+    expect(timerNow(before).fg?.info.id).toBe('w')
+    expect(variantTriggers(before, null).time.map((x) => x.id)).toEqual(['fixed:w:a'])
+    const r = click(s, '09:06', { a: 'undo', target: (which === 'pause' ? pause : start).id })
+    expect(r.ok && r.events.map((e) => (e as unknown as { target: string }).target).sort()).toEqual([pause.id, start.id].sort())
+    const st = s.state('09:10')
+    const t = timerNow(st)
+    // „a” goes on as before the start of „w”: one run in front, nothing in the background, „w” not begun (it can be started by hand).
+    expect(t.fg?.info.id).toBe('a')
+    expect(t.bg).toEqual([])
+    expect(st.facts.blocks.get('w')?.startedAt ?? null).toBeNull()
+    const open = [...st.facts.blocks.values()].flatMap((f) => f.runs.filter((r) => r.to === Number.POSITIVE_INFINITY).map((r) => [f.id, r.bg] as const))
+    expect(open).toEqual([['a', false]])
+    expect(variantTriggers(st, null).time).toEqual([])
+    // The leader does not start „w” again (the undone ids do not come back) …
+    expect(leader(s, '09:11')).toEqual([])
+    // … but „w” can be started by hand.
+    expect(click(s, '09:12', { a: 'start', block: 'w' }).ok).toBe(true)
+  })
+
+  it('para pauza ↔ start bloku stałego tylko póki ma sens: po końcu bloku stałego (albo po późniejszym kliknięciu) „Cofnij” jest odrzucone', () => {
+    const { s, pause, start } = fixedOverFlexible()
+    click(s, '10:02', { a: 'next' })
+    for (const x of [pause, start]) expect(click(s, '10:03', { a: 'undo', target: x.id })).toMatchObject({ ok: false })
+    // A click on the fixed block meanwhile (a longer „Przedłuż”) ends it too.
+    const t = fixedOverFlexible()
+    click(t.s, '09:20', { a: 'extend', minutes: 15 })
+    for (const x of [t.pause, t.start]) expect(click(t.s, '09:21', { a: 'undo', target: x.id })).toMatchObject({ ok: false })
   })
 
   it('„Cofnij” automatycznego zatwierdzenia granicy zdejmuje je z listy; drugie „Cofnij” nic nie robi', () => {

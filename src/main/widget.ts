@@ -75,13 +75,17 @@ export interface WidgetDeps {
   emit: (view: WidgetView) => void
   log: (level: 'info' | 'warn' | 'error', msg: string, e?: unknown) => void
   now?: () => number
+  /** The monotonic clock (ms): the double click and the cost waiting for its second click never follow a clock set back or forward (raport 751). */
+  mono?: () => number
   /** The battery saver is on, on a battery, with the data folder in OneDrive (spec „Kilka komputerów”, once a day). */
   batterySaver?: () => boolean
   /** The backups as the data service knows them (its last daily backup failed – A3-06). */
   backup?: () => { failed: { error: string } | null } | null
 }
 
-interface Pending extends BarPending {
+/** `until` here is on the monotonic clock (`WidgetEngine.mono`); the view gets what is left of it (`left`). */
+interface Pending extends Omit<BarPending, 'left'> {
+  until: number
   redo: () => Promise<TimerResult>
   /** „Przedłuż”: the length waiting for the second click (changed in steps of 15 min – T289), and its block (none: the one in front). */
   minutes?: number
@@ -139,7 +143,9 @@ function unknownView(): WidgetView {
 export class WidgetEngine {
   private view: WidgetView | null = null
   private pending: Pending | null = null
+  /** The monotonic clock like every term of the bar (`until`): a wall clock set meanwhile changes none of them. */
   private note: { text: string; until: number } | null = null
+
   private timer: ReturnType<typeof setInterval> | null = null
   private running: Promise<void> | null = null
   private again = false
@@ -175,9 +181,21 @@ export class WidgetEngine {
     return this.d.now?.() ?? Date.now()
   }
 
+  private get mono(): number {
+    return this.d.mono?.() ?? performance.now()
+  }
+
   /** The view now (the neutral bar until the engine has one). */
   current(): WidgetView {
-    return this.view ?? noFolderView(this.d.folderStatus?.() ?? 'none')
+    const v = this.view
+    if (!v) return noFolderView(this.d.folderStatus?.() ?? 'none')
+    if (!v.pending && !v.note) return v
+    // The terms (the cost waiting, the note) say what is left of them when the view is sent – each time, also for the view
+    // sent again to a window that opens (the window counts them from the moment it receives it).
+    const mono = this.mono
+    const pending = v.pending && this.pending && this.pending.until > mono ? { ...v.pending, left: this.pending.until - mono } : null
+    const note = v.note && this.note && this.note.until > mono ? { ...v.note, left: this.note.until - mono } : null
+    return { ...v, pending, note }
   }
 
   start(): void {
@@ -231,6 +249,7 @@ export class WidgetEngine {
       return
     }
     const now = this.now
+    const mono = this.mono
     let notices: (() => Promise<void>) | null = null
     try {
       const m = await folder.widgetModel(now)
@@ -239,8 +258,8 @@ export class WidgetEngine {
       const routines = (await folder.collection('routine').catch(() => [])).map(routineFrom).filter((x): x is Routine => !!x)
       const requests = (await folder.collection('request').catch(() => [])).map(requestFrom).filter((x): x is RequestRecord => !!x)
       const names = { rd, settings: m.state.settings, routines, requests }
-      if (this.pending && this.pending.until <= now) this.pending = null
-      if (this.note && this.note.until <= now) this.note = null
+      if (this.pending && this.pending.until <= mono) this.pending = null
+      if (this.note && this.note.until <= mono) this.note = null
       this.nextBlock = timerNow(m.state).next?.id ?? null
       this.view = {
         ...engineView({
@@ -253,7 +272,7 @@ export class WidgetEngine {
           care: { waterOn: rd.general.modules.water, waterEveryMin: rd.general.waterEveryMin, breakAfterMin: rd.general.breakAfterMin, solitudeAfterMin: rd.general.solitudeAfterMin },
           modePrefs: this.d.modePrefs(),
           // Only what the windows show (the view goes over IPC – no function in it).
-          pending: this.pending ? { button: this.pending.button, text: this.pending.text, until: this.pending.until, ...(this.pending.minutes != null ? { steps: true } : {}) } : null,
+          pending: this.pending ? { button: this.pending.button, text: this.pending.text, left: this.pending.until - mono, ...(this.pending.minutes != null ? { steps: true } : {}) } : null,
           computer: folder.computers[0]?.id,
           people: m.people,
           person: (id) => personName(rd, id),
@@ -261,10 +280,10 @@ export class WidgetEngine {
           ritualFrom: await folder.ritualDay(),
           routines
         }),
-        note: this.note
+        note: this.note ? { text: this.note.text, left: this.note.until - mono } : null
       }
       this.names = names
-      this.variantsView(m, now)
+      this.variantsView(m, now, mono)
       this.syncView(folder, now)
       if (this.failing) this.d.log('info', 'widget: dzień znów policzony')
       this.failing = false
@@ -288,7 +307,7 @@ export class WidgetEngine {
   }
 
   /** The marker and the open panel of variants in the view, and the line „Przestawiono: … · Cofnij” (D313). */
-  private variantsView(m: NonNullable<WidgetEngine['model']>, now: number): void {
+  private variantsView(m: NonNullable<WidgetEngine['model']>, now: number, mono: number): void {
     const v = this.view!
     const date = m.state.grid.date
     const modes = modesOf(m.state, timerNow(m.state), m.ctx.events, now, this.d.modePrefs())
@@ -311,10 +330,10 @@ export class WidgetEngine {
     this.markerNow = markerCause(causes, { shown: this.markerShown, done: this.markerDone, quiet, lastQuiet: this.lastQuiet, now })
     if (this.markerNow) this.markerShown.add(this.markerNow.id)
     v.variants = { marker: !!this.markerNow && !v.hidden && !v.night, open: this.panel && !v.hidden ? this.panel.variants.map((x) => ({ id: x.id, label: x.label })) : null }
-    if (this.moved && this.moved.until <= now) this.moved = null
+    if (this.moved && this.moved.until <= mono) this.moved = null
     if (this.moved && !v.hidden) v.lines = [{ id: 'moved:variant', text: `Przestawiono: ${this.moved.label}`, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }, ...v.lines]
     // A routine saved from the bar (D328): its „Cofnij” for a while, in place of its line.
-    if (this.routineSaved && (this.routineSaved.until <= now || this.routineSaved.day !== date)) this.routineSaved = null
+    if (this.routineSaved && (this.routineSaved.until <= mono || this.routineSaved.day !== date)) this.routineSaved = null
     if (this.routineSaved && !v.hidden) v.lines = [...v.lines, { id: `routineSaved:${this.routineSaved.block}`, text: this.routineSaved.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }]
   }
 
@@ -401,7 +420,7 @@ export class WidgetEngine {
       if (r.ok) started = after.start
       else if (r.why) this.say(r.why)
     }
-    this.moved = { label: v.label, day, edits, started, until: this.now + MOVED_MS }
+    this.moved = { label: v.label, day, edits, started, until: this.mono + MOVED_MS }
     return this.refresh()
   }
 
@@ -464,7 +483,7 @@ export class WidgetEngine {
     // A project runs now (also one begun after the hard end), or one ran in its minute or it passed in time to explain
     // after a project (D250) – then only within an hour of it, never hours late (the app started, the notice turned on).
     const passedRecently = state.hardEnd.passed != null && atOf(state.grid, state.hardEnd.passed) >= now - 60 * MIN
-    if (on.hardEnd && state.hardEnd.passed != null && ((state.hardEnd.message && passedRecently) || t.fg?.info.isProject)) out.push({ id: `notice:${date}:hardEnd:-:${state.hardEnd.passed}`, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
+    if (on.hardEnd && state.hardEnd.passed != null && !state.hardEnd.nothingMissing && state.regen.missingMin > 0 && ((state.hardEnd.message && passedRecently) || t.fg?.info.isProject)) out.push({ id: `notice:${date}:hardEnd:-:${state.hardEnd.passed}`, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
     // In a session or a class the reserve shows only in the colour, with „mniej pytań” its message is a quiet line – no
     // notification in any quiet mode (spec „Model energii”, D326).
     if (on.reserve && m.energy.enabled && !view.quiet) {
@@ -560,8 +579,9 @@ export class WidgetEngine {
   /** A click of the bar (`from`: which window). A refused or failed one says why in the bar for a few seconds. */
   async act(action: string, arg: string | undefined, from: ViewKind): Promise<void> {
     const key = `${action}|${arg ?? ''}`
-    const at = this.now
-    // Two clicks within 0.5 s are one – also the second click of a cost that comes too soon after its first.
+    // Two clicks within 0.5 s are one – also the second click of a cost that comes too soon after its first. On the
+    // monotonic clock: a wall clock set back or forward meanwhile (time sync) neither drops a click nor lets a double one through.
+    const at = this.mono
     if ((this.lastClick.key === key && at - this.lastClick.at < DOUBLE_MS) || (action === 'confirm' && this.pending && at - (this.pending.until - CONFIRM_MS) < DOUBLE_MS)) return
     // A click of the bar itself (the desktop bar's background) is no action: it never parts the two clicks of one (A7-01).
     if (action !== 'barClick') this.lastClick = { key, at }
@@ -576,7 +596,7 @@ export class WidgetEngine {
   }
 
   private say(text: string): void {
-    this.note = { text, until: this.now + NOTE_MS }
+    this.note = { text, until: this.mono + NOTE_MS }
     setTimeout(() => void this.refresh(), NOTE_MS + 50).unref?.()
   }
 
@@ -658,7 +678,7 @@ export class WidgetEngine {
       case 'confirm': {
         const p = this.pending
         this.pending = null
-        if (p && p.until > this.now) r = await p.redo()
+        if (p && p.until > this.mono) r = await p.redo()
         if (r && !r.ok && r.why) this.say(r.why)
         return this.refresh()
       }
@@ -786,7 +806,7 @@ export class WidgetEngine {
   private async routineDone(day: string | undefined, routine: BarRoutine, version: RoutineVersion, steps: string[]): Promise<void> {
     const r = await this.d.timer({ a: 'routineDone', block: routine.block, version, steps, day })
     if (!r.ok) this.say(r.why ?? 'rutyna nie zapisała się')
-    else if (day) this.routineSaved = { block: routine.block, day, text: `Zapisano: ${routine.name} (${ROUTINE_VERSION_NAMES[version]}) – ${steps.length} z ${routine[version].length}`, until: this.now + ROUTINE_UNDO_MS }
+    else if (day) this.routineSaved = { block: routine.block, day, text: `Zapisano: ${routine.name} (${ROUTINE_VERSION_NAMES[version]}) – ${steps.length} z ${routine[version].length}`, until: this.mono + ROUTINE_UNDO_MS }
     return this.refresh()
   }
 
@@ -803,7 +823,7 @@ export class WidgetEngine {
 
   /** A cost waits for its second click within 10 s, in place of its button. */
   private wait(button: string, label: string, cost: NonNullable<TimerResult['confirm']>, redo: () => Promise<TimerResult>, minutes?: number, block?: string): void {
-    this.pending = { button, text: costText(label, cost), until: this.now + CONFIRM_MS, redo, ...(minutes != null ? { minutes } : {}), ...(block ? { block } : {}) }
+    this.pending = { button, text: costText(label, cost), until: this.mono + CONFIRM_MS, redo, ...(minutes != null ? { minutes } : {}), ...(block ? { block } : {}) }
     setTimeout(() => void this.refresh(), CONFIRM_MS + 50).unref?.()
   }
 
@@ -814,7 +834,7 @@ export class WidgetEngine {
    */
   private async extendStep(delta: number): Promise<void> {
     const p = this.pending
-    if (!p || p.minutes == null || p.until <= this.now) return
+    if (!p || p.minutes == null || p.until <= this.mono) return
     const minutes = Math.min(EXTEND_MAX_MIN, Math.max(15, p.minutes + delta))
     if (minutes === p.minutes) return
     const day = this.current().day ?? undefined
@@ -822,7 +842,7 @@ export class WidgetEngine {
     const r = await this.d.timer({ ...c, probe: true })
     if (r.confirm) this.wait(p.button, `Przedłuż +${minutes}`, r.confirm, () => this.d.timer({ ...c, confirm: true }), minutes, p.block)
     else if (r.ok) {
-      this.pending = { button: p.button, text: `Przedłuż +${minutes}: bez kosztu`, until: this.now + CONFIRM_MS, redo: () => this.d.timer(c), minutes, ...(p.block ? { block: p.block } : {}) }
+      this.pending = { button: p.button, text: `Przedłuż +${minutes}: bez kosztu`, until: this.mono + CONFIRM_MS, redo: () => this.d.timer(c), minutes, ...(p.block ? { block: p.block } : {}) }
       setTimeout(() => void this.refresh(), CONFIRM_MS + 50).unref?.()
     } else {
       this.pending = null

@@ -6,7 +6,7 @@
  * The colour is the class of the block in the foreground (the reserve's when a pool is at the reserve), warmer 15 min
  * before the end of the block or the start of a fixed block, a step darker at 5 and at 0 min (D225). The dot lights only
  * for what stands without your click; the drop is the water. „Odcinam się” hides the widget (a grey icon, the panel only
- * with its line); the quiet modes make the bar compact; the night's quiet leaves only the time and the running block.
+ * with its line); the quiet modes make the bar compact; the night's quiet leaves only the time, the running block and „Prośba ▸”.
  */
 import { questionsOf, type Question } from './engine/auto'
 import type { Activity } from './engine/activity'
@@ -23,7 +23,7 @@ import { ritualDue } from './engine/ritual'
 import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
-import { endsAtOf, laterWork, plannedEndOf, secondShiftStart, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
+import { endsAtOf, fixedStartPair, laterWork, plannedEndOf, secondShiftStart, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
 import type { PlanBlock } from './model/plan'
 import type { Routine } from './model/routines'
@@ -351,13 +351,17 @@ export function engineView(i: EngineInput): WidgetView {
   const start = !fg && t.next && !running ? `${t.paused.some((p) => p.info.id === t.next!.id) ? 'Wznów' : 'Start'}: ${nameOf(t.next.id)}` : null
   const fixedFg = !!fg && (fg.info.fixed || fg.info.rules.kind === 'session')
 
-  // „Zrobione automatycznie”: the actions as the plan said them in one row, the rest each with „Cofnij”.
-  const planned = state.facts.autos.filter((a) => a.rule === 'fixedStart' || a.rule === 'plan')
-  const groups = planned.length ? [`bloki stałe według planu: ${planned.length}`] : []
+  // „Zrobione automatycznie” (D350): the actions as the plan said them (a fixed block's start, an end by the plan) in one
+  // row that unfolds into them, each with „Cofnij”; what changes the counting of time – a flexible block's pause at a fixed
+  // start too – and the rest each in a row of its own.
+  const autoItem = (a: (typeof state.facts.autos)[number]) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) && (fixedStartPair(state, a)?.alive ?? true) })
+  const asPlanned = (a: (typeof state.facts.autos)[number]) => (a.rule === 'fixedStart' && a.k !== 'block.pause') || a.rule === 'plan'
+  const planned = state.facts.autos.filter(asPlanned)
+  const groups = planned.length ? [{ id: 'plan', text: `bloki stałe według planu: ${planned.length}`, items: planned.map(autoItem).reverse() }] : []
   const items = state.facts.autos
     // A meal or a regeneration of an absence: one line, at its end (its „Cofnij” takes the start back too).
-    .filter((a) => !(a.rule === 'fixedStart' || a.rule === 'plan') && !(a.k === 'block.start' && (a.rule === 'absenceMeal' || a.rule === 'absenceRegen')))
-    .map((a) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) }))
+    .filter((a) => !asPlanned(a) && !(a.k === 'block.start' && (a.rule === 'absenceMeal' || a.rule === 'absenceRegen')))
+    .map(autoItem)
     .reverse()
 
   const block = front ? { name: nameOf(front.fg.info.id), className: `${CLASS_NAME[front.fg.info.rules.cls] ?? ''}${reserve ? ' · rezerwa energii' : ''}`, endsAt: front.endsAt } : null
@@ -411,7 +415,7 @@ export function engineView(i: EngineInput): WidgetView {
     fewer: modes.fewer,
     signals: !!i.energy?.enabled,
     night: modes.night,
-    pending: i.pending && i.pending.until > now ? i.pending : null,
+    pending: i.pending && i.pending.left > 0 ? i.pending : null,
     day: state.grid.date,
     toneSet: ENGINE_TONE_SET,
     note: null,

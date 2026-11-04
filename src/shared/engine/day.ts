@@ -96,6 +96,8 @@ export interface HardEnd {
   at: number
   /** No instant from now leaves enough regeneration before bedtime (the plan warns, the pool's second part is 0). */
   unreachable: boolean
+  /** The minimum of regeneration is collected before `at` (nothing missing): the hard end is the bedtime and there is no message about it. */
+  nothingMissing?: boolean
 }
 
 export interface DayState {
@@ -137,7 +139,8 @@ export interface DayState {
   /** Times to explain (E6): after work and project blocks that ended by themselves. */
   explains: Explain[]
   bedtime: { base: number; shiftMin: number; overLimitMin: number; effective: number; forecast: number }
-  hardEnd: HardEnd & { passed: number | null; message: boolean }
+  /** `nothingMissing` in the state: the missing part of the minimum was 0 when the hard end passed (false before it). */
+  hardEnd: HardEnd & { passed: number | null; message: boolean; nothingMissing: boolean }
   pool: { min: number; byLimit: number; byTime: number; empty: boolean }
   forecast: Placed[]
   /** The forecast end of work (index), null in a day without work. */
@@ -780,6 +783,8 @@ export function computeDay(ctx: DayContext): DayState {
   let message = false
   /** The hard end reached in time to explain after a project without input: it passes at the next input in it. */
   let atInput = false
+  /** Nothing was missing of the minimum when the hard end passed: no message, no notice of a project running on. */
+  let passQuiet = false
   const hardEndCheckFrom = Math.max(0, Math.min(c.wake, firstWorkStart ?? c.wake))
   let nextHardCheck = hardEndCheckFrom
   // Minutes from which the view changes: the minute after each event that is not only presence (T413).
@@ -838,12 +843,20 @@ export function computeDay(ctx: DayContext): DayState {
     // first input from the minute it would have passed (D250): a gap in input only puts it off.
     const explainProject = (fk & F_EXPLAIN) !== 0 && (fk & (F_TENT_REST | F_END | F_PROJECT)) === 0
     // Passed as the leader wrote it: its message as the day was known in that minute.
-    if (facts.hardEndPass?.at === k) message = (fk & F_PROJECT) !== 0 || explainProject
+    // No message when the missing part of the minimum was 0 (spec „Twardy koniec projektów”); `passQuiet` is the same at
+    // the pass for the notice of a project that runs on after it.
+    if (facts.hardEndPass?.at === k) {
+      // As the leader wrote it at the pass; a log without it (older) is counted again.
+      passQuiet = facts.hardEndPass.quiet ?? evaluate(k, shift, true, false, known).hardEnd.nothingMissing === true
+      message = ((fk & F_PROJECT) !== 0 || explainProject) && !passQuiet
+    }
     if (passed == null && atInput) {
       if (explainProject && !(fk & F_REQUEST)) {
         if (hadInput(k)) {
           passed = k
-          message = true
+          // Counted in the minute it passes, not in the one the hard end began to wait (answers and minutes came meanwhile).
+          passQuiet = evaluate(k, shift, true, false, known).hardEnd.nothingMissing === true
+          message = !passQuiet
         }
         nextHardCheck = k + 1
       } else atInput = false
@@ -853,10 +866,12 @@ export function computeDay(ctx: DayContext): DayState {
       if (!ev.hardEnd.unreachable && k >= ev.hardEnd.at) {
         const rest = (fk & (F_REGEN | F_DISC | F_TENT_REST)) !== 0 || (fk & F_BLOCK) === 0
         if (!rest && !(fk & F_REQUEST)) {
-          if (explainProject && !hadInput(k)) atInput = true
-          else {
+          if (explainProject && !hadInput(k)) {
+            atInput = true
+          } else {
             passed = k
-            message = (fk & F_PROJECT) !== 0 || explainProject
+            passQuiet = ev.hardEnd.nothingMissing === true
+            message = ((fk & F_PROJECT) !== 0 || explainProject) && !passQuiet
           }
         }
         nextHardCheck = k + 1
@@ -924,7 +939,7 @@ export function computeDay(ctx: DayContext): DayState {
     justifiedBy: fin.justifiedBy,
     explains,
     bedtime: { base: baseBedtime(now), shiftMin: shift, overLimitMin: overLimit, effective, forecast: fin.bedtimeForecast },
-    hardEnd: { at: hardPassed ? passed! : fin.hardEnd.at, unreachable: !hardPassed && fin.hardEnd.unreachable, passed, message },
+    hardEnd: { at: hardPassed ? passed! : fin.hardEnd.at, unreachable: !hardPassed && fin.hardEnd.unreachable, passed, message, nothingMissing: hardPassed && passQuiet },
     pool: hardPassed ? { min: 0, byLimit: fin.pool.byLimit, byTime: 0, empty: true } : { ...fin.pool, empty: fin.pool.min <= 0 },
     forecast: fin.forecast,
     forecastWorkEnd: fin.forecastWorkEnd,
@@ -1209,7 +1224,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     let collected = 0
     for (let k = 0; k < Math.min(at, bt); k++) collected += toward[k]!
     const missing = required - collected
-    if (missing <= 0) return { at: bt, unreachable: false }
+    if (missing <= 0) return { at: bt, unreachable: false, nothingMissing: true }
     let sum = 0
     for (let j = Math.min(bt, cap) - 1; j >= at; j--) {
       sum += toward[j]!

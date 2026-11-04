@@ -95,6 +95,9 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - E2E biorą dzień z prawdziwego zegara (CI także w weekend i święta): typ dnia ustaw w danych dla `logicalToday()`
   (T528). Propozycję granicy dają tylko bloki pracy przed drugą zmianą – w dzień roboczy sesje, w weekend nic;
   niedziela nie ma szablonu (pusty plan). Inne dni lokalnie: `faketime -f "@<data UTC>"` z `FAKETIME_DONT_FAKE_MONOTONIC=1`.
+- `DayState.hardEnd.nothingMissing`: przy przejściu twardego końca brakująca część minimum wynosiła 0 – bez komunikatu
+  i bez powiadomienia o biegnącym projekcie (`widget.ts`); prowadzący zapisuje je w `hardend.pass` (`quiet`), silnik czyta to pole, a liczy od nowa tylko bez niego (starsze logi). Powiadomienie
+  także wymaga bieżącego `regen.missingMin > 0`.
 - Timer, pytania „Dalej?” i „Koniec pracy?”, nieobecność i bezczynność (E4a) – reguły `timer.md`; fakty znają `undo`,
   `question.seen`, `question.answer` i `autoRule`. Prośby w dniu i warianty (logika E5) – reguły `prosby-warianty.md`.
   Czas do wyjaśnienia, rytuał i ocena dnia (logika E6) – reguły `rytual.md`. Jeszcze nie: zamrażanie (E6, część 2).

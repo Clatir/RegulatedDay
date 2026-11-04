@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.3
+- Warianty planu po prośbie: „Skróć … o N min” naprawdę przybliża koniec pracy, także gdy blok przed blokiem stałym się nie mieści i przeskakuje za niego – wariant tnie wtedy blok, który wyznacza koniec, i podaje faktyczne „o N min”, a „Przesuń na jutro” dobiera tyle bloków, ile trzeba. Wariant, który końca nie poprawia, pokazuje prawdziwy koniec pracy.
+- „Zrobione automatycznie” w „⋯”: wiersz „bloki stałe według planu: N” rozwija się kliknięciem w listę, w której każde działanie ma „Cofnij”; pauza bloku przy starcie bloku stałego ma osobny wiersz z „Cofnij”, które – póki blok stały biegnie – cofa też jego start (blok wraca, jak był).
+- W ciszy nocnej pasek i panel mają „Prośba ▸” – prośbę da się zacząć przed 04:00.
+- „Przedłuż” bloku dodanego przez „Dodaj bez wymiany” pokazuje koszt ponad jego planowaną długość.
+- „Dalej” i „Potwierdź” w pasku działają także tuż po tym, jak Windows przestawi zegar.
+- Drugiej zmiany nie da się przeciągnąć na osi dnia ani w Szablonach – jak sesji.
+- Gdy minimum regeneracji jest już zebrane, nie ma komunikatu ani powiadomienia o twardym końcu projektów.
+
 ## 1.0.2
 - Pasek odlicza blok od chwili kliknięcia „Start”: blok 15 min pokazuje na starcie 15:00 (dotąd np. 15:28), a zmiana koloru przy 15 i 5 min, pulsowanie, dźwięk i „Dalej?” przychodzą dokładnie wtedy, gdy odliczanie do nich dojdzie – „Dalej?” nie wcześniej niż przy 0:00. Tak samo kroki 15 · 5 · 0 przed startem bloku stałego.
 - Po uruchomieniu aplikacji blok, który biegł przy jej zamknięciu, od razu przestaje się liczyć w pasku i od razu widać „… przerwany zamknięciem aplikacji o …” – bez czekania ok. 3 min.

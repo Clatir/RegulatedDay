@@ -123,6 +123,47 @@ describe('widok paska z silnika', () => {
     expect(view(s, '15:35', { sessionMode: false }).quiet).toBe(false)
   })
 
+  it('„Zrobione automatycznie” (D350): działania zgodne z planem w grupie, każde z „Cofnij”; pauza bloku elastycznego przy starcie stałego osobnym wierszem z „Cofnij”', () => {
+    const s = new Scenario({
+      date: DATE,
+      plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 180 }), block({ id: 'w1', cat: 'zajecia-zdalne', at: '08:30', min: 60, fixed: true, bg: true }), block({ id: 'w2', cat: 'zajecia-zdalne', at: '09:00', min: 60, fixed: true, bg: false })]
+    }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    for (const time of ['08:30', '09:00', '09:30']) leader(s, time)
+    const { groups, items } = view(s, '09:35').autos
+    // The group of what went as the plan said: two fixed starts and an end by the plan, each with its own „Cofnij”.
+    expect(groups).toHaveLength(1)
+    expect(groups[0]!.text).toBe('bloki stałe według planu: 3')
+    expect(groups[0]!.items.map((i) => i.text)).toEqual(['Zajęcia zdalne skończony o 09:30 (według planu)', 'Zajęcia zdalne zaczęty o 09:00 (blok stały według planu)', 'Zajęcia zdalne zaczęty o 08:30 (blok stały według planu)'])
+    expect(groups[0]!.items.every((i) => i.undo)).toBe(true)
+    // The flexible block's pause at that start changes the counting of time: its own row, not in the group.
+    const pause = items.find((i) => i.text === 'Inne obowiązki – pauza o 09:00 (blok stały według planu)')
+    expect(pause).toMatchObject({ undo: true })
+    expect(groups[0]!.items.map((i) => i.id)).not.toContain(pause!.id)
+    // Every one of them can be taken back (the pause and the start of „w2” together, one `undo` for both).
+    const done = new Set<string>()
+    for (const i of [...groups[0]!.items, pause!]) {
+      if (done.has(i.id)) continue
+      const r = click(s, '09:36', { a: 'undo', target: i.id })
+      expect(r.ok).toBe(true)
+      if (r.ok) for (const e of r.events) done.add((e as unknown as { target: string }).target)
+    }
+    expect(done.has(pause!.id)).toBe(true)
+  })
+
+  it('pauza przy starcie bloku stałego i ten start tracą „Cofnij”, gdy blok stały się skończył (informacja, D350)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 180 }), block({ id: 'w', cat: 'zajecia-zdalne', at: '09:00', min: 60, fixed: true, bg: false })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    leader(s, '09:00')
+    const rows = (time: string) => {
+      const { groups, items } = view(s, time).autos
+      return [...groups[0]!.items, ...items].filter((i) => i.text.includes('blok stały według planu')).map((i) => i.undo)
+    }
+    expect(rows('09:30')).toEqual([true, true])
+    click(s, '10:00', { a: 'next' })
+    expect(rows('10:05')).toEqual([false, false])
+  })
+
   it('„Odcinam się”: widget ukryty, szara ikona, linia „Odcinam się od …”; blok elastyczny pauzuje, „Wracam” – „Wznów · Zaparkuj”', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 120 })] }).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })

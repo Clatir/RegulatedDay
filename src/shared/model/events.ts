@@ -132,7 +132,7 @@ export type TimerEvent =
   | (EventBase & { k: 'disconnect.end'; at: number })
   | (EventBase & { k: 'bedtime.recalc'; at: number; base: number })
   | (EventBase & { k: 'minutes'; from: number; to: number; cls: MinuteClass; upfront: boolean; know: Record<string, number> })
-  | (EventBase & { k: 'hardend.pass'; at: number; basis: string })
+  | (EventBase & { k: 'hardend.pass'; at: number; basis: string; /** The missing part of the minimum was 0 at the pass: no message (absent in older logs – counted again then). */ quiet?: boolean })
   /** „Cofnij” (spec „korekta”): the event `target` (an automatic action) is folded as if never written. */
   | (EventBase & { k: 'undo'; at: number; target: string; reason?: string })
   /**
@@ -271,7 +271,7 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'disconnect.end': { at: isNum },
   'bedtime.recalc': { at: isNum, base: isNum },
   minutes: { from: isNum, to: isNum, cls: (v) => v === 'in' || v === 'after' || v === 'max' || v === 'empty', know: isPlain },
-  'hardend.pass': { at: isNum },
+  'hardend.pass': { at: isNum, quiet: (v) => v == null || typeof v === 'boolean' },
   undo: { at: isNum, target: isStr },
   'question.seen': { at: isNum, question: isStr, how: (v) => v === 'panel' || v === 'main' || v === 'notification' || v === 'bar' },
   'question.answer': { at: isNum, question: isStr, answer: isStr, value: (v) => v == null || isNum(v) },

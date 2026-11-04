@@ -39,6 +39,13 @@ describe('przeciąganie bloków na osi (D305)', () => {
     expect(m.get('sesja')).toBe(false)
   })
 
+  it('druga zmiana (tag secondShift, jak sesja – D192): nieprzeciągalna', () => {
+    const second = block({ id: 'zmiana', cat: 'inne-obowiazki', at: '20:00', min: 60, fixed: true, tag: 'secondShift', origin: 'template' })
+    const m = axisOf(new Scenario({ date: DATE, plan: [...plan.slice(0, 1), second] }), null)
+    expect(m.get('rano')).toBe(true)
+    expect(m.get('zmiana')).toBe(false)
+  })
+
   it('zaczęty, miniony, zaparkowany albo odwołany blok: nie', () => {
     const s = new Scenario({ date: DATE, plan }).ran('rano', '08:00', '09:00')
     s.raw({ k: 'block.park', at: s.at('12:00'), block: 'wieczor', rule: 'exchange' }, '12:00')

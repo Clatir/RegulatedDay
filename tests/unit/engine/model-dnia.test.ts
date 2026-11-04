@@ -141,10 +141,39 @@ describe('Model dnia – przykład (dzień zwykły)', () => {
     const st = s.state('22:00')
     expect(hhmm(st, st.hardEnd.passed)).toBe('19:45')
     expect(st.hardEnd.message).toBe(true)
+    expect(st.hardEnd.nothingMissing).toBe(false)
     expect(st.pool.min).toBe(0)
     expect(st.regen.towardMinMin).toBe(75)
     expect(st.regen.towardMinMin < st.regen.requiredMin).toBe(true)
     expect(hhmm(st, st.bedtime.effective)).toBe('22:00')
+  })
+
+  it('wariant: minimum zebrane (brakuje 0) – projekt biegnący przez porę snu nie daje komunikatu o twardym końcu (spec „Twardy koniec projektów”)', () => {
+    const s = day()
+      .ran('ny', '14:00', '17:00')
+      .ran('jrn', '17:00', '17:30')
+      .workEnd('17:30')
+      .ran('reg', '17:30', '18:30', { cat: 'regeneracja', min: 60 })
+      .ran('ds', '20:00', '21:00')
+      .ran('p', '21:30', '22:30', { cat: 'projekty', min: 60 })
+    const st = s.state('22:40')
+    expect(st.regen.missingMin).toBe(0)
+    expect(hhmm(st, st.hardEnd.passed)).toBe('22:00')
+    expect(st.hardEnd.message).toBe(false)
+    expect(st.hardEnd.nothingMissing).toBe(true)
+  })
+
+  it('przejście twardego końca zapisane przez prowadzącego niesie „quiet”: silnik czyta pole, a liczy od nowa tylko przy starszym zdarzeniu bez niego', () => {
+    const build = (pass: Record<string, unknown> | null) => {
+      const s = day().ran('ny', '14:00', '17:00').ran('jrn', '17:00', '17:30').workEnd('17:30').ran('reg', '17:30', '18:30', { cat: 'regeneracja', min: 60 }).ran('ds', '20:00', '21:00').ran('p', '21:30', '22:30', { cat: 'projekty', min: 60 })
+      if (pass) s.raw({ k: 'hardend.pass', at: s.at('22:00'), basis: 'prowadzący', ...pass }, '22:00')
+      return s.state('22:40').hardEnd
+    }
+    // The minimum is collected, yet the leader wrote `quiet: false` (its day was known otherwise then): its word counts.
+    expect(build({ quiet: false })).toMatchObject({ nothingMissing: false, message: true })
+    expect(build({ quiet: true })).toMatchObject({ nothingMissing: true, message: false })
+    // An older log (no field): counted again, as before.
+    expect(build({})).toMatchObject({ nothingMissing: true, message: false })
   })
 
   it('wariant: projekty do 19:15, kolacja, potem prośba 19:45–20:00 – minimum spada do 75 min, nagroda zostaje', () => {

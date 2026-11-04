@@ -400,7 +400,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - po aktualizacji brak pliku;
   - ZIP nie otwiera się albo jest pusty.
 
-#### E3.13 Przeciąganie bloków na osi (0.10.0)
+#### E3.13 Przeciąganie bloków na osi (0.10.0, zmiana w 1.0.3)
 - [ ] Odebrane
 - **Automatycznie:** które bloki da się przeciągać i krok 5 min – `tests/web/day-axis.test.ts`; przeciągnięcie o
   godzinę i klik po nim – E2E (`screens.spec.ts`). Ty: rzut oka.
@@ -409,8 +409,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   i blok sesji.
 - **Oczekiwany efekt:** blok jedzie za myszą, godziny w bloku zmieniają się co 5 min (pełne 5 min: 10:15, 10:20…); po
   puszczeniu zostaje w nowym miejscu bez cofania się (plan dnia albo szablon zapisany). Krótkie kliknięcie otwiera
-  edycję jak dotąd. Bloku zaczętego, minionego, z minionego dnia, sesji, wykładu i bloku „po innym bloku” nie da się
-  przeciągnąć (kursor nie zmienia się w rączkę). Uwaga: blok elastyczny przeciągnięty przed koniec bloku, który właśnie
+  edycję jak dotąd. Bloku zaczętego, minionego, z minionego dnia, sesji, drugiej zmiany (jest sesją, D192), wykładu
+  i bloku „po innym bloku” nie da się przeciągnąć (kursor nie zmienia się w rączkę). Uwaga: blok elastyczny przeciągnięty przed koniec bloku, który właśnie
   trwa, prognoza i tak stawia po nim – to nie błąd.
 - **Nie przechodzi, gdy:**
   - blok wraca na stare miejsce po puszczeniu albo ląduje o inną liczbę minut niż pokazana;
@@ -473,14 +473,18 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - koszt się nie pokazuje albo pokazuje się przy bloku, który mieści się w granicy;
   - drugie kliknięcie po ponad 10 s nadal zaczyna blok.
 
-#### E4a.4 Blok stały w czasie bloku elastycznego (0.3.0)
+#### E4a.4 Blok stały w czasie bloku elastycznego (0.3.0, zmiana w 1.0.3)
 - [ ] Odebrane
-- **Automatycznie:** `timer.test.ts` („blok stały zaczyna się sam o czasie z planu…”), `tests/fs/timer.test.ts` („…„Cofnij” to cofa”). Ty: rzut oka.
+- **Automatycznie:** `timer.test.ts` („blok stały zaczyna się sam o czasie z planu…”), `tests/fs/timer.test.ts` („…„Cofnij” to
+  cofa”), `widget-view.test.ts` (grupa „Zrobione automatycznie”, D350). Ty: rzut oka.
 - **Jak sprawdzić:** zostaw biegnący blok elastyczny do startu bloku stałego (np. zajęć zdalnych). Po końcu bloku
   stałego nie reaguj przez 10 min.
-- **Oczekiwany efekt:** o czasie z planu blok stały zaczyna się sam, a elastyczny pauzuje. W „⋯” jest „Zrobione
-  automatycznie (2)” – oba działania z „Cofnij”. 10 min po końcu bloku stałego bez reakcji blok kończy się o czasie
-  z planu.
+- **Oczekiwany efekt:** o czasie z planu blok stały zaczyna się sam, a elastyczny pauzuje. W „⋯” pod „Zrobione
+  automatycznie:” (bez liczby) jest wiersz „bloki stałe według planu: N ▸” – po kliknięciu rozwija listę, w której start
+  bloku stałego ma „Cofnij” – i osobny wiersz pauzy bloku elastycznego z „Cofnij” (D350). Póki blok stały biegnie, „Cofnij”
+  pauzy albo startu cofa oba (elastyczny biegnie dalej, stały niezaczęty); po jego końcu te dwa wiersze są już tylko
+  informacją. 10 min po końcu bloku stałego
+  bez reakcji blok kończy się o czasie z planu.
 - **Nie przechodzi, gdy:**
   - blok stały nie zaczyna się sam;
   - oba bloki odliczają naraz na pierwszym planie;
@@ -883,23 +887,29 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - w trybie ciszy otwiera się okno główne;
   - „Pilne” w ciszy pyta o szacunek albo ma inny niż 15 min.
 
-#### E5b.4 Prośba przez 04:00 (0.11.0)
+#### E5b.4 Prośba przez 04:00 (0.11.0, zmiana w 1.0.3)
 - [ ] Odebrane
-- **Automatycznie:** `tests/fs/widget.test.ts` („prośba sprzed 04:00”). Ty: tylko gdy się zdarzy.
-- **Jak sprawdzić:** zacznij prośbę przed 04:00 i kliknij „Koniec” po 04:00.
-- **Oczekiwany efekt:** po 04:00 pasek pokazuje już nowy dzień, a prośba stoi w nim dalej z „Koniec”; po kliknięciu
-  kończy się w dniu, w którym się zaczęła.
-- **Nie przechodzi, gdy:** prośba znika z paska o 04:00 albo „Koniec” mówi, że prośba nie trwa.
+- **Automatycznie:** `tests/fs/widget.test.ts` („prośba sprzed 04:00”), `tests/web/bar-render.test.ts` („Prośba ▸” w nocy).
+  Ty: tylko gdy się zdarzy.
+- **Jak sprawdzić:** w ciszy nocnej zacznij prośbę z paska („Prośba ▸”) przed 04:00 i kliknij „Koniec” po 04:00.
+- **Oczekiwany efekt:** w ciszy nocnej pasek i panel mają „Prośba ▸” (D346). Po 04:00 pasek pokazuje już nowy dzień,
+  a prośba stoi w nim dalej z „Koniec”; po kliknięciu kończy się w dniu, w którym się zaczęła.
+- **Nie przechodzi, gdy:** w ciszy nocnej nie ma „Prośba ▸”, prośba znika z paska o 04:00 albo „Koniec” mówi, że prośba
+  nie trwa.
 
-#### E5b.5 Znacznik i warianty, „Przestawiono · Cofnij” (0.11.0)
+#### E5b.5 Znacznik i warianty, „Przestawiono · Cofnij” (0.11.0, zmiana w 1.0.3)
 - [ ] Odebrane
-- **Automatycznie:** `tests/fs/widget.test.ts` („warianty w pasku”). Ty: przy okazji.
+- **Automatycznie:** `tests/fs/widget.test.ts` („warianty w pasku”), `tests/unit/engine/variants.test.ts`. Ty: przy okazji.
 - **Jak sprawdzić:** w dniu z zatwierdzoną granicą zacznij długą prośbę „Pilne” (np. 60 min), tak żeby plan nie mieścił
   się przed granicą. Kliknij „◆ warianty”, wybierz pierwszy wariant, potem „Cofnij”.
 - **Oczekiwany efekt:** zaraz po prośbie w pasku stoi „◆ warianty”. Kliknięcie rozwija w pasku 2–3 warianty (np. „Skróć
   … o 45 min · koniec pracy 12:15”, „Przesuń … na jutro”, „Zostaw · przedłużenie 45 min”). Wybrany zmienia plan od razu
-  (oś dnia), znacznik znika, a w pasku stoi „Przestawiono: … · Cofnij”. „Cofnij” przywraca plan.
+  (oś dnia), znacznik znika, a w pasku stoi „Przestawiono: … · Cofnij”. „Cofnij” przywraca plan. „Skróć … o N min”
+  naprawdę przybliża koniec pracy (także gdy blok przed blokiem stałym się nie mieści i przeskakuje za niego – wtedy
+  wariant tnie blok, który wyznacza koniec, i podaje faktyczne „o N min”); wariant, który końca nie poprawia, pokazuje
+  prawdziwy koniec pracy (D340).
 - **Nie przechodzi, gdy:**
+  - wybrany wariant „Skróć …” nie zmienia końca pracy, choć dało się go poprawić;
   - znacznik pojawia się w trybie sesji albo zajęć (ma poczekać na ich koniec) albo wraca po zamknięciu;
   - panel otwiera się w osobnym oknie albo zabiera fokus;
   - plan nie zmienia się od razu albo „Cofnij” nie przywraca bloków.
@@ -1333,13 +1343,15 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Nie przechodzi, gdy:** pojawia się pytanie o zmianę z innego komputera, jedna z dwóch zmian znika, kolejność kroków
   wraca albo licznik „Dziś” stoi na 0 po prośbie z paska.
 
-#### E8d.2 „Przedłuż” krokami ±15 min i podwójne „Dalej” na pasku (0.19.0)
+#### E8d.2 „Przedłuż” krokami ±15 min i podwójne „Dalej” na pasku (0.19.0, zmiana w 1.0.3)
 - [ ] Odebrane
-- **Automatycznie:** `tests/fs/widget.test.ts` (kroki, podwójne „Dalej” z kliknięciem paska). Ty: przy końcu bloku po granicy.
+- **Automatycznie:** `tests/fs/widget.test.ts` (kroki, podwójne „Dalej” z kliknięciem paska, „Dalej” po cofnięciu zegara
+  przez Windows), `timer.test.ts` („+15” po „Dodaj bez wymiany”). Ty: przy końcu bloku po granicy.
 - **Jak sprawdzić:** pod koniec bloku po granicy kliknij na pasku pulpitu „Przedłuż” → +15 i potem „+15” obok kosztu;
   innym razem kliknij dwa razy szybko „Dalej”.
 - **Oczekiwany efekt:** koszt zmienia się na „Przedłuż +30 …”, „Potwierdź” przedłuża o 30 min; podwójne „Dalej” kończy
-  tylko bieżący blok i zaczyna następny.
+  tylko bieżący blok i zaczyna następny. Blok dodany przez „Dodaj bez wymiany” też pokazuje koszt „Przedłuż” ponad swoją
+  planowaną długość.
 - **Nie przechodzi, gdy:** obok kosztu nie ma −15 / +15, potwierdzenie przedłuża o 15 min albo podwójne „Dalej” kończy też
   następny blok.
 

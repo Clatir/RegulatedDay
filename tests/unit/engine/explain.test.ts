@@ -349,6 +349,17 @@ describe('twardy koniec w czasie do wyjaśnienia', () => {
     expect(hhmm(st, st.hardEnd.passed)).toBe('21:04')
   })
 
+  it('twardy koniec czekający na wejście: komunikat zależy od minuty, w której mija – odpowiedź „odpoczynek” w międzyczasie zbiera minimum', () => {
+    const s = evening('projekty')
+    s.gap('20:58', '21:04', { kind: 'input' })
+    answer(s, s.state('21:02').explains[0]!.id, 'rest', '21:02')
+    const st = s.state('22:30')
+    expect(hhmm(st, st.hardEnd.passed)).toBe('21:04')
+    // Nothing is missing of the minimum when it passes: no message (spec „Twardy koniec projektów”), as counted at 21:04 – not at 21:00.
+    expect(st.regen.missingMin).toBe(0)
+    expect(st.hardEnd).toMatchObject({ message: false, nothingMissing: true })
+  })
+
   it('po bloku pracy przesuwa się z nim jak przy odpoczynku – nie mija, bez komunikatu (D255, D262)', () => {
     const st = evening('inne').state('22:30')
     expect(span(st)).toMatchObject({ kind: 'work', from: '19:30', to: '21:20' })

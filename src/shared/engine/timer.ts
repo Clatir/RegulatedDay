@@ -14,7 +14,7 @@ import { ROUTINE_VERSIONS, type RoutineVersion } from '../model/routines'
 import { isBoundaryWork, plannedSpan, setsWorkEndBlock, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
 import { workedUntilOf } from './explain'
-import { OPEN, isRunning, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
+import { OPEN, isRunning, type AutoAction, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
 
 /** „Przedłuż” of a fixed block works up to this long after its planned end (spec „Timer”, D227). */
@@ -264,6 +264,33 @@ export function workEndOpen(state: DayState, t: TimerNow = timerNow(state), isWo
   return stop != null && !workEndReaches(state, stop, isWork)
 }
 
+/**
+ * The pair a fixed start made (rule `fixedStart`): the pause of the flexible block in front and the start of the fixed one,
+ * written together (the same instant). `null`: the action is no part of one (a fixed start with nothing in front, other
+ * rules). `alive`: while the fixed block still runs as it began and the flexible one stands in that pause – no later click
+ * of the user on either – a „Cofnij” of either takes both back; after it the two rows are only information.
+ */
+export function fixedStartPair(state: DayState, a: AutoAction): { ids: string[]; alive: boolean } | null {
+  if (a.rule !== 'fixedStart') return null
+  const autos = state.facts.autos.filter((x) => x.rule === 'fixedStart' && x.at === a.at)
+  const pause = autos.find((x) => x.k === 'block.pause')
+  const start = autos.find((x) => x.k === 'block.start' && state.facts.blocks.get(x.block ?? '')?.runs[0]?.bg === false)
+  if (!pause || !start || (a.id !== pause.id && a.id !== start.id)) return null
+  const fixed = state.facts.blocks.get(start.block ?? '')
+  const flexible = state.facts.blocks.get(pause.block ?? '')
+  const alive =
+    fixed != null &&
+    flexible != null &&
+    fixed.startedAt != null &&
+    fixed.endedAt == null &&
+    fixed.runs.length === 1 &&
+    fixed.runs[0]!.to === OPEN &&
+    fixed.extends.length === 0 &&
+    flexible.endedAt == null &&
+    flexible.runs.at(-1)?.to === pause.at
+  return { ids: [pause.id, start.id], alive }
+}
+
 export function timerNow(state: DayState): TimerNow {
   const now = state.now
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
@@ -340,7 +367,8 @@ function nextBlock(state: DayState, fg: TimerBlock | null, paused: TimerBlock[],
 export function workCost(state: DayState, info: BlockInfo, from: number, to: number, extend = false): ActionCost | null {
   const boundary = state.boundary.approved
   if (boundary == null || to <= from) return null
-  if (state.facts.blocks.get(info.id)?.addConfirmedAt != null) return null
+  // „Dodaj bez wymiany” confirms the block up to its planned length only – an extension past it has its cost (spec „Przedłużenie i przekroczenie”).
+  if (!extend && state.facts.blocks.get(info.id)?.addConfirmedAt != null) return null
   // The second shift's own minutes outside its planned time – those of an earlier start, and those of „Przedłuż”: an
   // ordinary extension, one confirmation, never an overrun; „Przesuń na teraz” beside the cost of an earlier start (spec
   // „Druga zmiana”, A1-04). A start later in its window, or a resume, costs nothing; a block anchored to it is no second
@@ -573,7 +601,15 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       // A request's end: the block it resumed waits again with it.
       const r = a.k === 'request.end' ? state.facts.requests.find((x) => x.id === a.request && x.endId === a.id) : undefined
       // A meal or a regeneration an answer to an absence made: its start and its end go back together (A1-09).
-      const pair = a.rule === 'absenceMeal' || a.rule === 'absenceRegen' ? state.facts.autos.filter((x) => x.rule === a.rule && x.block === a.block && x.id !== a.id) : []
+      let pair = a.rule === 'absenceMeal' || a.rule === 'absenceRegen' ? state.facts.autos.filter((x) => x.rule === a.rule && x.block === a.block && x.id !== a.id) : []
+      // A fixed start's pause and that start go back together, either way, while the fixed block runs and the flexible one
+      // stands in that pause (the flexible block goes on as before, the fixed one stays unstarted – it can be started by
+      // hand); afterwards the two are only information (D350).
+      const fixedPair = fixedStartPair(state, a)
+      if (fixedPair) {
+        if (!fixedPair.alive) return no('tego już nie cofniesz – blok stały ruszył dalej według planu')
+        pair = state.facts.autos.filter((x) => fixedPair.ids.includes(x.id) && x.id !== a.id)
+      }
       return yes([a, ...pair, ...(r ? resumedWith(state.facts, r) : [])].map((x) => ({ k: 'undo', at, target: x.id, reason: 'user' })))
     }
     case 'undoApproval': {
