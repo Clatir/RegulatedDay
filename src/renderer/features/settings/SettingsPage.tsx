@@ -30,6 +30,9 @@ const IDENTITY_LABEL: Record<AppInfo['identity'], string> = {
   test: 'testowa (Regulated Day Test)'
 }
 
+/** „Wersja aplikacji” in the information (D344): the number the updates show, and what the installation is. */
+export const appVersionText = (info: Pick<AppInfo, 'version' | 'identity'> | null): string => (info ? `${info.version} · ${IDENTITY_LABEL[info.identity]}` : '')
+
 const HELPER_LABEL: Record<AppInfo['helper']['state'], string> = {
   running: 'działa',
   starting: 'uruchamia się',
@@ -255,7 +258,7 @@ export function SettingsPage() {
       </Section>
       <Section title="Informacje">
         <Field label="Wersja aplikacji">
-          <span data-testid="identity">{info ? IDENTITY_LABEL[info.identity] : ''}</span>
+          <span data-testid="identity">{appVersionText(info)}</span>
         </Field>
         <Field label="Pomocnik">
           <span data-testid="helper-state">{info ? HELPER_LABEL[info.helper.state] : ''}</span>

@@ -28,7 +28,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   twardy koniec, pula, regeneracja każdej minuty (`rest`, dla energii); `newSegments` (odcinki do zapisu przez
   prowadzącego); `settingsAtMinute`. Energia (E2) – osobne reguły `energia.md`.
 - E3: `engine/context.ts` (`dayContextOf`, `snapshotOf` – jedno źródło kontekstu dla prowadzącego i okna),
-  `planEdit.ts` (nowy blok, przeniesienie, kopia dnia i szablonu, blok próśb), `exchange.ts` (wymiana),
+  `planEdit.ts` (nowy blok, przeniesienie, kopia dnia i szablonu, blok próśb, `wakeShifted` – bloki własne przy zmianie pobudki, D334), `exchange.ts` (wymiana),
   `typeChange.ts` (zmiana typu, „Dodaj bloki typu …”), `lateWake.ts`, `morning.ts` (z wczoraj, pytania sesji i świąt,
   ostrzeżenia, przesunięcie sesji, analiza sobotnia); `model/rd.ts`, `requests.ts`, `routines.ts`, `fields.ts`
   (opis każdego ustawienia z liczbą), `defaults.ts` (zapisy kreatora). Testy: `tests/unit/engine/e3-plan.test.ts`.

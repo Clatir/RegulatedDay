@@ -374,6 +374,8 @@ export interface TimerResult {
   ok: boolean
   why: string | null
   confirm: { block: string; minutes: number; overrun: boolean; bedtime: boolean; moveToNow?: boolean } | null
+  /** Why it did nothing, when the caller must tell it from other refusals (D336): never read from `why`. */
+  code?: 'alreadyOver' | 'notBegun'
 }
 
 export interface FolderProbe {

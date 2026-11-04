@@ -35,8 +35,8 @@
 3. **Ciąg F w toku (od 3.11, D349)** – `docs/plan.md`: główna sesja Opus 5.5 · xhigh, wykonawcy z `.claude/agents/`
    (Haiku F1–F2, Opus G1–G5, Sonnet H1–H3), zadania F1–H3, wersje 1.0.1–1.0.8; przyczyny w `docs/vm/przyczyny.md`,
    decyzje D334–D347, D350. „Przed ciągiem F” zrobione, F1–F3 scalone (PR #44), G1 – 1.0.1 wydane (PR #45).
-   G2 – 1.0.2 wydane (PR #46). **Teraz:** H1 – PR 1.0.3 (`claude/1.0.3-plan-i-pasek`) do scalenia po zielonym CI,
-   potem wydanie 1.0.3 na `main`; **następne:** H2 (1.0.4, `wykonawca-sonnet`), potem G3, G4, G5, H3 – bez pauzy.
+   G2 – 1.0.2 wydane (PR #46), H1 – 1.0.3 wydane (PR #47). **Teraz:** H2 – PR 1.0.4 (`claude/1.0.4-ekrany`) do
+   scalenia po zielonym CI, potem wydanie 1.0.4 na `main`; **następne:** G3 (1.0.5, `wykonawca-opus`), potem G4, G5, H3.
 4. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Do odbioru na Windows
@@ -109,6 +109,15 @@
   - `/code-review` xhigh trzy razy; poprawka „Cofnij” pauzy z rundy 1 cofnięta (regresje), zamiast niej para z warunkiem.
     Linia twardego końca w pasku (spec) – brak od 1.0.0, osobna poprawka 4.10 w `docs/plan.md`.
   - Czas faktyczny: ok. 3,5 h (szacunek 2,5–3 h).
+  - PR #47 scalony 4.11 (79bd58a) po zielonym CI; run 41784417509 na `main` zielony, **wydanie 1.0.3 opublikowane** (ok. 7:44).
+- **H2 – 1.0.4 ekrany po decyzjach** (`wykonawca-sonnet`): gałąź `claude/1.0.4-ekrany` od 79bd58a, 4.11 ok. 7:50. Rejestr T
+  ok. 197/200 KB – wpisy T534–T538 krótkie (do ~450 B); po ciągu propozycja: podział rejestru T na dwa pliki.
+  - D334 pobudka przesuwa bloki ręczne, D335 posiłek pauzuje pracę, D336 „Usuń” zaczętego bloku, D337 „Wstałeś później?”
+    w logu (`question.seen`), D338 „Sesja NY”, D339 koszt w panelu, D344 numer wersji, D347 komunikat pod polem, E6c.4.
+    T534. Odbiór: E3.4, E4a.3, E6c.4, E8f.2, E8k.3 („zmiana w 1.0.4”), nowa grupa E8l.1–E8l.5.
+  - `/code-review` xhigh trzy razy; cofnięte: zmiana granicy poranka w `dayPlan` (widoczna bez decyzji), zapis „pokazano”
+    do pliku dnia (konflikty – zamiast tego log). Znane: usunięta zaczęta sesja ma nazwę kategorii (plan 4.11).
+  - Czas faktyczny: ok. 4,5 h (szacunek 3–4 h).
 
 ## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)
 - Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji. Kolejno: bloki według modelu

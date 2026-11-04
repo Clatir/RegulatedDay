@@ -93,9 +93,9 @@ export function DataSection() {
     <Section title="Dane" data-testid="settings-data">
       <Field label="Eksport CSV" hint="Bloki, prośby i check-iny za zakres dat – trzy pliki (średnik, polskie daty).">
         <div className="flex flex-wrap items-center gap-2">
-          <DateField today={today} past value={from} onCommit={setFrom} className="w-[120px]" aria-label="Od" data-testid="csv-from" />
+          <DateField today={today} past value={from} onCommit={setFrom} shellClassName="w-[120px]" aria-label="Od" data-testid="csv-from" />
           –
-          <DateField today={today} past value={to} onCommit={setTo} className="w-[120px]" aria-label="Do" data-testid="csv-to" />
+          <DateField today={today} past value={to} onCommit={setTo} shellClassName="w-[120px]" aria-label="Do" data-testid="csv-to" />
           <button type="button" className="btn" onClick={() => void exportCsv()} data-testid="csv-export">
             Eksportuj…
           </button>

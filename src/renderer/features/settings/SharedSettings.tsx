@@ -65,7 +65,7 @@ export function FromBar() {
           today={today}
           value={date}
           onCommit={(d) => void (setFromDate(d, today) || toast('Data zmian musi być po dzisiejszej – na dziś wybierz „od dziś”.', 'error'))}
-          className="w-[120px]"
+          shellClassName="w-[120px]"
           aria-label="Od daty"
           data-testid="settings-from-date"
         />
@@ -121,6 +121,7 @@ export function DayTypesSection() {
                 value={s.dayTypes[t][f.key as 'budgetMin']}
                 onCommit={(v) => save({ dayTypes: { [t]: { [f.key]: v } } })}
                 className="w-full"
+                errorPlacement="below"
                 data-testid={`setting-${t}-${f.key}`}
               />
             ))}
@@ -179,10 +180,10 @@ export function SessionsSection() {
     <Section title="Sesje" data-testid="settings-sessions">
       {s.sessions.map((x, i) => (
         <div key={x.id} className="flex flex-wrap items-center gap-2">
-          <TextField value={x.name} onCommit={(name) => setSession(i, (y) => ({ ...y, name }))} required max={40} className="w-[110px]" aria-label="Nazwa sesji" />
-          <ClockField value={x.startMin} onCommit={(v) => setSession(i, (y) => sessionWithStart(y, v))} className="w-[76px]" aria-label={`${x.name}: początek`} />
+          <TextField value={x.name} onCommit={(name) => setSession(i, (y) => ({ ...y, name }))} required max={40} shellClassName="w-[110px]" aria-label="Nazwa sesji" />
+          <ClockField value={x.startMin} onCommit={(v) => setSession(i, (y) => sessionWithStart(y, v))} shellClassName="w-[76px]" aria-label={`${x.name}: początek`} />
           <span className="text-muted">–</span>
-          <ClockField value={x.endMin % 1440} onCommit={(v) => setSession(i, (y) => sessionWithEnd(y, v))} className="w-[76px]" aria-label={`${x.name}: koniec`} />
+          <ClockField value={x.endMin % 1440} onCommit={(v) => setSession(i, (y) => sessionWithEnd(y, v))} shellClassName="w-[76px]" aria-label={`${x.name}: koniec`} />
           <Choice value={x.zone} options={ZONES} onChange={(zone) => setSession(i, (y) => ({ ...y, zone }))} className="w-[150px]" aria-label={`${x.name}: strefa`} />
           <button type="button" className="text-[12px] text-muted hover:text-rose" onClick={() => void remove(i)} data-testid={`session-remove-${i}`}>
             Usuń
@@ -259,7 +260,7 @@ export function RegenWaysSection() {
         .filter((v) => !v.archived)
         .map((v) => (
           <div key={v.id} className="flex flex-wrap items-center gap-2">
-            <TextField value={v.name} onCommit={(n) => setVariants(regen.variants.map((x) => (x.id === v.id ? { ...x, name: n } : x)))} required max={80} className="w-[260px]" aria-label="Sposób regeneracji" />
+            <TextField value={v.name} onCommit={(n) => setVariants(regen.variants.map((x) => (x.id === v.id ? { ...x, name: n } : x)))} required max={80} shellClassName="w-[260px]" aria-label="Sposób regeneracji" />
             {pools.map((p) => (
               <SettingNumber
                 key={p}

@@ -25,6 +25,7 @@ import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
 import { endsAtOf, fixedStartPair, laterWork, plannedEndOf, secondShiftStart, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
+import { namedOf, type NamedBlock } from './blockName'
 import type { PlanBlock } from './model/plan'
 import type { Routine } from './model/routines'
 import { ENGINE_TONE_SET, iconColor, toneColor, type Tone, type WarnStep } from './theme'
@@ -39,7 +40,7 @@ export interface EngineInput {
   activity: Activity
   now: number
   /** A block's name (its routine, its requests' people, its variant or category – never an id; shared/blockName.ts). */
-  name: (b: Pick<PlanBlock, 'categoryId' | 'variantId' | 'routine' | 'requests' | 'note'>) => string
+  name: (b: NamedBlock) => string
   care: CareSettings
   modePrefs: ModePrefs
   pending: BarPending | null
@@ -191,7 +192,7 @@ const NOT_EXTENDED_MIN = 30
 /**
  * The lines of the day's moments (A1-12; spec „Sesje tradingowe”, „Granica i koniec pracy”, Timer):
  * - `anchor:<id>` – a block anchored to one that ended: „Zacznij · Zaparkuj · Koniec pracy”, with the dot (D194);
- * - `fixedLeft:<id>` – after „Koniec pracy” a fixed block of work still ahead: „NY o 14:00 zostaje · Odwołaj” (D216);
+ * - `fixedLeft:<id>` – after „Koniec pracy” a fixed block of work still ahead: „Sesja NY o 14:00 zostaje · Odwołaj” (D216, D338);
  * - `notExtended:<id>` – a fixed block ended by its plan, within 30 min: „Nie przedłużono · Przedłuż” (D227);
  * - `workedUntil:<explain>` – time to explain after a work block now: „Koniec pracy o 17:30 · Pracowałem do teraz” (D254).
  */
@@ -259,7 +260,7 @@ export function engineView(i: EngineInput): WidgetView {
     const p = i.ctx.plan.find((x) => x.id === id)
     if (p) return i.name(p)
     const b = byId.get(id)
-    return i.name({ categoryId: b?.categoryId ?? state.facts.blocks.get(id)?.planned?.categoryId ?? 'inne', variantId: b?.variantId ?? null, routine: null, requests: [], note: '' })
+    return i.name(namedOf({ categoryId: b?.categoryId ?? state.facts.blocks.get(id)?.planned?.categoryId ?? 'inne', variantId: b?.variantId ?? null, origin: b?.origin, sourceId: b?.sourceId }))
   }
   const hidden = modes.disconnect != null
   const fg = t.fg

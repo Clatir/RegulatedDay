@@ -83,6 +83,8 @@ export interface BlockFact {
   endRule: string | null
   /** The id of the event that ended it („Cofnij” of an automatic end points at it). */
   endId: string | null
+  /** When that event happened among the others (`EventOrder`): what began after it is told by this, not by minutes. */
+  endOrder: EventOrder | null
   /** „Dodaj bez wymiany” (index): its minutes after the boundary are confirmed in advance, up to its planned length. */
   addConfirmedAt: number | null
 }
@@ -120,6 +122,8 @@ export interface RequestFact {
   /** The clocks its start and its end were written at (ms) – a request written in later is checked then. */
   startT: number
   endT: number | null
+  /** When its start happened among the others (`EventOrder`): what began after a removed block is told by this. */
+  begun: EventOrder
 }
 
 export interface Segment {
@@ -137,7 +141,7 @@ export interface DayFacts {
   grid: Grid
   blocks: Map<string, BlockFact>
   requests: RequestFact[]
-  disconnect: Array<{ from: number; to: number }>
+  disconnect: Array<{ from: number; to: number; begun: EventOrder }>
   /**
    * `plan`: the blocks of the plan when it was approved (null: an approval that does not say); `undoneAt` – the minute of
    * the first „Cofnij” written after it (by the order of the log, so an approval, its „Cofnij” and a new approval in one
@@ -217,6 +221,7 @@ const newBlock = (id: string): BlockFact => ({
   done: null,
   endRule: null,
   endId: null,
+  endOrder: null,
   addConfirmedAt: null
 })
 
@@ -319,6 +324,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.done = e.done ?? null
         b.endRule = e.rule ?? null
         b.endId = e.id
+        b.endOrder = orderOf(e)
         break
       }
       case 'block.restart': {
@@ -334,6 +340,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.done = null
         b.endRule = null
         b.endId = null
+        b.endOrder = null
         break
       }
       case 'block.fg': {
@@ -392,7 +399,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
           stale(e, 'prośba już się zaczęła')
           break
         }
-        const r: RequestFact = { id: e.request, from: idx(e.at), to: OPEN, mode: e.mode, hardEndAt: e.hardEndAt ?? null, person: e.person ?? null, estimateMin: e.estimateMin ?? null, interrupts: e.interrupts ?? null, splits: Array.isArray(e.splits) ? e.splits.filter((x): x is string => typeof x === 'string') : [], endId: null, startT: e.t, endT: null }
+        const r: RequestFact = { id: e.request, from: idx(e.at), to: OPEN, mode: e.mode, hardEndAt: e.hardEndAt ?? null, person: e.person ?? null, estimateMin: e.estimateMin ?? null, interrupts: e.interrupts ?? null, splits: Array.isArray(e.splits) ? e.splits.filter((x): x is string => typeof x === 'string') : [], endId: null, startT: e.t, endT: null, begun: orderOf(e) }
         requests.set(e.request, r)
         f.requests.push(r)
         break
@@ -409,7 +416,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         break
       }
       case 'disconnect.start':
-        if (!f.disconnect.some((d) => d.to === OPEN)) f.disconnect.push({ from: idx(e.at), to: OPEN })
+        if (!f.disconnect.some((d) => d.to === OPEN)) f.disconnect.push({ from: idx(e.at), to: OPEN, begun: orderOf(e) })
         break
       case 'disconnect.end': {
         const d = f.disconnect.find((x) => x.to === OPEN)
@@ -539,6 +546,8 @@ export function blockAt(b: BlockFact, m: number): BlockFact {
     endedAt: ended ? b.endedAt : null,
     done: ended ? b.done : null,
     endRule: ended ? b.endRule : null,
+    endId: ended ? b.endId : null,
+    endOrder: ended ? b.endOrder : null,
     confirms: b.confirms.filter((c) => c.at < m),
     extends: b.extends.filter((x) => x.at < m),
     addConfirmedAt

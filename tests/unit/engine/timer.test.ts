@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
 import { answerEvents, autoActions, questionsOf, type AutoEvent } from '@shared/engine/auto'
 import { blockEvidence } from '@shared/engine/game'
+import { viewAt } from '@shared/engine/facts'
 import { requestAction } from '@shared/engine/requests'
 import { computeDay } from '@shared/engine/day'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
@@ -607,6 +608,108 @@ describe('poprawki po przeglądzie E4b', () => {
     expect(s.state('09:35').facts.blocks.get('brk')!.planned).toMatchObject({ variantId: 'przerwa-od-ekranu' })
     click(s, '09:45', { a: 'next' })
     expect(fgId(s, '09:46')).toBe('a')
+  })
+
+  it('„Start” bloku życia i opieki przy biegnącej pracy pauzuje pracę; inny blok pracy dalej kończy biegnący (D335)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 120 }), block({ id: 'p', cat: 'posilek', at: '09:00', min: 30 }), block({ id: 'r', cat: 'rutyny', at: '10:00', min: 20 }), block({ id: 'c', cat: 'analiza', at: '11:00', min: 30 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const meal = click(s, '09:00', { a: 'start', block: 'p' })
+    expect(meal.ok && meal.events.map((e) => e.k)).toEqual(['block.pause', 'block.start'])
+    expect(fgId(s, '09:01')).toBe('p')
+    // After the meal „Dalej” brings the paused work back.
+    click(s, '09:20', { a: 'next' })
+    expect(fgId(s, '09:21')).toBe('a')
+    // Care (routines) the same; another work block ends the running one, done.
+    const care = click(s, '10:00', { a: 'start', block: 'r' })
+    expect(care.ok && care.events.map((e) => e.k)).toEqual(['block.pause', 'block.start'])
+    click(s, '10:10', { a: 'finish' })
+    const other = click(s, '11:00', { a: 'start', block: 'c' })
+    expect(other.ok && other.events.map((e) => e.k)).toEqual(['block.end', 'block.start'])
+  })
+
+  it('„Usuń” zaczętego bloku (D336): kończy go teraz, bez planu zostaje „poza planem” i liczy się do budżetu; „Cofnij” otwiera go dalej', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 120 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const r = click(s, '08:30', { a: 'removeBegun', block: 'a' })
+    expect(r).toMatchObject({ ok: true, events: [{ k: 'block.end', block: 'a', done: false, rule: 'removed' }] })
+    // The plan without the block (the window took it out of the file): its run stays, outside the plan.
+    const used = (plan: boolean) => s.stateAt(s.at('10:00'), plan ? {} : { plan: [] })
+    expect(used(false).blocks.find((b) => b.id === 'a')).toMatchObject({ inPlan: false })
+    expect(used(false).facts.blocks.get('a')).toMatchObject({ endedAt: used(true).facts.blocks.get('a')!.endedAt, endRule: 'removed' })
+    expect(used(false).budgetUsedMin).toBe(used(true).budgetUsedMin)
+    expect(used(false).budgetUsedMin).toBeGreaterThanOrEqual(30)
+    // A block that is over has nothing to end; one that never began is not "begun".
+    expect(click(s, '09:00', { a: 'removeBegun', block: 'a' })).toMatchObject({ ok: false })
+    // „Cofnij”: the end is taken back, the block runs on as before.
+    expect(click(s, '08:40', { a: 'undoRemove', block: 'a' }).ok).toBe(true)
+    expect(timerNow(s.state('08:41')).fg?.info.id).toBe('a')
+    expect(click(s, '08:45', { a: 'undoRemove', block: 'a' })).toMatchObject({ ok: false })
+  })
+
+  it('„Cofnij” zdjęcia zaczętego bloku tylko dopóki nic innego nie zaczęło się po nim (D336)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 120 }), block({ id: 'b', cat: 'inne', at: '09:00', min: 60 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    expect(click(s, '08:30', { a: 'removeBegun', block: 'a' }).ok).toBe(true)
+    expect(click(s, '08:35', { a: 'start', block: 'b' }).ok).toBe(true)
+    // „A” would run beside „b” – refused, nothing written.
+    expect(click(s, '08:36', { a: 'undoRemove', block: 'a' })).toMatchObject({ ok: false, why: 'tego już nie cofniesz – po usunięciu zaczął się inny blok, prośba albo „Odcinam się”' })
+    expect(timerNow(s.state('08:37')).fg?.info.id).toBe('b')
+    expect(click(s, '08:40', { a: 'removeBegun', block: 'a' })).toMatchObject({ ok: false, why: 'ten blok już się skończył', code: 'alreadyOver' })
+    // A block whose start never was (or was taken back): its own code.
+    expect(click(s, '08:41', { a: 'removeBegun', block: 'nie-ma' })).toMatchObject({ ok: false, code: 'notBegun' })
+  })
+
+  it('„Cofnij” zdjęcia także przy prośbie albo „Odcinam się”, które zaczęły się po usunięciu (D336)', () => {
+    const mk = () => {
+      const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 120 })]).observe('07:00', null)
+      click(s, '08:00', { a: 'start', block: 'a' })
+      expect(click(s, '08:30', { a: 'removeBegun', block: 'a' }).ok).toBe(true)
+      return s
+    }
+    const withRequest = mk()
+    const t = withRequest.at('08:35')
+    const r = requestAction(withRequest.stateAt(t), { a: 'requestNow', request: 'r1', person: null }, t)
+    if (!r.ok) throw new Error(r.why)
+    withRequest.write(r.events, t)
+    expect(click(withRequest, '08:36', { a: 'undoRemove', block: 'a' })).toMatchObject({ ok: false })
+    const cut = mk()
+    expect(click(cut, '08:35', { a: 'cutOff' }).ok).toBe(true)
+    expect(click(cut, '08:36', { a: 'undoRemove', block: 'a' })).toMatchObject({ ok: false })
+    // Nothing since: it goes.
+    expect(click(mk(), '08:36', { a: 'undoRemove', block: 'a' }).ok).toBe(true)
+  })
+
+  it('„Usuń” kończy blok jak „Skończyłem”: stały po planowanym końcu bez „Przedłuż” kończy się w swoim oknie (D336)', () => {
+    const s = day([block({ id: 'ny', cat: 'sesja', at: '12:00', min: 60, fixed: true, bg: false })]).observe('07:00', null)
+    click(s, '12:00', { a: 'start', block: 'ny' })
+    const r = click(s, '14:00', { a: 'removeBegun', block: 'ny' })
+    expect(r.ok && r.events[0]).toMatchObject({ k: 'block.end', rule: 'removed', at: s.at('13:00') })
+    // The facts of the minutes before the end do not hold the end yet (the view of a minute before it).
+    const state = s.state('14:05')
+    const f = state.facts.blocks.get('ny')!
+    expect(f.endId).not.toBeNull()
+    expect(viewAt(state.facts, f.endedAt! - 1).blocks.get('ny')).toMatchObject({ endId: null, endOrder: null, endedAt: null })
+  })
+
+  it('„Cofnij” zdjęcia liczy od samego zdarzenia usunięcia, nie od minut: blok zapauzowany przed posiłkiem i start w tej samej minucie (D336)', () => {
+    // A paused block: its end is the minute of the pause (10:00) – the meal that paused it began before the removal.
+    const paused = day([block({ id: 'a', cat: 'inne', at: '09:00', min: 180 }), block({ id: 'p', cat: 'posilek', at: '10:00', min: 30 })]).observe('07:00', null)
+    click(paused, '09:00', { a: 'start', block: 'a' })
+    expect(click(paused, '10:00', { a: 'start', block: 'p' }).ok).toBe(true)
+    expect(click(paused, '10:05', { a: 'removeBegun', block: 'a' }).ok).toBe(true)
+    expect(click(paused, '10:06', { a: 'undoRemove', block: 'a' }).ok).toBe(true)
+    // The same minute: „b” begins at 12:00:10, the session is removed at 12:00:40 – „b” came first.
+    const s = day([block({ id: 'ny', cat: 'sesja', at: '12:00', min: 120, fixed: true, bg: false }), block({ id: 'b', cat: 'inne', at: '12:30', min: 60 })]).observe('07:00', null)
+    click(s, '12:00', { a: 'start', block: 'ny' })
+    const at = (sec: number) => s.at('12:00') + sec * 1000
+    const go = (sec: number, act: TimerAction) => {
+      const r = timerAction(s.contextAt(at(sec)), s.stateAt(at(sec)), act, at(sec))
+      if (r.ok) s.write(r.events, at(sec))
+      return r
+    }
+    expect(go(10, { a: 'start', block: 'b' }).ok).toBe(true)
+    expect(go(40, { a: 'removeBegun', block: 'ny' }).ok).toBe(true)
+    expect(go(50, { a: 'undoRemove', block: 'ny' }).ok).toBe(true)
   })
 
   it('„Zacznij jeszcze raz” sesji przy innym bloku stałym: sesja na pierwszym planie, tamten w tle', () => {

@@ -4,7 +4,7 @@
  * per request of the day), `checkiny.csv` (a row per check-in). Every day is counted by the same engine as everywhere
  * else; names are real names, never ids. Pure: the worker writes what it returns.
  */
-import { blockName, type Names } from '../blockName'
+import { blockName, namedOf, type Names } from '../blockName'
 import { POOLS } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type Answer } from '../model/events'
 import type { PlanBlock } from '../model/plan'
@@ -100,7 +100,7 @@ function blockRows(state: DayState, plan: readonly PlanBlock[], names: Names): A
     if (x) notes.push(x.answer ? `czas do wyjaśnienia: ${EXPLAIN[x.answer.cls]}` : `do wyjaśnienia ${Math.min(x.to, state.now) - x.from} min`)
     // Its routine and requests from the plan (a block started outside it has none).
     const p = plan.find((b) => b.id === info.id)
-    const name = blockName({ categoryId: info.categoryId, variantId: info.variantId, routine: p?.routine ?? null, requests: p?.requests ?? [], note: '' }, names)
+    const name = blockName(namedOf(info, { routine: p?.routine ?? null, requests: p?.requests ?? [] }), names)
     const started = f?.startedAt ?? null
     const ended = f?.endedAt ?? null
     out.push({

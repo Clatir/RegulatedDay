@@ -5,11 +5,11 @@
  * moving and copying.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { setDayField } from '@shared/data/dayEdits'
+import { costText } from '@shared/costText'
 import { logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
-import { detectLateWake } from '@shared/engine/lateWake'
-import { draggedBlock, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
+import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
+import { draggedBlock, leavesByCancel, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
 import { categoryName } from '@shared/model/rd'
 import type { PlanBlock } from '@shared/model/plan'
 import { DAY_TYPE_NAMES, RANGES } from '@shared/model/settings'
@@ -30,7 +30,7 @@ import { dayAxis, daySummary } from '../plan/dayItems'
 import { EnergyLegend, Timeline } from '../plan/Timeline'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
-import { patchDayBlock, saveDay, putDayBlock, removeDayBlock } from './dayActions'
+import { begunIds, patchDayBlock, putDayBlock, removeDayBlock, setDayWake } from './dayActions'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -83,11 +83,29 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
 
   const raw = model.data.dayFile
   const plan = model.ctx.plan
-  const snapshotIds = new Set(model.snapshot.blocks.map((b) => b.id))
   const block = draft ?? plan.find((b) => b.id === selected) ?? null
+  /** The selected block has begun, and how „Usuń” takes it (D336): a running one ends now, one that is over only leaves the plan. */
+  const blockFact = block && !draft ? model.state.facts.blocks.get(block.id) : undefined
+  const started = blockFact?.startedAt != null
+  const begun: 'no' | 'over' | 'open' = !started ? 'no' : isToday && blockFact?.endedAt == null ? 'open' : 'over'
+  const byCancel = block != null && !draft && leavesByCancel(block.id, model.snapshot, model.dayFile)
   const currentType = model.state.facts.snapshots.at(-1)?.dayType ?? model.snapshot.dayType
   const lateWake = useMemo(() => (isToday ? detectLateWake(model.ctx, model.state, model.dayFile) : null), [isToday, model])
   const nowMin = logicalMinuteOf(date, now)
+  // „Wstałeś później?” waits for the answer once shown (D337): the window reports it as seen (the first in the log wins) with
+  // the end of the routine and the wake it is counted from in the id, and the proposal is counted from that end.
+  const lateShown = lateWake != null && (lateWake.waitUntilMin == null || nowMin >= lateWake.waitUntilMin)
+  const lateSeenId = lateShown && model.data.complete ? lateWakeSeenId(date, lateWake) : null
+  useEffect(() => {
+    if (!lateSeenId) return
+    // Only a window in the foreground with presence is heard (the main process): again when it comes to the front.
+    const report = () => {
+      if (document.visibilityState === 'visible' && document.hasFocus()) window.rd.seen([lateSeenId])
+    }
+    report()
+    window.addEventListener('focus', report)
+    return () => window.removeEventListener('focus', report)
+  }, [lateSeenId])
   // The ritual (D318): today after the end of work (a day without work: any time), a day before from the ritual's first
   // day while it is not frozen (the morning's „Popraw” opens it, D320).
   const ritualFrom = rd.ritualFrom
@@ -153,8 +171,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
           <TimeField
             value={model.ctx.wakeMin}
             range={RANGES.wakeMin}
-            onCommit={(v) => void saveDay(date, raw, (r) => setDayField(r, 'wakeMin', v === model.snapshot.wakeMin && !model.dayFile?.wakeMin ? null : v))}
-            className="w-[76px]"
+            onCommit={(v) => void setDayWake([date], () => raw, v === model.snapshot.wakeMin && !model.dayFile?.wakeMin ? null : v, { [date]: { snapshot: model.snapshot, keep: begunIds(model.state.facts) } })}
+            shellClassName="w-[76px]"
             aria-label="Pobudka tego dnia"
             data-testid="day-wake"
           />
@@ -186,7 +204,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto">
           <div className="flex flex-col gap-3 p-4">
-            {lateWake && (lateWake.waitUntilMin == null || nowMin >= lateWake.waitUntilMin) && <LateWakeCard model={model} lw={lateWake} names={names} />}
+            {lateWake && lateShown && <LateWakeCard model={model} lw={lateWake} names={names} />}
             {isToday && ritualFrom && <UnclosedDays />}
             {isToday && <MorningPlan model={model} names={names} />}
             {isToday && <RoutineCards model={model} names={names} />}
@@ -257,7 +275,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                 <>
                   {isToday && canStart(model, block.id) && (
                     <button type="button" className="btn btn-accent" onClick={() => void startBlock(model, block)} data-testid="block-timer-start">
-                      {model.state.facts.blocks.get(block.id)?.startedAt != null ? 'Wznów' : 'Start'}
+                      {started ? 'Wznów' : 'Start'}
                     </button>
                   )}
                   <button type="button" className="btn" onClick={() => setDialog({ move: block })} data-testid="block-move">
@@ -268,11 +286,11 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                     className="btn"
                     onClick={() => {
                       setSelected(null)
-                      void removeDayBlock(date, raw, block, snapshotIds.has(block.id), blockName(block, names))
+                      void removeDayBlock(date, raw, block, byCancel, blockName(block, names), begun)
                     }}
                     data-testid="block-remove"
                   >
-                    {snapshotIds.has(block.id) ? 'Odwołaj na ten dzień' : 'Usuń'}
+                    {byCancel && !started ? 'Odwołaj na ten dzień' : 'Usuń'}
                   </button>
                 </>
               )
@@ -389,7 +407,7 @@ async function startBlock(model: DayModel, b: PlanBlock, move = true): Promise<v
                   .catch(failed)
             }
           : undefined
-      toast(`${c.overrun ? 'Przekroczenie' : 'Przedłużenie'}: ${c.minutes} min${c.bedtime ? ' (pora snu się przesunie)' : ' z puli projektów'}`, 'info', 10_000, { label: 'Potwierdź', run: () => void window.rd.timer({ a: 'start', block, day: date, confirm: true }).catch(failed) }, moveNow)
+      toast(costText('Start', c), 'info', 10_000, { label: 'Potwierdź', run: () => void window.rd.timer({ a: 'start', block, day: date, confirm: true }).catch(failed) }, moveNow)
     } else if (!r.ok && r.why) toast(r.why, 'info')
   } catch (e) {
     failed(e)

@@ -80,8 +80,8 @@ function Row({ r }: { r: RequestRecord }) {
   return (
     <div className="grid items-center gap-2 rounded border border-line bg-panel px-3 py-1.5" style={{ gridTemplateColumns: '180px 110px minmax(0,1fr) 120px auto' }} data-testid="request-row">
       <PersonChoice value={r.person} onChange={(person) => set({ person })} />
-      <DurationField value={r.estimateMin} range={ESTIMATE_RANGE} onCommit={(estimateMin) => set({ estimateMin })} placeholder="szacunek" aria-label="Szacunek" data-testid="request-estimate" />
-      <TextField value={r.note} onCommit={(note) => set({ note })} max={500} placeholder="czego dotyczy" aria-label="Notatka" data-testid="request-note" />
+      <DurationField value={r.estimateMin} range={ESTIMATE_RANGE} onCommit={(estimateMin) => set({ estimateMin })} placeholder="szacunek" aria-label="Szacunek" errorPlacement="float" data-testid="request-estimate" />
+      <TextField value={r.note} onCommit={(note) => set({ note })} max={500} placeholder="czego dotyczy" aria-label="Notatka" errorPlacement="float" data-testid="request-note" />
       <span className="text-[12px] text-muted">
         {STATE_NAMES[r.state]}
         {r.day ? ` ${plDate(r.day)}` : ''}
@@ -203,7 +203,7 @@ function People() {
     <div className="flex flex-col gap-1.5" data-testid="people">
       {rd.people.map((p) => (
         <div key={p.id} className="flex items-center gap-2">
-          <TextField value={p.name} onCommit={(n) => setPeople((list) => list.map((x) => (x.id === p.id ? { ...x, name: n } : x)))} required max={60} className="w-[220px]" aria-label="Osoba" />
+          <TextField value={p.name} onCommit={(n) => setPeople((list) => list.map((x) => (x.id === p.id ? { ...x, name: n } : x)))} required max={60} shellClassName="w-[220px]" aria-label="Osoba" />
           <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => setPeople((list) => list.map((x) => (x.id === p.id ? { ...x, archived: !p.archived } : x)))}>
             {p.archived ? 'Przywróć' : 'Archiwizuj'}
           </button>

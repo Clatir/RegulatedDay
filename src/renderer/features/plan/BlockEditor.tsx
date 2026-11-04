@@ -83,12 +83,12 @@ export function BlockEditor({
           {block.anchor ? (
             <Choice value={block.anchor} options={anchors} onChange={(anchor) => set({ anchor })} aria-label="Po bloku" data-testid="block-anchor" />
           ) : (
-            <TimeField value={block.startMin} onCommit={(startMin) => set({ startMin })} aria-label="Godzina początku" data-testid="block-start" />
+            <TimeField value={block.startMin} onCommit={(startMin) => set({ startMin })} aria-label="Godzina początku" errorPlacement="below" data-testid="block-start" />
           )}
         </div>
       </Field>
       <Field label="Długość" labelWidth={92} hint={routine ? `Rutyna: ${durationLabel(routineMinutes(routine))} (zwykła), ${durationLabel(routineMinutes(routine, 'worse'))} (na gorsze dni).` : undefined}>
-        <DurationField value={block.durationMin} onCommit={(durationMin) => set({ durationMin })} aria-label="Długość" data-testid="block-duration" />
+        <DurationField value={block.durationMin} onCommit={(durationMin) => set({ durationMin })} aria-label="Długość" errorPlacement="below" data-testid="block-duration" />
       </Field>
       <Field label="Rodzaj" labelWidth={92} hint={block.fixed ? 'Stały: zaczyna się o swojej godzinie.' : 'Elastyczny: idzie za końcem poprzedniego bloku, nie wcześniej niż o swojej godzinie.'}>
         <Segmented
@@ -132,7 +132,7 @@ export function BlockEditor({
             {block.tag === 'weeklyAnalysis' && (
               <label className="flex items-center gap-2 text-[12px] text-muted">
                 czeka do
-                <TimeField value={block.waitUntilMin} onCommit={(waitUntilMin) => set({ waitUntilMin })} aria-label="Czeka do" className="w-[90px]" />
+                <TimeField value={block.waitUntilMin} onCommit={(waitUntilMin) => set({ waitUntilMin })} aria-label="Czeka do" shellClassName="w-[90px]" />
               </label>
             )}
           </div>
@@ -158,7 +158,7 @@ export function BlockEditor({
         </Field>
       )}
       <Field label="Notatka" labelWidth={92}>
-        <TextField value={block.note} onCommit={(note) => set({ note })} max={2000} multiline aria-label="Notatka" data-testid="block-note" />
+        <TextField value={block.note} onCommit={(note) => set({ note })} max={2000} multiline aria-label="Notatka" errorPlacement="below" data-testid="block-note" />
       </Field>
       {block.moves > 0 && <p className="text-[12px] text-muted">Przeniesiony {block.moves}×.</p>}
       {actions && <div className="flex flex-wrap gap-2 border-t border-line pt-3">{actions}</div>}

@@ -14,7 +14,7 @@ import { ROUTINE_VERSIONS, type RoutineVersion } from '../model/routines'
 import { isBoundaryWork, plannedSpan, setsWorkEndBlock, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
 import { workedUntilOf } from './explain'
-import { OPEN, isRunning, type AutoAction, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
+import { OPEN, compareOrder, type EventOrder, isRunning, type AutoAction, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
 
 /** „Przedłuż” of a fixed block works up to this long after its planned end (spec „Timer”, D227). */
@@ -93,6 +93,9 @@ export type TimerAction =
   /** A routine's steps ticked off with its version (D328), and its „Cofnij”. */
   | { a: 'routineDone'; block: string; version: RoutineVersion; steps: string[] }
   | { a: 'routineUndo'; block: string }
+  /** „Usuń” a block that has begun (D336): it ends now (the window takes it out of the plan), and „Cofnij” of that. */
+  | { a: 'removeBegun'; block: string }
+  | { a: 'undoRemove'; block: string }
 
 /** The cost a first click shows (spec: „przedłużenie · −40 min puli”, „pora snu +40 min”, „przekroczenie”). */
 export interface ActionCost {
@@ -108,9 +111,12 @@ export interface ActionCost {
   moveToNow?: boolean
 }
 
+/** Why a click found nothing to do, for a caller that must tell it from another refusal (D336) – never read from the text. */
+export type ResultCode = 'alreadyOver' | 'notBegun'
+
 export type ActionResult =
   | { ok: true; events: TimerDraft[]; confirm: ActionCost | null }
-  | { ok: false; why: string; confirm: ActionCost | null }
+  | { ok: false; why: string; confirm: ActionCost | null; code?: ResultCode }
 
 /** Fixed by the plan (a session too): never paused, ends by its plan; a weekly analysis is flexible once begun. */
 const isFixedLike = (b: BlockInfo) => b.fixed || b.rules.kind === 'session'
@@ -407,6 +413,13 @@ function endInstant(state: DayState, t: TimerBlock, at: number): number {
   return at
 }
 
+/** The end rule of a block taken out of the plan after it began (D336). */
+export const REMOVED_RULE = 'removed'
+/** The refusal of a click on a block that is over (with the code `alreadyOver`: „Usuń” then only takes it out of the plan). */
+export const ALREADY_OVER = 'ten blok już się skończył'
+/** … and one whose start was taken back meanwhile (`notBegun`: it leaves the plan as one that never began). */
+export const NOT_BEGUN = 'ten blok się nie zaczął'
+
 /** The events of starting (or resuming) `info` at `at`, with what happens to the block in the foreground. */
 function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockInfo, at: number, confirmed: boolean): TimerDraft[] {
   const out: TimerDraft[] = []
@@ -417,9 +430,10 @@ function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockI
     if (fg.info.fixed || fg.info.waits) {
       // A fixed block is never paused: it goes on in the background (spec „Przerwania”).
       out.push({ k: 'block.fg', block: fg.info.id, at, bg: true })
-    } else if (((info.waits || info.fixed) && !fg.info.isRegen) || (info.isRegen && !fg.info.isRegen)) {
+    } else if (((info.waits || info.fixed) && !fg.info.isRegen) || (info.isRegen && !fg.info.isRegen) || (info.isLife && fg.info.isWork)) {
       // A waiting or fixed block pauses the running flexible one; it waits as the next in the plan (spec „Bloki”) – so
-      // does a break (a regeneration begun now never ends the work it interrupts).
+      // does a break (a regeneration begun now never ends the work it interrupts) and a block of life and care begun
+      // over running work, a meal for one (D335).
       out.push({ k: 'block.pause', block: fg.info.id, at })
     } else {
       // Another flexible block (or the start ends a regeneration): the running one ends here, done.
@@ -443,7 +457,7 @@ export function startCost(state: DayState, info: BlockInfo, at: number): ActionC
 export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, at: number): ActionResult {
   const t = timerNow(state)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
-  const no = (why: string, confirm: ActionCost | null = null): ActionResult => ({ ok: false, why, confirm })
+  const no = (why: string, confirm: ActionCost | null = null, code?: ResultCode): ActionResult => ({ ok: false, why, confirm, ...(code ? { code } : {}) })
   const yes = (events: TimerDraft[], confirm: ActionCost | null = null): ActionResult => ({ ok: true, events, confirm })
   const m = idxOf(state.grid, at)
 
@@ -452,7 +466,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       const info = byId.get(act.block)
       if (!info) return no('nie ma takiego bloku w planie dnia')
       const f = state.facts.blocks.get(info.id)
-      if (f?.endedAt != null) return no('ten blok już się skończył')
+      if (f?.endedAt != null) return no(ALREADY_OVER)
       if (f && isRunning(f)) return no('ten blok już biegnie')
       const cost = startCost(state, info, at)
       if (cost && !act.confirm) return no('koszt do potwierdzenia', cost)
@@ -582,7 +596,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       const info = byId.get(act.block)
       const f = state.facts.blocks.get(act.block)
       if (!info) return no('nie ma takiego bloku w planie dnia')
-      if (f?.endedAt != null) return no('ten blok już się skończył')
+      if (f?.endedAt != null) return no(ALREADY_OVER)
       // A paused block parked: what ran of it stays, the rest is not done (its continuation goes to the ritual).
       if (f?.startedAt != null) return isRunning(f) ? no('ten blok biegnie – najpierw „Dalej” albo „Pauza”') : yes([{ k: 'block.end', block: info.id, at, done: false, rule: 'park' }])
       return yes([{ k: 'block.park', block: info.id, at, rule: 'user' }])
@@ -668,6 +682,26 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       const done = state.facts.routines.get(act.block)
       if (!done) return no('ta rutyna nie jest zapisana')
       return yes([{ k: 'undo', at, target: done.id, reason: 'user' }])
+    }
+    case 'removeBegun': {
+      const f = state.facts.blocks.get(act.block)
+      if (!f || f.startedAt == null) return no(NOT_BEGUN, null, 'notBegun')
+      if (f.endedAt != null) return no(ALREADY_OVER, null, 'alreadyOver')
+      // Ended as „Dalej” and „Skończyłem” end it (a fixed block past its window ends in its window); not done, and no
+      // continuation for the ritual: the run so far stays in the day outside the plan.
+      const running = [t.fg, ...t.bg, ...t.paused].find((x) => x?.info.id === act.block)
+      return yes([{ k: 'block.end', block: act.block, at: running ? endInstant(state, running, at) : at, done: false, rule: REMOVED_RULE }])
+    }
+    case 'undoRemove': {
+      const f = state.facts.blocks.get(act.block)
+      if (!f?.endId || f.endRule !== REMOVED_RULE || f.endedAt == null) return no('tego bloku nie zdjęto z planu')
+      // Only while nothing has begun since the removal itself (its place among the events, not minutes – as G1): another
+      // block, a request or „Odcinam się” – the block would run beside it.
+      const end = f.endOrder
+      const later = (o: EventOrder) => compareOrder(o, end!) > 0
+      const since = !!end && ([...state.facts.blocks.values()].some((x) => x.id !== act.block && x.runs.some((r) => later(r.begun))) || state.facts.requests.some((r) => later(r.begun)) || state.facts.disconnect.some((d) => later(d.begun)))
+      if (since) return no('tego już nie cofniesz – po usunięciu zaczął się inny blok, prośba albo „Odcinam się”')
+      return yes([{ k: 'undo', at, target: f.endId, reason: 'user' }])
     }
     case 'restart': {
       const info = byId.get(act.block)

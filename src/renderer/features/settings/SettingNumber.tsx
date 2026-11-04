@@ -3,19 +3,21 @@
  * on leaving the field or Enter (spec „Każdy limit w schemacie ma taki sam limit w polu edycji”).
  */
 import { checkField, formatField, parseField, type FieldKind } from '@shared/model/fields'
-import { CommitField } from '../../components/fields'
+import { CommitField, type ErrorPlacement } from '../../components/fields'
 
 export function SettingNumber({
   field,
   value,
   onCommit,
   className,
+  errorPlacement,
   ...rest
 }: {
   field: { kind: FieldKind; range: readonly [number, number]; offAllowed?: boolean; label?: string; unit?: string }
   value: number
   onCommit: (v: number) => void
   className?: string
+  errorPlacement?: ErrorPlacement
   'aria-label'?: string
   'data-testid'?: string
 }) {
@@ -26,7 +28,8 @@ export function SettingNumber({
         parse={(t) => parseField(field, t)}
         format={(v) => (field.offAllowed && v === 0 ? '0' : formatField(field, v))}
         onCommit={(v) => checkField(field, v).ok && onCommit(v)}
-        className={className ?? 'w-[96px]'}
+        shellClassName={className ?? 'w-[96px]'}
+        errorPlacement={errorPlacement}
         aria-label={rest['aria-label'] ?? field.label}
         data-testid={rest['data-testid']}
       />

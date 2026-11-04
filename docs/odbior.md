@@ -90,6 +90,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8j.2 Powiadomienie odrzucone przez Windows wraca raz
    - [ ] E8k.1 „Cofnij zatwierdzenie” w planie porannym
    - [ ] E8k.2 Nowy blok: szkic po innym ekranie, Ctrl N w wolnym miejscu, okna i Tab
+   - [ ] E8l.1 Nazwy sesji „Sesja NY”, „Sesja Londyn”
+   - [ ] E8l.2 „Start” posiłku przy biegnącej pracy pauzuje pracę
+   - [ ] E8l.3 „Usuń” przy zaczętym bloku
+   - [ ] E8l.4 „Wstałeś później?” czeka na odpowiedź (gdy się zdarzy)
+   - [ ] E8l.5 Numer wersji w Ustawieniach
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -324,15 +329,19 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - blok po granicy dodaje się bez okna wymiany i bez kosztu;
   - „Dodaj bez wymiany” albo „Dodaj” (gdy nic nie może ustąpić) nie dodaje bloku.
 
-#### E3.4 Pobudka dnia (0.2.0)
+#### E3.4 Pobudka dnia (0.2.0, zmiana w 1.0.4)
 - [ ] Odebrane
-- **Automatycznie:** odmowa 13:00 – `screens.spec.ts`; przesunięcie bloków – `tests/unit/engine/e3-plan.test.ts` („pobudka dnia o 07:30…”). Ty: rzut oka.
-- **Jak sprawdzić:** w nagłówku „Dziś” wpisz pobudkę 13:00, potem 7:30.
-- **Oczekiwany efekt:** 13:00 – odmowa „Dozwolone: 04:00–12:00” i stara wartość zostaje. 7:30 – zapisane, a bloki
-  elastyczne przed pierwszym blokiem stałym przesuwają się o różnicę; bloki stałe zostają.
+- **Automatycznie:** odmowa 13:00 – `screens.spec.ts`; przesunięcie bloków – `tests/unit/engine/e3-plan.test.ts` („pobudka dnia o 07:30…”), `tests/fs/window-edits.test.ts` (bloki ręczne, D334). Ty: rzut oka.
+- **Jak sprawdzić:** dodaj ręcznie blok elastyczny przed pierwszym blokiem stałym. W nagłówku „Dziś” wpisz pobudkę
+  13:00, potem 7:30; kliknij „Cofnij” w toaście i wpisz 7:30 jeszcze raz; dodaj potem kolejny blok.
+- **Oczekiwany efekt:** 13:00 – odmowa „Dozwolone: 04:00–12:00” (także pod polem) i stara wartość zostaje. 7:30 –
+  zapisane, a bloki elastyczne przed pierwszym blokiem stałym – także dodane ręcznie (D334) – przesuwają się o różnicę,
+  raz, z toastem „Pobudka 07:30: przesunięto N bloków · Cofnij”; „Cofnij” oddaje pobudkę i bloki. Bloki stałe i zaczęte
+  zostają; blok dodany po zmianie stoi tam, gdzie go dałeś.
 - **Nie przechodzi, gdy:**
   - 13:00 zapisuje się;
-  - po 7:30 bloki elastyczne się nie przesuwają albo przesuwają się też bloki stałe.
+  - po 7:30 bloki elastyczne (także ręczne) się nie przesuwają albo przesuwają się też bloki stałe lub zaczęte;
+  - „Cofnij” nie przywraca pobudki albo bloków.
 
 #### E3.5 Kalendarz – zjazd (0.2.0)
 - [ ] Odebrane
@@ -461,13 +470,14 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - po wznowieniu planowany koniec się nie przesunął (pauza zjadła czas bloku);
   - Dalej przeskakuje następny blok albo zaczyna blok stały.
 
-#### E4a.3 Koszt startu po granicy (0.3.0)
+#### E4a.3 Koszt startu po granicy (0.3.0, zmiana w 1.0.4)
 - [ ] Odebrane
 - **Automatycznie:** `timer.test.ts` („Start bloku pracy za granicą bez potwierdzenia…”), `tests/fs/widget.test.ts` („koszt pierwszego kliknięcia czeka 10 s…”). Ty: rzut oka.
 - **Jak sprawdzić:** zatwierdź plan. Kliknij „Start” przy bloku, którego koniec wychodzi za granicę. Raz kliknij drugi
   raz w ciągu 10 s, raz nie klikaj.
-- **Oczekiwany efekt:** pierwsze kliknięcie pokazuje koszt („przedłużenie · −N min puli”) i „Potwierdź”. Blok zaczyna
-  się dopiero po drugim kliknięciu w ciągu 10 s. Bez drugiego kliknięcia po 10 s nic się nie zaczyna, a przycisk wraca.
+- **Oczekiwany efekt:** pierwsze kliknięcie pokazuje koszt („przedłużenie · −N min puli”) i „Potwierdź”. Ten sam tekst
+  („Start: przedłużenie · −N min puli”, przy pustej puli „pora snu +N min”) pokazuje „Start” w panelu bloku w „Dziś”
+  (D339). Blok zaczyna się dopiero po drugim kliknięciu w ciągu 10 s. Bez drugiego kliknięcia po 10 s nic się nie zaczyna, a przycisk wraca.
 - **Nie przechodzi, gdy:**
   - blok zaczyna się po pierwszym kliknięciu;
   - koszt się nie pokazuje albo pokazuje się przy bloku, który mieści się w granicy;
@@ -1041,13 +1051,13 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   listy; po potwierdzeniu karta mówi „dzień zamknięty o …”, a „Rytuał” znika z paska.
 - **Nie przechodzi, gdy:** dzień zamyka się od razu mimo wierszy bez wyboru albo po zamknięciu „Rytuał” zostaje w pasku.
 
-#### E6c.4 Odczuwany koszt (0.12.0)
+#### E6c.4 Odczuwany koszt (0.12.0, zmiana w 1.0.4)
 - [ ] Odebrane
-- **Automatycznie:** `tests/unit/engine/ritual.test.ts` („odczuwany koszt”). Ty: rzut oka.
+- **Automatycznie:** `tests/unit/engine/ritual.test.ts` („odczuwany koszt”), `tests/web/h2-pressed.test.ts`. Ty: rzut oka.
 - **Jak sprawdzić:** w rytuale przy kategorii kliknij „ciężej”, potem „jak zwykle”.
-- **Oczekiwany efekt:** wiersz dla każdej kategorii dnia z jej czasem; wybrany przycisk jest
-  zaznaczony i zostaje po ponownym otwarciu – liczy się ostatni wybór.
-- **Nie przechodzi, gdy:** brak kategorii z dnia albo wybór nie zostaje.
+- **Oczekiwany efekt:** wiersz dla każdej kategorii dnia z jej czasem; wybrany przycisk ma kolor lampki (ramka, tło,
+  tekst), także z kursorem na nim, i zostaje po ponownym otwarciu – liczy się ostatni wybór.
+- **Nie przechodzi, gdy:** brak kategorii z dnia, wybrany przycisk nie różni się od niewybranych albo wybór nie zostaje.
 
 #### E6c.5 Rano: niezamknięte dni (0.12.0)
 - [ ] Odebrane
@@ -1411,9 +1421,9 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   odpowiedzi na „Dalej?” przez 15 min pracuj w innym programie (okno Regulated Day nie liczy się jako użycie), potem
   kliknij „Koniec pracy” – przycisk jest w pasku od razu po samoczynnym końcu bloku. „Koniec pracy” przy sesji NY
   sprawdź też zaraz po starcie krótkiego bloku pracy (w tej samej minucie).
-- **Oczekiwany efekt:** „<blok> · Zacznij · Zaparkuj · Koniec pracy” z kropką (bez kropki, gdy coś biegnie); „NY o 14:00
-  zostaje · Odwołaj” (druga zmiana nigdy) – także po bloku zakończonym tym kliknięciem w minucie jego startu; „NY – nie
-  przedłużono · Przedłuż” (koszt jako „Przedłuż +15” z ±15); „Koniec pracy o 17:30 · Pracowałem do 18:30”. „Pracowałem
+- **Oczekiwany efekt:** „<blok> · Zacznij · Zaparkuj · Koniec pracy” z kropką (bez kropki, gdy coś biegnie); „Sesja NY
+  o 14:00 zostaje · Odwołaj” (od 1.0.4 nazwa „Sesja NY”, D338; druga zmiana nigdy) – także po bloku zakończonym tym
+  kliknięciem w minucie jego startu; „Sesja NY – nie przedłużono · Przedłuż” (koszt jako „Przedłuż +15” z ±15); „Koniec pracy o 17:30 · Pracowałem do 18:30”. „Pracowałem
   do …” nie wraca po czasie sprzed późniejszej pracy.
 - **Nie przechodzi, gdy:** którejś linii brak, jej przycisk nic nie robi, po samoczynnym końcu bloku nie ma „Koniec
   pracy”, „zostaje · Odwołaj” wraca po pracy, która przyszła po „Koniec pracy”, albo „Koniec pracy o 09:30 · Pracowałem
@@ -1567,14 +1577,59 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Nie przechodzi, gdy:** szkic znika po zmianie ekranu, Ctrl N stawia blok na trwającym, Tab wychodzi pod okno albo
   Esc zamyka coś pod oknem.
 
-#### E8k.3 Godzina w rytuale: błędny tekst i odcinek „nie odpoczynek” (0.26.0)
+#### E8k.3 Godzina w rytuale: błędny tekst i odcinek „nie odpoczynek” (0.26.0, zmiana w 1.0.4)
 - [ ] Odebrane
-- **Automatycznie:** `tests/web/screens-026.test.ts` (A6-14, A8-09), `tests/unit/engine/ritual.test.ts` (A2-05, A2-08).
+- **Automatycznie:** `tests/web/screens-026.test.ts` (A6-14, A8-09), `tests/unit/engine/ritual.test.ts` (A2-05, A2-08),
+  `tests/web/field-error.test.ts`, `screens.spec.ts` (komunikat pod polem pobudki, D347).
 - **Jak sprawdzić:** w rytuale kliknij „Pracowałem do …”, wpisz „25:30”, kliknij „Zapisz”; potem „zaznacz odcinek” z
   godzinami od rana do wieczoru.
-- **Oczekiwany efekt:** po „25:30” komunikat błędu i nic się nie zapisuje (także po drugim „Zapisz”), a po poprawnej
+- **Oczekiwany efekt:** po „25:30” komunikat błędu – w rogu okna i pod polem, dopóki wartość jest błędna (D347; tak samo
+  w każdym polu aplikacji, np. pobudka 13:00 w „Dziś”) – i nic się nie zapisuje (także po drugim „Zapisz”), a po poprawnej
   godzinie – także tej samej, co była – „Zapisz” działa; odcinek od rana jest odrzucony z komunikatem „tylko wieczór od
   końca pracy albo czas „Odcinam się””, odcinek wieczoru się zapisuje; dzień z prośbami „zrobione teraz” ma wiersz
   odczuwanego kosztu „Prośby domowe”.
 - **Nie przechodzi, gdy:** po błędnej godzinie zapisuje się godzina początkowa wiersza, „Zapisz” zostaje zablokowane po
   poprawnej godzinie, regeneracja sprzed końca pracy znika albo nie ma wiersza „Prośby domowe”.
+
+### E8l – ekrany po decyzjach z odbioru w maszynie (1.0.4)
+
+#### E8l.1 Nazwy sesji „Sesja NY”, „Sesja Londyn” (1.0.4)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/session-names.test.ts` (nazwa, CSV, pasek), `tests/fs/widget.test.ts` (powiadomienie).
+  Ty: rzut oka.
+- **Jak sprawdzić:** w dniu z sesją NY spójrz na pasek, oś w „Dziś”, powiadomienie 5 min przed startem, rytuał i eksport
+  CSV (kolumna „Blok”). Porównaj z blokiem drugiej zmiany.
+- **Oczekiwany efekt:** blok z warstwy sesji wszędzie nazywa się „Sesja NY” (powiadomienie „Sesja NY o HH:MM”); druga
+  zmiana i blok kategorii „Sesja tradingowa” dodany ręcznie zostają „Sesja tradingowa” (D338).
+- **Nie przechodzi, gdy:** gdzieś blok sesji nazywa się „Sesja tradingowa” albo druga zmiana dostaje nazwę sesji.
+
+#### E8l.2 „Start” posiłku przy biegnącej pracy pauzuje pracę (1.0.4)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer.test.ts` (D335). Ty: rzut oka.
+- **Jak sprawdzić:** przy biegnącym bloku pracy kliknij „Start” posiłku (albo innego bloku życia i opieki); po posiłku
+  spójrz na pasek. Innym razem przy biegnącym bloku pracy zacznij inny blok pracy.
+- **Oczekiwany efekt:** posiłek zaczyna się, a praca pauzuje – po posiłku pasek pokazuje „Wznów: <blok pracy>” (D335).
+  Start innego bloku pracy dalej kończy biegnący.
+- **Nie przechodzi, gdy:** posiłek kończy blok pracy albo po posiłku nie ma „Wznów”.
+
+#### E8l.3 „Usuń” przy zaczętym bloku (1.0.4)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/window-edits.test.ts` (D336), `timer.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** zacznij blok, w „Dziś” otwórz jego panel i kliknij „Usuń”; potem „Cofnij” w toaście.
+- **Oczekiwany efekt:** blok kończy się w tej chwili i znika z planu, a jego przebieg do tej chwili zostaje na osi jako
+  „poza planem” i liczy się do budżetu; toast „Usunięty: … · Cofnij”, a „Cofnij” przywraca blok w planie i biegnący (D336).
+- **Nie przechodzi, gdy:** blok dalej biegnie po „Usuń”, przebieg znika z osi albo „Cofnij” nie przywraca bloku.
+
+#### E8l.4 „Wstałeś później?” czeka na odpowiedź (1.0.4)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/e3-plan.test.ts` (D337). Ty: gdy się zdarzy.
+- **Jak sprawdzić:** gdy rano pojawi się karta „Wstałeś później?”, dodaj blok rutyny, zanim odpowiesz.
+- **Oczekiwany efekt:** karta zostaje do Twojej odpowiedzi (albo rytuału) – dodany blok rutyny jej nie zabiera (D337).
+- **Nie przechodzi, gdy:** karta znika po dodaniu bloku rutyny.
+
+#### E8l.5 Numer wersji w Ustawieniach (1.0.4)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/smoke.spec.ts` (`identity`). Ty: rzut oka.
+- **Jak sprawdzić:** otwórz Ustawienia i znajdź „Wersja aplikacji”.
+- **Oczekiwany efekt:** „Wersja aplikacji: 1.0.4 · zainstalowana” (numer bieżącej wersji, D344).
+- **Nie przechodzi, gdy:** zamiast numeru jest samo „zainstalowana” albo inny numer niż w Aktualizacjach.

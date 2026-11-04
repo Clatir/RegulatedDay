@@ -152,6 +152,27 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await wake.press('Enter')
       await expect(wake).toHaveAttribute('data-error', /Dozwolone/)
       await expect(wake).toHaveValue(wakeBefore)
+      // E8k.3 (D347): the reason stays under the field while the value is refused – until the next edit.
+      await expect(page.getByTestId('day-wake-error')).toContainText('Dozwolone')
+      // The message floats under the narrow field and takes no clicks from what lies below it.
+      const overMessage = await page.getByTestId('day-wake-error').evaluate((el) => {
+        const r = el.getBoundingClientRect()
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+        return top === el || el.contains(top)
+      })
+      expect(overMessage).toBe(false)
+      // Esc, wherever the focus is, takes the message and the frame away – and closes nothing else.
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('day-wake-error')).toHaveCount(0)
+      await expect(wake).not.toHaveAttribute('aria-invalid', 'true')
+      await expect(page.getByTestId('today')).toBeVisible()
+      // The next edit takes it too.
+      await wake.fill('13:00')
+      await wake.press('Enter')
+      await expect(page.getByTestId('day-wake-error')).toContainText('Dozwolone')
+      await wake.fill('7:00')
+      await expect(page.getByTestId('day-wake-error')).toHaveCount(0)
+      await wake.press('Escape')
 
       // A day gone: its type is its plan's – the dialog says so, nothing to save (A6-12).
       await page.getByTestId('nav-today').click()
@@ -213,6 +234,10 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('step-up-normal-1').click()
       await expect(steps.getByLabel('Krok 1', { exact: true })).toHaveValue('kot')
       await expect(steps.getByLabel('Krok 2', { exact: true })).toHaveValue('woda')
+      // A field with a layout of its own keeps it (D347): the name and the buttons of the routine in one row, the step's name wide.
+      const rowTop = async (id: string) => (await page.getByTestId(id).boundingBox())!.y
+      expect(Math.abs((await rowTop('routine-name')) - (await rowTop('routine-remove')))).toBeLessThan(12)
+      expect((await steps.getByLabel('Krok 1', { exact: true }).boundingBox())!.width).toBeGreaterThan(150)
       await shot(page, 'e3-06-routines')
 
       // Szablony: the ordinary day with its second shift.
@@ -220,6 +245,10 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('template-item').first().click()
       await expect(page.getByTestId('template-editor')).toBeVisible()
       await expect(page.getByTestId('template-timeline')).toContainText('druga zmiana')
+      // The name's field is no wider than its `max-w` and the buttons stay in its row (not wrapped under it).
+      const name = (await page.getByTestId('template-name').boundingBox())!
+      expect(name.width).toBeLessThanOrEqual(262)
+      expect(Math.abs(name.y - (await page.getByTestId('template-copy').boundingBox())!.y)).toBeLessThan(12)
       await shot(page, 'e3-07-templates')
 
       // Historia: the request edited – its earlier version, restored.

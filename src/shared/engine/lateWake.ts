@@ -4,23 +4,48 @@
  * nor on a free day; while a session waits for „Zacznij” or runs the proposal waits for its end. The boundary stays. It
  * starts with „Wstałeś później? · Tak · Nie”: „Nie” closes it, „Tak” shows the routines, care and meals moved by the
  * delay and the work blocks shortened or parked so the day fits the boundary again; the plan changes only when you
- * accept. Blocks that passed before the first use are listed for confirmation.
+ * accept. Blocks that passed before the first use are listed for confirmation. Once shown it waits for the answer: the
+ * end of the routine it was shown with is kept in the log (D337).
  *
  * The first use is the day's first use of a computer as the helper recorded it (spec „Użycie komputera”: from an hour
  * before the wake, so night coding after 04:00 is not it); a day without records of observation falls back to the first
  * presence (T454).
  */
 import { isKnown, type AnyEvent } from '../model/events'
-import type { DayFile, PlanBlock } from '../model/plan'
+import { PLAN_MAX, PLAN_MIN, type DayFile, type PlanBlock } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { activityOf } from './activity'
 import { dayFirstUse } from './auto'
+import { firstFixedStart } from './createDay'
 import { isBoundaryWork } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
 import { atOf, idxOf } from './grid'
 
 /** How long after the routine's planned end the first use counts as getting up later (spec: 30 min). */
 export const LATE_WAKE_MIN = 30
+/**
+ * The proposal shown is a `question.seen` of the log (D337): its id carries the end of the morning routine it was shown with
+ * and the day's wake – `lateWake:<day>:<end>:<wake>`. The log keeps the first (`facts.seen`, the same on every computer):
+ * a routine block added later does not take the question away. The window reports it like any question it shows.
+ */
+export const lateWakeSeenId = (date: string, lw: Pick<LateWake, 'routineEndMin' | 'wakeMin'>): string => `lateWake:${date}:${lw.routineEndMin}:${lw.wakeMin}`
+
+/**
+ * The end of the routine the proposal was first shown with, for the wake the day has now; null: it was not shown, or only
+ * for another wake (a change of the day's wake moves the routine, so it is counted from the plan again and shown anew), or
+ * the value is outside the day.
+ */
+export function lateWakeSeenEnd(seen: ReadonlyMap<string, unknown>, date: string, wakeMin: number): number | null {
+  const re = new RegExp(`^lateWake:${date}:(\\d{1,4}):(\\d{1,4})$`)
+  for (const id of seen.keys()) {
+    const m = re.exec(id)
+    if (!m || Number(m[2]) !== wakeMin) continue
+    const end = Number(m[1])
+    if (end >= PLAN_MIN && end <= PLAN_MAX + 24 * 60) return end
+  }
+  return null
+}
+
 /** A work block is never shortened below this; shorter, it is parked. */
 const MIN_LEFT = 15
 
@@ -29,6 +54,8 @@ export interface LateWake {
   firstUse: number
   /** The planned end of the morning routine (logical minute; the wake time without one). */
   routineEndMin: number
+  /** The day's wake the proposal was counted for (the kept end holds for it only). */
+  wakeMin: number
   delayMin: number
   /** The proposal waits for the end of a session (logical minute), null: it is shown now. */
   waitUntilMin: number | null
@@ -48,8 +75,7 @@ export function firstUseOf(events: readonly AnyEvent[]): number | null {
 
 /** The morning routine: the earliest routine block planned before the first fixed block (spec „Poranna rutyna”). */
 function morningRoutine(ctx: DayContext, state: DayState): PlanBlock | null {
-  const fixedStarts = ctx.plan.filter((b) => b.fixed && b.startMin != null).map((b) => b.startMin!)
-  const firstFixed = fixedStarts.length ? Math.min(...fixedStarts) : Number.POSITIVE_INFINITY
+  const firstFixed = firstFixedStart(ctx.plan)
   let best: PlanBlock | null = null
   for (const b of ctx.plan) {
     const rules = state.settings.categories[b.categoryId]
@@ -73,7 +99,8 @@ export function detectLateWake(ctx: DayContext, state: DayState, dayFile: DayFil
   const used = idxOf(g, firstUse)
   if (state.facts.approvals.some((a) => !a.auto && a.at <= used && !(a.undoneAt != null && a.undoneAt <= used))) return null
   const routine = morningRoutine(ctx, state)
-  const routineEndMin = routine ? routine.startMin! + routine.durationMin : ctx.wakeMin
+  // Once shown, from the end it was first shown with (D337) – the plan's routine may have changed since.
+  const routineEndMin = lateWakeSeenEnd(state.facts.seen, ctx.date, ctx.wakeMin) ?? (routine ? routine.startMin! + routine.durationMin : ctx.wakeMin)
   const useMin = logicalMinuteOf(ctx.date, firstUse)
   if (useMin <= routineEndMin + LATE_WAKE_MIN) return null
   const delayMin = useMin - routineEndMin
@@ -129,5 +156,5 @@ export function detectLateWake(ctx: DayContext, state: DayState, dayFile: DayFil
       over = (fcEnd(plan) ?? 0) - boundary
     }
   }
-  return { firstUse, routineEndMin, delayMin, waitUntilMin, shifts, shortens, parks, passed }
+  return { firstUse, routineEndMin, wakeMin: ctx.wakeMin, delayMin, waitUntilMin, shifts, shortens, parks, passed }
 }

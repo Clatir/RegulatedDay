@@ -506,7 +506,7 @@ function toggled(s: Set<string>, id: string): Set<string> {
 
 function Act({ onClick, children, testId, pressed }: { onClick: () => void; children: React.ReactNode; testId?: string; pressed?: boolean }) {
   return (
-    <button type="button" className={cx('btn h-[24px] px-2 text-[12px]', pressed && 'bg-raised')} aria-pressed={pressed} onClick={onClick} data-testid={testId}>
+    <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={pressed} onClick={onClick} data-testid={testId}>
       {children}
     </button>
   )

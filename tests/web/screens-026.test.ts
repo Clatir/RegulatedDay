@@ -3,6 +3,7 @@
  * – a refused text is never saved as the field's start (A6-14), the hours of the change of time (A8-09); the Monday
  * „Strona B” step closes at once in the window (A6-15).
  */
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { FolderProbe, HistoryRecord } from '@shared/api'
 import { failedFinish, patchWizard, resetWizard, takeProbe, useWizard } from '@renderer/features/wizard/wizardStore'
@@ -20,6 +21,14 @@ import { modalOpen, onModal, tabTarget, topModal } from '@renderer/lib/escape'
 import { closeSideB, patchBlockDraft, setBlockDraft, useUi } from '@renderer/store/ui'
 
 describe('godzina wpisana w rytuale (A6-14, A8-09)', () => {
+  it('Esc przy widocznym błędzie pola tylko chowa komunikat i ramkę: wartość zostaje odrzucona, „Zapisz” dalej odmawia (A6-14)', () => {
+    const src = readFileSync('src/renderer/components/fields.tsx', 'utf8')
+    const lines = src.split('\n').filter((l) => l.includes('useEscapeLayer(error != null'))
+    expect(lines.map((l) => l.trim())).toEqual(['useEscapeLayer(error != null, () => setError(null))', 'useEscapeLayer(error != null, () => setError(null))'])
+    // The refusal reaches the answer only through the field's own commit (onReject), never through Esc.
+    expect(src.slice(src.indexOf('export function CommitField'))).toContain('onReject?.(r.refused)')
+  })
+
   // 25.10.2026: 02:00–02:59 twice, in the logical day 24.10 (minute 1440 + 160 = 02:40).
   const AUTUMN = '2026-10-24'
   const firstOccurrence = Date.UTC(2026, 9, 25, 0, 40)

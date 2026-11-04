@@ -331,10 +331,10 @@ function StepSessions() {
       <div className="flex flex-col gap-2">
         {s.sessions.map((x, i) => (
           <div key={x.id} className="flex flex-wrap items-center gap-2">
-            <TextField value={x.name} onCommit={(name) => patchSettings({ sessions: s.sessions.map((y, j) => (j === i ? { ...y, name } : y)) })} required max={40} className="w-[120px]" aria-label="Nazwa sesji" />
-            <ClockField value={x.startMin} onCommit={(v) => patchSettings({ sessions: s.sessions.map((y, j) => (j === i ? sessionWithStart(y, v) : y)) })} className="w-[80px]" aria-label={`${x.name}: początek`} />
+            <TextField value={x.name} onCommit={(name) => patchSettings({ sessions: s.sessions.map((y, j) => (j === i ? { ...y, name } : y)) })} required max={40} shellClassName="w-[120px]" aria-label="Nazwa sesji" />
+            <ClockField value={x.startMin} onCommit={(v) => patchSettings({ sessions: s.sessions.map((y, j) => (j === i ? sessionWithStart(y, v) : y)) })} shellClassName="w-[80px]" aria-label={`${x.name}: początek`} />
             <span className="text-muted">–</span>
-            <ClockField value={x.endMin % 1440} onCommit={(v) => patchSettings({ sessions: s.sessions.map((y, j) => (j === i ? sessionWithEnd(y, v) : y)) })} className="w-[80px]" aria-label={`${x.name}: koniec`} />
+            <ClockField value={x.endMin % 1440} onCommit={(v) => patchSettings({ sessions: s.sessions.map((y, j) => (j === i ? sessionWithEnd(y, v) : y)) })} shellClassName="w-[80px]" aria-label={`${x.name}: koniec`} />
             <Choice value={x.zone} options={ZONES} onChange={(zone) => patchSettings({ sessions: s.sessions.map((y, j) => (j === i ? { ...y, zone } : y)) })} className="w-[190px]" aria-label={`${x.name}: strefa`} />
           </div>
         ))}
@@ -386,9 +386,9 @@ function StepSecondShift() {
       <Toggle checked={ss.on} onChange={(on) => patchWizard({ secondShift: { ...ss, on } })} label={ss.on ? 'Druga zmiana w dni zwykłe' : 'Bez drugiej zmiany'} data-testid="wizard-second-shift" />
       {ss.on && (
         <div className="flex items-center gap-2">
-          <TimeField value={ss.startMin} onCommit={(startMin) => patchWizard({ secondShift: { ...ss, startMin } })} className="w-[90px]" aria-label="Początek drugiej zmiany" data-testid="wizard-second-start" />
+          <TimeField value={ss.startMin} onCommit={(startMin) => patchWizard({ secondShift: { ...ss, startMin } })} shellClassName="w-[90px]" aria-label="Początek drugiej zmiany" data-testid="wizard-second-start" />
           <span className="text-muted">przez</span>
-          <DurationField value={ss.durationMin} onCommit={(durationMin) => patchWizard({ secondShift: { ...ss, durationMin } })} className="w-[110px]" aria-label="Długość drugiej zmiany" />
+          <DurationField value={ss.durationMin} onCommit={(durationMin) => patchWizard({ secondShift: { ...ss, durationMin } })} shellClassName="w-[110px]" aria-label="Długość drugiej zmiany" />
         </div>
       )}
     </div>
@@ -404,7 +404,7 @@ function StepLectures({ today }: { today: string }) {
       {lectures.map((l, i) => (
         <div key={l.id} className="flex flex-col gap-2 rounded border border-line bg-panel p-3" data-testid="wizard-lecture">
           <div className="flex flex-wrap items-center gap-2">
-            <TextField value={l.name} onCommit={(name) => set(i, { name })} placeholder="nazwa, np. Ekonometria" className="w-[220px]" aria-label="Nazwa wykładu" />
+            <TextField value={l.name} onCommit={(name) => set(i, { name })} placeholder="nazwa, np. Ekonometria" shellClassName="w-[220px]" aria-label="Nazwa wykładu" />
             <Choice
               value={l.categoryId}
               options={[
@@ -421,12 +421,12 @@ function StepLectures({ today }: { today: string }) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Choice value={String(l.weekday)} options={WEEKDAY_NAMES.map((n, j) => ({ value: String(j + 1), label: n }))} onChange={(v) => set(i, { weekday: Number(v) })} className="w-[140px]" aria-label="Dzień tygodnia" />
-            <TimeField value={l.startMin} onCommit={(startMin) => set(i, { startMin })} className="w-[80px]" aria-label="Godzina" />
-            <DurationField value={l.durationMin} onCommit={(durationMin) => set(i, { durationMin })} className="w-[100px]" aria-label="Długość" />
+            <TimeField value={l.startMin} onCommit={(startMin) => set(i, { startMin })} shellClassName="w-[80px]" aria-label="Godzina" />
+            <DurationField value={l.durationMin} onCommit={(durationMin) => set(i, { durationMin })} shellClassName="w-[100px]" aria-label="Długość" />
             <span className="text-muted">od</span>
-            <DateField today={today} value={l.from} onCommit={(from) => set(i, { from })} className="w-[110px]" aria-label="Od" />
+            <DateField today={today} value={l.from} onCommit={(from) => set(i, { from })} shellClassName="w-[110px]" aria-label="Od" />
             <span className="text-muted">do</span>
-            <DateField today={today} value={l.to} onCommit={(to) => set(i, { to })} className="w-[110px]" aria-label="Do" />
+            <DateField today={today} value={l.to} onCommit={(to) => set(i, { to })} shellClassName="w-[110px]" aria-label="Do" />
           </div>
         </div>
       ))}
@@ -508,7 +508,7 @@ function StepPeople() {
       <ul className="flex flex-col gap-1.5">
         {people.map((p) => (
           <li key={p.id} className="flex items-center gap-2">
-            <TextField value={p.name} onCommit={(n) => patchWizard({ people: people.map((x) => (x.id === p.id ? { ...x, name: n } : x)) })} required max={60} className="w-[240px]" aria-label="Osoba" />
+            <TextField value={p.name} onCommit={(n) => patchWizard({ people: people.map((x) => (x.id === p.id ? { ...x, name: n } : x)) })} required max={60} shellClassName="w-[240px]" aria-label="Osoba" />
             <button type="button" className="text-[12px] text-muted hover:text-rose" onClick={() => patchWizard({ people: people.filter((x) => x.id !== p.id) })}>
               Usuń
             </button>
@@ -538,7 +538,7 @@ function StepRegenWays() {
           .filter((v) => !v.archived)
           .map((v) => (
             <li key={v.id} className="flex items-center gap-2">
-              <TextField value={v.name} onCommit={(n) => setVariants(regen.variants.map((x) => (x.id === v.id ? { ...x, name: n } : x)))} required max={80} className="w-[300px]" aria-label="Sposób regeneracji" />
+              <TextField value={v.name} onCommit={(n) => setVariants(regen.variants.map((x) => (x.id === v.id ? { ...x, name: n } : x)))} required max={80} shellClassName="w-[300px]" aria-label="Sposób regeneracji" />
               <button type="button" className="text-[12px] text-muted hover:text-rose" onClick={() => setVariants(regen.variants.map((x) => (x.id === v.id ? { ...x, archived: true } : x)))}>
                 Usuń
               </button>
