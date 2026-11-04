@@ -53,7 +53,7 @@ function Lecture({ l, today }: { l: LectureSeries; today: string }) {
   return (
     <div className="flex flex-col gap-2 rounded border border-line p-2.5" data-testid="lecture-row">
       <div className="flex flex-wrap items-center gap-2">
-        <TextField value={l.name} onCommit={(name) => set({ name })} placeholder="nazwa" className="w-[200px]" aria-label="Nazwa wykładu" />
+        <TextField value={l.name} onCommit={(name) => set({ name })} placeholder="nazwa" shellClassName="w-[200px]" aria-label="Nazwa wykładu" />
         <Choice
           value={l.categoryId}
           options={[
@@ -72,12 +72,12 @@ function Lecture({ l, today }: { l: LectureSeries; today: string }) {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Choice value={String(l.weekday)} options={WEEKDAY_NAMES.map((n, i) => ({ value: String(i + 1), label: n }))} onChange={(v) => set({ weekday: Number(v) })} className="w-[140px]" aria-label="Dzień tygodnia" />
-        <TimeField value={l.startMin} onCommit={(startMin) => set({ startMin })} className="w-[76px]" aria-label="Godzina" />
-        <DurationField value={l.durationMin} onCommit={(durationMin) => set({ durationMin })} className="w-[96px]" aria-label="Długość" />
+        <TimeField value={l.startMin} onCommit={(startMin) => set({ startMin })} shellClassName="w-[76px]" aria-label="Godzina" />
+        <DurationField value={l.durationMin} onCommit={(durationMin) => set({ durationMin })} shellClassName="w-[96px]" aria-label="Długość" />
         <span className="text-muted">od</span>
-        <DateField today={today} value={l.from} onCommit={(from) => set({ from })} className="w-[110px]" aria-label="Od" />
+        <DateField today={today} value={l.from} onCommit={(from) => set({ from })} shellClassName="w-[110px]" aria-label="Od" />
         <span className="text-muted">do</span>
-        <DateField today={today} value={l.to} onCommit={(to) => set({ to })} className="w-[110px]" aria-label="Do" />
+        <DateField today={today} value={l.to} onCommit={(to) => set({ to })} shellClassName="w-[110px]" aria-label="Do" />
       </div>
       <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
         <span className="text-muted">Bez wykładu:</span>
@@ -96,7 +96,7 @@ function Lecture({ l, today }: { l: LectureSeries; today: string }) {
             setEx(null)
             set({ exceptions: [...new Set([...l.exceptions, d])].sort() })
           }}
-          className="w-[110px]"
+          shellClassName="w-[110px]"
           placeholder="+ data"
           aria-label="Dodaj wyjątek"
         />

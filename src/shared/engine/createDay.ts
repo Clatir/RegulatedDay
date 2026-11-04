@@ -196,6 +196,20 @@ export function createDay(inp: DayInputs): DaySnapshot {
   }
 }
 
+/** The snapshot's blocks with the session layer's answers given after the day was made (spec „Sesje tradingowe”): „nie” takes a session away, „tak” brings one the day was made without. */
+function snapshotBlocksOf(snapshot: DaySnapshot, dayFile: DayFile | null): PlanBlock[] {
+  const answers = dayFile?.sessions ?? {}
+  const blocks = snapshot.blocks.filter((b) => !(b.origin === 'session' && b.sourceId && answers[b.sourceId] === 'no'))
+  if (dayFile) {
+    for (const def of snapshot.settings.sessions) {
+      if (answers[def.id] !== 'yes' || blocks.some((b) => b.origin === 'session' && b.sourceId === def.id)) continue
+      const b = sessionBlock(def, dayFile.date, snapshot.holidays)
+      if (b) blocks.push(b)
+    }
+  }
+  return blocks
+}
+
 /**
  * The plan of a day: the snapshot's blocks with your edits laid over them – a block of the file replaces the snapshot's
  * block of the same id, cancelled and moved-away blocks leave, new blocks join; a block anchored to one that left leaves
@@ -206,15 +220,7 @@ export function dayPlan(snapshot: DaySnapshot, dayFile: DayFile | null): PlanBlo
   const gone = new Set([...(dayFile?.cancelled ?? []), ...Object.keys(dayFile?.movedTo ?? {})])
   // The answers of the session layer given after the day was made: „nie” takes a session away (and what is anchored to
   // it), „tak” brings one the day was made without (spec „Sesje tradingowe”).
-  const answers = dayFile?.sessions ?? {}
-  const snapshotBlocks = snapshot.blocks.filter((b) => !(b.origin === 'session' && b.sourceId && answers[b.sourceId] === 'no'))
-  if (dayFile) {
-    for (const def of snapshot.settings.sessions) {
-      if (answers[def.id] !== 'yes' || snapshotBlocks.some((b) => b.origin === 'session' && b.sourceId === def.id)) continue
-      const b = sessionBlock(def, dayFile.date, snapshot.holidays)
-      if (b) snapshotBlocks.push(b)
-    }
-  }
+  const snapshotBlocks = snapshotBlocksOf(snapshot, dayFile)
   const shift = wakeShift(snapshot, dayFile, snapshotBlocks, own)
   const out = new Map<string, PlanBlock>()
   for (const b of snapshotBlocks) if (!gone.has(b.id)) out.set(b.id, own.get(b.id) ?? shift(b))
@@ -249,17 +255,43 @@ export function dayPlan(snapshot: DaySnapshot, dayFile: DayFile | null): PlanBlo
  * The morning follows the day's wake (spec „Pobudkę możesz ustawić osobno”): the morning routine and the blocks planned
  * before the first fixed block (in a day without fixed blocks: every flexible one) move by the difference between the
  * day's wake and the template's, also in the weeks of the session shift; fixed blocks stay at their times (the plan shows
- * collisions). Only blocks of the snapshot you have not changed for the day move – a block you placed keeps its time.
+ * collisions). Only blocks of the snapshot you have not changed for the day move here; the blocks you placed move once,
+ * when you change the wake (`wakeShifted`, D334) – a block added after that keeps its time.
  */
 function wakeShift(snapshot: DaySnapshot, dayFile: DayFile | null, blocks: readonly PlanBlock[], own: ReadonlyMap<string, PlanBlock>): (b: PlanBlock) => PlanBlock {
   const delta = dayWakeMin(snapshot, dayFile) - snapshot.templateWakeMin
   if (delta === 0) return (b) => b
-  const fixedStarts = [...blocks.map((b) => own.get(b.id) ?? b), ...[...own.values()]].filter((b) => b.fixed && b.startMin != null).map((b) => b.startMin!)
-  const firstFixed = fixedStarts.length ? Math.min(...fixedStarts) : Number.POSITIVE_INFINITY
+  const firstFixed = boundOf(blocks, own)
   return (b) => {
-    if (b.fixed || b.anchor || b.startMin == null || b.startMin >= firstFixed) return b
-    return { ...b, startMin: Math.max(PLAN_MIN, Math.min(PLAN_MAX - b.durationMin, b.startMin + delta)) }
+    const startMin = wakeShiftedStart(b, delta, firstFixed)
+    return startMin == null ? b : { ...b, startMin }
   }
+}
+
+/** The first fixed block that bounds the morning: of the snapshot's blocks (yours over them) and yours – counted with the cancelled and moved away ones, as the morning has always followed the wake. */
+function boundOf(blocks: readonly PlanBlock[], own: ReadonlyMap<string, PlanBlock>): number {
+  return firstFixedStart([...blocks.map((b) => own.get(b.id) ?? b), ...own.values()])
+}
+
+/** The same bound for the blocks you placed (`wakeShifted`, D334): one rule for the snapshot's and for yours. */
+export function morningBound(snapshot: DaySnapshot, dayFile: DayFile | null): number {
+  return boundOf(snapshotBlocksOf(snapshot, dayFile), new Map((dayFile?.blocks ?? []).map((b) => [b.id, b])))
+}
+
+/** The start of the first fixed block of a plan, Infinity without one: what the morning that follows the wake is bounded by. */
+export function firstFixedStart(plan: readonly PlanBlock[]): number {
+  return Math.min(Number.POSITIVE_INFINITY, ...plan.filter((b) => b.fixed && b.startMin != null).map((b) => b.startMin!))
+}
+
+/**
+ * Where a day's wake, `delta` minutes later (earlier) than the template's, puts a block: only a flexible block with a
+ * start of its own, before `firstFixed`, moves – kept in the logical day; null: it keeps its place. One rule for the
+ * blocks of the snapshot (`dayPlan`) and for the blocks you placed (`wakeShifted`, D334).
+ */
+export function wakeShiftedStart(b: PlanBlock, delta: number, firstFixed: number): number | null {
+  if (delta === 0 || b.fixed || b.anchor || b.startMin == null || b.startMin >= firstFixed) return null
+  const startMin = Math.max(PLAN_MIN, Math.min(PLAN_MAX - b.durationMin, b.startMin + delta))
+  return startMin === b.startMin ? null : startMin
 }
 
 /** The wake time of a day: your own for the day, else the snapshot's (with the session shift). */

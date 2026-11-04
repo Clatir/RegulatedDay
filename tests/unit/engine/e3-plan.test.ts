@@ -6,12 +6,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
-import { createDay, dayPlan, defaultDayType } from '@shared/engine/createDay'
+import { createDay, dayPlan, defaultDayType, firstFixedStart, morningBound } from '@shared/engine/createDay'
 import { computeDay } from '@shared/engine/day'
 import { exchangeCost, isFullExchange, proposeExchange } from '@shared/engine/exchange'
-import { detectLateWake } from '@shared/engine/lateWake'
+import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
 import { fromYesterday, holidayQuestions, morningWarnings, sessionQuestions, shiftNotice, weeklyAnalysisMove, type MorningInputs } from '@shared/engine/morning'
-import { copiedDay, copiedTemplate, draggedBlock, moveBetweenDays, movedBlock, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
+import { copiedDay, copiedTemplate, draggedBlock, moveBetweenDays, movedBlock, newBlockStart, leavesByCancel, newUserBlock, wakeChange, wakeShifted } from '@shared/engine/planEdit'
 import { applyTypeChange, planTypeChange } from '@shared/engine/typeChange'
 import { defaultTemplates, firstComputerRecords, settingsPatch } from '@shared/model/defaults'
 import { DEFAULT_GENERAL, rdFrom } from '@shared/model/rd'
@@ -44,6 +44,22 @@ describe('odpowiedzi warstwy sesji po utworzeniu dnia', () => {
     expect(plan.some((b) => b.sourceId === 'ny')).toBe(false)
     expect(plan.some((b) => b.categoryId === 'journaling')).toBe(false)
     expect(plan.some((b) => b.sourceId === 'londyn')).toBe(true)
+  })
+
+  it('sesja dodana odpowiedzią „tak” schodzi z planu przez odwołanie (jest w planie, w żadnej migawce), blok własny przez wyjęcie z pliku', () => {
+    const weekend = createDay({ date: '2026-10-24', changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const file: DayFile = { ...emptyDayFile('2026-10-24'), sessions: { ny: 'yes' }, blocks: [block({ id: 'mine', cat: 'inne', at: '10:00', min: 30, origin: 'user' })] }
+    const ny = dayPlan(weekend, file).find((b) => b.sourceId === 'ny')!
+    expect(weekend.blocks.some((b) => b.id === ny.id)).toBe(false)
+    expect(leavesByCancel(ny.id, weekend, file)).toBe(true)
+    expect(leavesByCancel('mine', weekend, file)).toBe(false)
+    // A block of the snapshot changed for the day (its copy is in the file too) is cancelled as well.
+    const snap = createDay({ date: '2026-10-21', changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const tpl = snap.blocks.find((b) => b.origin === 'session')!
+    expect(leavesByCancel(tpl.id, snap, { ...emptyDayFile('2026-10-21'), blocks: [tpl] })).toBe(true)
+    // Cancelled it is gone from the plan, and „Cofnij” brings it back.
+    expect(dayPlan(weekend, { ...file, cancelled: [ny.id] }).some((b) => b.id === ny.id)).toBe(false)
+    expect(dayPlan(weekend, { ...file, cancelled: [] }).some((b) => b.id === ny.id)).toBe(true)
   })
 
   it('„tak” dodaje sesję, której dzień nie miał (dzień bez sesji)', () => {
@@ -317,6 +333,49 @@ describe('późne wstanie', () => {
     expect(detectLateWake(c4, computeDay(c4), { ...emptyDayFile('2026-10-21'), asked: { lateWake: 'no' } })).toBeNull()
   })
 
+  it('raz pokazane czeka na odpowiedź: pierwsze „zobaczono” w logu niesie koniec rutyny i pobudkę, później dodany blok rutyny go nie zmienia (D337)', () => {
+    const s = new Scenario({ date: '2026-10-21', plan, settings: { transitionBufferMin: 0 } }).presence('08:30')
+    const first = detectLateWake(s.contextAt(s.at('08:31')), computeDay(s.contextAt(s.at('08:31'))), null)!
+    expect(first.routineEndMin).toBe(lm('06:45'))
+    expect(lateWakeSeenId('2026-10-21', first)).toBe(`lateWake:2026-10-21:${lm('06:45')}:${lm('06:00')}`)
+    // A routine block added later, earlier than the morning one and running to 09:00: the morning routine is another now.
+    const added = [block({ id: 'r0', cat: 'rutyny', at: '05:00', min: 240, origin: 'user' }), ...plan]
+    const later = s.contextAt(s.at('08:40'), { plan: added })
+    expect(detectLateWake(later, computeDay(later), null)).toBeNull()
+    // The window reported it seen (the log keeps it): the proposal goes on from the end it was shown with.
+    s.raw({ k: 'question.seen', at: s.at('08:31'), question: lateWakeSeenId('2026-10-21', first), how: 'main' }, '08:31')
+    const kept = s.contextAt(s.at('08:40'), { plan: added })
+    const seen = detectLateWake(kept, computeDay(kept), null)!
+    expect(seen.routineEndMin).toBe(lm('06:45'))
+    expect(seen.delayMin).toBe(first.delayMin)
+    // An answer still closes it.
+    expect(detectLateWake(kept, computeDay(kept), { ...emptyDayFile('2026-10-21'), asked: { lateWake: 'no' } })).toBeNull()
+  })
+
+  it('pierwsze „zobaczono” wygrywa; inna pobudka – liczenie z planu; wartości spoza dnia i cudze id są ignorowane (D337)', () => {
+    const rutyna = [block({ id: 'ru', cat: 'rutyny', at: '07:00', min: 30 }), block({ id: 'an', cat: 'analiza', at: '10:00', min: 60 })]
+    const mk = (seen: string[]) => {
+      const s = new Scenario({ date: '2026-10-21', plan: rutyna, settings: { transitionBufferMin: 0 } }).presence('09:00')
+      for (const q of seen) s.raw({ k: 'question.seen', at: s.at('09:01'), question: q, how: 'main' }, '09:01')
+      return s
+    }
+    const endOf = (s: Scenario, extra: Parameters<Scenario['contextAt']>[1] = {}) => {
+      const ctx = s.contextAt(s.at('09:02'), extra)
+      return detectLateWake(ctx, computeDay(ctx), null)?.routineEndMin ?? null
+    }
+    const wake = lm('06:00')
+    // The first of two is the one kept (a later one with another end does not move it).
+    expect(endOf(mk([`lateWake:2026-10-21:${lm('07:15')}:${wake}`, `lateWake:2026-10-21:${lm('07:00')}:${wake}`]))).toBe(lm('07:15'))
+    // Kept for another wake: counted from the plan (07:30).
+    expect(endOf(mk([`lateWake:2026-10-21:${lm('07:15')}:${lm('05:00')}`]))).toBe(lm('07:30'))
+    // Another day's id, outside the day (before 04:00 of the day), not a number: ignored.
+    for (const bad of ['lateWake:2026-10-22:450:360', `lateWake:2026-10-21:100:${wake}`, `lateWake:2026-10-21:x:${wake}`, 'lateWake:2026-10-21:450', `wait:2026-10-21:450:${wake}`]) expect(endOf(mk([bad]))).toBe(lm('07:30'))
+    // The wake moved to 08:30 (the routine with it): the end kept for the old wake does not hold – the card is gone as before.
+    const kept = mk([`lateWake:2026-10-21:${lm('07:30')}:${wake}`])
+    const moved = { plan: [block({ id: 'ru', cat: 'rutyny', at: '08:30', min: 30 }), rutyna[1]!], wakeMin: lm('08:30') }
+    expect(endOf(kept, moved)).toBeNull()
+  })
+
   it('w czasie sesji propozycja czeka do jej końca', () => {
     const s = new Scenario({ date: '2026-10-21', plan: [...plan, block({ id: 'lo', cat: 'sesja', at: '08:00', min: 180, fixed: true, origin: 'session', source: 'londyn' })] }).presence('08:30')
     const ctx = s.contextAt(s.at('08:31'))
@@ -465,5 +524,88 @@ describe('kreator pierwszego komputera', () => {
     expect(sat.blocks.find((b) => b.tag === 'weeklyAnalysis')).toMatchObject({ startMin: lm('09:00'), waitUntilMin: lm('15:00') })
     const zjazd = createDay({ date: '2026-10-31', changes: rd.settings, templates, lectures: [], dayFile: dayFileFrom(records[3]!.value, '2026-10-31'), holidays: marketDay, at: null })
     expect(zjazd.dayType).toBe('zjazd-stacjonarny')
+  })
+})
+
+describe('pobudka przesuwa też bloki ręczne – jedna reguła i migawka dnia (D334)', () => {
+  const NO_SESSIONS = { londyn: 'no', ny: 'no' } as const
+  const tpl = templateFrom({
+    id: 't',
+    dayType: 'zwykly',
+    versions: [{ from: '2026-01-01', blocks: [{ id: 'f', categoryId: 'inne', startMin: lm('09:00'), durationMin: 30, fixed: true }, { id: 'b', categoryId: 'inne', startMin: lm('10:00'), durationMin: 30 }] }]
+  })!
+  const create = (lectures: Parameters<typeof createDay>[0]['lectures'] = []) => createDay({ date: '2026-10-21', changes: [], templates: [tpl], lectures, dayFile: null, holidays: marketDay, at: null })
+
+  it('poranek jest ograniczony pierwszym blokiem stałym jak w 1.0.3 – także odwołanym; blok szablonu i własny idą tak samo', () => {
+    const snap = create()
+    const f = snap.blocks.find((b) => b.sourceId === 'f')!
+    const base = { ...emptyDayFile('2026-10-21'), cancelled: [f.id], sessions: NO_SESSIONS, blocks: [block({ id: 'mine', cat: 'inne', at: '10:00', min: 30, origin: 'user' }), block({ id: 'early', cat: 'inne', at: '08:00', min: 30, origin: 'user' })] }
+    // The wake 06:00 → 07:00: the cancelled fixed block at 09:00 still bounds the morning (existing days do not change with
+    // the update): the block of the template at 10:00 stays, and so does yours at 10:00; the one at 08:00 goes with the wake.
+    const plan = dayPlan(snap, { ...base, wakeMin: lm('07:00') })
+    expect(plan.find((b) => b.sourceId === 'b')?.startMin).toBe(lm('10:00'))
+    expect(morningBound(snap, base)).toBe(lm('09:00'))
+    expect(wakeChange(snap, base, lm('07:00')).map((b) => [b.id, b.startMin])).toEqual([['early', lm('09:00')]])
+    // Not cancelled the bound is the same.
+    const kept = { ...base, cancelled: [] }
+    expect(morningBound(snap, kept)).toBe(lm('09:00'))
+    expect(dayPlan(snap, { ...kept, wakeMin: lm('07:00') }).find((b) => b.sourceId === 'b')?.startMin).toBe(lm('10:00'))
+    expect(wakeChange(snap, kept, lm('07:00')).map((b) => b.id)).toEqual(['early'])
+    // The answers of the session layer count as before: a session added by „tak” at 08:00 bounds both the same way.
+    const weekdaySnap = createDay({ date: '2026-10-21', changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const ses = { ...emptyDayFile('2026-10-21'), sessions: { londyn: 'yes', ny: 'no' } as const, blocks: [block({ id: 'x', cat: 'inne', at: '07:30', min: 30, origin: 'user' }), block({ id: 'y', cat: 'inne', at: '08:30', min: 30, origin: 'user' })] }
+    expect(morningBound(weekdaySnap, ses)).toBe(lm('08:00'))
+    expect(wakeChange(weekdaySnap, ses, lm('07:00')).map((b) => b.id)).toEqual(['x'])
+  })
+
+  it('pierwszy blok stały i różnica pobudek z migawki dnia, nie z dnia liczonego od nowa: wykład dodany po utworzeniu dnia', () => {
+    const lecture = { id: 'w', name: 'Wykład', categoryId: 'ogladanie', variantId: null, weekday: 3, startMin: lm('07:30'), durationMin: 60, from: '2026-01-01', to: '2026-12-31', exceptions: [], recorder: null, background: null, archived: false }
+    const logged = create()
+    const nowSnap = create([lecture])
+    expect(nowSnap.blocks.some((b) => b.origin === 'lecture')).toBe(true)
+    const file = { ...emptyDayFile('2026-10-21'), sessions: NO_SESSIONS, blocks: [block({ id: 'mine', cat: 'inne', at: '07:45', min: 30, origin: 'user' })] }
+    // The day as made (without the lecture): the block before the first fixed one of the shown plan moves.
+    expect(wakeChange(logged, file, lm('07:00')).map((b) => b.id)).toEqual(['mine'])
+    // The day counted again now has the lecture at 07:30 – it is not the plan the window shows.
+    expect(wakeChange(nowSnap, file, lm('07:00'))).toEqual([])
+  })
+})
+
+describe('pobudka przesuwa też bloki ręczne – raz, w chwili zmiany (D334)', () => {
+  const plan = [
+    block({ id: 'rano', cat: 'inne', at: '06:30', min: 30, origin: 'user' }),
+    block({ id: 'zmieniony', cat: 'inne', at: '07:00', min: 30, origin: 'template' }),
+    block({ id: 'stały', cat: 'inne', at: '09:00', min: 60, fixed: true, origin: 'user' }),
+    block({ id: 'po', cat: 'inne', at: '10:30', min: 30, origin: 'user' }),
+    block({ id: 'kotwica', cat: 'inne', after: 'rano', min: 15, origin: 'user' }),
+    block({ id: 'wlasny-stały', cat: 'inne', at: '07:30', min: 30, fixed: true, origin: 'user' })
+  ]
+  // The first fixed block is at 07:30 here: only what starts before it moves.
+  const moved = (from: string, to: string, p = plan, keep?: ReadonlySet<string>) => wakeShifted(p, p, firstFixedStart(p), lm(from), lm(to), keep).map((b) => [b.id, b.startMin!])
+
+  it('bloki ręczne przed pierwszym stałym idą o różnicę pobudek; stały, późniejsze i zakotwiczone zostają', () => {
+    expect(moved('06:00', '07:00')).toEqual([
+      ['rano', lm('07:30')],
+      ['zmieniony', lm('08:00')]
+    ])
+    // Without the fixed block of 07:30 the first one is that of 09:00: both flexible blocks of the morning move.
+    const p = plan.filter((b) => b.id !== 'wlasny-stały')
+    expect(moved('06:00', '07:30', p)).toEqual([
+      ['rano', lm('08:00')],
+      ['zmieniony', lm('08:30')]
+    ])
+  })
+
+  it('bez stałego bloku w planie idą wszystkie elastyczne; bez różnicy nic; zaczęty zostaje; początek dnia i koniec trzymają granice', () => {
+    const flexible = plan.filter((b) => !b.fixed)
+    expect(moved('06:00', '06:00', flexible)).toEqual([])
+    expect(moved('06:00', '07:00', flexible).map(([id]) => id)).toEqual(['rano', 'zmieniony', 'po'])
+    expect(moved('06:00', '07:00', flexible, new Set(['rano'])).map(([id]) => id)).toEqual(['zmieniony', 'po'])
+    expect(wakeShifted(flexible, flexible, firstFixedStart(flexible), lm('10:00'), lm('04:00')).find((b) => b.id === 'rano')?.startMin).toBe(240)
+  })
+
+  it('tylko własne bloki dnia: blok z migawki idzie z liczeniem dnia (dayPlan), nie z tą funkcją', () => {
+    const own = plan.filter((b) => b.id === 'rano')
+    expect(wakeShifted(own, plan, firstFixedStart(plan), lm('06:00'), lm('07:00')).map((b) => b.id)).toEqual(['rano'])
   })
 })

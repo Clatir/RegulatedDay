@@ -7,9 +7,11 @@
 import { REQUEST_CATEGORY, type CategoryRules } from '../model/categories'
 import { newId } from '../model/ids'
 import { dayRaw, putBlock, setMovedTo, takeBlock, type Raw } from '../data/dayEdits'
-import { dayFileFrom, PLAN_MAX, PLAN_MIN, planBlock, type PlanBlock, type Template } from '../model/plan'
+import type { DaySnapshot } from '../model/events'
+import { dayFileFrom, PLAN_MAX, PLAN_MIN, planBlock, type DayFile, type PlanBlock, type Template } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan, type BlockInfo } from './blocks'
+import { dayPlan, dayWakeMin, morningBound, wakeShiftedStart } from './createDay'
 import type { DayState } from './day'
 import { atOf, idxOfLogical } from './grid'
 
@@ -55,6 +57,41 @@ export function newBlockStart(state: DayState, fromMin: number, lengthMin = 60):
 
 /** A block dragged on the axis of a day or a template (D305) to a new start, kept in the logical day. */
 export const draggedBlock = (b: PlanBlock, startMin: number): PlanBlock => ({ ...b, startMin: inDay(startMin) })
+
+/**
+ * The blocks of the day's own file a changed wake moves (D334, spec „Pobudkę możesz ustawić osobno”, replaces T450 for the
+ * blocks you placed): once, at the change, by the difference between the new wake and the old one – the flexible ones
+ * that start before the first fixed block of the plan (in a day without a fixed block: every flexible one), not those
+ * anchored to another, and not those in `keep` (begun ones). `firstFixed` is the bound of the morning as `dayPlan` counts it (`morningBound`). The blocks of the snapshot follow the day's wake on their
+ * own (`dayPlan`); a block added after the change stays where it was put. Returns the moved copies only.
+ */
+export function wakeShifted(own: readonly PlanBlock[], plan: readonly PlanBlock[], firstFixed: number, fromWakeMin: number, toWakeMin: number, keep: ReadonlySet<string> = new Set()): PlanBlock[] {
+  const delta = toWakeMin - fromWakeMin
+  const shown = new Set(plan.map((b) => b.id))
+  const out: PlanBlock[] = []
+  for (const b of own) {
+    if (keep.has(b.id) || !shown.has(b.id)) continue
+    const startMin = wakeShiftedStart(b, delta, firstFixed)
+    if (startMin != null) out.push({ ...b, startMin })
+  }
+  return out
+}
+
+/**
+ * The blocks a change of the day's wake moves (D334): `snapshot` is the day's own as the engine counts it (the log's,
+ * else the one computed now), `file` the day's file as it is, `wakeMin` the value to store (null: the day's type again).
+ */
+export function wakeChange(snapshot: DaySnapshot, file: DayFile, wakeMin: number | null, keep: ReadonlySet<string> = new Set()): PlanBlock[] {
+  return wakeShifted(file.blocks, dayPlan(snapshot, file), morningBound(snapshot, file), dayWakeMin(snapshot, file), wakeMin ?? snapshot.wakeMin, keep)
+}
+
+/**
+ * Whether a block of the day's plan leaves it by being cancelled for the day (the snapshot's – template, lecture, session –
+ * also a session the answer „tak” added, which is in no snapshot) and not by being taken out of the file (your own).
+ */
+export function leavesByCancel(id: string, snapshot: Pick<DaySnapshot, 'blocks'>, file: Pick<DayFile, 'blocks'> | null): boolean {
+  return snapshot.blocks.some((b) => b.id === id) || !file?.blocks.some((b) => b.id === id)
+}
 
 /** The planned start of a block (an anchored one: its anchor's planned end), a logical minute; null when unknown. */
 export function plannedStartMin(b: PlanBlock, plan: readonly PlanBlock[], depth = 0): number | null {

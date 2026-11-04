@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.4
+- Bloki z warstwy sesji nazywają się „Sesja NY”, „Sesja Londyn” – w pasku, na osi, w rytuale, w powiadomieniach i w eksporcie CSV (np. „Sesja NY o 14:00 zostaje · Odwołaj”). Druga zmiana i ręcznie dodany blok „Sesja tradingowa” zostają „Sesja tradingowa”.
+- Zmiana pobudki przesuwa też Twoje ręcznie dodane bloki przed pierwszym blokiem stałym – raz, w chwili zmiany, z „Cofnij” („Pobudka 07:30: przesunięto 2 bloki”). Twoje zaczęte bloki i blok dodany po zmianie stoją, gdzie były.
+- „Start” posiłku albo innego bloku życia i opieki przy biegnącej pracy pauzuje pracę – po nim „Wznów: …” – zamiast ją kończyć.
+- „Usuń” przy zaczętym bloku kończy go w tej chwili i zdejmuje z planu, z „Cofnij”; przebieg do tej chwili zostaje na osi jako „poza planem”.
+- „Wstałeś później?” zostaje do Twojej odpowiedzi – dodanie bloku rutyny już jej nie zabiera.
+- Koszt startu w panelu bloku brzmi tak samo jak w pasku („Start: przedłużenie · −N min puli”).
+- Odrzucona wartość pola pokazuje powód także pod polem, dopóki jest błędna – we wszystkich polach aplikacji.
+- Wybrany odczuwany koszt w rytuale jest wyraźnie podświetlony.
+- Ustawienia pokazują numer wersji: „Wersja aplikacji: 1.0.4 · zainstalowana”.
+
 ## 1.0.3
 - Warianty planu po prośbie: „Skróć … o N min” naprawdę przybliża koniec pracy, także gdy blok przed blokiem stałym się nie mieści i przeskakuje za niego – wariant tnie wtedy blok, który wyznacza koniec, i podaje faktyczne „o N min”, a „Przesuń na jutro” dobiera tyle bloków, ile trzeba. Wariant, który końca nie poprawia, pokazuje prawdziwy koniec pracy.
 - „Zrobione automatycznie” w „⋯”: wiersz „bloki stałe według planu: N” rozwija się kliknięciem w listę, w której każde działanie ma „Cofnij”; pauza bloku przy starcie bloku stałego ma osobny wiersz z „Cofnij”, które – póki blok stały biegnie – cofa też jego start (blok wraca, jak był).

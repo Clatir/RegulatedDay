@@ -77,7 +77,7 @@ export function CategoriesSection() {
           <div key={id} className={cx('flex flex-col gap-2 rounded border border-line px-2.5 py-1.5', meta?.archived && 'border-dashed')} data-testid="category-row">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: blockFill(color, brightness), border: `1px solid ${color}` }} />
-              <TextField value={meta?.name ?? ''} onCommit={(n) => void setMeta(id, { name: n })} required max={60} className="w-[200px]" aria-label="Nazwa kategorii" />
+              <TextField value={meta?.name ?? ''} onCommit={(n) => void setMeta(id, { name: n })} required max={60} shellClassName="w-[200px]" aria-label="Nazwa kategorii" />
               <Choice value={c.cls} options={(['work', 'life', 'free'] as const).map((v) => ({ value: v, label: CLASS_NAMES[v] }))} onChange={(cls) => save({ categories: { [id]: { cls } } })} className="w-[130px]" aria-label="Klasa" />
               {POOLS.map(([p, label]) => (
                 <SettingNumber key={p} field={{ kind: 'integer', range: RANGES.cost, label: `${meta?.name}: ${label}` }} value={c.costs[p]} onCommit={(v) => save({ categories: { [id]: { costs: { [p]: v } } } })} className="w-[52px]" />

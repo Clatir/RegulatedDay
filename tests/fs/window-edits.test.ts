@@ -11,30 +11,43 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RawRecord, RdApi } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
+import { createDay } from '@shared/engine/createDay'
 import { planBlock, type PlanBlock } from '@shared/model/plan'
 import { logicalDayOf, placeLogical } from '@shared/time/day'
-import { addDays } from '@shared/time/zone'
+import { addDays, weekday } from '@shared/time/zone'
 import { DataHub } from '../../src/main/data/hub'
 
 // The window's modules (typed by the web project, not this one – loaded by path, with the few types used here).
 const load = <T,>(rel: string): Promise<T> => import(/* @vite-ignore */ rel) as Promise<T>
 interface Toast {
   text: string
+  kind?: string
   action?: { run: () => void }
 }
+type WakeDay = { snapshot: { wakeMin: number }; keep: ReadonlySet<string> }
 type CopySource = { date: string; plan: readonly PlanBlock[]; dayType: string | null; wakeMin: number | null }
-const { reloadData, useData } = await load<{ reloadData: () => Promise<void>; useData: { getState: () => { view: { status: string } | null } } }>('../../src/renderer/store/data')
+const { reloadData, useData } = await load<{ reloadData: () => Promise<void>; useData: { getState: () => { view: { status: string } | null }; setState: (s: { lectures: unknown[] }) => void } }>('../../src/renderer/store/data')
 const { useUi } = await load<{ useUi: { getState: () => { toasts: Toast[] }; setState: (s: { toasts: Toast[] }) => void } }>('../../src/renderer/store/ui')
-const { copyDayTo, patchDayBlock, removeDayBlock } = await load<{
+const { copyDayTo, patchDayBlock, removeDayBlock, saveDay, setDayWake, setWakeOnDays, wakeDayOf } = await load<{
   copyDayTo: (s: CopySource, targets: string[], rawOf: (d: string) => RawRecord | null) => Promise<boolean>
   patchDayBlock: (date: string, seen: RawRecord | null, b: PlanBlock, patch: Partial<PlanBlock>) => Promise<unknown>
-  removeDayBlock: (date: string, seen: RawRecord | null, b: PlanBlock, inSnapshot: boolean, name: string) => Promise<boolean>
+  removeDayBlock: (date: string, seen: RawRecord | null, b: PlanBlock, inSnapshot: boolean, name: string, begun?: 'no' | 'over' | 'open') => Promise<boolean>
+  setDayWake: (dates: string[], seen: (d: string) => RawRecord | null, wakeMin: number | null, days?: Record<string, WakeDay>) => Promise<boolean>
+  wakeDayOf: (date: string) => Promise<WakeDay>
+  setWakeOnDays: (dates: string[], today: string, seen: (d: string) => RawRecord | null, wakeMin: number | null) => Promise<boolean>
+  saveDay: (date: string, seen: RawRecord | null, next: (raw: RawRecord) => RawRecord) => Promise<unknown>
 }>('../../src/renderer/features/today/dayActions')
 
 let root: string
 let dir: string
 let hub: DataHub
 let failEdits = false
+// Actions of the timer whose IPC throws (an error of the bridge).
+let timerFails: string[] = []
+let failDayData = false
+// The outcome the plan's edit gets instead of the real one (a conflict with another computer, a broken file).
+let editStatus: 'conflict' | 'broken' | null = null
+let partialDay = false
 
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'rd-window-'))
@@ -56,17 +69,29 @@ beforeEach(async () => {
   })
   expect(await hub.open(dir)).toBe(true)
   failEdits = false
+  timerFails = []
+  failDayData = false
+  editStatus = null
+  partialDay = false
   // The window's bridge to the main process, as the preload gives it.
   ;(globalThis as unknown as { window: { rd: Partial<RdApi> } }).window = {
     rd: {
       dataView: () => hub.view(),
       dayFiles: (dates) => hub.dayFiles(dates),
-      dayData: (date) => hub.day(date),
+      dayData: async (date) => {
+        if (failDayData) throw new Error('most IPC nie odpowiada')
+        return partialDay ? { ...(await hub.day(date)), complete: false } : hub.day(date)
+      },
       edit: async (entries) => {
         if (failEdits) throw new Error('plik jest teraz nieczytelny')
+        if (editStatus) return entries.map(() => ({ status: editStatus! }))
         return hub.edit(entries)
       },
       logEvents: (events) => hub.events(events),
+      timer: async (click) => {
+        if (timerFails.includes(click.a)) throw new Error('most IPC nie odpowiada')
+        return hub.timer(click)
+      },
       requestCounters: () => hub.requestCounters()
     }
   }
@@ -81,7 +106,7 @@ afterEach(async () => {
 const today = () => logicalDayOf(hub.service!.folder.clock.now())
 const fileOf = (date: string) => {
   try {
-    return JSON.parse(readFileSync(join(dir, paths.day(date)), 'utf8')) as { blocks?: PlanBlock[]; cancelled?: Record<string, boolean> }
+    return JSON.parse(readFileSync(join(dir, paths.day(date)), 'utf8')) as { blocks?: PlanBlock[]; cancelled?: Record<string, boolean>; wakeMin?: number }
   } catch {
     return null
   }
@@ -127,6 +152,250 @@ describe('zapisy okna liczone od pliku w swojej kolejce', () => {
     await Promise.all([copyDayTo({ date, plan, dayType: null, wakeMin: null }, [target], () => null), copyDayTo({ date, plan, dayType: null, wakeMin: null }, [target], () => null)])
     expect(fileOf(target)!.blocks).toHaveLength(2)
     expect(await questions()).toEqual([])
+  })
+})
+
+describe('„Usuń” zaczętego bloku (D336)', () => {
+  const eventsOf = async (date: string) => (await hub.service!.folder.readDay(date)).events as unknown as Array<{ k: string; block?: string; rule?: string; target?: string; id: string }>
+
+  it('blok biegnący kończy się teraz i schodzi z planu jedną operacją; „Cofnij” oddaje go do planu i otwiera bieg', async () => {
+    const date = today()
+    const b = planBlock({ id: 'bieg', categoryId: 'inne', startMin: 4 * 60 + 5, durationMin: 600, origin: 'user' })
+    await patchDayBlock(date, null, b, {})
+    const started = await hub.timer({ a: 'start', block: 'bieg', day: date, confirm: true })
+    expect(started.ok).toBe(true)
+    expect(await removeDayBlock(date, null, b, false, 'Bieg', 'open')).toBe(true)
+    expect(fileOf(date)!.blocks!.some((x) => x.id === 'bieg')).toBe(false)
+    const end = (await eventsOf(date)).find((e) => e.k === 'block.end' && e.block === 'bieg')!
+    expect(end).toMatchObject({ rule: 'removed' })
+    useUi.getState().toasts.find((t) => t.text === 'Usunięty: Bieg')!.action!.run()
+    await vi.waitFor(async () => expect((await eventsOf(date)).some((e) => e.k === 'undo' && e.target === end.id)).toBe(true))
+    await vi.waitFor(() => expect(fileOf(date)!.blocks!.some((x) => x.id === 'bieg')).toBe(true))
+  })
+
+  const startOwn = async (date: string, id: string) => {
+    const b = planBlock({ id, categoryId: 'inne', startMin: 4 * 60 + 5, durationMin: 600, origin: 'user' })
+    await patchDayBlock(date, null, b, {})
+    expect((await hub.timer({ a: 'start', block: id, day: date, confirm: true })).ok).toBe(true)
+    return b
+  }
+  const undoAction = () => useUi.getState().toasts.find((t) => t.text.startsWith('Usunięty'))!.action!
+
+  it('„Cofnij” po tym, jak zaczął się inny blok: odmowa z komunikatem, nic nie wraca (ani plan, ani bieg)', async () => {
+    const date = today()
+    const a = await startOwn(date, 'a1')
+    expect(await removeDayBlock(date, null, a, false, 'A', 'open')).toBe(true)
+    const other = planBlock({ id: 'b1', categoryId: 'inne', startMin: 4 * 60 + 5, durationMin: 600, origin: 'user' })
+    await patchDayBlock(date, null, other, {})
+    expect((await hub.timer({ a: 'start', block: 'b1', day: date, confirm: true })).ok).toBe(true)
+    undoAction().run()
+    await vi.waitFor(() => expect(useUi.getState().toasts.some((t) => t.kind === 'error' && t.text.startsWith('Nie cofnięto'))).toBe(true))
+    await vi.waitFor(() => expect(fileOf(date)!.blocks!.some((x) => x.id === 'a1')).toBe(false))
+    expect((await eventsOf(date)).some((e) => e.k === 'undo')).toBe(false)
+  })
+
+  it('blok skończył się między widokiem a kliknięciem: tylko zdjęty z planu, bez czerwonego komunikatu i bez „undo” przy Cofnij', async () => {
+    const date = today()
+    const a = await startOwn(date, 'a2')
+    expect((await hub.timer({ a: 'finish', block: 'a2', day: date })).ok).toBe(true)
+    expect(await removeDayBlock(date, null, a, false, 'A', 'open')).toBe(true)
+    expect(fileOf(date)!.blocks!.some((x) => x.id === 'a2')).toBe(false)
+    expect(useUi.getState().toasts.some((t) => t.kind === 'error')).toBe(false)
+    undoAction().run()
+    await vi.waitFor(() => expect(fileOf(date)!.blocks!.some((x) => x.id === 'a2')).toBe(true))
+    expect((await eventsOf(date)).some((e) => e.k === 'undo')).toBe(false)
+  })
+
+  it('start cofnięty między widokiem a kliknięciem: zwykłe usunięcie jak bloku niezaczętego, bez czerwonego komunikatu', async () => {
+    const date = today()
+    const a = planBlock({ id: 'a4', categoryId: 'inne', startMin: 4 * 60 + 5, durationMin: 60, origin: 'user' })
+    await patchDayBlock(date, null, a, {})
+    // The view said „running”, the log says it never began.
+    expect(await removeDayBlock(date, null, a, false, 'A', 'open')).toBe(true)
+    expect(fileOf(date)!.blocks!.some((x) => x.id === 'a4')).toBe(false)
+    expect(useUi.getState().toasts.some((t) => t.kind === 'error')).toBe(false)
+    useUi.getState().toasts.find((t) => t.text.startsWith('Usunięty'))!.action!.run()
+    await vi.waitFor(() => expect(fileOf(date)!.blocks!.some((x) => x.id === 'a4')).toBe(true))
+    expect((await eventsOf(date)).some((e) => e.k === 'undo' || e.k === 'block.end')).toBe(false)
+  })
+
+  it('konflikt przy zapisie planu: edycja zostaje pytaniem, blok nie otwiera się z powrotem; zepsuty plik – otwiera i mówi', async () => {
+    const date = today()
+    const a = await startOwn(date, 'a5')
+    editStatus = 'conflict'
+    expect(await removeDayBlock(date, null, a, false, 'A', 'open')).toBe(false)
+    expect((await eventsOf(date)).some((e) => e.k === 'undo')).toBe(false)
+    expect((await eventsOf(date)).filter((e) => e.k === 'block.end')).toHaveLength(1)
+    editStatus = null
+    const b = await startOwn(date, 'a6')
+    editStatus = 'broken'
+    expect(await removeDayBlock(date, null, b, false, 'B', 'open')).toBe(false)
+    expect((await eventsOf(date)).filter((e) => e.k === 'undo')).toHaveLength(1)
+  })
+
+  it('niepowodzenie otwarcia bloku po nieudanym zapisie planu jest powiedziane', async () => {
+    const date = today()
+    const b = await startOwn(date, 'a8')
+    timerFails = ['undoRemove']
+    editStatus = 'broken'
+    expect(await removeDayBlock(date, null, b, false, 'B', 'open')).toBe(false)
+    expect(useUi.getState().toasts.some((t) => t.kind === 'error' && t.text.startsWith('Blok „B” nie otworzył się'))).toBe(true)
+  })
+
+  it('„Cofnij”: najpierw plan – odmowa zapisu planu nic nie rusza; potem koniec – odmowa cofa plan do stanu po usunięciu', async () => {
+    const date = today()
+    const a = await startOwn(date, 'a9')
+    expect(await removeDayBlock(date, null, a, false, 'A', 'open')).toBe(true)
+    const undo = undoAction()
+    // The plan's restore meets a conflict: the run is not opened.
+    editStatus = 'conflict'
+    undo.run()
+    await vi.waitFor(() => expect(useUi.getState().toasts.length).toBeGreaterThan(0))
+    await new Promise((r) => setTimeout(r, 300))
+    expect((await eventsOf(date)).some((e) => e.k === 'undo')).toBe(false)
+    expect(fileOf(date)!.blocks!.some((x) => x.id === 'a9')).toBe(false)
+    // The plan comes back, the end cannot be taken back: the plan goes again as the removal left it, and it is said.
+    editStatus = null
+    timerFails = ['undoRemove']
+    undo.run()
+    await vi.waitFor(() => expect(useUi.getState().toasts.some((t) => t.kind === 'error' && t.text.startsWith('Nie cofnięto'))).toBe(true))
+    await vi.waitFor(() => expect(fileOf(date)!.blocks!.some((x) => x.id === 'a9')).toBe(false))
+    expect((await eventsOf(date)).filter((e) => e.k === 'block.end')).toHaveLength(1)
+  })
+
+  it('most IPC rzuca: przy „Usuń” nic nie jest usunięte; przy „Cofnij” nie wraca żadna połowa', async () => {
+    const date = today()
+    const a = await startOwn(date, 'a3')
+    timerFails = ['removeBegun']
+    expect(await removeDayBlock(date, null, a, false, 'A', 'open')).toBe(false)
+    expect(fileOf(date)!.blocks!.some((x) => x.id === 'a3')).toBe(true)
+    expect(useUi.getState().toasts.some((t) => t.kind === 'error' && t.text.startsWith('Nie usunięto'))).toBe(true)
+    timerFails = []
+    expect(await removeDayBlock(date, null, a, false, 'A', 'open')).toBe(true)
+    timerFails = ['undoRemove']
+    undoAction().run()
+    await vi.waitFor(() => expect(useUi.getState().toasts.some((t) => t.kind === 'error' && t.text.startsWith('Nie cofnięto'))).toBe(true))
+    await vi.waitFor(() => expect(fileOf(date)!.blocks!.some((x) => x.id === 'a3')).toBe(false))
+  })
+
+  it('nieudany zapis planu: koniec bloku cofnięty od razu, bez „Usunięty”', async () => {
+    const date = today()
+    const b = planBlock({ id: 'bieg2', categoryId: 'inne', startMin: 4 * 60 + 5, durationMin: 600, origin: 'user' })
+    await patchDayBlock(date, null, b, {})
+    expect((await hub.timer({ a: 'start', block: 'bieg2', day: date, confirm: true })).ok).toBe(true)
+    failEdits = true
+    expect(await removeDayBlock(date, null, b, false, 'Bieg', 'open')).toBe(false)
+    failEdits = false
+    await vi.waitFor(async () => expect((await eventsOf(date)).some((e) => e.k === 'undo')).toBe(true))
+    expect(useUi.getState().toasts.some((t) => t.text.startsWith('Usunięty'))).toBe(false)
+  })
+})
+
+describe('pobudka przesuwa bloki ręczne (D334)', () => {
+  const put = (date: string, id: string, startMin: number, fixed = false) => patchDayBlock(date, null, planBlock({ id, categoryId: 'inne', startMin, durationMin: 30, fixed, origin: 'user' }), {})
+
+  it('zmiana pobudki: bloki ręczne przed pierwszym stałym idą o różnicę jednym zapisem z „Cofnij”; blok dodany potem już nie', async () => {
+    const date = addDays(today(), 2)
+    const wake = createDay({ date, changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null }).wakeMin
+    // Placed by hand at 04:30 and 04:45 (before any fixed block of any day type), a fixed one at 12:00 and a flexible one after it.
+    await put(date, 'rano', 4 * 60 + 30)
+    await put(date, 'stały', 12 * 60, true)
+    await put(date, 'po', 13 * 60)
+    await reloadData()
+    const seen = (d: string) => (d === date ? (fileOf(date) as unknown as RawRecord) : null)
+    expect(await setDayWake([date], seen, wake + 60)).toBe(true)
+    const moved = fileOf(date)!
+    expect(moved.wakeMin).toBe(wake + 60)
+    expect(moved.blocks!.map((b) => [b.id, b.startMin])).toEqual([
+      ['rano', 4 * 60 + 30 + 60],
+      ['stały', 12 * 60],
+      ['po', 13 * 60]
+    ])
+    // A block added after the change stays where it was put.
+    await put(date, 'nowy', 5 * 60)
+    expect(fileOf(date)!.blocks!.find((b) => b.id === 'nowy')!.startMin).toBe(5 * 60)
+    // „Cofnij” gives the wake and the moved block back (and leaves the new one).
+    const undo = useUi.getState().toasts.find((t) => t.text.startsWith('Pobudka'))!.action!
+    undo.run()
+    await vi.waitFor(() => expect(fileOf(date)!.blocks!.find((b) => b.id === 'rano')!.startMin).toBe(4 * 60 + 30))
+    expect(fileOf(date)!.wakeMin).toBeUndefined()
+    expect(fileOf(date)!.blocks!.find((b) => b.id === 'nowy')!.startMin).toBe(5 * 60)
+    expect(await questions()).toEqual([])
+  })
+
+  it('bloki zaczęte zostają: dla dziś keep z dnia policzonego jak w „Dziś” (wakeDayOf), bez niego przesunęłyby się', async () => {
+    const date = today()
+    await put(date, 'rano', 4 * 60 + 30)
+    await patchDayBlock(date, null, planBlock({ id: 'bieg', categoryId: 'inne', startMin: 4 * 60 + 5, durationMin: 600, origin: 'user' }), {})
+    expect((await hub.timer({ a: 'start', block: 'bieg', day: date, confirm: true })).ok).toBe(true)
+    await reloadData()
+    const seen = (d: string) => (d === date ? (fileOf(date) as unknown as RawRecord) : null)
+    const day = await wakeDayOf(date)
+    expect([...day.keep]).toEqual(['bieg'])
+    expect(await setDayWake([date], seen, day.snapshot.wakeMin + 60, { [date]: day })).toBe(true)
+    const starts = Object.fromEntries(fileOf(date)!.blocks!.map((b) => [b.id, b.startMin]))
+    expect(starts).toEqual({ rano: 4 * 60 + 30 + 60, bieg: 4 * 60 + 5 })
+  })
+
+  it('dzień liczony z migawki dnia, nie od nowa: wykład dodany po utworzeniu dnia nie wyznacza pierwszego bloku stałego', async () => {
+    const date = addDays(today(), 2)
+    const logged = createDay({ date, changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null })
+    await put(date, 'rano', 7 * 60 + 45)
+    const seen = (d: string) => (d === date ? (fileOf(date) as unknown as RawRecord) : null)
+    const lecture = { id: 'w', name: 'Wykład', categoryId: 'ogladanie', variantId: null, weekday: weekday(date), startMin: 7 * 60 + 30, durationMin: 60, from: '2026-01-01', to: '2099-12-31', exceptions: [], recorder: null, background: null, archived: false }
+    useData.setState({ lectures: [lecture] })
+    // The day as made (without the lecture): the block before its first fixed block moves.
+    expect(await setDayWake([date], seen, logged.wakeMin + 60, { [date]: { snapshot: logged, keep: new Set() } })).toBe(true)
+    expect(fileOf(date)!.blocks!.find((b) => b.id === 'rano')!.startMin).toBe(7 * 60 + 45 + 60)
+  })
+
+  it('„Cofnij” pobudki zostawia pobudkę zmienioną w międzyczasie, a oddaje bloki, które stoją jeszcze tam, gdzie je dał (A6-07)', async () => {
+    const date = addDays(today(), 2)
+    const wake = createDay({ date, changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null }).wakeMin
+    await put(date, 'rano', 4 * 60 + 30)
+    const seen = (d: string) => (d === date ? (fileOf(date) as unknown as RawRecord) : null)
+    expect(await setDayWake([date], seen, wake + 60)).toBe(true)
+    await saveDay(date, null, (raw) => ({ ...raw, wakeMin: wake + 120 }))
+    useUi.getState().toasts.find((t) => t.text.startsWith('Pobudka'))!.action!.run()
+    await vi.waitFor(() => expect(fileOf(date)!.blocks!.find((b) => b.id === 'rano')!.startMin).toBe(4 * 60 + 30))
+    expect(fileOf(date)!.wakeMin).toBe(wake + 120)
+  })
+
+  it('Kalendarz: dziś z dnia silnika (zaczęty blok zostaje), a błąd mostu przy czytaniu dnia nie jest nieobsłużony – komunikat i nic zapisanego', async () => {
+    const date = today()
+    await put(date, 'rano', 4 * 60 + 30)
+    await patchDayBlock(date, null, planBlock({ id: 'bieg', categoryId: 'inne', startMin: 4 * 60 + 5, durationMin: 600, origin: 'user' }), {})
+    expect((await hub.timer({ a: 'start', block: 'bieg', day: date, confirm: true })).ok).toBe(true)
+    await reloadData()
+    const seen = (d: string) => (d === date ? (fileOf(date) as unknown as RawRecord) : null)
+    const wake = (await wakeDayOf(date)).snapshot.wakeMin
+    failDayData = true
+    expect(await setWakeOnDays([date], date, seen, wake + 60)).toBe(false)
+    expect(useUi.getState().toasts.some((t) => t.kind === 'error' && t.text.startsWith('Nie zapisano pobudki'))).toBe(true)
+    expect(fileOf(date)!.wakeMin).toBeUndefined()
+    failDayData = false
+    expect(await setWakeOnDays([date], date, seen, wake + 60)).toBe(true)
+    expect(Object.fromEntries(fileOf(date)!.blocks!.map((b) => [b.id, b.startMin]))).toEqual({ rano: 4 * 60 + 30 + 60, bieg: 4 * 60 + 5 })
+  })
+
+  it('Kalendarz: dzień dziś nieczytelny albo niepełny – komunikat i nic zapisanego', async () => {
+    const date = today()
+    await put(date, 'rano', 4 * 60 + 30)
+    const seen = (d: string) => (d === date ? (fileOf(date) as unknown as RawRecord) : null)
+    partialDay = true
+    expect(await setWakeOnDays([date], date, seen, 7 * 60)).toBe(false)
+    expect(useUi.getState().toasts.some((t) => t.kind === 'error' && t.text.includes('nieczytelny'))).toBe(true)
+    expect(fileOf(date)!.wakeMin).toBeUndefined()
+    partialDay = false
+    expect(await setWakeOnDays([date], date, seen, 7 * 60)).toBe(true)
+    expect(fileOf(date)!.wakeMin).toBe(7 * 60)
+  })
+
+  it('bez bloków ręcznych do przesunięcia zapisuje samą pobudkę i nic nie ogłasza', async () => {
+    const date = addDays(today(), 2)
+    expect(await setDayWake([date], () => null, 7 * 60)).toBe(true)
+    expect(fileOf(date)!.wakeMin).toBe(7 * 60)
+    expect(useUi.getState().toasts.some((t) => t.text.startsWith('Pobudka'))).toBe(false)
   })
 })
 

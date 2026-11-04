@@ -41,7 +41,7 @@ export function MoveDialog({ model, block, today, onClose }: { model: DayModel; 
     >
       <p className="text-[12.5px] text-muted">Blok zachowa swoją godzinę i dostanie licznik przeniesień +1 (przeniesiony {block.moves + 1}×).</p>
       <div className="flex flex-wrap items-center gap-2">
-        <DateField today={today} value={to} onCommit={setTo} className="w-[130px]" aria-label="Dzień" data-testid="move-date" />
+        <DateField today={today} value={to} onCommit={setTo} shellClassName="w-[130px]" aria-label="Dzień" data-testid="move-date" />
         {[1, 2, 7].map((n) => (
           <button key={n} type="button" className="chip" aria-pressed={to === addDays(model.date, n)} onClick={() => setTo(addDays(model.date, n))}>
             {n === 1 ? 'jutro' : n === 2 ? 'pojutrze' : 'za tydzień'}

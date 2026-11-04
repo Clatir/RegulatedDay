@@ -155,7 +155,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
       <div className="min-w-0 flex-1 overflow-y-auto p-4">
         <div className="flex max-w-[760px] flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <TextField value={template.name} onCommit={(name) => void saveTemplate({ name })} required max={80} className="max-w-[260px]" aria-label="Nazwa szablonu" data-testid="template-name" />
+            <TextField value={template.name} onCommit={(name) => void saveTemplate({ name })} required max={80} shellClassName="max-w-[260px]" aria-label="Nazwa szablonu" data-testid="template-name" />
             <span className="flex-1" />
             <button type="button" className="btn" onClick={() => void copy()} data-testid="template-copy">
               Skopiuj szablon
@@ -195,7 +195,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
           </Field>
           <Field label="Zmiany od" labelWidth={140} hint={`Wersje: ${template.versions.map((v) => `od ${plDate(v.from)}`).join(', ') || 'brak'}. Dni przed tą datą się nie zmieniają.`}>
             <div className="flex items-center gap-2">
-              <DateField today={today} value={from} onCommit={(d) => setFrom(d < tomorrow ? tomorrow : d)} className="w-[120px]" aria-label="Zmiany od" data-testid="template-from" />
+              <DateField today={today} value={from} onCommit={(d) => setFrom(d < tomorrow ? tomorrow : d)} shellClassName="w-[120px]" aria-label="Zmiany od" data-testid="template-from" />
               {from !== tomorrow && (
                 <button type="button" className="chip" onClick={() => setFrom(tomorrow)}>
                   od jutra

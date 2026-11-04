@@ -22,6 +22,7 @@ import { dayFilesNow, editOf, isSaved, trySaveWith, useData } from '../../store/
 import { useBusy } from '../../lib/busy'
 import { useMachine } from '../../store/machine'
 import { openDay, toast } from '../../store/ui'
+import { setWakeOnDays } from '../today/dayActions'
 import { DAY_TYPE_COLORS, holidayMarks } from './dayTypes'
 import { gridDates, MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
 
@@ -106,7 +107,8 @@ export function CalendarPage() {
   }
 
   const setWakeOf = async (v: number | null) => {
-    if (isSaved(await saveDays([...sel].filter((d) => d >= today), (r) => setDayField(r, 'wakeMin', v)))) setSel(new Set())
+    // The blocks you placed move with the wake, once (D334); one „Cofnij” for all the days.
+    if (await run(() => setWakeOnDays([...sel].filter((d) => d >= today), today, (d) => files[d] ?? null, v))) setSel(new Set())
   }
 
   const answerAnalysis = async (a: (typeof ask)[number], yes: boolean) => {
@@ -177,7 +179,7 @@ export function CalendarPage() {
           Typ z tygodnia
         </button>
         <span className="inline-flex items-center gap-1.5">
-          <TimeField value={wake} range={RANGES.wakeMin} onCommit={setWake} className="w-[76px]" aria-label="Pobudka zaznaczonych dni" placeholder="pobudka" />
+          <TimeField value={wake} range={RANGES.wakeMin} onCommit={setWake} shellClassName="w-[76px]" aria-label="Pobudka zaznaczonych dni" placeholder="pobudka" />
           <button type="button" className="btn" disabled={!sel.size || wake == null || busy} onClick={() => void setWakeOf(wake)}>
             Ustaw pobudkę
           </button>

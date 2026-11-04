@@ -79,7 +79,7 @@ function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => voi
   return (
     <div className="flex max-w-[860px] flex-col gap-4" data-testid="routine-editor">
       <div className="flex items-center gap-2">
-        <TextField value={routine.name} onCommit={(name) => save({ name })} required max={80} className="max-w-[320px] text-[14px]" aria-label="Nazwa rutyny" data-testid="routine-name" />
+        <TextField value={routine.name} onCommit={(name) => save({ name })} required max={80} shellClassName="max-w-[320px]" className="text-[14px]" aria-label="Nazwa rutyny" data-testid="routine-name" />
         <span className="flex-1" />
         <button type="button" className="btn" onClick={() => save({ archived: !routine.archived })}>
           {routine.archived ? 'Przywróć z archiwum' : 'Archiwizuj'}
@@ -119,8 +119,8 @@ function Steps({ version, steps, onChange }: { version: RoutineVersion; steps: R
       {steps.map((s, i) => (
         <div key={s.id} className="flex items-center gap-1.5">
           <span className="num w-[18px] text-right text-[11px] text-muted">{i + 1}.</span>
-          <TextField value={s.name} onCommit={(name) => set(s.id, { name })} max={80} placeholder="krok" className="min-w-0 flex-1" aria-label={`Krok ${i + 1}`} />
-          <DurationField value={s.min} range={STEP_RANGE} onCommit={(min) => set(s.id, { min })} className="w-[84px]" aria-label={`Czas kroku ${i + 1}`} />
+          <TextField value={s.name} onCommit={(name) => set(s.id, { name })} max={80} placeholder="krok" shellClassName="min-w-0 flex-1" aria-label={`Krok ${i + 1}`} />
+          <DurationField value={s.min} range={STEP_RANGE} onCommit={(min) => set(s.id, { min })} shellClassName="w-[84px]" aria-label={`Czas kroku ${i + 1}`} />
           <button type="button" className="px-1 text-muted hover:text-fg" onClick={() => move(s.id, -1)} aria-label="Wyżej" data-testid={`step-up-${version}-${i}`}>
             ↑
           </button>

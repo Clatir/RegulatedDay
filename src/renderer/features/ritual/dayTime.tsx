@@ -87,7 +87,7 @@ export function DayTime({ date, value, onTyped, label, testId }: { date: string;
         // Taken also when equal to what it shows (typed again after a refusal) – the occurrence picked stays then.
         onAccept={(m) => onTyped({ min: m, pick: m === value.min ? value.pick : 'first' })}
         onReject={(message) => onTyped({ refused: message })}
-        className="w-[76px]"
+        shellClassName="w-[76px]"
         aria-label={label}
         data-testid={testId}
       />

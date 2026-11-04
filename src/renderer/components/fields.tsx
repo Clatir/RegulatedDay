@@ -5,10 +5,11 @@
  * fraction. Durations („90”, „1:30”, „1h30”), times of the logical day („+1” before 04:00) and dates without a year
  * („3.01” – the nearest such date) are parsed by @shared/format.
  */
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { clock, durationLabel, logicalClock, parseDate, parseDuration, parseInteger, parseLogicalTime, plDate, type Parsed } from '@shared/format'
 import { parseField } from '@shared/model/fields'
 import { toast } from '../store/ui'
+import { useEscapeLayer } from '../lib/escape'
 import { cx } from './ui'
 
 interface CommitFieldProps<T> {
@@ -17,7 +18,12 @@ interface CommitFieldProps<T> {
   parse: (text: string) => Parsed<T>
   format: (value: T) => string
   placeholder?: string
+  /** The input's own look (a text size …). */
   className?: string
+  /** The field's place in the layout (a width, `flex-1`, `min-w-0` …): on the shell, the input fills it. */
+  shellClassName?: string
+  /** Where the reason of a refused value sits (D347): `'float'` by default. */
+  errorPlacement?: ErrorPlacement
   readOnly?: boolean
   /** A value parsed but still refused (a skipped hour of the change of time): its message, null – accepted. */
   check?: (value: T) => string | null
@@ -41,9 +47,41 @@ export function fieldCommit<T>(draft: string, value: T | null, parse: (t: string
   return { value: parsed.value, changed: value == null || format(parsed.value) !== format(value) }
 }
 
-export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, readOnly, check, onReject, onAccept, ...rest }: CommitFieldProps<T>) {
+/** Where the reason of a refused value sits: in the flow under the field (the row grows), or floating under it (the layout stays). */
+export type ErrorPlacement = 'below' | 'float'
+
+/**
+ * A field with the reason it was refused under it (D347, E8k.3), for as long as the value stays refused, next to the
+ * corner's message and the red frame. Every field of the common handling goes through it. The shell is the field's
+ * element in the layout (`.field-shell`: the row's width, unless `className` – a width, `flex-1`, `min-w-0` … – says
+ * otherwise); the input fills it. `placement` is the field's choice, never guessed: `'float'` (the default; never moves
+ * what is around, takes no clicks) for fields in rows and grids, `'below'` for a form where there is room for a line.
+ */
+export function FieldShell({ error, errorId, className, placement = 'float', testId, children }: { error: string | null; errorId: string; className?: string; placement?: ErrorPlacement; testId?: string; children: ReactNode }) {
+  return (
+    <span className={cx('field-shell', className)}>
+      {children}
+      {error != null && (
+        <span
+          id={errorId}
+          role="alert"
+          data-testid={testId ? `${testId}-error` : undefined}
+          className={cx('text-[11px] leading-snug text-rose', placement === 'float' ? 'pointer-events-none absolute left-0 top-full z-10 mt-0.5 w-max max-w-[260px] rounded bg-panel px-1' : 'mt-0.5 block')}
+        >
+          {error}
+        </span>
+      )}
+    </span>
+  )
+}
+
+// The refused value's message goes away with Esc – wherever the focus is (the layer is the newest, so it is first). Only the message
+// and the frame: the value stays refused (A6-14: `onAccept` is not called, „Zapisz” of an answer still refuses).
+export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, shellClassName, errorPlacement, readOnly, check, onReject, onAccept, ...rest }: CommitFieldProps<T>) {
   const [draft, setDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const errorId = useId()
+  useEscapeLayer(error != null, () => setError(null))
   // Esc: the blur it causes runs with this render's draft – it must not apply it.
   const cancelled = useRef(false)
   const shown = draft ?? (value == null ? '' : format(value))
@@ -70,33 +108,36 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
     if (r.changed) onCommit(r.value)
   }
   return (
-    <input
-      className={cx('input num', className)}
-      value={shown}
-      placeholder={placeholder}
-      readOnly={readOnly}
-      spellCheck={false}
-      aria-invalid={!!error}
-      aria-label={rest['aria-label']}
-      data-testid={rest['data-testid']}
-      data-error={error ?? undefined}
-      onFocus={(e) => e.currentTarget.select()}
-      onChange={(e) => {
-        setDraft(e.currentTarget.value)
-        setError(null)
-      }}
-      onBlur={commit}
-      onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-        if (e.key === 'Escape' && draft != null) {
-          // The first Esc only cancels the edit; the next one goes to whatever is around.
-          e.stopPropagation()
-          e.preventDefault()
-          cancelled.current = true
-          e.currentTarget.blur()
-        }
-      }}
-    />
+    <FieldShell error={error} errorId={errorId} className={shellClassName} placement={errorPlacement} testId={rest['data-testid']}>
+      <input
+        className={cx('input num', className)}
+        value={shown}
+        placeholder={placeholder}
+        readOnly={readOnly}
+        spellCheck={false}
+        aria-invalid={!!error}
+        aria-describedby={error ? errorId : undefined}
+        aria-label={rest['aria-label']}
+        data-testid={rest['data-testid']}
+        data-error={error ?? undefined}
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => {
+          setDraft(e.currentTarget.value)
+          setError(null)
+        }}
+        onBlur={commit}
+        onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape' && draft != null) {
+            // The first Esc only cancels the edit; the next one goes to whatever is around.
+            e.stopPropagation()
+            e.preventDefault()
+            cancelled.current = true
+            e.currentTarget.blur()
+          }
+        }}
+      />
+    </FieldShell>
   )
 }
 
@@ -147,25 +188,31 @@ export function DateField({ today, past, ...p }: Omit<CommitFieldProps<string>, 
 }
 
 /** A text (a name, a note): saved on leaving the field or Enter, Esc throws the edit away; trimmed, at most `max` characters. */
-export function TextField({ value, onCommit, max = 80, multiline, placeholder, className, required, ...rest }: {
+export function TextField({ value, onCommit, max = 80, multiline, placeholder, className, shellClassName, errorPlacement, required, ...rest }: {
   value: string
   onCommit: (v: string) => void
   max?: number
   multiline?: boolean
   placeholder?: string
   className?: string
+  shellClassName?: string
+  errorPlacement?: ErrorPlacement
   /** An empty text is refused (a name). */
   required?: boolean
   'aria-label'?: string
   'data-testid'?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const errorId = useId()
+  useEscapeLayer(error != null, () => setError(null))
   const cancelled = useRef(false)
   const shown = draft ?? value
   const commit = () => {
     if (cancelled.current) {
       cancelled.current = false
       setDraft(null)
+      setError(null)
       return
     }
     if (draft == null) return
@@ -173,8 +220,10 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
     setDraft(null)
     if (required && !v) {
       toast('To pole nie może być puste.', 'error', 5000)
+      setError('To pole nie może być puste.')
       return
     }
+    setError(null)
     if (v !== value) onCommit(v)
   }
   const common = {
@@ -185,7 +234,12 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
     'aria-label': rest['aria-label'],
     'data-testid': rest['data-testid'],
     onBlur: commit,
-    onChange: (e: { currentTarget: { value: string } }) => setDraft(e.currentTarget.value),
+    'aria-invalid': !!error,
+    'aria-describedby': error ? errorId : undefined,
+    onChange: (e: { currentTarget: { value: string } }) => {
+      setDraft(e.currentTarget.value)
+      setError(null)
+    },
     onKeyDown: (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && (!multiline || e.ctrlKey)) e.currentTarget.blur()
       if (e.key === 'Escape' && draft != null) {
@@ -196,7 +250,11 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
       }
     }
   }
-  return multiline ? <textarea {...common} rows={3} className={cx('input h-auto py-1.5 leading-snug', className)} /> : <input {...common} className={cx('input', className)} />
+  return (
+    <FieldShell error={error} errorId={errorId} className={shellClassName} placement={errorPlacement} testId={rest['data-testid']}>
+      {multiline ? <textarea {...common} rows={3} className={cx('input h-auto py-1.5 leading-snug', className)} /> : <input {...common} className={cx('input', className)} />}
+    </FieldShell>
+  )
 }
 
 /** A choice from a list (a native list: the main window only – the bar never opens one, D229). */

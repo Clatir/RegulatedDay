@@ -159,6 +159,12 @@
     outline: none;
     transition: border-color 120ms ease-out;
   }
+  /* A field's element in the layout (fields.tsx): what the input was – the row's width unless a utility says otherwise. */
+  .field-shell {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+  }
   .input:focus {
     border-color: var(--color-accent);
   }
@@ -194,6 +200,15 @@
   }
   .btn:disabled {
     opacity: 0.45;
+  }
+  /* A chosen button (the felt cost in the ritual, E6c.4): the lamp, like a chosen chip – the raised fill is already the button's. */
+  .btn[aria-pressed='true'] {
+    color: var(--color-lamp);
+    border-color: rgb(242 182 109 / 0.6);
+    background: var(--color-lamp-soft);
+  }
+  .btn[aria-pressed='true']:hover:not(:disabled) {
+    background: var(--color-lamp-soft);
   }
   .btn-accent {
     border-color: rgb(242 182 109 / 0.55);

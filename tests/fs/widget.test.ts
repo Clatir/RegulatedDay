@@ -150,6 +150,21 @@ describe('widget w procesie głównym', () => {
     expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'notice.shown')).toHaveLength(1)
   })
 
+  it('powiadomienie sesji z warstwy sesji nazywa ją „Sesja NY” (D338); ręczny blok kategorii zostaje „Sesja tradingowa”', async () => {
+    writeFileSync(
+      join(dataDir, paths.day(DAY)),
+      JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'ny', categoryId: 'sesja', startMin: 15 * 60 + 30, durationMin: 60, fixed: true, background: false, origin: 'session', sourceId: 'ny' }] })
+    )
+    const { w, folder, shown, at } = await make()
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(15 * 60 + 26)
+    await folder.check()
+    await w.refresh()
+    expect(shown.map((n) => n.title)).toEqual(['Sesja NY o 15:30'])
+  })
+
   it('powiadomienie, którego Windows nie przyjął (pełny ekran): jeszcze raz, gdy przyjmuje i jesteś przy komputerze, póki aktualne (A4-07)', async () => {
     let taken = false
     let present = false

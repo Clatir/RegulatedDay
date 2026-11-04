@@ -126,7 +126,7 @@ function auto(date: string, rule: string, draft: TimerDraft & { block?: string }
 /** A block's fact without its end (to judge again whether an automatic end still holds). */
 function unended(f: BlockFact): BlockFact {
   const runs = f.runs.map((r, i) => (i === f.runs.length - 1 && f.endedAt != null && r.to === f.endedAt ? { ...r, to: OPEN } : r))
-  return { ...f, runs, endedAt: null, done: null, endRule: null, endId: null }
+  return { ...f, runs, endedAt: null, done: null, endRule: null, endId: null, endOrder: null }
 }
 
 interface Ctx {

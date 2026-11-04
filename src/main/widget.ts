@@ -8,7 +8,8 @@
  * Until a data folder is open the widget shows one neutral line („Brak folderu danych · Otwórz okno”, D327).
  */
 import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind } from '@shared/api'
-import { blockName } from '@shared/blockName'
+import { blockName, namedOf } from '@shared/blockName'
+import { costText } from '@shared/costText'
 import { recordEdit, sameContentAs } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { engineView, POOL_TEXT, RESERVE_REGEN_MIN, warnDeadlines } from '@shared/engineView'
@@ -94,8 +95,6 @@ interface Pending extends Omit<BarPending, 'left'> {
 
 /** The longest extension of „Przedłuż” by its steps. */
 export const EXTEND_MAX_MIN = 180
-
-const costText = (label: string, c: NonNullable<TimerResult['confirm']>) => `${label}: ${c.overrun ? 'przekroczenie' : 'przedłużenie'} · ${c.bedtime ? `pora snu +${c.minutes} min` : `−${c.minutes} min puli`}`
 
 /** Windows shows a notification in this state (A4-07): it accepts them, or the state could not be read. */
 const takesNotifications = (state: string): boolean => state === 'accepts' || state === 'unknown'
@@ -376,7 +375,7 @@ export class WidgetEngine {
       this.say('Plan się mieści – nie ma czego przestawiać.')
       return this.refresh()
     }
-    const nameOf = (b: BlockInfo) => blockName(m.ctx.plan.find((p) => p.id === b.id) ?? { categoryId: b.categoryId, variantId: b.variantId, routine: null, requests: [], note: '' }, names)
+    const nameOf = (b: BlockInfo) => blockName(m.ctx.plan.find((p) => p.id === b.id) ?? namedOf(b), names)
     this.panel = { cause, variants: variantsFor(m.ctx, m.state, cause, nameOf) }
     return this.refresh()
   }
