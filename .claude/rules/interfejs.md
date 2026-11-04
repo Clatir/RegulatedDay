@@ -29,8 +29,8 @@ paths:
 - `wizard/` (D294) – kroki pierwszego i kolejnego komputera, szkic w `wizardStore`, podgląd dnia (`countDay`).
 - `plan/` – `Timeline` (D293, bloki na planowanych miejscach, linie, energia; przeciąganie lewym przyciskiem – D305,
   T498: `onMove`, od miejsca widocznego, start na siatce 5 min, próg 4 px, klik po upuszczeniu pomijany, nowe miejsce
-  trzymane do nowych `items`), `BlockEditor`, `dayItems` (`dayAxis`, `movable`: własna godzina, niezaczęty, nie sesja
-  ani wykład, nieminiony; dni minione – bez `onMove`), `blockView` (nazwy i kolory – nigdy id). Zapis: `draggedBlock`.
+  trzymane do nowych `items`), `BlockEditor`, `dayItems` (`dayAxis`, `movable`: własna godzina, niezaczęty, nie sesja,
+  wykład ani druga zmiana (tag `secondShift` – D192: jest sesją; dotyczy też Szablonów), nieminiony; dni minione – bez `onMove`), `blockView` (nazwy i kolory – nigdy id). Zapis: `draggedBlock`.
   Testy okna bez DOM: `tests/web/` (projekt `tsconfig.web.json`).
 - `today/` – „Dziś”: `MorningPlan`, `LateWakeCard`, `TypeChangeDialog`, `ExchangeDialog`, `MoveDialogs`, `dayActions`.
 - `calendar/` (D295, `MonthGrid` wspólna z kreatorem), `templates/`, `requests/`, `routines/`, `history/`,

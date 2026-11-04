@@ -87,6 +87,7 @@ Ciągi A–E zakończone wydaniem 1.0.0 (28.10.2026) → `docs/archiwum/plan-E0-
 | 2 | Odbiór E3–E5 (44 punkty) | różnie | 4–8 h | 27.10: z ok. 10 punktów 2 nie przeszły, 4–5 próśb o zmianę → 3–6 błędów, 2–4 zmiany, 2–3 wydania 0.11.x |
 | 3.8 | Odbiór ekranów E6 | różnie | 2–4 h | 2–3 wieczory z rytuałem |
 | 4.9 | Odbiór ekranów gry | różnie | 2–4 h | |
+| 4.10 | Linia twardego końca w pasku (spec „Twardy koniec”: linia tekstu bez kropki obok powiadomienia, cicha ikona w „mniej pytań”) – brak w kodzie od 1.0.0, wyszło w H1 | Całość | 1–1,5 h | po ciągu F; tekst jak powiadomienie „Twardy koniec projektów – …” albo do Twojej decyzji |
 
 ## Po 1.0
 

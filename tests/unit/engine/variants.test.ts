@@ -3,11 +3,18 @@
  * past the boundary, for a block dragged past its planned end, and for a pool at the reserve – 2–3 deterministic
  * variants, the candidates first from the same gap between fixed blocks, then the latest; protected blocks never.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { EnergyState } from '@shared/engine/energy'
 import { applyVariant, markerCause, planCause, planWith, variantCauses, variantsFor } from '@shared/engine/variants'
 import { dayFileFrom } from '@shared/model/plan'
+import { computeDay } from '@shared/engine/day'
 import { block, Scenario } from './dsl'
+
+// A pass-through spy: how many times a variant counts the day again.
+vi.mock('@shared/engine/day', async (orig) => {
+  const m = await orig<typeof import('@shared/engine/day')>()
+  return { ...m, computeDay: vi.fn(m.computeDay) }
+})
 
 const DATE = '2026-10-28'
 const names = (b: { categoryId: string }) => ({ inne: 'Inne obowiązki', analiza: 'Analiza', posilek: 'Posiłek', 'zajecia-zdalne': 'Zajęcia zdalne' })[b.categoryId] ?? b.categoryId
@@ -84,10 +91,142 @@ describe('warianty przy brakującym czasie', () => {
     const cause = variantCauses(st, null)[0]!
     expect(cause.kind).toBe('time')
     const v = variantsFor(s.contextAt(s.at('10:00')), st, cause, names)
-    // „b” is in the same gap (before the fixed class): it is shortened first, the latest „c” only after it.
+    // „b” is in the same gap (before the fixed class) and comes first – but the end of work (14:00) is made by „c” behind the
+    // class: a cut or a move of „b” would leave it where it is (D340), so the variants go to „c”, judged by the day counted.
     expect(cause).toMatchObject({ minutes: 30 })
-    expect(v[0]!.changes).toEqual([{ k: 'shorten', block: 'b', toMin: 30 }])
-    expect(v[1]!.changes).toEqual([{ k: 'tomorrow', block: 'b' }])
+    expect(v[0]!.changes).toEqual([{ k: 'shorten', block: 'c', toMin: 90 }])
+    expect(v[0]!.effect.withinBoundary).toBe(true)
+    expect(v[1]!.changes).toEqual([{ k: 'tomorrow', block: 'c' }])
+    expect(v[1]!.effect.withinBoundary).toBe(true)
+  })
+
+  it('blok przeskakujący stały (D340): „Skróć o 5 min” realnie przybliża koniec pracy – cięcie trafia w blok, który go wyznacza', () => {
+    const plan = [
+      block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }),
+      block({ id: 'b1', cat: 'inne', at: '09:00', min: 60 }),
+      block({ id: 'b2', cat: 'inne', at: '10:00', min: 60 }),
+      block({ id: 'w', cat: 'inne', at: '11:00', min: 60, fixed: true })
+    ]
+    const s = new Scenario({ date: DATE, plan, settings: { transitionBufferMin: 0 } }).observe('07:00', null)
+    s.approve('12:55', '07:30')
+    s.start('a', '08:00').end('a', '09:30')
+    const st = s.state('09:40')
+    // „b2” does not fit before the fixed „w” (10:30–11:30): the forecast puts it whole behind it, 12:00–13:00.
+    expect(st.lastWorkForecast).toBe(st.forecast.find((p) => p.block.id === 'b2')!.to)
+    const cause = variantCauses(st, null).find((c) => c.kind === 'time') ?? { kind: 'time' as const, id: 'x', at: s.at('09:40'), minutes: 0 }
+    const time = { ...cause, kind: 'time' as const, minutes: 5 }
+    const v = variantsFor(s.contextAt(s.at('09:40')), st, time, names)
+    const shorten = v.find((x) => x.id === 'shorten')!
+    // A linear cut of the earlier „b1” by 5 min would change nothing (b2 still jumps): the cut goes where the end is made.
+    expect(shorten.changes).toEqual([{ k: 'shorten', block: 'b2', toMin: 55 }])
+    expect(shorten.effect.withinBoundary).toBe(true)
+    expect(shorten.label).toBe('Skróć Inne obowiązki o 5 min · koniec pracy 12:55')
+    // Moving „b1” tomorrow lets „b2” in before „w”.
+    expect(v.find((x) => x.id === 'tomorrow')!.effect.withinBoundary).toBe(true)
+  })
+
+  it('cięcie w jednej przerwie nie wystarcza (blok w przerwie, koniec robi blok za stałym): etykieta z cięcia faktycznego, koniec pracy prawdziwy', () => {
+    const plan = [
+      block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }),
+      block({ id: 'b', cat: 'inne', at: '09:00', min: 45 }),
+      block({ id: 'w', cat: 'inne', at: '11:00', min: 60, fixed: true }),
+      block({ id: 'c', cat: 'inne', at: '12:00', min: 30 })
+    ]
+    const s = new Scenario({ date: DATE, plan, settings: { transitionBufferMin: 0 } }).observe('07:00', null)
+    s.approve('12:20', '07:30')
+    s.start('a', '08:00').end('a', '09:20')
+    const st = s.state('09:25')
+    expect(st.lastWorkForecast).toBe(st.forecast.find((p) => p.block.id === 'c')!.to)
+    const v = variantsFor(s.contextAt(s.at('09:25')), st, { kind: 'time', id: 'x', at: s.at('09:25'), minutes: 10 }, names)
+    const shorten = v.find((x) => x.id === 'shorten')!
+    expect(shorten.changes).toEqual([{ k: 'shorten', block: 'c', toMin: 20 }])
+    expect(shorten.effect.withinBoundary).toBe(true)
+    expect(shorten.label).toBe('Skróć Inne obowiązki o 10 min · koniec pracy 12:20')
+  })
+
+  it('koniec pracy robi blok stały: cięcie i przeniesienie nie wydają przeliczeń na bloki, które go nie wyznaczają (po jednym przeliczeniu na wariant)', () => {
+    const plan = [
+      block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }),
+      block({ id: 'b', cat: 'inne', at: '09:00', min: 60 }),
+      block({ id: 'w', cat: 'inne', at: '11:00', min: 120, fixed: true })
+    ]
+    const s = new Scenario({ date: DATE, plan, settings: { transitionBufferMin: 0 } }).observe('07:00', null)
+    s.approve('12:30', '07:30')
+    s.start('a', '08:00').end('a', '09:20')
+    const st = s.state('09:25')
+    // The end of work (13:00) is „w”'s: no cut of „b” brings it nearer.
+    expect(st.lastWorkForecast).toBe(st.forecast.find((p) => p.block.id === 'w')!.to)
+    const ctx = s.contextAt(s.at('09:25'))
+    vi.mocked(computeDay).mockClear()
+    const v = variantsFor(ctx, st, { kind: 'time', id: 'x', at: s.at('09:25'), minutes: 30 }, names)
+    expect(vi.mocked(computeDay)).toHaveBeenCalledTimes(2)
+    const shorten = v.find((x) => x.id === 'shorten')!
+    expect(shorten.changes).toEqual([{ k: 'shorten', block: 'b', toMin: 30 }])
+    expect(shorten.effect.withinBoundary).toBe(false)
+    expect(shorten.label).toBe('Skróć Inne obowiązki o 30 min · koniec pracy 13:00')
+  })
+
+  it('bloki po starcie drugiej zmiany nie są kandydatami: koniec pracy przed nią ich nie liczy', () => {
+    const plan = [
+      block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }),
+      block({ id: 'b', cat: 'inne', at: '09:00', min: 60 }),
+      block({ id: 'w', cat: 'inne', at: '11:00', min: 120, fixed: true }),
+      block({ id: 'ds', cat: 'sesja', at: '19:00', min: 60, fixed: true, tag: 'secondShift' }),
+      block({ id: 'x', cat: 'inne', at: '21:00', min: 60 })
+    ]
+    const s = new Scenario({ date: DATE, plan, settings: { transitionBufferMin: 0 } }).observe('07:00', null)
+    s.approve('12:30', '07:30')
+    s.start('a', '08:00').end('a', '09:20')
+    const st = s.state('09:25')
+    vi.mocked(computeDay).mockClear()
+    const v = variantsFor(s.contextAt(s.at('09:25')), st, { kind: 'time', id: 'x', at: s.at('09:25'), minutes: 30 }, names)
+    // The end of work 13:00 is „w”'s and „x” (after the second shift) is not counted in it: one count per variant, none spent on „x”.
+    expect(vi.mocked(computeDay)).toHaveBeenCalledTimes(2)
+    const touched = v.flatMap((x) => x.changes.map((c) => (c as { block: string }).block))
+    expect(touched).not.toContain('x')
+    expect(touched).toContain('b')
+  })
+
+  it('ta sama zmiana planu liczona raz: pierwszy krok wyszukiwania równy próbie liniowej nie liczy dnia drugi raz', () => {
+    const plan = [
+      block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }),
+      block({ id: 'w', cat: 'inne', at: '11:00', min: 60, fixed: true }),
+      block({ id: 'c', cat: 'inne', at: '12:00', min: 60 })
+    ]
+    const s = new Scenario({ date: DATE, plan, settings: { transitionBufferMin: 0 } }).observe('07:00', null)
+    s.approve('11:30', '07:30')
+    s.start('a', '08:00').end('a', '09:20')
+    const st = s.state('09:25')
+    vi.mocked(computeDay).mockClear()
+    const v = variantsFor(s.contextAt(s.at('09:25')), st, { kind: 'time', id: 'x', at: s.at('09:25'), minutes: 90 }, names)
+    // „c” can be cut by 45 min at most and moved whole: neither fits the boundary (the fixed „w” ends 12:00), the true ends are shown.
+    expect(v.find((x) => x.id === 'shorten')!.changes).toEqual([{ k: 'shorten', block: 'c', toMin: 15 }])
+    expect(v.find((x) => x.id === 'tomorrow')!.changes).toEqual([{ k: 'tomorrow', block: 'c' }])
+    expect(vi.mocked(computeDay)).toHaveBeenCalledTimes(2)
+  })
+
+  it('krok wyszukiwania, po którym koniec pracy się nie przesunął, jest cofany i nie zostaje w wariancie', async () => {
+    const { computeDay: real } = await vi.importActual<typeof import('@shared/engine/day')>('@shared/engine/day')
+    const plan = [
+      block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }),
+      block({ id: 'b1', cat: 'inne', at: '09:00', min: 60 }),
+      block({ id: 'b2', cat: 'inne', at: '10:00', min: 60 }),
+      block({ id: 'w', cat: 'inne', at: '11:00', min: 60, fixed: true })
+    ]
+    const s = new Scenario({ date: DATE, plan, settings: { transitionBufferMin: 0 } }).observe('07:00', null)
+    s.approve('12:55', '07:30')
+    s.start('a', '08:00').end('a', '09:30')
+    const st = s.state('09:40')
+    const ctx = s.contextAt(s.at('09:40'))
+    const cause = { kind: 'time' as const, id: 'x', at: s.at('09:40'), minutes: 5 }
+    // The cut of „b1” (the first try) changes nothing; the second try, the cut of „b2”, would fit – as the day counted again
+    // it is shown as if it changed nothing (the day as it was): the step is taken back, „b2” stays whole.
+    vi.mocked(computeDay).mockClear()
+    vi.mocked(computeDay).mockImplementationOnce(real).mockImplementationOnce(() => st)
+    const shorten = variantsFor(ctx, st, cause, names).find((x) => x.id === 'shorten')!
+    expect(shorten.changes.map((c) => (c as { block: string }).block)).not.toContain('b2')
+    expect(shorten.changes).toEqual([{ k: 'shorten', block: 'b1', toMin: 55 }])
+    expect(shorten.label).toBe('Skróć Inne obowiązki o 5 min · koniec pracy 13:00')
   })
 
   it('prośba pauzuje ostatni blok pracy, a wznowienie kosztuje: przyczyna z prognozy (blok czeka, ale praca jeszcze będzie)', () => {

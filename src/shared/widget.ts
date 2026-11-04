@@ -38,9 +38,24 @@ export interface BarPending {
   /** The button it stands in place of (`next`, `extend`, `start`, a line's action …). */
   button: string
   text: string
-  until: number
+  /** How long it still waits (ms) at the instant the view was made – the window counts it on its own monotonic clock, never against a wall clock set meanwhile. */
+  left: number
   /** A length of „Przedłuż”: steps of ±15 min stand beside it before the second click (T289). */
   steps?: boolean
+}
+
+/** An automatic action in the list; `undo`: it has „Cofnij” (the information-only ones do not). */
+export interface AutoItem {
+  id: string
+  text: string
+  undo: boolean
+}
+
+/** The row of the actions that went as the plan said, unfolding into them (newest first). */
+export interface AutoGroup {
+  id: string
+  text: string
+  items: AutoItem[]
 }
 
 export interface WidgetView {
@@ -74,13 +89,16 @@ export interface WidgetView {
   buttons: BarButtons
   /** Blocks in the background with „Zakończ teraz” and „Przedłuż” (in „⋯”). */
   background: Array<{ id: string; name: string; endsAt: number }>
-  /** „Zrobione automatycznie”: the actions as the plan said them gathered in one row, the rest each with „Cofnij”. */
-  autos: { groups: string[]; items: Array<{ id: string; text: string; undo: boolean }> }
+  /**
+   * „Zrobione automatycznie” (D350): the actions as the plan said them in one row that unfolds on a click into the list of
+   * them, each with „Cofnij”; the rest (a flexible block's pause at a fixed start too) each in a row of its own.
+   */
+  autos: { groups: AutoGroup[]; items: AutoItem[] }
   /** „Mniej pytań” is on (the button says „Jest lepiej”). */
   fewer: boolean
   /** The signals and the relative assessment (the energy module on). */
   signals: boolean
-  /** The night's quiet: only the time and the running block with Dalej, Przedłuż and Koniec pracy. */
+  /** The night's quiet: only the time and the running block with Dalej, Przedłuż, Koniec pracy and „Prośba ▸” (D346). */
   night: boolean
   /** The cost of a first click waiting for the second. */
   pending: BarPending | null
@@ -95,7 +113,7 @@ export interface WidgetView {
   /** The computers recording a lecture now – the tones never play on them (A8-04). */
   recorders: string[]
   /** Why a click did nothing (shown in the bar for a few seconds), null: nothing to say. */
-  note: { text: string; until: number } | null
+  note: { text: string; left: number } | null
   /** „Prośba ▸” and the request running now (D311, D312). */
   requests: BarRequests
   /** The marker of variants and, while its panel is open, the variants (D313). */

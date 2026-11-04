@@ -20,6 +20,7 @@ import { OPEN, type BlockFact } from './facts'
 import { atOf } from './grid'
 import { moveBetweenDays, newUserBlock } from './planEdit'
 import { suggestRegen } from './reserve'
+import { secondShiftStart } from './timer'
 
 /** A block is never shortened below this. */
 export const MIN_BLOCK_MIN = 15
@@ -193,57 +194,174 @@ export function planWith(ctx: DayContext, changes: readonly VariantChange[]): Pl
   return plan
 }
 
+/** A variant's changes counted: the effect and the day they leave. */
+interface Judged {
+  effect: Variant['effect']
+  after: DayState
+}
+
 /** The day counted again with the changes. */
-function judge(ctx: DayContext, before: DayState, changes: readonly VariantChange[]): Variant['effect'] {
+function judgeDay(ctx: DayContext, before: DayState, changes: readonly VariantChange[]): Judged {
   const after = changes.length ? computeDay({ ...ctx, plan: planWith(ctx, changes) }) : before
   const end = after.lastWorkForecast
   const boundary = before.boundary.approved ?? before.boundary.proposal
   // Extension: the forecast's minutes of work after the boundary, as the exchange counts them.
   let ext = 0
   if (boundary != null) for (const p of after.forecast) if (isBoundaryWork(p.block) && !p.block.lectureOrCommute) ext += Math.max(0, p.to - Math.max(p.from, boundary))
-  return { workEndMin: end != null ? lmOf(after, end) : null, extensionMin: ext, regenMin: after.regen.towardMinMin, withinBoundary: boundary == null || end == null || end <= boundary }
+  return { effect: { workEndMin: end != null ? lmOf(after, end) : null, extensionMin: ext, regenMin: after.regen.towardMinMin, withinBoundary: boundary == null || end == null || end <= boundary }, after }
 }
+
+/**
+ * How many times a variantsFor counts the day again at most (D340): the forecast moves a flexible block that does not fit
+ * before a fixed one whole behind it, so a cut or a move is not linear in the end of work – each is judged, and the
+ * search for one that fits has this many tries, half for the shortening and half for the move to tomorrow.
+ */
+export const MAX_DAY_COUNTS = 8
+
+/** Whether `a` brings the end of work nearer the boundary than `b`: one that fits first, then the earlier end. */
+const nearer = (a: Variant['effect'], b: Variant['effect']): boolean => (a.withinBoundary !== b.withinBoundary ? a.withinBoundary : (a.workEndMin ?? Number.NEGATIVE_INFINITY) < (b.workEndMin ?? Number.NEGATIVE_INFINITY))
 
 /** The variants for a cause (2–3, fewer without candidates), each judged by the day counted again. */
 export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCause, names: (b: BlockInfo) => string): Variant[] {
   const out: Variant[] = []
-  const add = (id: string, label: (e: Variant['effect']) => string, changes: VariantChange[]) => {
-    const effect = judge(ctx, state, changes)
-    out.push({ id, label: label(effect), changes, effect })
+  // The days counted again so far (computeDay is the cost of a variant): the searches stop at MAX_DAY_COUNTS.
+  let counts = 0
+  // The same changes (in any order) are counted once: the first step of a search is often the linear try already judged.
+  const judged = new Map<string, Judged>()
+  const judge = (changes: readonly VariantChange[]): Judged => {
+    if (!changes.length) return judgeDay(ctx, state, changes)
+    const key = changes.map((c) => JSON.stringify(c)).sort().join('|')
+    let j = judged.get(key)
+    if (!j) {
+      counts++
+      j = judgeDay(ctx, state, changes)
+      judged.set(key, j)
+    }
+    return j
+  }
+  const add = (id: string, label: (e: Variant['effect']) => string, changes: VariantChange[], judged: Judged = judge(changes)) => {
+    out.push({ id, label: label(judged.effect), changes, effect: judged.effect })
   }
   if (cause.kind === 'time') {
     const gap = gapOfNow(state)
-    const all = candidates(state, (b) => isBoundaryWork(b) && !b.lectureOrCommute)
+    // Only the work before the second shift: the end of work (`lastWorkForecast`) leaves the rest out.
+    const second = secondShiftStart(state)
+    const all = candidates(state, (b) => isBoundaryWork(b) && !b.lectureOrCommute).filter((c) => c.from < second)
     // First the blocks of the same gap between fixed blocks (the latest first), then the latest planned of the rest.
     const inGap = all.filter((c) => c.from >= gap.from && c.from < gap.to).sort((a, b) => b.from - a.from)
     const rest = all.filter((c) => !inGap.includes(c)).sort((a, b) => b.from - a.from)
     const ordered = [...inGap, ...rest]
+    const byId = new Map(all.map((c) => [c.info.id, c.info]))
+    const half = Math.floor(MAX_DAY_COUNTS / 2)
+    const boundary = state.boundary.approved ?? state.boundary.proposal
+    // The minutes the end of work is past the boundary in a judged day (0: it fits).
+    const over = (j: Judged) => (boundary == null || j.effect.workEndMin == null ? 0 : Math.max(0, j.effect.workEndMin - lmOf(state, boundary)))
+    /** The candidate placed latest in a judged day, from the ones `ok` lets through: the one that makes the end of work. */
+    const latest = (j: Judged, ok: (id: string) => boolean): string | null => {
+      let pick: { id: string; to: number } | null = null
+      for (const p of j.after.forecast) if (byId.has(p.block.id) && ok(p.block.id) && (pick == null || p.to > pick.to)) pick = { id: p.block.id, to: p.to }
+      return pick?.id ?? null
+    }
+    /**
+     * The search from the end of work: from the day as it is, one change at a time (`take`, for the block that makes the end,
+     * with the minutes it is past the boundary; it returns how to take it back), the day counted again after each, until the
+     * end fits or the counts reach `limit`. A step after which the end of work did not come nearer is taken back (and its
+     * block left alone) – it stays in no variant. null: no step stayed.
+     */
+    const fromLatest = (limit: number, canTake: (id: string) => boolean, take: (id: string, over: number) => () => void, changes: () => VariantChange[]): Judged | null => {
+      let day = judgeDay(ctx, state, [])
+      let took = false
+      const skipped = new Set<string>()
+      while (!day.effect.withinBoundary && counts < limit) {
+        // The end of work made by a block that is no candidate (a fixed or a running one): no cut or move helps – stop at once.
+        const end = day.after.lastWorkForecast
+        if (end == null || !day.after.forecast.some((p) => byId.has(p.block.id) && p.to >= end)) break
+        const id = latest(day, (x) => !skipped.has(x) && canTake(x))
+        if (id == null) break
+        const back = take(id, over(day))
+        const next = judge(changes())
+        if ((next.effect.workEndMin ?? Number.NEGATIVE_INFINITY) < (day.effect.workEndMin ?? Number.POSITIVE_INFINITY)) {
+          day = next
+          took = true
+        } else {
+          back()
+          skipped.add(id)
+        }
+      }
+      return took ? day : null
+    }
+
+    // Shortening. First by the order above, the minutes asked for; a cut is judged, and when the end of work still does not
+    // fit (the cut block is not the one that makes it, or the block behind a fixed one still does not fit before it) the
+    // cut goes where the end is made, as far as the blocks can go (not below MIN_BLOCK_MIN), judged again each time.
+    const cutsOf = (cuts: ReadonlyMap<string, number>): VariantChange[] => [...cuts].map(([block, toMin]) => ({ k: 'shorten', block, toMin }))
+    const lengthIn = (cuts: ReadonlyMap<string, number>, id: string) => cuts.get(id) ?? byId.get(id)!.durationMin
     let need = cause.minutes
-    const shorten: VariantChange[] = []
+    let cuts = new Map<string, number>()
     for (const c of ordered) {
       if (need <= 0) break
       const can = c.info.durationMin - MIN_BLOCK_MIN
       if (can <= 0) continue
       const cut = Math.min(can, need)
-      shorten.push({ k: 'shorten', block: c.info.id, toMin: c.info.durationMin - cut })
+      cuts.set(c.info.id, c.info.durationMin - cut)
       need -= cut
     }
-    if (shorten.length) {
-      const first = ordered.find((c) => c.info.id === (shorten[0] as { block: string }).block)!
-      add('shorten', (e) => `Skróć ${names(first.info)}${shorten.length > 1 ? ` i ${shorten.length - 1} inne` : ''} o ${cause.minutes - Math.max(0, need)} min · koniec pracy ${e.workEndMin != null ? logicalClock(e.workEndMin) : '—'}`, shorten)
+    if (cuts.size) {
+      let best = judge(cutsOf(cuts))
+      if (!best.effect.withinBoundary) {
+        const tried = new Map<string, number>()
+        const day = fromLatest(
+          half,
+          (x) => lengthIn(tried, x) - MIN_BLOCK_MIN > 0,
+          (id, past) => {
+            const was = tried.get(id)
+            tried.set(id, lengthIn(tried, id) - Math.min(past, lengthIn(tried, id) - MIN_BLOCK_MIN))
+            return () => (was == null ? tried.delete(id) : tried.set(id, was))
+          },
+          () => cutsOf(tried)
+        )
+        if (day && nearer(day.effect, best.effect)) {
+          cuts = tried
+          best = day
+        }
+      }
+      const total = [...cuts].reduce((s, [id, toMin]) => s + byId.get(id)!.durationMin - toMin, 0)
+      const firstName = names(byId.get(cuts.keys().next().value!)!)
+      add('shorten', (e) => `Skróć ${firstName}${cuts.size > 1 ? ` i ${cuts.size - 1} inne` : ''} o ${total} min · koniec pracy ${e.workEndMin != null ? logicalClock(e.workEndMin) : '—'}`, cutsOf(cuts), best)
     }
+
+    // Moving to tomorrow. The same: the blocks of the order above until their lengths cover the minutes asked for; when
+    // the end of work still does not fit, the blocks that make it go, the latest first, one by one.
     let moved = 0
-    const tomorrow: VariantChange[] = []
+    let away: string[] = []
     // A category „nie przenosić na jutro” may be shortened, never moved (spec „Kategorie”).
     for (const c of ordered) {
       if (moved >= cause.minutes) break
       if (c.info.rules.noMoveTomorrow) continue
-      tomorrow.push({ k: 'tomorrow', block: c.info.id })
+      away.push(c.info.id)
       moved += c.info.durationMin
     }
-    if (tomorrow.length) {
-      const first = ordered.find((c) => c.info.id === (tomorrow[0] as { block: string }).block)!
-      add('tomorrow', (e) => `Przesuń ${names(first.info)}${tomorrow.length > 1 ? ` i ${tomorrow.length - 1} inne` : ''} na jutro · koniec pracy ${e.workEndMin != null ? logicalClock(e.workEndMin) : '—'}`, tomorrow)
+    if (away.length) {
+      const movesOf = (ids: readonly string[]): VariantChange[] => ids.map((block) => ({ k: 'tomorrow', block }))
+      let best = judge(movesOf(away))
+      if (!best.effect.withinBoundary) {
+        const tried: string[] = []
+        const day = fromLatest(
+          MAX_DAY_COUNTS,
+          (x) => !tried.includes(x) && !byId.get(x)!.rules.noMoveTomorrow,
+          (id) => {
+            tried.push(id)
+            return () => tried.pop()
+          },
+          () => movesOf(tried)
+        )
+        if (day && nearer(day.effect, best.effect)) {
+          away = tried
+          best = day
+        }
+      }
+      const firstName = names(byId.get(away[0]!)!)
+      add('tomorrow', (e) => `Przesuń ${firstName}${away.length > 1 ? ` i ${away.length - 1} inne` : ''} na jutro · koniec pracy ${e.workEndMin != null ? logicalClock(e.workEndMin) : '—'}`, movesOf(away), best)
     }
     add('keep', (e) => `Zostaw · przedłużenie ${e.extensionMin} min`, [])
     return out

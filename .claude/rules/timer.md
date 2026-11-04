@@ -44,6 +44,10 @@ paths:
   bramkę; blok stały w tle nie czeka) – poza tym jak w 1.0.1 (G2).
 
 ## Pułapki
+- Para `fixedStart` (`fixedStartPair` w `timer.ts`): pauza bloku elastycznego i start bloku stałego z tej samej listy (ten sam
+  `at`, start na pierwszym planie). „Cofnij” przy któregokolwiek cofa oba – elastyczny biegnie jak przed startem, stały
+  niezaczęty – ale tylko póki stały biegnie bez późniejszego kliknięcia (przedłużenie) i elastyczny stoi w tej pauzie
+  (`alive`); potem oba wiersze to informacja (bez „Cofnij”, `undo` odrzucone). Start stałego bez pauzy – zwykłe „Cofnij”.
 - `activityOf` bez żadnego komputera = cały czas bez wejścia; w testach dodaj `observe(...)` (DSL) – inaczej blok
   stały „przy komputerze” nie zacznie się (czeka na pierwsze użycie).
 - Otwarty odcinek innego komputera liczy się tylko do jego ostatniego `observe.alive` (`alive` w DSL).

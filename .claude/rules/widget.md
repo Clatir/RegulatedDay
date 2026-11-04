@@ -19,6 +19,9 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 ## Przepływ
 - `shared/engineView.ts` – `engineView(input)` → `WidgetView` (ton, krok, kropka, kropla, przyciski, linie, tło, lista
   automatyczna, tryby); ten sam widok w oknie głównym (`Bar mode="main"`), panelu ikony i na pasku pulpitu.
+- „Zrobione automatycznie” (D350): `WidgetView.autos` – `groups` (jeden wiersz „bloki stałe według planu: N” = start bloku
+  stałego i koniec według planu; rozwija się w pasku, każde działanie z „Cofnij”) i `items` (reszta, także pauza
+  bloku elastycznego przy starcie stałego – `rule fixedStart` z `block.pause` – każda z „Cofnij”); nagłówek bez liczby.
 - Odliczanie (E4a.1): `block.endsAt` = `endsAtOf` (`timer.ts`) – planowany koniec przesunięty o `runShift` (`facts.ts`:
   chwila zdarzenia, które otworzyło bieg, minus jego minuta; blok stały – koniec okna); z niego `warnOf` (kroki, puls,
   dźwięk), a „Dalej?” silnika (z minut, od hh:mm:30) pasek chowa do `now >= endsAt`. Godziny słowami (podpowiedź „do
@@ -26,7 +29,10 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 - `main/widget.ts` – `WidgetEngine`: `refresh()` po każdym sprawdzeniu folderu, co 15 s, po kliknięciu i w chwili
   kroku (`stepDelay` z `warnDeadlines`: kroki po chwili widoku, czekanie od ustawienia zegara – krok, który minął w
   czasie odświeżenia, od razu; tylko po `start()`), z `folder.widgetModel()`; `act(action, arg, from)` → kliknięcia
-  timera i odpowiedzi; koszt (`pending`) bez funkcji w widoku (idzie przez IPC); powiadomienia prowadzącego z
+  timera i odpowiedzi; podwójne kliknięcie (0,5 s) i terminy paska (koszt 10 s, uwaga o odmowie, „Przestawiono”, „Zapisano”)
+  liczą się na zegarze monotonicznym (`WidgetDeps.mono`, czytany razem z `now` na początku odświeżenia); widok niesie
+  `pending.left` i `note.left` (ms) – liczone przy każdym wysłaniu w `current()` (też przy ponownym rozesłaniu widoku
+  otwieranemu oknu), okno liczy je od odebrania na swoim `performance.now()` (`lib/viewTerms.ts`); koszt (`pending`) bez funkcji w widoku (idzie przez IPC); powiadomienia prowadzącego z
   `notice.shown`. Bez folderu `noFolderView` (D327): jedna linia „Brak folderu danych · Otwórz okno”, pasek bez dnia
   (`data-day=none`). Próby nie ma (D286); akcje paska spoza silnika – IPC `barAction` (`placeBar`, `corner`,
   `openPanel` dla testów).
@@ -46,7 +52,7 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   akcja `variants` `open` / `close` / `pick|i`, „Przestawiono … · Cofnij” to linia `moved:variant`.
 
 ## Pułapki
-- W ciszy nocnej pasek nie ma Start ani Pauzy – testy E2E zaczynają blok z panelu bloku (`block-timer-start`), bo
+- W ciszy nocnej pasek nie ma Start ani Pauzy (ma „Prośba ▸”, D346) – testy E2E zaczynają blok z panelu bloku (`block-timer-start`), bo
   uruchamiają się o dowolnej godzinie; tekst `bar-block` w nocy to godzina, nie „Bez bloku”.
 - Komponenty `renderer/widget/**` sprawdza check-code (bez title, select, pól daty i czasu): kroki ±5 min zamiast pól.
 - `DesktopBar.apply({ onTop })` to jedyne `setAlwaysOnTop` paska (check-code liczy wywołania); bez „na wierzchu” pasek

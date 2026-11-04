@@ -704,7 +704,7 @@ export class DataFolder {
           segments++
         }
         if (state.hardEnd.passed != null && !state.facts.hardEndPass && state.grid.start + state.hardEnd.passed * 60_000 <= gate) {
-          this.append({ id: derivedId(day, 'hardend.pass'), day, dom: 'timer', k: 'hardend.pass', at: state.grid.start + state.hardEnd.passed * 60_000, basis: 'prowadzący' })
+          this.append({ id: derivedId(day, 'hardend.pass'), day, dom: 'timer', k: 'hardend.pass', at: state.grid.start + state.hardEnd.passed * 60_000, basis: 'prowadzący', quiet: state.hardEnd.nothingMissing })
         }
         // Descents to the reserve, registered once their minute is closed by the gate (events up to 30 s after a minute
         // still round into it): they stay whatever later corrections say (spec). Apart, so energy never stops the rest.

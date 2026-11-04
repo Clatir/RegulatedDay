@@ -151,7 +151,8 @@ export interface DayFacts {
   /** Snapshots after the day's creation: „od dziś” and changes of type (with the maximum and minimum a change fixed, index / min). */
   snapshots: Array<{ at: number; dayType: DayTypeId; settings: RulesSettings; reason: string; max: number | null; minRegen: number | null }>
   segments: Segment[]
-  hardEndPass: { at: number } | null
+  /** `quiet`: nothing was missing of the minimum at the pass, as the leader wrote it (null: older log – counted again). */
+  hardEndPass: { at: number; quiet: boolean | null } | null
   /** The last event number seen of each computer (the state of knowledge of a segment). */
   know: Record<string, number>
   /** Clicks that did not fit (stale views) and conflicts, for the bar. */
@@ -429,7 +430,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         if (e.to > e.from) f.segments.push({ from: idx(e.from), to: idx(e.to), cls: e.cls, upfront: e.upfront === true, know: e.know, v: e.v, c: e.c, l: e.l })
         break
       case 'hardend.pass':
-        if (!f.hardEndPass) f.hardEndPass = { at: idx(e.at) }
+        if (!f.hardEndPass) f.hardEndPass = { at: idx(e.at), quiet: typeof e.quiet === 'boolean' ? e.quiet : null }
         break
       case 'question.seen':
         if (!f.seen.has(e.question)) f.seen.set(e.question, { at: e.at, c: e.c, how: e.how })

@@ -11,11 +11,12 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import type { WidgetAction } from '@shared/api'
 import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
 import { barBackground, TONE_SETS } from '@shared/theme'
-import { SEEN_LINE, type BarLine, type BarRoutine, type RunningRequest, type WidgetView } from '@shared/widget'
+import { SEEN_LINE, type AutoItem, type BarLine, type BarRoutine, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
 import { useStepPicks } from '../lib/stepPicks'
+import { termHolds } from '../lib/viewTerms'
 
 export type BarMode = 'main' | 'panel' | 'desktop'
 type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | null
@@ -132,6 +133,47 @@ function RequestLine({ run, mode, now }: { run: RunningRequest; mode: BarMode; n
         Koniec
       </BarButton>
     </span>
+  )
+}
+
+/** An automatic action in „Zrobione automatycznie” with its „Cofnij” (not the information-only ones, D350). */
+function AutoRow({ item, mode, indent }: { item: AutoItem; mode: BarMode; indent?: boolean }) {
+  return (
+    <div className={cx('flex flex-wrap items-center gap-1.5', indent && 'pl-3')} data-testid="bar-auto">
+      <span className="min-w-0 text-[12px] text-fg">{item.text}</span>
+      {item.undo && (
+        <BarButton mode={mode} testId="bar-auto-undo" onAct={() => act('undo', item.id)}>
+          Cofnij
+        </BarButton>
+      )}
+    </div>
+  )
+}
+
+/** How many of the other rows of „Zrobione automatycznie” the bar shows (the unfolded group shows all of its actions: each has „Cofnij”, D350). */
+const AUTOS_SHOWN = 8
+
+/**
+ * „Zrobione automatycznie” (D350): the row of the actions as the plan said them unfolds (`open` – its id) into the list of
+ * them, each with „Cofnij”; the other actions, a flexible block's pause at a fixed start too, each in a row of its own.
+ */
+export function AutosList({ autos, mode, open, onToggle }: { autos: WidgetView['autos']; mode: BarMode; open: string | null; onToggle: (id: string) => void }) {
+  if (autos.groups.length === 0 && autos.items.length === 0) return null
+  return (
+    <div className="flex flex-col gap-1" data-testid="bar-autos">
+      <span className="text-[12px] text-muted">Zrobione automatycznie:</span>
+      {autos.groups.map((g) => (
+        <div key={g.id} className="flex flex-col gap-1" data-testid={`bar-autos-group-${g.id}`}>
+          <BarButton mode={mode} testId={`bar-autos-toggle-${g.id}`} pressed={open === g.id} onAct={() => onToggle(g.id)}>
+            {g.text} {open === g.id ? '▾' : '▸'}
+          </BarButton>
+          {open === g.id && g.items.map((a) => <AutoRow key={a.id} item={a} mode={mode} indent />)}
+        </div>
+      ))}
+      {autos.items.slice(0, AUTOS_SHOWN).map((a) => (
+        <AutoRow key={a.id} item={a} mode={mode} />
+      ))}
+    </div>
   )
 }
 
@@ -377,6 +419,8 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
   const brightness = useMachine((s) => s.prefs.brightness)
   const pulse = useMachine((s) => s.prefs.barPulse)
   const [unfold, setUnfold] = useState<Unfold>(null)
+  // The row of the actions as the plan said them, unfolded into the list of them (D350).
+  const [groupOpen, setGroupOpen] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
   const quiet = view.quiet
   const beat = usePulse(pulseClass(view.warn, pulse, mode, quiet), `${view.block?.name ?? ''}|${view.block?.endsAt ?? ''}`)
@@ -399,7 +443,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
   const routineOpen = unfold === 'routine' ? (view.routines.find((r) => r.line === routineLine) ?? null) : null
   const running = view.requests.running
   const { shown: shownLines, extra } = barLines(view.lines, quiet)
-  const pending = view.pending && view.pending.until > now ? view.pending : null
+  // The terms of the view (the cost waiting, the note) count from the moment this view reached the window, on its own monotonic clock.
+  const received = useRef<{ view: WidgetView; at: number }>({ view, at: performance.now() })
+  if (received.current.view !== view) received.current = { view, at: performance.now() }
+  const holds = (left: number) => termHolds(received.current.at, left, performance.now())
+  const pending = view.pending && holds(view.pending.left) ? view.pending : null
   useSeen(view, mode, unfold === 'more' ? view.lines : shownLines)
   // The cost stands in place of its button when that button is on view; otherwise in the row under the buttons.
   const inPlace =
@@ -418,6 +466,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
   useEffect(() => {
     if (view.day == null) setUnfold(null)
   }, [view.day])
+  // The group of „Zrobione automatycznie” folds with its „⋯”, with the day gone from the view and with the group itself.
+  const groupGone = !view.autos.groups.some((g) => g.id === groupOpen)
+  useEffect(() => {
+    if (groupOpen != null && (unfold !== 'more' || view.day == null || groupGone)) setGroupOpen(null)
+  }, [groupOpen, unfold, view.day, groupGone])
   // A routine saved elsewhere (the card in „Dziś”, another computer): its line went – its steps fold.
   useEffect(() => {
     if (unfold === 'routine' && !routineOpen) setUnfold(null)
@@ -495,26 +548,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
               Przestaw plan
             </BarButton>
           </div>
-          {(view.autos.groups.length > 0 || view.autos.items.length > 0) && (
-            <div className="flex flex-col gap-1" data-testid="bar-autos">
-              <span className="text-[12px] text-muted">Zrobione automatycznie:</span>
-              {view.autos.groups.map((g) => (
-                <span key={g} className="text-[12px] text-fg">
-                  {g}
-                </span>
-              ))}
-              {view.autos.items.slice(0, 8).map((a) => (
-                <div key={a.id} className="flex flex-wrap items-center gap-1.5">
-                  <span className="min-w-0 text-[12px] text-fg">{a.text}</span>
-                  {a.undo && (
-                    <BarButton mode={mode} onAct={() => act('undo', a.id)}>
-                      Cofnij
-                    </BarButton>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <AutosList autos={view.autos} mode={mode} open={groupOpen} onToggle={(id) => setGroupOpen((x) => (x === id ? null : id))} />
           {extra.map((l) => (
             <Line key={l.id} line={l} mode={mode} onSteps={openRoutine} />
           ))}
@@ -721,11 +755,10 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
               Rytuał
             </BarButton>
           )}
-          {!view.night && (
-            <BarButton mode={mode} testId="bar-group-request" pressed={unfold === 'request'} onAct={() => toggle('request')}>
-              Prośba ▸
-            </BarButton>
-          )}
+          {/* Also in the night's quiet: a request can start before 04:00 (D346). */}
+          <BarButton mode={mode} testId="bar-group-request" pressed={unfold === 'request'} onAct={() => toggle('request')}>
+            Prośba ▸
+          </BarButton>
           {view.signals && !view.night && (
             <BarButton mode={mode} testId="bar-group-signals" pressed={unfold === 'signals'} onAct={() => toggle('signals')}>
               Sygnały ▸
@@ -755,7 +788,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
             )}
           </div>
         )}
-        {view.note && view.note.until > now && (
+        {view.note && holds(view.note.left) && (
           <div className="text-[12px] text-rose" data-testid="bar-note-click">
             {view.note.text}
           </div>

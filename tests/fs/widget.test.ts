@@ -38,8 +38,24 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs } = {}) {
-  const clock = { now: o.from ?? placeLogical(DAY, 10 * 60) }
-  const folder = await DataFolder.open({ fs: o.fs ?? nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => o.oneDrive ?? true })
+  // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
+  // alone (Windows sets the time back or forward – the monotonic clock goes on).
+  const clock = {
+    wall: o.from ?? placeLogical(DAY, 10 * 60),
+    mono: 0,
+    get now(): number {
+      return this.wall
+    },
+    set now(v: number) {
+      // Time goes on (the monotonic clock with it), a step back of the test (`at`) never turns it back.
+      this.mono += Math.max(0, v - this.wall)
+      this.wall = v
+    },
+    jump(ms: number): void {
+      this.wall += ms
+    }
+  }
+  const folder = await DataFolder.open({ fs: o.fs ?? nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now, mono: () => clock.mono }, holidays: marketDay, oneDriveRunning: () => o.oneDrive ?? true })
   const shown: NotifyIn[] = []
   const failLater: Array<() => void> = []
   const views: WidgetView[] = []
@@ -84,6 +100,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
     emit: (v) => views.push(v),
     log: (_level, msg) => void o.logs?.push(msg),
     now: () => clock.now,
+    mono: () => clock.mono,
     batterySaver: () => o.batterySaver ?? false,
     backup: () => (o.backupFailed ? { failed: { error: 'plik zajęty' } } : null)
   })
@@ -650,6 +667,109 @@ describe('widget w procesie głównym', () => {
     expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
   })
 
+  it('zegar cofnięty o kilka minut (synchronizacja czasu, raport 751): „Dalej” nie jest odrzucane jako podwójne kliknięcie', async () => {
+    const { w, folder, clock } = await make()
+    await folder.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 30 })
+    await w.refresh()
+    clock.now += 60_000
+    await w.act('next', undefined, 'bar')
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'block.end')).toHaveLength(1)
+    // Windows sets the clock back by 174 s, a few seconds later: the next click is no double click.
+    clock.now += 5_000
+    clock.jump(-174_000)
+    await w.act('next', undefined, 'bar')
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'block.end')).toHaveLength(2)
+  })
+
+  it('zegar przestawiony do przodu między dwoma kliknięciami w 0,5 s: to dalej jedno kliknięcie (zegar monotoniczny)', async () => {
+    const { w, folder, clock } = await make()
+    await folder.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 30 })
+    await w.refresh()
+    clock.now += 60_000
+    await w.act('next', undefined, 'bar')
+    clock.now += 200
+    clock.jump(3_600_000)
+    await w.act('next', undefined, 'bar')
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'block.end')).toHaveLength(1)
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+  })
+
+  /** A cost waiting for „Potwierdź” (the second click of „Dalej”), then `after` ms pass on the monotonic clock and the wall clock jumps by `jump`. */
+  async function confirmAfter(after: number, jump: number): Promise<string | undefined> {
+    const { w, folder, at, clock } = await make()
+    await folder.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 30 })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 10 * 60 + 40), auto: false }])
+    at(10 * 60 + 35)
+    await w.refresh()
+    await w.act('line', `${w.current().question!.id}|next`, 'main')
+    expect(w.current().pending).toMatchObject({ button: 'start' })
+    clock.now += after
+    clock.jump(jump)
+    await w.act('confirm', undefined, 'main')
+    return (await folder.timer(DAY)).fg?.info.id
+  }
+
+  it('koszt czeka 10 s na zegarze monotonicznym: zegar przestawiony do przodu go nie kasuje', async () => {
+    expect(await confirmAfter(3_000, 3_600_000)).toBe('a')
+  })
+
+  it('koszt czeka 10 s na zegarze monotonicznym: zegar cofnięty go nie przedłuża', async () => {
+    expect(await confirmAfter(11_000, -3_600_000)).not.toBe('a')
+  })
+
+  it('uwaga o odmowie kliknięcia trwa 6 s na zegarze monotonicznym: zegar przestawiony do przodu jej nie kasuje, cofnięty nie przedłuża', async () => {
+    const { w, clock } = await make()
+    await w.refresh()
+    await w.act('pause', undefined, 'bar')
+    expect(w.current().note?.text).toBe('nic nie biegnie na pierwszym planie')
+    clock.now += 1_000
+    clock.jump(3_600_000)
+    await w.refresh()
+    expect(w.current().note).toMatchObject({ text: 'nic nie biegnie na pierwszym planie', left: 5_000 })
+    clock.now += 6_000
+    clock.jump(-7_200_000)
+    await w.refresh()
+    expect(w.current().note).toBeNull()
+  })
+
+  it('termin kosztu i uwagi w widoku to to, co zostało w chwili wysłania – także przy ponownym rozesłaniu zapamiętanego widoku (otwarcie okna)', async () => {
+    const { w, folder, at, clock } = await make()
+    await folder.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 30 })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 10 * 60 + 40), auto: false }])
+    at(10 * 60 + 35)
+    await w.refresh()
+    await w.act('line', `${w.current().question!.id}|next`, 'main')
+    expect(w.current().pending).toMatchObject({ button: 'start', left: 10_000 })
+    // A window opening 4 s later gets the view sent again: what is left of the cost then, not the 10 s of the first sending.
+    clock.now += 4_000
+    expect(w.current().pending).toMatchObject({ left: 6_000 })
+    clock.now += 7_000
+    expect(w.current().pending).toBeNull()
+  })
+
+  it('uwaga o odmowie w ponownie rozesłanym widoku niesie to, co jej zostało', async () => {
+    const { w, clock } = await make()
+    await w.refresh()
+    await w.act('pause', undefined, 'bar')
+    expect(w.current().note).toMatchObject({ left: 6_000 })
+    clock.now += 2_500
+    expect(w.current().note).toMatchObject({ left: 3_500 })
+  })
+
+  it('zegar cofnięty po pokazaniu kosztu: „Potwierdź” nie jest odrzucane jako za szybkie', async () => {
+    const { w, folder, at, clock } = await make()
+    await folder.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 30 })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 10 * 60 + 40), auto: false }])
+    at(10 * 60 + 35)
+    await w.refresh()
+    await w.act('line', `${w.current().question!.id}|next`, 'main')
+    expect(w.current().pending).toMatchObject({ button: 'start' })
+    clock.now += 3_000
+    clock.jump(-174_000)
+    await w.act('confirm', undefined, 'main')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+  })
+
   it('„Dalej” z kosztem: koszt stoi przy „Start” następnego bloku, „Potwierdź” zaczyna właśnie ten blok (także z pytania „Dalej?”)', async () => {
     const { w, folder, at, clock } = await make()
     await folder.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 30 })
@@ -727,6 +847,60 @@ describe('widget w procesie głównym', () => {
     expect(shown.filter((n) => n.title === 'Energia na poziomie rezerwy')).toHaveLength(1)
     // Its click opens the panel on the reserve's line (D241, A4-04).
     expect(shown.find((n) => n.title === 'Energia na poziomie rezerwy')!.line).toMatch(/^reserve:2026-10-21:emotions:\d+$/)
+  })
+
+  /** The hard end passed long ago (no message of its own) and a project runs now: how many notices „Twardy koniec projektów” come. */
+  async function hardEndNotices(nothingMissing: boolean, missingMin?: number): Promise<number> {
+    const { w, folder, shown, at } = await make()
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(17 * 60)
+    await folder.check()
+    await folder.timerClick({ a: 'startNew', block: 'p', categoryId: 'projekty', durationMin: 60 })
+    const real = folder.widgetModel.bind(folder)
+    folder.widgetModel = async (t?: number) => {
+      const m = await real(t)
+      const regen = missingMin == null ? m.state.regen : { ...m.state.regen, missingMin }
+      return { ...m, state: { ...m.state, regen, hardEnd: { ...m.state.hardEnd, passed: m.state.now - 200, message: false, nothingMissing } } }
+    }
+    await w.refresh()
+    return shown.filter((n) => n.title === 'Twardy koniec projektów').length
+  }
+
+  it('powiadomienie o twardym końcu przy biegnącym projekcie przychodzi, gdy brakuje minimum regeneracji (projekt po twardym końcu)', async () => {
+    expect(await hardEndNotices(false)).toBe(1)
+  })
+
+  it('powiadomienie o twardym końcu nie przychodzi przy biegnącym projekcie, gdy brakująca część minimum wynosi 0', async () => {
+    expect(await hardEndNotices(true)).toBe(0)
+  })
+
+  it('powiadomienie o twardym końcu nie przychodzi, gdy minimum zostało zebrane już po przejściu (projekt zaczęty potem)', async () => {
+    expect(await hardEndNotices(false, 0)).toBe(0)
+  })
+
+  it('prowadzący zapisuje przejście twardego końca z polem „quiet”: true, gdy minimum regeneracji jest już zebrane', async () => {
+    const { folder, at } = await make()
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(17 * 60)
+    await folder.check()
+    await folder.timerClick({ a: 'workEnd' })
+    // 90 min of regeneration after the end of work: nothing is missing of the minimum, the hard end is the bedtime 22:00.
+    at(17 * 60 + 5)
+    await folder.timerClick({ a: 'startNew', block: 'reg', categoryId: 'regeneracja', durationMin: 90 })
+    at(18 * 60 + 35)
+    await folder.timerClick({ a: 'pause' })
+    at(21 * 60 + 58)
+    await folder.check()
+    at(22 * 60)
+    await folder.timerClick({ a: 'startNew', block: 'p', categoryId: 'projekty', durationMin: 10 })
+    at(22 * 60 + 5)
+    await folder.check()
+    const pass = (await folder.readDay(DAY)).events.filter((e) => e.k === 'hardend.pass')
+    expect(pass).toEqual([expect.objectContaining({ quiet: true })])
   })
 
   it('komunikat rezerwy (D326): linia z regeneracją dobraną do puli, „Zacznij” zaczyna ją od teraz, „nie dziś” chowa do końca dnia; zobaczenie się zapisuje', async () => {
@@ -811,12 +985,13 @@ describe('widget w procesie głównym', () => {
     await w.act('extend', '15', 'bar')
     expect(w.current().pending).toMatchObject({ button: 'extend' })
     expect(w.current().pending!.text).toContain('−15 min puli')
-    const first = w.current().pending!.until
+    expect(w.current().pending!.left).toBe(10_000)
     clock.now += 4_000
     await w.act('extendStep', '15', 'bar')
     expect(w.current().pending!.text).toContain('Przedłuż +30')
     expect(w.current().pending!.text).toContain('−30 min puli')
-    expect(w.current().pending!.until).toBeGreaterThan(first)
+    // A step renews the 10 s (4 s of the first would have left 6).
+    expect(w.current().pending!.left).toBe(10_000)
     // Not shorter than 15 min.
     await w.act('extendStep', '-15', 'bar')
     clock.now += 600

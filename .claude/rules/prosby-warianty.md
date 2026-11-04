@@ -16,7 +16,11 @@ D247, D263, D296, T202, T372. Decyzje T478–T481, T502, T503. Elementy w pasku 
   (`requestEnd`), po fakcie (`requestAfter`); `resumeAfter` (wznowienie przerwanego bloku, reguła `requestResume`),
   `requestEndOf` / `requestAutoEnds` (koniec bez „Koniec”), `requestCounters` (dziś, tydzień, osoby).
 - `engine/variants.ts` – `variantTriggers`, `variantCauses`, `variantsFor` (2–3 warianty, każdy oceniony ponownym
-  `computeDay`), `planWith`, `applyVariant` (pliki dni), `markerCause` (kiedy znacznik w pasku).
+  `computeDay`; D340: prognoza stawia elastyczny blok, który nie mieści się przed stałym, w całości za nim – cięcie
+  w kolejności „ta sama przerwa, potem najpóźniejsze” jest sprawdzane, a gdy koniec pracy dalej wypada po granicy,
+  cięcie i przeniesienie idą od bloku wyznaczającego koniec (najwyżej `MAX_DAY_COUNTS` = 8 przeliczeń); etykieta
+  z cięcia faktycznego, wariant bez poprawy zostaje z prawdziwym końcem pracy; gdy koniec robi blok niebędący kandydatem – stały albo biegnący – wyszukiwanie przerywa się od razu; kandydaci tylko sprzed drugiej zmiany; krok, po którym koniec się nie przesunął, jest
+  cofany; te same zmiany liczone raz), `planWith`, `applyVariant` (pliki dni), `markerCause` (kiedy znacznik w pasku).
 - `facts.ts`: `resumedWith` (wznowienie zapisane z końcem prośby), cięcie przebiegów przez `request.start.splits`.
 - Kliknięcia próśb idą drogą timera: `folder.timerClick`; „Koniec” – do dnia, w którym prośba trwa (także sprzed 04:00).
 

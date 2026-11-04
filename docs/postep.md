@@ -35,8 +35,8 @@
 3. **Ciąg F w toku (od 3.11, D349)** – `docs/plan.md`: główna sesja Opus 5.5 · xhigh, wykonawcy z `.claude/agents/`
    (Haiku F1–F2, Opus G1–G5, Sonnet H1–H3), zadania F1–H3, wersje 1.0.1–1.0.8; przyczyny w `docs/vm/przyczyny.md`,
    decyzje D334–D347, D350. „Przed ciągiem F” zrobione, F1–F3 scalone (PR #44), G1 – 1.0.1 wydane (PR #45).
-   **Teraz:** G2 – PR 1.0.2 (`claude/1.0.2-pasek-od-startu`) do scalenia po zielonym CI, potem wydanie 1.0.2 na `main`;
-   **następne:** H1 (1.0.3, `wykonawca-sonnet`), potem H2, G3, G4, G5, H3 – bez pauzy do końca ciągu.
+   G2 – 1.0.2 wydane (PR #46). **Teraz:** H1 – PR 1.0.3 (`claude/1.0.3-plan-i-pasek`) do scalenia po zielonym CI,
+   potem wydanie 1.0.3 na `main`; **następne:** H2 (1.0.4, `wykonawca-sonnet`), potem G3, G4, G5, H3 – bez pauzy.
 4. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Do odbioru na Windows
@@ -100,6 +100,15 @@
     Ostatnią deltę (refaktor `fixedStartLists`) przejrzałam sama. Propozycje: nakładka w jednym dostępie do dnia,
     reguła regeneracji z `inFront`.
   - Czas faktyczny: ok. 4 h (szacunek 2–3 h).
+  - PR #46 scalony 4.11 (506a4a5) po zielonym CI; run 41766394055 na `main` zielony, **wydanie 1.0.2 opublikowane** (ok. 4:51).
+- **H1 – 1.0.3 plan i pasek** (`wykonawca-sonnet`): gałąź `claude/1.0.3-plan-i-pasek` od 506a4a5, 4.11 ok. 4:55.
+  - E5b.5 (D340) warianty od bloku, który wyznacza koniec; E4a.4 (D350) grupa rozwijana z „Cofnij”, para pauza ↔ start;
+    E3.13 druga zmiana nieprzeciągalna; „+15” z kosztem; terminy paska na zegarze monotonicznym; bez komunikatu twardego
+    końca przy brakującej 0 (`hardend.pass.quiet`); „Prośba ▸” w ciszy nocnej (D346). T533. Odbiór: E5b.5, E4a.4, E3.13,
+    E5b.4, E8d.2 („zmiana w 1.0.3”).
+  - `/code-review` xhigh trzy razy; poprawka „Cofnij” pauzy z rundy 1 cofnięta (regresje), zamiast niej para z warunkiem.
+    Linia twardego końca w pasku (spec) – brak od 1.0.0, osobna poprawka 4.10 w `docs/plan.md`.
+  - Czas faktyczny: ok. 3,5 h (szacunek 2,5–3 h).
 
 ## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)
 - Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji. Kolejno: bloki według modelu
@@ -305,5 +314,8 @@
   (D165 – dziś milczy; koniec potwierdzasz przyciskiem „Koniec pracy”)?
 - Po G1: zapauzowany blok kończony przez „Koniec pracy”, „Tak” na „Koniec pracy?” i zamknięcie dnia ma na liście
   „zrobione automatycznie” tekst „<blok> zaparkowany („Koniec pracy”)”, choć jest zakończony – zmienić na „zakończony”?
+- Po H1 (D350): „Cofnij” przy pauzie bloku elastycznego i przy starcie bloku stałego cofa parę (elastyczny biegnie dalej,
+  stały niezaczęty) – tylko póki blok stały biegnie, potem oba wiersze są informacją. Inaczej: elastyczny dalej w tle,
+  a stały na pierwszym planie? Albo „Cofnij” także po końcu bloku stałego?
 - Przed E4a: punkt 15 listy E0 niesprawdzony – czy OBS nagrywa przy wygaszonym ekranie; od 0.20.0 bez Próby sprawdzisz
   to przy prawdziwym wykładzie nagrywanym na tym komputerze (D184, „Ekran świeci”).
