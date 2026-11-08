@@ -1,9 +1,13 @@
 # Changelog
 
-## 1.0.7
+## 1.0.8
 - Instalator uruchomiony ręcznie przy włączonej aplikacji najpierw prosi ją o zamknięcie i czeka, aż skończy zapisywać (do 15 s), zamiast od razu ją zabijać – następny start nie widzi już awarii, a w dzienniku jest „zamknięte przez instalator”. Pomocnik nie zostaje w tle.
 - Gdy instalator mimo to nie może zamknąć aplikacji („Nie można zamknąć”), zapisuje listę procesów, które zostały, w `logs\installer-check.log` (bez nazwy konta).
 - Instalator widzi teraz także pojedynczy proces, który został z aplikacji, i nie kopiuje plików pod działającą aplikację, gdy sprawdzenie procesów się nie uda.
+
+## 1.0.7
+- „Uruchamiaj z Windows” w Ustawieniach pokazuje prawdziwy stan i da się go wyłączyć (dotąd zawsze „wyłączone”, a wyłączenie nie działało, gdy folder aplikacji ma spację w nazwie); rozpoznaje też „wyłączone w Menedżerze zadań”.
+- Po twardym resecie albo utracie zasilania następny start rozpoznaje awarię albo mówi „nieznane (znacznik życia nieczytelny)” zamiast „pierwsze uruchomienie” – znacznik życia zapisuje się teraz tak, że nie zostaje pusty.
 
 ## 1.0.6
 - Pasek pulpitu nie kładzie się już nad oknami innych programów (był np. nad Edge na pełnym ekranie i nad zmaksymalizowanym Eksploratorem): ukryte okna Eksploratora nie są już brane za pulpit, a pasek nigdy nie leży nad pokazanym oknem, które na niego nachodzi. Nie dotyczy włączonego „Zawsze na wierzchu”.

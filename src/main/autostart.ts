@@ -14,6 +14,14 @@ export const HIDDEN_ARG = '--hidden'
 
 const samePath = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 
+/**
+ * Electron on Windows reads `path` of `getLoginItemSettings` as a command line and cuts it at the first space („…\Regulated”
+ * of „…\Regulated Day.exe”) unless it is in quotes: with the bare path `launchItems` stays empty, the switch always reads
+ * „off” and cannot be turned off. `setLoginItemSettings` quotes the path itself (the entry is `"…\Regulated Day.exe" --hidden`),
+ * so it gets the bare one – the entry must read back as written.
+ */
+const readPath = () => `"${process.execPath}"`
+
 export interface AutostartDeps {
   supported: boolean
   switchedOn: () => boolean
@@ -24,7 +32,7 @@ export class Autostart {
   constructor(private readonly d: AutostartDeps) {}
 
   private entry(): { path: string; enabled: boolean } | null {
-    const items = app.getLoginItemSettings({ path: process.execPath, args: [HIDDEN_ARG] }).launchItems ?? []
+    const items = app.getLoginItemSettings({ path: readPath(), args: [HIDDEN_ARG] }).launchItems ?? []
     const item = items.find((i) => i.name === AUTOSTART_NAME)
     return item ? { path: item.path, enabled: item.enabled } : null
   }

@@ -94,6 +94,35 @@ test('instalacja: tożsamość produkcyjna, jeden skrót, adres regulatedday://,
   }
 })
 
+test('Uruchamiaj z Windows: przełącznik pokazuje prawdziwy stan (ścieżka ze spacją), wpis Run powstaje i da się go usunąć (H3)', async () => {
+  test.setTimeout(5 * 60_000)
+  const exe = join(installed()!.dir, APP_EXE)
+  const app = await electron.launch({ executablePath: exe, env: { ...(process.env as Record<string, string>), RD_UPDATE_URL: 'http://127.0.0.1:9' } })
+  type State = { supported: boolean; switchedOn: boolean; willStart: boolean; disabledInTaskManager: boolean }
+  let set: (on: boolean) => Promise<State> = () => Promise.reject(new Error('okno nie otwarte'))
+  try {
+    const win = await app.firstWindow()
+    await win.waitForFunction(() => 'rd' in window)
+    set = (on: boolean) => win.evaluate((v) => (window as unknown as { rd: { setAutostart: (x: boolean) => Promise<State> } }).rd.setAutostart(v), on)
+    // The path has a space („Regulated Day.exe”): Electron cuts a bare path at it and reads no entry.
+    expect(exe).toContain(' ')
+    expect(await set(true)).toMatchObject({ supported: true, switchedOn: true, willStart: true, disabledInTaskManager: false })
+    expect(runEntry(PRODUCT)?.toLowerCase()).toBe(`"${exe}" --hidden`.toLowerCase())
+    expect(await set(false)).toMatchObject({ supported: true, switchedOn: false, willStart: false })
+    expect(runEntry(PRODUCT)).toBeNull()
+  } catch (e) {
+    await dump('autostart')
+    throw e
+  } finally {
+    // Nothing of the autostart is left behind, whatever happened above: the switch off in the app's settings (config.json),
+    // the Run entry and Windows' own mark of it (StartupApproved, which Task Manager also writes).
+    await set(false).catch(() => undefined)
+    powershell(`Remove-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name '${PRODUCT}' -ErrorAction SilentlyContinue`)
+    powershell(`Remove-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run' -Name '${PRODUCT}' -ErrorAction SilentlyContinue`)
+    await app.close().catch(() => undefined)
+  }
+})
+
 test('deinstalacja: strażnik, folder update i klucze aktywatora usunięte, ustawienia powiadomień zostają', async () => {
   test.setTimeout(10 * 60_000)
   const dir = installed()!.dir

@@ -5,10 +5,13 @@
  * restart, also with fast startup); without the helper an end without a record of closing is no crash (then a close in
  * Task Manager is not recognised either). A record of closing is valid only with no life marker after it (a logoff
  * cancelled). Closing by the installer is no crash: its marker counts when its time falls in the last window of the life
- * marker. A crash after a valid record of closing (while closing) goes only to the local log.
+ * marker. A crash after a valid record of closing (while closing) goes only to the local log. The files are written
+ * through a temporary file renamed over (never opened for writing in place: a hard reset or a failed write leaves the
+ * previous whole file, not an empty one); a marker that exists but cannot be read is „unknown”, never „first”.
  */
-import { appendFileSync, closeSync, existsSync, fsyncSync, openSync, readFileSync, readdirSync, statSync, writeSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { writeSyncAtomic } from '../update/files'
 import { minidumpProcessType } from './minidump'
 
 export const LIFE_EVERY_MS = 30_000
@@ -52,8 +55,12 @@ const readJson = <T>(path: string): T | null => {
 }
 
 /** Pure: the end of the previous run from what it left behind. */
-export function judge(prev: LifeMarker | null, close: CloseRecord | null, session: Session | null, installerAt: number | null, mainDump: boolean): Verdict {
-  if (!prev) return { kind: 'first', previous: null, why: 'brak znacznika życia' }
+export function judge(prev: LifeMarker | null, close: CloseRecord | null, session: Session | null, installerAt: number | null, mainDump: boolean, lifeUnreadable = false): Verdict {
+  if (!prev) {
+    // A marker that is there but empty or broken (a hard reset in the middle of a write) says nothing – not „the first run”.
+    if (lifeUnreadable) return { kind: 'unknown', previous: null, why: 'znacznik życia nieczytelny' }
+    return { kind: 'first', previous: null, why: 'brak znacznika życia' }
+  }
   const validClose = !!close && close.runId === prev.runId && close.at >= prev.lastAt
   if (mainDump) return validClose ? { kind: 'crashWhileClosing', previous: prev, why: 'zrzut procesu głównego po zapisie zamknięcia' } : { kind: 'crash', previous: prev, why: 'zrzut procesu głównego' }
   if (validClose) return { kind: 'clean', previous: prev, why: `zamknięcie (${close!.why})` }
@@ -81,8 +88,28 @@ export class LifeKeeper {
     return join(this.dir, 'closed-by-installer.json')
   }
 
+  /**
+   * The previous run's marker, read once: `marker` is null when there is none or it cannot be read; `unreadable` tells
+   * which (a file that is there but empty, cut short or of another shape is not „no marker”).
+   */
+  read(): { marker: LifeMarker | null; unreadable: boolean } {
+    let text: string
+    try {
+      text = readFileSync(this.lifeFile, 'utf8')
+    } catch (e) {
+      return { marker: null, unreadable: (e as NodeJS.ErrnoException).code !== 'ENOENT' }
+    }
+    try {
+      const m = JSON.parse(text) as Partial<LifeMarker> | null
+      if (m && typeof m.runId === 'string' && typeof m.lastAt === 'number' && typeof m.startedAt === 'number') return { marker: m as LifeMarker, unreadable: false }
+    } catch {
+      /* cut short */
+    }
+    return { marker: null, unreadable: true }
+  }
+
   previous(): LifeMarker | null {
-    return readJson<LifeMarker>(this.lifeFile)
+    return this.read().marker
   }
 
   closeRecord(): CloseRecord | null {
@@ -131,17 +158,6 @@ export class LifeKeeper {
     return { found, types }
   }
 
-  /** Synchronous write without waiting for the disk: the session's end may end the process right after. */
-  private writeNow(file: string, text: string, sync: boolean): void {
-    const fd = openSync(file, 'w')
-    try {
-      writeSync(fd, text)
-      if (sync) fsyncSync(fd)
-    } finally {
-      closeSync(fd)
-    }
-  }
-
   start(runId: string, version: string, now = Date.now()): void {
     if (this.closed) return
     this.marker = { format: 1, runId, version, pid: process.pid, startedAt: now, lastAt: now }
@@ -154,7 +170,7 @@ export class LifeKeeper {
     if (!this.marker) return
     this.marker.lastAt = now
     try {
-      this.writeNow(this.lifeFile, `${JSON.stringify(this.marker)}\n`, false)
+      writeSyncAtomic(this.lifeFile, `${JSON.stringify(this.marker)}\n`, true)
     } catch {
       /* the next beat tries again */
     }
@@ -167,7 +183,7 @@ export class LifeKeeper {
     if (this.timer) clearInterval(this.timer)
     this.timer = null
     try {
-      this.writeNow(this.closeFile, `${JSON.stringify({ runId: this.marker.runId, at: now, why })}\n`, why !== 'system')
+      writeSyncAtomic(this.closeFile, `${JSON.stringify({ runId: this.marker.runId, at: now, why })}\n`, why !== 'system')
     } catch {
       try {
         appendFileSync(this.closeFile, '')

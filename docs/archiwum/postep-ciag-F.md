@@ -113,6 +113,20 @@ Wpisy zadań ciągu F przeniesione z `docs/postep.md` 8.11.2026 (D351); stan i k
   - Testy: `build:helper`, typecheck, unit 1288, build, lint, samotest okien przez `Add-Type`; CI rund 0 i 2 zielone.
   - Czas faktyczny: ok. 2 h (szacunek 2–3 h). PR #51 scalony 8.11 (581d8eb); run 42518714788 na `main` zielony,
     **wydanie 1.0.6 opublikowane** (ok. 21:41).
+- **H3 – 1.0.7 autostart i znacznik życia** (`wykonawca-sonnet`): 8.11 ok. 22:00, gałąź `claude/1.0.8-autostart` od
+  d735aa7 w drzewie `C:\CC-Projekty\RegulatedDay-h3` (równolegle z G5). Wydane jako 1.0.7 przed G5 (T542) – G5 czekał
+  na CI `tests/update`.
+  - T542: „Uruchamiaj z Windows” – `getLoginItemSettings` ze ścieżką w cudzysłowie (Electron 44 tnie ją na spacji:
+    przełącznik zawsze „wyłączone”, wyłączenie nie działało); znaczniki życia i zamknięcia (aplikacji i folderu) przez
+    `writeSyncAtomic` (ukryty plik tymczasowy, fsync także przy biciu, ponowienia zmiany nazwy), jeden odczyt znacznika
+    przed czekaniem na pomocnika; pusty albo uszkodzony znacznik – `unknown`, nie `first`. Odbiór: E4a.13, nowy E8m.2.
+  - `/code-review` high: 9 uwag – 5 poprawionych z testami; deltę przejrzała główna sesja.
+  - Uwagi na później: `checkPath` nie widzi wpisu Run z inną ścieżką (Electron filtruje `launchItems` po ścieżce –
+    trzeba odczytu rejestru); nieudany zapis zamknięcia zostawia starszy zapis (anulowane wylogowanie); przy nieczytelnym
+    znaczniku folderu brak `observe.to` „crash”.
+  - Testy: typecheck, unit 1299, build, lint; CI zielone (także „Uruchamiaj z Windows… (ścieżka ze spacją)”
+    w `tests/update/install.spec.ts` na prawdziwym Electronie).
+  - Czas faktyczny: ok. 1,5 h (szacunek 1–1,5 h). PR #53 scalony 8.11 (1a4e69e); wydanie 1.0.7 z runu 42530187521.
 
 ## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)
 - Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji. Kolejno: bloki według modelu
