@@ -10,6 +10,7 @@ namespace RegulatedDay
     {
         public int Left, Top, Right, Bottom;
         public bool Overlaps(RECT o) { return Left < o.Right && o.Left < Right && Top < o.Bottom && o.Top < Bottom; }
+        public bool Contains(RECT o) { return Left <= o.Left && Top <= o.Top && Right >= o.Right && Bottom >= o.Bottom; }
         public bool Empty { get { return Right <= Left || Bottom <= Top; } }
         public override string ToString() { return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0},{1},{2},{3}", Left, Top, Right - Left, Bottom - Top); }
     }
