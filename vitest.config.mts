@@ -15,6 +15,8 @@ export default defineConfig({
   test: {
     testTimeout: 30000,
     include: ['tests/unit/**/*.test.ts', 'tests/fs/**/*.test.ts', 'tests/sim/**/*.test.ts', 'tests/scale/**/*.test.ts', 'tests/web/**/*.test.ts'],
-    environment: 'node'
+    environment: 'node',
+    // T538: dots locally (less output to read), the default reporter in CI.
+    reporters: process.env.CI ? ['default'] : ['dot']
   }
 })

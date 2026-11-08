@@ -12,12 +12,16 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
   sam i dopisz jako T-decyzję.
 - PR-y otwieraj i scalaj bez pytania, gdy CI jest zielone i nic nie czeka na decyzję (D285, D333). Do `main` pisze
   naraz jedna sesja; po scaleniu sprawdź, że zadanie Windows w CI opublikowało wydanie.
-- Plan napraw (D349): główna sesja na Opus 5.5 · xhigh zleca test i poprawkę każdego zadania wykonawcy z `.claude/agents/`
-  według kolumny „Wykonawca” w `docs/plan.md`, a sama sprawdza, robi `/code-review`, PR i scalanie.
+- Plan napraw (D349, D351): główna sesja na Opus 5.5 · high zleca test i poprawkę każdego zadania wykonawcy
+  z `.claude/agents/` według kolumny „Wykonawca” w `docs/plan.md`, a sama sprawdza, robi `/code-review`, PR i scalanie.
+- **Tokeny (D351):** `/code-review` według ryzyka (xhigh – silnik dnia, folder danych, pasek i okna, instalator;
+  high – reszta kodu; medium – dokumenty), najwyżej dwie rundy (druga tylko na poprawkach), medium tylko z testem,
+  reszta → „Uwagi na później”. Szczegóły: skill `etap`.
 - Po wznowieniu (limit, nowa sesja) najpierw przeczytaj `docs/postep.md`.
 - **`/clear`:** przy każdej pauzie i po każdym zamkniętym kroku powiedz wprost, czy można go teraz bezpiecznie wykonać.
   Bezpiecznie = wszystko jest w commitach wypchniętych na GitHuba, `docs/postep.md` mówi, co dalej (także PR do scalenia
   i CI w toku), i nic nie zależy tylko od pamięci rozmowy. Inaczej powiedz, czego brakuje i kiedy będzie można.
+  Po każdym scalonym PR zaproponuj `/clear` (D351).
 
 ## Zasady produktu (najważniejsze)
 - Aplikacja nigdy nie kontroluje użytkownika: ostrzega, odradza, sugeruje, nic twardo nie blokuje (D72).
@@ -30,14 +34,17 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
 - `docs/specyfikacja.md` – aktualne reguły (v29), ~420 KB. **Nie czytaj w całości:** Grep po nagłówku `##` albo
   identyfikatorze, potem `Read` z `offset`/`limit`. Rozdziały: Model dnia, Model energii, Bloki, Zakres 1.0, Timer,
   Grywalizacja, Wygląd, Dane i ustawienia, Konwencje interfejsu, Jakość i protokół, Plan budowy.
-- `docs/decyzje.md` – decyzje D (użytkownik), `docs/decyzje-techniczne.md` – T (techniczne) (D308); czytaj Grepem
-  po numerze. Nie zmieniaj D bez pytania; nowa decyzja wskazuje, którą zastępuje.
+- `docs/decyzje.md` – decyzje D (użytkownik), `docs/decyzje-techniczne.md` – T400 i nowsze,
+  `docs/decyzje-techniczne-T1-T399.md` – starsze T (D308, T535); czytaj Grepem po numerze. Nie zmieniaj D bez
+  pytania; nowa decyzja wskazuje, którą zastępuje.
 - `docs/plan.md` – tylko praca do zrobienia: ciągi, rodzaj, model, szacunek, „gotowe, gdy” (D317, D349).
-  `docs/postep.md` – stan bieżący i kolejka.
-- `docs/odbior.md` – listy do odbioru na Windows (oczekiwany efekt i błędy blokujące każdego punktu), także odebrane.
+  `docs/postep.md` – stan bieżący i kolejka (≤ 20 KB; zakończone wpisy → `docs/archiwum/postep-*.md`).
+- `docs/odbior.md` – listy do odbioru na Windows (oczekiwany efekt i błędy blokujące każdego punktu); opisy
+  odebranych → `docs/archiwum/odbior-odebrane.md` (T536).
 - `docs/odbior-vm.md` – odbiór w maszynie wirtualnej (Cowork); raport z testów w `docs/vm/raport.md` (T529),
   przyczyny jego niezgodności w `docs/vm/przyczyny.md`.
-- `CHANGELOG.md` – opis zmian dla użytkownika (pokazywany w aplikacji jako „Co nowego”).
+- `CHANGELOG.md` – opis zmian dla użytkownika (pokazywany w aplikacji jako „Co nowego”); przy dopisywaniu wersji
+  czytaj tylko początek (`Read` z `limit`).
 - Wiedza modułów → `.claude/rules/*.md` z `paths:`. Historia → `docs/archiwum/`.
 
 ## FinancialIntel (wzorzec)
