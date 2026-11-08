@@ -258,7 +258,7 @@ describe('instalacja a sesja i zajęcia (A5-02, A5-03, A5-05)', () => {
     c.updater?.stopAuto()
   })
 
-  it('zamknięcie z zewnątrz (ręcznie uruchomiony instalator) z pobranym wydaniem: przy tym wyjściu nic się nie instaluje (E4a.13)', () => {
+  it('zamknięte przez ręcznie uruchomiony instalator, z pobranym wydaniem: przy tym wyjściu nic się nie instaluje (E4a.13)', () => {
     const { userData, helperDir } = download()
     const before = { n: 0 }
     const logs: string[] = []
@@ -268,7 +268,7 @@ describe('instalacja a sesja i zajęcia (A5-02, A5-03, A5-05)', () => {
     c.onQuit(false, true)
     // The installer that closed the app installs now: no second installation from its exit.
     expect(before.n).toBe(0)
-    expect(logs.some((m) => m.startsWith('zamknięcie z zewnątrz'))).toBe(true)
+    expect(logs.some((m) => m.startsWith('zamknięte przez instalator'))).toBe(true)
     c.updater?.stopAuto()
   })
 

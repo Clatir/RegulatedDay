@@ -54,13 +54,14 @@ import { notify } from './notify'
 import { runStartup, type Banner, type StartupResult } from './update/startup'
 import { cleanUpdateFolders, emptyPlanAtStart, fsDeps, manifestOf, planBlocking, writeLaunched, writePlan } from './update/files'
 import { UpdateController } from './update/controller'
+import { QUIT_DATA_CLOSE_MS, closedByInstaller } from './installerClose'
 import { guardMode, startDetached } from './update/install'
 import { LifeKeeper, judge } from './crash/lifeMarker'
 import { sessionAtStart } from './crash/session'
 import { readVersions, recordRun } from './crash/versions'
 import { NightInstaller } from './update/night'
 import { marketDay } from '@shared/calendar/holidays'
-import { STOP_TIMEOUT_MS, type DataService } from './data/service'
+import { type DataService } from './data/service'
 import { DataHub } from './data/hub'
 import { PowerKeeper } from './power'
 import { OneDriveWatch } from './onedrive'
@@ -126,7 +127,10 @@ const oneDrive = new OneDriveWatch({
   log: (level, msg) => log(level, msg)
 })
 let quitting = false
-/** Something outside closed a hidden window (a hand-run installer's taskkill, E4a.13): no installation at this exit. */
+/**
+ * Something outside closed a hidden window (an installer's or your taskkill, E4a.13) – also while the app was quitting
+ * already. With a fresh marker of the installer (closedByInstaller) this exit installs nothing and its record says so.
+ */
 let closedFromOutside = false
 /** Windows ends the session (logoff, shutdown): never an installer now (spec), the record of closing written at once. */
 let sessionEnding = false
@@ -534,11 +538,11 @@ function quitApp(): void {
 
 /**
  * A close from outside – WM_CLOSE to a hidden window nobody could click (T396): an installer run by hand asks the app to
- * end its own way (taskkill without /F, E4a.13) and installs itself, so no ready download installs at this exit.
+ * end its own way (taskkill without /F, E4a.13). Noted also while the app quits already: the installer may come then.
  */
 function quitFromOutside(): void {
-  if (quitting) return
   closedFromOutside = true
+  if (quitting) return
   log('info', 'zamknięcie z zewnątrz (instalator albo taskkill) – kończę pracę')
   quitApp()
 }
@@ -1245,22 +1249,26 @@ app.on('before-quit', (e) => {
     const dir = dataFolderNow()
     const say = f && dir ? quitNotice(f.unsynced, existsSync(dir)) : null
     if (say) notify({ id: `unsynced:${Date.now()}`, title: 'Folder danych niedostępny', body: say, line: null, day: null }, log)
-    void Promise.race([hub.close('quit'), new Promise((r) => setTimeout(r, 2 * STOP_TIMEOUT_MS))])
+    void Promise.race([hub.close('quit'), new Promise((r) => setTimeout(r, QUIT_DATA_CLOSE_MS))])
       .catch((err) => log('warn', 'zamykanie folderu danych', err))
       .finally(() => app.quit())
   }
 })
 
 app.on('will-quit', () => {
-  // A ready download installs at the full exit (never at the end of the Windows session nor after a close from outside).
-  updates?.onQuit(sessionEnding, closedFromOutside)
+  // Closed by a hand-run installer: it installs itself – the install helper of a ready download does not stop at its mutex
+  // (it would show its window beside it). Your own taskkill is an ordinary exit.
+  const byInstaller = closedByInstaller(closedFromOutside, life.installerMarker(), Date.now())
+  if (byInstaller) log('info', 'zamknięte przez instalator')
+  // A ready download installs at the full exit (never at the end of the Windows session nor when an installer closed it).
+  updates?.onQuit(sessionEnding, byInstaller)
   power.stop()
   oneDrive.stop()
   widget.stop()
   sound?.destroy()
   helper?.stop()
   worker.stop()
-  if (!sessionEnding) life.close('quit')
+  if (!sessionEnding) life.close(byInstaller ? 'installer' : 'quit')
   // Not „koniec pracy”: that is the button of the day (F2).
   log('info', 'aplikacja zamknięta')
   flushLog()

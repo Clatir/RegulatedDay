@@ -10,6 +10,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { QUIT_BUDGET_MS, QUIT_DATA_CLOSE_MS } from '../../src/main/installerClose'
 
 const nsh = readFileSync('resources/installer.nsh', 'utf8').replace(/\r\n/g, '\n')
 
@@ -44,7 +45,39 @@ describe('instalator zamyka aplikację (E4a.13)', () => {
     expect(at('!insertmacro rdKillProcess')).toBeGreaterThan(at('!insertmacro rdCloseApp'))
     expect(at('!insertmacro rdListProcesses')).toBeGreaterThan(at('!insertmacro rdKillProcess'))
     expect(at('"$(appCannotBeClosed)"')).toBeGreaterThan(at('!insertmacro rdListProcesses'))
-    expect(nsh).toMatch(/^!define RD_CLOSE_WAIT_MS 5000$/m)
+  })
+
+  it('czekanie na łagodne wyjście jest dłuższe niż własne wyjście aplikacji (folder danych, pomocnik, zapis zamknięcia)', () => {
+    const wait = Number(/^!define RD_CLOSE_WAIT_MS (\d+)$/m.exec(nsh)?.[1])
+    expect(wait).toBeGreaterThanOrEqual(QUIT_BUDGET_MS)
+    // The app's quit waits for its data folder by this very limit.
+    expect(readFileSync('src/main/index.ts', 'utf8')).toContain('setTimeout(r, QUIT_DATA_CLOSE_MS)')
+    expect(QUIT_BUDGET_MS).toBeGreaterThan(QUIT_DATA_CLOSE_MS)
+  })
+
+  it('wyniki porównywane jako tekst: błąd szukania („timeout”, „error”, 2) to nie „nic nie działa”', () => {
+    const body = macro('customCheckAppRunning')
+    // LogicLib's == is IntCmp: "timeout" and "error" read as 0.
+    expect(body).not.toMatch(/\$R0 (==|!=) /)
+    const find = macro('rdFindProcess')
+    const ps = find.indexOf('${RD_PS_FIND}')
+    const unsure = find.search(/\$\{if\} \$\{_RETURN\} S!= "0"\s*\n\s*\$\{andIf\} \$\{_RETURN\} S!= "1"\s*\n\s*\$\{andIf\} \$\{_RETURN\} S!= "3"/)
+    const tasklist = find.indexOf('tasklist')
+    expect(ps).toBeGreaterThan(-1)
+    expect(unsure).toBeGreaterThan(ps)
+    expect(tasklist).toBeGreaterThan(unsure)
+    // tasklist unsure as well: running.
+    expect(find.slice(tasklist)).toMatch(/\$\{if\} \$\{_RETURN\} S!= "1"\s*\n\s*StrCpy \$\{_RETURN\} 0/)
+  })
+
+  it('znacznik „zamknięte przez instalator” tylko przy procesie głównym; gdy wszystko się skończyło – od razu dalej', () => {
+    const body = macro('customCheckAppRunning')
+    expect(body).toMatch(/\$\{if\} \$R0 S== "0"\s*\n\s*!insertmacro rdWriteClosedMarker\s*\n\s*\$\{endIf\}/)
+    // rdCloseApp gives the close's own result: 0 = every process ended, no further search.
+    const close = body.indexOf('!insertmacro rdCloseApp $R0')
+    expect(close).toBeGreaterThan(-1)
+    expect(body.slice(close)).toMatch(/^!insertmacro rdCloseApp \$R0\s*\n\s*\$\{if\} \$R0 S== "0"\s*\n\s*Goto rdNotRunning/)
+    expect(body.indexOf('rdWaitLoop:')).toBeGreaterThan(close)
   })
 
   it('łagodny krok nigdy nie zabija: taskkill bez /F, w PowerShellu bez Stop-Process', () => {
@@ -142,23 +175,24 @@ describe.skipIf(!win)('PowerShell instalatora na procesach zastępczych (Windows
     ...extra
   })
 
-  /** One step of the script, as nsExec starts it. */
-  function step(name: string, e: NodeJS.ProcessEnv): { code: number | null; ms: number } {
+  /** One step of the script, as nsExec starts it (`limit`: killed after it – status null). */
+  function step(name: string, e: NodeJS.ProcessEnv, limit = 60_000): { code: number | null; ms: number } {
     const t = Date.now()
-    const r = spawnSync(PS, ['-NoProfile', '-NonInteractive', '-C', defined(name).text], { env: e, stdio: 'ignore', timeout: 60_000 })
+    const r = spawnSync(PS, ['-NoProfile', '-NonInteractive', '-C', defined(name).text], { env: e, stdio: 'ignore', timeout: limit })
     return { code: r.status, ms: Date.now() - t }
   }
 
   const alive = (c: ChildProcess) => c.exitCode == null && c.signalCode == null
 
-  it('ukryte okno procesu głównego dostaje WM_CLOSE: aplikacja kończy się sama, krok nie czeka do końca terminu', async () => {
+  it('ukryte okno procesu głównego dostaje WM_CLOSE: aplikacja kończy się sama, krok kończy się z nią, nie z terminem', async () => {
     const app = await windowed('main')
-    const r = step('RD_PS_CLOSE', env({ RD_SETUP_WAIT_MS: '20000' }))
+    // A term of 10 min against a limit of 2 min on the step: only the end of the processes can end it in time (no clock
+    // of the whole step – PowerShell starts slowly on CI).
+    const r = step('RD_PS_CLOSE', env({ RD_SETUP_WAIT_MS: '600000' }), 120_000)
     expect(r.code).toBe(0)
     expect(readFileSync(join(root, 'main.closed'), 'utf8')).toBe('WM_CLOSE')
     await vi.waitFor(() => expect(alive(app)).toBe(false), { timeout: 5000 })
-    expect(r.ms).toBeLessThan(15_000)
-  }, 60_000)
+  }, 180_000)
 
   it('procesy potomne (--type=) i bez okna: nic ich nie zabija, krok czeka do terminu i zgłasza, że zostały', async () => {
     const app = await windowed('main')
@@ -178,10 +212,23 @@ describe.skipIf(!win)('PowerShell instalatora na procesach zastępczych (Windows
   it('szukanie widzi też jeden proces (FIND_PROCESS electron-buildera go nie widzi), nigdy samego instalatora', async () => {
     expect(step('RD_PS_FIND', env()).code).toBe(1)
     const helper = await windowless()
-    expect(step('RD_PS_FIND', env()).code).toBe(0)
+    expect(step('RD_PS_FIND', env()).code).not.toBe(1)
     // The installer itself under the installation (an uninstaller run in place, _?=): not counted.
     expect(step('RD_PS_FIND', env({ RD_SETUP_SELF: String(helper.pid) })).code).toBe(1)
   }, 60_000)
+
+  it('szukanie mówi, czy jest proces główny (0), czy tylko inne (3) – znacznik instalatora tylko przy głównym; błąd to 2', async () => {
+    await windowless()
+    expect(step('RD_PS_FIND', env()).code).toBe(3)
+    await windowed('renderer', ['--type=renderer'])
+    expect(step('RD_PS_FIND', env()).code).toBe(3)
+    await windowed('main')
+    expect(step('RD_PS_FIND', env()).code).toBe(0)
+    // A search that fails is no „nothing runs”.
+    const broken: NodeJS.ProcessEnv = { ...env() }
+    delete broken.RD_SETUP_INSTDIR
+    expect(step('RD_PS_FIND', broken).code).toBe(2)
+  }, 120_000)
 
   it('dobicie po terminie: Stop-Process każdego procesu spod instalacji poza samym instalatorem', async () => {
     const helper = await windowless()
@@ -191,8 +238,35 @@ describe.skipIf(!win)('PowerShell instalatora na procesach zastępczych (Windows
     expect(alive(self)).toBe(true)
   }, 60_000)
 
+  /**
+   * The account in the ways a command line may name it (D279: the list goes to the public repository): the profile in
+   * lower case, its 8.3 form (C:\Users\RUNNER~1 on CI) and the account's name as a folder elsewhere.
+   */
+  function accountForms(): { user: string; leaves: string[]; args: string[] } {
+    const profile = process.env.USERPROFILE ?? ''
+    const user = process.env.USERNAME ?? ''
+    const r = spawnSync('cmd.exe', ['/d /s /c "for %I in ("' + profile + '") do @echo %~sI"'], { encoding: 'utf8', windowsVerbatimArguments: true })
+    const short = r.stdout.trim() || profile
+    const leaf = (p: string) => p.split('\\').filter(Boolean).pop() ?? ''
+    return {
+      user,
+      leaves: [...new Set([user, leaf(profile), leaf(short)].filter(Boolean))],
+      args: [`${profile.toLowerCase()}\\lower.txt`, `${short}\\short.txt`, `D:\\kopie\\${user.toLowerCase()}\\plik.txt`]
+    }
+  }
+
+  /** Nothing of the account is left in `text`; its three forms are masked. */
+  function masked(text: string, a: ReturnType<typeof accountForms>): void {
+    for (const name of a.leaves) expect(text.toLowerCase()).not.toContain(name.toLowerCase())
+    expect(text).toContain('%USERPROFILE%\\lower.txt')
+    expect(text).toContain('%USERPROFILE%\\short.txt')
+    expect(text).toContain('D:\\kopie\\%USERNAME%\\plik.txt')
+  }
+
   it('lista przed „Nie można zamknąć”: nazwa, PID, rodzic, czas startu i wiersz poleceń, dopisywana, bez nazwy konta', async () => {
     const helper = await windowless()
+    const account = accountForms()
+    await windowed('main', account.args)
     expect(step('RD_PS_LIST', env()).code).toBe(0)
     expect(step('RD_PS_LIST', env()).code).toBe(0)
     const bytes = readFileSync(join(root, 'logs', 'installer-check.log'))
@@ -202,20 +276,20 @@ describe.skipIf(!win)('PowerShell instalatora na procesach zastępczych (Windows
     expect(text.match(head)?.length).toBe(2)
     const line = new RegExp(`^  rd-helper\\.exe \\| pid ${helper.pid} \\| rodzic ${process.pid}( \\S.*)? \\| start \\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z \\| .*rd-helper\\.exe"? +-n 120 127\\.0\\.0\\.1$`, 'm')
     expect(text).toMatch(line)
-    const profile = process.env.USERPROFILE
-    if (profile && inst.toLowerCase().startsWith(profile.toLowerCase())) {
-      expect(text).not.toContain(profile)
-      expect(text).toContain('%USERPROFILE%')
-    }
-  }, 60_000)
+    masked(text, account)
+  }, 90_000)
 
-  it('docs/vm/procesy.ps1 listuje te same dane ręcznie (odbiór w maszynie)', async () => {
+  it('docs/vm/procesy.ps1 listuje te same dane ręcznie (odbiór w maszynie), też bez nazwy konta', async () => {
     const helper = await windowless()
+    const account = accountForms()
+    await windowed('main', account.args)
     const out = join(root, 'procesy.txt')
     const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', 'docs/vm/procesy.ps1', inst, out], { encoding: 'utf8', timeout: 60_000 })
     expect(r.status).toBe(0)
     const text = readFileSync(out, 'utf8')
     expect(r.stdout).toContain(`pid ${helper.pid}`)
     expect(text).toMatch(new RegExp(`rd-helper\\.exe \\| pid ${helper.pid} \\| rodzic ${process.pid}( \\S.*)? \\| start \\d{4}-\\d\\d-\\d\\dT[^|]+\\| .*-n 120 127\\.0\\.0\\.1`))
-  }, 60_000)
+    masked(text, account)
+    masked(r.stdout, account)
+  }, 90_000)
 })

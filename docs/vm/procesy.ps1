@@ -62,16 +62,26 @@ $l += 'procesy spod folderu instalacji (' + $pod.Count + '):'
 foreach ($p in $pod) { $l += Linia $p }
 $l += 'procesy Regulated Day, rd-* i instalatora poza nim (' + $inne.Count + '):'
 foreach ($p in $inne) { $l += Linia $p }
-$tekst = ($l -join [char]10) + [char]10
-if ($env:USERPROFILE) { $tekst = $tekst.Replace($env:USERPROFILE, '%USERPROFILE%') }
+# Bez nazwy konta (jak installer-check.log): profil - takze w formie 8.3, dowolna wielkosc liter - jako %USERPROFILE%,
+# folder o nazwie konta (albo profilu) jako %USERNAME%.
+$profil = @($env:USERPROFILE)
+try { $profil += (New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:USERPROFILE).ShortPath } catch { }
+$profil = @($profil | Where-Object { $_ })
+$konto = @(@($env:USERNAME) + @($profil | ForEach-Object { Split-Path $_ -Leaf }) | Where-Object { $_ })
+function BezKonta([string]$s) {
+    foreach ($v in $profil) { $s = [regex]::Replace($s, [regex]::Escape($v), '%USERPROFILE%', 'IgnoreCase') }
+    foreach ($v in $konto) { $s = [regex]::Replace($s, '(?<=[\\/])' + [regex]::Escape($v) + '(?=[\\/\x22 ]|$)', '%USERNAME%', 'IgnoreCase, Multiline') }
+    return $s
+}
+$tekst = BezKonta (($l -join [char]10) + [char]10)
 Write-Host $tekst
 
 if (-not $Wynik -and (Test-Path 'C:\RD-raport')) { $Wynik = 'C:\RD-raport\procesy-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.txt' }
 if ($Wynik) {
     [IO.File]::WriteAllText($Wynik, $tekst, (New-Object Text.UTF8Encoding $false))
-    Write-Host ('zapisane: ' + $Wynik)
+    Write-Host ('zapisane: ' + (BezKonta $Wynik))
     if (Test-Path 'C:\RD-raport') {
-        $wpis = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' | procesy | ' + $pod.Count + ' spod folderu instalacji, ' + $inne.Count + ' poza nim -> ' + $Wynik
+        $wpis = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' | procesy | ' + $pod.Count + ' spod folderu instalacji, ' + $inne.Count + ' poza nim -> ' + (BezKonta $Wynik)
         try { Add-Content -Path 'C:\RD-raport\skrypty.log' -Value $wpis -Encoding UTF8 -ErrorAction Stop } catch { Write-Host '  (nie zapisano do C:\RD-raport\skrypty.log)' }
     }
 }

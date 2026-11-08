@@ -71,10 +71,13 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
   Przy `--updated` znacznik `rd-installed` przenosi atomicRMDir razem z plikami (T407).
 - Zamykanie w `customCheckAppRunning` (E4a.13): `KILL_PROCESS … 0` electron-buildera z PowerShellem to `Stop-Process`
   (TerminateProcess), a `FIND_PROCESS` nie widzi jednego procesu (pojedynczy CimInstance bez `.Count` w PS 5.1) – stąd
-  własne `rdFindProcess` / `rdCloseApp` (taskkill bez /F do procesu głównego, do 5 s) / `rdKillProcess` /
-  `rdListProcesses`, bez własnego PID. Tekst PowerShella w `RD_PS_*` (tylko `$$`, bez `"` i `` ` ``), wartości przez
-  zmienne `RD_SETUP_*`; `tests/unit/installer-close.test.ts` uruchamia go na procesach zastępczych. Zamknięcie z
-  zewnątrz (WM_CLOSE ukrytego okna) nie instaluje pobranej wersji przy tym wyjściu (`onQuit(…, fromOutside)`).
+  własne `rdFindProcess` (0 = proces główny, 3 = tylko inne, 1 = nic; błąd → tasklist, niepewne = działa) /
+  `rdCloseApp` (taskkill bez /F do procesu głównego, do 15 s ≥ `QUIT_BUDGET_MS`) / `rdKillProcess` /
+  `rdListProcesses`, bez własnego PID. Wyniki tylko `S==`/`S!=` (LogicLib `==` to IntCmp: „timeout” = 0). Znacznik
+  instalatora tylko przy procesie głównym. Tekst PowerShella w `RD_PS_*` (tylko `$$`, bez `"` i `` ` ``), wartości przez
+  `RD_SETUP_*`; `tests/unit/installer-close.test.ts` uruchamia go na procesach zastępczych. Zamknięcie z zewnątrz przy
+  świeżym znaczniku (`closedByInstaller`) nie instaluje pobranej wersji i zapisuje zamknięcie „installer”
+  (`rd-install` przy muteksie instalatora nie kończy się: okno postępu, czeka do 60 s); taskkill użytkownika – jak dotąd.
 - Kliknięcie aktywnego okna nie podnosi go nad okno pokazane bez aktywacji – okna właściciela kładzie pod kliknięte hak
   myszy (T408). W `fs` Electrona `app.asar` to folder 0 B – rozmiary z `process.noAsar`.
 - Testy: „close” Playwrighta czeka na wszystkie kopie potoków aplikacji, a odłączony właściciel je dziedziczy – czekaj na

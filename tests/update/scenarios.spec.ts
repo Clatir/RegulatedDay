@@ -468,6 +468,7 @@ test('ręcznie uruchomiony instalator: zamyka działającą aplikację ze znaczn
     // Asked to end, not killed (E4a.13): the app's own way out to its last line, the helper's too, nothing left to list.
     const main = await readText(join(productionData(), 'logs', 'main.log'))
     expect(main).toContain('zamknięcie z zewnątrz (instalator albo taskkill)')
+    expect(main).toContain('zamknięte przez instalator')
     expect(main).toContain('aplikacja zamknięta')
     await expect.poll(() => readText(join(productionData(), 'logs', 'helper.log')), { timeout: 30_000 }).toMatch(/ INFO koniec$/m)
     const marker = readJson<{ at: number }>(join(productionData(), 'closed-by-installer.json'))
@@ -476,10 +477,10 @@ test('ręcznie uruchomiony instalator: zamyka działającą aplikację ze znaczn
     await expect.poll(() => installed()?.version, { timeout: 600_000, intervals: [2000] }).toBe(NEXT)
     const ts = Number(powershell('[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()'))
     expect(Math.abs(marker!.at - ts)).toBeLessThan(10 * 60_000)
-    // The start after it: „zamknięte przez instalator”, not a crash.
+    // The start after it: its own record of closing by the installer, not a crash.
     const again = await electron.launch({ executablePath: join(dir, APP_EXE), env: env() })
     await again.firstWindow()
-    await expect.poll(() => readText(join(productionData(), 'logs', 'main.log')), { timeout: 30_000 }).toMatch(/poprzednie uruchomienie: (installer|clean)/)
+    await expect.poll(() => readText(join(productionData(), 'logs', 'main.log')), { timeout: 30_000 }).toMatch(/poprzednie uruchomienie: clean \(zamknięcie \(installer\)\)/)
     await again.close()
     expect(existsSync(join(productionData(), 'logs', 'installer-check.log'))).toBe(false)
   })
@@ -511,20 +512,40 @@ test('ręczny instalator, gdy proces spod folderu aplikacji się nie kończy: li
       expect(list).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z WARN instalator \S+: procesy spod .+, które nie dały się zamknąć:$/m)
       expect(list).toMatch(new RegExp(`^  rd-test-stuck\\.exe \\| pid \\d+ \\| rodzic ${process.pid}( \\S.*)? \\| start \\d{4}-\\d\\d-\\d\\dT[^|]+\\| .*setInterval`, 'm'))
       expect(installed()?.version).toBe(CURRENT)
+      // No main process of the app among them: no „zamknięte przez instalator” – an end of the app now would be judged as it is.
+      expect(existsSync(join(productionData(), 'closed-by-installer.json'))).toBe(false)
     } finally {
+      // Best effort: a failure here never hides the test's own.
       on = false
       const last = child as ChildProcess | null
       if (last && last.exitCode == null) last.kill()
-      const gone = () => {
+      for (let i = 0; i < 60 && existsSync(stuck); i++) {
         try {
           rmSync(stuck, { force: true })
         } catch {
-          // still running for a moment
+          await sleep(500)
         }
-        return !existsSync(stuck)
       }
-      await expect.poll(gone, { timeout: 30_000 }).toBe(true)
     }
+  })
+})
+
+test('taskkill użytkownika (bez /F) przy pobranej wersji: zwykłe wyjście – wersja instaluje się przy nim jak dotąd', async () => {
+  test.setTimeout(20 * 60_000)
+  await guarded('taskkill użytkownika', async () => {
+    const dir = await install(FROM, CURRENT)
+    stage(dir)
+    const app = await electron.launch({ executablePath: join(dir, APP_EXE), env: env() })
+    const page = await mainPage(app)
+    await expect.poll(() => page.evaluate(() => window.rd.update().then((u) => u.phase)), { timeout: 60_000 }).toBe('ready')
+    const ended = processEnd(app, 120_000)
+    // WM_CLOSE from outside without any installer's marker: not „zamknięte przez instalator”.
+    spawnSync('taskkill', ['/PID', String(app.process().pid)], { stdio: 'ignore' })
+    await ended
+    const main = await readText(join(productionData(), 'logs', 'main.log'))
+    expect(main).toContain('zamknięcie z zewnątrz (instalator albo taskkill)')
+    expect(main).not.toContain('zamknięte przez instalator')
+    await expect.poll(() => installed()?.version, { timeout: 600_000, intervals: [2000] }).toBe(NEXT)
   })
 })
 

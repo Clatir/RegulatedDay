@@ -181,14 +181,14 @@ export class UpdateController {
 
   /**
    * The full exit: a ready download installs (the app is quitting anyway) – never in a session or a class (spec, A5-03),
-   * nor when something outside closed the app (`fromOutside`: a hand-run installer asks it to end and installs itself – a
-   * second installation from this exit would run beside it, E4a.13).
+   * nor when a hand-run installer closed the app (`byInstaller`, installerClose.ts): it installs itself, and the install
+   * helper does not stop at its mutex – it would show its window beside it (E4a.13).
    */
-  onQuit(sessionEnding: boolean, fromOutside = false): void {
+  onQuit(sessionEnding: boolean, byInstaller = false): void {
     if (!this.updater?.readyRelease) return
     if (sessionEnding || this.installing) return
-    if (fromOutside) {
-      this.d.log('info', 'zamknięcie z zewnątrz (instalator) – pobrana wersja zainstaluje się przy kolejnym wyjściu albo w nocy')
+    if (byInstaller) {
+      this.d.log('info', 'zamknięte przez instalator – pobrana wersja zainstaluje się przy kolejnym wyjściu albo w nocy')
       return
     }
     if (this.d.sessionOrClass?.()) {

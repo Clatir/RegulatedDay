@@ -46,8 +46,10 @@ Var pid
   ${endIf}
 !macroend
 
-; How long the app has to end by its own way out once it is asked to (E4a.13); the kill comes only after it.
-!define RD_CLOSE_WAIT_MS 5000
+; How long the app has to end by its own way out once it is asked to (E4a.13); the kill comes only after it. Longer than
+; that way out (QUIT_BUDGET_MS in src/main/installerClose.ts: a slow data folder, the helper, the record of
+; closing); the close ends as soon as the processes do.
+!define RD_CLOSE_WAIT_MS 15000
 
 ; The PowerShell of the search, the close, the kill and the list (tests/unit/installer-close.test.ts runs it). Its text has
 ; only single quotes and no backticks – it goes into a backtick string and a command line – and every $ is $$ (one $ for
@@ -57,13 +59,17 @@ Var pid
 !define RD_PS_UNDER "$$d = $$env:RD_SETUP_INSTDIR.TrimEnd('\') + '\'; \
   $$all = @(Get-CimInstance Win32_Process -ErrorAction Stop); \
   $$u = @($$all | Where-Object { $$_.ProcessId -ne [int]$$env:RD_SETUP_SELF -and $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith($$d, [StringComparison]::OrdinalIgnoreCase) });"
-; Find: exit 0 = some process is there. electron-builder's FIND_PROCESS misses a single one – a lone CimInstance has no
-; .Count in Windows PowerShell 5.1 – so the last process left (a helper, a main process that does not end) read as
-; „closed” and was never killed nor listed; @(…) counts it.
-!define RD_PS_FIND "try { ${RD_PS_UNDER} if ($$u.Count -gt 0) { exit 0 } else { exit 1 } } catch { exit 2 }"
+; Find: exit 0 = the app's main process (no --type=) is there, 3 = only other processes (a helper, crashpad), 1 = none,
+; 2 = the search failed (never „none”). electron-builder's FIND_PROCESS misses a single process – a lone CimInstance has
+; no .Count in Windows PowerShell 5.1 – so the last one left read as „closed” and was never killed nor listed; @(…)
+; counts it.
+!define RD_PS_FIND "try { ${RD_PS_UNDER} \
+  $$m = @($$u | Where-Object { $$_.ExecutablePath -ieq ($$d + $$env:RD_SETUP_EXE) -and $$_.CommandLine -notlike '* --type=*' }); \
+  if ($$m.Count -gt 0) { exit 0 } elseif ($$u.Count -gt 0) { exit 3 } else { exit 1 } \
+} catch { exit 2 }"
 ; Close: taskkill without /F – a WM_CLOSE to the windows of the app's main process (not its --type= children, which end
 ; with it); its hidden windows end the app by its own way out (T396: the data folder, the helper, „aplikacja zamknięta”).
-; Then up to RD_SETUP_WAIT_MS for every process; exit 0 = none is left.
+; Then up to RD_SETUP_WAIT_MS for every process; exit 0 = none is left, 1 = some is, 2 = the step failed.
 !define RD_PS_CLOSE "try { ${RD_PS_UNDER} \
   $$w = [Diagnostics.Stopwatch]::StartNew(); $$e = $$d + $$env:RD_SETUP_EXE; \
   foreach ($$p in $$u) { if ($$p.ExecutablePath -ieq $$e -and $$p.CommandLine -notlike '* --type=*') { & ($$env:SystemRoot + '\System32\taskkill.exe') /PID $$p.ProcessId | Out-Null } }; \
@@ -72,11 +78,12 @@ Var pid
     if ($$h) { $$l = [int]$$env:RD_SETUP_WAIT_MS - $$w.ElapsedMilliseconds; if ($$l -lt 1 -or -not $$h.WaitForExit([int]$$l)) { exit 1 } } \
   }; \
   exit 0 \
-} catch { exit 1 }"
+} catch { exit 2 }"
 ; Kill: what is left after the close, as electron-builder's KILL_PROCESS … 1 (Stop-Process -Force), never this installer.
 !define RD_PS_KILL "try { ${RD_PS_UNDER} foreach ($$p in $$u) { Stop-Process -Id $$p.ProcessId -Force -ErrorAction SilentlyContinue }; exit 0 } catch { exit 1 }"
 ; List: every process left – name, PID, parent (with its name when it is older than the child), start and command line –
-; appended to RD_SETUP_LOG (UTF-8 without BOM), the profile's path as %USERPROFILE%.
+; appended to RD_SETUP_LOG (UTF-8 without BOM). Without the account (D279: the list may go to the public repository): the
+; profile – also its 8.3 form, in any case – as %USERPROFILE%, a folder named as the account (or its profile) as %USERNAME%.
 !define RD_PS_LIST "try { ${RD_PS_UNDER} \
   $$c = [Globalization.CultureInfo]::InvariantCulture; $$f = 'yyyy-MM-ddTHH:mm:ss.fffZ'; \
   $$by = @{}; foreach ($$p in $$all) { $$by[[int]$$p.ProcessId] = $$p }; \
@@ -86,7 +93,10 @@ Var pid
     $$r = [string]$$p.ParentProcessId; $$q = $$by[[int]$$p.ParentProcessId]; if ($$q -and $$q.CreationDate -le $$p.CreationDate) { $$r += ' ' + $$q.Name }; \
     $$s += '  ' + $$p.Name + ' | pid ' + $$p.ProcessId + ' | rodzic ' + $$r + ' | start ' + $$t + ' | ' + $$p.CommandLine + [char]10 \
   }; \
-  if ($$env:USERPROFILE) { $$s = $$s.Replace($$env:USERPROFILE, '%USERPROFILE%') }; \
+  $$h = @($$env:USERPROFILE); try { $$h += (New-Object -ComObject Scripting.FileSystemObject).GetFolder($$env:USERPROFILE).ShortPath } catch { }; \
+  foreach ($$v in @($$h | Where-Object { $$_ })) { $$s = [regex]::Replace($$s, [regex]::Escape($$v), '%USERPROFILE%', 'IgnoreCase') }; \
+  $$n = @($$env:USERNAME) + @($$h | Where-Object { $$_ } | ForEach-Object { Split-Path $$_ -Leaf }); \
+  foreach ($$v in @($$n | Where-Object { $$_ })) { $$s = [regex]::Replace($$s, '(?<=[\\/])' + [regex]::Escape($$v) + '(?=[\\/\x22 ]|$$)', '%USERNAME%', 'IgnoreCase, Multiline') }; \
   [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($$env:RD_SETUP_LOG)); \
   [IO.File]::AppendAllText($$env:RD_SETUP_LOG, $$s, (New-Object Text.UTF8Encoding $$false)); \
   exit 0 \
@@ -111,46 +121,60 @@ Var pid
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_VERSION", p 0)'
 !macroend
 
-; _RETURN = 0 when a process runs under the installation (in place of electron-builder's FIND_PROCESS, see RD_PS_FIND);
-; every PowerShell step ends within 60 s ("timeout" otherwise). Without PowerShell the same tasklist as FIND_PROCESS.
+; _RETURN (in place of electron-builder's FIND_PROCESS, see RD_PS_FIND): "0" = the app's main process runs, "3" = only
+; other processes of the installation, "1" = none. Every result is compared as text – LogicLib's == is IntCmp, which
+; reads "timeout" and "error" as 0. Every PowerShell step ends within 60 s ("timeout" otherwise). An unsure answer (no
+; PowerShell, 2 = the search failed, "timeout", "error") is asked of tasklist (the app's name, as FIND_PROCESS without
+; PowerShell); unsure again, or found there, counts as the main process running – never files copied under a running app.
 !macro rdFindProcess _RETURN
+  StrCpy ${_RETURN} 2
   ${if} $IsPowerShellAvailable == 0
     !insertmacro rdSetupEnv
     nsExec::Exec /TIMEOUT=60000 `"$PowerShellPath" -NoProfile -NonInteractive -C "${RD_PS_FIND}"`
     Pop ${_RETURN}
     !insertmacro rdClearEnv
-  ${else}
-    nsExec::Exec `"$CmdPath" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+  ${endIf}
+  ${if} ${_RETURN} S!= "0"
+  ${andIf} ${_RETURN} S!= "1"
+  ${andIf} ${_RETURN} S!= "3"
+    nsExec::Exec /TIMEOUT=60000 `"$CmdPath" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
     Pop ${_RETURN}
+    ${if} ${_RETURN} S!= "1"
+      StrCpy ${_RETURN} 0
+    ${endIf}
   ${endIf}
 !macroend
 
 ; The app is asked to end and given RD_CLOSE_WAIT_MS (electron-builder's KILL_PROCESS … 0 is Stop-Process – TerminateProcess –
-; whenever PowerShell is there: no close of the app's own). Gone sooner, nothing waits longer.
-!macro rdCloseApp
-  Push $0
-  Push $R2
+; whenever PowerShell is there: no close of the app's own). Gone sooner, nothing waits longer. _RETURN: "0" = every
+; process of the installation ended (nothing to search for again), anything else = some may be left.
+!macro rdCloseApp _RETURN
   ${if} $IsPowerShellAvailable == 0
     !insertmacro rdSetupEnv
     nsExec::Exec /TIMEOUT=60000 `"$PowerShellPath" -NoProfile -NonInteractive -C "${RD_PS_CLOSE}"`
-    Pop $0
+    Pop ${_RETURN}
     !insertmacro rdClearEnv
   ${else}
+    Push $R2
     nsExec::Exec `"$CmdPath" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "PID ne $pid" /FI "USERNAME eq %USERNAME%"`
-    Pop $0
+    Pop ${_RETURN}
     StrCpy $R2 0
     ${do}
-      !insertmacro rdFindProcess $0
-      ${if} $0 != 0
+      !insertmacro rdFindProcess ${_RETURN}
+      ${if} ${_RETURN} S== "1"
       ${orIf} $R2 >= ${RD_CLOSE_WAIT_MS}
         ${exitDo}
       ${endIf}
       Sleep 250
       IntOp $R2 $R2 + 250
     ${loop}
+    ${if} ${_RETURN} S== "1"
+      StrCpy ${_RETURN} 0
+    ${else}
+      StrCpy ${_RETURN} 1
+    ${endIf}
+    Pop $R2
   ${endIf}
-  Pop $R2
-  Pop $0
 !macroend
 
 ; The kill of what is left (RD_PS_KILL); without PowerShell electron-builder's taskkill /F, which skips this installer too.
@@ -201,24 +225,30 @@ Var pid
       Sleep 300
     ${endIf}
     !insertmacro rdFindProcess $R0
-    ${if} $R0 == 0
+    ${if} $R0 S!= "1"
       ${ifNot} ${isUpdated}
         MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$(appRunning)" /SD IDOK IDOK rdStopApp
         Quit
       ${endIf}
       rdStopApp:
-      !insertmacro rdWriteClosedMarker
+      ; „Zamknięte przez instalator” only for the app itself: a lone helper or crashpad left by a crash stays a crash.
+      ${if} $R0 S== "0"
+        !insertmacro rdWriteClosedMarker
+      ${endIf}
       DetailPrint "$(appClosing)"
       ; First asked, as „Zakończ” would end it; killed only what is left after RD_CLOSE_WAIT_MS (E4a.13).
-      !insertmacro rdCloseApp
+      !insertmacro rdCloseApp $R0
+      ${if} $R0 S== "0"
+        Goto rdNotRunning
+      ${endIf}
       StrCpy $R1 0
       rdWaitLoop:
         IntOp $R1 $R1 + 1
         !insertmacro rdFindProcess $R0
-        ${if} $R0 == 0
+        ${if} $R0 S!= "1"
           !insertmacro rdKillProcess
           !insertmacro rdFindProcess $R0
-          ${if} $R0 == 0
+          ${if} $R0 S!= "1"
             Sleep 2000
           ${else}
             Goto rdNotRunning
