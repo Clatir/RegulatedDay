@@ -1,320 +1,65 @@
 # Postęp
 
+Stan bieżący i kolejka (≤ 20 KB, D351). Zakończone wpisy: ciąg F – `docs/archiwum/postep-ciag-F.md`, ciąg E i sprawy
+z 1–3.11 – `docs/archiwum/postep-ciag-E.md`, ciągi A–D – `docs/archiwum/postep-ciagi-A-D.md`, E0–E6 –
+`docs/archiwum/postep-E0.md` … `postep-E6.md` (Grep po wersji, zadaniu albo decyzji). Po scaleniu PR jego wpis idzie do
+archiwum ciągu, tu zostaje jedna linia w tabeli.
+
 ## Stan bieżący
-- Ciągi A–D zakończone: wydania 0.11.0–0.15.0 (28.10; 0.15.0 z runu 40664496608 na `main` ok. 10:58). Wpisy ciągów,
-  0.10.x i logiki E7 → `docs/archiwum/postep-ciagi-A-D.md`; E0–E6 → `docs/archiwum/postep-E0.md` … `postep-E6.md`.
-- Na tym komputerze aplikacja ostatnio działała 27.10 o 23:41 w 0.10.1 (`main.log`, stan 29.10) – 0.11.0–1.0.0 jeszcze
+- **1.0.4 wydane** 4.11 (PR #48, run 41813291885 na `main` zielony). Ciąg F w toku: następne G3 (1.0.5).
+- Na tym komputerze aplikacja ostatnio działała 27.10 o 23:41 w 0.10.1 (`main.log`, stan 29.10) – nowsze wersje jeszcze
   nie przyszły.
 - **E4b.12 nie przechodzi (27.10):** uchwyt ⠿ widać po najechaniu, ale po chwyceniu pasek nawet nie drgnie („Zawsze na
   wierzchu”, pasek na drugim monitorze VG27B nad głównym – współrzędne ujemne). Test prawdziwą myszą (SendInput) w CI
-  na Windows przechodzi w obu wariantach (także „na wierzchu” z innym oknem z przodu). Od 0.11.0 ślad w `main.log`
-  („pasek: chwycony za uchwyt …”, „pasek: puszczony (up|cancel|lost) po N ruchach …”) – po Twojej próbie czytam
-  `%APPDATA%\Regulated Day\logs\main.log`.
+  na Windows przechodzi w obu wariantach. Od 0.11.0 ślad w `main.log` („pasek: chwycony za uchwyt …”, „pasek: puszczony
+  (up|cancel|lost) po N ruchach …”) – po Twojej próbie czytam `%APPDATA%\Regulated Day\logs\main.log`.
 - Z plików 27.10 (dowody do odbioru, nie odhaczone): `backups\aktualizacje` – 5 ZIP-ów 0.1.1→0.7.0 … 0.10.0→0.10.1,
   każdy otwiera się (7–10 plików) – E3.12; `backups\daily\2026-10-27.zip` (9 plików) – E6b.2 do sprawdzenia po
   następnym dniu z aplikacją po 12:00; `main.log` – „kreator zakończony” 27.10 (E3.1), aktualizacje 0.7.0→0.10.1 czyste
   (E6b.1–E7b.1; 0.2.0–0.6.0 przeskoczone, więc E5.1 i E6a.1 tylko „dane całe”).
-- Rejestr decyzji w dwóch plikach (D308): `docs/decyzje.md` – D (ok. 61 / 200 KB), `docs/decyzje-techniczne.md` – T
-  (ok. 160 / 200 KB); zastąpione w całości w `docs/archiwum/decyzje-zastapione.md`. D188 cofnięta przez T303, ale
-  cytowana w D150 i specyfikacji – zostaje w rejestrze.
+- Rejestry decyzji (D308, T535): `docs/decyzje.md` – D; `docs/decyzje-techniczne.md` – T400 i nowsze,
+  `docs/decyzje-techniczne-T1-T399.md` – T1–T399; zastąpione w całości w `docs/archiwum/decyzje-zastapione.md`. D188
+  cofnięta przez T303, ale cytowana w D150 i specyfikacji – zostaje w rejestrze.
+- `docs/plan.md` ma od 7.11 dopisany plan rozszerzeń (GCal, Notion, Sunsama – bloki FBL…) – poza ciągiem F, bez decyzji
+  o starcie.
 
 ## Kolejka (według `docs/plan.md`, D317)
-1. **Ciąg E (E8) zakończony – v1.0.0 opublikowane** 29.10 ok. 0:00 (run 40780293831 na `main` zielony): przegląd 5.1
-   (127 zgłoszeń, `docs/przeglad-E8.md` – wszystkie zamknięte), decyzje D325–D331, PR-y #26–#37 scalone, otwartych brak
-   (T525: wersja bez własnego wydania trafia do notatek następnej).
-   CI w weekend (T528): PR #40 scalony 2.11 (eb90643).
-2. Ty: aktualizacja do 1.0.0 i odbiór według `docs/odbior.md`. Opcjonalnie Cowork w maszynie wirtualnej
-   (`docs/odbior-vm.md`, T526: 68 z 87 punktów na świeżej instalacji, raport w `C:\RD-vm-raport`, po każdym dniu
-   kopia w `docs/vm/raport.md` – T529) – po raporcie czytam go z logami, każde NIEZGODNE sprawdzam w kodzie. Poza maszyną od razu: E4b.12 (godzina próby → `main.log`).
-   Dzień 1 (1.11) do powtórki: przy „Zakończ” 0.10.1 zainstalowała pobraną 1.0.0, więc Dzień 2 nie miał czego
-   testować; instrukcja przepisana (T527) – maszyna od migawki „czysta” z `docs/vm/przygotuj.ps1`.
-   Od 2.11 (T529) zegar przestawia Cowork (`zegar.cmd`, data w `zegar.txt`), skoki „przez noc” na początku sesji po
-   Twoim „Zakończ” – Dni 2–5 bez Ciebie w trakcie dnia. Przebieg w toku (Dni 1–3 zrobione 2.11 według starej
-   instrukcji) idzie dalej od Dnia 4 – „Przebieg zaczęty przed T529” w `docs/odbior-vm.md`, bez powrotu do migawki.
-   Poprawki z odbioru – wersje 1.0.x (D324).
-3. **Ciąg F w toku (od 3.11, D349)** – `docs/plan.md`: główna sesja Opus 5.5 · xhigh, wykonawcy z `.claude/agents/`
-   (Haiku F1–F2, Opus G1–G5, Sonnet H1–H3), zadania F1–H3, wersje 1.0.1–1.0.8; przyczyny w `docs/vm/przyczyny.md`,
-   decyzje D334–D347, D350. „Przed ciągiem F” zrobione, F1–F3 scalone (PR #44), G1 – 1.0.1 wydane (PR #45).
-   G2 – 1.0.2 wydane (PR #46), H1 – 1.0.3 wydane (PR #47). **Teraz:** H2 – PR 1.0.4 (`claude/1.0.4-ekrany`) do
-   scalenia po zielonym CI, potem wydanie 1.0.4 na `main`; **następne:** G3 (1.0.5, `wykonawca-opus`), potem G4, G5, H3.
-4. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
+1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →
+   `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport `docs/vm/raport.md` (T529); poprawki z odbioru
+   – wersje 1.0.x (D324).
+2. **Ciąg F w toku (od 3.11, D349, D351)** – `docs/plan.md`: główna sesja Opus 5.5 · high, wykonawcy z `.claude/agents/`,
+   przyczyny w `docs/vm/przyczyny.md`, decyzje D334–D347, D350. **Następne:** G3 (1.0.5, `wykonawca-opus`), potem G4,
+   G5, H3; na końcu ciągu `docs/vm/raport.md` i `docs/vm/przyczyny.md` → `docs/archiwum/vm/` (D351).
+3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
+
+## Ciąg F – stan (wpisy: `docs/archiwum/postep-ciag-F.md`)
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| F1–F3 opisy odbioru, logi | – (z 1.0.1) | #44 | scalone 3.11 | ok. 1 h (1,25–2 h) |
+| G1 koniec pracy | 1.0.1 | #45 | wydane 4.11 | ok. 7 h (2–3 h) – dziewięć rund przeglądu |
+| G2 pasek od pierwszej chwili | 1.0.2 | #46 | wydane 4.11 | ok. 4 h (2–3 h) |
+| H1 plan i pasek | 1.0.3 | #47 | wydane 4.11 | ok. 3,5 h (2,5–3 h) |
+| H2 ekrany po decyzjach | 1.0.4 | #48 | wydane 4.11 | ok. 4,5 h (3–4 h) |
+| G3 folder danych niedostępny | 1.0.5 | – | następne | (1,5–2,5 h) |
+| G4, G5, H3 | 1.0.6–1.0.8 | – | czeka | |
+
+Propozycje na później z przeglądów G1–H2 (architektura, bez zmian w działaniu) – w ich wpisach w archiwum.
+
+## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
+- Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy
+  szacunku 2–3 h; większość rund kończyła się na limicie 15 uwag) i praca całej głównej sesji na xhigh.
+- D351: przegląd według ryzyka, najwyżej dwie rundy (druga tylko na poprawkach), medium tylko z testem, reszta → „Uwagi
+  na później”; główna sesja Opus 5.5 · high; `/clear` po każdym scalonym PR; postęp ≤ 20 KB; `CHANGELOG.md` czytany
+  tylko od początku. Zasady w skillu `etap` i `CLAUDE.md`.
+- Techniczne: T535 rejestr T w dwóch plikach, T536 archiwum (przegląd E8, wpisy ciągów E i F, odebrane punkty odbioru),
+  T537 długie linie w specyfikacji złamane bez zmiany treści, T538 cichy `npm test` lokalnie i limity `check-context`.
+- Bez zmian w aplikacji (bez wersji, CHANGELOG i punktów odbioru).
 
 ## Do odbioru na Windows
-- `docs/odbior.md` (układ z 27.10): na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza
-  czas, i „Tylko Ty”; na dole „Wszystkie punkty” – pełny opis każdego (odebranego i nie) według etapu i numeru,
-  z wersją przy nagłówku. Odebrany punkt dostaje `[x]` i datę na miejscu i znika z listy na górze.
-
-## Ciąg F – poprawki po odbiorze w maszynie (od 3.11, D349)
-- **Przed ciągiem F (3.11):** zakres F1–H3 (`docs/plan.md`), 9 PR-ów, wersje 1.0.1–1.0.8, szacunek 16,5–24,5 h.
-  Ryzyka: G1 (koniec pracy, T507, D216), G2 (D345 przy dwóch komputerach – T), G4/G5/H3 tylko CI na Windows.
-  Odpowiedź: D350 (E4a.4 – nagłówek bez liczby, grupa rozwijana z „Cofnij”). Rejestr T ok. 192 / 200 KB – zastąpione
-  T450, T467 do archiwum w H2.
-- Wykonawcy: na starcie sesji agenci `.claude/agents/` niewidoczni (przyszli z `git pull`) – F1 przez `general-purpose`
-  z `model: haiku`, `effort: high` i treścią pliku wykonawcy; od F2 agenci widoczni – zlecenia wprost do `wykonawca-*`.
-- **F1–F3 (bez wydania, T525 – trafia z 1.0.1):** gałąź `claude/ciag-f-opisy-logi` od 3.11 ok. 15:15.
-  - F1 (`wykonawca-haiku`): opisy odbioru według `przyczyny.md` (E3.3, E4a.8, E4a.9, E4a.13, E4b.15, E6a.2, E6a.3, E7c.1,
-    E8a.2, E8e.2 – D342, E8f.2 cz. 1, wersja w `odbior-vm.md`). Poprawione po przeglądzie: w Dniu 6 E8a.2 dopiero po
-    sesji NY (sesja to stały blok pracy – „Koniec pracy” przed nią to przerwa, D216), E4a.13 z dokładnymi tekstami logu.
-  - F2 (`wykonawca-haiku`): T530 – „aplikacja zamknięta” zamiast „koniec pracy”, druga kopia `app.exit(0)` z jednym
-    wpisem, wyjście bez wydania bez wpisu o sesji, powiadomienie nieprzyjęte w logu ze stanem pomocnika i wynikiem
-    ponowienia. Ode mnie: stan pomocnika zamiast `boolean`, druga kopia bez flagi.
-  - `/code-review` (xhigh): 11 uwag, poprawione z testami – m.in. spóźnione „failed” dawało drugie ponowienie (A4-07,
-    test pada na starym kodzie), E2E sprawdza przekazanie startu (okno wraca), limit drugiej kopii 30 s, wspólne
-    `appCommand` i `notificationStateNow`, E4a.13.
-  - Testy: typecheck, build, lint, E2E 27 + 6 pominiętych; unit 1096/1097 – `tests/sim/two-computers.test.ts` lokalnie
-    przekracza 240 s także osobno (nie dotyka zmienionych plików; na `main` w CI zielone) – rozstrzyga CI.
-  - Czas faktyczny: ok. 1 h (szacunek 1,25–2 h).
-  - PR #44 scalony 3.11 (b33a9f0) po zielonym CI (Linux, E2E, Windows; `two-computers` w CI zielony); CI na `main`
-    zielone (run 41666814304, także Windows), bez wydania.
-- **G1 – 1.0.1 koniec pracy** (`wykonawca-opus`): gałąź `claude/1.0.1-koniec-pracy` od b33a9f0, 3.11 ok. 16:50.
-  - A–D i E8a.1 według `przyczyny.md` (T531): przycisk „Koniec pracy” od razu przy pauzie i po samoczynnym końcu bloku
-    (`workEndOpen`), `workSince` w `day.ts`, pasku i „Odwołaj” (zamiast `>=` → `>` – psuło T507), czas do wyjaśnienia od
-    powrotu, zamknięcie dnia kończy zapauzowaną pracę, „Koniec pracy?” po pauzie ostatniego bloku.
-  - Odbiór: E8a.1, E8a.2, E8f.2, E6a.2 – opisy po zmianie (nagłówki „zmiana w 1.0.1”).
-  - `/code-review` xhigh siedem razy (każda runda poprawek przez tego samego wykonawcę, z testami): m.in. zamknięcie dnia
-    przy krótkiej pauzie, praca w tle i prośba przy przycisku, kolejność zdarzeń zamiast minut (zegary dwóch komputerów,
-    zdarzenia z datą wsteczną), pominięta sesja przy D216, wiersz rytuału = godzina zamknięcia, `RULES_VERSION` 4.
-    Cofnięte rozszerzenia spoza szkicu (analiza i bloki „po pracy” przy zamknięciu, `ritualClose`, dzień regeneracyjny).
-  - Propozycje na później (architektura, bez zmian w działaniu): reguły końca pracy z `computeDay` w `DayState` zamiast
-    odtwarzania w `timer.ts`; `laterWork` w `explainsOf`; wspólne `notBegun`; jeden `workRunning` z `ritualDue`;
-    strażniki zamknięcia liczone raz; pamięć widoków startu bloków „po pracy”. Zachowanie sprzed G1 do decyzji: ✓ wiersza
-    „Koniec pracy o …” (rytuał, rano „Niezamknięte dni”) potwierdza koniec, ale nie kończy zapauzowanego bloku. Sprzed G1
-    (do osobnej poprawki): akcja `workEnd` z linii `anchor:` / „Dalej?” przy pracy w tle nie sprawdza warunku przycisku;
-    odpowiedź niejawna czasu do wyjaśnienia bierze każdy późniejszy `work.end` (`w.at >= from`, bez ograniczenia do `to`);
-    `heldByRequests` zakłada wznowienie także wtedy, gdy `resumeAfter` czeka na „Wznów · Zaparkuj”.
-  - Przegląd 9 znalazł krytyczne `TypeError` w `startViews` (blok bez przebiegu po prośbie po fakcie) – poprawione z testem
-    i przejrzane przeze mnie; dalszych rund nie było.
-  - Testy: unit ok. 1160, E2E 27 + 6 pominiętych, typecheck, build, lint, `check-context`. Lokalnie pod obciążeniem
-    (sesje innych projektów na tym komputerze) `two-computers` przekracza 240 s, a hak sprzątania testu skali 10 s – tak samo
-    na b33a9f0; rozstrzyga CI.
-  - Czas faktyczny: ok. 7 h (szacunek 2–3 h) – dziewięć rund przeglądu.
-  - PR #45 scalony 4.11 (6bcf039) po zielonym CI (Linux, E2E, Windows – `two-computers` i skala w CI zielone); run
-    41739662020 na `main` zielony, **wydanie 1.0.1 opublikowane** (4.11 ok. 1:05).
-- **G2 – 1.0.2 pasek od pierwszej chwili** (`wykonawca-opus`): gałąź `claude/1.0.2-pasek-od-startu` od 6bcf039, 4.11 ok. 1:10.
-  - E4a.1: odliczanie i kroki 15 · 5 · 0 (puls, dźwięk, „Dalej?”) od faktycznej chwili startu, widok przeliczany w chwili
-    kroku; E4a.10 (D345): wstępny koniec bloku przerwanego zamknięciem nałożony na pasek od startu, zapisywany razem
-    z kliknięciem albo przez prowadzącego po ustaleniu (T532, `RULES_VERSION` 5). Odbiór: E4a.1, E4a.10 („zmiana w 1.0.2”).
-  - `/code-review` xhigh cztery razy – m.in. kolejność zapisu kliknięć na nakładce (gubione „Zacznij jeszcze raz”, dwa
-    bloki naraz), pasek na wczorajszym dniu, warunki prowadzącego (pełny odczyt, skan obecności, bramka), blok przez
-    04:00 zamknięty po 04:00, `fixedStart` a `shutdown`; ogólna reguła `fixedStart` z rundy 2 cofnięta (zmiana widoczna).
-    Ostatnią deltę (refaktor `fixedStartLists`) przejrzałam sama. Propozycje: nakładka w jednym dostępie do dnia,
-    reguła regeneracji z `inFront`.
-  - Czas faktyczny: ok. 4 h (szacunek 2–3 h).
-  - PR #46 scalony 4.11 (506a4a5) po zielonym CI; run 41766394055 na `main` zielony, **wydanie 1.0.2 opublikowane** (ok. 4:51).
-- **H1 – 1.0.3 plan i pasek** (`wykonawca-sonnet`): gałąź `claude/1.0.3-plan-i-pasek` od 506a4a5, 4.11 ok. 4:55.
-  - E5b.5 (D340) warianty od bloku, który wyznacza koniec; E4a.4 (D350) grupa rozwijana z „Cofnij”, para pauza ↔ start;
-    E3.13 druga zmiana nieprzeciągalna; „+15” z kosztem; terminy paska na zegarze monotonicznym; bez komunikatu twardego
-    końca przy brakującej 0 (`hardend.pass.quiet`); „Prośba ▸” w ciszy nocnej (D346). T533. Odbiór: E5b.5, E4a.4, E3.13,
-    E5b.4, E8d.2 („zmiana w 1.0.3”).
-  - `/code-review` xhigh trzy razy; poprawka „Cofnij” pauzy z rundy 1 cofnięta (regresje), zamiast niej para z warunkiem.
-    Linia twardego końca w pasku (spec) – brak od 1.0.0, osobna poprawka 4.10 w `docs/plan.md`.
-  - Czas faktyczny: ok. 3,5 h (szacunek 2,5–3 h).
-  - PR #47 scalony 4.11 (79bd58a) po zielonym CI; run 41784417509 na `main` zielony, **wydanie 1.0.3 opublikowane** (ok. 7:44).
-- **H2 – 1.0.4 ekrany po decyzjach** (`wykonawca-sonnet`): gałąź `claude/1.0.4-ekrany` od 79bd58a, 4.11 ok. 7:50. Rejestr T
-  ok. 197/200 KB – wpisy T534–T538 krótkie (do ~450 B); po ciągu propozycja: podział rejestru T na dwa pliki.
-  - D334 pobudka przesuwa bloki ręczne, D335 posiłek pauzuje pracę, D336 „Usuń” zaczętego bloku, D337 „Wstałeś później?”
-    w logu (`question.seen`), D338 „Sesja NY”, D339 koszt w panelu, D344 numer wersji, D347 komunikat pod polem, E6c.4.
-    T534. Odbiór: E3.4, E4a.3, E6c.4, E8f.2, E8k.3 („zmiana w 1.0.4”), nowa grupa E8l.1–E8l.5.
-  - `/code-review` xhigh trzy razy; cofnięte: zmiana granicy poranka w `dayPlan` (widoczna bez decyzji), zapis „pokazano”
-    do pliku dnia (konflikty – zamiast tego log). Znane: usunięta zaczęta sesja ma nazwę kategorii (plan 4.11).
-  - Czas faktyczny: ok. 4,5 h (szacunek 3–4 h).
-
-## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)
-- Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji. Kolejno: bloki według modelu
-  (D332), jeden ciąg na Opus (D348), w końcu jedno zadanie z wykonawcami według modelu (D349 – limity sesji zniesione;
-  D332 i D348 w archiwum). Wykonawcy: `.claude/agents/wykonawca-{haiku,sonnet,opus}.md` (`model`, `effort` w nagłówku,
-  bez commitów i PR; pola sprawdzone w dokumentacji Claude Code – agenci dostają CLAUDE.md i reguły modułów).
-- Każda pozycja raportu (14 NIEZGODNE, 6 UWAGA, 2 DO OCENY, 5 NIE DO SPRAWDZENIA, obserwacje) sprawdzona w kodzie przez
-  sześć równoległych analiz (bloki i timer; koniec pracy; energia i powiadomienia; folder danych; proces główny i Windows;
-  ekrany), część hipotez potwierdzona testem na kopii repozytorium, kluczowe miejsca sprawdzone ponownie przeze mnie.
-  Wynik w `docs/vm/przyczyny.md`: 22 błędy w kodzie, 15 opisów odbioru do poprawy, 11 decyzji (P1–P11).
-- Decyzje: D333 (domyślna zgoda na PR-y i scalanie), D334–D347 (odpowiedzi P1–P11 i zmiany E4a.10, E5b.4, E8k.3 –
-  tabela w planie), D349. Bez zmian w aplikacji (bez wersji i CHANGELOG). Testy: `check-context` zielone.
-- PR #42 (plan, D332–D347) scalony 3.11 (16e64ea) po zielonym CI (run 149); CI na `main` zielone (run 150, także
-  Windows), bez wydania. D348 i D349 – PR #43.
-- `docs/plan.md`: ciąg F – F1–F3 (opisy odbioru, logi; PR bez wydania), G1 1.0.1 (koniec pracy), G2 1.0.2 (pasek od
-  pierwszej chwili), H1 1.0.3 (plan i pasek), H2 1.0.4 (ekrany po decyzjach), G3 1.0.5 (folder danych), G4 1.0.6 (pasek
-  pulpitu), G5 1.0.7 (instalator), H3 1.0.8 (autostart, znacznik życia); 16,5–24,5 h.
-- **Dalej:** PR #43 – scalenie po zielonym CI (D333), potem „Przed ciągiem F” (główna sesja Opus 5.5 · xhigh) i cały
-  ciąg bez pauzy, zadania przez wykonawców z kolumny „Wykonawca”.
-
-## Odbiór w VM – zegar u Cowork, raport w repozytorium (2.11, T529)
-- Zlecenie: Cowork domyślnie przestawia zegar skryptem, jak najmniej rąk użytkownika, raport z testów częścią repozytorium.
-- `docs/vm/przygotuj.ps1`: `zegar.cmd` – data z `C:\RD-raport\zegar.txt` (bez pisania w PowerShell), tylko do przodu,
-  najwyżej 10 dni, linia `przy-aplikacji`, wynik w `zegar-wynik.txt`; „Ustaw zegar” zostaje zapasowo.
-- `docs/odbior-vm.md`: część 1 „Zegar” od nowa, tabela „Kiedy jesteś potrzebny” (Dni 2–5 – tylko start sesji z jednym
-  „Zakończ”), skoki „przez noc” w krokach „Początek” Dni 3–6, E8e.2 cz. 2 → Dzień 3, E4a.10 + E5b.4 + koniec E6b.2 →
-  Dzień 4, E8i.2 → koniec Dnia 4 / początek Dnia 5; wariant „bez Ciebie” skrócony; część 6 – raport do `docs/vm/`.
-- Testy: `check-context` zielone; PowerShell niedostępny w kontenerze – składnia `zegar.ps1` sprawdzona tylko czytaniem
-  (sprawdzi go Dzień 1, krok 6). Bez zmian w aplikacji (bez wersji i CHANGELOG).
-- `/code-review` (medium): 9 uwag, wszystkie poprawione – blokada dwóch uruchomień (mutex) i stan „W TOKU”, `zegar.txt`
-  kasowany dopiero po udanej zmianie, cudzysłowy przy `przy-aplikacji`, nazwa konta poza `skrypty.log`
-  (`%USERPROFILE%`), błąd podniesienia uprawnień w `zegar-wynik.txt`, wspólna logika `zegar` / `ustaw-zegar` (te same
-  granice), UAC „konieczne”, 15:20 w ryzykach.
-- PR #41 (`claude/odbior-vm-zegar`) scalony 2.11 (764f87c) po zielonym CI (Linux, E2E, Windows); bez wersji – bez wydania.
-- Przebieg w toku (Dni 1–3 już zrobione, 2.11): bez powrotu do migawki – w działającej maszynie krok 8 części 1
-  (dopisuje `zegar.cmd`), Dzień 4 z „Początkiem” z części „Przebieg zaczęty przed T529” (E8e.2 cz. 2 i próba zegara
-  +40 min); raport Dni 1–3 do `docs/vm/raport.md` z lokalnej sesji.
-- CI na `main` po scaleniu zielone (c8d3e8d, Linux i Windows).
-- **Raport VM (3.11):** `docs/vm/raport.md` – Dni 1–6 i część dodatkowa (13–26.11 w maszynie) w jednym pliku, na górze
-  zestawienie: 68 z 68 punktów z wpisem – ZGODNE 41, NIEZGODNE 14, UWAGA 6, DO OCENY 2, NIE DO SPRAWDZENIA 5;
-  `docs/vm/skrypty.txt`. Zrzuty i logi zostają w `C:\RD-vm-raport`.
-- **Dalej:** zrobione 3.11 – plan napraw (wpis niżej). Ty: „Na samym końcu” (E4a.13 cz. 3), potem akceptacja punktów
-  (`[x]` w `docs/odbior.md`).
-
-## CI w weekend – E2E niezależne od dnia (1.11, T528)
-- Gałąź `claude/determined-shannon-ordir7` (od `main` c353c6a). Na `main` od niedzieli 1.11 czerwone runy 130, 131,
-  133 `ci.yml` (zmiany tylko w dokumentach): „ekrany E3” bez „Zatwierdź plan” (granicę dawały tylko sesje dnia
-  roboczego), kreator „z 3 h” zamiast „z 8 h” (niedziela = weekend). Poprawka tylko w testach: typ dnia w danych dla
-  `logicalToday()`, odwołana dzisiejsza druga zmiana (granica z bloku o 03:00), w kreatorze dzisiejszy dzień tygodnia
-  „zwykły”. Blok wczoraj (krok „dzień miniony” padał w każdy poniedziałek) – z PR #39 (3129834, scalony 2.11 w nocy);
-  ta gałąź przeniesiona na niego, własna opcja `yesterday` usunięta.
-- Testy: oba E2E przechodzą w prawdziwą niedzielę-święto 1.11 (23:00) i pod `faketime` (T528): poniedziałek 10:00
-  („Strona B”), sobota 12:00, wtorek 21:30 (po drugiej zmianie), środa 11.11 9:00 (święto), niedziela 8.11 7:00.
-  Pełny zestaw: typecheck, build, lint, E2E (26 + 6 pominiętych) zielone; unit 1092/1093 – `config.test.ts`
-  „nieudany zapis nowego identyfikatora” pada tylko w kontenerze jako root (chmod nie blokuje roota), w CI nie.
-- `/code-review` (high): 5 uwag – placeholder w tym wpisie poprawiony, okno 03:30–04:00 obalone (prognoza trzyma
-  niezaczęty blok do 03:59), reszta pominięta świadomie (wyścig o 04:00 jak w dotychczasowym `seed`, brak zegara testowego – T528).
-- Bez zmian dla użytkownika (bez wersji, CHANGELOG i punktów odbioru). Czas faktyczny: ok. 1 h.
-- **Dalej:** PR #40 – scalenie po zielonym CI (Twoje „dalej”, jeżeli zielono – 2.11), potem run `ci.yml` na `main`
-  zielony i wydanie z zadania Windows.
-
-## 1.0.0 – bramka 1.0 (ciąg E, 5.4)
-- Gałąź `claude/1.0.0` (od 0.26.0): wersja 1.0.0, CHANGELOG, T525, zakończone ciągi A–E w `docs/archiwum/plan-E0-E8.md`.
-  Bez kanału beta (D283) – wydania i tak są zwykłymi wydaniami GitHub; aplikacja pomija wersje testowe.
-
-## 0.26.0 – brzegi przed 1.0, część 2: ekrany (ciąg E, 5.3)
-- Gałąź `claude/0.26.0-ekrany` (od 0.25.0 po przeglądzie) od 28.10 ok. 21:35.
-- Zakres (T524): „Cofnij zatwierdzenie” jak w pasku (A6-11), godzina w rytuale i niezamkniętych dniach – błędny tekst,
-  zmiana czasu (A6-14, A8-09), odcinek „nie odpoczynek” (A2-05), „Prośby domowe” w odczuwanym koszcie (A2-08), „Strona B”
-  (A6-15), przeciąganie bez mignięcia (A6-16), szkic bloku (A6-17), okna dialogowe (A6-21), Ctrl N (A6-24), Historia
-  (A7-10), kreator (A7-11), „Spróbuj ponownie” przeniesienia (A7-20), zakres długości (A6-19). Przegląd E8: wszystkie
-  uwagi zamknięte (poprawione albo obalone). Test kopii i skali – w każdym `npm test`. Odbiór: E8k.1–E8k.3.
-- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. „Cofnij zatwierdzenie” zmieniało przeszłość dnia (teraz tylko
-  otwiera granicę), ponowne zatwierdzenie w tej samej minucie nie działało (kolejność logu), pole godziny po odmowie,
-  kreator kolejnego komputera, Tab w oknach także z fokusem na body; E2E dla okien i „Cofnij zatwierdzenie”.
-
-## 0.25.0 – brzegi przed 1.0, część 1 (ciąg E, 5.3)
-- Gałąź `claude/0.25.0-brzegi` (od 0.24.0) od 28.10 ok. 21:10.
-- Zakres (T523): „Cofnij” automatycznego zatwierdzenia (A1-15), usunięcie z bazą – pytanie „zmieniony gdzie indziej”
-  (A3-09), plik dnia – tylko zmienione pola bloku (A3-16), powiadomienie odrzucone przez Windows wraca raz (A4-07),
-  strażnik trzyma ekran i blokadę do potwierdzenia pomocnika aplikacji (A5-07, mutex `SleepHeld`), prowadzenie przy
-  nowszych regułach tylko po wskazaniu (A8-08). Odbiór: E8j.1–E8j.3.
-- `/code-review` (xhigh): 14 uwag, wszystkie poprawione z testami – m.in. krytyczna: strażnik czekający na potwierdzenie
-  trzymał guard.lock, więc uruchomiona aplikacja oddawała start i się zamykała (teraz najpierw zwalnia blokady); starszy
-  prowadzący nie oddawał prowadzenia nowszemu w użyciu; minuty przed granicą znowu bez oceniania (wydajność);
-  `RULES_VERSION` 3.
-- Reszta 5.3 (ekrany: A6-11, A6-14–A6-17, A6-21, A6-24, A7-10, A7-11, A7-20, A8-09) – 0.26.0.
-
-## 0.24.0 – funkcje D325, część 2c: kopia zapasowa i niedostępny folder (ciąg E, 5.2f)
-- Gałąź `claude/0.24.0-funkcje` (od 0.23.0) od 28.10 ok. 21:00.
-- Zakres (T522): ostrzeżenie o kopii zapasowej (A3-06), „N zmian zapisze się po powrocie folderu” (A3-07).
-- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. liczenie tylko Twoich zmian, plik zajęty przy
-  obecnym folderze, fałszywe „brak kopii” przy starcie i przy niedostępnym folderze, 3 dni w czasie.
-
-## 0.23.0 – funkcje D325, część 2b: komputery i synchronizacja (ciąg E, 5.2f)
-- Gałąź `claude/0.23.0-funkcje` (od 0.22.0) od 28.10 ok. 20:00.
-- Zakres (T521): dźwięk na jednym komputerze (A8-04), „Komputery” i „Zapomnij komputer” (A3-13), OneDrive po 5 min
-  (A3-14), ciche linie synchronizacji i zegara (A8-02, A8-07). Reszta 5.2f (A3-06, A3-07) – 0.24.0.
-- `/code-review` (xhigh): 15 uwag, wszystkie poprawione; trzy odstępstwa od specyfikacji zrobione według niej (bateria z
-  pomocnika, znacznik w „Dziś”, odblokowanie ekranu – D331 po pytaniu).
-
-## 0.22.0 – funkcje D325, część 2a (ciąg E, 5.2f)
-- Gałąź `claude/0.22.0-funkcje` (od 0.21.0) od 28.10 ok. 19:20.
-- Zakres (T520): odhaczanie rutyn w pasku i „Dziś” (D328, A6-10), rytuał bez zaczętej pracy (D329), kopia dnia
-  z ostrzeżeniem (D330, A6-13), święta UK (A7-18), pulsowanie paska (D225, A7-15). Reszta 5.2f (ostrzeżenia, dźwięk,
-  „Zapomnij komputer”: A3-06, A3-07, A3-13, A3-14, A8-02, A8-04, A8-07) – 0.23.0.
-- `/code-review` (xhigh): 13 uwag, wszystkie poprawione – m.in. rytuał D329 po bloku „po pracy”, kroki z paska jako miejsca
-  (bez obcinania argumentu), „Zapisano · Cofnij” w pasku, linia rutyny w „⋯” w trybach ciszy, puls raz na krok.
-- Testy: 1016+ jednostkowych i plikowych, E2E 26/26 (nowe: rutyny, ostrzeżenie kopii dnia).
-
-## 0.21.0 – funkcje D325, część 1b (ciąg E, 5.2e)
-- Gałąź `claude/0.21.0-funkcje` (od 0.20.0) od 28.10 ok. 18:40.
-- Zakres (T519): druga zmiana z kosztem i „Przesuń na teraz” (A1-04), odpowiedzi „Posiłek”, „Regeneracja”, „Byłem na
-  prośbie” (A1-09), linie paska – kotwica, „zostaje”, „nie przedłużono”, „Pracowałem do teraz” (A1-12).
-- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. „Przesuń na teraz” z pełną minutą, druga zmiana bez
-  kosztu przy starcie później w oknie i bez bloków zakotwiczonych, odpowiedź na nieobecność nie kończy bloku, który biegł
-  dalej, „Odwołaj” tylko dla stałej pracy przed drugą zmianą i z parkowaniem (D216), „Pracowałem do …” po „Koniec pracy”.
-- Testy: 999 jednostkowych i plikowych, E2E 25/25.
-
-## 0.20.0 – funkcje D325, część 1a (ciąg E, 5.2e)
-- Gałąź `claude/0.20.0-funkcje` (od 0.19.0) od 28.10 ok. 17:10.
-- Zakres (T518): Próba usunięta (D286) – bez folderu neutralny pasek (D327, A7-06, A8-12); komunikat rezerwy (D326,
-  A4-04) z zapisem zobaczenia i przesunięciem granicy przez „Zacznij”. Reszta 5.2e (A1-04, A1-09, A1-12) – 0.21.0.
-- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. zobaczenie tylko pokazanej linii, bez powiadomień
-  w trybach ciszy, „Zacznij” najpierw start, przesunięcie granicy, pasek „Otwieram folder danych…”, `main.log` bez
-  zalewu wpisów pomocnika.
-- Testy: 975 jednostkowych i plikowych, E2E 25/25 (nowe: „bez folderu danych”, konwencje na ekranie Prośby).
-
-## 0.19.0 – poprawki ekranów (ciąg E, 5.2d)
-- Gałąź `claude/0.19.0-ekrany` (od 0.18.0, przed scaleniem 0.17.0 i 0.18.0) od 28.10 ok. 16:00.
-- Zakres (T517): A6-01–A6-09, A7-01–A7-04, A7-07, A7-08, A8-05 i low A6-12, A6-18, A6-20, A6-22, A6-23, A7-09, A7-12,
-  A7-13 (T513), A7-14, A7-16, A7-17, A7-19, A7-21, A7-22. Do 5.3: A6-11, A6-14–A6-17, A6-21, A6-24, A7-10, A7-11,
-  A7-20, A8-09; 5.2f: A6-10, A6-13, A7-15, A7-18; 5.2e: A7-06, A8-12.
-- Testy: 972 jednostkowych i plikowych (nowe: `tests/fs/window-edits.test.ts` – zapisy okna na prawdziwym folderze,
-  `tests/web/screens-e8.test.ts`; w `widget.test.ts` kroki „Przedłuż” i „barClick”); E2E: kalendarz dziś, ↑ w rutynie.
-- `/code-review` (xhigh): 15 uwag, wszystkie poprawione – m.in. kalendarz, kalibracja i usunięcia w kolejce, „Cofnij”
-  sesji od tej samej daty, sesja przez północ, krok „Przedłuż” tylko liczony, kategoria bez osieroconej nazwy, wykład
-  w kreatorze, miniony dzień, widoki „sprzed chwili”, równoległe odczyty liczników. Testy: 974, E2E 24/24.
-
-## 0.18.0 – poprawki procesu głównego i aktualizacji (ciąg E, 5.2c)
-- Gałąź `claude/0.18.0-proces` (od 0.17.0, przed jego scaleniem) od 28.10 ok. 15:15.
-- Zakres (T516): A4-01 (pomocnik nie do uruchomienia), A4-02 (zasobnik a maksymalizacja), A4-03 (linia „wait:” w
-  adresie, tekst linii w panelu), A4-05 (Alt+F4 w panelu), A5-01 (noc przy blokadzie), A5-02 (plan strażnika), A5-03
-  (wyjście w sesji), A5-04 (sekwencja startu po zwolnieniu blokady), A5-05, A5-06, A5-12 (T513) i low A4-08–A4-13,
-  A5-08–A5-11. Do 5.3: A4-07, A5-07. A4-04 (komunikat rezerwy) – 5.2e.
-- `/code-review` (xhigh): 15 uwag, wszystkie poprawione z testami poza jedną (przyjęte ryzyko w T516: dwa laptopy
-  z nowoczesnym czuwaniem w tej samej minucie) – m.in. okno niepokazane zapisane jako zmaksymalizowane, „instaluję”
-  przy instalacji bez czekania, limit 4 startów właściciela przed blokadą (C#, test w `tests/update`), plan strażnika
-  przy nieczytelnym config.json, `planBlocking` jak strażnik, licznik 4 przy zgodnych plikach, „odłożono” przy nowszej
-  wersji, strażnik naprawy, linie w camelCase, ekran panelu, brakujące testy A4-08, A4-10, A4-12, A5-09, A5-11.
-- Testy: 955 jednostkowych i plikowych (nowe: `tray`, `panel-rules`, `main-window`; każdy pada na starym kodzie);
-  E2E 24/24 lokalnie (nowe: „start z Windows w zasobniku”, „Alt+F4 w panelu”).
-
-## 0.17.0 – poprawki danych i zegarów (ciąg E, 5.2b)
-- Gałąź `claude/0.17.0-dane` (od 0.16.0, przed jego scaleniem) od 28.10 ok. 14:40.
-- Zakres (T515): A8-01 (zegar logiczny po skoku zegara), A3-01 (folder bez korzenia – `rootGuarded`), A8-03
-  (powiadomienia po ustaleniu), A2-03 (zamrożenie a kopie konfliktowe plików oceny), A3-04 (szablon na surowym pliku),
-  A3-05 (identyfikator Windows, `folders-<stary>`), A3-08 (prośby równolegle, pomiar w teście skali) i low A3-02, A3-03,
-  A3-10, A3-11, A3-12, A3-15, A3-17 (`dataVersion`), A3-18, A2-07, A8-06, A8-11. Do 5.3: A3-09, A3-16, A8-08.
-- `/code-review` (xhigh): 15 uwag, wszystkie poprawione z testami poza jedną (pełny odczyt pliku ocen przy zamrożeniu –
-  raz na dzień, bez zmian) – m.in. druga kopia usuniętego rekordu, nowa wersja szablonu od wersji obowiązującej, rozjazd
-  zegara tylko po najnowszym zdarzeniu komputera, odczyty bez korzenia „nieznane”, ustalanie po wybudzeniu nieskracane
-  przez powrót sieci, identyfikator profilu skopiowanego przed 0.17.0 z obecności w folderze, kolejka zapisuje wszystkie
-  wpisy jednej zmiany naraz, `mapLimit` w `datastore/concurrency.ts`.
-- Testy: 925 jednostkowych i plikowych; każdy nowy test pada na kodzie 0.16.0.
-
-## 0.16.0 – poprawki silnika dnia (ciąg E, 5.2a)
-- Gałąź `claude/0.16.0-silnik` od 28.10 ok. 13:30.
-- Zakres (T514): A1-01 (pauza ostatniego bloku – 15 min, prośba od jej końca), A1-02 („Koniec pracy” przy
-  zapauzowanym bloku – koniec ostatniego przebiegu, blok kończy się z „Cofnij”; tak samo przełączenie na dzień
-  regeneracyjny), A1-03 („Odcinam się” z pracą po „Wracam” przed granicą – przerwa), A1-05 (oznaczenie „po pracy”:
-  największy zbiór, plan zatwierdzonej granicy), A1-06 („Dalej” bez bloków czekających), A1-07 (bloki stałe
-  i „Odcinam się”), A1-08 (regeneracja o porze snu), A1-10 (późne wstanie z pierwszego użycia), A1-11 (maksimum
-  szablonu – `maxFromTemplate`), A2-02 (`rewardRest`) i low A1-13, A1-14, A1-16, A1-17, A1-18. A1-15 → 5.3.
-- `/code-review` (xhigh): 14 uwag, wszystkie poprawione – m.in. oznaczenia niezależne od kolejności planu,
-  „Odcinam się” po pracy nie zabiera wcześniejszego końca, granica z tabeli zatwierdzeń (z niejawną i „Cofnij”), prośba
-  dopisana po fakcie, nagrywany wykład, sesja w prognozie okna, minimum ustalone przy zmianie typu, testy brakujących
-  ścieżek; liczenie limitu 1/3 tylko przy migawkach (test skali bez spowolnienia).
-- Testy: 899 jednostkowych i plikowych (nowe: `work-end.test.ts`, `day-rules-e8.test.ts`; każda poprawka pada na
-  starym kodzie). Test skali w pełnym zestawie lokalnie przekroczył czas otwarcia pod obciążeniem (zostawione procesy
-  Electrona po E2E – zatrzymane), osobno przechodzi. E2E lokalnie: `smoke` przekraczały czas pod obciążeniem (za każdym
-  razem inne testy, osobno przechodzą).
-- PR #26 scalony (efbe55e, 28.10 ok. 15:00; CI PR zielone za pierwszym razem, także Windows) – wydanie 0.16.0 z runu
-  40703787892 na `main` opublikowane (ok. 15:43).
-
-## Przed etapem E8 (28.10.2026)
-- Odpowiedzi: przegląd wieloagentowy teraz, 8 obszarów (T512); 1.0 bez czekania na odbiór (D324). Model: Opus 5.5 ·
-  xhigh (D317), recenzenci Opus xhigh (D309).
-- Obszary (T512): 1 silnik dnia; 2 energia, rytuał, zamrażanie, gra, kalibracja; 3 dane i synchronizacja; 4 proces
-  główny i okna; 5 aktualizacje, awarie, pomocnik C#; 6 ekrany dnia; 7 pozostałe ekrany i pasek; 8 przekrojowo – czas,
-  zegary, kolejność zdarzeń między komputerami, kontrast, przesiadka.
-- Szacunek ciągu E: 13–27 h (plan 5.1–5.4), sam przegląd 2–3 h.
-- Do przygotowania: aktualizacja do 0.15.0 (odbiór równolegle z przeglądem, ślad E4b.12 w logu).
-
-## Przed etapem E0 (25.10.2026)
-- Odpowiedzi: D284–D289. Model: Opus 5.5 · xhigh. Sprzęt próby: drugi monitor, laptop, platforma brokera jako
-  osobny program, nagrywanie wykładów na tym komputerze.
+- `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
+  niżej „Wszystkie punkty” – pełny opis każdego nieodebranego według etapu i numeru, z wersją przy nagłówku. Odebrany
+  punkt dostaje `[x]` i datę, znika z listy na górze, a przy zamknięciu najbliższego etapu jego opis przechodzi do
+  `docs/archiwum/odbior-odebrane.md` pod nagłówek swojego etapu (T536).
 
 ## Pytania na później
 - Po G1 (1.0.1): czy zamknięcie dnia ma kończyć też zapauzowaną analizę tygodniową i bloki „po końcu pracy jak projekt”

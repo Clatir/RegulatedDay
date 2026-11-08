@@ -1,7 +1,7 @@
 # Plan – do zrobienia
 
 Tylko praca, która została (D317); zakończone etapy → `docs/archiwum/plan-E0-E8.md`, pełna tabela etapów – specyfikacja
-„Plan budowy”. Model: główna sesja **Opus 5.5 · xhigh**; w planie napraw kod piszą wykonawcy z `.claude/agents/`
+„Plan budowy”. Model: główna sesja **Opus 5.5 · high** (D351); w planie napraw kod piszą wykonawcy z `.claude/agents/`
 według kolumny „Wykonawca” (D349).
 
 - **Rodzaj:** **Interfejs** – ekran na gotowej logice; **Logika** – bez widocznych zmian; **Całość** – logika, interfejs,
@@ -21,9 +21,9 @@ zadania). Wynik: 22 błędy w kodzie (część ze wspólną przyczyną, 2 tylko 
 11 zachowań do Twojej decyzji (P1–P11), reszta zgodna ze specyfikacją albo wina maszyny. Decyzje podjęte 3.11:
 D334–D344 (P1–P11) i trzy zmiany zachowań dotąd zgodnych ze specyfikacją (D345–D347) – tabela niżej.
 
-**Jedno zadanie (D349):** cały ciąg bez pauzy do „dalej” – pauza dopiero na końcu. **Główna sesja – Opus 5.5 · xhigh**
+**Jedno zadanie (D349):** cały ciąg bez pauzy do „dalej” – pauza dopiero na końcu. **Główna sesja – Opus 5.5 · high (D351)**
 – prowadzi i sprawdza: „Przed ciągiem F”, gałąź, zlecenie zadania wykonawcy, przegląd jego zmian, pełne testy,
-`/code-review` xhigh (poprawki sama albo przez tego samego wykonawcę), wersja i `CHANGELOG.md`, punkty w
+`/code-review` według ryzyka, najwyżej dwie rundy (D351; poprawki sama albo przez tego samego wykonawcę), wersja i `CHANGELOG.md`, punkty w
 `docs/odbior.md`, T-decyzje, `docs/postep.md`, commit, PR i scalenie po zielonym CI (D333), wydanie sprawdzone na
 `main`. **Wykonawca** (agent z `.claude/agents/`, model i thinking w jego nagłówku) pisze test, który na starym kodzie
 pada, i poprawkę według `docs/vm/przyczyny.md` – bez commitów i PR. Zadania po kolei, bez równoległych gałęzi (wspólne
@@ -46,6 +46,9 @@ PR-y. Szacunek – czas do wydania, jak dotąd.
 | G4 | 1.0.6 – pasek pulpitu nigdy nad oknami innych programów (D229: był nad Edge na pełnym ekranie), powrót po „nie udało się położyć pod oknami” co 5 min (D341) | Logika (okna, pomocnik C#) | `wykonawca-opus` – Opus 5.5 · xhigh | 2–3 h | tylko CI na Windows, 2–4 rundy |
 | G5 | 1.0.7 – instalator uruchomiony ręcznie zamyka aplikację łagodnie, przy „Nie można zamknąć” zapisuje listę procesów (E4a.13 cz. 1) | Logika (instalator) | `wykonawca-opus` – Opus 5.5 · xhigh | 1,5–2,5 h | `tests/update` tylko w CI; proces, który został w maszynie, pokaże dopiero ten log |
 | H3 | 1.0.8 – „Uruchamiaj z Windows” pokazuje prawdziwy stan i da się wyłączyć (dziś zawsze „wyłączone”), znacznik życia przeżywa twardy reset | Logika | `wykonawca-sonnet` – Sonnet 5.5 · high | 1–1,5 h | `tests/update` tylko w CI |
+
+Po H3 (koniec ciągu): `docs/vm/raport.md` i `docs/vm/przyczyny.md` → `docs/archiwum/vm/` (T536); odwołania wykonawców
+i `docs/odbior-vm.md` do nowej ścieżki.
 
 ### Decyzje (3.11) – D334–D347
 

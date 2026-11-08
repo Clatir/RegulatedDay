@@ -1,5 +1,5 @@
 /**
- * Rules of the day engine fixed after the E8 review (docs/przeglad-E8.md): the mark „po pracy” of two evening blocks
+ * Rules of the day engine fixed after the E8 review (docs/archiwum/przeglad-E8.md): the mark „po pracy” of two evening blocks
  * and its approval, „Dalej” never starting a block waiting for „Zacznij”, fixed blocks around „Odcinam się”, a
  * regeneration away from the computer at the bedtime, the late wake from the first use, the template's maximum after a
  * change „od dziś”, a third of the minimum by its own minute, a fixed block begun late, the rest of the reserve's reward.

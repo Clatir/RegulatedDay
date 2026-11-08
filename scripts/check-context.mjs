@@ -8,11 +8,14 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 const root = new URL('../', import.meta.url)
 const limits = [
   { file: 'CLAUDE.md', lines: 200, kb: 20 },
-  { file: 'docs/postep.md', lines: 400, kb: 60 },
+  // D351: the progress log is read on every resume – state and queue only, finished entries go to docs/archiwum/.
+  { file: 'docs/postep.md', lines: 250, kb: 20 },
   // The registers of decisions have a limit too (spec „Dokumenty w repozytorium”): replaced decisions go to the archive.
-  // D and T are in separate files (D308).
+  // D and T are in separate files (D308), T in two (T535).
   { file: 'docs/decyzje.md', lines: 1000, kb: 200 },
   { file: 'docs/decyzje-techniczne.md', lines: 1000, kb: 200 },
+  // T535: T1–T399 in a file of their own.
+  { file: 'docs/decyzje-techniczne-T1-T399.md', lines: 1000, kb: 200 },
 ]
 const rules = new URL('.claude/rules/', root)
 if (existsSync(rules)) {
