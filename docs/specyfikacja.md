@@ -1245,11 +1245,17 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   „Zrobione teraz”, „Koniec prośby”, gdy prośba trwa) i z pytaniem, które czeka (np. „Zajęcia skończyły się wcześniej?”
   na komputerze, na którym użyto komputera, bez kropki, D240). Pasek pulpitu przy każdym pokazaniu pomocnik kładzie tuż
   nad pulpitem, pod wszystkimi oknami, zanim się pokaże (SetWindowPos wywołane synchronicznie, bez SWP\_ASYNCWINDOWPOS,
-  w osobnym wątku z limitem 2 s, wprost nad najwyższym oknem pulpitu – Progman albo WorkerW z ikonami pulpitu – a nie na
+  w osobnym wątku z limitem 2 s, wprost nad najwyższym oknem pulpitu – Progman, WorkerW z ikonami pulpitu
+  (SHELLDLL\_DefView) albo widoczne, nieukryte przez system WorkerW z powierzchnią, które nachodzi na pasek; ukryte okna
+  WorkerW Eksploratora, także na szczycie kolejności, i okna innych programów z SHELLDLL\_DefView (okno pliku) nie są
+  oknem pulpitu (D229, T540) – a nie na
   samo dno; potwierdzenie dopiero po sprawdzeniu migawki kolejności okien z EnumWindows: potwierdzony jest pasek, pod
   którym leżą wszystkie okna pulpitu najwyższego poziomu (Progman, WorkerW i okno z SHELLDLL\_DefView), a nie leży żadne
-  inne widoczne, nieukryte przez system (DWMWA\_CLOAKED) i niezminimalizowane okno nachodzące na niego). Okna leżące pod
-  najwyższym oknem pulpitu nigdy nie liczą się jako nachodzące, a gdy okno pulpitu leży nad widocznymi oknami spoza
+  inne widoczne, nieukryte przez system (DWMWA\_CLOAKED) i niezminimalizowane okno nachodzące na niego). Okna pod
+  najniższym oknem pulpitu nigdy się nie liczą, okna pulpitu daleko od paska nie muszą leżeć pod nim, a okna pod
+  widocznym oknem pulpitu, które zakrywa cały pasek, nie liczą się tylko przy oknie pulpitu na pierwszym planie; przy
+  zwykłym pierwszym planie pasek nigdy nie leży nad pokazanym oknem nachodzącym na niego – gdy nad nim zostaje wtedy
+  okno pulpitu, próby kończą się komunikatem, a nie paskiem nad oknami. Gdy okno pulpitu leży nad widocznymi oknami spoza
   pulpitu, a na pierwszym planie jest okno pulpitu (Progman albo WorkerW; „Pokaż pulpit”), pomocnik nie rusza paska i
   nie liczy próby, tylko sprawdza ponownie, gdy pulpit wróci na swoje miejsce, a sam pasek liczy się wtedy jak okno pod
   pulpitem, więc nie trafia na wierzch także przy wszystkich oknach zminimalizowanych; gdy na pierwszym planie jest
@@ -1261,9 +1267,10 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   powłoki), a kładzie pasek ponownie tylko wtedy, gdy sprawdzenie nie wychodzi, najwyżej 3 razy w 10 s (gdy nie ma okna
   powłoki, np. w czasie restartu Eksploratora, czeka i nie liczy próby); potem pasek się chowa z komunikatem „Paska
   pulpitu nie udało się położyć pod oknami (inny program trzyma okno na dole)” tylko w panelu ikony, oknie głównym i
-  ustawieniach, bez powiadomienia, z przyciskiem „Pokaż pasek”, i próbuje ponownie sam przy zmianie okna powłoki,
-  zmianie ekranów, odblokowaniu ekranu, wybudzeniu i następnym pokazaniu, najwyżej raz na 5 min (przycisk działa zawsze,
-  D270). E0 sprawdza to także z pokazem slajdów tapety. Bez potwierdzenia pasek pulpitu zostaje ukryty, a ustawienia
+  ustawieniach, bez powiadomienia, z przyciskiem „Pokaż pasek”, i próbuje ponownie sam co 5 min (D341) oraz przy zmianie
+  okna powłoki, zmianie ekranów, odblokowaniu ekranu, wybudzeniu i następnym pokazaniu, najwyżej raz na 5 min (przycisk
+  działa zawsze, D270); po nieudanych próbach pomocnik zapisuje w swoim logu 8 górnych okien (klasa, program, widoczność,
+  prostokąt – bez tytułów), w jednym ciągu niepowodzeń tylko wtedy, gdy się zmieniły. E0 sprawdza to także z pokazem slajdów tapety. Bez potwierdzenia pasek pulpitu zostaje ukryty, a ustawienia
   pokazują osobno „Pasek pulpitu ukryty: pomocnik nie działa” albo „Paska pulpitu nie udało się położyć pod oknami”.
   Aplikacja zmienia ten pasek tylko przez jedną funkcję, która zna showInactive, hide, setBounds i setContentProtection
   (zmienia tylko widoczność na nagraniach, nie kolejność okien), i nigdy nie wywołuje na nim focus, blur, setFocusable,

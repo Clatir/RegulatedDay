@@ -107,7 +107,7 @@ namespace RegulatedDay
             if (id == checkTimer)
             {
                 // Each apart: a failed check of the order never stops the one of the full screen (nor the loop).
-                try { Bar.Check(false); }
+                try { Bar.Tick(); }
                 catch (Exception e) { Log.Error("pasek: " + e); }
                 CheckFullscreen();
             }

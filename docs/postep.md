@@ -6,7 +6,7 @@ z 1–3.11 – `docs/archiwum/postep-ciag-E.md`, ciągi A–D – `docs/archiwum
 archiwum ciągu, tu zostaje jedna linia w tabeli.
 
 ## Stan bieżący
-- **1.0.4 wydane** 4.11 (PR #48, run 41813291885 na `main` zielony). Ciąg F w toku: następne G3 (1.0.5).
+- **1.0.5 wydane** 8.11 ok. 20:04 (PR #50, run 42510534162 na `main` zielony). Ciąg F w toku: G4 (1.0.6).
 - Na tym komputerze aplikacja ostatnio działała 27.10 o 23:41 w 0.10.1 (`main.log`, stan 29.10) – nowsze wersje jeszcze
   nie przyszły.
 - **E4b.12 nie przechodzi (27.10):** uchwyt ⠿ widać po najechaniu, ale po chwyceniu pasek nawet nie drgnie („Zawsze na
@@ -28,8 +28,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport `docs/vm/raport.md` (T529); poprawki z odbioru
    – wersje 1.0.x (D324).
 2. **Ciąg F w toku (od 3.11, D349, D351)** – `docs/plan.md`: główna sesja Opus 5.5 · high, wykonawcy z `.claude/agents/`,
-   przyczyny w `docs/vm/przyczyny.md`, decyzje D334–D347, D350. **Następne:** G3 (1.0.5, `wykonawca-opus`), potem G4,
-   G5, H3; na końcu ciągu `docs/vm/raport.md` i `docs/vm/przyczyny.md` → `docs/archiwum/vm/` (D351).
+   przyczyny w `docs/vm/przyczyny.md`, decyzje D334–D347, D350. G3 – 1.0.5 scalone 8.11. **W toku:** G4 (1.0.6,
+   `wykonawca-opus`), potem G5, H3; na końcu ciągu `docs/vm/raport.md` i `docs/vm/przyczyny.md` → `docs/archiwum/vm/` (D351).
 3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Ciąg F – stan (wpisy: `docs/archiwum/postep-ciag-F.md`)
@@ -40,33 +40,40 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 | G2 pasek od pierwszej chwili | 1.0.2 | #46 | wydane 4.11 | ok. 4 h (2–3 h) |
 | H1 plan i pasek | 1.0.3 | #47 | wydane 4.11 | ok. 3,5 h (2,5–3 h) |
 | H2 ekrany po decyzjach | 1.0.4 | #48 | wydane 4.11 | ok. 4,5 h (3–4 h) |
-| G3 folder danych niedostępny | 1.0.5 | `claude/1.0.5-folder-niedostepny` | PR do scalenia po zielonym CI, potem wydanie | (1,5–2,5 h) |
-| G4, G5, H3 | 1.0.6–1.0.8 | – | czeka | |
+| G3 folder danych niedostępny | 1.0.5 | #50 | wydane 8.11 | ok. 2,5 h (1,5–2,5 h) |
+| G4 pasek pulpitu pod oknami | 1.0.6 | #51 (szkic) | w toku | (2–3 h) |
+| G5, H3 | 1.0.7–1.0.8 | – | czeka | |
 
 Propozycje na później z przeglądów G1–H2 (architektura, bez zmian w działaniu) – w ich wpisach w archiwum.
 
-## G3 – 1.0.5 folder danych niedostępny (bieżące)
-- 8.11 ok. 17:30: po `git pull` (PR #49, D351) użytkownik zlecił G3, G4, G5, H3 jednym ciągiem. Gałąź
-  `claude/1.0.5-folder-niedostepny` od 774154d, `wykonawca-opus`.
-- E8b.1, E8i.2 (T539, D343): przy wybranym, ale niedostępnym folderze pasek ma przyciski, „Start”, kliknięcia i zmiany
-  okna czekają w kolejce, N rośnie, po powrocie zmiany są w folderze, pod starą nazwą nic nie powstaje. `cachedJson`
-  oddaje znaną wersję (plik widziany jako brak – brak, `absent`), `readDay.away`, `DayData.away` + `dayUsable`,
-  `RecordRead.gone`, własny zapis do pamięci rekordów (`RecordStore.put`/`drop`), `forgetGone` w logu. Tekst dnia bez
-  znanej wersji – D343. Spec „W niedostępnym folderze niczego nie tworzy” uzupełniona. Odbiór: E8b.1, E8i.2 („zmiana
-  w 1.0.5”).
-- `/code-review` xhigh runda 1: 13 uwag – 1 high (nowy rekord z id → pasek „nieznany”) i 8 medium poprawione z testami
-  (każdy pada bez poprawki); baner „Nie mogę teraz odczytać” cofnięty do dawnego tekstu (zmiana widoczna bez decyzji D –
-  pytanie niżej). Runda 2 (tylko delta poprawek, Opus xhigh): poprawki bez regresji, 4 uwagi low – niżej.
-- Uwagi na później (low, wąskie okna czasowe): create z istniejącym id przy niedostępnym folderze (cofnięcie usunięcia,
-  przywrócenie z kopii) wpuszczany do kolejki – po powrocie pytania, nie utrata; gdy własny log zniknie z listy, N nie
-  liczy jego zdarzeń sprzed tego uruchomienia do ponownego odczytu; nowy rekord z odczytem `missing`, którego zapis
-  w kolejce nie zdążył przed zniknięciem folderu, nie trafia do `absent` (w `edit()` także `missing` → `fresh`);
-  `written` nie dopisuje pliku do `listed` (`cachedDir` po nieudanej liście go nie widzi); sprzed G3: `RecordStore.remove`
-  przy odczycie „unreadable” i znikniętym korzeniu uznaje usunięcie za zrobione (`rootGuarded.remove` bez `present()`),
-  odczyt `cachedJson` trwający w chwili zapisu nadpisuje świeżą treść w pamięci (licznik pokoleń na rel).
-- Testy: typecheck, `npm test` (82 pliki, 1288), build, lint, `check-context`, E2E 27 + 6 pominiętych – zielone.
-- **Dalej:** PR G3 – scalenie po zielonym CI (D333), wydanie 1.0.5 z zadania Windows na `main`; potem G4 (1.0.6,
-  `wykonawca-opus`), G5, H3 bez pauzy (zlecenie użytkownika 8.11).
+## G4 – 1.0.6 pasek pulpitu pod oknami (bieżące)
+- 8.11 ok. 19:50: gałąź `claude/1.0.6-pasek-pod-oknami` od G3 (drzewo robocze `C:\CC-Projekty\RegulatedDay-g4`, żeby
+  zacząć w czasie CI G3; po scaleniu #50 dociągnięta do `main`), `wykonawca-opus`. PR #51 jako szkic – CI na Windows
+  od rundy 0 (testy paska tylko tam).
+- D229, D341 (T540): okna pulpitu = Progman, okno z SHELLDLL_DefView, widoczne nieukryte WorkerW z powierzchnią (ukryte
+  WorkerW Eksploratora na szczycie kładło pasek nad Edge); pasek nigdy nad pokazanym oknem nachodzącym na niego; po
+  „failed” 8 górnych okien do `helper.log` i ponowienie co 5 min (`BarKeeper.Tick`, `GetTickCount64`,
+  `RD_TEST_BAR_RETRY_MS`). Samotest pomocnika `SelfTestWindows` (16 układów okien, zegar zmyślony) – 10 przypadków
+  padało przed poprawką; E2E `bar-windows.spec.ts` – dwa nowe testy (tylko CI). Spec „Widget” doprecyzowana. Odbiór:
+  nowa grupa E8m, E8m.1.
+- Lokalnie zbudowany `rd-helper.exe` znika przy uruchomieniu z powłoki narzędzi (proces kończy się 0) – przyczyna
+  nieustalona; pomocnik sprawdza tylko CI.
+- CI rundy 0 zielone (także Windows: samotest okien, trzy testy paska). `/code-review` xhigh runda 1: 11 uwag, wszystkie
+  poprawione (samotest 17 → 0): okno pliku z DefView nie jest pulpitem, nic pod najniższym oknem pulpitu, wyjątek
+  „pulpit zakrywa pasek” nie przy zwykłym pierwszym planie, okna pulpitu daleko od paska się nie liczą, samotest bez
+  Win32, log okien bez tytułów i tylko przy zmianie, jedna migawka, testy E2E zgodne z regułą. Runda 2 (delta): 1 medium
+  (regresja przy „Pokaż pulpit” z paskiem zadań/Start na pierwszym planie) – poprawione z przypadkiem samotestu.
+- Uwagi na później (low): ukryty Progman na szczycie w czasie restartu Eksploratora – „pod najniższym oknem pulpitu nic
+  się nie liczy” bierze go za dno (pasek chwilę nad Edge; tak samo na 1.0.5) – ucinać tylko przy widocznym; klucz
+  powtórki wpisu okien to cały opis z pozycjami (`pasek #N`) – przy aktywnym pulpicie wpis prawie co 5 min, porównywać
+  tylko część o oknach; sprzed G4 (E0): sprawdzenie „Pokaż pulpit” pomija sam pasek – przy Win+D i wszystkich oknach
+  zminimalizowanych `Wrong` i HWND_TOP nad pokazanym pulpitem. Ryzyko widoczne (D229, D341): okna programów „na
+  pulpicie” (widżety między warstwami pulpitu) nachodzące na pasek dają przy zwykłym pierwszym planie „failed”
+  z ponowieniem co 5 min zamiast paska nad nimi.
+- Testy lokalnie: `build:helper` (C# 5), typecheck, unit 1288, build, lint, `check-context`, samotest okien przez
+  `Add-Type` (0 błędów); E2E paska i `tests/update` – tylko CI.
+- **Dalej:** PR #51 – scalenie po zielonym CI (D333), wydanie 1.0.6 z zadania Windows na `main`; potem G5 (drzewo
+  `C:\CC-Projekty\RegulatedDay-g5`, gałąź `claude/1.0.7-instalator`, w toku od 8.11 ok. 20:40) i H3 bez pauzy.
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy
