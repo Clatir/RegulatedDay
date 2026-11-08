@@ -97,6 +97,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8l.4 „Wstałeś później?” czeka na odpowiedź (gdy się zdarzy)
    - [ ] E8l.5 Numer wersji w Ustawieniach
    - [ ] E8m.1 Pasek pulpitu nigdy nad oknami innych programów
+   - [ ] E8m.2 „Uruchamiaj z Windows” pokazuje stan i da się wyłączyć
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -435,7 +436,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Oczekiwany efekt:** po zamknięciu Windows i wylogowaniu w logu „poprzednie uruchomienie: clean (…)” – w nawiasie
   „zamknięcie (system)” albo „inna sesja logowania (wylogowanie albo restart)”; po instalatorze „installer (zamknięte
   przez instalator)” – osobny rodzaj, nie awaria – albo „clean (…)”; po Menedżerze zadań „crash”. Twardy reset też
-  daje „clean (inna sesja logowania …)”; do 1.0.8 może dać „first (brak znacznika życia)” (poprawka H3).
+  daje „clean (inna sesja logowania …)” albo „unknown (znacznik życia nieczytelny)”, od 1.0.7 nigdy „first (brak
+  znacznika życia)” (H3), a w folderze danych aplikacji nie zostaje pusty `life.json`.
 - **Nie przechodzi, gdy:**
   - „crash” po zwykłym zamknięciu Windows albo wylogowaniu;
   - „clean” po zamknięciu w Menedżerze zadań;
@@ -1303,3 +1305,15 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   5 min po komunikacie (bez „Pokaż pasek”), a w `helper.log` jest wpis „pasek: 8 górnych okien…”.
 - **Nie przechodzi, gdy:** pasek widać nad oknem innego programu, po „nie udało się położyć” nie wraca sam w ciągu
   6 min przy odkrytym pulpicie albo w `helper.log` brak wpisu z oknami.
+
+#### E8m.2 „Uruchamiaj z Windows” pokazuje stan i da się wyłączyć (1.0.7)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/autostart.test.ts`, w CI `tests/update/install.spec.ts` („Uruchamiaj z Windows…”).
+  Ty: rzut oka.
+- **Jak sprawdzić:** Ustawienia → „Uruchamiaj z Windows”: włącz, zamknij i otwórz Ustawienia; wyłącz; zajrzyj do
+  Menedżera zadań → Aplikacje autostartu; wyłącz tam „Regulated Day” i otwórz Ustawienia.
+- **Oczekiwany efekt:** po włączeniu przełącznik zostaje włączony także po ponownym otwarciu, a w Menedżerze zadań jest
+  „Regulated Day” (włączone); po wyłączeniu wpis znika; wyłączony w Menedżerze zadań – Ustawienia mówią „wyłączone
+  w Menedżerze zadań”, a start aplikacji go nie włącza z powrotem.
+- **Nie przechodzi, gdy:** przełącznik wraca do „wyłączone”, wyłączenie zostawia wpis w Menedżerze zadań albo stan
+  z Menedżera zadań nie jest widoczny.

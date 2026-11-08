@@ -1192,7 +1192,9 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   przelicza. Proces pomocniczy nie zapisuje rekordów danych, robi to proces główny, a własne pliki wynikowe (ZIP, CSV)
   zapisuje przez plik tymczasowy i zmianę nazwy; ma limit czasu, po awarii albo zawieszeniu startuje ponownie z wpisem w
   logu, dostaje tę samą wielkość puli wątków i jest przerywany przy wyjściu.
-- Lokalny znacznik życia w danych aplikacji na tym komputerze (nie na OneDrive) co 30 s pozwala po starcie odróżnić
+- Lokalny znacznik życia w danych aplikacji na tym komputerze (nie na OneDrive) co 30 s (zapis przez plik tymczasowy
+  z fsync i zmianą nazwy – po twardym resecie zostaje stary albo nowy plik, nigdy pusty; znacznik, który jest, ale nie da
+  się go odczytać, daje „nieznane”, nie „pierwsze uruchomienie”, T542) pozwala po starcie odróżnić
   awarię od zwykłego zamknięcia: awarią jest koniec bez ważnego zapisu zamknięcia w tej samej sesji logowania albo nowy
   zrzut awarii procesu głównego (crashReporter bez wysyłania; zrzut liczy się tylko z adnotacją process\_type „browser”,
   bo w tym samym folderze lądują zrzuty renderera i GPU). Tę samą sesję logowania rozpoznaje ulotny klucz rejestru
@@ -1253,9 +1255,10 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   którym leżą wszystkie okna pulpitu najwyższego poziomu (Progman, WorkerW i okno z SHELLDLL\_DefView), a nie leży żadne
   inne widoczne, nieukryte przez system (DWMWA\_CLOAKED) i niezminimalizowane okno nachodzące na niego). Okna pod
   najniższym oknem pulpitu nigdy się nie liczą, okna pulpitu daleko od paska nie muszą leżeć pod nim, a okna pod
-  widocznym oknem pulpitu, które zakrywa cały pasek, nie liczą się tylko przy oknie pulpitu na pierwszym planie; przy
-  zwykłym pierwszym planie pasek nigdy nie leży nad pokazanym oknem nachodzącym na niego – gdy nad nim zostaje wtedy
-  okno pulpitu, próby kończą się komunikatem, a nie paskiem nad oknami. Gdy okno pulpitu leży nad widocznymi oknami spoza
+  widocznym oknem pulpitu, które zakrywa cały pasek, się nie liczą („Pokaż pulpit”: na pierwszym planie pulpit, pasek
+  zadań, Start albo program uruchomiony nad pulpitem) – chyba że okno pierwszego planu spoza pulpitu leży pod nim
+  (przezroczyste okno pulpitu): wtedy pasek nigdy nie leży nad pokazanym oknem nachodzącym na niego, a gdy nad nim
+  zostaje okno pulpitu, próby kończą się komunikatem, a nie paskiem nad oknami. Gdy okno pulpitu leży nad widocznymi oknami spoza
   pulpitu, a na pierwszym planie jest okno pulpitu (Progman albo WorkerW; „Pokaż pulpit”), pomocnik nie rusza paska i
   nie liczy próby, tylko sprawdza ponownie, gdy pulpit wróci na swoje miejsce, a sam pasek liczy się wtedy jak okno pod
   pulpitem, więc nie trafia na wierzch także przy wszystkich oknach zminimalizowanych; gdy na pierwszym planie jest
@@ -1872,7 +1875,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 
 **Instalacja, aktualizacje i log**
 
-- Tylko instalator dla użytkownika, bez uprawnień administratora i bez wersji portable. Identyfikator aplikacji app.regulatedday.desktop (także dla powiadomień), nazwa „Regulated Day”, plik Regulated-Day-Setup.exe, wpis autostartu o stałej nazwie „Regulated Day”. Identyfikator, nazwa pakietu i folder danych aplikacji nie zmieniają się nigdy.
+- Tylko instalator dla użytkownika, bez uprawnień administratora i bez wersji portable. Identyfikator aplikacji app.regulatedday.desktop (także dla powiadomień), nazwa „Regulated Day”, plik Regulated-Day-Setup.exe, wpis autostartu o stałej nazwie „Regulated Day” (stan przełącznika odczytany ze ścieżką programu w cudzysłowie – folder ze spacją, T542). Identyfikator, nazwa pakietu i folder danych aplikacji nie zmieniają się nigdy.
 - Ustawienia pokazują rzeczywisty stan autostartu, także wyłączonego w Menedżerze zadań, a aplikacja nigdy go sama nie
   włącza z powrotem: swój wpis autostartu zapisuje tylko przy zmianie tego ustawienia (wtedy jako włączony albo
   wyłączony, według przełącznika) albo ścieżki programu (wtedy z bieżącym stanem włączenia), a przy starcie tylko go

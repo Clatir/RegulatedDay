@@ -95,6 +95,24 @@ Wpisy zadań ciągu F przeniesione z `docs/postep.md` 8.11.2026 (D351); stan i k
   - Testy: typecheck, unit 1288, build, lint, `check-context`, E2E 27 + 6 pominiętych; CI PR zielone za pierwszym razem.
   - Czas faktyczny: ok. 2,5 h (szacunek 1,5–2,5 h). PR #50 scalony 8.11 (d735aa7); run 42510534162 na `main` zielony,
     **wydanie 1.0.5 opublikowane** (ok. 20:04).
+- **G4 – 1.0.6 pasek pulpitu pod oknami** (`wykonawca-opus`): 8.11 ok. 19:50, gałąź `claude/1.0.6-pasek-pod-oknami` od G3
+  w drzewie `C:\CC-Projekty\RegulatedDay-g4` (start w czasie CI G3), PR #51 jako szkic – CI na Windows od rundy 0.
+  - D229, D341 (T540): okna pulpitu = Progman, WorkerW z SHELLDLL_DefView, widoczne nieukryte WorkerW nachodzące na
+    pasek (ukryte WorkerW Eksploratora na szczycie kładło pasek nad Edge; okno pliku z DefView nie jest pulpitem); nic
+    pod najniższym oknem pulpitu; wyjątek „pulpit zakrywa pasek” nie, gdy okno pierwszego planu leży pod nim; po
+    „failed” 8 górnych okien do `helper.log` (bez tytułów, tylko przy zmianie) i ponowienie co 5 min (`BarKeeper.Tick`,
+    `GetTickCount64`, `RD_TEST_BAR_RETRY_MS`). Samotest `SelfTestWindows` (`IWindowDesk`, zmyślone okna i zegar),
+    E2E `bar-windows.spec.ts` – dwa nowe testy. Odbiór: nowa grupa E8m, E8m.1.
+  - `/code-review` xhigh runda 1: 11 uwag poprawionych (samotest 17 → 0); runda 2 (delta): 1 medium – regresja przy
+    „Pokaż pulpit” z paskiem zadań na pierwszym planie – poprawione z przypadkiem samotestu.
+  - Uwagi na później (low): ukryty Progman na szczycie w czasie restartu Eksploratora bierze się za dno (ucinać tylko
+    przy widocznym); klucz powtórki wpisu okien z pozycjami (`pasek #N`) – porównywać tylko część o oknach; sprzed G4:
+    sprawdzenie „Pokaż pulpit” pomija sam pasek (Win+D i wszystkie okna zminimalizowane → HWND_TOP). Ryzyko widoczne
+    (D229, D341): widżety „na pulpicie” nachodzące na pasek dają przy zwykłym pierwszym planie „failed” z ponowieniem.
+  - Lokalnie zbudowany `rd-helper.exe` znika przy starcie – przyczyna: Malwarebytes (postęp 8.11); pomocnik tylko w CI.
+  - Testy: `build:helper`, typecheck, unit 1288, build, lint, samotest okien przez `Add-Type`; CI rund 0 i 2 zielone.
+  - Czas faktyczny: ok. 2 h (szacunek 2–3 h). PR #51 scalony 8.11 (581d8eb); run 42518714788 na `main` zielony,
+    **wydanie 1.0.6 opublikowane** (ok. 21:41).
 
 ## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)
 - Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji. Kolejno: bloki według modelu
