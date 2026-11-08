@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.7
+- „Uruchamiaj z Windows” w Ustawieniach pokazuje prawdziwy stan i da się go wyłączyć (dotąd zawsze „wyłączone”, a wyłączenie nie działało, gdy folder aplikacji ma spację w nazwie); rozpoznaje też „wyłączone w Menedżerze zadań”.
+- Po twardym resecie albo utracie zasilania następny start rozpoznaje awarię albo mówi „nieznane (znacznik życia nieczytelny)” zamiast „pierwsze uruchomienie” – znacznik życia zapisuje się teraz tak, że nie zostaje pusty.
+
 ## 1.0.6
 - Pasek pulpitu nie kładzie się już nad oknami innych programów (był np. nad Edge na pełnym ekranie i nad zmaksymalizowanym Eksploratorem): ukryte okna Eksploratora nie są już brane za pulpit, a pasek nigdy nie leży nad pokazanym oknem, które na niego nachodzi. Nie dotyczy włączonego „Zawsze na wierzchu”.
 - Po „Paska pulpitu nie udało się położyć pod oknami” pomocnik sam próbuje ponownie co 5 minut – pasek wraca bez „Pokaż pasek”, gdy tylko miejsce się zwolni. W dzienniku pomocnika zostaje wtedy lista górnych okien, która pokazuje, co trzymało pasek.

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -9,12 +9,154 @@ import { minidumpProcessType } from '../../src/main/crash/minidump'
 const atomic = vi.hoisted(() => [] as string[])
 vi.mock('../../src/main/update/files', async (importOriginal) => {
   const m = await importOriginal<typeof import('../../src/main/update/files')>()
-  return { ...m, writeSyncAtomic: (path: string, text: string) => (atomic.push(path), m.writeSyncAtomic(path, text)) }
+  return { ...m, writeSyncAtomic: (path: string, text: string, sync?: boolean) => (atomic.push(path), m.writeSyncAtomic(path, text, sync)) }
+})
+
+// A write that breaks after the file was opened (power loss, a full disk, the process ended): `writeSync` fails on demand;
+// `renameSync` fails with EPERM a set number of times (an antivirus holds the file); `fsyncSync` calls are counted.
+const failing = vi.hoisted(() => ({ writes: false, renames: 0, fsyncs: 0, lifeReads: 0 }))
+vi.mock('node:fs', async (importOriginal) => {
+  const m = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...m,
+    writeSync: (...args: Parameters<typeof m.writeSync>) => {
+      if (failing.writes) throw Object.assign(new Error('EIO: przerwany zapis'), { code: 'EIO' })
+      return m.writeSync(...args)
+    },
+    renameSync: (...args: Parameters<typeof m.renameSync>) => {
+      if (failing.renames > 0) {
+        failing.renames--
+        throw Object.assign(new Error('EPERM: plik trzymany przez antywirus'), { code: 'EPERM' })
+      }
+      return m.renameSync(...args)
+    },
+    readFileSync: ((...args: Parameters<typeof m.readFileSync>) => {
+      if (String(args[0]).endsWith('life.json')) failing.lifeReads++
+      return m.readFileSync(...args)
+    }) as typeof m.readFileSync,
+    fsyncSync: (...args: Parameters<typeof m.fsyncSync>) => {
+      failing.fsyncs++
+      return m.fsyncSync(...args)
+    }
+  }
 })
 
 const { readVersions, recordRun } = await import('../../src/main/crash/versions')
 
 const prev: LifeMarker = { format: 1, runId: 'r1', version: '0.1.0', pid: 1, startedAt: 1000, lastAt: 100_000 }
+
+describe('znacznik życia po twardym resecie (H3)', () => {
+  const inTemp = (fn: (dir: string) => void) => {
+    const dir = mkdtempSync(join(tmpdir(), 'rd-life-'))
+    try {
+      fn(dir)
+    } finally {
+      failing.writes = false
+      failing.renames = 0
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  it('pusty albo uszkodzony znacznik to „nieznane”, nie „pierwsze uruchomienie”; brak pliku to „pierwsze”', () => {
+    inTemp((dir) => {
+      const life = new LifeKeeper(dir)
+      expect(life.read().unreadable).toBe(false)
+      expect(judge(life.previous(), life.closeRecord(), { prevRunId: null }, null, false, life.read().unreadable).kind).toBe('first')
+      for (const text of ['', '{"format":1,"runId":"r1","vers', '   \n', 'null', '{}']) {
+        writeFileSync(life.lifeFile, text)
+        expect(life.previous(), JSON.stringify(text)).toBeNull()
+        expect(life.read().unreadable, JSON.stringify(text)).toBe(true)
+        const v = judge(life.previous(), life.closeRecord(), { prevRunId: null }, null, false, life.read().unreadable)
+        expect(v.kind, JSON.stringify(text)).toBe('unknown')
+        expect(v.why).toBe('znacznik życia nieczytelny')
+      }
+    })
+  })
+
+  it('zapis przerwany po otwarciu pliku nie zostawia pustego znacznika: poprzedni zostaje cały', () => {
+    inTemp((dir) => {
+      const life = new LifeKeeper(dir)
+      life.start('r1', '0.1.0', 1000)
+      life.beat(31_000)
+      expect(life.previous()?.lastAt).toBe(31_000)
+      failing.writes = true
+      life.beat(61_000)
+      life.close('quit', 62_000)
+      failing.writes = false
+      expect(life.read().unreadable).toBe(false)
+      expect(life.previous()?.lastAt).toBe(31_000)
+      expect(JSON.parse(readFileSync(life.lifeFile, 'utf8')).runId).toBe('r1')
+      // The record of closing that could not be written is no record (nothing half-written to be taken for one).
+      expect(life.closeRecord()).toBeNull()
+    })
+  })
+
+  it('zamknięcie przy chwilowo zajętym pliku (EPERM przy zmianie nazwy) udaje się po ponowieniu: „clean”, nie fałszywa awaria', () => {
+    inTemp((dir) => {
+      const life = new LifeKeeper(dir)
+      life.start('r1', '0.1.0', 1000)
+      failing.renames = 1
+      life.close('quit', 2000)
+      expect(failing.renames).toBe(0)
+      expect(life.closeRecord()).toMatchObject({ runId: 'r1', at: 2000, why: 'quit' })
+      expect(judge(life.previous(), life.closeRecord(), { prevRunId: 'r1' }, null, false).kind).toBe('clean')
+      expect(readdirSync(dir).sort()).toEqual(['closing.json', 'life.json'])
+    })
+  })
+
+  it('zapis, który nie przejdzie mimo ponowień, nie zostawia pliku tymczasowego', () => {
+    inTemp((dir) => {
+      const life = new LifeKeeper(dir)
+      life.start('r1', '0.1.0', 1000)
+      failing.renames = 1000
+      life.beat(2000)
+      failing.renames = 0
+      expect(readdirSync(dir)).toEqual(['life.json'])
+      expect(life.previous()?.lastAt).toBe(1000)
+    })
+  })
+
+  it('bicie czeka na dysk (fsync) przed zmianą nazwy; zamknięcie „system” bez fsync', () => {
+    inTemp((dir) => {
+      const life = new LifeKeeper(dir)
+      failing.fsyncs = 0
+      life.start('r1', '0.1.0', 1000)
+      expect(failing.fsyncs).toBe(1)
+      life.beat(31_000)
+      expect(failing.fsyncs).toBe(2)
+      life.close('system', 32_000)
+      expect(failing.fsyncs).toBe(2)
+      life.resume()
+      life.close('quit', 33_000)
+      expect(failing.fsyncs).toBeGreaterThanOrEqual(4)
+    })
+  })
+
+  it('znacznik jest czytany raz: marker i „nieczytelny” pochodzą z tego samego odczytu', () => {
+    inTemp((dir) => {
+      const life = new LifeKeeper(dir)
+      expect(life.read()).toEqual({ marker: null, unreadable: false })
+      writeFileSync(life.lifeFile, '')
+      failing.lifeReads = 0
+      expect(life.read()).toEqual({ marker: null, unreadable: true })
+      expect(failing.lifeReads).toBe(1)
+      writeFileSync(life.lifeFile, JSON.stringify(prev))
+      expect(life.read()).toEqual({ marker: prev, unreadable: false })
+    })
+  })
+
+  it('zapis przez plik tymczasowy: po udanym zapisie w folderze zostaje tylko znacznik', () => {
+    inTemp((dir) => {
+      const life = new LifeKeeper(dir)
+      life.start('r1', '0.1.0', 1000)
+      life.beat(2000)
+      life.close('quit', 3000)
+      expect(readdirSync(dir).sort()).toEqual(['closing.json', 'life.json'])
+      expect(life.previous()?.lastAt).toBe(2000)
+      expect(life.closeRecord()?.at).toBe(3000)
+    })
+  })
+})
 
 describe('awaria czy zwykłe zamknięcie (Terminy, D181)', () => {
   it('ważny zapis zamknięcia (po nim nie ma już znacznika życia) to zwykłe zamknięcie', () => {

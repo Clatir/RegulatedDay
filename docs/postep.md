@@ -6,9 +6,13 @@ z 1–3.11 – `docs/archiwum/postep-ciag-E.md`, ciągi A–D – `docs/archiwum
 archiwum ciągu, tu zostaje jedna linia w tabeli.
 
 ## Stan bieżący
-- **1.0.5 wydane** 8.11 ok. 20:04 (PR #50, run 42510534162 na `main` zielony). Ciąg F w toku: G4 (1.0.6).
-- Na tym komputerze aplikacja ostatnio działała 27.10 o 23:41 w 0.10.1 (`main.log`, stan 29.10) – nowsze wersje jeszcze
-  nie przyszły.
+- **1.0.6 wydane** 8.11 ok. 21:41 (PR #51, run 42518714788 na `main` zielony). Ciąg F w toku: H3 (1.0.7), G5 (1.0.8).
+- **Na tym komputerze działa 1.0.4 bez pomocnika (8.11):** w `resources\helper` jest tylko `rd-install.exe`, brak
+  `rd-helper.exe` i `rd-guard.exe`; `main.log` co 5 min „spawn …\rd-helper.exe ENOENT” (co najmniej od 6.11). Aktywny
+  antywirus to Malwarebytes (Defender wyłączony) – najpewniej kwarantanna niepodpisanych exe (lokalnie zbudowany
+  pomocnik też znika przy starcie). Ty: przywrócić z kwarantanny Malwarebytes i dodać wyjątek dla
+  `%LOCALAPPDATA%\Programs\regulated-day\`. Bez pomocnika pasek pulpitu się nie pokazuje – E4b.12, E8m.1 i inne
+  punkty pomocnika na tym komputerze dopiero potem.
 - **E4b.12 nie przechodzi (27.10):** uchwyt ⠿ widać po najechaniu, ale po chwyceniu pasek nawet nie drgnie („Zawsze na
   wierzchu”, pasek na drugim monitorze VG27B nad głównym – współrzędne ujemne). Test prawdziwą myszą (SendInput) w CI
   na Windows przechodzi w obu wariantach. Od 0.11.0 ślad w `main.log` („pasek: chwycony za uchwyt …”, „pasek: puszczony
@@ -28,8 +32,9 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport `docs/vm/raport.md` (T529); poprawki z odbioru
    – wersje 1.0.x (D324).
 2. **Ciąg F w toku (od 3.11, D349, D351)** – `docs/plan.md`: główna sesja Opus 5.5 · high, wykonawcy z `.claude/agents/`,
-   przyczyny w `docs/vm/przyczyny.md`, decyzje D334–D347, D350. G3 – 1.0.5 scalone 8.11. **W toku:** G4 (1.0.6,
-   `wykonawca-opus`), potem G5, H3; na końcu ciągu `docs/vm/raport.md` i `docs/vm/przyczyny.md` → `docs/archiwum/vm/` (D351).
+   przyczyny w `docs/vm/przyczyny.md`, decyzje D334–D347, D350. G3 – 1.0.5 i G4 – 1.0.6 wydane 8.11. **W toku:** H3
+   (1.0.7, `wykonawca-sonnet`), G5 (1.0.8, `wykonawca-opus`, w osobnym drzewie – CI `tests/update`; kolejność wydań
+   zamieniona, T542); na końcu ciągu `docs/vm/raport.md` i `docs/vm/przyczyny.md` → `docs/archiwum/vm/` (D351).
 3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Ciąg F – stan (wpisy: `docs/archiwum/postep-ciag-F.md`)
@@ -41,39 +46,32 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 | H1 plan i pasek | 1.0.3 | #47 | wydane 4.11 | ok. 3,5 h (2,5–3 h) |
 | H2 ekrany po decyzjach | 1.0.4 | #48 | wydane 4.11 | ok. 4,5 h (3–4 h) |
 | G3 folder danych niedostępny | 1.0.5 | #50 | wydane 8.11 | ok. 2,5 h (1,5–2,5 h) |
-| G4 pasek pulpitu pod oknami | 1.0.6 | #51 (szkic) | w toku | (2–3 h) |
-| G5, H3 | 1.0.7–1.0.8 | – | czeka | |
+| G4 pasek pulpitu pod oknami | 1.0.6 | #51 | wydane 8.11 | ok. 2 h (2–3 h) |
+| H3 autostart, znacznik życia | 1.0.7 | #53 | PR do scalenia po zielonym CI | (1–1,5 h) |
+| G5 instalator zamyka łagodnie | 1.0.8 | #52 | w toku – trzy scenariusze `tests/update` czerwone w CI | (1,5–2,5 h) |
 
 Propozycje na później z przeglądów G1–H2 (architektura, bez zmian w działaniu) – w ich wpisach w archiwum.
 
-## G4 – 1.0.6 pasek pulpitu pod oknami (bieżące)
-- 8.11 ok. 19:50: gałąź `claude/1.0.6-pasek-pod-oknami` od G3 (drzewo robocze `C:\CC-Projekty\RegulatedDay-g4`, żeby
-  zacząć w czasie CI G3; po scaleniu #50 dociągnięta do `main`), `wykonawca-opus`. PR #51 jako szkic – CI na Windows
-  od rundy 0 (testy paska tylko tam).
-- D229, D341 (T540): okna pulpitu = Progman, okno z SHELLDLL_DefView, widoczne nieukryte WorkerW z powierzchnią (ukryte
-  WorkerW Eksploratora na szczycie kładło pasek nad Edge); pasek nigdy nad pokazanym oknem nachodzącym na niego; po
-  „failed” 8 górnych okien do `helper.log` i ponowienie co 5 min (`BarKeeper.Tick`, `GetTickCount64`,
-  `RD_TEST_BAR_RETRY_MS`). Samotest pomocnika `SelfTestWindows` (16 układów okien, zegar zmyślony) – 10 przypadków
-  padało przed poprawką; E2E `bar-windows.spec.ts` – dwa nowe testy (tylko CI). Spec „Widget” doprecyzowana. Odbiór:
-  nowa grupa E8m, E8m.1.
-- Lokalnie zbudowany `rd-helper.exe` znika przy uruchomieniu z powłoki narzędzi (proces kończy się 0) – przyczyna
-  nieustalona; pomocnik sprawdza tylko CI.
-- CI rundy 0 zielone (także Windows: samotest okien, trzy testy paska). `/code-review` xhigh runda 1: 11 uwag, wszystkie
-  poprawione (samotest 17 → 0): okno pliku z DefView nie jest pulpitem, nic pod najniższym oknem pulpitu, wyjątek
-  „pulpit zakrywa pasek” nie przy zwykłym pierwszym planie, okna pulpitu daleko od paska się nie liczą, samotest bez
-  Win32, log okien bez tytułów i tylko przy zmianie, jedna migawka, testy E2E zgodne z regułą. Runda 2 (delta): 1 medium
-  (regresja przy „Pokaż pulpit” z paskiem zadań/Start na pierwszym planie) – poprawione z przypadkiem samotestu.
-- Uwagi na później (low): ukryty Progman na szczycie w czasie restartu Eksploratora – „pod najniższym oknem pulpitu nic
-  się nie liczy” bierze go za dno (pasek chwilę nad Edge; tak samo na 1.0.5) – ucinać tylko przy widocznym; klucz
-  powtórki wpisu okien to cały opis z pozycjami (`pasek #N`) – przy aktywnym pulpicie wpis prawie co 5 min, porównywać
-  tylko część o oknach; sprzed G4 (E0): sprawdzenie „Pokaż pulpit” pomija sam pasek – przy Win+D i wszystkich oknach
-  zminimalizowanych `Wrong` i HWND_TOP nad pokazanym pulpitem. Ryzyko widoczne (D229, D341): okna programów „na
-  pulpicie” (widżety między warstwami pulpitu) nachodzące na pasek dają przy zwykłym pierwszym planie „failed”
-  z ponowieniem co 5 min zamiast paska nad nimi.
-- Testy lokalnie: `build:helper` (C# 5), typecheck, unit 1288, build, lint, `check-context`, samotest okien przez
-  `Add-Type` (0 błędów); E2E paska i `tests/update` – tylko CI.
-- **Dalej:** PR #51 – scalenie po zielonym CI (D333), wydanie 1.0.6 z zadania Windows na `main`; potem G5 (drzewo
-  `C:\CC-Projekty\RegulatedDay-g5`, gałąź `claude/1.0.7-instalator`, w toku od 8.11 ok. 20:40) i H3 bez pauzy.
+## H3 – 1.0.7 autostart i znacznik życia (bieżące)
+- 8.11 ok. 22:00: gałąź `claude/1.0.8-autostart` od `main` d735aa7 w drzewie `C:\CC-Projekty\RegulatedDay-h3`
+  (równolegle z G5 – inne pliki), `wykonawca-sonnet`. PR #53. Wydanie jako 1.0.7 przed G5 (T542): G5 czeka na CI
+  `tests/update`, a numer wersji niczego nie zmienia w działaniu.
+- T542: „Uruchamiaj z Windows” – `getLoginItemSettings` ze ścieżką w cudzysłowie (Electron 44 tnie ją na spacji, więc
+  przełącznik zawsze pokazywał „wyłączone”, a wyłączenie nie działało); znaczniki życia i zamknięcia (aplikacji
+  i folderu) przez `writeSyncAtomic` (ukryty plik tymczasowy, fsync także przy biciu, ponowienia zmiany nazwy przy
+  EPERM/EBUSY), jeden odczyt znacznika przed czekaniem na pomocnika; pusty albo uszkodzony znacznik – `unknown`
+  („znacznik życia nieczytelny”), nie `first`. Odbiór: E4a.13 (twardy reset), nowy E8m.2.
+- `/code-review` high: 9 uwag – 5 poprawionych (zapis atomowy z ponowieniami zamiast własnej kopii, fsync bicia, jeden
+  odczyt, sprzątanie testu CI, zbędne `unquote`); deltę przejrzałam sama.
+- Uwagi na później: `checkPath` nie widzi wpisu Run z inną ścieżką (Electron filtruje `launchItems` po ścieżce – trzeba
+  odczytu rejestru); nieudany zapis zamknięcia zostawia starszy zapis (wąskie okno – anulowane wylogowanie); przy
+  nieczytelnym znaczniku folderu brak `observe.to` „crash”.
+- Testy: typecheck, unit 1299, build, lint; CI rundy 1 zielone (także Windows – „Uruchamiaj z Windows… (ścieżka ze
+  spacją)” w `tests/update/install.spec.ts` przechodzi na prawdziwym Electronie).
+- **G5 (1.0.8) w toku:** PR #52 – trzy nowe scenariusze `tests/update` czerwone w CI (run 42523771374), diagnoza
+  u wykonawcy; wpis G5 na gałęzi `claude/1.0.7-instalator`.
+- **Dalej:** PR #53 – scalenie po zielonym CI (D333), wydanie 1.0.7; potem G5 jako 1.0.8 (wersja, CHANGELOG, odbiór
+  „zmiana w 1.0.8”), scalenie, wydanie; na końcu ciągu `docs/vm/` → `docs/archiwum/vm/`, pauza z listą do sprawdzenia.
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy
