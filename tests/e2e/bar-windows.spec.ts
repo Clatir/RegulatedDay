@@ -4,13 +4,14 @@
  * entered – opens no new window and changes no order of windows; the control – an active window with one title
  * attribute – must open a tooltip window, or the check proves nothing. The windows lying over the bar (CI's console)
  * are minimized first, and every point must be the bar's own – or the cursor never reaches it. The bar dragged by its
- * handle with the real mouse follows it and stays where it is let go (E4b.12).
+ * handle with the real mouse follows it and stays where it is let go (E4b.12). A hidden „WorkerW” at the top of the order
+ * is no desktop – the bar stays under the windows (G4) – and after „failed” the helper tries again by itself (D341).
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication } from '@playwright/test'
 import { launch, settledBarBounds, viewPage, withMainLog } from './app'
-import { click, drag, foreground, hover, topWindows, uncover, windowsAt, type TopWindow } from './win32'
+import { background, click, drag, foreground, hover, placeUnder, topWindows, uncover, windowsAt, type TopWindow } from './win32'
 
 test.skip(process.platform !== 'win32' || process.env.RD_E2E_REAL_HELPER !== '1', 'Windows with the real helper only')
 
@@ -30,6 +31,35 @@ const pidWindows = (pid: number) =>
 
 /** Index of a window in the z-order (0 = the top). */
 const zIndex = (list: TopWindow[], hwnd: string) => list.findIndex((w) => w.hwnd === hwnd)
+
+/** Index of the highest desktop window: Progman, or a WorkerW that is visible and has an area – a hidden one is none (G4). */
+const desktopIndex = (list: TopWindow[]) =>
+  list.findIndex((w) => w.cls === 'Progman' || (w.cls === 'WorkerW' && w.visible && w.rect[2] > w.rect[0] && w.rect[3] > w.rect[1]))
+
+const logOf = (userData: string, name: 'main' | 'helper') => {
+  try {
+    return readFileSync(join(userData, 'logs', `${name}.log`), 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+/** A window over the bar's bounds and 20 DIP around them, shown with activation or without. */
+async function windowOverBar(app: ElectronApplication, title: string, active: boolean): Promise<string> {
+  const b = (await barInfo(app)).bounds
+  return app.evaluate(
+    ({ BrowserWindow }, a) => {
+      const w = new BrowserWindow({ x: a.b.x - 20, y: a.b.y - 20, width: a.b.width + 40, height: a.b.height + 40, show: false, title: a.title })
+      void w.loadURL(`data:text/html,<body style="background:%23333">${a.title}</body>`)
+      if (a.active) {
+        w.show()
+        w.focus()
+      } else w.showInactive()
+      return w.getNativeWindowHandle().readBigUInt64LE(0).toString()
+    },
+    { b, title, active }
+  )
+}
 
 /**
  * The visible windows that moved to the other side of the bar (above ↔ below) between two lists; windows in only one
@@ -60,12 +90,91 @@ test('pasek pulpitu pod oknem, które na niego nachodzi, i tuż nad pulpitem', a
       }, bar.bounds)
       await new Promise((r) => setTimeout(r, 3000))
       const list = topWindows()
-      const desktop = list.findIndex((w) => w.cls === 'Progman' || w.cls === 'WorkerW')
       expect(zIndex(list, cover)).toBeLessThan(zIndex(list, bar.hwnd))
-      expect(zIndex(list, bar.hwnd)).toBeLessThan(desktop)
+      expect(zIndex(list, bar.hwnd)).toBeLessThan(desktopIndex(list))
       expect((await barInfo(app)).visible).toBe(true)
     })
   } finally {
+    await app.close()
+  }
+})
+
+/**
+ * G4 (D229): Explorer keeps hidden WorkerW windows, also at the very top of the order; taken for the desktop, one laid
+ * the bar over every window (over Edge on full screen in the VM). Here a hidden „WorkerW” stays at the top, a normal
+ * window lies over the bar, and a second one is put right under it – the helper lays the bar again, and it stays under
+ * both, right above the desktop.
+ */
+test('pasek pulpitu zostaje pod zwykłym oknem, gdy na szczycie leży ukryte okno klasy WorkerW (G4)', async () => {
+  const { app, userData } = await launch()
+  let stopWorker = () => {}
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      const bar = await barInfo(app)
+      const probe = await windowOverBar(app, 'RD-CI-pod-paskiem', false)
+      const cover = await windowOverBar(app, 'RD-CI-okno', true)
+      await expect.poll(() => {
+        const l = topWindows()
+        return zIndex(l, cover) >= 0 && zIndex(l, cover) < zIndex(l, bar.hwnd)
+      }, { timeout: 10_000 }).toBe(true)
+      const worker = await background('[RdWin]::HiddenWorkerW(120)')
+      stopWorker = worker.stop
+      // The case holds only with the hidden WorkerW over the normal window.
+      await expect.poll(() => {
+        const l = topWindows()
+        const i = zIndex(l, worker.first)
+        return i >= 0 && l[i]!.cls === 'WorkerW' && !l[i]!.visible && i < zIndex(l, cover)
+      }, { timeout: 10_000 }).toBe(true)
+      // A window right under the bar: the helper must lay it again – now, with the WorkerW at the top.
+      const from = logOf(userData, 'main').length
+      placeUnder(probe, bar.hwnd)
+      await expect.poll(() => /pasek pulpitu: placing[\s\S]*pasek pulpitu: (confirmed|failed)/.test(logOf(userData, 'main').slice(from)), { timeout: 20_000 }).toBe(true)
+      const list = topWindows()
+      const names = `kolejność: ${JSON.stringify(list.slice(0, 12).map((w) => `${w.hwnd} ${w.cls}${w.visible ? '' : ' (ukryte)'}`))}; pasek ${bar.hwnd}`
+      expect(zIndex(list, worker.first), names).toBeLessThan(zIndex(list, cover))
+      expect(zIndex(list, cover), names).toBeLessThan(zIndex(list, bar.hwnd))
+      expect(zIndex(list, probe), names).toBeLessThan(zIndex(list, bar.hwnd))
+      expect(zIndex(list, bar.hwnd), names).toBeLessThan(desktopIndex(list))
+      expect((await barInfo(app)).visible).toBe(true)
+    })
+  } finally {
+    stopWorker()
+    await app.close()
+  }
+})
+
+/**
+ * D341: after „nie udało się położyć pod oknami” the helper tries again by itself every 5 min – here every 3 s
+ * (RD_TEST_BAR_RETRY_MS). Another program keeps its window right under the bar until the bar hides; then that window
+ * stays there and nothing else happens – only the retry by itself lays the bar under it again and shows it.
+ */
+test('pasek pulpitu po „nie udało się położyć pod oknami” sam ponawia co 5 min i wraca pod okna (D341)', async () => {
+  const { app, userData } = await launch({ env: { RD_TEST_BAR_RETRY_MS: '3000' } })
+  let stopFight = () => {}
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      const bar = await barInfo(app)
+      const probe = await windowOverBar(app, 'RD-CI-pod-paskiem', false)
+      const fight = await background(`[RdWin]::KeepUnder(${probe}, ${bar.hwnd}, 120)`)
+      stopFight = fight.stop
+      await expect.poll(() => logOf(userData, 'main'), { timeout: 30_000 }).toContain('pasek pulpitu: failed')
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(false)
+      fight.stop()
+      // What holds it, in the helper's log: the 8 top windows.
+      expect(logOf(userData, 'helper')).toMatch(/pasek: 8 górnych okien z \d+ \(pasek #\d+, najwyższe okno pulpitu #\d+ /)
+      placeUnder(probe, bar.hwnd)
+      await expect.poll(() => logOf(userData, 'helper'), { timeout: 30_000 }).toContain('pasek: ponowna próba (co 5 min)')
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 15_000 }).toBe(true)
+      // Shown, it may stand over the window for a moment, until the next check of the second lays it again.
+      await expect.poll(() => {
+        const l = topWindows()
+        return zIndex(l, probe) < zIndex(l, bar.hwnd) && zIndex(l, bar.hwnd) < desktopIndex(l)
+      }, { timeout: 10_000 }).toBe(true)
+    })
+  } finally {
+    stopFight()
     await app.close()
   }
 })
@@ -175,7 +284,7 @@ test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejn
       expect(pidWindows(bar.pid)).toEqual(before)
       const orderAfter = topWindows()
       expect(movedAcross(orderBefore, orderAfter, bar.hwnd)).toEqual([])
-      expect(zIndex(orderAfter, bar.hwnd)).toBeLessThan(orderAfter.findIndex((w) => w.cls === 'Progman' || w.cls === 'WorkerW'))
+      expect(zIndex(orderAfter, bar.hwnd)).toBeLessThan(desktopIndex(orderAfter))
       // The control: one title attribute must open a tooltip window, or counting the windows proves nothing. Chromium
       // shows a page's tooltip only in the active window, so the control is activated by a real click beside its button
       // (the bar is never active – no tooltip shows there, and no other popup may).
