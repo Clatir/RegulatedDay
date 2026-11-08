@@ -19,6 +19,7 @@ import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
 import { countLabel, logicalClock, plDate } from '@shared/format'
 import type { DaySnapshot } from '@shared/model/events'
 import { dayFilesNow, editOf, isSaved, trySaveWith, useData } from '../../store/data'
+import { dayUsable } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
 
 /** The day's file changed by `next` from its version in its turn; null when nothing could be sent (the toast said why). */
@@ -135,8 +136,9 @@ export interface WakeDay {
 export async function wakeDayOf(date: string): Promise<WakeDay> {
   const { rd, templates, lectures } = useData.getState()
   const data = await window.rd.dayData(date)
-  // A day that cannot be read whole now says nothing sure about its blocks that have begun: nothing is written.
-  if (!data.complete || data.unknown) throw new Error('log albo plik tego dnia jest teraz nieczytelny – spróbuj za chwilę')
+  // A day that cannot be read whole now says nothing sure about its blocks that have begun: nothing is written – except
+  // the day as last read with the data folder away (its change waits for the folder, E8b.1).
+  if (!dayUsable(data)) throw new Error('log albo plik tego dnia jest teraz nieczytelny – spróbuj za chwilę')
   const events = data.events as AnyEvent[]
   const dayFile = data.dayFile ? dayFileFrom(data.dayFile, date) : null
   const { snapshot } = snapshotOf({ changes: rd.settings, templates, lectures }, { date, events, dayFile, nextFile: null }, marketDay, Date.now())

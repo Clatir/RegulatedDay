@@ -10,14 +10,21 @@ import { join } from 'node:path'
 import { classify, paths, type Classified } from '@shared/data/paths'
 import { deepEqual, merge3, type MergeConflict } from '@shared/data/merge'
 import { earlierOnce } from '@shared/model/rd'
-import type { DataFs } from './fsio'
+import { isRootGone, type DataFs } from './fsio'
 import type { RecordHistory } from './history'
 
 export type RecordRead =
   | { status: 'ok'; value: Record<string, unknown> }
   | { status: 'missing' }
   | { status: 'broken'; why: string }
-  | { status: 'unreadable'; why: string }
+  /** `gone`: not read because the data folder itself is not there (`rootGuarded`, E8b.1) – not a file held. */
+  | { status: 'unreadable'; why: string; gone: boolean }
+
+/**
+ * A record of the folder written or removed by this computer: always called (its cached copy is stale at once); `now` only
+ * once the write or removal is done – the content the file holds now (null: removed), never after a write that failed.
+ */
+export type Written = (rel: string, now?: { value: Record<string, unknown> | null }) => void
 
 export class BrokenRecordError extends Error {
   constructor(readonly rel: string) {
@@ -35,15 +42,15 @@ export function historyKey(c: Classified): { kind: string; id: string } {
 export class RecordStore {
   readonly problems = new Map<string, string>()
 
-  /** `written`: a record this computer wrote or removed (its cached copy is known stale at once). */
-  constructor(private readonly o: { fs: DataFs; dataDir: string; computer: string; history: RecordHistory; now: () => number; written?: (rel: string) => void }) {}
+  /** `written`: a record this computer wrote or removed – every write of a record's file here goes through it. */
+  constructor(private readonly o: { fs: DataFs; dataDir: string; computer: string; history: RecordHistory; now: () => number; written?: Written }) {}
 
   async read(rel: string): Promise<RecordRead> {
     let bytes: Buffer | null
     try {
       bytes = await this.o.fs.read(join(this.o.dataDir, rel))
     } catch (e) {
-      return { status: 'unreadable', why: e instanceof Error ? e.message : String(e) }
+      return { status: 'unreadable', why: e instanceof Error ? e.message : String(e), gone: isRootGone(e) }
     }
     if (!bytes) return { status: 'missing' }
     try {
@@ -71,10 +78,30 @@ export class RecordStore {
       const { kind, id } = historyKey(c)
       await this.o.history.snapshot(kind, id, before.value, reason === 'merge' ? 'merge' : 'edit')
     }
+    await this.put(rel, value)
+  }
+
+  /** The file's content written whole (atomically), said to `written` – with the content only once it is there. */
+  private async put(rel: string, value: Record<string, unknown>): Promise<void> {
+    const text = `${JSON.stringify(value, null, 2)}\n`
+    let done = false
     try {
-      await this.o.fs.writeAtomic(join(this.o.dataDir, rel), `${JSON.stringify(value, null, 2)}\n`)
+      await this.o.fs.writeAtomic(join(this.o.dataDir, rel), text)
+      done = true
     } finally {
-      this.o.written?.(rel)
+      // As a read of the file would give it (JSON drops what it cannot hold).
+      this.o.written?.(rel, done ? { value: JSON.parse(text) as Record<string, unknown> } : undefined)
+    }
+  }
+
+  /** A file removed, said to `written` like a write (null: not there once the removal is done). */
+  private async drop(rel: string): Promise<void> {
+    let done = false
+    try {
+      await this.o.fs.remove(join(this.o.dataDir, rel))
+      done = true
+    } finally {
+      this.o.written?.(rel, done ? { value: null } : undefined)
     }
   }
 
@@ -86,11 +113,7 @@ export class RecordStore {
       const { kind, id } = historyKey(c)
       await this.o.history.snapshot(kind, id, before.value, 'delete')
     }
-    try {
-      await this.o.fs.remove(join(this.o.dataDir, rel))
-    } finally {
-      this.o.written?.(rel)
-    }
+    await this.drop(rel)
   }
 
   /** Conflict copies in a folder of the data (relative paths with the file each is a copy of). */
@@ -122,13 +145,13 @@ export class RecordStore {
       const key = c ? historyKey(c) : null
       if (key && (await this.o.history.lastReason(key.kind, key.id, ['conflict'])) === 'delete') {
         if (!(await this.o.history.snapshot(key.kind, key.id, copy.value, 'conflict'))) return { joined: false, conflicts: [] }
-      } else await this.o.fs.writeAtomic(join(this.o.dataDir, canonicalRel), `${JSON.stringify(copy.value, null, 2)}\n`)
-      await this.o.fs.remove(join(this.o.dataDir, copyRel))
+      } else await this.put(canonicalRel, copy.value)
+      await this.drop(copyRel)
       return { joined: true, conflicts: [] }
     }
     if (canon.status !== 'ok') return { joined: false, conflicts: [] }
     if (deepEqual(copy.value, canon.value)) {
-      await this.o.fs.remove(join(this.o.dataDir, copyRel))
+      await this.drop(copyRel)
       return { joined: true, conflicts: [] }
     }
     // Without a common base: what only one side has is an addition, what both have differently is a question – unless
@@ -151,8 +174,8 @@ export class RecordStore {
       await this.o.history.snapshot(kind, id, canon.value, 'conflict')
       await this.o.history.snapshot(kind, id, copy.value, 'conflict')
     }
-    await this.o.fs.writeAtomic(join(this.o.dataDir, canonicalRel), `${JSON.stringify(merged, null, 2)}\n`)
-    await this.o.fs.remove(join(this.o.dataDir, copyRel))
+    await this.put(canonicalRel, merged)
+    await this.drop(copyRel)
     return { joined: true, conflicts: [] }
   }
 }

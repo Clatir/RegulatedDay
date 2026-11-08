@@ -70,6 +70,9 @@ export const nodeFs: DataFs = {
   }
 }
 
+/** The error of a data folder whose root is not there (`rootGuarded`): unavailable, not a file missing nor unreadable. */
+export const isRootGone = (e: unknown): boolean => !!e && typeof e === 'object' && code(e) === 'ENOROOT'
+
 /**
  * The data folder whose root may go away (spec „W niedostępnym folderze niczego nie tworzy”, „nieznane nigdy nie jest
  * puste”, A3-01): a write into it fails – it waits in the journal or the queue – instead of making a new, empty folder in

@@ -4,7 +4,7 @@
  * cancel undoes only that cancel (A6-07), a copy clicked twice gives each target one copy (A6-04), nothing says
  * „usunięty” when it was not saved (A6-08), the counters of requests come from the days' logs (A6-03).
  */
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -112,6 +112,20 @@ const fileOf = (date: string) => {
   }
 }
 const questions = async () => (await hub.view()).questions
+
+/** The data folder renamed – again while a file in it is held a moment (the folder's service writes meanwhile). */
+async function moveDir(from: string, to: string): Promise<void> {
+  for (let i = 0; ; i++) {
+    try {
+      renameSync(from, to)
+      return
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      if (i >= 100 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) throw e
+      await new Promise((r) => setTimeout(r, 20))
+    }
+  }
+}
 
 describe('zapisy okna liczone od pliku w swojej kolejce', () => {
   it('dwie szybkie zmiany bloku spoza pliku dnia (z migawki) zapisują się obie, bez pytania (A6-01)', async () => {
@@ -388,6 +402,27 @@ describe('pobudka przesuwa bloki ręczne (D334)', () => {
     expect(fileOf(date)!.wakeMin).toBeUndefined()
     partialDay = false
     expect(await setWakeOnDays([date], date, seen, 7 * 60)).toBe(true)
+    expect(fileOf(date)!.wakeMin).toBe(7 * 60)
+  })
+
+  it('Kalendarz przy niedostępnym folderze: pobudka dziś (dzień znany) czeka w kolejce i trafia do folderu po jego powrocie (E8b.1, przegląd 1.0.5)', async () => {
+    const date = today()
+    await put(date, 'rano', 4 * 60 + 30)
+    // The window looked at the day and its logs, as „Dziś” does.
+    expect((await hub.day(date)).complete).toBe(true)
+    const file = fileOf(date) as unknown as RawRecord
+    const seen = (d: string) => (d === date ? file : null)
+    const hidden = `${dir}-ukryty`
+    await moveDir(dir, hidden)
+    try {
+      expect(await hub.day(date)).toMatchObject({ complete: false, unknown: false, away: true })
+      expect(await setWakeOnDays([date], date, seen, 7 * 60)).toBe(true)
+      expect(useUi.getState().toasts.some((t) => t.kind === 'error')).toBe(false)
+      expect(hub.service!.folder.queue.pending.some((e) => e.rel === paths.day(date))).toBe(true)
+    } finally {
+      await moveDir(hidden, dir)
+    }
+    await hub.service!.folder.check()
     expect(fileOf(date)!.wakeMin).toBe(7 * 60)
   })
 

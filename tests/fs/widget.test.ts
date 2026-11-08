@@ -3,11 +3,12 @@
  * a cost waiting for its second click in place of its button, a notification of the leader shown once (its id in the
  * day's log), one neutral line without a data folder (D327).
  */
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
+import { readLogText } from '@shared/data/logText'
 import { paths } from '@shared/data/paths'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -1096,6 +1097,63 @@ describe('widget w procesie głównym', () => {
     await folder.check()
     await w.refresh()
     expect(w.current().lines.some((l) => /zapisz(e|ą) się po powrocie folderu danych/.test(l.text))).toBe(true)
+    // The day is counted from what was read before (E8b.1): the bar keeps its actions, never „Dnia nie da się teraz policzyć”.
+    expect(w.current().lines.map((l) => l.id)).not.toContain('unknown')
+    expect(w.current()).toMatchObject({ day: DAY, buttons: { start: 'Start: Inne obowiązki' } })
+  })
+
+  it('nowy szablon i prośba przy niedostępnym folderze czekają w kolejce: pasek dalej z przyciskami, prośba na liście (E8b.1, przegląd 1.0.5)', async () => {
+    const { w, folder, at } = await make()
+    await folder.check()
+    await w.refresh()
+    renameSync(dataDir, `${dataDir}-ukryty`)
+    at(10 * 60 + 1)
+    const out = await folder.edit([
+      { rel: paths.record('template', 'tnowy'), create: true, edits: [{ path: ['id'], base: undefined, value: 'tnowy' }, { path: ['name'], base: undefined, value: 'Nowy' }] },
+      { rel: paths.record('request', 'rnowa'), create: true, edits: [{ path: ['id'], base: undefined, value: 'rnowa' }, { path: ['title'], base: undefined, value: 'zakupy' }] }
+    ])
+    expect(out.map((o) => o.status)).toEqual(['waiting', 'waiting'])
+    await w.refresh()
+    expect(w.current().lines.map((l) => l.id)).not.toContain('unknown')
+    expect(w.current().buttons.start).toBe('Start: Inne obowiązki')
+    expect((await folder.collection('request')).map((r) => r.id)).toEqual(['rnowa'])
+  })
+
+  it('folder danych pod inną nazwą: pasek z przyciskami, „Start” i „Pauza” przechodzą, N rośnie z kliknięciami, po powrocie są w folderze, pod starą nazwą nic (E8b.1, E8i.2)', async () => {
+    const { w, folder, at } = await make()
+    await folder.check()
+    await w.refresh()
+    const hidden = `${dataDir}-ukryty`
+    renameSync(dataDir, hidden)
+    at(10 * 60 + 1)
+    // Before the check every 15 s sees the folder gone: the day as last read and the journal – „Start” goes through.
+    await w.refresh()
+    expect(w.current().lines.map((l) => l.id)).not.toContain('unknown')
+    expect(w.current().buttons.start).toBe('Start: Inne obowiązki')
+    await w.act('start', undefined, 'bar')
+    expect(w.current().note).toBeNull()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+    await folder.check()
+    expect(folder.unavailable).toBe(true)
+    await w.refresh()
+    const waiting = () => w.current().lines.find((l) => l.id === 'sync:unsynced')?.text
+    expect(waiting()).toBe('1 zmiana zapisze się po powrocie folderu danych')
+    at(10 * 60 + 2)
+    await w.act('pause', undefined, 'bar')
+    expect((await folder.timer(DAY)).paused.map((p) => p.info.id)).toEqual(['a'])
+    expect(waiting()).toBe('2 zmiany zapiszą się po powrocie folderu danych')
+    // Nothing is made in the old name's place.
+    expect(existsSync(dataDir)).toBe(false)
+    renameSync(hidden, dataDir)
+    at(10 * 60 + 3)
+    await folder.check()
+    await w.refresh()
+    const log = readLogText(readFileSync(join(dataDir, paths.log(DAY, 'pca')), 'utf8')).events
+    expect(log.filter((e) => e.k === 'block.start' || e.k === 'block.pause').map((e) => [e.k, (e as { block?: string }).block])).toEqual([
+      ['block.start', 'a'],
+      ['block.pause', 'a']
+    ])
+    expect(waiting()).toBeUndefined()
   })
 
   it('ciche linie komputerów: „Brak zmian z PC B od …” po 10 min ciszy świeżej obecności; bateria raz dziennie z „OK” (A8-07)', async () => {

@@ -723,7 +723,7 @@ function Preview({ today }: { today: string }) {
     const dayFile = w.days[shown] ? { schema: 1, date: shown, dayType: w.days[shown] } : null
     return countDay(
       shown,
-      { date: shown, dayFile, nextFile: null, prevFile: null, events: [], complete: true, unknown: false },
+      { date: shown, dayFile, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false },
       { changes: draftChanges(w), templates: draftTemplates(w), lectures: w.lectures },
       placeLogical(shown, 4 * 60),
       false

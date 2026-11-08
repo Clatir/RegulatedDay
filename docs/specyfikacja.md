@@ -1847,6 +1847,9 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
   days i log oraz pliki dostępne tylko w chmurze, a aplikacja ostrzega, gdy coś nie jest przypięte. Pierwsze otwarcie na
   nowym komputerze pokazuje postęp z możliwością przerwania.
 - Gdy przy starcie OneDrive nie jest gotowy, aplikacja w zasobniku sama ponawia otwarcie co 30 s i pokazuje ikonę „czekam na folder”. W niedostępnym folderze niczego nie tworzy. Gdy folder przestaje być czytelny w trakcie pracy, widget i timer działają dalej z ostatniego stanu i lokalnego dziennika, a zapisy czekają w kolejce.
+  Czeka zmiana zapisu, którego wersję aplikacja zna z tego uruchomienia, nowy rekord z nowym id (prośba, rutyna,
+  szablon) i nowy plik, o którym wiadomo, że go nie było; zmiana zapisu bez znanej wersji dostaje odmowę „folder danych
+  jest niedostępny” (D343, T539).
 - Zmiana folderu danych działa jak w FI: najpierw otwiera nowy folder, a stary zamyka dopiero po sukcesie, z postępem. Lokalny dziennik, kolejka edycji, znacznik życia i miejsce kopii są osobne dla każdego folderu; zmiana folderu zapisuje zamknięcie w znaczniku starego, a sprawdzenie awarii przy starcie dotyczy tylko folderu poprzedniego uruchomienia. Przywrócenie całego folderu do nowego zapisuje w starym znacznik „przeniesiono do …”, a pozostałe komputery proponują przejście.
 - Podział zadań między komputerami:
 

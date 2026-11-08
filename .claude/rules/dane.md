@@ -77,6 +77,14 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   `serial`. Zapisy okna wprost do logu (`userEvents`) – bez nakładki. Zmiana reguł działań automatycznych – `RULES_VERSION`.
 - Folder bez korzenia (T515): `DataFolder.open` owija `fs` w `rootGuarded` – zapis nie tworzy samego folderu danych;
   `check()` bez korzenia zwraca od razu („nieustalony”). Testy, które otwierają folder, muszą go najpierw utworzyć.
+- Korzeń znika w trakcie (E8b.1, `isRootGone` = ENOROOT): `cachedJson` oddaje wersję znaną (zaufaną jak świeżo
+  sprawdzona – `lookedAt`), a plik widziany w tym uruchomieniu jako brak (`absent`) – brak; inaczej „nieznany”. Każdy
+  zapis i usunięcie rekordu (też `joinCopy`) idzie przez `RecordStore.put`/`drop` → `written(rel, { value })` tylko po
+  udanym: treść do pamięci (rozmiar −1 – następny odczyt i tak czyta plik), usunięcie → `absent`. `readDay` → `away`
+  (niepełny tylko przez brak folderu, dzień czytany wcześniej w całości – `knownDirs`; plik zniknięty z listy wypada z
+  pamięci – `forgetGone`): kliknięcie i akcja dnia idą na nim do dziennika, okno – `DayData.away`, `dayUsable`. `edit()`
+  z `create` przy `RecordRead.gone` (odpowiedź tego odczytu): rekord z id (`isIdRecord`, potem w `absent`) albo plik z
+  `absent` – do kolejki, reszta – odmowa „folder danych jest niedostępny”. Okno bez znanej wersji dnia – tekst D343.
 - Rozjazd zegara (`read.ahead`) tylko po `t` zdarzeń innych komputerów; zegar logiczny ponad 24 h z przodu wraca do
   zegara komputera przy `stamp()` (`onClamp` – log). Szablon: `templateJson(t, before)` na surowym pliku.
 - Odczyt i zapis rekordów obok kolejki (łączenie kopii konfliktowych) – tylko przez `queue.exclusive`.

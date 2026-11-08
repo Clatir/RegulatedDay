@@ -40,10 +40,33 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 | G2 pasek od pierwszej chwili | 1.0.2 | #46 | wydane 4.11 | ok. 4 h (2–3 h) |
 | H1 plan i pasek | 1.0.3 | #47 | wydane 4.11 | ok. 3,5 h (2,5–3 h) |
 | H2 ekrany po decyzjach | 1.0.4 | #48 | wydane 4.11 | ok. 4,5 h (3–4 h) |
-| G3 folder danych niedostępny | 1.0.5 | – | następne | (1,5–2,5 h) |
+| G3 folder danych niedostępny | 1.0.5 | `claude/1.0.5-folder-niedostepny` | PR do scalenia po zielonym CI, potem wydanie | (1,5–2,5 h) |
 | G4, G5, H3 | 1.0.6–1.0.8 | – | czeka | |
 
 Propozycje na później z przeglądów G1–H2 (architektura, bez zmian w działaniu) – w ich wpisach w archiwum.
+
+## G3 – 1.0.5 folder danych niedostępny (bieżące)
+- 8.11 ok. 17:30: po `git pull` (PR #49, D351) użytkownik zlecił G3, G4, G5, H3 jednym ciągiem. Gałąź
+  `claude/1.0.5-folder-niedostepny` od 774154d, `wykonawca-opus`.
+- E8b.1, E8i.2 (T539, D343): przy wybranym, ale niedostępnym folderze pasek ma przyciski, „Start”, kliknięcia i zmiany
+  okna czekają w kolejce, N rośnie, po powrocie zmiany są w folderze, pod starą nazwą nic nie powstaje. `cachedJson`
+  oddaje znaną wersję (plik widziany jako brak – brak, `absent`), `readDay.away`, `DayData.away` + `dayUsable`,
+  `RecordRead.gone`, własny zapis do pamięci rekordów (`RecordStore.put`/`drop`), `forgetGone` w logu. Tekst dnia bez
+  znanej wersji – D343. Spec „W niedostępnym folderze niczego nie tworzy” uzupełniona. Odbiór: E8b.1, E8i.2 („zmiana
+  w 1.0.5”).
+- `/code-review` xhigh runda 1: 13 uwag – 1 high (nowy rekord z id → pasek „nieznany”) i 8 medium poprawione z testami
+  (każdy pada bez poprawki); baner „Nie mogę teraz odczytać” cofnięty do dawnego tekstu (zmiana widoczna bez decyzji D –
+  pytanie niżej). Runda 2 (tylko delta poprawek, Opus xhigh): poprawki bez regresji, 4 uwagi low – niżej.
+- Uwagi na później (low, wąskie okna czasowe): create z istniejącym id przy niedostępnym folderze (cofnięcie usunięcia,
+  przywrócenie z kopii) wpuszczany do kolejki – po powrocie pytania, nie utrata; gdy własny log zniknie z listy, N nie
+  liczy jego zdarzeń sprzed tego uruchomienia do ponownego odczytu; nowy rekord z odczytem `missing`, którego zapis
+  w kolejce nie zdążył przed zniknięciem folderu, nie trafia do `absent` (w `edit()` także `missing` → `fresh`);
+  `written` nie dopisuje pliku do `listed` (`cachedDir` po nieudanej liście go nie widzi); sprzed G3: `RecordStore.remove`
+  przy odczycie „unreadable” i znikniętym korzeniu uznaje usunięcie za zrobione (`rootGuarded.remove` bez `present()`),
+  odczyt `cachedJson` trwający w chwili zapisu nadpisuje świeżą treść w pamięci (licznik pokoleń na rel).
+- Testy: typecheck, `npm test` (82 pliki, 1288), build, lint, `check-context`, E2E 27 + 6 pominiętych – zielone.
+- **Dalej:** PR G3 – scalenie po zielonym CI (D333), wydanie 1.0.5 z zadania Windows na `main`; potem G4 (1.0.6,
+  `wykonawca-opus`), G5, H3 bez pauzy (zlecenie użytkownika 8.11).
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy
@@ -71,5 +94,10 @@ Propozycje na później z przeglądów G1–H2 (architektura, bez zmian w dział
 - Po H1 (D350): „Cofnij” przy pauzie bloku elastycznego i przy starcie bloku stałego cofa parę (elastyczny biegnie dalej,
   stały niezaczęty) – tylko póki blok stały biegnie, potem oba wiersze są informacją. Inaczej: elastyczny dalej w tle,
   a stały na pierwszym planie? Albo „Cofnij” także po końcu bloku stałego?
+- Po G3 (1.0.5): baner „Nie mogę teraz odczytać: … Zmiany tych zapisów poczekają” obiecuje czekanie także dla `rd.json`
+  bez znanej wersji, którego zmiana jest odrzucana – zmienić na tekst jak D343 („zmiany zapiszesz, gdy da się je
+  odczytać”)? Dla pliku uszkodzonego ze znaną wersją zmiana czeka jako pytanie „uszkodzony”.
+- Po G3: przy niedostępnym folderze okno dalej pokazuje „Nie wszystkie logi tego dnia dało się teraz odczytać – dzień
+  może być niepełny.” obok banera folderu – zostawić czy ukryć, gdy widać baner?
 - Przed E4a: punkt 15 listy E0 niesprawdzony – czy OBS nagrywa przy wygaszonym ekranie; od 0.20.0 bez Próby sprawdzisz
   to przy prawdziwym wykładzie nagrywanym na tym komputerze (D184, „Ekran świeci”).

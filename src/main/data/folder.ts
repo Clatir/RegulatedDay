@@ -59,7 +59,7 @@ import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { EditQueue, type Outcome, type QueuedEdit } from './editQueue'
 import { EventLog, type DayRead, type EventDraft } from './eventLog'
-import { rootGuarded, type DataFs } from './fsio'
+import { isRootGone, rootGuarded, type DataFs } from './fsio'
 import { RecordHistory } from './history'
 import { PresenceStore, stillForgotten } from './presenceStore'
 import { RecordStore } from './records'
@@ -171,6 +171,15 @@ function spillsOver(day: string, events: readonly AnyEvent[]): boolean {
   return events.some((e) => e.k === 'disconnect.start') && foldFacts(gridOf(day), events).disconnect.some((d) => d.to === Number.POSITIVE_INFINITY)
 }
 
+/**
+ * A record of a collection kept one file per id (a request, routine, template, plan of lectures): a new one has an id
+ * made at that moment, so no other computer has its file – it may wait for a data folder that is away (E8b.1).
+ */
+function isIdRecord(rel: string): boolean {
+  const c = classify(rel)
+  return !!c && !c.conflict && Object.hasOwn(ID_COLLECTIONS, c.kind)
+}
+
 /** A record the day is made from that cannot be read now (or is broken) and was never read before: unknown. */
 export class UnknownRecordError extends Error {
   constructor(
@@ -263,6 +272,11 @@ export class DataFolder {
   private readonly cache = new Map<string, { size: number; mtimeMs: number; value: unknown }>()
   /** When a cached record was last looked at on the disk (the monotonic clock) – for the lists for showing. */
   private readonly lookedAt = new Map<string, number>()
+  /**
+   * Records this run looked at and found not there, none of its own writes since (`written`): with the data folder away
+   * they are still not there for the window (a new file of such a day waits in the queue), the others are unknown.
+   */
+  private readonly absent = new Set<string>()
   private lastSeenPeers = new Map<string, number>()
   /** Computers seen with a fresh presence in this run: one that stops refreshing it is „Brak zmian z … od …” (A8-07). */
   private readonly freshSeen = new Set<string>()
@@ -306,7 +320,26 @@ export class DataFolder {
     const now = () => this.clock.now()
     this.log = new EventLog({ fs: o.fs, dataDir: o.dataDir, stateDir: o.stateDir, computer: o.computer, clock: this.clock, rulesVersion: this.rulesVersion })
     this.history = new RecordHistory({ fs: o.fs, dataDir: o.dataDir, computer: o.computer, now })
-    this.records = new RecordStore({ fs: o.fs, dataDir: o.dataDir, computer: o.computer, history: this.history, now, written: (rel) => this.lookedAt.delete(rel) })
+    this.records = new RecordStore({
+      fs: o.fs,
+      dataDir: o.dataDir,
+      computer: o.computer,
+      history: this.history,
+      now,
+      written: (rel, now) => {
+        this.lookedAt.delete(rel)
+        // Done: what the file holds now is known (looked at again at the next read – the size never matches); failed:
+        // the file is as it was, with what is known of it.
+        if (!now) return
+        if (now.value) {
+          this.cache.set(rel, { size: -1, mtimeMs: -1, value: now.value })
+          this.absent.delete(rel)
+        } else {
+          this.cache.delete(rel)
+          this.absent.add(rel)
+        }
+      }
+    })
     this.queue = new EditQueue({ stateDir: o.stateDir, computer: o.computer })
     this.presence = new PresenceStore(
       { fs: o.fs, dataDir: o.dataDir, computer: o.computer, now },
@@ -428,37 +461,50 @@ export class DataFolder {
   }
 
   /**
-   * A record through the cache. A file that cannot be read now, or is broken, keeps the version read before; without
-   * one it is unknown – never taken as missing (a day made from it would be made from defaults, for good).
+   * A record through the cache. A file that cannot be read now – or looked at: the data folder away (E8b.1), a lock – or
+   * is broken, keeps the version read before; with the folder away a file this run saw not there is still not there.
+   * Without either it is unknown – never taken as missing (a day made from it would be made from defaults, for good).
    */
   private async cachedJson(rel: string): Promise<unknown> {
     const abs = join(this.o.dataDir, rel)
     const looked = this.o.clock.mono()
-    const st = await this.o.fs.stat(abs)
-    if (!st) {
-      this.cache.delete(rel)
-      this.lookedAt.delete(rel)
-      return undefined
-    }
     const old = this.cache.get(rel)
+    let st: Awaited<ReturnType<DataFs['stat']>>
+    try {
+      st = await this.o.fs.stat(abs)
+    } catch (e) {
+      // The folder away: nothing there changes it here – the known version is trusted as one just looked at (a list for
+      // showing never stats every file again at each refresh); a file not looked at now (a lock) is looked at again.
+      if (old && isRootGone(e)) this.lookedAt.set(rel, looked)
+      else this.lookedAt.delete(rel)
+      if (old) return old.value
+      if (isRootGone(e) && this.absent.has(rel)) return undefined
+      throw new UnknownRecordError(rel, e instanceof Error ? e.message : String(e))
+    }
+    if (!st) return this.missing(rel)
     if (old && old.size === st.size && old.mtimeMs === st.mtimeMs) {
       this.lookedAt.set(rel, looked)
       return old.value
     }
     const r = await this.records.read(rel)
-    if (r.status === 'missing') {
-      this.cache.delete(rel)
-      this.lookedAt.delete(rel)
-      return undefined
-    }
+    if (r.status === 'missing') return this.missing(rel)
     if (r.status !== 'ok') {
       this.lookedAt.delete(rel)
       if (old) return old.value
       throw new UnknownRecordError(rel, r.why)
     }
+    this.absent.delete(rel)
     this.cache.set(rel, { ...st, value: r.value })
     this.lookedAt.set(rel, looked)
     return r.value
+  }
+
+  /** A record looked at and not there (remembered for a folder that goes away – `cachedJson`). */
+  private missing(rel: string): undefined {
+    this.cache.delete(rel)
+    this.lookedAt.delete(rel)
+    this.absent.add(rel)
+    return undefined
   }
 
   /** A cached record looked at within `LIST_TRUST_MS` (undefined: look at its file). */
@@ -548,10 +594,20 @@ export class DataFolder {
   async edit(entries: ReadonlyArray<Omit<QueuedEdit, 'id' | 'at' | 'schema'> & { schema?: number }>): Promise<Outcome[]> {
     // A new record only where there is none: a file that is there but cannot be read now (OneDrive still fetching it) or
     // that came meanwhile is never taken as missing – its every field would be a question about a change you never made.
+    const fresh: string[] = []
     for (const e of entries) {
       if (!e.create) continue
       const now = await this.records.read(e.rel)
-      if (now.status !== 'missing' || this.queue.overlay(e.rel, undefined) !== undefined)
+      const inQueue = this.queue.overlay(e.rel, undefined) !== undefined
+      // The data folder away (E8b.1) – that read's own answer: a new record of an id made now, or a file this run saw not
+      // there, waits in the queue – laid on its return like any new record (a file that came meanwhile: its fields are
+      // questions, never written over); any other file is not known here.
+      if (now.status === 'unreadable' && now.gone && !inQueue) {
+        if (!isIdRecord(e.rel) && !this.absent.has(e.rel)) throw new Error('folder danych jest niedostępny – zmiana nie została zapisana, spróbuj po jego powrocie')
+        fresh.push(e.rel)
+        continue
+      }
+      if (now.status !== 'missing' || inQueue)
         throw new Error(
           now.status === 'ok'
             ? 'ten rekord już jest w folderze (zmienił się w międzyczasie) – zmiana nie została zapisana, spróbuj jeszcze raz'
@@ -570,6 +626,8 @@ export class DataFolder {
     }
     // All of them on the disk at once, or none (A3-15): a save that fails leaves no part of it to be written later.
     this.queue.add(...queued)
+    // A new record waiting for the folder is not there till then: shown from the queue, never „unknown” (the bar, lists).
+    for (const rel of fresh) this.absent.add(rel)
     const outcomes = await this.queue.apply(this.records)
     // One outcome per entry, in their order: an entry a run chained before this one laid has its outcome in the queue.
     return ids.map((id) => outcomes.find((o) => o.id === id) ?? this.queue.outcomeOf(id))
@@ -1484,7 +1542,8 @@ export class DataFolder {
       const chosen = click.day && isIsoDate(click.day) ? { day: click.day } : await this.barActiveDay(now, click.a === 'requestEnd' ? click.request : null)
       const day = chosen.day
       const read = chosen.read ?? (await this.log.readDay(day))
-      if (!read.complete) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę', confirm: null }
+      // With the data folder away: judged on the day as last read and the journal, it waits there (E8b.1).
+      if (!read.complete && !read.away) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę', confirm: null }
       const { ctx, state, laid } = chosen.bar ?? (await this.barDay(day, read, now))
       const { day: _d, probe, ...act } = click
       void _d
@@ -1813,7 +1872,7 @@ export class DataFolder {
       if (!isIsoDate(day)) return { ok: false, why: 'zły dzień', confirm: null }
       const now = this.clock.now()
       const read = await this.log.readDay(day)
-      if (!read.complete) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę', confirm: null }
+      if (!read.complete && !read.away) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę', confirm: null }
       const { ctx, state, laid } = await this.barDay(day, read, now)
       const r = act(state, now, ctx)
       if (typeof r === 'string') return { ok: false, why: r, confirm: null }
