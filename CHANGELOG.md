@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.7
+- Instalator uruchomiony ręcznie przy włączonej aplikacji najpierw prosi ją o zamknięcie i czeka, aż skończy zapisywać (do 15 s), zamiast od razu ją zabijać – następny start nie widzi już awarii, a w dzienniku jest „zamknięte przez instalator”. Pomocnik nie zostaje w tle.
+- Gdy instalator mimo to nie może zamknąć aplikacji („Nie można zamknąć”), zapisuje listę procesów, które zostały, w `logs\installer-check.log` (bez nazwy konta).
+- Instalator widzi teraz także pojedynczy proces, który został z aplikacji, i nie kopiuje plików pod działającą aplikację, gdy sprawdzenie procesów się nie uda.
+
 ## 1.0.6
 - Pasek pulpitu nie kładzie się już nad oknami innych programów (był np. nad Edge na pełnym ekranie i nad zmaksymalizowanym Eksploratorem): ukryte okna Eksploratora nie są już brane za pulpit, a pasek nigdy nie leży nad pokazanym oknem, które na niego nachodzi. Nie dotyczy włączonego „Zawsze na wierzchu”.
 - Po „Paska pulpitu nie udało się położyć pod oknami” pomocnik sam próbuje ponownie co 5 minut – pasek wraca bez „Pokaż pasek”, gdy tylko miejsce się zwolni. W dzienniku pomocnika zostaje wtedy lista górnych okien, która pokazuje, co trzymało pasek.

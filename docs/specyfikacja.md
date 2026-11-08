@@ -1204,7 +1204,12 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   standardowego zamykania) zapisuje znacznik „zamknięte przez instalator” z czasem tylko wtedy, gdy znajdzie działającą
   aplikację, tuż przed jej zamknięciem, a znacznik liczy się tylko, gdy jego czas wypada w ostatnim oknie znacznika
   życia; a aplikacja przed startem instalatora albo pomocnika instalacji zapisuje zamknięcie, a pomocnik czeka na koniec
-  jej procesu. Awaria po ważnym zapisie zamknięcia (w trakcie zamykania) trafia tylko do lokalnego logu, nie do awarii
+  jej procesu. Skrypt najpierw prosi aplikację o zamknięcie (taskkill bez /F – WM\_CLOSE do ukrytych okien procesu
+  głównego), czeka do 15 s (nie krócej niż jej własne wyjście; przy samych procesach pomocniczych 2 s) na koniec
+  wszystkich procesów spod folderu instalacji i dopiero potem zabija to, co zostało; gdy coś nadal działa, przed
+  komunikatem „Nie można zamknąć” zapisuje ich listę (nazwa, PID, rodzic, start, wiersz poleceń – bez nazwy konta)
+  w `logs\installer-check.log`. Aplikacja zamknięta tak przez instalator nie instaluje przy tym wyjściu pobranej wersji,
+  a jej zapis zamknięcia mówi „installer” (T541). Awaria po ważnym zapisie zamknięcia (w trakcie zamykania) trafia tylko do lokalnego logu, nie do awarii
   wersji w obecności, więc nie wstrzymuje innych komputerów.
 
 **Widget**
@@ -1253,9 +1258,10 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   którym leżą wszystkie okna pulpitu najwyższego poziomu (Progman, WorkerW i okno z SHELLDLL\_DefView), a nie leży żadne
   inne widoczne, nieukryte przez system (DWMWA\_CLOAKED) i niezminimalizowane okno nachodzące na niego). Okna pod
   najniższym oknem pulpitu nigdy się nie liczą, okna pulpitu daleko od paska nie muszą leżeć pod nim, a okna pod
-  widocznym oknem pulpitu, które zakrywa cały pasek, nie liczą się tylko przy oknie pulpitu na pierwszym planie; przy
-  zwykłym pierwszym planie pasek nigdy nie leży nad pokazanym oknem nachodzącym na niego – gdy nad nim zostaje wtedy
-  okno pulpitu, próby kończą się komunikatem, a nie paskiem nad oknami. Gdy okno pulpitu leży nad widocznymi oknami spoza
+  widocznym oknem pulpitu, które zakrywa cały pasek, się nie liczą („Pokaż pulpit”: na pierwszym planie pulpit, pasek
+  zadań, Start albo program uruchomiony nad pulpitem) – chyba że okno pierwszego planu spoza pulpitu leży pod nim
+  (przezroczyste okno pulpitu): wtedy pasek nigdy nie leży nad pokazanym oknem nachodzącym na niego, a gdy nad nim
+  zostaje okno pulpitu, próby kończą się komunikatem, a nie paskiem nad oknami. Gdy okno pulpitu leży nad widocznymi oknami spoza
   pulpitu, a na pierwszym planie jest okno pulpitu (Progman albo WorkerW; „Pokaż pulpit”), pomocnik nie rusza paska i
   nie liczy próby, tylko sprawdza ponownie, gdy pulpit wróci na swoje miejsce, a sam pasek liczy się wtedy jak okno pod
   pulpitem, więc nie trafia na wierzch także przy wszystkich oknach zminimalizowanych; gdy na pierwszym planie jest
