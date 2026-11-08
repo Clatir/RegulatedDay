@@ -12,8 +12,7 @@ import type { AutostartState } from '@shared/api'
 export const AUTOSTART_NAME = 'Regulated Day'
 export const HIDDEN_ARG = '--hidden'
 
-const unquote = (p: string) => (p.length > 1 && p.startsWith('"') && p.endsWith('"') ? p.slice(1, -1) : p)
-const samePath = (a: string, b: string) => unquote(a).toLowerCase() === unquote(b).toLowerCase()
+const samePath = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 
 /**
  * Electron on Windows reads `path` of `getLoginItemSettings` as a command line and cuts it at the first space („…\Regulated”

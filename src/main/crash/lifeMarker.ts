@@ -9,8 +9,9 @@
  * through a temporary file renamed over (never opened for writing in place: a hard reset or a failed write leaves the
  * previous whole file, not an empty one); a marker that exists but cannot be read is „unknown”, never „first”.
  */
-import { appendFileSync, closeSync, existsSync, fsyncSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { writeSyncAtomic } from '../update/files'
 import { minidumpProcessType } from './minidump'
 
 export const LIFE_EVERY_MS = 30_000
@@ -87,15 +88,28 @@ export class LifeKeeper {
     return join(this.dir, 'closed-by-installer.json')
   }
 
-  /** The previous run's marker; null when there is none or it cannot be read (`unreadable` tells which). */
-  previous(): LifeMarker | null {
-    const m = readJson<Partial<LifeMarker>>(this.lifeFile)
-    return m && typeof m.runId === 'string' && typeof m.lastAt === 'number' && typeof m.startedAt === 'number' ? (m as LifeMarker) : null
+  /**
+   * The previous run's marker, read once: `marker` is null when there is none or it cannot be read; `unreadable` tells
+   * which (a file that is there but empty, cut short or of another shape is not „no marker”).
+   */
+  read(): { marker: LifeMarker | null; unreadable: boolean } {
+    let text: string
+    try {
+      text = readFileSync(this.lifeFile, 'utf8')
+    } catch (e) {
+      return { marker: null, unreadable: (e as NodeJS.ErrnoException).code !== 'ENOENT' }
+    }
+    try {
+      const m = JSON.parse(text) as Partial<LifeMarker> | null
+      if (m && typeof m.runId === 'string' && typeof m.lastAt === 'number' && typeof m.startedAt === 'number') return { marker: m as LifeMarker, unreadable: false }
+    } catch {
+      /* cut short */
+    }
+    return { marker: null, unreadable: true }
   }
 
-  /** The marker file is there but empty, cut short or of another shape (not the same as no marker). */
-  unreadable(): boolean {
-    return existsSync(this.lifeFile) && this.previous() === null
+  previous(): LifeMarker | null {
+    return this.read().marker
   }
 
   closeRecord(): CloseRecord | null {
@@ -144,32 +158,6 @@ export class LifeKeeper {
     return { found, types }
   }
 
-  /**
-   * Synchronous write through a temporary file renamed over the target, so a hard reset or a failed write leaves the
-   * previous whole file; `sync`: the disk is waited for (the beat and the record of closing), `system`: the end of the
-   * session may end the process right after, so no fsync.
-   */
-  private writeNow(file: string, text: string, sync: boolean): void {
-    const tmp = `${file}.tmp`
-    try {
-      const fd = openSync(tmp, 'w')
-      try {
-        writeSync(fd, text)
-        if (sync) fsyncSync(fd)
-      } finally {
-        closeSync(fd)
-      }
-      renameSync(tmp, file)
-    } catch (e) {
-      try {
-        rmSync(tmp, { force: true })
-      } catch {
-        /* the next write opens it anew */
-      }
-      throw e
-    }
-  }
-
   start(runId: string, version: string, now = Date.now()): void {
     if (this.closed) return
     this.marker = { format: 1, runId, version, pid: process.pid, startedAt: now, lastAt: now }
@@ -182,7 +170,7 @@ export class LifeKeeper {
     if (!this.marker) return
     this.marker.lastAt = now
     try {
-      this.writeNow(this.lifeFile, `${JSON.stringify(this.marker)}\n`, false)
+      writeSyncAtomic(this.lifeFile, `${JSON.stringify(this.marker)}\n`, true)
     } catch {
       /* the next beat tries again */
     }
@@ -195,7 +183,7 @@ export class LifeKeeper {
     if (this.timer) clearInterval(this.timer)
     this.timer = null
     try {
-      this.writeNow(this.closeFile, `${JSON.stringify({ runId: this.marker.runId, at: now, why })}\n`, why !== 'system')
+      writeSyncAtomic(this.closeFile, `${JSON.stringify({ runId: this.marker.runId, at: now, why })}\n`, why !== 'system')
     } catch {
       try {
         appendFileSync(this.closeFile, '')

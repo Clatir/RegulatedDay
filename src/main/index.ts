@@ -899,12 +899,13 @@ function whatsNew(): UpdateView['whatsNew'] {
 
 /** The previous run's end from the life marker (a crash or not), then this run's marker. */
 async function judgePreviousRun(): Promise<void> {
-  const prev = life.previous()
+  // The marker is read once, before any wait (the helper's answer): the same file for the verdict and for „unreadable”.
+  const { marker: prev, unreadable } = life.read()
   const close = life.closeRecord()
   const installerAt = life.installerMarker()
   const dumps = LifeKeeper.mainDumpSince(app.getPath('crashDumps'), prev?.startedAt ?? Number.MAX_SAFE_INTEGER)
   const sessionInfo = process.platform === 'win32' ? await sessionAtStart(helper, runId, 5000, log) : null
-  const verdict = judge(prev, close, sessionInfo, installerAt, dumps.found, life.unreadable())
+  const verdict = judge(prev, close, sessionInfo, installerAt, dumps.found, unreadable)
   if (dumps.types.length) log('info', `nowe zrzuty awarii: ${dumps.types.join(', ')}`)
   log(verdict.kind === 'crash' ? 'warn' : 'info', `poprzednie uruchomienie: ${verdict.kind} (${verdict.why})`)
   life.start(runId, app.getVersion())

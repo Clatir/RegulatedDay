@@ -3,28 +3,47 @@
  * wersję X” (outside the update folder, with the attempt's id – a file of an earlier attempt does not count), the local
  * plan of sessions and classes for the guard, the start sequence's file system, and the cleaning of old update folders.
  */
-import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, appendFileSync, renameSync } from 'node:fs'
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, writeSync, appendFileSync, renameSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { compareVersions, parseManifest } from '@shared/update'
 import { readTask, type Task } from '@shared/task'
 import type { StartupDeps } from './startup'
 
-/** Atomic and synchronous (the start sequence runs before the app is ready): a temporary file renamed over. */
-export function writeSyncAtomic(path: string, text: string): void {
+/**
+ * Atomic and synchronous (the start sequence runs before the app is ready): a hidden temporary file renamed over, the
+ * rename tried again while a reader (an antivirus, the indexer) holds the target; `sync`: the disk is waited for before
+ * the rename (a hard reset then leaves the old or the new file, never an empty one). A failed write leaves no temporary file.
+ */
+export function writeSyncAtomic(path: string, text: string, sync = false): void {
   const tmp = join(dirname(path), `.${randomBytes(4).toString('hex')}.tmp`)
-  writeFileSync(tmp, text)
-  for (let i = 0; ; i++) {
+  try {
+    const fd = openSync(tmp, 'w')
     try {
-      renameSync(tmp, path)
-      return
-    } catch (e) {
-      if (i >= 20) throw e
-      const until = Date.now() + 100
-      while (Date.now() < until) {
-        /* a reader holds the file: a moment later */
+      writeSync(fd, text)
+      if (sync) fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
+    for (let i = 0; ; i++) {
+      try {
+        renameSync(tmp, path)
+        return
+      } catch (e) {
+        if (i >= 20) throw e
+        const until = Date.now() + 100
+        while (Date.now() < until) {
+          /* a reader holds the file: a moment later */
+        }
       }
     }
+  } catch (e) {
+    try {
+      rmSync(tmp, { force: true })
+    } catch {
+      /* the folder's cleaning takes it later */
+    }
+    throw e
   }
 }
 

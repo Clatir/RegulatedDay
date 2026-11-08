@@ -169,8 +169,7 @@ export class DataService {
   static async start(o: ServiceOptions): Promise<DataService> {
     const stateDir = stateDirFor(o.userData, o.dataDir)
     const life = new LifeKeeper(stateDir)
-    const prev = life.previous()
-    const unreadable = life.unreadable()
+    const { marker: prev, unreadable } = life.read()
     const close = life.closeRecord()
     const previousRun = prev ? { lastAt: prev.lastAt, clean: !!close && close.runId === prev.runId && close.at >= prev.lastAt } : null
     const base = o.clock ?? { wall: () => Date.now(), mono: () => performance.now() }
