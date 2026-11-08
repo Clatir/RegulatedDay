@@ -57,55 +57,63 @@ namespace RegulatedDay
 
         /// <summary>
         /// One snapshot: what the check says and which window the bar is laid right under (-1: not laid, 0: the top of the
-        /// windows not on top), with a window of class `fgClass` in the foreground.
+        /// windows not on top), with the window `fg` of the snapshot in the foreground (0: none).
         /// </summary>
-        static void Case(List<object> wrong, string name, List<WindowInfo> snap, string fgClass, OrderState state, long under)
+        static void Case(List<object> wrong, string name, List<WindowInfo> snap, long fg, OrderState state, long under)
         {
             string detail;
-            OrderState got = WindowOrder.Check(new IntPtr(BAR), snap, true, fgClass, out detail);
+            OrderState got = WindowOrder.Check(new IntPtr(BAR), snap, true, new IntPtr(fg), out detail);
             if (got != state) wrong.Add(name + ": " + got + " zamiast " + state + (detail == null ? "" : " (" + detail + ")"));
             IntPtr after;
-            long placed = WindowOrder.PlaceAfter(new IntPtr(BAR), snap, fgClass, out after, out detail) ? after.ToInt64() : -1;
+            long placed = WindowOrder.PlaceAfter(new IntPtr(BAR), snap, new IntPtr(fg), out after, out detail) ? after.ToInt64() : -1;
             if (placed != under) wrong.Add(name + ": pod oknem " + placed + " zamiast " + under);
         }
 
         static void Orders(List<object> wrong)
         {
             // Explorer's hidden WorkerW at the top (the VM's „WorkerW nad paskiem” over Edge on full screen): not a desktop window.
-            Case(wrong, "ukryte WorkerW na szczycie", L(W(1, "WorkerW", "", Screen), Window(2), Bar(), Progman("vd")), APP, OrderState.Confirmed, 2);
-            Case(wrong, "WorkerW ukryte przez system na szczycie", L(W(1, "WorkerW", "vc", Screen), Window(2), Bar(), Progman("vd")), APP, OrderState.Confirmed, 2);
-            Case(wrong, "WorkerW bez powierzchni na szczycie", L(W(1, "WorkerW", "v", R(0, 0, 0, 0)), Window(2), Bar(), Progman("vd")), APP, OrderState.Confirmed, 2);
+            Case(wrong, "ukryte WorkerW na szczycie", L(W(1, "WorkerW", "", Screen), Window(2), Bar(), Progman("vd")), 2, OrderState.Confirmed, 2);
+            Case(wrong, "WorkerW ukryte przez system na szczycie", L(W(1, "WorkerW", "vc", Screen), Window(2), Bar(), Progman("vd")), 2, OrderState.Confirmed, 2);
+            Case(wrong, "WorkerW bez powierzchni na szczycie", L(W(1, "WorkerW", "v", R(0, 0, 0, 0)), Window(2), Bar(), Progman("vd")), 2, OrderState.Confirmed, 2);
             // A wallpaper program: the icons in a WorkerW, a WorkerW of the wallpaper under it, Progman at the bottom.
-            Case(wrong, "tapeta: WorkerW z ikonami i WorkerW tapety", L(Window(2), Bar(), W(5, "WorkerW", "vd", Screen), W(6, "WorkerW", "v", Screen), Progman("v")), APP, OrderState.Confirmed, 2);
-            Case(wrong, "zwykłe okno pod paskiem", L(Bar(), Window(2), Progman("vd")), APP, OrderState.Wrong, 2);
-            Case(wrong, "okno pod pulpitem się nie liczy", L(Window(2), Bar(), Progman("vd"), Window(8)), APP, OrderState.Confirmed, 2);
+            Case(wrong, "tapeta: WorkerW z ikonami i WorkerW tapety", L(Window(2), Bar(), W(5, "WorkerW", "vd", Screen), W(6, "WorkerW", "v", Screen), Progman("v")), 2, OrderState.Confirmed, 2);
+            Case(wrong, "zwykłe okno pod paskiem", L(Bar(), Window(2), Progman("vd")), 2, OrderState.Wrong, 2);
+            Case(wrong, "okno pod pulpitem się nie liczy", L(Window(2), Bar(), Progman("vd"), Window(8)), 2, OrderState.Confirmed, 2);
             // Under the lowest desktop window nothing counts – also when Progman's rectangle is stale (a screen gone).
-            Case(wrong, "nieaktualny prostokąt Progman i okno zaparkowane pod nim", L(Window(2), Bar(), W(4, "Progman", "vd", Stale), Window(8)), APP, OrderState.Confirmed, 2);
-            Case(wrong, "zminimalizowane okno pod paskiem", L(Bar(), W(2, APP, "vm", Cover), Progman("vd")), APP, OrderState.Confirmed, 2);
-            Case(wrong, "okno obok paska pod nim", L(Bar(), W(10, APP, "v", Away), Progman("vd")), APP, OrderState.Confirmed, 10);
-            Case(wrong, "pasek zadań na wierzchu", L(W(9, "Shell_TrayWnd", "vt", R(0, 1040, 1920, 1080)), Bar(), Progman("vd")), APP, OrderState.Confirmed, 0);
-            Case(wrong, "pasek zadań na wierzchu i okno", L(W(9, "Shell_TrayWnd", "vt", R(0, 1040, 1920, 1080)), Window(2), Bar(), Progman("vd")), APP, OrderState.Confirmed, 2);
+            Case(wrong, "nieaktualny prostokąt Progman i okno zaparkowane pod nim", L(Window(2), Bar(), W(4, "Progman", "vd", Stale), Window(8)), 2, OrderState.Confirmed, 2);
+            Case(wrong, "zminimalizowane okno pod paskiem", L(Bar(), W(2, APP, "vm", Cover), Progman("vd")), 0, OrderState.Confirmed, 2);
+            Case(wrong, "okno obok paska pod nim", L(Bar(), W(10, APP, "v", Away), Progman("vd")), 10, OrderState.Confirmed, 10);
+            Case(wrong, "pasek zadań na wierzchu", L(W(9, "Shell_TrayWnd", "vt", R(0, 1040, 1920, 1080)), Bar(), Progman("vd")), 9, OrderState.Confirmed, 0);
+            Case(wrong, "pasek zadań na wierzchu i okno", L(W(9, "Shell_TrayWnd", "vt", R(0, 1040, 1920, 1080)), Window(2), Bar(), Progman("vd")), 2, OrderState.Confirmed, 2);
             // An old file dialog holds SHELLDLL_DefView too: a window of its program, never the desktop.
-            Case(wrong, "okno pliku #32770 z SHELLDLL_DefView nad paskiem", L(W(20, "#32770", "vd", Cover), Bar(), Progman("vd")), "#32770", OrderState.Confirmed, 20);
-            Case(wrong, "pasek nad oknem pliku #32770 z SHELLDLL_DefView", L(Bar(), W(20, "#32770", "vd", Cover), Progman("vd")), APP, OrderState.Wrong, 20);
+            Case(wrong, "okno pliku #32770 z SHELLDLL_DefView nad paskiem", L(W(20, "#32770", "vd", Cover), Bar(), Progman("vd")), 20, OrderState.Confirmed, 20);
+            Case(wrong, "pasek nad oknem pliku #32770 z SHELLDLL_DefView", L(Bar(), W(20, "#32770", "vd", Cover), Progman("vd")), 20, OrderState.Wrong, 20);
             // „Pokaż pulpit” (a desktop window in front): a desktop window over the whole bar hides the windows under it.
-            Case(wrong, "pokazany pulpit", L(W(5, "WorkerW", "vd", Screen), Window(2), Bar(), Progman("v")), "WorkerW", OrderState.DesktopShown, 0);
-            Case(wrong, "widoczne WorkerW na szczycie, pulpit na pierwszym planie", L(W(6, "WorkerW", "v", Screen), Window(2), Bar(), Progman("vd")), "WorkerW", OrderState.DesktopShown, 0);
-            Case(wrong, "pasek nad widocznym WorkerW nad oknem, pulpit na pierwszym planie", L(Bar(), W(6, "WorkerW", "v", Screen), Window(2), Progman("vd")), "WorkerW", OrderState.Confirmed, 0);
-            // An ordinary window in front: no desktop window hides anything (it may be see-through) – the bar never over a
-            // window that shows over it; with a desktop window still over it the tries end with „failed”.
-            Case(wrong, "pulpit nad oknami przy zwykłym pierwszym planie", L(W(5, "WorkerW", "vd", Screen), Window(2), Bar(), Progman("v")), APP, OrderState.Wrong, 2);
-            Case(wrong, "widoczne WorkerW na szczycie, zwykły pierwszy plan", L(W(6, "WorkerW", "v", Screen), Window(2), Bar(), Progman("vd")), APP, OrderState.Wrong, 2);
-            Case(wrong, "pasek nad widocznym WorkerW nad oknem, zwykły pierwszy plan", L(Bar(), W(6, "WorkerW", "v", Screen), Window(2), Progman("vd")), APP, OrderState.Wrong, 2);
+            Case(wrong, "pokazany pulpit", L(W(5, "WorkerW", "vd", Screen), Window(2), Bar(), Progman("v")), 5, OrderState.DesktopShown, 0);
+            Case(wrong, "widoczne WorkerW na szczycie, pulpit na pierwszym planie", L(W(6, "WorkerW", "v", Screen), Window(2), Bar(), Progman("vd")), 6, OrderState.DesktopShown, 0);
+            Case(wrong, "pasek nad widocznym WorkerW nad oknem, pulpit na pierwszym planie", L(Bar(), W(6, "WorkerW", "v", Screen), Window(2), Progman("vd")), 6, OrderState.Confirmed, 0);
+            // „Pokaż pulpit” with the foreground over the raised desktop – the taskbar, Start, a program started then: the
+            // windows under the desktop still hide; the bar goes over the desktop as before.
+            WindowInfo tray = W(9, "Shell_TrayWnd", "vt", R(0, 1040, 1920, 1080));
+            Case(wrong, "pokazany pulpit, pierwszy plan na pasku zadań, pasek pod pulpitem", L(tray, W(5, "WorkerW", "vd", Screen), Window(2), Bar(), Progman("v")), 9, OrderState.Wrong, 0);
+            Case(wrong, "pokazany pulpit, pierwszy plan na pasku zadań, pasek nad pulpitem", L(tray, Bar(), W(5, "WorkerW", "vd", Screen), Window(2), Progman("v")), 9, OrderState.Confirmed, 0);
+            Case(wrong, "pokazany pulpit, nowe okno nad nim na pierwszym planie, pasek pod pulpitem", L(tray, Window(12), W(5, "WorkerW", "vd", Screen), Window(2), Bar(), Progman("v")), 12, OrderState.Wrong, 12);
+            Case(wrong, "pokazany pulpit, nowe okno nad nim na pierwszym planie, pasek nad pulpitem", L(tray, Window(12), Bar(), W(5, "WorkerW", "vd", Screen), Window(2), Progman("v")), 12, OrderState.Confirmed, 12);
+            // The foreground under the desktop window (a see-through WorkerW over Edge on full screen): no desktop window
+            // hides anything – the bar never over a window that shows over it; with a desktop window still over it the
+            // tries end with „failed”.
+            Case(wrong, "pulpit nad oknami przy zwykłym pierwszym planie", L(W(5, "WorkerW", "vd", Screen), Window(2), Bar(), Progman("v")), 2, OrderState.Wrong, 2);
+            Case(wrong, "widoczne WorkerW na szczycie, zwykły pierwszy plan", L(W(6, "WorkerW", "v", Screen), Window(2), Bar(), Progman("vd")), 2, OrderState.Wrong, 2);
+            Case(wrong, "pasek nad widocznym WorkerW nad oknem, zwykły pierwszy plan", L(Bar(), W(6, "WorkerW", "v", Screen), Window(2), Progman("vd")), 2, OrderState.Wrong, 2);
             // A visible WorkerW over a part of the bar counts; one away from the bar does not.
-            Case(wrong, "małe WorkerW nad oknem na pasku", L(W(7, "WorkerW", "v", Small), Window(2), Bar(), Progman("vd")), APP, OrderState.Wrong, 2);
-            Case(wrong, "pasek nad oknem pod małym WorkerW", L(Bar(), W(7, "WorkerW", "v", Small), Window(2), Progman("vd")), APP, OrderState.Wrong, 2);
-            Case(wrong, "małe WorkerW daleko od paska nad oknem", L(W(7, "WorkerW", "v", Away), Window(2), Bar(), Progman("vd")), APP, OrderState.Confirmed, 2);
-            Case(wrong, "małe WorkerW daleko od paska na szczycie", L(W(7, "WorkerW", "v", Away), Bar(), Progman("vd")), APP, OrderState.Confirmed, 7);
-            Case(wrong, "brak okna pulpitu", L(Window(2), Bar()), APP, OrderState.NoShell, -1);
-            Case(wrong, "okna paska nie ma", L(Window(2), Progman("vd")), APP, OrderState.Gone, 2);
+            Case(wrong, "małe WorkerW nad oknem na pasku", L(W(7, "WorkerW", "v", Small), Window(2), Bar(), Progman("vd")), 2, OrderState.Wrong, 2);
+            Case(wrong, "pasek nad oknem pod małym WorkerW", L(Bar(), W(7, "WorkerW", "v", Small), Window(2), Progman("vd")), 2, OrderState.Wrong, 2);
+            Case(wrong, "małe WorkerW daleko od paska nad oknem", L(W(7, "WorkerW", "v", Away), Window(2), Bar(), Progman("vd")), 2, OrderState.Confirmed, 2);
+            Case(wrong, "małe WorkerW daleko od paska na szczycie", L(W(7, "WorkerW", "v", Away), Bar(), Progman("vd")), 0, OrderState.Confirmed, 7);
+            Case(wrong, "brak okna pulpitu", L(Window(2), Bar()), 2, OrderState.NoShell, -1);
+            Case(wrong, "okna paska nie ma", L(Window(2), Progman("vd")), 2, OrderState.Gone, 2);
             string detail;
-            if (WindowOrder.Check(new IntPtr(BAR), L(Window(2), Bar(), Progman("vd")), false, APP, out detail) != OrderState.NoShell) wrong.Add("brak powłoki: nie no-shell");
+            if (WindowOrder.Check(new IntPtr(BAR), L(Window(2), Bar(), Progman("vd")), false, new IntPtr(2), out detail) != OrderState.NoShell) wrong.Add("brak powłoki: nie no-shell");
         }
 
         /// <summary>The order on a made-up clock: wrong until laid (`AfterLay` then), every laying counted, notes kept.</summary>

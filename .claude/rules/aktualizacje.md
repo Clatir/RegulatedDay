@@ -78,6 +78,6 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
   i powiadomienia sprawdza tylko CI na Windows.
 - Okna pulpitu (`WindowOrder.IsDesktopWindow`): Progman i WorkerW – z SHELLDLL\_DefView albo widoczne, nieukryte przez
   system i z powierzchnią (ukryte WorkerW Eksploratora bywają na szczycie, G4; stary dialog pliku `#32770` też ma DefView).
-  Dla paska liczą się Progman, okno ikon i te, które na niego nachodzą (`Counts`); pod najniższym nic się nie liczy, a
-  okna pod oknem pulpitu zakrywającym pasek – tylko przy pulpicie na pierwszym planie. Reguły i ponowienia (`BarKeeper`
+  Dla paska liczą się Progman, okno ikon i te, które na niego nachodzą (`Counts`); pod najniższym nic się nie liczy, pod
+  oknem pulpitu zakrywającym pasek też nie – chyba że pierwszy plan (nie klasy pulpitu) leży pod nim. Reguły (`BarKeeper`
   przez `IWindowDesk`, zapis też przez nie) sprawdza bez pulpitu samotest (`SelfTestWindows`, `windowOrderWrong`).

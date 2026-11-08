@@ -6,9 +6,9 @@
 // full screen), and an old file dialog (#32770) holds SHELLDLL_DefView too. Of them count for the bar Progman, the
 // window of the icons (their rectangles may be stale after a change of the screens) and those overlapping it. Confirmed
 // is a window under which lie all desktop windows that count and no other shown (visible, not cloaked by the system, not
-// minimized) window overlapping it, down to the lowest desktop window that counts – under it nothing ever counts; only
-// with a desktop window in front („Pokaż pulpit”) the windows under a desktop window covering the whole bar do not count
-// either (with an ordinary window in front a desktop window may be see-through).
+// minimized) window overlapping it, down to the lowest desktop window that counts – under it nothing ever counts. The
+// windows under a desktop window covering the whole bar do not count either („Pokaż pulpit” raises the desktop), unless
+// the foreground – not of the desktop's class – lies under that desktop window: then it is see-through.
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -102,23 +102,43 @@ namespace RegulatedDay
         }
 
         /// <summary>
-        /// With a desktop window in front („Pokaż pulpit”): the highest desktop window (not `hwnd`) over the whole of
-        /// `mine` – the windows under it do not show there. With an ordinary window in front, or none such: -1.
+        /// The highest desktop window (not `hwnd`) over the whole of `mine` – the windows under it do not show there
+        /// („Pokaż pulpit”: Win+D raises the desktop; the foreground then is the desktop, or a window over it – the
+        /// taskbar, Start, a program started then). -1: none such, or the foreground (not of the desktop's class) lies under
+        /// it – then that desktop window is see-through (G4: a WorkerW over Edge on full screen) and hides nothing.
         /// </summary>
-        static int CoveringDesktop(IntPtr hwnd, List<WindowInfo> snap, RECT mine, string fgClass)
+        static int CoveringDesktop(IntPtr hwnd, List<WindowInfo> snap, RECT mine, IntPtr fg)
         {
-            if (!IsDesktopClass(fgClass)) return -1;
-            for (int i = 0; i < snap.Count; i++)
+            int covering = -1;
+            for (int i = 0; i < snap.Count && covering < 0; i++)
             {
                 WindowInfo w = snap[i];
-                if (w.Hwnd != hwnd && w.Desktop && w.Visible && !w.Cloaked && w.Rect.Contains(mine)) return i;
+                if (w.Hwnd != hwnd && w.Desktop && w.Visible && !w.Cloaked && w.Rect.Contains(mine)) covering = i;
             }
+            if (covering < 0) return -1;
+            // The foreground under it (an ordinary window under a see-through WorkerW): it shows – nothing is hidden.
+            int f = IndexIn(snap, fg);
+            if (f > covering && !IsDesktopClass(snap[f].Class)) return -1;
+            return covering;
+        }
+
+        static int IndexIn(List<WindowInfo> snap, IntPtr h)
+        {
+            if (h == IntPtr.Zero) return -1;
+            for (int i = 0; i < snap.Count; i++) if (snap[i].Hwnd == h) return i;
             return -1;
+        }
+
+        /// <summary>The class of a window of the snapshot; "" – not in it.</summary>
+        static string ClassIn(List<WindowInfo> snap, IntPtr h)
+        {
+            int i = IndexIn(snap, h);
+            return i < 0 ? "" : snap[i].Class;
         }
 
         /// <summary>
         /// The window at `i` (not `hwnd`, not of the desktop) shows over a part of `mine` – it is not under the desktop
-        /// window covering the whole of it in „Pokaż pulpit” (`covering`) – so `hwnd` must lie under it.
+        /// window covering the whole of it (`covering`, CoveringDesktop) – so `hwnd` must lie under it.
         /// </summary>
         static bool ShowsOver(IntPtr hwnd, List<WindowInfo> snap, int i, RECT mine, int covering)
         {
@@ -159,18 +179,16 @@ namespace RegulatedDay
         /// <summary>Where `hwnd` stands against the desktop, from a snapshot; `detail` says why it is wrong.</summary>
         public static OrderState Check(IntPtr hwnd, List<WindowInfo> snap, out string detail)
         {
-            return Check(hwnd, snap, ShellPresent(), ForegroundClass(), out detail);
+            return Check(hwnd, snap, ShellPresent(), Native.GetForegroundWindow(), out detail);
         }
 
-        static string ForegroundClass()
+        /// <summary>
+        /// The same from what was read: whether a shell window is there and the foreground window (found in the snapshot –
+        /// its class and its place; Zero or not in it: none).
+        /// </summary>
+        public static OrderState Check(IntPtr hwnd, List<WindowInfo> snap, bool shell, IntPtr fg, out string detail)
         {
-            IntPtr fg = Native.GetForegroundWindow();
-            return fg == IntPtr.Zero ? "" : Native.ClassOf(fg);
-        }
-
-        /// <summary>The same from what was read: whether a shell window is there and the foreground window's class.</summary>
-        public static OrderState Check(IntPtr hwnd, List<WindowInfo> snap, bool shell, string fgClass, out string detail)
-        {
+            string fgClass = ClassIn(snap, fg);
             detail = null;
             if (!shell) { detail = "brak okna powłoki"; return OrderState.NoShell; }
             Places p = Find(hwnd, snap);
@@ -192,7 +210,7 @@ namespace RegulatedDay
             }
             // Every desktop window counting for it lies under it (Top is the highest); no window that shows over its place
             // under it, down to the lowest desktop window.
-            int covering = CoveringDesktop(hwnd, snap, p.Mine, fgClass);
+            int covering = CoveringDesktop(hwnd, snap, p.Mine, fg);
             for (int i = p.Me + 1; i < p.Bottom; i++)
             {
                 if (ShowsOver(hwnd, snap, i, p.Mine, covering))
@@ -206,12 +224,12 @@ namespace RegulatedDay
 
         /// <summary>
         /// The window `hwnd` is to be laid right under (`after`; HWND_TOP – the top of the windows not on top), from a
-        /// snapshot with a window of class `fgClass` in front: right over the highest desktop window counting for it, but
+        /// snapshot with the window `fg` in front: right over the highest desktop window counting for it, but
         /// never over a window that shows over its place – with such a window between the desktop windows (under a
         /// see-through or partial one), it goes right under the lowest of them, and with a desktop window still over it
         /// the check says „wrong” and the tries end with „failed”. False: there is no desktop window.
         /// </summary>
-        public static bool PlaceAfter(IntPtr hwnd, List<WindowInfo> snap, string fgClass, out IntPtr after, out string detail)
+        public static bool PlaceAfter(IntPtr hwnd, List<WindowInfo> snap, IntPtr fg, out IntPtr after, out string detail)
         {
             detail = null;
             after = Native.HWND_TOP;
@@ -219,7 +237,7 @@ namespace RegulatedDay
             if (p.Top < 0) { detail = "brak okna pulpitu"; return false; }
             if (p.Me >= 0)
             {
-                int covering = CoveringDesktop(hwnd, snap, p.Mine, fgClass);
+                int covering = CoveringDesktop(hwnd, snap, p.Mine, fg);
                 for (int i = p.Bottom - 1; i > p.Top; i--)
                 {
                     if (!ShowsOver(hwnd, snap, i, p.Mine, covering)) continue;
@@ -251,7 +269,7 @@ namespace RegulatedDay
         public static bool LayAboveDesktop(IntPtr hwnd, List<WindowInfo> snap, out string detail)
         {
             IntPtr insertAfter;
-            if (!PlaceAfter(hwnd, snap, ForegroundClass(), out insertAfter, out detail)) return false;
+            if (!PlaceAfter(hwnd, snap, Native.GetForegroundWindow(), out insertAfter, out detail)) return false;
             bool ok = false;
             int error = 0;
             Thread t = new Thread(delegate()

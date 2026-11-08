@@ -58,8 +58,22 @@ Propozycje na później z przeglądów G1–H2 (architektura, bez zmian w dział
   nowa grupa E8m, E8m.1.
 - Lokalnie zbudowany `rd-helper.exe` znika przy uruchomieniu z powłoki narzędzi (proces kończy się 0) – przyczyna
   nieustalona; pomocnik sprawdza tylko CI.
-- **Dalej:** `/code-review` xhigh (runda 1) i CI rundy 0, poprawki, PR #51 gotowy → scalenie, wydanie 1.0.6; potem G5,
-  H3 bez pauzy (zlecenie użytkownika 8.11).
+- CI rundy 0 zielone (także Windows: samotest okien, trzy testy paska). `/code-review` xhigh runda 1: 11 uwag, wszystkie
+  poprawione (samotest 17 → 0): okno pliku z DefView nie jest pulpitem, nic pod najniższym oknem pulpitu, wyjątek
+  „pulpit zakrywa pasek” nie przy zwykłym pierwszym planie, okna pulpitu daleko od paska się nie liczą, samotest bez
+  Win32, log okien bez tytułów i tylko przy zmianie, jedna migawka, testy E2E zgodne z regułą. Runda 2 (delta): 1 medium
+  (regresja przy „Pokaż pulpit” z paskiem zadań/Start na pierwszym planie) – poprawione z przypadkiem samotestu.
+- Uwagi na później (low): ukryty Progman na szczycie w czasie restartu Eksploratora – „pod najniższym oknem pulpitu nic
+  się nie liczy” bierze go za dno (pasek chwilę nad Edge; tak samo na 1.0.5) – ucinać tylko przy widocznym; klucz
+  powtórki wpisu okien to cały opis z pozycjami (`pasek #N`) – przy aktywnym pulpicie wpis prawie co 5 min, porównywać
+  tylko część o oknach; sprzed G4 (E0): sprawdzenie „Pokaż pulpit” pomija sam pasek – przy Win+D i wszystkich oknach
+  zminimalizowanych `Wrong` i HWND_TOP nad pokazanym pulpitem. Ryzyko widoczne (D229, D341): okna programów „na
+  pulpicie” (widżety między warstwami pulpitu) nachodzące na pasek dają przy zwykłym pierwszym planie „failed”
+  z ponowieniem co 5 min zamiast paska nad nimi.
+- Testy lokalnie: `build:helper` (C# 5), typecheck, unit 1288, build, lint, `check-context`, samotest okien przez
+  `Add-Type` (0 błędów); E2E paska i `tests/update` – tylko CI.
+- **Dalej:** PR #51 – scalenie po zielonym CI (D333), wydanie 1.0.6 z zadania Windows na `main`; potem G5 (drzewo
+  `C:\CC-Projekty\RegulatedDay-g5`, gałąź `claude/1.0.7-instalator`, w toku od 8.11 ok. 20:40) i H3 bez pauzy.
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy
