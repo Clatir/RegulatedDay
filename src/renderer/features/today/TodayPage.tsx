@@ -21,7 +21,7 @@ import { EmptyState, cx } from '../../components/ui'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
 import { isSaved, useData } from '../../store/data'
-import { useDay, type DayModel } from '../../store/day'
+import { dayUsable, useDay, type DayModel } from '../../store/day'
 import { openDay, patchBlockDraft, setBlockDraft, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
 import { BlockEditor } from '../plan/BlockEditor'
@@ -95,7 +95,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // „Wstałeś później?” waits for the answer once shown (D337): the window reports it as seen (the first in the log wins) with
   // the end of the routine and the wake it is counted from in the id, and the proposal is counted from that end.
   const lateShown = lateWake != null && (lateWake.waitUntilMin == null || nowMin >= lateWake.waitUntilMin)
-  const lateSeenId = lateShown && model.data.complete ? lateWakeSeenId(date, lateWake) : null
+  const lateSeenId = lateShown && dayUsable(model.data) ? lateWakeSeenId(date, lateWake) : null
   useEffect(() => {
     if (!lateSeenId) return
     // Only a window in the foreground with presence is heard (the main process): again when it comes to the front.
@@ -215,7 +215,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             )}
             {model.data.unknown && (
               <p className="rounded border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px]" data-testid="day-unknown">
-                Plik tego dnia jest teraz nieczytelny (OneDrive może go jeszcze pobierać) – jego zmian nie widać, a nowe zmiany poczekają, aż da się go odczytać.
+                Plik tego dnia jest teraz nieczytelny (OneDrive może go jeszcze pobierać) – jego zmian nie widać, a zmiany tego dnia zapiszesz, gdy da się go odczytać.
               </p>
             )}
             {!model.data.complete && !model.data.unknown && <p className="text-[12px] text-rose">Nie wszystkie logi tego dnia dało się teraz odczytać – dzień może być niepełny.</p>}

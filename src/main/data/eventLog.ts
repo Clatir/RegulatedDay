@@ -16,7 +16,7 @@ import { classify, paths } from '@shared/data/paths'
 import { eventLine, mergeEvents, readLogText, type ReadLog } from '@shared/data/logText'
 import { AHEAD_LIMIT_MS, type EventClock } from '@shared/data/clock'
 import { type AnyEvent, type Domain } from '@shared/model/events'
-import type { DataFs } from './fsio'
+import { isRootGone, type DataFs, type Entry } from './fsio'
 
 export const JOURNAL_FILE = 'journal.v1.jsonl'
 
@@ -27,6 +27,12 @@ export interface DayRead {
   events: AnyEvent[]
   /** Every file of the day's folder was listed and read (false: „unknown” – never treat the day as empty). */
   complete: boolean
+  /**
+   * Not complete only because the data folder is not there, and every part missing was read before in this run: the day
+   * as last seen, with the journal – a click may be judged on it and waits in the journal (spec „widget i timer działają
+   * dalej z ostatniego stanu i lokalnego dziennika”, E8b.1). Without the root a day never read here is not away – unknown.
+   */
+  away: boolean
   problems: Array<{ file: string; why: string }>
   /** The logs seen, by computer: their last event number (what the presence's „last event” is checked against). */
   lastByComputer: Record<string, number>
@@ -55,6 +61,13 @@ export class EventLog {
   private readonly own = new Map<string, Map<string, AnyEvent>>()
   private readonly pending = new Set<string>()
   private readonly cache = new Map<string, Cached>()
+  /**
+   * The days' folders of logs read in full in this run, nothing unknown in them since: what was there is in `cache` (a
+   * folder not there – nothing) – the day as last seen while the data folder is away.
+   */
+  private readonly knownDirs = new Set<string>()
+  /** The files of each day's folder of logs at its last listing (`forgetGone`). */
+  private readonly listedLogs = new Map<string, Set<string>>()
   /** What this computer last saw of its own file on OneDrive (an unexpected change means it was swapped). */
   private readonly ownStat = new Map<string, { size: number; mtimeMs: number }>()
   private writing: Promise<void> = Promise.resolve()
@@ -291,10 +304,19 @@ export class EventLog {
     let complete = true
     let entries: Array<{ name: string; dir: boolean }> = []
     let copies = 0
+    // A part not read now: only the folder's absence over what this run read before leaves the day „away” (E8b.1).
+    let gone = false
+    let unknown = false
+    const failed = (e: unknown, known: boolean) => {
+      complete = false
+      if (isRootGone(e)) gone = true
+      if (!isRootGone(e) || !known) unknown = true
+    }
     try {
       entries = await this.o.fs.list(join(this.o.dataDir, dir))
+      this.forgetGone(dir, entries)
     } catch (e) {
-      complete = false
+      failed(e, this.knownDirs.has(dir))
       problems.push({ file: dir, why: `lista plików: ${e instanceof Error ? e.message : String(e)}` })
       // What was read before stays: the day is „unknown”, never empty.
       for (const [rel, c] of this.cache) if (rel.startsWith(`${dir}/`)) lists.push(c.read.events)
@@ -310,12 +332,14 @@ export class EventLog {
         lists.push(read.events)
         for (const p of read.problems) problems.push({ file: rel, why: `linia ${p.line}: ${p.why}` })
       } catch (e) {
-        complete = false
-        problems.push({ file: rel, why: e instanceof Error ? e.message : String(e) })
         const old = this.cache.get(rel)
+        failed(e, !!old)
+        problems.push({ file: rel, why: e instanceof Error ? e.message : String(e) })
         if (old) lists.push(old.read.events)
       }
     }
+    if (complete) this.knownDirs.add(dir)
+    else if (unknown) this.knownDirs.delete(dir)
     const events = mergeEvents(...lists)
     // The last number of each computer over every line read – also of an event that lost to another computer's copy
     // of the same derived id (its presence names it, and the gate of minutes must see it).
@@ -332,7 +356,23 @@ export class EventLog {
       if (!was || e.n > was.n) newest.set(e.c, e)
     }
     const ahead = [...newest.values()].some((e) => e.t > this.o.clock.now() + AHEAD_LIMIT_MS)
-    return { events, complete, problems, lastByComputer, ahead, copies }
+    return { events, complete, away: gone && !unknown, problems, lastByComputer, ahead, copies }
+  }
+
+  /**
+   * The logs of a day's folder listed now: a file listed before and not there any more leaves the cache – its events are
+   * no part of the day as last seen (`away`, E8b.1) nor of one whose listing fails later.
+   */
+  private forgetGone(dir: string, entries: readonly Entry[]): void {
+    const now = new Set(entries.filter((x) => !x.dir).map((x) => `${dir}/${x.name}`))
+    for (const rel of this.listedLogs.get(dir) ?? []) if (!now.has(rel)) this.forget(rel)
+    this.listedLogs.set(dir, now)
+  }
+
+  /** A log file not there any more: nothing of it is known (the own one is read whole at its next write). */
+  private forget(rel: string): void {
+    this.cache.delete(rel)
+    this.ownStat.delete(rel)
   }
 
   /** A day to compare with OneDrive at the next write (every check does it for today). */
@@ -345,7 +385,10 @@ export class EventLog {
     const abs = join(this.o.dataDir, rel)
     const st = await this.o.fs.stat(abs)
     const old = this.cache.get(rel)
-    if (!st) return { events: [], problems: [], cutTail: false, endsWithNewline: true }
+    if (!st) {
+      this.forget(rel)
+      return { events: [], problems: [], cutTail: false, endsWithNewline: true }
+    }
     if (old && old.size === st.size && old.mtimeMs === st.mtimeMs) return old.read
     const bytes = await this.o.fs.read(abs)
     const read = readLogText(bytes ? bytes.toString('utf8') : '')

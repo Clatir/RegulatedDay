@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5
+- Gdy folder danych zniknie w trakcie pracy (odłączony dysk, zmieniona nazwa folderu), pasek dalej ma przyciski: „Start”, kliknięcia w pasku i zmiany w oknie czekają, a „N zmian zapisze się po powrocie folderu danych” rośnie z każdą z nich – w oknie i w powiadomieniu przy wyjściu. Po powrocie folderu zmiany trafiają do niego.
+- Zmiana zapisu, którego aplikacja w tym uruchomieniu jeszcze nie odczytała, przy niedostępnym folderze danych dostaje od razu odmowę „folder danych jest niedostępny – … spróbuj po jego powrocie” zamiast „plik jest teraz nieczytelny”.
+- Dzień, którego pliku nie da się teraz odczytać, a jego wcześniejsza wersja nie jest znana: „zmiany tego dnia zapiszesz, gdy da się go odczytać” zamiast obietnicy, że nowe zmiany poczekają.
+
 ## 1.0.4
 - Bloki z warstwy sesji nazywają się „Sesja NY”, „Sesja Londyn” – w pasku, na osi, w rytuale, w powiadomieniach i w eksporcie CSV (np. „Sesja NY o 14:00 zostaje · Odwołaj”). Druga zmiana i ręcznie dodany blok „Sesja tradingowa” zostają „Sesja tradingowa”.
 - Zmiana pobudki przesuwa też Twoje ręcznie dodane bloki przed pierwszym blokiem stałym – raz, w chwili zmiany, z „Cofnij” („Pobudka 07:30: przesunięto 2 bloki”). Twoje zaczęte bloki i blok dodany po zmianie stoją, gdzie były.

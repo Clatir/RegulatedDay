@@ -4,13 +4,14 @@
  * leader's tasks only while it lasts, the observation after a sleep, the queue held by an antivirus, the gate of minutes
  * with a lost copy of a derived event, and one pass of writes per check.
  */
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { eventLine, readLogText } from '@shared/data/logText'
 import { paths } from '@shared/data/paths'
+import { quitNotice } from '@shared/sync/syncLines'
 import type { AnyEvent } from '@shared/model/events'
 import { logicalDayOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -179,6 +180,165 @@ describe('folder danych', () => {
     mkdirSync(dataDir, { recursive: true })
     await f.advance(1)
     expect(f.folder.unsynced).toBe(0)
+  })
+
+  it('folder pod inną nazwą: okno widzi znane wersje, zmiany i nowe rekordy czekają, plik bez znanej wersji – odmowa; po powrocie zmiana z drugiego komputera zostaje (E8b.1, D343)', async () => {
+    mkdirSync(join(dataDir, 'days', '2026'), { recursive: true })
+    writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, settings: [] }))
+    writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, wakeMin: 420, blocks: [] }))
+    const f = await make()
+    await f.advance(1)
+    const tomorrow = addDays(DAY, 1)
+    const far = addDays(DAY, 40)
+    // The window looked at the day; tomorrow's file looked at and not there: known missing.
+    expect(await f.folder.recordView(paths.day(DAY))).toMatchObject({ wakeMin: 420 })
+    expect(await f.folder.recordView(paths.day(tomorrow))).toBeUndefined()
+    // A file seen missing, then written by this computer and not read since: what it wrote.
+    const written = addDays(DAY, 2)
+    expect(await f.folder.recordView(paths.day(written))).toBeUndefined()
+    expect((await f.folder.edit([{ rel: paths.day(written), create: true, edits: [{ path: ['date'], base: undefined, value: written }] }]))[0]!.status).toBe('applied')
+    const hidden = `${dataDir}-ukryty`
+    renameSync(dataDir, hidden)
+    // What the window shows: the versions read before, a file known missing as missing, one never read – unknown.
+    expect(await f.folder.recordView(paths.settings)).toMatchObject({ schema: 1 })
+    expect(await f.folder.recordView(paths.day(DAY))).toMatchObject({ wakeMin: 420 })
+    expect(await f.folder.recordView(paths.day(tomorrow))).toBeUndefined()
+    await expect(f.folder.recordView(paths.day(far))).rejects.toThrow()
+    expect(await f.folder.recordView(paths.day(written))).toMatchObject({ date: written, updatedBy: 'pca' })
+    // The day's logs as last read (the journal with them) – a click may be judged on them; a day never read is unknown.
+    expect(await f.folder.readDay(DAY)).toMatchObject({ complete: false, away: true })
+    expect(await f.folder.readDay(far)).toMatchObject({ complete: false, away: false })
+    const out = await f.folder.edit([
+      { rel: paths.day(DAY), edits: [{ path: ['wakeMin'], base: 420, value: 450 }] },
+      { rel: paths.record('request', 'r1'), create: true, edits: [{ path: ['id'], base: undefined, value: 'r1' }] },
+      { rel: paths.day(tomorrow), create: true, edits: [{ path: ['date'], base: undefined, value: tomorrow }, { path: ['wakeMin'], base: undefined, value: 480 }] }
+    ])
+    expect(out.map((o) => o.status)).toEqual(['waiting', 'waiting', 'waiting'])
+    await expect(f.folder.edit([{ rel: paths.day(far), create: true, edits: [{ path: ['date'], base: undefined, value: far }] }])).rejects.toThrow('folder danych jest niedostępny')
+    await f.folder.check()
+    expect(f.folder.unavailable).toBe(true)
+    expect(f.folder.unsynced).toBe(3)
+    // The window's banner and the quit's notification say the same number (main/index.ts: the folder looked at then).
+    expect(f.folder.syncState(f.now)).toMatchObject({ unsynced: 3, folderAway: true })
+    expect(quitNotice(f.folder.unsynced, existsSync(dataDir))).toBe('3 zmiany zapiszą się po powrocie folderu danych (przy następnym starcie).')
+    // Meanwhile another computer changed the same field and made tomorrow's file (they come back with the folder).
+    writeFileSync(join(hidden, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, wakeMin: 400, blocks: [], updatedBy: 'pcb' }))
+    writeFileSync(join(hidden, paths.day(tomorrow)), JSON.stringify({ schema: 1, date: tomorrow, wakeMin: 500, updatedBy: 'pcb' }))
+    expect(existsSync(dataDir)).toBe(false)
+    renameSync(hidden, dataDir)
+    await f.advance(1)
+    const file = (rel: string) => JSON.parse(readFileSync(join(dataDir, rel), 'utf8')) as Record<string, unknown>
+    // The new record is written; the other computer's newer values are never written over – each is a question.
+    expect(file(paths.record('request', 'r1'))).toMatchObject({ id: 'r1', updatedBy: 'pca' })
+    expect(file(paths.day(DAY)).wakeMin).toBe(400)
+    expect(file(paths.day(tomorrow)).wakeMin).toBe(500)
+    expect(f.folder.queue.questions().map((q) => q.edit.rel).sort()).toEqual([paths.day(DAY), paths.day(tomorrow)].sort())
+    expect(existsSync(join(dataDir, paths.day(far)))).toBe(false)
+  })
+
+  it('folder znika zaraz po zapisie tego komputera: okno widzi zapisaną wersję, usunięty rekord – brak (przegląd 1.0.5)', async () => {
+    writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, settings: [] }))
+    const f = await make()
+    await f.advance(1)
+    const made = paths.record('request', 'r1')
+    const gone = paths.record('request', 'r2')
+    expect(await f.folder.recordView(paths.settings)).toMatchObject({ schema: 1 })
+    expect(await f.folder.recordView(made)).toBeUndefined()
+    await f.folder.edit([{ rel: gone, create: true, edits: [{ path: ['id'], base: undefined, value: 'r2' }] }])
+    expect(await f.folder.recordView(gone)).toMatchObject({ id: 'r2' })
+    const outs = await f.folder.edit([
+      { rel: paths.settings, edits: [{ path: ['note'], base: undefined, value: 'nowa' }] },
+      { rel: made, create: true, edits: [{ path: ['id'], base: undefined, value: 'r1' }] },
+      { rel: gone, remove: true, edits: [] }
+    ])
+    expect(outs.map((o) => o.status)).toEqual(['applied', 'applied', 'applied'])
+    // None of them read again before the folder goes.
+    renameSync(dataDir, `${dataDir}-ukryty`)
+    expect(await f.folder.recordView(paths.settings)).toMatchObject({ note: 'nowa' })
+    expect(await f.folder.recordView(made)).toMatchObject({ id: 'r1', updatedBy: 'pca' })
+    expect(await f.folder.recordView(gone)).toBeUndefined()
+  })
+
+  it('nowy plik dnia, którego zapis się nie udał (plik zajęty), czeka – po zniknięciu folderu okno dalej widzi go z kolejki (przegląd 1.0.5)', async () => {
+    const tomorrow = addDays(DAY, 1)
+    let held = false
+    const fs: DataFs = { ...nodeFs, writeAtomic: (p, t) => (held && p.endsWith(`${tomorrow}.json`) ? Promise.reject(Object.assign(new Error('EBUSY'), { code: 'EBUSY' })) : nodeFs.writeAtomic(p, t)) }
+    const f = await make({ fs })
+    await f.advance(1)
+    expect(await f.folder.recordView(paths.day(tomorrow))).toBeUndefined()
+    held = true
+    const out = await f.folder.edit([{ rel: paths.day(tomorrow), create: true, edits: [{ path: ['date'], base: undefined, value: tomorrow }, { path: ['wakeMin'], base: undefined, value: 480 }] }])
+    expect(out[0]!.status).toBe('waiting')
+    renameSync(dataDir, `${dataDir}-ukryty`)
+    // Still not there (the write failed): the new file from the queue, never „unknown”.
+    expect(await f.folder.recordView(paths.day(tomorrow))).toMatchObject({ wakeMin: 480 })
+  })
+
+  it('plik utworzony z kopii konfliktowej zna okno także po zniknięciu folderu (przegląd 1.0.5)', async () => {
+    const rel = paths.record('request', 'r1')
+    const f = await make()
+    await f.advance(1)
+    expect(await f.folder.recordView(rel)).toBeUndefined()
+    mkdirSync(join(dataDir, 'requests'), { recursive: true })
+    writeFileSync(join(dataDir, 'requests', 'r1-LAPTOP.json'), JSON.stringify({ schema: 1, id: 'r1', title: 'z laptopa' }))
+    f.now += 61_000
+    await f.folder.check()
+    expect(existsSync(join(dataDir, rel))).toBe(true)
+    renameSync(dataDir, `${dataDir}-ukryty`)
+    expect(await f.folder.recordView(rel)).toMatchObject({ title: 'z laptopa' })
+  })
+
+  it('log usunięty od ostatniego pełnego odczytu nie wraca przy niedostępnym folderze (przegląd 1.0.5)', async () => {
+    const f = await make()
+    await f.advance(1)
+    mkdirSync(join(dataDir, paths.logDir(DAY)), { recursive: true })
+    const at = f.now
+    const pcb = join(dataDir, paths.log(DAY, 'pcb'))
+    appendFileSync(pcb, eventLine({ id: 'pcb-0', c: 'pcb', n: 0, t: at, l: at, v: 1, day: DAY, dom: 'meta', k: 'observe.alive', at } as unknown as AnyEvent))
+    expect((await f.folder.readDay(DAY)).events.some((e) => e.id === 'pcb-0')).toBe(true)
+    rmSync(pcb)
+    expect(await f.folder.readDay(DAY)).toMatchObject({ complete: true })
+    renameSync(dataDir, `${dataDir}-ukryty`)
+    const read = await f.folder.readDay(DAY)
+    expect(read).toMatchObject({ complete: false, away: true })
+    expect(read.events.some((e) => e.id === 'pcb-0')).toBe(false)
+  })
+
+  it('nowy rekord nad plikiem zajętym przy obecnym folderze: odmowa jak dotąd, nie kolejka – decyduje ten odczyt (przegląd 1.0.5)', async () => {
+    let held = false
+    const rel = paths.record('request', 'r1')
+    const fs: DataFs = {
+      ...nodeFs,
+      read: (abs) => (held && abs.endsWith('r1.json') ? Promise.reject(Object.assign(new Error('EBUSY'), { code: 'EBUSY' })) : nodeFs.read(abs)),
+      // The root looked at again just after that read would say „not there” (it went in between).
+      stat: (abs) => (held && abs === dataDir ? Promise.resolve(null) : nodeFs.stat(abs))
+    }
+    const f = await make({ fs })
+    await f.advance(1)
+    held = true
+    await expect(f.folder.edit([{ rel, create: true, edits: [{ path: ['id'], base: undefined, value: 'r1' }] }])).rejects.toThrow('plik jest teraz nieczytelny')
+    expect(f.folder.queue.pending).toHaveLength(0)
+  })
+
+  it('lista do pokazania przy niedostępnym folderze: znane pliki bez sprawdzania przy każdym odświeżeniu (LIST_TRUST_MS, przegląd 1.0.5)', async () => {
+    mkdirSync(join(dataDir, 'requests'), { recursive: true })
+    for (const id of ['r1', 'r2']) writeFileSync(join(dataDir, paths.record('request', id)), JSON.stringify({ schema: 1, id }))
+    let stats = 0
+    const fs: DataFs = {
+      ...nodeFs,
+      stat: (abs) => {
+        if (abs.includes('requests')) stats++
+        return nodeFs.stat(abs)
+      }
+    }
+    const f = await make({ fs })
+    expect((await f.folder.collection('request')).map((r) => r.id)).toEqual(['r1', 'r2'])
+    renameSync(dataDir, `${dataDir}-ukryty`)
+    f.now += LIST_TRUST_MS + 1
+    expect((await f.folder.collection('request')).map((r) => r.id)).toEqual(['r1', 'r2'])
+    stats = 0
+    expect((await f.folder.collection('request')).map((r) => r.id)).toEqual(['r1', 'r2'])
+    expect(stats).toBe(0)
   })
 
   it('folder jest, ale plik zajęty: każda edycja tego pliku czeka (bez pytania) i po 5 min pasek to mówi (A3-07, przegląd 0.24.0)', async () => {

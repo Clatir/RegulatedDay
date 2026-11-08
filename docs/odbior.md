@@ -940,16 +940,19 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 
 ### E8b – poprawki danych i zegarów po przeglądzie E8 (0.17.0)
 
-#### E8b.1 Folder danych znika w trakcie pracy (0.17.0)
+#### E8b.1 Folder danych znika w trakcie pracy (0.17.0, zmiana w 1.0.5)
 - [ ] Odebrane
-- **Automatycznie:** `tests/fs/folder.test.ts` („folder danych znika w trakcie pracy”). Ty: tylko jeśli chcesz – na
+- **Automatycznie:** `tests/fs/folder.test.ts` („folder danych znika w trakcie pracy”, „folder pod inną nazwą: okno
+  widzi znane wersje…”), `tests/fs/widget.test.ts` („folder danych pod inną nazwą…”). Ty: tylko jeśli chcesz – na
   folderze testowym, nigdy na prawdziwym.
-- **Jak sprawdzić:** przy działającej aplikacji zmień nazwę folderu danych w Eksploratorze na minutę, potem przywróć
-  nazwę.
-- **Oczekiwany efekt:** w miejscu starej nazwy nie powstaje nowy folder; po przywróceniu nazwy zmiany z tej minuty (np.
-  kliknięcia w pasku) są w folderze, a dzień ma swoje ustawienia (nie domyślne).
-- **Nie przechodzi, gdy:** pod starą nazwą pojawia się nowy folder z `.presence` albo `log`, albo po przywróceniu dzień
-  ma inne ustawienia niż Twoje.
+- **Jak sprawdzić:** przy działającej aplikacji zmień nazwę folderu danych w Eksploratorze. W ciągu minuty kliknij
+  w pasku („Start” albo „Pauza”), w oknie dodaj blok („+ Blok”), potem przywróć nazwę.
+- **Oczekiwany efekt:** pasek przez cały czas ma przyciski (nie „Dnia nie da się teraz policzyć”), kliknięcie i blok
+  przechodzą bez „Nie zapisano”, w oknie „N zmian zapisze się po powrocie folderu danych”; w miejscu starej nazwy nie
+  powstaje nowy folder; po przywróceniu nazwy kliknięcia i blok są w folderze, a dzień ma swoje ustawienia (nie domyślne).
+- **Nie przechodzi, gdy:** pasek traci przyciski, zmiana kończy się „Nie zapisano … nieczytelny”, pod starą nazwą
+  pojawia się nowy folder z `.presence` albo `log`, albo po przywróceniu zmian nie ma lub dzień ma inne ustawienia niż
+  Twoje.
 
 #### E8b.2 Aktualizacja do 0.17.0 – kopia i identyfikator (0.17.0)
 - [ ] Odebrane
@@ -1158,15 +1161,18 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   znika. Po 3 dniach bez kopii w oknie u góry „Brak kopii zapasowej od …”.
 - **Nie przechodzi, gdy:** błąd jest tylko w dzienniku, linia ma kropkę albo baner pojawia się przy świeżej kopii.
 
-#### E8i.2 Niedostępny folder: „N zmian zapisze się” (0.24.0)
+#### E8i.2 Niedostępny folder: „N zmian zapisze się” (0.24.0, zmiana w 1.0.5)
 - [ ] Odebrane
-- **Automatycznie:** `tests/fs/folder.test.ts` („N zmian zapisze się”), `tests/fs/widget.test.ts`.
+- **Automatycznie:** `tests/fs/folder.test.ts` („N zmian zapisze się”, „folder pod inną nazwą…”),
+  `tests/fs/widget.test.ts` („folder danych pod inną nazwą…”).
   **Tylko Ty:** folder testowy na dysku wymiennym albo zmieniona nazwa folderu na chwilę.
-- **Jak sprawdzić:** przy pracy na folderze testowym zmień na chwilę nazwę folderu danych, kliknij „Start” bloku, zamknij
-  aplikację, przywróć nazwę i uruchom ją znowu.
-- **Oczekiwany efekt:** pasek i okno: „N zmian zapisze się po powrocie folderu danych”; przy wyjściu powiadomienie z tym
-  samym; po powrocie folderu zmiany są w nim.
-- **Nie przechodzi, gdy:** aplikacja udaje zapis, liczba nie rośnie z kliknięciami albo zmiany giną po powrocie folderu.
+- **Jak sprawdzić:** przy pracy na folderze testowym zmień nazwę folderu danych, kliknij „Start” bloku i jeszcze raz
+  w pasku (np. „Pauza”), zamknij aplikację, przywróć nazwę i uruchom ją znowu.
+- **Oczekiwany efekt:** pasek i okno: „N zmian zapisze się po powrocie folderu danych”, a N rośnie z każdym
+  kliknięciem (np. „1 zmiana…”, potem „2 zmiany…”); przy wyjściu powiadomienie z tą liczbą („przy następnym starcie”);
+  po powrocie folderu „Start” i kliknięcia są w nim.
+- **Nie przechodzi, gdy:** „Start” zostaje odrzucony, aplikacja udaje zapis, liczby nie ma albo nie rośnie
+  z kliknięciami, brak powiadomienia przy wyjściu albo zmiany giną po powrocie folderu.
 
 ### E8j – brzegi przed 1.0, część 1 (0.25.0)
 

@@ -24,6 +24,12 @@ const cache = new Map<string, DayData>()
  */
 const REREAD_MS = 30_000
 
+/**
+ * A day a change may be judged on: read whole now, or as last read with the data folder away (E8b.1 – the change waits
+ * for the folder); never a day whose file is unknown.
+ */
+export const dayUsable = (d: Pick<DayData, 'complete' | 'unknown' | 'away'>): boolean => !d.unknown && (d.complete || d.away)
+
 /** The day's data, read again when the data change (the last one read is shown meanwhile – no flash of an empty day). */
 export function useDayData(date: string): DayData | null {
   const stamp = useData((s) => s.stamp)

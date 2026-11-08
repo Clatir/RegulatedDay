@@ -477,7 +477,7 @@ export class DataHub {
       }
     }
     const dayFile = await file(date, true)
-    return { date, dayFile, nextFile: await file(addDays(date, 1)), prevFile: await file(addDays(date, -1)), events: read.events, complete: read.complete && !unknown, unknown }
+    return { date, dayFile, nextFile: await file(addDays(date, 1)), prevFile: await file(addDays(date, -1)), events: read.events, complete: read.complete && !unknown, unknown, away: read.away && !unknown }
   }
 
   async dayFiles(dates: string[]): Promise<Record<string, RawRecord | null>> {

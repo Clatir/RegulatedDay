@@ -304,6 +304,11 @@ export interface DayData {
   complete: boolean
   /** The day's file is there but cannot be read now: its own changes are not shown, and the day is not edited. */
   unknown: boolean
+  /**
+   * Not complete only because the data folder is away, the day as last read here (logs and file known): your changes of
+   * it wait for the folder like the bar's clicks (E8b.1) – `dayUsable`.
+   */
+  away: boolean
 }
 
 export interface FieldEditIn {

@@ -128,7 +128,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   }, [from, template.weekdays])
   const model = useMemo(() => {
     const t: Template = { ...template, versions: [{ ...version, from: '2000-01-01' }] }
-    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false }, { changes: rd.settings, templates: [t], lectures }, placeLogical(sample, 4 * 60), false)
+    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rd.settings, templates: [t], lectures }, placeLogical(sample, 4 * 60), false)
   }, [template, version, sample, rd.settings, lectures])
   const axis = dayAxis(model, names, null)
   // Template blocks have the day's derived ids: the block of the version is found by its source.

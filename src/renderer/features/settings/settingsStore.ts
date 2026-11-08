@@ -11,7 +11,7 @@ import { DEFAULT_GENERAL, type ModuleId } from '@shared/model/rd'
 import type { DayTypeId } from '@shared/model/settings'
 import { addDays } from '@shared/time/zone'
 import { isSaved, logEvents, saveRd, trySaveRd, useData } from '../../store/data'
-import { countDay, dayTypeNow } from '../../store/day'
+import { countDay, dayTypeNow, dayUsable } from '../../store/day'
 import { toast } from '../../store/ui'
 
 export type FromMode = 'tomorrow' | 'today' | 'date'
@@ -71,7 +71,7 @@ export async function saveSettingsFrom(patch: Record<string, unknown>, f: { from
 async function todayTypeNow(today: string): Promise<DayTypeId | null> {
   try {
     const data = await window.rd.dayData(today)
-    if (data.unknown || !data.complete) return null
+    if (!dayUsable(data)) return null
     const { rd, templates, lectures, view } = useData.getState()
     return dayTypeNow(countDay(today, data, { changes: rd.settings, templates, lectures }, Date.now(), rd.general.modules.energy, view?.calibration === true))
   } catch {
