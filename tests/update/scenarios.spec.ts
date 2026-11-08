@@ -3,8 +3,9 @@
  * the guard's modes and 10 000 parallel writes of the task file, two guards and the app at once, exceptions of the
  * guard (once while the installer works, at every start, a failed write of its count), four logons with „odłożono” and a
  * guard dying right after it, „Uruchom mimo to” while the files are copied and before the installer, a hung and a
- * missing guard, X+1 installed by hand while a task for X waits, the installer run by hand (its marker within 5 s of
- * the clock), the app opened while the install helper works, a slowed installer, the installer's mutex held by the
+ * missing guard, X+1 installed by hand while a task for X waits, the installer run by hand (the app asked to end, not
+ * killed; its marker within 5 s of the clock; a process that does not end listed in installer-check.log), the app
+ * opened while the install helper works, a slowed installer, the installer's mutex held by the
  * test, a file locked before the uninstall and while the files are copied, and the crash dumps of the main process, the
  * renderer and the GPU.
  */
@@ -464,6 +465,11 @@ test('ręcznie uruchomiony instalator: zamyka działającą aplikację ze znaczn
     const closed = app.waitForEvent('close', { timeout: 300_000 })
     spawn(join(TO, SETUP), ['/S'], { detached: true, stdio: 'ignore' }).unref()
     await closed
+    // Asked to end, not killed (E4a.13): the app's own way out to its last line, the helper's too, nothing left to list.
+    const main = await readText(join(productionData(), 'logs', 'main.log'))
+    expect(main).toContain('zamknięcie z zewnątrz (instalator albo taskkill)')
+    expect(main).toContain('aplikacja zamknięta')
+    await expect.poll(() => readText(join(productionData(), 'logs', 'helper.log')), { timeout: 30_000 }).toMatch(/ INFO koniec$/m)
     const marker = readJson<{ at: number }>(join(productionData(), 'closed-by-installer.json'))
     expect(marker).not.toBeNull()
     expect(Math.abs(marker!.at - Date.now())).toBeLessThan(60_000)
@@ -475,6 +481,50 @@ test('ręcznie uruchomiony instalator: zamyka działającą aplikację ze znaczn
     await again.firstWindow()
     await expect.poll(() => readText(join(productionData(), 'logs', 'main.log')), { timeout: 30_000 }).toMatch(/poprzednie uruchomienie: (installer|clean)/)
     await again.close()
+    expect(existsSync(join(productionData(), 'logs', 'installer-check.log'))).toBe(false)
+  })
+})
+
+test('ręczny instalator, gdy proces spod folderu aplikacji się nie kończy: lista procesów w installer-check.log, wersja bez zmian', async () => {
+  test.setTimeout(15 * 60_000)
+  await guarded('proces, który się nie kończy', async () => {
+    const dir = await install(FROM, CURRENT)
+    // A program under the installation that no close ends – started again at once after each end, as a process stuck in
+    // a driver stays (E4a.13). Alone under the folder: electron-builder's own search did not even see a single one.
+    const stuck = join(dir, 'resources', 'rd-test-stuck.exe')
+    copyFileSync(process.execPath, stuck)
+    let on = true
+    let child: ChildProcess | null = null
+    const start = () => {
+      child = spawn(stuck, ['-e', 'setInterval(() => {}, 1e9)'], { stdio: 'ignore' })
+      child.once('exit', () => {
+        if (on) start()
+      })
+    }
+    start()
+    try {
+      // Not spawnSync: the restarts need this process's event loop.
+      const setup = spawn(join(TO, SETUP), ['/S'], { stdio: 'ignore' })
+      expect(await exited(setup, 600_000)).toBe(true)
+      const list = await readText(join(productionData(), 'logs', 'installer-check.log'))
+      console.log(`installer-check.log:\n${list}`)
+      expect(list).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z WARN instalator \S+: procesy spod .+, które nie dały się zamknąć:$/m)
+      expect(list).toMatch(new RegExp(`^  rd-test-stuck\\.exe \\| pid \\d+ \\| rodzic ${process.pid}( \\S.*)? \\| start \\d{4}-\\d\\d-\\d\\dT[^|]+\\| .*setInterval`, 'm'))
+      expect(installed()?.version).toBe(CURRENT)
+    } finally {
+      on = false
+      const last = child as ChildProcess | null
+      if (last && last.exitCode == null) last.kill()
+      const gone = () => {
+        try {
+          rmSync(stuck, { force: true })
+        } catch {
+          // still running for a moment
+        }
+        return !existsSync(stuck)
+      }
+      await expect.poll(gone, { timeout: 30_000 }).toBe(true)
+    }
   })
 })
 

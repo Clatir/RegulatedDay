@@ -29,6 +29,8 @@ Poniżej formaty i podział ról, żeby nie czytać całości przy każdej zmian
   `handover.jsonl` (jednej próby: właściciel usuwa go po starcie aplikacji, nowa próba na starcie).
 - `launched.json` – „uruchomiono wersję X” (wersja, attemptId) poza update; liczy się tylko z attemptId bieżącej próby.
 - `closed-by-installer.json` – znacznik skryptu NSIS (czas ms UTC); `plan-blocks.json` – bloki sesji i zajęć na 7 dni.
+- `logs\installer-check.log` – skrypt NSIS przed „appCannotBeClosed”: procesy spod folderu instalacji (nazwa, PID,
+  rodzic, start UTC, wiersz poleceń, profil jako `%USERPROFILE%`); ręcznie to samo listuje `docs/vm/procesy.ps1`.
 
 ## task.json (format 1; nieznane pola zachowywane)
 `version`, `attemptId`, `state` (`scheduled` | `installing` | `postponed` | `done` | `failed` | `fi`), `trigger`
@@ -67,6 +69,12 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
 - Manifest powstaje w `afterSign` (rcedit i podpis zmieniają exe, elevate.exe dochodzi później).
 - Szablon NSIS pokazuje „uninstallFailed” bez `/SD` – cichy instalator czekał na kliknięcie; własny `customUnInstallCheck`.
   Przy `--updated` znacznik `rd-installed` przenosi atomicRMDir razem z plikami (T407).
+- Zamykanie w `customCheckAppRunning` (E4a.13): `KILL_PROCESS … 0` electron-buildera z PowerShellem to `Stop-Process`
+  (TerminateProcess), a `FIND_PROCESS` nie widzi jednego procesu (pojedynczy CimInstance bez `.Count` w PS 5.1) – stąd
+  własne `rdFindProcess` / `rdCloseApp` (taskkill bez /F do procesu głównego, do 5 s) / `rdKillProcess` /
+  `rdListProcesses`, bez własnego PID. Tekst PowerShella w `RD_PS_*` (tylko `$$`, bez `"` i `` ` ``), wartości przez
+  zmienne `RD_SETUP_*`; `tests/unit/installer-close.test.ts` uruchamia go na procesach zastępczych. Zamknięcie z
+  zewnątrz (WM_CLOSE ukrytego okna) nie instaluje pobranej wersji przy tym wyjściu (`onQuit(…, fromOutside)`).
 - Kliknięcie aktywnego okna nie podnosi go nad okno pokazane bez aktywacji – okna właściciela kładzie pod kliknięte hak
   myszy (T408). W `fs` Electrona `app.asar` to folder 0 B – rozmiary z `process.noAsar`.
 - Testy: „close” Playwrighta czeka na wszystkie kopie potoków aplikacji, a odłączony właściciel je dziedziczy – czekaj na

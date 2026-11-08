@@ -126,6 +126,8 @@ const oneDrive = new OneDriveWatch({
   log: (level, msg) => log(level, msg)
 })
 let quitting = false
+/** Something outside closed a hidden window (a hand-run installer's taskkill, E4a.13): no installation at this exit. */
+let closedFromOutside = false
 /** Windows ends the session (logoff, shutdown): never an installer now (spec), the record of closing written at once. */
 let sessionEnding = false
 /** A session that was only asked to end and still runs after this was cancelled (Windows ends one within seconds). */
@@ -528,6 +530,17 @@ function quitApp(): void {
     .flush()
     .catch(() => undefined)
     .finally(() => app.quit())
+}
+
+/**
+ * A close from outside – WM_CLOSE to a hidden window nobody could click (T396): an installer run by hand asks the app to
+ * end its own way (taskkill without /F, E4a.13) and installs itself, so no ready download installs at this exit.
+ */
+function quitFromOutside(): void {
+  if (quitting) return
+  closedFromOutside = true
+  log('info', 'zamknięcie z zewnątrz (instalator albo taskkill) – kończę pracę')
+  quitApp()
 }
 
 function showMainWindow(page?: string): void {
@@ -1128,7 +1141,7 @@ async function main(): Promise<void> {
     load: loadView,
     savePlace: (place) => void config.update({ window: place }).catch(() => undefined),
     quitting: () => quitting,
-    externalClose: quitApp,
+    externalClose: quitFromOutside,
     log: (m) => log('info', m)
   })
   mainWindow.once('ready-to-show', () => {
@@ -1152,7 +1165,7 @@ async function main(): Promise<void> {
   mainWindow.on('session-end', () => onSystemEnd(true))
 
   bar = new DesktopBar(preload, loadView)
-  bar.onExternalClose = quitApp
+  bar.onExternalClose = quitFromOutside
   bar.onSystemEnd(onSystemEnd)
   panel = new IconPanel(preload, loadView, {
     place: (height, cursor) => {
@@ -1168,7 +1181,7 @@ async function main(): Promise<void> {
     stayOnTop: () => prefs().onTop === 'barPanel',
     log: (m) => log('info', `panel: ${m}`)
   })
-  panel.onExternalClose = quitApp
+  panel.onExternalClose = quitFromOutside
   panel.onSystemEnd(onSystemEnd)
 
   sound = new SoundWindow(preload, loadView)
@@ -1239,8 +1252,8 @@ app.on('before-quit', (e) => {
 })
 
 app.on('will-quit', () => {
-  // A ready download installs at the full exit (never at the end of the Windows session).
-  updates?.onQuit(sessionEnding)
+  // A ready download installs at the full exit (never at the end of the Windows session nor after a close from outside).
+  updates?.onQuit(sessionEnding, closedFromOutside)
   power.stop()
   oneDrive.stop()
   widget.stop()

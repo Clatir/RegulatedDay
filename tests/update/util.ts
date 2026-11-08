@@ -130,7 +130,7 @@ export function readJson<T>(file: string): T | null {
 export async function dump(title: string, dirs: string[] = []): Promise<void> {
   const data = productionData()
   const lines = [`===== ${title}`]
-  for (const log of ['main.log', 'guard.log', 'install.log', 'helper.log', 'update.log']) {
+  for (const log of ['main.log', 'guard.log', 'install.log', 'helper.log', 'update.log', 'installer-check.log']) {
     lines.push(`--- logs/${log}:`, (await readText(join(data, 'logs', log))).split('\n').slice(-60).join('\n'))
   }
   const upd = join(data, 'update')
