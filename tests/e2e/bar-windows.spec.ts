@@ -32,9 +32,18 @@ const pidWindows = (pid: number) =>
 /** Index of a window in the z-order (0 = the top). */
 const zIndex = (list: TopWindow[], hwnd: string) => list.findIndex((w) => w.hwnd === hwnd)
 
-/** Index of the highest desktop window: Progman, or a WorkerW that is visible and has an area – a hidden one is none (G4). */
-const desktopIndex = (list: TopWindow[]) =>
-  list.findIndex((w) => w.cls === 'Progman' || (w.cls === 'WorkerW' && w.visible && w.rect[2] > w.rect[0] && w.rect[3] > w.rect[1]))
+/**
+ * Index of the highest desktop window counting for the bar, by the helper's rule (WindowOrder.IsDesktopWindow, Counts):
+ * Progman, a WorkerW with the icons, or a WorkerW that shows – visible, not cloaked, with an area – and overlaps the bar.
+ * A hidden WorkerW is none (G4), nor an old file dialog holding SHELLDLL_DefView.
+ */
+function desktopIndex(list: TopWindow[], barHwnd: string): number {
+  const bar = list.find((w) => w.hwnd === barHwnd)
+  const [l, t, r, b] = bar?.rect ?? [0, 0, 0, 0]
+  const overlaps = (x: TopWindow['rect']) => x[0] < r && l < x[2] && x[1] < b && t < x[3]
+  const shows = (w: TopWindow) => w.visible && !w.cloaked && w.rect[2] > w.rect[0] && w.rect[3] > w.rect[1]
+  return list.findIndex((w) => w.hwnd !== barHwnd && (w.cls === 'Progman' || (w.cls === 'WorkerW' && (w.defView || (shows(w) && overlaps(w.rect))))))
+}
 
 const logOf = (userData: string, name: 'main' | 'helper') => {
   try {
@@ -91,7 +100,7 @@ test('pasek pulpitu pod oknem, które na niego nachodzi, i tuż nad pulpitem', a
       await new Promise((r) => setTimeout(r, 3000))
       const list = topWindows()
       expect(zIndex(list, cover)).toBeLessThan(zIndex(list, bar.hwnd))
-      expect(zIndex(list, bar.hwnd)).toBeLessThan(desktopIndex(list))
+      expect(zIndex(list, bar.hwnd)).toBeLessThan(desktopIndex(list, bar.hwnd))
       expect((await barInfo(app)).visible).toBe(true)
     })
   } finally {
@@ -135,7 +144,7 @@ test('pasek pulpitu zostaje pod zwykłym oknem, gdy na szczycie leży ukryte okn
       expect(zIndex(list, worker.first), names).toBeLessThan(zIndex(list, cover))
       expect(zIndex(list, cover), names).toBeLessThan(zIndex(list, bar.hwnd))
       expect(zIndex(list, probe), names).toBeLessThan(zIndex(list, bar.hwnd))
-      expect(zIndex(list, bar.hwnd), names).toBeLessThan(desktopIndex(list))
+      expect(zIndex(list, bar.hwnd), names).toBeLessThan(desktopIndex(list, bar.hwnd))
       expect((await barInfo(app)).visible).toBe(true)
     })
   } finally {
@@ -162,15 +171,18 @@ test('pasek pulpitu po „nie udało się położyć pod oknami” sam ponawia c
       await expect.poll(() => logOf(userData, 'main'), { timeout: 30_000 }).toContain('pasek pulpitu: failed')
       await expect.poll(async () => (await barInfo(app)).visible, { timeout: 10_000 }).toBe(false)
       fight.stop()
-      // What holds it, in the helper's log: the 8 top windows.
-      expect(logOf(userData, 'helper')).toMatch(/pasek: 8 górnych okien z \d+ \(pasek #\d+, najwyższe okno pulpitu #\d+ /)
+      // Only a retry after the fight counts: one during it would prove nothing.
+      const from = logOf(userData, 'helper').length
+      // What holds it, in the helper's log: the top windows, without their titles (logs go into reports, D279).
+      expect(logOf(userData, 'helper')).toMatch(/pasek: \d+ górnych okien \(pasek #\d+, najwyższe okno pulpitu #\d+ /)
+      expect(logOf(userData, 'helper')).not.toContain('RD-CI-pod-paskiem')
       placeUnder(probe, bar.hwnd)
-      await expect.poll(() => logOf(userData, 'helper'), { timeout: 30_000 }).toContain('pasek: ponowna próba (co 5 min)')
+      await expect.poll(() => logOf(userData, 'helper').slice(from), { timeout: 30_000 }).toContain('pasek: ponowna próba (co 5 min)')
       await expect.poll(async () => (await barInfo(app)).visible, { timeout: 15_000 }).toBe(true)
       // Shown, it may stand over the window for a moment, until the next check of the second lays it again.
       await expect.poll(() => {
         const l = topWindows()
-        return zIndex(l, probe) < zIndex(l, bar.hwnd) && zIndex(l, bar.hwnd) < desktopIndex(l)
+        return zIndex(l, probe) < zIndex(l, bar.hwnd) && zIndex(l, bar.hwnd) < desktopIndex(l, bar.hwnd)
       }, { timeout: 10_000 }).toBe(true)
     })
   } finally {
@@ -284,7 +296,7 @@ test('kursor nad każdym przyciskiem paska nie otwiera okna i nie zmienia kolejn
       expect(pidWindows(bar.pid)).toEqual(before)
       const orderAfter = topWindows()
       expect(movedAcross(orderBefore, orderAfter, bar.hwnd)).toEqual([])
-      expect(zIndex(orderAfter, bar.hwnd)).toBeLessThan(desktopIndex(orderAfter))
+      expect(zIndex(orderAfter, bar.hwnd)).toBeLessThan(desktopIndex(orderAfter, bar.hwnd))
       // The control: one title attribute must open a tooltip window, or counting the windows proves nothing. Chromium
       // shows a page's tooltip only in the active window, so the control is activated by a real click beside its button
       // (the bar is never active – no tooltip shows there, and no other popup may).

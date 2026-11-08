@@ -38,6 +38,7 @@ public static class RdWin {
   [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int index);
   [DllImport("user32.dll")] static extern bool ShowWindowAsync(IntPtr h, int cmd);
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int value, int size);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
   [DllImport("user32.dll", SetLastError = true)] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct WNDCLASSEX { public uint cbSize; public uint style; public IntPtr lpfnWndProc; public int cbClsExtra; public int cbWndExtra; public IntPtr hInstance; public IntPtr hIcon; public IntPtr hCursor; public IntPtr hbrBackground; public string lpszMenuName; public string lpszClassName; public IntPtr hIconSm; }
   [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam; public IntPtr lParam; public uint time; public POINT pt; }
@@ -69,8 +70,12 @@ public static class RdWin {
       RECT r; GetWindowRect(h, out r);
       var c = new StringBuilder(256); GetClassName(h, c, 256);
       var t = new StringBuilder(256); GetWindowText(h, t, 256);
+      bool visible = IsWindowVisible(h);
+      int ck;
+      bool cloaked = visible && DwmGetWindowAttribute(h, 14, out ck, 4) == 0 && ck != 0;
+      bool defView = FindWindowEx(h, IntPtr.Zero, "SHELLDLL_DefView", null) != IntPtr.Zero;
       if (!first) sb.Append(","); first = false;
-      sb.Append("{\\"hwnd\\":\\"" + h.ToInt64() + "\\",\\"pid\\":" + pid + ",\\"visible\\":" + (IsWindowVisible(h) ? "true" : "false") + ",\\"cls\\":\\"" + Esc(c.ToString()) + "\\",\\"title\\":\\"" + Esc(t.ToString()) + "\\",\\"rect\\":[" + r.L + "," + r.T + "," + r.R + "," + r.B + "]}");
+      sb.Append("{\\"hwnd\\":\\"" + h.ToInt64() + "\\",\\"pid\\":" + pid + ",\\"visible\\":" + (visible ? "true" : "false") + ",\\"cloaked\\":" + (cloaked ? "true" : "false") + ",\\"defView\\":" + (defView ? "true" : "false") + ",\\"cls\\":\\"" + Esc(c.ToString()) + "\\",\\"title\\":\\"" + Esc(t.ToString()) + "\\",\\"rect\\":[" + r.L + "," + r.T + "," + r.R + "," + r.B + "]}");
       return true;
     }, IntPtr.Zero);
     return sb.Append("]").ToString();
@@ -208,6 +213,10 @@ export interface TopWindow {
   hwnd: string
   pid: number
   visible: boolean
+  /** Hidden by the system (DWMWA_CLOAKED: another virtual desktop, a suspended app). */
+  cloaked: boolean
+  /** It holds SHELLDLL_DefView (the desktop's icons – or an old file dialog). */
+  defView: boolean
   cls: string
   title: string
   rect: [number, number, number, number]

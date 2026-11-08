@@ -1,11 +1,14 @@
 // The order of windows (spec „Widget”, D229, D341): the desktop bar – and at night the install helper's progress window –
 // lies right above the highest window of the desktop, never at the very bottom (under the desktop it would never show),
-// and never above a shown window of another program that overlaps it. Desktop windows: Progman, the one holding
+// and never above a shown window of another program that overlaps it. Desktop windows: Progman, a WorkerW holding
 // SHELLDLL_DefView (the icons) and a WorkerW that shows (visible, not cloaked, with an area) – Explorer keeps hidden
 // WorkerW windows anywhere in the order, also at its very top (G4: taken for the desktop, one laid the bar over Edge on
-// full screen). Confirmed is a window under which lie all desktop windows and no other shown (visible, not cloaked by
-// the system, not minimized) window that overlaps it; windows under a shown desktop window covering the whole bar never
-// count – they never show there.
+// full screen), and an old file dialog (#32770) holds SHELLDLL_DefView too. Of them count for the bar Progman, the
+// window of the icons (their rectangles may be stale after a change of the screens) and those overlapping it. Confirmed
+// is a window under which lie all desktop windows that count and no other shown (visible, not cloaked by the system, not
+// minimized) window overlapping it, down to the lowest desktop window that counts – under it nothing ever counts; only
+// with a desktop window in front („Pokaż pulpit”) the windows under a desktop window covering the whole bar do not count
+// either (with an ordinary window in front a desktop window may be see-through).
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -48,11 +51,48 @@ namespace RegulatedDay
             return cls == "Progman" || cls == "WorkerW";
         }
 
-        /// <summary>Progman, the window of the icons, or a WorkerW that shows (a hidden one of Explorer is no desktop).</summary>
+        /// <summary>
+        /// Progman, or a WorkerW with the icons or one that shows (a hidden one of Explorer is no desktop; a window of
+        /// another class holding SHELLDLL_DefView – an old file dialog – is a window of its program).
+        /// </summary>
         public static bool IsDesktopWindow(WindowInfo w)
         {
-            if (w.DefView || w.Class == "Progman") return true;
-            return w.Class == "WorkerW" && w.Visible && !w.Cloaked && !w.Rect.Empty;
+            if (w.Class == "Progman") return true;
+            if (w.Class != "WorkerW") return false;
+            return w.DefView || (w.Visible && !w.Cloaked && !w.Rect.Empty);
+        }
+
+        /// <summary>Where a window and the desktop windows that count for it stand in a snapshot (-1: none).</summary>
+        struct Places
+        {
+            public int Me, Top, Bottom;
+            public RECT Mine;
+        }
+
+        /// <summary>
+        /// A desktop window counts for a window over `mine` when it is the desktop itself – Progman or the window of the
+        /// icons, whose rectangles may be stale after a change of the screens – or overlaps it (a small WorkerW elsewhere
+        /// never holds the bar).
+        /// </summary>
+        static bool Counts(WindowInfo w, RECT mine)
+        {
+            return w.Desktop && (w.Class == "Progman" || w.DefView || w.Rect.Overlaps(mine));
+        }
+
+        /// <summary>`hwnd` (Me, its rectangle) and the highest and the lowest desktop window counting for it.</summary>
+        static Places Find(IntPtr hwnd, List<WindowInfo> snap)
+        {
+            Places p = new Places();
+            p.Me = p.Top = p.Bottom = -1;
+            for (int i = 0; i < snap.Count; i++)
+                if (snap[i].Hwnd == hwnd) { p.Me = i; p.Mine = snap[i].Rect; break; }
+            for (int i = 0; i < snap.Count; i++)
+            {
+                if (i == p.Me || !Counts(snap[i], p.Mine)) continue;
+                if (p.Top < 0) p.Top = i;
+                p.Bottom = i;
+            }
+            return p;
         }
 
         /// <summary>The window shows: visible, not cloaked by the system, not minimized, with an area.</summary>
@@ -62,11 +102,12 @@ namespace RegulatedDay
         }
 
         /// <summary>
-        /// The highest desktop window (not `hwnd`) that shows over the whole of `mine`: the windows under it never show
-        /// there. -1: none.
+        /// With a desktop window in front („Pokaż pulpit”): the highest desktop window (not `hwnd`) over the whole of
+        /// `mine` – the windows under it do not show there. With an ordinary window in front, or none such: -1.
         /// </summary>
-        static int CoveringDesktop(IntPtr hwnd, List<WindowInfo> snap, RECT mine)
+        static int CoveringDesktop(IntPtr hwnd, List<WindowInfo> snap, RECT mine, string fgClass)
         {
+            if (!IsDesktopClass(fgClass)) return -1;
             for (int i = 0; i < snap.Count; i++)
             {
                 WindowInfo w = snap[i];
@@ -77,7 +118,7 @@ namespace RegulatedDay
 
         /// <summary>
         /// The window at `i` (not `hwnd`, not of the desktop) shows over a part of `mine` – it is not under the desktop
-        /// window covering the whole of it (`covering`) – so `hwnd` must lie under it.
+        /// window covering the whole of it in „Pokaż pulpit” (`covering`) – so `hwnd` must lie under it.
         /// </summary>
         static bool ShowsOver(IntPtr hwnd, List<WindowInfo> snap, int i, RECT mine, int covering)
         {
@@ -118,8 +159,13 @@ namespace RegulatedDay
         /// <summary>Where `hwnd` stands against the desktop, from a snapshot; `detail` says why it is wrong.</summary>
         public static OrderState Check(IntPtr hwnd, List<WindowInfo> snap, out string detail)
         {
+            return Check(hwnd, snap, ShellPresent(), ForegroundClass(), out detail);
+        }
+
+        static string ForegroundClass()
+        {
             IntPtr fg = Native.GetForegroundWindow();
-            return Check(hwnd, snap, ShellPresent(), fg == IntPtr.Zero ? "" : Native.ClassOf(fg), out detail);
+            return fg == IntPtr.Zero ? "" : Native.ClassOf(fg);
         }
 
         /// <summary>The same from what was read: whether a shell window is there and the foreground window's class.</summary>
@@ -127,38 +173,29 @@ namespace RegulatedDay
         {
             detail = null;
             if (!shell) { detail = "brak okna powłoki"; return OrderState.NoShell; }
-            int me = -1, topDesk = -1;
-            for (int i = 0; i < snap.Count; i++)
-            {
-                if (snap[i].Hwnd == hwnd) me = i;
-                else if (snap[i].Desktop && topDesk < 0) topDesk = i;
-            }
-            if (me < 0) { detail = "okna nie ma"; return OrderState.Gone; }
-            if (topDesk < 0) { detail = "brak okna pulpitu"; return OrderState.NoShell; }
-            if (topDesk < me)
+            Places p = Find(hwnd, snap);
+            if (p.Me < 0) { detail = "okna nie ma"; return OrderState.Gone; }
+            if (p.Top < 0) { detail = "brak okna pulpitu"; return OrderState.NoShell; }
+            if (p.Top < p.Me)
             {
                 // „Pokaż pulpit”: a desktop window has the foreground and lies over visible windows from outside the desktop.
                 if (IsDesktopClass(fgClass))
                 {
-                    for (int i = topDesk + 1; i < snap.Count; i++)
+                    for (int i = p.Top + 1; i < snap.Count; i++)
                     {
                         WindowInfo w = snap[i];
                         if (!w.Desktop && w.Hwnd != hwnd && Shows(w)) { detail = "pokazany pulpit"; return OrderState.DesktopShown; }
                     }
                 }
-                detail = "okno pulpitu (" + snap[topDesk].Class + ") nad paskiem";
+                detail = "okno pulpitu (" + snap[p.Top].Class + ") nad paskiem";
                 return OrderState.Wrong;
             }
-            // Every desktop window under it.
-            for (int i = 0; i < me; i++)
-                if (snap[i].Desktop) { detail = "okno pulpitu nad paskiem"; return OrderState.Wrong; }
-            // No window of another program that shows over its place under it – also under a desktop window that leaves
-            // a part of the bar open.
-            RECT mine = snap[me].Rect;
-            int covering = CoveringDesktop(hwnd, snap, mine);
-            for (int i = me + 1; i < snap.Count; i++)
+            // Every desktop window counting for it lies under it (Top is the highest); no window that shows over its place
+            // under it, down to the lowest desktop window.
+            int covering = CoveringDesktop(hwnd, snap, p.Mine, fgClass);
+            for (int i = p.Me + 1; i < p.Bottom; i++)
             {
-                if (ShowsOver(hwnd, snap, i, mine, covering))
+                if (ShowsOver(hwnd, snap, i, p.Mine, covering))
                 {
                     detail = "pod paskiem leży okno " + snap[i].Class;
                     return OrderState.Wrong;
@@ -169,33 +206,29 @@ namespace RegulatedDay
 
         /// <summary>
         /// The window `hwnd` is to be laid right under (`after`; HWND_TOP – the top of the windows not on top), from a
-        /// snapshot: right over the highest desktop window, but never over a window of another program that shows over
-        /// its place – under a desktop window leaving a part of it open, it goes under the lowest such window (the check
-        /// then says „wrong” and the tries end with „failed”). False: there is no desktop window.
+        /// snapshot with a window of class `fgClass` in front: right over the highest desktop window counting for it, but
+        /// never over a window that shows over its place – with such a window between the desktop windows (under a
+        /// see-through or partial one), it goes right under the lowest of them, and with a desktop window still over it
+        /// the check says „wrong” and the tries end with „failed”. False: there is no desktop window.
         /// </summary>
-        public static bool PlaceAfter(IntPtr hwnd, List<WindowInfo> snap, out IntPtr after, out string detail)
+        public static bool PlaceAfter(IntPtr hwnd, List<WindowInfo> snap, string fgClass, out IntPtr after, out string detail)
         {
             detail = null;
             after = Native.HWND_TOP;
-            int topDesk = -1, me = -1;
-            for (int i = 0; i < snap.Count; i++)
+            Places p = Find(hwnd, snap);
+            if (p.Top < 0) { detail = "brak okna pulpitu"; return false; }
+            if (p.Me >= 0)
             {
-                if (snap[i].Hwnd == hwnd) me = i;
-                else if (snap[i].Desktop && topDesk < 0) topDesk = i;
-            }
-            if (topDesk < 0) { detail = "brak okna pulpitu"; return false; }
-            if (me >= 0)
-            {
-                RECT mine = snap[me].Rect;
-                int covering = CoveringDesktop(hwnd, snap, mine);
-                for (int i = snap.Count - 1; i > topDesk; i--)
+                int covering = CoveringDesktop(hwnd, snap, p.Mine, fgClass);
+                for (int i = p.Bottom - 1; i > p.Top; i--)
                 {
-                    if (!ShowsOver(hwnd, snap, i, mine, covering)) continue;
+                    if (!ShowsOver(hwnd, snap, i, p.Mine, covering)) continue;
                     after = snap[i].Hwnd;
                     return true;
                 }
             }
             // The window above the desktop (not this one): this one goes right under it, i.e. right over the desktop.
+            int topDesk = p.Top;
             for (int i = topDesk - 1; i >= 0; i--)
             {
                 if (snap[i].Hwnd == hwnd) continue;
@@ -211,8 +244,14 @@ namespace RegulatedDay
         /// </summary>
         public static bool LayAboveDesktop(IntPtr hwnd, out string detail)
         {
+            return LayAboveDesktop(hwnd, Snapshot(), out detail);
+        }
+
+        /// <summary>The same by a snapshot just read (the one the check found wrong).</summary>
+        public static bool LayAboveDesktop(IntPtr hwnd, List<WindowInfo> snap, out string detail)
+        {
             IntPtr insertAfter;
-            if (!PlaceAfter(hwnd, Snapshot(), out insertAfter, out detail)) return false;
+            if (!PlaceAfter(hwnd, snap, ForegroundClass(), out insertAfter, out detail)) return false;
             bool ok = false;
             int error = 0;
             Thread t = new Thread(delegate()
@@ -228,46 +267,31 @@ namespace RegulatedDay
         }
 
         /// <summary>
-        /// The top `count` windows of a snapshot for the log after a failure – class, program, the title's start, what of
-        /// it shows, the rectangle – and where `hwnd` and the highest desktop window stand.
+        /// The top `count` windows of a snapshot for the log after a failure – class, program (`programOf`), what of it
+        /// shows, the rectangle; never a title (logs go into reports, D279) – and where `hwnd` and the highest and the
+        /// lowest desktop window counting for it stand.
         /// </summary>
-        public static string Describe(IntPtr hwnd, List<WindowInfo> snap, int count)
+        public static string Describe(IntPtr hwnd, List<WindowInfo> snap, int count, Func<IntPtr, string> programOf)
         {
-            int me = -1, topDesk = -1;
-            for (int i = 0; i < snap.Count; i++)
-            {
-                if (snap[i].Hwnd == hwnd) me = i;
-                else if (snap[i].Desktop && topDesk < 0) topDesk = i;
-            }
+            Places p = Find(hwnd, snap);
             StringBuilder b = new StringBuilder();
-            b.Append(Math.Min(count, snap.Count)).Append(" górnych okien z ").Append(snap.Count).Append(" (pasek #").Append(me).Append(", najwyższe okno pulpitu #").Append(topDesk);
-            if (topDesk >= 0) b.Append(' ').Append(snap[topDesk].Class);
+            b.Append(Math.Min(count, snap.Count)).Append(" górnych okien (pasek #").Append(p.Me).Append(", najwyższe okno pulpitu #").Append(p.Top);
+            if (p.Top >= 0) b.Append(' ').Append(snap[p.Top].Class).Append(", najniższe #").Append(p.Bottom);
             b.Append("):");
             for (int i = 0; i < snap.Count && i < count; i++)
             {
                 WindowInfo w = snap[i];
                 b.Append(i == 0 ? " #" : " | #").Append(i).Append(' ').Append(w.Class);
-                string program = Foreground.ProcessName(w.Hwnd);
+                string program = programOf(w.Hwnd);
                 if (program != null) b.Append(' ').Append(program);
-                b.Append(" \"").Append(Short(Native.TitleOf(w.Hwnd), 20)).Append("\" ").Append(w.Visible ? "widoczne" : "ukryte");
+                b.Append(' ').Append(w.Visible ? "widoczne" : "ukryte");
                 if (w.Cloaked) b.Append(", ukryte przez system");
                 if (w.Iconic) b.Append(", zminimalizowane");
                 if (w.Topmost) b.Append(", na wierzchu");
+                if (w.DefView) b.Append(", z ikonami");
                 if (w.Desktop) b.Append(", pulpit");
                 if (w.Hwnd == hwnd) b.Append(", pasek");
                 b.Append(' ').Append(w.Rect.ToString());
-            }
-            return b.ToString();
-        }
-
-        /// <summary>The start of a title: no control characters or quotes, at most `max` characters.</summary>
-        static string Short(string s, int max)
-        {
-            StringBuilder b = new StringBuilder();
-            foreach (char c in s ?? "")
-            {
-                if (b.Length >= max) { b.Append('…'); break; }
-                b.Append(c < ' ' || c == '"' ? ' ' : c);
             }
             return b.ToString();
         }

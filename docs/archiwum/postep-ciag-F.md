@@ -76,6 +76,25 @@ Wpisy zadań ciągu F przeniesione z `docs/postep.md` 8.11.2026 (D351); stan i k
   - `/code-review` xhigh trzy razy; cofnięte: zmiana granicy poranka w `dayPlan` (widoczna bez decyzji), zapis „pokazano”
     do pliku dnia (konflikty – zamiast tego log). Znane: usunięta zaczęta sesja ma nazwę kategorii (plan 4.11).
   - Czas faktyczny: ok. 4,5 h (szacunek 3–4 h).
+- **G3 – 1.0.5 folder danych niedostępny** (`wykonawca-opus`): 8.11 ok. 17:30 po `git pull` (PR #49, D351) użytkownik
+  zlecił G3, G4, G5, H3 jednym ciągiem. Gałąź `claude/1.0.5-folder-niedostepny` od 774154d.
+  - E8b.1, E8i.2 (T539, D343): przy wybranym, ale niedostępnym folderze pasek ma przyciski, „Start”, kliknięcia i zmiany
+    okna czekają w kolejce, N rośnie, po powrocie zmiany są w folderze, pod starą nazwą nic nie powstaje. `cachedJson`
+    oddaje znaną wersję (plik widziany jako brak – brak, `absent`), `readDay.away`, `DayData.away` + `dayUsable`,
+    `RecordRead.gone`, własny zapis do pamięci rekordów (`RecordStore.put`/`drop`), `forgetGone` w logu. Tekst dnia bez
+    znanej wersji – D343. Odbiór: E8b.1, E8i.2 („zmiana w 1.0.5”).
+  - `/code-review` xhigh runda 1: 13 uwag – 1 high (nowy rekord z id → pasek „nieznany”) i 8 medium poprawione z testami;
+    baner „Nie mogę teraz odczytać” cofnięty do dawnego tekstu (pytanie w postępie). Runda 2 (tylko delta poprawek):
+    bez regresji, 4 low.
+  - Uwagi na później (low): create z istniejącym id przy niedostępnym folderze (cofnięcie usunięcia, przywrócenie
+    z kopii) – po powrocie pytania, nie utrata; własny log zniknięty z listy – N bez jego zdarzeń do ponownego odczytu;
+    nowy rekord z odczytem `missing`, którego zapis nie zdążył przed zniknięciem folderu, nie trafia do `absent` (w `edit()`
+    także `missing` → `fresh`); `written` nie dopisuje pliku do `listed`; sprzed G3: `RecordStore.remove` przy
+    „unreadable” i znikniętym korzeniu uznaje usunięcie za zrobione (`rootGuarded.remove` bez `present()`), odczyt
+    `cachedJson` w chwili zapisu nadpisuje świeżą treść w pamięci (licznik pokoleń na rel).
+  - Testy: typecheck, unit 1288, build, lint, `check-context`, E2E 27 + 6 pominiętych; CI PR zielone za pierwszym razem.
+  - Czas faktyczny: ok. 2,5 h (szacunek 1,5–2,5 h). PR #50 scalony 8.11 (d735aa7); run 42510534162 na `main` zielony,
+    **wydanie 1.0.5 opublikowane** (ok. 20:04).
 
 ## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)
 - Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji. Kolejno: bloki według modelu

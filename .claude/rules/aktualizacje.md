@@ -76,6 +76,8 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
   SW_SHOWDEFAULT (Node startuje procesy ze STARTF_USESHOWWINDOW): `ShowWithoutActivation` (SW_SHOWNOACTIVATE).
 - Narzędzia Claude Code na komputerze użytkownika działają poza pulpitem: kolejność okien, powłoka, OneDrive
   i powiadomienia sprawdza tylko CI na Windows.
-- Okna pulpitu (`WindowOrder.IsDesktopWindow`): Progman, okno z SHELLDLL\_DefView i widoczne, nieukryte przez system
-  WorkerW z powierzchnią – ukryte WorkerW Eksploratora bywają na szczycie kolejności (G4). Reguły kolejności i ponowień
-  paska (`BarKeeper` przez `IWindowDesk`) sprawdza bez pulpitu samotest pomocnika (`SelfTestWindows`, `windowOrderWrong`).
+- Okna pulpitu (`WindowOrder.IsDesktopWindow`): Progman i WorkerW – z SHELLDLL\_DefView albo widoczne, nieukryte przez
+  system i z powierzchnią (ukryte WorkerW Eksploratora bywają na szczycie, G4; stary dialog pliku `#32770` też ma DefView).
+  Dla paska liczą się Progman, okno ikon i te, które na niego nachodzą (`Counts`); pod najniższym nic się nie liczy, a
+  okna pod oknem pulpitu zakrywającym pasek – tylko przy pulpicie na pierwszym planie. Reguły i ponowienia (`BarKeeper`
+  przez `IWindowDesk`, zapis też przez nie) sprawdza bez pulpitu samotest (`SelfTestWindows`, `windowOrderWrong`).
