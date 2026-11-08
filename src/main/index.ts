@@ -127,9 +127,12 @@ const oneDrive = new OneDriveWatch({
   log: (level, msg) => log(level, msg)
 })
 let quitting = false
+/** When this quit began (quitApp or before-quit): an installer's marker after it belongs to this quit (E4a.13). */
+let quitStartedAt: number | null = null
 /**
- * Something outside closed a hidden window (an installer's or your taskkill, E4a.13) – also while the app was quitting
- * already. With a fresh marker of the installer (closedByInstaller) this exit installs nothing and its record says so.
+ * Something outside closed a hidden window of a running app (an installer's or your taskkill, E4a.13). A quitting app's
+ * windows close without telling it (their handlers let the close through) – then only the installer's marker after
+ * quitStartedAt tells (closedByInstaller): this exit installs nothing and its record says „installer”.
  */
 let closedFromOutside = false
 /** Windows ends the session (logoff, shutdown): never an installer now (spec), the record of closing written at once. */
@@ -526,6 +529,7 @@ function openPanel(target: PanelTarget | null): void {
 function quitApp(): void {
   if (quitting) return
   quitting = true
+  quitStartedAt ??= Date.now()
   log('info', 'zamykanie: wyjście z aplikacji')
   if (bar) bar.quitting = true
   if (panel) panel.quitting = true
@@ -538,7 +542,7 @@ function quitApp(): void {
 
 /**
  * A close from outside – WM_CLOSE to a hidden window nobody could click (T396): an installer run by hand asks the app to
- * end its own way (taskkill without /F, E4a.13). Noted also while the app quits already: the installer may come then.
+ * end its own way (taskkill without /F, E4a.13). Only a running app hears it – a quitting one lets its windows close.
  */
 function quitFromOutside(): void {
   closedFromOutside = true
@@ -1234,6 +1238,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', (e) => {
   quitting = true
+  quitStartedAt ??= Date.now()
   if (bar) bar.quitting = true
   if (panel) panel.quitting = true
   // The data folder closes first, by any way out (its journal is on the disk already: this writes what OneDrive can take
@@ -1256,9 +1261,10 @@ app.on('before-quit', (e) => {
 })
 
 app.on('will-quit', () => {
-  // Closed by a hand-run installer: it installs itself – the install helper of a ready download does not stop at its mutex
-  // (it would show its window beside it). Your own taskkill is an ordinary exit.
-  const byInstaller = closedByInstaller(closedFromOutside, life.installerMarker(), Date.now())
+  // Closed by a hand-run installer – also one that came while „Zakończ” waited for the data folder: it installs itself, and
+  // the install helper of a ready download does not stop at its mutex (it would show its window beside it). Your own
+  // taskkill is an ordinary exit.
+  const byInstaller = closedByInstaller(closedFromOutside, life.installerMarker(), Date.now(), quitStartedAt)
   if (byInstaller) log('info', 'zamknięte przez instalator')
   // A ready download installs at the full exit (never at the end of the Windows session nor when an installer closed it).
   updates?.onQuit(sessionEnding, byInstaller)

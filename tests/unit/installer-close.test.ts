@@ -55,10 +55,10 @@ describe('instalator zamyka aplikację (E4a.13)', () => {
     expect(QUIT_BUDGET_MS).toBeGreaterThan(QUIT_DATA_CLOSE_MS)
   })
 
-  it('wyniki porównywane jako tekst: błąd szukania („timeout”, „error”, 2) to nie „nic nie działa”', () => {
+  it('błąd szukania („timeout”, „error”, 2) to nie „nic nie działa”: szukanie zapasowe, niepewne = działa', () => {
     const body = macro('customCheckAppRunning')
-    // LogicLib's == is IntCmp: "timeout" and "error" read as 0.
-    expect(body).not.toMatch(/\$R0 (==|!=) /)
+    // One way of comparing the results everywhere (S== – exact text; LogicLib's == is StrCmp without case, = is IntCmp).
+    expect(body).not.toMatch(/\$R0 (==|!=|=|<>) /)
     const find = macro('rdFindProcess')
     const ps = find.indexOf('${RD_PS_FIND}')
     const unsure = find.search(/\$\{if\} \$\{_RETURN\} S!= "0"\s*\n\s*\$\{andIf\} \$\{_RETURN\} S!= "1"\s*\n\s*\$\{andIf\} \$\{_RETURN\} S!= "3"/)
@@ -70,14 +70,23 @@ describe('instalator zamyka aplikację (E4a.13)', () => {
     expect(find.slice(tasklist)).toMatch(/\$\{if\} \$\{_RETURN\} S!= "1"\s*\n\s*StrCpy \$\{_RETURN\} 0/)
   })
 
-  it('znacznik „zamknięte przez instalator” tylko przy procesie głównym; gdy wszystko się skończyło – od razu dalej', () => {
+  it('znacznik i 15 s tylko przy procesie głównym; same inne procesy (cicha aktualizacja po wyjściu) – krótko; koniec – od razu dalej', () => {
     const body = macro('customCheckAppRunning')
-    expect(body).toMatch(/\$\{if\} \$R0 S== "0"\s*\n\s*!insertmacro rdWriteClosedMarker\s*\n\s*\$\{endIf\}/)
+    expect(body).toMatch(
+      /\$\{if\} \$R0 S== "0"\s*\n\s*!insertmacro rdWriteClosedMarker\s*\n\s*StrCpy \$R3 \$\{RD_CLOSE_WAIT_MS\}\s*\n\s*\$\{else\}\s*\n(\s*;[^\n]*\n)*\s*StrCpy \$R3 \$\{RD_LEFT_WAIT_MS\}\s*\n\s*\$\{endIf\}/
+    )
+    // Nobody is asked to end then: no more than a moment before the kill (electron-builder killed at once).
+    const left = Number(/^!define RD_LEFT_WAIT_MS (\d+)$/m.exec(nsh)?.[1])
+    expect(left).toBeGreaterThan(0)
+    expect(left).toBeLessThanOrEqual(2000)
     // rdCloseApp gives the close's own result: 0 = every process ended, no further search.
-    const close = body.indexOf('!insertmacro rdCloseApp $R0')
-    expect(close).toBeGreaterThan(-1)
-    expect(body.slice(close)).toMatch(/^!insertmacro rdCloseApp \$R0\s*\n\s*\$\{if\} \$R0 S== "0"\s*\n\s*Goto rdNotRunning/)
+    const close = body.indexOf('!insertmacro rdCloseApp $R3 $R0')
+    expect(close).toBeGreaterThan(body.indexOf('StrCpy $R3 ${RD_LEFT_WAIT_MS}'))
+    expect(body.slice(close)).toMatch(/^!insertmacro rdCloseApp \$R3 \$R0\s*\n\s*\$\{if\} \$R0 S== "0"\s*\n\s*Goto rdNotRunning/)
     expect(body.indexOf('rdWaitLoop:')).toBeGreaterThan(close)
+    // The term is the step's own, never a default of every step.
+    expect(macro('rdCloseApp')).toMatch(/SetEnvironmentVariable\(t "RD_SETUP_WAIT_MS", t "\$\{_WAIT\}"\)/)
+    expect(macro('rdSetupEnv')).not.toContain('RD_SETUP_WAIT_MS')
   })
 
   it('łagodny krok nigdy nie zabija: taskkill bez /F, w PowerShellu bez Stop-Process', () => {

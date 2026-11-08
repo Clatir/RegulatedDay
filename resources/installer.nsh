@@ -50,6 +50,9 @@ Var pid
 ; that way out (QUIT_BUDGET_MS in src/main/installerClose.ts: a slow data folder, the helper, the record of
 ; closing); the close ends as soon as the processes do.
 !define RD_CLOSE_WAIT_MS 15000
+; Only other processes of the installation (a helper, crashpad – the app itself gone, as after its exit before a silent
+; update): nobody is asked to end, a moment for them to go by themselves before the kill.
+!define RD_LEFT_WAIT_MS 2000
 
 ; The PowerShell of the search, the close, the kill and the list (tests/unit/installer-close.test.ts runs it). Its text has
 ; only single quotes and no backticks – it goes into a backtick string and a command line – and every $ is $$ (one $ for
@@ -106,7 +109,6 @@ Var pid
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_INSTDIR", t "$INSTDIR")'
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_SELF", t "$pid")'
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_EXE", t "${APP_EXECUTABLE_FILENAME}")'
-  System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_WAIT_MS", t "${RD_CLOSE_WAIT_MS}")'
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_LOG", t "${RD_APPDATA}\logs\installer-check.log")'
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_VERSION", t "${VERSION}")'
 !macroend
@@ -122,10 +124,11 @@ Var pid
 !macroend
 
 ; _RETURN (in place of electron-builder's FIND_PROCESS, see RD_PS_FIND): "0" = the app's main process runs, "3" = only
-; other processes of the installation, "1" = none. Every result is compared as text – LogicLib's == is IntCmp, which
-; reads "timeout" and "error" as 0. Every PowerShell step ends within 60 s ("timeout" otherwise). An unsure answer (no
-; PowerShell, 2 = the search failed, "timeout", "error") is asked of tasklist (the app's name, as FIND_PROCESS without
-; PowerShell); unsure again, or found there, counts as the main process running – never files copied under a running app.
+; other processes of the installation, "1" = none (compared as exact text, S==; LogicLib's == is StrCmp without case,
+; = is IntCmp). Every PowerShell step ends within 60 s ("timeout" otherwise). An unsure answer – no PowerShell, 2 = the
+; search failed, "timeout", "error"; before, every result but 0 read as „none” – is asked of tasklist (the app's name, as
+; FIND_PROCESS without PowerShell); unsure again, or found there, counts as the main process running – never files copied
+; under a running app.
 !macro rdFindProcess _RETURN
   StrCpy ${_RETURN} 2
   ${if} $IsPowerShellAvailable == 0
@@ -145,12 +148,13 @@ Var pid
   ${endIf}
 !macroend
 
-; The app is asked to end and given RD_CLOSE_WAIT_MS (electron-builder's KILL_PROCESS … 0 is Stop-Process – TerminateProcess –
+; The app is asked to end and given _WAIT ms (electron-builder's KILL_PROCESS … 0 is Stop-Process – TerminateProcess –
 ; whenever PowerShell is there: no close of the app's own). Gone sooner, nothing waits longer. _RETURN: "0" = every
 ; process of the installation ended (nothing to search for again), anything else = some may be left.
-!macro rdCloseApp _RETURN
+!macro rdCloseApp _WAIT _RETURN
   ${if} $IsPowerShellAvailable == 0
     !insertmacro rdSetupEnv
+    System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_WAIT_MS", t "${_WAIT}")'
     nsExec::Exec /TIMEOUT=60000 `"$PowerShellPath" -NoProfile -NonInteractive -C "${RD_PS_CLOSE}"`
     Pop ${_RETURN}
     !insertmacro rdClearEnv
@@ -162,7 +166,7 @@ Var pid
     ${do}
       !insertmacro rdFindProcess ${_RETURN}
       ${if} ${_RETURN} S== "1"
-      ${orIf} $R2 >= ${RD_CLOSE_WAIT_MS}
+      ${orIf} $R2 >= ${_WAIT}
         ${exitDo}
       ${endIf}
       Sleep 250
@@ -231,13 +235,17 @@ Var pid
         Quit
       ${endIf}
       rdStopApp:
-      ; „Zamknięte przez instalator” only for the app itself: a lone helper or crashpad left by a crash stays a crash.
+      ; „Zamknięte przez instalator” and the app's whole way out only for the app itself: a lone helper or crashpad (left
+      ; by a crash, or still going after the app's exit before a silent update) stays a crash and gets a moment only.
       ${if} $R0 S== "0"
         !insertmacro rdWriteClosedMarker
+        StrCpy $R3 ${RD_CLOSE_WAIT_MS}
+      ${else}
+        StrCpy $R3 ${RD_LEFT_WAIT_MS}
       ${endIf}
       DetailPrint "$(appClosing)"
-      ; First asked, as „Zakończ” would end it; killed only what is left after RD_CLOSE_WAIT_MS (E4a.13).
-      !insertmacro rdCloseApp $R0
+      ; First asked, as „Zakończ” would end it; killed only what is left after $R3 ms (E4a.13).
+      !insertmacro rdCloseApp $R3 $R0
       ${if} $R0 S== "0"
         Goto rdNotRunning
       ${endIf}

@@ -72,12 +72,13 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
 - Zamykanie w `customCheckAppRunning` (E4a.13): `KILL_PROCESS … 0` electron-buildera z PowerShellem to `Stop-Process`
   (TerminateProcess), a `FIND_PROCESS` nie widzi jednego procesu (pojedynczy CimInstance bez `.Count` w PS 5.1) – stąd
   własne `rdFindProcess` (0 = proces główny, 3 = tylko inne, 1 = nic; błąd → tasklist, niepewne = działa) /
-  `rdCloseApp` (taskkill bez /F do procesu głównego, do 15 s ≥ `QUIT_BUDGET_MS`) / `rdKillProcess` /
-  `rdListProcesses`, bez własnego PID. Wyniki tylko `S==`/`S!=` (LogicLib `==` to IntCmp: „timeout” = 0). Znacznik
-  instalatora tylko przy procesie głównym. Tekst PowerShella w `RD_PS_*` (tylko `$$`, bez `"` i `` ` ``), wartości przez
-  `RD_SETUP_*`; `tests/unit/installer-close.test.ts` uruchamia go na procesach zastępczych. Zamknięcie z zewnątrz przy
-  świeżym znaczniku (`closedByInstaller`) nie instaluje pobranej wersji i zapisuje zamknięcie „installer”
-  (`rd-install` przy muteksie instalatora nie kończy się: okno postępu, czeka do 60 s); taskkill użytkownika – jak dotąd.
+  `rdCloseApp` (taskkill bez /F do procesu głównego, do 15 s ≥ `QUIT_BUDGET_MS`; same inne procesy – 2 s) /
+  `rdKillProcess` / `rdListProcesses`, bez własnego PID. W LogicLib `==` to StrCmp (bez wielkości liter), `=` to IntCmp,
+  `S==` dokładny tekst – wyniki przez `S==`/`S!=`. Znacznik instalatora tylko przy procesie głównym. Tekst PowerShella
+  w `RD_PS_*` (tylko `$$`, bez `"` i `` ` ``), wartości przez `RD_SETUP_*`; `tests/unit/installer-close.test.ts`
+  uruchamia go na procesach zastępczych. Świeży znacznik i zamknięcie z zewnątrz albo znacznik po początku wyjścia
+  (`closedByInstaller`; okna kończącej się aplikacji zamykają się bez sygnału): bez instalacji pobranej wersji, zapis
+  „installer” (`rd-install` przy muteksie instalatora nie kończy się: okno postępu, do 60 s); taskkill użytkownika – jak dotąd.
 - Kliknięcie aktywnego okna nie podnosi go nad okno pokazane bez aktywacji – okna właściciela kładzie pod kliknięte hak
   myszy (T408). W `fs` Electrona `app.asar` to folder 0 B – rozmiary z `process.noAsar`.
 - Testy: „close” Playwrighta czeka na wszystkie kopie potoków aplikacji, a odłączony właściciel je dziedziczy – czekaj na
