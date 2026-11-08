@@ -5,9 +5,11 @@
  * restart, also with fast startup); without the helper an end without a record of closing is no crash (then a close in
  * Task Manager is not recognised either). A record of closing is valid only with no life marker after it (a logoff
  * cancelled). Closing by the installer is no crash: its marker counts when its time falls in the last window of the life
- * marker. A crash after a valid record of closing (while closing) goes only to the local log.
+ * marker. A crash after a valid record of closing (while closing) goes only to the local log. The files are written
+ * through a temporary file renamed over (never opened for writing in place: a hard reset or a failed write leaves the
+ * previous whole file, not an empty one); a marker that exists but cannot be read is „unknown”, never „first”.
  */
-import { appendFileSync, closeSync, existsSync, fsyncSync, openSync, readFileSync, readdirSync, statSync, writeSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, fsyncSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { minidumpProcessType } from './minidump'
 
@@ -52,8 +54,12 @@ const readJson = <T>(path: string): T | null => {
 }
 
 /** Pure: the end of the previous run from what it left behind. */
-export function judge(prev: LifeMarker | null, close: CloseRecord | null, session: Session | null, installerAt: number | null, mainDump: boolean): Verdict {
-  if (!prev) return { kind: 'first', previous: null, why: 'brak znacznika życia' }
+export function judge(prev: LifeMarker | null, close: CloseRecord | null, session: Session | null, installerAt: number | null, mainDump: boolean, lifeUnreadable = false): Verdict {
+  if (!prev) {
+    // A marker that is there but empty or broken (a hard reset in the middle of a write) says nothing – not „the first run”.
+    if (lifeUnreadable) return { kind: 'unknown', previous: null, why: 'znacznik życia nieczytelny' }
+    return { kind: 'first', previous: null, why: 'brak znacznika życia' }
+  }
   const validClose = !!close && close.runId === prev.runId && close.at >= prev.lastAt
   if (mainDump) return validClose ? { kind: 'crashWhileClosing', previous: prev, why: 'zrzut procesu głównego po zapisie zamknięcia' } : { kind: 'crash', previous: prev, why: 'zrzut procesu głównego' }
   if (validClose) return { kind: 'clean', previous: prev, why: `zamknięcie (${close!.why})` }
@@ -81,8 +87,15 @@ export class LifeKeeper {
     return join(this.dir, 'closed-by-installer.json')
   }
 
+  /** The previous run's marker; null when there is none or it cannot be read (`unreadable` tells which). */
   previous(): LifeMarker | null {
-    return readJson<LifeMarker>(this.lifeFile)
+    const m = readJson<Partial<LifeMarker>>(this.lifeFile)
+    return m && typeof m.runId === 'string' && typeof m.lastAt === 'number' && typeof m.startedAt === 'number' ? (m as LifeMarker) : null
+  }
+
+  /** The marker file is there but empty, cut short or of another shape (not the same as no marker). */
+  unreadable(): boolean {
+    return existsSync(this.lifeFile) && this.previous() === null
   }
 
   closeRecord(): CloseRecord | null {
@@ -131,14 +144,29 @@ export class LifeKeeper {
     return { found, types }
   }
 
-  /** Synchronous write without waiting for the disk: the session's end may end the process right after. */
+  /**
+   * Synchronous write through a temporary file renamed over the target, so a hard reset or a failed write leaves the
+   * previous whole file; `sync`: the disk is waited for (the beat and the record of closing), `system`: the end of the
+   * session may end the process right after, so no fsync.
+   */
   private writeNow(file: string, text: string, sync: boolean): void {
-    const fd = openSync(file, 'w')
+    const tmp = `${file}.tmp`
     try {
-      writeSync(fd, text)
-      if (sync) fsyncSync(fd)
-    } finally {
-      closeSync(fd)
+      const fd = openSync(tmp, 'w')
+      try {
+        writeSync(fd, text)
+        if (sync) fsyncSync(fd)
+      } finally {
+        closeSync(fd)
+      }
+      renameSync(tmp, file)
+    } catch (e) {
+      try {
+        rmSync(tmp, { force: true })
+      } catch {
+        /* the next write opens it anew */
+      }
+      throw e
     }
   }
 

@@ -904,7 +904,7 @@ async function judgePreviousRun(): Promise<void> {
   const installerAt = life.installerMarker()
   const dumps = LifeKeeper.mainDumpSince(app.getPath('crashDumps'), prev?.startedAt ?? Number.MAX_SAFE_INTEGER)
   const sessionInfo = process.platform === 'win32' ? await sessionAtStart(helper, runId, 5000, log) : null
-  const verdict = judge(prev, close, sessionInfo, installerAt, dumps.found)
+  const verdict = judge(prev, close, sessionInfo, installerAt, dumps.found, life.unreadable())
   if (dumps.types.length) log('info', `nowe zrzuty awarii: ${dumps.types.join(', ')}`)
   log(verdict.kind === 'crash' ? 'warn' : 'info', `poprzednie uruchomienie: ${verdict.kind} (${verdict.why})`)
   life.start(runId, app.getVersion())

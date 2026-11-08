@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -12,9 +12,80 @@ vi.mock('../../src/main/update/files', async (importOriginal) => {
   return { ...m, writeSyncAtomic: (path: string, text: string) => (atomic.push(path), m.writeSyncAtomic(path, text)) }
 })
 
+// A write that breaks after the file was opened (power loss, a full disk, the process ended): `writeSync` fails on demand.
+const failing = vi.hoisted(() => ({ writes: false }))
+vi.mock('node:fs', async (importOriginal) => {
+  const m = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...m,
+    writeSync: (...args: Parameters<typeof m.writeSync>) => {
+      if (failing.writes) throw Object.assign(new Error('EIO: przerwany zapis'), { code: 'EIO' })
+      return m.writeSync(...args)
+    }
+  }
+})
+
 const { readVersions, recordRun } = await import('../../src/main/crash/versions')
 
 const prev: LifeMarker = { format: 1, runId: 'r1', version: '0.1.0', pid: 1, startedAt: 1000, lastAt: 100_000 }
+
+describe('znacznik życia po twardym resecie (H3)', () => {
+  const inTemp = (fn: (dir: string) => void) => {
+    const dir = mkdtempSync(join(tmpdir(), 'rd-life-'))
+    try {
+      fn(dir)
+    } finally {
+      failing.writes = false
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  it('pusty albo uszkodzony znacznik to „nieznane”, nie „pierwsze uruchomienie”; brak pliku to „pierwsze”', () => {
+    inTemp((dir) => {
+      const life = new LifeKeeper(dir)
+      expect(life.unreadable()).toBe(false)
+      expect(judge(life.previous(), life.closeRecord(), { prevRunId: null }, null, false, life.unreadable()).kind).toBe('first')
+      for (const text of ['', '{"format":1,"runId":"r1","vers', '   \n', 'null', '{}']) {
+        writeFileSync(life.lifeFile, text)
+        expect(life.previous(), JSON.stringify(text)).toBeNull()
+        expect(life.unreadable(), JSON.stringify(text)).toBe(true)
+        const v = judge(life.previous(), life.closeRecord(), { prevRunId: null }, null, false, life.unreadable())
+        expect(v.kind, JSON.stringify(text)).toBe('unknown')
+        expect(v.why).toBe('znacznik życia nieczytelny')
+      }
+    })
+  })
+
+  it('zapis przerwany po otwarciu pliku nie zostawia pustego znacznika: poprzedni zostaje cały', () => {
+    inTemp((dir) => {
+      const life = new LifeKeeper(dir)
+      life.start('r1', '0.1.0', 1000)
+      life.beat(31_000)
+      expect(life.previous()?.lastAt).toBe(31_000)
+      failing.writes = true
+      life.beat(61_000)
+      life.close('quit', 62_000)
+      failing.writes = false
+      expect(life.unreadable()).toBe(false)
+      expect(life.previous()?.lastAt).toBe(31_000)
+      expect(JSON.parse(readFileSync(life.lifeFile, 'utf8')).runId).toBe('r1')
+      // The record of closing that could not be written is no record (nothing half-written to be taken for one).
+      expect(life.closeRecord()).toBeNull()
+    })
+  })
+
+  it('zapis przez plik tymczasowy: po udanym zapisie w folderze zostaje tylko znacznik', () => {
+    inTemp((dir) => {
+      const life = new LifeKeeper(dir)
+      life.start('r1', '0.1.0', 1000)
+      life.beat(2000)
+      life.close('quit', 3000)
+      expect(readdirSync(dir).sort()).toEqual(['closing.json', 'life.json'])
+      expect(life.previous()?.lastAt).toBe(2000)
+      expect(life.closeRecord()?.at).toBe(3000)
+    })
+  })
+})
 
 describe('awaria czy zwykłe zamknięcie (Terminy, D181)', () => {
   it('ważny zapis zamknięcia (po nim nie ma już znacznika życia) to zwykłe zamknięcie', () => {

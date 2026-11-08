@@ -170,6 +170,7 @@ export class DataService {
     const stateDir = stateDirFor(o.userData, o.dataDir)
     const life = new LifeKeeper(stateDir)
     const prev = life.previous()
+    const unreadable = life.unreadable()
     const close = life.closeRecord()
     const previousRun = prev ? { lastAt: prev.lastAt, clean: !!close && close.runId === prev.runId && close.at >= prev.lastAt } : null
     const base = o.clock ?? { wall: () => Date.now(), mono: () => performance.now() }
@@ -194,6 +195,7 @@ export class DataService {
       gameScreens: o.gameScreens === true
     })
     life.start(o.runId, o.appVersion, clock.wall())
+    if (!prev && unreadable) o.log('warn', 'znacznik życia folderu był nieczytelny (przerwany zapis) – koniec obserwacji poprzedniego uruchomienia nieznany')
     if (previousRun && !previousRun.clean) o.log('warn', 'poprzednie uruchomienie folderu skończyło się bez zamknięcia – koniec obserwacji z ostatniego znacznika życia')
     if (o.versions) folder.setVersions(o.versions())
     const s = new DataService(folder, life, o)
