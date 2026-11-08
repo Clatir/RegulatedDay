@@ -7,6 +7,12 @@
 ; electron-builder declares these only without customCheckAppRunning – this file brings its own.
 !include "getProcessInfo.nsh"
 Var pid
+; PowerShell for the steps of the close: "?" not known yet, "1" = a step of ours answered with its own code, "0" = it did
+; not (every step by tasklist and taskkill then). electron-builder's IS_POWERSHELL_AVAILABLE is not asked: on CI (the
+; installer started from a process of pwsh 7) it said „none” while PowerShell worked.
+Var rdPs
+; PSModulePath of the installer, given back after each PowerShell step (which runs with Windows PowerShell's own paths).
+Var rdModules
 
 !define RD_APPDATA "$APPDATA\Regulated Day"
 !define RD_GUARD_EXE "rd-guard.exe"
@@ -70,15 +76,25 @@ Var pid
   $$m = @($$u | Where-Object { $$_.ExecutablePath -ieq ($$d + $$env:RD_SETUP_EXE) -and $$_.CommandLine -notlike '* --type=*' }); \
   if ($$m.Count -gt 0) { exit 0 } elseif ($$u.Count -gt 0) { exit 3 } else { exit 1 } \
 } catch { exit 2 }"
-; Close: taskkill without /F – a WM_CLOSE to the windows of the app's main process (not its --type= children, which end
-; with it); its hidden windows end the app by its own way out (T396: the data folder, the helper, „aplikacja zamknięta”).
-; Then up to RD_SETUP_WAIT_MS for every process; exit 0 = none is left, 1 = some is, 2 = the step failed.
+; Close: taskkill without /F – a WM_CLOSE to a window of the app's main process (not its --type= children, which end with
+; it); its hidden windows end the app by its own way out (T396: the data folder, the helper, „aplikacja zamknięta”).
+; taskkill sends one WM_CLOSE to one window only – the topmost: a shown main window hides to the tray then (your close of
+; it), an old version's window of sound just goes – so the app is asked again every 3 s while it runs (its name checked:
+; never another process that took its PID). Up to RD_SETUP_WAIT_MS for every process; exit 0 = none is left, 1 = some
+; is, 2 = the step failed.
 !define RD_PS_CLOSE "try { ${RD_PS_UNDER} \
-  $$w = [Diagnostics.Stopwatch]::StartNew(); $$e = $$d + $$env:RD_SETUP_EXE; \
-  foreach ($$p in $$u) { if ($$p.ExecutablePath -ieq $$e -and $$p.CommandLine -notlike '* --type=*') { & ($$env:SystemRoot + '\System32\taskkill.exe') /PID $$p.ProcessId | Out-Null } }; \
+  $$w = [Diagnostics.Stopwatch]::StartNew(); $$e = $$d + $$env:RD_SETUP_EXE; $$t = [int]$$env:RD_SETUP_WAIT_MS; \
+  $$k = [IO.Path]::GetFileNameWithoutExtension($$env:RD_SETUP_EXE); \
+  $$m = @($$u | Where-Object { $$_.ExecutablePath -ieq $$e -and $$_.CommandLine -notlike '* --type=*' } | ForEach-Object { Get-Process -Id $$_.ProcessId -ErrorAction SilentlyContinue }); \
+  $$ask = { foreach ($$x in $$m) { if ($$x -and -not $$x.HasExited -and $$x.ProcessName -ieq $$k) { & ($$env:SystemRoot + '\System32\taskkill.exe') /PID $$x.Id | Out-Null } } }; \
+  & $$ask; \
   foreach ($$p in $$u) { \
     $$h = Get-Process -Id $$p.ProcessId -ErrorAction SilentlyContinue; \
-    if ($$h) { $$l = [int]$$env:RD_SETUP_WAIT_MS - $$w.ElapsedMilliseconds; if ($$l -lt 1 -or -not $$h.WaitForExit([int]$$l)) { exit 1 } } \
+    while ($$h -and -not $$h.HasExited) { \
+      $$l = $$t - $$w.ElapsedMilliseconds; if ($$l -lt 1) { exit 1 }; \
+      if ($$h.WaitForExit([int][Math]::Min($$l, 3000))) { break }; \
+      & $$ask \
+    } \
   }; \
   exit 0 \
 } catch { exit 2 }"
@@ -106,6 +122,9 @@ Var pid
 } catch { exit 1 }"
 
 !macro rdSetupEnv
+  ; Windows PowerShell with its own module paths (as started from Explorer), never those of a PowerShell 7 it came from.
+  ReadEnvStr $rdModules PSModulePath
+  System::Call 'kernel32::SetEnvironmentVariable(t "PSModulePath", p 0)'
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_INSTDIR", t "$INSTDIR")'
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_SELF", t "$pid")'
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_EXE", t "${APP_EXECUTABLE_FILENAME}")'
@@ -121,17 +140,20 @@ Var pid
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_WAIT_MS", p 0)'
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_LOG", p 0)'
   System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_VERSION", p 0)'
+  ${if} $rdModules != ""
+    System::Call 'kernel32::SetEnvironmentVariable(t "PSModulePath", t "$rdModules")'
+  ${endIf}
 !macroend
 
 ; _RETURN (in place of electron-builder's FIND_PROCESS, see RD_PS_FIND): "0" = the app's main process runs, "3" = only
 ; other processes of the installation, "1" = none (compared as exact text, S==; LogicLib's == is StrCmp without case,
-; = is IntCmp). Every PowerShell step ends within 60 s ("timeout" otherwise). An unsure answer – no PowerShell, 2 = the
-; search failed, "timeout", "error"; before, every result but 0 read as „none” – is asked of tasklist (the app's name, as
-; FIND_PROCESS without PowerShell); unsure again, or found there, counts as the main process running – never files copied
-; under a running app.
+; = is IntCmp). Every PowerShell step ends within 60 s ("timeout" otherwise). An unsure answer – 2 = the search failed,
+; "timeout", "error"; before, every result but 0 read as „none” – is asked of tasklist (the app's name, as FIND_PROCESS
+; without PowerShell); unsure again, or found there, counts as the main process running – never files copied under a
+; running app. The first unsure answer turns PowerShell off for the rest ($rdPs "0"); a sure one turns it on ("1").
 !macro rdFindProcess _RETURN
   StrCpy ${_RETURN} 2
-  ${if} $IsPowerShellAvailable == 0
+  ${if} $rdPs S!= "0"
     !insertmacro rdSetupEnv
     nsExec::Exec /TIMEOUT=60000 `"$PowerShellPath" -NoProfile -NonInteractive -C "${RD_PS_FIND}"`
     Pop ${_RETURN}
@@ -140,11 +162,16 @@ Var pid
   ${if} ${_RETURN} S!= "0"
   ${andIf} ${_RETURN} S!= "1"
   ${andIf} ${_RETURN} S!= "3"
+    ${if} $rdPs S== "?"
+      StrCpy $rdPs 0
+    ${endIf}
     nsExec::Exec /TIMEOUT=60000 `"$CmdPath" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
     Pop ${_RETURN}
     ${if} ${_RETURN} S!= "1"
       StrCpy ${_RETURN} 0
     ${endIf}
+  ${else}
+    StrCpy $rdPs 1
   ${endIf}
 !macroend
 
@@ -152,14 +179,17 @@ Var pid
 ; whenever PowerShell is there: no close of the app's own). Gone sooner, nothing waits longer. _RETURN: "0" = every
 ; process of the installation ended (nothing to search for again), anything else = some may be left.
 !macro rdCloseApp _WAIT _RETURN
-  ${if} $IsPowerShellAvailable == 0
+  ${if} $rdPs S== "1"
     !insertmacro rdSetupEnv
     System::Call 'kernel32::SetEnvironmentVariable(t "RD_SETUP_WAIT_MS", t "${_WAIT}")'
     nsExec::Exec /TIMEOUT=60000 `"$PowerShellPath" -NoProfile -NonInteractive -C "${RD_PS_CLOSE}"`
     Pop ${_RETURN}
     !insertmacro rdClearEnv
   ${else}
+    ; Without PowerShell: the app's name (its children get the same – those without a window refuse), asked again every
+    ; 3 s like RD_PS_CLOSE.
     Push $R2
+    Push $R4
     nsExec::Exec `"$CmdPath" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "PID ne $pid" /FI "USERNAME eq %USERNAME%"`
     Pop ${_RETURN}
     StrCpy $R2 0
@@ -171,35 +201,42 @@ Var pid
       ${endIf}
       Sleep 250
       IntOp $R2 $R2 + 250
+      IntOp $R4 $R2 % 3000
+      ${if} $R4 = 0
+        nsExec::Exec `"$CmdPath" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "PID ne $pid" /FI "USERNAME eq %USERNAME%"`
+        Pop $R4
+      ${endIf}
     ${loop}
     ${if} ${_RETURN} S== "1"
       StrCpy ${_RETURN} 0
     ${else}
       StrCpy ${_RETURN} 1
     ${endIf}
+    Pop $R4
     Pop $R2
   ${endIf}
 !macroend
 
-; The kill of what is left (RD_PS_KILL); without PowerShell electron-builder's taskkill /F, which skips this installer too.
+; The kill of what is left (RD_PS_KILL); without PowerShell taskkill /F by the app's name, never this installer.
 !macro rdKillProcess
-  ${if} $IsPowerShellAvailable == 0
-    Push $0
+  Push $0
+  ${if} $rdPs S== "1"
     !insertmacro rdSetupEnv
     nsExec::Exec /TIMEOUT=60000 `"$PowerShellPath" -NoProfile -NonInteractive -C "${RD_PS_KILL}"`
     Pop $0
     !insertmacro rdClearEnv
-    Pop $0
   ${else}
-    !insertmacro KILL_PROCESS "${APP_EXECUTABLE_FILENAME}" 1
+    nsExec::Exec /TIMEOUT=60000 `"$CmdPath" /C taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /FI "PID ne $pid" /FI "USERNAME eq %USERNAME%"`
+    Pop $0
   ${endIf}
+  Pop $0
 !macroend
 
 ; Before „appCannotBeClosed”: which process is left, into logs\installer-check.log (docs/vm/procesy.ps1 lists the same).
 !macro rdListProcesses
   Push $0
   Push $1
-  ${if} $IsPowerShellAvailable == 0
+  ${if} $rdPs S== "1"
     !insertmacro rdSetupEnv
     nsExec::Exec /TIMEOUT=60000 `"$PowerShellPath" -NoProfile -NonInteractive -C "${RD_PS_LIST}"`
     Pop $0
@@ -222,7 +259,7 @@ Var pid
 !macroend
 
 !macro customCheckAppRunning
-  !insertmacro IS_POWERSHELL_AVAILABLE
+  StrCpy $rdPs "?"
   ${GetProcessInfo} 0 $pid $1 $2 $3 $4
   ${if} $3 != "${APP_EXECUTABLE_FILENAME}"
     ${if} ${isUpdated}

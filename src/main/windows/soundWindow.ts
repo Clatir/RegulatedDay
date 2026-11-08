@@ -1,12 +1,17 @@
 /**
  * The window of sound (spec „Widget”): hidden, never shown – it only plays the bar's quiet tones at 5 and 0 min when the
  * sound is on (off by default). No block of autoplay (also after a reload without a click), no throttling in the
- * background. Never destroyed while the app runs.
+ * background. Never destroyed while the app runs: nobody can close it, so a close is one from outside – taskkill without
+ * /F sends its WM_CLOSE to one window of the app only, this one when nothing is shown – and the app ends (T396, E4a.13).
  */
 import { BrowserWindow } from 'electron'
 
 export class SoundWindow {
   private readonly win: BrowserWindow
+  /** The app quits: the window may close for real. */
+  quitting = false
+  /** Called when something outside closes the window (an installer's taskkill): the app quits. */
+  onExternalClose: (() => void) | null = null
 
   constructor(preload: string, load: (win: BrowserWindow) => Promise<void>) {
     this.win = new BrowserWindow({
@@ -26,6 +31,11 @@ export class SoundWindow {
       }
     })
     this.win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    this.win.on('close', (e) => {
+      if (this.quitting) return
+      e.preventDefault()
+      this.onExternalClose?.()
+    })
     void load(this.win)
   }
 

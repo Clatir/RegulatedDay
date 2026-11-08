@@ -100,6 +100,33 @@ describe('instalator zamyka aplikację (E4a.13)', () => {
     expect(macro('rdListProcesses')).toContain('${RD_PS_LIST}')
   })
 
+  it('PowerShell bez sprawdzenia electron-buildera: działa, gdy własne szukanie odpowie swoim kodem; środowisko jak z Eksploratora', () => {
+    // IS_POWERSHELL_AVAILABLE said „none” on CI (the installer started under pwsh 7): every step went by tasklist and
+    // taskkill /IM – a process under the installation by another name unseen, the app killed. Our own answer decides.
+    const body = macro('customCheckAppRunning')
+    expect(body).not.toContain('IS_POWERSHELL_AVAILABLE')
+    for (const name of ['rdFindProcess', 'rdCloseApp', 'rdKillProcess', 'rdListProcesses', 'customCheckAppRunning']) expect(macro(name)).not.toContain('$IsPowerShellAvailable')
+    const find = macro('rdFindProcess')
+    // Tried unless a step of ours failed already; a sure answer turns it on, the first unsure one off.
+    expect(find).toMatch(/\$\{if\} \$rdPs S!= "0"\s*\n\s*!insertmacro rdSetupEnv\s*\n\s*nsExec::Exec[^\n]*\$\{RD_PS_FIND\}/)
+    expect(find.indexOf('${RD_PS_FIND}')).toBeLessThan(find.indexOf('StrCpy $rdPs 1'))
+    expect(find).toMatch(/\$\{if\} \$rdPs S== "\?"\s*\n\s*StrCpy \$rdPs 0/)
+    for (const name of ['rdCloseApp', 'rdKillProcess', 'rdListProcesses']) expect(macro(name)).toMatch(/\$\{if\} \$rdPs S== "1"/)
+    expect(body.indexOf('StrCpy $rdPs "?"')).toBeGreaterThan(-1)
+    expect(body.indexOf('StrCpy $rdPs "?"')).toBeLessThan(body.indexOf('!insertmacro rdFindProcess $R0'))
+    // The modules of PowerShell 7 (its PSModulePath, inherited from a pwsh) never reach Windows PowerShell: its own
+    // default paths, the variable given back after each step.
+    expect(macro('rdSetupEnv')).toMatch(/ReadEnvStr \$rdModules PSModulePath\s*\n\s*System::Call 'kernel32::SetEnvironmentVariable\(t "PSModulePath", p 0\)'/)
+    expect(macro('rdClearEnv')).toMatch(/SetEnvironmentVariable\(t "PSModulePath", t "\$rdModules"\)/)
+  })
+
+  it('zamykanie bez PowerShella też prosi ponownie co 3 s (jedno WM_CLOSE – jedno okno), a dobicie omija instalator', () => {
+    const close = macro('rdCloseApp')
+    const again = close.slice(close.indexOf('${do}'))
+    expect(again).toMatch(/IntOp \$R4 \$R2 % 3000[\s\S]*taskkill \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "PID ne \$pid"/)
+    expect(macro('rdKillProcess')).toMatch(/taskkill \/F \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "PID ne \$pid"/)
+  })
+
   it('tekst PowerShella przechodzi przez NSIS bez zmian: tylko $$, bez cudzysłowów i odwrotnych apostrofów', () => {
     for (const name of ['RD_PS_FIND', 'RD_PS_CLOSE', 'RD_PS_KILL', 'RD_PS_LIST']) {
       const { raw } = defined(name)
@@ -117,7 +144,11 @@ const sysRoot = process.env.SystemRoot ?? 'C:\\Windows'
 const wow = join(sysRoot, 'SysWOW64', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const PS = existsSync(wow) ? wow : join(sysRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 
-/** A stand-in with one hidden top-level window (as the app's BrowserWindows): WM_CLOSE writes `<marker>.closed`, ends it. */
+/**
+ * A stand-in with one hidden top-level window (as the app's BrowserWindows): WM_CLOSE writes `<marker>.closed`, ends it.
+ * RD_T_SWALLOW=n: the first n are let pass (as a shown main window hides to the tray, or an old app's window of sound
+ * goes) – taskkill without /F sends one WM_CLOSE to one window only.
+ */
 const STAND_IN = `
 $code = @'
 using System;
@@ -125,8 +156,10 @@ using System.IO;
 using System.Windows.Forms;
 public class RdStandIn : NativeWindow {
   readonly string marker;
-  public RdStandIn(string m) { marker = m; CreateParams cp = new CreateParams(); cp.Caption = "rd stand-in"; cp.Style = 0x00CF0000; CreateHandle(cp); }
+  int swallow;
+  public RdStandIn(string m) { marker = m; int.TryParse(Environment.GetEnvironmentVariable("RD_T_SWALLOW"), out swallow); CreateParams cp = new CreateParams(); cp.Caption = "rd stand-in"; cp.Style = 0x00CF0000; CreateHandle(cp); }
   protected override void WndProc(ref Message m) {
+    if (m.Msg == 0x0010 && swallow > 0) { swallow--; File.AppendAllText(marker + ".swallowed", "WM_CLOSE\\n"); return; }
     if (m.Msg == 0x0010) { File.WriteAllText(marker + ".closed", "WM_CLOSE"); Application.ExitThread(); return; }
     base.WndProc(ref m);
   }
@@ -155,10 +188,10 @@ describe.skipIf(!win)('PowerShell instalatora na procesach zastępczych (Windows
   })
 
   /** The app's main process (or with `--type=` one of its children), with a hidden window. */
-  async function windowed(marker: string, extra: string[] = []): Promise<ChildProcess> {
+  async function windowed(marker: string, extra: string[] = [], swallow = 0): Promise<ChildProcess> {
     const exe = join(inst, 'Regulated Day.exe')
     if (!existsSync(exe)) copyFileSync(join(sysRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), exe)
-    const c = spawn(exe, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'stand-in.ps1'), join(root, marker), ...extra], { stdio: 'ignore' })
+    const c = spawn(exe, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'stand-in.ps1'), join(root, marker), ...extra], { stdio: 'ignore', env: { ...process.env, RD_T_SWALLOW: String(swallow) } })
     children.push(c)
     await vi.waitFor(() => expect(existsSync(join(root, `${marker}.ready`))).toBe(true), { timeout: 30_000, interval: 100 })
     return c
@@ -199,6 +232,15 @@ describe.skipIf(!win)('PowerShell instalatora na procesach zastępczych (Windows
     // of the whole step – PowerShell starts slowly on CI).
     const r = step('RD_PS_CLOSE', env({ RD_SETUP_WAIT_MS: '600000' }), 120_000)
     expect(r.code).toBe(0)
+    expect(readFileSync(join(root, 'main.closed'), 'utf8')).toBe('WM_CLOSE')
+    await vi.waitFor(() => expect(alive(app)).toBe(false), { timeout: 5000 })
+  }, 180_000)
+
+  it('jedno WM_CLOSE trafia do jednego okna (pokazane okno główne chowa się do zasobnika): krok prosi ponownie, aż aplikacja się skończy', async () => {
+    const app = await windowed('main', [], 2)
+    const r = step('RD_PS_CLOSE', env({ RD_SETUP_WAIT_MS: '600000' }), 120_000)
+    expect(r.code).toBe(0)
+    expect(readFileSync(join(root, 'main.swallowed'), 'utf8').match(/WM_CLOSE/g)?.length).toBe(2)
     expect(readFileSync(join(root, 'main.closed'), 'utf8')).toBe('WM_CLOSE')
     await vi.waitFor(() => expect(alive(app)).toBe(false), { timeout: 5000 })
   }, 180_000)

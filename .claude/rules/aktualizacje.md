@@ -79,6 +79,11 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
   uruchamia go na procesach zastępczych. Świeży znacznik i zamknięcie z zewnątrz albo znacznik po początku wyjścia
   (`closedByInstaller`; okna kończącej się aplikacji zamykają się bez sygnału): bez instalacji pobranej wersji, zapis
   „installer” (`rd-install` przy muteksie instalatora nie kończy się: okno postępu, do 60 s); taskkill użytkownika – jak dotąd.
+- `taskkill` bez /F wysyła jeden WM_CLOSE do jednego okna procesu (najwyższego w kolejności Z): pokazane okno główne
+  chowa się wtedy do zasobnika (Twoje zamknięcie to SC_CLOSE, potem WM_CLOSE), ukryte okna kończą aplikację – także okno
+  dźwięku. Dlatego `RD_PS_CLOSE` i ścieżka bez PowerShella proszą ponownie co 3 s. `IS_POWERSHELL_AVAILABLE`
+  electron-buildera nie jest pytany: w CI (instalator spod pwsh 7) mówił „brak” – o PowerShellu decyduje własna
+  odpowiedź `rdFindProcess` (`$rdPs`), kroki biegną bez odziedziczonego `PSModulePath`.
 - Kliknięcie aktywnego okna nie podnosi go nad okno pokazane bez aktywacji – okna właściciela kładzie pod kliknięte hak
   myszy (T408). W `fs` Electrona `app.asar` to folder 0 B – rozmiary z `process.noAsar`.
 - Testy: „close” Playwrighta czeka na wszystkie kopie potoków aplikacji, a odłączony właściciel je dziedziczy – czekaj na

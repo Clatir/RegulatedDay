@@ -19,7 +19,7 @@ import { RDWIN_PRELUDE, click, foreground, topWindows, type TopWindow } from '..
 import { readSharedSync, writeSyncAtomic } from '../../src/main/update/files'
 import { newTask } from '../../src/main/update/install'
 import { readTask, writeTask, type Task } from '../../src/shared/task'
-import { APP_EXE, MANIFEST, SETUP, appProcesses, appRunning, dump, installed, powershell, processEnd, productionData, readJson, readText, runEntry, sha256, sleep, stopAll, uninstall } from './util'
+import { APP_EXE, MANIFEST, SETUP, appProcesses, appRunning, dump, installed, powershell, powershellChecks, processEnd, productionData, readJson, readText, runEntry, sha256, sleep, stopAll, uninstall } from './util'
 
 const FROM = resolve(process.env.RD_UPDATE_FROM ?? 'release')
 const TO = resolve(process.env.RD_UPDATE_TO ?? 'release-next')
@@ -504,6 +504,8 @@ test('ręczny instalator, gdy proces spod folderu aplikacji się nie kończy: li
     }
     start()
     try {
+      // Which way the installer's PowerShell answers here (the evidence when its steps went by tasklist).
+      console.log(powershellChecks())
       // Not spawnSync: the restarts need this process's event loop.
       const setup = spawn(join(TO, SETUP), ['/S'], { stdio: 'ignore' })
       expect(await exited(setup, 600_000)).toBe(true)
@@ -538,10 +540,18 @@ test('taskkill użytkownika (bez /F) przy pobranej wersji: zwykłe wyjście – 
     const app = await electron.launch({ executablePath: join(dir, APP_EXE), env: env() })
     const page = await mainPage(app)
     await expect.poll(() => page.evaluate(() => window.rd.update().then((u) => u.phase)), { timeout: 60_000 }).toBe('ready')
-    const ended = processEnd(app, 120_000)
-    // WM_CLOSE from outside without any installer's marker: not „zamknięte przez instalator”.
-    spawnSync('taskkill', ['/PID', String(app.process().pid)], { stdio: 'ignore' })
-    await ended
+    // WM_CLOSE from outside without any installer's marker: not „zamknięte przez instalator”. taskkill without /F sends
+    // one WM_CLOSE to one window only (the topmost; a shown main window hides to the tray on it, as on your close) – so
+    // asked again every 3 s until the app ends, as the installer does.
+    const pid = app.process().pid!
+    let ended = false
+    const end = processEnd(app, 120_000).then(() => void (ended = true))
+    for (let i = 0; i < 30 && !ended; i++) {
+      const r = spawnSync('taskkill', ['/PID', String(pid)], { encoding: 'utf8' })
+      console.log(`taskkill /PID ${pid}: ${(r.stdout + r.stderr).trim()}`)
+      for (let j = 0; j < 30 && !ended; j++) await sleep(100)
+    }
+    await end
     const main = await readText(join(productionData(), 'logs', 'main.log'))
     expect(main).toContain('zamknięcie z zewnątrz (instalator albo taskkill)')
     expect(main).not.toContain('zamknięte przez instalator')

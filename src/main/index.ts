@@ -533,6 +533,7 @@ function quitApp(): void {
   log('info', 'zamykanie: wyjście z aplikacji')
   if (bar) bar.quitting = true
   if (panel) panel.quitting = true
+  if (sound) sound.quitting = true
   tray?.destroy()
   void config
     .flush()
@@ -1193,6 +1194,7 @@ async function main(): Promise<void> {
   panel.onSystemEnd(onSystemEnd)
 
   sound = new SoundWindow(preload, loadView)
+  sound.onExternalClose = quitFromOutside
   showWidget(widgetView())
   widget.start()
 
@@ -1241,6 +1243,7 @@ app.on('before-quit', (e) => {
   quitStartedAt ??= Date.now()
   if (bar) bar.quitting = true
   if (panel) panel.quitting = true
+  if (sound) sound.quitting = true
   // The data folder closes first, by any way out (its journal is on the disk already: this writes what OneDrive can take
   // now and the presence „closed”), also while it is still opening – once, with a limit of time, and never at the end of
   // the Windows session, which the app does not hold up.
