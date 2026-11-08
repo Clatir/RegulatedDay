@@ -1,5 +1,6 @@
-// The helper's self-test (spec „Testy”: CI runs it on a real Windows): what it reads of this session, and the layout of
-// SYSTEM_POWER_CAPABILITIES – the CI machines report modern standby off, so only the layout can be checked there.
+// The helper's self-test (spec „Testy”: CI runs it on a real Windows): what it reads of this session, the layout of
+// SYSTEM_POWER_CAPABILITIES – the CI machines report modern standby off, so only the layout can be checked there – and
+// the rules of the desktop bar's place on made-up windows (`windowOrderWrong`, SelfTestWindows: empty = all hold).
 using System;
 using System.IO;
 
@@ -20,6 +21,7 @@ namespace RegulatedDay
             r.Set("powerCapabilities", PowerCaps.Layout());
             r.Set("oneDrive", OneDrive.Running());
             r.Set("shell", WindowOrder.ShellPresent());
+            r.Set("windowOrderWrong", SelfTestWindows.Wrong());
             r.Set("culture", System.Globalization.CultureInfo.CurrentCulture.Name);
             r.Set("framework", Environment.Version.ToString());
             r.Set("cwd", Environment.CurrentDirectory);

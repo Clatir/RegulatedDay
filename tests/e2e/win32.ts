@@ -1,10 +1,12 @@
 /**
  * Win32 for the Windows E2E tests (the tests may use any tool; the app never reads tools' text): the top-level windows
  * in z-order, the window at a point, the windows covering one minimized (CI's console may lie over the desktop bar), the
- * cursor moved by SendInput (a real move – tooltips and hover need it), the foreground window. Runs a small C# through
- * PowerShell's Add-Type; each call answers JSON.
+ * cursor moved by SendInput (a real move – tooltips and hover need it), the foreground window; a window laid under
+ * another, and in the background a program fighting the bar's place or a hidden „WorkerW” at the top (G4). Runs a small
+ * C# through PowerShell's Add-Type; each call answers JSON.
  */
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+import { createInterface } from 'node:readline'
 
 const CS = `
 using System;
@@ -36,6 +38,19 @@ public static class RdWin {
   [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int index);
   [DllImport("user32.dll")] static extern bool ShowWindowAsync(IntPtr h, int cmd);
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int value, int size);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+  [DllImport("user32.dll", SetLastError = true)] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct WNDCLASSEX { public uint cbSize; public uint style; public IntPtr lpfnWndProc; public int cbClsExtra; public int cbWndExtra; public IntPtr hInstance; public IntPtr hIcon; public IntPtr hCursor; public IntPtr hbrBackground; public string lpszMenuName; public string lpszClassName; public IntPtr hIconSm; }
+  [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam; public IntPtr lParam; public uint time; public POINT pt; }
+  [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern ushort RegisterClassEx(ref WNDCLASSEX c);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr CreateWindowEx(uint ex, string cls, string title, uint style, int x, int y, int w, int h, IntPtr parent, IntPtr menu, IntPtr inst, IntPtr param);
+  [DllImport("user32.dll")] static extern bool PeekMessage(out MSG m, IntPtr h, uint min, uint max, uint remove);
+  [DllImport("user32.dll")] static extern bool TranslateMessage(ref MSG m);
+  [DllImport("user32.dll")] static extern IntPtr DispatchMessage(ref MSG m);
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr GetModuleHandle(string name);
+  [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true)] static extern IntPtr GetProcAddress(IntPtr module, string name);
+  // SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOOWNERZORDER: only the place in the order changes.
+  const uint ORDER_ONLY = 0x0001 | 0x0002 | 0x0010 | 0x0200;
   /** A JSON string's content: quotes, backslashes and control characters escaped (titles stay as they are). */
   static string Esc(string s) {
     var b = new StringBuilder();
@@ -55,8 +70,12 @@ public static class RdWin {
       RECT r; GetWindowRect(h, out r);
       var c = new StringBuilder(256); GetClassName(h, c, 256);
       var t = new StringBuilder(256); GetWindowText(h, t, 256);
+      bool visible = IsWindowVisible(h);
+      int ck;
+      bool cloaked = visible && DwmGetWindowAttribute(h, 14, out ck, 4) == 0 && ck != 0;
+      bool defView = FindWindowEx(h, IntPtr.Zero, "SHELLDLL_DefView", null) != IntPtr.Zero;
       if (!first) sb.Append(","); first = false;
-      sb.Append("{\\"hwnd\\":\\"" + h.ToInt64() + "\\",\\"pid\\":" + pid + ",\\"visible\\":" + (IsWindowVisible(h) ? "true" : "false") + ",\\"cls\\":\\"" + Esc(c.ToString()) + "\\",\\"title\\":\\"" + Esc(t.ToString()) + "\\",\\"rect\\":[" + r.L + "," + r.T + "," + r.R + "," + r.B + "]}");
+      sb.Append("{\\"hwnd\\":\\"" + h.ToInt64() + "\\",\\"pid\\":" + pid + ",\\"visible\\":" + (visible ? "true" : "false") + ",\\"cloaked\\":" + (cloaked ? "true" : "false") + ",\\"defView\\":" + (defView ? "true" : "false") + ",\\"cls\\":\\"" + Esc(c.ToString()) + "\\",\\"title\\":\\"" + Esc(t.ToString()) + "\\",\\"rect\\":[" + r.L + "," + r.T + "," + r.R + "," + r.B + "]}");
       return true;
     }, IntPtr.Zero);
     return sb.Append("]").ToString();
@@ -95,6 +114,42 @@ public static class RdWin {
       return true;
     }, IntPtr.Zero);
     return sb.Append("]").ToString();
+  }
+  /** Lays \`h\` right under \`after\` in the z-order, without activation (another program holding its window there). */
+  public static bool PlaceUnder(long h, long after) {
+    return SetWindowPos(new IntPtr(h), new IntPtr(after), 0, 0, 0, 0, ORDER_ONLY);
+  }
+  /** Keeps \`h\` right under \`after\` every 100 ms for \`seconds\` (says „ready” first) – a program fighting the bar's place. */
+  public static void KeepUnder(long h, long after, int seconds) {
+    Console.Out.WriteLine("ready");
+    DateTime end = DateTime.UtcNow.AddSeconds(seconds);
+    while (DateTime.UtcNow < end) { PlaceUnder(h, after); System.Threading.Thread.Sleep(100); }
+  }
+  /**
+   * A hidden top-level window of the class „WorkerW” over the virtual screen (like Explorer's), kept at the top of the
+   * windows not on top for \`seconds\`; says its handle first, then pumps its messages.
+   */
+  public static void HiddenWorkerW(int seconds) {
+    SetProcessDPIAware();
+    var c = new WNDCLASSEX();
+    c.cbSize = (uint)Marshal.SizeOf(typeof(WNDCLASSEX));
+    c.lpfnWndProc = GetProcAddress(GetModuleHandle("user32.dll"), "DefWindowProcW");
+    c.hInstance = GetModuleHandle(null);
+    c.lpszClassName = "WorkerW";
+    if (RegisterClassEx(ref c) == 0) throw new Exception("RegisterClassEx: error " + Marshal.GetLastWin32Error());
+    int vx = GetSystemMetrics(76), vy = GetSystemMetrics(77), vw = GetSystemMetrics(78), vh = GetSystemMetrics(79);
+    // WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, WS_POPUP – never WS_VISIBLE.
+    IntPtr h = CreateWindowEx(0x80 | 0x08000000, "WorkerW", "", 0x80000000, vx, vy, vw, vh, IntPtr.Zero, IntPtr.Zero, c.hInstance, IntPtr.Zero);
+    if (h == IntPtr.Zero) throw new Exception("CreateWindowEx: error " + Marshal.GetLastWin32Error());
+    SetWindowPos(h, IntPtr.Zero, 0, 0, 0, 0, ORDER_ONLY);
+    Console.Out.WriteLine(h.ToInt64().ToString());
+    DateTime end = DateTime.UtcNow.AddSeconds(seconds);
+    MSG m;
+    for (int n = 1; DateTime.UtcNow < end; n++) {
+      while (PeekMessage(out m, IntPtr.Zero, 0, 0, 1)) { TranslateMessage(ref m); DispatchMessage(ref m); }
+      if (n % 10 == 0) SetWindowPos(h, IntPtr.Zero, 0, 0, 0, 0, ORDER_ONLY);
+      System.Threading.Thread.Sleep(20);
+    }
   }
   static void Send(INPUT[] inputs) {
     uint sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
@@ -158,6 +213,10 @@ export interface TopWindow {
   hwnd: string
   pid: number
   visible: boolean
+  /** Hidden by the system (DWMWA_CLOAKED: another virtual desktop, a suspended app). */
+  cloaked: boolean
+  /** It holds SHELLDLL_DefView (the desktop's icons – or an old file dialog). */
+  defView: boolean
   cls: string
   title: string
   rect: [number, number, number, number]
@@ -180,6 +239,37 @@ export function hover(points: Array<[number, number]>, dwellMs: number): void {
 export function click(x: number, y: number): void {
   ps(`[RdWin]::Click(${Math.round(x)}, ${Math.round(y)})`)
 }
+/** `hwnd` right under `after` in the z-order, without activation. */
+export function placeUnder(hwnd: string, after: string): void {
+  if (ps(`[RdWin]::PlaceUnder(${hwnd}, ${after})`) !== 'True') throw new Error(`Win32: SetWindowPos ${hwnd} pod ${after} nie udało się`)
+}
+
+/**
+ * A PowerShell with [RdWin] running `call` in the background (hidden – its console never lies over the bar): resolves
+ * with its first line once it is there; `stop` ends it (its windows go with it).
+ */
+export async function background(call: string): Promise<{ first: string; stop: () => void }> {
+  const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${RDWIN_PRELUDE}; ${call}`], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  let err = ''
+  child.stderr.on('data', (d) => (err += String(d)))
+  const stop = () => void (child.exitCode === null && child.kill())
+  const first = await new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      stop()
+      reject(new Error(`Win32 w tle: brak odpowiedzi w 60 s; ${err}`))
+    }, 60_000)
+    createInterface({ input: child.stdout }).once('line', (line) => {
+      clearTimeout(timer)
+      resolve(line.trim())
+    })
+    child.once('exit', (code) => {
+      clearTimeout(timer)
+      reject(new Error(`Win32 w tle: koniec (kod ${code}) bez odpowiedzi; ${err}`))
+    })
+  })
+  return { first, stop }
+}
+
 /** A real drag with the left button (physical px): down at `from`, `steps` moves `stepMs` apart, up at `to`. */
 export function drag(from: [number, number], to: [number, number], steps = 24, stepMs = 25): void {
   ps(`[RdWin]::Drag(${Math.round(from[0])}, ${Math.round(from[1])}, ${Math.round(to[0])}, ${Math.round(to[1])}, ${steps}, ${stepMs})`)

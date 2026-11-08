@@ -102,6 +102,17 @@ test('samotest pomocnika: sesja, powiadomienia, układ SYSTEM_POWER_CAPABILITIES
   expect(readFileSync(join(cwd, 'logs', 'helper.log'), 'utf8')).toContain('koniec')
 })
 
+test('samotest pomocnika: miejsce paska pulpitu na zmyślonych oknach – ukryte WorkerW to nie pulpit, nigdy nad pokazanym oknem, po „failed” ponowienie co 5 min (G4, D229, D341)', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'rd-pomocnik-okna-'))
+  const h = new Helper(cwd, `Regulated Day Samotest okien ${Date.now()}`)
+  await h.waitFor((m) => m.type === 'hello')
+  const s = await h.request('selftest')
+  expect(s.ok).toBe(true)
+  // Each case answering otherwise is named (SelfTestWindows.cs).
+  expect(s.windowOrderWrong).toEqual([])
+  expect(await h.quit()).toBe(0)
+})
+
 test('samotest strażnika: kultura niezmienna, licznik ustawiony przez właściciela czytany od razu (limit 4 startów)', () => {
   const r = spawnSync(join(dirname(HELPER), 'rd-guard.exe'), ['--selftest'], { encoding: 'utf8', windowsHide: true })
   const s = JSON.parse(r.stdout.trim()) as Record<string, unknown>

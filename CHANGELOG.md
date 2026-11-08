@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.6
+- Pasek pulpitu nie kładzie się już nad oknami innych programów (był np. nad Edge na pełnym ekranie i nad zmaksymalizowanym Eksploratorem): ukryte okna Eksploratora nie są już brane za pulpit, a pasek nigdy nie leży nad pokazanym oknem, które na niego nachodzi. Nie dotyczy włączonego „Zawsze na wierzchu”.
+- Po „Paska pulpitu nie udało się położyć pod oknami” pomocnik sam próbuje ponownie co 5 minut – pasek wraca bez „Pokaż pasek”, gdy tylko miejsce się zwolni. W dzienniku pomocnika zostaje wtedy lista górnych okien, która pokazuje, co trzymało pasek.
+
 ## 1.0.5
 - Gdy folder danych zniknie w trakcie pracy (odłączony dysk, zmieniona nazwa folderu), pasek dalej ma przyciski: „Start”, kliknięcia w pasku i zmiany w oknie czekają, a „N zmian zapisze się po powrocie folderu danych” rośnie z każdą z nich – w oknie i w powiadomieniu przy wyjściu. Po powrocie folderu zmiany trafiają do niego.
 - Zmiana zapisu, którego aplikacja w tym uruchomieniu jeszcze nie odczytała, przy niedostępnym folderze danych dostaje od razu odmowę „folder danych jest niedostępny – … spróbuj po jego powrocie” zamiast „plik jest teraz nieczytelny”.

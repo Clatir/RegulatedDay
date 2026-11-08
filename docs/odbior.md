@@ -26,7 +26,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 - **W maszynie wirtualnej** (opcjonalnie): 68 z tych punktów może sprawdzić Cowork na świeżej instalacji, bez Twoich
@@ -96,6 +96,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8l.3 „Usuń” przy zaczętym bloku
    - [ ] E8l.4 „Wstałeś później?” czeka na odpowiedź (gdy się zdarzy)
    - [ ] E8l.5 Numer wersji w Ustawieniach
+   - [ ] E8m.1 Pasek pulpitu nigdy nad oknami innych programów
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1288,3 +1289,17 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Jak sprawdzić:** otwórz Ustawienia i znajdź „Wersja aplikacji”.
 - **Oczekiwany efekt:** „Wersja aplikacji: 1.0.4 · zainstalowana” (numer bieżącej wersji, D344).
 - **Nie przechodzi, gdy:** zamiast numeru jest samo „zainstalowana” albo inny numer niż w Aktualizacjach.
+
+### E8m – pasek pulpitu, instalator, Windows po odbiorze w maszynie (1.0.6–1.0.8)
+
+#### E8m.1 Pasek pulpitu nigdy nad oknami innych programów (1.0.6)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/bar-windows.spec.ts` (ukryte WorkerW na szczycie, ponowienie po „failed”), samotest
+  pomocnika (`windowOrderWrong`) – tylko CI na Windows. **Tylko Ty:** Twój pulpit, Eksplorator, Edge na pełnym ekranie.
+- **Jak sprawdzić:** przy wyłączonym „Zawsze na wierzchu” otwórz i zmaksymalizuj Eksplorator, potem Edge na pełnym
+  ekranie (F11); zminimalizuj oba.
+- **Oczekiwany efekt:** pasek pulpitu nigdy nie jest widoczny nad Eksploratorem ani Edge; po ich zminimalizowaniu widać
+  go nad pulpitem. Jeżeli pojawi się „Paska pulpitu nie udało się położyć pod oknami”, pasek wraca sam najpóźniej ok.
+  5 min po komunikacie (bez „Pokaż pasek”), a w `helper.log` jest wpis „pasek: 8 górnych okien…”.
+- **Nie przechodzi, gdy:** pasek widać nad oknem innego programu, po „nie udało się położyć” nie wraca sam w ciągu
+  6 min przy odkrytym pulpicie albo w `helper.log` brak wpisu z oknami.
