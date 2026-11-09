@@ -37,7 +37,7 @@ const pastCtx = (s: Scenario) => s.contextAt(dayEnd(PAST) + 3_600_000)
 describe('dzień miniony – jak było', () => {
   it('bloki tam, gdzie biegły; niezaczęty – „minął”; zaczęty poza planem – osobno; nauka i oglądanie wykładu', () => {
     const d = horizonDay(pastCtx(pastDay()), 'past')
-    expect(d).toMatchObject({ date: PAST, when: 'past', read: 'full', presence: true, dayType: 'zwykly', frozen: false, boundary: 'kept', extensionMin: 0 })
+    expect(d).toMatchObject({ date: PAST, when: 'past', read: 'full', dayType: 'zwykly', frozen: false, boundary: 'kept', extensionMin: 0 })
     const by = Object.fromEntries(d.blocks.map((b) => [b.id, b]))
     expect(by.a).toMatchObject({ state: 'ran', startMin: lm('08:05'), endMin: lm('09:00'), outsidePlan: false, categoryId: 'inne' })
     expect(by.n).toMatchObject({ state: 'ran', startMin: lm('10:00'), endMin: lm('11:10') })
@@ -55,7 +55,7 @@ describe('dzień miniony – jak było', () => {
     const s = pastDay()
     const d = horizonDay(pastCtx(s), 'past')
     const graded = computeDay({ ...s.contextAt(dayEnd(PAST)), now: dayEnd(PAST), asWritten: true })
-    expect(d.regen).toEqual({ towardMin: graded.regen.towardMinMin, requiredMin: 90, reached: graded.regen.towardMinMin >= 90, counts: true, forecastMin: graded.regen.towardMinMin })
+    expect(d.regen).toEqual({ towardMin: graded.regen.towardMinMin, requiredMin: 90, reached: graded.regen.towardMinMin >= 90 })
   })
 
   it('granica złamana: praca po zatwierdzonej granicy (przedłużenie)', () => {
@@ -70,7 +70,7 @@ describe('dzień miniony – jak było', () => {
     const s = new Scenario({ date: PAST, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', after: 'a', min: 30 })] })
     // Not a single event: the plan, nothing begun – without the full count of the day.
     const quiet = horizonDay(pastCtx(s), 'past')
-    expect(quiet).toMatchObject({ boundary: 'free', presence: false, regen: null, studyMin: 0, dayType: 'zwykly', wakeMin: lm('06:00') })
+    expect(quiet).toMatchObject({ boundary: 'free', regen: null, studyMin: 0, dayType: 'zwykly', wakeMin: lm('06:00') })
     expect(quiet.blocks.map((b) => [b.id, b.state, b.startMin, b.endMin])).toEqual([
       ['a', 'missed', lm('08:00'), lm('09:00')],
       ['b', 'missed', lm('09:00'), lm('09:30')]
@@ -78,7 +78,7 @@ describe('dzień miniony – jak było', () => {
     // Events without your presence (another computer's observation): the same, counted in full.
     s.observe('10:00', '10:05', 'pcb')
     const counted = horizonDay(pastCtx(s), 'past')
-    expect(counted).toMatchObject({ boundary: 'free', presence: false, regen: null })
+    expect(counted).toMatchObject({ boundary: 'free', regen: null })
     expect(counted.blocks.map((b) => [b.id, b.state, b.startMin, b.endMin])).toEqual(quiet.blocks.map((b) => [b.id, b.state, b.startMin, b.endMin]))
   })
 
@@ -95,7 +95,7 @@ describe('dzień miniony – jak było', () => {
     const lastCounted = s.events.find((e) => e.k === 'block.end' && (e as { block?: string }).block === 'n')!.n
     const grade = { boundary: 'noData', free: false, extensionMin: 0, regen: { towardMin: 40, requiredMin: 90, reached: false, counts: true } }
     const d = horizonDay(pastCtx(s), 'past', { know: { pca: lastCounted }, grade })
-    expect(d).toMatchObject({ frozen: true, boundary: 'noData', regen: { towardMin: 40, requiredMin: 90, reached: false, counts: true, forecastMin: 40 } })
+    expect(d).toMatchObject({ frozen: true, boundary: 'noData', regen: { towardMin: 40, requiredMin: 90, reached: false } })
     expect(d.studyMin).toBe(70)
     // The axis as the day's plan shows it: also what came after the freeze („poza oceną” – not in its measures).
     expect(d.blocks.find((b) => b.id === 'x')).toMatchObject({ state: 'ran', outsidePlan: true })
@@ -110,6 +110,22 @@ describe('dzień miniony – jak było', () => {
     const axis = horizonDay(pastCtx(cut), 'past', { know: { pca: lastCounted }, grade }).blocks
     expect(axis.map((b) => b.id)).not.toContain('x')
     expect(axis.find((b) => b.id === 'o')).toMatchObject({ state: 'missed' })
+  })
+
+  it('nauka, której nikt nie zakończył: do planowanego końca (jak na osi), nie do 04:00', () => {
+    const s = new Scenario({ date: PAST, plan: [block({ id: 'n', cat: 'nauka', at: '22:00', min: 60 })], settings: { transitionBufferMin: 0 } })
+    s.presence('07:30').using('07:30', '23:30').start('n', '22:00')
+    const d = horizonDay(pastCtx(s), 'past')
+    expect(d.blocks.find((b) => b.id === 'n')).toMatchObject({ state: 'ran', startMin: lm('22:00'), endMin: lm('23:00') })
+    expect(d.studyMin).toBe(60)
+  })
+
+  it('blok zapauzowany i niezakończony: do końca ostatniego przebiegu (nie do planowanego końca z całą pauzą)', () => {
+    const s = new Scenario({ date: PAST, plan: [block({ id: 'n', cat: 'nauka', at: '10:00', min: 60 })], settings: { transitionBufferMin: 0 } })
+    s.presence('07:30').using('07:30', '12:00').start('n', '10:00').pause('n', '10:30')
+    const d = horizonDay(pastCtx(s), 'past')
+    expect(d.blocks.find((b) => b.id === 'n')).toMatchObject({ state: 'ran', startMin: lm('10:00'), endMin: lm('10:30') })
+    expect(d.studyMin).toBe(30)
   })
 
   it('ocena bez pola (starsza): to pole policzone od nowa', () => {
@@ -140,7 +156,34 @@ describe('dziś – na żywo', () => {
     expect(by.p).toMatchObject({ state: 'parked', startMin: lm('15:00') })
     expect(d.studyMin).toBe(90)
     const now = computeDay(s.contextAt(s.at('11:30')))
-    expect(d.regen).toMatchObject({ towardMin: now.regen.towardMinMin, requiredMin: 90, forecastMin: now.regen.forecastMin })
+    expect(d.regen).toEqual({ towardMin: now.regen.towardMinMin, requiredMin: 90, reached: false })
+  })
+
+  it('blok zapauzowany dziś: „zapauzowany”, do końca ostatniego przebiegu – nie „trwa” do teraz', () => {
+    const s = new Scenario({ date: '2026-11-04', plan: [block({ id: 'n', cat: 'nauka', at: '10:00', min: 60 })], settings: { transitionBufferMin: 0 } })
+    s.presence('07:30').using('07:30', '11:30').start('n', '10:00').pause('n', '10:30')
+    const d = horizonDay(s.contextAt(s.at('11:30')), 'today')
+    expect(d.blocks.find((b) => b.id === 'n')).toMatchObject({ state: 'paused', startMin: lm('10:00'), endMin: lm('10:30') })
+    expect(d.studyMin).toBe(30)
+    // Resumed: running again, up to now.
+    s.resume('n', '11:00')
+    expect(horizonDay(s.contextAt(s.at('11:30')), 'today').blocks.find((b) => b.id === 'n')).toMatchObject({ state: 'running', endMin: lm('11:30') })
+  })
+
+  it('dziś zamknięte rytuałem: granica z wyniku dnia, nie „w toku”', () => {
+    const date = '2026-11-04'
+    const day = (boundary: string) => {
+      const s = new Scenario({ date, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })], settings: { transitionBufferMin: 0 } })
+      s.presence('07:30').using('07:30', '21:00').approve(boundary, '07:40').ran('a', '08:00', '09:00').workEnd('09:00')
+      return s
+    }
+    const open = day('17:00')
+    expect(horizonDay(open.contextAt(open.at('21:00')), 'today').boundary).toBe('open')
+    open.raw({ k: 'ritual.close', at: open.at('21:00'), how: 'ritual' }, '21:00')
+    expect(horizonDay(open.contextAt(open.at('21:01')), 'today').boundary).toBe('kept')
+    const late = day('08:30')
+    late.raw({ k: 'ritual.close', at: late.at('21:00'), how: 'asWritten' }, '21:00')
+    expect(horizonDay(late.contextAt(late.at('21:01')), 'today')).toMatchObject({ boundary: 'broken', extensionMin: 30 })
   })
 
   it('dzień wolny dziś: „wolny”, nie „w toku”', () => {
@@ -191,9 +234,9 @@ describe('dzień przyszły – z planu', () => {
     const ctx = dayContextOf({ changes: [], templates: [], lectures: [] }, { date, events: [], dayFile: null, nextFile: null }, marketDay, NOW)
     const d = horizonDay(ctx, 'future')
     expect(d.dayType).toBe('zwykly')
-    expect(d.blocks.map((b) => [b.named.origin, b.named.sourceId, b.state, b.fixed])).toEqual([
-      ['session', 'londyn', 'planned', true],
-      ['session', 'ny', 'planned', true]
+    expect(d.blocks.map((b) => [b.named.origin, b.named.sourceId, b.state])).toEqual([
+      ['session', 'londyn', 'planned'],
+      ['session', 'ny', 'planned']
     ])
     expect(d.blocks[0]).toMatchObject({ startMin: 8 * 60, endMin: 11 * 60 })
   })
@@ -228,11 +271,36 @@ describe('sesje tradingowe – bez przedłużenia, poza planem', () => {
     expect(horizonDay(ctx, 'past').sessions).toEqual({ clean: 2, extended: 1, outsidePlan: 2 })
   })
 
-  it('wcześniejszy start drugiej zmiany to minuty poza jej oknem – z przedłużeniem', () => {
+  it('przedłużenie to „Przedłuż” albo bieg po planowanym końcu, jak go liczy silnik – nie wcześniejszy start drugiej zmiany', () => {
     const s = new Scenario({ date: PAST, plan: sessions(), settings: { transitionBufferMin: 0 } })
     s.presence('07:30').using('07:30', '22:00')
+    // Begun 10 min early, ended with its window: no minute after its planned end.
     s.ran('ds', '19:50', '21:00')
-    expect(horizonDay(pastCtx(s), 'past').sessions).toEqual({ clean: 0, extended: 1, outsidePlan: 0 })
+    expect(horizonDay(pastCtx(s), 'past').sessions).toEqual({ clean: 1, extended: 0, outsidePlan: 0 })
+    // Run on past the window without „Przedłuż”: with an extension.
+    const over = new Scenario({ date: PAST, plan: sessions(), settings: { transitionBufferMin: 0 } })
+    over.presence('07:30').using('07:30', '22:00').ran('ds', '20:00', '21:10')
+    expect(horizonDay(pastCtx(over), 'past').sessions).toEqual({ clean: 0, extended: 1, outsidePlan: 0 })
+  })
+
+  it('sesja niestała z planu: zaczęta 5 min później i trwająca planowaną długość – bez przedłużenia; dłużej – z przedłużeniem', () => {
+    const plan = [block({ id: 'h', cat: 'sesja', at: '15:00', min: 60, origin: 'user' })]
+    const late = new Scenario({ date: PAST, plan, settings: { transitionBufferMin: 0 } })
+    late.presence('07:30').using('07:30', '22:00').ran('h', '15:05', '16:05')
+    expect(horizonDay(pastCtx(late), 'past').sessions).toEqual({ clean: 1, extended: 0, outsidePlan: 0 })
+    const long = new Scenario({ date: PAST, plan, settings: { transitionBufferMin: 0 } })
+    long.presence('07:30').using('07:30', '22:00').ran('h', '15:05', '16:20')
+    expect(horizonDay(pastCtx(long), 'past').sessions).toEqual({ clean: 0, extended: 1, outsidePlan: 0 })
+  })
+
+  it('sesja z migawki zdjęta z planu po starcie (D336) – poza planem, jak na osi', () => {
+    const s = new Scenario({ date: PAST, plan: sessions(), settings: { transitionBufferMin: 0 } })
+    s.presence('07:30').using('07:30', '22:00').ran('lon', '08:00', '09:00')
+    // „Usuń” of the begun block: out of the day's plan, its run stays in the day.
+    const ctx = { ...pastCtx(s), plan: s.opts.plan.filter((b) => b.id !== 'lon') }
+    const d = horizonDay(ctx, 'past')
+    expect(d.blocks.find((b) => b.id === 'lon')).toMatchObject({ outsidePlan: true })
+    expect(d.sessions).toEqual({ clean: 0, extended: 0, outsidePlan: 1 })
   })
 
   it('bez zatwierdzenia z listą bloków: sesja w planie dnia jest z planu', () => {
@@ -240,6 +308,24 @@ describe('sesje tradingowe – bez przedłużenia, poza planem', () => {
     const s = new Scenario({ date: PAST, plan: sessions(), settings: { transitionBufferMin: 0 } })
     s.presence('07:30').using('07:30', '22:00').ran('extra', '18:00', '19:00', { cat: 'sesja', min: 60 })
     expect(horizonDay({ ...pastCtx(s), plan: [...s.opts.plan, extra] }, 'past').sessions).toEqual({ clean: 1, extended: 0, outsidePlan: 0 })
+  })
+
+  it('obowiązujące zatwierdzenie to ostatnie: zmiana typu w południe (zatwierdzenie bez listy bloków) – sesja dodana po niej jest z planu', () => {
+    const extra = block({ id: 'extra', cat: 'sesja', at: '18:00', min: 60, origin: 'user' })
+    const s = new Scenario({ date: PAST, plan: sessions(), settings: { transitionBufferMin: 0 } })
+    s.presence('07:30').using('07:30', '22:00')
+    approve(s, ['lon', 'ny', 'ds'])
+    // The change of type at noon approves the boundary again without naming the blocks.
+    s.raw({ k: 'boundary.approve', at: s.at('12:00'), boundary: s.at('19:15'), auto: false }, '12:00')
+    s.ran('extra', '18:00', '19:00', { cat: 'sesja', min: 60 })
+    const ctx = { ...pastCtx(s), plan: [...s.opts.plan, extra] }
+    expect(horizonDay(ctx, 'past').sessions).toEqual({ clean: 1, extended: 0, outsidePlan: 0 })
+    // The approval with its list opened again by „Cofnij”: none in force – the plan as it is.
+    const undone = new Scenario({ date: PAST, plan: sessions(), settings: { transitionBufferMin: 0 } })
+    undone.presence('07:30').using('07:30', '22:00')
+    approve(undone, ['lon', 'ny', 'ds'])
+    undone.raw({ k: 'boundary.undo', at: undone.at('12:00') }, '12:00').ran('extra', '18:00', '19:00', { cat: 'sesja', min: 60 })
+    expect(horizonDay({ ...pastCtx(undone), plan: [...undone.opts.plan, extra] }, 'past').sessions).toEqual({ clean: 1, extended: 0, outsidePlan: 0 })
   })
 
   it('dziś: biegnąca sesja jeszcze się nie liczy; zaczęta poza planem – od razu', () => {
@@ -263,7 +349,7 @@ describe('tydzień', () => {
     const w = weekViewOf('2026-11-02', '2026-11-04', [
       day('2026-11-03', { wakeMin: 5 * 60 }),
       day('2026-11-02'),
-      day('2026-11-06', { when: 'future', bedtimeMin: 23 * 60, blocks: [{ id: 'b', named: { categoryId: 'inne', variantId: null, routine: null, requests: [], note: '' }, categoryId: 'inne', startMin: 23 * 60, endMin: 24 * 60 + 30, state: 'planned', outsidePlan: false, background: false, fixed: false, secondShift: false }] })
+      day('2026-11-06', { when: 'future', bedtimeMin: 23 * 60, blocks: [{ id: 'b', named: { categoryId: 'inne', variantId: null, routine: null, requests: [], note: '' }, categoryId: 'inne', startMin: 23 * 60, endMin: 24 * 60 + 30, state: 'planned', outsidePlan: false, background: false }] })
     ])
     expect(w.days.map((d) => [d.date, d.read])).toEqual([
       ['2026-11-02', 'full'],

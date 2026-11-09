@@ -74,7 +74,7 @@ export function laneLayout<T extends { startMin: number; endMin: number }>(items
 }
 
 /**
- * The month whose goals the top of the page shows (T-nowa): the current one when the week holds today, else the month of
+ * The month whose goals the top of the page shows (T555): the current one when the week holds today, else the month of
  * the week's Thursday (the month most of its days belong to – on a turn of months the one with four of them).
  */
 export function goalsMonthOfWeek(week: string, today: string): string {

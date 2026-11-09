@@ -99,7 +99,7 @@ describe('cele z okna – sprawdzenie i pola do zapisu', () => {
 
 /** A day of the month as the week counts it. */
 const day = (date: string, o: Partial<HorizonDay> = {}): HorizonDay => ({ ...unknownDay(date, 'past'), read: 'full', dayType: 'zwykly', frozen: true, ...o })
-const regen = (reached: boolean) => ({ towardMin: reached ? 100 : 40, requiredMin: 90, reached, counts: true, forecastMin: reached ? 100 : 40 })
+const regen = (reached: boolean) => ({ towardMin: reached ? 100 : 40, requiredMin: 90, reached })
 
 describe('postęp celów – „x z y”', () => {
   const days = [
@@ -112,11 +112,9 @@ describe('postęp celów – „x z y”', () => {
   ]
 
   it('studia – minuty nauki i oglądania wykładu z dni miesiąca do dziś; regeneracja – dni z minimum; trading – sesje bez przedłużenia, obok przedłużone i poza planem', () => {
-    const p = goalsProgress('2026-11', G({ study: 40, regen: 20, trading: 30 }), days)
+    const p = goalsProgress('2026-11', G({ study: 40, regen: 20, trading: 30 }), days, '2026-10-01')
     expect(p).toEqual({
       month: '2026-11',
-      days: 4,
-      monthDays: 30,
       // 03.11 not frozen yet, and today.
       preliminary: 2,
       unknown: [],
@@ -128,8 +126,16 @@ describe('postęp celów – „x z y”', () => {
   })
 
   it('bez celu: liczy się i tak (null zamiast celu); dzień nieczytelny – pominięty i nazwany', () => {
-    const p = goalsProgress('2026-11', NO_GOALS, [...days.slice(0, 2), unknownDay('2026-11-03', 'past'), day('2026-11-04', { when: 'today', frozen: false, read: 'partial', studyMin: 10 })])
-    expect(p).toMatchObject({ days: 4, unknown: ['2026-11-03'], partial: ['2026-11-04'], study: { min: 145, goalMin: null }, regen: { days: 1, goal: null }, trading: { clean: 2, goal: null } })
+    const p = goalsProgress('2026-11', NO_GOALS, [...days.slice(0, 2), unknownDay('2026-11-03', 'past'), day('2026-11-04', { when: 'today', frozen: false, read: 'partial', studyMin: 10 })], '2026-10-01')
+    expect(p).toMatchObject({ unknown: ['2026-11-03'], partial: ['2026-11-04'], study: { min: 145, goalMin: null }, regen: { days: 1, goal: null }, trading: { clean: 2, goal: null } })
+  })
+
+  it('wstępne – tylko dni od pierwszego dnia rytuału, niezamrożone (wcześniejsze zostają jak zapisano, D320); bez rytuału – żadne miniony; dziś zawsze', () => {
+    expect(goalsProgress('2026-11', NO_GOALS, days, '2026-11-04').preliminary).toBe(1)
+    expect(goalsProgress('2026-11', NO_GOALS, days, '2026-11-03').preliminary).toBe(2)
+    // Today counts live: preliminary always, also without the ritual.
+    expect(goalsProgress('2026-11', NO_GOALS, days, null).preliminary).toBe(1)
+    expect(goalsProgress('2026-11', NO_GOALS, days, '2026-12-01').preliminary).toBe(1)
   })
 
   it('dni do policzenia: od pierwszego do dziś; miesiąc miniony – cały; przyszły – żaden', () => {

@@ -2,14 +2,15 @@
  * The words of „Tydzień” (D356, D360): the title of the week, a column's boundary and regeneration, the progress „x z y”
  * of the month's goals with its counters, and the goals the morning's step takes over from the month before.
  */
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { GoalsProgress } from '@shared/engine/goals'
 import { unknownDay, type HorizonDay } from '@shared/engine/week'
-import { suggestedGoals } from '@renderer/features/today/GoalsStep'
-import { blockStateText, boundaryLine, dayHeading, goalRows, monthLabel, monthName, progressNotes, regenLine, weekTitle } from '@renderer/features/week/weekText'
+import { suggestedGoals, suggestedGoalsOf } from '@renderer/features/today/goalsStepLogic'
+import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, goalRows, monthLabel, monthName, progressNotes, regenLine, weekTitle } from '@renderer/features/week/weekText'
 
-const day = (o: Partial<HorizonDay>): HorizonDay => ({ ...unknownDay('2026-11-04', 'past'), read: 'full', presence: true, dayType: 'zwykly', ...o })
-const regen = (towardMin: number, requiredMin: number, reached = towardMin >= requiredMin) => ({ towardMin, requiredMin, reached, counts: true, forecastMin: towardMin })
+const day = (o: Partial<HorizonDay>): HorizonDay => ({ ...unknownDay('2026-11-04', 'past'), read: 'full', dayType: 'zwykly', ...o })
+const regen = (towardMin: number, requiredMin: number, reached = towardMin >= requiredMin) => ({ towardMin, requiredMin, reached })
 
 describe('tytuł tygodnia i nagłówki kolumn', () => {
   it('„3–9.11.2026”; na przełomie miesięcy i lat z obiema datami', () => {
@@ -24,6 +25,17 @@ describe('tytuł tygodnia i nagłówki kolumn', () => {
     expect(dayHeading('2026-11-15', 6)).toBe('nd 15.11')
     expect(monthLabel('2026-11')).toBe('listopad 2026')
     expect(monthName('2026-02')).toBe('luty')
+  })
+})
+
+describe('opis kolumny dla czytnika ekranu', () => {
+  it('liczba bloków w odmianie: 0 bloków, 1 blok, 2 bloki, 5 bloków, 12 bloków, 22 bloki', () => {
+    expect(columnLabel(0, 0)).toBe('poniedziałek: 0 bloków')
+    expect(columnLabel(2, 1)).toBe('środa: 1 blok')
+    expect(columnLabel(4, 2)).toBe('piątek: 2 bloki')
+    expect(columnLabel(5, 5)).toBe('sobota: 5 bloków')
+    expect(columnLabel(6, 12)).toBe('niedziela: 12 bloków')
+    expect(columnLabel(1, 22)).toBe('wtorek: 22 bloki')
   })
 })
 
@@ -57,15 +69,21 @@ describe('regeneracja wobec minimum w kolumnie', () => {
   })
 
   it('dzień przyszły – samo minimum, bez prognozy', () => {
-    expect(regenLine(day({ when: 'future', regen: { ...regen(0, 90), forecastMin: 140 } }))).toMatchObject({ text: 'minimum 1 h 30 min', tone: 'muted' })
+    expect(regenLine(day({ when: 'future', regen: regen(0, 90) }))).toMatchObject({ text: 'minimum 1 h 30 min', tone: 'muted' })
   })
 
   it('dzień miniony bez obecności – „brak danych”', () => {
-    expect(regenLine(day({ presence: false, regen: null }))).toMatchObject({ text: 'regeneracja: brak danych', tone: 'muted' })
+    expect(regenLine(day({ regen: null }))).toMatchObject({ text: 'regeneracja: brak danych', tone: 'muted' })
   })
 
   it('stan bloku w podpowiedzi, z oznaczeniem „poza planem”', () => {
     expect(blockStateText('missed', false)).toBe('nie zaczęty')
+    expect(blockStateText('paused', false)).toBe('zapauzowany')
+    // Paused: the dashed edge of the day's axis, never the ring of a running block.
+    expect(blockDashed('paused')).toBe(true)
+    expect(blockRinged('paused')).toBe(false)
+    expect(blockRinged('running')).toBe(true)
+    expect(blockDashed('running')).toBe(false)
     expect(blockStateText('ran', true)).toBe('zrobiony · poza planem')
   })
 })
@@ -73,8 +91,6 @@ describe('regeneracja wobec minimum w kolumnie', () => {
 describe('postęp celów miesiąca „x z y” (D356, D360)', () => {
   const P = (o: Partial<GoalsProgress> = {}): GoalsProgress => ({
     month: '2026-11',
-    days: 9,
-    monthDays: 30,
     preliminary: 1,
     unknown: [],
     partial: [],
@@ -119,5 +135,18 @@ describe('krok „Cele na <miesiąc>”: liczby z poprzedniego miesiąca', () =>
 
   it('bez poprzedniego miesiąca – puste pola', () => {
     expect(suggestedGoals('2026-11', null)).toEqual({ study: null, regen: null, trading: null })
+  })
+
+  it('z danych okna (`rd.goals`) – bez liczenia postępu miesiąca: poprzedni miesiąc kalendarzowy, także przez przełom roku', () => {
+    const G = (o: object) => ({ study: null, regen: null, trading: null, skipped: false, ...o })
+    expect(suggestedGoalsOf('2026-11', { '2026-10': G({ study: 40, trading: 8 }), '2026-09': G({ study: 99 }) })).toEqual({ study: 40, regen: null, trading: 8 })
+    expect(suggestedGoalsOf('2027-01', { '2026-12': G({ regen: 20 }) })).toEqual({ study: null, regen: 20, trading: null })
+    expect(suggestedGoalsOf('2026-11', { '2026-09': G({ study: 99 }) })).toEqual({ study: null, regen: null, trading: null })
+  })
+
+  it('krok nie czyta postępu miesiąca (co 30 s liczyłby cały miesiąc) – tylko dane okna', () => {
+    const src = readFileSync('src/renderer/features/today/GoalsStep.tsx', 'utf8')
+    expect(src).not.toContain('useGoalsView')
+    expect(src).not.toContain('window.rd.goals')
   })
 })

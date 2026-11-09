@@ -15,13 +15,13 @@ import { join } from 'node:path'
 import { writeFileAtomic } from '../datastore/atomic'
 import type { ComputerRow } from '@shared/api'
 import { EventClock, type ClockSources } from '@shared/data/clock'
-import type { MergeConflict } from '@shared/data/merge'
+import { setAt, type MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { readLogText } from '@shared/data/logText'
 import { activityOf, type Activity } from '@shared/engine/activity'
 import { answerEvents, autoActions, closedSince, fixedStartPausesClosed, nextDeadline, questionsOf, runFromOf, shutdownActions, type AutoEvent, type Question } from '@shared/engine/auto'
 import { simEvents } from '@shared/engine/sim'
-import { createDay, type HolidayLookup } from '@shared/engine/createDay'
+import { createDay, nextWakeForBedtime, type HolidayLookup } from '@shared/engine/createDay'
 import { dayContextOf } from '@shared/engine/context'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
 import { NO_POWER, powerNeedOf, type PowerNeed } from '@shared/engine/power'
@@ -47,7 +47,7 @@ import { derivedId } from '@shared/model/ids'
 import { CLOSE_HOWS, compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type FeltCost, type Signal } from '@shared/model/events'
 import { placeOf, type Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
-import { MODULES, personName, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
+import { MODULES, personName, RD_SCHEMA, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
 import { runningRequestOf } from '@shared/engineView'
 import type { RunningRequest } from '@shared/widget'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
@@ -225,6 +225,8 @@ export interface FolderOptions {
   gameScreens?: boolean
   /** The helper process (T190): the grades of days to freeze, the CSV export; default: this process. */
   worker?: Worker
+  /** The app's log (main.log): what the folder leaves out and why (never the content of a record). */
+  log?: (level: 'info' | 'warn' | 'error', msg: string) => void
 }
 
 export interface CheckResult {
@@ -317,8 +319,14 @@ export class DataFolder {
   private peopleCounts: { day: string; at: number; before: Map<string, number> } | null = null
   /** The rituals of the last days, each counted again only on a change of what it is made of (the morning asks often). */
   private readonly ritualMemo = new Map<string, { key: string; view: RitualView }>()
-  /** The days of the horizon (the week, the month's goals – D356), each counted again only on a change of what it is made of. */
-  private readonly horizonMemo = new Map<string, { key: string; day: HorizonDay }>()
+  /**
+   * The days of the horizon (the week, the month's goals – D356, T553), each counted again only on a change of what it is
+   * made of; the ones asked last stay (a hit goes to the end). Days being counted now: one count of a day for every ask.
+   */
+  private readonly horizonMemo = new Map<string, { key: string; day: HorizonDay; seq: number }>()
+  private readonly horizonRuns = new Map<string, { key: string; run: Promise<HorizonDay>; seq: number }>()
+  /** The counts of days of the horizon begun so far: a later one's result is never written over by an earlier one's. */
+  private horizonSeq = 0
   /** Changes of the goals one at a time, each made from rd.json as it is in its turn. */
   private goalsTurn: Promise<unknown> = Promise.resolve()
 
@@ -1048,44 +1056,75 @@ export class DataFolder {
   }
 
   /**
-   * Days of the horizon (D356: the week, the month's goals) as this computer sees them – your queued edits included – each
-   * counted by the helper process (`horizonDay`): a day gone by as its grade counts it (a frozen one up to the events its
-   * freeze named), today live, a day to come from its plan; again only when its log, its records or your queued edits
-   * changed (today also every minute). A day whose log or file cannot be read now is unknown (never an empty day).
+   * Days of the horizon (D356: the week, the month's goals; T553) as this computer sees them – your queued edits
+   * included – each counted by the helper process (`horizonDay`): a day gone by as its grade counts it (a frozen one up
+   * to the events its freeze named), today live, a day to come from its plan. rd.json or the list of templates not
+   * readable now (OneDrive still bringing them): every day unknown – never a refusal of the week or of the progress.
    */
   private async horizonDays(dates: readonly string[], at: number): Promise<HorizonDay[]> {
     const today = logicalDayOf(at)
-    const inp = await this.inputs(true)
+    const inp = await this.inputs(true).catch(() => null)
     const out: HorizonDay[] = []
-    for (const date of dates) {
-      const when = whenOf(date, today)
-      let read: DayRead
-      let ctx: DayContext
-      try {
-        read = await this.log.readDay(date)
-        ctx = await this.ownContext(date, read, at, inp)
-      } catch {
-        out.push(unknownDay(date, when))
-        continue
-      }
-      const frozen = when === 'past' ? foldFacts(gridOf(date), read.events).frozen : null
-      // A day the leader made has its snapshot in the log: then of the records only its file and the next one's count (the
-      // settings only through the next wake) – a change of rd.json (a goal saved) never counts a month of days again.
-      const made = daySnapshotOf(read.events) != null
-      const records = made ? [this.recordSig(paths.day(date)), this.recordSig(paths.day(addDays(date, 1))), ctx.wakeMin, ctx.nextWakeMin] : this.contextSig(date)
-      const key = JSON.stringify([when === 'today' ? Math.floor(at / 60_000) : when === 'future' ? today : null, read.lastByComputer, read.events.length, read.copies, records, this.queue.pending.length, frozen?.id ?? null])
-      const was = this.horizonMemo.get(date)
-      let day = was?.key === key ? was.day : null
-      if (!day) {
-        day = await (this.o.worker ?? inProcess).run({ kind: 'horizon', ctx, when, frozen: frozen ? { know: frozen.know, grade: frozen.grade } : null })
-        this.horizonMemo.delete(date)
-        this.horizonMemo.set(date, { key, day })
-      }
-      out.push(read.complete ? day : { ...day, read: 'partial' })
-    }
+    for (const date of dates) out.push(inp ? await this.horizonDay(date, today, at, inp) : unknownDay(date, whenOf(date, today)))
     // The days asked last stay remembered (two months and a week: a month's goals and the week shown).
     for (const d of this.horizonMemo.keys()) if (this.horizonMemo.size > HORIZON_MEMO_DAYS) this.horizonMemo.delete(d)
     return out
+  }
+
+  /**
+   * One day of the horizon: first the key of what it is made of – its log, its file and the next one's (each only looked
+   * at), for a day the leader made (its snapshot in the log) the next wake instead of every record – then counted again
+   * only on a change, once for every ask at the same time; a count begun earlier never writes over the result of one
+   * begun later (the day changed meanwhile). Its log or file not readable now, or its count failed (the helper process
+   * timed out or started again): this day unknown – said in the log, by its date and the kind of the error – the others
+   * go on.
+   */
+  private async horizonDay(date: string, today: string, at: number, inp: Inputs): Promise<HorizonDay> {
+    const when = whenOf(date, today)
+    const next = addDays(date, 1)
+    try {
+      const read = await this.log.readDay(date)
+      const dayFile = await this.dayFile(date, true)
+      const nextFile = await this.dayFile(next, true)
+      const made = daySnapshotOf(read.events) != null
+      const records = made ? [this.recordSig(paths.day(date)), this.recordSig(paths.day(next)), nextWakeForBedtime(null, nextFile, inp.changes, next)] : this.contextSig(date)
+      const key = JSON.stringify([when === 'today' ? Math.floor(at / 60_000) : when === 'future' ? today : null, read.lastByComputer, read.events.length, read.copies, records, this.queue.pending.length])
+      const was = this.horizonMemo.get(date)
+      let day: HorizonDay
+      let seq: number
+      if (was?.key === key) ({ day, seq } = was)
+      else {
+        let job = this.horizonRuns.get(date)
+        if (job?.key !== key) {
+          const run = (async () => {
+            const ctx = dayContextOf(inp, { date, events: read.events, dayFile, nextFile }, this.o.holidays, at)
+            const frozen = when === 'past' ? foldFacts(gridOf(date), read.events).frozen : null
+            return (this.o.worker ?? inProcess).run({ kind: 'horizon', ctx, when, frozen: frozen ? { know: frozen.know, grade: frozen.grade } : null })
+          })()
+          const mine = { key, run, seq: ++this.horizonSeq }
+          job = mine
+          this.horizonRuns.set(date, mine)
+          void run.then(
+            () => this.horizonRuns.get(date) === mine && this.horizonRuns.delete(date),
+            () => this.horizonRuns.get(date) === mine && this.horizonRuns.delete(date)
+          )
+        }
+        day = await job.run
+        seq = job.seq
+      }
+      // Remembered (the last asked at the end) – unless a count begun later has written the day already.
+      const now = this.horizonMemo.get(date)
+      if (!now || now.seq <= seq) {
+        this.horizonMemo.delete(date)
+        this.horizonMemo.set(date, { key, day, seq })
+      }
+      return read.complete ? day : { ...day, read: 'partial' }
+    } catch (e) {
+      const code = (e as { code?: unknown } | null)?.code
+      const kind = `${(e as object | null)?.constructor?.name ?? typeof e}${typeof code === 'string' ? ` ${code}` : ''}`
+      this.o.log?.('warn', `tydzień i cele: dzień ${date} nieznany (${kind})`)
+      return unknownDay(date, when)
+    }
   }
 
   /** The week of `date` (D356): its seven days from Monday, as this computer sees them. */
@@ -1096,25 +1135,37 @@ export class DataFolder {
 
   /**
    * A month's goals (D356) as this computer sees rd.json, the month before's (to take over), and the progress: the days
-   * from its first to today, each as the week counts it. rd.json not readable now – no goals (the progress still counts).
+   * from its first to today, each as the week counts it, preliminary from the ritual's first day (D320). rd.json not
+   * readable now – no goals (the progress still counts).
    */
   async goalsView(month: string, at = this.clock.now()): Promise<GoalsView> {
     const all = rdFrom(await this.recordView(paths.settings).catch(() => undefined)).goals
     const goals = all[month] ?? NO_GOALS
     const days = await this.horizonDays(goalsDates(month, logicalDayOf(at)), at)
-    return { month, goals, previous: all[previousMonth(month)] ?? null, progress: goalsProgress(month, goals, days) }
+    return { month, goals, previous: all[previousMonth(month)] ?? null, progress: goalsProgress(month, goals, days, await this.ritualDay()) }
   }
 
   /**
-   * A change of a month's goals (D356) – the numbers, the morning's step skipped – as fields of rd.json through the queue,
-   * one change at a time, each made from rd.json as this computer sees it in its turn (only what differs; nothing – []).
+   * A change of a month's goals (D356, T552) – the numbers, the morning's step skipped – as fields of rd.json through the
+   * queue, one change at a time, each made from rd.json as this computer sees it in its turn (only what differs; nothing –
+   * []). No rd.json yet: it is made, as every change of the settings makes it (`trySaveRd`: `schema` and the changed
+   * fields; one that came meanwhile is never written over – the change is refused). rd.json not readable now (never read
+   * in this run): refused with why – nothing waits, the window says „Nie zapisano”.
    */
   setGoals(month: string, patch: GoalsPatch): Promise<Outcome[]> {
     const run = this.goalsTurn.then(async () => {
-      const raw = await this.recordView(paths.settings)
-      if (!raw) throw new Error('nie ma jeszcze ustawień – cele zapiszesz po kreatorze')
-      const edits = goalsEdits(raw, month, patch)
-      return edits.length ? this.edit([{ rel: paths.settings, edits }]) : []
+      let raw: Record<string, unknown> | undefined
+      try {
+        raw = await this.recordView(paths.settings)
+      } catch {
+        throw new Error('plik ustawień (rd.json) jest teraz nieczytelny – cele nie zostały zapisane, spróbuj za chwilę')
+      }
+      const edits = goalsEdits(raw ?? {}, month, patch)
+      if (!edits.length) return []
+      if (raw) return this.edit([{ rel: paths.settings, edits }])
+      let goals: unknown = {}
+      for (const x of edits) goals = setAt(goals, x.path.slice(1), x.value)
+      return this.edit([{ rel: paths.settings, create: true, edits: [{ path: ['schema'], base: undefined, value: RD_SCHEMA }, { path: ['goals'], base: undefined, value: goals }] }])
     })
     this.goalsTurn = run.catch(() => undefined)
     return run

@@ -4,10 +4,11 @@
  * only a view. One count of a day (`horizonDay`) gives the column and the measures of the month's goals (`goals.ts`):
  * hours of study, the minimum of regeneration reached, the trading sessions without an extension and outside no plan.
  *
- * A day gone by is counted as its grade counts it (T-nowa): a frozen one up to the events its freeze names, with the
+ * A day gone by is counted as its grade counts it (T553): a frozen one up to the events its freeze names, with the
  * boundary, the extension and the regeneration of its stored grade (its axis shows a correction made after the freeze,
- * as the day's own plan does); one not frozen yet with all its events as it would freeze now – preliminary. Today counts live, a day to come from its plan (templates, lectures, sessions, the day's
- * file – a „zjazd” marked in the calendar). Pure, one `computeDay` a day (no loop over minutes with a full forecast).
+ * as the day's own plan does); one not frozen yet with all its events as it would freeze now – preliminary. Today
+ * counts live, a day to come from its plan (templates, lectures, sessions, the day's file – a „zjazd” marked in the
+ * calendar). Pure, one `computeDay` a day (no loop over minutes with a full forecast).
  */
 import { namedById, namedOf, type NamedBlock } from '../blockName'
 import { isKnown } from '../model/events'
@@ -17,7 +18,7 @@ import { blockInfos, plannedSpan, type BlockInfo } from './blocks'
 import { namingOf } from './context'
 import { snapshotEntries } from './createDay'
 import { computeDay, type DayContext, type DayState } from './day'
-import { foldFacts, isPassive, OPEN, ranMinutes, type BlockFact } from './facts'
+import { foldFacts, isPassive, lastRunEnd, OPEN, ranMinutes, type BlockFact } from './facts'
 import { countedEvents, isFreeDay } from './freeze'
 import { atOf, gridOf } from './grid'
 import { plannedEndOf } from './timer'
@@ -32,10 +33,11 @@ export type HorizonWhen = 'past' | 'today' | 'future'
 
 /**
  * How a block stands on the axis: `ran` – begun and over (on a day gone by: everything begun), `running` – runs now,
+ * `paused` – today, begun and paused (not ended): it stands up to the end of its last run and may still go on,
  * `planned` – still to come, `missed` – not begun and its time gone, `parked` / `cancelled` – taken off the day before
  * it began.
  */
-export type HorizonBlockState = 'ran' | 'running' | 'planned' | 'missed' | 'parked' | 'cancelled'
+export type HorizonBlockState = 'ran' | 'running' | 'paused' | 'planned' | 'missed' | 'parked' | 'cancelled'
 
 export interface HorizonBlock {
   id: string
@@ -49,13 +51,11 @@ export interface HorizonBlock {
   /** Begun outside the plan („Pracuję”, a block begun by hand) or taken out of it after it began (D336). */
   outsidePlan: boolean
   background: boolean
-  fixed: boolean
-  secondShift: boolean
 }
 
 /**
  * The boundary of the day: kept, broken, without data (the grade's words); `free` – a free day (not in „x z y”);
- * `open` – today, not over; null – a day to come.
+ * `open` – today, not over (a day closed already – the ritual, „Jak zapisano” – has its outcome); null – a day to come.
  */
 export type HorizonBoundary = BoundaryOutcome | 'free' | 'open' | null
 
@@ -63,11 +63,8 @@ export interface HorizonRegen {
   /** Toward the minimum so far (a day gone by: as graded; a day to come: 0). */
   towardMin: number
   requiredMin: number
-  /** The minimum reached (only a minimum of 30 min and more counts – `counts`, spec „Nagrody”). */
+  /** The minimum reached (only a minimum of 30 min and more counts, spec „Nagrody”). */
   reached: boolean
-  counts: boolean
-  /** Toward the minimum with the plan's forecast up to the bedtime (today, a day to come); a day gone by: `towardMin`. */
-  forecastMin: number
 }
 
 /** Trading sessions of a day (blocks of a category of the kind „sesja”, the second shift of „Sesja tradingowa” too). */
@@ -87,11 +84,9 @@ export interface HorizonDay {
   date: string
   when: HorizonWhen
   read: HorizonRead
-  /** Your presence that day on any computer (`presence.first`): a day gone by without it has no measure of regeneration. */
-  presence: boolean
   /** The type in force (after a change of type during the day – the new one); null when not read. */
   dayType: string | null
-  /** Frozen: its grade is final; a day gone by and not frozen is preliminary. */
+  /** Frozen: its grade is final; a day gone by from the ritual's first day and not frozen is preliminary (`goalsProgress`). */
   frozen: boolean
   blocks: HorizonBlock[]
   /** The wake and the bedtime's forecast (logical minutes); null when not read. */
@@ -100,8 +95,8 @@ export interface HorizonDay {
   boundary: HorizonBoundary
   extensionMin: number
   /**
-   * Null: not read, or a day gone by without your presence (no data – as „Strona B”; a stationary „zjazd”, whose plan is
-   * its record, has it).
+   * Null: not read, or a day gone by without your presence on any computer (no data – as „Strona B”, T554; a stationary
+   * „zjazd”, whose plan is its record, has it).
    */
   regen: HorizonRegen | null
   /** Minutes of study blocks run (today: so far). */
@@ -119,17 +114,17 @@ const NO_SESSIONS: SessionCount = { clean: 0, extended: 0, outsidePlan: 0 }
 
 /** A day whose log cannot be read now: no blocks, no measures. */
 export function unknownDay(date: string, when: HorizonWhen): HorizonDay {
-  return { date, when, read: 'unknown', presence: false, dayType: null, frozen: false, blocks: [], wakeMin: null, bedtimeMin: null, boundary: null, extensionMin: 0, regen: null, studyMin: 0, sessions: { ...NO_SESSIONS } }
+  return { date, when, read: 'unknown', dayType: null, frozen: false, blocks: [], wakeMin: null, bedtimeMin: null, boundary: null, extensionMin: 0, regen: null, studyMin: 0, sessions: { ...NO_SESSIONS } }
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const BOUNDARIES: readonly string[] = ['kept', 'broken', 'noData']
 
 /** What a stored grade says of the boundary and the regeneration (a field missing or broken: null – counted instead). */
-export function storedOutcome(grade: Readonly<Record<string, unknown>>): { boundary: BoundaryOutcome | null; free: boolean | null; extensionMin: number | null; regen: Omit<HorizonRegen, 'forecastMin'> | null } {
+export function storedOutcome(grade: Readonly<Record<string, unknown>>): { boundary: BoundaryOutcome | null; free: boolean | null; extensionMin: number | null; regen: HorizonRegen | null } {
   const r = grade.regen
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
-  const regen = isPlain(r) && num(r.towardMin) != null && num(r.requiredMin) != null && typeof r.reached === 'boolean' && typeof r.counts === 'boolean' ? { towardMin: r.towardMin as number, requiredMin: r.requiredMin as number, reached: r.reached, counts: r.counts } : null
+  const regen = isPlain(r) && num(r.towardMin) != null && num(r.requiredMin) != null && typeof r.reached === 'boolean' ? { towardMin: r.towardMin as number, requiredMin: r.requiredMin as number, reached: r.reached } : null
   return {
     boundary: BOUNDARIES.includes(grade.boundary as string) ? (grade.boundary as BoundaryOutcome) : null,
     free: typeof grade.free === 'boolean' ? grade.free : null,
@@ -138,9 +133,19 @@ export function storedOutcome(grade: Readonly<Record<string, unknown>>): { bound
   }
 }
 
-/** The end of a begun block on the axis (as the day's axis: its end, else running up to now or its planned end). */
+/**
+ * The end of a begun block on the axis: its end; a run still open – up to now (today) or its planned end (as the day's
+ * axis; on a day gone by nobody ended it – as written, by its plan); paused and not ended – the end of its last run.
+ */
 function begunEnd(state: DayState, info: BlockInfo, f: BlockFact, nowIdx: number | null): number {
-  return f.endedAt ?? Math.max(nowIdx ?? f.startedAt!, plannedEndOf(state, info, f))
+  if (f.endedAt != null) return f.endedAt
+  return lastRunEnd(f) ?? Math.max(nowIdx ?? f.startedAt!, plannedEndOf(state, info, f))
+}
+
+/** How a begun block stands: today – running (a run open), paused (no run open, not ended) or over; a day gone by – over. */
+function begunState(f: BlockFact, when: HorizonWhen): HorizonBlockState {
+  if (when !== 'today' || f.endedAt != null) return 'ran'
+  return f.runs.some((r) => r.to === OPEN) ? 'running' : 'paused'
 }
 
 /**
@@ -157,14 +162,14 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
   const naming = namingOf(ctx, state.facts)
   const out: HorizonBlock[] = []
   const push = (info: BlockInfo, named: NamedBlock, from: number, to: number, st: HorizonBlockState, outsidePlan: boolean) =>
-    out.push({ id: info.id, named, categoryId: info.categoryId, startMin: lm(from), endMin: lm(Math.max(to, from + 1)), state: st, outsidePlan, background: info.bg, fixed: info.fixed, secondShift: info.secondShift })
+    out.push({ id: info.id, named, categoryId: info.categoryId, startMin: lm(from), endMin: lm(Math.max(to, from + 1)), state: st, outsidePlan, background: info.bg })
   for (const p of ctx.plan) {
     const info = byId.get(p.id)
     if (!info) continue
     const f = state.facts.blocks.get(p.id)
     const named: NamedBlock = { categoryId: p.categoryId, variantId: p.variantId, routine: p.routine, requests: p.requests, note: p.note, origin: p.origin, sourceId: p.sourceId }
     if (f?.startedAt != null) {
-      push(info, named, f.startedAt, begunEnd(state, info, f, nowIdx), when === 'today' && f.endedAt == null ? 'running' : 'ran', false)
+      push(info, named, f.startedAt, begunEnd(state, info, f, nowIdx), begunState(f, when), false)
       continue
     }
     const gone: HorizonBlockState | null = f?.parkedAt != null ? 'parked' : f?.cancelledAt != null ? 'cancelled' : null
@@ -180,52 +185,59 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
     if (info.inPlan) continue
     const f = state.facts.blocks.get(info.id)
     if (!f || f.startedAt == null) continue
-    push(info, namedById(info.id, naming) ?? namedOf(info), f.startedAt, begunEnd(state, info, f, nowIdx), when === 'today' && f.endedAt == null ? 'running' : 'ran', true)
+    push(info, namedById(info.id, naming) ?? namedOf(info), f.startedAt, begunEnd(state, info, f, nowIdx), begunState(f, when), true)
   }
   return out.sort((a, b) => a.startMin - b.startMin || (a.id < b.id ? -1 : 1))
 }
 
-/** Minutes of study blocks run up to the index `upTo` (D356). */
-function studyMinutes(state: DayState, upTo: number): number {
+/**
+ * Minutes of study blocks run (D356, T554): today up to now; on a day gone by every run whole, and a run nobody ended up
+ * to the block's planned end – where the axis ends it (never on to 04:00).
+ */
+function studyMinutes(state: DayState, when: HorizonWhen): number {
   let sum = 0
   for (const b of state.blocks) {
     if (!STUDY_CATEGORIES.has(b.categoryId)) continue
     const f = state.facts.blocks.get(b.id)
-    if (f?.startedAt != null) sum += ranMinutes(f, upTo)
+    if (f?.startedAt == null) continue
+    if (when === 'today') sum += ranMinutes(f, state.now)
+    else for (const r of f.runs) sum += Math.max(0, (r.to === OPEN ? begunEnd(state, b, f, null) : r.to) - r.from)
   }
   return sum
 }
 
 /**
- * The trading sessions of a day (D356 „sesje bez przedłużenia i bez sesji poza planem”, T-nowa). A session is a begun
+ * The trading sessions of a day (D356, D360 „sesje bez przedłużenia i bez sesji poza planem”, T554). A session is a begun
  * block of a category of the kind „sesja” (the session layer, the second shift of „Sesja tradingowa”, one added by hand).
- * From the plan: in the day's snapshot (the template, the session layer, a session the answer „tak” added) or in the plan
- * you approved with the boundary (the approval in force that names its blocks; without one – in the plan); any other
- * begun session – added after the approval, begun outside the plan – is outside the plan. A session from the plan counts
- * once over (ended; on a day gone by – begun): without an extension when it has no „Przedłuż” and none of its minutes
- * lies outside its planned window (an earlier start too – as the spec counts the second shift's); with one otherwise.
+ * From the plan: in the day's plan now and there from the day's snapshot (the template, the session layer, a session the
+ * answer „tak” added) or from the plan you approved with the boundary – the approval in force, the last one not opened
+ * again (as `blockInfos`); one that names no blocks (a change of type) or none in force – the plan as it is. Any other
+ * begun session is outside the plan: added after the approval, begun outside the plan, or taken out of the plan after it
+ * began (D336 – as the axis shows it). A session from the plan counts once over (ended; on a day gone by – begun): with
+ * an extension when it has a „Przedłuż” or its run went on past its planned end as the engine counts it (`plannedEndOf`:
+ * a fixed one – its window, a later start not moving it; another – its start, planned length, pauses and extensions), so
+ * a session begun 5 min late and run for its length is without one; else without.
  */
 export function sessionsOf(ctx: DayContext, state: DayState, when: HorizonWhen): SessionCount {
   const out = { ...NO_SESSIONS }
   if (when === 'future') return out
-  const approval = [...state.facts.approvals].reverse().find((a) => a.plan != null && a.undoneAt == null)
-  const approved = approval ? new Set(approval.plan) : null
+  const last = state.facts.approvals.at(-1)
+  const approved = last && last.undoneAt == null && last.plan ? new Set(last.plan) : null
   const snap = snapshotEntries(ctx.snapshot, ctx.date)
-  const byId = new Map(state.blocks.map((b) => [b.id, b]))
   for (const b of state.blocks) {
     if (b.rules.kind !== 'session') continue
     const f = state.facts.blocks.get(b.id)
     if (!f || f.startedAt == null) continue
-    const planned = snap(b.id) != null || (approved ? approved.has(b.id) : b.inPlan)
+    const planned = b.inPlan && (snap(b.id) != null || (approved ? approved.has(b.id) : true))
     if (!planned) {
       out.outsidePlan++
       continue
     }
     if (f.endedAt == null && when !== 'past') continue
-    const span = b.inPlan ? plannedSpan(b, byId) : null
+    const plannedEnd = plannedEndOf(state, b, f)
     // A run still open on a day gone by (nobody ended it): as written – it ended by its plan.
-    const outside = span != null && f.runs.some((r) => r.from < span.start || (r.to === OPEN ? plannedEndOf(state, b, f) : r.to) > span.end)
-    if (f.extends.length > 0 || outside) out.extended++
+    const ranTo = Math.max(...f.runs.map((r) => (r.to === OPEN ? plannedEnd : r.to)))
+    if (f.extends.length > 0 || ranTo > plannedEnd) out.extended++
     else out.clean++
   }
   return out
@@ -255,14 +267,15 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
     boundary = free ? 'free' : (stored?.boundary ?? o.boundary)
     extensionMin = stored?.extensionMin ?? state.extensionMin
     const r = stored?.regen ?? o.regen
-    regen = presence || state.dayType === 'zjazd-stacjonarny' ? { towardMin: r.towardMin, requiredMin: r.requiredMin, reached: r.reached, counts: r.counts, forecastMin: r.towardMin } : null
+    regen = presence || state.dayType === 'zjazd-stacjonarny' ? { towardMin: r.towardMin, requiredMin: r.requiredMin, reached: r.reached } : null
   } else if (when === 'today') {
-    boundary = state.dayType === 'wolne' || closedFree ? 'free' : 'open'
-    regen = { ...o.regen, forecastMin: state.regen.forecastMin }
+    // Closed already (the ritual, „Jak zapisano”, „Nie pamiętam”): what the day came to, no longer „w toku”.
+    boundary = state.dayType === 'wolne' || closedFree ? 'free' : state.facts.closed ? o.boundary : 'open'
+    regen = { towardMin: o.regen.towardMin, requiredMin: o.regen.requiredMin, reached: o.regen.reached }
   } else {
     boundary = state.dayType === 'wolne' ? 'free' : null
     extensionMin = 0
-    regen = { towardMin: 0, requiredMin: state.regen.requiredMin, reached: false, counts: o.regen.counts, forecastMin: state.regen.forecastMin }
+    regen = { towardMin: 0, requiredMin: state.regen.requiredMin, reached: false }
   }
   // The axis of a frozen day shows corrections made after its freeze too (as the day's own plan does); its measures do not.
   const late = frozen != null && ctx.events.some((e) => e.n > (frozen.know[e.c] ?? -1) && e.k !== 'day.freeze' && !isPassive(e))
@@ -271,7 +284,6 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
     date: ctx.date,
     when,
     read: 'full',
-    presence,
     dayType: state.dayType,
     frozen: frozen != null,
     blocks: axisBlocks(axis.ctx, axis.state, when),
@@ -280,7 +292,7 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
     boundary,
     extensionMin,
     regen,
-    studyMin: when === 'future' ? 0 : studyMinutes(state, Math.min(state.now, g.length)),
+    studyMin: when === 'future' ? 0 : studyMinutes(state, when),
     sessions: sessionsOf(counted, state, when)
   }
 }
@@ -300,7 +312,7 @@ function quietDay(ctx: DayContext): HorizonDay {
     const span = info ? plannedSpan(info, byId) : null
     if (!info || !span) continue
     const named: NamedBlock = { categoryId: p.categoryId, variantId: p.variantId, routine: p.routine, requests: p.requests, note: p.note, origin: p.origin, sourceId: p.sourceId }
-    blocks.push({ id: p.id, named, categoryId: p.categoryId, startMin: lm(span.start), endMin: lm(Math.max(span.end, span.start + 1)), state: 'missed', outsidePlan: false, background: info.bg, fixed: info.fixed, secondShift: info.secondShift })
+    blocks.push({ id: p.id, named, categoryId: p.categoryId, startMin: lm(span.start), endMin: lm(Math.max(span.end, span.start + 1)), state: 'missed', outsidePlan: false, background: info.bg })
   }
   blocks.sort((a, b) => a.startMin - b.startMin || (a.id < b.id ? -1 : 1))
   return { ...unknownDay(ctx.date, 'past'), read: 'full', dayType: ctx.snapshot.dayType, blocks, wakeMin: ctx.wakeMin, boundary: 'free' }

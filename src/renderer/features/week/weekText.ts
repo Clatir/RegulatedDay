@@ -5,7 +5,7 @@
  */
 import type { GoalsProgress } from '@shared/engine/goals'
 import type { HorizonBlockState, HorizonDay } from '@shared/engine/week'
-import { durationLabel, formatNumber, ofLabel } from '@shared/format'
+import { countLabel, durationLabel, formatNumber, ofLabel } from '@shared/format'
 import type { GoalArea } from '@shared/model/goals'
 import { addDays } from '@shared/time/zone'
 import { MONTH_NAMES } from '../calendar/MonthGrid'
@@ -26,6 +26,9 @@ export function weekTitle(week: string): string {
 
 /** A column's first line: „pn 3.11” (`index` 0 = Monday). */
 export const dayHeading = (date: string, index: number): string => `${WEEKDAY_SHORT[index]} ${day(date)}.${month(date)}`
+
+/** What a column says to a screen reader: the weekday and how many blocks it holds („wtorek: 2 bloki”). */
+export const columnLabel = (index: number, blocks: number): string => `${WEEKDAY_FULL[index]}: ${countLabel(blocks, 'blok', 'bloki', 'bloków')}`
 
 /** A month's name for a heading: „listopad 2026”. */
 export const monthLabel = (m: string): string => `${MONTH_NAMES[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`
@@ -83,9 +86,13 @@ export function regenLine(d: HorizonDay): ColumnLine | null {
 
 /** What a block's state says in its hint. */
 export function blockStateText(state: HorizonBlockState, outsidePlan: boolean): string {
-  const text: Record<HorizonBlockState, string> = { ran: 'zrobiony', running: 'trwa', planned: 'w planie', missed: 'nie zaczęty', parked: 'zaparkowany', cancelled: 'odwołany' }
+  const text: Record<HorizonBlockState, string> = { ran: 'zrobiony', running: 'trwa', paused: 'zapauzowany', planned: 'w planie', missed: 'nie zaczęty', parked: 'zaparkowany', cancelled: 'odwołany' }
   return outsidePlan ? `${text[state]} · poza planem` : text[state]
 }
+
+/** A block taken off or waiting (parked, paused) has a dashed edge, as on the day's axis; only a running one has the ring. */
+export const blockDashed = (state: HorizonBlockState): boolean => state === 'parked' || state === 'paused'
+export const blockRinged = (state: HorizonBlockState): boolean => state === 'running'
 
 export const GOAL_LABELS: Record<GoalArea, string> = { study: 'Studia', regen: 'Regeneracja', trading: 'Dyscyplina tradingowa' }
 export const GOAL_UNITS: Record<GoalArea, string> = { study: 'godzin', regen: 'dni', trading: 'sesji' }

@@ -4,7 +4,7 @@
  * extension, outside no plan) – and whether the morning's step „Cele na <miesiąc>” was skipped. No goal is no number
  * (never a zero), and a goal never blocks anything (D72).
  *
- * They live in rd.json as `goals: { "RRRR-MM": { study, regen, trading, skipped } }` (T-nowa): every number its own field,
+ * They live in rd.json as `goals: { "RRRR-MM": { study, regen, trading, skipped } }` (T552): every number its own field,
  * so two computers setting different months or areas merge without a question, the history of rd.json keeps them, and an
  * older version – which reads only the fields it knows – keeps the field as it is. Read tolerantly: a value out of its
  * range or of another kind is no goal.

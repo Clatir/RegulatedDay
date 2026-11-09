@@ -20,7 +20,7 @@ import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockColor, blockName, type Names } from '../plan/blockView'
 import { GoalsPanel } from './GoalsPanel'
 import { axisHeight, axisRange, axisY, blockSpan, goalsMonthOfWeek, hourMarks, laneLayout } from './weekLayout'
-import { blockStateText, boundaryLine, dayHeading, regenLine, WEEKDAY_FULL, weekTitle, type Tone } from './weekText'
+import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, weekTitle, type Tone } from './weekText'
 
 const AXIS_PX = 48
 const TONE_CLASS: Record<Tone, string> = { ok: 'text-sea', bad: 'text-rose', muted: 'text-muted', plain: 'text-fg' }
@@ -138,7 +138,7 @@ function DayColumn({ day, index, lo, height, marks, names, brightness }: { day: 
       style={{ height }}
       onClick={() => openDay(day.date)}
       data-testid={`week-col-${day.date}`}
-      aria-label={`${WEEKDAY_FULL[index]}: ${day.blocks.length} bloków`}
+      aria-label={columnLabel(index, day.blocks.length)}
     >
       {marks.map((h) => (
         <div key={h} className="absolute right-0 left-0 border-t border-line/60" style={{ top: axisY(h, lo) }} />
@@ -163,7 +163,7 @@ function BlockBox({ block: b, lo, lane, lanes, names, brightness, date }: { bloc
       data-testid={`week-block-${date}-${b.id}`}
       data-state={b.state}
       data-outside={b.outsidePlan ? 'true' : undefined}
-      className={cx('absolute overflow-hidden rounded-[3px] border-l-[3px] px-1 text-[11px] leading-tight', b.state === 'running' && 'ring-1 ring-lamp', b.state === 'parked' && 'border-dashed', b.state === 'cancelled' && 'line-through')}
+      className={cx('absolute overflow-hidden rounded-[3px] border-l-[3px] px-1 text-[11px] leading-tight', blockRinged(b.state) && 'ring-1 ring-lamp', blockDashed(b.state) && 'border-dashed', b.state === 'cancelled' && 'line-through')}
       // Dimmed by its fill and edge, never its text (as on the day's axis, A8-05).
       style={{
         top,

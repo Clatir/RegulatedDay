@@ -1,7 +1,8 @@
 /**
  * The progress of a month's goals (D356): „x z y” in each area – never a judgement nor a block (D72) – from the same count
  * of the days as the week (`horizonDay`): the days from the first of the month to today (the whole month once it is over).
- * A day gone by counts as its grade counts it – frozen, or preliminary until it freezes – and today live (T-nowa).
+ * A day gone by counts as its grade counts it – frozen, or preliminary until it freezes (from the ritual's first day: an
+ * earlier one never freezes, it stays as written, D320) – and today live (T553, T554).
  *
  * - study: minutes of the blocks „Nauka” and „Oglądanie wykładu” run (the goal in hours);
  * - regeneration: days with the minimum reached (today – once it is reached);
@@ -16,11 +17,7 @@ import type { HorizonDay } from './week'
 
 export interface GoalsProgress {
   month: string
-  /** The days counted (the first of the month to today; the whole month once it is over; none for a month to come). */
-  days: number
-  /** Days of the month (28–31). */
-  monthDays: number
-  /** Counted days not frozen yet (today included): their numbers may still change. */
+  /** Counted days whose numbers may still change: today (counted live), days from the ritual's first day not frozen yet. */
   preliminary: number
   /** Days whose log cannot be read now (left out), and days read without some computer's log (the numbers may be short). */
   unknown: string[]
@@ -39,16 +36,17 @@ export interface GoalsView {
   progress: GoalsProgress
 }
 
-/** The progress of `month`'s goals from its days (any order; days of other months and days to come are left out). */
-export function goalsProgress(month: string, goals: MonthGoals, days: readonly HorizonDay[]): GoalsProgress {
+/**
+ * The progress of `month`'s goals from its days (any order; days of other months and days to come are left out);
+ * `ritualFrom` – the ritual's first day (null: none yet – no day gone by will ever freeze; today is preliminary always).
+ */
+export function goalsProgress(month: string, goals: MonthGoals, days: readonly HorizonDay[], ritualFrom: string | null): GoalsProgress {
   const mine = days.filter((d) => d.date.startsWith(`${month}-`) && d.when !== 'future')
   const read = mine.filter((d) => d.read !== 'unknown')
   const sum = (pick: (d: HorizonDay) => number) => read.reduce((s, d) => s + pick(d), 0)
   return {
     month,
-    days: mine.length,
-    monthDays: daysInMonth(month),
-    preliminary: read.filter((d) => !d.frozen).length,
+    preliminary: read.filter((d) => d.when === 'today' || (!d.frozen && ritualFrom != null && d.date >= ritualFrom)).length,
     unknown: mine.filter((d) => d.read === 'unknown').map((d) => d.date),
     partial: read.filter((d) => d.read === 'partial').map((d) => d.date),
     study: { min: sum((d) => d.studyMin), goalMin: goals.study == null ? null : goals.study * 60 },
@@ -60,7 +58,7 @@ export function goalsProgress(month: string, goals: MonthGoals, days: readonly H
 /**
  * The morning plan shows „Cele na <miesiąc>” (D360) at every morning plan of the month (`goals` – the month of the day's
  * date), while none of its goals is set and the step was not skipped. Its place: after „Strona B tygodnia”, before the
- * questions about symptoms (T-nowa).
+ * questions about symptoms (T555).
  */
 export function goalsStepShown(goals: MonthGoals | null | undefined): boolean {
   return !hasGoals(goals) && goals?.skipped !== true

@@ -10,7 +10,6 @@ import { marketDay } from '@shared/calendar/holidays'
 import { dayRaw, putBlock, setAsked, setCancelled, setSessionAnswer } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { checkinStates } from '@shared/engine/energy'
-import { goalsStepShown } from '@shared/engine/goals'
 import { atOf } from '@shared/engine/grid'
 import { fromYesterday, holidayQuestions, lighterDay, morningWarnings, sessionQuestions, shiftNotice, weeklyAnalysisMove, type MorningInputs, type MorningWarning } from '@shared/engine/morning'
 import { freeStart, requestsBlock } from '@shared/engine/planEdit'
@@ -27,6 +26,7 @@ import { Segmented, cx } from '../../components/ui'
 import { CalibrationCard } from '../calibration/CalibrationEntry'
 import { SideBStep, sideBShown } from './SideBStep'
 import { GoalsStep } from './GoalsStep'
+import { goalsStepOpen } from './goalsStepLogic'
 import { dayFilesNow, editOf, isSaved, logEvents, rawRecord, trySaveWith, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
@@ -59,7 +59,8 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   // Then „Cele na <miesiąc>” (D360): at every morning plan of the month until the goals are set or the step skipped – not
   // once the plan is approved by you (the morning is over).
   const month = monthOfDate(model.date)
-  const goals = !approvedByYou && goalsStepShown(names.rd.goals[month])
+  const goalsClosed = useUi((u) => u.goalsClosed)
+  const goals = goalsStepOpen(names.rd.goals[month], month, goalsClosed, approvedByYou)
   return (
     <section className="rounded-lg border border-line bg-panel" data-testid="morning-plan">
       <button type="button" className="flex w-full items-center gap-2 px-4 py-2.5 text-left" onClick={() => setOpen(!open)}>
@@ -70,7 +71,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
       </button>
       {open && (
         <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
-          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep month={month} /> : needCheckin && !skipCheckin ? <Checkin model={model} onSkip={() => setSkipCheckin(true)} /> : <Plan model={model} names={names} />}
+          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : needCheckin && !skipCheckin ? <Checkin model={model} onSkip={() => setSkipCheckin(true)} /> : <Plan model={model} names={names} />}
         </div>
       )}
     </section>

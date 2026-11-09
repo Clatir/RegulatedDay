@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BRIGHTNESS_STEPS } from '@shared/machine'
-import { BLOCK_COLORS, contrast, contrastPairs, iconColor, SEASON_COLORS, toneColor, TONES, HIDDEN_ICON } from '@shared/theme'
+import { BLOCK_COLORS, contrast, contrastPairs, iconColor, PALETTE, SEASON_COLORS, themeVars, toneColor, TONES, HIDDEN_ICON } from '@shared/theme'
 
 describe('kontrast (Wygląd i nazwy: co najmniej 4,5:1 przy każdej jasności)', () => {
   for (const step of BRIGHTNESS_STEPS) {
@@ -12,6 +12,14 @@ describe('kontrast (Wygląd i nazwy: co najmniej 4,5:1 przy każdej jasności)',
       expect(bad).toEqual([])
     })
   }
+
+  it('nagłówek dzisiejszej kolumny „Tydzień” (miękkie tło lampki): tekst, przygaszony tekst i każdy akcent mają sprawdzony kontrast (E10)', () => {
+    for (const step of BRIGHTNESS_STEPS) {
+      const bg = themeVars(step)['--color-lamp-soft']!
+      const texts = new Set(contrastPairs(step).filter((p) => p.bg === bg).map((p) => p.text))
+      for (const t of [PALETTE.text, PALETTE.muted, PALETTE.lamp, PALETTE.rose, PALETTE.sea]) expect(texts.has(t), `${t} na ${bg} przy ${step}`).toBe(true)
+    }
+  })
 
   it('okładki kaset (D322) to kolory bloków – napis na nich ma sprawdzony kontrast', () => {
     for (const c of Object.values(SEASON_COLORS)) expect(BLOCK_COLORS).toContain(c)

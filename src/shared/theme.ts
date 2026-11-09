@@ -173,7 +173,9 @@ export function contrastPairs(brightness: number): Array<{ name: string; text: s
     ['tło', v['--color-bg']!],
     ['karta', v['--color-panel']!],
     ['aktywny blok', v['--color-raised']!],
-    ['wskazany element', v['--color-hover']!]
+    ['wskazany element', v['--color-hover']!],
+    // The heading of today's column on „Tydzień” (E10): the day, the boundary and the regeneration in every tone on the lamp's soft fill.
+    ['nagłówek dzisiejszej kolumny', v['--color-lamp-soft']!]
   ]
   const barBgs: Array<[string, string]> = []
   for (const [setId, set] of Object.entries(TONE_SETS))
