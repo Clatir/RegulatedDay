@@ -15,8 +15,8 @@ export interface Names {
   requests: readonly RequestRecord[]
 }
 
-/** What names a block: its plan fields, and for a block of the session layer also where it comes from (D338). */
-export type NamedBlock = Pick<PlanBlock, 'categoryId' | 'variantId' | 'routine' | 'requests' | 'note'> & Partial<Pick<PlanBlock, 'origin' | 'sourceId'>>
+/** What names a block: its plan fields, its own name (D357), and for a block of the session layer also where it comes from (D338). */
+export type NamedBlock = Pick<PlanBlock, 'categoryId' | 'variantId' | 'routine' | 'requests' | 'note'> & Partial<Pick<PlanBlock, 'origin' | 'sourceId' | 'name'>>
 
 /**
  * The naming input of a block known by its info or facts only (begun outside the plan, a row of the CSV, a variant's
@@ -34,6 +34,8 @@ export const namedOf = (b: { categoryId: string; variantId: string | null; origi
 })
 
 export function blockName(b: NamedBlock, n: Names): string {
+  // Its own name (a class imported from the PDF of „zjazdy”: „<przedmiot> · <forma>”, D357).
+  if (b.name) return b.name
   // A block of the session layer is „Sesja <name>” („Sesja NY”, D338); the second shift and a category block added by
   // hand stay the category's „Sesja tradingowa”.
   if (b.origin === 'session' && b.sourceId) {

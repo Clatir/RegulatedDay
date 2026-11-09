@@ -519,7 +519,7 @@ export function computeDay(ctx: DayContext): DayState {
   const now = Math.max(0, Math.min(cap, idxOf(g, ctx.now)))
   const snapshot = ctx.snapshot
   const settingsAt = (k: number) => settingsAtMinute(snapshot, facts, k)
-  const blocks = blockInfos(g, ctx.plan, facts, snapshot.settings)
+  const blocks = blockInfos(g, ctx.plan, facts, snapshot.settings, (k) => settingsAt(k).dayType)
   const byId = new Map(blocks.map((b) => [b.id, b]))
   const secondWindows = new Map<string, { start: number; end: number }>()
   for (const b of blocks) {

@@ -82,7 +82,10 @@ const api: RdApi = {
   sideB: () => ipcRenderer.invoke(CH.sideB),
   calibration: () => ipcRenderer.invoke(CH.calibration),
   seen: (ids) => ipcRenderer.send(CH.seen, ids),
-  onSound: (cb) => on('rd:sound', cb)
+  onSound: (cb) => on('rd:sound', cb),
+  zjazdyRead: () => ipcRenderer.invoke(CH.zjazdyRead),
+  zjazdySave: (days) => ipcRenderer.invoke(CH.zjazdySave, days),
+  zjazdyUndo: (dates) => ipcRenderer.invoke(CH.zjazdyUndo, dates)
 }
 
 contextBridge.exposeInMainWorld('rd', api)

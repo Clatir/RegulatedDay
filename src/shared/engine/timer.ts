@@ -11,7 +11,7 @@
  * running block.
  */
 import { ROUTINE_VERSIONS, type RoutineVersion } from '../model/routines'
-import { isBoundaryWork, plannedSpan, setsWorkEndBlock, startPlanned, type BlockInfo } from './blocks'
+import { isBoundaryWork, plannedSpan, setsWorkEndBlock, startPlanned, zjazdRemoteClass, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
 import { workedUntilOf } from './explain'
 import { OPEN, compareOrder, type EventOrder, isRunning, type AutoAction, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
@@ -493,7 +493,8 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
         secondShift: false,
         weeklyAnalysis: false,
         waitUntil: null,
-        lectureOrCommute: rules.kind === 'commute' || rules.kind === 'lecture',
+        // A remote class begun now on a day of „zjazd” is a block of the „zjazd” (D359), as the day counts it once begun.
+        lectureOrCommute: rules.kind === 'commute' || rules.kind === 'lecture' || zjazdRemoteClass(rules, state.dayType),
         recorded: false,
         origin: 'user',
         sourceId: null,

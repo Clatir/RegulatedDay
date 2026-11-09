@@ -98,9 +98,9 @@ function blockRows(state: DayState, plan: readonly PlanBlock[], names: Names): A
     if (extended) notes.push(`przedłużony +${extended} min`)
     const x = state.explains.find((e) => e.block === info.id && Math.min(e.to, state.now) > e.from)
     if (x) notes.push(x.answer ? `czas do wyjaśnienia: ${EXPLAIN[x.answer.cls]}` : `do wyjaśnienia ${Math.min(x.to, state.now) - x.from} min`)
-    // Its routine and requests from the plan (a block started outside it has none).
+    // Its routine, requests and own name from the plan (a block started outside it has none).
     const p = plan.find((b) => b.id === info.id)
-    const name = blockName(namedOf(info, { routine: p?.routine ?? null, requests: p?.requests ?? [] }), names)
+    const name = blockName(namedOf(info, { routine: p?.routine ?? null, requests: p?.requests ?? [], name: p?.name ?? null }), names)
     const started = f?.startedAt ?? null
     const ended = f?.endedAt ?? null
     out.push({

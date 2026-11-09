@@ -7,6 +7,8 @@ import type { Celebration, GameView } from './engine/progress'
 import type { SideB } from './engine/sideB'
 import type { RitualValue, RitualView } from './engine/ritual'
 import type { CloseHow } from './model/events'
+import type { DayTypeId } from './model/settings'
+import type { ZjazdDay, ZjazdWarning } from './import/zjazdy'
 import type { IdentityKind } from './identity'
 import type { Rect } from './bounds'
 import type { BarSpot, MachinePrefs } from './machine'
@@ -74,7 +76,10 @@ export const CH = {
   game: 'rd:game',
   celebrated: 'rd:celebrated',
   sideB: 'rd:sideB',
-  calibration: 'rd:calibration'
+  calibration: 'rd:calibration',
+  zjazdyRead: 'rd:zjazdyRead',
+  zjazdySave: 'rd:zjazdySave',
+  zjazdyUndo: 'rd:zjazdyUndo'
 } as const
 
 /** The game for the window (D322): its view and the full-screen celebrations not shown on this computer yet. */
@@ -439,6 +444,49 @@ export interface BarScreens {
 /** Windows' settings the wizard opens with one button: priority notifications (D233), the icons beside the clock (D229). */
 export type SystemSettingsPage = 'notifications' | 'taskbar'
 
+/** A day of the schedule read from a PDF of „zjazdy” (D357) with what „Zapisz” would do to it. */
+export interface ZjazdPreviewDay extends ZjazdDay {
+  /** Not saved: the day has begun (today) or is gone – its plan stays; null – it will be saved. */
+  skip: 'today' | 'past' | null
+  /** An import of this date before is replaced by this one. */
+  replaces: boolean
+  /** The type the day's file gives it now (null: its weekday's) – the import makes it this day's „zjazd”. */
+  ownType: DayTypeId | null
+  /** The day's file cannot be read now (OneDrive still fetching it): „Zapisz” leaves the day out. */
+  unreadable: boolean
+}
+
+/** The preview of „Wczytaj PDF zjazdów”: nothing of it is saved until „Zapisz”. */
+export interface ZjazdPreview {
+  /** The name of the file (without its folder). */
+  file: string
+  /** The logical today the skips are counted from. */
+  today: string
+  days: ZjazdPreviewDay[]
+  /** Lines of the PDF that could not be read, hours turned round, overlaps – each with its message. */
+  warnings: ZjazdWarning[]
+}
+
+/** A PDF read: its preview, or why it could not be read (not a PDF, with a password, no text, no dates). */
+export type ZjazdyRead = { ok: true; preview: ZjazdPreview } | { ok: false; error: string }
+
+/**
+ * Why a day was not saved: it has begun, it is gone, it is not a day that can be saved, its file cannot be read now, it
+ * has no import to undo („Cofnij”).
+ */
+export type ZjazdSkipReason = 'today' | 'past' | 'invalid' | 'unreadable' | 'noImport'
+
+export interface ZjazdSaveResult {
+  /** Days written (or waiting for the data folder – written on its return), also those already as imported. */
+  saved: string[]
+  /** Days whose edit met a change made on another computer meanwhile: a question at the top of the window. */
+  questions: string[]
+  /** Days left as they are, each with its reason and a text for it. */
+  skipped: Array<{ date: string; reason: ZjazdSkipReason; text: string }>
+  /** The outcomes of the edits (for `editNotice`). */
+  outcomes: EditOutcome[]
+}
+
 export interface RdApi {
   view: ViewKind
   appInfo(): Promise<AppInfo>
@@ -536,4 +584,13 @@ export interface RdApi {
   calibration(): Promise<CalibrationScreen>
   /** The window of sound: a tone to play (5 min, 0 min). */
   onSound(cb: (s: { kind: 'five' | 'zero'; volume: number }) => void): () => void
+  /**
+   * „Wczytaj PDF zjazdów” (D357): a PDF picked in a window of Windows read into a preview – nothing is saved; null – no
+   * file picked.
+   */
+  zjazdyRead(): Promise<ZjazdyRead | null>
+  /** The days of the preview, as you corrected them, saved into their files – only days to come (D357). */
+  zjazdySave(days: ZjazdDay[]): Promise<ZjazdSaveResult>
+  /** „Cofnij” of the import (its toast): the days to come with an import back as before it – one edit of the queue. */
+  zjazdyUndo(dates: string[]): Promise<ZjazdSaveResult>
 }
