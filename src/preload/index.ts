@@ -85,7 +85,7 @@ const api: RdApi = {
   onSound: (cb) => on('rd:sound', cb),
   zjazdyRead: () => ipcRenderer.invoke(CH.zjazdyRead),
   zjazdySave: (days) => ipcRenderer.invoke(CH.zjazdySave, days),
-  zjazdyUndo: (dates) => ipcRenderer.invoke(CH.zjazdyUndo, dates)
+  zjazdyUndo: (undo) => ipcRenderer.invoke(CH.zjazdyUndo, undo)
 }
 
 contextBridge.exposeInMainWorld('rd', api)

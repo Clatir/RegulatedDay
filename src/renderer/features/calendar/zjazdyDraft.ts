@@ -4,10 +4,10 @@
  * are ticked and still have a class (`toSave`); the texts of the toasts after „Zapisz” and „Cofnij”. Nothing here
  * writes anything: the window sends `toSave` to the main process, which checks every day again.
  */
-import type { ZjazdPreview, ZjazdPreviewDay, ZjazdSaveResult } from '@shared/api'
+import type { ZjazdPreview, ZjazdPreviewDay, ZjazdSaveResult, ZjazdUndoDay } from '@shared/api'
 import { logicalClock, plDate, plural } from '@shared/format'
 import { zjazdDayType, ZJAZD_SKIP_TEXT } from '@shared/import/zjazdDay'
-import { zjazdKindOf, type ZjazdClass, type ZjazdDay, type ZjazdKind } from '@shared/import/zjazdy'
+import { subjectMax, zjazdKindOf, type ZjazdClass, type ZjazdDay, type ZjazdKind } from '@shared/import/zjazdy'
 import { DAY_TYPE_NAMES } from '@shared/model/settings'
 import { weekday } from '@shared/time/zone'
 
@@ -79,18 +79,25 @@ export const removeClass = (drafts: readonly DraftDay[], date: string, key: numb
 export const setSubject = (drafts: readonly DraftDay[], date: string, key: number, subject: string): DraftDay[] =>
   patchDay(drafts, date, (d) => ({ ...d, classes: d.classes.map((c) => (c.key === key ? { ...c, subject: subject.trim() } : c)) }))
 
+/** The next mark of the 5-min grid from `v` in the direction of `delta` (8:07 +5 → 8:10, −5 → 8:05; 8:05 +5 → 8:10). */
+const gridStep = (v: number, delta: number): number => (delta > 0 ? Math.floor(v / STEP_MIN) * STEP_MIN + STEP_MIN : Math.ceil(v / STEP_MIN) * STEP_MIN - STEP_MIN)
+
 /**
- * One end of a row moved by `delta` min on the 5-min grid: inside the logical day and never past the other end (a class
- * keeps at least one step); at the limit nothing moves.
+ * One end of a row moved one step of the 5-min grid in the direction of `delta`: inside the logical day (04:00–04:00),
+ * the start at most the end − 5, the end at least the start + 5; a step the limits would turn back does nothing.
  */
 export function stepEnd<T extends ZjazdClass>(c: T, end: 'start' | 'end', delta: number): T {
+  if (!delta) return c
   if (end === 'start') {
-    const startMin = Math.min(Math.max(c.startMin + delta, DAY_FROM), c.endMin - STEP_MIN)
-    return { ...c, startMin }
+    const to = Math.min(Math.max(gridStep(c.startMin, delta), DAY_FROM), c.endMin - STEP_MIN)
+    return (to - c.startMin) * delta > 0 ? { ...c, startMin: to } : c
   }
-  const endMin = Math.max(Math.min(c.endMin + delta, DAY_TO), c.startMin + STEP_MIN)
-  return { ...c, endMin }
+  const to = Math.max(Math.min(gridStep(c.endMin, delta), DAY_TO), c.startMin + STEP_MIN)
+  return (to - c.endMin) * delta > 0 ? { ...c, endMin: to } : c
 }
+
+/** How long the subject of a row may be: „przedmiot · forma” must fit a block's name. */
+export const subjectMaxOf = (c: Pick<ZjazdClass, 'form'>): number => subjectMax(c.form)
 
 export const stepClass = (drafts: readonly DraftDay[], date: string, key: number, end: 'start' | 'end', delta: number): DraftDay[] =>
   patchDay(drafts, date, (d) => ({ ...d, classes: d.classes.map((c) => (c.key === key ? stepEnd(c, end, delta) : c)) }))
@@ -118,14 +125,41 @@ export function skippedLines(r: Pick<ZjazdSaveResult, 'skipped'>): string[] {
   return [...byText].map(([text, dates]) => `${dates.join(', ')} – ${text}`)
 }
 
-/** The message of „Zapisz”: null when no day was saved. */
-export function savedText(r: Pick<ZjazdSaveResult, 'saved'>): string | null {
-  return r.saved.length ? `Zapisano ${daysText(r.saved.length)} zjazdów` : null
+/** The message of „Zapisz”: only for the days that „Cofnij” can take back (`undo`); null when no day was changed. */
+export function savedText(r: Pick<ZjazdSaveResult, 'undo'>): string | null {
+  return r.undo.length ? `Zapisano ${daysText(r.undo.length)} zjazdów` : null
 }
 
-/** The message of „Cofnij”. */
-export function undoneText(r: Pick<ZjazdSaveResult, 'saved'>): string {
-  return r.saved.length ? `Cofnięto import zjazdów: ${daysText(r.saved.length)}` : 'Nic nie cofnięto.'
+/** Days already as the import would make them: nothing written, nothing to take back. */
+export function unchangedText(r: Pick<ZjazdSaveResult, 'unchanged'>): string | null {
+  const n = r.unchanged.length
+  return n ? `${n} ${plural(n, 'dzień', 'dni', 'dni')} bez zmian (już tak zapisane)` : null
+}
+
+/**
+ * What the toast's „Cofnij” sends: the save's `undo` and the Fridays whose weekly-analysis answer („Tak” or „Nie”) came
+ * after it – a Friday that the import changed too keeps the file from before the import and stands as the answer left it.
+ */
+export function undoList(undo: readonly ZjazdUndoDay[], fridays: readonly ZjazdUndoDay[]): ZjazdUndoDay[] {
+  const list = [...undo]
+  for (const f of fridays) {
+    const i = list.findIndex((u) => u.date === f.date)
+    if (i >= 0) list[i] = { ...list[i]!, after: f.after }
+    else list.push(f)
+  }
+  return list
+}
+
+/**
+ * The message of „Cofnij”; `fridays` – the days of the weekly-analysis answers that went back with the import, `lost` –
+ * the Fridays whose file could not be read after the answer (their answer cannot go back: said, never quietly).
+ */
+export function undoneText(r: Pick<ZjazdSaveResult, 'saved'>, fridays: readonly string[] = [], lost: readonly string[] = []): string {
+  const imported = r.saved.filter((d) => !fridays.includes(d))
+  const analysis = r.saved.some((d) => fridays.includes(d))
+  const notBack = lost.length ? ` Piątku ${lost.map(plDate).join(', ')} nie cofnięto – jego pliku nie dało się odczytać po odpowiedzi o analizie.` : ''
+  if (!r.saved.length) return `Nic nie cofnięto.${notBack}`
+  return `Cofnięto import zjazdów${imported.length ? `: ${daysText(imported.length)}` : ''}${analysis ? ' i odpowiedź o analizie tygodniowej' : ''}${notBack ? `.${notBack}` : ''}`
 }
 
 /** The days that left the preview with a question (a change from another computer met the edit). */

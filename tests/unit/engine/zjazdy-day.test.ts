@@ -11,7 +11,7 @@ import { marketDay } from '@shared/calendar/holidays'
 import { putBlock, type Raw } from '@shared/data/dayEdits'
 import { createDay, dayPlan, dayWakeMin, templateBlockId } from '@shared/engine/createDay'
 import { computeDay } from '@shared/engine/day'
-import { CLASS_IMPORT, withoutZjazd, zjazdClassBlocks, zjazdDayRaw, zjazdSkipOf, type ZjazdInputs } from '@shared/import/zjazdDay'
+import { CLASS_IMPORT, withoutZjazd, zjazdClassBlocks, zjazdDayRaw, zjazdSkipOf, zjazdTypeRaw, type ZjazdInputs } from '@shared/import/zjazdDay'
 import type { ZjazdDay } from '@shared/import/zjazdy'
 import { dayFileFrom, planBlockFrom, type PlanBlock, type Template } from '@shared/model/plan'
 import { placeLogical } from '@shared/time/day'
@@ -93,11 +93,18 @@ describe('dzień zjazdu stacjonarnego z importu (D357)', () => {
     expect(at(byId(plan, tpl('zjazd-st', 'regen')))).toBe('18:00')
   })
 
-  it('zapis importu w pliku dnia: co anulował i jak wyglądały bloki przed nim', () => {
+  it('zapis importu w pliku dnia: typ przed nim i jego, co anulował (z końcem zajęć szablonu), bloki przed nim i po nim', () => {
+    const blockOf = (id: string) => (raw.blocks as Raw[]).find((b) => b.id === id)
     expect(raw[CLASS_IMPORT]).toEqual({
       dayType: null,
+      setType: 'zjazd-stacjonarny',
       cancelled: [tpl('zjazd-st', 'zaj')],
-      before: { [tpl('zjazd-st', 'tam')]: null, [tpl('zjazd-st', 'powrot')]: null, [tpl('zjazd-st', 'obiad')]: null }
+      classEnds: { [tpl('zjazd-st', 'zaj')]: lm('16:00') },
+      changed: {
+        [tpl('zjazd-st', 'tam')]: { before: null, after: blockOf(tpl('zjazd-st', 'tam')) },
+        [tpl('zjazd-st', 'powrot')]: { before: null, after: blockOf(tpl('zjazd-st', 'powrot')) },
+        [tpl('zjazd-st', 'obiad')]: { before: null, after: blockOf(tpl('zjazd-st', 'obiad')) }
+      }
     })
   })
 })
@@ -180,12 +187,9 @@ describe('ponowny import tej samej daty zastępuje poprzedni', () => {
     expect(plan.filter((b) => b.origin !== 'session').length).toBe(3)
   })
 
-  it('ten sam rodzaj, inne zajęcia: tylko nowe; dojazd liczony od nowa; Twój blok dodany po imporcie zostaje', () => {
+  it('ten sam rodzaj, inne zajęcia: tylko nowe; dojazd nieruszany od nowa liczony; Twój blok dodany po imporcie zostaje', () => {
     const first = zjazdDayRaw(null, stationaryDay, inp)
-    // After the import you moved the way back yourself and added a block of your own.
-    const { plan: p1 } = planOf(first)
-    let edited = putBlock(first, { ...byId(p1, tpl('zjazd-st', 'powrot'))!, startMin: lm('17:00') })
-    edited = putBlock(edited, block({ id: 'moje', cat: 'inne', at: '20:00', min: 30, origin: 'user' }))
+    const edited = putBlock(first, block({ id: 'moje', cat: 'inne', at: '20:00', min: 30, origin: 'user' }))
     const again: ZjazdDay = { date: DATE, kind: 'stacjonarny', classes: [c('08:00', '09:30', '19H', 'wykład', 'Marketing'), c('09:45', '11:15', '19H', 'wykład', 'Marketing')] }
     const raw = zjazdDayRaw(edited, again, inp)
     const { plan } = planOf(raw)
@@ -197,6 +201,46 @@ describe('ponowny import tej samej daty zastępuje poprzedni', () => {
     expect(at(byId(plan, tpl('zjazd-st', 'powrot')))).toBe('11:15')
     expect(at(byId(plan, 'moje'))).toBe('20:00')
     expect(byId(plan, tpl('zjazd-st', 'obiad'))!.anchor).toBe(plan.find((b) => b.origin === 'zjazd' && b.startMin === lm('09:45'))!.id)
+  })
+
+  it('dojazd i typ dnia zmienione po imporcie zostają, jak je zostawiłeś – ponowny import i reset ich nie cofają', () => {
+    const first = zjazdDayRaw(null, stationaryDay, inp)
+    // After the import you moved the way back yourself to 17:00.
+    const moved = putBlock(first, { ...byId(planOf(first).plan, tpl('zjazd-st', 'powrot'))!, startMin: lm('17:00') })
+    const again: ZjazdDay = { date: DATE, kind: 'stacjonarny', classes: [c('08:00', '09:30', '19H', 'wykład', 'Marketing')] }
+    const { plan } = planOf(zjazdDayRaw(moved, again, inp))
+    expect(at(byId(plan, tpl('zjazd-st', 'powrot')))).toBe('17:00')
+    // The way there, untouched since, follows the new classes.
+    expect(at(byId(plan, tpl('zjazd-st', 'tam')))).toBe('07:00')
+    expect(at(byId(planOf(withoutZjazd(moved, DATE)).plan, tpl('zjazd-st', 'powrot')))).toBe('17:00')
+    // The type of the day you changed after the import: the reset keeps it (not the type from before the import).
+    const free = { ...first, dayType: 'wolne' }
+    expect(dayFileFrom(withoutZjazd(free, DATE), DATE).dayType).toBe('wolne')
+    expect(dayFileFrom(withoutZjazd(first, DATE), DATE).dayType).toBeNull()
+  })
+
+  it('Twój blok zakotwiczony do zajęć z importu nie znika: ponowny import – do zajęć kończących się najbliżej; reset – z powrotem do zajęć szablonu', () => {
+    // A day you had marked as a stationary „zjazd” before the import (its template's classes come back on a reset).
+    const first = zjazdDayRaw({ schema: 1, date: DATE, dayType: 'zjazd-stacjonarny' }, stationaryDay, inp)
+    const ekonomia = planOf(first).plan.find((b) => b.origin === 'zjazd' && b.startMin === lm('11:30'))!
+    const mine = block({ id: 'notatki', cat: 'inne', after: ekonomia.id, min: 20, origin: 'user' })
+    const withMine = putBlock(first, mine)
+    // Ekonomia ended 13:00; the new import's classes end 9:30 and 12:45 – nearest 12:45.
+    const again: ZjazdDay = { date: DATE, kind: 'stacjonarny', classes: [c('08:00', '09:30', '19H', 'wykład', 'Marketing'), c('11:15', '12:45', '19H', 'wykład', 'Marketing')] }
+    const { plan } = planOf(zjazdDayRaw(withMine, again, inp))
+    expect(byId(plan, 'notatki')!.anchor).toBe(plan.find((b) => b.origin === 'zjazd' && b.startMin === lm('11:15'))!.id)
+    // Reset: the template's classes come back – your block after them again.
+    const back = planOf(withoutZjazd(withMine, DATE)).plan
+    expect(byId(back, 'notatki')!.anchor).toBe(tpl('zjazd-st', 'zaj'))
+    // The type before the import was the weekday's (a weekend): no classes come back – your block keeps its time (the
+    // end of the class it followed); a template without classes – the same.
+    const fromWeekend = putBlock(zjazdDayRaw(null, stationaryDay, inp), mine)
+    const timed = byId(planOf(withoutZjazd(fromWeekend, DATE)).plan, 'notatki')!
+    expect([timed.anchor, at(timed)]).toEqual([null, '13:00'])
+    const bare = T('zjazd-st', 'zjazd-stacjonarny', [])
+    const firstBare = putBlock(zjazdDayRaw({ schema: 1, date: DATE, dayType: 'zjazd-stacjonarny' }, stationaryDay, { ...inp, templates: [bare] }), mine)
+    const kept = byId(planOf(withoutZjazd(firstBare, DATE), [bare]).plan, 'notatki')!
+    expect([kept.anchor, at(kept)]).toEqual([null, '13:00'])
   })
 
   it('te same zajęcia drugi raz (np. drugi komputer) – ten sam plik', () => {
@@ -216,6 +260,55 @@ describe('ponowny import tej samej daty zastępuje poprzedni', () => {
     expect(back[CLASS_IMPORT]).toBeUndefined()
     expect(planOf(back).plan).toEqual(planOf(before).plan)
     expect(planOf(back).file.dayType).toBe('zjazd-stacjonarny')
+  })
+})
+
+describe('zmiana typu dnia z importem w Kalendarzu (runda 2)', () => {
+  const saturday = T('sobota', 'weekend', [block({ id: 'analiza', cat: 'analiza', at: '09:00', min: 60 })])
+  const withWeek: ZjazdInputs = { ...inp, templates: [stationary, remote, saturday] }
+
+  it('„Typ z tygodnia” zdejmuje import: plan = szablon tygodnia, bez zajęć z importu i bez dojazdu zjazdu', () => {
+    const raw = zjazdDayRaw(null, stationaryDay, withWeek)
+    const next = zjazdTypeRaw(raw, DATE, null)
+    const { file, plan } = planOf(next, withWeek.templates)
+    expect(file.dayType).toBeNull()
+    expect(plan.map((b) => b.id)).toEqual([tpl('sobota', 'analiza')])
+    expect((next.blocks as Raw[]).filter((b) => b.origin === 'zjazd' || String(b.sourceId) === 'tam')).toEqual([])
+    expect(next[CLASS_IMPORT]).toBeUndefined()
+  })
+
+  it('inny typ niż zjazd (wolne) też zdejmuje import; drugi rodzaj zjazdu – import zostaje', () => {
+    const raw = zjazdDayRaw(null, stationaryDay, withWeek)
+    const free = zjazdTypeRaw(raw, DATE, 'wolne')
+    expect(dayFileFrom(free, DATE).dayType).toBe('wolne')
+    expect(planOf(free, withWeek.templates).plan.filter((b) => b.origin === 'zjazd')).toEqual([])
+    const remoteType = zjazdTypeRaw(raw, DATE, 'zjazd-zdalny')
+    expect(dayFileFrom(remoteType, DATE).dayType).toBe('zjazd-zdalny')
+    expect(planOf(remoteType, withWeek.templates).plan.filter((b) => b.origin === 'zjazd').length).toBe(3)
+    // A day without an import: only its type, as before.
+    expect(zjazdTypeRaw({ schema: 1, date: DATE, wakeMin: 420 }, DATE, 'wolne')).toEqual({ schema: 1, date: DATE, wakeMin: 420, dayType: 'wolne' })
+  })
+})
+
+describe('kotwica przez kolejne importy i szablon z dojazdem bez wariantu (runda 2)', () => {
+  it('trzeci import: blok przypięty do zajęć trzeciego importu (nie bez kotwicy o godzinie zajęć pierwszego)', () => {
+    // A weekend by its weekday: the reset never brings classes of a template back.
+    const first = zjazdDayRaw(null, stationaryDay, inp)
+    const ekonomia = planOf(first).plan.find((b) => b.origin === 'zjazd' && b.startMin === lm('11:30'))!
+    const withMine = putBlock(first, block({ id: 'notatki', cat: 'inne', after: ekonomia.id, min: 20, origin: 'user' }))
+    const second = zjazdDayRaw(withMine, { date: DATE, kind: 'stacjonarny', classes: [c('08:00', '09:30', '19H', 'wykład', 'Marketing'), c('11:15', '12:45', '19H', 'wykład', 'Marketing')] }, inp)
+    const third = zjazdDayRaw(second, { date: DATE, kind: 'stacjonarny', classes: [c('10:00', '11:30', '12B', 'wykład', 'Prawo'), c('14:00', '15:30', '12B', 'wykład', 'Prawo')] }, inp)
+    const { plan } = planOf(third)
+    // The class it followed ended 12:45 – of the third import's classes 11:30 is the nearest.
+    expect(byId(plan, 'notatki')!.anchor).toBe(plan.find((b) => b.origin === 'zjazd' && b.startMin === lm('10:00'))!.id)
+  })
+
+  it('blok kategorii „Dojazd, zajęcia stacjonarne” bez wariantu w szablonie to zajęcia: zastępują go zajęcia z PDF', () => {
+    const noVariant = T('zjazd-st', 'zjazd-stacjonarny', [block({ id: 'zaj', cat: 'dojazd', at: '08:00', min: 480, fixed: true })])
+    const raw = zjazdDayRaw(null, stationaryDay, { ...inp, templates: [noVariant] })
+    const { plan } = planOf(raw, [noVariant])
+    expect(byId(plan, tpl('zjazd-st', 'zaj'))).toBeUndefined()
+    expect(plan.map((b) => b.origin)).toEqual(['zjazd', 'zjazd', 'zjazd'])
   })
 })
 

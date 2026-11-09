@@ -6,7 +6,8 @@
  * a day across two pages); no names nor subjects of the real file.
  */
 import { describe, expect, it } from 'vitest'
-import { classTitle, isRemoteRoom, parseZjazdy, zjazdDayFrom, zjazdKindOf, type PdfTextItem } from '@shared/import/zjazdy'
+import { classTitle, isRemoteRoom, parseZjazdy, subjectMax, zjazdDayFrom, zjazdKindOf, type PdfTextItem } from '@shared/import/zjazdy'
+import { BLOCK_NAME_MAX, planBlockFrom } from '@shared/model/plan'
 
 /** The centres of the columns of the schedule (x, points). */
 const COL = { time: 92, room: 160, form: 232, subject: 372, teacher: 595, notes: 752 } as const
@@ -196,6 +197,72 @@ describe('odczyt harmonogramu zjazdów (D357)', () => {
     expect(r.warnings.map((w) => [w.kind, w.date])).toEqual([['empty', '2030-10-13']])
   })
 
+  it('data, której nie ma (31.02): ostrzeżenie, a wiersze pod nią nie trafiają do poprzedniego dnia – każdy z ostrzeżeniem', () => {
+    const items = [
+      ...date(1, 450, '12.10.2030 (sobota)'),
+      ...header(1, 434),
+      ...row(1, 418, '8:00-9:30', 'TEAMS', 'wykład', 'Ekonomia'),
+      ...date(1, 386, '31.02.2030 (sobota)'),
+      ...header(1, 370),
+      ...row(1, 354, '8:00-9:30', '12B', 'wykład', 'Prawo'),
+      ...row(1, 338, '9:45-11:15', '12B', 'wykład', 'Finanse'),
+      ...date(1, 306, '13.10.2030 (niedziela)'),
+      ...header(1, 290),
+      ...row(1, 274, '8:00-9:30', 'TEAMS', 'wykład', 'Statystyka')
+    ]
+    const r = parseZjazdy(items)
+    expect(r.days.map((d) => [d.date, d.classes.map((c) => c.subject)])).toEqual([
+      ['2030-10-12', ['Ekonomia']],
+      ['2030-10-13', ['Statystyka']]
+    ])
+    expect(r.warnings.map((w) => [w.kind, w.date])).toEqual([
+      ['row', null],
+      ['noDate', null],
+      ['noDate', null]
+    ])
+    expect(r.warnings[1]!.message).toContain('31.02.2030')
+  })
+
+  it('data w komórce „Uwagi” (druga linijka komórki) to treść wiersza, nie nowy dzień; sama data w kolumnie poza wierszem – ostrzeżenie', () => {
+    const items = [
+      ...date(1, 450, '12.10.2030 (sobota)'),
+      ...header(1, 434),
+      ...row(1, 418, '8:00-9:30', '12B', 'wykład', 'Ekonomia'),
+      cell(1, 418, 'notes', 'odrobienie'),
+      cell(1, 408, 'notes', '19.10.2030'),
+      ...row(1, 392, '9:45-11:15', '12B', 'wykład', 'Prawo'),
+      // A date alone in the column of the lecturers, as far from the rows as a row is.
+      cell(1, 376, 'teacher', '26.10.2030 (sobota)'),
+      ...row(1, 360, '11:30-13:00', '12B', 'wykład', 'Finanse')
+    ]
+    const r = parseZjazdy(items)
+    expect(r.days.map((d) => [d.date, d.classes.map((c) => c.subject)])).toEqual([['2030-10-12', ['Ekonomia', 'Prawo', 'Finanse']]])
+    expect(r.warnings.map((w) => [w.kind, w.text])).toEqual([['row', '26.10.2030 (sobota)']])
+  })
+
+  it('nakładanie sprawdzane każdy z każdym: długie zajęcia z dwoma krótkimi w środku – dwa ostrzeżenia', () => {
+    const items = [
+      ...date(1, 450, '12.10.2030 (sobota)'),
+      ...header(1, 434),
+      ...row(1, 418, '8:00-12:00', 'TEAMS', 'wykład', 'Ekonomia'),
+      ...row(1, 402, '9:00-9:30', 'TEAMS', 'wykład', 'Prawo'),
+      ...row(1, 386, '10:00-11:00', 'TEAMS', 'wykład', 'Finanse')
+    ]
+    const r = parseZjazdy(items)
+    expect(r.warnings.map((w) => [w.kind, w.text])).toEqual([
+      ['overlap', '08:00–12:00 i 09:00–09:30'],
+      ['overlap', '08:00–12:00 i 10:00–11:00']
+    ])
+  })
+
+  it('ponad 30 zajęć w dniu: ostrzeżenie (zostaje pierwsze 30), nie ciche obcięcie', () => {
+    const rows = Array.from({ length: 32 }, (_, i) => row(1, 418 - i * 12, `${8 + Math.floor(i / 4)}:${String((i % 4) * 15).padStart(2, '0')}-${8 + Math.floor(i / 4)}:${String((i % 4) * 15 + 10).padStart(2, '0')}`, 'TEAMS', 'wykład', `Przedmiot ${i}`, ''))
+    const r = parseZjazdy([...date(1, 450, '12.10.2030 (sobota)'), ...header(1, 434), ...rows.flat()])
+    expect(r.days[0]!.classes.length).toBe(30)
+    expect(r.warnings.map((w) => w.kind)).toEqual(['tooMany'])
+    expect(r.warnings[0]!.message).toMatch(/32/)
+  })
+
   it('bez dat – pusta lista dni (komunikat o braku dat daje proces główny)', () => {
     expect(parseZjazdy([cell(1, 500, 300, 'Faktura nr 12/2030'), cell(1, 480, 300, '8:00-9:30')]).days).toEqual([])
     expect(parseZjazdy([]).days).toEqual([])
@@ -216,6 +283,23 @@ describe('dzień zjazdu z okna (poprawiony w podglądzie)', () => {
     const c = (room: string) => ({ startMin: 480, endMin: 570, room, form: '', subject: 'X' })
     expect(zjazdKindOf([c('TEAMS'), c('TEAMS')])).toBe('zdalny')
     expect(zjazdKindOf([c('TEAMS'), c('12B')])).toBe('stacjonarny')
+  })
+
+  it('nazwa bloku razem z formą mieści się w nazwie bloku: długi przedmiot ucięty z „…”, forma zostaje cała', () => {
+    const form = 'ćwiczenia laboratoryjne'
+    const t = classTitle({ form, subject: 'Bardzo długi przedmiot '.repeat(10) })
+    expect(t.length).toBeLessThanOrEqual(BLOCK_NAME_MAX)
+    expect(t.endsWith(`… · ${form}`)).toBe(true)
+    // Read as a day's file reads a block's name: nothing more is cut off.
+    expect(planBlockFrom({ id: 'k', categoryId: 'inne', startMin: 600, durationMin: 30, name: t })!.name).toBe(t)
+    expect(subjectMax(form)).toBe(BLOCK_NAME_MAX - form.length - 3)
+    expect(subjectMax('')).toBe(BLOCK_NAME_MAX)
+  })
+
+  it('koniec „4:00” to koniec dnia logicznego (1680), nie jego początek', () => {
+    const r = parseZjazdy([...date(1, 450, '12.10.2030 (sobota)'), ...header(1, 434), ...row(1, 418, '22:00-4:00', 'TEAMS', 'wykład', 'Nocne')])
+    expect(r.warnings).toEqual([])
+    expect(r.days[0]!.classes[0]).toMatchObject({ startMin: 22 * 60, endMin: 1680 })
   })
 
   it('nazwa bloku: „<przedmiot> · <forma>”', () => {

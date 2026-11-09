@@ -7,6 +7,7 @@
  * warning for the preview, never a guess.
  */
 import { plDate, logicalClock } from '../format'
+import { BLOCK_NAME_MAX } from '../model/plan'
 import { isIsoDate, weekday } from '../time/zone'
 
 /** A piece of text of a page as pdfjs gives it: its left end and baseline (points, y up), width, height. */
@@ -37,11 +38,13 @@ export interface ZjazdDay {
 }
 
 /**
- * row – a line of a day that is not a row of classes; noDate – a row before the first date; reversed – its end is not
- * after its start (left out); overlap – two classes of a day overlap (both stay); weekday – the name of the day does not
- * fit the date (the date stays); empty – a date without classes (left out); noRoom – a row without a room.
+ * row – a line of a day that is not a row of classes (also a date that does not exist); noDate – a row before the
+ * first date or under a date that does not exist (left out); reversed – its end is not after its start (left out);
+ * overlap – two classes of a day overlap (both stay); weekday – the name of the day does not fit the date (the date
+ * stays); empty – a date without classes (left out); noRoom – a row without a room; tooMany – a day with more classes
+ * than a day can take (the first ones stay); pages – a file with more pages than are read (the main process says it).
  */
-export type ZjazdWarningKind = 'row' | 'noDate' | 'reversed' | 'overlap' | 'weekday' | 'empty' | 'noRoom'
+export type ZjazdWarningKind = 'row' | 'noDate' | 'reversed' | 'overlap' | 'weekday' | 'empty' | 'noRoom' | 'tooMany' | 'pages'
 
 export interface ZjazdWarning {
   kind: ZjazdWarningKind
@@ -103,16 +106,32 @@ export function zjazdKindOf(classes: readonly ZjazdClass[]): ZjazdKind {
   return classes.some((c) => c.room.trim() !== '' && !isRemoteRoom(c.room)) ? 'stacjonarny' : 'zdalny'
 }
 
-/** The name of the class's block: „<przedmiot> · <forma>” (D357), one of them when the other is empty. */
-export function classTitle(c: Pick<ZjazdClass, 'subject' | 'form'>): string {
-  return [squash(c.subject), squash(c.form)].filter(Boolean).join(' · ')
+/** How long the subject may be so that „<przedmiot> · <forma>” fits a block's name (`BLOCK_NAME_MAX`). */
+export function subjectMax(form: string): number {
+  const f = squash(form)
+  return BLOCK_NAME_MAX - (f ? f.length + 3 : 0)
 }
 
-/** A clock time of the schedule as a logical minute (00:00–03:59 is the night after); null when it is no time. */
+/**
+ * The name of the class's block: „<przedmiot> · <forma>” (D357), one of them when the other is empty – never longer than
+ * a block's name may be: a long subject is cut with „…”, the form stays whole (it is at most 60 characters).
+ */
+export function classTitle(c: Pick<ZjazdClass, 'subject' | 'form'>): string {
+  const form = squash(c.form).slice(0, BLOCK_NAME_MAX)
+  let subject = squash(c.subject)
+  const room = subjectMax(form)
+  if (subject.length > room) subject = `${subject.slice(0, Math.max(0, room - 1)).trimEnd()}…`
+  return [subject, form].filter(Boolean).join(' · ')
+}
+
+/**
+ * A clock time of the schedule as a logical minute (00:00–03:59 is the night after); an end at 04:00 is the end of the
+ * logical day (1680), not its start; null when it is no time.
+ */
 function logicalOf(h: number, m: number, end: boolean): number | null {
   if (m > 59 || h > 24 || (h === 24 && (m > 0 || !end))) return null
   const v = h * 60 + m
-  return v < 240 ? v + 1440 : v
+  return v < 240 || (end && v === 240) ? v + 1440 : v
 }
 
 interface Line {
@@ -177,9 +196,23 @@ type Kind =
   | { k: 'bad'; cells: Cells }
   | { k: 'loose'; cells: Cells }
 
+/**
+ * A date heads a day only centred over the table, as the schedule lays its dates out (between its columns, not in one
+ * of them): a date in a cell („Uwagi”: „odrobienie 19.10.2030”, a second line of it) is the row's text, never a new day.
+ */
+function centredOverTable(line: Line, columns: Columns): boolean {
+  const centres = COLUMN_KEYS.map((k) => columns[k]).filter((x): x is number => x != null)
+  if (centres.length < 2) return true
+  const left = Math.min(...centres)
+  const right = Math.max(...centres)
+  const from = Math.min(...line.items.map((i) => i.x))
+  const to = Math.max(...line.items.map((i) => i.x + (i.w || 0)))
+  return Math.abs((from + to) / 2 - (left + right) / 2) <= 0.2 * (right - left)
+}
+
 function classify(line: Line, columns: Columns): Kind {
   const d = DATE_RE.exec(line.text)
-  if (d) {
+  if (d && centredOverTable(line, columns)) {
     const iso = `${d[3]}-${d[2]!.padStart(2, '0')}-${d[1]!.padStart(2, '0')}`
     return { k: 'date', date: isIsoDate(iso) ? iso : null, dayName: d[4] ? fold(d[4]) : null }
   }
@@ -234,14 +267,19 @@ export function parseZjazdy(items: readonly PdfTextItem[]): ZjazdParse {
   const warnings: ZjazdWarning[] = []
   const warn = (kind: ZjazdWarningKind, page: number | null, date: string | null, text: string, message: string) => warnings.push({ kind, page, date, text, message })
   let current: string | null = null
+  // A date that does not exist (31.02): the rows under it belong to no day – never to the day before it.
+  let badDate: string | null = null
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!
     const kind = kinds[i]!
     if (kind.k === 'date') {
       if (!kind.date) {
-        warn('row', line.page, current, line.text, `Wiersz nierozpoznany (strona ${line.page}): „${line.text}” – nie ma takiej daty.`)
+        current = null
+        badDate = line.text
+        warn('row', line.page, null, line.text, `Wiersz nierozpoznany (strona ${line.page}): „${line.text}” – nie ma takiej daty; zajęcia pod nią pominięte.`)
         continue
       }
+      badDate = null
       current = kind.date
       if (!days.has(current)) days.set(current, [])
       const name = kind.dayName
@@ -251,12 +289,18 @@ export function parseZjazdy(items: readonly PdfTextItem[]): ZjazdParse {
     }
     if (kind.k === 'header') continue
     if (kind.k === 'bad' || (kind.k === 'loose' && warnLoose.has(i))) {
-      if (current) warn('row', line.page, current, line.text, `Wiersz nierozpoznany (strona ${line.page}, ${plDate(current)}): „${line.text}”.`)
+      if (current || badDate) warn('row', line.page, current, line.text, `Wiersz nierozpoznany (strona ${line.page}${current ? `, ${plDate(current)}` : ''}): „${line.text}”.`)
       continue
     }
     if (kind.k !== 'class') continue
     if (!current) {
-      warn('noDate', line.page, null, line.text, `Zajęcia przed pierwszą datą (strona ${line.page}) pominięte: „${line.text}”.`)
+      warn(
+        'noDate',
+        line.page,
+        null,
+        line.text,
+        badDate ? `Zajęcia pod datą, której nie ma („${badDate}”, strona ${line.page}), pominięte: „${line.text}”.` : `Zajęcia przed pierwszą datą (strona ${line.page}) pominięte: „${line.text}”.`
+      )
       continue
     }
     // The row's cells with the lines of its cells above and below it, top to bottom.
@@ -288,7 +332,7 @@ export function parseZjazdy(items: readonly PdfTextItem[]): ZjazdParse {
   const out: ZjazdDay[] = []
   for (const date of [...days.keys()].sort()) {
     const seen = new Set<string>()
-    const classes = days
+    const all = days
       .get(date)!
       .filter((c) => {
         // The same row twice (a day repeated on the next page) is one class.
@@ -298,15 +342,19 @@ export function parseZjazdy(items: readonly PdfTextItem[]): ZjazdParse {
         return true
       })
       .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin)
-      .slice(0, MAX_CLASSES)
-    if (!classes.length) {
+    if (!all.length) {
       warn('empty', null, date, '', `Dzień ${plDate(date)} bez zajęć – pominięty.`)
       continue
     }
-    for (let k = 1; k < classes.length; k++) {
-      const a = classes[k - 1]!
-      const b = classes[k]!
-      if (b.startMin < a.endMin) warn('overlap', null, date, `${span(a)} i ${span(b)}`, `Zajęcia nakładają się (${plDate(date)}): ${span(a)} i ${span(b)}.`)
+    if (all.length > MAX_CLASSES) warn('tooMany', null, date, '', `Dzień ${plDate(date)} ma ${all.length} zajęć – zapisze się pierwsze ${MAX_CLASSES}.`)
+    const classes = all.slice(0, MAX_CLASSES)
+    // Every class with every later one that starts before it ends (a long class with two short ones in it: two).
+    for (let k = 0; k < classes.length; k++) {
+      const a = classes[k]!
+      for (let j = k + 1; j < classes.length && classes[j]!.startMin < a.endMin; j++) {
+        const b = classes[j]!
+        warn('overlap', null, date, `${span(a)} i ${span(b)}`, `Zajęcia nakładają się (${plDate(date)}): ${span(a)} i ${span(b)}.`)
+      }
     }
     out.push({ date, kind: zjazdKindOf(classes), classes })
   }

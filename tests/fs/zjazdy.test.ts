@@ -8,7 +8,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
 import { createDay, dayPlan, templateBlockId } from '@shared/engine/createDay'
@@ -153,47 +153,116 @@ describe('import zjazdów w folderze danych (D357)', () => {
     expect((raw[CLASS_IMPORT] as { dayType: unknown }).dayType).toBeNull()
   })
 
-  it('„Cofnij” importu: pliki dni jak przed nim (typ sprzed importu, bez zajęć), jednym zapisem; dni bez importu, dziś i minione – pominięte', async () => {
+  it('„Cofnij” = odwrotność tego zapisu: pliki dni jak przed nim (dzień bez pliku znów bez pliku, typ i Twój blok ze starszej wersji), jednym zapisem', async () => {
     const today = logicalDayOf(Date.now())
-    const [a, b, c] = [addDays(today, 2), addDays(today, 3), addDays(today, 4)]
+    const [a, b] = [addDays(today, 2), addDays(today, 3)]
     // `b` an older version marked in the calendar as a remote „zjazd”, with a block of your own; `a` had no file.
     const own = planBlock({ id: 'moje', categoryId: 'inne', startMin: 20 * 60, durationMin: 30 })
     write(paths.day(b), { schema: 1, date: b, dayType: 'zjazd-zdalny', blocks: [own] })
-    const before = { a: planOn(a), b: planOn(b) }
+    const before = { a: onDisk(a), b: planOn(b) }
     const rows: Array<[number, number, string, string, string]> = [[9 * 60 + 45, 11 * 60 + 15, '12B', 'ćwiczenia', 'Ekonomia']]
-    expect((await hub.zjazdySave([day(a, 'stacjonarny', rows), day(b, 'stacjonarny', rows)])).saved).toEqual([a, b])
+    const saved = await hub.zjazdySave([day(a, 'stacjonarny', rows), day(b, 'stacjonarny', rows)])
+    expect(saved.saved).toEqual([a, b])
+    expect(saved.undo.map((u) => [u.date, u.before === null])).toEqual([
+      [a, true],
+      [b, false]
+    ])
     expect(planOn(b).file.dayType).toBe('zjazd-stacjonarny')
 
-    const out = await hub.zjazdyUndo([a, b, c, today, addDays(today, -1), 'nie-data'])
-    expect(out.saved).toEqual([a, b])
-    expect(out.questions).toEqual([])
+    const out = await hub.zjazdyUndo(saved.undo)
+    expect(out).toMatchObject({ saved: [a, b], unchanged: [], questions: [], skipped: [], undo: [] })
     expect(out.outcomes.map((o) => o.status)).toEqual(['applied', 'applied'])
+    expect(before.a).toBeNull()
+    expect(onDisk(a)).toBeNull()
+    expect(planOn(b).file).toEqual(before.b.file)
+    expect(planOn(b).plan).toEqual(before.b.plan)
+    expect(onDisk(b)![CLASS_IMPORT]).toBeUndefined()
+  })
+
+  it('„Cofnij” importu, który zastąpił poprzedni: wraca poprzedni import (stan sprzed tego zapisu)', async () => {
+    const next = addDays(logicalDayOf(Date.now()), 2)
+    await hub.zjazdySave([day(next, 'stacjonarny', [[8 * 60, 9 * 60 + 30, '19H', 'wykład', 'Marketing']])])
+    const first = planOn(next)
+    const second = await hub.zjazdySave([day(next, 'zdalny', [[600, 690, 'TEAMS', 'wykład', 'Finanse']])])
+    expect(planOn(next).file.dayType).toBe('zjazd-zdalny')
+    expect((await hub.zjazdyUndo(second.undo)).saved).toEqual([next])
+    expect(planOn(next).file).toEqual(first.file)
+    expect(planOn(next).plan.filter((b) => b.origin === 'zjazd').map((b) => b.name)).toEqual(['Marketing · wykład'])
+  })
+
+  it('„Cofnij” nie nadpisuje zmian po imporcie: dzień zmieniony od zapisu pominięty („changed”), dziś i minione – też', async () => {
+    const today = logicalDayOf(Date.now())
+    const [a, b] = [addDays(today, 2), addDays(today, 3)]
+    const rows: Array<[number, number, string, string, string]> = [[8 * 60, 9 * 60 + 30, '19H', 'wykład', 'Marketing']]
+    const saved = await hub.zjazdySave([day(a, 'stacjonarny', rows), day(b, 'stacjonarny', rows)])
+    // After the import you set your own wake on `b`.
+    await hub.edit([{ rel: paths.day(b), edits: [{ path: ['wakeMin'], base: undefined, value: 7 * 60 }] }])
+    const afterEdit = onDisk(b)
+    const old = [
+      { date: today, before: null, after: {} },
+      { date: addDays(today, -1), before: null, after: {} }
+    ]
+    const out = await hub.zjazdyUndo([...saved.undo, ...old, { date: 'nie-data', before: null, after: {} }])
+    expect(out.saved).toEqual([a])
     expect(out.skipped.map((s) => [s.date, s.reason])).toEqual([
-      [c, 'noImport'],
+      [b, 'changed'],
       [today, 'today'],
       [addDays(today, -1), 'past'],
       ['nie-data', 'invalid']
     ])
-    for (const [d, was] of [
-      [a, before.a],
-      [b, before.b]
-    ] as const) {
-      const now = planOn(d)
-      expect(now.file).toEqual(was.file)
-      expect(now.plan).toEqual(was.plan)
-      expect(onDisk(d)![CLASS_IMPORT]).toBeUndefined()
-    }
-    expect(planOn(b).file.dayType).toBe('zjazd-zdalny')
-    expect(planOn(a).plan.filter((x) => x.origin === 'zjazd')).toEqual([])
+    expect(out.skipped[0]!.text).toMatch(/po imporcie/)
+    expect(onDisk(b)).toEqual(afterEdit)
+    expect(planOn(b).file.wakeMin).toBe(7 * 60)
   })
 
-  it('ten sam import drugi raz: bez zmian w pliku (zapisany), żadnego pytania', async () => {
+  it('ten sam import drugi raz: bez zmian w pliku – „bez zmian”, nie „zapisano”, nic do cofnięcia', async () => {
     const next = addDays(logicalDayOf(Date.now()), 2)
     const d = day(next, 'stacjonarny', [[8 * 60, 9 * 60 + 30, '19H', 'wykład', 'Marketing']])
     await hub.zjazdySave([d])
     const before = readFileSync(join(dir, paths.day(next)), 'utf8')
     const out = await hub.zjazdySave([d])
-    expect(out).toMatchObject({ saved: [next], questions: [], skipped: [], outcomes: [] })
+    expect(out).toMatchObject({ saved: [], unchanged: [next], questions: [], skipped: [], outcomes: [], undo: [] })
     expect(readFileSync(join(dir, paths.day(next)), 'utf8')).toBe(before)
+  })
+
+  it('pytanie o konflikt przy zapisie: dzień zapisany częściowo idzie do „Cofnij” (plik, jak go widzi okno), a „Cofnij” czeka na odpowiedź', async () => {
+    const next = addDays(logicalDayOf(Date.now()), 2)
+    // Another computer made the day a remote „zjazd” after this one saw it as free: the type meets that change.
+    write(paths.day(next), { schema: 1, date: next, dayType: 'zjazd-zdalny' })
+    const folder = hub.service!.folder
+    const real = folder.recordView.bind(folder)
+    let stale = true
+    const spy = vi.spyOn(folder, 'recordView').mockImplementation(async (rel: string) => {
+      if (rel === paths.day(next) && stale) {
+        stale = false
+        return { schema: 1, date: next, dayType: 'wolne' }
+      }
+      return real(rel)
+    })
+    const out = await hub.zjazdySave([day(next, 'stacjonarny', [[8 * 60, 9 * 60 + 30, '19H', 'wykład', 'Marketing']])])
+    spy.mockRestore()
+    expect(out.outcomes.map((o) => o.status)).toEqual(['conflict'])
+    expect(out.questions).toEqual([next])
+    expect(out.saved).toEqual([])
+    // The fields that met no change are written: the classes are in the file already.
+    expect(JSON.stringify(onDisk(next)!.blocks)).toMatch(/Marketing/)
+    expect(out.undo.map((u) => [u.date, u.before?.dayType])).toEqual([[next, 'wolne']])
+    expect(dayFileFrom(out.undo[0]!.after, next).dayType).toBe('zjazd-stacjonarny')
+    // „Cofnij” is not refused as „changed”: it waits behind the question for the same file.
+    const undone = await hub.zjazdyUndo(out.undo)
+    expect(undone.skipped).toEqual([])
+    expect(undone.outcomes.map((o) => [o.status, o.why])).toEqual([['waiting', 'czeka na odpowiedź na wcześniejsze pytanie']])
+  })
+
+  it('plik uszkodzony w chwili zapisu: dzień pominięty z powodem („broken”), nie pytanie o konflikt, nic do cofnięcia', async () => {
+    const next = addDays(logicalDayOf(Date.now()), 2)
+    const conflict = addDays(next, 1)
+    const edit = vi.spyOn(hub, 'edit').mockResolvedValueOnce([{ status: 'broken' }, { status: 'conflict' }])
+    const out = await hub.zjazdySave([day(next, 'stacjonarny', [[8 * 60, 9 * 60 + 30, '19H', 'wykład', 'Marketing']]), day(conflict, 'zdalny', [[600, 690, 'TEAMS', 'wykład', 'Prawo']])])
+    edit.mockRestore()
+    expect(out.saved).toEqual([])
+    expect(out.questions).toEqual([conflict])
+    expect(out.skipped.map((s) => [s.date, s.reason])).toEqual([[next, 'broken']])
+    expect(out.undo).toEqual([])
   })
 })

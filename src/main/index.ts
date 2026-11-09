@@ -69,7 +69,7 @@ import { toneOnChange, WidgetEngine } from './widget'
 import { SoundWindow } from './windows/soundWindow'
 import { afterOutsideClose } from './windows/outsideClose'
 import { WorkerHost, type WorkerChild } from './worker/host'
-import { readZjazdyPdf } from './import/zjazdy'
+import { readZjazdyPdf, zjazdyLogLine } from './import/zjazdy'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
 crashReporter.start({ uploadToServer: false, submitURL: '', compress: false })
@@ -789,11 +789,9 @@ function registerIpc(): void {
     const file = r.canceled ? null : (r.filePaths[0] ?? null)
     if (!file) return null
     const read = await readZjazdyPdf(file)
-    if (!read.ok) {
-      log('info', `import zjazdów: plik nieodczytany (${read.error})`)
-      return read
-    }
-    log('info', `import zjazdów: ${read.days.length} dni, ${read.days.reduce((s, d) => s + d.classes.length, 0)} zajęć, ${read.warnings.length} ostrzeżeń`)
+    // Only numbers and the kind of a failure: the message of a file not read has its path in it.
+    log('info', zjazdyLogLine(read))
+    if (!read.ok) return { ok: false, error: read.error }
     return { ok: true, preview: await needHub().zjazdyPreview(read) }
   })
   handle(CH.zjazdySave, async (_e, days: unknown) => {
@@ -801,8 +799,8 @@ function registerIpc(): void {
     log('info', `import zjazdów: zapisane ${out.saved.length} dni, z pytaniem ${out.questions.length}, pominięte ${out.skipped.length}`)
     return out
   })
-  handle(CH.zjazdyUndo, async (_e, dates: unknown) => {
-    const out = await needHub().zjazdyUndo(Array.isArray(dates) ? dates.map(String) : [])
+  handle(CH.zjazdyUndo, async (_e, undo: unknown) => {
+    const out = await needHub().zjazdyUndo(Array.isArray(undo) ? undo : [])
     log('info', `import zjazdów cofnięty: ${out.saved.length} dni, z pytaniem ${out.questions.length}, pominięte ${out.skipped.length}`)
     return out
   })

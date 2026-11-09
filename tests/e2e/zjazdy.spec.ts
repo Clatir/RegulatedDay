@@ -1,10 +1,10 @@
 /**
  * „Wczytaj PDF zjazdów” (D357, 1.1.0) in the calendar: a PDF (the test identity takes it from RD_E2E_PDF instead of the
  * dialog of Windows) read into a preview, corrected, one day left out, „Zapisz” – the days are zjazdy in the calendar and
- * their classes blocks „<przedmiot> · <forma>” in the day's plan; the Saturday asks about the weekly analysis; „Cofnij” of
- * the toast takes it all back. Independent of the day it runs at (T528): the dates of the schedule are made from the
- * logical today. A second test reads the made-up PDF of the fixtures (every row with its own warnings) and cancels – nothing
- * is written; a third: a file that is no PDF gives the message and no preview.
+ * their classes blocks „<przedmiot> · <forma>” in the day's plan; the Saturday asks about the weekly analysis. A second test:
+ * „Cofnij” of the toast right after „Tak” takes it all back – the days and Friday's analysis. Independent of the day it runs at (T528): the dates of the schedule are made from the
+ * logical today. A third test reads the made-up PDF of the fixtures (every row with its own warnings) and cancels – nothing
+ * is written; a fourth: a file that is no PDF gives the message and no preview.
  */
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -69,7 +69,7 @@ const readBlocks = (dir: string, d: string): Array<{ name?: string; startMin: nu
 }
 const zjazdBlocks = (dir: string, d: string) => readBlocks(dir, d).filter((b) => b.origin === 'zjazd')
 
-test('zjazdy z PDF: podgląd z poprawkami, zapis wybranych dni, pytanie o analizę, blok „przedmiot · forma”, „Cofnij”', async () => {
+test('zjazdy z PDF: podgląd z poprawkami, zapis wybranych dni, pytanie o analizę, blok „przedmiot · forma”', async () => {
   const today = logicalToday()
   let s1 = addDays(today, 2)
   while (weekday(s1) !== 6) s1 = addDays(s1, 1)
@@ -120,13 +120,14 @@ test('zjazdy z PDF: podgląd z poprawkami, zapis wybranych dni, pytanie o analiz
       await expect(page.getByTestId('zjazdy-save')).toHaveText('Zapisz (2 dni)')
 
       await page.getByTestId('zjazdy-save').click()
-      await expect(page.getByText('Zapisano 2 dni zjazdów')).toBeVisible()
       await expect(page.getByTestId('zjazdy-preview')).toHaveCount(0)
 
       // A Saturday of the import: the weekly analysis asked about once, as when it is marked in the calendar.
       await expect(page.getByTestId('ask-analysis')).toBeVisible()
       await page.getByTestId('ask-analysis').getByRole('button', { name: 'Nie', exact: true }).click()
       await expect(page.getByTestId('ask-analysis')).toHaveCount(0)
+      // The toast with „Cofnij” comes once the question is answered (the answer goes back with the import).
+      await expect(page.getByText('Zapisano 2 dni zjazdów')).toBeVisible()
 
       // The calendar: the days of the import are zjazdy of their kind; the day left out is not.
       await showMonthOf(page, s1)
@@ -146,16 +147,49 @@ test('zjazdy z PDF: podgląd z poprawkami, zapis wybranych dni, pytanie o analiz
       await page.getByTestId(`day-${s1}`).click()
       await expect(page.locator('[data-block-title="Ekonomia · wykład"]')).toBeVisible()
       await expect(page.locator('[data-block-title="Statystyka B · ćwiczenia"]')).toBeVisible()
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
 
-      // „Cofnij” of the toast: the days as before the import.
+test('zjazdy z PDF: „Cofnij” po odpowiedzi „Tak” cofa dni i przeniesioną analizę piątku', async () => {
+  const today = logicalToday()
+  let s1 = addDays(today, 2)
+  while (weekday(s1) !== 6) s1 = addDays(s1, 1)
+  const s2 = addDays(s1, 1)
+  const s3 = addDays(s1, 7)
+  const friday = addDays(s1, -1)
+  const work = mkdtempSync(join(tmpdir(), 'rd-e2e-zjazdy-'))
+  const pdf = join(work, 'zjazdy-e2e.pdf')
+  writeFileSync(pdf, schedule(s1))
+  const dataDir = join(work, 'data')
+  seed(dataDir)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir, RD_E2E_PDF: pdf } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
       await page.getByTestId('nav-calendar').click()
+      await page.getByTestId('calendar-zjazdy').click()
+      await expect(page.getByTestId('zjazdy-preview')).toBeVisible()
+      await page.getByTestId(`zjazdy-load-${s3}`).click()
+      await page.getByTestId('zjazdy-save').click()
+      await expect(page.getByTestId('ask-analysis')).toBeVisible()
+      await page.getByTestId('ask-analysis-yes').click()
+      // Friday has the analysis now; the toast follows the answer.
+      await expect(page.getByText('Zapisano 2 dni zjazdów')).toBeVisible()
+      await expect.poll(() => readBlocks(dataDir, friday).length).toBeGreaterThan(0)
+      await expect.poll(() => zjazdBlocks(dataDir, s1).length).toBe(2)
+      // „Cofnij” at once (the toast stays 10 s): the import and the answer go back together.
       await page.getByTestId('toast-action').click()
-      await expect(page.getByText('Cofnięto import zjazdów: 2 dni')).toBeVisible()
+      await expect(page.getByText('Cofnięto import zjazdów: 2 dni i odpowiedź o analizie tygodniowej')).toBeVisible()
+      await expect.poll(() => zjazdBlocks(dataDir, s1).length).toBe(0)
+      await expect.poll(() => zjazdBlocks(dataDir, s2).length).toBe(0)
+      await expect.poll(() => readBlocks(dataDir, friday).length).toBe(0)
       await showMonthOf(page, s1)
       await expect(page.getByTestId(`day-${s1}`)).not.toContainText('zjazd')
       await expect(page.getByTestId(`day-${s2}`)).not.toContainText('zjazd')
-      await expect.poll(() => zjazdBlocks(dataDir, s1).length).toBe(0)
-      await expect.poll(() => zjazdBlocks(dataDir, s2).length).toBe(0)
     })
     expect(errors).toEqual([])
   } finally {

@@ -5,6 +5,9 @@
 import { describe, expect, it } from 'vitest'
 import type { ZjazdPreview, ZjazdPreviewDay } from '@shared/api'
 import { analysisAsks } from '@renderer/features/calendar/analysisAsk'
+import { noteFriday, runInTurn, type PendingImport } from '@renderer/features/calendar/zjazdyRun'
+import { editZjazdy, keepZjazdy, openZjazdy, useZjazdy } from '@renderer/features/calendar/zjazdyStore'
+import type { inTurn } from '@renderer/store/data'
 import {
   blockedText,
   dayHeading,
@@ -21,9 +24,12 @@ import {
   skippedLines,
   stepClass,
   stepEnd,
+  subjectMaxOf,
   toSave,
   typeNowText,
-  undoneText
+  undoList,
+  undoneText,
+  unchangedText
 } from '@renderer/features/calendar/zjazdyDraft'
 import { rdFrom } from '@shared/model/rd'
 import { defaultTemplates } from '@shared/model/defaults'
@@ -120,6 +126,26 @@ describe('poprawki w podglądzie', () => {
     expect(toSave(d)[0]!.classes[0]!.endMin).toBe(575)
   })
 
+  it('kroki wyrównane do siatki 5 min; koniec w dniu logicznym, nie przed startem + 5; przy granicy nic się nie cofa', () => {
+    const odd = cls(487, 573, 'x', 'y')
+    expect(stepEnd(odd, 'start', 5).startMin).toBe(490)
+    expect(stepEnd(odd, 'start', -5).startMin).toBe(485)
+    expect(stepEnd(odd, 'end', 5).endMin).toBe(575)
+    expect(stepEnd(odd, 'end', -5).endMin).toBe(570)
+    // A class of three minutes (8:07–8:10): neither end can move toward the other, nor jump back.
+    const short = cls(487, 490, 'x', 'y')
+    expect(stepEnd(short, 'start', 5).startMin).toBe(487)
+    expect(stepEnd(short, 'end', -5).endMin).toBe(490)
+    // An end past the logical day comes into it; a start at its beginning stays.
+    expect(stepEnd(cls(1600, 1679, 'x', 'y'), 'end', 5).endMin).toBe(1680)
+    expect(stepEnd(cls(240, 300, 'x', 'y'), 'start', -5).startMin).toBe(240)
+  })
+
+  it('pole przedmiotu nie przepuszcza więcej, niż zmieści nazwa bloku z formą', () => {
+    expect(subjectMaxOf({ form: 'ćwiczenia' })).toBe(120 - 'ćwiczenia'.length - 3)
+    expect(subjectMaxOf({ form: '' })).toBe(120)
+  })
+
   it('przedmiot: zmiana tekstem, przycięty; nazwa bloku zostaje „przedmiot · forma”', () => {
     const d = setSubject(draftsOf(SAMPLE), date, 1, '  Statystyka opisowa ')
     expect(toSave(d)[0]!.classes[1]!.subject).toBe('Statystyka opisowa')
@@ -144,30 +170,98 @@ describe('opisy w podglądzie', () => {
 })
 
 describe('komunikaty po „Zapisz” i „Cofnij”', () => {
-  it('zapisane dni, pominięte z powodem, pytania', () => {
+  const undo = (date: string, before: Record<string, unknown> | null = null) => ({ date, before, after: { schema: 1, date } })
+  it('zapisane dni (tylko te do cofnięcia), bez zmian, pominięte z powodem, pytania', () => {
     const r = {
       saved: ['2030-10-13', '2030-10-19'],
+      unchanged: ['2030-10-20', '2030-10-21'],
       questions: ['2030-10-26'],
-      skipped: [{ date: '2030-10-12', reason: 'today' as const, text: 'dzień już trwa – jego plan zmienisz w „Dziś”' }],
-      outcomes: []
+      skipped: [
+        { date: '2030-10-12', reason: 'today' as const, text: 'dzień już trwa – jego plan zmienisz w „Dziś”' },
+        { date: '2030-10-14', reason: 'broken' as const, text: 'plik dnia jest uszkodzony – nie zapisano (przywróć go z Historii)' },
+        { date: '2030-10-15', reason: 'broken' as const, text: 'plik dnia jest uszkodzony – nie zapisano (przywróć go z Historii)' }
+      ],
+      outcomes: [],
+      undo: [undo('2030-10-13'), undo('2030-10-19')]
     }
     expect(savedText(r)).toBe('Zapisano 2 dni zjazdów')
-    expect(savedText({ saved: ['2030-10-13'] })).toBe('Zapisano 1 dzień zjazdów')
-    expect(savedText({ saved: [] })).toBeNull()
-    expect(skippedLines(r)).toEqual(['12.10.2030 – dzień już trwa – jego plan zmienisz w „Dziś”'])
+    expect(savedText({ undo: [undo('2030-10-13')] })).toBe('Zapisano 1 dzień zjazdów')
+    // Nothing to take back (all as they were): no „Zapisano”, so no „Cofnij” that would do nothing.
+    expect(savedText({ undo: [] })).toBeNull()
+    expect(unchangedText(r)).toBe('2 dni bez zmian (już tak zapisane)')
+    expect(unchangedText({ unchanged: [] })).toBeNull()
+    expect(skippedLines(r)).toEqual(['12.10.2030 – dzień już trwa – jego plan zmienisz w „Dziś”', '14.10.2030, 15.10.2030 – plik dnia jest uszkodzony – nie zapisano (przywróć go z Historii)'])
     expect(questionsText(r)).toContain('26.10.2030')
     expect(questionsText({ questions: [] })).toBeNull()
-    expect(undoneText(r)).toBe('Cofnięto import zjazdów: 2 dni')
+  })
+
+  it('„Cofnij” bierze też piątki z odpowiedzią „Tak”; piątek zmieniony przez import zachowuje plik sprzed importu', () => {
+    const imp = [undo('2030-10-11', { schema: 1, v: 'przed' }), undo('2030-10-12')]
+    const friday = { date: '2030-10-11', before: { schema: 1, v: 'po imporcie' }, after: { schema: 1, v: 'po odpowiedzi' } }
+    expect(undoList(imp, [friday])).toEqual([{ date: '2030-10-11', before: { schema: 1, v: 'przed' }, after: { schema: 1, v: 'po odpowiedzi' } }, imp[1]])
+    const other = { date: '2030-10-18', before: null, after: { schema: 1 } }
+    expect(undoList(imp, [other])).toEqual([...imp, other])
+    expect(undoList(imp, [])).toEqual(imp)
+  })
+
+  it('komunikat „Cofnij”: dni importu, odpowiedź o analizie, nic; piątek, którego nie dało się odczytać – powiedziane', () => {
+    expect(undoneText({ saved: ['2030-10-12', '2030-10-13'] })).toBe('Cofnięto import zjazdów: 2 dni')
+    expect(undoneText({ saved: ['2030-10-11', '2030-10-12'] }, ['2030-10-11'])).toBe('Cofnięto import zjazdów: 1 dzień i odpowiedź o analizie tygodniowej')
+    expect(undoneText({ saved: ['2030-10-11'] }, ['2030-10-11'])).toBe('Cofnięto import zjazdów i odpowiedź o analizie tygodniowej')
     expect(undoneText({ saved: [] })).toBe('Nic nie cofnięto.')
+    expect(undoneText({ saved: ['2030-10-12'] }, [], ['2030-10-11'])).toBe('Cofnięto import zjazdów: 1 dzień. Piątku 11.10.2030 nie cofnięto – jego pliku nie dało się odczytać po odpowiedzi o analizie.')
+  })
+
+  it('odpowiedź o analizie po imporcie – „Tak” i „Nie” – idzie z „Cofnij” (piątek przed i po odpowiedzi, odczyt w kolejce okna)', async () => {
+    const p: PendingImport = { out: { saved: [], unchanged: [], questions: [], skipped: [], outcomes: [], undo: [] }, fridays: [], lost: [] }
+    let turns = 0
+    const turn = (async <T,>(fn: () => Promise<T>) => (turns++, fn())) as typeof inTurn
+    const files: Record<string, Record<string, unknown>> = { '2030-10-11': { schema: 1, date: '2030-10-11', asked: { weeklyAnalysisMove: 'no' } } }
+    const read = async (dates: string[]) => Object.fromEntries(dates.filter((d) => files[d]).map((d) => [d, files[d]!]))
+    await noteFriday(p, '2030-10-11', null, { turn, read })
+    expect(p.fridays).toEqual([{ date: '2030-10-11', before: null, after: files['2030-10-11'] }])
+    expect(turns).toBe(1)
+    // A Friday that cannot be read after the answer cannot go back: noted for the message.
+    await noteFriday(p, '2030-10-04', { schema: 1 }, { turn, read })
+    expect(p.lost).toEqual(['2030-10-04'])
+  })
+})
+
+describe('podgląd po „Zapisz”: zostają tylko dni z nieczytelnym plikiem', () => {
+  it('zapisane dni znikają, dni do ponowienia zostają z poprawkami, nic nie zostaje – podgląd się zamyka', () => {
+    openZjazdy(SAMPLE)
+    editZjazdy((all) => setSubject(all, '2030-10-19', 0, 'Poprawiony'))
+    keepZjazdy(['2030-10-19'])
+    const s = useZjazdy.getState()
+    expect(s.preview!.days.map((d) => d.date)).toEqual(['2030-10-19'])
+    expect(s.drafts.map((d) => d.day.date)).toEqual(['2030-10-19'])
+    expect(toSave(s.drafts)[0]!.classes[0]!.subject).toBe('Poprawiony')
+    keepZjazdy([])
+    expect(useZjazdy.getState().preview).toBeNull()
+    expect(useZjazdy.getState().drafts).toEqual([])
+  })
+})
+
+describe('zapis w kolejce okna i ponowny odczyt (T517)', () => {
+  const turn = (async <T,>(fn: () => Promise<T>) => fn()) as typeof inTurn
+  it('wynik akcji wprost i widok odczytany po niej (odczyt nie odrzuca – jak po każdym zapisie okna); błąd akcji leci wyżej bez odczytu', async () => {
+    let reloads = 0
+    const reload = async () => void reloads++
+    expect(await runInTurn(async () => 1, { turn, reload })).toBe(1)
+    expect(reloads).toBe(1)
+    await expect(runInTurn(() => Promise.reject(new Error('nie zapisano')), { turn, reload })).rejects.toThrow('nie zapisano')
+    expect(reloads).toBe(1)
   })
 })
 
 describe('analiza tygodniowa po zjeździe w sobotę (wspólna z kalendarzem)', () => {
   const ctx = { changes: rdFrom(undefined).settings, templates: defaultTemplates(), lectures: [], holidays: marketDay }
   // 2030-10-12 is a Saturday.
+  // As `dayFiles` answers: null for a day without a file, a day whose file cannot be read now left out.
+  const readOf = (files: Record<string, Record<string, unknown> | null>) => async (dates: string[]) => Object.fromEntries(dates.filter((d) => d in files).map((d) => [d, files[d]!]))
+
   it('sobota ze zjazdem w pliku daje pytanie o piątek; dzień niebędący sobotą nie', async () => {
-    const files: Record<string, Record<string, unknown>> = { '2030-10-12': { schema: 1, date: '2030-10-12', dayType: 'zjazd-zdalny' } }
-    const read = async (dates: string[]) => Object.fromEntries(dates.filter((d) => files[d]).map((d) => [d, files[d]!]))
+    const read = readOf({ '2030-10-11': null, '2030-10-12': { schema: 1, date: '2030-10-12', dayType: 'zjazd-zdalny' } })
     const asks = await analysisAsks(['2030-10-12', '2030-10-13'], { ...ctx, read })
     expect(asks.map((a) => a.friday)).toEqual(['2030-10-11'])
     expect(asks[0]!.analysis.startMin).toBe(20 * 60)
@@ -175,7 +269,20 @@ describe('analiza tygodniowa po zjeździe w sobotę (wspólna z kalendarzem)', (
   })
 
   it('bez zjazdu w pliku soboty pytania nie ma', async () => {
-    const asks = await analysisAsks(['2030-10-12'], { ...ctx, read: async () => ({}) })
+    const asks = await analysisAsks(['2030-10-12'], { ...ctx, read: readOf({ '2030-10-11': null, '2030-10-12': null }) })
     expect(asks).toEqual([])
+  })
+
+  it('plik soboty nieczytelny (dayFiles go pomija) – bierze się typ, który właśnie nadano (ręczne oznaczenie w Kalendarzu)', async () => {
+    const read = readOf({ '2030-10-11': null })
+    const asks = await analysisAsks(['2030-10-12'], { ...ctx, read, dayType: 'zjazd-zdalny' })
+    expect(asks.map((a) => a.friday)).toEqual(['2030-10-11'])
+    // Without it (a day of another type): no question.
+    expect(await analysisAsks(['2030-10-12'], { ...ctx, read })).toEqual([])
+  })
+
+  it('piątek nieczytelny (dayFiles go pomija) to nie „brak pliku”: bez pytania (odpowiedź mogła już w nim być)', async () => {
+    const read = readOf({ '2030-10-12': { schema: 1, date: '2030-10-12', dayType: 'zjazd-zdalny' } })
+    expect(await analysisAsks(['2030-10-12'], { ...ctx, read })).toEqual([])
   })
 })

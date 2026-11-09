@@ -471,20 +471,36 @@ export interface ZjazdPreview {
 export type ZjazdyRead = { ok: true; preview: ZjazdPreview } | { ok: false; error: string }
 
 /**
- * Why a day was not saved: it has begun, it is gone, it is not a day that can be saved, its file cannot be read now, it
- * has no import to undo („Cofnij”).
+ * Why a day was left as it is: it has begun, it is gone, it is not a day that can be saved, its file cannot be read now,
+ * its file is broken (the queue never writes over it), its file was changed after the import („Cofnij” never writes over
+ * a change made since).
  */
-export type ZjazdSkipReason = 'today' | 'past' | 'invalid' | 'unreadable' | 'noImport'
+export type ZjazdSkipReason = 'today' | 'past' | 'invalid' | 'unreadable' | 'broken' | 'changed'
+
+/** What „Cofnij” of one save takes back for a day: its file before that save (null: there was none) and after it. */
+export interface ZjazdUndoDay {
+  date: string
+  before: RawRecord | null
+  after: RawRecord
+}
 
 export interface ZjazdSaveResult {
-  /** Days written (or waiting for the data folder – written on its return), also those already as imported. */
+  /** Days this save changed – written, or waiting for the data folder (written on its return). */
   saved: string[]
+  /** Days already as this save would make them: nothing written (also nothing to take back). */
+  unchanged: string[]
   /** Days whose edit met a change made on another computer meanwhile: a question at the top of the window. */
   questions: string[]
   /** Days left as they are, each with its reason and a text for it. */
   skipped: Array<{ date: string; reason: ZjazdSkipReason; text: string }>
   /** The outcomes of the edits (for `editNotice`). */
   outcomes: EditOutcome[]
+  /**
+   * „Cofnij” of this save: every day in `saved` with its file before and after it, and every day of `questions` saved in
+   * part (a field met a change elsewhere – the rest is written) with its file as this computer sees it; empty after a
+   * „Cofnij” itself.
+   */
+  undo: ZjazdUndoDay[]
 }
 
 export interface RdApi {
@@ -591,6 +607,10 @@ export interface RdApi {
   zjazdyRead(): Promise<ZjazdyRead | null>
   /** The days of the preview, as you corrected them, saved into their files – only days to come (D357). */
   zjazdySave(days: ZjazdDay[]): Promise<ZjazdSaveResult>
-  /** „Cofnij” of the import (its toast): the days to come with an import back as before it – one edit of the queue. */
-  zjazdyUndo(dates: string[]): Promise<ZjazdSaveResult>
+  /**
+   * „Cofnij” of one save of the import (its toast, with that save's `undo`): every day to come back as before that save
+   * (an import it replaced too) – only a day whose file still stands as the save left it (else `changed`); one edit of
+   * the queue.
+   */
+  zjazdyUndo(undo: ZjazdUndoDay[]): Promise<ZjazdSaveResult>
 }

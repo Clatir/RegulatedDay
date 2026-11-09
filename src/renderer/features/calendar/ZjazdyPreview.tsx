@@ -20,6 +20,7 @@ import {
   setSubject,
   STEP_MIN,
   stepClass,
+  subjectMaxOf,
   toSave,
   typeNowText,
   type DraftDay
@@ -82,7 +83,7 @@ function DayCard({ d }: { d: DraftDay }) {
             <span className="flex min-w-0 items-center gap-1.5">
               <TextField
                 value={c.subject}
-                max={120}
+                max={subjectMaxOf(c)}
                 onCommit={(v) => onChange((all) => setSubject(all, date, c.key, v))}
                 shellClassName="min-w-0 flex-1"
                 aria-label={`Przedmiot ${hoursText(c)}`}

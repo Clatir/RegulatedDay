@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { PDF_MAX_BYTES, PdfReadError, pdfTextItems } from '../../src/main/import/pdfText'
-import { PDF_MESSAGES, readZjazdyPdf } from '../../src/main/import/zjazdy'
+import { PDF_MESSAGES, readZjazdyPdf, zjazdyLogLine } from '../../src/main/import/zjazdy'
 import { SAMPLE, pdfOf } from '../fixtures/zjazdy-pdf'
 
 const FIXTURE = join(__dirname, '..', 'fixtures', 'zjazdy.pdf')
@@ -57,14 +57,72 @@ describe('PDF zjazdów (pdfjs w procesie głównym)', () => {
   })
 
   it('nie PDF, z hasłem, bez tekstu, bez dat, uszkodzony, brak pliku – każdy z komunikatem', async () => {
-    expect(await readZjazdyPdf(file('notatka.pdf', 'to tylko tekst'))).toEqual({ ok: false, error: PDF_MESSAGES.notPdf })
-    expect(await readZjazdyPdf(file('haslo.pdf', pdfOf(SAMPLE, { encrypted: true })))).toEqual({ ok: false, error: PDF_MESSAGES.encrypted })
-    expect(await readZjazdyPdf(file('pusty.pdf', pdfOf([[]])))).toEqual({ ok: false, error: PDF_MESSAGES.noText })
-    expect(await readZjazdyPdf(file('faktura.pdf', pdfOf([[{ cx: 300, y: 500, text: 'Faktura nr 12/2030' }]])))).toEqual({ ok: false, error: PDF_MESSAGES.noDates })
-    expect(await readZjazdyPdf(file('zly.pdf', '%PDF-1.4\n1 0 obj << /Type /Catalog'))).toEqual({ ok: false, error: PDF_MESSAGES.broken })
+    expect(await readZjazdyPdf(file('notatka.pdf', 'to tylko tekst'))).toEqual({ ok: false, code: 'notPdf', error: PDF_MESSAGES.notPdf })
+    expect(await readZjazdyPdf(file('haslo.pdf', pdfOf(SAMPLE, { encrypted: true })))).toEqual({ ok: false, code: 'encrypted', error: PDF_MESSAGES.encrypted })
+    expect(await readZjazdyPdf(file('pusty.pdf', pdfOf([[]])))).toEqual({ ok: false, code: 'noText', error: PDF_MESSAGES.noText })
+    expect(await readZjazdyPdf(file('faktura.pdf', pdfOf([[{ cx: 300, y: 500, text: 'Faktura nr 12/2030' }]])))).toEqual({ ok: false, code: 'noDates', error: PDF_MESSAGES.noDates })
+    expect(await readZjazdyPdf(file('zly.pdf', '%PDF-1.4\n1 0 obj << /Type /Catalog'))).toEqual({ ok: false, code: 'broken', error: PDF_MESSAGES.broken })
     const missing = await readZjazdyPdf(join(dir, 'nie-ma.pdf'))
     expect(missing.ok).toBe(false)
     expect(!missing.ok && missing.error).toMatch(/^Nie udało się odczytać pliku/)
+  })
+
+  it('ponad 60 stron: czyta pierwsze 60 i mówi o tym w ostrzeżeniu (nie obcina po cichu)', async () => {
+    const pages = [SAMPLE[0]!, ...Array.from({ length: 60 }, () => [])]
+    const r = await readZjazdyPdf(file('dlugi.pdf', pdfOf(pages)))
+    if (!r.ok) throw new Error(r.error)
+    expect(r.warnings.filter((w) => w.kind === 'pages').map((w) => w.message)).toEqual(['Plik ma 61 stron – odczytano pierwsze 60.'])
+    // The first page of the sample: 20.10 has its rows on the sample's second page (not here) – three days.
+    expect(r.days.map((d) => d.date)).toEqual(['2030-10-12', '2030-10-13', '2030-10-19'])
+  })
+
+  it('strona obrócona (/Rotate 90, tekst obrócony z nią): współrzędne z widoku strony – te same dni co bez obrotu', async () => {
+    const plain = await readZjazdyPdf(FIXTURE)
+    const rotated = await readZjazdyPdf(file('obrocony.pdf', pdfOf(SAMPLE, { rotate: 90 })))
+    if (!plain.ok || !rotated.ok) throw new Error('nie odczytano')
+    expect(rotated.days).toEqual(plain.days)
+    expect(rotated.warnings.map((w) => w.kind)).toEqual(plain.warnings.map((w) => w.kind))
+  })
+
+  it('odczyt oddaje pętlę zdarzeń między stronami (proces główny nie stoi) i ma limit czasu', async () => {
+    // A pdfjs of two pages whose every call is answered at once (microtasks only).
+    let ticked = false
+    let seenAtPage2: boolean | null = null
+    const page = (p: number) => ({
+      getViewport: () => ({ transform: [1, 0, 0, -1, 0, 595], width: 842, height: 595 }),
+      getTextContent: async () => ({ items: [{ str: `strona ${p}`, transform: [10, 0, 0, 10, 100, 500], width: 40, height: 10 }] }),
+      cleanup: () => undefined
+    })
+    const doc = { numPages: 2, getPage: async (p: number) => (p === 2 && (seenAtPage2 = ticked), page(p)) }
+    const util = { transform: (m: number[], n: number[]) => [m[0]! * n[0]! + m[2]! * n[1]!, m[1]! * n[0]! + m[3]! * n[1]!, m[0]! * n[2]! + m[2]! * n[3]!, m[1]! * n[2]! + m[3]! * n[3]!, m[0]! * n[4]! + m[2]! * n[5]! + m[4]!, m[1]! * n[4]! + m[3]! * n[5]! + m[5]!] }
+    const quick = { getDocument: () => ({ promise: Promise.resolve(doc), destroy: async () => undefined }), Util: util }
+    setImmediate(() => (ticked = true))
+    const read = await pdfTextItems(pdfOf(SAMPLE), { lib: quick as never })
+    expect(seenAtPage2).toBe(true)
+    // y from the top of the page's view turned back up: 595 − (595 − 500) = 500.
+    expect(read.items.map((i) => [i.str, i.x, i.y, i.page])).toEqual([
+      ['strona 1', 100, 500, 1],
+      ['strona 2', 100, 500, 2]
+    ])
+
+    // A file pdfjs never finishes: after the limit a message, and pdfjs stopped.
+    let destroyed = 0
+    const never = { getDocument: () => ({ promise: new Promise(() => undefined), destroy: async () => void destroyed++ }), Util: util }
+    await expect(pdfTextItems(pdfOf(SAMPLE), { lib: never as never, timeoutMs: 30 })).rejects.toMatchObject({ problem: 'slow' })
+    expect(destroyed).toBe(1)
+    expect(await readZjazdyPdf(FIXTURE, { lib: never as never, timeoutMs: 30 })).toEqual({ ok: false, code: 'slow', error: PDF_MESSAGES.slow })
+  })
+
+  it('wpis do logu: tylko liczby i rodzaj błędu – bez ścieżki, nazwy pliku, przedmiotów i prowadzących', async () => {
+    const secret = join(dir, 'Studia Tajne', 'plan Kowalskiego.pdf')
+    const missing = await readZjazdyPdf(secret)
+    expect(missing.ok).toBe(false)
+    const lineMissing = zjazdyLogLine(missing)
+    expect(lineMissing).toBe('import zjazdów: plik nieodczytany (read: ENOENT)')
+    const ok = await readZjazdyPdf(FIXTURE)
+    expect(zjazdyLogLine(ok)).toBe('import zjazdów: 5 dni, 9 zajęć, 1 ostrzeżeń')
+    for (const line of [lineMissing, zjazdyLogLine(ok)]) expect(line).not.toMatch(/Tajne|Kowalsk|zjazdy\.pdf|Ekonomia|Testowy|[\\/]/)
+    expect(zjazdyLogLine(await readZjazdyPdf(file('notatka2.pdf', 'tekst')))).toBe('import zjazdów: plik nieodczytany (notPdf)')
   })
 
   it('za duży plik – bez czytania przez pdfjs', async () => {

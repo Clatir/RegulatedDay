@@ -9,7 +9,7 @@ import { putBlock, setAsked, setCancelled } from '@shared/data/dayEdits'
 import type { HolidayLookup } from '@shared/engine/createDay'
 import { weeklyAnalysisMove } from '@shared/engine/morning'
 import { dayFileFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '@shared/model/plan'
-import type { SettingsChange } from '@shared/model/settings'
+import type { DayTypeId, SettingsChange } from '@shared/model/settings'
 import { addDays, weekday } from '@shared/time/zone'
 
 export interface AnalysisAsk {
@@ -25,6 +25,8 @@ export interface AnalysisContext {
   holidays?: HolidayLookup
   /** The files of days as they are now (default: the main process's); a day that cannot be read is not in the answer. */
   read?: (dates: string[]) => Promise<Record<string, RawRecord | null>>
+  /** The type the Saturdays were just given (marked in the calendar): used when their files cannot be read now (`read` leaves them out). */
+  dayType?: DayTypeId
   /** The file of any other day the question looks at. */
   fallback?: (date: string) => DayFile | null
 }
@@ -36,7 +38,14 @@ export async function analysisAsks(dates: readonly string[], ctx: AnalysisContex
   for (const d of dates.filter((x) => weekday(x) === 6)) {
     const friday = addDays(d, -1)
     const raw = await read([friday, d])
-    const file = (x: string): DayFile | null => (x === friday || x === d ? (raw[x] ? dayFileFrom(raw[x], x) : null) : (ctx.fallback?.(x) ?? null))
+    // Friday's file there but not readable now (`dayFiles` leaves it out) is no Friday without a file: its answer may be
+    // in it already – no question now (the morning plan of Friday asks, if it is not).
+    if (!(friday in raw)) continue
+    const file = (x: string): DayFile | null => {
+      if (x === friday) return raw[x] ? dayFileFrom(raw[x], x) : null
+      if (x === d) return raw[x] ? dayFileFrom(raw[x], x) : ctx.dayType ? { ...dayFileFrom({}, d), dayType: ctx.dayType } : null
+      return ctx.fallback?.(x) ?? null
+    }
     const m = weeklyAnalysisMove({ date: friday, changes: ctx.changes, templates: ctx.templates, lectures: ctx.lectures, holidays: ctx.holidays ?? marketDay, files: file }, friday)
     if (m) out.push({ friday, ...m })
   }

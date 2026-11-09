@@ -25,3 +25,17 @@ export function editZjazdy(fn: (all: readonly DraftDay[]) => DraftDay[]): void {
 export function closeZjazdy(): void {
   useZjazdy.setState({ preview: null, drafts: [] })
 }
+
+/**
+ * After „Zapisz”: only the days whose file could not be read just now stay in the preview, with your corrections, for
+ * „Zapisz” again; the days saved (and any other day left out) go. None left – the preview closes.
+ */
+export function keepZjazdy(dates: readonly string[]): void {
+  const keep = new Set(dates)
+  useZjazdy.setState((s) => {
+    if (!s.preview) return s
+    const days = s.preview.days.filter((d) => keep.has(d.date))
+    if (!days.length) return { preview: null, drafts: [] }
+    return { preview: { ...s.preview, days }, drafts: s.drafts.filter((d) => keep.has(d.day.date)) }
+  })
+}

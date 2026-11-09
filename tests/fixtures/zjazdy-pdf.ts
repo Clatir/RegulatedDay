@@ -98,13 +98,18 @@ const widthOf = (text: string, size: number) => [...text].reduce((w, ch) => w + 
 
 const SIZE = 10
 
-function content(cells: readonly Cell[]): number[] {
+/**
+ * A page's text. `rotate` 90: the page is a portrait 595 × 842 shown turned by 90° (/Rotate 90) and the text is drawn
+ * turned the other way, so the page looks just as the landscape one – a point (x, y) of the view is (595 − y, x) on it.
+ */
+function content(cells: readonly Cell[], rotate: 0 | 90): number[] {
   const out: number[] = []
   const ascii = (s: string) => out.push(...[...s].map((c) => c.charCodeAt(0)))
   ascii('BT\n')
   for (const c of cells) {
-    const x = (c.cx - widthOf(c.text, SIZE) / 2).toFixed(1)
-    ascii(`/F1 ${SIZE} Tf 1 0 0 1 ${x} ${c.y} Tm (`)
+    const x = c.cx - widthOf(c.text, SIZE) / 2
+    const tm = rotate === 90 ? `0 1 -1 0 ${(595 - c.y).toFixed(1)} ${x.toFixed(1)}` : `1 0 0 1 ${x.toFixed(1)} ${c.y}`
+    ascii(`/F1 ${SIZE} Tf ${tm} Tm (`)
     out.push(...encode(c.text))
     ascii(') Tj\n')
   }
@@ -114,9 +119,11 @@ function content(cells: readonly Cell[]): number[] {
 
 /**
  * The bytes of a PDF of these pages (842 × 595 pt, landscape A4). `encrypted`: the standard security handler with a
- * user password nobody knows – pdfjs asks for a password and gets none.
+ * user password nobody knows – pdfjs asks for a password and gets none. `rotate` 90: portrait pages shown turned
+ * (/Rotate 90), looking the same.
  */
-export function pdfOf(pages: readonly (readonly Cell[])[], o: { encrypted?: boolean } = {}): Uint8Array {
+export function pdfOf(pages: readonly (readonly Cell[])[], o: { encrypted?: boolean; rotate?: 0 | 90 } = {}): Uint8Array {
+  const rotate = o.rotate ?? 0
   const objects: number[][] = []
   const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0))
   const pageIds = pages.map((_, i) => 4 + i * 2)
@@ -124,8 +131,9 @@ export function pdfOf(pages: readonly (readonly Cell[])[], o: { encrypted?: bool
   objects[2] = ascii(`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pages.length} >>`)
   objects[3] = ascii(`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [128 ${GLYPHS.map((g) => `/${g}`).join(' ')}] >> >>`)
   pages.forEach((cells, i) => {
-    const stream = content(cells)
-    objects[pageIds[i]!] = ascii(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R >> >> /Contents ${pageIds[i]! + 1} 0 R >>`)
+    const stream = content(cells, rotate)
+    const box = rotate === 90 ? '/MediaBox [0 0 595 842] /Rotate 90' : '/MediaBox [0 0 842 595]'
+    objects[pageIds[i]!] = ascii(`<< /Type /Page /Parent 2 0 R ${box} /Resources << /Font << /F1 3 0 R >> >> /Contents ${pageIds[i]! + 1} 0 R >>`)
     objects[pageIds[i]! + 1] = [...ascii(`<< /Length ${stream.length} >>\nstream\n`), ...stream, ...ascii('\nendstream')]
   })
   const encryptId = objects.length

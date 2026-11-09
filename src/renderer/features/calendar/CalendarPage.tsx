@@ -6,9 +6,10 @@
  * „Wczytaj PDF zjazdów” (D357) reads a schedule into a preview you correct; only „Zapisz” writes the days (the same
  * question for a Saturday), its toast has „Cofnij”.
  */
-import { useEffect, useMemo, useState } from 'react'
-import type { RawRecord, ZjazdSaveResult } from '@shared/api'
-import { dayRaw, setDayField } from '@shared/data/dayEdits'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { RawRecord, ZjazdSaveResult, ZjazdUndoDay } from '@shared/api'
+import { dayRaw } from '@shared/data/dayEdits'
+import { zjazdTypeRaw } from '@shared/import/zjazdDay'
 import { paths } from '@shared/data/paths'
 import { sessionShiftMin, sessionWindow } from '@shared/engine/createDay'
 import { logicalClock, plDate } from '@shared/format'
@@ -19,7 +20,7 @@ import { blockFill } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
 import { Dialog } from '../../components/Dialog'
 import { TimeField } from '../../components/fields'
-import { dayFilesNow, editNotice, editOf, inTurn, isSaved, reloadData, trySaveWith, useData } from '../../store/data'
+import { dayFilesNow, editNotice, editOf, isSaved, trySaveWith, useData } from '../../store/data'
 import { useBusy } from '../../lib/busy'
 import { useMachine } from '../../store/machine'
 import { openDay, toast, undoToast } from '../../store/ui'
@@ -27,8 +28,9 @@ import { setWakeOnDays } from '../today/dayActions'
 import { analysisAsks, answerOf, type AnalysisAsk } from './analysisAsk'
 import { DAY_TYPE_COLORS, holidayMarks } from './dayTypes'
 import { gridDates, MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
-import { questionsText, savedText, skippedLines, undoneText } from './zjazdyDraft'
-import { closeZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
+import { questionsText, savedText, skippedLines, undoList, undoneText, unchangedText } from './zjazdyDraft'
+import { noteFriday, runInTurn, type PendingImport } from './zjazdyRun'
+import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
 import { ZjazdyPreviewPanel } from './ZjazdyPreview'
 
 export function CalendarPage() {
@@ -40,6 +42,8 @@ export function CalendarPage() {
   const [files, setFiles] = useState<Record<string, RawRecord | null>>({})
   const [ask, setAsk] = useState<AnalysisAsk[]>([])
   const importing = useZjazdy((s) => s.preview != null)
+  /** The save of an import whose toast with „Cofnij” waits for the answers about the weekly analysis (they go back with it). */
+  const pending = useRef<PendingImport | null>(null)
   const [wake, setWake] = useState<number | null>(null)
   const dates = useMemo(() => gridDates(month), [month])
   useEffect(() => {
@@ -53,11 +57,12 @@ export function CalendarPage() {
   const fileOf = (d: string) => (files[d] ? dayFileFrom(files[d], d) : null)
   const [busy, run] = useBusy()
   /** The days' files changed by `next`, each in its turn from the file as it is then (T517); one save at a time. */
-  const saveDays = (dates: readonly string[], next: (raw: RawRecord) => RawRecord) =>
+  const saveDays = (dates: readonly string[], next: (raw: RawRecord, date: string) => RawRecord, onBefore?: (date: string, before: RawRecord | null) => void) =>
     run(() =>
       trySaveWith(async () => {
         const now = await dayFilesNow(dates, (d) => files[d] ?? null)
-        return dates.map((d) => editOf(paths.day(d), now[d] ?? null, next(dayRaw(now[d], d))))
+        for (const d of dates) onBefore?.(d, now[d] ?? null)
+        return dates.map((d) => editOf(paths.day(d), now[d] ?? null, next(dayRaw(now[d], d), d)))
       })
     ).then((out) => out ?? null)
 
@@ -94,10 +99,11 @@ export function CalendarPage() {
         all.includes(today) ? { label: 'Otwórz Dziś', run: () => openDay(null) } : undefined
       )
     if (!list.length) return
-    if (!isSaved(await saveDays(list, (r) => setDayField(r, 'dayType', t)))) return
+    // A type that is no „zjazd” takes a day's import away in the same edit (its classes, the commute it moved).
+    if (!isSaved(await saveDays(list, (r, d) => zjazdTypeRaw(r, d, t)))) return
     setSel(new Set())
     // A Saturday marked as a „zjazd”: the weekly analysis to Friday – asked once, here or in Friday's morning plan.
-    if (t === 'zjazd-stacjonarny' || t === 'zjazd-zdalny') setAsk(await analysisAsks(list, { changes: rd.settings, templates, lectures, fallback: fileOf }))
+    if (t === 'zjazd-stacjonarny' || t === 'zjazd-zdalny') setAsk(await analysisAsks(list, { changes: rd.settings, templates, lectures, dayType: t, fallback: fileOf }))
   }
 
   const setWakeOf = async (v: number | null) => {
@@ -106,8 +112,15 @@ export function CalendarPage() {
   }
 
   const answerAnalysis = async (a: AnalysisAsk, yes: boolean) => {
-    const out = await saveDays([a.friday], (r) => answerOf(r, a, yes))
-    if (isSaved(out)) setAsk(ask.filter((x) => x !== a))
+    const seen: { before: RawRecord | null } = { before: null }
+    const out = await saveDays([a.friday], (r) => answerOf(r, a, yes), (_d, before) => (seen.before = before))
+    if (!isSaved(out)) return
+    // An answer after an import – „Tak” and „Nie” (its `asked`) alike: Friday goes back with it (its file as it stands
+    // now, read in the turn of the saves, is what „Cofnij” checks it against).
+    if (pending.current) await noteFriday(pending.current, a.friday, seen.before)
+    const rest = ask.filter((x) => x !== a)
+    setAsk(rest)
+    if (!rest.length) savedToast()
   }
 
   /** „Wczytaj PDF zjazdów”: a file picked in the dialog of Windows, read into the preview; nothing is saved (D357). */
@@ -123,42 +136,53 @@ export function CalendarPage() {
       }
     })
 
+  /** What is to be said after a save or a „Cofnij”: the days left as they are with their reasons, questions, the outcomes. */
+  const reportResult = (out: ZjazdSaveResult, skippedLabel: string) => {
+    const q = questionsText(out)
+    const skipped = skippedLines(out)
+    if (q || skipped.length) toast([q, skipped.length ? `${skippedLabel}: ${skipped.join('; ')}` : null].filter(Boolean).join(' '), 'info', 12_000)
+    const notice = editNotice(out.outcomes)
+    if (notice) toast(notice.text, notice.kind, 8000)
+  }
+
+  /** „Zapisano N dni zjazdów · Cofnij” – after the answers about the weekly analysis, which the „Cofnij” takes back too. */
+  const savedToast = () => {
+    const p = pending.current
+    pending.current = null
+    const text = p && savedText(p.out)
+    if (!p || !text) return
+    undoToast(text, () => void undoImport(undoList(p.out.undo, p.fridays), p.fridays.map((f) => f.date), p.lost))
+  }
+
   /** The days of the import as the preview was corrected, saved in the turn of the window's saves (T517). */
   const saveImport = (days: ZjazdDay[]) =>
     run(async () => {
       let out: ZjazdSaveResult
       try {
-        out = await inTurn(() => window.rd.zjazdySave(days))
-        await reloadData()
+        out = await runInTurn(() => window.rd.zjazdySave(days))
       } catch (e) {
         toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
         return
       }
-      closeZjazdy()
-      const saved = savedText(out)
-      if (saved)
-        undoToast(saved, () => {
-          void undoImport(out.saved)
-        })
-      const q = questionsText(out)
-      const skipped = skippedLines(out)
-      if (q || skipped.length) toast([q, skipped.length ? `Pominięte: ${skipped.join('; ')}` : null].filter(Boolean).join(' '), 'info', 12_000)
-      const notice = editNotice(out.outcomes)
-      if (notice) toast(notice.text, notice.kind, 8000)
-      // A Saturday imported as a „zjazd”: the same question about the weekly analysis as when it is marked here.
-      setAsk(await analysisAsks(out.saved, { changes: rd.settings, templates, lectures }))
+      // The days that could not be read now stay in the preview to be saved again; none left – it closes.
+      keepZjazdy(out.skipped.filter((x) => x.reason === 'unreadable').map((x) => x.date))
+      const unchanged = unchangedText(out)
+      if (unchanged) toast(unchanged, 'info', 6000)
+      reportResult(out, 'Pominięte')
+      // A Saturday imported as a „zjazd”: the same question about the weekly analysis as when it is marked here; the toast
+      // with „Cofnij” comes once it is answered, so that the answer goes back with the import.
+      pending.current = { out, fridays: [], lost: [] }
+      const asks = out.undo.length ? await analysisAsks(out.undo.map((u) => u.date), { changes: rd.settings, templates, lectures }).catch(() => []) : []
+      setAsk(asks)
+      if (!asks.length) savedToast()
     })
 
-  /** „Cofnij” of the toast: the saved days back as before the import – the days of it that changed stay as they are. */
-  const undoImport = async (dates: string[]) => {
+  /** „Cofnij” of the toast: the days back as before the import (and the answers) – a day changed since stays as it is, with the reason. */
+  const undoImport = async (undo: ZjazdUndoDay[], fridays: string[], lost: string[]) => {
     try {
-      const out = await inTurn(() => window.rd.zjazdyUndo(dates))
-      await reloadData()
-      toast(undoneText(out), 'info', 6000)
-      const skipped = skippedLines(out)
-      if (skipped.length) toast(`Bez zmian: ${skipped.join('; ')}`, 'info', 12_000)
-      const notice = editNotice(out.outcomes)
-      if (notice) toast(notice.text, notice.kind, 8000)
+      const out = await runInTurn(() => window.rd.zjazdyUndo(undo))
+      toast(undoneText(out, fridays, lost), 'info', lost.length ? 10_000 : 6000)
+      reportResult(out, 'Bez zmian')
     } catch (e) {
       toast(`Nie cofnięto: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
     }
