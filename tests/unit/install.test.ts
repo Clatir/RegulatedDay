@@ -258,6 +258,20 @@ describe('instalacja a sesja i zajęcia (A5-02, A5-03, A5-05)', () => {
     c.updater?.stopAuto()
   })
 
+  it('zamknięte przez ręcznie uruchomiony instalator, z pobranym wydaniem: przy tym wyjściu nic się nie instaluje (E4a.13)', () => {
+    const { userData, helperDir } = download()
+    const before = { n: 0 }
+    const logs: string[] = []
+    const c = controller({ userData, helperDir, sessionOrClass: () => false, before, logs })
+    c.init(null, null)
+    expect(c.updater?.readyRelease?.version).toBe('0.1.1')
+    c.onQuit(false, true)
+    // The installer that closed the app installs now: no second installation from its exit.
+    expect(before.n).toBe(0)
+    expect(logs.some((m) => m.startsWith('zamknięte przez instalator'))).toBe(true)
+    c.updater?.stopAuto()
+  })
+
   it('plan strażnika: sesja teraz albo w ciągu 30 min blokuje, później nie', async () => {
     const { planBlocking, writePlan } = await import('../../src/main/update/files')
     const { userData } = download()

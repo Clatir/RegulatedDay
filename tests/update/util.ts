@@ -61,6 +61,29 @@ export function powershell(script: string): string {
   return (r.stdout ?? '').trim()
 }
 
+/**
+ * How the installer's Windows PowerShell (32-bit) answers electron-builder's IS_POWERSHELL_AVAILABLE here, with this
+ * process's environment (a pwsh 7 on CI) and without PSModulePath – evidence for the log, never asserted (E4a.13).
+ */
+export function powershellChecks(): string {
+  const ps = join(process.env.SystemRoot ?? 'C:\\Windows', 'SysWOW64', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  const checks: Array<[string, string]> = [
+    ['Get-CimInstance', 'if (Get-Command Get-CimInstance -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }'],
+    ['ExecutionPolicy', "if ((Get-ExecutionPolicy -Scope Process) -eq 'Restricted') { exit 1 } else { exit 0 }"]
+  ]
+  const run = (env: NodeJS.ProcessEnv) =>
+    checks
+      .map(([name, command]) => {
+        const r = spawnSync(ps, ['-C', command], { env, encoding: 'utf8', timeout: 60_000 })
+        const err = (r.stderr ?? '').trim().split(/\r?\n/)[0]
+        return `${name} = ${r.status}${err ? ` (${err})` : ''}`
+      })
+      .join(', ')
+  const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toLowerCase() !== 'psmodulepath'))
+  const modules = Object.entries(process.env).find(([k]) => k.toLowerCase() === 'psmodulepath')?.[1] ?? '(brak)'
+  return `PowerShell instalatora – PSModulePath: ${modules}\n  odziedziczone: ${run(process.env)}\n  bez PSModulePath: ${run(clean)}`
+}
+
 /** The folder of app data of the production identity: %APPDATA%\Regulated Day (Environment.GetFolderPath). */
 export function appDataDir(): string {
   return powershell('[Environment]::GetFolderPath("ApplicationData")') || join(homedir(), 'AppData', 'Roaming')
@@ -130,7 +153,7 @@ export function readJson<T>(file: string): T | null {
 export async function dump(title: string, dirs: string[] = []): Promise<void> {
   const data = productionData()
   const lines = [`===== ${title}`]
-  for (const log of ['main.log', 'guard.log', 'install.log', 'helper.log', 'update.log']) {
+  for (const log of ['main.log', 'guard.log', 'install.log', 'helper.log', 'update.log', 'installer-check.log']) {
     lines.push(`--- logs/${log}:`, (await readText(join(data, 'logs', log))).split('\n').slice(-60).join('\n'))
   }
   const upd = join(data, 'update')

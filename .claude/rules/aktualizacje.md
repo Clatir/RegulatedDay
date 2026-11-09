@@ -29,6 +29,8 @@ Poniżej formaty i podział ról, żeby nie czytać całości przy każdej zmian
   `handover.jsonl` (jednej próby: właściciel usuwa go po starcie aplikacji, nowa próba na starcie).
 - `launched.json` – „uruchomiono wersję X” (wersja, attemptId) poza update; liczy się tylko z attemptId bieżącej próby.
 - `closed-by-installer.json` – znacznik skryptu NSIS (czas ms UTC); `plan-blocks.json` – bloki sesji i zajęć na 7 dni.
+- `logs\installer-check.log` – skrypt NSIS przed „appCannotBeClosed”: procesy spod folderu instalacji (nazwa, PID,
+  rodzic, start UTC, wiersz poleceń, profil jako `%USERPROFILE%`); ręcznie to samo listuje `docs/vm/procesy.ps1`.
 
 ## task.json (format 1; nieznane pola zachowywane)
 `version`, `attemptId`, `state` (`scheduled` | `installing` | `postponed` | `done` | `failed` | `fi`), `trigger`
@@ -67,6 +69,25 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
 - Manifest powstaje w `afterSign` (rcedit i podpis zmieniają exe, elevate.exe dochodzi później).
 - Szablon NSIS pokazuje „uninstallFailed” bez `/SD` – cichy instalator czekał na kliknięcie; własny `customUnInstallCheck`.
   Przy `--updated` znacznik `rd-installed` przenosi atomicRMDir razem z plikami (T407).
+- Zamykanie w `customCheckAppRunning` (E4a.13): `KILL_PROCESS … 0` electron-buildera z PowerShellem to `Stop-Process`
+  (TerminateProcess), a `FIND_PROCESS` nie widzi jednego procesu (pojedynczy CimInstance bez `.Count` w PS 5.1) – stąd
+  własne `rdFindProcess` (0 = proces główny, 3 = tylko inne, 1 = nic; błąd → tasklist, niepewne = działa) /
+  `rdCloseApp` (taskkill bez /F do procesu głównego, do 15 s ≥ `QUIT_BUDGET_MS`; same inne procesy – 2 s) /
+  `rdKillProcess` / `rdListProcesses`, bez własnego PID. W LogicLib `==` to StrCmp (bez wielkości liter), `=` to IntCmp,
+  `S==` dokładny tekst – wyniki przez `S==`/`S!=`. Znacznik instalatora tylko przy procesie głównym. Tekst PowerShella
+  w `RD_PS_*` (tylko `$$`, bez `"` i `` ` ``), wartości przez `RD_SETUP_*`; `tests/unit/installer-close.test.ts`
+  uruchamia go na procesach zastępczych. Świeży znacznik i zamknięcie z zewnątrz albo znacznik po początku wyjścia
+  (`closedByInstaller`; okna kończącej się aplikacji zamykają się bez sygnału): bez instalacji pobranej wersji, zapis
+  „installer” (`rd-install` przy muteksie instalatora nie kończy się: okno postępu, do 60 s); taskkill użytkownika – jak dotąd.
+- `taskkill` bez /F wysyła jeden WM_CLOSE do jednego okna procesu (najwyższego w kolejności Z): pokazane okno główne
+  chowa się wtedy do zasobnika (Twoje zamknięcie to SC_CLOSE, potem WM_CLOSE), ukryte okna kończą aplikację – także okno
+  dźwięku. Dlatego `RD_PS_CLOSE` i ścieżka bez PowerShella proszą ponownie co 3 s. `IS_POWERSHELL_AVAILABLE`
+  electron-buildera nie jest pytany: w CI (instalator spod pwsh 7) mówił „brak” – o PowerShellu decyduje własna
+  odpowiedź `rdFindProcess` (`$rdPs`), kroki biegną bez odziedziczonego `PSModulePath`.
+- `app.quit()` rozpoczęte wewnątrz zdarzenia `close` z `preventDefault` Electron anuluje po powrocie zdarzenia (okna się
+  zamykają, aplikacja zostaje bez nich) – wyjście po zamknięciu z zewnątrz idzie przez `afterOutsideClose` (następny
+  obrót pętli). Playwright na Windows uruchamia Electrona przez powłokę: `app.process()` to `cmd.exe` – PID aplikacji
+  z `app.evaluate(() => process.pid)`.
 - Kliknięcie aktywnego okna nie podnosi go nad okno pokazane bez aktywacji – okna właściciela kładzie pod kliknięte hak
   myszy (T408). W `fs` Electrona `app.asar` to folder 0 B – rozmiary z `process.noAsar`.
 - Testy: „close” Playwrighta czeka na wszystkie kopie potoków aplikacji, a odłączony właściciel je dziedziczy – czekaj na

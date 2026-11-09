@@ -3,8 +3,9 @@
  * the guard's modes and 10 000 parallel writes of the task file, two guards and the app at once, exceptions of the
  * guard (once while the installer works, at every start, a failed write of its count), four logons with „odłożono” and a
  * guard dying right after it, „Uruchom mimo to” while the files are copied and before the installer, a hung and a
- * missing guard, X+1 installed by hand while a task for X waits, the installer run by hand (its marker within 5 s of
- * the clock), the app opened while the install helper works, a slowed installer, the installer's mutex held by the
+ * missing guard, X+1 installed by hand while a task for X waits, the installer run by hand (the app asked to end, not
+ * killed; its marker within 5 s of the clock; a process that does not end listed in installer-check.log), the app
+ * opened while the install helper works, a slowed installer, the installer's mutex held by the
  * test, a file locked before the uninstall and while the files are copied, and the crash dumps of the main process, the
  * renderer and the GPU.
  */
@@ -18,7 +19,7 @@ import { RDWIN_PRELUDE, click, foreground, topWindows, type TopWindow } from '..
 import { readSharedSync, writeSyncAtomic } from '../../src/main/update/files'
 import { newTask } from '../../src/main/update/install'
 import { readTask, writeTask, type Task } from '../../src/shared/task'
-import { APP_EXE, MANIFEST, SETUP, appProcesses, appRunning, dump, installed, powershell, processEnd, productionData, readJson, readText, runEntry, sha256, sleep, stopAll, uninstall } from './util'
+import { APP_EXE, MANIFEST, SETUP, appProcesses, appRunning, dump, installed, powershell, powershellChecks, processEnd, productionData, readJson, readText, runEntry, sha256, sleep, stopAll, uninstall } from './util'
 
 const FROM = resolve(process.env.RD_UPDATE_FROM ?? 'release')
 const TO = resolve(process.env.RD_UPDATE_TO ?? 'release-next')
@@ -464,17 +465,98 @@ test('ręcznie uruchomiony instalator: zamyka działającą aplikację ze znaczn
     const closed = app.waitForEvent('close', { timeout: 300_000 })
     spawn(join(TO, SETUP), ['/S'], { detached: true, stdio: 'ignore' }).unref()
     await closed
+    // Asked to end, not killed (E4a.13): the app's own way out to its last line, the helper's too, nothing left to list.
+    const main = await readText(join(productionData(), 'logs', 'main.log'))
+    expect(main).toContain('zamknięcie z zewnątrz (instalator albo taskkill)')
+    expect(main).toContain('zamknięte przez instalator')
+    expect(main).toContain('aplikacja zamknięta')
+    await expect.poll(() => readText(join(productionData(), 'logs', 'helper.log')), { timeout: 30_000 }).toMatch(/ INFO koniec$/m)
     const marker = readJson<{ at: number }>(join(productionData(), 'closed-by-installer.json'))
     expect(marker).not.toBeNull()
     expect(Math.abs(marker!.at - Date.now())).toBeLessThan(60_000)
     await expect.poll(() => installed()?.version, { timeout: 600_000, intervals: [2000] }).toBe(NEXT)
     const ts = Number(powershell('[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()'))
     expect(Math.abs(marker!.at - ts)).toBeLessThan(10 * 60_000)
-    // The start after it: „zamknięte przez instalator”, not a crash.
+    // The start after it: its own record of closing by the installer, not a crash.
     const again = await electron.launch({ executablePath: join(dir, APP_EXE), env: env() })
     await again.firstWindow()
-    await expect.poll(() => readText(join(productionData(), 'logs', 'main.log')), { timeout: 30_000 }).toMatch(/poprzednie uruchomienie: (installer|clean)/)
+    await expect.poll(() => readText(join(productionData(), 'logs', 'main.log')), { timeout: 30_000 }).toMatch(/poprzednie uruchomienie: clean \(zamknięcie \(installer\)\)/)
     await again.close()
+    expect(existsSync(join(productionData(), 'logs', 'installer-check.log'))).toBe(false)
+  })
+})
+
+test('ręczny instalator, gdy proces spod folderu aplikacji się nie kończy: lista procesów w installer-check.log, wersja bez zmian', async () => {
+  test.setTimeout(15 * 60_000)
+  await guarded('proces, który się nie kończy', async () => {
+    const dir = await install(FROM, CURRENT)
+    // A program under the installation that no close ends – started again at once after each end, as a process stuck in
+    // a driver stays (E4a.13). Alone under the folder: electron-builder's own search did not even see a single one.
+    const stuck = join(dir, 'resources', 'rd-test-stuck.exe')
+    copyFileSync(process.execPath, stuck)
+    let on = true
+    let child: ChildProcess | null = null
+    const start = () => {
+      child = spawn(stuck, ['-e', 'setInterval(() => {}, 1e9)'], { stdio: 'ignore' })
+      child.once('exit', () => {
+        if (on) start()
+      })
+    }
+    start()
+    try {
+      // Which way the installer's PowerShell answers here (the evidence when its steps went by tasklist).
+      console.log(powershellChecks())
+      // Not spawnSync: the restarts need this process's event loop.
+      const setup = spawn(join(TO, SETUP), ['/S'], { stdio: 'ignore' })
+      expect(await exited(setup, 600_000)).toBe(true)
+      const list = await readText(join(productionData(), 'logs', 'installer-check.log'))
+      console.log(`installer-check.log:\n${list}`)
+      expect(list).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z WARN instalator \S+: procesy spod .+, które nie dały się zamknąć:$/m)
+      expect(list).toMatch(new RegExp(`^  rd-test-stuck\\.exe \\| pid \\d+ \\| rodzic ${process.pid}( \\S.*)? \\| start \\d{4}-\\d\\d-\\d\\dT[^|]+\\| .*setInterval`, 'm'))
+      expect(installed()?.version).toBe(CURRENT)
+      // No main process of the app among them: no „zamknięte przez instalator” – an end of the app now would be judged as it is.
+      expect(existsSync(join(productionData(), 'closed-by-installer.json'))).toBe(false)
+    } finally {
+      // Best effort: a failure here never hides the test's own.
+      on = false
+      const last = child as ChildProcess | null
+      if (last && last.exitCode == null) last.kill()
+      for (let i = 0; i < 60 && existsSync(stuck); i++) {
+        try {
+          rmSync(stuck, { force: true })
+        } catch {
+          await sleep(500)
+        }
+      }
+    }
+  })
+})
+
+test('taskkill użytkownika (bez /F) przy pobranej wersji: zwykłe wyjście – wersja instaluje się przy nim jak dotąd', async () => {
+  test.setTimeout(20 * 60_000)
+  await guarded('taskkill użytkownika', async () => {
+    const dir = await install(FROM, CURRENT)
+    stage(dir)
+    const app = await electron.launch({ executablePath: join(dir, APP_EXE), env: env() })
+    const page = await mainPage(app)
+    await expect.poll(() => page.evaluate(() => window.rd.update().then((u) => u.phase)), { timeout: 60_000 }).toBe('ready')
+    // WM_CLOSE from outside without any installer's marker: not „zamknięte przez instalator”. taskkill without /F sends
+    // one WM_CLOSE to one window only (the topmost; a shown main window hides to the tray on it, as on your close) – so
+    // asked again every 3 s until the app ends, as the installer does. The app's main process itself: Playwright starts it
+    // on Windows through a shell (shell: true), so app.process() is cmd.exe – no window, „can only be terminated forcefully”.
+    const pid = await app.evaluate(() => process.pid)
+    let ended = false
+    const end = processEnd(app, 120_000).then(() => void (ended = true))
+    for (let i = 0; i < 30 && !ended; i++) {
+      const r = spawnSync('taskkill', ['/PID', String(pid)], { encoding: 'utf8' })
+      console.log(`taskkill /PID ${pid}: ${(r.stdout + r.stderr).trim()}`)
+      for (let j = 0; j < 30 && !ended; j++) await sleep(100)
+    }
+    await end
+    const main = await readText(join(productionData(), 'logs', 'main.log'))
+    expect(main).toContain('zamknięcie z zewnątrz (instalator albo taskkill)')
+    expect(main).not.toContain('zamknięte przez instalator')
+    await expect.poll(() => installed()?.version, { timeout: 600_000, intervals: [2000] }).toBe(NEXT)
   })
 })
 

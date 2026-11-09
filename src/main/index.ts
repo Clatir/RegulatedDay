@@ -54,18 +54,20 @@ import { notify } from './notify'
 import { runStartup, type Banner, type StartupResult } from './update/startup'
 import { cleanUpdateFolders, emptyPlanAtStart, fsDeps, manifestOf, planBlocking, writeLaunched, writePlan } from './update/files'
 import { UpdateController } from './update/controller'
+import { QUIT_DATA_CLOSE_MS, closedByInstaller } from './installerClose'
 import { guardMode, startDetached } from './update/install'
 import { LifeKeeper, judge } from './crash/lifeMarker'
 import { sessionAtStart } from './crash/session'
 import { readVersions, recordRun } from './crash/versions'
 import { NightInstaller } from './update/night'
 import { marketDay } from '@shared/calendar/holidays'
-import { STOP_TIMEOUT_MS, type DataService } from './data/service'
+import { type DataService } from './data/service'
 import { DataHub } from './data/hub'
 import { PowerKeeper } from './power'
 import { OneDriveWatch } from './onedrive'
 import { toneOnChange, WidgetEngine } from './widget'
 import { SoundWindow } from './windows/soundWindow'
+import { afterOutsideClose } from './windows/outsideClose'
 import { WorkerHost, type WorkerChild } from './worker/host'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
@@ -126,6 +128,14 @@ const oneDrive = new OneDriveWatch({
   log: (level, msg) => log(level, msg)
 })
 let quitting = false
+/** When this quit began (quitApp or before-quit): an installer's marker after it belongs to this quit (E4a.13). */
+let quitStartedAt: number | null = null
+/**
+ * Something outside closed a hidden window of a running app (an installer's or your taskkill, E4a.13). A quitting app's
+ * windows close without telling it (their handlers let the close through) – then only the installer's marker after
+ * quitStartedAt tells (closedByInstaller): this exit installs nothing and its record says „installer”.
+ */
+let closedFromOutside = false
 /** Windows ends the session (logoff, shutdown): never an installer now (spec), the record of closing written at once. */
 let sessionEnding = false
 /** A session that was only asked to end and still runs after this was cancelled (Windows ends one within seconds). */
@@ -520,14 +530,33 @@ function openPanel(target: PanelTarget | null): void {
 function quitApp(): void {
   if (quitting) return
   quitting = true
+  quitStartedAt ??= Date.now()
   log('info', 'zamykanie: wyjście z aplikacji')
   if (bar) bar.quitting = true
   if (panel) panel.quitting = true
+  if (sound) sound.quitting = true
   tray?.destroy()
   void config
     .flush()
     .catch(() => undefined)
     .finally(() => app.quit())
+}
+
+/** The quit asked from outside comes after the window's close event (afterOutsideClose). */
+let quitFromOutsideAsked = false
+
+/**
+ * A close from outside – WM_CLOSE to a hidden window nobody could click (T396): an installer run by hand asks the app to
+ * end its own way (taskkill without /F, E4a.13). Only a running app hears it – a quitting one lets its windows close.
+ * Called inside that window's close event, whose default the window prevents: the quit waits for the event's end
+ * (afterOutsideClose) – begun within it, Electron cancels it on the prevented close, and the app went on without windows.
+ */
+function quitFromOutside(): void {
+  closedFromOutside = true
+  if (quitting || quitFromOutsideAsked) return
+  quitFromOutsideAsked = true
+  log('info', 'zamknięcie z zewnątrz (instalator albo taskkill) – kończę pracę')
+  afterOutsideClose(quitApp)
 }
 
 function showMainWindow(page?: string): void {
@@ -1129,7 +1158,7 @@ async function main(): Promise<void> {
     load: loadView,
     savePlace: (place) => void config.update({ window: place }).catch(() => undefined),
     quitting: () => quitting,
-    externalClose: quitApp,
+    externalClose: quitFromOutside,
     log: (m) => log('info', m)
   })
   mainWindow.once('ready-to-show', () => {
@@ -1153,7 +1182,7 @@ async function main(): Promise<void> {
   mainWindow.on('session-end', () => onSystemEnd(true))
 
   bar = new DesktopBar(preload, loadView)
-  bar.onExternalClose = quitApp
+  bar.onExternalClose = quitFromOutside
   bar.onSystemEnd(onSystemEnd)
   panel = new IconPanel(preload, loadView, {
     place: (height, cursor) => {
@@ -1169,10 +1198,11 @@ async function main(): Promise<void> {
     stayOnTop: () => prefs().onTop === 'barPanel',
     log: (m) => log('info', `panel: ${m}`)
   })
-  panel.onExternalClose = quitApp
+  panel.onExternalClose = quitFromOutside
   panel.onSystemEnd(onSystemEnd)
 
   sound = new SoundWindow(preload, loadView)
+  sound.onExternalClose = quitFromOutside
   showWidget(widgetView())
   widget.start()
 
@@ -1218,8 +1248,10 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', (e) => {
   quitting = true
+  quitStartedAt ??= Date.now()
   if (bar) bar.quitting = true
   if (panel) panel.quitting = true
+  if (sound) sound.quitting = true
   // The data folder closes first, by any way out (its journal is on the disk already: this writes what OneDrive can take
   // now and the presence „closed”), also while it is still opening – once, with a limit of time, and never at the end of
   // the Windows session, which the app does not hold up.
@@ -1233,22 +1265,27 @@ app.on('before-quit', (e) => {
     const dir = dataFolderNow()
     const say = f && dir ? quitNotice(f.unsynced, existsSync(dir)) : null
     if (say) notify({ id: `unsynced:${Date.now()}`, title: 'Folder danych niedostępny', body: say, line: null, day: null }, log)
-    void Promise.race([hub.close('quit'), new Promise((r) => setTimeout(r, 2 * STOP_TIMEOUT_MS))])
+    void Promise.race([hub.close('quit'), new Promise((r) => setTimeout(r, QUIT_DATA_CLOSE_MS))])
       .catch((err) => log('warn', 'zamykanie folderu danych', err))
       .finally(() => app.quit())
   }
 })
 
 app.on('will-quit', () => {
-  // A ready download installs at the full exit (never at the end of the Windows session).
-  updates?.onQuit(sessionEnding)
+  // Closed by a hand-run installer – also one that came while „Zakończ” waited for the data folder: it installs itself, and
+  // the install helper of a ready download does not stop at its mutex (it would show its window beside it). Your own
+  // taskkill is an ordinary exit.
+  const byInstaller = closedByInstaller(closedFromOutside, life.installerMarker(), Date.now(), quitStartedAt)
+  if (byInstaller) log('info', 'zamknięte przez instalator')
+  // A ready download installs at the full exit (never at the end of the Windows session nor when an installer closed it).
+  updates?.onQuit(sessionEnding, byInstaller)
   power.stop()
   oneDrive.stop()
   widget.stop()
   sound?.destroy()
   helper?.stop()
   worker.stop()
-  if (!sessionEnding) life.close('quit')
+  if (!sessionEnding) life.close(byInstaller ? 'installer' : 'quit')
   // Not „koniec pracy”: that is the button of the day (F2).
   log('info', 'aplikacja zamknięta')
   flushLog()

@@ -1,4 +1,7 @@
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { launch, launchSecondCopy, settledBarBounds, viewPage, withMainLog } from './app'
@@ -63,6 +66,68 @@ test('zamknięcie: aplikacja zamknięta bez nieobsłużonych wyjątków, także 
   expect(log).toContain('aplikacja zamknięta')
   expect(log.split('\n').filter((l) => /nieobsłużon/.test(l)), log).toEqual([])
 })
+
+/**
+ * A real WM_CLOSE (PostMessage) to the window of `pid` with this title – what an installer's or your taskkill sends to
+ * one window. Answers the windows of the process seen and whether one was posted to.
+ */
+function postClose(pid: number, title: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'rd-e2e-close-'))
+  const script = join(dir, 'close.ps1')
+  writeFileSync(
+    script,
+    `$src = @'
+using System; using System.Text; using System.Runtime.InteropServices;
+public static class RdClose {
+  delegate bool E(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumWindows(E f, IntPtr l);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+  public static string Post(uint want, string title) {
+    var sb = new StringBuilder();
+    EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); if (p != want) return true;
+      var t = new StringBuilder(256); GetWindowText(h, t, 256); sb.Append("[" + t + "] ");
+      if (t.ToString() == title) { PostMessage(h, 0x10, IntPtr.Zero, IntPtr.Zero); sb.Append("<- WM_CLOSE "); }
+      return true; }, IntPtr.Zero);
+    return sb.ToString();
+  }
+}
+'@
+Add-Type -TypeDefinition $src
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+[RdClose]::Post([uint32]$args[0], [string]$args[1])
+`,
+    'utf8'
+  )
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, String(pid), title], { encoding: 'utf8', timeout: 60_000 })
+  rmSync(dir, { recursive: true, force: true })
+  return `${r.stdout ?? ''}${r.stderr ?? ''}`.trim()
+}
+
+// A WM_CLOSE from outside (an installer's or your taskkill) to a hidden window – or the bar – is that window's close event,
+// which it prevents and ends the app (T396, E4a.13). A quit begun inside that event was cancelled: the windows closed,
+// the app went on without them until the installer killed it (CI) – seen only with a real WM_CLOSE (Windows); elsewhere
+// the same event from code.
+for (const title of ['Regulated Day – panel', 'Regulated Day – dźwięk', 'Regulated Day – pasek']) {
+  test(`zamknięcie z zewnątrz okna „${title}”: aplikacja kończy pracę do końca – „aplikacja zamknięta”`, async () => {
+    const { app, page, userData } = await launch()
+    await expect(page.getByTestId('bar-main')).toBeVisible()
+    const closed = app.waitForEvent('close', { timeout: 30_000 })
+    if (process.platform === 'win32') {
+      // The main process itself: Playwright starts it through a shell on Windows (app.process() is cmd.exe).
+      const pid = await app.evaluate(() => process.pid)
+      const seen = postClose(pid, title)
+      expect(seen, seen).toContain('<- WM_CLOSE')
+    } else {
+      await app.evaluate(({ BrowserWindow }, t) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === t)?.close(), title).catch(() => undefined)
+    }
+    await closed
+    const log = await readFile(join(userData, 'logs', 'main.log'), 'utf8')
+    expect(log).toContain('zamknięcie z zewnątrz (instalator albo taskkill)')
+    expect(log).toContain('aplikacja zamknięta')
+  })
+}
 
 test('druga kopia na tej samej tożsamości: przekazuje start działającej (okno wraca) i kończy się bez „koniec pracy” i „aplikacja zamknięta” (F2)', async () => {
   const { app, page, userData } = await launch()

@@ -6,7 +6,8 @@ z 1–3.11 – `docs/archiwum/postep-ciag-E.md`, ciągi A–D – `docs/archiwum
 archiwum ciągu, tu zostaje jedna linia w tabeli.
 
 ## Stan bieżący
-- **1.0.6 wydane** 8.11 ok. 21:41 (PR #51, run 42518714788 na `main` zielony). Ciąg F w toku: H3 (1.0.7), G5 (1.0.8).
+- **1.0.7 (H3)** – PR #53 scalony 8.11 (1a4e69e), wydanie z runu 42530187521 na `main`. Ciąg F w toku: G5 (1.0.8) –
+  ostatnie zadanie ciągu.
 - **Na tym komputerze działa 1.0.4 bez pomocnika (8.11):** w `resources\helper` jest tylko `rd-install.exe`, brak
   `rd-helper.exe` i `rd-guard.exe`; `main.log` co 5 min „spawn …\rd-helper.exe ENOENT” (co najmniej od 6.11). Aktywny
   antywirus to Malwarebytes (Defender wyłączony) – najpewniej kwarantanna niepodpisanych exe (lokalnie zbudowany
@@ -32,9 +33,9 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport `docs/vm/raport.md` (T529); poprawki z odbioru
    – wersje 1.0.x (D324).
 2. **Ciąg F w toku (od 3.11, D349, D351)** – `docs/plan.md`: główna sesja Opus 5.5 · high, wykonawcy z `.claude/agents/`,
-   przyczyny w `docs/vm/przyczyny.md`, decyzje D334–D347, D350. G3 – 1.0.5 i G4 – 1.0.6 wydane 8.11. **W toku:** H3
-   (1.0.7, `wykonawca-sonnet`), G5 (1.0.8, `wykonawca-opus`, w osobnym drzewie – CI `tests/update`; kolejność wydań
-   zamieniona, T542); na końcu ciągu `docs/vm/raport.md` i `docs/vm/przyczyny.md` → `docs/archiwum/vm/` (D351).
+   przyczyny w `docs/vm/przyczyny.md`, decyzje D334–D347, D350. G3 – 1.0.5, G4 – 1.0.6 i H3 – 1.0.7 (kolejność wydań
+   zamieniona, T542) – 8.11. **W toku:** G5 (1.0.8, `wykonawca-opus`); na końcu ciągu `docs/vm/raport.md`
+   i `docs/vm/przyczyny.md` → `docs/archiwum/vm/` (D351).
 3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
 
 ## Ciąg F – stan (wpisy: `docs/archiwum/postep-ciag-F.md`)
@@ -47,31 +48,50 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 | H2 ekrany po decyzjach | 1.0.4 | #48 | wydane 4.11 | ok. 4,5 h (3–4 h) |
 | G3 folder danych niedostępny | 1.0.5 | #50 | wydane 8.11 | ok. 2,5 h (1,5–2,5 h) |
 | G4 pasek pulpitu pod oknami | 1.0.6 | #51 | wydane 8.11 | ok. 2 h (2–3 h) |
-| H3 autostart, znacznik życia | 1.0.7 | #53 | PR do scalenia po zielonym CI | (1–1,5 h) |
-| G5 instalator zamyka łagodnie | 1.0.8 | #52 | w toku – trzy scenariusze `tests/update` czerwone w CI | (1,5–2,5 h) |
+| H3 autostart, znacznik życia | 1.0.7 | #53 | scalone 8.11 (1a4e69e) | ok. 1,5 h (1–1,5 h) |
+| G5 instalator zamyka łagodnie | 1.0.8 | #52 | PR do scalenia po zielonym CI | (1,5–2,5 h) |
 
 Propozycje na później z przeglądów G1–H2 (architektura, bez zmian w działaniu) – w ich wpisach w archiwum.
 
-## H3 – 1.0.7 autostart i znacznik życia (bieżące)
-- 8.11 ok. 22:00: gałąź `claude/1.0.8-autostart` od `main` d735aa7 w drzewie `C:\CC-Projekty\RegulatedDay-h3`
-  (równolegle z G5 – inne pliki), `wykonawca-sonnet`. PR #53. Wydanie jako 1.0.7 przed G5 (T542): G5 czeka na CI
-  `tests/update`, a numer wersji niczego nie zmienia w działaniu.
-- T542: „Uruchamiaj z Windows” – `getLoginItemSettings` ze ścieżką w cudzysłowie (Electron 44 tnie ją na spacji, więc
-  przełącznik zawsze pokazywał „wyłączone”, a wyłączenie nie działało); znaczniki życia i zamknięcia (aplikacji
-  i folderu) przez `writeSyncAtomic` (ukryty plik tymczasowy, fsync także przy biciu, ponowienia zmiany nazwy przy
-  EPERM/EBUSY), jeden odczyt znacznika przed czekaniem na pomocnika; pusty albo uszkodzony znacznik – `unknown`
-  („znacznik życia nieczytelny”), nie `first`. Odbiór: E4a.13 (twardy reset), nowy E8m.2.
-- `/code-review` high: 9 uwag – 5 poprawionych (zapis atomowy z ponowieniami zamiast własnej kopii, fsync bicia, jeden
-  odczyt, sprzątanie testu CI, zbędne `unquote`); deltę przejrzałam sama.
-- Uwagi na później: `checkPath` nie widzi wpisu Run z inną ścieżką (Electron filtruje `launchItems` po ścieżce – trzeba
-  odczytu rejestru); nieudany zapis zamknięcia zostawia starszy zapis (wąskie okno – anulowane wylogowanie); przy
-  nieczytelnym znaczniku folderu brak `observe.to` „crash”.
-- Testy: typecheck, unit 1299, build, lint; CI rundy 1 zielone (także Windows – „Uruchamiaj z Windows… (ścieżka ze
-  spacją)” w `tests/update/install.spec.ts` przechodzi na prawdziwym Electronie).
-- **G5 (1.0.8) w toku:** PR #52 – trzy nowe scenariusze `tests/update` czerwone w CI (run 42523771374), diagnoza
-  u wykonawcy; wpis G5 na gałęzi `claude/1.0.7-instalator`.
-- **Dalej:** PR #53 – scalenie po zielonym CI (D333), wydanie 1.0.7; potem G5 jako 1.0.8 (wersja, CHANGELOG, odbiór
-  „zmiana w 1.0.8”), scalenie, wydanie; na końcu ciągu `docs/vm/` → `docs/archiwum/vm/`, pauza z listą do sprawdzenia.
+## G5 – 1.0.8 instalator zamyka aplikację łagodnie (bieżące)
+- 8.11 ok. 20:40: gałąź `claude/1.0.7-instalator` od `main` d735aa7 w drzewie `C:\CC-Projekty\RegulatedDay-g5`
+  (równolegle z G4 – inne pliki; po wydaniu 1.0.6 scalony `main`), `wykonawca-opus`. PR #52.
+- E4a.13 cz. 1 (T541): `customCheckAppRunning` – `taskkill` bez /F do procesu głównego i do 15 s (≥ budżet wyjścia
+  aplikacji, `src/main/installerClose.ts`; same procesy pomocnicze 2 s), potem `Stop-Process -Force`; własne szukanie
+  (0 główny / 3 inne / 1 nic; `FIND_PROCESS` electron-buildera nie widział jednego procesu – pojedynczy `CimInstance`
+  bez `.Count`), błąd szukania → `tasklist`, niepewne = działa; znacznik instalatora tylko przy procesie głównym; przed
+  „appCannotBeClosed” lista procesów bez nazwy konta w `logs\installer-check.log`, `docs/vm/procesy.ps1` – to samo
+  ręcznie. Aplikacja: zamknięcie z zewnątrz w logu, przy świeżym znaczniku (z zewnątrz albo po początku wyjścia) bez
+  instalacji pobranej wersji przy wyjściu (`rd-install` pokazałby okno obok instalatora) i zapis zamknięcia „installer”;
+  Twój `taskkill` bez znacznika – zwykłe wyjście jak dotąd. Spec „Instalacja, aktualizacje i log” uzupełniona; T540
+  i zdanie spec G4 o pierwszym planie poprawione do reguły z rundy 2 G4. Odbiór: E4a.13 („zmiana w 1.0.8”).
+  Wydanie 1.0.8 – po H3 (T542).
+- CI rundy 0: czerwone tylko przez próg czasu w `installer-close.test.ts` (19 s > 15 s na CI) – zamieniony na warunek.
+  `/code-review` xhigh runda 1: 15 uwag – 9 poprawionych z testami (budżet czekania, błąd szukania ≠ „nic”, wyścig
+  z instalacją przy wyjściu, znacznik przy samotnym pomocniku, zapis „installer”, maskowanie konta, zbędny PowerShell,
+  sprzątanie testu CI). Runda 2 (delta): 1 medium (zamknięcie w trakcie „Zakończ” nie było rozpoznane) i 2 low (fałszywy
+  komentarz o LogicLib, 15 s przy samych procesach pomocniczych) – poprawione.
+- CI 59f78cd (run 42523771374) – pierwszy prawdziwy przebieg `tests/update`: trzy nowe scenariusze czerwone. Przyczyny:
+  w CI (pwsh 7) `IS_POWERSHELL_AVAILABLE` electron-buildera dawał „niedostępny” (najpewniej `PSModulePath` z PS7) –
+  ścieżka bez PowerShella zabijała aplikację i nie widziała procesu spod folderu; `taskkill` bez /F wysyła WM_CLOSE
+  tylko do jednego okna (widoczne okno główne chowa się do zasobnika, okno dźwięku nie miało obsługi). Poprawka:
+  o PowerShellu decyduje odpowiedź kroku (`$rdPs`), kroki z domyślnym `PSModulePath` 5.1, prośba co 3 s, póki proces
+  główny żyje, okno dźwięku zamknięte z zewnątrz kończy aplikację (T396); test `taskkill` użytkownika ponawia prośbę.
+  Zachowanie okna głównego bez zmian (pierwszy WM_CLOSE chowa je, jak dotąd).
+- CI bfb1147 (run 42530488682): test 2 zielony (diagnostyka potwierdziła `PSModulePath` z PS7). Test 1 odsłonił błąd
+  aplikacji: `quitApp` wołane wewnątrz `close` z `preventDefault` przy prawdziwym WM_CLOSE nie dochodzi do `will-quit` –
+  aplikacja zostawała bez okien do dobicia (wyjście z zewnątrz, T396, nie działało nigdy); teraz wyjście w następnym
+  obrocie pętli (`afterOutsideClose`), E2E `smoke.spec.ts` z prawdziwym WM_CLOSE do panelu, okna dźwięku i paska (bez
+  poprawki 3/3 padają). Test 3: `app.process()` Playwrighta na Windows to `cmd.exe` – PID z `app.evaluate`.
+- Uwagi na później: wspólne makro PowerShella zamiast czterech kopii; kopie formatu linii w `installer.nsh`
+  i `procesy.ps1`; lista bez PowerShella w innym formacie i kodowaniu; ścieżka względna w `procesy.ps1`; szukanie
+  zapasowe także dla zamknięcia i dobicia przy zepsutym WMI; maskowanie – kolejność nazw (najdłuższe najpierw) i forma
+  8.3 bez `Scripting.FileSystemObject`; `procesy.cmd` w `docs/vm/przygotuj.ps1`; lista nie powstaje, gdy „Nie można
+  zamknąć” pokazuje electron-builder przy deinstalacji.
+- Testy lokalnie: typecheck, unit 1312, build, lint, `check-context`, `dist:win` (bez uruchamiania), uprząż NSIS (bez
+  instalacji): zamknięcie łagodne, druga prośba, dobicie, lista, zepsuty PowerShell; `tests/update` – tylko CI.
+- **Dalej:** PR #52 – scalenie po zielonym CI (D333), wydanie 1.0.8; na końcu ciągu `docs/vm/` → `docs/archiwum/vm/`,
+  pauza z listą do sprawdzenia.
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy

@@ -428,19 +428,27 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - laptop nie instaluje po ponad 24 h działania nowej wersji na pierwszym;
   - instalacja startuje w dzień bez Twojego kliknięcia.
 
-#### E4a.13 Rozpoznawanie zamknięcia i awarii (0.3.0)
+#### E4a.13 Rozpoznawanie zamknięcia i awarii (0.3.0, zmiana w 1.0.7 i 1.0.8)
 - [ ] Odebrane
-- **Automatycznie:** `tests/unit/crash.test.ts` (zamknięcie Windows, wylogowanie, Menedżer zadań, instalator), w CI też `tests/e2e/smoke.spec.ts` i `tests/update/scenarios.spec.ts` („ręcznie uruchomiony instalator… to nie awaria”). Ty: opcjonalnie.
+- **Automatycznie:** `tests/unit/crash.test.ts` (zamknięcie Windows, wylogowanie, Menedżer zadań, instalator),
+  `tests/unit/installer-close.test.ts`, `installer-quit.test.ts`, w CI też `tests/e2e/smoke.spec.ts`
+  i `tests/update/scenarios.spec.ts` („ręcznie uruchomiony instalator…”, proces, który się nie zamyka). Ty: opcjonalnie.
 - **Jak sprawdzić:** po kolei: zamknij Windows (z szybkim uruchamianiem), wyloguj się, zamknij aplikację w Menedżerze
-  zadań, uruchom instalator ręcznie. Po każdym starcie zajrzyj do `main.log` (Ustawienia → „Otwórz logi”).
+  zadań, uruchom instalator ręcznie przy włączonej aplikacji (także tylko w zasobniku) i kliknij OK. Po każdym starcie
+  zajrzyj do `main.log` (Ustawienia → „Otwórz logi”).
 - **Oczekiwany efekt:** po zamknięciu Windows i wylogowaniu w logu „poprzednie uruchomienie: clean (…)” – w nawiasie
-  „zamknięcie (system)” albo „inna sesja logowania (wylogowanie albo restart)”; po instalatorze „installer (zamknięte
-  przez instalator)” – osobny rodzaj, nie awaria – albo „clean (…)”; po Menedżerze zadań „crash”. Twardy reset też
-  daje „clean (inna sesja logowania …)” albo „unknown (znacznik życia nieczytelny)”, od 1.0.7 nigdy „first (brak
-  znacznika życia)” (H3), a w folderze danych aplikacji nie zostaje pusty `life.json`.
+  „zamknięcie (system)” albo „inna sesja logowania (wylogowanie albo restart)”; po Menedżerze zadań „crash”. Po
+  instalatorze (od 1.0.8) aplikacja znika w ciągu kilku sekund, w `main.log` „zamknięcie z zewnątrz…”, „zamknięte
+  przez instalator” i „aplikacja zamknięta”, po starcie „clean (zamknięcie (installer))” albo „installer (…)”; obok
+  instalatora nie pojawia się okno pomocnika instalacji, a `installer-check.log` nie powstaje. Gdy jednak pojawi się
+  „Nie można zamknąć”, `logs\installer-check.log` ma listę procesów (bez nazwy konta), a `docs/vm/procesy.ps1` pokazuje
+  to samo. Twardy reset daje „clean (inna sesja logowania …)” albo „unknown (znacznik życia nieczytelny)”, od 1.0.7
+  nigdy „first (brak znacznika życia)” (H3), a w folderze danych aplikacji nie zostaje pusty `life.json`.
 - **Nie przechodzi, gdy:**
-  - „crash” po zwykłym zamknięciu Windows albo wylogowaniu;
+  - „crash” po zwykłym zamknięciu Windows, wylogowaniu albo instalatorze;
   - „clean” po zamknięciu w Menedżerze zadań;
+  - po instalatorze brak „aplikacja zamknięta” (zabita), obok niego okno pomocnika instalacji albo „Nie można zamknąć”
+    bez listy w `installer-check.log`;
   - Windows czeka przy zamykaniu na Regulated Day („Ta aplikacja uniemożliwia zamknięcie”).
 
 ### E4b – pasek, ikona, cisza

@@ -1206,7 +1206,12 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   standardowego zamykania) zapisuje znacznik „zamknięte przez instalator” z czasem tylko wtedy, gdy znajdzie działającą
   aplikację, tuż przed jej zamknięciem, a znacznik liczy się tylko, gdy jego czas wypada w ostatnim oknie znacznika
   życia; a aplikacja przed startem instalatora albo pomocnika instalacji zapisuje zamknięcie, a pomocnik czeka na koniec
-  jej procesu. Awaria po ważnym zapisie zamknięcia (w trakcie zamykania) trafia tylko do lokalnego logu, nie do awarii
+  jej procesu. Skrypt najpierw prosi aplikację o zamknięcie (taskkill bez /F – WM\_CLOSE do ukrytych okien procesu
+  głównego), czeka do 15 s (nie krócej niż jej własne wyjście; przy samych procesach pomocniczych 2 s) na koniec
+  wszystkich procesów spod folderu instalacji i dopiero potem zabija to, co zostało; gdy coś nadal działa, przed
+  komunikatem „Nie można zamknąć” zapisuje ich listę (nazwa, PID, rodzic, start, wiersz poleceń – bez nazwy konta)
+  w `logs\installer-check.log`. Aplikacja zamknięta tak przez instalator nie instaluje przy tym wyjściu pobranej wersji,
+  a jej zapis zamknięcia mówi „installer” (T541). Awaria po ważnym zapisie zamknięcia (w trakcie zamykania) trafia tylko do lokalnego logu, nie do awarii
   wersji w obecności, więc nie wstrzymuje innych komputerów.
 
 **Widget**

@@ -179,10 +179,18 @@ export class UpdateController {
     return this.install('now', 'visible', null, { version, notes: '', dir })
   }
 
-  /** The full exit: a ready download installs (the app is quitting anyway) – never in a session or a class (spec, A5-03). */
-  onQuit(sessionEnding: boolean): void {
+  /**
+   * The full exit: a ready download installs (the app is quitting anyway) – never in a session or a class (spec, A5-03),
+   * nor when a hand-run installer closed the app (`byInstaller`, installerClose.ts): it installs itself, and the install
+   * helper does not stop at its mutex – it would show its window beside it (E4a.13).
+   */
+  onQuit(sessionEnding: boolean, byInstaller = false): void {
     if (!this.updater?.readyRelease) return
     if (sessionEnding || this.installing) return
+    if (byInstaller) {
+      this.d.log('info', 'zamknięte przez instalator – pobrana wersja zainstaluje się przy kolejnym wyjściu albo w nocy')
+      return
+    }
     if (this.d.sessionOrClass?.()) {
       this.d.log('info', 'wyjście w czasie sesji albo zajęć (albo 30 min przed nimi) – instalacja przy kolejnym wyjściu albo w nocy')
       return
