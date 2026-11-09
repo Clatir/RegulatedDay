@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0
+- Nowa strona „Statystyki” w menu (zaraz po „Tygodniu”, Ctrl+4): okres 4 tygodnie, 3 miesiące albo od początku i cztery sekcje z wykresem i tabelą – wzorce energii (średnia z check-inów według pory dnia i dnia tygodnia, kategorie najczęściej „ciężej” w rytuale), trafność szacowania (np. „×1,29 · o 29% dłużej”), czas próśb na osobę i dotrzymane granice tygodniami. Liczą się tylko dni zamrożone; bez ocen i bez zmian w kosztach.
+- Skróty menu od „Prośb” w dół przesunęły się jeszcze o jeden (Historia – Ctrl+9).
+
 ## 1.2.0
 - Nowa strona „Tydzień” w menu (zaraz po „Kalendarzu”, Ctrl+3): siedem kolumn od poniedziałku ze wspólną osią godzin i blokami – w dniach minionych tak, jak było, w przyszłych według planu. Nad każdą kolumną typ dnia, czy granica była dotrzymana i regeneracja wobec minimum. Strzałki zmieniają tydzień, kliknięcie dnia otwiera jego plan.
 - Cele miesięczne w trzech obszarach, pokazywane na górze „Tygodnia” jako „x z y”, bez oceny: studia (godziny nauki i oglądania wykładów), regeneracja (dni z osiągniętym minimum), dyscyplina tradingowa (sesje z planu bez przedłużenia, obok liczniki „przedłużone” i „poza planem”). Cele ustawiasz na „Tygodniu” albo w nowym kroku „Cele na <miesiąc>” planu porannego, który pojawia się, dopóki ich nie ustawisz albo nie pominiesz.

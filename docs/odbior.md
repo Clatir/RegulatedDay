@@ -106,6 +106,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E10.1 Strona „Tydzień”
    - [ ] E10.2 Cele miesięczne na „Tygodniu”
    - [ ] E10.3 Krok „Cele na <miesiąc>” w planie porannym
+   - [ ] E12.1 Strona „Statystyki”
+   - [ ] E12.2 Skróty menu Ctrl+1…9
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1435,3 +1437,25 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   końca miesiąca (także przy nieudanym zapisie – wtedy wraca jutro); po „Zapisz” cele są na „Tygodniu” (D360, T555).
 - **Nie przechodzi, gdy:** krok blokuje dalsze kroki planu porannego, wraca po „Pomiń” w tym samym miesiącu albo pojawia się
   po ustawieniu celów.
+
+### E12 – statystyki (1.3.0)
+
+#### E12.1 Strona „Statystyki” (1.3.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/stats.test.ts`, `tests/fs/stats.test.ts`, `tests/web/stats-view.test.ts`,
+  `tests/e2e/stats.spec.ts`. Ty: rzut oka na prawdziwych danych.
+- **Jak sprawdzić:** menu → „Statystyki” (Ctrl+4); przełącz okres 4 tygodnie / 3 miesiące / od początku; przejrzyj cztery
+  sekcje.
+- **Oczekiwany efekt:** nota „dni zamrożone: N”; wzorce energii według pory dnia i dnia tygodnia oraz kategorie „ciężej”;
+  trafność na kategorię („×1,29 · o 29% dłużej”, „jak w planie”); czas próśb na osobę; granice tygodniami; dzień
+  z wyłączonym modułem – „brak pomiaru”; teksty bez ocen (D358, D362, T556–T558).
+- **Nie przechodzi, gdy:** liczy się dzień niezamrożony (np. dziś), sekcja pokazuje błąd przy poprawnych danych, wykres
+  granic ma nachodzące na siebie podpisy, albo tekst ocenia Ciebie zamiast opisywać czas.
+
+#### E12.2 Skróty menu Ctrl+1…9 (1.3.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/smoke.spec.ts`, `stats.spec.ts`, `week.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w oknie głównym naciśnij po kolei Ctrl+1 … Ctrl+9 i Ctrl+,.
+- **Oczekiwany efekt:** Dziś, Kalendarz, Tydzień, Statystyki, Prośby, Szablony, Rutyny, Pokój, Historia; Ctrl+, –
+  Ustawienia (zaraz pod Historią w menu) (D361, D362).
+- **Nie przechodzi, gdy:** skrót otwiera inną stronę niż ta na tej pozycji w menu.

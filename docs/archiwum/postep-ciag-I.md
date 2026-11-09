@@ -78,3 +78,25 @@ Wpisy zadań ciągu I (4.11, 4.10, E10–E12) po scaleniu ich PR-ów. Stan bież
   (2) postęp miesiąca liczy się także bez ustawionych celów; (3) `GoalsView.previous` nieczytane przez okno;
   (4) `trySaveGoals` dubluje `send` z `store/data.ts`; osobna ścieżka zapisu celów obok `trySaveRd`.
 - **Odbiór:** E10.1–E10.3.
+
+## E12 – statystyki (1.3.0, 9.11.2026)
+- **Zakres (D358, D362):** strona „Statystyki” (Ctrl+4, po „Tygodniu”), okresy 4 tygodnie / 3 miesiące / od początku,
+  cztery sekcje z wykresem SVG i tabelą; tylko dni zamrożone.
+- **Kod:** `shared/engine/stats.ts`, `game.ts` (`estimatedBlocks`), `main/data/folder.ts` (`stats`, `statsMemo`,
+  `statsRuns`, `moduleStates(…, tolerant)`), zadanie `stats` procesu pomocniczego, ekran `renderer/features/stats/*`;
+  menu i skróty cyfrowe w kolejności menu (Historia Ctrl+9).
+- **Decyzje:** D362; T556–T558.
+- **Wykonawca:** `wykonawca-sonnet` (logika, ekran, obie rundy, scalenie z E10).
+- **Testy:** `tests/unit/engine/stats.test.ts`, `tests/fs/stats.test.ts`, `tests/web/stats-view.test.ts`, E2E
+  `tests/e2e/stats.spec.ts` (2); po scaleniu z E10 – 1585 testów i 34 E2E zielone.
+- **Przegląd:** high, dwie rundy (10 + 10 uwag).
+- **Uwagi na później:** (1) „Od początku” trzyma logi wszystkich dni w pamięci procesu głównego; (2) odczyty dni po kolei,
+  plik następnego dnia czytany dwa razy, `statsMemo` bez przycinania; (3) minuty próśb na osobę dublują `sideB`
+  (`dayMeasure`), „ciężej” – kalibrację; (4) długi przebieg może zapisać wynik pod nowszym podpisem kontekstu.
+- **Odbiór:** E12.1–E12.2.
+
+## Ciąg I – zakończenie (9.11.2026)
+- 5 wydań: 1.0.9, 1.0.10, 1.1.0, 1.2.0, 1.3.0; decyzje D352–D362, T543–T558; przeglądy: 4.11 xhigh ×2, 4.10 xhigh ×3,
+  E11 xhigh ×2, E10 xhigh ×2, E12 high ×2.
+- Czas: ok. 07:30–22:00 zegarowo (szacunek planu 25–45 h dla E9–E12 bez E9 i K) – równolegle po 2–3 drzewa.
+- Po ciągu: K, gdy aplikacja zaproponuje przegląd kalibracji (najwcześniej ok. 12.11), potem E9.
