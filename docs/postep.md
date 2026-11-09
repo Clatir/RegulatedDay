@@ -31,9 +31,9 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →
-   `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport nowego przebiegu w `docs/vm/raport.md`
-   (T529; przebieg z 3.11 – `docs/archiwum/vm/`); powtórka punktów NIEZGODNE i NIE DO SPRAWDZENIA na 1.0.8
-   („Gotowe, gdy” F–H w `docs/plan.md`); poprawki z odbioru – wersje 1.0.x (D324).
+   `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport nowego przebiegu trafi do
+   `docs/vm/raport.md` (T529; przebieg z 3.11 – `docs/archiwum/vm/`); powtórka punktów NIEZGODNE i NIE DO SPRAWDZENIA
+   na 1.0.8 („Gotowe, gdy” F–H w `docs/plan.md`, punkty i ich zadania – `docs/archiwum/vm/przyczyny.md`); poprawki z odbioru – wersje 1.0.x (D324).
 2. Następne po „dalej”: 4.11 (nazwa usuniętego zaczętego bloku sesji) i 4.10 (linia twardego końca w pasku) –
    `docs/plan.md`, „Poprawki po Twoim odbiorze”.
 3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
@@ -48,9 +48,9 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 | H2 ekrany po decyzjach | 1.0.4 | #48 | wydane 4.11 | ok. 4,5 h (3–4 h) |
 | G3 folder danych niedostępny | 1.0.5 | #50 | wydane 8.11 | ok. 2,5 h (1,5–2,5 h) |
 | G4 pasek pulpitu pod oknami | 1.0.6 | #51 | wydane 8.11 | ok. 2 h (2–3 h) |
-| H3 autostart, znacznik życia | 1.0.7 | #53 | scalone 8.11 (1a4e69e) | ok. 1,5 h (1–1,5 h) |
+| H3 autostart, znacznik życia | 1.0.7 | #53 | wydane 8.11 | ok. 1,5 h (1–1,5 h) |
 | G5 instalator zamyka łagodnie | 1.0.8 | #52 | wydane 9.11 | ok. 7 h zegarowo, równolegle z G4 i H3 (1,5–2,5 h) |
-| **Razem** | 1.0.1–1.0.8 | 9 PR-ów | zakończony 9.11 | ok. 33 h (16,5–24,5 h) |
+| **Razem** | 1.0.1–1.0.8 | 9 PR-ów | zakończony 9.11 | ok. 30 h zegarowo – G3–H3 razem ok. 10 h, 8.11 17:30 – 9.11 3:45 (16,5–24,5 h) |
 
 Propozycje na później z przeglądów G1–H2 (architektura, bez zmian w działaniu) – w ich wpisach w archiwum.
 

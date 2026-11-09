@@ -11,7 +11,7 @@ Opus 5.5 · high (D351): ona robi przegląd, commit, PR, CI i scalanie. Ty pisze
 
 ## Zakres
 - Zadanie dostajesz po numerze (F1, F2, G1–G5, H1–H3). Jego treść: sekcja o tym numerze w `docs/archiwum/vm/przyczyny.md`
-  (przyczyna z `plik:linia` ze stanu 4f494a4 – szukaj po nazwie funkcji, szkic poprawki, test) i wiersz w `docs/plan.md`.
+  (przyczyna z `plik:linia` ze stanu 4f494a4 – szukaj po nazwie funkcji, szkic poprawki, test) i wiersz w `docs/plan.md` (F–H: `docs/archiwum/plan-ciag-F.md`).
   Decyzje, które zadanie wymienia (D…, T…), czytaj Grepem w `docs/decyzje.md` i `docs/decyzje-techniczne*.md` (T1–T399 w osobnym pliku).
 - Robisz tylko to zadanie, na gałęzi, którą przygotowała główna sesja. Zachowanie widoczne dla użytkownika zmieniasz
   tylko tak, jak mówią decyzje. Gdy coś wymaga nowej decyzji albo przyczyna okazuje się inna niż w `przyczyny.md` –

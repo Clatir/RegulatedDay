@@ -154,8 +154,9 @@ zakończony 9.11 – tabela planu w `docs/archiwum/plan-ciag-F.md`.
     `tests/update` – tylko CI.
   - Czas faktyczny: ok. 7 h zegarowo (20:40–3:40, równolegle z G4 i H3; cztery przebiegi CI z `tests/update`),
     szacunek 1,5–2,5 h. PR #52 scalony 9.11 (f074734); wydanie 1.0.8 z runu 42552144040.
-- **Koniec ciągu F (9.11):** 9 PR-ów, wersje 1.0.1–1.0.8; razem ok. 33 h (szacunek 16,5–24,5 h) – najwięcej G1
-  (dziewięć rund przeglądu) i G5 (CI). `docs/vm/raport.md`, `przyczyny.md` → `docs/archiwum/vm/`, tabela planu →
+- **Koniec ciągu F (9.11):** 9 PR-ów, wersje 1.0.1–1.0.8; razem ok. 30 h zegarowo (G3–H3 równolegle, razem ok. 10 h,
+  8.11 17:30 – 9.11 3:45; szacunek 16,5–24,5 h) – najwięcej G1 (dziewięć rund przeglądu) i G5 (CI).
+  `docs/vm/raport.md`, `przyczyny.md`, `skrypty.txt` → `docs/archiwum/vm/`, tabela planu →
   `docs/archiwum/plan-ciag-F.md` (T536, D317).
 
 ## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)

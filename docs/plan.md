@@ -17,7 +17,7 @@ według kolumny „Wykonawca” (D349).
 
 Ciąg F (F1–H3, wersje 1.0.1–1.0.8, 3–9.11.2026) zakończony: tabela zadań i decyzje D334–D347, D350 –
 `docs/archiwum/plan-ciag-F.md`, raport i przyczyny – `docs/archiwum/vm/`. Zostaje Twój odbiór wydań i powtórka
-w maszynie (niżej i „Gotowe, gdy”).
+w maszynie (niżej i „Gotowe, gdy”); który punkt odbioru poprawiło które zadanie – sekcje `docs/archiwum/vm/przyczyny.md`.
 
 ### Ty – równolegle, bez modelu
 

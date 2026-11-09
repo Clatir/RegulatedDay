@@ -2,7 +2,7 @@
 
 Przeniesione z `docs/plan.md` po ciągu F (D317, T536). Wpisy i czasy faktyczne – `docs/archiwum/postep-ciag-F.md`;
 raport i przyczyny – `docs/archiwum/vm/`. Ścieżki `docs/vm/raport.md` i `docs/vm/przyczyny.md` poniżej – stan sprzed
-przeniesienia.
+przeniesienia. Wersje G5 i H3 w tabeli – plan sprzed zamiany: wydane H3 jako 1.0.7, G5 jako 1.0.8 (T542).
 
 ## Poprawki po odbiorze w maszynie – jedno zadanie, wersje 1.0.1–1.0.8 (D324, D349)
 
@@ -39,7 +39,7 @@ PR-y. Szacunek – czas do wydania, jak dotąd.
 | H3 | 1.0.8 – „Uruchamiaj z Windows” pokazuje prawdziwy stan i da się wyłączyć (dziś zawsze „wyłączone”), znacznik życia przeżywa twardy reset | Logika | `wykonawca-sonnet` – Sonnet 5.5 · high | 1–1,5 h | `tests/update` tylko w CI |
 
 Po H3 (koniec ciągu): `docs/vm/raport.md` i `docs/vm/przyczyny.md` → `docs/archiwum/vm/` (T536); odwołania wykonawców
-i `docs/odbior-vm.md` do nowej ścieżki.
+i `docs/odbior-vm.md` do nowej ścieżki. **Wykonane 9.11** (z `docs/vm/skrypty.txt`).
 
 ### Decyzje (3.11) – D334–D347
 
