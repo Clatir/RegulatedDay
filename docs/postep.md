@@ -6,6 +6,8 @@ z 1–3.11 – `docs/archiwum/postep-ciag-E.md`, ciągi A–D – `docs/archiwum
 archiwum ciągu, tu zostaje jedna linia w tabeli.
 
 ## Stan bieżący
+- **Ciąg I w toku (D353):** 1.0.9 (4.11, PR #56) scalone 9.11; 1.0.10 (4.10, PR #55) – CI; E11 (1.1.0) w drzewie
+  `.claude/worktrees/we11` (lokalny commit, nie wypchnięty – po `/clear` sprawdź `git -C .claude/worktrees/we11 log`).
 - **1.0.8 (G5)** – PR #52 scalony 9.11 (f074734), wydanie z runu 42552144040 na `main`. **Ciąg F zakończony 9.11**
   (1.0.1–1.0.8): wpisy w `docs/archiwum/postep-ciag-F.md`, tabela planu w `docs/archiwum/plan-ciag-F.md`, raport VM
   i przyczyny w `docs/archiwum/vm/`.
@@ -48,9 +50,10 @@ w drzewach `.claude/worktrees/w411`, `w410`.
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| 4.11 nazwa usuniętej sesji | 1.0.9 | #56 | PR, CI w toku (9.11); wpis – `docs/archiwum/postep-ciag-I.md` | ok. 4,5 h (0,5–1 h) – dwie przebudowy po przeglądzie |
-| 4.10 linia twardego końca | 1.0.10 | #55 (draft) | poprawki po przeglądzie xhigh (runda 1); scalanie po #56 | (1–1,5 h) |
-| I-plan E10–E12 | – | – | po 4.11 i 4.10 | (1–2 h) |
+| 4.11 nazwa usuniętej sesji | 1.0.9 | #56 | scalone 9.11 (cc8bd04) | ok. 4,5 h (0,5–1 h) – dwie przebudowy po przeglądzie |
+| 4.10 linia twardego końca | 1.0.10 | #55 | PR, CI w toku (9.11); wpis – archiwum ciągu I | ok. 5 h (1–1,5 h) – trzy rundy przeglądu |
+| I-plan E10–E12 | – | – | pytania odpowiedziane 9.11 (D356–D359), kolejność T545 | ok. 0,5 h (1–2 h) |
+| E11 import zjazdów | 1.1.0 | – | w toku: ostatnia paczka po rundzie 2 przeglądu xhigh (drzewo `we11`) | (6–9 h) |
 
 ## Ciąg F – stan (wpisy: `docs/archiwum/postep-ciag-F.md`)
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |

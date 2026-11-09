@@ -27,3 +27,18 @@ Wpisy zadań ciągu I (4.11, 4.10, E10–E12) po scaleniu ich PR-ów. Stan bież
   `origin: 'user'` (jak w 1.0.8) – np. usunięty zaczęty wykład z planu wykładów traci `recorded` i reguły wykładu;
   rozwiązanie w `blockInfos` z migawki, bez zmiany logu.
 - **Odbiór:** E8n.1.
+
+## 4.10 – linia twardego końca w pasku (1.0.10, PR #55, 9.11.2026)
+- **Zakres:** linia „Twardy koniec projektów – regeneracja do snu” (D352) w pasku od minięcia, póki aktualny – brak
+  w kodzie od 1.0.0. Przy okazji powiadomienie według tabeli „Cisza”: bez powiadomienia w „mniej pytań” (D134, także
+  po „Jest lepiej”), w trybie zajęć czeka do końca trybu (D355), blok liczony jak projekt też (D195, D209).
+- **Kod:** `shared/engine/hardEnd.ts` (`hardEndCurrent`, `hardEndMessage`, `hardEndPassed`), `modes.ts` (`fewerAt`,
+  `classModeEnd`), `engineView.ts` (`hardEndLines`), `main/widget.ts` (`notices()`, `hardEndLast`); wszystko z faktów
+  dnia, bez stanu w pamięci (T544).
+- **Testy:** `tests/unit/engine/widget-view.test.ts`, `tests/fs/widget.test.ts` – z mutacjami (każdy warunek łapany).
+- **Przegląd:** xhigh, trzy rundy (D351 – trzecia, bo druga znalazła high), potem ostatnia paczka bez przeglądu.
+- **Uwagi na później:** (1) ponowienie odrzucone przez Windows ginie przy odświeżeniu w „mniej pytań” i po 60 min
+  (pełny ekran dłużej niż godzinę); (2) projekt w tle bez bloku na pierwszym planie nie daje linii; (3) `EngineInput`
+  niesie i `modePrefs`, i policzone `modes`/`timer`/`hardEnd` – uprościć; (4) zbiór `waiting` w `notices()` jako flaga
+  powiadomienia.
+- **Odbiór:** E8n.2.

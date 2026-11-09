@@ -34,6 +34,12 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   CSV, pasek i warianty – tylko przez nie; `blockName.ts` nie importuje `engine/`.
   Koszt startu
   w pasku i w panelu bloku – jedna funkcja `shared/costText.ts` (D339).
+- Twardy koniec (D352, D355, T544): „aktualny” liczy jedno miejsce – `engine/hardEnd.ts` (`hardEndCurrent`); linia
+  `hardEnd:<dzień>:<minuta>` (`hardEndLines`; `hardEndLast` – zawsze ostatnia) póki aktualny, bez przycisków i kropki,
+  bez przełącznika powiadomienia, w trybie zajęć czeka; powiadomienie (`notices()`) – póki aktualny (bez projektu
+  najwyżej 60 min od minięcia albo końca trybu zajęć – `classModeEnd`) albo komunikat minuty minięcia (`hardEndMessage`);
+  nigdy przy „mniej pytań” w minucie minięcia albo teraz (`fewerAt`, nie `view.quiet` – sesja je zachowuje). Bez stanu
+  w pamięci – wszystko z faktów dnia.
 - `main/widget.ts` – `WidgetEngine`: `refresh()` po każdym sprawdzeniu folderu, co 15 s, po kliknięciu i w chwili
   kroku (`stepDelay` z `warnDeadlines`: kroki po chwili widoku, czekanie od ustawienia zegara – krok, który minął w
   czasie odświeżenia, od razu; tylko po `start()`), z `folder.widgetModel()`; `act(action, arg, from)` → kliknięcia

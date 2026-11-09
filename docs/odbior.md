@@ -99,6 +99,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8m.1 Pasek pulpitu nigdy nad oknami innych programów
    - [ ] E8m.2 „Uruchamiaj z Windows” pokazuje stan i da się wyłączyć
    - [ ] E8n.1 Usunięta zaczęta sesja zostaje „Sesja NY”
+   - [ ] E8n.2 Linia twardego końca projektów w pasku (gdy się zdarzy)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1340,3 +1341,17 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   „Sesja tradingowa” po „Usuń” zostaje „Sesja tradingowa”; usunięty zaczęty blok rutyny ma nazwę rutyny.
 - **Nie przechodzi, gdy:** w którymś z tych miejsc usunięta sesja nazywa się „Sesja tradingowa” albo oś i CSV
   nazywają ten sam blok inaczej.
+
+#### E8n.2 Linia twardego końca projektów w pasku (1.0.10)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/widget-view.test.ts` („twardy koniec”), `tests/fs/widget.test.ts` (linia
+  i powiadomienie w „mniej pytań”, sesji, zajęciach, przy wyłączonym powiadomieniu). Ty: gdy się zdarzy.
+- **Jak sprawdzić:** w dzień, w którym minimum regeneracji ledwo się mieści, pracuj nad projektem po jego twardym końcu
+  (godzina w „Dziś” → „Twardy koniec projektów”) – projektem albo nauką po końcu pracy; spójrz na pasek. Innym razem to
+  samo przy włączonym „mniej pytań”, potem kliknij „Jest lepiej”, dalej przy projekcie.
+- **Oczekiwany efekt:** od minięcia twardego końca pasek ma linię „Twardy koniec projektów – regeneracja do snu” bez
+  kropki, dopóki biegnie projekt (albo trwa czas do wyjaśnienia po nim); znika po końcu projektu albo po starcie innego
+  bloku. Powiadomienie Windows przychodzi raz, jeśli jest włączone; w „mniej pytań” – sama cicha ikona w pasku, bez
+  powiadomienia, także po „Jest lepiej” (D352, T544).
+- **Nie przechodzi, gdy:** linii nie ma przy biegnącym projekcie po twardym końcu, linia ma kropkę albo przyciski,
+  zostaje po końcu projektu, albo w „mniej pytań” albo po „Jest lepiej” przychodzi powiadomienie.

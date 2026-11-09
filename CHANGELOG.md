@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.10
+- Po minięciu twardego końca projektów pasek pokazuje linię „Twardy koniec projektów – regeneracja do snu”, dopóki biegnie projekt (także blok liczony jak projekt, np. nauka po końcu pracy) albo trwa czas do wyjaśnienia po nim – także przy wyłączonym powiadomieniu Windows. Linia jest bez kropki, nie spycha pytań z przyciskami; w „mniej pytań” to cicha ikona.
+- Powiadomienie Windows o twardym końcu przychodzi też przy bloku liczonym jak projekt (np. nauka po końcu pracy) i w czasie do wyjaśnienia po projekcie – w ciągu godziny od minięcia.
+- W „mniej pytań” twardy koniec nie przychodzi już jako powiadomienie Windows, tylko cicho w pasku – także po „Jest lepiej”. W trybie zajęć linia i powiadomienie czekają do końca trybu i przychodzą wtedy, jeśli twardy koniec jest dalej aktualny; w trybie sesji jak dotąd.
+
 ## 1.0.9
 - Zaczęta sesja usunięta z planu („Usuń”) zostaje na osi dnia, w rytuale, w eksporcie CSV i na liście „zrobione automatycznie” jako „Sesja NY” (dotąd „Sesja tradingowa”); usunięty zaczęty blok rutyny z szablonu zachowuje nazwę rutyny. Blok zaczęty poza planem albo usunięty po starcie ma na osi i w rytuale tę samą nazwę co w CSV i w pasku (także nazwę wariantu).
 
