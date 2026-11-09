@@ -103,6 +103,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E11.1 Import zjazdów z Twojego PDF (przed 21.11)
    - [ ] E11.2 „Cofnij” i ponowny import
    - [ ] E11.3 Dzień zjazdu z importu – plan i dojazd (21–22.11)
+   - [ ] E10.1 Strona „Tydzień”
+   - [ ] E10.2 Cele miesięczne na „Tygodniu”
+   - [ ] E10.3 Krok „Cele na <miesiąc>” w planie porannym
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1397,3 +1400,38 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   przedłużeniem (D359).
 - **Nie przechodzi, gdy:** zajęcia z szablonu i z PDF są naraz, dojazd stoi w godzinach szablonu, posiłek zniknął,
   albo zajęcia zdalne po maksimum liczą się jako przedłużenie.
+
+### E10 – horyzont: tydzień i cele miesięczne (1.2.0)
+
+#### E10.1 Strona „Tydzień” (1.2.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/week.test.ts`, `tests/fs/horizon.test.ts`, `tests/web/week-layout.test.ts`,
+  `tests/e2e/week.spec.ts`. Ty: rzut oka na prawdziwych danych.
+- **Jak sprawdzić:** menu → „Tydzień” (Ctrl+3); spójrz na bieżący tydzień; strzałką przejdź tydzień wstecz i naprzód;
+  kliknij kolumnę jednego dnia.
+- **Oczekiwany efekt:** siedem kolumn pn–nd ze wspólną osią godzin; w dniach minionych bloki tak, jak było (niezaczęte
+  przygaszone), dziś na żywo, w przyszłych – plan (także zjazdy z importu); nad kolumną typ dnia, granica (✓ / ✗ / „w
+  toku” / „wolne” / „brak danych”) i regeneracja wobec minimum; kliknięcie otwiera plan dnia (D356, T553, T555).
+- **Nie przechodzi, gdy:** brakuje dnia albo bloku, który jest w planie dnia, blok minionego dnia stoi w godzinach planu
+  zamiast tych, w których biegł, albo kliknięcie nie otwiera dnia.
+
+#### E10.2 Cele miesięczne na „Tygodniu” (1.2.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/goals.test.ts`, `tests/fs/horizon.test.ts`, `tests/e2e/week.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** na „Tygodniu” „Ustaw cele”: studia np. 40 h, regeneracja 20 dni, dyscyplina 15 sesji; po kilku dniach
+  spójrz na postęp. Na drugim komputerze otwórz „Tydzień”.
+- **Oczekiwany efekt:** trzy pozycje „x z y” (godziny, dni, sesje) bez oceny i kolorów kary, przy dyscyplinie
+  „przedłużone: N · poza planem: N”; dopisek „wstępne” dla dziś i dni jeszcze niezamrożonych; te same cele na obu
+  komputerach; wartość spoza zakresu – komunikat pod polem (D356, D360, T552, T554).
+- **Nie przechodzi, gdy:** nauka po pracy nie liczy się do studiów, dzień bez obecności liczy się jako nieosiągnięte
+  minimum, sesja zaczęta 5 min później jest „przedłużona”, albo cele różnią się między komputerami.
+
+#### E10.3 Krok „Cele na <miesiąc>” w planie porannym (1.2.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/goals-step.test.ts`, `tests/e2e/week.spec.ts`. Ty: na początku grudnia (albo dziś, jeśli
+  cele listopada nie są ustawione).
+- **Jak sprawdzić:** otwórz plan poranny w miesiącu bez ustawionych celów; raz kliknij „Pomiń”, innego dnia „Zapisz”.
+- **Oczekiwany efekt:** krok po „Stronie B”, przed objawami, z liczbami z poprzedniego miesiąca; „Pomiń” chowa go do
+  końca miesiąca (także przy nieudanym zapisie – wtedy wraca jutro); po „Zapisz” cele są na „Tygodniu” (D360, T555).
+- **Nie przechodzi, gdy:** krok blokuje dalsze kroki planu porannego, wraca po „Pomiń” w tym samym miesiącu albo pojawia się
+  po ustawieniu celów.
