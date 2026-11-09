@@ -21,7 +21,10 @@ import {
   energyText,
   feltBars,
   hourLabel,
+  lastWeeks,
+  MAX_WEEKS,
   meanBars,
+  missingNote,
   minutesText,
   percentText,
   PERIOD_OPTIONS,
@@ -92,6 +95,10 @@ export function StatsPage() {
   const result = loaded && loaded !== 'failed' ? loaded.result : null
   const category = (id: string) => categoryName(rd, id)
   const person = (id: string) => (id === '?' ? 'Bez osoby' : personName(rd, id))
+  const weeks = lastWeeks(result?.boundaries.weeks ?? [])
+  const little = result ? tooLittle(result, MIN_STATS_DAYS) : null
+  const felt = result ? feltBars(result.energy.felt, category) : []
+  const people = result ? personBars(result.requests.people, person) : []
   return (
     <div className="flex max-w-[780px] flex-col gap-3 p-4" data-testid="stats">
       <div className="flex flex-wrap items-center gap-3">
@@ -110,12 +117,13 @@ export function StatsPage() {
       {result && (
         <>
           <Note testId="stats-days">{daysNote(result)}. Liczą się tylko dni zamrożone – potwierdzone dane, bez dnia dzisiejszego.</Note>
-          {tooLittle(result, MIN_STATS_DAYS) ? (
-            <EmptyState why={tooLittle(result, MIN_STATS_DAYS)} data-testid="stats-too-little" />
+          {little ? (
+            <EmptyState why={little} data-testid="stats-too-little" />
           ) : (
             <>
               <Section title="Wzorce energii" data-testid="stats-energy">
                 <Note>Energia check-inu to średnia z trzech pul, jakie ustawiają jego odpowiedzi (od 25 do 100). Tu: średnia ze wszystkich check-inów okresu.</Note>
+                {result.energy.missing > 0 && <Note testId="stats-energy-missing">{missingNote(result.energy.missing, 'energii')}</Note>}
                 {result.energy.checkins === 0 ? (
                   <Note testId="stats-energy-empty">W tym okresie nie ma check-inów.</Note>
                 ) : (
@@ -143,7 +151,7 @@ export function StatsPage() {
                   <Note testId="stats-felt-empty">W tym okresie nie ma odpowiedzi o odczuwanym koszcie (są opcjonalne w rytuale).</Note>
                 ) : (
                   <>
-                    {feltBars(result.energy.felt, category).length > 0 && <BarChart bars={feltBars(result.energy.felt, category)} axis={SHARE_AXIS} format={percentText} label="Odsetek odpowiedzi „ciężej” według kategorii" testId="stats-felt-chart" />}
+                    {felt.length > 0 && <BarChart bars={felt} axis={SHARE_AXIS} format={percentText} label="Odsetek odpowiedzi „ciężej” według kategorii" testId="stats-felt-chart" />}
                     <Table head={['Kategoria', 'Odpowiedzi', '„Ciężej”', 'Udział']} testId="stats-felt-table">
                       {result.energy.felt.map((r) => (
                         <Row key={r.category} cells={[category(r.category), r.answers, r.heavier, r.reliable ? percentText(r.share) : `za mało odpowiedzi (od ${MIN_FELT_ANSWERS})`]} />
@@ -170,12 +178,12 @@ export function StatsPage() {
               </Section>
 
               <Section title="Czas próśb na osobę" data-testid="stats-requests">
-                {result.requests.missing > 0 && <Note testId="stats-requests-missing">Brak pomiaru: {result.requests.missing} dni z wyłączonym modułem próśb – nie są liczone jako zero.</Note>}
+                {result.requests.missing > 0 && <Note testId="stats-requests-missing">{missingNote(result.requests.missing, 'próśb')}</Note>}
                 {result.requests.people.length === 0 ? (
                   <Note testId="stats-requests-empty">W tym okresie nie ma próśb.</Note>
                 ) : (
                   <>
-                    <BarChart bars={personBars(result.requests.people, person)} axis={axisOf(result.requests.people.slice(0, 8).map((p) => p.minutes))} format={minutesText} label="Czas próśb według osoby" testId="stats-requests-chart" />
+                    <BarChart bars={people} axis={axisOf(people.map((b) => b.value))} format={minutesText} label="Czas próśb według osoby" testId="stats-requests-chart" />
                     <Table head={['Osoba', 'Prośby', 'Czas']} testId="stats-requests-table">
                       {result.requests.people.map((p) => (
                         <Row key={p.person} cells={[person(p.person), p.count, minutesText(p.minutes)]} />
@@ -188,9 +196,14 @@ export function StatsPage() {
 
               <Section title="Dotrzymane granice" data-testid="stats-boundaries">
                 <Note>Dni według tygodni (od poniedziałku): granica dotrzymana, niedotrzymana, bez danych (koniec pracy niepotwierdzony) albo dzień wolny.</Note>
-                <BoundaryChart weeks={result.boundaries.weeks} testId="stats-boundaries-chart" />
+                {weeks.hidden > 0 && (
+                  <Note testId="stats-boundaries-cut">
+                    Wykres i tabela pokazują ostatnie {MAX_WEEKS} z {result.boundaries.weeks.length} tygodni; „Razem” liczy cały okres.
+                  </Note>
+                )}
+                <BoundaryChart weeks={weeks.shown} testId="stats-boundaries-chart" />
                 <Table head={['Tydzień', ...BOUNDARY_PARTS.map((p) => p.label)]} testId="stats-boundaries-table">
-                  {result.boundaries.weeks.map((w) => (
+                  {weeks.shown.map((w) => (
                     <Row key={w.week} cells={[weekLabel(w.week), w.kept, w.broken, w.noData, w.free]} />
                   ))}
                   <Row cells={['Razem', result.boundaries.totals.kept, result.boundaries.totals.broken, result.boundaries.totals.noData, result.boundaries.totals.free]} />

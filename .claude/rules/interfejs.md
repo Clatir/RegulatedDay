@@ -48,8 +48,8 @@ paths:
   `Charts` (ręczne słupki i słupki ułożone, bez zależności), `statsView` (skale, miejsca słupków, teksty – testy `tests/web/stats-view.test.ts`).
   Liczy je `folder.stats(okres)` (IPC `stats`): dni zamrożone z plików ocen (`gradeIndex`), każdy dzień przez zadanie procesu pomocniczego
   `stats` do zdarzeń z `know` (`engine/stats.ts`: `dayStats`, `statsOf`), pamięć wyniku dnia po jego wejściach; dzień bez czytelnego loga =
-  „nieczytelne”. „Energia” check-inu = średnia trzech pul (25–100). Strona jest w menu przed „Historią”, ale ma cyfrę po niej (Ctrl 8) –
-  numery istniejących ekranów się nie przesuwają (`DIGIT_PAGES` w `App.tsx`).
+  „nieczytelne”. „Energia” check-inu = średnia trzech pul (25–100). Strona jest jedną pozycją w `PAGES` (`store/ui.ts`); cyfry Ctrl+1…
+  idą w kolejności menu (`DIGIT_PAGES` w `App.tsx`, D362).
 - `app/Questions.tsx` – pytania kolejki i kopii konfliktowych; `lib/recordText.ts` – pola i wartości po ludzku.
 
 ## Pułapki

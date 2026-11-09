@@ -188,6 +188,7 @@ export class DataService {
       oneDriveProcess: o.oneDriveProcess,
       previousRun,
       worker: o.worker,
+      log: o.log,
       ritualFrom: o.ritualFrom ?? null,
       ritualScreens: o.ritualScreens === true,
       gameFrom: o.gameFrom ?? null,

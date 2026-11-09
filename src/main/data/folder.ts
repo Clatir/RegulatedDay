@@ -221,6 +221,8 @@ export interface FolderOptions {
   gameScreens?: boolean
   /** The helper process (T190): the grades of days to freeze, the CSV export; default: this process. */
   worker?: Worker
+  /** The app's log (a day the statistics could not count says so there – its date and the kind of the error). */
+  log?: (level: 'info' | 'warn' | 'error', msg: string) => void
 }
 
 export interface CheckResult {
@@ -315,6 +317,8 @@ export class DataFolder {
   private readonly ritualMemo = new Map<string, { key: string; view: RitualView }>()
   /** The statistics of each frozen day, counted again only when what it is made of changed (D358). */
   private readonly statsMemo = new Map<string, { key: string; stats: DayStats }>()
+  /** The counts of statistics in progress, by period (the same period asked again shares it). */
+  private readonly statsRuns = new Map<StatsPeriod, Promise<StatsResult>>()
 
   private constructor(private readonly o: FolderOptions) {
     this.rulesVersion = o.rulesVersion ?? RULES_VERSION
@@ -964,15 +968,27 @@ export class DataFolder {
   /**
    * The modules during each day from `from` to today before its first change that day (spec „Moduły”; the day's own
    * changes the engine reads from its log) – one pass back from today: the first change on a later day says what it
-   * was, before any the setting now.
+   * was, before any the setting now. `tolerant` (the statistics): a day whose log cannot be read stops the pass – the
+   * changes of that day and of every day before it are unknown, so the days before it get no answer (the function
+   * throws for them: the caller leaves such a day out) instead of failing the whole pass.
    */
-  private async moduleStates(from: string, today: string): Promise<(day: string) => Record<ModuleId, boolean>> {
+  private async moduleStates(from: string, today: string, tolerant = false): Promise<(day: string) => Record<ModuleId, boolean>> {
     const cur = { ...rdFrom(await this.shared(paths.settings)).general.modules }
     const during = new Map<string, Record<ModuleId, boolean>>()
+    let unknownBefore: string | null = null
     for (let d = today; d >= from; d = addDays(d, -1)) {
       during.set(d, { ...cur })
       const firsts = new Set<ModuleId>()
-      for (const e of (await this.log.readDay(d)).events.filter(isKnown).sort(compareEvents)) {
+      let read: DayRead
+      try {
+        read = await this.log.readDay(d)
+        if (tolerant && !read.complete) throw new Error('log dnia niepełny')
+      } catch (e) {
+        if (!tolerant) throw e
+        unknownBefore = d
+        break
+      }
+      for (const e of read.events.filter(isKnown).sort(compareEvents)) {
         const m = e.k === 'energy.module' ? 'energy' : e.k === 'module.set' && (MODULES as readonly string[]).includes(e.module) ? (e.module as ModuleId) : null
         if (!m || firsts.has(m)) continue
         firsts.add(m)
@@ -980,7 +996,10 @@ export class DataFolder {
         cur[m] = t.was ?? !t.on
       }
     }
-    return (day) => during.get(day) ?? cur
+    return (day) => {
+      if (unknownBefore != null && day < unknownBefore) throw new Error(`moduły dnia ${day} nieznane – log dnia ${unknownBefore} nieczytelny`)
+      return during.get(day) ?? cur
+    }
   }
 
   /**
@@ -1043,41 +1062,74 @@ export class DataFolder {
 
   /**
    * The statistics of the frozen days of a period before today (D358): each day counted as its grade counts it, by the
-   * helper process, once per change of what it is made of; a frozen day whose records cannot be read now is left out and
-   * counted („nieczytelne”). Days not frozen yet are not in it – only confirmed data.
+   * helper process, once per change of what it is made of; days not frozen yet are not in it – only confirmed data. A
+   * frozen day whose own records cannot be read now (its log, its files, a later day's log its modules need), or whose
+   * data the engine fails on, is left out and counted („nieczytelne”); a failure that is not one day's (the settings, the
+   * helper process dying or hanging, the files of grades) fails the whole count. The
+   * same period asked again while it is being counted shares the count.
    */
-  async stats(period: StatsPeriod, at = this.clock.now()): Promise<StatsResult> {
+  stats(period: StatsPeriod, at = this.clock.now()): Promise<StatsResult> {
+    const run = this.statsRuns.get(period)
+    if (run) return run
+    const started = this.statsOnce(period, at).finally(() => this.statsRuns.delete(period))
+    this.statsRuns.set(period, started)
+    return started
+  }
+
+  private async statsOnce(period: StatsPeriod, at: number): Promise<StatsResult> {
     const today = logicalDayOf(at)
     const from = periodFrom(period, today)
     const lines = [...(await this.gradeIndex()).lines.values()].filter((l) => l.day < today && (from == null || l.day >= from)).sort((a, b) => (a.day < b.day ? -1 : 1))
-    let current: MeasureModules | null = null
+    const inp = await this.inputs()
+    // A grade from before the modules: the modules of the day from one pass back from today, made at the first such day.
+    let states: Promise<(day: string) => Record<ModuleId, boolean>> | null = null
     const days: DayStats[] = []
     let unreadable = 0
     for (const line of lines) {
+      let read: DayRead
+      let dayFile: DayFile | null
+      let nextFile: DayFile | null
       try {
-        const read = await this.log.readDay(line.day)
+        read = await this.log.readDay(line.day)
         if (!read.complete || !read.events.length) {
           unreadable++
           continue
         }
-        let modules = storedModules(line.grade)
-        if (!modules) {
-          const m = (current ??= rdFrom(await this.shared(paths.settings)).general.modules)
-          modules = { energy: m.energy, projects: m.projects, requests: m.requests }
-        }
-        const ctx = await this.dayContext(line.day, read, at)
-        const key = JSON.stringify([read.lastByComputer, read.events.length, read.copies, this.contextSig(line.day), line.v, line.know, modules, line.grade.boundary, line.grade.free])
-        const was = this.statsMemo.get(line.day)
-        if (was?.key === key) {
-          days.push(was.stats)
-          continue
-        }
-        const stats = await (this.o.worker ?? inProcess).run({ kind: 'stats', ctx, know: line.know, modules, grade: line.grade })
-        this.statsMemo.set(line.day, { key, stats })
-        days.push(stats)
+        dayFile = await this.dayFile(line.day)
+        nextFile = await this.dayFile(addDays(line.day, 1))
       } catch {
         unreadable++
+        continue
       }
+      let modules = storedModules(line.grade)
+      if (!modules) {
+        const lookup = await (states ??= this.moduleStates(line.day, today, true))
+        try {
+          const s = lookup(line.day)
+          modules = { energy: s.energy, projects: s.projects, requests: s.requests }
+        } catch {
+          // A later day's log cannot be read: the modules of this day are not known – it is left out (counted).
+          unreadable++
+          continue
+        }
+      }
+      // The key first: a day counted before is not built (its context) again.
+      const key = JSON.stringify([read.lastByComputer, read.events.length, read.copies, this.contextSig(line.day), line.v, line.know, modules, line.grade.boundary, line.grade.free])
+      const was = this.statsMemo.get(line.day)
+      if (was?.key === key) {
+        days.push(was.stats)
+        continue
+      }
+      const ctx = dayContextOf(inp, { date: line.day, events: read.events, dayFile, nextFile }, this.o.holidays, at)
+      const stats = await (this.o.worker ?? inProcess).run({ kind: 'stats', ctx, know: line.know, modules, grade: line.grade })
+      if ('error' in stats) {
+        // The engine failed on this day's data (not the process): the day is left out, the period still counts.
+        this.o.log?.('warn', `statystyki: dzień ${line.day} pominięty – błąd silnika (${stats.error})`)
+        unreadable++
+        continue
+      }
+      this.statsMemo.set(line.day, { key, stats })
+      days.push(stats)
     }
     return statsOf(period, days, unreadable)
   }

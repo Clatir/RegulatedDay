@@ -31,7 +31,8 @@ export interface WorkerResults {
   ping: 'ok'
   grade: DayGrade
   summary: DaySummary
-  stats: DayStats
+  /** A day the engine could not count (a fault of its data, not of the helper process): only the kind of the error, never its text. */
+  stats: DayStats | { error: string }
   ritual: RitualView
   /** The names of the files written. */
   csv: string[]
@@ -51,7 +52,11 @@ export async function runTask<T extends WorkerTask>(t: T): Promise<WorkerResult<
       case 'summary':
         return daySummary(t.ctx, t.know, t.modules)
       case 'stats':
-        return dayStats(t.ctx, t.know, t.modules, t.grade)
+        try {
+          return dayStats(t.ctx, t.know, t.modules, t.grade)
+        } catch (e) {
+          return { error: e instanceof Error ? e.name : typeof e }
+        }
       case 'csv': {
         const files = csvOf(t.days)
         for (const [name, text] of Object.entries(files)) await writeFileAtomic(join(t.dir, name), text)

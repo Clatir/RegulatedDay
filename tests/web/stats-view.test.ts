@@ -6,7 +6,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { BarChart, BoundaryChart } from '@renderer/features/stats/Charts'
-import { accuracyBars, axisOf, barPlaces, daysNote, ENERGY_AXIS, energyText, feltBars, hourLabel, meanBars, minutesText, niceStep, percentText, personBars, ratioText, stackPlaces, tooLittle, weekdayShort, weekLabel } from '@renderer/features/stats/statsView'
+import { accuracyBars, lastWeeks, missingNote, MAX_WEEKS, weekAxisLabel, axisOf, barPlaces, daysNote, ENERGY_AXIS, energyText, feltBars, hourLabel, meanBars, minutesText, niceStep, percentText, personBars, ratioText, stackPlaces, tooLittle, weekdayShort, weekLabel } from '@renderer/features/stats/statsView'
 
 describe('skale wykresów', () => {
   it('krok osi to 1, 2 albo 5 razy potęga dziesięciu; oś od 0 do okrągłego maksimum nad największą wartością', () => {
@@ -23,10 +23,16 @@ describe('skale wykresów', () => {
     const p = barPlaces([50, null, 0, 150], 100, 400, 100, 0.2)
     expect(p[0]).toEqual({ x: 10, y: 50, w: 80, h: 50 })
     expect(p[1]).toBeNull()
-    expect(p[2]).toEqual({ x: 210, y: 100, w: 80, h: 0 })
+    expect(p[2]).toEqual({ x: 210, y: 99, w: 80, h: 1 })
     expect(p[3]).toEqual({ x: 310, y: 0, w: 80, h: 100 })
     // A value too small to see keeps a hairline.
     expect(barPlaces([0.1], 100, 100, 100)[0]!.h).toBe(1)
+  })
+
+  it('noty „brak pomiaru” z liczbą mnogą', () => {
+    expect(missingNote(1, 'energii')).toBe('Brak pomiaru: 1 dzień z wyłączonym modułem energii – nie jest liczony jako zero.')
+    expect(missingNote(2, 'próśb')).toBe('Brak pomiaru: 2 dni z wyłączonym modułem próśb – nie są liczone jako zero.')
+    expect(missingNote(5, 'próśb')).toContain('5 dni')
   })
 
   it('słupek ułożony: kolejne części od dołu', () => {
@@ -60,9 +66,30 @@ describe('teksty statystyk', () => {
   })
 
   it('„za mało danych” poniżej progu, z liczbą dni; od progu – nic', () => {
-    expect(tooLittle({ enough: false, days: 0 }, 3)).toMatch(/^Za mało danych: w tym okresie nie ma jeszcze zamrożonego dnia/)
-    expect(tooLittle({ enough: false, days: 2 }, 3)).toMatch(/^Za mało danych: 2 dni zamrożone w tym okresie/)
-    expect(tooLittle({ enough: true, days: 3 }, 3)).toBeNull()
+    expect(tooLittle({ enough: false, days: 0, unreadable: 0 }, 3)).toMatch(/^Za mało danych: w tym okresie nie ma jeszcze zamrożonego dnia/)
+    expect(tooLittle({ enough: false, days: 2, unreadable: 0 }, 3)).toMatch(/^Za mało danych: 2 dni zamrożone w tym okresie/)
+    expect(tooLittle({ enough: true, days: 3, unreadable: 0 }, 3)).toBeNull()
+  })
+
+  it('„za mało danych” bez żadnego czytelnego dnia, choć są zamrożone: mówi o odczycie, nie o braku dni', () => {
+    const t = tooLittle({ enough: false, days: 0, unreadable: 4 }, 3)!
+    expect(t).toMatch(/^Za mało danych: nie da się teraz odczytać 4 zamrożonych dni \(np\. OneDrive jeszcze je pobiera\)/)
+    expect(t).not.toContain('nie ma jeszcze zamrożonego dnia')
+    expect(tooLittle({ enough: false, days: 0, unreadable: 1 }, 3)).toContain('odczytać 1 zamrożonego dnia')
+  })
+
+  it('wykres granic: najwyżej 12 ostatnich tygodni z liczbą pominiętych; etykiety krótkie, gdy tygodni jest dużo', () => {
+    const weeks = Array.from({ length: 30 }, (_, i) => i)
+    expect(lastWeeks(weeks)).toEqual({ shown: weeks.slice(18), hidden: 18 })
+    expect(lastWeeks([1, 2, 3])).toEqual({ shown: [1, 2, 3], hidden: 0 })
+    expect(MAX_WEEKS).toBe(12)
+    expect(weekAxisLabel('2026-10-26', 4)).toBe('26.10–01.11')
+    expect(weekAxisLabel('2026-10-26', 12)).toBe('26.10')
+    // Twelve slots of the plot are wider than the longest label (about 29 units at 10.5 px).
+    const html = renderToStaticMarkup(createElement(BoundaryChart, { weeks: Array.from({ length: 12 }, (_, i) => ({ week: `2026-${String(i + 1).padStart(2, '0')}-05`, kept: 1, broken: 0, noData: 0, free: 0 })), testId: 'b' }))
+    const labels = [...html.matchAll(/text-anchor="middle"[^>]*>(\d\d\.\d\d[^<]*)</g)].map((m) => m[1]!)
+    expect(labels).toHaveLength(12)
+    expect(labels.every((l) => l.length === 5)).toBe(true)
   })
 
   it('słupki z danych: nazwy z ustawień, w rankingu „ciężej” tylko kategorie z dość odpowiedzi', () => {

@@ -26,10 +26,11 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(worker?: Worker) {
+async function make(worker?: Worker, log?: (level: 'info' | 'warn' | 'error', msg: string) => void) {
   const clock = { now: placeLogical(TODAY, 10 * 60) }
   const folder = await DataFolder.open({
     ...(worker ? { worker } : {}),
+    ...(log ? { log } : {}),
     fs: nodeFs,
     dataDir,
     stateDir: join(root, 'state'),
@@ -64,9 +65,9 @@ function writeDay(day: string, o: { extra?: boolean } = {}): number {
   return know
 }
 
-function grade(days: Record<string, number>, extra: Record<string, unknown> = {}): void {
+function grade(days: Record<string, number>, extra: Record<string, unknown> = {}, extraBy: Record<string, Record<string, unknown>> = {}): void {
   mkdirSync(join(dataDir, 'grades', '2026'), { recursive: true })
-  const lines = Object.entries(days).map(([day, know]) => JSON.stringify({ day, at: placeLogical(addDays(day, 2), 9 * 60), v: 1, how: 'ready', know: { pca: know }, missing: [], grade: { boundary: 'kept', free: false, closed: 'ritual', dayType: 'zwykly', ...extra } }))
+  const lines = Object.entries(days).map(([day, know]) => JSON.stringify({ day, at: placeLogical(addDays(day, 2), 9 * 60), v: 1, how: 'ready', know: { pca: know }, missing: [], grade: { boundary: 'kept', free: false, closed: 'ritual', dayType: 'zwykly', ...extra, ...extraBy[day] } }))
   writeFileSync(join(dataDir, paths.grades('2026', 'pca')), lines.join('\n') + '\n')
 }
 
@@ -135,5 +136,79 @@ describe('statystyki z folderu', () => {
     writeDay(d, { extra: true })
     await m.folder.stats('all')
     expect(calls).toEqual(['stats', 'stats'])
+  })
+
+  it('ocena sprzed modułów: moduły dnia z jego logu i późniejszych zmian, nie z dzisiejszych ustawień (prośby wyłączone wtedy, włączone dziś – „brak pomiaru”)', async () => {
+    const d = '2026-10-12'
+    grade({ [d]: writeDay(d) })
+    // Two days later the requests module was switched on: before it (also on d) it was off.
+    const later = '2026-10-14'
+    mkdirSync(join(dataDir, paths.logDir(later)), { recursive: true })
+    const at = placeLogical(later, 9 * 60)
+    writeFileSync(join(dataDir, paths.log(later, 'pca')), JSON.stringify({ id: `pca-${later}-0`, c: 'pca', n: 0, t: at, l: at, v: 1, day: later, dom: 'meta', k: 'module.set', at, module: 'requests', on: true, was: false }) + '\n')
+    const m = await make()
+    const r = await m.folder.stats('all')
+    expect(r.requests).toMatchObject({ count: 0, minutes: 0, missing: 1, people: [] })
+    // The other modules are as they were (on): the check-in counts.
+    expect(r.energy.checkins).toBe(1)
+  })
+
+  it('błąd jednego dnia (jego log nie do odczytania) – „nieczytelne”; błąd nie dotyczący dnia (proces pomocniczy) odrzuca całe liczenie', async () => {
+    const good = '2026-10-12'
+    const bad = '2026-10-13'
+    const modules = { energy: true, projects: true, requests: true }
+    grade({ [good]: writeDay(good), [bad]: 3 }, {}, { [good]: { modules }, [bad]: { modules } })
+    // The day's folder is a file: its listing fails (not an empty day).
+    writeFileSync(join(dataDir, 'log', '2026', bad), 'x')
+    const m = await make()
+    expect(await m.folder.stats('all')).toMatchObject({ days: 1, unreadable: 1 })
+    const broken: Worker = { run: () => Promise.reject(new Error('proces pomocniczy zakończył się (kod 1)')) }
+    const w = await make(broken)
+    await expect(w.folder.stats('all')).rejects.toThrow('proces pomocniczy')
+  })
+
+  it('to samo okres zapytany ponownie w trakcie liczenia dzieli je: jedno zadanie na dzień, ten sam wynik', async () => {
+    const days = ['2026-10-12', '2026-10-13', '2026-10-14']
+    grade(Object.fromEntries(days.map((d) => [d, writeDay(d)])))
+    const calls: string[] = []
+    const worker: Worker = {
+      run: (t) => {
+        calls.push(t.kind)
+        return inProcess.run(t)
+      }
+    }
+    const m = await make(worker)
+    const [a, b] = await Promise.all([m.folder.stats('4w'), m.folder.stats('4w')])
+    expect(calls).toHaveLength(3)
+    expect(b).toBe(a)
+    // Another period is its own count; a finished one is counted again (from the memory of the days).
+    await Promise.all([m.folder.stats('all'), m.folder.stats('4w')])
+    expect(calls).toHaveLength(3)
+  })
+
+  it('log jednego dnia nieczytelny przy odtwarzaniu modułów (dzień po zamrożonym, np. dziś): dni z ocenami sprzed modułów są „nieczytelne”, reszta się liczy', async () => {
+    const old = '2026-10-12'
+    const fresh = '2026-10-16'
+    const modules = { energy: true, projects: true, requests: true }
+    grade({ [old]: writeDay(old), [fresh]: writeDay(fresh) }, {}, { [fresh]: { modules } })
+    // The log of a day between them (not frozen) cannot be read: what its changes of the modules were is unknown.
+    writeFileSync(join(dataDir, 'log', '2026', '2026-10-14'), 'x')
+    const m = await make()
+    const r = await m.folder.stats('all')
+    expect(r).toMatchObject({ days: 1, first: fresh, unreadable: 1 })
+  })
+
+  it('błąd silnika na danych jednego dnia (zadanie zwraca błąd): dzień „nieczytelny” i wpis w logu bez treści, reszta okresu się liczy; zadanie łapie błąd silnika', async () => {
+    const days = ['2026-10-12', '2026-10-13', '2026-10-14']
+    grade(Object.fromEntries(days.map((d) => [d, writeDay(d)])))
+    const worker: Worker = {
+      run: (t) => (t.kind === 'stats' && t.ctx.date === days[1] ? (Promise.resolve({ error: 'TypeError' }) as never) : inProcess.run(t))
+    }
+    const lines: string[] = []
+    const m = await make(worker, (level, msg) => lines.push(`${level}: ${msg}`))
+    expect(await m.folder.stats('all')).toMatchObject({ days: 2, unreadable: 1 })
+    expect(lines).toEqual([`warn: statystyki: dzień ${days[1]} pominięty – błąd silnika (TypeError)`])
+    // The task itself: an engine failure comes back as a result, never as a rejection (the process stays a process).
+    expect(await inProcess.run({ kind: 'stats', ctx: {} as never, know: {}, modules: { energy: true, projects: true, requests: true }, grade: null })).toEqual({ error: expect.any(String) })
   })
 })

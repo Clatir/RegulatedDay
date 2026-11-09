@@ -45,11 +45,8 @@ export const PAGE_LABEL: Record<Page, string> = {
 /** Screens that need the data folder (without it they point to the wizard). */
 const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'stats', 'history'])
 
-/**
- * The screens with Ctrl+digit, in the menu's order; the settings have Ctrl+,. „Statystyki” (D358) stands in the menu before
- * the history but has the digit after it – the digits of the screens that were there do not move.
- */
-const DIGIT_PAGES: Page[] = [...PAGES.filter((p) => p !== 'settings' && p !== 'stats'), 'stats']
+/** The screens with Ctrl+digit, in the menu's order (D362: a screen put in the menu moves the digits below it); the settings have Ctrl+,. */
+const DIGIT_PAGES: Page[] = PAGES.filter((p) => p !== 'settings')
 
 function useHotkeys(): void {
   useEffect(() => {

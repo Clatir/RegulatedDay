@@ -62,6 +62,23 @@ describe('energia z check-inów', () => {
     expect(counted(s).checkins).toEqual([])
   })
 
+  it('moduł energii wyłączony choćby na chwilę dnia: check-iny i odczuwany koszt nie liczą się, dzień to „brak pomiaru” (modulesOfDay jak w podsumowaniu)', () => {
+    // On at the start of the day (what the grade of an old day would give), switched off at 15:00 – off for the day.
+    const s = day(DATE, { checkin: ['08:00', MID] })
+    felt(s, 'analiza', 'heavier', '21:00')
+    s.module(false, '15:00')
+    const d = counted(s)
+    expect(d).toMatchObject({ energyOn: false, checkins: [], felt: {} })
+    const ok = counted(day('2026-10-29', { checkin: ['08:00', MID] }))
+    expect(ok.energyOn).toBe(true)
+    const r = statsOf('all', [d, ok], 0).energy
+    expect(r).toMatchObject({ missing: 1, checkins: 1 })
+    // Off at the start, on again later: off for the day as well.
+    const t = day(DATE, { checkin: ['08:00', MID] })
+    t.module(true, '15:00', false)
+    expect(counted(t, { ...ON, energy: false }).checkins).toEqual([])
+  })
+
   it('odczuwany koszt: ostatnia odpowiedź kategorii w dniu; udział „ciężej” z liczby odpowiedzi, kategorie od 3 odpowiedzi w rankingu przed resztą', () => {
     const days: DayStats[] = []
     for (let i = 0; i < 4; i++) {
@@ -183,7 +200,7 @@ describe('dotrzymane granice', () => {
   })
 
   it('na tydzień od poniedziałku: dotrzymane, niedotrzymane, bez danych i wolne', () => {
-    const d = (date: string, boundary: DayStats['boundary']): DayStats => ({ date, checkins: [], felt: {}, estimates: [], requests: {}, boundary })
+    const d = (date: string, boundary: DayStats['boundary']): DayStats => ({ date, energyOn: true, checkins: [], felt: {}, estimates: [], requests: {}, boundary })
     // 2026-10-26 is a Monday.
     const r = statsOf('all', [d('2026-11-02', 'free'), d('2026-10-26', 'kept'), d('2026-10-27', 'kept'), d('2026-11-01', 'broken'), d('2026-10-28', 'noData')], 0).boundaries
     expect(r.weeks).toEqual([

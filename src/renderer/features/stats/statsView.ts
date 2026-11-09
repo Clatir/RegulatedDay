@@ -49,15 +49,16 @@ export interface BarPlace {
 
 /**
  * The places of the bars in a plot of `width` × `height` (its own coordinates, 0 at the top): equal slots, the bar
- * `gap` narrower than its slot; a value above the axis is cut at it, none (null) has no bar, a zero a hairline high.
+ * `gap` narrower than its slot; a value above the axis is cut at it, none (null) has no bar, a zero (or a value too small
+ * to see) a hairline high.
  */
 export function barPlaces(values: ReadonlyArray<number | null>, max: number, width: number, height: number, gap = 0.3): Array<BarPlace | null> {
   const slot = width / Math.max(1, values.length)
   const w = slot * (1 - gap)
   return values.map((v, i) => {
     if (v == null) return null
-    const h = max > 0 ? Math.min(1, Math.max(0, v / max)) * height : 0
-    return { x: i * slot + (slot - w) / 2, y: height - Math.max(h, v > 0 ? 1 : 0), w, h: Math.max(h, v > 0 ? 1 : 0) }
+    const h = Math.max(1, max > 0 ? Math.min(1, Math.max(0, v / max)) * height : 0)
+    return { x: i * slot + (slot - w) / 2, y: height - h, w, h }
   })
 }
 
@@ -100,6 +101,9 @@ export function ratioText(ratio: number): string {
   return `o ${delta}% ${ratio > 1 ? 'dłużej' : 'krócej'}`
 }
 
+/** „Brak pomiaru: 2 dni z wyłączonym modułem energii – nie są liczone jako zero.” */
+export const missingNote = (n: number, module: 'energii' | 'próśb'): string => `Brak pomiaru: ${countLabel(n, 'dzień', 'dni', 'dni')} z wyłączonym modułem ${module} – nie ${n === 1 ? 'jest liczony' : 'są liczone'} jako zero.`
+
 export const checkinsText = (n: number): string => countLabel(n, 'check-in', 'check-iny', 'check-inów')
 
 export const minutesText = (min: number): string => (min > 0 ? durationLabel(min) : '0 min')
@@ -113,8 +117,10 @@ export function daysNote(r: Pick<StatsResult, 'days' | 'first' | 'last' | 'unrea
 }
 
 /** Why the screen shows no numbers (too few frozen days), or null. */
-export function tooLittle(r: Pick<StatsResult, 'enough' | 'days'>, min: number): string | null {
+export function tooLittle(r: Pick<StatsResult, 'enough' | 'days' | 'unreadable'>, min: number): string | null {
   if (r.enough) return null
+  // Frozen days there are, but none can be read now: not „no frozen day” (OneDrive may still be bringing the logs).
+  if (r.days === 0 && r.unreadable > 0) return `Za mało danych: nie da się teraz odczytać ${countLabel(r.unreadable, 'zamrożonego dnia', 'zamrożonych dni', 'zamrożonych dni')} (np. OneDrive jeszcze je pobiera). Spróbuję przy następnym otwarciu strony.`
   return r.days === 0
     ? 'Za mało danych: w tym okresie nie ma jeszcze zamrożonego dnia. Statystyki liczą tylko dni potwierdzone – zamraża je aplikacja po oknie korekty.'
     : `Za mało danych: ${countLabel(r.days, 'dzień zamrożony', 'dni zamrożone', 'dni zamrożonych')} w tym okresie. Statystyki pokazuję od ${min} dni zamrożonych – mniej to tylko przypadek.`
@@ -146,6 +152,18 @@ export function accuracyBars(rows: readonly AccuracyRow[], name: (id: string) =>
 export function personBars(rows: readonly PersonRow[], name: (id: string) => string, limit = 8): ChartBar[] {
   return rows.slice(0, limit).map((r) => ({ label: name(r.person), value: r.minutes, text: minutesText(r.minutes) }))
 }
+
+/** The chart and the table of the boundaries show at most this many last weeks (the labels never overlap). */
+export const MAX_WEEKS = 12
+
+/** The last `MAX_WEEKS` weeks and how many earlier ones are left out (the totals still count them). */
+export function lastWeeks<T>(weeks: readonly T[], limit = MAX_WEEKS): { shown: T[]; hidden: number } {
+  const hidden = Math.max(0, weeks.length - limit)
+  return { shown: weeks.slice(hidden), hidden }
+}
+
+/** The label under a week's bar: both ends while the slots are wide (up to 8 weeks), else the Monday only. */
+export const weekAxisLabel = (week: string, count: number): string => (count > 8 ? plDayMonth(week) : weekLabel(week))
 
 /** A week of boundaries by its Monday: „12.10–18.10”. */
 export const weekLabel = (week: string): string => `${plDayMonth(week)}–${plDayMonth(addDays(week, 6))}`

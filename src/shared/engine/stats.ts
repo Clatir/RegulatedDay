@@ -19,7 +19,7 @@ import { OPEN } from './facts'
 import { estimatedBlocks, weekOf } from './game'
 import { countedEvents, isFreeDay } from './freeze'
 import { dayOutcome, type BoundaryOutcome } from './outcome'
-import type { MeasureModules } from './sideB'
+import { modulesOfDay, type MeasureModules } from './sideB'
 
 export type StatsPeriod = '4w' | '3m' | 'all'
 export const STATS_PERIODS: readonly StatsPeriod[] = ['4w', '3m', 'all']
@@ -43,6 +43,8 @@ export type DayBoundary = BoundaryOutcome | 'free'
 export interface DayStats {
   date: string
   /** The check-ins of the day: minute of the logical day (240 = 04:00) and the energy (25–100). */
+  /** The energy module was on all day; off – no check-in and no felt cost counts ("brak pomiaru"). */
+  energyOn: boolean
   checkins: Array<{ minute: number; energy: number }>
   /** The felt cost of the ritual: the day's last answer for each category. */
   felt: Record<string, FeltCost>
@@ -64,7 +66,8 @@ export function storedBoundary(grade: Readonly<Record<string, unknown>> | null |
 
 /**
  * A frozen day for the statistics: its events up to the ones the freeze names (`know`), as written (the grade's count);
- * `modules` – the modules of the day (a measure of a module that was off is none); `grade` – the grade stored (the
+ * `modules` – the modules before the day's first change of them (a frozen day's grade keeps them for the whole day; a
+ * module off at any moment of the day makes its measure none, `modulesOfDay` as in `daySummary`); `grade` – the grade stored (the
  * boundary comes from it, else from the day).
  */
 export function dayStats(ctx: DayContext, know: Readonly<Record<string, number>>, modules: MeasureModules, grade: Readonly<Record<string, unknown>> | null = null): DayStats {
@@ -72,15 +75,16 @@ export function dayStats(ctx: DayContext, know: Readonly<Record<string, number>>
   const state = computeDay(counted)
   const checkins: DayStats['checkins'] = []
   const felt: Record<string, FeltCost> = {}
+  const mods = modulesOfDay(counted.events, modules)
   for (const e of counted.events.filter(isKnown).sort(compareEvents)) {
-    if (e.k === 'energy.checkin' && modules.energy && !state.facts.undone.has(e.id)) {
+    if (e.k === 'energy.checkin' && mods.energy && !state.facts.undone.has(e.id)) {
       const v = checkinStates(e.answers)
       checkins.push({ minute: logicalMinuteOf(state.grid.date, e.at), energy: POOLS.reduce((s, p) => s + v[p], 0) / POOLS.length })
-    } else if (e.k === 'cost.felt') felt[e.category] = e.feel
+    } else if (e.k === 'cost.felt' && mods.energy) felt[e.category] = e.feel
   }
   const now = Math.min(state.now, state.grid.length)
   let requests: DayStats['requests'] = null
-  if (modules.requests) {
+  if (mods.requests) {
     requests = {}
     for (const r of state.facts.requests) {
       const who = r.person ?? '?'
@@ -91,7 +95,7 @@ export function dayStats(ctx: DayContext, know: Readonly<Record<string, number>>
     }
   }
   const boundary = storedBoundary(grade) ?? (isFreeDay(state, counted.events) ? 'free' : dayOutcome(state).boundary)
-  return { date: state.grid.date, checkins, felt, estimates: estimatedBlocks(counted, state).map(({ category, plannedMin, realMin, accurate }) => ({ category, plannedMin, realMin, accurate })), requests, boundary }
+  return { date: state.grid.date, energyOn: mods.energy, checkins, felt, estimates: estimatedBlocks(counted, state).map(({ category, plannedMin, realMin, accurate }) => ({ category, plannedMin, realMin, accurate })), requests, boundary }
 }
 
 export interface MeanRow {
@@ -148,7 +152,7 @@ export interface StatsResult {
   unreadable: number
   /** At least `MIN_STATS_DAYS` frozen days. */
   enough: boolean
-  energy: { checkins: number; byHour: MeanRow[]; byWeekday: MeanRow[]; felt: FeltRow[] }
+  energy: { checkins: number; byHour: MeanRow[]; byWeekday: MeanRow[]; felt: FeltRow[]; /** Days without the measure (the energy module was off). */ missing: number }
   accuracy: { blocks: number; accurate: number; rows: AccuracyRow[] }
   requests: { count: number; minutes: number; people: PersonRow[]; /** Days without the measure (the module was off). */ missing: number }
   boundaries: { weeks: WeekBoundaries[]; totals: Omit<WeekBoundaries, 'week'> }
@@ -191,7 +195,12 @@ export function statsOf(period: StatsPeriod, days: readonly DayStats[], unreadab
   felt.sort((a, b) => Number(b.reliable) - Number(a.reliable) || b.share - a.share || b.answers - a.answers || (a.category < b.category ? -1 : 1))
 
   const estBy = new Map<string, DayStats['estimates']>()
-  for (const d of sorted) for (const e of d.estimates) estBy.set(e.category, [...(estBy.get(e.category) ?? []), e])
+  for (const d of sorted)
+    for (const e of d.estimates) {
+      const list = estBy.get(e.category)
+      if (list) list.push(e)
+      else estBy.set(e.category, [e])
+    }
   const rows: AccuracyRow[] = [...estBy].map(([category, list]) => {
     const accurate = list.filter((e) => e.accurate).length
     return { category, blocks: list.length, medianRatio: round(median(list.map((e) => e.realMin / e.plannedMin)), 2), accurate, share: accurate / list.length }
@@ -232,7 +241,7 @@ export function statsOf(period: StatsPeriod, days: readonly DayStats[], unreadab
     last: sorted.at(-1)?.date ?? null,
     unreadable,
     enough: sorted.length >= MIN_STATS_DAYS,
-    energy: { checkins: samples.length, byHour, byWeekday, felt },
+    energy: { checkins: samples.length, byHour, byWeekday, felt, missing: sorted.filter((d) => !d.energyOn).length },
     accuracy: { blocks: rows.reduce((s, r) => s + r.blocks, 0), accurate: rows.reduce((s, r) => s + r.accurate, 0), rows },
     requests: { count: people.reduce((s, p) => s + p.count, 0), minutes: people.reduce((s, p) => s + p.minutes, 0), people, missing },
     boundaries: { weeks: [...weeks.values()].sort((a, b) => (a.week < b.week ? -1 : 1)), totals }

@@ -5,7 +5,7 @@
  * everything the chart says the table under it says too.
  */
 import type { ReactNode } from 'react'
-import { axisOf, barPlaces, BOUNDARY_PARTS, stackPlaces, weekLabel, weekParts, weekTotal, type Axis, type ChartBar } from './statsView'
+import { axisOf, barPlaces, BOUNDARY_PARTS, stackPlaces, weekAxisLabel, weekParts, weekTotal, type Axis, type ChartBar } from './statsView'
 import type { WeekBoundaries } from '@shared/engine/stats'
 import { formatNumber } from '@shared/format'
 
@@ -91,7 +91,7 @@ export function BoundaryChart({ weeks, testId }: { weeks: readonly WeekBoundarie
             <g key={wk.week}>
               {segs.map((s, k) => s.h > 0 && <rect key={k} x={cx - w / 2} y={s.y} width={w} height={s.h} fill={FILLS[k]} stroke="var(--color-panel)" strokeWidth={1} data-testid={`${testId}-bar`} />)}
               <text x={cx} y={PLOT_H + 14} textAnchor="middle" fontSize="10.5" fill="currentColor">
-                {weeks.length > 8 ? weekLabel(wk.week).slice(0, 5) : weekLabel(wk.week)}
+                {weekAxisLabel(wk.week, weeks.length)}
               </text>
             </g>
           )
