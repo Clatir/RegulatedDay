@@ -1,6 +1,6 @@
 /**
  * The work the main process hands to its helper process (spec „Proces główny nigdy nie blokuje się dłużej niż na około
- * 50 ms”, T190): the grade of a day to freeze, a day's ritual with the effects of its ✓, the CSV export, the daily
+ * 50 ms”, T190): the grade of a day to freeze, a day's statistics, a day's ritual with the effects of its ✓, the CSV export, the daily
  * backup. Plain Node – it runs in Electron's
  * utility process and, in tests and the simulator, in the same process. The helper never writes records of the data;
  * its own result files (ZIP, CSV) go through a temporary file and a rename.
@@ -13,6 +13,7 @@ import type { GameDayInput } from '@shared/engine/game'
 import { daySummary, type DaySummary } from '@shared/engine/daySummary'
 import type { MeasureModules } from '@shared/engine/sideB'
 import { ritualView, type RitualView } from '@shared/engine/ritual'
+import { dayStats, type DayStats } from '@shared/engine/stats'
 import { writeFileAtomic } from '../datastore/atomic'
 import { createDailyBackup, type BackupResult } from '../data/backup'
 
@@ -20,6 +21,7 @@ export type WorkerTask =
   | { kind: 'ping' }
   | { kind: 'grade'; ctx: DayContext; know: Record<string, number>; game: GameDayInput }
   | { kind: 'summary'; ctx: DayContext; know: Record<string, number>; modules: MeasureModules }
+  | { kind: 'stats'; ctx: DayContext; know: Record<string, number>; modules: MeasureModules; grade: Record<string, unknown> | null }
   | { kind: 'csv'; days: CsvDay[]; dir: string }
   | { kind: 'backup'; dataDir: string; backupsDir: string; date: string }
   | { kind: 'ritual'; ctx: DayContext; at: number }
@@ -29,6 +31,7 @@ export interface WorkerResults {
   ping: 'ok'
   grade: DayGrade
   summary: DaySummary
+  stats: DayStats
   ritual: RitualView
   /** The names of the files written. */
   csv: string[]
@@ -47,6 +50,8 @@ export async function runTask<T extends WorkerTask>(t: T): Promise<WorkerResult<
         return gradeOf(t.ctx, t.know, t.game)
       case 'summary':
         return daySummary(t.ctx, t.know, t.modules)
+      case 'stats':
+        return dayStats(t.ctx, t.know, t.modules, t.grade)
       case 'csv': {
         const files = csvOf(t.days)
         for (const [name, text] of Object.entries(files)) await writeFileAtomic(join(t.dir, name), text)

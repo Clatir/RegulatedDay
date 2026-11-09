@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { launch, launchSecondCopy, settledBarBounds, viewPage, withMainLog } from './app'
 
-const PAGES = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history', 'settings']
+const PAGES = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'stats', 'history', 'settings']
 
 async function noHorizontalOverflow(page: Page): Promise<string[]> {
   return page.evaluate(() =>

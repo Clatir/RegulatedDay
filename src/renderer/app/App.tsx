@@ -1,7 +1,7 @@
 // adapted from FI src/renderer/app/App.tsx @ de81f2b
 /**
  * The main window (D287): the side menu with the screens' names; at the top the name „Regulated Day” and the bar; the
- * game's celebration over everything (D322). Ctrl+1…7 switch the screens by the
+ * game's celebration over everything (D322). Ctrl+1…8 switch the screens by the
  * physical keys of the digits (any keyboard layout), Ctrl+, opens the settings, Ctrl+S commits the active field, Ctrl+N
  * creates a record in the current view (when it has records).
  */
@@ -20,6 +20,7 @@ import { RequestsPage } from '../features/requests/RequestsPage'
 import { TemplatesPage } from '../features/templates/TemplatesPage'
 import { RoutinesPage } from '../features/routines/RoutinesPage'
 import { HistoryPage } from '../features/history/HistoryPage'
+import { StatsPage } from '../features/stats/StatsPage'
 import { Celebration } from '../features/game/Celebration'
 import { RoomPage } from '../features/game/RoomPage'
 import { useGameFeed } from '../store/game'
@@ -36,15 +37,19 @@ export const PAGE_LABEL: Record<Page, string> = {
   templates: 'Szablony',
   routines: 'Rutyny',
   room: 'Pokój',
+  stats: 'Statystyki',
   history: 'Historia',
   settings: 'Ustawienia'
 }
 
 /** Screens that need the data folder (without it they point to the wizard). */
-const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history'])
+const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'stats', 'history'])
 
-/** The screens with Ctrl+digit, in the menu's order; the settings have Ctrl+,. */
-const DIGIT_PAGES: Page[] = PAGES.filter((p) => p !== 'settings')
+/**
+ * The screens with Ctrl+digit, in the menu's order; the settings have Ctrl+,. „Statystyki” (D358) stands in the menu before
+ * the history but has the digit after it – the digits of the screens that were there do not move.
+ */
+const DIGIT_PAGES: Page[] = [...PAGES.filter((p) => p !== 'settings' && p !== 'stats'), 'stats']
 
 function useHotkeys(): void {
   useEffect(() => {
@@ -137,6 +142,7 @@ function PageView({ page }: { page: Page }) {
   if (page === 'templates') return <TemplatesPage />
   if (page === 'routines') return <RoutinesPage />
   if (page === 'room') return <RoomPage />
+  if (page === 'stats') return <StatsPage />
   return <HistoryPage />
 }
 

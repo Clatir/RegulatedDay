@@ -33,8 +33,9 @@ import { betterFreeze, foldFacts, isRunning, isRunningRequest, type BlockFact, t
 import { correctionEnd, countedEvents, freezeDecision, gradeLineFrom, isFreeDay, lastEventsOf, openedAtOf, WRITERS_DAYS, type GradeLine } from '@shared/engine/freeze'
 import { dayGame, notesSum, storedGame, weekOf, type GameDay, type GameDayInput } from '@shared/engine/game'
 import { gameView, regenWaysOf, ROOM_ITEMS, storedWays, type Celebration, type GameView } from '@shared/engine/progress'
-import { sideBOf, storedModules, type DayMeasure, type SideB } from '@shared/engine/sideB'
+import { sideBOf, storedModules, type DayMeasure, type MeasureModules, type SideB } from '@shared/engine/sideB'
 import type { DaySummary } from '@shared/engine/daySummary'
+import { periodFrom, statsOf, type DayStats, type StatsPeriod, type StatsResult } from '@shared/engine/stats'
 import { calibrationPeriod, costProposals, inCalibration, timeProposals, type CalibrationDay, type CalibrationPeriod, type CostEvidence, type CostProposal, type FeltCounts, type TimeProposal, type TimeSample } from '@shared/engine/calibration'
 
 import { inProcess, type Worker } from '../worker/host'
@@ -312,6 +313,8 @@ export class DataFolder {
   private peopleCounts: { day: string; at: number; before: Map<string, number> } | null = null
   /** The rituals of the last days, each counted again only on a change of what it is made of (the morning asks often). */
   private readonly ritualMemo = new Map<string, { key: string; view: RitualView }>()
+  /** The statistics of each frozen day, counted again only when what it is made of changed (D358). */
+  private readonly statsMemo = new Map<string, { key: string; stats: DayStats }>()
 
   private constructor(private readonly o: FolderOptions) {
     this.rulesVersion = o.rulesVersion ?? RULES_VERSION
@@ -1036,6 +1039,47 @@ export class DataFolder {
       if (s?.summary.measure) measures.push(s.summary.measure)
     }
     return sideBOf(week, measures, sundayFrozen)
+  }
+
+  /**
+   * The statistics of the frozen days of a period before today (D358): each day counted as its grade counts it, by the
+   * helper process, once per change of what it is made of; a frozen day whose records cannot be read now is left out and
+   * counted („nieczytelne”). Days not frozen yet are not in it – only confirmed data.
+   */
+  async stats(period: StatsPeriod, at = this.clock.now()): Promise<StatsResult> {
+    const today = logicalDayOf(at)
+    const from = periodFrom(period, today)
+    const lines = [...(await this.gradeIndex()).lines.values()].filter((l) => l.day < today && (from == null || l.day >= from)).sort((a, b) => (a.day < b.day ? -1 : 1))
+    let current: MeasureModules | null = null
+    const days: DayStats[] = []
+    let unreadable = 0
+    for (const line of lines) {
+      try {
+        const read = await this.log.readDay(line.day)
+        if (!read.complete || !read.events.length) {
+          unreadable++
+          continue
+        }
+        let modules = storedModules(line.grade)
+        if (!modules) {
+          const m = (current ??= rdFrom(await this.shared(paths.settings)).general.modules)
+          modules = { energy: m.energy, projects: m.projects, requests: m.requests }
+        }
+        const ctx = await this.dayContext(line.day, read, at)
+        const key = JSON.stringify([read.lastByComputer, read.events.length, read.copies, this.contextSig(line.day), line.v, line.know, modules, line.grade.boundary, line.grade.free])
+        const was = this.statsMemo.get(line.day)
+        if (was?.key === key) {
+          days.push(was.stats)
+          continue
+        }
+        const stats = await (this.o.worker ?? inProcess).run({ kind: 'stats', ctx, know: line.know, modules, grade: line.grade })
+        this.statsMemo.set(line.day, { key, stats })
+        days.push(stats)
+      } catch {
+        unreadable++
+      }
+    }
+    return statsOf(period, days, unreadable)
   }
 
   /**

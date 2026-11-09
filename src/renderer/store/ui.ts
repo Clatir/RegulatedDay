@@ -6,9 +6,10 @@ import { create } from 'zustand'
 import type { PlanBlock } from '@shared/model/plan'
 import { commitActiveField } from '../lib/commit'
 
-export type Page = 'today' | 'calendar' | 'requests' | 'templates' | 'routines' | 'room' | 'history' | 'settings'
+export type Page = 'today' | 'calendar' | 'requests' | 'templates' | 'routines' | 'room' | 'stats' | 'history' | 'settings'
 
-export const PAGES: Page[] = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'history', 'settings']
+/** The menu's order (one place: a new screen is one word here, its label and its view in `App.tsx`). */
+export const PAGES: Page[] = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'stats', 'history', 'settings']
 
 export interface Toast {
   id: number

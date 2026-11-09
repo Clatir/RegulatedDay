@@ -19,6 +19,7 @@ import type { HolidayLookup } from '@shared/engine/createDay'
 import { CSV_HEADERS } from '@shared/engine/csv'
 import { reviewPrompt } from '@shared/engine/calibration'
 import type { SideB } from '@shared/engine/sideB'
+import type { StatsPeriod, StatsResult } from '@shared/engine/stats'
 import { keptOnRestore, rdFrom } from '@shared/model/rd'
 import { requestCounters } from '@shared/engine/requests'
 import type { AnyEvent } from '@shared/model/events'
@@ -601,6 +602,11 @@ export class DataHub {
   /** „Strona B tygodnia” of the week that ended (spec „Plan poranny”): its days and the week before, each as its grade counts it. */
   sideB(): Promise<SideB> {
     return this.need().sideB()
+  }
+
+  /** The statistics of the frozen days of a period (D358, spec „Etap 2”). */
+  stats(period: StatsPeriod): Promise<StatsResult> {
+    return this.need().stats(period)
   }
 
   /**

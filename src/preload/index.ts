@@ -81,6 +81,7 @@ const api: RdApi = {
   celebrated: (keys) => ipcRenderer.invoke(CH.celebrated, keys),
   sideB: () => ipcRenderer.invoke(CH.sideB),
   calibration: () => ipcRenderer.invoke(CH.calibration),
+  stats: (period) => ipcRenderer.invoke(CH.stats, period),
   seen: (ids) => ipcRenderer.send(CH.seen, ids),
   onSound: (cb) => on('rd:sound', cb)
 }
