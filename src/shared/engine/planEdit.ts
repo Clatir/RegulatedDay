@@ -116,8 +116,9 @@ export function movedBlock(b: PlanBlock, plan: readonly PlanBlock[], fromDate: s
     anchor: null,
     movedFrom: fromDate,
     moves: b.moves + (byYou ? 1 : 0),
-    // A block moved to another day is yours there (the template of that day has its own).
-    origin: b.origin === 'session' || b.origin === 'lecture' ? 'user' : b.origin === 'template' ? 'user' : b.origin
+    // A block moved to another day is yours there (the template of that day has its own; a class imported for one day
+    // is a block of that day's „zjazd” only – an import of the other day never takes it).
+    origin: b.origin === 'session' || b.origin === 'lecture' || b.origin === 'zjazd' ? 'user' : b.origin === 'template' ? 'user' : b.origin
   }
 }
 

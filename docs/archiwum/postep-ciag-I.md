@@ -42,3 +42,21 @@ Wpisy zadań ciągu I (4.11, 4.10, E10–E12) po scaleniu ich PR-ów. Stan bież
   niesie i `modePrefs`, i policzone `modes`/`timer`/`hardEnd` – uprościć; (4) zbiór `waiting` w `notices()` jako flaga
   powiadomienia.
 - **Odbiór:** E8n.2.
+
+## E11 – import zjazdów z PDF (1.1.0, 9.11.2026)
+- **Zakres (D357, D359):** Kalendarz → „Wczytaj PDF zjazdów”, podgląd do poprawienia, „Zapisz”, „Cofnij”; zajęcia z PDF
+  jako bloki stałe „Przedmiot · forma”, dojazd do godzin z PDF, zmiana typu na inny niż zjazd zdejmuje import; zajęcia
+  zdalne w dniu zjazdu przesuwają maksimum. PDF użytkownika: 20 dni (10 zdalnych, 10 stacjonarnych), 81 zajęć,
+  0 ostrzeżeń – sprawdzony lokalnie, poza repozytorium.
+- **Decyzje:** D357, D359; T546–T551; `RULES_VERSION` 6.
+- **Wykonawcy:** `wykonawca-opus` (parser, zapis, silnik, poprawki obu rund), `wykonawca-sonnet` (ekran, runda 1).
+- **Testy:** `tests/unit/zjazdy-parse.test.ts`, `zjazdy-pdf.test.ts`, `zjazdy-pdf-load.test.ts`,
+  `tests/unit/engine/zjazdy-day.test.ts`, `zjazd-blocks.test.ts`, `tests/fs/zjazdy.test.ts`,
+  `tests/web/zjazdy-preview.test.ts`, `record-text-zjazdy.test.ts`, `tests/web/day-axis.test.ts`, E2E
+  `tests/e2e/zjazdy.spec.ts` (4) – mutacje sprawdzone w obu rundach.
+- **Przegląd:** xhigh, dwie rundy (15 + 15 uwag), ostatnia paczka bez trzeciej rundy.
+- **Uwagi na później:** (1) zajęcia z importu usunięte po starcie („Usuń” – własny blok wyjęty z pliku) tracą nazwę
+  „Przedmiot · forma” (nazwa z kategorii startu); (2) sala nie trafia do bloku; (3) przełącznik rodzaju dnia nie zmienia
+  rodzaju bloków (dzień TEAMS przestawiony na stacjonarny ma bloki zdalne); (4) godzin nie da się wpisać z klawiatury
+  (tylko ±5 min); (5) prowadzący na 1.0.x nie przesuwa maksimum dla zajęć zdalnych z importu.
+- **Odbiór:** E11.1–E11.3.
