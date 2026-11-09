@@ -84,6 +84,10 @@ między dwoma odczytami w odstępie 6 s; zawieszony = plik zajęty i licznik sto
   dźwięku. Dlatego `RD_PS_CLOSE` i ścieżka bez PowerShella proszą ponownie co 3 s. `IS_POWERSHELL_AVAILABLE`
   electron-buildera nie jest pytany: w CI (instalator spod pwsh 7) mówił „brak” – o PowerShellu decyduje własna
   odpowiedź `rdFindProcess` (`$rdPs`), kroki biegną bez odziedziczonego `PSModulePath`.
+- `app.quit()` rozpoczęte wewnątrz zdarzenia `close` z `preventDefault` Electron anuluje po powrocie zdarzenia (okna się
+  zamykają, aplikacja zostaje bez nich) – wyjście po zamknięciu z zewnątrz idzie przez `afterOutsideClose` (następny
+  obrót pętli). Playwright na Windows uruchamia Electrona przez powłokę: `app.process()` to `cmd.exe` – PID aplikacji
+  z `app.evaluate(() => process.pid)`.
 - Kliknięcie aktywnego okna nie podnosi go nad okno pokazane bez aktywacji – okna właściciela kładzie pod kliknięte hak
   myszy (T408). W `fs` Electrona `app.asar` to folder 0 B – rozmiary z `process.noAsar`.
 - Testy: „close” Playwrighta czeka na wszystkie kopie potoków aplikacji, a odłączony właściciel je dziedziczy – czekaj na

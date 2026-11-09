@@ -67,6 +67,7 @@ import { PowerKeeper } from './power'
 import { OneDriveWatch } from './onedrive'
 import { toneOnChange, WidgetEngine } from './widget'
 import { SoundWindow } from './windows/soundWindow'
+import { afterOutsideClose } from './windows/outsideClose'
 import { WorkerHost, type WorkerChild } from './worker/host'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
@@ -541,15 +542,21 @@ function quitApp(): void {
     .finally(() => app.quit())
 }
 
+/** The quit asked from outside comes after the window's close event (afterOutsideClose). */
+let quitFromOutsideAsked = false
+
 /**
  * A close from outside – WM_CLOSE to a hidden window nobody could click (T396): an installer run by hand asks the app to
  * end its own way (taskkill without /F, E4a.13). Only a running app hears it – a quitting one lets its windows close.
+ * Called inside that window's close event, whose default the window prevents: the quit waits for the event's end
+ * (afterOutsideClose) – begun within it, Electron cancels it on the prevented close, and the app went on without windows.
  */
 function quitFromOutside(): void {
   closedFromOutside = true
-  if (quitting) return
+  if (quitting || quitFromOutsideAsked) return
+  quitFromOutsideAsked = true
   log('info', 'zamknięcie z zewnątrz (instalator albo taskkill) – kończę pracę')
-  quitApp()
+  afterOutsideClose(quitApp)
 }
 
 function showMainWindow(page?: string): void {

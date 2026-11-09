@@ -542,8 +542,9 @@ test('taskkill użytkownika (bez /F) przy pobranej wersji: zwykłe wyjście – 
     await expect.poll(() => page.evaluate(() => window.rd.update().then((u) => u.phase)), { timeout: 60_000 }).toBe('ready')
     // WM_CLOSE from outside without any installer's marker: not „zamknięte przez instalator”. taskkill without /F sends
     // one WM_CLOSE to one window only (the topmost; a shown main window hides to the tray on it, as on your close) – so
-    // asked again every 3 s until the app ends, as the installer does.
-    const pid = app.process().pid!
+    // asked again every 3 s until the app ends, as the installer does. The app's main process itself: Playwright starts it
+    // on Windows through a shell (shell: true), so app.process() is cmd.exe – no window, „can only be terminated forcefully”.
+    const pid = await app.evaluate(() => process.pid)
     let ended = false
     const end = processEnd(app, 120_000).then(() => void (ended = true))
     for (let i = 0; i < 30 && !ended; i++) {

@@ -31,6 +31,8 @@ export class SoundWindow {
       }
     })
     this.win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    // Its own title, as every window (not the page's „Regulated Day”): a list of the app's windows tells it apart.
+    this.win.on('page-title-updated', (e) => e.preventDefault())
     this.win.on('close', (e) => {
       if (this.quitting) return
       e.preventDefault()
