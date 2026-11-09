@@ -5,14 +5,14 @@
  * the maximum, the hard end, the bedtime's forecast and now; the energy's forecast (after the check-in).
  */
 import { plannedSpan } from '@shared/engine/blocks'
+import { namingOf } from '@shared/engine/context'
 import { atOf } from '@shared/engine/grid'
 import { plannedEndOf } from '@shared/engine/timer'
-import { categoryName } from '@shared/model/rd'
 import { durationLabel, logicalClock } from '@shared/format'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import type { DayModel } from '../../store/day'
-import { blockColor, blockMarks, blockName, type Names } from './blockView'
+import { blockColor, blockMarks, blockName, nameById, type Names } from './blockView'
 import type { EnergyTrack, TimelineItem, TimelineMarker } from './Timeline'
 
 export interface DayAxis {
@@ -65,7 +65,9 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
         gone == null && f?.startedAt == null && p.anchor == null && p.startMin != null && p.origin !== 'session' && p.origin !== 'lecture' && p.origin !== 'zjazd' && !info.secondShift && (nowIdx == null || to > nowIdx)
     })
   }
-  // Blocks begun outside the plan („Pracuję”, a block begun by hand): where they ran.
+  // Blocks begun outside the plan („Pracuję”, a block begun by hand) or taken out of it after they began (D336): where
+  // they ran, named as everywhere (`nameById`).
+  const naming = namingOf(ctx, state.facts)
   for (const info of state.blocks) {
     if (info.inPlan) continue
     const f = state.facts.blocks.get(info.id)
@@ -75,7 +77,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       id: info.id,
       startMin: lm(f.startedAt),
       endMin: lm(Math.max(to, f.startedAt + 1)),
-      title: categoryName(names.rd, info.categoryId),
+      title: nameById(info.id, naming, names),
       marks: f.endedAt == null ? ['poza planem', 'biegnie'] : ['poza planem'],
       color: blockColor(info.categoryId, names),
       background: false,

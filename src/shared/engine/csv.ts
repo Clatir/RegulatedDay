@@ -4,14 +4,14 @@
  * per request of the day), `checkiny.csv` (a row per check-in). Every day is counted by the same engine as everywhere
  * else; names are real names, never ids. Pure: the worker writes what it returns.
  */
-import { blockName, namedOf, type Names } from '../blockName'
+import { nameById, type Names } from '../blockName'
 import { POOLS } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type Answer } from '../model/events'
-import type { PlanBlock } from '../model/plan'
 import { categoryName, personName } from '../model/rd'
 import { logicalClock, plDate } from '../format'
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan } from './blocks'
+import { namingOf } from './context'
 import { computeDay, type DayContext, type DayState } from './day'
 import { checkinStates } from './energy'
 import { OPEN, ranMinutes, type BlockFact } from './facts'
@@ -75,8 +75,9 @@ function stateOf(f: BlockFact | undefined): string {
   return f.done === false ? 'niedokończony' : 'zrobiony'
 }
 
-function blockRows(state: DayState, plan: readonly PlanBlock[], names: Names): Array<{ order: number; cells: Array<string | number> }> {
+function blockRows(state: DayState, ctx: DayContext, names: Names): Array<{ order: number; cells: Array<string | number> }> {
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  const naming = namingOf(ctx, state.facts)
   const out: Array<{ order: number; cells: Array<string | number> }> = []
   for (const info of state.blocks) {
     const f = state.facts.blocks.get(info.id)
@@ -98,9 +99,9 @@ function blockRows(state: DayState, plan: readonly PlanBlock[], names: Names): A
     if (extended) notes.push(`przedłużony +${extended} min`)
     const x = state.explains.find((e) => e.block === info.id && Math.min(e.to, state.now) > e.from)
     if (x) notes.push(x.answer ? `czas do wyjaśnienia: ${EXPLAIN[x.answer.cls]}` : `do wyjaśnienia ${Math.min(x.to, state.now) - x.from} min`)
-    // Its routine, requests and own name from the plan (a block started outside it has none).
-    const p = plan.find((b) => b.id === info.id)
-    const name = blockName(namedOf(info, { routine: p?.routine ?? null, requests: p?.requests ?? [], name: p?.name ?? null }), names)
+    // As everywhere: the plan's entry (with its own name – an imported class, D357), the snapshot's of a block taken out
+    // of the plan after it began (D336), else its start.
+    const name = nameById(info.id, naming, names)
     const started = f?.startedAt ?? null
     const ended = f?.endedAt ?? null
     out.push({
@@ -137,7 +138,7 @@ export function csvOf(days: readonly CsvDay[]): CsvFiles {
   const checkins: string[] = []
   for (const d of days) {
     const state = computeDay(d.ctx)
-    blocks.push(...blockRows(state, d.ctx.plan, d.names).sort((a, b) => a.order - b.order).map((r) => line(r.cells)))
+    blocks.push(...blockRows(state, d.ctx, d.names).sort((a, b) => a.order - b.order).map((r) => line(r.cells)))
     requests.push(...requestRows(state, d.names))
     checkins.push(...checkinRows(state, d.ctx.events))
   }

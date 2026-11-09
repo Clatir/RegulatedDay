@@ -4,9 +4,9 @@
  */
 import { CLASS_COLORS, categoryName } from '@shared/model/rd'
 import type { PlanBlock } from '@shared/model/plan'
-import { blockName, type Names } from '@shared/blockName'
+import { blockName, nameById, type Names } from '@shared/blockName'
 
-export { blockName, type Names }
+export { blockName, nameById, type Names }
 
 export function blockColor(categoryId: string, n: Pick<Names, 'rd' | 'settings'>): string {
   const meta = n.rd.categories[categoryId]

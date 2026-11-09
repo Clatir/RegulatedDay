@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.0
+- Kalendarz → „Wczytaj PDF zjazdów”: aplikacja czyta harmonogram z uczelni (PDF) i pokazuje listę dni zjazdów do poprawienia – rodzaj (sala „TEAMS” to zjazd zdalny, sala w budynku – stacjonarny), godziny i przedmioty. Nic się nie zapisuje bez „Zapisz”; zapisują się dni od jutra.
+- Każde zajęcia z PDF to osobny blok stały „Przedmiot · forma” (np. „Marketing · wykład”). Zastępują zajęcia z szablonu zjazdu, reszta szablonu zostaje, a dojazd przesuwa się do godzin z PDF: tam kończy się o starcie pierwszych zajęć, powrót zaczyna po ostatnich.
+- „Cofnij” po zapisie przywraca dni sprzed tego importu (także odpowiedź na pytanie o analizę tygodniową); ponowny import tych samych dat zastępuje poprzedni, a zmiana typu dnia na inny niż zjazd zdejmuje import.
+- W dniu zjazdu każde zajęcia zdalne – z PDF, z szablonu i dodane ręcznie – liczą się jak blok zjazdu: przesuwają maksimum dnia i nie są przedłużeniem.
+- Komputer ze starszą wersją przy komputerze z 1.1.0 nie prowadzi dnia i nie zamraża dni (nowa wersja reguł liczenia).
+
+## 1.0.10
+- Po minięciu twardego końca projektów pasek pokazuje linię „Twardy koniec projektów – regeneracja do snu”, dopóki biegnie projekt (także blok liczony jak projekt, np. nauka po końcu pracy) albo trwa czas do wyjaśnienia po nim – także przy wyłączonym powiadomieniu Windows. Linia jest bez kropki, nie spycha pytań z przyciskami; w „mniej pytań” to cicha ikona.
+- Powiadomienie Windows o twardym końcu przychodzi też przy bloku liczonym jak projekt (np. nauka po końcu pracy) i w czasie do wyjaśnienia po projekcie – w ciągu godziny od minięcia.
+- W „mniej pytań” twardy koniec nie przychodzi już jako powiadomienie Windows, tylko cicho w pasku – także po „Jest lepiej”. W trybie zajęć linia i powiadomienie czekają do końca trybu i przychodzą wtedy, jeśli twardy koniec jest dalej aktualny; w trybie sesji jak dotąd.
+
+## 1.0.9
+- Zaczęta sesja usunięta z planu („Usuń”) zostaje na osi dnia, w rytuale, w eksporcie CSV i na liście „zrobione automatycznie” jako „Sesja NY” (dotąd „Sesja tradingowa”); usunięty zaczęty blok rutyny z szablonu zachowuje nazwę rutyny. Blok zaczęty poza planem albo usunięty po starcie ma na osi i w rytuale tę samą nazwę co w CSV i w pasku (także nazwę wariantu).
+
 ## 1.0.8
 - Instalator uruchomiony ręcznie przy włączonej aplikacji najpierw prosi ją o zamknięcie i czeka, aż skończy zapisywać (do 15 s), zamiast od razu ją zabijać – następny start nie widzi już awarii, a w dzienniku jest „zamknięte przez instalator”. Pomocnik nie zostaje w tle.
 - Gdy instalator mimo to nie może zamknąć aplikacji („Nie można zamknąć”), zapisuje listę procesów, które zostały, w `logs\installer-check.log` (bez nazwy konta).

@@ -33,6 +33,37 @@ export const namedOf = (b: { categoryId: string; variantId: string | null; origi
   ...more
 })
 
+/** What names the blocks of a day by id (`namingOf` in engine/context.ts builds it from the day and its facts). */
+export interface NamingDay {
+  plan: readonly PlanBlock[]
+  /** The snapshot's entry of a block (also one cancelled for the day, a session the answer „tak” added); null: none. */
+  snapshotBlock: (id: string) => PlanBlock | null
+  /** What a block's start wrote of its plan; null or undefined: it has not begun. */
+  planned: (id: string) => { categoryId: string; variantId: string | null } | null | undefined
+}
+
+/**
+ * What names a block of the day by its id: its entry in the plan. One not in the plan (taken out after it began – D336 –
+ * or begun outside it): its category and variant as its start wrote them (spec: a later edit never changes them), where it
+ * came from, its routine and requests from the snapshot's entry while that is the same block (the same category – a session
+ * „Sesja NY”, D338); one that has not begun – the snapshot's entry; null without any of them.
+ */
+export function namedById(id: string, day: NamingDay): NamedBlock | null {
+  const p = day.plan.find((b) => b.id === id)
+  if (p) return p
+  const snap = day.snapshotBlock(id)
+  const planned = day.planned(id)
+  if (!planned || typeof planned.categoryId !== 'string' || !planned.categoryId) return snap
+  const started = namedOf({ categoryId: planned.categoryId, variantId: planned.variantId ?? null })
+  return snap?.categoryId === planned.categoryId ? { ...started, origin: snap.origin, sourceId: snap.sourceId, routine: snap.routine, requests: snap.requests, note: snap.note } : started
+}
+
+/** The name of a block of the day by its id (`namedById`), the same on the axis, in the ritual, the CSV and the bar; „blok” when nothing names it. */
+export function nameById(id: string, day: NamingDay, n: Names): string {
+  const b = namedById(id, day)
+  return b ? blockName(b, n) : 'blok'
+}
+
 export function blockName(b: NamedBlock, n: Names): string {
   // Its own name (a class imported from the PDF of „zjazdy”: „<przedmiot> · <forma>”, D357).
   if (b.name) return b.name

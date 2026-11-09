@@ -26,7 +26,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 - **W maszynie wirtualnej** (opcjonalnie): 68 z tych punktów może sprawdzić Cowork na świeżej instalacji, bez Twoich
@@ -98,6 +98,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8l.5 Numer wersji w Ustawieniach
    - [ ] E8m.1 Pasek pulpitu nigdy nad oknami innych programów
    - [ ] E8m.2 „Uruchamiaj z Windows” pokazuje stan i da się wyłączyć
+   - [ ] E8n.1 Usunięta zaczęta sesja zostaje „Sesja NY”
+   - [ ] E8n.2 Linia twardego końca projektów w pasku (gdy się zdarzy)
+   - [ ] E11.1 Import zjazdów z Twojego PDF (przed 21.11)
+   - [ ] E11.2 „Cofnij” i ponowny import
+   - [ ] E11.3 Dzień zjazdu z importu – plan i dojazd (21–22.11)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1325,3 +1330,70 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   w Menedżerze zadań”, a start aplikacji go nie włącza z powrotem.
 - **Nie przechodzi, gdy:** przełącznik wraca do „wyłączone”, wyłączenie zostawia wpis w Menedżerze zadań albo stan
   z Menedżera zadań nie jest widoczny.
+
+### E8n – poprawki po ciągu F (1.0.9–1.0.10)
+
+#### E8n.1 Usunięta zaczęta sesja zostaje „Sesja NY” (1.0.9)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/session-names.test.ts` („nazwa bloku zdjętego z planu po starcie” – CSV,
+  rytuał, pasek, starty z 1.0.8), `tests/web/removed-session.test.ts` (oś równa nazwom w CSV). Ty: rzut oka.
+- **Jak sprawdzić:** zacznij sesję z warstwy sesji (np. „Sesja NY”), po chwili w „Dziś” otwórz jej panel i kliknij
+  „Usuń”; spójrz na oś dnia, wieczorem na rytuał, w Ustawieniach → Dane wyeksportuj CSV.
+- **Oczekiwany efekt:** przebieg do chwili „Usuń” stoi na osi jako „Sesja NY · poza planem”, w rytuale i w `bloki.csv`
+  też „Sesja NY”, a na liście „zrobione automatycznie” w pasku – „Sesja NY …” (D338, T543). Ręcznie dodany blok
+  „Sesja tradingowa” po „Usuń” zostaje „Sesja tradingowa”; usunięty zaczęty blok rutyny ma nazwę rutyny.
+- **Nie przechodzi, gdy:** w którymś z tych miejsc usunięta sesja nazywa się „Sesja tradingowa” albo oś i CSV
+  nazywają ten sam blok inaczej.
+
+#### E8n.2 Linia twardego końca projektów w pasku (1.0.10)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/widget-view.test.ts` („twardy koniec”), `tests/fs/widget.test.ts` (linia
+  i powiadomienie w „mniej pytań”, sesji, zajęciach, przy wyłączonym powiadomieniu). Ty: gdy się zdarzy.
+- **Jak sprawdzić:** w dzień, w którym minimum regeneracji ledwo się mieści, pracuj nad projektem po jego twardym końcu
+  (godzina w „Dziś” → „Twardy koniec projektów”) – projektem albo nauką po końcu pracy; spójrz na pasek. Innym razem to
+  samo przy włączonym „mniej pytań”, potem kliknij „Jest lepiej”, dalej przy projekcie.
+- **Oczekiwany efekt:** od minięcia twardego końca pasek ma linię „Twardy koniec projektów – regeneracja do snu” bez
+  kropki, dopóki biegnie projekt (albo trwa czas do wyjaśnienia po nim); znika po końcu projektu albo po starcie innego
+  bloku. Powiadomienie Windows przychodzi raz, jeśli jest włączone; w „mniej pytań” – sama cicha ikona w pasku, bez
+  powiadomienia, także po „Jest lepiej” (D352, T544).
+- **Nie przechodzi, gdy:** linii nie ma przy biegnącym projekcie po twardym końcu, linia ma kropkę albo przyciski,
+  zostaje po końcu projektu, albo w „mniej pytań” albo po „Jest lepiej” przychodzi powiadomienie.
+
+### E11 – import zjazdów z PDF (1.1.0)
+
+#### E11.1 Import zjazdów z Twojego PDF (1.1.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/zjazdy-parse.test.ts`, `tests/unit/zjazdy-pdf.test.ts` (zmyślony PDF),
+  `tests/e2e/zjazdy.spec.ts`. **Tylko Ty:** Twój PDF z uczelni (sprawdzony lokalnie przed wydaniem: 20 dni, 81 zajęć).
+- **Jak sprawdzić:** Kalendarz → „Wczytaj PDF zjazdów” → wybierz harmonogram z uczelni. Przejrzyj listę; jeden dzień
+  odznacz, w jednym wierszu zmień godzinę o +5 min; „Zapisz”; na pytanie o analizę tygodniową odpowiedz, jak chcesz.
+- **Oczekiwany efekt:** lista ma wszystkie przyszłe soboty i niedziele zjazdów z rodzajem (TEAMS – zdalny, sala
+  w budynku – stacjonarny), godzinami i „Przedmiot · forma”; dni minione i dziś są wyszarzone. Po „Zapisz” Kalendarz
+  pokazuje zjazdy w zapisanych dniach (bez odznaczonego), toast „Zapisano N dni zjazdów · Cofnij” (D357, T546).
+- **Nie przechodzi, gdy:** brakuje dnia albo zajęć z PDF, rodzaj dnia nie zgadza się z salami, zapisuje się dzień
+  odznaczony albo coś zapisuje się bez „Zapisz”.
+
+#### E11.2 „Cofnij” i ponowny import (1.1.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/zjazdy.test.ts` („Cofnij”, ponowny import, zmiana po imporcie),
+  `tests/unit/engine/zjazdy-day.test.ts`, `tests/e2e/zjazdy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** po zapisie kliknij „Cofnij” w toaście; wczytaj PDF jeszcze raz i zapisz; w jednym dniu zjazdu
+  w Kalendarzu wybierz „Typ z tygodnia”.
+- **Oczekiwany efekt:** „Cofnij” przywraca dni sprzed importu (typy i plan, także odpowiedź o analizie tygodniowej);
+  ponowny import tego samego pliku mówi „bez zmian” albo zastępuje poprzedni; „Typ z tygodnia” zostawia zwykły dzień bez
+  zajęć z PDF i bez przesuniętego dojazdu (T548).
+- **Nie przechodzi, gdy:** po „Cofnij” zostają zajęcia albo typ zjazdu, ponowny import dubluje zajęcia, albo zwykły dzień
+  ma zajęcia z PDF.
+
+#### E11.3 Dzień zjazdu z importu – plan i dojazd (1.1.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/zjazdy-day.test.ts`, `tests/unit/engine/zjazd-blocks.test.ts` (D359).
+  **Tylko Ty:** prawdziwy dzień zjazdu (21–22.11).
+- **Jak sprawdzić:** rano w dniu zjazdu stacjonarnego (21.11) otwórz plan dnia; w dniu zdalnym (22.11) spójrz na
+  maksimum i koniec pracy po zajęciach.
+- **Oczekiwany efekt:** zajęcia z PDF jako bloki stałe „Przedmiot · forma” w godzinach z PDF (nie da się ich przeciągnąć
+  na osi), zajęć z szablonu nie ma, dojazd kończy się o starcie pierwszych zajęć, a powrót zaczyna po ostatnich; pozostałe
+  bloki szablonu (np. posiłek) są na miejscu. W dniu zjazdu zajęcia zdalne po maksimum przesuwają maksimum i nie są
+  przedłużeniem (D359).
+- **Nie przechodzi, gdy:** zajęcia z szablonu i z PDF są naraz, dojazd stoi w godzinach szablonu, posiłek zniknął,
+  albo zajęcia zdalne po maksimum liczą się jako przedłużenie.

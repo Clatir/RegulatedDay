@@ -8,7 +8,8 @@
  * Until a data folder is open the widget shows one neutral line („Brak folderu danych · Otwórz okno”, D327).
  */
 import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind } from '@shared/api'
-import { blockName, namedOf } from '@shared/blockName'
+import { blockName, nameById } from '@shared/blockName'
+import { namingOf } from '@shared/engine/context'
 import { costText } from '@shared/costText'
 import { recordEdit, sameContentAs } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
@@ -16,9 +17,10 @@ import { engineView, POOL_TEXT, RESERVE_REGEN_MIN, warnDeadlines } from '@shared
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
 import { reserveMessageId } from '@shared/engine/game'
 import { atOf } from '@shared/engine/grid'
-import { modesOf, type ModePrefs } from '@shared/engine/modes'
+import { hardEndCurrent, hardEndMessage, type HardEndNow } from '@shared/engine/hardEnd'
+import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@shared/engine/modes'
 import { suggestRegen } from '@shared/engine/reserve'
-import { timerNow } from '@shared/engine/timer'
+import { timerNow, type TimerNow } from '@shared/engine/timer'
 import { applyVariant, markerCause, planCause, variantCauses, variantsFor, type Variant, type VariantCause } from '@shared/engine/variants'
 import type { NoticeKind } from '@shared/machine'
 import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
@@ -259,7 +261,11 @@ export class WidgetEngine {
       const names = { rd, settings: m.state.settings, routines, requests }
       if (this.pending && this.pending.until <= mono) this.pending = null
       if (this.note && this.note.until <= mono) this.note = null
-      this.nextBlock = timerNow(m.state).next?.id ?? null
+      const timer = timerNow(m.state)
+      const modePrefs = this.d.modePrefs()
+      const modes = modesOf(m.state, timer, m.ctx.events, now, modePrefs)
+      const hardEnd = hardEndCurrent(m.state, timer)
+      this.nextBlock = timer.next?.id ?? null
       this.view = {
         ...engineView({
           ctx: m.ctx,
@@ -269,7 +275,10 @@ export class WidgetEngine {
           now,
           name: (b) => blockName(b, names),
           care: { waterOn: rd.general.modules.water, waterEveryMin: rd.general.waterEveryMin, breakAfterMin: rd.general.breakAfterMin, solitudeAfterMin: rd.general.solitudeAfterMin },
-          modePrefs: this.d.modePrefs(),
+          modePrefs,
+          timer,
+          modes,
+          hardEnd,
           // Only what the windows show (the view goes over IPC – no function in it).
           pending: this.pending ? { button: this.pending.button, text: this.pending.text, left: this.pending.until - mono, ...(this.pending.minutes != null ? { steps: true } : {}) } : null,
           computer: folder.computers[0]?.id,
@@ -282,14 +291,15 @@ export class WidgetEngine {
         note: this.note ? { text: this.note.text, left: this.note.until - mono } : null
       }
       this.names = names
-      this.variantsView(m, now, mono)
+      this.variantsView(m, now, mono, modes)
       this.syncView(folder, now)
+      this.hardEndLast()
       if (this.failing) this.d.log('info', 'widget: dzień znów policzony')
       this.failing = false
       // Notifications are the leader's, and only once settled – after a start or a wake the other computers' logs (their
       // shown notices) come first, so nothing is shown twice (spec „Kilka komputerów”, A8-03). After the view is out: a
       // slow helper (the state of notifications) never holds the bar back.
-      if (folder.leader.iLead && !folder.unavailable && folder.settle.settled(folder.clock.now())) notices = () => this.notices(folder, m, (b) => blockName(b, names), now)
+      if (folder.leader.iLead && !folder.unavailable && folder.settle.settled(folder.clock.now())) notices = () => this.notices(folder, m, (b) => blockName(b, names), now, modes, timer, hardEnd, modePrefs)
     } catch (e) {
       // The day cannot be counted now: a bar without actions says so (never the last view with a stale countdown).
       if (!this.failing) this.d.log('warn', 'widok widgetu nie policzył się', e)
@@ -306,10 +316,9 @@ export class WidgetEngine {
   }
 
   /** The marker and the open panel of variants in the view, and the line „Przestawiono: … · Cofnij” (D313). */
-  private variantsView(m: NonNullable<WidgetEngine['model']>, now: number, mono: number): void {
+  private variantsView(m: NonNullable<WidgetEngine['model']>, now: number, mono: number, modes: Modes): void {
     const v = this.view!
     const date = m.state.grid.date
-    const modes = modesOf(m.state, timerNow(m.state), m.ctx.events, now, this.d.modePrefs())
     const quiet = modes.session || modes.classMode
     if (quiet) this.quietFrom ??= now
     else if (this.quietFrom != null) {
@@ -349,6 +358,12 @@ export class WidgetEngine {
     v.lines = [...v.lines, ...syncLines({ ...folder.syncState(now), battery, backupFailed: this.d.backup?.()?.failed != null }, now, v.day, folder.presence.own.computer)]
   }
 
+  /** The hard end's line stands last of all (after the routine saved, the lines of the computers and the battery). */
+  private hardEndLast(): void {
+    const v = this.view!
+    v.lines = [...v.lines.filter((l) => !l.id.startsWith('hardEnd:')), ...v.lines.filter((l) => l.id.startsWith('hardEnd:'))]
+  }
+
   /** A day not counted now while the folder is away: the changes waiting for it still say so (A3-07). */
   private awayView(folder: DataFolder): void {
     const v = this.view!
@@ -375,7 +390,8 @@ export class WidgetEngine {
       this.say('Plan się mieści – nie ma czego przestawiać.')
       return this.refresh()
     }
-    const nameOf = (b: BlockInfo) => blockName(m.ctx.plan.find((p) => p.id === b.id) ?? namedOf(b), names)
+    const naming = namingOf(m.ctx, m.state.facts)
+    const nameOf = (b: BlockInfo) => nameById(b.id, naming, names)
     this.panel = { cause, variants: variantsFor(m.ctx, m.state, cause, nameOf) }
     return this.refresh()
   }
@@ -452,14 +468,13 @@ export class WidgetEngine {
    * a pool at the reserve (the message of its first descent of the day).
    * Each once: its id goes to the day's log.
    */
-  private async notices(folder: DataFolder, m: Awaited<ReturnType<DataFolder['widgetModel']>>, name: (b: Parameters<typeof blockName>[0]) => string, now: number): Promise<void> {
+  private async notices(folder: DataFolder, m: Awaited<ReturnType<DataFolder['widgetModel']>>, name: (b: Parameters<typeof blockName>[0]) => string, now: number, modes: Modes, t: TimerNow, current: HardEndNow | null, prefs: ModePrefs): Promise<void> {
     const on = this.d.notices()
     const view = this.view
     if (!view || view.hidden || view.night || view.recording) return
     const { state } = m
     const date = state.grid.date
     const shown = new Set(m.ctx.events.filter((e) => e.k === 'notice.shown').map((e) => (e as unknown as { notice: string }).notice))
-    const t = timerNow(state)
     const running = [t.fg, ...t.bg].filter((x) => x != null)
     const inClass = running.some((x) => x!.info.rules.classMode || x!.info.rules.kind === 'commute')
     const out: NotifyIn[] = []
@@ -479,10 +494,25 @@ export class WidgetEngine {
         out.push({ id: `notice:${date}:start5:${b.id}:${span.start}`, title: `${p ? name(p) : b.categoryId} o ${clock}`, body: b.waits ? 'Za 5 min – „Zacznij” czeka w pasku.' : 'Za 5 min.', line: `wait:${b.id}`, day: date })
       }
     }
-    // A project runs now (also one begun after the hard end), or one ran in its minute or it passed in time to explain
-    // after a project (D250) – then only within an hour of it, never hours late (the app started, the notice turned on).
-    const passedRecently = state.hardEnd.passed != null && atOf(state.grid, state.hardEnd.passed) >= now - 60 * MIN
-    if (on.hardEnd && state.hardEnd.passed != null && !state.hardEnd.nothingMissing && state.regen.missingMin > 0 && ((state.hardEnd.message && passedRecently) || t.fg?.info.isProject)) out.push({ id: `notice:${date}:hardEnd:-:${state.hardEnd.passed}`, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
+    // The hard end (D228, D230): the notification comes while it is current as the bar's line is (`hardEndCurrent`: a
+    // project runs, or the time to explain after one waits for your answer), and for the message of the minute it passed
+    // in when a project ended in it with no time to explain after (`hardEndMessage`) – the line does not last then. A
+    // project running comes at any time; the rest within an hour of the pass – never hours late (the app started, the
+    // notice turned on) – counted from the later of the pass and the end of the class mode that lasted in or after its
+    // minute (D355: the mode holds it back; the end comes from the day's facts, so a restart or another leader tells the
+    // same). Never when „mniej pytań” was on in the minute it passed in or is on now (D134: no notification, not a later one).
+    const passed = current?.passed ?? hardEndMessage(state, t)
+    const waiting = new Set<string>()
+    if (on.hardEnd && passed != null && !modes.fewer && !fewerAt(m.ctx.events, state.grid, passed)) {
+      const id = `notice:${date}:hardEnd:-:${passed}`
+      const classEnd = modes.classMode ? null : classModeEnd(state, passed, prefs)
+      const since = classEnd != null && Number.isFinite(classEnd) ? Math.max(passed, classEnd) : passed
+      if (current?.projectRuns || atOf(state.grid, since) >= now - 60 * MIN) {
+        out.push({ id, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
+        // In the class mode it waits (D355), its retry too: it comes after the mode.
+        if (modes.classMode) waiting.add(id)
+      }
+    }
     // In a session or a class the reserve shows only in the colour, with „mniej pytań” its message is a quiet line – no
     // notification in any quiet mode (spec „Model energii”, D326).
     if (on.reserve && m.energy.enabled && !view.quiet) {
@@ -502,8 +532,10 @@ export class WidgetEngine {
     // the same id and time, when it takes them again and you are here, while the notification still holds and its line
     // was not seen meanwhile (A4-07).
     const seen = new Set(m.ctx.events.filter((e) => e.k === 'question.seen').map((e) => (e as unknown as { question: string }).question))
-    const held = out.filter((n) => this.notTaken.has(n.id) && !(n.line && seen.has(n.line)))
-    for (const id of [...this.notTaken]) if (!held.some((n) => n.id === id)) this.notTaken.delete(id)
+    // One waiting for the end of the class mode keeps its retry meanwhile (spec „Powiadomienia i dźwięki”: while current).
+    const kept = out.filter((n) => this.notTaken.has(n.id) && !(n.line && seen.has(n.line)))
+    const held = kept.filter((n) => !waiting.has(n.id))
+    for (const id of [...this.notTaken]) if (!kept.some((n) => n.id === id)) this.notTaken.delete(id)
     for (const id of [...this.retried]) if (!out.some((n) => n.id === id)) this.retried.delete(id)
     if (held.length && (this.d.present?.() ?? true) && takesNotifications(await notifState())) {
       for (const n of held) {
@@ -514,7 +546,7 @@ export class WidgetEngine {
         this.d.log('info', ok ? `powiadomienie ponowione: ${n.id}` : `ponowienie powiadomienia odrzucone: ${n.id}`)
       }
     }
-    const fresh = out.filter((n) => !shown.has(n.id))
+    const fresh = out.filter((n) => !shown.has(n.id) && !waiting.has(n.id))
     if (!fresh.length) return
     const stateNow = await notifState()
     for (const n of fresh) {

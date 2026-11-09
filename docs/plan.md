@@ -36,83 +36,91 @@ Ciągi A–E zakończone wydaniem 1.0.0 (28.10.2026) → `docs/archiwum/plan-E0-
 | 2 | Odbiór E3–E5 (44 punkty) | różnie | 4–8 h | 27.10: z ok. 10 punktów 2 nie przeszły, 4–5 próśb o zmianę → 3–6 błędów, 2–4 zmiany, 2–3 wydania 0.11.x |
 | 3.8 | Odbiór ekranów E6 | różnie | 2–4 h | 2–3 wieczory z rytuałem |
 | 4.9 | Odbiór ekranów gry | różnie | 2–4 h | |
-| 4.11 | Usunięty zaczęty blok sesji („Usuń”, D336) ma na osi, w rytuale i CSV nazwę kategorii zamiast „Sesja NY” (D338) – `block.start` nie niesie `origin`/`sourceId` | Logika | 0,5–1 h | po ciągu F |
-| 4.10 | Linia twardego końca w pasku (spec „Twardy koniec”: linia tekstu bez kropki obok powiadomienia, cicha ikona w „mniej pytań”) – brak w kodzie od 1.0.0, wyszło w H1 | Całość | 1–1,5 h | po ciągu F; tekst jak powiadomienie „Twardy koniec projektów – …” albo do Twojej decyzji |
+
+## Ciąg I – 4.11, 4.10, potem E10–E12 (D353)
+
+Bez pauz do „dalej” (D317); brama – pakiet pytań o wygląd E10–E12 – odpowiedziana 9.11 (D356–D359). Główna sesja
+Opus 5.5 · high. Kolejność (T545): E11 najpierw (najbliższy zjazd stacjonarny 21–22.11), potem E10, E12.
+
+| # | Zadanie | Rodzaj | Wersja | Wykonawca · przegląd | Szacunek |
+| --- | --- | --- | --- | --- | --- |
+| E10 | Horyzont (D356): strona „Tydzień” (podgląd), cele miesięczne – studia, regeneracja, dyscyplina tradingowa | Całość | 1.2.0 | `wykonawca-opus` (logika, dane) + `wykonawca-sonnet` (ekrany) · xhigh / high | 8–12 h |
+| E12 | Statystyki (D358): strona „Statystyki”, cztery sekcje, tylko dni zamrożone | Interfejs | 1.3.0 | `wykonawca-sonnet` · high | 5–8 h |
 
 ## Po 1.0
 
-| # | Zadanie | Rodzaj | Model | Szacunek | Kiedy |
+| # | Zadanie | Rodzaj | Wykonawca · przegląd | Szacunek | Kiedy |
 | --- | --- | --- | --- | --- | --- |
-| K | Przegląd kalibracji: długości, koszty, tolerancja, minimum, punktacja – nowe wartości od daty przeglądu | Logika i Twoje decyzje | Opus 5.5 · xhigh | 2–3 h | po 14 dniach z zamkniętym rytuałem, najpóźniej 28 dni kalendarzowych od pierwszego |
-| E9–E12 | Ciągłe uczenie się kosztów i czasu, tydzień i cele, import PDF zjazdów, statystyki | Całość | Opus 5.5 · xhigh | 25–45 h (zgrubnie) | według osobnego planu po 1.0 |
+| K | Przegląd kalibracji: długości, koszty, tolerancja, minimum, punktacja – nowe wartości od daty przeglądu | Logika i Twoje decyzje | główna sesja Opus 5.5 · xhigh (analiza i pytania), wartości `wykonawca-opus` · xhigh | 2–3 h | po 14 dniach z zamkniętym rytuałem, najpóźniej 28 dni kalendarzowych od pierwszego; warunek sprawdzam na końcu ciągu I |
+| E9 | Ciągłe uczenie się kosztów i czasu (propozycje korekty kosztów kategorii, mnożniki czasu) | Logika | `wykonawca-opus` · xhigh | według planu E9 | po K (specyfikacja „Etap 2”) |
 
 ## Rozszerzenia do pełnej funkcjonalności (parzystość z Google Calendar, Notion, Sunsama)
 
-Plan wdrożenia 14 kluczowych funkcji niwelujących braki operacyjne względem Google Calendar, Notion i hybrydowych narzędzi time-blockingu. Zadania pogrupowane w 4 zwarte bloki wykonawcze – po jednym bloku na każdy poziom z aktualnej oferty modeli firmy Anthropic (**Claude Fable 5.1**, **Claude Opus 5.5**, **Claude Sonnet 5.5**, **Claude Haiku 5.5**) wraz z przypisaniem do wykonawców z `.claude/agents/` (D349).
+Plan 14 funkcji niwelujących braki względem Google Calendar, Notion i narzędzi time-blockingu (dopisany 7.11), bez
+decyzji o starcie – każde zadanie przed startem potrzebuje decyzji D o wyglądzie i zachowaniu. Bloki są tematyczne;
+wykonawca i poziom przeglądu według ryzyka (D354, D351): silnik dnia, folder danych, migracje formatu i pasek pulpitu –
+`wykonawca-opus` albo przegląd xhigh; ekrany na gotowej logice – `wykonawca-sonnet`, przegląd high; Haiku nie pisze
+kodu rozszerzeń. Główna sesja Opus 5.5 · high zleca, sprawdza, przegląda i scala.
 
-### Blok 1: Architektura bazodanowa i optymalizacja NP-trudna – Claude Fable 5.1 · xhigh (`claude-fable-5-1`)
-Najpotężniejszy publicznie dostępny model Anthropic, przeznaczony do głębokiej przebudowy architektury systemu i wielowymiarowych algorytmów optymalizacyjnych z więzami.
+### Blok 1: Architektura danych i optymalizacja dnia
 
-| # | Zadanie i rozwiązanie techniczne | Rodzaj | Wykonawca / Model | Szacunek | Gotowe, gdy |
+| # | Zadanie i rozwiązanie techniczne | Rodzaj | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
 | --- | --- | --- | --- | --- | --- |
-| FBL1 | **3.2 Baza danych, właściwości niestandardowe i widoki (Databases & Custom Properties):** Wprowadzenie magazynu SQLite (w procesie głównym Electrona) jako silnika relacji i zapytań obok plików JSON. Model definiowania dynamicznych atrybutów rekordów (`PropertyDef`: tekst, wybór jedno/wielokrotny, liczba, data, checkbox, relacja). Silnik widoków: Tabela, Tablica Kanban (grupowanie po polu wyboru np. status), Lista. | Całość | Claude Fable 5.1 · xhigh (`claude-fable-5-1`) | 10–15 h | Użytkownik może dodawać dowolne pola do zadań/projektów; przełączanie widoków Tabela / Kanban / Lista działa płynnie z zachowaniem spójności danych i synchronizacji OneDrive. |
-| FBL2 | **5.1 Dynamiczne przepakowywanie dnia (Dynamic Auto-Rescheduling):** Algorytm optymalizacyjny `repackDaySchedule`: automatyczne przesuwanie w dół kolejnych elastycznych bloków w przypadku przeciągnięcia zadania lub wstawienia nagłego bloku. Respektowanie twardych granic: bloki stałe (spotkania, wykłady), maksima dnia, bufor przejścia, minimalna regeneracja. Podgląd propozycji zmian z opcją „Zatwierdź” i natychmiastowym „Cofnij”. | Logika | Claude Fable 5.1 · xhigh (`claude-fable-5-1`) | 7–10 h | Poślizg w zadaniu generuje optymalny, bezkolizyjny rozkład reszty dnia; bloki stałe pozostają nienaruszone; twardy koniec projektów jest bezwzględnie chroniony. |
+| FBL1 | **3.2 Baza danych, właściwości niestandardowe i widoki (Databases & Custom Properties):** Wprowadzenie magazynu SQLite (w procesie głównym Electrona) jako silnika relacji i zapytań obok plików JSON. Model definiowania dynamicznych atrybutów rekordów (`PropertyDef`: tekst, wybór jedno/wielokrotny, liczba, data, checkbox, relacja). Silnik widoków: Tabela, Tablica Kanban (grupowanie po polu wyboru np. status), Lista. | Całość | najpierw decyzja o architekturze (SQLite w folderze OneDrive dwóch komputerów – granica danych): główna sesja Opus 5.5 · max, druga opinia Fable 5.1; kod `wykonawca-opus` · xhigh | 10–15 h | Użytkownik może dodawać dowolne pola do zadań/projektów; przełączanie widoków Tabela / Kanban / Lista działa płynnie z zachowaniem spójności danych i synchronizacji OneDrive. |
+| FBL2 | **5.1 Dynamiczne przepakowywanie dnia (Dynamic Auto-Rescheduling):** Algorytm optymalizacyjny `repackDaySchedule`: automatyczne przesuwanie w dół kolejnych elastycznych bloków w przypadku przeciągnięcia zadania lub wstawienia nagłego bloku. Respektowanie twardych granic: bloki stałe (spotkania, wykłady), maksima dnia, bufor przejścia, minimalna regeneracja. Podgląd propozycji zmian z opcją „Zatwierdź” i natychmiastowym „Cofnij”. | Logika | `wykonawca-opus` · xhigh | 7–10 h | Poślizg w zadaniu generuje optymalny, bezkolizyjny rozkład reszty dnia; bloki stałe pozostają nienaruszone; twardy koniec projektów jest bezwzględnie chroniony. |
 
-*Razem Blok 1 (Claude Fable 5.1 · xhigh): 17–25 h (2 zadania)*
+*Razem Blok 1: 17–25 h (2 zadania)*
 
 ---
 
-### Blok 2: Silnik dnia, reguły cykliczne i model energii – Claude Opus 5.5 · xhigh (`claude-opus-5-5` / `wykonawca-opus`)
-Domyślny model do ciężkiej pracy inżynieryjnej i wieloetapowego kodowania agentowego, wymagającego rygoru deterministycznego i nienaruszalności reguł budżetu czasu/energii.
+### Blok 2: Silnik dnia, reguły cykliczne i model energii
 
-| # | Zadanie i rozwiązanie techniczne | Rodzaj | Wykonawca / Model | Szacunek | Gotowe, gdy |
+| # | Zadanie i rozwiązanie techniczne | Rodzaj | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
 | --- | --- | --- | --- | --- | --- |
-| OPS1 | **2.3 Ograniczony model powtarzalności (RFC 5545 / RRULE):** Implementacja pełnego silnika reguł powtarzalności RRULE (częstotliwości: codzienne, tygodniowe, miesięczne, interwały, reguły BYDAY/BYMONTHDAY, liczniki COUNT, data końcowa UNTIL). Obsługa wyjątków w serii (`EXDATE`, modyfikacja pojedynczego wystąpienia bez rozbijania serii). Integracja z silnikiem wyliczania dnia (`day.ts`, `forecast.ts`). | Logika | `wykonawca-opus` – Claude Opus 5.5 · xhigh (`claude-opus-5-5`) | 5–8 h | Każda reguła RRULE poprawnie generuje instancje bloków na osi czasu; modyfikacja jednego wystąpienia tworzy precyzyjny wyjątek; testy zgodności z RFC 5545 przechodzą. |
-| OPS2 | **4.2 Wypaczona koncepcja Backlogu – Uniwersalny Task Inbox:** Przebudowa architektury kolejki próśb (`requests`) na uniwersalny menedżer zadań `TaskInbox`. Rozdzielenie zadań własnych od próśb zewnętrznych (`origin: personal / request`). Widok organizera: *Inbox*, *Dziś*, *W tym tygodniu*, *Kiedyś/Może*. Przeciąganie zadań z backlogu wprost na oś czasu z automatycznym przekształceniem w blok planu. | Całość | `wykonawca-opus` – Claude Opus 5.5 · xhigh (`claude-opus-5-5`) | 6–9 h | Możliwość rejestrowania zadań osobistych niezależnie od osób; pełna zgodność wsteczna z dotychczasowymi plikami próśb; drag & drop z backlogu na timeline tworzy poprawny blok. |
-| OPS3 | **5.3 Inteligentne bufory ochronne (Smart Habits & Decompression):** Algorytm prognozowania i dynamicznego wstawiania mikro-buforów odpoczynku (10–15 min) bezpośrednio po blokach o wysokim koszcie psychicznym/emocjonalnym (zajęcia, spotkania, intensywne sesje pracy). Automatyczne sprzężenie z pulami energii (spadek puli bodźców/emocji poniżej progu rezerwy automatycznie wydłuża bufor). | Logika | `wykonawca-opus` – Claude Opus 5.5 · xhigh (`claude-opus-5-5`) | 4–6 h | Po wyczerpującym bloku silnik automatycznie proponuje lub wstawia bufor dekompresji; prognoza energii uwzględnia regenerację bufora; brak kolizji z blokami stałymi. |
+| OPS1 | **2.3 Ograniczony model powtarzalności (RFC 5545 / RRULE):** Implementacja pełnego silnika reguł powtarzalności RRULE (częstotliwości: codzienne, tygodniowe, miesięczne, interwały, reguły BYDAY/BYMONTHDAY, liczniki COUNT, data końcowa UNTIL). Obsługa wyjątków w serii (`EXDATE`, modyfikacja pojedynczego wystąpienia bez rozbijania serii). Integracja z silnikiem wyliczania dnia (`day.ts`, `forecast.ts`). | Logika | `wykonawca-opus` · xhigh | 5–8 h | Każda reguła RRULE poprawnie generuje instancje bloków na osi czasu; modyfikacja jednego wystąpienia tworzy precyzyjny wyjątek; testy zgodności z RFC 5545 przechodzą. |
+| OPS2 | **4.2 Wypaczona koncepcja Backlogu – Uniwersalny Task Inbox:** Przebudowa architektury kolejki próśb (`requests`) na uniwersalny menedżer zadań `TaskInbox`. Rozdzielenie zadań własnych od próśb zewnętrznych (`origin: personal / request`). Widok organizera: *Inbox*, *Dziś*, *W tym tygodniu*, *Kiedyś/Może*. Przeciąganie zadań z backlogu wprost na oś czasu z automatycznym przekształceniem w blok planu. | Całość | `wykonawca-opus` (model danych, migracja próśb) + `wykonawca-sonnet` (ekrany) · xhigh | 6–9 h | Możliwość rejestrowania zadań osobistych niezależnie od osób; pełna zgodność wsteczna z dotychczasowymi plikami próśb; drag & drop z backlogu na timeline tworzy poprawny blok. |
+| OPS3 | **5.3 Inteligentne bufory ochronne (Smart Habits & Decompression):** Algorytm prognozowania i dynamicznego wstawiania mikro-buforów odpoczynku (10–15 min) bezpośrednio po blokach o wysokim koszcie psychicznym/emocjonalnym (zajęcia, spotkania, intensywne sesje pracy). Automatyczne sprzężenie z pulami energii (spadek puli bodźców/emocji poniżej progu rezerwy automatycznie wydłuża bufor). | Logika | `wykonawca-opus` · xhigh | 4–6 h | Po wyczerpującym bloku silnik automatycznie proponuje lub wstawia bufor dekompresji; prognoza energii uwzględnia regenerację bufora; brak kolizji z blokami stałymi. |
 
-*Razem Blok 2 (Claude Opus 5.5 · xhigh): 15–23 h (3 zadania)*
+*Razem Blok 2: 15–23 h (3 zadania)*
 
 ---
 
-### Blok 3: Interfejs, widoki czasowe, edytor i wyszukiwanie – Claude Sonnet 5.5 · high (`claude-sonnet-5-5` / `wykonawca-sonnet`)
-Główny model roboczy łączący szybkość z wysoką inteligencją w budowie zaawansowanych komponentów React 19, edytorów tekstu, obsługi plików i ergonomii nawigacji.
+### Blok 3: Interfejs, widoki czasowe, edytor i wyszukiwanie
 
-| # | Zadanie i rozwiązanie techniczne | Rodzaj | Wykonawca / Model | Szacunek | Gotowe, gdy |
+| # | Zadanie i rozwiązanie techniczne | Rodzaj | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
 | --- | --- | --- | --- | --- | --- |
-| SNT1 | **2.1 Brak kluczowych widoków czasowych (Tydzień, 3 Dni, Agenda, Miesiąc z blokami):** Implementacja widoku wielodniowego `MultiDayTimeline` (kolumny 7-dniowe i 3-dniowe ze wspólną osią godzinową i krzywymi energii). Zwarta lista harmonogramu (Agenda View). Wzbogacenie komórek siatki miesiąca (`MonthGrid`) o miniaturowe paski zaplanowanych bloków i wskaźnik zagęszczenia czasu. Płynny drag & drop między dniami. | Interfejs | `wykonawca-sonnet` – Claude Sonnet 5.5 · high (`claude-sonnet-5-5`) | 6–9 h | Użytkownik może przełączać widok między dniem, 3 dniami, tygodniem, agendą i miesiącem; przeciąganie klocków między dniami aktualizuje odpowiednie pliki dni. |
-| SNT2 | **2.4 Brak wielokalendarzowości (Multi-Calendar / Layers):** Wprowadzenie pojęcia warstw kalendarza (`CalendarLayer`: praca, osobiste, rodzina, uczelnia). Rozszerzenie bloku o pole `calendarId`. Panel boczny z przełącznikami widoczności warstw (toggle visibility). Niezależne filtrowanie widoczności bloków na osi czasu, w widoku tygodnia i miesiąca. | Całość | `wykonawca-sonnet` – Claude Sonnet 5.5 · high (`claude-sonnet-5-5`) | 4–6 h | Użytkownik może tworzyć kalendarze, przypisywać do nich bloki i jednym kliknięciem ukrywać/pokazywać wybrane warstwy w kalendarzu bez utraty danych. |
-| SNT3 | **3.1 Brak edytora tekstu sformatowanego (Rich Text / Markdown):** Zastąpienie jednolinijkowego pola `note` pełnym, lekkim edytorem Markdown w panelu edycji bloku (`BlockEditor`) oraz w szczegółach zadań. Wsparcie dla nagłówków H1-H3, list wypunktowanych, pogrubienia, kursywy, bloków kodu, cytatów oraz to-do checkboxów. Zgodność z ciemnym motywem pokoju lo-fi. | Interfejs | `wykonawca-sonnet` – Claude Sonnet 5.5 · high (`claude-sonnet-5-5`) | 4–6 h | Notatki w blokach wspierają formatowanie Markdown i skróty klawiszowe; dane zapisują się asynchronicznie bez utraty fokusu i renderują z pełnym stylem. |
-| SNT4 | **3.4 Brak załączników, plików i multimediów:** Obsługa załączników w blokach i zadaniach: przeciąganie plików (`drag & drop`), zapisywanie w podfolderze `attachments/<id>/`. Obsługa klikalnych linków zewnętrznych (URL do GitHuba, Figmy, Notion, Dysku) z automatycznym pobieraniem tytułu/ikony i otwieraniem w domyślnej przeglądarce (`shell.openExternal`). | Całość | `wykonawca-sonnet` – Claude Sonnet 5.5 · high (`claude-sonnet-5-5`) | 3,5–5 h | Przeciągnięcie pliku do bloku zapisuje załącznik i wyświetla miniaturę/ikonę; kliknięcie linku zewnętrznego otwiera właściwą aplikację/przeglądarkę. |
-| SNT5 | **4.1 Brak podzadań i list kontrolnych (Subtasks & Checklists):** Rozszerzenie struktury bloku i zadania o listę kroków `subtasks: Array<{ id, title, done, order }>`. Interfejs listy w `BlockEditor`: szybkie dodawanie na Enter, zmiana kolejności, odhaczanie checkboxów. Wyświetlanie postępu (np. `3/5 ✓`) na kafelku bloku na osi czasu oraz bezpośrednia integracja z paskiem pulpitu (`DesktopBar`). | Całość | `wykonawca-sonnet` – Claude Sonnet 5.5 · high (`claude-sonnet-5-5`) | 3–4,5 h | Każdy blok pracy może zawierać checklistę; kroki można odhaczać zarówno w oknie głównym, jak i bezpośrednio na pasku pulpitu podczas trwania timera. |
-| SNT6 | **Globalne wyszukiwanie (Ctrl+K / Spotlight / Command Palette):** Szybkie okno wyszukiwarki wywoływane globalnym skrótem w aplikacji `Ctrl+K` / `Ctrl+P`. Wyszukiwanie pełnotekstowe w czasie rzeczywistym po tytułach bloków, notatkach Markdown, zadaniach backlogu, rutynach i szablonach. Nawigacja klawiaturą (góra/dół/Enter) ze skokiem do wybranego dnia lub rekordu. | Interfejs | `wykonawca-sonnet` – Claude Sonnet 5.5 · high (`claude-sonnet-5-5`) | 4–6 h | Naciśnięcie `Ctrl+K` otwiera paletę; wpisanie frazy błyskawicznie filtruje rekordy; wybór wyniku nawiguje bezpośrednio do widoku i zaznacza element. |
+| SNT1 | **2.1 Brak kluczowych widoków czasowych (Tydzień, 3 Dni, Agenda, Miesiąc z blokami):** Implementacja widoku wielodniowego `MultiDayTimeline` (kolumny 7-dniowe i 3-dniowe ze wspólną osią godzinową i krzywymi energii). Zwarta lista harmonogramu (Agenda View). Wzbogacenie komórek siatki miesiąca (`MonthGrid`) o miniaturowe paski zaplanowanych bloków i wskaźnik zagęszczenia czasu. Płynny drag & drop między dniami. | Interfejs | `wykonawca-sonnet` · high; przenoszenie bloku między plikami dni – `wykonawca-opus` · xhigh | 6–9 h | Użytkownik może przełączać widok między dniem, 3 dniami, tygodniem, agendą i miesiącem; przeciąganie klocków między dniami aktualizuje odpowiednie pliki dni. |
+| SNT2 | **2.4 Brak wielokalendarzowości (Multi-Calendar / Layers):** Wprowadzenie pojęcia warstw kalendarza (`CalendarLayer`: praca, osobiste, rodzina, uczelnia). Rozszerzenie bloku o pole `calendarId`. Panel boczny z przełącznikami widoczności warstw (toggle visibility). Niezależne filtrowanie widoczności bloków na osi czasu, w widoku tygodnia i miesiąca. | Całość | `wykonawca-sonnet` · xhigh (pole `calendarId` – migracja formatu) | 4–6 h | Użytkownik może tworzyć kalendarze, przypisywać do nich bloki i jednym kliknięciem ukrywać/pokazywać wybrane warstwy w kalendarzu bez utraty danych. |
+| SNT3 | **3.1 Brak edytora tekstu sformatowanego (Rich Text / Markdown):** Zastąpienie jednolinijkowego pola `note` pełnym, lekkim edytorem Markdown w panelu edycji bloku (`BlockEditor`) oraz w szczegółach zadań. Wsparcie dla nagłówków H1-H3, list wypunktowanych, pogrubienia, kursywy, bloków kodu, cytatów oraz to-do checkboxów. Zgodność z ciemnym motywem pokoju lo-fi. | Interfejs | `wykonawca-sonnet` · high | 4–6 h | Notatki w blokach wspierają formatowanie Markdown i skróty klawiszowe; dane zapisują się asynchronicznie bez utraty fokusu i renderują z pełnym stylem. |
+| SNT4 | **3.4 Brak załączników, plików i multimediów:** Obsługa załączników w blokach i zadaniach: przeciąganie plików (`drag & drop`), zapisywanie w podfolderze `attachments/<id>/`. Obsługa klikalnych linków zewnętrznych (URL do GitHuba, Figmy, Notion, Dysku) z automatycznym pobieraniem tytułu/ikony i otwieraniem w domyślnej przeglądarce (`shell.openExternal`). | Całość | `wykonawca-opus` (zapis w folderze danych, sprawdzenie adresu przed `shell.openExternal`) + `wykonawca-sonnet` (ekran) · xhigh | 3,5–5 h | Przeciągnięcie pliku do bloku zapisuje załącznik i wyświetla miniaturę/ikonę; kliknięcie linku zewnętrznego otwiera właściwą aplikację/przeglądarkę. |
+| SNT5 | **4.1 Brak podzadań i list kontrolnych (Subtasks & Checklists):** Rozszerzenie struktury bloku i zadania o listę kroków `subtasks: Array<{ id, title, done, order }>`. Interfejs listy w `BlockEditor`: szybkie dodawanie na Enter, zmiana kolejności, odhaczanie checkboxów. Wyświetlanie postępu (np. `3/5 ✓`) na kafelku bloku na osi czasu oraz bezpośrednia integracja z paskiem pulpitu (`DesktopBar`). | Całość | `wykonawca-sonnet` · xhigh (pasek pulpitu) | 3–4,5 h | Każdy blok pracy może zawierać checklistę; kroki można odhaczać zarówno w oknie głównym, jak i bezpośrednio na pasku pulpitu podczas trwania timera. |
+| SNT6 | **Globalne wyszukiwanie (Ctrl+K / Spotlight / Command Palette):** Szybkie okno wyszukiwarki wywoływane globalnym skrótem w aplikacji `Ctrl+K` / `Ctrl+P`. Wyszukiwanie pełnotekstowe w czasie rzeczywistym po tytułach bloków, notatkach Markdown, zadaniach backlogu, rutynach i szablonach. Nawigacja klawiaturą (góra/dół/Enter) ze skokiem do wybranego dnia lub rekordu. | Interfejs | `wykonawca-sonnet` · high | 4–6 h | Naciśnięcie `Ctrl+K` otwiera paletę; wpisanie frazy błyskawicznie filtruje rekordy; wybór wyniku nawiguje bezpośrednio do widoku i zaznacza element. |
 
-*Razem Blok 3 (Claude Sonnet 5.5 · high): 24,5–36,5 h (6 zadań)*
+*Razem Blok 3: 24,5–36,5 h (6 zadań)*
 
 ---
 
-### Blok 4: Schematy danych, metadane i priorytetyzacja – Claude Haiku 5.5 · high (`claude-haiku-5-5` / `wykonawca-haiku`)
-Najszybszy i najbardziej efektywny kosztowo model z generacji 5.5, zoptymalizowany pod kątem dobrze zdefiniowanych schematów walidacyjnych, klasyfikacji i izolowanych komponentów.
+### Blok 4: Schematy danych, metadane i priorytetyzacja
 
-| # | Zadanie i rozwiązanie techniczne | Rodzaj | Wykonawca / Model | Szacunek | Gotowe, gdy |
+| # | Zadanie i rozwiązanie techniczne | Rodzaj | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
 | --- | --- | --- | --- | --- | --- |
-| HKU1 | **2.5 Brak wydarzeń całodniowych i wielodniowych (All-day / Multi-day events):** Model danych `AllDayEvent` (`id`, `title`, `startDate`, `endDate`, `calendarId`, `color`, `note`). Dedykowany pas nagłówkowy (All-Day Bar) nad siatką godzinową w widoku dnia i tygodnia. Wyłączenie wydarzeń całodniowych z bilansu minut pracy i regeneracji. | Całość | `wykonawca-haiku` – Claude Haiku 5.5 · high (`claude-haiku-5-5`) | 2–3 h | Zdarzenia całodniowe wyświetlają się w belce nad godzinami; wielodniowe wyjazdy/urlopy rozciągają się poprawnie przez wiele kolumn; budżet minutowy pozostaje nienaruszony. |
-| HKU2 | **4.3 Rozróżnienie Due Date (Termin ostateczny) vs Scheduled Date (Data wykonania):** Dodanie do schematu zadania pól `dueDate: string | null` oraz `scheduledDate: string | null`. Znaczniki terminów na liście zadań (np. badge „Termin jutro”, „Po terminie”). Sekcja w planowaniu porannym informująca o zbliżających się deadlinach zadań, które nie mają jeszcze przydzielonego bloku na osi czasu. | Całość | `wykonawca-haiku` – Claude Haiku 5.5 · high (`claude-haiku-5-5`) | 2–3 h | Zadania w backlogu mają niezależną datę ostateczną i datę planowanego wykonania; widok poranny ostrzega o zadaniach zagrożonych przekroczeniem terminu. |
-| HKU3 | **4.4 Brak priorytetyzacji i macierzy Eisenhowera:** Wprowadzenie pola priorytetu `priority: 'urgent_important' | 'important' | 'urgent' | 'neither'` (lub P1–P4). Wizualne oznaczenia kolorystyczne na kafelkach i liście. Widok siatki 2x2 macierzy Eisenhowera z możliwością filtrowania i przeciągania zadań między ćwiartkami. Ostrzeżenie w silniku dnia przy braku zadań P1 w planie. | Całość | `wykonawca-haiku` – Claude Haiku 5.5 · high (`claude-haiku-5-5`) | 2,5–3,5 h | Zadania mają przypisany priorytet; widok macierzy pozwala zarządzać priorytetami; filtry na liście zadań poprawnie grupują elementy według ważności i pilności. |
+| HKU1 | **2.5 Brak wydarzeń całodniowych i wielodniowych (All-day / Multi-day events):** Model danych `AllDayEvent` (`id`, `title`, `startDate`, `endDate`, `calendarId`, `color`, `note`). Dedykowany pas nagłówkowy (All-Day Bar) nad siatką godzinową w widoku dnia i tygodnia. Wyłączenie wydarzeń całodniowych z bilansu minut pracy i regeneracji. | Całość | `wykonawca-sonnet`; wyłączenie z bilansu minut – `wykonawca-opus` · xhigh | 2–3 h | Zdarzenia całodniowe wyświetlają się w belce nad godzinami; wielodniowe wyjazdy/urlopy rozciągają się poprawnie przez wiele kolumn; budżet minutowy pozostaje nienaruszony. |
+| HKU2 | **4.3 Rozróżnienie Due Date (Termin ostateczny) vs Scheduled Date (Data wykonania):** Dodanie do schematu zadania pól `dueDate: string | null` oraz `scheduledDate: string | null`. Znaczniki terminów na liście zadań (np. badge „Termin jutro”, „Po terminie”). Sekcja w planowaniu porannym informująca o zbliżających się deadlinach zadań, które nie mają jeszcze przydzielonego bloku na osi czasu. | Całość | `wykonawca-sonnet` · high (xhigh przy migracji próśb); po OPS2 | 2–3 h | Zadania w backlogu mają niezależną datę ostateczną i datę planowanego wykonania; widok poranny ostrzega o zadaniach zagrożonych przekroczeniem terminu. |
+| HKU3 | **4.4 Brak priorytetyzacji i macierzy Eisenhowera:** Wprowadzenie pola priorytetu `priority: 'urgent_important' | 'important' | 'urgent' | 'neither'` (lub P1–P4). Wizualne oznaczenia kolorystyczne na kafelkach i liście. Widok siatki 2x2 macierzy Eisenhowera z możliwością filtrowania i przeciągania zadań między ćwiartkami. Ostrzeżenie w silniku dnia przy braku zadań P1 w planie. | Całość | `wykonawca-sonnet` · high; ostrzeżenie w silniku dnia – `wykonawca-opus` · xhigh | 2,5–3,5 h | Zadania mają przypisany priorytet; widok macierzy pozwala zarządzać priorytetami; filtry na liście zadań poprawnie grupują elementy według ważności i pilności. |
 
-*Razem Blok 4 (Claude Haiku 5.5 · high): 6,5–9,5 h (3 zadania)*
+*Razem Blok 4: 6,5–9,5 h (3 zadania)*
 
 ---
 
-### Podsumowanie czasowe i zasobowe rozszerzeń
+### Podsumowanie rozszerzeń
 
-| Blok | Zakres / Charakterystyka | Rekomendowany model (Anthropic 2026) | API ID | Liczba zadań | Szacunek łączny |
+| Blok | Zakres | Wykonawcy (D354) | Przegląd | Zadania | Szacunek |
 | :--- | :--- | :--- | :--- | :---: | :---: |
-| **Blok 1** | Architektura bazodanowa SQLite, widoki danych, optymalizator harmonogramu | **Claude Fable 5.1 · xhigh** | `claude-fable-5-1` | 2 | **17–25 h** |
-| **Blok 2** | Silnik dnia, reguły RRULE (RFC 5545), przebudowa Backlogu, bufory energii | **Claude Opus 5.5 · xhigh** (`wykonawca-opus`) | `claude-opus-5-5` | 3 | **15–23 h** |
-| **Blok 3** | Widoki czasowe, wielokalendarzowość, edytor Markdown, załączniki, subtaski, Ctrl+K | **Claude Sonnet 5.5 · high** (`wykonawca-sonnet`) | `claude-sonnet-5-5` | 6 | **24,5–36,5 h** |
-| **Blok 4** | Wydarzenia całodniowe, rozróżnienie dat Due/Scheduled, priorytety Eisenhowera | **Claude Haiku 5.5 · high** (`wykonawca-haiku`) | `claude-haiku-5-5` | 3 | **6,5–9,5 h** |
-| **ŁĄCZNIE** | **Pełna funkcjonalność i parzystość z Google Calendar / Notion / Sunsama** | **Generacja Claude 5.1 / 5.5** | – | **14** | **63–94 h** |
+| **Blok 1** | Architektura danych (SQLite), widoki danych, przepakowywanie dnia | `wykonawca-opus`; FBL1 najpierw decyzja o architekturze (Opus 5.5 · max, druga opinia Fable 5.1) | xhigh | 2 | **17–25 h** |
+| **Blok 2** | Silnik dnia, RRULE (RFC 5545), Task Inbox, bufory energii | `wykonawca-opus`; ekrany OPS2 – `wykonawca-sonnet` | xhigh | 3 | **15–23 h** |
+| **Blok 3** | Widoki czasowe, warstwy kalendarza, Markdown, załączniki, podzadania, Ctrl+K | `wykonawca-sonnet`; zapis plików dni (SNT1) i załączników (SNT4) – `wykonawca-opus` | high; SNT1 (zapis dni), SNT2, SNT4, SNT5 – xhigh | 6 | **24,5–36,5 h** |
+| **Blok 4** | Wydarzenia całodniowe, termin i data wykonania, priorytety | `wykonawca-sonnet`; części w silniku dnia – `wykonawca-opus` | high; HKU1 i silnik – xhigh | 3 | **6,5–9,5 h** |
+| **Łącznie** | Parzystość z Google Calendar, Notion i Sunsama | – | – | **14** | **63–94 h** |
 
 ## Gotowe, gdy
 
