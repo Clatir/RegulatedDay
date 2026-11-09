@@ -193,8 +193,27 @@ export function blockEvidence(ctx: DayContext, state: DayState): BlockEvidence[]
  * „odlicz”. The real time is without pauses.
  */
 export function accurateBlocks(ctx: DayContext, state: DayState, rules: GameRules = GAME_RULES): string[] {
+  return estimatedBlocks(ctx, state, rules)
+    .filter((b) => b.accurate)
+    .map((b) => b.id)
+}
+
+/** A block the estimate of the day can be judged on: its plan, its real time and whether it came within the tolerance. */
+export interface EstimatedBlock {
+  id: string
+  category: string
+  plannedMin: number
+  realMin: number
+  accurate: boolean
+}
+
+/**
+ * The blocks „Trafne szacowanie” judges – every one that meets all its conditions but the tolerance (the statistics
+ * count them: how many were judged, how many came within it); `accurateBlocks` are those within it.
+ */
+export function estimatedBlocks(ctx: DayContext, state: DayState, rules: GameRules = GAME_RULES): EstimatedBlock[] {
   const plan = new Map(ctx.plan.map((b) => [b.id, b]))
-  const out: string[] = []
+  const out: EstimatedBlock[] = []
   for (const x of blockEvidence(ctx, state)) {
     const p = x.f.planned!
     if (p.fixed || p.durationMin < rules.accuracy.minMin || (x.rules.cls !== 'work' && x.rules.cls !== 'life')) continue
@@ -202,7 +221,7 @@ export function accurateBlocks(ctx: DayContext, state: DayState, rules: GameRule
     if (!x.clickStart || !x.realEnd || !x.done || (!x.away && x.start.c !== x.end.c) || x.absenceUnanswered) continue
     const real = ranMinutes(x.f, x.f.endedAt!)
     const tolerance = Math.max(rules.accuracy.floorMin, (p.durationMin * rules.accuracy.pct) / 100)
-    if (Math.abs(real - p.durationMin) <= tolerance) out.push(x.f.id)
+    out.push({ id: x.f.id, category: p.categoryId, plannedMin: p.durationMin, realMin: real, accurate: Math.abs(real - p.durationMin) <= tolerance })
   }
   return out
 }

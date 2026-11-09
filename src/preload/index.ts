@@ -81,6 +81,7 @@ const api: RdApi = {
   celebrated: (keys) => ipcRenderer.invoke(CH.celebrated, keys),
   sideB: () => ipcRenderer.invoke(CH.sideB),
   calibration: () => ipcRenderer.invoke(CH.calibration),
+  stats: (period) => ipcRenderer.invoke(CH.stats, period),
   weekView: (date) => ipcRenderer.invoke(CH.weekView, date),
   goals: (month) => ipcRenderer.invoke(CH.goals, month),
   setGoals: (month, patch) => ipcRenderer.invoke(CH.setGoals, month, patch),

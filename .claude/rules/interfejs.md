@@ -48,6 +48,12 @@ paths:
   plik z `RD_E2E_PDF` zamiast dialogu), `templates/`, `requests/`, `routines/`, `history/`,
   `settings/` (`SharedSettings`, `CategoriesSection`, `LecturesSection`, `settingsStore` – od jutra / dziś / daty).
 - `week/` – „Tydzień” (D356, D360; strona w menu zaraz po „Kalendarzu”, Ctrl 3, D361): `WeekPage` (7 kolumn pn–nd na wspólnej osi z `useWeekView`; widok, bez przeciągania; klik dnia = `openDay`), `GoalsPanel` (postęp „x z y” i ustawianie celów w miejscu, zapis `trySaveGoals`), `GoalFields` (wspólne z krokiem „Cele na <miesiąc>” w `today/GoalsStep`: przy każdym planie porannym w miesiącu, dopóki cele nie są ustawione ani krok pominięty, i dopóki plan nie jest zatwierdzony przez Ciebie), czysta logika w `weekLayout.ts` i `weekText.ts` (testy `tests/web/week-*.test.ts`).
+- `stats/` (E12, D358, 1.3.0) – `StatsPage` (okres 4 tygodnie / 3 miesiące / od początku; cztery sekcje, każda z wykresem SVG i tabelą),
+  `Charts` (ręczne słupki i słupki ułożone, bez zależności), `statsView` (skale, miejsca słupków, teksty – testy `tests/web/stats-view.test.ts`).
+  Liczy je `folder.stats(okres)` (IPC `stats`): dni zamrożone z plików ocen (`gradeIndex`), każdy dzień przez zadanie procesu pomocniczego
+  `stats` do zdarzeń z `know` (`engine/stats.ts`: `dayStats`, `statsOf`), pamięć wyniku dnia po jego wejściach; dzień bez czytelnego loga =
+  „nieczytelne”. „Energia” check-inu = średnia trzech pul (25–100). Strona jest jedną pozycją w `PAGES` (`store/ui.ts`); cyfry Ctrl+1…
+  idą w kolejności menu (`DIGIT_PAGES` w `App.tsx`, D362).
 - `app/Questions.tsx` – pytania kolejki i kopii konfliktowych; `lib/recordText.ts` – pola i wartości po ludzku.
 
 ## Pułapki

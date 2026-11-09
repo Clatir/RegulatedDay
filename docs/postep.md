@@ -6,18 +6,19 @@ z 1–3.11 – `docs/archiwum/postep-ciag-E.md`, ciągi A–D – `docs/archiwum
 archiwum ciągu, tu zostaje jedna linia w tabeli.
 
 ## Stan bieżący
-- **Ciąg I w toku (D353):** 1.0.9 (4.11), 1.0.10 (4.10) i 1.1.0 (E11) scalone 9.11; E10 (1.2.0) – PR; E12 (1.3.0)
-  na gałęzi `claude/1.3.0-statystyki` (drzewo `.claude/worktrees/we12`, poprawki po przeglądzie high – runda 1,
-  niezacommitowane; po `/clear` sprawdź `git -C .claude/worktrees/we12 status`) – scalić `main` po E10 (menu: D362).
+- **Ciąg I (D353) – ostatnie wydanie w toku:** 1.0.9 (4.11), 1.0.10 (4.10), 1.1.0 (E11) i 1.2.0 (E10) scalone 9.11;
+  E12 (1.3.0) – PR z gałęzi `claude/1.3.0-statystyki` (scalona z E10, menu D362). Po wydaniu 1.3.0 ciąg I zakończony;
+  drzewa `.claude/worktrees/w410`, `w411`, `we10`, `we11`, `we12` do usunięcia (`git worktree remove`).
+- **K (przegląd kalibracji):** rytuał od 29.10 (`ritualFrom`), 9.11 w `grades/` 17 linii z dwóch komputerów – 14 dni
+  kwalifikujących się najwcześniej ok. 12.11, najpóźniej 26.11 (28 dni). Aplikacja sama proponuje przegląd rano
+  (E7d.2) – wtedy „dalej” na K, po nim E9.
 - **1.0.8 (G5)** – PR #52 scalony 9.11 (f074734), wydanie z runu 42552144040 na `main`. **Ciąg F zakończony 9.11**
   (1.0.1–1.0.8): wpisy w `docs/archiwum/postep-ciag-F.md`, tabela planu w `docs/archiwum/plan-ciag-F.md`, raport VM
   i przyczyny w `docs/archiwum/vm/`.
-- **Na tym komputerze działa 1.0.4 bez pomocnika (8.11):** w `resources\helper` jest tylko `rd-install.exe`, brak
-  `rd-helper.exe` i `rd-guard.exe`; `main.log` co 5 min „spawn …\rd-helper.exe ENOENT” (co najmniej od 6.11). Aktywny
-  antywirus to Malwarebytes (Defender wyłączony) – najpewniej kwarantanna niepodpisanych exe (lokalnie zbudowany
-  pomocnik też znika przy starcie). Ty: przywrócić z kwarantanny Malwarebytes i dodać wyjątek dla
-  `%LOCALAPPDATA%\Programs\regulated-day\`. Bez pomocnika pasek pulpitu się nie pokazuje – E4b.12, E8m.1 i inne
-  punkty pomocnika na tym komputerze dopiero potem.
+- **Pomocnik na tym komputerze działa od 9.11:** pliki przywrócone z kwarantanny Malwarebytes, aktualizacja 1.0.4 →
+  1.1.0 wgrała je od nowa i zostały (`main.log` 18:48 „pomocnik działa”), pasek pulpitu się pokazuje. Od 6.11 do 9.11
+  działało bez pomocnika (ENOENT). Teraz do odbioru E4b.12, E8m.1 i inne punkty pomocnika; po każdej aktualizacji
+  sprawdzić, czy `rd-helper.exe` i `rd-guard.exe` są w `resources\helper`.
 - **E4b.12 nie przechodzi (27.10):** uchwyt ⠿ widać po najechaniu, ale po chwyceniu pasek nawet nie drgnie („Zawsze na
   wierzchu”, pasek na drugim monitorze VG27B nad głównym – współrzędne ujemne). Test prawdziwą myszą (SendInput) w CI
   na Windows przechodzi w obu wariantach. Od 0.11.0 ślad w `main.log` („pasek: chwycony za uchwyt …”, „pasek: puszczony
@@ -37,10 +38,10 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport nowego przebiegu trafi do
    `docs/vm/raport.md` (T529; przebieg z 3.11 – `docs/archiwum/vm/`); powtórka punktów NIEZGODNE i NIE DO SPRAWDZENIA
    na 1.0.8 („Gotowe, gdy” F–H w `docs/plan.md`, punkty i ich zadania – `docs/archiwum/vm/przyczyny.md`); poprawki z odbioru – wersje 1.0.x (D324).
-2. Ciąg I w toku (D353, bez pauz do „dalej”): E11 → 1.1.0, E10 → 1.2.0, E12 → 1.3.0 – `docs/plan.md`, „Ciąg I”
-   (4.11 i 4.10 wydane 9.11).
-3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K, po nim E9 (`docs/plan.md`, „Po 1.0”); warunek
-   sprawdzam na końcu ciągu I.
+2. Ciąg I: po wydaniu 1.3.0 – koniec ciągu (wpisy w `docs/archiwum/postep-ciag-I.md`); Ty – odbiór E8n, E10, E11
+   (E11.1 przed zjazdem 21.11), E12 w `docs/odbior.md`.
+3. K (przegląd kalibracji), gdy aplikacja go zaproponuje (najwcześniej ok. 12.11), po nim E9 (`docs/plan.md`, „Po 1.0”).
+4. Rozszerzenia (FBL, OPS, SNT, HKU) – bez decyzji o starcie (`docs/plan.md`, D354).
 
 ## Ciąg I – stan (D353)
 **Przed ciągiem I (9.11):** zakres – `docs/plan.md`, „Ciąg I”; decyzje D352 (tekst linii twardego końca), D353 (kształt
@@ -55,8 +56,8 @@ w drzewach `.claude/worktrees/w411`, `w410`.
 | 4.10 linia twardego końca | 1.0.10 | #55 | scalone 9.11 (1410e4e); wpis – archiwum ciągu I | ok. 5 h (1–1,5 h) – trzy rundy przeglądu |
 | I-plan E10–E12 | – | – | pytania odpowiedziane 9.11 (D356–D359), kolejność T545 | ok. 0,5 h (1–2 h) |
 | E11 import zjazdów | 1.1.0 | #57 | scalone 9.11 (c621868); wpis – archiwum ciągu I | ok. 8 h (6–9 h) – dwie rundy przeglądu xhigh |
-| E10 tydzień i cele | 1.2.0 | PR (CI) | wpis – archiwum ciągu I; decyzje D360, D361 | ok. 6 h (8–12 h) – dwie rundy przeglądu xhigh |
-| E12 statystyki | 1.3.0 | – | poprawki po przeglądzie high (drzewo `we12`); decyzja D362 | (5–8 h) |
+| E10 tydzień i cele | 1.2.0 | #58 | scalone 9.11; wpis – archiwum ciągu I; decyzje D360, D361 | ok. 6 h (8–12 h) – dwie rundy przeglądu xhigh |
+| E12 statystyki | 1.3.0 | PR (CI) | wpis – archiwum ciągu I; decyzja D362 | ok. 4 h (5–8 h) – dwie rundy przeglądu high |
 
 ## Ciąg F – stan (wpisy: `docs/archiwum/postep-ciag-F.md`)
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |

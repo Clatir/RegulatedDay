@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { launch, launchSecondCopy, settledBarBounds, viewPage, withMainLog } from './app'
 
-const PAGES = ['today', 'calendar', 'week', 'requests', 'templates', 'routines', 'room', 'history', 'settings']
+const PAGES = ['today', 'calendar', 'week', 'stats', 'requests', 'templates', 'routines', 'room', 'history', 'settings']
 
 async function noHorizontalOverflow(page: Page): Promise<string[]> {
   return page.evaluate(() =>
@@ -29,11 +29,11 @@ test('start: okno główne z menu bocznym, nazwą i paskiem; tożsamość testow
       expect(await items.evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')))).toEqual(PAGES.map((p) => `nav-${p}`))
       const gaps = await items.evaluateAll((els) => els.slice(1).map((el, i) => el.getBoundingClientRect().top - els[i]!.getBoundingClientRect().bottom))
       for (const gap of gaps) expect(Math.abs(gap)).toBeLessThan(1)
-      // The shortcuts by the physical keys, the same as next to the names: Ctrl+8 – the history, Ctrl+, – the settings.
-      await expect(page.getByTestId('nav-history')).toHaveAttribute('title', 'Historia (Ctrl 8)')
+      // The shortcuts by the physical keys, the same as next to the names: Ctrl+9 – the history, Ctrl+, – the settings.
+      await expect(page.getByTestId('nav-history')).toHaveAttribute('title', 'Historia (Ctrl 9)')
       await expect(page.getByTestId('nav-settings')).toHaveAttribute('title', 'Ustawienia (Ctrl ,)')
       await expect(page.getByTestId('nav-trial')).toHaveCount(0)
-      await page.keyboard.press('Control+Digit8')
+      await page.keyboard.press('Control+Digit9')
       await expect(page.getByTestId('page-history')).toBeVisible()
       await page.keyboard.press('Control+Comma')
       await expect(page.getByTestId('page-settings')).toBeVisible()

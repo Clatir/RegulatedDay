@@ -5,6 +5,7 @@
 import type { CalibrationPeriod, CostProposal, FeltCounts, ReviewPrompt, TimeProposal } from './engine/calibration'
 import type { Celebration, GameView } from './engine/progress'
 import type { SideB } from './engine/sideB'
+import type { StatsPeriod, StatsResult } from './engine/stats'
 import type { GoalsView } from './engine/goals'
 import type { WeekView } from './engine/week'
 import type { GoalsPatch } from './model/goals'
@@ -85,7 +86,8 @@ export const CH = {
   zjazdyUndo: 'rd:zjazdyUndo',
   weekView: 'rd:weekView',
   goals: 'rd:goals',
-  setGoals: 'rd:setGoals'
+  setGoals: 'rd:setGoals',
+  stats: 'rd:stats'
 } as const
 
 /** The game for the window (D322): its view and the full-screen celebrations not shown on this computer yet. */
@@ -604,6 +606,8 @@ export interface RdApi {
   sideB(): Promise<SideB>
   /** The calibration: period, proposals of the review, felt cost, where the review waits. */
   calibration(): Promise<CalibrationScreen>
+  /** The statistics of the frozen days of a period (D358): energy, estimates, requests by person, boundaries. */
+  stats(period: StatsPeriod): Promise<StatsResult>
   /**
    * The week of a date (D356, „Tydzień”): its seven days from Monday on one axis – each with its type, blocks (the plan;
    * days gone by – as it was), boundary and regeneration against the minimum; only a view.

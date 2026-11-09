@@ -37,14 +37,10 @@ Ciągi A–E zakończone wydaniem 1.0.0 (28.10.2026) → `docs/archiwum/plan-E0-
 | 3.8 | Odbiór ekranów E6 | różnie | 2–4 h | 2–3 wieczory z rytuałem |
 | 4.9 | Odbiór ekranów gry | różnie | 2–4 h | |
 
-## Ciąg I – 4.11, 4.10, potem E10–E12 (D353)
+## Ciąg I – zakończony z wydaniem 1.3.0 (D353)
 
-Bez pauz do „dalej” (D317); brama – pakiet pytań o wygląd E10–E12 – odpowiedziana 9.11 (D356–D359). Główna sesja
-Opus 5.5 · high. Kolejność (T545): E11 najpierw (najbliższy zjazd stacjonarny 21–22.11), potem E10, E12.
-
-| # | Zadanie | Rodzaj | Wersja | Wykonawca · przegląd | Szacunek |
-| --- | --- | --- | --- | --- | --- |
-| E12 | Statystyki (D358): strona „Statystyki”, cztery sekcje, tylko dni zamrożone | Interfejs | 1.3.0 | `wykonawca-sonnet` · high | 5–8 h |
+4.11 (1.0.9), 4.10 (1.0.10), E11 (1.1.0), E10 (1.2.0), E12 (1.3.0) – 9.11.2026; wpisy i „Uwagi na później” –
+`docs/archiwum/postep-ciag-I.md`. Zostaje Twój odbiór (E8n, E10, E11, E12 w `docs/odbior.md`).
 
 ## Po 1.0
 
