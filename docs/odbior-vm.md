@@ -470,4 +470,5 @@ Po każdym dniu napisz „Dzień N gotowy” w sesji Claude Code na komputerze z
    idą jako wersje 1.0.x (D324). `[x]` w `docs/odbior.md` – po Twojej akceptacji.
 
 Od tej chwili raport czyta każda sesja, także w chmurze: `docs/vm/raport.md`. Nowy przebieg od migawki „czysta” –
-poprzedni raport idzie do `docs/archiwum/` (np. `vm-raport-2026-11.md`), a `docs/vm/raport.md` zaczyna się od nowa.
+poprzedni raport idzie do `docs/archiwum/vm/` (przebieg z 3.11: `raport.md` i `przyczyny.md` – po ciągu F, T536),
+a `docs/vm/raport.md` zaczyna się od nowa.

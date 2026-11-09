@@ -1,6 +1,7 @@
 # Postęp – ciąg F (od 3.11.2026, D349)
 
-Wpisy zadań ciągu F przeniesione z `docs/postep.md` 8.11.2026 (D351); stan i kolejka – `docs/postep.md`.
+Wpisy zadań ciągu F przeniesione z `docs/postep.md` 8–9.11.2026 (D351); stan i kolejka – `docs/postep.md`. Ciąg
+zakończony 9.11 – tabela planu w `docs/archiwum/plan-ciag-F.md`.
 
 ## Ciąg F – poprawki po odbiorze w maszynie (od 3.11, D349)
 - **Przed ciągiem F (3.11):** zakres F1–H3 (`docs/plan.md`), 9 PR-ów, wersje 1.0.1–1.0.8, szacunek 16,5–24,5 h.
@@ -127,6 +128,35 @@ Wpisy zadań ciągu F przeniesione z `docs/postep.md` 8.11.2026 (D351); stan i k
   - Testy: typecheck, unit 1299, build, lint; CI zielone (także „Uruchamiaj z Windows… (ścieżka ze spacją)”
     w `tests/update/install.spec.ts` na prawdziwym Electronie).
   - Czas faktyczny: ok. 1,5 h (szacunek 1–1,5 h). PR #53 scalony 8.11 (1a4e69e); wydanie 1.0.7 z runu 42530187521.
+- **G5 – 1.0.8 instalator zamyka aplikację łagodnie** (`wykonawca-opus`): 8.11 ok. 20:40, gałąź
+  `claude/1.0.7-instalator` od d735aa7 w drzewie `C:\CC-Projekty\RegulatedDay-g5` (równolegle z G4, potem z H3). PR #52.
+  - E4a.13 cz. 1 (T541): `customCheckAppRunning` – `taskkill` bez /F do procesu głównego, prośba co 3 s do 15 s
+    (≥ budżet wyjścia aplikacji, `src/main/installerClose.ts`; same procesy pomocnicze 2 s), potem `Stop-Process -Force`;
+    własne szukanie (0 główny / 3 inne / 1 nic; `FIND_PROCESS` electron-buildera nie widział pojedynczego procesu),
+    błąd szukania → `tasklist`, niepewne = działa; o PowerShellu decyduje odpowiedź kroku (`$rdPs`), kroki z domyślnym
+    `PSModulePath` 5.1 (w CI pwsh 7 psuł `IS_POWERSHELL_AVAILABLE`); znacznik instalatora tylko przy procesie głównym;
+    przed „appCannotBeClosed” lista procesów bez nazwy konta w `logs\installer-check.log`, `docs/vm/procesy.ps1` – to
+    samo ręcznie. Aplikacja: zamknięcie z zewnątrz w logu, przy świeżym znaczniku bez instalacji pobranej wersji przy
+    wyjściu i zapis zamknięcia „installer”; okno dźwięku zamknięte z zewnątrz kończy aplikację; wyjście z zewnątrz
+    w następnym obrocie pętli (`afterOutsideClose`) – `quitApp` wewnątrz `close` z `preventDefault` przy prawdziwym
+    WM_CLOSE nie dochodziło do `will-quit` (T396 nie działało nigdy). Twój `taskkill` bez znacznika – zwykłe wyjście.
+  - `/code-review` xhigh: runda 1 – 15 uwag, 9 poprawionych z testami; runda 2 (delta) – 1 medium i 2 low poprawione.
+  - CI: runda 0 – próg czasu w teście (zamieniony na warunek); 59f78cd – trzy nowe scenariusze `tests/update` czerwone
+    (PowerShell w CI, `taskkill` tylko do jednego okna); bfb1147 – utknięte wyjście przy WM_CLOSE i PID `cmd.exe`
+    z `app.process()` w Playwrighcie (PID z `app.evaluate`); 8e84577 – zielone. E2E `smoke.spec.ts` z prawdziwym
+    WM_CLOSE do panelu, okna dźwięku i paska (bez poprawki 3/3 padają).
+  - Uwagi na później: wspólne makro PowerShella zamiast czterech kopii; kopie formatu linii w `installer.nsh`
+    i `procesy.ps1`; lista bez PowerShella w innym formacie i kodowaniu; ścieżka względna w `procesy.ps1`; szukanie
+    zapasowe także dla zamknięcia i dobicia przy zepsutym WMI; maskowanie – kolejność nazw (najdłuższe najpierw) i forma
+    8.3 bez `Scripting.FileSystemObject`; `procesy.cmd` w `docs/vm/przygotuj.ps1`; lista nie powstaje, gdy „Nie można
+    zamknąć” pokazuje electron-builder przy deinstalacji.
+  - Testy lokalnie: typecheck, unit 1312, build, lint, `check-context`, `dist:win`, uprząż NSIS (bez instalacji);
+    `tests/update` – tylko CI.
+  - Czas faktyczny: ok. 7 h zegarowo (20:40–3:40, równolegle z G4 i H3; cztery przebiegi CI z `tests/update`),
+    szacunek 1,5–2,5 h. PR #52 scalony 9.11 (f074734); wydanie 1.0.8 z runu 42552144040.
+- **Koniec ciągu F (9.11):** 9 PR-ów, wersje 1.0.1–1.0.8; razem ok. 33 h (szacunek 16,5–24,5 h) – najwięcej G1
+  (dziewięć rund przeglądu) i G5 (CI). `docs/vm/raport.md`, `przyczyny.md` → `docs/archiwum/vm/`, tabela planu →
+  `docs/archiwum/plan-ciag-F.md` (T536, D317).
 
 ## Plan napraw po raporcie VM – jedno zadanie z wykonawcami (3.11, D349)
 - Zlecenie: plan napraw według audytu (raport VM) z modelem i czasem każdej pozycji. Kolejno: bloki według modelu

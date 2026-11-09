@@ -1,6 +1,6 @@
 # Przyczyny – raport z odbioru w maszynie (3.11.2026)
 
-Każda niezgodność, uwaga i obserwacja z `docs/vm/raport.md` sprawdzona w kodzie (3.11, `main` 4f494a4; część hipotez
+Każda niezgodność, uwaga i obserwacja z `docs/archiwum/vm/raport.md` sprawdzona w kodzie (3.11, `main` 4f494a4; część hipotez
 potwierdzona testem na kopii repozytorium). Plan napraw – `docs/plan.md`: jedno zadanie, główna sesja na Opus 5.5 · xhigh, wykonawcy według kolumny „Wykonawca”
 (D349); kolejność wykonania i wersje – tam. Numery linii – stan 4f494a4;
 po zmianach szukaj po nazwie funkcji.
