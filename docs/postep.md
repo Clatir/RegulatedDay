@@ -78,6 +78,11 @@ Propozycje na później z przeglądów G1–H2 (architektura, bez zmian w dział
   o PowerShellu decyduje odpowiedź kroku (`$rdPs`), kroki z domyślnym `PSModulePath` 5.1, prośba co 3 s, póki proces
   główny żyje, okno dźwięku zamknięte z zewnątrz kończy aplikację (T396); test `taskkill` użytkownika ponawia prośbę.
   Zachowanie okna głównego bez zmian (pierwszy WM_CLOSE chowa je, jak dotąd).
+- CI bfb1147 (run 42530488682): test 2 zielony (diagnostyka potwierdziła `PSModulePath` z PS7). Test 1 odsłonił błąd
+  aplikacji: `quitApp` wołane wewnątrz `close` z `preventDefault` przy prawdziwym WM_CLOSE nie dochodzi do `will-quit` –
+  aplikacja zostawała bez okien do dobicia (wyjście z zewnątrz, T396, nie działało nigdy); teraz wyjście w następnym
+  obrocie pętli (`afterOutsideClose`), E2E `smoke.spec.ts` z prawdziwym WM_CLOSE do panelu, okna dźwięku i paska (bez
+  poprawki 3/3 padają). Test 3: `app.process()` Playwrighta na Windows to `cmd.exe` – PID z `app.evaluate`.
 - Uwagi na później: wspólne makro PowerShella zamiast czterech kopii; kopie formatu linii w `installer.nsh`
   i `procesy.ps1`; lista bez PowerShella w innym formacie i kodowaniu; ścieżka względna w `procesy.ps1`; szukanie
   zapasowe także dla zamknięcia i dobicia przy zepsutym WMI; maskowanie – kolejność nazw (najdłuższe najpierw) i forma
