@@ -15,6 +15,7 @@ import { answered, contactEnded, waterDue, workRunStart, type CareSettings } fro
 import type { DayContext, DayState } from './engine/day'
 import type { EnergyState } from './engine/energy'
 import { reserveMessageId } from './engine/game'
+import { hardEndCurrent, type HardEndNow } from './engine/hardEnd'
 import { suggestRegen } from './engine/reserve'
 import { REGEN_CATEGORY, type Pool } from './model/categories'
 import { isRunningRequest, OPEN, workSince, type AutoAction, type RequestFact } from './engine/facts'
@@ -43,6 +44,11 @@ export interface EngineInput {
   name: (b: NamedBlock) => string
   care: CareSettings
   modePrefs: ModePrefs
+  /** The timer and the modes of this very state, when the caller has counted them already (once per refresh). */
+  timer?: TimerNow
+  modes?: Modes
+  /** `hardEndCurrent` of this state, when the caller has counted it already (null: not current). */
+  hardEnd?: HardEndNow | null
   pending: BarPending | null
   /** This computer (the recording computer of a lecture plays no sound and shows no notification then). */
   computer?: string
@@ -190,19 +196,13 @@ function reserveLines(i: EngineInput, modes: Modes): BarLine[] {
 export const HARD_END_TEXT = 'Twardy koniec projektów – regeneracja do snu'
 
 /**
- * The hard end of projects as a quiet line (D228, D240, D352): it stays while it is current – a project runs in the
- * foreground, or the time to explain after a project goes on after it passed with its message (spec „Cisza”, „Powiadomienia
- * i dźwięki”) – and only while something of the minimum is still missing (the same conditions as the notification, which
- * the switch of the notifications does not touch). It waits in the class mode (D228 names only the session mode). A
- * text with no buttons and no dot (D240); `mniej pytań` keeps it as it is (the quiet icon, D134); the night and „Odcinam się” are cut off by the caller.
+ * The hard end of projects as a quiet line (D228, D240, D352): while it is current (`hardEndCurrent`, the same as for
+ * the notification, which the switch of the notifications does not touch). It waits in the class mode (D355). A text
+ * with no buttons and no dot (D240); „mniej pytań” keeps it as it is (the quiet icon, D134); the night and „Odcinam się”
+ * are cut off by the caller. Pushed last of the lines: where the bar shows one line only, it never pushes theirs into „⋯”.
  */
-function hardEndLines(state: DayState, t: TimerNow, modes: Modes): BarLine[] {
-  const h = state.hardEnd
-  // The class mode holds everything but the session mode's exceptions (spec „Cisza”): it waits like the break does.
-  if (modes.classMode || h.passed == null || h.nothingMissing || state.regen.missingMin <= 0) return []
-  const afterProject = h.message && state.explains.some((x) => x.kind === 'project' && x.to === OPEN && x.from < state.now)
-  if (!t.fg?.info.isProject && !afterProject) return []
-  return [{ id: `hardEnd:${state.grid.date}:${h.passed}`, text: HARD_END_TEXT, actions: [], dot: false }]
+function hardEndLines(state: DayState, now: HardEndNow | null, modes: Modes): BarLine[] {
+  return now && !modes.classMode ? [{ id: `hardEnd:${state.grid.date}:${now.passed}`, text: HARD_END_TEXT, actions: [], dot: false }] : []
 }
 
 /** A fixed block ended by its plan may still be extended within this long after its planned end (D227). */
@@ -269,10 +269,10 @@ function dayLines(i: EngineInput, t: TimerNow, modes: Modes, nameOf: (id: string
 
 export function engineView(i: EngineInput): WidgetView {
   const { state, now } = i
-  const t = timerNow(state)
+  const t = i.timer ?? timerNow(state)
   const isWork = setsWorkEnd(state)
   const events = i.ctx.events
-  const modes: Modes = modesOf(state, t, events, now, i.modePrefs)
+  const modes: Modes = i.modes ?? modesOf(state, t, events, now, i.modePrefs)
   const at = (idx: number) => atOf(state.grid, idx)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
   const nameOf = (id: string) => {
@@ -351,7 +351,6 @@ export function engineView(i: EngineInput): WidgetView {
       if (!answered(events, id)) lines.push({ id, text: 'Po rozmowach – chwila samotności?', actions: [{ id: 'solitude', label: 'Chwila ciszy' }, { id: 'dismiss', label: 'Nie teraz' }], dot: false })
     }
     lines.push(...reserveLines(i, modes))
-    lines.push(...hardEndLines(state, t, modes))
     lines.push(...dayLines(i, t, modes, nameOf, clockOf, isWork))
   }
   // Routines to tick off (D328): quiet lines after all the others (no dot – in a quiet mode they fold into „⋯”), today,
@@ -364,6 +363,9 @@ export function engineView(i: EngineInput): WidgetView {
       routines.push({ line, block: r.block, name: nameOf(r.block), normal: r.normal, worse: r.worse })
       lines.push({ id: line, text: nameOf(r.block), actions: [{ id: 'all', label: '✓ Wszystkie' }, { id: 'steps', label: 'Kroki ▸' }, ...(r.worse.length ? [{ id: 'worse', label: 'gorsze dni' }] : [])], dot: false })
     }
+  // The hard end, a quiet icon with no buttons, stands last of the lines (the window of the main process puts it after
+  // the lines it adds): where the bar shows one line only, it never pushes theirs into „⋯”.
+  if (!hidden && !modes.night) lines.push(...hardEndLines(state, i.hardEnd !== undefined ? i.hardEnd : hardEndCurrent(state, t), modes))
 
   const water = waterDue(events, state, t, now, i.care, { night: modes.night, disconnect: hidden })
   const session = !!fg && fg.info.rules.kind === 'session'

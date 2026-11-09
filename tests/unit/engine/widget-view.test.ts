@@ -8,7 +8,8 @@ import { activityOf } from '@shared/engine/activity'
 import { autoActions } from '@shared/engine/auto'
 import { requestAction } from '@shared/engine/requests'
 import { timerAction, type TimerAction } from '@shared/engine/timer'
-import { engineView, warnDeadlines } from '@shared/engineView'
+import { fewerAt } from '@shared/engine/modes'
+import { engineView, HARD_END_TEXT, warnDeadlines } from '@shared/engineView'
 import { stepDelay, toneOnChange } from '../../../src/main/widget'
 import { block, Scenario } from './dsl'
 
@@ -648,23 +649,46 @@ describe('komputer nagrywający w widoku paska (A8-04)', () => {
   })
 })
 
+describe('„mniej pytań” w minucie (fewerAt)', () => {
+  it('odcinek zaczęty i skończony w tej samej minucie liczy się dla tej minuty, sąsiednie nie', () => {
+    const s = new Scenario({ date: DATE, plan: [] }).observe('07:00', null)
+    click(s, '10:00', { a: 'fewer' })
+    click(s, '10:00', { a: 'better' })
+    const t = s.at('10:30')
+    const ctx = s.contextAt(t)
+    const grid = s.stateAt(t).grid
+    const idx = (time: string) => Math.round((s.at(time) - grid.start) / 60_000)
+    expect(fewerAt(ctx.events, grid, idx('10:00'))).toBe(true)
+    expect(fewerAt(ctx.events, grid, idx('09:59'))).toBe(false)
+    expect(fewerAt(ctx.events, grid, idx('10:01'))).toBe(false)
+  })
+})
+
 describe('linia twardego końca projektów w pasku (D228, D240, D352)', () => {
-  const TEXT = 'Twardy koniec projektów – regeneracja do snu'
   const hard = (v: ReturnType<typeof view>) => v.lines.filter((l) => l.id.startsWith('hardEnd:'))
+  /** The same view with the day's figures set by hand (what the engine would have counted in another day). */
+  function patched(s: Scenario, time: string, patch: (st: ReturnType<Scenario['stateAt']>) => Partial<ReturnType<Scenario['stateAt']>>, o: { sessionMode?: boolean } = {}) {
+    const t = s.at(time)
+    const ctx = s.contextAt(t)
+    const base = s.stateAt(t)
+    const state = { ...base, ...patch(base) }
+    return engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, name: () => 'Projekt', care, modePrefs: { sessionMode: o.sessionMode ?? true, classMode: true }, pending: null })
+  }
+  const passedAt = (st: ReturnType<Scenario['stateAt']>) => ({ hardEnd: { ...st.hardEnd, passed: st.now - 10, message: true, nothingMissing: false }, regen: { ...st.regen, missingMin: 60 } })
 
   // Work to 17:00 (the end clicked), a project begun at 17:30 that runs on: minimum 90 min, 30 min collected, bedtime 22:00 –
   // the hard end is 21:00 and passes with the project running.
-  function running() {
-    const s = new Scenario({ date: DATE, plan: [block({ id: 'w', cat: 'inne', at: '08:00', min: 540 }), block({ id: 'p', cat: 'projekty', at: '17:30', min: 120 })] }).using('07:00', '23:59')
+  function running(cat = 'projekty', id = 'p') {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'w', cat: 'inne', at: '08:00', min: 540 }), block({ id, cat, at: '17:30', min: 120 })] }).using('07:00', '23:59')
     s.ran('w', '08:00', '17:00').workEnd('17:00')
-    s.start('p', '17:30')
+    s.start(id, '17:30')
     return s
   }
 
   // The same day, but the project ended by itself at 19:30 (two questions): time to explain after it; you use the computer
   // until 21:20, then a break of 50 min.
-  function explaining() {
-    const s = new Scenario({ date: DATE, plan: [block({ id: 'w', cat: 'inne', at: '08:00', min: 540 }), block({ id: 'p', cat: 'projekty', at: '17:30', min: 120 })] }).using('07:00', '23:59')
+  function explaining(extra: ReturnType<typeof block>[] = []) {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'w', cat: 'inne', at: '08:00', min: 540 }), block({ id: 'p', cat: 'projekty', at: '17:30', min: 120 }), ...extra] }).using('07:00', '23:59')
     s.ran('w', '08:00', '17:00').workEnd('17:00')
     s.start('p', '17:30')
     s.write([{ id: 'auto-p-twoQuestions', k: 'block.end', block: 'p', at: s.at('19:30'), done: null, rule: 'twoQuestions', autoRule: 'twoQuestions' }], s.at('20:30'))
@@ -675,19 +699,57 @@ describe('linia twardego końca projektów w pasku (D228, D240, D352)', () => {
   it('biegnący projekt po minięciu twardego końca: linia tekstu bez przycisków i bez kropki; przed minięciem jej nie ma', () => {
     const s = running()
     expect(hard(view(s, '20:30'))).toEqual([])
+    expect(hard(view(s, '21:10'))).toEqual([{ id: `hardEnd:${DATE}:${s.state('21:10').hardEnd.passed}`, text: HARD_END_TEXT, actions: [], dot: false }])
+  })
+
+  it('blok liczony jak projekt („Nauka” po końcu pracy) też daje linię (spec: także blok liczony jak projekt, D195, D209)', () => {
+    const s = running('nauka', 'n')
+    expect(s.state('21:10').asProject).toContain('n')
+    expect(hard(view(s, '21:10'))).toHaveLength(1)
+  })
+
+  it('blok pasywny liczony jak projekt („Oglądanie”) po planowanym końcu: linia jest (spec wyłącza go tylko z minuty minięcia, nie ze stanu po nim)', () => {
+    const s = running('ogladanie', 'o')
+    const st = s.state('21:10')
+    expect(st.asProject).toContain('o')
+    expect(st.blocks.find((b) => b.id === 'o')!.rules.place).toBe('passive')
+    // Planned 17:30–19:30, it runs on at 21:10: past its planned end. The hard end passed before – set by hand, as the pass
+    // itself does not come in a passive block after its planned end (spec).
     const v = view(s, '21:10')
-    expect(hard(v)).toEqual([{ id: `hardEnd:${DATE}:${s.state('21:10').hardEnd.passed}`, text: TEXT, actions: [], dot: false }])
-    expect(v.lines.find((l) => l.id.startsWith('hardEnd:'))?.id).toMatch(/^hardEnd:2026-10-28:\d+$/)
+    expect(v.block!.endsAt).toBeLessThan(s.at('21:10'))
+    expect(hard(patched(s, '21:10', passedAt))).toHaveLength(1)
   })
 
   it('w czasie do wyjaśnienia po projekcie linia jest, po jego końcu (przerwa w używaniu) już nie', () => {
     const s = explaining()
-    expect(s.state('21:10').hardEnd).toMatchObject({ message: true })
     expect(hard(view(s, '21:10'))).toHaveLength(1)
     // The break of 35 min (from 21:20) ended the time to explain: the hard end passed, no project, nothing to wait in.
-    const st = s.state('21:55')
-    expect(st.hardEnd.passed).not.toBeNull()
+    expect(s.state('21:55').hardEnd.passed).not.toBeNull()
     expect(hard(view(s, '21:55'))).toEqual([])
+  })
+
+  it('czas do wyjaśnienia po projekcie, który zaczął się po minięciu twardego końca w innym bloku: linia jest bez „message” minięcia', () => {
+    // The hard end passed in a block of life, the project began after it and ended by itself – no message of the pass.
+    const s = explaining()
+    const v = patched(s, '21:10', (st) => ({ hardEnd: { ...st.hardEnd, message: false } }))
+    expect(hard(v)).toHaveLength(1)
+  })
+
+  it('czas do wyjaśnienia już odpowiedziany nie jest trwającym: bez linii (odpowiedź „Projekt do …”)', () => {
+    const s = explaining()
+    expect(hard(view(s, '21:10'))).toHaveLength(1)
+    s.write([{ k: 'question.answer', at: s.at('21:12'), question: s.state('21:12').explains[0]!.id, answer: 'project', value: null }], s.at('21:12'))
+    expect(s.state('21:15').explains[0]!.answer).not.toBeNull()
+    expect(hard(view(s, '21:15'))).toEqual([])
+  })
+
+  it('blok, który nie jest projektem, na pierwszym planie (wykład online nie kończy czasu do wyjaśnienia): bez linii', () => {
+    const s = explaining([block({ id: 'l', cat: 'wyklad', at: '21:12', min: 30 })])
+    s.start('l', '21:12', { bg: false })
+    const v = view(s, '21:15')
+    expect(v.block).not.toBeNull()
+    expect(s.state('21:15').explains[0]!.to).toBe(Number.POSITIVE_INFINITY)
+    expect(hard(v)).toEqual([])
   })
 
   it('po projekcie, który skończył się zwykłym końcem (bez czasu do wyjaśnienia), linii nie ma', () => {
@@ -700,17 +762,10 @@ describe('linia twardego końca projektów w pasku (D228, D240, D352)', () => {
 
   it('brakująca część minimum 0 albo twardy koniec bez „brakuje” – bez linii, tak jak bez powiadomienia', () => {
     const s = running()
-    const t = s.at('21:10')
-    const ctx = s.contextAt(t)
-    const state = s.stateAt(t)
-    const show = (patch: Partial<typeof state>) => {
-      const st = { ...state, ...patch }
-      return hard(engineView({ ctx, state: st, energy: null, activity: activityOf(ctx.events, st.grid.start, t, 'pca'), now: t, name: () => 'Projekt', care, modePrefs: { sessionMode: true, classMode: true }, pending: null }))
-    }
-    expect(show({})).toHaveLength(1)
-    expect(show({ hardEnd: { ...state.hardEnd, nothingMissing: true } })).toEqual([])
-    expect(show({ regen: { ...state.regen, missingMin: 0 } })).toEqual([])
-    expect(show({ hardEnd: { ...state.hardEnd, passed: null } })).toEqual([])
+    expect(hard(patched(s, '21:10', () => ({})))).toHaveLength(1)
+    expect(hard(patched(s, '21:10', (st) => ({ hardEnd: { ...st.hardEnd, nothingMissing: true } })))).toEqual([])
+    expect(hard(patched(s, '21:10', (st) => ({ regen: { ...st.regen, missingMin: 0 } })))).toEqual([])
+    expect(hard(patched(s, '21:10', (st) => ({ hardEnd: { ...st.hardEnd, passed: null } })))).toEqual([])
   })
 
   it('„mniej pytań”: linia zostaje jako cicha (bez kropki, D134, D240)', () => {
@@ -718,7 +773,20 @@ describe('linia twardego końca projektów w pasku (D228, D240, D352)', () => {
     click(s, '21:05', { a: 'fewer' })
     const v = view(s, '21:10')
     expect(v.fewer).toBe(true)
-    expect(hard(v)).toEqual([expect.objectContaining({ text: TEXT, dot: false, actions: [] })])
+    expect(hard(v)).toEqual([expect.objectContaining({ text: HARD_END_TEXT, dot: false, actions: [] })])
+  })
+
+  it('cicha ikona twardego końca stoi na końcu, po liniach z przyciskami (nie spycha ich do „⋯”)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'j', cat: 'inne', after: 'a', min: 30 }), block({ id: 'p', cat: 'projekty', at: '17:30', min: 120 })] }).using('07:00', '23:59')
+    click(s, '08:00', { a: 'start', block: 'a' })
+    click(s, '09:00', { a: 'finish', block: 'a' })
+    click(s, '17:30', { a: 'start', block: 'p' })
+    click(s, '17:35', { a: 'fewer' })
+    const v = patched(s, '17:40', passedAt)
+    const ids = v.lines.map((l) => l.id)
+    expect(ids).toContain('anchor:j')
+    expect(ids.findIndex((x) => x.startsWith('hardEnd:'))).toBeGreaterThan(ids.indexOf('anchor:j'))
+    expect(v.quiet).toBe(true)
   })
 
   it('tryb sesji (sesja czeka na „Zacznij” w tle projektu): linia nie czeka na koniec trybu (D228)', () => {
@@ -728,16 +796,11 @@ describe('linia twardego końca projektów w pasku (D228, D240, D352)', () => {
     s.ran('w', '08:00', '17:00').workEnd('17:00')
     s.start('p', '17:30')
     leader(s, '21:06')
-    const t = s.at('21:10')
-    const ctx = s.contextAt(t)
-    const base = s.stateAt(t)
-    const state = { ...base, hardEnd: { ...base.hardEnd, passed: base.now - 10, message: true, nothingMissing: false }, regen: { ...base.regen, missingMin: 60 } }
-    const at = (sessionMode: boolean) => engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, name: () => 'Projekt', care, modePrefs: { sessionMode, classMode: true }, pending: null })
-    const v = at(true)
+    const v = patched(s, '21:10', passedAt)
     expect(v.lines.find((l) => l.id === 'wait:ny')).toBeDefined()
     expect(v.quiet).toBe(true)
     expect(hard(v)).toHaveLength(1)
-    expect(hard(at(false))).toHaveLength(1)
+    expect(hard(patched(s, '21:10', passedAt, { sessionMode: false }))).toHaveLength(1)
   })
 
   it('cisza nocna i „Odcinam się”: bez linii (po porze snu, przy ukrytym pasku)', () => {

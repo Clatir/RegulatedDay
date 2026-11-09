@@ -57,6 +57,28 @@ export function fewerSpans(events: readonly AnyEvent[], grid: Grid): Array<{ fro
   return out
 }
 
+/** „Mniej pytań” was on in the minute `idx` (from its start to its end, [from, to)). */
+export function fewerAt(events: readonly AnyEvent[], grid: Grid, idx: number): boolean {
+  // A stretch begun and ended in the very minute ([k, k)) counts for that minute.
+  return fewerSpans(events, grid).some((s) => s.from <= idx && (idx < s.to || idx === s.from))
+}
+
+/**
+ * The end (index) of the last stretch of the class mode that lasted in the minute `idx` or after it: of the runs of the
+ * blocks with the class mode, from the day's facts (the same on every computer and after a restart). Null: none, or the
+ * mode is off on this computer; a stretch still going on has no end yet (`OPEN`).
+ */
+export function classModeEnd(state: DayState, idx: number, prefs: ModePrefs): number | null {
+  if (!prefs.classMode) return null
+  const classBlocks = new Set(state.blocks.filter((b) => b.rules.classMode).map((b) => b.id))
+  let end: number | null = null
+  for (const [id, f] of state.facts.blocks) {
+    if (!classBlocks.has(id)) continue
+    for (const r of f.runs) if (r.to > idx) end = Math.max(end ?? r.to, r.to)
+  }
+  return end
+}
+
 export function modesOf(state: DayState, t: TimerNow, events: readonly AnyEvent[], now: number, prefs: ModePrefs = { sessionMode: true, classMode: true }): Modes {
   const running = [...(t.fg ? [t.fg] : []), ...t.bg]
   const sessionRuns = running.some((x) => x.info.rules.kind === 'session')

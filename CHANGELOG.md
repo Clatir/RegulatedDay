@@ -1,8 +1,9 @@
 # Changelog
 
 ## 1.0.10
-- Po minięciu twardego końca projektów pasek pokazuje linię „Twardy koniec projektów – regeneracja do snu”, dopóki biegnie projekt albo trwa czas do wyjaśnienia po nim – także przy wyłączonym powiadomieniu Windows. Linia jest bez kropki; w „mniej pytań” to cicha ikona.
-- W „mniej pytań” twardy koniec nie przychodzi już jako powiadomienie Windows, tylko cicho w pasku. W trybie zajęć linia i powiadomienie czekają na koniec trybu; w trybie sesji przychodzą jak dotąd.
+- Po minięciu twardego końca projektów pasek pokazuje linię „Twardy koniec projektów – regeneracja do snu”, dopóki biegnie projekt (także blok liczony jak projekt, np. nauka po końcu pracy) albo trwa czas do wyjaśnienia po nim – także przy wyłączonym powiadomieniu Windows. Linia jest bez kropki, nie spycha pytań z przyciskami; w „mniej pytań” to cicha ikona.
+- Powiadomienie Windows o twardym końcu przychodzi też przy bloku liczonym jak projekt (np. nauka po końcu pracy) i w czasie do wyjaśnienia po projekcie – w ciągu godziny od minięcia.
+- W „mniej pytań” twardy koniec nie przychodzi już jako powiadomienie Windows, tylko cicho w pasku – także po „Jest lepiej”. W trybie zajęć linia i powiadomienie czekają do końca trybu i przychodzą wtedy, jeśli twardy koniec jest dalej aktualny; w trybie sesji jak dotąd.
 
 ## 1.0.8
 - Instalator uruchomiony ręcznie przy włączonej aplikacji najpierw prosi ją o zamknięcie i czeka, aż skończy zapisywać (do 15 s), zamiast od razu ją zabijać – następny start nie widzi już awarii, a w dzienniku jest „zamknięte przez instalator”. Pomocnik nie zostaje w tle.

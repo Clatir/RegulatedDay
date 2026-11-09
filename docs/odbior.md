@@ -1334,9 +1334,11 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Automatycznie:** `tests/unit/engine/widget-view.test.ts` („twardy koniec”), `tests/fs/widget.test.ts` (linia
   i powiadomienie w „mniej pytań”, sesji, zajęciach, przy wyłączonym powiadomieniu). Ty: gdy się zdarzy.
 - **Jak sprawdzić:** w dzień, w którym minimum regeneracji ledwo się mieści, pracuj nad projektem po jego twardym końcu
-  (godzina w „Dziś” → „Twardy koniec projektów”); spójrz na pasek. Innym razem to samo przy włączonym „mniej pytań”.
+  (godzina w „Dziś” → „Twardy koniec projektów”) – projektem albo nauką po końcu pracy; spójrz na pasek. Innym razem to
+  samo przy włączonym „mniej pytań”, potem kliknij „Jest lepiej”, dalej przy projekcie.
 - **Oczekiwany efekt:** od minięcia twardego końca pasek ma linię „Twardy koniec projektów – regeneracja do snu” bez
-  kropki, dopóki biegnie projekt (albo trwa czas do wyjaśnienia po nim); znika po końcu projektu. Powiadomienie Windows
-  przychodzi raz, jeśli jest włączone; w „mniej pytań” – sama cicha ikona w pasku, bez powiadomienia (D352, T544).
+  kropki, dopóki biegnie projekt (albo trwa czas do wyjaśnienia po nim); znika po końcu projektu albo po starcie innego
+  bloku. Powiadomienie Windows przychodzi raz, jeśli jest włączone; w „mniej pytań” – sama cicha ikona w pasku, bez
+  powiadomienia, także po „Jest lepiej” (D352, T544).
 - **Nie przechodzi, gdy:** linii nie ma przy biegnącym projekcie po twardym końcu, linia ma kropkę albo przyciski,
-  zostaje po końcu projektu, albo w „mniej pytań” przychodzi powiadomienie.
+  zostaje po końcu projektu, albo w „mniej pytań” albo po „Jest lepiej” przychodzi powiadomienie.
