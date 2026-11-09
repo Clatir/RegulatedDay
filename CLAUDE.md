@@ -41,8 +41,8 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
   `docs/postep.md` – stan bieżący i kolejka (≤ 20 KB; zakończone wpisy → `docs/archiwum/postep-*.md`).
 - `docs/odbior.md` – listy do odbioru na Windows (oczekiwany efekt i błędy blokujące każdego punktu); opisy
   odebranych → `docs/archiwum/odbior-odebrane.md` (T536).
-- `docs/odbior-vm.md` – odbiór w maszynie wirtualnej (Cowork); raport z testów w `docs/vm/raport.md` (T529),
-  przyczyny jego niezgodności w `docs/vm/przyczyny.md`.
+- `docs/odbior-vm.md` – odbiór w maszynie wirtualnej (Cowork); raport nowego przebiegu trafi do
+  `docs/vm/raport.md` (T529); przebieg z 3.11 i przyczyny jego niezgodności (ciąg F) – `docs/archiwum/vm/`.
 - `CHANGELOG.md` – opis zmian dla użytkownika (pokazywany w aplikacji jako „Co nowego”); przy dopisywaniu wersji
   czytaj tylko początek (`Read` z `limit`).
 - Wiedza modułów → `.claude/rules/*.md` z `paths:`. Historia → `docs/archiwum/`.
