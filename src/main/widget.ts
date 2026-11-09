@@ -481,8 +481,10 @@ export class WidgetEngine {
     }
     // A project runs now (also one begun after the hard end), or one ran in its minute or it passed in time to explain
     // after a project (D250) – then only within an hour of it, never hours late (the app started, the notice turned on).
+    // Not in „mniej pytań” (a quiet icon in the bar, D134) nor in the class mode (it waits there); the session mode keeps it (spec „Cisza”, D228).
+    const modes = modesOf(state, t, m.ctx.events, now, this.d.modePrefs())
     const passedRecently = state.hardEnd.passed != null && atOf(state.grid, state.hardEnd.passed) >= now - 60 * MIN
-    if (on.hardEnd && state.hardEnd.passed != null && !state.hardEnd.nothingMissing && state.regen.missingMin > 0 && ((state.hardEnd.message && passedRecently) || t.fg?.info.isProject)) out.push({ id: `notice:${date}:hardEnd:-:${state.hardEnd.passed}`, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
+    if (on.hardEnd && !modes.fewer && !modes.classMode && state.hardEnd.passed != null && !state.hardEnd.nothingMissing && state.regen.missingMin > 0 && ((state.hardEnd.message && passedRecently) || t.fg?.info.isProject)) out.push({ id: `notice:${date}:hardEnd:-:${state.hardEnd.passed}`, title: 'Twardy koniec projektów', body: 'Minimum regeneracji potrzebuje teraz czasu do pory snu.', line: null, day: date })
     // In a session or a class the reserve shows only in the colour, with „mniej pytań” its message is a quiet line – no
     // notification in any quiet mode (spec „Model energii”, D326).
     if (on.reserve && m.energy.enabled && !view.quiet) {

@@ -38,7 +38,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean } = {}) {
   // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
   // alone (Windows sets the time back or forward – the monotonic clock goes on).
   const clock = {
@@ -83,7 +83,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       o.during?.()
       return { sessionMode: true, classMode: true }
     },
-    notices: () => ({ start5: true, hardEnd: true, reserve: true }),
+    notices: () => ({ start5: true, hardEnd: o.hardEndNotice ?? true, reserve: true }),
     notify: (n, onFailed) => {
       // Refused at once (an error of Windows): the failure is said before the answer.
       if (o.refuse?.()) {
@@ -894,6 +894,55 @@ describe('widget w procesie głównym', () => {
 
   it('powiadomienie o twardym końcu nie przychodzi, gdy minimum zostało zebrane już po przejściu (projekt zaczęty potem)', async () => {
     expect(await hardEndNotices(false, 0)).toBe(0)
+  })
+
+  /** A project runs after the hard end passed (the minimum is missing): the bar's line and the notifications in a mode of the day. */
+  async function hardEndIn(o: { blocks?: unknown[]; fewer?: boolean; at?: number; notice?: boolean } = {}) {
+    if (o.blocks) writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: o.blocks }))
+    const { w, folder, shown, at } = await make({ hardEndNotice: o.notice })
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(o.at ?? 17 * 60)
+    await folder.check()
+    await folder.timerClick({ a: 'startNew', block: 'p', categoryId: 'projekty', durationMin: 60 })
+    if (o.fewer) await folder.timerClick({ a: 'fewer' })
+    const real = folder.widgetModel.bind(folder)
+    folder.widgetModel = async (t?: number) => {
+      const m = await real(t)
+      return { ...m, state: { ...m.state, hardEnd: { ...m.state.hardEnd, passed: m.state.now - 200, message: false, nothingMissing: false } } }
+    }
+    await w.refresh()
+    const v = w.current()
+    return { v, line: v.lines.filter((l) => l.id.startsWith('hardEnd:')).length, notices: shown.filter((n) => n.title === 'Twardy koniec projektów').length }
+  }
+
+  // Each case on a day of its own: the notification's id is written in the day's log, a second run on it would show nothing.
+  it('linia twardego końca w pasku jest także przy wyłączonym powiadomieniu Windows (D352)', async () => {
+    expect(await hardEndIn({ notice: false })).toMatchObject({ line: 1, notices: 0 })
+  })
+
+  it('linia twardego końca: tekst bez przycisków i bez kropki, powiadomienie przy włączonym', async () => {
+    const r = await hardEndIn()
+    expect(r.v.lines.filter((l) => l.id.startsWith('hardEnd:'))).toEqual([expect.objectContaining({ text: 'Twardy koniec projektów – regeneracja do snu', actions: [], dot: false })])
+    expect(r.notices).toBe(1)
+  })
+
+  it('twardy koniec w „mniej pytań”: cicha linia w pasku, bez powiadomienia Windows (D134, wiersz „Cisza”)', async () => {
+    expect(await hardEndIn({ fewer: true })).toMatchObject({ v: expect.objectContaining({ fewer: true }), line: 1, notices: 0 })
+  })
+
+  it('twardy koniec w trybie sesji: linia i powiadomienie przychodzą (nie czekają na koniec trybu, D228)', async () => {
+    const r = await hardEndIn({ at: 15 * 60 + 35 })
+    expect(r.v).toMatchObject({ quiet: true, fewer: false })
+    expect(r).toMatchObject({ line: 1, notices: 1 })
+  })
+
+  it('twardy koniec w trybie zajęć: pasek jest widoczny, ale linia i powiadomienie czekają na jego koniec', async () => {
+    const plan = [{ id: 'z', categoryId: 'zajecia-zdalne', startMin: 16 * 60 + 50, durationMin: 180, fixed: true, origin: 'user' }]
+    const r = await hardEndIn({ blocks: plan })
+    expect(r.v).toMatchObject({ quiet: true, hidden: false })
+    expect(r).toMatchObject({ line: 0, notices: 0 })
   })
 
   it('prowadzący zapisuje przejście twardego końca z polem „quiet”: true, gdy minimum regeneracji jest już zebrane', async () => {

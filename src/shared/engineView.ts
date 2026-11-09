@@ -186,6 +186,25 @@ function reserveLines(i: EngineInput, modes: Modes): BarLine[] {
   return out
 }
 
+/** The text of the bar's line for the hard end of projects (D352). */
+export const HARD_END_TEXT = 'Twardy koniec projektów – regeneracja do snu'
+
+/**
+ * The hard end of projects as a quiet line (D228, D240, D352): it stays while it is current – a project runs in the
+ * foreground, or the time to explain after a project goes on after it passed with its message (spec „Cisza”, „Powiadomienia
+ * i dźwięki”) – and only while something of the minimum is still missing (the same conditions as the notification, which
+ * the switch of the notifications does not touch). It waits in the class mode (D228 names only the session mode). A
+ * text with no buttons and no dot (D240); `mniej pytań` keeps it as it is (the quiet icon, D134); the night and „Odcinam się” are cut off by the caller.
+ */
+function hardEndLines(state: DayState, t: TimerNow, modes: Modes): BarLine[] {
+  const h = state.hardEnd
+  // The class mode holds everything but the session mode's exceptions (spec „Cisza”): it waits like the break does.
+  if (modes.classMode || h.passed == null || h.nothingMissing || state.regen.missingMin <= 0) return []
+  const afterProject = h.message && state.explains.some((x) => x.kind === 'project' && x.to === OPEN && x.from < state.now)
+  if (!t.fg?.info.isProject && !afterProject) return []
+  return [{ id: `hardEnd:${state.grid.date}:${h.passed}`, text: HARD_END_TEXT, actions: [], dot: false }]
+}
+
 /** A fixed block ended by its plan may still be extended within this long after its planned end (D227). */
 const NOT_EXTENDED_MIN = 30
 
@@ -332,6 +351,7 @@ export function engineView(i: EngineInput): WidgetView {
       if (!answered(events, id)) lines.push({ id, text: 'Po rozmowach – chwila samotności?', actions: [{ id: 'solitude', label: 'Chwila ciszy' }, { id: 'dismiss', label: 'Nie teraz' }], dot: false })
     }
     lines.push(...reserveLines(i, modes))
+    lines.push(...hardEndLines(state, t, modes))
     lines.push(...dayLines(i, t, modes, nameOf, clockOf, isWork))
   }
   // Routines to tick off (D328): quiet lines after all the others (no dot – in a quiet mode they fold into „⋯”), today,

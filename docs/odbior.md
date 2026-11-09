@@ -98,6 +98,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8l.5 Numer wersji w Ustawieniach
    - [ ] E8m.1 Pasek pulpitu nigdy nad oknami innych programów
    - [ ] E8m.2 „Uruchamiaj z Windows” pokazuje stan i da się wyłączyć
+   - [ ] E8n.2 Linia twardego końca projektów w pasku (gdy się zdarzy)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1325,3 +1326,17 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   w Menedżerze zadań”, a start aplikacji go nie włącza z powrotem.
 - **Nie przechodzi, gdy:** przełącznik wraca do „wyłączone”, wyłączenie zostawia wpis w Menedżerze zadań albo stan
   z Menedżera zadań nie jest widoczny.
+
+### E8n – poprawki po ciągu F (1.0.9–1.0.10)
+
+#### E8n.2 Linia twardego końca projektów w pasku (1.0.10)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/widget-view.test.ts` („twardy koniec”), `tests/fs/widget.test.ts` (linia
+  i powiadomienie w „mniej pytań”, sesji, zajęciach, przy wyłączonym powiadomieniu). Ty: gdy się zdarzy.
+- **Jak sprawdzić:** w dzień, w którym minimum regeneracji ledwo się mieści, pracuj nad projektem po jego twardym końcu
+  (godzina w „Dziś” → „Twardy koniec projektów”); spójrz na pasek. Innym razem to samo przy włączonym „mniej pytań”.
+- **Oczekiwany efekt:** od minięcia twardego końca pasek ma linię „Twardy koniec projektów – regeneracja do snu” bez
+  kropki, dopóki biegnie projekt (albo trwa czas do wyjaśnienia po nim); znika po końcu projektu. Powiadomienie Windows
+  przychodzi raz, jeśli jest włączone; w „mniej pytań” – sama cicha ikona w pasku, bez powiadomienia (D352, T544).
+- **Nie przechodzi, gdy:** linii nie ma przy biegnącym projekcie po twardym końcu, linia ma kropkę albo przyciski,
+  zostaje po końcu projektu, albo w „mniej pytań” przychodzi powiadomienie.
