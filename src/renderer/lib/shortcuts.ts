@@ -1,6 +1,6 @@
 /** The list of shortcuts (spec „Skróty”): physical keys (any layout), never Ctrl+Alt – that is AltGr on the Polish layout. */
 export const SHORTCUTS: Array<[string, string]> = [
-  ['Ctrl 1 … Ctrl 8', 'ekrany w kolejności menu'],
+  ['Ctrl 1 … Ctrl 9', 'ekrany w kolejności menu'],
   ['Ctrl ,', 'ustawienia'],
   ['Ctrl S', 'zatwierdza pole, które edytujesz'],
   ['Ctrl N', 'nowy rekord w bieżącym widoku: blok w planie, prośba, szablon, rutyna'],

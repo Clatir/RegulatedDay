@@ -1,7 +1,7 @@
 // adapted from FI src/renderer/app/App.tsx @ de81f2b
 /**
  * The main window (D287): the side menu with the screens' names; at the top the name „Regulated Day” and the bar; the
- * game's celebration over everything (D322). Ctrl+1…8 switch the screens by the
+ * game's celebration over everything (D322). Ctrl+1…9 switch the screens by the
  * physical keys of the digits (any keyboard layout), Ctrl+, opens the settings, Ctrl+S commits the active field, Ctrl+N
  * creates a record in the current view (when it has records).
  */
@@ -21,6 +21,7 @@ import { TemplatesPage } from '../features/templates/TemplatesPage'
 import { RoutinesPage } from '../features/routines/RoutinesPage'
 import { HistoryPage } from '../features/history/HistoryPage'
 import { StatsPage } from '../features/stats/StatsPage'
+import { WeekPage } from '../features/week/WeekPage'
 import { Celebration } from '../features/game/Celebration'
 import { RoomPage } from '../features/game/RoomPage'
 import { useGameFeed } from '../store/game'
@@ -33,6 +34,7 @@ import { ProblemsBanner, QuestionsBanner } from './Questions'
 export const PAGE_LABEL: Record<Page, string> = {
   today: 'Dziś',
   calendar: 'Kalendarz',
+  week: 'Tydzień',
   requests: 'Prośby',
   templates: 'Szablony',
   routines: 'Rutyny',
@@ -43,7 +45,7 @@ export const PAGE_LABEL: Record<Page, string> = {
 }
 
 /** Screens that need the data folder (without it they point to the wizard). */
-const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'stats', 'history'])
+const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'week', 'requests', 'templates', 'routines', 'room', 'stats', 'history'])
 
 /** The screens with Ctrl+digit, in the menu's order (D362: a screen put in the menu moves the digits below it); the settings have Ctrl+,. */
 const DIGIT_PAGES: Page[] = PAGES.filter((p) => p !== 'settings')
@@ -140,6 +142,7 @@ function PageView({ page }: { page: Page }) {
   if (page === 'routines') return <RoutinesPage />
   if (page === 'room') return <RoomPage />
   if (page === 'stats') return <StatsPage />
+  if (page === 'week') return <WeekPage />
   return <HistoryPage />
 }
 

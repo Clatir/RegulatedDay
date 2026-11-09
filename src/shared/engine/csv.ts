@@ -99,7 +99,8 @@ function blockRows(state: DayState, ctx: DayContext, names: Names): Array<{ orde
     if (extended) notes.push(`przedłużony +${extended} min`)
     const x = state.explains.find((e) => e.block === info.id && Math.min(e.to, state.now) > e.from)
     if (x) notes.push(x.answer ? `czas do wyjaśnienia: ${EXPLAIN[x.answer.cls]}` : `do wyjaśnienia ${Math.min(x.to, state.now) - x.from} min`)
-    // As everywhere: the plan's entry, the snapshot's of a block taken out of the plan after it began (D336), else its start.
+    // As everywhere: the plan's entry (with its own name – an imported class, D357), the snapshot's of a block taken out
+    // of the plan after it began (D336), else its start.
     const name = nameById(info.id, naming, names)
     const started = f?.startedAt ?? null
     const ended = f?.endedAt ?? null

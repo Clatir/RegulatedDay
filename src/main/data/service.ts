@@ -188,11 +188,11 @@ export class DataService {
       oneDriveProcess: o.oneDriveProcess,
       previousRun,
       worker: o.worker,
-      log: o.log,
       ritualFrom: o.ritualFrom ?? null,
       ritualScreens: o.ritualScreens === true,
       gameFrom: o.gameFrom ?? null,
-      gameScreens: o.gameScreens === true
+      gameScreens: o.gameScreens === true,
+      log: (level, msg) => o.log(level, msg)
     })
     life.start(o.runId, o.appVersion, clock.wall())
     if (!prev && unreadable) o.log('warn', 'znacznik życia folderu był nieczytelny (przerwany zapis) – koniec obserwacji poprzedniego uruchomienia nieznany')

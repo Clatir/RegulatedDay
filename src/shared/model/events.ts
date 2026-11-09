@@ -24,9 +24,11 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * (1.0.1): an older version would confirm an end by a click before later work, keep time to explain begun after a block
  * and leave a paused block after the close. 5 – the automatic actions of G2 (1.0.2): an older version would pause a block
  * the close ended before a fixed block's start (its end moved to the pause) and never end a block through 04:00 closed
- * after it (its close is in the next day's log).
+ * after it (its close is in the next day's log). 6 – the classes of a „zjazd” (1.1.0, D357, D359): a remote class on a
+ * day of „zjazd” and a class imported from the PDF move the maximum and are never an extension – an older version would
+ * write their minutes after the boundary as an extension and freeze the day so; it gives way to this one as the leader.
  */
-export const RULES_VERSION = 5
+export const RULES_VERSION = 6
 
 export interface EventBase {
   /** Unique: `<computer>-<n>` for your actions, derived from the data for automatic ones (both computers write the same). */

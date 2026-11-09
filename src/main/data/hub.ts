@@ -10,16 +10,23 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { BackupRecord, CalibrationScreen, ComputerRow, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay } from '@shared/api'
+import type { BackupRecord, CalibrationScreen, ComputerRow, DataView, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
-import { deepEqual, diffRecords } from '@shared/data/merge'
+import { deepEqual, diffRecords, recordEdit } from '@shared/data/merge'
+import { isRaw } from '@shared/data/dayEdits'
+import { hasZjazdImport, sameDayFile, ZJAZD_SKIP_TEXT, zjazdDayRaw, zjazdSkipOf } from '@shared/import/zjazdDay'
+import { zjazdDayFrom, type ZjazdDay, type ZjazdWarning } from '@shared/import/zjazdy'
+import { dayFileFrom } from '@shared/model/plan'
 import { classify, ID_COLLECTIONS, paths, SETTINGS_FILE, type IdKind } from '@shared/data/paths'
 import type { HolidayLookup } from '@shared/engine/createDay'
 import { CSV_HEADERS } from '@shared/engine/csv'
 import { reviewPrompt } from '@shared/engine/calibration'
 import type { SideB } from '@shared/engine/sideB'
 import type { StatsPeriod, StatsResult } from '@shared/engine/stats'
+import type { GoalsView } from '@shared/engine/goals'
+import type { WeekView } from '@shared/engine/week'
+import { goalsPatchFrom, isMonth } from '@shared/model/goals'
 import { keptOnRestore, rdFrom } from '@shared/model/rd'
 import { requestCounters } from '@shared/engine/requests'
 import type { AnyEvent } from '@shared/model/events'
@@ -496,6 +503,135 @@ export class DataHub {
     return out
   }
 
+  /**
+   * The schedule read from a PDF of „zjazdy” (D357) with what „Zapisz” would do to each day: left as it is (today, a day
+   * gone), an import of the date before replaced, the day's own type now, a file that cannot be read now. Writes nothing.
+   */
+  async zjazdyPreview(read: { file: string; days: readonly ZjazdDay[]; warnings: readonly ZjazdWarning[] }): Promise<ZjazdPreview> {
+    const f = this.need()
+    const today = logicalDayOf(f.clock.now())
+    const days: ZjazdPreview['days'] = []
+    for (const d of read.days) {
+      let raw: RawRecord | null | undefined
+      try {
+        raw = (await f.recordView(paths.day(d.date))) ?? null
+      } catch {
+        raw = undefined
+      }
+      days.push({ ...d, skip: zjazdSkipOf(d.date, today), replaces: hasZjazdImport(raw), ownType: raw ? dayFileFrom(raw, d.date).dayType : null, unreadable: raw === undefined })
+    }
+    return { file: read.file, today, days, warnings: [...read.warnings] }
+  }
+
+  /**
+   * „Zapisz” of the import of „zjazdy” (D357): every day to come of the list (as the window corrected it) into its file –
+   * its type, its classes, the template's classes replaced and its commute moved (`zjazdDayRaw`), an import of the date
+   * before replaced – as one edit of the queue (all of them or none, A3-15); today, the days gone, a day that is not one
+   * and a file that cannot be read now are left as they are, each with its reason.
+   */
+  async zjazdySave(list: readonly unknown[]): Promise<ZjazdSaveResult> {
+    const inp = { ...(await this.need().inputs(true)), holidays: this.o.holidays }
+    return this.zjazdyWrite(
+      list.map((v) => {
+        const day = zjazdDayFrom(v)
+        const date = isRaw(v) && typeof v.date === 'string' ? v.date.slice(0, 10) : ''
+        return { date: day?.date ?? date, next: day ? (raw: RawRecord | null) => zjazdDayRaw(raw, day, inp) : null }
+      }),
+      true
+    )
+  }
+
+  /**
+   * „Cofnij” of one save of the import (the toast after „Zapisz”, with that save's `undo`): every day back as before
+   * THAT save – an import it replaced comes back too – and only a day whose file still stands as the save left it (a
+   * change made since, here or on another computer, is never written over: `changed`); one edit of the queue. Today and
+   * the days gone are left as they are.
+   */
+  async zjazdyUndo(list: readonly unknown[]): Promise<ZjazdSaveResult> {
+    return this.zjazdyWrite(
+      list.map((v) => {
+        const ok = isRaw(v) && isIsoDate(v.date) && isRaw(v.after) && (v.before === null || isRaw(v.before))
+        const date = isRaw(v) && typeof v.date === 'string' ? v.date.slice(0, 10) : ''
+        if (!ok) return { date, next: null }
+        const { before, after } = v as unknown as ZjazdUndoDay
+        return { date, next: (now: RawRecord | null) => (sameDayFile(now, after) ? before : ('changed' as const)) }
+      }),
+      false
+    )
+  }
+
+  /**
+   * The edits of an import or of its „Cofnij”, one per day to come (`next`: the day's file after it – null: no file –
+   * or why it stays as it is; null instead of a function: not a day). They go into the queue at once (A3-15: on its disk
+   * all of them or none) and are laid on the files one by one, as every edit of the window: written or waiting – saved;
+   * a field that met a change made elsewhere – a question, and the rest of that day's edit is written (the day is saved
+   * in part: its „Cofnij” takes back the day as this computer sees it now – the file with the question still queued –
+   * and waits behind the question for the same file); a broken file – left out, nothing written.
+   */
+  private async zjazdyWrite(days: ReadonlyArray<{ date: string; next: ((raw: RawRecord | null) => RawRecord | null | 'changed') | null }>, undoable: boolean): Promise<ZjazdSaveResult> {
+    const f = this.need()
+    const today = logicalDayOf(f.clock.now())
+    const unchanged: string[] = []
+    const skipped: ZjazdSaveResult['skipped'] = []
+    const skip = (date: string, reason: ZjazdSkipReason) => skipped.push({ date, reason, text: ZJAZD_SKIP_TEXT[reason] })
+    const entries: EditEntry[] = []
+    const edits: ZjazdUndoDay[] = []
+    const seen = new Set<string>()
+    for (const { date, next } of days.slice(0, 366)) {
+      if (!next || seen.has(date)) {
+        skip(date, 'invalid')
+        continue
+      }
+      seen.add(date)
+      const why = zjazdSkipOf(date, today)
+      if (why) {
+        skip(date, why)
+        continue
+      }
+      let before: RawRecord | null
+      try {
+        before = (await f.recordView(paths.day(date))) ?? null
+      } catch {
+        // There but not readable now: never edited as a new file (its every field would meet the one on the disk).
+        skip(date, 'unreadable')
+        continue
+      }
+      const after = next(before)
+      if (after === 'changed') {
+        skip(date, 'changed')
+        continue
+      }
+      const entry = recordEdit(paths.day(date), before, after)
+      if (!entry) {
+        unchanged.push(date)
+        continue
+      }
+      entries.push(entry)
+      edits.push({ date, before, after: after ?? {} })
+    }
+    const outcomes = entries.length ? await this.edit(entries) : []
+    const saved: string[] = []
+    const questions: string[] = []
+    const undo: ZjazdUndoDay[] = []
+    for (let i = 0; i < outcomes.length; i++) {
+      const o = outcomes[i]!
+      const e = edits[i]!
+      if (o.status === 'applied' || o.status === 'waiting') {
+        saved.push(e.date)
+        if (undoable) undo.push(e)
+      } else if (o.status === 'broken') skip(e.date, 'broken')
+      else {
+        questions.push(e.date)
+        // Saved in part (the fields that met no change are written): „Cofnij” takes back the day as it is seen now.
+        if (undoable && o.status === 'conflict') {
+          const seen = await f.recordView(paths.day(e.date)).catch(() => undefined)
+          if (seen) undo.push({ date: e.date, before: e.before, after: seen })
+        }
+      }
+    }
+    return { saved: saved.sort(), unchanged: unchanged.sort(), questions, skipped, outcomes, undo }
+  }
+
   async edit(entries: EditEntry[]): Promise<EditOutcome[]> {
     const f = this.need()
     const clean = entries.map((e) => {
@@ -607,6 +743,27 @@ export class DataHub {
   /** The statistics of the frozen days of a period (D358, spec „Etap 2”). */
   stats(period: StatsPeriod): Promise<StatsResult> {
     return this.need().stats(period)
+  }
+
+  /** The week of a date (D356): seven days from Monday on one axis – type, blocks, boundary, regeneration. */
+  async weekView(date: string): Promise<WeekView> {
+    if (!isIsoDate(date)) throw new Error('data tygodnia')
+    return this.need().weekView(date)
+  }
+
+  /** A month's goals (D356) with the month before's and the progress so far. */
+  async goals(month: string): Promise<GoalsView> {
+    if (!isMonth(month)) throw new Error('miesiąc celów')
+    return this.need().goalsView(month)
+  }
+
+  /** A change of a month's goals from the window (checked here: numbers in their ranges, null – no goal, the step skipped). */
+  async setGoals(month: unknown, patch: unknown): Promise<EditOutcome[]> {
+    const p = goalsPatchFrom(month, patch)
+    if (!p.ok) throw new Error(p.why)
+    const out = await this.need().setGoals(p.month, p.patch)
+    this.changed()
+    return out.map((o) => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}) }))
   }
 
   /**

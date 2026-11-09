@@ -1,5 +1,5 @@
 /**
- * „Statystyki” (D358): the page opens from the menu (and by Ctrl+7); in a clean folder it says there is too little data;
+ * „Statystyki” (D358): the page opens from the menu (and by Ctrl+4); in a clean folder it says there is too little data;
  * the period switches (4 tygodnie, 3 miesiące, od początku); with three frozen days (their grades and logs seeded for
  * the days before today – T528: the clock is the real one) it draws its four sections with a chart and a table each, and
  * counts a frozen day whose log is missing as unreadable.
@@ -45,14 +45,14 @@ function seed(dir: string, days: string[], missing: string[] = []): void {
   writeFileSync(join(dir, 'grades', days[0]!.slice(0, 4), 'seed.jsonl'), grades.join('\n') + '\n')
 }
 
-test('Statystyki: strona z menu i Ctrl+7, w czystym folderze „za mało danych”, przełączanie okresu', async () => {
+test('Statystyki: strona z menu i Ctrl+4, w czystym folderze „za mało danych”, przełączanie okresu', async () => {
   const { app, page, userData, errors } = await launch({ data: true })
   try {
     await withMainLog(userData, async () => {
       // In the menu before the history (D306: the settings right under it); the digits follow the menu's order (D362).
       await expect(page.getByTestId('nav-stats')).toHaveText(/Statystyki/)
-      await expect(page.getByTestId('nav-stats')).toHaveAttribute('title', 'Statystyki (Ctrl 7)')
-      await expect(page.getByTestId('nav-history')).toHaveAttribute('title', 'Historia (Ctrl 8)')
+      await expect(page.getByTestId('nav-stats')).toHaveAttribute('title', 'Statystyki (Ctrl 4)')
+      await expect(page.getByTestId('nav-history')).toHaveAttribute('title', 'Historia (Ctrl 9)')
       await page.getByTestId('nav-stats').click()
       await expect(page.getByTestId('page-stats')).toBeVisible()
       await expect(page.getByTestId('stats-too-little')).toContainText('Za mało danych')
@@ -67,7 +67,7 @@ test('Statystyki: strona z menu i Ctrl+7, w czystym folderze „za mało danych�
       }
       await page.getByTestId('nav-history').click()
       await expect(page.getByTestId('page-history')).toBeVisible()
-      await page.keyboard.press('Control+Digit7')
+      await page.keyboard.press('Control+Digit4')
       await expect(page.getByTestId('page-stats')).toBeVisible()
     })
     expect(errors).toEqual([])

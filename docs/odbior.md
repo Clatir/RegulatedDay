@@ -26,7 +26,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 - **W maszynie wirtualnej** (opcjonalnie): 68 z tych punktów może sprawdzić Cowork na świeżej instalacji, bez Twoich
@@ -100,6 +100,12 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8m.2 „Uruchamiaj z Windows” pokazuje stan i da się wyłączyć
    - [ ] E8n.1 Usunięta zaczęta sesja zostaje „Sesja NY”
    - [ ] E8n.2 Linia twardego końca projektów w pasku (gdy się zdarzy)
+   - [ ] E11.1 Import zjazdów z Twojego PDF (przed 21.11)
+   - [ ] E11.2 „Cofnij” i ponowny import
+   - [ ] E11.3 Dzień zjazdu z importu – plan i dojazd (21–22.11)
+   - [ ] E10.1 Strona „Tydzień”
+   - [ ] E10.2 Cele miesięczne na „Tygodniu”
+   - [ ] E10.3 Krok „Cele na <miesiąc>” w planie porannym
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1355,3 +1361,77 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   powiadomienia, także po „Jest lepiej” (D352, T544).
 - **Nie przechodzi, gdy:** linii nie ma przy biegnącym projekcie po twardym końcu, linia ma kropkę albo przyciski,
   zostaje po końcu projektu, albo w „mniej pytań” albo po „Jest lepiej” przychodzi powiadomienie.
+
+### E11 – import zjazdów z PDF (1.1.0)
+
+#### E11.1 Import zjazdów z Twojego PDF (1.1.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/zjazdy-parse.test.ts`, `tests/unit/zjazdy-pdf.test.ts` (zmyślony PDF),
+  `tests/e2e/zjazdy.spec.ts`. **Tylko Ty:** Twój PDF z uczelni (sprawdzony lokalnie przed wydaniem: 20 dni, 81 zajęć).
+- **Jak sprawdzić:** Kalendarz → „Wczytaj PDF zjazdów” → wybierz harmonogram z uczelni. Przejrzyj listę; jeden dzień
+  odznacz, w jednym wierszu zmień godzinę o +5 min; „Zapisz”; na pytanie o analizę tygodniową odpowiedz, jak chcesz.
+- **Oczekiwany efekt:** lista ma wszystkie przyszłe soboty i niedziele zjazdów z rodzajem (TEAMS – zdalny, sala
+  w budynku – stacjonarny), godzinami i „Przedmiot · forma”; dni minione i dziś są wyszarzone. Po „Zapisz” Kalendarz
+  pokazuje zjazdy w zapisanych dniach (bez odznaczonego), toast „Zapisano N dni zjazdów · Cofnij” (D357, T546).
+- **Nie przechodzi, gdy:** brakuje dnia albo zajęć z PDF, rodzaj dnia nie zgadza się z salami, zapisuje się dzień
+  odznaczony albo coś zapisuje się bez „Zapisz”.
+
+#### E11.2 „Cofnij” i ponowny import (1.1.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/zjazdy.test.ts` („Cofnij”, ponowny import, zmiana po imporcie),
+  `tests/unit/engine/zjazdy-day.test.ts`, `tests/e2e/zjazdy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** po zapisie kliknij „Cofnij” w toaście; wczytaj PDF jeszcze raz i zapisz; w jednym dniu zjazdu
+  w Kalendarzu wybierz „Typ z tygodnia”.
+- **Oczekiwany efekt:** „Cofnij” przywraca dni sprzed importu (typy i plan, także odpowiedź o analizie tygodniowej);
+  ponowny import tego samego pliku mówi „bez zmian” albo zastępuje poprzedni; „Typ z tygodnia” zostawia zwykły dzień bez
+  zajęć z PDF i bez przesuniętego dojazdu (T548).
+- **Nie przechodzi, gdy:** po „Cofnij” zostają zajęcia albo typ zjazdu, ponowny import dubluje zajęcia, albo zwykły dzień
+  ma zajęcia z PDF.
+
+#### E11.3 Dzień zjazdu z importu – plan i dojazd (1.1.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/zjazdy-day.test.ts`, `tests/unit/engine/zjazd-blocks.test.ts` (D359).
+  **Tylko Ty:** prawdziwy dzień zjazdu (21–22.11).
+- **Jak sprawdzić:** rano w dniu zjazdu stacjonarnego (21.11) otwórz plan dnia; w dniu zdalnym (22.11) spójrz na
+  maksimum i koniec pracy po zajęciach.
+- **Oczekiwany efekt:** zajęcia z PDF jako bloki stałe „Przedmiot · forma” w godzinach z PDF (nie da się ich przeciągnąć
+  na osi), zajęć z szablonu nie ma, dojazd kończy się o starcie pierwszych zajęć, a powrót zaczyna po ostatnich; pozostałe
+  bloki szablonu (np. posiłek) są na miejscu. W dniu zjazdu zajęcia zdalne po maksimum przesuwają maksimum i nie są
+  przedłużeniem (D359).
+- **Nie przechodzi, gdy:** zajęcia z szablonu i z PDF są naraz, dojazd stoi w godzinach szablonu, posiłek zniknął,
+  albo zajęcia zdalne po maksimum liczą się jako przedłużenie.
+
+### E10 – horyzont: tydzień i cele miesięczne (1.2.0)
+
+#### E10.1 Strona „Tydzień” (1.2.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/week.test.ts`, `tests/fs/horizon.test.ts`, `tests/web/week-layout.test.ts`,
+  `tests/e2e/week.spec.ts`. Ty: rzut oka na prawdziwych danych.
+- **Jak sprawdzić:** menu → „Tydzień” (Ctrl+3); spójrz na bieżący tydzień; strzałką przejdź tydzień wstecz i naprzód;
+  kliknij kolumnę jednego dnia.
+- **Oczekiwany efekt:** siedem kolumn pn–nd ze wspólną osią godzin; w dniach minionych bloki tak, jak było (niezaczęte
+  przygaszone), dziś na żywo, w przyszłych – plan (także zjazdy z importu); nad kolumną typ dnia, granica (✓ / ✗ / „w
+  toku” / „wolne” / „brak danych”) i regeneracja wobec minimum; kliknięcie otwiera plan dnia (D356, T553, T555).
+- **Nie przechodzi, gdy:** brakuje dnia albo bloku, który jest w planie dnia, blok minionego dnia stoi w godzinach planu
+  zamiast tych, w których biegł, albo kliknięcie nie otwiera dnia.
+
+#### E10.2 Cele miesięczne na „Tygodniu” (1.2.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/goals.test.ts`, `tests/fs/horizon.test.ts`, `tests/e2e/week.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** na „Tygodniu” „Ustaw cele”: studia np. 40 h, regeneracja 20 dni, dyscyplina 15 sesji; po kilku dniach
+  spójrz na postęp. Na drugim komputerze otwórz „Tydzień”.
+- **Oczekiwany efekt:** trzy pozycje „x z y” (godziny, dni, sesje) bez oceny i kolorów kary, przy dyscyplinie
+  „przedłużone: N · poza planem: N”; dopisek „wstępne” dla dziś i dni jeszcze niezamrożonych; te same cele na obu
+  komputerach; wartość spoza zakresu – komunikat pod polem (D356, D360, T552, T554).
+- **Nie przechodzi, gdy:** nauka po pracy nie liczy się do studiów, dzień bez obecności liczy się jako nieosiągnięte
+  minimum, sesja zaczęta 5 min później jest „przedłużona”, albo cele różnią się między komputerami.
+
+#### E10.3 Krok „Cele na <miesiąc>” w planie porannym (1.2.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/goals-step.test.ts`, `tests/e2e/week.spec.ts`. Ty: na początku grudnia (albo dziś, jeśli
+  cele listopada nie są ustawione).
+- **Jak sprawdzić:** otwórz plan poranny w miesiącu bez ustawionych celów; raz kliknij „Pomiń”, innego dnia „Zapisz”.
+- **Oczekiwany efekt:** krok po „Stronie B”, przed objawami, z liczbami z poprzedniego miesiąca; „Pomiń” chowa go do
+  końca miesiąca (także przy nieudanym zapisie – wtedy wraca jutro); po „Zapisz” cele są na „Tygodniu” (D360, T555).
+- **Nie przechodzi, gdy:** krok blokuje dalsze kroki planu porannego, wraca po „Pomiń” w tym samym miesiącu albo pojawia się
+  po ustawieniu celów.

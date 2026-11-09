@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0
+- Nowa strona „Tydzień” w menu (zaraz po „Kalendarzu”, Ctrl+3): siedem kolumn od poniedziałku ze wspólną osią godzin i blokami – w dniach minionych tak, jak było, w przyszłych według planu. Nad każdą kolumną typ dnia, czy granica była dotrzymana i regeneracja wobec minimum. Strzałki zmieniają tydzień, kliknięcie dnia otwiera jego plan.
+- Cele miesięczne w trzech obszarach, pokazywane na górze „Tygodnia” jako „x z y”, bez oceny: studia (godziny nauki i oglądania wykładów), regeneracja (dni z osiągniętym minimum), dyscyplina tradingowa (sesje z planu bez przedłużenia, obok liczniki „przedłużone” i „poza planem”). Cele ustawiasz na „Tygodniu” albo w nowym kroku „Cele na <miesiąc>” planu porannego, który pojawia się, dopóki ich nie ustawisz albo nie pominiesz.
+- Skróty menu od „Prośb” w dół przesunęły się o jeden (Historia – Ctrl+8).
+
+## 1.1.0
+- Kalendarz → „Wczytaj PDF zjazdów”: aplikacja czyta harmonogram z uczelni (PDF) i pokazuje listę dni zjazdów do poprawienia – rodzaj (sala „TEAMS” to zjazd zdalny, sala w budynku – stacjonarny), godziny i przedmioty. Nic się nie zapisuje bez „Zapisz”; zapisują się dni od jutra.
+- Każde zajęcia z PDF to osobny blok stały „Przedmiot · forma” (np. „Marketing · wykład”). Zastępują zajęcia z szablonu zjazdu, reszta szablonu zostaje, a dojazd przesuwa się do godzin z PDF: tam kończy się o starcie pierwszych zajęć, powrót zaczyna po ostatnich.
+- „Cofnij” po zapisie przywraca dni sprzed tego importu (także odpowiedź na pytanie o analizę tygodniową); ponowny import tych samych dat zastępuje poprzedni, a zmiana typu dnia na inny niż zjazd zdejmuje import.
+- W dniu zjazdu każde zajęcia zdalne – z PDF, z szablonu i dodane ręcznie – liczą się jak blok zjazdu: przesuwają maksimum dnia i nie są przedłużeniem.
+- Komputer ze starszą wersją przy komputerze z 1.1.0 nie prowadzi dnia i nie zamraża dni (nowa wersja reguł liczenia).
+
 ## 1.0.10
 - Po minięciu twardego końca projektów pasek pokazuje linię „Twardy koniec projektów – regeneracja do snu”, dopóki biegnie projekt (także blok liczony jak projekt, np. nauka po końcu pracy) albo trwa czas do wyjaśnienia po nim – także przy wyłączonym powiadomieniu Windows. Linia jest bez kropki, nie spycha pytań z przyciskami; w „mniej pytań” to cicha ikona.
 - Powiadomienie Windows o twardym końcu przychodzi też przy bloku liczonym jak projekt (np. nauka po końcu pracy) i w czasie do wyjaśnienia po projekcie – w ciągu godziny od minięcia.

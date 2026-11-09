@@ -6,10 +6,10 @@ import { create } from 'zustand'
 import type { PlanBlock } from '@shared/model/plan'
 import { commitActiveField } from '../lib/commit'
 
-export type Page = 'today' | 'calendar' | 'requests' | 'templates' | 'routines' | 'room' | 'stats' | 'history' | 'settings'
+export type Page = 'today' | 'calendar' | 'week' | 'stats' | 'requests' | 'templates' | 'routines' | 'room' | 'history' | 'settings'
 
-/** The menu's order (one place: a new screen is one word here, its label and its view in `App.tsx`). */
-export const PAGES: Page[] = ['today', 'calendar', 'requests', 'templates', 'routines', 'room', 'stats', 'history', 'settings']
+/** The menu's order (D362; one place: a new screen is one word here, its label and its view in `App.tsx`). */
+export const PAGES: Page[] = ['today', 'calendar', 'week', 'stats', 'requests', 'templates', 'routines', 'room', 'history', 'settings']
 
 export interface Toast {
   id: number
@@ -33,14 +33,20 @@ interface UiState {
   movedLater: string | null
   /** The day whose „Strona B” step „Dalej” or „Pomiń” closed here – at once, whatever its file does (A6-15). */
   sideBClosed: string | null
+  /** The month whose morning step „Cele” „Pomiń” closed here – at once, whatever the save does (D72, as „Strona B”, A6-15). */
+  goalsClosed: string | null
   /** The new block not added yet, with its day: a form not saved survives going to another screen (spec „Szkice”, A6-17). */
   blockDraft: { date: string; block: PlanBlock } | null
 }
 
-export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, blockDraft: null }))
+export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, goalsClosed: null, blockDraft: null }))
 
 export function closeSideB(date: string): void {
   useUi.setState({ sideBClosed: date })
+}
+
+export function closeGoals(month: string): void {
+  useUi.setState({ goalsClosed: month })
 }
 
 /** The day's new block (null: none) – clearing touches only that day's draft. */

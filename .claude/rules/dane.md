@@ -75,6 +75,10 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   swoje; wszystko sprawdzone przed zapisem (logi pełne, zdarzenia poprawne), inaczej nic. Bez kliknięcia zapisuje je
   prowadzący w `check()` (bez nakładki). Nowe miejsce, które ocenia kliknięcie, też przez `barDay`, `writeOn` i
   `serial`. Zapisy okna wprost do logu (`userEvents`) – bez nakładki. Zmiana reguł działań automatycznych – `RULES_VERSION`.
+  Import zjazdów (T546, T548): `DataHub.zjazdyPreview` / `zjazdySave` / `zjazdyUndo` – jedna partia kolejki
+  (`zjazdyWrite`), PDF przez `main/import/pdfText.ts` (pdfjs leniwie, tylko proces główny).
+  Tydzień i cele (T552, T553): `folder.horizonDays` (zadanie `horizon`, pamięć per dzień, `unknown` + `warn`),
+  `weekView`, `goalsView`, `setGoals` (pola liściowe `goals.RRRR-MM.*` w `rd.json`, po kolei przez kolejkę).
 - Folder bez korzenia (T515): `DataFolder.open` owija `fs` w `rootGuarded` – zapis nie tworzy samego folderu danych;
   `check()` bez korzenia zwraca od razu („nieustalony”). Testy, które otwierają folder, muszą go najpierw utworzyć.
 - Korzeń znika w trakcie (E8b.1, `isRootGone` = ENOROOT): `cachedJson` oddaje wersję znaną (zaufaną jak świeżo

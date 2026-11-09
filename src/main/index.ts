@@ -69,6 +69,7 @@ import { toneOnChange, WidgetEngine } from './widget'
 import { SoundWindow } from './windows/soundWindow'
 import { afterOutsideClose } from './windows/outsideClose'
 import { WorkerHost, type WorkerChild } from './worker/host'
+import { readZjazdyPdf, zjazdyLogLine } from './import/zjazdy'
 
 // Crash dumps of every process stay on this computer (no upload); only the main process's („browser”) count as a crash.
 crashReporter.start({ uploadToServer: false, submitURL: '', compress: false })
@@ -778,6 +779,31 @@ function registerIpc(): void {
     const r = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
     return r.response === 0
   }
+  // „Wczytaj PDF zjazdów” (D357): a PDF picked over the main window, read into a preview (nothing saved); „Zapisz” then
+  // writes the days to come. The log gets only counts – never the subjects nor the lecturers of the schedule.
+  handle(CH.zjazdyRead, async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const opts = { title: 'Wczytaj PDF zjazdów', properties: ['openFile'] as Array<'openFile'>, filters: [{ name: 'PDF', extensions: ['pdf'] }] }
+    // The test identity (E2E, CI) takes the file from RD_E2E_PDF – the dialog of Windows cannot be driven by a test.
+    const r = identity.kind === 'test' && process.env.RD_E2E_PDF ? { canceled: false, filePaths: [process.env.RD_E2E_PDF] } : win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    const file = r.canceled ? null : (r.filePaths[0] ?? null)
+    if (!file) return null
+    const read = await readZjazdyPdf(file)
+    // Only numbers and the kind of a failure: the message of a file not read has its path in it.
+    log('info', zjazdyLogLine(read))
+    if (!read.ok) return { ok: false, error: read.error }
+    return { ok: true, preview: await needHub().zjazdyPreview(read) }
+  })
+  handle(CH.zjazdySave, async (_e, days: unknown) => {
+    const out = await needHub().zjazdySave(Array.isArray(days) ? days : [])
+    log('info', `import zjazdów: zapisane ${out.saved.length} dni, z pytaniem ${out.questions.length}, pominięte ${out.skipped.length}`)
+    return out
+  })
+  handle(CH.zjazdyUndo, async (_e, undo: unknown) => {
+    const out = await needHub().zjazdyUndo(Array.isArray(undo) ? undo : [])
+    log('info', `import zjazdów cofnięty: ${out.saved.length} dni, z pytaniem ${out.questions.length}, pominięte ${out.skipped.length}`)
+    return out
+  })
   handle(CH.exportCsv, async (e, from: unknown, to: unknown) => {
     const dir = await pickDir(e, 'Folder na eksport CSV')
     if (!dir) return null
@@ -808,6 +834,10 @@ function registerIpc(): void {
   handle(CH.sideB, () => needHub().sideB())
   handle(CH.calibration, () => needHub().calibration())
   handle(CH.stats, (_e, period: unknown) => needHub().stats(period === '3m' || period === 'all' ? period : '4w'))
+  // „Tydzień” and the month's goals (D356).
+  handle(CH.weekView, (_e, date: unknown) => needHub().weekView(String(date)))
+  handle(CH.goals, (_e, month: unknown) => needHub().goals(String(month)))
+  handle(CH.setGoals, (_e, month: unknown, patch: unknown) => needHub().setGoals(month, patch))
   handle(CH.answer, (_e, id: string, answer: string, value: number | null) => needHub().answer(String(id), String(answer), typeof value === 'number' && Number.isFinite(value) ? value : null))
   ipcMain.on(CH.seen, (e, ids: unknown) => {
     // Seen only in the main window in the foreground (spec D231); the panel counts while it is open (E4b).

@@ -4,6 +4,7 @@ paths:
   - "src/shared/time/**"
   - "src/shared/model/**"
   - "src/shared/calendar/**"
+  - "src/shared/import/**"
   - "tests/unit/engine/**"
 ---
 
@@ -27,6 +28,12 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - `engine/day.ts` – `computeDay`: granica, koniec pracy, klasyfikacja minut, budżet, regeneracja, minimum, pora snu,
   twardy koniec, pula, regeneracja każdej minuty (`rest`, dla energii); `newSegments` (odcinki do zapisu przez
   prowadzącego); `settingsAtMinute`. Energia (E2) – osobne reguły `energia.md`.
+- E11 (T546–T550): `import/zjazdy.ts` (parser PDF z elementów tekstu), `import/zjazdDay.ts` (`zjazdDayRaw`,
+  `withoutZjazd`, `zjazdTypeRaw`, `classImport`, `sameDayFile`); bloki `origin: 'zjazd'` i zajęcia zdalne w dniu zjazdu
+  (`blockInfos(…, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
+  `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 6 od 1.1.0.
+- E10 (T552–T554): `engine/week.ts` (`horizonDay` – dzień tygodnia i celów, `weekViewOf`, `sessionsOf`),
+  `engine/goals.ts` (postęp „x z y”, `goalsStepShown`), `model/goals.ts` (cele w `rd.json`, zakresy).
 - E3: `engine/context.ts` (`dayContextOf`, `snapshotOf` – jedno źródło kontekstu dla prowadzącego i okna),
   `planEdit.ts` (nowy blok, przeniesienie, kopia dnia i szablonu, blok próśb, `wakeShifted` – bloki własne przy zmianie pobudki, D334), `exchange.ts` (wymiana),
   `typeChange.ts` (zmiana typu, „Dodaj bloki typu …”), `lateWake.ts`, `morning.ts` (z wczoraj, pytania sesji i świąt,

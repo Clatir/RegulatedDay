@@ -9,6 +9,7 @@
  */
 import { BLOCK_COLORS } from '../theme'
 import { DEFAULT_CATEGORIES } from './categories'
+import { goalsFrom, type MonthGoals } from './goals'
 import { changeFrom, changeOrder, type SettingsChange } from './settings'
 import { isIsoDate } from '../time/zone'
 
@@ -95,6 +96,8 @@ export interface RdFile {
    * it was forgotten – nobody waits for it (freezing, leading) until that presence changes (it is used again).
    */
   forgotten: Record<string, { lastPresence: number | null; at: number }>
+  /** The goals of months (D356, `model/goals.ts`): by 'RRRR-MM'; a month without an entry has none. */
+  goals: Record<string, MonthGoals>
 }
 
 /** The key of a proposal of the review: its kind, category and variant – the same when counted again on the changed values. */
@@ -209,7 +212,8 @@ export function rdFrom(v: unknown): RdFile {
     ritualFrom: isIsoDate(r.ritualFrom) ? r.ritualFrom : null,
     gameFrom: isIsoDate(r.gameFrom) ? r.gameFrom : null,
     calibrationReview: calibrationReviewFrom(r.calibrationReview),
-    forgotten: forgottenFrom(r.forgotten)
+    forgotten: forgottenFrom(r.forgotten),
+    goals: goalsFrom(r.goals)
   }
 }
 

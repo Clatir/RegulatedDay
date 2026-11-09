@@ -31,7 +31,7 @@ export interface BlockInfo {
   weeklyAnalysis: boolean
   /** The latest a waiting block may start (its window's end), index. */
   waitUntil: number | null
-  /** From the plan of lectures or a „zjazd” (commute, class): work, but never an extension (spec). */
+  /** From the plan of lectures or a „zjazd” (commute, class, a class imported from the PDF): work, but never an extension (spec). */
   lectureOrCommute: boolean
   /** A lecture recorded on a computer (it runs on in „Odcinam się”). */
   recorded: boolean
@@ -67,8 +67,17 @@ const CAT_FALLBACK: CategoryRules = {
   variants: []
 }
 
-/** The blocks of a day: the plan's, then the ones that only the log knows (with what their start said). */
-export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFacts, settings: RulesSettings): BlockInfo[] {
+/** The types of a day of „zjazd”: on them a remote class is a block of the „zjazd” (D359). */
+export const ZJAZD_DAY_TYPES: ReadonlySet<string> = new Set(['zjazd-stacjonarny', 'zjazd-zdalny'])
+
+/** A remote class on a day of `dayType` is a block of the „zjazd” (D359): on a day of „zjazd” only. */
+export const zjazdRemoteClass = (rules: Pick<CategoryRules, 'kind'>, dayType: string): boolean => rules.kind === 'remoteClass' && ZJAZD_DAY_TYPES.has(dayType)
+
+/**
+ * The blocks of a day: the plan's, then the ones that only the log knows (with what their start said). `typeAt`: the
+ * day's type in force at a minute (index) – a day switched in its course has its snapshots of type.
+ */
+export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFacts, settings: RulesSettings, typeAt: (k: number) => string = () => ''): BlockInfo[] {
   const rulesOf = (id: string) => settings.categories[id] ?? (id === REGEN_CATEGORY ? { ...CAT_FALLBACK, cls: 'free' as const, kind: 'regen' as const } : CAT_FALLBACK)
   const out: BlockInfo[] = []
   const make = (p: PlanBlock, inPlan: boolean): BlockInfo => {
@@ -90,7 +99,8 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
       secondShift: p.tag === 'secondShift',
       weeklyAnalysis: p.tag === 'weeklyAnalysis',
       waitUntil: p.waitUntilMin != null ? idxOfLogical(grid, p.waitUntilMin) : null,
-      lectureOrCommute: p.origin === 'lecture' || rules.kind === 'commute' || rules.kind === 'lecture',
+      // A class imported from the PDF of „zjazdy” (D357) is a block of a „zjazd” too, a remote one as well.
+      lectureOrCommute: p.origin === 'lecture' || p.origin === 'zjazd' || rules.kind === 'commute' || rules.kind === 'lecture',
       recorded: p.recorder != null,
       origin: p.origin,
       sourceId: p.sourceId,
@@ -128,6 +138,7 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
           costs: null,
           bgCostPct: null,
           note: '',
+          name: null,
           origin: 'user',
           sourceId: null,
           recorder: null,
@@ -153,6 +164,14 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
         changed = true
       }
     }
+  }
+  // D359: a remote class on a day of „zjazd” – of the import, of the template, added by you – is a block of the „zjazd”
+  // (it moves the maximum, never an extension), by the type in force at its planned start (begun outside the plan: its
+  // first run); on other days as before.
+  for (const b of out) {
+    if (b.lectureOrCommute || b.rules.kind !== 'remoteClass') continue
+    const at = plannedSpan(b, byId)?.start ?? facts.blocks.get(b.id)?.runs[0]?.from ?? 0
+    if (zjazdRemoteClass(b.rules, typeAt(at))) b.lectureOrCommute = true
   }
   // The approval in force (not opened again since): the plan it names (T321); one that names none – the plan as it is.
   const last = facts.approvals.at(-1)

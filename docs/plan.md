@@ -44,8 +44,6 @@ Opus 5.5 · high. Kolejność (T545): E11 najpierw (najbliższy zjazd stacjonarn
 
 | # | Zadanie | Rodzaj | Wersja | Wykonawca · przegląd | Szacunek |
 | --- | --- | --- | --- | --- | --- |
-| E11 | Import zjazdów z PDF (D357, D359): daty, rodzaj, godziny, blok na wiersz, dojazd do godzin z PDF, podgląd, „Cofnij” | Całość | 1.1.0 | `wykonawca-opus` (parser, zapis, silnik) + `wykonawca-sonnet` (ekran) · xhigh | 6–9 h |
-| E10 | Horyzont (D356): strona „Tydzień” (podgląd), cele miesięczne – studia, regeneracja, dyscyplina tradingowa | Całość | 1.2.0 | `wykonawca-opus` (logika, dane) + `wykonawca-sonnet` (ekrany) · xhigh / high | 8–12 h |
 | E12 | Statystyki (D358): strona „Statystyki”, cztery sekcje, tylko dni zamrożone | Interfejs | 1.3.0 | `wykonawca-sonnet` · high | 5–8 h |
 
 ## Po 1.0

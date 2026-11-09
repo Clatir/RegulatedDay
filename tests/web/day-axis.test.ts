@@ -39,6 +39,13 @@ describe('przeciąganie bloków na osi (D305)', () => {
     expect(m.get('sesja')).toBe(false)
   })
 
+  it('zajęcia z importu PDF zjazdów (D357): jak wykład – nieprzeciągalne', () => {
+    const imported = block({ id: 'zajecia', cat: 'zajecia-zdalne', at: '10:00', min: 90, fixed: true, origin: 'zjazd' })
+    const m = axisOf(new Scenario({ date: DATE, plan: [...plan.slice(0, 1), imported] }), null)
+    expect(m.get('rano')).toBe(true)
+    expect(m.get('zajecia')).toBe(false)
+  })
+
   it('druga zmiana (tag secondShift, jak sesja – D192): nieprzeciągalna', () => {
     const second = block({ id: 'zmiana', cat: 'inne-obowiazki', at: '20:00', min: 60, fixed: true, tag: 'secondShift', origin: 'template' })
     const m = axisOf(new Scenario({ date: DATE, plan: [...plan.slice(0, 1), second] }), null)

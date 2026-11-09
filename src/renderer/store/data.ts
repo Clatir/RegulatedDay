@@ -7,6 +7,7 @@
 import { create } from 'zustand'
 import type { DataView, EditEntry, EditOutcome, EventIn, RawRecord } from '@shared/api'
 import { recordEdit } from '@shared/data/merge'
+import type { GoalsPatch } from '@shared/model/goals'
 import { newId } from '@shared/model/ids'
 import { lectureFrom, templateFrom, type LectureSeries, type Template } from '@shared/model/plan'
 import { rdFrom, type RdFile } from '@shared/model/rd'
@@ -111,9 +112,10 @@ let turn: Promise<unknown> = Promise.resolve()
 /**
  * The window's edits go one at a time, each made when its turn comes from the records as they are then (the view is read
  * again after every edit): two quick changes of one block never meet as if the second came from another computer, and
- * the second never brings back what the first changed (A6-01).
+ * the second never brings back what the first changed (A6-01). Exported for what the main process writes itself (the
+ * import of „zjazdy”): it goes in its turn too, after the edits sent before it.
  */
-function inTurn<T>(fn: () => Promise<T>): Promise<T> {
+export function inTurn<T>(fn: () => Promise<T>): Promise<T> {
   const run = turn.then(fn)
   turn = run.catch(() => undefined)
   return run
@@ -186,6 +188,25 @@ export function trySaveRd(fn: (raw: RawRecord) => RawRecord): Promise<EditOutcom
   return trySaveWith(() => {
     const before = rawRecord('rd.json')
     return [editOf('rd.json', before, fn(before ? { ...before } : { schema: 1 }))]
+  })
+}
+
+/**
+ * A change of a month's goals (D356) – the numbers (null: no goal) or the morning's step skipped – in its turn, made by
+ * the main process from rd.json as it is then; null when nothing could be sent (the toast said why).
+ */
+export function trySaveGoals(month: string, patch: GoalsPatch): Promise<EditOutcome[] | null> {
+  return inTurn(async () => {
+    try {
+      const out = await window.rd.setGoals(month, patch)
+      await reloadData()
+      const notice = editNotice(out)
+      if (notice) toast(notice.text, notice.kind, 8000)
+      return out
+    } catch (e) {
+      toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
+      return null
+    }
   })
 }
 
