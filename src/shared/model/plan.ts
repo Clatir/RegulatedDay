@@ -31,8 +31,16 @@ export interface PlanBlock {
   /** Its own share of the cost in the background, 0–100 % (null: the setting, 50 % at the start). */
   bgCostPct: number | null
   note: string
-  /** Where it comes from: the template, the plan of lectures, the session layer, or you. */
-  origin: 'template' | 'lecture' | 'session' | 'user'
+  /**
+   * Its own name instead of its variant's or category's (a class imported from the PDF of „zjazdy”: „<przedmiot> ·
+   * <forma>”, D357); null – named as before. A version that does not know the field names it by its category.
+   */
+  name: string | null
+  /**
+   * Where it comes from: the template, the plan of lectures, the session layer, you, or the import of „zjazdy” from a PDF
+   * (D357: a fixed class of a „zjazd”; a version that does not know it reads it as yours).
+   */
+  origin: 'template' | 'lecture' | 'session' | 'user' | 'zjazd'
   /** The session of the session layer, the lecture series, the template block it was made from. */
   sourceId: string | null
   /** The computer that records a lecture (spec „Plan wykładów”). */
@@ -117,6 +125,8 @@ const intIn = (v: unknown, min: number, max: number): number | null => (typeof v
 /** Logical minutes a plan may use: 04:00 to 03:59 of the night after. */
 export const PLAN_MIN = 240
 export const PLAN_MAX = 1679
+/** The longest own name of a block. */
+export const BLOCK_NAME_MAX = 120
 
 function costsFrom(v: unknown): PlanBlock['costs'] {
   if (!isPlain(v)) return null
@@ -132,7 +142,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
   const anchor = typeof v.anchor === 'string' && v.anchor ? v.anchor : null
   const durationMin = intIn(v.durationMin, 1, 24 * 60)
   if ((startMin == null && !anchor) || durationMin == null) return null
-  const origins = ['template', 'lecture', 'session', 'user']
+  const origins = ['template', 'lecture', 'session', 'user', 'zjazd']
   return {
     id: v.id,
     categoryId: v.categoryId,
@@ -147,6 +157,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     costs: costsFrom(v.costs),
     bgCostPct: intIn(v.bgCostPct, 0, 100),
     note: str(v.note).slice(0, 2000),
+    name: str(v.name).trim().slice(0, BLOCK_NAME_MAX) || null,
     origin: origins.includes(v.origin as string) ? (v.origin as PlanBlock['origin']) : origin,
     sourceId: typeof v.sourceId === 'string' ? v.sourceId : null,
     recorder: typeof v.recorder === 'string' ? v.recorder : null,
@@ -171,6 +182,7 @@ export function planBlock(p: Partial<PlanBlock> & Pick<PlanBlock, 'id' | 'catego
     costs: null,
     bgCostPct: null,
     note: '',
+    name: null,
     origin: 'user',
     sourceId: null,
     recorder: null,

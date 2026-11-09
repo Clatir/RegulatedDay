@@ -85,7 +85,10 @@ const api: RdApi = {
   goals: (month) => ipcRenderer.invoke(CH.goals, month),
   setGoals: (month, patch) => ipcRenderer.invoke(CH.setGoals, month, patch),
   seen: (ids) => ipcRenderer.send(CH.seen, ids),
-  onSound: (cb) => on('rd:sound', cb)
+  onSound: (cb) => on('rd:sound', cb),
+  zjazdyRead: () => ipcRenderer.invoke(CH.zjazdyRead),
+  zjazdySave: (days) => ipcRenderer.invoke(CH.zjazdySave, days),
+  zjazdyUndo: (undo) => ipcRenderer.invoke(CH.zjazdyUndo, undo)
 }
 
 contextBridge.exposeInMainWorld('rd', api)

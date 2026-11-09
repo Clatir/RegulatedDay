@@ -9,11 +9,28 @@ import { deepEqual } from './merge'
 
 export type Raw = Record<string, unknown>
 
-const isPlain = (v: unknown): v is Raw => !!v && typeof v === 'object' && !Array.isArray(v)
+/** A plain object (a record, a block) – not an array, not null. */
+export const isRaw = (v: unknown): v is Raw => !!v && typeof v === 'object' && !Array.isArray(v)
+const isPlain = isRaw
 
 /** The day's raw file, or a new one (schema and date). */
 export function dayRaw(raw: Raw | null | undefined, date: string): Raw {
   return isPlain(raw) ? { ...raw } : { schema: 1, date }
+}
+
+/** The raw blocks of a day's file: a list (E1, and as the app writes it), or a map by id. */
+export function dayBlocks(raw: Raw): unknown[] {
+  return Array.isArray(raw.blocks) ? (raw.blocks as unknown[]) : isPlain(raw.blocks) ? Object.values(raw.blocks) : []
+}
+
+/** A raw block put into the day as it is (replacing the one with its id) – a block taken back as it was before. */
+export function putRawBlock(raw: Raw, b: Raw): Raw {
+  const list = dayBlocks(raw)
+  const i = list.findIndex((x) => isPlain(x) && x.id === b.id)
+  const next = [...list]
+  if (i >= 0) next[i] = b
+  else next.push(b)
+  return { ...raw, blocks: next }
 }
 
 /**
@@ -32,18 +49,13 @@ export function blockJson(b: PlanBlock, before?: Raw): Raw {
 
 /** The block put into the day (replacing one with its id, keeping its unknown fields). */
 export function putBlock(raw: Raw, b: PlanBlock): Raw {
-  const list = Array.isArray(raw.blocks) ? (raw.blocks as unknown[]) : isPlain(raw.blocks) ? Object.values(raw.blocks) : []
-  const i = list.findIndex((x) => isPlain(x) && x.id === b.id)
-  const next = [...list]
-  if (i >= 0) next[i] = blockJson(b, list[i] as Raw)
-  else next.push(blockJson(b))
-  return { ...raw, blocks: next }
+  const before = dayBlocks(raw).find((x) => isPlain(x) && x.id === b.id) as Raw | undefined
+  return putRawBlock(raw, before ? blockJson(b, before) : blockJson(b))
 }
 
 /** A block of your own taken out of the file (a new block you added and then removed). */
 export function takeBlock(raw: Raw, id: string): Raw {
-  const list = Array.isArray(raw.blocks) ? (raw.blocks as unknown[]) : isPlain(raw.blocks) ? Object.values(raw.blocks) : []
-  return { ...raw, blocks: list.filter((x) => !(isPlain(x) && x.id === id)) }
+  return { ...raw, blocks: dayBlocks(raw).filter((x) => !(isPlain(x) && x.id === id)) }
 }
 
 /** The map of cancelled blocks (a list written by E1 becomes the map, id → true). */

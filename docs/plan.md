@@ -39,15 +39,13 @@ Ciągi A–E zakończone wydaniem 1.0.0 (28.10.2026) → `docs/archiwum/plan-E0-
 
 ## Ciąg I – 4.11, 4.10, potem E10–E12 (D353)
 
-Bez pauz do „dalej” (D317); jedyna brama – pakiet pytań o wygląd E10–E12 po planie. Główna sesja Opus 5.5 · high.
+Bez pauz do „dalej” (D317); brama – pakiet pytań o wygląd E10–E12 – odpowiedziana 9.11 (D356–D359). Główna sesja
+Opus 5.5 · high. Kolejność (T545): E11 najpierw (najbliższy zjazd stacjonarny 21–22.11), potem E10, E12.
 
 | # | Zadanie | Rodzaj | Wersja | Wykonawca · przegląd | Szacunek |
 | --- | --- | --- | --- | --- | --- |
-| 4.10 | Linia twardego końca w pasku: „Twardy koniec projektów – regeneracja do snu” (D352), bez kropki, cicha ikona w „mniej pytań” – brak w kodzie od 1.0.0, wyszło w H1 | Całość | 1.0.10 | `wykonawca-sonnet` · xhigh (pasek) | 1–1,5 h |
-| I-plan | Plan E10–E12 (zakres, ekrany, dane, kolejność, wykonawcy) i pakiet pytań o wygląd – brama | Dokumenty | – | główna sesja · medium | 1–2 h |
-| E10 | Horyzont: widok tygodnia i cele miesięczne w trzech obszarach (studia, regeneracja, dyscyplina tradingowa) | Całość | 1.1.x | `wykonawca-opus` (logika, dane) + `wykonawca-sonnet` (ekrany) · xhigh / high | według planu |
-| E11 | Import zjazdów: PDF z terminami z uczelni i dobór szablonu dnia | Całość | 1.1.x | `wykonawca-opus` (parser, walidacja, zapis planu) · high (zapis dni – xhigh) | według planu |
-| E12 | Statystyki: wzorce energii, trafność szacowania, czas próśb na osobę, dotrzymane granice | Interfejs | 1.1.x | `wykonawca-sonnet` · high | według planu |
+| E10 | Horyzont (D356): strona „Tydzień” (podgląd), cele miesięczne – studia, regeneracja, dyscyplina tradingowa | Całość | 1.2.0 | `wykonawca-opus` (logika, dane) + `wykonawca-sonnet` (ekrany) · xhigh / high | 8–12 h |
+| E12 | Statystyki (D358): strona „Statystyki”, cztery sekcje, tylko dni zamrożone | Interfejs | 1.3.0 | `wykonawca-sonnet` · high | 5–8 h |
 
 ## Po 1.0
 

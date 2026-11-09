@@ -7,3 +7,5 @@
 *.zip binary
 *.woff binary
 *.woff2 binary
+# A PDF's cross-reference table counts bytes (tests/fixtures/zjazdy.pdf): never a conversion of line ends.
+*.pdf binary

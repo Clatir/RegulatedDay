@@ -12,6 +12,7 @@ import { readLogText } from '@shared/data/logText'
 import { paths } from '@shared/data/paths'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
+import { HARD_END_TEXT } from '@shared/engineView'
 import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
@@ -38,7 +39,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; modePrefs?: () => { sessionMode: boolean; classMode: boolean } } = {}) {
   // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
   // alone (Windows sets the time back or forward – the monotonic clock goes on).
   const clock = {
@@ -62,50 +63,52 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
   const views: WidgetView[] = []
   let open = true
   let editFails = false
-  const w = new WidgetEngine({
-    folder: () => (open ? folder : null),
-    timer: async (c) => {
-      const r = await folder.timerClick(c as never)
-      return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
-    },
-    edit: async (entries) => {
-      if (editFails) throw new Error('plik jest teraz nieczytelny – zmiana nie została zapisana, spróbuj za chwilę')
-      return (await folder.edit(entries.map((e) => ({ ...e, edits: e.edits.map((x) => ({ ...x, path: x.path.map(String) })) })))).map((o) => ({ status: o.status }))
-    },
-    answer: async (id, a, v) => {
-      const r = await folder.answer(id, a, v)
-      return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
-    },
-    seen: (ids, how) => folder.markSeen(ids, how),
-    clickedApp: () => undefined,
-    modePrefs: () => {
-      // A hook inside a refresh, after the folder was read (a slow refresh: the clock goes on meanwhile).
-      o.during?.()
-      return { sessionMode: true, classMode: true }
-    },
-    notices: () => ({ start5: true, hardEnd: true, reserve: true }),
-    notify: (n, onFailed) => {
-      // Refused at once (an error of Windows): the failure is said before the answer.
-      if (o.refuse?.()) {
-        onFailed?.()
-        return false
-      }
-      shown.push(n)
-      // Windows can still say „failed” later (`onFailed` of a shown one): the test calls it when it wants.
-      if (onFailed) failLater.push(onFailed)
-      return true
-    },
-    ...(o.taken ? { notificationState: async () => (o.taken!() ? 'accepts' : 'presentation') } : {}),
-    ...(o.present ? { present: o.present } : {}),
-    showMain: () => undefined,
-    emit: (v) => views.push(v),
-    log: (_level, msg) => void o.logs?.push(msg),
-    now: () => clock.now,
-    mono: () => clock.mono,
-    batterySaver: () => o.batterySaver ?? false,
-    backup: () => (o.backupFailed ? { failed: { error: 'plik zajęty' } } : null)
-  })
-  return { folder, clock, w, shown, failLater, views, closeFolder: () => (open = false), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
+  const build = () =>
+    new WidgetEngine({
+      folder: () => (open ? folder : null),
+      timer: async (c) => {
+        const r = await folder.timerClick(c as never)
+        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
+      },
+      edit: async (entries) => {
+        if (editFails) throw new Error('plik jest teraz nieczytelny – zmiana nie została zapisana, spróbuj za chwilę')
+        return (await folder.edit(entries.map((e) => ({ ...e, edits: e.edits.map((x) => ({ ...x, path: x.path.map(String) })) })))).map((o) => ({ status: o.status }))
+      },
+      answer: async (id, a, v) => {
+        const r = await folder.answer(id, a, v)
+        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
+      },
+      seen: (ids, how) => folder.markSeen(ids, how),
+      clickedApp: () => undefined,
+      modePrefs: () => {
+        // A hook inside a refresh, after the folder was read (a slow refresh: the clock goes on meanwhile).
+        o.during?.()
+        return o.modePrefs?.() ?? { sessionMode: true, classMode: true }
+      },
+      notices: () => ({ start5: true, hardEnd: o.hardEndNotice ?? true, reserve: true }),
+      notify: (n, onFailed) => {
+        // Refused at once (an error of Windows): the failure is said before the answer.
+        if (o.refuse?.()) {
+          onFailed?.()
+          return false
+        }
+        shown.push(n)
+        // Windows can still say „failed” later (`onFailed` of a shown one): the test calls it when it wants.
+        if (onFailed) failLater.push(onFailed)
+        return true
+      },
+      ...(o.taken ? { notificationState: async () => (o.taken!() ? 'accepts' : 'presentation') } : {}),
+      ...(o.present ? { present: o.present } : {}),
+      showMain: () => undefined,
+      emit: (v) => views.push(v),
+      log: (_level, msg) => void o.logs?.push(msg),
+      now: () => clock.now,
+      mono: () => clock.mono,
+      batterySaver: () => o.batterySaver ?? false,
+      backup: () => (o.backupFailed ? { failed: { error: 'plik zajęty' } } : null)
+    })
+  const w = build()
+  return { folder, clock, w, build, shown, failLater, views, closeFolder: () => (open = false), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
 }
 
 describe('widget w procesie głównym', () => {
@@ -894,6 +897,211 @@ describe('widget w procesie głównym', () => {
 
   it('powiadomienie o twardym końcu nie przychodzi, gdy minimum zostało zebrane już po przejściu (projekt zaczęty potem)', async () => {
     expect(await hardEndNotices(false, 0)).toBe(0)
+  })
+
+  /**
+   * A project runs after the hard end passed (the minimum is missing, the figures set by hand): the bar's line and the
+   * notification in a mode of the day. `ctl.passed` – the minute it passed in (null: 200 min before now). Every case on
+   * a day of its own (a test of its own): the notification's id is written in the day's log, a second one on it would
+   * show nothing.
+   */
+  async function hardEndDay(o: { blocks?: unknown[]; at?: number; category?: string; asProject?: boolean; project?: boolean; explain?: 'open' | 'answered'; message?: boolean; make?: Parameters<typeof make>[0] } = {}) {
+    if (o.blocks) writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: o.blocks }))
+    const d = await make(o.make)
+    const { w, folder, shown, at } = d
+    await folder.check()
+    at(10 * 60 + 2)
+    await folder.check()
+    at(o.at ?? 17 * 60)
+    await folder.check()
+    if (o.project !== false) await folder.timerClick({ a: 'startNew', block: 'p', categoryId: o.category ?? 'projekty', durationMin: 60 })
+    // The time to explain after a project, by hand: open, or answered („Projekt do …”).
+    const explains = o.explain ? [{ id: 'x', block: 'p', kind: 'project', asProject: true, from: 0, to: Number.POSITIVE_INFINITY, rests: [], answer: o.explain === 'answered' ? { cls: 'project', until: null, at: 0, how: 'answer' } : null }] : null
+    const ctl = { passed: null as number | null }
+    const real = folder.widgetModel.bind(folder)
+    folder.widgetModel = async (t?: number) => {
+      const m = await real(t)
+      return { ...m, state: { ...m.state, asProject: o.asProject ? ['p'] : m.state.asProject, ...(explains ? { explains: explains as never } : {}), hardEnd: { ...m.state.hardEnd, passed: ctl.passed ?? m.state.now - 200, message: o.message ?? false, nothingMissing: false } } }
+    }
+    const notices = () => shown.filter((n) => n.title === 'Twardy koniec projektów').length
+    const result = async () => {
+      await w.refresh()
+      const v = w.current()
+      return { v, line: v.lines.filter((l) => l.id.startsWith('hardEnd:')).length, notices: notices() }
+    }
+    /** The minute it passed in: the one of now. */
+    const passNow = async () => {
+      ctl.passed = (await folder.widgetModel(d.clock.now)).state.now
+    }
+    return { ...d, ctl, result, notices, passNow }
+  }
+
+  it('linia twardego końca w pasku jest także przy wyłączonym powiadomieniu Windows (D352)', async () => {
+    const d = await hardEndDay({ make: { hardEndNotice: false } })
+    expect(await d.result()).toMatchObject({ line: 1, notices: 0 })
+  })
+
+  it('linia twardego końca: tekst bez przycisków i bez kropki, powiadomienie przy włączonym', async () => {
+    const r = await (await hardEndDay()).result()
+    expect(r.v.lines.filter((l) => l.id.startsWith('hardEnd:'))).toEqual([expect.objectContaining({ text: HARD_END_TEXT, actions: [], dot: false })])
+    expect(r.notices).toBe(1)
+  })
+
+  it('twardy koniec w bloku liczonym jak projekt („Nauka” po końcu pracy): linia i powiadomienie', async () => {
+    const d = await hardEndDay({ category: 'nauka', asProject: true })
+    expect(await d.result()).toMatchObject({ line: 1, notices: 1 })
+  })
+
+  it('linia twardego końca stoi na samym końcu paska – po rutynie, „Zapisano · Cofnij” i cichych liniach komputerów (w „mniej pytań” jedna linia widać tamte)', async () => {
+    mkdirSync(join(dataDir, 'routines'), { recursive: true })
+    writeFileSync(join(dataDir, paths.record('routine', 'r')), JSON.stringify({ schema: 1, id: 'r', name: 'Poranna', normal: [{ id: 'woda', name: 'woda', min: 2 }, { id: 'kot', name: 'kot', min: 8 }], worse: [] }))
+    const blocks = [
+      { id: 'rut', categoryId: 'rutyny', startMin: 16 * 60, durationMin: 20, fixed: false, origin: 'user', routine: 'r' },
+      { id: 'rut2', categoryId: 'rutyny', startMin: 16 * 60 + 20, durationMin: 20, fixed: false, origin: 'user', routine: 'r' }
+    ]
+    const d = await hardEndDay({ blocks, make: { backupFailed: true } })
+    await d.folder.timerClick({ a: 'fewer' })
+    await d.w.refresh()
+    d.at(17 * 60 + 1)
+    await d.w.act('routine', 'rut|normal|0,1', 'bar')
+    const ids = d.w.current().lines.map((l) => l.id)
+    expect(ids.some((x) => x.startsWith('routineSaved:'))).toBe(true)
+    expect(ids.some((x) => x.startsWith(`routine:${DAY}:rut2`))).toBe(true)
+    expect(ids.some((x) => x.startsWith('sync:backup'))).toBe(true)
+    expect(ids.filter((x) => x.startsWith('hardEnd:'))).toHaveLength(1)
+    expect(ids.at(-1)).toMatch(/^hardEnd:/)
+    expect(d.w.current()).toMatchObject({ quiet: true })
+  })
+
+  it('twardy koniec w „mniej pytań”: cicha linia, bez powiadomienia – także po „Jest lepiej”, gdy projekt biegnie dalej (D134)', async () => {
+    const d = await hardEndDay({ at: 16 * 60 + 50 })
+    // „Mniej pytań” from 16:55, the hard end passes at 16:57 in it.
+    d.at(16 * 60 + 55)
+    await d.folder.timerClick({ a: 'fewer' })
+    d.at(16 * 60 + 57)
+    await d.passNow()
+    d.at(16 * 60 + 58)
+    expect(await d.result()).toMatchObject({ v: expect.objectContaining({ fewer: true }), line: 1, notices: 0 })
+    d.at(17 * 60 + 2)
+    await d.folder.timerClick({ a: 'better' })
+    d.at(17 * 60 + 3)
+    expect(await d.result()).toMatchObject({ v: expect.objectContaining({ fewer: false }), line: 1, notices: 0 })
+  })
+
+  it('„mniej pytań” włączone i wyłączone w tej samej minucie co minięcie: bez powiadomienia (odcinek [k, k) też się liczy)', async () => {
+    const d = await hardEndDay({ at: 16 * 60 + 50 })
+    d.at(16 * 60 + 57)
+    await d.folder.timerClick({ a: 'fewer' })
+    await d.folder.timerClick({ a: 'better' })
+    await d.passNow()
+    d.at(16 * 60 + 59)
+    expect(await d.result()).toMatchObject({ v: expect.objectContaining({ fewer: false }), line: 1, notices: 0 })
+  })
+
+  it('powiadomienie, którego Windows nie przyjął: chwilowe „mniej pytań” po minięciu nie odbiera ponowienia', async () => {
+    let refuse = true
+    const d = await hardEndDay({ at: 16 * 60 + 50, make: { taken: () => true, present: () => true, refuse: () => refuse } })
+    d.at(16 * 60 + 57)
+    await d.passNow()
+    expect(await d.result()).toMatchObject({ line: 1, notices: 0 })
+    refuse = false
+    d.at(17 * 60 + 1)
+    await d.folder.timerClick({ a: 'fewer' })
+    d.at(17 * 60 + 2)
+    await d.folder.timerClick({ a: 'better' })
+    d.at(17 * 60 + 3)
+    expect(await d.result()).toMatchObject({ line: 1, notices: 1 })
+  })
+
+  it('twardy koniec w trybie sesji: linia i powiadomienie przychodzą (nie czekają na koniec trybu, D228)', async () => {
+    const r = await (await hardEndDay({ at: 15 * 60 + 35 })).result()
+    expect(r.v).toMatchObject({ quiet: true, fewer: false })
+    expect(r).toMatchObject({ line: 1, notices: 1 })
+  })
+
+  // A remote class (a class mode) with a project in its background.
+  const CLASS = [{ id: 'z', categoryId: 'zajecia-zdalne', startMin: 16 * 60 + 50, durationMin: 180, fixed: true, origin: 'user' }]
+  const classFrom1950 = (min: number) => [{ id: 'z', categoryId: 'zajecia-zdalne', startMin: 19 * 60 + 50, durationMin: min, fixed: true, origin: 'user' }]
+
+  it('twardy koniec w trybie zajęć: pasek jest widoczny, ale linia i powiadomienie czekają na jego koniec (D355)', async () => {
+    let classMode = true
+    const d = await hardEndDay({ blocks: CLASS, make: { modePrefs: () => ({ sessionMode: true, classMode }) } })
+    expect(await d.result()).toMatchObject({ v: expect.objectContaining({ quiet: true, hidden: false }), line: 0, notices: 0 })
+    // The mode is switched off on this computer: the hard end is current, the project runs – at once.
+    classMode = false
+    expect(await d.result()).toMatchObject({ v: expect.objectContaining({ quiet: false }), line: 1, notices: 1 })
+  })
+
+  /** The class 19:50–`end`, a project in its background from 20:00 that ends by itself at 20:12; the hard end passes at 20:05. */
+  async function afterClass(endMin: number) {
+    const d = await hardEndDay({ blocks: classFrom1950(endMin - (19 * 60 + 50)), explain: 'open', at: 20 * 60 })
+    d.at(20 * 60 + 5)
+    await d.passNow()
+    d.at(20 * 60 + 10)
+    expect(await d.result()).toMatchObject({ v: expect.objectContaining({ quiet: true }), line: 0, notices: 0 })
+    await d.folder.timerClick({ a: 'finish', block: 'p' })
+    d.at(20 * 60 + 15)
+    expect(await d.result()).toMatchObject({ line: 0, notices: 0 })
+    return d
+  }
+
+  it('powiadomienie wstrzymane w trybie zajęć przychodzi po jego końcu raz, także po ponad godzinie od minięcia (D355)', async () => {
+    const d = await afterClass(21 * 60 + 30)
+    // The class ends at 21:30: the hard end passed 85 min ago, the time to explain after the project still goes on.
+    d.at(21 * 60 + 31)
+    await d.folder.check()
+    expect(await d.result()).toMatchObject({ v: expect.objectContaining({ quiet: false }), line: 1, notices: 1 })
+    expect(await d.result()).toMatchObject({ notices: 1 })
+  })
+
+  it('to samo po restarcie aplikacji (nowy WidgetEngine) po końcu trybu zajęć: też raz, bez pamięci w procesie', async () => {
+    const d = await afterClass(21 * 60 + 30)
+    d.at(21 * 60 + 31)
+    await d.folder.check()
+    const fresh = d.build()
+    await fresh.refresh()
+    expect(d.notices()).toBe(1)
+    expect(fresh.current().lines.filter((l) => l.id.startsWith('hardEnd:'))).toHaveLength(1)
+    await fresh.refresh()
+    expect(d.notices()).toBe(1)
+  })
+
+  it('godzina liczy się od końca trybu zajęć, nie od minięcia: ponad 60 min po jego końcu – nic', async () => {
+    const d = await afterClass(20 * 60 + 20)
+    d.at(20 * 60 + 21)
+    await d.folder.check()
+    d.at(21 * 60 + 30)
+    expect(await d.result()).toMatchObject({ v: expect.objectContaining({ quiet: false }), line: 1, notices: 0 })
+  })
+
+  it('projekt skończony w minucie minięcia twardego końca (bez czasu do wyjaśnienia): powiadomienie raz, bez linii', async () => {
+    const d = await hardEndDay({ project: false, message: true })
+    d.at(17 * 60 + 5)
+    await d.passNow()
+    expect(await d.result()).toMatchObject({ line: 0, notices: 1 })
+    expect(await d.result()).toMatchObject({ notices: 1 })
+  })
+
+  it('to samo minięcie zobaczone po ponad godzinie (aplikacja wystartowała późno): nic', async () => {
+    const d = await hardEndDay({ project: false, message: true })
+    d.at(17 * 60 + 5)
+    await d.passNow()
+    d.at(18 * 60 + 30)
+    expect(await d.result()).toMatchObject({ line: 0, notices: 0 })
+  })
+
+  it('komunikat minuty minięcia nie przychodzi, gdy po nim jest czas do wyjaśnienia po projekcie odpowiedziany („Projekt do …”) – tak pisze silnik przy minięciu w czasie do wyjaśnienia', async () => {
+    const d = await hardEndDay({ project: false, explain: 'answered', message: true })
+    d.at(17 * 60 + 5)
+    await d.passNow()
+    expect(await d.result()).toMatchObject({ line: 0, notices: 0 })
+  })
+
+  it('twardy koniec w czasie do wyjaśnienia po projekcie (otwartym): linia i powiadomienie', async () => {
+    const d = await hardEndDay({ project: false, explain: 'open', message: true })
+    d.at(17 * 60 + 5)
+    await d.passNow()
+    expect(await d.result()).toMatchObject({ line: 1, notices: 1 })
   })
 
   it('prowadzący zapisuje przejście twardego końca z polem „quiet”: true, gdy minimum regeneracji jest już zebrane', async () => {

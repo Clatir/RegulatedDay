@@ -10,6 +10,8 @@ import type { WeekView } from './engine/week'
 import type { GoalsPatch } from './model/goals'
 import type { RitualValue, RitualView } from './engine/ritual'
 import type { CloseHow } from './model/events'
+import type { DayTypeId } from './model/settings'
+import type { ZjazdDay, ZjazdWarning } from './import/zjazdy'
 import type { IdentityKind } from './identity'
 import type { Rect } from './bounds'
 import type { BarSpot, MachinePrefs } from './machine'
@@ -78,6 +80,9 @@ export const CH = {
   celebrated: 'rd:celebrated',
   sideB: 'rd:sideB',
   calibration: 'rd:calibration',
+  zjazdyRead: 'rd:zjazdyRead',
+  zjazdySave: 'rd:zjazdySave',
+  zjazdyUndo: 'rd:zjazdyUndo',
   weekView: 'rd:weekView',
   goals: 'rd:goals',
   setGoals: 'rd:setGoals'
@@ -445,6 +450,65 @@ export interface BarScreens {
 /** Windows' settings the wizard opens with one button: priority notifications (D233), the icons beside the clock (D229). */
 export type SystemSettingsPage = 'notifications' | 'taskbar'
 
+/** A day of the schedule read from a PDF of „zjazdy” (D357) with what „Zapisz” would do to it. */
+export interface ZjazdPreviewDay extends ZjazdDay {
+  /** Not saved: the day has begun (today) or is gone – its plan stays; null – it will be saved. */
+  skip: 'today' | 'past' | null
+  /** An import of this date before is replaced by this one. */
+  replaces: boolean
+  /** The type the day's file gives it now (null: its weekday's) – the import makes it this day's „zjazd”. */
+  ownType: DayTypeId | null
+  /** The day's file cannot be read now (OneDrive still fetching it): „Zapisz” leaves the day out. */
+  unreadable: boolean
+}
+
+/** The preview of „Wczytaj PDF zjazdów”: nothing of it is saved until „Zapisz”. */
+export interface ZjazdPreview {
+  /** The name of the file (without its folder). */
+  file: string
+  /** The logical today the skips are counted from. */
+  today: string
+  days: ZjazdPreviewDay[]
+  /** Lines of the PDF that could not be read, hours turned round, overlaps – each with its message. */
+  warnings: ZjazdWarning[]
+}
+
+/** A PDF read: its preview, or why it could not be read (not a PDF, with a password, no text, no dates). */
+export type ZjazdyRead = { ok: true; preview: ZjazdPreview } | { ok: false; error: string }
+
+/**
+ * Why a day was left as it is: it has begun, it is gone, it is not a day that can be saved, its file cannot be read now,
+ * its file is broken (the queue never writes over it), its file was changed after the import („Cofnij” never writes over
+ * a change made since).
+ */
+export type ZjazdSkipReason = 'today' | 'past' | 'invalid' | 'unreadable' | 'broken' | 'changed'
+
+/** What „Cofnij” of one save takes back for a day: its file before that save (null: there was none) and after it. */
+export interface ZjazdUndoDay {
+  date: string
+  before: RawRecord | null
+  after: RawRecord
+}
+
+export interface ZjazdSaveResult {
+  /** Days this save changed – written, or waiting for the data folder (written on its return). */
+  saved: string[]
+  /** Days already as this save would make them: nothing written (also nothing to take back). */
+  unchanged: string[]
+  /** Days whose edit met a change made on another computer meanwhile: a question at the top of the window. */
+  questions: string[]
+  /** Days left as they are, each with its reason and a text for it. */
+  skipped: Array<{ date: string; reason: ZjazdSkipReason; text: string }>
+  /** The outcomes of the edits (for `editNotice`). */
+  outcomes: EditOutcome[]
+  /**
+   * „Cofnij” of this save: every day in `saved` with its file before and after it, and every day of `questions` saved in
+   * part (a field met a change elsewhere – the rest is written) with its file as this computer sees it; empty after a
+   * „Cofnij” itself.
+   */
+  undo: ZjazdUndoDay[]
+}
+
 export interface RdApi {
   view: ViewKind
   appInfo(): Promise<AppInfo>
@@ -555,4 +619,17 @@ export interface RdApi {
   setGoals(month: string, patch: GoalsPatch): Promise<EditOutcome[]>
   /** The window of sound: a tone to play (5 min, 0 min). */
   onSound(cb: (s: { kind: 'five' | 'zero'; volume: number }) => void): () => void
+  /**
+   * „Wczytaj PDF zjazdów” (D357): a PDF picked in a window of Windows read into a preview – nothing is saved; null – no
+   * file picked.
+   */
+  zjazdyRead(): Promise<ZjazdyRead | null>
+  /** The days of the preview, as you corrected them, saved into their files – only days to come (D357). */
+  zjazdySave(days: ZjazdDay[]): Promise<ZjazdSaveResult>
+  /**
+   * „Cofnij” of one save of the import (its toast, with that save's `undo`): every day to come back as before that save
+   * (an import it replaced too) – only a day whose file still stands as the save left it (else `changed`); one edit of
+   * the queue.
+   */
+  zjazdyUndo(undo: ZjazdUndoDay[]): Promise<ZjazdSaveResult>
 }

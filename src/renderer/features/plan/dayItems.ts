@@ -59,8 +59,10 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       background: info.bg,
       dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),
       waits: info.waits,
-      // D305: a block not begun nor gone, with its own start (not after another block, not a session, a lecture or the second shift – D192).
-      movable: gone == null && f?.startedAt == null && p.anchor == null && p.startMin != null && p.origin !== 'session' && p.origin !== 'lecture' && !info.secondShift && (nowIdx == null || to > nowIdx)
+      // D305: a block not begun nor gone, with its own start (not after another block, not a session, a lecture, a class
+      // imported from the PDF of „zjazdy” – D357, or the second shift – D192).
+      movable:
+        gone == null && f?.startedAt == null && p.anchor == null && p.startMin != null && p.origin !== 'session' && p.origin !== 'lecture' && p.origin !== 'zjazd' && !info.secondShift && (nowIdx == null || to > nowIdx)
     })
   }
   // Blocks begun outside the plan („Pracuję”, a block begun by hand) or taken out of it after they began (D336): where

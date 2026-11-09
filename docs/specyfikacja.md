@@ -104,8 +104,8 @@ Każda funkcja korzysta z tych samych definicji dnia i czasu; nie ma drugiego sp
   dopiero po „Zacznij” (D212), a spóźnione „Zacznij” przesuwa ją na teraz jak sobotnią, ale bez zmiany granicy, bo druga
   zmiana granicy nie przesuwa (D221); poza tym oznaczenie zmienia tylko liczenie granicy, a zachowanie wynika z
   kategorii.
-- Plan wykładów to cykliczne bloki stałe: dzień tygodnia, godzina, zakres dat semestru, wyjątki i komputer, który nagrywa. Zjazdy zaznaczasz w kalendarzu, kilka dat naraz; import PDF jest w etapie 2.
-- Gdy blok stały z planu wykładów albo zjazdu kończy się po maksimum, maksimum tego dnia przesuwa się do jego końca plus bufor granicy, bez użycia wyjątku. Rzeczywiste przeciągnięcie takiego bloku na pierwszym planie („Przedłuż” albo poprawka w rytuale) przesuwa maksimum i granicę o czas przeciągnięcia, bez kosztu. Nagrywanie w tle niczego nie przesuwa. Nie dotyczy to sesji.
+- Plan wykładów to cykliczne bloki stałe: dzień tygodnia, godzina, zakres dat semestru, wyjątki i komputer, który nagrywa. Zjazdy zaznaczasz w kalendarzu, kilka dat naraz, albo wczytujesz z PDF uczelni („Wczytaj PDF zjazdów”, D357): daty, rodzaj (sala „TEAMS” – zjazd zdalny, sala w budynku – stacjonarny; dzień z choć jedną salą w budynku – stacjonarny) i godziny. Każdy wiersz to blok stały „<przedmiot> · <forma>”, nieprzesuwalny na osi; zastępuje bloki zajęć szablonu typu dnia (zajęcia zdalne, zajęcia stacjonarne, dojazd bez wariantu), pozostałe zostają; dojazd szablonu kończy się o starcie pierwszych zajęć, powrót zaczyna po końcu ostatnich (długości z szablonu). Przed zapisem lista do poprawienia; zapisują się dni od jutra, „Cofnij” przywraca dni sprzed tego zapisu, ponowny import tych samych dat zastępuje poprzedni, a zmiana typu dnia na inny niż zjazd zdejmuje import – za każdym razem tylko to, co stoi tak, jak import zostawił (T546–T549).
+- Gdy blok stały z planu wykładów albo zjazdu (w dniu zjazdu także każde zajęcia zdalne – z importu, z szablonu i dodane ręcznie, D359) kończy się po maksimum, maksimum tego dnia przesuwa się do jego końca plus bufor granicy, bez użycia wyjątku. Rzeczywiste przeciągnięcie takiego bloku na pierwszym planie („Przedłuż” albo poprawka w rytuale) przesuwa maksimum i granicę o czas przeciągnięcia, bez kosztu. Nagrywanie w tle niczego nie przesuwa. Nie dotyczy to sesji.
 - Bloki z planu wykładów i zjazdów nigdy nie są przedłużeniem.
 - Blok w tle z opcją „nie przerywa regeneracji” (domyślnie nagrywanie wykładu) liczy się tylko do budżetu pracy: nigdy nie jest pierwszym blokiem pracy ani końcem pracy, nie otwiera pracy ponownie i nie przesuwa granicy ani maksimum. Czas obok niego jest regeneracją, jeśli byłby nią bez tego bloku.
 - **Zjazd stacjonarny:** plan jest zapisem dnia i potwierdza się sam. W tym dniu nie ma późnego wstania, a bloki planu
@@ -1406,7 +1406,7 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
 | Nadgodzina bez reakcji | liczona wstępnie, a pytania liczą się od zobaczenia (D231; w bloku pasywnym od zadania, D239), jak poza trybem; po dwóch pytaniach bez odpowiedzi blok kończy się sam, a czas po bloku pracy albo projektu jest do wyjaśnienia (D238, D250); niezobaczone – blok aktywny trwa do progu bezczynności, a używanie komputera po powrocie po bloku pracy albo projektu jest do wyjaśnienia (D271) |
 | Przyciski: Dalej, Pauza, Przedłuż, Koniec pracy, Odcinam się, Skończyłem, a w grupach paska Zakończ teraz, wypite, sygnały, „Mniej pytań” albo „Jest lepiej”, + Prośba z 3 najczęstszymi osobami, Zrobione teraz, Pilne | działają bez otwierania okien; inna osoba to „osoba: ?” |
 | Wszystko inne: propozycje, pytania, komunikaty, przypomnienia, ostrzeżenia o kopii, aktualizacja, „Co nowego”, lista problemów, świętowanie | czeka i pokazuje się po końcu trybu w jednym podsumowaniu; o 04:00 nieaktualne propozycje znikają, a rzeczy do uzupełnienia trafiają do rytuału |
-| Twardy koniec projektów (przy biegnącym projekcie albo w czasie do wyjaśnienia po projekcie) i propozycja przerwy po 90 min przy biegnącym projekcie w trybie sesji, poza „mniej pytań” (np. gdy druga zmiana czeka na „Zacznij” albo biegnie w tle) | nie czekają: linia w pasku (propozycja przerwy z kropką na ikonie, bez powiadomienia, D234), a przy twardym końcu także powiadomienie Windows, jeśli jest włączone (D228, D230) |
+| Twardy koniec projektów (przy biegnącym projekcie albo w czasie do wyjaśnienia po projekcie) i propozycja przerwy po 90 min przy biegnącym projekcie w trybie sesji, poza „mniej pytań” (np. gdy druga zmiana czeka na „Zacznij” albo biegnie w tle) | nie czekają: linia w pasku (propozycja przerwy z kropką na ikonie, bez powiadomienia, D234; twardy koniec – „Twardy koniec projektów – regeneracja do snu”, bez przycisków i bez kropki, także przy wyłączonym powiadomieniu, D352), a przy twardym końcu także powiadomienie Windows, jeśli jest włączone (D228, D230); w trybie zajęć oba czekają do jego końca, póki twardy koniec jest aktualny (D355) |
 
 **Odcinam się**
 
@@ -1609,7 +1609,7 @@ Etap 2 zaczyna się po kilku tygodniach używania wersji 1.0, gdy są już dane 
 
 - **Uczenie się kosztów:** ciągłe propozycje korekty kosztów kategorii na podstawie check-inów i odczuwanego kosztu oraz mnożników czasu dla kategorii (np. studia ×1,4), po jednorazowym przeglądzie kalibracji.
 - **Horyzont:** widok tygodnia i cele miesięczne w trzech obszarach: studia, regeneracja, dyscyplina tradingowa.
-- **Import zjazdów:** wczytanie PDF z terminami zjazdów z uczelni i automatyczny dobór szablonu dnia.
+- **Import zjazdów:** wczytanie PDF z terminami zjazdów z uczelni i automatyczny dobór szablonu dnia – w 1.1.0 (D357, D359; reguły w „Model dnia”, plan wykładów).
 - **Statystyki:** wzorce energii, trafność szacowania, czas próśb na osobę, dotrzymane granice.
 
 ## Wygląd i nazwy
@@ -1675,7 +1675,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 | rd.json | ustawienia wspólne z datą obowiązywania; listy kategorii, typów dni, osób i sposobów regeneracji |
 | templates/\<id>.json | szablony dnia |
 | schedule/\<id>.json | plan wykładów jako bloki cykliczne |
-| days/RRRR/RRRR-MM-DD.json | Twoje edycje planu dnia, także przyszłych dni, i pobudka dnia; pisze go tylko okno główne, także ukryte w zasobniku |
+| days/RRRR/RRRR-MM-DD.json | Twoje edycje planu dnia, także przyszłych dni, i pobudka dnia; pisze go okno główne, także ukryte w zasobniku, a import zjazdów z PDF – proces główny jedną partią kolejki (typ dnia, zajęcia, `classImport` do cofnięcia, T546) |
 | log/RRRR/RRRR-MM-DD/\<komputer>.jsonl | dopisywany log zdarzeń dnia z tego komputera: utworzenie dnia z migawką, start, pauza, dalej, przedłużenie, check-in, sygnał, prośba, alarm, działania automatyczne, zobaczenie komunikatu albo pytania (identyfikator, sposób), zatwierdzenie granicy, zamrożenie z oceną dnia, korekta, pierwsza obecność dnia, przerwy w wejściu i w użyciu od 2 min, odcinki obserwacji, odcinki klasyfikacji minut, przeliczenia pory snu i każda akcja widgetu; pisze go tylko proces główny |
 | requests/\<id>.json | prośby |
 | routines/\<id>.json | rutyny |

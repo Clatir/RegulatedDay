@@ -112,9 +112,10 @@ let turn: Promise<unknown> = Promise.resolve()
 /**
  * The window's edits go one at a time, each made when its turn comes from the records as they are then (the view is read
  * again after every edit): two quick changes of one block never meet as if the second came from another computer, and
- * the second never brings back what the first changed (A6-01).
+ * the second never brings back what the first changed (A6-01). Exported for what the main process writes itself (the
+ * import of „zjazdy”): it goes in its turn too, after the edits sent before it.
  */
-function inTurn<T>(fn: () => Promise<T>): Promise<T> {
+export function inTurn<T>(fn: () => Promise<T>): Promise<T> {
   const run = turn.then(fn)
   turn = run.catch(() => undefined)
   return run

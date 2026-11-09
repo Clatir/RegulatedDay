@@ -28,6 +28,7 @@ const BLOCK_FIELDS: Record<string, string> = {
   tag: 'oznaczenie',
   waitUntilMin: 'czeka do',
   note: 'notatka',
+  name: 'nazwa',
   recorder: 'komputer nagrywający',
   moves: 'licznik przeniesień',
   requests: 'prośby',
@@ -78,7 +79,9 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
     if (typeof v.categoryId === 'string') {
       const start = typeof v.startMin === 'number' ? ` ${logicalClock(v.startMin)}` : ''
       const dur = typeof v.durationMin === 'number' ? `, ${durationLabel(v.durationMin)}` : ''
-      return `${categoryName(n.rd, v.categoryId)}${start}${dur}`
+      // A block with its own name (a class imported from the PDF of „zjazdy”, D357) by that name, as the plan shows it.
+      const name = typeof v.name === 'string' && v.name.trim() ? v.name.trim() : categoryName(n.rd, v.categoryId)
+      return `${name}${start}${dur}`
     }
     if (typeof v.name === 'string') return v.name
     return 'zmienione ustawienia'
@@ -103,6 +106,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames): s
     if (a === 'movedTo') return b ? `${blockPart(b, undefined)}: przeniesiony na` : 'przeniesione bloki'
     if (a === 'sessions') return 'odpowiedzi warstwy sesji'
     if (a === 'asked') return 'pytania tego dnia'
+    if (a === 'classImport') return 'import zjazdów'
     return 'inne pole dnia'
   }
   if (kind === 'template') {
