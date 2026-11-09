@@ -11,7 +11,7 @@
 import type { Costs } from '../model/categories'
 import { compareEvents, eventAt, isKnown, type AnyEvent, type CloseHow, type EventBase, type LogEvent, type MinuteClass } from '../model/events'
 import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
-import { isOrigin, type PlanBlock } from '../model/plan'
+import type { PlanBlock } from '../model/plan'
 import type { RoutineVersion } from '../model/routines'
 import { atOf, idxOf, type Grid } from './grid'
 
@@ -71,8 +71,7 @@ export interface BlockFact {
   startedAt: number | null
   endedAt: number | null
   runs: Run[]
-  /** What its start said of its plan (`block.start` `planned`); `origin` and `sourceId` absent in starts before 1.0.9. */
-  planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null; origin?: PlanBlock['origin']; sourceId?: string | null } | null
+  planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null } | null
   confirms: Confirm[]
   /** Confirmed „Przedłuż”, in order. */
   extends: Array<{ at: number; minutes: number }>
@@ -286,8 +285,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         }
         const at = idx(e.at)
         b.startedAt = at
-        // Where it came from as the log has it (another version may write anything): a known origin, else none.
-        b.planned = { ...e.planned, variantId: e.planned.variantId ?? null, tag: e.planned.tag ?? null, fixed: e.planned.fixed === true, origin: isOrigin(e.planned.origin) ? e.planned.origin : undefined, sourceId: typeof e.planned.sourceId === 'string' ? e.planned.sourceId : null }
+        b.planned = { ...e.planned, variantId: e.planned.variantId ?? null, tag: e.planned.tag ?? null, fixed: e.planned.fixed === true }
         b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })
         if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil) })
         break

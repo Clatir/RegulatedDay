@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.0.9
-- Zaczęta sesja usunięta z planu („Usuń”) zostaje na osi dnia, w rytuale, w eksporcie CSV i na liście „zrobione automatycznie” jako „Sesja NY” (dotąd „Sesja tradingowa”). Dotyczy sesji zaczętych od tej wersji.
+- Zaczęta sesja usunięta z planu („Usuń”) zostaje na osi dnia, w rytuale, w eksporcie CSV i na liście „zrobione automatycznie” jako „Sesja NY” (dotąd „Sesja tradingowa”); usunięty zaczęty blok rutyny z szablonu zachowuje nazwę rutyny. Blok zaczęty poza planem albo usunięty po starcie ma na osi i w rytuale tę samą nazwę co w CSV i w pasku (także nazwę wariantu).
 
 ## 1.0.8
 - Instalator uruchomiony ręcznie przy włączonej aplikacji najpierw prosi ją o zamknięcie i czeka, aż skończy zapisywać (do 15 s), zamiast od razu ją zabijać – następny start nie widzi już awarii, a w dzienniku jest „zamknięte przez instalator”. Pomocnik nie zostaje w tle.

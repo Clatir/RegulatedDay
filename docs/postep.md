@@ -41,14 +41,14 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 
 ## Ciąg I – stan (D353)
 **Przed ciągiem I (9.11):** zakres – `docs/plan.md`, „Ciąg I”; decyzje D352 (tekst linii twardego końca), D353 (kształt
-ciągu), D354 (wykonawcy rozszerzeń). Ryzyka: 4.11 zmienia zdarzenie w logu dnia, które czytają oba komputery (stara
-wersja musi przeczytać nowe pole); 4.10 – pasek. Przygotować: nic do 1.0.10; do E11 – PDF z terminami zjazdów (poza
+ciągu), D354 (wykonawcy rozszerzeń). Ryzyka: 4.11 – nazwy bloków w czterech miejscach (log i silnik bez zmian, T543);
+4.10 – pasek i powiadomienia. Przygotować: nic do 1.0.10; do E11 – PDF z terminami zjazdów (poza
 repozytorium, D279). Model: główna sesja Opus 5.5 · high; 4.11 `wykonawca-opus`, 4.10 `wykonawca-sonnet` – równolegle
 w drzewach `.claude/worktrees/w411`, `w410`.
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| 4.11 nazwa usuniętej sesji | 1.0.9 | #56 | PR, CI w toku (9.11); wpis – `docs/archiwum/postep-ciag-I.md` | ok. 2 h (0,5–1 h) |
+| 4.11 nazwa usuniętej sesji | 1.0.9 | #56 | PR, CI w toku (9.11); wpis – `docs/archiwum/postep-ciag-I.md` | ok. 4,5 h (0,5–1 h) – dwie przebudowy po przeglądzie |
 | 4.10 linia twardego końca | 1.0.10 | #55 (draft) | poprawki po przeglądzie xhigh (runda 1); scalanie po #56 | (1–1,5 h) |
 | I-plan E10–E12 | – | – | po 4.11 i 4.10 | (1–2 h) |
 

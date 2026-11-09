@@ -7,20 +7,23 @@ Wpisy zadań ciągu I (4.11, 4.10, E10–E12) po scaleniu ich PR-ów. Stan bież
   „zrobione automatycznie” nazwę kategorii „Sesja tradingowa” zamiast „Sesja NY” (D338). Przyczyna: `blockInfos`
   budował blok spoza planu z `origin: 'user'`, a `block.start` nie zapisywał pochodzenia; oś (`dayItems`) i rytuał
   (`RitualPanel`) brały wprost nazwę kategorii.
-- **Poprawka:** start (`startPlanned`, start bloku stałego w `auto.ts`) zapisuje `origin` i `sourceId`; `facts.ts`
-  czyta je z walidacją (`isOrigin`); blok spoza planu dostaje je w `BlockInfo.named` – tylko do nazwy (`namedOf`,
-  nowe `loggedBlockName`, `ritualBlockName`), silnik widzi dalej `origin: 'user'` (T543).
+- **Poprawka:** jeden pomocnik `nameById` / `namedById` (`shared/blockName.ts`) dla osi, rytuału, CSV, paska
+  i wariantów: plan → migawka dnia (`snapshotBlock` – usunięty blok migawki i sesja „tak” są tylko odwołane) →
+  `planned` startu → „blok” (T543). Log i silnik bez zmian – działa też dla startów z 1.0.8 i mieszanych wersji.
+  Pierwsza wersja (pola `origin`/`sourceId` w starcie) odrzucona po przeglądzie xhigh.
 - **Decyzje:** T543; D352–D358 (tekst linii twardego końca, kształt ciągu I, wykonawcy rozszerzeń, tryb zajęć przy
   twardym końcu, E10, E11, E12) – z pytań przed ciągiem i bramy E10–E12; plan rozszerzeń w `docs/plan.md` przepisany
   według ryzyka (D354).
-- **Testy:** `tests/unit/engine/session-names.test.ts` (start zapisuje pola, CSV, pasek, walidacja odczytu, stary log,
-  zgodność `parseEvent`, silnik bez zmian przy polach i bez), `tests/web/removed-session.test.ts` (oś, rytuał, stary
-  log) – 7 nowych pada na 1.0.8. Lokalnie `npm test` przy obciążeniu: 3 przekroczenia czasu (`scale`,
-  `sim/two-computers`, `unit/installer-close`), osobno przechodzą.
-- **Wykonawca:** `wykonawca-opus`; zawężenie po moim przeglądzie: pierwsza wersja dawała silnikowi `origin: 'session'`
-  dla bloku spoza planu (zmiana prognozy i maksimum) – cofnięta, test pilnuje.
-- **Uwagi na później:** (1) mieszane wersje – sesja zaczęta na 1.0.8 i usunięta na 1.0.9 dalej „Sesja tradingowa”
-  (można szukać bloku w migawce dnia); (2) usunięty zaczęty blok rutyny albo próśb traci nazwę rutyny i osób (start
-  nie zapisuje `routine`/`requests`); (3) CSV nazywa blok spoza planu z wariantem nazwą wariantu, oś i rytuał –
-  kategorią.
+- **Testy:** `tests/unit/engine/session-names.test.ts` (CSV, rytuał, sesja „tak”, pasek, `planned` bez kategorii,
+  starty w formacie 1.0.8), `tests/web/removed-session.test.ts` (oś równa nazwom CSV) – 5 nowych pada na 1.0.8.
+  Lokalnie `npm test` przy obciążeniu: przekroczenia czasu `scale` i `sim/two-computers`, osobno przechodzą.
+- **Wykonawca:** `wykonawca-opus`; dwie przebudowy po przeglądach: (1) silnik dostawał `origin: 'session'` dla bloku
+  spoza planu – cofnięte; (2) nazwa z pól startu → nazwa z migawki dnia (xhigh, runda 1).
+- **Przegląd:** xhigh, dwie rundy (pierwsza – przebudowa na migawkę, druga – kategoria i wariant ze startu przed
+  migawką, podział zależności `blockName` ← `engine/`).
+- **Uwagi na później:** (0) kopia bloku w pliku dnia, która zmienia tylko rutynę albo prośby (ta sama kategoria), po
+  „Usuń” zaczętego bloku daje nazwę rutyny/próśb z migawki sprzed zmiany; (1) własny blok z pliku dnia (ręczny z rutyną, blok próśb, „z wczoraj”) po „Usuń” jest wyjęty
+  z pliku – nazwa tylko z kategorii i wariantu startu, rutyna i osoby giną; (2) blok zdjęty z planu ma dla silnika
+  `origin: 'user'` (jak w 1.0.8) – np. usunięty zaczęty wykład z planu wykładów traci `recorded` i reguły wykładu;
+  rozwiązanie w `blockInfos` z migawki, bez zmiany logu.
 - **Odbiór:** E8n.1.

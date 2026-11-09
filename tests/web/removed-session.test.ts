@@ -1,65 +1,86 @@
 /**
- * 1.0.9 (plan 4.11): a session begun and then taken out of the plan („Usuń”, D336) is „Sesja NY” (D338) on the axis of
- * the day and in the ritual, as its start wrote where it came from; a block outside the session layer keeps its category's
- * name, and a start written before 1.0.9 (without those fields) – the category's name, as before.
+ * 1.0.9 (plan 4.11): a block begun and then taken out of the plan („Usuń”, D336) is on the axis of the day by the same
+ * name as in the CSV (spec „W interfejsie tylko prawdziwe nazwy”): a session „Sesja NY” (D338), a routine's block its
+ * routine, a block with a variant its variant; a block begun outside the plan likewise. The log stays as 1.0.8 writes it.
  */
 import { describe, expect, it } from 'vitest'
+import { csvOf } from '@shared/engine/csv'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
 import { timerAction, type TimerAction } from '@shared/engine/timer'
+import type { PlanBlock } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { dayAxis } from '@renderer/features/plan/dayItems'
-import { ritualBlockName } from '@renderer/features/ritual/RitualPanel'
 import type { DayModel } from '@renderer/store/day'
 import { block, Scenario } from '../unit/engine/dsl'
 
 const DATE = '2026-10-28'
-const PLAN = [block({ id: 'ny', cat: 'sesja', at: '15:30', min: 60, fixed: true, origin: 'session', source: 'ny' }), block({ id: 'x', cat: 'inne', at: '17:00', min: 60 })]
+const PLAN: PlanBlock[] = [
+  block({ id: 'ny', cat: 'sesja', at: '15:30', min: 60, fixed: true, origin: 'session', source: 'ny' }),
+  { ...block({ id: 'r', cat: 'rutyny', at: '17:00', min: 30 }), routine: 'wieczor' },
+  block({ id: 'v', cat: 'regeneracja', variant: 'spacer', at: '18:00', min: 30 })
+]
 
-/** „Zacznij” of both blocks and „Usuń” of each after a while (the timer's events); `old` – starts as 1.0.8 wrote them. */
-function removed(old = false) {
+/** „Zacznij” and „Usuń” of each block of the plan, two blocks begun outside it; then the day without the plan. */
+function removedAll() {
   const s = new Scenario({ date: DATE, plan: PLAN }).observe('07:00', null)
   const go = (time: string, act: TimerAction) => {
     const t = s.at(time)
     const r = timerAction(s.contextAt(t), s.stateAt(t), act, t)
-    if (!r.ok) throw new Error(r.why)
+    if (!r.ok) throw new Error(`${time}: ${r.why}`)
     s.write(r.events, t)
   }
-  if (old) s.start('ny', '15:30')
-  else go('15:30', { a: 'start', block: 'ny', confirm: true })
+  go('15:30', { a: 'start', block: 'ny', confirm: true })
   go('15:45', { a: 'removeBegun', block: 'ny' })
-  if (old) s.start('x', '17:00')
-  else go('17:00', { a: 'start', block: 'x', confirm: true })
-  go('17:15', { a: 'removeBegun', block: 'x' })
-  // The window took both out of the plan.
-  const ctx = s.contextAt(s.at('18:00'), { plan: [] })
+  go('17:00', { a: 'start', block: 'r', confirm: true })
+  go('17:10', { a: 'removeBegun', block: 'r' })
+  go('18:00', { a: 'start', block: 'v', confirm: true })
+  go('18:10', { a: 'removeBegun', block: 'v' })
+  go('19:00', { a: 'startNew', block: 'praca', categoryId: 'inne', durationMin: 30, confirm: true })
+  go('19:20', { a: 'finish', block: 'praca' })
+  go('20:00', { a: 'startNew', block: 'brk', categoryId: 'regeneracja', variantId: 'przerwa-od-ekranu', durationMin: 15, confirm: true })
+  go('20:10', { a: 'finish', block: 'brk' })
+  // The window took the plan's blocks out (the snapshot's are cancelled: they stay in the snapshot).
+  const ctx = s.contextAt(s.at('21:00'), { plan: [] })
   const state = computeDay(ctx)
   const model = { date: DATE, ctx, state, energy: computeEnergy(ctx, state) } as unknown as DayModel
-  const names = { rd: rdFrom({}), settings: s.settings, routines: [], requests: [] }
-  return { model, names, now: s.at('18:00') }
+  const names = { rd: rdFrom({}), settings: s.settings, routines: [{ id: 'wieczor', name: 'Wieczorna rutyna', normal: [], worse: [], archived: false }], requests: [] }
+  return { model, names, now: s.at('21:00') }
 }
 
-const axisTitles = (r: ReturnType<typeof removed>) => dayAxis(r.model, r.names, r.now).items.map((i) => [i.id, i.title, i.marks.join(', ')])
-const ritualNames = (r: ReturnType<typeof removed>) => ['ny', 'x', 'nie-ma'].map((id) => ritualBlockName(id, r.model.ctx.plan, r.model.state.facts, r.names))
-
-describe('usunięty zaczęty blok sesji na osi i w rytuale (D336, D338)', () => {
-  it('oś dnia: „Sesja NY” poza planem; blok spoza warstwy sesji – nazwa kategorii', () => {
-    expect(axisTitles(removed())).toEqual([
+describe('nazwa bloku zdjętego z planu po starcie na osi (D336, D338)', () => {
+  it('oś: „Sesja NY”, nazwa rutyny, wariant – poza planem; zaczęte poza planem jak w CSV', () => {
+    const r = removedAll()
+    const items = dayAxis(r.model, r.names, r.now).items
+    expect(items.map((i) => [i.id, i.title, i.marks.join(', ')])).toEqual([
       ['ny', 'Sesja NY', 'poza planem'],
-      ['x', 'Inne obowiązki', 'poza planem']
+      ['r', 'Wieczorna rutyna', 'poza planem'],
+      ['v', 'Samotny spacer', 'poza planem'],
+      ['praca', 'Inne obowiązki', 'poza planem'],
+      ['brk', 'Przerwa od ekranu', 'poza planem']
     ])
+    // The same names as the CSV's.
+    const csv = csvOf([{ ctx: r.model.ctx, names: r.names }])['bloki.csv'].slice(1).trim().split('\r\n').slice(1).map((row) => row.split(';')[1])
+    expect(items.map((i) => i.title)).toEqual(csv)
   })
 
-  it('rytuał: „Sesja NY”; blok spoza warstwy sesji – nazwa kategorii; blok bez startu – „blok”', () => {
-    expect(ritualNames(removed())).toEqual(['Sesja NY', 'Inne obowiązki', 'blok'])
-  })
-
-  it('stary log (start bez pól pochodzenia): oś i rytuał – nazwa kategorii jak dotąd', () => {
-    const r = removed(true)
-    expect(axisTitles(r)).toEqual([
-      ['ny', 'Sesja tradingowa', 'poza planem'],
-      ['x', 'Inne obowiązki', 'poza planem']
-    ])
-    expect(ritualNames(r)).toEqual(['Sesja tradingowa', 'Inne obowiązki', 'blok'])
+  it('oś: blok zmieniony na ten dzień (w snapshocie „spacer”, dziś „przerwa od ekranu”) – nazwa z chwili startu', () => {
+    const today = [{ ...PLAN[2]!, variantId: 'przerwa-od-ekranu' }]
+    const s = new Scenario({ date: DATE, plan: today }).observe('07:00', null)
+    const extra = { snapshot: { ...s.snapshot, blocks: PLAN } }
+    for (const [time, act] of [
+      ['18:00', { a: 'start', block: 'v', confirm: true }],
+      ['18:10', { a: 'removeBegun', block: 'v' }]
+    ] as Array<[string, TimerAction]>) {
+      const t = s.at(time)
+      const r = timerAction(s.contextAt(t, extra), s.stateAt(t, extra), act, t)
+      if (!r.ok) throw new Error(`${time}: ${r.why}`)
+      s.write(r.events, t)
+    }
+    const ctx = s.contextAt(s.at('19:00'), { ...extra, plan: [] })
+    const state = computeDay(ctx)
+    const model = { date: DATE, ctx, state, energy: computeEnergy(ctx, state) } as unknown as DayModel
+    const names = { rd: rdFrom({}), settings: s.settings, routines: [], requests: [] }
+    expect(dayAxis(model, names, s.at('19:00')).items.map((i) => [i.id, i.title])).toEqual([['v', 'Przerwa od ekranu']])
   })
 })
