@@ -81,6 +81,8 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
         await shot(page, 'e7-03-side-b')
         await page.getByTestId('side-b-done').click()
       }
+      // „Cele na <miesiąc>” (D360) comes before the questions about symptoms until skipped.
+      await page.getByTestId('goals-skip').click()
       await page.getByTestId('checkin-skip').click()
       await expect(page.getByTestId('queue-pick')).toContainText('Mama')
       await page.getByTestId('boundary-approve').click()
@@ -494,6 +496,7 @@ test('kalibracja (D119): po okresie karta w planie porannym – „Nie teraz” 
     await withMainLog(userData, async () => {
       await expect(page.getByTestId('morning-plan')).toBeVisible({ timeout: 30_000 })
       if (new Date(`${today}T12:00:00Z`).getUTCDay() === 1) await page.getByTestId('side-b-done').click()
+      await page.getByTestId('goals-skip').click()
       await page.getByTestId('checkin-skip').click()
       await expect(page.getByTestId('calibration-card')).toBeVisible({ timeout: 30_000 })
       await page.getByTestId('calibration-later').click()

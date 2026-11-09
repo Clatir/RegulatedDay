@@ -44,7 +44,6 @@ Opus 5.5 · high. Kolejność (T545): E11 najpierw (najbliższy zjazd stacjonarn
 
 | # | Zadanie | Rodzaj | Wersja | Wykonawca · przegląd | Szacunek |
 | --- | --- | --- | --- | --- | --- |
-| E10 | Horyzont (D356): strona „Tydzień” (podgląd), cele miesięczne – studia, regeneracja, dyscyplina tradingowa | Całość | 1.2.0 | `wykonawca-opus` (logika, dane) + `wykonawca-sonnet` (ekrany) · xhigh / high | 8–12 h |
 | E12 | Statystyki (D358): strona „Statystyki”, cztery sekcje, tylko dni zamrożone | Interfejs | 1.3.0 | `wykonawca-sonnet` · high | 5–8 h |
 
 ## Po 1.0

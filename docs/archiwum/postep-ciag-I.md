@@ -60,3 +60,21 @@ Wpisy zadań ciągu I (4.11, 4.10, E10–E12) po scaleniu ich PR-ów. Stan bież
   rodzaju bloków (dzień TEAMS przestawiony na stacjonarny ma bloki zdalne); (4) godzin nie da się wpisać z klawiatury
   (tylko ±5 min); (5) prowadzący na 1.0.x nie przesuwa maksimum dla zajęć zdalnych z importu.
 - **Odbiór:** E11.1–E11.3.
+
+## E10 – horyzont: tydzień i cele miesięczne (1.2.0, 9.11.2026)
+- **Zakres (D356, D360, D361):** strona „Tydzień” (Ctrl+3, po „Kalendarzu”), cele miesięczne „x z y” (studia,
+  regeneracja, dyscyplina tradingowa) na „Tygodniu” i w kroku „Cele na <miesiąc>” planu porannego.
+- **Kod:** `shared/model/goals.ts`, `shared/engine/week.ts` (`horizonDay`, `weekViewOf`, `sessionsOf`),
+  `shared/engine/goals.ts` (postęp, `goalsStepShown`), `main/data/folder.ts` (`horizonDays`, `weekView`, `goalsView`,
+  `setGoals`), zadanie `horizon` procesu pomocniczego; ekrany `renderer/features/week/*`, `today/GoalsStep.tsx`,
+  `goalsStepLogic.ts`, `store/horizon.ts`, `store/viewCache.ts`.
+- **Decyzje:** D360, D361; T552–T555.
+- **Wykonawcy:** `wykonawca-opus` (logika, obie rundy), `wykonawca-sonnet` (ekrany, obie rundy).
+- **Testy:** `tests/unit/engine/week.test.ts`, `goals.test.ts`, `tests/fs/horizon.test.ts`, `tests/web/week-layout.test.ts`,
+  `week-text.test.ts`, `goals-step.test.ts`, `view-cache.test.ts`, `tests/unit/theme.test.ts` (kontrast), E2E
+  `tests/e2e/week.spec.ts` (3); mutacje w rundzie 2.
+- **Przegląd:** xhigh, dwie rundy (15 + 14 uwag).
+- **Uwagi na później:** (1) `horizonDays` liczy dni po kolei (OneDrive – opóźnienie rośnie z miesiącem; `mapLimit`);
+  (2) postęp miesiąca liczy się także bez ustawionych celów; (3) `GoalsView.previous` nieczytane przez okno;
+  (4) `trySaveGoals` dubluje `send` z `store/data.ts`; osobna ścieżka zapisu celów obok `trySaveRd`.
+- **Odbiór:** E10.1–E10.3.

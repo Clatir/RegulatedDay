@@ -21,7 +21,7 @@ pomocniczy), „Kilka komputerów” (przeniesienie folderu); D300, T117, T190. 
   (ocena „jak zapisano” do zdarzeń z `know`), `countedEvents`, `outsideGrade`. Fakty: `frozen` (`day.freeze`).
 - `main/data/folder.ts` – `freezeTasks` w zadaniach prowadzącego (od `ritualFrom`), `quietFor`, `mayFreeze`,
   `writers`; `exportCsv`. `eventLog.readDay` liczy kopie konfliktowe logu (`copies`).
-- `main/worker/` – `tasks.ts` (ping, grade, csv, backup – zwykły Node), `index.ts` (wejście `utilityProcess`),
+- `main/worker/` – `tasks.ts` (ping, grade, csv, backup, horizon – dzień tygodnia i celów, T553 – zwykły Node), `index.ts` (wejście `utilityProcess`),
   `host.ts` (`WorkerHost`: limit czasu, start od nowa, stop; `inProcess` w testach). Wejście `worker` w
   `electron.vite.config.mts`.
 - `engine/csv.ts` – `csvOf` (trzy pliki, BOM, średnik, CRLF). `main/data/hub.ts` – `backups`, `backupRecords`,

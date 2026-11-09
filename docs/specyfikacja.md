@@ -842,7 +842,7 @@ Wersja 1.0 zawiera wszystko, co działa jako hamulec w czasie i energii, wraz z 
 
 **Plan poranny**
 
-- Kolejność: niezamknięte dni, w poniedziałek „Strona B tygodnia”, pytania o objawy, plan. Każdy krok można pominąć.
+- Kolejność: niezamknięte dni, w poniedziałek „Strona B tygodnia”, „Cele na <miesiąc>” (dopóki cele miesiąca nie są ustawione albo krok pominięty, D360), pytania o objawy, plan. Każdy krok można pominąć.
 - Plan: dzień ze szkicu z wyjątkami, pobudka tego dnia, bloki przeniesione z wczoraj („z wczoraj +2 h 10”), pytania warstwy sesji i świąt, wybór próśb z kolejki, propozycja granicy, prognoza czasu i energii.
 - Wyjątek granicy na dni z danymi makro, propozycja lżejszego dnia po zjeździe stacjonarnym, zapowiedź tygodnia przesunięcia sesji, ostrzeżenie, gdy efektywna pora snu wypada nie później niż koniec drugiej zmiany.
 - „Strona B tygodnia” trwa minutę i jest wstępna, dopóki niedziela nie jest zamrożona. Pokazuje pomiar „czy to pomaga”:
@@ -1608,7 +1608,7 @@ Gra nagradza pięć zachowań, które realnie chronią przed przeciążeniem, i 
 Etap 2 zaczyna się po kilku tygodniach używania wersji 1.0, gdy są już dane o czasie i energii.
 
 - **Uczenie się kosztów:** ciągłe propozycje korekty kosztów kategorii na podstawie check-inów i odczuwanego kosztu oraz mnożników czasu dla kategorii (np. studia ×1,4), po jednorazowym przeglądzie kalibracji.
-- **Horyzont:** widok tygodnia i cele miesięczne w trzech obszarach: studia, regeneracja, dyscyplina tradingowa.
+- **Horyzont:** widok tygodnia i cele miesięczne w trzech obszarach: studia, regeneracja, dyscyplina tradingowa – w 1.2.0 (D356, D360, D361): strona „Tydzień” (podgląd, dni minione jak ocena, dziś na żywo, przyszłe z planu); cele „x z y” bez oceny – studia: minuty bloków „Nauka” i „Oglądanie wykładu”; regeneracja: dni z osiągniętym minimum (dzień bez obecności, poza zjazdem stacjonarnym – „brak danych”, nie liczy się); dyscyplina: sesje z planu bez przedłużenia (druga zmiana też), obok „przedłużone” i „poza planem”; wstępne – dziś i dni niezamrożone od pierwszego rytuału (T552–T555).
 - **Import zjazdów:** wczytanie PDF z terminami zjazdów z uczelni i automatyczny dobór szablonu dnia – w 1.1.0 (D357, D359; reguły w „Model dnia”, plan wykładów).
 - **Statystyki:** wzorce energii, trafność szacowania, czas próśb na osobę, dotrzymane granice.
 
@@ -1672,7 +1672,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 
 | Plik | Zawartość |
 | --- | --- |
-| rd.json | ustawienia wspólne z datą obowiązywania; listy kategorii, typów dni, osób i sposobów regeneracji |
+| rd.json | ustawienia wspólne z datą obowiązywania; listy kategorii, typów dni, osób i sposobów regeneracji; cele miesięczne `goals.RRRR-MM` (T552) |
 | templates/\<id>.json | szablony dnia |
 | schedule/\<id>.json | plan wykładów jako bloki cykliczne |
 | days/RRRR/RRRR-MM-DD.json | Twoje edycje planu dnia, także przyszłych dni, i pobudka dnia; pisze go okno główne, także ukryte w zasobniku, a import zjazdów z PDF – proces główny jedną partią kolejki (typ dnia, zajęcia, `classImport` do cofnięcia, T546) |
