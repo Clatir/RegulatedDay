@@ -6,9 +6,10 @@ z 1–3.11 – `docs/archiwum/postep-ciag-E.md`, ciągi A–D – `docs/archiwum
 archiwum ciągu, tu zostaje jedna linia w tabeli.
 
 ## Stan bieżący
-- **Ciąg I (D353) – ostatnie wydanie w toku:** 1.0.9 (4.11), 1.0.10 (4.10), 1.1.0 (E11) i 1.2.0 (E10) scalone 9.11;
-  E12 (1.3.0) – PR z gałęzi `claude/1.3.0-statystyki` (scalona z E10, menu D362). Po wydaniu 1.3.0 ciąg I zakończony;
-  drzewa `.claude/worktrees/w410`, `w411`, `we10`, `we11`, `we12` do usunięcia (`git worktree remove`).
+- **Ciąg I (D353) zakończony 9.11:** 1.0.9 (4.11), 1.0.10 (4.10), 1.1.0 (E11), 1.2.0 (E10) i 1.3.0 (E12, PR #59,
+  wydanie z runu 42692721496 na `main`). Wpisy w `docs/archiwum/postep-ciag-I.md`; drzewa `w410`, `w411`, `we10`,
+  `we11` usunięte, `.claude/worktrees/we12` – po zamknięciu tej sesji (`git worktree remove`, najpierw `rmdir` dowiązania
+  `node_modules`).
 - **K (przegląd kalibracji):** rytuał od 29.10 (`ritualFrom`), 9.11 w `grades/` 17 linii z dwóch komputerów – 14 dni
   kwalifikujących się najwcześniej ok. 12.11, najpóźniej 26.11 (28 dni). Aplikacja sama proponuje przegląd rano
   (E7d.2) – wtedy „dalej” na K, po nim E9.
@@ -38,8 +39,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport nowego przebiegu trafi do
    `docs/vm/raport.md` (T529; przebieg z 3.11 – `docs/archiwum/vm/`); powtórka punktów NIEZGODNE i NIE DO SPRAWDZENIA
    na 1.0.8 („Gotowe, gdy” F–H w `docs/plan.md`, punkty i ich zadania – `docs/archiwum/vm/przyczyny.md`); poprawki z odbioru – wersje 1.0.x (D324).
-2. Ciąg I: po wydaniu 1.3.0 – koniec ciągu (wpisy w `docs/archiwum/postep-ciag-I.md`); Ty – odbiór E8n, E10, E11
-   (E11.1 przed zjazdem 21.11), E12 w `docs/odbior.md`.
+2. Ty: odbiór ciągu I – E8n, E10, E11 (E11.1 przed zjazdem 21.11), E12 w `docs/odbior.md`.
 3. K (przegląd kalibracji), gdy aplikacja go zaproponuje (najwcześniej ok. 12.11), po nim E9 (`docs/plan.md`, „Po 1.0”).
 4. Rozszerzenia (FBL, OPS, SNT, HKU) – bez decyzji o starcie (`docs/plan.md`, D354).
 
@@ -57,7 +57,7 @@ w drzewach `.claude/worktrees/w411`, `w410`.
 | I-plan E10–E12 | – | – | pytania odpowiedziane 9.11 (D356–D359), kolejność T545 | ok. 0,5 h (1–2 h) |
 | E11 import zjazdów | 1.1.0 | #57 | scalone 9.11 (c621868); wpis – archiwum ciągu I | ok. 8 h (6–9 h) – dwie rundy przeglądu xhigh |
 | E10 tydzień i cele | 1.2.0 | #58 | scalone 9.11; wpis – archiwum ciągu I; decyzje D360, D361 | ok. 6 h (8–12 h) – dwie rundy przeglądu xhigh |
-| E12 statystyki | 1.3.0 | PR (CI) | wpis – archiwum ciągu I; decyzja D362 | ok. 4 h (5–8 h) – dwie rundy przeglądu high |
+| E12 statystyki | 1.3.0 | #59 | scalone 9.11 (06e6b8c); wpis – archiwum ciągu I; decyzja D362 | ok. 4 h (5–8 h) – dwie rundy przeglądu high |
 
 ## Ciąg F – stan (wpisy: `docs/archiwum/postep-ciag-F.md`)
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
