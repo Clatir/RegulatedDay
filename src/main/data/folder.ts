@@ -27,7 +27,10 @@ import { computeDay, newSegments, type DayContext, type DayState } from '@shared
 import { NO_POWER, powerNeedOf, type PowerNeed } from '@shared/engine/power'
 import { requestAction, type RequestAction } from '@shared/engine/requests'
 import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft } from '@shared/engine/timer'
-import { dayStart } from '@shared/time/day'
+import { dayStart, weekStart } from '@shared/time/day'
+import { goalsDates, goalsProgress, type GoalsView } from '@shared/engine/goals'
+import { unknownDay, weekDates, weekViewOf, whenOf, type HorizonDay, type WeekView } from '@shared/engine/week'
+import { goalsEdits, NO_GOALS, previousMonth, type GoalsPatch } from '@shared/model/goals'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
 import { betterFreeze, foldFacts, isRunning, isRunningRequest, type BlockFact, type DayFacts } from '@shared/engine/facts'
 import { correctionEnd, countedEvents, freezeDecision, gradeLineFrom, isFreeDay, lastEventsOf, openedAtOf, WRITERS_DAYS, type GradeLine } from '@shared/engine/freeze'
@@ -122,6 +125,8 @@ const PEOPLE_DAYS = 28
 const PEOPLE_RECOUNT_MS = 15 * 60_000
 /** The rituals of this many days back are remembered (the morning shows at most 72 h of days to close). */
 const RITUAL_MEMO_DAYS = 4
+/** The days of the horizon remembered at most (the ones asked last): a month of goals and the week shown, with room. */
+const HORIZON_MEMO_DAYS = 70
 
 /** Why an answer of the ritual was refused, in words (never the choice's id). */
 function refusalOf(choice: string): string {
@@ -312,6 +317,10 @@ export class DataFolder {
   private peopleCounts: { day: string; at: number; before: Map<string, number> } | null = null
   /** The rituals of the last days, each counted again only on a change of what it is made of (the morning asks often). */
   private readonly ritualMemo = new Map<string, { key: string; view: RitualView }>()
+  /** The days of the horizon (the week, the month's goals – D356), each counted again only on a change of what it is made of. */
+  private readonly horizonMemo = new Map<string, { key: string; day: HorizonDay }>()
+  /** Changes of the goals one at a time, each made from rd.json as it is in its turn. */
+  private goalsTurn: Promise<unknown> = Promise.resolve()
 
   private constructor(private readonly o: FolderOptions) {
     this.rulesVersion = o.rulesVersion ?? RULES_VERSION
@@ -1039,6 +1048,79 @@ export class DataFolder {
   }
 
   /**
+   * Days of the horizon (D356: the week, the month's goals) as this computer sees them – your queued edits included – each
+   * counted by the helper process (`horizonDay`): a day gone by as its grade counts it (a frozen one up to the events its
+   * freeze named), today live, a day to come from its plan; again only when its log, its records or your queued edits
+   * changed (today also every minute). A day whose log or file cannot be read now is unknown (never an empty day).
+   */
+  private async horizonDays(dates: readonly string[], at: number): Promise<HorizonDay[]> {
+    const today = logicalDayOf(at)
+    const inp = await this.inputs(true)
+    const out: HorizonDay[] = []
+    for (const date of dates) {
+      const when = whenOf(date, today)
+      let read: DayRead
+      let ctx: DayContext
+      try {
+        read = await this.log.readDay(date)
+        ctx = await this.ownContext(date, read, at, inp)
+      } catch {
+        out.push(unknownDay(date, when))
+        continue
+      }
+      const frozen = when === 'past' ? foldFacts(gridOf(date), read.events).frozen : null
+      // A day the leader made has its snapshot in the log: then of the records only its file and the next one's count (the
+      // settings only through the next wake) – a change of rd.json (a goal saved) never counts a month of days again.
+      const made = daySnapshotOf(read.events) != null
+      const records = made ? [this.recordSig(paths.day(date)), this.recordSig(paths.day(addDays(date, 1))), ctx.wakeMin, ctx.nextWakeMin] : this.contextSig(date)
+      const key = JSON.stringify([when === 'today' ? Math.floor(at / 60_000) : when === 'future' ? today : null, read.lastByComputer, read.events.length, read.copies, records, this.queue.pending.length, frozen?.id ?? null])
+      const was = this.horizonMemo.get(date)
+      let day = was?.key === key ? was.day : null
+      if (!day) {
+        day = await (this.o.worker ?? inProcess).run({ kind: 'horizon', ctx, when, frozen: frozen ? { know: frozen.know, grade: frozen.grade } : null })
+        this.horizonMemo.delete(date)
+        this.horizonMemo.set(date, { key, day })
+      }
+      out.push(read.complete ? day : { ...day, read: 'partial' })
+    }
+    // The days asked last stay remembered (two months and a week: a month's goals and the week shown).
+    for (const d of this.horizonMemo.keys()) if (this.horizonMemo.size > HORIZON_MEMO_DAYS) this.horizonMemo.delete(d)
+    return out
+  }
+
+  /** The week of `date` (D356): its seven days from Monday, as this computer sees them. */
+  async weekView(date: string, at = this.clock.now()): Promise<WeekView> {
+    const week = weekStart(date)
+    return weekViewOf(week, logicalDayOf(at), await this.horizonDays(weekDates(week), at))
+  }
+
+  /**
+   * A month's goals (D356) as this computer sees rd.json, the month before's (to take over), and the progress: the days
+   * from its first to today, each as the week counts it. rd.json not readable now – no goals (the progress still counts).
+   */
+  async goalsView(month: string, at = this.clock.now()): Promise<GoalsView> {
+    const all = rdFrom(await this.recordView(paths.settings).catch(() => undefined)).goals
+    const goals = all[month] ?? NO_GOALS
+    const days = await this.horizonDays(goalsDates(month, logicalDayOf(at)), at)
+    return { month, goals, previous: all[previousMonth(month)] ?? null, progress: goalsProgress(month, goals, days) }
+  }
+
+  /**
+   * A change of a month's goals (D356) – the numbers, the morning's step skipped – as fields of rd.json through the queue,
+   * one change at a time, each made from rd.json as this computer sees it in its turn (only what differs; nothing – []).
+   */
+  setGoals(month: string, patch: GoalsPatch): Promise<Outcome[]> {
+    const run = this.goalsTurn.then(async () => {
+      const raw = await this.recordView(paths.settings)
+      if (!raw) throw new Error('nie ma jeszcze ustawień – cele zapiszesz po kreatorze')
+      const edits = goalsEdits(raw, month, patch)
+      return edits.length ? this.edit([{ rel: paths.settings, edits }]) : []
+    })
+    this.goalsTurn = run.catch(() => undefined)
+    return run
+  }
+
+  /**
    * Every day's close and type (the calibration period): frozen days from their grades, the days the leader will still
    * freeze (from the ritual's first day, within its look back) from their logs; without the ritual – none closed.
    */
@@ -1209,12 +1291,15 @@ export class DataFolder {
    * is counted again only when one of them changed (T501).
    */
   private contextSig(date: string): string {
-    const of = (rel: string) => {
-      const c = this.cache.get(rel)
-      return c ? `${c.size}:${c.mtimeMs}` : '-'
-    }
+    const of = (rel: string) => this.recordSig(rel)
     const dir = (d: string) => (this.listed.get(d) ?? []).map((n) => `${n}=${of(`${d}/${n}`)}`).join(',')
     return [of(paths.settings), dir(ID_COLLECTIONS.template), dir(ID_COLLECTIONS.schedule), of(paths.day(date)), of(paths.day(addDays(date, 1)))].join('|')
+  }
+
+  /** A record as last read: by size and time of modification ('-': not read, or not there). */
+  private recordSig(rel: string): string {
+    const c = this.cache.get(rel)
+    return c ? `${c.size}:${c.mtimeMs}` : '-'
   }
 
   /**

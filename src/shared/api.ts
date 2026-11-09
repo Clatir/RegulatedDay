@@ -5,6 +5,9 @@
 import type { CalibrationPeriod, CostProposal, FeltCounts, ReviewPrompt, TimeProposal } from './engine/calibration'
 import type { Celebration, GameView } from './engine/progress'
 import type { SideB } from './engine/sideB'
+import type { GoalsView } from './engine/goals'
+import type { WeekView } from './engine/week'
+import type { GoalsPatch } from './model/goals'
 import type { RitualValue, RitualView } from './engine/ritual'
 import type { CloseHow } from './model/events'
 import type { IdentityKind } from './identity'
@@ -74,7 +77,10 @@ export const CH = {
   game: 'rd:game',
   celebrated: 'rd:celebrated',
   sideB: 'rd:sideB',
-  calibration: 'rd:calibration'
+  calibration: 'rd:calibration',
+  weekView: 'rd:weekView',
+  goals: 'rd:goals',
+  setGoals: 'rd:setGoals'
 } as const
 
 /** The game for the window (D322): its view and the full-screen celebrations not shown on this computer yet. */
@@ -534,6 +540,19 @@ export interface RdApi {
   sideB(): Promise<SideB>
   /** The calibration: period, proposals of the review, felt cost, where the review waits. */
   calibration(): Promise<CalibrationScreen>
+  /**
+   * The week of a date (D356, „Tydzień”): its seven days from Monday on one axis – each with its type, blocks (the plan;
+   * days gone by – as it was), boundary and regeneration against the minimum; only a view.
+   */
+  weekView(date: string): Promise<WeekView>
+  /** A month's goals ('RRRR-MM', D356): as rd.json holds them, the month before's, the progress „x z y” so far. */
+  goals(month: string): Promise<GoalsView>
+  /**
+   * A change of a month's goals (D356): a whole number per area in its range (`goalRange`), null – no goal; `skipped` – the
+   * morning's step „Cele na <miesiąc>” skipped. Fields of rd.json through the queue, as `edit`; a value out of range is
+   * refused (an error with why).
+   */
+  setGoals(month: string, patch: GoalsPatch): Promise<EditOutcome[]>
   /** The window of sound: a tone to play (5 min, 0 min). */
   onSound(cb: (s: { kind: 'five' | 'zero'; volume: number }) => void): () => void
 }

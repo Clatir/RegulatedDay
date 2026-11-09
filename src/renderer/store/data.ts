@@ -7,6 +7,7 @@
 import { create } from 'zustand'
 import type { DataView, EditEntry, EditOutcome, EventIn, RawRecord } from '@shared/api'
 import { recordEdit } from '@shared/data/merge'
+import type { GoalsPatch } from '@shared/model/goals'
 import { newId } from '@shared/model/ids'
 import { lectureFrom, templateFrom, type LectureSeries, type Template } from '@shared/model/plan'
 import { rdFrom, type RdFile } from '@shared/model/rd'
@@ -186,6 +187,25 @@ export function trySaveRd(fn: (raw: RawRecord) => RawRecord): Promise<EditOutcom
   return trySaveWith(() => {
     const before = rawRecord('rd.json')
     return [editOf('rd.json', before, fn(before ? { ...before } : { schema: 1 }))]
+  })
+}
+
+/**
+ * A change of a month's goals (D356) – the numbers (null: no goal) or the morning's step skipped – in its turn, made by
+ * the main process from rd.json as it is then; null when nothing could be sent (the toast said why).
+ */
+export function trySaveGoals(month: string, patch: GoalsPatch): Promise<EditOutcome[] | null> {
+  return inTurn(async () => {
+    try {
+      const out = await window.rd.setGoals(month, patch)
+      await reloadData()
+      const notice = editNotice(out)
+      if (notice) toast(notice.text, notice.kind, 8000)
+      return out
+    } catch (e) {
+      toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
+      return null
+    }
   })
 }
 

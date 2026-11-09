@@ -19,6 +19,9 @@ import type { HolidayLookup } from '@shared/engine/createDay'
 import { CSV_HEADERS } from '@shared/engine/csv'
 import { reviewPrompt } from '@shared/engine/calibration'
 import type { SideB } from '@shared/engine/sideB'
+import type { GoalsView } from '@shared/engine/goals'
+import type { WeekView } from '@shared/engine/week'
+import { goalsPatchFrom, isMonth } from '@shared/model/goals'
 import { keptOnRestore, rdFrom } from '@shared/model/rd'
 import { requestCounters } from '@shared/engine/requests'
 import type { AnyEvent } from '@shared/model/events'
@@ -601,6 +604,27 @@ export class DataHub {
   /** „Strona B tygodnia” of the week that ended (spec „Plan poranny”): its days and the week before, each as its grade counts it. */
   sideB(): Promise<SideB> {
     return this.need().sideB()
+  }
+
+  /** The week of a date (D356): seven days from Monday on one axis – type, blocks, boundary, regeneration. */
+  async weekView(date: string): Promise<WeekView> {
+    if (!isIsoDate(date)) throw new Error('data tygodnia')
+    return this.need().weekView(date)
+  }
+
+  /** A month's goals (D356) with the month before's and the progress so far. */
+  async goals(month: string): Promise<GoalsView> {
+    if (!isMonth(month)) throw new Error('miesiąc celów')
+    return this.need().goalsView(month)
+  }
+
+  /** A change of a month's goals from the window (checked here: numbers in their ranges, null – no goal, the step skipped). */
+  async setGoals(month: unknown, patch: unknown): Promise<EditOutcome[]> {
+    const p = goalsPatchFrom(month, patch)
+    if (!p.ok) throw new Error(p.why)
+    const out = await this.need().setGoals(p.month, p.patch)
+    this.changed()
+    return out.map((o) => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}) }))
   }
 
   /**

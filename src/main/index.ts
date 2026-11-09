@@ -807,6 +807,10 @@ function registerIpc(): void {
   handle(CH.celebrated, (_e, keys: unknown) => needHub().celebrated(Array.isArray(keys) ? keys.map(String) : []))
   handle(CH.sideB, () => needHub().sideB())
   handle(CH.calibration, () => needHub().calibration())
+  // „Tydzień” and the month's goals (D356).
+  handle(CH.weekView, (_e, date: unknown) => needHub().weekView(String(date)))
+  handle(CH.goals, (_e, month: unknown) => needHub().goals(String(month)))
+  handle(CH.setGoals, (_e, month: unknown, patch: unknown) => needHub().setGoals(month, patch))
   handle(CH.answer, (_e, id: string, answer: string, value: number | null) => needHub().answer(String(id), String(answer), typeof value === 'number' && Number.isFinite(value) ? value : null))
   ipcMain.on(CH.seen, (e, ids: unknown) => {
     // Seen only in the main window in the foreground (spec D231); the panel counts while it is open (E4b).
