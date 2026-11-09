@@ -5,6 +5,9 @@
 - Powiadomienie Windows o twardym końcu przychodzi też przy bloku liczonym jak projekt (np. nauka po końcu pracy) i w czasie do wyjaśnienia po projekcie – w ciągu godziny od minięcia.
 - W „mniej pytań” twardy koniec nie przychodzi już jako powiadomienie Windows, tylko cicho w pasku – także po „Jest lepiej”. W trybie zajęć linia i powiadomienie czekają do końca trybu i przychodzą wtedy, jeśli twardy koniec jest dalej aktualny; w trybie sesji jak dotąd.
 
+## 1.0.9
+- Zaczęta sesja usunięta z planu („Usuń”) zostaje na osi dnia, w rytuale, w eksporcie CSV i na liście „zrobione automatycznie” jako „Sesja NY” (dotąd „Sesja tradingowa”); usunięty zaczęty blok rutyny z szablonu zachowuje nazwę rutyny. Blok zaczęty poza planem albo usunięty po starcie ma na osi i w rytuale tę samą nazwę co w CSV i w pasku (także nazwę wariantu).
+
 ## 1.0.8
 - Instalator uruchomiony ręcznie przy włączonej aplikacji najpierw prosi ją o zamknięcie i czeka, aż skończy zapisywać (do 15 s), zamiast od razu ją zabijać – następny start nie widzi już awarii, a w dzienniku jest „zamknięte przez instalator”. Pomocnik nie zostaje w tle.
 - Gdy instalator mimo to nie może zamknąć aplikacji („Nie można zamknąć”), zapisuje listę procesów, które zostały, w `logs\installer-check.log` (bez nazwy konta).

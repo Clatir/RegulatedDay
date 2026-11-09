@@ -98,6 +98,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8l.5 Numer wersji w Ustawieniach
    - [ ] E8m.1 Pasek pulpitu nigdy nad oknami innych programów
    - [ ] E8m.2 „Uruchamiaj z Windows” pokazuje stan i da się wyłączyć
+   - [ ] E8n.1 Usunięta zaczęta sesja zostaje „Sesja NY”
    - [ ] E8n.2 Linia twardego końca projektów w pasku (gdy się zdarzy)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
@@ -1328,6 +1329,18 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   z Menedżera zadań nie jest widoczny.
 
 ### E8n – poprawki po ciągu F (1.0.9–1.0.10)
+
+#### E8n.1 Usunięta zaczęta sesja zostaje „Sesja NY” (1.0.9)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/session-names.test.ts` („nazwa bloku zdjętego z planu po starcie” – CSV,
+  rytuał, pasek, starty z 1.0.8), `tests/web/removed-session.test.ts` (oś równa nazwom w CSV). Ty: rzut oka.
+- **Jak sprawdzić:** zacznij sesję z warstwy sesji (np. „Sesja NY”), po chwili w „Dziś” otwórz jej panel i kliknij
+  „Usuń”; spójrz na oś dnia, wieczorem na rytuał, w Ustawieniach → Dane wyeksportuj CSV.
+- **Oczekiwany efekt:** przebieg do chwili „Usuń” stoi na osi jako „Sesja NY · poza planem”, w rytuale i w `bloki.csv`
+  też „Sesja NY”, a na liście „zrobione automatycznie” w pasku – „Sesja NY …” (D338, T543). Ręcznie dodany blok
+  „Sesja tradingowa” po „Usuń” zostaje „Sesja tradingowa”; usunięty zaczęty blok rutyny ma nazwę rutyny.
+- **Nie przechodzi, gdy:** w którymś z tych miejsc usunięta sesja nazywa się „Sesja tradingowa” albo oś i CSV
+  nazywają ten sam blok inaczej.
 
 #### E8n.2 Linia twardego końca projektów w pasku (1.0.10)
 - [ ] Odebrane

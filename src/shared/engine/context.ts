@@ -4,12 +4,14 @@
  * the snapshot with your edits. The main process (the leader's tasks) and the main window (the plan and its previews)
  * build it with this one function.
  */
+import type { NamingDay } from '../blockName'
 import { daySnapshotOf, type AnyEvent, type DaySnapshot } from '../model/events'
 import type { DayFile, LectureSeries, Template } from '../model/plan'
 import type { SettingsChange } from '../model/settings'
 import { addDays } from '../time/zone'
-import { createDay, dayPlan, dayWakeMin, nextWakeForBedtime, type HolidayLookup } from './createDay'
+import { createDay, dayPlan, dayWakeMin, nextWakeForBedtime, snapshotEntries, type HolidayLookup } from './createDay'
 import type { DayContext } from './day'
+import type { DayFacts } from './facts'
 
 export interface PlanInputs {
   changes: readonly SettingsChange[]
@@ -44,4 +46,9 @@ export function dayContextOf(inp: PlanInputs, src: DaySource, holidays: HolidayL
     events: src.events,
     now: at
   }
+}
+
+/** What names the day's blocks (`nameById`): its plan, its snapshot's entries, what each start wrote. */
+export function namingOf(ctx: Pick<DayContext, 'date' | 'plan' | 'snapshot'>, facts: Pick<DayFacts, 'blocks'>): NamingDay {
+  return { plan: ctx.plan, snapshotBlock: snapshotEntries(ctx.snapshot, ctx.date), planned: (id) => facts.blocks.get(id)?.planned }
 }

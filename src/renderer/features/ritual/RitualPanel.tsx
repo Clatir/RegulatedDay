@@ -5,6 +5,7 @@
  * The main process counts the ritual (its helper process) and writes every answer to the day's log.
  */
 import { useEffect, useState } from 'react'
+import { namingOf } from '@shared/engine/context'
 import type { OutcomeChange } from '@shared/engine/outcome'
 import type { FeltRow, RitualEffect, RitualRow, RitualValue, RitualView } from '@shared/engine/ritual'
 import { atOf, gridOf } from '@shared/engine/grid'
@@ -17,7 +18,7 @@ import { cx } from '../../components/ui'
 import { logEvents, useData } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { openDay, toast } from '../../store/ui'
-import { blockName, type Names } from '../plan/blockView'
+import { nameById, type Names } from '../plan/blockView'
 import { PersonChoice } from '../requests/RequestsPage'
 import { DayTime, typedOf, useTypedTime } from './dayTime'
 
@@ -145,12 +146,9 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
   const t = (idx: number) => logicalClock(logicalMinuteOf(date, atOf(grid, idx)))
   const tm = (ms: number) => logicalClock(logicalMinuteOf(date, ms))
   const instant = (idx: number) => atOf(grid, idx)
-  const name = (id: string) => {
-    const p = model.ctx.plan.find((b) => b.id === id)
-    if (p) return blockName(p, names)
-    const cat = model.state.facts.blocks.get(id)?.planned?.categoryId
-    return cat ? categoryName(rd, cat) : 'blok'
-  }
+  // A block taken out of the plan after it began (D336) keeps its name – as on the axis, in the CSV and the bar.
+  const naming = namingOf(model.ctx, model.state.facts)
+  const name = (id: string) => nameById(id, naming, names)
   const answer = async (row: RitualRow, choice: string, value: RitualValue = null, item: string | null = null) => {
     setEditing(null)
     setStretch(null)

@@ -8,7 +8,8 @@
  * Until a data folder is open the widget shows one neutral line („Brak folderu danych · Otwórz okno”, D327).
  */
 import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind } from '@shared/api'
-import { blockName, namedOf } from '@shared/blockName'
+import { blockName, nameById } from '@shared/blockName'
+import { namingOf } from '@shared/engine/context'
 import { costText } from '@shared/costText'
 import { recordEdit, sameContentAs } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
@@ -389,7 +390,8 @@ export class WidgetEngine {
       this.say('Plan się mieści – nie ma czego przestawiać.')
       return this.refresh()
     }
-    const nameOf = (b: BlockInfo) => blockName(m.ctx.plan.find((p) => p.id === b.id) ?? namedOf(b), names)
+    const naming = namingOf(m.ctx, m.state.facts)
+    const nameOf = (b: BlockInfo) => nameById(b.id, naming, names)
     this.panel = { cause, variants: variantsFor(m.ctx, m.state, cause, nameOf) }
     return this.refresh()
   }
