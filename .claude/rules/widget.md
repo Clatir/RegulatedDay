@@ -27,7 +27,12 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   dźwięk), a „Dalej?” silnika (z minut, od hh:mm:30) pasek chowa do `now >= endsAt`. Godziny słowami (podpowiedź „do
   HH:MM”, „W tle: … do HH:MM”) – z minuty `plannedEnd`, jak w 1.0.1. Dzień liczy dalej w minutach (T412).
 - Nazwy bloków: `blockName` (`shared/blockName.ts`) – blok `origin: 'session'` to „Sesja <nazwa>” (D338; druga zmiana i ręczny blok
-  kategorii – „Sesja tradingowa”); przekazuj mu cały `PlanBlock` albo `origin` i `sourceId` (pasek, powiadomienia, CSV). Koszt startu
+  kategorii – „Sesja tradingowa”); przekazuj mu cały `PlanBlock` albo `origin` i `sourceId` (pasek, powiadomienia, CSV).
+  Blok po id (także zdjęty z planu po starcie – D336, albo zaczęty poza planem): `nameById` / `namedById` z danymi
+  `namingOf` (`engine/context.ts`) – wpis planu; zaczęty: kategoria i wariant ze startu, pochodzenie, rutyna i prośby
+  z migawki (`snapshotEntries`) tylko przy tej samej kategorii; niezaczęty: migawka; inaczej „blok” (T543). Oś, rytuał,
+  CSV, pasek i warianty – tylko przez nie; `blockName.ts` nie importuje `engine/`.
+  Koszt startu
   w pasku i w panelu bloku – jedna funkcja `shared/costText.ts` (D339).
 - `main/widget.ts` – `WidgetEngine`: `refresh()` po każdym sprawdzeniu folderu, co 15 s, po kliknięciu i w chwili
   kroku (`stepDelay` z `warnDeadlines`: kroki po chwili widoku, czekanie od ustawienia zegara – krok, który minął w

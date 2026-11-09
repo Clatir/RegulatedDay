@@ -26,17 +26,31 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 - Rejestry decyzji (D308, T535): `docs/decyzje.md` – D; `docs/decyzje-techniczne.md` – T400 i nowsze,
   `docs/decyzje-techniczne-T1-T399.md` – T1–T399; zastąpione w całości w `docs/archiwum/decyzje-zastapione.md`. D188
   cofnięta przez T303, ale cytowana w D150 i specyfikacji – zostaje w rejestrze.
-- `docs/plan.md` ma od 7.11 dopisany plan rozszerzeń (GCal, Notion, Sunsama – bloki FBL…) – poza ciągiem F, bez decyzji
-  o starcie.
+- `docs/plan.md` ma od 7.11 dopisany plan rozszerzeń (GCal, Notion, Sunsama – bloki FBL…) – bez decyzji o starcie;
+  wykonawcy i przeglądy według ryzyka od 9.11 (D354).
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →
    `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport nowego przebiegu trafi do
    `docs/vm/raport.md` (T529; przebieg z 3.11 – `docs/archiwum/vm/`); powtórka punktów NIEZGODNE i NIE DO SPRAWDZENIA
    na 1.0.8 („Gotowe, gdy” F–H w `docs/plan.md`, punkty i ich zadania – `docs/archiwum/vm/przyczyny.md`); poprawki z odbioru – wersje 1.0.x (D324).
-2. Następne po „dalej”: 4.11 (nazwa usuniętego zaczętego bloku sesji) i 4.10 (linia twardego końca w pasku) –
-   `docs/plan.md`, „Poprawki po Twoim odbiorze”.
-3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K (`docs/plan.md`).
+2. Ciąg I w toku (D353, bez pauz do „dalej”): 4.11 → 1.0.9, 4.10 → 1.0.10, plan E10–E12 z pakietem pytań (brama),
+   potem E10–E12 – `docs/plan.md`, „Ciąg I”.
+3. Po 14 dniach z zamkniętym rytuałem – przegląd kalibracji K, po nim E9 (`docs/plan.md`, „Po 1.0”); warunek
+   sprawdzam na końcu ciągu I.
+
+## Ciąg I – stan (D353)
+**Przed ciągiem I (9.11):** zakres – `docs/plan.md`, „Ciąg I”; decyzje D352 (tekst linii twardego końca), D353 (kształt
+ciągu), D354 (wykonawcy rozszerzeń). Ryzyka: 4.11 – nazwy bloków w czterech miejscach (log i silnik bez zmian, T543);
+4.10 – pasek i powiadomienia. Przygotować: nic do 1.0.10; do E11 – PDF z terminami zjazdów (poza
+repozytorium, D279). Model: główna sesja Opus 5.5 · high; 4.11 `wykonawca-opus`, 4.10 `wykonawca-sonnet` – równolegle
+w drzewach `.claude/worktrees/w411`, `w410`.
+
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| 4.11 nazwa usuniętej sesji | 1.0.9 | #56 | PR, CI w toku (9.11); wpis – `docs/archiwum/postep-ciag-I.md` | ok. 4,5 h (0,5–1 h) – dwie przebudowy po przeglądzie |
+| 4.10 linia twardego końca | 1.0.10 | #55 (draft) | poprawki po przeglądzie xhigh (runda 1); scalanie po #56 | (1–1,5 h) |
+| I-plan E10–E12 | – | – | po 4.11 i 4.10 | (1–2 h) |
 
 ## Ciąg F – stan (wpisy: `docs/archiwum/postep-ciag-F.md`)
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |

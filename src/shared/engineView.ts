@@ -25,7 +25,8 @@ import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
 import { endsAtOf, fixedStartPair, laterWork, plannedEndOf, secondShiftStart, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
-import { namedOf, type NamedBlock } from './blockName'
+import { namedById, type NamedBlock } from './blockName'
+import { namingOf } from './engine/context'
 import type { PlanBlock } from './model/plan'
 import type { Routine } from './model/routines'
 import { ENGINE_TONE_SET, iconColor, toneColor, type Tone, type WarnStep } from './theme'
@@ -256,11 +257,11 @@ export function engineView(i: EngineInput): WidgetView {
   const modes: Modes = modesOf(state, t, events, now, i.modePrefs)
   const at = (idx: number) => atOf(state.grid, idx)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  // As everywhere (`namedById`): a block taken out of the plan after it began keeps its name (D336, D338).
+  const naming = namingOf(i.ctx, state.facts)
   const nameOf = (id: string) => {
-    const p = i.ctx.plan.find((x) => x.id === id)
-    if (p) return i.name(p)
-    const b = byId.get(id)
-    return i.name(namedOf({ categoryId: b?.categoryId ?? state.facts.blocks.get(id)?.planned?.categoryId ?? 'inne', variantId: b?.variantId ?? null, origin: b?.origin, sourceId: b?.sourceId }))
+    const b = namedById(id, naming)
+    return b ? i.name(b) : 'blok'
   }
   const hidden = modes.disconnect != null
   const fg = t.fg

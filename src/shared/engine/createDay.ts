@@ -200,14 +200,26 @@ export function createDay(inp: DayInputs): DaySnapshot {
 function snapshotBlocksOf(snapshot: DaySnapshot, dayFile: DayFile | null): PlanBlock[] {
   const answers = dayFile?.sessions ?? {}
   const blocks = snapshot.blocks.filter((b) => !(b.origin === 'session' && b.sourceId && answers[b.sourceId] === 'no'))
-  if (dayFile) {
-    for (const def of snapshot.settings.sessions) {
-      if (answers[def.id] !== 'yes' || blocks.some((b) => b.origin === 'session' && b.sourceId === def.id)) continue
-      const b = sessionBlock(def, dayFile.date, snapshot.holidays)
-      if (b) blocks.push(b)
-    }
-  }
+  if (dayFile) blocks.push(...addedSessions(snapshot, dayFile.date, (def) => answers[def.id] === 'yes' && !blocks.some((b) => b.origin === 'session' && b.sourceId === def.id)))
   return blocks
+}
+
+/** The sessions of the layer an answer „tak” brings to a day (`which` of them), as blocks of `date` – none in the snapshot. */
+function addedSessions(snapshot: DaySnapshot, date: string, which: (def: SessionDef) => boolean): PlanBlock[] {
+  return snapshot.settings.sessions.filter(which).flatMap((def) => sessionBlock(def, date, snapshot.holidays) ?? [])
+}
+
+/**
+ * The blocks the day's snapshot gives, by id, whether in the plan or not: the snapshot's (also one cancelled for the day)
+ * and the sessions an answer „tak” may add (in no snapshot) – a block taken out of the plan after it began (D336) is named
+ * by its entry (D338). Counted once, at the first look.
+ */
+export function snapshotEntries(snapshot: DaySnapshot, date: string): (id: string) => PlanBlock | null {
+  let byId: Map<string, PlanBlock> | null = null
+  return (id) => {
+    byId ??= new Map([...addedSessions(snapshot, date, () => true), ...snapshot.blocks].map((b) => [b.id, b]))
+    return byId.get(id) ?? null
+  }
 }
 
 /**
