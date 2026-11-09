@@ -5,11 +5,14 @@
  * The main process counts the ritual (its helper process) and writes every answer to the day's log.
  */
 import { useEffect, useState } from 'react'
+import { loggedBlockName } from '@shared/blockName'
+import type { DayFacts } from '@shared/engine/facts'
 import type { OutcomeChange } from '@shared/engine/outcome'
 import type { FeltRow, RitualEffect, RitualRow, RitualValue, RitualView } from '@shared/engine/ritual'
 import { atOf, gridOf } from '@shared/engine/grid'
 import { countLabel, durationLabel, logicalClock } from '@shared/format'
 import { FELT_COSTS, type FeltCost } from '@shared/model/events'
+import type { PlanBlock } from '@shared/model/plan'
 import { categoryName } from '@shared/model/rd'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -59,6 +62,17 @@ export function untouched(r: RitualRow): boolean {
     default:
       return !r.answered
   }
+}
+
+/**
+ * A row's block by name: the plan's; one only the log knows (begun outside the plan, or taken out of it after it began –
+ * D336) by what its start wrote („Sesja NY”, D338); „blok” without either.
+ */
+export function ritualBlockName(id: string, plan: readonly PlanBlock[], facts: Pick<DayFacts, 'blocks'>, names: Names): string {
+  const p = plan.find((b) => b.id === id)
+  if (p) return blockName(p, names)
+  const planned = facts.blocks.get(id)?.planned
+  return planned ? loggedBlockName(planned, names) : 'blok'
 }
 
 /** The day's ritual as the main process counts it, again after every change of the data and every minute. */
@@ -145,12 +159,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
   const t = (idx: number) => logicalClock(logicalMinuteOf(date, atOf(grid, idx)))
   const tm = (ms: number) => logicalClock(logicalMinuteOf(date, ms))
   const instant = (idx: number) => atOf(grid, idx)
-  const name = (id: string) => {
-    const p = model.ctx.plan.find((b) => b.id === id)
-    if (p) return blockName(p, names)
-    const cat = model.state.facts.blocks.get(id)?.planned?.categoryId
-    return cat ? categoryName(rd, cat) : 'blok'
-  }
+  const name = (id: string) => ritualBlockName(id, model.ctx.plan, model.state.facts, names)
   const answer = async (row: RitualRow, choice: string, value: RitualValue = null, item: string | null = null) => {
     setEditing(null)
     setStretch(null)

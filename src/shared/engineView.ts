@@ -260,7 +260,7 @@ export function engineView(i: EngineInput): WidgetView {
     const p = i.ctx.plan.find((x) => x.id === id)
     if (p) return i.name(p)
     const b = byId.get(id)
-    return i.name(namedOf({ categoryId: b?.categoryId ?? state.facts.blocks.get(id)?.planned?.categoryId ?? 'inne', variantId: b?.variantId ?? null, origin: b?.origin, sourceId: b?.sourceId }))
+    return i.name(namedOf({ categoryId: b?.categoryId ?? state.facts.blocks.get(id)?.planned?.categoryId ?? 'inne', variantId: b?.variantId ?? null, origin: b?.origin, sourceId: b?.sourceId, named: b?.named }))
   }
   const hidden = modes.disconnect != null
   const fg = t.fg

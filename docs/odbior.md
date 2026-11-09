@@ -98,6 +98,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8l.5 Numer wersji w Ustawieniach
    - [ ] E8m.1 Pasek pulpitu nigdy nad oknami innych programów
    - [ ] E8m.2 „Uruchamiaj z Windows” pokazuje stan i da się wyłączyć
+   - [ ] E8n.1 Usunięta zaczęta sesja zostaje „Sesja NY”
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1325,3 +1326,16 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   w Menedżerze zadań”, a start aplikacji go nie włącza z powrotem.
 - **Nie przechodzi, gdy:** przełącznik wraca do „wyłączone”, wyłączenie zostawia wpis w Menedżerze zadań albo stan
   z Menedżera zadań nie jest widoczny.
+
+### E8n – poprawki po ciągu F (1.0.9–1.0.10)
+
+#### E8n.1 Usunięta zaczęta sesja zostaje „Sesja NY” (1.0.9)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/session-names.test.ts` („usunięty zaczęty blok sesji”),
+  `tests/web/removed-session.test.ts` (oś, rytuał, stary log). Ty: rzut oka.
+- **Jak sprawdzić:** zacznij sesję z warstwy sesji (np. „Sesja NY”), po chwili w „Dziś” otwórz jej panel i kliknij
+  „Usuń”; spójrz na oś dnia, wieczorem na rytuał, w Ustawieniach → Dane wyeksportuj CSV.
+- **Oczekiwany efekt:** przebieg do chwili „Usuń” stoi na osi jako „Sesja NY · poza planem”, w rytuale i w `bloki.csv`
+  też „Sesja NY”, a na liście „zrobione automatycznie” w pasku – „Sesja NY …” (D338, T543). Ręcznie dodany blok
+  „Sesja tradingowa” po „Usuń” zostaje „Sesja tradingowa”.
+- **Nie przechodzi, gdy:** w którymś z tych miejsc usunięta sesja nazywa się „Sesja tradingowa”.

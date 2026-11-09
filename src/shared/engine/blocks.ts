@@ -37,6 +37,11 @@ export interface BlockInfo {
   recorded: boolean
   origin: PlanBlock['origin']
   sourceId: string | null
+  /**
+   * A block outside the plan: where its start says it came from (since 1.0.9) – only what names it, „Sesja NY” of a block
+   * taken out of the plan after it began (D336, D338). The engine's rules go by `origin` (`user` outside the plan).
+   */
+  named?: { origin: PlanBlock['origin']; sourceId: string | null }
   isWork: boolean
   isLife: boolean
   isRegen: boolean
@@ -112,34 +117,35 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
   }
   for (const [id, f] of facts.blocks) {
     if (ids.has(id) || !f.planned) continue
-    out.push(
-      make(
-        {
-          id,
-          categoryId: f.planned.categoryId,
-          variantId: f.planned.variantId,
-          startMin: null,
-          anchor: null,
-          durationMin: f.planned.durationMin,
-          fixed: f.planned.fixed,
-          background: f.runs[0]?.bg ?? null,
-          tag: f.planned.tag,
-          waitUntilMin: null,
-          costs: null,
-          bgCostPct: null,
-          note: '',
-          origin: 'user',
-          sourceId: null,
-          recorder: null,
-          moves: 0,
-          requests: [],
-          routine: null,
-          movedFrom: null,
-          byVariant: false
-        },
-        false
-      )
+    const info = make(
+      {
+        id,
+        categoryId: f.planned.categoryId,
+        variantId: f.planned.variantId,
+        startMin: null,
+        anchor: null,
+        durationMin: f.planned.durationMin,
+        fixed: f.planned.fixed,
+        background: f.runs[0]?.bg ?? null,
+        tag: f.planned.tag,
+        waitUntilMin: null,
+        costs: null,
+        bgCostPct: null,
+        note: '',
+        origin: 'user',
+        sourceId: null,
+        recorder: null,
+        moves: 0,
+        requests: [],
+        routine: null,
+        movedFrom: null,
+        byVariant: false
+      },
+      false
     )
+    // Where its start says it came from (none in starts before 1.0.9): only its name (`named`), its rules stay those of a
+    // block outside the plan.
+    out.push(f.planned.origin ? { ...info, named: { origin: f.planned.origin, sourceId: f.planned.sourceId ?? null } } : info)
   }
   // A template block anchored to the second shift carries its mark (spec „Druga zmiana”).
   const byId = new Map(out.map((b) => [b.id, b]))
@@ -172,7 +178,8 @@ export function plannedSpan(b: BlockInfo, byId: Map<string, BlockInfo>, depth = 
 
 /**
  * What a block's start writes of its plan (spec „Zdarzenie startu bloku zapisuje planowaną długość, kategorię, koszty i
- * miejsce z tej chwili”): the plan's entry (`plan`) wins over the block's info.
+ * miejsce z tej chwili”): the plan's entry (`plan`) wins over the block's info. Where the block came from too – a block
+ * taken out of the plan after it began keeps its name by it („Sesja NY”, D336, D338).
  */
 export function startPlanned(info: BlockInfo, plan: readonly PlanBlock[] = []): Record<string, unknown> {
   const p = plan.find((b) => b.id === info.id)
@@ -183,7 +190,9 @@ export function startPlanned(info: BlockInfo, plan: readonly PlanBlock[] = []): 
     tag: p?.tag ?? (info.secondShift ? 'secondShift' : info.weeklyAnalysis ? 'weeklyAnalysis' : null),
     fixed: info.fixed,
     costs: info.costs,
-    bgCostPct: info.bgCostPct
+    bgCostPct: info.bgCostPct,
+    origin: info.origin,
+    sourceId: info.sourceId
   }
 }
 

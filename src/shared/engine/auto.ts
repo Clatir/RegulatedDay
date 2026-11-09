@@ -317,7 +317,7 @@ function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, Shu
         block: b.id,
         at: from,
         bg,
-        planned: { categoryId: b.categoryId, variantId: b.variantId, durationMin: b.durationMin, tag: b.secondShift ? 'secondShift' : b.weeklyAnalysis ? 'weeklyAnalysis' : null, fixed: true, costs: b.costs, bgCostPct: b.bgCostPct },
+        planned: { categoryId: b.categoryId, variantId: b.variantId, durationMin: b.durationMin, tag: b.secondShift ? 'secondShift' : b.weeklyAnalysis ? 'weeklyAnalysis' : null, fixed: true, costs: b.costs, bgCostPct: b.bgCostPct, origin: b.origin, sourceId: b.sourceId },
         confirmUntil: null,
         how: 'auto'
       })

@@ -125,6 +125,10 @@ function costsFrom(v: unknown): PlanBlock['costs'] {
   return head == null || emotions == null || senses == null ? null : { head, emotions, senses }
 }
 
+/** Where a block may come from (`PlanBlock.origin`). */
+const ORIGINS: ReadonlyArray<PlanBlock['origin']> = ['template', 'lecture', 'session', 'user']
+export const isOrigin = (v: unknown): v is PlanBlock['origin'] => (ORIGINS as readonly unknown[]).includes(v)
+
 /** A block from a file, or null when it cannot be one (no id, no category, no start nor anchor, no length). */
 export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'): PlanBlock | null {
   if (!isPlain(v) || typeof v.id !== 'string' || !v.id || typeof v.categoryId !== 'string' || !v.categoryId) return null
@@ -132,7 +136,6 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
   const anchor = typeof v.anchor === 'string' && v.anchor ? v.anchor : null
   const durationMin = intIn(v.durationMin, 1, 24 * 60)
   if ((startMin == null && !anchor) || durationMin == null) return null
-  const origins = ['template', 'lecture', 'session', 'user']
   return {
     id: v.id,
     categoryId: v.categoryId,
@@ -147,7 +150,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     costs: costsFrom(v.costs),
     bgCostPct: intIn(v.bgCostPct, 0, 100),
     note: str(v.note).slice(0, 2000),
-    origin: origins.includes(v.origin as string) ? (v.origin as PlanBlock['origin']) : origin,
+    origin: isOrigin(v.origin) ? v.origin : origin,
     sourceId: typeof v.sourceId === 'string' ? v.sourceId : null,
     recorder: typeof v.recorder === 'string' ? v.recorder : null,
     moves: intIn(v.moves, 0, 1_000_000) ?? 0,
