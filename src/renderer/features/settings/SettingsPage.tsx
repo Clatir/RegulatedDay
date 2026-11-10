@@ -14,7 +14,7 @@ import { useData } from '../../store/data'
 import { Field, Section, Segmented, Toggle } from '../../components/ui'
 import { SHORTCUTS } from '../../lib/shortcuts'
 import { phaseText, updateAction } from '../../store/update'
-import { toast } from '../../store/ui'
+import { takeFoundPick, takePick, toast, useUi } from '../../store/ui'
 import { BarPlaceMap } from './BarPlaceMap'
 import { CategoriesSection } from './CategoriesSection'
 import { LecturesSection } from './LecturesSection'
@@ -58,6 +58,14 @@ export function SettingsPage() {
   // „Od dziś” / „od daty” lasts only for this visit and this day: then „od jutra” again (T513, A7-13).
   const today = useData((s) => s.view?.today ?? '')
   const [visitDay] = useState(today)
+  // A section picked in the search (Ctrl K): brought to the top once. Those that need the folder are not there without it.
+  const pick = useUi((s) => s.pick)
+  useEffect(() => {
+    if (pick?.kind !== 'setting') return
+    const find = () => document.querySelector(`[data-testid="${pick.id}"]`)
+    if (!dataOpen && !find()) takePick((p) => p.kind === 'setting')
+    else if (takeFoundPick((p) => p.kind === 'setting', () => !!find(), 'Tej sekcji ustawień nie ma.')) find()?.scrollIntoView({ block: 'start' })
+  }, [pick, dataOpen])
   useEffect(() => resetSettingsFrom, [])
   useEffect(() => {
     if (today && visitDay && today !== visitDay) resetSettingsFrom()
@@ -84,7 +92,7 @@ export function SettingsPage() {
           <ComputersSection />
         </>
       )}
-      <Section title="Ten komputer">
+      <Section title="Ten komputer" data-testid="settings-machine">
         <Field
           label="Uruchamiaj z Windows"
           hint={
@@ -256,7 +264,7 @@ export function SettingsPage() {
           </Field>
         )}
       </Section>
-      <Section title="Informacje">
+      <Section title="Informacje" data-testid="settings-info">
         <Field label="Wersja aplikacji">
           <span data-testid="identity">{appVersionText(info)}</span>
         </Field>
@@ -274,7 +282,7 @@ export function SettingsPage() {
           </button>
         </Field>
       </Section>
-      <Section title="Skróty klawiszowe">
+      <Section title="Skróty klawiszowe" data-testid="settings-shortcuts">
         <dl className="grid grid-cols-[160px_1fr] gap-x-3 gap-y-1.5" data-testid="shortcuts">
           {SHORTCUTS.map(([k, what]) => (
             <div key={k} className="contents">

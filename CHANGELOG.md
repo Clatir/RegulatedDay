@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.0
+- Wyszukiwarka: Ctrl K w oknie głównym otwiera okno wyszukiwania nad bieżącym ekranem. Szuka w nazwach i notatkach bloków wszystkich dni (minionych i zaplanowanych), w szablonach, prośbach, rutynach, kategoriach, ekranach i sekcjach ustawień oraz w poleceniach („Nowy blok”, „Nowa prośba”, „Jutro”, „Wczoraj”, „Rytuał” – tylko przechodzą, nic nie przenoszą).
+- Wielkość liter i polskie znaki nie mają znaczenia („zolw” znajdzie „Żółw”); każde wpisane słowo musi być początkiem jakiegoś słowa. Wyniki są w grupach po 5 z „Pokaż jeszcze”, przy bloku data i fragment notatki z podświetloną frazą; bloki – najpierw dziś, potem zaplanowane, potem minione od najnowszych.
+- Strzałki wybierają, Enter otwiera: blok – „Dziś” na jego dniu z otwartym panelem bloku; szablon, prośba, rutyna i kategoria – ich ekran z tym rekordem. Przed wpisaniem czegokolwiek okno pokazuje do 5 ostatnio wybranych wyników i polecenia. Esc albo kliknięcie obok zamyka.
+
 ## 1.5.0
 - „Tydzień”: kliknięcie w pustą siatkę otwiera obok dnia kartę nowego bloku – kategoria (na start ostatnio użyta), długość, „Dodaj”, „Więcej” (pełna edycja) i „Anuluj”. Dzień otwierasz teraz kliknięciem w jego nagłówek albo w blok. W dniu minionym karta ostrzega „Ten dzień już minął”, ale zapis jest możliwy.
 - Przeciągnięcie po pustym miejscu osi („Dziś”, „Szablony”, „Tydzień”) od razu ustawia start i koniec nowego bloku, co 5 min, z godzinami w trakcie. W „Tygodniu” przeciągnięcie przez kilka dni dodaje osobny blok o tych samych godzinach w każdym z nich.

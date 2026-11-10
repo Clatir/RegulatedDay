@@ -22,7 +22,7 @@ import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
 import { isSaved, useData } from '../../store/data'
 import { dayUsable, useDay, type DayModel } from '../../store/day'
-import { openDay, patchBlockDraft, setBlockDraft, toast, useUi } from '../../store/ui'
+import { openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
@@ -145,6 +145,21 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
 
   const raw = model.data.dayFile
   const plan = model.ctx.plan
+  // What the search (Ctrl K) left here: the command „Nowy blok” (as Ctrl+N), or a block of this day – selected as a click on
+  // it does, the panel of the block opens (a day gone by too). One that is no longer on the day says so.
+  const pick = useUi((s) => s.pick)
+  useEffect(() => {
+    if (pick?.kind === 'command' && pick.id === 'newBlock' && isToday) {
+      takePick((p) => p.kind === 'command' && p.id === 'newBlock')
+      newHere()
+    } else if (pick?.kind === 'block' && pick.date === date) {
+      takePick((p) => p.kind === 'block')
+      if (plan.some((b) => b.id === pick.id)) {
+        setDraft(null)
+        setSelected(pick.id)
+      } else toast('Tego bloku nie ma już na tym dniu.')
+    }
+  }, [pick, date, plan])
   const block = draft ?? plan.find((b) => b.id === selected) ?? null
   /** The selected block has begun, and how „Usuń” takes it (D336): a running one ends now, one that is over only leaves the plan. */
   const blockFact = block && !draft ? model.state.facts.blocks.get(block.id) : undefined

@@ -35,6 +35,27 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   10.11: blok 1 = ciąg J (SNT7, SNT8, FBL2 w trzech częściach), pytania odpowiedziane (D363–D369), FBL1 odłożone
   (D364); bloki 2–4 bez decyzji o starcie. Opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`.
 
+### SNT3 i SNT6 – stan
+Sesja równoległa do ciągu J (wyjątek od „jedna sesja do `main`”, zgoda 10.11); numery D387–D399 (D380–D386 zajął ciąg L, PR #66),
+T650–T699.
+**Przed etapem (10.11):** pytania w sześciu rundach – D387 (SNT6), D388 (SNT3). Ryzyka: SNT6 – korpus wszystkich
+dni w procesie głównym; SNT3 – wierność zapisu Markdown (stare notatki bez zmian), limit 10 000 (starsza wersja na
+drugim komputerze tnie do 2000 – ostrzeżenie), linki tylko http/https. Model: główna sesja Opus 5.5 · high,
+`wykonawca-sonnet` · high równolegle w `.claude/worktrees/ws6` i `ws3` (ws3 – własna kopia `node_modules`, bo SNT3
+dodaje biblioteki edytora); SNT3 – przegląd xhigh części limitu (format pliku).
+
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| SNT6 wyszukiwarka Ctrl K | 1.6.0 | – | PR w toku (gałąź `claude/snt6-wyszukiwanie`) | ok. 2 h (4–6 h) – jedna runda przeglądu high |
+| SNT3 Markdown w notatkach | – | – | kod gotowy w `ws3`, przegląd xhigh w toku | – (6–9 h, edytor na żywo) |
+
+**SNT6 (1.6.0):** paleta Ctrl K (`renderer/features/search/`), dopasowanie `shared/search.ts`, korpus dni
+`DataFolder.searchDays()` (cały plan dnia jak w „Dziś”), skok do rekordu `useUi.pick`; D387, T650–T654; odbiór
+SNT6.1–SNT6.3. Przegląd high: 10 uwag (1 high – niezmienione bloki szablonu nieprzeszukiwane; 3 medium; reszta
+porządkowe) – wszystkie poprawione z testami, Ctrl K nad kreatorem – nic. **Uwagi na później:** pierwsze otwarcie
+palety liczy plan każdego dnia z plikiem w procesie głównym (`readDay` + `ownContext`) – przy latach danych
+pamięć podręczna planu dnia po podpisie wejść; ukryte słowa poleceń („nowe”, „podsumowanie”) – T650.
+
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →
    `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport nowego przebiegu trafi do
