@@ -12,7 +12,7 @@
 import { firstFixedStart, shiftedStart, unshiftedStart } from '@shared/engine/createDay'
 import type { DayContext, DayState } from '@shared/engine/day'
 import { idxOfLogical, logicalSpan } from '@shared/engine/grid'
-import { pushApart, withBlock, type PushHold } from '@shared/engine/pushApart'
+import { axisMoves, pushApart, withBlock, type PushHold } from '@shared/engine/pushApart'
 import type { DaySnapshot } from '@shared/model/events'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN, type PlanBlock, type TemplateVersion } from '@shared/model/plan'
 import type { BlockSpan, DragEdge } from '../plan/Timeline'
@@ -42,13 +42,13 @@ export interface TemplateChange {
 const sources = (day: TemplateDay): Map<string, string> => new Map(day.ctx.plan.filter((b) => b.origin === 'template' && b.sourceId).map((b) => [b.id, b.sourceId!]))
 
 /**
- * The block `block` (in the day's hours, as the day shows it) put into the day – its start where the day can show it (the
- * end of a block dragged by its top edge, `endMin`, stays, never less than 5 min from the start) – the blocks it pushes
- * apart, and those the first fixed block of the changed plan moves on the axis, each in the template's hours (`id` – its id
- * in the version; null: a new block).
+ * The block `block` (in the day's hours, as the day shows it) put into the day by `how` – its start where the day can show
+ * it with its length after the change: moved by its body or new – the first place at or after the one asked for; by its
+ * top edge – the latest at or before it, the end (`endMin`) staying and the block at least 5 min long; by its bottom edge –
+ * its own start, unless the day's end holds it earlier – the blocks it pushes apart, each in the template's hours (`id` –
+ * its id in the version; null: a new block), and every block whose place on the axis the change moves (the preview).
  */
-function inTemplate(day: TemplateDay, block: PlanBlock, patch: Partial<PlanBlock>, id: string | null, atMin?: number, endMin?: number): TemplateChange {
-  const g = day.state.grid
+function inTemplate(day: TemplateDay, block: PlanBlock, patch: Partial<PlanBlock>, id: string | null, how: DragEdge | 'move' | 'new', atMin?: number, endMin?: number): TemplateChange {
   const delta = day.snapshot.wakeMin - day.snapshot.templateWakeMin
   const firstFixed = firstFixedStart(withBlock(day.ctx.plan, block))
   const toTemplate = (b: Pick<PlanBlock, 'fixed' | 'anchor' | 'durationMin'>, startMin: number) => unshiftedStart(b, startMin, delta, firstFixed)
@@ -56,20 +56,16 @@ function inTemplate(day: TemplateDay, block: PlanBlock, patch: Partial<PlanBlock
   /** Where the day shows a block put at `startMin` (the nearest place it can – see above). */
   const reach = (b: Pick<PlanBlock, 'fixed' | 'anchor' | 'durationMin'>, startMin: number) => onDay(b, toTemplate(b, startMin))
   const hold: PushHold = reach
-  /** The latest place at or before `startMin` the day can show the block at (on the grid of 5 min). */
-  const atOrBefore = (b: PlanBlock, startMin: number) => {
-    for (let k = startMin; k > startMin - 24 * 60; k -= DRAG_STEP_MIN) if (reach(b, k) === k) return k
-    return startMin
-  }
+  const length = (startMin: number) => Math.min(Math.max(endMin! - startMin, MIN_BLOCK_MIN), MAX_BLOCK_MIN)
   let put = block
-  if (block.startMin != null && patch.startMin != null) {
-    let startMin = reach(block, block.startMin)
-    // The top edge: the end stays – a start moved on so far that the block would be shorter than 5 min goes back instead.
-    if (endMin != null && endMin - startMin < MIN_BLOCK_MIN) startMin = atOrBefore(block, Math.min(block.startMin, endMin - MIN_BLOCK_MIN))
-    put = { ...block, startMin, ...(endMin != null ? { durationMin: Math.min(Math.max(endMin - startMin, MIN_BLOCK_MIN), MAX_BLOCK_MIN) } : {}) }
-  }
+  if (block.startMin != null && how === 'top' && endMin != null) {
+    // The latest start at or before the one asked for (on the grid of 5 min) the day shows with the end kept, 5 min at least.
+    let k = Math.min(block.startMin, endMin - MIN_BLOCK_MIN)
+    for (let n = 0; n < (24 * 60) / DRAG_STEP_MIN && reach({ ...block, durationMin: length(k) }, k) !== k; n++) k -= DRAG_STEP_MIN
+    put = { ...block, startMin: k, durationMin: length(k) }
+  } else if (block.startMin != null) put = { ...block, startMin: reach(block, block.startMin) }
   // The day after the change: every block of the template where the day's wake shows it with the changed plan's first fixed block.
-  const ofSnapshot = new Map(day.snapshot.blocks.map((b) => [b.id, b]))
+  const ofSnapshot = new Map(day.snapshot.blocks.map((x) => [x.id, x]))
   const after = withBlock(
     day.ctx.plan.map((b) => {
       const s = ofSnapshot.get(b.id)
@@ -78,33 +74,35 @@ function inTemplate(day: TemplateDay, block: PlanBlock, patch: Partial<PlanBlock
     put
   )
   const pushed = pushApart(day.ctx, day.state, after, put.id, { atMin, hold, onUnsettled })
-  const span = (startMin: number, durationMin: number): BlockSpan => {
-    const k = idxOfLogical(g, startMin)
-    return logicalSpan(g, k, k + durationMin)
-  }
-  const own: Partial<PlanBlock> = { ...patch, ...(patch.startMin != null ? { startMin: toTemplate(put, put.startMin!) } : {}), ...(patch.durationMin != null ? { durationMin: put.durationMin } : {}) }
   const src = sources(day)
+  const own: Partial<PlanBlock> = { ...patch, ...(patch.startMin != null || put.startMin !== block.startMin ? { startMin: toTemplate(put, put.startMin!) } : {}), ...(patch.durationMin != null ? { durationMin: put.durationMin } : {}) }
   const patches: TemplateChange['patches'] = id != null ? [{ id, patch: own }] : []
-  const preview = new Map<string, BlockSpan>()
-  const putSpan = span(put.startMin!, put.durationMin)
-  preview.set(id ?? put.id, putSpan)
-  const moved = new Set<string>()
   for (const p of pushed) {
     const of = src.get(p.id)
     const b = day.ctx.plan.find((x) => x.id === p.id)
-    if (!of || !b) continue
-    patches.push({ id: of, patch: { startMin: toTemplate(b, p.startMin) } })
-    preview.set(of, p.planned)
-    moved.add(p.id)
+    if (of && b) patches.push({ id: of, patch: { startMin: toTemplate(b, p.startMin) } })
   }
-  // Blocks not pushed that the changed first fixed block shifts or unshifts: shown where they will stand (nothing to write).
-  for (const b of after) {
-    const of = src.get(b.id)
-    const was = day.ctx.plan.find((x) => x.id === b.id)
-    if (!of || moved.has(b.id) || b.id === put.id || !was || b.startMin == null || b.startMin === was.startMin) continue
-    preview.set(of, span(b.startMin, b.durationMin))
+  // Every block whose place on the axis (its plan) moves – the block put, the pushed, those anchored to them, those the
+  // changed first fixed block shifts or unshifts – by its id in the version.
+  const final = after.map((b) => {
+    const p = pushed.find((x) => x.id === b.id)
+    return p ? { ...b, startMin: p.startMin } : b
+  })
+  const preview = new Map<string, BlockSpan>()
+  for (const [dayId, s] of axisMoves(day.ctx, day.state, final, 'plan')) {
+    const of = dayId === put.id ? (id ?? put.id) : src.get(dayId)
+    if (of) preview.set(of, s)
   }
-  return { put: id == null ? ({ ...put, ...own } as PlanBlock) : null, patches, span: putSpan, durationMin: put.durationMin, preview, pushed: moved.size }
+  const span = preview.get(id ?? put.id) ?? planSpan(day, put)
+  preview.set(id ?? put.id, span)
+  return { put: id == null ? ({ ...put, ...own } as PlanBlock) : null, patches, span, durationMin: put.durationMin, preview, pushed: pushed.filter((p) => src.has(p.id)).length }
+}
+
+/** Where the axis shows a block of the day at its plan (its start, its length). */
+function planSpan(day: TemplateDay, b: PlanBlock): BlockSpan {
+  const g = day.state.grid
+  const k = idxOfLogical(g, b.startMin!)
+  return logicalSpan(g, k, k + b.durationMin)
 }
 
 /**
@@ -114,13 +112,13 @@ function inTemplate(day: TemplateDay, block: PlanBlock, patch: Partial<PlanBlock
 export function templateDrag(day: TemplateDay, id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan): TemplateChange | null {
   const dayId = [...sources(day)].find(([, of]) => of === id)?.[0]
   const c = dayId ? dragChange(day, dayId, span, edge, shown, false) : null
-  return c ? inTemplate(day, c.block, c.patch, id, edge === 'end' ? shown.startMin : undefined, edge === 'top' ? span.endMin : undefined) : null
+  return c ? inTemplate(day, c.block, c.patch, id, edge ?? 'move', edge === 'end' ? shown.startMin : undefined, edge === 'top' ? span.endMin : undefined) : null
 }
 
 /** A new block of the version from the grid (D366) at the hour clicked, with the blocks it pushes apart. */
 export function templateAdd(day: TemplateDay, block: PlanBlock): TemplateChange {
   const c = addChange(day, { ...block, origin: 'template', sourceId: block.id }, false)
-  return inTemplate(day, c.block, c.patch, null)
+  return inTemplate(day, c.block, c.patch, null, 'new')
 }
 
 /** The version's blocks with the change laid on (each patch over the block as the version holds it then). */

@@ -29,13 +29,13 @@ export const atOf = (g: Grid, idx: number): number => g.start + idx * MINUTE
 export const idxOfLogical = (g: Grid, logicalMin: number): number => idxOf(g, placeLogical(g.date, logicalMin))
 
 /**
- * The minutes [from, to) of the grid as logical minutes of the axis: from the minute the Polish clock shows at the start,
- * as long as they last – a 25-hour day's clock shows an hour twice, and a block across it keeps its length (never a
- * sliver); across the hour a 23-hour day skips, the end as the clock shows it.
+ * The minutes [from, to) of the grid as logical minutes of the axis – as the Polish clock shows them at both ends, as the
+ * axis drew every day before J3: a 23-hour day's skipped hour is in a span across it, a 25-hour day's repeated hour is
+ * drawn once – a block across it may end on the clock where (or before) it starts (drawn at its least height). Blocks one
+ * after another in time meet on the axis, never overlap. One rule for the axis (`dayAxis`) and the preview of a push.
  */
 export function logicalSpan(g: Grid, from: number, to: number): { startMin: number; endMin: number } {
-  const startMin = logicalMinuteOf(g.date, atOf(g, from))
-  return { startMin, endMin: Math.max(logicalMinuteOf(g.date, atOf(g, to)), startMin + (to - from)) }
+  return { startMin: logicalMinuteOf(g.date, atOf(g, from)), endMin: logicalMinuteOf(g.date, atOf(g, to)) }
 }
 
 /** An index kept within the day [0, length]. */

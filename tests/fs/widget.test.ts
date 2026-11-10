@@ -974,6 +974,21 @@ describe('widget w procesie głównym', () => {
     expect(d.w.current()).toMatchObject({ quiet: true })
   })
 
+  it('linie zmian z „Cofnij” (D367) stoją po wszystkich liniach dnia – także po cichych liniach komputerów i twardym końcu, dokładanych później', async () => {
+    const d = await hardEndDay({ make: { backupFailed: true } })
+    const now = (await d.folder.recordView(paths.day(DAY))) as Record<string, unknown> & { blocks: Array<{ id: string; startMin: number }> }
+    const entry = recordEdit(paths.day(DAY), now, { ...now, blocks: now.blocks.map((b) => (b.id === 'a' ? { ...b, startMin: 11 * 60 } : b)) })!
+    await d.folder.edit([{ ...entry, edits: entry.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
+    await d.w.pushed(DAY, 1, { entry, made: null })
+    const ids = d.w.current().lines.map((l) => l.id)
+    const hardEnd = ids.findIndex((x) => x.startsWith('hardEnd:'))
+    const backup = ids.findIndex((x) => x.startsWith('sync:backup'))
+    expect(hardEnd).toBeGreaterThanOrEqual(0)
+    expect(backup).toBeGreaterThanOrEqual(0)
+    expect(ids.at(-1)).toBe('moved:push')
+    expect(Math.max(hardEnd, backup)).toBeLessThan(ids.indexOf('moved:push'))
+  })
+
   it('twardy koniec w „mniej pytań”: cicha linia, bez powiadomienia – także po „Jest lepiej”, gdy projekt biegnie dalej (D134)', async () => {
     const d = await hardEndDay({ at: 16 * 60 + 50 })
     // „Mniej pytań” from 16:55, the hard end passes at 16:57 in it.

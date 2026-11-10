@@ -298,11 +298,8 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
               const c = templateDrag(model, id, span, edge, shown)
               return c?.preview.size ? c.preview : null
             }}
-            // The length the drop saves (D365; in a morning the wake moves – after its start found a place, D372).
-            resizeNote={(id, span, edge, shown) => {
-              const c = templateDrag(model, id, span, edge, shown)
-              return c ? durationLabel(c.durationMin) : null
-            }}
+            // The hint says the length the drop saves: the block is drawn where it will stand (the preview has it), so the
+            // Timeline's own length of that span is it – no `resizeNote`, no second count.
             onCreate={(min, durationMin = DEFAULT_NEW_BLOCK_MIN) => {
               // D366; D367: on a taken place it pushes the flexible blocks after it apart.
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin, origin: 'template' })

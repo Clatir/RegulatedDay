@@ -99,6 +99,12 @@ export const draggedEnd = (startMin: number, endMin: number, dy: number, limits:
  * The hold of a dropped block ends when its end waits for a confirmation: the drop `d` is the one `attached` is about (the
  * same block, the end the drop asked for) – another, earlier wait does not end the hold of a new drop.
  */
+/**
+ * A drop that changes nothing: the block would stand where it stood when grabbed – compared at where it will stand (`at`,
+ * after a template's morning found its place – D372), not under the pointer.
+ */
+export const staysPut = (at: BlockSpan, d: { from: number; fromEnd: number }): boolean => at.startMin === d.from && at.endMin === d.fromEnd
+
 export const holdEnds = (d: { dropped: boolean; id: string; end: number }, attached: { id: string; endMin: number } | null | undefined): boolean =>
   d.dropped && attached != null && d.id === attached.id && d.end === attached.endMin
 
@@ -188,7 +194,8 @@ export function Timeline({
   onResize?: (id: string, span: BlockSpan, edge: DragEdge, shown: BlockSpan) => BlockSpan | false
   /**
    * What the drop would save, said beside the hours while an edge is dragged (D365: the saved length, the cost of a running
-   * block's extension); null – the length of the span shown. Asked only for a span that differs from the shown one.
+   * block's extension); null or left out – the length of the span the block is drawn over (where it will stand). Asked
+   * only for a drop that changes something.
    */
   resizeNote?: (id: string, span: BlockSpan, edge: DragEdge, shown: BlockSpan) => string | null
   /** What bounds the bottom edge of a block when it is grabbed (D365: a running block – not before now, not past the day). */
@@ -359,7 +366,9 @@ export function Timeline({
         onPointerUp={(e) => {
           const d = dragRef.current
           if (!d || d.id !== i.id || d.pointer !== e.pointerId || d.dropped) return
-          if (!d.moved || (d.start === d.from && d.end === d.fromEnd)) {
+          // Where it will stand: as drawn now (`dragShown`), under the pointer otherwise.
+          const at = drag?.id === d.id && dragShown ? dragShown : { startMin: d.start, endMin: d.end }
+          if (!d.moved || staysPut(at, d)) {
             setDrag(null)
             if (!d.moved) return
           } else {
@@ -458,9 +467,9 @@ export function Timeline({
             data-testid="edge-hint"
           >
             {logicalClock(dragShown!.startMin)}–{logicalClock(dragShown!.endMin)} ·{' '}
-            {drag.start === drag.from && drag.end === drag.fromEnd
+            {staysPut(dragShown!, drag)
               ? 'bez zmian'
-              : (resizeNote?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) ?? durationLabel(drag.end - drag.start))}
+              : (resizeNote?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) ?? durationLabel(dragShown!.endMin - dragShown!.startMin))}
           </div>
         )}
         {markers.map((m) => (

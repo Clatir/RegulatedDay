@@ -5,13 +5,14 @@
  * earlier and the day's wake moves the morning).
  */
 import { describe, expect, it } from 'vitest'
-import { firstFixedStart } from '@shared/engine/createDay'
-import { planBlock, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
+import { dayPlan, firstFixedStart } from '@shared/engine/createDay'
+import { computeDay } from '@shared/engine/day'
+import { PLAN_MAX, planBlock, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { placeLogical } from '@shared/time/day'
 import { templateAdd, templateDrag, withTemplateChange } from '@renderer/features/templates/templatePush'
 import { countDay } from '@renderer/store/day'
-import { lm } from '../unit/engine/dsl'
+import { lm, Scenario } from '../unit/engine/dsl'
 
 const tb = (id: string, at: string, min: number, o: Partial<PlanBlock> = {}): PlanBlock => planBlock({ id, categoryId: 'inne', startMin: lm(at), durationMin: min, origin: 'template', ...o })
 
@@ -164,5 +165,57 @@ describe('D372 – runda 2 przeglądu J3: brzegi przesunięcia pobudki w „Szab
     expect(blocks.find((b) => b.id === 'm')!.startMin).toBe(lm('05:30'))
     expect(c.preview.get('m')).toEqual(shownOf(blocks, 'm'))
     expect(c.preview.get('m')).toEqual(span('05:30', '06:00'))
+  })
+})
+
+describe('D372 – runda 3 przeglądu J3', () => {
+  const DATE = '2026-03-10'
+  const clockOf = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+  const shownOf = (date: string, blocks: PlanBlock[], id: string) => {
+    const b = templateDay(date, blocks).day.ctx.plan.find((x) => x.sourceId === id)!
+    return span(clockOf(b.startMin!), clockOf(b.startMin! + b.durationMin))
+  }
+
+  it('górna krawędź w godzinie, której dzień nie pokaże: zawsze wcześniejsze miejsce, koniec zostaje (05:30–07:30, krawędź na 06:20 → 05:55–07:30)', () => {
+    // b: 06:30–08:30 in the template, shown an hour earlier (before the first fixed block, London at 07:00).
+    const { day, version } = templateDay(DATE, [tb('b', '06:30', 120)])
+    expect(shownOf(DATE, version.blocks, 'b')).toEqual(span('05:30', '07:30'))
+    const c = templateDrag(day, 'b', span('06:20', '07:30'), 'top', span('05:30', '07:30'))!
+    expect(c.span).toEqual(span('05:55', '07:30'))
+    const blocks = withTemplateChange(version, c)
+    expect(blocks.find((x) => x.id === 'b')).toMatchObject({ startMin: lm('06:55'), durationMin: 95 })
+    expect(shownOf(DATE, blocks, 'b')).toEqual(c.span)
+  })
+
+  it('blok zakotwiczony do przesuniętego: w podglądzie tam, gdzie stanie (za swoją kotwicą)', () => {
+    const { day, version } = templateDay(SUNDAY, [tb('a', '18:00', 60), tb('po', '18:00', 30, { anchor: 'a', startMin: null }), tb('c', '19:00', 60)])
+    const c = templateDrag(day, 'a', span('18:30', '19:30'), null, span('18:00', '19:00'))!
+    expect(c.preview.get('po')).toEqual(span('19:30', '20:00'))
+    const after = templateDay(SUNDAY, withTemplateChange(version, c)).day.ctx.plan
+    expect(after.find((b) => b.sourceId === 'c')!.startMin).toBe(c.preview.get('c')!.startMin)
+  })
+})
+
+describe('D372 – runda 3: dolna krawędź przy końcu doby, gdy pobudka przesuwa poranek', () => {
+  /** A day whose wake (05:00) is an hour before its template's (06:00) and with no fixed block: every flexible block of the template moves. */
+  function earlyDay(blocks: PlanBlock[]) {
+    const s = new Scenario({ date: SUNDAY, plan: blocks.map((b) => ({ ...b, sourceId: b.id })), wake: '05:00' })
+    const raw = s.contextAt(s.at('04:00'))
+    const ctx = { ...raw, plan: dayPlan(s.snapshot, null) }
+    return { ctx, state: computeDay(ctx), snapshot: s.snapshot }
+  }
+
+  it('wydłużony blok, którego dzień nie pokaże tak późno w całości: start z długością po zmianie – `c.span` to miejsce po zapisie', () => {
+    // m: 02:40 (+1) in the template, 30 min – shown at 01:40. Its bottom edge to 04:20: 160 min – the day shows a moved block
+    // at 03:59 less its length at the latest: from 01:19.
+    const m = tb('m', '02:40', 30)
+    const day = earlyDay([m])
+    expect(day.ctx.plan[0]!.startMin).toBe(lm('01:40'))
+    const c = templateDrag(day, 'm', { startMin: lm('01:40'), endMin: lm('01:40') + 160 }, 'end', { startMin: lm('01:40'), endMin: lm('02:10') })!
+    expect(c.durationMin).toBe(160)
+    const blocks = withTemplateChange({ from: '2000-01-01', blocks: [m], budgetMin: null, maxMin: null }, c)
+    const shown = dayPlan({ ...day.snapshot, blocks: blocks.map((b) => ({ ...b, sourceId: b.id })) }, null)[0]!
+    expect(c.span).toEqual({ startMin: shown.startMin!, endMin: shown.startMin! + shown.durationMin })
+    expect(c.span.startMin).toBe(PLAN_MAX - 160)
   })
 })

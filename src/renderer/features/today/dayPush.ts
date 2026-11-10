@@ -5,7 +5,7 @@
  */
 import type { DayContext, DayState } from '@shared/engine/day'
 import { draggedBlock } from '@shared/engine/planEdit'
-import { pushApart, withBlock, type PushedBlock } from '@shared/engine/pushApart'
+import { axisMoves, pushApart, withBlock, type PushedBlock } from '@shared/engine/pushApart'
 import type { PlanBlock } from '@shared/model/plan'
 import type { BlockSpan, DragEdge } from '../plan/Timeline'
 import { edgePatch } from '../plan/edgeEdit'
@@ -41,10 +41,19 @@ export function addChange(day: { ctx: DayContext; state: DayState }, block: Plan
 }
 
 /**
- * Where the pushed blocks stand (the preview on the axis, by id): today's axis shows the forecast, another day's its plan
- * (`dayAxis`) – the same places the axis shows after the save.
+ * Where the blocks a push moves stand (the preview on the axis, by id; the dragged one stays under the pointer): the
+ * pushed ones and every other block whose place changes with them – one anchored to a pushed one, a protected one the
+ * forecast lets through. Today's axis shows the forecast, another day's its plan (`dayAxis`) – the places the axis shows
+ * after the save. Nothing pushed – no preview.
  */
-export const pushedSpans = (c: DayChange | null, axis: 'forecast' | 'plan'): ReadonlyMap<string, BlockSpan> | null => (c?.pushed.length ? new Map(c.pushed.map((p) => [p.id, axis === 'forecast' ? p.shown : p.planned])) : null)
+export function pushedSpans(day: { ctx: DayContext; state: DayState }, c: DayChange | null, axis: 'forecast' | 'plan'): ReadonlyMap<string, BlockSpan> | null {
+  if (!c?.pushed.length) return null
+  const starts = new Map(c.pushed.map((p) => [p.id, p.startMin]))
+  const plan = withBlock(day.ctx.plan, c.block).map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
+  const moves = axisMoves(day.ctx, day.state, plan, axis)
+  moves.delete(c.block.id)
+  return moves.size ? moves : null
+}
 
 /** The counting of a push did not settle (a bound for safety): said in the console of a development build only. */
 export function onUnsettled(): void {

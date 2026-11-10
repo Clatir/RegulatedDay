@@ -333,7 +333,7 @@ export class WidgetEngine {
       this.names = names
       this.variantsView(m, now, mono, modes)
       this.syncView(folder, now)
-      this.hardEndLast()
+      this.linesLast()
       if (this.failing) this.d.log('info', 'widget: dzień znów policzony')
       this.failing = false
       // Notifications are the leader's, and only once settled – after a start or a wake the other computers' logs (their
@@ -382,8 +382,8 @@ export class WidgetEngine {
     if (this.markerNow) this.markerShown.add(this.markerNow.id)
     v.variants = { marker: !!this.markerNow && !v.hidden && !v.night, open: this.panel && !v.hidden ? this.panel.variants.map((x) => ({ id: x.id, label: x.label })) : null }
     for (const [kind, mv] of [...this.moved]) if (mv.until <= mono) this.moved.delete(kind)
-    // After the day's own lines (its questions and warnings are always in view), the newest first: the bar shows one of
-    // them at most, the other waits in „⋯” with its „Cofnij” (`barLines`).
+    // The newest first; after every line of the day (`linesLast`): the bar shows one of them at most, the other waits in
+    // „⋯” with its „Cofnij” (`barLines`).
     const movedLines = [...this.moved].sort((a, b) => b[1].seq - a[1].seq).map(([kind, mv]) => ({ id: `moved:${kind}`, text: mv.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }))
     if (movedLines.length && !v.hidden) v.lines = [...v.lines, ...movedLines]
     // A routine saved from the bar (D328): its „Cofnij” for a while, in place of its line.
@@ -404,10 +404,16 @@ export class WidgetEngine {
     v.lines = [...v.lines, ...syncLines({ ...folder.syncState(now), battery, backupFailed: this.d.backup?.()?.failed != null }, now, v.day, folder.presence.own.computer)]
   }
 
-  /** The hard end's line stands last of all (after the routine saved, the lines of the computers and the battery). */
-  private hardEndLast(): void {
+  /**
+   * The order of the lines at the end: the hard end's line after the day's other lines (the routine saved, the lines of
+   * the computers and the battery), and the lines of changes with their „Cofnij” (`moved:`, D367) after all of the day's –
+   * the bar shows one of them at most (`barLines`), never in place of a question or a warning.
+   */
+  private linesLast(): void {
     const v = this.view!
-    v.lines = [...v.lines.filter((l) => !l.id.startsWith('hardEnd:')), ...v.lines.filter((l) => l.id.startsWith('hardEnd:'))]
+    const moved = (l: { id: string }) => l.id.startsWith('moved:')
+    const hard = (l: { id: string }) => l.id.startsWith('hardEnd:')
+    v.lines = [...v.lines.filter((l) => !hard(l) && !moved(l)), ...v.lines.filter(hard), ...v.lines.filter(moved)]
   }
 
   /** A day not counted now while the folder is away: the changes waiting for it still say so (A3-07). */

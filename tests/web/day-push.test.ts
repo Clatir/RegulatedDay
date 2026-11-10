@@ -35,8 +35,8 @@ describe('D367 – co zmienia przeciągnięcie albo „Dodaj” w „Dziś”', 
       ['c', lm('12:30')]
     ])
     // Today's axis shows the forecast, another day's the plan: here (no begun block, nothing before now) the same places.
-    expect(pushedSpans(c, 'plan')).toEqual(pushedSpans(c, 'forecast'))
-    expect(pushedSpans(c, 'forecast')).toEqual(
+    expect(pushedSpans(d, c, 'plan')).toEqual(pushedSpans(d, c, 'forecast'))
+    expect(pushedSpans(d, c, 'forecast')).toEqual(
       new Map([
         ['b', span('11:30', '12:30')],
         ['c', span('12:30', '13:30')]
@@ -61,8 +61,17 @@ describe('D367 – co zmienia przeciągnięcie albo „Dodaj” w „Dziś”', 
   it('dzień miniony (bez rozsuwania) i przeciągnięcie w wolne miejsce: nic nie przesuwa – zapis jak dotąd', () => {
     const d = day()
     expect(dragChange(d, 'a', span('10:30', '11:30'), null, span('10:00', '11:00'), false)!.pushed).toEqual([])
-    expect(pushedSpans(dragChange(d, 'c', span('14:00', '15:00'), null, span('12:00', '13:00'), true), 'forecast')).toBeNull()
+    expect(pushedSpans(d, dragChange(d, 'c', span('14:00', '15:00'), null, span('12:00', '13:00'), true), 'forecast')).toBeNull()
     expect(dragChange(d, 'brak', span('14:00', '15:00'), null, span('12:00', '13:00'), true)).toBeNull()
+  })
+
+  it('blok zakotwiczony do przesuniętego jest w podglądzie tam, gdzie stanie (za swoją kotwicą) – na osi dziś i innego dnia', () => {
+    const plan = [flex('a', '10:00', 60), block({ id: 'po', cat: 'inne', after: 'a', min: 30, origin: 'user' }), flex('c', '11:00', 60)]
+    const d = day(plan)
+    // x put at 10:00 pushes a to 11:00; po follows a.
+    const c = addChange(d, flex('x', '10:00', 60), true)
+    expect(c.pushed.map((p) => p.id)).toEqual(['a', 'c'])
+    for (const axis of ['forecast', 'plan'] as const) expect(pushedSpans(d, c, axis)?.get('po'), axis).toEqual(span('12:00', '12:30'))
   })
 
   it('„Dodaj” nowego bloku o 10:00 przesuwa trzy kolejne', () => {

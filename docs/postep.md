@@ -63,7 +63,8 @@ zmieniają `Timeline.tsx`, J3 korzysta z J1). Wersje 1.4.0–1.8.0.
 | J2 SNT8 nowy blok kliknięciem w siatkę | 1.5.0 | – | PR w toku 10.11 (gałąź `claude/1.5.0-nowy-blok-w-siatce`, drzewo `.claude/worktrees/wj2`); dwie rundy high (10 + 9 uwag); D371, T568–T574 | ok. 4,5 h (3–4,5 h) |
 
 **J2 – wpis (10.11):** karta nowego bloku w „Tygodniu”, przeciągnięcie po pustej osi, kolumna godzin „Dziś” i „Szablonów” jak oś, zakres wielodniowy (D366, D371). Testy: `tests/web/grid-create.test.ts`, `week-new-block.test.ts`, E2E `week.spec.ts`. Odbiór J2.1–J2.2. **Uwagi na później:** brak E2E dla konfliktu i nieznanego wyniku zapisu wielodniowego (pokrywa `weekAdds` w unit); brak E2E „klik z drgnięciem w bok” w „Dziś” (pokrywa `dragStarted`).
-| J3 FBL2a rozsuwanie | 1.6.0 | – | – | – (4–6 h) |
+| J3 FBL2a rozsuwanie | 1.6.0 | – | w toku 10.11 (gałąź `claude/1.6.0-rozsuwanie`, drzewo `.claude/worktrees/wj3`); trzy rundy xhigh (15 + 15 + runda 3); D372, T575–T594 | ok. 5 h (4–6 h) |
+| J3b rozsuwanie przy „Dodaj” z karty „Tygodnia” | 1.8.1? | – | dopisane 10.11 (D372) – po J5 | – (1–2 h) |
 | J4 FBL2b domykanie luk | 1.7.0 | – | – | – (3–4 h) |
 | J5 FBL2c „Ułóż pod energię” | 1.8.0 | – | – | – (4–6 h) |
 

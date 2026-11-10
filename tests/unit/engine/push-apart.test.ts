@@ -277,12 +277,13 @@ describe('D367 – zapisane godziny to te, które prognoza pokaże po zapisie (p
     const s = new Scenario({ date, plan }).observe('07:00', null)
     const changed = withBlock(plan, flex('x', '01:00', 90))
     const out = push(s, '08:00', changed, 'x')
-    // a: from the first 02:30 an hour on (to the second 02:30 – on the axis as long as it lasts, never a sliver); b after it
-    // would start at the second 02:30 – at 03:00.
+    // a: from the first 02:30 an hour on, to the second 02:30 – on the axis as the clock shows it (the repeated hour drawn
+    // once, as before J3); b after it would start at the second 02:30 – at 03:00. On the axis they meet, never overlap.
     expect(out.map((p) => [p.id, p.startMin, p.shown.startMin, p.shown.endMin])).toEqual([
-      ['a', lm('02:30'), lm('02:30'), lm('03:30')],
+      ['a', lm('02:30'), lm('02:30'), lm('02:30')],
       ['b', lm('03:00'), lm('03:00'), lm('04:00+1')]
     ])
+    expect(out[0]!.shown.endMin).toBeLessThanOrEqual(out[1]!.shown.startMin)
     written(s, '08:00', changed, out)
   })
 })
@@ -319,10 +320,18 @@ describe('D367 – runda 2 przeglądu J3: równe starty, koniec rund, doba 25 h,
     }
   })
 
-  it('`logicalSpan`: w dobie 25-godzinnej blok przez podwójną godzinę ma swoją długość (nie pasek), w 23-godzinnej koniec jak na zegarze', () => {
+  it('`logicalSpan`: jak zegar na obu końcach (oś przed J3) – w dobie 25-godzinnej blok do drugiej 02:30 i następny od 03:00 nie nachodzą na siebie', () => {
     const fall = new Scenario({ date: '2026-10-24', plan: [] }).stateAt(Date.parse('2026-10-24T08:00:00Z')).grid
-    // From the first 02:30 (index 1350) an hour on – to the second 02:30.
-    expect(logicalSpan(fall, 1350, 1410)).toEqual({ startMin: lm('02:30'), endMin: lm('03:30') })
+    // From the first 02:30 (index 1350) an hour on – to the second 02:30; the next block from 03:00 (1440).
+    const a = logicalSpan(fall, 1350, 1410)
+    const b = logicalSpan(fall, 1440, 1500)
+    expect([a, b]).toEqual([
+      { startMin: lm('02:30'), endMin: lm('02:30') },
+      { startMin: lm('03:00'), endMin: lm('04:00+1') }
+    ])
+    expect(a.endMin).toBeLessThanOrEqual(b.startMin)
+    // Blocks one after another in the repeated hour meet on the axis too.
+    expect(logicalSpan(fall, 1320, 1350).endMin).toBe(logicalSpan(fall, 1350, 1380).startMin)
     const spring = new Scenario({ date: '2027-03-27', plan: [] }).stateAt(Date.parse('2027-03-27T08:00:00Z')).grid
     // 01:30 + 60 min of the 23-hour day is 03:30 on the clock (02:xx skipped).
     expect(logicalSpan(spring, 1290, 1350)).toEqual({ startMin: lm('01:30'), endMin: lm('03:30') })
@@ -353,5 +362,24 @@ describe('D367 – runda 2 przeglądu J3: równe starty, koniec rund, doba 25 h,
         // The latest place a moved morning block shows at: 03:59 less its length, and the template's last start (03:59) moved.
         expect(shown).toBe(Math.min(dayMin, PLAN_MAX - durationMin, PLAN_MAX - 60))
       }
+  })
+})
+
+describe('D367 – runda 3 przeglądu J3: przejście wstecz na końcu doby', () => {
+  it('przez `hold` i nigdy przed blok upuszczony: gdy plan nie mieści bloków bez nakładania – zostają, a przesunięcie jest nieustalone', () => {
+    const plan = [flex('a', '03:00', 30), flex('b', '03:30', 60)]
+    const s = day(plan)
+    const changed = withBlock(plan, flex('x', '03:00', 30))
+    const t = s.at('08:00')
+    const ctx = s.contextAt(t)
+    let unsettled = 0
+    // The plan holds b at 01:00 at the latest, a at 03:59 less its length.
+    const hold: PushHold = (b, startMin) => Math.min(startMin, b.id === 'b' ? lm('01:00') : PLAN_MAX - b.durationMin)
+    const out = pushApart(ctx, computeDay(ctx), changed, 'x', { hold, onUnsettled: () => unsettled++ })
+    const a = out.find((p) => p.id === 'a')!
+    // a stays after x (never at 00:59, before the block put) and where the plan holds it.
+    expect(a.startMin).toBeGreaterThan(lm('03:00'))
+    expect(a.startMin).toBe(hold({ durationMin: 30, id: 'a' } as never, a.startMin))
+    expect(unsettled).toBe(1)
   })
 })
