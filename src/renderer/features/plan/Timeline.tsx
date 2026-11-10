@@ -14,7 +14,7 @@ import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { cx } from '../../components/ui'
 import { useMachine } from '../../store/machine'
-import { DRAG_FROM_PX } from './gridCreate'
+import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
 
 export interface TimelineItem {
@@ -242,6 +242,7 @@ export function Timeline({
     lo,
     hi,
     ppm: PPM,
+    flatMin: DEFAULT_NEW_BLOCK_MIN,
     onClick: (min) => onCreate?.(Math.round(min / 15) * 15),
     onRange: (r) => onCreate?.(r.startMin, r.endMin - r.startMin)
   })

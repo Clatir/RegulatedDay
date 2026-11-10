@@ -13,21 +13,32 @@ import { Choice, DurationField } from '../../components/fields'
 import { Field } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useEscapeLayer } from '../../lib/escape'
-import { useDay } from '../../store/day'
+import { useDay, type DayModel } from '../../store/day'
 import { categoryOptions, type Names } from '../plan/blockView'
 import { lastNewBlockCategory, rememberNewBlockCategory, startCategory } from '../plan/lastCategory'
 import { ExchangeDialog } from '../today/ExchangeDialog'
-import { addWeekBlock } from './weekActions'
+import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
+import { addWeekBlocks } from './weekActions'
 import { NEW_BLOCK_WIDTH } from './weekLayout'
 import { daysLabel, pastWarning } from './weekText'
 
 /** The length of a new block that was only clicked, as the day's own „+ Blok” (D366). */
-export const NEW_BLOCK_MIN = 60
+export const NEW_BLOCK_MIN = DEFAULT_NEW_BLOCK_MIN
 
 /** A block to be added to a day (the exchange of today's comes first, the rest after it). */
 interface Entry {
   date: string
   block: PlanBlock
+}
+
+/** Counts today for the exchange (spec „Wymiana”) – mounted only while today is among the days: no other day is counted for it. */
+function TodayModel({ date, onModel }: { date: string; onModel: (model: DayModel | null) => void }) {
+  const model = useDay(date)
+  useEffect(() => {
+    onModel(model)
+    return () => onModel(null)
+  }, [model, onModel])
+  return null
 }
 
 export function NewBlockPopover({
@@ -67,7 +78,7 @@ export function NewBlockPopover({
   const [busy, run] = useBusy()
   const todayIn = dates.includes(today)
   // Today a work block added after the approval asks for the exchange (spec „Wymiana”): the day is counted for it.
-  const model = useDay(todayIn ? today : dates[0]!)
+  const [model, setModel] = useState<DayModel | null>(null)
   useEscapeLayer(true, onClose)
   useEffect(() => {
     ref.current?.scrollIntoView({ block: 'nearest' })
@@ -84,13 +95,8 @@ export function NewBlockPopover({
   const blockOn = (date: string): PlanBlock => newUserBlock(categoryId, startMin, length, namesOf(date).settings.categories[categoryId])
   /** Saves the entries one after another; the days that did not go stay in the window (their toast said which). */
   const save = async (entries: readonly Entry[]) => {
-    const failed: string[] = []
-    let saved = 0
-    for (const e of entries) {
-      if (await addWeekBlock(e.date, e.block)) saved++
-      else failed.push(e.date)
-    }
-    if (saved) rememberNewBlockCategory(categoryId)
+    const { saved, failed } = await addWeekBlocks(entries)
+    if (saved.length) rememberNewBlockCategory(categoryId)
     if (failed.length) onDates(failed)
     else onClose()
   }
@@ -119,6 +125,7 @@ export function NewBlockPopover({
       data-dates={dates.join(',')}
       data-start={startMin}
     >
+      {todayIn && <TodayModel date={today} onModel={setModel} />}
       <h3 className="text-[13px] font-medium">
         Nowy blok · {daysLabel(dates)}{' '}
         <span className="num" data-testid="week-new-hours">

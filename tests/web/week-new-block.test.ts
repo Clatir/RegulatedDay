@@ -4,24 +4,54 @@
  */
 import { describe, expect, it } from 'vitest'
 import { lastNewBlockCategory, rememberNewBlockCategory, startCategory } from '@renderer/features/plan/lastCategory'
-import { columnAt, dayIndexes } from '@renderer/features/week/weekLayout'
+import { columnAt, dayIndexes, sameDrag } from '@renderer/features/week/weekLayout'
+import { unreadableText } from '@renderer/features/week/weekActions'
 import { daysLabel, pastWarning } from '@renderer/features/week/weekText'
 
-// A grid 1024 px wide from x = 100: the axis of hours 48 px, seven columns with 4 px between them – each 136 px.
-const GRID = { gridLeft: 100, gridWidth: 1024, axisPx: 48, gap: 4, count: 7 }
+// The rectangles the columns really have (the gaps between them are not columns): 136 px wide, 4 px apart, from x = 148.
+const COLS = Array.from({ length: 7 }, (_, i) => ({ left: 148 + i * 140, right: 148 + i * 140 + 136 }))
 
 describe('kolumna pod wskaźnikiem (D371)', () => {
-  it('liczy kolumny od osi godzin, z odstępami', () => {
-    expect(columnAt(100 + 48 + 1, GRID)).toBe(0)
-    expect(columnAt(100 + 48 + 135, GRID)).toBe(0)
-    expect(columnAt(100 + 48 + 140 + 1, GRID)).toBe(1)
-    expect(columnAt(100 + 48 + 3 * 140 + 70, GRID)).toBe(3)
-    expect(columnAt(100 + 48 + 6 * 140 + 135, GRID)).toBe(6)
+  it('trafia w prostokąt kolumny', () => {
+    expect(columnAt(149, COLS)).toBe(0)
+    expect(columnAt(148 + 135, COLS)).toBe(0)
+    expect(columnAt(148 + 140 + 1, COLS)).toBe(1)
+    expect(columnAt(148 + 3 * 140 + 70, COLS)).toBe(3)
+    expect(columnAt(148 + 6 * 140 + 135, COLS)).toBe(6)
+  })
+  it('w odstępie – najbliższa kolumna', () => {
+    expect(columnAt(148 + 137, COLS)).toBe(0)
+    expect(columnAt(148 + 139, COLS)).toBe(1)
   })
   it('poza siatką – pierwsza lub ostatnia kolumna', () => {
-    expect(columnAt(10, GRID)).toBe(0)
-    expect(columnAt(120, GRID)).toBe(0)
-    expect(columnAt(5000, GRID)).toBe(6)
+    expect(columnAt(10, COLS)).toBe(0)
+    expect(columnAt(120, COLS)).toBe(0)
+    expect(columnAt(5000, COLS)).toBe(6)
+  })
+  it('kolumny o innej szerokości niż założona (okno węższe, przewinięta strona) – liczą się ich prostokąty', () => {
+    const narrow = [
+      { left: 60, right: 100 },
+      { left: 108, right: 150 },
+      { left: 160, right: 200 }
+    ]
+    expect(columnAt(104, narrow)).toBe(0)
+    expect(columnAt(109, narrow)).toBe(1)
+    expect(columnAt(185, narrow)).toBe(2)
+  })
+})
+
+describe('przeciągnięcie, które się nie zmieniło, nie rysuje się od nowa (D371)', () => {
+  const drag = (from: number, to: number, startMin = 600, endMin = 660) => ({ from, to, range: { startMin, endMin } })
+  it('te same kolumny i godziny – to samo', () => {
+    expect(sameDrag(drag(1, 3), drag(1, 3))).toBe(true)
+    expect(sameDrag(null, null)).toBe(true)
+  })
+  it('inna kolumna pod wskaźnikiem albo inne godziny – zmiana', () => {
+    expect(sameDrag(drag(1, 3), drag(1, 2))).toBe(false)
+    expect(sameDrag(drag(1, 3), drag(1, 3, 600, 665))).toBe(false)
+    expect(sameDrag(drag(1, 3), drag(1, 3, 605, 660))).toBe(false)
+    expect(sameDrag(null, drag(1, 1))).toBe(false)
+    expect(sameDrag(drag(1, 1), null)).toBe(false)
   })
 })
 
@@ -76,5 +106,14 @@ describe('kategoria na starcie okienka (D371)', () => {
     // No `localStorage` in this environment: reading gives nothing, writing is silent.
     expect(lastNewBlockCategory()).toBeNull()
     expect(() => rememberNewBlockCategory('trening')).not.toThrow()
+  })
+})
+
+describe('komunikat o dniach z nieczytelnym plikiem (D371)', () => {
+  it('nazywa dzień datą i dniem tygodnia, nie odmienia nazwy po „dnia”', () => {
+    expect(unreadableText(['2026-11-11'])).toBe('Nie dodano bloku w dniu 11.11.2026 · środa – plik tego dnia jest teraz nieczytelny. Spróbuj za chwilę.')
+  })
+  it('kilka dni – lista, reszta zapisana', () => {
+    expect(unreadableText(['2026-11-11', '2026-11-12'])).toBe('Nie dodano bloków w dniach: 11.11.2026 · środa, 12.11.2026 · czwartek – ich pliki są teraz nieczytelne. Spróbuj za chwilę.')
   })
 })

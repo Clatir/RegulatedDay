@@ -23,12 +23,10 @@ import { snapMinute, type GridRange } from '../plan/gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { GoalsPanel } from './GoalsPanel'
 import { NEW_BLOCK_MIN, NewBlockPopover } from './NewBlockPopover'
-import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, goalsMonthOfWeek, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, WEEK_PPM } from './weekLayout'
+import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, goalsMonthOfWeek, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, weekTitle, type Tone } from './weekText'
 
 const AXIS_PX = 48
-/** The gap between the columns (`gap-x-1`), pixels. */
-const COLUMN_GAP = 4
 const TONE_CLASS: Record<Tone, string> = { ok: 'text-sea', bad: 'text-rose', muted: 'text-muted', plain: 'text-fg' }
 
 export function WeekPage() {
@@ -54,7 +52,8 @@ export function WeekPage() {
       </div>
       <GoalsPanel month={goalsMonthOfWeek(week, today)} />
       {view ? (
-        <WeekGrid days={view.days} from={view.from} to={view.to} />
+        // Keyed by the week: another week is another grid – a window of a new block or a drag never goes with it (D371).
+        <WeekGrid key={view.days[0]?.date} days={view.days} from={view.from} to={view.to} />
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="week-loading">
           {failed ? 'Nie da się teraz policzyć tego tygodnia.' : 'Liczę tydzień…'}
@@ -97,17 +96,16 @@ function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: nu
   const marks = hourMarks(lo, hi)
   const namesOf = useMemo(() => (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests }), [rd, routines, requests])
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(7, minmax(0, 1fr))` }
+  /** The rectangle a column has on the screen. */
+  const columnRect = (i: number): DOMRect => bodyRef.current!.querySelector(`[data-testid="week-col-${days[i]!.date}"]`)!.getBoundingClientRect()
   /** The column under `x` (the pointer of a drag may be in another one than where it began). */
-  const columnUnder = (x: number): number => {
-    const body = bodyRef.current?.getBoundingClientRect()
-    return body ? columnAt(x, { gridLeft: body.left, gridWidth: body.width, axisPx: AXIS_PX, gap: COLUMN_GAP, count: days.length }) : 0
-  }
+  const columnUnder = (x: number): number => columnAt(x, days.map((_, i) => columnRect(i)))
   /** A click (an hour long) or a drag over an empty place of the columns `first`–`last` asks for a new block there. */
   const pickOn = (first: number, last: number, r: GridRange) => {
     const body = bodyRef.current?.getBoundingClientRect()
     if (!body) return
     const idx = dayIndexes(first, last)
-    const side = (i: number) => bodyRef.current!.querySelector(`[data-testid="week-col-${days[i]!.date}"]`)!.getBoundingClientRect()
+    const side = columnRect
     const a = side(idx[0]!)
     const b = side(idx.at(-1)!)
     const place = popoverPlace({ gridWidth: body.width, colLeft: a.left - body.left, colRight: b.right - body.left, top: a.top - body.top + axisY(r.startMin, lo), width: NEW_BLOCK_WIDTH })
@@ -143,7 +141,11 @@ function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: nu
             names={namesOf(d.date)}
             brightness={brightness}
             columnUnder={columnUnder}
-            onHold={(range, x) => setHeld(range ? { from: i, to: columnUnder(x), range } : null)}
+            onHold={(range, x) => {
+              // Only a change of the columns or the hours is drawn again – the pointer moves on a good deal more often.
+              const next = range ? { from: i, to: columnUnder(x), range } : null
+              setHeld((was) => (sameDrag(was, next) ? was : next))
+            }}
             onPick={pickOn}
             held={held && spanHeld.includes(i) ? held.range : null}
             waiting={pick?.dates.includes(d.date) ? pick : null}
@@ -250,6 +252,7 @@ function DayColumn({
     lo,
     hi,
     ppm: WEEK_PPM,
+    flatMin: NEW_BLOCK_MIN,
     onClick: (min, rect) => {
       const startMin = Math.min(Math.max(snapMinute(min), lo), hi)
       onPick(index, index, { startMin, endMin: startMin + NEW_BLOCK_MIN })

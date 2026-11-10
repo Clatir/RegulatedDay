@@ -96,13 +96,25 @@ export function popoverPlace(o: { gridWidth: number; colLeft: number; colRight: 
 }
 
 /**
- * The column of the grid under `x` (D371: a drag over several days): the grid's corner and width, the axis of hours and the
- * gaps between `count` equal columns; left of the first – the first, right of the last – the last (a drag may leave the grid).
+ * The column under `x` (D371: a drag over several days), among the rectangles the columns really have on the screen
+ * (left to right): the one that holds `x`; in a gap, or beyond the first or the last (a drag may leave the grid) – the nearest.
  */
-export function columnAt(x: number, o: { gridLeft: number; gridWidth: number; axisPx: number; gap: number; count: number }): number {
-  const width = (o.gridWidth - o.axisPx - o.gap * (o.count - 1)) / o.count
-  const i = Math.floor((x - o.gridLeft - o.axisPx) / (width + o.gap))
-  return Math.min(Math.max(i, 0), o.count - 1)
+export function columnAt(x: number, cols: ReadonlyArray<{ left: number; right: number }>): number {
+  let best = 0
+  let bestDistance = Number.POSITIVE_INFINITY
+  cols.forEach((c, i) => {
+    const distance = x < c.left ? c.left - x : x > c.right ? x - c.right : 0
+    if (distance < bestDistance) {
+      best = i
+      bestDistance = distance
+    }
+  })
+  return best
+}
+
+/** A drag over the columns that has not changed (its columns and hours): nothing to draw again (D371). */
+export function sameDrag(a: { from: number; to: number; range: { startMin: number; endMin: number } } | null, b: typeof a): boolean {
+  return a === b || (a != null && b != null && a.from === b.from && a.to === b.to && a.range.startMin === b.range.startMin && a.range.endMin === b.range.endMin)
 }
 
 /** The columns from `a` to `b`, either way round (D371: a drag from the right to the left takes the same days). */

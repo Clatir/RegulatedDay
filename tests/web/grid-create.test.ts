@@ -3,7 +3,7 @@
  * an empty place (either way, never under 5 min), the place of the small window beside a column of „Tydzień”.
  */
 import { describe, expect, it } from 'vitest'
-import { DRAG_FROM_PX, gridMinute, gridRange, minuteAtPx } from '@renderer/features/plan/gridCreate'
+import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX, dragStarted, gridMinute, gridRange, minuteAtPx } from '@renderer/features/plan/gridCreate'
 import { WEEK_PPM, popoverPlace } from '@renderer/features/week/weekLayout'
 
 const LO = 6 * 60
@@ -21,6 +21,22 @@ describe('minuta z pozycji (D366)', () => {
   })
   it('próg przeciągnięcia to 4 px', () => {
     expect(DRAG_FROM_PX).toBe(4)
+  })
+})
+
+describe('próg przeciągnięcia to odległość, nie sam pion (D371)', () => {
+  it('ruch poziomy też jest przeciągnięciem', () => {
+    expect(dragStarted(4, 0)).toBe(true)
+    expect(dragStarted(-30, 1)).toBe(true)
+  })
+  it('pion – jak dotąd', () => {
+    expect(dragStarted(0, 4)).toBe(true)
+    expect(dragStarted(0, -4)).toBe(true)
+    expect(dragStarted(0, 3.9)).toBe(false)
+  })
+  it('krótki ruch w obie strony to klik', () => {
+    expect(dragStarted(2, 2)).toBe(false)
+    expect(dragStarted(2.9, 2.9)).toBe(true)
   })
 })
 
@@ -46,6 +62,13 @@ describe('zakres z przeciągnięcia po pustym miejscu (D366)', () => {
   it('poza osią – zakres zostaje na osi', () => {
     expect(gridRange(-40, at(7), LO, 24 * 60, WEEK_PPM)).toEqual({ startMin: LO, endMin: 7 * 60 })
     expect(gridRange(at(23), at(23) + 900, LO, 24 * 60, WEEK_PPM)).toEqual({ startMin: 23 * 60, endMin: 24 * 60 })
+  })
+  it('przeciągnięcie tylko w poziomie (oba końce na tej samej minucie) – domyślnie godzina, jak klik', () => {
+    expect(gridRange(at(10), at(10), LO, 24 * 60, WEEK_PPM, DEFAULT_NEW_BLOCK_MIN)).toEqual({ startMin: 600, endMin: 660 })
+    expect(gridRange(at(10, 1), at(10, 2), LO, 24 * 60, WEEK_PPM, DEFAULT_NEW_BLOCK_MIN)).toEqual({ startMin: 600, endMin: 660 })
+  })
+  it('przeciągnięcie o krok siatki w pionie – 5 min, nie godzina', () => {
+    expect(gridRange(at(10), at(10, 5), LO, 24 * 60, WEEK_PPM, DEFAULT_NEW_BLOCK_MIN)).toEqual({ startMin: 600, endMin: 605 })
   })
   it('przy dolnym brzegu osi blok ma co najmniej 5 min', () => {
     expect(gridRange(at(24), at(24) + 50, LO, 24 * 60, WEEK_PPM)).toEqual({ startMin: 24 * 60, endMin: 24 * 60 + 5 })

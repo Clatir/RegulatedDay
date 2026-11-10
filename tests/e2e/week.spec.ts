@@ -456,6 +456,101 @@ test('Tydzień (D371): dzień minął – okienko ma ostrzeżenie (z nazwami dni
   }
 })
 
+test('Tydzień (D371, przegląd): przeciągnięcie tylko w poziomie to godzina w kilku dniach; puszczenie przed przechwyceniem nie zostawia ducha; przewinięcie nie przesuwa zakresu; po bloku klik nic nie tworzy; zmiana tygodnia zamyka okienko', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-review-'))
+  seed(dataDir)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      const { tue, wed, thu } = await nextWeek(page)
+      const small = page.getByTestId('week-new')
+      const bands = page.getByTestId('week-range')
+      const h = await freeHour(page, [tue, wed, thu], 15)
+
+      // Only sideways: the days are the pointer's, the hours an hour from where it went down, as a click gives them.
+      const y = await hourY(page, h)
+      const x0 = await centreOf(page, tue)
+      await page.mouse.move(x0, y)
+      await page.mouse.down()
+      await page.mouse.move(await centreOf(page, thu), y, { steps: 6 })
+      await expect(bands).toHaveCount(3)
+      for (const band of await bands.all()) await expect(band).toContainText(`${clockOf(h)}–${clockOf(h + 60)}`)
+      await page.mouse.up()
+      await expect(small).toHaveAttribute('data-dates', `${tue},${wed},${thu}`)
+      await expect(page.getByTestId('week-new-duration')).toHaveValue('1 h')
+      await page.keyboard.press('Escape')
+      await expect(small).toBeHidden()
+
+      // Let go before the column held the pointer (a move under 4 px, out into the gap): no drag is left behind, and the
+      // pointer coming back with no button held draws nothing.
+      const col = (await page.getByTestId(`week-col-${tue}`).boundingBox())!
+      await page.mouse.move(col.x + col.width - 1, y)
+      await page.mouse.down()
+      await page.mouse.move(col.x + col.width + 2, y)
+      await page.mouse.up()
+      await page.mouse.move(col.x + col.width / 2, y + 30, { steps: 3 })
+      await page.mouse.move(col.x + col.width / 2, y + 90, { steps: 3 })
+      await expect(bands).toHaveCount(0)
+      await expect(small).toHaveCount(0)
+
+      // The page scrolling under a drag: the start stays where it went down, the end is where the pointer is now.
+      const before = await hourY(page, h)
+      await page.mouse.move(x0, before)
+      await page.mouse.down()
+      await page.mouse.move(x0, before + 10, { steps: 2 })
+      await page.mouse.wheel(0, 40)
+      // The scrolling is not done at once: its end is when the label of the hour stands still, moved up.
+      const label = page.getByTestId(`week-hour-${h}`)
+      const labelY = async () => {
+        const box = (await label.boundingBox())!
+        return box.y + box.height / 2
+      }
+      let last = Number.NaN
+      await expect
+        .poll(async () => {
+          const now = await labelY()
+          const still = now === last
+          last = now
+          return still && now < before - 1
+        })
+        .toBe(true)
+      const scrolled = before - last
+      await page.mouse.move(x0, before + 72, { steps: 4 })
+      const endMin = Math.round((h + (72 + scrolled) / 0.8) / 5) * 5
+      await expect(bands.first()).toHaveAttribute('data-start', String(h))
+      await expect(bands.first()).toHaveAttribute('data-end', String(endMin))
+      await page.mouse.up()
+      await expect(small).toHaveAttribute('data-start', String(h))
+      await page.keyboard.press('Escape')
+      await expect(small).toBeHidden()
+
+      // A press on a block that ends on an empty place is no click on the grid (nothing is created).
+      const blockBox = (await page.locator(`[data-testid^="week-block-${tue}-"]`).first().boundingBox())!
+      const free = await hourY(page, h)
+      await page.mouse.move(blockBox.x + blockBox.width / 2, blockBox.y + blockBox.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(blockBox.x + blockBox.width / 2, free, { steps: 6 })
+      await page.mouse.up()
+      await expect(small).toHaveCount(0)
+      await expect(page.getByTestId('week')).toBeVisible()
+
+      // Another week is another grid: the window of the one left does not stay over it (the arrow with the keyboard).
+      await page.mouse.click(await centreOf(page, wed), await hourY(page, h))
+      await expect(small).toBeVisible()
+      await page.getByTestId('week-prev').focus()
+      await page.keyboard.press('Enter')
+      await expect(page.getByTestId('week-today')).toBeDisabled()
+      await expect(small).toHaveCount(0)
+      expect(planOf(dataDir, wed)).toEqual([])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('oś dnia (D366): przeciągnięcie po pustym miejscu ustawia start i długość nowego bloku w „Dziś” i w „Szablonach”, kolumna godzin działa jak oś', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-axis-new-'))
   seed(dataDir)
