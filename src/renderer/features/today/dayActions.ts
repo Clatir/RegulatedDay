@@ -5,7 +5,7 @@
  * parking) are events of its log. Every edit is made in its turn from the file as it is then (A6-01); the window's
  * version (`seen`) only stands in for a file that cannot be read now.
  */
-import type { EditOutcome, RawRecord, TimerIn, TimerResult } from '@shared/api'
+import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult } from '@shared/api'
 import { blockJson, dayRaw, putBlock, setCancelled, setDayField, takeBlock } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { marketDay } from '@shared/calendar/holidays'
@@ -22,11 +22,16 @@ import { dayFilesNow, editOf, isSaved, trySaveWith, useData } from '../../store/
 import { dayUsable } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
 
+/** The edit of a day's file `before` (null: none yet, it is made) by `next` – null when it changes nothing. */
+export function dayFileEdit(date: string, before: RawRecord | null, next: (raw: RawRecord) => RawRecord): EditEntry | null {
+  return editOf(paths.day(date), before, next(dayRaw(before, date)))
+}
+
 /** The day's file changed by `next` from its version in its turn; null when nothing could be sent (the toast said why). */
 export function saveDay(date: string, seen: RawRecord | null, next: (raw: RawRecord) => RawRecord): Promise<EditOutcome[] | null> {
   return trySaveWith(async () => {
     const before = (await dayFilesNow([date], () => seen))[date] ?? null
-    return [editOf(paths.day(date), before, next(dayRaw(before, date)))]
+    return [dayFileEdit(date, before, next)]
   })
 }
 

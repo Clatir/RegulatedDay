@@ -110,6 +110,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E12.2 Skróty menu Ctrl+1…9
    - [ ] J1.1 Długość niezaczętego bloku krawędzią – „Dziś” i „Szablony”
    - [ ] J1.2 Trwający blok – dolna krawędź, „Potwierdź · Anuluj” za granicą
+   - [ ] J2.1 Nowy blok kliknięciem i przeciągnięciem w „Tygodniu”
+   - [ ] J2.2 Nowy blok przeciągnięciem w „Dziś” i „Szablonach”
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1489,3 +1491,31 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   kosztem co „Przedłuż” w pasku. Sesja, wykład z planu, zjazd i druga zmiana – bez uchwytu (D365).
 - **Nie przechodzi, gdy:** przeciągnięcie za granicę zmienia blok bez „Potwierdź”, koszt różni się od „Przedłuż”
   w pasku, krawędź w górę przedłuża blok, albo pasek „Potwierdź · Anuluj” zostaje w pustym miejscu osi.
+
+### J2 – nowy blok kliknięciem w siatkę (1.5.0)
+
+#### J2.1 Nowy blok kliknięciem i przeciągnięciem w „Tygodniu” (1.5.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/grid-create.test.ts`, `tests/web/week-new-block.test.ts`, `tests/e2e/week.spec.ts`.
+  Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” kliknij puste miejsce w przyszłym dniu; zmień kategorię i „Dodaj”. Kliknij jeszcze raz
+  w pusty dzień – sprawdź kategorię na starcie; zamknij „Anuluj”, Esc i kliknięciem obok. Przeciągnij po pustym miejscu
+  przez trzy dni. Kliknij w dzień miniony. Kliknij nagłówek dnia i blok.
+- **Oczekiwany efekt:** karta „Nowy blok · <dzień> <godzina>” obok dnia, na start ostatnio użyta kategoria i 60 min;
+  „Dodaj” zapisuje blok w tym dniu o klikniętej godzinie (co 5 min); przeciągnięcie przez dni – karta „wt–cz 10:00–11:30”
+  i osobny blok o tych godzinach w każdym dniu; dzień miniony – linia „Ten dzień już minął”, zapis możliwy; nagłówek
+  i blok otwierają dzień; „Anuluj”, Esc i klik obok nic nie zapisują (D366, D371).
+- **Nie przechodzi, gdy:** klik w pustą siatkę otwiera dzień zamiast karty, blok zapisuje się w innym dniu albo innej
+  godzinie, przeciągnięcie przez dni tworzy jeden blok albo żaden, ponowne „Dodaj” dubluje bloki, albo zamknięcie bez
+  „Dodaj” coś zapisuje.
+
+#### J2.2 Nowy blok przeciągnięciem w „Dziś” i „Szablonach” (1.5.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/grid-create.test.ts`, `tests/e2e/week.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” przeciągnij po pustym miejscu osi z 10:00 do 11:30; kliknij puste miejsce bez ruchu;
+  kliknij i przeciągnij w kolumnie godzin. To samo w „Szablonach”.
+- **Oczekiwany efekt:** w trakcie pasmo z godzinami; po puszczeniu panel nowego bloku ze startem 10:00 i długością
+  1 h 30 min; zwykłe kliknięcie jak dotąd (panel od kwadransa); kolumna godzin działa jak oś (D366).
+- **Nie przechodzi, gdy:** przeciągnięcie przesuwa istniejący blok, drobne drgnięcie myszy przy kliknięciu robi blok
+  inny niż przy kliknięciu, albo kolumna godzin nic nie robi.
+

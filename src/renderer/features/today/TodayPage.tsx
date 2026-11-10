@@ -27,6 +27,8 @@ import { useMachine } from '../../store/machine'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis, daySummary } from '../plan/dayItems'
+import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
+import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgePatch, edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
 import { EnergyLegend, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
@@ -178,9 +180,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     useUi.setState({ focus: null })
   }, [focus, ritual])
 
-  /** A new block: in the panel first (nothing is saved until „Dodaj”). */
-  const create = (startMin: number) => {
-    const b = newUserBlock('inne', startMin, 60, model.state.settings.categories.inne)
+  /** A new block: in the panel first (nothing is saved until „Dodaj”); an hour long, or as long as the range dragged over the axis (D366). */
+  const create = (startMin: number, durationMin = DEFAULT_NEW_BLOCK_MIN) => {
+    const b = newUserBlock('inne', startMin, durationMin, model.state.settings.categories.inne)
     setSelected(null)
     setDraft(b)
   }
@@ -194,6 +196,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
       }
     }
     if (!isSaved(await putDayBlock(date, raw, b))) return
+    rememberNewBlockCategory(b.categoryId)
     setDraft(null)
     setSelected(b.id)
   }
@@ -413,6 +416,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
           onClose={(added) => {
             setExchange(null)
             if (added) {
+              rememberNewBlockCategory(exchange.block.categoryId)
               setDraft(null)
               setSelected(added)
             }
@@ -471,7 +475,7 @@ function SidePanel({ model, names, onSelect, onMove }: { model: DayModel; names:
           ))}
         </div>
       )}
-      <p className={cx('text-[11.5px] text-muted')}>Kliknij wolne miejsce na osi, żeby dodać blok w tej godzinie (Ctrl N – w najbliższym wolnym miejscu).</p>
+      <p className={cx('text-[11.5px] text-muted')}>Kliknij wolne miejsce na osi, żeby dodać blok w tej godzinie – albo przeciągnij po nim, żeby ustawić początek i koniec (Ctrl N – w najbliższym wolnym miejscu).</p>
     </aside>
   )
 }

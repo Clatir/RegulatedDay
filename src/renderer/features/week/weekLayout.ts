@@ -80,3 +80,47 @@ export function laneLayout<T extends { startMin: number; endMin: number }>(items
 export function goalsMonthOfWeek(week: string, today: string): string {
   return today >= week && today <= addDays(week, 6) ? monthOfDate(today) : monthOfDate(addDays(week, 3))
 }
+
+/** The width of the small window of a new block (D366), pixels. */
+export const NEW_BLOCK_WIDTH = 264
+const POPOVER_GAP = 4
+
+/**
+ * Where the small window of a new block stands beside a column of the grid (D366): to the right of it when it fits within
+ * the grid's width, else to its left; at `top` – never above the grid nor left of it. Pixels from the grid's corner.
+ */
+export function popoverPlace(o: { gridWidth: number; colLeft: number; colRight: number; top: number; width: number }): { left: number; top: number } {
+  const right = o.colRight + POPOVER_GAP
+  const left = right + o.width <= o.gridWidth ? right : o.colLeft - POPOVER_GAP - o.width
+  return { left: Math.max(0, left), top: Math.max(0, o.top) }
+}
+
+/**
+ * The column under `x` (D371: a drag over several days), among the rectangles the columns really have on the screen
+ * (left to right): the one that holds `x`; in a gap, or beyond the first or the last (a drag may leave the grid) – the nearest.
+ * No rectangles (the grid is not on the screen): `fallback`.
+ */
+export function columnAt(x: number, cols: ReadonlyArray<{ left: number; right: number }>, fallback = 0): number {
+  if (!cols.length) return fallback
+  let best = 0
+  let bestDistance = Number.POSITIVE_INFINITY
+  cols.forEach((c, i) => {
+    const distance = x < c.left ? c.left - x : x > c.right ? x - c.right : 0
+    if (distance < bestDistance) {
+      best = i
+      bestDistance = distance
+    }
+  })
+  return best
+}
+
+/** A drag over the columns that has not changed (its columns and hours): nothing to draw again (D371). */
+export function sameDrag(a: { from: number; to: number; range: { startMin: number; endMin: number } } | null, b: typeof a): boolean {
+  return a === b || (a != null && b != null && a.from === b.from && a.to === b.to && a.range.startMin === b.range.startMin && a.range.endMin === b.range.endMin)
+}
+
+/** The columns from `a` to `b`, either way round (D371: a drag from the right to the left takes the same days). */
+export function dayIndexes(a: number, b: number): number[] {
+  const lo = Math.min(a, b)
+  return Array.from({ length: Math.abs(a - b) + 1 }, (_, k) => lo + k)
+}

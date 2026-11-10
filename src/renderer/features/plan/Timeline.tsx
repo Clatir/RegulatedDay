@@ -4,7 +4,8 @@
  * axis, and the lines of the wake, the boundary, the maximum, the hard end, the bedtime and now cross it. A click on a
  * block selects it (its editing panel opens on the right), a click on a gap creates a block there; a movable block is
  * dragged with the left button to a new start, in steps of 5 min (D305), and by its edges to a new length (D365): the
- * bottom edge moves its end, the top one its start with the same end.
+ * bottom edge moves its end, the top one its start with the same end. A drag over a gap creates a block with that start
+ * and end (D366); the column of hours counts as the axis for both.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
@@ -13,6 +14,8 @@ import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { cx } from '../../components/ui'
 import { useMachine } from '../../store/machine'
+import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
+import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
 
 export interface TimelineItem {
   id: string
@@ -69,8 +72,6 @@ const TONE: Record<TimelineMarker['tone'], string> = { lamp: '#F2B66D', rose: '#
 /** Pixels per minute of the axis. */
 const PPM = 1.1
 const MIN_H = 20
-/** A drag starts past 4 px – a shorter move is a click (D305). */
-const DRAG_FROM_PX = 4
 /** A dropped block waits this long at its new start for the day to bring it there (the edit refused: it goes back). */
 const DROP_HOLD_MS = 2000
 
@@ -166,7 +167,11 @@ export function Timeline({
   energy?: EnergyTrack | null
   selected: string | null
   onSelect: (id: string) => void
-  onCreate?: (min: number) => void
+  /**
+   * A new block from an empty place: a click gives its start (on the quarter, `durationMin` left out), a drag over it the
+   * start and the length of the range (on the 5-min grid, D366).
+   */
+  onCreate?: (min: number, durationMin?: number) => void
   /** A movable block dragged with the left button to a new start (logical minute). */
   onMove?: (id: string, startMin: number) => void
   /**
@@ -232,6 +237,16 @@ export function Timeline({
   }, [holding])
   const lo = Math.floor(Math.min(from, ...items.map((i) => i.startMin), ...markers.map((m) => m.at)) / 60) * 60
   const hi = Math.ceil(Math.max(to, ...items.map((i) => i.endMin), ...markers.map((m) => m.at)) / 60) * 60
+  // D366: a click on a gap (or in the column of hours) creates a block on the quarter, a drag one with its start and end.
+  const grid = useGridCreate({
+    lo,
+    hi,
+    ppm: PPM,
+    flatMin: DEFAULT_NEW_BLOCK_MIN,
+    onClick: (min) => onCreate?.(Math.round(min / 15) * 15),
+    onRange: (r) => onCreate?.(r.startMin, r.endMin - r.startMin)
+  })
+  const gridBind = onCreate ? grid.bind : {}
   const y = (min: number) => (min - lo) * PPM
   const height = (hi - lo) * PPM
 
@@ -275,6 +290,7 @@ export function Timeline({
         key={i.id}
         type="button"
         data-testid={`block-${i.id}`}
+        {...NO_GRID}
         data-block-title={i.title}
         data-movable={draggable ? 'true' : undefined}
         data-selected={selected === i.id ? 'true' : undefined}
@@ -378,7 +394,7 @@ export function Timeline({
   return (
     <div className="flex select-none" data-testid={rest['data-testid'] ?? 'timeline'}>
       {/* Hours. */}
-      <div className="relative w-[46px] shrink-0" style={{ height }}>
+      <div className="relative w-[46px] shrink-0" style={{ height }} data-testid="timeline-hours" {...gridBind}>
         {hours.map((h) => (
           <div key={h} className="num absolute right-2 -translate-y-1/2 text-[11px] text-muted" style={{ top: y(h) }}>
             {logicalClock(h)}
@@ -389,12 +405,7 @@ export function Timeline({
       <div
         className="relative min-w-0 flex-1 border-l border-line"
         style={{ height }}
-        onClick={(e) => {
-          if (!onCreate) return
-          const rect = e.currentTarget.getBoundingClientRect()
-          const min = lo + (e.clientY - rect.top) / PPM
-          onCreate(Math.round(min / 15) * 15)
-        }}
+        {...gridBind}
         data-testid="timeline-axis"
       >
         {hours.map((h) => (
@@ -403,10 +414,12 @@ export function Timeline({
         <div className="absolute inset-y-0 right-[96px] left-1.5">{lanes.main.map((i) => box(i, false))}</div>
         <div className="absolute inset-y-0 right-1.5 w-[86px]">{lanes.side.map((i) => box(i, true))}</div>
         {attached && (
-          <div className="absolute right-3 z-30" style={{ top: y(attached.endMin) }} onClick={(e) => e.stopPropagation()}>
+          <div className="absolute right-3 z-30" style={{ top: y(attached.endMin) }} onClick={(e) => e.stopPropagation()} {...NO_GRID}>
             {attached.node}
           </div>
         )}
+        {/* D366: the range of a new block being dragged over an empty place. */}
+        {grid.range && <RangeBand range={grid.range} lo={lo} ppm={PPM} withLength testId="create-range" />}
         {/* D365: the hours of an edge being dragged, and what the end costs. */}
         {drag?.moved && !drag.dropped && drag.edge && (
           <div

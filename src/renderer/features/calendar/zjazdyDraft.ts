@@ -9,7 +9,6 @@ import { logicalClock, plDate, plural } from '@shared/format'
 import { zjazdDayType, ZJAZD_SKIP_TEXT } from '@shared/import/zjazdDay'
 import { subjectMax, zjazdKindOf, type ZjazdClass, type ZjazdDay, type ZjazdKind } from '@shared/import/zjazdy'
 import { DAY_TYPE_NAMES } from '@shared/model/settings'
-import { weekday } from '@shared/time/zone'
 
 /** The step of the hours in the preview (as everywhere in the app: 5 min). */
 export const STEP_MIN = 5
@@ -102,10 +101,6 @@ export const subjectMaxOf = (c: Pick<ZjazdClass, 'form'>): number => subjectMax(
 export const stepClass = (drafts: readonly DraftDay[], date: string, key: number, end: 'start' | 'end', delta: number): DraftDay[] =>
   patchDay(drafts, date, (d) => ({ ...d, classes: d.classes.map((c) => (c.key === key ? stepEnd(c, end, delta) : c)) }))
 
-const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
-
-/** „12.10.2030 · sobota”. */
-export const dayHeading = (date: string): string => `${plDate(date)} · ${WEEKDAY_NAMES[weekday(date) - 1]}`
 
 /** „08:00–09:30” (the clock as the app shows it, „+1” after midnight). */
 export const hoursText = (c: Pick<ZjazdClass, 'startMin' | 'endMin'>): string => `${logicalClock(c.startMin)}–${logicalClock(c.endMin)}`

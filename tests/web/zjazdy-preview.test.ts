@@ -10,7 +10,6 @@ import { editZjazdy, keepZjazdy, openZjazdy, useZjazdy } from '@renderer/feature
 import type { inTurn } from '@renderer/store/data'
 import {
   blockedText,
-  dayHeading,
   draftsOf,
   hoursText,
   kindOf,
@@ -31,6 +30,7 @@ import {
   undoneText,
   unchangedText
 } from '@renderer/features/calendar/zjazdyDraft'
+import { plDateWithWeekday } from '@shared/format'
 import { rdFrom } from '@shared/model/rd'
 import { defaultTemplates } from '@shared/model/defaults'
 import { marketDay } from '@shared/calendar/holidays'
@@ -159,7 +159,7 @@ describe('poprawki w podglądzie', () => {
 
 describe('opisy w podglądzie', () => {
   it('data z dniem tygodnia, „teraz: typ” tylko gdy import zmieni typ dnia', () => {
-    expect(dayHeading('2030-10-12')).toBe('12.10.2030 · sobota')
+    expect(plDateWithWeekday('2030-10-12')).toBe('12.10.2030 · sobota')
     const d = draftsOf(SAMPLE)
     expect(typeNowText(d[2]!)).toBe('teraz: Zwykły')
     expect(typeNowText(d[1]!)).toBeNull()
