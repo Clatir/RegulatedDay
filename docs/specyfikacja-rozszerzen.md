@@ -1,6 +1,6 @@
 # RegulatedDay – Specyfikacja Funkcjonalna Rozszerzeń
 
-Dokument opisuje 14 kluczowych możliwości funkcjonalnych aplikacji: **co użytkownik może osiągnąć**, jak wygląda jego codzienna praca z narzędziem i jakie problemy rozwiązuje każda z funkcji w praktyce (bez żargonu i szczegółów technicznych implementacji).
+Dokument opisuje 16 kluczowych możliwości funkcjonalnych aplikacji (stan 10.11.2026: 12, 15 i 16 – ciąg J, D363–D369; 6 – odłożone, D364): **co użytkownik może osiągnąć**, jak wygląda jego codzienna praca z narzędziem i jakie problemy rozwiązuje każda z funkcji w praktyce (bez żargonu i szczegółów technicznych implementacji).
 
 ---
 
@@ -90,6 +90,8 @@ Masz w kalendarzu 60-minutowy blok „Spotkanie projektowe z zespołem”. W tra
 ---
 
 ## 6. Własne bazy danych, pola i elastyczne widoki (3.2)
+
+*Odłożone 10.11.2026 (D364) – opis zostaje na powrót, wybory z 10.11 zapisane w D364.*
 
 ### Co ta funkcja daje użytkownikowi
 Możliwość organizowania informacji w ustrukturyzowane bazy (jak w Notion) z własnymi polami (np. Klient, Budżet, Status, Priorytet) i oglądania ich w formie Tabeli, Tablicy Kanban lub Listy.
@@ -200,22 +202,23 @@ Mija kolejny dzień, w którym byłeś zajęty od rana do nocy, odebrałeś 20 t
 
 ## 12. Dynamiczne przepakowywanie dnia przy poślizgach (5.1)
 
+*Zakres ustalony 10.11.2026 (D367–D369), ciąg J. Już wcześniej prognoza przesuwała bloki elastyczne za rzeczywistym
+końcem poprzednika, a panel wariantów skracał je albo przenosił na jutro – ta funkcja dodaje trzy rzeczy niżej.*
+
 ### Co ta funkcja daje użytkownikowi
-Koniec z ręcznym przestawianiem klocków na osi czasu, gdy coś pójdzie niezgodnie z planem. Jedno kliknięcie układa resztę dnia na nowo, dbając o nienaruszalność ważnych spotkań i chroniąc porę odpoczynku.
+Koniec z ręcznym przestawianiem klocków na osi czasu. Wstawiony albo wydłużony blok sam robi sobie miejsce, luki po wcześniej skończonych blokach da się domknąć jednym kliknięciem, a aplikacja podpowiada kolejność, która lepiej pasuje do Twojej energii.
 
 ### Scenariusz z życia
-Jest godzina 11:30. Zadanie, które miało zająć 45 minut, przedłużyło się o godzinę, a o 14:00 masz sztywne spotkanie z klientem. Za spotkaniem masz jeszcze 3 inne elastyczne zadania, a o 17:00 wyznaczyłeś twardy koniec pracy.
-* **Przed zmianą:** Twój plan dnia leży w gruzach. Bloki nachodzą na siebie, wpadają na spotkanie i wylewają się poza godzinę zakończenia pracy. Musisz ręcznie klikać każde zadanie, skracać, przesuwać i liczyć w pamięci, co się zmieści.
-* **Dzięki funkcji:** Aplikacja zauważa poślizg i wyświetla na pasku pulpitu spokojną propozycję: *„Poślizg +60 min. Przepakować resztę dnia?”*. Klikasz *Tak*. Silnik natychmiast:
-  - przesuwa elastyczne zadanie przed spotkanie (jeśli jest okienko),
-  - omija nienaruszalne spotkanie o 14:00,
-  - zadania o niskim priorytecie automatycznie odkłada na jutro,
-  - a Ty o 17:00 kończysz pracę dokładnie o zaplanowanej porze, bez poczucia winy i chaosu.
+Jest 11:30. O 12:00 wstawiasz nagłe 45-minutowe zadanie, a za nim masz trzy elastyczne bloki i o 14:00 stałe zajęcia.
+* **Przed zmianą:** Nowy blok nachodzi na kolejne; przesuwasz każdy po kolei.
+* **Dzięki funkcji:** Upuszczasz blok o 12:00 – kolejne elastyczne bloki od razu dostają nowe godziny, a zajęcia o 14:00 stoją na miejscu (blok, który się przed nimi nie mieści, przeskakuje za nie). W pasku widzisz „Przesunięto 3 bloki · Cofnij”. Po południu jedno zadanie kończysz 25 minut wcześniej – pasek cicho pyta: „Luka 25 min · Przesuń resztę wcześniej · Zostaw”.
 
 ### Jak wygląda praca z tą funkcją
-* **Respektowanie bloków stałych:** Spotkania z ludźmi, wizyty lekarskie i wykłady nigdy nie są przesuwane – są jak nienaruszalne skały w rzece czasu.
-* **Podgląd przed decyzją:** Zawsze widzisz porównanie: jak dzień wyglądał przed chwilą, a jak będzie wyglądał po ułożeniu. Jeśli propozycja Ci się nie spodoba, odrzucasz ją jednym kliknięciem.
-* **Ochrona regeneracji:** Przepakowywanie nigdy po cichu nie zabiera Twojego wieczornego czasu wolnego ani snu.
+* **Rozsuwanie:** Wstawienie, przeciągnięcie albo wydłużenie bloku na zajęte miejsce przesuwa kolejne bloki elastyczne od razu; w trakcie przeciągania widzisz ich nowe miejsca, a „Cofnij” w pasku przywraca wszystko jednym kliknięciem.
+* **Domykanie luk:** Gdy blok skończy się wcześniej, usuniesz go albo skrócisz i powstanie luka co najmniej 10 minut, pasek cicho proponuje przesunięcie reszty dnia wcześniej. Zawsze pyta, nigdy nie przesuwa niczego przed bieżącą chwilą; w czasie sesji i zajęć czeka do ich końca.
+* **„Ułóż pod energię”:** W „Przestaw plan” i w planie porannym pojawia się wariant z inną kolejnością bloków elastycznych – tylko gdy wyraźnie podnosi najniższą energię dnia. Zmienia kolejność wyłącznie w tej samej przerwie między blokami stałymi.
+* **Respektowanie bloków stałych:** Bloki stałe (wykłady, zajęcia, sesje), chronione bloki życia i bloki już zaczęte nigdy nie są przesuwane.
+* **Nadmiar:** Gdy przesunięte bloki wyjdą za granicę dnia albo porę snu, pojawia się znacznik wariantów (skróć, przenieś na jutro) – aplikacja niczego sama nie odkłada.
 
 ---
 
@@ -252,10 +255,53 @@ Pracujesz nad projektem i nagle przypominasz sobie, że trzy tygodnie temu zapis
 
 ---
 
+## 15. Zmiana długości bloku przeciągnięciem krawędzi (2.2, SNT7)
+
+*Zakres ustalony 10.11.2026 (D365), ciąg J.*
+
+### Co ta funkcja daje użytkownikowi
+Wydłużenie albo skrócenie bloku jednym ruchem myszy, prosto na osi dnia – tak jak w Google Calendar – bez otwierania okna edycji i wpisywania minut.
+
+### Scenariusz z życia
+Masz blok pracy nad raportem od 9:00 do 10:00. Rano widzisz, że godzina nie wystarczy.
+* **Przed zmianą:** Klikasz blok, w panelu edycji szukasz pola „Długość”, wpisujesz nową liczbę minut i zatwierdzasz.
+* **Dzięki funkcji:** Najeżdżasz na dolną krawędź bloku – kursor zmienia się w strzałkę góra/dół. Chwytasz krawędź i ciągniesz w dół. Podczas ruchu widzisz podpowiedź „9:00–11:30 · 2 h 30 min”. Puszczasz – blok kończy się o 11:30, a krzywa energii i linia granicy dnia od razu przeliczają się od nowa.
+
+### Jak wygląda praca z tą funkcją
+* **Obie krawędzie, krok 5 minut:** Dolna krawędź zmienia koniec, górna – start przy tym samym końcu. Godzina przeskakuje co 5 minut, tak samo jak start przy przeciąganiu całego bloku. Najkrótszy blok ma 5 minut.
+* **Trwający blok:** Wydłużasz go albo skracasz dolną krawędzią, najwyżej do bieżącej chwili. Sesja, wykład, zjazd i druga zmiana – dalej przyciskiem „Przedłuż” w pasku. Do granicy dnia zmiana wchodzi od razu. Za granicą już w trakcie przeciągania widzisz koszt przedłużenia, a po puszczeniu przy bloku pojawia się „Potwierdź · Anuluj” na 10 sekund – bez potwierdzenia nic się nie zmienia.
+* **Kliknięcie dalej otwiera blok:** Zwykłe kliknięcie bez ruchu otwiera blok do edycji, jak dotąd.
+* **Ostrzega, nie blokuje:** Gdy wydłużony blok przekracza maksimum dnia albo twardy koniec, widzisz te same ostrzeżenia co przy zmianie długości w panelu edycji. Aplikacja niczego nie zatrzymuje.
+* **Które bloki:** Niezaczęte – te same, które da się przeciągać: z własną godziną, poza sesją, wykładem i drugą zmianą (wykład zmieniasz w rozkładzie). Trwające – jak wyżej.
+* **Wszędzie ten sam gest:** Działa na osi dnia i w szablonach, a później w widokach tygodnia i 3 dni.
+* **Zanim przyjdzie rozsuwanie (sekcja 12):** Wydłużenie bloku na następny działa jak dziś przeciągnięcie – kolejne bloki przesuwa prognoza, plan zostaje.
+
+---
+
+## 16. Nowy blok kliknięciem w siatkę kalendarza (SNT8)
+
+*Zakres ustalony 10.11.2026 (D366), ciąg J.*
+
+### Co ta funkcja daje użytkownikowi
+Dodanie bloku dokładnie tam, gdzie klikasz – w pustym miejscu siatki obok innych bloków – jak w Google Calendar, także w widoku tygodnia.
+
+### Scenariusz z życia
+Przeglądasz „Tydzień” i widzisz, że we wtorek o 10:00 jest wolne miejsce na przygotowanie prezentacji.
+* **Przed zmianą:** Klikasz wtorek, przechodzisz do jego planu i dopiero tam dodajesz blok.
+* **Dzięki funkcji:** Klikasz puste miejsce we wtorkowej kolumnie na wysokości 10:00. W tym miejscu otwiera się małe okienko: wybierasz kategorię, długość i klikasz „Dodaj”. Albo od razu przeciągasz myszą po pustym miejscu od 10:00 do 11:30 – powstaje blok 90-minutowy.
+
+### Jak wygląda praca z tą funkcją
+* **Okienko w miejscu („Tydzień”):** Kategoria, długość, „Dodaj”; „Więcej” otwiera pełną edycję. Dzień otwierasz kliknięciem w jego nagłówek albo w blok.
+* **Przeciągnięcie po pustym miejscu:** W „Dziś”, „Szablonach” i „Tygodniu” ustawia od razu start i koniec nowego bloku.
+* **Kolumna godzin:** Kliknięcie w godzinę z boku osi działa tak samo jak kliknięcie w oś.
+* **„Dziś” jak dotąd:** Kliknięcie w pustą oś otwiera nowy blok w panelu edycji obok osi.
+
+---
+
 ## Podsumowanie
 
-Te 14 funkcjonalności sprawia, że **RegulatedDay staje się kompletnym, samodzielnym centrum zarządzania czasem i życiem**:
-1. Daje pełną elastyczność i horyzont czasowy **Google Calendar** (tydzień, powtarzalność, warstwy, all-day),
+Te funkcjonalności sprawiają, że **RegulatedDay staje się kompletnym, samodzielnym centrum zarządzania czasem i życiem**:
+1. Daje pełną elastyczność i horyzont czasowy **Google Calendar** (tydzień, powtarzalność, warstwy, all-day, zmiana długości przeciągnięciem, nowy blok kliknięciem w siatkę),
 2. Daje swobodę tworzenia notatek i strukturę danych **Notion** (Markdown, bazy danych, załączniki, checklisty, backlog),
 3. Daje spryt i inteligencję narzędzi **Sunsama / Motion** (dynamiczne przepakowywanie, ochrona deadlinów, dekompresja),
 4. A przede wszystkim: **nie gubi przy tym unikalnej tożsamości RegulatedDay** – nadal bezwzględnie chroni Twój sen, energię psychofizyczną i uczy zdrowego bilansu między pracą a regeneracją.
