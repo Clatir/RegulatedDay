@@ -274,7 +274,7 @@ Masz blok pracy nad raportem od 9:00 do 10:00. Rano widzisz, że godzina nie wys
 * **Ostrzega, nie blokuje:** Gdy wydłużony blok przekracza maksimum dnia albo twardy koniec, widzisz te same ostrzeżenia co przy zmianie długości w panelu edycji. Aplikacja niczego nie zatrzymuje.
 * **Które bloki:** Niezaczęte – te same, które da się przeciągać: z własną godziną, poza sesją, wykładem i drugą zmianą (wykład zmieniasz w rozkładzie). Trwające – jak wyżej.
 * **Wszędzie ten sam gest:** Działa na osi dnia i w szablonach, a później w widokach tygodnia i 3 dni.
-* **Zanim przyjdzie rozsuwanie (sekcja 12):** Wydłużenie bloku na następny działa jak dziś przeciągnięcie – kolejne bloki przesuwa prognoza, plan zostaje.
+* **Rozsuwanie (sekcja 12):** Wydłużenie bloku na następny zapisuje nowe godziny kolejnych bloków elastycznych, tak samo jak przeciągnięcie; trwający blok wydłużony krawędzią dalej przesuwa je tylko w prognozie.
 
 ---
 

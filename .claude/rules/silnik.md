@@ -24,7 +24,14 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   skróceniem, przesunięcie pobudki) i `dayPlan` (migawka + plik dnia).
 - `engine/facts.ts` – log → fakty (przebiegi bloków, prośby, „Odcinam się”, zatwierdzenia, odcinki); `viewAt(f, m)`.
 - `engine/blocks.ts` – `BlockInfo` (klasa, czeka na „Zacznij”, druga zmiana, wykład/zjazd, oznaczenie „po pracy”).
-- `engine/forecast.ts` – prognoza planu od minuty m (tryby `window` i `typical`).
+- `engine/forecast.ts` – prognoza planu od minuty m (tryby `window` i `typical`); `day.ts` `shownForecast(ctx, state, bloki)` –
+  ta sama prognoza co `DayState.forecast` dla innych bloków (zmiana próbowana przed zapisem), `typicalOf`.
+- `engine/pushApart.ts` (D367, rozsuwanie) – `pushApart(ctx, state, planPoZmianie, id, atMin?)` → `PushedBlock[]` (stary start,
+  nowe miejsce): kolejne = pokazane od miejsca bloku (dolna krawędź – `atMin`, miejsce na osi); zaplanowane nie później niż
+  blok idą za nim; nowe godziny z `shownForecast` planu po zmianie (reguła prognozy, nie kopia); zapis, gdy blok przesunął
+  się później, musiał pójść za blokiem albo jego start w planie wypadłby przed zapisanym wcześniej (kolejność prognozy).
+  Tylko elastyczne z własną godziną, w pierwszym planie, niechronione (`protectedLife`, `rules.protected`), niezaczęte;
+  nic za koniec doby logicznej. `pushedPlan`, `pushedText` (tekst paska). Testy: `tests/unit/engine/push-apart.test.ts`.
 - `engine/day.ts` – `computeDay`: granica, koniec pracy, klasyfikacja minut, budżet, regeneracja, minimum, pora snu,
   twardy koniec, pula, regeneracja każdej minuty (`rest`, dla energii); `newSegments` (odcinki do zapisu przez
   prowadzącego); `settingsAtMinute`. Energia (E2) – osobne reguły `energia.md`.

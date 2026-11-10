@@ -16,7 +16,8 @@ import { HARD_END_TEXT } from '@shared/engineView'
 import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
-import { WidgetEngine, type NotifyIn } from '../../src/main/widget'
+import { pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
+import { recordEdit } from '@shared/data/merge'
 
 const DAY = '2026-10-21'
 let root: string
@@ -1725,5 +1726,103 @@ describe('warianty w pasku (D313)', () => {
     m.at(10 * 60 + 13)
     await m.w.refresh()
     expect(m.w.current().variants.marker).toBe(false)
+  })
+})
+
+describe('rozsuwanie w pasku (D367)', () => {
+  beforeEach(() =>
+    writeFileSync(
+      join(dataDir, paths.day(DAY)),
+      JSON.stringify({
+        schema: 1,
+        date: DAY,
+        sessions: { londyn: 'no', ny: 'no' },
+        blocks: [
+          { id: 'a', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'b', categoryId: 'inne', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user' }
+        ]
+      })
+    )
+  )
+  type Day = { blocks: Array<{ id: string; startMin: number }> }
+  const starts = async (folder: DataFolder) => Object.fromEntries(((await folder.recordView(paths.day(DAY))) as Day).blocks.map((b) => [b.id, b.startMin]))
+
+  /** What the window saves for „x” put at 10:00 (60 min): one edit of the day's file with „a” and „b” pushed behind it. */
+  async function pushX(folder: DataFolder) {
+    const before = (await folder.recordView(paths.day(DAY))) as Record<string, unknown> & Day
+    const after = {
+      ...before,
+      blocks: [...before.blocks.map((b) => (b.id === 'a' ? { ...b, startMin: 11 * 60 } : b.id === 'b' ? { ...b, startMin: 12 * 60 } : b)), { id: 'x', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: false, origin: 'user' }]
+    }
+    const entry = recordEdit(paths.day(DAY), before, after)!
+    const out = await folder.edit([{ ...entry, edits: entry.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
+    expect(out.map((o) => o.status)).toEqual(['applied'])
+    return entry
+  }
+
+  it('„Przesunięto 2 bloki · Cofnij” po zapisie z okna; „Cofnij” przywraca plik dnia sprzed partii (także wstawiony blok)', async () => {
+    const { w, folder } = await make({ from: placeLogical(DAY, 9 * 60) })
+    await w.refresh()
+    const entry = await pushX(folder)
+    expect(await starts(folder)).toEqual({ a: 11 * 60, b: 12 * 60, x: 10 * 60 })
+    await w.pushed(DAY, 2, { entry, made: null })
+    expect(w.current().lines[0]).toMatchObject({ id: 'moved:push', text: 'Przesunięto 2 bloki', actions: [{ id: 'undo', label: 'Cofnij' }] })
+    await w.act('line', 'moved:push|undo', 'bar')
+    expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60 })
+    expect(w.current().lines.some((l) => l.id === 'moved:push')).toBe(false)
+  })
+
+  it('„Cofnij” nie nadpisuje bloku zmienionego od przesunięcia – mówi, że część zostaje', async () => {
+    const { w, folder } = await make({ from: placeLogical(DAY, 9 * 60) })
+    await w.refresh()
+    const entry = await pushX(folder)
+    await w.pushed(DAY, 2, { entry, made: null })
+    // Meanwhile „b” moved again in the window.
+    const now = (await folder.recordView(paths.day(DAY))) as Record<string, unknown> & Day
+    const moved = recordEdit(paths.day(DAY), now, { ...now, blocks: now.blocks.map((b) => (b.id === 'b' ? { ...b, startMin: 14 * 60 } : b)) })!
+    await folder.edit([{ ...moved, edits: moved.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
+    await w.act('line', 'moved:push|undo', 'bar')
+    expect((await starts(folder)).a).toBe(10 * 60)
+    expect(w.current().note?.text).toBe('Część planu zmieniła się od przesunięcia – zostaje tak, jak jest teraz.')
+  })
+
+  it('nadmiar za granicą: przesunięcie zapala znacznik wariantów (wyzwalacz), bez przesunięcia – nie', async () => {
+    const { w, folder, at } = await make({ from: placeLogical(DAY, 9 * 60) })
+    await w.refresh()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, boundary: placeLogical(DAY, 12 * 60 + 15), auto: false, plan: ['a', 'b'] }])
+    const entry = await pushX(folder)
+    // The plan written alone (no push said): no trigger – no marker.
+    at(9 * 60 + 1)
+    await w.refresh()
+    expect(w.current().variants.marker).toBe(false)
+    await w.pushed(DAY, 2, { entry, made: null })
+    expect(w.current().variants.marker).toBe(true)
+    // The marker stays while its condition holds, also past the 5 min of the check.
+    at(9 * 60 + 20)
+    await w.refresh()
+    expect(w.current().variants.marker).toBe(true)
+  })
+
+  it('przesunięcie innego dnia: linia z „Cofnij” jest, znacznika dziś nie wyzwala', async () => {
+    const { w, folder } = await make({ from: placeLogical(DAY, 9 * 60) })
+    await w.refresh()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, boundary: placeLogical(DAY, 12 * 60 + 15), auto: false, plan: ['a', 'b'] }])
+    const entry = await pushX(folder)
+    await w.pushed(addDays(DAY, 1), 2, { entry: { ...entry, rel: paths.day(addDays(DAY, 1)) }, made: null })
+    expect(w.current().lines[0]?.id).toBe('moved:push')
+    expect(w.current().variants.marker).toBe(false)
+  })
+
+  it('IPC: przyjmuje tylko edycję pliku tego dnia (nie usunięcie), liczbę bloków ≥ 1, plik utworzony tylko przy „create”', () => {
+    const entry = { rel: paths.day(DAY), edits: [{ path: ['blocks', '#a', 'startMin'], base: 600, value: 660 }] }
+    expect(pushedIn(DAY, 2, entry, null)).toEqual({ day: DAY, count: 2, edit: { entry, made: null } })
+    expect(pushedIn(DAY, 2, entry, { schema: 1 })?.edit.made).toBeNull()
+    expect(pushedIn(DAY, 1, { ...entry, create: true }, { schema: 1, date: DAY })?.edit).toEqual({ entry: { ...entry, create: true }, made: { schema: 1, date: DAY } })
+    expect(pushedIn(DAY, 0, entry, null)).toBeNull()
+    expect(pushedIn(DAY, 1.5, entry, null)).toBeNull()
+    expect(pushedIn('jutro', 1, entry, null)).toBeNull()
+    expect(pushedIn(DAY, 1, { ...entry, rel: 'rd.json' }, null)).toBeNull()
+    expect(pushedIn(DAY, 1, { ...entry, remove: true }, null)).toBeNull()
+    expect(pushedIn(DAY, 1, { rel: entry.rel, edits: [{ base: 1, value: 2 }] }, null)).toBeNull()
   })
 })

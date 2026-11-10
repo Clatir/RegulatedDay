@@ -5,7 +5,8 @@
  * block selects it (its editing panel opens on the right), a click on a gap creates a block there; a movable block is
  * dragged with the left button to a new start, in steps of 5 min (D305), and by its edges to a new length (D365): the
  * bottom edge moves its end, the top one its start with the same end. A drag over a gap creates a block with that start
- * and end (D366); the column of hours counts as the axis for both.
+ * and end (D366); the column of hours counts as the axis for both. While a block is dragged, the blocks it pushes apart
+ * stand at their new places (D367, `pushPreview`).
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
@@ -157,6 +158,7 @@ export function Timeline({
   onResize,
   resizeNote,
   edgeLimits,
+  pushPreview,
   attached,
   from,
   to,
@@ -188,6 +190,12 @@ export function Timeline({
   resizeNote?: (id: string, span: BlockSpan, edge: DragEdge, shown: BlockSpan) => string | null
   /** What bounds the bottom edge of a block when it is grabbed (D365: a running block – not before now, not past the day). */
   edgeLimits?: (id: string) => EdgeLimits | null
+  /**
+   * D367 (rozsuwanie): the blocks a drag pushes apart and where they would stand (by id) while a block is dragged by its
+   * body (`edge` null) or an edge to `span`, grabbed at `shown`; null or empty – nothing pushed. They are drawn there,
+   * dashed, until the day shows the drop.
+   */
+  pushPreview?: (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan) => ReadonlyMap<string, BlockSpan> | null
   /**
    * A block's end waiting for a confirmation (D365: a running block's extension past the boundary): the block is drawn
    * down to `endMin` (its added part dashed), `node` – „Potwierdź · Anuluj” – stands at that edge. Gone: the block is at its end.
@@ -272,12 +280,17 @@ export function Timeline({
   const hours: number[] = []
   for (let h = lo; h <= hi; h += 60) hours.push(h)
 
+  // D367: where the blocks the dragged one pushes apart would stand – while it is held, and after the drop until the day
+  // shows it (the hold).
+  const pushed = drag?.moved && pushPreview ? pushPreview(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) : null
+
   const box = (i: TimelineItem, narrow: boolean) => {
     const dragged = drag?.id === i.id && drag.moved
-    const start = dragged ? drag.start : i.startMin
+    const pushedTo = dragged ? undefined : pushed?.get(i.id)
     // Waiting for a confirmation (and not being dragged again): at the end it asks for.
     const waiting = !dragged && attached?.id === i.id
-    const end = dragged ? drag.end : waiting ? attached.endMin : i.endMin
+    const start = dragged ? drag.start : pushedTo ? pushedTo.startMin : i.startMin
+    const end = dragged ? drag.end : waiting ? attached.endMin : pushedTo ? pushedTo.endMin : i.endMin
     const top = y(start)
     const h = Math.max(MIN_H, (end - start) * PPM - 1)
     const tiny = h < 34
@@ -364,9 +377,13 @@ export function Timeline({
           height: h,
           background: i.dim ? blockFillDim(i.color, brightness) : blockFill(i.color, brightness),
           borderLeftColor: i.dim ? blockEdgeDim(i.color) : i.color,
-          ...(waiting ? { borderBottom: `2px dashed ${i.color}` } : {})
+          ...(waiting ? { borderBottom: `2px dashed ${i.color}` } : {}),
+          // Pushed apart by the drag (D367): at its new place, dashed round – not written until the drop (its text never
+          // dimmed, A8-05).
+          ...(pushedTo ? { outline: `1px dashed ${i.color}`, outlineOffset: -1 } : {})
         }}
         data-waiting={waiting ? 'true' : undefined}
+        data-pushed={pushedTo ? 'true' : undefined}
         data-dim={i.dim ? 'on' : undefined}
       >
         {topEdge && <span data-edge="top" data-testid={`block-${i.id}-edge-top`} className={cx('absolute inset-x-0 top-0 z-10 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}

@@ -65,7 +65,7 @@ import { type DataService } from './data/service'
 import { DataHub } from './data/hub'
 import { PowerKeeper } from './power'
 import { OneDriveWatch } from './onedrive'
-import { toneOnChange, WidgetEngine } from './widget'
+import { pushedIn, toneOnChange, WidgetEngine } from './widget'
 import { SoundWindow } from './windows/soundWindow'
 import { afterOutsideClose } from './windows/outsideClose'
 import { WorkerHost, type WorkerChild } from './worker/host'
@@ -754,6 +754,11 @@ function registerIpc(): void {
   handle(CH.dayData, (_e, date: string) => needHub().day(String(date)))
   handle(CH.dayFiles, (_e, dates: string[]) => needHub().dayFiles(Array.isArray(dates) ? dates.map(String) : []))
   handle(CH.edit, (_e, entries: EditEntry[]) => needHub().edit(Array.isArray(entries) ? entries : []))
+  // D367: blocks pushed apart, saved by the window – the bar's „Przesunięto N bloków · Cofnij” and the marker's trigger.
+  handle(CH.planPushed, async (_e, day: unknown, count: unknown, entry: unknown, made: unknown) => {
+    const p = pushedIn(day, count, entry, made)
+    if (p) await widget.pushed(p.day, p.count, p.edit)
+  })
   handle(CH.logEvents, (_e, events: EventIn[]) => needHub().events(Array.isArray(events) ? events : []))
   handle(CH.resolve, (_e, id: string, choice: 'mine' | 'theirs') => needHub().resolve(String(id), choice === 'theirs' ? 'theirs' : 'mine'))
   handle(CH.monthEvents, (_e, month: string, kinds: string[]) => needHub().monthEvents(String(month), Array.isArray(kinds) ? kinds.map(String) : []))
