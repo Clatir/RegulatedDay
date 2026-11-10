@@ -31,9 +31,9 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 - Rejestry decyzji (D308, T535): `docs/decyzje.md` – D; `docs/decyzje-techniczne.md` – T400 i nowsze,
   `docs/decyzje-techniczne-T1-T399.md` – T1–T399; zastąpione w całości w `docs/archiwum/decyzje-zastapione.md`. D188
   cofnięta przez T303, ale cytowana w D150 i specyfikacji – zostaje w rejestrze.
-- `docs/plan.md` ma od 7.11 dopisany plan rozszerzeń (GCal, Notion, Sunsama – bloki FBL…) – bez decyzji o starcie;
-  wykonawcy i przeglądy według ryzyka od 9.11 (D354); 10.11 dopisane SNT7 (długość bloku przeciągnięciem krawędzi),
-  opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`.
+- `docs/plan.md` ma od 7.11 plan rozszerzeń (GCal, Notion, Sunsama); wykonawcy i przeglądy według ryzyka (D354).
+  10.11: blok 1 = ciąg J (SNT7, SNT8, FBL2 w trzech częściach), pytania odpowiedziane (D363–D369), FBL1 odłożone
+  (D364); bloki 2–4 bez decyzji o starcie. Opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`.
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →
@@ -41,8 +41,26 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    `docs/vm/raport.md` (T529; przebieg z 3.11 – `docs/archiwum/vm/`); powtórka punktów NIEZGODNE i NIE DO SPRAWDZENIA
    na 1.0.8 („Gotowe, gdy” F–H w `docs/plan.md`, punkty i ich zadania – `docs/archiwum/vm/przyczyny.md`); poprawki z odbioru – wersje 1.0.x (D324).
 2. Ty: odbiór ciągu I – E8n, E10, E11 (E11.1 przed zjazdem 21.11), E12 w `docs/odbior.md`.
-3. K (przegląd kalibracji), gdy aplikacja go zaproponuje (najwcześniej ok. 12.11), po nim E9 (`docs/plan.md`, „Po 1.0”).
-4. Rozszerzenia (FBL, OPS, SNT, HKU) – bez decyzji o starcie (`docs/plan.md`, D354).
+3. Ciąg J (D363) – gotowy do startu po „dalej”: J1 SNT7 → J2 SNT8 → J3–J5 FBL2 (`docs/plan.md`, „Blok 1 = ciąg J”).
+4. K (przegląd kalibracji), gdy aplikacja go zaproponuje (najwcześniej ok. 12.11) – wchodzi między PR-y ciągu J; po nim
+   E9 (`docs/plan.md`, „Po 1.0”).
+5. Rozszerzenia bloki 2–4 (OPS, SNT, HKU) – bez decyzji o starcie; FBL1 odłożone (D364).
+
+## Ciąg J – stan (D363)
+**Przed ciągiem J (10.11):** zakres i „Gotowe, gdy” – `docs/plan.md`; decyzje D363–D369 (pytania w trzech rundach
+10.11). Ryzyka: J1 – trwający blok i koszt przedłużenia poza paskiem (wyjątek D365), J3 – zapis wielu bloków dnia
+jedną partią z jednym „Cofnij”, J4 – pytanie w pasku na dwóch komputerach (prowadzący, identyfikator). Przygotować:
+nic. Model: główna sesja Opus 5.5 · high; wykonawcy według tabeli planu, po kolei w jednym drzewie roboczym (J1 i J2
+zmieniają `Timeline.tsx`, J3 korzysta z J1). Wersje 1.4.0–1.8.0.
+
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| J-plan pytania i decyzje | – | #61 | D363–D369 zapisane 10.11 (PR razem z dopisaniem SNT7) | ok. 1,5 h (–) |
+| J1 SNT7 długość przeciągnięciem | 1.4.0 | – | czeka na „dalej” | – (3–4,5 h) |
+| J2 SNT8 nowy blok kliknięciem w siatkę | 1.5.0 | – | – | – (3–4,5 h) |
+| J3 FBL2a rozsuwanie | 1.6.0 | – | – | – (4–6 h) |
+| J4 FBL2b domykanie luk | 1.7.0 | – | – | – (3–4 h) |
+| J5 FBL2c „Ułóż pod energię” | 1.8.0 | – | – | – (4–6 h) |
 
 ## Ciąg I – stan (D353)
 **Przed ciągiem I (9.11):** zakres – `docs/plan.md`, „Ciąg I”; decyzje D352 (tekst linii twardego końca), D353 (kształt

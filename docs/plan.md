@@ -51,20 +51,33 @@ Ciągi A–E zakończone wydaniem 1.0.0 (28.10.2026) → `docs/archiwum/plan-E0-
 
 ## Rozszerzenia do pełnej funkcjonalności (parzystość z Google Calendar, Notion, Sunsama)
 
-Plan 15 funkcji niwelujących braki względem Google Calendar, Notion i narzędzi time-blockingu (dopisany 7.11, SNT7 –
-10.11), bez decyzji o starcie – każde zadanie przed startem potrzebuje decyzji D o wyglądzie i zachowaniu. Bloki są tematyczne;
+Plan funkcji niwelujących braki względem Google Calendar, Notion i narzędzi time-blockingu (dopisany 7.11; 10.11 –
+SNT7, SNT8 i blok 1 jako ciąg J z decyzjami D363–D369, FBL1 odłożone). Bloki 2–4 bez decyzji o starcie – każde zadanie
+przed startem potrzebuje decyzji D o wyglądzie i zachowaniu. Bloki są tematyczne;
 wykonawca i poziom przeglądu według ryzyka (D354, D351): silnik dnia, folder danych, migracje formatu i pasek pulpitu –
 `wykonawca-opus` albo przegląd xhigh; ekrany na gotowej logice – `wykonawca-sonnet`, przegląd high; Haiku nie pisze
 kodu rozszerzeń. Główna sesja Opus 5.5 · high zleca, sprawdza, przegląda i scala.
 
-### Blok 1: Architektura danych i optymalizacja dnia
+### Blok 1 = ciąg J: oś dnia i przepakowywanie (D363)
 
-| # | Zadanie i rozwiązanie techniczne | Rodzaj | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
+Pytania przed ciągiem odpowiedziane 10.11 (D363–D369). Start po Twoim „dalej”, potem pozycje idą bez pauzy, bez
+„dalej” między nimi (D317). Kolejność jak w
+tabeli – J1 i J2 zmieniają `Timeline.tsx`, J3 korzysta z gestu J1, więc pozycje idą po kolei, nie równolegle. Każda
+pozycja – osobny PR z wydaniem. K (przegląd kalibracji) wchodzi między PR-y, gdy aplikacja go zaproponuje.
+
+| # | Zadanie | Rodzaj | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
 | --- | --- | --- | --- | --- | --- |
-| FBL1 | **3.2 Baza danych, właściwości niestandardowe i widoki (Databases & Custom Properties):** Wprowadzenie magazynu SQLite (w procesie głównym Electrona) jako silnika relacji i zapytań obok plików JSON. Model definiowania dynamicznych atrybutów rekordów (`PropertyDef`: tekst, wybór jedno/wielokrotny, liczba, data, checkbox, relacja). Silnik widoków: Tabela, Tablica Kanban (grupowanie po polu wyboru np. status), Lista. | Całość | najpierw decyzja o architekturze (SQLite w folderze OneDrive dwóch komputerów – granica danych): główna sesja Opus 5.5 · max, druga opinia Fable 5.1; kod `wykonawca-opus` · xhigh | 10–15 h | Użytkownik może dodawać dowolne pola do zadań/projektów; przełączanie widoków Tabela / Kanban / Lista działa płynnie z zachowaniem spójności danych i synchronizacji OneDrive. |
-| FBL2 | **5.1 Dynamiczne przepakowywanie dnia (Dynamic Auto-Rescheduling):** Algorytm optymalizacyjny `repackDaySchedule`: automatyczne przesuwanie w dół kolejnych elastycznych bloków w przypadku przeciągnięcia zadania lub wstawienia nagłego bloku. Respektowanie twardych granic: bloki stałe (spotkania, wykłady), maksima dnia, bufor przejścia, minimalna regeneracja. Podgląd propozycji zmian z opcją „Zatwierdź” i natychmiastowym „Cofnij”. | Logika | `wykonawca-opus` · xhigh | 7–10 h | Poślizg w zadaniu generuje optymalny, bezkolizyjny rozkład reszty dnia; bloki stałe pozostają nienaruszone; twardy koniec projektów jest bezwzględnie chroniony. |
+| J1 = SNT7 | **2.2 Długość bloku przeciągnięciem krawędzi (D365):** na osi „Dziś” i „Szablonów”: dolna krawędź – koniec, górna – start przy tym samym końcu, krok 5 min, najkrótszy 5 min; niezaczęte bloki jak D305 (`movable`). Trwający blok tego samego rodzaju (`movable` poza warunkiem „niezaczęty” – nie sesja, wykład, zjazd ani druga zmiana) – dolna krawędź zmienia planowaną długość, nie wcześniej niż teraz (w górę do 5 min): do granicy od razu, za granicą koszt przedłużenia w podpowiedzi przeciągania i „Potwierdź · Anuluj” przy bloku przez 10 s (to samo zdarzenie i koszt co „Przedłuż”). Niezaczęty – zapis drogą pola „Długość” (`durationMin`, ostrzeżenia, D72). Kliknięcie bez ruchu – edycja (D305). Do J3 wydłużenie na następny blok działa jak dziś przeciągnięcie (D305): plan bez zmian, prognoza przesuwa kolejne elastyczne. | Całość | `wykonawca-opus` (trwający blok: zdarzenie, koszt, timer) + `wykonawca-sonnet` (gest na osi) · xhigh | 3–4,5 h | Obie krawędzie zmieniają blok co 5 min z podglądem godzin w „Dziś” i „Szablonach”; trwające sesja i wykład – bez uchwytu; dolna krawędź trwającego nie schodzi przed teraz; trwający blok wydłużony za granicę bez „Potwierdź” nie zmienia niczego, z „Potwierdź” – przedłużenie z kosztem jak „Przedłuż”; testy gestu w E2E i kosztu w unit. |
+| J2 = SNT8 | **Nowy blok kliknięciem w siatkę (D366):** w „Tygodniu” klik w pustą siatkę – okienko nowego bloku w miejscu (kategoria, długość, „Dodaj”, „Więcej” = pełna edycja), dzień otwiera nagłówek dnia albo blok; przeciągnięcie po pustym miejscu osi („Dziś”, „Szablony”, „Tydzień”) ustawia start i koniec; kolumna godzin klikalna; w „Dziś” klik jak dotąd – panel edycji. | Interfejs | `wykonawca-sonnet` · high | 3–4,5 h | Klik w pusty „Tydzień” o 10:00 we wtorek otwiera okienko, „Dodaj” zapisuje blok we wtorek o 10:00; przeciągnięcie 10:00–11:30 po pustym miejscu daje blok 90 min; klik w nagłówek otwiera dzień; testy E2E. |
+| J3 = FBL2a | **Rozsuwanie (D367):** wstawienie, przeciągnięcie albo wydłużenie bloku na zajęte miejsce zapisuje nowe godziny kolejnych bloków elastycznych w pliku dnia (jedna partia, jeden „Cofnij”); w trakcie przeciągania widać ich nowe miejsca; pasek „Przesunięto N bloków · Cofnij” (D313); stałe, chronione i zaczęte zostają, elastyczny przeskakuje stały jak w prognozie; nadmiar – znacznik wariantów według jego warunków. | Logika | `wykonawca-opus` · xhigh | 4–6 h | Przykłady z decyzji są testami silnika: bloki za wstawionym przesuwają się bez nakładania, stałe na miejscu; „Cofnij” przywraca plik dnia; nadmiar za granicą zapala znacznik. |
+| J4 = FBL2b | **Domykanie luk (D368):** po wcześniejszym końcu, usunięciu albo skróceniu bloku luka ≥ 10 min przed kolejnym elastycznym – pasek cicho „Luka N min · Przesuń resztę wcześniej · Zostaw”; w trybie sesji i zajęć po ich końcu; nigdy przed bieżącą chwilą; pytanie z identyfikatorem (raz na lukę, bez podwójnego pytania na dwóch komputerach). | Całość | `wykonawca-opus` · xhigh (pasek, prowadzący) | 3–4 h | Luka 20 min po wcześniejszym końcu daje jedno pytanie w pasku; „Przesuń” zapisuje nowe godziny, „Cofnij” je przywraca; luka 5 min i tryb sesji – bez pytania; test w CI na Windows dla paska. |
+| J5 = FBL2c | **„Ułóż pod energię” (D369):** wariant w „Przestaw plan” i w planie porannym, gdy nowa kolejność wyraźnie podnosi najniższą energię dnia (próg – T przy J5); przestawia tylko elastyczne w tej samej przerwie między stałymi; deterministyczny, oceniany ponownym policzeniem dnia jak warianty (D340). | Logika | `wykonawca-opus` · xhigh | 4–6 h | Dzień z najdroższym blokiem przy najniższej energii dostaje wariant, który podnosi minimum energii; dzień bez poprawy – bez wariantu; stałe, chronione i zaczęte na miejscu; testy silnika. |
 
-*Razem Blok 1: 17–25 h (2 zadania)*
+*Razem ciąg J: 17–25 h (5 pozycji, wersje 1.4.0–1.8.0)*
+
+**Odłożone (D364):** FBL1 – własne bazy jak w Notion (pola, widoki Tabela / Kanban / Lista), 10–15 h. Odpowiedzi
+z 10.11 zapisane w D364; przy powrocie najpierw decyzja o architekturze (SQLite w folderze OneDrive dwóch komputerów –
+granica danych): Opus 5.5 · max, druga opinia Fable 5.1; kod `wykonawca-opus` · xhigh.
 
 ---
 
@@ -90,9 +103,8 @@ kodu rozszerzeń. Główna sesja Opus 5.5 · high zleca, sprawdza, przegląda i 
 | SNT4 | **3.4 Brak załączników, plików i multimediów:** Obsługa załączników w blokach i zadaniach: przeciąganie plików (`drag & drop`), zapisywanie w podfolderze `attachments/<id>/`. Obsługa klikalnych linków zewnętrznych (URL do GitHuba, Figmy, Notion, Dysku) z automatycznym pobieraniem tytułu/ikony i otwieraniem w domyślnej przeglądarce (`shell.openExternal`). | Całość | `wykonawca-opus` (zapis w folderze danych, sprawdzenie adresu przed `shell.openExternal`) + `wykonawca-sonnet` (ekran) · xhigh | 3,5–5 h | Przeciągnięcie pliku do bloku zapisuje załącznik i wyświetla miniaturę/ikonę; kliknięcie linku zewnętrznego otwiera właściwą aplikację/przeglądarkę. |
 | SNT5 | **4.1 Brak podzadań i list kontrolnych (Subtasks & Checklists):** Rozszerzenie struktury bloku i zadania o listę kroków `subtasks: Array<{ id, title, done, order }>`. Interfejs listy w `BlockEditor`: szybkie dodawanie na Enter, zmiana kolejności, odhaczanie checkboxów. Wyświetlanie postępu (np. `3/5 ✓`) na kafelku bloku na osi czasu oraz bezpośrednia integracja z paskiem pulpitu (`DesktopBar`). | Całość | `wykonawca-sonnet` · xhigh (pasek pulpitu) | 3–4,5 h | Każdy blok pracy może zawierać checklistę; kroki można odhaczać zarówno w oknie głównym, jak i bezpośrednio na pasku pulpitu podczas trwania timera. |
 | SNT6 | **Globalne wyszukiwanie (Ctrl+K / Spotlight / Command Palette):** Szybkie okno wyszukiwarki wywoływane globalnym skrótem w aplikacji `Ctrl+K` / `Ctrl+P`. Wyszukiwanie pełnotekstowe w czasie rzeczywistym po tytułach bloków, notatkach Markdown, zadaniach backlogu, rutynach i szablonach. Nawigacja klawiaturą (góra/dół/Enter) ze skokiem do wybranego dnia lub rekordu. | Interfejs | `wykonawca-sonnet` · high | 4–6 h | Naciśnięcie `Ctrl+K` otwiera paletę; wpisanie frazy błyskawicznie filtruje rekordy; wybór wyniku nawiguje bezpośrednio do widoku i zaznacza element. |
-| SNT7 | **2.2 Zmiana długości bloku przeciągnięciem krawędzi (jak w Google Calendar):** Po najechaniu na dolną krawędź bloku na osi dnia pojawia się kursor zmiany rozmiaru; przeciągnięcie w dół wydłuża, w górę skraca blok – koniec staje na siatce 5 min jak start w D305, najkrótszy blok 5 min. W trakcie przeciągania podgląd nowej godziny końca i długości. Zapis tą samą drogą co pole „Długość” w `BlockEditor` (`durationMin`), więc te same ostrzeżenia (maksima dnia, twardy koniec) – ostrzega, nie blokuje (D72). Zwykłe kliknięcie dalej otwiera blok do edycji (D305). Działa wszędzie, gdzie jest `Timeline` (Dziś, Szablony), a w widokach wielodniowych SNT1 – ten sam gest. Przed startem decyzja D: czy także górna krawędź (zmiana startu przy stałym końcu), które bloki (jak D305: niezaczęte z własną godziną; czy też blok trwający – wydłużenie planu), czy bloki stałe z rozkładu (wykład) i bloki z rutyną (długość z kroków). | Interfejs | `wykonawca-sonnet` · high | 1,5–2,5 h | Przeciągnięcie dolnej krawędzi bloku zmienia jego długość co 5 min, podgląd pokazuje nową godzinę końca, po puszczeniu plan, prognoza energii i ostrzeżenia liczą się od nowa; kliknięcie bez ruchu otwiera edycję; test gestu w E2E. |
 
-*Razem Blok 3: 26–39 h (7 zadań)*
+*Razem Blok 3: 24,5–36,5 h (6 zadań; SNT7 przeniesione do ciągu J). W SNT1 widoki wielodniowe dostają gesty J1 i J2.*
 
 ---
 
@@ -112,11 +124,12 @@ kodu rozszerzeń. Główna sesja Opus 5.5 · high zleca, sprawdza, przegląda i 
 
 | Blok | Zakres | Wykonawcy (D354) | Przegląd | Zadania | Szacunek |
 | :--- | :--- | :--- | :--- | :---: | :---: |
-| **Blok 1** | Architektura danych (SQLite), widoki danych, przepakowywanie dnia | `wykonawca-opus`; FBL1 najpierw decyzja o architekturze (Opus 5.5 · max, druga opinia Fable 5.1) | xhigh | 2 | **17–25 h** |
+| **Blok 1 = ciąg J** | Długość przeciągnięciem, nowy blok kliknięciem w siatkę, rozsuwanie, domykanie luk, „Ułóż pod energię” (D363–D369) | `wykonawca-opus`; gesty i okienko – `wykonawca-sonnet` | xhigh; J2 – high | 5 | **17–25 h** |
 | **Blok 2** | Silnik dnia, RRULE (RFC 5545), Task Inbox, bufory energii | `wykonawca-opus`; ekrany OPS2 – `wykonawca-sonnet` | xhigh | 3 | **15–23 h** |
-| **Blok 3** | Widoki czasowe, warstwy kalendarza, Markdown, załączniki, podzadania, Ctrl+K, długość przeciągnięciem | `wykonawca-sonnet`; zapis plików dni (SNT1) i załączników (SNT4) – `wykonawca-opus` | high; SNT1 (zapis dni), SNT2, SNT4, SNT5 – xhigh | 7 | **26–39 h** |
+| **Blok 3** | Widoki czasowe, warstwy kalendarza, Markdown, załączniki, podzadania, Ctrl+K | `wykonawca-sonnet`; zapis plików dni (SNT1) i załączników (SNT4) – `wykonawca-opus` | high; SNT1 (zapis dni), SNT2, SNT4, SNT5 – xhigh | 6 | **24,5–36,5 h** |
 | **Blok 4** | Wydarzenia całodniowe, termin i data wykonania, priorytety | `wykonawca-sonnet`; części w silniku dnia – `wykonawca-opus` | high; HKU1 i silnik – xhigh | 3 | **6,5–9,5 h** |
-| **Łącznie** | Parzystość z Google Calendar, Notion i Sunsama | – | – | **15** | **64,5–96,5 h** |
+| **Łącznie** | Parzystość z Google Calendar, Notion i Sunsama | – | – | **17** | **63–94 h** |
+| *Odłożone* | FBL1 – własne bazy jak w Notion (D364) | – | – | 1 | *10–15 h* |
 
 ## Gotowe, gdy
 
