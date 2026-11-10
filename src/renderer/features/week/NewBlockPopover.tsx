@@ -17,13 +17,9 @@ import { useDay, type DayModel } from '../../store/day'
 import { categoryOptions, type Names } from '../plan/blockView'
 import { lastNewBlockCategory, rememberNewBlockCategory, startCategory } from '../plan/lastCategory'
 import { ExchangeDialog } from '../today/ExchangeDialog'
-import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { addWeekBlocks } from './weekActions'
 import { NEW_BLOCK_WIDTH } from './weekLayout'
 import { daysLabel, pastWarning } from './weekText'
-
-/** The length of a new block that was only clicked, as the day's own „+ Blok” (D366). */
-export const NEW_BLOCK_MIN = DEFAULT_NEW_BLOCK_MIN
 
 /** A block to be added to a day (the exchange of today's comes first, the rest after it). */
 interface Entry {
@@ -60,7 +56,7 @@ export function NewBlockPopover({
   namesOf: (date: string) => Names
   place: { left: number; top: number }
   onClose: () => void
-  /** Some days could not be saved: only they are left to add (the rest are in the plan already). */
+  /** Some days were not written: only they are left to add (the rest are in the plan, or wait for an answer to a question). */
   onDates: (dates: string[]) => void
   /** „Więcej” (one day): the block as it stands now, to be edited in the day (nothing saved). */
   onMore: (block: PlanBlock) => void
@@ -93,7 +89,11 @@ export function NewBlockPopover({
     return () => document.removeEventListener('pointerdown', away)
   }, [exchange, onClose])
   const blockOn = (date: string): PlanBlock => newUserBlock(categoryId, startMin, length, namesOf(date).settings.categories[categoryId])
-  /** Saves the entries one after another; the days that did not go stay in the window (their toast said which). */
+  /**
+   * Saves the entries, all the days in one go; the days where nothing was written stay in the window (their toast said which),
+   * the ones that wait for an answer to a question (a conflict) or whose outcome is not known do not – added again they
+   * would make a second block.
+   */
   const save = async (entries: readonly Entry[]) => {
     const { saved, failed } = await addWeekBlocks(entries)
     if (saved.length) rememberNewBlockCategory(categoryId)

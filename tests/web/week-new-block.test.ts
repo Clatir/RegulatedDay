@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { lastNewBlockCategory, rememberNewBlockCategory, startCategory } from '@renderer/features/plan/lastCategory'
 import { columnAt, dayIndexes, sameDrag } from '@renderer/features/week/weekLayout'
-import { unreadableText } from '@renderer/features/week/weekActions'
+import { unknownText, unreadableText, weekAdds } from '@renderer/features/week/weekActions'
 import { daysLabel, pastWarning } from '@renderer/features/week/weekText'
 
 // The rectangles the columns really have (the gaps between them are not columns): 136 px wide, 4 px apart, from x = 148.
@@ -22,6 +22,10 @@ describe('kolumna pod wskaźnikiem (D371)', () => {
   it('w odstępie – najbliższa kolumna', () => {
     expect(columnAt(148 + 137, COLS)).toBe(0)
     expect(columnAt(148 + 139, COLS)).toBe(1)
+  })
+  it('bez prostokątów (siatki nie ma na ekranie) – kolumna zapasowa, nie wyjątek', () => {
+    expect(columnAt(300, [], 4)).toBe(4)
+    expect(columnAt(300, [])).toBe(0)
   })
   it('poza siatką – pierwsza lub ostatnia kolumna', () => {
     expect(columnAt(10, COLS)).toBe(0)
@@ -115,5 +119,34 @@ describe('komunikat o dniach z nieczytelnym plikiem (D371)', () => {
   })
   it('kilka dni – lista, reszta zapisana', () => {
     expect(unreadableText(['2026-11-11', '2026-11-12'])).toBe('Nie dodano bloków w dniach: 11.11.2026 · środa, 12.11.2026 · czwartek – ich pliki są teraz nieczytelne. Spróbuj za chwilę.')
+  })
+})
+
+describe('co się stało z dniami po „Dodaj” (D371)', () => {
+  const D = ['2026-11-10', '2026-11-11', '2026-11-12']
+  const ok = { status: 'applied' as const }
+  it('wszystkie zapisane (też czekające na folder)', () => {
+    expect(weekAdds(D, D, [ok, { status: 'waiting' as const }, ok], true)).toEqual({ saved: D, pending: [], failed: [], unknown: false })
+  })
+  it('dzień ze zmianą z innego komputera czeka na pytanie – nie zostaje do ponownego zapisu', () => {
+    const r = weekAdds(D, D, [ok, { status: 'conflict' as const }, { status: 'changedElsewhere' as const }], true)
+    expect(r).toEqual({ saved: [D[0]], pending: [D[1], D[2]], failed: [], unknown: false })
+    expect(weekAdds(D, D, [{ status: 'removedElsewhere' as const }, ok, ok], true).pending).toEqual([D[0]])
+  })
+  it('plik uszkodzony albo nieczytelny – nic nie zapisano, dzień zostaje', () => {
+    // The second day was never sent (its file could not be read).
+    const r = weekAdds(D, [D[0]!, D[2]!], [ok, { status: 'broken' as const }], true)
+    expect(r).toEqual({ saved: [D[0]], pending: [], failed: [D[1], D[2]], unknown: false })
+  })
+  it('błąd po wysłaniu edycji (nie wiadomo, czy zapisano) – dni nie wracają do ponownego zapisu', () => {
+    const r = weekAdds(D, [D[0]!, D[2]!], null, true)
+    expect(r).toEqual({ saved: [], pending: [D[0], D[2]], failed: [D[1]], unknown: true })
+  })
+  it('błąd przed wysłaniem – nic nie zapisano, wszystkie dni zostają', () => {
+    expect(weekAdds(D, [], null, false)).toEqual({ saved: [], pending: [], failed: D, unknown: false })
+  })
+  it('komunikat o nieznanym wyniku nazywa dni', () => {
+    expect(unknownText(['2026-11-11'])).toBe('Nie wiadomo, czy blok trafił do dnia: 11.11.2026 · środa. Sprawdź tydzień – nic nie zostanie dodane ponownie.')
+    expect(unknownText(D.slice(0, 2))).toContain('do dni: 10.11.2026 · wtorek, 11.11.2026 · środa')
   })
 })

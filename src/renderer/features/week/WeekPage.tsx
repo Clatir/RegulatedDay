@@ -19,10 +19,10 @@ import { useMachine } from '../../store/machine'
 import { openDay, setBlockDraft } from '../../store/ui'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockColor, blockName, type Names } from '../plan/blockView'
-import { snapMinute, type GridRange } from '../plan/gridCreate'
+import { DEFAULT_NEW_BLOCK_MIN, snapMinute, type GridRange } from '../plan/gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { GoalsPanel } from './GoalsPanel'
-import { NEW_BLOCK_MIN, NewBlockPopover } from './NewBlockPopover'
+import { NewBlockPopover } from './NewBlockPopover'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, goalsMonthOfWeek, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, weekTitle, type Tone } from './weekText'
 
@@ -96,10 +96,21 @@ function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: nu
   const marks = hourMarks(lo, hi)
   const namesOf = useMemo(() => (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests }), [rd, routines, requests])
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(7, minmax(0, 1fr))` }
-  /** The rectangle a column has on the screen. */
-  const columnRect = (i: number): DOMRect => bodyRef.current!.querySelector(`[data-testid="week-col-${days[i]!.date}"]`)!.getBoundingClientRect()
-  /** The column under `x` (the pointer of a drag may be in another one than where it began). */
-  const columnUnder = (x: number): number => columnAt(x, days.map((_, i) => columnRect(i)))
+  /** The rectangle a column has on the screen; null when it is not there. */
+  const columnRect = (i: number): DOMRect | null => bodyRef.current?.querySelector(`[data-testid="week-col-${days[i]?.date}"]`)?.getBoundingClientRect() ?? null
+  // The columns do not move while a drag goes on: their rectangles are read once, when the pointer first asks.
+  const rects = useRef<Array<{ left: number; right: number }> | null>(null)
+  const readRects = (): Array<{ left: number; right: number }> => {
+    const out: Array<{ left: number; right: number }> = []
+    for (let i = 0; i < days.length; i++) {
+      const r = columnRect(i)
+      if (!r) return []
+      out.push({ left: r.left, right: r.right })
+    }
+    return out
+  }
+  /** The column under `x` (the pointer of a drag may be in another one than where it began); `fallback` where the grid cannot be read. */
+  const columnUnder = (x: number, fallback: number): number => columnAt(x, (rects.current ??= readRects()), fallback)
   /** A click (an hour long) or a drag over an empty place of the columns `first`–`last` asks for a new block there. */
   const pickOn = (first: number, last: number, r: GridRange) => {
     const body = bodyRef.current?.getBoundingClientRect()
@@ -108,6 +119,7 @@ function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: nu
     const side = columnRect
     const a = side(idx[0]!)
     const b = side(idx.at(-1)!)
+    if (!a || !b) return
     const place = popoverPlace({ gridWidth: body.width, colLeft: a.left - body.left, colRight: b.right - body.left, top: a.top - body.top + axisY(r.startMin, lo), width: NEW_BLOCK_WIDTH })
     setPick({ seq: ++asks.current, dates: idx.map((i) => days[i]!.date), startMin: r.startMin, durationMin: r.endMin - r.startMin, place })
   }
@@ -143,7 +155,8 @@ function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: nu
             columnUnder={columnUnder}
             onHold={(range, x) => {
               // Only a change of the columns or the hours is drawn again – the pointer moves on a good deal more often.
-              const next = range ? { from: i, to: columnUnder(x), range } : null
+              if (!range) rects.current = null
+              const next = range ? { from: i, to: columnUnder(x, i), range } : null
               setHeld((was) => (sameDrag(was, next) ? was : next))
             }}
             onPick={pickOn}
@@ -241,7 +254,7 @@ function DayColumn({
   marks: number[]
   names: Names
   brightness: number
-  columnUnder: (x: number) => number
+  columnUnder: (x: number, fallback: number) => number
   onHold: (range: GridRange | null, x: number) => void
   onPick: (first: number, last: number, range: GridRange) => void
   held: GridRange | null
@@ -252,13 +265,14 @@ function DayColumn({
     lo,
     hi,
     ppm: WEEK_PPM,
-    flatMin: NEW_BLOCK_MIN,
+    axis: 'xy',
+    flatMin: DEFAULT_NEW_BLOCK_MIN,
     onClick: (min, rect) => {
       const startMin = Math.min(Math.max(snapMinute(min), lo), hi)
-      onPick(index, index, { startMin, endMin: startMin + NEW_BLOCK_MIN })
+      onPick(index, index, { startMin, endMin: startMin + DEFAULT_NEW_BLOCK_MIN })
     },
     onHold,
-    onRange: (r, _rect, x) => onPick(index, columnUnder(x), r)
+    onRange: (r, _rect, x) => onPick(index, columnUnder(x, index), r)
   })
   const shown = held ?? (waiting ? { startMin: waiting.startMin, endMin: waiting.startMin + waiting.durationMin } : null)
   return (

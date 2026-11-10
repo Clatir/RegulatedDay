@@ -27,6 +27,7 @@ import { useMachine } from '../../store/machine'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis, daySummary } from '../plan/dayItems'
+import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgePatch, edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
@@ -180,7 +181,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   }, [focus, ritual])
 
   /** A new block: in the panel first (nothing is saved until „Dodaj”); an hour long, or as long as the range dragged over the axis (D366). */
-  const create = (startMin: number, durationMin = 60) => {
+  const create = (startMin: number, durationMin = DEFAULT_NEW_BLOCK_MIN) => {
     const b = newUserBlock('inne', startMin, durationMin, model.state.settings.categories.inne)
     setSelected(null)
     setDraft(b)

@@ -24,19 +24,25 @@ describe('minuta z pozycji (D366)', () => {
   })
 })
 
-describe('próg przeciągnięcia to odległość, nie sam pion (D371)', () => {
-  it('ruch poziomy też jest przeciągnięciem', () => {
-    expect(dragStarted(4, 0)).toBe(true)
-    expect(dragStarted(-30, 1)).toBe(true)
+describe('próg przeciągnięcia: odległość tam, gdzie ruch w bok coś znaczy (D371)', () => {
+  it('na jednej kolumnie („Dziś”, „Szablony”) tylko pion – klik z drgnięciem w bok to dalej klik', () => {
+    expect(dragStarted(4, 0, 'y')).toBe(false)
+    expect(dragStarted(-30, 3.9, 'y')).toBe(false)
+    expect(dragStarted(3, 4, 'y')).toBe(true)
+    expect(dragStarted(0, -4, 'y')).toBe(true)
+  })
+  it('na wielu kolumnach („Tydzień”) ruch poziomy też jest przeciągnięciem', () => {
+    expect(dragStarted(4, 0, 'xy')).toBe(true)
+    expect(dragStarted(-30, 1, 'xy')).toBe(true)
   })
   it('pion – jak dotąd', () => {
-    expect(dragStarted(0, 4)).toBe(true)
-    expect(dragStarted(0, -4)).toBe(true)
-    expect(dragStarted(0, 3.9)).toBe(false)
+    expect(dragStarted(0, 4, 'xy')).toBe(true)
+    expect(dragStarted(0, -4, 'xy')).toBe(true)
+    expect(dragStarted(0, 3.9, 'xy')).toBe(false)
   })
   it('krótki ruch w obie strony to klik', () => {
-    expect(dragStarted(2, 2)).toBe(false)
-    expect(dragStarted(2.9, 2.9)).toBe(true)
+    expect(dragStarted(2, 2, 'xy')).toBe(false)
+    expect(dragStarted(2.9, 2.9, 'xy')).toBe(true)
   })
 })
 
@@ -70,8 +76,18 @@ describe('zakres z przeciągnięcia po pustym miejscu (D366)', () => {
   it('przeciągnięcie o krok siatki w pionie – 5 min, nie godzina', () => {
     expect(gridRange(at(10), at(10, 5), LO, 24 * 60, WEEK_PPM, DEFAULT_NEW_BLOCK_MIN)).toEqual({ startMin: 600, endMin: 605 })
   })
-  it('przy dolnym brzegu osi blok ma co najmniej 5 min', () => {
-    expect(gridRange(at(24), at(24) + 50, LO, 24 * 60, WEEK_PPM)).toEqual({ startMin: 24 * 60, endMin: 24 * 60 + 5 })
+  it('przy dolnym brzegu osi blok ma co najmniej 5 min i kończy się na osi', () => {
+    expect(gridRange(at(24), at(24) + 50, LO, 24 * 60, WEEK_PPM)).toEqual({ startMin: 24 * 60 - 5, endMin: 24 * 60 })
+    expect(gridRange(at(24) - 1, at(24) + 50, LO, 24 * 60, WEEK_PPM)).toEqual({ startMin: 24 * 60 - 5, endMin: 24 * 60 })
+  })
+  it('przycięcie do brzegu to nie „płaskie” przeciągnięcie – bez godziny poza osią', () => {
+    // Both ends were far apart and went to the bottom edge: 5 min there, not the hour of a click.
+    expect(gridRange(at(23, 50), at(24) + 200, LO, 24 * 60, WEEK_PPM, DEFAULT_NEW_BLOCK_MIN)).toEqual({ startMin: 23 * 60 + 50, endMin: 24 * 60 })
+    expect(gridRange(at(24) + 100, at(24) + 300, LO, 24 * 60, WEEK_PPM, DEFAULT_NEW_BLOCK_MIN)).toEqual({ startMin: 24 * 60 - 5, endMin: 24 * 60 })
+    expect(gridRange(-300, -100, LO, 24 * 60, WEEK_PPM, DEFAULT_NEW_BLOCK_MIN)).toEqual({ startMin: LO, endMin: LO + 5 })
+  })
+  it('godzina z płaskiego przeciągnięcia nie wychodzi za oś', () => {
+    expect(gridRange(at(23, 30), at(23, 30), LO, 24 * 60, WEEK_PPM, DEFAULT_NEW_BLOCK_MIN)).toEqual({ startMin: 23 * 60 + 30, endMin: 24 * 60 })
   })
 })
 

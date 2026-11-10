@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.0
+- „Tydzień”: kliknięcie w pustą siatkę otwiera obok dnia kartę nowego bloku – kategoria (na start ostatnio użyta), długość, „Dodaj”, „Więcej” (pełna edycja) i „Anuluj”. Dzień otwierasz teraz kliknięciem w jego nagłówek albo w blok. W dniu minionym karta ostrzega „Ten dzień już minął”, ale zapis jest możliwy.
+- Przeciągnięcie po pustym miejscu osi („Dziś”, „Szablony”, „Tydzień”) od razu ustawia start i koniec nowego bloku, co 5 min, z godzinami w trakcie. W „Tygodniu” przeciągnięcie przez kilka dni dodaje osobny blok o tych samych godzinach w każdym z nich.
+- W „Dziś” i „Szablonach” kolumna godzin działa jak oś: kliknięcie i przeciągnięcie tworzą nowy blok.
+
 ## 1.4.0
 - Długość bloku zmieniasz teraz przeciągnięciem jego krawędzi na osi „Dziś” i „Szablonów”: dolna krawędź przesuwa koniec, górna – start przy tym samym końcu, co 5 min (najkrótszy blok 5 min). W trakcie widać godziny i długość; zapis jak w polu „Długość”, z tymi samymi ostrzeżeniami. Zwykłe kliknięcie dalej otwiera blok.
 - Trwający blok z godziną w planie ma tylko dolną krawędź: koniec nie schodzi przed teraz, do granicy zmiana jest od razu, a za granicą widać koszt przedłużenia i po puszczeniu „Potwierdź · Anuluj” przy bloku przez 10 s – bez potwierdzenia nic się nie zmienia, z nim to samo przedłużenie i koszt co „Przedłuż” w pasku. Sesja, wykład, zjazd i druga zmiana – dalej tylko „Przedłuż”.

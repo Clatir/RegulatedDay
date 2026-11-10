@@ -26,6 +26,7 @@ import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis } from '../plan/dayItems'
 import { edgePatch, edgeSummary } from '../plan/edgeEdit'
+import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { Timeline } from '../plan/Timeline'
 import { SettingNumber } from '../settings/SettingNumber'
 
@@ -239,7 +240,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
               const b = version.blocks.find((x) => x.id === id)
               return b ? edgeSummary(b, span, edge, shown) : null
             }}
-            onCreate={(min, durationMin = 60) => {
+            onCreate={(min, durationMin = DEFAULT_NEW_BLOCK_MIN) => {
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin, origin: 'template' })
               void putBlock(b).then(() => setSelected(b.id))
             }}

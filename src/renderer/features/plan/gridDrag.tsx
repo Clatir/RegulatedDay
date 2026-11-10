@@ -36,6 +36,8 @@ export function useGridCreate(o: {
   lo: number
   hi: number
   ppm: number
+  /** What moves start a drag: up and down (one column, the default) or the distance (several columns, D371). */
+  axis?: 'y' | 'xy'
   flatMin?: number
   onClick: (minute: number, rect: DOMRect) => void
   /** A finished drag: its range, the column's rectangle and where the pointer let go (`clientX`: a drag may leave the column, D371). */
@@ -84,7 +86,7 @@ export function useGridCreate(o: {
         return
       }
       if (!h.moved) {
-        if (!dragStarted(e.clientX - h.x0, e.clientY - h.y0)) return
+        if (!dragStarted(e.clientX - h.x0, e.clientY - h.y0, o.axis ?? 'y')) return
         // From here the column follows the pointer wherever it goes (not before: a click on a button inside stays one).
         e.currentTarget.setPointerCapture(e.pointerId)
         h.moved = true

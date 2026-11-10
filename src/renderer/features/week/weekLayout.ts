@@ -98,8 +98,10 @@ export function popoverPlace(o: { gridWidth: number; colLeft: number; colRight: 
 /**
  * The column under `x` (D371: a drag over several days), among the rectangles the columns really have on the screen
  * (left to right): the one that holds `x`; in a gap, or beyond the first or the last (a drag may leave the grid) – the nearest.
+ * No rectangles (the grid is not on the screen): `fallback`.
  */
-export function columnAt(x: number, cols: ReadonlyArray<{ left: number; right: number }>): number {
+export function columnAt(x: number, cols: ReadonlyArray<{ left: number; right: number }>, fallback = 0): number {
+  if (!cols.length) return fallback
   let best = 0
   let bestDistance = Number.POSITIVE_INFINITY
   cols.forEach((c, i) => {

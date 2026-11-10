@@ -5,13 +5,13 @@
  */
 import type { GoalsProgress } from '@shared/engine/goals'
 import type { HorizonBlockState, HorizonDay } from '@shared/engine/week'
-import { countLabel, durationLabel, formatNumber, ofLabel } from '@shared/format'
+import { countLabel, durationLabel, formatNumber, ofLabel, WEEKDAY_NAMES } from '@shared/format'
 import type { GoalArea } from '@shared/model/goals'
 import { addDays, weekday } from '@shared/time/zone'
 import { MONTH_NAMES } from '../calendar/MonthGrid'
 
 export const WEEKDAY_SHORT = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'] as const
-export const WEEKDAY_FULL = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'] as const
+export const WEEKDAY_FULL = WEEKDAY_NAMES
 
 const day = (d: string) => String(Number(d.slice(8, 10)))
 const month = (d: string) => d.slice(5, 7)

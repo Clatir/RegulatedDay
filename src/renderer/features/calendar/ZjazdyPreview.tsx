@@ -5,12 +5,12 @@
  * and the days gone are shown grey with their reason, without a choice.
  */
 import type { ZjazdDay } from '@shared/import/zjazdy'
+import { plDateWithWeekday } from '@shared/format'
 import { classTitle } from '@shared/import/zjazdy'
 import { TextField } from '../../components/fields'
 import { Segmented, Toggle, cx } from '../../components/ui'
 import {
   blockedText,
-  dayHeading,
   hoursText,
   kindOf,
   removeClass,
@@ -50,7 +50,7 @@ function DayCard({ d }: { d: DraftDay }) {
   return (
     <section className={cx('flex flex-col gap-2 rounded border border-line bg-panel px-3 py-2', blocked && 'opacity-60')} data-testid={`zjazdy-day-${date}`} data-skip={d.day.skip ?? ''} data-load={String(d.load)}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="text-[13px] font-medium">{dayHeading(date)}</span>
+        <span className="text-[13px] font-medium">{plDateWithWeekday(date)}</span>
         {blocked ? (
           <span className="text-[12px] text-muted" data-testid={`zjazdy-blocked-${date}`}>
             {blocked}
@@ -65,7 +65,7 @@ function DayCard({ d }: { d: DraftDay }) {
             { value: 'zdalny', label: 'zdalny', disabled: !!blocked }
           ]}
           onChange={(k) => onChange((all) => setKind(all, date, k))}
-          aria-label={`Rodzaj dnia ${dayHeading(date)}`}
+          aria-label={`Rodzaj dnia ${plDateWithWeekday(date)}`}
           data-testid={`zjazdy-kind-${date}`}
         />
         {d.day.replaces && !blocked && <span className="text-[12px] text-sea">zastąpi poprzedni import</span>}

@@ -6,6 +6,7 @@
  * tests share it.
  */
 import { MAX_BLOCK_MIN } from './model/plan'
+import { weekday } from './time/zone'
 
 /** No-break space: a number never breaks between its thousands. */
 export const NBSP = ' '
@@ -46,6 +47,12 @@ const pad2 = (n: number) => String(n).padStart(2, '0')
 
 /** 'RRRR-MM-DD' → „21.10.2026”. */
 export const plDate = (date: string): string => `${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`
+
+/** The names of the weekdays, Monday first (the nominative, lower case). */
+export const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'] as const
+
+/** 'RRRR-MM-DD' → „12.10.2030 · sobota” (the date with the day of the week). */
+export const plDateWithWeekday = (date: string): string => `${plDate(date)} · ${WEEKDAY_NAMES[weekday(date) - 1]}`
 
 /** 'RRRR-MM-DD' → „21.10” (a short date). */
 export const plDayMonth = (date: string): string => `${date.slice(8, 10)}.${date.slice(5, 7)}`
