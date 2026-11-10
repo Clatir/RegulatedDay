@@ -128,6 +128,54 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(late).not.toHaveAttribute('data-selected', 'true')
       await late.click()
       await expect(late).toHaveAttribute('data-selected', 'true')
+      // D365: the bottom edge moves the end, the top one the start with the same end – 5 min steps, the hours shown while dragging.
+      // The block is short (its end is not written on it): its start as shown, its end that and its saved length.
+      const saved = () => (JSON.parse(readFileSync(dayPath, 'utf8')) as { blocks: Array<{ id: string; startMin: number; durationMin: number }> }).blocks.find((b) => b.id === 'late')!
+      const span = async () => {
+        const m = /(\d\d):(\d\d)/.exec((await late.textContent()) ?? '')!
+        const start = Number(m[1]) * 60 + Number(m[2]) + (Number(m[1]) < 4 ? 1440 : 0)
+        return { start, end: start + saved().durationMin }
+      }
+      const clock = (min: number) => `${String(Math.floor((min % 1440) / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}${min >= 1440 ? ' +1' : ''}`
+      await expect(page.getByTestId('block-late-edge-end')).toBeVisible()
+      await expect(page.getByTestId('block-late-edge-top')).toBeVisible()
+      const s0 = await span()
+      const grab = async (edge: 'top' | 'end') => {
+        await late.scrollIntoViewIfNeeded()
+        const r = (await late.boundingBox())!
+        return { x: r.x + 40, y: edge === 'end' ? r.y + r.height - 3 : r.y + 3 }
+      }
+      const bottom = await grab('end')
+      await page.mouse.move(bottom.x, bottom.y)
+      await page.mouse.down()
+      await page.mouse.move(bottom.x, bottom.y + 16, { steps: 3 })
+      await page.mouse.move(bottom.x, bottom.y + 33, { steps: 3 })
+      // The hours are shown while the edge is held (nothing saved yet).
+      const end1 = Math.round((s0.end + 30) / 5) * 5
+      await expect(page.getByTestId('edge-hint')).toContainText(`${clock(s0.start)}–${clock(end1)}`)
+      // At an edge the cursor is the edge's alone (never „grabbing” of the whole block).
+      await expect(late).toHaveClass(/cursor-ns-resize/)
+      await expect(late).not.toHaveClass(/cursor-grabbing/)
+      await page.mouse.up()
+      await expect.poll(() => saved().durationMin).toBe(end1 - s0.start)
+      const s1 = await span()
+      const top = await grab('top')
+      await page.mouse.move(top.x, top.y)
+      await page.mouse.down()
+      await page.mouse.move(top.x, top.y - 8, { steps: 3 })
+      await page.mouse.move(top.x, top.y - 16.5, { steps: 3 })
+      await page.mouse.up()
+      const start2 = Math.round((s1.start - 15) / 5) * 5
+      await expect.poll(() => saved().durationMin).toBe(s1.end - start2)
+      expect(saved().startMin % 1440).toBe(start2 % 1440)
+      await expect(late).toContainText(clock(start2))
+      // Dragged to under 5 min: the block holds 5 min and no less.
+      const squeeze = await grab('end')
+      await page.mouse.move(squeeze.x, squeeze.y)
+      await page.mouse.down()
+      await page.mouse.move(squeeze.x, squeeze.y - 150, { steps: 6 })
+      await page.mouse.up()
+      await expect.poll(() => saved().durationMin).toBe(5)
       // A dialog keeps the keyboard (A6-21): Tab never leaves it, Ctrl+N of the page waits, Esc gives the focus back.
       await page.getByTestId('block-move').click()
       const moveDialog = page.getByRole('dialog')
@@ -247,6 +295,23 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('template-item').first().click()
       await expect(page.getByTestId('template-editor')).toBeVisible()
       await expect(page.getByTestId('template-timeline')).toContainText('druga zmiana')
+      // D365: a block of the template with its own start (one added on a free place) – the bottom edge lengthens it by
+      // the field's way (30 min, 33 px).
+      const tAxis = page.getByTestId('template-timeline').getByTestId('timeline-axis')
+      await tAxis.click({ position: { x: 120, y: (await tAxis.boundingBox())!.height - 40 } })
+      await expect(page.getByTestId('block-editor')).toBeVisible()
+      const own = page.getByTestId('template-timeline').locator('[data-movable="true"]').first()
+      await expect(own).toBeVisible()
+      await own.scrollIntoViewIfNeeded()
+      const lengthField = page.getByTestId('block-duration')
+      const length0 = await lengthField.inputValue()
+      const ownBox = (await own.boundingBox())!
+      await page.mouse.move(ownBox.x + 40, ownBox.y + ownBox.height - 3)
+      await page.mouse.down()
+      await page.mouse.move(ownBox.x + 40, ownBox.y + ownBox.height + 16, { steps: 3 })
+      await page.mouse.move(ownBox.x + 40, ownBox.y + ownBox.height + 30, { steps: 3 })
+      await page.mouse.up()
+      await expect(lengthField).not.toHaveValue(length0)
       // The name's field is no wider than its `max-w` and the buttons stay in its row (not wrapped under it).
       const name = (await page.getByTestId('template-name').boundingBox())!
       expect(name.width).toBeLessThanOrEqual(262)
@@ -335,6 +400,147 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
         .map((l) => (JSON.parse(l) as { k: string }).k)
         .filter((k) => k.startsWith('block.'))
       expect(kinds).toEqual(['block.start', 'block.pause', 'block.resume', 'block.end'])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('trwający blok (D365): dolna krawędź na osi przedłuża i skraca przez timer, nie przez plan', async () => {
+  // The engine approves the boundary itself at the first work block's start (end of work + 15 min – on a weekend or a
+  // holiday that is 45 min from now): the day's own approval at the end of the logical day (04:00) puts it out of the way
+  // at any hour and on any day of the week – the cost counts only minutes after the boundary. Not run only in the last
+  // 75 min of the logical day, where the block (30 min) and its extension (30 min) would reach over the turn of the day.
+  const nowMin = logicalMinuteOf(logicalToday(), Date.now())
+  test.skip(nowMin > 28 * 60 - 75, 'blok i jego przedłużenie nie mieszczą się już w dobie logicznej (koniec o 04:00)')
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-resize-'))
+  seed(dataDir)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      const late = page.getByTestId('block-late')
+      await expect(late).toBeVisible({ timeout: 30_000 })
+      await page.evaluate((a) => window.rd.logEvents([{ k: 'boundary.approve', day: a.day, boundary: a.boundary, auto: false }]), { day: logicalToday(), boundary: Math.round((Date.now() + (28 * 60 - nowMin - 1) * 60_000) / 60_000) * 60_000 })
+      await late.click()
+      await page.getByTestId('block-timer-start').click()
+      await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
+      // A running block has the bottom edge only (its start is no longer its plan's to move).
+      await expect(page.getByTestId('block-late-edge-end')).toBeVisible()
+      await expect(page.getByTestId('block-late-edge-top')).toHaveCount(0)
+      await expect(late).not.toHaveAttribute('data-movable', 'true')
+      const dayFile = join(dataDir, 'days', logicalToday().slice(0, 4), `${logicalToday()}.json`)
+      const planned = () => (JSON.parse(readFileSync(dayFile, 'utf8')) as { blocks: Array<{ id: string; durationMin: number; startMin: number }> }).blocks.find((b) => b.id === 'late')!
+      const before = planned()
+      const logFile = async () => join(dataDir, 'log', logicalToday().slice(0, 4), logicalToday(), `${(await page.evaluate(() => window.rd.dataView())).computer}.jsonl`)
+      const events = async () =>
+        readFileSync(await logFile(), 'utf8')
+          .trim()
+          .split('\n')
+          .map((l) => JSON.parse(l) as { k: string; minutes?: number })
+          .filter((e) => e.k.startsWith('block.'))
+      const drag = async (dy: number) => {
+        await late.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+        const r = (await late.boundingBox())!
+        const x = r.x + 40
+        const y = r.y + r.height - 3
+        await page.mouse.move(x, y)
+        await page.mouse.down()
+        await page.mouse.move(x, y + dy / 2, { steps: 4 })
+        await page.mouse.move(x, y + dy, { steps: 4 })
+        // The hours and what the end brings are shown while the edge is held.
+        await expect(page.getByTestId('edge-hint')).toBeVisible()
+        await page.mouse.up()
+      }
+      // Down by 30 min (33 px): inside the approved boundary (the end of the day) – written at once as „Przedłuż”, the plan of the day untouched.
+      await drag(33)
+      await expect.poll(async () => (await events()).filter((e) => e.k === 'block.extend').length).toBe(1)
+      const extended = (await events()).find((e) => e.k === 'block.extend')!.minutes!
+      expect(extended).toBeGreaterThanOrEqual(25)
+      expect(extended).toBeLessThanOrEqual(35)
+      expect(planned()).toEqual(before)
+      await expect(page.getByTestId('resize-confirm')).toHaveCount(0)
+      // Up by far more than the block holds: the end stops at now (rounded up) – a shortening, never before now.
+      await drag(-110)
+      await expect.poll(async () => (await events()).filter((e) => e.k === 'block.shorten').length).toBe(1)
+      const shortened = (await events()).find((e) => e.k === 'block.shorten')!.minutes!
+      expect(shortened).toBeGreaterThan(0)
+      expect(shortened).toBeLessThan(30 + extended)
+      expect(planned()).toEqual(before)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('trwający blok (D365): za granicą koszt i „Potwierdź · Anuluj” – bez potwierdzenia nic się nie zmienia, z nim jedno „Przedłuż”', async () => {
+  // The boundary is written 45 min from now and the block runs 30 min from now: an extension by 60 min crosses it, at any
+  // hour (the cost counts the minutes after the boundary). Not run only in the last 100 min of the logical day (04:00),
+  // where the extended block would reach over the turn of the day.
+  const nowMin = logicalMinuteOf(logicalToday(), Date.now())
+  test.skip(nowMin > 28 * 60 - 100, 'blok przedłużony za granicę nie mieści się już w dobie logicznej (koniec o 04:00)')
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-resize-cost-'))
+  seed(dataDir, { sessions: false, secondShift: false })
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      const late = page.getByTestId('block-late')
+      await expect(late).toBeVisible({ timeout: 30_000 })
+      await page.evaluate((a) => window.rd.logEvents([{ k: 'boundary.approve', day: a.day, boundary: a.boundary, auto: false }]), { day: logicalToday(), boundary: Math.round((Date.now() + 45 * 60_000) / 60_000) * 60_000 })
+      await late.click()
+      await page.getByTestId('block-timer-start').click()
+      await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
+      const logFile = async () => join(dataDir, 'log', logicalToday().slice(0, 4), logicalToday(), `${(await page.evaluate(() => window.rd.dataView())).computer}.jsonl`)
+      const extends_ = async () =>
+        readFileSync(await logFile(), 'utf8')
+          .trim()
+          .split('\n')
+          .map((l) => JSON.parse(l) as { k: string; minutes?: number })
+          .filter((e) => e.k === 'block.extend')
+      const drag = async (dy: number) => {
+        await late.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+        const r = (await late.boundingBox())!
+        const x = r.x + 40
+        const y = r.y + r.height - 3
+        await page.mouse.move(x, y)
+        await page.mouse.down()
+        await page.mouse.move(x, y + dy / 2, { steps: 4 })
+        await page.mouse.move(x, y + dy, { steps: 4 })
+        // Past the boundary the hint carries the cost while the edge is held.
+        await expect(page.getByTestId('edge-hint')).toContainText('Przedłuż +')
+        await page.mouse.up()
+      }
+      const confirm = page.getByTestId('resize-confirm')
+      // 60 min down: past the boundary – the cost waits, the block is drawn at the end it asks for, nothing is written.
+      await drag(66)
+      await expect(confirm).toBeVisible()
+      await expect(page.getByTestId('resize-confirm-text')).toContainText('Przedłuż +')
+      await expect(page.getByTestId('resize-confirm-text')).toContainText(/przedłużenie|przekroczenie/)
+      await expect(late).toHaveAttribute('data-waiting', 'true')
+      expect(await extends_()).toHaveLength(0)
+      // Without „Potwierdź” it goes away by itself (10 s) and the block is at its end again – the log unchanged.
+      await expect(confirm).toBeHidden({ timeout: 20_000 })
+      await expect(late).not.toHaveAttribute('data-waiting', 'true')
+      expect(await extends_()).toHaveLength(0)
+      // „Anuluj”: the same.
+      await drag(66)
+      await expect(confirm).toBeVisible()
+      await page.getByTestId('resize-confirm-no').click()
+      await expect(confirm).toBeHidden()
+      await expect(late).not.toHaveAttribute('data-waiting', 'true')
+      expect(await extends_()).toHaveLength(0)
+      // „Potwierdź”: one extension, the event of „Przedłuż” (a click of the bar writes the same).
+      await drag(66)
+      await expect(confirm).toBeVisible()
+      await page.getByTestId('resize-confirm-yes').click()
+      await expect.poll(async () => (await extends_()).length).toBe(1)
+      await expect(confirm).toBeHidden()
+      const minutes = (await extends_())[0]!.minutes!
+      expect(minutes).toBeGreaterThanOrEqual(55)
+      expect(minutes).toBeLessThanOrEqual(65)
     })
     expect(errors).toEqual([])
   } finally {

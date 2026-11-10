@@ -101,7 +101,7 @@ describe('zajęcia zdalne w dniu zjazdu (D359)', () => {
   })
 
   it('nowe reguły minut – nowa wersja reguł: komputer na 1.0.x (wersja 5) ustępuje prowadzenia i nie zamraża dnia', () => {
-    expect(RULES_VERSION).toBe(6)
+    expect(RULES_VERSION).toBeGreaterThanOrEqual(6)
   })
 
   it('dzień przełączony w trakcie: liczy się typ w chwili startu zajęć', () => {

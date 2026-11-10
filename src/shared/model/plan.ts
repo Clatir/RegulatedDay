@@ -125,6 +125,13 @@ const intIn = (v: unknown, min: number, max: number): number | null => (typeof v
 /** Logical minutes a plan may use: 04:00 to 03:59 of the night after. */
 export const PLAN_MIN = 240
 export const PLAN_MAX = 1679
+
+/** The longest block (minutes): a planned length, one „Przedłuż”, one shortening, an exchange – the one limit. */
+export const MAX_BLOCK_MIN = 24 * 60
+/** A block on the axis (D305, D365): its start and its edges move in steps of 5 min. */
+export const DRAG_STEP_MIN = 5
+/** The shortest block a drag of its edge leaves (D365) – the field „Długość” takes from 1 min. */
+export const MIN_BLOCK_MIN = 5
 /** The longest own name of a block. */
 export const BLOCK_NAME_MAX = 120
 
@@ -140,7 +147,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
   if (!isPlain(v) || typeof v.id !== 'string' || !v.id || typeof v.categoryId !== 'string' || !v.categoryId) return null
   const startMin = intIn(v.startMin, PLAN_MIN, PLAN_MAX)
   const anchor = typeof v.anchor === 'string' && v.anchor ? v.anchor : null
-  const durationMin = intIn(v.durationMin, 1, 24 * 60)
+  const durationMin = intIn(v.durationMin, 1, MAX_BLOCK_MIN)
   if ((startMin == null && !anchor) || durationMin == null) return null
   const origins = ['template', 'lecture', 'session', 'user', 'zjazd']
   return {
@@ -246,7 +253,7 @@ export function lectureFrom(v: unknown): LectureSeries | null {
   if (!isPlain(v) || typeof v.id !== 'string' || typeof v.categoryId !== 'string' || !isIsoDate(v.from) || !isIsoDate(v.to)) return null
   const weekday = intIn(v.weekday, 1, 7)
   const startMin = intIn(v.startMin, PLAN_MIN, PLAN_MAX)
-  const durationMin = intIn(v.durationMin, 1, 24 * 60)
+  const durationMin = intIn(v.durationMin, 1, MAX_BLOCK_MIN)
   if (weekday == null || startMin == null || durationMin == null) return null
   return {
     id: v.id,

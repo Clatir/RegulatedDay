@@ -206,6 +206,15 @@ export function startPlanned(info: BlockInfo, plan: readonly PlanBlock[] = []): 
   }
 }
 
+/**
+ * A block of the plan with its own hour, as the axis drags it (D305, D365): not after another block, not a session, a
+ * lecture, a class imported from the PDF of „zjazdy” (D357) nor the second shift (D192) – those keep „Przedłuż” on the bar.
+ * Before its start its place and length move (`dayItems` – `movable`, with „not begun” and „not passed”), once running
+ * the end of its planned length (`engine/resize.ts`).
+ */
+export const ownHourBlock = (b: BlockInfo): boolean =>
+  b.inPlan && b.anchor == null && b.start != null && b.origin !== 'session' && b.origin !== 'lecture' && b.origin !== 'zjazd' && !b.secondShift
+
 /** Counts for the boundary, the end of work and its forecast (spec: no „nie przerywa regeneracji”, no „po pracy”). */
 export const isBoundaryWork = (b: BlockInfo): boolean => b.isWork && !b.rules.keepsRegen && !b.afterWorkMark && !b.secondShift
 

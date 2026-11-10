@@ -4,9 +4,10 @@
  * dimmed when passed, parked or cancelled; the lines of the wake, the boundary (approved – solid, a proposal – dashed),
  * the maximum, the hard end, the bedtime's forecast and now; the energy's forecast (after the check-in).
  */
-import { plannedSpan } from '@shared/engine/blocks'
+import { ownHourBlock, plannedSpan } from '@shared/engine/blocks'
 import { namingOf } from '@shared/engine/context'
 import { atOf } from '@shared/engine/grid'
+import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
 import { durationLabel, logicalClock } from '@shared/format'
 import { logicalMinuteOf } from '@shared/time/day'
@@ -30,6 +31,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
   const yesterday = addDays(model.date, -1)
   const nowIdx = now != null ? Math.round((now - g.start) / 60_000) : null
+  // D365: a block running now (of its own hour – not a session, a lecture, a class of a „zjazd”, the second shift) has its bottom edge.
+  const edges = now != null ? runningEdges(state, now) : null
   const items: TimelineItem[] = []
   const placed = new Map(state.forecast.map((p) => [p.block.id, p]))
   for (const p of ctx.plan) {
@@ -49,6 +52,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       to = placed.get(p.id)!.to
     }
     if (from == null || to == null) continue
+    const edge = f?.startedAt != null && f.endedAt == null ? edges?.get(p.id) : undefined
     items.push({
       id: p.id,
       startMin: lm(from),
@@ -59,10 +63,10 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       background: info.bg,
       dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),
       waits: info.waits,
-      // D305: a block not begun nor gone, with its own start (not after another block, not a session, a lecture, a class
-      // imported from the PDF of „zjazdy” – D357, or the second shift – D192).
-      movable:
-        gone == null && f?.startedAt == null && p.anchor == null && p.startMin != null && p.origin !== 'session' && p.origin !== 'lecture' && p.origin !== 'zjazd' && !info.secondShift && (nowIdx == null || to > nowIdx)
+      ...(edge ? { resize: 'end' as const } : {}),
+      // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
+      // a class imported from the PDF of „zjazdy” – D357, nor the second shift – D192), not passed.
+      movable: gone == null && f?.startedAt == null && ownHourBlock(info) && (nowIdx == null || to > nowIdx)
     })
   }
   // Blocks begun outside the plan („Pracuję”, a block begun by hand) or taken out of it after they began (D336): where

@@ -64,6 +64,8 @@ export interface Confirm {
   at: number
   from: number
   to: number
+  /** When the event that confirmed them happened (`EventOrder`): a shortening (D365) ends only those confirmed before it. */
+  order: EventOrder
 }
 
 export interface BlockFact {
@@ -75,6 +77,13 @@ export interface BlockFact {
   confirms: Confirm[]
   /** Confirmed „Przedłuż”, in order. */
   extends: Array<{ at: number; minutes: number }>
+  /**
+   * Every change of its planned end, in the log's order: „Przedłuż” (minutes > 0) and an end dragged earlier on the axis
+   * (`block.shorten`, minutes < 0, D365). Where the planned end is counted, take it from here (`endShiftOf`), not from
+   * `extends`; where their order matters (a shortening cuts what was confirmed before it – `confirmWindows`), sort them
+   * by `order` (`compareOrder`) – a click of another computer may stand later in the log than it happened.
+   */
+  endChanges: Array<{ at: number; minutes: number; order: EventOrder }>
   parkedAt: number | null
   /** Why it was parked or cancelled (the rule: 'exchange', 'type', 'lateWake', 'workEnd' …). */
   goneRule: string | null
@@ -215,6 +224,7 @@ const newBlock = (id: string): BlockFact => ({
   planned: null,
   confirms: [],
   extends: [],
+  endChanges: [],
   parkedAt: null,
   goneRule: null,
   cancelledAt: null,
@@ -287,7 +297,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.startedAt = at
         b.planned = { ...e.planned, variantId: e.planned.variantId ?? null, tag: e.planned.tag ?? null, fixed: e.planned.fixed === true }
         b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })
-        if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil) })
+        if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil), order: orderOf(e) })
         break
       }
       case 'block.pause': {
@@ -308,7 +318,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         }
         const at = Math.max(idx(e.at), b.runs.at(-1)?.to ?? 0)
         b.runs.push({ from: at, to: OPEN, bg: b.runs.at(-1)?.bg ?? false, begun: orderOf(e) })
-        if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil) })
+        if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil), order: orderOf(e) })
         break
       }
       case 'block.end': {
@@ -352,12 +362,18 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })
         break
       }
-      case 'block.extend':
-        block(e.block).extends.push({ at: idx(e.at), minutes: e.minutes })
+      case 'block.extend': {
+        const b = block(e.block)
+        b.extends.push({ at: idx(e.at), minutes: e.minutes })
+        b.endChanges.push({ at: idx(e.at), minutes: e.minutes, order: orderOf(e) })
+        break
+      }
+      case 'block.shorten':
+        block(e.block).endChanges.push({ at: idx(e.at), minutes: -e.minutes, order: orderOf(e) })
         break
       case 'block.confirm': {
         const b = block(e.block)
-        b.confirms.push({ at: idx(e.at), from: idx(e.at), to: OPEN })
+        b.confirms.push({ at: idx(e.at), from: idx(e.at), to: OPEN, order: orderOf(e) })
         break
       }
       case 'block.park': {
@@ -530,6 +546,16 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
   return f
 }
 
+/**
+ * How far a block's planned end moved (minutes): its „Przedłuż” less its shortenings (D365) – those clicked before
+ * `before` (index) when given. A plain sum, nothing cut to zero on the way: the order of the changes does not matter.
+ */
+export function endShiftOf(f: Pick<BlockFact, 'endChanges'>, before = Number.POSITIVE_INFINITY): number {
+  let s = 0
+  for (const x of f.endChanges) if (x.at < before) s += x.minutes
+  return s
+}
+
 /** A block as known at the start of minute m: runs cut at m, what began at m or later not yet there. */
 export function blockAt(b: BlockFact, m: number): BlockFact {
   const addConfirmedAt = b.addConfirmedAt != null && b.addConfirmedAt < m ? b.addConfirmedAt : null
@@ -550,6 +576,7 @@ export function blockAt(b: BlockFact, m: number): BlockFact {
     endOrder: ended ? b.endOrder : null,
     confirms: b.confirms.filter((c) => c.at < m),
     extends: b.extends.filter((x) => x.at < m),
+    endChanges: b.endChanges.filter((x) => x.at < m),
     addConfirmedAt
   }
 }

@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { costText } from '@shared/costText'
-import { logicalClock, plDate } from '@shared/format'
+import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
 import { draggedBlock, leavesByCancel, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
@@ -27,10 +27,12 @@ import { useMachine } from '../../store/machine'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis, daySummary } from '../plan/dayItems'
-import { EnergyLegend, Timeline } from '../plan/Timeline'
+import { edgePatch, edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
+import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
+import { EnergyLegend, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
-import { begunIds, patchDayBlock, putDayBlock, removeDayBlock, setDayWake } from './dayActions'
+import { begunIds, clickResize, patchDayBlock, putDayBlock, removeDayBlock, setDayWake } from './dayActions'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -73,6 +75,64 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const [exchange, setExchange] = useState<{ block: PlanBlock; proposal: ExchangeProposal } | null>(null)
   const [dialog, setDialog] = useState<null | 'type' | 'copy' | { move: PlanBlock } | 'addType'>(null)
   const [menu, setMenu] = useState(false)
+  // D365: the bottom edge of a running block dropped past the boundary – its cost waits for „Potwierdź” or „Anuluj” for 10 s,
+  // nothing is written meanwhile; the confirmation is the same click again (`confirm`) to the same instant.
+  const [pending, setPending] = useState<{ id: string; to: number; endMin: number; text: string; seq: number } | null>(null)
+  const drops = useRef(0)
+  useEffect(() => {
+    if (!pending) return
+    const t = setTimeout(() => setPending(null), 10_000)
+    return () => clearTimeout(t)
+  }, [pending])
+  useEffect(() => setPending(null), [date])
+  // The block stopped running meanwhile (ended, parked): no edge, nothing to confirm.
+  const pendingEdge = pending ? axis.items.find((i) => i.id === pending.id)?.resize : undefined
+  useEffect(() => {
+    if (pending && pendingEdge !== 'end') setPending(null)
+  }, [pending, pendingEdge])
+  // The preview of the edge being dragged is counted when its end on the grid changes (the day counted again once).
+  const previewed = useRef<{ model: DayModel; key: string; value: ResizePreview | null } | null>(null)
+  const previewOf = (id: string, endMin: number): ResizePreview | null => {
+    const key = `${id}:${endMin}`
+    if (previewed.current?.model !== model || previewed.current.key !== key) previewed.current = { model, key, value: resizePreview(model.ctx, model.state, id, endMin, Date.now()) }
+    return previewed.current.value
+  }
+  const resizeNote = (id: string, span: BlockSpan, edge: DragEdge, shown: BlockSpan): string | null => {
+    const item = axis.items.find((i) => i.id === id)
+    const b = plan.find((x) => x.id === id)
+    if (item?.movable && b) return edgeSummary(b, span, edge, shown)
+    const p = previewOf(id, span.endMin)
+    if (!p) return null
+    const what = p.refused ?? p.costText ?? (p.minutes > 0 ? `Przedłuż +${p.minutes}` : p.minutes < 0 ? `krócej o ${-p.minutes} min` : null)
+    return [durationLabel(span.endMin - span.startMin), what, ...p.warnings].filter(Boolean).join(' · ')
+  }
+  // What bounds a running block's bottom edge, taken when it is grabbed (the engine's `runningEdges`, the same bounds the
+  // preview keeps, so the hint is what is written).
+  const edgeLimits = (id: string): EdgeLimits | null => {
+    const e = runningEdges(model.state, Date.now()).get(id)
+    return e ? { minEndMin: e.earliestEnd, maxEndMin: e.latestEnd } : null
+  }
+  /**
+   * A running block's edge dropped (D365), `p` counted at the drop (now, not when the pointer moved): the main process
+   * decides (it may see more than the window: an end after the closing, a change from the other computer) – up to the
+   * boundary it writes at once, past it the cost waits for „Potwierdź”; what the window's count says (`refused`) only words
+   * the hint.
+   */
+  const dropRunning = async (id: string, p: ResizePreview, to: number) => {
+    const a = resizeAnswer(await clickResize(id, date, to, false), p.minutes)
+    if (a.kind === 'confirm') setPending({ id, to, endMin: p.end, text: a.text, seq: ++drops.current })
+    else {
+      setPending(null)
+      if (a.kind === 'refused') toast(a.why, 'error', 6000)
+    }
+  }
+  const confirmResize = async () => {
+    if (!pending) return
+    const p = pending
+    setPending(null)
+    const r = await clickResize(p.id, date, p.to, true)
+    if (!r.ok) toast(r.why ?? 'Nie przedłużono bloku.', 'error', 6000)
+  }
   useEffect(() => {
     setSelected(null)
   }, [date])
@@ -243,6 +303,50 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                       if (p) void patchDayBlock(date, raw, p, { startMin: draggedBlock(p, startMin).startMin })
                     }
                   : undefined
+              }
+              // D365: an edge dragged – the length as the field „Długość” saves it (the top edge: its start with it).
+              onResize={
+                date >= today
+                  ? (id, span, edge, shown) => {
+                      const item = axis.items.find((i) => i.id === id)
+                      const p = plan.find((b) => b.id === id)
+                      if (item?.movable && p) {
+                        void patchDayBlock(date, raw, p, edgePatch(p, span, edge, shown))
+                        return span
+                      }
+                      // A running block: no change of its plan – the timer moves its end (D365), counted at the drop.
+                      if (item?.resize === 'end' && edge === 'end') {
+                        const now = resizePreview(model.ctx, model.state, id, span.endMin, Date.now())
+                        const to = resizeToSend(now)
+                        const asked = resizeAsked(span, now)
+                        if (now && to != null && asked) void dropRunning(id, now, to)
+                        return asked
+                      }
+                      return false
+                    }
+                  : undefined
+              }
+              resizeNote={resizeNote}
+              edgeLimits={edgeLimits}
+              attached={
+                pending
+                  ? {
+                      id: pending.id,
+                      endMin: pending.endMin,
+                      seq: pending.seq,
+                      node: (
+                        <div className="flex items-center gap-2 rounded border border-line bg-panel px-2 py-1 text-[11.5px] text-fg shadow-lg" data-testid="resize-confirm">
+                          <span data-testid="resize-confirm-text">{pending.text}</span>
+                          <button type="button" className="btn btn-accent" onClick={() => void confirmResize()} data-testid="resize-confirm-yes">
+                            Potwierdź
+                          </button>
+                          <button type="button" className="btn" onClick={() => setPending(null)} data-testid="resize-confirm-no">
+                            Anuluj
+                          </button>
+                        </div>
+                      )
+                    }
+                  : null
               }
               from={axis.from}
               to={axis.to}

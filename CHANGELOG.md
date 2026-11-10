@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0
+- Długość bloku zmieniasz teraz przeciągnięciem jego krawędzi na osi „Dziś” i „Szablonów”: dolna krawędź przesuwa koniec, górna – start przy tym samym końcu, co 5 min (najkrótszy blok 5 min). W trakcie widać godziny i długość; zapis jak w polu „Długość”, z tymi samymi ostrzeżeniami. Zwykłe kliknięcie dalej otwiera blok.
+- Trwający blok z godziną w planie ma tylko dolną krawędź: koniec nie schodzi przed teraz, do granicy zmiana jest od razu, a za granicą widać koszt przedłużenia i po puszczeniu „Potwierdź · Anuluj” przy bloku przez 10 s – bez potwierdzenia nic się nie zmienia, z nim to samo przedłużenie i koszt co „Przedłuż” w pasku. Sesja, wykład, zjazd i druga zmiana – dalej tylko „Przedłuż”.
+- Komputer ze starszą wersją przy komputerze z 1.4.0 nie prowadzi dnia i nie zamraża dni (nowa wersja reguł liczenia – skrócenie trwającego bloku).
+
 ## 1.3.0
 - Nowa strona „Statystyki” w menu (zaraz po „Tygodniu”, Ctrl+4): okres 4 tygodnie, 3 miesiące albo od początku i cztery sekcje z wykresem i tabelą – wzorce energii (średnia z check-inów według pory dnia i dnia tygodnia, kategorie najczęściej „ciężej” w rytuale), trafność szacowania (np. „×1,29 · o 29% dłużej”), czas próśb na osobę i dotrzymane granice tygodniami. Liczą się tylko dni zamrożone; bez ocen i bez zmian w kosztach.
 - Skróty menu od „Prośb” w dół przesunęły się jeszcze o jeden (Historia – Ctrl+9).
