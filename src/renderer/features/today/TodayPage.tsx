@@ -348,7 +348,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               resizeNote={resizeNote}
               edgeLimits={edgeLimits}
               // D367: while a block is dragged, the blocks it pushes apart at their new places.
-              pushPreview={pushes ? (id, span, edge, shown) => pushedSpans(movableChange(id, span, edge, shown)) : undefined}
+              pushPreview={pushes ? (id, span, edge, shown) => pushedSpans(movableChange(id, span, edge, shown), isToday ? 'forecast' : 'plan') : undefined}
               attached={
                 pending
                   ? {

@@ -382,9 +382,10 @@ export class WidgetEngine {
     if (this.markerNow) this.markerShown.add(this.markerNow.id)
     v.variants = { marker: !!this.markerNow && !v.hidden && !v.night, open: this.panel && !v.hidden ? this.panel.variants.map((x) => ({ id: x.id, label: x.label })) : null }
     for (const [kind, mv] of [...this.moved]) if (mv.until <= mono) this.moved.delete(kind)
-    // The newest first: in the bar's two rows the latest change's „Cofnij” is always at hand (the other may wait in „⋯”).
+    // After the day's own lines (its questions and warnings are always in view), the newest first: the bar shows one of
+    // them at most, the other waits in „⋯” with its „Cofnij” (`barLines`).
     const movedLines = [...this.moved].sort((a, b) => b[1].seq - a[1].seq).map(([kind, mv]) => ({ id: `moved:${kind}`, text: mv.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }))
-    if (movedLines.length && !v.hidden) v.lines = [...movedLines, ...v.lines]
+    if (movedLines.length && !v.hidden) v.lines = [...v.lines, ...movedLines]
     // A routine saved from the bar (D328): its „Cofnij” for a while, in place of its line.
     if (this.routineSaved && (this.routineSaved.until <= mono || this.routineSaved.day !== date)) this.routineSaved = null
     if (this.routineSaved && !v.hidden) v.lines = [...v.lines, { id: `routineSaved:${this.routineSaved.block}`, text: this.routineSaved.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }]

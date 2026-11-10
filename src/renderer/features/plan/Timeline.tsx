@@ -174,8 +174,11 @@ export function Timeline({
    * start and the length of the range (on the 5-min grid, D366).
    */
   onCreate?: (min: number, durationMin?: number) => void
-  /** A movable block dragged with the left button to a new start (logical minute). */
-  onMove?: (id: string, startMin: number) => void
+  /**
+   * A movable block dragged with the left button to a new start (logical minute); it may return the span the block stands
+   * at after it (a template's morning the day's wake moves – D372), where it is held until the day shows it.
+   */
+  onMove?: (id: string, startMin: number) => BlockSpan | void
   /**
    * A block's edge dragged (D365): its new span – the end moved alone (`end`) or the start with the same end (`top`) – and
    * the span it was shown over when grabbed (`shown`: what the drop is counted against, not what the day shows by then).
@@ -193,7 +196,8 @@ export function Timeline({
   /**
    * D367 (rozsuwanie): the blocks a drag pushes apart and where they would stand (by id) while a block is dragged by its
    * body (`edge` null) or an edge to `span`, grabbed at `shown`; null or empty – nothing pushed. They are drawn there,
-   * dashed, until the day shows the drop.
+   * dashed, until the day shows the drop. The dragged block's own id: where it will stand when that is not under the
+   * pointer (D372) – drawn and said there.
    */
   pushPreview?: (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan) => ReadonlyMap<string, BlockSpan> | null
   /**
@@ -290,14 +294,16 @@ export function Timeline({
     // The drag's place is in the key; a new count of the day brings new items.
     [pushKey, items]
   )
+  // Where the dragged block is drawn: under the pointer, or where it will stand (`pushPreview` with its own id).
+  const dragShown: BlockSpan | null = drag ? (pushed?.get(drag.id) ?? { startMin: drag.start, endMin: drag.end }) : null
 
   const box = (i: TimelineItem, narrow: boolean) => {
     const dragged = drag?.id === i.id && drag.moved
     const pushedTo = dragged ? undefined : pushed?.get(i.id)
     // Waiting for a confirmation (and not being dragged again): at the end it asks for.
     const waiting = !dragged && attached?.id === i.id
-    const start = dragged ? drag.start : pushedTo ? pushedTo.startMin : i.startMin
-    const end = dragged ? drag.end : waiting ? attached.endMin : pushedTo ? pushedTo.endMin : i.endMin
+    const start = dragged ? dragShown!.startMin : pushedTo ? pushedTo.startMin : i.startMin
+    const end = dragged ? dragShown!.endMin : waiting ? attached.endMin : pushedTo ? pushedTo.endMin : i.endMin
     const top = y(start)
     const h = Math.max(MIN_H, (end - start) * PPM - 1)
     const tiny = h < 34
@@ -358,7 +364,7 @@ export function Timeline({
             if (!d.moved) return
           } else {
             // The block stays where it was dropped until the day shows it there – at the end the edit asked for.
-            const asked: BlockSpan | false = d.edge ? onResize!(i.id, { startMin: d.start, endMin: d.end }, d.edge, { startMin: d.from, endMin: d.fromEnd }) : (onMove!(i.id, d.start), { startMin: d.start, endMin: d.end })
+            const asked: BlockSpan | false = d.edge ? onResize!(i.id, { startMin: d.start, endMin: d.end }, d.edge, { startMin: d.from, endMin: d.fromEnd }) : (onMove!(i.id, d.start) ?? { startMin: d.start, endMin: d.end })
             if (asked === false) setDrag(null)
             else {
               const held = { ...d, start: asked.startMin, end: asked.endMin, dropped: true }
@@ -448,10 +454,10 @@ export function Timeline({
         {drag?.moved && !drag.dropped && drag.edge && (
           <div
             className={cx('num pointer-events-none absolute right-3 z-30 rounded-sm border border-line bg-bg/90 px-1.5 py-0.5 text-[11px] text-fg', drag.edge === 'top' && '-translate-y-full')}
-            style={{ top: y(drag.edge === 'top' ? drag.start : drag.end) }}
+            style={{ top: y(drag.edge === 'top' ? dragShown!.startMin : dragShown!.endMin) }}
             data-testid="edge-hint"
           >
-            {logicalClock(drag.start)}–{logicalClock(drag.end)} ·{' '}
+            {logicalClock(dragShown!.startMin)}–{logicalClock(dragShown!.endMin)} ·{' '}
             {drag.start === drag.from && drag.end === drag.fromEnd
               ? 'bez zmian'
               : (resizeNote?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) ?? durationLabel(drag.end - drag.start))}

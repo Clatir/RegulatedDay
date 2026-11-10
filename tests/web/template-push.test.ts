@@ -34,8 +34,10 @@ describe('D367, D372 – rozsuwanie w „Szablonach”', () => {
     const { day, version } = templateDay(SUNDAY, EVENING)
     const c = templateDrag(day, 'a', span('19:00', '20:00'), null, span('18:00', '19:00'))!
     expect(c.pushed).toBe(2)
+    // The dragged block itself where it will stand, and the pushed ones.
     expect(c.preview).toEqual(
       new Map([
+        ['a', span('19:00', '20:00')],
         ['b', span('20:00', '21:00')],
         ['c', span('21:00', '22:00')]
       ])
@@ -76,7 +78,12 @@ describe('D367, D372 – rozsuwanie w „Szablonach”', () => {
     expect([shown('m'), shown('n')]).toEqual([lm('04:00'), lm('04:30')])
     // m dragged on the axis from 04:00 to 04:15 pushes n to 04:45 – in the template 05:15 and 05:45.
     const c = templateDrag(day, 'm', span('04:15', '04:45'), null, span('04:00', '04:30'))!
-    expect(c.preview).toEqual(new Map([['n', span('04:45', '05:15')]]))
+    expect(c.preview).toEqual(
+      new Map([
+        ['m', span('04:15', '04:45')],
+        ['n', span('04:45', '05:15')]
+      ])
+    )
     expect(starts(withTemplateChange(version, c))).toEqual({ m: lm('05:15'), n: lm('05:45') })
   })
 })
@@ -105,5 +112,57 @@ describe('D372 – szablon w tygodniu przesunięcia sesji: miejsce tuż przed pi
     expect(planned(blocks, 'm')).toBe(lm('05:30'))
     expect(c.preview.get('n')!.startMin).toBeGreaterThanOrEqual(lm('07:00'))
     expect(planned(blocks, 'n')).toBe(c.preview.get('n')!.startMin)
+  })
+})
+
+describe('D372 – runda 2 przeglądu J3: brzegi przesunięcia pobudki w „Szablonach”', () => {
+  const DATE = '2026-03-10'
+  const recount = (blocks: PlanBlock[]) => templateDay(DATE, blocks).day.ctx.plan
+  const shownOf = (blocks: PlanBlock[], id: string) => {
+    const b = recount(blocks).find((x) => x.sourceId === id)!
+    return span(clockOf(b.startMin!), clockOf(b.startMin! + b.durationMin))
+  }
+  const clockOf = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+
+  it('górna krawędź w godzinie, której dzień nie pokaże: koniec zostaje, blok ma co najmniej 5 min – start cofa się, a podpowiedź i podgląd to zapis', () => {
+    // m: in the template 06:40–07:10, shown 05:40–06:10. Its top edge to 06:00 (end 06:10): the day can show it from 07:00 only – past its end.
+    const { day, version } = templateDay(DATE, [tb('m', '06:40', 30)])
+    const c = templateDrag(day, 'm', span('06:00', '06:10'), 'top', span('05:40', '06:10'))!
+    expect(c.span).toEqual(span('05:55', '06:10'))
+    expect(c.durationMin).toBe(15)
+    expect(c.preview.get('m')).toEqual(c.span)
+    const blocks = withTemplateChange(version, c)
+    expect(blocks.find((b) => b.id === 'm')).toMatchObject({ startMin: lm('06:55'), durationMin: 15 })
+    expect(shownOf(blocks, 'm')).toEqual(c.span)
+  })
+
+  it('przeciągnięty blok w tę godzinę: miejsce po niej (start stałego) – tam go trzyma oś i tam stoi po zapisie', () => {
+    const { day, version } = templateDay(DATE, [tb('m', '05:00', 30)])
+    const c = templateDrag(day, 'm', span('06:30', '07:00'), null, span('04:00', '04:30'))!
+    expect(c.span).toEqual(span('07:00', '07:30'))
+    expect(c.preview.get('m')).toEqual(c.span)
+    expect(shownOf(withTemplateChange(version, c), 'm')).toEqual(c.span)
+  })
+
+  it('dwa bloki przesunięte w tę godzinę dostają kolejne miejsca w kolejności osi (nie ten sam start stałego, który rozstrzygałby identyfikator)', () => {
+    // m (shown 04:00) dragged to 05:30 onto zn (05:40) and ao (05:50): both would go to the hour before 07:00.
+    const { day, version } = templateDay(DATE, [tb('m', '05:00', 60), tb('zn', '06:40', 10), tb('ao', '06:50', 10)])
+    const c = templateDrag(day, 'm', span('05:30', '06:30'), null, span('04:00', '05:00'))!
+    const blocks = withTemplateChange(version, c)
+    expect(c.preview.get('zn')!.startMin).toBeLessThan(c.preview.get('ao')!.startMin)
+    expect(shownOf(blocks, 'zn')).toEqual(c.preview.get('zn'))
+    expect(shownOf(blocks, 'ao')).toEqual(c.preview.get('ao'))
+  })
+
+  it('stały blok szablonu przeciągnięty przez poranek: bloki, które przez to przestają się przesuwać z pobudką, są w podglądzie tam, gdzie staną', () => {
+    // f (fixed, 06:00 in the template) is the first fixed block: m (05:30) before it shows at 04:30. f dragged to 05:00 –
+    // m is no longer before the first fixed block: the day shows it at 05:30 (its hour in the template), nothing written.
+    const { day, version } = templateDay(DATE, [tb('f', '06:00', 30, { fixed: true, categoryId: 'posilek' }), tb('m', '05:30', 30)])
+    expect(shownOf(version.blocks, 'm')).toEqual(span('04:30', '05:00'))
+    const c = templateDrag(day, 'f', span('05:00', '05:30'), null, span('06:00', '06:30'))!
+    const blocks = withTemplateChange(version, c)
+    expect(blocks.find((b) => b.id === 'm')!.startMin).toBe(lm('05:30'))
+    expect(c.preview.get('m')).toEqual(shownOf(blocks, 'm'))
+    expect(c.preview.get('m')).toEqual(span('05:30', '06:00'))
   })
 })

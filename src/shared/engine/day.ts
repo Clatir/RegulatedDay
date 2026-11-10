@@ -86,14 +86,19 @@ export const typicalOf =
 
 /**
  * The forecast the day's state shows from now (`DayState.forecast`: the mode 'typical' with the events of the minute now
- * in view) for `blocks` of the same day – a change of the plan tried before it is made (D367); `state.blocks` give back
- * the state's own forecast.
+ * in view) for blocks of the same day – changes of the plan tried before one is made (D367); `state.blocks` give back
+ * the state's own forecast. The view, the buffer and the typical lengths are taken once, for every try.
  */
-export function shownForecast(ctx: DayContext, state: DayState, blocks: readonly BlockInfo[]): Placed[] {
+export function shownForecaster(ctx: DayContext, state: DayState): (blocks: readonly BlockInfo[]) => Placed[] {
   const m = state.now
-  const { settings } = settingsAtMinute(ctx.snapshot, state.facts, m + 1)
-  return forecast({ blocks, view: viewAt(state.facts, m + 1), m, mode: 'typical', transitionBufferMin: settings.transitionBufferMin, typicalMin: typicalOf(ctx) }).placed
+  const view = viewAt(state.facts, m + 1)
+  const { transitionBufferMin } = settingsAtMinute(ctx.snapshot, state.facts, m + 1).settings
+  const typicalMin = typicalOf(ctx)
+  return (blocks) => forecast({ blocks, view, m, mode: 'typical', transitionBufferMin, typicalMin }).placed
 }
+
+/** `shownForecaster` for one set of blocks. */
+export const shownForecast = (ctx: DayContext, state: DayState, blocks: readonly BlockInfo[]): Placed[] => shownForecaster(ctx, state)(blocks)
 
 export interface MinuteInfo {
   cls: MinuteClass

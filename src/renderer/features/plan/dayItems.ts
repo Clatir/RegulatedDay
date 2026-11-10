@@ -6,7 +6,7 @@
  */
 import { ownHourBlock, plannedSpan } from '@shared/engine/blocks'
 import { namingOf } from '@shared/engine/context'
-import { atOf } from '@shared/engine/grid'
+import { atOf, logicalSpan } from '@shared/engine/grid'
 import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
 import { durationLabel, logicalClock } from '@shared/format'
@@ -55,8 +55,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
     const edge = f?.startedAt != null && f.endedAt == null ? edges?.get(p.id) : undefined
     items.push({
       id: p.id,
-      startMin: lm(from),
-      endMin: lm(Math.max(to, from + 1)),
+      // As long as it lasts, also across the doubled hour of a 25-hour day (`logicalSpan` – the preview of a push the same).
+      ...logicalSpan(g, from, Math.max(to, from + 1)),
       title: gone ? `${blockName(p, names)} (${gone})` : blockName(p, names),
       marks: [...blockMarks(p, { afterWork: info.afterWorkMark, fromYesterday: p.movedFrom === yesterday }), ...(f?.startedAt != null && f.endedAt == null ? ['biegnie'] : [])],
       color: blockColor(p.categoryId, names),
@@ -79,8 +79,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
     const to = f.endedAt ?? Math.max(nowIdx ?? f.startedAt, plannedEndOf(state, info, f))
     items.push({
       id: info.id,
-      startMin: lm(f.startedAt),
-      endMin: lm(Math.max(to, f.startedAt + 1)),
+      ...logicalSpan(g, f.startedAt, Math.max(to, f.startedAt + 1)),
       title: nameById(info.id, naming, names),
       marks: f.endedAt == null ? ['poza planem', 'biegnie'] : ['poza planem'],
       color: blockColor(info.categoryId, names),

@@ -34,7 +34,9 @@ describe('D367 – co zmienia przeciągnięcie albo „Dodaj” w „Dziś”', 
       ['b', lm('11:30')],
       ['c', lm('12:30')]
     ])
-    expect(pushedSpans(c)).toEqual(
+    // Today's axis shows the forecast, another day's the plan: here (no begun block, nothing before now) the same places.
+    expect(pushedSpans(c, 'plan')).toEqual(pushedSpans(c, 'forecast'))
+    expect(pushedSpans(c, 'forecast')).toEqual(
       new Map([
         ['b', span('11:30', '12:30')],
         ['c', span('12:30', '13:30')]
@@ -59,7 +61,7 @@ describe('D367 – co zmienia przeciągnięcie albo „Dodaj” w „Dziś”', 
   it('dzień miniony (bez rozsuwania) i przeciągnięcie w wolne miejsce: nic nie przesuwa – zapis jak dotąd', () => {
     const d = day()
     expect(dragChange(d, 'a', span('10:30', '11:30'), null, span('10:00', '11:00'), false)!.pushed).toEqual([])
-    expect(pushedSpans(dragChange(d, 'c', span('14:00', '15:00'), null, span('12:00', '13:00'), true))).toBeNull()
+    expect(pushedSpans(dragChange(d, 'c', span('14:00', '15:00'), null, span('12:00', '13:00'), true), 'forecast')).toBeNull()
     expect(dragChange(d, 'brak', span('14:00', '15:00'), null, span('12:00', '13:00'), true)).toBeNull()
   })
 

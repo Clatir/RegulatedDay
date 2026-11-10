@@ -5,7 +5,7 @@
  */
 import type { DayContext, DayState } from '@shared/engine/day'
 import { draggedBlock } from '@shared/engine/planEdit'
-import { planWith, pushApart, type PushedBlock } from '@shared/engine/pushApart'
+import { pushApart, withBlock, type PushedBlock } from '@shared/engine/pushApart'
 import type { PlanBlock } from '@shared/model/plan'
 import type { BlockSpan, DragEdge } from '../plan/Timeline'
 import { edgePatch } from '../plan/edgeEdit'
@@ -32,16 +32,24 @@ export function dragChange(day: { ctx: DayContext; state: DayState }, id: string
   if (!was) return null
   const patch: Partial<PlanBlock> = edge ? edgePatch(was, span, edge, shown) : { startMin: draggedBlock(was, span.startMin).startMin }
   const block = { ...was, ...patch }
-  return { was, block, patch, pushed: pushes ? pushApart(day.ctx, day.state, planWith(plan, block), id, edge === 'end' ? shown.startMin : undefined) : [] }
+  return { was, block, patch, pushed: pushes ? pushApart(day.ctx, day.state, withBlock(plan, block), id, { atMin: edge === 'end' ? shown.startMin : undefined, onUnsettled }) : [] }
 }
 
 /** A new block added to a day to come (`pushes`) and what it pushes apart (D367: „Dodaj” in the panel of „Dziś”). */
 export function addChange(day: { ctx: DayContext; state: DayState }, block: PlanBlock, pushes: boolean): DayChange {
-  return { was: null, block, patch: block, pushed: pushes ? pushApart(day.ctx, day.state, planWith(day.ctx.plan, block), block.id) : [] }
+  return { was: null, block, patch: block, pushed: pushes ? pushApart(day.ctx, day.state, withBlock(day.ctx.plan, block), block.id, { onUnsettled }) : [] }
 }
 
-/** Where the pushed blocks stand (the preview on the axis, by id). */
-export const pushedSpans = (c: DayChange | null): ReadonlyMap<string, BlockSpan> | null => (c?.pushed.length ? new Map(c.pushed.map((p) => [p.id, p.shown])) : null)
+/**
+ * Where the pushed blocks stand (the preview on the axis, by id): today's axis shows the forecast, another day's its plan
+ * (`dayAxis`) – the same places the axis shows after the save.
+ */
+export const pushedSpans = (c: DayChange | null, axis: 'forecast' | 'plan'): ReadonlyMap<string, BlockSpan> | null => (c?.pushed.length ? new Map(c.pushed.map((p) => [p.id, axis === 'forecast' ? p.shown : p.planned])) : null)
+
+/** The counting of a push did not settle (a bound for safety): said in the console of a development build only. */
+export function onUnsettled(): void {
+  if (import.meta.env?.DEV) console.warn('rozsuwanie: przeliczenie dnia nie ustaliło się w limicie rund – wynik z ostatniego przeliczenia')
+}
 
 /** The pushed blocks as the edit of the day writes them: each block of the plan with its new start. */
 export function pushedStarts(plan: readonly PlanBlock[], c: DayChange): PushedStart[] {

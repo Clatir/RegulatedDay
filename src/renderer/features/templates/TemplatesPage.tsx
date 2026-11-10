@@ -31,7 +31,6 @@ import { undoToast } from '../../store/ui'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis } from '../plan/dayItems'
-import { edgeSummary } from '../plan/edgeEdit'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { Timeline } from '../plan/Timeline'
 import { SettingNumber } from '../settings/SettingNumber'
@@ -106,10 +105,13 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   const [from, setFrom] = useState(tomorrow)
   const [selected, setSelected] = useState<string | null>(null)
   const rel = paths.record('template', template.id)
-  const inForce = templateVersionOn(template, from)
-  const version = template.versions.find((v) => v.from === from) ?? (inForce ? { ...inForce, from } : { from, blocks: [], budgetMin: null, maxMin: null })
-  const settings = settingsOn(rd.settings, from)
-  const names: Names = { rd, settings, routines, requests }
+  // The same objects while nothing they come from changes: the day, its axis and the memo of the drag's preview stay.
+  const version = useMemo(() => {
+    const inForce = templateVersionOn(template, from)
+    return template.versions.find((v) => v.from === from) ?? (inForce ? { ...inForce, from } : { from, blocks: [], budgetMin: null, maxMin: null })
+  }, [template, from])
+  const settings = useMemo(() => settingsOn(rd.settings, from), [rd.settings, from])
+  const names: Names = useMemo(() => ({ rd, settings, routines, requests }), [rd, settings, routines, requests])
 
   /** The template changed by `fn` from what it is when the change's turn comes (two quick changes both stay – A6-01). */
   const change = (fn: (t: Template) => Template) =>
@@ -129,14 +131,15 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   const saveVersion = (patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)) => change((t) => withVersion(t, patch))
 
   // D367, D372: the blocks a change of the axis pushed apart – the template before and after it, for „Cofnij”.
-  const [pushed, setPushed] = useState<{ text: string; before: RawRecord; after: RawRecord; made: Template | null } | null>(null)
+  const [pushed, setPushed] = useState<{ text: string; before: RawRecord; after: RawRecord } | null>(null)
   useEffect(() => {
     if (!pushed) return
     const t = setTimeout(() => setPushed(null), UNDO_LINE_MS)
     return () => clearTimeout(t)
   }, [pushed])
   // The line stays only while the template is as the push left it: any change after it ends it.
-  const pushedShown = pushed != null && deepEqual(pushed.made, template)
+  const pushedMade = useMemo(() => (pushed ? templateFrom(pushed.after) : null), [pushed])
+  const pushedShown = pushed != null && deepEqual(pushedMade, template)
   /**
    * A change of the axis (a block dragged, an edge, a new block) as one edit of the template, with the blocks it pushes
    * apart; when it pushed some, „Przesunięto N bloków · Cofnij”. Saved – true.
@@ -151,7 +154,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
       return made.after
     })
     const saved = isSaved(out)
-    if (saved && c.pushed > 0 && made.before && made.after) setPushed({ text: pushedText(c.pushed), before: made.before, after: made.after, made: templateFrom(made.after) })
+    if (saved && c.pushed > 0 && made.before && made.after) setPushed({ text: pushedText(c.pushed), before: made.before, after: made.after })
     return saved
   }
   /** „Cofnij”: the template as it was before the push – what changed on another computer since stays a question. */
@@ -173,9 +176,10 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
     const t: Template = { ...template, versions: [{ ...version, from: '2000-01-01' }] }
     return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rd.settings, templates: [t], lectures }, placeLogical(sample, 4 * 60), false)
   }, [template, version, sample, rd.settings, lectures])
-  const axis = dayAxis(model, names, null)
+  const axis = useMemo(() => dayAxis(model, names, null), [model, names])
   // Template blocks have the day's derived ids: the block of the version is found by its source.
-  const byPlanId = new Map(model.ctx.plan.filter((b) => b.origin === 'template' && b.sourceId).map((b) => [b.id, b.sourceId!]))
+  const byPlanId = useMemo(() => new Map(model.ctx.plan.filter((b) => b.origin === 'template' && b.sourceId).map((b) => [b.id, b.sourceId!])), [model])
+  const items = useMemo(() => axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), movable: i.movable === true && byPlanId.has(i.id) })), [axis, byPlanId])
   const block = version.blocks.find((b) => b.id === selected) ?? null
   const patchBlock = (id: string, patch: Partial<PlanBlock>) => saveVersion((v) => ({ blocks: v.blocks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))
 
@@ -268,7 +272,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
             </div>
           )}
           <Timeline
-            items={axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), movable: i.movable === true && byPlanId.has(i.id) }))}
+            items={items}
             markers={axis.markers}
             selected={selected}
             onSelect={(id) => setSelected(version.blocks.some((b) => b.id === id) ? id : null)}
@@ -276,7 +280,10 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
               // D305: the template's block with its own start, moved in steps of 5 min (in the template's hours); D367: with
               // the blocks it pushes apart.
               const c = templateDrag(model, id, { startMin, endMin: startMin }, null, { startMin, endMin: startMin })
-              if (c) void saveChange(c)
+              if (!c) return
+              void saveChange(c)
+              // D372: held where the day will show it (a morning the wake moves).
+              return c.span
             }}
             onResize={(id, span, edge, shown) => {
               // D365: an edge of the template's block – the length as the field „Długość” saves it; D367: with the blocks it
@@ -284,16 +291,17 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
               const c = templateDrag(model, id, span, edge, shown)
               if (!c) return false
               void saveChange(c)
-              return span
+              return c.span
             }}
             // D367: while a block is dragged, the blocks it pushes apart at their new places.
             pushPreview={(id, span, edge, shown) => {
               const c = templateDrag(model, id, span, edge, shown)
               return c?.preview.size ? c.preview : null
             }}
+            // The length the drop saves (D365; in a morning the wake moves – after its start found a place, D372).
             resizeNote={(id, span, edge, shown) => {
-              const b = version.blocks.find((x) => x.id === id)
-              return b ? edgeSummary(b, span, edge, shown) : null
+              const c = templateDrag(model, id, span, edge, shown)
+              return c ? durationLabel(c.durationMin) : null
             }}
             onCreate={(min, durationMin = DEFAULT_NEW_BLOCK_MIN) => {
               // D366; D367: on a taken place it pushes the flexible blocks after it apart.

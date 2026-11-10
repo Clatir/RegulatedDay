@@ -1850,6 +1850,20 @@ describe('rozsuwanie w pasku (D367)', () => {
     expect(w.current().variants.marker).toBe(false)
   })
 
+  it('linie dnia (pytania, ostrzeżenia) stoją przed liniami zmian z „Cofnij” – w pasku nigdy nie spychają ich do „⋯”', async () => {
+    // A session of yours waiting for „Zacznij” since 09:00: the day's line „wait:…” with its dot.
+    const file = join(dataDir, paths.day(DAY))
+    const day = JSON.parse(readFileSync(file, 'utf8')) as { blocks: unknown[] }
+    writeFileSync(file, JSON.stringify({ ...day, blocks: [...day.blocks, { id: 'ses', categoryId: 'sesja', startMin: 9 * 60, durationMin: 60, fixed: true, background: false, origin: 'user' }] }))
+    const { w, folder } = await make({ from: placeLogical(DAY, 9 * 60 + 5) })
+    await w.refresh()
+    expect(w.current().lines.map((l) => l.id)).toContain('wait:ses')
+    const entry = await pushX(folder)
+    await w.pushed(DAY, 2, { entry, made: null })
+    const ids = w.current().lines.map((l) => l.id)
+    expect(ids.indexOf('wait:ses')).toBeLessThan(ids.indexOf('moved:push'))
+  })
+
   it('IPC: odpowiedź nie czeka na przeliczenie paska (okno nie wisi na „Dodaj”), błąd przeliczenia idzie do logu', async () => {
     const entry = { rel: paths.day(DAY), edits: [{ path: ['blocks', '#a', 'startMin'], base: 600, value: 660 }] }
     const calls: unknown[][] = []

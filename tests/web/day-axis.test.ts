@@ -255,3 +255,17 @@ describe('przeciąganie bloków na osi (D305)', () => {
     expect(resizeAnswer({ ok: false, why: 'Stały blok.', confirm: null }, 5)).toEqual({ kind: 'refused', why: 'Stały blok.' })
   })
 })
+
+describe('oś dnia w dobie 25-godzinnej (przegląd J3)', () => {
+  it('blok przez podwójną godzinę 02:00–02:59 (24.10.2026) ma na osi swoją długość, nie pasek – jak podgląd rozsuwania', () => {
+    const date = '2026-10-24'
+    const s = new Scenario({ date, plan: [block({ id: 'noc', cat: 'inne-obowiazki', at: '02:00', min: 90, origin: 'user' })] })
+    const ctx = s.contextAt(s.at('08:00'))
+    const state = computeDay(ctx)
+    const model = { date, ctx, state, energy: computeEnergy(ctx, state) } as unknown as DayModel
+    const names = { rd: rdFrom({}), settings: s.settings, routines: [], requests: [] }
+    const noc = dayAxis(model, names, null).items.find((i) => i.id === 'noc')!
+    // From the first 02:00 90 min on (to the second 02:30): on the axis 02:00–03:30.
+    expect([noc.startMin, noc.endMin]).toEqual([26 * 60, 27 * 60 + 30])
+  })
+})

@@ -40,11 +40,6 @@ export function blockNow(raw: RawRecord, date: string, b: PlanBlock): PlanBlock 
   return dayFileFrom(raw, date).blocks.find((x) => x.id === b.id) ?? b
 }
 
-/** A block put into the day (new, or changed: a block of the snapshot keeps its id, the change is the day's own). */
-export function putDayBlock(date: string, seen: RawRecord | null, b: PlanBlock): Promise<EditOutcome[] | null> {
-  return saveDay(date, seen, (raw) => putBlock(raw, b))
-}
-
 /**
  * Fields of a block changed (the panel of a block): over the block as the file holds it in its turn, so a change made a
  * moment before stays (A6-01).

@@ -4,7 +4,7 @@
  * rozpoczęcia”). Instants of events are rounded to the nearest minute (T412): a click at 10:00:40 counts from 10:01.
  * Plan times (logical minutes) go through the Polish clock, so a 25-hour day has its doubled hour twice.
  */
-import { dayLengthMin, dayStart, placeLogical } from '../time/day'
+import { dayLengthMin, dayStart, logicalMinuteOf, placeLogical } from '../time/day'
 import { MINUTE } from '../time/zone'
 
 export interface Grid {
@@ -27,6 +27,16 @@ export const atOf = (g: Grid, idx: number): number => g.start + idx * MINUTE
 
 /** The index of a logical minute of the plan (a skipped hour goes to the first minute after it). */
 export const idxOfLogical = (g: Grid, logicalMin: number): number => idxOf(g, placeLogical(g.date, logicalMin))
+
+/**
+ * The minutes [from, to) of the grid as logical minutes of the axis: from the minute the Polish clock shows at the start,
+ * as long as they last – a 25-hour day's clock shows an hour twice, and a block across it keeps its length (never a
+ * sliver); across the hour a 23-hour day skips, the end as the clock shows it.
+ */
+export function logicalSpan(g: Grid, from: number, to: number): { startMin: number; endMin: number } {
+  const startMin = logicalMinuteOf(g.date, atOf(g, from))
+  return { startMin, endMin: Math.max(logicalMinuteOf(g.date, atOf(g, to)), startMin + (to - from)) }
+}
 
 /** An index kept within the day [0, length]. */
 export const clampIdx = (g: Grid, idx: number): number => Math.max(0, Math.min(g.length, idx))
