@@ -144,10 +144,14 @@ jobs:
         env:
           RD_REPORT: install
       # The next patch version built like a future release (release-next\): the four update paths go N → N+1.
+      # out\ is built anew first: install.spec runs `npm run dev`, which rewrites out\ with a development build and,
+      # killed after a few seconds, can leave it without out\main\start.js (T559).
       - name: Następna wersja do testu aktualizacji
         if: ${{ !cancelled() }}
         shell: pwsh
         run: |
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $next = node scripts/next-version.mjs
           npx electron-builder --win --x64 --publish never '-c.directories.output=release-next'
           $code = $LASTEXITCODE
