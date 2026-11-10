@@ -32,7 +32,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   `docs/decyzje-techniczne-T1-T399.md` – T1–T399; zastąpione w całości w `docs/archiwum/decyzje-zastapione.md`. D188
   cofnięta przez T303, ale cytowana w D150 i specyfikacji – zostaje w rejestrze.
 - `docs/plan.md` ma od 7.11 dopisany plan rozszerzeń (GCal, Notion, Sunsama – bloki FBL…) – bez decyzji o starcie;
-  wykonawcy i przeglądy według ryzyka od 9.11 (D354).
+  wykonawcy i przeglądy według ryzyka od 9.11 (D354); 10.11 dopisane SNT7 (długość bloku przeciągnięciem krawędzi),
+  opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`.
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →

@@ -51,8 +51,8 @@ Ciągi A–E zakończone wydaniem 1.0.0 (28.10.2026) → `docs/archiwum/plan-E0-
 
 ## Rozszerzenia do pełnej funkcjonalności (parzystość z Google Calendar, Notion, Sunsama)
 
-Plan 14 funkcji niwelujących braki względem Google Calendar, Notion i narzędzi time-blockingu (dopisany 7.11), bez
-decyzji o starcie – każde zadanie przed startem potrzebuje decyzji D o wyglądzie i zachowaniu. Bloki są tematyczne;
+Plan 15 funkcji niwelujących braki względem Google Calendar, Notion i narzędzi time-blockingu (dopisany 7.11, SNT7 –
+10.11), bez decyzji o starcie – każde zadanie przed startem potrzebuje decyzji D o wyglądzie i zachowaniu. Bloki są tematyczne;
 wykonawca i poziom przeglądu według ryzyka (D354, D351): silnik dnia, folder danych, migracje formatu i pasek pulpitu –
 `wykonawca-opus` albo przegląd xhigh; ekrany na gotowej logice – `wykonawca-sonnet`, przegląd high; Haiku nie pisze
 kodu rozszerzeń. Główna sesja Opus 5.5 · high zleca, sprawdza, przegląda i scala.
@@ -90,8 +90,9 @@ kodu rozszerzeń. Główna sesja Opus 5.5 · high zleca, sprawdza, przegląda i 
 | SNT4 | **3.4 Brak załączników, plików i multimediów:** Obsługa załączników w blokach i zadaniach: przeciąganie plików (`drag & drop`), zapisywanie w podfolderze `attachments/<id>/`. Obsługa klikalnych linków zewnętrznych (URL do GitHuba, Figmy, Notion, Dysku) z automatycznym pobieraniem tytułu/ikony i otwieraniem w domyślnej przeglądarce (`shell.openExternal`). | Całość | `wykonawca-opus` (zapis w folderze danych, sprawdzenie adresu przed `shell.openExternal`) + `wykonawca-sonnet` (ekran) · xhigh | 3,5–5 h | Przeciągnięcie pliku do bloku zapisuje załącznik i wyświetla miniaturę/ikonę; kliknięcie linku zewnętrznego otwiera właściwą aplikację/przeglądarkę. |
 | SNT5 | **4.1 Brak podzadań i list kontrolnych (Subtasks & Checklists):** Rozszerzenie struktury bloku i zadania o listę kroków `subtasks: Array<{ id, title, done, order }>`. Interfejs listy w `BlockEditor`: szybkie dodawanie na Enter, zmiana kolejności, odhaczanie checkboxów. Wyświetlanie postępu (np. `3/5 ✓`) na kafelku bloku na osi czasu oraz bezpośrednia integracja z paskiem pulpitu (`DesktopBar`). | Całość | `wykonawca-sonnet` · xhigh (pasek pulpitu) | 3–4,5 h | Każdy blok pracy może zawierać checklistę; kroki można odhaczać zarówno w oknie głównym, jak i bezpośrednio na pasku pulpitu podczas trwania timera. |
 | SNT6 | **Globalne wyszukiwanie (Ctrl+K / Spotlight / Command Palette):** Szybkie okno wyszukiwarki wywoływane globalnym skrótem w aplikacji `Ctrl+K` / `Ctrl+P`. Wyszukiwanie pełnotekstowe w czasie rzeczywistym po tytułach bloków, notatkach Markdown, zadaniach backlogu, rutynach i szablonach. Nawigacja klawiaturą (góra/dół/Enter) ze skokiem do wybranego dnia lub rekordu. | Interfejs | `wykonawca-sonnet` · high | 4–6 h | Naciśnięcie `Ctrl+K` otwiera paletę; wpisanie frazy błyskawicznie filtruje rekordy; wybór wyniku nawiguje bezpośrednio do widoku i zaznacza element. |
+| SNT7 | **2.2 Zmiana długości bloku przeciągnięciem krawędzi (jak w Google Calendar):** Po najechaniu na dolną krawędź bloku na osi dnia pojawia się kursor zmiany rozmiaru; przeciągnięcie w dół wydłuża, w górę skraca blok – koniec staje na siatce 5 min jak start w D305, najkrótszy blok 5 min. W trakcie przeciągania podgląd nowej godziny końca i długości. Zapis tą samą drogą co pole „Długość” w `BlockEditor` (`durationMin`), więc te same ostrzeżenia (maksima dnia, twardy koniec) – ostrzega, nie blokuje (D72). Zwykłe kliknięcie dalej otwiera blok do edycji (D305). Działa wszędzie, gdzie jest `Timeline` (Dziś, Szablony), a w widokach wielodniowych SNT1 – ten sam gest. Przed startem decyzja D: czy także górna krawędź (zmiana startu przy stałym końcu), które bloki (jak D305: niezaczęte z własną godziną; czy też blok trwający – wydłużenie planu), czy bloki stałe z rozkładu (wykład) i bloki z rutyną (długość z kroków). | Interfejs | `wykonawca-sonnet` · high | 1,5–2,5 h | Przeciągnięcie dolnej krawędzi bloku zmienia jego długość co 5 min, podgląd pokazuje nową godzinę końca, po puszczeniu plan, prognoza energii i ostrzeżenia liczą się od nowa; kliknięcie bez ruchu otwiera edycję; test gestu w E2E. |
 
-*Razem Blok 3: 24,5–36,5 h (6 zadań)*
+*Razem Blok 3: 26–39 h (7 zadań)*
 
 ---
 
@@ -113,9 +114,9 @@ kodu rozszerzeń. Główna sesja Opus 5.5 · high zleca, sprawdza, przegląda i 
 | :--- | :--- | :--- | :--- | :---: | :---: |
 | **Blok 1** | Architektura danych (SQLite), widoki danych, przepakowywanie dnia | `wykonawca-opus`; FBL1 najpierw decyzja o architekturze (Opus 5.5 · max, druga opinia Fable 5.1) | xhigh | 2 | **17–25 h** |
 | **Blok 2** | Silnik dnia, RRULE (RFC 5545), Task Inbox, bufory energii | `wykonawca-opus`; ekrany OPS2 – `wykonawca-sonnet` | xhigh | 3 | **15–23 h** |
-| **Blok 3** | Widoki czasowe, warstwy kalendarza, Markdown, załączniki, podzadania, Ctrl+K | `wykonawca-sonnet`; zapis plików dni (SNT1) i załączników (SNT4) – `wykonawca-opus` | high; SNT1 (zapis dni), SNT2, SNT4, SNT5 – xhigh | 6 | **24,5–36,5 h** |
+| **Blok 3** | Widoki czasowe, warstwy kalendarza, Markdown, załączniki, podzadania, Ctrl+K, długość przeciągnięciem | `wykonawca-sonnet`; zapis plików dni (SNT1) i załączników (SNT4) – `wykonawca-opus` | high; SNT1 (zapis dni), SNT2, SNT4, SNT5 – xhigh | 7 | **26–39 h** |
 | **Blok 4** | Wydarzenia całodniowe, termin i data wykonania, priorytety | `wykonawca-sonnet`; części w silniku dnia – `wykonawca-opus` | high; HKU1 i silnik – xhigh | 3 | **6,5–9,5 h** |
-| **Łącznie** | Parzystość z Google Calendar, Notion i Sunsama | – | – | **14** | **63–94 h** |
+| **Łącznie** | Parzystość z Google Calendar, Notion i Sunsama | – | – | **15** | **64,5–96,5 h** |
 
 ## Gotowe, gdy
 

@@ -1,6 +1,6 @@
 # RegulatedDay – Specyfikacja Funkcjonalna Rozszerzeń
 
-Dokument opisuje 14 kluczowych możliwości funkcjonalnych aplikacji: **co użytkownik może osiągnąć**, jak wygląda jego codzienna praca z narzędziem i jakie problemy rozwiązuje każda z funkcji w praktyce (bez żargonu i szczegółów technicznych implementacji).
+Dokument opisuje 15 kluczowych możliwości funkcjonalnych aplikacji: **co użytkownik może osiągnąć**, jak wygląda jego codzienna praca z narzędziem i jakie problemy rozwiązuje każda z funkcji w praktyce (bez żargonu i szczegółów technicznych implementacji).
 
 ---
 
@@ -252,10 +252,29 @@ Pracujesz nad projektem i nagle przypominasz sobie, że trzy tygodnie temu zapis
 
 ---
 
+## 15. Zmiana długości bloku przeciągnięciem krawędzi (2.2)
+
+### Co ta funkcja daje użytkownikowi
+Wydłużenie albo skrócenie bloku jednym ruchem myszy, prosto na osi dnia – tak jak w Google Calendar – bez otwierania okna edycji i wpisywania minut.
+
+### Scenariusz z życia
+Masz blok pracy nad raportem od 9:00 do 10:00. Rano widzisz, że godzina nie wystarczy.
+* **Przed zmianą:** Klikasz blok, w panelu edycji szukasz pola „Długość”, wpisujesz nową liczbę minut i zatwierdzasz.
+* **Dzięki funkcji:** Najeżdżasz na dolną krawędź bloku – kursor zmienia się w strzałkę góra/dół. Chwytasz krawędź i ciągniesz w dół. Podczas ruchu widzisz podpowiedź „9:00–11:30 · 2 h 30 min”. Puszczasz – blok kończy się o 11:30, a krzywa energii i linia granicy dnia od razu przeliczają się od nowa.
+
+### Jak wygląda praca z tą funkcją
+* **Krok 5 minut:** Koniec bloku przeskakuje co 5 minut, tak samo jak start przy przeciąganiu całego bloku. Najkrótszy blok ma 5 minut.
+* **Kliknięcie dalej otwiera blok:** Zwykłe kliknięcie bez ruchu otwiera blok do edycji, jak dotąd.
+* **Ostrzega, nie blokuje:** Gdy wydłużony blok przekracza maksimum dnia albo twardy koniec, widzisz te same ostrzeżenia co przy zmianie długości w panelu edycji. Aplikacja niczego nie zatrzymuje.
+* **Wszędzie ten sam gest:** Działa na osi dnia, w szablonach i w widokach tygodnia i 3 dni.
+* **Do decyzji przed budową:** czy także górna krawędź (zmiana startu przy tym samym końcu), czy także blok, który już trwa, i jak traktować wykłady z rozkładu oraz bloki z rutyną.
+
+---
+
 ## Podsumowanie
 
-Te 14 funkcjonalności sprawia, że **RegulatedDay staje się kompletnym, samodzielnym centrum zarządzania czasem i życiem**:
-1. Daje pełną elastyczność i horyzont czasowy **Google Calendar** (tydzień, powtarzalność, warstwy, all-day),
+Te 15 funkcjonalności sprawia, że **RegulatedDay staje się kompletnym, samodzielnym centrum zarządzania czasem i życiem**:
+1. Daje pełną elastyczność i horyzont czasowy **Google Calendar** (tydzień, powtarzalność, warstwy, all-day, zmiana długości przeciągnięciem),
 2. Daje swobodę tworzenia notatek i strukturę danych **Notion** (Markdown, bazy danych, załączniki, checklisty, backlog),
 3. Daje spryt i inteligencję narzędzi **Sunsama / Motion** (dynamiczne przepakowywanie, ochrona deadlinów, dekompresja),
 4. A przede wszystkim: **nie gubi przy tym unikalnej tożsamości RegulatedDay** – nadal bezwzględnie chroni Twój sen, energię psychofizyczną i uczy zdrowego bilansu między pracą a regeneracją.
