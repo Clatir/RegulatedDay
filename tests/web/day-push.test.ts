@@ -78,7 +78,12 @@ describe('D367 – co zmienia przeciągnięcie albo „Dodaj” w „Dziś”', 
 
 describe('D367 – zapis partii: jedna edycja pliku dnia i „Przesunięto N bloków” w pasku', () => {
   const file: RawRecord = { schema: 1, date: DATE, blocks: PLAN.map((b) => blockJson(b)) }
-  afterEach(() => delete (globalThis as { window?: unknown }).window)
+  // The window's data as before each test: a view set here never leaks into another file's tests.
+  const data = useData.getState()
+  afterEach(() => {
+    delete (globalThis as { window?: unknown }).window
+    useData.setState(data, true)
+  })
 
   function stub(dayFile: RawRecord | null) {
     const sent: EditEntry[][] = []
@@ -122,6 +127,14 @@ describe('D367 – zapis partii: jedna edycja pliku dnia i „Przesunięto N blo
     expect(pushed).toHaveLength(1)
     expect(pushed[0]![1]).toBe(1)
     expect(pushed[0]![3]).toMatchObject({ ...raw, blocks: expect.arrayContaining([expect.objectContaining({ id: 'x' }), expect.objectContaining({ id: 'a', startMin: lm('10:30') })]) })
+  })
+
+  it('nic nie przesunięte: ta sama droga to jeden zapis zmiany, bez linii w pasku', async () => {
+    const { sent, pushed } = stub(file)
+    const out = await pushDayBlocks(DATE, file, (r) => putBlock(r, { ...PLAN[2]!, startMin: lm('14:00') }), [])
+    expect(out).toEqual([{ status: 'applied' }])
+    expect(sent.map((e) => e.map((x) => x.edits.map((y) => y.path.join('.'))))).toEqual([[['blocks.#c.startMin']]])
+    expect(pushed).toEqual([])
   })
 
   it('zapis odrzucony (konflikt z innym komputerem): pasek nie dostaje „Cofnij”', async () => {

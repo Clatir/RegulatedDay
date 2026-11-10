@@ -5,6 +5,7 @@
  * earlier and the day's wake moves the morning).
  */
 import { describe, expect, it } from 'vitest'
+import { firstFixedStart } from '@shared/engine/createDay'
 import { planBlock, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { placeLogical } from '@shared/time/day'
@@ -77,5 +78,32 @@ describe('D367, D372 – rozsuwanie w „Szablonach”', () => {
     const c = templateDrag(day, 'm', span('04:15', '04:45'), null, span('04:00', '04:30'))!
     expect(c.preview).toEqual(new Map([['n', span('04:45', '05:15')]]))
     expect(starts(withTemplateChange(version, c))).toEqual({ m: lm('05:15'), n: lm('05:45') })
+  })
+})
+
+describe('D372 – szablon w tygodniu przesunięcia sesji: miejsce tuż przed pierwszym stałym', () => {
+  // 10.03.2026: the day's wake an hour early – the morning's blocks show an hour before their hours in the template, so
+  // the hour before the first fixed block (the London session at 07:00) can show none of them.
+  const DATE = '2026-03-10'
+  const planned = (blocks: PlanBlock[], id: string) => templateDay(DATE, blocks).day.ctx.plan.find((b) => b.sourceId === id)!.startMin
+
+  it('nowy blok kliknięty w tej godzinie dostaje pierwsze miejsce po niej, które dzień pokaże (start stałego) – nie godzinę wcześniej', () => {
+    const { day, version } = templateDay(DATE, [tb('m', '05:00', 30)])
+    expect(firstFixedStart(day.ctx.plan)).toBe(lm('07:00'))
+    const c = templateAdd(day, tb('x', '06:30', 30))
+    const blocks = withTemplateChange(version, c)
+    expect(starts(blocks).x).toBe(lm('07:00'))
+    expect(planned(blocks, 'x')).toBe(lm('07:00'))
+  })
+
+  it('blok przesunięty w tę godzinę staje tam, gdzie dzień go pokaże – podgląd to miejsce po zapisie', () => {
+    const { day, version } = templateDay(DATE, [tb('m', '05:00', 60), tb('n', '06:40', 30)])
+    // m (shown 04:00) dragged to 05:30 onto n (shown 05:40): n behind it would start at 06:30 – a place no morning block shows at.
+    const c = templateDrag(day, 'm', span('05:30', '06:30'), null, span('04:00', '05:00'))!
+    const blocks = withTemplateChange(version, c)
+    expect(starts(blocks).m).toBe(lm('06:30'))
+    expect(planned(blocks, 'm')).toBe(lm('05:30'))
+    expect(c.preview.get('n')!.startMin).toBeGreaterThanOrEqual(lm('07:00'))
+    expect(planned(blocks, 'n')).toBe(c.preview.get('n')!.startMin)
   })
 })

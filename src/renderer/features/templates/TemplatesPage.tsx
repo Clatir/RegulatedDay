@@ -8,11 +8,9 @@
  * on a taken place of the axis pushes the flexible blocks after it apart (D367, D372) – „Przesunięto N bloków · Cofnij”
  * stays on the page for 15 min, or until the template changes again.
  */
-
-/** How long the line „Przesunięto N bloków · Cofnij” of a template stays (as the bar's after a variant, D313). */
-const PUSHED_MS = 15 * 60_000
 import { useEffect, useMemo, useState } from 'react'
 import type { RawRecord } from '@shared/api'
+import { deepEqual } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { copiedTemplate } from '@shared/engine/planEdit'
 import { pushedText } from '@shared/engine/pushApart'
@@ -23,6 +21,7 @@ import { planBlock, templateFrom, templateVersionOn, type PlanBlock, type Templa
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn } from '@shared/model/settings'
 import { placeLogical } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
+import { UNDO_LINE_MS } from '@shared/widget'
 import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { isSaved, saveRecord, tryRemoveRecord, tryUpdateRecord, updateRecord, useData } from '../../store/data'
@@ -130,14 +129,14 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   const saveVersion = (patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)) => change((t) => withVersion(t, patch))
 
   // D367, D372: the blocks a change of the axis pushed apart – the template before and after it, for „Cofnij”.
-  const [pushed, setPushed] = useState<{ text: string; before: RawRecord; after: RawRecord } | null>(null)
+  const [pushed, setPushed] = useState<{ text: string; before: RawRecord; after: RawRecord; made: Template | null } | null>(null)
   useEffect(() => {
     if (!pushed) return
-    const t = setTimeout(() => setPushed(null), PUSHED_MS)
+    const t = setTimeout(() => setPushed(null), UNDO_LINE_MS)
     return () => clearTimeout(t)
   }, [pushed])
   // The line stays only while the template is as the push left it: any change after it ends it.
-  const pushedShown = pushed != null && JSON.stringify(templateFrom(pushed.after)) === JSON.stringify(template)
+  const pushedShown = pushed != null && deepEqual(pushed.made, template)
   /**
    * A change of the axis (a block dragged, an edge, a new block) as one edit of the template, with the blocks it pushes
    * apart; when it pushed some, „Przesunięto N bloków · Cofnij”. Saved – true.
@@ -152,7 +151,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
       return made.after
     })
     const saved = isSaved(out)
-    if (saved && c.pushed > 0 && made.before && made.after) setPushed({ text: pushedText(c.pushed), before: made.before, after: made.after })
+    if (saved && c.pushed > 0 && made.before && made.after) setPushed({ text: pushedText(c.pushed), before: made.before, after: made.after, made: templateFrom(made.after) })
     return saved
   }
   /** „Cofnij”: the template as it was before the push – what changed on another computer since stays a question. */

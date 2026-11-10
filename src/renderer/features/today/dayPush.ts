@@ -5,7 +5,7 @@
  */
 import type { DayContext, DayState } from '@shared/engine/day'
 import { draggedBlock } from '@shared/engine/planEdit'
-import { pushApart, type PushedBlock } from '@shared/engine/pushApart'
+import { planWith, pushApart, type PushedBlock } from '@shared/engine/pushApart'
 import type { PlanBlock } from '@shared/model/plan'
 import type { BlockSpan, DragEdge } from '../plan/Timeline'
 import { edgePatch } from '../plan/edgeEdit'
@@ -20,9 +20,6 @@ export interface DayChange {
   patch: Partial<PlanBlock>
   pushed: PushedBlock[]
 }
-
-/** The plan with `b` in place of its block of the same id, or added. */
-const planWith = (plan: readonly PlanBlock[], b: PlanBlock): PlanBlock[] => (plan.some((x) => x.id === b.id) ? plan.map((x) => (x.id === b.id ? b : x)) : [...plan, b])
 
 /**
  * The block `id` of the plan dragged to `span` – by its body (`edge` null: its start, D305) or an edge (D365, as the field
@@ -44,7 +41,7 @@ export function addChange(day: { ctx: DayContext; state: DayState }, block: Plan
 }
 
 /** Where the pushed blocks stand (the preview on the axis, by id). */
-export const pushedSpans = (c: DayChange | null): ReadonlyMap<string, BlockSpan> | null => (c?.pushed.length ? new Map(c.pushed.map((p) => [p.id, { startMin: p.startMin, endMin: p.endMin }])) : null)
+export const pushedSpans = (c: DayChange | null): ReadonlyMap<string, BlockSpan> | null => (c?.pushed.length ? new Map(c.pushed.map((p) => [p.id, p.shown])) : null)
 
 /** The pushed blocks as the edit of the day writes them: each block of the plan with its new start. */
 export function pushedStarts(plan: readonly PlanBlock[], c: DayChange): PushedStart[] {

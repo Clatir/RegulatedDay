@@ -3,15 +3,17 @@
  * or a new one from the grid (D366), on a taken place pushes the flexible blocks of the template after it apart – counted
  * on the day the version makes (the same `pushApart` and forecast as „Dziś”), once for the preview and for the save. What
  * the day shows is written in the template's hours: while the sessions start earlier the day's wake moves the morning
- * (`wakeShiftedStart`), and its inverse (`unshiftedStart`) gives each block its start in the template. Without a DOM.
+ * (`wakeShiftedStart`), and its inverse (`unshiftedStart`) gives each block its start in the template; a place the day
+ * cannot show a morning block at (just before the first fixed block) is the first one after it it can – for the block
+ * put there and for every pushed one (`pushApart`'s `hold`), so what is written is what the day then shows. Without a DOM.
  */
-import { firstFixedStart, unshiftedStart } from '@shared/engine/createDay'
+import { firstFixedStart, shiftedStart, unshiftedStart } from '@shared/engine/createDay'
 import type { DayContext, DayState } from '@shared/engine/day'
-import { pushedPlan } from '@shared/engine/pushApart'
+import { planWith, pushApart, type PushHold } from '@shared/engine/pushApart'
 import type { DaySnapshot } from '@shared/model/events'
-import type { PlanBlock, TemplateVersion } from '@shared/model/plan'
+import { MAX_BLOCK_MIN, type PlanBlock, type TemplateVersion } from '@shared/model/plan'
 import type { BlockSpan, DragEdge } from '../plan/Timeline'
-import { addChange, dragChange, type DayChange } from '../today/dayPush'
+import { addChange, dragChange } from '../today/dayPush'
 
 /** The day a version makes (its snapshot has the template's wake and the day's). */
 export interface TemplateDay {
@@ -33,26 +35,34 @@ export interface TemplateChange {
 /** The id in the version of each block the template put into the day. */
 const sources = (day: TemplateDay): Map<string, string> => new Map(day.ctx.plan.filter((b) => b.origin === 'template' && b.sourceId).map((b) => [b.id, b.sourceId!]))
 
-/** The day's change in the template's hours: the changed block's start and the pushed starts unshifted by the day's wake. */
-function inTemplate(day: TemplateDay, c: DayChange, id: string | null): TemplateChange {
+/**
+ * The block `block` (in the day's hours, as the day shows it) put into the day: its start where the day can show it, the
+ * blocks it pushes apart, each in the template's hours (`id` – its id in the version; null: a new block).
+ */
+function inTemplate(day: TemplateDay, block: PlanBlock, patch: Partial<PlanBlock>, id: string | null, atMin?: number, endMin?: number): TemplateChange {
   const delta = day.snapshot.wakeMin - day.snapshot.templateWakeMin
-  const after = pushedPlan(day.ctx.plan.some((b) => b.id === c.block.id) ? day.ctx.plan.map((b) => (b.id === c.block.id ? c.block : b)) : [...day.ctx.plan, c.block], c.pushed)
-  const firstFixed = firstFixedStart(after)
-  const hours = (b: PlanBlock, startMin: number) => unshiftedStart(b, startMin, delta, firstFixed)
+  const firstFixed = firstFixedStart(planWith(day.ctx.plan, block))
+  const toTemplate = (b: Pick<PlanBlock, 'fixed' | 'anchor'>, startMin: number) => unshiftedStart(b, startMin, delta, firstFixed)
+  const hold: PushHold = (b, startMin) => shiftedStart(b, toTemplate(b, startMin), delta, firstFixed)
+  // The block put where the day can show it: the end of a block dragged by its top edge stays.
+  let put = block
+  if (block.startMin != null && patch.startMin != null) {
+    const startMin = shiftedStart(block, toTemplate(block, block.startMin), delta, firstFixed)
+    put = { ...block, startMin, ...(endMin != null ? { durationMin: Math.min(Math.max(endMin - startMin, 1), MAX_BLOCK_MIN) } : {}) }
+  }
+  const pushed = pushApart(day.ctx, day.state, planWith(day.ctx.plan, put), put.id, atMin, hold)
+  const own: Partial<PlanBlock> = { ...patch, ...(patch.startMin != null ? { startMin: toTemplate(put, put.startMin!) } : {}), ...(patch.durationMin != null ? { durationMin: put.durationMin } : {}) }
   const src = sources(day)
-  const patch: Partial<PlanBlock> = { ...c.patch }
-  if (patch.startMin != null) patch.startMin = hours(c.block, patch.startMin)
-  const patches: TemplateChange['patches'] = []
+  const patches: TemplateChange['patches'] = id != null ? [{ id, patch: own }] : []
   const preview = new Map<string, BlockSpan>()
-  if (id != null) patches.push({ id, patch })
-  for (const p of c.pushed) {
+  for (const p of pushed) {
     const of = src.get(p.id)
     const b = day.ctx.plan.find((x) => x.id === p.id)
     if (!of || !b) continue
-    patches.push({ id: of, patch: { startMin: hours(b, p.startMin) } })
-    preview.set(of, { startMin: p.startMin, endMin: p.endMin })
+    patches.push({ id: of, patch: { startMin: toTemplate(b, p.startMin) } })
+    preview.set(of, p.shown)
   }
-  return { put: id == null ? (patch as PlanBlock) : null, patches, preview, pushed: preview.size }
+  return { put: id == null ? ({ ...put, ...own } as PlanBlock) : null, patches, preview, pushed: preview.size }
 }
 
 /**
@@ -61,13 +71,14 @@ function inTemplate(day: TemplateDay, c: DayChange, id: string | null): Template
  */
 export function templateDrag(day: TemplateDay, id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan): TemplateChange | null {
   const dayId = [...sources(day)].find(([, of]) => of === id)?.[0]
-  const c = dayId ? dragChange(day, dayId, span, edge, shown, true) : null
-  return c ? inTemplate(day, c, id) : null
+  const c = dayId ? dragChange(day, dayId, span, edge, shown, false) : null
+  return c ? inTemplate(day, c.block, c.patch, id, edge === 'end' ? shown.startMin : undefined, edge === 'top' ? span.endMin : undefined) : null
 }
 
 /** A new block of the version from the grid (D366) at the hour clicked, with the blocks it pushes apart. */
 export function templateAdd(day: TemplateDay, block: PlanBlock): TemplateChange {
-  return inTemplate(day, addChange(day, { ...block, origin: 'template', sourceId: block.id }, true), null)
+  const c = addChange(day, { ...block, origin: 'template', sourceId: block.id }, false)
+  return inTemplate(day, c.block, c.patch, null)
 }
 
 /** The version's blocks with the change laid on (each patch over the block as the version holds it then). */

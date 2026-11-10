@@ -16,7 +16,7 @@ import { HARD_END_TEXT } from '@shared/engineView'
 import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
-import { pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
+import { planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
 import { recordEdit } from '@shared/data/merge'
 
 const DAY = '2026-10-21'
@@ -1727,6 +1727,43 @@ describe('warianty w pasku (D313)', () => {
     await m.w.refresh()
     expect(m.w.current().variants.marker).toBe(false)
   })
+
+  /** „b” moved to `startMin` in the main window as a push of one block (D367): the edit the window saves, said to the bar. */
+  async function pushB(w: WidgetEngine, folder: DataFolder, startMin = 13 * 60) {
+    const now = (await folder.recordView(paths.day(DAY))) as Record<string, unknown> & { blocks: Array<{ id: string; startMin: number }> }
+    const entry = recordEdit(paths.day(DAY), now, { ...now, blocks: now.blocks.map((b) => (b.id === 'b' ? { ...b, startMin } : b)) })!
+    await folder.edit([{ ...entry, edits: entry.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
+    await w.pushed(DAY, 1, { entry, made: null })
+  }
+  const startOfB = async (folder: DataFolder) => ((await folder.recordView(paths.day(DAY))) as { blocks: Array<{ id: string; startMin: number }> }).blocks.find((b) => b.id === 'b')?.startMin
+  const movedIds = (w: WidgetEngine) => w.current().lines.filter((l) => l.id.startsWith('moved:')).map((l) => l.id)
+
+  it('wariant, potem rozsuwanie: w pasku obie linie, każda ze swoim „Cofnij” – cofnięcie rozsuwania zostawia wariant i odwrotnie', async () => {
+    const { w, folder } = await over()
+    await w.act('variants', 'open', 'bar')
+    await w.act('variants', 'pick|shorten', 'bar')
+    await pushB(w, folder)
+    // The newest first.
+    expect(movedIds(w)).toEqual(['moved:push', 'moved:variant'])
+    expect(w.current().lines[0]).toMatchObject({ text: 'Przesunięto 1 blok', actions: [{ id: 'undo', label: 'Cofnij' }] })
+    await w.act('line', 'moved:push|undo', 'bar')
+    expect(await startOfB(folder)).toBe(11 * 60)
+    expect(await blockB(folder)).toMatchObject({ durationMin: 15, byVariant: true })
+    expect(movedIds(w)).toEqual(['moved:variant'])
+    await w.act('line', 'moved:variant|undo', 'bar')
+    expect(await blockB(folder)).toMatchObject({ durationMin: 60 })
+    expect(movedIds(w)).toEqual([])
+  })
+
+  it('rozsuwanie, potem wariant: linia rozsuwania zostaje; kolejne rozsuwanie zastępuje tylko poprzednie', async () => {
+    const { w, folder } = await over()
+    await pushB(w, folder)
+    await w.act('variants', 'open', 'bar')
+    await w.act('variants', 'pick|shorten', 'bar')
+    expect(movedIds(w)).toEqual(['moved:variant', 'moved:push'])
+    await pushB(w, folder, 14 * 60)
+    expect(movedIds(w)).toEqual(['moved:push', 'moved:variant'])
+  })
 })
 
 describe('rozsuwanie w pasku (D367)', () => {
@@ -1811,6 +1848,21 @@ describe('rozsuwanie w pasku (D367)', () => {
     await w.pushed(addDays(DAY, 1), 2, { entry: { ...entry, rel: paths.day(addDays(DAY, 1)) }, made: null })
     expect(w.current().lines[0]?.id).toBe('moved:push')
     expect(w.current().variants.marker).toBe(false)
+  })
+
+  it('IPC: odpowiedź nie czeka na przeliczenie paska (okno nie wisi na „Dodaj”), błąd przeliczenia idzie do logu', async () => {
+    const entry = { rel: paths.day(DAY), edits: [{ path: ['blocks', '#a', 'startMin'], base: 600, value: 660 }] }
+    const calls: unknown[][] = []
+    const logs: string[] = []
+    const never = { pushed: (...a: unknown[]) => (calls.push(a), new Promise<void>(() => undefined)) }
+    expect(planPushedIpc(never, () => undefined, DAY, 2, entry, null)).toBeUndefined()
+    expect(calls).toEqual([[DAY, 2, { entry, made: null }]])
+    const failing = { pushed: () => Promise.reject(new Error('folder')) }
+    planPushedIpc(failing, (_l, msg) => void logs.push(msg), DAY, 1, entry, null)
+    await vi.waitFor(() => expect(logs).toEqual(['pasek nie przeliczył się po przesunięciu bloków']))
+    // Not taken: nothing asked of the bar.
+    planPushedIpc(never, () => undefined, DAY, 0, entry, null)
+    expect(calls).toHaveLength(1)
   })
 
   it('IPC: przyjmuje tylko edycję pliku tego dnia (nie usunięcie), liczbę bloków ≥ 1, plik utworzony tylko przy „create”', () => {

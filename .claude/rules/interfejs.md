@@ -37,11 +37,13 @@ paths:
   krawędź od miejsca na osi; `addChange` – „Dodaj” poza wymianą) liczy zmianę i `pushApart` raz dla podglądu i zapisu; `Timeline`
   `pushPreview` rysuje przesuwane na nowych miejscach (`data-pushed`, przerywana obwódka) w trakcie i w czasie trzymania po
   upuszczeniu; zapis `pushDayBlocks` (`withPushed`: zmiana + starty w jednym wpisie `trySaveWith`), po `isSaved` – `window.rd.planPushed`
-  (pasek „Przesunięto N bloków · Cofnij”, reguły `widget.md`); nic nie przesunięte – zapis jak dotąd (`patchDayBlock`, `putDayBlock`).
+  (pasek „Przesunięto N bloków · Cofnij”, reguły `widget.md`); nic nie przesunięte – ten sam `pushDayBlocks` z pustą listą (bez IPC).
+  Podgląd `Timeline` liczony raz na miejsce przeciągania (klucz id/krawędź/godziny + `items`), podgląd = `PushedBlock.shown`.
   „Szablony” (D372): `templates/templatePush.ts` (`templateDrag`, `templateAdd` – te same `dragChange`/`addChange` na dniu wersji, id osi =
-  id w wersji; godziny osi → szablonu przez `unshiftedStart` z `createDay.ts`, odwrotność `wakeShiftedStart`; `withTemplateChange`) –
-  także przeciągnięcie i krawędzie bez przesunięć; jeden `tryUpdateRecord`; linia `template-pushed` w `Editor` (przed/po, 15 min,
-  widoczna tylko póki szablon jest taki, jak go zostawiła), „Cofnij” = `saveRecord(rel, po, przed)`. Bez `planPushed` i znacznika.
+  id w wersji; godziny osi → szablonu przez `unshiftedStart` z `createDay.ts`, odwrotność `wakeShiftedStart` – godzina przed pierwszym
+  stałym, której dzień z wcześniejszą pobudką nie pokaże, → start stałego; ten sam `hold` w `pushApart` i dla bloku upuszczonego) –
+  także przeciągnięcie i krawędzie bez przesunięć; jeden `tryUpdateRecord`; linia `template-pushed` w `Editor` (przed/po, `UNDO_LINE_MS`,
+  widoczna tylko póki szablon jest taki, jak go zostawiła – `deepEqual`), „Cofnij” = `saveRecord(rel, po, przed)`. Bez `planPushed` i znacznika.
   Testy okna bez DOM: `tests/web/` (projekt `tsconfig.web.json`).
 - `today/` – „Dziś”: `MorningPlan`, `LateWakeCard`, `TypeChangeDialog`, `ExchangeDialog`, `MoveDialogs`, `dayActions`.
   Pobudka dnia (`TodayPage`, `CalendarPage`) = `setDayWake`: zapis pobudki i jednorazowe przesunięcie własnych bloków

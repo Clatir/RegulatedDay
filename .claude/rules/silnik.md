@@ -26,12 +26,15 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - `engine/blocks.ts` – `BlockInfo` (klasa, czeka na „Zacznij”, druga zmiana, wykład/zjazd, oznaczenie „po pracy”).
 - `engine/forecast.ts` – prognoza planu od minuty m (tryby `window` i `typical`); `day.ts` `shownForecast(ctx, state, bloki)` –
   ta sama prognoza co `DayState.forecast` dla innych bloków (zmiana próbowana przed zapisem), `typicalOf`.
-- `engine/pushApart.ts` (D367, rozsuwanie) – `pushApart(ctx, state, planPoZmianie, id, atMin?)` → `PushedBlock[]` (stary start,
-  nowe miejsce): kolejne = pokazane od miejsca bloku (dolna krawędź – `atMin`, miejsce na osi); zaplanowane nie później niż
-  blok idą za nim; nowe godziny z `shownForecast` planu po zmianie (reguła prognozy, nie kopia); zapis, gdy blok przesunął
-  się później, musiał pójść za blokiem albo jego start w planie wypadłby przed zapisanym wcześniej (kolejność prognozy).
-  Tylko elastyczne z własną godziną, w pierwszym planie, niechronione (`protectedLife`, `rules.protected`), niezaczęte;
-  nic za koniec doby logicznej. `pushedPlan`, `pushedText` (tekst paska). Testy: `tests/unit/engine/push-apart.test.ts`.
+- `engine/pushApart.ts` (D367, rozsuwanie) – `pushApart(ctx, state, planPoZmianie, id, atMin?, hold?)` → `PushedBlock[]` (stary
+  start, zapisany `startMin`, `shown` – miejsce na osi): kolejne = pokazane w `state.forecast` od miejsca bloku (dolna
+  krawędź – `atMin`); zaplanowane nie później niż blok idą za nim w kolejności osi (ułamkowe próbne starty); potem dzień
+  liczony od nowa (`shownForecast`, reguła prognozy, nie kopia), aż nic się nie rusza (starty tylko rosną, `MAX_ROUNDS`):
+  zapis, gdy blok przesunął się później, musiał pójść za blokiem, był już zapisany albo jego start wypadłby przed zapisanym
+  wcześniej – stojące elastyczne (chronione, zaczęte) zostają w łańcuchu i zapis = to, co prognoza pokaże. Start, który plan
+  może trzymać: minuta z własnym numerem (doba 25 h: druga 02:xx → 03:00), najwyżej `PLAN_MAX` (dalej – zapis 03:59, `shown`
+  za dobą), `hold` (szablon). Tylko elastyczne z własną godziną, w pierwszym planie, niechronione (`protectedLife`,
+  `rules.protected`), niezaczęte. `planWith`, `pushedPlan`, `pushedText`. Testy: `tests/unit/engine/push-apart.test.ts`.
 - `engine/day.ts` – `computeDay`: granica, koniec pracy, klasyfikacja minut, budżet, regeneracja, minimum, pora snu,
   twardy koniec, pula, regeneracja każdej minuty (`rest`, dla energii); `newSegments` (odcinki do zapisu przez
   prowadzącego); `settingsAtMinute`. Energia (E2) – osobne reguły `energia.md`.

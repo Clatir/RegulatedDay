@@ -281,8 +281,15 @@ export function Timeline({
   for (let h = lo; h <= hi; h += 60) hours.push(h)
 
   // D367: where the blocks the dragged one pushes apart would stand – while it is held, and after the drop until the day
-  // shows it (the hold).
-  const pushed = drag?.moved && pushPreview ? pushPreview(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) : null
+  // shows it (the hold); counted once for each place of the drag on the day shown (`items`), not on every render.
+  const previewOf = useRef(pushPreview)
+  previewOf.current = pushPreview
+  const pushKey = drag?.moved && pushPreview ? `${drag.id}|${drag.edge ?? ''}|${drag.start}|${drag.end}|${drag.from}|${drag.fromEnd}` : null
+  const pushed = useMemo(
+    () => (pushKey && drag ? (previewOf.current?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) ?? null) : null),
+    // The drag's place is in the key; a new count of the day brings new items.
+    [pushKey, items]
+  )
 
   const box = (i: TimelineItem, narrow: boolean) => {
     const dragged = drag?.id === i.id && drag.moved

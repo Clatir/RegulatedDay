@@ -34,7 +34,7 @@ import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/
 import { EnergyLegend, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
-import { begunIds, blockNow, clickResize, patchDayBlock, pushDayBlocks, putDayBlock, removeDayBlock, setDayWake } from './dayActions'
+import { begunIds, blockNow, clickResize, patchDayBlock, pushDayBlocks, removeDayBlock, setDayWake } from './dayActions'
 import { addChange, dragChange, pushedSpans, pushedStarts, type DayChange } from './dayPush'
 import { putBlock } from '@shared/data/dayEdits'
 import { ExchangeDialog } from './ExchangeDialog'
@@ -185,15 +185,11 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // D367: a day to come pushes blocks apart (a day gone is history).
   const pushes = date >= today
   /**
-   * A change of the plan saved: with the blocks it pushes apart as one edit of the day (the bar's „Przesunięto N bloków ·
-   * Cofnij”, D367), else as before – the fields of the block (D305, D365), a new block put in.
+   * A change of the plan saved – the fields of the block (D305, D365, over the block as the file holds it then), a new
+   * block put in – with the blocks it pushes apart as one edit of the day (the bar's „Przesunięto N bloków · Cofnij”,
+   * D367); nothing pushed: the change alone, as before.
    */
-  const saveChange = (c: DayChange) =>
-    c.pushed.length
-      ? pushDayBlocks(date, raw, (r) => putBlock(r, c.was ? { ...blockNow(r, date, c.was), ...c.patch } : c.block), pushedStarts(plan, c))
-      : c.was
-        ? patchDayBlock(date, raw, c.was, c.patch)
-        : putDayBlock(date, raw, c.block)
+  const saveChange = (c: DayChange) => pushDayBlocks(date, raw, (r) => putBlock(r, c.was ? { ...blockNow(r, date, c.was), ...c.patch } : c.block), pushedStarts(plan, c))
   /** A block of the plan that may be dragged (D305): what its drag to `span` changes and pushes apart (D367). */
   const movableChange = (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan): DayChange | null => (axis.items.find((i) => i.id === id)?.movable ? dragChange(model, id, span, edge, shown, pushes) : null)
 
