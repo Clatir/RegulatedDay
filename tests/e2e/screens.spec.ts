@@ -409,9 +409,11 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
 
 test('trwający blok (D365): dolna krawędź na osi przedłuża i skraca przez timer, nie przez plan', async () => {
   // The engine approves the boundary itself at the first work block's start (end of work + 15 min – on a weekend or a
-  // holiday that is 45 min from now): the day's own approval 4 h ahead puts it out of the way on any day of the week.
+  // holiday that is 45 min from now): the day's own approval at the end of the logical day (04:00) puts it out of the way
+  // at any hour and on any day of the week – the cost counts only minutes after the boundary. Not run only in the last
+  // 75 min of the logical day, where the block (30 min) and its extension (30 min) would reach over the turn of the day.
   const nowMin = logicalMinuteOf(logicalToday(), Date.now())
-  test.skip(nowMin < 6 * 60 || nowMin > 17 * 60, 'granica 4 h od teraz i maksimum dnia muszą być daleko za blokiem')
+  test.skip(nowMin > 28 * 60 - 75, 'blok i jego przedłużenie nie mieszczą się już w dobie logicznej (koniec o 04:00)')
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-resize-'))
   seed(dataDir)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
@@ -420,7 +422,7 @@ test('trwający blok (D365): dolna krawędź na osi przedłuża i skraca przez t
       await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
       const late = page.getByTestId('block-late')
       await expect(late).toBeVisible({ timeout: 30_000 })
-      await page.evaluate((a) => window.rd.logEvents([{ k: 'boundary.approve', day: a.day, boundary: a.boundary, auto: false }]), { day: logicalToday(), boundary: Math.round((Date.now() + 4 * 60 * 60_000) / 60_000) * 60_000 })
+      await page.evaluate((a) => window.rd.logEvents([{ k: 'boundary.approve', day: a.day, boundary: a.boundary, auto: false }]), { day: logicalToday(), boundary: Math.round((Date.now() + (28 * 60 - nowMin - 1) * 60_000) / 60_000) * 60_000 })
       await late.click()
       await page.getByTestId('block-timer-start').click()
       await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
@@ -451,7 +453,7 @@ test('trwający blok (D365): dolna krawędź na osi przedłuża i skraca przez t
         await expect(page.getByTestId('edge-hint')).toBeVisible()
         await page.mouse.up()
       }
-      // Down by 30 min (33 px): no boundary approved – written at once as „Przedłuż”, the plan of the day untouched.
+      // Down by 30 min (33 px): inside the approved boundary (the end of the day) – written at once as „Przedłuż”, the plan of the day untouched.
       await drag(33)
       await expect.poll(async () => (await events()).filter((e) => e.k === 'block.extend').length).toBe(1)
       const extended = (await events()).find((e) => e.k === 'block.extend')!.minutes!
@@ -474,10 +476,11 @@ test('trwający blok (D365): dolna krawędź na osi przedłuża i skraca przez t
 })
 
 test('trwający blok (D365): za granicą koszt i „Potwierdź · Anuluj” – bez potwierdzenia nic się nie zmienia, z nim jedno „Przedłuż”', async () => {
-  // The boundary is written 45 min from now and the block runs 30 min from now: an extension by 60 min crosses it. Near
-  // the turn of the logical day (04:00) or late in the evening (the maximum of the day) the count is another – not run.
+  // The boundary is written 45 min from now and the block runs 30 min from now: an extension by 60 min crosses it, at any
+  // hour (the cost counts the minutes after the boundary). Not run only in the last 100 min of the logical day (04:00),
+  // where the extended block would reach over the turn of the day.
   const nowMin = logicalMinuteOf(logicalToday(), Date.now())
-  test.skip(nowMin < 6 * 60 || nowMin > 20 * 60, 'granica 45 min od teraz musi mieścić się w dniu i przed jego maksimum')
+  test.skip(nowMin > 28 * 60 - 100, 'blok przedłużony za granicę nie mieści się już w dobie logicznej (koniec o 04:00)')
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-resize-cost-'))
   seed(dataDir, { sessions: false, secondShift: false })
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
@@ -515,7 +518,7 @@ test('trwający blok (D365): za granicą koszt i „Potwierdź · Anuluj” – 
       await drag(66)
       await expect(confirm).toBeVisible()
       await expect(page.getByTestId('resize-confirm-text')).toContainText('Przedłuż +')
-      await expect(page.getByTestId('resize-confirm-text')).toContainText('min puli')
+      await expect(page.getByTestId('resize-confirm-text')).toContainText(/przedłużenie|przekroczenie/)
       await expect(late).toHaveAttribute('data-waiting', 'true')
       expect(await extends_()).toHaveLength(0)
       // Without „Potwierdź” it goes away by itself (10 s) and the block is at its end again – the log unchanged.

@@ -64,6 +64,8 @@ export interface Confirm {
   at: number
   from: number
   to: number
+  /** When the event that confirmed them happened (`EventOrder`): a shortening (D365) ends only those confirmed before it. */
+  order: EventOrder
 }
 
 export interface BlockFact {
@@ -80,7 +82,7 @@ export interface BlockFact {
    * (`block.shorten`, minutes < 0, D365). Where the planned end is counted, take it from here (`endShiftOf`), not from
    * `extends`.
    */
-  endChanges: Array<{ at: number; minutes: number }>
+  endChanges: Array<{ at: number; minutes: number; order: EventOrder }>
   parkedAt: number | null
   /** Why it was parked or cancelled (the rule: 'exchange', 'type', 'lateWake', 'workEnd' …). */
   goneRule: string | null
@@ -294,7 +296,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.startedAt = at
         b.planned = { ...e.planned, variantId: e.planned.variantId ?? null, tag: e.planned.tag ?? null, fixed: e.planned.fixed === true }
         b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })
-        if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil) })
+        if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil), order: orderOf(e) })
         break
       }
       case 'block.pause': {
@@ -315,7 +317,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         }
         const at = Math.max(idx(e.at), b.runs.at(-1)?.to ?? 0)
         b.runs.push({ from: at, to: OPEN, bg: b.runs.at(-1)?.bg ?? false, begun: orderOf(e) })
-        if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil) })
+        if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil), order: orderOf(e) })
         break
       }
       case 'block.end': {
@@ -362,15 +364,15 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
       case 'block.extend': {
         const b = block(e.block)
         b.extends.push({ at: idx(e.at), minutes: e.minutes })
-        b.endChanges.push({ at: idx(e.at), minutes: e.minutes })
+        b.endChanges.push({ at: idx(e.at), minutes: e.minutes, order: orderOf(e) })
         break
       }
       case 'block.shorten':
-        block(e.block).endChanges.push({ at: idx(e.at), minutes: -e.minutes })
+        block(e.block).endChanges.push({ at: idx(e.at), minutes: -e.minutes, order: orderOf(e) })
         break
       case 'block.confirm': {
         const b = block(e.block)
-        b.confirms.push({ at: idx(e.at), from: idx(e.at), to: OPEN })
+        b.confirms.push({ at: idx(e.at), from: idx(e.at), to: OPEN, order: orderOf(e) })
         break
       }
       case 'block.park': {

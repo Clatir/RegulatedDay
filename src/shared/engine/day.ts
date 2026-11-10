@@ -18,7 +18,7 @@ import { addDays, weekday } from '../time/zone'
 import { activityOf, type Activity } from './activity'
 import { blockInfos, isBoundaryWork, plannedSpan, setsWorkEndBlock, type BlockInfo } from './blocks'
 import { EXPLAIN_END_RULES, explainMinutes, explainsOf, type Explain } from './explain'
-import { OPEN, compareOrder, foldFacts, isPassive, isRunning, orderOf, ranMinutes, sameClick, viewAt, workSince, type DayFacts, type Segment } from './facts'
+import { OPEN, compareOrder, foldFacts, isPassive, isRunning, orderOf, ranMinutes, sameClick, viewAt, workSince, type DayFacts, type EventOrder, type Segment } from './facts'
 import { forecast, type Forecast, type Placed } from './forecast'
 import { atOf, gridOf, idxOf, idxOfLogical, type Grid } from './grid'
 
@@ -190,21 +190,23 @@ function plannedEndOf(c: Ctx, b: BlockInfo, startedAt: number, plannedMin: numbe
 
 /**
  * Windows confirmed in advance of a block, from its start/resume confirmations and its „Przedłuż” (each from its click).
- * A shortening dragged on the axis (D365) ends every window confirmed before it at the planned end it leaves: running on
- * past that end is unconfirmed again – a later „Przedłuż” confirms it anew from there.
+ * A shortening dragged on the axis (D365) ends every window confirmed before it – by the order of the events
+ * (`compareOrder`), not by their minute – at the planned end it leaves: running on past that end is unconfirmed again, a
+ * later „Przedłuż” or „Potwierdź” confirms it anew.
  */
 function confirmWindows(c: Ctx, b: BlockInfo, facts: DayFacts): Array<{ at: number; from: number; to: number }> {
   const f = facts.blocks.get(b.id)
   if (!f || f.startedAt == null) return []
-  const out = f.confirms.map((x) => ({ at: x.at, from: x.from, to: x.to === OPEN ? c.cap : x.to }))
+  // `order` null: „Dodaj bez wymiany”, written for a block not begun yet – before every change of its running.
+  const out: Array<{ at: number; from: number; to: number; order: EventOrder | null }> = f.confirms.map((x) => ({ at: x.at, from: x.from, to: x.to === OPEN ? c.cap : x.to, order: x.order }))
   // „Dodaj bez wymiany”: from its start, up to its planned length (spec „Wymiana”).
-  if (f.addConfirmedAt != null) out.push({ at: f.addConfirmedAt, from: f.startedAt, to: f.startedAt + (f.planned?.durationMin ?? b.durationMin) })
+  if (f.addConfirmedAt != null) out.push({ at: f.addConfirmedAt, from: f.startedAt, to: f.startedAt + (f.planned?.durationMin ?? b.durationMin), order: null })
   let extended = 0
   for (const x of f.endChanges) {
     const paused = Math.max(0, x.at - f.startedAt - ranMinutes(f, x.at))
     const end = plannedEndOf(c, b, f.startedAt, f.planned?.durationMin ?? b.durationMin, paused, extended)
-    if (x.minutes > 0) out.push({ at: x.at, from: Math.max(end, x.at), to: end + x.minutes })
-    else for (const w of out) if (w.at <= x.at) w.to = Math.min(w.to, end + x.minutes)
+    if (x.minutes > 0) out.push({ at: x.at, from: Math.max(end, x.at), to: end + x.minutes, order: x.order })
+    else for (const w of out) if (w.order == null || compareOrder(w.order, x.order) < 0) w.to = Math.min(w.to, end + x.minutes)
     extended += x.minutes
   }
   // A „Potwierdź” of a fixed block confirms it to its planned end with the extensions.

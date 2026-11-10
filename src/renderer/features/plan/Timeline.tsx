@@ -81,15 +81,24 @@ export const draggedStart = (startMin: number, dy: number): number => Math.round
  * The end of a block shown over `startMin`–`endMin` and its bottom edge dragged by `dy` pixels (D365): the minute under
  * the edge, on the 5-min grid; never a block shorter than 5 min nor longer than the plan holds, within `limits` (a running
  * block: not before now rounded up, not past the day). A move up never lengthens the block – past a limit that lies
- * after its shown end (a block that ran over its plan, the end shown at now) the end stays where it is.
+ * after its shown end (a block that ran over its plan, the end shown at now) the end stays where it is – and a move down
+ * never shortens it (a limit before its shown end, off the grid or under 5 min, does not pull it back), nor ends it under
+ * 5 min after its start.
  */
 export const draggedEnd = (startMin: number, endMin: number, dy: number, limits: EdgeLimits = {}): number => {
   const shortest = Math.ceil(Math.max(startMin + MIN_BLOCK_MIN, limits.minEndMin ?? Number.NEGATIVE_INFINITY) / DRAG_STEP_MIN) * DRAG_STEP_MIN
   const longest = Math.floor(Math.min(startMin + MAX_BLOCK_MIN, limits.maxEndMin ?? Number.POSITIVE_INFINITY) / DRAG_STEP_MIN) * DRAG_STEP_MIN
   const under = Math.round((endMin + dy / PPM) / DRAG_STEP_MIN) * DRAG_STEP_MIN
-  const end = Math.min(Math.max(under, shortest), longest)
-  return under < endMin ? Math.min(end, endMin) : end
+  if (under < endMin) return Math.min(Math.max(under, shortest), endMin)
+  return Math.max(Math.min(under, longest), endMin, shortest)
 }
+
+/**
+ * The hold of a dropped block ends when its end waits for a confirmation: the drop `d` is the one `attached` is about (the
+ * same block, the end the drop asked for) – another, earlier wait does not end the hold of a new drop.
+ */
+export const holdEnds = (d: { dropped: boolean; id: string; end: number }, attached: { id: string; endMin: number } | null | undefined): boolean =>
+  d.dropped && attached != null && d.id === attached.id && d.end === attached.endMin
 
 /**
  * The start of a block shown over `startMin`–`endMin` and its top edge dragged by `dy` pixels (D365): on the 5-min grid, the
@@ -160,10 +169,16 @@ export function Timeline({
   onCreate?: (min: number) => void
   /** A movable block dragged with the left button to a new start (logical minute). */
   onMove?: (id: string, startMin: number) => void
-  /** A block's edge dragged (D365): its new span; the end moved alone (`end`) or the start with the same end (`top`). */
-  onResize?: (id: string, span: BlockSpan, edge: DragEdge) => void
-  /** A line beside the hours while an edge is dragged to `endMin` (D365: the cost of a running block's extension), if any. */
-  resizeNote?: (id: string, endMin: number) => string | null
+  /**
+   * A block's edge dragged (D365): its new span – the end moved alone (`end`) or the start with the same end (`top`) – and
+   * the span it was shown over when grabbed (`shown`: what the drop is counted against, not what the day shows by then).
+   */
+  onResize?: (id: string, span: BlockSpan, edge: DragEdge, shown: BlockSpan) => void
+  /**
+   * What the drop would save, said beside the hours while an edge is dragged (D365: the saved length, the cost of a running
+   * block's extension); null – the length of the span shown. Asked only for a span that differs from the shown one.
+   */
+  resizeNote?: (id: string, span: BlockSpan, edge: DragEdge, shown: BlockSpan) => string | null
   /** What bounds the bottom edge of a block when it is grabbed (D365: a running block – not before now, not past the day). */
   edgeLimits?: (id: string) => EdgeLimits | null
   /**
@@ -192,10 +207,12 @@ export function Timeline({
     if (d?.dropped && dropSettled(items, { ...d, exactEnd: d.exact ? d.end : undefined })) setDrag(null)
   }, [items])
   // A running block's end waiting for „Potwierdź · Anuluj”: the block is drawn there by `attached`, the hold is over.
+  const waitingId = attached?.id
+  const waitingEnd = attached?.endMin
   useEffect(() => {
     const d = dragRef.current
-    if (attached && d?.dropped && d.id === attached.id) setDrag(null)
-  }, [attached])
+    if (d && waitingId != null && waitingEnd != null && holdEnds(d, { id: waitingId, endMin: waitingEnd })) setDrag(null)
+  }, [waitingId, waitingEnd])
   // Let go anywhere (the block drawn anew in another column loses the pointer): the drag ends without a move.
   const holding = drag != null && !drag.dropped
   useEffect(() => {
@@ -276,7 +293,7 @@ export function Timeline({
           if (edge == null && !draggable) return
           dropped.current = false
           e.currentTarget.setPointerCapture(e.pointerId)
-          const limits = (edge === 'end' ? edgeLimits?.(i.id) : null) ?? {}
+          const limits = (edge === 'end' && i.resize === 'end' ? edgeLimits?.(i.id) : null) ?? {}
           setDrag({ id: i.id, pointer: e.pointerId, y0: e.clientY, edge, from: i.startMin, fromEnd: i.endMin, start: i.startMin, end: i.endMin, limits, exact: edge === 'end' && i.movable !== true, moved: false, dropped: false })
         }}
         onPointerMove={(e) => {
@@ -304,7 +321,7 @@ export function Timeline({
           } else {
             const held = { ...d, dropped: true }
             setDrag(held)
-            if (d.edge) onResize!(i.id, { startMin: d.start, endMin: d.end }, d.edge)
+            if (d.edge) onResize!(i.id, { startMin: d.start, endMin: d.end }, d.edge, { startMin: d.from, endMin: d.fromEnd })
             else onMove!(i.id, d.start)
             setTimeout(() => dragRef.current === held && setDrag(null), DROP_HOLD_MS)
           }
@@ -392,11 +409,10 @@ export function Timeline({
             style={{ top: y(drag.edge === 'top' ? drag.start : drag.end) }}
             data-testid="edge-hint"
           >
-            {logicalClock(drag.start)}–{logicalClock(drag.end)} · {durationLabel(drag.end - drag.start)}
-            {(() => {
-              const note = drag.edge === 'end' ? resizeNote?.(drag.id, drag.end) : null
-              return note ? ` · ${note}` : ''
-            })()}
+            {logicalClock(drag.start)}–{logicalClock(drag.end)} ·{' '}
+            {drag.start === drag.from && drag.end === drag.fromEnd
+              ? 'bez zmian'
+              : (resizeNote?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) ?? durationLabel(drag.end - drag.start))}
           </div>
         )}
         {markers.map((m) => (

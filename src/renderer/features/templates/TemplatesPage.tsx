@@ -25,7 +25,7 @@ import { undoToast } from '../../store/ui'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis } from '../plan/dayItems'
-import { edgePatch } from '../plan/edgeEdit'
+import { edgePatch, edgeSummary } from '../plan/edgeEdit'
 import { Timeline } from '../plan/Timeline'
 import { SettingNumber } from '../settings/SettingNumber'
 
@@ -228,11 +228,15 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
               const b = version.blocks.find((x) => x.id === id)
               if (b && b.anchor == null && b.startMin != null) void patchBlock(b.id, { startMin: draggedBlock(b, startMin).startMin })
             }}
-            onResize={(id, span, edge) => {
+            onResize={(id, span, edge, shown) => {
               // D365: an edge of the template's block – the length as the field „Długość” saves it.
               const b = version.blocks.find((x) => x.id === id)
-              const item = axis.items.find((x) => (byPlanId.get(x.id) ?? x.id) === id)
-              if (b && item && b.anchor == null && b.startMin != null) void patchBlock(b.id, edgePatch(b, span, edge, { startMin: item.startMin, endMin: item.endMin }))
+              const patch = b && b.anchor == null && b.startMin != null ? edgePatch(b, span, edge, shown) : null
+              if (b && patch && Object.keys(patch).length > 0) void patchBlock(b.id, patch)
+            }}
+            resizeNote={(id, span, edge, shown) => {
+              const b = version.blocks.find((x) => x.id === id)
+              return b ? edgeSummary(b, span, edge, shown) : null
             }}
             onCreate={(min) => {
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin: 60, origin: 'template' })

@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { costText } from '@shared/costText'
-import { logicalClock, plDate } from '@shared/format'
+import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
 import { draggedBlock, leavesByCancel, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
@@ -27,9 +27,9 @@ import { useMachine } from '../../store/machine'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis, daySummary } from '../plan/dayItems'
-import { edgePatch, resizeAnswer } from '../plan/edgeEdit'
+import { edgePatch, edgeSummary, resizeAnswer, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
-import { EnergyLegend, Timeline, type EdgeLimits } from '../plan/Timeline'
+import { EnergyLegend, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
 import { begunIds, clickResize, patchDayBlock, putDayBlock, removeDayBlock, setDayWake } from './dayActions'
@@ -96,18 +96,20 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     if (previewed.current?.model !== model || previewed.current.key !== key) previewed.current = { model, key, value: resizePreview(model.ctx, model.state, id, endMin, Date.now()) }
     return previewed.current.value
   }
-  const resizeNote = (id: string, endMin: number): string | null => {
-    const p = previewOf(id, endMin)
+  const resizeNote = (id: string, span: BlockSpan, edge: DragEdge, shown: BlockSpan): string | null => {
+    const item = axis.items.find((i) => i.id === id)
+    const b = plan.find((x) => x.id === id)
+    if (item?.movable && b) return edgeSummary(b, span, edge, shown)
+    const p = previewOf(id, span.endMin)
     if (!p) return null
     const what = p.refused ?? p.costText ?? (p.minutes > 0 ? `Przedłuż +${p.minutes}` : p.minutes < 0 ? `krócej o ${-p.minutes} min` : null)
-    return [what, ...p.warnings].filter(Boolean).join(' · ') || null
+    return [durationLabel(span.endMin - span.startMin), what, ...p.warnings].filter(Boolean).join(' · ')
   }
-  // What bounds a running block's bottom edge, taken when it is grabbed: not before now rounded up, not past the day's end
-  // (the same bounds the preview keeps, so the hint is what is written).
+  // What bounds a running block's bottom edge, taken when it is grabbed (the engine's `runningEdges`, the same bounds the
+  // preview keeps, so the hint is what is written).
   const edgeLimits = (id: string): EdgeLimits | null => {
     const e = runningEdges(model.state, Date.now()).get(id)
-    const g = model.state.grid
-    return e ? { minEndMin: e.earliestEnd, maxEndMin: Math.max(logicalMinuteOf(date, atOf(g, g.length)), e.plannedEnd) } : null
+    return e ? { minEndMin: e.earliestEnd, maxEndMin: e.latestEnd } : null
   }
   /**
    * A running block's edge dropped (D365): the main process decides (it may see more than the window: an end after the
@@ -116,9 +118,10 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
    */
   const dropRunning = async (id: string, endMin: number) => {
     const p = previewOf(id, endMin)
-    if (!p || p.minutes === 0) return
-    const a = resizeAnswer(await clickResize(id, date, p.to, false), p.minutes)
-    if (a.kind === 'confirm') setPending({ id, to: p.to, endMin: p.end, text: a.text })
+    const to = resizeToSend(p)
+    if (!p || to == null) return
+    const a = resizeAnswer(await clickResize(id, date, to, false), p.minutes)
+    if (a.kind === 'confirm') setPending({ id, to, endMin: p.end, text: a.text })
     else {
       setPending(null)
       if (a.kind === 'refused') toast(a.why, 'error', 6000)
@@ -305,10 +308,11 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               // D365: an edge dragged – the length as the field „Długość” saves it (the top edge: its start with it).
               onResize={
                 date >= today
-                  ? (id, span, edge) => {
+                  ? (id, span, edge, shown) => {
                       const item = axis.items.find((i) => i.id === id)
                       const p = plan.find((b) => b.id === id)
-                      if (item?.movable && p) void patchDayBlock(date, raw, p, edgePatch(p, span, edge, { startMin: item.startMin, endMin: item.endMin }))
+                      const patch = item?.movable && p ? edgePatch(p, span, edge, shown) : null
+                      if (patch && Object.keys(patch).length > 0) void patchDayBlock(date, raw, p!, patch)
                       // A running block: no change of its plan – the timer moves its end (D365).
                       else if (item?.resize === 'end' && edge === 'end') void dropRunning(id, span.endMin)
                     }

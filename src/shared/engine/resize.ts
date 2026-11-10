@@ -8,7 +8,7 @@
  * „Długość” – nothing is blocked, D72).
  */
 import { costText } from '../costText'
-import { DRAG_STEP_MIN, MIN_BLOCK_MIN } from '../model/plan'
+import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { MINUTE } from '../time/zone'
 import { ownHourBlock } from './blocks'
@@ -22,6 +22,11 @@ export interface RunningEdge {
   block: string
   /** The earliest end allowed now: now rounded up to 5 min, at least 5 min after the block's start. */
   earliestEnd: number
+  /**
+   * The latest end allowed: the day's end (04:00) – within one „Przedłuż” of the planned end; never before `earliestEnd`
+   * nor before the planned end rounded up to 5 min (a block begun just before 04:00 that runs past it). On the grid.
+   */
+  latestEnd: number
   /** Its planned end now (where its edge stands unless it ran past it – then the axis shows it up to now). */
   plannedEnd: number
 }
@@ -29,7 +34,7 @@ export interface RunningEdge {
 /** What dragging the edge of a running block to an end does (logical minutes; `minutes` against its planned end now). */
 export interface ResizePreview {
   block: string
-  /** The end it gets: on the 5-min grid, not before `earliestEnd`, not after the day's end. */
+  /** The end it gets: on the 5-min grid, within [`earliestEnd`, `latestEnd`] of `runningEdges`. */
   end: number
   /** The instant of that end (ms) – `to` of the click `resize`. */
   to: number
@@ -55,16 +60,29 @@ function running(state: DayState): TimerBlock[] {
   return [t.fg, ...t.bg].filter((x): x is TimerBlock => x != null && ownHourBlock(x.info))
 }
 
-/** The earliest end (index): now rounded up to the 5-min grid, at least 5 min after its start (index 0 is 04:00 – a whole hour). */
-function earliestIdx(state: DayState, tb: TimerBlock, at: number): number {
+const up = (idx: number) => Math.ceil(idx / DRAG_STEP_MIN) * DRAG_STEP_MIN
+const down = (idx: number) => Math.floor(idx / DRAG_STEP_MIN) * DRAG_STEP_MIN
+
+/**
+ * The limits of a running block's end (indexes on the 5-min grid – index 0 is 04:00, a whole hour, so the grid is the
+ * clock's): earliest – now rounded up, at least 5 min after its start; latest – the day's end, at most one „Przedłuż”
+ * (`MAX_BLOCK_MIN`) past the planned end, but never before the earliest nor before the planned end rounded up (the end
+ * the axis shows is never cut off). Always earliest ≤ latest.
+ */
+function limitsOf(state: DayState, tb: TimerBlock, at: number): { earliest: number; latest: number } {
   const now = (at - state.grid.start) / MINUTE
-  return Math.ceil(Math.max(now, tb.startedAt + MIN_BLOCK_MIN) / DRAG_STEP_MIN) * DRAG_STEP_MIN
+  const earliest = up(Math.max(now, tb.startedAt + MIN_BLOCK_MIN))
+  const latest = Math.max(Math.min(state.grid.length, down(tb.plannedEnd + MAX_BLOCK_MIN)), earliest, up(tb.plannedEnd))
+  return { earliest, latest }
 }
 
 /** The bottom edges of the running blocks that can be dragged at `at` (ms), by the block's id. */
 export function runningEdges(state: DayState, at: number): Map<string, RunningEdge> {
   const out = new Map<string, RunningEdge>()
-  for (const tb of running(state)) out.set(tb.info.id, { block: tb.info.id, earliestEnd: lmOf(state, earliestIdx(state, tb, at)), plannedEnd: lmOf(state, tb.plannedEnd) })
+  for (const tb of running(state)) {
+    const { earliest, latest } = limitsOf(state, tb, at)
+    out.set(tb.info.id, { block: tb.info.id, earliestEnd: lmOf(state, earliest), latestEnd: lmOf(state, latest), plannedEnd: lmOf(state, tb.plannedEnd) })
+  }
   return out
 }
 
@@ -77,9 +95,9 @@ export function resizePreview(ctx: DayContext, state: DayState, id: string, endL
   const tb = running(state).find((x) => x.info.id === id)
   if (!tb) return null
   const g = state.grid
-  const earliest = earliestIdx(state, tb, at)
+  const { earliest, latest } = limitsOf(state, tb, at)
   const snapped = Math.round(endLm / DRAG_STEP_MIN) * DRAG_STEP_MIN
-  const end = Math.min(Math.max(earliest, idxOfLogical(g, snapped)), Math.max(g.length, tb.plannedEnd))
+  const end = Math.min(Math.max(earliest, idxOfLogical(g, snapped)), latest)
   const to = atOf(g, end)
   const minutes = end - tb.plannedEnd
   const r = timerAction(ctx, state, { a: 'resize', block: id, to }, at)

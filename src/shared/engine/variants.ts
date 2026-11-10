@@ -22,8 +22,8 @@ import { moveBetweenDays, newUserBlock } from './planEdit'
 import { suggestRegen } from './reserve'
 import { secondShiftStart } from './timer'
 
-/** A block is never shortened below this. */
-export const MIN_BLOCK_MIN = 15
+/** A variant never shortens a block below this (the shortest block a drag leaves is `MIN_BLOCK_MIN` of `model/plan`). */
+export const VARIANT_MIN_BLOCK_MIN = 15
 /** The regeneration a variant of energy adds now. */
 export const REGEN_VARIANT_MIN = 20
 
@@ -299,14 +299,14 @@ export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCaus
 
     // Shortening. First by the order above, the minutes asked for; a cut is judged, and when the end of work still does not
     // fit (the cut block is not the one that makes it, or the block behind a fixed one still does not fit before it) the
-    // cut goes where the end is made, as far as the blocks can go (not below MIN_BLOCK_MIN), judged again each time.
+    // cut goes where the end is made, as far as the blocks can go (not below VARIANT_MIN_BLOCK_MIN), judged again each time.
     const cutsOf = (cuts: ReadonlyMap<string, number>): VariantChange[] => [...cuts].map(([block, toMin]) => ({ k: 'shorten', block, toMin }))
     const lengthIn = (cuts: ReadonlyMap<string, number>, id: string) => cuts.get(id) ?? byId.get(id)!.durationMin
     let need = cause.minutes
     let cuts = new Map<string, number>()
     for (const c of ordered) {
       if (need <= 0) break
-      const can = c.info.durationMin - MIN_BLOCK_MIN
+      const can = c.info.durationMin - VARIANT_MIN_BLOCK_MIN
       if (can <= 0) continue
       const cut = Math.min(can, need)
       cuts.set(c.info.id, c.info.durationMin - cut)
@@ -318,10 +318,10 @@ export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCaus
         const tried = new Map<string, number>()
         const day = fromLatest(
           half,
-          (x) => lengthIn(tried, x) - MIN_BLOCK_MIN > 0,
+          (x) => lengthIn(tried, x) - VARIANT_MIN_BLOCK_MIN > 0,
           (id, past) => {
             const was = tried.get(id)
-            tried.set(id, lengthIn(tried, id) - Math.min(past, lengthIn(tried, id) - MIN_BLOCK_MIN))
+            tried.set(id, lengthIn(tried, id) - Math.min(past, lengthIn(tried, id) - VARIANT_MIN_BLOCK_MIN))
             return () => (was == null ? tried.delete(id) : tried.set(id, was))
           },
           () => cutsOf(tried)
@@ -381,7 +381,7 @@ export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCaus
   const costly = candidates(state, (b) => costOf(b) > 0).sort((a, b) => costOf(b.info) - costOf(a.info) || a.from - b.from)[0]
   // A category „nie przenosić na jutro” may be shortened, never moved (spec „Kategorie”).
   const movable = costly != null && !costly.info.rules.noMoveTomorrow
-  const shortenable = costly != null && costly.info.durationMin >= 2 * MIN_BLOCK_MIN
+  const shortenable = costly != null && costly.info.durationMin >= 2 * VARIANT_MIN_BLOCK_MIN
   if (movable) add('regenTomorrow', () => `${capital(regenName)} ${REGEN_VARIANT_MIN} min teraz · ${names(costly.info)} na jutro`, [regen, { k: 'tomorrow', block: costly.info.id }])
   if (shortenable) add('regenShorter', () => `${capital(regenName)} ${REGEN_VARIANT_MIN} min teraz · ${names(costly!.info)} krócej o połowę`, [regen, { k: 'shorten', block: costly!.info.id, toMin: Math.ceil(costly!.info.durationMin / 2) }])
   if (!movable && !shortenable) add('regen', () => `${capital(regenName)} ${REGEN_VARIANT_MIN} min teraz`, [regen])

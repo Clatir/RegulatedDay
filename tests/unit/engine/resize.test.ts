@@ -58,12 +58,43 @@ describe('D365 – trwający blok: dolna krawędź nie schodzi przed teraz', () 
   it('najwcześniejszy koniec to bieżąca chwila zaokrąglona w górę do 5 min', () => {
     const s = day()
     click(s, s.at('10:00'), { a: 'start', block: 'a' })
-    expect(edges(s, s.at('10:12') + 30 * SEC).get('a')).toEqual({ block: 'a', earliestEnd: lm('10:15'), plannedEnd: lm('11:00') })
+    expect(edges(s, s.at('10:12') + 30 * SEC).get('a')).toEqual({ block: 'a', earliestEnd: lm('10:15'), latestEnd: lm('04:00+1'), plannedEnd: lm('11:00') })
     expect(edges(s, s.at('10:15')).get('a')?.earliestEnd).toBe(lm('10:15'))
     expect(edges(s, s.at('10:15') + SEC).get('a')?.earliestEnd).toBe(lm('10:20'))
     // A proposal before it goes to it.
     const p = preview(s, s.at('10:12') + 30 * SEC, 'a', '10:05')!
     expect(p).toMatchObject({ end: lm('10:15'), to: s.at('10:15'), minutes: -45, cost: null, refused: null })
+  })
+
+  it('najpóźniejszy koniec: koniec dnia (04:00)', () => {
+    const s = day()
+    click(s, s.at('10:00'), { a: 'start', block: 'a' })
+    const t = s.at('10:20')
+    expect(edges(s, t).get('a')).toEqual({ block: 'a', earliestEnd: lm('10:20'), latestEnd: lm('04:00+1'), plannedEnd: lm('11:00') })
+    expect(preview(s, t, 'a', '05:00+1')).toMatchObject({ end: lm('04:00+1'), minutes: 17 * 60 })
+  })
+
+  it('blok zaczęty tuż przed 04:00 i sięgający za nią: limity spójne, na siatce 5 min, nie poniżej pokazanego końca', () => {
+    const s = day([block({ id: 'n', cat: 'inne', at: '03:33', min: 60 })])
+    click(s, s.at('03:33'), { a: 'start', block: 'n' })
+    const t = s.at('03:40')
+    // Planned end 04:33 (past the day's end): the latest is it rounded up to the grid, never the day's end below it.
+    expect(edges(s, t).get('n')).toEqual({ block: 'n', earliestEnd: lm('03:40'), latestEnd: lm('04:35+1'), plannedEnd: lm('04:33+1') })
+    const p = preview(s, t, 'n', '05:30+1')!
+    expect(p).toMatchObject({ end: lm('04:35+1'), minutes: 2 })
+    // What the main process writes for the preview's `to` is what the preview showed (past the maximum: with its cost).
+    expect(click(s, t, { a: 'resize', block: 'n', to: p.to })).toMatchObject({ ok: false, confirm: p.cost })
+    expect(click(s, t, { a: 'resize', block: 'n', to: p.to, confirm: true })).toMatchObject({ ok: true, events: [{ k: 'block.extend', minutes: p.minutes }] })
+  })
+
+  it('blok zaczęty minutę przed 04:00: najpóźniejszy koniec nie jest przed najwcześniejszym', () => {
+    const s = day([block({ id: 'n', cat: 'inne', at: '03:58', min: 2 })])
+    click(s, s.at('03:58'), { a: 'start', block: 'n' })
+    const t = s.at('03:59')
+    expect(edges(s, t).get('n')).toEqual({ block: 'n', earliestEnd: lm('04:05+1'), latestEnd: lm('04:05+1'), plannedEnd: lm('04:00+1') })
+    const p = preview(s, t, 'n', '03:59')!
+    expect(p).toMatchObject({ end: lm('04:05+1'), minutes: 5 })
+    expect(click(s, t, { a: 'resize', block: 'n', to: p.to, confirm: true })).toMatchObject({ ok: true, events: [{ k: 'block.extend', minutes: 5 }] })
   })
 
   it('blok zaczęty przed chwilą: najkrótszy blok 5 min, koniec na siatce 5 min', () => {
@@ -235,6 +266,18 @@ describe('D365 – krócej: planowany koniec wcześniej, nie przed teraz', () =>
     expect(minuteOf(s, '11:35', '10:47')).toMatchObject({ upfront: true })
     expect(minuteOf(s, '11:35', '10:55')).toMatchObject({ upfront: false })
     expect(minuteOf(s, '11:35', '11:20')).toMatchObject({ upfront: false })
+  })
+
+  it('„Potwierdź” w tej samej minucie, ale po skróceniu, nie jest przycinane (kolejność zdarzeń, nie minuta)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '10:00', min: 60 })]).approve('10:00', '07:30')
+    expect(click(s, s.at('10:00'), { a: 'start', block: 'a', confirm: true }).ok).toBe(true)
+    // 10:20:05 – the end dragged to 10:40; 10:20:25 – „Potwierdź”: up to its planned end with the extensions.
+    expect(click(s, s.at('10:20') + 5 * SEC, { a: 'resize', block: 'a', to: s.at('10:40') }).ok).toBe(true)
+    expect(click(s, s.at('10:20') + 25 * SEC, { a: 'confirm', block: 'a' }).ok).toBe(true)
+    // Run on past 10:40, „Przedłuż +30” at 10:50 (from the planned end): 10:40–10:50 stay confirmed by „Potwierdź”.
+    expect(click(s, s.at('10:50'), { a: 'extend', block: 'a', minutes: 30, confirm: true }).ok).toBe(true)
+    expect(minuteOf(s, '11:15', '10:45')).toMatchObject({ cls: 'after', upfront: true })
+    expect(minuteOf(s, '11:15', '11:05')).toMatchObject({ upfront: true })
   })
 
   it('„Przedłuż” w `extendedMin` to tylko „Przedłuż” – skrócenie przesuwa sam planowany koniec', () => {
