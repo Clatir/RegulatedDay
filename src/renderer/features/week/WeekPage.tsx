@@ -1,10 +1,11 @@
 /**
  * „Tydzień” (D356, E10 Horyzont): the month's goals at the top, then seven columns Monday to Sunday on one axis of hours –
  * above each its type, the boundary (kept, not kept, in progress, free, no data) and the regeneration against the minimum;
- * the blocks as planned, on days gone by as it was. Only a view: nothing is dragged. A click on a day opens its plan, as in
- * the calendar (D295). The arrows move by a week; the goals shown are the month of the week (`goalsMonthOfWeek`).
+ * the blocks as planned, on days gone by as it was. A click on the heading of a day or on a block opens its plan, as in the
+ * calendar (D295); a click on an empty place of a column (or a drag over it) opens the small window of a new block there
+ * (D366). The arrows move by a week; the goals shown are the month of the week (`goalsMonthOfWeek`).
  */
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { logicalClock } from '@shared/format'
 import { settingsOn, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
@@ -15,14 +16,19 @@ import { cx } from '../../components/ui'
 import { useData } from '../../store/data'
 import { useWeekView } from '../../store/horizon'
 import { useMachine } from '../../store/machine'
-import { openDay } from '../../store/ui'
+import { openDay, setBlockDraft } from '../../store/ui'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockColor, blockName, type Names } from '../plan/blockView'
+import { snapMinute, type GridRange } from '../plan/gridCreate'
+import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { GoalsPanel } from './GoalsPanel'
-import { axisHeight, axisRange, axisY, blockSpan, goalsMonthOfWeek, hourMarks, laneLayout } from './weekLayout'
+import { NEW_BLOCK_MIN, NewBlockPopover } from './NewBlockPopover'
+import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, goalsMonthOfWeek, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, WEEK_PPM } from './weekLayout'
 import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, weekTitle, type Tone } from './weekText'
 
 const AXIS_PX = 48
+/** The gap between the columns (`gap-x-1`), pixels. */
+const COLUMN_GAP = 4
 const TONE_CLASS: Record<Tone, string> = { ok: 'text-sea', bad: 'text-rose', muted: 'text-muted', plain: 'text-fg' }
 
 export function WeekPage() {
@@ -59,16 +65,57 @@ export function WeekPage() {
   )
 }
 
+/**
+ * The new block asked for on the grid (D366, D371): the days in a row it is for (one, or those a drag crossed), its span, and
+ * where its small window stands (pixels from the grid's corner); `seq` – which ask it is (a new ask is a new window).
+ */
+interface NewPick {
+  seq: number
+  dates: string[]
+  startMin: number
+  durationMin: number
+  place: { left: number; top: number }
+}
+
+/** A drag over the columns in progress (D371): the column it began in, the one under the pointer now, its span of hours. */
+interface Held {
+  from: number
+  to: number
+  range: GridRange
+}
+
 function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: number }) {
   const { rd, routines, requests } = useData()
+  const today = useData((s) => s.view?.today ?? '')
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const asks = useRef(0)
+  const [pick, setPick] = useState<NewPick | null>(null)
+  const [held, setHeld] = useState<Held | null>(null)
   const brightness = useMachine((s) => s.prefs.brightness)
   const { lo, hi } = axisRange(from, to)
   const height = axisHeight(lo, hi)
   const marks = hourMarks(lo, hi)
   const namesOf = useMemo(() => (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests }), [rd, routines, requests])
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(7, minmax(0, 1fr))` }
+  /** The column under `x` (the pointer of a drag may be in another one than where it began). */
+  const columnUnder = (x: number): number => {
+    const body = bodyRef.current?.getBoundingClientRect()
+    return body ? columnAt(x, { gridLeft: body.left, gridWidth: body.width, axisPx: AXIS_PX, gap: COLUMN_GAP, count: days.length }) : 0
+  }
+  /** A click (an hour long) or a drag over an empty place of the columns `first`–`last` asks for a new block there. */
+  const pickOn = (first: number, last: number, r: GridRange) => {
+    const body = bodyRef.current?.getBoundingClientRect()
+    if (!body) return
+    const idx = dayIndexes(first, last)
+    const side = (i: number) => bodyRef.current!.querySelector(`[data-testid="week-col-${days[i]!.date}"]`)!.getBoundingClientRect()
+    const a = side(idx[0]!)
+    const b = side(idx.at(-1)!)
+    const place = popoverPlace({ gridWidth: body.width, colLeft: a.left - body.left, colRight: b.right - body.left, top: a.top - body.top + axisY(r.startMin, lo), width: NEW_BLOCK_WIDTH })
+    setPick({ seq: ++asks.current, dates: idx.map((i) => days[i]!.date), startMin: r.startMin, durationMin: r.endMin - r.startMin, place })
+  }
+  const spanHeld = held ? dayIndexes(held.from, held.to) : []
   return (
-    <div className="flex flex-col" data-testid="week-grid">
+    <div className="flex select-none flex-col" data-testid="week-grid">
       {/* The headings stay in view while the axis scrolls. */}
       <div className="sticky top-0 z-10 grid gap-x-1 border-b border-line bg-bg pb-1" style={cols}>
         <span />
@@ -76,17 +123,51 @@ function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: nu
           <ColumnHeading key={d.date} day={d} index={i} brightness={brightness} />
         ))}
       </div>
-      <div className="grid gap-x-1" style={cols}>
+      <div className="relative grid gap-x-1" style={cols} ref={bodyRef}>
         <div className="relative" style={{ height }} aria-hidden="true">
           {marks.map((h) => (
-            <span key={h} className="num absolute right-1.5 -translate-y-1/2 text-[11px] text-muted" style={{ top: Math.max(axisY(h, lo), 7) }}>
+            <span key={h} className="num absolute right-1.5 -translate-y-1/2 text-[11px] text-muted" style={{ top: Math.max(axisY(h, lo), 7) }} data-testid={`week-hour-${h}`}>
               {logicalClock(h)}
             </span>
           ))}
         </div>
         {days.map((d, i) => (
-          <DayColumn key={d.date} day={d} index={i} lo={lo} height={height} marks={marks} names={namesOf(d.date)} brightness={brightness} />
+          <DayColumn
+            key={d.date}
+            day={d}
+            index={i}
+            lo={lo}
+            hi={hi}
+            height={height}
+            marks={marks}
+            names={namesOf(d.date)}
+            brightness={brightness}
+            columnUnder={columnUnder}
+            onHold={(range, x) => setHeld(range ? { from: i, to: columnUnder(x), range } : null)}
+            onPick={pickOn}
+            held={held && spanHeld.includes(i) ? held.range : null}
+            waiting={pick?.dates.includes(d.date) ? pick : null}
+          />
         ))}
+        {pick && (
+          <NewBlockPopover
+            key={pick.seq}
+            dates={pick.dates}
+            startMin={pick.startMin}
+            durationMin={pick.durationMin}
+            today={today}
+            namesOf={namesOf}
+            place={pick.place}
+            onClose={() => setPick(null)}
+            onDates={(dates) => setPick((p) => p && { ...p, dates })}
+            onMore={(block) => {
+              // The full editing of the day, the block not saved yet: the draft of „Dziś” (A6-17) – its „Dodaj” saves it.
+              setBlockDraft(pick.dates[0]!, block)
+              setPick(null)
+              openDay(pick.dates[0]!)
+            }}
+          />
+        )}
       </div>
     </div>
   )
@@ -130,27 +211,73 @@ function ColumnHeading({ day, index, brightness }: { day: HorizonDay; index: num
   )
 }
 
-function DayColumn({ day, index, lo, height, marks, names, brightness }: { day: HorizonDay; index: number; lo: number; height: number; marks: number[]; names: Names; brightness: number }) {
+/**
+ * A column of a day (D366, D371): a click on an empty place of it asks for a new block there, on the 5-min grid and an hour
+ * long; a drag over it for a block as long as the range, in as many days as the pointer crossed (`columnUnder`). `held` –
+ * the band of a drag in progress that takes this day, `waiting` – the block whose small window is open (kept drawn).
+ */
+function DayColumn({
+  day,
+  index,
+  lo,
+  hi,
+  height,
+  marks,
+  names,
+  brightness,
+  columnUnder,
+  onHold,
+  onPick,
+  held,
+  waiting
+}: {
+  day: HorizonDay
+  index: number
+  lo: number
+  hi: number
+  height: number
+  marks: number[]
+  names: Names
+  brightness: number
+  columnUnder: (x: number) => number
+  onHold: (range: GridRange | null, x: number) => void
+  onPick: (first: number, last: number, range: GridRange) => void
+  held: GridRange | null
+  waiting: NewPick | null
+}) {
   const lanes = useMemo(() => laneLayout(day.blocks), [day.blocks])
+  const grid = useGridCreate({
+    lo,
+    hi,
+    ppm: WEEK_PPM,
+    onClick: (min, rect) => {
+      const startMin = Math.min(Math.max(snapMinute(min), lo), hi)
+      onPick(index, index, { startMin, endMin: startMin + NEW_BLOCK_MIN })
+    },
+    onHold,
+    onRange: (r, _rect, x) => onPick(index, columnUnder(x), r)
+  })
+  const shown = held ?? (waiting ? { startMin: waiting.startMin, endMin: waiting.startMin + waiting.durationMin } : null)
   return (
     <div
-      className={cx('relative cursor-pointer overflow-hidden rounded-sm border-x border-line', day.when === 'today' ? 'bg-panel' : 'bg-transparent')}
+      className={cx('relative overflow-hidden rounded-sm border-x border-line', day.when === 'today' ? 'bg-panel' : 'bg-transparent')}
       style={{ height }}
-      onClick={() => openDay(day.date)}
+      {...grid.bind}
       data-testid={`week-col-${day.date}`}
       aria-label={columnLabel(index, day.blocks.length)}
     >
       {marks.map((h) => (
-        <div key={h} className="absolute right-0 left-0 border-t border-line/60" style={{ top: axisY(h, lo) }} />
+        <div key={h} className="pointer-events-none absolute right-0 left-0 border-t border-line/60" style={{ top: axisY(h, lo) }} />
       ))}
       {lanes.map(({ item, lane, lanes: n }) => (
         <BlockBox key={item.id} block={item} lo={lo} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} />
       ))}
+      {shown && <RangeBand range={shown} lo={lo} ppm={WEEK_PPM} testId={held ? 'week-range' : 'week-range-waiting'} />}
     </div>
   )
 }
 
-/** A block on the axis (view only): its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. */
+/** A block on the axis: its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. A click opens its day (D366). */
 function BlockBox({ block: b, lo, lane, lanes, names, brightness, date }: { block: HorizonBlock; lo: number; lane: number; lanes: number; names: Names; brightness: number; date: string }) {
   const { top, height } = blockSpan(b, lo)
   const color = blockColor(b.categoryId, names)
@@ -158,12 +285,15 @@ function BlockBox({ block: b, lo, lane, lanes, names, brightness, date }: { bloc
   const name = blockName(b.named, names)
   const title = `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}${b.background ? ' · w tle' : ''}`
   return (
-    <div
+    <button
+      type="button"
+      onClick={() => openDay(date)}
+      {...NO_GRID}
       title={title}
       data-testid={`week-block-${date}-${b.id}`}
       data-state={b.state}
       data-outside={b.outsidePlan ? 'true' : undefined}
-      className={cx('absolute overflow-hidden rounded-[3px] border-l-[3px] px-1 text-[11px] leading-tight', blockRinged(b.state) && 'ring-1 ring-lamp', blockDashed(b.state) && 'border-dashed', b.state === 'cancelled' && 'line-through')}
+      className={cx('absolute cursor-pointer overflow-hidden rounded-[3px] border-l-[3px] px-1 text-left text-[11px] leading-tight', blockRinged(b.state) && 'ring-1 ring-lamp', blockDashed(b.state) && 'border-dashed', b.state === 'cancelled' && 'line-through')}
       // Dimmed by its fill and edge, never its text (as on the day's axis, A8-05).
       style={{
         top,
@@ -183,6 +313,6 @@ function BlockBox({ block: b, lo, lane, lanes, names, brightness, date }: { bloc
           {logicalClock(b.startMin)}–{logicalClock(b.endMin)}
         </span>
       )}
-    </div>
+    </button>
   )
 }

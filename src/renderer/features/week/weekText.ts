@@ -7,7 +7,7 @@ import type { GoalsProgress } from '@shared/engine/goals'
 import type { HorizonBlockState, HorizonDay } from '@shared/engine/week'
 import { countLabel, durationLabel, formatNumber, ofLabel } from '@shared/format'
 import type { GoalArea } from '@shared/model/goals'
-import { addDays } from '@shared/time/zone'
+import { addDays, weekday } from '@shared/time/zone'
 import { MONTH_NAMES } from '../calendar/MonthGrid'
 
 export const WEEKDAY_SHORT = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'] as const
@@ -138,4 +138,31 @@ export function progressNotes(p: GoalsProgress): Array<{ text: string; title: st
   const short = p.unknown.length + p.partial.length
   if (short > 0) out.push({ text: `niepełne dane: ${short}`, title: 'Nie wszystkie logi miesiąca dało się teraz odczytać – liczby mogą być niepełne' })
   return out
+}
+
+const dayIndex = (date: string): number => weekday(date) - 1
+const capital = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
+
+/** The days of a new block in the small window's heading (D371): „wtorek”, „wt–czw” for days in a row, else „wt, czw”. */
+export function daysLabel(dates: readonly string[]): string {
+  if (dates.length === 1) return WEEKDAY_FULL[dayIndex(dates[0]!)]!
+  const short = dates.map((d) => WEEKDAY_SHORT[dayIndex(d)]!)
+  const inRow = dates.every((d, i) => i === 0 || addDays(dates[i - 1]!, 1) === d)
+  return inRow ? `${short[0]}–${short.at(-1)}` : short.join(', ')
+}
+
+/**
+ * The warning of the small window of a new block for the days gone by among `dates` (D371, D72: only a warning, „Dodaj”
+ * still saves): „Ten dzień już minął.” for one day, else the days by name – „Wtorek już minął.”, „Poniedziałek i wtorek
+ * już minęły.”; null when none has passed.
+ */
+export function pastWarning(dates: readonly string[], today: string): string | null {
+  const past = dates.filter((d) => d < today)
+  if (!past.length) return null
+  if (dates.length === 1) return 'Ten dzień już minął.'
+  const names = past.map((d) => WEEKDAY_FULL[dayIndex(d)]!)
+  const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} i ${names.at(-1)}`
+  // One day: „wtorek minął”, „środa minęła” (the names ending with „a” are feminine); several – „minęły”.
+  const verb = names.length > 1 ? 'minęły' : names[0]!.endsWith('a') ? 'minęła' : 'minął'
+  return `${capital(list)} już ${verb}.`
 }

@@ -216,7 +216,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
             </div>
           </Field>
           <p className="text-[12px] text-muted">
-            Dzień z tego szablonu: {plDate(sample)} · budżet {durationLabel(model.state.budget.limitMin)} · granica {model.state.boundary.proposal != null ? logicalClock(axis.markers.find((m) => m.label.startsWith('propozycja'))?.at ?? 0) : '—'}. Kliknij wolne miejsce na osi, żeby dodać blok.
+            Dzień z tego szablonu: {plDate(sample)} · budżet {durationLabel(model.state.budget.limitMin)} · granica {model.state.boundary.proposal != null ? logicalClock(axis.markers.find((m) => m.label.startsWith('propozycja'))?.at ?? 0) : '—'}. Kliknij wolne miejsce na osi (albo przeciągnij po nim), żeby dodać blok.
           </p>
           <Timeline
             items={axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), movable: i.movable === true && byPlanId.has(i.id) }))}
@@ -239,8 +239,8 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
               const b = version.blocks.find((x) => x.id === id)
               return b ? edgeSummary(b, span, edge, shown) : null
             }}
-            onCreate={(min) => {
-              const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin: 60, origin: 'template' })
+            onCreate={(min, durationMin = 60) => {
+              const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin, origin: 'template' })
               void putBlock(b).then(() => setSelected(b.id))
             }}
             from={axis.from}
