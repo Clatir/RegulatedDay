@@ -27,7 +27,7 @@ import { useMachine } from '../../store/machine'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis, daySummary } from '../plan/dayItems'
-import { edgePatch, edgeSummary, resizeAnswer, resizeToSend } from '../plan/edgeEdit'
+import { edgePatch, edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
 import { EnergyLegend, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
@@ -77,7 +77,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const [menu, setMenu] = useState(false)
   // D365: the bottom edge of a running block dropped past the boundary – its cost waits for „Potwierdź” or „Anuluj” for 10 s,
   // nothing is written meanwhile; the confirmation is the same click again (`confirm`) to the same instant.
-  const [pending, setPending] = useState<{ id: string; to: number; endMin: number; text: string } | null>(null)
+  const [pending, setPending] = useState<{ id: string; to: number; endMin: number; text: string; seq: number } | null>(null)
+  const drops = useRef(0)
   useEffect(() => {
     if (!pending) return
     const t = setTimeout(() => setPending(null), 10_000)
@@ -112,16 +113,14 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     return e ? { minEndMin: e.earliestEnd, maxEndMin: e.latestEnd } : null
   }
   /**
-   * A running block's edge dropped (D365): the main process decides (it may see more than the window: an end after the
-   * closing, a change from the other computer) – up to the boundary it writes at once, past it the cost waits for „Potwierdź”;
-   * what the window's count says (`refused`) only words the hint.
+   * A running block's edge dropped (D365), `p` counted at the drop (now, not when the pointer moved): the main process
+   * decides (it may see more than the window: an end after the closing, a change from the other computer) – up to the
+   * boundary it writes at once, past it the cost waits for „Potwierdź”; what the window's count says (`refused`) only words
+   * the hint.
    */
-  const dropRunning = async (id: string, endMin: number) => {
-    const p = previewOf(id, endMin)
-    const to = resizeToSend(p)
-    if (!p || to == null) return
+  const dropRunning = async (id: string, p: ResizePreview, to: number) => {
     const a = resizeAnswer(await clickResize(id, date, to, false), p.minutes)
-    if (a.kind === 'confirm') setPending({ id, to, endMin: p.end, text: a.text })
+    if (a.kind === 'confirm') setPending({ id, to, endMin: p.end, text: a.text, seq: ++drops.current })
     else {
       setPending(null)
       if (a.kind === 'refused') toast(a.why, 'error', 6000)
@@ -311,10 +310,19 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                   ? (id, span, edge, shown) => {
                       const item = axis.items.find((i) => i.id === id)
                       const p = plan.find((b) => b.id === id)
-                      const patch = item?.movable && p ? edgePatch(p, span, edge, shown) : null
-                      if (patch && Object.keys(patch).length > 0) void patchDayBlock(date, raw, p!, patch)
-                      // A running block: no change of its plan – the timer moves its end (D365).
-                      else if (item?.resize === 'end' && edge === 'end') void dropRunning(id, span.endMin)
+                      if (item?.movable && p) {
+                        void patchDayBlock(date, raw, p, edgePatch(p, span, edge, shown))
+                        return span
+                      }
+                      // A running block: no change of its plan – the timer moves its end (D365), counted at the drop.
+                      if (item?.resize === 'end' && edge === 'end') {
+                        const now = resizePreview(model.ctx, model.state, id, span.endMin, Date.now())
+                        const to = resizeToSend(now)
+                        const asked = resizeAsked(span, now)
+                        if (now && to != null && asked) void dropRunning(id, now, to)
+                        return asked
+                      }
+                      return false
                     }
                   : undefined
               }
@@ -325,6 +333,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                   ? {
                       id: pending.id,
                       endMin: pending.endMin,
+                      seq: pending.seq,
                       node: (
                         <div className="flex items-center gap-2 rounded border border-line bg-panel px-2 py-1 text-[11.5px] text-fg shadow-lg" data-testid="resize-confirm">
                           <span data-testid="resize-confirm-text">{pending.text}</span>

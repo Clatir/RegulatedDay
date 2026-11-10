@@ -201,8 +201,10 @@ function confirmWindows(c: Ctx, b: BlockInfo, facts: DayFacts): Array<{ at: numb
   const out: Array<{ at: number; from: number; to: number; order: EventOrder | null }> = f.confirms.map((x) => ({ at: x.at, from: x.from, to: x.to === OPEN ? c.cap : x.to, order: x.order }))
   // „Dodaj bez wymiany”: from its start, up to its planned length (spec „Wymiana”).
   if (f.addConfirmedAt != null) out.push({ at: f.addConfirmedAt, from: f.startedAt, to: f.startedAt + (f.planned?.durationMin ?? b.durationMin), order: null })
+  // One order for the sum and the cut – the events' (`compareOrder`), not the log's: a „Przedłuż” clicked on another
+  // computer before a shortening but written after it is still cut by it.
   let extended = 0
-  for (const x of f.endChanges) {
+  for (const x of [...f.endChanges].sort((p, q) => compareOrder(p.order, q.order))) {
     const paused = Math.max(0, x.at - f.startedAt - ranMinutes(f, x.at))
     const end = plannedEndOf(c, b, f.startedAt, f.planned?.durationMin ?? b.durationMin, paused, extended)
     if (x.minutes > 0) out.push({ at: x.at, from: Math.max(end, x.at), to: end + x.minutes, order: x.order })

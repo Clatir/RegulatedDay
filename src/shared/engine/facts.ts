@@ -78,9 +78,10 @@ export interface BlockFact {
   /** Confirmed „Przedłuż”, in order. */
   extends: Array<{ at: number; minutes: number }>
   /**
-   * Every change of its planned end, in order: „Przedłuż” (minutes > 0) and an end dragged earlier on the axis
+   * Every change of its planned end, in the log's order: „Przedłuż” (minutes > 0) and an end dragged earlier on the axis
    * (`block.shorten`, minutes < 0, D365). Where the planned end is counted, take it from here (`endShiftOf`), not from
-   * `extends`.
+   * `extends`; where their order matters (a shortening cuts what was confirmed before it – `confirmWindows`), sort them
+   * by `order` (`compareOrder`) – a click of another computer may stand later in the log than it happened.
    */
   endChanges: Array<{ at: number; minutes: number; order: EventOrder }>
   parkedAt: number | null
@@ -547,7 +548,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
 
 /**
  * How far a block's planned end moved (minutes): its „Przedłuż” less its shortenings (D365) – those clicked before
- * `before` (index) when given.
+ * `before` (index) when given. A plain sum, nothing cut to zero on the way: the order of the changes does not matter.
  */
 export function endShiftOf(f: Pick<BlockFact, 'endChanges'>, before = Number.POSITIVE_INFINITY): number {
   let s = 0

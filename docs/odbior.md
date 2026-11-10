@@ -108,6 +108,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E10.3 Krok „Cele na <miesiąc>” w planie porannym
    - [ ] E12.1 Strona „Statystyki”
    - [ ] E12.2 Skróty menu Ctrl+1…9
+   - [ ] J1.1 Długość niezaczętego bloku krawędzią – „Dziś” i „Szablony”
+   - [ ] J1.2 Trwający blok – dolna krawędź, „Potwierdź · Anuluj” za granicą
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1459,3 +1461,31 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Oczekiwany efekt:** Dziś, Kalendarz, Tydzień, Statystyki, Prośby, Szablony, Rutyny, Pokój, Historia; Ctrl+, –
   Ustawienia (zaraz pod Historią w menu) (D361, D362).
 - **Nie przechodzi, gdy:** skrót otwiera inną stronę niż ta na tej pozycji w menu.
+
+### J1 – długość bloku przeciągnięciem krawędzi (1.4.0)
+
+#### J1.1 Długość niezaczętego bloku krawędzią – „Dziś” i „Szablony” (1.4.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/day-axis.test.ts`, `tests/e2e/screens.spec.ts` („ekrany E3”). Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” najedź na dolną krawędź niezaczętego bloku z własną godziną (krawędź jaśnieje, kursor ↕),
+  przeciągnij w dół o ok. pół godziny; potem górną krawędź w górę. To samo w „Szablonach” na bloku z godziną.
+  Zwykłe kliknięcie bloku.
+- **Oczekiwany efekt:** w trakcie podpowiedź „10:00–11:30 · 1 h 30 min”; zmiana co 5 min; dolna krawędź zmienia
+  koniec, górna – start przy tym samym końcu; blok nie krótszy niż 5 min; pole „Długość” w panelu pokazuje nową
+  długość, ostrzeżenia jak przy wpisaniu długości; kliknięcie bez ruchu otwiera blok (D365, D305).
+- **Nie przechodzi, gdy:** krawędź przesuwa cały blok zamiast zmieniać długość, blok po puszczeniu wraca do starej
+  długości, sesja, wykład albo zjazd ma uchwyt, albo kliknięcie bloku zmienia jego długość.
+
+#### J1.2 Trwający blok – dolna krawędź, „Potwierdź · Anuluj” za granicą (1.4.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/resize.test.ts`, `tests/e2e/screens.spec.ts` („trwający blok (D365)”). Ty:
+  rzut oka przy zwykłej pracy.
+- **Jak sprawdzić:** w czasie biegnącego bloku pracy z godziną w planie przeciągnij jego dolną krawędź w dół (przed
+  granicą), potem w górę; wieczorem, gdy blok kończy się blisko granicy – przeciągnij za granicę i puść, raz kliknij
+  „Anuluj”, raz „Potwierdź”.
+- **Oczekiwany efekt:** górnej krawędzi brak; koniec nie schodzi przed teraz (w górę do 5 min); do granicy zmiana od
+  razu; za granicą podpowiedź z kosztem („Przedłuż +N: …”), po puszczeniu blok narysowany do nowego końca
+  z „Potwierdź · Anuluj” przez 10 s – bez potwierdzenia nic się nie zmienia, z „Potwierdź” – przedłużenie z tym samym
+  kosztem co „Przedłuż” w pasku. Sesja, wykład z planu, zjazd i druga zmiana – bez uchwytu (D365).
+- **Nie przechodzi, gdy:** przeciągnięcie za granicę zmienia blok bez „Potwierdź”, koszt różni się od „Przedłuż”
+  w pasku, krawędź w górę przedłuża blok, albo pasek „Potwierdź · Anuluj” zostaje w pustym miejscu osi.

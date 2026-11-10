@@ -268,6 +268,26 @@ describe('D365 – krócej: planowany koniec wcześniej, nie przed teraz', () =>
     expect(minuteOf(s, '11:35', '11:20')).toMatchObject({ upfront: false })
   })
 
+  it('dwa komputery: „Przedłuż” kliknięte przed skróceniem, ale zapisane później w logu – przycina je skrócenie', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '10:00', min: 60 })]).approve('10:00', '07:30')
+    // „Dodaj bez wymiany”: 10:00–11:00 confirmed; a pause of 10 min moves the planned end to 11:10, past that window.
+    s.raw({ k: 'block.addConfirm', block: 'a', at: s.at('09:00') }, '09:00')
+    expect(click(s, s.at('10:00'), { a: 'start', block: 'a' }).ok).toBe(true)
+    click(s, s.at('10:05'), { a: 'pause' })
+    expect(click(s, s.at('10:15'), { a: 'start', block: 'a' }).ok).toBe(true)
+    // Computer A, 10:20:05: the end dragged from 11:10 to 10:50 (it does not know B's click yet).
+    expect(click(s, s.at('10:20') + 5 * SEC, { a: 'resize', block: 'a', to: s.at('10:50') })).toMatchObject({ ok: true, events: [{ k: 'block.shorten', minutes: 20 }] })
+    // Computer B: „Przedłuż +30” clicked at 10:20:03, written from its queue at 10:20:06 – after A's in the log.
+    const t = s.at('10:20') + 6 * SEC
+    s.events.push({ id: 'pcb-0', c: 'pcb', n: 0, t, l: t, v: RULES_VERSION, day: DATE, dom: 'timer', k: 'block.extend', block: 'a', at: s.at('10:20') + 3 * SEC, minutes: 30 } as never)
+    expect(plannedEnd(s, s.at('10:30'), 'a')).toBe('11:20')
+    // By the events' order: „Przedłuż” 11:10–11:40, then the shortening to 11:20. 11:00–11:10 was never confirmed.
+    expect(minuteOf(s, '11:35', '10:55')).toMatchObject({ upfront: true })
+    expect(minuteOf(s, '11:35', '11:05')).toMatchObject({ cls: 'after', upfront: false })
+    expect(minuteOf(s, '11:35', '11:15')).toMatchObject({ upfront: true })
+    expect(minuteOf(s, '11:35', '11:25')).toMatchObject({ upfront: false })
+  })
+
   it('„Potwierdź” w tej samej minucie, ale po skróceniu, nie jest przycinane (kolejność zdarzeń, nie minuta)', () => {
     const s = day([block({ id: 'a', cat: 'inne', at: '10:00', min: 60 })]).approve('10:00', '07:30')
     expect(click(s, s.at('10:00'), { a: 'start', block: 'a', confirm: true }).ok).toBe(true)

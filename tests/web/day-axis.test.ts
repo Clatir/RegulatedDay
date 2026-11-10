@@ -6,7 +6,7 @@ import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
 import { rdFrom } from '@shared/model/rd'
 import { dayAxis } from '@renderer/features/plan/dayItems'
-import { edgePatch, edgeSummary, resizeAnswer, resizeToSend } from '@renderer/features/plan/edgeEdit'
+import { edgePatch, edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '@renderer/features/plan/edgeEdit'
 import { draggedEnd, draggedStart, draggedTopStart, dropSettled, holdEnds, type TimelineItem } from '@renderer/features/plan/Timeline'
 import { DRAG_STEP_MIN, planBlock } from '@shared/model/plan'
 import type { DayModel } from '@renderer/store/day'
@@ -137,40 +137,36 @@ describe('przeciąganie bloków na osi (D305)', () => {
     expect(edgePatch(b, { startMin: 655, endMin: 660 }, 'top', shown)).toEqual({ startMin: 655, durationMin: 5 })
   })
 
-  it('D365: blok stały czekający za regeneracją (10:00–11:00, oś 10:30–11:00) – długość od startu w planie, górna w górę nie skraca', () => {
+  it('D365/D370: blok stały czekający za regeneracją (10:00–11:00, oś 10:30–11:00) – dolna od startu w planie, górna ustawia start na przeciągniętą godzinę', () => {
     const b = planBlock({ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60, fixed: true })
     const shown = { startMin: 630, endMin: 660 }
     // Dolna krawędź do 11:30: koniec 11:30 przy starcie 10:00 – 90 min (nie 60 od pokazanego 10:30).
     expect(edgePatch(b, { startMin: 630, endMin: 690 }, 'end', shown)).toEqual({ durationMin: 90 })
-    // Górna w górę, ale nie wyżej niż start w planie (10:15 ≥ 10:00): nic się nie zmienia (plan nie skraca się do 45 min).
-    expect(edgePatch(b, { startMin: 615, endMin: 660 }, 'top', shown)).toEqual({})
-    expect(edgePatch(b, { startMin: 600, endMin: 660 }, 'top', shown)).toEqual({})
-    // Wyżej niż start w planie: start ustawiony, koniec 11:00 zostaje.
+    // Górna: start w planie = przeciągnięta godzina, także między planowanym a pokazanym startem; koniec 11:00 zostaje.
+    expect(edgePatch(b, { startMin: 615, endMin: 660 }, 'top', shown)).toEqual({ startMin: 615, durationMin: 45 })
+    expect(edgePatch(b, { startMin: 600, endMin: 660 }, 'top', shown)).toEqual({ startMin: 600, durationMin: 60 })
     expect(edgePatch(b, { startMin: 585, endMin: 660 }, 'top', shown)).toEqual({ startMin: 585, durationMin: 75 })
-    // W dół: skraca od góry (start w planie 10:45, koniec bez zmian).
     expect(edgePatch(b, { startMin: 645, endMin: 660 }, 'top', shown)).toEqual({ startMin: 645, durationMin: 15 })
   })
 
-  it('D365: blok elastyczny przesunięty prognozą (plan 10:00, oś 10:30–11:30) – górna w górę nie przesuwa startu w planie później', () => {
+  it('D365/D370: blok elastyczny przesunięty prognozą (plan 10:00, oś 10:30–11:30) – górna też ustawia start w planie, koniec jak na osi', () => {
     const b = planBlock({ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60 })
     const shown = { startMin: 630, endMin: 690 }
     expect(edgePatch(b, { startMin: 630, endMin: 720 }, 'end', shown)).toEqual({ durationMin: 90 })
-    // W górę, ale nie wyżej niż start w planie: plan 10:00–11:00 zostaje (nie 10:15–11:15).
-    expect(edgePatch(b, { startMin: 615, endMin: 690 }, 'top', shown)).toEqual({})
-    // Wyżej niż start w planie: start tam, długość bez zmian (prognoza i tak go wstrzymuje, koniec zostaje).
-    expect(edgePatch(b, { startMin: 585, endMin: 690 }, 'top', shown)).toEqual({ startMin: 585, durationMin: 60 })
-    // W dół – skraca od góry.
+    // Krawędź na 10:15 (między planem a pokazanym startem): plan 10:15, długość do pokazanego końca 11:30 – 75 min.
+    expect(edgePatch(b, { startMin: 615, endMin: 690 }, 'top', shown)).toEqual({ startMin: 615, durationMin: 75 })
+    expect(edgePatch(b, { startMin: 585, endMin: 690 }, 'top', shown)).toEqual({ startMin: 585, durationMin: 105 })
     expect(edgePatch(b, { startMin: 645, endMin: 690 }, 'top', shown)).toEqual({ startMin: 645, durationMin: 45 })
-    // Nieprzesunięty (oś = plan): w górę wydłuża, bo nic go nie wstrzymuje.
+    // Nieprzesunięty (oś = plan): w górę wydłuża.
     expect(edgePatch(b, { startMin: 585, endMin: 660 }, 'top', { startMin: 600, endMin: 660 })).toEqual({ startMin: 585, durationMin: 75 })
   })
 
-  it('D365: podpowiedź mówi to, co zapisze puszczenie – długość od startu w planie dla stałego, „bez zmian”, gdy nic', () => {
+  it('D365/D370: podpowiedź mówi zapisywaną długość (bez „od …”)', () => {
     const fixed = planBlock({ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60, fixed: true })
     const shown = { startMin: 630, endMin: 660 }
     // Stały 10:00–11:00 pokazany 10:30–11:00, dolna do 11:30: zapisze 90 min (od 10:00), nie 1 h.
-    expect(edgeSummary(fixed, { startMin: 630, endMin: 690 }, 'end', shown)).toBe('1 h 30 min od 10:00')
-    expect(edgeSummary(fixed, { startMin: 615, endMin: 660 }, 'top', shown)).toBe('bez zmian')
+    expect(edgeSummary(fixed, { startMin: 630, endMin: 690 }, 'end', shown)).toBe('1 h 30 min')
+    expect(edgeSummary(fixed, { startMin: 615, endMin: 660 }, 'top', shown)).toBe('45 min')
     const flex = planBlock({ id: 'b', categoryId: 'inne', startMin: 600, durationMin: 60 })
     expect(edgeSummary(flex, { startMin: 600, endMin: 690 }, 'end', { startMin: 600, endMin: 660 })).toBe('1 h 30 min')
   })
@@ -191,6 +187,16 @@ describe('przeciąganie bloków na osi (D305)', () => {
     // Bez zmiany albo bez policzonego podglądu – nic do wysłania.
     expect(resizeToSend({ minutes: 0, to: 5 })).toBeNull()
     expect(resizeToSend(null)).toBeNull()
+  })
+
+  it('D365: puszczenie trwającego – blok trzymany na końcu policzonym przy puszczeniu, a bez zmiany wcale', () => {
+    const span = { startMin: 600, endMin: 640 }
+    // Pod wskaźnikiem 10:40, policzone przy puszczeniu (teraz poszło dalej): 10:45 – tam blok czeka na potwierdzenie.
+    expect(resizeAsked(span, { minutes: 20, end: 645 })).toEqual({ startMin: 600, endMin: 645 })
+    expect(resizeAsked(span, { minutes: -10, end: 610 })).toEqual({ startMin: 600, endMin: 610 })
+    // Bez zmiany albo bez policzonego podglądu – nic nie idzie do głównego i blok nie jest trzymany (brak skoku po 2 s).
+    expect(resizeAsked(span, { minutes: 0, end: 640 })).toBe(false)
+    expect(resizeAsked(span, null)).toBe(false)
   })
 
   it('D365: trzymanie upuszczonego bloku kończy się tylko przy oczekiwaniu na TO upuszczenie', () => {

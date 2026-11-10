@@ -231,8 +231,9 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
             onResize={(id, span, edge, shown) => {
               // D365: an edge of the template's block – the length as the field „Długość” saves it.
               const b = version.blocks.find((x) => x.id === id)
-              const patch = b && b.anchor == null && b.startMin != null ? edgePatch(b, span, edge, shown) : null
-              if (b && patch && Object.keys(patch).length > 0) void patchBlock(b.id, patch)
+              if (!b || b.anchor != null || b.startMin == null) return false
+              void patchBlock(b.id, edgePatch(b, span, edge, shown))
+              return span
             }}
             resizeNote={(id, span, edge, shown) => {
               const b = version.blocks.find((x) => x.id === id)

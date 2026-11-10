@@ -81,7 +81,8 @@ paths:
   5 min, blok ≥ 5 min (`DRAG_STEP_MIN`, `MIN_BLOCK_MIN`, `MAX_BLOCK_MIN` w `model/plan.ts`); ten sam koniec – nic.
   Uchwyt tylko `ownHourBlock` (`blocks.ts`, `movable` bez „niezaczęty”); podgląd – `engine/resize.ts`. Planowany
   koniec liczy `BlockFact.endChanges` (`endShiftOf`: „Przedłuż” +, skrócenie −); `extends` to dalej samo „Przedłuż”.
-  Skrócenie przycina okna potwierdzone z góry przed nim (kolejnością zdarzeń `compareOrder`, nie minutą) do swojego
+  Skrócenie przycina okna potwierdzone z góry przed nim (kolejnością zdarzeń `compareOrder`, nie minutą ani logiem –
+  `endChanges` sortowane tak przed pętlą, ta sama kolejność dla sumy) do swojego
   końca (`confirmWindows` w `day.ts`). Limity krawędzi (`runningEdges`: `earliestEnd`, `latestEnd`) liczy jedno
   `limitsOf` w `resize.ts` – także podgląd; oba na siatce, zawsze `earliestEnd ≤ latestEnd`.
 - Późne wstanie (`lateWake.ts`) – pierwsze użycie z `dayFirstUse`; `presence.first` tylko bez zapisów obserwacji.

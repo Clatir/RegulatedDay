@@ -172,8 +172,10 @@ export function Timeline({
   /**
    * A block's edge dragged (D365): its new span – the end moved alone (`end`) or the start with the same end (`top`) – and
    * the span it was shown over when grabbed (`shown`: what the drop is counted against, not what the day shows by then).
+   * Returns the span the block is held at until the day shows the change, or false when nothing was asked (nothing to save):
+   * the block then goes back at once.
    */
-  onResize?: (id: string, span: BlockSpan, edge: DragEdge, shown: BlockSpan) => void
+  onResize?: (id: string, span: BlockSpan, edge: DragEdge, shown: BlockSpan) => BlockSpan | false
   /**
    * What the drop would save, said beside the hours while an edge is dragged (D365: the saved length, the cost of a running
    * block's extension); null – the length of the span shown. Asked only for a span that differs from the shown one.
@@ -185,7 +187,7 @@ export function Timeline({
    * A block's end waiting for a confirmation (D365: a running block's extension past the boundary): the block is drawn
    * down to `endMin` (its added part dashed), `node` – „Potwierdź · Anuluj” – stands at that edge. Gone: the block is at its end.
    */
-  attached?: { id: string; endMin: number; node: ReactNode } | null
+  attached?: { id: string; endMin: number; seq: number; node: ReactNode } | null
   /** The range shown (logical minutes); the blocks and lines widen it. */
   from: number
   to: number
@@ -207,12 +209,12 @@ export function Timeline({
     if (d?.dropped && dropSettled(items, { ...d, exactEnd: d.exact ? d.end : undefined })) setDrag(null)
   }, [items])
   // A running block's end waiting for „Potwierdź · Anuluj”: the block is drawn there by `attached`, the hold is over.
-  const waitingId = attached?.id
-  const waitingEnd = attached?.endMin
+  // (`seq` counts the waits: a second drop to the same end is a new wait.)
+  const waitingSeq = attached?.seq
   useEffect(() => {
     const d = dragRef.current
-    if (d && waitingId != null && waitingEnd != null && holdEnds(d, { id: waitingId, endMin: waitingEnd })) setDrag(null)
-  }, [waitingId, waitingEnd])
+    if (d && attached && holdEnds(d, attached)) setDrag(null)
+  }, [waitingSeq])
   // Let go anywhere (the block drawn anew in another column loses the pointer): the drag ends without a move.
   const holding = drag != null && !drag.dropped
   useEffect(() => {
@@ -319,11 +321,14 @@ export function Timeline({
             setDrag(null)
             if (!d.moved) return
           } else {
-            const held = { ...d, dropped: true }
-            setDrag(held)
-            if (d.edge) onResize!(i.id, { startMin: d.start, endMin: d.end }, d.edge, { startMin: d.from, endMin: d.fromEnd })
-            else onMove!(i.id, d.start)
-            setTimeout(() => dragRef.current === held && setDrag(null), DROP_HOLD_MS)
+            // The block stays where it was dropped until the day shows it there – at the end the edit asked for.
+            const asked: BlockSpan | false = d.edge ? onResize!(i.id, { startMin: d.start, endMin: d.end }, d.edge, { startMin: d.from, endMin: d.fromEnd }) : (onMove!(i.id, d.start), { startMin: d.start, endMin: d.end })
+            if (asked === false) setDrag(null)
+            else {
+              const held = { ...d, start: asked.startMin, end: asked.endMin, dropped: true }
+              setDrag(held)
+              setTimeout(() => dragRef.current === held && setDrag(null), DROP_HOLD_MS)
+            }
           }
           // The click comes right after this event, if at all: it alone is swallowed, never a later one.
           dropped.current = true
