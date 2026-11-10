@@ -41,7 +41,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    `docs/vm/raport.md` (T529; przebieg z 3.11 – `docs/archiwum/vm/`); powtórka punktów NIEZGODNE i NIE DO SPRAWDZENIA
    na 1.0.8 („Gotowe, gdy” F–H w `docs/plan.md`, punkty i ich zadania – `docs/archiwum/vm/przyczyny.md`); poprawki z odbioru – wersje 1.0.x (D324).
 2. Ty: odbiór ciągu I – E8n, E10, E11 (E11.1 przed zjazdem 21.11), E12 w `docs/odbior.md`.
-3. Ciąg J (D363) – gotowy do startu po „dalej”: J1 SNT7 → J2 SNT8 → J3–J5 FBL2 (`docs/plan.md`, „Blok 1 = ciąg J”).
+3. Ciąg J (D363) – w toku od 10.11 (bez pauz, D363): J1 SNT7 (1.4.0, scalone) → J2 SNT8 (1.5.0, PR) → J3–J5 FBL2 (`docs/plan.md`, „Blok 1 = ciąg J”).
 4. K (przegląd kalibracji), gdy aplikacja go zaproponuje (najwcześniej ok. 12.11) – wchodzi między PR-y ciągu J; po nim
    E9 (`docs/plan.md`, „Po 1.0”).
 5. Rozszerzenia bloki 2–4 (OPS, SNT, HKU) – bez decyzji o starcie; FBL1 odłożone (D364).
@@ -57,10 +57,12 @@ zmieniają `Timeline.tsx`, J3 korzysta z J1). Wersje 1.4.0–1.8.0.
 | --- | --- | --- | --- | --- |
 | J-plan pytania i decyzje | – | #61 | D363–D369 zapisane 10.11 (PR razem z dopisaniem SNT7) | ok. 1,5 h (–) |
 | CI `release-next` (T559) | – | #62 | scalone 10.11 (cab4067) – `main` czerwony po #61: `npm run dev` z `install.spec` psuł `out\` | ok. 1 h (–) |
-| J1 SNT7 długość przeciągnięciem | 1.4.0 | – | PR w toku 10.11 (gałąź `claude/1.4.0-dlugosc-przeciagnieciem`, drzewo `.claude/worktrees/wj`); trzy rundy xhigh (15 + 15 + 10 uwag); D370, T560–T567 | ok. 8 h (3–4,5 h) – trzy rundy przeglądu |
+| J1 SNT7 długość przeciągnięciem | 1.4.0 | #63 | scalone 10.11 (4916f32), wydanie z runu 42870895485 na `main`; trzy rundy xhigh (15 + 15 + 10 uwag); D370, T560–T567 | ok. 8 h (3–4,5 h) – trzy rundy przeglądu |
 
 **J1 – wpis (10.11):** krawędzie bloku na osi „Dziś” i „Szablonów” (D365, D370); trwający blok – kliknięcie timera `resize` (`extend` / nowe `block.shorten`, `RULES_VERSION` 7, `endChanges`), „Potwierdź · Anuluj” przy bloku przez 10 s. Testy: `tests/unit/engine/resize.test.ts`, `tests/web/day-axis.test.ts`, E2E „ekrany E3”, „trwający blok (D365)” ×2 (pomijane tylko pod koniec doby logicznej). Odbiór J1.1–J1.2. **Uwagi na później:** zaokrąglanie do siatki i minimum 5 min w trzech miejscach (Timeline, `resize.ts`, `timer.ts`) – wspólne `snapUp`/`snapDown` w `model/plan.ts`; brak testu źródła `shown` (span z chwili chwycenia) i zależności efektu `seq`; próbny dzień w „Szablonach” w tygodniu przesunięcia sesji pokazuje bloki z `wakeShift`, a krawędź zapisuje start we współrzędnych pokazanych (stare zachowanie, też przy przeciąganiu D305); okno ocenia koszt lokalnie, główny może odpowiedzieć inaczej (nakładka D345) – podpowiedź wtedy różni się od odpowiedzi.
-| J2 SNT8 nowy blok kliknięciem w siatkę | 1.5.0 | – | – | – (3–4,5 h) |
+| J2 SNT8 nowy blok kliknięciem w siatkę | 1.5.0 | – | PR w toku 10.11 (gałąź `claude/1.5.0-nowy-blok-w-siatce`, drzewo `.claude/worktrees/wj2`); dwie rundy high (10 + 9 uwag); D371, T568–T574 | ok. 4,5 h (3–4,5 h) |
+
+**J2 – wpis (10.11):** karta nowego bloku w „Tygodniu”, przeciągnięcie po pustej osi, kolumna godzin „Dziś” i „Szablonów” jak oś, zakres wielodniowy (D366, D371). Testy: `tests/web/grid-create.test.ts`, `week-new-block.test.ts`, E2E `week.spec.ts`. Odbiór J2.1–J2.2. **Uwagi na później:** brak E2E dla konfliktu i nieznanego wyniku zapisu wielodniowego (pokrywa `weekAdds` w unit); brak E2E „klik z drgnięciem w bok” w „Dziś” (pokrywa `dragStarted`).
 | J3 FBL2a rozsuwanie | 1.6.0 | – | – | – (4–6 h) |
 | J4 FBL2b domykanie luk | 1.7.0 | – | – | – (3–4 h) |
 | J5 FBL2c „Ułóż pod energię” | 1.8.0 | – | – | – (4–6 h) |
