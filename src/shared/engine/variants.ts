@@ -55,16 +55,22 @@ export interface Variant {
 
 const lmOf = (s: DayState, idx: number) => logicalMinuteOf(s.grid.date, atOf(s.grid, idx))
 
+/** The most steps `zeroOf` takes (a bound for safety: a block's end changes a few times a day). */
+const ZERO_STEPS = 32
+
 /**
  * The instant (index) a started block's countdown comes to 0 and stays there: a fixed block at its planned end, a
- * flexible one when its running time reaches its length – each moved by the „Przedłuż” clicked before 2 min past it.
+ * flexible one when its running time reaches its length – each moved by the „Przedłuż” (and the shortenings dragged on
+ * the axis, D365) clicked before 2 min past it. A length not reached yet takes every change so far (a shortening may
+ * bring its 0 to now). A shortening can move the 0 back before a change, so the changes taken are no longer only
+ * growing: the search stops after a bounded number of steps.
  */
 function zeroOf(state: DayState, info: BlockInfo, f: BlockFact, byId: Map<string, BlockInfo>): number | null {
   if (f.startedAt == null) return null
   const span = info.fixed ? plannedSpan(info, byId) : null
   const planned = f.planned?.durationMin ?? info.durationMin
   let ext = 0
-  for (;;) {
+  for (let step = 0; ; step++) {
     let z: number | null = null
     if (span) z = Math.max(span.end, f.startedAt) + ext
     else {
@@ -78,9 +84,9 @@ function zeroOf(state: DayState, info: BlockInfo, f: BlockFact, byId: Map<string
         ran += end - r.from
       }
     }
-    if (z == null) return null
-    const more = f.extends.filter((x) => x.at < z! + OVERRUN_CHECK_MIN).reduce((s, x) => s + x.minutes, 0)
-    if (more === ext) return z
+    const until = z ?? Number.POSITIVE_INFINITY
+    const more = f.extends.filter((x) => x.at < until + OVERRUN_CHECK_MIN).reduce((s, x) => s + x.minutes, 0)
+    if (more === ext || step >= ZERO_STEPS) return z
     ext = more
   }
 }

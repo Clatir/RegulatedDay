@@ -355,7 +355,11 @@ export interface EventIn {
   [field: string]: unknown
 }
 
-/** A click of the timer (`a`: start, startNew, pause, next, extend, workEnd, finish, cancel, park, confirm – engine/timer.ts). */
+/**
+ * A click of the timer (`a`: start, startNew, pause, next, extend, workEnd, finish, cancel, park, confirm, resize –
+ * engine/timer.ts). `resize` (D365): the end of a running block dragged on the axis – `block`, `to` (ms of the new end),
+ * `confirm` (the second call, „Potwierdź”, when the first returned a cost).
+ */
 export interface TimerIn {
   a: string
   day?: string

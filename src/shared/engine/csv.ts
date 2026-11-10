@@ -95,7 +95,8 @@ function blockRows(state: DayState, ctx: DayContext, names: Names): Array<{ orde
     const notes: string[] = []
     if (f?.runs.some((r) => r.bg)) notes.push('w tle')
     if (f?.endRule && END_RULE[f.endRule]) notes.push(END_RULE[f.endRule]!)
-    const extended = f?.extends.reduce((s, x) => s + x.minutes, 0) ?? 0
+    // „Przedłuż” only – a shortening dragged on the axis (D365) is no extension.
+    const extended = f?.extends.reduce((s, x) => s + Math.max(0, x.minutes), 0) ?? 0
     if (extended) notes.push(`przedłużony +${extended} min`)
     const x = state.explains.find((e) => e.block === info.id && Math.min(e.to, state.now) > e.from)
     if (x) notes.push(x.answer ? `czas do wyjaśnienia: ${EXPLAIN[x.answer.cls]}` : `do wyjaśnienia ${Math.min(x.to, state.now) - x.from} min`)

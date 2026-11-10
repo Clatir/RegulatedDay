@@ -27,8 +27,10 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * after it (its close is in the next day's log). 6 – the classes of a „zjazd” (1.1.0, D357, D359): a remote class on a
  * day of „zjazd” and a class imported from the PDF move the maximum and are never an extension – an older version would
  * write their minutes after the boundary as an extension and freeze the day so; it gives way to this one as the leader.
+ * 7 – a running block shortened by its end dragged on the axis (D365, `block.shorten`): an older version skips the event
+ * and would keep the old planned end – its „Dalej?”, automatic ends and the windows of a later „Przedłuż”.
  */
-export const RULES_VERSION = 6
+export const RULES_VERSION = 7
 
 export interface EventBase {
   /** Unique: `<computer>-<n>` for your actions, derived from the data for automatic ones (both computers write the same). */
@@ -101,6 +103,8 @@ export type TimerEvent =
   | (EventBase & { k: 'block.resume'; block: string; at: number; confirmUntil: number | null })
   | (EventBase & { k: 'block.end'; block: string; at: number; done: boolean | null; rule: string | null })
   | (EventBase & { k: 'block.extend'; block: string; at: number; minutes: number })
+  /** The end of a running block dragged earlier on the axis (D365): its planned end `minutes` sooner – „Przedłuż” the other way. */
+  | (EventBase & { k: 'block.shorten'; block: string; at: number; minutes: number })
   | (EventBase & { k: 'block.confirm'; block: string; at: number })
   | (EventBase & { k: 'block.park'; block: string; at: number; rule: string })
   | (EventBase & { k: 'block.cancel'; block: string; at: number; rule: string })
@@ -256,6 +260,7 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'block.resume': { block: isStr, at: isNum },
   'block.end': { block: isStr, at: isNum },
   'block.extend': { block: isStr, at: isNum, minutes: (v) => isNum(v) && v > 0 && v <= 24 * 60 },
+  'block.shorten': { block: isStr, at: isNum, minutes: (v) => isNum(v) && v > 0 && v <= 24 * 60 },
   'block.confirm': { block: isStr, at: isNum },
   'block.park': { block: isStr, at: isNum },
   'block.cancel': { block: isStr, at: isNum },

@@ -237,7 +237,7 @@ export function sessionsOf(ctx: DayContext, state: DayState, when: HorizonWhen):
     const plannedEnd = plannedEndOf(state, b, f)
     // A run still open on a day gone by (nobody ended it): as written – it ended by its plan.
     const ranTo = Math.max(...f.runs.map((r) => (r.to === OPEN ? plannedEnd : r.to)))
-    if (f.extends.length > 0 || ranTo > plannedEnd) out.extended++
+    if (f.extends.some((x) => x.minutes > 0) || ranTo > plannedEnd) out.extended++
     else out.clean++
   }
   return out

@@ -7,6 +7,7 @@
 import { plannedSpan } from '@shared/engine/blocks'
 import { namingOf } from '@shared/engine/context'
 import { atOf } from '@shared/engine/grid'
+import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
 import { durationLabel, logicalClock } from '@shared/format'
 import { logicalMinuteOf } from '@shared/time/day'
@@ -30,6 +31,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
   const yesterday = addDays(model.date, -1)
   const nowIdx = now != null ? Math.round((now - g.start) / 60_000) : null
+  // D365: a block running now (of its own hour – not a session, a lecture, a class of a „zjazd”, the second shift) has its bottom edge.
+  const edges = now != null ? runningEdges(state, now) : null
   const items: TimelineItem[] = []
   const placed = new Map(state.forecast.map((p) => [p.block.id, p]))
   for (const p of ctx.plan) {
@@ -49,6 +52,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       to = placed.get(p.id)!.to
     }
     if (from == null || to == null) continue
+    const edge = f?.startedAt != null && f.endedAt == null ? edges?.get(p.id) : undefined
     items.push({
       id: p.id,
       startMin: lm(from),
@@ -59,6 +63,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       background: info.bg,
       dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),
       waits: info.waits,
+      ...(edge ? { resize: 'end' as const, minEndMin: edge.earliestEnd } : {}),
       // D305: a block not begun nor gone, with its own start (not after another block, not a session, a lecture, a class
       // imported from the PDF of „zjazdy” – D357, or the second shift – D192).
       movable:

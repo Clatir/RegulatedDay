@@ -73,7 +73,11 @@ export interface BlockFact {
   runs: Run[]
   planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null } | null
   confirms: Confirm[]
-  /** Confirmed „Przedłuż”, in order. */
+  /**
+   * The changes of its planned end, in order: a confirmed „Przedłuż” (minutes > 0) and an end dragged earlier on the axis
+   * (`block.shorten`, minutes < 0, D365). Their sum moves the planned end; what counts only „Przedłuż” (its confirmed
+   * windows, „przedłużony”) takes the positive ones.
+   */
   extends: Array<{ at: number; minutes: number }>
   parkedAt: number | null
   /** Why it was parked or cancelled (the rule: 'exchange', 'type', 'lateWake', 'workEnd' …). */
@@ -354,6 +358,9 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
       }
       case 'block.extend':
         block(e.block).extends.push({ at: idx(e.at), minutes: e.minutes })
+        break
+      case 'block.shorten':
+        block(e.block).extends.push({ at: idx(e.at), minutes: -e.minutes })
         break
       case 'block.confirm': {
         const b = block(e.block)

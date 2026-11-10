@@ -197,9 +197,12 @@ function confirmWindows(c: Ctx, b: BlockInfo, facts: DayFacts): Array<{ at: numb
   if (f.addConfirmedAt != null) out.push({ at: f.addConfirmedAt, from: f.startedAt, to: f.startedAt + (f.planned?.durationMin ?? b.durationMin) })
   let extended = 0
   for (const x of f.extends) {
-    const paused = Math.max(0, x.at - f.startedAt - ranMinutes(f, x.at))
-    const end = plannedEndOf(c, b, f.startedAt, f.planned?.durationMin ?? b.durationMin, paused, extended)
-    out.push({ at: x.at, from: Math.max(end, x.at), to: end + x.minutes })
+    // Only „Przedłuż” confirms minutes; a shortening (D365) moves the planned end the later ones count from.
+    if (x.minutes > 0) {
+      const paused = Math.max(0, x.at - f.startedAt - ranMinutes(f, x.at))
+      const end = plannedEndOf(c, b, f.startedAt, f.planned?.durationMin ?? b.durationMin, paused, extended)
+      out.push({ at: x.at, from: Math.max(end, x.at), to: end + x.minutes })
+    }
     extended += x.minutes
   }
   // A „Potwierdź” of a fixed block confirms it to its planned end with the extensions.

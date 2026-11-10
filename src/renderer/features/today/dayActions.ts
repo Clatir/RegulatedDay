@@ -58,6 +58,19 @@ async function clickTimer(block: string, date: string, a: 'removeBegun' | 'undoR
   }
 }
 
+/**
+ * The bottom edge of a running block dropped on the axis (D365): the click `resize` to the instant `to` (ms) – first without
+ * `confirm` (up to the boundary it is written at once; past it nothing is written and the answer carries the cost), then
+ * with it („Potwierdź”). The IPC throwing is an answer, not an unhandled rejection.
+ */
+export async function clickResize(block: string, date: string, to: number, confirm: boolean): Promise<TimerResult> {
+  try {
+    return await window.rd.timer({ a: 'resize', block, day: date, to, ...(confirm ? { confirm: true } : {}) })
+  } catch (e) {
+    return { ok: false, why: e instanceof Error ? e.message : String(e), confirm: null }
+  }
+}
+
 /** The edit of the plan did not go and will not: nothing was sent, or the file is broken (a conflict stays as a question and may still pass). */
 const refusedEdit = (out: readonly EditOutcome[] | null): boolean => out == null || out.some((o) => o.status === 'broken')
 

@@ -2,7 +2,7 @@
  * The timer (spec „Timer”, „Bloki”, „Przedłużenie i przekroczenie”): what runs now in the foreground and in the
  * background, what „Dalej” would start, which blocks wait for „Zacznij”, and every click of the widget as the events it
  * writes – Start (also „Zacznij” and „Wznów”), Pauza, Dalej, Przedłuż, Koniec pracy, Skończyłem, „Zakończ teraz”,
- * Odwołaj, Zaparkuj, Potwierdź. Pure: the main process validates a click against the day as it knows it and writes the
+ * Odwołaj, Zaparkuj, Potwierdź, the end of a running block dragged on the axis (D365). Pure: the main process validates a click against the day as it knows it and writes the
  * events; the main window shows the same view from the same day.
  *
  * An action that creates minutes of work after the approved boundary that nobody confirmed (start or resume of a work
@@ -11,7 +11,7 @@
  * running block.
  */
 import { ROUTINE_VERSIONS, type RoutineVersion } from '../model/routines'
-import { isBoundaryWork, plannedSpan, setsWorkEndBlock, startPlanned, zjazdRemoteClass, type BlockInfo } from './blocks'
+import { isBoundaryWork, ownHourBlock, plannedSpan, setsWorkEndBlock, startPlanned, zjazdRemoteClass, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
 import { workedUntilOf } from './explain'
 import { OPEN, compareOrder, type EventOrder, isRunning, type AutoAction, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
@@ -67,6 +67,11 @@ export type TimerAction =
   | { a: 'pause' }
   | { a: 'next'; done?: boolean; confirm?: boolean }
   | { a: 'extend'; block?: string; minutes: number; confirm?: boolean }
+  /**
+   * The end of a running block of its own hour dragged on the axis to `to` (ms, D365): later – „Przedłuż” by the difference
+   * (its cost and second click); earlier – `block.shorten`, never before now; the end it has – nothing.
+   */
+  | { a: 'resize'; block: string; to: number; confirm?: boolean }
   | { a: 'workEnd' }
   | { a: 'finish'; block?: string }
   | { a: 'cancel'; block: string }
@@ -558,6 +563,22 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       const cost = workCost(state, target.info, from, from + act.minutes - Math.max(0, m - target.plannedEnd), true)
       if (cost && !act.confirm) return no('koszt do potwierdzenia', cost)
       return yes([{ k: 'block.extend', block: target.info.id, at, minutes: act.minutes }])
+    }
+    case 'resize': {
+      // D365: later is „Przedłuż” itself – the same cost, the same second click (up to the boundary none: at once), the same
+      // event, a fixed block at most 30 min past its planned end; earlier moves the planned end back, never before now.
+      // The end it already has writes nothing (a second „Potwierdź” finds it there).
+      const target = [t.fg, ...t.bg].find((x) => x?.info.id === act.block) ?? null
+      if (!target) return no('ten blok nie biegnie')
+      if (!ownHourBlock(target.info)) return no('tego bloku nie zmienia się przeciągnięciem – „Przedłuż” w pasku')
+      if (typeof act.to !== 'number' || !Number.isFinite(act.to)) return no('koniec bloku')
+      const end = idxOf(state.grid, act.to)
+      const minutes = end - target.plannedEnd
+      if (minutes > 0) return timerAction(ctx, state, { a: 'extend', block: target.info.id, minutes, ...(act.confirm ? { confirm: true } : {}) }, at)
+      if (minutes === 0) return yes([])
+      if (end < m) return no('koniec bloku przed teraz')
+      if (-minutes > 24 * 60) return no('długość skrócenia')
+      return yes([{ k: 'block.shorten', block: target.info.id, at, minutes: -minutes }])
     }
     case 'workEnd': {
       const events: TimerDraft[] = []

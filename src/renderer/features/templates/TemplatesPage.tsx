@@ -25,6 +25,7 @@ import { undoToast } from '../../store/ui'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis } from '../plan/dayItems'
+import { edgePatch } from '../plan/edgeEdit'
 import { Timeline } from '../plan/Timeline'
 import { SettingNumber } from '../settings/SettingNumber'
 
@@ -226,6 +227,11 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
               // D305: the template's block with its own start, moved in steps of 5 min.
               const b = version.blocks.find((x) => x.id === id)
               if (b && b.anchor == null && b.startMin != null) void patchBlock(b.id, { startMin: draggedBlock(b, startMin).startMin })
+            }}
+            onResize={(id, span, edge) => {
+              // D365: an edge of the template's block – the length as the field „Długość” saves it.
+              const b = version.blocks.find((x) => x.id === id)
+              if (b && b.anchor == null && b.startMin != null) void patchBlock(b.id, edgePatch(b, span, edge))
             }}
             onCreate={(min) => {
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin: 60, origin: 'template' })

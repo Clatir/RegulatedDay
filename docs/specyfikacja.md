@@ -286,7 +286,10 @@ Każda funkcja korzysta z tych samych definicji dnia i czasu; nie ma drugiego sp
 
 - Zwykłe przedłużenie wymaga jednego potwierdzenia z widocznym kosztem: drugiego kliknięcia w pasku (niżej). Każda minuta przedłużenia zmniejsza pulę projektów, a dzień traci nagrodę za granicę.
 - Przekroczenie to minuty pracy po maksimum granicy (albo po wyjątku) oraz minuty przedłużenia przy pustej puli projektów, poza blokiem drugiej zmiany. Wymaga drugiego potwierdzenia, które jest mocniejszym ostrzeżeniem, nie blokadą. Przy pustej puli minuty potwierdzone z góry (D253) przesuwają porę snu, najwyżej o 2 h na noc i nigdy po 03:59; minuty ponad ten limit są zapisywane jako „poza limitem”.
-- Potwierdzenie przedłużenia jest zawsze drugim kliknięciem w pasku. Każde działanie, po którym powstają niepotwierdzone
+- Potwierdzenie przedłużenia jest zawsze drugim kliknięciem w pasku – z jednym wyjątkiem: dolna krawędź trwającego
+  bloku przeciągnięta na osi „Dziś” za granicę pokazuje koszt w trakcie przeciągania, a po puszczeniu „Potwierdź ·
+  Anuluj” przy bloku przez 10 s; to samo zdarzenie i ten sam koszt co „Przedłuż”, bez potwierdzenia nic się nie zmienia
+  (D365). Każde działanie, po którym powstają niepotwierdzone
   minuty pracy po zatwierdzonej granicy poza planowanym czasem drugiej zmiany i bloków do niej zakotwiczonych (także
   start przed granicą bloku, którego plan sięga za nią), czyli start albo wznowienie bloku pracy (Start, „Zacznij”,
   „Dalej” do następnego bloku pracy, „Pracuję”, wznowienie zaparkowanego albo zapauzowanego bloku), „Przedłuż” o podaną
@@ -2138,6 +2141,7 @@ Te zasady obowiązują każdy ekran i każdy typ rekordu: blok, prośbę, szablo
 
 - **Zatwierdzanie przed przejściem:** każda zmiana widoku albo dnia, akcja z widgetu, Ctrl+S i zamknięcie najpierw zatwierdzają aktywne pole.
 - **Czas i długość:** godzina 00:00–03:59 w dniu logicznym dostaje oznaczenie „+1”. Długość można wpisać jako „90”, „1:30” albo „1h30”. Data wpisana bez roku („3.01”) oznacza najbliższą przyszłą taką datę, a pola liczb całkowitych odrzucają ułamki. Błędna wartość jest odrzucana z komunikatem w rogu okna i z tym samym powodem pod polem, dopóki wartość pozostaje odrzucona (do kolejnej zmiany pola albo Esc) – we wszystkich polach, także w godzinie wpisywanej w odpowiedzi o dniu (D347).
+- **Długość bloku na osi dnia (D365):** na osi „Dziś” i „Szablonów” blok z własną godziną, który się nie zaczął, ma uchwyty na krawędziach (pasek 6 px, po najechaniu jaśnieje, kursor pionowej zmiany rozmiaru): dolna zmienia koniec, górna start przy tym samym końcu, co 5 min, najkrócej 5 min. W trakcie przeciągania obok krawędzi widać godziny i długość; zapis jak w polu „Długość” (te same ostrzeżenia, nic nie blokuje – D72). Kliknięcie bez ruchu (próg 4 px) dalej otwiera blok do edycji (D305). Trwający blok ma tylko uchwyt dolny (jego działanie – „Przedłużenie i przekroczenie”); sesja, wykład, zjazd i druga zmiana – żadnego.
 - **Historia i konflikty:** widok pokazuje nazwy pól i wartości tak jak w interfejsie, nigdy klucze, identyfikatory, UTC ani milisekundy.
 - **Słowniki:** osoby, kategorie, typy dni i sposoby regeneracji wybiera się z listy z „+ dodaj”, a nie wpisuje tekstem. Usunięcie to archiwizacja.
 
