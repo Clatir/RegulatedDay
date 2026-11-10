@@ -1,7 +1,7 @@
 /**
  * The editing panel of a block (D293: on the right of the plan): its category and variant, its start or the block it
  * follows („po sesji NY”), its length, fixed or flexible, in the foreground or the background, the marks of the second
- * shift and the weekly analysis, its routine, the computer recording a lecture, its note. Every field saves on leaving
+ * shift and the weekly analysis, its routine, the computer recording a lecture, its note (a live Markdown editor, D388). Every field saves on leaving
  * it (spec „Edycja pól”); the panel changes nothing by itself.
  */
 import type { ReactNode } from 'react'
@@ -10,9 +10,11 @@ import type { PlanBlock } from '@shared/model/plan'
 import { routineMinutes } from '@shared/model/routines'
 import type { SessionDef } from '@shared/model/settings'
 import { SESSION_ANCHOR } from '@shared/engine/createDay'
-import { Choice, DurationField, TextField, TimeField } from '../../components/fields'
+import { olderComputers } from '@shared/model/note'
+import { Choice, DurationField, TimeField } from '../../components/fields'
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
+import { NoteEditor } from '../note/NoteEditor'
 import { anchorCandidates, blockName, categoryOptions, type Names } from './blockView'
 
 export function BlockEditor({
@@ -29,7 +31,7 @@ export function BlockEditor({
   block: PlanBlock
   plan: readonly PlanBlock[]
   names: Names
-  computers: Array<{ id: string; name: string }>
+  computers: Array<{ id: string; name: string; appVersion?: string }>
   /** In a template a block may follow a session of the layer („po sesji NY”). */
   sessions?: readonly SessionDef[]
   /** The fields changed (over the block as it is when the change is saved – a change made a moment before stays). */
@@ -157,9 +159,7 @@ export function BlockEditor({
           <Choice value={block.recorder ?? '-'} options={[{ value: '-', label: 'nie wskazano' }, ...computers.map((c) => ({ value: c.id, label: c.name }))]} onChange={(v) => set({ recorder: v === '-' ? null : v })} aria-label="Komputer nagrywający" />
         </Field>
       )}
-      <Field label="Notatka" labelWidth={92}>
-        <TextField value={block.note} onCommit={(note) => set({ note })} max={2000} multiline aria-label="Notatka" errorPlacement="below" data-testid="block-note" />
-      </Field>
+      <NoteEditor value={block.note} onCommit={(note) => set({ note })} olderComputers={olderComputers(computers)} readOnly={readOnly} />
       {block.moves > 0 && <p className="text-[12px] text-muted">Przeniesiony {block.moves}×.</p>}
       {actions && <div className="flex flex-wrap gap-2 border-t border-line pt-3">{actions}</div>}
     </aside>

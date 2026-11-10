@@ -37,6 +37,7 @@ import { barRect, barWidth, draggedBounds, dragHolds, panelDisplay, panelRect, p
 import { urlFromArgv, type PanelTarget } from '@shared/protocol'
 import { compareVersions } from '@shared/update'
 import { systemSettingsUrl } from '@shared/systemSettings'
+import { safeLinkUrl } from '@shared/noteLink'
 import type { UpdateView } from '@shared/updateView'
 import { BAR_NOTE_FAILED, BAR_NOTE_HELPER, type WidgetView } from '@shared/widget'
 import { identity } from './identity'
@@ -871,6 +872,11 @@ function registerIpc(): void {
   handle(CH.openDataFolder, async () => {
     const dir = dataFolderNow()
     if (dir) await shell.openPath(dir)
+  })
+  // A link of a note (D388, T663): checked here again – whatever the window sends, only http and https reach the browser.
+  handle(CH.openLink, async (_e, url: unknown) => {
+    const safe = typeof url === 'string' ? safeLinkUrl(url) : null
+    if (safe) await shell.openExternal(safe)
   })
 }
 
