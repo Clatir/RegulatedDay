@@ -44,6 +44,11 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 3. Ciąg J (D363) – w toku od 10.11 (bez pauz, D363): J1 SNT7 (1.4.0, scalone) → J2 SNT8 (1.5.0, PR) → J3–J5 FBL2 (`docs/plan.md`, „Blok 1 = ciąg J”).
 4. K (przegląd kalibracji), gdy aplikacja go zaproponuje (najwcześniej ok. 12.11) – wchodzi między PR-y ciągu J; po nim
    E9 (`docs/plan.md`, „Po 1.0”).
+4a. **Równolegle (10.11, zgoda użytkownika – wyjątek od „do `main` pisze naraz jedna sesja”):** druga sesja robi SNT6
+   (Ctrl+K) i SNT3 (Markdown w notatkach) w drzewach `.claude/worktrees/ws6`, `ws3`. Numery: ta sesja (ciąg J) – D373–D379,
+   T587–T649; druga – D380–D399, T650–T699. Wersja przy scaleniu = następna minor po wersji na `main`; scalenie tylko,
+   gdy na `main` nie biegnie run (`gh run list --branch main --status in_progress`), po `git merge origin/main` i zielonym
+   CI na tym stanie. Druga sesja pisze w `docs/postep.md` tylko we własnej sekcji „SNT3 i SNT6 – stan”.
 5. Rozszerzenia bloki 2–4 (OPS, SNT, HKU) – bez decyzji o starcie; FBL1 odłożone (D364).
 
 ## Ciąg J – stan (D363)
@@ -63,7 +68,9 @@ zmieniają `Timeline.tsx`, J3 korzysta z J1). Wersje 1.4.0–1.8.0.
 | J2 SNT8 nowy blok kliknięciem w siatkę | 1.5.0 | – | PR w toku 10.11 (gałąź `claude/1.5.0-nowy-blok-w-siatce`, drzewo `.claude/worktrees/wj2`); dwie rundy high (10 + 9 uwag); D371, T568–T574 | ok. 4,5 h (3–4,5 h) |
 
 **J2 – wpis (10.11):** karta nowego bloku w „Tygodniu”, przeciągnięcie po pustej osi, kolumna godzin „Dziś” i „Szablonów” jak oś, zakres wielodniowy (D366, D371). Testy: `tests/web/grid-create.test.ts`, `week-new-block.test.ts`, E2E `week.spec.ts`. Odbiór J2.1–J2.2. **Uwagi na później:** brak E2E dla konfliktu i nieznanego wyniku zapisu wielodniowego (pokrywa `weekAdds` w unit); brak E2E „klik z drgnięciem w bok” w „Dziś” (pokrywa `dragStarted`).
-| J3 FBL2a rozsuwanie | 1.6.0 | – | w toku 10.11 (gałąź `claude/1.6.0-rozsuwanie`, drzewo `.claude/worktrees/wj3`); trzy rundy xhigh (15 + 15 + runda 3); D372, T575–T594 | ok. 5 h (4–6 h) |
+| J3 FBL2a rozsuwanie | 1.6.0 | – | w toku 10.11 (gałąź `claude/1.6.0-rozsuwanie`, drzewo `.claude/worktrees/wj3`); trzy rundy xhigh (15 + 15 + 11 uwag); D372, T575–T586 | ok. 6 h (4–6 h) – trzy rundy przeglądu |
+
+**J3 – wpis (10.11):** `pushApart` (punkt stały na prognozie), zapis jedną partią, podgląd przerywaną obwódką, „Przesunięto N bloków · Cofnij” w pasku (obok linii wariantu, pytania dnia pierwsze) i na stronie szablonu; oś szablonu w godzinach szablonu w tygodniu przesunięcia sesji (T582). Testy: `push-apart.test.ts`, `day-push.test.ts`, `template-push.test.ts`, `widget.test.ts`, E2E „rozsuwanie” ×2. Odbiór J3.1–J3.2. **Uwagi na później:** brak testu memo podglądu (wymaga DOM); blok przez cofnięty zegar w dobie 25 h rysowany na najmniejszą wysokość.
 | J3b rozsuwanie przy „Dodaj” z karty „Tygodnia” | 1.8.1? | – | dopisane 10.11 (D372) – po J5 | – (1–2 h) |
 | J4 FBL2b domykanie luk | 1.7.0 | – | – | – (3–4 h) |
 | J5 FBL2c „Ułóż pod energię” | 1.8.0 | – | – | – (4–6 h) |
