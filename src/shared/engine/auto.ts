@@ -14,7 +14,7 @@ import { derivedId, questionId } from '../model/ids'
 import { lastInputAt, firstUseAfter, firstUseFrom, lastOutsideBefore, type Activity, type Interval } from './activity'
 import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
-import { blockAt, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
+import { blockAt, endShiftOf, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
 import { requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
 import { fixedWorkLeft, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
@@ -81,7 +81,11 @@ export function placeOf(b: BlockInfo): Place {
 /** Fixed by the plan (a session too): no pause, no „Dalej?” – it ends by its plan (a weekly analysis is flexible once begun). */
 const isFixedLike = (b: BlockInfo) => b.fixed || b.rules.kind === 'session'
 
-/** The moments the user reacted to a running block (start, resume, „Przedłuż”, „Potwierdź”) – the last answer (ms). */
+/**
+ * The moments the user reacted to a running block (start, resume, „Przedłuż”, „Potwierdź”) – the last answer (ms). A
+ * shortening dragged on the axis (D365) is not one: its click comes before the planned end it leaves, so it would never
+ * be the latest after that end.
+ */
 function lastAnswerAt(state: DayState, f: BlockFact): number {
   let last = atOf(state.grid, f.startedAt ?? 0)
   for (const r of f.runs) last = Math.max(last, atOf(state.grid, r.from))
@@ -166,7 +170,7 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
   // A commute and stationary classes end by their plan or „Tak” (D224); regeneration waiting before a fixed block too.
   if (info.rules.kind === 'commute') return null
   const start = atOf(state.grid, f.startedAt)
-  const length = (f.planned?.durationMin ?? info.durationMin) + f.extends.reduce((s, x) => s + x.minutes, 0)
+  const length = (f.planned?.durationMin ?? info.durationMin) + endShiftOf(f)
   const limited = info.rules.kind === 'meal' || info.rules.kind === 'routine' || info.categoryId === 'sprawy'
   const listening = info.isWork || info.isProject
   const limit = limited ? start + (length + AWAY_LIMIT_EXTRA_MIN) * MIN : listening ? start + length * MIN : null

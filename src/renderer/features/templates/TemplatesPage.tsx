@@ -231,7 +231,8 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
             onResize={(id, span, edge) => {
               // D365: an edge of the template's block – the length as the field „Długość” saves it.
               const b = version.blocks.find((x) => x.id === id)
-              if (b && b.anchor == null && b.startMin != null) void patchBlock(b.id, edgePatch(b, span, edge))
+              const item = axis.items.find((x) => (byPlanId.get(x.id) ?? x.id) === id)
+              if (b && item && b.anchor == null && b.startMin != null) void patchBlock(b.id, edgePatch(b, span, edge, { startMin: item.startMin, endMin: item.endMin }))
             }}
             onCreate={(min) => {
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin: 60, origin: 'template' })

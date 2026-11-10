@@ -188,7 +188,11 @@ function plannedEndOf(c: Ctx, b: BlockInfo, startedAt: number, plannedMin: numbe
   return startedAt + plannedMin + pausedMin + extendedMin
 }
 
-/** Windows confirmed in advance of a block, from its start/resume confirmations and its „Przedłuż” (each from its click). */
+/**
+ * Windows confirmed in advance of a block, from its start/resume confirmations and its „Przedłuż” (each from its click).
+ * A shortening dragged on the axis (D365) ends every window confirmed before it at the planned end it leaves: running on
+ * past that end is unconfirmed again – a later „Przedłuż” confirms it anew from there.
+ */
 function confirmWindows(c: Ctx, b: BlockInfo, facts: DayFacts): Array<{ at: number; from: number; to: number }> {
   const f = facts.blocks.get(b.id)
   if (!f || f.startedAt == null) return []
@@ -196,13 +200,11 @@ function confirmWindows(c: Ctx, b: BlockInfo, facts: DayFacts): Array<{ at: numb
   // „Dodaj bez wymiany”: from its start, up to its planned length (spec „Wymiana”).
   if (f.addConfirmedAt != null) out.push({ at: f.addConfirmedAt, from: f.startedAt, to: f.startedAt + (f.planned?.durationMin ?? b.durationMin) })
   let extended = 0
-  for (const x of f.extends) {
-    // Only „Przedłuż” confirms minutes; a shortening (D365) moves the planned end the later ones count from.
-    if (x.minutes > 0) {
-      const paused = Math.max(0, x.at - f.startedAt - ranMinutes(f, x.at))
-      const end = plannedEndOf(c, b, f.startedAt, f.planned?.durationMin ?? b.durationMin, paused, extended)
-      out.push({ at: x.at, from: Math.max(end, x.at), to: end + x.minutes })
-    }
+  for (const x of f.endChanges) {
+    const paused = Math.max(0, x.at - f.startedAt - ranMinutes(f, x.at))
+    const end = plannedEndOf(c, b, f.startedAt, f.planned?.durationMin ?? b.durationMin, paused, extended)
+    if (x.minutes > 0) out.push({ at: x.at, from: Math.max(end, x.at), to: end + x.minutes })
+    else for (const w of out) if (w.at <= x.at) w.to = Math.min(w.to, end + x.minutes)
     extended += x.minutes
   }
   // A „Potwierdź” of a fixed block confirms it to its planned end with the extensions.

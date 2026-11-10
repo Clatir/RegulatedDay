@@ -77,10 +77,11 @@ paths:
   tak – z jego `work.end`); nie czeka na wyliczony koniec (15 min). „Pracowałem do …”: linia i kliknięcie pomijają czas
   sprzed późniejszej pracy (`laterWork`).
 - Koniec trwającego bloku przeciągnięty na osi (D365): kliknięcie `resize` (`to` w ms) – dłużej to `extend` o różnicę
-  (ten sam koszt, drugie kliknięcie, zdarzenie), krócej `block.shorten`, nie przed teraz; ten sam koniec – nic. Uchwyt
-  tylko `ownHourBlock` (`blocks.ts`, reguła `movable` bez „niezaczęty”); podgląd i najwcześniejszy koniec –
-  `engine/resize.ts`. `BlockFact.extends` ma znak: skrócenie to minuty ujemne – suma przesuwa planowany koniec, a to,
-  co liczy samo „Przedłuż” (okna z góry w `day.ts`, „przedłużony” w CSV, sesje w `week.ts`), bierze tylko dodatnie.
+  (ten sam koszt, drugie kliknięcie, zdarzenie), krócej `block.shorten`, nie przed bieżącą minutą; koniec na siatce
+  5 min, blok ≥ 5 min (`DRAG_STEP_MIN`, `MIN_BLOCK_MIN`, `MAX_BLOCK_MIN` w `model/plan.ts`); ten sam koniec – nic.
+  Uchwyt tylko `ownHourBlock` (`blocks.ts`, `movable` bez „niezaczęty”); podgląd – `engine/resize.ts`. Planowany
+  koniec liczy `BlockFact.endChanges` (`endShiftOf`: „Przedłuż” +, skrócenie −); `extends` to dalej samo „Przedłuż”.
+  Skrócenie przycina okna potwierdzone z góry przed nim do swojego końca (`confirmWindows` w `day.ts`).
 - Późne wstanie (`lateWake.ts`) – pierwsze użycie z `dayFirstUse`; `presence.first` tylko bez zapisów obserwacji.
 - Prowadzący sprawdza `idle`, `firstUse`, `limit`, `absence`, `lastInput` przy każdym sprawdzeniu i cofa je, gdy
   późniejszy log z wejściem im przeczy (T465) – nowa reguła końca zależna od wejścia musi tam trafić.

@@ -28,8 +28,8 @@ import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis, daySummary } from '../plan/dayItems'
 import { edgePatch, resizeAnswer } from '../plan/edgeEdit'
-import { resizePreview, type ResizePreview } from '@shared/engine/resize'
-import { EnergyLegend, Timeline } from '../plan/Timeline'
+import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
+import { EnergyLegend, Timeline, type EdgeLimits } from '../plan/Timeline'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
 import { begunIds, clickResize, patchDayBlock, putDayBlock, removeDayBlock, setDayWake } from './dayActions'
@@ -91,22 +91,32 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   }, [pending, pendingEdge])
   // The preview of the edge being dragged is counted when its end on the grid changes (the day counted again once).
   const previewed = useRef<{ model: DayModel; key: string; value: ResizePreview | null } | null>(null)
-  const resizeNote = (id: string, endMin: number): string | null => {
+  const previewOf = (id: string, endMin: number): ResizePreview | null => {
     const key = `${id}:${endMin}`
     if (previewed.current?.model !== model || previewed.current.key !== key) previewed.current = { model, key, value: resizePreview(model.ctx, model.state, id, endMin, Date.now()) }
-    const p = previewed.current.value
+    return previewed.current.value
+  }
+  const resizeNote = (id: string, endMin: number): string | null => {
+    const p = previewOf(id, endMin)
     if (!p) return null
     const what = p.refused ?? p.costText ?? (p.minutes > 0 ? `Przedłuż +${p.minutes}` : p.minutes < 0 ? `krócej o ${-p.minutes} min` : null)
     return [what, ...p.warnings].filter(Boolean).join(' · ') || null
   }
-  /** A running block's edge dropped (D365): up to the boundary it is written at once, past it the cost waits for „Potwierdź”. */
+  // What bounds a running block's bottom edge, taken when it is grabbed: not before now rounded up, not past the day's end
+  // (the same bounds the preview keeps, so the hint is what is written).
+  const edgeLimits = (id: string): EdgeLimits | null => {
+    const e = runningEdges(model.state, Date.now()).get(id)
+    const g = model.state.grid
+    return e ? { minEndMin: e.earliestEnd, maxEndMin: Math.max(logicalMinuteOf(date, atOf(g, g.length)), e.plannedEnd) } : null
+  }
+  /**
+   * A running block's edge dropped (D365): the main process decides (it may see more than the window: an end after the
+   * closing, a change from the other computer) – up to the boundary it writes at once, past it the cost waits for „Potwierdź”;
+   * what the window's count says (`refused`) only words the hint.
+   */
   const dropRunning = async (id: string, endMin: number) => {
-    const p = resizePreview(model.ctx, model.state, id, endMin, Date.now())
+    const p = previewOf(id, endMin)
     if (!p || p.minutes === 0) return
-    if (p.refused) {
-      toast(p.refused, 'error', 6000)
-      return
-    }
     const a = resizeAnswer(await clickResize(id, date, p.to, false), p.minutes)
     if (a.kind === 'confirm') setPending({ id, to: p.to, endMin: p.end, text: a.text })
     else {
@@ -298,13 +308,14 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                   ? (id, span, edge) => {
                       const item = axis.items.find((i) => i.id === id)
                       const p = plan.find((b) => b.id === id)
-                      if (item?.movable && p) void patchDayBlock(date, raw, p, edgePatch(p, span, edge))
+                      if (item?.movable && p) void patchDayBlock(date, raw, p, edgePatch(p, span, edge, { startMin: item.startMin, endMin: item.endMin }))
                       // A running block: no change of its plan – the timer moves its end (D365).
                       else if (item?.resize === 'end' && edge === 'end') void dropRunning(id, span.endMin)
                     }
                   : undefined
               }
               resizeNote={resizeNote}
+              edgeLimits={edgeLimits}
               attached={
                 pending
                   ? {

@@ -9,7 +9,7 @@
  * Two modes: 'window' – waiting blocks in their planned window at full length (the boundary's proposal, the maximum, the
  * variants' marker); 'typical' – from now with the typical length (energy, budget, hard end, pool).
  */
-import { OPEN, isRunning, ranMinutes, type DayFacts } from './facts'
+import { OPEN, endShiftOf, isRunning, ranMinutes, type DayFacts } from './facts'
 import { plannedSpan, type BlockInfo } from './blocks'
 
 export type ForecastMode = 'window' | 'typical'
@@ -73,7 +73,7 @@ export function forecast(inp: ForecastInput): Forecast {
   const runningEnd = (b: BlockInfo): number => {
     const f = fact(b.id)!
     const planned = f.planned?.durationMin ?? b.durationMin
-    const extended = f.extends.reduce((s, x) => s + x.minutes, 0)
+    const extended = endShiftOf(f)
     let length = planned + extended
     const typical = mode === 'typical' && b.rules.kind === 'session' ? inp.typicalMin(b) : null
     if (typical != null) length = typical + extended
@@ -160,7 +160,7 @@ export function forecast(inp: ForecastInput): Forecast {
   for (let guard = 0; pending.length && guard < 10_000; guard++) {
     const b = pending.shift()!
     const f = fact(b.id)
-    const left = f?.startedAt != null ? Math.max(0, (f.planned?.durationMin ?? b.durationMin) + f.extends.reduce((s, x) => s + x.minutes, 0) - ranMinutes(f, m)) : b.durationMin
+    const left = f?.startedAt != null ? Math.max(0, (f.planned?.durationMin ?? b.durationMin) + endShiftOf(f) - ranMinutes(f, m)) : b.durationMin
     let from: number
     let due: number
     if (b.anchor) {

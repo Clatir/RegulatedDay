@@ -38,6 +38,22 @@ const plannedEnd = (s: Scenario, t: number, id: string) => {
 }
 const SEC = 1000
 
+/** The leader's automatic actions at `time`, written (the boundary's own approval left out of the result). */
+function leader(s: Scenario, time: string) {
+  const t = s.at(time)
+  const ctx = s.contextAt(t)
+  const st = s.stateAt(t)
+  const out = autoActions({ ctx, state: st, activity: activityOf(ctx.events, st.grid.start, t, 'pca'), now: t, gate: t })
+  s.write(out, t)
+  return out.filter((e) => e.autoRule !== 'boundary')
+}
+
+/** A minute's class as the day counts it at `now` (`upfront`: confirmed in advance). */
+const minuteOf = (s: Scenario, now: string, time: string) => {
+  const st = s.state(now)
+  return st.minutes.get(Math.round((s.at(time) - st.grid.start) / 60_000))
+}
+
 describe('D365 – trwający blok: dolna krawędź nie schodzi przed teraz', () => {
   it('najwcześniejszy koniec to bieżąca chwila zaokrąglona w górę do 5 min', () => {
     const s = day()
@@ -61,6 +77,25 @@ describe('D365 – trwający blok: dolna krawędź nie schodzi przed teraz', () 
     click(s, s.at('10:00'), { a: 'start', block: 'a' })
     expect(preview(s, s.at('10:20'), 'a', '11:22')?.end).toBe(lm('11:20'))
     expect(preview(s, s.at('10:20'), 'a', '11:23')?.end).toBe(lm('11:25'))
+  })
+
+  it('zapis z procesu głównego: blok krótszy niż 5 min – odmowa, nic się nie zmienia', () => {
+    const s = day()
+    click(s, s.at('10:13'), { a: 'start', block: 'a' })
+    const n = s.events.length
+    expect(click(s, s.at('10:14'), { a: 'resize', block: 'a', to: s.at('10:15') })).toMatchObject({ ok: false, why: 'najkrótszy blok to 5 min', confirm: null })
+    expect(s.events.length).toBe(n)
+    expect(click(s, s.at('10:14'), { a: 'resize', block: 'a', to: s.at('10:20') })).toMatchObject({ ok: true, events: [{ k: 'block.shorten', minutes: 53 }] })
+  })
+
+  it('zapis z procesu głównego: koniec idzie na siatkę 5 min', () => {
+    const s = day()
+    click(s, s.at('10:00'), { a: 'start', block: 'a' })
+    const t = s.at('10:20')
+    const at = (end: string) => timerAction(s.contextAt(t), s.stateAt(t), { a: 'resize', block: 'a', to: s.at(end) }, t)
+    expect(at('11:22')).toMatchObject({ ok: true, events: [{ k: 'block.extend', minutes: 20 }] })
+    expect(at('11:23')).toMatchObject({ ok: true, events: [{ k: 'block.extend', minutes: 25 }] })
+    expect(at('10:42')).toMatchObject({ ok: true, events: [{ k: 'block.shorten', minutes: 20 }] })
   })
 
   it('zapis końca przed teraz nic nie zmienia (odmowa)', () => {
@@ -175,6 +210,57 @@ describe('D365 – krócej: planowany koniec wcześniej, nie przed teraz', () =>
     expect(minute('11:05')).toMatchObject({ upfront: false })
   })
 
+  it('skrócenie przycina okno potwierdzone startem: bieg za nowy koniec nie jest potwierdzony z góry', () => {
+    const started = () => {
+      const s = day([block({ id: 'a', cat: 'inne', at: '10:00', min: 60 })]).approve('10:45', '07:30')
+      expect(click(s, s.at('10:00'), { a: 'start', block: 'a' })).toMatchObject({ ok: false, confirm: { minutes: 15 } })
+      expect(click(s, s.at('10:00'), { a: 'start', block: 'a', confirm: true }).ok).toBe(true)
+      return s
+    }
+    // Confirmed with the start up to 11:00 …
+    expect(minuteOf(started(), '11:05', '10:50')).toMatchObject({ cls: 'after', upfront: true })
+    const s = started()
+    click(s, s.at('10:20'), { a: 'resize', block: 'a', to: s.at('10:40') })
+    // … but after the end dragged to 10:40, the work run on to 11:00 without „Dalej” is unconfirmed past the boundary.
+    expect(minuteOf(s, '11:05', '10:50')).toMatchObject({ cls: 'after', upfront: false })
+    expect(minuteOf(s, '11:05', '10:58')).toMatchObject({ upfront: false })
+  })
+
+  it('„Przedłuż”, potem skrócenie: bieg do starego końca nie jest potwierdzony z góry za nowym końcem', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '10:00', min: 30 })]).approve('10:45', '07:30')
+    click(s, s.at('10:00'), { a: 'start', block: 'a' })
+    expect(click(s, s.at('10:10'), { a: 'extend', block: 'a', minutes: 60 })).toMatchObject({ ok: false, confirm: { minutes: 45 } })
+    expect(click(s, s.at('10:10'), { a: 'extend', block: 'a', minutes: 60, confirm: true }).ok).toBe(true)
+    click(s, s.at('10:40'), { a: 'resize', block: 'a', to: s.at('10:50') })
+    expect(minuteOf(s, '11:35', '10:47')).toMatchObject({ upfront: true })
+    expect(minuteOf(s, '11:35', '10:55')).toMatchObject({ upfront: false })
+    expect(minuteOf(s, '11:35', '11:20')).toMatchObject({ upfront: false })
+  })
+
+  it('„Przedłuż” w `extendedMin` to tylko „Przedłuż” – skrócenie przesuwa sam planowany koniec', () => {
+    const s = day().approve('13:00', '07:30')
+    click(s, s.at('10:00'), { a: 'start', block: 'a' })
+    click(s, s.at('10:10'), { a: 'resize', block: 'a', to: s.at('10:40') })
+    expect(timerNow(s.state('10:11')).fg).toMatchObject({ extendedMin: 0 })
+    click(s, s.at('10:20'), { a: 'resize', block: 'a', to: s.at('12:00') })
+    click(s, s.at('10:30'), { a: 'resize', block: 'a', to: s.at('11:30') })
+    const fg = timerNow(s.state('10:31')).fg!
+    expect(fg.extendedMin).toBe(80)
+    expect(plannedEnd(s, s.at('10:31'), 'a')).toBe('11:30')
+  })
+
+  it('para startu bloku stałego: po skróceniu stałego „Cofnij” już jej nie cofa (jak po „Przedłuż”)', () => {
+    const s = day([block({ id: 'f', cat: 'inne', at: '08:00', min: 180 }), block({ id: 'w', cat: 'zajecia-zdalne', at: '09:00', min: 60, fixed: true })])
+    click(s, s.at('08:00'), { a: 'start', block: 'f' })
+    expect(leader(s, '09:00').map((e) => [e.k, e.block])).toEqual([
+      ['block.pause', 'f'],
+      ['block.start', 'w']
+    ])
+    const pause = s.state('09:05').facts.autos.find((a) => a.rule === 'fixedStart' && a.k === 'block.pause')!
+    expect(click(s, s.at('09:10'), { a: 'resize', block: 'w', to: s.at('09:45') }).ok).toBe(true)
+    expect(click(s, s.at('09:15'), { a: 'undo', target: pause.id })).toMatchObject({ ok: false, why: 'tego już nie cofniesz – blok stały ruszył dalej według planu' })
+  })
+
   it('ten sam koniec drugi raz nic nie zapisuje', () => {
     const s = day()
     click(s, s.at('10:00'), { a: 'start', block: 'a' })
@@ -184,19 +270,11 @@ describe('D365 – krócej: planowany koniec wcześniej, nie przed teraz', () =>
 
   it('blok stały z własną godziną: krócej – koniec według planu w nowym miejscu', () => {
     const s = day([block({ id: 'w', cat: 'zajecia-zdalne', at: '09:00', min: 60, fixed: true, bg: true })])
-    const lead = (time: string) => {
-      const t = s.at(time)
-      const ctx = s.contextAt(t)
-      const st = s.stateAt(t)
-      const out = autoActions({ ctx, state: st, activity: activityOf(ctx.events, st.grid.start, t, 'pca'), now: t, gate: t })
-      s.write(out, t)
-      return out.filter((e) => e.autoRule !== 'boundary')
-    }
-    lead('09:00')
+    leader(s, '09:00')
     expect(edges(s, s.at('09:20')).has('w')).toBe(true)
     click(s, s.at('09:20'), { a: 'resize', block: 'w', to: s.at('09:45') })
-    expect(lead('09:44')).toEqual([])
-    expect(lead('09:45')).toEqual([expect.objectContaining({ k: 'block.end', block: 'w', autoRule: 'plan', at: s.at('09:45') })])
+    expect(leader(s, '09:44')).toEqual([])
+    expect(leader(s, '09:45')).toEqual([expect.objectContaining({ k: 'block.end', block: 'w', autoRule: 'plan', at: s.at('09:45') })])
   })
 
   it('„Tydzień”: skrócona sesja dodana przez Ciebie nie liczy się jako przedłużona', () => {

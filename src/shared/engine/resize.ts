@@ -8,6 +8,7 @@
  * „Długość” – nothing is blocked, D72).
  */
 import { costText } from '../costText'
+import { DRAG_STEP_MIN, MIN_BLOCK_MIN } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { MINUTE } from '../time/zone'
 import { ownHourBlock } from './blocks'
@@ -15,10 +16,6 @@ import { computeDay, type DayContext, type DayState } from './day'
 import { atOf, idxOfLogical } from './grid'
 import { simEvents } from './sim'
 import { timerAction, timerNow, type ActionCost, type TimerBlock } from './timer'
-
-/** The step of a dragged edge and the shortest block (D365). */
-export const EDGE_STEP_MIN = 5
-export const EDGE_MIN_BLOCK_MIN = 5
 
 /** The bottom edge of a running block that can be dragged now (logical minutes). */
 export interface RunningEdge {
@@ -61,7 +58,7 @@ function running(state: DayState): TimerBlock[] {
 /** The earliest end (index): now rounded up to the 5-min grid, at least 5 min after its start (index 0 is 04:00 – a whole hour). */
 function earliestIdx(state: DayState, tb: TimerBlock, at: number): number {
   const now = (at - state.grid.start) / MINUTE
-  return Math.ceil(Math.max(now, tb.startedAt + EDGE_MIN_BLOCK_MIN) / EDGE_STEP_MIN) * EDGE_STEP_MIN
+  return Math.ceil(Math.max(now, tb.startedAt + MIN_BLOCK_MIN) / DRAG_STEP_MIN) * DRAG_STEP_MIN
 }
 
 /** The bottom edges of the running blocks that can be dragged at `at` (ms), by the block's id. */
@@ -81,7 +78,7 @@ export function resizePreview(ctx: DayContext, state: DayState, id: string, endL
   if (!tb) return null
   const g = state.grid
   const earliest = earliestIdx(state, tb, at)
-  const snapped = Math.round(endLm / EDGE_STEP_MIN) * EDGE_STEP_MIN
+  const snapped = Math.round(endLm / DRAG_STEP_MIN) * DRAG_STEP_MIN
   const end = Math.min(Math.max(earliest, idxOfLogical(g, snapped)), Math.max(g.length, tb.plannedEnd))
   const to = atOf(g, end)
   const minutes = end - tb.plannedEnd

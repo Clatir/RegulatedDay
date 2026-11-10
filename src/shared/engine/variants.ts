@@ -16,7 +16,7 @@ import { logicalMinuteOf } from '../time/day'
 import { isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
 import type { EnergyState } from './energy'
-import { OPEN, type BlockFact } from './facts'
+import { endShiftOf, OPEN, type BlockFact } from './facts'
 import { atOf } from './grid'
 import { moveBetweenDays, newUserBlock } from './planEdit'
 import { suggestRegen } from './reserve'
@@ -85,7 +85,7 @@ function zeroOf(state: DayState, info: BlockInfo, f: BlockFact, byId: Map<string
       }
     }
     const until = z ?? Number.POSITIVE_INFINITY
-    const more = f.extends.filter((x) => x.at < until + OVERRUN_CHECK_MIN).reduce((s, x) => s + x.minutes, 0)
+    const more = endShiftOf(f, until + OVERRUN_CHECK_MIN)
     if (more === ext || step >= ZERO_STEPS) return z
     ext = more
   }

@@ -5,7 +5,7 @@
  * parking) are events of its log. Every edit is made in its turn from the file as it is then (A6-01); the window's
  * version (`seen`) only stands in for a file that cannot be read now.
  */
-import type { EditOutcome, RawRecord, TimerResult } from '@shared/api'
+import type { EditOutcome, RawRecord, TimerIn, TimerResult } from '@shared/api'
 import { blockJson, dayRaw, putBlock, setCancelled, setDayField, takeBlock } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { marketDay } from '@shared/calendar/holidays'
@@ -49,13 +49,17 @@ export function patchDayBlock(date: string, seen: RawRecord | null, b: PlanBlock
 }
 
 /** A click of the timer whose failure (the IPC throws) is an answer, not an unhandled rejection. */
-async function clickTimer(block: string, date: string, a: 'removeBegun' | 'undoRemove'): Promise<{ ok: boolean; why: string | null; code: TimerResult['code'] }> {
+async function timerClick(req: TimerIn): Promise<TimerResult> {
   try {
-    const r = await window.rd.timer({ a, block, day: date })
-    return { ok: r.ok, why: r.why ?? null, code: r.code }
+    return await window.rd.timer(req)
   } catch (e) {
-    return { ok: false, why: e instanceof Error ? e.message : String(e), code: undefined }
+    return { ok: false, why: e instanceof Error ? e.message : String(e), confirm: null }
   }
+}
+
+async function clickTimer(block: string, date: string, a: 'removeBegun' | 'undoRemove'): Promise<{ ok: boolean; why: string | null; code: TimerResult['code'] }> {
+  const r = await timerClick({ a, block, day: date })
+  return { ok: r.ok, why: r.why ?? null, code: r.code }
 }
 
 /**
@@ -63,13 +67,7 @@ async function clickTimer(block: string, date: string, a: 'removeBegun' | 'undoR
  * `confirm` (up to the boundary it is written at once; past it nothing is written and the answer carries the cost), then
  * with it („Potwierdź”). The IPC throwing is an answer, not an unhandled rejection.
  */
-export async function clickResize(block: string, date: string, to: number, confirm: boolean): Promise<TimerResult> {
-  try {
-    return await window.rd.timer({ a: 'resize', block, day: date, to, ...(confirm ? { confirm: true } : {}) })
-  } catch (e) {
-    return { ok: false, why: e instanceof Error ? e.message : String(e), confirm: null }
-  }
-}
+export const clickResize = (block: string, date: string, to: number, confirm: boolean): Promise<TimerResult> => timerClick({ a: 'resize', block, day: date, to, ...(confirm ? { confirm: true } : {}) })
 
 /** The edit of the plan did not go and will not: nothing was sent, or the file is broken (a conflict stays as a question and may still pass). */
 const refusedEdit = (out: readonly EditOutcome[] | null): boolean => out == null || out.some((o) => o.status === 'broken')

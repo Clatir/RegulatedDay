@@ -153,6 +153,9 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       // The hours are shown while the edge is held (nothing saved yet).
       const end1 = Math.round((s0.end + 30) / 5) * 5
       await expect(page.getByTestId('edge-hint')).toContainText(`${clock(s0.start)}–${clock(end1)}`)
+      // At an edge the cursor is the edge's alone (never „grabbing” of the whole block).
+      await expect(late).toHaveClass(/cursor-ns-resize/)
+      await expect(late).not.toHaveClass(/cursor-grabbing/)
       await page.mouse.up()
       await expect.poll(() => saved().durationMin).toBe(end1 - s0.start)
       const s1 = await span()
@@ -405,6 +408,10 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
 })
 
 test('trwający blok (D365): dolna krawędź na osi przedłuża i skraca przez timer, nie przez plan', async () => {
+  // The engine approves the boundary itself at the first work block's start (end of work + 15 min – on a weekend or a
+  // holiday that is 45 min from now): the day's own approval 4 h ahead puts it out of the way on any day of the week.
+  const nowMin = logicalMinuteOf(logicalToday(), Date.now())
+  test.skip(nowMin < 6 * 60 || nowMin > 17 * 60, 'granica 4 h od teraz i maksimum dnia muszą być daleko za blokiem')
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-resize-'))
   seed(dataDir)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
@@ -413,6 +420,7 @@ test('trwający blok (D365): dolna krawędź na osi przedłuża i skraca przez t
       await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
       const late = page.getByTestId('block-late')
       await expect(late).toBeVisible({ timeout: 30_000 })
+      await page.evaluate((a) => window.rd.logEvents([{ k: 'boundary.approve', day: a.day, boundary: a.boundary, auto: false }]), { day: logicalToday(), boundary: Math.round((Date.now() + 4 * 60 * 60_000) / 60_000) * 60_000 })
       await late.click()
       await page.getByTestId('block-timer-start').click()
       await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')

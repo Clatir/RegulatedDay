@@ -1,17 +1,25 @@
 /**
- * What an edge dragged on the axis changes in a block (D365): the way the field „Długość” saves – `durationMin`; the top
- * edge also the start (kept in the logical day as a dragged start is, D305), so that the end stays.
+ * What an edge dragged on the axis changes in a block `b` of the plan (D365), shown over `shown` before the drag and now
+ * over `span`: the way the field „Długość” saves – `durationMin`; the top edge also the start (kept in the logical day as
+ * a dragged start is, D305), so that the end stays.
+ *
+ * The length is counted from where the block really starts: a fixed one – at its start in the plan (the axis shows it
+ * later while it waits behind a regeneration), a flexible one – at the start shown (where the forecast puts it). The top
+ * edge of a flexible block the forecast holds back (shown after its start in the plan) does not start it earlier by
+ * going above its shown start: the plan will place it there anyway, so only the part below counts and the end stays.
  */
 import { draggedBlock } from '@shared/engine/planEdit'
 import type { TimerResult } from '@shared/api'
 import { costText } from '@shared/costText'
-import type { PlanBlock } from '@shared/model/plan'
-import { MAX_BLOCK_MIN, type BlockSpan, type DragEdge } from './Timeline'
+import { MAX_BLOCK_MIN, type PlanBlock } from '@shared/model/plan'
+import type { BlockSpan, DragEdge } from './Timeline'
 
-export function edgePatch(b: PlanBlock, span: BlockSpan, edge: DragEdge): Partial<PlanBlock> {
-  const startMin = edge === 'top' ? (draggedBlock(b, span.startMin).startMin ?? span.startMin) : span.startMin
-  const durationMin = Math.min(Math.max(span.endMin - startMin, 1), MAX_BLOCK_MIN)
-  return edge === 'top' ? { startMin, durationMin } : { durationMin }
+export function edgePatch(b: PlanBlock, span: BlockSpan, edge: DragEdge, shown: BlockSpan): Partial<PlanBlock> {
+  const lengthFrom = (start: number) => Math.min(Math.max(span.endMin - start, 1), MAX_BLOCK_MIN)
+  if (edge === 'end') return { durationMin: lengthFrom(b.fixed ? (b.startMin ?? shown.startMin) : shown.startMin) }
+  const startMin = draggedBlock(b, span.startMin).startMin!
+  const heldBack = !b.fixed && b.startMin != null && shown.startMin > b.startMin
+  return { startMin, durationMin: lengthFrom(heldBack ? Math.max(startMin, shown.startMin) : startMin) }
 }
 
 /** What the main process said to the bottom edge of a running block dropped on the axis (D365). */

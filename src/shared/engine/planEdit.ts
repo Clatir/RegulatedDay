@@ -8,7 +8,7 @@ import { REQUEST_CATEGORY, type CategoryRules } from '../model/categories'
 import { newId } from '../model/ids'
 import { dayRaw, putBlock, setMovedTo, takeBlock, type Raw } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
-import { dayFileFrom, PLAN_MAX, PLAN_MIN, planBlock, type DayFile, type PlanBlock, type Template } from '../model/plan'
+import { dayFileFrom, MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlock, type DayFile, type PlanBlock, type Template } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan, type BlockInfo } from './blocks'
 import { dayPlan, dayWakeMin, morningBound, wakeShiftedStart } from './createDay'
@@ -24,7 +24,7 @@ export function newUserBlock(categoryId: string, startMin: number, durationMin: 
     id: newId(),
     categoryId,
     startMin: inDay(startMin),
-    durationMin: Math.max(1, Math.min(24 * 60, durationMin)),
+    durationMin: Math.max(1, Math.min(MAX_BLOCK_MIN, durationMin)),
     fixed: false,
     background: rules?.startsInBackground ? true : null,
     origin: 'user',

@@ -10,7 +10,7 @@
  */
 import { isIsoDate } from '../time/zone'
 import { POOLS, type Costs, type Pool, type PoolValues } from './categories'
-import type { PlanBlock } from './plan'
+import { MAX_BLOCK_MIN, type PlanBlock } from './plan'
 import { MAX_STEPS, ROUTINE_VERSIONS, type RoutineVersion } from './routines'
 import { settingsFrom, type DayTypeId, type RulesSettings } from './settings'
 
@@ -246,7 +246,9 @@ const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 const DOMAINS = new Set(['timer', 'energy', 'game', 'meta'])
 const isPool = (v: unknown): v is Pool => (POOLS as readonly unknown[]).includes(v)
 /** A planned length: whole minutes, at most a day. */
-const isLength = (v: unknown): v is number => Number.isInteger(v) && (v as number) > 0 && (v as number) <= 24 * 60
+const isLength = (v: unknown): v is number => Number.isInteger(v) && (v as number) > 0 && (v as number) <= MAX_BLOCK_MIN
+/** A change of a block's planned end („Przedłuż”, a shortening): minutes, more than 0, at most a block's longest. */
+const isChange = (v: unknown): v is number => isNum(v) && v > 0 && v <= MAX_BLOCK_MIN
 const isAnswers = (v: unknown) => isPlain(v) && POOLS.every((p) => Array.isArray(v[p]) && (v[p] as unknown[]).length === 2 && (v[p] as unknown[]).every((a) => a === 0 || a === 1 || a === 2))
 const isValues = (v: unknown) => v == null || (isPlain(v) && POOLS.every((p) => isNum(v[p]) && (v[p] as number) >= 0 && (v[p] as number) <= 100))
 
@@ -259,8 +261,8 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'block.pause': { block: isStr, at: isNum },
   'block.resume': { block: isStr, at: isNum },
   'block.end': { block: isStr, at: isNum },
-  'block.extend': { block: isStr, at: isNum, minutes: (v) => isNum(v) && v > 0 && v <= 24 * 60 },
-  'block.shorten': { block: isStr, at: isNum, minutes: (v) => isNum(v) && v > 0 && v <= 24 * 60 },
+  'block.extend': { block: isStr, at: isNum, minutes: isChange },
+  'block.shorten': { block: isStr, at: isNum, minutes: isChange },
   'block.confirm': { block: isStr, at: isNum },
   'block.park': { block: isStr, at: isNum },
   'block.cancel': { block: isStr, at: isNum },

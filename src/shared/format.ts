@@ -5,6 +5,7 @@
  * (durations „90”, „1:30”, „1h30”, a date without its year, whole numbers). Pure – the main process, the windows and the
  * tests share it.
  */
+import { MAX_BLOCK_MIN } from './model/plan'
 
 /** No-break space: a number never breaks between its thousands. */
 export const NBSP = ' '
@@ -81,8 +82,8 @@ export type Parsed<T> = { ok: true; value: T } | { ok: false; message: string }
 const ok = <T>(value: T): Parsed<T> => ({ ok: true, value })
 const refuse = (message: string): Parsed<never> => ({ ok: false, message })
 
-/** The longest duration a field takes: a day. */
-export const MAX_DURATION_MIN = 24 * 60
+/** The longest duration a field takes: a day (the longest block). */
+export const MAX_DURATION_MIN = MAX_BLOCK_MIN
 
 /**
  * A duration typed (spec „Czas i długość”): „90” (minutes), „1:30”, „1h30”, also „1h”, „1 h 30 min”, „45 min”, „45m”.

@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import type { Pool } from '@shared/model/categories'
+import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { cx } from '../../components/ui'
 import { useMachine } from '../../store/machine'
@@ -32,8 +33,12 @@ export interface TimelineItem {
    * runs, of a kind that has its own hour) – no handle on its top, its start stays.
    */
   resize?: 'end'
-  /** The earliest end its bottom edge goes to (D365: a running block – not before now); the shortest block still holds. */
+}
+
+/** What bounds a block's bottom edge besides the 5 min and the day's length (D365: a running block – not before now, not past the day). */
+export interface EdgeLimits {
   minEndMin?: number
+  maxEndMin?: number
 }
 
 /** A span of a block shown on the axis after an edge was dragged (logical minutes). */
@@ -64,12 +69,8 @@ const TONE: Record<TimelineMarker['tone'], string> = { lamp: '#F2B66D', rose: '#
 /** Pixels per minute of the axis. */
 const PPM = 1.1
 const MIN_H = 20
-/** A dragged start stands on the grid of these minutes (D305); a drag starts past 4 px – a shorter move is a click. */
-export const DRAG_STEP_MIN = 5
+/** A drag starts past 4 px – a shorter move is a click (D305). */
 const DRAG_FROM_PX = 4
-/** The shortest block an edge makes (D365) and the longest the plan's schema holds. */
-export const MIN_BLOCK_MIN = 5
-export const MAX_BLOCK_MIN = 24 * 60
 /** A dropped block waits this long at its new start for the day to bring it there (the edit refused: it goes back). */
 const DROP_HOLD_MS = 2000
 
@@ -78,13 +79,16 @@ export const draggedStart = (startMin: number, dy: number): number => Math.round
 
 /**
  * The end of a block shown over `startMin`–`endMin` and its bottom edge dragged by `dy` pixels (D365): the minute under
- * the edge, on the 5-min grid; never a block shorter than 5 min nor longer than the plan holds, and not before `minEndMin`
- * (a running block: now rounded up) when given.
+ * the edge, on the 5-min grid; never a block shorter than 5 min nor longer than the plan holds, within `limits` (a running
+ * block: not before now rounded up, not past the day). A move up never lengthens the block – past a limit that lies
+ * after its shown end (a block that ran over its plan, the end shown at now) the end stays where it is.
  */
-export const draggedEnd = (startMin: number, endMin: number, dy: number, minEndMin?: number): number => {
-  const shortest = Math.ceil(Math.max(startMin + MIN_BLOCK_MIN, minEndMin ?? Number.NEGATIVE_INFINITY) / DRAG_STEP_MIN) * DRAG_STEP_MIN
-  const longest = Math.floor((startMin + MAX_BLOCK_MIN) / DRAG_STEP_MIN) * DRAG_STEP_MIN
-  return Math.min(Math.max(Math.round((endMin + dy / PPM) / DRAG_STEP_MIN) * DRAG_STEP_MIN, shortest), Math.max(longest, shortest))
+export const draggedEnd = (startMin: number, endMin: number, dy: number, limits: EdgeLimits = {}): number => {
+  const shortest = Math.ceil(Math.max(startMin + MIN_BLOCK_MIN, limits.minEndMin ?? Number.NEGATIVE_INFINITY) / DRAG_STEP_MIN) * DRAG_STEP_MIN
+  const longest = Math.floor(Math.min(startMin + MAX_BLOCK_MIN, limits.maxEndMin ?? Number.POSITIVE_INFINITY) / DRAG_STEP_MIN) * DRAG_STEP_MIN
+  const under = Math.round((endMin + dy / PPM) / DRAG_STEP_MIN) * DRAG_STEP_MIN
+  const end = Math.min(Math.max(under, shortest), longest)
+  return under < endMin ? Math.min(end, endMin) : end
 }
 
 /**
@@ -103,8 +107,11 @@ export const draggedTopStart = (startMin: number, endMin: number, dy: number): n
  * dropped on (kept in the logical day, a flexible block before now placed at now): any other place is the edit read back;
  * the edit refused – the hold's time runs out.
  */
-export const dropSettled = (items: readonly TimelineItem[], d: { id: string; from: number; fromEnd?: number }): boolean => {
+export const dropSettled = (items: readonly TimelineItem[], d: { id: string; from: number; fromEnd?: number; exactEnd?: number }): boolean => {
   const i = items.find((x) => x.id === d.id)
+  // A running block's end the timer sets exactly (`exactEnd`): until it stands there nothing is read back (its shown end
+  // moves with the clock when it ran over its plan – not the edit).
+  if (d.exactEnd != null) return !i || i.endMin === d.exactEnd
   return !i || i.startMin !== d.from || (d.fromEnd != null && i.endMin !== d.fromEnd)
 }
 
@@ -121,6 +128,10 @@ interface Drag {
   fromEnd: number
   start: number
   end: number
+  /** What bounds the bottom edge, taken when it was grabbed (now moves on while it is held). */
+  limits: EdgeLimits
+  /** The end is set exactly by the timer (a running block): the hold waits for it (`dropSettled`). */
+  exact: boolean
   moved: boolean
   dropped: boolean
 }
@@ -135,6 +146,7 @@ export function Timeline({
   onMove,
   onResize,
   resizeNote,
+  edgeLimits,
   attached,
   from,
   to,
@@ -152,6 +164,8 @@ export function Timeline({
   onResize?: (id: string, span: BlockSpan, edge: DragEdge) => void
   /** A line beside the hours while an edge is dragged to `endMin` (D365: the cost of a running block's extension), if any. */
   resizeNote?: (id: string, endMin: number) => string | null
+  /** What bounds the bottom edge of a block when it is grabbed (D365: a running block – not before now, not past the day). */
+  edgeLimits?: (id: string) => EdgeLimits | null
   /**
    * A block's end waiting for a confirmation (D365: a running block's extension past the boundary): the block is drawn
    * down to `endMin` (its added part dashed), `node` – „Potwierdź · Anuluj” – stands at that edge. Gone: the block is at its end.
@@ -175,8 +189,13 @@ export function Timeline({
   // A dropped block stands at its new start until the day's items bring it there (the edit read back).
   useEffect(() => {
     const d = dragRef.current
-    if (d?.dropped && dropSettled(items, d)) setDrag(null)
+    if (d?.dropped && dropSettled(items, { ...d, exactEnd: d.exact ? d.end : undefined })) setDrag(null)
   }, [items])
+  // A running block's end waiting for „Potwierdź · Anuluj”: the block is drawn there by `attached`, the hold is over.
+  useEffect(() => {
+    const d = dragRef.current
+    if (attached && d?.dropped && d.id === attached.id) setDrag(null)
+  }, [attached])
   // Let go anywhere (the block drawn anew in another column loses the pointer): the drag ends without a move.
   const holding = drag != null && !drag.dropped
   useEffect(() => {
@@ -257,7 +276,8 @@ export function Timeline({
           if (edge == null && !draggable) return
           dropped.current = false
           e.currentTarget.setPointerCapture(e.pointerId)
-          setDrag({ id: i.id, pointer: e.pointerId, y0: e.clientY, edge, from: i.startMin, fromEnd: i.endMin, start: i.startMin, end: i.endMin, moved: false, dropped: false })
+          const limits = (edge === 'end' ? edgeLimits?.(i.id) : null) ?? {}
+          setDrag({ id: i.id, pointer: e.pointerId, y0: e.clientY, edge, from: i.startMin, fromEnd: i.endMin, start: i.startMin, end: i.endMin, limits, exact: edge === 'end' && i.movable !== true, moved: false, dropped: false })
         }}
         onPointerMove={(e) => {
           const d = dragRef.current
@@ -266,7 +286,7 @@ export function Timeline({
           if (!d.moved && Math.abs(dy) < DRAG_FROM_PX) return
           const span: BlockSpan =
             d.edge === 'end'
-              ? { startMin: d.from, endMin: draggedEnd(d.from, d.fromEnd, dy, i.minEndMin) }
+              ? { startMin: d.from, endMin: draggedEnd(d.from, d.fromEnd, dy, d.limits) }
               : d.edge === 'top'
                 ? { startMin: draggedTopStart(d.from, d.fromEnd, dy), endMin: d.fromEnd }
                 : (() => {
@@ -296,8 +316,9 @@ export function Timeline({
           'absolute right-0 left-0 overflow-hidden rounded-[3px] border-l-[3px] px-1.5 text-left leading-tight transition-colors',
           selected === i.id ? 'ring-1 ring-lamp' : 'hover:brightness-110',
           i.waits && 'border-dashed',
-          draggable && (dragged ? 'z-20 cursor-grabbing shadow-lg' : 'cursor-grab'),
-          dragged && drag.edge && 'z-20 cursor-ns-resize shadow-lg'
+          draggable && !dragged && 'cursor-grab',
+          dragged && 'z-20 shadow-lg',
+          dragged && (drag.edge ? 'cursor-ns-resize' : 'cursor-grabbing')
         )}
         // Dimmed by its fill and edge, never its text (A8-05).
         style={{

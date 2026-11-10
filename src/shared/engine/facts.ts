@@ -73,12 +73,14 @@ export interface BlockFact {
   runs: Run[]
   planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null } | null
   confirms: Confirm[]
-  /**
-   * The changes of its planned end, in order: a confirmed „Przedłuż” (minutes > 0) and an end dragged earlier on the axis
-   * (`block.shorten`, minutes < 0, D365). Their sum moves the planned end; what counts only „Przedłuż” (its confirmed
-   * windows, „przedłużony”) takes the positive ones.
-   */
+  /** Confirmed „Przedłuż”, in order. */
   extends: Array<{ at: number; minutes: number }>
+  /**
+   * Every change of its planned end, in order: „Przedłuż” (minutes > 0) and an end dragged earlier on the axis
+   * (`block.shorten`, minutes < 0, D365). Where the planned end is counted, take it from here (`endShiftOf`), not from
+   * `extends`.
+   */
+  endChanges: Array<{ at: number; minutes: number }>
   parkedAt: number | null
   /** Why it was parked or cancelled (the rule: 'exchange', 'type', 'lateWake', 'workEnd' …). */
   goneRule: string | null
@@ -219,6 +221,7 @@ const newBlock = (id: string): BlockFact => ({
   planned: null,
   confirms: [],
   extends: [],
+  endChanges: [],
   parkedAt: null,
   goneRule: null,
   cancelledAt: null,
@@ -356,11 +359,14 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })
         break
       }
-      case 'block.extend':
-        block(e.block).extends.push({ at: idx(e.at), minutes: e.minutes })
+      case 'block.extend': {
+        const b = block(e.block)
+        b.extends.push({ at: idx(e.at), minutes: e.minutes })
+        b.endChanges.push({ at: idx(e.at), minutes: e.minutes })
         break
+      }
       case 'block.shorten':
-        block(e.block).extends.push({ at: idx(e.at), minutes: -e.minutes })
+        block(e.block).endChanges.push({ at: idx(e.at), minutes: -e.minutes })
         break
       case 'block.confirm': {
         const b = block(e.block)
@@ -537,6 +543,16 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
   return f
 }
 
+/**
+ * How far a block's planned end moved (minutes): its „Przedłuż” less its shortenings (D365) – those clicked before
+ * `before` (index) when given.
+ */
+export function endShiftOf(f: Pick<BlockFact, 'endChanges'>, before = Number.POSITIVE_INFINITY): number {
+  let s = 0
+  for (const x of f.endChanges) if (x.at < before) s += x.minutes
+  return s
+}
+
 /** A block as known at the start of minute m: runs cut at m, what began at m or later not yet there. */
 export function blockAt(b: BlockFact, m: number): BlockFact {
   const addConfirmedAt = b.addConfirmedAt != null && b.addConfirmedAt < m ? b.addConfirmedAt : null
@@ -557,6 +573,7 @@ export function blockAt(b: BlockFact, m: number): BlockFact {
     endOrder: ended ? b.endOrder : null,
     confirms: b.confirms.filter((c) => c.at < m),
     extends: b.extends.filter((x) => x.at < m),
+    endChanges: b.endChanges.filter((x) => x.at < m),
     addConfirmedAt
   }
 }
