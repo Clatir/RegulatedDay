@@ -1571,7 +1571,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   nowe godziny bloków elastycznych do najbliższego stałego – żaden nie zaczyna się przed teraz; stały i bloki za nim,
   chronione (posiłek, regeneracja, rutyny) i zaczęte zostają – i daje linię „Przesunięto N bloków · Cofnij”; „Cofnij”
   przywraca godziny, a pytanie o tę lukę nie wraca. „Zostaw” – linia znika, plan bez zmian. Bez odpowiedzi linia znika
-  sama, gdy zacznie się następny blok albo coś w luce (D368, D373, D375).
+  sama, gdy zacznie się następny blok albo coś w luce – także blok dalszy niż następny, z pominięciem należnego (D368,
+  D373, D375, D376).
 - **Nie przechodzi, gdy:** pytanie o tę samą lukę przychodzi drugi raz (także po „Zostaw” i wcześniejszym starcie
   następnego bloku), „Zostaw” nie zamyka linii, linia ma kropkę albo daje powiadomienie, liczba w linii różni się od
   przesunięcia po „Przesuń”, po „Start” następnego bloku pytanie znika zamiast przejść na lukę za nim,
@@ -1589,7 +1590,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   komputerach i także po ponownym uruchomieniu aplikacji (zamknij ją i otwórz, póki pytanie czeka); „Przesuń” przesuwa
   następne bloki o zwolniony czas (przerwa zaplanowana wcześniej zostaje). Przeniesienie bloku i górna krawędź – bez
   pytania; na jutrze – bez pytania (D368, D373, D375). Usunięcie bloku z blokiem zakotwiczonym za nim zwalnia oba;
-  „Cofnij” usunięcia (i wydłużenie skróconego bloku z powrotem) kończy pytanie, a ponowne usunięcie pyta od nowa.
+  „Cofnij” usunięcia (i wydłużenie skróconego bloku z powrotem) kończy pytanie, a ponowne usunięcie pyta od nowa – o ten
+  sam czas raz (nie dwa razy tyle). Skrócony blok, który się spóźnia, pytania nie gasi.
 - **Nie przechodzi, gdy:** po usunięciu dziś nie ma pytania, pytanie znika po ponownym uruchomieniu, przychodzi po
   zmianie na jutrze, po przeniesieniu bloku albo po „Cofnij”, albo „Przesuń” przesuwa bloki o więcej, niż zwolniło
   usunięcie.

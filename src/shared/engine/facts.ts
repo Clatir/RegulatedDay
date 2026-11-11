@@ -87,9 +87,11 @@ export interface BlockFact {
   parkedAt: number | null
   /** Why it was parked or cancelled (the rule: 'exchange', 'type', 'lateWake', 'workEnd' …). */
   goneRule: string | null
-  /** The event that parked or cancelled it before it began: its id and when it happened (`EventOrder`, not its minute). */
-  goneId: string | null
-  goneOrder: EventOrder | null
+  /**
+   * The first event that parked or cancelled it before it began (in the order of events): its minute (index), its rule,
+   * its id and when it happened (`EventOrder`, not its minute) – all of one event (`goneRule` is the last one's).
+   */
+  gone: { at: number; rule: string | null; id: string; order: EventOrder } | null
   cancelledAt: number | null
   done: boolean | null
   endRule: string | null
@@ -183,7 +185,7 @@ export interface DayFacts {
    * Answers to questions that are not actions of the timer („Przerwa” of „Koniec pracy?”, absence …): id → answer; `order`
    * – when it was written (`EventOrder`: before or after an event of another computer, whatever their clocks say).
    */
-  answers: Map<string, { at: number; answer: string; value: number | null; order: EventOrder }>
+  answers: Map<string, { at: number; answer: string; value: number | null; order: EventOrder; id: string }>
   /** The day closed (the ritual, the morning's choice): the last close written, `at` an index. */
   closed: { at: number; how: CloseHow } | null
   /** Stretches marked in the ritual as no rest, and when (indices): they count from the marking on (T413). */
@@ -192,8 +194,11 @@ export interface DayFacts {
   frozen: FrozenFact | null
   /** Routines ticked off by their block (D328): the last record of each; `at` ms, `id` – the event (its „Cofnij”). */
   routines: Map<string, { id: string; at: number; routine: string; version: RoutineVersion; steps: string[] }>
-  /** Time freed in the plan by the window (`plan.freed`, D375): its id, the block, how, the place (index), minutes, when written. */
-  freed: Array<{ id: string; block: string; how: 'remove' | 'shorten'; place: number; minutes: number; order: EventOrder }>
+  /**
+   * Time freed in the plan by the window (`plan.freed`, D375): its id, the block, how, the place (index), minutes, the
+   * block's planned end after a shortening (index; null – a removal, or written without it), when written.
+   */
+  freed: Array<{ id: string; block: string; how: 'remove' | 'shorten'; place: number; minutes: number; end: number | null; order: EventOrder }>
 }
 
 export interface FrozenFact {
@@ -235,8 +240,7 @@ const newBlock = (id: string): BlockFact => ({
   endChanges: [],
   parkedAt: null,
   goneRule: null,
-  goneId: null,
-  goneOrder: null,
+  gone: null,
   cancelledAt: null,
   done: null,
   endRule: null,
@@ -392,10 +396,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         if (b.parkedAt == null && b.startedAt == null) {
           b.parkedAt = idx(e.at)
           b.goneRule = e.rule ?? null
-          if (b.cancelledAt == null) {
-            b.goneId = e.id
-            b.goneOrder = orderOf(e)
-          }
+          b.gone ??= { at: idx(e.at), rule: e.rule ?? null, id: e.id, order: orderOf(e) }
         }
         break
       }
@@ -404,8 +405,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         if (b.cancelledAt == null && b.startedAt == null) {
           b.cancelledAt = idx(e.at)
           b.goneRule = e.rule ?? null
-          b.goneId = e.id
-          b.goneOrder = orderOf(e)
+          b.gone ??= { at: idx(e.at), rule: e.rule ?? null, id: e.id, order: orderOf(e) }
         }
         break
       }
@@ -476,10 +476,10 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         if (!f.seen.has(e.question)) f.seen.set(e.question, { at: e.at, c: e.c, how: e.how })
         break
       case 'question.answer':
-        if (!f.answers.has(e.question)) f.answers.set(e.question, { at: e.at, answer: e.answer, value: e.value ?? null, order: orderOf(e) })
+        if (!f.answers.has(e.question)) f.answers.set(e.question, { at: e.at, answer: e.answer, value: e.value ?? null, order: orderOf(e), id: e.id })
         break
       case 'plan.freed':
-        f.freed.push({ id: e.id, block: e.block, how: e.how, place: idx(e.place), minutes: e.minutes, order: orderOf(e) })
+        f.freed.push({ id: e.id, block: e.block, how: e.how, place: idx(e.place), minutes: e.minutes, end: e.end != null ? idx(e.end) : null, order: orderOf(e) })
         break
       case 'ritual.close':
         f.closed = { at: idx(e.at), how: e.how }
@@ -583,7 +583,7 @@ export function blockAt(b: BlockFact, m: number): BlockFact {
     const parkedAt = b.parkedAt != null && b.parkedAt < m ? b.parkedAt : null
     const cancelledAt = b.cancelledAt != null && b.cancelledAt < m ? b.cancelledAt : null
     const gone = parkedAt != null || cancelledAt != null
-    return { ...newBlock(b.id), parkedAt, cancelledAt, goneRule: gone ? b.goneRule : null, goneId: gone ? b.goneId : null, goneOrder: gone ? b.goneOrder : null, addConfirmedAt }
+    return { ...newBlock(b.id), parkedAt, cancelledAt, goneRule: gone ? b.goneRule : null, gone: b.gone && b.gone.at < m ? b.gone : null, addConfirmedAt }
   }
   const runs = b.runs.filter((r) => r.from < m).map((r) => (r.to >= m ? { ...r, to: OPEN } : r))
   const ended = b.endedAt != null && b.endedAt < m

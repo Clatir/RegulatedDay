@@ -683,22 +683,32 @@ test('domykanie luk (D368): usunięty blok zostawia lukę – w pasku okna „Lu
       await b.click()
       await page.getByTestId('block-remove').click()
       await expect.poll(starts).toEqual({ a: base, c: base + 120 })
-      // One quiet line: „a” ends where „b” stood – 1 h empty before „c”, 1 h freed.
+      // The bar's lines as the view has them (also those in „⋯”): the day's own lines – the morning's questions, the
+      // computers' quiet ones – may stand before the gap's; two fit in the bar, the rest wait in „⋯” (any hour of the day).
+      const lines = () => page.evaluate(async () => (await window.rd.widget()).lines.map((l) => l.id))
       const bar = page.getByTestId('bar-main')
-      const line = bar.locator('[data-testid^="bar-line-gap:"]')
-      await expect(line).toHaveCount(1, { timeout: 30_000 })
+      const reveal = async (prefix: string) => {
+        await expect.poll(async () => (await lines()).some((id) => id.startsWith(prefix)), { timeout: 30_000 }).toBe(true)
+        const line = bar.locator(`[data-testid^="bar-line-${prefix}"]`)
+        const more = bar.getByTestId('bar-group-more')
+        if (!(await line.count()) && (await more.getAttribute('aria-pressed')) !== 'true') await more.click()
+        await expect(line).toHaveCount(1)
+        return line
+      }
+      // One quiet line: „a” ends where „b” stood – 1 h empty before „c”, 1 h freed.
+      const line = await reveal('gap:')
       await expect(line).toContainText('Luka 1 h')
       await expect(line).toContainText('Zostaw')
       await line.getByTestId('bar-act-gap-close').click()
       await expect.poll(starts).toEqual({ a: base, c: base + 60 })
-      await expect(line).toHaveCount(0)
-      const moved = bar.getByTestId('bar-line-moved:push')
+      await expect.poll(async () => (await lines()).filter((id) => id.startsWith('gap:'))).toEqual([])
+      const moved = await reveal('moved:push')
       await expect(moved).toContainText('Przesunięto 1 blok')
       await moved.getByTestId('bar-act-moved-undo').click()
       await expect.poll(starts).toEqual({ a: base, c: base + 120 })
-      await expect(moved).toHaveCount(0)
+      await expect.poll(async () => (await lines()).filter((id) => id.startsWith('moved:'))).toEqual([])
       // The gap is back, its question is not (answered once).
-      await expect(line).toHaveCount(0)
+      expect((await lines()).filter((id) => id.startsWith('gap:'))).toEqual([])
     })
     expect(errors).toEqual([])
   } finally {

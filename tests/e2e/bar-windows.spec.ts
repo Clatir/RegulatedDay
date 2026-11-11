@@ -423,7 +423,11 @@ test('luka na pasku pulpitu (D368): prawdziwe kliknięcie „Przesuń resztę wc
       await main.evaluate(() => window.rd.timer({ a: 'startNew', block: 'e2e-gap', categoryId: 'inne', durationMin: 60 }))
       await main.evaluate(() => window.rd.timer({ a: 'finish', block: 'e2e-gap' }))
       const page = await viewPage(app, 'bar')
-      await expect(page.locator('[data-testid^="bar-line-gap:"]')).toContainText('Luka', { timeout: 30_000 })
+      // The gap's line in the view; the day's own lines before it (the morning's questions …) may put it in „⋯” – two fit.
+      await expect.poll(async () => (await main.evaluate(async () => (await window.rd.widget()).lines.map((l) => l.id))).some((id) => id.startsWith('gap:')), { timeout: 30_000 }).toBe(true)
+      const gapLine = page.locator('[data-testid^="bar-line-gap:"]')
+      if (!(await gapLine.count())) await page.getByTestId('bar-group-more').click()
+      await expect(gapLine).toContainText('Luka', { timeout: 30_000 })
       const close = page.getByTestId('bar-act-gap-close')
       await expect(close).toBeVisible()
       await settledBarBounds(app)
@@ -438,7 +442,8 @@ test('luka na pasku pulpitu (D368): prawdziwe kliknięcie „Przesuń resztę wc
       const orderBefore = topWindows()
       click(...point)
       await expect.poll(startOfC, { timeout: 15_000 }).toBeLessThan(planned)
-      await expect(page.getByTestId('bar-line-moved:push')).toContainText('Przesunięto 1 blok')
+      // „Przesunięto 1 blok · Cofnij” – in the view (in the bar or in „⋯”).
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).lines.find((l) => l.id === 'moved:push')?.text ?? null)).toBe('Przesunięto 1 blok')
       expect(pidWindows(bar.pid)).toEqual(before)
       const orderAfter = topWindows()
       expect(movedAcross(orderBefore, orderAfter, bar.hwnd)).toEqual([])

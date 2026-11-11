@@ -259,7 +259,7 @@ describe('D368 – usunięcie i skrócenie w oknie (`freedByEdit`)', () => {
     const plan = [flex('a', '10:00', 80), flex('b', '11:20', 60)]
     const st = at(day(plan), '09:00').state
     const a = plan[0]!
-    expect(freedByEdit(st, a, { ...a, durationMin: 30 })).toEqual({ block: 'a', how: 'shorten', place: day(plan).at('10:30'), minutes: 50 })
+    expect(freedByEdit(st, a, { ...a, durationMin: 30 })).toEqual({ block: 'a', how: 'shorten', place: day(plan).at('10:30'), minutes: 50, end: day(plan).at('10:30') })
     expect(freedByEdit(st, a, { ...a, startMin: lm('10:30'), durationMin: 50 })).toBeNull()
     expect(freedByEdit(st, a, { ...a, startMin: lm('09:00') })).toBeNull()
     expect(freedByEdit(st, a, { ...a, durationMin: 75 })).toBeNull()
@@ -431,5 +431,95 @@ describe('przegląd J4 – runda 1', () => {
     const p = [flex('a', '10:00', 60), flex('x', '12:00', 60), block({ id: 'j', cat: 'inne', after: 'x', min: 15, origin: 'user' }), flex('c', '13:30', 60)]
     const s = day(p)
     expect(freedByEdit(at(s, '09:00').state, p[1]!, null)).toEqual({ block: 'x', how: 'remove', place: s.at('12:00'), minutes: 75 })
+  })
+})
+
+describe('przegląd J4 – runda 2', () => {
+  const plan = [flex('a', '10:00', 60), flex('b', '11:00', 60), flex('c', '12:00', 60)]
+
+  it('(1) usuń → „Cofnij” → usuń znowu: liczy się tylko nowsze zdarzenie tego bloku (bez podwójnego zwolnienia)', () => {
+    const p = [flex('a', '10:00', 60), flex('x', '12:00', 60), flex('c', '14:00', 60)]
+    const s = day(p)
+    const without = p.filter((b) => b.id !== 'x')
+    const f = freedByEdit(at(s, '09:00').state, p[1]!, null)!
+    freedEvent(s, f, s.at('09:00'))
+    freedEvent(s, f, s.at('09:10'))
+    const { gap, state } = at(s, '09:11', { plan: without })
+    expect(logGapTriggers(state)).toHaveLength(1)
+    // 2 h empty before „c” (12:00–14:00 – an hour planned before it stays): 60 min, not 120.
+    expect(gap).toMatchObject({ block: 'c', minutes: 60, keys: [logGapTriggers(state)[0]!.key] })
+    // Shortened, lengthened back and shortened again: the same.
+    const q = [flex('a', '10:00', 80), flex('b', '12:00', 60)]
+    const s2 = day(q)
+    const short = freedByEdit(at(s2, '09:00').state, q[0]!, { ...q[0]!, durationMin: 30 })!
+    freedEvent(s2, short, s2.at('09:00'))
+    freedEvent(s2, short, s2.at('09:10'))
+    expect(at(s2, '09:11', { plan: [{ ...q[0]!, durationMin: 30 }, q[1]!] }).gap).toMatchObject({ block: 'b', minutes: 50 })
+  })
+
+  it('(1) dwa skrócenia jednego bloku po sobie: oba zwolnienia się liczą (różne miejsca)', () => {
+    const q = [flex('a', '10:00', 80), flex('b', '12:00', 60)]
+    const s = day(q)
+    freedEvent(s, freedByEdit(at(s, '09:00').state, q[0]!, { ...q[0]!, durationMin: 50 })!, s.at('09:00'))
+    const fifty = [{ ...q[0]!, durationMin: 50 }, q[1]!]
+    freedEvent(s, freedByEdit(at(s, '09:05', { plan: fifty }).state, fifty[0]!, { ...q[0]!, durationMin: 30 })!, s.at('09:05'))
+    expect(at(s, '09:06', { plan: [{ ...q[0]!, durationMin: 30 }, q[1]!] }).gap).toMatchObject({ block: 'b', minutes: 50 })
+  })
+
+  it('(2) skrócony blok, który się spóźnia: wyzwalacz zostaje (koniec w planie, nie w prognozie)', () => {
+    const q = [flex('a', '10:00', 80), flex('b', '11:20', 60)]
+    const s = day(q)
+    const short = { ...q[0]!, durationMin: 30 }
+    freedEvent(s, freedByEdit(at(s, '09:00').state, q[0]!, short)!, s.at('09:00'))
+    const late = at(s, '10:02', { plan: [short, q[1]!] })
+    expect(logGapTriggers(late.state)).toHaveLength(1)
+    // „a” due now (10:02–10:32): 48 min before „b”.
+    expect(late.gap).toMatchObject({ block: 'b', minutes: 48 })
+  })
+
+  it('(4) usunięcie z zakotwiczonym, a między nimi prognoza wstawia stały blok: zwolnione = długości usuniętych bloków', () => {
+    const p = [flex('a', '10:00', 60), flex('x', '12:00', 60), block({ id: 'j', cat: 'inne', after: 'x', min: 15, origin: 'user' }), fixed('s', '13:00', 60), flex('c', '15:00', 60)]
+    const s = day(p)
+    const f = freedByEdit(at(s, '09:00').state, p[1]!, null)!
+    expect(f.minutes).toBe(75)
+  })
+
+  it('(5) identyfikator grupy stały przez całe życie pytania – także gdy zapas najwcześniejszego wyzwalacza się skończył', () => {
+    const p = [flex('a', '10:00', 60), flex('x', '11:00', 30), flex('b', '11:30', 60)]
+    const s = day(p).start('a', '10:00').end('a', '10:40')
+    // „x” removed at 10:41 (its place 11:00, 30 min freed): two triggers before „b”, the end of „a” the earliest.
+    freedEvent(s, { block: 'x', how: 'remove', place: s.at('11:00'), minutes: 30 }, s.at('10:41'))
+    const without = p.filter((b) => b.id !== 'x')
+    const early = at(s, '10:42', { plan: without }).gap!
+    expect(early.keys).toHaveLength(2)
+    // 11:05: the end of „a” has nothing left (25 min waited, 20 freed) – the question and its id stay.
+    const late = at(s, '11:05', { plan: without }).gap!
+    expect(late.id).toBe(early.id)
+    expect(late.minutes).toBe(25)
+  })
+
+  it('(7) „Start” bloku dalszego niż następny należny (pominięty blok, którego godzina minęła): luka wypełniona (D376)', () => {
+    const p = [flex('a', '10:00', 60), flex('b', '10:20', 20), flex('c', '10:30', 20), flex('d', '12:00', 60)]
+    const s = day(p).start('a', '10:00').end('a', '10:40').start('c', '10:41')
+    expect(at(s, '10:41').gap).toBeNull()
+  })
+
+  it('(8) odwołanie przez Ciebie, potem zaparkowanie przy wymianie: wyzwalacz z pierwszego zdarzenia (reguła, id i kolejność razem)', () => {
+    const s = day(plan)
+    s.raw({ k: 'block.cancel', block: 'b', at: s.at('10:05'), rule: 'user' }, '10:05')
+    s.raw({ k: 'block.park', block: 'b', at: s.at('10:06'), rule: 'exchange' }, '10:06')
+    const { state, gap } = at(s, '10:06')
+    expect(logGapTriggers(state)).toHaveLength(1)
+    expect(gap).toMatchObject({ block: 'c' })
+  })
+
+  it('(9) blok niosący lukę przeniesiony w tło po swojej długości: minuty w tle zużywają zapas raz, nie dwa razy', () => {
+    const p = [flex('a', '10:00', 60), flex('b', '11:00', 20), flex('c', '12:30', 60)]
+    const s = dalej(day(p).start('a', '10:00'), 'a', 'b', '10:40', 20)
+    // „b” (20 min) to the background at 11:00 and on there to 11:10: 10 min of the foreground with no block.
+    s.raw({ k: 'block.fg', block: 'b', at: s.at('11:00'), bg: true }, '11:00')
+    s.raw({ k: 'block.end', block: 'b', at: s.at('11:10'), done: true, rule: null }, '11:10')
+    // 20 freed, 10 used up: 10 left before „c” (12:30 – 80 min empty after „b”).
+    expect(at(s, '11:10').gap).toMatchObject({ block: 'c', minutes: 10 })
   })
 })

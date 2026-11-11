@@ -75,9 +75,10 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   Zostaw” z `gapNow` (`engine/gaps.ts`) tylko dziś, nie w sesji, zajęciach, nocy i „Odcinam się”; wyzwalacze tylko z logu (te same
   na każdym komputerze i po restarcie) – także usunięcie albo skrócenie niezaczętego bloku w oknie: `freedByEdit` w `TodayPage`
   → `tellFreed` → `logEvents` ze zdarzeniem `plan.freed` (`USER_EVENTS`; `hub.events` przelicza pasek, T588, T594, T600).
-  „Zostaw” (`leaveGap`) i „Przesuń” (`closeGapNow`) liczą lukę od nowa na świeżym `widgetModel` (`gapOfLine`; zmieniona – nic
-  nie zapisuje) i piszą `mark` na każdy wyzwalacz (`keys`); „Przesuń”: najpierw jedna edycja pliku dnia i linia `moved:push`,
-  odpowiedzi dopiero po udanym zapisie (T601); odmowa `mark` przy „Zostaw” – powód w pasku.
+  „Zostaw” (`leaveGap`) i „Przesuń” (`closeGapNow`) liczą lukę od nowa na świeżym `widgetModel` (`gapOfLine`: luka, której `keys`
+  ma klucz linii, z `gapsNow`; nie ma – nic nie przesuwa) i piszą `mark` na każdy wyzwalacz (`keys`); „Przesuń”: najpierw
+  odpowiedzi (odmowa odpowiedzi linii – nic), potem jedna edycja pliku dnia i linia `moved:push`; nieudana edycja – `unmark`
+  (`undo` odpowiedzi) i pytanie zostaje (T601, T602); odmowa `mark` przy „Zostaw” – powód w pasku.
 
 ## Pułapki
 - W ciszy nocnej pasek nie ma Start ani Pauzy (ma „Prośba ▸”, D346) – testy E2E zaczynają blok z panelu bloku (`block-timer-start`), bo

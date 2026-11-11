@@ -2173,10 +2173,85 @@ describe('domykanie luk w pasku (D368, D373)', () => {
     failEdits()
     await w.act('line', `${id}|close`, 'bar')
     expect(w.current().note?.text).toContain('Nie zapisano')
-    expect(await answers(folder)).toEqual([])
+    // The answer written before the edit is taken back (`undo`): none in force.
+    expect([...(await folder.dayState(DAY)).facts.answers.keys()]).toEqual([])
     expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, c: 12 * 60 })
     await w.refresh()
     expect(gapLines(w).map((l) => l.id)).toEqual([id])
+  })
+
+  it('(3) „Przesuń”: odpowiedź przed zmianą planu – gdy jej zapis się nie uda, plan zostaje (nic nie przesuwa się drugi raz)', async () => {
+    const { w, folder } = await nextAt(10 * 60 + 40)
+    const id = gapLines(w)[0]!.id
+    const real = folder.timerClick.bind(folder)
+    folder.timerClick = (async (c: Parameters<typeof real>[0]) => {
+      if (c.a === 'mark') throw new Error('dziennik zajęty')
+      return real(c)
+    }) as typeof folder.timerClick
+    await w.act('line', `${id}|close`, 'bar')
+    expect(w.current().note?.text).toContain('Nie zapisano')
+    expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, c: 12 * 60 })
+    folder.timerClick = real
+    await w.refresh()
+    expect(gapLines(w).map((l) => l.id)).toEqual([id])
+  })
+
+  /** Two triggers before „c”: „Dalej” at 10:40 (20 min) and „b” shortened by its edge by 15 min at 10:45. */
+  async function twoBeforeC() {
+    const m = await nextAt(10 * 60 + 40)
+    m.at(10 * 60 + 45)
+    expect((await m.folder.timerClick({ a: 'resize', block: 'b', to: placeLogical(DAY, 11 * 60 + 25), day: DAY } as never)).ok).toBe(true)
+    await m.w.refresh()
+    expect(gapLines(m.w).map((l) => [l.id, l.text])).toEqual([[await gapOf(m.folder, 'block.end', 'a'), 'Luka 35 min']])
+    return m
+  }
+
+  it('(10) dwa wyzwalacze przed jednym blokiem: „Zostaw” odpowiada na oba – pytanie nie wraca', async () => {
+    const { w, folder, at } = await twoBeforeC()
+    await w.act('line', `${gapLines(w)[0]!.id}|leave`, 'bar')
+    expect(await answers(folder)).toEqual(['leave', 'leave'])
+    at(10 * 60 + 46)
+    await w.refresh()
+    expect(gapLines(w)).toEqual([])
+  })
+
+  it('(10) dwa wyzwalacze przed jednym blokiem: „Przesuń” odpowiada na oba i przesuwa o oba', async () => {
+    const { w, folder } = await twoBeforeC()
+    await w.act('line', `${gapLines(w)[0]!.id}|close`, 'bar')
+    expect(await answers(folder)).toEqual(['close', 'close'])
+    expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, c: 11 * 60 + 25 })
+    await w.act('line', 'moved:push|undo', 'bar')
+    expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, c: 12 * 60 })
+    expect(gapLines(w)).toEqual([])
+  })
+
+  it('(6) linia dalszej luki, a bliższa pojawiła się w międzyczasie: „Przesuń” tej linii przesuwa jej blok', async () => {
+    writeFileSync(
+      join(dataDir, paths.day(DAY)),
+      JSON.stringify({
+        schema: 1,
+        date: DAY,
+        sessions: { londyn: 'no', ny: 'no' },
+        blocks: [
+          { id: 'a', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'b', categoryId: 'inne', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'z', categoryId: 'inne', startMin: 15 * 60, durationMin: 60, fixed: false, origin: 'user' }
+        ]
+      })
+    )
+    const { w, folder, at } = await make()
+    // „y” (14:00–15:00) removed in the window before: the gap before „z”.
+    await folder.userEvents([{ k: 'plan.freed', day: DAY, block: 'y', how: 'remove', place: placeLogical(DAY, 14 * 60), minutes: 60 }])
+    expect((await folder.timerClick({ a: 'start', block: 'a', day: DAY } as never)).ok).toBe(true)
+    await w.refresh()
+    const far = gapLines(w)[0]!.id
+    expect(far).toBe(await gapOf(folder, 'plan.freed', 'y'))
+    // „a” ends 20 min early from the main window: a nearer gap (before „b”), the bar not counted again yet.
+    at(10 * 60 + 40)
+    expect((await folder.timerClick({ a: 'finish', block: 'a', day: DAY } as never)).ok).toBe(true)
+    await w.act('line', `${far}|close`, 'bar')
+    expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, z: 14 * 60 })
+    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 20 min'])
   })
 
   it('pytanie, którego luki już nie ma (blok zaczęty w oknie): „Przesuń” nic nie zapisuje i mówi dlaczego', async () => {

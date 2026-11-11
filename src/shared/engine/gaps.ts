@@ -28,7 +28,7 @@ import type { PlanBlock } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan, type BlockInfo } from './blocks'
 import { shownForecaster, type DayContext, type DayState } from './day'
-import { compareOrder, OPEN, ranMinutes, type EventOrder } from './facts'
+import { compareOrder, OPEN, type EventOrder } from './facts'
 import type { Placed } from './forecast'
 import { atOf, idxOfLogical, logicalSpan } from './grid'
 import { pushable, type PushedBlock } from './pushApart'
@@ -79,18 +79,33 @@ const goneOf = (state: DayState, id: string): boolean => {
   return !!f && (f.parkedAt != null || f.cancelledAt != null)
 }
 
+type FreedFact = DayState['facts']['freed'][number]
+
 /**
  * Time freed by the window lasts while the plan keeps it so (D368: a move never asks): a removed block not in the plan
- * again (its „Cofnij”), a shortened one ending at the place or before (not lengthened back nor moved later).
+ * again (its „Cofnij”), a shortened one whose planned end (its start and length in the plan – not where the forecast
+ * shows it, late or begun later) is at its end after the shortening or before (not lengthened back nor moved later).
  */
-function freeingLasts(state: DayState, byId: Map<string, BlockInfo>, x: DayState['facts']['freed'][number]): boolean {
+function freeingLasts(state: DayState, byId: Map<string, BlockInfo>, x: FreedFact): boolean {
   const info = byId.get(x.block)
   const inPlan = !!info && info.inPlan && !goneOf(state, x.block)
   if (x.how === 'remove') return !inPlan
   if (!inPlan) return true
-  const p = state.forecast.find((q) => q.block.id === x.block)
-  const end = p ? p.to : (state.facts.blocks.get(x.block)?.endedAt ?? plannedSpan(info, byId)?.end ?? Number.POSITIVE_INFINITY)
-  return end <= x.place
+  const end = plannedSpan(info, byId)?.end ?? Number.POSITIVE_INFINITY
+  return end <= (x.end ?? x.place)
+}
+
+/**
+ * Of the window's events of one block, a later one whose time freed overlaps an earlier one's stands for it (removed, put
+ * back by „Cofnij” and removed again; shortened, lengthened back and shortened again): that time counts once. Two
+ * shortenings one after another free different minutes – both count.
+ */
+function newestFreed(freed: readonly FreedFact[]): FreedFact[] {
+  const span = (x: FreedFact) => [x.place, x.place + x.minutes] as const
+  return freed.filter((x) => {
+    const [a, b] = span(x)
+    return !freed.some((y) => y !== x && y.block === x.block && compareOrder(y.order, x.order) > 0 && span(y)[0] < b && a < span(y)[1])
+  })
 }
 
 /** The triggers the day's log holds (the same on every computer). */
@@ -107,16 +122,17 @@ export function logGapTriggers(state: DayState): GapTrigger[] {
       if (freed >= GAP_MIN) out.push({ key: f.endId, place: f.endedAt, freedMin: freed, order: f.endOrder })
     }
     if (fg) for (const c of f.endChanges) if (c.minutes <= -GAP_MIN) out.push({ key: c.id, place: c.at, freedMin: -c.minutes, order: c.order })
-    // Cancelled or parked by you before it began (the bar's „Odwołaj”, „Zaparkuj”): its place from then on.
-    const gone = f.startedAt == null ? (f.cancelledAt ?? f.parkedAt) : null
-    if (gone != null && f.goneRule === 'user' && !info.bg && f.goneId && f.goneOrder) {
+    // Cancelled or parked by you before it began (the bar's „Odwołaj”, „Zaparkuj”): its place from then on – the first such
+    // event decides (its rule, id and order together).
+    const gone = f.startedAt == null ? f.gone : null
+    if (gone && gone.rule === 'user' && !info.bg) {
       const span = plannedSpan(info, byId)
-      const place = span ? Math.max(span.start, gone) : null
-      if (span && place != null && span.end - place >= GAP_MIN) out.push({ key: f.goneId, place, freedMin: span.end - place, order: f.goneOrder })
+      const place = span ? Math.max(span.start, gone.at) : null
+      if (span && place != null && span.end - place >= GAP_MIN) out.push({ key: gone.id, place, freedMin: span.end - place, order: gone.order })
     }
   }
   // The main window's removals and shortenings (D375), while they last.
-  for (const x of state.facts.freed) if (x.minutes >= GAP_MIN && freeingLasts(state, byId, x)) out.push({ key: x.id, place: x.place, freedMin: x.minutes, order: x.order })
+  for (const x of newestFreed(state.facts.freed)) if (x.minutes >= GAP_MIN && freeingLasts(state, byId, x)) out.push({ key: x.id, place: x.place, freedMin: x.minutes, order: x.order })
   return out
 }
 
@@ -149,9 +165,10 @@ function slackOf(state: DayState, byId: ReadonlyMap<string, BlockInfo>, t: GapTr
     if (!info || !info.inPlan || info.bg || goneOf(state, x.id)) return 0
     if (info.start == null) {
       if (!info.anchor || !(carriers.has(info.anchor) || begunBefore(info.anchor, x.order))) return 0
-    } else if (info.start > t.place) {
+    } else {
+      // A flexible block of the plan with an earlier hour not begun yet – also one due, whose hour has passed – left out (D376).
       const start = info.start
-      const left = state.blocks.some((y) => y.id !== x.id && y.inPlan && !y.bg && !y.fixed && !y.waits && y.start != null && y.start >= t.place && y.start < start && !goneOf(state, y.id) && !begunBefore(y.id, x.order))
+      const left = state.blocks.some((y) => y.id !== x.id && y.inPlan && !y.bg && !y.fixed && !y.waits && y.start != null && y.start < start && !goneOf(state, y.id) && !begunBefore(y.id, x.order))
       if (left) return 0
     }
     carriers.add(x.id)
@@ -170,11 +187,19 @@ function slackOf(state: DayState, byId: ReadonlyMap<string, BlockInfo>, t: GapTr
     covered += b - Math.max(a, reach)
     reach = b
   }
+  // Minutes of the foreground past a carrier's length (its runs in the background count to the length, but use up nothing
+  // twice – the foreground was free then, counted above).
   let past = 0
   for (const id of carriers) {
     const f = facts.blocks.get(id)!
     const length = (f.planned?.durationMin ?? byId.get(id)?.durationMin ?? 0) + f.endChanges.filter((c) => compareOrder(c.order, t.order) <= 0).reduce((s, c) => s + c.minutes, 0)
-    past += Math.max(0, ranMinutes(f, now) - length) - Math.max(0, ranMinutes(f, t.place) - length)
+    let ran = 0
+    for (const r of [...f.runs].sort((a, b) => a.from - b.from)) {
+      const to = Math.min(r.to === OPEN ? now : r.to, now)
+      if (to <= r.from) continue
+      if (!r.bg) past += Math.max(0, to - Math.max(r.from + Math.max(0, length - ran), t.place))
+      ran += to - r.from
+    }
   }
   return Math.max(0, t.freedMin - (now - t.place - covered) - past)
 }
@@ -204,11 +229,13 @@ function targetOf(state: DayState, fg: readonly Placed[], t: GapTrigger): { b: P
 const answered = (state: DayState, key: string): boolean => state.facts.answers.has(gapId(state.grid.date, key))
 
 /**
- * The gap the bar asks about now (D368, D373, D375), or null: the triggers still holding time freed and not answered, by
- * the block they stand before; the nearest such block whose gap „Przesuń” closes by at least 10 min. The modes it waits in
- * (a session, classes, the night) and the day (only today) are the bar's.
+ * The gaps the bar may ask about now (D368, D373, D375), nearest first: the triggers not answered, by the block they stand
+ * before – each such block whose gap „Przesuń” closes by at least 10 min. A question's triggers are all those before its
+ * block, also the ones with nothing left (its id – the earliest of them – stays while any of them holds time freed, T599);
+ * „Zostaw” and „Przesuń” answer each. The modes it waits in (a session, classes, the night) and the day (only today) are
+ * the bar's.
  */
-export function gapNow(ctx: DayContext, state: DayState): Gap | null {
+export function gapsNow(ctx: DayContext, state: DayState): Gap[] {
   const g = state.grid
   const lm = (idx: number) => logicalMinuteOf(g.date, atOf(g, idx))
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
@@ -216,16 +243,16 @@ export function gapNow(ctx: DayContext, state: DayState): Gap | null {
   const groups = new Map<string, { b: Placed; prev: number; slack: number; triggers: GapTrigger[] }>()
   for (const t of logGapTriggers(state)) {
     if (answered(state, t.key)) continue
-    const slack = slackOf(state, byId, t)
-    if (slack <= 0) continue
     const x = targetOf(state, fg, t)
     if (!x) continue
+    const slack = slackOf(state, byId, t)
     const was = groups.get(x.b.block.id)
     if (was) {
       was.slack += slack
       was.triggers.push(t)
     } else groups.set(x.b.block.id, { ...x, slack, triggers: [t] })
   }
+  const out: Gap[] = []
   for (const c of [...groups.values()].sort((a, b) => a.b.from - b.b.from)) {
     const tryMin = Math.min(c.b.from - c.prev, c.slack)
     if (tryMin < GAP_MIN) continue
@@ -233,10 +260,13 @@ export function gapNow(ctx: DayContext, state: DayState): Gap | null {
     const minutes = from == null ? 0 : c.b.from - from
     if (minutes < GAP_MIN) continue
     const triggers = [...c.triggers].sort((a, b) => compareOrder(a.order, b.order))
-    return { id: gapId(g.date, triggers[0]!.key), keys: triggers.map((t) => t.key), block: c.b.block.id, minutes, tryMin, startMin: lm(c.b.from), fromMin: lm(from!) }
+    out.push({ id: gapId(g.date, triggers[0]!.key), keys: triggers.map((t) => t.key), block: c.b.block.id, minutes, tryMin, startMin: lm(c.b.from), fromMin: lm(from!) })
   }
-  return null
+  return out
 }
+
+/** The gap the bar asks about now – the nearest (`gapsNow`), or null. */
+export const gapNow = (ctx: DayContext, state: DayState): Gap | null => gapsNow(ctx, state)[0] ?? null
 
 /** The rounds of counting the day again after a gap closed (a start only falls, so a couple do – a bound for safety). */
 const MAX_ROUNDS = 10
@@ -333,6 +363,8 @@ export interface Freed {
   how: 'remove' | 'shorten'
   place: number
   minutes: number
+  /** A shortening: the block's planned end after it (ms) – the freeing lasts while the plan ends there or before. */
+  end?: number
 }
 
 /**
@@ -360,8 +392,10 @@ export function freedByEdit(state: DayState, was: PlanBlock, after: PlanBlock | 
           grew = true
         }
     }
+    // What leaves the plan: the block from now on and the whole of each anchored one (never what the forecast put between).
     place = Math.max(p.from, state.now)
-    freed = Math.max(...state.forecast.filter((x) => gone.has(x.block.id) && !x.bg).map((x) => x.to)) - place
+    freed = p.to - place
+    for (const x of state.forecast) if (x.block.id !== was.id && gone.has(x.block.id) && !x.bg) freed += x.to - Math.max(x.from, state.now)
   } else {
     if (was.startMin == null || after.startMin == null) return null
     const cut = Math.min(was.durationMin - after.durationMin, was.startMin + was.durationMin - (after.startMin + after.durationMin))
@@ -370,5 +404,6 @@ export function freedByEdit(state: DayState, was: PlanBlock, after: PlanBlock | 
     freed = cut
   }
   if (freed < GAP_MIN) return null
-  return { block: was.id, how: after ? 'shorten' : 'remove', place: atOf(state.grid, place), minutes: freed }
+  if (!after) return { block: was.id, how: 'remove', place: atOf(state.grid, place), minutes: freed }
+  return { block: was.id, how: 'shorten', place: atOf(state.grid, place), minutes: freed, end: atOf(state.grid, idxOfLogical(state.grid, after.startMin! + after.durationMin)) }
 }
