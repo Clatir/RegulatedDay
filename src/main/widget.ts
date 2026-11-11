@@ -162,6 +162,9 @@ export function planPushedIpc(w: Pick<WidgetEngine, 'pushed'>, log: WidgetDeps['
   if (p) void w.pushed(p.day, p.count, p.edit).catch((e) => log('warn', 'pasek nie przeliczył się po przesunięciu bloków', e))
 }
 
+/** The bar's note when a variant picked finds the plan as it would make it (D378). */
+export const PLAN_ALREADY = 'Plan już jest tak ułożony.'
+
 /** The longest label of a variant the window may give the bar (its line „Przestawiono: …”). */
 const ARRANGED_LABEL_MAX = 200
 
@@ -594,8 +597,8 @@ export class WidgetEngine {
    * see it at once; a block moved to tomorrow goes there, a regeneration of a variant of energy starts) – and the bar keeps
    * „Przestawiono: … · Cofnij”; „Zostaw” (no change) closes the panel and the marker. Its causes are done once the plan
    * changed (a refused edit leaves the marker) – not by „Ułóż pod energię”, which mends none of them (T614: the marker stays
-   * while its cause holds). A variant whose edit came out empty (the plan already so, made elsewhere) changes nothing and
-   * leaves the line of an earlier change with its „Cofnij”.
+   * while its cause holds). A variant whose edit came out empty (the plan already so, made elsewhere) changes nothing,
+   * leaves the line of an earlier change with its „Cofnij” and says „Plan już jest tak ułożony.” (D378, T618).
    */
   private async pickVariant(id: string | undefined): Promise<void> {
     const p = this.panel
@@ -618,7 +621,10 @@ export class WidgetEngine {
       const entry = recordEdit(rel, before[k]!, made[k]!)
       return entry ? [{ entry, made: made[k]! }] : []
     })
-    if (!edits.length) return this.refresh()
+    if (!edits.length) {
+      this.say(PLAN_ALREADY)
+      return this.refresh()
+    }
     const out = await this.d.edit(edits.map((x) => x.entry))
     if (out.some((o) => o.status !== 'applied' && o.status !== 'waiting')) {
       this.say('Wariant spotkał się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')

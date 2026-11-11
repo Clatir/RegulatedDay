@@ -1,5 +1,5 @@
 /**
- * „Ułóż pod energię” (D369, D374, D377, FBL2c): a variant of today's plan that only changes the order of flexible blocks –
+ * „Ułóż pod energię” (D369, D374, D377, D378, FBL2c): a variant of today's plan that only changes the order of flexible blocks –
  * each within its own gap between fixed blocks – when the lowest energy of the day (the lowest of the three pools from now
  * to the bedtime's forecast, the energy's forecast) is below `ENERGY_ORDER_BELOW` and the new order clearly raises it:
  * „Ułóż pod energię – najniższa energia dnia 35 → 52”, with the changes of order. Fixed blocks and those waiting for
@@ -15,7 +15,8 @@
  * day shifted by the change at the gap's end). The estimate only ranks: the `ORDER_TOP` best orders of each gap, the
  * greatest estimated gain first, are judged by counting the day and its energy again, and then the best of each gap
  * together (`ORDER_COUNTS` counts at most, D340): the variant is the count with the higher lowest energy that raises it by
- * `ENERGY_ORDER_GAIN` at least (as shown, whole) and neither adds an extension nor takes the end of work past the boundary.
+ * `ENERGY_ORDER_GAIN` at least (as shown, whole) and neither adds an extension nor takes the end of work past the approved
+ * boundary – before the approval, past the day's maximum (D378).
  */
 import { logicalClock } from '../format'
 import { POOLS, costsOf, type Costs, type Pool } from '../model/categories'
@@ -316,8 +317,13 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
     // The day counted again keeps every block that stays where it was (as the layout said).
     const counted = new Map(judged.after.forecast.map((p) => [p.block.id, p]))
     if (identity.some((p) => !starts.has(p.block.id) && (counted.get(p.block.id)?.from !== p.from || counted.get(p.block.id)?.to !== p.to))) return null
-    // Never an extension the plan did not have, nor the end of work past the boundary it kept.
-    if (judged.effect.extensionMin > before.extensionMin || (before.withinBoundary && !judged.effect.withinBoundary)) return null
+    // Before the boundary is approved the end of work may pass its proposal, within the day's maximum – or no later than it
+    // was, when it was past it already (D378, T617); once approved, never an extension the plan did not have, nor the end of
+    // work past the boundary it kept.
+    if (state.boundary.approved == null) {
+      const end = judged.after.lastWorkForecast
+      if (end != null && end > Math.max(state.boundary.max, state.lastWorkForecast ?? Number.NEGATIVE_INFINITY)) return null
+    } else if (judged.effect.extensionMin > before.extensionMin || (before.withinBoundary && !judged.effect.withinBoundary)) return null
     const low = lowestEnergy(computeEnergy({ ...ctx, plan: planWith(ctx, changes) }, judged.after, opts))
     return low == null ? null : { changes, low, effect: judged.effect, shown: counted }
   }

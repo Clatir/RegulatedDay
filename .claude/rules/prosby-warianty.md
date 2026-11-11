@@ -37,7 +37,8 @@ D247, D263, D296, T202, T372. Decyzje T478–T481, T502, T503. Elementy w pasku 
   jak „gra”, przełączenie 2, kontakt 2, 0–100; reszta dnia przesunięta o zmianę na końcu przerwy) tylko porządkuje: po
   `ORDER_TOP` = 3 najlepsze każdej przerwy liczone ponownie (dzień i energia) od największego zysku, potem najlepsze
   przerw z poprawą razem – razem najwyżej `ORDER_COUNTS` = 6 (T609): `lowestEnergy` ≥ przed + `ENERGY_ORDER_GAIN` (5),
-  bez nowego przedłużenia i bez końca pracy za granicą. `lowestEnergy` – min trzech pul z `energy.forecast.min` (jednostki).
+  bez nowego przedłużenia i bez końca pracy za zatwierdzoną granicą; przed zatwierdzeniem – koniec pracy najwyżej w maksimum
+  dnia (`boundary.max`, D378, T617; tylko ten wariant, `judgeDay` bez zmian). `lowestEnergy` – min trzech pul z `energy.forecast.min` (jednostki).
 - `facts.ts`: `resumedWith` (wznowienie zapisane z końcem prośby), cięcie przebiegów przez `request.start.splits`.
 - Kliknięcia próśb idą drogą timera: `folder.timerClick`; „Koniec” – do dnia, w którym prośba trwa (także sprzed 04:00).
 

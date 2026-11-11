@@ -303,6 +303,31 @@ describe('„Ułóż pod energię” (D369, D374, D377)', () => {
     ])
   })
 
+  it('D378, T617: przed zatwierdzeniem granicy koniec pracy może przejść za propozycję (w maksimum dnia); po zatwierdzeniu – nie', () => {
+    // A tired head (45); „Analiza” 2 h, „Inne”, then the nap ends the day's blocks – the end of work 13:00. The nap before
+    // „Analiza” raises the lowest energy and moves the end of work to 14:30: past the proposal (13:15), within the
+    // maximum (19:00).
+    const plan = [
+      block({ id: 'e', cat: 'analiza', at: '10:00', min: 120 }),
+      block({ id: 'c', cat: 'inne', at: '12:00', min: 60 }),
+      block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '13:00', min: 90 })
+    ]
+    const answers = { ...ZERO, head: [2, 1] as [Answer, Answer] }
+    const open = day(plan, { answers })
+    expect(open.state.boundary.approved).toBeNull()
+    // Indexes of the day's minutes from 04:00 (an ordinary day).
+    expect(open.state.lastWorkForecast).toBe(lm('13:00') - 240)
+    const v = open.v!
+    expect(v).not.toBeNull()
+    expect(v.effect.workEndMin).toBe(lm('14:30'))
+    expect(lm('14:30') - 240).toBeGreaterThan(open.state.boundary.proposal!)
+    expect(lm('14:30') - 240).toBeLessThanOrEqual(open.state.boundary.max)
+    // The same morning with the boundary approved at its proposal: that order is no variant any more.
+    const approved = day(plan, { answers, events: (s) => s.approve('13:15', '07:20') })
+    expect(approved.state.boundary.approved).toBe(lm('13:15') - 240)
+    expect(approved.v).toBeNull()
+  })
+
   it('bez check-inu (energia nieznana) i z wyłączonym modułem energii – bez wariantu', () => {
     expect(day(napDay(), { checkin: false }).v).toBeNull()
     const s = new Scenario({ date: DATE, plan: napDay(), wake: '06:30', settings: { transitionBufferMin: 0 } }).observe('06:30', null)

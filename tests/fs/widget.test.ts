@@ -2387,7 +2387,7 @@ describe('„Ułóż pod energię” w pasku i z planu porannego (D369, D374, D3
     expect(w.current().variants.open).toBeNull()
   })
 
-  it('T614: wariant, którego edycja wyszła pusta (plan już taki), nie nadpisuje linii wcześniejszej zmiany z jej „Cofnij”', async () => {
+  it('T614, T618: wariant, którego edycja wyszła pusta (plan już taki) – panel zamknięty, uwaga „Plan już jest tak ułożony.”, linia wcześniejszej zmiany z jej „Cofnij” zostaje (D378)', async () => {
     const { w, folder } = await morning()
     // An earlier change with its line: a note on „c” saved as an arrangement.
     const note = await editDay(folder, (b) => (b.id === 'c' ? { ...b, note: 'wcześniej' } : b))
@@ -2400,6 +2400,8 @@ describe('„Ułóż pod energię” w pasku i z planu porannego (D369, D374, D3
     const entry = recordEdit(paths.day(DAY), now, same)!
     await folder.edit([{ ...entry, edits: entry.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
     await w.act('variants', 'pick|energyOrder', 'bar')
+    expect(w.current().variants.open).toBeNull()
+    expect(w.current().note?.text).toBe('Plan już jest tak ułożony.')
     expect(w.current().lines.find((l) => l.id === 'moved:variant')).toMatchObject({ text: 'Przestawiono: wcześniejsza zmiana' })
     await w.act('line', 'moved:variant|undo', 'bar')
     const c = ((await folder.recordView(paths.day(DAY))) as { blocks: Array<{ id: string; note?: string }> }).blocks.find((b) => b.id === 'c')
