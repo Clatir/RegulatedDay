@@ -114,6 +114,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] J2.2 Nowy blok przeciągnięciem w „Dziś” i „Szablonach”
    - [ ] J3.1 Rozsuwanie w „Dziś” i „Cofnij” w pasku
    - [ ] J3.2 Rozsuwanie w „Szablonach”
+   - [ ] SNT3.1 Notatka bloku – formatowanie na żywo
+   - [ ] SNT3.2 Stara notatka otwiera się i zapisuje bez zmian
+   - [ ] SNT3.3 Link, „Powiększ” i limit 10 000 znaków (Tylko Ty – przeglądarka, drugi komputer)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1548,4 +1551,48 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   go upuściłeś, także w tygodniu przesunięcia sesji (D372).
 - **Nie przechodzi, gdy:** blok po upuszczeniu skacze o godzinę, „Cofnij” zostawia nową wersję szablonu, albo bloki
   stałe szablonu się przesuwają.
+
+### SNT3 – Markdown w notatkach bloków (1.8.0)
+
+#### SNT3.1 Notatka bloku – formatowanie na żywo (1.8.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/note-markdown.test.ts`, `tests/web/note-property.test.ts`, `tests/web/note-editor.test.ts`,
+  `tests/e2e/note.spec.ts`. Ty: rzut oka przy zwykłym planowaniu.
+- **Jak sprawdzić:** w „Dziś” otwórz panel bloku i w notatce użyj każdego przycisku paska nad nią (pogrubienie, kursywa,
+  przekreślenie, H1–H3, listy, pola wyboru, cytat, blok kodu); spróbuj też Ctrl B i Ctrl I oraz pisania „# ”, „- ”,
+  „1. ”, „> ” na początku linii. Odhacz jedno pole wyboru. Kliknij poza notatką, zamknij panel i otwórz go ponownie;
+  zrób to samo w panelu bloku w „Szablonach”.
+- **Oczekiwany efekt:** formatowanie widać od razu podczas pisania; po ponownym otwarciu notatka wygląda tak samo;
+  odhaczenie zapisuje się od razu i nic nie liczy; kursor nie ucieka w trakcie pisania; Esc przywraca ostatnio
+  zapisany tekst (D388).
+- **Nie przechodzi, gdy:** po ponownym otwarciu znika formatowanie albo tekst, pojawiają się znaki `*`, `#`, `&#…;`
+  zamiast formatowania, pisanie wyraźnie się zacina, albo kliknięcie poza notatką nie zapisuje zmian.
+
+#### SNT3.2 Stara notatka otwiera się i zapisuje bez zmian (1.8.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/note-markdown.test.ts` („stara notatka …”), `tests/web/note-property.test.ts`. Ty: rzut oka
+  na prawdziwych danych.
+- **Jak sprawdzić:** otwórz blok z notatką sprzed aktualizacji (kilka linii, ścieżka w rodzaju `C:\Users\…`, adres
+  strony, gwiazdki albo podkreślniki w tekście). Najpierw tylko otwórz i zamknij panel; potem dopisz słowo na końcu
+  i kliknij obok. Zajrzyj do notatki w kafelku osi i w historii.
+- **Oczekiwany efekt:** samo otwarcie niczego nie zapisuje; po dopisaniu słowa reszta notatki zostaje co do znaku – każdy
+  Enter dalej jest nową linią, ukośniki w ścieżce zostają, gwiazdki i podkreślniki nie zamieniają się w kursywę;
+  kafelek osi i historia pokazują zwykły tekst jak dotąd (D388).
+- **Nie przechodzi, gdy:** znikają puste linie albo łamania, z ścieżki znikają ukośniki, fragment tekstu staje się kursywą
+  albo blokiem kodu, albo w kafelku osi widać znaczniki zamiast tekstu.
+
+#### SNT3.3 Link, „Powiększ” i limit 10 000 znaków (1.8.0)
+- [ ] Odebrane
+- **Tylko Ty:** otwarcie przeglądarki i drugi komputer ze starszą wersją. Automatycznie: `tests/unit/note-limit.test.ts`,
+  `tests/web/note-editor-limit.test.ts`, `tests/e2e/note.spec.ts` („Powiększ”).
+- **Jak sprawdzić:** wpisz adres `https://…` i kliknij go; dodaj link przyciskiem „Link” z adresem `ftp://…`. Kliknij
+  „Powiększ”, popisz, naciśnij Tab kilka razy, potem Esc. Wklej długi tekst (ponad 2000 znaków); jeśli drugi komputer
+  ma jeszcze wersję sprzed 1.8.0 i jest obecny w folderze danych – spójrz pod notatkę.
+- **Oczekiwany efekt:** link http/https otwiera domyślną przeglądarkę, inny adres zostaje tekstem; „Powiększ” rozwija
+  notatkę na całe okno z tym samym tekstem i kursorem, Tab krąży po przyciskach i tekście, Esc albo „Pomniejsz” wraca;
+  od 9000 znaków licznik „x z 10 000”, dłuższego tekstu nie da się wkleić; przy starszym komputerze napis „Notatka ma
+  ponad 2000 znaków – na komputerze … ze starszą wersją aplikacji zostanie obcięta.” (D388).
+- **Nie przechodzi, gdy:** link otwiera się w oknie aplikacji albo nic się nie dzieje bez komunikatu, „Powiększ” gubi
+  tekst albo Tab wychodzi do pól pod nakładką, notatka po 2000 znakach jest obcięta na tym komputerze, albo ostrzeżenie
+  nie pojawia się przy starszym komputerze.
 

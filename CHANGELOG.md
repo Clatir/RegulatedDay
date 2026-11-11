@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.0
+- Notatka bloku (panel bloku w „Dziś” i w „Szablonach”) ma edytor z formatowaniem widocznym od razu podczas pisania: pogrubienie i kursywa (Ctrl B, Ctrl I), przekreślenie, nagłówki H1–H3, listy punktowane i numerowane, pola wyboru, cytat, kod i blok kodu, link. Przyciski są nad notatką, działa też pisanie „# ”, „- ”, „1. ”, „> ” na początku linii.
+- Pole wyboru odhaczasz kliknięciem – zapisuje się od razu i nigdzie się nie liczy. Link http lub https otwiera domyślną przeglądarkę, inne adresy zostają tekstem.
+- „Powiększ” rozwija notatkę na całe okno; Esc albo „Pomniejsz” wraca z tym samym tekstem.
+- Istniejące notatki otwierają się bez zmian – każdy Enter zostaje nową linią, a samo otwarcie niczego nie zapisuje. Kafelek osi, historia, CSV i wyszukiwarka pokazują notatkę jak dotąd.
+- Notatka mieści do 10 000 znaków zamiast 2000. Gdy w folderze danych jest obecny komputer ze starszą wersją aplikacji, przy dłuższej notatce widać ostrzeżenie, że tam zostanie obcięta.
+
 ## 1.6.0
 - Rozsuwanie: gdy przeciągniesz blok, wydłużysz go krawędzią albo dodasz nowy blok z siatki na zajęte miejsce w „Dziś”, kolejne bloki elastyczne dostają w planie nowe godziny – bez nakładania, w trakcie przeciągania widać ich nowe miejsca (przerywana obwódka). Bloki stałe, chronione i zaczęte zostają, elastyczny przeskakuje stały jak w prognozie.
 - Po rozsunięciu w pasku „Przesunięto N bloków · Cofnij” przez 15 min – „Cofnij” przywraca plan dnia sprzed zmiany. Gdy czeka też „Przestawiono … · Cofnij” wariantu, oba działają; pytania dnia zostają widoczne, druga linia z „Cofnij” czeka w „⋯”.

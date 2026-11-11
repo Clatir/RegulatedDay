@@ -2,10 +2,13 @@
  * The limit of a block's note (D388, T664): 10 000 characters for days and templates alike, the warning for a computer
  * with an older version (it cuts the note at 2000), the check of a link before the browser opens it (T663).
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { LONG_NOTE_FROM, NOTE_MAX, NOTE_OLD_MAX, longNoteWarning, olderComputers } from '@shared/model/note'
 import { planBlockFrom, templateFrom } from '@shared/model/plan'
 import { safeLinkUrl } from '@shared/noteLink'
+import { compareVersions } from '@shared/update'
 
 const block = (note: string) => ({ id: 'a', categoryId: 'inne', startMin: 540, durationMin: 30, note })
 
@@ -41,6 +44,16 @@ describe('ostrzeżenie przed starszą wersją (D388)', () => {
     expect(longNoteWarning(['Biuro'], 2000)).toBeNull()
     expect(longNoteWarning([], 5000)).toBeNull()
     expect(longNoteWarning(['Biuro'], 2001)).toBe('Notatka ma ponad 2000 znaków – na komputerze Biuro ze starszą wersją aplikacji zostanie obcięta.')
+  })
+  it('LONG_NOTE_FROM to wydanie, które ogłasza limit 10 000 – nie nowsze niż wersja aplikacji', () => {
+    // The constant is set by hand at merge time; a release that takes another number would make the warning silent.
+    const root = join(__dirname, '..', '..')
+    const version = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }).version
+    expect(compareVersions(LONG_NOTE_FROM, version)).toBeLessThanOrEqual(0)
+    const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8')
+    const section = changelog.split(/^## /m).find((s) => s.startsWith(`${LONG_NOTE_FROM}\n`))
+    expect(section, `CHANGELOG bez sekcji ${LONG_NOTE_FROM}`).toBeDefined()
+    expect(section).toContain('10 000')
   })
   it('kilka komputerów – liczba mnoga', () => {
     expect(longNoteWarning(['Biuro', 'Laptop'], 3000)).toBe('Notatka ma ponad 2000 znaków – na komputerach Biuro, Laptop ze starszą wersją aplikacji zostanie obcięta.')
