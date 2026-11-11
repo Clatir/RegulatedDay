@@ -4,6 +4,12 @@
  */
 import { ENGINE_TONE_SET, iconColor, TONE_SETS, toneColor, type Tone, type ToneSetId, type WarnStep } from './theme'
 
+/**
+ * How long a line of a change of the plan with its „Cofnij” stays: „Przestawiono: …” after a variant (D313), „Przesunięto
+ * N bloków” after a push in the bar (D367) and on the page of a template (D372).
+ */
+export const UNDO_LINE_MS = 15 * 60_000
+
 /** A button of a line: its id goes back to the main process with the line's (`line` action, `<line>|<action>`). */
 export interface BarAction {
   id: string

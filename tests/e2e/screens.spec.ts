@@ -14,7 +14,9 @@ import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
 import { DEFAULT_SESSIONS, DEFAULT_SETTINGS } from '../../src/shared/model/settings'
-import { defaultTemplates, firstComputerRecords, SECOND_SHIFT_BLOCK } from '../../src/shared/model/defaults'
+import { defaultTemplates, firstComputerRecords, SECOND_SHIFT_BLOCK, SETUP_FROM, templateJson } from '../../src/shared/model/defaults'
+import { planBlock } from '../../src/shared/model/plan'
+import { paths } from '../../src/shared/data/paths'
 import { templateBlockId } from '../../src/shared/engine/createDay'
 import { createDailyBackup } from '../../src/main/data/backup'
 import { logicalMinuteOf } from '../../src/shared/time/day'
@@ -541,6 +543,118 @@ test('trwający blok (D365): za granicą koszt i „Potwierdź · Anuluj” – 
       const minutes = (await extends_())[0]!.minutes!
       expect(minutes).toBeGreaterThanOrEqual(55)
       expect(minutes).toBeLessThanOrEqual(65)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('rozsuwanie (D367): blok przeciągnięty na zajęte miejsce przesuwa kolejne w pliku dnia, w trakcie widać ich nowe miejsca; „Cofnij” w pasku przywraca plik', async () => {
+  // Tomorrow – a day to come at any hour of the run (no „now” on its axis): three blocks of yours an hour each, the
+  // template's second shift cancelled and no sessions, so nothing else stands between them.
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-push-'))
+  seed(dataDir)
+  const tomorrow = addDays(logicalToday(), 1)
+  const own = (id: string, startMin: number) => ({ id, categoryId: 'inne', startMin, durationMin: 60, fixed: false, origin: 'user' })
+  const dayFile = join(dataDir, 'days', tomorrow.slice(0, 4), `${tomorrow}.json`)
+  mkdirSync(dirname(dayFile), { recursive: true })
+  writeFileSync(
+    dayFile,
+    JSON.stringify({
+      schema: 1,
+      date: tomorrow,
+      dayType: 'zwykly',
+      sessions: Object.fromEntries(DEFAULT_SESSIONS.map((s) => [s.id, 'no'])),
+      cancelled: [templateBlockId(tomorrow, 'zwykly', SECOND_SHIFT_BLOCK)],
+      blocks: [own('a', 13 * 60), own('b', 14 * 60), own('c', 15 * 60)]
+    })
+  )
+  const starts = () => Object.fromEntries((JSON.parse(readFileSync(dayFile, 'utf8')) as { blocks: Array<{ id: string; startMin: number }> }).blocks.map((b) => [b.id, b.startMin]))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('day-next').click()
+      const a = page.getByTestId('block-a')
+      const b = page.getByTestId('block-b')
+      await expect(a).toHaveAttribute('data-movable', 'true')
+      await a.scrollIntoViewIfNeeded()
+      const box = (await a.boundingBox())!
+      // An hour down (1.1 px a minute): „a” onto „b” – while it is held, „b” and „c” stand an hour later, dashed.
+      await page.mouse.move(box.x + 40, box.y + 20)
+      await page.mouse.down()
+      await page.mouse.move(box.x + 40, box.y + 50, { steps: 4 })
+      await page.mouse.move(box.x + 40, box.y + 86, { steps: 4 })
+      await expect(b).toHaveAttribute('data-pushed', 'true')
+      await expect(b).toContainText('15:00')
+      await expect(page.getByTestId('block-c')).toHaveAttribute('data-pushed', 'true')
+      expect(starts()).toEqual({ a: 780, b: 840, c: 900 })
+      await page.mouse.up()
+      // One edit of the day's file: the dragged block and both pushed ones.
+      await expect.poll(starts).toEqual({ a: 840, b: 900, c: 960 })
+      await expect(b).not.toHaveAttribute('data-pushed', 'true')
+      await expect(b).toContainText('15:00')
+      const line = page.getByTestId('bar-line-moved:push')
+      await expect(line).toContainText('Przesunięto 2 bloki')
+      await page.getByTestId('bar-act-moved-undo').click()
+      await expect.poll(starts).toEqual({ a: 780, b: 840, c: 900 })
+      await expect(line).toHaveCount(0)
+      await expect(b).toContainText('14:00')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('rozsuwanie w „Szablonach” (D367, D372): blok przeciągnięty na zajęty przesuwa kolejne w nowej wersji szablonu; „Cofnij” na stronie przywraca szablon', async () => {
+  // The ordinary day's template with three blocks of its own in the evening (after any session, the second shift left out):
+  // the day it makes (from tomorrow) has nothing else between them, on any day of the week.
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-push-template-'))
+  seed(dataDir)
+  const tomorrow = addDays(logicalToday(), 1)
+  const own = (id: string, startMin: number) => planBlock({ id, categoryId: 'inne', startMin, durationMin: 60, origin: 'template' })
+  const ordinary = defaultTemplates().find((t) => t.id === 'zwykly')!
+  const file = join(dataDir, paths.record('template', 'zwykly'))
+  writeFileSync(file, JSON.stringify(templateJson({ ...ordinary, versions: [{ from: SETUP_FROM, blocks: [own('a', 18 * 60), own('b', 19 * 60), own('c', 20 * 60)], budgetMin: null, maxMin: null }] })))
+  type Raw = { versions: Record<string, { blocks: Array<{ id: string; startMin: number }> }> }
+  const versions = () => (JSON.parse(readFileSync(file, 'utf8')) as Raw).versions
+  const startsFrom = (from: string) => Object.fromEntries((versions()[from]?.blocks ?? []).map((b) => [b.id, b.startMin]))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-templates').click()
+      await page.getByTestId('template-item').first().click()
+      const axis = page.getByTestId('template-timeline')
+      const a = axis.getByTestId('block-a')
+      const b = axis.getByTestId('block-b')
+      await expect(a).toHaveAttribute('data-movable', 'true')
+      await a.scrollIntoViewIfNeeded()
+      const box = (await a.boundingBox())!
+      // An hour down (1.1 px a minute): „a” onto „b” – while it is held, „b” and „c” stand an hour later, dashed.
+      await page.mouse.move(box.x + 40, box.y + 20)
+      await page.mouse.down()
+      await page.mouse.move(box.x + 40, box.y + 50, { steps: 4 })
+      await page.mouse.move(box.x + 40, box.y + 86, { steps: 4 })
+      await expect(b).toHaveAttribute('data-pushed', 'true')
+      await expect(b).toContainText('20:00')
+      await expect(axis.getByTestId('block-c')).toHaveAttribute('data-pushed', 'true')
+      await page.mouse.up()
+      // One edit of the template: its new version from tomorrow with the dragged block and both pushed ones; the version
+      // in force before stays as it was.
+      await expect.poll(() => startsFrom(tomorrow)).toEqual({ a: 19 * 60, b: 20 * 60, c: 21 * 60 })
+      expect(startsFrom(SETUP_FROM)).toEqual({ a: 18 * 60, b: 19 * 60, c: 20 * 60 })
+      const line = page.getByTestId('template-pushed')
+      await expect(line).toContainText('Przesunięto 2 bloki')
+      await page.getByTestId('template-pushed-undo').click()
+      // The template as before the push: no version from tomorrow.
+      await expect.poll(() => Object.keys(versions())).toEqual([SETUP_FROM])
+      await expect(line).toHaveCount(0)
+      await expect(b).toContainText('19:00')
     })
     expect(errors).toEqual([])
   } finally {

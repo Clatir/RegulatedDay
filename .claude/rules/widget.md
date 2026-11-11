@@ -63,7 +63,14 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   „osoba: ?”, szacunek), `requestEnd`, `openMain` z `requests`. Szacunek „Pilne” i „inna…” rozstrzyga pasek
   (`RequestUnfold`: w ciszy i „Odcinam się” bez okna, domyślne 15 min).
 - Warianty (D313, T502): `WidgetView.variants` (znacznik, panel) ustawia `WidgetEngine.variantsView` po `engineView`;
-  akcja `variants` `open` / `close` / `pick|i`, „Przestawiono … · Cofnij” to linia `moved:variant`.
+  akcja `variants` `open` / `close` / `pick|i`, „Przestawiono … · Cofnij” to linia `moved:variant`. Linie `moved:` idą po wszystkich liniach dnia
+  (`linesLast`: także po cichych liniach komputerów i twardym końcu), nowsza pierwsza; `barLines` pokazuje najwyżej jedną, druga w „⋯” (z działającym „Cofnij”).
+  Rozsuwanie (D367): okno zapisuje
+  partię samo, potem IPC `planPushed` (`planPushedIpc`: `pushedIn` sprawdza plik tego dnia, bez usunięcia; odpowiedź nie czeka na
+  przeliczenie paska) → `WidgetEngine.pushed` – linia `moved:push` „Przesunięto N bloków · Cofnij” obok `moved:variant` (`moved`:
+  mapa wariant / rozsuwanie, każda ze swoim `undoMoved`/`inverseEdit` i `UNDO_LINE_MS` z `shared/widget.ts`, nowsza pierwsza;
+  kolejne rozsuwanie zastępuje tylko poprzednie) i
+  wyzwalacz `push:<ms>` znacznika (`pushes`, tylko dzień paska, cały dzień – jak wyzwalacze z logu; tylko ten komputer).
 
 ## Pułapki
 - W ciszy nocnej pasek nie ma Start ani Pauzy (ma „Prośba ▸”, D346) – testy E2E zaczynają blok z panelu bloku (`block-timer-start`), bo

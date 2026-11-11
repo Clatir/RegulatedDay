@@ -112,6 +112,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] J1.2 Trwający blok – dolna krawędź, „Potwierdź · Anuluj” za granicą
    - [ ] J2.1 Nowy blok kliknięciem i przeciągnięciem w „Tygodniu”
    - [ ] J2.2 Nowy blok przeciągnięciem w „Dziś” i „Szablonach”
+   - [ ] J3.1 Rozsuwanie w „Dziś” i „Cofnij” w pasku
+   - [ ] J3.2 Rozsuwanie w „Szablonach”
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1518,4 +1520,32 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   1 h 30 min; zwykłe kliknięcie jak dotąd (panel od kwadransa); kolumna godzin działa jak oś (D366).
 - **Nie przechodzi, gdy:** przeciągnięcie przesuwa istniejący blok, drobne drgnięcie myszy przy kliknięciu robi blok
   inny niż przy kliknięciu, albo kolumna godzin nic nie robi.
+
+### J3 – rozsuwanie (1.6.0)
+
+#### J3.1 Rozsuwanie w „Dziś” i „Cofnij” w pasku (1.6.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/push-apart.test.ts`, `tests/web/day-push.test.ts`, `tests/fs/widget.test.ts`,
+  `tests/e2e/screens.spec.ts` („rozsuwanie (D367)”). Ty: rzut oka przy zwykłym planowaniu.
+- **Jak sprawdzić:** w „Dziś” (albo na jutrze) przeciągnij niezaczęty blok na miejsce następnego; potem wydłuż blok
+  dolną krawędzią na następny; dodaj nowy blok z siatki na zajęte miejsce. Kliknij „Cofnij” w pasku. Wpisz w panelu
+  dłuższą długość bloku stojącego przed innym.
+- **Oczekiwany efekt:** w trakcie kolejne elastyczne bloki stoją na nowych miejscach z przerywaną obwódką; po
+  puszczeniu mają te godziny w planie, bez nakładania; stałe (sesja, zajęcia), chronione i zaczęte zostają, elastyczny
+  przeskakuje stały; w pasku „Przesunięto N bloków · Cofnij”, „Cofnij” przywraca plan; wpisanie długości w panelu nie
+  rusza innych (D367, D372).
+- **Nie przechodzi, gdy:** bloki po puszczeniu stoją gdzie indziej niż w podglądzie, blok stały albo zaczęty się
+  przesuwa, „Cofnij” nie przywraca wszystkich godzin, albo pytanie dnia („Dalej?”) znika z paska przez linię „Cofnij”.
+
+#### J3.2 Rozsuwanie w „Szablonach” (1.6.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/template-push.test.ts`, `tests/e2e/screens.spec.ts` („rozsuwanie w „Szablonach””).
+  Ty: rzut oka.
+- **Jak sprawdzić:** w „Szablonach” przeciągnij blok z godziną na następny; kliknij „Przesunięto … · Cofnij” na stronie
+  szablonu.
+- **Oczekiwany efekt:** kolejne bloki szablonu dostają nowe godziny (nowa wersja od jutra), linia „Przesunięto N bloków
+  · Cofnij” na stronie szablonu przez 15 min, „Cofnij” przywraca szablon sprzed zmiany; blok upuszczony stoi tam, gdzie
+  go upuściłeś, także w tygodniu przesunięcia sesji (D372).
+- **Nie przechodzi, gdy:** blok po upuszczeniu skacze o godzinę, „Cofnij” zostawia nową wersję szablonu, albo bloki
+  stałe szablonu się przesuwają.
 

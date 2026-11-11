@@ -5,7 +5,8 @@
  * block selects it (its editing panel opens on the right), a click on a gap creates a block there; a movable block is
  * dragged with the left button to a new start, in steps of 5 min (D305), and by its edges to a new length (D365): the
  * bottom edge moves its end, the top one its start with the same end. A drag over a gap creates a block with that start
- * and end (D366); the column of hours counts as the axis for both.
+ * and end (D366); the column of hours counts as the axis for both. While a block is dragged, the blocks it pushes apart
+ * stand at their new places (D367, `pushPreview`).
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
@@ -98,6 +99,12 @@ export const draggedEnd = (startMin: number, endMin: number, dy: number, limits:
  * The hold of a dropped block ends when its end waits for a confirmation: the drop `d` is the one `attached` is about (the
  * same block, the end the drop asked for) – another, earlier wait does not end the hold of a new drop.
  */
+/**
+ * A drop that changes nothing: the block would stand where it stood when grabbed – compared at where it will stand (`at`,
+ * after a template's morning found its place – D372), not under the pointer.
+ */
+export const staysPut = (at: BlockSpan, d: { from: number; fromEnd: number }): boolean => at.startMin === d.from && at.endMin === d.fromEnd
+
 export const holdEnds = (d: { dropped: boolean; id: string; end: number }, attached: { id: string; endMin: number } | null | undefined): boolean =>
   d.dropped && attached != null && d.id === attached.id && d.end === attached.endMin
 
@@ -157,6 +164,7 @@ export function Timeline({
   onResize,
   resizeNote,
   edgeLimits,
+  pushPreview,
   attached,
   from,
   to,
@@ -172,8 +180,11 @@ export function Timeline({
    * start and the length of the range (on the 5-min grid, D366).
    */
   onCreate?: (min: number, durationMin?: number) => void
-  /** A movable block dragged with the left button to a new start (logical minute). */
-  onMove?: (id: string, startMin: number) => void
+  /**
+   * A movable block dragged with the left button to a new start (logical minute); it may return the span the block stands
+   * at after it (a template's morning the day's wake moves – D372), where it is held until the day shows it.
+   */
+  onMove?: (id: string, startMin: number) => BlockSpan | void
   /**
    * A block's edge dragged (D365): its new span – the end moved alone (`end`) or the start with the same end (`top`) – and
    * the span it was shown over when grabbed (`shown`: what the drop is counted against, not what the day shows by then).
@@ -183,11 +194,19 @@ export function Timeline({
   onResize?: (id: string, span: BlockSpan, edge: DragEdge, shown: BlockSpan) => BlockSpan | false
   /**
    * What the drop would save, said beside the hours while an edge is dragged (D365: the saved length, the cost of a running
-   * block's extension); null – the length of the span shown. Asked only for a span that differs from the shown one.
+   * block's extension); null or left out – the length of the span the block is drawn over (where it will stand). Asked
+   * only for a drop that changes something.
    */
   resizeNote?: (id: string, span: BlockSpan, edge: DragEdge, shown: BlockSpan) => string | null
   /** What bounds the bottom edge of a block when it is grabbed (D365: a running block – not before now, not past the day). */
   edgeLimits?: (id: string) => EdgeLimits | null
+  /**
+   * D367 (rozsuwanie): the blocks a drag pushes apart and where they would stand (by id) while a block is dragged by its
+   * body (`edge` null) or an edge to `span`, grabbed at `shown`; null or empty – nothing pushed. They are drawn there,
+   * dashed, until the day shows the drop. The dragged block's own id: where it will stand when that is not under the
+   * pointer (D372) – drawn and said there.
+   */
+  pushPreview?: (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan) => ReadonlyMap<string, BlockSpan> | null
   /**
    * A block's end waiting for a confirmation (D365: a running block's extension past the boundary): the block is drawn
    * down to `endMin` (its added part dashed), `node` – „Potwierdź · Anuluj” – stands at that edge. Gone: the block is at its end.
@@ -272,12 +291,26 @@ export function Timeline({
   const hours: number[] = []
   for (let h = lo; h <= hi; h += 60) hours.push(h)
 
+  // D367: where the blocks the dragged one pushes apart would stand – while it is held, and after the drop until the day
+  // shows it (the hold); counted once for each place of the drag on the day shown (`items`), not on every render.
+  const previewOf = useRef(pushPreview)
+  previewOf.current = pushPreview
+  const pushKey = drag?.moved && pushPreview ? `${drag.id}|${drag.edge ?? ''}|${drag.start}|${drag.end}|${drag.from}|${drag.fromEnd}` : null
+  const pushed = useMemo(
+    () => (pushKey && drag ? (previewOf.current?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) ?? null) : null),
+    // The drag's place is in the key; a new count of the day brings new items.
+    [pushKey, items]
+  )
+  // Where the dragged block is drawn: under the pointer, or where it will stand (`pushPreview` with its own id).
+  const dragShown: BlockSpan | null = drag ? (pushed?.get(drag.id) ?? { startMin: drag.start, endMin: drag.end }) : null
+
   const box = (i: TimelineItem, narrow: boolean) => {
     const dragged = drag?.id === i.id && drag.moved
-    const start = dragged ? drag.start : i.startMin
+    const pushedTo = dragged ? undefined : pushed?.get(i.id)
     // Waiting for a confirmation (and not being dragged again): at the end it asks for.
     const waiting = !dragged && attached?.id === i.id
-    const end = dragged ? drag.end : waiting ? attached.endMin : i.endMin
+    const start = dragged ? dragShown!.startMin : pushedTo ? pushedTo.startMin : i.startMin
+    const end = dragged ? dragShown!.endMin : waiting ? attached.endMin : pushedTo ? pushedTo.endMin : i.endMin
     const top = y(start)
     const h = Math.max(MIN_H, (end - start) * PPM - 1)
     const tiny = h < 34
@@ -333,12 +366,14 @@ export function Timeline({
         onPointerUp={(e) => {
           const d = dragRef.current
           if (!d || d.id !== i.id || d.pointer !== e.pointerId || d.dropped) return
-          if (!d.moved || (d.start === d.from && d.end === d.fromEnd)) {
+          // Where it will stand: as drawn now (`dragShown`), under the pointer otherwise.
+          const at = drag?.id === d.id && dragShown ? dragShown : { startMin: d.start, endMin: d.end }
+          if (!d.moved || staysPut(at, d)) {
             setDrag(null)
             if (!d.moved) return
           } else {
             // The block stays where it was dropped until the day shows it there – at the end the edit asked for.
-            const asked: BlockSpan | false = d.edge ? onResize!(i.id, { startMin: d.start, endMin: d.end }, d.edge, { startMin: d.from, endMin: d.fromEnd }) : (onMove!(i.id, d.start), { startMin: d.start, endMin: d.end })
+            const asked: BlockSpan | false = d.edge ? onResize!(i.id, { startMin: d.start, endMin: d.end }, d.edge, { startMin: d.from, endMin: d.fromEnd }) : (onMove!(i.id, d.start) ?? { startMin: d.start, endMin: d.end })
             if (asked === false) setDrag(null)
             else {
               const held = { ...d, start: asked.startMin, end: asked.endMin, dropped: true }
@@ -364,9 +399,13 @@ export function Timeline({
           height: h,
           background: i.dim ? blockFillDim(i.color, brightness) : blockFill(i.color, brightness),
           borderLeftColor: i.dim ? blockEdgeDim(i.color) : i.color,
-          ...(waiting ? { borderBottom: `2px dashed ${i.color}` } : {})
+          ...(waiting ? { borderBottom: `2px dashed ${i.color}` } : {}),
+          // Pushed apart by the drag (D367): at its new place, dashed round – not written until the drop (its text never
+          // dimmed, A8-05).
+          ...(pushedTo ? { outline: `1px dashed ${i.color}`, outlineOffset: -1 } : {})
         }}
         data-waiting={waiting ? 'true' : undefined}
+        data-pushed={pushedTo ? 'true' : undefined}
         data-dim={i.dim ? 'on' : undefined}
       >
         {topEdge && <span data-edge="top" data-testid={`block-${i.id}-edge-top`} className={cx('absolute inset-x-0 top-0 z-10 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
@@ -424,13 +463,13 @@ export function Timeline({
         {drag?.moved && !drag.dropped && drag.edge && (
           <div
             className={cx('num pointer-events-none absolute right-3 z-30 rounded-sm border border-line bg-bg/90 px-1.5 py-0.5 text-[11px] text-fg', drag.edge === 'top' && '-translate-y-full')}
-            style={{ top: y(drag.edge === 'top' ? drag.start : drag.end) }}
+            style={{ top: y(drag.edge === 'top' ? dragShown!.startMin : dragShown!.endMin) }}
             data-testid="edge-hint"
           >
-            {logicalClock(drag.start)}–{logicalClock(drag.end)} ·{' '}
-            {drag.start === drag.from && drag.end === drag.fromEnd
+            {logicalClock(dragShown!.startMin)}–{logicalClock(dragShown!.endMin)} ·{' '}
+            {staysPut(dragShown!, drag)
               ? 'bez zmian'
-              : (resizeNote?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) ?? durationLabel(drag.end - drag.start))}
+              : (resizeNote?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) ?? durationLabel(dragShown!.endMin - dragShown!.startMin))}
           </div>
         )}
         {markers.map((m) => (
