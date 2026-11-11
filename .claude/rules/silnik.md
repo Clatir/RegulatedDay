@@ -37,6 +37,12 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   state, plan, 'forecast' | 'plan')` – każdy blok, który zmienia miejsce na osi (podgląd: przesunięte, zakotwiczone, przepuszczone). Start z własnym numerem
   minuty (doba 25 h: druga 02:xx → 03:00), najwyżej `PLAN_MAX`, `hold` (szablon; przy końcu doby może dać wcześniej). Tylko
   elastyczne z własną godziną, w pierwszym planie, niechronione, niezaczęte. `withBlock`, `pushedText`. Testy: `push-apart.test.ts`.
+- `engine/gaps.ts` (D368, D373) – `logGapTriggers` (koniec przed planowanym – nie `plan`/`fixedNoReaction`, `block.shorten`,
+  odwołanie / zaparkowanie przez Ciebie; tylko pierwszy plan, zwolnione ≥ 10 min), `gapNow(ctx, state, extra)` – pierwszy blok
+  pierwszego planu od miejsca wyzwalacza musi być `pushable`; luka = min(od max(teraz, koniec poprzedniego), zwolnione);
+  wyzwalacz kończy przebieg pierwszego planu zaczęty po nim od jego miejsca (nie w tym samym kliknięciu – „Dalej”); najbliższa
+  luka, której zamknięcie rusza blok. `closeGap` – lustro `pushApart`: elastyczne od luki do pierwszego stałego/czekającego,
+  każdy o tyle wcześniej, nie przed teraz ani przed blokiem, który zostaje; zapis = prognoza. `freedByEdit` – okno. Testy: `gaps.test.ts`.
 - `engine/day.ts` – `computeDay`: granica, koniec pracy, klasyfikacja minut, budżet, regeneracja, minimum, pora snu,
   twardy koniec, pula, regeneracja każdej minuty (`rest`, dla energii); `newSegments` (odcinki do zapisu przez
   prowadzącego); `settingsAtMinute`. Energia (E2) – osobne reguły `energia.md`.

@@ -88,7 +88,8 @@ export const CH = {
   goals: 'rd:goals',
   setGoals: 'rd:setGoals',
   stats: 'rd:stats',
-  planPushed: 'rd:planPushed'
+  planPushed: 'rd:planPushed',
+  planGap: 'rd:planGap'
 } as const
 
 /** The game for the window (D322): its view and the full-screen celebrations not shown on this computer yet. */
@@ -561,6 +562,11 @@ export interface RdApi {
    * push checks the marker of variants of today.
    */
   planPushed(day: string, count: number, entry: EditEntry, made: RawRecord | null): Promise<void>
+  /**
+   * Time freed in today's plan by the window (D368): a block not begun removed or shortened, already saved – from the
+   * logical minute `placeMin` the bar looks for the next flexible block, `freedMin` the minutes freed („Luka N min”).
+   */
+  planGap(day: string, placeMin: number, freedMin: number): Promise<void>
   logEvents(events: EventIn[]): Promise<void>
   resolve(id: string, choice: 'mine' | 'theirs'): Promise<void>
   /** The events of every day of a month (kinds asked) – e.g. the exceptions of the boundary this month. */

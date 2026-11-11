@@ -89,6 +89,19 @@ export async function pushDayBlocks(date: string, seen: RawRecord | null, change
   return out
 }
 
+/**
+ * Time freed in today's plan, saved (D368: a block not begun removed or shortened – `freedByEdit`): the bar may ask „Luka
+ * N min · Przesuń resztę wcześniej · Zostaw”. The bridge failing loses only the question (the main process is closing).
+ */
+export async function tellFreed(date: string, freed: { placeMin: number; freedMin: number } | null): Promise<void> {
+  if (!freed) return
+  try {
+    await window.rd.planGap(date, freed.placeMin, freed.freedMin)
+  } catch {
+    // The plan is saved; only the bar's question about the gap is missing.
+  }
+}
+
 /** A click of the timer whose failure (the IPC throws) is an answer, not an unhandled rejection. */
 async function timerClick(req: TimerIn): Promise<TimerResult> {
   try {

@@ -11,12 +11,14 @@ import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind 
 import { blockName, nameById } from '@shared/blockName'
 import { namingOf } from '@shared/engine/context'
 import { costText } from '@shared/costText'
+import { dayRaw, putBlock } from '@shared/data/dayEdits'
 import { recordEdit, sameContentAs } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { engineView, POOL_TEXT, RESERVE_REGEN_MIN, warnDeadlines } from '@shared/engineView'
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
 import { reserveMessageId } from '@shared/engine/game'
-import { atOf } from '@shared/engine/grid'
+import { closeGap, GAP_MIN, gapNow, gapText, instantOrder, type GapTrigger } from '@shared/engine/gaps'
+import { atOf, idxOfLogical } from '@shared/engine/grid'
 import { hardEndCurrent, hardEndMessage, type HardEndNow } from '@shared/engine/hardEnd'
 import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@shared/engine/modes'
 import { suggestRegen } from '@shared/engine/reserve'
@@ -26,6 +28,7 @@ import { applyVariant, markerCause, planCause, variantCauses, variantsFor, type 
 import type { NoticeKind } from '@shared/machine'
 import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
+import { dayFileFrom, PLAN_MAX, PLAN_MIN } from '@shared/model/plan'
 import { personName } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { ROUTINE_VERSION_NAMES, ROUTINE_VERSIONS, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
@@ -158,6 +161,23 @@ export function planPushedIpc(w: Pick<WidgetEngine, 'pushed'>, log: WidgetDeps['
   if (p) void w.pushed(p.day, p.count, p.edit).catch((e) => log('warn', 'pasek nie przeliczył się po przesunięciu bloków', e))
 }
 
+/**
+ * What the window says it freed in today's plan (D368, IPC `planGap`): a day, the logical minute from which the next block
+ * is looked for and the minutes freed (at least `GAP_MIN`) – anything else is not taken.
+ */
+export function gapIn(day: unknown, placeMin: unknown, freedMin: unknown): { day: string; placeMin: number; freedMin: number } | null {
+  if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
+  if (typeof placeMin !== 'number' || !Number.isInteger(placeMin) || placeMin < PLAN_MIN || placeMin > PLAN_MAX) return null
+  if (typeof freedMin !== 'number' || !Number.isInteger(freedMin) || freedMin < GAP_MIN || freedMin > 24 * 60) return null
+  return { day, placeMin, freedMin }
+}
+
+/** The IPC `planGap` (D368): taken at once, the bar counted again in the background – the window's save never waits for it. */
+export function planGapIpc(w: Pick<WidgetEngine, 'freed'>, log: WidgetDeps['log'], day: unknown, placeMin: unknown, freedMin: unknown): void {
+  const g = gapIn(day, placeMin, freedMin)
+  if (g) void w.freed(g.day, g.placeMin, g.freedMin).catch((e) => log('warn', 'pasek nie przeliczył się po zwolnieniu czasu w planie', e))
+}
+
 /** A line of a change of the plan with its own „Cofnij” (T502): its edits, the files it created, the regeneration it started. */
 interface Moved {
   text: string
@@ -215,6 +235,11 @@ export class WidgetEngine {
   private pushes: Array<{ day: string; trigger: VariantTrigger }> = []
   /** „Zapisano: … · Cofnij” after a routine saved from the bar (D328). */
   private routineSaved: { block: string; day: string; text: string; until: number } | null = null
+  /**
+   * Time freed in today's plan in the main window of this computer (D368: a block not begun removed or shortened) –
+   * triggers of „Luka N min” the log does not hold, all day (a question asks while its gap is there); `at` – when.
+   */
+  private freedHere: Array<{ day: string; placeMin: number; freedMin: number; at: number }> = []
 
   constructor(private readonly d: WidgetDeps) {}
 
@@ -331,6 +356,7 @@ export class WidgetEngine {
         note: this.note ? { text: this.note.text, left: this.note.until - mono } : null
       }
       this.names = names
+      this.gapView(m, now, modes)
       this.variantsView(m, now, mono, modes)
       this.syncView(folder, now)
       this.linesLast()
@@ -353,6 +379,85 @@ export class WidgetEngine {
     this.stepAt(this.model && !v.hidden ? warnDeadlines(this.model.state, v.block?.endsAt ?? null, now) : [], now)
     this.d.emit(v)
     if (notices) await notices().catch((e) => this.d.log('warn', 'powiadomienia nie policzyły się', e))
+  }
+
+  /**
+   * „Luka N min · Przesuń resztę wcześniej · Zostaw” (D368, D373): a quiet line (no dot, no notification, no sound) for
+   * the nearest gap before a flexible block – only today; never in a session, classes, the night or „Odcinam się”, after
+   * them while the gap is there (`gapNow`: the log's triggers and the window's of this computer).
+   */
+  private gapView(m: NonNullable<WidgetEngine['model']>, now: number, modes: Modes): void {
+    const v = this.view!
+    const date = m.state.grid.date
+    this.freedHere = this.freedHere.filter((f) => f.day === date)
+    if (v.hidden || v.night || modes.session || modes.classMode || date !== logicalDayOf(now)) return
+    const gap = gapNow(m.ctx, m.state, this.freedTriggers(m))
+    if (gap)
+      v.lines = [
+        ...v.lines,
+        {
+          id: gap.id,
+          text: gapText(gap.minutes),
+          actions: [
+            { id: 'close', label: 'Przesuń resztę wcześniej' },
+            { id: 'leave', label: 'Zostaw' }
+          ],
+          dot: false
+        }
+      ]
+  }
+
+  /**
+   * Time freed in today's plan in the main window (D368, IPC `planGap`): a trigger of „Luka N min” on this computer (the
+   * other computers ask after a change of the log only); the promise is the bar counted again.
+   */
+  freed(day: string, placeMin: number, freedMin: number): Promise<void> {
+    this.freedHere.push({ day, placeMin, freedMin, at: this.now })
+    return this.refresh()
+  }
+
+  /** The window's triggers of the model's day (`freedHere`) on its grid. */
+  private freedTriggers(m: NonNullable<WidgetEngine['model']>): GapTrigger[] {
+    const g = m.state.grid
+    return this.freedHere.filter((f) => f.day === g.date).map((f) => ({ place: idxOfLogical(g, f.placeMin), freedMin: f.freedMin, order: instantOrder(f.at) }))
+  }
+
+  /**
+   * „Przesuń resztę wcześniej” (D368): the gap counted again on the day as it is at the click (a block begun meanwhile, a
+   * plan changed – the line's gap is gone: nothing written); the answer first (answered on another computer meanwhile –
+   * nothing moves twice), then the new starts of the gap's blocks as one edit of the day's file, with „Przesunięto N
+   * bloków · Cofnij” as after a push (D367, D313 – the same line and „Cofnij”).
+   */
+  private async closeGapNow(line: string, day: string | undefined): Promise<void> {
+    const folder = this.d.folder()
+    const m = folder ? await folder.widgetModel(this.now) : null
+    const gap = m && day === m.state.grid.date ? gapNow(m.ctx, m.state, this.freedTriggers(m)) : null
+    const out = m && gap?.id === line ? closeGap(m.ctx, m.state, gap) : []
+    if (!m || !folder || !day || !out.length) {
+      this.say('Tej luki już nie ma.')
+      return this.refresh()
+    }
+    const r = await this.d.timer({ a: 'mark', question: line, answer: 'close', day })
+    if (!r.ok) {
+      if (r.why) this.say(r.why)
+      return this.refresh()
+    }
+    const rel = paths.day(day)
+    const before = ((await folder.recordView(rel)) as RawRecord | undefined) ?? null
+    let after = dayRaw(before, day)
+    for (const p of out) {
+      const b = dayFileFrom(after, day).blocks.find((x) => x.id === p.id) ?? m.ctx.plan.find((x) => x.id === p.id)
+      if (b) after = putBlock(after, { ...b, startMin: p.startMin })
+    }
+    const entry = recordEdit(rel, before, after)
+    if (!entry) return this.refresh()
+    const res = await this.d.edit([entry])
+    if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) {
+      this.say('Przesunięcie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
+      return this.refresh()
+    }
+    this.moved.set('push', { text: pushedText(out.length), day, edits: [{ entry, made: entry.create ? after : null }], started: null, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq })
+    return this.refresh()
   }
 
   /** The marker and the open panel of variants in the view, and the line „Przestawiono: … · Cofnij” (D313). */
@@ -845,7 +950,12 @@ export class WidgetEngine {
         } else if (kind === 'routineSaved') return act === 'undo' ? this.undoRoutine() : undefined
         // „OK” of the line about saving the battery: the day's answer in the log – it never comes back that day.
         else if (kind === 'battery') await this.d.timer({ a: 'mark', question: line, answer: 'ok', day })
-        else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
+        // A gap (D368): „Przesuń resztę wcześniej” closes it, „Zostaw” – the answer in the log, never asked again for it.
+        else if (kind === 'gap') {
+          if (act === 'close') return this.closeGapNow(line, day)
+          if (act !== 'leave') return
+          await this.d.timer({ a: 'mark', question: line, answer: 'leave', day })
+        } else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
         else if (kind === 'fewerOffer') {
           await this.d.timer({ a: 'mark', question: line, answer: act, day })
           if (act === 'yes') click = { a: 'fewer' }

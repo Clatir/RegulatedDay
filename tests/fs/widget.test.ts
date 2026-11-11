@@ -16,7 +16,7 @@ import { HARD_END_TEXT } from '@shared/engineView'
 import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
-import { planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
+import { gapIn, planGapIpc, planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
 import { recordEdit } from '@shared/data/merge'
 
 const DAY = '2026-10-21'
@@ -1905,5 +1905,164 @@ describe('rozsuwanie w pasku (D367)', () => {
     expect(pushedIn(DAY, 1, { ...entry, rel: 'rd.json' }, null)).toBeNull()
     expect(pushedIn(DAY, 1, { ...entry, remove: true }, null)).toBeNull()
     expect(pushedIn(DAY, 1, { rel: entry.rel, edits: [{ base: 1, value: 2 }] }, null)).toBeNull()
+  })
+})
+
+describe('domykanie luk w pasku (D368, D373)', () => {
+  beforeEach(() =>
+    writeFileSync(
+      join(dataDir, paths.day(DAY)),
+      JSON.stringify({
+        schema: 1,
+        date: DAY,
+        sessions: { londyn: 'no', ny: 'no' },
+        blocks: [
+          { id: 'a', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'b', categoryId: 'inne', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'c', categoryId: 'inne', startMin: 12 * 60, durationMin: 60, fixed: false, origin: 'user' }
+        ]
+      })
+    )
+  )
+  type Day = { blocks: Array<{ id: string; startMin: number }> }
+  const starts = async (folder: DataFolder) => Object.fromEntries(((await folder.recordView(paths.day(DAY))) as Day).blocks.map((b) => [b.id, b.startMin]))
+  const gapLines = (w: WidgetEngine) => w.current().lines.filter((l) => l.id.startsWith('gap:'))
+  const answers = async (folder: DataFolder) => (await folder.readDay(DAY)).events.filter((e) => e.k === 'question.answer').map((e) => (e as unknown as { answer: string }).answer)
+
+  /** „a” from 10:00, „Dalej” at `endMin`: „b” begins at once, the gap stands before „c”. */
+  async function nextAt(endMin: number) {
+    const m = await make()
+    await m.w.refresh()
+    await m.w.act('start', undefined, 'panel')
+    m.at(endMin)
+    await m.w.act('next', undefined, 'bar')
+    await m.w.refresh()
+    return m
+  }
+
+  it('luka 20 min po „Dalej” przed planem: jedna cicha linia; „Przesuń resztę wcześniej” zapisuje nowe godziny, „Cofnij” je przywraca', async () => {
+    const { w, folder } = await nextAt(10 * 60 + 40)
+    expect(w.current().block?.name).toBe('Inne obowiązki')
+    const lines = gapLines(w)
+    expect(lines).toEqual([{ id: `gap:${DAY}:c:${10 * 60 + 40}`, text: 'Luka 20 min', actions: [{ id: 'close', label: 'Przesuń resztę wcześniej' }, { id: 'leave', label: 'Zostaw' }], dot: false }])
+    // Quiet: no dot of its own (nothing else waits now).
+    expect(w.current().dot).toBe(false)
+    await w.act('line', `${lines[0]!.id}|close`, 'bar')
+    expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, c: 11 * 60 + 40 })
+    expect(gapLines(w)).toEqual([])
+    expect(w.current().lines.find((l) => l.id === 'moved:push')).toMatchObject({ text: 'Przesunięto 1 blok', actions: [{ id: 'undo', label: 'Cofnij' }] })
+    expect(await answers(folder)).toEqual(['close'])
+    await w.act('line', 'moved:push|undo', 'bar')
+    expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, c: 12 * 60 })
+    // The gap is back, its question is not (answered once).
+    expect(gapLines(w)).toEqual([])
+  })
+
+  it('„Zostaw”: linia znika i nie wraca dla tej luki, plan bez zmian', async () => {
+    const { w, folder, at } = await nextAt(10 * 60 + 40)
+    await w.act('line', `${gapLines(w)[0]!.id}|leave`, 'bar')
+    expect(gapLines(w)).toEqual([])
+    at(10 * 60 + 42)
+    await w.refresh()
+    expect(gapLines(w)).toEqual([])
+    expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, c: 12 * 60 })
+    expect(await answers(folder)).toEqual(['leave'])
+  })
+
+  it('luka 5 min – bez pytania', async () => {
+    const { w } = await nextAt(10 * 60 + 55)
+    expect(gapLines(w)).toEqual([])
+  })
+
+  it('odpowiedź z drugiego komputera (log PC B) zamyka pytanie i tu – ten sam identyfikator luki', async () => {
+    const { w, at } = await nextAt(10 * 60 + 40)
+    const id = gapLines(w)[0]!.id
+    const t = placeLogical(DAY, 10 * 60 + 41)
+    mkdirSync(join(dataDir, paths.logDir(DAY)), { recursive: true })
+    writeFileSync(join(dataDir, paths.log(DAY, 'pcb')), `${JSON.stringify({ id: 'pcb-0', c: 'pcb', n: 0, t, l: t, v: 1, day: DAY, dom: 'timer', k: 'question.answer', at: t, question: id, answer: 'leave', value: null })}\n`)
+    at(10 * 60 + 42)
+    await w.refresh()
+    expect(gapLines(w)).toEqual([])
+  })
+
+  it('tryb sesji: bez pytania do jej końca; po końcu – pytanie, jeśli luka dalej jest', async () => {
+    writeFileSync(
+      join(dataDir, paths.day(DAY)),
+      JSON.stringify({
+        schema: 1,
+        date: DAY,
+        sessions: { londyn: 'no', ny: 'no' },
+        blocks: [
+          { id: 'ses', categoryId: 'sesja', startMin: 10 * 60, durationMin: 50, fixed: true, background: true, origin: 'user' },
+          { id: 'a', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'b', categoryId: 'inne', startMin: 11 * 60 + 30, durationMin: 60, fixed: false, origin: 'user' }
+        ]
+      })
+    )
+    const { w, folder, at } = await make()
+    await w.refresh()
+    await w.act('line', 'wait:ses|start', 'bar')
+    await w.act('start', undefined, 'panel')
+    expect(w.current().block?.name).toBe('Inne obowiązki')
+    at(10 * 60 + 30)
+    expect((await folder.timerClick({ a: 'finish', block: 'a', day: DAY } as never)).ok).toBe(true)
+    await w.refresh()
+    expect(w.current().session).toBe(true)
+    expect(gapLines(w)).toEqual([])
+    at(10 * 60 + 50)
+    expect((await folder.timerClick({ a: 'finish', block: 'ses', day: DAY } as never)).ok).toBe(true)
+    await w.refresh()
+    // 40 min stand empty before „b”, the early end of „a” freed 30 of them.
+    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 30 min'])
+  })
+
+  it('usunięcie w oknie (IPC `planGap`): pytanie na tym komputerze, „Przesuń” zapisuje; innego dnia i bez zgłoszenia – nic', async () => {
+    const { w, folder, build } = await make({ from: placeLogical(DAY, 9 * 60) })
+    await w.refresh()
+    const now = (await folder.recordView(paths.day(DAY))) as Record<string, unknown> & Day
+    const entry = recordEdit(paths.day(DAY), now, { ...now, blocks: now.blocks.filter((b) => b.id !== 'b') })!
+    await folder.edit([{ ...entry, edits: entry.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
+    await w.refresh()
+    // The plan written alone (nothing said): no question.
+    expect(gapLines(w)).toEqual([])
+    await w.freed(addDays(DAY, 1), 11 * 60, 60)
+    expect(gapLines(w)).toEqual([])
+    await w.freed(DAY, 11 * 60, 60)
+    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 1 h'])
+    // Another bar on this folder (the other computer's) has no trigger of this window.
+    const other = build()
+    await other.refresh()
+    expect(gapLines(other)).toEqual([])
+    await w.act('line', `${gapLines(w)[0]!.id}|close`, 'bar')
+    expect(await starts(folder)).toEqual({ a: 10 * 60, c: 11 * 60 })
+  })
+
+  it('pytanie, którego luki już nie ma (blok zaczęty w oknie): „Przesuń” nic nie zapisuje i mówi dlaczego', async () => {
+    const { w, folder } = await nextAt(10 * 60 + 40)
+    const id = gapLines(w)[0]!.id
+    // „c” begun from the main window meanwhile – the bar not counted again yet.
+    expect((await folder.timerClick({ a: 'start', block: 'c', day: DAY } as never)).ok).toBe(true)
+    await w.act('line', `${id}|close`, 'bar')
+    expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, c: 12 * 60 })
+    expect(w.current().note?.text).toBe('Tej luki już nie ma.')
+    expect(gapLines(w)).toEqual([])
+  })
+
+  it('IPC: przyjmuje tylko dzień, minutę planu i co najmniej 10 min; odpowiedź nie czeka na przeliczenie paska', async () => {
+    expect(gapIn(DAY, 11 * 60, 60)).toEqual({ day: DAY, placeMin: 11 * 60, freedMin: 60 })
+    expect(gapIn(DAY, 11 * 60, 5)).toBeNull()
+    expect(gapIn(DAY, 11 * 60 + 0.5, 60)).toBeNull()
+    expect(gapIn(DAY, 100, 60)).toBeNull()
+    expect(gapIn('jutro', 11 * 60, 60)).toBeNull()
+    expect(gapIn(DAY, '660', 60)).toBeNull()
+    const calls: unknown[][] = []
+    const logs: string[] = []
+    const never = { freed: (...a: unknown[]) => (calls.push(a), new Promise<void>(() => undefined)) }
+    expect(planGapIpc(never, () => undefined, DAY, 11 * 60, 60)).toBeUndefined()
+    expect(calls).toEqual([[DAY, 11 * 60, 60]])
+    planGapIpc({ freed: () => Promise.reject(new Error('folder')) }, (_l, msg) => void logs.push(msg), DAY, 11 * 60, 60)
+    await vi.waitFor(() => expect(logs).toEqual(['pasek nie przeliczył się po zwolnieniu czasu w planie']))
+    planGapIpc(never, () => undefined, DAY, 11 * 60, 3)
+    expect(calls).toHaveLength(1)
   })
 })
