@@ -114,6 +114,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] J2.2 Nowy blok przeciągnięciem w „Dziś” i „Szablonach”
    - [ ] J3.1 Rozsuwanie w „Dziś” i „Cofnij” w pasku
    - [ ] J3.2 Rozsuwanie w „Szablonach”
+   - [ ] J4.1 Luka po wcześniejszym końcu – „Przesuń resztę wcześniej” i „Cofnij”
+   - [ ] J4.2 Luka po usunięciu albo skróceniu bloku w „Dziś”
+   - [ ] J4.3 Kiedy pasek o lukę nie pyta (sesja, mała luka, blok stały, drugi komputer)
    - [ ] SNT6.1 Wyszukiwarka Ctrl K – wyniki i dopasowanie
    - [ ] SNT6.2 Enter na wyniku – skok do rekordu
    - [ ] SNT6.3 Polecenia, ostatnio wybrane i gdzie Ctrl K nie działa
@@ -1551,6 +1554,64 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   go upuściłeś, także w tygodniu przesunięcia sesji (D372).
 - **Nie przechodzi, gdy:** blok po upuszczeniu skacze o godzinę, „Cofnij” zostawia nową wersję szablonu, albo bloki
   stałe szablonu się przesuwają.
+
+### J4 – domykanie luk (1.8.0)
+
+#### J4.1 Luka po wcześniejszym końcu – „Przesuń resztę wcześniej” i „Cofnij” (1.8.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/gaps.test.ts`, `tests/fs/widget.test.ts` („domykanie luk w pasku”),
+  `tests/e2e/bar-windows.spec.ts` („luka na pasku pulpitu”, CI na Windows). Ty: rzut oka przy zwykłej pracy.
+- **Jak sprawdzić:** dziś zacznij blok elastyczny, po którym w planie stoi kolejny elastyczny (bez stałego między
+  nimi), i skończ go „Skończyłem” albo „Dalej” co najmniej 10 min przed planowanym końcem. Spójrz na pasek pulpitu.
+  Kliknij „Przesuń resztę wcześniej”, potem „Cofnij” w linii „Przesunięto …”. Przy kolejnej luce kliknij „Zostaw”.
+  Innym razem po „Skończyłem” od razu kliknij „Start” następnego bloku; jeszcze innym – zapauzuj blok i go zaparkuj.
+- **Oczekiwany efekt:** w pasku cicha linia (bez kropki, powiadomienia i dźwięku) „Luka 20 min · Przesuń resztę
+  wcześniej · Zostaw” – o tyle „Przesuń” przesunie następny blok (bufor między kategoriami zostaje): najwyżej tyle, ile
+  zwolnił wcześniejszy koniec i jeszcze nie minęło bez bloku (przerwa zaplanowana wcześniej zostaje); po „Dalej” i po
+  „Start” następnego bloku – także gdy jego godzina minęła – luka przed blokiem za tym, który się właśnie zaczął (jego
+  pauza tego nie zmienia, przedłużenie ją zmniejsza); po zaparkowaniu zapauzowanego bloku – luka najwyżej o
+  niezrobioną część. „Przesuń” zapisuje
+  nowe godziny bloków elastycznych do najbliższego stałego – żaden nie zaczyna się przed teraz; stały i bloki za nim,
+  chronione (posiłek, regeneracja, rutyny) i zaczęte zostają – i daje linię „Przesunięto N bloków · Cofnij”; „Cofnij”
+  przywraca godziny, a pytanie o tę lukę nie wraca. „Zostaw” – linia znika, plan bez zmian. Bez odpowiedzi linia znika
+  sama, gdy zacznie się następny blok albo coś w luce – także blok dalszy niż następny, z pominięciem należnego (D368,
+  D373, D375, D376).
+- **Nie przechodzi, gdy:** pytanie o tę samą lukę przychodzi drugi raz (także po „Zostaw” i wcześniejszym starcie
+  następnego bloku), „Zostaw” nie zamyka linii, linia ma kropkę albo daje powiadomienie, liczba w linii różni się od
+  przesunięcia po „Przesuń”, po „Start” następnego bloku pytanie znika zamiast przejść na lukę za nim,
+  „Przesuń” rusza blok stały, chroniony, zaczęty albo blok za stałym, któryś blok staje przed teraz, „Cofnij” nie
+  przywraca wszystkich godzin, albo pasek pulpitu po kliknięciu wychodzi nad okna innych programów.
+
+#### J4.2 Luka po usunięciu albo skróceniu bloku w „Dziś” (1.8.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/gaps.test.ts` („usunięcie i skrócenie w oknie”), `tests/fs/widget.test.ts`,
+  `tests/e2e/screens.spec.ts` („domykanie luk (D368)”). Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” usuń niezaczęty blok elastyczny, który stoi między dwoma innymi; innym razem skróć blok
+  o co najmniej 10 min dolną krawędzią albo polem „Długość”. Przenieś blok przeciągnięciem i zmień górną krawędź. To
+  samo na jutrze.
+- **Oczekiwany efekt:** po usunięciu i skróceniu dziś – w pasku „Luka … · Przesuń resztę wcześniej · Zostaw”, na obu
+  komputerach i także po ponownym uruchomieniu aplikacji (zamknij ją i otwórz, póki pytanie czeka); „Przesuń” przesuwa
+  następne bloki o zwolniony czas (przerwa zaplanowana wcześniej zostaje). Przeniesienie bloku i górna krawędź – bez
+  pytania; na jutrze – bez pytania (D368, D373, D375). Usunięcie bloku z blokiem zakotwiczonym za nim zwalnia oba;
+  „Cofnij” usunięcia (i wydłużenie skróconego bloku z powrotem) kończy pytanie, a ponowne usunięcie pyta od nowa – o ten
+  sam czas raz (nie dwa razy tyle). Skrócony blok, który się spóźnia, pytania nie gasi.
+- **Nie przechodzi, gdy:** po usunięciu dziś nie ma pytania, pytanie znika po ponownym uruchomieniu, przychodzi po
+  zmianie na jutrze, po przeniesieniu bloku albo po „Cofnij”, albo „Przesuń” przesuwa bloki o więcej, niż zwolniło
+  usunięcie.
+
+#### J4.3 Kiedy pasek o lukę nie pyta – sesja, mała luka, blok stały, drugi komputer (1.8.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/gaps.test.ts`, `tests/fs/widget.test.ts` (sesja, zajęcia, „Odcinam się”, noc,
+  odpowiedź z drugiego komputera). Ty: rzut oka, gdy się zdarzy.
+- **Jak sprawdzić:** skończ blok 5 min przed planem; skończ blok wcześniej, gdy następny jest stały (sesja, zajęcia)
+  albo chroniony (posiłek); skończ blok wcześniej w czasie sesji albo zajęć zdalnych. Przy dwóch komputerach odpowiedz
+  na pytanie o lukę na jednym z nich.
+- **Oczekiwany efekt:** luka poniżej 10 min albo blok stały, chroniony lub zaczęty zaraz po luce – bez pytania;
+  w trybie sesji, zajęć, w „Odcinam się” i w nocy – pytanie dopiero po ich końcu, jeśli luka dalej jest (o tyle mniejsza,
+  ile zwolnionego czasu minęło w ich trakcie); odpowiedź na
+  jednym komputerze zamyka pytanie na drugim, także gdy ich zegary się różnią (D368, D373).
+- **Nie przechodzi, gdy:** pytanie pojawia się w czasie sesji albo zajęć, przy luce 5 min albo przed blokiem stałym, albo
+  zostaje na drugim komputerze po odpowiedzi.
 
 ### SNT6 – wyszukiwarka Ctrl K (1.7.0)
 

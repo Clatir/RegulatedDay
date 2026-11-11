@@ -5,12 +5,17 @@
  * attribute – must open a tooltip window, or the check proves nothing. The windows lying over the bar (CI's console)
  * are minimized first, and every point must be the bar's own – or the cursor never reaches it. The bar dragged by its
  * handle with the real mouse follows it and stays where it is let go (E4b.12). A hidden „WorkerW” at the top of the order
- * is no desktop – the bar stays under the windows (G4) – and after „failed” the helper tries again by itself (D341).
+ * is no desktop – the bar stays under the windows (G4) – and after „failed” the helper tries again by itself (D341). A
+ * line's button clicked with the real cursor (the gap's „Przesuń resztę wcześniej”, D368) writes its change and opens no
+ * window, the bar staying where it lay in the order.
  */
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication } from '@playwright/test'
-import { launch, settledBarBounds, viewPage, withMainLog } from './app'
+import { logicalMinuteOf } from '../../src/shared/time/day'
+import { launch, logicalToday, settledBarBounds, viewPage, withMainLog } from './app'
+import { seedAwake } from './seedAwake'
 import { background, click, drag, foreground, hover, placeUnder, topWindows, uncover, windowsAt, type TopWindow } from './win32'
 
 test.skip(process.platform !== 'win32' || process.env.RD_E2E_REAL_HELPER !== '1', 'Windows with the real helper only')
@@ -398,6 +403,56 @@ async function dragByHandle(onTop: boolean): Promise<void> {
     await app.close()
   }
 }
+
+test('luka na pasku pulpitu (D368): prawdziwe kliknięcie „Przesuń resztę wcześniej” zapisuje nowe godziny – bez nowego okna, pasek dalej pod oknami', async () => {
+  test.setTimeout(120_000)
+  // Today without the night's quiet (`seedAwake`), „c” of yours an hour and a half from now; not run in the last 3 h 20 min
+  // of the logical day (the block would reach past 04:00).
+  const nowMin = logicalMinuteOf(logicalToday(), Date.now())
+  test.skip(nowMin > 28 * 60 - 200, 'blok za półtorej godziny nie mieści się już w dobie logicznej (koniec o 04:00)')
+  const planned = Math.ceil((nowMin + 90) / 5) * 5
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-gap-bar-'))
+  const { dayFile } = seedAwake(dataDir, [{ id: 'c', categoryId: 'inne', startMin: planned, durationMin: 60, fixed: false, origin: 'user' }])
+  const startOfC = () => (JSON.parse(readFileSync(dayFile, 'utf8')) as { blocks: Array<{ id: string; startMin: number }> }).blocks.find((b) => b.id === 'c')!.startMin
+  const { app, page: main, userData } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
+      // A block of an hour begun now and finished at once: about an hour freed – the gap before „c”.
+      await main.evaluate(() => window.rd.timer({ a: 'startNew', block: 'e2e-gap', categoryId: 'inne', durationMin: 60 }))
+      await main.evaluate(() => window.rd.timer({ a: 'finish', block: 'e2e-gap' }))
+      const page = await viewPage(app, 'bar')
+      // The gap's line in the view; the day's own lines before it (the morning's questions …) may put it in „⋯” – two fit.
+      await expect.poll(async () => (await main.evaluate(async () => (await window.rd.widget()).lines.map((l) => l.id))).some((id) => id.startsWith('gap:')), { timeout: 30_000 }).toBe(true)
+      const gapLine = page.locator('[data-testid^="bar-line-gap:"]')
+      if (!(await gapLine.count())) await page.getByTestId('bar-group-more').click()
+      await expect(gapLine).toContainText('Luka', { timeout: 30_000 })
+      const close = page.getByTestId('bar-act-gap-close')
+      await expect(close).toBeVisible()
+      await settledBarBounds(app)
+      const bar = await barInfo(app)
+      const covers = uncover(bar.hwnd)
+      const r = (await close.boundingBox())!
+      const k = bar.scale
+      const point: [number, number] = [(bar.bounds.x + (r.x + r.width / 2) * bar.zoom) * k, (bar.bounds.y + (r.y + r.height / 2) * bar.zoom) * k]
+      // The windows minimized by `uncover` are gone from the point once their animation ends – waited for, no fixed delay.
+      await expect.poll(() => windowsAt([point]), { message: `przycisk paska zasłonięty (${covers.join(', ') || 'nic nie zminimalizowano'})`, timeout: 10_000 }).toEqual([bar.hwnd])
+      const before = pidWindows(bar.pid)
+      const orderBefore = topWindows()
+      click(...point)
+      await expect.poll(startOfC, { timeout: 15_000 }).toBeLessThan(planned)
+      // „Przesunięto 1 blok · Cofnij” – in the view (in the bar or in „⋯”).
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).lines.find((l) => l.id === 'moved:push')?.text ?? null)).toBe('Przesunięto 1 blok')
+      expect(pidWindows(bar.pid)).toEqual(before)
+      const orderAfter = topWindows()
+      expect(movedAcross(orderBefore, orderAfter, bar.hwnd)).toEqual([])
+      expect(zIndex(orderAfter, bar.hwnd)).toBeLessThan(desktopIndex(orderAfter, bar.hwnd))
+    })
+  } finally {
+    await app.close()
+  }
+})
 
 test('pasek pulpitu przeciągnięty za uchwyt prawdziwą myszą idzie za kursorem i zostaje tam, gdzie go puszczono (E4b.12)', () => dragByHandle(false))
 

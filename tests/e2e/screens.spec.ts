@@ -22,6 +22,7 @@ import { createDailyBackup } from '../../src/main/data/backup'
 import { logicalMinuteOf } from '../../src/shared/time/day'
 import { addDays } from '../../src/shared/time/zone'
 import { launch, logicalToday, viewPage, withMainLog } from './app'
+import { seedAwake } from './seedAwake'
 
 const shots = process.env.RD_E2E_SHOTS
 async function shot(page: Page, name: string): Promise<void> {
@@ -661,6 +662,59 @@ test('rozsuwanie w „Szablonach” (D367, D372): blok przeciągnięty na zajęt
       await expect.poll(() => Object.keys(versions())).toEqual([SETUP_FROM])
       await expect(line).toHaveCount(0)
       await expect(b).toContainText('19:00')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('domykanie luk (D368): usunięty blok zostawia lukę – w pasku okna „Luka 1 h · Przesuń resztę wcześniej · Zostaw”; „Przesuń” zapisuje nowe godziny, „Cofnij” je przywraca', async () => {
+  // Today, three blocks of yours an hour each from an hour from now; a day without the night's quiet (`seedAwake`) – at any
+  // hour but the last 4 h 20 min of the logical day (the blocks would reach past 04:00).
+  const nowMin = logicalMinuteOf(logicalToday(), Date.now())
+  test.skip(nowMin > 28 * 60 - 260, 'trzy bloki od godziny od teraz nie mieszczą się już w dobie logicznej (koniec o 04:00)')
+  const base = Math.ceil((nowMin + 60) / 5) * 5
+  const own = (id: string, startMin: number) => ({ id, categoryId: 'inne', startMin, durationMin: 60, fixed: false, origin: 'user' })
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-gap-'))
+  const { dayFile } = seedAwake(dataDir, [own('a', base), own('b', base + 60), own('c', base + 120)])
+  const starts = () => Object.fromEntries((JSON.parse(readFileSync(dayFile, 'utf8')) as { blocks: Array<{ id: string; startMin: number }> }).blocks.map((b) => [b.id, b.startMin]))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      const b = page.getByTestId('block-b')
+      await b.scrollIntoViewIfNeeded()
+      await b.click()
+      await page.getByTestId('block-remove').click()
+      await expect.poll(starts).toEqual({ a: base, c: base + 120 })
+      // The bar's lines as the view has them (also those in „⋯”): the day's own lines – the morning's questions, the
+      // computers' quiet ones – may stand before the gap's; two fit in the bar, the rest wait in „⋯” (any hour of the day).
+      const lines = () => page.evaluate(async () => (await window.rd.widget()).lines.map((l) => l.id))
+      const bar = page.getByTestId('bar-main')
+      const reveal = async (prefix: string) => {
+        await expect.poll(async () => (await lines()).some((id) => id.startsWith(prefix)), { timeout: 30_000 }).toBe(true)
+        const line = bar.locator(`[data-testid^="bar-line-${prefix}"]`)
+        const more = bar.getByTestId('bar-group-more')
+        if (!(await line.count()) && (await more.getAttribute('aria-pressed')) !== 'true') await more.click()
+        await expect(line).toHaveCount(1)
+        return line
+      }
+      // One quiet line: „a” ends where „b” stood – 1 h empty before „c”, 1 h freed.
+      const line = await reveal('gap:')
+      await expect(line).toContainText('Luka 1 h')
+      await expect(line).toContainText('Zostaw')
+      await line.getByTestId('bar-act-gap-close').click()
+      await expect.poll(starts).toEqual({ a: base, c: base + 60 })
+      await expect.poll(async () => (await lines()).filter((id) => id.startsWith('gap:'))).toEqual([])
+      const moved = await reveal('moved:push')
+      await expect(moved).toContainText('Przesunięto 1 blok')
+      await moved.getByTestId('bar-act-moved-undo').click()
+      await expect.poll(starts).toEqual({ a: base, c: base + 120 })
+      await expect.poll(async () => (await lines()).filter((id) => id.startsWith('moved:'))).toEqual([])
+      // The gap is back, its question is not (answered once).
+      expect((await lines()).filter((id) => id.startsWith('gap:'))).toEqual([])
     })
     expect(errors).toEqual([])
   } finally {

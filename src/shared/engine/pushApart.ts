@@ -50,9 +50,10 @@ export interface PushOptions {
 /**
  * A block that may be pushed: flexible, of the plan, with its own hour (`ownHourBlock` – not a session, a lecture, a class
  * of a „zjazd”, the second shift, nor anchored), in the foreground, not waiting for „Zacznij”, not protected (a protected
- * life block or a protected category – as the variants never touch them), not begun, parked or cancelled.
+ * life block or a protected category – as the variants never touch them), not begun, parked or cancelled. The same blocks
+ * close a gap (D368, `gaps.ts`).
  */
-function pushable(b: BlockInfo, facts: DayFacts): boolean {
+export function pushable(b: BlockInfo, facts: DayFacts): boolean {
   if (b.fixed || b.waits || b.bg || b.protectedLife || b.rules.protected || !ownHourBlock(b)) return false
   const f = facts.blocks.get(b.id)
   return !f || (f.startedAt == null && f.parkedAt == null && f.cancelledAt == null)

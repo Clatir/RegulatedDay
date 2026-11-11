@@ -87,7 +87,9 @@ const USER_EVENTS: Record<string, Domain> = {
   'energy.module': 'energy',
   'module.set': 'meta',
   // The ritual's felt cost of a category (D319): passive, never the timer's (an older version installs no faster for it).
-  'cost.felt': 'energy'
+  'cost.felt': 'energy',
+  // Time freed in today's plan (D375): the timer's – an older version, whose bar would not ask about the gap, installs at once.
+  'plan.freed': 'timer'
 }
 /** The journal keeps own events of this many days back (spec: until the day's freeze plus 7 days – freezing is E6). */
 export const JOURNAL_KEEP_DAYS = 14
