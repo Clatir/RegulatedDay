@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.0
+- Rozsuwanie: gdy przeciągniesz blok, wydłużysz go krawędzią albo dodasz nowy blok z siatki na zajęte miejsce w „Dziś”, kolejne bloki elastyczne dostają w planie nowe godziny – bez nakładania, w trakcie przeciągania widać ich nowe miejsca (przerywana obwódka). Bloki stałe, chronione i zaczęte zostają, elastyczny przeskakuje stały jak w prognozie.
+- Po rozsunięciu w pasku „Przesunięto N bloków · Cofnij” przez 15 min – „Cofnij” przywraca plan dnia sprzed zmiany. Gdy czeka też „Przestawiono … · Cofnij” wariantu, oba działają; pytania dnia zostają widoczne, druga linia z „Cofnij” czeka w „⋯”.
+- Rozsunięcie, po którym praca wychodzi za zatwierdzoną granicę, zapala znacznik wariantów.
+- To samo na osi „Szablonów”, z „Przesunięto N bloków · Cofnij” na stronie szablonu. W tygodniach, w których sesje zaczynają się godzinę wcześniej, blok przeciągnięty na osi szablonu nie skacze już o godzinę po upuszczeniu.
+- Wpisanie godziny albo długości w panelu bloku nie rozsuwa innych (jak dotąd); trwający blok wydłużony krawędzią przesuwa kolejne tylko na osi.
+
 ## 1.5.0
 - „Tydzień”: kliknięcie w pustą siatkę otwiera obok dnia kartę nowego bloku – kategoria (na start ostatnio użyta), długość, „Dodaj”, „Więcej” (pełna edycja) i „Anuluj”. Dzień otwierasz teraz kliknięciem w jego nagłówek albo w blok. W dniu minionym karta ostrzega „Ten dzień już minął”, ale zapis jest możliwy.
 - Przeciągnięcie po pustym miejscu osi („Dziś”, „Szablony”, „Tydzień”) od razu ustawia start i koniec nowego bloku, co 5 min, z godzinami w trakcie. W „Tygodniu” przeciągnięcie przez kilka dni dodaje osobny blok o tych samych godzinach w każdym z nich.

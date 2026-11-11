@@ -33,9 +33,11 @@ Co dwa tygodnie w czwartek o 17:00 masz wizytę u fizjoterapeuty, a w każdy ost
 * **Dzięki funkcji:** Tworzysz jedno wydarzenie z regułą „co 2 tygodnie w czwartek”. Gdy wypada zmiana terminu, klikasz to jedno konkretne spotkanie i przesuwasz je na piątek. Aplikacja pyta: *„Zmienić tylko to spotkanie, czy całą serię?”*. Wybierasz *„Tylko to spotkanie”* – reszta czwartków pozostaje nienaruszona.
 
 ### Jak wygląda praca z tą funkcją
-* **Dowolne cykle:** Możesz ustawić: codziennie, w dni robocze, co N tygodni w wybrane dni (np. wtorki i czwartki), w konkretny dzień miesiąca (np. 10. każdego miesiąca) lub relatywnie (np. „w trzecią środę miesiąca”).
-* **Warunki końca:** Seria może trwać bez końca, zakończyć się po określonej liczbie wystąpień (np. 10 lekcji języka) lub w konkretnym dniu roku.
-* **Inteligentne wyjątki:** Jeśli w dzień powtarzalnego spotkania wypada dzień wolny od pracy lub święto, aplikacja z wyprzedzeniem pyta w planie porannym: *„Dziś jest święto – czy spotkanie z serii ma się odbyć, czy je odwołujemy?”*.
+* **Dowolne cykle:** Codziennie, w dni robocze, co N tygodni w wybrane dni (np. wtorki i czwartki), w konkretny dzień miesiąca (np. 10. każdego miesiąca) albo relatywnie („trzecia środa”, „ostatni piątek” miesiąca). Serię ustawiasz polem „Powtarzaj” w panelu edycji bloku, a listę wszystkich serii masz w „Szablonach” (D381).
+* **Warunki końca:** Seria może trwać bez końca, zakończyć się po określonej liczbie wystąpień (np. 10 lekcji języka) albo w konkretnym dniu.
+* **Tylko to, to i następne, cała seria:** Zmiana albo usunięcie bloku z serii pyta, czego dotyczy. Zmiana całej serii działa od dziś (dzisiejsze wystąpienie, jeśli jeszcze się nie zaczęło); dni minione nigdy się nie zmieniają.
+* **Dni szczególne:** Każda seria ma pole „W dni szczególne: odbywa się · pomiń · pytaj”. Domyślnie w dniu „Wolne” wystąpienie znika samo, a w zjazd i dzień regeneracyjny plan poranny pyta: *„Fizjoterapeuta z serii – zostaw · odwołaj”* (D382).
+* **Szablony zostają:** Szablony dnia i plan wykładów działają jak dotąd; seria to pojedynczy blok, który wraca według reguły.
 
 ---
 
@@ -153,12 +155,15 @@ W ciągu dnia przypomina Ci się nagle kilkanaście drobiazgów: wymienić filtr
 * **Dzięki funkcji:** Naciskasz skrót klawiszowy, wpisujesz zadanie do **Skrzynki (Inbox)** i wracasz do pracy. Wieczorem lub rano otwierasz swój Backlog. Przeglądasz zebrane sprawy i decydujesz: część robisz w tym tygodniu, część odraczasz do zakładki *Kiedyś / Może*, a najważniejsze przeciągasz myszką wprost na wolne okienko w kalendarzu na jutro.
 
 ### Jak wygląda praca z tą funkcją
-* **Czysty podział:**
-  * *Skrzynka (Inbox)* – szybki zrzut bieżących myśli,
+* **„Sprawy” zamiast „Próśb”:** Jedna strona w tym samym miejscu menu i z tym samym skrótem. Sprawa to zadanie własne albo prośba (z osobą, trybami i kosztem jak dotąd) (D383).
+* **Pięć list:**
+  * *Skrzynka* – szybki zrzut bieżących myśli,
+  * *Dziś* – zadania na dziś bez godzin; niezrobione wracają rano do „W tym tygodniu”, a rytuał je wymienia,
   * *W tym tygodniu* – zadania wybrane do realizacji w bieżącym cyklu,
   * *Kiedyś / Może* – pomysły bez presji czasowej, które nie zaśmiecają codziennego widoku,
   * *Zrobione* – archiwum sukcesów.
-* **Płynna zamiana w plan:** Złapanie zadania z listy i upuszczenie go na osi czasu automatycznie rezerwuje odpowiedni czas w budżecie dnia.
+* **Szybki zapis:** Ctrl+Alt+N w dowolnej aplikacji otwiera małe okienko „Do skrzynki” (Enter zapisuje, Esc zamyka); to samo pole otwiera „+” na pasku pulpitu (D385).
+* **Płynna zamiana w plan:** Zadanie ma tytuł, szacunek (domyślnie 30 min), kategorię i notatkę. Przeciągnięte z panelu przy osi „Dziś” albo ze strony „Sprawy” staje się blokiem elastycznym tej kategorii; plan poranny pozwala wybrać zadania z listy „Dziś” razem z prośbami. Po końcu bloku pasek pyta cicho: *„Zadanie zrobione? · Tak · Wraca na listę”* (D384).
 
 ---
 
@@ -230,11 +235,13 @@ Automatyczną ochronę przed przebodźcowaniem i wypaleniem: program sam pamięt
 ### Scenariusz z życia
 Przez 90 minut prowadzisz trudne spotkanie projektowe z klientem (duży koszt emocjonalny i społeczny).
 * **Przed zmianą:** Zaraz po zakończeniu spotkania w kalendarzu masz kolejny blok wymagającej pracy umysłowej. Siadasz do niego z pustą baterią, nie możesz się skupić, jesteś rozdrażniony i działasz na oparach energii.
-* **Dzięki funkcji:** Aplikacja zna koszt kategorii „Spotkania”. Automatycznie wstawia bezpośrednio po nim 15-minutowy **bufor dekompresji** w kolorze uspokajającej zieleni morskiej z ikoną filiżanki. Bufor ten mówi: *„Czas na samotność i herbatę – nie planuj tu pracy”*. Jeśli spróbujesz wepchnąć w to miejsce zadanie, program życzliwie zapyta: *„Dopiero co skończyłeś trudne spotkanie. Czy na pewno nie potrzebujesz 15 minut na zresetowanie głowy?”*.
+* **Dzięki funkcji:** Aplikacja zna koszt kategorii „Spotkania”. Automatycznie wstawia bezpośrednio po nim 15-minutowy **bufor dekompresji** w kolorze uspokajającej zieleni morskiej z ikoną filiżanki. Bufor ten mówi: *„Czas na samotność i herbatę – nie planuj tu pracy”*. Jeśli położysz w tym miejscu blok pracy, aplikacja ostrzeże: *„Na miejscu dekompresji po spotkaniu”* – i zapisze zmianę, bo decyzja należy do Ciebie.
 
 ### Jak wygląda praca z tą funkcją
-* **Dynamiczny czas na oddech:** Bufor sam dopasowuje się do Twojego stanu – po krótkiej rozmowie wystarczy 5 minut, po dwugodzinnym maratonie system zaproponuje 20 minut ciszy.
-* **Zasilanie puli energii:** Czas spędzony w buforze dekompresji jest traktowany przez silnik jako regeneracja i realnie podnosi poziom Twojej energii w pasku pulpitu.
+* **Kiedy:** Po bloku trwającym co najmniej 45 minut z kosztem psychicznym albo sensorycznym co najmniej 3 na godzinę (próg zmienisz w ustawieniach), w każdej kategorii. W trybie sesji i zajęć – dopiero po ich końcu (D386).
+* **Dynamiczny czas na oddech:** Długość od 5 do 20 minut zależy od długości i kosztu bloku. Bufor zaczyna się od faktycznego końca bloku, a po „Przedłuż” jego długość liczy się na nowo; kolejne bloki elastyczne rozsuwają się, stałe zostają.
+* **Zasilanie puli energii:** Czas w buforze dekompresji podnosi energię jak regeneracja (widać to w pasku pulpitu), ale nie liczy się do minimum regeneracji dnia.
+* **Ostrzega, nie blokuje:** Bufor usuniesz jak każdy blok („Cofnij” po wstawieniu). Gdy położysz na nim blok pracy, zobaczysz ostrzeżenie „Na miejscu dekompresji po spotkaniu”, a zapis przejdzie od razu (D72).
 
 ---
 
@@ -274,7 +281,7 @@ Masz blok pracy nad raportem od 9:00 do 10:00. Rano widzisz, że godzina nie wys
 * **Ostrzega, nie blokuje:** Gdy wydłużony blok przekracza maksimum dnia albo twardy koniec, widzisz te same ostrzeżenia co przy zmianie długości w panelu edycji. Aplikacja niczego nie zatrzymuje.
 * **Które bloki:** Niezaczęte – te same, które da się przeciągać: z własną godziną, poza sesją, wykładem i drugą zmianą (wykład zmieniasz w rozkładzie). Trwające – jak wyżej.
 * **Wszędzie ten sam gest:** Działa na osi dnia i w szablonach, a później w widokach tygodnia i 3 dni.
-* **Zanim przyjdzie rozsuwanie (sekcja 12):** Wydłużenie bloku na następny działa jak dziś przeciągnięcie – kolejne bloki przesuwa prognoza, plan zostaje.
+* **Rozsuwanie (sekcja 12):** Wydłużenie bloku na następny zapisuje nowe godziny kolejnych bloków elastycznych, tak samo jak przeciągnięcie; trwający blok wydłużony krawędzią dalej przesuwa je tylko w prognozie.
 
 ---
 

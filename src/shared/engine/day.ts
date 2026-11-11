@@ -78,6 +78,28 @@ export interface DayContext {
   asWritten?: boolean
 }
 
+/** A session's typical length in the day's context (by the session's id in the layer), null – its whole window. */
+export const typicalOf =
+  (ctx: Pick<DayContext, 'typicalSessionMin'>) =>
+  (b: BlockInfo): number | null =>
+    b.origin === 'session' && b.sourceId ? (ctx.typicalSessionMin?.[b.sourceId] ?? null) : null
+
+/**
+ * The forecast the day's state shows from now (`DayState.forecast`: the mode 'typical' with the events of the minute now
+ * in view) for blocks of the same day – changes of the plan tried before one is made (D367); `state.blocks` give back
+ * the state's own forecast. The view, the buffer and the typical lengths are taken once, for every try.
+ */
+export function shownForecaster(ctx: DayContext, state: DayState): (blocks: readonly BlockInfo[]) => Placed[] {
+  const m = state.now
+  const view = viewAt(state.facts, m + 1)
+  const { transitionBufferMin } = settingsAtMinute(ctx.snapshot, state.facts, m + 1).settings
+  const typicalMin = typicalOf(ctx)
+  return (blocks) => forecast({ blocks, view, m, mode: 'typical', transitionBufferMin, typicalMin }).placed
+}
+
+/** `shownForecaster` for one set of blocks. */
+export const shownForecast = (ctx: DayContext, state: DayState, blocks: readonly BlockInfo[]): Placed[] => shownForecaster(ctx, state)(blocks)
+
 export interface MinuteInfo {
   cls: MinuteClass
   upfront: boolean
@@ -549,7 +571,7 @@ export function computeDay(ctx: DayContext): DayState {
     nextWake: idxOf(g, placeLogical(addDays(ctx.date, 1), ctx.nextWakeMin)),
     secondShiftStart: secondStarts.length ? Math.min(...secondStarts) : OPEN,
     secondWindows,
-    typical: (b) => (b.origin === 'session' && b.sourceId ? (ctx.typicalSessionMin?.[b.sourceId] ?? null) : null),
+    typical: typicalOf(ctx),
     noWorkPlanned: !snapshot.blocks.some((p) => {
       const r = snapshot.settings.categories[p.categoryId]
       return r?.cls === 'work' && !r.keepsRegen && p.tag !== 'secondShift'

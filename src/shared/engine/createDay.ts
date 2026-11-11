@@ -300,10 +300,34 @@ export function firstFixedStart(plan: readonly PlanBlock[]): number {
  * start of its own, before `firstFixed`, moves – kept in the logical day; null: it keeps its place. One rule for the
  * blocks of the snapshot (`dayPlan`) and for the blocks you placed (`wakeShifted`, D334).
  */
-export function wakeShiftedStart(b: PlanBlock, delta: number, firstFixed: number): number | null {
+export function wakeShiftedStart(b: Pick<PlanBlock, 'fixed' | 'anchor' | 'startMin' | 'durationMin'>, delta: number, firstFixed: number): number | null {
   if (delta === 0 || b.fixed || b.anchor || b.startMin == null || b.startMin >= firstFixed) return null
   const startMin = Math.max(PLAN_MIN, Math.min(PLAN_MAX - b.durationMin, b.startMin + delta))
   return startMin === b.startMin ? null : startMin
+}
+
+/**
+ * The start a block of the template needs for a day to show it at `dayMin` – the inverse of `wakeShiftedStart` (the day's
+ * wake `delta` minutes from the template's moves a flexible block of its own hour that starts before `firstFixed`): what
+ * the axis of a template shows is written in the template's hours. Fixed and anchored blocks, and a place from the first
+ * fixed block on, keep `dayMin` – a block put after the first fixed block stays after it, also where a start before it
+ * would show there too (`delta` > 0). A place before it is the template's hour `delta` away. A day whose wake is earlier
+ * (`delta` < 0) shows no block of the morning in the last `-delta` minutes before the first fixed block: a place there
+ * gets the first fixed block's start, the first place after it the day can show. A moved morning block is shown at most at
+ * the day's last start for its length (`PLAN_MAX` less its length – the cut of `wakeShiftedStart`) and at the template's
+ * last start moved (`PLAN_MAX` + `delta`): a place after that takes the earlier of them. Kept in the logical day;
+ * `shiftedStart(unshiftedStart(D))` is where the day shows the block, and again the same place for it.
+ */
+export function unshiftedStart(b: Pick<PlanBlock, 'fixed' | 'anchor' | 'durationMin'>, dayMin: number, delta: number, firstFixed: number): number {
+  if (delta === 0 || b.fixed || b.anchor || dayMin >= firstFixed) return dayMin
+  const shown = Math.min(dayMin, PLAN_MAX - b.durationMin)
+  const startMin = Math.max(PLAN_MIN, Math.min(PLAN_MAX, shown - delta))
+  return startMin < firstFixed ? startMin : firstFixed
+}
+
+/** Where a day whose wake is `delta` minutes from the template's shows a block the template starts at `startMin` (`wakeShiftedStart`). */
+export function shiftedStart(b: Pick<PlanBlock, 'fixed' | 'anchor' | 'durationMin'>, startMin: number, delta: number, firstFixed: number): number {
+  return wakeShiftedStart({ ...b, startMin }, delta, firstFixed) ?? startMin
 }
 
 /** The wake time of a day: your own for the day, else the snapshot's (with the session shift). */
