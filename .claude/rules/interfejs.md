@@ -77,8 +77,17 @@ paths:
   Liczy je `folder.stats(okres)` (IPC `stats`): dni zamrożone z plików ocen (`gradeIndex`), każdy dzień przez zadanie procesu pomocniczego
   `stats` do zdarzeń z `know` (`engine/stats.ts`: `dayStats`, `statsOf`), pamięć wyniku dnia po jego wejściach; dzień bez czytelnego loga =
   „nieczytelne”. „Energia” check-inu = średnia trzech pul (25–100). Strona jest jedną pozycją w `PAGES` (`store/ui.ts`); cyfry Ctrl+1…
-  idą w kolejności menu (`DIGIT_PAGES` w `App.tsx`, D362).
+  idą w kolejności menu (`DIGIT_PAGES` w `app/pages.ts`, D362).
 - `app/Questions.tsx` – pytania kolejki i kopii konfliktowych; `lib/recordText.ts` – pola i wartości po ludzku.
+- `search/` (SNT6, D387, T650–T653) – paleta Ctrl K (`Palette`, `searchStore`; skrót w `useHotkeys` w `App.tsx`, `app/pages.ts` – nazwy ekranów i
+  klawisze menu). Dopasowanie i kolejność – czyste `shared/search.ts` (`fold` – bez ogonków i „ł” jawnie, zakresy podświetleń w oryginale,
+  `buildIndex`/`searchIndex`, `compareDays`, grupy po 5); rekordy: `search/records.ts` (statyczne ekrany, sekcje ustawień po `data-testid`,
+  polecenia + dane okna), dni z `window.rd.searchDays()` (`folder.searchDays`: pliki dni przez `recordView` – czytane po rozmiarze i czasie, bez
+  odczytu niezmienionych) – cały plan dnia jak w „Dziś” (`ownContext`: zdjęcie dnia + zmiany, bez odwołanych i przeniesionych); `complete: false`, gdy nie da się odczytać ustawień, rutyn, próśb, listy roku, pliku albo logu dnia (nigdy „pusto”). Enter: `choose` →
+  `openPick` / `openDay` w `store/ui.ts`; `pick` zużywa jednorazowo ekran docelowy (`takePick` / `takeFoundPick` – rekord, którego już nie ma, kończy się komunikatem, nie czeka: `TodayPage`, `TemplatesPage`, `RequestsPage`,
+  `RoutinesPage`, `SettingsPage`, `CategoriesSection`), ręczne przejście (`navigate`, `openDay`, `openRitual`) go gubi. Ostatnio wybrane:
+  `localStorage` `rd.searchRecent` (klucze rekordów, najwyżej 5). Testy: `tests/unit/search.test.ts`, `tests/web/search-*.test.ts`,
+  `tests/fs/search-days.test.ts`, `tests/e2e/search.spec.ts`.
 
 ## Pułapki
 - Selektor zustand musi zwracać tę samą wartość dla tego samego stanu: `s.view?.x ?? []` tworzy nową tablicę przy

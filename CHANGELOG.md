@@ -1,6 +1,11 @@
 # Changelog
 
-## 1.9.0
+## 1.11.0
+- Rozsuwanie w „Tygodniu”: „Dodaj” z karty nowego bloku na zajęte miejsce w dniu dzisiejszym albo przyszłym przesuwa kolejne bloki elastyczne tego dnia za nowy blok – tak jak „Dodaj” w „Dziś”. Bloki stałe, sesje, chronione i zaczęte zostają.
+- Zakres kilku dni zapisuje się jednym ruchem, a nad tygodniem przez 15 min stoi jedna linia „Przesunięto N bloków w K dniach · Cofnij”. „Cofnij” przywraca wszystkie dni naraz; dzień zmieniony od tego czasu zostaje, jaki jest, z komunikatem.
+- Gdy w zakresie jest dzisiaj, pasek nie dostaje drugiej linii „Cofnij”, a znacznik wariantów zapala się jak po rozsunięciu w „Dziś”. Dzień miniony dostaje tylko nowy blok, bez przesuwania.
+
+## 1.10.0
 - „Ułóż pod energię”: w „Przestaw plan” i w planie porannym nowy wariant „Ułóż pod energię – najniższa energia dnia 35 → 52” z listą zmian kolejności. Pojawia się tylko dla dnia bieżącego, gdy najniższa energia dnia jest poniżej 60, a nowa kolejność podnosi ją co najmniej o 5.
 - Przestawia bloki elastyczne – także regenerację, posiłki i rutyny – tylko w tej samej przerwie między blokami stałymi; stałe i zaczęte zostają na miejscu. Przed zatwierdzeniem granicy koniec pracy może się przesunąć, byle w maksimum dnia; po zatwierdzeniu – nie za granicę.
 - Kliknięcie zmienia plan od razu, z „Przestawiono … · Cofnij” w pasku. Wybór z panelu znacznika nie gasi znacznika, póki plan się nie mieści. W planie porannym karta ma „Ułóż” i „Zostaw” (chowa ją do końca dnia); gdy plan jest już tak ułożony – „Plan już jest tak ułożony.”
@@ -10,6 +15,10 @@
 - „Przesuń resztę wcześniej” przesuwa tylko bloki elastyczne od luki do najbliższego bloku stałego (chronione i zaczęte zostają), z „Przesunięto N bloków · Cofnij” w pasku. Liczba w pytaniu to tyle, ile przesunięcie naprawdę zamknie – czas, który minął w sesji, zajęciach albo na czekaniu przy zaplanowanej przerwie, się nie liczy.
 - Bez odpowiedzi pytanie znika samo, gdy zacznie się kolejny blok po luce albo ją zapełnisz – nic się wtedy nie zmienia. Ręczny „Start” następnego bloku działa jak „Dalej”: pytanie przechodzi na lukę za nim. Kilka luk naraz – jedno pytanie o najbliższą.
 - Pytanie zadaje się raz na lukę, także przy dwóch komputerach, i wraca po ponownym uruchomieniu aplikacji. Komputer ze starszą wersją nie pyta o luki po usunięciu i skróceniu w oknie, dopóki się nie zaktualizuje.
+## 1.7.0
+- Wyszukiwarka: Ctrl K w oknie głównym otwiera okno wyszukiwania nad bieżącym ekranem. Szuka w nazwach i notatkach bloków wszystkich dni (minionych i zaplanowanych), w szablonach, prośbach, rutynach, kategoriach, ekranach i sekcjach ustawień oraz w poleceniach („Nowy blok”, „Nowa prośba”, „Jutro”, „Wczoraj”, „Rytuał” – tylko przechodzą, nic nie przenoszą).
+- Wielkość liter i polskie znaki nie mają znaczenia („zolw” znajdzie „Żółw”); każde wpisane słowo musi być początkiem jakiegoś słowa. Wyniki są w grupach po 5 z „Pokaż jeszcze”, przy bloku data i fragment notatki z podświetloną frazą; bloki – najpierw dziś, potem zaplanowane, potem minione od najnowszych.
+- Strzałki wybierają, Enter otwiera: blok – „Dziś” na jego dniu z otwartym panelem bloku; szablon, prośba, rutyna i kategoria – ich ekran z tym rekordem. Przed wpisaniem czegokolwiek okno pokazuje do 5 ostatnio wybranych wyników i polecenia. Esc albo kliknięcie obok zamyka.
 
 ## 1.6.0
 - Rozsuwanie: gdy przeciągniesz blok, wydłużysz go krawędzią albo dodasz nowy blok z siatki na zajęte miejsce w „Dziś”, kolejne bloki elastyczne dostają w planie nowe godziny – bez nakładania, w trakcie przeciągania widać ich nowe miejsca (przerywana obwódka). Bloki stałe, chronione i zaczęte zostają, elastyczny przeskakuje stały jak w prognozie.

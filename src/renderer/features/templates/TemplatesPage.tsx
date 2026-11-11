@@ -27,7 +27,7 @@ import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { isSaved, saveRecord, tryRemoveRecord, tryUpdateRecord, updateRecord, useData } from '../../store/data'
 import { countDay } from '../../store/day'
 import { useNewShortcut } from '../../lib/escape'
-import { undoToast } from '../../store/ui'
+import { takeFoundPick, undoToast, useUi } from '../../store/ui'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis } from '../plan/dayItems'
@@ -53,6 +53,20 @@ export function TemplatesPage() {
     setSelected(id)
   }
   useNewShortcut(() => void create())
+  // A template (or one of its blocks) picked in the search (Ctrl K): opened once; one that is gone is said so.
+  const pick = useUi((s) => s.pick)
+  const [openBlock, setOpenBlock] = useState<string | null>(null)
+  useEffect(() => {
+    const ofPick = (p: { kind: string; id: string; parent?: string | undefined }) => (p.kind === 'template' ? p.id : p.parent)
+    const p = takeFoundPick(
+      (x) => x.kind === 'template' || x.kind === 'templateBlock',
+      (x) => templates.some((t) => t.id === ofPick(x)),
+      'Tego szablonu nie ma już.'
+    )
+    if (!p) return
+    setSelected(ofPick(p)!)
+    setOpenBlock(p.kind === 'templateBlock' ? p.id : null)
+  }, [pick, templates])
   const current = templates.find((t) => t.id === selected) ?? null
   return (
     <div className="flex min-h-0 flex-1" data-testid="templates">
@@ -89,7 +103,7 @@ export function TemplatesPage() {
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         {current ? (
-          <Editor key={current.id} template={current} today={today} onCopied={setSelected} onRemoved={() => setSelected(null)} />
+          <Editor key={current.id} template={current} today={today} openBlock={openBlock} onBlockOpened={() => setOpenBlock(null)} onCopied={setSelected} onRemoved={() => setSelected(null)} />
         ) : (
           <EmptyState why={templates.length ? 'Wybierz szablon z listy.' : 'Nie ma jeszcze szablonów. Szablon to plan dnia danego typu, z którego powstaje każdy taki dzień.'} action={{ label: '+ Szablon', run: () => void create() }} />
         )}
@@ -98,12 +112,18 @@ export function TemplatesPage() {
   )
 }
 
-function Editor({ template, today, onCopied, onRemoved }: { template: Template; today: string; onCopied: (id: string) => void; onRemoved: () => void }) {
+function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved }: { template: Template; today: string; openBlock: string | null; onBlockOpened: () => void; onCopied: (id: string) => void; onRemoved: () => void }) {
   const { rd, lectures, routines, requests } = useData()
   const view = useData((s) => s.view)!
   const tomorrow = addDays(today, 1)
   const [from, setFrom] = useState(tomorrow)
   const [selected, setSelected] = useState<string | null>(null)
+  // The block the search picked (only one of the version shown – the one in force from tomorrow).
+  useEffect(() => {
+    if (!openBlock) return
+    setSelected(openBlock)
+    onBlockOpened()
+  }, [openBlock])
   const rel = paths.record('template', template.id)
   // The same objects while nothing they come from changes: the day, its axis and the memo of the drag's preview stay.
   const version = useMemo(() => {

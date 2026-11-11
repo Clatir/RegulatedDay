@@ -598,7 +598,13 @@ test('rozsuwanie (D367): blok przeciągnięty na zajęte miejsce przesuwa kolejn
       await expect(b).not.toHaveAttribute('data-pushed', 'true')
       await expect(b).toContainText('15:00')
       const line = page.getByTestId('bar-line-moved:push')
-      await expect(line).toContainText('Przesunięto 2 bloki')
+      // The change's line stands after every line of the day (T584): at some hours of the run two of them (a morning
+      // question, water) fill the bar and it waits in „⋯” – unfold it then, the line works there the same.
+      const more = page.getByTestId('bar-main').getByTestId('bar-group-more')
+      await expect(async () => {
+        if (!(await line.count()) && (await more.count()) && (await more.getAttribute('aria-pressed')) !== 'true') await more.click()
+        await expect(line).toContainText('Przesunięto 2 bloki', { timeout: 1_000 })
+      }).toPass({ timeout: 10_000 })
       await page.getByTestId('bar-act-moved-undo').click()
       await expect.poll(starts).toEqual({ a: 780, b: 840, c: 900 })
       await expect(line).toHaveCount(0)
