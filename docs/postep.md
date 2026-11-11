@@ -46,8 +46,13 @@ dodaje biblioteki edytora); SNT3 – przegląd xhigh części limitu (format pli
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| SNT6 wyszukiwarka Ctrl K | 1.6.0 | – | PR w toku (gałąź `claude/snt6-wyszukiwanie`) | ok. 2 h (4–6 h) – jedna runda przeglądu high |
-| SNT3 Markdown w notatkach | – | – | kod gotowy w `ws3`, przegląd xhigh w toku | – (6–9 h, edytor na żywo) |
+| SNT6 wyszukiwarka Ctrl K | 1.7.0 albo następna wolna | #67 | gotowy; czeka na #65 (J3, 1.6.0) i #68 (poprawka `tests/fs/restore.test.ts`) na `main`, potem w `ws6` `git merge origin/main`, wersja, zielone CI, scalenie | ok. 2 h (4–6 h) – jedna runda przeglądu high |
+| SNT3 Markdown w notatkach | następna wolna po SNT6 | – | kod i przegląd gotowe (`9571e0c` na `claude/snt3-markdown`, drzewo `ws3`); zostało: wersja, `LONG_NOTE_FROM` = ta wersja, CHANGELOG, odbiór SNT3.x, wpis, PR | – (6–9 h, edytor na żywo) |
+
+**Przejęcie 11.11 (awaria maszyny):** sesję przejęła nowa sesja. Wynik rundy 3 przeglądu SNT3 przepadł, więc puściła
+przegląd high na poprawkach rund 1–2 (10 uwag, 2 high). Druga runda high objęła poprawki tamtej rundy (10 uwag, 1 high).
+Oba zestawy poprawił `wykonawca-sonnet`, każdy punkt z testem; to T670–T673. Lokalnie 1867 testów zielonych, jedyny
+czerwony `tests/fs/restore.test.ts` (naprawia go #68).
 
 **SNT6 (1.6.0):** paleta Ctrl K (`renderer/features/search/`), dopasowanie `shared/search.ts`, korpus dni
 `DataFolder.searchDays()` (cały plan dnia jak w „Dziś”), skok do rekordu `useUi.pick`; D387, T650–T654; odbiór
