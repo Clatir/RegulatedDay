@@ -10,35 +10,60 @@ import { paths } from '@shared/data/paths'
 import { durationLabel, plDate } from '@shared/format'
 import { newId } from '@shared/model/ids'
 import { personName } from '@shared/model/rd'
-import { DEFAULT_ESTIMATE_MIN, ESTIMATE_RANGE, newRequest, type RequestRecord, type RequestState } from '@shared/model/requests'
+import { DEFAULT_ESTIMATE_MIN, ESTIMATE_RANGE, newRequest, REQUEST_STATE_NAMES, REQUEST_STATES, requestStateOrder, type RequestRecord } from '@shared/model/requests'
 import { FilterBar, useFilters } from '../../components/FilterBar'
 import { Choice, DurationField, TextField } from '../../components/fields'
-import { EmptyState, Section } from '../../components/ui'
+import { EmptyState, Section, cx } from '../../components/ui'
 import { useNow } from '../../lib/clock'
 import { addPerson, saveRd, saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { useNewShortcut } from '../../lib/escape'
-import { undoToast } from '../../store/ui'
+import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 
-const STATE_NAMES: Record<RequestState, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobione', dropped: 'porzucone' }
 
 export function RequestsPage() {
   const { requests, rd } = useData()
-  const [filters] = useFilters('requests')
+  const [filters, setFilters] = useFilters('requests')
+  const stateFilters = filters.filter((f) => f.startsWith('state:')).map((f) => f.slice(6))
+  const personFilters = filters.filter((f) => f.startsWith('person:')).map((f) => f.slice(7))
+  const visible = (r: RequestRecord) => (!stateFilters.length || stateFilters.includes(r.state)) && (!personFilters.length || personFilters.includes(r.person ?? '?'))
+  const [chosen, setChosen] = useState<string | null>(null)
+  const [bring, setBring] = useState<string | null>(null)
   const create = async () => {
     const id = newId()
     await saveRecord(paths.record('request', id), null, newRequest(id, Date.now(), { person: null, estimateMin: DEFAULT_ESTIMATE_MIN, note: '' }))
   }
   useNewShortcut(() => void create())
+  // What the search (Ctrl K) left here: the command „Nowa prośba”, or a request – its filters cleared when they hide it,
+  // its row marked and its note field focused (the row is edited in place).
+  const pick = useUi((s) => s.pick)
+  useEffect(() => {
+    if (pick?.kind === 'command' && pick.id === 'newRequest') {
+      takePick((p) => p.kind === 'command' && p.id === 'newRequest')
+      if (rd.general.modules.requests) void create()
+      return
+    }
+    const p = takeFoundPick((x) => x.kind === 'request', (x) => requests.some((r) => r.id === x.id), 'Tej prośby nie ma już.')
+    const r = p ? requests.find((x) => x.id === p.id) : undefined
+    if (!r) return
+    if (!visible(r)) setFilters([])
+    setChosen(r.id)
+    setBring(r.id)
+  }, [pick, requests])
+  useEffect(() => {
+    if (!bring) return
+    const row = document.querySelector(`[data-request="${bring}"]`)
+    if (!row) return
+    setBring(null)
+    row.scrollIntoView({ block: 'center' })
+    row.querySelector<HTMLElement>('[data-testid="request-note"]')?.focus()
+  }, [bring, filters])
   if (!rd.general.modules.requests) return <EmptyState why="Moduł próśb jest wyłączony – włączysz go w ustawieniach." />
 
-  const stateFilters = filters.filter((f) => f.startsWith('state:')).map((f) => f.slice(6))
-  const personFilters = filters.filter((f) => f.startsWith('person:')).map((f) => f.slice(7))
   const shown = requests
-    .filter((r) => !stateFilters.length || stateFilters.includes(r.state))
-    .filter((r) => !personFilters.length || personFilters.includes(r.person ?? '?'))
+    .filter(visible)
     .sort((a, b) => order(a) - order(b) || b.createdAt - a.createdAt)
   const options = [
-    ...(['queued', 'planned', 'done', 'dropped'] as RequestState[]).map((s) => ({ id: `state:${s}`, label: STATE_NAMES[s], count: requests.filter((r) => r.state === s).length })),
+    ...REQUEST_STATES.map((s) => ({ id: `state:${s}`, label: REQUEST_STATE_NAMES[s], count: requests.filter((r) => r.state === s).length })),
     ...rd.people.filter((p) => !p.archived).map((p) => ({ id: `person:${p.id}`, label: p.name, count: requests.filter((r) => r.person === p.id).length })),
     { id: 'person:?', label: 'osoba: ?', count: requests.filter((r) => !r.person).length }
   ].filter((o) => o.count > 0 || filters.includes(o.id))
@@ -57,7 +82,7 @@ export function RequestsPage() {
       ) : (
         <div className="flex flex-col gap-1.5" data-testid="request-list">
           {shown.map((r) => (
-            <Row key={r.id} r={r} />
+            <Row key={r.id} r={r} marked={r.id === chosen} />
           ))}
         </div>
       )}
@@ -68,9 +93,9 @@ export function RequestsPage() {
   )
 }
 
-const order = (r: RequestRecord) => ({ queued: 0, planned: 1, done: 2, dropped: 3 })[r.state]
+const order = (r: RequestRecord) => requestStateOrder(r.state)
 
-function Row({ r }: { r: RequestRecord }) {
+function Row({ r, marked }: { r: RequestRecord; marked: boolean }) {
   const rel = paths.record('request', r.id)
   const set = (patch: Partial<RequestRecord>) => void updateRecord(rel, (raw) => ({ ...raw, ...patch }))
   const remove = async () => {
@@ -78,12 +103,12 @@ function Row({ r }: { r: RequestRecord }) {
     if (saved) undoToast('Prośba usunięta', () => void saveRecord(rel, null, before))
   }
   return (
-    <div className="grid items-center gap-2 rounded border border-line bg-panel px-3 py-1.5" style={{ gridTemplateColumns: '180px 110px minmax(0,1fr) 120px auto' }} data-testid="request-row">
+    <div className={cx('grid items-center gap-2 rounded border px-3 py-1.5', marked ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} style={{ gridTemplateColumns: '180px 110px minmax(0,1fr) 120px auto' }} data-testid="request-row" data-request={r.id}>
       <PersonChoice value={r.person} onChange={(person) => set({ person })} />
       <DurationField value={r.estimateMin} range={ESTIMATE_RANGE} onCommit={(estimateMin) => set({ estimateMin })} placeholder="szacunek" aria-label="Szacunek" errorPlacement="float" data-testid="request-estimate" />
       <TextField value={r.note} onCommit={(note) => set({ note })} max={500} placeholder="czego dotyczy" aria-label="Notatka" errorPlacement="float" data-testid="request-note" />
       <span className="text-[12px] text-muted">
-        {STATE_NAMES[r.state]}
+        {REQUEST_STATE_NAMES[r.state]}
         {r.day ? ` ${plDate(r.day)}` : ''}
       </span>
       <span className="flex gap-1.5">

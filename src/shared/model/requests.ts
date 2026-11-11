@@ -11,6 +11,10 @@ export const REQUEST_SCHEMA = 1
 /** queued – waiting in the queue; planned – chosen into a day's block; done – done; dropped – will not be done. */
 export type RequestState = 'queued' | 'planned' | 'done' | 'dropped'
 export const REQUEST_STATES: readonly RequestState[] = ['queued', 'planned', 'done', 'dropped']
+/** The states by their names in the interface (the list, the search). */
+export const REQUEST_STATE_NAMES: Record<RequestState, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobione', dropped: 'porzucone' }
+/** The order the list shows states in (the order of `REQUEST_STATES`). */
+export const requestStateOrder = (state: RequestState): number => REQUEST_STATES.indexOf(state)
 
 export interface RequestRecord {
   id: string

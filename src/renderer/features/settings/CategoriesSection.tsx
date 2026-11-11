@@ -4,7 +4,7 @@
  * komputera”, contact, the class mode, „nie przerywa regeneracji”, „po końcu pracy jak projekt” – dated like every
  * setting the engine reads; the name and colour apply at once. Removing one archives it (it stays in the history).
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { newId } from '@shared/model/ids'
 import type { CategoryRules } from '@shared/model/categories'
 import { CATEGORY_COLORS } from '@shared/model/rd'
@@ -15,6 +15,7 @@ import { Section, Toggle, cx } from '../../components/ui'
 import { saveRd, useData } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { useBusy } from '../../lib/busy'
+import { takeFoundPick, useUi } from '../../store/ui'
 import { CLASS_NAMES, blockColor } from '../plan/blockView'
 import { SettingNumber } from './SettingNumber'
 import { useShared } from './SharedSettings'
@@ -49,6 +50,21 @@ export function CategoriesSection() {
   const [open, setOpen] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [name, setName] = useState('')
+  // A category picked in the search (Ctrl K): its row open (an archived one shows with the archive), brought into view once.
+  const pick = useUi((x) => x.pick)
+  const [brought, setBrought] = useState<string | null>(null)
+  useEffect(() => {
+    const p = takeFoundPick((x) => x.kind === 'category', (x) => !!s.categories[x.id], 'Tej kategorii nie ma już w ustawieniach.')
+    if (!p) return
+    setOpen(p.id)
+    if (rd.categories[p.id]?.archived) setShowArchived(true)
+    setBrought(p.id)
+  }, [pick, s.categories, rd.categories])
+  useEffect(() => {
+    if (!brought) return
+    document.querySelector(`[data-category="${brought}"]`)?.scrollIntoView({ block: 'center' })
+    setBrought(null)
+  }, [brought])
   const ids = Object.keys(s.categories).filter((id) => showArchived || !rd.categories[id]?.archived)
   const [busy, run] = useBusy()
   // The name is taken at once: a second click (or Enter and a click) while it saves adds no second category (A7-14).
@@ -74,7 +90,7 @@ export function CategoriesSection() {
         const meta = rd.categories[id]
         const color = blockColor(id, { rd, settings: s })
         return (
-          <div key={id} className={cx('flex flex-col gap-2 rounded border border-line px-2.5 py-1.5', meta?.archived && 'border-dashed')} data-testid="category-row">
+          <div key={id} className={cx('flex flex-col gap-2 rounded border border-line px-2.5 py-1.5', meta?.archived && 'border-dashed')} data-testid="category-row" data-category={id}>
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: blockFill(color, brightness), border: `1px solid ${color}` }} />
               <TextField value={meta?.name ?? ''} onCommit={(n) => void setMeta(id, { name: n })} required max={60} shellClassName="w-[200px]" aria-label="Nazwa kategorii" />

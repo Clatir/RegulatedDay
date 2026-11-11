@@ -84,6 +84,12 @@ export function patchSettings(patch: Record<string, unknown>): void {
   useWizard.setState({ settings: settingsFrom(deepMerge<unknown>(s, patch), s) })
 }
 
+/**
+ * The wizard takes the window (no folder on this computer until „Później”; a folder that did not open only when you ask for
+ * it): nothing else – the menu, the search – works under it.
+ */
+export const wizardShown = (open: boolean, asked: boolean, status: string | null): boolean => open && (status === 'none' || (status === 'failed' && asked))
+
 export function resetWizard(): void {
   useWizard.setState({ open: true, ...initial() })
 }

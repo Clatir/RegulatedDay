@@ -36,6 +36,32 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   (D364); blok 2 = ciąg L (OPS1 → OPS2 → OPS3), pytania odpowiedziane (D380–D386); bloki 3–4 bez decyzji o starcie.
   Opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`.
 
+### SNT3 i SNT6 – stan
+Sesja równoległa do ciągu J (wyjątek od „jedna sesja do `main`”, zgoda 10.11); numery D387–D399 (D380–D386 zajął ciąg L, PR #66),
+T650–T699.
+**Przed etapem (10.11):** pytania w sześciu rundach – D387 (SNT6), D388 (SNT3). Ryzyka: SNT6 – korpus wszystkich
+dni w procesie głównym; SNT3 – wierność zapisu Markdown (stare notatki bez zmian), limit 10 000 (starsza wersja na
+drugim komputerze tnie do 2000 – ostrzeżenie), linki tylko http/https. Model: główna sesja Opus 5.5 · high,
+`wykonawca-sonnet` · high równolegle w `.claude/worktrees/ws6` i `ws3` (ws3 – własna kopia `node_modules`, bo SNT3
+dodaje biblioteki edytora); SNT3 – przegląd xhigh części limitu (format pliku).
+
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| SNT6 wyszukiwarka Ctrl K | 1.7.0 | #67 | 11.11 po #65 i #68: `origin/main` scalony w `ws6`, wersja 1.7.0; CI w toku, scalenie po zielonym | ok. 2,5 h (4–6 h) – jedna runda przeglądu high |
+| SNT3 Markdown w notatkach | następna wolna po SNT6 | – | kod i przegląd gotowe (`9571e0c` na `claude/snt3-markdown`, drzewo `ws3`); zostało: wersja, `LONG_NOTE_FROM` = ta wersja, CHANGELOG, odbiór SNT3.x, wpis, PR | – (6–9 h, edytor na żywo) |
+
+**Przejęcie 11.11 (awaria maszyny):** sesję przejęła nowa sesja. Wynik rundy 3 przeglądu SNT3 przepadł, więc puściła
+przegląd high na poprawkach rund 1–2 (10 uwag, 2 high). Druga runda high objęła poprawki tamtej rundy (10 uwag, 1 high).
+Oba zestawy poprawił `wykonawca-sonnet`, każdy punkt z testem; to T670–T673. Lokalnie 1867 testów zielonych, jedyny
+czerwony `tests/fs/restore.test.ts` (naprawia go #68).
+
+**SNT6 (1.7.0):** paleta Ctrl K (`renderer/features/search/`), dopasowanie `shared/search.ts`, korpus dni
+`DataFolder.searchDays()` (cały plan dnia jak w „Dziś”), skok do rekordu `useUi.pick`; D387, T650–T654; odbiór
+SNT6.1–SNT6.3. Przegląd high: 10 uwag (1 high – niezmienione bloki szablonu nieprzeszukiwane; 3 medium; reszta
+porządkowe) – wszystkie poprawione z testami, Ctrl K nad kreatorem – nic. **Uwagi na później:** pierwsze otwarcie
+palety liczy plan każdego dnia z plikiem w procesie głównym (`readDay` + `ownContext`) – przy latach danych
+pamięć podręczna planu dnia po podpisie wejść; ukryte słowa poleceń („nowe”, „podsumowanie”) – T650.
+
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →
    `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport nowego przebiegu trafi do
