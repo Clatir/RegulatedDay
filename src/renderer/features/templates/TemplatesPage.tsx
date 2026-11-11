@@ -19,7 +19,7 @@ import { addDays, weekday } from '@shared/time/zone'
 import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import type { RawRecord } from '@shared/api'
-import { isStored, saveRecord, tryRemoveRecord, tryUpdateRecord, updateRecord, useData } from '../../store/data'
+import { saveRecord, storedAnswer, tryRemoveRecord, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
 import { countDay } from '../../store/day'
 import { useNewShortcut } from '../../lib/escape'
 import { undoToast } from '../../store/ui'
@@ -140,9 +140,11 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   const byPlanId = new Map(model.ctx.plan.filter((b) => b.origin === 'template' && b.sourceId).map((b) => [b.id, b.sourceId!]))
   const block = version.blocks.find((b) => b.id === selected) ?? null
   const putBlock = (b: PlanBlock) => saveVersion((v) => ({ blocks: v.blocks.some((x) => x.id === b.id) ? v.blocks.map((x) => (x.id === b.id ? b : x)) : [...v.blocks, b] }))
-  /** A block of the version changed; answers whether it was saved (the panel's note puts back what it shows when it was not – also when the template is gone: nothing was written). */
-  const patchBlock = (id: string, patch: Partial<PlanBlock>): Promise<boolean> =>
-    tryUpdateRecord(rel, changed(versionChange((v) => ({ blocks: v.blocks.map((x) => (x.id === id ? { ...x, ...patch } : x)) })))).then(isStored)
+  /** A block of the version changed; answers what became of the save (the panel's note puts back what it shows only when it was refused – also when the template is gone: nothing was written; a question keeps it). */
+  const patchBlock = (id: string, patch: Partial<PlanBlock>): Promise<SaveAnswer> => {
+    const state: SendState = { afterSend: false }
+    return tryUpdateRecord(rel, changed(versionChange((v) => ({ blocks: v.blocks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))), state).then((out) => storedAnswer(out, state))
+  }
 
   const copy = async () => {
     const id = newId()

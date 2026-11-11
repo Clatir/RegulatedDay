@@ -8,7 +8,7 @@ import { Editor } from '@tiptap/core'
 import { MarkdownManager } from '@tiptap/markdown'
 import { TextSelection } from '@tiptap/pm/state'
 import { describe, expect, it } from 'vitest'
-import { canonicalNote, escapeNoteText, noteExtensions, noteGuard, noteMarkdown } from '@renderer/features/note/noteMarkdown'
+import { canonicalNote, escapeNoteText, noteExtensions, noteGuard, noteLength, noteMarkdown } from '@renderer/features/note/noteMarkdown'
 import { NOTE_MAX } from '@shared/model/note'
 
 function open(md: string, onUpdate?: () => void): Editor {
@@ -538,5 +538,225 @@ describe('biblioteka zostaje taka, jaka jest (T661)', () => {
     expect(library.createImplicitEmptyParagraphsFromSpace({ raw: '\n\n\n' }, 0, 2)).toHaveLength(0)
     // The note's own manager is a subclass: the same method writes „<” as it is.
     expect(through('a < b')).toBe('a < b')
+  })
+})
+
+// ---- Trzecia runda przeglądu (T670–T673) ----
+
+const codeBlock = (t: string): NodeJson => ({ type: 'codeBlock', content: [text(t)] })
+
+describe('blok kodu z płotem w treści (T671)', () => {
+  it('blok kodu z linią ``` zostaje blokiem kodu (płot dłuższy od najdłuższego ciągu graweru), reszta notatki bez zmian', () => {
+    const r = writeRead(doc(codeBlock('a\n```\nb'), para(text('x', 'bold'))))
+    expect(r.degraded).toBe(false)
+    expect(r.same).toBe(true)
+    expect(r.back.state.doc.child(0).type.name).toBe('codeBlock')
+    expect(r.back.state.doc.child(0).textContent).toBe('a\n```\nb')
+    expect(r.back.getHTML()).toContain('<strong>x</strong>')
+    expect(r.md).toContain('````')
+    expect(through(r.md)).toBe(r.md)
+  })
+  it('płot rośnie z najdłuższym ciągiem w treści, a zwykły blok kodu zostaje na trzech', () => {
+    expect(writeRead(doc(codeBlock('a\n`````\nb'))).md.startsWith('``````\n')).toBe(true)
+    expect(writeRead(doc(codeBlock('x = 1'))).md).toBe('```\nx = 1\n```')
+    expect(writeRead(doc(codeBlock('a ` b ``'))).md.startsWith('```\n')).toBe(true)
+  })
+  it('blok kodu z linią ~~~ albo kończącą się płotem nie degraduje', () => {
+    for (const body of ['a\n~~~\nb', '````\n', 'x\n```js\ny', '```']) {
+      const r = writeRead(doc(codeBlock(body), para(text('x'))))
+      expect(r.degraded, body).toBe(false)
+      expect(r.back.state.doc.child(0).type.name, body).toBe('codeBlock')
+    }
+  })
+})
+
+describe('adres linku z nawiasem, spacją, „<” (T671)', () => {
+  it('link z niesparowanym „)” w adresie wraca z linkiem i kursywą obok', () => {
+    const r = writeRead(doc(para(text('see ', 'italic'), link('https://x.com/a)', 'https://x.com/a)'), text(' end'))))
+    expect(r.degraded).toBe(false)
+    expect(r.same).toBe(true)
+    expect(r.back.getHTML()).toContain('<em>see</em>')
+    expect([...r.back.getHTML().matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(['https://x.com/a)'])
+  })
+  it('adres z „(”, spacją i „<” – akapit nie jest spłaszczony, adres jest ten sam albo zakodowany procentowo', () => {
+    for (const href of ['https://x.com/a(b', 'https://x.com/a b', 'https://x.com/a<b>c', 'https://x.com/(a)b)']) {
+      const r = writeRead(doc(para(text('t ', 'bold'), link('tekst', href), text(' end'))))
+      expect(r.degraded, href).toBe(false)
+      expect(r.same, href).toBe(true)
+      const hrefs = [...r.back.getHTML().matchAll(/href="([^"]*)"/g)].map((m) => m[1])
+      expect(hrefs, href).toHaveLength(1)
+      expect(r.back.getHTML(), href).toContain('<strong>t</strong>')
+    }
+  })
+})
+
+describe('znacznik na samej interpunkcji i kod ze spacją brzegową (T671)', () => {
+  it('„!!!” z pogrubieniem po spacji zostaje pogrubione (zapis ze „**”)', () => {
+    for (const mark of ['bold', 'italic', 'strike']) {
+      const r = writeRead(doc(para(text('x '), text('!!!', mark))))
+      expect(r.degraded, mark).toBe(false)
+      expect(r.same, mark).toBe(true)
+      expect(r.md, mark).toMatch(/^x (\*\*|\*|~~)!!!\1$/)
+      expect(r.back.getHTML(), mark).toMatch(/<(strong|em|s)>!!!<\/(strong|em|s)>/)
+    }
+  })
+  it('„!!!” przy literze (nie da się zapisać z gwiazdkami) zostaje tekstem – bez straty znaków', () => {
+    const r = writeRead(doc(para(text('x'), text('!!!', 'bold'), text('y'))))
+    expect(r.degraded).toBe(false)
+    expect(r.back.getText()).toBe('x!!!y')
+  })
+  it('same spacje z pogrubieniem – znacznik zdjęty, tekst zostaje', () => {
+    const r = writeRead(doc(para(text('a'), text('   ', 'bold'), text('b'))))
+    expect(r.degraded).toBe(false)
+    expect(r.same).toBe(true)
+    expect(r.back.getText()).toBe('a   b')
+  })
+  it('kod inline ze spacją na brzegu: spacje wychodzą poza znaczniki (biblioteka robi to sama), tekst i reszta bez zmian', () => {
+    const r = writeRead(doc(para(text('a'), text(' y ', 'code'), text('b'))))
+    expect(r.degraded).toBe(false)
+    expect(r.same).toBe(true)
+    expect(r.back.getText()).toBe('a y b')
+    expect(through(r.md)).toBe(r.md)
+  })
+})
+
+describe('strażnik biegnie przy zapisie, nie przy każdym znaku (T672)', () => {
+  it('wpisywanie znaków nie uruchamia strażnika, zapis uruchamia go raz', () => {
+    const e = open('x'.repeat(3000))
+    const before = noteGuard.runs
+    typeKeys(e, 'abcdefghij *kursywa* _a_')
+    expect(noteGuard.runs).toBe(before)
+    e.getMarkdown()
+    e.getMarkdown()
+    expect(noteGuard.runs).toBe(before + 1)
+    e.destroy()
+  })
+  it('limit nadal działa bez strażnika w filtrze', () => {
+    const e = open('x'.repeat(NOTE_MAX - 5))
+    const before = noteGuard.runs
+    e.view.dispatch(e.state.tr.insertText('12345678', e.state.doc.content.size - 1))
+    expect(e.state.doc.textContent).toHaveLength(NOTE_MAX - 5)
+    e.view.dispatch(e.state.tr.insertText('12345', e.state.doc.content.size - 1))
+    expect(e.state.doc.textContent).toHaveLength(NOTE_MAX)
+    expect(noteGuard.runs).toBe(before)
+    e.destroy()
+  })
+})
+
+describe('zwykły tekst z „http://” nie dostaje encji (T673)', () => {
+  it('„see http://a here” i „use the https:// prefix” zapisują się jak wpisane, bez linku po odczycie', () => {
+    for (const t of ['see http://a here', 'use the https:// prefix', 'http://', 'a http://b']) {
+      const { written, back } = typed(t)
+      expect(written, t).toBe(t)
+      expect(back.getText(), t).toBe(t)
+      expect(back.getHTML(), t).not.toContain('<a ')
+      back.destroy()
+    }
+  })
+  it('tekst, który bez ucieczki byłby linkiem, nadal ją dostaje i wraca tekstem', () => {
+    const r = writeRead(doc(para(text('see http://a.b/c here'))))
+    expect(r.md).toContain('&#58;')
+    expect(r.degraded).toBe(false)
+    expect(r.same).toBe(true)
+    expect(r.back.getHTML()).not.toContain('<a ')
+    expect(r.back.getText()).toBe('see http://a.b/c here')
+  })
+  it('wpisany adres „http://a ” i „http://a.b ” – edytor i odczyt zgadzają się co do linku (próg > 8 znaków)', () => {
+    for (const t of ['x http://a ', 'x http://a.b ']) {
+      const { written, back } = typed(t)
+      const e = open('')
+      typeKeys(e, t)
+      const linked = e.getHTML().includes('<a ')
+      expect(back.getHTML().includes('<a '), t).toBe(linked)
+      expect(through(written), t).toBe(written)
+      e.destroy()
+      back.destroy()
+    }
+  })
+})
+
+// ---- Czwarta runda przeglądu (T670–T673) ----
+
+/** The addresses of the links of an editor, as the document holds them. */
+function hrefsOf(e: Editor): string[] {
+  const out: string[] = []
+  e.state.doc.descendants((n) => void n.marks.forEach((m) => m.type.name === 'link' && out.push(String(m.attrs.href))))
+  return out
+}
+
+describe('jedna miara długości: filtr, licznik i sprawdzenie przy zapisie (T672)', () => {
+  it('noteLength to długość zwykłego zapisu: bez końcowych znaków nowej linii i z nawiasami adresu, po którym idzie tekst', () => {
+    const e = open('')
+    const trailing = e.schema.nodeFromJSON(doc(para(text('a'), { type: 'hardBreak' })))
+    expect(noteLength(e, trailing)).toBe(noteMarkdown(e, trailing).replace(/\n+$/, '').length)
+    const href = 'https://x.y/a'
+    const brackets = e.schema.nodeFromJSON(doc(para(link(href, href), text('b'))))
+    expect(noteLength(e, brackets)).toBe(noteMarkdown(e, brackets).length)
+    e.destroy()
+  })
+})
+
+describe('znacznik na interpunkcji liczony po ciągu znacznika, nie po węźle (T671)', () => {
+  it('pogrubienie na „abc!!!” z kursywą tylko na „abc” zostaje też na „!!!”', () => {
+    const r = writeRead(doc(para(text('x '), text('abc', 'bold', 'italic'), text('!!!', 'bold'), text(' y'))))
+    expect(r.degraded).toBe(false)
+    expect(r.same).toBe(true)
+    expect(r.back.getHTML()).toMatch(/<strong>(<em>abc<\/em>|<em>abc<\/em>)!!!<\/strong>/)
+  })
+  it('„(**!!!**)”: interpunkcja obok też otwiera i zamyka – pogrubienie zostaje', () => {
+    const r = writeRead(doc(para(text('('), text('!!!', 'bold'), text(')'))))
+    expect(r.degraded).toBe(false)
+    expect(r.same).toBe(true)
+    expect(r.md).toBe('(**!!!**)')
+    expect(r.back.getHTML()).toContain('<strong>!!!</strong>')
+  })
+  it('przy literze nadal schodzi (nie da się zapisać), bez straty znaków', () => {
+    const r = writeRead(doc(para(text('x'), text('!!!', 'bold'), text('y'))))
+    expect(r.degraded).toBe(false)
+    expect(r.back.getText()).toBe('x!!!y')
+  })
+})
+
+describe('„http://” przy znaczniku (T673)', () => {
+  it('„http://” i kursywa „a” obok: bez pełnej ucieczki, bez linku, kursywa zostaje', () => {
+    const before = noteGuard.escaped
+    const r = writeRead(doc(para(text('http://'), text('a', 'italic'))))
+    expect(noteGuard.escaped).toBe(before)
+    expect(r.degraded).toBe(false)
+    expect(r.same).toBe(true)
+    expect(r.back.getHTML()).not.toContain('<a ')
+    expect(r.back.getHTML()).toContain('<em>a</em>')
+    expect(r.back.getText()).toBe('http://a')
+  })
+  it('autolink bierze cały adres, nie jego prefiks: ogon z „\'” albo niesparowanym „)” zostaje tekstem', () => {
+    const e = open('')
+    const link = e.extensionManager.extensions.find((x) => x.name === 'link')!
+    const should = (link.options as { shouldAutoLink: (u: string) => boolean }).shouldAutoLink
+    expect(should('https://x.com/a')).toBe(true)
+    expect(should("https://x.com/a'")).toBe(false)
+    expect(should('https://x.com/a)')).toBe(false)
+    expect(should('http://a')).toBe(false)
+    e.destroy()
+    for (const t of ["zobacz https://x.com/a') koniec ", 'zobacz https://x.com/a) koniec ']) {
+      const was = { escaped: noteGuard.escaped, degraded: noteGuard.degraded }
+      const { written, back } = typed(t)
+      expect(noteGuard.escaped, t).toBe(was.escaped)
+      expect(noteGuard.degraded, t).toBe(was.degraded)
+      expect(through(written), t).toBe(written)
+      expect(back.getText(), t).toBe(t.trimEnd())
+      back.destroy()
+    }
+  })
+})
+
+describe('adres linku ze znakiem ukośnika wstecznego (T671)', () => {
+  it('adres z ukośnikiem wstecznym na końcu, przed „_” i „(” wraca identyczny', () => {
+    for (const href of ['https://x/(a\\', 'https://x.com/a\\_b', 'https://x.com/a\\(b', 'https://x.com/a\\\\b', 'https://x.com/a)\\']) {
+      const r = writeRead(doc(para(text('t ', 'bold'), link('tekst', href), text(' end'))))
+      expect(r.degraded, href).toBe(false)
+      expect(r.same, href).toBe(true)
+      expect(hrefsOf(r.back), href).toEqual([href])
+      expect(r.back.getText(), href).toBe('t tekst end')
+    }
   })
 })

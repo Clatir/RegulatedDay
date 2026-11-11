@@ -14,7 +14,8 @@ import { safeLinkUrl } from '@shared/noteLink'
 import { cx } from '../../components/ui'
 import { handleEscape, onModal, tabTarget, topModal, useEscapeLayer } from '../../lib/escape'
 import { toast } from '../../store/ui'
-import { loadNote, noteExtensions, noteMarkdown } from './noteMarkdown'
+import type { SaveAnswer } from '../../store/data'
+import { loadNote, noteExtensions, noteLength, noteMarkdown, plainNote } from './noteMarkdown'
 
 /**
  * What was typed as the address of a link, with its scheme: „localhost:3000” and „example.com:8080/x” have none (https is
@@ -45,13 +46,15 @@ function Tool({ label, title, active, onClick, testId }: { label: ReactNode; tit
   )
 }
 
-export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { value: string; onCommit: (note: string) => void | Promise<boolean>; olderComputers: readonly string[]; readOnly?: boolean }) {
+export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { value: string; onCommit: (note: string) => void | Promise<SaveAnswer>; olderComputers: readonly string[]; readOnly?: boolean }) {
   const [expanded, setExpanded] = useState(false)
   const [length, setLength] = useState(value.length)
   const [link, setLink] = useState<string | null>(null)
   // The saved note the editor shows (what it was opened with, what it saved last); `dirty`: changed since.
   const base = useRef(value)
   const dirty = useRef(false)
+  // The newest saved value that came from outside while an edit of yours was unsaved (Esc goes back to it, not to `base`).
+  const outside = useRef<string | null>(null)
   const latest = useRef({ value, onCommit })
   latest.current = { value, onCommit }
   const wrap = useRef<HTMLDivElement>(null)
@@ -67,7 +70,8 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
       // Only a change of the text is an edit (setEditable and the like also announce an update).
       if (!transaction.docChanged) return
       dirty.current = true
-      setLength(noteMarkdown(e).length)
+      // The plain length (the guard runs when the note is saved, not on every key).
+      setLength(noteLength(e))
     },
     onBlur: () => commit()
   })
@@ -78,19 +82,29 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
     loadNote(editor, text)
     base.current = text
     dirty.current = false
+    outside.current = null
     setLength(text.length)
   }
 
   /**
    * Saves the note when it changed: the whole text as it is now (the latest value of quick clicks, T517 in the store). A save
-   * that was refused (the store says so and the window tells why) puts back what the note was, as a field does – unless you
-   * went on writing meanwhile.
+   * that was refused for good (nothing was written and nothing will be: the store says so and the window tells why) puts back
+   * what the note was, as a field does – unless you went on writing meanwhile. A save that waits for an answer (a question
+   * about a change on another computer, or a result not known after the send, `'asked'`) puts nothing back: the window shows
+   * what the store holds, as every field does, and what comes after your answer is loaded as any.
+   * The note the guard writes (escapes, a block as text) may be longer than the plain one the limit was checked with: over
+   * the limit the plain writing is saved (the filter keeps it within the limit); the formatting may read differently then.
    */
   const commit = () => {
     if (!editor || editor.isDestroyed || !dirty.current) return
-    dirty.current = false
     // Only the line breaks at the end go: a space there may be the one of an empty check box („- [ ] ”).
-    const text = noteMarkdown(editor).replace(/\n+$/, '')
+    let text = noteMarkdown(editor).replace(/\n+$/, '')
+    if (text.length > NOTE_MAX) {
+      console.warn(`notatka: zapis po kontroli ma ${text.length} znaków (limit ${NOTE_MAX}) – zapisano zwykły zapis (${noteLength(editor)})`)
+      text = plainNote(editor)
+    }
+    dirty.current = false
+    outside.current = null
     base.current = text
     if (text === latest.current.value) return
     const refused = () => {
@@ -99,10 +113,13 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
     void Promise.resolve(latest.current.onCommit(text)).then((saved) => saved === false && refused(), refused)
   }
 
-  // A change that came from elsewhere (another computer, the history) while there is nothing of yours unsaved.
+  // A change that came from elsewhere (another computer, the history): at once when there is nothing of yours unsaved,
+  // otherwise it waits (Esc brings it).
   useEffect(() => {
-    if (!editor || editor.isDestroyed || dirty.current || value === base.current) return
-    show(value)
+    if (!editor || editor.isDestroyed) return
+    if (value === base.current) outside.current = null
+    else if (dirty.current) outside.current = value
+    else show(value)
   }, [editor, value])
 
   useEffect(() => {
@@ -130,9 +147,14 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
     const onKey = (e: globalThis.KeyboardEvent) => {
       const box = wrap.current
       if (e.key !== 'Tab' || e.defaultPrevented || !box || topModal() !== modal.id) return
-      const items = Array.from(box.querySelectorAll<HTMLElement>(TABBABLE))
+      // The text (its root, whatever its contenteditable says) is one stop: what is inside it – the check boxes – is the text's own,
+      // and the focus on one of them counts as the focus in the text.
+      const text = editor?.view.dom
+      const items = Array.from(box.querySelectorAll<HTMLElement>(TABBABLE)).filter((el) => !text?.contains(el) || el === text)
       const active = document.activeElement
-      const to = tabTarget(items.length, active instanceof HTMLElement ? items.indexOf(active) : -1, e.shiftKey)
+      // A read-only text is not in the list: it comes after the buttons.
+      const at = text && active && text.contains(active) ? (items.includes(text) ? items.indexOf(text) : items.length - 1) : active instanceof HTMLElement ? items.indexOf(active) : -1
+      const to = tabTarget(items.length, at, e.shiftKey)
       if (to == null) return
       e.preventDefault()
       ;(items[to] ?? box).focus()
@@ -142,7 +164,7 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
       document.removeEventListener('keydown', onKey)
       modal.off()
     }
-  }, [expanded])
+  }, [expanded, editor])
   // The text takes the focus when the note changes size (not when the panel opens: it never takes it by itself).
   const sized = useRef(expanded)
   useEffect(() => {
@@ -170,7 +192,8 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
       return
     }
     // The first Esc only throws away what was not saved; the next one goes to whatever is around.
-    show(base.current)
+    // To the newest saved note: what came from another computer meanwhile, else what was saved here last.
+    show(outside.current ?? base.current)
     editor.commands.blur()
   }
 

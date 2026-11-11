@@ -9,7 +9,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { Editor } from '@tiptap/core'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { NoteEditor, withScheme } from '@renderer/features/note/NoteEditor'
-import { loadNote, noteExtensions } from '@renderer/features/note/noteMarkdown'
+import { loadNote, noteExtensions, noteGuard } from '@renderer/features/note/noteMarkdown'
 import { installEscape, onEscapeLayer } from '@renderer/lib/escape'
 import { useUi } from '@renderer/store/ui'
 import { ofLabel } from '@shared/format'
@@ -30,7 +30,7 @@ afterEach(() => {
   host = null
 })
 
-async function mount(value: string, o: { older?: string[]; onCommit?: (n: string) => void | Promise<boolean> } = {}) {
+async function mount(value: string, o: { older?: string[]; onCommit?: (n: string) => void | Promise<boolean | 'asked'> } = {}) {
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
@@ -232,7 +232,6 @@ describe('jedna instancja marked na edytor', () => {
   })
 })
 
-
 describe('„Powiększ” (T665)', () => {
   it('ten sam edytor na całe okno: tekst niezapisany zostaje, Esc wraca bez cofania zmian', async () => {
     const m = await mount('abc')
@@ -346,5 +345,104 @@ describe('„Powiększ”: Tab nie wychodzi z nakładki (H)', () => {
     const m = await mount('abc')
     act(() => m.el.focus())
     expect(tab(m.el).defaultPrevented).toBe(false)
+  })
+})
+
+describe('trzecia runda przeglądu: Esc, odpowiedź zapisu, limit przy zapisie, Tab (T670, T672)', () => {
+  it('Esc po zmianie z innego komputera w trakcie pisania wraca do najnowszej zapisanej wartości, a następny blur jej nie nadpisuje', async () => {
+    const m = await mount('a')
+    await m.type('X')
+    await act(async () => {
+      root!.render(createElement(NoteEditor, { value: 'zdalnie', onCommit: m.onCommit, olderComputers: [] }))
+    })
+    expect(m.editor.getText()).toBe('aX')
+    await m.esc()
+    expect(m.editor.getText()).toBe('zdalnie')
+    await m.blur()
+    expect(m.onCommit).not.toHaveBeenCalled()
+    // And a later edit starts from it.
+    await m.type('!')
+    await m.blur()
+    expect(m.onCommit).toHaveBeenCalledWith('zdalnie!')
+  })
+
+  it('zapis czeka na odpowiedź (konflikt): edytor zostaje przy Twoim tekście, wartość po odpowiedzi wchodzi normalnie', async () => {
+    const onCommit = vi.fn(() => Promise.resolve('asked' as const))
+    const m = await mount('abc', { onCommit })
+    await m.type('d')
+    await m.blur()
+    await act(async () => void (await Promise.resolve()))
+    expect(m.editor.getText()).toBe('abcd')
+    // „Zostaw moje”: the store now has the text – nothing changes, nothing is written again.
+    await act(async () => {
+      root!.render(createElement(NoteEditor, { value: 'abcd', onCommit, olderComputers: [] }))
+    })
+    expect(m.editor.getText()).toBe('abcd')
+    expect(onCommit).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      root!.render(createElement(NoteEditor, { value: 'z innego komputera', onCommit, olderComputers: [] }))
+    })
+    expect(m.editor.getText()).toBe('z innego komputera')
+  })
+
+  it('wpisywanie nie uruchamia strażnika zapisu; blur – raz', async () => {
+    const m = await mount('x'.repeat(2000))
+    const before = noteGuard.runs
+    await m.type('abc')
+    await m.type('def')
+    expect(noteGuard.runs).toBe(before)
+    await m.blur()
+    expect(noteGuard.runs).toBe(before + 1)
+    expect(m.onCommit).toHaveBeenCalledTimes(1)
+  })
+
+  it('„Powiększ”: Tab z tekstu nie chodzi po polach wyboru wewnątrz notatki – z ostatniej kontrolki zawija na pierwszą', async () => {
+    const m = await mount('tekst\n\n- [ ] a\n- [ ] b')
+    await act(async () => m.host.querySelector<HTMLButtonElement>('[data-testid="note-expand"]')!.click())
+    const first = m.host.querySelector<HTMLElement>('[data-testid="note-editor"] button')!
+    act(() => m.el.focus())
+    const e = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    act(() => void m.el.dispatchEvent(e))
+    expect(e.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(first)
+    expect((document.activeElement as HTMLInputElement).type).not.toBe('checkbox')
+  })
+
+  it('„Powiększ”: fokus na polu wyboru w tekście liczy się jak fokus w edytorze – Tab zawija na pierwszą kontrolkę (nie skacze do pierwszego przycisku z indeksu −1)', async () => {
+    const m = await mount('tekst\n\n- [ ] a\n- [ ] b')
+    await act(async () => m.host.querySelector<HTMLButtonElement>('[data-testid="note-expand"]')!.click())
+    const boxes = m.el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+    act(() => boxes[1]!.focus())
+    expect(document.activeElement).toBe(boxes[1])
+    const e = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    act(() => void boxes[1]!.dispatchEvent(e))
+    expect(e.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(m.host.querySelector('[data-testid="note-editor"] button'))
+    // Shift+Tab from a box goes to the previous control as from the text: the browser's own step is not taken over in the middle.
+    act(() => boxes[0]!.focus())
+    const back = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true })
+    act(() => void boxes[0]!.dispatchEvent(back))
+    expect(back.defaultPrevented).toBe(false)
+  })
+
+  it('„Powiększ” tylko do odczytu: pola wyboru w tekście nie są punktami Tab (korzeń edytora, nie atrybut contenteditable)', async () => {
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => {
+      root!.render(createElement(NoteEditor, { value: 'tekst\n\n- [ ] a\n- [ ] b', onCommit: vi.fn(), olderComputers: [], readOnly: true }))
+    })
+    await act(async () => host!.querySelector<HTMLButtonElement>('[data-testid="note-expand"]')!.click())
+    const el = host.querySelector<HTMLElement>('[data-testid="block-note"]')!
+    expect(el.getAttribute('contenteditable')).toBe('false')
+    const box = el.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    box.disabled = false
+    act(() => box.focus())
+    expect(document.activeElement).toBe(box)
+    const e = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    act(() => void box.dispatchEvent(e))
+    // The text is the last stop: Tab from it goes to the first (the „Pomniejsz” button), not along the boxes.
+    expect(e.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(host.querySelector('[data-testid="note-expand"]'))
   })
 })

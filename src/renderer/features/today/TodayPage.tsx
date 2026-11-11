@@ -20,7 +20,7 @@ import { TimeField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
-import { isSaved, useData } from '../../store/data'
+import { isSaved, saveAnswer, useData, type SendState } from '../../store/data'
 import { dayUsable, useDay, type DayModel } from '../../store/day'
 import { openDay, patchBlockDraft, setBlockDraft, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
@@ -363,7 +363,11 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             plan={plan}
             names={names}
             computers={view.computers}
-            onChange={(patch) => (draft ? patchBlockDraft(date, patch) : patchDayBlock(date, raw, block, patch).then(isSaved))}
+            onChange={(patch) => {
+              if (draft) return patchBlockDraft(date, patch)
+              const state: SendState = { afterSend: false }
+              return patchDayBlock(date, raw, block, patch, state).then((out) => saveAnswer(out, state))
+            }}
             onClose={() => {
               setDraft(null)
               setSelected(null)

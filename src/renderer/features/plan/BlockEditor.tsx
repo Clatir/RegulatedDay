@@ -14,6 +14,7 @@ import { olderComputers } from '@shared/model/note'
 import { Choice, DurationField, TimeField } from '../../components/fields'
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
+import type { SaveAnswer } from '../../store/data'
 import { NoteEditor } from '../note/NoteEditor'
 import { anchorCandidates, blockName, categoryOptions, type Names } from './blockView'
 
@@ -35,7 +36,7 @@ export function BlockEditor({
   /** In a template a block may follow a session of the layer („po sesji NY”). */
   sessions?: readonly SessionDef[]
   /** The fields changed (over the block as it is when the change is saved – a change made a moment before stays); answers whether it was saved when it can say (the note puts back what it shows when it was not). */
-  onChange: (patch: Partial<PlanBlock>) => void | Promise<boolean>
+  onChange: (patch: Partial<PlanBlock>) => void | Promise<SaveAnswer>
   onClose: () => void
   actions?: ReactNode
   readOnly?: boolean
@@ -43,7 +44,7 @@ export function BlockEditor({
   useEscapeLayer(true, onClose)
   const rules = names.settings.categories[block.categoryId]
   const variants = (rules?.variants ?? []).filter((v) => !v.archived || v.id === block.variantId)
-  const set = (patch: Partial<PlanBlock>): void | Promise<boolean> => (readOnly ? undefined : onChange(patch))
+  const set = (patch: Partial<PlanBlock>): void | Promise<SaveAnswer> => (readOnly ? undefined : onChange(patch))
   const anchors = [
     ...(sessions ?? []).map((s) => ({ value: `${SESSION_ANCHOR}${s.id}`, label: `po sesji ${s.name}` })),
     ...anchorCandidates(plan, block.id).map((b) => ({ value: b.id, label: `po: ${blockName(b, names)}${b.startMin != null ? ` (${logicalClock(b.startMin)})` : ''}` }))

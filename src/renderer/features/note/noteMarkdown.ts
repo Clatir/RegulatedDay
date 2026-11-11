@@ -5,7 +5,7 @@
  * a path of Windows stays as it is; a character that would read as formatting is written as a numeric entity, `&#42;`),
  * a bare address stays bare, HTML and `<…>` are never read as markup.
  */
-import { Extension, markInputRule, markPasteRule, type Editor, type Extensions, type JSONContent, type MarkdownRendererHelpers, type RenderContext } from '@tiptap/core'
+import { Extension, markInputRule, markPasteRule, type Editor, type Mark as TiptapMark, type Extensions, type JSONContent, type MarkdownRendererHelpers, type RenderContext } from '@tiptap/core'
 import Blockquote from '@tiptap/extension-blockquote'
 import Bold from '@tiptap/extension-bold'
 import Document from '@tiptap/extension-document'
@@ -29,6 +29,15 @@ export function trimAddress(candidate: string): string {
   let a = candidate.replace(/[.,;:!?"'»”’]+$/, '')
   for (const [open, close] of [['(', ')'], ['[', ']'], ['{', '}']] as const) while (a.endsWith(close) && a.split(close).length > a.split(open).length) a = a.slice(0, -1).replace(/[.,;:!?"'»”’]+$/, '')
   return a
+}
+/**
+ * The bare address at the start of `src` (its protocol, something after it, without the punctuation that ends a sentence);
+ * '' when there is none. One rule for the reading (the `url` tokenizer), for the writing (which colon needs an escape) and for
+ * the editor (what it turns into a link by itself).
+ */
+export function bareAddress(src: string): string {
+  const address = trimAddress(/^https?:\/\/[^\s<>]+/i.exec(src)?.[0] ?? '')
+  return WITH_PROTOCOL.test(address) && address.length > 8 ? address : ''
 }
 /** What the library turns back into a character when it reads a text (an entity of its own list). */
 const ENTITY = /^&(?:#\d{1,7}|#[xX][0-9a-fA-F]{1,6}|lt|gt|quot|amp);/
@@ -60,8 +69,8 @@ function noteMarked(): InstanceType<typeof Marked> {
       table: () => undefined,
       // Only an address with its protocol is a link (not www.x, not an e-mail – their text is not their address).
       url: (src: string) => {
-        const address = trimAddress(/^https?:\/\/[^\s<>]+/i.exec(src)?.[0] ?? '')
-        return address && WITH_PROTOCOL.test(address) && address.length > 8 ? { type: 'link', raw: address, text: address, href: address, tokens: [{ type: 'text', raw: address, text: address }] } : undefined
+        const address = bareAddress(src)
+        return address ? { type: 'link', raw: address, text: address, href: address, tokens: [{ type: 'text', raw: address, text: address }] } : undefined
       }
     }
   })
@@ -137,12 +146,21 @@ function hasPartner(par: string, ch: string, at: number): boolean {
 }
 
 /**
+ * The colon at `at` is the one of „http://…” that the reading takes for the start of an address. `par` is the text as the reading
+ * will see it: where a mark begins or ends its delimiter stands (a `*`), so „http://” and an italic „a” are „http://*a*”, an address.
+ */
+function readsAsAddress(par: string, at: number): boolean {
+  const scheme = /https?$/i.exec(par.slice(0, at))?.[0]
+  return scheme != null && bareAddress(par.slice(at - scheme.length)) !== ''
+}
+
+/**
  * Text of the editor as Markdown text: what would read as formatting is written as a numeric entity, and no more – a `*`
  * that opens or closes nothing in its paragraph, an `_` inside a word and the like are text. `paragraph` is the whole text of
  * the paragraph (the partner may be in the next piece of it, next to a mark), `offset` where this text starts in it. At the
  * start of a line (a paragraph, after a hard break) a „#”, „>”, „-”, „+”, „*” or „1.” would make a heading, quote or list.
  */
-export function escapeNoteText(text: string, lineStart = false, paragraph = text, offset = 0, inLink = false): string {
+export function escapeNoteText(text: string, lineStart = false, paragraph = text, offset = 0, inLink = false, source?: { text: string; offset: number }): string {
   const number = lineStart ? /^(\s*\d+)([.)])(?=\s|$)/.exec(text) : null
   let out = ''
   let blankSoFar = lineStart
@@ -155,8 +173,8 @@ export function escapeNoteText(text: string, lineStart = false, paragraph = text
     else if (atStart && ((c === '#' && /^#{1,6}(\s|$)/.test(text.slice(i))) || c === '>' || ((c === '-' || c === '+' || c === '*') && (next === undefined || /\s/.test(next) || (c !== '+' && new RegExp(`^\\${c}[\\${c}\\s]*$`).test(text.slice(i))))))) out += entity(c)
     else if (number && i === number[1]!.length) out += entity(c)
     else if (c === '*' || c === '_' || c === '~') out += hasPartner(paragraph, c, offset + i) ? entity(c) : c
-    // Text that only looks like an address (no link on it) is not read as one: the colon of „https://” is a character.
-    else if (!inLink && c === ':' && next === '/' && /https?$/i.test(text.slice(0, i))) out += entity(c)
+    // Only where the text would be read as an address (the same rule as the reading): „see http://a here” stays as typed.
+    else if (!inLink && c === ':' && next === '/' && readsAsAddress(source?.text ?? paragraph, (source?.offset ?? offset) + i)) out += entity(c)
     else if (c === '`') out += paragraph.split(c).length > 2 ? entity(c) : c
     else if (c === '[') out += paragraph.includes('](') ? entity(c) : c
     else out += c
@@ -185,7 +203,11 @@ function encodeText(this: { codeTypes: Set<string> }, text: string, node: NodeOf
   const piece = (n: NodeOf) => (n.type === 'hardBreak' ? '\n' : (n.text ?? ''))
   const paragraph = at < 0 ? text : siblings.map(piece).join('')
   const offset = at < 0 ? 0 : siblings.slice(0, at).map(piece).join('').length
-  return escapeNoteText(text, at === 0 || before?.type === 'hardBreak', paragraph, offset, (node.marks ?? []).some((m) => typeof m !== 'string' && m.type === 'link'))
+  // The paragraph as the reading sees it: a delimiter (stood for by a `*`) where the marks change from one piece to the next.
+  const marksOf = (n: NodeOf) => (n.marks ?? []).map((m) => (typeof m === 'string' ? m : m.type)).sort().join()
+  const view = siblings.map((n, k) => (k > 0 && marksOf(n) !== marksOf(siblings[k - 1]!) ? '*' : '') + piece(n))
+  const source = at < 0 ? undefined : { text: view.join(''), offset: view.slice(0, at).join('').length + (at > 0 && marksOf(node) !== marksOf(siblings[at - 1]!) ? 1 : 0) }
+  return escapeNoteText(text, at === 0 || before?.type === 'hardBreak', paragraph, offset, (node.marks ?? []).some((m) => typeof m !== 'string' && m.type === 'link'), source)
 }
 
 /**
@@ -248,6 +270,43 @@ const trimLine = (line: J[], start: boolean, end: boolean): J[] => {
 }
 
 /**
+ * The nodes of a line with the address of every link as the reading gives it (the writing encodes what an address in brackets
+ * cannot hold) and without the bold, italic or strike of a run (nodes next to each other with the same mark) that has no letter
+ * in it and where the reading would not open or close it: CommonMark wants a space, a punctuation mark or the end of the line
+ * next to such a run („x**!!!**y” is text, „(**!!!**)” and „x **!!!**” are bold).
+ */
+function flankedRuns(nodes: J[]): J[] {
+  const list = nodes.map((n) => (n.type === 'text' && n.marks ? { ...n, marks: n.marks.map((m) => (m.type === 'link' && typeof m.attrs?.href === 'string' ? { ...m, attrs: { ...m.attrs, href: readableHref(m.attrs.href) } } : m)) } : n))
+  const has = (n: J | undefined, type: string) => n?.type === 'text' && !!n.marks?.some((m) => m.type === type)
+  // What stands next to the run: nothing (the start or the end of the line, a hard break) counts as a space; a punctuation mark
+  // of a node with marks of its own is not one (its delimiters stand there: „**!!!**~~]~~” is not read as written).
+  const edge = (n: J | undefined, last: boolean): string | undefined => {
+    if (n?.type !== 'text') return n && n.type !== 'hardBreak' ? 'x' : undefined
+    const c = last ? n.text!.at(-1) : n.text![0]
+    return c === undefined || /\s/.test(c) || !n.marks?.length ? c : 'x'
+  }
+  for (const type of FLANKED) {
+    for (let i = 0; i < list.length; ) {
+      if (!has(list[i], type)) {
+        i++
+        continue
+      }
+      let j = i
+      while (has(list[j], type)) j++
+      const run = list.slice(i, j).map((n) => n.text).join('')
+      if (!/[\p{L}\p{N}]/u.test(run)) {
+        const before = /^\s/.test(run) ? ' ' : edge(list[i - 1], true)
+        const after = /\s$/.test(run) ? ' ' : edge(list[j], false)
+        const fits = (c: string | undefined) => c === undefined || /[\s\p{P}\p{S}]/u.test(c)
+        if (!(fits(before) && fits(after))) for (let k = i; k < j; k++) list[k] = { ...list[k]!, marks: list[k]!.marks!.filter((m) => m.type !== type) }
+      }
+      i = j
+    }
+  }
+  return list
+}
+
+/**
  * The text of a paragraph or a heading as the reading gives it back: no break at the ends or twice in a row and no line of
  * spaces only; spaces and (next to a letter) punctuation outside the marks that need a flanking character; in an item (or a
  * heading) the indent of a line is not text.
@@ -255,26 +314,28 @@ const trimLine = (line: J[], start: boolean, end: boolean): J[] => {
 function canonInline(nodes: J[] | undefined, heading: boolean, indented: boolean): J[] {
   const out: J[] = []
   const text = (t: string, marks: Mark[]) => t && out.push({ type: 'text', text: t, ...(marks.length ? { marks } : {}) })
-  const list = nodes ?? []
+  const list = flankedRuns(nodes ?? [])
+  // A flanked mark that goes on from the node before (or into the next one) has its edge there, not at this node.
+  const goesOn = (n: J | undefined, marks: Mark[]) => marks.filter((m) => FLANKED.has(m.type)).every((m) => n?.type === 'text' && n.marks?.some((x) => x.type === m.type))
   list.forEach((n, i) => {
     if (n.type === 'hardBreak') out.push(heading ? { type: 'text', text: ' ' } : n)
     else if (n.type !== 'text') out.push(n)
     else {
-      let marks = n.marks ?? []
-      // Bold, italic and strike on what has no letter in it are not kept (their delimiters would not close next to what is around).
-      if (!/[\p{L}\p{N}]/u.test(n.text ?? '')) marks = marks.filter((m) => !FLANKED.has(m.type))
+      const marks = n.marks ?? []
       if (!marks.some((m) => EXTRACTED.has(m.type))) return void text(n.text ?? '', marks)
       const flanked = marks.some((m) => FLANKED.has(m.type))
       let core = n.text ?? ''
       let head = ''
       let tail = ''
+      const opens = flanked && !goesOn(list[i - 1], marks)
+      const closes = flanked && !goesOn(list[i + 1], marks)
       const before = out.at(-1)?.type === 'text' ? out.at(-1)!.text!.at(-1) : undefined
-      while (core && (/\s/.test(core[0]!) || (flanked && edgeChar(core[0]!) && wordChar(head ? head.at(-1) : before)))) {
+      while (core && (/\s/.test(core[0]!) || (opens && edgeChar(core[0]!) && wordChar(head ? head.at(-1) : before)))) {
         head += core[0]
         core = core.slice(1)
       }
       const after = list[i + 1]?.type === 'text' ? list[i + 1]!.text![0] : undefined
-      while (core && (/\s/.test(core.at(-1)!) || (flanked && edgeChar(core.at(-1)!) && wordChar(tail ? tail[0] : after)))) {
+      while (core && (/\s/.test(core.at(-1)!) || (closes && edgeChar(core.at(-1)!) && wordChar(tail ? tail[0] : after)))) {
         tail = core.at(-1)! + tail
         core = core.slice(0, -1)
       }
@@ -370,7 +431,7 @@ function withBrackets(doc: J): J {
  * What the guard of the note's Markdown did: notes written with everything escaped, notes with a block that had to be written
  * as plain text (its structure cannot be held by the text), and notes that could not be written to read back at all.
  */
-export const noteGuard = { escaped: 0, degraded: 0, failed: 0, strict: false }
+export const noteGuard = { escaped: 0, degraded: 0, failed: 0, runs: 0, strict: false }
 const written = new WeakMap<object, string>()
 
 /** The text of a block, line by line, as one paragraph: what is left of a block the Markdown cannot hold. */
@@ -393,6 +454,7 @@ function flattened(block: J): J {
 export function noteMarkdown(editor: Editor, doc = editor.state.doc): string {
   const hit = written.get(doc)
   if (hit !== undefined) return hit
+  noteGuard.runs++
   const manager = editor.markdown!
   const write = (target: J): { md: string; how: 'plain' | 'escaped' | null } => {
     const reads = (md: string) => {
@@ -588,6 +650,28 @@ const NoteHardBreak = HardBreak.extend({
 })
 
 /**
+ * The address of a link as the written note holds it: a space, `<` and `>` cannot be in the address of `[text](address)`
+ * (the reading would take them for the end of it), so they are written as `%20`, `%3C`, `%3E` (the browser reads the same address).
+ */
+function readableHref(href: string): string {
+  return href.replace(/[\s<>]/g, (c) => encodeURIComponent(c))
+}
+/**
+ * The address as it stands between the brackets: a backslash is written doubled (the reading takes `\` before a punctuation
+ * mark, and before the closing `>`, for an escape), and the whole in `<…>` when it has a bracket with no pair (`)` would end the
+ * link early).
+ */
+function destination(href: string): string {
+  const doubled = href.replace(/\\/g, '\\\\')
+  let depth = 0
+  for (const c of doubled) {
+    if (c === '(') depth++
+    else if (c === ')' && --depth < 0) return `<${doubled}>`
+  }
+  return depth ? `<${doubled}>` : doubled
+}
+
+/**
  * A link: an address written as the text of its own link is written bare (so a note with a bare address stays one and
  * is read as a link again), any other as [text](address). Only http and https open (T663), anything else stays text. Text
  * typed after a link is not part of it.
@@ -595,20 +679,20 @@ const NoteHardBreak = HardBreak.extend({
 const NoteLink = Link.extend({
   inclusive: false,
   renderMarkdown: (node, h, context) => {
-    const href = String(node.attrs?.href ?? '')
+    const href = readableHref(String(node.attrs?.href ?? ''))
     const title = node.attrs?.title ? String(node.attrs.title) : ''
     // The text of the mark's whole span (the serializer asks for the opening and the closing apart from the text).
     if (!title && context?.meta?.markText === href && node.attrs?.written !== false) return h.renderChildren(node)
     const text = h.renderChildren(node)
-    return title ? `[${text}](${href} "${title}")` : `[${text}](${href})`
+    return title ? `[${text}](${destination(href)} "${title}")` : `[${text}](${destination(href)})`
   }
 }).configure({
   openOnClick: false,
   autolink: true,
   linkOnPaste: true,
   defaultProtocol: 'https',
-  // Only a written address becomes a link by itself (a „wp.pl” stays a word).
-  shouldAutoLink: (url) => WITH_PROTOCOL.test(url),
+  // Only a written address becomes a link by itself (a „wp.pl” stays a word) – the whole address the reading takes for a link too (not a prefix of it).
+  shouldAutoLink: (url) => bareAddress(url) === url,
   isAllowedUri: (url) => safeLinkUrl(url) != null
 })
 
@@ -617,37 +701,39 @@ const NoteLink = Link.extend({
  * inside the marks is not a space („5 * 6 *” stays text). `delimiter` is as written in a pattern, `c` the character.
  */
 const spanRule = (delimiter: string, c: string, global: boolean): RegExp => new RegExp(`(?:^|\\s)(${delimiter}([^\\s${c}](?:[^${c}]*[^\\s${c}])?)${delimiter})${global ? '' : '$'}`, global ? 'g' : '')
-const spans = (type: Parameters<typeof markInputRule>[0]['type'], rules: Array<[string, string]>) => ({
-  addInputRules: () => rules.map(([d, c]) => markInputRule({ find: spanRule(d, c, false), type })),
-  addPasteRules: () => rules.map(([d, c]) => markPasteRule({ find: spanRule(d, c, true), type }))
-})
-const NoteBold = Bold.extend({
-  addInputRules() {
-    return spans(this.type, [['\\*\\*', '*'], ['__', '_']]).addInputRules()
-  },
-  addPasteRules() {
-    return spans(this.type, [['\\*\\*', '*'], ['__', '_']]).addPasteRules()
-  }
-})
-const NoteItalic = Italic.extend({
-  addInputRules() {
-    return spans(this.type, [['\\*', '*'], ['_', '_']]).addInputRules()
-  },
-  addPasteRules() {
-    return spans(this.type, [['\\*', '*'], ['_', '_']]).addPasteRules()
-  }
-})
-const NoteStrike = Strike.extend({
-  addInputRules() {
-    return spans(this.type, [['~~', '~']]).addInputRules()
-  },
-  addPasteRules() {
-    return spans(this.type, [['~~', '~']]).addPasteRules()
-  }
-})
+/** A mark with the input and paste rules of its delimiters (`[delimiter as in a pattern, character]` each). */
+const withSpans = <O, S>(mark: TiptapMark<O, S>, rules: Array<[string, string]>): TiptapMark<O, S> =>
+  mark.extend({
+    addInputRules() {
+      return rules.map(([d, c]) => markInputRule({ find: spanRule(d, c, false), type: this.type }))
+    },
+    addPasteRules() {
+      return rules.map(([d, c]) => markPasteRule({ find: spanRule(d, c, true), type: this.type }))
+    }
+  })
+const NoteBold = withSpans(Bold, [['\\*\\*', '*'], ['__', '_']])
+const NoteItalic = withSpans(Italic, [['\\*', '*'], ['_', '_']])
+const NoteStrike = withSpans(Strike, [['~~', '~']])
 
 /** The meta of a transaction that puts a note into the editor (from the file, from another computer, after Esc). */
 const LOAD = 'noteLoad'
+
+const plainCache = new WeakMap<PMNode, string>()
+/**
+ * The Markdown of the note as the plain writing gives it – without the guard (it runs when the note is saved, not on every key):
+ * what the limit and the counter measure, and what is saved when the guard's text would be over the limit. As the save has it:
+ * no line breaks at the end, the addresses that need brackets with them.
+ */
+export function plainNote(editor: Editor, doc = editor.state.doc): string {
+  let md = plainCache.get(doc)
+  if (md === undefined) {
+    md = editor.markdown!.serialize(withBrackets(doc.toJSON() as J) as never).replace(/\n+$/, '')
+    plainCache.set(doc, md)
+  }
+  return md
+}
+/** The length of `plainNote`: one measure for the filter of the limit, the counter and the check at the save. */
+export const noteLength = (editor: Editor, doc = editor.state.doc): number => plainNote(editor, doc).length
 
 /**
  * The note's limit: a change that would make the Markdown longer than `NOTE_MAX` is refused (a shorter one always passes);
@@ -656,7 +742,7 @@ const LOAD = 'noteLoad'
 const NoteLimit = Extension.create({
   name: 'noteLimit',
   addProseMirrorPlugins() {
-    const length = (doc: PMNode) => noteMarkdown(this.editor, doc).length
+    const length = (doc: PMNode) => noteLength(this.editor, doc)
     return [
       new Plugin({
         filterTransaction: (tr, state) => !tr.docChanged || tr.getMeta(LOAD) === true || length(tr.doc) <= NOTE_MAX || length(tr.doc) <= length(state.doc)
@@ -670,10 +756,24 @@ export function loadNote(editor: Editor, text: string): void {
   editor.chain().setMeta('addToHistory', false).setMeta(LOAD, true).setContent(text, { contentType: 'markdown', emitUpdate: false }).run()
 }
 
+/** A block of code is fenced by more backticks than any run in it (at least three): a line of ```` inside does not close it. */
+const codeBlockMarkdown: (node: JSONContent, h: MarkdownRendererHelpers) => string = (node, h) => {
+  const body = node.content ? h.renderChildren(node.content) : ''
+  const fence = '`'.repeat(Math.max(3, ...(body.match(/`+/g) ?? []).map((run) => run.length + 1)))
+  return [fence + String(node.attrs?.language ?? ''), body, fence].join('\n')
+}
+
+/** The starter kit with the writing of a block of code of the note (the library's own is kept for the rest). */
+const NoteStarterKit = StarterKit.extend({
+  addExtensions() {
+    return (this.parent?.() ?? []).map((ext) => (ext.name === 'codeBlock' ? ext.extend({ renderMarkdown: codeBlockMarkdown }) : ext))
+  }
+})
+
 /** All the extensions of the note's editor (made for one editor: its marked is its own). */
 export function noteExtensions(): Extensions {
   return [
-    StarterKit.configure({
+    NoteStarterKit.configure({
       heading: { levels: [1, 2, 3] },
       document: false,
       orderedList: false,
