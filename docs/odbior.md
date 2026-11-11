@@ -117,6 +117,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] J4.1 Luka po wcześniejszym końcu – „Przesuń resztę wcześniej” i „Cofnij”
    - [ ] J4.2 Luka po usunięciu albo skróceniu bloku w „Dziś”
    - [ ] J4.3 Kiedy pasek o lukę nie pyta (sesja, mała luka, blok stały, drugi komputer)
+   - [ ] SNT6.1 Wyszukiwarka Ctrl K – wyniki i dopasowanie
+   - [ ] SNT6.2 Enter na wyniku – skok do rekordu
+   - [ ] SNT6.3 Polecenia, ostatnio wybrane i gdzie Ctrl K nie działa
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1610,3 +1613,43 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Nie przechodzi, gdy:** pytanie pojawia się w czasie sesji albo zajęć, przy luce 5 min albo przed blokiem stałym, albo
   zostaje na drugim komputerze po odpowiedzi.
 
+### SNT6 – wyszukiwarka Ctrl K (1.7.0)
+
+#### SNT6.1 Wyszukiwarka Ctrl K – wyniki i dopasowanie (1.7.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/search.test.ts`, `tests/fs/search-days.test.ts`, `tests/web/search-palette.test.ts`,
+  `tests/e2e/search.spec.ts`. Ty: rzut oka na prawdziwych danych.
+- **Jak sprawdzić:** na dowolnym ekranie okna głównego naciśnij Ctrl K. Wpisz bez ogonków dwa słowa z notatki bloku
+  sprzed kilku dni (np. „telefon kowal”), potem nazwę bloku z szablonu, który ten dzień miał bez zmian, potem nazwę
+  szablonu, osobę z prośby, rutynę i kategorię. Wpisz słowo z literówką.
+- **Oczekiwany efekt:** okno nad bieżącym ekranem z fokusem w polu; wyniki od razu, w grupach (polecenia, ekrany
+  i ustawienia, kategorie, bloki, szablony, prośby, rutyny) po 5 z „Pokaż jeszcze N”; przy bloku data i fragment
+  notatki z podświetloną frazą; bloki – dziś, potem zaplanowane, potem minione od najnowszych; „zolw” trafia „Żółw”,
+  słowo z literówką nic nie znajduje i okno wyjaśnia dlaczego (D387).
+- **Nie przechodzi, gdy:** blok dnia minionego (także niezmieniony blok z szablonu) nie daje się znaleźć, ogonki albo
+  wielkie litery psują dopasowanie, wynik pokazuje identyfikator zamiast nazwy, albo pisanie wyraźnie się zacina.
+
+#### SNT6.2 Enter na wyniku – skok do rekordu (1.7.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/search-palette.test.ts`, `tests/web/search-pick.test.ts`, `tests/e2e/search.spec.ts`.
+  Ty: rzut oka.
+- **Jak sprawdzić:** strzałkami wybierz i Enterem otwórz po kolei: blok dnia minionego, blok jutra, szablon, prośbę,
+  rutynę, kategorię i sekcję ustawień. Jeden wynik wybierz kliknięciem.
+- **Oczekiwany efekt:** blok – „Dziś” na jego dniu z otwartym panelem tego bloku; szablon, prośba, rutyna – ich ekran
+  z tym rekordem otwartym (prośba zaznaczona, fokus w notatce); kategoria i sekcja ustawień – Ustawienia przewinięte
+  do niej; kliknięcie działa jak Enter (D387).
+- **Nie przechodzi, gdy:** otwiera się inny dzień albo inny rekord, panel bloku się nie otwiera, albo skok „wraca”
+  później sam (np. po synchronizacji z drugim komputerem).
+
+#### SNT6.3 Polecenia, ostatnio wybrane i gdzie Ctrl K nie działa (1.7.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/search-palette.test.ts`, `tests/e2e/search.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** otwórz Ctrl K bez wpisywania; wybierz „Jutro”, potem „Wczoraj”, „Rytuał”, „Nowy blok”, „Nowa
+  prośba”. Otwórz Ctrl K jeszcze raz. W edytowanym polu (np. nazwa szablonu) wpisz coś i od razu Ctrl K. Otwórz okno
+  dialogowe (np. „Zmień typ dnia”) i naciśnij Ctrl K. Esc i kliknięcie obok okna wyszukiwania.
+- **Oczekiwany efekt:** puste pole – do 5 ostatnio wybranych wyników i polecenia; „Jutro”/„Wczoraj” tylko otwierają ten
+  dzień, „Rytuał” przewija „Dziś” do rytuału, nic się nie przenosi; „Nowy blok” i „Nowa prośba” jak Ctrl N; w polu
+  wpis zostaje zapisany, potem otwiera się wyszukiwarka; nad oknem dialogowym Ctrl K nic nie robi; Esc i klik obok
+  zamykają (D387).
+- **Nie przechodzi, gdy:** „Jutro” przenosi bloki, wpis w polu ginie, wyszukiwarka otwiera się nad oknem dialogowym,
+  albo pasek pulpitu reaguje na Ctrl K.

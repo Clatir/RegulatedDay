@@ -5,6 +5,10 @@
 - „Przesuń resztę wcześniej” przesuwa tylko bloki elastyczne od luki do najbliższego bloku stałego (chronione i zaczęte zostają), z „Przesunięto N bloków · Cofnij” w pasku. Liczba w pytaniu to tyle, ile przesunięcie naprawdę zamknie – czas, który minął w sesji, zajęciach albo na czekaniu przy zaplanowanej przerwie, się nie liczy.
 - Bez odpowiedzi pytanie znika samo, gdy zacznie się kolejny blok po luce albo ją zapełnisz – nic się wtedy nie zmienia. Ręczny „Start” następnego bloku działa jak „Dalej”: pytanie przechodzi na lukę za nim. Kilka luk naraz – jedno pytanie o najbliższą.
 - Pytanie zadaje się raz na lukę, także przy dwóch komputerach, i wraca po ponownym uruchomieniu aplikacji. Komputer ze starszą wersją nie pyta o luki po usunięciu i skróceniu w oknie, dopóki się nie zaktualizuje.
+## 1.7.0
+- Wyszukiwarka: Ctrl K w oknie głównym otwiera okno wyszukiwania nad bieżącym ekranem. Szuka w nazwach i notatkach bloków wszystkich dni (minionych i zaplanowanych), w szablonach, prośbach, rutynach, kategoriach, ekranach i sekcjach ustawień oraz w poleceniach („Nowy blok”, „Nowa prośba”, „Jutro”, „Wczoraj”, „Rytuał” – tylko przechodzą, nic nie przenoszą).
+- Wielkość liter i polskie znaki nie mają znaczenia („zolw” znajdzie „Żółw”); każde wpisane słowo musi być początkiem jakiegoś słowa. Wyniki są w grupach po 5 z „Pokaż jeszcze”, przy bloku data i fragment notatki z podświetloną frazą; bloki – najpierw dziś, potem zaplanowane, potem minione od najnowszych.
+- Strzałki wybierają, Enter otwiera: blok – „Dziś” na jego dniu z otwartym panelem bloku; szablon, prośba, rutyna i kategoria – ich ekran z tym rekordem. Przed wpisaniem czegokolwiek okno pokazuje do 5 ostatnio wybranych wyników i polecenia. Esc albo kliknięcie obok zamyka.
 
 ## 1.6.0
 - Rozsuwanie: gdy przeciągniesz blok, wydłużysz go krawędzią albo dodasz nowy blok z siatki na zajęte miejsce w „Dziś”, kolejne bloki elastyczne dostają w planie nowe godziny – bez nakładania, w trakcie przeciągania widać ich nowe miejsca (przerywana obwódka). Bloki stałe, chronione i zaczęte zostają, elastyczny przeskakuje stały jak w prognozie.
