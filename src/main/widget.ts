@@ -17,8 +17,8 @@ import { paths } from '@shared/data/paths'
 import { engineView, POOL_TEXT, RESERVE_REGEN_MIN, warnDeadlines } from '@shared/engineView'
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
 import { reserveMessageId } from '@shared/engine/game'
-import { closeGap, GAP_MIN, gapNow, gapText, instantOrder, type GapTrigger } from '@shared/engine/gaps'
-import { atOf, idxOfLogical } from '@shared/engine/grid'
+import { closeGap, gapNow, gapText } from '@shared/engine/gaps'
+import { atOf } from '@shared/engine/grid'
 import { hardEndCurrent, hardEndMessage, type HardEndNow } from '@shared/engine/hardEnd'
 import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@shared/engine/modes'
 import { suggestRegen } from '@shared/engine/reserve'
@@ -28,7 +28,7 @@ import { applyVariant, markerCause, planCause, variantCauses, variantsFor, type 
 import type { NoticeKind } from '@shared/machine'
 import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
-import { dayFileFrom, PLAN_MAX, PLAN_MIN } from '@shared/model/plan'
+import { dayFileFrom } from '@shared/model/plan'
 import { personName } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { ROUTINE_VERSION_NAMES, ROUTINE_VERSIONS, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
@@ -161,23 +161,6 @@ export function planPushedIpc(w: Pick<WidgetEngine, 'pushed'>, log: WidgetDeps['
   if (p) void w.pushed(p.day, p.count, p.edit).catch((e) => log('warn', 'pasek nie przeliczył się po przesunięciu bloków', e))
 }
 
-/**
- * What the window says it freed in today's plan (D368, IPC `planGap`): a day, the logical minute from which the next block
- * is looked for and the minutes freed (at least `GAP_MIN`) – anything else is not taken.
- */
-export function gapIn(day: unknown, placeMin: unknown, freedMin: unknown): { day: string; placeMin: number; freedMin: number } | null {
-  if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
-  if (typeof placeMin !== 'number' || !Number.isInteger(placeMin) || placeMin < PLAN_MIN || placeMin > PLAN_MAX) return null
-  if (typeof freedMin !== 'number' || !Number.isInteger(freedMin) || freedMin < GAP_MIN || freedMin > 24 * 60) return null
-  return { day, placeMin, freedMin }
-}
-
-/** The IPC `planGap` (D368): taken at once, the bar counted again in the background – the window's save never waits for it. */
-export function planGapIpc(w: Pick<WidgetEngine, 'freed'>, log: WidgetDeps['log'], day: unknown, placeMin: unknown, freedMin: unknown): void {
-  const g = gapIn(day, placeMin, freedMin)
-  if (g) void w.freed(g.day, g.placeMin, g.freedMin).catch((e) => log('warn', 'pasek nie przeliczył się po zwolnieniu czasu w planie', e))
-}
-
 /** A line of a change of the plan with its own „Cofnij” (T502): its edits, the files it created, the regeneration it started. */
 interface Moved {
   text: string
@@ -235,11 +218,6 @@ export class WidgetEngine {
   private pushes: Array<{ day: string; trigger: VariantTrigger }> = []
   /** „Zapisano: … · Cofnij” after a routine saved from the bar (D328). */
   private routineSaved: { block: string; day: string; text: string; until: number } | null = null
-  /**
-   * Time freed in today's plan in the main window of this computer (D368: a block not begun removed or shortened) –
-   * triggers of „Luka N min” the log does not hold, all day (a question asks while its gap is there); `at` – when.
-   */
-  private freedHere: Array<{ day: string; placeMin: number; freedMin: number; at: number }> = []
 
   constructor(private readonly d: WidgetDeps) {}
 
@@ -384,14 +362,13 @@ export class WidgetEngine {
   /**
    * „Luka N min · Przesuń resztę wcześniej · Zostaw” (D368, D373): a quiet line (no dot, no notification, no sound) for
    * the nearest gap before a flexible block – only today; never in a session, classes, the night or „Odcinam się”, after
-   * them while the gap is there (`gapNow`: the log's triggers and the window's of this computer).
+   * them while the gap is there (`gapNow`: the triggers of the day's log – also the window's `plan.freed`, D375).
    */
   private gapView(m: NonNullable<WidgetEngine['model']>, now: number, modes: Modes): void {
     const v = this.view!
     const date = m.state.grid.date
-    this.freedHere = this.freedHere.filter((f) => f.day === date)
     if (v.hidden || v.night || modes.session || modes.classMode || date !== logicalDayOf(now)) return
-    const gap = gapNow(m.ctx, m.state, this.freedTriggers(m))
+    const gap = gapNow(m.ctx, m.state)
     if (gap)
       v.lines = [
         ...v.lines,
@@ -408,21 +385,6 @@ export class WidgetEngine {
   }
 
   /**
-   * Time freed in today's plan in the main window (D368, IPC `planGap`): a trigger of „Luka N min” on this computer (the
-   * other computers ask after a change of the log only); the promise is the bar counted again.
-   */
-  freed(day: string, placeMin: number, freedMin: number): Promise<void> {
-    this.freedHere.push({ day, placeMin, freedMin, at: this.now })
-    return this.refresh()
-  }
-
-  /** The window's triggers of the model's day (`freedHere`) on its grid. */
-  private freedTriggers(m: NonNullable<WidgetEngine['model']>): GapTrigger[] {
-    const g = m.state.grid
-    return this.freedHere.filter((f) => f.day === g.date).map((f) => ({ place: idxOfLogical(g, f.placeMin), freedMin: f.freedMin, order: instantOrder(f.at) }))
-  }
-
-  /**
    * „Przesuń resztę wcześniej” (D368): the gap counted again on the day as it is at the click (a block begun meanwhile, a
    * plan changed – the line's gap is gone: nothing written); the answer first (answered on another computer meanwhile –
    * nothing moves twice), then the new starts of the gap's blocks as one edit of the day's file, with „Przesunięto N
@@ -431,7 +393,7 @@ export class WidgetEngine {
   private async closeGapNow(line: string, day: string | undefined): Promise<void> {
     const folder = this.d.folder()
     const m = folder ? await folder.widgetModel(this.now) : null
-    const gap = m && day === m.state.grid.date ? gapNow(m.ctx, m.state, this.freedTriggers(m)) : null
+    const gap = m && day === m.state.grid.date ? gapNow(m.ctx, m.state) : null
     const out = m && gap?.id === line ? closeGap(m.ctx, m.state, gap) : []
     if (!m || !folder || !day || !out.length) {
       this.say('Tej luki już nie ma.')

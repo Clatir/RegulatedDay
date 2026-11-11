@@ -11,6 +11,7 @@ import { paths } from '@shared/data/paths'
 import { marketDay } from '@shared/calendar/holidays'
 import { snapshotOf } from '@shared/engine/context'
 import { foldFacts, type DayFacts } from '@shared/engine/facts'
+import type { Freed } from '@shared/engine/gaps'
 import { gridOf } from '@shared/engine/grid'
 import type { AnyEvent } from '@shared/model/events'
 import { createDay } from '@shared/engine/createDay'
@@ -90,13 +91,14 @@ export async function pushDayBlocks(date: string, seen: RawRecord | null, change
 }
 
 /**
- * Time freed in today's plan, saved (D368: a block not begun removed or shortened – `freedByEdit`): the bar may ask „Luka
- * N min · Przesuń resztę wcześniej · Zostaw”. The bridge failing loses only the question (the main process is closing).
+ * Time freed in today's plan, saved (D368: a block not begun removed or shortened – `freedByEdit`): the event `plan.freed`
+ * in the day's log (D375 – the bars of every computer ask „Luka N min · Przesuń resztę wcześniej · Zostaw”, also after a
+ * restart). Its failure loses only the question – the plan is saved, so no toast.
  */
-export async function tellFreed(date: string, freed: { placeMin: number; freedMin: number } | null): Promise<void> {
+export async function tellFreed(date: string, freed: Freed | null): Promise<void> {
   if (!freed) return
   try {
-    await window.rd.planGap(date, freed.placeMin, freed.freedMin)
+    await window.rd.logEvents([{ k: 'plan.freed', day: date, block: freed.block, place: freed.place, minutes: freed.minutes }])
   } catch {
     // The plan is saved; only the bar's question about the gap is missing.
   }

@@ -6,9 +6,10 @@
  */
 import { describe, expect, it } from 'vitest'
 import { computeDay } from '@shared/engine/day'
-import { closeGap, freedByEdit, GAP_MIN, gapNow, gapText, instantOrder, logGapTriggers, type Gap, type GapTrigger } from '@shared/engine/gaps'
+import { closeGap, freedByEdit, GAP_MIN, gapNow, gapText, logGapTriggers, type Freed, type Gap } from '@shared/engine/gaps'
 import { idxOfLogical } from '@shared/engine/grid'
 import type { PushedBlock } from '@shared/engine/pushApart'
+import { isKnown, parseEvent, RULES_VERSION } from '@shared/model/events'
 import type { PlanBlock } from '@shared/model/plan'
 import { block, lm, Scenario } from './dsl'
 
@@ -23,10 +24,10 @@ const clock = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, 
 const moves = (out: readonly PushedBlock[]) => out.map((p) => `${p.id} ${clock(p.fromMin)}→${clock(p.startMin)}`)
 
 /** The engine at `now` with the plan `plan` (default: the scenario's) and the gap it asks about. */
-function at(s: Scenario, now: string, o: { plan?: PlanBlock[]; extra?: GapTrigger[] } = {}) {
+function at(s: Scenario, now: string, o: { plan?: PlanBlock[] } = {}) {
   const ctx = s.contextAt(s.at(now), o.plan ? { plan: o.plan } : {})
   const state = computeDay(ctx)
-  return { ctx, state, gap: gapNow(ctx, state, o.extra ?? []) }
+  return { ctx, state, gap: gapNow(ctx, state) }
 }
 
 /** The day counted again with the starts of „Przesuń” written: where the forecast shows each block (logical minutes). */
@@ -39,6 +40,9 @@ function closed(s: Scenario, now: string, plan: readonly PlanBlock[], out: reado
   for (let k = 1; k < fg.length; k++) expect(fg[k]!.from, `${fg[k]!.block.id} po ${fg[k - 1]!.block.id}`).toBeGreaterThanOrEqual(fg[k - 1]!.to)
   return { plan: written, state: st }
 }
+
+/** The window's `plan.freed` (D375) – what `freedByEdit` gave – written at the instant `t` (ms). */
+const freedEvent = (s: Scenario, f: Freed, t: number, computer?: string) => s.write([{ k: 'plan.freed', at: t, ...f }], t, computer)
 
 /** An answer to a gap's question in the log (the bar's „Zostaw” or „Przesuń”). */
 const answer = (s: Scenario, id: string, now: string, computer?: string) => s.raw({ k: 'question.answer', at: s.at(now), question: id, answer: 'leave', value: null }, now, computer)
@@ -99,10 +103,50 @@ describe('D368 – luka po wcześniejszym końcu', () => {
     expect(moves(closeGap(ctx, state, gap!))).toEqual(['c 12:00→11:40'])
   })
 
+  it('ręczny „Start” kolejnego bloku po „Skończyłem” działa jak „Dalej” (D375): luka przed blokiem po nim', () => {
+    const s = day(plan).start('a', '10:00').end('a', '10:40').start('b', '10:41')
+    const { ctx, state, gap } = at(s, '10:41')
+    // „b” runs to 11:41, „c” stands at 12:00: 19 min empty (the early end freed 20).
+    expect(gap).toMatchObject({ block: 'c', minutes: 19, fromMin: lm('11:41') })
+    expect(moves(closeGap(ctx, state, gap!))).toEqual(['c 12:00→11:41'])
+    // „b” begun at its planned hour (the gap waited through): the question is over.
+    expect(at(day(plan).start('a', '10:00').end('a', '10:40').start('b', '11:00'), '11:00').gap).toBeNull()
+  })
+
+  it('pauza i wznowienie bloku zaczętego „Dalej” nie zapełnia luki za nim – pytanie zostaje', () => {
+    const s = day(plan).start('a', '10:00')
+    const t = s.at('10:40')
+    s.write(
+      [
+        { k: 'block.end', block: 'a', at: t, done: true, rule: null },
+        { k: 'block.start', block: 'b', at: t, bg: false, planned: { categoryId: 'inne', variantId: null, durationMin: 60, tag: null, fixed: false }, confirmUntil: null, how: 'click' }
+      ],
+      t
+    )
+    s.pause('b', '10:50').resume('b', '10:55')
+    // „b” ends at 11:45 now (5 min of pause): 15 min empty before „c”.
+    expect(at(s, '10:55').gap).toMatchObject({ block: 'c', minutes: 15 })
+  })
+
+  it('skrócony trwający blok po pauzie i wznowieniu – pytanie zostaje (biegł przy wyzwalaczu)', () => {
+    const s = day(plan).start('a', '10:00').raw({ k: 'block.shorten', block: 'a', at: day(plan).at('10:10'), minutes: 20 }, '10:10')
+    s.pause('a', '10:15').resume('a', '10:20')
+    // „a” ends at 10:45 (5 min of pause): 15 min empty before „b”.
+    expect(at(s, '10:20').gap).toMatchObject({ block: 'b', minutes: 15 })
+  })
+
   it('skrócenie trwającego bloku (krawędź, `block.shorten`) o 20 min: luka przed kolejnym', () => {
     const s = day(plan).start('a', '10:00').raw({ k: 'block.shorten', block: 'a', at: day(plan).at('10:10'), minutes: 20 }, '10:10')
     const { gap } = at(s, '10:10')
     expect(gap).toMatchObject({ block: 'b', minutes: 20, fromMin: lm('10:40') })
+  })
+
+  it('zaparkowanie zaczętego, zapauzowanego bloku (D375, koniec `park`): luka po nim przed kolejnym – najwyżej to, czego nie zrobiono', () => {
+    const s = day(plan).start('a', '10:00').pause('a', '10:20').raw({ k: 'block.end', block: 'a', at: day(plan).at('10:30'), done: false, rule: 'park' }, '10:30')
+    const { ctx, state, gap } = at(s, '10:30')
+    // 40 min of „a” were not done, 30 min stand empty before „b” – from now.
+    expect(gap).toMatchObject({ block: 'b', minutes: 30, fromMin: lm('10:30') })
+    expect(moves(closeGap(ctx, state, gap!))).toEqual(['b 11:00→10:30', 'c 12:00→11:30'])
   })
 
   it('„Usuń” zaczętego bloku (koniec `removed`) zwalnia resztę jego czasu', () => {
@@ -183,12 +227,11 @@ describe('D373 – jak długo pytanie czeka i co przesuwa', () => {
     const s = day(plan).start('a', '10:00').end('a', '10:40')
     // „y” removed in the main window at 10:40 (its place 14:00, 60 min freed).
     const without = plan.filter((b) => b.id !== 'y')
-    const grid = computeDay(s.contextAt(s.at('10:40'))).grid
-    const removal: GapTrigger = { place: idxOfLogical(grid, lm('14:00')), freedMin: 60, order: instantOrder(s.at('10:40') + 30_000) }
-    const first = at(s, '10:41', { plan: without, extra: [removal] }).gap!
+    freedEvent(s, { block: 'y', place: s.at('14:00'), minutes: 60 }, s.at('10:40') + 30_000)
+    const first = at(s, '10:41', { plan: without }).gap!
     expect(first).toMatchObject({ block: 'b', minutes: 19 })
     answer(s, first.id, '10:42')
-    expect(at(s, '10:43', { plan: without, extra: [removal] }).gap).toMatchObject({ block: 'z', minutes: 60, fromMin: lm('14:00') })
+    expect(at(s, '10:43', { plan: without }).gap).toMatchObject({ block: 'z', minutes: 60, fromMin: lm('14:00') })
   })
 })
 
@@ -198,10 +241,12 @@ describe('D368 – usunięcie i skrócenie w oknie (`freedByEdit`)', () => {
     const s = day(plan)
     const before = at(s, '09:00').state
     const freed = freedByEdit(before, plan[1]!, null)
-    expect(freed).toEqual({ placeMin: lm('12:00'), freedMin: 60 })
+    expect(freed).toEqual({ block: 'x', place: s.at('12:00'), minutes: 60 })
     const without = plan.filter((b) => b.id !== 'x')
-    const trigger: GapTrigger = { place: idxOfLogical(before.grid, freed!.placeMin), freedMin: freed!.freedMin, order: instantOrder(s.at('09:00')) }
-    const { ctx, state, gap } = at(s, '09:00', { plan: without, extra: [trigger] })
+    // Without the event (an older version's window): no question.
+    expect(at(s, '09:00', { plan: without }).gap).toBeNull()
+    freedEvent(s, freed!, s.at('09:00'))
+    const { ctx, state, gap } = at(s, '09:00', { plan: without })
     // 2 h stand empty before „c” (11:00–13:00), the removal freed 1 h: „c” goes to 12:00.
     expect(gap).toMatchObject({ block: 'c', minutes: 60 })
     expect(gapText(gap!.minutes)).toBe('Luka 1 h')
@@ -212,13 +257,36 @@ describe('D368 – usunięcie i skrócenie w oknie (`freedByEdit`)', () => {
     const plan = [flex('a', '10:00', 80), flex('b', '11:20', 60)]
     const st = at(day(plan), '09:00').state
     const a = plan[0]!
-    expect(freedByEdit(st, a, { ...a, durationMin: 30 })).toEqual({ placeMin: lm('10:30'), freedMin: 50 })
+    expect(freedByEdit(st, a, { ...a, durationMin: 30 })).toEqual({ block: 'a', place: day(plan).at('10:30'), minutes: 50 })
     expect(freedByEdit(st, a, { ...a, startMin: lm('10:30'), durationMin: 50 })).toBeNull()
     expect(freedByEdit(st, a, { ...a, startMin: lm('09:00') })).toBeNull()
     expect(freedByEdit(st, a, { ...a, durationMin: 75 })).toBeNull()
     const s = day(plan)
-    const trigger: GapTrigger = { place: idxOfLogical(st.grid, lm('10:30')), freedMin: 50, order: instantOrder(s.at('09:00')) }
-    expect(at(s, '09:00', { plan: [{ ...a, durationMin: 30 }, plan[1]!], extra: [trigger] }).gap).toMatchObject({ block: 'b', minutes: 50, fromMin: lm('10:30') })
+    freedEvent(s, freedByEdit(st, a, { ...a, durationMin: 30 })!, s.at('09:00'))
+    expect(at(s, '09:00', { plan: [{ ...a, durationMin: 30 }, plan[1]!] }).gap).toMatchObject({ block: 'b', minutes: 50, fromMin: lm('10:30') })
+  })
+
+  it('`plan.freed` z drugiego komputera (D375): to samo pytanie tutaj; „Zostaw” z dowolnego zamyka je wszędzie', () => {
+    const plan = [flex('a', '10:00', 60), flex('x', '12:00', 60), flex('c', '13:00', 60)]
+    const s = day(plan)
+    freedEvent(s, freedByEdit(at(s, '09:00').state, plan[1]!, null)!, s.at('09:00'), 'pcb')
+    const without = plan.filter((b) => b.id !== 'x')
+    const { gap } = at(s, '09:01', { plan: without })
+    expect(gap).toMatchObject({ id: `gap:${DATE}:c:${lm('12:00')}`, minutes: 60 })
+    answer(s, gap!.id, '09:02')
+    expect(at(s, '09:03', { plan: without }).gap).toBeNull()
+  })
+
+  it('`plan.freed`: znane zdarzenie z blokiem, chwilą miejsca i minutami 1–1440; inne – uszkodzone; starsze logi bez niego bez zmian', () => {
+    const line = (o: Record<string, unknown>) => JSON.stringify({ id: 'pca-1', c: 'pca', n: 1, t: 0, l: 0, v: RULES_VERSION, day: DATE, dom: 'timer', k: 'plan.freed', at: 0, block: 'x', place: 0, minutes: 60, ...o })
+    const ok = parseEvent(line({}))
+    expect(ok.ok && isKnown(ok.event)).toBe(true)
+    expect(parseEvent(line({ minutes: 0 })).ok).toBe(false)
+    expect(parseEvent(line({ minutes: 12.5 })).ok).toBe(false)
+    expect(parseEvent(line({ place: null })).ok).toBe(false)
+    expect(parseEvent(line({ block: '' })).ok).toBe(false)
+    // A day without it: no trigger of the window.
+    expect(computeDay(day([flex('a', '10:00', 60)]).contextAt(day([]).at('09:00'))).facts.freed).toEqual([])
   })
 
   it('blok zaczęty – nic (zdarzenie w logu mówi samo); bez pytania przed teraz', () => {

@@ -71,11 +71,10 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   mapa wariant / rozsuwanie, każda ze swoim `undoMoved`/`inverseEdit` i `UNDO_LINE_MS` z `shared/widget.ts`, nowsza pierwsza;
   kolejne rozsuwanie zastępuje tylko poprzednie) i
   wyzwalacz `push:<ms>` znacznika (`pushes`, tylko dzień paska, cały dzień – jak wyzwalacze z logu; tylko ten komputer).
-- Domykanie luk (D368, D373): `gapView` – cicha linia `gap:<dzień>:<blok>:<miejsce>` „Luka N min · Przesuń resztę wcześniej ·
-  Zostaw” z `gapNow` (`engine/gaps.ts`) tylko dziś, nie w sesji, zajęciach, nocy i „Odcinam się”; wyzwalacze z logu (te same
-  na każdym komputerze) i z okna tego komputera (`freedHere`: IPC `planGap` → `gapIn`/`planGapIpc` → `freed`, po usunięciu
-  albo skróceniu niezaczętego bloku – `freedByEdit` w `TodayPage`, `tellFreed`; tylko w pamięci, do końca dnia albo zamknięcia
-  aplikacji – T588). Odpowiedź = `mark` w logu (jak „Przerwa?”; obejmuje wcześniejsze wyzwalacze tego bloku); „Przesuń” (`closeGapNow`) liczy lukę od nowa na świeżym `widgetModel`
+- Domykanie luk (D368, D373, D375): `gapView` – cicha linia `gap:<dzień>:<blok>:<miejsce>` „Luka N min · Przesuń resztę wcześniej ·
+  Zostaw” z `gapNow` (`engine/gaps.ts`) tylko dziś, nie w sesji, zajęciach, nocy i „Odcinam się”; wyzwalacze tylko z logu (te same
+  na każdym komputerze i po restarcie) – także usunięcie albo skrócenie niezaczętego bloku w oknie: `freedByEdit` w `TodayPage`
+  → `tellFreed` → `logEvents` ze zdarzeniem `plan.freed` (`USER_EVENTS`; `hub.events` przelicza pasek, T588, T594). Odpowiedź = `mark` w logu (jak „Przerwa?”; obejmuje wcześniejsze wyzwalacze tego bloku); „Przesuń” (`closeGapNow`) liczy lukę od nowa na świeżym `widgetModel`
   (blok zaczęty w międzyczasie – nic nie zapisuje), najpierw `mark`, potem jedna edycja pliku dnia i linia `moved:push`.
 
 ## Pułapki

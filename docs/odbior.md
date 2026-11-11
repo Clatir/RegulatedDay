@@ -1561,14 +1561,18 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Jak sprawdzić:** dziś zacznij blok elastyczny, po którym w planie stoi kolejny elastyczny (bez stałego między
   nimi), i skończ go „Skończyłem” albo „Dalej” co najmniej 10 min przed planowanym końcem. Spójrz na pasek pulpitu.
   Kliknij „Przesuń resztę wcześniej”, potem „Cofnij” w linii „Przesunięto …”. Przy kolejnej luce kliknij „Zostaw”.
+  Innym razem po „Skończyłem” od razu kliknij „Start” następnego bloku; jeszcze innym – zapauzuj blok i go zaparkuj.
 - **Oczekiwany efekt:** w pasku cicha linia (bez kropki, powiadomienia i dźwięku) „Luka 20 min · Przesuń resztę
   wcześniej · Zostaw” – wolny czas od teraz do następnego bloku, najwyżej tyle, ile zwolnił wcześniejszy koniec (przerwa
-  zaplanowana wcześniej zostaje); po „Dalej” – luka przed blokiem za tym, który się właśnie zaczął. „Przesuń” zapisuje
+  zaplanowana wcześniej zostaje); po „Dalej” i po „Start” następnego bloku przed jego godziną – luka przed blokiem za
+  tym, który się właśnie zaczął (jego pauza tego nie zmienia); po zaparkowaniu zapauzowanego bloku – luka najwyżej o
+  niezrobioną część. „Przesuń” zapisuje
   nowe godziny bloków elastycznych do najbliższego stałego – żaden nie zaczyna się przed teraz; stały i bloki za nim,
   chronione (posiłek, regeneracja, rutyny) i zaczęte zostają – i daje linię „Przesunięto N bloków · Cofnij”; „Cofnij”
   przywraca godziny, a pytanie o tę lukę nie wraca. „Zostaw” – linia znika, plan bez zmian. Bez odpowiedzi linia znika
-  sama, gdy zacznie się następny blok albo coś w luce (D368, D373).
+  sama, gdy zacznie się następny blok albo coś w luce (D368, D373, D375).
 - **Nie przechodzi, gdy:** pytanie o tę samą lukę przychodzi drugi raz, linia ma kropkę albo daje powiadomienie,
+  po „Start” następnego bloku pytanie znika zamiast przejść na lukę za nim,
   „Przesuń” rusza blok stały, chroniony, zaczęty albo blok za stałym, któryś blok staje przed teraz, „Cofnij” nie
   przywraca wszystkich godzin, albo pasek pulpitu po kliknięciu wychodzi nad okna innych programów.
 
@@ -1579,12 +1583,12 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Jak sprawdzić:** w „Dziś” usuń niezaczęty blok elastyczny, który stoi między dwoma innymi; innym razem skróć blok
   o co najmniej 10 min dolną krawędzią albo polem „Długość”. Przenieś blok przeciągnięciem i zmień górną krawędź. To
   samo na jutrze.
-- **Oczekiwany efekt:** po usunięciu i skróceniu dziś – w pasku tego komputera „Luka … · Przesuń resztę wcześniej ·
-  Zostaw”; „Przesuń” przesuwa następne bloki o zwolniony czas (przerwa zaplanowana wcześniej zostaje). Przeniesienie
-  bloku i górna krawędź – bez pytania; na jutrze – bez pytania (D368, D373). Po ponownym uruchomieniu aplikacji pytanie
-  o usunięcie albo skrócenie w oknie już nie wraca (T588).
-- **Nie przechodzi, gdy:** po usunięciu dziś nie ma pytania, pytanie przychodzi po zmianie na jutrze albo po
-  przeniesieniu bloku, albo „Przesuń” przesuwa bloki o więcej, niż zwolniło usunięcie.
+- **Oczekiwany efekt:** po usunięciu i skróceniu dziś – w pasku „Luka … · Przesuń resztę wcześniej · Zostaw”, na obu
+  komputerach i także po ponownym uruchomieniu aplikacji (zamknij ją i otwórz, póki pytanie czeka); „Przesuń” przesuwa
+  następne bloki o zwolniony czas (przerwa zaplanowana wcześniej zostaje). Przeniesienie bloku i górna krawędź – bez
+  pytania; na jutrze – bez pytania (D368, D373, D375).
+- **Nie przechodzi, gdy:** po usunięciu dziś nie ma pytania, pytanie znika po ponownym uruchomieniu, przychodzi po
+  zmianie na jutrze albo po przeniesieniu bloku, albo „Przesuń” przesuwa bloki o więcej, niż zwolniło usunięcie.
 
 #### J4.3 Kiedy pasek o lukę nie pyta – sesja, mała luka, blok stały, drugi komputer (1.7.0)
 - [ ] Odebrane

@@ -2,14 +2,15 @@
  * Domykanie luk (D368, D373, FBL2b): when a block ends before its planned end, is removed or shortened and at least 10 min
  * stand empty before the next flexible block, the bar asks quietly „Luka 20 min · Przesuń resztę wcześniej · Zostaw”.
  *
- * Where time was freed is a trigger: from the day's log (an end before the planned end – „Dalej”, „Skończyłem”, „Usuń” of
- * a begun block, an automatic end; a running block shortened by its edge, `block.shorten`; a block not begun cancelled or
- * parked by you) – the same on every computer – and from the main window of this computer (a block not begun removed or
- * shortened in the plan: `freedByEdit`, IPC `planGap`). A trigger asks about the first block of the foreground after its
- * place, when that one may be moved (`pushable`: flexible, its own hour, not protected, not begun); the gap counts from
- * now or the end of the block before it, whichever is later, and at most what the trigger freed (a break you planned
- * before it stays). It asks until a block of the foreground starts after it (the next one, or one in the gap – it is
- * filled), until it is answered or less than 10 min are left; one question at a time – the nearest. Only today.
+ * Where time was freed is a trigger, all from the day's log – the same on every computer and after a restart: an end before
+ * the planned end („Dalej”, „Skończyłem”, „Usuń” of a begun block, a paused one parked, an automatic end), a running block
+ * shortened by its edge (`block.shorten`), a block not begun cancelled or parked by you, and time freed in the plan by
+ * the main window (a block not begun removed or shortened: `freedByEdit`, the event `plan.freed`, D375). A trigger asks
+ * about the first block of the foreground after its place, when that one may be moved (`pushable`: flexible, its own
+ * hour, not protected, not begun); the gap counts from now or the end of the block before it, whichever is later, and at
+ * most what the trigger freed (a break you planned before it stays). It asks until a block of the foreground starts
+ * after it (the next one, or one in the gap – it is filled; the next one begun early by hand goes as „Dalej”, `over`),
+ * until it is answered or less than 10 min are left; one question at a time – the nearest. Only today.
  *
  * „Przesuń resztę wcześniej” (`closeGap`, the mirror of `pushApart`): the flexible blocks from the gap up to the nearest
  * fixed block (a session, classes) – each as much earlier as the gap, never before now nor before the block before it, a
@@ -21,7 +22,7 @@ import type { PlanBlock } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan } from './blocks'
 import { shownForecaster, type DayContext, type DayState } from './day'
-import { compareOrder, type EventOrder } from './facts'
+import { compareOrder, OPEN, type EventOrder } from './facts'
 import type { Placed } from './forecast'
 import { atOf, idxOfLogical, logicalSpan } from './grid'
 import { pushable, type PushedBlock } from './pushApart'
@@ -60,8 +61,8 @@ export const gapText = (minutes: number): string => `Luka ${durationLabel(minute
 /** Ends that come when the plan says (a fixed block's window): never early. */
 const PLANNED_ENDS = new Set(['plan', 'fixedNoReaction'])
 
-/** A trigger of the main window (no event of the log): its instant on this computer. */
-export const instantOrder = (at: number): EventOrder => ({ instant: at, at, l: at, c: '', n: -1 })
+/** The order of a fact known only by its minute (a block parked or cancelled before it began): that minute's first instant. */
+const instantOrder = (at: number): EventOrder => ({ instant: at, at, l: at, c: '', n: -1 })
 
 /** The triggers the day's log holds (the same on every computer). */
 export function logGapTriggers(state: DayState): GapTrigger[] {
@@ -86,14 +87,43 @@ export function logGapTriggers(state: DayState): GapTrigger[] {
       if (span && place != null && span.end - place >= GAP_MIN) out.push({ place, freedMin: span.end - place, order: instantOrder(atOf(g, gone)) })
     }
   }
+  // The main window's removals and shortenings (D375).
+  for (const x of state.facts.freed) if (x.minutes >= GAP_MIN) out.push({ place: x.place, freedMin: x.minutes, order: x.order })
   return out
 }
 
-/** A block of the foreground began after the trigger, at or after its place (not in its own click – „Dalej”): its question is over. */
+/**
+ * The trigger's question is over: a block of the foreground began after it, at or after its place – the next block after
+ * the gap, or one in the gap (it is filled). Not so (their runs fill no gap, also after a pause – the question goes on
+ * before the block after them): a block running at the trigger or begun with it (its own click – „Dalej”), and the first
+ * block begun after it when it is the next of the plan from its place, begun before its planned hour (a manual „Start”
+ * after „Skończyłem” – as „Dalej”, D375; begun at its hour or later – the gap was waited through).
+ */
 function over(state: DayState, t: GapTrigger): boolean {
-  for (const f of state.facts.blocks.values())
-    for (const r of f.runs) if (!r.bg && r.from >= t.place && compareOrder(r.begun, t.order) > 0 && !(r.begun.c === t.order.c && r.begun.at === t.order.at)) return true
-  return false
+  const after = (o: EventOrder) => compareOrder(o, t.order) > 0 && !(o.c === t.order.c && o.at === t.order.at)
+  const begun: Array<{ id: string; from: number; order: EventOrder }> = []
+  const before = new Set<string>()
+  for (const [id, f] of state.facts.blocks) {
+    if (f.runs.some((r) => !after(r.begun))) before.add(id)
+    // Running at the trigger, or begun with it.
+    if (f.runs.some((r) => !after(r.begun) && (r.to === OPEN || r.to > t.place))) continue
+    const r = f.runs.find((x) => !x.bg && x.from >= t.place && after(x.begun))
+    if (r) begun.push({ id, from: r.from, order: r.begun })
+  }
+  if (!begun.length) return false
+  begun.sort((a, b) => compareOrder(a.order, b.order))
+  const first = begun[0]!
+  const info = state.blocks.find((b) => b.id === first.id)
+  const gone = (id: string) => {
+    const f = state.facts.blocks.get(id)
+    return !!f && (f.parkedAt != null || f.cancelledAt != null)
+  }
+  // The next block of the plan from the place: of the foreground, with its own hour, not begun before the trigger nor gone.
+  const next = state.blocks
+    .filter((b) => b.inPlan && !b.bg && b.start != null && b.start >= t.place && !before.has(b.id) && !gone(b.id))
+    .sort((a, b) => a.start! - b.start! || (a.id < b.id ? -1 : 1))[0]
+  const likeNext = !!info && info.id === next?.id && first.from < info.start!
+  return begun.length > (likeNext ? 1 : 0)
 }
 
 /** The foreground of the forecast in the order of the axis. */
@@ -122,16 +152,16 @@ function answered(state: DayState, block: string, t: GapTrigger): boolean {
 }
 
 /**
- * The gap the bar asks about now (D368, D373), or null: of the triggers of the log and `extra` (the main window's), still
- * asking and not answered, the nearest gap whose closing moves its block; for one block the longest gap (the latest
- * trigger at equal length). The modes it waits in (a session, classes, the night) and the day (only today) are the bar's.
+ * The gap the bar asks about now (D368, D373), or null: of the triggers of the log still asking and not answered, the
+ * nearest gap whose closing moves its block; for one block the longest gap (the latest trigger at equal length). The modes
+ * it waits in (a session, classes, the night) and the day (only today) are the bar's.
  */
-export function gapNow(ctx: DayContext, state: DayState, extra: readonly GapTrigger[] = []): Gap | null {
+export function gapNow(ctx: DayContext, state: DayState): Gap | null {
   const g = state.grid
   const lm = (idx: number) => logicalMinuteOf(g.date, atOf(g, idx))
   const fg = foreground(state)
   const found = new Map<string, { b: Placed; minutes: number; t: GapTrigger }>()
-  for (const t of [...logGapTriggers(state), ...extra]) {
+  for (const t of logGapTriggers(state)) {
     if (over(state, t)) continue
     const x = gapOf(state, fg, t)
     if (!x || answered(state, x.b.block.id, t)) continue
@@ -228,12 +258,22 @@ export function closeGap(ctx: DayContext, state: DayState, gap: Pick<Gap, 'block
 }
 
 /**
- * What a change of today's plan in the main window frees (D368: a block not begun removed – `after` null – or shortened –
- * its end earlier with a shorter length, the field „Długość” or the bottom edge; never a move nor the top edge): the place
- * on the axis from which the next block is looked for and the minutes freed, counted on the day before the change. Null:
- * nothing to ask about (a begun block – the log tells; less than 10 min; in the past).
+ * The fields of the event `plan.freed` (D375): the block changed, the place on the axis from which the next block is
+ * looked for (an instant, ms) and the minutes freed.
  */
-export function freedByEdit(state: DayState, was: PlanBlock, after: PlanBlock | null): { placeMin: number; freedMin: number } | null {
+export interface Freed {
+  block: string
+  place: number
+  minutes: number
+}
+
+/**
+ * What a change of today's plan in the main window frees (D368: a block not begun removed – `after` null – or shortened –
+ * its end earlier with a shorter length, the field „Długość” or the bottom edge; never a move nor the top edge), counted on
+ * the day before the change – the window writes it to the day's log as `plan.freed` (D375). Null: nothing to ask about (a
+ * begun block – the log tells; less than 10 min; in the past).
+ */
+export function freedByEdit(state: DayState, was: PlanBlock, after: PlanBlock | null): Freed | null {
   const f = state.facts.blocks.get(was.id)
   if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) return null
   const p = state.forecast.find((x) => x.block.id === was.id)
@@ -251,5 +291,5 @@ export function freedByEdit(state: DayState, was: PlanBlock, after: PlanBlock | 
     freed = cut
   }
   if (freed < GAP_MIN) return null
-  return { placeMin: logicalMinuteOf(state.grid.date, atOf(state.grid, place)), freedMin: freed }
+  return { block: was.id, place: atOf(state.grid, place), minutes: freed }
 }

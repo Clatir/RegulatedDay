@@ -16,7 +16,7 @@ import { HARD_END_TEXT } from '@shared/engineView'
 import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
-import { gapIn, planGapIpc, planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
+import { planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
 import { recordEdit } from '@shared/data/merge'
 
 const DAY = '2026-10-21'
@@ -1969,6 +1969,35 @@ describe('domykanie luk w pasku (D368, D373)', () => {
     expect(await answers(folder)).toEqual(['leave'])
   })
 
+  it('„Skończyłem”, potem „Start” następnego w pasku – jak „Dalej” (D375): pytanie o lukę przed blokiem po nim', async () => {
+    const { w, folder, at } = await make()
+    expect((await folder.timerClick({ a: 'start', block: 'a', day: DAY } as never)).ok).toBe(true)
+    at(10 * 60 + 40)
+    expect((await folder.timerClick({ a: 'finish', block: 'a', day: DAY } as never)).ok).toBe(true)
+    await w.refresh()
+    expect(gapLines(w).map((l) => l.id)).toEqual([`gap:${DAY}:b:${10 * 60 + 40}`])
+    at(10 * 60 + 41)
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+    expect(gapLines(w).map((l) => [l.id, l.text])).toEqual([[`gap:${DAY}:c:${10 * 60 + 40}`, 'Luka 19 min']])
+  })
+
+  it('zaparkowanie zapauzowanego bloku w pasku (D375): pytanie o lukę przed kolejnym', async () => {
+    const { w, folder, at } = await make()
+    expect((await folder.timerClick({ a: 'start', block: 'a', day: DAY } as never)).ok).toBe(true)
+    at(10 * 60 + 20)
+    await w.refresh()
+    await w.act('pause', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.refresh()
+    expect(gapLines(w)).toEqual([])
+    await w.act('line', 'paused:a|park', 'bar')
+    expect((await folder.timer(DAY)).paused).toEqual([])
+    // 40 min of „a” not done, 30 min empty before „b” from now.
+    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 30 min'])
+  })
+
   it('luka 5 min – bez pytania', async () => {
     const { w } = await nextAt(10 * 60 + 55)
     expect(gapLines(w)).toEqual([])
@@ -2090,25 +2119,32 @@ describe('domykanie luk w pasku (D368, D373)', () => {
     expect(gapLines(w)).toEqual([])
   })
 
-  it('usunięcie w oknie (IPC `planGap`): pytanie na tym komputerze, „Przesuń” zapisuje; innego dnia i bez zgłoszenia – nic', async () => {
+  it('usunięcie w oknie (zdarzenie `plan.freed`, D375): pytanie także po ponownym uruchomieniu, „Przesuń” zapisuje; innego dnia – nic', async () => {
     const { w, folder, build } = await make({ from: placeLogical(DAY, 9 * 60) })
     await w.refresh()
     const now = (await folder.recordView(paths.day(DAY))) as Record<string, unknown> & Day
     const entry = recordEdit(paths.day(DAY), now, { ...now, blocks: now.blocks.filter((b) => b.id !== 'b') })!
     await folder.edit([{ ...entry, edits: entry.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
     await w.refresh()
-    // The plan written alone (nothing said): no question.
+    // The plan written alone (an older version's window – nothing said): no question.
     expect(gapLines(w)).toEqual([])
-    await w.freed(addDays(DAY, 1), 11 * 60, 60)
+    const tomorrow = addDays(DAY, 1)
+    await folder.userEvents([{ k: 'plan.freed', day: tomorrow, block: 'b', place: placeLogical(tomorrow, 11 * 60), minutes: 60 }])
+    await w.refresh()
     expect(gapLines(w)).toEqual([])
-    await w.freed(DAY, 11 * 60, 60)
-    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 1 h'])
-    // Another bar on this folder (the other computer's) has no trigger of this window.
-    const other = build()
-    await other.refresh()
-    expect(gapLines(other)).toEqual([])
-    await w.act('line', `${gapLines(w)[0]!.id}|close`, 'bar')
+    // What the window writes (`tellFreed`): through the log, as every event of the window.
+    await expect(folder.userEvents([{ k: 'plan.freed', day: DAY, block: 'b', place: placeLogical(DAY, 11 * 60), minutes: 0 }])).rejects.toThrow('plan.freed')
+    await folder.userEvents([{ k: 'plan.freed', day: DAY, block: 'b', place: placeLogical(DAY, 11 * 60), minutes: 60 }])
+    await w.refresh()
+    expect(gapLines(w).map((l) => [l.id, l.text])).toEqual([[`gap:${DAY}:c:${11 * 60}`, 'Luka 1 h']])
+    // The app started again (a bar with no memory of this window) – and the other computer, reading the same log: the same question.
+    const again = build()
+    await again.refresh()
+    expect(gapLines(again).map((l) => l.id)).toEqual([`gap:${DAY}:c:${11 * 60}`])
+    await again.act('line', `${gapLines(again)[0]!.id}|close`, 'bar')
     expect(await starts(folder)).toEqual({ a: 10 * 60, c: 11 * 60 })
+    await w.refresh()
+    expect(gapLines(w)).toEqual([])
   })
 
   it('pytanie, którego luki już nie ma (blok zaczęty w oknie): „Przesuń” nic nie zapisuje i mówi dlaczego', async () => {
@@ -2120,23 +2156,5 @@ describe('domykanie luk w pasku (D368, D373)', () => {
     expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, c: 12 * 60 })
     expect(w.current().note?.text).toBe('Tej luki już nie ma.')
     expect(gapLines(w)).toEqual([])
-  })
-
-  it('IPC: przyjmuje tylko dzień, minutę planu i co najmniej 10 min; odpowiedź nie czeka na przeliczenie paska', async () => {
-    expect(gapIn(DAY, 11 * 60, 60)).toEqual({ day: DAY, placeMin: 11 * 60, freedMin: 60 })
-    expect(gapIn(DAY, 11 * 60, 5)).toBeNull()
-    expect(gapIn(DAY, 11 * 60 + 0.5, 60)).toBeNull()
-    expect(gapIn(DAY, 100, 60)).toBeNull()
-    expect(gapIn('jutro', 11 * 60, 60)).toBeNull()
-    expect(gapIn(DAY, '660', 60)).toBeNull()
-    const calls: unknown[][] = []
-    const logs: string[] = []
-    const never = { freed: (...a: unknown[]) => (calls.push(a), new Promise<void>(() => undefined)) }
-    expect(planGapIpc(never, () => undefined, DAY, 11 * 60, 60)).toBeUndefined()
-    expect(calls).toEqual([[DAY, 11 * 60, 60]])
-    planGapIpc({ freed: () => Promise.reject(new Error('folder')) }, (_l, msg) => void logs.push(msg), DAY, 11 * 60, 60)
-    await vi.waitFor(() => expect(logs).toEqual(['pasek nie przeliczył się po zwolnieniu czasu w planie']))
-    planGapIpc(never, () => undefined, DAY, 11 * 60, 3)
-    expect(calls).toHaveLength(1)
   })
 })

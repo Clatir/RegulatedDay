@@ -189,6 +189,8 @@ export interface DayFacts {
   frozen: FrozenFact | null
   /** Routines ticked off by their block (D328): the last record of each; `at` ms, `id` – the event (its „Cofnij”). */
   routines: Map<string, { id: string; at: number; routine: string; version: RoutineVersion; steps: string[] }>
+  /** Time freed in the plan by the window (`plan.freed`, D375): the block, the place (index), minutes, when written. */
+  freed: Array<{ block: string; place: number; minutes: number; order: EventOrder }>
 }
 
 export interface FrozenFact {
@@ -239,7 +241,7 @@ const newBlock = (id: string): BlockFact => ({
 })
 
 /** Events that never change the timer's facts (they do not make segments stale either); energy never does either. */
-const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown', 'block.exchange', 'cost.felt', 'routine.done'])
+const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown', 'block.exchange', 'cost.felt', 'routine.done', 'plan.freed'])
 
 export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k) || e.dom === 'energy'
 
@@ -266,7 +268,8 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
     closed: null,
     notRest: [],
     frozen: null,
-    routines: new Map()
+    routines: new Map(),
+    freed: []
   }
   const fixes: Array<{ block: string; start: number | null; end: number | null; id: string; order: EventOrder }> = []
   const marks = new Map<string, boolean>()
@@ -463,6 +466,9 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         break
       case 'question.answer':
         if (!f.answers.has(e.question)) f.answers.set(e.question, { at: e.at, answer: e.answer, value: e.value ?? null, order: orderOf(e) })
+        break
+      case 'plan.freed':
+        f.freed.push({ block: e.block, place: idx(e.place), minutes: e.minutes, order: orderOf(e) })
         break
       case 'ritual.close':
         f.closed = { at: idx(e.at), how: e.how }
