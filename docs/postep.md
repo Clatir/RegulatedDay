@@ -38,32 +38,14 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 
 ### SNT3 i SNT6 – stan
 Sesja równoległa do ciągu J (wyjątek od „jedna sesja do `main`”, zgoda 10.11); numery D387–D399 (D380–D386 zajął ciąg L, PR #66),
-T650–T699.
-**Przed etapem (10.11):** pytania w sześciu rundach – D387 (SNT6), D388 (SNT3). Ryzyka: SNT6 – korpus wszystkich
-dni w procesie głównym; SNT3 – wierność zapisu Markdown (stare notatki bez zmian), limit 10 000 (starsza wersja na
-drugim komputerze tnie do 2000 – ostrzeżenie), linki tylko http/https. Model: główna sesja Opus 5.5 · high,
-`wykonawca-sonnet` · high równolegle w `.claude/worktrees/ws6` i `ws3` (ws3 – własna kopia `node_modules`, bo SNT3
-dodaje biblioteki edytora); SNT3 – przegląd xhigh części limitu (format pliku).
+T650–T699 (zajęte D387–D388, T650–T674).
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| SNT6 wyszukiwarka Ctrl K | 1.7.0 | #67 | scalone 11.11 (d76ce2b), wydanie 1.7.0 z runu 43079086202; wpis – `docs/archiwum/postep-SNT.md` | ok. 2,5 h (4–6 h) – jedna runda przeglądu high |
-| SNT3 Markdown w notatkach | 1.9.0 | #71 | po wydaniu 1.8.0 (J4, #70) i poprawce `week.spec.ts:554` (sesja J): merge `main`, zielone CI, scalenie; jeśli J5 (#72) wejdzie pierwsze – SNT3 = 1.10.0 | przed awarią nieznany; po przejęciu ok. 4 h (6–9 h) – cztery rundy przeglądu |
+| SNT6 wyszukiwarka Ctrl K | 1.7.0 | #67 | scalone 11.11 (d76ce2b), wydanie 1.7.0 z runu 43079086202 | ok. 2,5 h (4–6 h) |
+| SNT3 Markdown w notatkach | 1.9.0 | #71 | scalone 12.11 (16c1568); run `main` 43121110287 czerwony na `week.spec.ts:554` (J2, godzina) – wydanie 1.9.0 z runu po #73 (sesja J) | po przejęciu ok. 4 h (6–9 h) |
 
-**Przejęcie 11.11 (awaria maszyny):** sesję przejęła nowa sesja. Wynik rundy 3 przeglądu SNT3 przepadł, więc puściła
-przegląd high na poprawkach rund 1–2 (10 uwag, 2 high). Druga runda high objęła poprawki tamtej rundy (10 uwag, 1 high).
-Oba zestawy poprawił `wykonawca-sonnet`, każdy punkt z testem; to T670–T673.
-
-**SNT3 (1.9.0):** notatka bloku jako Markdown – edytor na żywo (Tiptap 3, `NoteStarterKit`: pogrubienie, kursywa,
-przekreślenie, kod, listy, lista zadań, cytat, link), zapis w pliku jako tekst Markdown wierny staremu zapisowi (stara
-notatka bez edycji – bajt w bajt), nagłówki, „Powiększ” (notatka na całe okno), linki tylko http/https (`safeLinkUrl`), limit 10 000
-(`shared/model/note.ts`; ostrzeżenie, gdy komputer w folderze ma wersję starszą niż `LONG_NOTE_FROM` – ta tnie do
-2000); D388, T660–T674 (T674 – jsdom 27.4.0 dla Node 22.12, układ `Range` w testach); odbiór SNT3.1–SNT3.3. Przegląd: rundy 1–2 xhigh (15 + 14 uwag, sesja sprzed awarii), po
-przejęciu dwie rundy high (10 + 10) – poprawki z testami (wykonawca-sonnet). **Uwagi na później:** spacje na brzegach
-kodu w linii (biblioteka wynosi je poza znacznik); testy własności z innymi ziarnami (11, 12345, 987654) padają też na
-starym kodzie – w ścieżce pełnego escapowania encja `&#46;` trafia do adresu gołego linku (poprawka: wymusić `<…>`);
-degradacja bloków w części zagnieżdżeń; encje w starych notatkach są dekodowane. **Pytania na później:** „http://a”
-(≤ 8 znaków) przy pisaniu nie staje się już linkiem.
+Wpisy obu zadań, „Uwagi na później” i „Pytania na później” – `docs/archiwum/postep-SNT.md`.
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →
