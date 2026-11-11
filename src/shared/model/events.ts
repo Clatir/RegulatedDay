@@ -149,11 +149,12 @@ export type TimerEvent =
   /** An answer that is no action of the timer („Przerwa” of „Koniec pracy?”, an absence …), with a value when it has one. */
   | (EventBase & { k: 'question.answer'; at: number; question: string; answer: string; value?: number | null })
   /**
-   * Time freed in today's plan by the window (D368, D375): a block not begun removed, or shortened by its bottom edge or
-   * the field „Długość” – `place` the instant on the axis from which the next block is looked for, `minutes` freed. Only
-   * the bar's question „Luka N min” reads it – the same on every computer and after a restart; an older version skips it.
+   * Time freed in today's plan by the window (D368, D375): a block not begun removed (`how: 'remove'`, with the blocks
+   * anchored to it), or shortened by its bottom edge or the field „Długość” (`'shorten'`) – `place` the instant on the
+   * axis from which the next block is looked for, `minutes` freed. Only the bar's question „Luka N min” reads it – the
+   * same on every computer and after a restart, while the freeing lasts; an older version skips it.
    */
-  | (EventBase & { k: 'plan.freed'; at: number; block: string; place: number; minutes: number })
+  | (EventBase & { k: 'plan.freed'; at: number; block: string; how: 'remove' | 'shorten'; place: number; minutes: number })
   /** „Zacznij jeszcze raz” (D207): another stretch of a session (or a weekly analysis) that ended before its planned end. */
   | (EventBase & { k: 'block.restart'; block: string; at: number })
   /** „Mniej pytań” (spec „Cisza”): a state of the day on every computer, until „Jest lepiej” (or 04:00). */
@@ -290,7 +291,7 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   undo: { at: isNum, target: isStr },
   'question.seen': { at: isNum, question: isStr, how: (v) => v === 'panel' || v === 'main' || v === 'notification' || v === 'bar' },
   'question.answer': { at: isNum, question: isStr, answer: isStr, value: (v) => v == null || isNum(v) },
-  'plan.freed': { at: isNum, block: isStr, place: isNum, minutes: isLength },
+  'plan.freed': { at: isNum, block: isStr, how: (v) => v === 'remove' || v === 'shorten', place: isNum, minutes: isLength },
   'block.restart': { block: isStr, at: isNum },
   'fewer.start': { at: isNum },
   'fewer.end': { at: isNum },

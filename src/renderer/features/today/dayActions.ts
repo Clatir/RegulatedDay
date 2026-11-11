@@ -98,7 +98,7 @@ export async function pushDayBlocks(date: string, seen: RawRecord | null, change
 export async function tellFreed(date: string, freed: Freed | null): Promise<void> {
   if (!freed) return
   try {
-    await window.rd.logEvents([{ k: 'plan.freed', day: date, block: freed.block, place: freed.place, minutes: freed.minutes }])
+    await window.rd.logEvents([{ k: 'plan.freed', day: date, block: freed.block, how: freed.how, place: freed.place, minutes: freed.minutes }])
   } catch {
     // The plan is saved; only the bar's question about the gap is missing.
   }

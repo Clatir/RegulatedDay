@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { computeDay } from '@shared/engine/day'
-import { closeGap, freedByEdit, GAP_MIN, gapNow, gapText, logGapTriggers, type Freed, type Gap } from '@shared/engine/gaps'
+import { closeGap, freedByEdit, GAP_MIN, gapId, gapNow, gapText, logGapTriggers, type Freed, type Gap } from '@shared/engine/gaps'
 import { idxOfLogical } from '@shared/engine/grid'
 import type { PushedBlock } from '@shared/engine/pushApart'
 import { isKnown, parseEvent, RULES_VERSION } from '@shared/model/events'
@@ -53,8 +53,10 @@ describe('D368 – luka po wcześniejszym końcu', () => {
   it('„Skończyłem” 20 min przed planem: jedno pytanie „Luka 20 min” przed kolejnym blokiem; „Przesuń” zapisuje nowe godziny kolejnych', () => {
     const s = day(plan).start('a', '10:00').end('a', '10:40')
     const { ctx, state, gap } = at(s, '10:40')
-    expect(logGapTriggers(state)).toHaveLength(1)
-    expect(gap).toEqual({ id: `gap:${DATE}:b:${lm('10:40')}`, block: 'b', minutes: 20, startMin: lm('11:00'), fromMin: lm('10:40') })
+    const triggers = logGapTriggers(state)
+    expect(triggers).toHaveLength(1)
+    // The id of the question is the id of the event of the end (its trigger).
+    expect(gap).toEqual({ id: gapId(DATE, triggers[0]!.key), keys: [triggers[0]!.key], block: 'b', minutes: 20, tryMin: 20, startMin: lm('11:00'), fromMin: lm('10:40') })
     expect(gapText(gap!.minutes)).toBe('Luka 20 min')
     const out = closeGap(ctx, state, gap!)
     expect(moves(out)).toEqual(['b 11:00→10:40', 'c 12:00→11:40'])
@@ -227,7 +229,7 @@ describe('D373 – jak długo pytanie czeka i co przesuwa', () => {
     const s = day(plan).start('a', '10:00').end('a', '10:40')
     // „y” removed in the main window at 10:40 (its place 14:00, 60 min freed).
     const without = plan.filter((b) => b.id !== 'y')
-    freedEvent(s, { block: 'y', place: s.at('14:00'), minutes: 60 }, s.at('10:40') + 30_000)
+    freedEvent(s, { block: 'y', how: 'remove', place: s.at('14:00'), minutes: 60 }, s.at('10:40') + 30_000)
     const first = at(s, '10:41', { plan: without }).gap!
     expect(first).toMatchObject({ block: 'b', minutes: 19 })
     answer(s, first.id, '10:42')
@@ -241,7 +243,7 @@ describe('D368 – usunięcie i skrócenie w oknie (`freedByEdit`)', () => {
     const s = day(plan)
     const before = at(s, '09:00').state
     const freed = freedByEdit(before, plan[1]!, null)
-    expect(freed).toEqual({ block: 'x', place: s.at('12:00'), minutes: 60 })
+    expect(freed).toEqual({ block: 'x', how: 'remove', place: s.at('12:00'), minutes: 60 })
     const without = plan.filter((b) => b.id !== 'x')
     // Without the event (an older version's window): no question.
     expect(at(s, '09:00', { plan: without }).gap).toBeNull()
@@ -257,7 +259,7 @@ describe('D368 – usunięcie i skrócenie w oknie (`freedByEdit`)', () => {
     const plan = [flex('a', '10:00', 80), flex('b', '11:20', 60)]
     const st = at(day(plan), '09:00').state
     const a = plan[0]!
-    expect(freedByEdit(st, a, { ...a, durationMin: 30 })).toEqual({ block: 'a', place: day(plan).at('10:30'), minutes: 50 })
+    expect(freedByEdit(st, a, { ...a, durationMin: 30 })).toEqual({ block: 'a', how: 'shorten', place: day(plan).at('10:30'), minutes: 50 })
     expect(freedByEdit(st, a, { ...a, startMin: lm('10:30'), durationMin: 50 })).toBeNull()
     expect(freedByEdit(st, a, { ...a, startMin: lm('09:00') })).toBeNull()
     expect(freedByEdit(st, a, { ...a, durationMin: 75 })).toBeNull()
@@ -272,19 +274,20 @@ describe('D368 – usunięcie i skrócenie w oknie (`freedByEdit`)', () => {
     freedEvent(s, freedByEdit(at(s, '09:00').state, plan[1]!, null)!, s.at('09:00'), 'pcb')
     const without = plan.filter((b) => b.id !== 'x')
     const { gap } = at(s, '09:01', { plan: without })
-    expect(gap).toMatchObject({ id: `gap:${DATE}:c:${lm('12:00')}`, minutes: 60 })
+    expect(gap).toMatchObject({ id: gapId(DATE, logGapTriggers(at(s, '09:01', { plan: without }).state)[0]!.key), block: 'c', minutes: 60 })
     answer(s, gap!.id, '09:02')
     expect(at(s, '09:03', { plan: without }).gap).toBeNull()
   })
 
   it('`plan.freed`: znane zdarzenie z blokiem, chwilą miejsca i minutami 1–1440; inne – uszkodzone; starsze logi bez niego bez zmian', () => {
-    const line = (o: Record<string, unknown>) => JSON.stringify({ id: 'pca-1', c: 'pca', n: 1, t: 0, l: 0, v: RULES_VERSION, day: DATE, dom: 'timer', k: 'plan.freed', at: 0, block: 'x', place: 0, minutes: 60, ...o })
+    const line = (o: Record<string, unknown>) => JSON.stringify({ id: 'pca-1', c: 'pca', n: 1, t: 0, l: 0, v: RULES_VERSION, day: DATE, dom: 'timer', k: 'plan.freed', at: 0, block: 'x', how: 'remove', place: 0, minutes: 60, ...o })
     const ok = parseEvent(line({}))
     expect(ok.ok && isKnown(ok.event)).toBe(true)
     expect(parseEvent(line({ minutes: 0 })).ok).toBe(false)
     expect(parseEvent(line({ minutes: 12.5 })).ok).toBe(false)
     expect(parseEvent(line({ place: null })).ok).toBe(false)
     expect(parseEvent(line({ block: '' })).ok).toBe(false)
+    expect(parseEvent(line({ how: 'move' })).ok).toBe(false)
     // A day without it: no trigger of the window.
     expect(computeDay(day([flex('a', '10:00', 60)]).contextAt(day([]).at('09:00'))).facts.freed).toEqual([])
   })
@@ -302,7 +305,131 @@ describe('D368 – usunięcie i skrócenie w oknie (`freedByEdit`)', () => {
 it('próg luki to 10 min (D368)', () => {
   expect(GAP_MIN).toBe(10)
   expect(gapText(80)).toBe('Luka 1 h 20 min')
-  const g: Pick<Gap, 'block' | 'minutes'> = { block: 'nie-ma', minutes: 20 }
+  const g: Pick<Gap, 'block' | 'tryMin'> = { block: 'nie-ma', tryMin: 20 }
   const { ctx, state } = at(day([flex('a', '10:00', 60)]), '09:00')
   expect(closeGap(ctx, state, g)).toEqual([])
+})
+
+/** „Dalej” of `from` at `hhmm`: its end and the start of `to` in one click (the same instant and computer). */
+function dalej(s: Scenario, from: string, to: string, hhmm: string, min = 60): Scenario {
+  const t = s.at(hhmm)
+  return s.write(
+    [
+      { k: 'block.end', block: from, at: t, done: true, rule: null },
+      { k: 'block.start', block: to, at: t, bg: false, planned: { categoryId: 'inne', variantId: null, durationMin: min, tag: null, fixed: false }, confirmUntil: null, how: 'click' }
+    ],
+    t
+  )
+}
+
+describe('przegląd J4 – runda 1', () => {
+  const plan = [flex('a', '10:00', 60), flex('b', '11:00', 60), flex('c', '12:00', 60)]
+
+  it('(1) odwołanie 10:05:40 i „Zostaw” 10:05:45: pytanie znika – kolejność zdarzenia odwołania, nie jego minuta', () => {
+    const s = day(plan)
+    const t = s.at('10:05') + 40_000
+    s.write([{ k: 'block.cancel', block: 'b', at: t, rule: 'user' }], t)
+    const c1 = s.contextAt(t + 2_000)
+    const g = gapNow(c1, computeDay(c1))
+    expect(g).toMatchObject({ block: 'c' })
+    s.write([{ k: 'question.answer', at: t + 5_000, question: g!.id, answer: 'leave', value: null }], t + 5_000)
+    const c2 = s.contextAt(t + 6_000)
+    expect(gapNow(c2, computeDay(c2))).toBeNull()
+  })
+
+  it('(2, 7) usuń → „Cofnij” → usuń znowu: po „Cofnij” bez pytania, potem nowe pytanie z własnym identyfikatorem', () => {
+    const p = [flex('a', '10:00', 60), flex('x', '12:00', 60), flex('c', '13:00', 60)]
+    const s = day(p)
+    const without = p.filter((b) => b.id !== 'x')
+    const f = freedByEdit(at(s, '09:00').state, p[1]!, null)!
+    freedEvent(s, f, s.at('09:00'))
+    const first = at(s, '09:01', { plan: without }).gap!
+    expect(first).toMatchObject({ block: 'c', minutes: 60 })
+    answer(s, first.id, '09:02')
+    // „Cofnij”: x stands where it stood – its freeing is over.
+    expect(at(s, '09:05').gap).toBeNull()
+    freedEvent(s, f, s.at('09:10'))
+    const second = at(s, '09:11', { plan: without }).gap!
+    expect(second).toMatchObject({ block: 'c', minutes: 60 })
+    expect(second.id).not.toBe(first.id)
+  })
+
+  it('(4) „Zostaw”, potem wcześniejszy start bloku po luce: ten sam wyzwalacz nie pyta drugi raz (o blok za nim)', () => {
+    const s = day(plan).start('a', '10:00').end('a', '10:40')
+    answer(s, at(s, '10:40').gap!.id, '10:40')
+    s.start('b', '10:41')
+    expect(at(s, '10:42').gap).toBeNull()
+  })
+
+  it('(5) dzień spóźniony: „Dalej”, „Skończyłem” + „Start” i samo „Skończyłem” – luka przed blokiem za następnym', () => {
+    const p = [flex('a', '10:00', 60), flex('b', '11:00', 60), flex('c', '12:30', 60)]
+    expect(at(dalej(day(p).start('a', '10:30'), 'a', 'b', '11:10'), '11:10').gap).toMatchObject({ block: 'c', minutes: 20 })
+    expect(at(day(p).start('a', '10:30').end('a', '11:10').start('b', '11:11'), '11:11').gap).toMatchObject({ block: 'c', minutes: 19 })
+    // „b” is due now (its hour passed): the time freed stands before „c” at once.
+    expect(at(day(p).start('a', '10:30').end('a', '11:10'), '11:10').gap).toMatchObject({ block: 'c', minutes: 20 })
+  })
+
+  it('(6) łańcuch: „Skończyłem”, „Start” następnego i „Dalej” do kolejnego – jak sam „Dalej” (pytanie o lukę przed d)', () => {
+    const p = [flex('a', '10:00', 60), flex('b', '11:00', 30), flex('c', '11:30', 30), flex('d', '12:30', 60)]
+    const pure = dalej(dalej(day(p).start('a', '10:00'), 'a', 'b', '10:30', 30), 'b', 'c', '11:00', 30)
+    expect(at(pure, '11:00').gap).toMatchObject({ block: 'd', minutes: 30 })
+    const hand = dalej(day(p).start('a', '10:00').end('a', '10:30').start('b', '10:31'), 'b', 'c', '11:01', 30)
+    // A minute waited after „Skończyłem”: one minute less.
+    expect(at(hand, '11:01').gap).toMatchObject({ block: 'd', minutes: 29 })
+  })
+
+  it('(5, 6) łańcuch „Dalej” z przedłużeniem: przedłużony blok zużywa zwolniony czas – bez pytania o blok dalej', () => {
+    const p = [flex('a', '10:00', 60), flex('b', '11:00', 60), flex('c', '12:00', 60), flex('d', '14:00', 60)]
+    const s = dalej(day(p).start('a', '10:00'), 'a', 'b', '10:40')
+    s.raw({ k: 'block.extend', block: 'b', at: s.at('11:30'), minutes: 20 }, '11:30')
+    expect(at(dalej(s, 'b', 'c', '12:00'), '12:00').gap).toBeNull()
+    // „Przedłuż” +10: 10 of the 20 min are left, before „d”.
+    const ten = dalej(day(p).start('a', '10:00'), 'a', 'b', '10:40')
+    ten.raw({ k: 'block.extend', block: 'b', at: ten.at('11:30'), minutes: 10 }, '11:30')
+    expect(at(dalej(ten, 'b', 'c', '11:50'), '11:50').gap).toMatchObject({ block: 'd', minutes: 10 })
+    // Without „Przedłuż”: the 20 min stand before „d” (the hour planned between „c” and „d” stays).
+    expect(at(dalej(dalej(day(p).start('a', '10:00'), 'a', 'b', '10:40'), 'b', 'c', '11:40'), '11:40').gap).toMatchObject({ block: 'd', minutes: 20 })
+  })
+
+  it('(7) usunięcie, „Cofnij” i przeniesienie bloku – bez pytania; skrócenie wydłużone z powrotem – też', () => {
+    const p = [flex('a', '10:00', 60), flex('x', '12:00', 60), flex('c', '13:00', 60)]
+    const s = day(p)
+    freedEvent(s, freedByEdit(at(s, '09:00').state, p[1]!, null)!, s.at('09:00'))
+    expect(at(s, '09:10', { plan: p.map((b) => (b.id === 'x' ? { ...b, startMin: lm('15:00') } : b)) }).gap).toBeNull()
+    const q = [flex('a', '10:00', 80), flex('b', '11:20', 60)]
+    const s2 = day(q)
+    const short = { ...q[0]!, durationMin: 30 }
+    freedEvent(s2, freedByEdit(at(s2, '09:00').state, q[0]!, short)!, s2.at('09:00'))
+    expect(at(s2, '09:05', { plan: [short, q[1]!] }).gap).toMatchObject({ block: 'b', minutes: 50 })
+    expect(at(s2, '09:10').gap).toBeNull()
+  })
+
+  it('(9) bufor przejścia między kategoriami zostaje: linia podaje tyle, ile „Przesuń” naprawdę zamknie', () => {
+    const p = [flex('a', '10:00', 60), flex('b', '11:00', 60), flex('c', '12:00', 60, 'nauka')]
+    const s = dalej(day(p).start('a', '10:00'), 'a', 'b', '10:40')
+    const { ctx, state, gap } = at(s, '10:40')
+    // „b” ends at 11:40, „c” of another category waits 5 min after it.
+    expect(gap).toMatchObject({ block: 'c', minutes: 15, fromMin: lm('11:45') })
+    expect(moves(closeGap(ctx, state, gap!))).toEqual(['c 12:00→11:45'])
+  })
+
+  it('(10) dwa wyzwalacze przed jednym blokiem: identyfikator pytania nie zmienia się sam z czasem', () => {
+    const p = [flex('a', '10:00', 60), flex('x', '11:00', 30), flex('b', '11:30', 60)]
+    const s = day(p).start('a', '10:00')
+    freedEvent(s, { block: 'x', how: 'remove', place: s.at('11:00'), minutes: 30 }, s.at('10:20'))
+    s.end('a', '10:40')
+    const without = p.filter((b) => b.id !== 'x')
+    const early = at(s, '10:41', { plan: without }).gap!
+    expect(early).toMatchObject({ block: 'b', minutes: 49 })
+    const late = at(s, '11:12', { plan: without }).gap!
+    expect(late.id).toBe(early.id)
+    // 18 of the 50 min freed are left (32 min waited) – the plan had no break before „b”.
+    expect(late.minutes).toBe(18)
+  })
+
+  it('(15) usunięcie bloku z zakotwiczonym za nim: zwolniony cały czas, który znika z planu', () => {
+    const p = [flex('a', '10:00', 60), flex('x', '12:00', 60), block({ id: 'j', cat: 'inne', after: 'x', min: 15, origin: 'user' }), flex('c', '13:30', 60)]
+    const s = day(p)
+    expect(freedByEdit(at(s, '09:00').state, p[1]!, null)).toEqual({ block: 'x', how: 'remove', place: s.at('12:00'), minutes: 75 })
+  })
 })

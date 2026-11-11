@@ -1928,6 +1928,8 @@ describe('domykanie luk w pasku (D368, D373)', () => {
   const starts = async (folder: DataFolder) => Object.fromEntries(((await folder.recordView(paths.day(DAY))) as Day).blocks.map((b) => [b.id, b.startMin]))
   const gapLines = (w: WidgetEngine) => w.current().lines.filter((l) => l.id.startsWith('gap:'))
   const answers = async (folder: DataFolder) => (await folder.readDay(DAY)).events.filter((e) => e.k === 'question.answer').map((e) => (e as unknown as { answer: string }).answer)
+  /** The id of the question of a trigger: `gap:<day>:<the id of its event>` (the end of a block, `plan.freed` …). */
+  const gapOf = async (folder: DataFolder, k: string, block: string) => `gap:${DAY}:${(await folder.readDay(DAY)).events.find((e) => e.k === k && (e as unknown as { block: string }).block === block)!.id}`
 
   /** „a” from 10:00, „Dalej” at `endMin`: „b” begins at once, the gap stands before „c”. */
   async function nextAt(endMin: number) {
@@ -1944,7 +1946,7 @@ describe('domykanie luk w pasku (D368, D373)', () => {
     const { w, folder } = await nextAt(10 * 60 + 40)
     expect(w.current().block?.name).toBe('Inne obowiązki')
     const lines = gapLines(w)
-    expect(lines).toEqual([{ id: `gap:${DAY}:c:${10 * 60 + 40}`, text: 'Luka 20 min', actions: [{ id: 'close', label: 'Przesuń resztę wcześniej' }, { id: 'leave', label: 'Zostaw' }], dot: false }])
+    expect(lines).toEqual([{ id: await gapOf(folder, 'block.end', 'a'), text: 'Luka 20 min', actions: [{ id: 'close', label: 'Przesuń resztę wcześniej' }, { id: 'leave', label: 'Zostaw' }], dot: false }])
     // Quiet: no dot of its own (nothing else waits now).
     expect(w.current().dot).toBe(false)
     await w.act('line', `${lines[0]!.id}|close`, 'bar')
@@ -1975,12 +1977,14 @@ describe('domykanie luk w pasku (D368, D373)', () => {
     at(10 * 60 + 40)
     expect((await folder.timerClick({ a: 'finish', block: 'a', day: DAY } as never)).ok).toBe(true)
     await w.refresh()
-    expect(gapLines(w).map((l) => l.id)).toEqual([`gap:${DAY}:b:${10 * 60 + 40}`])
+    const id = await gapOf(folder, 'block.end', 'a')
+    expect(gapLines(w).map((l) => [l.id, l.text])).toEqual([[id, 'Luka 20 min']])
     at(10 * 60 + 41)
     await w.refresh()
     await w.act('start', undefined, 'bar')
     expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
-    expect(gapLines(w).map((l) => [l.id, l.text])).toEqual([[`gap:${DAY}:c:${10 * 60 + 40}`, 'Luka 19 min']])
+    // The same trigger (its id), now before „c”: a minute waited.
+    expect(gapLines(w).map((l) => [l.id, l.text])).toEqual([[id, 'Luka 19 min']])
   })
 
   it('zaparkowanie zapauzowanego bloku w pasku (D375): pytanie o lukę przed kolejnym', async () => {
@@ -2041,8 +2045,9 @@ describe('domykanie luk w pasku (D368, D373)', () => {
     at(10 * 60 + 50)
     expect((await folder.timerClick({ a: 'finish', block: 'ses', day: DAY } as never)).ok).toBe(true)
     await w.refresh()
-    // 40 min stand empty before „b”, the early end of „a” freed 30 of them.
-    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 30 min'])
+    // 40 min stand empty before „b”; of the 30 min the early end of „a” freed, 20 passed in the session – the break planned
+    // after „a” (11:00–11:30) stays.
+    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 10 min'])
   })
 
   it('tryb zajęć: bez pytania do jego końca; po końcu – pytanie, jeśli luka dalej jest', async () => {
@@ -2071,7 +2076,8 @@ describe('domykanie luk w pasku (D368, D373)', () => {
     expect((await folder.timerClick({ a: 'finish', block: 'z', day: DAY } as never)).ok).toBe(true)
     await w.refresh()
     expect(w.current().quiet).toBe(false)
-    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 30 min'])
+    // 20 of the 30 min freed passed in the classes: the break planned after „a” stays.
+    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 10 min'])
   })
 
   it('„Odcinam się”: bez pytania do „Wracam”; po nim – pytanie o lukę, która jeszcze jest', async () => {
@@ -2129,22 +2135,48 @@ describe('domykanie luk w pasku (D368, D373)', () => {
     // The plan written alone (an older version's window – nothing said): no question.
     expect(gapLines(w)).toEqual([])
     const tomorrow = addDays(DAY, 1)
-    await folder.userEvents([{ k: 'plan.freed', day: tomorrow, block: 'b', place: placeLogical(tomorrow, 11 * 60), minutes: 60 }])
+    await folder.userEvents([{ k: 'plan.freed', day: tomorrow, block: 'b', how: 'remove', place: placeLogical(tomorrow, 11 * 60), minutes: 60 }])
     await w.refresh()
     expect(gapLines(w)).toEqual([])
     // What the window writes (`tellFreed`): through the log, as every event of the window.
-    await expect(folder.userEvents([{ k: 'plan.freed', day: DAY, block: 'b', place: placeLogical(DAY, 11 * 60), minutes: 0 }])).rejects.toThrow('plan.freed')
-    await folder.userEvents([{ k: 'plan.freed', day: DAY, block: 'b', place: placeLogical(DAY, 11 * 60), minutes: 60 }])
+    await expect(folder.userEvents([{ k: 'plan.freed', day: DAY, block: 'b', how: 'remove', place: placeLogical(DAY, 11 * 60), minutes: 0 }])).rejects.toThrow('plan.freed')
+    await folder.userEvents([{ k: 'plan.freed', day: DAY, block: 'b', how: 'remove', place: placeLogical(DAY, 11 * 60), minutes: 60 }])
     await w.refresh()
-    expect(gapLines(w).map((l) => [l.id, l.text])).toEqual([[`gap:${DAY}:c:${11 * 60}`, 'Luka 1 h']])
+    const id = await gapOf(folder, 'plan.freed', 'b')
+    expect(gapLines(w).map((l) => [l.id, l.text])).toEqual([[id, 'Luka 1 h']])
     // The app started again (a bar with no memory of this window) – and the other computer, reading the same log: the same question.
     const again = build()
     await again.refresh()
-    expect(gapLines(again).map((l) => l.id)).toEqual([`gap:${DAY}:c:${11 * 60}`])
+    expect(gapLines(again).map((l) => l.id)).toEqual([id])
     await again.act('line', `${gapLines(again)[0]!.id}|close`, 'bar')
     expect(await starts(folder)).toEqual({ a: 10 * 60, c: 11 * 60 })
     await w.refresh()
     expect(gapLines(w)).toEqual([])
+  })
+
+  it('„Zostaw”, gdy odpowiedź już jest (drugi komputer, pasek jeszcze nieprzeliczony): pasek mówi dlaczego', async () => {
+    const { w, at } = await nextAt(10 * 60 + 40)
+    const id = gapLines(w)[0]!.id
+    const t = placeLogical(DAY, 10 * 60 + 41)
+    mkdirSync(join(dataDir, paths.logDir(DAY)), { recursive: true })
+    writeFileSync(join(dataDir, paths.log(DAY, 'pcb')), `${JSON.stringify({ id: 'pcb-0', c: 'pcb', n: 0, t, l: t, v: 1, day: DAY, dom: 'timer', k: 'question.answer', at: t, question: id, answer: 'leave', value: null })}
+`)
+    at(10 * 60 + 41)
+    await w.act('line', `${id}|leave`, 'bar')
+    expect(w.current().note?.text).toBe('już odpowiedziane')
+    expect(gapLines(w)).toEqual([])
+  })
+
+  it('„Przesuń”, którego zapis się nie udał: odpowiedzi nie ma, pytanie zostaje (po udanym zapisie – jedna odpowiedź na wyzwalacz)', async () => {
+    const { w, folder, failEdits } = await nextAt(10 * 60 + 40)
+    const id = gapLines(w)[0]!.id
+    failEdits()
+    await w.act('line', `${id}|close`, 'bar')
+    expect(w.current().note?.text).toContain('Nie zapisano')
+    expect(await answers(folder)).toEqual([])
+    expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, c: 12 * 60 })
+    await w.refresh()
+    expect(gapLines(w).map((l) => l.id)).toEqual([id])
   })
 
   it('pytanie, którego luki już nie ma (blok zaczęty w oknie): „Przesuń” nic nie zapisuje i mówi dlaczego', async () => {

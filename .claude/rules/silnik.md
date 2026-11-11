@@ -37,15 +37,16 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   state, plan, 'forecast' | 'plan')` – każdy blok, który zmienia miejsce na osi (podgląd: przesunięte, zakotwiczone, przepuszczone). Start z własnym numerem
   minuty (doba 25 h: druga 02:xx → 03:00), najwyżej `PLAN_MAX`, `hold` (szablon; przy końcu doby może dać wcześniej). Tylko
   elastyczne z własną godziną, w pierwszym planie, niechronione, niezaczęte. `withBlock`, `pushedText`. Testy: `push-apart.test.ts`.
-- `engine/gaps.ts` (D368, D373, D375) – `logGapTriggers`, wszystko z logu (koniec przed planowanym – nie `plan`/`fixedNoReaction`,
-  także `park` zapauzowanego; `block.shorten`; odwołanie / zaparkowanie niezaczętego przez Ciebie; `plan.freed` okna – fakt
-  `DayFacts.freed`, zdarzenie bierne; tylko pierwszy plan, zwolnione ≥ 10 min), `gapNow(ctx, state)` – pierwszy blok
-  pierwszego planu od miejsca wyzwalacza musi być `pushable`; luka = min(od max(teraz, koniec poprzedniego), zwolnione);
-  `over` (T593): pytanie kończy blok zaczęty po wyzwalaczu od jego miejsca – poza blokiem, który biegł przy nim albo zaczął
-  się z nim („Dalej”, też po pauzie), i następnym blokiem planu zaczętym przed swoją godziną (ręczny „Start” – jak „Dalej”); najbliższa
-  luka, której zamknięcie rusza blok; odpowiedź `gap:<dzień>:<blok>:…` obejmuje wyzwalacze tego bloku sprzed niej kolejnością
-  zdarzeń (`compareOrder` z `answers.order` – nie zegarem ściennym, T590). `closeGap` – lustro `pushApart`: elastyczne od luki do pierwszego stałego/czekającego,
-  każdy o tyle wcześniej, nie przed teraz ani przed blokiem, który zostaje; zapis = prognoza. `freedByEdit` – pola `plan.freed` dla okna. Testy: `gaps.test.ts`.
+- `engine/gaps.ts` (D368, D373, D375, T596–T601) – `logGapTriggers` z logu, każdy z id swojego zdarzenia (koniec przed planowanym –
+  nie `plan`/`fixedNoReaction`, także `park` zapauzowanego; `block.shorten`; odwołanie / zaparkowanie niezaczętego przez Ciebie –
+  `goneId`/`goneOrder`; `plan.freed` okna – `DayFacts.freed`, bierne, póki zwolnienie trwa: `how` remove / shorten). `slackOf` – ile
+  zwolnionego czasu zostało: niosą go bloki biegnące przez miejsce, zaczęte z wyzwalaczem i następne bloki planu zaczęte po nim
+  (ręczny „Start” = „Dalej”), inny blok zaczęty w luce ją wypełnia, zużywają minuty bez nich i ponad ich długość. `targetOf` –
+  pierwszy blok o swojej godzinie od miejsca (należne pomija), musi być `pushable`. `gapNow(ctx, state)` – wyzwalacze jednego
+  bloku razem (`gap:<dzień>:<id najwcześniejszego>`, `keys`; odpowiedź na każdy wyzwalacz), `tryMin` = min(wolne, zostało),
+  `minutes` = tyle, ile `closeGap` przesunie (bufor zostaje). `closeGap` – lustro `pushApart`: elastyczne od luki do pierwszego
+  stałego/czekającego, każdy o `tryMin` wcześniej, nie przed teraz ani przed blokiem, który zostaje; zapis = prognoza.
+  `freedByEdit` – pola `plan.freed` (usunięcie z zakotwiczonymi). Testy: `gaps.test.ts`.
 - `engine/day.ts` – `computeDay`: granica, koniec pracy, klasyfikacja minut, budżet, regeneracja, minimum, pora snu,
   twardy koniec, pula, regeneracja każdej minuty (`rest`, dla energii); `newSegments` (odcinki do zapisu przez
   prowadzącego); `settingsAtMinute`. Energia (E2) – osobne reguły `energia.md`.

@@ -83,10 +83,13 @@ export interface BlockFact {
    * `extends`; where their order matters (a shortening cuts what was confirmed before it – `confirmWindows`), sort them
    * by `order` (`compareOrder`) – a click of another computer may stand later in the log than it happened.
    */
-  endChanges: Array<{ at: number; minutes: number; order: EventOrder }>
+  endChanges: Array<{ at: number; minutes: number; order: EventOrder; id: string }>
   parkedAt: number | null
   /** Why it was parked or cancelled (the rule: 'exchange', 'type', 'lateWake', 'workEnd' …). */
   goneRule: string | null
+  /** The event that parked or cancelled it before it began: its id and when it happened (`EventOrder`, not its minute). */
+  goneId: string | null
+  goneOrder: EventOrder | null
   cancelledAt: number | null
   done: boolean | null
   endRule: string | null
@@ -189,8 +192,8 @@ export interface DayFacts {
   frozen: FrozenFact | null
   /** Routines ticked off by their block (D328): the last record of each; `at` ms, `id` – the event (its „Cofnij”). */
   routines: Map<string, { id: string; at: number; routine: string; version: RoutineVersion; steps: string[] }>
-  /** Time freed in the plan by the window (`plan.freed`, D375): the block, the place (index), minutes, when written. */
-  freed: Array<{ block: string; place: number; minutes: number; order: EventOrder }>
+  /** Time freed in the plan by the window (`plan.freed`, D375): its id, the block, how, the place (index), minutes, when written. */
+  freed: Array<{ id: string; block: string; how: 'remove' | 'shorten'; place: number; minutes: number; order: EventOrder }>
 }
 
 export interface FrozenFact {
@@ -232,6 +235,8 @@ const newBlock = (id: string): BlockFact => ({
   endChanges: [],
   parkedAt: null,
   goneRule: null,
+  goneId: null,
+  goneOrder: null,
   cancelledAt: null,
   done: null,
   endRule: null,
@@ -371,11 +376,11 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
       case 'block.extend': {
         const b = block(e.block)
         b.extends.push({ at: idx(e.at), minutes: e.minutes })
-        b.endChanges.push({ at: idx(e.at), minutes: e.minutes, order: orderOf(e) })
+        b.endChanges.push({ at: idx(e.at), minutes: e.minutes, order: orderOf(e), id: e.id })
         break
       }
       case 'block.shorten':
-        block(e.block).endChanges.push({ at: idx(e.at), minutes: -e.minutes, order: orderOf(e) })
+        block(e.block).endChanges.push({ at: idx(e.at), minutes: -e.minutes, order: orderOf(e), id: e.id })
         break
       case 'block.confirm': {
         const b = block(e.block)
@@ -387,6 +392,10 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         if (b.parkedAt == null && b.startedAt == null) {
           b.parkedAt = idx(e.at)
           b.goneRule = e.rule ?? null
+          if (b.cancelledAt == null) {
+            b.goneId = e.id
+            b.goneOrder = orderOf(e)
+          }
         }
         break
       }
@@ -395,6 +404,8 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         if (b.cancelledAt == null && b.startedAt == null) {
           b.cancelledAt = idx(e.at)
           b.goneRule = e.rule ?? null
+          b.goneId = e.id
+          b.goneOrder = orderOf(e)
         }
         break
       }
@@ -468,7 +479,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         if (!f.answers.has(e.question)) f.answers.set(e.question, { at: e.at, answer: e.answer, value: e.value ?? null, order: orderOf(e) })
         break
       case 'plan.freed':
-        f.freed.push({ block: e.block, place: idx(e.place), minutes: e.minutes, order: orderOf(e) })
+        f.freed.push({ id: e.id, block: e.block, how: e.how, place: idx(e.place), minutes: e.minutes, order: orderOf(e) })
         break
       case 'ritual.close':
         f.closed = { at: idx(e.at), how: e.how }
@@ -571,7 +582,8 @@ export function blockAt(b: BlockFact, m: number): BlockFact {
   if (b.startedAt == null || b.startedAt >= m) {
     const parkedAt = b.parkedAt != null && b.parkedAt < m ? b.parkedAt : null
     const cancelledAt = b.cancelledAt != null && b.cancelledAt < m ? b.cancelledAt : null
-    return { ...newBlock(b.id), parkedAt, cancelledAt, goneRule: parkedAt != null || cancelledAt != null ? b.goneRule : null, addConfirmedAt }
+    const gone = parkedAt != null || cancelledAt != null
+    return { ...newBlock(b.id), parkedAt, cancelledAt, goneRule: gone ? b.goneRule : null, goneId: gone ? b.goneId : null, goneOrder: gone ? b.goneOrder : null, addConfirmedAt }
   }
   const runs = b.runs.filter((r) => r.from < m).map((r) => (r.to >= m ? { ...r, to: OPEN } : r))
   const ended = b.endedAt != null && b.endedAt < m

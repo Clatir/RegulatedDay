@@ -17,7 +17,7 @@ import { paths } from '@shared/data/paths'
 import { engineView, POOL_TEXT, RESERVE_REGEN_MIN, warnDeadlines } from '@shared/engineView'
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
 import { reserveMessageId } from '@shared/engine/game'
-import { closeGap, gapNow, gapText } from '@shared/engine/gaps'
+import { closeGap, gapId, gapNow, gapText } from '@shared/engine/gaps'
 import { atOf } from '@shared/engine/grid'
 import { hardEndCurrent, hardEndMessage, type HardEndNow } from '@shared/engine/hardEnd'
 import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@shared/engine/modes'
@@ -384,41 +384,62 @@ export class WidgetEngine {
       ]
   }
 
-  /**
-   * „Przesuń resztę wcześniej” (D368): the gap counted again on the day as it is at the click (a block begun meanwhile, a
-   * plan changed – the line's gap is gone: nothing written); the answer first (answered on another computer meanwhile –
-   * nothing moves twice), then the new starts of the gap's blocks as one edit of the day's file, with „Przesunięto N
-   * bloków · Cofnij” as after a push (D367, D313 – the same line and „Cofnij”).
-   */
-  private async closeGapNow(line: string, day: string | undefined): Promise<void> {
+  /** The line's gap counted again on the day as it is at the click (a block begun meanwhile, a plan changed – null: gone). */
+  private async gapOfLine(line: string, day: string | undefined) {
     const folder = this.d.folder()
     const m = folder ? await folder.widgetModel(this.now) : null
     const gap = m && day === m.state.grid.date ? gapNow(m.ctx, m.state) : null
-    const out = m && gap?.id === line ? closeGap(m.ctx, m.state, gap) : []
-    if (!m || !folder || !day || !out.length) {
+    return folder && m && day && gap?.id === line ? { folder, m, gap, day } : null
+  }
+
+  /**
+   * „Zostaw” (D368): the line's answer, then one for each other trigger of its gap (the question never comes back for
+   * them); the line's own refused (answered on another computer meanwhile) says why.
+   */
+  private async leaveGap(line: string, day: string | undefined): Promise<void> {
+    const now = await this.gapOfLine(line, day)
+    const r = await this.d.timer({ a: 'mark', question: line, answer: 'leave', day })
+    if (!r.ok && r.why) this.say(r.why)
+    if (now) for (const k of now.gap.keys.slice(1)) await this.d.timer({ a: 'mark', question: gapId(now.day, k), answer: 'leave', day: now.day })
+    return this.refresh()
+  }
+
+  /**
+   * „Przesuń resztę wcześniej” (D368): the gap counted again on the day as it is at the click (gone – nothing written), the
+   * new starts of its blocks as one edit of the day's file with „Przesunięto N bloków · Cofnij” as after a push (D367, D313
+   * – the same line and „Cofnij”); only once the edit went through, the answers – one for each trigger of the gap (a
+   * refused or failed edit leaves the question as it was).
+   */
+  private async closeGapNow(line: string, day: string | undefined): Promise<void> {
+    const now = await this.gapOfLine(line, day)
+    const out = now ? closeGap(now.m.ctx, now.m.state, now.gap) : []
+    if (!now || !out.length) {
       this.say('Tej luki już nie ma.')
       return this.refresh()
     }
-    const r = await this.d.timer({ a: 'mark', question: line, answer: 'close', day })
-    if (!r.ok) {
-      if (r.why) this.say(r.why)
-      return this.refresh()
-    }
-    const rel = paths.day(day)
+    const { folder, m, gap } = now
+    const rel = paths.day(now.day)
     const before = ((await folder.recordView(rel)) as RawRecord | undefined) ?? null
-    let after = dayRaw(before, day)
+    let after = dayRaw(before, now.day)
     for (const p of out) {
-      const b = dayFileFrom(after, day).blocks.find((x) => x.id === p.id) ?? m.ctx.plan.find((x) => x.id === p.id)
+      const b = dayFileFrom(after, now.day).blocks.find((x) => x.id === p.id) ?? m.ctx.plan.find((x) => x.id === p.id)
       if (b) after = putBlock(after, { ...b, startMin: p.startMin })
     }
     const entry = recordEdit(rel, before, after)
-    if (!entry) return this.refresh()
+    if (!entry) {
+      this.say('Tej luki już nie ma.')
+      return this.refresh()
+    }
     const res = await this.d.edit([entry])
     if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) {
       this.say('Przesunięcie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
       return this.refresh()
     }
-    this.moved.set('push', { text: pushedText(out.length), day, edits: [{ entry, made: entry.create ? after : null }], started: null, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq })
+    this.moved.set('push', { text: pushedText(out.length), day: now.day, edits: [{ entry, made: entry.create ? after : null }], started: null, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq })
+    for (const k of gap.keys) {
+      const r = await this.d.timer({ a: 'mark', question: gapId(now.day, k), answer: 'close', day: now.day })
+      if (!r.ok) this.d.log('info', `luka ${gapId(now.day, k)}: odpowiedź po przesunięciu nie zapisała się (${r.why ?? 'bez powodu'})`)
+    }
     return this.refresh()
   }
 
@@ -915,8 +936,7 @@ export class WidgetEngine {
         // A gap (D368): „Przesuń resztę wcześniej” closes it, „Zostaw” – the answer in the log, never asked again for it.
         else if (kind === 'gap') {
           if (act === 'close') return this.closeGapNow(line, day)
-          if (act !== 'leave') return
-          await this.d.timer({ a: 'mark', question: line, answer: 'leave', day })
+          return act === 'leave' ? this.leaveGap(line, day) : undefined
         } else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
         else if (kind === 'fewerOffer') {
           await this.d.timer({ a: 'mark', question: line, answer: act, day })

@@ -423,7 +423,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                     className="btn"
                     onClick={() => {
                       setSelected(null)
-                      // D368: a block not begun removed today frees its place – the bar may ask about the gap (a begun one: its end in the log).
+                      // D368: a block not begun removed today frees its place and that of the blocks anchored to it, which leave with it
+                      // – the bar may ask about the gap (a begun one: its end in the log).
                       const freed = isToday && begun === 'no' ? freedByEdit(model.state, block, null) : null
                       void removeDayBlock(date, raw, block, byCancel, blockName(block, names), begun).then((ok) => (ok ? tellFreed(date, freed) : undefined))
                     }}

@@ -429,13 +429,13 @@ test('luka na pasku pulpitu (D368): prawdziwe kliknięcie „Przesuń resztę wc
       await settledBarBounds(app)
       const bar = await barInfo(app)
       const covers = uncover(bar.hwnd)
-      await new Promise((r) => setTimeout(r, 1000))
-      const before = pidWindows(bar.pid)
-      const orderBefore = topWindows()
       const r = (await close.boundingBox())!
       const k = bar.scale
       const point: [number, number] = [(bar.bounds.x + (r.x + r.width / 2) * bar.zoom) * k, (bar.bounds.y + (r.y + r.height / 2) * bar.zoom) * k]
-      expect(windowsAt([point]), `przycisk paska zasłonięty (${covers.join(', ') || 'nic nie zminimalizowano'})`).toEqual([bar.hwnd])
+      // The windows minimized by `uncover` are gone from the point once their animation ends – waited for, no fixed delay.
+      await expect.poll(() => windowsAt([point]), { message: `przycisk paska zasłonięty (${covers.join(', ') || 'nic nie zminimalizowano'})`, timeout: 10_000 }).toEqual([bar.hwnd])
+      const before = pidWindows(bar.pid)
+      const orderBefore = topWindows()
       click(...point)
       await expect.poll(startOfC, { timeout: 15_000 }).toBeLessThan(planned)
       await expect(page.getByTestId('bar-line-moved:push')).toContainText('Przesunięto 1 blok')

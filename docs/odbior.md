@@ -1563,16 +1563,18 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   Kliknij „Przesuń resztę wcześniej”, potem „Cofnij” w linii „Przesunięto …”. Przy kolejnej luce kliknij „Zostaw”.
   Innym razem po „Skończyłem” od razu kliknij „Start” następnego bloku; jeszcze innym – zapauzuj blok i go zaparkuj.
 - **Oczekiwany efekt:** w pasku cicha linia (bez kropki, powiadomienia i dźwięku) „Luka 20 min · Przesuń resztę
-  wcześniej · Zostaw” – wolny czas od teraz do następnego bloku, najwyżej tyle, ile zwolnił wcześniejszy koniec (przerwa
-  zaplanowana wcześniej zostaje); po „Dalej” i po „Start” następnego bloku przed jego godziną – luka przed blokiem za
-  tym, który się właśnie zaczął (jego pauza tego nie zmienia); po zaparkowaniu zapauzowanego bloku – luka najwyżej o
+  wcześniej · Zostaw” – o tyle „Przesuń” przesunie następny blok (bufor między kategoriami zostaje): najwyżej tyle, ile
+  zwolnił wcześniejszy koniec i jeszcze nie minęło bez bloku (przerwa zaplanowana wcześniej zostaje); po „Dalej” i po
+  „Start” następnego bloku – także gdy jego godzina minęła – luka przed blokiem za tym, który się właśnie zaczął (jego
+  pauza tego nie zmienia, przedłużenie ją zmniejsza); po zaparkowaniu zapauzowanego bloku – luka najwyżej o
   niezrobioną część. „Przesuń” zapisuje
   nowe godziny bloków elastycznych do najbliższego stałego – żaden nie zaczyna się przed teraz; stały i bloki za nim,
   chronione (posiłek, regeneracja, rutyny) i zaczęte zostają – i daje linię „Przesunięto N bloków · Cofnij”; „Cofnij”
   przywraca godziny, a pytanie o tę lukę nie wraca. „Zostaw” – linia znika, plan bez zmian. Bez odpowiedzi linia znika
   sama, gdy zacznie się następny blok albo coś w luce (D368, D373, D375).
-- **Nie przechodzi, gdy:** pytanie o tę samą lukę przychodzi drugi raz, linia ma kropkę albo daje powiadomienie,
-  po „Start” następnego bloku pytanie znika zamiast przejść na lukę za nim,
+- **Nie przechodzi, gdy:** pytanie o tę samą lukę przychodzi drugi raz (także po „Zostaw” i wcześniejszym starcie
+  następnego bloku), „Zostaw” nie zamyka linii, linia ma kropkę albo daje powiadomienie, liczba w linii różni się od
+  przesunięcia po „Przesuń”, po „Start” następnego bloku pytanie znika zamiast przejść na lukę za nim,
   „Przesuń” rusza blok stały, chroniony, zaczęty albo blok za stałym, któryś blok staje przed teraz, „Cofnij” nie
   przywraca wszystkich godzin, albo pasek pulpitu po kliknięciu wychodzi nad okna innych programów.
 
@@ -1586,9 +1588,11 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Oczekiwany efekt:** po usunięciu i skróceniu dziś – w pasku „Luka … · Przesuń resztę wcześniej · Zostaw”, na obu
   komputerach i także po ponownym uruchomieniu aplikacji (zamknij ją i otwórz, póki pytanie czeka); „Przesuń” przesuwa
   następne bloki o zwolniony czas (przerwa zaplanowana wcześniej zostaje). Przeniesienie bloku i górna krawędź – bez
-  pytania; na jutrze – bez pytania (D368, D373, D375).
+  pytania; na jutrze – bez pytania (D368, D373, D375). Usunięcie bloku z blokiem zakotwiczonym za nim zwalnia oba;
+  „Cofnij” usunięcia (i wydłużenie skróconego bloku z powrotem) kończy pytanie, a ponowne usunięcie pyta od nowa.
 - **Nie przechodzi, gdy:** po usunięciu dziś nie ma pytania, pytanie znika po ponownym uruchomieniu, przychodzi po
-  zmianie na jutrze albo po przeniesieniu bloku, albo „Przesuń” przesuwa bloki o więcej, niż zwolniło usunięcie.
+  zmianie na jutrze, po przeniesieniu bloku albo po „Cofnij”, albo „Przesuń” przesuwa bloki o więcej, niż zwolniło
+  usunięcie.
 
 #### J4.3 Kiedy pasek o lukę nie pyta – sesja, mała luka, blok stały, drugi komputer (1.7.0)
 - [ ] Odebrane
@@ -1598,7 +1602,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   albo chroniony (posiłek); skończ blok wcześniej w czasie sesji albo zajęć zdalnych. Przy dwóch komputerach odpowiedz
   na pytanie o lukę na jednym z nich.
 - **Oczekiwany efekt:** luka poniżej 10 min albo blok stały, chroniony lub zaczęty zaraz po luce – bez pytania;
-  w trybie sesji, zajęć, w „Odcinam się” i w nocy – pytanie dopiero po ich końcu, jeśli luka dalej jest; odpowiedź na
+  w trybie sesji, zajęć, w „Odcinam się” i w nocy – pytanie dopiero po ich końcu, jeśli luka dalej jest (o tyle mniejsza,
+  ile zwolnionego czasu minęło w ich trakcie); odpowiedź na
   jednym komputerze zamyka pytanie na drugim, także gdy ich zegary się różnią (D368, D373).
 - **Nie przechodzi, gdy:** pytanie pojawia się w czasie sesji albo zajęć, przy luce 5 min albo przed blokiem stałym, albo
   zostaje na drugim komputerze po odpowiedzi.
