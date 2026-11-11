@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.0
+- „Ułóż pod energię”: w „Przestaw plan” i w planie porannym nowy wariant „Ułóż pod energię – najniższa energia dnia 35 → 52” z listą zmian kolejności. Pojawia się tylko dla dnia bieżącego, gdy najniższa energia dnia jest poniżej 60, a nowa kolejność podnosi ją co najmniej o 5.
+- Przestawia bloki elastyczne – także regenerację, posiłki i rutyny – tylko w tej samej przerwie między blokami stałymi; stałe i zaczęte zostają na miejscu. Przed zatwierdzeniem granicy koniec pracy może się przesunąć, byle w maksimum dnia; po zatwierdzeniu – nie za granicę.
+- Kliknięcie zmienia plan od razu, z „Przestawiono … · Cofnij” w pasku. Wybór z panelu znacznika nie gasi znacznika, póki plan się nie mieści. W planie porannym karta ma „Ułóż” i „Zostaw” (chowa ją do końca dnia); gdy plan jest już tak ułożony – „Plan już jest tak ułożony.”
+
 ## 1.8.0
 - Domykanie luk: gdy blok skończysz wcześniej, zaparkujesz zaczęty, usuniesz albo skrócisz w „Dziś” i przed kolejnym blokiem elastycznym zostaje co najmniej 10 min wolnego, pasek cicho pyta „Luka N min · Przesuń resztę wcześniej · Zostaw”. Tylko dla dnia bieżącego, nigdy przed bieżącą chwilą; w trybie sesji i zajęć – dopiero po ich końcu.
 - „Przesuń resztę wcześniej” przesuwa tylko bloki elastyczne od luki do najbliższego bloku stałego (chronione i zaczęte zostają), z „Przesunięto N bloków · Cofnij” w pasku. Liczba w pytaniu to tyle, ile przesunięcie naprawdę zamknie – czas, który minął w sesji, zajęciach albo na czekaniu przy zaplanowanej przerwie, się nie liczy.
