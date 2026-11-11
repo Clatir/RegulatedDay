@@ -33,7 +33,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   cofnięta przez T303, ale cytowana w D150 i specyfikacji – zostaje w rejestrze.
 - `docs/plan.md` ma od 7.11 plan rozszerzeń (GCal, Notion, Sunsama); wykonawcy i przeglądy według ryzyka (D354).
   10.11: blok 1 = ciąg J (SNT7, SNT8, FBL2 w trzech częściach), pytania odpowiedziane (D363–D369), FBL1 odłożone
-  (D364); bloki 2–4 bez decyzji o starcie. Opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`.
+  (D364); blok 2 = ciąg L (OPS1 → OPS2 → OPS3), pytania odpowiedziane (D380–D386); bloki 3–4 bez decyzji o starcie.
+  Opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`.
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →
@@ -44,7 +45,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 3. Ciąg J (D363) – w toku od 10.11 (bez pauz, D363): J1 SNT7 (1.4.0, scalone) → J2 SNT8 (1.5.0, PR) → J3–J5 FBL2 (`docs/plan.md`, „Blok 1 = ciąg J”).
 4. K (przegląd kalibracji), gdy aplikacja go zaproponuje (najwcześniej ok. 12.11) – wchodzi między PR-y ciągu J; po nim
    E9 (`docs/plan.md`, „Po 1.0”).
-5. Rozszerzenia bloki 2–4 (OPS, SNT, HKU) – bez decyzji o starcie; FBL1 odłożone (D364).
+5. Ciąg L (blok 2, D380): L1 OPS1 serie → L2 OPS2 „Sprawy” → L3 OPS3 bufory (po K) – po ciągu J i „dalej”
+   (`docs/plan.md`, „Blok 2 = ciąg L”). Bloki 3–4 (SNT, HKU) bez decyzji o starcie; FBL1 odłożone (D364).
 
 ## Ciąg J – stan (D363)
 **Przed ciągiem J (10.11):** zakres i „Gotowe, gdy” – `docs/plan.md`; decyzje D363–D369 (pytania w trzech rundach
