@@ -128,14 +128,17 @@ export function variantTriggers(state: DayState, energy: EnergyState | null): { 
 /**
  * The causes of variants now, one for each trigger (the latest last): the forecast end of work before the second shift
  * after the approved boundary; a pool still at the reserve after its descent (not in calibration – `energy.variants`).
+ * `pushes` – triggers of the time the day's log does not hold: blocks pushed apart in the main window (D367, „Przesunięto
+ * N bloków”), known to the bar of the computer that pushed them.
  */
-export function variantCauses(state: DayState, energy: EnergyState | null): VariantCause[] {
+export function variantCauses(state: DayState, energy: EnergyState | null, pushes: readonly VariantTrigger[] = []): VariantCause[] {
   const out: VariantCause[] = []
   const date = state.grid.date
   const tr = variantTriggers(state, energy)
   const end = state.lastWorkForecast
   const boundary = state.boundary.approved
-  if (boundary != null && end != null && end > boundary) for (const t of tr.time) out.push({ kind: 'time', id: `variants:${date}:${t.id}`, at: t.at, minutes: end - boundary })
+  const time = pushes.length ? [...tr.time, ...pushes].sort((a, b) => a.at - b.at) : tr.time
+  if (boundary != null && end != null && end > boundary) for (const t of time) out.push({ kind: 'time', id: `variants:${date}:${t.id}`, at: t.at, minutes: end - boundary })
   // A pool's last descent only: the earlier ones were followed by a rise above the reserve.
   const last = new Map(tr.energy.map((t) => [t.pool, t]))
   for (const t of last.values()) if (energy!.atReserve[t.pool]) out.push({ kind: 'energy', id: `variants:${date}:${t.id}`, at: t.at, pool: t.pool })

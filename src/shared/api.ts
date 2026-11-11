@@ -88,6 +88,7 @@ export const CH = {
   goals: 'rd:goals',
   setGoals: 'rd:setGoals',
   stats: 'rd:stats',
+  planPushed: 'rd:planPushed',
   searchDays: 'rd:searchDays'
 } as const
 
@@ -569,6 +570,12 @@ export interface RdApi {
   /** The files of several days (the calendar's month), null where a day has none; a day whose file cannot be read now is left out. */
   dayFiles(dates: string[]): Promise<Record<string, RawRecord | null>>
   edit(entries: EditEntry[]): Promise<EditOutcome[]>
+  /**
+   * Blocks pushed apart (D367), already saved by the window as the one edit `entry` of the day's file (`made` – the file
+   * it created, else null): the bar keeps „Przesunięto N bloków · Cofnij” – its „Cofnij” takes that edit back – and the
+   * push checks the marker of variants of today.
+   */
+  planPushed(day: string, count: number, entry: EditEntry, made: RawRecord | null): Promise<void>
   logEvents(events: EventIn[]): Promise<void>
   resolve(id: string, choice: 'mine' | 'theirs'): Promise<void>
   /** The events of every day of a month (kinds asked) – e.g. the exceptions of the boundary this month. */

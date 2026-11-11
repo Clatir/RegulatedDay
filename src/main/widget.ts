@@ -21,7 +21,8 @@ import { hardEndCurrent, hardEndMessage, type HardEndNow } from '@shared/engine/
 import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@shared/engine/modes'
 import { suggestRegen } from '@shared/engine/reserve'
 import { timerNow, type TimerNow } from '@shared/engine/timer'
-import { applyVariant, markerCause, planCause, variantCauses, variantsFor, type Variant, type VariantCause } from '@shared/engine/variants'
+import { pushedText } from '@shared/engine/pushApart'
+import { applyVariant, markerCause, planCause, variantCauses, variantsFor, type Variant, type VariantCause, type VariantTrigger } from '@shared/engine/variants'
 import type { NoticeKind } from '@shared/machine'
 import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
@@ -32,7 +33,7 @@ import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { answered } from '@shared/engine/care'
 import { batteryLine, NO_SYNC, syncLines } from '@shared/sync/syncLines'
-import { noFolderView, SEEN_LINE, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
+import { noFolderView, SEEN_LINE, UNDO_LINE_MS, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
 const CONFIRM_MS = 10_000
@@ -122,8 +123,6 @@ export function stepDelay(deadlines: readonly number[], viewAt: number, now = vi
   return Number.isFinite(at) && at - viewAt <= REFRESH_MS ? Math.max(0, at - now) : null
 }
 
-/** „Przestawiono: … · Cofnij” stays this long after a variant (D313), as the bar's other lines with „Cofnij”. */
-const MOVED_MS = 15 * MIN
 /** „Zapisano: … · Cofnij” of a routine saved from the bar stays this long. */
 const ROUTINE_UNDO_MS = 60_000
 
@@ -134,6 +133,40 @@ const ROUTINE_UNDO_MS = 60_000
 function inverseEdit(e: EditEntry, now: RawRecord | null, made: RawRecord | null): EditEntry | null {
   if (e.create) return now && sameContentAs(now, made) ? { rel: e.rel, remove: true, edits: [], base: made } : null
   return { rel: e.rel, edits: e.edits.map((x) => ({ path: x.path, base: x.value, value: x.base })) }
+}
+
+/**
+ * What the window says it pushed apart (D367, IPC `planPushed`): a day, how many blocks, the one edit of that day's file it
+ * saved (never a removal) and the file it created – anything else is not taken.
+ */
+export function pushedIn(day: unknown, count: unknown, entry: unknown, made: unknown): { day: string; count: number; edit: { entry: EditEntry; made: RawRecord | null } } | null {
+  if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 1 || count > 1000) return null
+  const e = entry as Partial<EditEntry> | null
+  if (!e || typeof e !== 'object' || e.rel !== paths.day(day) || e.remove || !Array.isArray(e.edits) || !e.edits.every((x) => x && Array.isArray(x.path))) return null
+  const created = e.create === true
+  const file = created && made && typeof made === 'object' && !Array.isArray(made) ? (made as RawRecord) : null
+  return { day, count, edit: { entry: { rel: e.rel, edits: e.edits, ...(created ? { create: true } : {}) }, made: file } }
+}
+
+/**
+ * The IPC `planPushed` (D367): what the window pushed apart is taken at once – the line and the marker's trigger – and the
+ * bar is counted again in the background: the window's save (its „Dodaj”, its drop) never waits for the bar.
+ */
+export function planPushedIpc(w: Pick<WidgetEngine, 'pushed'>, log: WidgetDeps['log'], day: unknown, count: unknown, entry: unknown, made: unknown): void {
+  const p = pushedIn(day, count, entry, made)
+  if (p) void w.pushed(p.day, p.count, p.edit).catch((e) => log('warn', 'pasek nie przeliczył się po przesunięciu bloków', e))
+}
+
+/** A line of a change of the plan with its own „Cofnij” (T502): its edits, the files it created, the regeneration it started. */
+interface Moved {
+  text: string
+  day: string
+  edits: Array<{ entry: EditEntry; made: RawRecord | null }>
+  started: string | null
+  until: number
+  /** Counts the lines: the newest first. */
+  seq: number
 }
 
 /** The bar while the day cannot be counted (a file not readable now): no actions, one line why. */
@@ -171,8 +204,15 @@ export class WidgetEngine {
   private causesNow: VariantCause[] = []
   /** The open panel of variants – one for every window (the main process owns it): its cause and its variants. */
   private panel: { cause: VariantCause; variants: Variant[] } | null = null
-  /** „Przestawiono: … · Cofnij” after a variant: its own edits, the files it created, the regeneration it started (T502). */
-  private moved: { label: string; day: string; edits: Array<{ entry: EditEntry; made: RawRecord | null }>; started: string | null; until: number } | null = null
+  /**
+   * The lines of changes of the plan, each with its own „Cofnij” for 15 min (line `moved:<kind>`): „Przestawiono: …” after
+   * a variant (D313, T502) and „Przesunięto N bloków” after blocks pushed apart in the main window (D367). A variant
+   * replaces only the variant's line, a push only the push's.
+   */
+  private readonly moved = new Map<'variant' | 'push', Moved>()
+  private movedSeq = 0
+  /** Blocks pushed apart today (D367): triggers of the marker of variants the log does not hold (this computer's bar). */
+  private pushes: Array<{ day: string; trigger: VariantTrigger }> = []
   /** „Zapisano: … · Cofnij” after a routine saved from the bar (D328). */
   private routineSaved: { block: string; day: string; text: string; until: number } | null = null
 
@@ -293,7 +333,7 @@ export class WidgetEngine {
       this.names = names
       this.variantsView(m, now, mono, modes)
       this.syncView(folder, now)
-      this.hardEndLast()
+      this.linesLast()
       if (this.failing) this.d.log('info', 'widget: dzień znów policzony')
       this.failing = false
       // Notifications are the leader's, and only once settled – after a start or a wake the other computers' logs (their
@@ -327,7 +367,10 @@ export class WidgetEngine {
     }
     // The causes are the day's (their ids carry it): those of another day are no longer needed.
     for (const set of [this.markerShown, this.markerDone]) for (const id of [...set]) if (!id.startsWith(`variants:${date}:`)) set.delete(id)
-    const causes = variantCauses(m.state, m.energy)
+    // A push of another day is no trigger of this one. The day's pushes stay all day, as the log's triggers do: a marker
+    // shown for one stays while its condition holds (`markerCause` brings a new one only within its 5 min).
+    this.pushes = this.pushes.filter((p) => p.day === date)
+    const causes = variantCauses(m.state, m.energy, this.pushes.map((p) => p.trigger))
     this.causesNow = causes
     // A cause whose marker was shown and no longer holds is done: its marker never comes back.
     for (const id of [...this.markerShown]) {
@@ -338,8 +381,11 @@ export class WidgetEngine {
     this.markerNow = markerCause(causes, { shown: this.markerShown, done: this.markerDone, quiet, lastQuiet: this.lastQuiet, now })
     if (this.markerNow) this.markerShown.add(this.markerNow.id)
     v.variants = { marker: !!this.markerNow && !v.hidden && !v.night, open: this.panel && !v.hidden ? this.panel.variants.map((x) => ({ id: x.id, label: x.label })) : null }
-    if (this.moved && this.moved.until <= mono) this.moved = null
-    if (this.moved && !v.hidden) v.lines = [{ id: 'moved:variant', text: `Przestawiono: ${this.moved.label}`, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }, ...v.lines]
+    for (const [kind, mv] of [...this.moved]) if (mv.until <= mono) this.moved.delete(kind)
+    // The newest first; after every line of the day (`linesLast`): the bar shows one of them at most, the other waits in
+    // „⋯” with its „Cofnij” (`barLines`).
+    const movedLines = [...this.moved].sort((a, b) => b[1].seq - a[1].seq).map(([kind, mv]) => ({ id: `moved:${kind}`, text: mv.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }))
+    if (movedLines.length && !v.hidden) v.lines = [...v.lines, ...movedLines]
     // A routine saved from the bar (D328): its „Cofnij” for a while, in place of its line.
     if (this.routineSaved && (this.routineSaved.until <= mono || this.routineSaved.day !== date)) this.routineSaved = null
     if (this.routineSaved && !v.hidden) v.lines = [...v.lines, { id: `routineSaved:${this.routineSaved.block}`, text: this.routineSaved.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }]
@@ -358,10 +404,16 @@ export class WidgetEngine {
     v.lines = [...v.lines, ...syncLines({ ...folder.syncState(now), battery, backupFailed: this.d.backup?.()?.failed != null }, now, v.day, folder.presence.own.computer)]
   }
 
-  /** The hard end's line stands last of all (after the routine saved, the lines of the computers and the battery). */
-  private hardEndLast(): void {
+  /**
+   * The order of the lines at the end: the hard end's line after the day's other lines (the routine saved, the lines of
+   * the computers and the battery), and the lines of changes with their „Cofnij” (`moved:`, D367) after all of the day's –
+   * the bar shows one of them at most (`barLines`), never in place of a question or a warning.
+   */
+  private linesLast(): void {
     const v = this.view!
-    v.lines = [...v.lines.filter((l) => !l.id.startsWith('hardEnd:')), ...v.lines.filter((l) => l.id.startsWith('hardEnd:'))]
+    const moved = (l: { id: string }) => l.id.startsWith('moved:')
+    const hard = (l: { id: string }) => l.id.startsWith('hardEnd:')
+    v.lines = [...v.lines.filter((l) => !hard(l) && !moved(l)), ...v.lines.filter(hard), ...v.lines.filter(moved)]
   }
 
   /** A day not counted now while the folder is away: the changes waiting for it still say so (A3-07). */
@@ -435,19 +487,34 @@ export class WidgetEngine {
       if (r.ok) started = after.start
       else if (r.why) this.say(r.why)
     }
-    this.moved = { label: v.label, day, edits, started, until: this.mono + MOVED_MS }
+    this.moved.set('variant', { text: `Przestawiono: ${v.label}`, day, edits, started, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq })
     return this.refresh()
   }
 
   /**
-   * „Cofnij” of a variant (T502): its own edits taken back (a field changed since is a question, a file it created goes
-   * only while it is as the variant made it); a regeneration it started ends now.
+   * Blocks pushed apart in the main window (D367) – `count` blocks, written by the window as one edit of the day's file
+   * (`edit`, `made` – the file it created): the bar keeps „Przesunięto N bloków · Cofnij” as after a variant (D313), its
+   * „Cofnij” taking that edit back the same way (T502) – beside a variant's line, which stays – and the push checks the
+   * marker of variants of today by its own conditions (`variantCauses`). The state is set before the bar is counted again
+   * (the promise is that count).
    */
-  private async undoVariant(): Promise<void> {
-    const mv = this.moved
+  pushed(day: string, count: number, edit: { entry: EditEntry; made: RawRecord | null }): Promise<void> {
+    if (count < 1) return Promise.resolve()
+    const now = this.now
+    this.moved.set('push', { text: pushedText(count), day, edits: [edit], started: null, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq })
+    this.pushes.push({ day, trigger: { id: `push:${now}`, at: now } })
+    return this.refresh()
+  }
+
+  /**
+   * „Cofnij” of a variant (T502) or of a push (D367): its own edits taken back (a field changed since is a question, a file
+   * it created goes only while it is as it made it); a regeneration a variant started ends now. The other line stays.
+   */
+  private async undoMoved(kind: 'variant' | 'push'): Promise<void> {
+    const mv = this.moved.get(kind)
     const folder = this.d.folder()
     if (!mv || !folder) return
-    this.moved = null
+    this.moved.delete(kind)
     if (mv.started) await this.d.timer({ a: 'finish', block: mv.started, day: mv.day })
     const back: EditEntry[] = []
     let kept = false
@@ -457,7 +524,7 @@ export class WidgetEngine {
       else kept = true
     }
     const out = await this.d.edit(back)
-    if (kept || out.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Część planu zmieniła się od wariantu – zostaje tak, jak jest teraz.')
+    if (kept || out.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say(`Część planu zmieniła się od ${kind === 'push' ? 'przesunięcia' : 'wariantu'} – zostaje tak, jak jest teraz.`)
     return this.refresh()
   }
 
@@ -757,7 +824,7 @@ export class WidgetEngine {
         if (!line || !act) return
         const [kind, id] = [line.slice(0, line.indexOf(':')), line.slice(line.indexOf(':') + 1)]
         button = `line:${line}|${act}`
-        if (kind === 'moved') return act === 'undo' ? this.undoVariant() : undefined
+        if (kind === 'moved') return act === 'undo' ? this.undoMoved(id === 'push' ? 'push' : 'variant') : undefined
         if (kind === 'wait') click = act === 'start' ? { a: 'start', block: id } : { a: 'cancel', block: id }
         else if (kind === 'restart') click = { a: 'restart', block: id }
         // The day's moments (A1-12): an anchored block's „Zacznij · Zaparkuj · Koniec pracy”, a fixed block cancelled after

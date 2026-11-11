@@ -33,6 +33,22 @@ paths:
   trzymane do nowych `items`; nowy blok z pustej osi – D366: `gridCreate.ts` (czyste: `snapMinute`, `gridRange`, próg `DRAG_FROM_PX`), `gridDrag.tsx` (`useGridCreate` – klik i przeciągnięcie na kolumnie czasu, `RangeBand`; co zaczyna się na bloku albo na `data-no-grid` (`NO_GRID`), nie jest gestem; próg: `axis: 'y'` (oś jednokolumnowa – tylko pion, jak przed J2) albo `'xy'` (Tydzień – odległość), `dragStarted`; przechwycenie wskaźnika dopiero po nim, żeby przycisk w środku dalej klikał; gest kończy się puszczeniem gdziekolwiek w oknie i ruchem bez przycisku; start zakresu to miejsce kolumny (przewinięcie nie przesuwa), koniec z aktualnego `top`; przeciągnięcie bez ruchu w pionie (przed przycięciem do osi) = `flatMin` (60 min, `DEFAULT_NEW_BLOCK_MIN`), po przycięciu min. 5 min, koniec ≤ dół osi; klik po puszczeniu albo po wciśnięciu na bloku pomijany), `Timeline` daje `onCreate(min, durationMin?)` – klik: kwadrans, przeciągnięcie: 5 min i długość zakresu; kolumna godzin `timeline-hours` jest częścią osi), `BlockEditor`, `dayItems` (`dayAxis`, `movable`: własna godzina, niezaczęty, nie sesja,
   wykład ani druga zmiana (tag `secondShift` – D192: jest sesją; dotyczy też Szablonów), nieminiony; dni minione – bez `onMove`), `blockView` (nazwy i kolory – nigdy id). Zapis: `draggedBlock`.
   Krawędzie (D365): uchwyty `data-edge` (6 px) w bloku `movable` – oba, w trwającym tylko dolny (`TimelineItem.resize: 'end'` i `minEndMin` z `runningEdges`, `dayAxis`); czyste `draggedEnd` / `draggedTopStart` (5 min, najkrócej 5 min, najdłużej doba), `onResize(id, span, edge)`, podgląd `edge-hint` (`resizeNote`). Niezaczęty: `edgePatch` → `patchDayBlock` / `patchBlock` (jak pole „Długość”; górna krawędź ze startem). Trwający: **nie** plan, tylko `window.rd.timer({ a: 'resize', to })` (`clickResize`, `resizeAnswer`) – za granicą odpowiedź z kosztem to `pending` w `TodayPage` („Potwierdź · Anuluj” 10 s, `attached` w `Timeline`, to samo `to` z `confirm`).
+  Rozsuwanie (D367, tylko „Dziś”, dziś i dni przyszłe): `today/dayPush.ts` (`dragChange` – ciało albo krawędź bloku `movable`, dolna
+  krawędź od miejsca na osi; `addChange` – „Dodaj” poza wymianą) liczy zmianę i `pushApart` raz dla podglądu i zapisu; `Timeline`
+  `pushPreview` rysuje przesuwane na nowych miejscach (`data-pushed`, przerywana obwódka) w trakcie i w czasie trzymania po
+  upuszczeniu; zapis `pushDayBlocks` (`withPushed`: zmiana + starty w jednym wpisie `trySaveWith`), po `isSaved` – `window.rd.planPushed`
+  (pasek „Przesunięto N bloków · Cofnij”, reguły `widget.md`); nic nie przesunięte – ten sam `pushDayBlocks` z pustą listą (bez IPC).
+  Podgląd `Timeline` liczony raz na miejsce przeciągania (klucz id/krawędź/godziny + `items`): `pushedSpans(day, c, oś)` = `axisMoves`
+  bez przeciąganego (także zakotwiczone do przesuniętych); „bez zmian” i brak zapisu – `staysPut` miejsca, w którym blok stanie.
+  „Szablony” (D372): `templates/templatePush.ts` (`templateDrag`, `templateAdd` – te same `dragChange`/`addChange` na dniu wersji, id osi =
+  id w wersji). Oś zostaje z przesunięciem pobudki tygodnia sesji: godziny osi → szablonu `unshiftedStart` (odwrotność
+  `wakeShiftedStart`, to samo przycięcie końca doby); miejsce, którego dzień nie pokaże (godzina przed pierwszym stałym), → najbliższe,
+  które pokaże – ciało i nowy blok: pierwsze od miejsca, górna krawędź: zawsze ostatnie przed nim (koniec zostaje, ≥ 5 min), dolna:
+  start z długością po zmianie; to samo `reach` dla przesuwanych (`hold`); dzień po
+  zmianie z pierwszym stałym planu po zmianie (bloki, które przez to zmieniają miejsce, są w podglądzie). `TemplateChange.span` – gdzie
+  stanie przeciągany: `onMove`/`onResize` go zwracają (trzymanie), podgląd ma go pod jego id (`Timeline` rysuje go tam i tak podpowiada),
+  podpowiedź = długość miejsca z podglądu (bez `resizeNote`); podgląd = `axisMoves` dnia po zmianie (z przeciąganym). Jeden `tryUpdateRecord`; linia `template-pushed` (`UNDO_LINE_MS`, widoczna póki szablon jak po
+  zmianie – `deepEqual`), „Cofnij” = `saveRecord(rel, po, przed)`. Bez `planPushed` i znacznika; dane osi w `useMemo` (memo podglądu).
   Testy okna bez DOM: `tests/web/` (projekt `tsconfig.web.json`).
 - `today/` – „Dziś”: `MorningPlan`, `LateWakeCard`, `TypeChangeDialog`, `ExchangeDialog`, `MoveDialogs`, `dayActions`.
   Pobudka dnia (`TodayPage`, `CalendarPage`) = `setDayWake`: zapis pobudki i jednorazowe przesunięcie własnych bloków

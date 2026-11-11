@@ -33,7 +33,8 @@ D247, D263, D296, T202, T372. Decyzje T478–T481, T502, T503. Elementy w pasku 
   snu. „Jeszcze trwa” wyłącza pierwsze użycie. Cofnięty koniec → następna reguła. Prowadzący ocenia ponownie (T465).
 - Prognoza: „zrobione teraz” kończy się teraz (T202), pilna biegnie do szacunku (kursor pierwszego planu, minuty).
 - Znacznik: przyczyna = wyzwalacz (prośba – start i koniec albo chwila dopisania, blok 2 min po 0 bez reakcji,
-  blok stały nad biegnącym elastycznym, zejście puli do rezerwy) przy spełnionym warunku teraz (`lastWorkForecast` po
+  blok stały nad biegnącym elastycznym, zejście puli do rezerwy; rozsuwanie D367 – spoza logu, `variantCauses(…, pushes)`
+  z paska) przy spełnionym warunku teraz (`lastWorkForecast` po
   granicy); nowy znacznik tylko do 5 min po wyzwalaczu (albo po końcu trybu sesji i zajęć, w którym wypadł);
   pokazany zostaje, póki warunek trwa, także po sesji, która go schowała.
 

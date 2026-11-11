@@ -405,13 +405,17 @@ export const beatsNow = (beaten: string | null, id: string | null): boolean => i
 
 /**
  * The lines on view and those gathered in „⋯”: in a quiet mode one fits, otherwise two; a routine's line (D328) in a
- * quiet mode always waits in „⋯” – never in the only row beside the session's countdown.
+ * quiet mode always waits in „⋯” – never in the only row beside the session's countdown. The lines of a change with its
+ * „Cofnij” (`moved:`, after the day's own – its questions and warnings come first) take one row at most: the newest; the
+ * other waits in „⋯”, its „Cofnij” working there. Only the lines on view count as seen (`useSeen`).
  */
 export function barLines(lines: readonly BarLine[], quiet: boolean): { shown: BarLine[]; extra: BarLine[] } {
   const fit = quiet ? 1 : 2
   const folds = (l: BarLine) => quiet && l.id.startsWith('routine:')
-  const front = lines.filter((l) => !folds(l))
-  return { shown: front.slice(0, fit), extra: [...front.slice(fit), ...lines.filter(folds)] }
+  const moved = lines.filter((l) => l.id.startsWith('moved:'))
+  const later = new Set([...lines.filter(folds), ...moved.slice(1)])
+  const front = lines.filter((l) => !later.has(l))
+  return { shown: front.slice(0, fit), extra: [...front.slice(fit), ...lines.filter((l) => later.has(l))] }
 }
 
 export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; mode: BarMode; grows?: 'up' | 'down'; onUnfold?: (unfolded: boolean) => void }) {

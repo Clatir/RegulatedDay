@@ -10,6 +10,7 @@ import { join, relative, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { newRequest } from '@shared/model/requests'
+import { logicalDayOf } from '@shared/time/day'
 import { createDailyBackup, listBackups } from '../../src/main/data/backup'
 import { DataHub, MOVED_FILE, PENDING_MOVE_FILE } from '../../src/main/data/hub'
 import { writeZipFile } from '../../src/main/data/zip'
@@ -54,7 +55,9 @@ describe('przywracanie kopii – przypadki z przeglądu', () => {
     const hub = hubFor()
     try {
       expect(await hub.open(dirA)).toBe(true)
-      for (let i = 0; i < 5; i++) hub.service!.folder.append({ day: '2026-10-27', dom: 'meta', k: 'observe.alive', at: Date.now() })
+      // Today's day: continueOwnNumbers only scans recent logs, so a fixed date would age out of its window.
+      const day = logicalDayOf(Date.now())
+      for (let i = 0; i < 5; i++) hub.service!.folder.append({ day, dom: 'meta', k: 'observe.alive', at: Date.now() })
       await hub.service!.folder.log.flush()
       const before = hub.service!.folder.clock.last.n
       const zip = await backupOfA()

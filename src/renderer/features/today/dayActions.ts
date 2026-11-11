@@ -40,17 +40,53 @@ export function blockNow(raw: RawRecord, date: string, b: PlanBlock): PlanBlock 
   return dayFileFrom(raw, date).blocks.find((x) => x.id === b.id) ?? b
 }
 
-/** A block put into the day (new, or changed: a block of the snapshot keeps its id, the change is the day's own). */
-export function putDayBlock(date: string, seen: RawRecord | null, b: PlanBlock): Promise<EditOutcome[] | null> {
-  return saveDay(date, seen, (raw) => putBlock(raw, b))
-}
-
 /**
  * Fields of a block changed (the panel of a block): over the block as the file holds it in its turn, so a change made a
  * moment before stays (A6-01).
  */
 export function patchDayBlock(date: string, seen: RawRecord | null, b: PlanBlock, patch: Partial<PlanBlock>): Promise<EditOutcome[] | null> {
   return saveDay(date, seen, (raw) => putBlock(raw, { ...blockNow(raw, date, b), ...patch }))
+}
+
+/** A block the change pushes apart (D367): the block as the window knows it, and its new planned start. */
+export interface PushedStart {
+  block: PlanBlock
+  startMin: number
+}
+
+/**
+ * The day's file with a change (`change`, made over the file as it is in its turn – a block put in, or one block's
+ * fields) and the starts of the blocks it pushes apart (D367), each over that block as the file holds it then.
+ */
+export function withPushed(raw: RawRecord, date: string, change: (raw: RawRecord) => RawRecord, pushed: readonly PushedStart[]): RawRecord {
+  let after = change(raw)
+  for (const p of pushed) after = putBlock(after, { ...blockNow(after, date, p.block), startMin: p.startMin })
+  return after
+}
+
+/**
+ * A change of the plan that pushes blocks apart (D367, rozsuwanie): the change and the pushed blocks' new starts as one
+ * edit of the day's file, in its turn. Saved – the bar keeps „Przesunięto N bloków · Cofnij” (the main process, as after
+ * a variant, D313): its „Cofnij” takes this one edit back, the day's file as it was before it. Nothing pushed – the change
+ * alone, as before.
+ */
+export async function pushDayBlocks(date: string, seen: RawRecord | null, change: (raw: RawRecord) => RawRecord, pushed: readonly PushedStart[]): Promise<EditOutcome[] | null> {
+  const sent: { entry: EditEntry | null; made: RawRecord | null } = { entry: null, made: null }
+  const out = await trySaveWith(async () => {
+    const before = (await dayFilesNow([date], () => seen))[date] ?? null
+    const after = withPushed(dayRaw(before, date), date, change, pushed)
+    sent.entry = editOf(paths.day(date), before, after)
+    sent.made = sent.entry?.create ? after : null
+    return [sent.entry]
+  })
+  if (isSaved(out) && sent.entry && pushed.length) {
+    try {
+      await window.rd.planPushed(date, pushed.length, sent.entry, sent.made)
+    } catch {
+      // The plan is saved; only the bar's „Cofnij” of it is missing (the main process is closing).
+    }
+  }
+  return out
 }
 
 /** A click of the timer whose failure (the IPC throws) is an answer, not an unhandled rejection. */

@@ -69,6 +69,19 @@ describe('poprawki po przeglądzie 0.22.0', () => {
     expect(barLines([q, routine], false)).toEqual({ shown: [q, routine], extra: [] })
   })
 
+  it('linie z „Cofnij” (D367, przegląd J3): pytania i ostrzeżenia dnia zawsze w widoku; z dwóch linii zmian najwyżej jedna (nowsza), druga w „⋯”', () => {
+    const q = { id: 'next:2026-10-28:a:1', text: 'Dalej?', actions: [], dot: true }
+    const warn = { id: 'hardEnd:2026-10-28:900', text: 'Twardy koniec projektów', actions: [], dot: false }
+    const push = { id: 'moved:push', text: 'Przesunięto 2 bloki', actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }
+    const variant = { id: 'moved:variant', text: 'Przestawiono: …', actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }
+    // The engine puts the day's lines first, the newest change next.
+    expect(barLines([q, push, variant], false)).toEqual({ shown: [q, push], extra: [variant] })
+    expect(barLines([push, variant], false)).toEqual({ shown: [push], extra: [variant] })
+    expect(barLines([q, warn, push, variant], false)).toEqual({ shown: [q, warn], extra: [push, variant] })
+    // A quiet mode: the question alone in its row (only it counts as seen), the changes wait.
+    expect(barLines([q, push, variant], true)).toEqual({ shown: [q], extra: [push, variant] })
+  })
+
   it('pulsowanie raz na krok bloku: pasek narysowany od nowa w tym samym kroku nie pulsuje drugi raz', () => {
     expect(beatsNow(null, 'Nauka|1|rd-bar-pulse-zero')).toBe(true)
     expect(beatsNow('Nauka|1|rd-bar-pulse-zero', 'Nauka|1|rd-bar-pulse-zero')).toBe(false)

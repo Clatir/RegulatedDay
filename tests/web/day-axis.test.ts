@@ -7,7 +7,7 @@ import { computeEnergy } from '@shared/engine/energy'
 import { rdFrom } from '@shared/model/rd'
 import { dayAxis } from '@renderer/features/plan/dayItems'
 import { edgePatch, edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '@renderer/features/plan/edgeEdit'
-import { draggedEnd, draggedStart, draggedTopStart, dropSettled, holdEnds, type TimelineItem } from '@renderer/features/plan/Timeline'
+import { draggedEnd, draggedStart, draggedTopStart, dropSettled, holdEnds, staysPut, type TimelineItem } from '@renderer/features/plan/Timeline'
 import { DRAG_STEP_MIN, planBlock } from '@shared/model/plan'
 import type { DayModel } from '@renderer/store/day'
 import { block, Scenario } from '../unit/engine/dsl'
@@ -253,5 +253,31 @@ describe('przeciąganie bloków na osi (D305)', () => {
     const cost = { block: 'a', minutes: 20, overrun: false, bedtime: false }
     expect(resizeAnswer({ ok: false, why: null, confirm: cost }, 60)).toEqual({ kind: 'confirm', text: 'Przedłuż +60: przedłużenie · −20 min puli' })
     expect(resizeAnswer({ ok: false, why: 'Stały blok.', confirm: null }, 5)).toEqual({ kind: 'refused', why: 'Stały blok.' })
+  })
+})
+
+describe('upuszczenie bez zmiany (przegląd J3)', () => {
+  it('liczy się miejsce, w którym blok stanie, nie wskaźnik: wskaźnik dalej, a blok wraca na swoje – „bez zmian”, nic do zapisu', () => {
+    const d = { from: 600, fromEnd: 660 }
+    expect(staysPut({ startMin: 600, endMin: 660 }, d)).toBe(true)
+    expect(staysPut({ startMin: 605, endMin: 660 }, d)).toBe(false)
+    expect(staysPut({ startMin: 600, endMin: 665 }, d)).toBe(false)
+  })
+})
+
+describe('oś dnia w dobie 25-godzinnej (przegląd J3)', () => {
+  it('blok przez podwójną godzinę 02:00–02:59 (24.10.2026) jak na zegarze (oś przed J3, ta sama reguła co podgląd rozsuwania): następny od 03:00 nie nachodzi na niego', () => {
+    const date = '2026-10-24'
+    const s = new Scenario({ date, plan: [block({ id: 'noc', cat: 'inne-obowiazki', at: '02:00', min: 90, origin: 'user' }), block({ id: 'potem', cat: 'inne-obowiazki', at: '03:00', min: 30, origin: 'user' })] })
+    const ctx = s.contextAt(s.at('08:00'))
+    const state = computeDay(ctx)
+    const model = { date, ctx, state, energy: computeEnergy(ctx, state) } as unknown as DayModel
+    const names = { rd: rdFrom({}), settings: s.settings, routines: [], requests: [] }
+    const items = dayAxis(model, names, null).items
+    const noc = items.find((i) => i.id === 'noc')!
+    const potem = items.find((i) => i.id === 'potem')!
+    // From the first 02:00 90 min on – to the second 02:30: on the clock 02:00–02:30; the next one at 03:00.
+    expect([noc.startMin, noc.endMin]).toEqual([26 * 60, 26 * 60 + 30])
+    expect(noc.endMin).toBeLessThanOrEqual(potem.startMin)
   })
 })

@@ -1,9 +1,16 @@
 # Changelog
 
-## 1.6.0
+## 1.7.0
 - Wyszukiwarka: Ctrl K w oknie głównym otwiera okno wyszukiwania nad bieżącym ekranem. Szuka w nazwach i notatkach bloków wszystkich dni (minionych i zaplanowanych), w szablonach, prośbach, rutynach, kategoriach, ekranach i sekcjach ustawień oraz w poleceniach („Nowy blok”, „Nowa prośba”, „Jutro”, „Wczoraj”, „Rytuał” – tylko przechodzą, nic nie przenoszą).
 - Wielkość liter i polskie znaki nie mają znaczenia („zolw” znajdzie „Żółw”); każde wpisane słowo musi być początkiem jakiegoś słowa. Wyniki są w grupach po 5 z „Pokaż jeszcze”, przy bloku data i fragment notatki z podświetloną frazą; bloki – najpierw dziś, potem zaplanowane, potem minione od najnowszych.
 - Strzałki wybierają, Enter otwiera: blok – „Dziś” na jego dniu z otwartym panelem bloku; szablon, prośba, rutyna i kategoria – ich ekran z tym rekordem. Przed wpisaniem czegokolwiek okno pokazuje do 5 ostatnio wybranych wyników i polecenia. Esc albo kliknięcie obok zamyka.
+
+## 1.6.0
+- Rozsuwanie: gdy przeciągniesz blok, wydłużysz go krawędzią albo dodasz nowy blok z siatki na zajęte miejsce w „Dziś”, kolejne bloki elastyczne dostają w planie nowe godziny – bez nakładania, w trakcie przeciągania widać ich nowe miejsca (przerywana obwódka). Bloki stałe, chronione i zaczęte zostają, elastyczny przeskakuje stały jak w prognozie.
+- Po rozsunięciu w pasku „Przesunięto N bloków · Cofnij” przez 15 min – „Cofnij” przywraca plan dnia sprzed zmiany. Gdy czeka też „Przestawiono … · Cofnij” wariantu, oba działają; pytania dnia zostają widoczne, druga linia z „Cofnij” czeka w „⋯”.
+- Rozsunięcie, po którym praca wychodzi za zatwierdzoną granicę, zapala znacznik wariantów.
+- To samo na osi „Szablonów”, z „Przesunięto N bloków · Cofnij” na stronie szablonu. W tygodniach, w których sesje zaczynają się godzinę wcześniej, blok przeciągnięty na osi szablonu nie skacze już o godzinę po upuszczeniu.
+- Wpisanie godziny albo długości w panelu bloku nie rozsuwa innych (jak dotąd); trwający blok wydłużony krawędzią przesuwa kolejne tylko na osi.
 
 ## 1.5.0
 - „Tydzień”: kliknięcie w pustą siatkę otwiera obok dnia kartę nowego bloku – kategoria (na start ostatnio użyta), długość, „Dodaj”, „Więcej” (pełna edycja) i „Anuluj”. Dzień otwierasz teraz kliknięciem w jego nagłówek albo w blok. W dniu minionym karta ostrzega „Ten dzień już minął”, ale zapis jest możliwy.

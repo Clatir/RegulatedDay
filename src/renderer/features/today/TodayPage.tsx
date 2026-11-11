@@ -9,7 +9,7 @@ import { costText } from '@shared/costText'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
-import { draggedBlock, leavesByCancel, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
+import { leavesByCancel, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
 import { categoryName } from '@shared/model/rd'
 import type { PlanBlock } from '@shared/model/plan'
 import { DAY_TYPE_NAMES, RANGES } from '@shared/model/settings'
@@ -29,12 +29,14 @@ import { blockName, type Names } from '../plan/blockView'
 import { dayAxis, daySummary } from '../plan/dayItems'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { rememberNewBlockCategory } from '../plan/lastCategory'
-import { edgePatch, edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
+import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
 import { EnergyLegend, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
-import { begunIds, clickResize, patchDayBlock, putDayBlock, removeDayBlock, setDayWake } from './dayActions'
+import { begunIds, blockNow, clickResize, patchDayBlock, pushDayBlocks, removeDayBlock, setDayWake } from './dayActions'
+import { addChange, dragChange, pushedSpans, pushedStarts, type DayChange } from './dayPush'
+import { putBlock } from '@shared/data/dayEdits'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -195,6 +197,17 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     useUi.setState({ focus: null })
   }, [focus, ritual])
 
+  // D367: a day to come pushes blocks apart (a day gone is history).
+  const pushes = date >= today
+  /**
+   * A change of the plan saved – the fields of the block (D305, D365, over the block as the file holds it then), a new
+   * block put in – with the blocks it pushes apart as one edit of the day (the bar's „Przesunięto N bloków · Cofnij”,
+   * D367); nothing pushed: the change alone, as before.
+   */
+  const saveChange = (c: DayChange) => pushDayBlocks(date, raw, (r) => putBlock(r, c.was ? { ...blockNow(r, date, c.was), ...c.patch } : c.block), pushedStarts(plan, c))
+  /** A block of the plan that may be dragged (D305): what its drag to `span` changes and pushes apart (D367). */
+  const movableChange = (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan): DayChange | null => (axis.items.find((i) => i.id === id)?.movable ? dragChange(model, id, span, edge, shown, pushes) : null)
+
   /** A new block: in the panel first (nothing is saved until „Dodaj”); an hour long, or as long as the range dragged over the axis (D366). */
   const create = (startMin: number, durationMin = DEFAULT_NEW_BLOCK_MIN) => {
     const b = newUserBlock('inne', startMin, durationMin, model.state.settings.categories.inne)
@@ -210,7 +223,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
         return
       }
     }
-    if (!isSaved(await putDayBlock(date, raw, b))) return
+    // D367: on a taken place it pushes the flexible blocks after it apart.
+    if (!isSaved(await saveChange(addChange(model, b, pushes)))) return
     rememberNewBlockCategory(b.categoryId)
     setDraft(null)
     setSelected(b.id)
@@ -313,23 +327,25 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                 setSelected(id)
               }}
               onCreate={create}
-              // D305: the dragged block's planned start, as an edit of the day – today and later (a day gone is history).
+              // D305: the dragged block's planned start, as an edit of the day – today and later (a day gone is history);
+              // D367: with the blocks it pushes apart.
               onMove={
                 date >= today
                   ? (id, startMin) => {
-                      const p = plan.find((b) => b.id === id)
-                      if (p) void patchDayBlock(date, raw, p, { startMin: draggedBlock(p, startMin).startMin })
+                      const c = dragChange(model, id, { startMin, endMin: startMin }, null, { startMin, endMin: startMin }, pushes)
+                      if (c) void saveChange(c)
                     }
                   : undefined
               }
-              // D365: an edge dragged – the length as the field „Długość” saves it (the top edge: its start with it).
+              // D365: an edge dragged – the length as the field „Długość” saves it (the top edge: its start with it); D367:
+              // with the blocks it pushes apart.
               onResize={
                 date >= today
                   ? (id, span, edge, shown) => {
                       const item = axis.items.find((i) => i.id === id)
-                      const p = plan.find((b) => b.id === id)
-                      if (item?.movable && p) {
-                        void patchDayBlock(date, raw, p, edgePatch(p, span, edge, shown))
+                      const c = movableChange(id, span, edge, shown)
+                      if (c) {
+                        void saveChange(c)
                         return span
                       }
                       // A running block: no change of its plan – the timer moves its end (D365), counted at the drop.
@@ -346,6 +362,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               }
               resizeNote={resizeNote}
               edgeLimits={edgeLimits}
+              // D367: while a block is dragged, the blocks it pushes apart at their new places.
+              pushPreview={pushes ? (id, span, edge, shown) => pushedSpans(model, movableChange(id, span, edge, shown), isToday ? 'forecast' : 'plan') : undefined}
               attached={
                 pending
                   ? {
