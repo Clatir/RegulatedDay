@@ -123,7 +123,7 @@ export function checkinStates(answers: Record<Pool, readonly [number, number]>):
 }
 
 /** A way of regeneration of the settings (a variant without costs has the category's); missing: the starting one. */
-function regenVariant(s: RulesSettings, id: string): Costs {
+export function regenVariant(s: RulesSettings, id: string): Costs {
   const cat = s.categories[REGEN_CATEGORY]
   const v = cat?.variants.find((x) => x.id === id)
   return cat && v ? (v.costs ?? cat.costs) : costsOf(DEFAULT_SETTINGS.categories[REGEN_CATEGORY]!, id)

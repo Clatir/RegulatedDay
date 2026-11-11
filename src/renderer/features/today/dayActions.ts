@@ -16,6 +16,7 @@ import { gridOf } from '@shared/engine/grid'
 import type { AnyEvent } from '@shared/model/events'
 import { createDay } from '@shared/engine/createDay'
 import { copiedDay, moveBetweenDays, wakeChange } from '@shared/engine/planEdit'
+import type { Variant } from '@shared/engine/variants'
 import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
 import { countLabel, logicalClock, plDate } from '@shared/format'
 import type { DaySnapshot } from '@shared/model/events'
@@ -83,6 +84,38 @@ export async function pushDayBlocks(date: string, seen: RawRecord | null, change
   if (isSaved(out) && sent.entry && pushed.length) {
     try {
       await window.rd.planPushed(date, pushed.length, sent.entry, sent.made)
+    } catch {
+      // The plan is saved; only the bar's „Cofnij” of it is missing (the main process is closing).
+    }
+  }
+  return out
+}
+
+/** The new starts of „Ułóż pod energię” (D369) as blocks of the plan the window knows (one gone from it meanwhile – left out). */
+export function variantStarts(plan: readonly PlanBlock[], v: Pick<Variant, 'changes'>): PushedStart[] {
+  return v.changes.flatMap((c) => {
+    const block = c.k === 'start' ? plan.find((b) => b.id === c.block) : undefined
+    return block && c.k === 'start' ? [{ block, startMin: c.startMin }] : []
+  })
+}
+
+/**
+ * „Ułóż pod energię” from the morning plan (D369, D374): the new starts as one edit of today's file, in its turn, each over
+ * the block as the file holds it then. Saved – the bar keeps „Przestawiono: <label> · Cofnij” (the main process, as after
+ * a variant picked in the bar, D313): its „Cofnij” takes this one edit back.
+ */
+export async function arrangeDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], label: string): Promise<EditOutcome[] | null> {
+  const sent: { entry: EditEntry | null; made: RawRecord | null } = { entry: null, made: null }
+  const out = await trySaveWith(async () => {
+    const before = (await dayFilesNow([date], () => seen))[date] ?? null
+    const after = withPushed(dayRaw(before, date), date, (r) => r, starts)
+    sent.entry = editOf(paths.day(date), before, after)
+    sent.made = sent.entry?.create ? after : null
+    return [sent.entry]
+  })
+  if (isSaved(out) && sent.entry) {
+    try {
+      await window.rd.planArranged(date, label, sent.entry, sent.made)
     } catch {
       // The plan is saved; only the bar's „Cofnij” of it is missing (the main process is closing).
     }

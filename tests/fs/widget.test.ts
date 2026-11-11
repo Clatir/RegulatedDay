@@ -16,7 +16,7 @@ import { HARD_END_TEXT } from '@shared/engineView'
 import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
-import { planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
+import { arrangedIn, planArrangedIpc, planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
 import { recordEdit } from '@shared/data/merge'
 
 const DAY = '2026-10-21'
@@ -2263,5 +2263,104 @@ describe('domykanie luk w pasku (D368, D373)', () => {
     expect(await starts(folder)).toEqual({ a: 10 * 60, b: 11 * 60, c: 12 * 60 })
     expect(w.current().note?.text).toBe('Tej luki już nie ma.')
     expect(gapLines(w)).toEqual([])
+  })
+})
+
+describe('„Ułóż pod energię” w pasku i z planu porannego (D369, D374)', () => {
+  // Before the fixed class (11:30): „Inne” 08:00, a nap 09:00 (+5 min buffer), „Analiza” 10:05 – the nap after „Inne” fills the
+  // head back to 100 and wastes most of it; with „Analiza” first the lowest energy of the day rises.
+  beforeEach(() =>
+    writeFileSync(
+      join(dataDir, paths.day(DAY)),
+      JSON.stringify({
+        schema: 1,
+        date: DAY,
+        sessions: { londyn: 'no', ny: 'no' },
+        blocks: [
+          { id: 'c', categoryId: 'inne', startMin: 8 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'r', categoryId: 'regeneracja', variantId: 'drzemka', startMin: 9 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'e', categoryId: 'analiza', startMin: 10 * 60 + 5, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'w', categoryId: 'zajecia-zdalne', startMin: 11 * 60 + 30, durationMin: 180, fixed: true, origin: 'user' }
+        ]
+      })
+    )
+  )
+  const ZERO = { head: [0, 0], emotions: [0, 0], senses: [0, 0] }
+  const starts = async (folder: DataFolder) => Object.fromEntries(((await folder.recordView(paths.day(DAY))) as { blocks: Array<{ id: string; startMin: number }> }).blocks.map((b) => [b.id, b.startMin]))
+
+  /** The day at 07:30 with the check-in (every pool 100). */
+  async function morning() {
+    const m = await make({ from: placeLogical(DAY, 7 * 60 + 30) })
+    await m.folder.userEvents([{ k: 'energy.checkin', day: DAY, answers: ZERO }])
+    await m.w.refresh()
+    return m
+  }
+
+  it('„Przestaw plan” bez przyczyny: „Ułóż pod energię” z listą zmian i „Zostaw plan”; wybór zmienia plan od razu, „Cofnij” go przywraca', async () => {
+    const { w, folder } = await morning()
+    expect(w.current().variants.marker).toBe(false)
+    await w.act('variants', 'open', 'bar')
+    const open = w.current().variants.open!
+    expect(open.map((v) => v.id)).toEqual(['energyOrder', 'keep'])
+    expect(open[0]!.label).toMatch(/^Ułóż pod energię – najniższa energia dnia \d+ → \d+$/)
+    expect(open[0]!.details).toEqual(['Analiza 10:10 → 08:00', 'Inne obowiązki 08:00 → 10:10'])
+    expect(open[1]).toEqual({ id: 'keep', label: 'Zostaw plan' })
+    await w.act('variants', 'pick|energyOrder', 'bar')
+    expect(await starts(folder)).toMatchObject({ c: 10 * 60 + 10, r: 9 * 60, e: 8 * 60, w: 11 * 60 + 30 })
+    expect(w.current().variants).toEqual({ marker: false, open: null })
+    expect(w.current().lines.find((l) => l.id === 'moved:variant')).toMatchObject({ text: `Przestawiono: ${open[0]!.label}`, actions: [{ id: 'undo', label: 'Cofnij' }] })
+    await w.act('line', 'moved:variant|undo', 'bar')
+    expect(await starts(folder)).toMatchObject({ c: 8 * 60, r: 9 * 60, e: 10 * 60 + 5, w: 11 * 60 + 30 })
+    expect(w.current().lines.some((l) => l.id === 'moved:variant')).toBe(false)
+  })
+
+  it('przy przyczynie czasu (koniec pracy za granicą): „Ułóż pod energię” stoi przed ostatnim „Zostaw”', async () => {
+    const { w, folder } = await morning()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, boundary: placeLogical(DAY, 12 * 60), auto: false, plan: ['c', 'r', 'e', 'w'] }])
+    await w.refresh()
+    await w.act('variants', 'open', 'bar')
+    expect(w.current().variants.open?.map((v) => v.id)).toEqual(['shorten', 'tomorrow', 'energyOrder', 'keep'])
+  })
+
+  it('„Zostaw plan” zamyka panel bez zmiany planu', async () => {
+    const { w, folder } = await morning()
+    await w.act('variants', 'open', 'bar')
+    await w.act('variants', 'pick|keep', 'bar')
+    expect(w.current().variants).toEqual({ marker: false, open: null })
+    expect(await starts(folder)).toMatchObject({ c: 8 * 60, e: 10 * 60 + 5 })
+  })
+
+  it('bez check-inu energia jest nieznana: „Przestaw plan” mówi, że plan się mieści', async () => {
+    const m = await make({ from: placeLogical(DAY, 7 * 60 + 30) })
+    await m.w.refresh()
+    await m.w.act('variants', 'open', 'bar')
+    expect(m.w.current().variants.open).toBeNull()
+    expect(m.w.current().note?.text).toBe('Plan się mieści – nie ma czego przestawiać.')
+  })
+
+  it('z planu porannego: zapis okna i „Przestawiono: … · Cofnij” w pasku (IPC `planArranged`); „Cofnij” przywraca plik dnia', async () => {
+    const { w, folder } = await morning()
+    const now = (await folder.recordView(paths.day(DAY))) as Record<string, unknown> & { blocks: Array<{ id: string; startMin: number }> }
+    const moved: Record<string, number> = { e: 8 * 60, c: 10 * 60 + 10 }
+    const entry = recordEdit(paths.day(DAY), now, { ...now, blocks: now.blocks.map((b) => (b.id in moved ? { ...b, startMin: moved[b.id]! } : b)) })!
+    await folder.edit([{ ...entry, edits: entry.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
+    const logs: string[] = []
+    planArrangedIpc(w, (_l, msg) => void logs.push(msg), DAY, 'Ułóż pod energię – najniższa energia dnia 69 → 75', entry, null)
+    await w.refresh()
+    expect(w.current().lines.find((l) => l.id === 'moved:variant')).toMatchObject({ text: 'Przestawiono: Ułóż pod energię – najniższa energia dnia 69 → 75' })
+    await w.act('line', 'moved:variant|undo', 'bar')
+    expect(await starts(folder)).toMatchObject({ c: 8 * 60, e: 10 * 60 + 5 })
+    expect(logs).toEqual([])
+  })
+
+  it('`planArranged` bierze tylko dzień, etykietę i jedną edycję pliku tego dnia', () => {
+    const entry = { rel: paths.day(DAY), edits: [{ path: ['blocks', '#e', 'startMin'], base: 605, value: 480 }] }
+    expect(arrangedIn(DAY, 'Ułóż pod energię', entry, null)).toMatchObject({ day: DAY, label: 'Ułóż pod energię', edit: { entry, made: null } })
+    expect(arrangedIn(DAY, '', entry, null)).toBeNull()
+    expect(arrangedIn(DAY, 'x'.repeat(201), entry, null)).toBeNull()
+    expect(arrangedIn(DAY, 7, entry, null)).toBeNull()
+    expect(arrangedIn('jutro', 'Ułóż', entry, null)).toBeNull()
+    expect(arrangedIn(DAY, 'Ułóż', { ...entry, rel: paths.day(addDays(DAY, 1)) }, null)).toBeNull()
+    expect(arrangedIn(DAY, 'Ułóż', { ...entry, remove: true }, null)).toBeNull()
   })
 })

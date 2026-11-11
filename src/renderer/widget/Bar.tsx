@@ -497,9 +497,19 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
       {variantsOpen && (
         <div className="flex flex-col gap-1" data-testid="bar-variants-panel">
           {view.variants.open!.map((v) => (
-            <BarButton key={v.id} mode={mode} testId={`bar-variant-${v.id}`} onAct={() => act('variants', `pick|${v.id}`)}>
-              {v.label}
-            </BarButton>
+            <div key={v.id} className="flex flex-col items-start gap-0.5">
+              <BarButton mode={mode} testId={`bar-variant-${v.id}`} onAct={() => act('variants', `pick|${v.id}`)}>
+                {v.label}
+              </BarButton>
+              {/* The changes of order of „Ułóż pod energię” (D374), one under another. */}
+              {v.details?.length ? (
+                <div className="flex flex-col pl-2 text-[11.5px] text-muted" data-testid={`bar-variant-${v.id}-details`}>
+                  {v.details.map((d, i) => (
+                    <span key={`${i}:${d}`}>{d}</span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           ))}
         </div>
       )}

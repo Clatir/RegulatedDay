@@ -2,8 +2,10 @@
 paths:
   - "src/shared/engine/requests.ts"
   - "src/shared/engine/variants.ts"
+  - "src/shared/engine/energyOrder.ts"
   - "tests/unit/engine/requests.test.ts"
   - "tests/unit/engine/variants.test.ts"
+  - "tests/unit/engine/energy-order.test.ts"
 ---
 
 # Prośby w dniu i warianty zmiany planu (logika E5)
@@ -20,7 +22,19 @@ D247, D263, D296, T202, T372. Decyzje T478–T481, T502, T503. Elementy w pasku 
   w kolejności „ta sama przerwa, potem najpóźniejsze” jest sprawdzane, a gdy koniec pracy dalej wypada po granicy,
   cięcie i przeniesienie idą od bloku wyznaczającego koniec (najwyżej `MAX_DAY_COUNTS` = 8 przeliczeń); etykieta
   z cięcia faktycznego, wariant bez poprawy zostaje z prawdziwym końcem pracy; gdy koniec robi blok niebędący kandydatem – stały albo biegnący – wyszukiwanie przerywa się od razu; kandydaci tylko sprzed drugiej zmiany; krok, po którym koniec się nie przesunął, jest
-  cofany; te same zmiany liczone raz), `planWith`, `applyVariant` (pliki dni), `markerCause` (kiedy znacznik w pasku).
+  cofany; te same zmiany liczone raz), `planWith`, `applyVariant` (pliki dni), `markerCause` (kiedy znacznik w pasku);
+  `judgeDay` (dzień liczony ponownie ze zmianami), `keepPlan` („Zostaw plan” panelu bez przyczyny). Zmiana `start`
+  (nowa godzina bloku) – `applyVariant` kładzie ją na bloku z pliku, bez `byVariant` (T610).
+- `engine/energyOrder.ts` (D369, D374, T608–T610) – `energyOrderVariant(ctx, state, energy, names)` → wariant `energyOrder`
+  („Ułóż pod energię – najniższa energia dnia a → b”, `details` – zmiany kolejności, `energy`) albo null: przerwy między
+  stałymi/czekającymi z prognozy (`shownForecaster`), kandydaci = `pushable` bez bloków, do których coś jest zakotwiczone,
+  w miejscu z prognozy od teraz; reszta (chronione, zaczęte, zakotwiczone) stoi – ułożenie, które ją rusza, odpada.
+  Kolejności przerwy: wszystkie do `ORDER_EXACT_MAX` = 6, do `ORDER_MAX_BLOCKS` = 12 zamiany po dwa; starty sekwencyjnie
+  (pierwsze miejsce zostaje, przerwy planowane na miejscach, bufor od nowa), prognoza musi postawić je dokładnie tam;
+  ocena szacunkiem energii przerwy (koszty, czas wolny ≥ 30 min albo po końcu pracy jak „gra”, przełączenie 2, kontakt 2,
+  0–100; reszta dnia przesunięta o zmianę na końcu przerwy). Potem `ORDER_COUNTS` = 2 przeliczenia dnia i energii
+  (najlepsza przerwa, wszystkie z poprawą): `lowestEnergy` ≥ przed + `ENERGY_ORDER_GAIN` (5, liczby jak na ekranie), bez
+  nowego przedłużenia i bez końca pracy za granicą. `lowestEnergy` – min trzech pul z `energy.forecast.min` (jednostki).
 - `facts.ts`: `resumedWith` (wznowienie zapisane z końcem prośby), cięcie przebiegów przez `request.start.splits`.
 - Kliknięcia próśb idą drogą timera: `folder.timerClick`; „Koniec” – do dnia, w którym prośba trwa (także sprzed 04:00).
 

@@ -88,7 +88,8 @@ export const CH = {
   goals: 'rd:goals',
   setGoals: 'rd:setGoals',
   stats: 'rd:stats',
-  planPushed: 'rd:planPushed'
+  planPushed: 'rd:planPushed',
+  planArranged: 'rd:planArranged'
 } as const
 
 /** The game for the window (D322): its view and the full-screen celebrations not shown on this computer yet. */
@@ -561,6 +562,11 @@ export interface RdApi {
    * push checks the marker of variants of today.
    */
   planPushed(day: string, count: number, entry: EditEntry, made: RawRecord | null): Promise<void>
+  /**
+   * „Ułóż pod energię” (D369) applied in the morning plan, already saved by the window as the one edit `entry` of today's
+   * file (`made` – the file it created, else null): the bar keeps „Przestawiono: <label> · Cofnij” as after a variant (D313).
+   */
+  planArranged(day: string, label: string, entry: EditEntry, made: RawRecord | null): Promise<void>
   logEvents(events: EventIn[]): Promise<void>
   resolve(id: string, choice: 'mine' | 'theirs'): Promise<void>
   /** The events of every day of a month (kinds asked) – e.g. the exceptions of the boundary this month. */

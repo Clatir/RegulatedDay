@@ -65,7 +65,7 @@ import { type DataService } from './data/service'
 import { DataHub } from './data/hub'
 import { PowerKeeper } from './power'
 import { OneDriveWatch } from './onedrive'
-import { planPushedIpc, toneOnChange, WidgetEngine } from './widget'
+import { planArrangedIpc, planPushedIpc, toneOnChange, WidgetEngine } from './widget'
 import { SoundWindow } from './windows/soundWindow'
 import { afterOutsideClose } from './windows/outsideClose'
 import { WorkerHost, type WorkerChild } from './worker/host'
@@ -757,6 +757,8 @@ function registerIpc(): void {
   // D367: blocks pushed apart, saved by the window – the bar's „Przesunięto N bloków · Cofnij” and the marker's trigger;
   // the answer never waits for the bar to be counted again.
   handle(CH.planPushed, (_e, day: unknown, count: unknown, entry: unknown, made: unknown) => planPushedIpc(widget, log, day, count, entry, made))
+  // D369: „Ułóż pod energię” saved by the morning plan – the bar's „Przestawiono: … · Cofnij” (no wait for the bar).
+  handle(CH.planArranged, (_e, day: unknown, label: unknown, entry: unknown, made: unknown) => planArrangedIpc(widget, log, day, label, entry, made))
   handle(CH.logEvents, (_e, events: EventIn[]) => needHub().events(Array.isArray(events) ? events : []))
   handle(CH.resolve, (_e, id: string, choice: 'mine' | 'theirs') => needHub().resolve(String(id), choice === 'theirs' ? 'theirs' : 'mine'))
   handle(CH.monthEvents, (_e, month: string, kinds: string[]) => needHub().monthEvents(String(month), Array.isArray(kinds) ? kinds.map(String) : []))

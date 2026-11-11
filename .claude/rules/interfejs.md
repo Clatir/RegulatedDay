@@ -51,6 +51,9 @@ paths:
   zmianie – `deepEqual`), „Cofnij” = `saveRecord(rel, po, przed)`. Bez `planPushed` i znacznika; dane osi w `useMemo` (memo podglądu).
   Testy okna bez DOM: `tests/web/` (projekt `tsconfig.web.json`).
 - `today/` – „Dziś”: `MorningPlan`, `LateWakeCard`, `TypeChangeDialog`, `ExchangeDialog`, `MoveDialogs`, `dayActions`.
+  Plan poranny – karta `EnergyOrder` (D369, `energy-order`): `energyOrderVariant` w `useMemo` na model dnia (nazwy `nameById`),
+  „Ułóż” = `arrangeDayBlocks` (`variantStarts` → `withPushed`, jeden wpis `trySaveWith`; po `isSaved` – `window.rd.planArranged`,
+  linia paska „Przestawiono: … · Cofnij”); tylko dziś (`MorningPlan` stoi tylko w dniu bieżącym).
   Pobudka dnia (`TodayPage`, `CalendarPage`) = `setDayWake`: zapis pobudki i jednorazowe przesunięcie własnych bloków
   elastycznych dnia przed pierwszym stałym (`wakeChange`/`wakeShifted`, D334) – liczone z migawki dnia silnika i planu pokazywanego
   (`WakeDay`: w „Dziś” z `model`, dla dziś w Kalendarzu `wakeDayOf`; zaczęte zostają), jeden „Cofnij” (pobudka i bloki tylko, gdy
