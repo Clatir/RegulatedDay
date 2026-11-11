@@ -363,7 +363,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             plan={plan}
             names={names}
             computers={view.computers}
-            onChange={(patch) => (draft ? patchBlockDraft(date, patch) : void patchDayBlock(date, raw, block, patch))}
+            onChange={(patch) => (draft ? patchBlockDraft(date, patch) : patchDayBlock(date, raw, block, patch).then(isSaved))}
             onClose={() => {
               setDraft(null)
               setSelected(null)

@@ -18,7 +18,8 @@ import { placeLogical } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
 import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
-import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
+import type { RawRecord } from '@shared/api'
+import { isStored, saveRecord, tryRemoveRecord, tryUpdateRecord, updateRecord, useData } from '../../store/data'
 import { countDay } from '../../store/day'
 import { useNewShortcut } from '../../lib/escape'
 import { undoToast } from '../../store/ui'
@@ -105,20 +106,22 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   const names: Names = { rd, settings, routines, requests }
 
   /** The template changed by `fn` from what it is when the change's turn comes (two quick changes both stay – A6-01). */
-  const change = (fn: (t: Template) => Template) =>
-    updateRecord(rel, (raw) => {
-      const t = templateFrom(raw)
-      return t ? templateJson(fn(t), raw) : raw
-    })
+  const changed = (fn: (t: Template) => Template) => (raw: RawRecord) => {
+    const t = templateFrom(raw)
+    return t ? templateJson(fn(t), raw) : raw
+  }
+  const change = (fn: (t: Template) => Template) => updateRecord(rel, changed(fn))
   const saveTemplate = (patch: Partial<Template>) => change((t) => ({ ...t, ...patch }))
-  /** Saves the template with the version from `from` (made when it is not there yet – a copy of the one in force then). */
-  const saveVersion = (patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)) =>
-    change((t) => {
+  /** The template with the version from `from` changed (made when it is not there yet – a copy of the one in force then). */
+  const versionChange =
+    (patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)) =>
+    (t: Template): Template => {
       const inForceThen = templateVersionOn(t, from)
       const v = t.versions.find((x) => x.from === from) ?? (inForceThen ? { ...inForceThen, from } : { from, blocks: [], budgetMin: null, maxMin: null })
       const next = { ...v, ...(typeof patch === 'function' ? patch(v) : patch) }
       return { ...t, versions: [...t.versions.filter((x) => x.from !== from), next].sort((a, b) => (a.from < b.from ? -1 : 1)) }
-    })
+    }
+  const saveVersion = (patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)) => change(versionChange(patch))
 
   // The day this version would make: the first date from the chosen one with its weekday, counted by the engine.
   const sample = useMemo(() => {
@@ -137,7 +140,9 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
   const byPlanId = new Map(model.ctx.plan.filter((b) => b.origin === 'template' && b.sourceId).map((b) => [b.id, b.sourceId!]))
   const block = version.blocks.find((b) => b.id === selected) ?? null
   const putBlock = (b: PlanBlock) => saveVersion((v) => ({ blocks: v.blocks.some((x) => x.id === b.id) ? v.blocks.map((x) => (x.id === b.id ? b : x)) : [...v.blocks, b] }))
-  const patchBlock = (id: string, patch: Partial<PlanBlock>) => saveVersion((v) => ({ blocks: v.blocks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))
+  /** A block of the version changed; answers whether it was saved (the panel's note puts back what it shows when it was not – also when the template is gone: nothing was written). */
+  const patchBlock = (id: string, patch: Partial<PlanBlock>): Promise<boolean> =>
+    tryUpdateRecord(rel, changed(versionChange((v) => ({ blocks: v.blocks.map((x) => (x.id === id ? { ...x, ...patch } : x)) })))).then(isStored)
 
   const copy = async () => {
     const id = newId()
@@ -258,7 +263,7 @@ function Editor({ template, today, onCopied, onRemoved }: { template: Template; 
           names={names}
           computers={view.computers}
           sessions={settings.sessions}
-          onChange={(patch) => void patchBlock(block.id, patch)}
+          onChange={(patch) => patchBlock(block.id, patch)}
           onClose={() => setSelected(null)}
           actions={
             <button type="button" className="btn" onClick={() => void saveVersion((v) => ({ blocks: v.blocks.filter((b) => b.id !== block.id) })).then(() => setSelected(null))} data-testid="template-block-remove">

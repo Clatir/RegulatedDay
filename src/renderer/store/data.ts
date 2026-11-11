@@ -178,6 +178,9 @@ export async function dayFilesNow(dates: readonly string[], seen: (date: string)
 /** Saved – written, or waiting for the folder – never a question, a broken file or an error. */
 export const isSaved = (out: readonly EditOutcome[] | null): boolean => out != null && out.every((o) => o.status === 'applied' || o.status === 'waiting')
 
+/** As `isSaved`, and something was written: an edit of a record that is gone (nothing sent, an empty answer) is not a saved one. */
+export const isStored = (out: readonly EditOutcome[] | null): boolean => out != null && out.length > 0 && isSaved(out)
+
 /** rd.json changed by `fn` (made when there is none yet – the defaults are never written unless you change something). */
 export async function saveRd(fn: (raw: RawRecord) => RawRecord): Promise<EditOutcome[]> {
   return (await trySaveRd(fn)) ?? []

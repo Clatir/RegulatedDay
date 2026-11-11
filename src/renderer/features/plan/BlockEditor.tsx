@@ -34,8 +34,8 @@ export function BlockEditor({
   computers: Array<{ id: string; name: string; appVersion?: string }>
   /** In a template a block may follow a session of the layer („po sesji NY”). */
   sessions?: readonly SessionDef[]
-  /** The fields changed (over the block as it is when the change is saved – a change made a moment before stays). */
-  onChange: (patch: Partial<PlanBlock>) => void
+  /** The fields changed (over the block as it is when the change is saved – a change made a moment before stays); answers whether it was saved when it can say (the note puts back what it shows when it was not). */
+  onChange: (patch: Partial<PlanBlock>) => void | Promise<boolean>
   onClose: () => void
   actions?: ReactNode
   readOnly?: boolean
@@ -43,7 +43,7 @@ export function BlockEditor({
   useEscapeLayer(true, onClose)
   const rules = names.settings.categories[block.categoryId]
   const variants = (rules?.variants ?? []).filter((v) => !v.archived || v.id === block.variantId)
-  const set = (patch: Partial<PlanBlock>) => !readOnly && onChange(patch)
+  const set = (patch: Partial<PlanBlock>): void | Promise<boolean> => (readOnly ? undefined : onChange(patch))
   const anchors = [
     ...(sessions ?? []).map((s) => ({ value: `${SESSION_ANCHOR}${s.id}`, label: `po sesji ${s.name}` })),
     ...anchorCandidates(plan, block.id).map((b) => ({ value: b.id, label: `po: ${blockName(b, names)}${b.startMin != null ? ` (${logicalClock(b.startMin)})` : ''}` }))

@@ -47,6 +47,12 @@ test('notatka bloku: pogrubienie i pola wyboru zapisane jako Markdown, widoczne 
       await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
       const block = page.getByTestId('block-n1')
       const note = page.getByTestId('block-note')
+      // The caret at the end of the text, and ProseMirror knows it (its selection follows the browser's a moment later).
+      const toEnd = async () => {
+        await note.focus()
+        await page.keyboard.press('Control+End')
+        await expect.poll(() => note.evaluate((el) => { const e = (el as unknown as { editor: { state: { selection: { from: number }; doc: { content: { size: number } } } } }).editor; return e.state.selection.from === e.state.doc.content.size - 1 })).toBe(true)
+      }
       const open = async () => {
         await block.scrollIntoViewIfNeeded()
         await block.click()
@@ -65,8 +71,7 @@ test('notatka bloku: pogrubienie i pola wyboru zapisane jako Markdown, widoczne 
 
       // Bold with Ctrl B (the keys stay in the editor) and check boxes; saved on leaving the field.
       await open()
-      await note.click()
-      await page.keyboard.press('Control+End')
+      await toEnd()
       await page.keyboard.press('Enter')
       await page.keyboard.press('Control+b')
       await page.keyboard.type('Ważne')
@@ -92,8 +97,7 @@ test('notatka bloku: pogrubienie i pola wyboru zapisane jako Markdown, widoczne 
       await expect.poll(() => noteOf(dayPath), { timeout: 15_000 }).toContain('- [x] kupić mleko\n- [ ] zadzwonić')
 
       // Esc throws away what was not saved, the next Esc closes the panel (T662).
-      await note.click()
-      await page.keyboard.press('Control+End')
+      await toEnd()
       await page.keyboard.type(' LOST')
       await page.keyboard.press('Escape')
       await expect(note).not.toContainText('LOST')
@@ -104,8 +108,7 @@ test('notatka bloku: pogrubienie i pola wyboru zapisane jako Markdown, widoczne 
 
       // „Powiększ”: the unsaved text and the cursor stay; Esc brings the note back and does not throw the text away (T665).
       await open()
-      await note.click()
-      await page.keyboard.press('Control+End')
+      await toEnd()
       await page.keyboard.type(' KEPT')
       await page.getByTestId('note-expand').click()
       await expect(page.getByTestId('note-editor')).toHaveAttribute('role', 'dialog')

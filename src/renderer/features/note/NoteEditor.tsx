@@ -8,15 +8,24 @@
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
+import { ofLabel } from '@shared/format'
 import { NOTE_COUNTER_FROM, NOTE_MAX, longNoteWarning } from '@shared/model/note'
 import { safeLinkUrl } from '@shared/noteLink'
 import { cx } from '../../components/ui'
-import { handleEscape, onModal, useEscapeLayer } from '../../lib/escape'
+import { handleEscape, onModal, tabTarget, topModal, useEscapeLayer } from '../../lib/escape'
 import { toast } from '../../store/ui'
-import { noteExtensions } from './noteMarkdown'
+import { loadNote, noteExtensions, noteMarkdown } from './noteMarkdown'
 
-/** „x z 10 000” – thousands apart. */
-const spaced = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+/**
+ * What was typed as the address of a link, with its scheme: „localhost:3000” and „example.com:8080/x” have none (https is
+ * added); a scheme is „x://” or one of the known ones (mailto:, javascript:, file: … – refused afterwards).
+ */
+export const withScheme = (text: string): string => (/^(?:[a-z][a-z0-9+.-]*:\/\/|(?:mailto|javascript|file|data|tel|ftp|sms|vbscript|blob|about):)/i.test(text) ? text : `https://${text}`)
+
+/** What Tab goes through in the note that fills the window: its buttons and the text. */
+const TABBABLE = 'button:not([disabled]), input:not([disabled]), [contenteditable="true"]'
+
+const EDITOR_PROPS = { attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'Notatka', spellcheck: 'false', class: 'rd-note', 'data-testid': 'block-note' } }
 
 function Tool({ label, title, active, onClick, testId }: { label: ReactNode; title: string; active?: boolean; onClick: () => void; testId?: string }) {
   return (
@@ -36,7 +45,7 @@ function Tool({ label, title, active, onClick, testId }: { label: ReactNode; tit
   )
 }
 
-export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { value: string; onCommit: (note: string) => void; olderComputers: readonly string[]; readOnly?: boolean }) {
+export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { value: string; onCommit: (note: string) => void | Promise<boolean>; olderComputers: readonly string[]; readOnly?: boolean }) {
   const [expanded, setExpanded] = useState(false)
   const [length, setLength] = useState(value.length)
   const [link, setLink] = useState<string | null>(null)
@@ -53,33 +62,47 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
     content: value,
     contentType: 'markdown',
     editable: !readOnly,
-    editorProps: {
-      attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'Notatka', spellcheck: 'false', class: 'rd-note', 'data-testid': 'block-note' }
-    },
+    editorProps: EDITOR_PROPS,
     onUpdate: ({ editor: e, transaction }) => {
       // Only a change of the text is an edit (setEditable and the like also announce an update).
       if (!transaction.docChanged) return
       dirty.current = true
-      setLength(e.getMarkdown().length)
+      setLength(noteMarkdown(e).length)
     },
     onBlur: () => commit()
   })
 
-  /** Saves the note when it changed: the whole text as it is now (the latest value of quick clicks, T517 in the store). */
+  /** The editor shows `text` again as the saved note (not an edit: no step of Ctrl Z, no update). */
+  const show = (text: string) => {
+    if (!editor || editor.isDestroyed) return
+    loadNote(editor, text)
+    base.current = text
+    dirty.current = false
+    setLength(text.length)
+  }
+
+  /**
+   * Saves the note when it changed: the whole text as it is now (the latest value of quick clicks, T517 in the store). A save
+   * that was refused (the store says so and the window tells why) puts back what the note was, as a field does – unless you
+   * went on writing meanwhile.
+   */
   const commit = () => {
     if (!editor || editor.isDestroyed || !dirty.current) return
     dirty.current = false
-    const text = editor.getMarkdown().replace(/\s+$/, '')
+    // Only the line breaks at the end go: a space there may be the one of an empty check box („- [ ] ”).
+    const text = noteMarkdown(editor).replace(/\n+$/, '')
     base.current = text
-    if (text !== latest.current.value) latest.current.onCommit(text)
+    if (text === latest.current.value) return
+    const refused = () => {
+      if (!dirty.current && base.current === text) show(latest.current.value)
+    }
+    void Promise.resolve(latest.current.onCommit(text)).then((saved) => saved === false && refused(), refused)
   }
 
   // A change that came from elsewhere (another computer, the history) while there is nothing of yours unsaved.
   useEffect(() => {
     if (!editor || editor.isDestroyed || dirty.current || value === base.current) return
-    editor.commands.setContent(value, { contentType: 'markdown', emitUpdate: false })
-    base.current = value
-    setLength(value.length)
+    show(value)
   }, [editor, value])
 
   useEffect(() => {
@@ -102,7 +125,23 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
   useEffect(() => {
     if (!expanded) return
     const modal = onModal()
-    return modal.off
+    // Tab stays inside the note while it fills the window (A6-21, as in a dialog): after the editor's own keys (a list takes
+    // Tab to go a level deeper), from the last element to the first, Shift+Tab the other way.
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      const box = wrap.current
+      if (e.key !== 'Tab' || e.defaultPrevented || !box || topModal() !== modal.id) return
+      const items = Array.from(box.querySelectorAll<HTMLElement>(TABBABLE))
+      const active = document.activeElement
+      const to = tabTarget(items.length, active instanceof HTMLElement ? items.indexOf(active) : -1, e.shiftKey)
+      if (to == null) return
+      e.preventDefault()
+      ;(items[to] ?? box).focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      modal.off()
+    }
   }, [expanded])
   // The text takes the focus when the note changes size (not when the panel opens: it never takes it by itself).
   const sized = useRef(expanded)
@@ -131,10 +170,7 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
       return
     }
     // The first Esc only throws away what was not saved; the next one goes to whatever is around.
-    dirty.current = false
-    editor.commands.setContent(latest.current.value, { contentType: 'markdown', emitUpdate: false })
-    base.current = latest.current.value
-    setLength(latest.current.value.length)
+    show(base.current)
     editor.commands.blur()
   }
 
@@ -148,7 +184,7 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
     if (!a) return
     e.preventDefault()
     const url = safeLinkUrl(a.getAttribute('href') ?? '')
-    if (url) void window.rd.openLink(url)
+    if (url) void window.rd.openLink(url).catch(() => toast('Nie udało się otworzyć linku.', 'error', 5000))
   }
 
   const applyLink = (text: string) => {
@@ -156,7 +192,7 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
     const trimmed = text.trim()
     if (!trimmed) editor.chain().focus().extendMarkRange('link').unsetLink().run()
     else {
-      const href = safeLinkUrl(/^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`)
+      const href = safeLinkUrl(withScheme(trimmed))
       if (!href) {
         toast('Link musi zaczynać się od http:// albo https://.', 'error', 5000)
         return
@@ -238,7 +274,7 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
         </div>
         {length >= NOTE_COUNTER_FROM && (
           <p className={cx('num text-right text-[11px]', length >= NOTE_MAX ? 'text-rose' : 'text-muted')} data-testid="note-counter">
-            {spaced(length)} z {spaced(NOTE_MAX)}
+            {ofLabel(length, NOTE_MAX)}
           </p>
         )}
         {warning && (
