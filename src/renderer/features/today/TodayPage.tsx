@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { costText } from '@shared/costText'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
+import { freedByEdit } from '@shared/engine/gaps'
 import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
 import { leavesByCancel, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
 import { categoryName } from '@shared/model/rd'
@@ -34,7 +35,7 @@ import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/
 import { EnergyLegend, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
-import { begunIds, blockNow, clickResize, patchDayBlock, pushDayBlocks, removeDayBlock, setDayWake } from './dayActions'
+import { begunIds, blockNow, clickResize, patchDayBlock, pushDayBlocks, removeDayBlock, setDayWake, tellFreed } from './dayActions'
 import { addChange, dragChange, pushedSpans, pushedStarts, type DayChange } from './dayPush'
 import { putBlock } from '@shared/data/dayEdits'
 import { ExchangeDialog } from './ExchangeDialog'
@@ -204,7 +205,24 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
    * block put in – with the blocks it pushes apart as one edit of the day (the bar's „Przesunięto N bloków · Cofnij”,
    * D367); nothing pushed: the change alone, as before.
    */
-  const saveChange = (c: DayChange) => pushDayBlocks(date, raw, (r) => putBlock(r, c.was ? { ...blockNow(r, date, c.was), ...c.patch } : c.block), pushedStarts(plan, c))
+  const saveChange = async (c: DayChange) => {
+    // D368: a block shortened today by its bottom edge frees its end – the bar may ask about the gap (a move, the top edge: no).
+    const freed = isToday && c.was ? freedByEdit(model.state, c.was, c.block) : null
+    const out = await pushDayBlocks(date, raw, (r) => putBlock(r, c.was ? { ...blockNow(r, date, c.was), ...c.patch } : c.block), pushedStarts(plan, c))
+    if (isSaved(out)) void tellFreed(date, freed)
+    return out
+  }
+  /**
+   * Fields of the block changed in its panel (D368: „Długość” shorter today – the bar may ask about the gap). The answer
+   * is the note editor’s (T670): saved, refused, or asked after the send.
+   */
+  const saveFields = async (b: PlanBlock, patch: Partial<PlanBlock>) => {
+    const freed = isToday ? freedByEdit(model.state, b, { ...b, ...patch }) : null
+    const state: SendState = { afterSend: false }
+    const out = await patchDayBlock(date, raw, b, patch, state)
+    if (isSaved(out)) void tellFreed(date, freed)
+    return saveAnswer(out, state)
+  }
   /** A block of the plan that may be dragged (D305): what its drag to `span` changes and pushes apart (D367). */
   const movableChange = (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan): DayChange | null => (axis.items.find((i) => i.id === id)?.movable ? dragChange(model, id, span, edge, shown, pushes) : null)
 
@@ -396,11 +414,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             plan={plan}
             names={names}
             computers={view.computers}
-            onChange={(patch) => {
-              if (draft) return patchBlockDraft(date, patch)
-              const state: SendState = { afterSend: false }
-              return patchDayBlock(date, raw, block, patch, state).then((out) => saveAnswer(out, state))
-            }}
+            onChange={(patch) => (draft ? patchBlockDraft(date, patch) : saveFields(block, patch))}
             onClose={() => {
               setDraft(null)
               setSelected(null)
@@ -430,7 +444,10 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                     className="btn"
                     onClick={() => {
                       setSelected(null)
-                      void removeDayBlock(date, raw, block, byCancel, blockName(block, names), begun)
+                      // D368: a block not begun removed today frees its place and that of the blocks anchored to it, which leave with it
+                      // – the bar may ask about the gap (a begun one: its end in the log).
+                      const freed = isToday && begun === 'no' ? freedByEdit(model.state, block, null) : null
+                      void removeDayBlock(date, raw, block, byCancel, blockName(block, names), begun).then((ok) => (ok ? tellFreed(date, freed) : undefined))
                     }}
                     data-testid="block-remove"
                   >

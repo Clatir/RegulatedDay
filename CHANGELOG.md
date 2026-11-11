@@ -7,6 +7,12 @@
 - Istniejące notatki otwierają się bez zmian – każdy Enter zostaje nową linią, a samo otwarcie niczego nie zapisuje. Kafelek osi, historia, CSV i wyszukiwarka pokazują notatkę jak dotąd.
 - Notatka mieści do 10 000 znaków zamiast 2000. Gdy w folderze danych jest obecny komputer ze starszą wersją aplikacji, przy dłuższej notatce widać ostrzeżenie, że tam zostanie obcięta.
 
+## 1.8.0
+- Domykanie luk: gdy blok skończysz wcześniej, zaparkujesz zaczęty, usuniesz albo skrócisz w „Dziś” i przed kolejnym blokiem elastycznym zostaje co najmniej 10 min wolnego, pasek cicho pyta „Luka N min · Przesuń resztę wcześniej · Zostaw”. Tylko dla dnia bieżącego, nigdy przed bieżącą chwilą; w trybie sesji i zajęć – dopiero po ich końcu.
+- „Przesuń resztę wcześniej” przesuwa tylko bloki elastyczne od luki do najbliższego bloku stałego (chronione i zaczęte zostają), z „Przesunięto N bloków · Cofnij” w pasku. Liczba w pytaniu to tyle, ile przesunięcie naprawdę zamknie – czas, który minął w sesji, zajęciach albo na czekaniu przy zaplanowanej przerwie, się nie liczy.
+- Bez odpowiedzi pytanie znika samo, gdy zacznie się kolejny blok po luce albo ją zapełnisz – nic się wtedy nie zmienia. Ręczny „Start” następnego bloku działa jak „Dalej”: pytanie przechodzi na lukę za nim. Kilka luk naraz – jedno pytanie o najbliższą.
+- Pytanie zadaje się raz na lukę, także przy dwóch komputerach, i wraca po ponownym uruchomieniu aplikacji. Komputer ze starszą wersją nie pyta o luki po usunięciu i skróceniu w oknie, dopóki się nie zaktualizuje.
+
 ## 1.7.0
 - Wyszukiwarka: Ctrl K w oknie głównym otwiera okno wyszukiwania nad bieżącym ekranem. Szuka w nazwach i notatkach bloków wszystkich dni (minionych i zaplanowanych), w szablonach, prośbach, rutynach, kategoriach, ekranach i sekcjach ustawień oraz w poleceniach („Nowy blok”, „Nowa prośba”, „Jutro”, „Wczoraj”, „Rytuał” – tylko przechodzą, nic nie przenoszą).
 - Wielkość liter i polskie znaki nie mają znaczenia („zolw” znajdzie „Żółw”); każde wpisane słowo musi być początkiem jakiegoś słowa. Wyniki są w grupach po 5 z „Pokaż jeszcze”, przy bloku data i fragment notatki z podświetloną frazą; bloki – najpierw dziś, potem zaplanowane, potem minione od najnowszych.

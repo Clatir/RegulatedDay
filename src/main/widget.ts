@@ -11,11 +11,13 @@ import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind 
 import { blockName, nameById } from '@shared/blockName'
 import { namingOf } from '@shared/engine/context'
 import { costText } from '@shared/costText'
+import { dayRaw, putBlock } from '@shared/data/dayEdits'
 import { recordEdit, sameContentAs } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { engineView, POOL_TEXT, RESERVE_REGEN_MIN, warnDeadlines } from '@shared/engineView'
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
 import { reserveMessageId } from '@shared/engine/game'
+import { closeGap, gapId, gapNow, gapsNow, gapText } from '@shared/engine/gaps'
 import { atOf } from '@shared/engine/grid'
 import { hardEndCurrent, hardEndMessage, type HardEndNow } from '@shared/engine/hardEnd'
 import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@shared/engine/modes'
@@ -26,6 +28,7 @@ import { applyVariant, markerCause, planCause, variantCauses, variantsFor, type 
 import type { NoticeKind } from '@shared/machine'
 import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
+import { dayFileFrom } from '@shared/model/plan'
 import { personName } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { ROUTINE_VERSION_NAMES, ROUTINE_VERSIONS, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
@@ -331,6 +334,7 @@ export class WidgetEngine {
         note: this.note ? { text: this.note.text, left: this.note.until - mono } : null
       }
       this.names = names
+      this.gapView(m, now, modes)
       this.variantsView(m, now, mono, modes)
       this.syncView(folder, now)
       this.linesLast()
@@ -353,6 +357,115 @@ export class WidgetEngine {
     this.stepAt(this.model && !v.hidden ? warnDeadlines(this.model.state, v.block?.endsAt ?? null, now) : [], now)
     this.d.emit(v)
     if (notices) await notices().catch((e) => this.d.log('warn', 'powiadomienia nie policzyły się', e))
+  }
+
+  /**
+   * „Luka N min · Przesuń resztę wcześniej · Zostaw” (D368, D373): a quiet line (no dot, no notification, no sound) for
+   * the nearest gap before a flexible block – only today; never in a session, classes, the night or „Odcinam się”, after
+   * them while the gap is there (`gapNow`: the triggers of the day's log – also the window's `plan.freed`, D375).
+   */
+  private gapView(m: NonNullable<WidgetEngine['model']>, now: number, modes: Modes): void {
+    const v = this.view!
+    const date = m.state.grid.date
+    if (v.hidden || v.night || modes.session || modes.classMode || date !== logicalDayOf(now)) return
+    const gap = gapNow(m.ctx, m.state)
+    if (gap)
+      v.lines = [
+        ...v.lines,
+        {
+          id: gap.id,
+          text: gapText(gap.minutes),
+          actions: [
+            { id: 'close', label: 'Przesuń resztę wcześniej' },
+            { id: 'leave', label: 'Zostaw' }
+          ],
+          dot: false
+        }
+      ]
+  }
+
+  /**
+   * The line's gap counted again on the day as it is at the click: the gap whose triggers hold the line's own (its id –
+   * `gap:<day>:<key>`; another gap may stand nearer now). Null: gone (a block begun meanwhile, a plan changed).
+   */
+  private async gapOfLine(line: string, day: string | undefined) {
+    const folder = this.d.folder()
+    const m = folder ? await folder.widgetModel(this.now) : null
+    if (!folder || !m || !day || day !== m.state.grid.date || !line.startsWith(`gap:${day}:`)) return null
+    const key = line.slice(`gap:${day}:`.length)
+    const gap = gapsNow(m.ctx, m.state).find((x) => x.keys.includes(key))
+    return gap ? { folder, m, gap, day } : null
+  }
+
+  /**
+   * „Zostaw” (D368): an answer for each trigger of the line's gap – the line's own first (refused – answered on another
+   * computer meanwhile – says why); its gap gone, the line's own only. The question never comes back for them.
+   */
+  private async leaveGap(line: string, day: string | undefined): Promise<void> {
+    const now = await this.gapOfLine(line, day)
+    const r = await this.d.timer({ a: 'mark', question: line, answer: 'leave', day })
+    if (!r.ok && r.why) this.say(r.why)
+    if (now) for (const k of now.gap.keys) if (gapId(now.day, k) !== line) await this.d.timer({ a: 'mark', question: gapId(now.day, k), answer: 'leave', day: now.day })
+    return this.refresh()
+  }
+
+  /**
+   * „Przesuń resztę wcześniej” (D368, T602): the gap counted again on the day as it is at the click (gone – nothing
+   * written); the answers first – one for each trigger of the gap, so no other view, refresh or computer moves it a second
+   * time (the line's own refused – answered elsewhere meanwhile: nothing moves) – then the new starts of its blocks as one
+   * edit of the day's file with „Przesunięto N bloków · Cofnij” as after a push (D367, D313 – the same line and „Cofnij”).
+   * An edit refused, in conflict or failed takes the answers back (`unmark` – an `undo` of each): the question stays.
+   */
+  private async closeGapNow(line: string, day: string | undefined): Promise<void> {
+    const now = await this.gapOfLine(line, day)
+    const out = now ? closeGap(now.m.ctx, now.m.state, now.gap) : []
+    if (!now || !out.length) {
+      this.say('Tej luki już nie ma.')
+      return this.refresh()
+    }
+    const { folder, m, gap } = now
+    const questions = [line, ...gap.keys.map((k) => gapId(now.day, k)).filter((q) => q !== line)]
+    const answered: string[] = []
+    for (const q of questions) {
+      const r = await this.d.timer({ a: 'mark', question: q, answer: 'close', day: now.day })
+      if (r.ok) answered.push(q)
+      else if (q === line) {
+        if (r.why) this.say(r.why)
+        return this.refresh()
+      }
+    }
+    const takeBack = async () => {
+      for (const q of answered) {
+        const r = await this.d.timer({ a: 'unmark', question: q, day: now.day }).catch((e: unknown) => ({ ok: false, why: e instanceof Error ? e.message : String(e) }))
+        if (!r.ok) this.d.log('warn', `luka ${q}: odpowiedź nie cofnęła się po nieudanym przesunięciu (${r.why ?? 'bez powodu'})`)
+      }
+    }
+    try {
+      const rel = paths.day(now.day)
+      const before = ((await folder.recordView(rel)) as RawRecord | undefined) ?? null
+      let after = dayRaw(before, now.day)
+      for (const p of out) {
+        const b = dayFileFrom(after, now.day).blocks.find((x) => x.id === p.id) ?? m.ctx.plan.find((x) => x.id === p.id)
+        if (b) after = putBlock(after, { ...b, startMin: p.startMin })
+      }
+      const entry = recordEdit(rel, before, after)
+      if (!entry) {
+        await takeBack()
+        this.say('Tej luki już nie ma.')
+        return this.refresh()
+      }
+      const res = await this.d.edit([entry])
+      if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) {
+        await takeBack()
+        this.say('Przesunięcie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
+        return this.refresh()
+      }
+      this.moved.set('push', { text: pushedText(out.length), day: now.day, edits: [{ entry, made: entry.create ? after : null }], started: null, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq })
+    } catch (e) {
+      await takeBack()
+      throw e
+    }
+    return this.refresh()
   }
 
   /** The marker and the open panel of variants in the view, and the line „Przestawiono: … · Cofnij” (D313). */
@@ -845,7 +958,11 @@ export class WidgetEngine {
         } else if (kind === 'routineSaved') return act === 'undo' ? this.undoRoutine() : undefined
         // „OK” of the line about saving the battery: the day's answer in the log – it never comes back that day.
         else if (kind === 'battery') await this.d.timer({ a: 'mark', question: line, answer: 'ok', day })
-        else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
+        // A gap (D368): „Przesuń resztę wcześniej” closes it, „Zostaw” – the answer in the log, never asked again for it.
+        else if (kind === 'gap') {
+          if (act === 'close') return this.closeGapNow(line, day)
+          return act === 'leave' ? this.leaveGap(line, day) : undefined
+        } else if (kind === 'paused') click = act === 'start' ? { a: 'start', block: id } : { a: 'park', block: id }
         else if (kind === 'fewerOffer') {
           await this.d.timer({ a: 'mark', question: line, answer: act, day })
           if (act === 'yes') click = { a: 'fewer' }

@@ -95,6 +95,8 @@ export type TimerAction =
   | { a: 'restart'; block: string }
   /** An answer to a proposal of the bar (the break, the solitude): recorded, so it is shown once. */
   | { a: 'mark'; question: string; answer: string }
+  /** That answer taken back (`undo` of its event): the gap's „Przesuń” whose edit failed after its answers (D368, T602). */
+  | { a: 'unmark'; question: string }
   /** „Pracowałem do teraz” on the bar: the time to explain after a work block answered „praca” to now, the end of work then. */
   | { a: 'workedUntil'; explain: string }
   /** A routine's steps ticked off with its version (D328), and its „Cofnij”. */
@@ -696,6 +698,11 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
     case 'mark':
       if (state.facts.answers.has(act.question)) return no('już odpowiedziane')
       return yes([{ k: 'question.answer', at, question: act.question, answer: act.answer, value: null }])
+    case 'unmark': {
+      const answer = state.facts.answers.get(act.question)
+      if (!answer) return no('nie ma tej odpowiedzi')
+      return yes([{ k: 'undo', at, target: answer.id, reason: 'answer' }])
+    }
     case 'routineDone': {
       // The bar and „Dziś” save one state (D328): the first save closes both, a second one finds it saved.
       const routine = ctx.plan.find((p) => p.id === act.block)?.routine
