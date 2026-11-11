@@ -18,6 +18,8 @@ import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
 import { arrangedIn, planArrangedIpc, planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
 import { recordEdit } from '@shared/data/merge'
+import { putBlock } from '@shared/data/dayEdits'
+import { dayFileFrom } from '@shared/model/plan'
 
 const DAY = '2026-10-21'
 let root: string
@@ -2352,6 +2354,56 @@ describe('„Ułóż pod energię” w pasku i z planu porannego (D369, D374, D3
     await w.act('line', 'moved:variant|undo', 'bar')
     expect(await starts(folder)).toMatchObject({ c: 8 * 60, e: 10 * 60 + 5 })
     expect(logs).toEqual([])
+  })
+
+  /** An edit of today's file made elsewhere (the window, another computer): `change` over the blocks, saved. */
+  async function editDay(folder: DataFolder, change: (b: { id: string; startMin: number; note?: string }) => object) {
+    const now = (await folder.recordView(paths.day(DAY))) as Record<string, unknown> & { blocks: Array<{ id: string; startMin: number }> }
+    const entry = recordEdit(paths.day(DAY), now, { ...now, blocks: now.blocks.map(change) })!
+    await folder.edit([{ ...entry, edits: entry.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
+    return entry
+  }
+
+  it('T614: „Ułóż pod energię” z panelu znacznika nie zamyka jego przyczyny – znacznik zostaje, póki plan się nie mieści', async () => {
+    const { w, folder } = await morning()
+    // The boundary 12:00 approved, the end of work after the class at 17:40: a push in the window checks the marker.
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, boundary: placeLogical(DAY, 12 * 60), auto: false, plan: ['c', 'r', 'e', 'w'] }])
+    const entry = await editDay(folder, (b) => (b.id === 'c' ? { ...b, note: 'x' } : b))
+    await w.pushed(DAY, 1, { entry, made: null })
+    expect(w.current().variants.marker).toBe(true)
+    await w.act('variants', 'open', 'bar')
+    expect(w.current().variants.open?.map((v) => v.id)).toEqual(['shorten', 'tomorrow', 'energyOrder', 'keep'])
+    await w.act('variants', 'pick|energyOrder', 'bar')
+    expect(await starts(folder)).toMatchObject({ e: 9 * 60 + 5, r: 10 * 60 + 10 })
+    expect(w.current().variants.marker).toBe(true)
+  })
+
+  it('T614: „Ułóż” w planie porannym zamyka otwarty panel wariantów (policzony na planie sprzed zmiany)', async () => {
+    const { w, folder } = await morning()
+    await w.act('variants', 'open', 'bar')
+    expect(w.current().variants.open).not.toBeNull()
+    const entry = await editDay(folder, (b) => (b.id === 'e' ? { ...b, startMin: 9 * 60 + 5 } : b.id === 'r' ? { ...b, startMin: 10 * 60 + 10 } : b))
+    await w.arranged(DAY, 'Ułóż pod energię – najniższa energia dnia 50 → 56', { entry, made: null })
+    expect(w.current().variants.open).toBeNull()
+  })
+
+  it('T614: wariant, którego edycja wyszła pusta (plan już taki), nie nadpisuje linii wcześniejszej zmiany z jej „Cofnij”', async () => {
+    const { w, folder } = await morning()
+    // An earlier change with its line: a note on „c” saved as an arrangement.
+    const note = await editDay(folder, (b) => (b.id === 'c' ? { ...b, note: 'wcześniej' } : b))
+    await w.arranged(DAY, 'wcześniejsza zmiana', { entry: note, made: null })
+    await w.act('variants', 'open', 'bar')
+    // Meanwhile the same order is written elsewhere, as the window writes it (whole blocks): the variant's edit comes out empty.
+    const now = (await folder.recordView(paths.day(DAY))) as Record<string, unknown>
+    let same = now
+    for (const [id, startMin] of [['e', 9 * 60 + 5], ['r', 10 * 60 + 10]] as const) same = putBlock(same, { ...dayFileFrom(same, DAY).blocks.find((b) => b.id === id)!, startMin })
+    const entry = recordEdit(paths.day(DAY), now, same)!
+    await folder.edit([{ ...entry, edits: entry.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
+    await w.act('variants', 'pick|energyOrder', 'bar')
+    expect(w.current().lines.find((l) => l.id === 'moved:variant')).toMatchObject({ text: 'Przestawiono: wcześniejsza zmiana' })
+    await w.act('line', 'moved:variant|undo', 'bar')
+    const c = ((await folder.recordView(paths.day(DAY))) as { blocks: Array<{ id: string; note?: string }> }).blocks.find((b) => b.id === 'c')
+    expect(c?.note ?? '').toBe('')
   })
 
   it('`planArranged` bierze tylko dzień, etykietę i jedną edycję pliku tego dnia', () => {

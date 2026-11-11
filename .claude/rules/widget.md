@@ -65,9 +65,11 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 - Warianty (D313, T502): `WidgetView.variants` (znacznik, panel) ustawia `WidgetEngine.variantsView` po `engineView`;
   akcja `variants` `open` / `close` / `pick|i`, „Przestawiono … · Cofnij” to linia `moved:variant`. „Ułóż pod energię” (D369, T612): `openVariants`
   dokłada `energyOrderVariant` (tylko dzień paska = dziś) przed ostatnim „Zostaw”; bez przyczyny panel = ten wariant + `keepPlan`
-  (`panel.cause` null – wybór nie zamyka przyczyn); `open[].details` – zmiany kolejności pod przyciskiem (`bar-variant-<id>-details`).
-  Z planu porannego: okno zapisuje edycję, IPC `planArranged` (`arrangedIn` jak `pushedIn` + etykieta ≤ 200) → `WidgetEngine.arranged` –
-  ta sama linia `moved:variant` „Przestawiono: <etykieta>”, bez wyzwalacza znacznika. Linie `moved:` idą po wszystkich liniach dnia
+  (`panel.cause` null); wybór `ENERGY_ORDER_ID` nigdy nie zamyka przyczyn znacznika, edycja pusta nic nie zapisuje i nie zastępuje
+  linii `moved:variant` (T614); `open[].details` – zmiany kolejności pod przyciskiem (`bar-variant-<id>-details`, sąsiad przycisku w
+  `Fragment` – przyciski zostają dziećmi panelu, T615). Z planu porannego: okno zapisuje edycję, IPC `planArranged` (`arrangedIn`
+  jak `pushedIn` + etykieta ≤ 200) → `WidgetEngine.arranged` – zamyka otwarty panel, ta sama linia `moved:variant` „Przestawiono:
+  <etykieta>”, bez wyzwalacza znacznika. Linie `moved:` idą po wszystkich liniach dnia
   (`linesLast`: także po cichych liniach komputerów i twardym końcu), nowsza pierwsza; `barLines` pokazuje najwyżej jedną, druga w „⋯” (z działającym „Cofnij”).
   Rozsuwanie (D367): okno zapisuje
   partię samo, potem IPC `planPushed` (`planPushedIpc`: `pushedIn` sprawdza plik tego dnia, bez usunięcia; odpowiedź nie czeka na

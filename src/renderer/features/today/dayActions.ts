@@ -18,7 +18,7 @@ import { createDay } from '@shared/engine/createDay'
 import { copiedDay, moveBetweenDays, wakeChange } from '@shared/engine/planEdit'
 import type { DayContext, DayState } from '@shared/engine/day'
 import type { EnergyState } from '@shared/engine/energy'
-import { energyOrderVariant } from '@shared/engine/energyOrder'
+import { energyOrderVariant, lowestEnergy } from '@shared/engine/energyOrder'
 import type { Variant } from '@shared/engine/variants'
 import { nameById, type Names } from '@shared/blockName'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
@@ -102,10 +102,40 @@ export const ENERGY_ORDER_ASKED = 'energyOrder'
  * The morning plan's „Ułóż pod energię” (D369, D374, D377): the variant of today's plan, or null – none, or left („Zostaw”)
  * for the day (its answer in the day's file, as the plan's other questions: on every computer, to the day's end).
  */
-export function energyOrderFor(m: { ctx: DayContext; state: DayState; energy: EnergyState; dayFile: DayFile | null }, names: Names): Variant | null {
+export function energyOrderFor(m: EnergyOrderDay, names: Names): Variant | null {
   if (m.dayFile?.asked[ENERGY_ORDER_ASKED] != null) return null
   const naming = namingOf(m.ctx, m.state.facts)
   return energyOrderVariant(m.ctx, m.state, m.energy, (b) => nameById(b.id, naming, names))
+}
+
+/** What the morning plan counts „Ułóż pod energię” on: the day as counted (`DayModel`). */
+type EnergyOrderDay = { ctx: DayContext; state: DayState; energy: EnergyState; dayFile: DayFile | null }
+
+/**
+ * What „Ułóż pod energię” depends on in the day counted at a minute (T616): the plan and the snapshot, the log, the energy
+ * module and the calibration, the lowest energy from now, the answer „Zostaw” and where the forecast places the blocks (a
+ * running one by its end – its start is now). The clock alone (the window counts the day every 30 s) changes none of it,
+ * a block due now (placed at now) – each minute.
+ */
+export function energyOrderKey(m: EnergyOrderDay): string {
+  const places = m.state.forecast.map((p) => `${p.block.id}:${p.running ? '' : p.from}:${p.to}:${p.bg ? 1 : 0}`).join(',')
+  const last = m.ctx.events.at(-1) as { id?: unknown } | undefined
+  return [JSON.stringify(m.ctx.plan), JSON.stringify(m.ctx.snapshot), m.ctx.events.length, String(last?.id ?? ''), m.energy.enabled, m.energy.variants, lowestEnergy(m.energy) ?? '', m.dayFile?.asked[ENERGY_ORDER_ASKED] ?? '', places].join('|')
+}
+
+/** The last variant counted for the morning plan, by its key and the names it was named with. */
+let lastOrder: { key: string; names: Names; value: Variant | null } | null = null
+
+/**
+ * `energyOrderFor` counted again only when its key changes (T616): the search (orders of each gap, the day counted again)
+ * runs in the window's thread – never for a count of the day that only moved the clock.
+ */
+export function energyOrderCached(m: EnergyOrderDay, names: Names): Variant | null {
+  const key = energyOrderKey(m)
+  if (lastOrder && lastOrder.key === key && lastOrder.names === names) return lastOrder.value
+  const value = energyOrderFor(m, names)
+  lastOrder = { key, names, value }
+  return value
 }
 
 /** „Zostaw” of the morning plan's „Ułóż pod energię” (D377): the card does not come back that day. */

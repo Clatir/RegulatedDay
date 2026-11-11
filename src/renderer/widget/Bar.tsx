@@ -7,7 +7,7 @@
  * never as a separate window (D229). A first click with a cost shows it in place of its button; the second within 10 s
  * does it. On the desktop bar the buttons act on the mouse button's release and there are no tooltips.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { WidgetAction } from '@shared/api'
 import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
 import { barBackground, TONE_SETS } from '@shared/theme'
@@ -497,11 +497,12 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
       {variantsOpen && (
         <div className="flex flex-col gap-1" data-testid="bar-variants-panel">
           {view.variants.open!.map((v) => (
-            <div key={v.id} className="flex flex-col items-start gap-0.5">
+            // The buttons stay children of the panel as before (its full width); the changes of order of „Ułóż pod energię”
+            // (D374) stand under the button, one under another (T615).
+            <Fragment key={v.id}>
               <BarButton mode={mode} testId={`bar-variant-${v.id}`} onAct={() => act('variants', `pick|${v.id}`)}>
                 {v.label}
               </BarButton>
-              {/* The changes of order of „Ułóż pod energię” (D374), one under another. */}
               {v.details?.length ? (
                 <div className="flex flex-col pl-2 text-[11.5px] text-muted" data-testid={`bar-variant-${v.id}-details`}>
                   {v.details.map((d, i) => (
@@ -509,7 +510,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
                   ))}
                 </div>
               ) : null}
-            </div>
+            </Fragment>
           ))}
         </div>
       )}

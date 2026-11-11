@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy, shownOf } from '@shared/engine/energy'
-import { ENERGY_ORDER_BELOW, ENERGY_ORDER_GAIN, ORDER_COUNTS, energyOrderVariant, lowestEnergy } from '@shared/engine/energyOrder'
+import { ENERGY_ORDER_BELOW, ENERGY_ORDER_GAIN, ORDER_COUNTS, energyOrderLabel, energyOrderVariant, lowestEnergy } from '@shared/engine/energyOrder'
 import { applyVariant, planWith } from '@shared/engine/variants'
 import type { Pool } from '@shared/model/categories'
 import type { Answer } from '@shared/model/events'
@@ -234,6 +234,73 @@ describe('„Ułóż pod energię” (D369, D374, D377)', () => {
     expect(lowestWith(d)).toBe(v.energy!.after)
     expect(v.changes.every((c) => c.k === 'start' && c.block !== 'w')).toBe(true)
     expect(energyOrderVariant(d.ctx, d.state, d.energy, names)).toEqual(v)
+  })
+
+  it('etykieta z liczb wariantu w jednym miejscu (`energyOrderLabel`)', () => {
+    const v = day(napDay()).v!
+    expect(v.label).toBe(energyOrderLabel(v.energy!))
+  })
+
+  it('T613: blok tej samej kategorii co blok przed przerwą zaczyna się bez bufora – szacunek liczy go od końca tamtego', () => {
+    // „a” („Analiza” without costs) runs to 08:30; „Inne” planned 08:30 stands at 08:35 after the buffer. „Analiza” put first
+    // would start at 08:30 – before the first slot as it is: counted from there, it no longer looks free of cost, and the
+    // nap before the costly blocks wins (a tired head, 45; the class at 13:30 holds the end of work).
+    const d = day(
+      [
+        { ...block({ id: 'a', cat: 'analiza', at: '07:30', min: 60 }), costs: { head: 0, emotions: 0, senses: 0 } },
+        block({ id: 'b', cat: 'inne', at: '08:30', min: 60 }),
+        block({ id: 'c', cat: 'analiza', at: '09:40', min: 120 }),
+        block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '11:45', min: 90 }),
+        block({ id: 'w', cat: 'zajecia-zdalne', at: '13:30', min: 30, fixed: true })
+      ],
+      { answers: { ...ZERO, head: [2, 1] }, settings: { transitionBufferMin: 5 }, now: '07:40', events: (s) => s.start('a', '07:30') }
+    )
+    expect(d.v?.energy).toEqual({ before: 20, after: 29 })
+    expect(d.v!.changes).toEqual([
+      { k: 'start', block: 'r', startMin: lm('09:40') },
+      { k: 'start', block: 'c', startMin: lm('11:15') }
+    ])
+  })
+
+  it('T610: start „koniec poprzedniego + bufor” (jak zapisuje rozsuwanie) to nie przerwa – nowi sąsiedzi tej samej kategorii bez dziury', () => {
+    // Every start as rozsuwanie writes them (the end of the block before and 5 min); „Analiza” goes first, the two „Inne”
+    // meet after the nap – the second right at the end of the first, no 5 min between them.
+    const d = day(
+      [
+        block({ id: 'c1', cat: 'inne', at: '08:00', min: 60 }),
+        block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:05', min: 60 }),
+        block({ id: 'c2', cat: 'inne', at: '10:10', min: 60 }),
+        block({ id: 'e', cat: 'analiza', at: '11:15', min: 60 }),
+        block({ id: 'w', cat: 'zajecia-zdalne', at: '12:30', min: 370, fixed: true })
+      ],
+      { settings: { transitionBufferMin: 5 } }
+    )
+    expect(d.v!.changes).toEqual([
+      { k: 'start', block: 'e', startMin: lm('08:00') },
+      { k: 'start', block: 'c1', startMin: lm('11:10') }
+    ])
+    expect(d.v!.details).toEqual(['Analiza 11:15 → 08:00', 'Inne obowiązki 08:00 → 11:10'])
+  })
+
+  it('T611: kotwica bloku odwołanego (poza prognozą) nie stoi – przestawia się jak inne', () => {
+    // „z” anchored to „Analiza” is cancelled: „Analiza” may go before the nap.
+    const plan = [...napDay(), block({ id: 'z', cat: 'inne', after: 'e', min: 30 })].map((b) => (b.id === 'w' ? { ...b, startMin: lm('11:30') } : b))
+    const d = day(plan, { events: (s) => s.raw({ k: 'block.cancel', block: 'z', at: s.at('07:10'), rule: 'click' }, '07:10') })
+    expect(d.v!.changes).toEqual([
+      { k: 'start', block: 'e', startMin: lm('09:00') },
+      { k: 'start', block: 'r', startMin: lm('10:00') }
+    ])
+  })
+
+  it('T609: najlepsze kolejności szacunku liczone ponownie – wygrywa prawdziwie najlepsza (bez przełączenia na stały blok tej samej kategorii)', () => {
+    // The fixed block after the gap is „Inne” (10 h): the order that ends with „Inne” has no switch into it, which the
+    // estimate of the gap does not see – both orders tie there; counted again, that one gives 2 more.
+    const d = day(napDay().map((b) => (b.id === 'w' ? { ...b, categoryId: 'inne', durationMin: 600 } : b)))
+    expect(d.v?.energy).toEqual({ before: 57, after: 65 })
+    expect(d.v!.changes).toEqual([
+      { k: 'start', block: 'e', startMin: lm('08:00') },
+      { k: 'start', block: 'c', startMin: lm('10:00') }
+    ])
   })
 
   it('bez check-inu (energia nieznana) i z wyłączonym modułem energii – bez wariantu', () => {

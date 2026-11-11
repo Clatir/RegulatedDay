@@ -1629,11 +1629,13 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   zmienia godziny w „Dziś” tylko w obrębie tej przerwy między blokami stałymi; mogą się przestawić także regeneracja,
   posiłek i rutyny (D377), a blok stały, zaczęty i zakotwiczony stoją tam, gdzie stały; wykres energii w „Dziś”
   pokazuje wyższe minimum. W pasku na 15 min „Przestawiono: Ułóż pod energię – … · Cofnij”; „Cofnij” przywraca godziny
-  sprzed zmiany (D369, D374, D377, D313).
+  sprzed zmiany (D369, D374, D377, D313). Gdy panel otworzył znacznik („◆ warianty”, np. koniec pracy za granicą), po
+  „Ułóż pod energię” znacznik zostaje, póki plan dalej się nie mieści (T614).
 - **Nie przechodzi, gdy:** wariant przesuwa blok stały, zaczęty albo zakotwiczony, przenosi blok za blok stały albo
   przed niego z innej przerwy, zmienia długość któregoś bloku, liczby w etykiecie różnią się od minimum energii po
-  zmianie, lista zmian nie zgadza się z „Dziś”, „Cofnij” nie przywraca wszystkich godzin, albo pasek pulpitu po
-  kliknięciu wychodzi nad okna innych programów.
+  zmianie, lista zmian nie zgadza się z „Dziś”, „Cofnij” nie przywraca wszystkich godzin, znacznik znika po „Ułóż pod
+  energię”, choć plan dalej się nie mieści, przyciski panelu są węższe niż przed 1.9.0, albo pasek pulpitu po kliknięciu
+  wychodzi nad okna innych programów.
 
 #### J5.2 „Ułóż pod energię” w planie porannym – „Ułóż” i „Zostaw” (1.9.0)
 - [ ] Odebrane

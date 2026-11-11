@@ -11,11 +11,11 @@
  *
  * The search (T608, T609): in each gap every order of its blocks (up to `ORDER_EXACT_MAX` – 720 orders; a larger gap up
  * to `ORDER_MAX_BLOCKS` by swaps of two, best swap first) is laid out as the forecast lays it (`shownForecaster`) and
- * judged by an estimate of the energy over the gap (the costs of the blocks, the free time, the switches; the rest of the
- * day shifted by the change at the gap's end). The best gap alone, and every gap with a gain together, are then judged by
- * counting the day and its energy again (`ORDER_COUNTS` counts at most, D340): the variant is the count with the higher
- * lowest energy that raises it by `ENERGY_ORDER_GAIN` at least (as shown, whole) and neither adds an extension nor takes
- * the end of work past the boundary.
+ * ranked by an estimate of the energy over the gap (the costs of the blocks, the free time, the switches; the rest of the
+ * day shifted by the change at the gap's end). The estimate only ranks: the `ORDER_TOP` best orders of each gap, the
+ * greatest estimated gain first, are judged by counting the day and its energy again, and then the best of each gap
+ * together (`ORDER_COUNTS` counts at most, D340): the variant is the count with the higher lowest energy that raises it by
+ * `ENERGY_ORDER_GAIN` at least (as shown, whole) and neither adds an extension nor takes the end of work past the boundary.
  */
 import { logicalClock } from '../format'
 import { POOLS, costsOf, type Costs, type Pool } from '../model/categories'
@@ -37,8 +37,16 @@ export const ENERGY_ORDER_BELOW = 60
 export const ORDER_EXACT_MAX = 6
 /** A gap of more blocks is left as it is; up to it, larger than `ORDER_EXACT_MAX`, it is searched by swaps of two. */
 export const ORDER_MAX_BLOCKS = 12
-/** The days (and their energy) counted again at most: the best gap alone, every gap with a gain together. */
-export const ORDER_COUNTS = 2
+/** The orders of each gap the estimate ranks best that are judged by counting the day again (T609). */
+export const ORDER_TOP = 3
+/**
+ * The days (and their energy) counted again at most (T609): the best orders of the gaps, one by one, the greatest estimated
+ * gain first – and the last count for the best order of each gap that raised the lowest energy, together.
+ */
+export const ORDER_COUNTS = 6
+
+/** The id of the variant (the bar's action `pick|energyOrder`). */
+export const ENERGY_ORDER_ID = 'energyOrder'
 
 /** The units of energy (1/2000 of a point, as `computeEnergy` keeps them). */
 const UNIT = toUnits(1)
@@ -125,10 +133,11 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
   })
 
   /**
-   * The estimate of a gap laid out as `placed` (T609): from its first slot to its end (the next fixed block, at most the
-   * bedtime's forecast) – the blocks' costs, free time as regeneration when ≥ 30 min or after the end of work, the switch
-   * into work of another category and the contact of a request at a block's start, kept within 0–100. The lowest state
-   * on the way and the state at the end.
+   * The estimate of a gap laid out as `placed` (T609): from where its first slot may start (the end of the block before
+   * it, T613) to its end (the next fixed block, at most the bedtime's forecast) – the blocks' costs, free time as
+   * regeneration when ≥ 30 min or after the end of work, the switch into work of another category and the contact of a
+   * request at a block's start, kept within 0–100. The lowest state on the way and the state at the end. Only a ranking:
+   * the best orders are judged by counting the day again.
    */
   const simulate = (gap: Gap, placed: ReadonlyMap<string, Placed>, r0: number, r1: number, start: PoolUnits): { low: PoolUnits; end: PoolUnits } => {
     const list = gap.items.map((it) => placed.get(it.block.id) ?? it).filter((p) => p.from >= r0 && p.from < r1).sort(byFrom)
@@ -212,14 +221,20 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
     return map
   }
 
-  /** The best order of a gap by the estimate (null: none better than the gap as it is). */
-  const pickGap = (gap: Gap): GapPick | null => {
-    const r0 = gap.items[gap.slots[0]!]!.from
+  /**
+   * The best orders of a gap by the estimate – `ORDER_TOP` at most, each better than the gap as it is, the best first (of
+   * equal ones the one that moves fewer blocks, then the first in the order of the search).
+   */
+  const pickGap = (gap: Gap): GapPick[] => {
+    // From where the first slot may start (T613): the end of the blocks before it in the gap – a block of the same
+    // category as the one before needs no buffer and starts there, before the slot's start as it is.
+    const first = gap.slots[0]!
+    const r0 = first > 0 ? Math.max(...gap.items.slice(0, first).map((it) => it.to)) : gap.items[first]!.from
     const r1 = Math.min(gap.upper, until)
-    if (r1 <= r0) return null
-    const first = gap.items[gap.slots[0]!]!.block
-    const ch0 = charge(first, gap.before?.block.categoryId ?? null)
-    // The state at the gap's first slot before that block's own switch (the series has it in that minute).
+    if (r1 <= r0) return []
+    // The state there before the switch of a block that starts at that minute as it is (the series has it in that minute).
+    const opening = gap.items.find((it) => it.from === r0 && gap.slots.includes(gap.items.indexOf(it)))
+    const ch0 = opening ? charge(opening.block, gap.before?.block.categoryId ?? null) : pools(() => 0)
     const start = pools((p) => clamp(at(p, r0) + ch0[p]))
     const lowBefore = pools((p) => (r0 > now ? minOver(p, now, r0 - 1) : Number.POSITIVE_INFINITY))
     const lowWithin = pools((p) => minOver(p, r0, r1 - 1))
@@ -232,19 +247,20 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
     const baseScore = scoreOf(idById)
     const n = gap.slots.length
     const moved = (starts: ReadonlyMap<string, number>) => [...starts].filter(([id, s]) => idById.get(id)!.from !== s).length
-    // The best so far (a holder: the closure below sets it) and how many blocks it moves.
-    const top: { pick: GapPick | null; moved: number } = { pick: null, moved: 0 }
+    // The best orders so far, the best first (each with how many blocks it moves and when the search met it).
+    const top: Array<GapPick & { moved: number; seen: number }> = []
+    let seen = 0
     const consider = (order: readonly number[]): number | null => {
       const starts = startsFor(gap, order)
       if (!starts.size) return baseScore
       const placed = layout(starts, [gap])
       if (!placed) return null
       const score = scoreOf(placed)
-      const m = moved(starts)
-      if (score > (top.pick?.score ?? baseScore) || (top.pick && score === top.pick.score && m < top.moved)) {
-        top.pick = { gap, starts, placed, score, base: baseScore }
-        top.moved = m
-      }
+      if (score <= baseScore) return score
+      const pick = { gap, starts, placed, score, base: baseScore, moved: moved(starts), seen: seen++ }
+      top.push(pick)
+      top.sort((a, b) => b.score - a.score || a.moved - b.moved || a.seen - b.seen)
+      if (top.length > ORDER_TOP) top.pop()
       return score
     }
     if (n <= ORDER_EXACT_MAX) {
@@ -269,39 +285,60 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
         curScore = next.score
       }
     }
-    return top.pick
+    return top
   }
 
-  const picks = gaps.map(pickGap).filter((x): x is GapPick => x != null)
-  if (!picks.length) return null
-  // The best gap alone first, then every gap with a gain together (the earlier gap first among equal ones).
-  const ranked = [...picks].sort((a, b) => b.score - b.base - (a.score - a.base) || a.gap.index - b.gap.index)
-  const tries: GapPick[][] = [[ranked[0]!]]
-  if (picks.length > 1) tries.push(picks)
+  // The orders of every gap the estimate finds better, the greatest estimated gain first (the earlier gap, then the
+  // gap's own ranking, among equal ones): each judged by counting the day and its energy again (T609).
+  const ranked = gaps
+    .flatMap((gap) => pickGap(gap).map((pick, rank) => ({ pick, rank })))
+    .sort((a, b) => b.pick.score - b.pick.base - (a.pick.score - a.pick.base) || a.pick.gap.index - b.pick.gap.index || a.rank - b.rank)
+    .map((x) => x.pick)
+  if (!ranked.length) return null
 
   const before = judgeDay(ctx, state, []).effect
   const planned = new Map(ctx.plan.map((b) => [b.id, b.startMin]))
   const opts = { moduleOn: energy.enabled, calibration: !energy.variants }
-  let found: { changes: VariantChange[]; low: number; effect: Variant['effect']; shown: Map<string, Placed> } | null = null
-  for (const t of tries.slice(0, ORDER_COUNTS)) {
+  type Counted = { changes: VariantChange[]; low: number; effect: Variant['effect']; shown: Map<string, Placed> }
+  let counts = 0
+  /** The orders of some gaps together, counted again: null when they do not stand as laid out or break a rule above. */
+  const judge = (t: readonly GapPick[]): Counted | null => {
     const starts = new Map(t.flatMap((x) => [...x.starts]))
     const placed = t.length === 1 ? t[0]!.placed : layout(starts, t.map((x) => x.gap))
-    if (!placed) continue
+    if (!placed) return null
     const changes: VariantChange[] = [...starts]
       .filter(([id, s]) => planned.get(id) !== lm(s))
       .sort((a, b) => a[1] - b[1])
       .map(([block, s]) => ({ k: 'start', block, startMin: lm(s) }))
-    if (!changes.length) continue
+    if (!changes.length) return null
+    counts++
     const judged = judgeDay(ctx, state, changes)
     // The day counted again keeps every block that stays where it was (as the layout said).
     const counted = new Map(judged.after.forecast.map((p) => [p.block.id, p]))
-    if (identity.some((p) => !starts.has(p.block.id) && (counted.get(p.block.id)?.from !== p.from || counted.get(p.block.id)?.to !== p.to))) continue
-    const low = lowestEnergy(computeEnergy({ ...ctx, plan: planWith(ctx, changes) }, judged.after, opts))
-    if (low == null || shownOf(low) - shownOf(low0) < ENERGY_ORDER_GAIN) continue
+    if (identity.some((p) => !starts.has(p.block.id) && (counted.get(p.block.id)?.from !== p.from || counted.get(p.block.id)?.to !== p.to))) return null
     // Never an extension the plan did not have, nor the end of work past the boundary it kept.
-    if (judged.effect.extensionMin > before.extensionMin || (before.withinBoundary && !judged.effect.withinBoundary)) continue
-    if (!found || low > found.low) found = { changes, low, effect: judged.effect, shown: counted }
+    if (judged.effect.extensionMin > before.extensionMin || (before.withinBoundary && !judged.effect.withinBoundary)) return null
+    const low = lowestEnergy(computeEnergy({ ...ctx, plan: planWith(ctx, changes) }, judged.after, opts))
+    return low == null ? null : { changes, low, effect: judged.effect, shown: counted }
   }
+  // The higher lowest energy wins; among equal ones the one with fewer changes, then the one judged first (a holder: the
+  // closure sets it).
+  const best: { j: Counted | null } = { j: null }
+  const keep = (j: Counted | null) => {
+    const b = best.j
+    if (j && shownOf(j.low) - shownOf(low0) >= ENERGY_ORDER_GAIN && (!b || j.low > b.low || (j.low === b.low && j.changes.length < b.changes.length))) best.j = j
+  }
+  // Each gap's orders alone (one count is kept for the gaps together), then the best of each gap that raised it, together.
+  const bestOf = new Map<number, { pick: GapPick; low: number }>()
+  for (const pick of ranked) {
+    if (counts >= ORDER_COUNTS - 1) break
+    const j = judge([pick])
+    keep(j)
+    const was = bestOf.get(pick.gap.index)
+    if (j && j.low > low0 && (!was || j.low > was.low)) bestOf.set(pick.gap.index, { pick, low: j.low })
+  }
+  if (bestOf.size > 1 && counts < ORDER_COUNTS) keep(judge([...bestOf.values()].sort((a, b) => a.pick.gap.index - b.pick.gap.index).map((x) => x.pick)))
+  const found = best.j
   if (!found) return null
   // The changes of order as the day counted with them shows its blocks: each one that moves, by its new place.
   const { shown: after } = found
@@ -309,16 +346,12 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
     .filter((p) => !p.bg && after.has(p.block.id) && after.get(p.block.id)!.from !== p.from)
     .sort((a, b) => after.get(a.block.id)!.from - after.get(b.block.id)!.from)
     .map((p) => `${names(p.block)} ${logicalClock(lm(p.from))} → ${logicalClock(lm(after.get(p.block.id)!.from))}`)
-  const shown = { before: shownOf(low0), after: shownOf(found.low) }
-  return {
-    id: 'energyOrder',
-    label: `Ułóż pod energię – najniższa energia dnia ${shown.before} → ${shown.after}`,
-    changes: found.changes,
-    effect: found.effect,
-    details,
-    energy: shown
-  }
+  const energyNow = { before: shownOf(low0), after: shownOf(found.low) }
+  return { id: ENERGY_ORDER_ID, label: energyOrderLabel(energyNow), changes: found.changes, effect: found.effect, details, energy: energyNow }
 }
+
+/** The label of „Ułóż pod energię” from its lowest energy before and with it (the one place it is said). */
+export const energyOrderLabel = (e: { before: number; after: number }): string => `Ułóż pod energię – najniższa energia dnia ${e.before} → ${e.after}`
 
 /**
  * A block the order may move (D377): flexible (not fixed, not waiting for „Zacznij”), of the plan with an hour of its own
@@ -337,7 +370,8 @@ export function orderable(b: BlockInfo, facts: DayFacts): boolean {
  * gap from now on – when it has two of them at least and `ORDER_MAX_BLOCKS` at most.
  */
 function gapsOf(state: DayState, identity: readonly Placed[], buf: (prev: string | null, cat: string) => number): Gap[] {
-  const anchors = new Set(state.blocks.filter((b) => b.anchor != null).map((b) => b.anchor!))
+  // Anchors of the blocks the forecast places (one cancelled, parked or gone with its anchor holds nothing back, T611).
+  const anchors = new Set(identity.flatMap((p) => (p.block.anchor != null ? [p.block.anchor] : [])))
   const fg = identity.filter((p) => !p.bg).sort(byFrom)
   const out: Gap[] = []
   let lower = Number.NEGATIVE_INFINITY
@@ -353,7 +387,9 @@ function gapsOf(state: DayState, identity: readonly Placed[], buf: (prev: string
         const prev = items[pos - 1]!
         const it = items[pos]!
         const planned = it.block.start
-        return planned != null && planned - prev.to >= buf(prev.block.categoryId, it.block.categoryId) ? planned - prev.to : 0
+        // A planned break only when longer than the buffer the block needs after the one before (T610): a start at their end
+        // with the buffer (as rozsuwanie writes it) follows that block, and the new neighbours get their own buffer.
+        return planned != null && planned - prev.to > buf(prev.block.categoryId, it.block.categoryId) ? planned - prev.to : 0
       })
       const first = slots[0]!
       out.push({ index: out.length, lower, upper, items, slots, breaks, before: first > 0 ? items[first - 1]! : before })

@@ -1,11 +1,12 @@
 /**
  * „Ułóż pod energię” (D369, D374) in the window without a DOM: the morning plan's „Ułóż” writes the variant's new starts as
  * one edit of today's file and tells the main process of it (the bar's „Przestawiono: … · Cofnij”), „Zostaw” hides the card to
- * the day's end (D377); the bar's panel says the changes of order under the variant.
+ * the day's end (D377), the search runs again only when the day changes, not the clock (T616); the bar's panel says the
+ * changes of order under the variant.
  */
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DataView, EditEntry, RawRecord, RdApi } from '@shared/api'
 import { blockJson } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
@@ -15,10 +16,17 @@ import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
 import { rdFrom } from '@shared/model/rd'
 import { dayFileFrom } from '@shared/model/plan'
-import { ENERGY_ORDER_ASKED, arrangeDayBlocks, energyOrderFor, leaveEnergyOrder, variantStarts } from '@renderer/features/today/dayActions'
+import { energyOrderVariant } from '@shared/engine/energyOrder'
+import { ENERGY_ORDER_ASKED, arrangeDayBlocks, energyOrderCached, energyOrderFor, leaveEnergyOrder, variantStarts } from '@renderer/features/today/dayActions'
 import { useData } from '@renderer/store/data'
 import { Bar } from '@renderer/widget/Bar'
 import { block, lm, Scenario } from '../unit/engine/dsl'
+
+// A pass-through spy: how many times the window searches for the variant.
+vi.mock('@shared/engine/energyOrder', async (orig) => {
+  const m = await orig<typeof import('@shared/engine/energyOrder')>()
+  return { ...m, energyOrderVariant: vi.fn(m.energyOrderVariant) }
+})
 
 const DATE = '2026-10-28'
 const flex = (id: string, cat: string, at: string, min: number): PlanBlock => block({ id, cat, at, min, origin: 'user' })
@@ -91,19 +99,31 @@ describe('karta „Ułóż pod energię” w planie porannym: „Zostaw” chowa
   })
 
   /** The day of the engine's test (the nap after „Inne”, a long class – the lowest energy 50) with the day's file `asked`. */
-  function model(asked: Record<string, string> = {}) {
+  const NAMES = { rd: rdFrom({}), settings: new Scenario({ date: DATE, plan: [] }).settings, routines: [], requests: [] }
+  function model(asked: Record<string, string> = {}, at = '07:30', classMin = 370) {
     const plan = [
       flex('c', 'inne', '08:00', 60),
       block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:00', min: 60, origin: 'user' }),
       flex('e', 'analiza', '10:00', 60),
-      block({ id: 'w', cat: 'zajecia-zdalne', at: '11:00', min: 370, fixed: true, origin: 'user' })
+      block({ id: 'w', cat: 'zajecia-zdalne', at: '11:00', min: classMin, fixed: true, origin: 'user' })
     ]
     const s = new Scenario({ date: DATE, plan, wake: '06:30', settings: { transitionBufferMin: 0 } }).observe('06:30', null)
     s.checkin('07:00', { head: [0, 0], emotions: [0, 0], senses: [0, 0] })
-    const ctx = s.contextAt(s.at('07:30'))
+    const ctx = s.contextAt(s.at(at))
     const state = computeDay(ctx)
-    return { ctx, state, energy: computeEnergy(ctx, state), dayFile: dayFileFrom({ schema: 1, date: DATE, asked }, DATE), names: { rd: rdFrom({}), settings: s.settings, routines: [], requests: [] } }
+    return { ctx, state, energy: computeEnergy(ctx, state), dayFile: dayFileFrom({ schema: 1, date: DATE, asked }, DATE), names: NAMES }
   }
+
+  it('T616: dwa liczenia dnia bez zmiany planu (sam zegar, co 30 s) nie szukają wariantu od nowa; zmiana planu – szuka', () => {
+    const search = vi.mocked(energyOrderVariant)
+    search.mockClear()
+    const first = energyOrderCached(model({}, '07:30'), NAMES)
+    expect(energyOrderCached(model({}, '07:31'), NAMES)).toBe(first)
+    expect(search).toHaveBeenCalledTimes(1)
+    // A longer class (another plan): counted again.
+    expect(energyOrderCached(model({}, '07:31', 400), NAMES)?.label).not.toBe(first?.label)
+    expect(search).toHaveBeenCalledTimes(2)
+  })
 
   it('karta ma wariant dnia; po „Zostaw” (odpowiedź w pliku dnia) – nie', () => {
     const m = model()
@@ -141,5 +161,20 @@ describe('panel wariantów w pasku: lista zmian kolejności pod „Ułóż pod e
     expect(out).toContain('<span>Analiza 10:00 → 08:00</span><span>Inne obowiązki 08:00 → 10:00</span>')
     expect(out).toContain('data-testid="bar-variant-keep"')
     expect(out).not.toContain('bar-variant-keep-details')
+  })
+
+  it('T615: przyciski wariantów zostają dziećmi panelu (pełna szerokość jak dotąd), lista zmian obok, nie w opakowaniu', () => {
+    const view: WidgetView = {
+      ...noFolderView(),
+      day: DATE,
+      lines: [],
+      variants: { marker: false, open: [{ id: 'energyOrder', label: LABEL, details: ['Analiza 10:00 → 08:00'] }, { id: 'keep', label: 'Zostaw plan' }] }
+    }
+    const out = renderToStaticMarkup(createElement(Bar, { view, mode: 'panel' }))
+    const panel = /data-testid="bar-variants-panel">(.*?)<\/div><\/div>/.exec(out)?.[1] ?? ''
+    // The panel holds: the button, its details, the next button – no wrapper that shrinks a button to its text.
+    expect(panel.startsWith('<button')).toBe(true)
+    expect(panel).toMatch(/^<button[^>]*bar-variant-energyOrder"[^>]*>[^<]*<\/button><div[^>]*bar-variant-energyOrder-details"><span>[^<]*<\/span><\/div><button[^>]*bar-variant-keep"/)
+    expect(panel).not.toContain('items-start')
   })
 })
