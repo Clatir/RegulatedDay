@@ -36,13 +36,39 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   (D364); blok 2 = ciąg L (OPS1 → OPS2 → OPS3), pytania odpowiedziane (D380–D386); bloki 3–4 bez decyzji o starcie.
   Opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`.
 
+### SNT3 i SNT6 – stan
+Sesja równoległa do ciągu J (wyjątek od „jedna sesja do `main`”, zgoda 10.11); numery D387–D399 (D380–D386 zajął ciąg L, PR #66),
+T650–T699.
+**Przed etapem (10.11):** pytania w sześciu rundach – D387 (SNT6), D388 (SNT3). Ryzyka: SNT6 – korpus wszystkich
+dni w procesie głównym; SNT3 – wierność zapisu Markdown (stare notatki bez zmian), limit 10 000 (starsza wersja na
+drugim komputerze tnie do 2000 – ostrzeżenie), linki tylko http/https. Model: główna sesja Opus 5.5 · high,
+`wykonawca-sonnet` · high równolegle w `.claude/worktrees/ws6` i `ws3` (ws3 – własna kopia `node_modules`, bo SNT3
+dodaje biblioteki edytora); SNT3 – przegląd xhigh części limitu (format pliku).
+
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| SNT6 wyszukiwarka Ctrl K | 1.7.0 | #67 | 11.11 po #65 i #68: `origin/main` scalony w `ws6`, wersja 1.7.0; CI w toku, scalenie po zielonym | ok. 2,5 h (4–6 h) – jedna runda przeglądu high |
+| SNT3 Markdown w notatkach | następna wolna po SNT6 | – | kod i przegląd gotowe (`9571e0c` na `claude/snt3-markdown`, drzewo `ws3`); zostało: wersja, `LONG_NOTE_FROM` = ta wersja, CHANGELOG, odbiór SNT3.x, wpis, PR | – (6–9 h, edytor na żywo) |
+
+**Przejęcie 11.11 (awaria maszyny):** sesję przejęła nowa sesja. Wynik rundy 3 przeglądu SNT3 przepadł, więc puściła
+przegląd high na poprawkach rund 1–2 (10 uwag, 2 high). Druga runda high objęła poprawki tamtej rundy (10 uwag, 1 high).
+Oba zestawy poprawił `wykonawca-sonnet`, każdy punkt z testem; to T670–T673. Lokalnie 1867 testów zielonych, jedyny
+czerwony `tests/fs/restore.test.ts` (naprawia go #68).
+
+**SNT6 (1.7.0):** paleta Ctrl K (`renderer/features/search/`), dopasowanie `shared/search.ts`, korpus dni
+`DataFolder.searchDays()` (cały plan dnia jak w „Dziś”), skok do rekordu `useUi.pick`; D387, T650–T654; odbiór
+SNT6.1–SNT6.3. Przegląd high: 10 uwag (1 high – niezmienione bloki szablonu nieprzeszukiwane; 3 medium; reszta
+porządkowe) – wszystkie poprawione z testami, Ctrl K nad kreatorem – nic. **Uwagi na później:** pierwsze otwarcie
+palety liczy plan każdego dnia z plikiem w procesie głównym (`readDay` + `ownContext`) – przy latach danych
+pamięć podręczna planu dnia po podpisie wejść; ukryte słowa poleceń („nowe”, „podsumowanie”) – T650.
+
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →
    `main.log`). Odbiór w maszynie wirtualnej: `docs/odbior-vm.md`, raport nowego przebiegu trafi do
    `docs/vm/raport.md` (T529; przebieg z 3.11 – `docs/archiwum/vm/`); powtórka punktów NIEZGODNE i NIE DO SPRAWDZENIA
    na 1.0.8 („Gotowe, gdy” F–H w `docs/plan.md`, punkty i ich zadania – `docs/archiwum/vm/przyczyny.md`); poprawki z odbioru – wersje 1.0.x (D324).
 2. Ty: odbiór ciągu I – E8n, E10, E11 (E11.1 przed zjazdem 21.11), E12 w `docs/odbior.md`.
-3. Ciąg J (D363) – w toku od 10.11 (bez pauz, D363): J1 SNT7 (1.4.0) i J2 SNT8 (1.5.0) scalone → J3 FBL2a (1.6.0) scalone → J4 FBL2b (1.8.0, PR #70) → J5 FBL2c (1.9.0, PR) → J3b (`docs/plan.md`, „Blok 1 = ciąg J”).
+3. Ciąg J (D363) – w toku od 10.11 (bez pauz, D363): J1 SNT7 (1.4.0) i J2 SNT8 (1.5.0) scalone → J3 FBL2a (1.6.0) scalone → J4 FBL2b (1.8.0) scalone → J5 FBL2c (1.10.0, PR – po SNT3, który bierze 1.9.0) → J3b (`docs/plan.md`, „Blok 1 = ciąg J”).
 4. K (przegląd kalibracji), gdy aplikacja go zaproponuje (najwcześniej ok. 12.11) – wchodzi między PR-y ciągu J; po nim
    E9 (`docs/plan.md`, „Po 1.0”).
 4a. **Dwie sesje równolegle (10.11, zgoda użytkownika – wyjątek od „do `main` pisze naraz jedna sesja”; po awarii
@@ -76,10 +102,10 @@ zmieniają `Timeline.tsx`, J3 korzysta z J1). Wersje 1.4.0–1.8.0.
 
 **J3 – wpis (10.11):** `pushApart` (punkt stały na prognozie), zapis jedną partią, podgląd przerywaną obwódką, „Przesunięto N bloków · Cofnij” w pasku (obok linii wariantu, pytania dnia pierwsze) i na stronie szablonu; oś szablonu w godzinach szablonu w tygodniu przesunięcia sesji (T582). Testy: `push-apart.test.ts`, `day-push.test.ts`, `template-push.test.ts`, `widget.test.ts`, E2E „rozsuwanie” ×2. Odbiór J3.1–J3.2. **Uwagi na później:** brak testu memo podglądu (wymaga DOM); blok przez cofnięty zegar w dobie 25 h rysowany na najmniejszą wysokość.
 | J3b rozsuwanie przy „Dodaj” z karty „Tygodnia” | po J5 | – | dopisane 10.11 (D372) – po J5 | – (1–2 h) |
-| J4 FBL2b domykanie luk | 1.8.0 | – | PR (gałąź `claude/1.7.0-domykanie-luk`, drzewo `.claude/worktrees/wj4`); WIP sprzed awarii zabezpieczony 11.11; dwie rundy xhigh (15 + 12 uwag); D373, D375, D376, T587–T607 | ok. 5 h (3–4 h) – dwie rundy przeglądu, pytania D375/D376 |
+| J4 FBL2b domykanie luk | 1.8.0 | #70 | scalone 11.11 (3f6a45e) po SNT6 (1.7.0); WIP sprzed awarii zabezpieczony 11.11; dwie rundy xhigh (15 + 12 uwag); D373, D375, D376, T587–T607 | ok. 5 h (3–4 h) – dwie rundy przeglądu, pytania D375/D376 |
 
 **J4 – wpis (11.11):** `engine/gaps.ts` – wyzwalacze z logu (wcześniejszy koniec, `block.shorten`, odwołanie / zaparkowanie przez Ciebie) i z okna (nowe zdarzenie `plan.freed`, `how` remove/shorten, `end` – przetrwa restart i drugi komputer, `RULES_VERSION` bez zmian – T594), zapas niesiony przez „Dalej” i ręczny „Start” (`slackOf`, T597), miejsce luki (`targetOf`, T598), id pytania z najwcześniejszego wyzwalacza grupy (T599, T604), `closeGap` – lustro `pushApart`; pasek `gapView` / `leaveGap` / `closeGapNow` (odpowiedzi przed edycją, cofane `unmark` przy nieudanej – T601, T602). SNT6 wydany jako 1.7.0 przed J4. Testy: `gaps.test.ts` (43), `widget.test.ts`, E2E „domykanie luk” (`screens.spec.ts`, „⋯” o każdej godzinie), `bar-windows.spec.ts` (tylko CI). Odbiór J4.1–J4.3. **Uwagi na później:** wydajność `gapView`/`closeGap` i `byId`/`closing` liczone przy każdym odświeżeniu; wspólny pomocnik reguły T585 (`closeGap.place` i `pushApart`) oraz `withPushed`/`blockNow` (okno i pasek); kaskada kotwic powtórzona z `dayPlan` (`createDay.ts`), różnica przy zaczętych zakotwiczonych; zapas kilku wyzwalaczy liczony osobno (zaniżona liczba przy nakładającym się czekaniu, T599); przy nieudanym „Przesuń” drugi komputer może na moment schować i znowu pokazać linię.
-| J5 FBL2c „Ułóż pod energię” | 1.9.0 | – | PR (gałąź `claude/1.9.0-uloz-pod-energie`, drzewo `.claude/worktrees/wj5`, od J4); dwie rundy xhigh (12 + 15 uwag); D377–D379, T608–T623 | ok. 4,5 h (4–6 h) – pytania D377–D379 |
+| J5 FBL2c „Ułóż pod energię” | 1.10.0 | – | PR (gałąź `claude/1.9.0-uloz-pod-energie`, drzewo `.claude/worktrees/wj5`, od J4); dwie rundy xhigh (12 + 15 uwag); D377–D379, T608–T623 | ok. 4,5 h (4–6 h) – pytania D377–D379 |
 
 **J5 – wpis (11.11):** `engine/energyOrder.ts` – przerwy między stałymi z prognozy, kandydaci elastyczni (też chronieni, D377), wszystkie kolejności do 6 bloków, zamiany dla 7–12, szacunek energii (od początku przerwy, przełączenie w stały za przerwą – T613, T620), prawdziwe przeliczenie 2 najlepszych na przerwę, razem najwyżej 4 (T609); próg: minimum < 60 i +5 (T608); przed zatwierdzeniem granicy do maksimum dnia (T617); zmiana `start` w `variants.ts`, `Variant.mends: false` (wybór nie gasi przyczyny – D379, T621); pasek `openVariants`/`arranged`, IPC `planArranged`; plan poranny – karta „Ułóż · Zostaw” (`asked.energyOrder`), pamięć wyniku `energyOrderCached` (klucz z krokiem 5 min, T616). Testy: `energy-order.test.ts` (unit i web), `widget.test.ts`. Odbiór J5.1–J5.3. **Uwagi na później:** koszt `openVariants` w procesie głównym (≤ 4 przeliczenia + układanie przy kliknięciu); kopie `pools`/`clamp`/`SWITCH`/`CONTACT`/`FREE_REST_MIN` z `energy.ts` i `day.ts`; `dayFileFrom` przy każdej zmianie w `applyVariant` i trzy kopie `blockNow` (okno, pasek, warianty); powielony pomocnik edycji w `tests/fs/widget.test.ts`.
 

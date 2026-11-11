@@ -89,7 +89,8 @@ export const CH = {
   setGoals: 'rd:setGoals',
   stats: 'rd:stats',
   planPushed: 'rd:planPushed',
-  planArranged: 'rd:planArranged'
+  planArranged: 'rd:planArranged',
+  searchDays: 'rd:searchDays'
 } as const
 
 /** The game for the window (D322): its view and the full-screen celebrations not shown on this computer yet. */
@@ -305,6 +306,20 @@ export interface EditQuestion {
   at: number
   theirsAt: number | null
   fields: Array<{ path: string[]; mine: unknown; theirs: unknown }>
+}
+
+/** One block of a day file for the global search (Ctrl K, T651): named like everywhere (never by id), with its note. */
+export interface SearchBlock {
+  date: string
+  id: string
+  title: string
+  note: string
+}
+
+/** The blocks of every day file of the data folder; `complete` false: some file could not be read now (never taken for none). */
+export interface SearchCorpus {
+  blocks: SearchBlock[]
+  complete: boolean
 }
 
 /** A day for the main window: its file, the next day's (its wake sets the bedtime) and the log of every computer. */
@@ -625,6 +640,8 @@ export interface RdApi {
   calibration(): Promise<CalibrationScreen>
   /** The statistics of the frozen days of a period (D358): energy, estimates, requests by person, boundaries. */
   stats(period: StatsPeriod): Promise<StatsResult>
+  /** The blocks of all days with files, past and coming, for the global search (Ctrl K); read when the palette opens. */
+  searchDays(): Promise<SearchCorpus>
   /**
    * The week of a date (D356, „Tydzień”): its seven days from Monday on one axis – each with its type, blocks (the plan;
    * days gone by – as it was), boundary and regeneration against the minimum; only a view.

@@ -3,7 +3,7 @@
  * days. You set the order here; the app never changes it, at most it moves the whole routine in time. A block of the
  * plan points at its routine (the panel of a block of the „Rutyny” category). Ctrl+N makes a new routine.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { paths } from '@shared/data/paths'
 import { durationLabel } from '@shared/format'
 import { newId } from '@shared/model/ids'
@@ -12,7 +12,7 @@ import { DurationField, TextField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
 import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { useNewShortcut } from '../../lib/escape'
-import { undoToast } from '../../store/ui'
+import { takeFoundPick, undoToast, useUi } from '../../store/ui'
 
 export function RoutinesPage() {
   const routines = useData((s) => s.routines)
@@ -24,6 +24,14 @@ export function RoutinesPage() {
     setSelected(id)
   }
   useNewShortcut(() => void create())
+  // A routine picked in the search (Ctrl K): open for editing once (an archived one shows with the archive).
+  const pick = useUi((s) => s.pick)
+  useEffect(() => {
+    const p = takeFoundPick((x) => x.kind === 'routine', (x) => routines.some((r) => r.id === x.id), 'Tej rutyny nie ma już.')
+    if (!p) return
+    setSelected(p.id)
+    if (routines.find((r) => r.id === p.id)?.archived) setShowArchived(true)
+  }, [pick, routines])
   const list = routines.filter((r) => showArchived || !r.archived).sort((a, b) => a.name.localeCompare(b.name, 'pl'))
   const current = routines.find((r) => r.id === selected) ?? null
   return (
