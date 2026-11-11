@@ -82,15 +82,19 @@ granica danych): Opus 5.5 · max, druga opinia Fable 5.1; kod `wykonawca-opus` �
 
 ---
 
-### Blok 2: Silnik dnia, reguły cykliczne i model energii
+### Blok 2 = ciąg L: serie, „Sprawy” i bufory dekompresji (D380)
 
-| # | Zadanie i rozwiązanie techniczne | Rodzaj | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
+Pytania przed ciągiem odpowiedziane 10.11 (D380–D386). Start po ciągu J i Twoim „dalej”, potem pozycje idą bez pauzy
+(D317); OPS3 dopiero po przeglądzie K (koszty kategorii). Każda pozycja – osobny PR z wydaniem, wersje po ciągu J
+(1.9.0–1.11.0, jeśli J kończy się na 1.8.0).
+
+| # | Zadanie | Rodzaj | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
 | --- | --- | --- | --- | --- | --- |
-| OPS1 | **2.3 Ograniczony model powtarzalności (RFC 5545 / RRULE):** Implementacja pełnego silnika reguł powtarzalności RRULE (częstotliwości: codzienne, tygodniowe, miesięczne, interwały, reguły BYDAY/BYMONTHDAY, liczniki COUNT, data końcowa UNTIL). Obsługa wyjątków w serii (`EXDATE`, modyfikacja pojedynczego wystąpienia bez rozbijania serii). Integracja z silnikiem wyliczania dnia (`day.ts`, `forecast.ts`). | Logika | `wykonawca-opus` · xhigh | 5–8 h | Każda reguła RRULE poprawnie generuje instancje bloków na osi czasu; modyfikacja jednego wystąpienia tworzy precyzyjny wyjątek; testy zgodności z RFC 5545 przechodzą. |
-| OPS2 | **4.2 Wypaczona koncepcja Backlogu – Uniwersalny Task Inbox:** Przebudowa architektury kolejki próśb (`requests`) na uniwersalny menedżer zadań `TaskInbox`. Rozdzielenie zadań własnych od próśb zewnętrznych (`origin: personal / request`). Widok organizera: *Inbox*, *Dziś*, *W tym tygodniu*, *Kiedyś/Może*. Przeciąganie zadań z backlogu wprost na oś czasu z automatycznym przekształceniem w blok planu. | Całość | `wykonawca-opus` (model danych, migracja próśb) + `wykonawca-sonnet` (ekrany) · xhigh | 6–9 h | Możliwość rejestrowania zadań osobistych niezależnie od osób; pełna zgodność wsteczna z dotychczasowymi plikami próśb; drag & drop z backlogu na timeline tworzy poprawny blok. |
-| OPS3 | **5.3 Inteligentne bufory ochronne (Smart Habits & Decompression):** Algorytm prognozowania i dynamicznego wstawiania mikro-buforów odpoczynku (10–15 min) bezpośrednio po blokach o wysokim koszcie psychicznym/emocjonalnym (zajęcia, spotkania, intensywne sesje pracy). Automatyczne sprzężenie z pulami energii (spadek puli bodźców/emocji poniżej progu rezerwy automatycznie wydłuża bufor). | Logika | `wykonawca-opus` · xhigh | 4–6 h | Po wyczerpującym bloku silnik automatycznie proponuje lub wstawia bufor dekompresji; prognoza energii uwzględnia regenerację bufora; brak kolizji z blokami stałymi. |
+| L1 = OPS1 | **Serie powtarzalne (D381, D382):** pole „Powtarzaj” w panelu edycji bloku („Dziś”, „Tydzień”, „Kalendarz”), lista serii w „Szablonach”; reguły: codziennie, dni robocze, co N tygodni w wybrane dni, N-ty dzień miesiąca, „trzecia środa” / „ostatni piątek”; koniec nigdy / po N / w dniu X; „Tylko to · To i następne · Cała seria”, zmiana serii od dziś (niezaczęte), wyjątki pojedynczych wystąpień; dni szczególne według pola serii (domyślnie „Wolne” pomija, zjazd i regeneracyjny – pytanie w planie porannym). Szablony dnia i plan wykładów bez zmian. Wystąpienia wchodzą do szkicu dnia jak bloki z szablonu. | Całość | `wykonawca-opus` (model serii, wystąpienia w szkicu dnia, nowy plik w folderze danych) + `wykonawca-sonnet` (pole i lista) · xhigh | 5–8 h | „Co 2 tygodnie w czwartek 17:00” daje wystąpienia w dobre czwartki; „ostatni piątek” – w ostatni piątek każdego miesiąca; „po 10 razach” kończy serię; „Tylko to” przenosi jedno wystąpienie, reszta bez zmian; „To i następne” dzieli serię; dzień „Wolne” bez wystąpienia, zjazd – pytanie w planie porannym; dni minione bez zmian; testy silnika i E2E pola. |
+| L2 = OPS2 | **„Sprawy” zamiast „Próśb” (D383–D385):** jedna strona (to samo miejsce i skrót), sprawa = zadanie własne albo prośba (tryby i koszt jak dziś, migracja danych próśb); listy Skrzynka · Dziś · W tym tygodniu · Kiedyś / Może · Zrobione, niezrobione z „Dziś” o 04:00 → „W tym tygodniu”; zadanie: tytuł, szacunek 30 min, kategoria „Inne”, notatka; przeciągnięcie z panelu przy „Dziś” i ze strony – blok elastyczny; krok próśb w planie porannym obejmuje „Dziś”; „zaplanowane”, po końcu bloku pasek „Zadanie zrobione? · Tak · Wraca na listę” (bez odpowiedzi – rytuał); szybki zapis Ctrl+Alt+N (okienko na wierzchu tylko na skrót, wyjątek od D229) i „+” na pasku pulpitu. | Całość | `wykonawca-opus` (migracja próśb, skrót globalny i okienko, pasek pulpitu, rytuał) + `wykonawca-sonnet` (strona, panel, plan poranny) · xhigh | 8–12 h | Pliki próśb sprzed wersji czytają się jako sprawy bez utraty danych (test na kopii folderu); zadanie z Ctrl+Alt+N trafia do „Skrzynki”, okienko nie wychodzi na wierzch bez skrótu; przeciągnięcie na „Dziś” 10:00 tworzy blok 30 min „Inne”; koniec bloku daje jedno pytanie w pasku (dwa komputery – bez podwójnego); niezrobione z „Dziś” rano są w „W tym tygodniu”; test paska i okienka w CI na Windows. |
+| L3 = OPS3 | **Bufory dekompresji (D386):** po bloku ≥ 45 min z kosztem psychicznym albo sensorycznym ≥ 3/h (próg w ustawieniach) plan wstawia blok „Dekompresja” (regeneracja) z rozsuwaniem (D367) i „Cofnij”; długość 5–20 min co 5 min z długości i kosztu (wzór – T); energia jak regeneracja, bez minimum regeneracji i nagrody; blok pracy na buforze – ostrzeżenie, zapis, bufor znika (D72); bufor za faktycznym końcem, po „Przedłuż” długość na nowo; w trybie sesji i zajęć dopiero po ich końcu. | Logika | `wykonawca-opus` · xhigh | 4–6 h | 90 min spotkania o koszcie psychicznym 4 daje bufor w planie z rozsuwaniem kolejnych elastycznych, stałe na miejscu; blok 30 min albo koszt 2 – bez bufora; bufor podnosi energię, a minimum regeneracji się nie zmienia; „Przedłuż” przesuwa i wydłuża bufor; wykład – bufor dopiero po jego końcu; testy silnika. |
 
-*Razem Blok 2: 15–23 h (3 zadania)*
+*Razem ciąg L: 17–26 h (3 pozycje)*
 
 ---
 
@@ -126,10 +130,10 @@ granica danych): Opus 5.5 · max, druga opinia Fable 5.1; kod `wykonawca-opus` �
 | Blok | Zakres | Wykonawcy (D354) | Przegląd | Zadania | Szacunek |
 | :--- | :--- | :--- | :--- | :---: | :---: |
 | **Blok 1 = ciąg J** | Długość przeciągnięciem, nowy blok kliknięciem w siatkę, rozsuwanie, domykanie luk, „Ułóż pod energię” (D363–D369) | `wykonawca-opus`; gesty i okienko – `wykonawca-sonnet` | xhigh; J2 – high | 5 | **17–25 h** |
-| **Blok 2** | Silnik dnia, RRULE (RFC 5545), Task Inbox, bufory energii | `wykonawca-opus`; ekrany OPS2 – `wykonawca-sonnet` | xhigh | 3 | **15–23 h** |
+| **Blok 2 = ciąg L** | Serie powtarzalne, „Sprawy” zamiast „Próśb” (zadania własne), bufory dekompresji (D380–D386) | `wykonawca-opus`; ekrany – `wykonawca-sonnet` | xhigh | 3 | **17–26 h** |
 | **Blok 3** | Widoki czasowe, warstwy kalendarza, Markdown, załączniki, podzadania, Ctrl+K | `wykonawca-sonnet`; zapis plików dni (SNT1) i załączników (SNT4) – `wykonawca-opus` | high; SNT1 (zapis dni), SNT2, SNT4, SNT5 – xhigh | 6 | **24,5–36,5 h** |
 | **Blok 4** | Wydarzenia całodniowe, termin i data wykonania, priorytety | `wykonawca-sonnet`; części w silniku dnia – `wykonawca-opus` | high; HKU1 i silnik – xhigh | 3 | **6,5–9,5 h** |
-| **Łącznie** | Parzystość z Google Calendar, Notion i Sunsama | – | – | **17** | **63–94 h** |
+| **Łącznie** | Parzystość z Google Calendar, Notion i Sunsama | – | – | **17** | **65–97 h** |
 | *Odłożone* | FBL1 – własne bazy jak w Notion (D364) | – | – | 1 | *10–15 h* |
 
 ## Gotowe, gdy
