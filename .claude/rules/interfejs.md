@@ -91,6 +91,17 @@ paths:
   pola (szerokość, `flex-1`, `min-w-0`) idzie w `shellClassName` (powłoka `.field-shell`), `className` to wygląd inputu; miejsce komunikatu to jawny `errorPlacement` pola (`float` domyślnie – nic nie rusza, nie zabiera kliknięć; `below` w formularzach i przy `w-full` w siatce); kolor `text-rose` jest w `contrastPairs`.
 - Pola zapisują się przy opuszczeniu albo Enter (`CommitField`, `TextField`); Esc cofa, kolejny Esc zamyka warstwę
   (`useEscapeLayer`). Natywny `<select>` (`Choice`) tylko w oknie głównym – pasek go nie ma (check-code).
+- Notatka bloku (D388, T660–T673) – `features/note/`: `NoteEditor` (TipTap w polu: zapis przy opuszczeniu / Ctrl S / `commitActiveField`
+  – blur też contenteditable; `dirty` tylko po zmianie tekstu, `setEditable` i podobne ogłaszają `update` bez niej, więc samo otwarcie
+  niczego nie zapisuje; klik w pole wyboru – zapis od razu; „Powiększ” = ta sama klasa `fixed inset-0`, bez przenoszenia DOM;
+  `onCommit` zwraca `SaveAnswer` (`store/data.ts`: `saveAnswer`, `storedAnswer`, `SendState` dla wyniku nieznanego po wysłaniu): `false` cofa pokazany tekst, `'asked' – pytanie po
+  konflikcie – zostawia go; Esc wraca do najnowszej wartości z zewnątrz) i `noteMarkdown` (rozszerzenia: `\n` = twarde łamanie, puste
+  linie = puste akapity, HTML/tabele/`PS.` jako tekst, własne ucieczki, `bareAddress` – jedna reguła adresu dla odczytu, ucieczki
+  dwukropka i autolinku; płot bloku kodu i adres linku zapisywane tak, by wracały; `NoteManager` – podklasa, biblioteka bez mutacji).
+  Strażnik round-trip (`noteMarkdown`) biegnie tylko przy zapisie; filtr limitu `NOTE_MAX`, licznik i sprawdzenie przy zapisie liczą `noteLength` (= `plainNote`, bez strażnika),
+  gdy zapis strażnika przekracza limit, `commit` zapisuje `plainNote` (log `console.warn`). Round-trip `tests/web/note-markdown.test.ts`, `note-property.test.ts` (przy
+  podniesieniu wersji TipTap przejdź te testy). Link: `safeLinkUrl` (`shared/noteLink.ts`) w oknie i w main (`openLink`).
+  Limit i ostrzeżenie o starszym komputerze: `shared/model/note.ts` (`LONG_NOTE_FROM`), wersje z `DataView.computers[].appVersion`.
 - Testy E2E: `launch({ data: true })` daje pusty folder (`RD_DATA_DIR`) – bez niego okno pokazuje kreator. Wartości
   pól sprawdzaj `toHaveValue` (tekst strony ich nie zawiera). `RD_E2E_SHOTS=<folder>` zapisuje zrzuty w testach E3.
 - Kolory nowych tła tekstu dopisz do `contrastPairs` (`shared/theme.ts`) – test kontrastu przy każdej jasności.

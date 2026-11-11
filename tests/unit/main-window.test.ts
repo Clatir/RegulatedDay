@@ -12,7 +12,16 @@ vi.mock('electron', () => {
     handlers = new Map<string, (e: { preventDefault: () => void }) => void>()
     maximized = false
     visible = false
-    webContents = { setWindowOpenHandler: () => undefined, on: () => undefined }
+    webContents = {
+      open: undefined as undefined | (() => { action: string }),
+      navigate: undefined as undefined | ((e: { preventDefault: () => void }, url: string) => void),
+      setWindowOpenHandler(fn: () => { action: string }) {
+        this.open = fn
+      },
+      on(name: string, fn: (e: { preventDefault: () => void }, url: string) => void) {
+        if (name === 'will-navigate') this.navigate = fn
+      }
+    }
     constructor(public o: { x: number; y: number; width: number; height: number }) {}
     on(name: string, fn: (e: { preventDefault: () => void }) => void) {
       this.handlers.set(name, fn)
@@ -49,6 +58,19 @@ function windowWith(saved: WindowPlace, quitting: boolean) {
   const close = () => (win as unknown as { handlers: Map<string, (e: { preventDefault: () => void }) => void> }).handlers.get('close')!({ preventDefault: () => undefined })
   return { win, places, close }
 }
+
+describe('okno nie nawiguje i nie otwiera okien (T663: link notatki idzie przez openLink)', () => {
+  it('adres po kliknięciu linku nie wczytuje się w oknie, nowe okno jest odrzucone', () => {
+    const { win } = windowWith({ x: 0, y: 0, width: 1200, height: 800, maximized: false }, true)
+    const wc = (win as unknown as { webContents: { open: () => { action: string }; navigate: (e: { preventDefault: () => void }, url: string) => void } }).webContents
+    for (const url of ['https://example.com/', 'http://example.com/', 'file:///C:/x', 'javascript:alert(1)']) {
+      const e = { preventDefault: vi.fn() }
+      wc.navigate(e, url)
+      expect(e.preventDefault, url).toHaveBeenCalled()
+    }
+    expect(wc.open()).toEqual({ action: 'deny' })
+  })
+})
 
 describe('miejsce okna głównego przy starcie w zasobniku', () => {
   it('zmaksymalizowane, nigdy niepokazane: wyjście zapisuje je jako zmaksymalizowane', () => {

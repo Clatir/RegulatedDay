@@ -5,5 +5,6 @@
  */
 export function commitActiveField(): void {
   const el = document.activeElement
-  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.blur()
+  // The note's editor (D388) is a contenteditable element: leaving it saves it like any field.
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) el.blur()
 }

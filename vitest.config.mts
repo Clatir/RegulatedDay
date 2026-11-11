@@ -16,6 +16,8 @@ export default defineConfig({
     testTimeout: 30000,
     include: ['tests/unit/**/*.test.ts', 'tests/fs/**/*.test.ts', 'tests/sim/**/*.test.ts', 'tests/scale/**/*.test.ts', 'tests/web/**/*.test.ts'],
     environment: 'node',
+    // Files with `@vitest-environment jsdom`: the layout jsdom lacks for a Range (ProseMirror measures the selection).
+    setupFiles: ['tests/web/jsdomLayout.ts'],
     // T538: dots locally (less output to read), the default reporter in CI.
     reporters: process.env.CI ? ['default'] : ['dot']
   }

@@ -53,7 +53,7 @@ const stubStorage = (store: Record<string, string> | 'broken') => {
 }
 
 beforeEach(() => {
-  Object.assign(globalThis, { document: { activeElement: null }, HTMLInputElement: class {}, HTMLTextAreaElement: class {} })
+  Object.assign(globalThis, { document: { activeElement: null }, HTMLElement: class {}, HTMLInputElement: class {}, HTMLTextAreaElement: class {} })
   useUi.setState({ page: 'calendar', day: null, focus: null, pick: null })
   useSearch.setState({ open: false })
 })

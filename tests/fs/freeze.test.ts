@@ -224,9 +224,12 @@ describe('zamrażanie w folderze danych', () => {
     await m.folder.check()
     expect(await row()).toMatchObject({ forgotten: true })
     expect(m.folder.computers.map((c) => c.id)).toContain('lap')
+    // A forgotten computer has no version for the warning of a long note (D388); a present one carries its own.
+    expect(m.folder.computers.find((c) => c.id === 'lap')).not.toHaveProperty('appVersion')
     // Used again: a new presence – it counts again.
     lap(at + 2 * H)
     await m.folder.check()
     expect(await row()).toMatchObject({ forgotten: false })
+    expect(m.folder.computers.find((c) => c.id === 'lap')).toMatchObject({ name: 'Laptop', appVersion: '0.7.0' })
   })
 })

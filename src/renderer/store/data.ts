@@ -129,11 +129,20 @@ export function editNotice(out: readonly EditOutcome[]): { text: string; kind: '
   return null
 }
 
+/**
+ * Filled in by a save for a caller that must tell „not sent” from „sent, the result not known”: `afterSend` is set when the
+ * failure came after the edit was handed to the main process (it may have been written).
+ */
+export interface SendState {
+  afterSend: boolean
+}
+
 /** Sends edits made by `make` (in its turn); null when nothing could be sent – the toast said why. */
-async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>): Promise<EditOutcome[] | null> {
+async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>, state?: SendState): Promise<EditOutcome[] | null> {
   try {
     const list = (await make()).filter((e): e is EditEntry => !!e)
     if (!list.length) return []
+    if (state) state.afterSend = true
     const out = await window.rd.edit(list)
     await reloadData()
     const notice = editNotice(out)
@@ -162,8 +171,8 @@ export function trySaveEdits(entries: ReadonlyArray<EditEntry | null>): Promise<
  * Edits made in their turn by `make` – from the records (`rawRecord`) and the days' files (`dayFilesNow`) as they are
  * then – and saved; null when nothing could be sent.
  */
-export function trySaveWith(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>): Promise<EditOutcome[] | null> {
-  return inTurn(() => send(make))
+export function trySaveWith(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>, state?: SendState): Promise<EditOutcome[] | null> {
+  return inTurn(() => send(make, state))
 }
 
 /**
@@ -177,6 +186,23 @@ export async function dayFilesNow(dates: readonly string[], seen: (date: string)
 
 /** Saved – written, or waiting for the folder – never a question, a broken file or an error. */
 export const isSaved = (out: readonly EditOutcome[] | null): boolean => out != null && out.every((o) => o.status === 'applied' || o.status === 'waiting')
+
+/**
+ * What became of a save that a field has to know (the note's editor puts the shown text back only when it was refused for good):
+ * `true` – written or waiting for the folder; `'asked'` – met a change on another computer and became a question (your answer
+ * may still write it, as `pending` of the multi-day „Dodaj”), or the result is not known after the send (`SendState`); `false` –
+ * nothing was written and nothing will be (not sent,
+ * a broken file, no record).
+ */
+export type SaveAnswer = boolean | 'asked'
+export function saveAnswer(out: readonly EditOutcome[] | null, state?: SendState): SaveAnswer {
+  // No answer: nothing was sent (refused), or it was and the result is not known (the folder may have it).
+  if (out == null) return state?.afterSend === true ? 'asked' : false
+  if (out.some((o) => o.status === 'broken')) return false
+  return isSaved(out) ? true : 'asked'
+}
+/** As `saveAnswer`, and something was written: an edit of a record that is gone (an empty answer) is refused. */
+export const storedAnswer = (out: readonly EditOutcome[] | null, state?: SendState): SaveAnswer => (out != null && out.length === 0 ? false : saveAnswer(out, state))
 
 /** rd.json changed by `fn` (made when there is none yet – the defaults are never written unless you change something). */
 export async function saveRd(fn: (raw: RawRecord) => RawRecord): Promise<EditOutcome[]> {
@@ -211,11 +237,11 @@ export function trySaveGoals(month: string, patch: GoalsPatch): Promise<EditOutc
 }
 
 /** A record changed by `fn` from what it is in its turn (a record gone by then is not made again); null: not sent. */
-export function tryUpdateRecord(rel: string, fn: (raw: RawRecord) => RawRecord | null): Promise<EditOutcome[] | null> {
+export function tryUpdateRecord(rel: string, fn: (raw: RawRecord) => RawRecord | null, state?: SendState): Promise<EditOutcome[] | null> {
   return trySaveWith(() => {
     const before = rawRecord(rel)
     return before ? [editOf(rel, before, fn({ ...before }))] : []
-  })
+  }, state)
 }
 
 /**

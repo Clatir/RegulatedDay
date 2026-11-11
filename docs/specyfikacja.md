@@ -651,6 +651,14 @@ Wszystko w aplikacji jest blokiem. Nie ma osobnej listy zadań, więc aplikacja 
 **Co ma blok**
 
 - Kategorię (z opcjonalnym wariantem i własnym kosztem), planowany początek i długość albo kotwicę (np. „po sesji NY”), oznaczenie „stały” lub „elastyczny”, planowane miejsce (pierwszy plan albo tło, domyślnie z kategorii), opcjonalne oznaczenie „druga zmiana” albo „analiza tygodniowa” (Model dnia), koszt energii i notatkę.
+- Notatka bloku (panel bloku w planie dnia i w szablonach; kafelek osi, notatki próśb, wyszukiwarka, CSV i historia – tekst
+  bez zmian, D388) jest tekstem Markdown w pliku, do 10 000 znaków (wcześniej 2000: starsza wersja aplikacji tnie dłuższą na
+  2000, więc przy notatce dłuższej niż 2000 znaków i obecnym w folderze komputerze ze starszą wersją pod edytorem jest
+  ostrzeżenie). Edytor pokazuje formatowanie na żywo: pogrubienie, kursywa (Ctrl B, Ctrl I), przekreślenie, nagłówki H1–H3,
+  listy punktowane i numerowane, pola wyboru (klik zapisuje od razu, nigdzie się nie liczy), cytat, kod i blok kodu, link
+  (http i https otwiera domyślną przeglądarkę, inne adresy zostają tekstem). Pojedynczy Enter starej notatki to łamanie
+  linii i tak wraca do pliku; samo otwarcie notatki niczego nie zapisuje. „Powiększ” rozwija notatkę na całe okno, Esc
+  albo „Pomniejsz” wraca z tekstem (T660–T665).
 - Bloki stałe to sesje, druga zmiana, wykłady, zajęcia i jednorazowe terminy; nie przesuwa się ich początek. Elastyczne zachowują kolejność i przesuwa je rzeczywisty koniec poprzednika, nigdy jednak na godzinę wcześniejszą niż ich planowany początek. Gdy elastyczny trafi na stały, przeskakuje za niego, a aplikacja sprawdza warunek znacznika wariantów.
 - Blok stały zaplanowany na pierwszym planie zaczyna się sam o czasie z planu na pierwszym planie (widoczne w liście
   „zrobione automatycznie”), także gdy biegnie inny blok. Wyjątkiem są sesja (kategoria „Sesja tradingowa”, także druga

@@ -24,7 +24,7 @@ import { addDays, weekday } from '@shared/time/zone'
 import { UNDO_LINE_MS } from '@shared/widget'
 import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
-import { isSaved, saveRecord, tryRemoveRecord, tryUpdateRecord, updateRecord, useData } from '../../store/data'
+import { isSaved, saveRecord, storedAnswer, tryRemoveRecord, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
 import { countDay } from '../../store/day'
 import { useNewShortcut } from '../../lib/escape'
 import { takeFoundPick, undoToast, useUi } from '../../store/ui'
@@ -134,11 +134,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const names: Names = useMemo(() => ({ rd, settings, routines, requests }), [rd, settings, routines, requests])
 
   /** The template changed by `fn` from what it is when the change's turn comes (two quick changes both stay – A6-01). */
-  const change = (fn: (t: Template) => Template) =>
-    updateRecord(rel, (raw) => {
-      const t = templateFrom(raw)
-      return t ? templateJson(fn(t), raw) : raw
-    })
+  const changed = (fn: (t: Template) => Template) => (raw: RawRecord) => {
+    const t = templateFrom(raw)
+    return t ? templateJson(fn(t), raw) : raw
+  }
+  const change = (fn: (t: Template) => Template) => updateRecord(rel, changed(fn))
   const saveTemplate = (patch: Partial<Template>) => change((t) => ({ ...t, ...patch }))
   /** The template with the version from `from` changed (made when it is not there yet – a copy of the one in force then). */
   const withVersion = (t: Template, patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)): Template => {
@@ -201,7 +201,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const byPlanId = useMemo(() => new Map(model.ctx.plan.filter((b) => b.origin === 'template' && b.sourceId).map((b) => [b.id, b.sourceId!])), [model])
   const items = useMemo(() => axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), movable: i.movable === true && byPlanId.has(i.id) })), [axis, byPlanId])
   const block = version.blocks.find((b) => b.id === selected) ?? null
-  const patchBlock = (id: string, patch: Partial<PlanBlock>) => saveVersion((v) => ({ blocks: v.blocks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))
+  /** A block of the version changed; answers what became of the save (the panel's note puts back what it shows only when it was refused – also when the template is gone: nothing was written; a question keeps it). */
+  const patchBlock = (id: string, patch: Partial<PlanBlock>): Promise<SaveAnswer> => {
+    const state: SendState = { afterSend: false }
+    return tryUpdateRecord(rel, changed((t) => withVersion(t, (v) => ({ blocks: v.blocks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))), state).then((out) => storedAnswer(out, state))
+  }
 
   const copy = async () => {
     const id = newId()
@@ -339,7 +343,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           names={names}
           computers={view.computers}
           sessions={settings.sessions}
-          onChange={(patch) => void patchBlock(block.id, patch)}
+          onChange={(patch) => patchBlock(block.id, patch)}
           onClose={() => setSelected(null)}
           actions={
             <button type="button" className="btn" onClick={() => void saveVersion((v) => ({ blocks: v.blocks.filter((b) => b.id !== block.id) })).then(() => setSelected(null))} data-testid="template-block-remove">
