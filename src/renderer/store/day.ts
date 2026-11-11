@@ -59,16 +59,18 @@ export function useDayData(date: string): DayData | null {
 /**
  * The raw files of several days (the morning plan looks at yesterday and the week ahead); null until read. Only the
  * files – one read, no logs (A6-22); a day whose file cannot be read now is left out (unknown, never „no changes”).
+ * `fresh`: the files of these very dates only – while the dates changed and the new read has not come, null (not the old
+ * read of other dates).
  */
-export function useDayFiles(dates: readonly string[]): Record<string, RawRecord | null> | null {
+export function useDayFiles(dates: readonly string[], fresh = false): Record<string, RawRecord | null> | null {
   const stamp = useData((s) => s.stamp)
   const reread = useNow(REREAD_MS)
   const key = dates.join(',')
-  const [files, setFiles] = useState<Record<string, RawRecord | null> | null>(null)
+  const [read, setRead] = useState<{ key: string; files: Record<string, RawRecord | null> } | null>(null)
   useEffect(() => {
     let alive = true
     void window.rd.dayFiles([...dates]).then(
-      (f) => alive && setFiles(f),
+      (f) => alive && setRead({ key, files: f }),
       () => undefined
     )
     return () => {
@@ -76,7 +78,12 @@ export function useDayFiles(dates: readonly string[]): Record<string, RawRecord 
     }
     // The dates by their key: a new array of the same dates reads nothing again.
   }, [key, stamp, reread])
-  return files
+  return filesFor(read, key, fresh)
+}
+
+/** The files read for `key` – with `fresh` only the read of that key (a read of other dates is not it); null – none yet. */
+export function filesFor(read: { key: string; files: Record<string, RawRecord | null> } | null, key: string, fresh: boolean): Record<string, RawRecord | null> | null {
+  return read && (!fresh || read.key === key) ? read.files : null
 }
 
 export interface DayModel {

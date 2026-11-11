@@ -3,6 +3,8 @@
  * `pushApart` jak „Dziś”, wszystkie dni idą jednym zapisem, linia „Przesunięto N bloków w K dniach · Cofnij” cofa te dni,
  * które stoją tak jak po zmianie; dzisiejszy dzień zapala znacznik wariantów (tylko wyzwalacz, bez drugiej linii w pasku).
  */
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DataView, DayData, EditEntry, RawRecord, RdApi } from '@shared/api'
 import { blockJson } from '@shared/data/dayEdits'
@@ -10,11 +12,13 @@ import { paths } from '@shared/data/paths'
 import type { PlanBlock } from '@shared/model/plan'
 import { computeEnergy } from '@shared/engine/energy'
 import { UNDO_LINE_MS } from '@shared/widget'
-import { addWeekBlocks, undoWeekLine, undoWeekPush, weekPushStands, type WeekPush } from '@renderer/features/week/weekActions'
-import { weekPushedText } from '@renderer/features/week/weekText'
+import { WeekPushLine, WeekPushShown } from '@renderer/features/week/WeekPushLine'
+import { addWeekBlocks, undoWeekLine, undoWeekPush, weekPushStanding, weekPushStands } from '@renderer/features/week/weekActions'
+import { weekPushedText, weekPushLineText } from '@renderer/features/week/weekText'
+import { filesFor } from '@renderer/store/day'
 import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
-import { clearWeekPush, dropWeekPushDays, showWeekPush, useWeekPush, weekPushLeft } from '@renderer/store/weekPush'
+import { clearWeekPush, dropWeekPushDays, showWeekPush, useWeekPush, weekPushLeft, type WeekPush, type WeekPushedDay } from '@renderer/store/weekPush'
 import { block, lm } from '../unit/engine/dsl'
 
 // A pass-through spy: the energy of a day is not counted for the pushing.
@@ -398,12 +402,92 @@ describe('D400 – linia w oknie, „Cofnij” z linii', () => {
     expect(s.sent).toEqual([])
   })
 
-  it('dni wyjęte z linii: gdy nie zostaje żaden z przesunięciem, linii nie ma', () => {
-    const day = (date: string, moved: number) => ({ date, entry: { rel: paths.day(date), edits: [] }, made: null, moved })
-    showWeekPush({ days: [day(D1, 2), day(D2, 0)] })
+  const dayOf = (date: string, moved: number): WeekPushedDay => ({ date, entry: { rel: paths.day(date), edits: [{ path: ['blocks', '#x'], base: undefined, value: { id: 'x' } }] }, made: null, moved })
+
+  it('dni wyjęte z linii: zostają pozostałe (też te, które nic nie przesunęły), gdy nie ma żadnego – linii nie ma', () => {
+    showWeekPush({ days: [dayOf(D1, 2), dayOf(D2, 0)] })
     const seq = useWeekPush.getState().line!.seq
     dropWeekPushDays(seq, [D1])
+    expect(useWeekPush.getState().line?.push.days.map((d) => d.date)).toEqual([D2])
+    dropWeekPushDays(seq, [D2])
     expect(useWeekPush.getState().line).toBeNull()
+  })
+
+  it('dzień nieczytelny zostaje w linii do ponowienia także wtedy, gdy nic nie przesunął – z tekstem o nowym bloku', async () => {
+    const s = stub({ files: {} })
+    showWeekPush({ days: [dayOf(D1, 2), dayOf(D2, 0)] })
+    // D1 is as „Dodaj” left it; D2 cannot be read now.
+    const now = { schema: 1, date: D1, blocks: [{ id: 'x' }] }
+    ;(window.rd as Partial<RdApi>).dayFiles = async () => ({ [D1]: now })
+    await undoWeekLine()
+    expect(s.sent[0]!.map((e) => e.rel)).toEqual([paths.day(D1)])
+    const line = useWeekPush.getState().line!
+    expect(line.push.days.map((d) => d.date)).toEqual([D2])
+    expect(weekPushLineText(line.push)).toBe('Nowy blok w 1 dniu')
+  })
+
+  it('wynik mieszany (jeden dzień zapisany, drugi – pytanie o konflikt): zapisany wypada z linii, drugi zostaje; drugi klik nie mówi o dniu cofniętym', async () => {
+    const s = stub({ files: {} })
+    showWeekPush({ days: [dayOf(D1, 2), dayOf(D2, 1)] })
+    const stand = (date: string) => ({ schema: 1, date, blocks: [{ id: 'x' }] })
+    ;(window.rd as Partial<RdApi>).dayFiles = async () => ({ [D1]: stand(D1), [D2]: stand(D2) })
+    ;(window.rd as Partial<RdApi>).edit = async (entries) => (s.sent.push(entries), entries.map((e) => ({ status: e.rel === paths.day(D2) ? ('conflict' as const) : ('applied' as const) })))
+    await undoWeekLine()
+    expect(useWeekPush.getState().line?.push.days.map((d) => d.date)).toEqual([D2])
+    expect(weekPushLineText(useWeekPush.getState().line!.push)).toBe('Przesunięto 1 blok w 1 dniu')
+    // The second click: D1 is back as it was (no longer as „Dodaj” left it), the line does not hold it – nothing is said of it.
+    useUi.setState({ toasts: [] })
+    ;(window.rd as Partial<RdApi>).dayFiles = async () => ({ [D1]: { schema: 1, date: D1, blocks: [] }, [D2]: stand(D2) })
+    ;(window.rd as Partial<RdApi>).edit = async (entries) => (s.sent.push(entries), entries.map(() => ({ status: 'applied' as const })))
+    await undoWeekLine()
+    expect(s.sent.at(-1)!.map((e) => e.rel)).toEqual([paths.day(D2)])
+    expect(useUi.getState().toasts.some((t) => t.text.includes('zmieniła się od przesunięcia'))).toBe(false)
+    expect(useWeekPush.getState().line).toBeNull()
+  })
+
+  it('linia „stoi”: nie przeczytane jeszcze albo dzień nieczytelny – tak (Cofnij to rozstrzyga), same dni zmienione – nie', () => {
+    const push = { days: [dayOf(D1, 2), dayOf(D2, 0)] }
+    const stood = { schema: 1, blocks: [{ id: 'x' }] }
+    const changed = { schema: 1, blocks: [{ id: 'x', startMin: 5 }] }
+    expect(weekPushStanding(push, null)).toBe(true)
+    expect(weekPushStanding(push, { [D1]: stood, [D2]: changed })).toBe(true)
+    expect(weekPushStanding(push, { [D1]: changed, [D2]: changed })).toBe(false)
+    // D1 changed, D2 cannot be read now (left out): it may still be taken back.
+    expect(weekPushStanding(push, { [D1]: changed })).toBe(true)
+    expect(weekPushStanding(push, {})).toBe(true)
+  })
+
+  it('odczyt dni po zmianie linii: ze świeżym kluczem liczy się tylko odczyt tych dni, nie poprzedni', () => {
+    const read = { key: 'a,b', files: { a: null, b: null } }
+    expect(filesFor(read, 'a,b', true)).toBe(read.files)
+    expect(filesFor(read, 'b', true)).toBeNull()
+    expect(filesFor(null, 'b', true)).toBeNull()
+    // The morning plan keeps the last read while the dates change (as before).
+    expect(filesFor(read, 'b', false)).toBe(read.files)
+  })
+
+  it('linia kończy się sama po UNDO_LINE_MS, bez otwartej strony; starsza nie zabiera nowszej', () => {
+    vi.useFakeTimers()
+    showWeekPush({ days: [dayOf(D1, 2)] })
+    const older = useWeekPush.getState().line!.seq
+    vi.advanceTimersByTime(UNDO_LINE_MS - 1000)
+    expect(useWeekPush.getState().line).not.toBeNull()
+    showWeekPush({ days: [dayOf(D2, 1)] })
+    clearWeekPush(older)
+    vi.advanceTimersByTime(2000)
+    // Past the first one's 15 min, the second one (shown a moment later) stands.
+    expect(useWeekPush.getState().line?.push.days[0]?.date).toBe(D2)
+    vi.advanceTimersByTime(UNDO_LINE_MS)
+    expect(useWeekPush.getState().line).toBeNull()
+  })
+
+  it('komponent: bez linii nic (i nic nie czyta), z linią – tekst z liczbą przesuniętych i „Cofnij”', () => {
+    expect(renderToStaticMarkup(createElement(WeekPushLine))).toBe('')
+    // (The static render knows only the store's first state: the shown part is given its line.)
+    showWeekPush({ days: [dayOf(D1, 2), dayOf(D2, 1)] })
+    const html = renderToStaticMarkup(createElement(WeekPushShown, { line: useWeekPush.getState().line! }))
+    expect(html).toContain('Przesunięto 3 bloki w 2 dniach')
+    expect(html).toContain('data-testid="week-pushed-undo"')
   })
 })
 

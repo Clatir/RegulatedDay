@@ -5,7 +5,7 @@
  * calendar (D295); a click on an empty place of a column (or a drag over it) opens the small window of a new block there
  * (D366). The arrows move by a week; the goals shown are the month of the week (`goalsMonthOfWeek`).
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { logicalClock } from '@shared/format'
 import { settingsOn, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
@@ -13,22 +13,19 @@ import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { weekStart } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { cx } from '../../components/ui'
-import { useBusy } from '../../lib/busy'
 import { useData } from '../../store/data'
-import { useDayFiles } from '../../store/day'
 import { useWeekView } from '../../store/horizon'
 import { useMachine } from '../../store/machine'
-import { clearWeekPush, useWeekPush, weekPushLeft } from '../../store/weekPush'
 import { openDay, setBlockDraft } from '../../store/ui'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockColor, blockName, type Names } from '../plan/blockView'
 import { DEFAULT_NEW_BLOCK_MIN, snapMinute, type GridRange } from '../plan/gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { GoalsPanel } from './GoalsPanel'
-import { undoWeekLine, weekPushCounts, weekPushStands } from './weekActions'
+import { WeekPushLine } from './WeekPushLine'
 import { NewBlockPopover } from './NewBlockPopover'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, goalsMonthOfWeek, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
-import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, weekPushedText, weekTitle, type Tone } from './weekText'
+import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, weekTitle, type Tone } from './weekText'
 
 const AXIS_PX = 48
 const TONE_CLASS: Record<Tone, string> = { ok: 'text-sea', bad: 'text-rose', muted: 'text-muted', plain: 'text-fg' }
@@ -65,38 +62,6 @@ export function WeekPage() {
         </span>
       )}
       {view && failed && <span className="text-[12px] text-muted">Odświeżenie tygodnia się nie udało – widać ostatni odczyt.</span>}
-    </div>
-  )
-}
-
-/**
- * „Przesunięto N bloków w K dniach · Cofnij” (D400): the window's line (`store/weekPush`) – it outlives the page and stands to the
- * end of `UNDO_LINE_MS` from the save – while a day of the batch still stands as it left it (a later change of every one of
- * them ends it); „Cofnij” takes back those that do, in one write (`undoWeekLine`: the line stays when that fails).
- */
-function WeekPushLine() {
-  const line = useWeekPush((s) => s.line)
-  const dates = useMemo(() => line?.push.days.map((d) => d.date) ?? [], [line])
-  const files = useDayFiles(dates)
-  const [busy, run] = useBusy()
-  const which = line?.seq
-  const until = line?.until
-  useEffect(() => {
-    if (which == null) return
-    const t = setTimeout(() => clearWeekPush(which), Math.max(0, weekPushLeft(useWeekPush.getState().line)))
-    return () => clearTimeout(t)
-  }, [which, until])
-  if (!line || weekPushLeft(line) <= 0) return null
-  // Not read yet: shown (the save has just been made); a day whose file cannot be read now does not stand.
-  const standing = files == null || line.push.days.some((d) => d.date in files && weekPushStands(d, files[d.date] ?? null))
-  if (!standing) return null
-  const { blocks, days } = weekPushCounts(line.push)
-  return (
-    <div className="flex items-center gap-2 self-start rounded border border-line bg-raised px-3 py-1.5 text-[12.5px]" role="status" data-testid="week-pushed">
-      <span>{weekPushedText(blocks, days)}</span>
-      <button type="button" className="btn" disabled={busy} onClick={() => void run(undoWeekLine)} data-testid="week-pushed-undo">
-        Cofnij
-      </button>
     </div>
   )
 }

@@ -1588,8 +1588,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   zostaje, jaki jest, a reszta wraca; dymek „Część planu zmieniła się od przesunięcia – zostaje tak, jak jest teraz.”
   Linia znika sama po 15 min od zapisu albo gdy żaden z dni nie stoi już tak jak po „Dodaj”; po przejściu na inną stronę
   (np. „Dziś”) i powrocie na „Tydzień” jest dalej (do końca 15 min). Kolejne „Dodaj” z przesunięciem zastępuje linię.
-  Gdy zapis „Cofnij” się nie uda (pytanie o konflikt, plik dnia chwilowo nieczytelny), linia zostaje do ponowienia, a dymek
-  mówi tylko o tym, co się stało.
+  Gdy „Cofnij” nie dotknie któregoś dnia (pytanie o konflikt, plik dnia chwilowo nieczytelny), ten dzień zostaje w linii do
+  ponowienia (przy dniu, w którym nic nie przesunięto – „Nowy blok w 1 dniu · Cofnij”), a dymek mówi tylko o tym, co się stało.
 - **Nie przechodzi, gdy:** „Cofnij” przywraca tylko jeden dzień, nadpisuje dzień zmieniony później, zostawia któryś nowy
   blok, linia znika po zmianie strony przed upływem 15 min, nieudane „Cofnij” zdejmuje linię, albo „Dodaj” dla kilku dni
   robi kilka osobnych zapisów (pytania o konflikt się mnożą).
