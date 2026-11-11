@@ -17,7 +17,8 @@ import { computeEnergy } from '@shared/engine/energy'
 import { rdFrom } from '@shared/model/rd'
 import { dayFileFrom } from '@shared/model/plan'
 import { energyOrderVariant } from '@shared/engine/energyOrder'
-import { ENERGY_ORDER_ASKED, arrangeDayBlocks, energyOrderCached, energyOrderFor, leaveEnergyOrder, variantStarts } from '@renderer/features/today/dayActions'
+import { ENERGY_ORDER_ASKED, PLAN_ALREADY_TEXT, arrangeDayBlocks, energyOrderCached, energyOrderFor, energyOrderKey, leaveEnergyOrder, resetEnergyOrderCache, variantStarts, withPushed } from '@renderer/features/today/dayActions'
+import { useUi } from '@renderer/store/ui'
 import { useData } from '@renderer/store/data'
 import { Bar } from '@renderer/widget/Bar'
 import { block, lm, Scenario } from '../unit/engine/dsl'
@@ -72,7 +73,7 @@ describe('„Ułóż” w planie porannym: jedna edycja pliku dnia i „Przestaw
     const now: RawRecord = { ...file, blocks: (file.blocks as Array<Record<string, unknown>>).map((b) => (b.id === 'c' ? { ...b, note: 'nowa' } : b)) }
     const { sent, told } = stub(now)
     const out = await arrangeDayBlocks(DATE, file, variantStarts(PLAN, { changes: CHANGES }), LABEL)
-    expect(out).toEqual([{ status: 'applied' }])
+    expect(out).toEqual({ out: [{ status: 'applied' }], already: false })
     expect(sent).toHaveLength(1)
     const entry = sent[0]![0]!
     expect(entry.rel).toBe(paths.day(DATE))
@@ -81,6 +82,17 @@ describe('„Ułóż” w planie porannym: jedna edycja pliku dnia i „Przestaw
       ['blocks.#e.startMin', lm('10:00'), lm('08:00')]
     ])
     expect(told).toEqual([[DATE, LABEL, entry, null]])
+  })
+
+  it('T622: plik już tak ułożony (drugi komputer) – nic nie zapisane, dymek „Plan już jest tak ułożony.”, karta wie, że ma zniknąć (D379)', async () => {
+    const same: RawRecord = withPushed(file, DATE, (r) => r, variantStarts(PLAN, { changes: CHANGES }))
+    const { sent, told } = stub(same)
+    const toasts = useUi.getState().toasts.length
+    expect(await arrangeDayBlocks(DATE, file, variantStarts(PLAN, { changes: CHANGES }), LABEL)).toMatchObject({ already: true })
+    expect(sent).toEqual([])
+    expect(told).toEqual([])
+    expect(useUi.getState().toasts.slice(toasts).map((t) => t.text)).toEqual([PLAN_ALREADY_TEXT])
+    expect(PLAN_ALREADY_TEXT).toBe('Plan już jest tak ułożony.')
   })
 
   it('zapis odrzucony (konflikt z innym komputerem): pasek nie dostaje „Cofnij”', async () => {
@@ -96,18 +108,20 @@ describe('karta „Ułóż pod energię” w planie porannym: „Zostaw” chowa
   afterEach(() => {
     delete (globalThis as { window?: unknown }).window
     useData.setState(data, true)
+    // The window's memory of the variant: one test's day never answers for another's.
+    resetEnergyOrderCache()
   })
 
   /** The day of the engine's test (the nap after „Inne”, a long class – the lowest energy 50) with the day's file `asked`. */
   const NAMES = { rd: rdFrom({}), settings: new Scenario({ date: DATE, plan: [] }).settings, routines: [], requests: [] }
-  function model(asked: Record<string, string> = {}, at = '07:30', classMin = 370) {
+  function model(asked: Record<string, string> = {}, at = '07:30', classMin = 370, nextWake = '06:00') {
     const plan = [
       flex('c', 'inne', '08:00', 60),
       block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:00', min: 60, origin: 'user' }),
       flex('e', 'analiza', '10:00', 60),
       block({ id: 'w', cat: 'zajecia-zdalne', at: '11:00', min: classMin, fixed: true, origin: 'user' })
     ]
-    const s = new Scenario({ date: DATE, plan, wake: '06:30', settings: { transitionBufferMin: 0 } }).observe('06:30', null)
+    const s = new Scenario({ date: DATE, plan, wake: '06:30', nextWake, settings: { transitionBufferMin: 0 } }).observe('06:30', null)
     s.checkin('07:00', { head: [0, 0], emotions: [0, 0], senses: [0, 0] })
     const ctx = s.contextAt(s.at(at))
     const state = computeDay(ctx)
@@ -123,6 +137,24 @@ describe('karta „Ułóż pod energię” w planie porannym: „Zostaw” chowa
     // A longer class (another plan): counted again.
     expect(energyOrderCached(model({}, '07:31', 400), NAMES)?.label).not.toBe(first?.label)
     expect(search).toHaveBeenCalledTimes(2)
+  })
+
+  it('T616: nowe obiekty nazw przy tych samych danych (okno robi je co liczenie) – z pamięci', () => {
+    const search = vi.mocked(energyOrderVariant)
+    search.mockClear()
+    const first = energyOrderCached(model({}, '07:30'), NAMES)
+    // `settings` is new each count of the day; rd, routines and requests are the store's own.
+    expect(energyOrderCached(model({}, '07:31'), { ...NAMES, settings: { ...NAMES.settings } })).toBe(first)
+    expect(search).toHaveBeenCalledTimes(1)
+    // Another list of routines (the data changed): counted again.
+    energyOrderCached(model({}, '07:31'), { ...NAMES, routines: [] })
+    expect(search).toHaveBeenCalledTimes(2)
+  })
+
+  it('T616: klucz zmienia się z pobudką następnego dnia (pora snu) i co 5 min zegara, nie co 30 s', () => {
+    expect(energyOrderKey(model({}, '07:30'))).toBe(energyOrderKey(model({}, '07:34')))
+    expect(energyOrderKey(model({}, '07:30'))).not.toBe(energyOrderKey(model({}, '07:35')))
+    expect(energyOrderKey(model({}, '07:30'))).not.toBe(energyOrderKey(model({}, '07:30', 370, '07:00')))
   })
 
   it('karta ma wariant dnia; po „Zostaw” (odpowiedź w pliku dnia) – nie', () => {

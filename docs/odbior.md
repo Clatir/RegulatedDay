@@ -1632,8 +1632,9 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   sprzed zmiany (D369, D374, D377, D313). Gdy panel otworzył znacznik („◆ warianty”, np. koniec pracy za granicą), po
   „Ułóż pod energię” znacznik zostaje, póki plan dalej się nie mieści (T614). Przed zatwierdzeniem granicy wariant może
   przesunąć koniec pracy za proponowaną granicę (np. regeneracja przed pracą), ale nie za maksimum dnia; po zatwierdzeniu –
-  nie za zatwierdzoną granicę (D378). Gdy plan jest już tak ułożony (np. zmieniony na drugim komputerze), wybór wariantu
-  zamyka panel z uwagą „Plan już jest tak ułożony.” i niczego nie zmienia.
+  nie za zatwierdzoną granicę (D378). Gdy plan jest już tak ułożony (np. zmieniony na drugim komputerze), wybór „Ułóż pod
+  energię” zamyka panel z uwagą „Plan już jest tak ułożony.” i niczego nie zmienia; „Skróć” albo „na jutro” w takim planie
+  zamyka znacznik jak dotąd, bez tej uwagi (D379).
 - **Nie przechodzi, gdy:** wariant przesuwa blok stały, zaczęty albo zakotwiczony, przenosi blok za blok stały albo
   przed niego z innej przerwy, zmienia długość któregoś bloku, liczby w etykiecie różnią się od minimum energii po
   zmianie, lista zmian nie zgadza się z „Dziś”, „Cofnij” nie przywraca wszystkich godzin, znacznik znika po „Ułóż pod
@@ -1650,8 +1651,10 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   potem „Cofnij” w pasku. Potem kliknij „Zostaw” na karcie; zamknij i otwórz aplikację, zajrzyj na drugi komputer.
 - **Oczekiwany efekt:** karta z tą samą etykietą i listą zmian co w „Przestaw plan”; „Ułóż” od razu zmienia godziny w
   „Dziś”, karta znika (albo pokazuje kolejną poprawę), w pasku „Przestawiono: Ułóż pod energię – … · Cofnij” przez
-  15 min; „Cofnij” przywraca plan. „Zostaw” chowa kartę do końca dnia – także po ponownym uruchomieniu i na drugim
-  komputerze; „Przestaw plan” w pasku dalej ma wariant. Karta tylko dla dnia bieżącego (D369, D374, D377).
+  15 min; „Cofnij” przywraca plan, a otwarty w pasku panel wariantów się zamyka. „Zostaw” chowa kartę do końca dnia – także
+  po ponownym uruchomieniu i na drugim komputerze; „Przestaw plan” w pasku dalej ma wariant. Gdy plan jest już tak ułożony
+  (np. „Ułóż” kliknięte chwilę wcześniej na drugim komputerze), „Ułóż” pokazuje dymek „Plan już jest tak ułożony.” i karta
+  znika. Karta tylko dla dnia bieżącego (D369, D374, D377, D379).
 - **Nie przechodzi, gdy:** karta jest przed check-inem albo na innym dniu, „Ułóż” zmienia coś poza godzinami bloków
   z listy, po „Ułóż” w pasku nie ma „Cofnij”, „Cofnij” zostawia nowe godziny, albo karta po „Zostaw” wraca tego samego
   dnia.

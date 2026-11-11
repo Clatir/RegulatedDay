@@ -4,7 +4,7 @@
  * raises it by 5 at least – judged by counting the day and its energy again (D340); fixed, begun and anchored blocks stay.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { computeDay } from '@shared/engine/day'
+import { computeDay, shownForecaster } from '@shared/engine/day'
 import { computeEnergy, shownOf } from '@shared/engine/energy'
 import { ENERGY_ORDER_BELOW, ENERGY_ORDER_GAIN, ORDER_COUNTS, energyOrderLabel, energyOrderVariant, lowestEnergy } from '@shared/engine/energyOrder'
 import { applyVariant, planWith } from '@shared/engine/variants'
@@ -16,7 +16,8 @@ import { block, lm, Scenario } from './dsl'
 // A pass-through spy: how many times the variant counts the day again.
 vi.mock('@shared/engine/day', async (orig) => {
   const m = await orig<typeof import('@shared/engine/day')>()
-  return { ...m, computeDay: vi.fn(m.computeDay) }
+  // The forecaster of the layouts wrapped too: which orders the search lays out.
+  return { ...m, computeDay: vi.fn(m.computeDay), shownForecaster: vi.fn((ctx: Parameters<typeof m.shownForecaster>[0], st: Parameters<typeof m.shownForecaster>[1]) => vi.fn(m.shownForecaster(ctx, st))) }
 })
 
 const DATE = '2026-10-28'
@@ -239,6 +240,8 @@ describe('„Ułóż pod energię” (D369, D374, D377)', () => {
   it('etykieta z liczb wariantu w jednym miejscu (`energyOrderLabel`)', () => {
     const v = day(napDay()).v!
     expect(v.label).toBe(energyOrderLabel(v.energy!))
+    // It mends no cause of the marker (D379): the bar never closes them for it.
+    expect(v.mends).toBe(false)
   })
 
   it('T613: blok tej samej kategorii co blok przed przerwą zaczyna się bez bufora – szacunek liczy go od końca tamtego', () => {
@@ -301,6 +304,65 @@ describe('„Ułóż pod energię” (D369, D374, D377)', () => {
       { k: 'start', block: 'e', startMin: lm('08:00') },
       { k: 'start', block: 'c', startMin: lm('10:00') }
     ])
+  })
+
+  it('T619: pierwszy blok przerwy po biegnącym bloku stałym innej kategorii – z buforem za nim, a nie odrzucony', () => {
+    // The fixed „Inne” (no costs) runs to 08:30; after it „Inne” that regenerates the head (+9 an hour), the nap and
+    // „Analiza”: both regenerating blocks at 100 waste theirs, „Analiza” first (5 min after the fixed block) does not.
+    const d = day(
+      [
+        { ...block({ id: 'f', cat: 'inne', at: '07:30', min: 60, fixed: true }), costs: { head: 0, emotions: 0, senses: 0 } },
+        { ...block({ id: 'c', cat: 'inne', at: '08:30', min: 60 }), costs: { head: -3, emotions: 0, senses: 0 } },
+        block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:35', min: 60 }),
+        block({ id: 'e', cat: 'analiza', at: '10:40', min: 60 }),
+        block({ id: 'w', cat: 'zajecia-zdalne', at: '12:00', min: 370, fixed: true })
+      ],
+      { settings: { transitionBufferMin: 5 }, now: '07:40', events: (s) => s.start('f', '07:30') }
+    )
+    expect(d.v?.energy).toEqual({ before: 50, after: 61 })
+    expect(d.v!.changes[0]).toEqual({ k: 'start', block: 'e', startMin: lm('08:35') })
+  })
+
+  it('T620: szacunek liczy przełączenie w blok stały za przerwą – kolejność kończąca się jego kategorią wygrywa', () => {
+    // The fixed block after the gap is „Inne”: the order that ends with „Inne” has no switch into it.
+    const d = day([
+      block({ id: 'x1', cat: 'inne', at: '08:00', min: 60 }),
+      block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:00', min: 60 }),
+      block({ id: 'x2', cat: 'nauka', at: '10:00', min: 60 }),
+      block({ id: 'x3', cat: 'analiza', at: '11:00', min: 60 }),
+      block({ id: 'w', cat: 'inne', at: '12:00', min: 480, fixed: true })
+    ])
+    expect(d.v?.energy).toEqual({ before: 52, after: 60 })
+    expect(d.v!.changes).toEqual([
+      { k: 'start', block: 'x3', startMin: lm('08:00') },
+      { k: 'start', block: 'x1', startMin: lm('11:00') }
+    ])
+  })
+
+  /** 12 blocks of 20 min in turn „Inne”, „Analiza”, „Nauka” before a long class: one gap, searched by swaps of two. */
+  const twelveDay = () => {
+    const t = (m: number) => `${String(8 + Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+    const cats = ['inne', 'analiza', 'nauka']
+    return [...Array.from({ length: 12 }, (_, i) => block({ id: `z${i}`, cat: cats[i % 3]!, at: t(i * 20), min: 20 })), block({ id: 'w', cat: 'zajecia-zdalne', at: t(250), min: 420, fixed: true })]
+  }
+
+  it('T609: zamiany po dwa układają każdą kolejność raz (powrót do kolejności już ocenionej bez nowego ułożenia)', () => {
+    const d = day(twelveDay())
+    const layouts = vi.mocked(shownForecaster)
+    layouts.mockClear()
+    const v = energyOrderVariant(d.ctx, d.state, d.energy, names)
+    expect(v).not.toBeNull()
+    const laid = layouts.mock.results.flatMap((r) => (r.value as ReturnType<typeof vi.fn>).mock.calls.map((c) => JSON.stringify((c[0] as Array<{ id: string; start: number | null }>).map((b) => [b.id, b.start]))))
+    expect(laid.length).toBeGreaterThan(20)
+    expect(new Set(laid).size).toBe(laid.length)
+  })
+
+  it('T609: przy jednej przerwie żadne przeliczenie nie czeka na „przerwy razem” – wszystkie idą na jej kolejności', () => {
+    const d = day(twelveDay())
+    const counted = vi.mocked(computeDay)
+    counted.mockClear()
+    energyOrderVariant(d.ctx, d.state, d.energy, names, { top: 4, counts: 4 })
+    expect(counted).toHaveBeenCalledTimes(4)
   })
 
   it('D378, T617: przed zatwierdzeniem granicy koniec pracy może przejść za propozycję (w maksimum dnia); po zatwierdzeniu – nie', () => {

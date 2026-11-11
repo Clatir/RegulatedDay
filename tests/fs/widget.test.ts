@@ -1670,6 +1670,35 @@ describe('warianty w pasku (D313)', () => {
     expect(w.current().lines.some((l) => l.id === 'moved:variant')).toBe(false)
   })
 
+  it('T623: wariant przyczyny, gdy plan jest już tak zmieniony (drugi komputer) – zamyka przyczynę jak przed J5, bez zapisu i bez uwagi', async () => {
+    // As \`over()\`, with a request of 2 h: the end of work 14:00 – „Skróć” (b to 15 min) leaves it past the boundary, the
+    // cause holds after it.
+    const m = await make()
+    await m.w.refresh()
+    await m.folder.userEvents([{ k: 'boundary.approve', day: DAY, boundary: placeLogical(DAY, 12 * 60 + 15), auto: false, plan: ['a', 'b'] }])
+    await m.w.act('start', undefined, 'panel')
+    m.at(10 * 60 + 10)
+    await m.w.act('request', 'urgent|mama|120', 'bar')
+    m.at(10 * 60 + 11)
+    await m.w.refresh()
+    expect(m.w.current().variants.marker).toBe(true)
+    await m.w.act('variants', 'open', 'bar')
+    // Another computer (a bar on the same folder) picks the same variant first.
+    const other = m.build()
+    await other.refresh()
+    await other.act('variants', 'open', 'bar')
+    await other.act('variants', 'pick|shorten', 'bar')
+    expect(await blockB(m.folder)).toMatchObject({ durationMin: 15, byVariant: true })
+    await m.w.refresh()
+    // The cause still holds (the end of work past the boundary): the marker is still in this bar.
+    expect(m.w.current().variants.marker).toBe(true)
+    // Here its edit comes out empty: nothing written, the cause closed (D313), no note of „Ułóż pod energię”.
+    await m.w.act('variants', 'pick|shorten', 'bar')
+    expect(m.w.current().variants).toEqual({ marker: false, open: null })
+    expect(m.w.current().note?.text).not.toBe('Plan już jest tak ułożony.')
+    expect(m.w.current().lines.some((l) => l.id === 'moved:variant')).toBe(false)
+  })
+
   it('„Zostaw” zamyka panel i znacznik bez zmiany planu; „Przestaw plan” otwiera panel bez znacznika', async () => {
     const { w, folder } = await over()
     await w.act('variants', 'open', 'bar')

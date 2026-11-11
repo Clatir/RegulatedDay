@@ -24,7 +24,7 @@ import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@sha
 import { suggestRegen } from '@shared/engine/reserve'
 import { timerNow, type TimerNow } from '@shared/engine/timer'
 import { pushedText } from '@shared/engine/pushApart'
-import { ENERGY_ORDER_ID, energyOrderVariant } from '@shared/engine/energyOrder'
+import { energyOrderVariant } from '@shared/engine/energyOrder'
 import { applyVariant, keepPlan, markerCause, planCause, variantCauses, variantsFor, type Variant, type VariantCause, type VariantTrigger } from '@shared/engine/variants'
 import type { NoticeKind } from '@shared/machine'
 import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
@@ -596,9 +596,10 @@ export class WidgetEngine {
    * A variant clicked by its id (D313): the plan changes at once – the days' files as edits through the hub (the windows
    * see it at once; a block moved to tomorrow goes there, a regeneration of a variant of energy starts) – and the bar keeps
    * „Przestawiono: … · Cofnij”; „Zostaw” (no change) closes the panel and the marker. Its causes are done once the plan
-   * changed (a refused edit leaves the marker) – not by „Ułóż pod energię”, which mends none of them (T614: the marker stays
-   * while its cause holds). A variant whose edit came out empty (the plan already so, made elsewhere) changes nothing,
-   * leaves the line of an earlier change with its „Cofnij” and says „Plan już jest tak ułożony.” (D378, T618).
+   * changed (a refused edit leaves the marker) – not by a variant that mends none of them (`mends: false` – „Ułóż pod
+   * energię”, D379, T614: the marker stays while its cause holds). A variant whose edit came out empty (the plan already
+   * so, made elsewhere) writes nothing and leaves the line of an earlier change with its „Cofnij”: one of the cause closes
+   * its causes as before (D313, T623), „Ułóż pod energię” says „Plan już jest tak ułożony.” (D378, T618).
    */
   private async pickVariant(id: string | undefined): Promise<void> {
     const p = this.panel
@@ -622,7 +623,8 @@ export class WidgetEngine {
       return entry ? [{ entry, made: made[k]! }] : []
     })
     if (!edits.length) {
-      this.say(PLAN_ALREADY)
+      if (v.mends === false) this.say(PLAN_ALREADY)
+      else if (p.cause) this.closeCauses(p.cause)
       return this.refresh()
     }
     const out = await this.d.edit(edits.map((x) => x.entry))
@@ -630,7 +632,7 @@ export class WidgetEngine {
       this.say('Wariant spotkał się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
       return this.refresh()
     }
-    if (p.cause && v.id !== ENERGY_ORDER_ID) this.closeCauses(p.cause)
+    if (p.cause && v.mends !== false) this.closeCauses(p.cause)
     let started: string | null = null
     if (after.start) {
       const r = await this.d.timer({ a: 'start', block: after.start, day })
@@ -659,8 +661,10 @@ export class WidgetEngine {
   /**
    * „Ułóż pod energię” clicked in the morning plan (D369): the window saved the new order as one edit of today's file
    * (`edit`, `made` – the file it created); the bar keeps „Przestawiono: <label> · Cofnij” as after a variant picked in it
-   * (D313) – its „Cofnij” takes that edit back the same way (T502). No trigger of the marker: the variant adds no extension.
-   * An open panel of variants closes (T614): its variants were counted on the plan before the change.
+   * (D313) – its „Cofnij” takes that edit back the same way (T502). No trigger of the marker: after the approval the variant
+   * adds no extension, before it the end of work stays within the day's maximum (T617) – the marker's own conditions are
+   * checked at its usual triggers. An open panel of variants closes (D379, T614): its variants were counted on the plan before
+   * the change.
    */
   arranged(day: string, label: string, edit: { entry: EditEntry; made: RawRecord | null }): Promise<void> {
     this.panel = null

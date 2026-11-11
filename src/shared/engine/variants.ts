@@ -57,6 +57,11 @@ export interface Variant {
   details?: string[]
   /** The lowest energy of the day before and with it (whole points, as shown) – „Ułóż pod energię”. */
   energy?: { before: number; after: number }
+  /**
+   * Whether picking it closes the causes of the marker (D313) – false: it mends none of them („Ułóż pod energię”, D379),
+   * the marker stays while its cause holds. Unset: it does.
+   */
+  mends?: boolean
 }
 
 const lmOf = (s: DayState, idx: number) => logicalMinuteOf(s.grid.date, atOf(s.grid, idx))
