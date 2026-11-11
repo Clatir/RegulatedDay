@@ -47,20 +47,23 @@ dodaje biblioteki edytora); SNT3 – przegląd xhigh części limitu (format pli
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| SNT6 wyszukiwarka Ctrl K | 1.7.0 | #67 | 11.11 po #65 i #68: `origin/main` scalony w `ws6`, wersja 1.7.0; CI w toku, scalenie po zielonym | ok. 2,5 h (4–6 h) – jedna runda przeglądu high |
-| SNT3 Markdown w notatkach | następna wolna po SNT6 | – | kod i przegląd gotowe (`9571e0c` na `claude/snt3-markdown`, drzewo `ws3`); zostało: wersja, `LONG_NOTE_FROM` = ta wersja, CHANGELOG, odbiór SNT3.x, wpis, PR | – (6–9 h, edytor na żywo) |
+| SNT6 wyszukiwarka Ctrl K | 1.7.0 | #67 | scalone 11.11 (d76ce2b), wydanie 1.7.0 z runu 43079086202; wpis – `docs/archiwum/postep-SNT.md` | ok. 2,5 h (4–6 h) – jedna runda przeglądu high |
+| SNT3 Markdown w notatkach | 1.9.0 | #71 | po wydaniu 1.8.0 (J4, #70) i poprawce `week.spec.ts:554` (sesja J): merge `main`, zielone CI, scalenie; jeśli J5 (#72) wejdzie pierwsze – SNT3 = 1.10.0 | przed awarią nieznany; po przejęciu ok. 4 h (6–9 h) – cztery rundy przeglądu |
 
 **Przejęcie 11.11 (awaria maszyny):** sesję przejęła nowa sesja. Wynik rundy 3 przeglądu SNT3 przepadł, więc puściła
 przegląd high na poprawkach rund 1–2 (10 uwag, 2 high). Druga runda high objęła poprawki tamtej rundy (10 uwag, 1 high).
-Oba zestawy poprawił `wykonawca-sonnet`, każdy punkt z testem; to T670–T673. Lokalnie 1867 testów zielonych, jedyny
-czerwony `tests/fs/restore.test.ts` (naprawia go #68).
+Oba zestawy poprawił `wykonawca-sonnet`, każdy punkt z testem; to T670–T673.
 
-**SNT6 (1.7.0):** paleta Ctrl K (`renderer/features/search/`), dopasowanie `shared/search.ts`, korpus dni
-`DataFolder.searchDays()` (cały plan dnia jak w „Dziś”), skok do rekordu `useUi.pick`; D387, T650–T654; odbiór
-SNT6.1–SNT6.3. Przegląd high: 10 uwag (1 high – niezmienione bloki szablonu nieprzeszukiwane; 3 medium; reszta
-porządkowe) – wszystkie poprawione z testami, Ctrl K nad kreatorem – nic. **Uwagi na później:** pierwsze otwarcie
-palety liczy plan każdego dnia z plikiem w procesie głównym (`readDay` + `ownContext`) – przy latach danych
-pamięć podręczna planu dnia po podpisie wejść; ukryte słowa poleceń („nowe”, „podsumowanie”) – T650.
+**SNT3 (1.9.0):** notatka bloku jako Markdown – edytor na żywo (Tiptap 3, `NoteStarterKit`: pogrubienie, kursywa,
+przekreślenie, kod, listy, lista zadań, cytat, link), zapis w pliku jako tekst Markdown wierny staremu zapisowi (stara
+notatka bez edycji – bajt w bajt), nagłówki, „Powiększ” (notatka na całe okno), linki tylko http/https (`safeLinkUrl`), limit 10 000
+(`shared/model/note.ts`; ostrzeżenie, gdy komputer w folderze ma wersję starszą niż `LONG_NOTE_FROM` – ta tnie do
+2000); D388, T660–T674 (T674 – jsdom 27.4.0 dla Node 22.12, układ `Range` w testach); odbiór SNT3.1–SNT3.3. Przegląd: rundy 1–2 xhigh (15 + 14 uwag, sesja sprzed awarii), po
+przejęciu dwie rundy high (10 + 10) – poprawki z testami (wykonawca-sonnet). **Uwagi na później:** spacje na brzegach
+kodu w linii (biblioteka wynosi je poza znacznik); testy własności z innymi ziarnami (11, 12345, 987654) padają też na
+starym kodzie – w ścieżce pełnego escapowania encja `&#46;` trafia do adresu gołego linku (poprawka: wymusić `<…>`);
+degradacja bloków w części zagnieżdżeń; encje w starych notatkach są dekodowane. **Pytania na później:** „http://a”
+(≤ 8 znaków) przy pisaniu nie staje się już linkiem.
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →

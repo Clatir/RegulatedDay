@@ -2277,11 +2277,14 @@ export class DataFolder {
     ]
   }
 
-  /** The computers that wrote a presence, this one first (names as each computer calls itself). */
-  get computers(): Array<{ id: string; name: string }> {
+  /**
+   * The computers that wrote a presence, this one first (names as each computer calls itself); another computer present
+   * (not forgotten) carries the version of its app – the warning of a long note (D388) needs it.
+   */
+  get computers(): Array<{ id: string; name: string; appVersion?: string }> {
     // Forgotten ones too: their names stay in the history and on the lectures they record (A3-13 review).
-    const out = [{ id: this.o.computer, name: this.o.computerName }]
-    for (const s of this.presence.all()) if (s.presence.computer !== this.o.computer) out.push({ id: s.presence.computer, name: s.presence.name || s.presence.computer })
+    const out: Array<{ id: string; name: string; appVersion?: string }> = [{ id: this.o.computer, name: this.o.computerName }]
+    for (const s of this.presence.all()) if (s.presence.computer !== this.o.computer) out.push({ id: s.presence.computer, name: s.presence.name || s.presence.computer, ...(s.forgotten ? {} : { appVersion: s.presence.appVersion }) })
     return out
   }
 

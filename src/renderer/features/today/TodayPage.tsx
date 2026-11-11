@@ -21,7 +21,7 @@ import { TimeField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
-import { isSaved, useData } from '../../store/data'
+import { isSaved, saveAnswer, useData, type SendState } from '../../store/data'
 import { dayUsable, useDay, type DayModel } from '../../store/day'
 import { openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
@@ -212,10 +212,16 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     if (isSaved(out)) void tellFreed(date, freed)
     return out
   }
-  /** Fields of the block changed in its panel (D368: „Długość” shorter today – the bar may ask about the gap). */
+  /**
+   * Fields of the block changed in its panel (D368: „Długość” shorter today – the bar may ask about the gap). The answer
+   * is the note editor’s (T670): saved, refused, or asked after the send.
+   */
   const saveFields = async (b: PlanBlock, patch: Partial<PlanBlock>) => {
     const freed = isToday ? freedByEdit(model.state, b, { ...b, ...patch }) : null
-    if (isSaved(await patchDayBlock(date, raw, b, patch))) void tellFreed(date, freed)
+    const state: SendState = { afterSend: false }
+    const out = await patchDayBlock(date, raw, b, patch, state)
+    if (isSaved(out)) void tellFreed(date, freed)
+    return saveAnswer(out, state)
   }
   /** A block of the plan that may be dragged (D305): what its drag to `span` changes and pushes apart (D367). */
   const movableChange = (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan): DayChange | null => (axis.items.find((i) => i.id === id)?.movable ? dragChange(model, id, span, edge, shown, pushes) : null)
@@ -408,7 +414,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             plan={plan}
             names={names}
             computers={view.computers}
-            onChange={(patch) => (draft ? patchBlockDraft(date, patch) : void saveFields(block, patch))}
+            onChange={(patch) => (draft ? patchBlockDraft(date, patch) : saveFields(block, patch))}
             onClose={() => {
               setDraft(null)
               setSelected(null)

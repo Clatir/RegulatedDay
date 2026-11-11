@@ -7,7 +7,7 @@ import { closeToast, navigate, openDay, openPick, openRitual, takeFoundPick, tak
 
 beforeEach(() => {
   // The store commits the active field first; there is no document in this environment.
-  Object.assign(globalThis, { document: { activeElement: null }, HTMLInputElement: class {}, HTMLTextAreaElement: class {} })
+  Object.assign(globalThis, { document: { activeElement: null }, HTMLElement: class {}, HTMLInputElement: class {}, HTMLTextAreaElement: class {} })
   useUi.setState({ page: 'today', day: null, focus: null, pick: null })
   for (const x of useUi.getState().toasts) closeToast(x.id)
 })
