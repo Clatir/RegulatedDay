@@ -1,11 +1,16 @@
 # Changelog
 
-## 1.8.0
+## 1.9.0
 - Notatka bloku (panel bloku w „Dziś” i w „Szablonach”) ma edytor z formatowaniem widocznym od razu podczas pisania: pogrubienie i kursywa (Ctrl B, Ctrl I), przekreślenie, nagłówki H1–H3, listy punktowane i numerowane, pola wyboru, cytat, kod i blok kodu, link. Przyciski są nad notatką, działa też pisanie „# ”, „- ”, „1. ”, „> ” na początku linii.
 - Pole wyboru odhaczasz kliknięciem – zapisuje się od razu i nigdzie się nie liczy. Link http lub https otwiera domyślną przeglądarkę, inne adresy zostają tekstem.
 - „Powiększ” rozwija notatkę na całe okno; Esc albo „Pomniejsz” wraca z tym samym tekstem.
 - Istniejące notatki otwierają się bez zmian – każdy Enter zostaje nową linią, a samo otwarcie niczego nie zapisuje. Kafelek osi, historia, CSV i wyszukiwarka pokazują notatkę jak dotąd.
 - Notatka mieści do 10 000 znaków zamiast 2000. Gdy w folderze danych jest obecny komputer ze starszą wersją aplikacji, przy dłuższej notatce widać ostrzeżenie, że tam zostanie obcięta.
+
+## 1.7.0
+- Wyszukiwarka: Ctrl K w oknie głównym otwiera okno wyszukiwania nad bieżącym ekranem. Szuka w nazwach i notatkach bloków wszystkich dni (minionych i zaplanowanych), w szablonach, prośbach, rutynach, kategoriach, ekranach i sekcjach ustawień oraz w poleceniach („Nowy blok”, „Nowa prośba”, „Jutro”, „Wczoraj”, „Rytuał” – tylko przechodzą, nic nie przenoszą).
+- Wielkość liter i polskie znaki nie mają znaczenia („zolw” znajdzie „Żółw”); każde wpisane słowo musi być początkiem jakiegoś słowa. Wyniki są w grupach po 5 z „Pokaż jeszcze”, przy bloku data i fragment notatki z podświetloną frazą; bloki – najpierw dziś, potem zaplanowane, potem minione od najnowszych.
+- Strzałki wybierają, Enter otwiera: blok – „Dziś” na jego dniu z otwartym panelem bloku; szablon, prośba, rutyna i kategoria – ich ekran z tym rekordem. Przed wpisaniem czegokolwiek okno pokazuje do 5 ostatnio wybranych wyników i polecenia. Esc albo kliknięcie obok zamyka.
 
 ## 1.6.0
 - Rozsuwanie: gdy przeciągniesz blok, wydłużysz go krawędzią albo dodasz nowy blok z siatki na zajęte miejsce w „Dziś”, kolejne bloki elastyczne dostają w planie nowe godziny – bez nakładania, w trakcie przeciągania widać ich nowe miejsca (przerywana obwódka). Bloki stałe, chronione i zaczęte zostają, elastyczny przeskakuje stały jak w prognozie.

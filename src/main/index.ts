@@ -838,6 +838,7 @@ function registerIpc(): void {
   handle(CH.sideB, () => needHub().sideB())
   handle(CH.calibration, () => needHub().calibration())
   handle(CH.stats, (_e, period: unknown) => needHub().stats(period === '3m' || period === 'all' ? period : '4w'))
+  handle(CH.searchDays, () => needHub().searchDays())
   // „Tydzień” and the month's goals (D356).
   handle(CH.weekView, (_e, date: unknown) => needHub().weekView(String(date)))
   handle(CH.goals, (_e, month: unknown) => needHub().goals(String(month)))

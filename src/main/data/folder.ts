@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeFileAtomic } from '../datastore/atomic'
-import type { ComputerRow } from '@shared/api'
+import type { ComputerRow, SearchCorpus } from '@shared/api'
 import { EventClock, type ClockSources } from '@shared/data/clock'
 import { setAt, type MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
@@ -47,14 +47,15 @@ import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
 import { CLOSE_HOWS, compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type FeltCost, type Signal } from '@shared/model/events'
 import { placeOf, type Pool } from '@shared/model/categories'
-import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type Template } from '@shared/model/plan'
+import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '@shared/model/plan'
 import { MODULES, personName, RD_SCHEMA, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
 import { runningRequestOf } from '@shared/engineView'
 import type { RunningRequest } from '@shared/widget'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
+import { blockName, type Names } from '@shared/blockName'
 import { routineFrom, type Routine } from '@shared/model/routines'
 import type { CsvDay } from '@shared/engine/csv'
-import { isDayTypeId, settingsOn, type SettingsChange } from '@shared/model/settings'
+import { changeOrder, isDayTypeId, settingsOn, type SettingsChange } from '@shared/model/settings'
 import { decideLeader, minuteGate, SILENT_MS, soundComputer, type LeaderDecision, type Peer } from '@shared/sync/leader'
 import type { SyncState } from '@shared/sync/syncLines'
 import type { Presence } from '@shared/sync/presence'
@@ -602,6 +603,82 @@ export class DataFolder {
   /** The records of a collection as this computer sees them (requests, routines …), through the same cache. */
   async collection(kind: keyof typeof ID_COLLECTIONS): Promise<Array<Record<string, unknown>>> {
     return (await this.cachedDir(ID_COLLECTIONS[kind], (v) => v, true, true)) as Array<Record<string, unknown>>
+  }
+
+  /**
+   * The blocks of every day with a file, for the global search (T651): the day's whole plan as „Dziś” shows it
+   * (`ownContext`: the day's snapshot – the log's or made from the templates – with your edits and queued edits laid
+   * over it, so a block of the template the file did not change is there, one cancelled or moved away is not), named as
+   * everywhere (`blockName`, the settings of that day) – never by id. Files go through `recordView` (looked at by size
+   * and time, parsed again only when they changed on disk). Whatever cannot be read now – the settings, the routines, the
+   * requests, a year's list, a day's file or log – makes the answer incomplete: unknown is never „none”.
+   */
+  async searchDays(): Promise<SearchCorpus> {
+    let complete = true
+    const settled = async <T>(p: Promise<T>, fallback: T): Promise<T> => {
+      try {
+        return await p
+      } catch {
+        complete = false
+        return fallback
+      }
+    }
+    const rd = rdFrom(await settled(this.recordView(paths.settings), undefined))
+    const routines = (await settled(this.collection('routine'), [])).map(routineFrom).filter((r): r is Routine => !!r)
+    const requests = (await settled(this.collection('request'), [])).map(requestFrom).filter((r): r is RequestRecord => !!r)
+    const rels = new Set<string>()
+    const root = join(this.o.dataDir, 'days')
+    // Each year on its own: a year that cannot be listed leaves the others.
+    const years = await settled(this.o.fs.list(root), [])
+    for (const y of years) {
+      if (!y.dir) continue
+      const files = await settled(this.o.fs.list(join(root, y.name)), [])
+      for (const f of files) {
+        const rel = `days/${y.name}/${f.name}`
+        const c = classify(rel)
+        if (!f.dir && c?.kind === 'day' && !c.conflict) rels.add(rel)
+      }
+    }
+    // A new day waiting in the queue (the folder away) is a day too.
+    for (const rel of this.queue.relsUnder('days')) {
+      const c = classify(rel)
+      if (c?.kind === 'day' && !c.conflict) rels.add(rel)
+    }
+    // The settings in force differ only where a change begins: one set of names per number of changes laid on.
+    const changes = [...rd.settings].sort(changeOrder)
+    const settingsFor = new Map<number, ReturnType<typeof settingsOn>>()
+    const namesOn = (date: string): Names => {
+      const n = changes.filter((c) => c.from < date || (c.from === date && c.at == null)).length
+      let s = settingsFor.get(n)
+      if (!s) settingsFor.set(n, (s = settingsOn(changes, date)))
+      return { rd, settings: s, routines, requests }
+    }
+    const inp = await settled(this.inputs(true), null)
+    const at = this.clock.now()
+    const per = await mapLimit([...rels].sort(), DIR_CONCURRENCY, async (rel) => {
+      const date = classify(rel)?.date
+      if (!date) return []
+      let plan: readonly PlanBlock[]
+      try {
+        const read = await this.log.readDay(date)
+        if (!read.complete && !read.away) complete = false
+        if (!inp) throw new Error('inputs')
+        plan = (await this.ownContext(date, read, at, inp)).plan
+      } catch {
+        complete = false
+        // The day's own blocks at least (the file as this computer sees it), when its plan cannot be made now.
+        try {
+          const raw = await this.recordView(rel)
+          const f = raw === undefined ? null : dayFileFrom(raw, date)
+          plan = f ? f.blocks.filter((b) => !f.cancelled.includes(b.id) && !(b.id in f.movedTo)) : []
+        } catch {
+          return []
+        }
+      }
+      const names = namesOn(date)
+      return plan.map((b) => ({ date, id: b.id, title: blockName(b, names), note: b.note }))
+    })
+    return { blocks: per.flat(), complete }
   }
 
   async dayFile(date: string, own = false): Promise<DayFile | null> {

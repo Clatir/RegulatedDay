@@ -8,7 +8,7 @@ export const NOTE_MAX = 10_000
 /** What a version before `LONG_NOTE_FROM` keeps of a note. */
 export const NOTE_OLD_MAX = 2000
 /** The first version that keeps notes up to `NOTE_MAX`. */
-export const LONG_NOTE_FROM = '1.8.0'
+export const LONG_NOTE_FROM = '1.9.0'
 /** The counter „x z 10 000” shows from this length. */
 export const NOTE_COUNTER_FROM = 9000
 

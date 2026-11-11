@@ -114,6 +114,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] J2.2 Nowy blok przeciągnięciem w „Dziś” i „Szablonach”
    - [ ] J3.1 Rozsuwanie w „Dziś” i „Cofnij” w pasku
    - [ ] J3.2 Rozsuwanie w „Szablonach”
+   - [ ] SNT6.1 Wyszukiwarka Ctrl K – wyniki i dopasowanie
+   - [ ] SNT6.2 Enter na wyniku – skok do rekordu
+   - [ ] SNT6.3 Polecenia, ostatnio wybrane i gdzie Ctrl K nie działa
    - [ ] SNT3.1 Notatka bloku – formatowanie na żywo
    - [ ] SNT3.2 Stara notatka otwiera się i zapisuje bez zmian
    - [ ] SNT3.3 Link, „Powiększ” i limit 10 000 znaków (Tylko Ty – przeglądarka, drugi komputer)
@@ -1552,9 +1555,50 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Nie przechodzi, gdy:** blok po upuszczeniu skacze o godzinę, „Cofnij” zostawia nową wersję szablonu, albo bloki
   stałe szablonu się przesuwają.
 
-### SNT3 – Markdown w notatkach bloków (1.8.0)
+### SNT6 – wyszukiwarka Ctrl K (1.7.0)
 
-#### SNT3.1 Notatka bloku – formatowanie na żywo (1.8.0)
+#### SNT6.1 Wyszukiwarka Ctrl K – wyniki i dopasowanie (1.7.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/search.test.ts`, `tests/fs/search-days.test.ts`, `tests/web/search-palette.test.ts`,
+  `tests/e2e/search.spec.ts`. Ty: rzut oka na prawdziwych danych.
+- **Jak sprawdzić:** na dowolnym ekranie okna głównego naciśnij Ctrl K. Wpisz bez ogonków dwa słowa z notatki bloku
+  sprzed kilku dni (np. „telefon kowal”), potem nazwę bloku z szablonu, który ten dzień miał bez zmian, potem nazwę
+  szablonu, osobę z prośby, rutynę i kategorię. Wpisz słowo z literówką.
+- **Oczekiwany efekt:** okno nad bieżącym ekranem z fokusem w polu; wyniki od razu, w grupach (polecenia, ekrany
+  i ustawienia, kategorie, bloki, szablony, prośby, rutyny) po 5 z „Pokaż jeszcze N”; przy bloku data i fragment
+  notatki z podświetloną frazą; bloki – dziś, potem zaplanowane, potem minione od najnowszych; „zolw” trafia „Żółw”,
+  słowo z literówką nic nie znajduje i okno wyjaśnia dlaczego (D387).
+- **Nie przechodzi, gdy:** blok dnia minionego (także niezmieniony blok z szablonu) nie daje się znaleźć, ogonki albo
+  wielkie litery psują dopasowanie, wynik pokazuje identyfikator zamiast nazwy, albo pisanie wyraźnie się zacina.
+
+#### SNT6.2 Enter na wyniku – skok do rekordu (1.7.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/search-palette.test.ts`, `tests/web/search-pick.test.ts`, `tests/e2e/search.spec.ts`.
+  Ty: rzut oka.
+- **Jak sprawdzić:** strzałkami wybierz i Enterem otwórz po kolei: blok dnia minionego, blok jutra, szablon, prośbę,
+  rutynę, kategorię i sekcję ustawień. Jeden wynik wybierz kliknięciem.
+- **Oczekiwany efekt:** blok – „Dziś” na jego dniu z otwartym panelem tego bloku; szablon, prośba, rutyna – ich ekran
+  z tym rekordem otwartym (prośba zaznaczona, fokus w notatce); kategoria i sekcja ustawień – Ustawienia przewinięte
+  do niej; kliknięcie działa jak Enter (D387).
+- **Nie przechodzi, gdy:** otwiera się inny dzień albo inny rekord, panel bloku się nie otwiera, albo skok „wraca”
+  później sam (np. po synchronizacji z drugim komputerem).
+
+#### SNT6.3 Polecenia, ostatnio wybrane i gdzie Ctrl K nie działa (1.7.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/search-palette.test.ts`, `tests/e2e/search.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** otwórz Ctrl K bez wpisywania; wybierz „Jutro”, potem „Wczoraj”, „Rytuał”, „Nowy blok”, „Nowa
+  prośba”. Otwórz Ctrl K jeszcze raz. W edytowanym polu (np. nazwa szablonu) wpisz coś i od razu Ctrl K. Otwórz okno
+  dialogowe (np. „Zmień typ dnia”) i naciśnij Ctrl K. Esc i kliknięcie obok okna wyszukiwania.
+- **Oczekiwany efekt:** puste pole – do 5 ostatnio wybranych wyników i polecenia; „Jutro”/„Wczoraj” tylko otwierają ten
+  dzień, „Rytuał” przewija „Dziś” do rytuału, nic się nie przenosi; „Nowy blok” i „Nowa prośba” jak Ctrl N; w polu
+  wpis zostaje zapisany, potem otwiera się wyszukiwarka; nad oknem dialogowym Ctrl K nic nie robi; Esc i klik obok
+  zamykają (D387).
+- **Nie przechodzi, gdy:** „Jutro” przenosi bloki, wpis w polu ginie, wyszukiwarka otwiera się nad oknem dialogowym,
+  albo pasek pulpitu reaguje na Ctrl K.
+
+### SNT3 – Markdown w notatkach bloków (1.9.0)
+
+#### SNT3.1 Notatka bloku – formatowanie na żywo (1.9.0)
 - [ ] Odebrane
 - **Automatycznie:** `tests/web/note-markdown.test.ts`, `tests/web/note-property.test.ts`, `tests/web/note-editor.test.ts`,
   `tests/e2e/note.spec.ts`. Ty: rzut oka przy zwykłym planowaniu.
@@ -1568,7 +1612,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Nie przechodzi, gdy:** po ponownym otwarciu znika formatowanie albo tekst, pojawiają się znaki `*`, `#`, `&#…;`
   zamiast formatowania, pisanie wyraźnie się zacina, albo kliknięcie poza notatką nie zapisuje zmian.
 
-#### SNT3.2 Stara notatka otwiera się i zapisuje bez zmian (1.8.0)
+#### SNT3.2 Stara notatka otwiera się i zapisuje bez zmian (1.9.0)
 - [ ] Odebrane
 - **Automatycznie:** `tests/web/note-markdown.test.ts` („stara notatka …”), `tests/web/note-property.test.ts`. Ty: rzut oka
   na prawdziwych danych.
@@ -1581,13 +1625,13 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Nie przechodzi, gdy:** znikają puste linie albo łamania, z ścieżki znikają ukośniki, fragment tekstu staje się kursywą
   albo blokiem kodu, albo w kafelku osi widać znaczniki zamiast tekstu.
 
-#### SNT3.3 Link, „Powiększ” i limit 10 000 znaków (1.8.0)
+#### SNT3.3 Link, „Powiększ” i limit 10 000 znaków (1.9.0)
 - [ ] Odebrane
 - **Tylko Ty:** otwarcie przeglądarki i drugi komputer ze starszą wersją. Automatycznie: `tests/unit/note-limit.test.ts`,
   `tests/web/note-editor-limit.test.ts`, `tests/e2e/note.spec.ts` („Powiększ”).
 - **Jak sprawdzić:** wpisz adres `https://…` i kliknij go; dodaj link przyciskiem „Link” z adresem `ftp://…`. Kliknij
   „Powiększ”, popisz, naciśnij Tab kilka razy, potem Esc. Wklej długi tekst (ponad 2000 znaków); jeśli drugi komputer
-  ma jeszcze wersję sprzed 1.8.0 i jest obecny w folderze danych – spójrz pod notatkę.
+  ma jeszcze wersję sprzed 1.9.0 i jest obecny w folderze danych – spójrz pod notatkę.
 - **Oczekiwany efekt:** link http/https otwiera domyślną przeglądarkę, inny adres zostaje tekstem; „Powiększ” rozwija
   notatkę na całe okno z tym samym tekstem i kursorem, Tab krąży po przyciskach i tekście, Esc albo „Pomniejsz” wraca;
   od 9000 znaków licznik „x z 10 000”, dłuższego tekstu nie da się wkleić; przy starszym komputerze napis „Notatka ma

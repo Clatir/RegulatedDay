@@ -3,7 +3,7 @@
  * The main window (D287): the side menu with the screens' names; at the top the name „Regulated Day” and the bar; the
  * game's celebration over everything (D322). Ctrl+1…9 switch the screens by the
  * physical keys of the digits (any keyboard layout), Ctrl+, opens the settings, Ctrl+S commits the active field, Ctrl+N
- * creates a record in the current view (when it has records).
+ * creates a record in the current view (when it has records), Ctrl+K opens the search (D387).
  */
 import { useEffect, type ReactNode } from 'react'
 import { navigate, openRitual, PAGES, useUi, type Page } from '../store/ui'
@@ -11,6 +11,9 @@ import { useWidget } from '../store/widget'
 import { commitActiveField } from '../lib/commit'
 import { modalOpen } from '../lib/escape'
 import { Bar } from '../widget/Bar'
+import { Palette } from '../features/search/Palette'
+import { openSearch } from '../features/search/searchStore'
+import { DIGIT_PAGES, PAGE_LABEL, pageKeys } from './pages'
 import { Toasts } from '../components/Toasts'
 import { EmptyState, cx } from '../components/ui'
 import { SettingsPage } from '../features/settings/SettingsPage'
@@ -26,29 +29,13 @@ import { Celebration } from '../features/game/Celebration'
 import { RoomPage } from '../features/game/RoomPage'
 import { useGameFeed } from '../store/game'
 import { Wizard } from '../features/wizard/Wizard'
-import { patchWizard, useWizard } from '../features/wizard/wizardStore'
+import { patchWizard, useWizard, wizardShown } from '../features/wizard/wizardStore'
 import { useData } from '../store/data'
 import { Banners } from './Banners'
 import { ProblemsBanner, QuestionsBanner } from './Questions'
 
-export const PAGE_LABEL: Record<Page, string> = {
-  today: 'Dziś',
-  calendar: 'Kalendarz',
-  week: 'Tydzień',
-  requests: 'Prośby',
-  templates: 'Szablony',
-  routines: 'Rutyny',
-  room: 'Pokój',
-  stats: 'Statystyki',
-  history: 'Historia',
-  settings: 'Ustawienia'
-}
-
 /** Screens that need the data folder (without it they point to the wizard). */
 const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'week', 'requests', 'templates', 'routines', 'room', 'stats', 'history'])
-
-/** The screens with Ctrl+digit, in the menu's order (D362: a screen put in the menu moves the digits below it); the settings have Ctrl+,. */
-const DIGIT_PAGES: Page[] = PAGES.filter((p) => p !== 'settings')
 
 function useHotkeys(): void {
   useEffect(() => {
@@ -56,7 +43,7 @@ function useHotkeys(): void {
       if (!e.ctrlKey || e.altKey || e.metaKey) return
       const digit = /^Digit([1-9])$/.exec(e.code)?.[1]
       // A dialog open: no other screen under it (A6-21); Ctrl+S still commits its field.
-      if ((digit || e.code === 'Comma') && modalOpen()) return
+      if ((digit || e.code === 'Comma' || e.code === 'KeyK') && modalOpen()) return
       if (digit && !e.shiftKey) {
         const page = DIGIT_PAGES[Number(digit) - 1]
         if (page) {
@@ -66,6 +53,10 @@ function useHotkeys(): void {
       } else if (e.code === 'KeyS' && !e.shiftKey) {
         e.preventDefault()
         commitActiveField()
+      } else if (e.code === 'KeyK' && !e.shiftKey) {
+        // The search (D387): the field being edited commits first; a dialog open – nothing (the test above).
+        e.preventDefault()
+        openSearch()
       } else if (e.code === 'Comma') {
         e.preventDefault()
         navigate('settings')
@@ -94,20 +85,13 @@ function NavItem({ page, active, keys }: { page: Page; active: boolean; keys: st
   )
 }
 
-/** The shortcut shown next to the screen's name (the same keys as useHotkeys). */
-function keysOf(page: Page): string | null {
-  if (page === 'settings') return 'Ctrl ,'
-  const digit = DIGIT_PAGES.indexOf(page) + 1
-  return digit ? `Ctrl ${digit}` : null
-}
-
 // One list in the order of PAGES: the settings right under the history (D306).
 function SideMenu({ page }: { page: Page }) {
   return (
     <nav className="flex w-[176px] shrink-0 flex-col overflow-y-auto border-r border-line bg-panel" data-testid="side-menu">
       <div className="flex flex-col py-1">
         {PAGES.map((p) => (
-          <NavItem key={p} page={p} active={page === p} keys={keysOf(p)} />
+          <NavItem key={p} page={p} active={page === p} keys={pageKeys(p)} />
         ))}
       </div>
     </nav>
@@ -157,7 +141,7 @@ export function App() {
   useEffect(() => window.rd.onNavigate((p) => (p === 'ritual' ? openRitual() : (PAGES as string[]).includes(p) && navigate(p as Page))), [])
   // No folder on this computer: the wizard (until „Później”). A folder that did not open (OneDrive not ready at the
   // start) is tried again by itself – the wizard only when you ask for it.
-  const wizard = wizardOpen && (status === 'none' || (status === 'failed' && wizardAsked))
+  const wizard = wizardShown(wizardOpen, wizardAsked, status)
   return (
     // Below 1024×700 (a small work area, the scale 150 %) the whole window scrolls vertically.
     <div className="flex h-full min-h-[460px] flex-col overflow-y-auto" data-testid="main-window">
@@ -176,6 +160,7 @@ export function App() {
           </main>
         </div>
       )}
+      <Palette />
       <Toasts />
       <Celebration />
     </div>

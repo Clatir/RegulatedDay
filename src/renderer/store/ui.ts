@@ -4,12 +4,16 @@
  */
 import { create } from 'zustand'
 import type { PlanBlock } from '@shared/model/plan'
+import type { SearchKind, SearchRecord } from '@shared/search'
 import { commitActiveField } from '../lib/commit'
 
 export type Page = 'today' | 'calendar' | 'week' | 'stats' | 'requests' | 'templates' | 'routines' | 'room' | 'history' | 'settings'
 
 /** The menu's order (D362; one place: a new screen is one word here, its label and its view in `App.tsx`). */
 export const PAGES: Page[] = ['today', 'calendar', 'week', 'stats', 'requests', 'templates', 'routines', 'room', 'history', 'settings']
+
+/** What Enter in the search (Ctrl K) selects on the screen it opens (T653): taken once by that screen; kind command: do it there. */
+export type SearchPick = { kind: Exclude<SearchKind, 'screen'> } & Pick<SearchRecord, 'id' | 'date' | 'parent'>
 
 export interface Toast {
   id: number
@@ -37,9 +41,11 @@ interface UiState {
   goalsClosed: string | null
   /** The new block not added yet, with its day: a form not saved survives going to another screen (spec „Szkice”, A6-17). */
   blockDraft: { date: string; block: PlanBlock } | null
+  /** What the search selected for the screen it opened (null: nothing waits). */
+  pick: SearchPick | null
 }
 
-export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, goalsClosed: null, blockDraft: null }))
+export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, goalsClosed: null, blockDraft: null, pick: null }))
 
 export function closeSideB(date: string): void {
   useUi.setState({ sideBClosed: date })
@@ -68,19 +74,45 @@ export function setMovedLater(key: string): void {
 /** Every change of view first commits the active field (spec „Zatwierdzanie przed przejściem”). */
 export function navigate(page: Page): void {
   commitActiveField()
-  useUi.setState({ page })
+  useUi.setState({ page, pick: null })
 }
 
 /** Today's ritual brought into view (the bar's „Rytuał”, D318). */
 export function openRitual(): void {
   commitActiveField()
-  useUi.setState({ page: 'today', day: null, focus: 'ritual' })
+  useUi.setState({ page: 'today', day: null, focus: 'ritual', pick: null })
 }
 
 /** The plan of a day (a click in the calendar opens it, D295); null: today. Commits the active field first. */
 export function openDay(day: string | null): void {
   commitActiveField()
-  useUi.setState({ page: 'today', day })
+  useUi.setState({ page: 'today', day, pick: null })
+}
+
+/** The search's Enter (T653): the screen (and the day of „Dziś”) with what to select there; a hand-made move drops it. */
+export function openPick(target: { page: Page; day?: string | null }, pick: SearchPick): void {
+  commitActiveField()
+  useUi.setState({ page: target.page, ...(target.day !== undefined ? { day: target.day } : {}), pick })
+}
+
+/** The waiting pick if accept takes it – and it is gone then, so it is used once. */
+export function takePick(accept: (p: SearchPick) => boolean): SearchPick | null {
+  const p = useUi.getState().pick
+  if (!p || !accept(p)) return null
+  useUi.setState({ pick: null })
+  return p
+}
+
+/**
+ * The waiting pick the screen takes (`accept`), when what it points at is there (`found`). One that points at nothing – a record
+ * gone meanwhile – is dropped with `missing` said, never left waiting to fire after a later sync (T653).
+ */
+export function takeFoundPick(accept: (p: SearchPick) => boolean, found: (p: SearchPick) => boolean, missing: string): SearchPick | null {
+  const p = takePick(accept)
+  if (!p) return null
+  if (found(p)) return p
+  toast(missing)
+  return null
 }
 
 let nextToast = 1
