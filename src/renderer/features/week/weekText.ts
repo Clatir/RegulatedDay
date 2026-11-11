@@ -166,3 +166,6 @@ export function pastWarning(dates: readonly string[], today: string): string | n
   const verb = names.length > 1 ? 'minęły' : names[0]!.endsWith('a') ? 'minęła' : 'minął'
   return `${capital(list)} już ${verb}.`
 }
+
+/** The line after „Dodaj” pushed blocks apart in the days of a range (D400): „Przesunięto 5 bloków w 3 dniach”. */
+export const weekPushedText = (blocks: number, days: number): string => `Przesunięto ${countLabel(blocks, 'blok', 'bloki', 'bloków')} w ${countLabel(days, 'dniu', 'dniach', 'dniach')}`

@@ -1896,6 +1896,16 @@ describe('rozsuwanie w pasku (D367)', () => {
     expect(w.current().variants.marker).toBe(false)
   })
 
+  it('D400: przesunięcie z „Tygodnia” (bez linii) zapala znacznik wariantów dziś, ale nie dodaje linii „Cofnij” w pasku', async () => {
+    const { w, folder } = await make({ from: placeLogical(DAY, 9 * 60) })
+    await w.refresh()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, boundary: placeLogical(DAY, 12 * 60 + 15), auto: false, plan: ['a', 'b'] }])
+    const entry = await pushX(folder)
+    await w.pushed(DAY, 2, { entry, made: null }, false)
+    expect(w.current().variants.marker).toBe(true)
+    expect(w.current().lines.some((l) => l.id === 'moved:push')).toBe(false)
+  })
+
   it('linie dnia (pytania, ostrzeżenia) stoją przed liniami zmian z „Cofnij” – w pasku nigdy nie spychają ich do „⋯”', async () => {
     // A session of yours waiting for „Zacznij” since 09:00: the day's line „wait:…” with its dot.
     const file = join(dataDir, paths.day(DAY))
@@ -1916,7 +1926,11 @@ describe('rozsuwanie w pasku (D367)', () => {
     const logs: string[] = []
     const never = { pushed: (...a: unknown[]) => (calls.push(a), new Promise<void>(() => undefined)) }
     expect(planPushedIpc(never, () => undefined, DAY, 2, entry, null)).toBeUndefined()
-    expect(calls).toEqual([[DAY, 2, { entry, made: null }]])
+    expect(calls).toEqual([[DAY, 2, { entry, made: null }, true]])
+    // D400: a „Dodaj” of the week says it has no line of its own.
+    planPushedIpc(never, () => undefined, DAY, 2, entry, null, false)
+    expect(calls[1]).toEqual([DAY, 2, { entry, made: null }, false])
+    calls.pop()
     const failing = { pushed: () => Promise.reject(new Error('folder')) }
     planPushedIpc(failing, (_l, msg) => void logs.push(msg), DAY, 1, entry, null)
     await vi.waitFor(() => expect(logs).toEqual(['pasek nie przeliczył się po przesunięciu bloków']))

@@ -1,13 +1,16 @@
 /**
  * What „Tydzień” writes (D366, D371): the blocks added to the days of the week from the small window of a new block.
  */
-import type { EditEntry, EditOutcome } from '@shared/api'
+import type { EditEntry, EditOutcome, RawRecord } from '@shared/api'
 import { putBlock } from '@shared/data/dayEdits'
+import { deepEqual, sameContentAs, valueAt } from '@shared/data/merge'
 import { plDateWithWeekday } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
-import { trySaveWith } from '../../store/data'
+import { editOf, isSaved, trySaveWith, useData } from '../../store/data'
+import { countDay, dayUsable } from '../../store/day'
 import { toast } from '../../store/ui'
-import { dayFileEdit } from '../today/dayActions'
+import { dayFileEdit, withPushed, type PushedStart } from '../today/dayActions'
+import { addChange, pushedStarts } from '../today/dayPush'
 
 /** The toast for days whose files cannot be read now: named, with what was done about the rest. */
 export function unreadableText(dates: readonly string[]): string {
@@ -59,17 +62,59 @@ export function weekAdds(dates: readonly string[], sent: readonly string[], out:
   return { saved: dates.filter((d) => saved.has(d)), pending: dates.filter((d) => pending.has(d)), failed: dates.filter((d) => !saved.has(d) && !pending.has(d)), unknown }
 }
 
+/** What „Dodaj” did to one day of the range: the one edit of its file, the file it created, how many blocks it pushed apart. */
+export interface WeekPushedDay {
+  date: string
+  entry: EditEntry
+  /** The file the edit created (null: the file was there). */
+  made: RawRecord | null
+  moved: number
+}
+
+/** The days a „Dodaj” wrote (D400), for the one „Cofnij” of the line „Przesunięto N bloków w K dniach” – only when it pushed some. */
+export interface WeekPush {
+  days: WeekPushedDay[]
+}
+
+/** The outcome of `addWeekBlocks`: what became of each day, and the line to keep (null: nothing was pushed apart). */
+export interface WeekAdded extends WeekAdds {
+  push: WeekPush | null
+}
+
+/**
+ * The starts of the blocks a block put in `date` pushes apart (D367, as „Dodaj” in „Dziś” counts them): the day as the
+ * engine has it now, from its data. A day that cannot be counted now (its logs not read whole, the bridge fails) pushes
+ * nothing – the block is added as before the pushing, never refused (D72).
+ */
+async function pushedFor(date: string, block: PlanBlock): Promise<PushedStart[]> {
+  try {
+    const data = await window.rd.dayData(date)
+    if (!dayUsable(data)) return []
+    const { rd, templates, lectures, view } = useData.getState()
+    const model = countDay(date, data, { changes: rd.settings, templates, lectures }, Date.now(), rd.general.modules.energy, view?.calibration === true)
+    return pushedStarts(model.ctx.plan, addChange(model, block, true))
+  } catch {
+    return []
+  }
+}
+
 /**
  * Each block put into the plan of its day – the day's own file as it is when this turn comes (made when the day has none
  * yet, as „Dodaj” in „Dziś” does for another day), all the days in one go: one read of the files, one write, in the queue
  * of the window's edits. A day whose file cannot be read now, or whose file the edit cannot be made on, is not written over
  * (its edit would go on a file never seen) – the toast names it; the others are saved.
+ *
+ * D400: a day from `today` on pushes the flexible blocks after the new one apart (`pushApart`, as in „Dziś”; a day gone is
+ * history – only the block), each day in its own edit, all in the one write. What was written comes back as `push` (null:
+ * nothing pushed) for the line „Przesunięto N bloków w K dniach · Cofnij”; today's pushing is told to the bar for the marker
+ * of variants only (no line of its own – the one „Cofnij” is the window's).
  */
-export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block: PlanBlock }>): Promise<WeekAdds> {
+export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block: PlanBlock }>, today: string): Promise<WeekAdded> {
   const dates = entries.map((e) => e.date)
   const unreadable: string[] = []
   // The dates of the edits sent, in their order: what the main process answers goes by it.
   const sent: string[] = []
+  const written = new Map<string, WeekPushedDay>()
   let made = false
   const out = await trySaveWith(async () => {
     const files = await window.rd.dayFiles(dates)
@@ -80,10 +125,13 @@ export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block
         continue
       }
       try {
-        const edit = dayFileEdit(e.date, files[e.date] ?? null, (raw) => putBlock(raw, e.block))
+        const starts = e.date >= today ? await pushedFor(e.date, e.block) : []
+        let after: RawRecord | null = null
+        const edit = dayFileEdit(e.date, files[e.date] ?? null, (raw) => (after = withPushed(raw, e.date, (r) => putBlock(r, e.block), starts)))
         if (edit) {
           edits.push(edit)
           sent.push(e.date)
+          written.set(e.date, { date: e.date, entry: edit, made: edit.create ? after : null, moved: starts.length })
         }
       } catch {
         // A file the edit cannot be made on (a broken one): this day is left as an unreadable one, the others go on.
@@ -96,5 +144,62 @@ export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block
   if (unreadable.length) toast(unreadableText(unreadable), 'error', 6000)
   const r = weekAdds(dates, sent, out, made)
   if (r.unknown) toast(unknownText(r.pending), 'error', 8000)
-  return r
+  const days = r.saved.flatMap((d) => written.get(d) ?? [])
+  const mine = days.find((d) => d.date === today && d.moved > 0)
+  if (!days.some((d) => d.moved > 0)) return { ...r, push: null }
+  if (mine) {
+    try {
+      await window.rd.planPushed(mine.date, mine.moved, mine.entry, mine.made, false)
+    } catch {
+      // The plan is saved; only the bar's marker is missing (the main process is closing).
+    }
+  }
+  return { ...r, push: { days } }
+}
+
+/** The blocks a „Dodaj” pushed apart and the days it pushed them in (the line's text). */
+export const weekPushCounts = (p: WeekPush): { blocks: number; days: number } => ({ blocks: p.days.reduce((n, d) => n + d.moved, 0), days: p.days.filter((d) => d.moved > 0).length })
+
+/**
+ * Whether a day still stands as „Dodaj” left it (`now`: its file as it is; null – none): a file it created – with the same
+ * content; else every field the edit set holds the value it set. A later change (here or on another computer) ends it.
+ */
+export function weekPushStands(d: WeekPushedDay, now: RawRecord | null): boolean {
+  if (!now) return false
+  if (d.entry.create) return sameContentAs(now, d.made)
+  return d.entry.edits.every((e) => deepEqual(valueAt(now, e.path), e.value))
+}
+
+/** The edit that takes a day's „Dodaj” back (a new field or block – removed, a file it created – taken off). */
+function weekUndoEdit(d: WeekPushedDay, now: RawRecord): EditEntry | null {
+  if (d.entry.create) return editOf(d.entry.rel, now, null)
+  return { rel: d.entry.rel, edits: d.entry.edits.map((x) => ({ path: x.path, base: x.value, value: x.base })) }
+}
+
+/**
+ * „Cofnij” of the line (D400): in one write, each day that still stands as „Dodaj” left it goes back to how it was (the
+ * block put in is taken off, the pushed ones return); a day changed since stays as it is – the toast says so, as the bar's
+ * „Cofnij” of a push does. `undone` / `kept` – the days by their dates.
+ */
+export async function undoWeekPush(push: WeekPush): Promise<{ undone: string[]; kept: string[] }> {
+  const undone: string[] = []
+  const kept: string[] = []
+  const out = await trySaveWith(async () => {
+    undone.length = 0
+    kept.length = 0
+    const files = await window.rd.dayFiles(push.days.map((d) => d.date))
+    const back: EditEntry[] = []
+    for (const d of push.days) {
+      // A day whose file cannot be read now is not touched (unknown is never „as it was left”).
+      const now = d.date in files ? (files[d.date] ?? null) : null
+      const edit = now && weekPushStands(d, now) ? weekUndoEdit(d, now) : null
+      if (edit) {
+        back.push(edit)
+        undone.push(d.date)
+      } else kept.push(d.date)
+    }
+    return back
+  })
+  if (kept.length) toast('Część planu zmieniła się od przesunięcia – zostaje tak, jak jest teraz.', 'info', 6000)
+  return { undone: isSaved(out) ? [...undone] : [], kept }
 }

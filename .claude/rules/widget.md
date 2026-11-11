@@ -74,7 +74,7 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   (`linesLast`: także po cichych liniach komputerów i twardym końcu), nowsza pierwsza; `barLines` pokazuje najwyżej jedną, druga w „⋯” (z działającym „Cofnij”).
   Rozsuwanie (D367): okno zapisuje
   partię samo, potem IPC `planPushed` (`planPushedIpc`: `pushedIn` sprawdza plik tego dnia, bez usunięcia; odpowiedź nie czeka na
-  przeliczenie paska) → `WidgetEngine.pushed` – linia `moved:push` „Przesunięto N bloków · Cofnij” obok `moved:variant` (`moved`:
+  przeliczenie paska; piąty argument `line` = false – „Dodaj” z „Tygodnia”, D400 – daje sam wyzwalacz `push:<ms>`, bez linii `moved:push`) → `WidgetEngine.pushed` – linia `moved:push` „Przesunięto N bloków · Cofnij” obok `moved:variant` (`moved`:
   mapa wariant / rozsuwanie, każda ze swoim `undoMoved`/`inverseEdit` i `UNDO_LINE_MS` z `shared/widget.ts`, nowsza pierwsza;
   kolejne rozsuwanie zastępuje tylko poprzednie) i
   wyzwalacz `push:<ms>` znacznika (`pushes`, tylko dzień paska, cały dzień – jak wyzwalacze z logu; tylko ten komputer).

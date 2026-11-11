@@ -610,3 +610,60 @@ test('oś dnia (D366): przeciągnięcie po pustym miejscu ustawia start i długo
     await app.close()
   }
 })
+
+test('Tydzień (D400): „Dodaj” na zajęte miejsce w trzech przyszłych dniach przesuwa kolejny blok w każdym, jedna linia „Przesunięto N bloków w 3 dniach · Cofnij” cofa wszystkie', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-push-'))
+  seed(dataDir)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      // The days of the next week (none gone, none today: the same at every hour of the day).
+      const { tue, wed, thu } = await nextWeek(page)
+      const days = [tue, wed, thu]
+      const h = await freeHour(page, days, 120)
+      const small = page.getByTestId('week-new')
+      const line = page.getByTestId('week-pushed')
+      // A block of an hour in the second hour of the free place, in each of the days: free place, nothing is pushed, no line.
+      await dragDays(page, tue, thu, h + 60, 60)
+      await page.mouse.up()
+      await expect(small).toBeVisible()
+      await page.getByTestId('week-new-add').click()
+      await expect(small).toBeHidden()
+      for (const d of days) await expect.poll(() => planOf(dataDir, d).map((b) => [b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([[h + 60, 60]])
+      await expect(line).toHaveCount(0)
+      const first = Object.fromEntries(days.map((d) => [d, planOf(dataDir, d)]))
+      const pIds = Object.fromEntries(days.map((d) => [d, first[d]![0]!.id]))
+
+      // Another one over the first half of it (90 min from the line of the hour): the first block goes on, in each day.
+      await dragDays(page, tue, thu, h, 90)
+      await page.mouse.up()
+      await expect(small).toBeVisible()
+      await expect(page.getByTestId('week-new-duration')).toHaveValue('1 h 30 min')
+      await page.getByTestId('week-new-add').click()
+      await expect(small).toBeHidden()
+      for (const d of days) {
+        await expect.poll(() => planOf(dataDir, d).find((b) => b.id === pIds[d])?.startMin, { timeout: 15_000 }).toBeGreaterThanOrEqual(h + 90)
+        const added = planOf(dataDir, d).filter((b) => !first[d]!.some((f) => f.id === b.id) && b.startMin === h)
+        expect(added.map((b) => b.durationMin)).toEqual([90])
+      }
+      // One line for all three days (more blocks may follow where a template's flexible block stood after them).
+      await expect(line).toBeVisible()
+      await expect(line).toContainText(/Przesunięto \d+ \S+ w 3 dniach/)
+      await shot(page, 'j3b-01-week-push')
+
+      // „Cofnij”: all three days are as they were – the new block gone, the first one back at its place.
+      await page.getByTestId('week-pushed-undo').click()
+      await expect(line).toHaveCount(0)
+      for (const d of days) {
+        await expect
+          .poll(() => planOf(dataDir, d).map((b) => [b.id, b.startMin, b.durationMin]).sort(), { timeout: 15_000 })
+          .toEqual(first[d]!.map((b) => [b.id, b.startMin, b.durationMin]).sort())
+      }
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
