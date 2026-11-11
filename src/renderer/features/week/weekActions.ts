@@ -3,12 +3,13 @@
  */
 import type { EditEntry, EditOutcome, RawRecord } from '@shared/api'
 import { putBlock } from '@shared/data/dayEdits'
-import { deepEqual, sameContentAs, valueAt } from '@shared/data/merge'
+import { editStands, inverseEdit } from '@shared/data/merge'
 import { plDateWithWeekday } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
-import { editOf, isSaved, trySaveWith, useData } from '../../store/data'
+import { isSaved, trySaveWith, useData } from '../../store/data'
 import { countDay, dayUsable } from '../../store/day'
 import { toast } from '../../store/ui'
+import { dropWeekPushDays, useWeekPush } from '../../store/weekPush'
 import { dayFileEdit, withPushed, type PushedStart } from '../today/dayActions'
 import { addChange, pushedStarts } from '../today/dayPush'
 
@@ -83,15 +84,17 @@ export interface WeekAdded extends WeekAdds {
 
 /**
  * The starts of the blocks a block put in `date` pushes apart (D367, as „Dodaj” in „Dziś” counts them): the day as the
- * engine has it now, from its data. A day that cannot be counted now (its logs not read whole, the bridge fails) pushes
- * nothing – the block is added as before the pushing, never refused (D72).
+ * engine has it now – its logs from `dayData`, its plan from `base`, the very file the edit is made on (two reads of one day
+ * may differ; the counted starts always belong to the file they are written over). The energy is not counted (`pushApart`
+ * does not use it). A day that cannot be counted now (its logs not read whole, the bridge fails) pushes nothing – the block is
+ * added as before the pushing, never refused (D72).
  */
-async function pushedFor(date: string, block: PlanBlock): Promise<PushedStart[]> {
+async function pushedFor(date: string, base: RawRecord | null, block: PlanBlock): Promise<PushedStart[]> {
   try {
     const data = await window.rd.dayData(date)
     if (!dayUsable(data)) return []
-    const { rd, templates, lectures, view } = useData.getState()
-    const model = countDay(date, data, { changes: rd.settings, templates, lectures }, Date.now(), rd.general.modules.energy, view?.calibration === true)
+    const { rd, templates, lectures } = useData.getState()
+    const model = countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures }, Date.now(), false)
     return pushedStarts(model.ctx.plan, addChange(model, block, true))
   } catch {
     return []
@@ -118,14 +121,17 @@ export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block
   let made = false
   const out = await trySaveWith(async () => {
     const files = await window.rd.dayFiles(dates)
+    // The days to come counted at once (their reads go side by side – this turn holds the window's other edits back). Without
+    // a known today nothing is told gone or to come: the blocks are added alone.
+    const counted = await Promise.all(entries.map((e) => (today && e.date >= today && e.date in files ? pushedFor(e.date, files[e.date] ?? null, e.block) : [])))
     const edits: EditEntry[] = []
-    for (const e of entries) {
+    for (const [i, e] of entries.entries()) {
       if (!(e.date in files)) {
         unreadable.push(e.date)
         continue
       }
       try {
-        const starts = e.date >= today ? await pushedFor(e.date, e.block) : []
+        const starts = counted[i]!
         let after: RawRecord | null = null
         const edit = dayFileEdit(e.date, files[e.date] ?? null, (raw) => (after = withPushed(raw, e.date, (r) => putBlock(r, e.block), starts)))
         if (edit) {
@@ -160,46 +166,64 @@ export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block
 /** The blocks a „Dodaj” pushed apart and the days it pushed them in (the line's text). */
 export const weekPushCounts = (p: WeekPush): { blocks: number; days: number } => ({ blocks: p.days.reduce((n, d) => n + d.moved, 0), days: p.days.filter((d) => d.moved > 0).length })
 
-/**
- * Whether a day still stands as „Dodaj” left it (`now`: its file as it is; null – none): a file it created – with the same
- * content; else every field the edit set holds the value it set. A later change (here or on another computer) ends it.
- */
-export function weekPushStands(d: WeekPushedDay, now: RawRecord | null): boolean {
-  if (!now) return false
-  if (d.entry.create) return sameContentAs(now, d.made)
-  return d.entry.edits.every((e) => deepEqual(valueAt(now, e.path), e.value))
+/** Whether a day still stands as „Dodaj” left it (`now`: its file as it is; null – none): `editStands`. */
+export const weekPushStands = (d: WeekPushedDay, now: RawRecord | null): boolean => editStands(d.entry, now, d.made)
+
+/** The toast for days whose files cannot be read now when „Cofnij” asks: nothing was done there, they stay to take back. */
+export function undoUnreadableText(dates: readonly string[]): string {
+  return `Nie cofnięto zmian w ${dates.length === 1 ? 'dniu' : 'dniach'}: ${dates.map(plDateWithWeekday).join(', ')} – ${dates.length === 1 ? 'plik tego dnia jest' : 'ich pliki są'} teraz nieczytelne. Spróbuj za chwilę.`
 }
 
-/** The edit that takes a day's „Dodaj” back (a new field or block – removed, a file it created – taken off). */
-function weekUndoEdit(d: WeekPushedDay, now: RawRecord): EditEntry | null {
-  if (d.entry.create) return editOf(d.entry.rel, now, null)
-  return { rel: d.entry.rel, edits: d.entry.edits.map((x) => ({ path: x.path, base: x.value, value: x.base })) }
+/** What „Cofnij” did: `saved` – the write went through (nothing is claimed when it did not); the days by their dates. */
+export interface WeekUndone {
+  saved: boolean
+  /** Taken back. */
+  undone: string[]
+  /** Changed since „Dodaj” – left as they are. */
+  changed: string[]
+  /** Their files cannot be read now – left, to take back later. */
+  unreadable: string[]
 }
 
 /**
  * „Cofnij” of the line (D400): in one write, each day that still stands as „Dodaj” left it goes back to how it was (the
- * block put in is taken off, the pushed ones return); a day changed since stays as it is – the toast says so, as the bar's
- * „Cofnij” of a push does. `undone` / `kept` – the days by their dates.
+ * block put in is taken off, the pushed ones return – `inverseEdit`); a day changed since stays as it is, a day whose file
+ * cannot be read now is not touched – each says so in its toast, only when the write went through (else the write's own
+ * toast is all there is).
  */
-export async function undoWeekPush(push: WeekPush): Promise<{ undone: string[]; kept: string[] }> {
-  const undone: string[] = []
-  const kept: string[] = []
+export async function undoWeekPush(push: WeekPush): Promise<WeekUndone> {
+  const r: WeekUndone = { saved: false, undone: [], changed: [], unreadable: [] }
   const out = await trySaveWith(async () => {
-    undone.length = 0
-    kept.length = 0
     const files = await window.rd.dayFiles(push.days.map((d) => d.date))
     const back: EditEntry[] = []
     for (const d of push.days) {
-      // A day whose file cannot be read now is not touched (unknown is never „as it was left”).
-      const now = d.date in files ? (files[d.date] ?? null) : null
-      const edit = now && weekPushStands(d, now) ? weekUndoEdit(d, now) : null
+      if (!(d.date in files)) {
+        r.unreadable.push(d.date)
+        continue
+      }
+      const now = files[d.date] ?? null
+      const edit = editStands(d.entry, now, d.made) ? inverseEdit(d.entry, now, d.made) : null
       if (edit) {
         back.push(edit)
-        undone.push(d.date)
-      } else kept.push(d.date)
+        r.undone.push(d.date)
+      } else r.changed.push(d.date)
     }
     return back
   })
-  if (kept.length) toast('Część planu zmieniła się od przesunięcia – zostaje tak, jak jest teraz.', 'info', 6000)
-  return { undone: isSaved(out) ? [...undone] : [], kept }
+  r.saved = isSaved(out)
+  if (!r.saved) return { ...r, undone: [] }
+  if (r.changed.length) toast('Część planu zmieniła się od przesunięcia – zostaje tak, jak jest teraz.', 'info', 6000)
+  if (r.unreadable.length) toast(undoUnreadableText(r.unreadable), 'error', 6000)
+  return r
+}
+
+/**
+ * „Cofnij” of the line kept in the window: the line goes when the days are taken back (or nothing stands as „Dodaj” left it);
+ * when the write did not go through, or a file could not be read, it stays – for another try.
+ */
+export async function undoWeekLine(): Promise<void> {
+  const line = useWeekPush.getState().line
+  if (!line) return
+  const r = await undoWeekPush(line.push)
+  if (r.saved) dropWeekPushDays(line.seq, [...r.undone, ...r.changed])
 }

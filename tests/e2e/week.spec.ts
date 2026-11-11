@@ -652,6 +652,11 @@ test('Tydzień (D400): „Dodaj” na zajęte miejsce w trzech przyszłych dniac
       await expect(line).toBeVisible()
       await expect(line).toContainText(/Przesunięto \d+ \S+ w 3 dniach/)
       await shot(page, 'j3b-01-week-push')
+      // The line is the window's, not the page's: it is there again after another page (D400, 15 min from the save).
+      await page.getByTestId('nav-stats').click()
+      await expect(page.getByTestId('week')).toHaveCount(0)
+      await page.getByTestId('nav-week').click()
+      await expect(line).toBeVisible()
 
       // „Cofnij”: all three days are as they were – the new block gone, the first one back at its place.
       await page.getByTestId('week-pushed-undo').click()

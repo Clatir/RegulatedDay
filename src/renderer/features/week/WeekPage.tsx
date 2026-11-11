@@ -10,7 +10,6 @@ import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { logicalClock } from '@shared/format'
 import { settingsOn, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
-import { UNDO_LINE_MS } from '@shared/widget'
 import { weekStart } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { cx } from '../../components/ui'
@@ -19,13 +18,14 @@ import { useData } from '../../store/data'
 import { useDayFiles } from '../../store/day'
 import { useWeekView } from '../../store/horizon'
 import { useMachine } from '../../store/machine'
+import { clearWeekPush, useWeekPush, weekPushLeft } from '../../store/weekPush'
 import { openDay, setBlockDraft } from '../../store/ui'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockColor, blockName, type Names } from '../plan/blockView'
 import { DEFAULT_NEW_BLOCK_MIN, snapMinute, type GridRange } from '../plan/gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { GoalsPanel } from './GoalsPanel'
-import { undoWeekPush, weekPushCounts, weekPushStands, type WeekPush } from './weekActions'
+import { undoWeekLine, weekPushCounts, weekPushStands } from './weekActions'
 import { NewBlockPopover } from './NewBlockPopover'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, goalsMonthOfWeek, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, weekPushedText, weekTitle, type Tone } from './weekText'
@@ -38,8 +38,6 @@ export function WeekPage() {
   const [week, setWeek] = useState(() => weekStart(today))
   const { view, failed } = useWeekView(week)
   const thisWeek = weekStart(today)
-  // D400: the blocks the last „Dodaj” pushed apart – one line with one „Cofnij” for all the days it wrote (it does not go with the week).
-  const [pushed, setPushed] = useState<{ seq: number; push: WeekPush } | null>(null)
   return (
     <div className="flex flex-col gap-3 p-4" data-testid="week">
       <div className="flex items-center gap-2">
@@ -56,11 +54,11 @@ export function WeekPage() {
           Ten tydzień
         </button>
       </div>
-      {pushed && <WeekPushLine key={pushed.seq} push={pushed.push} onGone={() => setPushed((p) => (p === pushed ? null : p))} />}
+      <WeekPushLine />
       <GoalsPanel month={goalsMonthOfWeek(week, today)} />
       {view ? (
         // Keyed by the week: another week is another grid – a window of a new block or a drag never goes with it (D371).
-        <WeekGrid key={view.days[0]?.date} days={view.days} from={view.from} to={view.to} onPushed={(push) => setPushed((p) => ({ seq: (p?.seq ?? 0) + 1, push }))} />
+        <WeekGrid key={view.days[0]?.date} days={view.days} from={view.from} to={view.to} />
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="week-loading">
           {failed ? 'Nie da się teraz policzyć tego tygodnia.' : 'Liczę tydzień…'}
@@ -72,35 +70,31 @@ export function WeekPage() {
 }
 
 /**
- * „Przesunięto N bloków w K dniach · Cofnij” (D400): shown for `UNDO_LINE_MS` while a day of the batch still stands as it left it
- * (a later change of every one of them ends it); „Cofnij” takes back those that do, in one write.
+ * „Przesunięto N bloków w K dniach · Cofnij” (D400): the window's line (`store/weekPush`) – it outlives the page and stands to the
+ * end of `UNDO_LINE_MS` from the save – while a day of the batch still stands as it left it (a later change of every one of
+ * them ends it); „Cofnij” takes back those that do, in one write (`undoWeekLine`: the line stays when that fails).
  */
-function WeekPushLine({ push, onGone }: { push: WeekPush; onGone: () => void }) {
-  const files = useDayFiles(push.days.map((d) => d.date))
+function WeekPushLine() {
+  const line = useWeekPush((s) => s.line)
+  const dates = useMemo(() => line?.push.days.map((d) => d.date) ?? [], [line])
+  const files = useDayFiles(dates)
   const [busy, run] = useBusy()
+  const which = line?.seq
+  const until = line?.until
   useEffect(() => {
-    const t = setTimeout(onGone, UNDO_LINE_MS)
+    if (which == null) return
+    const t = setTimeout(() => clearWeekPush(which), Math.max(0, weekPushLeft(useWeekPush.getState().line)))
     return () => clearTimeout(t)
-  }, [])
+  }, [which, until])
+  if (!line || weekPushLeft(line) <= 0) return null
   // Not read yet: shown (the save has just been made); a day whose file cannot be read now does not stand.
-  const standing = files == null || push.days.some((d) => d.date in files && weekPushStands(d, files[d.date] ?? null))
+  const standing = files == null || line.push.days.some((d) => d.date in files && weekPushStands(d, files[d.date] ?? null))
   if (!standing) return null
-  const { blocks, days } = weekPushCounts(push)
+  const { blocks, days } = weekPushCounts(line.push)
   return (
     <div className="flex items-center gap-2 self-start rounded border border-line bg-raised px-3 py-1.5 text-[12.5px]" role="status" data-testid="week-pushed">
       <span>{weekPushedText(blocks, days)}</span>
-      <button
-        type="button"
-        className="btn"
-        disabled={busy}
-        onClick={() =>
-          void run(async () => {
-            await undoWeekPush(push)
-            onGone()
-          })
-        }
-        data-testid="week-pushed-undo"
-      >
+      <button type="button" className="btn" disabled={busy} onClick={() => void run(undoWeekLine)} data-testid="week-pushed-undo">
         Cofnij
       </button>
     </div>
@@ -126,7 +120,7 @@ interface Held {
   range: GridRange
 }
 
-function WeekGrid({ days, from, to, onPushed }: { days: HorizonDay[]; from: number; to: number; onPushed: (push: WeekPush) => void }) {
+function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: number }) {
   const { rd, routines, requests } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -218,7 +212,6 @@ function WeekGrid({ days, from, to, onPushed }: { days: HorizonDay[]; from: numb
             place={pick.place}
             onClose={() => setPick(null)}
             onDates={(dates) => setPick((p) => p && { ...p, dates })}
-            onPushed={onPushed}
             onMore={(block) => {
               // The full editing of the day, the block not saved yet: the draft of „Dziś” (A6-17) – its „Dodaj” saves it.
               setBlockDraft(pick.dates[0]!, block)

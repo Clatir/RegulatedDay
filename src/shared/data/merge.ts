@@ -236,3 +236,23 @@ export function recordEdit(rel: string, before: Record<string, unknown> | null, 
   const edits = diffRecords(before, after).map((c) => ({ path: c.path, base: c.before, value: c.after }))
   return edits.length ? { rel, edits } : null
 }
+
+/**
+ * The edit that takes an edit of the window or the bar back (T502, D400): each field to its value before, with its value
+ * after as the base – a field changed since is a question, not overwritten; a file the edit created goes only while it is as
+ * it made it (`made`; null – not taken). `now` – the file as it is.
+ */
+export function inverseEdit(e: EditEntry, now: Record<string, unknown> | null, made: Record<string, unknown> | null): EditEntry | null {
+  if (e.create) return now && sameContentAs(now, made) ? { rel: e.rel, remove: true, edits: [], base: made } : null
+  return { rel: e.rel, edits: e.edits.map((x) => ({ path: x.path, base: x.value, value: x.base })) }
+}
+
+/**
+ * Whether the file `now` still stands as the edit `e` left it: a file it created – with the same content as `made`; else
+ * every field it set holds the value it set. A later change of any of them (here or on another computer) ends it.
+ */
+export function editStands(e: EditEntry, now: Record<string, unknown> | null, made: Record<string, unknown> | null): boolean {
+  if (!now) return false
+  if (e.create) return sameContentAs(now, made)
+  return e.edits.every((x) => deepEqual(valueAt(now, x.path), x.value))
+}

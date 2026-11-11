@@ -4,6 +4,7 @@
  * (D72: a goal is no grade and blocks nothing).
  */
 import type { GoalsProgress } from '@shared/engine/goals'
+import { pushedText } from '@shared/engine/pushApart'
 import type { HorizonBlockState, HorizonDay } from '@shared/engine/week'
 import { countLabel, durationLabel, formatNumber, ofLabel, WEEKDAY_NAMES } from '@shared/format'
 import type { GoalArea } from '@shared/model/goals'
@@ -168,4 +169,4 @@ export function pastWarning(dates: readonly string[], today: string): string | n
 }
 
 /** The line after „Dodaj” pushed blocks apart in the days of a range (D400): „Przesunięto 5 bloków w 3 dniach”. */
-export const weekPushedText = (blocks: number, days: number): string => `Przesunięto ${countLabel(blocks, 'blok', 'bloki', 'bloków')} w ${countLabel(days, 'dniu', 'dniach', 'dniach')}`
+export const weekPushedText = (blocks: number, days: number): string => `${pushedText(blocks)} w ${countLabel(days, 'dniu', 'dniach', 'dniach')}`

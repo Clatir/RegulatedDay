@@ -12,7 +12,7 @@ import { blockName, nameById } from '@shared/blockName'
 import { namingOf } from '@shared/engine/context'
 import { costText } from '@shared/costText'
 import { dayRaw, putBlock } from '@shared/data/dayEdits'
-import { recordEdit, sameContentAs } from '@shared/data/merge'
+import { inverseEdit, recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { engineView, POOL_TEXT, RESERVE_REGEN_MIN, warnDeadlines } from '@shared/engineView'
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
@@ -129,15 +129,6 @@ export function stepDelay(deadlines: readonly number[], viewAt: number, now = vi
 
 /** „Zapisano: … · Cofnij” of a routine saved from the bar stays this long. */
 const ROUTINE_UNDO_MS = 60_000
-
-/**
- * The edit that takes a variant's own edit back (T502): each field to its value before, with its value after as the base
- * – a field changed since is a question, not overwritten; a file the variant created goes only while it is as it made it.
- */
-function inverseEdit(e: EditEntry, now: RawRecord | null, made: RawRecord | null): EditEntry | null {
-  if (e.create) return now && sameContentAs(now, made) ? { rel: e.rel, remove: true, edits: [], base: made } : null
-  return { rel: e.rel, edits: e.edits.map((x) => ({ path: x.path, base: x.value, value: x.base })) }
-}
 
 /**
  * What the window says it pushed apart (D367, IPC `planPushed`): a day, how many blocks, the one edit of that day's file it

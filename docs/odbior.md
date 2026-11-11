@@ -1581,15 +1581,18 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   zmianie), `tests/e2e/week.spec.ts` („D400”). Ty: rzut oka.
 - **Jak sprawdzić:** przeciągnij po pustym miejscu przez trzy dni następnego tygodnia (np. wtorek–czwartek) tak, żeby
   w każdym nowy blok nachodził na blok elastyczny; „Dodaj”. Kliknij „Cofnij” w linii. Powtórz i przed „Cofnij” zmień ręcznie
-  godzinę przesuniętego bloku w jednym z dni, potem „Cofnij”.
+  godzinę przesuniętego bloku w jednym z dni, potem „Cofnij”. Po „Dodaj” przejdź na „Dziś” i wróć na „Tydzień”.
 - **Oczekiwany efekt:** w każdym dniu zakresu bloki elastyczne za nowym przesuwają się; jedna linia „Przesunięto N
   bloków w 3 dniach · Cofnij” (N to wszystkie przesunięte razem; „w 3 dniach” – dni, w których coś przesunięto). „Cofnij”
   przywraca wszystkie trzy dni jednym ruchem (nowe bloki znikają, stare godziny wracają). Dzień zmieniony po „Dodaj”
   zostaje, jaki jest, a reszta wraca; dymek „Część planu zmieniła się od przesunięcia – zostaje tak, jak jest teraz.”
-  Linia znika sama po 15 min albo gdy żaden z dni nie stoi już tak jak po „Dodaj”. Kolejne „Dodaj” z przesunięciem
-  zastępuje linię.
+  Linia znika sama po 15 min od zapisu albo gdy żaden z dni nie stoi już tak jak po „Dodaj”; po przejściu na inną stronę
+  (np. „Dziś”) i powrocie na „Tydzień” jest dalej (do końca 15 min). Kolejne „Dodaj” z przesunięciem zastępuje linię.
+  Gdy zapis „Cofnij” się nie uda (pytanie o konflikt, plik dnia chwilowo nieczytelny), linia zostaje do ponowienia, a dymek
+  mówi tylko o tym, co się stało.
 - **Nie przechodzi, gdy:** „Cofnij” przywraca tylko jeden dzień, nadpisuje dzień zmieniony później, zostawia któryś nowy
-  blok, albo „Dodaj” dla kilku dni robi kilka osobnych zapisów (pytania o konflikt się mnożą).
+  blok, linia znika po zmianie strony przed upływem 15 min, nieudane „Cofnij” zdejmuje linię, albo „Dodaj” dla kilku dni
+  robi kilka osobnych zapisów (pytania o konflikt się mnożą).
 
 #### J3b.3 Dzisiaj w zakresie, wymiana i dni minione (J3b)
 - [ ] Odebrane

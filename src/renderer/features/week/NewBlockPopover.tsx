@@ -17,7 +17,8 @@ import { useDay, type DayModel } from '../../store/day'
 import { categoryOptions, type Names } from '../plan/blockView'
 import { lastNewBlockCategory, rememberNewBlockCategory, startCategory } from '../plan/lastCategory'
 import { ExchangeDialog } from '../today/ExchangeDialog'
-import { addWeekBlocks, type WeekPush } from './weekActions'
+import { showWeekPush } from '../../store/weekPush'
+import { addWeekBlocks } from './weekActions'
 import { NEW_BLOCK_WIDTH } from './weekLayout'
 import { daysLabel, pastWarning } from './weekText'
 
@@ -46,7 +47,6 @@ export function NewBlockPopover({
   place,
   onClose,
   onDates,
-  onPushed,
   onMore
 }: {
   /** The days in a row (one, or those a drag crossed – D371). */
@@ -59,8 +59,6 @@ export function NewBlockPopover({
   onClose: () => void
   /** Some days were not written: only they are left to add (the rest are in the plan, or wait for an answer to a question). */
   onDates: (dates: string[]) => void
-  /** Blocks were pushed apart in the days written (D400): the one line with its „Cofnij” for them all. */
-  onPushed: (push: WeekPush) => void
   /** „Więcej” (one day): the block as it stands now, to be edited in the day (nothing saved). */
   onMore: (block: PlanBlock) => void
 }) {
@@ -100,7 +98,8 @@ export function NewBlockPopover({
   const save = async (entries: readonly Entry[]) => {
     const { saved, failed, push } = await addWeekBlocks(entries, today)
     if (saved.length) rememberNewBlockCategory(categoryId)
-    if (push) onPushed(push)
+    // Blocks pushed apart in the days written (D400): the window's one line with its „Cofnij” for them all.
+    if (push) showWeekPush(push)
     if (failed.length) onDates(failed)
     else onClose()
   }
