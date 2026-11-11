@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.0
+- Domykanie luk: gdy blok skończysz wcześniej, zaparkujesz zaczęty, usuniesz albo skrócisz w „Dziś” i przed kolejnym blokiem elastycznym zostaje co najmniej 10 min wolnego, pasek cicho pyta „Luka N min · Przesuń resztę wcześniej · Zostaw”. Tylko dla dnia bieżącego, nigdy przed bieżącą chwilą; w trybie sesji i zajęć – dopiero po ich końcu.
+- „Przesuń resztę wcześniej” przesuwa tylko bloki elastyczne od luki do najbliższego bloku stałego (chronione i zaczęte zostają), z „Przesunięto N bloków · Cofnij” w pasku. Liczba w pytaniu to tyle, ile przesunięcie naprawdę zamknie – czas, który minął w sesji, zajęciach albo na czekaniu przy zaplanowanej przerwie, się nie liczy.
+- Bez odpowiedzi pytanie znika samo, gdy zacznie się kolejny blok po luce albo ją zapełnisz – nic się wtedy nie zmienia. Ręczny „Start” następnego bloku działa jak „Dalej”: pytanie przechodzi na lukę za nim. Kilka luk naraz – jedno pytanie o najbliższą.
+- Pytanie zadaje się raz na lukę, także przy dwóch komputerach, i wraca po ponownym uruchomieniu aplikacji. Komputer ze starszą wersją nie pyta o luki po usunięciu i skróceniu w oknie, dopóki się nie zaktualizuje.
+
 ## 1.6.0
 - Rozsuwanie: gdy przeciągniesz blok, wydłużysz go krawędzią albo dodasz nowy blok z siatki na zajęte miejsce w „Dziś”, kolejne bloki elastyczne dostają w planie nowe godziny – bez nakładania, w trakcie przeciągania widać ich nowe miejsca (przerywana obwódka). Bloki stałe, chronione i zaczęte zostają, elastyczny przeskakuje stały jak w prognozie.
 - Po rozsunięciu w pasku „Przesunięto N bloków · Cofnij” przez 15 min – „Cofnij” przywraca plan dnia sprzed zmiany. Gdy czeka też „Przestawiono … · Cofnij” wariantu, oba działają; pytania dnia zostają widoczne, druga linia z „Cofnij” czeka w „⋯”.

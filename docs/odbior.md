@@ -1552,9 +1552,9 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
 - **Nie przechodzi, gdy:** blok po upuszczeniu skacze o godzinę, „Cofnij” zostawia nową wersję szablonu, albo bloki
   stałe szablonu się przesuwają.
 
-### J4 – domykanie luk (1.7.0)
+### J4 – domykanie luk (1.8.0)
 
-#### J4.1 Luka po wcześniejszym końcu – „Przesuń resztę wcześniej” i „Cofnij” (1.7.0)
+#### J4.1 Luka po wcześniejszym końcu – „Przesuń resztę wcześniej” i „Cofnij” (1.8.0)
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/gaps.test.ts`, `tests/fs/widget.test.ts` („domykanie luk w pasku”),
   `tests/e2e/bar-windows.spec.ts` („luka na pasku pulpitu”, CI na Windows). Ty: rzut oka przy zwykłej pracy.
@@ -1579,7 +1579,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   „Przesuń” rusza blok stały, chroniony, zaczęty albo blok za stałym, któryś blok staje przed teraz, „Cofnij” nie
   przywraca wszystkich godzin, albo pasek pulpitu po kliknięciu wychodzi nad okna innych programów.
 
-#### J4.2 Luka po usunięciu albo skróceniu bloku w „Dziś” (1.7.0)
+#### J4.2 Luka po usunięciu albo skróceniu bloku w „Dziś” (1.8.0)
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/gaps.test.ts` („usunięcie i skrócenie w oknie”), `tests/fs/widget.test.ts`,
   `tests/e2e/screens.spec.ts` („domykanie luk (D368)”). Ty: rzut oka.
@@ -1596,7 +1596,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   zmianie na jutrze, po przeniesieniu bloku albo po „Cofnij”, albo „Przesuń” przesuwa bloki o więcej, niż zwolniło
   usunięcie.
 
-#### J4.3 Kiedy pasek o lukę nie pyta – sesja, mała luka, blok stały, drugi komputer (1.7.0)
+#### J4.3 Kiedy pasek o lukę nie pyta – sesja, mała luka, blok stały, drugi komputer (1.8.0)
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/gaps.test.ts`, `tests/fs/widget.test.ts` (sesja, zajęcia, „Odcinam się”, noc,
   odpowiedź z drugiego komputera). Ty: rzut oka, gdy się zdarzy.

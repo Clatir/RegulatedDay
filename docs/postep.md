@@ -42,7 +42,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    `docs/vm/raport.md` (T529; przebieg z 3.11 – `docs/archiwum/vm/`); powtórka punktów NIEZGODNE i NIE DO SPRAWDZENIA
    na 1.0.8 („Gotowe, gdy” F–H w `docs/plan.md`, punkty i ich zadania – `docs/archiwum/vm/przyczyny.md`); poprawki z odbioru – wersje 1.0.x (D324).
 2. Ty: odbiór ciągu I – E8n, E10, E11 (E11.1 przed zjazdem 21.11), E12 w `docs/odbior.md`.
-3. Ciąg J (D363) – w toku od 10.11 (bez pauz, D363): J1 SNT7 (1.4.0) i J2 SNT8 (1.5.0) scalone → J3 FBL2a (1.6.0, PR #65) → J4, J5 (`docs/plan.md`, „Blok 1 = ciąg J”).
+3. Ciąg J (D363) – w toku od 10.11 (bez pauz, D363): J1 SNT7 (1.4.0) i J2 SNT8 (1.5.0) scalone → J3 FBL2a (1.6.0) scalone → J4 FBL2b (1.8.0, PR) → J5 (`docs/plan.md`, „Blok 1 = ciąg J”).
 4. K (przegląd kalibracji), gdy aplikacja go zaproponuje (najwcześniej ok. 12.11) – wchodzi między PR-y ciągu J; po nim
    E9 (`docs/plan.md`, „Po 1.0”).
 4a. **Dwie sesje równolegle (10.11, zgoda użytkownika – wyjątek od „do `main` pisze naraz jedna sesja”; po awarii
@@ -72,12 +72,14 @@ zmieniają `Timeline.tsx`, J3 korzysta z J1). Wersje 1.4.0–1.8.0.
 | J2 SNT8 nowy blok kliknięciem w siatkę | 1.5.0 | #64 | scalone 10.11 (2d29725), wydanie z runu 42891720195 na `main`; dwie rundy high (10 + 9 uwag); D371, T568–T574 | ok. 4,5 h (3–4,5 h) |
 
 **J2 – wpis (10.11):** karta nowego bloku w „Tygodniu”, przeciągnięcie po pustej osi, kolumna godzin „Dziś” i „Szablonów” jak oś, zakres wielodniowy (D366, D371). Testy: `tests/web/grid-create.test.ts`, `week-new-block.test.ts`, E2E `week.spec.ts`. Odbiór J2.1–J2.2. **Uwagi na później:** brak E2E dla konfliktu i nieznanego wyniku zapisu wielodniowego (pokrywa `weekAdds` w unit); brak E2E „klik z drgnięciem w bok” w „Dziś” (pokrywa `dragStarted`).
-| J3 FBL2a rozsuwanie | 1.6.0 | #65 | PR (gałąź `claude/1.6.0-rozsuwanie`, drzewo `.claude/worktrees/wj3`), sesja przerwana awarią maszyny 11.11, przejęta; trzy rundy xhigh (15 + 15 + 11 uwag); D372, T575–T586 | ok. 6 h (4–6 h) – trzy rundy przeglądu |
+| J3 FBL2a rozsuwanie | 1.6.0 | #65 | scalone 11.11 (e50353e) po przejęciu sesji przerwanej awarią maszyny; run `main` padł na E2E zależnym od godziny (linia w „⋯”) – poprawka #69, wydanie z runu po niej; trzy rundy xhigh (15 + 15 + 11 uwag); D372, T575–T586 | ok. 6 h (4–6 h) – trzy rundy przeglądu |
 
 **J3 – wpis (10.11):** `pushApart` (punkt stały na prognozie), zapis jedną partią, podgląd przerywaną obwódką, „Przesunięto N bloków · Cofnij” w pasku (obok linii wariantu, pytania dnia pierwsze) i na stronie szablonu; oś szablonu w godzinach szablonu w tygodniu przesunięcia sesji (T582). Testy: `push-apart.test.ts`, `day-push.test.ts`, `template-push.test.ts`, `widget.test.ts`, E2E „rozsuwanie” ×2. Odbiór J3.1–J3.2. **Uwagi na później:** brak testu memo podglądu (wymaga DOM); blok przez cofnięty zegar w dobie 25 h rysowany na najmniejszą wysokość.
-| J3b rozsuwanie przy „Dodaj” z karty „Tygodnia” | 1.8.1? | – | dopisane 10.11 (D372) – po J5 | – (1–2 h) |
-| J4 FBL2b domykanie luk | 1.7.0 | – | – | – (3–4 h) |
-| J5 FBL2c „Ułóż pod energię” | 1.8.0 | – | – | – (4–6 h) |
+| J3b rozsuwanie przy „Dodaj” z karty „Tygodnia” | po J5 | – | dopisane 10.11 (D372) – po J5 | – (1–2 h) |
+| J4 FBL2b domykanie luk | 1.8.0 | – | PR (gałąź `claude/1.7.0-domykanie-luk`, drzewo `.claude/worktrees/wj4`); WIP sprzed awarii zabezpieczony 11.11; dwie rundy xhigh (15 + 12 uwag); D373, D375, D376, T587–T607 | ok. 5 h (3–4 h) – dwie rundy przeglądu, pytania D375/D376 |
+
+**J4 – wpis (11.11):** `engine/gaps.ts` – wyzwalacze z logu (wcześniejszy koniec, `block.shorten`, odwołanie / zaparkowanie przez Ciebie) i z okna (nowe zdarzenie `plan.freed`, `how` remove/shorten, `end` – przetrwa restart i drugi komputer, `RULES_VERSION` bez zmian – T594), zapas niesiony przez „Dalej” i ręczny „Start” (`slackOf`, T597), miejsce luki (`targetOf`, T598), id pytania z najwcześniejszego wyzwalacza grupy (T599, T604), `closeGap` – lustro `pushApart`; pasek `gapView` / `leaveGap` / `closeGapNow` (odpowiedzi przed edycją, cofane `unmark` przy nieudanej – T601, T602). SNT6 wydany jako 1.7.0 przed J4. Testy: `gaps.test.ts` (43), `widget.test.ts`, E2E „domykanie luk” (`screens.spec.ts`, „⋯” o każdej godzinie), `bar-windows.spec.ts` (tylko CI). Odbiór J4.1–J4.3. **Uwagi na później:** wydajność `gapView`/`closeGap` i `byId`/`closing` liczone przy każdym odświeżeniu; wspólny pomocnik reguły T585 (`closeGap.place` i `pushApart`) oraz `withPushed`/`blockNow` (okno i pasek); kaskada kotwic powtórzona z `dayPlan` (`createDay.ts`), różnica przy zaczętych zakotwiczonych; zapas kilku wyzwalaczy liczony osobno (zaniżona liczba przy nakładającym się czekaniu, T599); przy nieudanym „Przesuń” drugi komputer może na moment schować i znowu pokazać linię.
+| J5 FBL2c „Ułóż pod energię” | 1.9.0 | – | – | – (4–6 h) |
 
 ## Ciąg I – stan (D353)
 **Przed ciągiem I (9.11):** zakres – `docs/plan.md`, „Ciąg I”; decyzje D352 (tekst linii twardego końca), D353 (kształt
