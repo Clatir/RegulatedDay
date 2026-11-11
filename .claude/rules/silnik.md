@@ -41,7 +41,8 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   odwołanie / zaparkowanie przez Ciebie; tylko pierwszy plan, zwolnione ≥ 10 min), `gapNow(ctx, state, extra)` – pierwszy blok
   pierwszego planu od miejsca wyzwalacza musi być `pushable`; luka = min(od max(teraz, koniec poprzedniego), zwolnione);
   wyzwalacz kończy przebieg pierwszego planu zaczęty po nim od jego miejsca (nie w tym samym kliknięciu – „Dalej”); najbliższa
-  luka, której zamknięcie rusza blok. `closeGap` – lustro `pushApart`: elastyczne od luki do pierwszego stałego/czekającego,
+  luka, której zamknięcie rusza blok; odpowiedź `gap:<dzień>:<blok>:…` obejmuje wyzwalacze tego bloku sprzed niej kolejnością
+  zdarzeń (`compareOrder` z `answers.order` – nie zegarem ściennym, T590). `closeGap` – lustro `pushApart`: elastyczne od luki do pierwszego stałego/czekającego,
   każdy o tyle wcześniej, nie przed teraz ani przed blokiem, który zostaje; zapis = prognoza. `freedByEdit` – okno. Testy: `gaps.test.ts`.
 - `engine/day.ts` – `computeDay`: granica, koniec pracy, klasyfikacja minut, budżet, regeneracja, minimum, pora snu,
   twardy koniec, pula, regeneracja każdej minuty (`rest`, dla energii); `newSegments` (odcinki do zapisu przez

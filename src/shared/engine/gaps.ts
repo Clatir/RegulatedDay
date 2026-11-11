@@ -110,10 +110,14 @@ function gapOf(state: DayState, fg: readonly Placed[], t: GapTrigger): { b: Plac
   return minutes >= GAP_MIN ? { b, minutes } : null
 }
 
-/** A gap before `block` answered after the trigger happened – „Zostaw” or „Przesuń” covers the triggers that stood then. */
+/**
+ * A gap before `block` answered after the trigger happened – „Zostaw” or „Przesuń” covers the triggers that stood then. In
+ * the order of events (`compareOrder`), not by their clocks: an answer from a computer whose clock is behind still comes
+ * after the end it answers (it saw it).
+ */
 function answered(state: DayState, block: string, t: GapTrigger): boolean {
   const prefix = `gap:${state.grid.date}:${block}:`
-  for (const [q, a] of state.facts.answers) if (q.startsWith(prefix) && /^\d+$/.test(q.slice(prefix.length)) && a.at >= t.order.at) return true
+  for (const [q, a] of state.facts.answers) if (q.startsWith(prefix) && /^\d+$/.test(q.slice(prefix.length)) && compareOrder(a.order, t.order) > 0) return true
   return false
 }
 

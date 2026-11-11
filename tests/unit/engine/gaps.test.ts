@@ -138,6 +138,16 @@ describe('D373 – jak długo pytanie czeka i co przesuwa', () => {
     expect(at(s, '11:25').gap).toMatchObject({ block: 'c', minutes: 20 })
   })
 
+  it('„Zostaw” z komputera, którego zegar jest 3 min z tyłu: pytanie znika i tu (kolejność zegarem logicznym, nie godziną zdarzenia)', () => {
+    const plan = [flex('a', '10:00', 60), flex('b', '11:00', 60)]
+    const s = day(plan).start('a', '10:00').end('a', '10:40')
+    const id = at(s, '10:40').gap!.id
+    // PC B saw the end of „a” (its logical clock moved past it) and answered at 10:41 by the clock – its wall clock says 10:38.
+    const wall = s.at('10:38')
+    s.write([{ k: 'question.answer', at: wall, question: id, answer: 'leave', value: null, l: s.at('10:41') }], wall, 'pcb')
+    expect(at(s, '10:42').gap).toBeNull()
+  })
+
   it('przesuwa tylko elastyczne do najbliższego stałego: stały i bloki za nim zostają', () => {
     const plan = [flex('a', '10:00', 60), flex('b', '11:00', 30), fixed('zajecia', '12:00', 60), flex('d', '13:30', 60)]
     const s = day(plan).start('a', '10:00').end('a', '10:30')

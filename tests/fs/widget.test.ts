@@ -2016,6 +2016,80 @@ describe('domykanie luk w pasku (D368, D373)', () => {
     expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 30 min'])
   })
 
+  it('tryb zajęć: bez pytania do jego końca; po końcu – pytanie, jeśli luka dalej jest', async () => {
+    writeFileSync(
+      join(dataDir, paths.day(DAY)),
+      JSON.stringify({
+        schema: 1,
+        date: DAY,
+        sessions: { londyn: 'no', ny: 'no' },
+        blocks: [
+          { id: 'z', categoryId: 'zajecia-zdalne', startMin: 10 * 60, durationMin: 50, fixed: true, background: true, origin: 'user' },
+          { id: 'a', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'b', categoryId: 'inne', startMin: 11 * 60 + 30, durationMin: 60, fixed: false, origin: 'user' }
+        ]
+      })
+    )
+    const { w, folder, at } = await make()
+    expect((await folder.timerClick({ a: 'start', block: 'z', day: DAY } as never)).ok).toBe(true)
+    expect((await folder.timerClick({ a: 'start', block: 'a', day: DAY } as never)).ok).toBe(true)
+    at(10 * 60 + 30)
+    expect((await folder.timerClick({ a: 'finish', block: 'a', day: DAY } as never)).ok).toBe(true)
+    await w.refresh()
+    expect(w.current().quiet).toBe(true)
+    expect(gapLines(w)).toEqual([])
+    at(10 * 60 + 50)
+    expect((await folder.timerClick({ a: 'finish', block: 'z', day: DAY } as never)).ok).toBe(true)
+    await w.refresh()
+    expect(w.current().quiet).toBe(false)
+    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 30 min'])
+  })
+
+  it('„Odcinam się”: bez pytania do „Wracam”; po nim – pytanie o lukę, która jeszcze jest', async () => {
+    const { w, folder, at } = await make()
+    expect((await folder.timerClick({ a: 'start', block: 'a', day: DAY } as never)).ok).toBe(true)
+    at(10 * 60 + 40)
+    expect((await folder.timerClick({ a: 'finish', block: 'a', day: DAY } as never)).ok).toBe(true)
+    await w.refresh()
+    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 20 min'])
+    at(10 * 60 + 41)
+    expect((await folder.timerClick({ a: 'cutOff', day: DAY } as never)).ok).toBe(true)
+    await w.refresh()
+    expect(w.current().hidden).toBe(true)
+    expect(gapLines(w)).toEqual([])
+    at(10 * 60 + 45)
+    expect((await folder.timerClick({ a: 'back', day: DAY } as never)).ok).toBe(true)
+    await w.refresh()
+    // From now on: 15 min left before „b”.
+    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 15 min'])
+  })
+
+  it('cisza nocna: pytanie znika po porze snu (nie budzi paska w nocy)', async () => {
+    writeFileSync(
+      join(dataDir, paths.day(DAY)),
+      JSON.stringify({
+        schema: 1,
+        date: DAY,
+        sessions: { londyn: 'no', ny: 'no' },
+        blocks: [
+          { id: 'a', categoryId: 'inne', startMin: 21 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'b', categoryId: 'inne', startMin: 22 * 60 + 30, durationMin: 60, fixed: false, origin: 'user' }
+        ]
+      })
+    )
+    const { w, folder, at } = await make({ from: placeLogical(DAY, 21 * 60) })
+    expect((await folder.timerClick({ a: 'start', block: 'a', day: DAY } as never)).ok).toBe(true)
+    at(21 * 60 + 30)
+    expect((await folder.timerClick({ a: 'finish', block: 'a', day: DAY } as never)).ok).toBe(true)
+    await w.refresh()
+    expect(gapLines(w).map((l) => l.text)).toEqual(['Luka 30 min'])
+    // The ordinary day's bedtime is 22:00.
+    at(22 * 60 + 1)
+    await w.refresh()
+    expect(w.current().night).toBe(true)
+    expect(gapLines(w)).toEqual([])
+  })
+
   it('usunięcie w oknie (IPC `planGap`): pytanie na tym komputerze, „Przesuń” zapisuje; innego dnia i bez zgłoszenia – nic', async () => {
     const { w, folder, build } = await make({ from: placeLogical(DAY, 9 * 60) })
     await w.refresh()

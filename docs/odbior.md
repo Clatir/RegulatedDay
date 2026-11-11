@@ -114,6 +114,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] J2.2 Nowy blok przeciągnięciem w „Dziś” i „Szablonach”
    - [ ] J3.1 Rozsuwanie w „Dziś” i „Cofnij” w pasku
    - [ ] J3.2 Rozsuwanie w „Szablonach”
+   - [ ] J4.1 Luka po wcześniejszym końcu – „Przesuń resztę wcześniej” i „Cofnij”
+   - [ ] J4.2 Luka po usunięciu albo skróceniu bloku w „Dziś”
+   - [ ] J4.3 Kiedy pasek o lukę nie pyta (sesja, mała luka, blok stały, drugi komputer)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1548,4 +1551,51 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   go upuściłeś, także w tygodniu przesunięcia sesji (D372).
 - **Nie przechodzi, gdy:** blok po upuszczeniu skacze o godzinę, „Cofnij” zostawia nową wersję szablonu, albo bloki
   stałe szablonu się przesuwają.
+
+### J4 – domykanie luk (1.7.0)
+
+#### J4.1 Luka po wcześniejszym końcu – „Przesuń resztę wcześniej” i „Cofnij” (1.7.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/gaps.test.ts`, `tests/fs/widget.test.ts` („domykanie luk w pasku”),
+  `tests/e2e/bar-windows.spec.ts` („luka na pasku pulpitu”, CI na Windows). Ty: rzut oka przy zwykłej pracy.
+- **Jak sprawdzić:** dziś zacznij blok elastyczny, po którym w planie stoi kolejny elastyczny (bez stałego między
+  nimi), i skończ go „Skończyłem” albo „Dalej” co najmniej 10 min przed planowanym końcem. Spójrz na pasek pulpitu.
+  Kliknij „Przesuń resztę wcześniej”, potem „Cofnij” w linii „Przesunięto …”. Przy kolejnej luce kliknij „Zostaw”.
+- **Oczekiwany efekt:** w pasku cicha linia (bez kropki, powiadomienia i dźwięku) „Luka 20 min · Przesuń resztę
+  wcześniej · Zostaw” – wolny czas od teraz do następnego bloku, najwyżej tyle, ile zwolnił wcześniejszy koniec (przerwa
+  zaplanowana wcześniej zostaje); po „Dalej” – luka przed blokiem za tym, który się właśnie zaczął. „Przesuń” zapisuje
+  nowe godziny bloków elastycznych do najbliższego stałego – żaden nie zaczyna się przed teraz; stały i bloki za nim,
+  chronione (posiłek, regeneracja, rutyny) i zaczęte zostają – i daje linię „Przesunięto N bloków · Cofnij”; „Cofnij”
+  przywraca godziny, a pytanie o tę lukę nie wraca. „Zostaw” – linia znika, plan bez zmian. Bez odpowiedzi linia znika
+  sama, gdy zacznie się następny blok albo coś w luce (D368, D373).
+- **Nie przechodzi, gdy:** pytanie o tę samą lukę przychodzi drugi raz, linia ma kropkę albo daje powiadomienie,
+  „Przesuń” rusza blok stały, chroniony, zaczęty albo blok za stałym, któryś blok staje przed teraz, „Cofnij” nie
+  przywraca wszystkich godzin, albo pasek pulpitu po kliknięciu wychodzi nad okna innych programów.
+
+#### J4.2 Luka po usunięciu albo skróceniu bloku w „Dziś” (1.7.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/gaps.test.ts` („usunięcie i skrócenie w oknie”), `tests/fs/widget.test.ts`,
+  `tests/e2e/screens.spec.ts` („domykanie luk (D368)”). Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” usuń niezaczęty blok elastyczny, który stoi między dwoma innymi; innym razem skróć blok
+  o co najmniej 10 min dolną krawędzią albo polem „Długość”. Przenieś blok przeciągnięciem i zmień górną krawędź. To
+  samo na jutrze.
+- **Oczekiwany efekt:** po usunięciu i skróceniu dziś – w pasku tego komputera „Luka … · Przesuń resztę wcześniej ·
+  Zostaw”; „Przesuń” przesuwa następne bloki o zwolniony czas (przerwa zaplanowana wcześniej zostaje). Przeniesienie
+  bloku i górna krawędź – bez pytania; na jutrze – bez pytania (D368, D373). Po ponownym uruchomieniu aplikacji pytanie
+  o usunięcie albo skrócenie w oknie już nie wraca (T588).
+- **Nie przechodzi, gdy:** po usunięciu dziś nie ma pytania, pytanie przychodzi po zmianie na jutrze albo po
+  przeniesieniu bloku, albo „Przesuń” przesuwa bloki o więcej, niż zwolniło usunięcie.
+
+#### J4.3 Kiedy pasek o lukę nie pyta – sesja, mała luka, blok stały, drugi komputer (1.7.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/gaps.test.ts`, `tests/fs/widget.test.ts` (sesja, zajęcia, „Odcinam się”, noc,
+  odpowiedź z drugiego komputera). Ty: rzut oka, gdy się zdarzy.
+- **Jak sprawdzić:** skończ blok 5 min przed planem; skończ blok wcześniej, gdy następny jest stały (sesja, zajęcia)
+  albo chroniony (posiłek); skończ blok wcześniej w czasie sesji albo zajęć zdalnych. Przy dwóch komputerach odpowiedz
+  na pytanie o lukę na jednym z nich.
+- **Oczekiwany efekt:** luka poniżej 10 min albo blok stały, chroniony lub zaczęty zaraz po luce – bez pytania;
+  w trybie sesji, zajęć, w „Odcinam się” i w nocy – pytanie dopiero po ich końcu, jeśli luka dalej jest; odpowiedź na
+  jednym komputerze zamyka pytanie na drugim, także gdy ich zegary się różnią (D368, D373).
+- **Nie przechodzi, gdy:** pytanie pojawia się w czasie sesji albo zajęć, przy luce 5 min albo przed blokiem stałym, albo
+  zostaje na drugim komputerze po odpowiedzi.
 

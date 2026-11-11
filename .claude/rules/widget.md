@@ -74,8 +74,8 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 - Domykanie luk (D368, D373): `gapView` – cicha linia `gap:<dzień>:<blok>:<miejsce>` „Luka N min · Przesuń resztę wcześniej ·
   Zostaw” z `gapNow` (`engine/gaps.ts`) tylko dziś, nie w sesji, zajęciach, nocy i „Odcinam się”; wyzwalacze z logu (te same
   na każdym komputerze) i z okna tego komputera (`freedHere`: IPC `planGap` → `gapIn`/`planGapIpc` → `freed`, po usunięciu
-  albo skróceniu niezaczętego bloku – `freedByEdit` w `TodayPage`, `tellFreed`). Odpowiedź = `mark` w logu (jak „Przerwa?”;
-  obejmuje wcześniejsze wyzwalacze tego bloku); „Przesuń” (`closeGapNow`) liczy lukę od nowa na świeżym `widgetModel`
+  albo skróceniu niezaczętego bloku – `freedByEdit` w `TodayPage`, `tellFreed`; tylko w pamięci, do końca dnia albo zamknięcia
+  aplikacji – T588). Odpowiedź = `mark` w logu (jak „Przerwa?”; obejmuje wcześniejsze wyzwalacze tego bloku); „Przesuń” (`closeGapNow`) liczy lukę od nowa na świeżym `widgetModel`
   (blok zaczęty w międzyczasie – nic nie zapisuje), najpierw `mark`, potem jedna edycja pliku dnia i linia `moved:push`.
 
 ## Pułapki

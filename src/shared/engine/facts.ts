@@ -176,8 +176,11 @@ export interface DayFacts {
   undone: Set<string>
   /** Questions seen (question id → the first instant it was seen, ms, and on which computer and how). */
   seen: Map<string, { at: number; c: string; how: string }>
-  /** Answers to questions that are not actions of the timer („Przerwa” of „Koniec pracy?”, absence …): id → answer. */
-  answers: Map<string, { at: number; answer: string; value: number | null }>
+  /**
+   * Answers to questions that are not actions of the timer („Przerwa” of „Koniec pracy?”, absence …): id → answer; `order`
+   * – when it was written (`EventOrder`: before or after an event of another computer, whatever their clocks say).
+   */
+  answers: Map<string, { at: number; answer: string; value: number | null; order: EventOrder }>
   /** The day closed (the ritual, the morning's choice): the last close written, `at` an index. */
   closed: { at: number; how: CloseHow } | null
   /** Stretches marked in the ritual as no rest, and when (indices): they count from the marking on (T413). */
@@ -459,7 +462,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         if (!f.seen.has(e.question)) f.seen.set(e.question, { at: e.at, c: e.c, how: e.how })
         break
       case 'question.answer':
-        if (!f.answers.has(e.question)) f.answers.set(e.question, { at: e.at, answer: e.answer, value: e.value ?? null })
+        if (!f.answers.has(e.question)) f.answers.set(e.question, { at: e.at, answer: e.answer, value: e.value ?? null, order: orderOf(e) })
         break
       case 'ritual.close':
         f.closed = { at: idx(e.at), how: e.how }
