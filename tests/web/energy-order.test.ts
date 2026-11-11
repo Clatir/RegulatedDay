@@ -1,7 +1,7 @@
 /**
  * „Ułóż pod energię” (D369, D374) in the window without a DOM: the morning plan's „Ułóż” writes the variant's new starts as
- * one edit of today's file and tells the main process of it (the bar's „Przestawiono: … · Cofnij”); the bar's panel says
- * the changes of order under the variant.
+ * one edit of today's file and tells the main process of it (the bar's „Przestawiono: … · Cofnij”), „Zostaw” hides the card to
+ * the day's end (D377); the bar's panel says the changes of order under the variant.
  */
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -11,10 +11,14 @@ import { blockJson } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import type { PlanBlock } from '@shared/model/plan'
 import { noFolderView, type WidgetView } from '@shared/widget'
-import { arrangeDayBlocks, variantStarts } from '@renderer/features/today/dayActions'
+import { computeDay } from '@shared/engine/day'
+import { computeEnergy } from '@shared/engine/energy'
+import { rdFrom } from '@shared/model/rd'
+import { dayFileFrom } from '@shared/model/plan'
+import { ENERGY_ORDER_ASKED, arrangeDayBlocks, energyOrderFor, leaveEnergyOrder, variantStarts } from '@renderer/features/today/dayActions'
 import { useData } from '@renderer/store/data'
 import { Bar } from '@renderer/widget/Bar'
-import { block, lm } from '../unit/engine/dsl'
+import { block, lm, Scenario } from '../unit/engine/dsl'
 
 const DATE = '2026-10-28'
 const flex = (id: string, cat: string, at: string, min: number): PlanBlock => block({ id, cat, at, min, origin: 'user' })
@@ -76,6 +80,50 @@ describe('„Ułóż” w planie porannym: jedna edycja pliku dnia i „Przestaw
     ;(window.rd as Partial<RdApi>).edit = async (entries) => entries.map(() => ({ status: 'conflict' as const }))
     await arrangeDayBlocks(DATE, file, variantStarts(PLAN, { changes: CHANGES }), LABEL)
     expect(told).toEqual([])
+  })
+})
+
+describe('karta „Ułóż pod energię” w planie porannym: „Zostaw” chowa ją do końca dnia (D377)', () => {
+  const data = useData.getState()
+  afterEach(() => {
+    delete (globalThis as { window?: unknown }).window
+    useData.setState(data, true)
+  })
+
+  /** The day of the engine's test (the nap after „Inne”, a long class – the lowest energy 50) with the day's file `asked`. */
+  function model(asked: Record<string, string> = {}) {
+    const plan = [
+      flex('c', 'inne', '08:00', 60),
+      block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:00', min: 60, origin: 'user' }),
+      flex('e', 'analiza', '10:00', 60),
+      block({ id: 'w', cat: 'zajecia-zdalne', at: '11:00', min: 370, fixed: true, origin: 'user' })
+    ]
+    const s = new Scenario({ date: DATE, plan, wake: '06:30', settings: { transitionBufferMin: 0 } }).observe('06:30', null)
+    s.checkin('07:00', { head: [0, 0], emotions: [0, 0], senses: [0, 0] })
+    const ctx = s.contextAt(s.at('07:30'))
+    const state = computeDay(ctx)
+    return { ctx, state, energy: computeEnergy(ctx, state), dayFile: dayFileFrom({ schema: 1, date: DATE, asked }, DATE), names: { rd: rdFrom({}), settings: s.settings, routines: [], requests: [] } }
+  }
+
+  it('karta ma wariant dnia; po „Zostaw” (odpowiedź w pliku dnia) – nie', () => {
+    const m = model()
+    expect(energyOrderFor(m, m.names)?.label).toBe('Ułóż pod energię – najniższa energia dnia 50 → 56')
+    const left = model({ [ENERGY_ORDER_ASKED]: 'leave' })
+    expect(energyOrderFor(left, left.names)).toBeNull()
+  })
+
+  it('„Zostaw” zapisuje odpowiedź w pliku dnia jedną edycją, bez zmiany planu', async () => {
+    const file: RawRecord = { schema: 1, date: DATE, blocks: PLAN.map((b) => blockJson(b)) }
+    const sent: EditEntry[][] = []
+    const rd: Partial<RdApi> = {
+      dayFiles: async () => ({ [DATE]: file }),
+      edit: async (entries) => (sent.push(entries), entries.map(() => ({ status: 'applied' as const }))),
+      dataView: async () => ({ today: DATE }) as DataView
+    }
+    ;(globalThis as unknown as { window: { rd: Partial<RdApi> } }).window = { rd }
+    useData.setState({ view: { today: DATE } as DataView })
+    expect(await leaveEnergyOrder(DATE, file)).toEqual([{ status: 'applied' }])
+    expect(sent.map((e) => e.map((x) => x.edits.map((y) => [y.path.join('.'), y.value])))).toEqual([[[['asked', { [ENERGY_ORDER_ASKED]: 'leave' }]]]])
   })
 })
 

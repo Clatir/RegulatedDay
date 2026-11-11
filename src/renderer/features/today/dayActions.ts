@@ -6,18 +6,22 @@
  * version (`seen`) only stands in for a file that cannot be read now.
  */
 import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult } from '@shared/api'
-import { blockJson, dayRaw, putBlock, setCancelled, setDayField, takeBlock } from '@shared/data/dayEdits'
+import { blockJson, dayRaw, putBlock, setAsked, setCancelled, setDayField, takeBlock } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { marketDay } from '@shared/calendar/holidays'
-import { snapshotOf } from '@shared/engine/context'
+import { namingOf, snapshotOf } from '@shared/engine/context'
 import { foldFacts, type DayFacts } from '@shared/engine/facts'
 import type { Freed } from '@shared/engine/gaps'
 import { gridOf } from '@shared/engine/grid'
 import type { AnyEvent } from '@shared/model/events'
 import { createDay } from '@shared/engine/createDay'
 import { copiedDay, moveBetweenDays, wakeChange } from '@shared/engine/planEdit'
+import type { DayContext, DayState } from '@shared/engine/day'
+import type { EnergyState } from '@shared/engine/energy'
+import { energyOrderVariant } from '@shared/engine/energyOrder'
 import type { Variant } from '@shared/engine/variants'
-import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
+import { nameById, type Names } from '@shared/blockName'
+import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { countLabel, logicalClock, plDate } from '@shared/format'
 import type { DaySnapshot } from '@shared/model/events'
 import { dayFilesNow, editOf, isSaved, trySaveWith, useData } from '../../store/data'
@@ -89,6 +93,24 @@ export async function pushDayBlocks(date: string, seen: RawRecord | null, change
     }
   }
   return out
+}
+
+/** The key of the morning plan's answer „Zostaw” to „Ułóż pod energię” in the day's `asked` (D377). */
+export const ENERGY_ORDER_ASKED = 'energyOrder'
+
+/**
+ * The morning plan's „Ułóż pod energię” (D369, D374, D377): the variant of today's plan, or null – none, or left („Zostaw”)
+ * for the day (its answer in the day's file, as the plan's other questions: on every computer, to the day's end).
+ */
+export function energyOrderFor(m: { ctx: DayContext; state: DayState; energy: EnergyState; dayFile: DayFile | null }, names: Names): Variant | null {
+  if (m.dayFile?.asked[ENERGY_ORDER_ASKED] != null) return null
+  const naming = namingOf(m.ctx, m.state.facts)
+  return energyOrderVariant(m.ctx, m.state, m.energy, (b) => nameById(b.id, naming, names))
+}
+
+/** „Zostaw” of the morning plan's „Ułóż pod energię” (D377): the card does not come back that day. */
+export function leaveEnergyOrder(date: string, seen: RawRecord | null): Promise<EditOutcome[] | null> {
+  return saveDay(date, seen, (r) => setAsked(r, ENERGY_ORDER_ASKED, 'leave'))
 }
 
 /** The new starts of „Ułóż pod energię” (D369) as blocks of the plan the window knows (one gone from it meanwhile – left out). */

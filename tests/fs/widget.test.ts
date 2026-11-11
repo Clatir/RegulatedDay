@@ -2266,9 +2266,10 @@ describe('domykanie luk w pasku (D368, D373)', () => {
   })
 })
 
-describe('„Ułóż pod energię” w pasku i z planu porannego (D369, D374)', () => {
-  // Before the fixed class (11:30): „Inne” 08:00, a nap 09:00 (+5 min buffer), „Analiza” 10:05 – the nap after „Inne” fills the
-  // head back to 100 and wastes most of it; with „Analiza” first the lowest energy of the day rises.
+describe('„Ułóż pod energię” w pasku i z planu porannego (D369, D374, D377)', () => {
+  // Before the fixed class (11:30, over 6 h – the head after it is the lowest of the day, below 60): „Inne” 08:00, a nap 09:00
+  // (+5 min buffer), „Analiza” 10:05 – the nap after „Inne” fills the head back to 100 and wastes most of it; with „Analiza”
+  // before the nap (protected – it may move in its gap, D377) the lowest energy of the day rises.
   beforeEach(() =>
     writeFileSync(
       join(dataDir, paths.day(DAY)),
@@ -2280,7 +2281,7 @@ describe('„Ułóż pod energię” w pasku i z planu porannego (D369, D374)', 
           { id: 'c', categoryId: 'inne', startMin: 8 * 60, durationMin: 60, fixed: false, origin: 'user' },
           { id: 'r', categoryId: 'regeneracja', variantId: 'drzemka', startMin: 9 * 60, durationMin: 60, fixed: false, origin: 'user' },
           { id: 'e', categoryId: 'analiza', startMin: 10 * 60 + 5, durationMin: 60, fixed: false, origin: 'user' },
-          { id: 'w', categoryId: 'zajecia-zdalne', startMin: 11 * 60 + 30, durationMin: 180, fixed: true, origin: 'user' }
+          { id: 'w', categoryId: 'zajecia-zdalne', startMin: 11 * 60 + 30, durationMin: 370, fixed: true, origin: 'user' }
         ]
       })
     )
@@ -2303,10 +2304,10 @@ describe('„Ułóż pod energię” w pasku i z planu porannego (D369, D374)', 
     const open = w.current().variants.open!
     expect(open.map((v) => v.id)).toEqual(['energyOrder', 'keep'])
     expect(open[0]!.label).toMatch(/^Ułóż pod energię – najniższa energia dnia \d+ → \d+$/)
-    expect(open[0]!.details).toEqual(['Analiza 10:10 → 08:00', 'Inne obowiązki 08:00 → 10:10'])
+    expect(open[0]!.details).toEqual(['Analiza 10:10 → 09:05', 'Leżenie, drzemka 09:05 → 10:10'])
     expect(open[1]).toEqual({ id: 'keep', label: 'Zostaw plan' })
     await w.act('variants', 'pick|energyOrder', 'bar')
-    expect(await starts(folder)).toMatchObject({ c: 10 * 60 + 10, r: 9 * 60, e: 8 * 60, w: 11 * 60 + 30 })
+    expect(await starts(folder)).toMatchObject({ c: 8 * 60, e: 9 * 60 + 5, r: 10 * 60 + 10, w: 11 * 60 + 30 })
     expect(w.current().variants).toEqual({ marker: false, open: null })
     expect(w.current().lines.find((l) => l.id === 'moved:variant')).toMatchObject({ text: `Przestawiono: ${open[0]!.label}`, actions: [{ id: 'undo', label: 'Cofnij' }] })
     await w.act('line', 'moved:variant|undo', 'bar')

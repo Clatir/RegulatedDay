@@ -9,9 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { marketDay } from '@shared/calendar/holidays'
 import { dayRaw, putBlock, setAsked, setCancelled, setSessionAnswer } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
-import { namingOf } from '@shared/engine/context'
 import { checkinStates } from '@shared/engine/energy'
-import { energyOrderVariant } from '@shared/engine/energyOrder'
 import { atOf } from '@shared/engine/grid'
 import { fromYesterday, holidayQuestions, lighterDay, morningWarnings, sessionQuestions, shiftNotice, weeklyAnalysisMove, type MorningInputs, type MorningWarning } from '@shared/engine/morning'
 import { freeStart, requestsBlock } from '@shared/engine/planEdit'
@@ -33,8 +31,8 @@ import { dayFilesNow, editOf, isSaved, logEvents, rawRecord, trySaveWith, useDat
 import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
 import { toast, useUi } from '../../store/ui'
-import { blockName, nameById, type Names } from '../plan/blockView'
-import { arrangeDayBlocks, saveDay, variantStarts } from './dayActions'
+import { blockName, type Names } from '../plan/blockView'
+import { arrangeDayBlocks, energyOrderFor, leaveEnergyOrder, saveDay, variantStarts } from './dayActions'
 
 const QUESTIONS: Array<{ pool: Pool; text: string }> = [
   { pool: 'head', text: 'Trudno zebrać myśli?' },
@@ -308,18 +306,17 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
 }
 
 /**
- * „Ułóż pod energię” (D369, D374): today's plan in another order of its flexible blocks, when it clearly raises the lowest
- * energy of the day – the variant with its changes of order; „Ułóż” changes the plan at once, „Cofnij” in the bar (D313).
+ * „Ułóż pod energię” (D369, D374, D377): today's plan in another order of its flexible blocks, when the lowest energy of the
+ * day is low and the order clearly raises it – the variant with its changes of order; „Ułóż” changes the plan at once,
+ * „Cofnij” in the bar (D313); „Zostaw” hides the card to the day's end (the day's `asked`, like the plan's other questions).
  * Counted once for each count of the day (the search lays out the orders of each gap and counts the day again twice at most).
  */
 function EnergyOrder({ model, names }: { model: DayModel; names: Names }) {
-  const variant = useMemo(() => {
-    const naming = namingOf(model.ctx, model.state.facts)
-    return energyOrderVariant(model.ctx, model.state, model.energy, (b) => nameById(b.id, naming, names))
-  }, [model, names])
+  const variant = useMemo(() => energyOrderFor(model, names), [model, names])
   const [busy, run] = useBusy()
   if (!variant) return null
   const arrange = () => run(async () => void (await arrangeDayBlocks(model.date, model.data.dayFile, variantStarts(model.ctx.plan, variant), variant.label)))
+  const leave = () => run(async () => void (await leaveEnergyOrder(model.date, model.data.dayFile)))
   return (
     <div className="flex flex-col gap-1.5 rounded border border-line px-3 py-2" data-testid="energy-order">
       <div className="flex flex-wrap items-center gap-2">
@@ -328,6 +325,9 @@ function EnergyOrder({ model, names }: { model: DayModel; names: Names }) {
         </span>
         <button type="button" className="btn" disabled={busy} onClick={() => void arrange()} data-testid="energy-order-apply">
           Ułóż
+        </button>
+        <button type="button" className="btn" disabled={busy} onClick={() => void leave()} data-testid="energy-order-leave">
+          Zostaw
         </button>
       </div>
       {variant.details?.length ? (

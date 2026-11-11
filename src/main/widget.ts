@@ -567,7 +567,7 @@ export class WidgetEngine {
 
   /**
    * The panel of variants opened (the marker, or „Przestaw plan” without it): counted now for its cause, with „Ułóż pod
-   * energię” before its last „Zostaw” when today's order can clearly raise the lowest energy (D369, D374) – also without
+   * energię” before its last „Zostaw” when today's order can clearly raise the lowest energy (D369, D374, T612) – also without
    * a cause (then with „Zostaw plan”). Neither – the plan fits.
    */
   private async openVariants(): Promise<void> {

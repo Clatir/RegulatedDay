@@ -63,7 +63,7 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   „osoba: ?”, szacunek), `requestEnd`, `openMain` z `requests`. Szacunek „Pilne” i „inna…” rozstrzyga pasek
   (`RequestUnfold`: w ciszy i „Odcinam się” bez okna, domyślne 15 min).
 - Warianty (D313, T502): `WidgetView.variants` (znacznik, panel) ustawia `WidgetEngine.variantsView` po `engineView`;
-  akcja `variants` `open` / `close` / `pick|i`, „Przestawiono … · Cofnij” to linia `moved:variant`. „Ułóż pod energię” (D369): `openVariants`
+  akcja `variants` `open` / `close` / `pick|i`, „Przestawiono … · Cofnij” to linia `moved:variant`. „Ułóż pod energię” (D369, T612): `openVariants`
   dokłada `energyOrderVariant` (tylko dzień paska = dziś) przed ostatnim „Zostaw”; bez przyczyny panel = ten wariant + `keepPlan`
   (`panel.cause` null – wybór nie zamyka przyczyn); `open[].details` – zmiany kolejności pod przyciskiem (`bar-variant-<id>-details`).
   Z planu porannego: okno zapisuje edycję, IPC `planArranged` (`arrangedIn` jak `pushedIn` + etykieta ≤ 200) → `WidgetEngine.arranged` –

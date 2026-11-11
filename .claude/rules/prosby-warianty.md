@@ -25,10 +25,12 @@ D247, D263, D296, T202, T372. Decyzje T478–T481, T502, T503. Elementy w pasku 
   cofany; te same zmiany liczone raz), `planWith`, `applyVariant` (pliki dni), `markerCause` (kiedy znacznik w pasku);
   `judgeDay` (dzień liczony ponownie ze zmianami), `keepPlan` („Zostaw plan” panelu bez przyczyny). Zmiana `start`
   (nowa godzina bloku) – `applyVariant` kładzie ją na bloku z pliku, bez `byVariant` (T610).
-- `engine/energyOrder.ts` (D369, D374, T608–T610) – `energyOrderVariant(ctx, state, energy, names)` → wariant `energyOrder`
-  („Ułóż pod energię – najniższa energia dnia a → b”, `details` – zmiany kolejności, `energy`) albo null: przerwy między
-  stałymi/czekającymi z prognozy (`shownForecaster`), kandydaci = `pushable` bez bloków, do których coś jest zakotwiczone,
-  w miejscu z prognozy od teraz; reszta (chronione, zaczęte, zakotwiczone) stoi – ułożenie, które ją rusza, odpada.
+- `engine/energyOrder.ts` (D369, D374, D377, T608–T612) – `energyOrderVariant(ctx, state, energy, names)` → wariant
+  `energyOrder` („Ułóż pod energię – najniższa energia dnia a → b”, `details` – zmiany kolejności, `energy`) albo null
+  (najniższa ≥ `ENERGY_ORDER_BELOW` = 60, energia nieznana albo wyłączona; kalibracja nie wyłącza): przerwy między
+  stałymi/czekającymi z prognozy (`shownForecaster`), kandydaci = `orderable` (jak `pushable`, ale także kategorie
+  chronione – D377) bez bloków, do których coś jest zakotwiczone, w miejscu z prognozy od teraz; reszta (zaczęte,
+  zakotwiczone, w tle) stoi – ułożenie, które ją rusza, odpada (T611).
   Kolejności przerwy: wszystkie do `ORDER_EXACT_MAX` = 6, do `ORDER_MAX_BLOCKS` = 12 zamiany po dwa; starty sekwencyjnie
   (pierwsze miejsce zostaje, przerwy planowane na miejscach, bufor od nowa), prognoza musi postawić je dokładnie tam;
   ocena szacunkiem energii przerwy (koszty, czas wolny ≥ 30 min albo po końcu pracy jak „gra”, przełączenie 2, kontakt 2,

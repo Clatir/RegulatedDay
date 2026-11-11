@@ -1,10 +1,13 @@
 /**
- * „Ułóż pod energię” (D369, D374, FBL2c): a variant of today's plan that only changes the order of flexible blocks – each
- * within its own gap between fixed blocks – when the new order clearly raises the lowest energy of the day (the lowest of
- * the three pools from now to the bedtime's forecast, the energy's forecast): „Ułóż pod energię – najniższa energia dnia
- * 35 → 52”, with the changes of order. Fixed blocks and those waiting for „Zacznij” split the day into gaps; protected,
- * begun, anchored and background blocks, those without an hour of their own and those another block is anchored to stay
- * where the forecast shows them (a moved block may pass them inside its gap, never push them). Pure and deterministic.
+ * „Ułóż pod energię” (D369, D374, D377, FBL2c): a variant of today's plan that only changes the order of flexible blocks –
+ * each within its own gap between fixed blocks – when the lowest energy of the day (the lowest of the three pools from now
+ * to the bedtime's forecast, the energy's forecast) is below `ENERGY_ORDER_BELOW` and the new order clearly raises it:
+ * „Ułóż pod energię – najniższa energia dnia 35 → 52”, with the changes of order. Fixed blocks and those waiting for
+ * „Zacznij” split the day into gaps; every flexible block of the plan with an hour of its own may move in its gap, a
+ * protected one too (D377: the protection keeps it from being removed and shortened, not from another place in the order).
+ * Begun, anchored and background blocks, those without an hour of their own and those another block is anchored to stay
+ * where the forecast shows them (T611 – a moved block may pass them inside its gap, never push them). Pure and
+ * deterministic; also in the calibration period (D377).
  *
  * The search (T608, T609): in each gap every order of its blocks (up to `ORDER_EXACT_MAX` – 720 orders; a larger gap up
  * to `ORDER_MAX_BLOCKS` by swaps of two, best swap first) is laid out as the forecast lays it (`shownForecaster`) and
@@ -18,16 +21,18 @@ import { logicalClock } from '../format'
 import { POOLS, costsOf, type Costs, type Pool } from '../model/categories'
 import { PLAN_MAX } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
-import type { BlockInfo } from './blocks'
+import { ownHourBlock, type BlockInfo } from './blocks'
 import { settingsAtMinute, shownForecaster, type DayContext, type DayState } from './day'
 import { computeEnergy, regenVariant, shownOf, toUnits, type EnergyState } from './energy'
+import type { DayFacts } from './facts'
 import type { Placed } from './forecast'
 import { atOf, idxOfLogical } from './grid'
-import { pushable } from './pushApart'
 import { judgeDay, planWith, type Variant, type VariantChange } from './variants'
 
 /** The least rise of the lowest energy of the day (whole points, as shown) that is „clear” (T608): the reserve's hysteresis. */
 export const ENERGY_ORDER_GAIN = 5
+/** The variant only for a day whose lowest energy (whole points, as shown) is below this (D377, T608). */
+export const ENERGY_ORDER_BELOW = 60
 /** A gap of up to this many blocks is searched in every order (6! = 720 layouts of the forecast). */
 export const ORDER_EXACT_MAX = 6
 /** A gap of more blocks is left as it is; up to it, larger than `ORDER_EXACT_MAX`, it is searched by swaps of two. */
@@ -85,7 +90,7 @@ export function lowestEnergy(e: EnergyState | null): number | null {
  */
 export function energyOrderVariant(ctx: DayContext, state: DayState, energy: EnergyState | null, names: (b: BlockInfo) => string): Variant | null {
   const low0 = lowestEnergy(energy)
-  if (low0 == null || !energy) return null
+  if (low0 == null || !energy || shownOf(low0) >= ENERGY_ORDER_BELOW) return null
   const g = state.grid
   const now = state.now
   const until = Math.min(g.length, Math.max(now, state.bedtime.forecast))
@@ -316,9 +321,20 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
 }
 
 /**
+ * A block the order may move (D377): flexible (not fixed, not waiting for „Zacznij”), of the plan with an hour of its own
+ * (`ownHourBlock` – not a session, a lecture, a class of a „zjazd”, the second shift, nor anchored), in the foreground,
+ * not begun, parked or cancelled – a protected one too, unlike `pushable` (rozsuwanie and the gaps never move it).
+ */
+export function orderable(b: BlockInfo, facts: DayFacts): boolean {
+  if (b.fixed || b.waits || b.bg || !ownHourBlock(b)) return false
+  const f = facts.blocks.get(b.id)
+  return !f || (f.startedAt == null && f.parkedAt == null && f.cancelledAt == null)
+}
+
+/**
  * The gaps between fixed blocks of the foreground (and those waiting for „Zacznij”) in the forecast, each with its blocks
- * that may move – flexible, of the plan, with an hour of their own, not protected, not begun, no block anchored to them,
- * placed within the gap from now on – when it has two of them at least and `ORDER_MAX_BLOCKS` at most.
+ * that may move – `orderable`, no block anchored to them (T611: it would take its anchored one along), placed within the
+ * gap from now on – when it has two of them at least and `ORDER_MAX_BLOCKS` at most.
  */
 function gapsOf(state: DayState, identity: readonly Placed[], buf: (prev: string | null, cat: string) => number): Gap[] {
   const anchors = new Set(state.blocks.filter((b) => b.anchor != null).map((b) => b.anchor!))
@@ -329,7 +345,7 @@ function gapsOf(state: DayState, identity: readonly Placed[], buf: (prev: string
   let before: Placed | null = null
   const close = (upper: number) => {
     const slots = items.flatMap((p, i) =>
-      !p.running && p.from >= state.now && p.from >= lower && p.to <= upper && pushable(p.block, state.facts) && !anchors.has(p.block.id) ? [i] : []
+      !p.running && p.from >= state.now && p.from >= lower && p.to <= upper && orderable(p.block, state.facts) && !anchors.has(p.block.id) ? [i] : []
     )
     if (slots.length >= 2 && slots.length <= ORDER_MAX_BLOCKS) {
       const breaks = slots.map((pos) => {
