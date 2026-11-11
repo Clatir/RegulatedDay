@@ -5,6 +5,7 @@
  * falls back, a broken block is left out (and reported), unknown fields stay in the file.
  */
 import { isIsoDate } from '../time/zone'
+import { NOTE_MAX } from './note'
 import { DAY_TYPES, type DayTypeId } from './settings'
 
 /** „druga zmiana” and „analiza tygodniowa” (spec „Model dnia”): a block with either waits for „Zacznij”. */
@@ -163,7 +164,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     waitUntilMin: intIn(v.waitUntilMin, PLAN_MIN, PLAN_MAX),
     costs: costsFrom(v.costs),
     bgCostPct: intIn(v.bgCostPct, 0, 100),
-    note: str(v.note).slice(0, 2000),
+    note: str(v.note).slice(0, NOTE_MAX),
     name: str(v.name).trim().slice(0, BLOCK_NAME_MAX) || null,
     origin: origins.includes(v.origin as string) ? (v.origin as PlanBlock['origin']) : origin,
     sourceId: typeof v.sourceId === 'string' ? v.sourceId : null,

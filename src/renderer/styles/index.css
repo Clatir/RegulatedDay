@@ -241,6 +241,129 @@
     color: var(--color-muted);
     line-height: 16px;
   }
+  /* The note of a block (D388): the live Markdown editor (TipTap) – the tokens of the theme only. */
+  .rd-note {
+    min-height: 84px;
+    padding: 6px 8px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-line-strong);
+    border-radius: 4px;
+    color: var(--color-fg);
+    line-height: 1.45;
+    outline: none;
+    overflow-wrap: anywhere;
+    transition: border-color 120ms ease-out;
+  }
+  .rd-note.ProseMirror-focused {
+    border-color: var(--color-accent);
+  }
+  .rd-note > * + * {
+    margin-top: 0.4em;
+  }
+  .rd-note h1,
+  .rd-note h2,
+  .rd-note h3 {
+    font-weight: 600;
+    line-height: 1.25;
+    margin-top: 0.7em;
+  }
+  .rd-note h1 {
+    font-size: 1.35em;
+  }
+  .rd-note h2 {
+    font-size: 1.18em;
+  }
+  .rd-note h3 {
+    font-size: 1.05em;
+    color: var(--color-lamp);
+  }
+  .rd-note ul,
+  .rd-note ol {
+    padding-left: 1.4em;
+  }
+  .rd-note ul {
+    list-style: disc;
+  }
+  .rd-note ol {
+    list-style: decimal;
+  }
+  .rd-note li > * + * {
+    margin-top: 0.2em;
+  }
+  .rd-note ul[data-type='taskList'] {
+    list-style: none;
+    padding-left: 0.1em;
+  }
+  .rd-note ul[data-type='taskList'] ul[data-type='taskList'] {
+    padding-left: 1.3em;
+  }
+  .rd-note li[data-type='taskItem'] {
+    display: flex;
+    gap: 0.5em;
+    align-items: flex-start;
+  }
+  .rd-note li[data-type='taskItem'] > label {
+    flex: none;
+    margin-top: 0.15em;
+    user-select: none;
+  }
+  .rd-note li[data-type='taskItem'] > div {
+    flex: 1;
+    min-width: 0;
+  }
+  .rd-note li[data-type='taskItem'][data-checked='true'] > div {
+    color: var(--color-muted);
+  }
+  .rd-note input[type='checkbox'] {
+    accent-color: var(--color-lamp);
+    cursor: pointer;
+  }
+  .rd-note blockquote {
+    border-left: 3px solid var(--color-line-strong);
+    padding-left: 0.75em;
+    color: var(--color-muted);
+  }
+  .rd-note code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    background: var(--color-raised);
+    border-radius: 3px;
+    padding: 0 0.3em;
+  }
+  .rd-note pre {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    background: var(--color-raised);
+    border-radius: 4px;
+    padding: 0.5em 0.7em;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .rd-note pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+  }
+  .rd-note a {
+    color: var(--color-sea);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .rd-note s {
+    color: var(--color-muted);
+  }
+  .rd-note hr {
+    border: 0;
+    border-top: 1px solid var(--color-line-strong);
+    margin: 0.7em 0;
+  }
+  .rd-note-expanded .rd-note {
+    min-height: 0;
+    flex: 1;
+    max-height: none;
+    overflow-y: auto;
+    font-size: 15px;
+  }
 }
 
 /*
