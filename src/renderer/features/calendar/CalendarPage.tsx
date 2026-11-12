@@ -14,6 +14,7 @@ import { paths } from '@shared/data/paths'
 import { sessionShiftMin, sessionWindow } from '@shared/engine/createDay'
 import { logicalClock, plDate } from '@shared/format'
 import type { ZjazdDay } from '@shared/import/zjazdy'
+import { eventsOn } from '@shared/model/allDay'
 import { dayFileFrom } from '@shared/model/plan'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn, type DayTypeId } from '@shared/model/settings'
 import { blockFill } from '@shared/theme'
@@ -34,7 +35,7 @@ import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
 import { ZjazdyPreviewPanel } from './ZjazdyPreview'
 
 export function CalendarPage() {
-  const { rd, templates, lectures, stamp } = useData()
+  const { rd, templates, lectures, stamp, allDay } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const brightness = useMachine((s) => s.prefs.brightness)
   const [month, setMonth] = useState(monthOf(today))
@@ -230,6 +231,7 @@ export function CalendarPage() {
               return {
                 tone: blockFill(DAY_TYPE_COLORS[i.type], brightness),
                 title: i.title,
+                events: eventsOn(allDay, d),
                 marks: i.marks.map((x) => (
                   <span key={x} className="rounded-sm bg-bg/60 px-1">
                     {x}
