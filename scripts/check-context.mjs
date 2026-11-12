@@ -16,6 +16,7 @@ const limits = [
   { file: 'docs/decyzje-techniczne.md', lines: 1000, kb: 200 },
   // T535: T1–T399 in a file of their own.
   { file: 'docs/decyzje-techniczne-T1-T399.md', lines: 1000, kb: 200 },
+  { file: 'docs/decyzje-techniczne-T400-T599.md', lines: 1000, kb: 200 },
 ]
 const rules = new URL('.claude/rules/', root)
 if (existsSync(rules)) {
