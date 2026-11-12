@@ -3,9 +3,9 @@
  * weekdays, on the N-th day of a month, on the N-th or last weekday of a month – from its first day until never, a date
  * or N occurrences (series/<id>.json). A change of the whole series applies from a date like a version of a template
  * (`SeriesVersion.from`): a day counted later takes the version of its own date, so a day gone by never changes. „To i
- * następne” splits a series: the part after the split keeps the first one's `root`, so its occurrences keep their ids
- * (a day's own change of an occurrence stays with it). Records are read tolerantly: a broken one is left out (null),
- * fields this version does not know stay in the file (`seriesJson`).
+ * następne” is a version from the occurrence's day (T715): a series is one record for good – one count, one end, one
+ * place in the list. Records are read tolerantly: a broken one is left out (null), fields this version does not know
+ * stay in the file (`seriesJson`).
  */
 import type { RawRecord } from '../api'
 import { addDays, daysBetween, isIsoDate, weekday } from '../time/zone'
@@ -64,7 +64,7 @@ export interface SeriesVersion {
 
 export interface Series {
   id: string
-  /** The series its occurrences' ids come from: its own id, or – for a part split off by „To i następne” – the first part's. */
+  /** The series its occurrences' ids come from (`seriesBlockId`): its own id (a record of another root is read the same way). */
   root: string
   /** The first day it may have an occurrence on. */
   start: string

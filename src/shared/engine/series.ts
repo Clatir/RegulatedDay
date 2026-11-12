@@ -66,24 +66,44 @@ export function seriesBlocks(plans: readonly SeriesPlan[], date: string, dayType
 
 const overlaps = (a: PlanBlock, b: PlanBlock): boolean => a.startMin != null && b.startMin != null && a.startMin < b.startMin + b.durationMin && b.startMin < a.startMin + a.durationMin
 
+/** How many times the room of occurrences was counted (`pushedBySeries`; the tests see the memory work). */
+export const seriesPushRuns = { count: 0 }
+
+/** The rooms counted lately, by what they are counted from (a day is made again and again – „Dziś” every 30 s, the morning's 7 days). */
+const pushMemo = new Map<string, PlanBlock[]>()
+const PUSH_MEMO_MAX = 64
+
 /**
  * The snapshot's blocks with the room its occurrences make (D401): an occurrence on a place a block of the template takes
  * pushes the flexible blocks after it as „Dodaj” does (D367, `pushApart` on the axis of the plan – a day counted from its
  * start with no events), the fixed, protected and anchored ones stay; one occurrence after another by its start. Only the
- * snapshot's own blocks (never the day's file): the same files make the same snapshot on every computer. Nothing on a
- * taken place – the blocks as they are (no day counted).
+ * snapshot's own blocks, without those the day's file cancels or moves away (`gone` – a block of the template a series
+ * was made from that day takes no place, T718); never the file's own blocks: the same files make the same snapshot on
+ * every computer. Nothing on a taken place – the blocks as they are (no day counted); counted once per its inputs.
  */
-export function pushedBySeries(snapshot: DaySnapshot, date: string, nextWakeMin: number): PlanBlock[] {
-  let blocks = snapshot.blocks
-  const occurrences = blocks.filter((b) => b.origin === 'series' && b.startMin != null && b.background !== true).sort((a, b) => a.startMin! - b.startMin! || (a.id < b.id ? -1 : 1))
-  for (const o of occurrences) {
+export function pushedBySeries(snapshot: DaySnapshot, date: string, nextWakeMin: number, gone: ReadonlySet<string> = new Set()): PlanBlock[] {
+  const live = (b: PlanBlock) => !gone.has(b.id)
+  const occurrences = snapshot.blocks.filter((b) => live(b) && b.origin === 'series' && b.startMin != null && b.background !== true)
+  if (!occurrences.some((o) => snapshot.blocks.some((b) => live(b) && b.id !== o.id && b.origin === 'template' && !b.anchor && overlaps(b, o)))) return snapshot.blocks
+  const key = JSON.stringify([date, nextWakeMin, [...gone].sort(), snapshot])
+  const known = pushMemo.get(key)
+  if (known) return [...known]
+  let blocks = snapshot.blocks.filter(live)
+  for (const o0 of [...occurrences].sort((a, b) => a.startMin! - b.startMin! || (a.id < b.id ? -1 : 1))) {
+    const o = blocks.find((b) => b.id === o0.id)!
     const others = blocks.filter((b) => b.id !== o.id)
     if (!others.some((b) => b.origin === 'template' && !b.anchor && overlaps(b, o))) continue
     const ctx: DayContext = { date, snapshot: { ...snapshot, blocks: others }, plan: others, wakeMin: snapshot.wakeMin, nextWakeMin, events: [], now: dayStart(date) }
+    seriesPushRuns.count++
     const starts = new Map(pushApart(ctx, computeDay(ctx), blocks, o.id).map((p) => [p.id, p.startMin]))
     if (starts.size) blocks = blocks.map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
   }
-  return blocks
+  const moved = new Map(blocks.map((b) => [b.id, b]))
+  // The blocks the file cancels stay in the snapshot as they were (an answer „tak” or a „Cofnij” brings them back).
+  const out = snapshot.blocks.map((b) => moved.get(b.id) ?? b)
+  pushMemo.set(key, out)
+  if (pushMemo.size > PUSH_MEMO_MAX) pushMemo.delete(pushMemo.keys().next().value!)
+  return [...out]
 }
 
 /**
@@ -198,41 +218,18 @@ export function withEnd(s: Series, patch: Pick<SeriesPatch, 'until' | 'count'>, 
 }
 
 /**
- * „Cała seria” (D381): a version from `from` (today, or the series' first day if it starts later) with the change – the
- * versions before it stay (the days gone by), a version of the same date is replaced; its end as `withEnd` says. The
- * block's fields of the patch are only those changed (the panel sends what you changed, never the whole block).
+ * A change of the series from `from` on (D381, T715): „Cała seria” – from today (the series' first day when it starts
+ * later), „To i następne” – from the occurrence's day. A version from that day with the change over the version in force
+ * on it; the versions before it stay (the days gone by), one of the same date is replaced, the later ones get the change
+ * too (each keeps what else it changed). The block's fields of the patch are only those changed (the panel sends what you
+ * changed, never the whole block). Only its end changed: no version (`withEnd`).
  */
 export function changedFrom(s: Series, from: string, patch: SeriesPatch): Series {
-  // Only its end changed: no version (its days are made as before).
   if (patch.block === undefined && patch.rule === undefined && patch.special === undefined) return s
   const at = from < s.start ? s.start : from
   const base = seriesVersionOn(s, at) ?? s.versions[0]!
-  const version: SeriesVersion = { from: at, block: { ...base.block, ...patch.block }, rule: ruleFrom(patch.rule, base.rule, at), special: patch.special ?? base.special }
-  return { ...s, versions: [...s.versions.filter((v) => v.from < at), version] }
-}
-
-/**
- * „To i następne” from `at` (D381, a day after the series' first): the series ends the day before, a new one of the same
- * root (its occurrences keep their ids) starts on `at` with the change; a count is shared – the new part has what the
- * first did not use (`countedBefore`), none left – no new part.
- */
-export function splitAt(s: Series, at: string, id: string, patch: SeriesPatch, typeOf: TypeOf, holidays: PlHolidays): { before: Series; after: Series | null } {
-  const before: Series = { ...s, until: s.until != null && s.until < addDays(at, -1) ? s.until : addDays(at, -1), versions: s.versions.filter((v) => v.from < at) }
-  if (!before.versions.length) before.versions = [s.versions[0]!]
-  if (s.until != null && s.until < at) return { before: s, after: null }
-  const left = s.count == null ? null : s.count - countedBefore(s, at, typeOf, holidays)
-  if (left != null && left <= 0) return { before: s, after: null }
-  const base = seriesVersionOn(s, at) ?? s.versions[0]!
-  const after: Series = {
-    id,
-    root: s.root,
-    start: at,
-    until: s.until,
-    count: left,
-    versions: [{ from: at, block: { ...base.block, ...patch.block }, rule: ruleFrom(patch.rule, base.rule, at), special: patch.special ?? base.special }],
-    archived: false
-  }
-  return { before, after }
+  const apply = (v: SeriesVersion, f: string): SeriesVersion => ({ from: f, block: { ...v.block, ...patch.block }, rule: ruleFrom(patch.rule, v.rule, f), special: patch.special ?? v.special })
+  return { ...s, versions: [...s.versions.filter((v) => v.from < at), apply(base, at), ...s.versions.filter((v) => v.from > at).map((v) => apply(v, v.from))] }
 }
 
 /** The series ended on `last` (at least yesterday – a day gone by keeps its occurrence); `remove` – also out of the list. */
@@ -255,35 +252,56 @@ export interface TodayDay {
 }
 
 /**
+ * The field of a day's file with the occurrences a change of their series cancelled (id → true, T719): one a later change
+ * brings back is cancelled no more – one you cancelled yourself (no mark) stays cancelled. Unknown to older versions (kept).
+ */
+export const SERIES_OFF = 'seriesOff'
+
+const offMap = (raw: Raw): Raw => (raw[SERIES_OFF] && typeof raw[SERIES_OFF] === 'object' && !Array.isArray(raw[SERIES_OFF]) ? { ...(raw[SERIES_OFF] as Raw) } : {})
+
+/** An occurrence cancelled by a change of its series (marked), or brought back (the mark and the cancel gone). */
+function seriesOff(raw: Raw, id: string, on: boolean): Raw {
+  const m = offMap(raw)
+  if (on) m[id] = true
+  else delete m[id]
+  return { ...setCancelled(raw, id, on), [SERIES_OFF]: m }
+}
+
+/**
  * Today's occurrence of a series after a change (D381: „Cała seria” and „To i następne” from today, a new series, an
  * end, a removal), as an edit of today's file – only while it has not begun, and never one changed on its day (moved
- * away, cancelled or edited – „Tylko to”): `was` – the occurrence before the change (null: none), `next` – after it (null:
- * none). One that comes or changes is written whole into the file (a snapshot already in the log holds the old one) and
- * pushes apart the flexible blocks after it as „Dodaj” does (D367, D401 – without the bar's „Cofnij”); one that goes is
- * cancelled. `remove` (a removal, an end): also one changed on its day goes.
+ * away, cancelled by you or edited – „Tylko to”): `was` – the occurrence before the change (null: none), `next` – after it
+ * (null: none). One that comes or changes is written whole into the file (a snapshot already in the log holds the old
+ * one) and pushes apart the flexible blocks after it as „Dodaj” does (D367, D401 – without the bar's „Cofnij”); one that
+ * goes is cancelled with the mark of a change (`SERIES_OFF`), so a change back brings it again. `remove` (a removal, an
+ * end): also one changed on its day goes, without the mark.
  */
 export function todayOccurrenceEdit(raw: Raw | null, today: TodayDay, id: string, was: PlanBlock | null, next: PlanBlock | null, remove = false): Raw | null {
   const date = today.ctx.date
   const fact = today.state.facts.blocks.get(id)
   if (fact && (fact.startedAt != null || fact.runs.length > 0)) return null
-  const file = dayFileFrom(raw ?? {}, date)
+  const base = dayRaw(raw, date)
+  const file = dayFileFrom(base, date)
   if (id in file.movedTo) return null
   const inPlan = today.ctx.plan.some((b) => b.id === id)
-  const fileBlock = dayBlocks(dayRaw(raw, date)).find((b) => !!b && typeof b === 'object' && (b as Raw).id === id) as Raw | undefined
+  const fileBlock = dayBlocks(base).find((b) => !!b && typeof b === 'object' && (b as Raw).id === id) as Raw | undefined
   // The occurrence as the day holds it: its block in the file, else the snapshot's (before the day's wake moves it).
   const current: Raw | PlanBlock | null = fileBlock ?? today.ctx.snapshot.blocks.find((b) => b.id === id) ?? null
+  const off = offMap(base)[id] === true && file.cancelled.includes(id)
   if (!remove) {
-    if (file.cancelled.includes(id)) return null
+    if (file.cancelled.includes(id) && !off) return null
     if (fileBlock && !(was && sameOccurrence(fileBlock, was)) && !(next && sameOccurrence(fileBlock, next))) return null
   }
   if (!next || remove) {
     if (!inPlan) return null
     const inSnapshot = today.ctx.snapshot.blocks.some((b) => b.id === id)
-    const base = dayRaw(raw, date)
-    return inSnapshot ? setCancelled(base, id, true) : takeBlock(base, id)
+    if (!inSnapshot) return takeBlock(base, id)
+    return remove ? setCancelled(base, id, true) : seriesOff(base, id, true)
   }
-  if (inPlan && current && sameOccurrence(current, next)) return null
-  let after = putBlock(dayRaw(raw, date), next)
+  // Cancelled by a change of the series before: back in the plan.
+  let after = off ? seriesOff(base, id, false) : base
+  if (inPlan && current && sameOccurrence(current, next)) return off ? after : null
+  after = putBlock(after, next)
   for (const p of pushApart(today.ctx, today.state, withBlock(today.ctx.plan, next), id)) {
     const b = today.ctx.plan.find((x) => x.id === p.id)
     if (b) after = putBlock(after, { ...(dayFileFrom(after, date).blocks.find((x) => x.id === p.id) ?? b), startMin: p.startMin })
@@ -297,7 +315,8 @@ export function todayOccurrenceEdit(raw: Raw | null, today: TodayDay, id: string
  * mark, without a snapshot of the day.
  */
 export function seriesOnDay(plans: readonly SeriesPlan[], date: string, dayType: DayTypeId, dayFile: DayFile | null, holidays: PlHolidays): boolean {
-  if (dayFile?.blocks.some((b) => b.origin === 'series')) return true
   const gone = new Set([...(dayFile?.cancelled ?? []), ...Object.keys(dayFile?.movedTo ?? {})])
+  // As `dayPlan`: a block of the file the file itself cancels or moves away is not on the day.
+  if (dayFile?.blocks.some((b) => b.origin === 'series' && !gone.has(b.id))) return true
   return seriesBlocks(plans, date, dayType, holidays).some((b) => !gone.has(b.id))
 }

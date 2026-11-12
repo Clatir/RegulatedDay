@@ -28,9 +28,11 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * day of „zjazd” and a class imported from the PDF move the maximum and are never an extension – an older version would
  * write their minutes after the boundary as an extension and freeze the day so; it gives way to this one as the leader.
  * 7 – a running block shortened by its end dragged on the axis (D365, `block.shorten`): an older version skips the event
- * and would keep the old planned end – its „Dalej?”, automatic ends and the windows of a later „Przedłuż”.
+ * and would keep the old planned end – its „Dalej?”, automatic ends and the windows of a later „Przedłuż”. 8 – series
+ * (D381, T716): the leader's `day.create` takes the occurrences and the room they make among the template's blocks – an
+ * older version would make the day without them; it gives way to this one as the leader.
  */
-export const RULES_VERSION = 7
+export const RULES_VERSION = 8
 
 export interface EventBase {
   /** Unique: `<computer>-<n>` for your actions, derived from the data for automatic ones (both computers write the same). */

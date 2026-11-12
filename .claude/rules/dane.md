@@ -77,15 +77,17 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   pasku najpierw końce wczoraj (`barActiveDay().before`), potem dnia (`laid`, bez tych już w logu i dzienniku), potem
   swoje; wszystko sprawdzone przed zapisem (logi pełne, zdarzenia poprawne), inaczej nic. Bez kliknięcia zapisuje je
   prowadzący w `check()` (bez nakładki). Nowe miejsce, które ocenia kliknięcie, też przez `barDay`, `writeOn` i
-  `serial`. Zapisy okna wprost do logu (`userEvents`) – bez nakładki. Zmiana reguł działań automatycznych – `RULES_VERSION`.
+  `serial`. Zapisy okna wprost do logu (`userEvents`) – bez nakładki. Zmiana reguł działań automatycznych i migawki `day.create` – `RULES_VERSION` (8: serie, T716).
   Import zjazdów (T546, T548): `DataHub.zjazdyPreview` / `zjazdySave` / `zjazdyUndo` – jedna partia kolejki
   (`zjazdyWrite`), PDF przez `main/import/pdfText.ts` (pdfjs leniwie, tylko proces główny).
   Tydzień i cele (T552, T553): `folder.horizonDays` (zadanie `horizon`, pamięć per dzień, `unknown` + `warn`),
   `weekView`, `goalsView`, `setGoals` (pola liściowe `goals.RRRR-MM.*` w `rd.json`, po kolei przez kolejkę).
-- Serie (T700–T710): `series/<id>.json`; `inputs()` daje `series` (`SeriesPlan[]`, typy dni licznika z plików dni –
-  `seriesOf`, iteracyjnie) i `seriesDays`; okno – `DataView.series` + `seriesDays` (`folder.seriesView`). Zmiany serii:
-  `main/data/series.ts` (hub `seriesCreate`/`Change`/`Remove`/`End`/`Answer`/`Undo`) – rekordy z kolejką, jedna partia
-  `edit`, dziś tylko niezaczęte; `folder.dayDatesFrom` (pliki dni od daty). `searchDays` pomija wystąpienia. Test: `tests/fs/series.test.ts`.
+- Serie (T700–T719): `series/<id>.json`; `inputs()` daje `series` (`SeriesPlan[]`) i `seriesDays` – typy dni licznika z plików
+  (`countTypes`, iteracyjnie; bez serii „odbywa się”, seria zakończona przed wczoraj – raz), `seriesOf` pamięta wynik
+  `LIST_TRUST_MS` po wejściach (zapis dnia, serii, ustawień przez ten komputer – od razu od nowa); okno – `DataView.series`
+  + `seriesDays` (`folder.seriesView`, hub przy błędzie – ostatnie znane). Zmiany: `main/data/series.ts` (hub `series*`) –
+  rekordy z kolejką, jedna partia `edit`, typy dni nowego licznika czytane przed liczeniem (`ensureTypes`), dziś tylko
+  niezaczęte; `folder.dayDatesFrom`. `searchDays` pomija wystąpienia. Testy: `tests/fs/series*.test.ts`.
 - Folder bez korzenia (T515): `DataFolder.open` owija `fs` w `rootGuarded` – zapis nie tworzy samego folderu danych;
   `check()` bez korzenia zwraca od razu („nieustalony”). Testy, które otwierają folder, muszą go najpierw utworzyć.
 - Korzeń znika w trakcie (E8b.1, `isRootGone` = ENOROOT): `cachedJson` oddaje wersję znaną (zaufaną jak świeżo

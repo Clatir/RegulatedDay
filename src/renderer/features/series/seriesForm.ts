@@ -142,11 +142,13 @@ export function draftPatch(base: SeriesDraft, d: SeriesDraft): SeriesPatch {
   if (d.special !== base.special) out.special = d.special
   const e = endOf(d)
   const was = endOf(base)
-  // The end is compared as the field shows it: a series with both a date and a count keeps both until the end is touched.
-  if (d.end !== base.end || e.until !== was.until || e.count !== was.count) {
+  // Another kind of end: the one the field shows, the other cleared. The same kind: only its value – an end the app set
+  // beside it (a count the days gone by reached ends the series yesterday) stays (T719).
+  if (d.end !== base.end) {
     out.until = e.until
     out.count = e.count
-  }
+  } else if (d.end === 'count' && e.count !== was.count) out.count = e.count
+  else if (d.end === 'until' && e.until !== was.until) out.until = e.until
   return out
 }
 

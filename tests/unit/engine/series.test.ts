@@ -21,8 +21,9 @@ import {
   seriesAnswerRaw,
   seriesBlockId,
   seriesOnDay,
+  seriesPushRuns,
   seriesQuestions,
-  splitAt,
+  SERIES_OFF,
   todayOccurrenceEdit,
   withEnd,
   type SeriesEditError
@@ -45,7 +46,7 @@ import type { DayTypeId } from '@shared/model/settings'
 import { seriesRuleText, seriesText } from '@shared/seriesText'
 import { addDays, weekday } from '@shared/time/zone'
 import { dayLengthMin, placeLogical } from '@shared/time/day'
-import type { AnyEvent } from '@shared/model/events'
+import { RULES_VERSION, type AnyEvent } from '@shared/model/events'
 import { lm, Scenario } from './dsl'
 
 const physio: SeriesBlock = { categoryId: 'inne', variantId: null, startMin: lm('17:00'), durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null }
@@ -167,11 +168,11 @@ describe('dni szczególne (D382)', () => {
     }
   })
 
-  it('po podziale pyta pole części, do której należy dzień', () => {
-    const { before, after } = splitAt(s, '2026-11-26', 'fizjo2', { special: 'held' }, typeOfDays([], () => null), marketDay)
+  it('po „To i następne” pyta pole wersji dnia', () => {
+    const changed = changedFrom(s, '2026-11-26', { special: 'held' })
     const ask = (d: string) => {
       const file = fileOf(d, 'zjazd-zdalny')
-      return seriesQuestions([before, after!], dayPlan(snap(d, [before, after!], { [d]: 'zjazd-zdalny' }), file), file, 'zjazd-zdalny', d).length
+      return seriesQuestions([changed], dayPlan(snap(d, [changed], { [d]: 'zjazd-zdalny' }), file), file, 'zjazd-zdalny', d).length
     }
     expect([ask('2026-11-19'), ask('2026-11-26')]).toEqual([1, 0])
   })
@@ -206,30 +207,27 @@ describe('zmiany serii: Tylko to · To i następne · Cała seria (D381)', () =>
     expect(occurrenceDays([s], '2026-11-12', '2026-12-24', {}, { [thu]: src })).toEqual(['2026-11-12', '2026-12-10', '2026-12-24'])
   })
 
-  it('„To i następne” dzieli serię: stara kończy się dzień wcześniej, nowa od tego dnia z tymi samymi identyfikatorami wystąpień', () => {
+  it('„To i następne” od dnia: jedna seria z wersją od tego dnia (te same id wystąpień, jeden licznik); późniejsze wersje dostają zmianę', () => {
     const counted = make('ang', { kind: 'weekly', every: 1, days: [1], anchor: '' }, '2026-11-16', { block: flexible, count: 5 })
-    const typeOf = typeOfDays([], () => null)
-    const { before, after } = splitAt(counted, '2026-11-30', 'ang2', { block: { startMin: lm('18:00') } }, typeOf, marketDay)
-    expect([before.until, before.count, after?.start, after?.root, after?.count]).toEqual(['2026-11-29', 5, '2026-11-30', 'ang', 3])
-    const list = [before, after!]
-    expect(occOn('2026-11-23', list)!.startMin).toBe(lm('17:00'))
-    const later = occOn('2026-11-30', list)!
+    const after = changedFrom(counted, '2026-11-30', { block: { startMin: lm('18:00') } })
+    expect([after.id, after.count, after.until, after.versions.map((v) => v.from)]).toEqual(['ang', 5, null, ['2026-11-16', '2026-11-30']])
+    expect(occOn('2026-11-23', [after])!.startMin).toBe(lm('17:00'))
+    const later = occOn('2026-11-30', [after])!
     expect([later.startMin, later.id, later.sourceId]).toEqual([lm('18:00'), seriesBlockId('2026-11-30', 'ang'), 'ang'])
-    // The count is shared: 2 before the split, 3 after – five Mondays in all.
-    expect(occurrenceDays(list, '2026-11-16', '2027-01-31')).toEqual(['2026-11-16', '2026-11-23', '2026-11-30', '2026-12-07', '2026-12-14'])
-    expect(seriesOfBlock(list, later, '2026-11-30')?.id).toBe('ang2')
-    expect(seriesOfBlock(list, occOn('2026-11-23', list)!, '2026-11-23')?.id).toBe('ang')
-    // Nothing left of the count – no new part.
-    expect(splitAt(make('x', { kind: 'daily' }, '2026-11-16', { count: 2 }), '2026-11-20', 'y', {}, typeOf, marketDay).after).toBeNull()
+    // One count: five Mondays in all.
+    expect(occurrenceDays([after], '2026-11-16', '2027-01-31')).toEqual(['2026-11-16', '2026-11-23', '2026-11-30', '2026-12-07', '2026-12-14'])
+    // A change from an earlier day („Cała seria” from today) reaches the later version too – its own start stays.
+    const all = changedFrom(after, '2026-11-23', { block: { durationMin: 30 } })
+    expect(all.versions.map((v) => [v.from, v.block.startMin, v.block.durationMin])).toEqual([
+      ['2026-11-16', lm('17:00'), 45],
+      ['2026-11-23', lm('17:00'), 30],
+      ['2026-11-30', lm('18:00'), 30]
+    ])
   })
 
-  it('lista serii: jedna na korzeń – część z dziś, przed podziałem stara, po końcu następna; usunięta – żadna', () => {
-    const typeOf = typeOfDays([], () => null)
-    const { before, after } = splitAt(s, '2026-12-10', 'fizjo2', {}, typeOf, marketDay)
-    expect(currentSeries([after!, before], '2026-11-26').map((x) => x.id)).toEqual(['fizjo'])
-    expect(currentSeries([before, after!], '2026-12-10').map((x) => x.id)).toEqual(['fizjo2'])
-    expect(currentSeries([{ ...before, until: '2026-11-20' }, after!], '2026-11-26').map((x) => x.id)).toEqual(['fizjo2'])
-    expect(currentSeries([{ ...before, archived: true }, { ...after!, archived: true }], '2026-11-26')).toEqual([])
+  it('lista serii: jedna na korzeń – usunięta – żadna', () => {
+    expect(currentSeries([s, make('b', { kind: 'daily' }, '2026-11-12')], '2026-11-26').map((x) => x.id)).toEqual(['b', 'fizjo'])
+    expect(currentSeries([{ ...s, archived: true }], '2026-11-26')).toEqual([])
   })
 
   it('„Cała seria” od dziś: dni minione bez zmian (także liczone na żywo), dni przyszłe z nową godziną', () => {
@@ -272,6 +270,26 @@ describe('zmiany serii: Tylko to · To i następne · Cała seria (D381)', () =>
     const cancelled = setCancelled({ schema: 1, date: today }, id, true)
     expect(todayOccurrenceEdit(cancelled, day([], cancelled), id, was, next)).toBeNull()
     expect(dayFileFrom(todayOccurrenceEdit(null, day([], null), id, was, null, true)!, today).cancelled).toEqual([id])
+  })
+
+  it('zmiana serii odwołuje dzisiejsze wystąpienie ze znacznikiem; zmiana z powrotem je przywraca, Twoje odwołanie zostaje (T719)', () => {
+    const today = '2026-11-26'
+    const id = seriesBlockId(today, 'fizjo')
+    const day = (raw: Record<string, unknown> | null, list: Series[]) => {
+      const ctx = dayContextOf(inputs(list), { date: today, events: [], dayFile: raw ? dayFileFrom(raw, today) : null, nextFile: null }, marketDay, placeLogical(today, lm('10:00')))
+      return { ctx, state: computeDay(ctx) }
+    }
+    const was = occOn(today, [s])!
+    const off = changedFrom(s, today, { rule: { kind: 'weekly', every: 2, days: [5], anchor: today } })
+    const gone = todayOccurrenceEdit(null, day(null, [s]), id, was, null)!
+    expect([dayFileFrom(gone, today).cancelled, (gone[SERIES_OFF] as Record<string, unknown>)[id]]).toEqual([[id], true])
+    // Back to Thursdays: the occurrence is in today's plan again.
+    const back = todayOccurrenceEdit(gone, day(gone, [off]), id, null, was)!
+    expect(dayFileFrom(back, today).cancelled).toEqual([])
+    expect(dayPlan(snap(today, [s], {}, [], dayFileFrom(back, today)), dayFileFrom(back, today)).some((b) => b.id === id)).toBe(true)
+    // Cancelled by you (no mark): stays cancelled.
+    const mine = setCancelled({ schema: 1, date: today }, id, true)
+    expect(todayOccurrenceEdit(mine, day(mine, [off]), id, null, was)).toBeNull()
   })
 
   it('koniec i zmiana końca nie ruszają dni minionych', () => {
@@ -332,6 +350,50 @@ describe('wystąpienie na zajętym miejscu rozsuwa bloki szablonu (D401, D367)',
     // The days after both keep their rule (calendar days).
     const daily = make('d', { kind: 'daily' }, '2026-10-24')
     expect(occurrenceDays([daily], '2026-10-24', '2026-10-26')).toEqual(['2026-10-24', '2026-10-25', '2026-10-26'])
+  })
+})
+
+describe('rozsuwanie: odwołane w pliku dnia i pamięć (T718)', () => {
+  const tpl = (blocks: PlanBlock[]): Template => ({ id: 'zw', name: 'Zwykły', dayType: 'zwykly', weekdays: [], archived: false, versions: [{ from: '2020-01-01', budgetMin: null, maxMin: null, blocks }] })
+  const t = (id: string, at: string, min: number) => planBlock({ id, categoryId: 'inne', startMin: lm(at), durationMin: min, origin: 'template' })
+  const date = '2026-11-19'
+  const s = make('ang', { kind: 'weekly', every: 1, days: [4], anchor: '' }, '2026-11-12', { block: { ...flexible, startMin: lm('17:00'), durationMin: 60 } })
+  const template = tpl([t('a', '17:00', 60), t('b', '18:00', 30)])
+
+  it('blok szablonu odwołany w pliku dnia (z niego powstała seria) nie zajmuje miejsca – kolejne bez rozsunięcia', () => {
+    const aId = snap(date, [], {}, [template]).blocks.find((b) => b.sourceId === 'a')!.id
+    const file = dayFileFrom(setCancelled({ schema: 1, date }, aId, true), date)
+    const out = snap(date, [s], {}, [template], file)
+    expect(out.blocks.find((b) => b.sourceId === 'b')!.startMin).toBe(lm('18:00'))
+    // Without the cancel the block of the template is pushed (and so is the next one).
+    expect(snap(date, [s], {}, [template]).blocks.find((b) => b.sourceId === 'b')!.startMin).toBeGreaterThan(lm('18:00'))
+  })
+
+  it('ten sam dzień liczony drugi raz bierze rozsunięcie z pamięci (bez ponownego liczenia dnia)', () => {
+    const first = snap('2026-11-26', [s], {}, [template])
+    const runs = seriesPushRuns.count
+    const again = snap('2026-11-26', [s], {}, [template])
+    expect(seriesPushRuns.count).toBe(runs)
+    expect(again.blocks).toEqual(first.blocks)
+    snap('2026-12-03', [s], {}, [template])
+    expect(seriesPushRuns.count).toBe(runs + 1)
+  })
+})
+
+describe('znak w siatce miesiąca (D404)', () => {
+  it('wystąpienie w pliku dnia, które ten plik odwołuje albo przenosi – bez znaku', () => {
+    const d = '2026-11-19'
+    const s = make('fizjo', { kind: 'weekly', every: 1, days: [4], anchor: '' }, '2026-11-12')
+    const id = seriesBlockId(d, 'fizjo')
+    const own = putBlock({ schema: 1, date: d, dayType: 'wolne' }, planBlock({ id, categoryId: 'inne', startMin: 600, durationMin: 30, origin: 'series', sourceId: 'fizjo' }))
+    expect(seriesOnDay(plansOf([s]), d, 'wolne', dayFileFrom(own, d), marketDay)).toBe(true)
+    expect(seriesOnDay(plansOf([s]), d, 'wolne', dayFileFrom(setCancelled(own, id, true), d), marketDay)).toBe(false)
+  })
+})
+
+describe('wersja reguł (T716)', () => {
+  it('wystąpienia w `day.create` prowadzącego: starsza wersja ustępuje prowadzenia', () => {
+    expect(RULES_VERSION).toBe(8)
   })
 })
 

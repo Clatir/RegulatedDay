@@ -204,10 +204,12 @@ export function createDay(inp: DayInputs): DaySnapshot {
     holidays,
     series: occurrences.map((b) => b.sourceId!).sort()
   }
-  // An occurrence on a place a block of the template takes makes room for itself (D401) – on the axis of the plan.
+  // An occurrence on a place a block of the template takes makes room for itself (D401) – on the axis of the plan; a block
+  // the day's file cancels or moves away takes no place (T718).
   if (!occurrences.length) return snapshot
   const nextWakeMin = nextWakeForBedtime(null, null, inp.changes, addDays(date, 1))
-  return { ...snapshot, blocks: pushedBySeries(snapshot, date, nextWakeMin) }
+  const gone = new Set([...(dayFile?.cancelled ?? []), ...Object.keys(dayFile?.movedTo ?? {})])
+  return { ...snapshot, blocks: pushedBySeries(snapshot, date, nextWakeMin, gone) }
 }
 
 /** The snapshot's blocks with the session layer's answers given after the day was made (spec „Sesje tradingowe”): „nie” takes a session away, „tak” brings one the day was made without. */

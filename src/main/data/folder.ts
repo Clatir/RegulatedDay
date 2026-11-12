@@ -54,7 +54,7 @@ import type { RunningRequest } from '@shared/widget'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { blockName, type Names } from '@shared/blockName'
 import { routineFrom, type Routine } from '@shared/model/routines'
-import { countDatesToRead, seriesFrom, seriesPlans, typeOfDays, type Series, type SeriesPlan } from '@shared/model/series'
+import { countDatesToRead, ruleDates, seriesFrom, seriesLast, seriesPlans, typeOfDays, type Series, type SeriesPlan } from '@shared/model/series'
 import type { CsvDay } from '@shared/engine/csv'
 import { changeOrder, isDayTypeId, settingsOn, type DayTypeId, type SettingsChange } from '@shared/model/settings'
 import { decideLeader, minuteGate, SILENT_MS, soundComputer, type LeaderDecision, type Peer } from '@shared/sync/leader'
@@ -282,6 +282,12 @@ export class DataFolder {
   private lastObserve = 0
   /** The last days of the series as the last `inputs` counted them (a day counted again only when they change – `contextSig`). */
   private seriesSig = ''
+  /** The types of days the counts of the series read, by the view (`own`) – for `LIST_TRUST_MS` (`seriesOf`, T717). */
+  private readonly seriesMemo = new Map<boolean, { key: string; at: number; days: Record<string, DayTypeId> }>()
+  /** Writes of this computer of what the counts read (days, series, settings): a memory of counts before them is stale. */
+  private seriesWrites = 0
+  /** Series that ended before yesterday, by their content: the types of their days as read then (`countTypes`). */
+  private readonly seriesSettled = new Map<string, Record<string, DayTypeId | null>>()
   /** The data folder's root was gone at the last check (it is unsettled again when it comes back). */
   private rootGone = false
 
@@ -363,6 +369,7 @@ export class DataFolder {
       now,
       written: (rel, now) => {
         this.lookedAt.delete(rel)
+        if (rel === paths.settings || rel.startsWith('days/') || rel.startsWith(`${ID_COLLECTIONS.series}/`)) this.seriesWrites++
         // Done: what the file holds now is known (looked at again at the next read – the size never matches); failed:
         // the file is as it was, with what is known of it.
         if (!now) return
@@ -616,13 +623,43 @@ export class DataFolder {
 
   /**
    * The series with their last days (D401: a count ends on the day of its N-th occurrence a special day did not skip): the
-   * own types of the days the counts read come from their files, read until the ends stand (a skipped day moves an end).
-   * A day's file that cannot be read now counts by its weekday – a count of a series never stops the day being made.
+   * own types of the days the counts read come from their files (`countTypes`). Counted once per its inputs (the series,
+   * the settings' changes, your queued edits and this computer's writes of days, series and settings) for `LIST_TRUST_MS`
+   * (T717): a type set on another computer reaches the counts within a minute, never at every check of 15 s.
    */
   private async seriesOf(list: readonly Series[], changes: readonly SettingsChange[], own: boolean): Promise<{ plans: SeriesPlan[]; days: Record<string, DayTypeId> }> {
+    const key = JSON.stringify([own, own ? this.queue.pending.length : 0, this.seriesWrites, logicalDayOf(this.clock.now()), list, changes.map((c) => [c.id, c.from, c.at, c.made])])
+    const memo = this.seriesMemo.get(own)
+    let days: Record<string, DayTypeId>
+    if (memo && memo.key === key && this.o.clock.mono() - memo.at < LIST_TRUST_MS) days = memo.days
+    else {
+      days = await this.countTypes(list, changes, own)
+      this.seriesMemo.set(own, { key, at: this.o.clock.mono(), days })
+    }
+    const plans = seriesPlans(list, typeOfDays(changes, (d) => days[d] ?? null), this.o.holidays)
+    // The key of a day counted from the folder's files (`contextSig`) – never from your queued edits.
+    if (!own) this.seriesSig = JSON.stringify(plans.map((p) => [p.series.id, p.last]))
+    return { plans, days }
+  }
+
+  /**
+   * The own types of the days the counts of `list` read, from the days' files, read until the ends stand (a skipped day
+   * moves an end – `countDatesToRead`). Not read: a series whose type of day changes nothing (every version „odbywa się”),
+   * and one whose end was found before yesterday – its days are gone by and never change (their types as read then). A
+   * day's file that cannot be read now counts by its weekday – a count of a series never stops the day being made.
+   */
+  async countTypes(list: readonly Series[], changes: readonly SettingsChange[], own = true): Promise<Record<string, DayTypeId>> {
     const known = new Map<string, DayTypeId | null>()
+    const yesterday = addDays(logicalDayOf(this.clock.now()), -1)
+    const open: Series[] = []
+    for (const s of list) {
+      if (s.count == null || s.versions.every((v) => v.special === 'held')) continue
+      const settled = this.seriesSettled.get(JSON.stringify(s))
+      if (settled) for (const [d, t] of Object.entries(settled)) known.set(d, t)
+      else open.push(s)
+    }
     for (let round = 0; round < SERIES_READ_ROUNDS; round++) {
-      const need = countDatesToRead(list, changes, (d) => known.get(d), this.o.holidays)
+      const need = countDatesToRead(open, changes, (d) => known.get(d), this.o.holidays)
       if (!need.length) break
       for (const d of need) {
         try {
@@ -634,19 +671,26 @@ export class DataFolder {
     }
     const days: Record<string, DayTypeId> = {}
     for (const [d, t] of known) if (t) days[d] = t
-    const plans = seriesPlans(list, typeOfDays(changes, (d) => days[d] ?? null), this.o.holidays)
-    // The key of a day counted from the folder's files (`contextSig`) – never from your queued edits.
-    if (!own) this.seriesSig = JSON.stringify(plans.map((p) => [p.series.id, p.last]))
-    return { plans, days }
+    const typeOf = typeOfDays(changes, (d) => days[d] ?? null)
+    for (const s of open) {
+      const last = seriesLast(s, typeOf, this.o.holidays)
+      if (last == null || last >= yesterday) continue
+      // Ended before yesterday: the types of its days as read now (also the days without one) stay its for good.
+      const mine: Record<string, DayTypeId | null> = {}
+      for (const d of ruleDates(s, s.start, last, this.o.holidays)) mine[d] = known.get(d) ?? null
+      this.seriesSettled.set(JSON.stringify(s), mine)
+    }
+    if (this.seriesSettled.size > 500) this.seriesSettled.clear()
+    return days
   }
 
   /**
-   * The series for the window (D381): their records as this computer sees them (with your queued edits) and the own types
-   * of the days their counts read – the window counts their last days from them (`seriesPlans`), as `inputs(true)` does.
+   * The series for the window (D381): their records as this computer sees them (with your queued edits) – as the days are
+   * made from them (a file that cannot be read now keeps the version read before; one never read – unknown, an error) – and
+   * the own types of the days their counts read with `changes` (the window counts their last days as `inputs(true)` does).
    */
-  async seriesView(): Promise<{ records: Array<Record<string, unknown>>; days: Record<string, DayTypeId> }> {
-    const records = await this.collection('series')
-    const changes = rdFrom(await this.recordView(paths.settings)).settings
+  async seriesView(changes: readonly SettingsChange[]): Promise<{ records: Array<Record<string, unknown>>; days: Record<string, DayTypeId> }> {
+    const records = (await this.cachedDir(ID_COLLECTIONS.series, (v) => v, false, true)) as Array<Record<string, unknown>>
     const list = records.map(seriesFrom).filter((x): x is Series => !!x)
     return { records, days: (await this.seriesOf(list, changes, true)).days }
   }

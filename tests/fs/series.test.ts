@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
+import { recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { snapshotOf } from '@shared/engine/context'
 import { createDay, dayPlan } from '@shared/engine/createDay'
@@ -176,20 +177,63 @@ describe('zmiany i usunięcie serii (D381)', () => {
     expect((await planOn(addDays(today, 1))).find((b) => b.origin === 'series')!.startMin).toBe(23 * 60)
   })
 
-  it('„To i następne” dzieli serię: stara do dnia przed, nowa od niego z tym samym korzeniem; dziś bez zmian', async () => {
+  it('„To i następne” to wersja od dnia jednej serii: kolejne zmiany i usunięcie działają na całej serii (T715)', async () => {
     write(paths.record('series', 'fizjo'), seriesJson(series()))
     const d = addDays(today, 3)
     const out = await hub.seriesChange({ date: d, blockId: seriesBlockId(d, 'fizjo') }, 'following', { block: { durationMin: 30 } })
-    expect(out.ok).toBe(true)
-    const list = seriesOnDisk().sort((a, b) => (a.start < b.start ? -1 : 1))
-    expect(list.map((s) => [s.id === 'fizjo', s.root, s.start, s.until])).toEqual([
-      [true, 'fizjo', start(), addDays(d, -1)],
-      [false, 'fizjo', d, null]
+    expect([out.ok, out.seriesId]).toEqual([true, 'fizjo'])
+    expect(seriesOnDisk().map((x) => [x.id, x.until, x.versions.map((v) => [v.from, v.block.durationMin])])).toEqual([
+      [
+        'fizjo',
+        null,
+        [
+          [start(), 60],
+          [d, 30]
+        ]
+      ]
     ])
-    expect(out.seriesId).toBe(list[1]!.id)
-    const len = async (x: string) => (await planOn(x)).find((b) => b.origin === 'series')!.durationMin
+    const len = async (x: string) => (await planOn(x)).find((b) => b.origin === 'series')?.durationMin ?? null
     expect([await len(today), await len(addDays(d, -1)), await len(d), await len(addDays(d, 4))]).toEqual([60, 60, 30, 30])
     expect(onDisk(paths.day(today))).toBeNull()
+    // „To i następne” once more, later: still one series; „Cała seria” from today reaches every version.
+    const e = addDays(today, 6)
+    expect((await hub.seriesChange({ date: e, blockId: seriesBlockId(e, 'fizjo') }, 'following', { block: { startMin: 21 * 60 } })).ok).toBe(true)
+    expect((await hub.seriesChange({ seriesId: 'fizjo' }, 'all', { block: { name: 'Rehabilitacja' } })).ok).toBe(true)
+    const [one, ...more] = seriesOnDisk()
+    expect(more).toEqual([])
+    expect(one!.versions.map((v) => [v.from, v.block.startMin, v.block.durationMin, v.block.name])).toEqual([
+      [start(), 22 * 60, 60, 'Fizjoterapeuta'],
+      [today, 22 * 60, 60, 'Rehabilitacja'],
+      [d, 22 * 60, 30, 'Rehabilitacja'],
+      [e, 21 * 60, 30, 'Rehabilitacja']
+    ])
+    expect((await hub.view()).series.map((r) => r.id)).toEqual(['fizjo'])
+    // Removed from today: no occurrence on any day after, the days gone by keep theirs.
+    expect((await hub.seriesRemove({ seriesId: 'fizjo' }, 'all')).ok).toBe(true)
+    expect([await len(addDays(d, 1)), await len(addDays(e, 1)), await len(addDays(today, -1))]).toEqual([null, null, 60])
+  })
+
+  it('„To i następne” na dniu przyszłym: jego własny wpis (rozsunięty) dostaje zmienione pola, inne dni z wpisem – bez zmian (T715)', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const [d, e] = [addDays(today, 2), addDays(today, 5)]
+    const entry = (x: string) => planBlock({ ...series().versions[0]!.block, id: seriesBlockId(x, 'fizjo'), startMin: 22 * 60 + 15, origin: 'series', sourceId: 'fizjo' })
+    write(paths.day(d), dayFileWith(d, [entry(d)]))
+    write(paths.day(e), dayFileWith(e, [entry(e)]))
+    expect((await hub.seriesChange({ date: d, blockId: seriesBlockId(d, 'fizjo') }, 'following', { block: { durationMin: 30 } })).ok).toBe(true)
+    const at = (x: string) => dayFileFrom(onDisk(paths.day(x)), x).blocks.map((b) => [b.startMin, b.durationMin])
+    expect(at(d)).toEqual([[22 * 60 + 15, 30]])
+    expect(at(e)).toEqual([[22 * 60 + 15, 60]])
+  })
+
+  it('zmiana z wersją z jutra (zegar innego komputera z przodu): pola sprawdzane na wersji z dziś, jutrzejsza zachowuje swoją godzinę (uwaga 14)', async () => {
+    const s0 = series()
+    write(paths.record('series', 'fizjo'), seriesJson({ ...s0, versions: [...s0.versions, { ...s0.versions[0]!, from: addDays(today, 1), block: { ...s0.versions[0]!.block, startMin: 19 * 60 } }] }))
+    expect((await hub.seriesChange({ seriesId: 'fizjo' }, 'all', { block: { durationMin: 45 } })).ok).toBe(true)
+    expect(seriesOnDisk()[0]!.versions.map((v) => [v.from, v.block.startMin, v.block.durationMin])).toEqual([
+      [start(), 22 * 60, 60],
+      [today, 22 * 60, 45],
+      [addDays(today, 1), 19 * 60, 45]
+    ])
   })
 
   it('„Tylko to” zmienia jedno wystąpienie w pliku jego dnia; seria bez zmian', async () => {
@@ -232,12 +276,39 @@ describe('zmiany i usunięcie serii (D381)', () => {
     expect((await planOn(d)).some((b) => b.id === id)).toBe(false)
   })
 
+  it('licznik ustawiony serii bez licznika liczy dni minione z typów z plików: dni „Wolne” pominięte się nie liczą (T717)', async () => {
+    // Daily from 20 days ago, „pomiń” on special days; 5 of the days gone by were „Wolne”: 15 occurrences stood in plans.
+    const from = addDays(today, -20)
+    write(paths.record('series', 'fizjo'), seriesJson({ ...series(), start: from, versions: [{ ...series().versions[0]!, from, special: 'skip' }] }))
+    for (const k of [2, 5, 8, 11, 14]) write(paths.day(addDays(from, k)), { schema: 1, date: addDays(from, k), dayType: 'wolne' })
+    expect((await hub.seriesChange({ seriesId: 'fizjo' }, 'all', { count: 18 })).ok).toBe(true)
+    const [s] = seriesOnDisk()
+    expect([s!.count, s!.until]).toEqual([18, null])
+    // 3 more from today: today, tomorrow and the day after – none later.
+    const has = async (x: string) => (await planOn(x)).some((b) => b.origin === 'series')
+    expect([await has(addDays(today, 2)), await has(addDays(today, 3))]).toEqual([true, false])
+  })
+
+  it('usunięcie „To i następne”: wystąpienie z dnia po nim przeniesione na dzień przed nim (od dziś) też znika (D404, uwaga 6)', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const [moved, target, from] = [addDays(today, 9), addDays(today, 1), addDays(today, 3)]
+    const id = seriesBlockId(moved, 'fizjo')
+    write(paths.day(moved), { schema: 1, date: moved, movedTo: { [id]: target } })
+    write(paths.day(target), dayFileWith(target, [planBlock({ ...series().versions[0]!.block, id, startMin: 20 * 60, origin: 'series', sourceId: 'fizjo', movedFrom: moved })]))
+    expect((await planOn(target)).some((b) => b.id === id)).toBe(true)
+    expect((await hub.seriesRemove({ date: from, blockId: seriesBlockId(from, 'fizjo') }, 'following')).ok).toBe(true)
+    expect((await planOn(target)).some((b) => b.id === id)).toBe(false)
+    // The day's own occurrence (before the end) stays.
+    expect((await planOn(target)).some((b) => b.id === seriesBlockId(target, 'fizjo'))).toBe(true)
+  })
+
   it('„po N” liczy dni z typem z pliku dnia: dzień „Wolne” przedłuża serię (okno dostaje typy tych dni)', async () => {
     write(paths.record('series', 'fizjo'), seriesJson({ ...series(), start: addDays(today, 1), versions: [{ ...series().versions[0]!, from: addDays(today, 1) }], count: 2 }))
     expect((await planOn(addDays(today, 3))).some((b) => b.origin === 'series')).toBe(false)
-    write(paths.day(addDays(today, 1)), { schema: 1, date: addDays(today, 1), dayType: 'wolne' })
-    hub.changed()
-    expect((await hub.view()).seriesDays).toEqual({ [addDays(today, 1)]: 'wolne' })
+    // Marked „Wolne” in the calendar of this computer (its own write: the counts read the day again at once, T717).
+    const d1 = addDays(today, 1)
+    expect((await hub.edit([recordEdit(paths.day(d1), null, { schema: 1, date: d1, dayType: 'wolne' })!]))[0]!.status).toBe('applied')
+    expect((await hub.view()).seriesDays).toEqual({ [d1]: 'wolne' })
     expect((await planOn(addDays(today, 1))).some((b) => b.origin === 'series')).toBe(false)
     expect((await planOn(addDays(today, 3))).some((b) => b.origin === 'series')).toBe(true)
     expect((await planOn(addDays(today, 4))).some((b) => b.origin === 'series')).toBe(false)

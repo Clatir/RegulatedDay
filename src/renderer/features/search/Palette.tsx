@@ -45,7 +45,7 @@ function PaletteBody() {
   const [days, setDays] = useState<Days>('loading')
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLDivElement>(null)
-  const { rd, templates, requests, routines, series } = useData()
+  const { rd, templates, requests, routines, seriesPlans } = useData()
   const viewToday = useData((s) => s.view?.today ?? null)
   const today = todayOf(viewToday)
   useEscapeLayer(true, closeSearch)
@@ -70,8 +70,8 @@ function PaletteBody() {
     }
   }, [])
   const records = useMemo(
-    () => searchRecords({ today, rd, templates, requests, routines, series, blocks: typeof days === 'object' ? days.blocks : [], pageLabel: PAGE_LABEL, pageKeys }),
-    [today, rd, templates, requests, routines, series, days]
+    () => searchRecords({ today, rd, templates, requests, routines, series: seriesPlans, blocks: typeof days === 'object' ? days.blocks : [], pageLabel: PAGE_LABEL, pageKeys }),
+    [today, rd, templates, requests, routines, seriesPlans, days]
   )
   const index = useMemo(() => buildIndex(records), [records])
   const qw = useMemo(() => queryWords(query), [query])

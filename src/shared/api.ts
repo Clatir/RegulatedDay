@@ -589,7 +589,7 @@ export interface SeriesResult {
   /** Why nothing was written (shown to you), null when it was. */
   error: string | null
   code: 'kind' | 'series' | 'requests' | 'noStart' | 'ended' | 'notFound' | 'begun' | 'invalid' | null
-  /** The series the change made or changed (a new one; the part after „To i następne”), null – none. */
+  /** The series the change made or changed (a new one with „Powtarzaj”), null – none. */
   seriesId: string | null
   /** The outcomes of the edits (for `editNotice`): a question means part of it waits for your answer. */
   outcomes: EditOutcome[]

@@ -104,15 +104,18 @@ describe('szkic istniejącej serii i zmiana z formularza', () => {
     expect(draftPatch(base, { ...base, special: 'held' })).toEqual({ special: 'held' })
     expect(draftPatch(base, { ...base, end: 'never' })).toEqual({ until: null, count: null })
     expect(draftPatch(base, { ...base, end: 'count', count: 10 })).toEqual({ until: null, count: 10 })
-    expect(draftPatch(base, { ...base, until: '2027-06-30' })).toEqual({ until: '2027-06-30', count: null })
+    expect(draftPatch(base, { ...base, until: '2027-06-30' })).toEqual({ until: '2027-06-30' })
   })
 
-  it('seria z datą i licznikiem zachowuje oba, dopóki koniec nie jest ruszony', () => {
+  it('seria z datą i licznikiem: zmiana licznika wysyła tylko licznik – data (np. koniec ustawiony przez aplikację) zostaje (T719)', () => {
     const both = series({ kind: 'daily' }, { until: '2027-01-31', count: 10 })
     const base = draftOf(both, '2026-11-12')
     expect(base.end).toBe('count')
     expect(isEmptyPatch(draftPatch(base, { ...base }))).toBe(true)
-    expect(draftPatch(base, { ...base, count: 5 })).toEqual({ until: null, count: 5 })
+    expect(draftPatch(base, { ...base, count: 5 })).toEqual({ count: 5 })
+    // Another kind of end: the one shown, the other cleared.
+    expect(draftPatch(base, { ...base, end: 'until', until: '2027-02-28' })).toEqual({ until: '2027-02-28', count: null })
+    expect(draftPatch(base, { ...base, end: 'never' })).toEqual({ until: null, count: null })
   })
 
   it('reguła niepełna nie jest zmianą', () => {

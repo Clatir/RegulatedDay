@@ -24,7 +24,6 @@ import {
   seriesAnswerRaw,
   seriesBlockId,
   seriesBlocks,
-  splitAt,
   todayOccurrenceEdit,
   withEnd,
   type SeriesPatch,
@@ -34,6 +33,7 @@ import { newId } from '@shared/model/ids'
 import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
 import {
   DEFAULT_SPECIAL,
+  SERIES_BLOCK_FIELDS,
   SERIES_COUNT_MAX,
   SPECIAL_DAYS,
   seriesBlockFrom,
@@ -41,11 +41,14 @@ import {
   seriesOfBlock,
   seriesPlans,
   seriesRuleFrom,
+  seriesVersionOn,
   typeOfDays,
   type Series,
+  type SeriesBlock,
   type SeriesPlan,
   type SpecialDays
 } from '@shared/model/series'
+import type { DayTypeId } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import type { DataFolder, Inputs } from './folder'
@@ -102,15 +105,25 @@ interface Base {
   now: number
   inp: Inputs
   list: Series[]
+  /** The own types of days the counts read – those of `inputs` and those read for the series a change makes (`ensureTypes`). */
+  days: Record<string, DayTypeId>
 }
 
 async function baseOf(io: SeriesIo): Promise<Base> {
   const now = io.folder.clock.now()
   const inp = await io.folder.inputs(true)
-  return { today: logicalDayOf(now), now, inp, list: inp.series.map((p) => p.series) }
+  return { today: logicalDayOf(now), now, inp, list: inp.series.map((p) => p.series), days: { ...inp.seriesDays } }
 }
 
-const typeOf = (b: Base) => typeOfDays(b.inp.changes, (d) => b.inp.seriesDays[d] ?? null)
+const typeOf = (b: Base) => typeOfDays(b.inp.changes, (d) => b.days[d] ?? null)
+
+/**
+ * The types of the days the counts of `list` read, from their files (T717) – a series a change makes or gives a count is
+ * counted from the same files as `inputs()` counts it afterwards (never by the weekdays only).
+ */
+async function ensureTypes(io: SeriesIo, b: Base, list: readonly Series[]): Promise<void> {
+  Object.assign(b.days, await io.folder.countTypes(list, b.inp.changes, true))
+}
 const plansOf = (io: SeriesIo, b: Base, list: readonly Series[]): SeriesPlan[] => seriesPlans(list, typeOf(b), io.holidays)
 
 /** A day as this computer counts it now, with `raw` as its file (the file as the change leaves it so far). */
@@ -152,7 +165,8 @@ async function dropChanged(io: SeriesIo, b: Base, t: Touched, root: string, from
   const own = seriesBlockId(b.today, root)
   let dates: string[]
   try {
-    dates = await io.folder.dayDatesFrom(from < b.today ? b.today : from)
+    // From today: one of `from` on may have been moved to an earlier day (never to a day gone by – those never change).
+    dates = await io.folder.dayDatesFrom(b.today)
   } catch {
     throw new SeriesEditError('invalid', 'Folderu dni nie da się teraz odczytać – nic nie zostało zapisane, spróbuj za chwilę.')
   }
@@ -201,11 +215,17 @@ function patchFrom(v: unknown, start: string): SeriesPatch | null {
   return out
 }
 
-/** A patch's block over the version's (checked as a block of a file): null – not a block. */
-function blockPatched(s: Series, patch: SeriesPatch): SeriesPatch | null {
+/**
+ * A patch's block checked over the version in force on `from` (as a block of a file): only the fields it changes, with
+ * their values as read (T715 – a later version keeps what else it has); null – not a block.
+ */
+function blockPatched(s: Series, patch: SeriesPatch, from: string): SeriesPatch | null {
   if (!patch.block) return patch
-  const block = seriesBlockFrom({ ...s.versions[s.versions.length - 1]!.block, ...patch.block })
-  return block ? { ...patch, block } : null
+  const full = seriesBlockFrom({ ...(seriesVersionOn(s, from) ?? s.versions[0]!).block, ...patch.block })
+  if (!full) return null
+  const block: Record<string, unknown> = {}
+  for (const k of SERIES_BLOCK_FIELDS) if (k in patch.block) block[k] = full[k]
+  return { ...patch, block: block as Partial<SeriesBlock> }
 }
 
 /** The series a target names, with the occurrence when it names one (a block of a day). */
@@ -273,6 +293,8 @@ export function seriesCreate(io: SeriesIo, input: unknown): Promise<SeriesResult
       const until = isIsoDate(input.until) ? input.until : null
       const count = typeof input.count === 'number' && Number.isInteger(input.count) && input.count >= 1 && input.count <= SERIES_COUNT_MAX ? input.count : null
       const s = newSeries(newId(10), seriesBlockFromPlan(block, startMin), start, rule, special, { until, count })
+      // Its count from the types of its days as the files give them (as `inputs()` counts it afterwards).
+      await ensureTypes(io, b, [s])
       await putSeries(t, s)
       const next = [...b.list, s]
       const plan = plansOf(io, b, next).find((p) => p.series.id === s.id)!
@@ -293,9 +315,10 @@ const seriesBlockFromPlan = (b: PlanBlock, startMin: number) => seriesBlockFrom(
 
 /**
  * A change by its scope (D381): „Tylko to” – the occurrence's own block in its day's file (as a block of the template is
- * changed); „Cała seria” – a version from today (the series' first day when it starts later); „To i następne” – from the
- * occurrence's day (today at the earliest) the series splits, its first day – the whole series. Today's occurrence follows
- * while it has not begun and was not changed on its day.
+ * changed); „Cała seria” – a version from today (the series' first day when it starts later); „To i następne” – a version
+ * from the occurrence's day (today at the earliest; T715 – the series stays one record, its later versions get the change
+ * too). The day it is changed from gets the changed fields in its own entry; today's occurrence follows while it has not
+ * begun and was not changed on its day.
  */
 export function seriesChange(io: SeriesIo, target: unknown, scope: unknown, patch: unknown): Promise<SeriesResult> {
   return run(
@@ -315,28 +338,31 @@ export function seriesChange(io: SeriesIo, target: unknown, scope: unknown, patc
         t.set(r, putBlock(dayRaw(await t.get(r), tg.date), { ...tg.block, ...own, anchor: null }))
         return s.id
       }
-      const p = p0 && blockPatched(s, p0)
-      if (!p) throw new SeriesEditError('invalid', 'Zmiana serii jest niepełna.')
-      const lastOf = b.inp.series.find((x) => x.series.id === s.id)?.last ?? null
+      // „Cała seria” from today, „To i następne” from the occurrence's day (today at the earliest): one series, a version
+      // from that day (T715) – never parts of a series that could overlap.
       const from = scope === 'all' ? b.today : tg.date && tg.date > b.today ? tg.date : b.today
-      let next: Series[]
-      let made = s.id
-      if (scope === 'all' || from <= s.start) {
-        const changed = withEnd(changedFrom(s, from, p), p, b.today, lastOf, typeOf(b), io.holidays)
-        await putSeries(t, changed)
-        next = b.list.map((x) => (x.id === s.id ? changed : x))
-      } else {
-        const { before, after } = splitAt(s, from, newId(10), p, typeOf(b), io.holidays)
-        const tail = after && withEnd(after, p, b.today, null, typeOf(b), io.holidays)
-        await putSeries(t, before)
-        if (tail) {
-          await putSeries(t, tail)
-          made = tail.id
-        }
-        next = [...b.list.map((x) => (x.id === s.id ? before : x)), ...(tail ? [tail] : [])]
+      const p = p0 && blockPatched(s, p0, from < s.start ? s.start : from)
+      if (!p) throw new SeriesEditError('invalid', 'Zmiana serii jest niepełna.')
+      let changed = changedFrom(s, from, p)
+      if (p.until !== undefined || p.count !== undefined) {
+        // What the days before today reached is counted from their files (T717), with the end as the change sets it.
+        const end = { until: p.until !== undefined ? p.until : changed.until, count: p.count !== undefined ? p.count : changed.count }
+        await ensureTypes(io, b, [{ ...changed, count: SERIES_COUNT_MAX, until: addDays(b.today, -1) }, { ...changed, ...end }])
+        changed = withEnd(changed, p, b.today, b.inp.series.find((x) => x.series.id === s.id)?.last ?? null, typeOf(b), io.holidays)
       }
-      if (from <= b.today) await today(io, b, t, s.root, next)
-      return made
+      await ensureTypes(io, b, [changed])
+      await putSeries(t, changed)
+      // The day you change it from gets the changed fields in its own entry too (an occurrence pushed or dragged there, T715);
+      // the other days with an entry keep theirs (D381).
+      const tb = tg.block
+      if (tg.date && tb && p.block && tg.date >= b.today && !(tg.date === b.today && tg.day && begun(tg.day, tb.id))) {
+        const r = paths.day(tg.date)
+        const raw = await t.get(r)
+        const entry = dayFileFrom(raw ?? {}, tg.date).blocks.find((x) => x.id === tb.id)
+        if (entry) t.set(r, putBlock(dayRaw(raw, tg.date), { ...entry, ...p.block }))
+      }
+      await today(io, b, t, s.root, b.list.map((x) => (x.id === s.id ? changed : x)))
+      return s.id
     },
     io.folder
   )

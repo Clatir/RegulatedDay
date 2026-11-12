@@ -166,6 +166,8 @@ export class DataHub {
   private opening: Promise<boolean> | null = null
   private closing = false
   private lastSignature = ''
+  /** The series the window saw last, of its folder (`records`: a read that fails gives these). */
+  private lastSeries: { folder: string | null; records: RawRecord[]; days: Record<string, string> } | null = null
   private retry: ReturnType<typeof setTimeout> | null = null
   private backedUp = false
   private openingDir: string | null = null
@@ -384,9 +386,25 @@ export class DataHub {
     const f = this.service?.folder
     if (!f) return { rd: null, templates: [], lectures: [], requests: [], routines: [], series: [], seriesDays: {} }
     const settled = async <T>(p: Promise<T>, fallback: T) => p.catch(() => fallback)
-    const series = await settled(f.seriesView(), { records: [], days: {} })
+    let rd: RawRecord | null = null
+    let rdKnown = true
+    try {
+      rd = (await f.recordView(SETTINGS_FILE)) ?? null
+    } catch {
+      rdKnown = false
+    }
+    // The series as last seen when they cannot be read now (T717): never „none” – the days to come would lose their
+    // occurrences and the panel its „Powtarzaj”.
+    let series = this.lastSeries?.folder === this.folder ? this.lastSeries : { folder: this.folder, records: [], days: {} }
+    try {
+      if (!rdKnown) throw new Error(SETTINGS_FILE)
+      series = { folder: this.folder, ...(await f.seriesView(rdFrom(rd ?? undefined).settings)) }
+      this.lastSeries = series
+    } catch {
+      /* the last known */
+    }
     return {
-      rd: (await settled(f.recordView(SETTINGS_FILE), undefined)) ?? null,
+      rd,
       templates: await settled(f.collection('template'), []),
       lectures: await settled(f.collection('schedule'), []),
       requests: await settled(f.collection('request'), []),
