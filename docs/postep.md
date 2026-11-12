@@ -72,6 +72,9 @@ Wpisy obu zadań, „Uwagi na później” i „Pytania na później” – `doc
 ## Ciąg L – stan (D380)
 Numery: D404, T700–T719 (L1), T750–T799 (L2, L3 – uzgodnione z sesją HKU1 12.11); kolejne D – osobno od HKU1 (ma D405, D406). „Przed etapem” pominięte na
 polecenie użytkownika (pytania zadane w D380–D386, D401–D403).
+**Dalej (12.11, decyzja użytkownika):** L3 po przeglądzie K (D380 zostaje). Po wydaniu L2 ta sesja robi SNT5 (podzadania) –
+pytania „Przed etapem” zadane: D440; noc 12/13.11 – D441 (scalanie w kolejce L2 → SNT4 → SNT5, nowe zachowanie „do potwierdzenia”).
+Numery: D440–D449, T772–T779 i T786–T799. SNT4 = sesja regulatedday-ab (D410–D439, T800–T849), HKU = regulatedday-d7 (D450–D459, T850–T899).
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
