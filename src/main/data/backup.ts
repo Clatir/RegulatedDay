@@ -25,10 +25,10 @@
 import { promises as fs } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import type { BackupItem } from '@shared/api'
-import { isIgnoredPath, sanitizeRelPath } from '@shared/data/paths'
+import { attachmentFileOf, classify, isIgnoredPath, sanitizeRelPath } from '@shared/data/paths'
 import { addDays, daysBetween, isIsoDate, weekday } from '@shared/time/zone'
 import { pathExists, removeFile, tempPathFor, withRetry } from '../datastore/atomic'
-import { diskSource, withZip, zipFolder, type ZipEntry, type ZipSource } from './zip'
+import { diskSource, streamSource, withZip, writeZipFile, zipFolder, type ZipEntry, type ZipSource } from './zip'
 
 /** Daily backups kept, and one a week for 8 weeks before them (spec „Kopie zapasowe”, FI D84 C4). */
 export const DAILY_KEEP = 14
@@ -85,8 +85,22 @@ export function isOutsideBackup(rel: string): boolean {
  * version) still goes into the backup.
  */
 export function isDataFile(rel: string): boolean {
-  return !isOutsideBackup(rel) && /\.jsonl?$/.test(rel)
+  return !isOutsideBackup(rel) && /\.jsonl?$/.test(rel) && !attachmentFileOf(rel)
 }
+
+/**
+ * The file of an attachment (D410, T809: attachments/<id>/<name>, never its hidden temp file): only in the weekly backup
+ * and the one before an update – the daily one has the records only.
+ */
+export function isAttachmentFile(rel: string): boolean {
+  return !!attachmentFileOf(rel) && !isOutsideBackup(rel)
+}
+
+/** What goes into the weekly backup and the one before an update: the data and the attachments' files. */
+const withAttachments = (rel: string): boolean => isDataFile(rel) || isAttachmentFile(rel)
+
+/** A file of the backup with the attachments: an attachment's streamed (any size, T809), the data as the daily backup reads it. */
+const fullSource = (abs: string, rel: string): ZipSource => (isAttachmentFile(rel) ? streamSource(abs, rel) : backupSource(abs, rel))
 
 /**
  * The ISO week of a date 'RRRR-MM-DD' as 'RRRR-Www' (the week's Thursday gives the year), null for no date: pure date
@@ -127,6 +141,46 @@ async function copyBackup(from: string, to: string): Promise<void> {
   }
 }
 
+/**
+ * A weekly backup made of a daily one with the attachments' files (D410, T809): every entry of the daily one as it is,
+ * then the files of the attachments whose records it holds, as the data folder has them now (an attachment's file never
+ * changes; one already gone – or not on this computer yet – is left out, never a failed weekly backup).
+ */
+async function weeklyWithFiles(from: string, to: string, dataDir: string): Promise<void> {
+  const mtime = (await fs.stat(from)).mtime
+  await withZip(from, async (zip) => {
+    const items: ZipSource[] = []
+    const ids = new Set<string>()
+    for (const e of zip.entries) {
+      if (e.name.endsWith('/')) continue
+      const rel = safeRelPath(e.name)
+      if (!rel || attachmentFileOf(rel)) continue
+      items.push({ name: rel, read: async () => ({ data: await zip.read(e), mtime }) })
+      const c = classify(rel)
+      if (c?.kind === 'attachment' && !c.conflict && c.id) ids.add(c.id)
+    }
+    for (const id of [...ids].sort()) {
+      const dir = join(dataDir, 'attachments', id)
+      const names = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
+      for (const n of names) {
+        const rel = `attachments/${id}/${n.name}`
+        if (n.isFile() && isAttachmentFile(rel)) items.push(skippedOnError(streamSource(join(dir, n.name), rel)))
+      }
+    }
+    await writeZipFile(to, items)
+  })
+}
+
+/** A source whose failure to be looked at leaves it out (an attachment's file held now) instead of failing the backup. */
+const skippedOnError = (src: ZipSource): ZipSource => ({ name: src.name, read: async () => Promise.resolve(src.read()).catch(() => null) })
+
+/** The newest daily of a past week becomes its weekly backup – with the attachments' files when the data folder is given. */
+async function promoteWeek(from: string, to: string, dataDir: string | null): Promise<void> {
+  if (!dataDir) return copyBackup(from, to)
+  await fs.mkdir(dirname(to), { recursive: true })
+  await weeklyWithFiles(from, to, dataDir)
+}
+
 async function removeBeyond(dir: string, kind: BackupKind, keep: number): Promise<void> {
   for (const name of (await listNames(dir, kind)).slice(keep)) await removeFile(join(dir, name))
 }
@@ -148,7 +202,7 @@ async function removeStaleTemps(dir: string): Promise<void> {
  * of the newest daily) without a weekly copy is copied to weekly/ – unless it is older than the 8 weeks kept –, then the
  * oldest beyond the counts are removed. Only this app's names are touched (B121).
  */
-async function rotate(dir: string): Promise<void> {
+async function rotate(dir: string, dataDir: string | null = null): Promise<void> {
   const dailyDir = join(dir, 'daily')
   const weeklyDir = join(dir, 'weekly')
   const dailies = (await listNames(dailyDir, 'daily')).flatMap((name) => {
@@ -165,7 +219,7 @@ async function rotate(dir: string): Promise<void> {
     }
     const kept = new Set([...weeklies, ...[...promote.keys()].map((w) => `${w}.zip`)].sort().reverse().slice(0, WEEKLY_KEEP))
     for (const [week, name] of promote) {
-      if (kept.has(`${week}.zip`)) await copyBackup(join(dailyDir, name), join(weeklyDir, `${week}.zip`))
+      if (kept.has(`${week}.zip`)) await promoteWeek(join(dailyDir, name), join(weeklyDir, `${week}.zip`), dataDir)
     }
   }
   await removeBeyond(weeklyDir, 'weekly', WEEKLY_KEEP)
@@ -192,7 +246,7 @@ function backupSource(abs: string, rel: string): ZipSource {
       } catch (e) {
         throw new Error(`Nie można odczytać pliku ${rel}: ${message(e)}`)
       }
-      return content && rel.endsWith('.jsonl') ? { ...content, data: wholeLines(content.data) } : content
+      return content && 'data' in content && rel.endsWith('.jsonl') ? { ...content, data: wholeLines(content.data) } : content
     }
   }
 }
@@ -221,7 +275,8 @@ export async function createDailyBackup(dataDir: string, backupsDir: string, dat
     return { ok: false, error: message(e) }
   }
   try {
-    await rotate(backupsDir)
+    // The weekly copy carries the attachments' files (D410): from the data folder.
+    await rotate(backupsDir, dataDir)
     return { ok: true, file, ...made }
   } catch (e) {
     return { ok: true, file, ...made, rotateError: message(e) }
@@ -247,7 +302,8 @@ export async function createUpdateBackup(dataDir: string, backupsDir: string, fr
   const file = join(dir, name)
   if (await pathExists(file)) return null
   try {
-    const made = await zipFolder(dataDir, file, isDataFile, isOutsideBackup, backupSource)
+    // With the attachments' files (D410, T809).
+    const made = await zipFolder(dataDir, file, withAttachments, isOutsideBackup, fullSource)
     const names = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => UPDATE_NAME.test(n))
     // Oldest first by the time each was made (the names hold versions, not dates).
     const dated = await Promise.all(names.map(async (n) => ({ n, t: (await fs.stat(join(dir, n)).catch(() => null))?.mtimeMs ?? 0 })))
@@ -281,6 +337,14 @@ export async function copyLatestTo(backupsDir: string, extraDir: string): Promis
   })
   if (there && there.size === (await fs.stat(from)).size) return null
   await copyBackup(from, to)
+  // The folder's weekly backups first (they carry the attachments' files, D410): the rotation then makes only the weeks
+  // still missing from the dailies there.
+  for (const name of await listNames(join(backupsDir, 'weekly'), 'weekly')) {
+    const w = join(backupsDir, 'weekly', name)
+    const e = join(extraDir, 'weekly', name)
+    const st = await fs.stat(e).catch(() => null)
+    if (!st || st.size !== (await fs.stat(w)).size) await copyBackup(w, e)
+  }
   await rotate(extraDir)
   return newest
 }
@@ -337,7 +401,8 @@ export async function restoreToFolder(zipFile: string, targetDir: string): Promi
       const isDir = entry.name.endsWith('/')
       const rel = safeRelPath(isDir ? entry.name.slice(0, -1) : entry.name)
       if (!rel) throw new Error('ZIP zawiera niedozwolone ścieżki (np. ../) – odrzucony.')
-      if (!isDir && isDataFile(rel)) files.push({ rel, entry })
+      // The attachments' files too (a weekly backup has them, D410).
+      if (!isDir && withAttachments(rel)) files.push({ rel, entry })
     }
     const tmp = tempPathFor(target)
     try {
@@ -347,7 +412,8 @@ export async function restoreToFolder(zipFile: string, targetDir: string): Promi
         if (!file.startsWith(tmp + sep)) throw new Error('ZIP zawiera niedozwolone ścieżki (np. ../) – odrzucony.')
         await fs.mkdir(dirname(file), { recursive: true })
         try {
-          await fs.writeFile(file, await zip.read(entry), { flag: 'wx' })
+          if (isAttachmentFile(rel)) await zip.copyTo(entry, file)
+          else await fs.writeFile(file, await zip.read(entry), { flag: 'wx' })
         } catch (e) {
           if (errCode(e) === 'EEXIST') throw new Error(`Uszkodzony plik ZIP: powtórzony wpis ${rel}`)
           throw e
@@ -400,5 +466,37 @@ export async function readBackupFiles(zipFile: string, wanted: (rel: string) => 
       if (!files.has(rel) && wanted(rel)) files.set(rel, await zip.read(e))
     }
     return { entries, files }
+  })
+}
+
+/**
+ * The files of attachments taken back with their records from a backup (D410: a weekly one has them): the files of `ids`
+ * the backup holds and the data folder has not – never one written over, never one removed (a backup without them, a
+ * daily one, takes nothing away). Each through a hidden temp file renamed into place; the root of the data folder must be
+ * there (nothing is made in place of a folder that is away). The files written.
+ */
+export async function restoreAttachmentFiles(zipFile: string, ids: ReadonlySet<string>, dataDir: string): Promise<string[]> {
+  if (!ids.size) return []
+  await fs.stat(dataDir)
+  return withZip(zipFile, async (zip) => {
+    const done: string[] = []
+    for (const entry of zip.entries) {
+      if (entry.name.endsWith('/')) continue
+      const rel = safeRelPath(entry.name)
+      const f = rel && isAttachmentFile(rel) ? attachmentFileOf(rel) : null
+      if (!rel || !f || !ids.has(f.id)) continue
+      const target = join(dataDir, ...rel.split('/'))
+      if (await pathExists(target)) continue
+      await fs.mkdir(dirname(target), { recursive: true })
+      const tmp = tempPathFor(target)
+      try {
+        await zip.copyTo(entry, tmp)
+        await withRetry(() => fs.rename(tmp, target))
+        done.push(rel)
+      } finally {
+        await fs.rm(tmp, { force: true }).catch(() => undefined)
+      }
+    }
+    return done
   })
 }

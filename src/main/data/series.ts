@@ -53,6 +53,7 @@ import type { DayTypeId } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import type { DataFolder, Inputs } from './folder'
+import { attachmentFrom, attachmentJson, attachmentRel, ownAttachmentIds, type Attachment } from '@shared/model/attachment'
 
 export interface SeriesIo {
   folder: DataFolder
@@ -400,6 +401,8 @@ export function seriesRemove(io: SeriesIo, target: unknown, scope: unknown): Pro
         const r = paths.day(tg.date)
         const base = dayRaw(await t.get(r), tg.date)
         t.set(r, tg.day.ctx.snapshot.blocks.some((x) => x.id === tg.block!.id) ? setCancelled(base, tg.block.id, true) : takeBlock(base, tg.block.id))
+        // The occurrence's own attachments go with it (D410, T805) – in the same edit, back with its „Cofnij”.
+        await removeOwnAttachments(io, b, t, tg.block.id)
         return s.id
       }
       const from0 = scope === 'all' ? b.today : tg.date && tg.date > b.today ? tg.date : b.today
@@ -409,6 +412,25 @@ export function seriesRemove(io: SeriesIo, target: unknown, scope: unknown): Pro
     },
     io.folder
   )
+}
+
+/** The attachments a block of a day had of its own (not the series'), removed in the change's edit (T805). */
+async function removeOwnAttachments(io: SeriesIo, b: Base, t: Touched, blockId: string): Promise<void> {
+  let raws: RawRecord[]
+  try {
+    raws = await io.folder.collection('attachment')
+  } catch {
+    // The list cannot be read now: the attachments stay (they are not shown without their block).
+    return
+  }
+  const own = new Set(ownAttachmentIds(raws.map(attachmentFrom).filter((a): a is Attachment => !!a), blockId))
+  for (const raw of raws) {
+    const a = attachmentFrom(raw)
+    if (!a || !own.has(a.id)) continue
+    const rel = attachmentRel(a.id)
+    const before = await t.get(rel)
+    if (before) t.set(rel, attachmentJson({ ...a, removedAt: b.now }, before))
+  }
 }
 
 /** The series ends the day before `from` (`remove` – also out of the list): today's occurrence and the changed ones after it go. */
@@ -466,7 +488,7 @@ export function seriesUndo(io: SeriesIo, undo: unknown): Promise<SeriesResult> {
       for (const u of list) {
         if (!isRaw(u) || typeof u.rel !== 'string') continue
         const c = classify(u.rel)
-        if (!c || c.conflict || (c.kind !== 'series' && c.kind !== 'day')) continue
+        if (!c || c.conflict || (c.kind !== 'series' && c.kind !== 'day' && c.kind !== 'attachment')) continue
         const before = isRaw(u.before) ? u.before : null
         const after = isRaw(u.after) ? u.after : null
         const now = await t.get(c.canonical)

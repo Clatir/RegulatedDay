@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { rename } from 'node:fs/promises'
 import { hostname, release } from 'node:os'
 import { join } from 'node:path'
-import { BrowserWindow, Menu, app, clipboard, crashReporter, dialog, ipcMain, net, powerMonitor, powerSaveBlocker, screen, session, shell, utilityProcess, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
+import { BrowserWindow, Menu, app, clipboard, crashReporter, dialog, ipcMain, nativeImage, net, powerMonitor, powerSaveBlocker, screen, session, shell, utilityProcess, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
 import {
   CH,
   type AppInfo,
@@ -38,6 +38,8 @@ import { urlFromArgv, type PanelTarget } from '@shared/protocol'
 import { compareVersions } from '@shared/update'
 import { systemSettingsUrl } from '@shared/systemSettings'
 import { safeLinkUrl } from '@shared/noteLink'
+import { fetchPageMeta, type Fetcher } from './data/linkFetch'
+import { THUMB_PX } from './data/attachments'
 import type { UpdateView } from '@shared/updateView'
 import { BAR_NOTE_FAILED, BAR_NOTE_HELPER, type WidgetView } from '@shared/widget'
 import { identity } from './identity'
@@ -443,6 +445,22 @@ const worker = new WorkerHost({
   log: (level, msg) => log(level, msg)
 })
 
+/**
+ * The page of a link attachment read in a session of its own (D410, T807): in memory only (no „persist:”), never the
+ * windows' session – no cookies of anything else, nothing kept on the disk; the network as the system's proxy has it.
+ */
+const linkFetcher: Fetcher = (url, init) => session.fromPartition('rd-link-meta', { cache: false }).fetch(url, init)
+
+/** A thumbnail of an image attachment (T808): at most `THUMB_PX` on its longer side, a PNG data URL; null – not an image. */
+function thumbOf(abs: string): string | null {
+  const img = nativeImage.createFromPath(abs)
+  if (img.isEmpty()) return null
+  const { width, height } = img.getSize()
+  if (!width || !height) return null
+  const small = width >= height ? img.resize({ width: Math.min(THUMB_PX, width), quality: 'good' }) : img.resize({ height: Math.min(THUMB_PX, height), quality: 'good' })
+  return small.toDataURL()
+}
+
 function createHub(): DataHub {
   return new DataHub({
     userData,
@@ -479,6 +497,12 @@ function createHub(): DataHub {
     onChange: () => {
       broadcast(CH.onData, null)
       void widget.refresh()
+    },
+    // D410: files open in their programs, links in the browser – after the checks of `main/data/attachments.ts`.
+    attachments: {
+      shell: { openPath: (abs) => shell.openPath(abs), showItemInFolder: (abs) => shell.showItemInFolder(abs), openExternal: (url) => shell.openExternal(url) },
+      fetchMeta: (url) => fetchPageMeta(linkFetcher, url),
+      thumbOf
     }
   })
 }
@@ -847,6 +871,19 @@ function registerIpc(): void {
   handle(CH.seriesEnd, (_e, seriesId: unknown, last: unknown) => needHub().seriesEnd(seriesId, last))
   handle(CH.seriesAnswer, (_e, date: unknown, blockId: unknown, keep: unknown) => needHub().seriesAnswer(date, blockId, keep))
   handle(CH.seriesUndo, (_e, undo: unknown) => needHub().seriesUndo(undo))
+  // Attachments of blocks (D410): the window names an attachment by its id – a path or an address to open never comes from it.
+  handle(CH.attachFiles, (_e, owner: unknown, paths: unknown) => needHub().attachFiles(owner, paths))
+  handle(CH.attachPick, async (e, owner: unknown) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const opts = { title: 'Dołącz plik', properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'> }
+    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    return r.canceled || !r.filePaths.length ? { added: [], failed: [] } : needHub().attachFiles(owner, r.filePaths)
+  })
+  handle(CH.addLink, (_e, owner: unknown, url: unknown) => needHub().addLink(owner, url))
+  handle(CH.openAttachment, (_e, id: unknown) => needHub().openAttachment(id))
+  handle(CH.openAttachments, (_e, ids: unknown) => needHub().openAttachments(ids))
+  handle(CH.showAttachment, (_e, id: unknown) => needHub().showAttachment(id))
+  handle(CH.attachmentThumb, (_e, id: unknown) => needHub().attachmentThumb(id))
   // „Tydzień” and the month's goals (D356).
   handle(CH.weekView, (_e, date: unknown) => needHub().weekView(String(date)))
   handle(CH.goals, (_e, month: unknown) => needHub().goals(String(month)))

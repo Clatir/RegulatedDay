@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { AddLinkResult, AttachResult, AttachmentOpen, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords, recordEdit } from '@shared/data/merge'
@@ -34,7 +34,9 @@ import { logicalDayOf, placeLogical, weekStart } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { writeFileAtomic } from '../datastore/atomic'
-import { backupEntries, createUpdateBackup, listBackups, readBackupFiles, restoreToFolder, type BackupInfo } from './backup'
+import { backupEntries, createUpdateBackup, listBackups, readBackupFiles, restoreAttachmentFiles, restoreToFolder, type BackupInfo } from './backup'
+import { addLink, attachFiles, attachmentThumb, nodeAttachmentFiles, openAttachment, openAttachments, showAttachment, ThumbCache, type AttachmentFiles, type AttachmentIo, type AttachmentShell, type MetaFetch } from './attachments'
+import { attachmentFrom } from '@shared/model/attachment'
 import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
 import type { DataFolder, TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
@@ -98,6 +100,12 @@ export interface HubOptions {
   gameScreens?: boolean
   /** This computer now works in another folder (a whole backup restored into a new one): its config remembers it. */
   onFolder?: (dir: string) => void
+  /**
+   * What attachments need of Electron (D410): `shell` opens files and links, `fetchMeta` reads a page's title and icon
+   * (a session of its own), `thumbOf` makes thumbnails (nativeImage); `files` – the files in the folder (tests: faulty).
+   * Without `shell` nothing opens (the answer says so).
+   */
+  attachments?: { shell?: AttachmentShell; fetchMeta?: MetaFetch; thumbOf?: (abs: string) => string | null; files?: AttachmentFiles }
 }
 
 /** `a` is a newer version than `b` (versions that cannot be compared: no). */
@@ -382,9 +390,9 @@ export class DataHub {
     return `${head}|${today}|${JSON.stringify(await this.records())}|${JSON.stringify(days)}|${read.events.length}|${f.unsynced}|${f.unavailable}|${JSON.stringify(this.service?.backup ?? null)}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}|${JSON.stringify(moved)}|${f.computers.map((c) => `${c.id}:${c.appVersion ?? ''}`).join(',')}`
   }
 
-  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines' | 'series' | 'seriesDays' | 'allDay'>> {
+  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines' | 'series' | 'seriesDays' | 'allDay' | 'attachments' | 'attachmentsMissing'>> {
     const f = this.service?.folder
-    if (!f) return { rd: null, templates: [], lectures: [], requests: [], routines: [], series: [], seriesDays: {}, allDay: [] }
+    if (!f) return { rd: null, templates: [], lectures: [], requests: [], routines: [], series: [], seriesDays: {}, allDay: [], attachments: [], attachmentsMissing: [] }
     const settled = async <T>(p: Promise<T>, fallback: T) => p.catch(() => fallback)
     let rd: RawRecord | null = null
     let rdKnown = true
@@ -395,6 +403,7 @@ export class DataHub {
     }
     // The series as last seen when they cannot be read now (T717): never „none” – the days to come would lose their
     // occurrences and the panel its „Powtarzaj”.
+    const attachments = await settled(f.collection('attachment'), [])
     let series = this.lastSeries?.folder === this.folder ? this.lastSeries : { folder: this.folder, records: [], days: {} }
     try {
       if (!rdKnown) throw new Error(SETTINGS_FILE)
@@ -411,8 +420,34 @@ export class DataHub {
       routines: await settled(f.collection('routine'), []),
       series: series.records,
       seriesDays: series.days,
-      allDay: await settled(f.collection('allDay'), [])
+      allDay: await settled(f.collection('allDay'), []),
+      attachments,
+      attachmentsMissing: await this.missingFiles(attachments)
     }
+  }
+
+  /** Files of attachments seen here in this folder (they never change: once here, here – until the record goes). */
+  private readonly seenFiles = new Set<string>()
+
+  /**
+   * The attachments not removed whose file is not on this computer yet (T802: OneDrive brings the record first); a file
+   * that cannot be looked at now is not „missing” (opening it says why).
+   */
+  private async missingFiles(raws: readonly RawRecord[]): Promise<string[]> {
+    const dir = this.folder
+    if (!dir) return []
+    const files = this.o.attachments?.files ?? nodeAttachmentFiles
+    const out: string[] = []
+    for (const raw of raws) {
+      const a = attachmentFrom(raw)
+      if (!a?.file || a.removedAt != null) continue
+      const key = `${dir}|${a.id}|${a.file.fileName}`
+      if (this.seenFiles.has(key)) continue
+      const at = await files.realInside(dir, a.id, a.file.fileName).catch(() => null)
+      if (at === 'missing') out.push(a.id)
+      else if (at) this.seenFiles.add(key)
+    }
+    return out.sort()
   }
 
   async view(): Promise<DataView> {
@@ -688,6 +723,56 @@ export class DataHub {
   /** „Cofnij” of one change of a series. */
   seriesUndo(undo: unknown): Promise<SeriesResult> {
     return seriesUndo(this.seriesIo(), undo)
+  }
+
+  /** Thumbnails of image attachments made in this run (memory only, T808). */
+  private readonly thumbs = new ThumbCache()
+  /** The page's title of the last link added still being fetched (tests wait for it). */
+  linkMeta: Promise<void> = Promise.resolve()
+
+  private attachmentIo(): AttachmentIo {
+    const f = this.need()
+    const env = this.o.attachments ?? {}
+    const refused = async () => Promise.reject(new Error('otwieranie niedostępne'))
+    return {
+      folder: f,
+      dataDir: this.folder!,
+      files: env.files ?? nodeAttachmentFiles,
+      edit: (entries) => this.edit(entries),
+      now: () => f.clock.now(),
+      shell: env.shell ?? { openPath: async () => 'otwieranie niedostępne', showItemInFolder: () => undefined, openExternal: refused },
+      fetchMeta: env.fetchMeta,
+      thumbOf: env.thumbOf,
+      log: (level, msg) => this.o.log(level, msg)
+    }
+  }
+
+  /** Files for a block (D410): copied, then their records (`main/data/attachments.ts`). */
+  attachFiles(owner: unknown, sources: unknown): Promise<AttachResult> {
+    return attachFiles(this.attachmentIo(), owner, sources)
+  }
+
+  /** A link for a block: written at once, the page's title and icon afterwards (`linkMeta`). */
+  async addLink(owner: unknown, url: unknown): Promise<AddLinkResult> {
+    const { result, meta } = await addLink(this.attachmentIo(), owner, url)
+    this.linkMeta = meta
+    return result
+  }
+
+  openAttachment(id: unknown): Promise<AttachmentOpen> {
+    return openAttachment(this.attachmentIo(), id)
+  }
+
+  openAttachments(ids: unknown): Promise<AttachmentOpen[]> {
+    return openAttachments(this.attachmentIo(), ids)
+  }
+
+  showAttachment(id: unknown): Promise<AttachmentOpen> {
+    return showAttachment(this.attachmentIo(), id)
+  }
+
+  attachmentThumb(id: unknown): Promise<string | null> {
+    return attachmentThumb(this.attachmentIo(), this.thumbs, id)
   }
 
   async edit(entries: EditEntry[]): Promise<EditOutcome[]> {
@@ -1098,6 +1183,11 @@ export class DataHub {
     // One outcome per record chosen: what the queue did with it – waiting behind a question is its own (it never goes by
     // itself) – or „the same already” (nothing written).
     const done = entries.length ? await this.edit(entries) : []
+    // The files of the attachments chosen, when the backup has them (a weekly one, D410) and the folder has not.
+    const ids = new Set([...wanted].map((rel) => classify(rel)).flatMap((c) => (c?.kind === 'attachment' && c.id ? [c.id] : [])))
+    if (ids.size && this.folder) {
+      await restoreAttachmentFiles(zipFile, ids, this.folder).catch((e) => this.o.log('warn', 'pliki załączników z kopii nie wróciły', e))
+    }
     const statusOf = (o: EditOutcome | undefined): RestoreOutcome['status'] => (!o ? 'waiting' : o.status === 'waiting' && o.why === BEHIND_QUESTION ? 'behindQuestion' : o.status)
     return [...entries.map((e, i) => ({ rel: e.rel, status: statusOf(done[i]) })), ...same.map((rel) => ({ rel, status: 'same' as const }))]
   }

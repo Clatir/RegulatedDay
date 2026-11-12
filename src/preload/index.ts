@@ -5,7 +5,7 @@
  * removes every `title` attribute and empties the text inside `<title>` elements (SVG) through nodeValue – never removing
  * an element or a node by textContent, which would break React at its next change.
  */
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { CH, type RdApi, type ViewKind } from '../shared/api'
 
 const viewArg = process.argv.find((a) => a.startsWith('--rd-view='))?.slice('--rd-view='.length)
@@ -99,7 +99,21 @@ const api: RdApi = {
   seriesRemove: (target, scope) => ipcRenderer.invoke(CH.seriesRemove, target, scope),
   seriesEnd: (seriesId, last) => ipcRenderer.invoke(CH.seriesEnd, seriesId, last),
   seriesAnswer: (date, blockId, keep) => ipcRenderer.invoke(CH.seriesAnswer, date, blockId, keep),
-  seriesUndo: (undo) => ipcRenderer.invoke(CH.seriesUndo, undo)
+  seriesUndo: (undo) => ipcRenderer.invoke(CH.seriesUndo, undo),
+  pathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file)
+    } catch {
+      return ''
+    }
+  },
+  attachFiles: (owner, paths) => ipcRenderer.invoke(CH.attachFiles, owner, paths),
+  attachPick: (owner) => ipcRenderer.invoke(CH.attachPick, owner),
+  addLink: (owner, url) => ipcRenderer.invoke(CH.addLink, owner, url),
+  openAttachment: (id) => ipcRenderer.invoke(CH.openAttachment, id),
+  openAttachments: (ids) => ipcRenderer.invoke(CH.openAttachments, ids),
+  showAttachment: (id) => ipcRenderer.invoke(CH.showAttachment, id),
+  attachmentThumb: (id) => ipcRenderer.invoke(CH.attachmentThumb, id)
 }
 
 contextBridge.exposeInMainWorld('rd', api)

@@ -1691,6 +1691,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 | requests/\<id>.json | prośby |
 | routines/\<id>.json | rutyny |
 | allday/\<id>.json | wydarzenia całodniowe i wielodniowe (D405): tytuł, daty od–do, kolor, notatka, „To wolne”; tylko informacja – silnik dnia ich nie czyta |
+| attachments/\<id>.json, attachments/\<id>/\<plik> | załączniki bloków (D410): plik skopiowany do folderu albo link (tytuł, ikona strony), właściciel – blok dnia, blok szablonu albo seria; usunięty zostaje 30 dni, potem prowadzący kasuje plik i rekord (T800–T806) |
 | .presence/\<komputer>.json | obecność każdego komputera: wersja aplikacji i reguł, 10 ostatnich wersji z pierwszym i ostatnim uruchomieniem i awariami na każdej, „instaluję wersję X”, ostatnia obecność, ostatnie użycie, ostatnie wejście poza aplikacją, stan (używany, bezczynny, „Odcinam się”, „mniej pytań”, zamknięty), stan blokady ekranu, zasilanie (sieć, bateria, oszczędzanie baterii), widziany prowadzący, stan synchronizacji i ostatnie zdarzenie zapisane dla każdego otwartego dnia, także bez zdarzeń |
 | .history/ | poprzednie wersje rekordów |
 | grades/RRRR/\<komputer>.jsonl | oceny dni zamrożonych przez ten komputer; plik pochodny, da się go odtworzyć z logów |
@@ -1792,6 +1793,8 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 - Kopia ZIP powstaje raz na dzień logiczny, po 12:00. Tworzy ją komputer prowadzący: co godzinę, przy starcie i po wybudzeniu sprawdza, czy kopia z tego dnia już jest, i tworzy ją przy pierwszej okazji. Kopia jest odporna na zapisy w trakcie pakowania.
 - Domyślnie trafia do podfolderu backups/ w folderze danych; każdy komputer może wskazać dodatkowe miejsce poza OneDrive i sam kopiuje tam najnowszą kopię, także gdy nie prowadzi. Przechowywanych jest 14 kopii dziennych i 8 tygodniowych.
 - Nieudana kopia daje ostrzeżenie w widgecie od razu, a po 3 dniach bez kopii także w oknie głównym.
+- Załączniki (D410): lista załączników jest w każdej kopii, ich pliki tylko w tygodniowej i w kopii przed aktualizacją;
+  przywrócenie kopii bez plików niczego nie usuwa, a przywrócone rekordy biorą z kopii pliki, których w folderze brak (T809).
 - Przywracanie w aplikacji: wybrane rekordy albo cały folder do nowego folderu – w Ustawieniach → „Dane” razem z
   eksportem CSV (zakres dat, domyślnie bieżący miesiąc): lista kopii od najnowszej, przy każdej „Wybrane rekordy…”
   (rekordy nazwane jak w interfejsie, zaznaczone wracają do tego folderu jako Twoja zmiana) i „Cały folder do nowego…”
