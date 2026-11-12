@@ -116,6 +116,26 @@ describe('podpis wydarzeń całodniowych na pasku pulpitu (D405)', () => {
     expect(out).toContain('Konferencja · Urlop')
   })
 
+  it('podpis stoi też, gdy w pasku biegnie prośba bez bloku (RequestLine), i przy bloku', () => {
+    const running = { id: 'p1', day: '2026-10-21', mode: 'urgent' as const, person: 'Mama', from: Date.now(), estimateMin: null }
+    const out = html(dayView({ allDay, requests: { people: [], running, interrupted: null } }), 'desktop')
+    expect(out).toContain('data-testid="bar-request"')
+    expect(out).toContain('data-testid="bar-allday"')
+    expect(out).toContain('Konferencja +1')
+    expect(html(dayView({ allDay, block: { name: 'Praca', className: 'Praca', endsAt: null } }), 'desktop')).toContain('data-testid="bar-allday"')
+    const noLabel = html(dayView({ requests: { people: [], running, interrupted: null } }), 'desktop')
+    expect(noLabel).not.toContain('bar-allday')
+  })
+
+  it('najechanie nie zmienia wysokości wiersza: pełne tytuły w jednym wierszu (bez zawijania), nadmiar ucięty', () => {
+    for (const open of [false, true]) {
+      const out = renderToStaticMarkup(createElement(AllDayLabel, { allDay, open }))
+      expect(out).not.toContain('whitespace-normal')
+      expect(out).not.toContain('break-words')
+      expect(out).toContain('truncate')
+    }
+  })
+
   it('bez wydarzeń dziś pasek wygląda jak dotąd; okno główne i panel podpisu nie mają', () => {
     expect(html(dayView(), 'desktop')).not.toContain('bar-allday')
     for (const mode of ['main', 'panel'] as const) expect(html(dayView({ allDay }), mode)).not.toContain('bar-allday')

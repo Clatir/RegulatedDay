@@ -187,17 +187,24 @@ export interface FreeDayInfo {
 }
 
 /**
- * The days the bar offers the type „Wolne” for after an event „To wolne” is saved (D405): its days from today on
- * (`today` – the logical day), without those „Wolne” already and those closed; a day that cannot be read now (`info`
- * null) is not offered. Never more than `ALL_DAY_MAX_DAYS`.
+ * The days the proposal „Wolne” may be about for `e` (D405): none unless it is „To wolne”, else its days from today on
+ * (`today` – the logical day), at most `ALL_DAY_MAX_DAYS`. The one place that counts them.
  */
-export function freeDaysToAsk(e: AllDayEvent, today: string, info: (date: string) => FreeDayInfo | null): string[] {
+export function freeCandidateDays(e: AllDayEvent, today: string): string[] {
   if (!e.free) return []
   const out: string[] = []
-  let d = e.startDate > today ? e.startDate : today
-  for (let n = 0; d <= e.endDate && n < ALL_DAY_MAX_DAYS; n++, d = addDays(d, 1)) {
-    const i = info(d)
-    if (i && i.type !== 'wolne' && !i.closed) out.push(d)
-  }
+  for (let d = e.startDate > today ? e.startDate : today; d <= e.endDate && out.length < ALL_DAY_MAX_DAYS; d = addDays(d, 1)) out.push(d)
   return out
+}
+
+/**
+ * The days the bar offers the type „Wolne” for after an event „To wolne” is saved (D405): its days from today on
+ * (`freeCandidateDays`), without those „Wolne” already and those closed; a day that cannot be read now (`info` null) is not
+ * offered.
+ */
+export function freeDaysToAsk(e: AllDayEvent, today: string, info: (date: string) => FreeDayInfo | null): string[] {
+  return freeCandidateDays(e, today).filter((d) => {
+    const i = info(d)
+    return i != null && i.type !== 'wolne' && !i.closed
+  })
 }

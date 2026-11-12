@@ -8,7 +8,8 @@ import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { UNDO_LINE_MS } from '@shared/widget'
 import { cardProblems } from '@renderer/features/allday/AllDayCard'
 import { barTitle, monthLabel } from '@renderer/features/allday/allDayText'
-import { allDayLayout, dragDates, freeAskDays, freeAskText, freeLineText } from '@renderer/features/allday/allDayView'
+import { allDayLayout, asksFreeAfter, dragDates, freeAskDays, freeAskText, freeLineText } from '@renderer/features/allday/allDayView'
+import { freeAnswerSettled } from '@renderer/features/allday/freeDays'
 import { allDayLineLeft, dropAllDayLine, linesOf, showAllDayLine, useAllDayLines } from '@renderer/store/allDayLine'
 import { columnAt } from '@renderer/features/week/weekLayout'
 
@@ -63,6 +64,71 @@ describe('pas całodniowy – układ', () => {
     const open = allDayLayout(events, WEEK, true)
     expect(open.lanes.bars.find((b) => b.event.id === 'd')).toMatchObject({ lane: 3, fromCol: 1, toCol: 2 })
     expect(open.more).toEqual([0, 1, 1, 0, 0, 0, 0])
+  })
+})
+
+describe('pas – zawsze jeden wolny rząd pod belkami (klik = nowe wydarzenie)', () => {
+  it('jedno wydarzenie w „Dziś”: belka i pod nią wolny rząd, w który da się kliknąć', () => {
+    const day = '2026-11-18'
+    const l = allDayLayout([ev('a', day)], [day], false)
+    expect(l.lanes.bars.map((b) => b.lane)).toEqual([0])
+    expect(l.rows).toBe(2)
+    expect(l.moreRow).toBeNull()
+  })
+
+  it('trzy rzędy belek bez ukrytych: czwarty rząd wolny; tydzień – rzędy belek plus jeden', () => {
+    const day = '2026-11-18'
+    expect(allDayLayout(['a', 'b', 'c'].map((id) => ev(id, day)), [day], false).rows).toBe(4)
+    const week = allDayLayout([ev('k', WEEK[2]!, WEEK[4]!), ev('u', WEEK[3]!)], WEEK, false)
+    expect(week.lanes.lanes).toBe(2)
+    expect(week.rows).toBe(3)
+  })
+
+  it('„+N więcej” stoi w tym wolnym rzędzie (nie w dodatkowym): rzędów belek + 1, także rozwinięte', () => {
+    const day = '2026-11-18'
+    const events = ['a', 'b', 'c', 'd'].map((id) => ev(id, day))
+    const folded = allDayLayout(events, [day], false)
+    expect([folded.rows, folded.moreRow]).toEqual([4, 4])
+    const open = allDayLayout(events, [day], true)
+    expect([open.rows, open.moreRow]).toEqual([5, 5])
+    expect(open.lanes.lanes).toBe(4)
+  })
+})
+
+describe('pytanie „Wolne” – kiedy karta pyta (D405: raz)', () => {
+  const base = { ...ev('u', '2026-11-18', '2026-11-20'), free: true }
+  it('pyta po zapisie nowego wydarzenia „To wolne” i po włączeniu „To wolne”', () => {
+    expect(asksFreeAfter(null, base)).toBe(true)
+    expect(asksFreeAfter({ ...base, free: false }, base)).toBe(true)
+  })
+
+  it('pyta po zmianie dat wydarzenia „To wolne”', () => {
+    expect(asksFreeAfter(base, { ...base, endDate: '2026-11-22' })).toBe(true)
+    expect(asksFreeAfter(base, { ...base, startDate: '2026-11-17' })).toBe(true)
+  })
+
+  it('nie pyta po poprawce tytułu, koloru, notatki ani gdy „To wolne” wyłączone', () => {
+    expect(asksFreeAfter(base, { ...base, title: 'Urlop w górach' })).toBe(false)
+    expect(asksFreeAfter(base, { ...base, color: 'rose', note: 'x' })).toBe(false)
+    expect(asksFreeAfter(null, { ...base, free: false })).toBe(false)
+    expect(asksFreeAfter(base, { ...base, free: false })).toBe(false)
+  })
+})
+
+describe('odpowiedź „Tak” – kiedy pytanie się zamyka', () => {
+  const none = { saved: true, change: null, duringDay: null, unreadable: [] as string[] }
+  it('zapis się nie udał – pytanie zostaje', () => {
+    expect(freeAnswerSettled({ ...none, saved: false })).toBe(false)
+  })
+
+  it('nic nie zapisano, bo dni są nieczytelne – pytanie zostaje (komunikat był)', () => {
+    expect(freeAnswerSettled({ ...none, unreadable: ['2026-11-19'] })).toBe(false)
+  })
+
+  it('zapisano część albo dziś czeka na okno albo nie ma już o co pytać – zamyka się', () => {
+    expect(freeAnswerSettled({ ...none, change: { days: [] }, unreadable: ['2026-11-19'] })).toBe(true)
+    expect(freeAnswerSettled({ ...none, duringDay: '2026-11-18' })).toBe(true)
+    expect(freeAnswerSettled(none)).toBe(true)
   })
 })
 

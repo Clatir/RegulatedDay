@@ -34,12 +34,18 @@ const { saveAllDay, removeAllDay, restoreAllDay } = await load<{
   removeAllDay: (id: string) => Promise<RawRecord | null>
   restoreAllDay: (raw: RawRecord) => Promise<boolean>
 }>('../../src/renderer/store/allDay')
-const { freeDayInfos, askFreeDays, setFreeDays, undoFreeDays } = await load<{
+const { freeDayInfos, askFreeDays, setFreeDays, undoFreeDays, undoFreeLine } = await load<{
   freeDayInfos: (dates: string[], today: string) => Promise<Record<string, FreeDayInfo & { duringDay: boolean }>>
   askFreeDays: (e: AllDayEvent, today: string) => Promise<string[]>
-  setFreeDays: (dates: string[], today: string) => Promise<{ saved: boolean; change: FreeChange | null; duringDay: string | null }>
+  setFreeDays: (dates: string[], today: string) => Promise<{ saved: boolean; change: FreeChange | null; duringDay: string | null; unreadable: string[] }>
+  undoFreeLine: (seq: number) => Promise<void>
   undoFreeDays: (change: FreeChange) => Promise<{ saved: boolean; undone: string[]; changed: string[]; unreadable: string[] }>
 }>('../../src/renderer/features/allday/freeDays')
+const { showAllDayLine, dropAllDayLine, useAllDayLines } = await load<{
+  showAllDayLine: (page: 'today' | 'week', what: { kind: 'free'; change: FreeChange }) => number
+  dropAllDayLine: (seq: number) => void
+  useAllDayLines: { getState: () => { lines: Array<{ seq: number; kind: string; change?: FreeChange }> }; setState: (s: { lines: [] }) => void }
+}>('../../src/renderer/store/allDayLine')
 const { saveDay } = await load<{ saveDay: (date: string, seen: RawRecord | null, next: (raw: RawRecord) => RawRecord) => Promise<unknown> }>('../../src/renderer/features/today/dayActions')
 
 let root: string
@@ -80,7 +86,9 @@ beforeEach(async () => {
   await reloadData()
 })
 afterEach(async () => {
+  for (const l of useAllDayLines.getState().lines) dropAllDayLine(l.seq)
   await hub.close('quit')
+  delete (globalThis as { window?: unknown }).window
   rmSync(root, { recursive: true, force: true })
 })
 
@@ -216,6 +224,15 @@ describe('wydarzenia w oknie', () => {
     expect(await restoreAllDay(removed!)).toBe(false)
     expect(await removeAllDay('nie-ma')).toBeNull()
   })
+
+  it('usunięcie wydarzenia już usuniętego (gdzie indziej): nic się nie dzieje, komunikat jak przy zapisie', async () => {
+    expect(await saveAllDay(event('k1', '2026-11-18'))).toBe(true)
+    rmSync(join(dir, rel('k1')))
+    await reloadData()
+    useUi.setState({ toasts: [] })
+    expect(await removeAllDay('k1')).toBeNull()
+    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['Tego wydarzenia już nie ma – usunięto je w międzyczasie.'])
+  })
 })
 
 describe('„To wolne” – typ „Wolne” na dni wydarzenia (D405)', () => {
@@ -278,5 +295,68 @@ describe('„To wolne” – typ „Wolne” na dni wydarzenia (D405)', () => {
     write(paths.day(addDays(t, 1)), '{"schema": 1, ')
     await reloadData()
     expect(await askFreeDays(event('u', addDays(t, 1), addDays(t, 2), { free: true }), t)).toEqual([addDays(t, 2)])
+  })
+})
+
+describe('„Tak” na pytaniu „Wolne” – dziś i dni nieczytelne', () => {
+  it('brak klucza dnia w odpowiedzi dayFiles to dzień nieczytelny – także dziś: pominięty z komunikatem, plik nie powstaje; jedno wywołanie dayFiles na wszystkie dni', async () => {
+    const t = today()
+    const d1 = addDays(t, 1)
+    const calls: string[][] = []
+    const rd = (globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd
+    rd.dayFiles = async (dates) => {
+      calls.push([...dates])
+      const files = await hub.dayFiles(dates)
+      delete files[t]
+      return files
+    }
+    const r = await setFreeDays([t, d1], t)
+    expect(r.change!.days.map((d) => d.date)).toEqual([d1])
+    expect(r.unreadable).toEqual([t])
+    expect(r.duringDay).toBeNull()
+    expect(dayOf(t)).toBeNull()
+    expect(dayOf(d1)?.dayType).toBe('wolne')
+    expect(useUi.getState().toasts.some((x) => x.kind === 'error' && /nieczytel/.test(x.text))).toBe(true)
+    expect(calls).toHaveLength(1)
+    expect([...calls[0]!].sort()).toEqual([t, d1].sort())
+  })
+
+  it('dziś zamknięty (rytuał) w chwili „Tak”: bez okna zmiany typu (duringDay puste), nic dziś nie zapisane', async () => {
+    const t = today()
+    await makeToday()
+    const folder = hub.service!.folder
+    folder.append({ day: t, dom: 'timer', k: 'ritual.close', at: folder.clock.now(), how: 'asWritten' })
+    await folder.log.flush()
+    const r = await setFreeDays([t, addDays(t, 1)], t)
+    expect(r.duringDay).toBeNull()
+    expect(r.change!.days.map((d) => d.date)).toEqual([addDays(t, 1)])
+    expect(dayOf(t)?.dayType).toBeUndefined()
+  })
+})
+
+describe('linia „Wolne · Cofnij” – dni nieczytelne zostają na linii', () => {
+  it('„Cofnij” z jednym dniem nieczytelnym: linia zostaje z tym dniem, drugie „Cofnij” po naprawie kończy ją', async () => {
+    const t = today()
+    const [d1, d2] = [addDays(t, 1), addDays(t, 2)]
+    write(paths.day(d2), { schema: 1, date: d2, dayType: 'zwykly', wakeMin: 7 * 60 })
+    await reloadData()
+    const r = await setFreeDays([d1, d2], t)
+    const seq = showAllDayLine('week', { kind: 'free', change: r.change! })
+    // The file of d2 cannot be read for a while: its days are not in the answer of dayFiles.
+    const rd = (globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd
+    const read = rd.dayFiles!
+    rd.dayFiles = async (dates) => {
+      const files = await read(dates)
+      delete files[d2]
+      return files
+    }
+    await undoFreeLine(seq)
+    expect(dayOf(d1)).toBeNull()
+    const line = useAllDayLines.getState().lines.find((l) => l.seq === seq)
+    expect(line?.change?.days.map((d) => d.date)).toEqual([d2])
+    rd.dayFiles = read
+    await undoFreeLine(seq)
+    expect(useAllDayLines.getState().lines.some((l) => l.seq === seq)).toBe(false)
+    expect(dayOf(d2)).toMatchObject({ dayType: 'zwykly', wakeMin: 7 * 60 })
   })
 })

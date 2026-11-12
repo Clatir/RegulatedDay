@@ -230,8 +230,22 @@ test('Tydzień (D405, D406): „To wolne” pyta raz o typ „Wolne” na dni od
       await expect(page.getByTestId('allday-card')).toBeHidden()
       for (const d of days) expect(dayType(dataDir, d)).not.toBe('wolne')
 
-      // Again, and „Tak”: the days are „Wolne”, one line with one „Cofnij”.
-      await page.getByTestId(`allday-bar-${stored(dataDir)[0]!.id}`).click()
+      // A mended title asks nothing (D405: once – when „To wolne” is turned on or its days change).
+      const bar = page.getByTestId(`allday-bar-${stored(dataDir)[0]!.id}`)
+      await bar.click()
+      await page.getByTestId('allday-title').fill('Urlop letni')
+      await page.getByTestId('allday-save').click()
+      await expect(page.getByTestId('allday-card')).toBeHidden({ timeout: 15_000 })
+      await expect(ask).toHaveCount(0)
+      await expect.poll(() => stored(dataDir).map((e) => e.title), { timeout: 15_000 }).toEqual(['Urlop letni'])
+      // Turned off and on again: it asks once more; „Tak”: the days are „Wolne”, one line with one „Cofnij”.
+      await bar.click()
+      await page.getByTestId('allday-free').uncheck()
+      await page.getByTestId('allday-save').click()
+      await expect(page.getByTestId('allday-card')).toBeHidden({ timeout: 15_000 })
+      await expect(ask).toHaveCount(0)
+      await bar.click()
+      await page.getByTestId('allday-free').check()
       await page.getByTestId('allday-save').click()
       await expect(ask).toBeVisible({ timeout: 15_000 })
       await page.getByTestId('allday-free-yes').click()
@@ -242,6 +256,39 @@ test('Tydzień (D405, D406): „To wolne” pyta raz o typ „Wolne” na dni od
       await page.getByTestId('allday-line-undo').click()
       await expect(line).toHaveCount(0)
       for (const d of days) await expect.poll(() => dayType(dataDir, d), { timeout: 15_000 }).not.toBe('wolne')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Dziś (D405): pod belkami jest zawsze wolny rząd – przy jednym istniejącym wydarzeniu drugie dodasz klikiem w pas', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-allday-free-row-'))
+  const { today } = seedAwake(dataDir, [])
+  seedEvent(dataDir, { id: 'k1', title: 'Konferencja', startDate: today, endDate: today, color: 'teal' })
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      const strip = page.getByTestId('allday-today')
+      await expect(page.getByTestId('allday-bar-k1')).toBeVisible({ timeout: 15_000 })
+      // One bar and one free row under it.
+      await expect(strip).toHaveAttribute('data-rows', '2')
+      const box = (await strip.boundingBox())!
+      const bar = (await page.getByTestId('allday-bar-k1').boundingBox())!
+      expect(box.y + box.height - (bar.y + bar.height)).toBeGreaterThan(14)
+      // A click low in the strip (the free row), not on the bar: a new event, not the card of the existing one.
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height - 4)
+      const card = page.getByTestId('allday-card')
+      await expect(card).toBeVisible()
+      await expect(card).toHaveAttribute('data-new', 'true')
+      await page.getByTestId('allday-title').fill('Kolacja')
+      await page.getByTestId('allday-save').click()
+      await expect(card).toBeHidden()
+      await expect.poll(() => stored(dataDir).map((e) => e.title).sort(), { timeout: 15_000 }).toEqual(['Kolacja', 'Konferencja'])
+      await expect(strip).toHaveAttribute('data-rows', '3')
     })
     expect(errors).toEqual([])
   } finally {
@@ -324,8 +371,11 @@ test('Dziś (D405): plan poranny ma jedną linię „Dziś: …” bez pytania; 
       await expect(bar.getByTestId('bar-block')).toBeVisible()
       expect(await bar.locator('[title]').count()).toBe(0)
       // Hover: every title in place; leaving brings the short text back.
+      const height = (await bar.getByTestId('bar-desktop').boundingBox())!.height
       await label.hover()
       await expect(bar.getByTestId('bar-allday-text')).toHaveText(`${long} · Urlop`)
+      // The hover never changes the bar's height (the window would be re-sized at every pass of the pointer).
+      expect((await bar.getByTestId('bar-desktop').boundingBox())!.height).toBe(height)
       await bar.mouse.move(0, 400)
       await expect(bar.getByTestId('bar-allday-text')).toHaveText(`${shortTitle(long)} +1`)
       // The window's own bar and the panel have no label (only the desktop bar, D405).

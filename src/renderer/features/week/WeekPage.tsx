@@ -16,7 +16,7 @@ import { cx } from '../../components/ui'
 import { useData } from '../../store/data'
 import { useWeekView } from '../../store/horizon'
 import { useMachine } from '../../store/machine'
-import { openDay, setBlockDraft, takeOpenAllDay, toast, useUi } from '../../store/ui'
+import { openDay, setBlockDraft, takeFoundPick, useUi } from '../../store/ui'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockColor, blockName, type Names } from '../plan/blockView'
 import { DEFAULT_NEW_BLOCK_MIN, snapMinute, type GridRange } from '../plan/gridCreate'
@@ -37,17 +37,18 @@ export function WeekPage() {
   const [week, setWeek] = useState(() => weekStart(today))
   const { view, failed } = useWeekView(week)
   const thisWeek = weekStart(today)
-  // Ctrl K on an all-day event (D405): the week of its first day; its card the strip of that week opens. One that is gone says so.
-  const wanted = useUi((s) => s.openAllDay)
+  // Ctrl K on an all-day event (D405, as the other results): the week of its first day, set once; its card the strip of that
+  // week opens (`card`, until it has). One that is gone says so (`takeFoundPick`).
+  const pick = useUi((s) => s.pick)
   const events = useData((s) => s.allDay)
+  const [card, setCard] = useState<string | null>(null)
   useEffect(() => {
-    if (!wanted) return
-    const e = events.find((x) => x.id === wanted)
-    if (!e) {
-      takeOpenAllDay()
-      toast('Tego wydarzenia już nie ma.')
-    } else setWeek(weekStart(e.startDate))
-  }, [wanted, events])
+    const p = takeFoundPick((x) => x.kind === 'allDay', (x) => events.some((e) => e.id === x.id), 'Tego wydarzenia już nie ma.')
+    const e = p ? events.find((x) => x.id === p.id) : undefined
+    if (!e) return
+    setWeek(weekStart(e.startDate))
+    setCard(e.id)
+  }, [pick, events])
   return (
     <div className="flex flex-col gap-3 p-4" data-testid="week">
       <div className="flex items-center gap-2">
@@ -69,7 +70,7 @@ export function WeekPage() {
       <GoalsPanel month={goalsMonthOfWeek(week, today)} />
       {view ? (
         // Keyed by the week: another week is another grid – a window of a new block or a drag never goes with it (D371).
-        <WeekGrid key={view.days[0]?.date} days={view.days} from={view.from} to={view.to} />
+        <WeekGrid key={view.days[0]?.date} days={view.days} from={view.from} to={view.to} openCard={card} onCardOpened={() => setCard(null)} />
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="week-loading">
           {failed ? 'Nie da się teraz policzyć tego tygodnia.' : 'Liczę tydzień…'}
@@ -99,7 +100,7 @@ interface Held {
   range: GridRange
 }
 
-function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: number }) {
+function WeekGrid({ days, from, to, openCard, onCardOpened }: { days: HorizonDay[]; from: number; to: number; openCard: string | null; onCardOpened: () => void }) {
   const { rd, routines, requests } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -153,7 +154,7 @@ function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: nu
           ))}
         </div>
         <div className="mt-1">
-          <AllDayBar dates={dates} page="week" today={today} axisPx={AXIS_PX} gapClass="gap-x-1" />
+          <AllDayBar dates={dates} page="week" today={today} axisPx={AXIS_PX} gapClass="gap-x-1" openId={openCard} onOpened={onCardOpened} />
         </div>
       </div>
       <div className="relative grid gap-x-1" style={cols} ref={bodyRef}>

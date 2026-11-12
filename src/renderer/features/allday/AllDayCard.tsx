@@ -2,7 +2,8 @@
  * The card of an all-day event (D405, D406): a small window beside the strip – the title, the days from and to, one of six
  * colours, the note (the block's Markdown editor, D388), „To wolne (urlop, wyjazd)”; „Zapisz” · „Anuluj” · „Usuń” (only an
  * event that exists). Esc, „Anuluj” and a click outside close it and save nothing; a removal asks nothing (its line „Cofnij”
- * is the strip's). After „Zapisz” of an event „To wolne” the same window asks once about the type „Wolne” for its days.
+ * is the strip's). After a „Zapisz” that turns „To wolne” on or changes the days of such an event the same window asks once
+ * about the type „Wolne” for its days (T733: a mended title asks nothing).
  */
 import { useEffect, useRef, useState } from 'react'
 import type { RawRecord } from '@shared/api'
@@ -14,13 +15,16 @@ import { Field, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { commitActiveField } from '../../lib/commit'
 import { useEscapeLayer } from '../../lib/escape'
-import { removeAllDay, saveAllDay } from '../../store/allDay'
-import { useData } from '../../store/data'
+import { allDayRel, removeAllDay, saveAllDay } from '../../store/allDay'
+import { rawRecord, useData } from '../../store/data'
 import { NoteEditor } from '../note/NoteEditor'
-import { freeAskText } from './allDayView'
-import { askFreeDays, setFreeDays, type FreeDaysResult } from './freeDays'
+import { asksFreeAfter, freeAskText } from './allDayView'
+import { askFreeDays, freeAnswerSettled, setFreeDays, type FreeDaysResult } from './freeDays'
 
 export const ALL_DAY_CARD_WIDTH = 320
+
+/** No computers known yet: one array for every render (a selector must give the same value for the same state). */
+const NONE: never[] = []
 
 /** Why the title is not accepted (null: it is), and why the days are not – each under its own field. */
 export function cardProblems(e: Pick<AllDayEvent, 'title' | 'startDate' | 'endDate'>): { title: string | null; dates: string | null } {
@@ -64,7 +68,7 @@ export function AllDayCard({
   const [tried, setTried] = useState(false)
   const [ask, setAsk] = useState<string[] | null>(null)
   const [busy, run] = useBusy()
-  const computers = useData((s) => s.view?.computers ?? [])
+  const computers = useData((s) => s.view?.computers ?? NONE)
   useEscapeLayer(true, onClose)
   useEffect(() => {
     ref.current?.scrollIntoView({ block: 'nearest' })
@@ -89,8 +93,9 @@ export function AllDayCard({
         return
       }
       if (!(await saveAllDay(e, base))) return
-      // The question once, after this save of an event „To wolne” (D405): the days from today on that are not „Wolne” and not closed.
-      const days = await askFreeDays(e, today)
+      // The question once (D405): when this save turned „To wolne” on or changed the days of such an event – the days from today on
+      // that are not „Wolne” and not closed.
+      const days = asksFreeAfter(base, e) ? await askFreeDays(e, today) : []
       if (days.length) setAsk(days)
       else onClose()
     })
@@ -98,15 +103,21 @@ export function AllDayCard({
     run(async () => {
       if (!base) return
       const raw = await removeAllDay(base.id)
-      if (!raw) return
+      if (!raw) {
+        // Gone meanwhile (the toast said so): nothing left to edit here. A removal that did not go through leaves the card.
+        if (rawRecord(allDayRel(base.id)) == null) onClose()
+        return
+      }
       onRemoved(base.title, raw)
       onClose()
     })
   const yes = () =>
     run(async () => {
       if (!ask) return
-      onFree(await setFreeDays(ask, today))
-      onClose()
+      const r = await setFreeDays(ask, today)
+      if (r.change || r.duringDay) onFree(r)
+      // Nothing written (a refused save, every day unreadable – the toast said so): the question stays for another „Tak”.
+      if (freeAnswerSettled(r)) onClose()
     })
 
   return (

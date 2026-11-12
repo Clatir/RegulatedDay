@@ -43,11 +43,9 @@ interface UiState {
   blockDraft: { date: string; block: PlanBlock } | null
   /** What the search selected for the screen it opened (null: nothing waits). */
   pick: SearchPick | null
-  /** The all-day event whose card „Tydzień” opens once it shows (Ctrl K, D405; null: none waits) – taken once, by the strip. */
-  openAllDay: string | null
 }
 
-export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, goalsClosed: null, blockDraft: null, pick: null, openAllDay: null }))
+export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, goalsClosed: null, blockDraft: null, pick: null }))
 
 export function closeSideB(date: string): void {
   useUi.setState({ sideBClosed: date })
@@ -76,41 +74,25 @@ export function setMovedLater(key: string): void {
 /** Every change of view first commits the active field (spec „Zatwierdzanie przed przejściem”). */
 export function navigate(page: Page): void {
   commitActiveField()
-  useUi.setState({ page, pick: null, openAllDay: null })
+  useUi.setState({ page, pick: null })
 }
 
 /** Today's ritual brought into view (the bar's „Rytuał”, D318). */
 export function openRitual(): void {
   commitActiveField()
-  useUi.setState({ page: 'today', day: null, focus: 'ritual', pick: null, openAllDay: null })
+  useUi.setState({ page: 'today', day: null, focus: 'ritual', pick: null })
 }
 
 /** The plan of a day (a click in the calendar opens it, D295); null: today. Commits the active field first. */
 export function openDay(day: string | null): void {
   commitActiveField()
-  useUi.setState({ page: 'today', day, pick: null, openAllDay: null })
+  useUi.setState({ page: 'today', day, pick: null })
 }
 
 /** The search's Enter (T653): the screen (and the day of „Dziś”) with what to select there; a hand-made move drops it. */
 export function openPick(target: { page: Page; day?: string | null }, pick: SearchPick): void {
   commitActiveField()
-  useUi.setState({ page: target.page, ...(target.day !== undefined ? { day: target.day } : {}), pick, openAllDay: null })
-}
-
-/**
- * „Tydzień” at the week of the all-day event `id` with its card open (Ctrl K, D405): the strip of that week takes the id once it
- * is shown (`takeOpenAllDay`); a hand-made move drops it.
- */
-export function openAllDayCard(id: string): void {
-  commitActiveField()
-  useUi.setState({ page: 'week', pick: null, openAllDay: id })
-}
-
-/** The id waiting for its card, gone from the window's state – so it is used once. */
-export function takeOpenAllDay(): string | null {
-  const id = useUi.getState().openAllDay
-  if (id != null) useUi.setState({ openAllDay: null })
-  return id
+  useUi.setState({ page: target.page, ...(target.day !== undefined ? { day: target.day } : {}), pick })
 }
 
 /** The waiting pick if accept takes it – and it is gone then, so it is used once. */

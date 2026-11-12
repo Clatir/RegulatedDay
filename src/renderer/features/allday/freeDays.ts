@@ -14,11 +14,11 @@ import { paths } from '@shared/data/paths'
 import { defaultDayType } from '@shared/engine/createDay'
 import { plDateWithWeekday } from '@shared/format'
 import { zjazdTypeRaw } from '@shared/import/zjazdDay'
-import { ALL_DAY_MAX_DAYS, freeDaysToAsk, type AllDayEvent, type FreeDayInfo } from '@shared/model/allDay'
+import { freeCandidateDays, freeDaysToAsk, type AllDayEvent, type FreeDayInfo } from '@shared/model/allDay'
 import { dayFileFrom } from '@shared/model/plan'
 import { settingsOn } from '@shared/model/settings'
-import { addDays } from '@shared/time/zone'
 import { editOf, isSaved, trySaveWith, useData } from '../../store/data'
+import { dropAllDayLine, narrowFreeLine, useAllDayLines } from '../../store/allDayLine'
 import { countDay, dayTypeNow, dayUsable } from '../../store/day'
 import { toast } from '../../store/ui'
 
@@ -65,9 +65,8 @@ export async function freeDayInfos(dates: readonly string[], today: string): Pro
 
 /** The days to offer „Wolne” for after `e` was saved (none when it is not „To wolne”). */
 export async function askFreeDays(e: AllDayEvent, today: string): Promise<string[]> {
-  if (!e.free || e.endDate < today) return []
-  const dates: string[] = []
-  for (let d = e.startDate > today ? e.startDate : today; d <= e.endDate && dates.length < ALL_DAY_MAX_DAYS; d = addDays(d, 1)) dates.push(d)
+  const dates = freeCandidateDays(e, today)
+  if (!dates.length) return []
   const info = await freeDayInfos(dates, today)
   return freeDaysToAsk(e, today, (d) => info[d] ?? null)
 }
@@ -84,7 +83,16 @@ export interface FreeDaysResult {
   change: FreeDaysChange | null
   /** Today, made already: its change of type is the one during the day – not done here. */
   duringDay: string | null
+  /** The days left alone because their file cannot be read now (the toast said so). */
+  unreadable: string[]
 }
+
+/**
+ * Whether the question „Wolne” may close after „Tak” answered `r`: not when nothing was written (the save failed, or every
+ * day was unreadable – its toast has said why; „Tak” can be tried again). Some days written, today left to the dialog, or
+ * nothing left to do (a saved answer with no day unreadable) – it closes.
+ */
+export const freeAnswerSettled = (r: FreeDaysResult): boolean => r.change != null || r.duringDay != null || (r.saved && r.unreadable.length === 0)
 
 const unreadableText = (dates: readonly string[]): string =>
   dates.length === 1 ? `Typ dnia ${plDateWithWeekday(dates[0]!)} się nie zmienił – plik tego dnia jest teraz nieczytelny.` : `Typ dni ${dates.map(plDateWithWeekday).join(', ')} się nie zmienił – ich pliki są teraz nieczytelne.`
@@ -100,10 +108,14 @@ export async function setFreeDays(dates: readonly string[], today: string): Prom
   const unreadable: string[] = []
   let duringDay: string | null = null
   const out = await trySaveWith(async () => {
-    const coming = list.filter((d) => d > today)
-    const files = coming.length ? await window.rd.dayFiles(coming) : {}
+    // One read of every day's file, today's too: a day missing from the answer is one that cannot be read now – never no file.
+    const files = list.length ? await window.rd.dayFiles(list) : {}
     for (const d of list) {
-      let raw: RawRecord | null
+      if (!(d in files)) {
+        unreadable.push(d)
+        continue
+      }
+      const raw = files[d] ?? null
       let after: RawRecord
       if (d === today) {
         const t = await todayDay(today)
@@ -111,21 +123,15 @@ export async function setFreeDays(dates: readonly string[], today: string): Prom
           unreadable.push(d)
           continue
         }
+        // Today turned „Wolne” or closed since the question: nothing to ask about it any more.
+        if (t.closed || t.type === 'wolne') continue
         if (t.duringDay) {
           duringDay = d
           continue
         }
-        raw = (await window.rd.dayFiles([d]))[d] ?? null
         const weekdayType = defaultDayType(d, settingsOn(useData.getState().rd.settings, d))
         after = setDayField(dayRaw(raw, d), 'dayType', weekdayType === 'wolne' ? null : 'wolne')
-      } else {
-        if (!(d in files)) {
-          unreadable.push(d)
-          continue
-        }
-        raw = files[d] ?? null
-        after = zjazdTypeRaw(dayRaw(raw, d), d, 'wolne')
-      }
+      } else after = zjazdTypeRaw(dayRaw(raw, d), d, 'wolne')
       const entry = editOf(paths.day(d), raw, after)
       if (entry) sent.push({ date: d, entry, made: entry.create ? after : null })
     }
@@ -133,7 +139,7 @@ export async function setFreeDays(dates: readonly string[], today: string): Prom
   })
   if (unreadable.length) toast(unreadableText(unreadable), 'error', 8000)
   const days = out ? sent.filter((_, i) => out[i]?.status === 'applied' || out[i]?.status === 'waiting') : []
-  return { saved: isSaved(out), change: days.length ? { days } : null, duringDay }
+  return { saved: isSaved(out), change: days.length ? { days } : null, duringDay, unreadable }
 }
 
 export interface FreeDaysUndone {
@@ -178,4 +184,18 @@ export async function undoFreeDays(change: FreeDaysChange): Promise<FreeDaysUndo
   if (r.changed.length) toast('Część dni zmieniła się od ustawienia „Wolne” – zostaje tak, jak jest teraz.', 'info', 6000)
   if (r.unreadable.length) toast(`Nie cofnięto typu: ${r.unreadable.map(plDateWithWeekday).join(', ')} – plik jest teraz nieczytelny. Spróbuj za chwilę.`, 'error', 6000)
   return r
+}
+
+/**
+ * „Cofnij” of the line „Wolne” (D406): the days that still stand as it left them are given back; the line ends once nothing is
+ * left to take back – a day whose file cannot be read now stays on it (with the days only it names) until its „Cofnij” is
+ * done or the 15 minutes are out. A save that failed leaves the line as it is.
+ */
+export async function undoFreeLine(which: number): Promise<void> {
+  const line = useAllDayLines.getState().lines.find((l) => l.seq === which)
+  if (!line || line.kind !== 'free') return
+  const r = await undoFreeDays(line.change)
+  if (!r.saved) return
+  if (r.unreadable.length) narrowFreeLine(which, r.unreadable)
+  else dropAllDayLine(which)
 }

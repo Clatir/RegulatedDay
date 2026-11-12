@@ -1,7 +1,8 @@
 /**
  * The strip of all-day events (D405) over the axis of „Dziś” (one column) and under the headings of „Tydzień” (seven): always
  * there, one line high while empty. Every event is a bar over the columns of its days – the first three rows, the rest „+N
- * więcej” in their column (a click unfolds them all, the next folds them); ‹ / › where it goes on beyond the days shown. A click
+ * więcej” in their column (a click unfolds them all, the next folds them); ‹ / › where it goes on beyond the days shown. Under
+ * the bars there is always one free row (T747) – „+N więcej” stands in it, the rest of it is a place to click. A click
  * on an empty place opens the card of a new event on that day, in „Tydzień” a drag over several days – on that range; a click on a
  * bar – the card of that event. The gesture is the strip's own (a horizontal one, over the cells below): it never starts the
  * gestures of the axis, which stands in another element. The events never touch the plan (D405).
@@ -15,7 +16,6 @@ import { cx } from '../../components/ui'
 import { useData } from '../../store/data'
 import { showAllDayLine, type AllDayLinePage } from '../../store/allDayLine'
 import { useMachine } from '../../store/machine'
-import { takeOpenAllDay, useUi } from '../../store/ui'
 import { columnAt, popoverPlace } from '../week/weekLayout'
 import { ALL_DAY_CARD_WIDTH, AllDayCard } from './AllDayCard'
 import { barTitle } from './allDayText'
@@ -34,7 +34,26 @@ interface Open {
   place: { left: number; top: number }
 }
 
-export function AllDayBar({ dates, page, today, axisPx, endPx = 0, gapClass = '' }: { dates: readonly string[]; page: AllDayLinePage; today: string; axisPx: number; endPx?: number; gapClass?: string }) {
+export function AllDayBar({
+  dates,
+  page,
+  today,
+  axisPx,
+  endPx = 0,
+  gapClass = '',
+  openId = null,
+  onOpened
+}: {
+  dates: readonly string[]
+  page: AllDayLinePage
+  today: string
+  axisPx: number
+  endPx?: number
+  gapClass?: string
+  /** The event whose card to open once (Ctrl K, D405) – by the strip of the week of its first day; `onOpened` says it was. */
+  openId?: string | null
+  onOpened?: () => void
+}) {
   const events = useData((s) => s.allDay)
   const brightness = useMachine((s) => s.prefs.brightness)
   const wrap = useRef<HTMLDivElement>(null)
@@ -62,17 +81,16 @@ export function AllDayBar({ dates, page, today, axisPx, endPx = 0, gapClass = ''
   }
   const openEdit = (event: AllDayEvent, left: number, right: number) => setCard({ seq: ++asks.current, event, base: event, place: placeAt(left, right) })
 
-  // Ctrl K (D405): „Tydzień” of the event's first day with its card open – once, by the strip of that very week.
-  const wanted = useUi((s) => s.openAllDay)
+  // Ctrl K (D405): the card of the event the page asked for – once, by the strip of the week of its first day.
   useEffect(() => {
-    if (!wanted || page !== 'week') return
-    const e = events.find((x) => x.id === wanted)
+    if (!openId || page !== 'week') return
+    const e = events.find((x) => x.id === openId)
     if (!e || dates[0] !== weekStart(e.startDate)) return
-    takeOpenAllDay()
+    onOpened?.()
     const col0 = Math.max(0, dates.indexOf(e.startDate))
     const r = cellRect(col0)
     setCard({ seq: ++asks.current, event: e, base: e, place: placeAt(r?.left ?? 0, r?.right ?? 0) })
-  }, [wanted, events, dates, page])
+  }, [openId, events, dates, page])
 
   /** The drag over several columns („Tydzień” only): from the column it began in to the one under the pointer. */
   const down = (e: PointerEvent<HTMLButtonElement>, from: number) => {
@@ -194,8 +212,9 @@ export function AllDayBar({ dates, page, today, axisPx, endPx = 0, gapClass = ''
               <button
                 key={dates[i]}
                 type="button"
-                className="relative z-[2] truncate rounded-sm px-1 text-left text-[11px] leading-[16px] text-muted hover:bg-hover hover:text-fg"
-                style={{ gridColumn: col(i), gridRow: layout.moreRow! }}
+                className="relative z-[2] max-w-full truncate rounded-sm px-1 text-left text-[11px] leading-[16px] text-muted hover:bg-hover hover:text-fg"
+                // Only as wide as its words: the rest of the free row stays a place to click (T747).
+                style={{ gridColumn: col(i), gridRow: layout.moreRow!, justifySelf: 'start' }}
                 aria-expanded={expanded}
                 onClick={() => setExpanded(!expanded)}
                 data-testid={`allday-more-${dates[i]}`}

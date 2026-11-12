@@ -11,14 +11,16 @@ paths:
 
 # Wydarzenia całodniowe – ekrany (HKU1 część B)
 
-Źródło prawdy: D405, D406; decyzje T720–T729 (model, kolekcja, zapis, „Wolne”), T730–T737 (ekrany). Wydarzenie nigdy nie zmienia budżetu,
+Źródło prawdy: D405, D406; decyzje T720–T729 (model, kolekcja, zapis, „Wolne”), T730–T737 i T747–T749 (ekrany, poprawki po przeglądzie). Wydarzenie nigdy nie zmienia budżetu,
 regeneracji ani typu dnia (silnik go nie czyta – T725).
 
 ## Pas (`AllDayBar`)
 - Jeden komponent: „Dziś” (`dates=[dzień]`, kolumna godzin 46 px po lewej, 48 px po prawej przy energii) i „Tydzień” (7 dat, w tym samym
   przyklejonym bloku co nagłówki, `AXIS_PX`). „Szablony” – bez pasa. `key={date}` w „Dziś” (zmiana dnia zamyka kartę), klucz tygodnia w `WeekGrid`.
-- Układ czysty w `allDayView.allDayLayout` (`weekLanes`): 3 rzędy po 20 px, rząd „+N więcej” tylko gdy któraś kolumna ma ukryte, jedna flaga
-  „rozwinięte” na pas (przycisk zostaje jako „Zwiń”), pusty pas = jedna linia. Komórki to przyciski pod belkami (klik, klawiatura), belka – klik = edycja.
+- Układ czysty w `allDayView.allDayLayout` (`weekLanes`): 3 rzędy belek po 20 px i **zawsze jeden wolny rząd pod nimi** (T747: rzędy belek + 1,
+  bez belek – ten jeden rząd = pusty pas jedna linia); „+N więcej” stoi w wolnym rzędzie (przycisk tylko tak szeroki jak słowa, reszta rzędu
+  klika się jak komórka), jedna flaga „rozwinięte” na pas (przycisk zostaje jako „Zwiń”). Komórki to przyciski pod belkami (klik, klawiatura),
+  belka – klik = edycja; belki nigdy nie zasłaniają całego dnia – bez wolnego rzędu drugiego wydarzenia nie dodasz myszą.
 - Gest przeciągnięcia (tylko „Tydzień”): nasłuch okna, prostokąty komórek raz przy wciśnięciu, `columnAt`, `dragDates`; ta sama kolumna = klik.
   To nie `useGridCreate`: pas jest osobnym elementem, więc gesty osi z niego nie startują (`data-no-grid` zbędne).
 - Teksty bez cyklu importów: `allDayText` (belka, komórka miesiąca – importuje je `MonthGrid`), `allDayView` (układ, dni pytania „Wolne”).
@@ -27,19 +29,26 @@ regeneracji ani typu dnia (silnik go nie czyta – T725).
 - Okienko jak `NewBlockPopover` (`popoverPlace` obok wskaźnika, pod pasem). Pola także w `ref` (kliknięcie „Zapisz” opuszcza pole przed obsługą kliknięcia).
   Notatka = `NoteEditor` pisze do pól karty, do pliku dopiero „Zapisz” (`saveAllDay(e, base)` w `useBusy`); komunikat tytułu po próbie zapisu, dat – od razu (`cardProblems`).
 - Esc, „Anuluj”, klik poza – bez zapisu. „Usuń” bez pytania → `removeAllDay` → linia „Cofnij”.
-- Pytanie „Wolne” po każdym udanym zapisie „To wolne”, gdy `askFreeDays` daje dni: w miejscu karty; „Tak” = `setFreeDays` (linia „Wolne” z `change`),
-  dzień `duringDay` → `FreeTodayDialog` (`TypeChangeDialog` z `initialTo: 'wolne'`, bez „Cofnij”); „Nie”, Esc, klik poza zamykają.
+- Pytanie „Wolne” raz (T733, `asksFreeAfter`): tylko gdy zapis włączył „To wolne” (nowe wydarzenie z nim albo false → true) albo zmienił daty
+  wydarzenia „To wolne”, i gdy `askFreeDays` daje dni; poprawka tytułu nie pyta. W miejscu karty; „Tak” = `setFreeDays` (linia „Wolne” z `change`),
+  dzień `duringDay` → `FreeTodayDialog` (`TypeChangeDialog` z `initialTo: 'wolne'`, bez „Cofnij”); dziś sprawdzane ponownie przy „Tak” (już „Wolne”
+  albo zamknięte – pominięte). Karta zamyka się po „Tak” wg `freeAnswerSettled` (nic nie zapisano – pytanie zostaje); „Nie”, Esc, klik poza zamykają.
+  `setFreeDays` czyta pliki wszystkich dni jednym `dayFiles`; brak klucza = nieczytelny (także dziś), nigdy brak pliku.
+- „Usuń” wydarzenia już usuniętego: ten sam komunikat co zapis (`GONE_TEXT`) i zamknięcie karty (`removeAllDay` → `tryRemoveRecord`).
 
 ## Linie (`AllDayLines`, `store/allDayLine`)
 - Lista linii, każda z czasomierzem `UNDO_LINE_MS` i stroną (`today` / `week`) miejsca zmiany; tylko okno, pasek pulpitu ich nie ma (D406).
-  „Cofnij” usunięcia = `restoreAllDay` (linia znika też, gdy rekord już jest); „Wolne” = `undoFreeDays`.
+  „Cofnij” usunięcia = `restoreAllDay` (linia znika też, gdy rekord już jest); „Wolne” = `undoFreeLine` (`undoFreeDays`; linia zostaje z dniami
+  nieczytelnymi teraz – `narrowFreeLine` – dopóki wszystko nie cofnięte albo 15 min).
 
 ## Z zewnątrz (Ctrl K, część C)
-- `openAllDayCard(id)` (`store/ui.ts`): „Tydzień”, `WeekPage` ustawia tydzień dnia początku (brak wydarzenia – dymek), pas tego tygodnia bierze
-  `openAllDay` raz (`takeOpenAllDay`) i otwiera kartę edycji. Ręczne przejście czyści `openAllDay`.
+- Jak inne wyniki Ctrl K (T749): `openPick({ page: 'week' }, { kind: 'allDay', id })`; `WeekPage` bierze wybór `takeFoundPick` (brak wydarzenia –
+  dymek „Tego wydarzenia już nie ma.”), raz ustawia tydzień dnia początku i daje id pasowi tego tygodnia (`openId`, `onOpened` zużywa je);
+  osobnego kanału w `store/ui.ts` nie ma, ręczne przejście czyści `pick`.
 
 ## Pasek, Ctrl K, plan poranny (część C, T740–T746)
 - Pasek pulpitu: `WidgetView.allDay` (`barAllDay`, `shortTitle` w `shared/widget.ts`) z wejścia `engineView({ allDay })`; `WidgetEngine.refreshNow`
   czyta `folder.collection('allDay')` (błąd = bez podpisu). Dziś = doba logiczna. Rysuje `AllDayLabel` (`Bar.tsx`) tylko w trybie `desktop`, w elastycznej
-  części wiersza; pełne tytuły po najechaniu w miejscu (nie `title`). Bez wydarzeń znaczniki jak dotąd.
-- Ctrl K: rodzaj `allDay` (grupa „Wydarzenia”), `choose` → `openAllDayCard`. Plan poranny: `morningAllDayLine`, linia `morning-allday` pod nagłówkiem.
+  części wiersza – także przy prośbie bez bloku (`RequestLine`, T748); pełne tytuły po najechaniu w miejscu (nie `title`), w jednym wierszu
+  (`truncate`, bez zawijania: wysokość wiersza = okno paska, najechanie jej nie zmienia). Bez wydarzeń znaczniki jak dotąd.
+- Ctrl K: rodzaj `allDay` (grupa „Wydarzenia”), `choose` → `openPick({ page: 'week' }, { kind: 'allDay', id })`. Plan poranny: `morningAllDayLine`, linia `morning-allday` pod nagłówkiem.

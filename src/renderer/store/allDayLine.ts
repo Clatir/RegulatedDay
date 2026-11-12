@@ -45,6 +45,13 @@ export function dropAllDayLine(which: number): void {
   useAllDayLines.setState((s) => (s.lines.some((l) => l.seq === which) ? { lines: s.lines.filter((l) => l.seq !== which) } : s))
 }
 
+/** The line „Wolne” `which` left with only `dates` of its days (the others were given back; those are still to be). */
+export function narrowFreeLine(which: number, dates: readonly string[]): void {
+  useAllDayLines.setState((s) => ({
+    lines: s.lines.map((l) => (l.seq === which && l.kind === 'free' ? { ...l, change: { days: l.change.days.filter((d) => dates.includes(d.date)) } } : l))
+  }))
+}
+
 /** How long a line still stands (ms; 0 and less – it is over). */
 export const allDayLineLeft = (line: AllDayLine, now = Date.now()): number => line.until - now
 

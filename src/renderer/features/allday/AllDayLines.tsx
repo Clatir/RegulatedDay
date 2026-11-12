@@ -1,7 +1,7 @@
 /**
  * The lines of all-day events on top of „Dziś” and „Tydzień” (D406): „Usunięto „…” · Cofnij” and „Typ dnia „Wolne” na K
  * dniach · Cofnij”, 15 minutes (`store/allDayLine`). „Cofnij” of a removal brings the record back (only while none of its id
- * is there); of „Wolne” – the days that still stand as it left them.
+ * is there); of „Wolne” – the days that still stand as it left them (`undoFreeLine`: a day not readable now stays on the line).
  */
 import { allDayRemovedText } from '@shared/model/allDay'
 import { useBusy } from '../../lib/busy'
@@ -9,7 +9,7 @@ import { allDayRel, restoreAllDay } from '../../store/allDay'
 import { dropAllDayLine, linesOf, useAllDayLines, type AllDayLine, type AllDayLinePage } from '../../store/allDayLine'
 import { rawRecord } from '../../store/data'
 import { freeLineText } from './allDayView'
-import { undoFreeDays } from './freeDays'
+import { undoFreeLine } from './freeDays'
 
 export function AllDayLines({ page }: { page: AllDayLinePage }) {
   const lines = useAllDayLines((s) => s.lines)
@@ -33,7 +33,7 @@ function LineView({ line }: { line: AllDayLine }) {
         if ((await restoreAllDay(line.raw)) || rawRecord(allDayRel(String(line.raw.id))) != null) dropAllDayLine(line.seq)
         return
       }
-      if ((await undoFreeDays(line.change)).saved) dropAllDayLine(line.seq)
+      await undoFreeLine(line.seq)
     })
   return (
     <div className="flex items-center gap-2 rounded border border-line bg-raised px-3 py-1.5 text-[12.5px]" role="status" data-testid={line.kind === 'removed' ? 'allday-removed' : 'allday-free-set'}>

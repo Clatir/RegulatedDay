@@ -2,7 +2,7 @@
  * What the widget shows (spec „Widget”: the bar at the top of the main window, in the icon's panel and on the desktop,
  * and the icon by the clock): the engine's view (E4b) – without a data folder one neutral line (`noFolderView`, D327).
  */
-import { compareAllDay, eventsOn, type AllDayEvent } from './model/allDay'
+import { eventsOn, type AllDayEvent } from './model/allDay'
 import { ALL_DAY_COLOR_HEX, ENGINE_TONE_SET, iconColor, TONE_SETS, toneColor, type Tone, type ToneSetId, type WarnStep } from './theme'
 
 /**
@@ -87,10 +87,10 @@ export function shortTitle(title: string, max = BAR_ALL_DAY_CHARS): string {
 
 /** The bar's label for `today`: null when no event touches it (the bar then looks as before – no empty place). */
 export function barAllDay(events: readonly AllDayEvent[], today: string): BarAllDay | null {
-  const list = eventsOn(events, today).sort(compareAllDay)
+  const list = eventsOn(events, today)
   const first = list[0]
   if (!first) return null
-  return { color: ALL_DAY_COLOR_HEX[first.color], text: `${shortTitle(first.title)}${list.length > 1 ? ` +${list.length - 1}` : ''}`, full: list.map((e) => e.title.trim()).join(' · ') }
+  return { color: ALL_DAY_COLOR_HEX[first.color], text: `${shortTitle(first.title)}${list.length > 1 ? ` +${list.length - 1}` : ''}`, full: list.map((e) => e.title).join(' · ') }
 }
 
 export interface WidgetView {

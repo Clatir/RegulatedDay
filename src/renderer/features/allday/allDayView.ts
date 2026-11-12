@@ -1,6 +1,7 @@
 /**
  * The strip of all-day events (D405) without the screen: the rows of its bars (at most three, the rest „+N więcej”, unfolded
- * on a click), the days a drag over the strip takes, and the words of the strip, the card's question „Wolne” and the lines.
+ * on a click) and the one free row under them (T747), the days a drag over the strip takes, and the words of the strip, the
+ * card's question „Wolne” and the lines.
  * Pure – the screens (`AllDayBar`, `AllDayCard`) only draw what this says.
  */
 import { weekLanes, type AllDayEvent, type AllDayLanes } from '@shared/model/allDay'
@@ -14,9 +15,12 @@ export const ALL_DAY_MAX_LANES = 3
 export interface AllDayLayout {
   /** The bars to draw (every row when unfolded). */
   lanes: AllDayLanes
-  /** The rows of the strip: the bars' rows (one at least – an empty strip is one line high) and the row of „+N więcej”. */
+  /**
+   * The rows of the strip: the bars' rows and always one free row under them (T747: a click there is a new event; with no bars
+   * the strip is that one row alone).
+   */
   rows: number
-  /** The row (1-based, for the grid) of the „+N więcej” buttons; null when no column has events hidden. */
+  /** The row (1-based, for the grid) of the „+N więcej” buttons – the free row; null when no column has events hidden. */
   moreRow: number | null
   /** Per column: the events not shown while the strip is folded (what „+N więcej” counts; the button stands also when unfolded, as „Zwiń”). */
   more: number[]
@@ -26,9 +30,18 @@ export interface AllDayLayout {
 export function allDayLayout(events: readonly AllDayEvent[], dates: readonly string[], expanded: boolean): AllDayLayout {
   const folded = weekLanes(events, dates, ALL_DAY_MAX_LANES)
   const lanes = expanded ? weekLanes(events, dates, Number.POSITIVE_INFINITY) : folded
-  const body = Math.max(1, lanes.lanes)
+  const rows = lanes.lanes + 1
   const any = folded.hidden.some((n) => n > 0)
-  return { lanes, rows: body + (any ? 1 : 0), moreRow: any ? body + 1 : null, more: folded.hidden }
+  return { lanes, rows, moreRow: any ? rows : null, more: folded.hidden }
+}
+
+/**
+ * Whether a save of the card asks about the type „Wolne” (D405: once): the event is „To wolne” and it has just become so (a new
+ * one, or the box turned on) or its days changed – a mended title, colour or note asks nothing.
+ */
+export function asksFreeAfter(base: AllDayEvent | null, saved: AllDayEvent): boolean {
+  if (!saved.free) return false
+  return !base || !base.free || base.startDate !== saved.startDate || base.endDate !== saved.endDate
 }
 
 /** The dates a drag over the strip took, from the column it began in to the one it ended in (either way round). */

@@ -180,9 +180,10 @@ describe('Enter na wyniku (T653)', () => {
     expect(go(rec('setting', 'settings-data'))).toEqual(['settings', { kind: 'setting', id: 'settings-data' }])
   })
 
-  it('wydarzenie całodniowe: „Tydzień” z kartą tego wydarzenia (openAllDay), bez wyboru (D405)', () => {
+  it('wydarzenie całodniowe: „Tydzień” z wyborem tego wydarzenia (jak inne rodzaje, D405) – to karta bierze go raz', () => {
     choose(rec('allDay', 'ev1'), TODAY)
-    expect([ui().page, ui().pick, ui().openAllDay]).toEqual(['week', null, 'ev1'])
+    expect([ui().page, ui().pick]).toEqual(['week', { kind: 'allDay', id: 'ev1' }])
+    expect(Object.keys(ui())).not.toContain('openAllDay')
   })
 
   it('ekran: przejście bez wyboru', () => {

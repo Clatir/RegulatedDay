@@ -119,7 +119,8 @@ function DragHandle() {
  * Today's all-day events at the left of the desktop bar (D405): the colour of the first one as a dot, its title cut to
  * about 20 characters with „+N” for the others. Read only – a click is the bar's own click; on hover the label shows
  * every full title in place (no tooltip: it would be a window of its own, D229). It takes its room from the block's
- * name (the flexible part): never wider than half of it, truncated.
+ * name (the flexible part): never wider than half of it, truncated; on hover it takes more of it, still one line – the
+ * row never changes its height (the bar's window would be re-sized at every pass of the pointer, T748).
  */
 export function AllDayLabel({ allDay, open }: { allDay: BarAllDay; open?: boolean }) {
   const [hover, setHover] = useState(false)
@@ -133,7 +134,7 @@ export function AllDayLabel({ allDay, open }: { allDay: BarAllDay; open?: boolea
       onPointerLeave={() => setHover(false)}
     >
       <span className="h-[8px] w-[8px] shrink-0 rounded-full" style={{ background: allDay.color }} data-testid="bar-allday-dot" />
-      <span className={cx('min-w-0', shown ? 'whitespace-normal break-words' : 'truncate')} data-testid="bar-allday-text">
+      <span className="min-w-0 truncate" data-testid="bar-allday-text">
         {shown ? allDay.full : allDay.text}
       </span>
     </span>
@@ -147,9 +148,10 @@ function elapsed(ms: number): string {
 }
 
 /** The request running now, in place of the block (D312): „Pilne · Mama · 0:12 z 30 min · Koniec”. */
-function RequestLine({ run, mode, now }: { run: RunningRequest; mode: BarMode; now: number }) {
+function RequestLine({ run, mode, now, before }: { run: RunningRequest; mode: BarMode; now: number; before?: ReactNode }) {
   return (
     <span className="flex min-w-[120px] flex-1 items-center gap-1.5" data-testid="bar-request">
+      {before}
       <span className="min-w-0 truncate text-fg">
         {run.mode === 'urgent' ? 'Pilne' : 'Zrobione teraz'} · {run.person} · <span className="num">{elapsed(now - run.from)}</span>
         {run.mode === 'urgent' && run.estimateMin != null ? ` z ${run.estimateMin} min` : ''}
@@ -674,6 +676,8 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
     )
 
   const left = view.block ? (view.block.endsAt ?? now) - now : 0
+  // Today's all-day events (D405): only on the desktop bar, only when there is one – nothing else moves.
+  const allDayLabel = mode === 'desktop' && view.allDay ? <AllDayLabel allDay={view.allDay} /> : null
   return (
     <div
       ref={root}
@@ -709,11 +713,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
             </div>
           )}
           {running && !view.block ? (
-            <RequestLine run={running} mode={mode} now={now} />
+            // Today's all-day events (D405) stand here too: a request without a block is still today.
+            <RequestLine run={running} mode={mode} now={now} before={allDayLabel} />
           ) : (
             <span className="flex min-w-[120px] flex-1 items-center gap-2">
-              {/* Today's all-day events (D405): only on the desktop bar, only when there is one – nothing else moves. */}
-              {mode === 'desktop' && view.allDay && <AllDayLabel allDay={view.allDay} />}
+              {allDayLabel}
               <span className="min-w-0 flex-1 truncate text-fg" data-testid="bar-block">
                 {view.block ? view.block.name : view.night ? clockOf(now) : 'Bez bloku'}
                 {view.block && !quiet && <span className="ml-1.5 text-[12px] text-muted">{view.block.className}</span>}

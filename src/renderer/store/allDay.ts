@@ -7,8 +7,11 @@
 import type { RawRecord } from '@shared/api'
 import { paths } from '@shared/data/paths'
 import { allDayFrom, allDayJson, allDayProblem, type AllDayEvent } from '@shared/model/allDay'
-import { editOf, isSaved, rawRecord, trySaveWith } from './data'
+import { editOf, isSaved, rawRecord, tryRemoveRecord, trySaveWith } from './data'
 import { toast } from './ui'
+
+/** What a save or a removal says of an event removed meanwhile (on another computer, or by the card's own „Usuń” a moment ago). */
+const GONE_TEXT = 'Tego wydarzenia już nie ma – usunięto je w międzyczasie.'
 
 /** The file of an event. */
 export const allDayRel = (id: string): string => paths.record('allDay', id)
@@ -44,7 +47,7 @@ export async function saveAllDay(e: AllDayEvent, base: AllDayEvent | null = null
     return [editOf(rel, before, allDayJson({ ...(allDayFrom(before) ?? base), ...changed }, before))]
   })
   if (gone) {
-    toast('Tego wydarzenia już nie ma – usunięto je w międzyczasie.', 'info', 6000)
+    toast(GONE_TEXT, 'info', 6000)
     return false
   }
   return !there && isSaved(out)
@@ -52,16 +55,13 @@ export async function saveAllDay(e: AllDayEvent, base: AllDayEvent | null = null
 
 /**
  * An event removed (no question, D405): the record as it was when the removal's turn came – for „Cofnij” – or null when
- * nothing was removed (gone already, or the removal did not go through; the toast says why).
+ * nothing was removed: gone already (the toast says so, as a save of it does), or the removal did not go through (the toast
+ * says why).
  */
 export async function removeAllDay(id: string): Promise<RawRecord | null> {
-  const rel = allDayRel(id)
-  let before: RawRecord | null = null
-  const out = await trySaveWith(() => {
-    before = rawRecord(rel)
-    return before ? [editOf(rel, before, null)] : []
-  })
-  return before != null && isSaved(out) ? before : null
+  const { saved, before } = await tryRemoveRecord(allDayRel(id))
+  if (before == null) toast(GONE_TEXT, 'info', 6000)
+  return saved ? before : null
 }
 
 /**
