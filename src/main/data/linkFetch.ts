@@ -1,14 +1,17 @@
 /**
  * The title and icon of a page for a link attachment (D410, T807), from the network: in the main process only, through a
  * session of its own without cookies, cache or anything kept (`session.fromPartition` without „persist:” – `index.ts`
- * gives its `fetch`), about 5 s for the page and as much for the icon, at most 512 KB of the page and 64 KB of an icon,
- * a few redirects – each one checked to stay http or https. What is read is pure work of `shared/linkMeta.ts`. Any failure
- * is no title (null) – the link keeps its host, without a message.
+ * gives its `fetch`), about 5 s for the page and as much for the icon, at most 512 KB of the page and 64 KB of an icon.
+ * Redirects (T835): Electron's `session.fetch` refuses a redirect with `redirect: 'manual'` instead of answering it, so the
+ * network stack follows them (`follow` – Chromium goes only to http and https, at most 20 times) and where it ended is
+ * checked to be http or https; a fetch that answers a redirect itself (3xx) is followed by hand, at most `MAX_REDIRECTS`.
+ * What is read is pure work of `shared/linkMeta.ts`. Any failure is no title (null) – the link keeps its host, without a
+ * message.
  */
 import { ICON_BYTES_MAX, PAGE_BYTES_MAX, iconDataUrl, pageText, parsePageMeta } from '@shared/linkMeta'
 
 /** A `fetch` of the session of its own (tests: a fake one; never the real network in tests). */
-export type Fetcher = (url: string, init: { redirect: 'manual'; signal: AbortSignal; credentials: 'omit'; cache: 'no-store'; headers: Record<string, string> }) => Promise<Response>
+export type Fetcher = (url: string, init: { redirect: 'follow'; signal: AbortSignal; credentials: 'omit'; cache: 'no-store'; headers: Record<string, string> }) => Promise<Response>
 
 export const META_TIMEOUT_MS = 5000
 export const MAX_REDIRECTS = 4
@@ -56,12 +59,12 @@ async function readUpTo(res: Response, max: number): Promise<{ bytes: Uint8Array
   return { bytes: out, over }
 }
 
-/** A GET following at most `MAX_REDIRECTS` redirects by hand, each to http or https; null – none of those, or not 2xx. */
+/** A GET whose redirects the fetch follows (or – one that answers them – by hand, at most `MAX_REDIRECTS`), each to http or https; null – not 2xx there. */
 async function get(fetcher: Fetcher, url: string, signal: AbortSignal, accept: string): Promise<{ res: Response; url: string } | null> {
   let at = url
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     if (!isHttp(at)) return null
-    const res = await fetcher(at, { redirect: 'manual', signal, credentials: 'omit', cache: 'no-store', headers: { Accept: accept } })
+    const res = await fetcher(at, { redirect: 'follow', signal, credentials: 'omit', cache: 'no-store', headers: { Accept: accept } })
     if (res.status >= 300 && res.status < 400) {
       const next = res.headers.get('location')
       await res.body?.cancel().catch(() => undefined)

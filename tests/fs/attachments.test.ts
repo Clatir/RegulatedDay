@@ -35,6 +35,7 @@ const { reloadData, useData } = await load<{ reloadData: () => Promise<void>; us
 const { useUi } = await load<{ useUi: { getState: () => { toasts: Toast[] }; setState: (s: { toasts: Toast[] }) => void } }>('../../src/renderer/store/ui')
 const store = await load<{
   attachFiles: (owner: AttachmentOwner, paths: string[]) => Promise<AttachResult>
+  pickFiles: (owner: AttachmentOwner) => Promise<AttachResult>
   addLink: (owner: AttachmentOwner, input: string) => Promise<string | null>
   renameAttachment: (id: string, name: string) => Promise<boolean>
   removeAttachments: (ids: string[]) => Promise<AttachmentUndo | null>
@@ -53,6 +54,8 @@ let hub: DataHub
 let files: AttachmentFiles
 let calls: string[]
 let meta: { title: string | null; iconDataUrl: string | null } | null
+/** The thumbnails Electron would make (async, like `nativeImage.createThumbnailFromPath`); null – it could not. */
+let thumbs: (abs: string) => string | null
 
 const shell: AttachmentShell = {
   openPath: async (abs) => (calls.push(`open:${abs}`), ''),
@@ -68,6 +71,7 @@ beforeEach(async () => {
   mkdirSync(outside, { recursive: true })
   calls = []
   meta = null
+  thumbs = (abs) => `data:image/png;base64,${Buffer.from(abs).toString('base64')}`
   files = nodeAttachmentFiles
   hub = new DataHub({
     userData: join(root, 'appdata'),
@@ -85,7 +89,7 @@ beforeEach(async () => {
     attachments: {
       shell,
       fetchMeta: async () => meta,
-      thumbOf: (abs) => `data:image/png;base64,${Buffer.from(abs).toString('base64')}`,
+      thumbOf: async (abs) => thumbs(abs),
       files: {
         copyIn: (...a) => files.copyIn(...a),
         realInside: (...a) => files.realInside(...a),
@@ -177,6 +181,29 @@ describe('dołączenie pliku: najpierw kopia, potem rekord (T802)', () => {
     expect(readdirSync(join(dir, 'attachments')).filter((n) => !n.endsWith('.json'))).toEqual([])
   })
 
+  it('wyjątek po zapisie albo wynik mieszany: plik zostaje przy każdym rekordzie, który jest (T839)', async () => {
+    const real = hub.edit.bind(hub)
+    hub.edit = async (entries) => {
+      await real(entries)
+      throw new Error('IPC po wysłaniu')
+    }
+    const r = await hub.attachFiles(own(), [source('a.txt'), source('b.txt')])
+    expect(r.added).toHaveLength(2)
+    for (const id of r.added) expect(readdirSync(join(dir, 'attachments', id))).toHaveLength(1)
+    hub.edit = async (entries) => {
+      const out = await real(entries.slice(0, 1))
+      return [...out, { status: 'broken' as const }]
+    }
+    const m = await hub.attachFiles(own(), [source('c.txt'), source('d.txt')])
+    hub.edit = real
+    expect(m.added).toHaveLength(1)
+    expect(m.failed.map((f) => f.name)).toEqual(['d.txt'])
+    expect(readdirSync(join(dir, 'attachments', m.added[0]!))).toEqual(['c.txt'])
+    // The copy of the one whose record is not there went.
+    const folders = readdirSync(join(dir, 'attachments'), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)
+    expect(folders.sort()).toEqual([...r.added, ...m.added].sort())
+  })
+
   it('folder danych niedostępny: nic nie powstaje w jego miejscu', async () => {
     rmSync(dir, { recursive: true, force: true })
     const r = await hub.attachFiles(own(), [source('a.txt')])
@@ -221,6 +248,18 @@ describe('otwieranie – okno podaje tylko id (T803, T804)', () => {
     expect(await hub.openAttachment('t2')).toMatchObject({ ok: false, code: 'gone' })
     expect(await hub.openAttachment('../rd')).toMatchObject({ ok: false, code: 'gone' })
     expect(calls).toEqual([])
+  })
+
+  it('miniatura: plik jeszcze nie dotarł albo Windows jej nie dał – null bez zapamiętania, potem się pojawia (T837)', async () => {
+    write(attachmentRel('p3'), fileRecord('p3', 'zdjęcie.webp'))
+    expect(await hub.attachmentThumb('p3')).toBeNull()
+    write('attachments/p3/zdjęcie.webp', 'webp')
+    let fail = true
+    const real = thumbs
+    thumbs = (abs) => (fail ? null : real(abs))
+    expect(await hub.attachmentThumb('p3')).toBeNull()
+    fail = false
+    expect(await hub.attachmentThumb('p3')).toMatch(/^data:image\/png;base64,/)
   })
 
   it('dowiązanie (junction) folderu załącznika poza folder danych – odmowa', async () => {
@@ -345,6 +384,67 @@ describe('przywrócenie wybranego rekordu z kopii (D410)', () => {
     expect(out.map((o) => o.status)).toEqual(['applied', 'applied'])
     expect(readFileSync(join(dir, 'attachments', 'r1', 'umowa.pdf'), 'utf8')).toBe('z kopii')
     expect(readFileSync(join(dir, 'attachments', 'r2', 'b.pdf'), 'utf8')).toBe('w folderze')
+  })
+})
+
+describe('wybrane rekordy z kopii: pliki tylko dla zapisanych, brakujące z kopii tygodniowej (T838, T839)', () => {
+  const zipOf = (file: string, items: Array<[string, string]>) => writeZipFile(file, items.map(([name, text]) => ({ name, read: () => ({ data: Buffer.from(text), mtime: new Date() }) })))
+
+  it('rekord z kopii dziennej: plik z najnowszej kopii tygodniowej folderu', async () => {
+    const rec = JSON.stringify(fileRecord('d1', 'skan.pdf'))
+    const daily = join(root, 'dzienna.zip')
+    await zipOf(daily, [[attachmentRel('d1'), rec]])
+    mkdirSync(join(dir, 'backups', 'weekly'), { recursive: true })
+    await zipOf(join(dir, 'backups', 'weekly', '2026-W40.zip'), [[attachmentRel('d1'), rec], ['attachments/d1/skan.pdf', 'stara']])
+    await zipOf(join(dir, 'backups', 'weekly', '2026-W45.zip'), [[attachmentRel('d1'), rec], ['attachments/d1/skan.pdf', 'nowsza']])
+    expect((await hub.restoreRecords(daily, [attachmentRel('d1')])).map((o) => o.status)).toEqual(['applied'])
+    expect(readFileSync(join(dir, 'attachments', 'd1', 'skan.pdf'), 'utf8')).toBe('nowsza')
+  })
+
+  it('rekord czeka na pytanie: pliku nie ma (folder bez rekordu nie powstaje)', async () => {
+    write(attachmentRel('q1'), fileRecord('q1', 'a.pdf', { name: 'teraz' }))
+    await reloadData()
+    // An earlier edit of it that met another change: a question.
+    expect((await hub.edit([{ rel: attachmentRel('q1'), edits: [{ path: ['name'], base: 'inna', value: 'moja' }] }]))[0]!.status).toBe('conflict')
+    rmSync(join(dir, attachmentRel('q1')))
+    const zip = join(root, 'tygodniowa.zip')
+    await zipOf(zip, [[attachmentRel('q1'), JSON.stringify(fileRecord('q1', 'a.pdf'))], ['attachments/q1/a.pdf', 'z kopii']])
+    const out = await hub.restoreRecords(zip, [attachmentRel('q1')])
+    expect(out.map((o) => o.status)).not.toContain('applied')
+    expect(existsSync(join(dir, 'attachments', 'q1'))).toBe(false)
+  })
+})
+
+describe('seria „Tylko to”: załącznik z pliku, nie z listy w pamięci (T839)', () => {
+  it('zmiana z drugiego komputera zostaje; usunięty już tam – bez zmiany', async () => {
+    const start = addDays(today(), -3)
+    write(paths.record('series', 'fizjo'), seriesJson({ id: 'fizjo', root: 'fizjo', start, until: null, count: null, archived: false, versions: [{ from: start, block: { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjo', routine: null }, rule: { kind: 'daily' }, special: 'ask' }] }))
+    const d = addDays(today(), 2)
+    const occ = seriesBlockId(d, 'fizjo')
+    const a = (await store.attachFiles(own(occ, d), [source('a.pdf')])).added[0]!
+    const b = (await store.attachFiles(own(occ, d), [source('b.pdf')])).added[0]!
+    // The list was read a moment ago (trusted for 60 s); another computer changes the files meanwhile.
+    await hub.view()
+    write(attachmentRel(a), { ...recordOf(a)!, name: 'z laptopa, dłuższa nazwa' })
+    write(attachmentRel(b), { ...recordOf(b)!, removedAt: 5 })
+    expect((await hub.seriesRemove({ date: d, blockId: occ }, 'only')).ok).toBe(true)
+    expect(recordOf(a)).toMatchObject({ name: 'z laptopa, dłuższa nazwa', removedAt: expect.any(Number) })
+    expect(recordOf(b)!.removedAt).toBe(5)
+  })
+})
+
+describe('okno: dołączanie nie trzyma kolejki zapisów (T839)', () => {
+  it('okno wyboru plików otwarte – zmiana nazwy innego załącznika zapisuje się od razu', async () => {
+    const id = (await store.attachFiles(own(), [source('a.txt')])).added[0]!
+    let release: (r: AttachResult) => void = () => undefined
+    const rd = (globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd
+    rd.attachPick = () => new Promise<AttachResult>((r) => (release = r))
+    const picking = store.pickFiles(own())
+    const renamed = await Promise.race([store.renameAttachment(id, 'Nowa'), new Promise<'czeka'>((r) => setTimeout(() => r('czeka'), 3000))])
+    expect(renamed).toBe(true)
+    release({ added: [], failed: [] })
+    await picking
+    expect(recordOf(id)!.name).toBe('Nowa')
   })
 })
 

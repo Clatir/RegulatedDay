@@ -34,7 +34,7 @@ import { logicalDayOf, placeLogical, weekStart } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { writeFileAtomic } from '../datastore/atomic'
-import { backupEntries, createUpdateBackup, listBackups, readBackupFiles, restoreAttachmentFiles, restoreToFolder, type BackupInfo } from './backup'
+import { backupEntries, createUpdateBackup, fillAttachmentFiles, listBackups, readBackupFiles, restoreAttachmentFiles, restoreToFolder, type BackupInfo } from './backup'
 import { addLink, attachFiles, attachmentThumb, nodeAttachmentFiles, openAttachment, openAttachments, showAttachment, ThumbCache, type AttachmentFiles, type AttachmentIo, type AttachmentShell, type MetaFetch } from './attachments'
 import { attachmentFrom } from '@shared/model/attachment'
 import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
@@ -105,7 +105,7 @@ export interface HubOptions {
    * (a session of its own), `thumbOf` makes thumbnails (nativeImage); `files` – the files in the folder (tests: faulty).
    * Without `shell` nothing opens (the answer says so).
    */
-  attachments?: { shell?: AttachmentShell; fetchMeta?: MetaFetch; thumbOf?: (abs: string) => string | null; files?: AttachmentFiles }
+  attachments?: { shell?: AttachmentShell; fetchMeta?: MetaFetch; thumbOf?: (abs: string) => Promise<string | null> | string | null; files?: AttachmentFiles }
 }
 
 /** `a` is a newer version than `b` (versions that cannot be compared: no). */
@@ -1187,13 +1187,25 @@ export class DataHub {
     // One outcome per record chosen: what the queue did with it – waiting behind a question is its own (it never goes by
     // itself) – or „the same already” (nothing written).
     const done = entries.length ? await this.edit(entries) : []
-    // The files of the attachments chosen, when the backup has them (a weekly one, D410) and the folder has not.
-    const ids = new Set([...wanted].map((rel) => classify(rel)).flatMap((c) => (c?.kind === 'attachment' && c.id ? [c.id] : [])))
-    if (ids.size && this.folder) {
-      await restoreAttachmentFiles(zipFile, ids, this.folder).catch((e) => this.o.log('warn', 'pliki załączników z kopii nie wróciły', e))
-    }
     const statusOf = (o: EditOutcome | undefined): RestoreOutcome['status'] => (!o ? 'waiting' : o.status === 'waiting' && o.why === BEHIND_QUESTION ? 'behindQuestion' : o.status)
-    return [...entries.map((e, i) => ({ rel: e.rel, status: statusOf(done[i]) })), ...same.map((rel) => ({ rel, status: 'same' as const }))]
+    const out: RestoreOutcome[] = [...entries.map((e, i) => ({ rel: e.rel, status: statusOf(done[i]) })), ...same.map((rel) => ({ rel, status: 'same' as const }))]
+    // The files of the attachments chosen (T838, T839) – only of a record written, waiting for the folder or the same
+    // already (one behind a question gets none: a folder without its record is never cleaned up): from the backup when it
+    // has them (a weekly one, D410), else from the folder's weekly backups; never over a file there.
+    const ids = new Set(
+      out.flatMap((o) => {
+        const c = classify(o.rel)
+        const isFile = attachmentFrom(JSON.parse(files.get(o.rel)?.toString('utf8') ?? 'null'))?.kind === 'file'
+        return c?.kind === 'attachment' && c.id && isFile && (o.status === 'applied' || o.status === 'waiting' || o.status === 'same') ? [c.id] : []
+      })
+    )
+    if (ids.size && this.folder) {
+      const folder = this.folder
+      await restoreAttachmentFiles(zipFile, ids, folder)
+        .then(() => fillAttachmentFiles(folder, ids, { backupsDir: join(folder, 'backups') }))
+        .catch((e) => this.o.log('warn', 'pliki załączników z kopii nie wróciły', e))
+    }
+    return out
   }
 
   /**
@@ -1206,7 +1218,8 @@ export class DataHub {
   async restoreWhole(zipFile: string, target: string, at = Date.now()): Promise<{ to: string; ok: boolean; error: string | null }> {
     const to = resolve(target)
     if (this.folder && within(to, this.folder)) throw new Error('Nowy folder leży w obecnym folderze danych – wybierz folder poza nim.')
-    const files = await restoreToFolder(zipFile, to)
+    // The attachments' files a daily backup lacks: from this folder, else its weekly backups (T838).
+    const files = await restoreToFolder(zipFile, to, this.folder ? { from: this.folder, backupsDir: join(this.folder, 'backups') } : {})
     this.o.log('info', `kopia ${zipFile} przywrócona do ${to}: ${files} plików`)
     this.moving = { from: this.folder, to, at, error: null }
     return { to, ...(await this.moveTo(to)) }

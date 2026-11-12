@@ -3,12 +3,12 @@
  * before an update (streamed – any size, never whole in memory); a whole backup restored brings the files back; files
  * taken back with their records never write over one there and a backup without them removes nothing.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { copyLatestTo, createDailyBackup, createUpdateBackup, restoreAttachmentFiles, restoreToFolder } from '../../src/main/data/backup'
-import { withZip } from '../../src/main/data/zip'
+import { withZip, writeZipFile } from '../../src/main/data/zip'
 
 let root: string
 let data: string
@@ -123,5 +123,59 @@ describe('kopie zapasowe z załącznikami (D410, T809)', () => {
     rmSync(data, { recursive: true, force: true })
     await expect(restoreAttachmentFiles(weekly, new Set(['a1']), data)).rejects.toThrow()
     expect(existsSync(data)).toBe(false)
+  })
+})
+
+describe('poprawki po przeglądzie (T836)', () => {
+  it('plik załącznika nieczytelny przy pakowaniu (brak, zmieniony rozmiar) – pominięty, ZIP poprawny, kopia dalej (T836)', async () => {
+    put(data, 'a.json', '{"a":1}')
+    put(data, 'krótki.bin', 'abc')
+    const out = join(root, 'z.zip')
+    const r = await writeZipFile(out, [
+      { name: 'a.json', read: () => ({ data: Buffer.from('{"a":1}'), mtime: new Date() }) },
+      { name: 'attachments/x/brak.pdf', read: () => ({ path: join(data, 'nie-ma.pdf'), size: 10, mtime: new Date() }) },
+      // Its stat said more than it holds now: a part already written – taken back.
+      { name: 'attachments/x/krótki.bin', read: () => ({ path: join(data, 'krótki.bin'), size: 5 * 1024 * 1024, mtime: new Date() }) },
+      { name: 'b.json', read: () => ({ data: Buffer.from('{"b":2}'), mtime: new Date() }) }
+    ])
+    expect(r.skipped).toEqual(['attachments/x/brak.pdf', 'attachments/x/krótki.bin'])
+    expect(r.files).toBe(2)
+    await withZip(out, async (zip) => {
+      expect(zip.entries.map((e) => e.name)).toEqual(['a.json', 'b.json'])
+      expect((await zip.read(zip.entries[1]!)).toString()).toBe('{"b":2}')
+    })
+  })
+
+  it('tygodniowa: wpisy dziennej skopiowane bez ponownego pakowania, z czasem zmiany każdego pliku (T836)', async () => {
+    makeData()
+    const old = new Date('2020-03-04T05:06:08Z')
+    utimesSync(join(data, 'rd.json'), old, old)
+    await createDailyBackup(data, backups, '2026-11-08')
+    await createDailyBackup(data, backups, '2026-11-09')
+    const of = (file: string) => withZip(file, async (zip) => Object.fromEntries(zip.entries.map((e) => [e.name, e])))
+    const daily = await of(join(backups, 'daily', '2026-11-08.zip'))
+    const weekly = await of(join(backups, 'weekly', '2026-W45.zip'))
+    expect(weekly['rd.json']!.unix).toBe(Math.floor(old.getTime() / 1000))
+    for (const name of Object.keys(daily)) {
+      const [d, w] = [daily[name]!, weekly[name]!]
+      expect([w.crc, w.csize, w.size, w.method, w.time, w.date, w.unix], name).toEqual([d.crc, d.csize, d.size, d.method, d.time, d.date, d.unix])
+    }
+  })
+})
+
+describe('przywrócenie kopii bez plików dociąga pliki (T838)', () => {
+  it('cały folder z kopii dziennej: pliki z obecnego folderu, a brakujące tam – z najnowszej tygodniowej', async () => {
+    makeData()
+    await createDailyBackup(data, backups, '2026-11-08')
+    await createDailyBackup(data, backups, '2026-11-09')
+    // a1 gone from the folder since (the weekly still has it); a2 still here.
+    rmSync(join(data, 'attachments', 'a1'), { recursive: true })
+    const out = join(root, 'nowy')
+    await restoreToFolder(join(backups, 'daily', '2026-11-09.zip'), out, { from: data, backupsDir: backups })
+    expect(readFileSync(join(out, 'attachments', 'a1', 'film.mp4')).equals(big)).toBe(true)
+    expect(readFileSync(join(out, 'attachments', 'a2', 'notatki.json'), 'utf8')).toBe('{"to":"plik, nie rekord"}')
+    // Nothing taken from the folder it came from.
+    expect(existsSync(join(data, 'attachments', 'a2', 'notatki.json'))).toBe(true)
+    expect(existsSync(join(out, 'attachments', 'a3'))).toBe(false)
   })
 })

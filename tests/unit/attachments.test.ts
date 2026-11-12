@@ -25,6 +25,7 @@ import {
 } from '@shared/model/attachment'
 import { charsetOf, cleanTitle, decodeEntities, iconDataUrl, imageKindOf, pageText, parsePageMeta } from '@shared/linkMeta'
 import { isOutsideBackup, isDataFile } from '../../src/main/data/backup'
+import { templateBlockId } from '@shared/engine/createDay'
 
 const file = (id: string, owner: Attachment['owner'], o: Partial<Attachment> = {}): Attachment => ({
   id,
@@ -99,8 +100,10 @@ describe('który blok widzi załącznik (D410, T800)', () => {
   const list = [ser, other, tpl, day, gone]
 
   it('blok dnia: własne, bloku szablonu, z którego jest (ten szablon), i swojej serii; bez usuniętych', () => {
-    const fromTemplate = { id: 'blk', origin: 'template' as const, sourceId: 'src' }
-    expect(attachmentsOfBlock(list, fromTemplate, { scope: 'day', date: '2026-11-12', templateId: 'zwykly' }).map((a) => a.id)).toEqual(['d1', 't1'])
+    // A block of the template in a day: its id derived from the day, the template and the template's block.
+    const fromTemplate = { id: templateBlockId('2026-11-12', 'zwykly', 'src'), origin: 'template' as const, sourceId: 'src' }
+    const ownOfIt = file('d2', { scope: 'day', date: '2026-11-12', blockId: fromTemplate.id })
+    expect(attachmentsOfBlock([...list, ownOfIt], fromTemplate, { scope: 'day', date: '2026-11-12', templateId: 'zwykly' }).map((a) => a.id)).toEqual(['d2', 't1'])
     const occurrence = { id: 'blk', origin: 'series' as const, sourceId: 'root1' }
     expect(attachmentsOfBlock(list, occurrence, { scope: 'day', date: '2026-11-12', templateId: 'zwykly' }).map((a) => a.id)).toEqual(['d1', 's1'])
   })
@@ -267,5 +270,64 @@ describe('tytuł i ikona strony (T807)', () => {
     const big = new Uint8Array(64 * 1024 + 1)
     big.set(png)
     expect(iconDataUrl(big)).toBeNull()
+  })
+})
+
+describe('poprawki po przeglądzie (T831–T839)', () => {
+  it('blok dnia z innego szablonu niż migawka dnia (zmiana typu dnia) nie widzi załączników cudzego szablonu (T831)', () => {
+    const date = '2026-11-12'
+    const tplZwykly = file('tz', { scope: 'template', templateId: 'zwykly', blockId: 'analiza' })
+    const tplSobota = file('ts', { scope: 'template', templateId: 'sobota', blockId: 'analiza' })
+    const list = [tplZwykly, tplSobota]
+    // A block of „sobota” kept in the day's file after the day became „zwykły”: its id is derived from its own template.
+    const fromSobota = { id: templateBlockId(date, 'sobota', 'analiza'), origin: 'template' as const, sourceId: 'analiza' }
+    expect(attachmentsOfBlock(list, fromSobota, { scope: 'day', date, templateId: 'zwykly' })).toEqual([])
+    expect(attachmentsOfBlock(list, fromSobota, { scope: 'day', date, templateId: 'sobota' }).map((a) => a.id)).toEqual(['ts'])
+    // The day's templates given: the block's own one is found by its id.
+    expect(attachmentsOfBlock(list, fromSobota, { scope: 'day', date, templateId: 'zwykly', templateIds: ['zwykly', 'sobota'] }).map((a) => a.id)).toEqual(['ts'])
+    const fromZwykly = { id: templateBlockId(date, 'zwykly', 'analiza'), origin: 'template' as const, sourceId: 'analiza' }
+    expect(attachmentsOfBlock(list, fromZwykly, { scope: 'day', date, templateId: 'zwykly' }).map((a) => a.id)).toEqual(['tz'])
+  })
+
+  it('pliki, które Windows uruchamia, montuje albo łączy przy otwarciu (T832)', () => {
+    for (const n of ['poprawka.msu', 'a.ppkg', 'piaskownica.wsb', 'serwer.rdp', 'obraz.iso', 'dysk.img', 'dysk.vhd', 'dysk.vhdx', 'strona.mht', 'strona.mhtml', 'x.library-ms', 'y.search-ms', 'z.diagcab', 'dodatek.xll', 'dodatek.xlam', 'dodatek.ppam', 'u.ins', 'r.vsix']) {
+      expect(isExecutableName(n), n).toBe(true)
+    }
+    for (const n of ['zdjęcie.png', 'umowa.docx', 'arkusz.xlsx', 'prezentacja.pptx']) expect(isExecutableName(n), n).toBe(false)
+  })
+
+  it('adres z portem bez protokołu to https; schematy dalej odrzucone (T833)', () => {
+    expect(linkFromInput('localhost:3000')).toBe('https://localhost:3000/')
+    expect(linkFromInput('intranet.local:8080/wiki')).toBe('https://intranet.local:8080/wiki')
+    expect(linkFromInput('192.168.1.1:8443/panel')).toBe('https://192.168.1.1:8443/panel')
+    for (const bad of ['javascript:alert(1)', 'vbscript:x', 'data:text/html,x', 'file:///C:/x', 'ms-settings:privacy', 'search-ms:query=x']) expect(linkFromInput(bad), bad).toBeNull()
+  })
+})
+
+describe('wrogi HTML strony – koszt liniowy (T834)', () => {
+  const N = 24_000
+  const hostile: Array<[string, string]> = [
+    ['niezamknięte komentarze', '<!--'.repeat(N)],
+    ['niezamknięte skrypty', '<script>'.repeat(N)],
+    ['niezamknięte style', '<style a'.repeat(N)],
+    ['niezamknięte meta', '<meta '.repeat(N)],
+    ['niezamknięte link', '<link rel=icon href=x '.repeat(N / 4)],
+    ['niezamknięte title', '<title>'.repeat(N)],
+    ['długi atrybut bez cudzysłowu na końcu', `<meta property="og:title" content="${'x'.repeat(200_000)}>`],
+    ['długa nazwa atrybutu', `<meta ${'a'.repeat(200_000)}>`]
+  ]
+  for (const [what, html] of hostile) {
+    it(what, () => {
+      const t = performance.now()
+      const out = parsePageMeta(html, 'https://e.com/')
+      expect(performance.now() - t).toBeLessThan(250)
+      expect(out.icons.at(-1)).toBe('https://e.com/favicon.ico')
+    })
+  }
+
+  it('ten sam wynik co dotąd dla zwykłej strony', () => {
+    const html = '<!doctype html><HTML><Head><!-- <title>x</title> --><TITLE>Strona</TITLE><Script>var a="<title>z</title>"</Script><META property="og:title" content="Tytuł &amp; więcej"><LINK REL="Icon" HREF="/f.png"></Head></HTML>'
+    expect(parsePageMeta(html, 'https://e.com/a')).toEqual({ title: 'Tytuł & więcej', icons: ['https://e.com/f.png', 'https://e.com/favicon.ico'] })
+    expect(parsePageMeta('<title>Ą & B</title><titlex>nie</titlex>', 'https://e.com/').title).toBe('Ą & B')
   })
 })

@@ -2,10 +2,11 @@
  * Attachments of blocks from the window (SNT4, D410): what a block sees (`attachmentsOfBlock` over `useData().attachments`),
  * adding files and links (the main process copies the file before its record – `window.rd.attachFiles`, `addLink`), a
  * new name, a removal with „Cofnij” and opening. A removal is soft (`removedAt`); its answer is what „Cofnij” needs
- * (`AttachmentUndo`) – only the attachments still removed at that very instant come back. Everything that writes goes in
- * its turn after the edits sent before it (`inTurn`, `trySaveWith`).
+ * (`AttachmentUndo`) – only the attachments still removed at that very instant come back. A change of a record that is there
+ * goes in its turn after the edits sent before it (`trySaveWith`); a new attachment – new records of new ids – never waits
+ * for them nor holds them (T839: the dialog of files open, gigabytes copied).
  */
-import type { AttachmentOpen, AttachResult } from '@shared/api'
+import type { AddLinkResult, AttachmentOpen, AttachResult } from '@shared/api'
 import { recordEdit } from '@shared/data/merge'
 import {
   ATTACHMENT_NAME_MAX,
@@ -22,7 +23,7 @@ import {
   type BlockPlace
 } from '@shared/model/attachment'
 import type { PlanBlock } from '@shared/model/plan'
-import { inTurn, isSaved, rawRecord, reloadData, trySaveWith, useData } from './data'
+import { isSaved, rawRecord, reloadData, trySaveWith, useData } from './data'
 import { toast } from './ui'
 
 /** What a change of an attachment says when it is gone (removed elsewhere, deleted after 30 days). */
@@ -48,14 +49,14 @@ function sayFailed(r: AttachResult): void {
   toast(text, 'error', 8000)
 }
 
+/** Outside the turn of the window's edits (T839): new records of new ids need no order and never hold the edits after them. */
 async function attachCall(call: () => Promise<AttachResult>): Promise<AttachResult> {
-  const r = await inTurn(async () => {
-    try {
-      return await call()
-    } catch (e) {
-      return { added: [], failed: [{ name: '', error: e instanceof Error ? e.message : String(e) }] }
-    }
-  })
+  let r: AttachResult
+  try {
+    r = await call()
+  } catch (e) {
+    r = { added: [], failed: [{ name: '', error: e instanceof Error ? e.message : String(e) }] }
+  }
   await reloadData()
   sayFailed(r)
   return r
@@ -77,13 +78,13 @@ export async function addLink(owner: AttachmentOwner, input: string): Promise<st
     toast(LINK_INPUT_TEXT, 'error', 6000)
     return null
   }
-  const r = await inTurn(async () => {
-    try {
-      return await window.rd.addLink(owner, url)
-    } catch (e) {
-      return { ok: false, id: null, error: e instanceof Error ? e.message : String(e) }
-    }
-  })
+  // A new record of a new id: outside the turn of the edits (T839).
+  let r: AddLinkResult
+  try {
+    r = await window.rd.addLink(owner, url)
+  } catch (e) {
+    r = { ok: false, id: null, error: e instanceof Error ? e.message : String(e) }
+  }
   await reloadData()
   if (!r.ok) toast(`Nie dodano linku: ${r.error ?? 'spróbuj jeszcze raz'}`, 'error', 6000)
   return r.ok ? r.id : null

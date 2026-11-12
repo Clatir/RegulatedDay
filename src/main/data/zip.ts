@@ -92,6 +92,8 @@ class ZipWriter {
   private pending = 0
   /** Bytes on the disk so far (each write goes at its position). */
   private flushed = 0
+  /** An entry was taken back: the file is cut to its end at the finish. */
+  private cut = false
 
   constructor(private readonly fh: fs.FileHandle) {}
 
@@ -132,10 +134,17 @@ class ZipWriter {
   /**
    * One file streamed from the disk, stored as it is (T809: an attachment of any size never whole in memory): the local
    * header first with the size known from its stat, the content in chunks while its CRC is counted, then the CRC written
-   * into the header (no data descriptor). From 4 GB on the entry has ZIP64 sizes. A file whose size changed meanwhile
-   * fails the ZIP (an attachment's file never changes – it would be another file).
+   * into the header (no data descriptor). From 4 GB on the entry has ZIP64 sizes. A file that cannot be opened or read now,
+   * or whose size changed meanwhile, is left out (false – T836): what of it was written is taken back (the next entry
+   * goes in its place, the ZIP is cut to its end in `finish`). A failure to write the ZIP itself still fails it.
    */
-  async addFile(name: string, file: ZipFileContent): Promise<void> {
+  async addFile(name: string, file: ZipFileContent): Promise<boolean> {
+    let src: fs.FileHandle
+    try {
+      src = await withRetry(() => fs.open(file.path, 'r'))
+    } catch {
+      return false
+    }
     const zip64 = file.size >= MAX32
     const { date, time } = dosDateTime(file.mtime)
     const entry: Entry = { name: Buffer.from(name, 'utf8'), crc: 0, size: file.size, csize: file.size, method: 0, time, date, unix: Math.floor(file.mtime.getTime() / 1000), offset: this.offset }
@@ -159,15 +168,21 @@ class ZipWriter {
     head.writeUInt32LE(zip64 ? MAX32 : file.size, 22)
     head.writeUInt16LE(entry.name.length, 26)
     head.writeUInt16LE(extra.length + sizes.length, 28)
-    await this.write(head, entry.name, extra, sizes)
-    await this.flush()
-    const src = await withRetry(() => fs.open(file.path, 'r'))
     let crc = 0
     let read = 0
+    let readFailed = false
     try {
+      await this.write(head, entry.name, extra, sizes)
+      await this.flush()
       const buf = Buffer.allocUnsafe(STREAM_CHUNK)
       for (;;) {
-        const { bytesRead } = await src.read(buf, 0, buf.length, null)
+        let bytesRead: number
+        try {
+          bytesRead = (await withRetry(() => src.read(buf, 0, buf.length, null))).bytesRead
+        } catch {
+          readFailed = true
+          break
+        }
         if (!bytesRead) break
         read += bytesRead
         if (read > file.size) break
@@ -178,12 +193,43 @@ class ZipWriter {
     } finally {
       await src.close()
     }
-    if (read !== file.size) throw new Error(`Plik zmienił się w trakcie kopii: ${name}`)
+    if (readFailed || read !== file.size) {
+      // Taken back: the header and the part written stay as bytes past the next entry's start until written over or cut.
+      this.offset = entry.offset
+      this.flushed = entry.offset
+      this.cut = true
+      return false
+    }
     entry.crc = crc >>> 0
     const c = Buffer.alloc(4)
     c.writeUInt32LE(entry.crc, 0)
     await this.fh.write(c, 0, 4, entry.offset + 14)
     this.entries.push(entry)
+    return true
+  }
+
+  /**
+   * One entry copied as another ZIP holds it (T837: the weekly backup from a daily one) – its compressed bytes, method, CRC,
+   * sizes and times as they are, never unpacked and packed again.
+   */
+  async addRaw(name: string, c: ZipRawContent): Promise<void> {
+    if (c.size >= MAX32 || c.raw.length >= MAX32) throw new Error(`Plik za duży do kopii: ${name}`)
+    const entry: Entry = { name: Buffer.from(name, 'utf8'), crc: c.crc >>> 0, size: c.size, csize: c.raw.length, method: c.method, time: c.time, date: c.date, unix: c.unix, offset: this.offset }
+    const extra = timestampExtra(entry.unix)
+    const head = Buffer.alloc(30)
+    head.writeUInt32LE(0x04034b50, 0)
+    head.writeUInt16LE(VERSION_NEEDED, 4)
+    head.writeUInt16LE(FLAG_UTF8, 6)
+    head.writeUInt16LE(entry.method, 8)
+    head.writeUInt16LE(entry.time, 10)
+    head.writeUInt16LE(entry.date, 12)
+    head.writeUInt32LE(entry.crc, 14)
+    head.writeUInt32LE(entry.csize, 18)
+    head.writeUInt32LE(entry.size, 22)
+    head.writeUInt16LE(entry.name.length, 26)
+    head.writeUInt16LE(extra.length, 28)
+    this.entries.push(entry)
+    await this.write(head, entry.name, extra, c.raw)
   }
 
   /** The central directory and the end records; the file is complete once this resolves. */
@@ -256,6 +302,8 @@ class ZipWriter {
     end.writeUInt16LE(0, 20)
     await this.write(end)
     await this.flush()
+    // A streamed entry taken back may have left bytes past the end (T836).
+    if (this.cut) await this.fh.truncate(this.flushed)
     return count
   }
 
@@ -316,12 +364,23 @@ function readFile(abs: string): Promise<{ st: Stats; data: Buffer } | null> {
 /** One file of a ZIP: its name, and its content with its time (null = left out – gone meanwhile). */
 export interface ZipSource {
   name: string
-  read: () => ZipContent | ZipFileContent | null | Promise<ZipContent | ZipFileContent | null>
+  read: () => ZipContent | ZipFileContent | ZipRawContent | null | Promise<ZipContent | ZipFileContent | ZipRawContent | null>
 }
 
 export interface ZipContent {
   data: Buffer
   mtime: Date
+}
+
+/** An entry of another ZIP as it is stored there (T837): written as it is. */
+export interface ZipRawContent {
+  raw: Buffer
+  method: number
+  crc: number
+  size: number
+  time: number
+  date: number
+  unix: number
 }
 
 /** A file streamed into the ZIP (stored, never whole in memory – T809): where it is, its size and time from its stat. */
@@ -405,7 +464,11 @@ export async function writeZipFile(outFile: string, items: readonly ZipSource[])
             continue
           }
           if ('path' in content) {
-            await zip.addFile(name, content)
+            if (!(await zip.addFile(name, content))) skipped.push(name)
+            continue
+          }
+          if ('raw' in content) {
+            await zip.addRaw(name, content)
             continue
           }
           const compress = content.data.length > 0 && !/\.(webp|png|jpe?g|zip)$/i.test(name)
@@ -477,6 +540,10 @@ export interface ZipEntry {
   flags: number
   /** Where its local header is. */
   offset: number
+  /** Its DOS time and date as stored, and its time of modification (UTC seconds) from the extended timestamp – null: none. */
+  time: number
+  date: number
+  unix: number | null
 }
 
 const damaged = (why: string) => new Error(`Uszkodzony plik ZIP: ${why}`)
@@ -542,7 +609,10 @@ async function readDirectory(fh: fs.FileHandle, fileSize: number): Promise<ZipEn
       csize: cd.readUInt32LE(p + 20),
       size: cd.readUInt32LE(p + 24),
       flags,
-      offset: cd.readUInt32LE(p + 42)
+      offset: cd.readUInt32LE(p + 42),
+      time: cd.readUInt16LE(p + 12),
+      date: cd.readUInt16LE(p + 14),
+      unix: null
     }
     // ZIP64 extended information: the 64-bit values of the fields set to 0xFFFFFFFF, in this order.
     for (let q = nameEnd; q + 4 <= extraEnd; ) {
@@ -560,6 +630,8 @@ async function readDirectory(fh: fs.FileHandle, fileSize: number): Promise<ZipEn
         if (entry.csize === MAX32) entry.csize = field()
         if (entry.offset === MAX32) entry.offset = field()
       }
+      // The extended timestamp: its flags, then the time of modification when flag 1 is set.
+      if (id === 0x5455 && len >= 5 && cd[q + 4]! & 1) entry.unix = cd.readUInt32LE(q + 5)
       q += 4 + len
     }
     entries.push(entry)
@@ -591,6 +663,17 @@ export class ZipReader {
   }
 
   /** The content of one entry (stored or deflated), never more bytes than its declared size. */
+  /** The entry's bytes as stored (compressed or not), never checked – for a copy into another ZIP (T837). */
+  async readRaw(entry: ZipEntry): Promise<Buffer> {
+    if (entry.flags & FLAG_ENCRYPTED) throw damaged(`${entry.name}: wpis zaszyfrowany`)
+    if (entry.offset + LOCAL_LEN > this.fileSize) throw damaged(`${entry.name}: wpis poza plikiem`)
+    const head = await readAt(this.fh, entry.offset, LOCAL_LEN)
+    if (head.readUInt32LE(0) !== SIG_LOCAL) throw damaged(`${entry.name}: nagłówek wpisu`)
+    const dataAt = entry.offset + LOCAL_LEN + head.readUInt16LE(26) + head.readUInt16LE(28)
+    if (dataAt + entry.csize > this.fileSize) throw damaged(`${entry.name}: wpis poza plikiem`)
+    return readAt(this.fh, dataAt, entry.csize)
+  }
+
   async read(entry: ZipEntry): Promise<Buffer> {
     if (entry.flags & FLAG_ENCRYPTED) throw damaged(`${entry.name}: wpis zaszyfrowany`)
     if (entry.offset + LOCAL_LEN > this.fileSize) throw damaged(`${entry.name}: wpis poza plikiem`)

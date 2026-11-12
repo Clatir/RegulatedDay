@@ -451,8 +451,16 @@ const worker = new WorkerHost({
  */
 const linkFetcher: Fetcher = (url, init) => session.fromPartition('rd-link-meta', { cache: false }).fetch(url, init)
 
-/** A thumbnail of an image attachment (T808): at most `THUMB_PX` on its longer side, a PNG data URL; null – not an image. */
-function thumbOf(abs: string): string | null {
+/**
+ * A thumbnail of an image attachment (T808, T837): at most `THUMB_PX` on its longer side, a PNG data URL; null – none.
+ * Windows and macOS – the system's own thumbnail, asynchronous (the main process never decodes a large image itself and a
+ * file only in the cloud never holds it); elsewhere (Linux – CI, tests) the image decoded here.
+ */
+async function thumbOf(abs: string): Promise<string | null> {
+  if (process.platform === 'win32' || process.platform === 'darwin') {
+    const img = await nativeImage.createThumbnailFromPath(abs, { width: THUMB_PX, height: THUMB_PX }).catch(() => null)
+    return img && !img.isEmpty() ? img.toDataURL() : null
+  }
   const img = nativeImage.createFromPath(abs)
   if (img.isEmpty()) return null
   const { width, height } = img.getSize()

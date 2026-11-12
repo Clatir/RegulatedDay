@@ -423,13 +423,15 @@ async function removeOwnAttachments(io: SeriesIo, b: Base, t: Touched, blockId: 
     // The list cannot be read now: the attachments stay (they are not shown without their block).
     return
   }
+  // The list only says which may be the block's (it is trusted from memory for a minute, LIST_TRUST_MS); each is read again
+  // as this computer sees it now and changed from that (T839) – a change from another computer stays, one removed there stays so.
   const own = new Set(ownAttachmentIds(raws.map(attachmentFrom).filter((a): a is Attachment => !!a), blockId))
-  for (const raw of raws) {
-    const a = attachmentFrom(raw)
-    if (!a || !own.has(a.id)) continue
-    const rel = attachmentRel(a.id)
+  for (const id of own) {
+    const rel = attachmentRel(id)
     const before = await t.get(rel)
-    if (before) t.set(rel, attachmentJson({ ...a, removedAt: b.now }, before))
+    const a = before ? attachmentFrom(before) : null
+    if (!before || !a || a.removedAt != null || a.owner.scope !== 'day' || a.owner.blockId !== blockId) continue
+    t.set(rel, attachmentJson({ ...a, removedAt: b.now }, before))
   }
 }
 

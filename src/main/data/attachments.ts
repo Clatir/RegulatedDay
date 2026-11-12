@@ -128,7 +128,7 @@ export interface AttachmentIo {
   shell: AttachmentShell
   fetchMeta?: MetaFetch
   /** A thumbnail of an image file as a data URL (Electron's nativeImage), null – none. */
-  thumbOf?: (abs: string) => string | null
+  thumbOf?: (abs: string) => Promise<string | null> | string | null
   log?: (level: 'info' | 'warn' | 'error', msg: string) => void
 }
 
@@ -213,11 +213,27 @@ export async function attachFiles(io: AttachmentIo, ownerIn: unknown, sourcesIn:
   } catch (e) {
     io.log?.('warn', `załączniki: rekordy nie zapisały się – ${e instanceof Error ? e.message : String(e)}`)
   }
-  if (!out || !saved(out)) {
-    for (const m of made) await io.files.removeDir(io.dataDir, m.id).catch(() => undefined)
-    return { added: [], failed: [...failed, ...made.map((m) => ({ name: String(m.raw.name), error: 'nie zapisano – spróbuj jeszcze raz' }))] }
+  // Each copy by its own record (T839): written or waiting – it stays; any other answer, or none (an error after the edit
+  // may have gone), – it stays while its record may be there (in the folder, unreadable now, or in the queue); only the copy
+  // of a record surely not there goes. A file without a record is better than a record without its file.
+  const added: string[] = []
+  for (const [i, m] of made.entries()) {
+    const o = out?.[i]
+    if ((o && (o.status === 'applied' || o.status === 'waiting')) || (await recordMayBe(io, m.id))) {
+      added.push(m.id)
+      continue
+    }
+    await io.files.removeDir(io.dataDir, m.id).catch(() => undefined)
+    failed.push({ name: String(m.raw.name), error: 'nie zapisano – spróbuj jeszcze raz' })
   }
-  return { added: made.map((m) => m.id), failed }
+  return { added, failed }
+}
+
+/** The record of an attachment may be there: queued here, or a file in the folder (also one that cannot be read now). */
+async function recordMayBe(io: AttachmentIo, id: string): Promise<boolean> {
+  const rel = attachmentRel(id)
+  if (io.folder.queue.relsUnder(paths.attachmentDir(id).split('/')[0]!).includes(rel)) return true
+  return (await io.folder.records.read(rel)).status !== 'missing'
 }
 
 /**
@@ -346,8 +362,10 @@ export class ThumbCache {
 }
 
 /**
- * The thumbnail of an image attachment (D410, T808): png, jpg, gif, webp or bmp up to `THUMB_FILE_MAX`, made in the main
- * process and kept in memory only – nothing is written in the folder; null – none (no image, not here yet, too large).
+ * The thumbnail of an image attachment (D410, T808, T837): png, jpg, gif, webp or bmp up to `THUMB_FILE_MAX`, made without
+ * holding the main process (`thumbOf` – Windows' own thumbnails, asynchronous) and kept in memory only – nothing is written
+ * in the folder. None (no image, not here yet, too large, Windows gave none) is null and never remembered: a file that
+ * comes later, or a thumbnail Windows makes later, shows at the next ask.
  */
 export async function attachmentThumb(io: AttachmentIo, cache: ThumbCache, idIn: unknown): Promise<string | null> {
   const a = await current(io, idIn)
@@ -361,10 +379,10 @@ export async function attachmentThumb(io: AttachmentIo, cache: ThumbCache, idIn:
   if (!st || st.size > THUMB_FILE_MAX) return null
   let url: string | null = null
   try {
-    url = io.thumbOf(where.abs)
+    url = await io.thumbOf(where.abs)
   } catch {
     url = null
   }
-  cache.set(key, url)
+  if (url) cache.set(key, url)
   return url
 }

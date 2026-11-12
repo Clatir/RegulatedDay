@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { attachBadge, attachBadgeTitle, fileKind, isOwnHere, originTag, sizeText, withAttachCounts } from '@renderer/features/attachments/attachView'
 import type { Attachment, BlockPlace } from '@shared/model/attachment'
+import { templateBlockId } from '@shared/engine/createDay'
 
 const a = (id: string, owner: Attachment['owner'], removedAt: number | null = null): Attachment => ({
   id,
@@ -85,14 +86,15 @@ describe('znaczek 📎N', () => {
   it('liczy załączniki bloku (własne, szablonu, serii), nie usunięte; blok nieznany – bez liczby', () => {
     const day: BlockPlace = { scope: 'day', date: '2026-11-18', templateId: 't1' }
     const list = [
-      a('a1', { scope: 'day', date: '2026-11-18', blockId: 'b1' }),
+      a('a1', { scope: 'day', date: '2026-11-18', blockId: templateBlockId('2026-11-18', 't1', 's1') }),
       a('a2', { scope: 'template', templateId: 't1', blockId: 's1' }),
       a('a3', { scope: 'series', root: 'r1' }),
-      a('a4', { scope: 'day', date: '2026-11-18', blockId: 'b1' }, 5),
+      a('a4', { scope: 'day', date: '2026-11-18', blockId: templateBlockId('2026-11-18', 't1', 's1') }, 5),
       a('a5', { scope: 'day', date: '2026-11-18', blockId: 'zly' })
     ]
     const blocks = new Map<string, { id: string; origin: 'template' | 'series' | 'user'; sourceId: string | null }>([
-      ['b1', { id: 'b1', origin: 'template', sourceId: 's1' }],
+      // A block of the template in the day: its id derived from the day, the template and its block (T831).
+      ['b1', { id: templateBlockId('2026-11-18', 't1', 's1'), origin: 'template', sourceId: 's1' }],
       ['b2', { id: 'b2', origin: 'series', sourceId: 'r1' }],
       ['b3', { id: 'b3', origin: 'user', sourceId: null }]
     ])

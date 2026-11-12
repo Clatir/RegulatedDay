@@ -37,11 +37,13 @@ export function cleanTitle(raw: string): string | null {
 }
 
 const ATTR = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g
+/** The most of a tag's inside its attributes are read from (a longer one – its start): the attribute pattern backtracks. */
+const TAG_INSIDE_MAX = 2048
 
-/** The attributes of a tag's inside (`<meta …>`), names in lower case. */
+/** The attributes of a tag's inside (`<meta …>`), names in lower case – of its first `TAG_INSIDE_MAX` characters. */
 function attrsOf(inside: string): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const m of inside.matchAll(ATTR)) {
+  for (const m of inside.slice(0, TAG_INSIDE_MAX).matchAll(ATTR)) {
     const k = m[1]!.toLowerCase()
     if (!(k in out)) out[k] = m[2] ?? m[3] ?? m[4] ?? ''
   }
@@ -63,19 +65,70 @@ const httpUrl = (href: string, base: string): string | null => {
   }
 }
 
+/** Elements whose content is no markup (a „<title>” inside a script is no title). */
+const RAW_TEXT = new Set(['script', 'style', 'noscript', 'template', 'textarea', 'xmp'])
+const isLetter = (c: number) => (c >= 97 && c <= 122) || (c >= 48 && c <= 57)
+/** After a tag's name: a space, „/”, „>” or the end – „<titlex>” is no title. */
+const endsName = (c: string | undefined) => c === undefined || c === '>' || c === '/' || /^[ \t\n\r\f]$/.test(c)
+
+/** A tag's name in lower case at `at` (after „<”), at most 16 letters; '' – none. */
+function nameAt(lower: string, at: number): string {
+  let e = at
+  while (e < lower.length && e - at < 16 && isLetter(lower.charCodeAt(e))) e++
+  return e > at && endsName(lower[e]) ? lower.slice(at, e) : ''
+}
+
+/**
+ * The tags `<base>`, `<meta>` and `<link>` and the first `<title>` of a page outside comments and raw-text elements, in one
+ * pass from start to end (T834): every search goes forward, and an opening that is never closed (a comment, a script, a
+ * tag without „>”) ends the reading – hostile markup never costs more than its length.
+ */
+function scanPage(html: string): { tags: Array<{ name: string; inside: string }>; title: string | null } {
+  // ASCII letters only to lower case: the same length, so indices stay.
+  const lower = html.replace(/[A-Z]+/g, (m) => m.toLowerCase())
+  const tags: Array<{ name: string; inside: string }> = []
+  let title: string | null = null
+  for (let i = 0; i < lower.length; ) {
+    const lt = lower.indexOf('<', i)
+    if (lt < 0) break
+    if (lower.startsWith('<!--', lt)) {
+      const end = lower.indexOf('-->', lt + 4)
+      if (end < 0) break
+      i = end + 3
+      continue
+    }
+    const name = nameAt(lower, lt + 1)
+    if (!name) {
+      i = lt + 1
+      continue
+    }
+    const gt = lower.indexOf('>', lt + 1 + name.length)
+    if (gt < 0) break
+    if (RAW_TEXT.has(name) || name === 'title') {
+      const close = lower.indexOf(`</${name}`, gt + 1)
+      if (close < 0) break
+      if (name === 'title' && title == null) title = html.slice(gt + 1, close)
+      i = close + 2 + name.length
+      continue
+    }
+    if (name === 'base' || name === 'meta' || name === 'link') tags.push({ name, inside: html.slice(lt + 1 + name.length, gt) })
+    i = gt + 1
+  }
+  return { tags, title }
+}
+
 /**
  * The title and the icons of a page (`pageUrl` – where it was read from, after redirects): `og:title` before `<title>`
  * (sites put their name into the second), comments and scripts skipped; icons of `<link rel="icon">` (and „shortcut icon”,
- * „apple-touch-icon”) that are no SVG, then /favicon.ico of the page's origin.
+ * „apple-touch-icon”) that are no SVG, then /favicon.ico of the page's origin. Linear in the page's length (T834).
  */
 export function parsePageMeta(html: string, pageUrl: string): PageMeta {
-  const text = html.replace(/<!--[\s\S]*?-->/g, ' ').replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1\s*>/gi, ' ')
+  const page = scanPage(html)
   let base = pageUrl
   let og: string | null = null
   const icons: string[] = []
-  for (const m of text.matchAll(/<(base|meta|link)\b([^>]*)>/gi)) {
-    const tag = m[1]!.toLowerCase()
-    const a = attrsOf(m[2]!)
+  for (const { name: tag, inside } of page.tags) {
+    const a = attrsOf(inside)
     if (tag === 'base' && a.href) base = httpUrl(a.href, pageUrl) ?? base
     else if (tag === 'meta' && og == null && (a.property ?? a.name ?? '').toLowerCase() === 'og:title' && a.content) og = cleanTitle(a.content)
     else if (tag === 'link' && a.href) {
@@ -86,8 +139,7 @@ export function parsePageMeta(html: string, pageUrl: string): PageMeta {
       if (u && !icons.includes(u)) icons.push(u)
     }
   }
-  const t = /<title\b[^>]*>([\s\S]*?)<\/title\s*>/i.exec(text)
-  const title = og ?? (t ? cleanTitle(t[1]!) : null)
+  const title = og ?? (page.title != null ? cleanTitle(page.title) : null)
   try {
     const fav = new URL('/favicon.ico', pageUrl).href
     if (/^https?:/.test(fav) && !icons.includes(fav)) icons.push(fav)
@@ -102,7 +154,7 @@ export function charsetOf(contentType: string | null, head: Uint8Array): string 
   const fromHeader = /charset\s*=\s*["']?([\w.:-]+)/i.exec(contentType ?? '')?.[1]
   if (fromHeader) return fromHeader.toLowerCase()
   const start = new TextDecoder('latin1').decode(head.subarray(0, 2048))
-  const fromMeta = /<meta[^>]+charset\s*=\s*["']?([\w.:-]+)/i.exec(start)?.[1]
+  const fromMeta = /<meta[^>]{0,256}?charset\s*=\s*["']?([\w.:-]+)/i.exec(start)?.[1]
   return (fromMeta ?? 'utf-8').toLowerCase()
 }
 

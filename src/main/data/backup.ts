@@ -155,7 +155,8 @@ async function weeklyWithFiles(from: string, to: string, dataDir: string): Promi
       if (e.name.endsWith('/')) continue
       const rel = safeRelPath(e.name)
       if (!rel || attachmentFileOf(rel)) continue
-      items.push({ name: rel, read: async () => ({ data: await zip.read(e), mtime }) })
+      // As the daily one holds it (T837): its compressed bytes and times, never packed again.
+      items.push({ name: rel, read: async () => ({ raw: await zip.readRaw(e), method: e.method, crc: e.crc, size: e.size, time: e.time, date: e.date, unix: e.unix ?? Math.floor(mtime.getTime() / 1000) }) })
       const c = classify(rel)
       if (c?.kind === 'attachment' && !c.conflict && c.id) ids.add(c.id)
     }
@@ -416,7 +417,7 @@ async function isEmptyOrMissing(dir: string): Promise<boolean> {
  * before anything is written; only the data's files are taken. Unpacked under a temp name beside the target and renamed
  * into place, so no half folder ever shows. Returns the number of files.
  */
-export async function restoreToFolder(zipFile: string, targetDir: string): Promise<number> {
+export async function restoreToFolder(zipFile: string, targetDir: string, more: AttachmentSources = {}): Promise<number> {
   const target = resolve(targetDir)
   if (!(await isEmptyOrMissing(target))) throw new Error(`Folder ${target} istnieje i nie jest pusty – kopię przywraca się tylko do nowego folderu.`)
   return withZip(zipFile, async (zip) => {
@@ -443,6 +444,15 @@ export async function restoreToFolder(zipFile: string, targetDir: string): Promi
           throw e
         }
       }
+      // A backup without the attachments' files (a daily one): theirs from where they still are (T838).
+      const inZip = new Set(files.flatMap(({ rel }) => (isAttachmentFile(rel) ? [attachmentFileOf(rel)!.id] : [])))
+      const wanted = new Set<string>()
+      for (const { rel } of files) {
+        const c = classify(rel)
+        if (c?.kind !== 'attachment' || c.conflict || !c.id || inZip.has(c.id)) continue
+        if (fileKindRecord(await fs.readFile(join(tmp, ...rel.split('/'))).catch(() => null))) wanted.add(c.id)
+      }
+      if (wanted.size) await fillAttachmentFiles(tmp, wanted, more)
       if (await pathExists(target)) await fs.rmdir(target)
       await withRetry(() => fs.rename(tmp, target))
       return files.length
@@ -451,6 +461,69 @@ export async function restoreToFolder(zipFile: string, targetDir: string): Promi
       throw e
     }
   })
+}
+
+/** Where the files of attachments a backup lacks may still be (T838): a data folder, and the weekly backups of a backups folder. */
+export interface AttachmentSources {
+  from?: string | null
+  backupsDir?: string | null
+}
+
+/** A record (its bytes) of an attachment that is a file. */
+function fileKindRecord(bytes: Buffer | null): boolean {
+  try {
+    const v = bytes ? (JSON.parse(bytes.toString('utf8')) as unknown) : null
+    return !!v && typeof v === 'object' && (v as Record<string, unknown>).kind === 'file'
+  } catch {
+    return false
+  }
+}
+
+/** attachments/<id>/ in `dir` holds a file of its own (not a hidden temp file); one that cannot be read – no. */
+async function hasAttachmentFiles(dir: string, id: string): Promise<boolean> {
+  const names = await fs.readdir(join(dir, 'attachments', id), { withFileTypes: true }).catch(() => [])
+  return names.some((n) => n.isFile() && isAttachmentFile(`attachments/${id}/${n.name}`))
+}
+
+/**
+ * The files of the attachments `ids` that `dataDir` lacks, brought from where they still are (T838): the folder `from`
+ * (the data folder now, when a whole backup goes elsewhere), then the weekly backups of `backupsDir`, the newest first.
+ * Never written over, never removed; a source that cannot be read is passed by. The ids still without their files.
+ */
+export async function fillAttachmentFiles(dataDir: string, ids: ReadonlySet<string>, more: AttachmentSources): Promise<string[]> {
+  const left = new Set<string>()
+  for (const id of ids) if (!(await hasAttachmentFiles(dataDir, id))) left.add(id)
+  if (more.from) {
+    for (const id of [...left]) {
+      const src = join(more.from, 'attachments', id)
+      const names = await fs.readdir(src, { withFileTypes: true }).catch(() => [])
+      let copied = false
+      for (const n of names) {
+        if (!n.isFile() || !isAttachmentFile(`attachments/${id}/${n.name}`)) continue
+        const target = join(dataDir, 'attachments', id, n.name)
+        if (await pathExists(target)) continue
+        const tmp = tempPathFor(target)
+        try {
+          await fs.mkdir(dirname(target), { recursive: true })
+          await withRetry(() => fs.copyFile(join(src, n.name), tmp))
+          await withRetry(() => fs.rename(tmp, target))
+          copied = true
+        } catch {
+          await fs.rm(tmp, { force: true }).catch(() => undefined)
+        }
+      }
+      if (copied) left.delete(id)
+    }
+  }
+  if (more.backupsDir && left.size) {
+    const weekly = join(more.backupsDir, 'weekly')
+    for (const name of await listNames(weekly, 'weekly').catch(() => [] as string[])) {
+      if (!left.size) break
+      const done = await restoreAttachmentFiles(join(weekly, name), left, dataDir).catch(() => [] as string[])
+      for (const rel of done) left.delete(attachmentFileOf(rel)!.id)
+    }
+  }
+  return [...left]
 }
 
 /** The data's files a backup holds (safe paths only), e.g. to choose records from it. A damaged ZIP rejects. */

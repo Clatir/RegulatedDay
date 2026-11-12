@@ -10,6 +10,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AttachmentOpen } from '@shared/api'
 import { ownerToAdd, type Attachment, type BlockPlace } from '@shared/model/attachment'
+import { templateBlockId } from '@shared/engine/createDay'
 import { AttachmentsSection } from '@renderer/features/attachments/AttachmentsSection'
 import { MISSING_NOTE, PROGRAM_NOTE } from '@renderer/features/attachments/attachView'
 import { handleEscape, installEscape } from '@renderer/lib/escape'
@@ -31,7 +32,8 @@ vi.mock('@renderer/store/attachments', async (orig) => ({
 }))
 
 const DAY: BlockPlace = { scope: 'day', date: '2026-11-18', templateId: 't1' }
-const block = { id: 'b1', origin: 'template' as const, sourceId: 's1' }
+// A block of the template in the day (its id derived from the day, the template and its block – T831).
+const block = { id: templateBlockId('2026-11-18', 't1', 's1'), origin: 'template' as const, sourceId: 's1' }
 
 const file = (id: string, fileName: string, owner: Attachment['owner'], at: number, size = 1536): Attachment => ({
   id,
@@ -53,7 +55,7 @@ const link = (id: string, owner: Attachment['owner'], at: number, title: string 
   addedAt: at,
   removedAt: null
 })
-const OWN = { scope: 'day', date: '2026-11-18', blockId: 'b1' } as const
+const OWN = { scope: 'day', date: '2026-11-18', blockId: block.id } as const
 const TPL = { scope: 'template', templateId: 't1', blockId: 's1' } as const
 
 let root: Root | null = null

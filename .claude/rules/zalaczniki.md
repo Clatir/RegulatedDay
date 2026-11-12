@@ -15,13 +15,14 @@ paths:
 
 # Załączniki i linki bloków (SNT4)
 
-Źródło prawdy: D410; T800–T810. Część A (model, folder, kopie, IPC, otwieranie) i część B (ekrany, T811–T817).
+Źródło prawdy: D410–D412; T800–T810, T830–T839. Część A (model, folder, kopie, IPC, otwieranie) i część B (ekrany, T811–T817).
 
 ## Model (`shared/model/attachment.ts`)
 - Rekord `attachments/<id>.json`, plik w `attachments/<id>/<safeFileName>`. Format bloku bez zmian – właściciel w rekordzie:
   `day {date, blockId}` (dopasowanie po samym `blockId`), `template {templateId, blockId}`, `series {root}` (T800).
-- Co widzi blok: `attachmentsOfBlock(list, block, place)`; `place` = `{ scope: 'day', date, templateId }` (szablon z migawki dnia –
-  `DaySnapshot.templateId`), `{ scope: 'template', templateId }`, `{ scope: 'series', root }`. Dodawanie: `ownerToAdd(block, place)`.
+- Co widzi blok: `attachmentsOfBlock(list, block, place)`; `place` = `{ scope: 'day', date, templateId, templateIds? }` (szablon z migawki
+  dnia; blok szablonu rozpoznany po swoim id – `templateOfDayBlock`, T831), `{ scope: 'template', templateId }`, `{ scope: 'series', root }`.
+  Dodawanie: `ownerToAdd(block, place)`.
 - `name` pusta = nazwa pliku / tytuł strony / domena (`attachmentFrom` wylicza); zmiana nazwy na pustą przywraca wyliczoną.
 
 ## Proces główny (`main/data/attachments.ts`)
@@ -31,7 +32,8 @@ paths:
   (`EXECUTABLE_EXTS`), linki `safeAttachmentUrl` ponownie przed `openExternal` (T803, T804). Okno nigdy nie podaje ścieżki do otwarcia.
 - Tytuł i ikona linku: `linkFetch.fetchPageMeta` (sesja w pamięci, ręczne przekierowania, limity), parser czysty w
   `shared/linkMeta.ts`; zapis tylko `link.title` / `link.iconDataUrl` (T807). W testach atrapa `Fetcher`, nigdy sieć.
-- Miniatury: `nativeImage` w `index.ts` (`thumbOf`), pamięć `ThumbCache` (T808).
+- Miniatury: `nativeImage.createThumbnailFromPath` w `index.ts` (`thumbOf`, asynchronicznie), w pamięci tylko gotowe (T837).
+- Parser strony liniowy (`scanPage`, T834); przekierowania – `redirect: 'follow'` + sprawdzenie `response.url` (T835).
 
 ## Usuwanie i sprzątanie
 - Miękkie `removedAt`, „Cofnij” = `AttachmentUndo` (ta sama chwila). Blok dnia (`removeDayBlock`) i „Tylko to” serii

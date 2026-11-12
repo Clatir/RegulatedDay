@@ -10,6 +10,7 @@ import type { EditEntry, RawRecord } from '../api'
 import { recordEdit } from '../data/merge'
 import { paths } from '../data/paths'
 import { isIsoDate } from '../time/zone'
+import { templateBlockId } from '../engine/createDay'
 import { isId } from './ids'
 import type { PlanBlock } from './plan'
 
@@ -144,7 +145,25 @@ export function sameOwner(a: AttachmentOwner, b: AttachmentOwner): boolean {
  * Where a block is shown (T800): in a day's plan – with the template the day was made from (its snapshot's), whose blocks
  * the day's blocks of origin „template” are; in a template's editor; or a series (its panel in „Szablony”).
  */
-export type BlockPlace = { scope: 'day'; date: string; templateId: string | null } | { scope: 'template'; templateId: string } | { scope: 'series'; root: string }
+export type BlockPlace =
+  /**
+   * `templateId` – the template of the day's snapshot; `templateIds` – the templates there are (a block of another one,
+   * left in the day's file by a change of the day's type, is found by its id – T831).
+   */
+  | { scope: 'day'; date: string; templateId: string | null; templateIds?: readonly string[] }
+  | { scope: 'template'; templateId: string }
+  | { scope: 'series'; root: string }
+
+/**
+ * The template a block of a day of origin „template” was made from (T831): its id is derived from the day, the template
+ * and the template's block (`templateBlockId`), so the one whose derived id is the block's own; none – null (its
+ * template's attachments are not shown rather than another template's, whose blocks may share ids – T800).
+ */
+export function templateOfDayBlock(block: Pick<PlanBlock, 'id' | 'sourceId'>, date: string, candidates: ReadonlyArray<string | null | undefined>): string | null {
+  if (!block.sourceId) return null
+  for (const t of candidates) if (t && templateBlockId(date, t, block.sourceId) === block.id) return t
+  return null
+}
 
 /**
  * The owners whose attachments a block sees (D410): a block of a day its own, and those of the template block it was made
@@ -156,7 +175,8 @@ export function ownersOf(block: Pick<PlanBlock, 'id' | 'origin' | 'sourceId'> | 
   if (!block) return []
   if (place.scope === 'template') return [{ scope: 'template', templateId: place.templateId, blockId: block.id }]
   const out: AttachmentOwner[] = [{ scope: 'day', date: place.date, blockId: block.id }]
-  if (block.origin === 'template' && block.sourceId && place.templateId) out.push({ scope: 'template', templateId: place.templateId, blockId: block.sourceId })
+  const tpl = block.origin === 'template' ? templateOfDayBlock(block, place.date, [place.templateId, ...(place.templateIds ?? [])]) : null
+  if (tpl && block.sourceId) out.push({ scope: 'template', templateId: tpl, blockId: block.sourceId })
   if (block.origin === 'series' && block.sourceId) out.push({ scope: 'series', root: block.sourceId })
   return out
 }
@@ -272,7 +292,9 @@ export const EXECUTABLE_EXTS: ReadonlySet<string> = new Set([
   'vbs', 'vbe', 'vb', 'js', 'jse', 'wsf', 'wsh', 'ws', 'wsc', 'sct', 'msi', 'msp', 'mst', 'lnk', 'scr', 'pif', 'cpl', 'hta', 'jar', 'reg', 'url',
   'appref-ms', 'application', 'gadget', 'inf', 'scf', 'sys', 'dll', 'ocx', 'drv', 'chm', 'hlp', 'msc', 'shb', 'shs', 'website', 'xbap', 'job',
   'library-ms', 'search-ms', 'searchconnector-ms', 'settingcontent-ms', 'appx', 'appxbundle', 'msix', 'msixbundle', 'appinstaller', 'diagcab',
-  'xll', 'ade', 'adp', 'mde', 'accde', 'jnlp', 'py', 'pyw', 'pyz', 'pyc', 'rb', 'pl', 'sh', 'bash', 'theme', 'themepack', 'deskthemepack', 'mof', 'vsto'
+  'xll', 'ade', 'adp', 'mde', 'accde', 'jnlp', 'py', 'pyw', 'pyz', 'pyc', 'rb', 'pl', 'sh', 'bash', 'theme', 'themepack', 'deskthemepack', 'mof', 'vsto',
+  // T832: what Windows installs, mounts, connects to or runs add-ins of when opened.
+  'msu', 'ppkg', 'wsb', 'rdp', 'iso', 'img', 'vhd', 'vhdx', 'mht', 'mhtml', 'xla', 'xlam', 'ppa', 'ppam', 'ins', 'isp', 'vsix', 'cer', 'crt', 'der', 'p7b'
 ])
 
 /** Windows would run the file of this name (T803). */
@@ -324,6 +346,8 @@ export function safeAttachmentUrl(raw: unknown): string | null {
 export function linkFromInput(raw: string): string | null {
   const text = raw.trim()
   if (!text || /\s/.test(text)) return null
+  // A host with a port („localhost:3000”, „intranet.local:8080/wiki”) – no scheme, though it looks like one (T833).
+  if (/^[a-z0-9][a-z0-9.-]*:\d{1,5}(?:[/?#]|$)/i.test(text)) return safeAttachmentUrl(`https://${text}`)
   if (/^[a-z][a-z0-9+.-]*:/i.test(text)) return safeAttachmentUrl(text)
   if (text.startsWith('\\') || text.startsWith('/') || text.startsWith('.')) return null
   if (/^[^@/]+@[^@/]+\.[^@/]+$/.test(text)) return safeAttachmentUrl(`mailto:${text}`)

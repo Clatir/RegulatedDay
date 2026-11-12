@@ -25,13 +25,13 @@ function net(routes: Record<string, () => Response | Promise<Response>>): { fetc
 }
 
 describe('pobranie tytułu i ikony (T807)', () => {
-  it('tytuł i ikona strony; zapytanie bez ciasteczek i pamięci, przekierowania ręcznie', async () => {
+  it('tytuł i ikona strony; zapytanie bez ciasteczek i pamięci', async () => {
     const n = net({
       'https://example.com/a': () => html('<html><head><title>Przykład – strona</title><link rel="icon" href="/i.png"></head></html>'),
       'https://example.com/i.png': () => new Response(PNG, { headers: { 'content-type': 'text/plain' } })
     })
     expect(await fetchPageMeta(n.fetcher, 'https://example.com/a')).toEqual({ title: 'Przykład – strona', iconDataUrl: `data:image/png;base64,${Buffer.from(PNG).toString('base64')}` })
-    expect(n.inits[0]).toMatchObject({ redirect: 'manual', credentials: 'omit', cache: 'no-store' })
+    expect(n.inits[0]).toMatchObject({ redirect: 'follow', credentials: 'omit', cache: 'no-store' })
   })
 
   it('przekierowanie do innego protokołu albo więcej niż kilka – nic', async () => {
@@ -75,5 +75,48 @@ describe('pobranie tytułu i ikony (T807)', () => {
   it('nie HTML (PDF) – bez tytułu, ikona strony z /favicon.ico', async () => {
     const n = net({ 'https://e.com/plik.pdf': () => html('%PDF', 'application/pdf'), 'https://e.com/favicon.ico': () => new Response(PNG) })
     expect(await fetchPageMeta(n.fetcher, 'https://e.com/plik.pdf')).toMatchObject({ title: null, iconDataUrl: expect.stringMatching(/^data:image\/png/) })
+  })
+})
+
+/**
+ * A fetch that behaves like Electron's `session.fetch` (T835): with `redirect: 'manual'` a redirect is refused („Redirect
+ * was cancelled”), with `follow` the network stack follows it – only to http or https (anything else: ERR_UNSAFE_REDIRECT)
+ * – and the answer says where it ended (`url`, `redirected`).
+ */
+function electronNet(routes: Record<string, () => Response>): Fetcher {
+  return async (url, init) => {
+    let at = url
+    for (let hop = 0; hop < 20; hop++) {
+      const r = routes[at]?.() ?? new Response('nie ma', { status: 404 })
+      const to = r.status >= 300 && r.status < 400 ? r.headers.get('location') : null
+      if (!to) {
+        Object.defineProperty(r, 'url', { value: at })
+        Object.defineProperty(r, 'redirected', { value: hop > 0 })
+        return r
+      }
+      if ((init as { redirect: string }).redirect === 'manual') throw new TypeError('Redirect was cancelled')
+      const next = new URL(to, at)
+      if (next.protocol !== 'http:' && next.protocol !== 'https:') throw new TypeError('net::ERR_UNSAFE_REDIRECT')
+      at = next.href
+    }
+    throw new TypeError('net::ERR_TOO_MANY_REDIRECTS')
+  }
+}
+
+describe('jak Electron: przekierowania idą przez stos sieciowy (T835)', () => {
+  it('google.com → www, http → https, ikona przez przekierowanie', async () => {
+    const f = electronNet({
+      'http://google.com/': () => redirect('https://google.com/'),
+      'https://google.com/': () => redirect('https://www.google.com/'),
+      'https://www.google.com/': () => html('<title>Google</title>'),
+      'https://www.google.com/favicon.ico': () => redirect('https://www.gstatic.com/f.png'),
+      'https://www.gstatic.com/f.png': () => new Response(PNG)
+    })
+    expect(await fetchPageMeta(f, 'http://google.com/')).toEqual({ title: 'Google', iconDataUrl: expect.stringMatching(/^data:image\/png;base64,/) })
+  })
+
+  it('przekierowanie poza http/https – nic', async () => {
+    const f = electronNet({ 'https://e.com/': () => redirect('file:///C:/Windows/win.ini') })
+    expect(await fetchPageMeta(f, 'https://e.com/')).toBeNull()
   })
 })
