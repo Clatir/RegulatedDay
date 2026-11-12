@@ -6,7 +6,8 @@
  * the engine) with the same panel of a block as the day; a template block may follow a session („po sesji NY”), carry
  * the second shift or the weekly analysis. Ctrl+N makes a new template; a template can be copied. A block dragged or added
  * on a taken place of the axis pushes the flexible blocks after it apart (D367, D372) – „Przesunięto N bloków · Cofnij”
- * stays on the page for 15 min, or until the template changes again.
+ * stays on the page for 15 min, or until the template changes again. Below the templates: the list of series (D381, D401) –
+ * each with its rule in words, edited and ended there (`SeriesEditor`); Ctrl K finds a series as one record.
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { RawRecord } from '@shared/api'
@@ -18,7 +19,9 @@ import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
 import { planBlock, templateFrom, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
+import { currentSeries } from '@shared/model/series'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn } from '@shared/model/settings'
+import { SERIES_MARK, seriesText } from '@shared/seriesText'
 import { placeLogical } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
 import { UNDO_LINE_MS } from '@shared/widget'
@@ -33,6 +36,8 @@ import { blockName, type Names } from '../plan/blockView'
 import { dayAxis } from '../plan/dayItems'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { Timeline } from '../plan/Timeline'
+import { SeriesEditor, useSeriesNames } from '../series/SeriesEditor'
+import { seriesBlockOf } from '../series/seriesForm'
 import { SettingNumber } from '../settings/SettingNumber'
 import { templateAdd, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
 
@@ -40,8 +45,22 @@ const DAYS = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd']
 
 export function TemplatesPage() {
   const templates = useData((s) => s.templates)
+  const series = useData((s) => s.series)
+  const seriesPlans = useData((s) => s.seriesPlans)
   const today = useData((s) => s.view?.today ?? '')
-  const [selected, setSelected] = useState<string | null>(null)
+  const names = useSeriesNames(today)
+  const [selected, setSelectedTemplate] = useState<string | null>(null)
+  // One thing is open on the right: a template or a series of the list.
+  const [selectedSeries, setSelectedSeries] = useState<string | null>(null)
+  const setSelected = (id: string | null) => {
+    setSelectedTemplate(id)
+    if (id != null) setSelectedSeries(null)
+  }
+  const openSeries = (id: string | null) => {
+    setSelectedSeries(id)
+    if (id != null) setSelectedTemplate(null)
+  }
+  const listed = useMemo(() => currentSeries(series, today), [series, today])
   const [showArchivedState, setShowArchived] = useState(false)
   // A copy starts in the archive: the one selected is shown even then.
   const showArchived = showArchivedState || templates.some((t) => t.id === selected && t.archived)
@@ -67,7 +86,17 @@ export function TemplatesPage() {
     setSelected(ofPick(p)!)
     setOpenBlock(p.kind === 'templateBlock' ? p.id : null)
   }, [pick, templates])
+  // A series picked in the search (Ctrl K, D401): opened on the list; one that is gone is said so.
+  useEffect(() => {
+    const p = takeFoundPick(
+      (x) => x.kind === 'series',
+      (x) => listed.some((s) => s.id === x.id),
+      'Tej serii nie ma już.'
+    )
+    if (p) openSeries(p.id)
+  }, [pick, listed])
   const current = templates.find((t) => t.id === selected) ?? null
+  const currentSeriesRecord = listed.find((s) => s.id === selectedSeries) ?? null
   return (
     <div className="flex min-h-0 flex-1" data-testid="templates">
       <div className="flex w-[260px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line p-3">
@@ -95,6 +124,31 @@ export function TemplatesPage() {
             </div>
           )
         })}
+        {listed.length > 0 && (
+          <div className="flex flex-col gap-1" data-testid="series-list">
+            <span className="text-[11.5px] text-muted">Serie</span>
+            {listed.map((s) => {
+              const ended = (seriesPlans.find((p) => p.series.id === s.id)?.last ?? s.until ?? today) < today
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => openSeries(s.id)}
+                  className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selectedSeries === s.id ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover', ended && 'border-dashed text-muted')}
+                  data-testid="series-item"
+                >
+                  <span>
+                    {SERIES_MARK} {blockName(seriesBlockOf(s, today), names)}
+                  </span>
+                  <span className="text-[11.5px] text-muted">
+                    {seriesText(s, today)}
+                    {ended ? ' · zakończona' : ''}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
         {templates.some((t) => t.archived) && (
           <button type="button" className="text-left text-[12px] text-muted hover:text-fg" onClick={() => setShowArchived(!showArchived)}>
             {showArchived ? 'Ukryj archiwum' : 'Pokaż archiwum'}
@@ -102,7 +156,9 @@ export function TemplatesPage() {
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        {current ? (
+        {currentSeriesRecord ? (
+          <SeriesEditor key={currentSeriesRecord.id} series={currentSeriesRecord} today={today} onClosed={() => openSeries(null)} />
+        ) : current ? (
           <Editor key={current.id} template={current} today={today} openBlock={openBlock} onBlockOpened={() => setOpenBlock(null)} onCopied={setSelected} onRemoved={() => setSelected(null)} />
         ) : (
           <EmptyState why={templates.length ? 'Wybierz szablon z listy.' : 'Nie ma jeszcze szablonów. Szablon to plan dnia danego typu, z którego powstaje każdy taki dzień.'} action={{ label: '+ Szablon', run: () => void create() }} />

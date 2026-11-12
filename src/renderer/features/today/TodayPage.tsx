@@ -11,7 +11,9 @@ import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { freedByEdit } from '@shared/engine/gaps'
 import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
 import { leavesByCancel, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
+import { seriesBlockId } from '@shared/engine/series'
 import { categoryName } from '@shared/model/rd'
+import { seriesOfBlock } from '@shared/model/series'
 import type { PlanBlock } from '@shared/model/plan'
 import { DAY_TYPE_NAMES, RANGES } from '@shared/model/settings'
 import { logicalMinuteOf } from '@shared/time/day'
@@ -26,6 +28,10 @@ import { dayUsable, useDay, type DayModel } from '../../store/day'
 import { openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
 import { BlockEditor } from '../plan/BlockEditor'
+import { BlockSeries, blockMayRepeat } from '../series/BlockSeries'
+import { askScope } from '../series/scopeAsk'
+import { changeSeries, removeSeries } from '../series/seriesActions'
+import { occurrenceRuleText, seriesBlockPatch, touchesSeries } from '../series/seriesForm'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis, daySummary } from '../plan/dayItems'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
@@ -64,7 +70,7 @@ export function TodayPage() {
 }
 
 function DayView({ model, today }: { model: DayModel; today: string }) {
-  const { rd, routines, requests } = useData()
+  const { rd, routines, requests, series } = useData()
   const view = useData((s) => s.view)!
   const brightness = useMachine((s) => s.prefs.brightness)
   const now = useNow(30_000)
@@ -164,6 +170,14 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     }
   }, [pick, date, plan])
   const block = draft ?? plan.find((b) => b.id === selected) ?? null
+  // „Powtarzaj” made the block the series' first occurrence – another id: the panel follows it once the day shows it.
+  const follow = useRef<{ from: string; to: string } | null>(null)
+  useEffect(() => {
+    const f = follow.current
+    if (!f || selected !== f.from || plan.some((b) => b.id === f.from) || !plan.some((b) => b.id === f.to)) return
+    follow.current = null
+    setSelected(f.to)
+  }, [plan, selected])
   /** The selected block has begun, and how „Usuń” takes it (D336): a running one ends now, one that is over only leaves the plan. */
   const blockFact = block && !draft ? model.state.facts.blocks.get(block.id) : undefined
   const started = blockFact?.startedAt != null
@@ -217,11 +231,37 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
    * is the note editor’s (T670): saved, refused, or asked after the send.
    */
   const saveFields = async (b: PlanBlock, patch: Partial<PlanBlock>) => {
+    // D401: a change of a block of a series in the panel asks its scope; „Tylko to” is the day's own edit (below, as any block's).
+    const of = seriesOfBlock(series, b, date)
+    if (of && touchesSeries(patch)) {
+      const scope = await askScope('change', blockName(b, names), occurrenceRuleText(of, date, today))
+      if (!scope) return false
+      if (scope !== 'only') return changeSeries({ date, blockId: b.id }, scope, { block: seriesBlockPatch(patch) }, 'Seria zmieniona')
+    }
     const freed = isToday ? freedByEdit(model.state, b, { ...b, ...patch }) : null
     const state: SendState = { afterSend: false }
     const out = await patchDayBlock(date, raw, b, patch, state)
     if (isSaved(out)) void tellFreed(date, freed)
     return saveAnswer(out, state)
+  }
+  /**
+   * „Usuń” of a block of a series asks its scope (D401); „Tylko to” and any other block – the day's own removal (a begun one:
+   * D336). „To i następne” and „Cała seria” end the series (the occurrences that stood changed go with it, T708).
+   */
+  const removeBlock = async (b: PlanBlock) => {
+    const of = seriesOfBlock(series, b, date)
+    const name = blockName(b, names)
+    const scope = of ? await askScope('remove', name, occurrenceRuleText(of, date, today)) : 'only'
+    if (!scope) return
+    setSelected(null)
+    if (scope === 'only') {
+      // D368: a block not begun removed today frees its place and that of the blocks anchored to it, which leave with it
+      // – the bar may ask about the gap (a begun one: its end in the log).
+      const freed = isToday && begun === 'no' ? freedByEdit(model.state, b, null) : null
+      if (await removeDayBlock(date, raw, b, byCancel, name, begun)) void tellFreed(date, freed)
+      return
+    }
+    await removeSeries({ date, blockId: b.id }, scope, scope === 'all' ? `Usunięta seria: ${name}` : `Seria kończy się przed tym dniem: ${name}`)
   }
   /** A block of the plan that may be dragged (D305): what its drag to `span` changes and pushes apart (D367). */
   const movableChange = (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan): DayChange | null => (axis.items.find((i) => i.id === id)?.movable ? dragChange(model, id, span, edge, shown, pushes) : null)
@@ -419,6 +459,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               setDraft(null)
               setSelected(null)
             }}
+            inSeries={!draft && block.origin === 'series'}
+            repeat={!draft && blockMayRepeat(block) ? <BlockSeries block={block} date={date} today={today} name={blockName(block, names)} onCreated={(id) => (follow.current = { from: block.id, to: seriesBlockId(date, id) })} /> : undefined}
             actions={
               draft ? (
                 <>
@@ -442,16 +484,10 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                   <button
                     type="button"
                     className="btn"
-                    onClick={() => {
-                      setSelected(null)
-                      // D368: a block not begun removed today frees its place and that of the blocks anchored to it, which leave with it
-                      // – the bar may ask about the gap (a begun one: its end in the log).
-                      const freed = isToday && begun === 'no' ? freedByEdit(model.state, block, null) : null
-                      void removeDayBlock(date, raw, block, byCancel, blockName(block, names), begun).then((ok) => (ok ? tellFreed(date, freed) : undefined))
-                    }}
+                    onClick={() => void removeBlock(block)}
                     data-testid="block-remove"
                   >
-                    {byCancel && !started ? 'Odwołaj na ten dzień' : 'Usuń'}
+                    {byCancel && !started && block.origin !== 'series' ? 'Odwołaj na ten dzień' : 'Usuń'}
                   </button>
                 </>
               )

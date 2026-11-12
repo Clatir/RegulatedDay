@@ -8,6 +8,7 @@ import { countLabel, durationLabel, logicalClock, plDate } from '@shared/format'
 import { fieldByKey } from '@shared/model/fields'
 import { categoryName, MODULE_NAMES, personName, type ModuleId, type RdFile } from '@shared/model/rd'
 import { DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
+import { onDaysText, SPECIAL_DAYS_TEXT } from '@shared/seriesText'
 
 export interface TextNames {
   rd: RdFile
@@ -39,6 +40,10 @@ const BLOCK_FIELDS: Record<string, string> = {
 
 const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok' }
 const ROUTINE_FIELDS: Record<string, string> = { name: 'nazwa', normal: 'kroki (zwykła)', worse: 'kroki (na gorsze dni)', archived: 'archiwum' }
+const SERIES_FIELDS: Record<string, string> = { start: 'pierwszy dzień', until: 'koniec (dzień)', count: 'koniec (liczba razy)', archived: 'usunięta z listy', root: 'seria' }
+/** The kinds of a series' rule (D381) as the panel of a block says them. */
+const RULE_KINDS: Record<string, string> = { daily: 'codziennie', workdays: 'w dni robocze', weekly: 'co tydzień lub co kilka tygodni', monthDay: 'wybranego dnia miesiąca', monthWeekday: 'wybranego dnia tygodnia miesiąca' }
+const RULE_FIELDS: Record<string, string> = { kind: 'reguła', every: 'reguła: co ile tygodni', days: 'reguła: dni tygodnia', anchor: 'reguła: tydzień początkowy', day: 'reguła: dzień miesiąca', nth: 'reguła: który z kolei', weekday: 'reguła: dzień tygodnia' }
 const STATES: Record<string, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobiona', dropped: 'porzucona' }
 
 /** A value as shown: minutes and times as the fields show them, ids as names, objects briefly. */
@@ -60,6 +65,8 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
     if (key === 'person') return personName(n.rd, v)
     if (key === 'dayType') return DAY_TYPE_NAMES[v as DayTypeId] ?? v
     if (key === 'state') return STATES[v] ?? v
+    if (key === 'special') return SPECIAL_DAYS_TEXT[v as keyof typeof SPECIAL_DAYS_TEXT] ?? v
+    if (key === 'kind' && RULE_KINDS[v]) return RULE_KINDS[v]!
     if (key === 'tag') return v === 'secondShift' ? 'druga zmiana' : v === 'weeklyAnalysis' ? 'analiza tygodniowa' : v
     if (key === 'anchor' || key === 'block') return n.blockName?.(v) ?? 'inny blok'
     if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return plDate(v)
@@ -68,6 +75,7 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
   }
   if (Array.isArray(v)) {
     if (!v.length) return 'brak'
+    if (key === 'days' && v.every((x) => typeof x === 'number')) return onDaysText(v as number[])
     // Blocks of a day or a template: by their names – a count says nothing of which one changed (A6-20).
     if (v.every((x) => isPlain(x) && typeof x.categoryId === 'string')) {
       const names = v.slice(0, 3).map((x) => valueText(key, x, n))
@@ -116,6 +124,14 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames): s
     if (a === 'archived') return 'archiwum'
     if (a === 'versions') return b ? `wersja od ${plDate(b)}${rest[0] === 'blocks' ? `: ${blockPart(rest[1], rest[2])}` : rest[0] === 'budgetMin' ? ': budżet' : rest[0] === 'maxMin' ? ': maksimum' : ''}` : 'wersje'
     return 'inne pole szablonu'
+  }
+  if (kind === 'series') {
+    if (a === 'versions') {
+      if (!b) return 'wersje'
+      const part = rest[0] === 'block' ? `: blok${rest[1] ? ` – ${BLOCK_FIELDS[rest[1]] ?? 'inne pole'}` : ''}` : rest[0] === 'rule' ? `: ${RULE_FIELDS[rest[1] ?? ''] ?? 'reguła'}` : rest[0] === 'special' ? ': w dni szczególne' : ''
+      return `wersja od ${plDate(b)}${part}`
+    }
+    return SERIES_FIELDS[a ?? ''] ?? 'inne pole serii'
   }
   if (kind === 'request') return REQUEST_FIELDS[a ?? ''] ?? 'inne pole prośby'
   if (kind === 'routine') return ROUTINE_FIELDS[a ?? ''] ?? 'inne pole rutyny'
