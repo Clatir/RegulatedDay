@@ -539,7 +539,10 @@ export class DataHub {
     const gone: Record<string, string[]> = {}
     for (const d of list) {
       try {
-        gone[d] = [...goneBlocks(d, (await f.readDay(d)).events)]
+        // Only a log read in full: a part missing (another computer's log) could hold the „Cofnij” of a parking – such a
+        // day is unknown, its sprawy „zaplanowane” as its file says, never freed by it (T766).
+        const read = await f.readDay(d)
+        if (read.complete) gone[d] = [...goneBlocks(d, read.events)]
       } catch {
         /* the log unreadable now */
       }

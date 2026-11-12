@@ -163,7 +163,8 @@ describe('sprawa przeciągnięta na oś (D384, D367, planOnAxis)', () => {
 
   it('zadanie upuszczone na 10:00: blok 30 min „Inne” nazwany tytułem; zajęte miejsce rozsuwa kolejne bloki; „Cofnij” w toaście i w pasku', async () => {
     const t = task('t1', { title: 'Zadzwonić do banku' })
-    const { sent, planPushed } = stubWindow([t], { [TODAY]: null })
+    // Blocks of yours live in the day's file (the push writes only blocks still in it, T764).
+    const { sent, planPushed } = stubWindow([t], { [TODAY]: { schema: 1, date: TODAY, blocks: dayOf(TODAY).ctx.plan.map((b) => ({ ...b })) } })
     const model = dayOf(TODAY)
     const r = requestFrom(t)!
     // Counted once, before the write: the same block and the same pushed starts the edit gets.
@@ -181,7 +182,7 @@ describe('sprawa przeciągnięta na oś (D384, D367, planOnAxis)', () => {
     expect(sent[0]!.map((e) => e.rel).sort()).toEqual([paths.day(TODAY), paths.record('request', 't1')].sort())
     const after = res.undo.find((u) => u.rel === paths.day(TODAY))!.after
     expect(dayFileFrom(after, TODAY).blocks.map((b) => [b.id, b.startMin]).sort()).toEqual([['a', lm('10:30')], ['b', lm('11:30')], [res.block!.id, lm('10:00')]].sort())
-    expect(planPushed).toHaveBeenCalledWith(TODAY, 2, expect.objectContaining({ rel: paths.day(TODAY) }), expect.anything())
+    expect(planPushed).toHaveBeenCalledWith(TODAY, 2, expect.objectContaining({ rel: paths.day(TODAY) }), null)
     // The toast „Cofnij” says where.
     const [toast] = useUi.getState().toasts
     expect(toast).toMatchObject({ text: plannedText('Zadzwonić do banku', res.block!), action: { label: 'Cofnij' } })

@@ -146,16 +146,13 @@ export function scheduledOf(r: Pick<RequestRecord, 'day' | 'block'>, fileOf: (da
   return null
 }
 
-/** How far back the days of „zaplanowane” are read (older ones: as the record says, without the hour – T760). */
-export const SCHEDULED_LOOKBACK_DAYS = 14
-
 /**
- * The days whose files (and logs) tell where the sprawy are planned (`scheduledOf` reads them): only of sprawy not done,
- * from `SCHEDULED_LOOKBACK_DAYS` before `today` on – never every day a sprawa was ever planned in.
+ * The days whose files (and logs) tell where the sprawy are planned (`scheduledOf` reads them): the days of every sprawa
+ * not done with a block – as many as the open sprawy, never the history (T766: a block gone frees its sprawa however old
+ * the day); a done one is not read (its day as the record says).
  */
-export function scheduledDays(records: readonly RequestRecord[], today: string): string[] {
-  const from = addDays(today, -SCHEDULED_LOOKBACK_DAYS)
-  return [...new Set(records.flatMap((r) => (r.day && r.block && !isDone(r) && r.day >= from ? [r.day] : [])))].sort()
+export function scheduledDays(records: readonly RequestRecord[]): string[] {
+  return [...new Set(records.flatMap((r) => (r.day && r.block && !isDone(r) ? [r.day] : [])))].sort()
 }
 
 /** A sprawa as the lists show it on a day. */
@@ -326,11 +323,26 @@ export interface CasePlan {
   record: Raw
   /** The days' files after (the new block's day; the old block's day, when it was taken out of it). */
   days: Record<string, Raw>
-  /**
-   * The sprawa's block of before, taken out of its day (or a block of requests that lost it), null – none: what the drop
-   * pushes apart never puts it back (T761).
-   */
-  taken: { day: string; block: string } | null
+}
+
+/**
+ * The sprawa's block of before that a new planning takes out of its day whole (T764 – one rule for the write, `casePlan`
+ * and `morningPlan`, and for the window's count of the push, `planningOf`): a block of yours made for it – its task's,
+ * or a block of requests with this one only. A block of several requests only loses it (`withoutRequest`) and stays.
+ */
+export function ownTakenBlock(old: Pick<PlanBlock, 'origin' | 'task' | 'requests'>, r: Pick<RequestRecord, 'id'>): boolean {
+  return old.origin === 'user' && (old.task === r.id || (old.requests.length === 1 && old.requests[0] === r.id))
+}
+
+/**
+ * The day's file without the sprawa's old block `id` (begun – never asked for): taken out whole (`ownTakenBlock`), a block
+ * of several requests without this one; anything else – as it was.
+ */
+function withoutOld(raw: Raw, date: string, id: string, r: RequestRecord): Raw {
+  const old = dayFileFrom(raw, date).blocks.find((b) => b.id === id)
+  if (!old) return raw
+  if (ownTakenBlock(old, r)) return takeBlock(raw, old.id)
+  return old.origin === 'user' && old.requests.includes(r.id) ? putBlock(raw, { ...old, requests: old.requests.filter((x) => x !== r.id) }) : raw
 }
 
 /**
@@ -357,19 +369,14 @@ export function casePlan(i: CasePlanInput): CasePlan | null {
   const days: Record<string, Raw> = {}
   const fileOf = (date: string): Raw => days[date] ?? dayRaw(i.files[date] ?? null, date)
   const was = scheduledOf(r, (d) => (d in i.files || d in days ? dayFileFrom(fileOf(d), d) : undefined))
-  let taken: CasePlan['taken'] = null
   if (was?.known && !i.begun(was.day, was.block)) {
     const raw = fileOf(was.day)
-    const old = dayFileFrom(raw, was.day).blocks.find((b) => b.id === was.block)
-    if (old && old.origin === 'user' && (old.task === r.id || old.requests.includes(r.id))) {
-      const others = old.requests.filter((x) => x !== r.id)
-      days[was.day] = old.task === r.id || !others.length ? takeBlock(raw, old.id) : putBlock(raw, { ...old, requests: others })
-      taken = { day: was.day, block: old.id }
-    }
+    const next = withoutOld(raw, was.day, was.block, r)
+    if (next !== raw) days[was.day] = next
   }
   const block = caseBlock(r, i.startMin, i.rules)
   days[i.date] = putBlock(fileOf(i.date), block)
-  return { block, record: scheduledRaw(i.record, i.date, block.id, i.at), days, taken }
+  return { block, record: scheduledRaw(i.record, i.date, block.id, i.at), days }
 }
 
 /**
@@ -410,8 +417,8 @@ export interface MorningPlanInput {
   startMin: number
   rules: Readonly<Record<string, CategoryRules>>
   at: number
-  /** The files of the other days the chosen ones are planned in (undefined – not read: taken for planned). */
-  fileOf?: (date: string) => DayFile | null | undefined
+  /** The files of the other days the chosen ones are planned in (a day not here – not read: taken for planned). */
+  files?: Readonly<Record<string, Raw | null>>
   /** The blocks parked or cancelled before their start in the days' logs (`goneBlocks`). */
   goneOf?: GoneOf
 }
@@ -419,6 +426,8 @@ export interface MorningPlanInput {
 /** The morning's step done: the day after, the records after, the blocks made, the chosen ones left out (their ids). */
 export interface MorningPlan {
   day: Raw
+  /** Every day's file the step changed – today's, and the day of an old block it took out (T765). */
+  days: Record<string, Raw>
   records: Array<{ id: string; raw: Raw }>
   blocks: PlanBlock[]
   /** Chosen but done or planned meanwhile (or gone): nothing made for them – the window says so, never in silence. */
@@ -433,8 +442,12 @@ export interface MorningPlan {
  * nothing).
  */
 export function morningPlan(i: MorningPlanInput): MorningPlan {
-  const today = dayFileFrom(dayRaw(i.dayFile, i.date), i.date)
-  const fileOf = (d: string) => (d === i.date ? today : i.fileOf?.(d))
+  const days: Record<string, Raw> = {}
+  const rawOf = (d: string): Raw | undefined => days[d] ?? (d === i.date ? dayRaw(i.dayFile, i.date) : i.files && d in i.files ? dayRaw(i.files[d] ?? null, d) : undefined)
+  const fileOf = (d: string) => {
+    const raw = rawOf(d)
+    return raw ? dayFileFrom(raw, d) : undefined
+  }
   const skipped: string[] = []
   const open = (raw: Raw, kind: CaseKind) => {
     const r = requestFrom(raw)
@@ -444,7 +457,17 @@ export function morningPlan(i: MorningPlanInput): MorningPlan {
   }
   const requests = i.requests.filter((raw) => open(raw, 'request'))
   const tasks = i.tasks.filter((raw) => open(raw, 'task'))
-  let day = dayRaw(i.dayFile, i.date)
+  // A sprawa planned again because its block was parked or cancelled before its start (T760): that block, still in its
+  // day's file, goes out – the sprawa is planned once, and a „Cofnij” of the parking brings back nothing of it (T765).
+  for (const raw of [...requests, ...tasks]) {
+    const r = requestFrom(raw)!
+    const where = scheduledOf(r, fileOf)
+    if (!where?.known) continue
+    const before = rawOf(where.day)!
+    const after = withoutOld(before, where.day, where.block, r)
+    if (after !== before) days[where.day] = after
+  }
+  let day = rawOf(i.date)!
   let at = i.startMin
   const blocks: PlanBlock[] = []
   const records: Array<{ id: string; raw: Raw }> = []
@@ -469,7 +492,8 @@ export function morningPlan(i: MorningPlanInput): MorningPlan {
     at += b.durationMin
     records.push({ id: r.id, raw: scheduledRaw(raw, i.date, b.id, i.at) })
   }
-  return { day, records, blocks, skipped }
+  if (blocks.length) days[i.date] = day
+  return { day, days, records, blocks, skipped }
 }
 
 // ------------------------------------------------------------------ „Zadanie zrobione?” and the ritual

@@ -83,12 +83,13 @@ polecenie użytkownika (pytania zadane w D380–D386, D401–D403).
 (T751); „zaplanowane” wyliczane z pliku dnia i logu (T752, T760); sprawa na osi, plan poranny (T753, T761, T782); „Zadanie
 zrobione?” w pasku (T754); szybki zapis – skrót globalny, okienko, „+” (T755, T756, T759, T763 – domyślny Win+Alt+N, D408);
 rytuał (T757, T762, T783); Ctrl K (T758). Ekrany: `renderer/features/cases/` (strona, panel przy osi „Dziś”, przeciąganie,
-rytuał), pole skrótu w Ustawieniach, nazwy zadań w Historii, „Danych” i pytaniach (T780–T785). Decyzje T750–T763, T780–T785,
+rytuał), pole skrótu w Ustawieniach, nazwy zadań w Historii, „Danych” i pytaniach (T780–T785). Decyzje T750–T767, T780–T785,
 D408. Testy: 2300 unit, 43 E2E lokalnie (`cases.spec.ts`, `quick.spec.ts`; `quick-windows.spec.ts` tylko CI na Windows).
 Odbiór L2.1–L2.6.
 **Uwagi na później (L2):** przechwytywanie klawiszy w polu skrótu (dziś zwykły tekst); E2E „Zadanie zrobione?” w pasku (potrzebny
 zakończony blok); przeciąganie z panelu bez klawiatury i dotyku (jest „Zaplanuj”); ponowienie skrótu co 60 s testowane tylko
-przez `retry()`; sprawy zaplanowane ponad 14 dni wstecz mówią „zaplanowane” bez godziny (`SCHEDULED_LOOKBACK_DAYS`).
+przez `retry()`; `hub.caseDays` czyta dni po kolei, bez `Promise.all` i pamięci; `check-code` nie widzi aliasów `webContents`
+okienka poza `quickWindow.ts`; test „timer E4a/E4b” w `screens.spec` raz niestabilny lokalnie.
 
 ## Ciąg J – stan (D363)
 **Przed ciągiem J (10.11):** zakres i „Gotowe, gdy” – `docs/plan.md`; decyzje D363–D369 (pytania w trzech rundach

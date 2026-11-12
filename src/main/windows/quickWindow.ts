@@ -43,6 +43,10 @@ export class QuickWindow {
   private key: string | null = null
   private registered = false
   private state: QuickShortcut['state'] = 'off'
+  /** The last refusal's words (an exception of `register`): said once, not at every retry. */
+  private lastError: string | null = null
+  /** Destroyed (the quit): nothing is registered again. */
+  private destroyed = false
   /** The app quits: the window may close for real. */
   quitting = false
   /** Called when something outside closes the hidden window (an installer's taskkill): the app quits. */
@@ -115,18 +119,21 @@ export class QuickWindow {
    * Windows refusing it (another program holds it) – `taken` (D402: „Skrót zajęty przez inny program”).
    */
   setShortcut(key: string | null): QuickShortcut {
-    if (key === this.key && this.state !== 'taken') return this.shortcut
+    if (this.destroyed || (key === this.key && this.state !== 'taken')) return this.shortcut
     const was = `${this.key}|${this.state}`
     this.stop()
     this.key = key
     if (!key) this.state = 'off'
     else {
       let ok = false
+      let error: string | null = null
       try {
         ok = this.shortcuts.register(key, () => this.raise())
       } catch (e) {
-        this.d.log(`skrót ${key}: ${e instanceof Error ? e.message : String(e)}`)
+        error = `skrót ${key}: ${e instanceof Error ? e.message : String(e)}`
       }
+      if (error && error !== this.lastError) this.d.log(error)
+      this.lastError = error
       this.registered = ok
       this.state = ok ? 'on' : 'taken'
     }
@@ -181,6 +188,7 @@ export class QuickWindow {
 
   destroy(): void {
     this.stop()
+    this.destroyed = true
     if (!this.win.isDestroyed()) this.win.destroy()
   }
 }

@@ -2313,12 +2313,13 @@ export class DataFolder {
     const activity = await this.mayLayOn(day, read, at)
     const bar = activity ? await this.barDay(day, read, at, false, activity) : null
     const today = logicalDayOf(at)
-    const sprawy = records.map((r) => [r.id, r.kind, r.title, r.state, r.list, r.listDay, r.day, r.block, r.createdAt])
-    const key = JSON.stringify([today, read.lastByComputer, read.events.length, read.copies, this.contextSig(day), this.queue.pending.length, (bar?.laid ?? []).map((e) => e.id), sprawy])
+    // The day as read now (its files looked at by `ownContext` – the key from them, never from an earlier look), and the
+    // sprawy whole: only the count itself is remembered.
+    const ctx = bar?.ctx ?? (await this.ownContext(day, read, at))
+    const key = JSON.stringify([today, read.lastByComputer, read.events.length, read.copies, this.contextSig(day), this.queue.pending.length, (bar?.laid ?? []).map((e) => e.id), records])
     const was = this.casesRitualMemo.get(day)
     if (was?.key === key) return was.out
     this.casesRitualRuns++
-    const ctx = bar?.ctx ?? (await this.ownContext(day, read, at))
     const out = casesRitual(day, today, records, taskQuestions(ctx, dayFactsOf(day, ctx.events), records))
     this.casesRitualMemo.set(day, { key, out })
     for (const d of this.casesRitualMemo.keys()) if (d < addDays(today, -RITUAL_MEMO_DAYS)) this.casesRitualMemo.delete(d)

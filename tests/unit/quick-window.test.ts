@@ -46,20 +46,22 @@ vi.mock('electron', () => {
 
 const { QuickWindow, shortcutOf, touchesShortcut } = await import('../../src/main/windows/quickWindow')
 
-function make(o: { refuse?: string[] } = {}) {
+function make(o: { refuse?: string[]; throws?: string[]; logs?: string[]; registered?: string[] } = {}) {
   calls.length = 0
   const pressed = new Map<string, () => void>()
   const unregistered: string[] = []
   const states: string[] = []
   const shortcuts = {
     register: (key: string, cb: () => void) => {
+      o.registered?.push(key)
+      if (o.throws?.includes(key)) throw new Error('nie można zarejestrować')
       if (o.refuse?.includes(key)) return false
       pressed.set(key, cb)
       return true
     },
     unregister: (key: string) => void (unregistered.push(key), pressed.delete(key))
   }
-  const q = new QuickWindow('', async () => undefined, { zoom: () => 1, hideFromCapture: () => true, changed: (s) => states.push(`${s.key}:${s.state}`), log: () => undefined, shortcuts: shortcuts as never })
+  const q = new QuickWindow('', async () => undefined, { zoom: () => 1, hideFromCapture: () => true, changed: (s) => states.push(`${s.key}:${s.state}`), log: (m) => void o.logs?.push(m), shortcuts: shortcuts as never })
   const win = (q as unknown as { win: { visible: boolean; onTop: boolean; handlers: Map<string, () => void> } }).win
   return { q, win, pressed, unregistered, states }
 }
@@ -120,5 +122,27 @@ describe('skrót zajęty – ponawianie (T759)', () => {
     expect(touchesShortcut({ quickOn: true })).toBe(true)
     expect(touchesShortcut({ zoom: 1.1 })).toBe(false)
     expect(touchesShortcut(null)).toBe(false)
+  })
+})
+
+describe('ponawianie bez szumu i nic po zamknięciu (T767)', () => {
+  it('odmowa z wyjątkiem: jedna linia logu, nie przy każdym ponowieniu', () => {
+    const logs: string[] = []
+    const { q } = make({ throws: ['Super+Alt+N'], logs })
+    q.setShortcut('Super+Alt+N')
+    q.retry()
+    q.retry()
+    expect(logs.filter((l) => l.includes('nie można zarejestrować'))).toHaveLength(1)
+    expect(logs.filter((l) => l.includes('zajęty'))).toHaveLength(1)
+  })
+
+  it('po destroy() ponowienie niczego nie rejestruje', () => {
+    const registered: string[] = []
+    const { q } = make({ refuse: ['Super+Alt+N'], registered })
+    q.setShortcut('Super+Alt+N')
+    q.destroy()
+    q.retry()
+    q.setShortcut('Super+Alt+K')
+    expect(registered).toEqual(['Super+Alt+N'])
   })
 })

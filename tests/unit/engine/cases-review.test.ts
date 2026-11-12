@@ -5,7 +5,8 @@
  * planned) and says what it left out; its task blocks are `caseBlock`'s.
  */
 import { describe, expect, it } from 'vitest'
-import { caseBlock, caseItems, goneBlocks, morningCases, morningPlan, scheduledDays, scheduledOf, SCHEDULED_LOOKBACK_DAYS } from '@shared/engine/cases'
+import { caseBlock, caseItems, goneBlocks, morningCases, morningPlan, ownTakenBlock, scheduledDays, scheduledOf } from '@shared/engine/cases'
+import { planBlock } from '@shared/model/plan'
 import { DEFAULT_CATEGORIES } from '@shared/model/categories'
 import { dayFileFrom } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom, type RequestRecord } from '@shared/model/requests'
@@ -45,12 +46,25 @@ describe('zaplanowane a blok zaparkowany albo odwołany przed startem (D402)', (
   })
 })
 
-describe('dni czytane dla „zaplanowane” (useCases)', () => {
-  it('bez spraw zrobionych i bez dni starszych niż dwa tygodnie', () => {
-    const old = addDays(TODAY, -(SCHEDULED_LOOKBACK_DAYS + 1))
-    const edge = addDays(TODAY, -SCHEDULED_LOOKBACK_DAYS)
-    const list = [planned({ day: TODAY }), planned({ id: 'd', day: '2026-11-11', state: 'done', list: 'done' }), planned({ id: 'o', day: old }), planned({ id: 'e', day: edge }), planned({ id: 'f', day: '2026-11-20' })]
-    expect(scheduledDays(list, TODAY)).toEqual([edge, TODAY, '2026-11-20'])
+describe('dni czytane dla „zaplanowane” (useCases, T766)', () => {
+  it('dni wszystkich spraw niezrobionych z blokiem – także dawne (blok usunięty zwalnia sprawę zawsze); zrobione – bez odczytu', () => {
+    const old = addDays(TODAY, -40)
+    const list = [planned({ day: TODAY }), planned({ id: 'd', day: '2026-11-11', state: 'done', list: 'done' }), planned({ id: 'o', day: old }), planned({ id: 'f', day: '2026-11-20' })]
+    expect(scheduledDays(list)).toEqual([old, TODAY, '2026-11-20'])
+    // A sprawa of 40 days ago whose block is gone from its file: back on its list.
+    expect(caseItems([planned({ day: old })], TODAY, (d) => (d === old ? dayFileFrom({ schema: 1, date: old, blocks: [] }, old) : undefined))[0]!.scheduled).toBeNull()
+  })
+})
+
+describe('który stary blok zdejmujemy (T764)', () => {
+  it('blok zadania tej sprawy i blok próśb tylko z nią – zdjęty; blok kilku próśb – nie (traci tylko ją); cudzy – nie', () => {
+    const r = rec(newRequest('r', 1, { person: null, estimateMin: null, note: '' }))
+    const t = planned()
+    expect(ownTakenBlock(planBlock({ id: 'b', categoryId: 'inne', durationMin: 30, task: 't1' }), t)).toBe(true)
+    expect(ownTakenBlock(planBlock({ id: 'b', categoryId: 'prosby', durationMin: 30, requests: ['r'] }), r)).toBe(true)
+    expect(ownTakenBlock(planBlock({ id: 'b', categoryId: 'prosby', durationMin: 30, requests: ['r', 's'] }), r)).toBe(false)
+    expect(ownTakenBlock(planBlock({ id: 'b', categoryId: 'inne', durationMin: 30, task: 'other' }), t)).toBe(false)
+    expect(ownTakenBlock(planBlock({ id: 'b', categoryId: 'inne', durationMin: 30, task: 't1', origin: 'template' }), t)).toBe(false)
   })
 })
 

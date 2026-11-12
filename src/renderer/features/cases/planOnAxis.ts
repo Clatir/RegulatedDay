@@ -5,7 +5,7 @@
  * (and the bar's „Przesunięto N bloków · Cofnij” when something was pushed). Without a DOM (tests in `tests/web`).
  */
 import { paths } from '@shared/data/paths'
-import { caseBlock } from '@shared/engine/cases'
+import { caseBlock, ownTakenBlock } from '@shared/engine/cases'
 import { computeDay } from '@shared/engine/day'
 import { logicalClock } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
@@ -22,8 +22,8 @@ import { addChange, pushedStarts } from '../today/dayPush'
  */
 function ownBlockOf(model: DayModel, r: RequestRecord): string | null {
   const b = r.block ? model.ctx.plan.find((x) => x.id === r.block) : undefined
-  if (!b || b.origin !== 'user' || model.state.facts.blocks.get(b.id)?.startedAt != null) return null
-  return b.task === r.id || (b.requests.length === 1 && b.requests[0] === r.id) ? b.id : null
+  // The rule of the write (`casePlan`): the window counts the push as the edit will leave the day (T764).
+  return b && model.state.facts.blocks.get(b.id)?.startedAt == null && ownTakenBlock(b, r) ? b.id : null
 }
 
 /**
@@ -47,7 +47,7 @@ export const plannedText = (title: string, block: Pick<PlanBlock, 'startMin'>): 
  * The sprawa `r` on the axis of `model`'s day at `startMin`. `begun`: a block of the day shown that has run stays where it
  * ran; the day's file as the window knows it is the fallback for one not readable now. Returns whether it was saved.
  */
-export async function planOnAxis(model: DayModel, today: string, r: RequestRecord, title: string, startMin: number): Promise<CaseResult & { block: PlanBlock | null }> {
+export async function planOnAxis(model: DayModel, today: string, r: RequestRecord, title: string, startMin: number): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
   const { pushed } = planningOf(model, today, r, startMin)
   const res = await planCase(r.id, model.date, startMin, {
     begun: (date, block) => (date === model.date ? model.state.facts.blocks.get(block)?.startedAt != null : date <= today),
@@ -55,12 +55,12 @@ export async function planOnAxis(model: DayModel, today: string, r: RequestRecor
     seen: (date) => (date === model.date ? model.data.dayFile : undefined)
   })
   if (!res.saved || !res.block) return res
-  if (pushed.length) {
-    // The pushed blocks' bar line „Przesunięto N bloków · Cofnij” takes the day's edit back (the sprawa then reads as not
-    // „zaplanowane” by itself – its block is gone, T752).
+  if (res.moved > 0) {
+    // The pushed blocks' bar line „Przesunięto N bloków · Cofnij” – N as written (T764) – takes the day's edit back (the
+    // sprawa then reads as not „zaplanowane” by itself – its block is gone, T752).
     const u = res.undo.find((x) => x.rel === paths.day(model.date))
     const entry = u ? editOf(u.rel, u.before, u.after) : null
-    if (entry) await window.rd.planPushed(model.date, pushed.length, entry, entry.create ? u!.after : null).catch(() => undefined)
+    if (entry) await window.rd.planPushed(model.date, res.moved, entry, entry.create ? u!.after : null).catch(() => undefined)
   }
   undoToast(plannedText(title, res.block), () => void undoCase(res.undo))
   return res

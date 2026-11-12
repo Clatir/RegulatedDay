@@ -253,8 +253,13 @@ function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode;
  * why when it cannot), Esc folds it – in the main window's bar and in the icon's panel (the desktop bar takes no keys: its
  * „+” opens the panel with this field, T756).
  */
-function QuickField({ mode, close, text, setText }: { mode: BarMode; close: () => void; text: string; setText: (t: string) => void }) {
+function QuickField({ mode, close, text, setText, takeFocus }: { mode: BarMode; close: () => void; text: string; setText: (t: string) => void; takeFocus: () => boolean }) {
   useEscapeLayer(true, close)
+  const input = useRef<HTMLInputElement>(null)
+  // The keys come here when the field opens – not when the bar only changed its layout (no day now, the day back).
+  useEffect(() => {
+    if (takeFocus()) input.current?.focus()
+  }, [])
   const save = () => {
     if (!text.trim()) return
     act('quickAdd', text.slice(0, TITLE_MAX))
@@ -265,7 +270,7 @@ function QuickField({ mode, close, text, setText }: { mode: BarMode; close: () =
     <div className="flex items-center gap-1.5" data-testid="bar-quick-field">
       <span className="shrink-0 text-[12px] text-muted">Do skrzynki:</span>
       <input
-        autoFocus
+        ref={input}
         className="input h-[24px] min-w-0 flex-1 text-[12px]"
         value={text}
         maxLength={TITLE_MAX}
@@ -473,6 +478,8 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
   const brightness = useMachine((s) => s.prefs.brightness)
   const pulse = useMachine((s) => s.prefs.barPulse)
   const [unfold, setUnfold] = useState<Unfold>(null)
+  /** The field of the quick capture was just opened: its mount takes the focus (a mount after a change of layout does not). */
+  const quickFocus = useRef(false)
   // The row of the actions as the plan said them, unfolded into the list of them (D350).
   const [groupOpen, setGroupOpen] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -481,6 +488,8 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
   // The panel of variants belongs to the main process (D313): one for every window, open while the view has it.
   const variantsOpen = view.variants.open != null
   const toggle = (u: Exclude<Unfold, null>) => {
+    // The field of the quick capture opened (not closed): it takes the keys at its mount.
+    if (u === 'quick') quickFocus.current = unfold !== 'quick'
     if (u === 'variants') {
       act('variants', variantsOpen ? 'close' : 'open')
       setUnfold(null)
@@ -515,13 +524,24 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
     onUnfold?.(unfold != null || variantsOpen)
     if (mode === 'panel') window.rd.panelTouch()
   }, [mode, unfold, variantsOpen, onUnfold])
-  // The panel opened by the desktop bar's „+” (T756): its field unfolds – at each opening.
+  // The panel opened by the desktop bar's „+” (T756): its field unfolds – at each opening, with the keys.
   useEffect(() => {
-    if (quickAt) setUnfold('quick')
+    if (!quickAt) return
+    quickFocus.current = true
+    setUnfold('quick')
   }, [quickAt])
-  // The title typed into the field of the quick capture: the bar's own, so it stays when the layout changes (T763).
+  // The title typed into the field of the quick capture: the bar's own, so it stays when the layout changes (T763) – and
+  // only then: the field closed (Esc, „+”, saved), it is gone (T767).
   const [quickText, setQuickText] = useState('')
-  const quickField = <QuickField mode={mode} close={() => setUnfold(null)} text={quickText} setText={setQuickText} />
+  useEffect(() => {
+    if (unfold !== 'quick') setQuickText('')
+  }, [unfold])
+  const takeQuickFocus = () => {
+    const now = quickFocus.current
+    quickFocus.current = false
+    return now
+  }
+  const quickField = <QuickField mode={mode} close={() => setUnfold(null)} text={quickText} setText={setQuickText} takeFocus={takeQuickFocus} />
   // A day gone from the view (no folder, a day not counted now): nothing of the day stays unfolded – the panel's 60 s run
   // again and the day's return shows no old unfold; the field of the quick capture stays, with its text (D402: „+” always).
   useEffect(() => {

@@ -94,6 +94,8 @@ let tray: AppTray | null = null
 let sound: SoundWindow | null = null
 /** „Do skrzynki” (D385): on top only on your shortcut. */
 let quick: QuickWindow | null = null
+/** The retry of a shortcut another program holds (T759, T767): stopped at the quit. */
+let quickRetry: ReturnType<typeof setInterval> | null = null
 let helper: HelperClient | null = null
 let autostart: Autostart | null = null
 let updates: UpdateController | null = null
@@ -1290,7 +1292,8 @@ async function main(): Promise<void> {
   quick.onExternalClose = quitFromOutside
   quick.setShortcut(shortcutOf(prefs()))
   // A shortcut another program held at the start is tried again now and then (T759).
-  setInterval(() => quick?.retry(), QUICK_RETRY_MS).unref?.()
+  quickRetry = setInterval(() => quick?.retry(), QUICK_RETRY_MS)
+  quickRetry.unref?.()
   showWidget(widgetView())
   widget.start()
 
@@ -1372,7 +1375,9 @@ app.on('will-quit', () => {
   oneDrive.stop()
   widget.stop()
   sound?.destroy()
-  // The global shortcut given back to Windows.
+  // The global shortcut given back to Windows; no retry after it.
+  if (quickRetry) clearInterval(quickRetry)
+  quickRetry = null
   quick?.destroy()
   helper?.stop()
   worker.stop()

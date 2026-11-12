@@ -266,4 +266,60 @@ describe('„Zadanie zrobione?” na dwóch komputerach (D384, T754)', () => {
     expect(a.folder.casesRitualRuns).toBe(runs + 1)
     await a.folder.close('quit')
   })
+
+  it('pamięć rytuału spraw: plik dnia zmieniony na dysku i notatka sprawy zmieniona – liczone od nowa (T766)', async () => {
+    const dataDir = join(root, 'data')
+    mkdirSync(join(dataDir, 'days', '2026'), { recursive: true })
+    mkdirSync(join(dataDir, 'requests'), { recursive: true })
+    const dayFile = join(dataDir, paths.day(DAY))
+    writeFileSync(dayFile, JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'tb', categoryId: 'inne', startMin: 10 * 60, durationMin: 30, fixed: false, origin: 'user', task: 't1' }] }))
+    writeFileSync(join(dataDir, paths.record('request', 't1')), JSON.stringify({ schema: 1, id: 't1', kind: 'task', title: 'Zadzwonić', estimateMin: 30, categoryId: 'inne', note: '', createdAt: 1, state: 'planned', day: DAY, block: 'tb', list: 'inbox', listDay: null, doneAt: null }))
+    const rRel = paths.record('request', 'r1')
+    writeFileSync(join(dataDir, rRel), JSON.stringify({ schema: 1, id: 'r1', kind: 'request', person: null, note: 'stara', estimateMin: 15, createdAt: 2, state: 'queued', list: 'today', listDay: DAY, day: null, block: null, doneAt: null }))
+    const clock = { now: placeLogical(DAY, 10 * 60) }
+    const a = await computer(dataDir, 'pca', clock)
+    expect((await a.folder.timerClick({ a: 'start', block: 'tb', day: DAY } as never)).ok).toBe(true)
+    clock.now = placeLogical(DAY, 10 * 60 + 30)
+    expect((await a.folder.timerClick({ a: 'next', day: DAY } as never)).ok).toBe(true)
+    await a.folder.log.flush()
+    clock.now = placeLogical(DAY, 20 * 60)
+    expect((await a.folder.casesRitual(DAY)).questions.map((q) => q.task)).toEqual(['t1'])
+    // Another computer took the block out of the day (the file on the disk): no question any more.
+    writeFileSync(dayFile, JSON.stringify({ schema: 1, date: DAY, blocks: [], updatedAt: 1 }))
+    clock.now += 61_000
+    expect((await a.folder.casesRitual(DAY)).questions).toEqual([])
+    // The note of a sprawa of „Dziś” changed: the ritual names it anew.
+    const before = (await a.folder.recordView(rRel))!
+    const e = recordEdit(rRel, before, { ...before, note: 'nowa' })!
+    await a.folder.edit([{ ...e, edits: e.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
+    clock.now += 61_000
+    expect((await a.folder.casesRitual(DAY)).back.map((r) => r.note)).toEqual(['nowa'])
+    await a.folder.close('quit')
+  })
+})
+
+describe('dni „zaplanowane” z niepełnym logiem (T766)', () => {
+  it('log dnia niepełny teraz: dzień bez „gone” (nieznany, „zaplanowane” jak w pliku), nigdy „usunięty”', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const day = '2099-03-02'
+    mkdirSync(join(dir, 'days', '2099'), { recursive: true })
+    writeFileSync(join(dir, paths.day(day)), JSON.stringify({ schema: 1, date: day, blocks: [{ id: 'b1', categoryId: 'inne', startMin: 600, durationMin: 30, origin: 'user', task: 't1' }] }))
+    let broken = false
+    const hub = new DataHub({
+      ...(hubFor() as unknown as { o: ConstructorParameters<typeof DataHub>[0] }).o,
+      start: async (o) => (await import('../../src/main/data/service')).DataService.start({ ...o, fs: { ...nodeFs, list: (abs) => (broken && abs.includes(day) && abs.includes('log') ? Promise.reject(new Error('EIO')) : nodeFs.list(abs)) } })
+    })
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      expect((await hub.caseDays([day])).gone).toEqual({ [day]: [] })
+      broken = true
+      const out = await hub.caseDays([day])
+      expect(out.gone).toEqual({})
+      expect(Object.keys(out.files)).toEqual([day])
+    } finally {
+      await hub.close('quit')
+    }
+  })
 })
