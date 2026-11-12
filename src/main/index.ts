@@ -49,7 +49,7 @@ import { displays, primaryDisplay } from './displays'
 import { createMainWindow, revealMainWindow } from './windows/mainWindow'
 import { DesktopBar } from './windows/desktopBar'
 import { IconPanel } from './windows/iconPanel'
-import { QuickWindow } from './windows/quickWindow'
+import { QUICK_RETRY_MS, QuickWindow, shortcutOf, touchesShortcut } from './windows/quickWindow'
 import { HelperClient, type HelperMessage } from './helper/client'
 import { helperProgram } from './helper/program'
 import { notify } from './notify'
@@ -650,8 +650,9 @@ async function setPrefs(patch: unknown): Promise<MachinePrefs> {
   const saved = config.update({ prefs: next })
   saved.catch((e) => log('warn', 'zapis ustawień komputera nie udał się', e))
   if (next.zoom !== before.zoom) for (const w of appWindows()) w.setZoomFactor(next.zoom)
-  // D402: the shortcut of the quick capture changed or switched off in the settings – registered again at once.
-  if (next.quickKey !== before.quickKey) quick?.setShortcut(next.quickKey)
+  // D402, T759: the shortcut of the quick capture changed, switched off or on, or typed again – registered again at once
+  // (the same keys again: one Windows refused is tried once more).
+  if (touchesShortcut(patch)) quick?.setShortcut(shortcutOf(next))
   broadcast(CH.onPrefs, next)
   layoutBar()
   await saved.catch(() => undefined)
@@ -869,8 +870,10 @@ function registerIpc(): void {
     return r
   })
   ipcMain.on(CH.quickClose, () => quick?.close('Esc'))
-  handle(CH.quickShortcut, () => quick?.shortcut ?? { key: prefs().quickKey, state: 'off' })
+  // The settings ask for its state (opened, T759): one Windows refused is tried again first.
+  handle(CH.quickShortcut, () => quick?.retry() ?? { key: shortcutOf(prefs()), state: 'off' })
   handle(CH.casesRitual, (_e, day: unknown) => needHub().casesRitual(String(day)))
+  handle(CH.caseDays, (_e, dates: unknown) => needHub().caseDays(Array.isArray(dates) ? dates.map(String) : []))
   // „Tydzień” and the month's goals (D356).
   handle(CH.weekView, (_e, date: unknown) => needHub().weekView(String(date)))
   handle(CH.goals, (_e, month: unknown) => needHub().goals(String(month)))
@@ -1086,7 +1089,7 @@ async function main(): Promise<void> {
       if (c.updates.lastRunVersion !== app.getVersion()) void config.update({ updates: { ...c.updates, lastRunVersion: app.getVersion(), dataVersion: c.updates.dataVersion ?? c.updates.lastRunVersion } }).catch(() => undefined)
       for (const w of appWindows()) w.setZoomFactor(c.prefs.zoom)
       broadcast(CH.onPrefs, c.prefs)
-      quick?.setShortcut(c.prefs.quickKey)
+      quick?.setShortcut(shortcutOf(c.prefs))
       layoutBar()
     })
   }
@@ -1285,7 +1288,9 @@ async function main(): Promise<void> {
     log: (m) => log('info', m)
   })
   quick.onExternalClose = quitFromOutside
-  quick.setShortcut(prefs().quickKey)
+  quick.setShortcut(shortcutOf(prefs()))
+  // A shortcut another program held at the start is tried again now and then (T759).
+  setInterval(() => quick?.retry(), QUICK_RETRY_MS).unref?.()
   showWidget(widgetView())
   widget.start()
 

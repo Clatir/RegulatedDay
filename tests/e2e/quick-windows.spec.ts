@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { launch, withMainLog } from './app'
+import { launch, settledBarBounds, withMainLog } from './app'
 import { foreground, keys, topMost, topWindows } from './win32'
 
 test.skip(process.platform !== 'win32' || process.env.RD_E2E_REAL_HELPER !== '1', 'Windows with the real helper only')
@@ -50,13 +50,14 @@ test('Win+Alt+N: „Do skrzynki” na wierzchu z fokusem tylko na skrót; Enter 
       await expect(page.getByTestId('bar-main')).toBeVisible({ timeout: 30_000 })
       expect(await page.evaluate(() => window.rd.quickShortcut())).toEqual({ key: 'Super+Alt+N', state: 'on' })
       const w = await quick(app)
-      // While the app starts and the bar is laid: never shown, never „topmost” – looked at several times.
-      for (let i = 0; i < 5; i++) {
-        expect((await quick(app)).visible).toBe(false)
-        expect(topMost(w.hwnd)).toBe(false)
-        expect(topWindows().some((x) => x.hwnd === w.hwnd && x.visible)).toBe(false)
-        await page.waitForTimeout(400)
-      }
+      // The start is over once the helper laid the desktop bar and it stands still: until then (and now) the window was
+      // never shown – the main log says every time it comes up – and is not „topmost”.
+      await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((x) => x.getTitle() === 'Regulated Day – pasek')?.isVisible() ?? false), { timeout: 30_000 }).toBe(true)
+      await settledBarBounds(app)
+      expect(readFileSync(join(userData, 'logs', 'main.log'), 'utf8')).not.toContain('okienko „Do skrzynki” otwarte')
+      expect((await quick(app)).visible).toBe(false)
+      expect(topMost(w.hwnd)).toBe(false)
+      expect(topWindows().some((x) => x.hwnd === w.hwnd && x.visible)).toBe(false)
 
       keys(WIN_ALT_N)
       await expect.poll(async () => (await quick(app)).visible, { timeout: 10_000 }).toBe(true)

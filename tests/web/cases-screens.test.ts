@@ -15,6 +15,9 @@ import { rdFrom } from '@shared/model/rd'
 import { dayFileFrom, planBlock } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom, type RequestRecord } from '@shared/model/requests'
 import { placeLogical } from '@shared/time/day'
+import { morningOutcome } from '@renderer/features/today/MorningPlan'
+import { nextFreeStart, queueRowText, startSearchFrom, submitTitle } from '@renderer/features/cases/casesUi'
+import { oneAtATime } from '@renderer/lib/busy'
 import { backText, caseTitle, filterOf, isMorningChosen, morningChosen, sectionsOf, somedayText, statusParts } from '@renderer/features/cases/casesLogic'
 import { planningOf, plannedText, planOnAxis } from '@renderer/features/cases/planOnAxis'
 import { dropMinute, HOURS_PX, type AxisPoint } from '@renderer/features/plan/axisDrop'
@@ -268,5 +271,73 @@ describe('plan poranny: zadania z „Dziś” zaznaczone od razu, prośby nie (D
     expect(isMorningChosen('task', 't1', ['t1'])).toBe(false)
     expect(isMorningChosen('request', 'r1', [])).toBe(false)
     expect(isMorningChosen('request', 'r1', ['r1'])).toBe(true)
+  })
+})
+
+describe('następne wolne miejsce (jedna reguła: Ctrl+N, „Zaplanuj” panelu i strony)', () => {
+  const day = dayOf(TODAY)
+  const where = (isToday: boolean, now: string) => ({ isToday, nowMin: lm(now), wakeMin: day.ctx.wakeMin })
+  it('dziś – następny kwadrans po teraz (nie przed pobudką), inny dzień – godzina po pobudce', () => {
+    expect(startSearchFrom({ isToday: true, nowMin: lm('10:10'), wakeMin: lm('07:00') })).toBe(lm('10:15'))
+    expect(startSearchFrom({ isToday: true, nowMin: lm('10:15'), wakeMin: lm('07:00') })).toBe(lm('10:15'))
+    expect(startSearchFrom({ isToday: true, nowMin: lm('05:00'), wakeMin: lm('07:00') })).toBe(lm('07:00'))
+    expect(startSearchFrom({ isToday: false, nowMin: lm('10:10'), wakeMin: lm('07:00') })).toBe(lm('08:00'))
+  })
+  it('wolne miejsce omija bloki planu: po zajętym oknie 10:00–12:00; przed nim, gdy mieści się przed pierwszym blokiem', () => {
+    expect(nextFreeStart(day.state, where(true, '10:10'), 30)).toBe(lm('12:00'))
+    const early = day.ctx.wakeMin + 60
+    expect(nextFreeStart(day.state, where(false, '10:10'), 30)).toBe(early + 30 <= lm('10:00') ? early : lm('12:00'))
+  })
+})
+
+describe('prośba w kroku planu porannego – notatka raz', () => {
+  const rd = rdFrom({ people: [{ id: 'p1', name: 'Anna' }] })
+  it('osoba i notatka w jednym tekście; zadanie – tytuł', () => {
+    const [req] = items([newRequest('r1', 1, { person: 'p1', estimateMin: 15, note: 'oddzwonić' })])
+    const text = queueRowText(req!, rd)
+    expect(text).toBe('Anna: oddzwonić')
+    expect(text.match(/oddzwonić/g)).toHaveLength(1)
+    expect(queueRowText(items([task('t', { title: 'Wymienić filtr' })])[0]!, rd)).toBe('Wymienić filtr')
+  })
+})
+
+describe('pole tytułu zapisuje raz (nowe zadanie)', () => {
+  it('drugi Enter w czasie zapisu nic nie robi; pole czyszczone od razu, oddane po nieudanym zapisie', async () => {
+    const saved: string[] = []
+    const fields: string[] = []
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const run = oneAtATime()
+    const o = { set: (t: string) => fields.push(t), save: async (t: string) => (saved.push(t), await gate, true), done: vi.fn() }
+    const first = submitTitle(run, 'Napisać raport', o)
+    const second = submitTitle(run, 'Napisać raport', o)
+    expect(fields).toEqual([''])
+    release()
+    await Promise.all([first, second])
+    expect(saved).toEqual(['Napisać raport'])
+    expect(o.done).toHaveBeenCalledTimes(1)
+    // A save that did not happen gives the title back (and does not close).
+    const back: string[] = []
+    const fail = { set: (t: string) => back.push(t), save: async () => false, done: vi.fn() }
+    await submitTitle(oneAtATime(), 'x', fail)
+    expect(back).toEqual(['', 'x'])
+    expect(fail.done).not.toHaveBeenCalled()
+    // An empty title saves nothing.
+    await submitTitle(oneAtATime(), '  ', fail)
+    expect(back).toEqual(['', 'x'])
+  })
+})
+
+describe('plan poranny – co ekran mówi po „Dodaj do planu” (planMorning)', () => {
+  const name = (id: string) => ({ t1: 'Wymienić filtr', r1: 'Anna: oddzwonić' })[id] ?? id
+  it('nic nie powstało: zaznaczenie zostaje, komunikat w kroku', () => {
+    expect(morningOutcome({ saved: true, made: 0, skipped: ['t1'] }, name)).toEqual({ clear: false, note: 'Nic nie dodano – wybrane sprawy są już zaplanowane albo zrobione.' })
+  })
+  it('część powstała: zaznaczenie czyszczone, pominięte z nazwami', () => {
+    expect(morningOutcome({ saved: true, made: 1, skipped: ['t1', 'r1'] }, name)).toEqual({ clear: true, note: 'Pominięto: Wymienić filtr, Anna: oddzwonić – są już zaplanowane albo zrobione.' })
+  })
+  it('wszystko powstało: czyszczone, bez komunikatu; zapis, który się nie udał: bez zmian i bez komunikatu', () => {
+    expect(morningOutcome({ saved: true, made: 2, skipped: [] }, name)).toEqual({ clear: true, note: null })
+    expect(morningOutcome({ saved: false, made: 0, skipped: [] }, name)).toEqual({ clear: false, note: null })
   })
 })

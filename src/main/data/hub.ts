@@ -10,9 +10,9 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { CaseDays, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
-import type { CasesRitual } from '@shared/engine/cases'
+import { goneBlocks, type CasesRitual } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
 import { newTask } from '@shared/model/requests'
 import type { CloseHow } from '@shared/model/events'
@@ -526,6 +526,25 @@ export class DataHub {
       }
     }
     return out
+  }
+
+  /**
+   * The days „Sprawy” look at (T760): their files as `dayFiles` gives them, and the blocks of each parked or cancelled in
+   * its log before they began (`goneBlocks`) – a sprawa planned in one is not „zaplanowane”. A day whose file or log
+   * cannot be read now is left out of that part.
+   */
+  async caseDays(dates: string[]): Promise<CaseDays> {
+    const f = this.need()
+    const list = [...new Set(dates.filter((d) => isIsoDate(d)))].slice(0, 62)
+    const gone: Record<string, string[]> = {}
+    for (const d of list) {
+      try {
+        gone[d] = [...goneBlocks(d, (await f.readDay(d)).events)]
+      } catch {
+        /* the log unreadable now */
+      }
+    }
+    return { files: await this.dayFiles(list), gone }
   }
 
   /**

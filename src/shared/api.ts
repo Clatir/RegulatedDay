@@ -106,8 +106,18 @@ export const CH = {
   onQuickShown: 'rd:onQuickShown',
   quickShortcut: 'rd:quickShortcut',
   onQuickShortcut: 'rd:onQuickShortcut',
-  casesRitual: 'rd:casesRitual'
+  casesRitual: 'rd:casesRitual',
+  caseDays: 'rd:caseDays'
 } as const
+
+/**
+ * The days „Sprawy” look at (T760): each day's file (null – none) and the blocks parked or cancelled in its log before they
+ * began; a day not readable now is left out of each (unknown, never „none”).
+ */
+export interface CaseDays {
+  files: Record<string, RawRecord | null>
+  gone: Record<string, string[]>
+}
 
 /** The quick capture saved (D385): the new task's id; refused – why (no folder, no title). */
 export interface QuickAddResult {
@@ -795,4 +805,6 @@ export interface RdApi {
   onQuickShortcut(cb: (s: QuickShortcut) => void): () => void
   /** What a day's evening ritual says about „Sprawy” (D383, D384, D402): back from „Dziś”, „Zadanie zrobione?”, Sunday's „Kiedyś / Może”. */
   casesRitual(day: string): Promise<CasesRitual>
+  /** The days' files and their blocks gone before they began (T760) – „zaplanowane” of „Sprawy” (at most 62 days). */
+  caseDays(dates: string[]): Promise<CaseDays>
 }

@@ -31,12 +31,23 @@ import { goalsStepOpen } from './goalsStepLogic'
 import { logEvents, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
-import { planMorning, useCases } from '../../store/cases'
+import { planMorning, useCases, type MorningResult } from '../../store/cases'
 import { caseTitle, isMorningChosen, morningChosen } from '../cases/casesLogic'
+import { queueRowText } from '../cases/casesUi'
 import { toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { answerSeries } from '../series/seriesActions'
 import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, variantStarts } from './dayActions'
+
+/**
+ * What the screen says after „Dodaj do planu” (`planMorning`, D384): nothing made (every chosen sprawa was planned or done meanwhile)
+ * – the choice stays and the note says why; some left out – the choice is cleared as before and the note names them.
+ */
+export function morningOutcome(r: Pick<MorningResult, 'saved' | 'made' | 'skipped'>, name: (id: string) => string): { clear: boolean; note: string | null } {
+  if (!r.saved) return { clear: false, note: null }
+  if (r.made === 0) return { clear: false, note: 'Nic nie dodano – wybrane sprawy są już zaplanowane albo zrobione.' }
+  return { clear: true, note: r.skipped.length ? `Pominięto: ${r.skipped.map(name).join(', ')} – są już zaplanowane albo zrobione.` : null }
+}
 
 const QUESTIONS: Array<{ pool: Pool; text: string }> = [
   { pool: 'head', text: 'Trudno zebrać myśli?' },
@@ -186,6 +197,8 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
   const dayTasks = offered.tasks
   // D408: the tasks of „Dziś” are chosen at once, the requests are not – `toggled` is what you changed against that.
   const [toggled, setToggled] = useState<string[]>([])
+  // What the last „Dodaj do planu” left out or did not do (`morningOutcome`); gone with the next change of the choice.
+  const [note, setNote] = useState<string | null>(null)
   const chosen = morningChosen({ requests: queued, tasks: dayTasks }, toggled)
   const approved = s.boundary.approved
   const proposal = s.boundary.proposal
@@ -213,7 +226,13 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
       const tasks = dayTasks.filter((x) => chosen.tasks.includes(x.record.id))
       const start = freeStart(s, s.now, morningMinutes(reqs.map((x) => x.record), tasks.map((x) => x.record)))
       const r = await planMorning(date, raw, { requests: reqs.map((x) => x.record.id), tasks: tasks.map((x) => x.record.id) }, start)
-      if (r.saved) setToggled([])
+      const offeredNow = [...queued, ...dayTasks]
+      const out = morningOutcome(r, (id) => {
+        const x = offeredNow.find((o) => o.record.id === id)
+        return x ? caseTitle(x.record, names.rd) : 'sprawa'
+      })
+      if (out.clear) setToggled([])
+      setNote(out.note)
     })
 
   return (
@@ -304,15 +323,19 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
           </span>
           {[...queued, ...dayTasks].map((x) => (
             <label key={x.record.id} className="flex items-center gap-2" data-testid="queue-item" data-case={x.record.id}>
-              <input type="checkbox" checked={isMorningChosen(x.record.kind, x.record.id, toggled)} onChange={() => setToggled(toggled.includes(x.record.id) ? toggled.filter((id) => id !== x.record.id) : [...toggled, x.record.id])} />
-              <span>{caseTitle(x.record, names.rd)}</span>
-              {x.record.kind === 'request' && <span className="text-muted">{x.record.note}</span>}
+              <input type="checkbox" checked={isMorningChosen(x.record.kind, x.record.id, toggled)} onChange={() => (setNote(null), setToggled(toggled.includes(x.record.id) ? toggled.filter((id) => id !== x.record.id) : [...toggled, x.record.id]))} />
+              <span>{queueRowText(x, names.rd)}</span>
               <span className="num ml-auto text-muted">{durationLabel(x.estimateMin)}</span>
             </label>
           ))}
           <button type="button" className="btn self-start" disabled={!(chosen.requests.length + chosen.tasks.length) || busy} onClick={() => void addChosen()} data-testid="queue-add">
             Dodaj do planu
           </button>
+          {note && (
+            <span className="text-[12px] text-rose" role="status" data-testid="queue-note">
+              {note}
+            </span>
+          )}
         </div>
       )}
       {warnings.map((w) => (

@@ -6,6 +6,7 @@
  */
 import { paths } from '@shared/data/paths'
 import { caseBlock } from '@shared/engine/cases'
+import { computeDay } from '@shared/engine/day'
 import { logicalClock } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
 import type { RequestRecord } from '@shared/model/requests'
@@ -15,12 +16,28 @@ import type { DayModel } from '../../store/day'
 import { undoToast } from '../../store/ui'
 import { addChange, pushedStarts } from '../today/dayPush'
 
-/** What puts a sprawa on the axis: the block it would make (for the preview and the push) and the pushed blocks. */
+/**
+ * The sprawa's own block of before on this day that the drop takes out (`casePlan`: not begun – a task's, or a block of
+ * requests with this one only); null – none (a block of several requests only loses it and stays).
+ */
+function ownBlockOf(model: DayModel, r: RequestRecord): string | null {
+  const b = r.block ? model.ctx.plan.find((x) => x.id === r.block) : undefined
+  if (!b || b.origin !== 'user' || model.state.facts.blocks.get(b.id)?.startedAt != null) return null
+  return b.task === r.id || (b.requests.length === 1 && b.requests[0] === r.id) ? b.id : null
+}
+
+/**
+ * What puts a sprawa on the axis: the block it would make (for the preview and the push) and the pushed blocks – counted
+ * on the day without the sprawa's own block of before, which the drop takes out (T761): it is neither pushed nor pushes.
+ */
 export function planningOf(model: DayModel, today: string, r: RequestRecord, startMin: number) {
   const block = caseBlock(r, startMin, model.state.settings.categories)
+  const own = ownBlockOf(model, r)
+  const ctx = own ? { ...model.ctx, plan: model.ctx.plan.filter((b) => b.id !== own) } : model.ctx
+  const day = own ? { ctx, state: computeDay(ctx) } : model
   // D367: a day to come pushes the flexible blocks after the new one apart (a day gone is history).
-  const change = addChange(model, block, model.date >= today)
-  return { block, pushed: pushedStarts(model.ctx.plan, change) }
+  const change = addChange(day, block, model.date >= today)
+  return { block, pushed: pushedStarts(day.ctx.plan, change) }
 }
 
 /** What the toast says after the sprawa was put on the axis. */

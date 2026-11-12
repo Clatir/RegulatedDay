@@ -56,9 +56,11 @@ export interface MachinePrefs {
   soundVolume: number
   /**
    * The global shortcut of the quick capture „Do skrzynki” (D385, D402, D408): an accelerator of Electron („Super+Alt+N” –
-   * Win+Alt+N – by default), null – switched off on this computer.
+   * Win+Alt+N – by default); kept also while it is switched off, so switching it on again brings your own back (T759).
    */
-  quickKey: string | null
+  quickKey: string
+  /** The shortcut is on on this computer (switched off in the settings: false). */
+  quickOn: boolean
 }
 
 /**
@@ -111,7 +113,8 @@ export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   notices: { start5: true, hardEnd: true, reserve: true },
   sound: false,
   soundVolume: 0.5,
-  quickKey: DEFAULT_QUICK_KEY
+  quickKey: DEFAULT_QUICK_KEY,
+  quickOn: true
 }
 
 const num = (v: unknown, min: number, max: number, fallback: number): number =>
@@ -160,8 +163,9 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
     notices: Object.fromEntries(NOTICE_KINDS.map((k) => [k, bool((r.notices as Record<string, unknown> | undefined)?.[k], DEFAULT_MACHINE_PREFS.notices[k])])) as Record<NoticeKind, boolean>,
     sound: bool(r.sound, DEFAULT_MACHINE_PREFS.sound),
     soundVolume: num(r.soundVolume, 0.1, 1, DEFAULT_MACHINE_PREFS.soundVolume),
-    // Switched off (null) stays off; a shortcut that is none – the default.
-    quickKey: r.quickKey === null ? null : (quickKeyFrom(r.quickKey) ?? DEFAULT_MACHINE_PREFS.quickKey)
+    // A shortcut that is none – the default; written as null by a build before T759 – off (with the default).
+    quickKey: quickKeyFrom(r.quickKey) ?? DEFAULT_MACHINE_PREFS.quickKey,
+    quickOn: r.quickKey === null ? false : bool(r.quickOn, DEFAULT_MACHINE_PREFS.quickOn)
   }
 }
 

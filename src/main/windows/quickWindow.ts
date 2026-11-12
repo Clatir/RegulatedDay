@@ -8,7 +8,20 @@
  */
 import { BrowserWindow, globalShortcut, screen } from 'electron'
 import { CH, type QuickShortcut } from '@shared/api'
+import type { MachinePrefs } from '@shared/machine'
 import { PALETTE } from '@shared/theme'
+
+/** The shortcut this computer's settings ask for: its keys, null – switched off. */
+export const shortcutOf = (p: Pick<MachinePrefs, 'quickOn' | 'quickKey'>): string | null => (p.quickOn ? p.quickKey : null)
+
+/**
+ * A change of the settings that concerns the shortcut (its keys or its switch) – also the same keys typed again: it is
+ * registered again then, one Windows refused before too (T759).
+ */
+export const touchesShortcut = (patch: unknown): boolean => !!patch && typeof patch === 'object' && ('quickKey' in patch || 'quickOn' in patch)
+
+/** A shortcut Windows refused (another program holds it) is tried again this often while the app runs (T759). */
+export const QUICK_RETRY_MS = 60_000
 
 /** Its size (DIP, before the interface's scale) and its place: the upper third of the monitor with the cursor. */
 export const QUICK_SIZE = { width: 440, height: 92 } as const
@@ -103,6 +116,7 @@ export class QuickWindow {
    */
   setShortcut(key: string | null): QuickShortcut {
     if (key === this.key && this.state !== 'taken') return this.shortcut
+    const was = `${this.key}|${this.state}`
     this.stop()
     this.key = key
     if (!key) this.state = 'off'
@@ -116,9 +130,19 @@ export class QuickWindow {
       this.registered = ok
       this.state = ok ? 'on' : 'taken'
     }
+    // Said once per change: a retry that finds it still taken writes no line and tells no window (T759).
+    if (was === `${this.key}|${this.state}`) return this.shortcut
     this.d.log(this.state === 'on' ? `skrót szybkiego zapisu: ${key}` : this.state === 'taken' ? `skrót szybkiego zapisu ${key} zajęty przez inny program` : 'skrót szybkiego zapisu wyłączony')
     this.d.changed(this.shortcut)
     return this.shortcut
+  }
+
+  /**
+   * A shortcut Windows refused (`taken`) registered again – the other program may have let it go (every
+   * `QUICK_RETRY_MS`, when the settings ask for its state, T759); one that works or is off – nothing changes.
+   */
+  retry(): QuickShortcut {
+    return this.state === 'taken' ? this.setShortcut(this.key) : this.shortcut
   }
 
   /** The shortcut given back to Windows (the quit, a change of it). */

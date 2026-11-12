@@ -98,8 +98,10 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
     out.push({ kind: 'series', id: s.id, title: blockName(occurrenceBlock(s, v.block, i.today), names), text: seriesText(s, i.today), hint: ended ? 'seria zakończona' : 'seria' })
   }
 
-  // „Sprawy” (D383, SNT6): in the order of the lists, the newest first; the hint says what it is and where it lies.
-  const lists = i.requests.map((r) => ({ r, list: listOf(r, i.today) }))
+  // „Sprawy” (D383, SNT6): in the order of the lists, the newest first; the hint says what it is and where it lies. The
+  // module of requests off: no request – the page would not show it (T763); the tasks stay.
+  const shown = i.rd.general.modules.requests ? i.requests : i.requests.filter((r) => r.kind === 'task')
+  const lists = shown.map((r) => ({ r, list: listOf(r, i.today) }))
   for (const { r, list } of lists.sort((a, b) => CASE_LISTS.indexOf(a.list) - CASE_LISTS.indexOf(b.list) || b.r.createdAt - a.r.createdAt)) {
     const title = r.kind === 'task' ? r.title || 'zadanie' : personName(i.rd, r.person)
     out.push({ kind: 'request', id: r.id, title, text: r.note, hint: `${r.kind === 'task' ? 'zadanie' : 'prośba'} · ${CASE_LIST_NAMES[list]}${r.state === 'dropped' ? ' · porzucone' : ''}` })

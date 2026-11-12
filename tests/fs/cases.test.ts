@@ -237,4 +237,33 @@ describe('„Zadanie zrobione?” na dwóch komputerach (D384, T754)', () => {
     await a.folder.close('quit')
     await b.folder.close('quit')
   })
+
+  it('rytuał spraw liczy dzień raz na zmianę danych (T762): to samo wywołanie co minutę – z pamięci; zmiana sprawy – od nowa', async () => {
+    const dataDir = join(root, 'data')
+    mkdirSync(join(dataDir, 'days', '2026'), { recursive: true })
+    mkdirSync(join(dataDir, 'requests'), { recursive: true })
+    writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, blocks: [{ id: 'tb', categoryId: 'inne', startMin: 10 * 60, durationMin: 30, fixed: false, origin: 'user', task: 't1' }] }))
+    const rel = paths.record('request', 't1')
+    writeFileSync(join(dataDir, rel), JSON.stringify({ schema: 1, id: 't1', kind: 'task', title: 'Zadzwonić', estimateMin: 30, categoryId: 'inne', note: '', createdAt: 1, state: 'planned', day: DAY, block: 'tb', list: 'today', listDay: DAY, doneAt: null }))
+    const clock = { now: placeLogical(DAY, 10 * 60) }
+    const a = await computer(dataDir, 'pca', clock)
+    expect((await a.folder.timerClick({ a: 'start', block: 'tb', day: DAY } as never)).ok).toBe(true)
+    clock.now = placeLogical(DAY, 10 * 60 + 30)
+    expect((await a.folder.timerClick({ a: 'next', day: DAY } as never)).ok).toBe(true)
+    await a.folder.log.flush()
+    clock.now = placeLogical(DAY, 20 * 60)
+    const first = await a.folder.casesRitual(DAY)
+    expect(first.questions.map((q) => q.task)).toEqual(['t1'])
+    const runs = a.folder.casesRitualRuns
+    clock.now += 60_000
+    expect(await a.folder.casesRitual(DAY)).toBe(first)
+    expect(a.folder.casesRitualRuns).toBe(runs)
+    // The task answered (its record): counted again, the question gone.
+    const before = (await a.folder.recordView(rel))!
+    await a.folder.edit([{ ...recordEdit(rel, before, { ...before, state: 'done', list: 'done', doneAt: clock.now })!, edits: recordEdit(rel, before, { ...before, state: 'done', list: 'done', doneAt: clock.now })!.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
+    clock.now += 61_000
+    expect((await a.folder.casesRitual(DAY)).questions).toEqual([])
+    expect(a.folder.casesRitualRuns).toBe(runs + 1)
+    await a.folder.close('quit')
+  })
 })

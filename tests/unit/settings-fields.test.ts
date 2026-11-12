@@ -111,12 +111,21 @@ describe('ustawienia bez liczb', () => {
 })
 
 describe('skrót szybkiego zapisu (D385, D402)', () => {
-  it('domyślnie Win+Alt+N (D408); wyłączony zostaje wyłączony; zły – domyślny', () => {
-    expect(DEFAULT_MACHINE_PREFS.quickKey).toBe('Super+Alt+N')
-    expect(machinePrefsFrom({}).quickKey).toBe('Super+Alt+N')
-    expect(machinePrefsFrom({ quickKey: null }).quickKey).toBeNull()
+  it('domyślnie Win+Alt+N (D408), włączony; zły – domyślny; zapisany wcześniej jako null – wyłączony z domyślnym', () => {
+    expect([DEFAULT_MACHINE_PREFS.quickKey, DEFAULT_MACHINE_PREFS.quickOn]).toEqual(['Super+Alt+N', true])
+    expect(machinePrefsFrom({})).toMatchObject({ quickKey: 'Super+Alt+N', quickOn: true })
+    expect(machinePrefsFrom({ quickKey: null })).toMatchObject({ quickKey: 'Super+Alt+N', quickOn: false })
     expect(machinePrefsFrom({ quickKey: 'Q' }).quickKey).toBe('Super+Alt+N')
     expect(patchMachinePrefs(DEFAULT_MACHINE_PREFS, { quickKey: 'alt+shift+k' }).quickKey).toBe('Alt+Shift+K')
+  })
+
+  it('wyłączenie i włączenie nie gubi własnego skrótu (T759)', () => {
+    const own = patchMachinePrefs(DEFAULT_MACHINE_PREFS, { quickKey: 'Super+Alt+F11' })
+    const off = patchMachinePrefs(own, { quickOn: false })
+    expect(off).toMatchObject({ quickOn: false, quickKey: 'Super+Alt+F11' })
+    expect(patchMachinePrefs(off, { quickOn: true })).toMatchObject({ quickOn: true, quickKey: 'Super+Alt+F11' })
+    // As config.json keeps it: the same after a start.
+    expect(machinePrefsFrom(JSON.parse(JSON.stringify(off)))).toMatchObject({ quickOn: false, quickKey: 'Super+Alt+F11' })
   })
 
   it('zapis skrótu: modyfikatory w kolejności Super (Win), Ctrl, Alt, Shift, jeden klawisz; bez Ctrl ani Alt – nie', () => {

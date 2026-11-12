@@ -253,8 +253,7 @@ function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode;
  * why when it cannot), Esc folds it – in the main window's bar and in the icon's panel (the desktop bar takes no keys: its
  * „+” opens the panel with this field, T756).
  */
-function QuickField({ mode, close }: { mode: BarMode; close: () => void }) {
-  const [text, setText] = useState('')
+function QuickField({ mode, close, text, setText }: { mode: BarMode; close: () => void; text: string; setText: (t: string) => void }) {
   useEscapeLayer(true, close)
   const save = () => {
     if (!text.trim()) return
@@ -520,10 +519,13 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
   useEffect(() => {
     if (quickAt) setUnfold('quick')
   }, [quickAt])
-  // A day gone from the view (no folder, a day not counted now): nothing stays unfolded – the panel's 60 s run again and
-  // the day's return shows no old unfold.
+  // The title typed into the field of the quick capture: the bar's own, so it stays when the layout changes (T763).
+  const [quickText, setQuickText] = useState('')
+  const quickField = <QuickField mode={mode} close={() => setUnfold(null)} text={quickText} setText={setQuickText} />
+  // A day gone from the view (no folder, a day not counted now): nothing of the day stays unfolded – the panel's 60 s run
+  // again and the day's return shows no old unfold; the field of the quick capture stays, with its text (D402: „+” always).
   useEffect(() => {
-    if (view.day == null) setUnfold(null)
+    if (view.day == null) setUnfold((u) => (u === 'quick' ? u : null))
   }, [view.day])
   // The group of „Zrobione automatycznie” folds with its „⋯”, with the day gone from the view and with the group itself.
   const groupGone = !view.autos.groups.some((g) => g.id === groupOpen)
@@ -570,7 +572,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
         </div>
       )}
       {unfold === 'request' && <RequestUnfold view={view} mode={mode} close={() => setUnfold(null)} />}
-      {unfold === 'quick' && <QuickField mode={mode} close={() => setUnfold(null)} />}
+      {unfold === 'quick' && quickField}
       {routineOpen && <RoutineUnfold key={routineOpen.line} routine={routineOpen} mode={mode} close={() => setUnfold(null)} />}
       {unfold === 'signals' && (
         <div className="flex flex-col gap-1.5">
@@ -664,7 +666,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
         )}
         {unfold === 'quick' && (
           <div className="w-full">
-            <QuickField mode={mode} close={() => setUnfold(null)} />
+            {quickField}
           </div>
         )}
       </div>
@@ -706,6 +708,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
               </BarButton>
             </div>
           )}
+          {/* D402: „+” always – also without a day (the main process says why when nothing could be saved). */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <QuickButton mode={mode} open={unfold === 'quick'} toggle={() => toggle('quick')} />
+          </div>
+          {unfold === 'quick' && quickField}
         </div>
       </div>
     )

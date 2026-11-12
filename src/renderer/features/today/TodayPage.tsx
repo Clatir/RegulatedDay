@@ -10,7 +10,7 @@ import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { freedByEdit } from '@shared/engine/gaps'
 import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
-import { leavesByCancel, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
+import { leavesByCancel, newUserBlock } from '@shared/engine/planEdit'
 import { seriesBlockId } from '@shared/engine/series'
 import { categoryName } from '@shared/model/rd'
 import { seriesOfBlock } from '@shared/model/series'
@@ -47,6 +47,7 @@ import { putBlock } from '@shared/data/dayEdits'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
 import { CasesPanel } from '../cases/CasesPanel'
 import { caseTitle } from '../cases/casesLogic'
+import { nextFreeStart } from '../cases/casesUi'
 import { planOnAxis } from '../cases/planOnAxis'
 import { useCaseDrag } from '../cases/useCaseDrag'
 import { ExchangeDialog } from './ExchangeDialog'
@@ -154,7 +155,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   }, [date])
   // Ctrl+N: a new block in the nearest free place (spec „Tworzenie”) – today from the next quarter, another day an hour
   // after the wake (A6-24).
-  const newHere = () => create(newBlockStart(model.state, isToday ? Math.ceil(Math.max(logicalMinuteOf(date, Date.now()), model.ctx.wakeMin) / 15) * 15 : model.ctx.wakeMin + 60))
+  const nextPlace = (lengthMin?: number) => nextFreeStart(model.state, { isToday, nowMin: logicalMinuteOf(date, Date.now()), wakeMin: model.ctx.wakeMin }, lengthMin)
+  const newHere = () => create(nextPlace())
   useNewShortcut(newHere)
   // D384: a sprawa of the panel beside the axis put on it – dropped at a minute, or in the nearest free place from now. A day
   // gone is history: no panel there (as no pushing, D367).
@@ -163,7 +165,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     const r = requests.find((x) => x.id === id)
     if (r) void planOnAxis(model, today, r, caseTitle(r, rd), minute)
   }
-  const planCaseNext = (x: CaseItem) => planCaseAt(x.record.id, newBlockStart(model.state, isToday ? Math.ceil(Math.max(logicalMinuteOf(date, Date.now()), model.ctx.wakeMin) / 15) * 15 : model.ctx.wakeMin + 60, x.estimateMin))
+  const planCaseNext = (x: CaseItem) => planCaseAt(x.record.id, nextPlace(x.estimateMin))
   const { drag: caseDrag, grab: grabCase } = useCaseDrag(planCaseAt)
   const draggedCase = caseDrag?.minute != null ? requests.find((x) => x.id === caseDrag.id) : undefined
   const ghost: BlockSpan | null = draggedCase && caseDrag?.minute != null ? { startMin: caseDrag.minute, endMin: caseDrag.minute + estimateOf(draggedCase) } : null

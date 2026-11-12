@@ -200,11 +200,12 @@ test('Ustawienia: skrót szybkiego zapisu – nieprawidłowy odrzucony z powodem
       // Windows' answer is told under the field: it works, or another program holds it.
       await expect(page.getByTestId('pref-quick-note')).toContainText(/Otwiera małe okienko|Skrót zajęty przez inny program/)
       await page.getByTestId('pref-quick-on').click()
-      await expect.poll(async () => (await prefs(page)).quickKey).toBeNull()
+      await expect.poll(async () => (await prefs(page)).quickOn).toBe(false)
       await expect(page.getByTestId('pref-quick-note')).toContainText('Wyłączony')
       await expect(page.getByTestId('pref-quick-key')).toHaveCount(0)
+      // On again: your own shortcut, not the default (T759).
       await page.getByTestId('pref-quick-on').click()
-      await expect.poll(async () => (await prefs(page)).quickKey).toBe('Super+Alt+N')
+      await expect.poll(async () => prefs(page)).toMatchObject({ quickOn: true, quickKey: 'Super+Alt+F11' })
     })
     expect(errors).toEqual([])
   } finally {

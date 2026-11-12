@@ -6,11 +6,12 @@
  * „Cofnij” needs. A refusal is said by a toast (as the other saves); the answer says whether it was saved.
  */
 import { useEffect, useMemo, useState } from 'react'
-import type { EditOutcome, QuickShortcut, RawRecord } from '@shared/api'
+import type { CaseDays, EditOutcome, QuickShortcut, RawRecord } from '@shared/api'
 import { isRaw, putBlock } from '@shared/data/dayEdits'
 import { sameContentAs } from '@shared/data/merge'
 import { classify, paths } from '@shared/data/paths'
 import {
+  caseDayToRead,
   caseItems,
   casePlan,
   listedRaw,
@@ -20,15 +21,15 @@ import {
   taskAnswerRaw,
   todayMinutes,
   type CaseItem,
-  type CasePatch
+  type CasePatch,
+  type GoneOf
 } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
 import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
-import { newRequest, newTask, type CaseList, type NewTask } from '@shared/model/requests'
+import { newRequest, newTask, requestFrom, type CaseList, type NewTask } from '@shared/model/requests'
 import { settingsOn } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { useNow } from '../lib/clock'
-import { useDayFiles } from './day'
 import { editOf, isSaved, rawRecord, trySaveWith, useData } from './data'
 import { toast } from './ui'
 
@@ -66,20 +67,65 @@ export interface CasesView {
   ready: boolean
 }
 
+/** How often the days of „zaplanowane” are read again without a change of the data (another computer's log). */
+const CASE_DAYS_REREAD_MS = 30_000
+
+/**
+ * One read of the days of „zaplanowane” for every view that asks for the same days at the same moment of the data (the
+ * page, the panel by „Dziś”, the morning plan and the ritual share it – T760).
+ */
+let caseDaysRead: { key: string; read: Promise<CaseDays> } | null = null
+function readCaseDays(key: string, dates: readonly string[]): Promise<CaseDays> {
+  if (caseDaysRead?.key === key) return caseDaysRead.read
+  const read = window.rd.caseDays([...dates])
+  caseDaysRead = { key, read }
+  read.catch(() => {
+    if (caseDaysRead?.read === read) caseDaysRead = null
+  })
+  return read
+}
+
+/** The days' files and the blocks gone in their logs as `scheduledOf` reads them; unknown where not read. */
+function readersOf(days: CaseDays | null): { fileOf: (date: string) => ReturnType<typeof dayFileFrom> | null | undefined; goneOf: GoneOf } {
+  return {
+    fileOf: (d) => (days == null || !(d in days.files) ? undefined : days.files[d] ? dayFileFrom(days.files[d], d) : null),
+    goneOf: (d) => (days?.gone[d] ? new Set(days.gone[d]) : undefined)
+  }
+}
+
 /**
  * The sprawy as the lists show them now: each with its list (the 04:00 of „Dziś” counted from the date), whether it is
- * „zaplanowane” – its block still in its day, with the hour – its estimate, its day of „Zrobione”. Read again with the
- * data and every minute (04:00 passes without a write).
+ * „zaplanowane” – its block still in its day (not parked nor cancelled before it began), with the hour – its estimate, its
+ * day of „Zrobione”. The days read are those of sprawy not done from two weeks back (`scheduledDays`), once for every
+ * view showing them, again with the data and every 30 s; the lists every minute (04:00 passes without a write).
  */
 export function useCases(): CasesView {
   const requests = useData((s) => s.requests)
-  const today = logicalDayOf(useNow(60_000))
-  const dates = useMemo(() => scheduledDays(requests), [requests])
-  const files = useDayFiles(dates)
+  const stamp = useData((s) => s.stamp)
+  const now = useNow(CASE_DAYS_REREAD_MS)
+  const today = logicalDayOf(now)
+  const dates = useMemo(() => scheduledDays(requests, today), [requests, today])
+  const key = `${stamp}|${Math.floor(now / CASE_DAYS_REREAD_MS)}|${dates.join(',')}`
+  const [days, setDays] = useState<{ dates: string; read: CaseDays } | null>(null)
+  useEffect(() => {
+    let alive = true
+    if (!dates.length) {
+      setDays({ dates: '', read: { files: {}, gone: {} } })
+      return
+    }
+    readCaseDays(key, dates).then(
+      (read) => alive && setDays({ dates: dates.join(','), read }),
+      () => undefined
+    )
+    return () => {
+      alive = false
+    }
+  }, [key])
   return useMemo(() => {
-    const items = caseItems(requests, today, (d) => (files == null || !(d in files) ? undefined : files[d] ? dayFileFrom(files[d], d) : null))
-    return { today, items, todayMinutes: todayMinutes(items), ready: files != null }
-  }, [requests, today, files])
+    const { fileOf, goneOf } = readersOf(days?.read ?? null)
+    const items = caseItems(requests, today, fileOf, goneOf)
+    return { today, items, todayMinutes: todayMinutes(items), ready: days != null && days.dates === dates.join(',') }
+  }, [requests, today, days, dates])
 }
 
 /** A file of the undo of a change: before and after it (null: none). */
@@ -207,14 +253,23 @@ export async function planCase(id: string, date: string, startMin: number, o: { 
     const rel = relOf(id)
     const before = rawRecord(rel)
     if (!before) return 'Tej sprawy już nie ma.'
-    const was = typeof before.day === 'string' && before.day !== date ? [before.day] : []
-    const days = await daysNow([date, ...was], o.seen)
+    const r0 = requestFrom(before)
+    if (!r0) return 'Tej sprawy już nie ma.'
+    // The day of the drop and the day the sprawa is planned in – followed to where its block was moved (`movedTo`).
+    const dates = [date, ...(r0.day && r0.day !== date ? [r0.day] : [])]
+    let days = await daysNow(dates, o.seen)
+    for (let more = caseDayToRead(r0, days ?? {}); days && more && !dates.includes(more); more = caseDayToRead(r0, days ?? {})) {
+      dates.push(more)
+      days = await daysNow(dates, o.seen)
+    }
     if (!days) return DAY_UNREADABLE
     const p = casePlan({ record: before, date, startMin, files: days, rules: settingsOn(useData.getState().rd.settings, date).categories, at: Date.now(), begun })
     if (!p) return 'Tej sprawy już nie ma.'
+    // The sprawa's old block is gone from its day: a push the window counted with it never writes it back (T761).
+    const pushed = (o.pushed ?? []).filter((x) => !(p.taken && p.taken.day === date && x.block.id === p.taken.block) && x.block.task !== r0.id)
     for (const [d, after] of Object.entries(p.days)) {
       let next = after
-      if (d === date) for (const x of o.pushed ?? []) next = putBlock(next, { ...(dayFileFrom(next, d).blocks.find((b) => b.id === x.block.id) ?? x.block), startMin: x.startMin })
+      if (d === date) for (const x of pushed) next = putBlock(next, { ...(dayFileFrom(next, d).blocks.find((b) => b.id === x.block.id) ?? x.block), startMin: x.startMin })
       put(paths.day(d), days[d] ?? null, next)
     }
     put(rel, before, p.record)
@@ -224,26 +279,49 @@ export async function planCase(id: string, date: string, startMin: number, o: { 
   return { ...r, block: r.saved ? block : null }
 }
 
+/** What the morning's step did: `made` – the blocks it put into the plan, `skipped` – the chosen sprawy it left out. */
+export interface MorningResult extends CaseResult {
+  made: number
+  /** Chosen, but gone, done or planned meanwhile (their ids): nothing made for them – the window says so. */
+  skipped: string[]
+}
+
 /**
  * The morning plan's step of requests (D384): the chosen requests as one block of requests, each chosen task of „Dziś”
  * its own block – from `startMin` (the plan's `freeStart` for `morningMinutes`), one after another; one edit of today's
- * file and the records. A sprawa planned or done meanwhile is left out (a second click adds nothing).
+ * file and the records. „Not planned” is the rule of the offer (`scheduledOf` with the days' files and logs – T761); a
+ * sprawa planned or done meanwhile is left out and named in `skipped`, `made: 0` – nothing written (a second click adds
+ * nothing; the window keeps its choice and says why).
  */
-export function planMorning(date: string, seen: RawRecord | null, chosen: { requests: readonly string[]; tasks: readonly string[] }, startMin: number): Promise<CaseResult> {
-  return change(async (put) => {
-    const days = await daysNow([date], () => seen)
-    if (!days) return DAY_UNREADABLE
-    const day = days[date] ?? null
-    const raws = (ids: readonly string[]) => ids.flatMap((id) => {
-      const raw = rawRecord(relOf(id))
-      return raw ? [raw] : []
-    })
-    const out = morningPlan({ date, dayFile: day, requests: raws(chosen.requests), tasks: raws(chosen.tasks), startMin, rules: settingsOn(useData.getState().rd.settings, date).categories, at: Date.now() })
-    if (!out.blocks.length) return null
+export async function planMorning(date: string, seen: RawRecord | null, chosen: { requests: readonly string[]; tasks: readonly string[] }, startMin: number): Promise<MorningResult> {
+  let made = 0
+  let skipped: string[] = []
+  const r = await change(async (put) => {
+    const raws = (ids: readonly string[]) => {
+      const out: RawRecord[] = []
+      for (const id of ids) {
+        const raw = rawRecord(relOf(id))
+        if (raw) out.push(raw)
+        else skipped.push(id)
+      }
+      return out
+    }
+    skipped = []
+    const requests = raws(chosen.requests)
+    const tasks = raws(chosen.tasks)
+    const dates = [...new Set([date, ...[...requests, ...tasks].flatMap((x) => (typeof x.day === 'string' ? [x.day] : []))])]
+    const read = await window.rd.caseDays(dates)
+    const day = date in read.files ? (read.files[date] ?? null) : seen
+    const { fileOf, goneOf } = readersOf(read)
+    const out = morningPlan({ date, dayFile: day, requests, tasks, startMin, rules: settingsOn(useData.getState().rd.settings, date).categories, at: Date.now(), fileOf, goneOf })
+    skipped.push(...out.skipped)
+    made = out.blocks.length
+    if (!made) return null
     put(paths.day(date), day, out.day)
     for (const x of out.records) put(relOf(x.id), rawRecord(relOf(x.id)), x.raw)
     return null
   })
+  return { ...r, made: r.saved ? made : 0, skipped }
 }
 
 /** „Cofnij” of one change: each file back as it was before it – only while it stands as the change left it. */

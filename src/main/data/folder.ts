@@ -42,7 +42,7 @@ import { periodFrom, statsOf, type DayStats, type StatsPeriod, type StatsResult 
 import { calibrationPeriod, costProposals, inCalibration, timeProposals, type CalibrationDay, type CalibrationPeriod, type CostEvidence, type CostProposal, type FeltCounts, type TimeProposal, type TimeSample } from '@shared/engine/calibration'
 
 import { inProcess, type Worker } from '../worker/host'
-import { casesFrom, casesRitual, taskQuestions, type CasesRitual } from '@shared/engine/cases'
+import { casesFrom, casesRitual, dayFactsOf, taskQuestions, type CasesRitual } from '@shared/engine/cases'
 import { CLOSE_WINDOW_H, closeEvents, closeRefusal, ritualActivity, ritualAnswer, ritualRows, unclosedDays, type DayLog, type RitualValue, type RitualView } from '@shared/engine/ritual'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
@@ -342,6 +342,10 @@ export class DataFolder {
   private peopleCounts: { day: string; at: number; before: Map<string, number> } | null = null
   /** The rituals of the last days, each counted again only on a change of what it is made of (the morning asks often). */
   private readonly ritualMemo = new Map<string, { key: string; view: RitualView }>()
+  /** What the rituals of the last days say about „Sprawy” (`casesRitual`), each counted again only on a change. */
+  private readonly casesRitualMemo = new Map<string, { key: string; out: CasesRitual }>()
+  /** How many times `casesRitual` counted a day (the tests: its memory works). */
+  casesRitualRuns = 0
   /** The statistics of each frozen day, counted again only when what it is made of changed (D358). */
   private readonly statsMemo = new Map<string, { key: string; stats: DayStats }>()
   /** The counts of statistics in progress, by period (the same period asked again shares it). */
@@ -2299,12 +2303,26 @@ export class DataFolder {
   /**
    * What the evening ritual of a day says about „Sprawy” (D383, D384, D402): the sprawy of its „Dziś” not done (back in „W
    * tym tygodniu” at 04:00), the tasks whose block ended without an answer to „Zadanie zrobione?”, on Sunday the number in
-   * „Kiedyś / Może”. From the records as this computer sees them and the day as the window counts it.
+   * „Kiedyś / Może”. From the records as this computer sees them and the day as the bar and the ritual count it (D345:
+   * `barDay`, with the ends the app's close made – cheaply first, `mayLayOn`), only its facts (the blocks that ended);
+   * counted again only when the day's log, its files, your queued edits, the ends laid over it or the sprawy changed (T762).
    */
   async casesRitual(day: string, at = this.clock.now()): Promise<CasesRitual> {
     const records = casesFrom(await this.collection('request'))
-    const ctx = await this.ownContext(day, await this.log.readDay(day), at)
-    return casesRitual(day, logicalDayOf(at), records, taskQuestions(ctx, computeDay(ctx), records))
+    const read = await this.log.readDay(day)
+    const activity = await this.mayLayOn(day, read, at)
+    const bar = activity ? await this.barDay(day, read, at, false, activity) : null
+    const today = logicalDayOf(at)
+    const sprawy = records.map((r) => [r.id, r.kind, r.title, r.state, r.list, r.listDay, r.day, r.block, r.createdAt])
+    const key = JSON.stringify([today, read.lastByComputer, read.events.length, read.copies, this.contextSig(day), this.queue.pending.length, (bar?.laid ?? []).map((e) => e.id), sprawy])
+    const was = this.casesRitualMemo.get(day)
+    if (was?.key === key) return was.out
+    this.casesRitualRuns++
+    const ctx = bar?.ctx ?? (await this.ownContext(day, read, at))
+    const out = casesRitual(day, today, records, taskQuestions(ctx, dayFactsOf(day, ctx.events), records))
+    this.casesRitualMemo.set(day, { key, out })
+    for (const d of this.casesRitualMemo.keys()) if (d < addDays(today, -RITUAL_MEMO_DAYS)) this.casesRitualMemo.delete(d)
+    return out
   }
 
   /** Your answer to a row of a day's ritual: judged on the day as it is now and written to its log, one at a time. */

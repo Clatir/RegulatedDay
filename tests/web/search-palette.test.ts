@@ -85,6 +85,13 @@ describe('rekordy wyszukiwarki', () => {
     expect(kinds('block')[0]).toMatchObject({ id: 'a', date: '2026-11-09', hint: '09.11.2026 · poniedziałek', text: 'Kowalski podał numer' })
   })
 
+  it('moduł próśb wyłączony: prośby nie do znalezienia (strona ich nie pokaże), zadania tak (T763)', () => {
+    const off = { ...rd, general: { ...rd.general, modules: { ...rd.general.modules, requests: false } } }
+    const found = searchRecords({ ...input(), rd: off }).filter((r) => r.kind === 'request')
+    expect(found.map((r) => r.id)).toEqual(['t1'])
+    expect(search(searchRecords({ ...input(), rd: off }), 'telefon', TODAY)).toEqual([])
+  })
+
   it('bloki szablonu mają nazwy (rutyna, kategoria), nigdy id, i wskazują szablon', () => {
     const tb = searchRecords(input()).filter((r) => r.kind === 'templateBlock')
     expect(tb.map((r) => r.title)).toEqual(['Analiza', 'Poranna rutyna'])

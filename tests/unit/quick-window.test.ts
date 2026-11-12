@@ -44,7 +44,7 @@ vi.mock('electron', () => {
   return { BrowserWindow, screen, globalShortcut: { register: () => true, unregister: () => undefined } }
 })
 
-const { QuickWindow } = await import('../../src/main/windows/quickWindow')
+const { QuickWindow, shortcutOf, touchesShortcut } = await import('../../src/main/windows/quickWindow')
 
 function make(o: { refuse?: string[] } = {}) {
   calls.length = 0
@@ -96,5 +96,29 @@ describe('okienko „Do skrzynki”', () => {
     q.setShortcut('Super+Alt+N')
     q.destroy()
     expect(unregistered).toEqual(['Super+Alt+N', 'Super+Alt+N'])
+  })
+})
+
+describe('skrót zajęty – ponawianie (T759)', () => {
+  it('zajęty: retry() rejestruje ponownie, gdy inny program go zwolnił; włączony – retry() niczego nie rusza', () => {
+    const refuse = ['Super+Alt+N']
+    const { q, pressed, states } = make({ refuse })
+    expect(q.setShortcut('Super+Alt+N').state).toBe('taken')
+    expect(q.retry().state).toBe('taken')
+    refuse.length = 0
+    expect(q.retry()).toEqual({ key: 'Super+Alt+N', state: 'on' })
+    expect([...pressed.keys()]).toEqual(['Super+Alt+N'])
+    expect(q.retry().state).toBe('on')
+    // Still taken on a retry: nothing said again (no line every minute).
+    expect(states).toEqual(['Super+Alt+N:taken', 'Super+Alt+N:on'])
+  })
+
+  it('zmiana ustawień: skrót z przełącznika i klucza; ponownie wpisany ten sam klucz albo przełącznik – ponowienie', () => {
+    expect(shortcutOf({ quickOn: true, quickKey: 'Super+Alt+F11' })).toBe('Super+Alt+F11')
+    expect(shortcutOf({ quickOn: false, quickKey: 'Super+Alt+F11' })).toBeNull()
+    expect(touchesShortcut({ quickKey: 'Super+Alt+N' })).toBe(true)
+    expect(touchesShortcut({ quickOn: true })).toBe(true)
+    expect(touchesShortcut({ zoom: 1.1 })).toBe(false)
+    expect(touchesShortcut(null)).toBe(false)
   })
 })

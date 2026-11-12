@@ -105,7 +105,8 @@ const api: RdApi = {
   onQuickShown: (cb) => on(CH.onQuickShown, cb),
   quickShortcut: () => ipcRenderer.invoke(CH.quickShortcut),
   onQuickShortcut: (cb) => on(CH.onQuickShortcut, cb),
-  casesRitual: (day) => ipcRenderer.invoke(CH.casesRitual, day)
+  casesRitual: (day) => ipcRenderer.invoke(CH.casesRitual, day),
+  caseDays: (dates) => ipcRenderer.invoke(CH.caseDays, dates)
 }
 
 contextBridge.exposeInMainWorld('rd', api)

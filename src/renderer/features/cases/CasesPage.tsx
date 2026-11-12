@@ -9,7 +9,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { RequestCounters } from '@shared/api'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
-import { newBlockStart } from '@shared/engine/planEdit'
 import { durationLabel } from '@shared/format'
 import { personName } from '@shared/model/rd'
 import { CASE_LIST_NAMES, CASE_LISTS, ESTIMATE_RANGE, TITLE_MAX, CASE_NOTE_MAX, DEFAULT_ESTIMATE_MIN, DEFAULT_TASK_CATEGORY, type CaseList } from '@shared/model/requests'
@@ -18,6 +17,7 @@ import { logicalMinuteOf } from '@shared/time/day'
 import { FilterBar, useFilters } from '../../components/FilterBar'
 import { Choice, DateField, DurationField, TextField, TimeField } from '../../components/fields'
 import { EmptyState, Section, cx } from '../../components/ui'
+import { useBusy } from '../../lib/busy'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
 import { changeCase, createRequest, createTask, moveCase, removeCase, undoCase, useCases } from '../../store/cases'
@@ -26,6 +26,7 @@ import { useDay } from '../../store/day'
 import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 import { categoryOptions } from '../plan/blockView'
 import { caseTitle, filterOf, sectionsOf, statusParts } from './casesLogic'
+import { nextFreeStart, submitTitle } from './casesUi'
 import { planOnAxis } from './planOnAxis'
 
 export function CasesPage() {
@@ -135,18 +136,16 @@ export function CasesPage() {
 /** A new task (D384): its title – Enter adds it to „Skrzynka” (30 min, „Inne”; the rest is edited in its row), Esc closes. */
 function NewTask({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('')
-  const add = async () => {
-    const r = await createTask({ title })
-    if (!r.saved) return
-    setTitle('')
-    onClose()
-  }
+  const [busy, run] = useBusy()
+  // Once: the field is cleared at once and a second Enter (or „Dodaj”) while it saves does nothing; a save that did not happen gives the title back.
+  const add = () => submitTitle(run, title, { set: setTitle, save: async (t) => (await createTask({ title: t })).saved, done: onClose })
   return (
     <div className="flex items-center gap-2" data-testid="case-add">
       <input
         autoFocus
         className="input min-w-0 flex-1"
         value={title}
+        readOnly={busy}
         maxLength={TITLE_MAX}
         placeholder="Tytuł zadania – Enter dodaje do Skrzynki"
         aria-label="Tytuł zadania"
@@ -160,7 +159,7 @@ function NewTask({ onClose }: { onClose: () => void }) {
         }}
         data-testid="case-add-title"
       />
-      <button type="button" className="btn btn-accent" disabled={!title.trim()} onClick={() => void add()} data-testid="case-add-save">
+      <button type="button" className="btn btn-accent" disabled={busy || !title.trim()} onClick={() => void add()} data-testid="case-add-save">
         Dodaj
       </button>
       <button type="button" className="btn" onClick={onClose}>
@@ -228,7 +227,7 @@ function PlanForm({ x, today, title, onDone }: { x: CaseItem; today: string; tit
   const [date, setDate] = useState(x.scheduled?.day && x.scheduled.day >= today ? x.scheduled.day : today)
   const [start, setStart] = useState<number | null>(null)
   const model = useDay(date)
-  const proposed = model ? newBlockStart(model.state, date === today ? Math.ceil(Math.max(logicalMinuteOf(date, now), model.ctx.wakeMin) / 15) * 15 : model.ctx.wakeMin + 60, estimateOf(x.record)) : null
+  const proposed = model ? nextFreeStart(model.state, { isToday: date === today, nowMin: logicalMinuteOf(date, now), wakeMin: model.ctx.wakeMin }, estimateOf(x.record)) : null
   const at = start ?? proposed
   const [busy, setBusy] = useState(false)
   const save = async () => {
