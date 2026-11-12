@@ -43,7 +43,7 @@ T650–T699 (zajęte D387–D388, T650–T674).
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
 | SNT6 wyszukiwarka Ctrl K | 1.7.0 | #67 | scalone 11.11 (d76ce2b), wydanie 1.7.0 z runu 43079086202 | ok. 2,5 h (4–6 h) |
-| SNT3 Markdown w notatkach | 1.9.0 | #71 | scalone 12.11 (16c1568); run `main` 43121110287 czerwony na `week.spec.ts:554` (J2, godzina) – wydanie 1.9.0 z runu po #73 (sesja J) | po przejęciu ok. 4 h (6–9 h) |
+| SNT3 Markdown w notatkach | 1.9.0 | #71 | scalone 12.11 (16c1568); runy `main` po #71 i #73 czerwone na nocnych E2E (J2, E3 – godzina); wydanie 1.9.0 12.11 z runu 43148191553 po #75 (sesja J) | po przejęciu ok. 4 h (6–9 h) |
 
 Wpisy obu zadań, „Uwagi na później” i „Pytania na później” – `docs/archiwum/postep-SNT.md`.
 

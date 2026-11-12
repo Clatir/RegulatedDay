@@ -27,7 +27,8 @@ Wpisy zadań SNT po scaleniu ich PR-ów. Stan bieżący i kolejka – `docs/post
   przejęciu dwie rundy high (10 + 10 uwag, T670–T673) – poprawki z testami (`wykonawca-sonnet`).
 - **Scalenie:** po SNT6 (1.7.0) i J4 (1.8.0). Pierwsze CI PR: jsdom 30 nie startował na Node 22.12 (undici 8 wymaga
   ^22.22.2) i wyjątek `getClientRects` ProseMirror po teście na Node 26 – T674 (jsdom 27.4.0, `tests/web/jsdomLayout.ts`);
-  E2E `week.spec.ts:554` (J2, zależny od godziny) – poprawka sesji J (#73). Po merge `main`: testy SNT6 z atrapą
+  E2E `week.spec.ts:554` (J2, zależny od godziny) – poprawka sesji J (#73); po scaleniu nocne runy `main` padały jeszcze na
+  `week.spec.ts:600` i `screens.spec.ts:174` – #75 (sesja J), wydanie 1.9.0 z runu 43148191553. Po merge `main`: testy SNT6 z atrapą
   `HTMLElement`, E2E wyszukiwarki czyta notatkę `toContainText`; `saveFields` z J4 zwraca odpowiedź zapisu edytora.
   Czas faktyczny: przed awarią nieznany, po przejęciu ok. 4 h pracy (szacunek 6–9 h).
 - **Uwagi na później:** spacje na brzegach kodu w linii (biblioteka wynosi je poza znacznik); testy własności z innymi
