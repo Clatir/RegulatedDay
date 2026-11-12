@@ -18,6 +18,7 @@ import { useData } from '@renderer/store/data'
 import { useWizard } from '@renderer/features/wizard/wizardStore'
 import { logicalDayOf } from '@shared/time/day'
 import { useUi } from '@renderer/store/ui'
+import type { Series } from '@shared/model/series'
 
 const TODAY = '2026-11-10'
 const rd = { ...rdFrom(undefined), people: [{ id: 'p1', name: 'Żółw Kowalski', archived: false }] }
@@ -38,6 +39,7 @@ const input = (blocks: Array<{ date: string; id: string; title: string; note: st
   templates: [template],
   requests: [req('r1', 'queued', 'telefon'), req('r2', 'done', 'zwrot książki')],
   routines: [routine],
+  series: [] as Series[],
   blocks,
   pageLabel: PAGE_LABEL,
   pageKeys
@@ -83,6 +85,17 @@ describe('rekordy wyszukiwarki', () => {
     expect(tb.map((r) => r.title)).toEqual(['Analiza', 'Poranna rutyna'])
     expect(tb.every((r) => r.parent === 't1' && r.hint === 'szablon: Dzień zwykły')).toBe(true)
     expect(tb[0]!.text).toBe('zacznij od wody')
+  })
+
+  it('seria to jeden rekord (nazwa i reguła, D401): części po „To i następne” – jedna, usunięta – żadna; Enter otwiera „Szablony”', () => {
+    const block = { categoryId: 'inne', variantId: null, startMin: 1020, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null }
+    const part = (id: string, start: string, until: string | null, archived = false): Series => ({ id, root: 'fizjo', start, until, count: null, versions: [{ from: start, block, rule: { kind: 'weekly', every: 2, days: [4], anchor: start }, special: 'ask' }], archived })
+    const rs = searchRecords({ ...input(), series: [part('fizjo', '2026-10-01', '2026-11-04'), part('fizjo2', '2026-11-05', null), { ...part('gone', '2026-10-01', '2026-11-09', true), root: 'gone' }] })
+    const found = rs.filter((r) => r.kind === 'series')
+    expect(found.map((r) => [r.id, r.title, r.text, r.hint])).toEqual([['fizjo2', 'Fizjoterapeuta', 'co 2 tygodnie w czwartek', 'seria']])
+    expect(search(rs, 'fizjo', TODAY)[0]!.label).toBe('Szablony')
+    choose(found[0]!, TODAY)
+    expect(useUi.getState()).toMatchObject({ page: 'templates', pick: { kind: 'series', id: 'fizjo2' } })
   })
 
   it('dzisiejszy blok ma w dacie „dziś”', () => {

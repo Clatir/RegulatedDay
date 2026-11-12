@@ -1,7 +1,8 @@
 /**
  * Creating a day (spec „Dzień i czas”, „Typy dni i szablony”, „Sesje tradingowe”, „Plan wykładów”): one deterministic
  * function. It takes the template and settings in force on the date, the lectures of the plan, the sessions of the
- * session layer placed from their own zone (shortened on early-close days), and writes them as the day's snapshot; your
+ * session layer placed from their own zone (shortened on early-close days), the occurrences of the series (D381, with
+ * the room they make among the template's blocks – D401), and writes them as the day's snapshot; your
  * edits of the day (its file) are laid over the snapshot by `dayPlan`, before and after the creation alike. Every
  * computer computes the same snapshot from the same files, and the derived ids make the same blocks.
  */
@@ -9,9 +10,11 @@ import { derivedId } from '../model/ids'
 import { SESSION_CATEGORY } from '../model/categories'
 import type { DaySnapshot } from '../model/events'
 import { PLAN_MAX, PLAN_MIN, planBlock, templateFor, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
+import type { SeriesPlan } from '../model/series'
 import { DEFAULT_SETTINGS, settingsOn, type DayTypeId, type RulesSettings, type SessionDef, type SettingsChange } from '../model/settings'
 import { dayEnd, dayStart, logicalMinuteOf, placeLogical } from '../time/day'
 import { MINUTE, PL_ZONE, addDays, offsetMin, placeWall, weekday } from '../time/zone'
+import { pushedBySeries, seriesBlocks } from './series'
 
 /** What the holiday calendar answers for a market and date (the calendar module's MarketDay). */
 export interface MarketDayInfo {
@@ -26,6 +29,8 @@ export interface DayInputs {
   changes: readonly SettingsChange[]
   templates: readonly Template[]
   lectures: readonly LectureSeries[]
+  /** The series with their last days (`seriesPlans` – the same on every computer for the same files). */
+  series: readonly SeriesPlan[]
   /** The day's file (your edits so far); null = none yet. */
   dayFile: DayFile | null
   holidays: HolidayLookup
@@ -176,11 +181,15 @@ export function createDay(inp: DayInputs): DaySnapshot {
     )
   }
 
+  // The series' occurrences (D381) – a special day by the series' own field (D382).
+  const occurrences = seriesBlocks(inp.series, date, dayType, inp.holidays)
+  blocks.push(...occurrences)
+
   blocks.sort((a, b) => (a.startMin ?? 1e9) - (b.startMin ?? 1e9) || (a.id < b.id ? -1 : 1))
   const templateWakeMin = params.wakeMin
   // While the sessions start an hour earlier the wake time does too (not before 04:00); your own wake for the day wins.
   const wakeMin = Math.max(4 * 60, templateWakeMin + shift)
-  return {
+  const snapshot: DaySnapshot = {
     dayType,
     settings,
     templateId: tpl?.template.id ?? null,
@@ -192,8 +201,13 @@ export function createDay(inp: DayInputs): DaySnapshot {
     templateWakeMin,
     blocks,
     changes,
-    holidays
+    holidays,
+    series: occurrences.map((b) => b.sourceId!).sort()
   }
+  // An occurrence on a place a block of the template takes makes room for itself (D401) – on the axis of the plan.
+  if (!occurrences.length) return snapshot
+  const nextWakeMin = nextWakeForBedtime(null, null, inp.changes, addDays(date, 1))
+  return { ...snapshot, blocks: pushedBySeries(snapshot, date, nextWakeMin) }
 }
 
 /** The snapshot's blocks with the session layer's answers given after the day was made (spec „Sesje tradingowe”): „nie” takes a session away, „tak” brings one the day was made without. */

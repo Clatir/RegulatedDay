@@ -26,17 +26,17 @@ describe('typ dnia z przypisania tygodnia', () => {
     expect(defaultDayType('2026-10-21')).toBe('zwykly')
     expect(defaultDayType('2026-10-24')).toBe('weekend')
     const changes = [{ id: 'a', from: '2026-01-01', at: null, patch: { weekTypes: ['zwykly', 'zwykly', 'regeneracyjny', 'zwykly', 'zwykly', 'weekend', 'weekend'] } }]
-    const snap = createDay({ date: '2026-10-21', changes, templates: [], lectures: [], dayFile: null, holidays: noHolidays, at: null })
+    const snap = createDay({ date: '2026-10-21', changes, templates: [], lectures: [], series: [], dayFile: null, holidays: noHolidays, at: null })
     expect(snap.dayType).toBe('regeneracyjny')
     // A day marked in the calendar keeps its own type.
-    const marked = createDay({ date: '2026-10-21', changes, templates: [], lectures: [], dayFile: { ...emptyDayFile('2026-10-21'), dayType: 'zjazd-zdalny' }, holidays: noHolidays, at: null })
+    const marked = createDay({ date: '2026-10-21', changes, templates: [], lectures: [], series: [], dayFile: { ...emptyDayFile('2026-10-21'), dayType: 'zjazd-zdalny' }, holidays: noHolidays, at: null })
     expect(marked.dayType).toBe('zjazd-zdalny')
   })
 })
 
 describe('odpowiedzi warstwy sesji po utworzeniu dnia', () => {
   const tpl = templateFrom({ id: 't', dayType: 'zwykly', versions: [{ from: '2026-01-01', blocks: [{ id: 'j', categoryId: 'journaling', anchor: 'session:ny', durationMin: 30 }] }] })!
-  const snap = createDay({ date: '2026-10-21', changes: [], templates: [tpl], lectures: [], dayFile: null, holidays: marketDay, at: null })
+  const snap = createDay({ date: '2026-10-21', changes: [], templates: [tpl], lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
 
   it('„nie” zabiera sesję i blok do niej zakotwiczony', () => {
     const file: DayFile = { ...emptyDayFile('2026-10-21'), sessions: { ny: 'no' } }
@@ -47,14 +47,14 @@ describe('odpowiedzi warstwy sesji po utworzeniu dnia', () => {
   })
 
   it('sesja dodana odpowiedzią „tak” schodzi z planu przez odwołanie (jest w planie, w żadnej migawce), blok własny przez wyjęcie z pliku', () => {
-    const weekend = createDay({ date: '2026-10-24', changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const weekend = createDay({ date: '2026-10-24', changes: [], templates: [], lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
     const file: DayFile = { ...emptyDayFile('2026-10-24'), sessions: { ny: 'yes' }, blocks: [block({ id: 'mine', cat: 'inne', at: '10:00', min: 30, origin: 'user' })] }
     const ny = dayPlan(weekend, file).find((b) => b.sourceId === 'ny')!
     expect(weekend.blocks.some((b) => b.id === ny.id)).toBe(false)
     expect(leavesByCancel(ny.id, weekend, file)).toBe(true)
     expect(leavesByCancel('mine', weekend, file)).toBe(false)
     // A block of the snapshot changed for the day (its copy is in the file too) is cancelled as well.
-    const snap = createDay({ date: '2026-10-21', changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const snap = createDay({ date: '2026-10-21', changes: [], templates: [], lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
     const tpl = snap.blocks.find((b) => b.origin === 'session')!
     expect(leavesByCancel(tpl.id, snap, { ...emptyDayFile('2026-10-21'), blocks: [tpl] })).toBe(true)
     // Cancelled it is gone from the plan, and „Cofnij” brings it back.
@@ -63,7 +63,7 @@ describe('odpowiedzi warstwy sesji po utworzeniu dnia', () => {
   })
 
   it('„tak” dodaje sesję, której dzień nie miał (dzień bez sesji)', () => {
-    const weekend = createDay({ date: '2026-10-24', changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const weekend = createDay({ date: '2026-10-24', changes: [], templates: [], lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
     expect(weekend.blocks.some((b) => b.origin === 'session')).toBe(false)
     const plan = dayPlan(weekend, { ...emptyDayFile('2026-10-24'), sessions: { ny: 'yes' } })
     const ny = plan.find((b) => b.sourceId === 'ny')!
@@ -90,7 +90,7 @@ describe('poranek idzie za pobudką dnia', () => {
   })!
 
   it('pobudka dnia o 07:30 przesuwa rutynę i bloki przed pierwszym stałym o 1 h 30; stały i późniejsze zostają', () => {
-    const snap = createDay({ date: '2026-10-21', changes: [], templates: [tpl], lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const snap = createDay({ date: '2026-10-21', changes: [], templates: [tpl], lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
     const plan = dayPlan(snap, { ...emptyDayFile('2026-10-21'), wakeMin: lm('07:30') })
     const at = (src: string) => plan.find((b) => b.sourceId === src)?.startMin
     expect(at('r')).toBe(lm('07:30'))
@@ -101,7 +101,7 @@ describe('poranek idzie za pobudką dnia', () => {
   })
 
   it('w tygodniu przesunięcia sesji poranek idzie o godzinę wcześniej, a pobudka ustawiona ręcznie wygrywa', () => {
-    const snap = createDay({ date: '2026-10-27', changes: [], templates: [tpl], lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const snap = createDay({ date: '2026-10-27', changes: [], templates: [tpl], lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
     expect(snap.wakeMin).toBe(lm('05:00'))
     expect(dayPlan(snap, null).find((b) => b.sourceId === 'r')?.startMin).toBe(lm('05:00'))
     expect(dayPlan(snap, { ...emptyDayFile('2026-10-27'), wakeMin: lm('06:00') }).find((b) => b.sourceId === 'r')?.startMin).toBe(lm('06:00'))
@@ -262,7 +262,7 @@ describe('zmiana typu w trakcie dnia', () => {
     // 27.11.2026: NYSE closes at 13:00 New York time; a session 09:30–16:00 NY on a day without sessions, added by „tak”.
     const changes = [{ id: 'a', from: '2026-01-01', at: null, patch: { sessions: [{ id: 'rth', name: 'RTH', zone: 'America/New_York', startMin: 570, endMin: 960, markets: ['NYSE'] }] } }]
     const file: DayFile = { ...emptyDayFile('2026-11-27'), dayType: 'regeneracyjny' }
-    const snap = createDay({ date: '2026-11-27', changes, templates: [], lectures: [], dayFile: file, holidays: marketDay, at: null })
+    const snap = createDay({ date: '2026-11-27', changes, templates: [], lectures: [], series: [], dayFile: file, holidays: marketDay, at: null })
     expect(snap.blocks.some((b) => b.origin === 'session')).toBe(false)
     const rth = dayPlan(snap, { ...file, sessions: { rth: 'yes' } }).find((b) => b.sourceId === 'rth')!
     expect(rth.durationMin).toBe(210)
@@ -388,7 +388,7 @@ describe('plan poranny', () => {
     date,
     changes: [],
     templates: defaultTemplates(),
-    lectures: [],
+    lectures: [], series: [],
     holidays: marketDay,
     files: (d) => files[d] ?? null
   })
@@ -400,7 +400,7 @@ describe('plan poranny', () => {
   })
 
   it('pytania warstwy sesji „pytaj” bez odpowiedzi', () => {
-    const snap = createDay({ date: '2026-10-21', changes: [], templates: [], lectures: [], dayFile: { ...emptyDayFile('2026-10-21'), dayType: 'zjazd-zdalny' }, holidays: marketDay, at: null })
+    const snap = createDay({ date: '2026-10-21', changes: [], templates: [], lectures: [], series: [], dayFile: { ...emptyDayFile('2026-10-21'), dayType: 'zjazd-zdalny' }, holidays: marketDay, at: null })
     expect(sessionQuestions(snap, null, '2026-10-21').map((s) => s.id)).toEqual(['londyn', 'ny'])
     expect(sessionQuestions(snap, { ...emptyDayFile('2026-10-21'), sessions: { ny: 'yes' } }, '2026-10-21').map((s) => s.id)).toEqual(['londyn'])
   })
@@ -464,7 +464,7 @@ describe('przenoszenie i kopiowanie', () => {
 
   it('blok przeniesiony z powrotem na dzień, z którego wyszedł, jest tam znowu (i nie ma go na drugim)', () => {
     const x = block({ id: 'x', cat: 'analiza', at: '09:00', min: 60, origin: 'user' })
-    const snap = createDay({ date: '2026-10-21', changes: [], templates: [], lectures: [], dayFile: null, holidays: noHolidays, at: null })
+    const snap = createDay({ date: '2026-10-21', changes: [], templates: [], lectures: [], series: [], dayFile: null, holidays: noHolidays, at: null })
     const there = moveBetweenDays({ schema: 1, date: '2026-10-21', blocks: [x] }, null, x, [x], '2026-10-21', '2026-10-22')
     const back = moveBetweenDays(there.target, there.source, { ...x, movedFrom: '2026-10-21', moves: 1 }, [x], '2026-10-22', '2026-10-21')
     const mon = dayPlan(snap, dayFileFrom(back.target, '2026-10-21'))
@@ -517,12 +517,12 @@ describe('kreator pierwszego komputera', () => {
     expect(rd.people.map((p) => p.name)).toEqual(['Mama'])
     const templates = records.filter((r) => r.rel.startsWith('templates/')).map((r) => templateFrom(r.value)!)
     expect(settingsOn(rd.settings, '2026-10-21').dayTypes.zwykly.budgetMin).toBe(480)
-    const wed = createDay({ date: '2026-10-21', changes: rd.settings, templates, lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const wed = createDay({ date: '2026-10-21', changes: rd.settings, templates, lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
     expect(wed.budgetMin).toBe(480)
     expect(wed.blocks.find((b) => b.tag === 'secondShift')).toMatchObject({ startMin: lm('20:00'), durationMin: 60, fixed: true })
-    const sat = createDay({ date: '2026-10-24', changes: rd.settings, templates, lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const sat = createDay({ date: '2026-10-24', changes: rd.settings, templates, lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
     expect(sat.blocks.find((b) => b.tag === 'weeklyAnalysis')).toMatchObject({ startMin: lm('09:00'), waitUntilMin: lm('15:00') })
-    const zjazd = createDay({ date: '2026-10-31', changes: rd.settings, templates, lectures: [], dayFile: dayFileFrom(records[3]!.value, '2026-10-31'), holidays: marketDay, at: null })
+    const zjazd = createDay({ date: '2026-10-31', changes: rd.settings, templates, lectures: [], series: [], dayFile: dayFileFrom(records[3]!.value, '2026-10-31'), holidays: marketDay, at: null })
     expect(zjazd.dayType).toBe('zjazd-stacjonarny')
   })
 })
@@ -534,7 +534,7 @@ describe('pobudka przesuwa też bloki ręczne – jedna reguła i migawka dnia (
     dayType: 'zwykly',
     versions: [{ from: '2026-01-01', blocks: [{ id: 'f', categoryId: 'inne', startMin: lm('09:00'), durationMin: 30, fixed: true }, { id: 'b', categoryId: 'inne', startMin: lm('10:00'), durationMin: 30 }] }]
   })!
-  const create = (lectures: Parameters<typeof createDay>[0]['lectures'] = []) => createDay({ date: '2026-10-21', changes: [], templates: [tpl], lectures, dayFile: null, holidays: marketDay, at: null })
+  const create = (lectures: Parameters<typeof createDay>[0]['lectures'] = []) => createDay({ date: '2026-10-21', changes: [], templates: [tpl], lectures, series: [], dayFile: null, holidays: marketDay, at: null })
 
   it('poranek jest ograniczony pierwszym blokiem stałym jak w 1.0.3 – także odwołanym; blok szablonu i własny idą tak samo', () => {
     const snap = create()
@@ -552,7 +552,7 @@ describe('pobudka przesuwa też bloki ręczne – jedna reguła i migawka dnia (
     expect(dayPlan(snap, { ...kept, wakeMin: lm('07:00') }).find((b) => b.sourceId === 'b')?.startMin).toBe(lm('10:00'))
     expect(wakeChange(snap, kept, lm('07:00')).map((b) => b.id)).toEqual(['early'])
     // The answers of the session layer count as before: a session added by „tak” at 08:00 bounds both the same way.
-    const weekdaySnap = createDay({ date: '2026-10-21', changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const weekdaySnap = createDay({ date: '2026-10-21', changes: [], templates: [], lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
     const ses = { ...emptyDayFile('2026-10-21'), sessions: { londyn: 'yes', ny: 'no' } as const, blocks: [block({ id: 'x', cat: 'inne', at: '07:30', min: 30, origin: 'user' }), block({ id: 'y', cat: 'inne', at: '08:30', min: 30, origin: 'user' })] }
     expect(morningBound(weekdaySnap, ses)).toBe(lm('08:00'))
     expect(wakeChange(weekdaySnap, ses, lm('07:00')).map((b) => b.id)).toEqual(['x'])

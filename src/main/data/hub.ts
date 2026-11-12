@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { BackupRecord, CalibrationScreen, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords, recordEdit } from '@shared/data/merge'
@@ -39,6 +39,7 @@ import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
 import type { DataFolder, TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
+import { seriesAnswer, seriesChange, seriesCreate, seriesEnd, seriesRemove, seriesUndo, type SeriesIo } from './series'
 import { DataService, STOP_TIMEOUT_MS, type ServiceOptions } from './service'
 
 /** No daily backup for this many days: the window warns (spec „po 3 dniach bez kopii także w oknie głównym”). */
@@ -379,16 +380,19 @@ export class DataHub {
     return `${head}|${today}|${JSON.stringify(await this.records())}|${JSON.stringify(days)}|${read.events.length}|${f.unsynced}|${f.unavailable}|${JSON.stringify(this.service?.backup ?? null)}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}|${JSON.stringify(moved)}|${f.computers.map((c) => `${c.id}:${c.appVersion ?? ''}`).join(',')}`
   }
 
-  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines'>> {
+  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines' | 'series' | 'seriesDays'>> {
     const f = this.service?.folder
-    if (!f) return { rd: null, templates: [], lectures: [], requests: [], routines: [] }
+    if (!f) return { rd: null, templates: [], lectures: [], requests: [], routines: [], series: [], seriesDays: {} }
     const settled = async <T>(p: Promise<T>, fallback: T) => p.catch(() => fallback)
+    const series = await settled(f.seriesView(), { records: [], days: {} })
     return {
       rd: (await settled(f.recordView(SETTINGS_FILE), undefined)) ?? null,
       templates: await settled(f.collection('template'), []),
       lectures: await settled(f.collection('schedule'), []),
       requests: await settled(f.collection('request'), []),
-      routines: await settled(f.collection('routine'), [])
+      routines: await settled(f.collection('routine'), []),
+      series: series.records,
+      seriesDays: series.days
     }
   }
 
@@ -630,6 +634,41 @@ export class DataHub {
       }
     }
     return { saved: saved.sort(), unchanged: unchanged.sort(), questions, skipped, outcomes, undo }
+  }
+
+  /** The series' changes (D381): the folder as this computer sees it, written through `edit` – one edit of the queue each. */
+  private seriesIo(): SeriesIo {
+    return { folder: this.need(), holidays: this.o.holidays, edit: (entries) => this.edit(entries) }
+  }
+
+  /** „Powtarzaj”: a new series from a block of a day (`main/data/series.ts`). */
+  seriesCreate(input: unknown): Promise<SeriesResult> {
+    return seriesCreate(this.seriesIo(), input)
+  }
+
+  /** A change of a series by its scope („Tylko to · To i następne · Cała seria”). */
+  seriesChange(target: unknown, scope: unknown, patch: unknown): Promise<SeriesResult> {
+    return seriesChange(this.seriesIo(), target, scope, patch)
+  }
+
+  /** A removal of a series by its scope. */
+  seriesRemove(target: unknown, scope: unknown): Promise<SeriesResult> {
+    return seriesRemove(this.seriesIo(), target, scope)
+  }
+
+  /** „Koniec serii”: its last day. */
+  seriesEnd(seriesId: unknown, last: unknown): Promise<SeriesResult> {
+    return seriesEnd(this.seriesIo(), seriesId, last)
+  }
+
+  /** The morning's answer about an occurrence on a special day (D382). */
+  seriesAnswer(date: unknown, blockId: unknown, keep: unknown): Promise<SeriesResult> {
+    return seriesAnswer(this.seriesIo(), date, blockId, keep)
+  }
+
+  /** „Cofnij” of one change of a series. */
+  seriesUndo(undo: unknown): Promise<SeriesResult> {
+    return seriesUndo(this.seriesIo(), undo)
   }
 
   async edit(entries: EditEntry[]): Promise<EditOutcome[]> {

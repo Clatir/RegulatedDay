@@ -20,7 +20,7 @@ const tb = (id: string, at: string, min: number, o: Partial<PlanBlock> = {}): Pl
 function templateDay(date: string, blocks: PlanBlock[]) {
   const version: TemplateVersion = { from: '2000-01-01', blocks, budgetMin: null, maxMin: null }
   const t: Template = { id: 'zwykly', name: 'Dzień zwykły', dayType: 'zwykly', weekdays: [], versions: [version], archived: false }
-  const day = countDay(date, { date, dayFile: { schema: 1, date, dayType: 'zwykly' }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [t], lectures: [] }, placeLogical(date, 4 * 60), false)
+  const day = countDay(date, { date, dayFile: { schema: 1, date, dayType: 'zwykly' }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [t], lectures: [], series: [] }, placeLogical(date, 4 * 60), false)
   return { day, version }
 }
 const span = (from: string, to: string) => ({ startMin: lm(from), endMin: lm(to) })

@@ -7,7 +7,7 @@
 
 export type Range = [number, number]
 
-export type SearchKind = 'command' | 'screen' | 'setting' | 'category' | 'block' | 'template' | 'templateBlock' | 'request' | 'routine'
+export type SearchKind = 'command' | 'screen' | 'setting' | 'category' | 'block' | 'template' | 'templateBlock' | 'series' | 'request' | 'routine'
 
 /** One thing that can be found. `title` and `text` are shown (and searched), `keys` only searched, `hint` only shown. */
 export interface SearchRecord {
@@ -33,7 +33,7 @@ export const GROUPS: ReadonlyArray<{ id: GroupId; label: string; kinds: readonly
   { id: 'screen', label: 'Ekrany i ustawienia', kinds: ['screen', 'setting'] },
   { id: 'category', label: 'Kategorie', kinds: ['category'] },
   { id: 'block', label: 'Bloki', kinds: ['block'] },
-  { id: 'template', label: 'Szablony', kinds: ['template', 'templateBlock'] },
+  { id: 'template', label: 'Szablony', kinds: ['template', 'templateBlock', 'series'] },
   { id: 'request', label: 'Prośby', kinds: ['request'] },
   { id: 'routine', label: 'Rutyny', kinds: ['routine'] }
 ]

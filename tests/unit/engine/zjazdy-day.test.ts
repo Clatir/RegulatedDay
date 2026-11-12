@@ -35,7 +35,7 @@ const stationary = T('zjazd-st', 'zjazd-stacjonarny', [
   block({ id: 'regen', cat: 'regeneracja', at: '18:00', min: 60 })
 ])
 const remote = T('zjazd-zd', 'zjazd-zdalny', [block({ id: 'zz', cat: 'zajecia-zdalne', at: '08:00', min: 360, fixed: true }), block({ id: 'nauka', cat: 'nauka', after: 'zz', min: 60 })])
-const inp: ZjazdInputs = { changes: [], templates: [stationary, remote], lectures: [], holidays: marketDay }
+const inp: ZjazdInputs = { changes: [], templates: [stationary, remote], lectures: [], series: [], holidays: marketDay }
 
 const DATE = '2026-11-21'
 const tpl = (templateId: string, id: string) => templateBlockId(DATE, templateId, id)
@@ -50,7 +50,7 @@ const remoteDay: ZjazdDay = { date: DATE, kind: 'zdalny', classes: [c('08:00', '
 
 function planOf(raw: Raw, templates: readonly Template[] = inp.templates) {
   const file = dayFileFrom(raw, DATE)
-  const snapshot = createDay({ date: DATE, changes: [], templates, lectures: [], dayFile: file, holidays: marketDay, at: null })
+  const snapshot = createDay({ date: DATE, changes: [], templates, lectures: [], series: [], dayFile: file, holidays: marketDay, at: null })
   return { file, snapshot, plan: dayPlan(snapshot, file) }
 }
 const byId = (plan: readonly PlanBlock[], id: string) => plan.find((b) => b.id === id)

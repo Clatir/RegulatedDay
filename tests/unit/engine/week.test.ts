@@ -218,7 +218,7 @@ const NOW = placeLogical('2026-11-04', 11 * 60 + 30)
 describe('dzień przyszły – z planu', () => {
   it('zjazd zaznaczony w kalendarzu: typ dnia i bloki szablonu zjazdu; bez granicy, minimum bez prognozy przeszłości', () => {
     const date = '2026-11-07'
-    const ctx = dayContextOf({ changes: [], templates: [zjazd], lectures: [] }, { date, events: [], dayFile: dayFileFrom({ schema: 1, date, dayType: 'zjazd-stacjonarny' }, date), nextFile: null }, marketDay, NOW)
+    const ctx = dayContextOf({ changes: [], templates: [zjazd], lectures: [], series: [] }, { date, events: [], dayFile: dayFileFrom({ schema: 1, date, dayType: 'zjazd-stacjonarny' }, date), nextFile: null }, marketDay, NOW)
     const d = horizonDay(ctx, 'future')
     expect(d).toMatchObject({ when: 'future', dayType: 'zjazd-stacjonarny', boundary: null, extensionMin: 0, studyMin: 0, sessions: { clean: 0, extended: 0, outsidePlan: 0 } })
     // A template's blocks have ids derived for the day: told by what names them.
@@ -231,7 +231,7 @@ describe('dzień przyszły – z planu', () => {
 
   it('zwykły dzień roboczy: sesje warstwy (Londyn, NY) w planie, nazwane jak wszędzie (skąd pochodzą)', () => {
     const date = '2026-11-05'
-    const ctx = dayContextOf({ changes: [], templates: [], lectures: [] }, { date, events: [], dayFile: null, nextFile: null }, marketDay, NOW)
+    const ctx = dayContextOf({ changes: [], templates: [], lectures: [], series: [] }, { date, events: [], dayFile: null, nextFile: null }, marketDay, NOW)
     const d = horizonDay(ctx, 'future')
     expect(d.dayType).toBe('zwykly')
     expect(d.blocks.map((b) => [b.named.origin, b.named.sourceId, b.state])).toEqual([
@@ -243,7 +243,7 @@ describe('dzień przyszły – z planu', () => {
 
   it('dzień wolny w przyszłości: „wolny”', () => {
     const date = '2026-11-06'
-    const ctx = dayContextOf({ changes: [], templates: [], lectures: [] }, { date, events: [], dayFile: dayFileFrom({ schema: 1, date, dayType: 'wolne' }, date), nextFile: null }, marketDay, NOW)
+    const ctx = dayContextOf({ changes: [], templates: [], lectures: [], series: [] }, { date, events: [], dayFile: dayFileFrom({ schema: 1, date, dayType: 'wolne' }, date), nextFile: null }, marketDay, NOW)
     expect(horizonDay(ctx, 'future').boundary).toBe('free')
   })
 })

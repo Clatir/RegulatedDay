@@ -58,6 +58,12 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `withoutZjazd`, `zjazdTypeRaw`, `classImport`, `sameDayFile`); bloki `origin: 'zjazd'` i zajęcia zdalne w dniu zjazdu
   (`blockInfos(…, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
   `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365).
+- Serie (OPS1, D381, D382, D401, T700–T710): `model/series.ts` (rekord, reguły `ruleFallsOn`, wersje `seriesVersionOn`,
+  dni szczególne `specialOutcome`, licznik `countedBefore`/`seriesLast`, `seriesPlans` – `SeriesPlan { series, last }`,
+  `countDatesToRead`, `seriesOfBlock`, `currentSeries` – lista, jedna na korzeń), `engine/series.ts` (`seriesBlocks` w `createDay`, `pushedBySeries` – rozsuwanie na
+  osi planu, `withSeriesOccurrences` w `snapshotOf`, `seriesQuestions`, `seriesAnswerRaw`, zmiany `changedFrom`/`splitAt`/
+  `withEnd`/`endedOn`, `todayOccurrenceEdit`), słowa – `shared/seriesText.ts`. Każde miejsce budujące dzień podaje `series`
+  (wymagane w `PlanInputs`/`DayInputs`). Dni minione: zmiana tylko od dziś (wersja albo podział). Testy: `series.test.ts`.
 - E10 (T552–T554): `engine/week.ts` (`horizonDay` – dzień tygodnia i celów, `weekViewOf`, `sessionsOf`),
   `engine/goals.ts` (postęp „x z y”, `goalsStepShown`), `model/goals.ts` (cele w `rd.json`, zakresy).
 - E3: `engine/context.ts` (`dayContextOf`, `snapshotOf` – jedno źródło kontekstu dla prowadzącego i okna),

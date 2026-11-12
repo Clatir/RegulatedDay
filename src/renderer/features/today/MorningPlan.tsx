@@ -137,7 +137,7 @@ const WARNINGS: Record<MorningWarning, (m: DayModel, lm: (i: number) => string) 
 }
 
 function Plan({ model, names }: { model: DayModel; names: Names }) {
-  const { requests, templates, lectures, rd } = useData()
+  const { requests, templates, lectures, seriesPlans, rd } = useData()
   const date = model.date
   const s = model.state
   const g = s.grid
@@ -151,10 +151,11 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
         changes: rd.settings,
         templates,
         lectures,
+        series: seriesPlans,
         holidays: marketDay,
         files: (d) => (d === date ? model.dayFile : raws[d] ? dayFileFrom(raws[d], d) : null)
       },
-    [raws, date, rd.settings, templates, lectures, model.dayFile]
+    [raws, date, rd.settings, templates, lectures, seriesPlans, model.dayFile]
   )
   const raw = model.data.dayFile
   const currentType = s.facts.snapshots.at(-1)?.dayType ?? model.snapshot.dayType

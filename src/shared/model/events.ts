@@ -71,6 +71,11 @@ export interface DaySnapshot {
   changes: string[]
   /** Holidays of the day by market, as the calendar of this build knew them. */
   holidays: Array<{ market: string; closed: boolean; earlyCloseAt: number | null; names: string[] }>
+  /**
+   * The series whose occurrences the snapshot holds (D381, their roots). Absent in a snapshot made by a version without
+   * series: the day's occurrences are laid over it by the series in force (`snapshotOf`).
+   */
+  series?: string[]
 }
 
 /** A part of the minutes of work, classified once by the computer leading in that minute (spec „odcinki klasyfikacji”). */

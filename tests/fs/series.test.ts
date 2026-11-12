@@ -1,0 +1,245 @@
+/**
+ * Series in a real data folder (OPS1, D381, D382, D401): „Powtarzaj” writes series/<id>.json and the day's file in one
+ * edit of the queue (the block becomes the first occurrence; today's occurrence is written into today's file), the window
+ * sees the series and the plans of days have their occurrences, „Cała seria” adds a version from today (yesterday as it
+ * was), „To i następne” splits the series (the same root), „Tylko to” changes one day's file, a removal of the whole series
+ * cancels today's occurrence and takes the ones changed on their days, the morning's answer, „Cofnij”, and refusals.
+ */
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { marketDay } from '@shared/calendar/holidays'
+import { paths } from '@shared/data/paths'
+import { snapshotOf } from '@shared/engine/context'
+import { createDay, dayPlan } from '@shared/engine/createDay'
+import { RULES_VERSION, type AnyEvent } from '@shared/model/events'
+import { dayStart } from '@shared/time/day'
+import { seriesAskKey, seriesBlockId } from '@shared/engine/series'
+import { dayFileFrom, planBlock, type PlanBlock } from '@shared/model/plan'
+import { seriesFrom, seriesJson, seriesPlans, typeOfDays, type Series } from '@shared/model/series'
+import { logicalDayOf } from '@shared/time/day'
+import { addDays } from '@shared/time/zone'
+import { DataHub } from '../../src/main/data/hub'
+
+let root: string
+let dir: string
+let hub: DataHub
+let today: string
+
+const write = (rel: string, value: unknown) => {
+  mkdirSync(dirname(join(dir, rel)), { recursive: true })
+  writeFileSync(join(dir, rel), typeof value === 'string' ? value : JSON.stringify(value))
+}
+const onDisk = (rel: string) => (existsSync(join(dir, rel)) ? (JSON.parse(readFileSync(join(dir, rel), 'utf8')) as Record<string, unknown>) : null)
+const seriesOnDisk = (): Series[] =>
+  existsSync(join(dir, 'series'))
+    ? readdirSync(join(dir, 'series'))
+        .map((n) => seriesFrom(onDisk(`series/${n}`)))
+        .filter((s): s is Series => !!s)
+    : []
+
+/** The plan of a day as the window counts it: the view's series, the day's log and file. */
+async function planOn(date: string): Promise<PlanBlock[]> {
+  const view = await hub.view()
+  const list = view.series.map(seriesFrom).filter((s): s is Series => !!s)
+  const plans = seriesPlans(list, typeOfDays([], (d) => (view.seriesDays[d] as never) ?? null), marketDay)
+  const data = await hub.day(date)
+  const file = data.dayFile ? dayFileFrom(data.dayFile, date) : null
+  const { snapshot } = snapshotOf({ changes: [], templates: [], lectures: [], series: plans }, { date, events: data.events as AnyEvent[], dayFile: file, nextFile: null }, marketDay, Date.now())
+  return dayPlan(snapshot, file)
+}
+
+const own = (id: string, at: number, extra: Partial<PlanBlock> = {}) => planBlock({ id, categoryId: 'inne', startMin: at, durationMin: 45, name: 'Angielski', ...extra })
+const dayFileWith = (date: string, blocks: PlanBlock[], extra: Record<string, unknown> = {}) => ({ schema: 1, date, blocks: Object.fromEntries(blocks.map((b) => [b.id, b])), ...extra })
+
+beforeEach(async () => {
+  root = mkdtempSync(join(tmpdir(), 'rd-series-'))
+  dir = join(root, 'data')
+  mkdirSync(dir, { recursive: true })
+  hub = new DataHub({
+    userData: join(root, 'appdata'),
+    computer: () => 'pca',
+    computerName: 'PC A',
+    appVersion: '1.11.0',
+    runId: `run-${Math.random()}`,
+    holidays: marketDay,
+    idleSeconds: () => 0,
+    log: () => undefined,
+    writeGuardPlan: false,
+    extraBackupDir: () => null,
+    previousVersion: () => null,
+    onChange: () => undefined
+  })
+  expect(await hub.open(dir)).toBe(true)
+  today = logicalDayOf(Date.now())
+})
+afterEach(async () => {
+  await hub.close('quit')
+  rmSync(root, { recursive: true, force: true })
+})
+
+describe('serie w folderze danych (D381)', () => {
+  it('„Powtarzaj” z bloku dnia przyszłego: plik serii i plik dnia jedną zmianą; blok jest pierwszym wystąpieniem; okno widzi serię', async () => {
+    const d = addDays(today, 2)
+    write(paths.day(d), dayFileWith(d, [own('ang', 18 * 60)]))
+    const out = await hub.seriesCreate({ date: d, blockId: 'ang', rule: { kind: 'daily' }, count: 3 })
+    expect([out.ok, out.error]).toEqual([true, null])
+    const [s] = seriesOnDisk()
+    expect([s!.id, s!.start, s!.count, s!.versions[0]!.block.startMin, s!.versions[0]!.special]).toEqual([out.seriesId, d, 3, 18 * 60, 'ask'])
+    // The block left its day: the occurrence is there instead, the next days have theirs, the fourth day none.
+    expect(dayFileFrom(onDisk(paths.day(d)), d).blocks).toEqual([])
+    const occ = (await planOn(d)).find((b) => b.origin === 'series')!
+    expect([occ.id, occ.startMin, occ.name]).toEqual([seriesBlockId(d, s!.root), 18 * 60, 'Angielski'])
+    expect((await planOn(addDays(d, 2))).some((b) => b.origin === 'series')).toBe(true)
+    expect((await planOn(addDays(d, 3))).some((b) => b.origin === 'series')).toBe(false)
+    expect((await hub.view()).series.map((r) => r.id)).toEqual([s!.id])
+    // The search finds the series as one record (the window's data), never its occurrences as blocks of days (D401).
+    const corpus = await hub.searchDays()
+    expect(corpus.complete).toBe(true)
+    expect(corpus.blocks.some((x) => x.id === occ.id)).toBe(false)
+    // „Cofnij”: the series and the day's file as before.
+    const back = await hub.seriesUndo(out.undo)
+    expect(back.ok).toBe(true)
+    expect(seriesOnDisk()).toEqual([])
+    expect(dayFileFrom(onDisk(paths.day(d)), d).blocks.map((b) => b.id)).toEqual(['ang'])
+  })
+
+  it('„Powtarzaj” dziś: dzisiejsze wystąpienie trafia do pliku dnia (migawka w logu go nie ma), blok – nie', async () => {
+    write(paths.day(today), dayFileWith(today, [own('ang', 21 * 60)]))
+    const out = await hub.seriesCreate({ date: today, blockId: 'ang', rule: { kind: 'daily' } })
+    expect(out.ok).toBe(true)
+    const file = dayFileFrom(onDisk(paths.day(today)), today)
+    expect(file.blocks.map((b) => [b.id, b.origin, b.startMin])).toEqual([[seriesBlockId(today, out.seriesId!), 'series', 21 * 60]])
+    expect((await planOn(today)).filter((b) => b.origin === 'series' || b.id === 'ang').map((b) => b.id)).toEqual([seriesBlockId(today, out.seriesId!)])
+  })
+
+  it('blok sesji nie powtarza się w serii; nieznany blok – odmowa, nic nie zapisane', async () => {
+    const d = addDays(today, 3)
+    write(paths.day(d), dayFileWith(d, [own('s', 9 * 60, { origin: 'session', sourceId: 'londyn', fixed: true }), own('u', 18 * 60)]))
+    expect((await hub.seriesCreate({ date: d, blockId: 's', rule: { kind: 'daily' } })).code).toBe('kind')
+    expect((await hub.seriesCreate({ date: d, blockId: 'nie-ma', rule: { kind: 'daily' } })).code).toBe('notFound')
+    expect((await hub.seriesCreate({ date: d, blockId: 'u', rule: { kind: 'co-tydzien' } })).code).toBe('invalid')
+    expect(seriesOnDisk()).toEqual([])
+  })
+})
+
+describe('zmiany i usunięcie serii (D381)', () => {
+  const start = () => addDays(today, -7)
+  const series = (): Series => ({
+    id: 'fizjo',
+    root: 'fizjo',
+    start: start(),
+    until: null,
+    count: null,
+    versions: [{ from: start(), block: { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null }, rule: { kind: 'daily' }, special: 'ask' }],
+    archived: false
+  })
+
+  it('„Cała seria” od dziś: wersja od dziś, wczoraj bez zmian, dzisiejsze niezaczęte w pliku dnia, jutro z nową godziną', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const out = await hub.seriesChange({ seriesId: 'fizjo' }, 'all', { block: { startMin: 22 * 60 + 30 } })
+    expect(out.ok).toBe(true)
+    const [s] = seriesOnDisk()
+    expect(s!.versions.map((v) => [v.from, v.block.startMin])).toEqual([
+      [start(), 22 * 60],
+      [today, 22 * 60 + 30]
+    ])
+    const at = async (d: string) => (await planOn(d)).find((b) => b.origin === 'series')!.startMin
+    expect(await at(addDays(today, -1))).toBe(22 * 60)
+    expect(await at(today)).toBe(22 * 60 + 30)
+    expect(dayFileFrom(onDisk(paths.day(today)), today).blocks.find((b) => b.id === seriesBlockId(today, 'fizjo'))!.startMin).toBe(22 * 60 + 30)
+    expect(onDisk(paths.day(addDays(today, -1)))).toBeNull()
+    expect(await at(addDays(today, 5))).toBe(22 * 60 + 30)
+  })
+
+  it('dziś z migawką w logu: „Cała seria” zapisuje dzisiejsze wystąpienie w pliku dnia; zaczęte zostaje jak w logu', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const plans = seriesPlans([series()], typeOfDays([], () => null), marketDay)
+    const snapshot = createDay({ date: today, changes: [], templates: [], lectures: [], series: plans, dayFile: null, holidays: marketDay, at: null })
+    const t0 = dayStart(today)
+    const base = { c: 'pcb', v: RULES_VERSION, day: today, dom: 'timer' }
+    const lines = [{ ...base, id: 'pcb-0', n: 0, t: t0, l: t0, k: 'day.create', snapshot }]
+    const jsonl = (xs: unknown[]) => `${xs.map((x) => JSON.stringify(x)).join('\n')}\n`
+    write(paths.log(today, 'pcb'), jsonl(lines))
+    const id = seriesBlockId(today, 'fizjo')
+    expect((await planOn(today)).find((b) => b.id === id)!.startMin).toBe(22 * 60)
+    expect((await hub.seriesChange({ seriesId: 'fizjo' }, 'all', { block: { startMin: 22 * 60 + 30 } })).ok).toBe(true)
+    expect((await planOn(today)).find((b) => b.id === id)!.startMin).toBe(22 * 60 + 30)
+
+    // Begun (a start in the log): a later change of the whole series leaves today's as it is.
+    const started = { ...base, id: 'pcb-1', n: 1, t: t0 + 60_000, l: t0 + 60_000, k: 'block.start', block: id, at: t0 + 60_000, bg: false, how: 'click', planned: { categoryId: 'inne', variantId: null, durationMin: 60, tag: null, fixed: true } }
+    write(paths.log(today, 'pcb'), jsonl([...lines, started]))
+    const before = onDisk(paths.day(today))
+    expect((await hub.seriesChange({ seriesId: 'fizjo' }, 'all', { block: { startMin: 23 * 60 } })).ok).toBe(true)
+    expect(dayFileFrom(onDisk(paths.day(today)), today).blocks.find((b) => b.id === id)!.startMin).toBe(dayFileFrom(before, today).blocks.find((b) => b.id === id)!.startMin)
+    expect((await planOn(addDays(today, 1))).find((b) => b.origin === 'series')!.startMin).toBe(23 * 60)
+  })
+
+  it('„To i następne” dzieli serię: stara do dnia przed, nowa od niego z tym samym korzeniem; dziś bez zmian', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const d = addDays(today, 3)
+    const out = await hub.seriesChange({ date: d, blockId: seriesBlockId(d, 'fizjo') }, 'following', { block: { durationMin: 30 } })
+    expect(out.ok).toBe(true)
+    const list = seriesOnDisk().sort((a, b) => (a.start < b.start ? -1 : 1))
+    expect(list.map((s) => [s.id === 'fizjo', s.root, s.start, s.until])).toEqual([
+      [true, 'fizjo', start(), addDays(d, -1)],
+      [false, 'fizjo', d, null]
+    ])
+    expect(out.seriesId).toBe(list[1]!.id)
+    const len = async (x: string) => (await planOn(x)).find((b) => b.origin === 'series')!.durationMin
+    expect([await len(today), await len(addDays(d, -1)), await len(d), await len(addDays(d, 4))]).toEqual([60, 60, 30, 30])
+    expect(onDisk(paths.day(today))).toBeNull()
+  })
+
+  it('„Tylko to” zmienia jedno wystąpienie w pliku jego dnia; seria bez zmian', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const d = addDays(today, 2)
+    const id = seriesBlockId(d, 'fizjo')
+    const out = await hub.seriesChange({ date: d, blockId: id }, 'only', { block: { startMin: 19 * 60 } })
+    expect(out.ok).toBe(true)
+    expect(dayFileFrom(onDisk(paths.day(d)), d).blocks.map((b) => [b.id, b.startMin, b.fixed])).toEqual([[id, 19 * 60, true]])
+    expect(seriesOnDisk()[0]!.versions).toHaveLength(1)
+    expect((await planOn(addDays(d, 1))).find((b) => b.origin === 'series')!.startMin).toBe(22 * 60)
+  })
+
+  it('usunięcie „Cała seria”: koniec wczoraj, poza listą, dzisiejsze odwołane, zmienione pojedynczo w przyszłości zdjęte; dni minione zostają', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const d = addDays(today, 4)
+    const id = seriesBlockId(d, 'fizjo')
+    // An occurrence changed on its day (an exception kept by every change of the series).
+    write(paths.day(d), dayFileWith(d, [planBlock({ ...series().versions[0]!.block, id, startMin: 20 * 60, origin: 'series', sourceId: 'fizjo' })]))
+    const out = await hub.seriesRemove({ seriesId: 'fizjo' }, 'all')
+    expect(out.ok).toBe(true)
+    const [s] = seriesOnDisk()
+    expect([s!.until, s!.archived]).toEqual([addDays(today, -1), true])
+    expect(dayFileFrom(onDisk(paths.day(today)), today).cancelled).toEqual([seriesBlockId(today, 'fizjo')])
+    expect(dayFileFrom(onDisk(paths.day(d)), d).blocks).toEqual([])
+    expect((await planOn(today)).some((b) => b.origin === 'series')).toBe(false)
+    expect((await planOn(d)).some((b) => b.origin === 'series')).toBe(false)
+    expect((await planOn(addDays(today, -1))).some((b) => b.origin === 'series')).toBe(true)
+  })
+
+  it('odpowiedź planu porannego „odwołaj” w dniu zjazdu: pytanie zapisane, wystąpienie odwołane', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const d = addDays(today, 1)
+    write(paths.day(d), { schema: 1, date: d, dayType: 'zjazd-stacjonarny' })
+    const id = seriesBlockId(d, 'fizjo')
+    expect((await planOn(d)).some((b) => b.id === id)).toBe(true)
+    expect((await hub.seriesAnswer(d, id, false)).ok).toBe(true)
+    const file = dayFileFrom(onDisk(paths.day(d)), d)
+    expect([file.asked[seriesAskKey(id)], file.cancelled]).toEqual(['no', [id]])
+    expect((await planOn(d)).some((b) => b.id === id)).toBe(false)
+  })
+
+  it('„po N” liczy dni z typem z pliku dnia: dzień „Wolne” przedłuża serię (okno dostaje typy tych dni)', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson({ ...series(), start: addDays(today, 1), versions: [{ ...series().versions[0]!, from: addDays(today, 1) }], count: 2 }))
+    expect((await planOn(addDays(today, 3))).some((b) => b.origin === 'series')).toBe(false)
+    write(paths.day(addDays(today, 1)), { schema: 1, date: addDays(today, 1), dayType: 'wolne' })
+    hub.changed()
+    expect((await hub.view()).seriesDays).toEqual({ [addDays(today, 1)]: 'wolne' })
+    expect((await planOn(addDays(today, 1))).some((b) => b.origin === 'series')).toBe(false)
+    expect((await planOn(addDays(today, 3))).some((b) => b.origin === 'series')).toBe(true)
+    expect((await planOn(addDays(today, 4))).some((b) => b.origin === 'series')).toBe(false)
+  })
+})

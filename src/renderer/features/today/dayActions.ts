@@ -321,14 +321,14 @@ export interface WakeDay {
  * blocks from the facts folded from its log – no whole day counted (budget, energy), as the change needs neither.
  */
 export async function wakeDayOf(date: string): Promise<WakeDay> {
-  const { rd, templates, lectures } = useData.getState()
+  const { rd, templates, lectures, seriesPlans } = useData.getState()
   const data = await window.rd.dayData(date)
   // A day that cannot be read whole now says nothing sure about its blocks that have begun: nothing is written – except
   // the day as last read with the data folder away (its change waits for the folder, E8b.1).
   if (!dayUsable(data)) throw new Error('log albo plik tego dnia jest teraz nieczytelny – spróbuj za chwilę')
   const events = data.events as AnyEvent[]
   const dayFile = data.dayFile ? dayFileFrom(data.dayFile, date) : null
-  const { snapshot } = snapshotOf({ changes: rd.settings, templates, lectures }, { date, events, dayFile, nextFile: null }, marketDay, Date.now())
+  const { snapshot } = snapshotOf({ changes: rd.settings, templates, lectures, series: seriesPlans }, { date, events, dayFile, nextFile: null }, marketDay, Date.now())
   return { snapshot, keep: begunIds(foldFacts(gridOf(date), events)) }
 }
 
@@ -357,7 +357,7 @@ type WakeWas = Map<string, { wake: number | null; next: number | null; after: Ra
  * wake and those blocks back – only what is still as this change left it, so a later change stays (A6-07).
  */
 export async function setDayWake(dates: readonly string[], seen: (date: string) => RawRecord | null, wakeMin: number | null, days: Readonly<Record<string, WakeDay>> = {}): Promise<boolean> {
-  const { rd, templates, lectures } = useData.getState()
+  const { rd, templates, lectures, seriesPlans } = useData.getState()
   const was: WakeWas = new Map()
   const out = await trySaveWith(async () => {
     const now = await dayFilesNow(dates, seen)
@@ -366,7 +366,7 @@ export async function setDayWake(dates: readonly string[], seen: (date: string) 
       const raw = dayRaw(before, date)
       const file = dayFileFrom(raw, date)
       const day = days[date]
-      const snapshot = day?.snapshot ?? createDay({ date, changes: rd.settings, templates, lectures, dayFile: file, holidays: marketDay, at: null })
+      const snapshot = day?.snapshot ?? createDay({ date, changes: rd.settings, templates, lectures, series: seriesPlans, dayFile: file, holidays: marketDay, at: null })
       const moved = wakeChange(snapshot, file, wakeMin, day?.keep)
       let after = setDayField(raw, 'wakeMin', wakeMin)
       for (const b of moved) after = putBlock(after, b)
@@ -427,7 +427,7 @@ const COPIED = ['blocks', 'cancelled', 'dayType', 'wakeMin'] as const
  * „Cofnij” gives each target back those fields as they were before the copy.
  */
 export async function copyDayTo(source: { date: string; plan: readonly PlanBlock[]; dayType: string | null; wakeMin: number | null }, targets: readonly string[], rawOf: (date: string) => RawRecord | null): Promise<boolean> {
-  const { rd, templates, lectures } = useData.getState()
+  const { rd, templates, lectures, seriesPlans } = useData.getState()
   const blocks = copiedDay(source.plan)
   const was = new Map<string, { before: RawRecord | null; after: RawRecord }>()
   const out = await trySaveWith(async () => {
@@ -438,7 +438,7 @@ export async function copyDayTo(source: { date: string; plan: readonly PlanBlock
       if (source.dayType) raw.dayType = source.dayType
       if (source.wakeMin != null) raw.wakeMin = source.wakeMin
       else delete raw.wakeMin
-      const snap = createDay({ date, changes: rd.settings, templates, lectures, dayFile: dayFileFrom(raw, date), holidays: marketDay, at: null })
+      const snap = createDay({ date, changes: rd.settings, templates, lectures, series: seriesPlans, dayFile: dayFileFrom(raw, date), holidays: marketDay, at: null })
       let after = raw
       for (const b of snap.blocks) if (b.origin === 'template') after = setCancelled(after, b.id, true)
       was.set(date, { before, after })

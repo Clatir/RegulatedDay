@@ -54,8 +54,9 @@ import type { RunningRequest } from '@shared/widget'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { blockName, type Names } from '@shared/blockName'
 import { routineFrom, type Routine } from '@shared/model/routines'
+import { countDatesToRead, seriesFrom, seriesPlans, typeOfDays, type Series, type SeriesPlan } from '@shared/model/series'
 import type { CsvDay } from '@shared/engine/csv'
-import { changeOrder, isDayTypeId, settingsOn, type SettingsChange } from '@shared/model/settings'
+import { changeOrder, isDayTypeId, settingsOn, type DayTypeId, type SettingsChange } from '@shared/model/settings'
 import { decideLeader, minuteGate, SILENT_MS, soundComputer, type LeaderDecision, type Peer } from '@shared/sync/leader'
 import type { SyncState } from '@shared/sync/syncLines'
 import type { Presence } from '@shared/sync/presence'
@@ -252,11 +253,18 @@ export interface CheckResult {
 export type TimerClick = (TimerAction | RequestAction) & { day?: string; probe?: boolean }
 
 /** The records the day is made from, read through a cache checked by size and time of modification. */
-interface Inputs {
+export interface Inputs {
   changes: SettingsChange[]
   templates: Template[]
   lectures: LectureSeries[]
+  /** The series with their last days (D381, `seriesPlans`). */
+  series: SeriesPlan[]
+  /** The own types of the days the counts of the series read (date → type; a day without one is not here). */
+  seriesDays: Record<string, DayTypeId>
 }
+
+/** The rounds of reading the days a count of a series reads (a day read may move its end – `countDatesToRead`). */
+const SERIES_READ_ROUNDS = 20
 
 export class DataFolder {
   readonly clock: EventClock
@@ -272,6 +280,8 @@ export class DataFolder {
   /** The other computers' presences were scanned once (`check`): before that the leader's gate is not known (D345). */
   private peersScanned = false
   private lastObserve = 0
+  /** The last days of the series as the last `inputs` counted them (a day counted again only when they change – `contextSig`). */
+  private seriesSig = ''
   /** The data folder's root was gone at the last check (it is unsettled again when it comes back). */
   private rootGone = false
 
@@ -599,7 +609,46 @@ export class DataFolder {
     const changes = rdFrom(own ? await this.recordView(paths.settings) : await this.shared(paths.settings)).settings
     const templates = (await this.cachedDir(ID_COLLECTIONS.template, templateFrom, false, own)) as Template[]
     const lectures = (await this.cachedDir(ID_COLLECTIONS.schedule, lectureFrom, false, own)) as LectureSeries[]
-    return { changes, templates, lectures }
+    const list = (await this.cachedDir(ID_COLLECTIONS.series, seriesFrom, false, own)) as Series[]
+    const { plans, days } = await this.seriesOf(list, changes, own)
+    return { changes, templates, lectures, series: plans, seriesDays: days }
+  }
+
+  /**
+   * The series with their last days (D401: a count ends on the day of its N-th occurrence a special day did not skip): the
+   * own types of the days the counts read come from their files, read until the ends stand (a skipped day moves an end).
+   * A day's file that cannot be read now counts by its weekday – a count of a series never stops the day being made.
+   */
+  private async seriesOf(list: readonly Series[], changes: readonly SettingsChange[], own: boolean): Promise<{ plans: SeriesPlan[]; days: Record<string, DayTypeId> }> {
+    const known = new Map<string, DayTypeId | null>()
+    for (let round = 0; round < SERIES_READ_ROUNDS; round++) {
+      const need = countDatesToRead(list, changes, (d) => known.get(d), this.o.holidays)
+      if (!need.length) break
+      for (const d of need) {
+        try {
+          known.set(d, (await this.dayFile(d, own))?.dayType ?? null)
+        } catch {
+          known.set(d, null)
+        }
+      }
+    }
+    const days: Record<string, DayTypeId> = {}
+    for (const [d, t] of known) if (t) days[d] = t
+    const plans = seriesPlans(list, typeOfDays(changes, (d) => days[d] ?? null), this.o.holidays)
+    // The key of a day counted from the folder's files (`contextSig`) – never from your queued edits.
+    if (!own) this.seriesSig = JSON.stringify(plans.map((p) => [p.series.id, p.last]))
+    return { plans, days }
+  }
+
+  /**
+   * The series for the window (D381): their records as this computer sees them (with your queued edits) and the own types
+   * of the days their counts read – the window counts their last days from them (`seriesPlans`), as `inputs(true)` does.
+   */
+  async seriesView(): Promise<{ records: Array<Record<string, unknown>>; days: Record<string, DayTypeId> }> {
+    const records = await this.collection('series')
+    const changes = rdFrom(await this.recordView(paths.settings)).settings
+    const list = records.map(seriesFrom).filter((x): x is Series => !!x)
+    return { records, days: (await this.seriesOf(list, changes, true)).days }
   }
 
   /** The records of a collection as this computer sees them (requests, routines …), through the same cache. */
@@ -678,9 +727,31 @@ export class DataFolder {
         }
       }
       const names = namesOn(date)
-      return plan.map((b) => ({ date, id: b.id, title: blockName(b, names), note: b.note }))
+      // An occurrence of a series is found as its series (one record, D401), never once per day.
+      return plan.filter((b) => b.origin !== 'series').map((b) => ({ date, id: b.id, title: blockName(b, names), note: b.note }))
     })
     return { blocks: per.flat(), complete }
+  }
+
+  /**
+   * The days from `from` on that have a file (also one still in the queue), in order – a change of a series looks at the
+   * occurrences changed on their days (D381). A year that cannot be listed now is an error (unknown is never „none”).
+   */
+  async dayDatesFrom(from: string): Promise<string[]> {
+    const out = new Set<string>()
+    const root = join(this.o.dataDir, 'days')
+    for (const y of await this.o.fs.list(root)) {
+      if (!y.dir || !/^\d{4}$/.test(y.name) || y.name < from.slice(0, 4)) continue
+      for (const f of await this.o.fs.list(join(root, y.name))) {
+        const c = classify(`days/${y.name}/${f.name}`)
+        if (!f.dir && c?.kind === 'day' && !c.conflict && c.date! >= from) out.add(c.date!)
+      }
+    }
+    for (const rel of this.queue.relsUnder('days')) {
+      const c = classify(rel)
+      if (c?.kind === 'day' && !c.conflict && c.date! >= from) out.add(c.date!)
+    }
+    return [...out].sort()
   }
 
   async dayFile(date: string, own = false): Promise<DayFile | null> {
@@ -1037,7 +1108,7 @@ export class DataFolder {
         // No conflict copies in the files its grade reads – the log, the day's and the next day's file, rd.json, the
         // templates and the plan of lectures – until you answer them (spec „Ocena dnia”, A2-03); after 72 h it freezes
         // without waiting, as with the log's copies.
-        const readsCopy = [...this.copyConflicts.values()].some(({ canonical: c }) => c === paths.day(day) || c === paths.day(addDays(day, 1)) || c === paths.settings || c.startsWith(`${ID_COLLECTIONS.template}/`) || c.startsWith(`${ID_COLLECTIONS.schedule}/`))
+        const readsCopy = [...this.copyConflicts.values()].some(({ canonical: c }) => c === paths.day(day) || c === paths.day(addDays(day, 1)) || c === paths.settings || c.startsWith(`${ID_COLLECTIONS.template}/`) || c.startsWith(`${ID_COLLECTIONS.schedule}/`) || c.startsWith(`${ID_COLLECTIONS.series}/`))
         const decision = freezeDecision({ date: day, now, mayFreeze, openedAt, computers, filesQuiet: read.copies === 0 && !readsCopy && quiet })
         if (!decision.freeze) continue
         const know = { ...read.lastByComputer }
@@ -1517,7 +1588,7 @@ export class DataFolder {
   private contextSig(date: string): string {
     const of = (rel: string) => this.recordSig(rel)
     const dir = (d: string) => (this.listed.get(d) ?? []).map((n) => `${n}=${of(`${d}/${n}`)}`).join(',')
-    return [of(paths.settings), dir(ID_COLLECTIONS.template), dir(ID_COLLECTIONS.schedule), of(paths.day(date)), of(paths.day(addDays(date, 1)))].join('|')
+    return [of(paths.settings), dir(ID_COLLECTIONS.template), dir(ID_COLLECTIONS.schedule), dir(ID_COLLECTIONS.series), this.seriesSig, of(paths.day(date)), of(paths.day(addDays(date, 1)))].join('|')
   }
 
   /** A record as last read: by size and time of modification ('-': not read, or not there). */
@@ -2199,7 +2270,7 @@ export class DataFolder {
   private async joinCopies(day: string): Promise<void> {
     const year = Number(day.slice(0, 4))
     // Last year's days too (a copy of 31.12 seen on 1.01).
-    const dirs = ['', ID_COLLECTIONS.template, ID_COLLECTIONS.schedule, ID_COLLECTIONS.request, ID_COLLECTIONS.routine, `days/${year - 1}`, `days/${year}`, `days/${year + 1}`]
+    const dirs = ['', ID_COLLECTIONS.template, ID_COLLECTIONS.schedule, ID_COLLECTIONS.request, ID_COLLECTIONS.routine, ID_COLLECTIONS.series, `days/${year - 1}`, `days/${year}`, `days/${year + 1}`]
     const scanned = new Set(dirs)
     const seen = new Set<string>()
     for (const dir of dirs) {

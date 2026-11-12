@@ -113,7 +113,7 @@ describe('tydzień w folderze danych', () => {
   it('zmiana rd.json (zapisany cel) nie liczy od nowa dni, które prowadzący utworzył (migawka w logu) – tylko pozostałe', async () => {
     const { folder, runs } = await studied()
     const raw = JSON.parse(readFileSync(join(dataDir, paths.day(TUE)), 'utf8')) as unknown
-    const snapshot = createDay({ date: TUE, changes: [], templates: [], lectures: [], dayFile: dayFileFrom(raw, TUE), holidays: marketDay, at: placeLogical(TUE, 5 * 60) })
+    const snapshot = createDay({ date: TUE, changes: [], templates: [], lectures: [], series: [], dayFile: dayFileFrom(raw, TUE), holidays: marketDay, at: placeLogical(TUE, 5 * 60) })
     folder.append({ day: TUE, dom: 'timer', k: 'day.create', snapshot })
     await folder.log.flush()
     await folder.weekView(WED)

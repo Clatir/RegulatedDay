@@ -93,7 +93,13 @@ const api: RdApi = {
   onSound: (cb) => on('rd:sound', cb),
   zjazdyRead: () => ipcRenderer.invoke(CH.zjazdyRead),
   zjazdySave: (days) => ipcRenderer.invoke(CH.zjazdySave, days),
-  zjazdyUndo: (undo) => ipcRenderer.invoke(CH.zjazdyUndo, undo)
+  zjazdyUndo: (undo) => ipcRenderer.invoke(CH.zjazdyUndo, undo),
+  seriesCreate: (input) => ipcRenderer.invoke(CH.seriesCreate, input),
+  seriesChange: (target, scope, patch) => ipcRenderer.invoke(CH.seriesChange, target, scope, patch),
+  seriesRemove: (target, scope) => ipcRenderer.invoke(CH.seriesRemove, target, scope),
+  seriesEnd: (seriesId, last) => ipcRenderer.invoke(CH.seriesEnd, seriesId, last),
+  seriesAnswer: (date, blockId, keep) => ipcRenderer.invoke(CH.seriesAnswer, date, blockId, keep),
+  seriesUndo: (undo) => ipcRenderer.invoke(CH.seriesUndo, undo)
 }
 
 contextBridge.exposeInMainWorld('rd', api)

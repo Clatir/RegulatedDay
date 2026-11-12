@@ -10,10 +10,10 @@
 import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import type { HolidayLookup } from '@shared/engine/createDay'
-import { createDay, dayPlan } from '@shared/engine/createDay'
+import { dayPlan } from '@shared/engine/createDay'
+import { snapshotOf } from '@shared/engine/context'
 import { foldFacts, OPEN } from '@shared/engine/facts'
 import { gridOf } from '@shared/engine/grid'
-import { daySnapshotOf } from '@shared/model/events'
 import { dayStart, logicalDayOf, logicalMinuteOf, placeLogical } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { NO_POWER, type PowerNeed } from '@shared/engine/power'
@@ -342,7 +342,7 @@ export class DataService {
         const date = addDays(today, i)
         const file = await this.folder.dayFile(date)
         const events = i === 0 ? (await this.folder.readDay(date)).events : []
-        const snapshot = daySnapshotOf(events) ?? createDay({ date, ...inp, dayFile: file, holidays: this.o.holidays, at: null })
+        const snapshot = snapshotOf(inp, { date, events, dayFile: file, nextFile: null }, this.o.holidays, null).snapshot
         for (const b of dayPlan(snapshot, file)) {
           const rules = snapshot.settings.categories[b.categoryId]
           if (!rules || b.startMin == null) continue

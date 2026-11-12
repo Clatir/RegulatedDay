@@ -79,8 +79,8 @@ async function pushedFor(date: string, base: RawRecord | null, block: PlanBlock)
   try {
     const data = await window.rd.dayData(date)
     if (!dayUsable(data)) return []
-    const { rd, templates, lectures } = useData.getState()
-    const model = countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures }, Date.now(), false)
+    const { rd, templates, lectures, seriesPlans } = useData.getState()
+    const model = countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures, series: seriesPlans }, Date.now(), false)
     return pushedStarts(model.ctx.plan, addChange(model, block, true))
   } catch {
     return []
