@@ -151,6 +151,19 @@ wolna przy scaleniu; scalenie tylko po uzgodnieniu z sesją ciągu L i po „1.1
 
 **HKU1 – wpis (12.11):** kolekcja `allday/<id>.json` (silnik dnia jej nie czyta), pas nad osią „Dziś” i siatką „Tygodnia” (belki `weekLanes`, 3 rzędy + „+N”, wolny rząd), karta z notatką Markdown, linie „Cofnij” 15 min w oknie, „Wolne” (porcje po 62 dni, dziś – okno zmiany typu), miesiąc, plan poranny, pasek pulpitu, Ctrl K; reguły `.claude/rules/allday.md`. Odbiór HKU1.1–HKU1.5. **Uwagi na później:** brak E2E okna „Wolne” dla dziś już utworzonego; opis ekranów wydarzeń w specyfikacji; `NONE` – trzecia stała w oknie (wspólna stała zamiast kopii).
 
+## SNT4 – stan
+**Przed SNT4 (12.11):** załączniki i linki w blokach (blok 3); pytania w trzech rundach 12.11 – D410. Sesja równoległa do
+HKU1 i ciągu L (numery D410+, T800–T849), drzewo `.claude/worktrees/ws4` od 96201f8 (1.13.0), gałąź `claude/snt4-zalaczniki`.
+Ryzyka: zapis plików w folderze OneDrive (dwa komputery, plik przed rekordem, kopie konfliktowe, sprzątanie po 30 dniach
+tylko u prowadzącego), sprawdzenie adresu i pliku wykonywalnego przed `shell.openExternal`/`openPath`, pobieranie tytułu
+linku z sieci, wystąpienia szablonu i serii. Sprawy (L2) – osobne małe zadanie po scaleniu L2. Model: główna sesja
+Opus 5.5 · high; `wykonawca-opus` · xhigh – część A (model, folder danych, kopie, IPC, adresy), `wykonawca-sonnet` –
+część B (ekrany). Kolejka scalania: HKU1 (1.13.0) → L2 (1.14.0) → SNT4 (następna minor, zwykle 1.15.0).
+
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| SNT4 załączniki i linki | 1.15.0? | – | decyzje D410; część A w toku | – (3,5–5 h; szablon i seria +1,5 h) |
+
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy
   szacunku 2–3 h; większość rund kończyła się na limicie 15 uwag) i praca całej głównej sesji na xhigh.
