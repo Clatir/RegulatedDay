@@ -559,13 +559,33 @@ test('oś dnia (D366): przeciągnięcie po pustym miejscu ustawia start i długo
     await withMainLog(userData, async () => {
       await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
       await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
-      /** Drags upward 99 px (90 min at 1.1 px a minute) from near the bottom of the axis, the pointer going down on an empty place. */
+      /**
+       * Drags upward 99 px (90 min at 1.1 px a minute) on an empty place of the axis. The place is looked for, not taken from
+       * the bottom: late in the day „Dziś” puts the blocks not started yet after now, at the axis's end (the test runs at any
+       * hour). The lowest run of 110 px free of blocks (anything `data-no-grid`) in view, with the axis scrolled to its end,
+       * its start or its centre.
+       */
       const dragUp = async () => {
         const axis = page.getByTestId('timeline-axis')
-        await axis.evaluate((el) => el.scrollIntoView({ block: 'end' }))
-        const box = (await axis.boundingBox())!
-        const x = box.x + 120
-        const y = box.y + box.height - 40
+        let spot: { x: number; y: number } | null = null
+        for (const block of ['end', 'start', 'center'] as const) {
+          spot = await axis.evaluate((el, b) => {
+            el.scrollIntoView({ block: b })
+            const r = el.getBoundingClientRect()
+            const x = r.left + 120
+            const top = Math.max(r.top, 0) + 2
+            let run = 0
+            for (let y = Math.min(r.bottom, window.innerHeight) - 2; y >= top; y -= 2) {
+              const at = document.elementFromPoint(x, y)
+              run = at != null && el.contains(at) && at.closest('[data-no-grid]') == null ? run + 2 : 0
+              if (run >= 110) return { x, y: y + run - 6 }
+            }
+            return null
+          }, block)
+          if (spot) break
+        }
+        expect(spot, 'an empty place 110 px high on the axis').not.toBeNull()
+        const { x, y } = spot!
         await page.mouse.move(x, y)
         await page.mouse.down()
         await page.mouse.move(x, y - 40, { steps: 4 })
