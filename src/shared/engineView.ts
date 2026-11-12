@@ -32,8 +32,9 @@ import { namingOf } from './engine/context'
 import type { PlanBlock } from './model/plan'
 import type { RequestRecord } from './model/requests'
 import type { Routine } from './model/routines'
+import type { AllDayEvent } from './model/allDay'
 import { ENGINE_TONE_SET, iconColor, toneColor, type Tone, type WarnStep } from './theme'
-import { NO_VARIANTS, type BarLine, type BarPending, type BarRoutine, type RunningRequest, type WidgetView } from './widget'
+import { barAllDay, NO_VARIANTS, type BarLine, type BarPending, type BarRoutine, type RunningRequest, type WidgetView } from './widget'
 
 const MIN = 60_000
 
@@ -67,6 +68,8 @@ export interface EngineInput {
   routines?: readonly Routine[]
   /** The records of „Sprawy” (D384): a task whose block ended asks „Zadanie zrobione?”. */
   cases?: readonly RequestRecord[]
+  /** The all-day events (D405): today's are the label at the left of the desktop bar (read only, never an input of the day). */
+  allDay?: readonly AllDayEvent[]
 }
 
 /** A request without a person (spec „osoba: ?”). */
@@ -458,6 +461,7 @@ export function engineView(i: EngineInput): WidgetView {
     variants: NO_VARIANTS,
     // Today's ritual due and not closed, not in the night – also in „Odcinam się” (D318, T505).
     ritual: !modes.night && !state.facts.closed && state.grid.date === logicalDayOf(now) && ritualDue(state, logicalDayOf(now), i.ritualFrom ?? null),
-    routines
+    routines,
+    allDay: barAllDay(i.allDay ?? [], logicalDayOf(now))
   }
 }

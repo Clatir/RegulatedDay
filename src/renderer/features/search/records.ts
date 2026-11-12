@@ -8,6 +8,7 @@
 import type { SearchBlock } from '@shared/api'
 import { blockName, type Names } from '@shared/blockName'
 import { plDate, WEEKDAY_NAMES } from '@shared/format'
+import { compareAllDay, rangeText, type AllDayEvent } from '@shared/model/allDay'
 import { FIELD_GROUP_NAMES } from '@shared/model/fields'
 import { templateVersionOn, type Template } from '@shared/model/plan'
 import { personName, type RdFile } from '@shared/model/rd'
@@ -62,6 +63,8 @@ export interface RecordsInput {
   routines: readonly Routine[]
   /** The series with their last days (D381, `seriesPlans`) – each found once, by its name and rule; its occurrences are not blocks of the days here. */
   series: readonly SeriesPlan[]
+  /** The all-day events (D405): found by title and note, shown with their dates. */
+  allDay?: readonly AllDayEvent[]
   /** The blocks of the days (`searchDays`); none while they are read. */
   blocks: readonly SearchBlock[]
   /** The names of the screens and the keys shown beside them (the menu's own). */
@@ -109,6 +112,8 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
   for (const r of [...i.routines].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
     out.push({ kind: 'routine', id: r.id, title: r.name, text: [...r.normal, ...r.worse].map((s) => s.name).filter(Boolean).join(' · '), ...(r.archived ? { hint: 'w archiwum' } : {}) })
   }
+  // „Wydarzenie”: its dates are the hint („18–20.11”); Enter opens its card in „Tydzień” (D405).
+  for (const e of [...(i.allDay ?? [])].sort(compareAllDay)) out.push({ kind: 'allDay', id: e.id, title: e.title, text: e.note, hint: rangeText(e) })
   for (const b of i.blocks) out.push({ kind: 'block', id: b.id, date: b.date, title: b.title, text: b.note, hint: dayHint(b.date, i.today) })
   return out
 }

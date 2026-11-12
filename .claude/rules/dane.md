@@ -44,6 +44,9 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Stan folderu na komputerze: `%APPDATA%\Regulated Day\folders\<sha1>\` – `journal.v1.jsonl`, `queue.v1.json`,
   `life.json`/`closing.json` (znacznik życia folderu).
 - Kopie: `backups/daily/RRRR-MM-DD.zip`, `backups/weekly/RRRR-Www.zip`.
+- Wydarzenia całodniowe (D405, T720–T729): `allday/<id>.json` (`ID_COLLECTIONS.allDay`, model `shared/model/allDay.ts`) – lista
+  okna (`collection('allDay')`, `DataView.allDay`), kopie konfliktowe (`joinCopies`), historia i kopie zapasowe jak inne rekordy;
+  `inputs()`, `dayFile` i kontekst dnia ich nie czytają (strażnik `tests/unit/engine/all-day.test.ts`).
 - Notatka bloku (`PlanBlock.note`): zwykły tekst Markdown, do `NOTE_MAX` = 10 000 znaków (`shared/model/note.ts`, tnie `planBlockFrom` –
   dni i szablony); wersja przed `LONG_NOTE_FROM` tnie na 2000, więc okno ostrzega przy dłuższej notatce, gdy obecny komputer
   (`DataView.computers[].appVersion`, bez zapomnianych) ma starszą wersję.

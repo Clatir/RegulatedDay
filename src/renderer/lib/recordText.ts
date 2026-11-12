@@ -5,6 +5,7 @@
  */
 import { classify } from '@shared/data/paths'
 import { countLabel, durationLabel, logicalClock, plDate } from '@shared/format'
+import { ALL_DAY_COLOR_NAMES, type AllDayColor } from '@shared/model/allDay'
 import { fieldByKey } from '@shared/model/fields'
 import { CASE_LIST_NAMES, type CaseList } from '@shared/model/requests'
 import { categoryName, MODULE_NAMES, personName, type ModuleId, type RdFile } from '@shared/model/rd'
@@ -45,6 +46,7 @@ const SERIES_FIELDS: Record<string, string> = { start: 'pierwszy dzień', until:
 /** The kinds of a series' rule (D381) as the panel of a block says them. */
 const RULE_KINDS: Record<string, string> = { daily: 'codziennie', workdays: 'w dni robocze', weekly: 'co tydzień lub co kilka tygodni', monthDay: 'wybranego dnia miesiąca', monthWeekday: 'wybranego dnia tygodnia miesiąca' }
 const RULE_FIELDS: Record<string, string> = { kind: 'reguła', every: 'reguła: co ile tygodni', days: 'reguła: dni tygodnia', anchor: 'reguła: tydzień początkowy', day: 'reguła: dzień miesiąca', nth: 'reguła: który z kolei', weekday: 'reguła: dzień tygodnia' }
+const ALL_DAY_FIELDS: Record<string, string> = { title: 'tytuł', startDate: 'od', endDate: 'do', color: 'kolor', note: 'notatka', free: 'to wolne', calendarId: 'kalendarz' }
 const STATES: Record<string, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobiona', dropped: 'porzucona' }
 
 /** A value as shown: minutes and times as the fields show them, ids as names, objects briefly. */
@@ -65,6 +67,7 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
     if (key === 'categoryId') return categoryName(n.rd, v)
     if (key === 'person') return personName(n.rd, v)
     if (key === 'dayType') return DAY_TYPE_NAMES[v as DayTypeId] ?? v
+    if (key === 'color' && Object.hasOwn(ALL_DAY_COLOR_NAMES, v)) return ALL_DAY_COLOR_NAMES[v as AllDayColor]
     if (key === 'state') return STATES[v] ?? v
     // „Sprawy” (D383): the list by its name, the kind as a task or a request.
     if (key === 'list') return CASE_LIST_NAMES[v as CaseList] ?? v
@@ -140,6 +143,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames): s
   }
   if (kind === 'request') return REQUEST_FIELDS[a ?? ''] ?? 'inne pole sprawy'
   if (kind === 'routine') return ROUTINE_FIELDS[a ?? ''] ?? 'inne pole rutyny'
+  if (kind === 'allDay') return ALL_DAY_FIELDS[a ?? ''] ?? 'inne pole wydarzenia'
   if (kind === 'schedule') return a === 'name' ? 'nazwa' : a === 'weekday' ? 'dzień tygodnia' : a === 'startMin' ? 'godzina' : a === 'durationMin' ? 'długość' : a === 'from' ? 'od' : a === 'to' ? 'do' : 'inne pole wykładu'
   if (kind === 'settings') {
     if (a === 'people') return b ? `osoba ${n.rd.people.find((p) => `#${p.id}` === b)?.name ?? ''}`.trim() : 'osoby'

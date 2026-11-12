@@ -12,7 +12,7 @@ import type { WidgetAction } from '@shared/api'
 import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
 import { TITLE_MAX } from '@shared/model/requests'
 import { barBackground, TONE_SETS } from '@shared/theme'
-import { SEEN_LINE, type AutoItem, type BarLine, type BarRoutine, type RunningRequest, type WidgetView } from '@shared/widget'
+import { SEEN_LINE, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
@@ -118,6 +118,33 @@ function DragHandle() {
   )
 }
 
+/**
+ * Today's all-day events at the left of the desktop bar (D405): the colour of the first one as a dot, its title cut to
+ * about 20 characters with „+N” for the others. Read only – a click is the bar's own click; on hover the label shows
+ * every full title in place (no tooltip: it would be a window of its own, D229). It takes its room from the block's
+ * name (the flexible part): never wider than 55% of the row, truncated; on hover only that cap rises (80%) – the label
+ * never shrinks (`shrink-0` in both states: a neighbour without `flex-1`, as in the request line, would leave it narrower),
+ * still one line – the row never changes its height (the bar's window would be re-sized at every pass of the pointer, T748).
+ */
+export function AllDayLabel({ allDay, open }: { allDay: BarAllDay; open?: boolean }) {
+  const [hover, setHover] = useState(false)
+  const shown = open ?? hover
+  return (
+    <span
+      className={cx('flex min-w-0 items-center gap-1.5 text-[12px] text-fg', shown ? 'max-w-[80%] shrink-0' : 'max-w-[55%] shrink-0')}
+      data-testid="bar-allday"
+      data-open={shown ? 'on' : 'off'}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => setHover(false)}
+    >
+      <span className="h-[8px] w-[8px] shrink-0 rounded-full" style={{ background: allDay.color }} data-testid="bar-allday-dot" />
+      <span className="min-w-0 truncate" data-testid="bar-allday-text">
+        {shown ? allDay.full : allDay.text}
+      </span>
+    </span>
+  )
+}
+
 /** The time of a request so far as „0:12” (D312). */
 function elapsed(ms: number): string {
   const m = Math.max(0, Math.floor(ms / 60_000))
@@ -125,9 +152,10 @@ function elapsed(ms: number): string {
 }
 
 /** The request running now, in place of the block (D312): „Pilne · Mama · 0:12 z 30 min · Koniec”. */
-function RequestLine({ run, mode, now }: { run: RunningRequest; mode: BarMode; now: number }) {
+function RequestLine({ run, mode, now, before }: { run: RunningRequest; mode: BarMode; now: number; before?: ReactNode }) {
   return (
     <span className="flex min-w-[120px] flex-1 items-center gap-1.5" data-testid="bar-request">
+      {before}
       <span className="min-w-0 truncate text-fg">
         {run.mode === 'urgent' ? 'Pilne' : 'Zrobione teraz'} · {run.person} · <span className="num">{elapsed(now - run.from)}</span>
         {run.mode === 'urgent' && run.estimateMin != null ? ` z ${run.estimateMin} min` : ''}
@@ -752,6 +780,8 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
     )
 
   const left = view.block ? (view.block.endsAt ?? now) - now : 0
+  // Today's all-day events (D405): only on the desktop bar, only when there is one – nothing else moves.
+  const allDayLabel = mode === 'desktop' && view.allDay ? <AllDayLabel allDay={view.allDay} /> : null
   return (
     <div
       ref={root}
@@ -787,11 +817,15 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
             </div>
           )}
           {running && !view.block ? (
-            <RequestLine run={running} mode={mode} now={now} />
+            // Today's all-day events (D405) stand here too: a request without a block is still today.
+            <RequestLine run={running} mode={mode} now={now} before={allDayLabel} />
           ) : (
-            <span className="min-w-[120px] flex-1 truncate text-fg" data-testid="bar-block">
-              {view.block ? view.block.name : view.night ? clockOf(now) : 'Bez bloku'}
-              {view.block && !quiet && <span className="ml-1.5 text-[12px] text-muted">{view.block.className}</span>}
+            <span className="flex min-w-[120px] flex-1 items-center gap-2">
+              {allDayLabel}
+              <span className="min-w-0 flex-1 truncate text-fg" data-testid="bar-block">
+                {view.block ? view.block.name : view.night ? clockOf(now) : 'Bez bloku'}
+                {view.block && !quiet && <span className="ml-1.5 text-[12px] text-muted">{view.block.className}</span>}
+              </span>
             </span>
           )}
           {view.block && (

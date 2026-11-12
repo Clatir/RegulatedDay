@@ -60,6 +60,9 @@ export function choose(r: SearchRecord, today: string): void {
     case 'block':
       openPick({ page: 'today', day: r.date === today ? null : r.date! }, { kind: 'block', id: r.id, date: r.date! })
       return
+    case 'allDay':
+      openPick({ page: 'week' }, { kind: 'allDay', id: r.id })
+      return
     case 'template':
       openPick({ page: 'templates' }, { kind: 'template', id: r.id })
       return

@@ -11,10 +11,10 @@ export const BACKUPS_DIR = 'backups'
 export const PRESENCE_DIR = '.presence'
 export const HISTORY_DIR = '.history'
 
-export type FileKind = 'settings' | 'template' | 'schedule' | 'day' | 'log' | 'request' | 'routine' | 'series' | 'presence' | 'grades'
+export type FileKind = 'settings' | 'template' | 'schedule' | 'day' | 'log' | 'request' | 'routine' | 'series' | 'allDay' | 'presence' | 'grades'
 
-/** Collections of records stored one file per id (`series` – D381, series/<id>.json). */
-export const ID_COLLECTIONS = { template: 'templates', schedule: 'schedule', request: 'requests', routine: 'routines', series: 'series' } as const
+/** Collections of records stored one file per id (`series` – D381, series/<id>.json; `allDay` – all-day events, D405: allday/<id>.json). */
+export const ID_COLLECTIONS = { template: 'templates', schedule: 'schedule', request: 'requests', routine: 'routines', series: 'series', allDay: 'allday' } as const
 export type IdKind = keyof typeof ID_COLLECTIONS
 
 const ID = '[0-9a-z][0-9a-z_-]{0,63}'

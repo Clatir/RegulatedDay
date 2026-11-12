@@ -7,7 +7,7 @@
 
 export type Range = [number, number]
 
-export type SearchKind = 'command' | 'screen' | 'setting' | 'category' | 'block' | 'template' | 'templateBlock' | 'series' | 'request' | 'routine'
+export type SearchKind = 'command' | 'screen' | 'setting' | 'category' | 'block' | 'allDay' | 'template' | 'templateBlock' | 'series' | 'request' | 'routine'
 
 /** One thing that can be found. `title` and `text` are shown (and searched), `keys` only searched, `hint` only shown. */
 export interface SearchRecord {
@@ -25,7 +25,7 @@ export interface SearchRecord {
   hint?: string
 }
 
-export type GroupId = 'command' | 'screen' | 'category' | 'block' | 'template' | 'request' | 'routine'
+export type GroupId = 'command' | 'screen' | 'category' | 'block' | 'allDay' | 'template' | 'request' | 'routine'
 
 /** The groups in the order they are shown. */
 export const GROUPS: ReadonlyArray<{ id: GroupId; label: string; kinds: readonly SearchKind[] }> = [
@@ -33,6 +33,7 @@ export const GROUPS: ReadonlyArray<{ id: GroupId; label: string; kinds: readonly
   { id: 'screen', label: 'Ekrany i ustawienia', kinds: ['screen', 'setting'] },
   { id: 'category', label: 'Kategorie', kinds: ['category'] },
   { id: 'block', label: 'Bloki', kinds: ['block'] },
+  { id: 'allDay', label: 'Wydarzenia', kinds: ['allDay'] },
   { id: 'template', label: 'Szablony', kinds: ['template', 'templateBlock', 'series'] },
   { id: 'request', label: 'Sprawy', kinds: ['request'] },
   { id: 'routine', label: 'Rutyny', kinds: ['routine'] }
