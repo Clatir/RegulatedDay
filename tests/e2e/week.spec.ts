@@ -597,7 +597,8 @@ test('oś dnia (D366): przeciągnięcie po pustym miejscu ustawia start i długo
       await dragUp()
       await expect(page.getByTestId('block-editor')).toBeVisible()
       await expect(page.getByTestId('block-duration')).toHaveValue('1 h 30 min')
-      expect(await page.getByTestId('block-start').inputValue()).toMatch(/^\d\d:\d[05]$/)
+      // After midnight the start of the logical day carries „+1”.
+      expect(await page.getByTestId('block-start').inputValue()).toMatch(/^\d\d:\d[05]( \+1)?$/)
       await expect(page.getByTestId('block-add')).toBeVisible()
       await expect(page.getByTestId('create-range')).toHaveCount(0)
 
