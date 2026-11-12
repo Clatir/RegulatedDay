@@ -13,11 +13,11 @@ import { placeLogical } from '@shared/time/day'
 
 // Every field of what the day is counted from. A new one: add it here only if it is no event of the calendar.
 const CONTEXT_FIELDS: Record<keyof DayContext, true> = { date: true, snapshot: true, plan: true, wakeMin: true, nextWakeMin: true, events: true, now: true, typicalSessionMin: true, asWritten: true }
-const INPUT_FIELDS: Record<keyof PlanInputs, true> = { changes: true, templates: true, lectures: true }
+const INPUT_FIELDS: Record<keyof PlanInputs, true> = { changes: true, templates: true, lectures: true, series: true }
 const SOURCE_FIELDS: Record<keyof DaySource, true> = { date: true, events: true, dayFile: true, nextFile: true }
 
 const DATE = '2026-11-18'
-const inputs: PlanInputs = { changes: [], templates: [], lectures: [] }
+const inputs: PlanInputs = { changes: [], templates: [], lectures: [], series: [] }
 const source: DaySource = { date: DATE, events: [], dayFile: null, nextFile: null }
 
 describe('wydarzenia całodniowe poza silnikiem dnia (D405)', () => {

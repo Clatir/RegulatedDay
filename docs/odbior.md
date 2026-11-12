@@ -129,6 +129,15 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] SNT3.1 Notatka bloku – formatowanie na żywo
    - [ ] SNT3.2 Stara notatka otwiera się i zapisuje bez zmian
    - [ ] SNT3.3 Link, „Powiększ” i limit 10 000 znaków (Tylko Ty – przeglądarka, drugi komputer)
+   - [ ] L1.1 „Powtarzaj” w panelu bloku i znak ↻ w „Dziś”, „Tygodniu” i „Kalendarzu”
+   - [ ] L1.2 „Tylko to · To i następne · Cała seria” przy zmianie i usunięciu
+   - [ ] L1.3 Dni szczególne – „Wolne” bez wystąpienia, zjazd i dzień regeneracyjny – pytanie w planie porannym
+   - [ ] L1.4 Lista serii w „Szablonach”, „Zakończ serię”, „Usuń serię” i Ctrl K
+   - [ ] HKU1.1 Pas całodniowy w „Dziś” – nowe wydarzenie, edycja, usunięcie i „Cofnij”
+   - [ ] HKU1.2 Wielodniowe w „Tygodniu” – belka przez kolumny, „+N więcej”, ‹ / ›
+   - [ ] HKU1.3 „To wolne” – pytanie o typ dnia „Wolne” i „Cofnij”
+   - [ ] HKU1.4 Miesiąc, plan poranny i Ctrl K
+   - [ ] HKU1.5 Podpis wydarzenia na pasku pulpitu (Tylko Ty – pasek na pulpicie)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1818,3 +1827,128 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   tekst albo Tab wychodzi do pól pod nakładką, notatka po 2000 znakach jest obcięta na tym komputerze, albo ostrzeżenie
   nie pojawia się przy starszym komputerze.
 
+### L1 – serie powtarzalne (1.12.0)
+
+#### L1.1 „Powtarzaj” w panelu bloku i znak ↻ w „Dziś”, „Tygodniu” i „Kalendarzu” (1.12.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/series.test.ts` (reguły, „co 2 tygodnie w czwartek”, „ostatni piątek”, 31. w
+  lutym, dni robocze bez świąt, „po N razach”), `tests/web/series-form.test.ts`, `tests/e2e/series.spec.ts` (seria co
+  tydzień → ↻ w „Tygodniu” za 7 dni). Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” otwórz panel swojego bloku na jutro albo pojutrze (np. „Inne” 17:00), w polu „Powtarzaj”
+  wybierz „co 2 tygodnie” w jego dzień tygodnia, koniec „po 3 razach”, kliknij „Utwórz serię”. Przejdź na „Tydzień” i
+  strzałkami dwa i cztery tygodnie dalej, potem na „Kalendarz”. Utwórz drugą serię „ostatni piątek miesiąca”.
+- **Oczekiwany efekt:** blok ma ↻ przy nazwie, panel pisze regułę słowami („co 2 tygodnie w <dzień>, 3 razy”);
+  wystąpienia stoją o tej samej godzinie co dwa tygodnie, po trzecim – koniec; komórki tych dni w siatce „Kalendarza”
+  mają ↻; druga seria – tylko w ostatni piątek każdego miesiąca. Gdy wystąpienie wypada na miejscu bloku elastycznego z
+  szablonu, ten i kolejne elastyczne stoją za nim, stałe zostają.
+- **Nie przechodzi, gdy:** wystąpienie stoi w zły dzień albo o złej godzinie, seria nie kończy się po 3 razach, brak ↻
+  w którymś z trzech miejsc, albo pole „Powtarzaj” jest przy bloku sesji lub wykładu.
+
+#### L1.2 „Tylko to · To i następne · Cała seria” przy zmianie i usunięciu (1.12.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/series.test.ts` („Tylko to”, „To i następne”, „Cała seria” nie rusza dnia
+  minionego ani zaczętego), `tests/fs/series.test.ts`, `tests/e2e/series.spec.ts` („Tylko to” zmienia jeden dzień). Ty:
+  rzut oka.
+- **Jak sprawdzić:** na serii z L1.1 otwórz wystąpienie za dwa tygodnie, zmień długość, wybierz „Tylko to”. Otwórz
+  wystąpienie za cztery tygodnie, zmień godzinę – „To i następne”. Potem zmień nazwę z „Cała seria”. Przeciągnij jedno
+  wystąpienie na osi. Na koniec usuń wystąpienie z „Tylko to” i drugie z „To i następne”.
+- **Oczekiwany efekt:** „Tylko to” zmienia jedno wystąpienie; „To i następne” – to i późniejsze, wcześniejsze zostają;
+  „Cała seria” – od dziś, a pojedynczo zmienione zachowują swoje zmiany; przeciągnięcie nie pyta i przesuwa tylko to
+  wystąpienie. Usunięcie „To i następne” zdejmuje od tego dnia też zmienione i przeniesione pojedynczo (D404). Po każdej
+  zmianie „Cofnij” w rogu wraca do stanu sprzed niej; dni minione się nie zmieniają.
+- **Nie przechodzi, gdy:** „Tylko to” zmienia też inne dni, „To i następne” rusza dni wcześniejsze, „Cała seria” kasuje
+  pojedyncze zmiany albo zmienia dzień miniony, przeciągnięcie pyta o zakres, albo po usunięciu zostaje pojedynczy blok.
+
+#### L1.3 Dni szczególne – „Wolne” bez wystąpienia, zjazd i dzień regeneracyjny – pytanie w planie porannym (1.12.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/series.test.ts` („dni szczególne (D382)”), `tests/e2e/series.spec.ts` (karta w
+  planie porannym w dniu regeneracyjnym, „Odwołaj”). Ty: rzut oka przy pierwszym takim dniu.
+- **Jak sprawdzić:** w „Kalendarzu” ustaw dzień z wystąpieniem serii („W dni szczególne: pytaj” – domyślne) na „Wolne”,
+  inny na „Zjazd stacjonarny”. Rano w dniu zjazdu (albo dniu regeneracyjnym) otwórz plan poranny.
+- **Oczekiwany efekt:** dzień „Wolne” nie ma wystąpienia (bez pytania, komórka bez ↻); w zjazd plan poranny ma kartę
+  „<blok> z serii · Zostaw · Odwołaj” – „Odwołaj” zdejmuje wystąpienie z tego dnia, „Zostaw” zostawia; bez odpowiedzi
+  wystąpienie zostaje w planie. Seria z „pomiń” nie ma wystąpień w żadnym dniu szczególnym, z „odbywa się” – ma je zawsze.
+- **Nie przechodzi, gdy:** wystąpienie zostaje w dniu „Wolne”, plan poranny w zjazd nie pyta, „Odwołaj” zdejmuje
+  wystąpienia z innych dni, albo pytanie wraca po odpowiedzi.
+
+#### L1.4 Lista serii w „Szablonach”, „Zakończ serię”, „Usuń serię” i Ctrl K (1.12.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/series.spec.ts` (lista z regułą słowami, „Zakończ serię”, Ctrl K otwiera serię),
+  `tests/web/search-palette.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** otwórz „Szablony”, sekcję „Serie”. Zmień w jednej serii godzinę, w drugiej kliknij „Zakończ serię”,
+  w trzeciej „Usuń serię”. Ctrl K – wpisz nazwę serii, Enter.
+- **Oczekiwany efekt:** każda seria raz, z nazwą i regułą słowami; zmiana z listy działa od dziś; zakończona ma
+  „zakończona” i nie ma wystąpień od dziś; usunięta znika z listy, a dni minione zostają; Ctrl K pokazuje serię jako jeden
+  wynik (nie każde wystąpienie) i otwiera ją na liście.
+- **Nie przechodzi, gdy:** seria jest na liście kilka razy, zakończona albo usunięta dalej daje wystąpienia od dziś,
+  usunięcie zmienia dni minione, albo Ctrl K pokazuje każde wystąpienie osobno.
+
+### HKU1 – wydarzenia całodniowe i wielodniowe (1.13.0)
+
+#### HKU1.1 Pas całodniowy w „Dziś” – nowe wydarzenie, edycja, usunięcie i „Cofnij” (1.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/all-day.test.ts`, `tests/unit/engine/all-day.test.ts` (dzień z wydarzeniem i bez –
+  ten sam budżet i regeneracja), `tests/web/all-day-bar.test.ts`, `tests/e2e/allday.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” kliknij w puste miejsce cienkiego pasa nad osią. Wpisz tytuł „Urodziny”, wybierz kolor,
+  w notatce pogrub słowo, „Zapisz”. Kliknij w wolny rząd pod belką i dodaj drugie wydarzenie. Kliknij w „Urodziny”,
+  zmień tytuł, „Zapisz”; potem otwórz je jeszcze raz i „Usuń”, a na górze strony „Cofnij”. Spójrz na podsumowanie dnia
+  przed dodaniem i po dodaniu.
+- **Oczekiwany efekt:** pas jest zawsze, także bez wydarzeń; wydarzenie stoi w nim w wybranym kolorze, a pod belkami
+  zostaje wolny rząd do kliknięcia; notatka zapisuje się z formatowaniem; po „Usuń” wydarzenie znika od razu i na górze
+  „Dziś” stoi „Usunięto „…” · Cofnij” (do 15 min), „Cofnij” przywraca wydarzenie w całości; budżet pracy, regeneracja
+  i granica w podsumowaniu dnia są takie same jak przed dodaniem (D405, D407).
+- **Nie przechodzi, gdy:** pasa nie ma bez wydarzeń, drugiego wydarzenia nie da się dodać kliknięciem, wydarzenie
+  pojawia się na osi godzin, „Cofnij” nie przywraca notatki albo koloru, albo zmienia się budżet lub regeneracja.
+
+#### HKU1.2 Wielodniowe w „Tygodniu” – belka przez kolumny, „+N więcej”, ‹ / › (1.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/all-day-bar.test.ts` (rzędy, „+N”, ‹ ›), `tests/e2e/allday.spec.ts` (przeciągnięcie
+  przez 3 dni). Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” przeciągnij po pasie od środy do piątku i zapisz „Konferencja”. Dodaj jeszcze cztery
+  wydarzenia na czwartek. Dodaj wydarzenie od niedzieli do wtorku następnego tygodnia. Przewiń siatkę w dół i przejdź
+  strzałką na następny tydzień.
+- **Oczekiwany efekt:** „Konferencja” to jedna belka przez trzy kolumny, równo z nagłówkami dni; w czwartku najwyżej
+  3 rzędy belek, reszta jako „+N więcej” – kliknięcie rozwija wszystkie rzędy, drugie zwija; wydarzenie przez koniec
+  tygodnia ma › w niedzielę, a w następnym tygodniu ‹ i ciągnie się od poniedziałku do wtorku; pas zostaje u góry przy
+  przewijaniu, pod nagłówkami dni.
+- **Nie przechodzi, gdy:** wielodniowe jest kilkoma osobnymi kawałkami, belki rozjeżdżają się z kolumnami, „+N” nie
+  rozwija albo liczy źle, brak ‹ / ›, albo pas przewija się razem z godzinami.
+
+#### HKU1.3 „To wolne” – pytanie o typ dnia „Wolne” i „Cofnij” (1.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/all-day.test.ts` (dni przyszłe, dni zamknięte i już „Wolne” pominięte, porcje po 62
+  dni, konflikt), `tests/web/all-day-card-save.test.ts`, `tests/e2e/allday.spec.ts` („Nie”, „Tak”, „Cofnij”). Okno
+  zmiany typu dla dziś – Ty (bez testu E2E dnia już utworzonego).
+- **Jak sprawdzić:** dodaj wydarzenie od jutra na 3 dni z „To wolne”, „Zapisz”. Najpierw „Nie”; zmień tylko tytuł
+  i zapisz; potem wyłącz i włącz „To wolne”, zapisz i „Tak”. Zajrzyj do „Kalendarza”, potem „Cofnij” na górze strony.
+  Na koniec dodaj wydarzenie „To wolne” od dziś do jutra i „Tak”.
+- **Oczekiwany efekt:** po pierwszym zapisie pod kartą „Ustawić typ dnia „Wolne” na <dni>? · Tak · Nie”; po samej
+  zmianie tytułu – bez pytania; po „Tak” trzy dni są „Wolne” w „Kalendarzu”, na górze linia z „Cofnij”, które przywraca
+  poprzednie typy; z dziś w zakresie jutro zmienia się od razu, a dla dziś otwiera się zwykłe okno zmiany typu dnia
+  z „Wolne” (D405–D407).
+- **Nie przechodzi, gdy:** typ dnia zmienia się bez „Tak”, pytanie pada po samej zmianie tytułu, pytanie obejmuje dni
+  minione albo zamknięte, „Cofnij” nie przywraca wszystkich dni, albo dziś zmienia się bez okna zmiany typu.
+
+#### HKU1.4 Miesiąc, plan poranny i Ctrl K (1.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/morning-allday.test.ts`, `tests/web/search-palette.test.ts`, `tests/e2e/allday.spec.ts`
+  (Ctrl K → „Tydzień” z kartą). Ty: rzut oka.
+- **Jak sprawdzić:** z wydarzeniami z HKU1.2 otwórz „Kalendarz”. W dniu „Konferencji” spójrz na kartę planu porannego.
+  Naciśnij Ctrl K, wpisz „konf” albo słowo z notatki, Enter.
+- **Oczekiwany efekt:** komórki dni miesiąca mają kropkę w kolorze i pierwsze wydarzenie, przy kilku „+N”, pełna lista
+  po najechaniu; plan poranny ma jedną linię „Dziś: Konferencja (2/3)” bez pytania; Ctrl K pokazuje wydarzenie w grupie
+  „Wydarzenia” z datami („18–20.11”), Enter otwiera „Tydzień” z dniem początku i otwartą kartą edycji.
+- **Nie przechodzi, gdy:** miesiąc nie pokazuje wydarzeń, plan poranny pyta o wydarzenie albo nie ma linii, Ctrl K nie
+  znajduje po notatce, albo Enter otwiera zły tydzień lub bez karty.
+
+#### HKU1.5 Podpis wydarzenia na pasku pulpitu (1.13.0)
+- [ ] Odebrane
+- **Tylko Ty:** wygląd paska na Twoim pulpicie. Automatycznie: `tests/unit/bar-all-day.test.ts`,
+  `tests/web/bar-render.test.ts`, `tests/e2e/allday.spec.ts` (podpis i ta sama wysokość po najechaniu).
+- **Jak sprawdzić:** z wydarzeniem na dziś o długim tytule (ponad 20 znaków) i drugim wydarzeniem spójrz na pasek
+  pulpitu; najedź na podpis; uruchom blok, potem prośbę; usuń oba wydarzenia.
+- **Oczekiwany efekt:** z lewej strony paska kropka w kolorze i tytuł skrócony do ok. 20 znaków z „+1”; po najechaniu
+  pełne tytuły w tym samym wierszu, pasek nie zmienia wysokości ani położenia; podpis zostaje przy biegnącym bloku
+  i prośbie; bez wydarzeń pasek wygląda jak przed 1.13.0 (D405).
+- **Nie przechodzi, gdy:** podpis wypycha przyciski paska, pasek skacze albo rośnie po najechaniu, podpis znika przy
+  prośbie, albo po usunięciu wydarzeń zostaje puste miejsce.

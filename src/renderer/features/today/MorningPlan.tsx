@@ -13,11 +13,14 @@ import { checkinStates } from '@shared/engine/energy'
 import { atOf } from '@shared/engine/grid'
 import { fromYesterday, holidayQuestions, lighterDay, morningWarnings, sessionQuestions, shiftNotice, weeklyAnalysisMove, type MorningInputs, type MorningWarning } from '@shared/engine/morning'
 import { freeStart, requestsBlock } from '@shared/engine/planEdit'
+import { seriesQuestions } from '@shared/engine/series'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { POOLS, type Pool } from '@shared/model/categories'
 import type { Answer } from '@shared/model/events'
 import { dayFileFrom } from '@shared/model/plan'
 import { DEFAULT_ESTIMATE_MIN } from '@shared/model/requests'
+import { DAY_TYPE_NAMES } from '@shared/model/settings'
+import { seriesAskText } from '@shared/seriesText'
 import { monthOfDate } from '@shared/model/goals'
 import { personName } from '@shared/model/rd'
 import { logicalMinuteOf } from '@shared/time/day'
@@ -33,6 +36,7 @@ import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
 import { toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
+import { answerSeries } from '../series/seriesActions'
 import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, variantStarts } from './dayActions'
 
 const QUESTIONS: Array<{ pool: Pool; text: string }> = [
@@ -145,7 +149,7 @@ const WARNINGS: Record<MorningWarning, (m: DayModel, lm: (i: number) => string) 
 }
 
 function Plan({ model, names }: { model: DayModel; names: Names }) {
-  const { requests, templates, lectures, rd } = useData()
+  const { requests, templates, lectures, series, seriesPlans, rd } = useData()
   const date = model.date
   const s = model.state
   const g = s.grid
@@ -159,10 +163,11 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
         changes: rd.settings,
         templates,
         lectures,
+        series: seriesPlans,
         holidays: marketDay,
         files: (d) => (d === date ? model.dayFile : raws[d] ? dayFileFrom(raws[d], d) : null)
       },
-    [raws, date, rd.settings, templates, lectures, model.dayFile]
+    [raws, date, rd.settings, templates, lectures, seriesPlans, model.dayFile]
   )
   const raw = model.data.dayFile
   const currentType = s.facts.snapshots.at(-1)?.dayType ?? model.snapshot.dayType
@@ -177,6 +182,8 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
     [inputs, currentType, date]
   )
   const { holidays, lighter, shift, analysis } = ahead
+  // D382: an occurrence of a series on a „zjazd” or a day of regeneration (its field „W dni szczególne” says „pytaj”) – kept or called off for the day.
+  const seriesAsk = seriesQuestions(series, model.ctx.plan, model.dayFile, currentType, date)
   const warnings = morningWarnings(s)
   const queued = requests.filter((r) => r.state === 'queued')
   const [chosen, setChosen] = useState<string[]>([])
@@ -197,6 +204,7 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
   }
 
   const [busy, run] = useBusy()
+  const answerSeriesAsk = (blockId: string, name: string, keep: boolean) => run(() => answerSeries(date, blockId, keep, keep ? null : `Odwołany na dziś: ${name}`))
   // In its turn: only requests still in the queue (a second click finds them planned and adds nothing).
   const addRequests = () =>
     run(async () => {
@@ -251,6 +259,22 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
           </button>
         </Card>
       ))}
+      {seriesAsk.map((q) => {
+        const name = blockName(model.ctx.plan.find((b) => b.id === q.blockId)!, names)
+        return (
+          <Card key={q.blockId} data-testid="ask-series">
+            <span className="flex-1">
+              {seriesAskText(name)} <span className="text-muted">– dziś: {DAY_TYPE_NAMES[currentType].toLowerCase()}</span>
+            </span>
+            <button type="button" className="btn" disabled={busy} onClick={() => void answerSeriesAsk(q.blockId, name, true)} data-testid="ask-series-keep">
+              Zostaw
+            </button>
+            <button type="button" className="btn" disabled={busy} onClick={() => void answerSeriesAsk(q.blockId, name, false)} data-testid="ask-series-cancel">
+              Odwołaj
+            </button>
+          </Card>
+        )
+      })}
       {lighter && (
         <Card>
           <span className="flex-1">Wczoraj był zjazd stacjonarny – może lżejszy dzień? Typ dnia (np. regeneracyjny) zmienisz przyciskiem typu u góry.</span>

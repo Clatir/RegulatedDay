@@ -69,6 +69,10 @@ export function choose(r: SearchRecord, today: string): void {
     case 'templateBlock':
       openPick({ page: 'templates' }, { kind: 'templateBlock', id: r.id, parent: r.parent! })
       return
+    case 'series':
+      // The list of series is in „Szablony” (D381).
+      openPick({ page: 'templates' }, { kind: 'series', id: r.id })
+      return
     case 'request':
       openPick({ page: 'requests' }, { kind: 'request', id: r.id })
       return

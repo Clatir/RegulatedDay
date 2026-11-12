@@ -72,8 +72,8 @@ async function todayTypeNow(today: string): Promise<DayTypeId | null> {
   try {
     const data = await window.rd.dayData(today)
     if (!dayUsable(data)) return null
-    const { rd, templates, lectures, view } = useData.getState()
-    return dayTypeNow(countDay(today, data, { changes: rd.settings, templates, lectures }, Date.now(), rd.general.modules.energy, view?.calibration === true))
+    const { rd, templates, lectures, seriesPlans, view } = useData.getState()
+    return dayTypeNow(countDay(today, data, { changes: rd.settings, templates, lectures, series: seriesPlans }, Date.now(), rd.general.modules.energy, view?.calibration === true))
   } catch {
     return null
   }

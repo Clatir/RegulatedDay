@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { logicalClock } from '@shared/format'
 import { settingsOn, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
+import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { weekStart } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -354,6 +355,11 @@ function BlockBox({ block: b, lo, lane, lanes, names, brightness, date }: { bloc
       <span className="block truncate pt-px text-fg">
         {b.outsidePlan ? '+ ' : ''}
         {name}
+        {b.named.origin === 'series' && (
+          <span className="ml-1 text-muted" title="Z serii" aria-label="z serii" data-testid="series-mark">
+            {SERIES_MARK}
+          </span>
+        )}
       </span>
       {height >= 30 && (
         <span className="num block truncate text-muted">

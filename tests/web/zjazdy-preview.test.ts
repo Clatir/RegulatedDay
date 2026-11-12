@@ -255,7 +255,7 @@ describe('zapis w kolejce okna i ponowny odczyt (T517)', () => {
 })
 
 describe('analiza tygodniowa po zjeździe w sobotę (wspólna z kalendarzem)', () => {
-  const ctx = { changes: rdFrom(undefined).settings, templates: defaultTemplates(), lectures: [], holidays: marketDay }
+  const ctx = { changes: rdFrom(undefined).settings, templates: defaultTemplates(), lectures: [], series: [], holidays: marketDay }
   // 2030-10-12 is a Saturday.
   // As `dayFiles` answers: null for a day without a file, a day whose file cannot be read now left out.
   const readOf = (files: Record<string, Record<string, unknown> | null>) => async (dates: string[]) => Object.fromEntries(dates.filter((d) => d in files).map((d) => [d, files[d]!]))

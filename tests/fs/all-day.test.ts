@@ -106,7 +106,7 @@ async function makeToday(): Promise<void> {
   const folder = hub.service!.folder
   const t = today()
   if ((await hub.day(t)).events.some((e) => (e as { k?: string }).k === 'day.create')) return
-  const snapshot = createDay({ date: t, changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: folder.clock.now() })
+  const snapshot = createDay({ date: t, changes: [], templates: [], lectures: [], series: [], dayFile: null, holidays: marketDay, at: folder.clock.now() })
   folder.append({ day: t, dom: 'timer', k: 'day.create', snapshot })
   await folder.log.flush()
 }

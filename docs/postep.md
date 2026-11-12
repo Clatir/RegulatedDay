@@ -63,8 +63,32 @@ Wpisy obu zadań, „Uwagi na później” i „Pytania na później” – `doc
    Wersja przy scaleniu = następna minor po wersji na `main`; scalenie tylko, gdy na `main` nie biegnie run
    (`gh run list --branch main --status in_progress`), po `git merge origin/main` i zielonym CI na tym stanie. Druga
    sesja pisze w `docs/postep.md` tylko we własnej sekcji „SNT3 i SNT6 – stan”.
-5. Ciąg L (blok 2, D380): L1 OPS1 serie → L2 OPS2 „Sprawy” → L3 OPS3 bufory (po K) – po ciągu J i „dalej”
-   (`docs/plan.md`, „Blok 2 = ciąg L”). Bloki 3–4 (SNT, HKU) bez decyzji o starcie; FBL1 odłożone (D364).
+5. Ciąg L (blok 2, D380) – w toku od 12.11 w osobnej sesji (drzewo `.claude/worktrees/wl1`, bez pauz między pozycjami –
+   polecenie użytkownika 12.11): L1 OPS1 serie (1.12.0) → L2 OPS2 „Sprawy” → L3 OPS3 bufory (po K). Równolegle sesja HKU1
+   (blok 4, numery D405+, T720–T749); do `main` scala naraz jedna – L1 pierwsze, HKU1 po nim. Bloki 3–4 poza HKU1 bez
+   decyzji o starcie; FBL1 odłożone (D364).
+
+## Ciąg L – stan (D380)
+Numery: D404, T700–T719 (L1), T750–T799 (L2, L3 – uzgodnione z sesją HKU1 12.11); kolejne D – osobno od HKU1 (ma D405, D406). „Przed etapem” pominięte na
+polecenie użytkownika (pytania zadane w D380–D386, D401–D403).
+
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| L1 OPS1 serie powtarzalne | 1.12.0 | – | gałąź `claude/l1-serie`; logika `wykonawca-opus`, ekrany `wykonawca-sonnet`; dwie rundy xhigh (15 + 15 uwag; poprawione z testami – seria jednym rekordem, `RULES_VERSION` 8, rozsuwanie po „Cała seria” dziś, pamięć typów dni licznika); PR w toku | ok. 5 h (5–8 h) |
+
+**L1 – wpis (12.11):** seria = rekord `series/<id>.json` z wersjami od daty (`model/series.ts`; „Cała seria” i „To i następne” –
+nowa wersja od dnia, jeden licznik, T715); wystąpienia w migawce dnia jak bloki szablonu (`engine/series.ts`, `origin: 'series'`,
+id `derivedId(dzień,'ser',korzeń)`, migawka starszej wersji – nałożone, T701), dziś – wpis w pliku dnia, póki niezaczęte (T706,
+`seriesOff` – T719); rozsuwanie bloków szablonu w `createDay` (`pushedBySeries`, pamięć wyniku, T705, T718); dni szczególne i
+pytanie planu porannego (T704); licznik „po N” z typów dni (T703, T717); operacje okna w `main/data/series.ts` jedną partią.
+Ekrany: `renderer/features/series/` (pole „Powtarzaj”, pytanie zakresu, edycja z listy), ↻ w „Dziś”, „Tygodniu”, komórce
+„Kalendarza” (`seriesOnDay`), lista w „Szablonach”, karta w `MorningPlan`, Ctrl K. Decyzje D404 (trzy przypadki z budowy i trzy
+z ekranów), T700–T719. Testy: `series.test.ts` (unit, fs), `series-reads.test.ts`, `series-form.test.ts`, `series-screens.test.ts`,
+`series.spec.ts` (E2E). Odbiór L1.1–L1.4.
+**Uwagi na później (L1):** klucz pamięci `pushedBySeries` to `JSON.stringify` całej migawki (z ustawieniami), licznik
+`seriesPushRuns` w kodzie produkcyjnym; trzy kopie reguły „zakończona” (`search/records.ts`, `TemplatesPage`, `SeriesEditor`) –
+wspólne `seriesEnded`; martwa logika części serii w `seriesOfBlock`/`currentSeries` i komentarze o podziale (po T715); test
+rozsuwania „Cała seria” dziś w `tests/fs/series.test.ts` pomija się po ok. 01:30 (prawdziwy zegar).
 
 ## Ciąg J – stan (D363)
 **Przed ciągiem J (10.11):** zakres i „Gotowe, gdy” – `docs/plan.md`; decyzje D363–D369 (pytania w trzech rundach
@@ -123,7 +147,9 @@ wolna przy scaleniu; scalenie tylko po uzgodnieniu z sesją ciągu L i po „1.1
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| HKU1 wydarzenia całodniowe | – | – | pytania odpowiedziane (D405), kod w toku | – (2–3 h; po D405 raczej 5–7 h: pasek pulpitu, Ctrl K, miesiąc, plan poranny) |
+| HKU1 wydarzenia całodniowe | 1.13.0 | – | gałąź gotowa: części A–C, dwie rundy xhigh (15 + 13 uwag), merge L1 (1.12.0); PR po zielonym CI, scalenie po znaku sesji L; D405–D407, T720–T749 | ok. 7 h (2–3 h) – zakres D405 (pasek pulpitu, Ctrl K, miesiąc, plan poranny) i dwie rundy |
+
+**HKU1 – wpis (12.11):** kolekcja `allday/<id>.json` (silnik dnia jej nie czyta), pas nad osią „Dziś” i siatką „Tygodnia” (belki `weekLanes`, 3 rzędy + „+N”, wolny rząd), karta z notatką Markdown, linie „Cofnij” 15 min w oknie, „Wolne” (porcje po 62 dni, dziś – okno zmiany typu), miesiąc, plan poranny, pasek pulpitu, Ctrl K; reguły `.claude/rules/allday.md`. Odbiór HKU1.1–HKU1.5. **Uwagi na później:** brak E2E okna „Wolne” dla dziś już utworzonego; opis ekranów wydarzeń w specyfikacji; `NONE` – trzecia stała w oknie (wspólna stała zamiast kopii).
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy

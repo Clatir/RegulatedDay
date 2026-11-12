@@ -62,7 +62,7 @@ const inputs = (date: string, extra: Partial<Parameters<typeof createDay>[0]> = 
   date,
   changes: [] as SettingsChange[],
   templates: [ordinaryTemplate, tuesday],
-  lectures: [lecture],
+  lectures: [lecture], series: [],
   dayFile: null,
   holidays,
   at: null,

@@ -25,6 +25,7 @@ import { COMMUTE_CATEGORY, REMOTE_CLASS_CATEGORY } from '../model/categories'
 import { derivedId } from '../model/ids'
 import { DAY_TYPES, type DayTypeId, type SettingsChange } from '../model/settings'
 import { PLAN_MAX, PLAN_MIN, dayFileFrom, planBlock, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
+import type { SeriesPlan } from '../model/series'
 import { classTitle, isRemoteRoom, type ZjazdDay, type ZjazdKind } from './zjazdy'
 
 /** The field of the day's file that records the import (unknown to older versions, which keep it as it is). */
@@ -38,6 +39,7 @@ export interface ZjazdInputs {
   changes: readonly SettingsChange[]
   templates: readonly Template[]
   lectures: readonly LectureSeries[]
+  series: readonly SeriesPlan[]
   holidays: HolidayLookup
 }
 
@@ -246,7 +248,7 @@ export function zjazdDayRaw(raw: Raw | null | undefined, day: ZjazdDay, inp: Zja
   // A day without classes is never imported (the parser and `zjazdDayFrom` leave it out): only its type, nothing replaced.
   if (!day.classes.length) return next
   const file = dayFileFrom(next, date)
-  const snapshot = createDay({ date, changes: inp.changes, templates: inp.templates, lectures: inp.lectures, dayFile: file, holidays: inp.holidays, at: null })
+  const snapshot = createDay({ date, changes: inp.changes, templates: inp.templates, lectures: inp.lectures, series: inp.series, dayFile: file, holidays: inp.holidays, at: null })
   const plan = dayPlan(snapshot, file)
 
   const classes = zjazdClassBlocks(day)

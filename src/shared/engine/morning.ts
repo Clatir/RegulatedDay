@@ -9,6 +9,7 @@ import type { HolidayLookup } from './createDay'
 import { createDay, dayPlan, sessionWindow, sessionShiftMin } from './createDay'
 import type { DaySnapshot } from '../model/events'
 import { planBlock, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
+import type { SeriesPlan } from '../model/series'
 import type { DayTypeId, SessionDef, SettingsChange } from '../model/settings'
 import { settingsOn } from '../model/settings'
 import { addDays, placeWall, weekday } from '../time/zone'
@@ -21,6 +22,7 @@ export interface MorningInputs {
   changes: readonly SettingsChange[]
   templates: readonly Template[]
   lectures: readonly LectureSeries[]
+  series: readonly SeriesPlan[]
   holidays: HolidayLookup
   /** The files of the days the morning looks at (yesterday, today, the next 7 days); a missing one: none. */
   files: (date: string) => DayFile | null
@@ -52,7 +54,7 @@ export function sessionQuestions(snapshot: DaySnapshot, dayFile: DayFile | null,
 }
 
 function snapshotFor(inp: MorningInputs, date: string): DaySnapshot {
-  return createDay({ date, changes: inp.changes, templates: inp.templates, lectures: inp.lectures, dayFile: inp.files(date), holidays: inp.holidays, at: null })
+  return createDay({ date, changes: inp.changes, templates: inp.templates, lectures: inp.lectures, series: inp.series, dayFile: inp.files(date), holidays: inp.holidays, at: null })
 }
 
 const plDayMonth = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}`
@@ -172,7 +174,7 @@ export function weeklyAnalysisMove(inp: MorningInputs, friday: string): { analys
   const satType = inp.files(sat)?.dayType
   if (satType !== 'zjazd-stacjonarny' && satType !== 'zjazd-zdalny') return null
   // The analysis the Saturday would have without the „zjazd”: its weekend template's.
-  const plain = createDay({ date: sat, changes: inp.changes, templates: inp.templates, lectures: inp.lectures, dayFile: null, holidays: inp.holidays, at: null })
+  const plain = createDay({ date: sat, changes: inp.changes, templates: inp.templates, lectures: inp.lectures, series: inp.series, dayFile: null, holidays: inp.holidays, at: null })
   const analysis = plain.blocks.find((b) => b.tag === 'weeklyAnalysis')
   if (!analysis) return null
   const fri = dayPlan(snapshotFor(inp, friday), fileF)

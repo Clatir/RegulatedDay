@@ -32,8 +32,8 @@ async function todayDay(today: string): Promise<FreeDay | null> {
   try {
     const data = await window.rd.dayData(today)
     if (!dayUsable(data)) return null
-    const { rd, templates, lectures, view } = useData.getState()
-    const m = countDay(today, data, { changes: rd.settings, templates, lectures }, Date.now(), rd.general.modules.energy, view?.calibration === true)
+    const { rd, templates, lectures, seriesPlans, view } = useData.getState()
+    const m = countDay(today, data, { changes: rd.settings, templates, lectures, series: seriesPlans }, Date.now(), rd.general.modules.energy, view?.calibration === true)
     return { type: dayTypeNow(m), closed: m.state.facts.closed != null, duringDay: m.fromLog }
   } catch {
     return null

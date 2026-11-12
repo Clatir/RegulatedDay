@@ -15,9 +15,9 @@ import { useBusy } from '../../lib/busy'
 import { useData } from '../../store/data'
 import { toast } from '../../store/ui'
 
-const KIND: Record<string, string> = { settings: 'Ustawienia', template: 'Szablon', schedule: 'Wykład', day: 'Plan dnia', request: 'Prośba', routine: 'Rutyna', allDay: 'Wydarzenie' }
+const KIND: Record<string, string> = { settings: 'Ustawienia', template: 'Szablon', series: 'Seria', schedule: 'Wykład', day: 'Plan dnia', request: 'Prośba', routine: 'Rutyna', allDay: 'Wydarzenie' }
 /** The order of kinds in the list of a backup's records. */
-const KIND_ORDER = ['settings', 'template', 'schedule', 'routine', 'allDay', 'request', 'day']
+const KIND_ORDER = ['settings', 'template', 'series', 'schedule', 'routine', 'allDay', 'request', 'day']
 
 const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 const sizeOf = (bytes: number) => (bytes >= 1024 * 1024 ? `${formatNumber(bytes / (1024 * 1024), 1)} MB` : `${formatNumber(Math.max(1, Math.round(bytes / 1024)))} kB`)

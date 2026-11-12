@@ -10,13 +10,17 @@ import type { HistoryRecord, HistoryVersion } from '@shared/api'
 import { diffRecords } from '@shared/data/merge'
 import { countLabel, plDate } from '@shared/format'
 import { personName } from '@shared/model/rd'
+import { settingsOn } from '@shared/model/settings'
+import { SERIES_MARK } from '@shared/seriesText'
 import { EmptyState, cx } from '../../components/ui'
 import { fieldText, keyOf, valueText } from '../../lib/recordText'
 import { useBusy } from '../../lib/busy'
 import { rawRecord, reloadData, useData } from '../../store/data'
 import { toast } from '../../store/ui'
+import { blockName } from '../plan/blockView'
+import { seriesBlockOf } from '../series/seriesForm'
 
-const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Prośby', routine: 'Rutyny', allDay: 'Wydarzenia' }
+const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', series: 'Serie', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Prośby', routine: 'Rutyny', allDay: 'Wydarzenia' }
 const REASONS: Record<string, string> = { edit: 'przed edycją', delete: 'przed usunięciem', merge: 'przed scaleniem', conflict: 'wersja z konfliktu', restore: 'przed przywróceniem' }
 
 /** The record chosen, by its key, from the list as it is now – after „Przywróć” no longer „usunięty” (A7-10). */
@@ -66,10 +70,16 @@ export function HistoryPage() {
 }
 
 function RecordName({ r }: { r: HistoryRecord }) {
-  const { templates, requests, routines, lectures, allDay, rd } = useData()
+  const { templates, requests, routines, lectures, series, allDay, rd } = useData()
+  const today = useData((s) => s.view?.today ?? '')
   if (r.kind === 'settings') return <span>Ustawienia wspólne</span>
   if (r.kind === 'day') return <span>Plan dnia {plDate(r.id)}</span>
   if (r.kind === 'template') return <span>{templates.find((t) => t.id === r.id)?.name ?? 'Szablon'}</span>
+  if (r.kind === 'series') {
+    const s = series.find((t) => t.id === r.id)
+    // The series by its block's name, as the list in „Szablony” has it.
+    return <span>{s ? `${SERIES_MARK} ${blockName(seriesBlockOf(s, today), { rd, settings: settingsOn(rd.settings, today), routines, requests })}` : 'Seria'}</span>
+  }
   if (r.kind === 'routine') return <span>{routines.find((t) => t.id === r.id)?.name ?? 'Rutyna'}</span>
   if (r.kind === 'allDay') return <span>{allDay.find((t) => t.id === r.id)?.title ?? 'Wydarzenie'}</span>
   if (r.kind === 'schedule') return <span>{lectures.find((t) => t.id === r.id)?.name || 'Wykład'}</span>
