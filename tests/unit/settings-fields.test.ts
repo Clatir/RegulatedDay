@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { checkField, formatField, NUMBER_FIELDS, parseField } from '@shared/model/fields'
-import { DEFAULT_MACHINE_PREFS, machinePrefsFrom } from '@shared/machine'
+import { DEFAULT_MACHINE_PREFS, machinePrefsFrom, patchMachinePrefs, quickKeyFrom } from '@shared/machine'
 import { DEFAULT_GENERAL, generalFrom } from '@shared/model/rd'
 import { DEFAULT_SETTINGS, deepMerge, settingsFrom } from '@shared/model/settings'
 
@@ -107,5 +107,27 @@ describe('ustawienia bez liczb', () => {
     expect(machinePrefsFrom({ barPlacement: { display, offset: { x: 8, y: 600 } } }).barPlacement).toEqual({ display, spot: null, offset: { x: 8, y: 600 } })
     expect(machinePrefsFrom({ barPlacement: { display, spot: 'middle', offset: { x: 8, y: 600 } } }).barPlacement?.spot).toBeNull()
     expect(machinePrefsFrom({ barPlacement: { display, spot: 'top-left' } }).barPlacement).toBeNull()
+  })
+})
+
+describe('skrót szybkiego zapisu (D385, D402)', () => {
+  it('domyślnie Ctrl+Alt+N; wyłączony zostaje wyłączony; zły – domyślny', () => {
+    expect(DEFAULT_MACHINE_PREFS.quickKey).toBe('Ctrl+Alt+N')
+    expect(machinePrefsFrom({}).quickKey).toBe('Ctrl+Alt+N')
+    expect(machinePrefsFrom({ quickKey: null }).quickKey).toBeNull()
+    expect(machinePrefsFrom({ quickKey: 'Q' }).quickKey).toBe('Ctrl+Alt+N')
+    expect(patchMachinePrefs(DEFAULT_MACHINE_PREFS, { quickKey: 'alt+shift+k' }).quickKey).toBe('Alt+Shift+K')
+  })
+
+  it('zapis skrótu: modyfikatory w kolejności Ctrl, Alt, Shift, Super, jeden klawisz; bez Ctrl ani Alt – nie', () => {
+    expect(quickKeyFrom('Shift+Control+n')).toBe('Ctrl+Shift+N')
+    expect(quickKeyFrom('Ctrl+Alt+F12')).toBe('Ctrl+Alt+F12')
+    expect(quickKeyFrom('Super+Alt+space')).toBe('Alt+Super+Space')
+    expect(quickKeyFrom('N')).toBeNull()
+    expect(quickKeyFrom('Shift+N')).toBeNull()
+    expect(quickKeyFrom('Ctrl+Ctrl+N')).toBeNull()
+    expect(quickKeyFrom('Ctrl+Alt+Enter')).toBeNull()
+    expect(quickKeyFrom('Ctrl+Alt+F25')).toBeNull()
+    expect(quickKeyFrom(7)).toBeNull()
   })
 })

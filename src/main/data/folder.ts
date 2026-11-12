@@ -42,6 +42,7 @@ import { periodFrom, statsOf, type DayStats, type StatsPeriod, type StatsResult 
 import { calibrationPeriod, costProposals, inCalibration, timeProposals, type CalibrationDay, type CalibrationPeriod, type CostEvidence, type CostProposal, type FeltCounts, type TimeProposal, type TimeSample } from '@shared/engine/calibration'
 
 import { inProcess, type Worker } from '../worker/host'
+import { casesFrom, casesRitual, taskQuestions, type CasesRitual } from '@shared/engine/cases'
 import { CLOSE_WINDOW_H, closeEvents, closeRefusal, ritualActivity, ritualAnswer, ritualRows, unclosedDays, type DayLog, type RitualValue, type RitualView } from '@shared/engine/ritual'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
@@ -2293,6 +2294,17 @@ export class DataFolder {
     this.ritualMemo.set(day, { key, view })
     for (const d of this.ritualMemo.keys()) if (d < addDays(logicalDayOf(at), -RITUAL_MEMO_DAYS)) this.ritualMemo.delete(d)
     return view
+  }
+
+  /**
+   * What the evening ritual of a day says about „Sprawy” (D383, D384, D402): the sprawy of its „Dziś” not done (back in „W
+   * tym tygodniu” at 04:00), the tasks whose block ended without an answer to „Zadanie zrobione?”, on Sunday the number in
+   * „Kiedyś / Może”. From the records as this computer sees them and the day as the window counts it.
+   */
+  async casesRitual(day: string, at = this.clock.now()): Promise<CasesRitual> {
+    const records = casesFrom(await this.collection('request'))
+    const ctx = await this.ownContext(day, await this.log.readDay(day), at)
+    return casesRitual(day, logicalDayOf(at), records, taskQuestions(ctx, computeDay(ctx), records))
   }
 
   /** Your answer to a row of a day's ritual: judged on the day as it is now and written to its log, one at a time. */

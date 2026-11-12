@@ -10,8 +10,11 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
+import type { CasesRitual } from '@shared/engine/cases'
+import { newId } from '@shared/model/ids'
+import { newTask } from '@shared/model/requests'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords, recordEdit } from '@shared/data/merge'
 import { isRaw } from '@shared/data/dayEdits'
@@ -718,6 +721,29 @@ export class DataHub {
     return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}) }
   }
 
+  /**
+   * The quick capture (D385, D402): a task of your own – only its title – into „Skrzynka”, from the window „Do skrzynki”
+   * and the bar's field. Without an open folder, or without a title – not saved, with why; a folder away – it waits in the
+   * queue as every new record (saved).
+   */
+  async quickAdd(title: unknown): Promise<QuickAddResult> {
+    const f = this.service?.folder
+    if (!f) return { ok: false, error: 'Folder danych nie jest otwarty – nic nie zapisano.', id: null }
+    const now = f.clock.now()
+    const id = newId()
+    const raw = newTask(id, now, logicalDayOf(now), { title: typeof title === 'string' ? title : '' })
+    if (!raw) return { ok: false, error: 'Wpisz, co zapisać.', id: null }
+    const out = await this.edit([recordEdit(paths.record('request', id), null, raw)!])
+    const ok = out.every((o) => o.status === 'applied' || o.status === 'waiting')
+    return { ok, error: ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: ok ? id : null }
+  }
+
+  /** What a day's evening ritual says about „Sprawy” (D383, D384, D402). */
+  casesRitual(day: string): Promise<CasesRitual> {
+    if (!isIsoDate(day)) throw new Error('data dnia')
+    return this.need().casesRitual(day)
+  }
+
   /** A day's ritual (D318) – counted by the helper process. */
   ritual(day: string): Promise<RitualView> {
     return this.need().ritual(day)
@@ -989,7 +1015,8 @@ export class DataHub {
         rel,
         kind: c.kind,
         date: c.date,
-        name: text(r.name) ?? text(r.note),
+        // A task of „Sprawy” by its title (D384), a request by its note.
+        name: text(r.name) ?? text(r.title) ?? text(r.note),
         person: c.kind === 'request' ? text(r.person) : null,
         // 0 – the model's „unknown” (`requestFrom`), never a date.
         at: c.kind === 'request' && typeof r.createdAt === 'number' && Number.isFinite(r.createdAt) && r.createdAt > 0 ? r.createdAt : null

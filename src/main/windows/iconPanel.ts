@@ -24,8 +24,11 @@ export const REOPEN_BLOCK_MS = 500
 export const closesOnBlur = (o: { helperRunning: boolean; stayOnTop: boolean; sinceOpenMs: number }): boolean => !o.helperRunning && !o.stayOnTop && o.sinceOpenMs > PANEL_GRACE_MS
 
 export interface PanelDeps {
-  /** The rectangle to open at for a content height (CSS px); `cursor` – where it was when the panel opened. */
-  place: (height: number, cursor: { x: number; y: number }) => Rect
+  /**
+   * The rectangle to open at for a content height (CSS px); `cursor` – where it was when the panel opened; `atCursor` –
+   * by the cursor, not by the icon (opened from the desktop bar's „+”, T756).
+   */
+  place: (height: number, cursor: { x: number; y: number }, atCursor: boolean) => Rect
   helperRunning: () => boolean
   /** Out of recordings and screen sharing (this computer's setting, on by default). */
   hideFromCapture: () => boolean
@@ -43,6 +46,8 @@ export class IconPanel {
   private contentHeight = 320
   /** The cursor when the panel opened: by it the panel keeps its place (icon under the hidden icons' arrow) as it grows. */
   private cursorAtOpen = { x: 0, y: 0 }
+  /** Opened by the cursor (the desktop bar's „+”): it keeps that place as it grows. */
+  private atCursor = false
   private idleTimer: NodeJS.Timeout | null = null
   quitting = false
   onExternalClose: (() => void) | null = null
@@ -127,7 +132,8 @@ export class IconPanel {
   open(target: PanelTarget | null = null): void {
     if (this.win.isDestroyed()) return
     this.cursorAtOpen = screen.getCursorScreenPoint()
-    const r = this.d.place(this.contentHeight, this.cursorAtOpen)
+    this.atCursor = target?.quick === true
+    const r = this.d.place(this.contentHeight, this.cursorAtOpen, this.atCursor)
     this.win.setBounds(r)
     this.win.setContentProtection(this.d.hideFromCapture())
     this.openedAt = Date.now()
@@ -170,7 +176,7 @@ export class IconPanel {
   layout(height: number, zoom: number, unfolded: boolean): void {
     this.contentHeight = Math.ceil(height * zoom)
     this.unfolded = unfolded
-    if (this.isOpen) this.win.setBounds(this.d.place(this.contentHeight, this.cursorAtOpen))
+    if (this.isOpen) this.win.setBounds(this.d.place(this.contentHeight, this.cursorAtOpen, this.atCursor))
   }
 
   private armIdle(): void {

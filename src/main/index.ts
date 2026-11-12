@@ -49,6 +49,7 @@ import { displays, primaryDisplay } from './displays'
 import { createMainWindow, revealMainWindow } from './windows/mainWindow'
 import { DesktopBar } from './windows/desktopBar'
 import { IconPanel } from './windows/iconPanel'
+import { QuickWindow } from './windows/quickWindow'
 import { HelperClient, type HelperMessage } from './helper/client'
 import { helperProgram } from './helper/program'
 import { notify } from './notify'
@@ -91,6 +92,8 @@ let bar: DesktopBar | null = null
 let panel: IconPanel | null = null
 let tray: AppTray | null = null
 let sound: SoundWindow | null = null
+/** „Do skrzynki” (D385): on top only on your shortcut. */
+let quick: QuickWindow | null = null
 let helper: HelperClient | null = null
 let autostart: Autostart | null = null
 let updates: UpdateController | null = null
@@ -160,7 +163,7 @@ function loadView(win: BrowserWindow): Promise<void> {
 }
 
 const appWindows = (): Electron.WebContents[] =>
-  [mainWindow?.isDestroyed() ? null : mainWindow?.webContents, bar?.webContents, panel?.webContents].filter((w): w is Electron.WebContents => !!w && !w.isDestroyed())
+  [mainWindow?.isDestroyed() ? null : mainWindow?.webContents, bar?.webContents, panel?.webContents, quick?.webContents].filter((w): w is Electron.WebContents => !!w && !w.isDestroyed())
 
 function broadcast(channel: string, payload: unknown): void {
   for (const w of appWindows()) w.send(channel, payload)
@@ -169,6 +172,7 @@ function broadcast(channel: string, payload: unknown): void {
 function viewOf(sender: Electron.WebContents): ViewKind {
   if (bar && sender === bar.webContents) return 'bar'
   if (panel && sender === panel.webContents) return 'panel'
+  if (quick && sender === quick.webContents) return 'quick'
   return 'main'
 }
 
@@ -201,8 +205,16 @@ const widget = new WidgetEngine({
   emit: (view) => showWidget(view),
   log,
   batterySaver: () => batterySaverOn && inOneDriveNow(),
-  backup: () => hub?.service?.backup ?? null
+  backup: () => hub?.service?.backup ?? null,
+  quickAdd: (title) => quickAdd(title),
+  // „+” of the desktop bar (T756): the bar takes no keys (D229) – the icon's panel opens at the cursor with the field.
+  openQuick: () => openPanel({ line: null, day: null, quick: true })
 })
+
+/** The quick capture (D385): a task into „Skrzynka” – the window „Do skrzynki” and the bar's field. */
+function quickAdd(title: unknown): Promise<{ ok: boolean; error: string | null; id: string | null }> {
+  return hub ? hub.quickAdd(title) : Promise.resolve({ ok: false, error: 'Aplikacja jeszcze się uruchamia – nic nie zapisano.', id: null })
+}
 
 function widgetView(): WidgetView {
   const view = widget.current()
@@ -537,6 +549,7 @@ function quitApp(): void {
   if (bar) bar.quitting = true
   if (panel) panel.quitting = true
   if (sound) sound.quitting = true
+  if (quick) quick.quitting = true
   tray?.destroy()
   void config
     .flush()
@@ -637,6 +650,8 @@ async function setPrefs(patch: unknown): Promise<MachinePrefs> {
   const saved = config.update({ prefs: next })
   saved.catch((e) => log('warn', 'zapis ustawień komputera nie udał się', e))
   if (next.zoom !== before.zoom) for (const w of appWindows()) w.setZoomFactor(next.zoom)
+  // D402: the shortcut of the quick capture changed or switched off in the settings – registered again at once.
+  if (next.quickKey !== before.quickKey) quick?.setShortcut(next.quickKey)
   broadcast(CH.onPrefs, next)
   layoutBar()
   await saved.catch(() => undefined)
@@ -847,6 +862,15 @@ function registerIpc(): void {
   handle(CH.seriesEnd, (_e, seriesId: unknown, last: unknown) => needHub().seriesEnd(seriesId, last))
   handle(CH.seriesAnswer, (_e, date: unknown, blockId: unknown, keep: unknown) => needHub().seriesAnswer(date, blockId, keep))
   handle(CH.seriesUndo, (_e, undo: unknown) => needHub().seriesUndo(undo))
+  // „Sprawy” (D383–D385, D402): the quick capture – saved from „Do skrzynki”, the window hides; its shortcut for the settings.
+  handle(CH.quickAdd, async (e, title: unknown) => {
+    const r = await quickAdd(typeof title === 'string' ? title.slice(0, 1000) : '')
+    if (r.ok && viewOf(e.sender) === 'quick') quick?.close('zapisano')
+    return r
+  })
+  ipcMain.on(CH.quickClose, () => quick?.close('Esc'))
+  handle(CH.quickShortcut, () => quick?.shortcut ?? { key: prefs().quickKey, state: 'off' })
+  handle(CH.casesRitual, (_e, day: unknown) => needHub().casesRitual(String(day)))
   // „Tydzień” and the month's goals (D356).
   handle(CH.weekView, (_e, date: unknown) => needHub().weekView(String(date)))
   handle(CH.goals, (_e, month: unknown) => needHub().goals(String(month)))
@@ -1062,6 +1086,7 @@ async function main(): Promise<void> {
       if (c.updates.lastRunVersion !== app.getVersion()) void config.update({ updates: { ...c.updates, lastRunVersion: app.getVersion(), dataVersion: c.updates.dataVersion ?? c.updates.lastRunVersion } }).catch(() => undefined)
       for (const w of appWindows()) w.setZoomFactor(c.prefs.zoom)
       broadcast(CH.onPrefs, c.prefs)
+      quick?.setShortcut(c.prefs.quickKey)
       layoutBar()
     })
   }
@@ -1234,9 +1259,10 @@ async function main(): Promise<void> {
   bar.onExternalClose = quitFromOutside
   bar.onSystemEnd(onSystemEnd)
   panel = new IconPanel(preload, loadView, {
-    place: (height, cursor) => {
+    place: (height, cursor, atCursor) => {
       const all = displays()
-      const icon = tray?.bounds() ?? null
+      // Opened from the desktop bar's „+” (T756): by the cursor – the bar it was clicked on.
+      const icon = atCursor ? null : (tray?.bounds() ?? null)
       // The display the panel opens on – the same one its rectangle is put on (an icon under the arrow: the cursor's).
       const wa = panelDisplay(icon, cursor, all).workArea
       const width = Math.floor(Math.min(480 * prefs().zoom, wa.width - 16))
@@ -1252,6 +1278,14 @@ async function main(): Promise<void> {
 
   sound = new SoundWindow(preload, loadView)
   sound.onExternalClose = quitFromOutside
+  quick = new QuickWindow(preload, loadView, {
+    zoom: () => prefs().zoom,
+    hideFromCapture: () => prefs().hideFromCapture,
+    changed: (s) => broadcast(CH.onQuickShortcut, s),
+    log: (m) => log('info', m)
+  })
+  quick.onExternalClose = quitFromOutside
+  quick.setShortcut(prefs().quickKey)
   showWidget(widgetView())
   widget.start()
 
@@ -1301,6 +1335,7 @@ app.on('before-quit', (e) => {
   if (bar) bar.quitting = true
   if (panel) panel.quitting = true
   if (sound) sound.quitting = true
+  if (quick) quick.quitting = true
   // The data folder closes first, by any way out (its journal is on the disk already: this writes what OneDrive can take
   // now and the presence „closed”), also while it is still opening – once, with a limit of time, and never at the end of
   // the Windows session, which the app does not hold up.
@@ -1332,6 +1367,8 @@ app.on('will-quit', () => {
   oneDrive.stop()
   widget.stop()
   sound?.destroy()
+  // The global shortcut given back to Windows.
+  quick?.destroy()
   helper?.stop()
   worker.stop()
   if (!sessionEnding) life.close(byInstaller ? 'installer' : 'quit')

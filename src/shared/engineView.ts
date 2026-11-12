@@ -22,6 +22,7 @@ import { isRunningRequest, OPEN, workSince, type AutoAction, type RequestFact } 
 import { atOf, type Grid } from './engine/grid'
 import { ritualDue } from './engine/ritual'
 import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
+import { TASK_ANSWERS, TASK_LINE_MIN, taskLineText, taskQuestions } from './engine/cases'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
 import { endsAtOf, fixedStartPair, laterWork, plannedEndOf, secondShiftStart, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
@@ -29,6 +30,7 @@ import { workedUntilOf } from './engine/explain'
 import { namedById, type NamedBlock } from './blockName'
 import { namingOf } from './engine/context'
 import type { PlanBlock } from './model/plan'
+import type { RequestRecord } from './model/requests'
 import type { Routine } from './model/routines'
 import { ENGINE_TONE_SET, iconColor, toneColor, type Tone, type WarnStep } from './theme'
 import { NO_VARIANTS, type BarLine, type BarPending, type BarRoutine, type RunningRequest, type WidgetView } from './widget'
@@ -63,6 +65,8 @@ export interface EngineInput {
   ritualFrom?: string | null
   /** The routines (D328): a routine of a block begun today and not ticked off has its line. */
   routines?: readonly Routine[]
+  /** The records of „Sprawy” (D384): a task whose block ended asks „Zadanie zrobione?”. */
+  cases?: readonly RequestRecord[]
 }
 
 /** A request without a person (spec „osoba: ?”). */
@@ -363,6 +367,13 @@ export function engineView(i: EngineInput): WidgetView {
       const line = `routine:${state.grid.date}:${r.block}`
       routines.push({ line, block: r.block, name: nameOf(r.block), normal: r.normal, worse: r.worse })
       lines.push({ id: line, text: nameOf(r.block), actions: [{ id: 'all', label: '✓ Wszystkie' }, { id: 'steps', label: 'Kroki ▸' }, ...(r.worse.length ? [{ id: 'worse', label: 'gorsze dni' }] : [])], dot: false })
+    }
+  // „Zadanie zrobione? · Tak · Wraca na listę” (D384, T754): quiet lines (no dot) after the routines, today, for 3 h after
+  // the task's block ended – then the ritual has it. The answer is the task's record: every computer asks one question.
+  if (!hidden && !modes.night && state.grid.date === logicalDayOf(now))
+    for (const q of taskQuestions(i.ctx, state, i.cases ?? [])) {
+      if (now >= q.endedAt + TASK_LINE_MIN * MIN) continue
+      lines.push({ id: q.id, text: taskLineText(q.title), actions: TASK_ANSWERS.map((a) => ({ id: a.id, label: a.label })), dot: false })
     }
   // The hard end, a quiet icon with no buttons, stands last of the lines (the window of the main process puts it after
   // the lines it adds): where the bar shows one line only, it never pushes theirs into „⋯”.

@@ -109,7 +109,7 @@ Add-Type -TypeDefinition $src
 // which it prevents and ends the app (T396, E4a.13). A quit begun inside that event was cancelled: the windows closed,
 // the app went on without them until the installer killed it (CI) – seen only with a real WM_CLOSE (Windows); elsewhere
 // the same event from code.
-for (const title of ['Regulated Day – panel', 'Regulated Day – dźwięk', 'Regulated Day – pasek']) {
+for (const title of ['Regulated Day – panel', 'Regulated Day – dźwięk', 'Regulated Day – pasek', 'Regulated Day – do skrzynki']) {
   test(`zamknięcie z zewnątrz okna „${title}”: aplikacja kończy pracę do końca – „aplikacja zamknięta”`, async () => {
     const { app, page, userData } = await launch()
     await expect(page.getByTestId('bar-main')).toBeVisible()

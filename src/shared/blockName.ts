@@ -1,6 +1,7 @@
 /**
- * How a block is named (spec „W interfejsie tylko prawdziwe nazwy”): its routine, the people of its requests, its
- * variant or its category – never an id. The main window and the widget (the main process) name it the same way.
+ * How a block is named (spec „W interfejsie tylko prawdziwe nazwy”): its task's title (D384), its routine, the people of
+ * its requests, its variant or its category – never an id. The main window and the widget (the main process) name it the
+ * same way. `Names.requests` are the records of „Sprawy” – the tasks and the requests.
  */
 import { categoryName, personName, type RdFile } from './model/rd'
 import type { PlanBlock } from './model/plan'
@@ -16,7 +17,7 @@ export interface Names {
 }
 
 /** What names a block: its plan fields, its own name (D357), and for a block of the session layer also where it comes from (D338). */
-export type NamedBlock = Pick<PlanBlock, 'categoryId' | 'variantId' | 'routine' | 'requests' | 'note'> & Partial<Pick<PlanBlock, 'origin' | 'sourceId' | 'name'>>
+export type NamedBlock = Pick<PlanBlock, 'categoryId' | 'variantId' | 'routine' | 'requests' | 'note'> & Partial<Pick<PlanBlock, 'origin' | 'sourceId' | 'name' | 'task'>>
 
 /**
  * The naming input of a block known by its info or facts only (begun outside the plan, a row of the CSV, a variant's
@@ -55,7 +56,7 @@ export function namedById(id: string, day: NamingDay): NamedBlock | null {
   const planned = day.planned(id)
   if (!planned || typeof planned.categoryId !== 'string' || !planned.categoryId) return snap
   const started = namedOf({ categoryId: planned.categoryId, variantId: planned.variantId ?? null })
-  return snap?.categoryId === planned.categoryId ? { ...started, origin: snap.origin, sourceId: snap.sourceId, routine: snap.routine, requests: snap.requests, note: snap.note } : started
+  return snap?.categoryId === planned.categoryId ? { ...started, origin: snap.origin, sourceId: snap.sourceId, routine: snap.routine, requests: snap.requests, task: snap.task, note: snap.note } : started
 }
 
 /** The name of a block of the day by its id (`namedById`), the same on the axis, in the ritual, the CSV and the bar; „blok” when nothing names it. */
@@ -72,6 +73,11 @@ export function blockName(b: NamedBlock, n: Names): string {
   if (b.origin === 'session' && b.sourceId) {
     const s = n.settings.sessions.find((x) => x.id === b.sourceId)
     if (s) return `Sesja ${s.name}`
+  }
+  // A task's block (D384): the task's title – as „Sprawy” have it now (a task gone: the category).
+  if (b.task) {
+    const t = n.requests.find((x) => x.id === b.task)
+    if (t?.title) return t.title
   }
   if (b.routine) {
     const r = n.routines.find((x) => x.id === b.routine)

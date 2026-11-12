@@ -10,6 +10,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { WidgetAction } from '@shared/api'
 import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
+import { TITLE_MAX } from '@shared/model/requests'
 import { barBackground, TONE_SETS } from '@shared/theme'
 import { SEEN_LINE, type AutoItem, type BarLine, type BarRoutine, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
@@ -17,9 +18,10 @@ import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
 import { useStepPicks } from '../lib/stepPicks'
 import { termHolds } from '../lib/viewTerms'
+import { useEscapeLayer } from '../lib/escape'
 
 export type BarMode = 'main' | 'panel' | 'desktop'
-type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | null
+type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | null
 
 const SIGNALS: Array<[string, string]> = [
   ['glasses', 'okulary'],
@@ -43,7 +45,7 @@ function act(action: WidgetAction, arg?: string): void {
 const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 
 /** A button of the bar: on the desktop bar it acts on the release of the mouse button (no activation, D229). */
-function BarButton({ mode, onAct, children, testId, pressed, accent }: { mode: BarMode; onAct: () => void; children: ReactNode; testId?: string; pressed?: boolean; accent?: boolean }) {
+function BarButton({ mode, onAct, children, testId, pressed, accent, label }: { mode: BarMode; onAct: () => void; children: ReactNode; testId?: string; pressed?: boolean; accent?: boolean; label?: string }) {
   const props =
     mode === 'desktop'
       ? {
@@ -57,6 +59,7 @@ function BarButton({ mode, onAct, children, testId, pressed, accent }: { mode: B
       type="button"
       data-testid={testId}
       aria-pressed={pressed}
+      aria-label={label}
       className={cx(
         'inline-flex h-[24px] shrink-0 items-center rounded border px-2 text-[12px] leading-none whitespace-nowrap',
         accent ? 'border-lamp/60 text-fg' : 'border-line-strong text-fg',
@@ -246,6 +249,54 @@ function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode;
 }
 
 /**
+ * The field of the quick capture (D385, D402): a title, Enter saves it as a task into „Skrzynka” (the main process says
+ * why when it cannot), Esc folds it – in the main window's bar and in the icon's panel (the desktop bar takes no keys: its
+ * „+” opens the panel with this field, T756).
+ */
+function QuickField({ mode, close }: { mode: BarMode; close: () => void }) {
+  const [text, setText] = useState('')
+  useEscapeLayer(true, close)
+  const save = () => {
+    if (!text.trim()) return
+    act('quickAdd', text.slice(0, TITLE_MAX))
+    setText('')
+    close()
+  }
+  return (
+    <div className="flex items-center gap-1.5" data-testid="bar-quick-field">
+      <span className="shrink-0 text-[12px] text-muted">Do skrzynki:</span>
+      <input
+        autoFocus
+        className="input h-[24px] min-w-0 flex-1 text-[12px]"
+        value={text}
+        maxLength={TITLE_MAX}
+        placeholder="Enter zapisuje"
+        onChange={(e) => setText(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            save()
+          }
+        }}
+        data-testid="bar-quick-title"
+      />
+      <BarButton mode={mode} accent testId="bar-quick-save" onAct={save}>
+        Zapisz
+      </BarButton>
+    </div>
+  )
+}
+
+/** „+” of the quick capture (D402: always – in the night's quiet, „Odcinam się”, a session and a class too). */
+function QuickButton({ mode, open, toggle }: { mode: BarMode; open: boolean; toggle: () => void }) {
+  return (
+    <BarButton mode={mode} testId="bar-quick" label="Do skrzynki" pressed={open} onAct={() => (mode === 'desktop' ? act('quickOpen') : toggle())}>
+      +
+    </BarButton>
+  )
+}
+
+/**
  * „Kroki ▸” of a routine unfolded (D328): its steps ticked one by one, the version („zwykła” or „gorsze dni”) and
  * „✓ Zapisz zaznaczone” – the same save as the card in „Dziś”. Another version starts with nothing ticked. The steps go
  * by their places in the version (an action's argument is short – 40 ids would not fit, A6-10 review).
@@ -404,21 +455,21 @@ function usePulse(step: string | null, key: string): string | null {
 export const beatsNow = (beaten: string | null, id: string | null): boolean => id != null && id !== beaten
 
 /**
- * The lines on view and those gathered in „⋯”: in a quiet mode one fits, otherwise two; a routine's line (D328) in a
- * quiet mode always waits in „⋯” – never in the only row beside the session's countdown. The lines of a change with its
+ * The lines on view and those gathered in „⋯”: in a quiet mode one fits, otherwise two; a routine's line (D328) and
+ * „Zadanie zrobione?” (D384) in a quiet mode always wait in „⋯” – never in the only row beside the session's countdown. The lines of a change with its
  * „Cofnij” (`moved:`, after the day's own – its questions and warnings come first) take one row at most: the newest; the
  * other waits in „⋯”, its „Cofnij” working there. Only the lines on view count as seen (`useSeen`).
  */
 export function barLines(lines: readonly BarLine[], quiet: boolean): { shown: BarLine[]; extra: BarLine[] } {
   const fit = quiet ? 1 : 2
-  const folds = (l: BarLine) => quiet && l.id.startsWith('routine:')
+  const folds = (l: BarLine) => quiet && (l.id.startsWith('routine:') || l.id.startsWith('task:'))
   const moved = lines.filter((l) => l.id.startsWith('moved:'))
   const later = new Set([...lines.filter(folds), ...moved.slice(1)])
   const front = lines.filter((l) => !later.has(l))
   return { shown: front.slice(0, fit), extra: [...front.slice(fit), ...lines.filter((l) => later.has(l))] }
 }
 
-export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; mode: BarMode; grows?: 'up' | 'down'; onUnfold?: (unfolded: boolean) => void }) {
+export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: WidgetView; mode: BarMode; grows?: 'up' | 'down'; onUnfold?: (unfolded: boolean) => void; quickAt?: object | null }) {
   const now = useNow()
   const brightness = useMachine((s) => s.prefs.brightness)
   const pulse = useMachine((s) => s.prefs.barPulse)
@@ -465,6 +516,10 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
     onUnfold?.(unfold != null || variantsOpen)
     if (mode === 'panel') window.rd.panelTouch()
   }, [mode, unfold, variantsOpen, onUnfold])
+  // The panel opened by the desktop bar's „+” (T756): its field unfolds – at each opening.
+  useEffect(() => {
+    if (quickAt) setUnfold('quick')
+  }, [quickAt])
   // A day gone from the view (no folder, a day not counted now): nothing stays unfolded – the panel's 60 s run again and
   // the day's return shows no old unfold.
   useEffect(() => {
@@ -515,6 +570,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
         </div>
       )}
       {unfold === 'request' && <RequestUnfold view={view} mode={mode} close={() => setUnfold(null)} />}
+      {unfold === 'quick' && <QuickField mode={mode} close={() => setUnfold(null)} />}
       {routineOpen && <RoutineUnfold key={routineOpen.line} routine={routineOpen} mode={mode} close={() => setUnfold(null)} />}
       {unfold === 'signals' && (
         <div className="flex flex-col gap-1.5">
@@ -595,6 +651,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
         <BarButton mode={mode} testId="bar-group-request" pressed={unfold === 'request'} onAct={() => toggle('request')}>
           Prośba ▸
         </BarButton>
+        <QuickButton mode={mode} open={unfold === 'quick'} toggle={() => toggle('quick')} />
         {view.ritual && (
           <BarButton mode={mode} testId="bar-ritual" onAct={() => act('openMain', 'ritual')}>
             Rytuał
@@ -603,6 +660,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
         {unfold === 'request' && (
           <div className="w-full">
             <RequestUnfold view={view} mode={mode} close={() => setUnfold(null)} />
+          </div>
+        )}
+        {unfold === 'quick' && (
+          <div className="w-full">
+            <QuickField mode={mode} close={() => setUnfold(null)} />
           </div>
         )}
       </div>
@@ -774,6 +836,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
           <BarButton mode={mode} testId="bar-group-request" pressed={unfold === 'request'} onAct={() => toggle('request')}>
             Prośba ▸
           </BarButton>
+          <QuickButton mode={mode} open={unfold === 'quick'} toggle={() => toggle('quick')} />
           {view.signals && !view.night && (
             <BarButton mode={mode} testId="bar-group-signals" pressed={unfold === 'signals'} onAct={() => toggle('signals')}>
               Sygnały ▸

@@ -1,15 +1,15 @@
 // adapted from FI src/preload/index.ts @ de81f2b
 /**
- * `window.rd` for every window (the main one, the icon's panel, the desktop bar): the view comes from the window's
- * arguments. In the desktop bar a tooltip would be a separate Chromium window on top of every other (D229): the preload
- * removes every `title` attribute and empties the text inside `<title>` elements (SVG) through nodeValue – never removing
+ * `window.rd` for every window (the main one, the icon's panel, the desktop bar, „Do skrzynki”): the view comes from the
+ * window's arguments. In the desktop bar a tooltip would be a separate Chromium window on top of every other (D229): the
+ * preload removes every `title` attribute and empties the text inside `<title>` elements (SVG) through nodeValue – never removing
  * an element or a node by textContent, which would break React at its next change.
  */
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { CH, type RdApi, type ViewKind } from '../shared/api'
 
 const viewArg = process.argv.find((a) => a.startsWith('--rd-view='))?.slice('--rd-view='.length)
-const view: ViewKind = viewArg === 'bar' || viewArg === 'panel' || viewArg === 'sound' ? viewArg : 'main'
+const view: ViewKind = viewArg === 'bar' || viewArg === 'panel' || viewArg === 'sound' || viewArg === 'quick' ? viewArg : 'main'
 
 function on<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_e: IpcRendererEvent, payload: T) => cb(payload)
@@ -99,7 +99,13 @@ const api: RdApi = {
   seriesRemove: (target, scope) => ipcRenderer.invoke(CH.seriesRemove, target, scope),
   seriesEnd: (seriesId, last) => ipcRenderer.invoke(CH.seriesEnd, seriesId, last),
   seriesAnswer: (date, blockId, keep) => ipcRenderer.invoke(CH.seriesAnswer, date, blockId, keep),
-  seriesUndo: (undo) => ipcRenderer.invoke(CH.seriesUndo, undo)
+  seriesUndo: (undo) => ipcRenderer.invoke(CH.seriesUndo, undo),
+  quickAdd: (title) => ipcRenderer.invoke(CH.quickAdd, title),
+  quickClose: () => ipcRenderer.send(CH.quickClose),
+  onQuickShown: (cb) => on(CH.onQuickShown, cb),
+  quickShortcut: () => ipcRenderer.invoke(CH.quickShortcut),
+  onQuickShortcut: (cb) => on(CH.onQuickShortcut, cb),
+  casesRitual: (day) => ipcRenderer.invoke(CH.casesRitual, day)
 }
 
 contextBridge.exposeInMainWorld('rd', api)
@@ -120,7 +126,8 @@ function stripElement(el: Element): void {
   stripTooltips(el)
 }
 
-if (view === 'bar') {
+// The window „Do skrzynki” is on top while it is open (D385): no tooltip window over it either.
+if (view === 'bar' || view === 'quick') {
   window.addEventListener('DOMContentLoaded', () => {
     stripTooltips(document)
     new MutationObserver((records) => {

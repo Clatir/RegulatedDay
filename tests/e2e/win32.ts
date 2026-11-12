@@ -36,6 +36,7 @@ public static class RdWin {
   [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
   [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int index);
+  [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
   [DllImport("user32.dll")] static extern bool ShowWindowAsync(IntPtr h, int cmd);
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int value, int size);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
@@ -81,6 +82,15 @@ public static class RdWin {
     return sb.Append("]").ToString();
   }
   public static string Foreground() { return GetForegroundWindow().ToInt64().ToString(); }
+  /** Keys pressed for real, as by a keyboard (virtual key codes, e.g. Ctrl+Alt+N = 0x11,0x12,0x4E): down in order, up in reverse. */
+  public static void Keys(string codes) {
+    var vks = new List<byte>();
+    foreach (var c in codes.Split(',')) vks.Add(Convert.ToByte(c.Trim(), 16));
+    foreach (var vk in vks) { keybd_event(vk, 0, 0, UIntPtr.Zero); System.Threading.Thread.Sleep(30); }
+    for (int i = vks.Count - 1; i >= 0; i--) { keybd_event(vks[i], 0, 0x0002, UIntPtr.Zero); System.Threading.Thread.Sleep(30); }
+  }
+  /** The window is „topmost” (WS_EX_TOPMOST): over every window that is not. */
+  public static bool TopMost(long h) { return (GetWindowLong(new IntPtr(h), -20) & 0x00000008) != 0; }
   /** The top-level window at (x, y) in physical pixels. */
   public static string At(int x, int y) {
     SetProcessDPIAware();
@@ -225,6 +235,10 @@ export interface TopWindow {
 /** Every top-level window, from the top of the z-order down. */
 export const topWindows = (): TopWindow[] => JSON.parse(ps('[RdWin]::Windows()')) as TopWindow[]
 export const foreground = (): string => ps('[RdWin]::Foreground()')
+/** Keys pressed for real (virtual key codes in hex, e.g. ['11', '12', '4E'] – Ctrl+Alt+N). */
+export const keys = (codes: readonly string[]): void => void ps(`[RdWin]::Keys('${codes.join(',')}')`)
+/** The window is „topmost” (WS_EX_TOPMOST). */
+export const topMost = (hwnd: string): boolean => ps(`[RdWin]::TopMost(${hwnd})`) === 'True'
 /** The top-level window at each point (physical px); one PowerShell for all. */
 export const windowsAt = (points: Array<[number, number]>): string[] =>
   ps(points.map(([x, y]) => `[RdWin]::At(${Math.round(x)}, ${Math.round(y)})`).join('; '))

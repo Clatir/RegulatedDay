@@ -4,7 +4,7 @@
  * minutes (today, this week, per person – from the days' logs, T479). Ctrl+N makes a new request; removing one has
  * „Cofnij” for 10 s.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { RequestCounters } from '@shared/api'
 import { paths } from '@shared/data/paths'
 import { durationLabel, plDate } from '@shared/format'
@@ -21,7 +21,9 @@ import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 
 
 export function RequestsPage() {
-  const { requests, rd } = useData()
+  const { requests: all, rd } = useData()
+  // Only the requests of „Sprawy” (D383) – the tasks have their own screen.
+  const requests = useMemo(() => all.filter((r) => r.kind === 'request'), [all])
   const [filters, setFilters] = useFilters('requests')
   const stateFilters = filters.filter((f) => f.startsWith('state:')).map((f) => f.slice(6))
   const personFilters = filters.filter((f) => f.startsWith('person:')).map((f) => f.slice(7))

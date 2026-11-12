@@ -5,7 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { rdFrom } from '@shared/model/rd'
-import { REQUEST_STATE_NAMES, requestStateOrder, type RequestRecord } from '@shared/model/requests'
+import { requestFrom, requestStateOrder, type RequestRecord } from '@shared/model/requests'
 import { templateFrom, type Template } from '@shared/model/plan'
 import type { Routine } from '@shared/model/routines'
 import { recordKey, search, type SearchRecord } from '@shared/search'
@@ -32,12 +32,12 @@ const template: Template = templateFrom({
   versions: [{ from: '2026-01-01', blocks: [block('tb1', { note: 'zacznij od wody' }), block('tb2', { routine: 'rano' })] }]
 })!
 const routine: Routine = { id: 'rano', name: 'Poranna rutyna', normal: [{ id: 's1', name: 'woda', min: 5 }, { id: 's2', name: 'prysznic', min: 10 }], worse: [{ id: 's3', name: 'tylko woda', min: 5 }], archived: false }
-const req = (id: string, state: 'queued' | 'done', note: string): RequestRecord => ({ id, person: 'p1', estimateMin: 15, note, createdAt: 1, state, day: null, block: null })
+const req = (id: string, state: 'queued' | 'done', note: string): RequestRecord => requestFrom({ id, person: 'p1', estimateMin: 15, note, createdAt: 1, state, day: null, block: null })!
 const input = (blocks: Array<{ date: string; id: string; title: string; note: string }> = []) => ({
   today: TODAY,
   rd,
   templates: [template],
-  requests: [req('r1', 'queued', 'telefon'), req('r2', 'done', 'zwrot książki')],
+  requests: [req('r1', 'queued', 'telefon'), req('r2', 'done', 'zwrot książki'), requestFrom({ id: 't1', kind: 'task', title: 'Filtr w ekspresie', note: 'Brita', createdAt: 2, state: 'done', list: 'done', doneAt: Date.parse('2026-09-01T10:00:00Z') })!],
   routines: [routine],
   series: [] as SeriesPlan[],
   blocks,
@@ -64,7 +64,7 @@ afterEach(() => {
 })
 
 describe('rekordy wyszukiwarki', () => {
-  it('ekrany, polecenia, ustawienia, kategorie, szablony z blokami, prośby (także zrobione), rutyny z krokami i bloki dni', () => {
+  it('ekrany, polecenia, ustawienia, kategorie, szablony z blokami, sprawy (także zrobione dawno), rutyny z krokami i bloki dni', () => {
     const rs = searchRecords(input([{ date: '2026-11-09', id: 'a', title: 'Analiza', note: 'Kowalski podał numer' }]))
     const kinds = (k: string) => rs.filter((r) => r.kind === k)
     expect(kinds('screen').map((r) => r.title)).toContain('Tydzień')
@@ -73,9 +73,14 @@ describe('rekordy wyszukiwarki', () => {
     expect(kinds('setting')).toHaveLength(SETTING_SECTIONS.length)
     expect(kinds('category').map((r) => r.title)).toContain('Analiza')
     expect(kinds('template').map((r) => r.title)).toEqual(['Dzień zwykły'])
-    expect(kinds('request').map((r) => r.hint)).toEqual([REQUEST_STATE_NAMES.queued, REQUEST_STATE_NAMES.done])
+    // D383, D402: the tasks and the requests, in the order of the lists; „Zrobione” older than 7 days too.
+    expect(kinds('request').map((r) => [r.id, r.title, r.hint])).toEqual([
+      ['r1', 'Żółw Kowalski', 'prośba · Skrzynka'],
+      ['t1', 'Filtr w ekspresie', 'zadanie · Zrobione'],
+      ['r2', 'Żółw Kowalski', 'prośba · Zrobione']
+    ])
+    expect(search(rs, 'brita', TODAY).flatMap((g) => g.hits.map((h) => [g.label, h.record.id]))).toEqual([['Sprawy', 't1']])
     expect(['dropped', 'done', 'queued', 'planned'].sort((a, b) => requestStateOrder(a as 'done') - requestStateOrder(b as 'done'))).toEqual(['queued', 'planned', 'done', 'dropped'])
-    expect(kinds('request')[0]!.title).toBe('Żółw Kowalski')
     expect(kinds('routine')[0]!.text).toBe('woda · prysznic · tylko woda')
     expect(kinds('block')[0]).toMatchObject({ id: 'a', date: '2026-11-09', hint: '09.11.2026 · poniedziałek', text: 'Kowalski podał numer' })
   })

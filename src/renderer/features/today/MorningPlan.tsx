@@ -177,7 +177,8 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
   // D382: an occurrence of a series on a „zjazd” or a day of regeneration (its field „W dni szczególne” says „pytaj”) – kept or called off for the day.
   const seriesAsk = seriesQuestions(series, model.ctx.plan, model.dayFile, currentType, date)
   const warnings = morningWarnings(s)
-  const queued = requests.filter((r) => r.state === 'queued')
+  // The tasks of „Sprawy” (D384) are not requests: their place in this step comes with its screen (`morningCases`).
+  const queued = requests.filter((r) => r.kind === 'request' && r.state === 'queued')
   const [chosen, setChosen] = useState<string[]>([])
   const approved = s.boundary.approved
   const proposal = s.boundary.proposal

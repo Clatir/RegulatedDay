@@ -25,13 +25,14 @@ import { suggestRegen } from '@shared/engine/reserve'
 import { timerNow, type TimerNow } from '@shared/engine/timer'
 import { pushedText } from '@shared/engine/pushApart'
 import { energyOrderVariant } from '@shared/engine/energyOrder'
+import { casesFrom, isDone, taskAnswerRaw } from '@shared/engine/cases'
+import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { applyVariant, keepPlan, markerCause, planCause, variantCauses, variantsFor, type Variant, type VariantCause, type VariantTrigger } from '@shared/engine/variants'
 import type { NoticeKind } from '@shared/machine'
 import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
 import { dayFileFrom } from '@shared/model/plan'
 import { personName } from '@shared/model/rd'
-import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { ROUTINE_VERSION_NAMES, ROUTINE_VERSIONS, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -89,6 +90,10 @@ export interface WidgetDeps {
   batterySaver?: () => boolean
   /** The backups as the data service knows them (its last daily backup failed – A3-06). */
   backup?: () => { failed: { error: string } | null } | null
+  /** The quick capture (D385, D402): a task of your own into „Skrzynka” – the field of the bar; why, when not saved. */
+  quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null }>
+  /** „+” of the desktop bar (T756): it takes no keys – the icon's panel opens at the cursor with the field. */
+  openQuick?: () => void
 }
 
 /** `until` here is on the monotonic clock (`WidgetEngine.mono`); the view gets what is left of it (`left`). */
@@ -314,7 +319,8 @@ export class WidgetEngine {
       this.model = m
       const rd = m.rd
       const routines = (await folder.collection('routine').catch(() => [])).map(routineFrom).filter((x): x is Routine => !!x)
-      const requests = (await folder.collection('request').catch(() => [])).map(requestFrom).filter((x): x is RequestRecord => !!x)
+      // The records of „Sprawy” – the tasks and the requests (their names, „Zadanie zrobione?”).
+      const requests = casesFrom(await folder.collection('request').catch(() => []))
       const names = { rd, settings: m.state.settings, routines, requests }
       if (this.pending && this.pending.until <= mono) this.pending = null
       if (this.note && this.note.until <= mono) this.note = null
@@ -343,7 +349,8 @@ export class WidgetEngine {
           person: (id) => personName(rd, id),
           carried: m.carried,
           ritualFrom: await folder.ritualDay(),
-          routines
+          routines,
+          cases: requests
         }),
         note: this.note ? { text: this.note.text, left: this.note.until - mono } : null
       }
@@ -866,6 +873,12 @@ export class WidgetEngine {
       const ids = this.shownQuestions()
       if (ids.length) void this.d.seen(ids, 'bar')
     }
+    // The quick capture (D385, D402): always – also without a day counted now, in the night, „Odcinam się”, a session, a class.
+    if (action === 'quickAdd') return this.quickAdd(arg ?? '')
+    if (action === 'quickOpen') {
+      this.d.openQuick?.()
+      return
+    }
     if (v.day == null && action !== 'openMain') return
     const day = v.day ?? undefined
     let r: TimerResult | null = null
@@ -983,6 +996,8 @@ export class WidgetEngine {
         const [kind, id] = [line.slice(0, line.indexOf(':')), line.slice(line.indexOf(':') + 1)]
         button = `line:${line}|${act}`
         if (kind === 'moved') return act === 'undo' ? this.undoMoved(id === 'push' ? 'push' : 'variant') : undefined
+        // „Zadanie zrobione? · Tak · Wraca na listę” (D384): the answer is the task's record.
+        if (kind === 'task') return act === 'done' || act === 'back' ? this.answerTask(line, act) : undefined
         if (kind === 'wait') click = act === 'start' ? { a: 'start', block: id } : { a: 'cancel', block: id }
         else if (kind === 'restart') click = { a: 'restart', block: id }
         // The day's moments (A1-12): an anchored block's „Zacznij · Zaparkuj · Koniec pracy”, a fixed block cancelled after
@@ -1057,6 +1072,38 @@ export class WidgetEngine {
       if (!r.ok && r.why) this.say(r.why)
     }
     await this.refresh()
+  }
+
+  /** A title from the bar's field into „Skrzynka” (D385): refused – the bar says why. */
+  private async quickAdd(title: string): Promise<void> {
+    const r = this.d.quickAdd ? await this.d.quickAdd(title) : { ok: false, error: 'Szybki zapis nie działa teraz.' }
+    if (!r.ok && r.error) this.say(r.error)
+    return this.refresh()
+  }
+
+  /**
+   * The answer to „Zadanie zrobione?” (D384, T754): the task the line asks about – planned in its block, not done – as the
+   * folder has it now: „Tak” – Zrobione, „Wraca na listę” – no longer planned. One edit of the record: every computer's
+   * line goes with it (answered elsewhere meanwhile – nothing written, the bar says so).
+   */
+  private async answerTask(line: string, answer: 'done' | 'back'): Promise<void> {
+    const folder = this.d.folder()
+    const [, day, block] = line.split(':')
+    if (!folder || !day || !block) return
+    const asked = (r: RequestRecord | null): r is RequestRecord => !!r && r.kind === 'task' && !isDone(r) && r.block === block
+    // The list may be a minute old (`LIST_TRUST_MS`): the record itself is read again – answered on another computer
+    // meanwhile, nothing is written over its answer.
+    const task = casesFrom(await folder.collection('request')).find(asked)
+    const rel = task ? paths.record('request', task.id) : null
+    const before = rel ? (((await folder.recordView(rel)) as RawRecord | undefined) ?? null) : null
+    if (!rel || !before || !asked(requestFrom(before))) {
+      this.say('To pytanie ma już odpowiedź.')
+      return this.refresh()
+    }
+    const entry = recordEdit(rel, before, taskAnswerRaw(before, answer, this.now))
+    const res = entry ? await this.d.edit([entry]) : []
+    if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odpowiedź spotkała się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
+    return this.refresh()
   }
 
   /**

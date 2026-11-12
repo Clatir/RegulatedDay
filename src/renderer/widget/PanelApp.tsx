@@ -9,7 +9,7 @@ import { Bar, useReportLayout } from './Bar'
 
 export function PanelApp() {
   const view = useWidget((s) => s.view)
-  const [target, setTarget] = useState<{ line: string | null; day: string | null } | null>(null)
+  const [target, setTarget] = useState<{ line: string | null; day: string | null; quick?: boolean } | null>(null)
   const [unfolded, setUnfolded] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useReportLayout(ref, unfolded)
@@ -30,10 +30,10 @@ export function PanelApp() {
         (view.hidden ? (
           // The widget hidden („Odcinam się”): the state line with „Wracam” (the bar's own hidden state).
           <div className="flex flex-col gap-1.5 px-1 py-1" data-testid="panel-hidden">
-            <Bar view={view} mode="panel" grows="down" onUnfold={setUnfolded} />
+            <Bar view={view} mode="panel" grows="down" onUnfold={setUnfolded} quickAt={target?.quick ? target : null} />
           </div>
         ) : (
-          <Bar view={view} mode="panel" grows="down" onUnfold={setUnfolded} />
+          <Bar view={view} mode="panel" grows="down" onUnfold={setUnfolded} quickAt={target?.quick ? target : null} />
         ))}
       {target?.line && (
         <div className="rounded border border-lamp/50 bg-lamp-soft px-2 py-1 text-[12px] text-lamp" data-testid="panel-target">
