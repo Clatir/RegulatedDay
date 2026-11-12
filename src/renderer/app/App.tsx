@@ -20,7 +20,7 @@ import { EmptyState, cx } from '../components/ui'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { TodayPage } from '../features/today/TodayPage'
 import { CalendarPage } from '../features/calendar/CalendarPage'
-import { RequestsPage } from '../features/requests/RequestsPage'
+import { CasesPage } from '../features/cases/CasesPage'
 import { TemplatesPage } from '../features/templates/TemplatesPage'
 import { RoutinesPage } from '../features/routines/RoutinesPage'
 import { HistoryPage } from '../features/history/HistoryPage'
@@ -122,7 +122,7 @@ function PageView({ page }: { page: Page }) {
   }
   if (page === 'today') return <TodayPage />
   if (page === 'calendar') return <CalendarPage />
-  if (page === 'requests') return <RequestsPage />
+  if (page === 'requests') return <CasesPage />
   if (page === 'templates') return <TemplatesPage />
   if (page === 'routines') return <RoutinesPage />
   if (page === 'room') return <RoomPage />

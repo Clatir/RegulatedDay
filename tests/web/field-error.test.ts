@@ -48,7 +48,7 @@ describe('komunikat pod odrzuconym polem (D347)', () => {
   it('wszystkie wywołania pól z klasą układu przekazują ją powłoce (shellClassName), nie inputowi', () => {
     const layout = /^(w|min-w|max-w|flex|flex-\d+|grow|shrink)-/
     const bad: string[] = []
-    for (const f of ['calendar/CalendarPage', 'plan/BlockEditor', 'requests/RequestsPage', 'ritual/dayTime', 'routines/RoutinesPage', 'settings/CategoriesSection', 'settings/LecturesSection', 'settings/SharedSettings', 'settings/SettingNumber', 'templates/TemplatesPage', 'today/MoveDialogs', 'today/TodayPage', 'wizard/Wizard']) {
+    for (const f of ['calendar/CalendarPage', 'plan/BlockEditor', 'cases/CasesPage', 'ritual/dayTime', 'routines/RoutinesPage', 'settings/CategoriesSection', 'settings/LecturesSection', 'settings/SharedSettings', 'settings/SettingNumber', 'templates/TemplatesPage', 'today/MoveDialogs', 'today/TodayPage', 'wizard/Wizard']) {
       const text = readFileSync(`src/renderer/features/${f}.tsx`, 'utf8')
       for (const m of text.matchAll(/<(TextField|TimeField|ClockField|DurationField|DateField|IntegerField|CommitField)\b[^]*?\/>/g)) {
         const cls = /(?<![A-Za-z])className="([^"]*)"/.exec(m[0])?.[1]
@@ -61,7 +61,7 @@ describe('komunikat pod odrzuconym polem (D347)', () => {
   it('miejsce komunikatu to jawny wybór pola: bez własnego układu albo na całą szerokość – errorPlacement, nie zgadywanie', () => {
     const bad: string[] = []
     const dir = 'src/renderer/features'
-    for (const f of ['plan/BlockEditor', 'requests/RequestsPage', 'settings/SharedSettings', 'settings/LecturesSection', 'templates/TemplatesPage', 'routines/RoutinesPage', 'today/TodayPage', 'today/MoveDialogs', 'wizard/Wizard', 'ritual/dayTime', 'calendar/CalendarPage', 'settings/CategoriesSection', 'settings/DataSection']) {
+    for (const f of ['plan/BlockEditor', 'cases/CasesPage', 'settings/SharedSettings', 'settings/LecturesSection', 'templates/TemplatesPage', 'routines/RoutinesPage', 'today/TodayPage', 'today/MoveDialogs', 'wizard/Wizard', 'ritual/dayTime', 'calendar/CalendarPage', 'settings/CategoriesSection', 'settings/DataSection']) {
       const text = readFileSync(`${dir}/${f}.tsx`, 'utf8')
       for (const m of text.matchAll(/<(TextField|TimeField|ClockField|DurationField|DateField|IntegerField|CommitField|SettingNumber)\b[^]*?\/>/g)) {
         const tag = m[0]
@@ -73,8 +73,8 @@ describe('komunikat pod odrzuconym polem (D347)', () => {
       }
     }
     expect(bad).toEqual([])
-    const req = readFileSync(`${dir}/requests/RequestsPage.tsx`, 'utf8')
-    expect(req.match(/errorPlacement="float"/g)).toHaveLength(2)
+    const req = readFileSync(`${dir}/cases/CasesPage.tsx`, 'utf8')
+    expect(req.match(/errorPlacement="float"/g)).toHaveLength(3)
   })
 
   it('CommitField i pole tekstowe z wymaganą wartością pokazują komunikat we wspólnej powłoce, a w rogu zostaje toast', () => {

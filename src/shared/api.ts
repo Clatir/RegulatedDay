@@ -10,6 +10,7 @@ import type { GoalsView } from './engine/goals'
 import type { WeekView } from './engine/week'
 import type { GoalsPatch } from './model/goals'
 import type { RitualValue, RitualView } from './engine/ritual'
+import type { CasesRitual } from './engine/cases'
 import type { CloseHow } from './model/events'
 import type { DayTypeId } from './model/settings'
 import type { ZjazdDay, ZjazdWarning } from './import/zjazdy'
@@ -99,8 +100,43 @@ export const CH = {
   seriesRemove: 'rd:seriesRemove',
   seriesEnd: 'rd:seriesEnd',
   seriesAnswer: 'rd:seriesAnswer',
-  seriesUndo: 'rd:seriesUndo'
+  seriesUndo: 'rd:seriesUndo',
+  quickAdd: 'rd:quickAdd',
+  quickClose: 'rd:quickClose',
+  onQuickShown: 'rd:onQuickShown',
+  quickShortcut: 'rd:quickShortcut',
+  onQuickShortcut: 'rd:onQuickShortcut',
+  casesRitual: 'rd:casesRitual',
+  caseDays: 'rd:caseDays'
 } as const
+
+/**
+ * The days „Sprawy” look at (T760): each day's file (null – none) and the blocks parked or cancelled in its log before they
+ * began; a day not readable now is left out of each (unknown, never „none”).
+ */
+export interface CaseDays {
+  files: Record<string, RawRecord | null>
+  gone: Record<string, string[]>
+  /** The blocks begun by the log (of a day whose log is known – read in full or `away`; T769: an old block not begun may go). */
+  begun: Record<string, string[]>
+}
+
+/** The quick capture saved (D385): the new task's id; refused – why (no folder, no title). */
+export interface QuickAddResult {
+  ok: boolean
+  error: string | null
+  id: string | null
+}
+
+/**
+ * The global shortcut of the quick capture on this computer (D385, D402): its keys (an accelerator, „Super+Alt+N” (Win+Alt+N); null –
+ * switched off in the settings) and whether Windows took it – `taken`: another program holds it („Skrót zajęty przez inny
+ * program”), `off`: switched off.
+ */
+export interface QuickShortcut {
+  key: string | null
+  state: 'on' | 'off' | 'taken'
+}
 
 /** The game for the window (D322): its view and the full-screen celebrations not shown on this computer yet. */
 export interface GameScreen extends GameView {
@@ -159,10 +195,12 @@ export interface BackupRecord {
   /** A request's person (its id – the window names it) and when it was added: requests with one note told apart. */
   person: string | null
   at: number | null
+  /** A sprawa that is a task of your own (D384) – named by its title, not as a request. */
+  task?: boolean
 }
 
 /** Which window a renderer is (the preload reads it from its arguments); `sound` – the hidden window of sound. */
-export type ViewKind = 'main' | 'bar' | 'panel' | 'sound'
+export type ViewKind = 'main' | 'bar' | 'panel' | 'sound' | 'quick'
 
 export interface HelperStatus {
   /** running – answering; starting – (re)starting after a crash; unavailable – 3 crashes in 10 min; missing – no program. */
@@ -230,6 +268,10 @@ export type WidgetAction =
   | 'routine'
   | 'barClick'
   | 'extendStep'
+  /** The bar's field of the quick capture (D385): its title into „Skrzynka”. */
+  | 'quickAdd'
+  /** „+” of the desktop bar: the icon's panel opens with the field (T756). */
+  | 'quickOpen'
 
 /** The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests). */
 export type BarActionId = 'placeBar' | 'corner' | 'openPanel'
@@ -590,7 +632,7 @@ export interface SeriesResult {
   ok: boolean
   /** Why nothing was written (shown to you), null when it was. */
   error: string | null
-  code: 'kind' | 'series' | 'requests' | 'noStart' | 'ended' | 'notFound' | 'begun' | 'invalid' | null
+  code: 'kind' | 'series' | 'requests' | 'task' | 'noStart' | 'ended' | 'notFound' | 'begun' | 'invalid' | null
   /** The series the change made or changed (a new one with „Powtarzaj”), null – none. */
   seriesId: string | null
   /** The outcomes of the edits (for `editNotice`): a question means part of it waits for your answer. */
@@ -628,7 +670,7 @@ export interface RdApi {
   showMain(page?: string): void
   copyText(text: string): Promise<void>
   /** The icon's panel: the line a click opened it for (a notification). */
-  onPanelTarget(cb: (target: { line: string | null; day: string | null } | null) => void): () => void
+  onPanelTarget(cb: (target: { line: string | null; day: string | null; quick?: boolean } | null) => void): () => void
   /** The desktop bar: which way it unfolds (up, or down when it stands at the top). */
   onBarGrows(cb: (dir: 'up' | 'down') => void): () => void
   dataView(): Promise<DataView>
@@ -756,4 +798,17 @@ export interface RdApi {
   seriesAnswer(date: string, blockId: string, keep: boolean): Promise<SeriesResult>
   /** „Cofnij” of one change of a series: each file back as before it, only while it stands as the change left it. */
   seriesUndo(undo: SeriesUndoFile[]): Promise<SeriesResult>
+  /** The quick capture (D385): a task of your own with this title into „Skrzynka” (the window „Do skrzynki”). */
+  quickAdd(title: string): Promise<QuickAddResult>
+  /** The window „Do skrzynki” closes (Esc, after Enter saved). */
+  quickClose(): void
+  /** The window „Do skrzynki” was shown by the shortcut: its field takes the keys. */
+  onQuickShown(cb: () => void): () => void
+  /** The global shortcut of the quick capture on this computer, for the settings (D402: „Skrót zajęty przez inny program”). */
+  quickShortcut(): Promise<QuickShortcut>
+  onQuickShortcut(cb: (s: QuickShortcut) => void): () => void
+  /** What a day's evening ritual says about „Sprawy” (D383, D384, D402): back from „Dziś”, „Zadanie zrobione?”, Sunday's „Kiedyś / Może”. */
+  casesRitual(day: string): Promise<CasesRitual>
+  /** The days' files and their blocks gone before they began (T760) – „zaplanowane” of „Sprawy” (at most 62 days). */
+  caseDays(dates: string[]): Promise<CaseDays>
 }

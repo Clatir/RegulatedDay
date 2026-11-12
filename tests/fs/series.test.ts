@@ -123,6 +123,17 @@ describe('serie w folderze danych (D381)', () => {
     expect((await hub.seriesCreate({ date: d, blockId: 'u', rule: { kind: 'co-tydzien' } })).code).toBe('invalid')
     expect(seriesOnDisk()).toEqual([])
   })
+
+  it('blok zadania ani blok próśb nie powtarzają się w serii: odmowa z powodem, nic nie zapisane (D408)', async () => {
+    const d = addDays(today, 3)
+    write(paths.day(d), dayFileWith(d, [own('z', 9 * 60, { task: 't1' }), own('p', 11 * 60, { categoryId: 'prosby', requests: ['r1'] })]))
+    const before = JSON.stringify(onDisk(paths.day(d)))
+    const task = await hub.seriesCreate({ date: d, blockId: 'z', rule: { kind: 'daily' } })
+    expect([task.ok, task.code, task.error]).toEqual([false, 'task', 'Blok zadania należy do jednego dnia – zadanie nie powtarza się w serii.'])
+    expect((await hub.seriesCreate({ date: d, blockId: 'p', rule: { kind: 'daily' } })).code).toBe('requests')
+    expect(seriesOnDisk()).toEqual([])
+    expect(JSON.stringify(onDisk(paths.day(d)))).toBe(before)
+  })
 })
 
 describe('zmiany i usunięcie serii (D381)', () => {

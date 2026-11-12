@@ -6,6 +6,8 @@
 export interface PanelTarget {
   line: string | null
   day: string | null
+  /** Opened by the desktop bar's „+” (T756): the bar's field of the quick capture unfolded (never from an address). */
+  quick?: boolean
 }
 
 /**

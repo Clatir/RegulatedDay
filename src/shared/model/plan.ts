@@ -50,6 +50,11 @@ export interface PlanBlock {
   moves: number
   /** Requests from the queue done in this block (several chosen in the morning are one block, one contact). */
   requests: string[]
+  /**
+   * The task of „Sprawy” this block is for (D384: a task put on the axis – its title names the block, its end asks
+   * „Zadanie zrobione?”); null – none. A version that does not know the field names the block by its category.
+   */
+  task: string | null
   /** The routine whose steps this block is (spec „Rutyna”). */
   routine: string | null
   /** The day this block was moved from (the morning plan shows „z wczoraj”). */
@@ -171,6 +176,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     recorder: typeof v.recorder === 'string' ? v.recorder : null,
     moves: intIn(v.moves, 0, 1_000_000) ?? 0,
     requests: Array.isArray(v.requests) ? [...new Set(v.requests.filter((x): x is string => typeof x === 'string' && !!x))].slice(0, 50) : [],
+    task: typeof v.task === 'string' && v.task ? v.task : null,
     routine: typeof v.routine === 'string' && v.routine ? v.routine : null,
     movedFrom: isIsoDate(v.movedFrom) ? v.movedFrom : null,
     byVariant: v.byVariant === true
@@ -196,6 +202,7 @@ export function planBlock(p: Partial<PlanBlock> & Pick<PlanBlock, 'id' | 'catego
     recorder: null,
     moves: 0,
     requests: [],
+    task: null,
     routine: null,
     movedFrom: null,
     byVariant: false,

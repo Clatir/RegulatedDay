@@ -16,6 +16,8 @@ import { SHORTCUTS } from '../../lib/shortcuts'
 import { phaseText, updateAction } from '../../store/update'
 import { takeFoundPick, takePick, toast, useUi } from '../../store/ui'
 import { BarPlaceMap } from './BarPlaceMap'
+import { QuickKeyField } from './QuickKeyField'
+import { QUICK_KEY_HELP } from './quickKey'
 import { CategoriesSection } from './CategoriesSection'
 import { LecturesSection } from './LecturesSection'
 import { DayTypesSection, FieldsSection, FromBar, ModulesSection, RegenWaysSection, SessionsSection } from './SharedSettings'
@@ -150,6 +152,9 @@ export function SettingsPage() {
             <Toggle checked={prefs.notices.hardEnd} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, hardEnd: v } })} label="twardy koniec projektów" data-testid="pref-notice-hardend" />
             <Toggle checked={prefs.notices.reserve} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, reserve: v } })} label="energia na poziomie rezerwy" data-testid="pref-notice-reserve" />
           </div>
+        </Field>
+        <Field label="Skrót szybkiego zapisu" hint={`${QUICK_KEY_HELP}`}>
+          <QuickKeyField />
         </Field>
         <Field label="Dźwięk" hint="Cichy dźwięk 5 i 0 min przed końcem bloku i startem bloku stałego (gra także przy „Nie przeszkadzać”). Nigdy w trybie „mniej pytań”, w dniu zjazdu stacjonarnego ani na komputerze nagrywającym w czasie wykładu.">
           <div className="flex flex-wrap items-center gap-3">

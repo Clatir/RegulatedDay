@@ -10,6 +10,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { WidgetAction } from '@shared/api'
 import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
+import { TITLE_MAX } from '@shared/model/requests'
 import { barBackground, TONE_SETS } from '@shared/theme'
 import { SEEN_LINE, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
@@ -17,9 +18,10 @@ import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
 import { useStepPicks } from '../lib/stepPicks'
 import { termHolds } from '../lib/viewTerms'
+import { useEscapeLayer } from '../lib/escape'
 
 export type BarMode = 'main' | 'panel' | 'desktop'
-type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | null
+type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | null
 
 const SIGNALS: Array<[string, string]> = [
   ['glasses', 'okulary'],
@@ -43,7 +45,7 @@ function act(action: WidgetAction, arg?: string): void {
 const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 
 /** A button of the bar: on the desktop bar it acts on the release of the mouse button (no activation, D229). */
-function BarButton({ mode, onAct, children, testId, pressed, accent }: { mode: BarMode; onAct: () => void; children: ReactNode; testId?: string; pressed?: boolean; accent?: boolean }) {
+function BarButton({ mode, onAct, children, testId, pressed, accent, label }: { mode: BarMode; onAct: () => void; children: ReactNode; testId?: string; pressed?: boolean; accent?: boolean; label?: string }) {
   const props =
     mode === 'desktop'
       ? {
@@ -57,6 +59,7 @@ function BarButton({ mode, onAct, children, testId, pressed, accent }: { mode: B
       type="button"
       data-testid={testId}
       aria-pressed={pressed}
+      aria-label={label}
       className={cx(
         'inline-flex h-[24px] shrink-0 items-center rounded border px-2 text-[12px] leading-none whitespace-nowrap',
         accent ? 'border-lamp/60 text-fg' : 'border-line-strong text-fg',
@@ -274,6 +277,57 @@ function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode;
 }
 
 /**
+ * The field of the quick capture (D385, D402): a title, Enter saves it as a task into „Skrzynka” (the main process says
+ * why when it cannot), Esc folds it – in the main window's bar and in the icon's panel (the desktop bar takes no keys: its
+ * „+” opens the panel with this field, T756).
+ */
+function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: BarMode; close: () => void; text: string; setText: (t: string) => void; takeFocus: () => boolean; input: React.RefObject<HTMLInputElement | null> }) {
+  useEscapeLayer(true, close)
+  // The keys come here when the field opens – not when the bar only changed its layout (no day now, the day back).
+  useEffect(() => {
+    if (takeFocus()) input.current?.focus()
+  }, [])
+  const save = () => {
+    if (!text.trim()) return
+    act('quickAdd', text.slice(0, TITLE_MAX))
+    setText('')
+    close()
+  }
+  return (
+    <div className="flex items-center gap-1.5" data-testid="bar-quick-field">
+      <span className="shrink-0 text-[12px] text-muted">Do skrzynki:</span>
+      <input
+        ref={input}
+        className="input h-[24px] min-w-0 flex-1 text-[12px]"
+        value={text}
+        maxLength={TITLE_MAX}
+        placeholder="Enter zapisuje"
+        onChange={(e) => setText(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            save()
+          }
+        }}
+        data-testid="bar-quick-title"
+      />
+      <BarButton mode={mode} accent testId="bar-quick-save" onAct={save}>
+        Zapisz
+      </BarButton>
+    </div>
+  )
+}
+
+/** „+” of the quick capture (D402: always – in the night's quiet, „Odcinam się”, a session and a class too). */
+function QuickButton({ mode, open, toggle }: { mode: BarMode; open: boolean; toggle: () => void }) {
+  return (
+    <BarButton mode={mode} testId="bar-quick" label="Do skrzynki" pressed={open} onAct={() => (mode === 'desktop' ? act('quickOpen') : toggle())}>
+      +
+    </BarButton>
+  )
+}
+
+/**
  * „Kroki ▸” of a routine unfolded (D328): its steps ticked one by one, the version („zwykła” or „gorsze dni”) and
  * „✓ Zapisz zaznaczone” – the same save as the card in „Dziś”. Another version starts with nothing ticked. The steps go
  * by their places in the version (an action's argument is short – 40 ids would not fit, A6-10 review).
@@ -432,25 +486,32 @@ function usePulse(step: string | null, key: string): string | null {
 export const beatsNow = (beaten: string | null, id: string | null): boolean => id != null && id !== beaten
 
 /**
- * The lines on view and those gathered in „⋯”: in a quiet mode one fits, otherwise two; a routine's line (D328) in a
- * quiet mode always waits in „⋯” – never in the only row beside the session's countdown. The lines of a change with its
+ * The lines on view and those gathered in „⋯”: in a quiet mode one fits, otherwise two; a routine's line (D328) and
+ * „Zadanie zrobione?” (D384) in a quiet mode always wait in „⋯” – never in the only row beside the session's countdown. The lines of a change with its
  * „Cofnij” (`moved:`, after the day's own – its questions and warnings come first) take one row at most: the newest; the
  * other waits in „⋯”, its „Cofnij” working there. Only the lines on view count as seen (`useSeen`).
  */
 export function barLines(lines: readonly BarLine[], quiet: boolean): { shown: BarLine[]; extra: BarLine[] } {
   const fit = quiet ? 1 : 2
-  const folds = (l: BarLine) => quiet && l.id.startsWith('routine:')
+  const folds = (l: BarLine) => quiet && (l.id.startsWith('routine:') || l.id.startsWith('task:'))
   const moved = lines.filter((l) => l.id.startsWith('moved:'))
   const later = new Set([...lines.filter(folds), ...moved.slice(1)])
   const front = lines.filter((l) => !later.has(l))
   return { shown: front.slice(0, fit), extra: [...front.slice(fit), ...lines.filter((l) => later.has(l))] }
 }
 
-export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; mode: BarMode; grows?: 'up' | 'down'; onUnfold?: (unfolded: boolean) => void }) {
+export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: WidgetView; mode: BarMode; grows?: 'up' | 'down'; onUnfold?: (unfolded: boolean) => void; quickAt?: object | null }) {
   const now = useNow()
   const brightness = useMachine((s) => s.prefs.brightness)
   const pulse = useMachine((s) => s.prefs.barPulse)
   const [unfold, setUnfold] = useState<Unfold>(null)
+  /** The field of the quick capture was just opened: its mount takes the focus (a mount after a change of layout does not). */
+  const quickFocus = useRef(false)
+  // The flag of an opening lives one commit: set by a click or by `quickAt` (after this effect – declared first), spent by
+  // the field's mount in the next commit (children's effects run first) – never kept for a later one.
+  useEffect(() => {
+    quickFocus.current = false
+  })
   // The row of the actions as the plan said them, unfolded into the list of them (D350).
   const [groupOpen, setGroupOpen] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -459,6 +520,8 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
   // The panel of variants belongs to the main process (D313): one for every window, open while the view has it.
   const variantsOpen = view.variants.open != null
   const toggle = (u: Exclude<Unfold, null>) => {
+    // The field of the quick capture opened (not closed): it takes the keys at its mount.
+    if (u === 'quick') quickFocus.current = unfold !== 'quick'
     if (u === 'variants') {
       act('variants', variantsOpen ? 'close' : 'open')
       setUnfold(null)
@@ -493,11 +556,39 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
     onUnfold?.(unfold != null || variantsOpen)
     if (mode === 'panel') window.rd.panelTouch()
   }, [mode, unfold, variantsOpen, onUnfold])
-  // A day gone from the view (no folder, a day not counted now): nothing stays unfolded – the panel's 60 s run again and
-  // the day's return shows no old unfold.
+  // The panel opened by the desktop bar's „+” (T756): its field unfolds with the keys – at each opening, also when it is
+  // open already (then no mount takes the focus: given here).
   useEffect(() => {
-    if (view.day == null) setUnfold(null)
+    if (!quickAt) return
+    if (unfold === 'quick') quickInput.current?.focus()
+    else {
+      quickFocus.current = true
+      setUnfold('quick')
+    }
+  }, [quickAt])
+  // The title typed into the field of the quick capture: the bar's own, so it stays when the layout changes (T763) – and
+  // only then: the field closed (Esc, „+”, saved), it is gone (T767).
+  const [quickText, setQuickText] = useState('')
+  useEffect(() => {
+    if (unfold !== 'quick') setQuickText('')
+  }, [unfold])
+  const takeQuickFocus = () => {
+    const now = quickFocus.current
+    quickFocus.current = false
+    return now
+  }
+  const quickInput = useRef<HTMLInputElement>(null)
+  const quickField = <QuickField mode={mode} close={() => setUnfold(null)} text={quickText} setText={setQuickText} takeFocus={takeQuickFocus} input={quickInput} />
+  // A day gone from the view (no folder, a day not counted now): nothing of the day stays unfolded – the panel's 60 s run
+  // again and the day's return shows no old unfold; the field of the quick capture stays, with its text (D402: „+” always).
+  useEffect(() => {
+    if (view.day == null) setUnfold((u) => (u === 'quick' ? u : null))
   }, [view.day])
+  // „Odcinam się” (the same bar in the panel, T771): what was unfolded folds – the panel is not kept „unfolded”, „⋯” never
+  // comes back after „Wracam”; only the field of the quick capture stays, with its text (T772).
+  useEffect(() => {
+    if (view.hidden) setUnfold((u) => (u === 'quick' ? u : null))
+  }, [view.hidden])
   // The group of „Zrobione automatycznie” folds with its „⋯”, with the day gone from the view and with the group itself.
   const groupGone = !view.autos.groups.some((g) => g.id === groupOpen)
   useEffect(() => {
@@ -543,6 +634,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
         </div>
       )}
       {unfold === 'request' && <RequestUnfold view={view} mode={mode} close={() => setUnfold(null)} />}
+      {unfold === 'quick' && quickField}
       {routineOpen && <RoutineUnfold key={routineOpen.line} routine={routineOpen} mode={mode} close={() => setUnfold(null)} />}
       {unfold === 'signals' && (
         <div className="flex flex-col gap-1.5">
@@ -623,6 +715,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
         <BarButton mode={mode} testId="bar-group-request" pressed={unfold === 'request'} onAct={() => toggle('request')}>
           Prośba ▸
         </BarButton>
+        <QuickButton mode={mode} open={unfold === 'quick'} toggle={() => toggle('quick')} />
         {view.ritual && (
           <BarButton mode={mode} testId="bar-ritual" onAct={() => act('openMain', 'ritual')}>
             Rytuał
@@ -631,6 +724,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
         {unfold === 'request' && (
           <div className="w-full">
             <RequestUnfold view={view} mode={mode} close={() => setUnfold(null)} />
+          </div>
+        )}
+        {unfold === 'quick' && (
+          <div className="w-full">
+            {quickField}
           </div>
         )}
       </div>
@@ -672,6 +770,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
               </BarButton>
             </div>
           )}
+          {/* D402: „+” always – also without a day (the main process says why when nothing could be saved). */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <QuickButton mode={mode} open={unfold === 'quick'} toggle={() => toggle('quick')} />
+          </div>
+          {unfold === 'quick' && quickField}
         </div>
       </div>
     )
@@ -808,6 +911,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
           <BarButton mode={mode} testId="bar-group-request" pressed={unfold === 'request'} onAct={() => toggle('request')}>
             Prośba ▸
           </BarButton>
+          <QuickButton mode={mode} open={unfold === 'quick'} toggle={() => toggle('quick')} />
           {view.signals && !view.night && (
             <BarButton mode={mode} testId="bar-group-signals" pressed={unfold === 'signals'} onAct={() => toggle('signals')}>
               Sygnały ▸

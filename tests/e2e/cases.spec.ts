@@ -1,0 +1,240 @@
+/**
+ * „Sprawy” (OPS2, L2: D383, D384, D402, D408): the page that replaced „Prośby” – a task from Ctrl+N, the lists and the move
+ * to „Dziś”; the panel of „Dziś” beside the axis: a task dragged onto the axis at 10:00 is a block of 30 min „Inne” named by
+ * it (the day's file and the record in one edit, „Cofnij” in the toast); „Powtarzaj” not offered on its block; the morning
+ * plan's step of requests takes the tasks of „Dziś”; the shortcut of the quick capture in the settings (validated, switched
+ * off). The pytanie „Zadanie zrobione?” of the bar and the ritual's lines are the unit and fs tests' (they need a block that
+ * has run); the real Win+Alt+N – `quick-windows.spec.ts` (CI on Windows).
+ */
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { expect, test, type Page } from '@playwright/test'
+import { paths } from '../../src/shared/data/paths'
+import { dayFileFrom } from '../../src/shared/model/plan'
+import { newRequest, newTask } from '../../src/shared/model/requests'
+import { launch, withMainLog } from './app'
+import { seedAwake } from './seedAwake'
+
+type Json = Record<string, unknown>
+
+const readJson = (file: string): Json | null => {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as Json
+  } catch {
+    return null
+  }
+}
+
+/** The records of requests/ (tasks and requests) in the folder now. */
+const records = (dir: string): Json[] => {
+  try {
+    return readdirSync(join(dir, 'requests'))
+      .filter((n) => n.endsWith('.json'))
+      .map((n) => readJson(join(dir, 'requests', n)))
+      .filter((r): r is Json => r != null)
+  } catch {
+    return []
+  }
+}
+
+const putRecord = (dir: string, raw: Json): void => {
+  mkdirSync(join(dir, 'requests'), { recursive: true })
+  writeFileSync(join(dir, 'requests', `${raw.id as string}.json`), JSON.stringify(raw))
+}
+
+const blocksOf = (dir: string, today: string) => {
+  const raw = readJson(join(dir, paths.day(today)))
+  return raw ? dayFileFrom(raw, today).blocks : []
+}
+
+/** Press on the centre of `from`, move over `to` (the pointer of a drag, as the plan's other drags are made) – `hold` runs before the release. */
+async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }, hold?: () => Promise<void>): Promise<void> {
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(from.x - 12, from.y + 4, { steps: 3 })
+  await page.mouse.move(to.x, to.y, { steps: 8 })
+  await hold?.()
+  await page.mouse.up()
+}
+
+const center = async (page: Page, testId: string) => {
+  const b = (await page.getByTestId(testId).first().boundingBox())!
+  return { x: b.x + Math.min(b.width / 2, 60), y: b.y + b.height / 2 }
+}
+
+test('Sprawy: Ctrl+N dodaje zadanie do Skrzynki, lista „Dziś” z sumą; przeciągnięcie z panelu na oś 10:00 daje blok 30 min „Inne” z tytułem zadania; „Cofnij”; „Powtarzaj” niedostępne', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-'))
+  const { today } = seedAwake(dataDir, [])
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+
+      // The page: the same place in the menu and the same key as „Prośby”.
+      await expect(page.getByTestId('nav-requests')).toContainText('Sprawy')
+      await page.getByTestId('nav-requests').click()
+      await expect(page.getByTestId('requests')).toBeVisible()
+      await page.keyboard.press('Control+KeyN')
+      await expect(page.getByTestId('case-add-title')).toBeFocused()
+      await page.getByTestId('case-add-title').fill('Napisać raport')
+      await page.getByTestId('case-add-title').press('Enter')
+      const row = page.getByTestId('cases-inbox-list').getByTestId('case-row')
+      await expect(row).toHaveCount(1)
+      // A task: the title, 30 min, „Inne”, no note.
+      await expect(row.getByTestId('case-title')).toHaveValue('Napisać raport')
+      await expect(row.getByTestId('request-estimate')).toHaveValue('30 min')
+      await expect(row.getByTestId('case-category')).toHaveValue('inne')
+      await expect.poll(() => records(dataDir).map((r) => [r.kind, r.title, r.list, r.estimateMin, r.categoryId])).toEqual([['task', 'Napisać raport', 'inbox', 30, 'inne']])
+      // A task needs its title: an empty one is refused, the saved one stays.
+      await row.getByTestId('case-title').fill('')
+      await row.getByTestId('case-title').press('Enter')
+      await expect(row.getByTestId('case-title')).toHaveValue('Napisać raport')
+      // To „Dziś”: the header says the sum of the estimates.
+      await row.getByTestId('case-list').selectOption('today')
+      await expect(page.getByTestId('cases-today-list').getByTestId('case-row')).toHaveCount(1)
+      await expect(page.getByTestId('cases-today-title')).toHaveText('Dziś · 30 min')
+      await expect(page.getByTestId('cases-inbox-list')).toHaveCount(0)
+      await expect(page.getByTestId('cases-done')).toContainText('Pusto.')
+
+      // The panel beside the axis of „Dziś”: the task, dragged onto the axis at 10:00.
+      await page.getByTestId('nav-today').click()
+      await expect(page.getByTestId('cases-panel-today')).toContainText('Napisać raport')
+      await page.getByTestId('timeline-axis').evaluate((el) => el.scrollIntoView({ block: 'start' }))
+      const axis = (await page.getByTestId('timeline-axis').boundingBox())!
+      const lo = Number(await page.getByTestId('timeline-axis').getAttribute('data-lo'))
+      const ppm = Number(await page.getByTestId('timeline-axis').getAttribute('data-ppm'))
+      const at10 = { x: axis.x + axis.width / 3, y: axis.y + (10 * 60 - lo) * ppm + 1 }
+      await drag(page, await center(page, 'case-chip'), at10, async () => {
+        // Held over the axis: where the block would stand.
+        await expect(page.getByTestId('case-ghost')).toContainText('10:00–10:30')
+        await expect(page.getByTestId('case-drag')).toContainText('Napisać raport')
+      })
+      await expect.poll(() => blocksOf(dataDir, today).length, { timeout: 15_000 }).toBe(1)
+      const block = blocksOf(dataDir, today)[0]!
+      expect([block.categoryId, block.startMin, block.durationMin, block.task, block.origin]).toEqual(['inne', 600, 30, records(dataDir)[0]!.id, 'user'])
+      // The record is „zaplanowane”: it stays on „Dziś” with the hour.
+      await expect.poll(() => records(dataDir)[0]!.block).toBe(block.id)
+      await expect(page.getByTestId('cases-panel-today')).toContainText('zaplanowane')
+      await expect(page.getByTestId('cases-panel-today')).toContainText('10:00')
+      // The block on the axis has the task's title.
+      await expect(page.getByTestId(`block-${block.id}`)).toContainText('Napisać raport')
+
+      // „Cofnij” of the toast: the block gone and the record without it – it is not „zaplanowane” any more.
+      await page.getByTestId('toast-action').click()
+      await expect.poll(() => blocksOf(dataDir, today).length, { timeout: 15_000 }).toBe(0)
+      await expect.poll(() => records(dataDir)[0]!.block).toBeNull()
+      await expect(page.getByTestId('cases-panel-today')).not.toContainText('zaplanowane')
+
+      // „Zaplanuj” of the panel puts it in the nearest free place; „Powtarzaj” is not offered on its block, with the reason (D408).
+      await page.getByTestId('case-plan').click()
+      await expect.poll(() => blocksOf(dataDir, today).length, { timeout: 15_000 }).toBe(1)
+      const again = blocksOf(dataDir, today)[0]!
+      expect([again.categoryId, again.durationMin, again.task]).toEqual(['inne', 30, block.task])
+      await page.getByTestId(`block-${again.id}`).click()
+      await expect(page.getByTestId('series-unavailable')).toContainText('Blok zadania należy do jednego dnia')
+      await expect(page.getByTestId('block-series')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('plan poranny: krok próśb obejmuje zadania z „Dziś” – wybrane zadanie to osobny blok, prośby jednym', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-morning-'))
+  const { today } = seedAwake(dataDir, [])
+  const t = newTask('t1', Date.now(), today, { title: 'Wymienić filtr', list: 'today', estimateMin: 45 })!
+  putRecord(dataDir, t)
+  putRecord(dataDir, newTask('t2', Date.now() - 1, today, { title: 'Ze Skrzynki' })!)
+  putRecord(dataDir, newRequest('r1', Date.now() - 2, { person: null, estimateMin: 20, note: 'zakupy' }))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('morning-plan')).toBeVisible({ timeout: 30_000 })
+      // On Monday „Strona B tygodnia” comes first, then „Cele na <miesiąc>” and the first check-in – each skipped.
+      if (await page.getByTestId('side-b').isVisible()) await page.getByTestId('side-b-done').click()
+      await page.getByTestId('goals-skip').click()
+      await page.getByTestId('checkin-skip').click()
+      const pick = page.getByTestId('queue-pick')
+      await expect(pick).toBeVisible()
+      // The task of „Dziś” and the request – not the task of „Skrzynka”.
+      await expect(pick.getByTestId('queue-item')).toHaveCount(2)
+      await expect(pick).toContainText('Wymienić filtr')
+      await expect(pick).not.toContainText('Ze Skrzynki')
+      // D408: the task of „Dziś” is chosen at once, the request is not.
+      await expect(pick.getByTestId('queue-item').filter({ hasText: 'Wymienić filtr' }).getByRole('checkbox')).toBeChecked()
+      await expect(pick.getByTestId('queue-item').filter({ hasText: 'zakupy' }).getByRole('checkbox')).not.toBeChecked()
+      await pick.getByTestId('queue-add').click()
+      await expect.poll(() => blocksOf(dataDir, today).map((b) => [b.task, b.durationMin, b.categoryId])).toEqual([['t1', 45, 'inne']])
+      await expect.poll(() => records(dataDir).find((r) => r.id === 't1')!.block).toBe(blocksOf(dataDir, today)[0]!.id)
+      // The request stays in the step; the task is planned and gone from it.
+      await expect(pick.getByTestId('queue-item')).toHaveCount(1)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+/** This computer's prefs as the main process holds them. */
+const prefs = (page: Page) => page.evaluate(() => window.rd.prefs())
+
+test('Ustawienia: skrót szybkiego zapisu – nieprawidłowy odrzucony z powodem, prawidłowy zapisany, wyłączony; uwaga o skrócie', async () => {
+  const { app, page, userData, errors } = await launch({ data: true })
+  try {
+    await withMainLog(userData, async () => {
+      await page.getByTestId('nav-settings').click()
+      const key = page.getByTestId('pref-quick-key')
+      await expect(key).toHaveValue('Win+Alt+N')
+      // A key without Ctrl or Alt is refused with its reason – nothing is sent (the default does not return in silence).
+      await key.fill('N')
+      await key.press('Enter')
+      await expect(page.getByTestId('pref-quick-key-error')).toContainText('Ctrl lub Alt')
+      expect((await prefs(page)).quickKey).toBe('Super+Alt+N')
+      await key.fill('win+alt+f11')
+      await key.press('Enter')
+      await expect(key).toHaveValue('Win+Alt+F11')
+      await expect.poll(async () => (await prefs(page)).quickKey).toBe('Super+Alt+F11')
+      // Windows' answer is told under the field: it works, or another program holds it.
+      await expect(page.getByTestId('pref-quick-note')).toContainText(/Otwiera małe okienko|Skrót zajęty przez inny program/)
+      await page.getByTestId('pref-quick-on').click()
+      await expect.poll(async () => (await prefs(page)).quickOn).toBe(false)
+      await expect(page.getByTestId('pref-quick-note')).toContainText('Wyłączony')
+      await expect(page.getByTestId('pref-quick-key')).toHaveCount(0)
+      // On again: your own shortcut, not the default (T759).
+      await page.getByTestId('pref-quick-on').click()
+      await expect.poll(async () => prefs(page)).toMatchObject({ quickOn: true, quickKey: 'Super+Alt+F11' })
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('rytuał wieczorny: niezrobione zadanie z „Dziś” wymienione („wrócą o 04:00”), „Zrobione” w rytuale przenosi je na listę Zrobione', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-ritual-'))
+  // A day without work: the ritual is due at any hour (D318); its first day is today (D320).
+  const { today } = seedAwake(dataDir, [])
+  const rdFile = join(dataDir, 'rd.json')
+  writeFileSync(rdFile, JSON.stringify({ ...JSON.parse(readFileSync(rdFile, 'utf8')), ritualFrom: today }, null, 2))
+  putRecord(dataDir, newTask('t1', Date.now(), today, { title: 'Oddać książki', list: 'today' })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('ritual')).toBeVisible({ timeout: 30_000 })
+      const part = page.getByTestId('ritual-cases')
+      await expect(part.getByTestId('ritual-cases-back')).toContainText('Niezrobione z „Dziś” wrócą o 04:00 do „W tym tygodniu”')
+      await expect(part.getByTestId('ritual-case-back')).toContainText('Oddać książki')
+      // A weekday other than Sunday: no line of „Kiedyś / Może”.
+      if (new Date(`${today}T12:00:00Z`).getUTCDay() !== 0) await expect(page.getByTestId('ritual-someday')).toHaveCount(0)
+      await part.getByTestId('ritual-case-done').click()
+      await expect.poll(() => records(dataDir)[0]!.list).toBe('done')
+      await expect(page.getByTestId('ritual-case-back')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

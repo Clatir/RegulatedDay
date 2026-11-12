@@ -54,6 +54,36 @@ export interface MachinePrefs {
   /** The bar's quiet tones at 5 and 0 min (off by default), with their own volume (0.1–1). */
   sound: boolean
   soundVolume: number
+  /**
+   * The global shortcut of the quick capture „Do skrzynki” (D385, D402, D408): an accelerator of Electron („Super+Alt+N” –
+   * Win+Alt+N – by default); kept also while it is switched off, so switching it on again brings your own back (T759).
+   */
+  quickKey: string
+  /** The shortcut is on on this computer (switched off in the settings: false). */
+  quickOn: boolean
+}
+
+/**
+ * The quick capture's shortcut by default (D408): Win+Alt+N – on the Polish layout Ctrl+Alt is AltGr, so a default with it
+ * would take „ń” from every program you type in.
+ */
+export const DEFAULT_QUICK_KEY = 'Super+Alt+N'
+const QUICK_MODIFIERS = ['Super', 'Ctrl', 'Alt', 'Shift'] as const
+const QUICK_KEY = /^(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space)$/
+
+/**
+ * A shortcut as the settings write it (D402): modifiers in the order Super (the Windows key), Ctrl, Alt, Shift, then one key – a letter, a
+ * digit, F1–F24 or Space; Ctrl or Alt among them (a key alone, or with Shift only, would be taken from every program you
+ * type in). Null: not a shortcut the app registers.
+ */
+export function quickKeyFrom(v: unknown): string | null {
+  if (typeof v !== 'string' || v.length > 40) return null
+  const parts = v.split('+').map((x) => x.trim())
+  const key = parts.pop()?.toUpperCase().replace(/^SPACE$/, 'Space') ?? ''
+  if (!QUICK_KEY.test(key)) return null
+  const mods = parts.map((m) => QUICK_MODIFIERS.find((x) => x.toLowerCase() === m.toLowerCase() || (x === 'Ctrl' && /^control$/i.test(m))))
+  if (mods.some((m) => !m) || new Set(mods).size !== mods.length || !mods.some((m) => m === 'Ctrl' || m === 'Alt')) return null
+  return [...QUICK_MODIFIERS.filter((m) => mods.includes(m)), key].join('+')
 }
 
 export type OnTop = 'off' | 'bar' | 'barPanel'
@@ -82,7 +112,9 @@ export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   classMode: true,
   notices: { start5: true, hardEnd: true, reserve: true },
   sound: false,
-  soundVolume: 0.5
+  soundVolume: 0.5,
+  quickKey: DEFAULT_QUICK_KEY,
+  quickOn: true
 }
 
 const num = (v: unknown, min: number, max: number, fallback: number): number =>
@@ -130,7 +162,10 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
     classMode: bool(r.classMode, DEFAULT_MACHINE_PREFS.classMode),
     notices: Object.fromEntries(NOTICE_KINDS.map((k) => [k, bool((r.notices as Record<string, unknown> | undefined)?.[k], DEFAULT_MACHINE_PREFS.notices[k])])) as Record<NoticeKind, boolean>,
     sound: bool(r.sound, DEFAULT_MACHINE_PREFS.sound),
-    soundVolume: num(r.soundVolume, 0.1, 1, DEFAULT_MACHINE_PREFS.soundVolume)
+    soundVolume: num(r.soundVolume, 0.1, 1, DEFAULT_MACHINE_PREFS.soundVolume),
+    // A shortcut that is none – the default; written as null by a build before T759 – off (with the default).
+    quickKey: quickKeyFrom(r.quickKey) ?? DEFAULT_MACHINE_PREFS.quickKey,
+    quickOn: r.quickKey === null ? false : bool(r.quickOn, DEFAULT_MACHINE_PREFS.quickOn)
   }
 }
 

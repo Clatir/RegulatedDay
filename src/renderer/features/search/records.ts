@@ -1,8 +1,9 @@
 /**
  * What the global search (Ctrl K, D387, T652) can find, as plain records: the screens, the settings' sections and the
  * commands are a static list; blocks of the days come from the main process (`searchDays`), the rest from the data the
- * window already has – templates (name and blocks), requests (person, note – also the done ones), routines (name,
- * steps) and categories. The matching itself is `shared/search.ts`.
+ * window already has – templates (name and blocks), „Sprawy” (a task by its title, a request by its person; the note –
+ * every list, „Zrobione” of any day too, D402), routines (name, steps) and categories. The matching itself is
+ * `shared/search.ts`.
  */
 import type { SearchBlock } from '@shared/api'
 import { blockName, type Names } from '@shared/blockName'
@@ -11,7 +12,8 @@ import { compareAllDay, rangeText, type AllDayEvent } from '@shared/model/allDay
 import { FIELD_GROUP_NAMES } from '@shared/model/fields'
 import { templateVersionOn, type Template } from '@shared/model/plan'
 import { personName, type RdFile } from '@shared/model/rd'
-import { REQUEST_STATE_NAMES, requestStateOrder, type RequestRecord } from '@shared/model/requests'
+import { CASE_LIST_NAMES, CASE_LISTS, type RequestRecord } from '@shared/model/requests'
+import { listOf } from '@shared/engine/cases'
 import type { Routine } from '@shared/model/routines'
 import { currentSeries, seriesVersionOn, type SeriesPlan } from '@shared/model/series'
 import { occurrenceBlock } from '@shared/engine/series'
@@ -24,7 +26,7 @@ import { PAGES, type Page } from '../../store/ui'
 /** The commands (D387: they only navigate, nothing is moved): „nowe” finds both „Nowy …” (the spec's example). */
 export const COMMANDS: SearchRecord[] = [
   { kind: 'command', id: 'newBlock', title: 'Nowy blok', hint: 'Ctrl N w „Dziś”', keys: 'nowe' },
-  { kind: 'command', id: 'newRequest', title: 'Nowa prośba', hint: 'w „Prośbach”', keys: 'nowe' },
+  { kind: 'command', id: 'newRequest', title: 'Nowa prośba', hint: 'w „Sprawach”', keys: 'nowe' },
   { kind: 'command', id: 'tomorrow', title: 'Jutro', hint: 'plan na jutro' },
   { kind: 'command', id: 'yesterday', title: 'Wczoraj', hint: 'plan wczorajszego dnia' },
   { kind: 'command', id: 'ritual', title: 'Rytuał', hint: 'rytuał dzisiejszego dnia', keys: 'wieczór podsumowanie' }
@@ -99,8 +101,13 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
     out.push({ kind: 'series', id: s.id, title: blockName(occurrenceBlock(s, v.block, i.today), names), text: seriesText(s, i.today), hint: ended ? 'seria zakończona' : 'seria' })
   }
 
-  for (const r of [...i.requests].sort((a, b) => requestStateOrder(a.state) - requestStateOrder(b.state) || b.createdAt - a.createdAt)) {
-    out.push({ kind: 'request', id: r.id, title: personName(i.rd, r.person), text: r.note, hint: REQUEST_STATE_NAMES[r.state] })
+  // „Sprawy” (D383, SNT6): in the order of the lists, the newest first; the hint says what it is and where it lies. The
+  // module of requests off: no request – the page would not show it (T763); the tasks stay.
+  const shown = i.rd.general.modules.requests ? i.requests : i.requests.filter((r) => r.kind === 'task')
+  const lists = shown.map((r) => ({ r, list: listOf(r, i.today) }))
+  for (const { r, list } of lists.sort((a, b) => CASE_LISTS.indexOf(a.list) - CASE_LISTS.indexOf(b.list) || b.r.createdAt - a.r.createdAt)) {
+    const title = r.kind === 'task' ? r.title || 'zadanie' : personName(i.rd, r.person)
+    out.push({ kind: 'request', id: r.id, title, text: r.note, hint: `${r.kind === 'task' ? 'zadanie' : 'prośba'} · ${CASE_LIST_NAMES[list]}${r.state === 'dropped' ? ' · porzucone' : ''}` })
   }
   for (const r of [...i.routines].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
     out.push({ kind: 'routine', id: r.id, title: r.name, text: [...r.normal, ...r.worse].map((s) => s.name).filter(Boolean).join(' · '), ...(r.archived ? { hint: 'w archiwum' } : {}) })

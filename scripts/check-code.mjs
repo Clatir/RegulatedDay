@@ -8,7 +8,10 @@
  *   alert / confirm / prompt – each would be a separate window of Chromium on top of every other;
  * - no window uses Notification (only the main process does, through notify.ts);
  * - the helper's commands that answer only a request (with an id) are never sent without one – their answer would be
- *   lost (`helper.send('toastSetting')` read Windows' setting and said nothing).
+ *   lost (`helper.send('toastSetting')` read Windows' setting and said nothing);
+ * - the window „Do skrzynki” (D385) comes over the other windows only on your shortcut: show, focus (also of its contents)
+ *   and „on top” only in its private `raise`, `raise` only from the callback of the global shortcut it registers, never
+ *   shown nor on top by the options it is made with, and its window never under another name.
  * `--self-test` proves each check catches its case.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
@@ -55,6 +58,43 @@ export function checkBarWindow(text) {
   return problems
 }
 
+/** The body of a method (`private raise(): void {` … its closing brace), or null. */
+function methodBody(text, head) {
+  const at = text.indexOf(head)
+  if (at < 0) return null
+  const open = text.indexOf('{', at + head.length - 1)
+  let depth = 0
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === '{') depth++
+    else if (text[i] === '}' && --depth === 0) return { from: open, to: i + 1 }
+  }
+  return null
+}
+
+/** What raises a window over the others (or activates it): only `setAlwaysOnTop(false)` is no raise. */
+const RAISES = /this\.win\.(?:show|showInactive|focus|moveTop|moveAbove|restore|maximize|setFullScreen|setParentWindow)\(|this\.win\.setAlwaysOnTop\((?!\s*false\s*\))|this\.win\.webContents\.focus\(/g
+
+/** The window „Do skrzynki” (D385): on top only by the shortcut – `raise` private, alone raising, called only by the shortcut. */
+export function checkQuickWindow(text) {
+  const code = text.replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '')
+  const problems = []
+  const body = methodBody(code, 'private raise(): void {')
+  if (!body) return ['okienko „Do skrzynki”: brak prywatnej metody raise() – jedynej drogi na wierzch']
+  for (const m of code.matchAll(RAISES)) if (m.index < body.from || m.index >= body.to) problems.push(`okienko „Do skrzynki”: ${m[0]} poza raise() – na wierzch wychodzi tylko na skrót (D385)`)
+  // Shown or on top from its making: before any shortcut (the options of `new BrowserWindow`).
+  for (const m of code.matchAll(/new BrowserWindow\(\s*\{([\s\S]*?)\}\s*\)/g)) {
+    const opts = m[1].replace(/webPreferences:\s*\{[\s\S]*?\}/g, '')
+    if (/\bshow:(?!\s*false\b)/.test(opts)) problems.push('okienko „Do skrzynki”: show w opcjach okna inne niż false – pokazane bez skrótu')
+    if (/\balwaysOnTop:(?!\s*false\b)/.test(opts)) problems.push('okienko „Do skrzynki”: alwaysOnTop w opcjach okna – na wierzchu bez skrótu')
+  }
+  // The window under another name would escape every check above.
+  if (/=\s*this\.win\s*(?:[;,)\n]|$)|\{[^}]*\bwin\b[^}]*\}\s*=\s*this\b/m.test(code)) problems.push('okienko „Do skrzynki”: this.win pod inną nazwą – zmiany okna tylko przez this.win')
+  const calls = [...code.matchAll(/this\.raise\(/g)].length
+  const byShortcut = [...code.matchAll(/\.register\([^,()]+,\s*\(\)\s*=>\s*this\.raise\(\)\s*\)/g)].length
+  if (calls !== byShortcut || byShortcut !== 1) problems.push('okienko „Do skrzynki”: raise() wołane gdzie indziej niż w wywołaniu skrótu globalnego (register)')
+  return problems
+}
+
 /** The bar's components: nothing that opens a window of its own. */
 export function checkBarComponent(text) {
   const problems = []
@@ -92,6 +132,8 @@ function run() {
   else console.log('out/main/start.js nie istnieje (przed buildem) – sprawdzenie startu pominięte')
   const barFile = join(root, 'src', 'main', 'windows', 'desktopBar.ts')
   problems.push(...checkBarWindow(readFileSync(barFile, 'utf8')).map((p) => `${rel(barFile)}: ${p}`))
+  const quickFile = join(root, 'src', 'main', 'windows', 'quickWindow.ts')
+  problems.push(...checkQuickWindow(readFileSync(quickFile, 'utf8')).map((p) => `${rel(quickFile)}: ${p}`))
   for (const f of files(join(root, 'src', 'renderer', 'widget'), ['.tsx', '.ts'])) problems.push(...checkBarComponent(readFileSync(f, 'utf8')).map((p) => `${rel(f)}: ${p}`))
   for (const f of files(join(root, 'src', 'renderer'), ['.tsx', '.ts'])) problems.push(...checkRenderer(readFileSync(f, 'utf8')).map((p) => `${rel(f)}: ${p}`))
   for (const f of files(join(root, 'src', 'main'), ['.ts'])) {
@@ -106,6 +148,14 @@ function run() {
   }
   console.log('check-code: ok')
 }
+
+/** A window „Do skrzynki” as it must be (the self-test changes it one way at a time). */
+const QUICK_OK = `class Q {
+  constructor() { this.win = new BrowserWindow({ show: false, frame: false, webPreferences: { preload } }) }
+  setShortcut(key) { ok = this.shortcuts.register(key, () => this.raise()) }
+  private raise(): void { if (x) { y() } this.win.setAlwaysOnTop(true, 'floating'); this.win.show(); this.win.focus() }
+  close(): void { this.win.setAlwaysOnTop(false); this.win.hide() }
+}`
 
 /** Each check catches what it is for (the test bar with one title must be caught). */
 function selfTest() {
@@ -123,7 +173,17 @@ function selfTest() {
     [checkBarComponent('if (confirm("x"))').length === 1, 'confirm'],
     [checkRenderer('new Notification("x")').length === 1, 'Notification'],
     [checkHelperCalls("helper?.send('toastSetting')").length === 1, 'pomocnik: send bez id'],
-    [checkHelperCalls("helper?.send('bar.watch', { hwnd }); void helper.request('toastSetting')").length === 0, 'pomocnik: ok']
+    [checkHelperCalls("helper?.send('bar.watch', { hwnd }); void helper.request('toastSetting')").length === 0, 'pomocnik: ok'],
+    [checkQuickWindow(QUICK_OK).length === 0, 'okienko: ok'],
+    [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { this.win.show()')).length === 1, 'okienko: show poza raise'],
+    [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { this.win.setAlwaysOnTop(true)')).length === 1, 'okienko: na wierzchu poza raise'],
+    [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { this.raise()')).length === 1, 'okienko: raise bez skrótu'],
+    [checkQuickWindow(QUICK_OK.replace('private raise(', 'raise(')).length === 1, 'okienko: raise nie prywatne'],
+    [checkQuickWindow(QUICK_OK.replace('show: false', 'show: true')).length === 1, 'okienko: pokazane od razu (show: true)'],
+    [checkQuickWindow(QUICK_OK.replace('frame: false', 'frame: false, alwaysOnTop: true')).length === 1, 'okienko: na wierzchu od razu (alwaysOnTop: true)'],
+    [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { this.win.webContents.focus()')).length === 1, 'okienko: webContents.focus poza raise'],
+    [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { const w = this.win; w.show()')).length >= 1, 'okienko: this.win pod inną nazwą'],
+    [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { const { win } = this; win.show()')).length >= 1, 'okienko: win wyjęte z this']
   ]
   const failed = cases.filter(([ok]) => !ok).map(([, name]) => name)
   if (failed.length) {
