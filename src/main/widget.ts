@@ -12,7 +12,7 @@ import { blockName, nameById } from '@shared/blockName'
 import { namingOf } from '@shared/engine/context'
 import { costText } from '@shared/costText'
 import { dayRaw, putBlock } from '@shared/data/dayEdits'
-import { recordEdit, sameContentAs } from '@shared/data/merge'
+import { inverseEdit, recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { engineView, POOL_TEXT, RESERVE_REGEN_MIN, warnDeadlines } from '@shared/engineView'
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
@@ -131,15 +131,6 @@ export function stepDelay(deadlines: readonly number[], viewAt: number, now = vi
 const ROUTINE_UNDO_MS = 60_000
 
 /**
- * The edit that takes a variant's own edit back (T502): each field to its value before, with its value after as the base
- * – a field changed since is a question, not overwritten; a file the variant created goes only while it is as it made it.
- */
-function inverseEdit(e: EditEntry, now: RawRecord | null, made: RawRecord | null): EditEntry | null {
-  if (e.create) return now && sameContentAs(now, made) ? { rel: e.rel, remove: true, edits: [], base: made } : null
-  return { rel: e.rel, edits: e.edits.map((x) => ({ path: x.path, base: x.value, value: x.base })) }
-}
-
-/**
  * What the window says it pushed apart (D367, IPC `planPushed`): a day, how many blocks, the one edit of that day's file it
  * saved (never a removal) and the file it created – anything else is not taken.
  */
@@ -157,9 +148,9 @@ export function pushedIn(day: unknown, count: unknown, entry: unknown, made: unk
  * The IPC `planPushed` (D367): what the window pushed apart is taken at once – the line and the marker's trigger – and the
  * bar is counted again in the background: the window's save (its „Dodaj”, its drop) never waits for the bar.
  */
-export function planPushedIpc(w: Pick<WidgetEngine, 'pushed'>, log: WidgetDeps['log'], day: unknown, count: unknown, entry: unknown, made: unknown): void {
+export function planPushedIpc(w: Pick<WidgetEngine, 'pushed'>, log: WidgetDeps['log'], day: unknown, count: unknown, entry: unknown, made: unknown, line?: unknown): void {
   const p = pushedIn(day, count, entry, made)
-  if (p) void w.pushed(p.day, p.count, p.edit).catch((e) => log('warn', 'pasek nie przeliczył się po przesunięciu bloków', e))
+  if (p) void w.pushed(p.day, p.count, p.edit, line !== false).catch((e) => log('warn', 'pasek nie przeliczył się po przesunięciu bloków', e))
 }
 
 /** The bar's note when a variant picked finds the plan as it would make it (D378). */
@@ -648,12 +639,13 @@ export class WidgetEngine {
    * (`edit`, `made` – the file it created): the bar keeps „Przesunięto N bloków · Cofnij” as after a variant (D313), its
    * „Cofnij” taking that edit back the same way (T502) – beside a variant's line, which stays – and the push checks the
    * marker of variants of today by its own conditions (`variantCauses`). The state is set before the bar is counted again
-   * (the promise is that count).
+   * (the promise is that count). `line` false (D400, a „Dodaj” of the week – its one „Cofnij” is in the window): the
+   * trigger of the marker only, no line.
    */
-  pushed(day: string, count: number, edit: { entry: EditEntry; made: RawRecord | null }): Promise<void> {
+  pushed(day: string, count: number, edit: { entry: EditEntry; made: RawRecord | null }, line = true): Promise<void> {
     if (count < 1) return Promise.resolve()
     const now = this.now
-    this.moved.set('push', { text: pushedText(count), day, edits: [edit], started: null, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq })
+    if (line) this.moved.set('push', { text: pushedText(count), day, edits: [edit], started: null, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq })
     this.pushes.push({ day, trigger: { id: `push:${now}`, at: now } })
     return this.refresh()
   }

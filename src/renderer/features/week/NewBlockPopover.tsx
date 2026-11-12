@@ -17,6 +17,7 @@ import { useDay, type DayModel } from '../../store/day'
 import { categoryOptions, type Names } from '../plan/blockView'
 import { lastNewBlockCategory, rememberNewBlockCategory, startCategory } from '../plan/lastCategory'
 import { ExchangeDialog } from '../today/ExchangeDialog'
+import { showWeekPush } from '../../store/weekPush'
 import { addWeekBlocks } from './weekActions'
 import { NEW_BLOCK_WIDTH } from './weekLayout'
 import { daysLabel, pastWarning } from './weekText'
@@ -95,8 +96,10 @@ export function NewBlockPopover({
    * would make a second block.
    */
   const save = async (entries: readonly Entry[]) => {
-    const { saved, failed } = await addWeekBlocks(entries)
+    const { saved, failed, push } = await addWeekBlocks(entries, today)
     if (saved.length) rememberNewBlockCategory(categoryId)
+    // Blocks pushed apart in the days written (D400): the window's one line with its „Cofnij” for them all.
+    if (push) showWeekPush(push)
     if (failed.length) onDates(failed)
     else onClose()
   }

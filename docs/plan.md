@@ -84,9 +84,10 @@ granica danych): Opus 5.5 · max, druga opinia Fable 5.1; kod `wykonawca-opus` �
 
 ### Blok 2 = ciąg L: serie, „Sprawy” i bufory dekompresji (D380)
 
-Pytania przed ciągiem odpowiedziane 10.11 (D380–D386). Start po ciągu J i Twoim „dalej”, potem pozycje idą bez pauzy
-(D317); OPS3 dopiero po przeglądzie K (koszty kategorii). Każda pozycja – osobny PR z wydaniem, wersje – kolejne wolne
-po ciągu J.
+Pytania przed ciągiem odpowiedziane 10.11 (D380–D386), szczegóły 11.11 (D401 – serie, D402 – „Sprawy”, D403 –
+bufory). „Dalej” dane 11.11: L1 zaczyna osobna sesja dopiero po końcu ciągu J (wydanie J3b) i SNT3 drugiej sesji,
+potem pozycje idą bez pauzy (D317); OPS3 dopiero po przeglądzie K (koszty kategorii). Każda pozycja – osobny PR
+z wydaniem, wersja – następna wolna przy scaleniu.
 
 | # | Zadanie | Rodzaj | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
 | --- | --- | --- | --- | --- | --- |

@@ -757,7 +757,7 @@ function registerIpc(): void {
   handle(CH.edit, (_e, entries: EditEntry[]) => needHub().edit(Array.isArray(entries) ? entries : []))
   // D367: blocks pushed apart, saved by the window – the bar's „Przesunięto N bloków · Cofnij” and the marker's trigger;
   // the answer never waits for the bar to be counted again.
-  handle(CH.planPushed, (_e, day: unknown, count: unknown, entry: unknown, made: unknown) => planPushedIpc(widget, log, day, count, entry, made))
+  handle(CH.planPushed, (_e, day: unknown, count: unknown, entry: unknown, made: unknown, line: unknown) => planPushedIpc(widget, log, day, count, entry, made, line))
   // D369: „Ułóż pod energię” saved by the morning plan – the bar's „Przestawiono: … · Cofnij” (no wait for the bar).
   handle(CH.planArranged, (_e, day: unknown, label: unknown, entry: unknown, made: unknown) => planArrangedIpc(widget, log, day, label, entry, made))
   handle(CH.logEvents, (_e, events: EventIn[]) => needHub().events(Array.isArray(events) ? events : []))

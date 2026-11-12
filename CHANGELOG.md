@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.11.0
+- Rozsuwanie w „Tygodniu”: „Dodaj” z karty nowego bloku na zajęte miejsce w dniu dzisiejszym albo przyszłym przesuwa kolejne bloki elastyczne tego dnia za nowy blok – tak jak „Dodaj” w „Dziś”. Bloki stałe, sesje, chronione i zaczęte zostają.
+- Zakres kilku dni zapisuje się jednym ruchem, a nad tygodniem przez 15 min stoi jedna linia „Przesunięto N bloków w K dniach · Cofnij”. „Cofnij” przywraca wszystkie dni naraz; dzień zmieniony od tego czasu zostaje, jaki jest, z komunikatem.
+- Gdy w zakresie jest dzisiaj, pasek nie dostaje drugiej linii „Cofnij”, a znacznik wariantów zapala się jak po rozsunięciu w „Dziś”. Dzień miniony dostaje tylko nowy blok, bez przesuwania.
+
 ## 1.10.0
 - „Ułóż pod energię”: w „Przestaw plan” i w planie porannym nowy wariant „Ułóż pod energię – najniższa energia dnia 35 → 52” z listą zmian kolejności. Pojawia się tylko dla dnia bieżącego, gdy najniższa energia dnia jest poniżej 60, a nowa kolejność podnosi ją co najmniej o 5.
 - Przestawia bloki elastyczne – także regenerację, posiłki i rutyny – tylko w tej samej przerwie między blokami stałymi; stałe i zaczęte zostają na miejscu. Przed zatwierdzeniem granicy koniec pracy może się przesunąć, byle w maksimum dnia; po zatwierdzeniu – nie za granicę.

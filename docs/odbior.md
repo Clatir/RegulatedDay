@@ -114,6 +114,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] J2.2 Nowy blok przeciągnięciem w „Dziś” i „Szablonach”
    - [ ] J3.1 Rozsuwanie w „Dziś” i „Cofnij” w pasku
    - [ ] J3.2 Rozsuwanie w „Szablonach”
+   - [ ] J3b.1 „Dodaj” z karty „Tygodnia” na zajęte miejsce w przyszłym dniu i „Cofnij”
+   - [ ] J3b.2 Zakres kilku dni – jedno „Cofnij” dla wszystkich
+   - [ ] J3b.3 Dzisiaj w zakresie, wymiana i dni minione
    - [ ] J4.1 Luka po wcześniejszym końcu – „Przesuń resztę wcześniej” i „Cofnij”
    - [ ] J4.2 Luka po usunięciu albo skróceniu bloku w „Dziś”
    - [ ] J4.3 Kiedy pasek o lukę nie pyta (sesja, mała luka, blok stały, drugi komputer)
@@ -1560,6 +1563,57 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   go upuściłeś, także w tygodniu przesunięcia sesji (D372).
 - **Nie przechodzi, gdy:** blok po upuszczeniu skacze o godzinę, „Cofnij” zostawia nową wersję szablonu, albo bloki
   stałe szablonu się przesuwają.
+
+### J3b – rozsuwanie w „Tygodniu” (1.11.0)
+
+#### J3b.1 „Dodaj” z karty na zajęte miejsce w przyszłym dniu i „Cofnij” (1.11.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/week-push.test.ts` (rozsuwanie, jeden zapis, „Cofnij”), `tests/fs/widget.test.ts`
+  (`planPushed` bez linii), `tests/e2e/week.spec.ts` („D400”). Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” (strzałką na następny tydzień) kliknij pusty fragment jednego dnia, w którym tuż pod
+  nim stoi twój blok elastyczny (np. inne), tak żeby nowy blok (domyślnie godzina) na niego nachodził; „Dodaj”. Potem
+  kliknij „Cofnij” w linii nad tygodniem.
+- **Oczekiwany efekt:** nowy blok stoi tam, gdzie kliknąłeś, a kolejne bloki elastyczne tego dnia (nie stałe, nie sesje,
+  nie chronione) dostają nowe godziny za nim, jak przy „Dodaj” w „Dziś” (D367, D372). Nad kolumnami linia „Przesunięto 2
+  bloki w 1 dniu · Cofnij” przez 15 min; „Cofnij” zdejmuje nowy blok i przywraca godziny. Gdy nic nie stoi na drodze
+  (wolne miejsce) – tylko nowy blok, bez linii (D400).
+- **Nie przechodzi, gdy:** bloki nie dostają nowych godzin mimo nachodzenia, przesuwa się blok stały, sesja albo
+  chroniony, linia wskazuje złą liczbę bloków, „Cofnij” zostawia nowy blok albo stare godziny, albo linia pokazuje się,
+  choć nic nie przesunięto.
+
+#### J3b.2 Zakres kilku dni – jedno „Cofnij” dla wszystkich (1.11.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/week-push.test.ts` (trzy dni jednym zapisem, „Cofnij” tylko dni, które stoją jak po
+  zmianie), `tests/e2e/week.spec.ts` („D400”). Ty: rzut oka.
+- **Jak sprawdzić:** przeciągnij po pustym miejscu przez trzy dni następnego tygodnia (np. wtorek–czwartek) tak, żeby
+  w każdym nowy blok nachodził na blok elastyczny; „Dodaj”. Kliknij „Cofnij” w linii. Powtórz i przed „Cofnij” zmień ręcznie
+  godzinę przesuniętego bloku w jednym z dni, potem „Cofnij”. Po „Dodaj” przejdź na „Dziś” i wróć na „Tydzień”.
+- **Oczekiwany efekt:** w każdym dniu zakresu bloki elastyczne za nowym przesuwają się; jedna linia „Przesunięto N
+  bloków w 3 dniach · Cofnij” (N to wszystkie przesunięte razem; „w 3 dniach” – dni, w których coś przesunięto). „Cofnij”
+  przywraca wszystkie trzy dni jednym ruchem (nowe bloki znikają, stare godziny wracają). Dzień zmieniony po „Dodaj”
+  zostaje, jaki jest, a reszta wraca; dymek „Część planu zmieniła się od przesunięcia – zostaje tak, jak jest teraz.”
+  Linia znika sama po 15 min od zapisu albo gdy żaden z dni nie stoi już tak jak po „Dodaj”; po przejściu na inną stronę
+  (np. „Dziś”) i powrocie na „Tydzień” jest dalej (do końca 15 min). Kolejne „Dodaj” z przesunięciem zastępuje linię.
+  Gdy „Cofnij” nie dotknie któregoś dnia (pytanie o konflikt, plik dnia chwilowo nieczytelny), ten dzień zostaje w linii do
+  ponowienia (przy dniu, w którym nic nie przesunięto – „Nowy blok w 1 dniu · Cofnij”), a dymek mówi tylko o tym, co się stało.
+- **Nie przechodzi, gdy:** „Cofnij” przywraca tylko jeden dzień, nadpisuje dzień zmieniony później, zostawia któryś nowy
+  blok, linia znika po zmianie strony przed upływem 15 min, nieudane „Cofnij” zdejmuje linię, albo „Dodaj” dla kilku dni
+  robi kilka osobnych zapisów (pytania o konflikt się mnożą).
+
+#### J3b.3 Dzisiaj w zakresie, wymiana i dni minione (1.11.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/week-push.test.ts` (dzisiaj – wyzwalacz bez linii w pasku; dzień minięty bez
+  rozsuwania), `tests/fs/widget.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** (1) w „Tygodniu” bieżącego tygodnia przeciągnij zakres obejmujący dzisiaj i jutro, nachodząc na blok
+  elastyczny w każdym, „Dodaj”; zajrzyj do paska. (2) Dodaj blok pracy na dzisiaj po zatwierdzeniu granicy dnia (okienko
+  wymiany). (3) Przeciągnij zakres z dniem minionym, „Dodaj”.
+- **Oczekiwany efekt:** (1) dzisiaj i jutro rozsunięte, w „Tygodniu” jedna linia „Cofnij”; w pasku nie przybywa druga linia
+  „Przesunięto … · Cofnij”, a znacznik wariantów zapala się tak jak po rozsunięciu w „Dziś”, gdy nadmiar wychodzi za
+  granicę (D400). (2) Wymiana jak dotąd – dzisiejszy blok bez dodatkowego rozsuwania (D372); pozostałe dni zakresu
+  rozsunięte. (3) Dzień minięty dostaje tylko nowy blok, bez przesuwania innych, z dotychczasowym ostrzeżeniem
+  „… już minął”.
+- **Nie przechodzi, gdy:** w pasku jest druga linia „Cofnij” po „Dodaj” z „Tygodnia”, znacznika wariantów nie ma mimo
+  nadmiaru za granicą, dzisiejszy blok z wymiany dodatkowo przesuwa inne, albo w dniu minionym coś się przesuwa.
 
 ### J4 – domykanie luk (1.8.0)
 

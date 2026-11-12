@@ -4,11 +4,13 @@
  * (D72: a goal is no grade and blocks nothing).
  */
 import type { GoalsProgress } from '@shared/engine/goals'
+import { pushedText } from '@shared/engine/pushApart'
 import type { HorizonBlockState, HorizonDay } from '@shared/engine/week'
 import { countLabel, durationLabel, formatNumber, ofLabel, WEEKDAY_NAMES } from '@shared/format'
 import type { GoalArea } from '@shared/model/goals'
 import { addDays, weekday } from '@shared/time/zone'
 import { MONTH_NAMES } from '../calendar/MonthGrid'
+import type { WeekPush } from '../../store/weekPush'
 
 export const WEEKDAY_SHORT = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'] as const
 export const WEEKDAY_FULL = WEEKDAY_NAMES
@@ -165,4 +167,17 @@ export function pastWarning(dates: readonly string[], today: string): string | n
   // One day: „wtorek minął”, „środa minęła” (the names ending with „a” are feminine); several – „minęły”.
   const verb = names.length > 1 ? 'minęły' : names[0]!.endsWith('a') ? 'minęła' : 'minął'
   return `${capital(list)} już ${verb}.`
+}
+
+/** The line after „Dodaj” pushed blocks apart in the days of a range (D400): „Przesunięto 5 bloków w 3 dniach”. */
+export const weekPushedText = (blocks: number, days: number): string => `${pushedText(blocks)} w ${countLabel(days, 'dniu', 'dniach', 'dniach')}`
+
+/**
+ * The line's words from the days it still holds: the blocks they pushed and the days that pushed them; when none of them
+ * pushed (what is left to take back is only a new block – a day that could not be read then), „Nowy blok w K dniach”.
+ */
+export function weekPushLineText(push: WeekPush): string {
+  const blocks = push.days.reduce((n, d) => n + d.moved, 0)
+  if (blocks > 0) return weekPushedText(blocks, push.days.filter((d) => d.moved > 0).length)
+  return `Nowy blok w ${countLabel(push.days.length, 'dniu', 'dniach', 'dniach')}`
 }
