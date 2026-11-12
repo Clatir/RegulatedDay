@@ -74,6 +74,21 @@ describe('kopie zapasowe z załącznikami (D410, T809)', () => {
     expect(readFileSync(join(out, 'attachments', 'a1', 'film.mp4')).equals(big)).toBe(true)
   })
 
+  it('przed aktualizacją ponad próg (D412): sama lista załączników, linia w logu z łącznym rozmiarem; do progu – z plikami', async () => {
+    makeData()
+    const logs: string[] = []
+    const total = big.length + Buffer.byteLength('{"to":"plik, nie rekord"}')
+    const r = await createUpdateBackup(data, backups, '1.13.0', '1.14.0', { filesMax: total - 1, log: (_level, msg) => logs.push(msg) })
+    expect(r?.ok).toBe(true)
+    expect(await names(join(backups, 'aktualizacje', '1.13.0-do-1.14.0.zip'))).toEqual(['attachments/a1.json', 'attachments/a2.json', 'attachments/a3.json', 'rd.json'])
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toContain(`${total} B`)
+    const exact = await createUpdateBackup(data, backups, '1.14.0', '1.15.0', { filesMax: total, log: (_level, msg) => logs.push(msg) })
+    expect(exact?.ok).toBe(true)
+    expect(await names(join(backups, 'aktualizacje', '1.14.0-do-1.15.0.zip'))).toContain('attachments/a1/film.mp4')
+    expect(logs).toHaveLength(1)
+  })
+
   it('dodatkowe miejsce dostaje kopie tygodniowe folderu (z plikami)', async () => {
     makeData()
     await createDailyBackup(data, backups, '2026-11-08')

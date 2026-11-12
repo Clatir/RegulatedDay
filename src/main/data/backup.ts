@@ -28,7 +28,7 @@ import type { BackupItem } from '@shared/api'
 import { attachmentFileOf, classify, isIgnoredPath, sanitizeRelPath } from '@shared/data/paths'
 import { addDays, daysBetween, isIsoDate, weekday } from '@shared/time/zone'
 import { pathExists, removeFile, tempPathFor, withRetry } from '../datastore/atomic'
-import { diskSource, streamSource, withZip, writeZipFile, zipFolder, type ZipEntry, type ZipSource } from './zip'
+import { diskSource, streamSource, walkFiles, withZip, writeZipFile, zipFolder, type ZipEntry, type ZipSource } from './zip'
 
 /** Daily backups kept, and one a week for 8 weeks before them (spec „Kopie zapasowe”, FI D84 C4). */
 export const DAILY_KEEP = 14
@@ -290,20 +290,44 @@ const VERSION = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)
 const UPDATE_NAME = new RegExp(`^${VERSION}-do-${VERSION}\\.zip$`)
 
 /**
+ * The attachments' files the backup before an update takes at most (D412, T830): more – the records only (the files are
+ * in the weekly backup), so the first start of a new version never waits for gigabytes of them.
+ */
+export const UPDATE_FILES_MAX = 1024 * 1024 * 1024
+
+/** The attachments' files of the data folder and their size together (a file gone meanwhile – not counted). */
+async function attachmentBytes(dataDir: string): Promise<{ files: number; bytes: number }> {
+  const rels = (await walkFiles(dataDir, (rel) => isOutsideBackup(rel) || (rel.includes('/') && !rel.startsWith('attachments/')))).filter(isAttachmentFile)
+  let bytes = 0
+  for (const rel of rels) bytes += (await fs.stat(join(dataDir, ...rel.split('/'))).catch(() => null))?.size ?? 0
+  return { files: rels.length, bytes }
+}
+
+/**
  * The backup before an update (plan: „kopia zapasowa przed aktualizacją”): a new version makes it at its first opening
  * of the folder, before it reads or writes anything there – the data are still as the version before left them, so a
  * change of format (a migration) can always be undone. `<backupsDir>/aktualizacje/<from>-do-<to>.zip`, made once per
- * update (on the computer that opens the folder first), the last 5 kept. Never throws.
+ * update (on the computer that opens the folder first), the last 5 kept. With the attachments' files when together they
+ * are at most `filesMax` (D412); more – the records only and one line in the log with their size. Never throws.
  */
-export async function createUpdateBackup(dataDir: string, backupsDir: string, from: string, to: string): Promise<BackupResult | null> {
+export async function createUpdateBackup(
+  dataDir: string,
+  backupsDir: string,
+  from: string,
+  to: string,
+  o: { filesMax?: number; log?: (level: 'info' | 'warn', msg: string) => void } = {}
+): Promise<BackupResult | null> {
   const dir = join(backupsDir, 'aktualizacje')
   const name = `${from}-do-${to}.zip`
   if (!UPDATE_NAME.test(name)) return { ok: false, error: `Niepoprawne wersje: ${from}, ${to}` }
   const file = join(dir, name)
   if (await pathExists(file)) return null
   try {
-    // With the attachments' files (D410, T809).
-    const made = await zipFolder(dataDir, file, withAttachments, isOutsideBackup, fullSource)
+    // With the attachments' files (D410, T809) – up to the limit (D412, T830).
+    const att = await attachmentBytes(dataDir)
+    const withFiles = att.bytes <= (o.filesMax ?? UPDATE_FILES_MAX)
+    if (!withFiles) o.log?.('info', `kopia przed aktualizacją ${from} → ${to} bez plików załączników: ${att.files} plików, razem ${att.bytes} B (${(att.bytes / 1024 ** 3).toFixed(2)} GB) – są w kopii tygodniowej`)
+    const made = await zipFolder(dataDir, file, withFiles ? withAttachments : isDataFile, isOutsideBackup, fullSource)
     const names = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => UPDATE_NAME.test(n))
     // Oldest first by the time each was made (the names hold versions, not dates).
     const dated = await Promise.all(names.map(async (n) => ({ n, t: (await fs.stat(join(dir, n)).catch(() => null))?.mtimeMs ?? 0 })))

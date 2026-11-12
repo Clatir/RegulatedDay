@@ -269,7 +269,9 @@ export class DataHub {
       const prev = this.o.previousVersion()
       const due = !!prev && isNewer(this.o.appVersion, prev)
       if (due && !this.backedUp) {
-        const r = await createUpdateBackup(dir, join(dir, 'backups'), prev, this.o.appVersion)
+        const r = await createUpdateBackup(dir, join(dir, 'backups'), prev, this.o.appVersion, {
+          log: (level, msg) => this.o.log(level, msg)
+        })
         // Made (or there already): not again; failed: tried again at the next opening.
         if (!r || r.ok) this.backedUp = true
         if (r?.ok) this.o.log('info', `kopia przed aktualizacją ${prev} → ${this.o.appVersion}: ${r.files} plików`)

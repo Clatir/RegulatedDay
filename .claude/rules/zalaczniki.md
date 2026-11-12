@@ -41,6 +41,7 @@ paths:
 - Dzienna: rekordy. Tygodniowa (`promoteWeek` → `weeklyWithFiles`) i przed aktualizacją: też pliki, strumieniowo
   (`ZipWriter.addFile`, `streamSource`). Przywracanie: `restoreToFolder` (`copyTo`), `restoreAttachmentFiles` – nigdy nie
   nadpisuje ani nie usuwa.
+- Kopia przed aktualizacją bierze pliki tylko do `UPDATE_FILES_MAX` (1 GB razem, D412, T830) – powyżej same rekordy i linia w logu (`log`).
 
 ## Pułapki
 - Wzorzec kolekcji w `paths.ts` nie bierze „/” po id – plik załącznika o nazwie kopii („x (1).json”) nie jest rekordem (T801).
