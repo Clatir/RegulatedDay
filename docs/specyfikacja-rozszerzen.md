@@ -139,8 +139,9 @@ Zaplanowałeś 90-minutowy blok „Wdrożenie nowej funkcji”. Blok jest duży 
 
 ### Jak wygląda praca z tą funkcją
 * **Szybkie dodawanie:** Wpisujesz treść kroku, wciskasz `Enter` i od razu wpisujesz kolejny.
+* **Lista w panelu bloku:** sekcja „Kroki” nad notatką – pole „Dodaj krok”, ptaszek (odhacza zawsze tylko ten dzień), tytuł edytowany w miejscu, „×” usuwa (z „Cofnij”), kolejność zmieniasz przeciągnięciem uchwytu „⋮⋮” albo Alt+↑ / Alt+↓ na kroku; do 30 kroków, tytuł do 200 znaków. W bloku serii pierwsza zmiana listy pyta o zakres („Tylko to · To i następne · Cała seria”), wybór obowiązuje, dopóki panel jest otwarty na tym bloku; ptaszek nie pyta.
 * **Wskaźnik postępu:** Na osi czasu i w panelu bloku licznik (np. `✓ 3/4`), dając poczucie realnego posuwania się naprzód; kroki niczego nie liczą (energia, punktacja), a koniec bloku z nieodhaczonymi krokami o nic nie pyta (D440).
-* **Szablony, serie i Sprawy (D440):** kroki bloku szablonu i serii każdego dnia startują odznaczone; blok z zadania „Spraw” dostaje jego kroki, a odhaczenie w bloku odhacza je w zadaniu.
+* **Szablony, serie i Sprawy (D440; w „Szablonach” i serii sama lista bez ptaszków, w „Sprawach” lista rozwija się pod wierszem zadania, prośby nie mają kroków):** kroki bloku szablonu i serii każdego dnia startują odznaczone; blok z zadania „Spraw” dostaje jego kroki, a odhaczenie w bloku odhacza je w zadaniu.
 * **Praca bez rozpraszania:** Nie musisz co chwilę otwierać głównego programu, by sprawdzić, co masz teraz zrobić – kolejny krok zawsze czuwa na pasku pulpitu.
 
 ---

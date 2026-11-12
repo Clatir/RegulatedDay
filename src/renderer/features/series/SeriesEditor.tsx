@@ -7,11 +7,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Series } from '@shared/model/series'
 import { settingsOn } from '@shared/model/settings'
+import { seriesStepsPatch } from '@shared/engine/steps'
 import { plDate } from '@shared/format'
 import { addDays } from '@shared/time/zone'
 import { useBusy } from '../../lib/busy'
 import { useData } from '../../store/data'
 import { BlockEditor } from '../plan/BlockEditor'
+import { StepsEditor } from '../steps/StepsEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { SeriesFields } from './SeriesFields'
 import { changeSeries, endSeries, removeSeries } from './seriesActions'
@@ -101,6 +103,18 @@ export function SeriesEditor({ series, today, onClosed }: { series: Series; toda
           return changeSeries({ seriesId: series.id }, 'all', { block: b }, 'Seria zmieniona')
         }}
         onClose={onClosed}
+        // D440: the series' list without boxes (every occurrence starts with none ticked), changed for the whole series from today.
+        steps={
+          <StepsEditor
+            steps={block.steps}
+            ticks={false}
+            readOnly={ended}
+            onOp={(op) => {
+              const patch = seriesStepsPatch(block, op)
+              return 'error' in patch ? false : changeSeries({ seriesId: series.id }, 'all', patch, 'Seria zmieniona')
+            }}
+          />
+        }
       />
     </div>
   )

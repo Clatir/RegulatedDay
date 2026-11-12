@@ -12,6 +12,7 @@
  */
 import { namedById, namedOf, type NamedBlock } from '../blockName'
 import { isKnown } from '../model/events'
+import type { Step } from '../model/steps'
 import type { BoundaryOutcome } from './outcome'
 import { dayOutcome } from './outcome'
 import { blockInfos, plannedSpan, type BlockInfo } from './blocks'
@@ -51,6 +52,8 @@ export interface HorizonBlock {
   /** Begun outside the plan („Pracuję”, a block begun by hand) or taken out of it after it began (D336). */
   outsidePlan: boolean
   background: boolean
+  /** Its steps with the ticks of the day (D440) – the counter „✓ 3/4” on the tile; absent – none. */
+  steps?: Step[]
 }
 
 /**
@@ -161,15 +164,15 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
   const placed = new Map(state.forecast.map((p) => [p.block.id, p]))
   const naming = namingOf(ctx, state.facts)
   const out: HorizonBlock[] = []
-  const push = (info: BlockInfo, named: NamedBlock, from: number, to: number, st: HorizonBlockState, outsidePlan: boolean) =>
-    out.push({ id: info.id, named, categoryId: info.categoryId, startMin: lm(from), endMin: lm(Math.max(to, from + 1)), state: st, outsidePlan, background: info.bg })
+  const push = (info: BlockInfo, named: NamedBlock, from: number, to: number, st: HorizonBlockState, outsidePlan: boolean, steps?: Step[]) =>
+    out.push({ id: info.id, named, categoryId: info.categoryId, startMin: lm(from), endMin: lm(Math.max(to, from + 1)), state: st, outsidePlan, background: info.bg, ...(steps?.length ? { steps } : {}) })
   for (const p of ctx.plan) {
     const info = byId.get(p.id)
     if (!info) continue
     const f = state.facts.blocks.get(p.id)
     const named: NamedBlock = { categoryId: p.categoryId, variantId: p.variantId, routine: p.routine, requests: p.requests, note: p.note, origin: p.origin, sourceId: p.sourceId }
     if (f?.startedAt != null) {
-      push(info, named, f.startedAt, begunEnd(state, info, f, nowIdx), begunState(f, when), false)
+      push(info, named, f.startedAt, begunEnd(state, info, f, nowIdx), begunState(f, when), false, p.steps)
       continue
     }
     const gone: HorizonBlockState | null = f?.parkedAt != null ? 'parked' : f?.cancelledAt != null ? 'cancelled' : null
@@ -179,7 +182,7 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
     const to = fc?.to ?? span?.end
     if (from == null || to == null) continue
     const st: HorizonBlockState = gone ?? (when === 'past' || (nowIdx != null && to <= nowIdx) ? 'missed' : 'planned')
-    push(info, named, from, to, st, false)
+    push(info, named, from, to, st, false, p.steps)
   }
   for (const info of state.blocks) {
     if (info.inPlan) continue
@@ -312,7 +315,7 @@ function quietDay(ctx: DayContext): HorizonDay {
     const span = info ? plannedSpan(info, byId) : null
     if (!info || !span) continue
     const named: NamedBlock = { categoryId: p.categoryId, variantId: p.variantId, routine: p.routine, requests: p.requests, note: p.note, origin: p.origin, sourceId: p.sourceId }
-    blocks.push({ id: p.id, named, categoryId: p.categoryId, startMin: lm(span.start), endMin: lm(Math.max(span.end, span.start + 1)), state: 'missed', outsidePlan: false, background: info.bg })
+    blocks.push({ id: p.id, named, categoryId: p.categoryId, startMin: lm(span.start), endMin: lm(Math.max(span.end, span.start + 1)), state: 'missed', outsidePlan: false, background: info.bg, ...(p.steps.length ? { steps: p.steps } : {}) })
   }
   blocks.sort((a, b) => a.startMin - b.startMin || (a.id < b.id ? -1 : 1))
   return { ...unknownDay(ctx.date, 'past'), read: 'full', dayType: ctx.snapshot.dayType, blocks, wakeMin: ctx.wakeMin, boundary: 'free' }

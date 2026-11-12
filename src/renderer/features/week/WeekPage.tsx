@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { logicalClock } from '@shared/format'
 import { settingsOn, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
+import { stepsCounter } from '@shared/model/steps'
 import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { weekStart } from '@shared/time/day'
@@ -326,11 +327,13 @@ function DayColumn({
 }
 
 /** A block on the axis: its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. A click opens its day (D366). */
-function BlockBox({ block: b, lo, lane, lanes, names, brightness, date }: { block: HorizonBlock; lo: number; lane: number; lanes: number; names: Names; brightness: number; date: string }) {
+export function BlockBox({ block: b, lo, lane, lanes, names, brightness, date }: { block: HorizonBlock; lo: number; lane: number; lanes: number; names: Names; brightness: number; date: string }) {
   const { top, height } = blockSpan(b, lo)
   const color = blockColor(b.categoryId, names)
   const dim = b.state === 'missed' || b.state === 'parked' || b.state === 'cancelled'
   const name = blockName(b.named, names)
+  // D440: the counter of the steps „✓ 3/4” (none – nothing).
+  const counter = stepsCounter(b.steps)
   const title = `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}${b.background ? ' · w tle' : ''}`
   return (
     <button
@@ -358,6 +361,11 @@ function BlockBox({ block: b, lo, lane, lanes, names, brightness, date }: { bloc
         {b.named.origin === 'series' && (
           <span className="ml-1 text-muted" title="Z serii" aria-label="z serii" data-testid="series-mark">
             {SERIES_MARK}
+          </span>
+        )}
+        {counter && (
+          <span className="num ml-1 text-muted" title="Kroki" data-testid="steps-counter">
+            {counter}
           </span>
         )}
       </span>

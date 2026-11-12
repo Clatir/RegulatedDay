@@ -3,6 +3,9 @@ paths:
   - "src/shared/model/steps.ts"
   - "src/shared/engine/steps.ts"
   - "src/renderer/store/steps.ts"
+  - "src/renderer/features/steps/*"
+  - "tests/web/steps-screens.test.ts"
+  - "tests/e2e/steps-screens.spec.ts"
   - "src/shared/data/dayEdits.ts"
   - "src/shared/data/merge.ts"
   - "tests/unit/engine/steps.test.ts"
@@ -14,7 +17,7 @@ paths:
 # Kroki bloku i zadania (SNT5)
 
 Źródło prawdy: D440 (uzupełnia D388), D401/D404 (serie), D384/D402/D408 (Sprawy); opis dla użytkownika –
-`docs/specyfikacja-rozszerzen.md` „## 8. Podzadania”. Decyzje T786–T793. Kroki nic nie liczą (energia, punkty, reguły
+`docs/specyfikacja-rozszerzen.md` „## 8. Podzadania”. Decyzje T786–T793, ekrany T795–T799. Kroki nic nie liczą (energia, punkty, reguły
 dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyta (D72); nic nie gra dźwięku.
 
 ## Pliki
@@ -26,6 +29,10 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
   `taskStepsEdits` (zadanie + blok od dziś), `templateStepsChanged`, `seriesStepsPatch`, `taskOfBlock`, `dayBlockNow`.
 - `renderer/store/steps.ts` – API okna: `tickBlockStep`, `changeBlockSteps`, `tickTaskStep`, `changeTaskSteps`,
   `changeTemplateSteps`, `changeSeriesSteps` (zakres serii), `undoSteps`; wynik `StepsResult` (jak `CaseResult` bez `id`).
+- `features/steps/` – ekrany (T795–T799): `StepsEditor` (lista, pole „Dodaj krok”, ptaszki, tytuł w miejscu, uchwyt i Alt+↑/↓),
+  `stepsUi` (`stepsAnswer` – „Cofnij” po usunięciu, `keyMove`, `dropMove`, `refusedOp`), `blockSteps` (`saveBlockSteps` –
+  panel dnia: szkic, zakres serii, dzień). Używają go `TodayPage` (slot `steps` w `BlockEditor`), `TemplatesPage`, `SeriesEditor`
+  (bez ptaszków) i `CasesPage` (wiersz zadania); licznik – `TimelineItem.steps` (`dayAxis`), `HorizonBlock.steps` (Tydzień).
 
 ## Zasady
 - Lista w bloku (`PlanBlock.steps`, blok szablonu, `SeriesBlock.steps`, `RequestRecord.steps`); odhaczenie jest dniowe

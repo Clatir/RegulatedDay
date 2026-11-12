@@ -33,6 +33,8 @@ export interface TimelineItem {
   waits?: boolean
   /** An occurrence of a series: the mark `SERIES_MARK` stands by its name (D401). */
   series?: boolean
+  /** The counter of the block's steps „✓ 3/4” (D440, `stepsCounter`); none – no steps. */
+  steps?: string
   /** Its planned start may be dragged (D305): not begun, with its own start time. */
   movable?: boolean
   /**
@@ -422,6 +424,11 @@ export function Timeline({
           {i.series && (
             <span className="shrink-0 text-muted" title="Z serii" aria-label="z serii" data-testid="series-mark">
               {SERIES_MARK}
+            </span>
+          )}
+          {i.steps && (
+            <span className="num shrink-0 text-[11px] text-muted" title="Kroki" data-testid="steps-counter">
+              {i.steps}
             </span>
           )}
         </div>

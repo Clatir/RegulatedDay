@@ -38,6 +38,9 @@ import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { Timeline } from '../plan/Timeline'
 import { SeriesEditor, useSeriesNames } from '../series/SeriesEditor'
 import { seriesBlockOf } from '../series/seriesForm'
+import { StepsEditor } from '../steps/StepsEditor'
+import { stepsAnswer } from '../steps/stepsUi'
+import { changeTemplateSteps } from '../../store/steps'
 import { SettingNumber } from '../settings/SettingNumber'
 import { templateAdd, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
 
@@ -255,7 +258,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const axis = useMemo(() => dayAxis(model, names, null), [model, names])
   // Template blocks have the day's derived ids: the block of the version is found by its source.
   const byPlanId = useMemo(() => new Map(model.ctx.plan.filter((b) => b.origin === 'template' && b.sourceId).map((b) => [b.id, b.sourceId!])), [model])
-  const items = useMemo(() => axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), movable: i.movable === true && byPlanId.has(i.id) })), [axis, byPlanId])
+  const items = useMemo(() => axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), steps: undefined, movable: i.movable === true && byPlanId.has(i.id) })), [axis, byPlanId])
   const block = version.blocks.find((b) => b.id === selected) ?? null
   /** A block of the version changed; answers what became of the save (the panel's note puts back what it shows only when it was refused – also when the template is gone: nothing was written; a question keeps it). */
   const patchBlock = (id: string, patch: Partial<PlanBlock>): Promise<SaveAnswer> => {
@@ -400,6 +403,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           computers={view.computers}
           sessions={settings.sessions}
           onChange={(patch) => patchBlock(block.id, patch)}
+          // D440: the list without boxes – every day made from the template starts with none ticked.
+          steps={<StepsEditor steps={block.steps} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}
           onClose={() => setSelected(null)}
           actions={
             <button type="button" className="btn" onClick={() => void saveVersion((v) => ({ blocks: v.blocks.filter((b) => b.id !== block.id) })).then(() => setSelected(null))} data-testid="template-block-remove">
