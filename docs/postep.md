@@ -1,6 +1,6 @@
 # Postęp
 
-Stan bieżący i kolejka (≤ 20 KB, D351). Zakończone wpisy: ciąg F – `docs/archiwum/postep-ciag-F.md`, ciąg E i sprawy
+Stan bieżący i kolejka (≤ 20 KB, D351). Zakończone wpisy: ciąg L (L1) – `docs/archiwum/postep-ciag-L.md`, ciąg F – `docs/archiwum/postep-ciag-F.md`, ciąg E i sprawy
 z 1–3.11 – `docs/archiwum/postep-ciag-E.md`, ciągi A–D – `docs/archiwum/postep-ciagi-A-D.md`, E0–E6 –
 `docs/archiwum/postep-E0.md` … `postep-E6.md` (Grep po wersji, zadaniu albo decyzji). Po scaleniu PR jego wpis idzie do
 archiwum ciągu, tu zostaje jedna linia w tabeli.
@@ -64,8 +64,9 @@ Wpisy obu zadań, „Uwagi na później” i „Pytania na później” – `doc
    (`gh run list --branch main --status in_progress`), po `git merge origin/main` i zielonym CI na tym stanie. Druga
    sesja pisze w `docs/postep.md` tylko we własnej sekcji „SNT3 i SNT6 – stan”.
 5. Ciąg L (blok 2, D380) – w toku od 12.11 w osobnej sesji (drzewo `.claude/worktrees/wl1`, bez pauz między pozycjami –
-   polecenie użytkownika 12.11): L1 OPS1 serie (1.12.0) → L2 OPS2 „Sprawy” → L3 OPS3 bufory (po K). Równolegle sesja HKU1
-   (blok 4, numery D405+, T720–T749); do `main` scala naraz jedna – L1 pierwsze, HKU1 po nim. Bloki 3–4 poza HKU1 bez
+   polecenie użytkownika 12.11): L1 OPS1 serie (1.12.0, scalone) → L2 OPS2 „Sprawy” (1.14.0, gotowe na gałęzi, PR po 1.13.0)
+   → L3 OPS3 bufory (po K). Równolegle sesja HKU1 (blok 4, numery D405+, T720–T749, wydaje 1.13.0); do `main` scala naraz
+   jedna – HKU1 pierwsze, L2 po nim. Bloki 3–4 poza HKU1 bez
    decyzji o starcie; FBL1 odłożone (D364).
 
 ## Ciąg L – stan (D380)
@@ -74,21 +75,20 @@ polecenie użytkownika (pytania zadane w D380–D386, D401–D403).
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| L1 OPS1 serie powtarzalne | 1.12.0 | – | gałąź `claude/l1-serie`; logika `wykonawca-opus`, ekrany `wykonawca-sonnet`; dwie rundy xhigh (15 + 15 uwag; poprawione z testami – seria jednym rekordem, `RULES_VERSION` 8, rozsuwanie po „Cała seria” dziś, pamięć typów dni licznika); PR w toku | ok. 5 h (5–8 h) |
+| L1 OPS1 serie powtarzalne | 1.12.0 | #77 | scalone 12.11, wydanie 1.12.0 opublikowane 12.11; wpis i uwagi – `docs/archiwum/postep-ciag-L.md` | ok. 5 h (5–8 h) |
+| L2 OPS2 „Sprawy” | 1.14.0 | – | gałąź `claude/l2-sprawy` (HEAD 6cdd331 + dokumenty); PR do otwarcia po wydaniu 1.13.0 (sesja HKU1), wersja 1.14.0 (konflikt `package.json` i `CHANGELOG.md` przy scaleniu); logika `wykonawca-opus`, ekrany `wykonawca-sonnet`, przegląd xhigh | ok. 4 h (wykonawcy; plan 8–12 h) |
 
-**L1 – wpis (12.11):** seria = rekord `series/<id>.json` z wersjami od daty (`model/series.ts`; „Cała seria” i „To i następne” –
-nowa wersja od dnia, jeden licznik, T715); wystąpienia w migawce dnia jak bloki szablonu (`engine/series.ts`, `origin: 'series'`,
-id `derivedId(dzień,'ser',korzeń)`, migawka starszej wersji – nałożone, T701), dziś – wpis w pliku dnia, póki niezaczęte (T706,
-`seriesOff` – T719); rozsuwanie bloków szablonu w `createDay` (`pushedBySeries`, pamięć wyniku, T705, T718); dni szczególne i
-pytanie planu porannego (T704); licznik „po N” z typów dni (T703, T717); operacje okna w `main/data/series.ts` jedną partią.
-Ekrany: `renderer/features/series/` (pole „Powtarzaj”, pytanie zakresu, edycja z listy), ↻ w „Dziś”, „Tygodniu”, komórce
-„Kalendarza” (`seriesOnDay`), lista w „Szablonach”, karta w `MorningPlan`, Ctrl K. Decyzje D404 (trzy przypadki z budowy i trzy
-z ekranów), T700–T719. Testy: `series.test.ts` (unit, fs), `series-reads.test.ts`, `series-form.test.ts`, `series-screens.test.ts`,
-`series.spec.ts` (E2E). Odbiór L1.1–L1.4.
-**Uwagi na później (L1):** klucz pamięci `pushedBySeries` to `JSON.stringify` całej migawki (z ustawieniami), licznik
-`seriesPushRuns` w kodzie produkcyjnym; trzy kopie reguły „zakończona” (`search/records.ts`, `TemplatesPage`, `SeriesEditor`) –
-wspólne `seriesEnded`; martwa logika części serii w `seriesOfBlock`/`currentSeries` i komentarze o podziale (po T715); test
-rozsuwania „Cała seria” dziś w `tests/fs/series.test.ts` pomija się po ok. 01:30 (prawdziwy zegar).
+**L2 – wpis (12.11):** „Sprawy” zamiast „Próśb” (D383–D385, D402, D408): rekord `requests/<id>.json` z `kind`, `list`, `listDay`,
+`doneAt` – stare pliki czytane bez migracji w miejscu, `state` lustrem dla starszych wersji (T750); listy i 04:00 liczone z daty
+(T751); „zaplanowane” wyliczane z pliku dnia i logu (T752, T760); sprawa na osi, plan poranny (T753, T761, T782); „Zadanie
+zrobione?” w pasku (T754); szybki zapis – skrót globalny, okienko, „+” (T755, T756, T759, T763 – domyślny Win+Alt+N, D408);
+rytuał (T757, T762, T783); Ctrl K (T758). Ekrany: `renderer/features/cases/` (strona, panel przy osi „Dziś”, przeciąganie,
+rytuał), pole skrótu w Ustawieniach, nazwy zadań w Historii, „Danych” i pytaniach (T780–T785). Decyzje T750–T763, T780–T785,
+D408. Testy: 2300 unit, 43 E2E lokalnie (`cases.spec.ts`, `quick.spec.ts`; `quick-windows.spec.ts` tylko CI na Windows).
+Odbiór L2.1–L2.6.
+**Uwagi na później (L2):** przechwytywanie klawiszy w polu skrótu (dziś zwykły tekst); E2E „Zadanie zrobione?” w pasku (potrzebny
+zakończony blok); przeciąganie z panelu bez klawiatury i dotyku (jest „Zaplanuj”); ponowienie skrótu co 60 s testowane tylko
+przez `retry()`; sprawy zaplanowane ponad 14 dni wstecz mówią „zaplanowane” bez godziny (`SCHEDULED_LOOKBACK_DAYS`).
 
 ## Ciąg J – stan (D363)
 **Przed ciągiem J (10.11):** zakres i „Gotowe, gdy” – `docs/plan.md`; decyzje D363–D369 (pytania w trzech rundach
