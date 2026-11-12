@@ -12,7 +12,7 @@ import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { CaseDays, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
-import { goneBlocks, type CasesRitual } from '@shared/engine/cases'
+import { dayFactsOf, type CasesRitual } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
 import { newTask } from '@shared/model/requests'
 import type { CloseHow } from '@shared/model/events'
@@ -47,6 +47,8 @@ import { DataService, STOP_TIMEOUT_MS, type ServiceOptions } from './service'
 
 /** No daily backup for this many days: the window warns (spec „po 3 dniach bez kopii także w oknie głównym”). */
 export const BACKUP_STALE_DAYS = 3
+/** The most days `caseDays` reads at once (a guard; today and later first). */
+export const CASE_DAYS_MAX = 62
 
 /**
  * The backups as the window shows them (A3-06): the last own failure, the newest daily backup and „none for 3 days” – 3
@@ -171,6 +173,10 @@ export class DataHub {
   private lastSignature = ''
   /** The series the window saw last, of its folder (`records`: a read that fails gives these). */
   private lastSeries: { folder: string | null; records: RawRecord[]; days: Record<string, string> } | null = null
+  /** The facts of the days gone by `caseDays` read, by the signature of their logs (T768). */
+  private readonly caseDayMemo = new Map<string, { key: string; facts: { gone: string[]; begun: string[] } }>()
+  /** How many days `caseDays` folded the facts of (the tests: its memory works). */
+  caseDayFolds = 0
   private retry: ReturnType<typeof setTimeout> | null = null
   private backedUp = false
   private openingDir: string | null = null
@@ -535,19 +541,42 @@ export class DataHub {
    */
   async caseDays(dates: string[]): Promise<CaseDays> {
     const f = this.need()
-    const list = [...new Set(dates.filter((d) => isIsoDate(d)))].slice(0, 62)
+    const today = logicalDayOf(f.clock.now())
+    // Today and the days to come first, then the days gone by from the newest – the limit (a guard) drops the oldest.
+    const unique = [...new Set(dates.filter((d) => isIsoDate(d)))]
+    const list = [...unique.filter((d) => d >= today).sort(), ...unique.filter((d) => d < today).sort().reverse()].slice(0, CASE_DAYS_MAX)
     const gone: Record<string, string[]> = {}
+    const begun: Record<string, string[]> = {}
     for (const d of list) {
       try {
         // Only a log read in full: a part missing (another computer's log) could hold the „Cofnij” of a parking – such a
         // day is unknown, its sprawy „zaplanowane” as its file says, never freed by it (T766).
         const read = await f.readDay(d)
-        if (read.complete) gone[d] = [...goneBlocks(d, read.events)]
+        if (!read.complete) continue
+        const facts = this.caseDayFacts(d, d < today, read)
+        gone[d] = facts.gone
+        begun[d] = facts.begun
       } catch {
         /* the log unreadable now */
       }
     }
-    return { files: await this.dayFiles(list), gone }
+    for (const d of this.caseDayMemo.keys()) if (!list.includes(d)) this.caseDayMemo.delete(d)
+    return { files: await this.dayFiles(list), gone, begun }
+  }
+
+  /** The blocks of a day gone and begun by its log; a day gone by from memory while its log is as it was (T768). */
+  private caseDayFacts(date: string, past: boolean, read: { lastByComputer: unknown; events: readonly unknown[]; copies: number }): { gone: string[]; begun: string[] } {
+    const key = JSON.stringify([read.lastByComputer, read.events.length, read.copies])
+    const was = past ? this.caseDayMemo.get(date) : undefined
+    if (was?.key === key) return was.facts
+    this.caseDayFolds++
+    const out = { gone: [] as string[], begun: [] as string[] }
+    for (const [id, b] of dayFactsOf(date, read.events as Parameters<typeof dayFactsOf>[1]).facts.blocks) {
+      if (b.startedAt != null) out.begun.push(id)
+      else if (b.parkedAt != null || b.cancelledAt != null) out.gone.push(id)
+    }
+    if (past) this.caseDayMemo.set(date, { key, facts: out })
+    return out
   }
 
   /**

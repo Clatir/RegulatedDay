@@ -16,6 +16,7 @@ import { DEFAULT_CATEGORIES } from '@shared/model/categories'
 import { dayFileFrom } from '@shared/model/plan'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { logicalDayOf, placeLogical } from '@shared/time/day'
+import { addDays } from '@shared/time/zone'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs } from '../../src/main/data/fsio'
 import { DataHub } from '../../src/main/data/hub'
@@ -238,7 +239,7 @@ describe('„Zadanie zrobione?” na dwóch komputerach (D384, T754)', () => {
     await b.folder.close('quit')
   })
 
-  it('rytuał spraw liczy dzień raz na zmianę danych (T762): to samo wywołanie co minutę – z pamięci; zmiana sprawy – od nowa', async () => {
+  it('rytuał spraw: odpowiedź na pytanie (rekord) – pytanie znika (T762, bez pamięci – T771)', async () => {
     const dataDir = join(root, 'data')
     mkdirSync(join(dataDir, 'days', '2026'), { recursive: true })
     mkdirSync(join(dataDir, 'requests'), { recursive: true })
@@ -252,18 +253,12 @@ describe('„Zadanie zrobione?” na dwóch komputerach (D384, T754)', () => {
     expect((await a.folder.timerClick({ a: 'next', day: DAY } as never)).ok).toBe(true)
     await a.folder.log.flush()
     clock.now = placeLogical(DAY, 20 * 60)
-    const first = await a.folder.casesRitual(DAY)
-    expect(first.questions.map((q) => q.task)).toEqual(['t1'])
-    const runs = a.folder.casesRitualRuns
-    clock.now += 60_000
-    expect(await a.folder.casesRitual(DAY)).toBe(first)
-    expect(a.folder.casesRitualRuns).toBe(runs)
+    expect((await a.folder.casesRitual(DAY)).questions.map((q) => q.task)).toEqual(['t1'])
     // The task answered (its record): counted again, the question gone.
     const before = (await a.folder.recordView(rel))!
     await a.folder.edit([{ ...recordEdit(rel, before, { ...before, state: 'done', list: 'done', doneAt: clock.now })!, edits: recordEdit(rel, before, { ...before, state: 'done', list: 'done', doneAt: clock.now })!.edits.map((x) => ({ ...x, path: x.path.map(String) })) }])
     clock.now += 61_000
     expect((await a.folder.casesRitual(DAY)).questions).toEqual([])
-    expect(a.folder.casesRitualRuns).toBe(runs + 1)
     await a.folder.close('quit')
   })
 
@@ -295,6 +290,38 @@ describe('„Zadanie zrobione?” na dwóch komputerach (D384, T754)', () => {
     clock.now += 61_000
     expect((await a.folder.casesRitual(DAY)).back.map((r) => r.note)).toEqual(['nowa'])
     await a.folder.close('quit')
+  })
+})
+
+describe('dni „Spraw” (T768)', () => {
+  it('ponad limit dni: najpierw dziś i przyszłe, potem od najnowszych minionych; minione z pamięci, póki log się nie zmienił', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const today = logicalDayOf(Date.now())
+      const past = Array.from({ length: 70 }, (_, i) => addDays(today, -(i + 1)))
+      const coming = [today, addDays(today, 1), addDays(today, 30)]
+      const out = await hub.caseDays([...past, ...coming].sort())
+      expect(Object.keys(out.gone)).toHaveLength(62)
+      for (const d of coming) expect(out.gone).toHaveProperty(d)
+      expect(out.gone).toHaveProperty(past[0]!)
+      expect(out.gone).not.toHaveProperty(past[69]!)
+      // Asked again with nothing changed: no day gone by folded again (today and later – every time).
+      const folds = hub.caseDayFolds
+      await hub.caseDays([...past, ...coming].sort())
+      expect(hub.caseDayFolds - folds).toBe(coming.length)
+      // A new event in a day gone by: that day only, again.
+      hub.service!.folder.append({ day: past[0]!, dom: 'meta', k: 'observe.alive', at: placeLogical(past[0]!, 600) })
+      await hub.service!.folder.log.flush()
+      const again = hub.caseDayFolds
+      await hub.caseDays([...past, ...coming].sort())
+      expect(hub.caseDayFolds - again).toBe(coming.length + 1)
+    } finally {
+      await hub.close('quit')
+    }
   })
 })
 

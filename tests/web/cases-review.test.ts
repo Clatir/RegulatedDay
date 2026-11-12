@@ -38,7 +38,7 @@ function stub(records: RawRecord[], days: Record<string, RawRecord | null>, gone
   const files = (dates: string[]) => Object.fromEntries(dates.filter((d) => d in days).map((d) => [d, days[d] ?? null]))
   const rd: Partial<RdApi> = {
     dayFiles: async (dates) => files(dates),
-    caseDays: async (dates) => ({ files: files(dates), gone: Object.fromEntries(dates.filter((d) => d in days).map((d) => [d, gone[d] ?? []])) }),
+    caseDays: async (dates) => ({ files: files(dates), gone: Object.fromEntries(dates.filter((d) => d in days).map((d) => [d, gone[d] ?? []])), begun: Object.fromEntries(dates.filter((d) => d in days).map((d) => [d, []])) }),
     edit: async (entries) => (sent.push(entries), entries.map(() => ({ status: 'applied' as const }))),
     dataView: async () => view()
   }

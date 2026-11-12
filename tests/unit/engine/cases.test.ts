@@ -191,7 +191,7 @@ describe('plan poranny (D384)', () => {
       ['t1', out.blocks[1]!.id, 'planned']
     ])
     // A second click: the records are planned already – nothing more.
-    const again = morningPlan({ date: TODAY, dayFile: out.day, requests: [out.records[0]!.raw], tasks: [out.records[1]!.raw], startMin: 700, rules, at: at(TODAY, 8) })
+    const again = morningPlan({ date: TODAY, dayFile: out.days[TODAY]!, requests: [out.records[0]!.raw], tasks: [out.records[1]!.raw], startMin: 700, rules, at: at(TODAY, 8) })
     expect(again.blocks).toEqual([])
   })
 })

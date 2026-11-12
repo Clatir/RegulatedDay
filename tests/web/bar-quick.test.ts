@@ -7,15 +7,20 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import type { RdApi } from '@shared/api'
 import { installEscape } from '@renderer/lib/escape'
+import { useWidget } from '@renderer/store/widget'
 import { Bar } from '@renderer/widget/Bar'
+import { PanelApp } from '@renderer/widget/PanelApp'
 import { noFolderView, type WidgetView } from '@shared/widget'
 
+let uninstallEscape: () => void = () => undefined
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  installEscape()
+  uninstallEscape = installEscape()
 })
+afterAll(() => uninstallEscape())
 
 let root: Root | null = null
 let host: HTMLElement | null = null
@@ -94,10 +99,81 @@ describe('pole szybkiego zapisu: tekst tylko przez zmianę układu (T767)', () =
     expect(document.activeElement).toBe(field())
     const other = document.createElement('button')
     document.body.append(other)
-    other.focus()
-    await act(async () => root!.render(createElement(Bar, { view: noFolderView('failed'), mode: 'main' })))
-    expect(field()?.value).toBe('x')
-    expect(document.activeElement).toBe(other)
-    other.remove()
+    try {
+      other.focus()
+      await act(async () => root!.render(createElement(Bar, { view: noFolderView('failed'), mode: 'main' })))
+      expect(field()?.value).toBe('x')
+      expect(document.activeElement).toBe(other)
+    } finally {
+      other.remove()
+    }
+  })
+})
+
+describe('panel otwarty „+” paska pulpitu (T771)', () => {
+  let target: ((t: { line: string | null; day: string | null; quick?: boolean } | null) => void) | null = null
+  beforeEach(() => {
+    const rd: Partial<RdApi> = { onPanelTarget: (cb) => ((target = cb), () => undefined), panelTouch: () => undefined, panelClose: () => undefined, barLayout: () => undefined }
+    ;(window as unknown as { rd: Partial<RdApi> }).rd = rd
+  })
+  afterEach(() => {
+    delete (window as unknown as { rd?: unknown }).rd
+  })
+
+  it('każde nowe otwarcie daje fokus polu – także gdy już jest otwarte; flaga nie zostaje na później', async () => {
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    const other = document.createElement('button')
+    document.body.append(other)
+    try {
+      await act(async () => root!.render(createElement(Bar, { view: dayView(), mode: 'panel', quickAt: { n: 1 } })))
+      expect(document.activeElement).toBe(field())
+      other.focus()
+      await act(async () => root!.render(createElement(Bar, { view: dayView(), mode: 'panel', quickAt: { n: 2 } })))
+      expect(document.activeElement).toBe(field())
+      other.focus()
+      // A change of layout afterwards: the focus stays where it is.
+      const same = { n: 3 }
+      await act(async () => root!.render(createElement(Bar, { view: dayView(), mode: 'panel', quickAt: same })))
+      other.focus()
+      await act(async () => root!.render(createElement(Bar, { view: noFolderView('failed'), mode: 'panel', quickAt: same })))
+      expect(document.activeElement).toBe(other)
+    } finally {
+      other.remove()
+    }
+  })
+
+  it('panel: „Odcinam się” w trakcie – ten sam pasek (tekst zostaje), otwarcie nie wraca ani nie zabiera fokusu', async () => {
+    ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
+      observe() {}
+      disconnect() {}
+    }
+    useWidget.setState({ view: dayView() })
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    const other = document.createElement('button')
+    document.body.append(other)
+    try {
+      await act(async () => root!.render(createElement(PanelApp)))
+      await act(async () => target!({ line: null, day: null, quick: true }))
+      expect(document.activeElement).toBe(field())
+      await act(async () => {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+        set.call(field()!, 'abc')
+        field()!.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      other.focus()
+      await act(async () => useWidget.setState({ view: { ...dayView(), hidden: true, stateLine: 'Odcinam się od 10:00' } }))
+      expect(field()?.value).toBe('abc')
+      expect(document.activeElement).toBe(other)
+      await act(async () => useWidget.setState({ view: dayView() }))
+      expect(field()?.value).toBe('abc')
+      expect(document.activeElement).toBe(other)
+    } finally {
+      other.remove()
+      useWidget.setState({ view: null })
+    }
   })
 })

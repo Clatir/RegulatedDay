@@ -13,7 +13,7 @@ import { dayFileFrom, planBlock } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom } from '@shared/model/requests'
 import { placeLogical } from '@shared/time/day'
 import { planningOf, planOnAxis } from '@renderer/features/cases/planOnAxis'
-import { planCase, planMorning } from '@renderer/store/cases'
+import { DAY_UNREADABLE, planCase, planMorning } from '@renderer/store/cases'
 import { useData } from '@renderer/store/data'
 import type { DayModel } from '@renderer/store/day'
 import { useUi } from '@renderer/store/ui'
@@ -37,7 +37,7 @@ function stub(records: RawRecord[], days: Record<string, RawRecord | null>, gone
   const files = (dates: string[]) => Object.fromEntries(dates.filter((d) => d in days).map((d) => [d, days[d] ?? null]))
   const rd: Partial<RdApi> = {
     dayFiles: async (dates) => files(dates),
-    caseDays: async (dates) => ({ files: files(dates), gone: Object.fromEntries(dates.filter((d) => d in days).map((d) => [d, gone[d] ?? []])) }),
+    caseDays: async (dates) => ({ files: files(dates), gone: Object.fromEntries(dates.filter((d) => d in days).map((d) => [d, gone[d] ?? []])), begun: Object.fromEntries(dates.filter((d) => d in days).map((d) => [d, []])) }),
     edit: async (entries) => (sent.push(entries), entries.map(() => ({ status: 'applied' as const }))),
     dataView: async () => view(),
     planPushed
@@ -75,7 +75,9 @@ describe('rozsuwanie przy zaplanowaniu sprawy (T764)', () => {
     const { planPushed } = stub([t], { [D1]: { schema: 1, date: D1, blocks: [] } })
     const plan = [block({ id: 'c', cat: 'inne', at: '10:30', min: 30, origin: 'user' })]
     const s = new Scenario({ date: D1, plan }).observe('07:00', null)
-    const ctx = s.contextAt(s.at('08:00'))
+    // A block of yours is the file's, never the snapshot's (made from the templates).
+    const at = s.contextAt(s.at('08:00'))
+    const ctx = { ...at, snapshot: { ...at.snapshot, blocks: [] } }
     const model = { date: D1, ctx, state: computeDay(ctx), data: { dayFile: { schema: 1, date: D1, blocks: [] } } } as unknown as DayModel
     const res = await planOnAxis(model, D1, requestFrom(t)!, 'x', lm('10:15'))
     expect(res.saved).toBe(true)
@@ -109,13 +111,13 @@ describe('plan poranny i stary blok (T765)', () => {
   })
 })
 
-describe('dzień łańcucha „przenieś” nieczytelny (T765)', () => {
-  it('nie blokuje zaplanowania – stary blok zostaje, nowy powstaje', async () => {
+describe('dzień łańcucha „przenieś” nieczytelny (T765, cofnięte przez T769)', () => {
+  it('odmowa – stary blok mógłby zostać obok nowego (nigdy cichy duplikat)', async () => {
     const t = { ...newTask('t1', placeLogical(D1, 600), D1, { title: 'x', list: 'week' })!, day: D1, block: 'old', state: 'planned' }
     // D1 not readable now (not in the window's answer), the drop on D2.
     const { sent } = stub([t], { [D2]: null })
     const r = await planCase('t1', D2, lm('10:00'))
-    expect(r).toMatchObject({ saved: true, error: null })
-    expect(sent[0]!.map((e) => e.rel).sort()).toEqual([paths.day(D2), paths.record('request', 't1')].sort())
+    expect(r).toMatchObject({ saved: false, error: DAY_UNREADABLE })
+    expect(sent).toEqual([])
   })
 })

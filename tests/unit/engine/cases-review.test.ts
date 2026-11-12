@@ -6,9 +6,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { caseBlock, caseItems, goneBlocks, morningCases, morningPlan, ownTakenBlock, scheduledDays, scheduledOf } from '@shared/engine/cases'
-import { planBlock } from '@shared/model/plan'
 import { DEFAULT_CATEGORIES } from '@shared/model/categories'
-import { dayFileFrom } from '@shared/model/plan'
+import { dayFileFrom, planBlock } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom, type RequestRecord } from '@shared/model/requests'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'

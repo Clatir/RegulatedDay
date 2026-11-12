@@ -18,7 +18,7 @@ paths:
 # Sprawy, Skrzynka, szybki zapis (OPS2, L2)
 
 Źródło prawdy: D383, D384, D385, D402 (`docs/decyzje.md`), opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`
-„## 9. Prawdziwy Backlog i Skrzynka Spraw”. Decyzje T750–T758 (logika), T759–T767 (po przeglądach), T780–T785 (ekrany). Prośby w dniu (zdarzenia logu) – reguły `prosby-warianty.md`.
+„## 9. Prawdziwy Backlog i Skrzynka Spraw”. Decyzje T750–T758 (logika), T759–T771 (po przeglądach), T780–T785 (ekrany). Prośby w dniu (zdarzenia logu) – reguły `prosby-warianty.md`.
 
 ## Pliki
 - `model/requests.ts` – rekord sprawy w `requests/<id>.json` (te same pliki co prośby, T750): `kind` (`task` / `request`),
@@ -28,7 +28,7 @@ paths:
 - `engine/cases.ts` – czyste reguły: `listOf` (04:00 z daty, D402 dla starych plików), `rolledFrom`, `doneDayOf`,
   `doneRecently` (7 dni), `scheduledOf` (blok w pliku dnia, `movedTo`, bez bloków `goneBlocks` z logu – T760), `scheduledDays`
   (dni wszystkich spraw niezrobionych z blokiem – T766), `caseItems`, `todayMinutes` / `todayHeader`, `caseBlock`,
-  `ownTakenBlock` (jedna reguła starego bloku – T764), `caseDayToRead`,
+  `ownTakenBlock` i `oldBlockTakeable` (który stary blok i kiedy: dziś i później, niezaczęty według logu – T764, T769), `caseDayToRead`,
   zapisy na surowym JSON (`listedRaw`, `scheduledRaw`, `unscheduledRaw`, `patchedRaw`, `taskAnswerRaw`), `casePlan`
   (sprawa na osi), `morningCases` / `morningPlan` (`skipped`, `days` – też dzień zdjętego starego bloku), `taskQuestions` (pasek i rytuał),
   `dayFactsOf`, `casesRitual`.
@@ -52,8 +52,9 @@ paths:
 - „Zaplanowane” = blok rekordu jest w pliku dnia i nie jest zaparkowany ani odwołany przed startem w logu dnia; usunięcie /
   odwołanie / „Cofnij” bloku nie piszą rekordu (T752, T760). Plan poranny planuje według tej samej reguły (T761).
 - Ponowne zaplanowanie: stary niezaczęty blok sprawy wychodzi z dnia (także po `movedTo`) i nie wraca przez rozsuwane –
-  rozsuwanie w oknie liczone bez niego (`planningOf`, `ownTakenBlock`); przy zapisie przesunięty start tylko dla bloku, który
-  jest w dniu po zmianie (`pushedInto`), `planCase` → `moved` (licznik „Przesunięto N bloków”, T764).
+  rozsuwanie w oknie liczone bez niego (`planningOf`, `ownTakenBlock`); przy zapisie przesunięty start tylko dla bloku z planu
+  dnia po zmianie i ze zmienionym startem (`pushedInto`, `planOf`), `planCase` → `moved` (T764, T770). Dzień starego bloku
+  nieczytelny albo (od dziś) z niepełnym logiem – `DAY_UNREADABLE`; dzień miniony nigdy nie jest przepisywany (T769).
 - Skrót: `quickKey` + `quickOn` (wyłączenie zostawia Twój klucz); zajęty – ponawiany (ustawienia, `quickShortcut`, co 60 s – T759).
 - „Zadanie zrobione?”: odpowiedź to rekord (T754) – nie `question.answer`; linia `task:<dzień>:<blok>`, cicha, 3 h.
 - „Powtarzaj” nie dotyczy bloku zadania ani próśb (D408): `blockNotSeries` (kod `task` / `requests`), w panelu bloku `RepeatNote`.

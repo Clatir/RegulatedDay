@@ -6,6 +6,7 @@
  */
 import { paths } from '@shared/data/paths'
 import { caseBlock, ownTakenBlock } from '@shared/engine/cases'
+import { dayPlan } from '@shared/engine/createDay'
 import { computeDay } from '@shared/engine/day'
 import { logicalClock } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
@@ -44,15 +45,16 @@ export function planningOf(model: DayModel, today: string, r: RequestRecord, sta
 export const plannedText = (title: string, block: Pick<PlanBlock, 'startMin'>): string => (block.startMin != null ? `Zaplanowano „${title}” na ${logicalClock(block.startMin)}` : `Zaplanowano „${title}”`)
 
 /**
- * The sprawa `r` on the axis of `model`'s day at `startMin`. `begun`: a block of the day shown that has run stays where it
- * ran; the day's file as the window knows it is the fallback for one not readable now. Returns whether it was saved.
+ * The sprawa `r` on the axis of `model`'s day at `startMin`: whether its old block began is the log's (`planCase`, T769);
+ * the day's file as the window knows it is the fallback for one not readable now; the pushed blocks are written while the
+ * day's plan after the change has them (its snapshot with the new file, T770). Returns whether it was saved.
  */
 export async function planOnAxis(model: DayModel, today: string, r: RequestRecord, title: string, startMin: number): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
   const { pushed } = planningOf(model, today, r, startMin)
   const res = await planCase(r.id, model.date, startMin, {
-    begun: (date, block) => (date === model.date ? model.state.facts.blocks.get(block)?.startedAt != null : date <= today),
     pushed,
-    seen: (date) => (date === model.date ? model.data.dayFile : undefined)
+    seen: (date) => (date === model.date ? model.data.dayFile : undefined),
+    planOf: (file) => dayPlan(model.ctx.snapshot, file)
   })
   if (!res.saved || !res.block) return res
   if (res.moved > 0) {

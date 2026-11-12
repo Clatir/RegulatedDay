@@ -29,6 +29,10 @@ function stub(records: RawRecord[], days: Record<string, RawRecord | null> = {})
   const view = (): DataView => ({ status: 'open', rd: null, templates: [], lectures: [], requests: state.records, routines: [], series: [], seriesDays: {} }) as unknown as DataView
   const rd: Partial<RdApi> = {
     dayFiles: async (dates) => Object.fromEntries(dates.filter((d) => d in state.days).map((d) => [d, state.days[d] ?? null])),
+    caseDays: async (dates) => {
+      const known = dates.filter((d) => d in state.days)
+      return { files: Object.fromEntries(known.map((d) => [d, state.days[d] ?? null])), gone: Object.fromEntries(known.map((d) => [d, []])), begun: Object.fromEntries(known.map((d) => [d, []])) }
+    },
     edit: async (entries) => (sent.push(entries), entries.map(() => ({ status: 'applied' as const }))),
     dataView: async () => view()
   }
@@ -92,13 +96,13 @@ describe('sprawy w oknie (store/cases.ts)', () => {
     expect(sent[2]!.map((e) => e.rel)).toEqual([paths.day(TODAY)])
   })
 
-  it('ponowne przeciągnięcie na jutro: dzisiejszy blok (być może zaczęty) zostaje, jutrzejszy – nowy', async () => {
+  it('ponowne przeciągnięcie na jutro: dzisiejszy blok niezaczęty według logu wychodzi (T769), jutrzejszy – nowy', async () => {
     const tomorrow = '2099-01-02'
     const t = { ...newTask('t1', Date.now(), TODAY, { title: 'x' })!, day: TODAY, block: 'old', state: 'planned' }
     const { sent } = stub([t], { [TODAY]: { schema: 1, date: TODAY, blocks: [{ id: 'old', categoryId: 'inne', startMin: 600, durationMin: 30, origin: 'user', task: 't1' }] }, [tomorrow]: null })
     const r = await planCase('t1', tomorrow, 700)
     expect(r.saved).toBe(true)
-    expect(sent[0]!.map((e) => e.rel).sort()).toEqual([paths.day(tomorrow), paths.record('request', 't1')].sort())
+    expect(sent[0]!.map((e) => e.rel).sort()).toEqual([paths.day(TODAY), paths.day(tomorrow), paths.record('request', 't1')].sort())
     const moved = { ...t, day: '2099-01-01', block: 'old' }
     const s2 = stub([moved], { '2099-01-01': { schema: 1, date: '2099-01-01', blocks: [{ id: 'old', categoryId: 'inne', startMin: 600, durationMin: 30, origin: 'user', task: 't1' }] }, [tomorrow]: null })
     const r2 = await planCase('t1', tomorrow, 700)

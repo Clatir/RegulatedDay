@@ -14,6 +14,7 @@ import {
   caseDayToRead,
   caseItems,
   casePlan,
+  scheduledOf,
   listedRaw,
   morningPlan,
   patchedRaw,
@@ -25,7 +26,7 @@ import {
   type GoneOf
 } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
-import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
+import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom, type CaseList, type NewTask } from '@shared/model/requests'
 import { settingsOn } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
@@ -232,17 +233,17 @@ export function removeCase(id: string): Promise<CaseResult> {
 }
 
 /**
- * A pushed start written into the day's file after the change (D367, T764): only for a block still in the day – the
- * file's (a block of several requests that only lost this sprawa moves too), or one of the day's snapshot never in the
- * file and not taken out of the day by it; a block of yours gone from the file (the sprawa's old one, one removed on
- * another computer) is never written back. Null – not written.
+ * A pushed start written into the day's file after the change (D367, T764, T770): only for a block the day's plan after
+ * the change still has (`planOf` – the day's snapshot with this file; without it: the file's, or a block of the snapshot
+ * the file never held nor takes away) and whose start it changes; a block gone from the day (the sprawa's old one, one
+ * removed on another computer, one the day no longer makes) is never written back. Null – nothing to write.
  */
-function pushedInto(next: RawRecord, date: string, x: CasePushed): RawRecord | null {
+function pushedInto(next: RawRecord, date: string, x: CasePushed, planOf?: (file: DayFile) => readonly PlanBlock[]): RawRecord | null {
   const file = dayFileFrom(next, date)
-  const now = file.blocks.find((b) => b.id === x.block.id)
-  if (now) return putBlock(next, { ...now, startMin: x.startMin })
-  if (x.block.origin === 'user' || x.block.origin === 'zjazd' || file.cancelled.includes(x.block.id) || x.block.id in file.movedTo) return null
-  return putBlock(next, { ...x.block, startMin: x.startMin })
+  const own = file.blocks.find((b) => b.id === x.block.id)
+  const inDay = planOf ? planOf(file).find((b) => b.id === x.block.id) : (own ?? (x.block.origin === 'user' || x.block.origin === 'zjazd' || file.cancelled.includes(x.block.id) || x.block.id in file.movedTo ? undefined : x.block))
+  if (!inDay || inDay.startMin === x.startMin) return null
+  return putBlock(next, { ...(own ?? inDay), startMin: x.startMin })
 }
 
 /** A block the drop pushes apart (D367, `dayPush.ts`): the block as the window knows it and its new start. */
@@ -254,39 +255,53 @@ export interface CasePushed {
 /**
  * A sprawa put on the axis of `date` at `startMin` (D384): a task – a flexible block of its category as long as its
  * estimate, the cost from the category; a request – a block of requests; the sprawa „zaplanowane” in it – one edit of
- * the day's file and the record. Its block of before is taken out of its day when it has not begun (`begun`; not said –
- * a block of today or a day gone by is taken for begun and stays). `pushed` – the blocks the drop pushes apart (D367), in
- * the same edit of the day; `seen` – the day's file as the window knows it, for one not readable now (else nothing is
- * written). Its „Cofnij” – `undoCase(result.undo)`.
+ * the day's file and the record. Its block of before leaves its day when that day is today or later and its log says it
+ * has not begun (`oldBlockTakeable`, T769); the day it stands on (followed through `movedTo`) not readable now, or its log
+ * not read in full – nothing is written (`DAY_UNREADABLE`: never a second block in silence). `pushed` – the blocks the
+ * drop pushes apart (D367), in the same edit of the day, written while the day's plan after the change has them
+ * (`planOf`, T770); `seen` – the day's file as the window knows it, for one not readable now. Its „Cofnij” –
+ * `undoCase(result.undo)`; `moved` – the starts that changed.
  */
-export async function planCase(id: string, date: string, startMin: number, o: { begun?: (date: string, block: string) => boolean; pushed?: readonly CasePushed[]; seen?: (date: string) => RawRecord | null | undefined } = {}): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
+export async function planCase(id: string, date: string, startMin: number, o: { pushed?: readonly CasePushed[]; seen?: (date: string) => RawRecord | null | undefined; planOf?: (file: DayFile) => readonly PlanBlock[] } = {}): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
   let block: PlanBlock | null = null
   let moved = 0
   const today = logicalDayOf(Date.now())
-  const begun = o.begun ?? ((d: string) => d <= today)
   const r = await change(async (put) => {
     const rel = relOf(id)
     const before = rawRecord(rel)
     if (!before) return 'Tej sprawy już nie ma.'
     const r0 = requestFrom(before)
     if (!r0) return 'Tej sprawy już nie ma.'
-    // The day of the drop must be read (or known to the window); the day the sprawa is planned in, followed to where its
-    // block was moved (`movedTo`), only if it can be read now – one that cannot: its old block stays (T765).
-    const days = await daysNow([date], o.seen)
-    if (!days) return DAY_UNREADABLE
-    for (let more = caseDayToRead(r0, days); more && !(more in days); more = caseDayToRead(r0, days)) {
-      const read = await daysNow([more], o.seen)
-      if (!read) break
-      Object.assign(days, read)
+    // The day of the drop (or as the window knows it) and the day the sprawa is planned in, followed to where its block was
+    // moved (`movedTo`) – with their logs: whether the old block began (T769).
+    const read = await window.rd.caseDays([date, ...(r0.day && r0.day !== date ? [r0.day] : [])])
+    const days: Record<string, RawRecord | null> = { ...read.files }
+    const begunIn: Record<string, string[]> = { ...(read.begun ?? {}) }
+    if (!(date in days)) {
+      const known = o.seen?.(date)
+      if (known === undefined) return DAY_UNREADABLE
+      days[date] = known
     }
-    const p = casePlan({ record: before, date, startMin, files: days, rules: settingsOn(useData.getState().rd.settings, date).categories, at: Date.now(), begun })
+    for (let more = caseDayToRead(r0, days); more && !(more in days); more = caseDayToRead(r0, days)) {
+      const next = await window.rd.caseDays([more])
+      // The day its old block stands on cannot be read now: it could stay beside the new one – nothing written (T769).
+      if (!(more in next.files)) return DAY_UNREADABLE
+      days[more] = next.files[more] ?? null
+      const begunHere = next.begun?.[more]
+      if (begunHere) begunIn[more] = begunHere
+    }
+    const begunOf = (d: string, b: string) => (begunIn[d] ? begunIn[d].includes(b) : undefined)
+    const where = scheduledOf(r0, (d) => (d in days ? dayFileFrom(days[d] ?? null, d) : undefined))
+    // Its old block today or later, its log not read in full: whether it began is not known – it cannot go, so no write.
+    if (where?.known && where.day >= today && dayFileFrom(days[where.day] ?? null, where.day).blocks.some((b) => b.id === where.block) && begunOf(where.day, where.block) === undefined) return DAY_UNREADABLE
+    const p = casePlan({ record: before, date, startMin, files: days, rules: settingsOn(useData.getState().rd.settings, date).categories, at: Date.now(), begun: begunOf })
     if (!p) return 'Tej sprawy już nie ma.'
     moved = 0
     for (const [d, after] of Object.entries(p.days)) {
       let next = after
       if (d === date)
         for (const x of o.pushed ?? []) {
-          const pushed = pushedInto(next, d, x)
+          const pushed = pushedInto(next, d, x, o.planOf)
           if (pushed) {
             next = pushed
             moved++

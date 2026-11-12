@@ -312,8 +312,11 @@ export interface CasePlanInput {
   /** The categories in force on that day. */
   rules: Readonly<Record<string, CategoryRules>>
   at: number
-  /** The block has begun (its run in the log): it stays where it ran – the sprawa only moves to the new one. */
-  begun: (date: string, block: string) => boolean
+  /**
+   * The block has begun by its day's log (it stays where it ran – the sprawa only moves to the new one); undefined – not
+   * known (the log not read in full): it stays too (`oldBlockTakeable`).
+   */
+  begun: (date: string, block: string) => boolean | undefined
 }
 
 export interface CasePlan {
@@ -332,6 +335,15 @@ export interface CasePlan {
  */
 export function ownTakenBlock(old: Pick<PlanBlock, 'origin' | 'task' | 'requests'>, r: Pick<RequestRecord, 'id'>): boolean {
   return old.origin === 'user' && (old.task === r.id || (old.requests.length === 1 && old.requests[0] === r.id))
+}
+
+/**
+ * The sprawa's old block may leave its day (T769 – one rule for the drop and the morning's step): a day today or later,
+ * the block not begun by that day's log (`begun` false; unknown – it stays); a day gone by never – history is not
+ * rewritten.
+ */
+export function oldBlockTakeable(day: string, today: string, begun: boolean | undefined): boolean {
+  return day >= today && begun === false
 }
 
 /**
@@ -369,7 +381,7 @@ export function casePlan(i: CasePlanInput): CasePlan | null {
   const days: Record<string, Raw> = {}
   const fileOf = (date: string): Raw => days[date] ?? dayRaw(i.files[date] ?? null, date)
   const was = scheduledOf(r, (d) => (d in i.files || d in days ? dayFileFrom(fileOf(d), d) : undefined))
-  if (was?.known && !i.begun(was.day, was.block)) {
+  if (was?.known && oldBlockTakeable(was.day, logicalDayOf(i.at), i.begun(was.day, was.block))) {
     const raw = fileOf(was.day)
     const next = withoutOld(raw, was.day, was.block, r)
     if (next !== raw) days[was.day] = next
@@ -423,10 +435,9 @@ export interface MorningPlanInput {
   goneOf?: GoneOf
 }
 
-/** The morning's step done: the day after, the records after, the blocks made, the chosen ones left out (their ids). */
+/** The morning's step done: the days after, the records after, the blocks made, the chosen ones left out (their ids). */
 export interface MorningPlan {
-  day: Raw
-  /** Every day's file the step changed – today's, and the day of an old block it took out (T765). */
+  /** Every day's file the step changed – today's, and the day (today or later) of an old block it took out (T765, T769). */
   days: Record<string, Raw>
   records: Array<{ id: string; raw: Raw }>
   blocks: PlanBlock[]
@@ -442,6 +453,7 @@ export interface MorningPlan {
  * nothing).
  */
 export function morningPlan(i: MorningPlanInput): MorningPlan {
+  const today = logicalDayOf(i.at)
   const days: Record<string, Raw> = {}
   const rawOf = (d: string): Raw | undefined => days[d] ?? (d === i.date ? dayRaw(i.dayFile, i.date) : i.files && d in i.files ? dayRaw(i.files[d] ?? null, d) : undefined)
   const fileOf = (d: string) => {
@@ -458,11 +470,12 @@ export function morningPlan(i: MorningPlanInput): MorningPlan {
   const requests = i.requests.filter((raw) => open(raw, 'request'))
   const tasks = i.tasks.filter((raw) => open(raw, 'task'))
   // A sprawa planned again because its block was parked or cancelled before its start (T760): that block, still in its
-  // day's file, goes out – the sprawa is planned once, and a „Cofnij” of the parking brings back nothing of it (T765).
+  // day's file, goes out – the sprawa is planned once, and a „Cofnij” of the parking brings back nothing of it (T765);
+  // never from a day gone by (T769: it never began – `gone` – but history stays).
   for (const raw of [...requests, ...tasks]) {
     const r = requestFrom(raw)!
     const where = scheduledOf(r, fileOf)
-    if (!where?.known) continue
+    if (!where?.known || !oldBlockTakeable(where.day, today, false)) continue
     const before = rawOf(where.day)!
     const after = withoutOld(before, where.day, where.block, r)
     if (after !== before) days[where.day] = after
@@ -493,7 +506,7 @@ export function morningPlan(i: MorningPlanInput): MorningPlan {
     records.push({ id: r.id, raw: scheduledRaw(raw, i.date, b.id, i.at) })
   }
   if (blocks.length) days[i.date] = day
-  return { day, days, records, blocks, skipped }
+  return { days, records, blocks, skipped }
 }
 
 // ------------------------------------------------------------------ „Zadanie zrobione?” and the ritual

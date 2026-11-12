@@ -253,9 +253,8 @@ function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode;
  * why when it cannot), Esc folds it – in the main window's bar and in the icon's panel (the desktop bar takes no keys: its
  * „+” opens the panel with this field, T756).
  */
-function QuickField({ mode, close, text, setText, takeFocus }: { mode: BarMode; close: () => void; text: string; setText: (t: string) => void; takeFocus: () => boolean }) {
+function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: BarMode; close: () => void; text: string; setText: (t: string) => void; takeFocus: () => boolean; input: React.RefObject<HTMLInputElement | null> }) {
   useEscapeLayer(true, close)
-  const input = useRef<HTMLInputElement>(null)
   // The keys come here when the field opens – not when the bar only changed its layout (no day now, the day back).
   useEffect(() => {
     if (takeFocus()) input.current?.focus()
@@ -480,6 +479,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
   const [unfold, setUnfold] = useState<Unfold>(null)
   /** The field of the quick capture was just opened: its mount takes the focus (a mount after a change of layout does not). */
   const quickFocus = useRef(false)
+  // The flag of an opening lives one commit: set by a click or by `quickAt` (after this effect – declared first), spent by
+  // the field's mount in the next commit (children's effects run first) – never kept for a later one.
+  useEffect(() => {
+    quickFocus.current = false
+  })
   // The row of the actions as the plan said them, unfolded into the list of them (D350).
   const [groupOpen, setGroupOpen] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -524,11 +528,15 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
     onUnfold?.(unfold != null || variantsOpen)
     if (mode === 'panel') window.rd.panelTouch()
   }, [mode, unfold, variantsOpen, onUnfold])
-  // The panel opened by the desktop bar's „+” (T756): its field unfolds – at each opening, with the keys.
+  // The panel opened by the desktop bar's „+” (T756): its field unfolds with the keys – at each opening, also when it is
+  // open already (then no mount takes the focus: given here).
   useEffect(() => {
     if (!quickAt) return
-    quickFocus.current = true
-    setUnfold('quick')
+    if (unfold === 'quick') quickInput.current?.focus()
+    else {
+      quickFocus.current = true
+      setUnfold('quick')
+    }
   }, [quickAt])
   // The title typed into the field of the quick capture: the bar's own, so it stays when the layout changes (T763) – and
   // only then: the field closed (Esc, „+”, saved), it is gone (T767).
@@ -541,7 +549,8 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
     quickFocus.current = false
     return now
   }
-  const quickField = <QuickField mode={mode} close={() => setUnfold(null)} text={quickText} setText={setQuickText} takeFocus={takeQuickFocus} />
+  const quickInput = useRef<HTMLInputElement>(null)
+  const quickField = <QuickField mode={mode} close={() => setUnfold(null)} text={quickText} setText={setQuickText} takeFocus={takeQuickFocus} input={quickInput} />
   // A day gone from the view (no folder, a day not counted now): nothing of the day stays unfolded – the panel's 60 s run
   // again and the day's return shows no old unfold; the field of the quick capture stays, with its text (D402: „+” always).
   useEffect(() => {

@@ -342,10 +342,6 @@ export class DataFolder {
   private peopleCounts: { day: string; at: number; before: Map<string, number> } | null = null
   /** The rituals of the last days, each counted again only on a change of what it is made of (the morning asks often). */
   private readonly ritualMemo = new Map<string, { key: string; view: RitualView }>()
-  /** What the rituals of the last days say about „Sprawy” (`casesRitual`), each counted again only on a change. */
-  private readonly casesRitualMemo = new Map<string, { key: string; out: CasesRitual }>()
-  /** How many times `casesRitual` counted a day (the tests: its memory works). */
-  casesRitualRuns = 0
   /** The statistics of each frozen day, counted again only when what it is made of changed (D358). */
   private readonly statsMemo = new Map<string, { key: string; stats: DayStats }>()
   /** The counts of statistics in progress, by period (the same period asked again shares it). */
@@ -2304,26 +2300,16 @@ export class DataFolder {
    * What the evening ritual of a day says about „Sprawy” (D383, D384, D402): the sprawy of its „Dziś” not done (back in „W
    * tym tygodniu” at 04:00), the tasks whose block ended without an answer to „Zadanie zrobione?”, on Sunday the number in
    * „Kiedyś / Może”. From the records as this computer sees them and the day as the bar and the ritual count it (D345:
-   * `barDay`, with the ends the app's close made – cheaply first, `mayLayOn`), only its facts (the blocks that ended);
-   * counted again only when the day's log, its files, your queued edits, the ends laid over it or the sprawy changed (T762).
+   * `barDay`, with the ends the app's close made – cheaply first, `mayLayOn`), only its facts (the blocks that ended) –
+   * cheap enough to need no memory (T771).
    */
   async casesRitual(day: string, at = this.clock.now()): Promise<CasesRitual> {
     const records = casesFrom(await this.collection('request'))
     const read = await this.log.readDay(day)
     const activity = await this.mayLayOn(day, read, at)
     const bar = activity ? await this.barDay(day, read, at, false, activity) : null
-    const today = logicalDayOf(at)
-    // The day as read now (its files looked at by `ownContext` – the key from them, never from an earlier look), and the
-    // sprawy whole: only the count itself is remembered.
     const ctx = bar?.ctx ?? (await this.ownContext(day, read, at))
-    const key = JSON.stringify([today, read.lastByComputer, read.events.length, read.copies, this.contextSig(day), this.queue.pending.length, (bar?.laid ?? []).map((e) => e.id), records])
-    const was = this.casesRitualMemo.get(day)
-    if (was?.key === key) return was.out
-    this.casesRitualRuns++
-    const out = casesRitual(day, today, records, taskQuestions(ctx, dayFactsOf(day, ctx.events), records))
-    this.casesRitualMemo.set(day, { key, out })
-    for (const d of this.casesRitualMemo.keys()) if (d < addDays(today, -RITUAL_MEMO_DAYS)) this.casesRitualMemo.delete(d)
-    return out
+    return casesRitual(day, logicalDayOf(at), records, taskQuestions(ctx, dayFactsOf(day, ctx.events), records))
   }
 
   /** Your answer to a row of a day's ritual: judged on the day as it is now and written to its log, one at a time. */

@@ -117,6 +117,8 @@ export const CH = {
 export interface CaseDays {
   files: Record<string, RawRecord | null>
   gone: Record<string, string[]>
+  /** The blocks begun by the log (only of a day whose log was read in full – T769: an old block not begun may go). */
+  begun?: Record<string, string[]>
 }
 
 /** The quick capture saved (D385): the new task's id; refused – why (no folder, no title). */
