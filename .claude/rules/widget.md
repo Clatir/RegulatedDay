@@ -63,7 +63,14 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   „osoba: ?”, szacunek), `requestEnd`, `openMain` z `requests`. Szacunek „Pilne” i „inna…” rozstrzyga pasek
   (`RequestUnfold`: w ciszy i „Odcinam się” bez okna, domyślne 15 min).
 - Warianty (D313, T502): `WidgetView.variants` (znacznik, panel) ustawia `WidgetEngine.variantsView` po `engineView`;
-  akcja `variants` `open` / `close` / `pick|i`, „Przestawiono … · Cofnij” to linia `moved:variant`. Linie `moved:` idą po wszystkich liniach dnia
+  akcja `variants` `open` / `close` / `pick|i`, „Przestawiono … · Cofnij” to linia `moved:variant`. „Ułóż pod energię” (D369, T612): `openVariants`
+  dokłada `energyOrderVariant` (tylko dzień paska = dziś) przed ostatnim „Zostaw”; bez przyczyny panel = ten wariant + `keepPlan`
+  (`panel.cause` null); wariant z `mends: false` („Ułóż pod energię”) nigdy nie zamyka przyczyn znacznika (D379, T621); edycja pusta nic nie zapisuje i
+  nie zastępuje linii `moved:variant` – `mends: false` mówi `PLAN_ALREADY` „Plan już jest tak ułożony.” (T618), wariant przyczyny
+  zamyka przyczyny jak przed J5 (T623); `open[].details` – zmiany kolejności pod przyciskiem (`bar-variant-<id>-details`, sąsiad przycisku w
+  `Fragment` – przyciski zostają dziećmi panelu, T615). Z planu porannego: okno zapisuje edycję, IPC `planArranged` (`arrangedIn`
+  jak `pushedIn` + etykieta ≤ 200) → `WidgetEngine.arranged` – zamyka otwarty panel, ta sama linia `moved:variant` „Przestawiono:
+  <etykieta>”, bez wyzwalacza znacznika. Linie `moved:` idą po wszystkich liniach dnia
   (`linesLast`: także po cichych liniach komputerów i twardym końcu), nowsza pierwsza; `barLines` pokazuje najwyżej jedną, druga w „⋯” (z działającym „Cofnij”).
   Rozsuwanie (D367): okno zapisuje
   partię samo, potem IPC `planPushed` (`planPushedIpc`: `pushedIn` sprawdza plik tego dnia, bez usunięcia; odpowiedź nie czeka na

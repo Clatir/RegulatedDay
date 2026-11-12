@@ -6,17 +6,22 @@
  * version (`seen`) only stands in for a file that cannot be read now.
  */
 import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult } from '@shared/api'
-import { blockJson, dayRaw, putBlock, setCancelled, setDayField, takeBlock } from '@shared/data/dayEdits'
+import { blockJson, dayRaw, putBlock, setAsked, setCancelled, setDayField, takeBlock } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { marketDay } from '@shared/calendar/holidays'
-import { snapshotOf } from '@shared/engine/context'
+import { namingOf, snapshotOf } from '@shared/engine/context'
 import { foldFacts, type DayFacts } from '@shared/engine/facts'
 import type { Freed } from '@shared/engine/gaps'
 import { gridOf } from '@shared/engine/grid'
 import type { AnyEvent } from '@shared/model/events'
 import { createDay } from '@shared/engine/createDay'
 import { copiedDay, moveBetweenDays, wakeChange } from '@shared/engine/planEdit'
-import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
+import type { DayContext, DayState } from '@shared/engine/day'
+import type { EnergyState } from '@shared/engine/energy'
+import { energyOrderVariant, lowestEnergy } from '@shared/engine/energyOrder'
+import type { Variant } from '@shared/engine/variants'
+import { nameById, type Names } from '@shared/blockName'
+import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { countLabel, logicalClock, plDate } from '@shared/format'
 import type { DaySnapshot } from '@shared/model/events'
 import { dayFilesNow, editOf, isSaved, trySaveWith, useData, type SendState } from '../../store/data'
@@ -88,6 +93,121 @@ export async function pushDayBlocks(date: string, seen: RawRecord | null, change
     }
   }
   return out
+}
+
+/** The key of the morning plan's answer „Zostaw” to „Ułóż pod energię” in the day's `asked` (D377). */
+export const ENERGY_ORDER_ASKED = 'energyOrder'
+
+/**
+ * The morning plan's „Ułóż pod energię” (D369, D374, D377): the variant of today's plan, or null – none, or left („Zostaw”)
+ * for the day (its answer in the day's file, as the plan's other questions: on every computer, to the day's end).
+ */
+export function energyOrderFor(m: EnergyOrderDay, names: Names): Variant | null {
+  if (m.dayFile?.asked[ENERGY_ORDER_ASKED] != null) return null
+  const naming = namingOf(m.ctx, m.state.facts)
+  return energyOrderVariant(m.ctx, m.state, m.energy, (b) => nameById(b.id, naming, names))
+}
+
+/** What the morning plan counts „Ułóż pod energię” on: the day as counted (`DayModel`). */
+type EnergyOrderDay = { ctx: DayContext; state: DayState; energy: EnergyState; dayFile: DayFile | null }
+
+/** The minutes of the clock one count of „Ułóż pod energię” holds for at most (T616). */
+export const ENERGY_ORDER_HOLD_MIN = 5
+
+/**
+ * What „Ułóż pod energię” depends on in the day counted at a minute (T616): the plan and the snapshot, the wake of the day
+ * and of the next one and the bedtime's forecast (where the lowest energy is looked for), the log, the energy module and
+ * the calibration, the lowest energy from now, the answer „Zostaw”, where the forecast places the blocks (a running one by
+ * its end – its start is now) and the clock in steps of `ENERGY_ORDER_HOLD_MIN` (the lowest from now moves with the time).
+ * The window's count every 30 s changes it at most every 5 min, a block due now (placed at now) – each minute.
+ */
+export function energyOrderKey(m: EnergyOrderDay): string {
+  const places = m.state.forecast.map((p) => `${p.block.id}:${p.running ? '' : p.from}:${p.to}:${p.bg ? 1 : 0}`).join(',')
+  const last = m.ctx.events.at(-1) as { id?: unknown } | undefined
+  return [
+    JSON.stringify(m.ctx.plan),
+    JSON.stringify(m.ctx.snapshot),
+    m.ctx.wakeMin,
+    m.ctx.nextWakeMin,
+    m.state.bedtime.forecast,
+    Math.floor(m.state.now / ENERGY_ORDER_HOLD_MIN),
+    m.ctx.events.length,
+    String(last?.id ?? ''),
+    m.energy.enabled,
+    m.energy.variants,
+    lowestEnergy(m.energy) ?? '',
+    m.dayFile?.asked[ENERGY_ORDER_ASKED] ?? '',
+    places
+  ].join('|')
+}
+
+/** The last variant counted for the morning plan, by its key and the names it was named with. */
+let lastOrder: { key: string; names: Names; value: Variant | null } | null = null
+
+/** The same names: the settings are in the key; the window makes `Names` anew at each count, its lists stay. */
+const sameNames = (a: Names, b: Names) => a.rd === b.rd && a.routines === b.routines && a.requests === b.requests
+
+/**
+ * `energyOrderFor` counted again only when its key changes (T616): the search (orders of each gap, the day counted again)
+ * runs in the window's thread – not for a count of the day that only moved the clock within its step.
+ */
+export function energyOrderCached(m: EnergyOrderDay, names: Names): Variant | null {
+  const key = energyOrderKey(m)
+  if (lastOrder && lastOrder.key === key && sameNames(lastOrder.names, names)) return lastOrder.value
+  const value = energyOrderFor(m, names)
+  lastOrder = { key, names, value }
+  return value
+}
+
+/** The memory of `energyOrderCached` emptied (tests: one file's day never answers for another's). */
+export function resetEnergyOrderCache(): void {
+  lastOrder = null
+}
+
+/** The window's note when „Ułóż” finds the plan as it would make it (D379). */
+export const PLAN_ALREADY_TEXT = 'Plan już jest tak ułożony.'
+
+/** „Zostaw” of the morning plan's „Ułóż pod energię” (D377): the card does not come back that day. */
+export function leaveEnergyOrder(date: string, seen: RawRecord | null): Promise<EditOutcome[] | null> {
+  return saveDay(date, seen, (r) => setAsked(r, ENERGY_ORDER_ASKED, 'leave'))
+}
+
+/** The new starts of „Ułóż pod energię” (D369) as blocks of the plan the window knows (one gone from it meanwhile – left out). */
+export function variantStarts(plan: readonly PlanBlock[], v: Pick<Variant, 'changes'>): PushedStart[] {
+  return v.changes.flatMap((c) => {
+    const block = c.k === 'start' ? plan.find((b) => b.id === c.block) : undefined
+    return block && c.k === 'start' ? [{ block, startMin: c.startMin }] : []
+  })
+}
+
+/**
+ * „Ułóż pod energię” from the morning plan (D369, D374): the new starts as one edit of today's file, in its turn, each over
+ * the block as the file holds it then. Saved – the bar keeps „Przestawiono: <label> · Cofnij” (the main process, as after
+ * a variant picked in the bar, D313): its „Cofnij” takes this one edit back.
+ */
+export async function arrangeDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], label: string): Promise<{ out: EditOutcome[] | null; already: boolean }> {
+  const sent: { made: boolean; entry: EditEntry | null; after: RawRecord | null } = { made: false, entry: null, after: null }
+  const out = await trySaveWith(async () => {
+    const before = (await dayFilesNow([date], () => seen))[date] ?? null
+    const after = withPushed(dayRaw(before, date), date, (r) => r, starts)
+    sent.made = true
+    sent.entry = editOf(paths.day(date), before, after)
+    sent.after = sent.entry?.create ? after : null
+    return [sent.entry]
+  })
+  // The file in its turn already so (another computer, an earlier click): nothing written – the note (D379, T622).
+  if (sent.made && !sent.entry) {
+    toast(PLAN_ALREADY_TEXT, 'info')
+    return { out, already: true }
+  }
+  if (isSaved(out) && sent.entry) {
+    try {
+      await window.rd.planArranged(date, label, sent.entry, sent.after)
+    } catch {
+      // The plan is saved; only the bar's „Cofnij” of it is missing (the main process is closing).
+    }
+  }
+  return { out, already: false }
 }
 
 /**

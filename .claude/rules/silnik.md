@@ -37,6 +37,8 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   state, plan, 'forecast' | 'plan')` – każdy blok, który zmienia miejsce na osi (podgląd: przesunięte, zakotwiczone, przepuszczone). Start z własnym numerem
   minuty (doba 25 h: druga 02:xx → 03:00), najwyżej `PLAN_MAX`, `hold` (szablon; przy końcu doby może dać wcześniej). Tylko
   elastyczne z własną godziną, w pierwszym planie, niechronione, niezaczęte. `withBlock`, `pushedText`. Testy: `push-apart.test.ts`.
+- `engine/energyOrder.ts` (D369, D374, D377, T608–T616) – „Ułóż pod energię”: kolejność elastycznych (także chronionych) w
+  przerwie między stałymi pod najniższą energię dnia (reguły `prosby-warianty.md`); `shownForecaster`, `orderable`, `judgeDay` + `computeEnergy`.
 - `engine/gaps.ts` (D368, D373, D375, T596–T601) – `logGapTriggers` z logu, każdy z id swojego zdarzenia (koniec przed planowanym –
   nie `plan`/`fixedNoReaction`, także `park` zapauzowanego; `block.shorten`; odwołanie / zaparkowanie niezaczętego przez Ciebie –
   pierwsze zdarzenie `BlockFact.gone`; `plan.freed` okna – `DayFacts.freed`, bierne; jednego bloku liczy się nowsze z zachodzących

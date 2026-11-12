@@ -11,7 +11,7 @@
 import { dayRaw, putBlock, type Raw } from '../data/dayEdits'
 import { logicalClock } from '../format'
 import { REGEN_CATEGORY, costsOf, type Pool } from '../model/categories'
-import type { PlanBlock } from '../model/plan'
+import { dayFileFrom, type PlanBlock } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
@@ -44,6 +44,8 @@ export type VariantChange =
   | { k: 'shorten'; block: string; toMin: number }
   | { k: 'tomorrow'; block: string }
   | { k: 'regen'; startMin: number; durationMin: number; variantId: string | null }
+  /** A new planned start of a block of today (logical minute) – „Ułóż pod energię” (D369, `energyOrder.ts`). */
+  | { k: 'start'; block: string; startMin: number }
 
 export interface Variant {
   id: string
@@ -51,6 +53,15 @@ export interface Variant {
   changes: VariantChange[]
   /** What the day looks like with it: the forecast end of work (logical minute), extension minutes, regeneration. */
   effect: { workEndMin: number | null; extensionMin: number; regenMin: number; withinBoundary: boolean }
+  /** The changes said one by one under the label (D374: the changes of order – „Analiza 10:00 → 08:00”). */
+  details?: string[]
+  /** The lowest energy of the day before and with it (whole points, as shown) – „Ułóż pod energię”. */
+  energy?: { before: number; after: number }
+  /**
+   * Whether picking it closes the causes of the marker (D313) – false: it mends none of them („Ułóż pod energię”, D379),
+   * the marker stays while its cause holds. Unset: it does.
+   */
+  mends?: boolean
 }
 
 const lmOf = (s: DayState, idx: number) => logicalMinuteOf(s.grid.date, atOf(s.grid, idx))
@@ -198,19 +209,20 @@ export function planWith(ctx: DayContext, changes: readonly VariantChange[]): Pl
   for (const c of changes) {
     if (c.k === 'shorten') plan = plan.map((b) => (b.id === c.block ? { ...b, durationMin: c.toMin } : b))
     else if (c.k === 'tomorrow') plan = plan.filter((b) => b.id !== c.block && b.anchor !== c.block)
+    else if (c.k === 'start') plan = plan.map((b) => (b.id === c.block ? { ...b, startMin: c.startMin } : b))
     else plan.push(newUserBlock(REGEN_CATEGORY, c.startMin, c.durationMin, ctx.snapshot.settings.categories[REGEN_CATEGORY], { id: `variant-regen-${c.startMin}`, variantId: c.variantId }))
   }
   return plan
 }
 
 /** A variant's changes counted: the effect and the day they leave. */
-interface Judged {
+export interface Judged {
   effect: Variant['effect']
   after: DayState
 }
 
-/** The day counted again with the changes. */
-function judgeDay(ctx: DayContext, before: DayState, changes: readonly VariantChange[]): Judged {
+/** The day counted again with the changes (none – the day as it is, not counted again). */
+export function judgeDay(ctx: DayContext, before: DayState, changes: readonly VariantChange[]): Judged {
   const after = changes.length ? computeDay({ ...ctx, plan: planWith(ctx, changes) }) : before
   const end = after.lastWorkForecast
   const boundary = before.boundary.approved ?? before.boundary.proposal
@@ -394,6 +406,9 @@ export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCaus
 
 const capital = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s)
 
+/** „Zostaw plan” of a panel without a cause („Przestaw plan” with only „Ułóż pod energię”, D369): no change. */
+export const keepPlan = (ctx: DayContext, state: DayState): Variant => ({ id: 'keep', label: 'Zostaw plan', changes: [], effect: judgeDay(ctx, state, []).effect })
+
 /**
  * A chosen variant as the files of the days (the window writes them as edits): a shortened block with its new length; a
  * block to tomorrow moved with its id (a move of a variant does not count to its moves, spec „Przeniesienie”); a
@@ -407,6 +422,8 @@ export function applyVariant(ctx: DayContext, today: Raw | null, tomorrow: Raw |
     const b = ctx.plan.find((x) => x.id === (c as { block?: string }).block)
     // A block a variant changed is marked: it gives no note for accuracy (the game).
     if (c.k === 'shorten' && b) t = putBlock(t, { ...b, durationMin: c.toMin, byVariant: true })
+    // A new start („Ułóż pod energię”) over the block as the file holds it, without the mark: its length stays as planned (T610).
+    else if (c.k === 'start' && b) t = putBlock(t, { ...(dayFileFrom(t, ctx.date).blocks.find((x) => x.id === b.id) ?? b), startMin: c.startMin })
     else if (c.k === 'tomorrow' && b) {
       const moved = moveBetweenDays(t, next, { ...b, byVariant: true }, ctx.plan, ctx.date, tomorrowDate, false)
       t = moved.source
