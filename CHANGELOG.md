@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.0
+- „Ułóż pod energię”: w „Przestaw plan” i w planie porannym nowy wariant „Ułóż pod energię – najniższa energia dnia 35 → 52” z listą zmian kolejności. Pojawia się tylko dla dnia bieżącego, gdy najniższa energia dnia jest poniżej 60, a nowa kolejność podnosi ją co najmniej o 5.
+- Przestawia bloki elastyczne – także regenerację, posiłki i rutyny – tylko w tej samej przerwie między blokami stałymi; stałe i zaczęte zostają na miejscu. Przed zatwierdzeniem granicy koniec pracy może się przesunąć, byle w maksimum dnia; po zatwierdzeniu – nie za granicę.
+- Kliknięcie zmienia plan od razu, z „Przestawiono … · Cofnij” w pasku. Wybór z panelu znacznika nie gasi znacznika, póki plan się nie mieści. W planie porannym karta ma „Ułóż” i „Zostaw” (chowa ją do końca dnia); gdy plan jest już tak ułożony – „Plan już jest tak ułożony.”
+
 ## 1.9.0
 - Notatka bloku (panel bloku w „Dziś” i w „Szablonach”) ma edytor z formatowaniem widocznym od razu podczas pisania: pogrubienie i kursywa (Ctrl B, Ctrl I), przekreślenie, nagłówki H1–H3, listy punktowane i numerowane, pola wyboru, cytat, kod i blok kodu, link. Przyciski są nad notatką, działa też pisanie „# ”, „- ”, „1. ”, „> ” na początku linii.
 - Pole wyboru odhaczasz kliknięciem – zapisuje się od razu i nigdzie się nie liczy. Link http lub https otwiera domyślną przeglądarkę, inne adresy zostają tekstem.

@@ -117,6 +117,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] J4.1 Luka po wcześniejszym końcu – „Przesuń resztę wcześniej” i „Cofnij”
    - [ ] J4.2 Luka po usunięciu albo skróceniu bloku w „Dziś”
    - [ ] J4.3 Kiedy pasek o lukę nie pyta (sesja, mała luka, blok stały, drugi komputer)
+   - [ ] J5.1 „Ułóż pod energię” w „Przestaw plan” i „Cofnij” w pasku
+   - [ ] J5.2 „Ułóż pod energię” w planie porannym – „Ułóż” i „Zostaw”
+   - [ ] J5.3 Kiedy „Ułóż pod energię” się nie pojawia (energia 60 i więcej, dzień bez poprawy, bez check-inu)
    - [ ] SNT6.1 Wyszukiwarka Ctrl K – wyniki i dopasowanie
    - [ ] SNT6.2 Enter na wyniku – skok do rekordu
    - [ ] SNT6.3 Polecenia, ostatnio wybrane i gdzie Ctrl K nie działa
@@ -1615,6 +1618,66 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   jednym komputerze zamyka pytanie na drugim, także gdy ich zegary się różnią (D368, D373).
 - **Nie przechodzi, gdy:** pytanie pojawia się w czasie sesji albo zajęć, przy luce 5 min albo przed blokiem stałym, albo
   zostaje na drugim komputerze po odpowiedzi.
+
+### J5 – „Ułóż pod energię” (1.10.0)
+
+#### J5.1 „Ułóż pod energię” w „Przestaw plan” i „Cofnij” w pasku (1.10.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/energy-order.test.ts`, `tests/fs/widget.test.ts` („Ułóż pod energię” w pasku
+  i z planu porannego), `tests/web/energy-order.test.ts`. Ty: rzut oka, gdy dzień ma taką kolejność.
+- **Jak sprawdzić:** po check-inie, w dniu z niską energią (najniższa w prognozie poniżej 60), w którym przed blokiem
+  stałym (sesja, zajęcia) stoją bloki elastyczne i regeneracja albo posiłek – a najdroższy blok (np. „Analiza”) stoi
+  przy najniższej energii, po regeneracji – otwórz w pasku „⋯” → „Przestaw plan”. Kliknij „Ułóż pod energię – …”, potem
+  „Cofnij” w linii „Przestawiono: …”.
+- **Oczekiwany efekt:** w panelu wariant „Ułóż pod energię – najniższa energia dnia 50 → 56” (liczby z Twojego dnia:
+  przed poniżej 60, różnica co najmniej 5), pod nim lista zmian kolejności („Analiza 10:00 → 09:00”, każdy blok, który
+  zmienia miejsce), a obok „Zostaw plan” (albo – gdy jest znacznik wariantów – przed jego „Zostaw”). Kliknięcie od razu
+  zmienia godziny w „Dziś” tylko w obrębie tej przerwy między blokami stałymi; mogą się przestawić także regeneracja,
+  posiłek i rutyny (D377), a blok stały, zaczęty i zakotwiczony stoją tam, gdzie stały; wykres energii w „Dziś”
+  pokazuje wyższe minimum. W pasku na 15 min „Przestawiono: Ułóż pod energię – … · Cofnij”; „Cofnij” przywraca godziny
+  sprzed zmiany (D369, D374, D377, D313). Gdy panel otworzył znacznik („◆ warianty”, np. koniec pracy za granicą), po
+  „Ułóż pod energię” znacznik zostaje, póki plan dalej się nie mieści (T614). Przed zatwierdzeniem granicy wariant może
+  przesunąć koniec pracy za proponowaną granicę (np. regeneracja przed pracą), ale nie za maksimum dnia; po zatwierdzeniu –
+  nie za zatwierdzoną granicę (D378). Gdy plan jest już tak ułożony (np. zmieniony na drugim komputerze), wybór „Ułóż pod
+  energię” zamyka panel z uwagą „Plan już jest tak ułożony.” i niczego nie zmienia; „Skróć” albo „na jutro” w takim planie
+  zamyka znacznik jak dotąd, bez tej uwagi (D379).
+- **Nie przechodzi, gdy:** wariant przesuwa blok stały, zaczęty albo zakotwiczony, przenosi blok za blok stały albo
+  przed niego z innej przerwy, zmienia długość któregoś bloku, liczby w etykiecie różnią się od minimum energii po
+  zmianie, lista zmian nie zgadza się z „Dziś”, „Cofnij” nie przywraca wszystkich godzin, znacznik znika po „Ułóż pod
+  energię”, choć plan dalej się nie mieści, po zatwierdzeniu granicy wariant przesuwa koniec pracy za nią, przed
+  zatwierdzeniem – za maksimum dnia, przyciski panelu są węższe niż przed 1.10.0, albo pasek pulpitu po kliknięciu
+  wychodzi nad okna innych programów.
+
+#### J5.2 „Ułóż pod energię” w planie porannym – „Ułóż” i „Zostaw” (1.10.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/energy-order.test.ts` (zapis, „Przestawiono” w pasku, „Zostaw”), `tests/fs/widget.test.ts`
+  (`planArranged`). Ty: rzut oka.
+- **Jak sprawdzić:** rano zrób check-in w planie porannym; w kroku planu, nad granicą, poszukaj karty „Ułóż pod energię
+  – …” (pojawia się tylko w dniu z niską energią, w którym inna kolejność wyraźnie podnosi minimum). Kliknij „Ułóż”,
+  potem „Cofnij” w pasku. Potem kliknij „Zostaw” na karcie; zamknij i otwórz aplikację, zajrzyj na drugi komputer.
+- **Oczekiwany efekt:** karta z tą samą etykietą i listą zmian co w „Przestaw plan”; „Ułóż” od razu zmienia godziny w
+  „Dziś”, karta znika (albo pokazuje kolejną poprawę), w pasku „Przestawiono: Ułóż pod energię – … · Cofnij” przez
+  15 min; „Cofnij” przywraca plan, a otwarty w pasku panel wariantów się zamyka. „Zostaw” chowa kartę do końca dnia – także
+  po ponownym uruchomieniu i na drugim komputerze; „Przestaw plan” w pasku dalej ma wariant. Gdy plan jest już tak ułożony
+  (np. „Ułóż” kliknięte chwilę wcześniej na drugim komputerze), „Ułóż” pokazuje dymek „Plan już jest tak ułożony.” i karta
+  znika. Karta tylko dla dnia bieżącego (D369, D374, D377, D379).
+- **Nie przechodzi, gdy:** karta jest przed check-inem albo na innym dniu, „Ułóż” zmienia coś poza godzinami bloków
+  z listy, po „Ułóż” w pasku nie ma „Cofnij”, „Cofnij” zostawia nowe godziny, albo karta po „Zostaw” wraca tego samego
+  dnia.
+
+#### J5.3 Kiedy „Ułóż pod energię” się nie pojawia (1.10.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/energy-order.test.ts` (energia 80 → 86 bez wariantu, dzień bez poprawy, próg 5,
+  bez check-inu, wyłączony moduł energii, blok z zakotwiczonym na drodze, tylko ta sama przerwa; w okresie kalibracji
+  wariant jest). Ty: rzut oka.
+- **Jak sprawdzić:** w dniu z dobrą energią (najniższa w prognozie 60 i więcej) otwórz „Przestaw plan”; to samo w dniu,
+  w którym przed blokiem stałym stoją same bloki pracy (bez regeneracji między nimi), przed check-inem i z wyłączonym
+  modułem energii.
+- **Oczekiwany efekt:** bez wariantu „Ułóż pod energię” – pasek mówi „Plan się mieści – nie ma czego przestawiać.” (gdy
+  nie ma też innej przyczyny wariantów), karta w planie porannym się nie pokazuje (D369, D377: tylko przy najniższej
+  energii poniżej 60 i poprawie co najmniej 5).
+- **Nie przechodzi, gdy:** wariant pojawia się przy najniższej energii 60 i więcej, bez poprawy minimum (etykieta
+  „50 → 50” albo różnica mniejsza niż 5), przed check-inem albo przy wyłączonym module energii.
 
 ### SNT6 – wyszukiwarka Ctrl K (1.7.0)
 

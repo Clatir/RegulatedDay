@@ -32,7 +32,7 @@ import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
 import { toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
-import { saveDay } from './dayActions'
+import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, variantStarts } from './dayActions'
 
 const QUESTIONS: Array<{ pool: Pool; text: string }> = [
   { pool: 'head', text: 'Trudno zebrać myśli?' },
@@ -299,7 +299,51 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
           {WARNINGS[w](model, lm)}
         </p>
       ))}
+      <EnergyOrder model={model} names={names} />
       <Boundary model={model} lm={lm} approved={approved} proposal={proposal} />
+    </div>
+  )
+}
+
+/**
+ * „Ułóż pod energię” (D369, D374, D377): today's plan in another order of its flexible blocks, when the lowest energy of the
+ * day is low and the order clearly raises it – the variant with its changes of order; „Ułóż” changes the plan at once,
+ * „Cofnij” in the bar (D313); „Zostaw” hides the card to the day's end (the day's `asked`, like the plan's other questions);
+ * „Ułóż” on a plan already so – the note „Plan już jest tak ułożony.” and the card goes (D379, T622).
+ * Counted again only when the plan, the log or the energy change (`energyOrderCached`, T616), not at each count of the clock.
+ */
+function EnergyOrder({ model, names }: { model: DayModel; names: Names }) {
+  const variant = useMemo(() => energyOrderCached(model, names), [model, names])
+  const key = useMemo(() => energyOrderKey(model), [model])
+  // „Ułóż” found the plan already so (D379): the card goes – until the day changes (its key).
+  const [gone, setGone] = useState<string | null>(null)
+  const [busy, run] = useBusy()
+  if (!variant || gone === key) return null
+  const arrange = () =>
+    run(async () => {
+      if ((await arrangeDayBlocks(model.date, model.data.dayFile, variantStarts(model.ctx.plan, variant), variant.label)).already) setGone(key)
+    })
+  const leave = () => run(async () => void (await leaveEnergyOrder(model.date, model.data.dayFile)))
+  return (
+    <div className="flex flex-col gap-1.5 rounded border border-line px-3 py-2" data-testid="energy-order">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex-1" data-testid="energy-order-label">
+          {variant.label}
+        </span>
+        <button type="button" className="btn" disabled={busy} onClick={() => void arrange()} data-testid="energy-order-apply">
+          Ułóż
+        </button>
+        <button type="button" className="btn" disabled={busy} onClick={() => void leave()} data-testid="energy-order-leave">
+          Zostaw
+        </button>
+      </div>
+      {variant.details?.length ? (
+        <ul className="flex flex-col gap-0.5 text-[12px] text-muted" data-testid="energy-order-details">
+          {variant.details.map((d, i) => (
+            <li key={`${i}:${d}`}>{d}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   )
 }

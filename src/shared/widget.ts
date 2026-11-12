@@ -162,8 +162,11 @@ export interface BarRequests {
 export interface BarVariants {
   /** The marker „◆ warianty” is in the bar (its cause holds). */
   marker: boolean
-  /** The panel is open: its 2–3 variants (the last one leaves the plan). */
-  open: Array<{ id: string; label: string }> | null
+  /**
+   * The panel is open: its 2–3 variants and „Ułóż pod energię” (D369) when it has one (the last one leaves the plan);
+   * `details` – the changes said one by one under the label (the changes of order, D374).
+   */
+  open: Array<{ id: string; label: string; details?: string[] }> | null
 }
 
 export const NO_REQUESTS: BarRequests = { people: [], running: null, interrupted: null }
