@@ -11,11 +11,12 @@ const limits = [
   // D351: the progress log is read on every resume – state and queue only, finished entries go to docs/archiwum/.
   { file: 'docs/postep.md', lines: 250, kb: 20 },
   // The registers of decisions have a limit too (spec „Dokumenty w repozytorium”): replaced decisions go to the archive.
-  // D and T are in separate files (D308), T in two (T535).
+  // D and T are in separate files (D308), T in three (T535, T840).
   { file: 'docs/decyzje.md', lines: 1000, kb: 200 },
   { file: 'docs/decyzje-techniczne.md', lines: 1000, kb: 200 },
-  // T535: T1–T399 in a file of their own.
+  // T535: T1–T399 in a file of their own; T840: T400–T499 too.
   { file: 'docs/decyzje-techniczne-T1-T399.md', lines: 1000, kb: 200 },
+  { file: 'docs/decyzje-techniczne-T400-T499.md', lines: 1000, kb: 200 },
 ]
 const rules = new URL('.claude/rules/', root)
 if (existsSync(rules)) {
