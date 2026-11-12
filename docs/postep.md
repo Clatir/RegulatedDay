@@ -153,7 +153,7 @@ wolna przy scaleniu; scalenie tylko po uzgodnieniu z sesją ciągu L i po „1.1
 | HKU2 termin i data wykonania | po SNT4 (1.16.0?) | – | D409 (pytania 12.11 przed L2); start po scaleniu L2 – najpierw dopytanie o różnice, gałąź `claude/hku2-terminy` | – (2–3 h) |
 | HKU3 priorytety i macierz | po HKU2 | – | D450 (pytania 12.11); po HKU2 | – (2,5–3,5 h) |
 
-**Blok 4 bez pauz (12.11, zgoda użytkownika):** HKU2 i HKU3 idą po kolei bez „dalej”; pytania o zachowanie widoczne dla użytkownika dalej przed zmianą. Numery HKU: D405–D409, D450–D459, T720–T749, T850–T899 (SNT4 – D410–D449, T800–T849; L – D404, D408, T700–T799). Kolejka do `main`: 1.13.0 (HKU1) → L2 1.14.0 → SNT4 1.15.0 → HKU2 → HKU3; przed scaleniem pytanie do sesji L (regulatedday-a8) i SNT4 (regulatedday-ab).
+**Blok 4 bez pauz (12.11, zgoda użytkownika):** HKU2 i HKU3 idą po kolei bez „dalej”; pytania o zachowanie widoczne dla użytkownika dalej przed zmianą – w nocy 12/13.11 (do ok. 7:00) rozstrzygam rekomendacją, zapis D „bez pytania – do potwierdzenia”, lista niżej, rano pytania do użytkownika. Numery HKU: D405–D409, D450–D459, T720–T749, T850–T899 (SNT4 – D410–D449, T800–T849; L – D404, D408, T700–T799). Kolejka do `main`: 1.13.0 (HKU1) → L2 1.14.0 → SNT4 1.15.0 → HKU2 → HKU3; przed scaleniem pytanie do sesji L (regulatedday-a8) i SNT4 (regulatedday-ab).
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy
