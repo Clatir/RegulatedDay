@@ -115,6 +115,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames): s
     if (a === 'sessions') return 'odpowiedzi warstwy sesji'
     if (a === 'asked') return 'pytania tego dnia'
     if (a === 'classImport') return 'import zjazdów'
+    if (a === 'seriesOff') return b ? `${blockPart(b, undefined)}: odwołany przez zmianę serii` : 'odwołane przez zmianę serii'
     return 'inne pole dnia'
   }
   if (kind === 'template') {

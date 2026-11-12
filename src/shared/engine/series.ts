@@ -228,7 +228,9 @@ export function changedFrom(s: Series, from: string, patch: SeriesPatch): Series
   if (patch.block === undefined && patch.rule === undefined && patch.special === undefined) return s
   const at = from < s.start ? s.start : from
   const base = seriesVersionOn(s, at) ?? s.versions[0]!
-  const apply = (v: SeriesVersion, f: string): SeriesVersion => ({ from: f, block: { ...v.block, ...patch.block }, rule: ruleFrom(patch.rule, v.rule, f), special: patch.special ?? v.special })
+  // A new rule is one for every version from `at` on – its weeks counted once, from the version it starts in.
+  const rule = ruleFrom(patch.rule, base.rule, at)
+  const apply = (v: SeriesVersion, f: string): SeriesVersion => ({ from: f, block: { ...v.block, ...patch.block }, rule: patch.rule ? rule : v.rule, special: patch.special ?? v.special })
   return { ...s, versions: [...s.versions.filter((v) => v.from < at), apply(base, at), ...s.versions.filter((v) => v.from > at).map((v) => apply(v, v.from))] }
 }
 
@@ -290,7 +292,8 @@ export function todayOccurrenceEdit(raw: Raw | null, today: TodayDay, id: string
   const off = offMap(base)[id] === true && file.cancelled.includes(id)
   if (!remove) {
     if (file.cancelled.includes(id) && !off) return null
-    if (fileBlock && !(was && sameOccurrence(fileBlock, was)) && !(next && sameOccurrence(fileBlock, next))) return null
+    // Cancelled by a change of the series: its block in the file is the series' own copy, never a change of its day.
+    if (!off && fileBlock && !(was && sameOccurrence(fileBlock, was)) && !(next && sameOccurrence(fileBlock, next))) return null
   }
   if (!next || remove) {
     if (!inPlan) return null

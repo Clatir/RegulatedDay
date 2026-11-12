@@ -83,7 +83,8 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   Tydzień i cele (T552, T553): `folder.horizonDays` (zadanie `horizon`, pamięć per dzień, `unknown` + `warn`),
   `weekView`, `goalsView`, `setGoals` (pola liściowe `goals.RRRR-MM.*` w `rd.json`, po kolei przez kolejkę).
 - Serie (T700–T719): `series/<id>.json`; `inputs()` daje `series` (`SeriesPlan[]`) i `seriesDays` – typy dni licznika z plików
-  (`countTypes`, iteracyjnie; bez serii „odbywa się”, seria zakończona przed wczoraj – raz), `seriesOf` pamięta wynik
+  (`countTypes`, równolegle; bez serii „odbywa się”; seria zakończona przed wczoraj – `settledTypes`, osobno z kolejką i bez, tylko
+  pewne odczyty, do zapisu/zmiany kolejki/listy dni z zakresu, 10 min), `seriesOf` pamięta wynik
   `LIST_TRUST_MS` po wejściach (zapis dnia, serii, ustawień przez ten komputer – od razu od nowa); okno – `DataView.series`
   + `seriesDays` (`folder.seriesView`, hub przy błędzie – ostatnie znane). Zmiany: `main/data/series.ts` (hub `series*`) –
   rekordy z kolejką, jedna partia `edit`, typy dni nowego licznika czytane przed liczeniem (`ensureTypes`), dziś tylko

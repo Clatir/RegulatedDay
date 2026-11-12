@@ -290,6 +290,21 @@ describe('zmiany serii: Tylko to · To i następne · Cała seria (D381)', () =>
     // Cancelled by you (no mark): stays cancelled.
     const mine = setCancelled({ schema: 1, date: today }, id, true)
     expect(todayOccurrenceEdit(mine, day(mine, [off]), id, null, was)).toBeNull()
+    // Its block in the file written by an earlier change (11:00), then cancelled by a change: back at the new 12:00.
+    const copy = { ...putBlock({ schema: 1, date: today }, { ...was, startMin: lm('11:00') }), cancelled: { [id]: true }, [SERIES_OFF]: { [id]: true } }
+    const again = todayOccurrenceEdit(copy, day(copy, [off]), id, null, { ...was, startMin: lm('12:00') })!
+    expect([dayFileFrom(again, today).cancelled, dayFileFrom(again, today).blocks.find((b) => b.id === id)!.startMin]).toEqual([[], lm('12:00')])
+  })
+
+  it('nowa reguła od dnia obowiązuje też w późniejszych wersjach z tą samą kotwicą tygodni (co 2 tygodnie bez przesunięcia)', () => {
+    const weekly = make('w', { kind: 'weekly', every: 1, days: [4], anchor: '' }, '2026-11-12')
+    const twoVersions = changedFrom(weekly, '2026-12-03', { block: { startMin: lm('18:00') } })
+    const every2 = changedFrom(twoVersions, '2026-11-12', { rule: { kind: 'weekly', every: 2, days: [4], anchor: '' } })
+    expect(occurrenceDays([every2], '2026-11-12', '2026-12-31')).toEqual(['2026-11-12', '2026-11-26', '2026-12-10', '2026-12-24'])
+    expect(every2.versions.map((v) => [v.from, v.block.startMin])).toEqual([
+      ['2026-11-12', lm('17:00')],
+      ['2026-12-03', lm('18:00')]
+    ])
   })
 
   it('koniec i zmiana końca nie ruszają dni minionych', () => {

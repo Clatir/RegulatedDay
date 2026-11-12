@@ -15,7 +15,7 @@ import { paths } from '@shared/data/paths'
 import { snapshotOf } from '@shared/engine/context'
 import { createDay, dayPlan } from '@shared/engine/createDay'
 import { RULES_VERSION, type AnyEvent } from '@shared/model/events'
-import { dayStart } from '@shared/time/day'
+import { dayStart, logicalMinuteOf } from '@shared/time/day'
 import { seriesAskKey, seriesBlockId } from '@shared/engine/series'
 import { dayFileFrom, planBlock, type PlanBlock } from '@shared/model/plan'
 import { seriesFrom, seriesJson, seriesPlans, typeOfDays, type Series } from '@shared/model/series'
@@ -234,6 +234,37 @@ describe('zmiany i usunięcie serii (D381)', () => {
       [today, 22 * 60, 45],
       [addDays(today, 1), 19 * 60, 45]
     ])
+  })
+
+  it('„Cała seria” z dzisiejszego bloku z wpisem dnia: dłuższe wystąpienie rozsuwa elastyczny blok po nim (uwaga 1 drugiej rundy, D367)', async (ctx) => {
+    // On today's axis from now on (a day without the sessions of the layer – they never ran in this folder's log, so the
+    // forecast would put them at now): the occurrence a little later than now, a flexible block of yours right after it.
+    const start = Math.ceil((logicalMinuteOf(today, Date.now()) + 20) / 5) * 5
+    if (start + 90 + 30 + 15 > 1679) return ctx.skip()
+    write(paths.day(today), dayFileWith(today, [own('ang', start), own('next', start + 45, { durationMin: 30, name: 'Po' })], { dayType: 'weekend' }))
+    const made = await hub.seriesCreate({ date: today, blockId: 'ang', rule: { kind: 'daily' } })
+    expect(made.ok).toBe(true)
+    const id = seriesBlockId(today, made.seriesId!)
+    expect(dayFileFrom(onDisk(paths.day(today)), today).blocks.map((b) => [b.id, b.startMin])).toEqual([
+      ['next', start + 45],
+      [id, start]
+    ])
+    expect((await hub.seriesChange({ date: today, blockId: id }, 'all', { block: { durationMin: 90 } })).ok).toBe(true)
+    const file = dayFileFrom(onDisk(paths.day(today)), today)
+    expect(file.blocks.find((b) => b.id === id)!.durationMin).toBe(90)
+    expect(file.blocks.find((b) => b.id === 'next')!.startMin).toBeGreaterThanOrEqual(start + 90)
+  })
+
+  it('koniec przesunięty wcześniej zdejmuje wystąpienia zmienione pojedynczo po nim, jak „Zakończ serię” (D404, uwaga 5)', async () => {
+    const s0 = series()
+    write(paths.record('series', 'fizjo'), seriesJson({ ...s0, start: today, versions: [{ ...s0.versions[0]!, from: today }] }))
+    const d = addDays(today, 5)
+    const id = seriesBlockId(d, 'fizjo')
+    write(paths.day(d), dayFileWith(d, [planBlock({ ...s0.versions[0]!.block, id, startMin: 20 * 60, origin: 'series', sourceId: 'fizjo' })]))
+    expect((await hub.seriesChange({ seriesId: 'fizjo' }, 'all', { count: 3 })).ok).toBe(true)
+    expect(dayFileFrom(onDisk(paths.day(d)), d).blocks.filter((b) => b.origin === 'series')).toEqual([])
+    expect((await planOn(d)).some((b) => b.origin === 'series')).toBe(false)
+    expect((await planOn(addDays(today, 2))).some((b) => b.origin === 'series')).toBe(true)
   })
 
   it('„Tylko to” zmienia jedno wystąpienie w pliku jego dnia; seria bez zmian', async () => {

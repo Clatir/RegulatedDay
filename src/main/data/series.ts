@@ -40,6 +40,7 @@ import {
   seriesJson,
   seriesOfBlock,
   seriesPlans,
+  seriesLast,
   seriesRuleFrom,
   seriesVersionOn,
   typeOfDays,
@@ -107,12 +108,14 @@ interface Base {
   list: Series[]
   /** The own types of days the counts read – those of `inputs` and those read for the series a change makes (`ensureTypes`). */
   days: Record<string, DayTypeId>
+  /** The days read for this change (also those without a type of their own): a second count never reads them again. */
+  seen: Map<string, DayTypeId | null>
 }
 
 async function baseOf(io: SeriesIo): Promise<Base> {
   const now = io.folder.clock.now()
   const inp = await io.folder.inputs(true)
-  return { today: logicalDayOf(now), now, inp, list: inp.series.map((p) => p.series), days: { ...inp.seriesDays } }
+  return { today: logicalDayOf(now), now, inp, list: inp.series.map((p) => p.series), days: { ...inp.seriesDays }, seen: new Map(Object.entries(inp.seriesDays)) }
 }
 
 const typeOf = (b: Base) => typeOfDays(b.inp.changes, (d) => b.days[d] ?? null)
@@ -122,7 +125,7 @@ const typeOf = (b: Base) => typeOfDays(b.inp.changes, (d) => b.days[d] ?? null)
  * counted from the same files as `inputs()` counts it afterwards (never by the weekdays only).
  */
 async function ensureTypes(io: SeriesIo, b: Base, list: readonly Series[]): Promise<void> {
-  Object.assign(b.days, await io.folder.countTypes(list, b.inp.changes, true))
+  Object.assign(b.days, await io.folder.countTypes(list, b.inp.changes, true, b.seen))
 }
 const plansOf = (io: SeriesIo, b: Base, list: readonly Series[]): SeriesPlan[] => seriesPlans(list, typeOf(b), io.holidays)
 
@@ -144,14 +147,15 @@ const begun = (day: TodayDay, id: string): boolean => {
  * comes, changes or goes in today's file, and pushes apart what is after it (`todayOccurrenceEdit`); `remove` – a removal
  * or an end (also one changed today goes).
  */
-async function today(io: SeriesIo, b: Base, t: Touched, root: string, next: readonly Series[], remove = false): Promise<void> {
+async function today(io: SeriesIo, b: Base, t: Touched, root: string, next: readonly Series[], remove = false, own: { was: PlanBlock; next: PlanBlock } | null = null): Promise<void> {
   const rel = paths.day(b.today)
   const raw = await t.get(rel)
   const day = await dayOf(io, b, b.today, raw)
   const id = seriesBlockId(b.today, root)
   const type = day.ctx.snapshot.dayType
-  const was = seriesBlocks(b.inp.series.filter((p) => p.series.root === root), b.today, type, io.holidays).find((x) => x.id === id) ?? null
-  const now = seriesBlocks(plansOf(io, b, next).filter((p) => p.series.root === root), b.today, type, io.holidays).find((x) => x.id === id) ?? null
+  // `own`: today is the day it is changed from – its own entry with the changed fields (T715).
+  const was = own?.was ?? seriesBlocks(b.inp.series.filter((p) => p.series.root === root), b.today, type, io.holidays).find((x) => x.id === id) ?? null
+  const now = own?.next ?? seriesBlocks(plansOf(io, b, next).filter((p) => p.series.root === root), b.today, type, io.holidays).find((x) => x.id === id) ?? null
   const after = todayOccurrenceEdit(raw, day, id, was, now, remove)
   if (after) t.set(rel, after)
 }
@@ -292,9 +296,9 @@ export function seriesCreate(io: SeriesIo, input: unknown): Promise<SeriesResult
       const special = (SPECIAL_DAYS as readonly unknown[]).includes(input.special) ? (input.special as SpecialDays) : DEFAULT_SPECIAL
       const until = isIsoDate(input.until) ? input.until : null
       const count = typeof input.count === 'number' && Number.isInteger(input.count) && input.count >= 1 && input.count <= SERIES_COUNT_MAX ? input.count : null
+      // Its end is counted by `inputs()` from the days' files; what this change writes needs only its first days – the
+      // block's day and today are its first occurrence each, before any count can end it.
       const s = newSeries(newId(10), seriesBlockFromPlan(block, startMin), start, rule, special, { until, count })
-      // Its count from the types of its days as the files give them (as `inputs()` counts it afterwards).
-      await ensureTypes(io, b, [s])
       await putSeries(t, s)
       const next = [...b.list, s]
       const plan = plansOf(io, b, next).find((p) => p.series.id === s.id)!
@@ -344,24 +348,31 @@ export function seriesChange(io: SeriesIo, target: unknown, scope: unknown, patc
       const p = p0 && blockPatched(s, p0, from < s.start ? s.start : from)
       if (!p) throw new SeriesEditError('invalid', 'Zmiana serii jest niepełna.')
       let changed = changedFrom(s, from, p)
-      if (p.until !== undefined || p.count !== undefined) {
+      const lastBefore = b.inp.series.find((x) => x.series.id === s.id)?.last ?? null
+      const endChanged = p.until !== undefined || p.count !== undefined
+      if (endChanged) {
         // What the days before today reached is counted from their files (T717), with the end as the change sets it.
         const end = { until: p.until !== undefined ? p.until : changed.until, count: p.count !== undefined ? p.count : changed.count }
         await ensureTypes(io, b, [{ ...changed, count: SERIES_COUNT_MAX, until: addDays(b.today, -1) }, { ...changed, ...end }])
-        changed = withEnd(changed, p, b.today, b.inp.series.find((x) => x.series.id === s.id)?.last ?? null, typeOf(b), io.holidays)
+        changed = withEnd(changed, p, b.today, lastBefore, typeOf(b), io.holidays)
       }
       await ensureTypes(io, b, [changed])
       await putSeries(t, changed)
+      const next = b.list.map((x) => (x.id === s.id ? changed : x))
       // The day you change it from gets the changed fields in its own entry too (an occurrence pushed or dragged there, T715);
-      // the other days with an entry keep theirs (D381).
+      // the other days with an entry keep theirs (D381). Today through `todayOccurrenceEdit`: it pushes apart what is after it.
       const tb = tg.block
-      if (tg.date && tb && p.block && tg.date >= b.today && !(tg.date === b.today && tg.day && begun(tg.day, tb.id))) {
-        const r = paths.day(tg.date)
-        const raw = await t.get(r)
-        const entry = dayFileFrom(raw ?? {}, tg.date).blocks.find((x) => x.id === tb.id)
-        if (entry) t.set(r, putBlock(dayRaw(raw, tg.date), { ...entry, ...p.block }))
+      const entryOf = async (date: string) => dayFileFrom((await t.get(paths.day(date))) ?? {}, date).blocks.find((x) => x.id === tb!.id) ?? null
+      const own = tg.date && tb && p.block && tg.date >= b.today && !(tg.date === b.today && tg.day && begun(tg.day, tb.id)) ? await entryOf(tg.date) : null
+      if (own && tg.date! > b.today) {
+        const r = paths.day(tg.date!)
+        t.set(r, putBlock(dayRaw(await t.get(r), tg.date!), { ...own, ...p.block }))
       }
-      await today(io, b, t, s.root, b.list.map((x) => (x.id === s.id ? changed : x)))
+      if (own && tg.date === b.today) await today(io, b, t, s.root, next, false, { was: own, next: { ...own, ...p.block } })
+      else await today(io, b, t, s.root, next)
+      // An end moved earlier takes the occurrences changed on their days after it, as „Zakończ serię” does (D404).
+      const lastAfter = seriesLast(changed, typeOf(b), io.holidays)
+      if (endChanged && lastAfter != null && (lastBefore == null || lastAfter < lastBefore)) await dropChanged(io, b, t, s.root, addDays(lastAfter, 1))
       return s.id
     },
     io.folder

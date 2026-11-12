@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.12.0
+- Serie powtarzalne: w panelu bloku („Dziś”, „Tydzień”, dzień otwarty z „Kalendarza”) pole „Powtarzaj” robi z bloku serię – codziennie, w dni robocze (poniedziałek–piątek bez świąt), co N tygodni w wybrane dni, N-tego dnia miesiąca (w krótszym miesiącu – ostatni dzień) albo „trzecia środa” / „ostatni piątek” miesiąca. Koniec: nigdy, po N razach albo w wybranym dniu. Seria to pojedynczy blok – szablony dnia i plan wykładów działają jak dotąd.
+- Wystąpienia mają przy nazwie znak ↻ na osi „Dziś”, w „Tygodniu” i w komórce dnia „Kalendarza”, a panel bloku opisuje regułę słowami („co 2 tygodnie w czwartek, do 30.04”). Wystąpienie na miejscu zajętym blokiem szablonu przesuwa kolejne bloki elastyczne, stałe zostają.
+- Zmiana w panelu bloku i usunięcie pytają „Tylko to · To i następne · Cała seria”. „Cała seria” działa od dziś (dzisiejsze wystąpienie, gdy jeszcze się nie zaczęło), dni minione nigdy się nie zmieniają, a wystąpienia zmienione pojedynczo zostają. Przeciągnięcie, krawędź, rozsuwanie i warianty zmieniają tylko to wystąpienie, bez pytania.
+- Dni szczególne: pole „W dni szczególne: odbywa się · pomiń · pytaj”. Domyślnie w dniu „Wolne” wystąpienie znika, a w zjazd i dzień regeneracyjny plan poranny pyta „<blok> z serii – zostaw · odwołaj”.
+- W „Szablonach” lista wszystkich serii z regułą słowami, edycją, „Zakończ serię” i „Usuń serię”; Ctrl K znajduje serię jako jeden wynik.
+- Komputer ze starszą wersją aplikacji nie prowadzi już dnia, dopóki się nie zaktualizuje – inaczej nie widziałby wystąpień serii.
+
 ## 1.11.0
 - Rozsuwanie w „Tygodniu”: „Dodaj” z karty nowego bloku na zajęte miejsce w dniu dzisiejszym albo przyszłym przesuwa kolejne bloki elastyczne tego dnia za nowy blok – tak jak „Dodaj” w „Dziś”. Bloki stałe, sesje, chronione i zaczęte zostają.
 - Zakres kilku dni zapisuje się jednym ruchem, a nad tygodniem przez 15 min stoi jedna linia „Przesunięto N bloków w K dniach · Cofnij”. „Cofnij” przywraca wszystkie dni naraz; dzień zmieniony od tego czasu zostaje, jaki jest, z komunikatem.
