@@ -55,19 +55,22 @@ export interface MachinePrefs {
   sound: boolean
   soundVolume: number
   /**
-   * The global shortcut of the quick capture „Do skrzynki” (D385, D402): an accelerator of Electron („Ctrl+Alt+N” by
-   * default), null – switched off on this computer.
+   * The global shortcut of the quick capture „Do skrzynki” (D385, D402, D408): an accelerator of Electron („Super+Alt+N” –
+   * Win+Alt+N – by default), null – switched off on this computer.
    */
   quickKey: string | null
 }
 
-/** The quick capture's shortcut by default (D385). */
-export const DEFAULT_QUICK_KEY = 'Ctrl+Alt+N'
-const QUICK_MODIFIERS = ['Ctrl', 'Alt', 'Shift', 'Super'] as const
+/**
+ * The quick capture's shortcut by default (D408): Win+Alt+N – on the Polish layout Ctrl+Alt is AltGr, so a default with it
+ * would take „ń” from every program you type in.
+ */
+export const DEFAULT_QUICK_KEY = 'Super+Alt+N'
+const QUICK_MODIFIERS = ['Super', 'Ctrl', 'Alt', 'Shift'] as const
 const QUICK_KEY = /^(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space)$/
 
 /**
- * A shortcut as the settings write it (D402): modifiers in the order Ctrl, Alt, Shift, Super, then one key – a letter, a
+ * A shortcut as the settings write it (D402): modifiers in the order Super (the Windows key), Ctrl, Alt, Shift, then one key – a letter, a
  * digit, F1–F24 or Space; Ctrl or Alt among them (a key alone, or with Shift only, would be taken from every program you
  * type in). Null: not a shortcut the app registers.
  */

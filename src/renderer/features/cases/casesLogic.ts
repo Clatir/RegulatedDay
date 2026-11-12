@@ -64,3 +64,15 @@ export function filterOf(filters: readonly string[]): (x: CaseItem) => boolean {
   const persons = filters.filter((f) => f.startsWith('person:')).map((f) => f.slice(7))
   return (x) => (!kinds.length || kinds.includes(x.record.kind)) && (!persons.length || (x.record.kind === 'request' && persons.includes(x.record.person ?? '?')))
 }
+
+/**
+ * The morning plan's step (D384, D408): the tasks of „Dziś” are chosen at once, the requests are not. What you change is kept as a
+ * list of ids toggled against that default (a task unchecked, a request checked), so a task that comes later is chosen too.
+ */
+export const isMorningChosen = (kind: 'task' | 'request', id: string, toggled: readonly string[]): boolean => (kind === 'task') !== toggled.includes(id)
+
+/** The ids chosen among what the step offers (`morningCases`), given what you toggled. */
+export function morningChosen(offered: { requests: readonly CaseItem[]; tasks: readonly CaseItem[] }, toggled: readonly string[]): { requests: string[]; tasks: string[] } {
+  const ids = (list: readonly CaseItem[], kind: 'task' | 'request') => list.map((x) => x.record.id).filter((id) => isMorningChosen(kind, id, toggled))
+  return { requests: ids(offered.requests, 'request'), tasks: ids(offered.tasks, 'task') }
+}

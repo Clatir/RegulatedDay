@@ -15,7 +15,7 @@ import { rdFrom } from '@shared/model/rd'
 import { dayFileFrom, planBlock } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom, type RequestRecord } from '@shared/model/requests'
 import { placeLogical } from '@shared/time/day'
-import { backText, caseTitle, filterOf, sectionsOf, somedayText, statusParts } from '@renderer/features/cases/casesLogic'
+import { backText, caseTitle, filterOf, isMorningChosen, morningChosen, sectionsOf, somedayText, statusParts } from '@renderer/features/cases/casesLogic'
 import { planningOf, plannedText, planOnAxis } from '@renderer/features/cases/planOnAxis'
 import { dropMinute, HOURS_PX, type AxisPoint } from '@renderer/features/plan/axisDrop'
 import { repeatNote } from '@renderer/features/series/BlockSeries'
@@ -228,18 +228,22 @@ describe('rytuał wieczorny: teksty spraw (D402)', () => {
 
 describe('skrót szybkiego zapisu w Ustawieniach (D385, D402)', () => {
   it('wpisany skrót walidowany przed zapisem: Ctrl lub Alt i jeden klawisz', () => {
-    expect(parseQuickKey('ctrl+alt+n')).toEqual({ ok: true, value: 'Ctrl+Alt+N' })
+    expect(parseQuickKey('ctrl+alt+k')).toEqual({ ok: true, value: 'Ctrl+Alt+K' })
+    // The Windows key (D408): typed as „Win” (or „Windows”), saved as Electron's „Super”, shown as „Win” again.
+    expect(parseQuickKey('win+alt+n')).toEqual({ ok: true, value: 'Super+Alt+N' })
+    expect(parseQuickKey('Alt+Windows+F5')).toEqual({ ok: true, value: 'Super+Alt+F5' })
+    expect(quickKeyShown('Super+Alt+N')).toBe('Win+Alt+N')
     expect(parseQuickKey('Alt+Shift+F5')).toEqual({ ok: true, value: 'Alt+Shift+F5' })
     expect(parseQuickKey('Ctrl+Spacja')).toEqual({ ok: true, value: 'Ctrl+Space' })
-    for (const bad of ['', 'N', 'Shift+N', 'Ctrl+Alt', 'Ctrl+Alt+NN', 'Ctrl+Ctrl+N', 'Win+N', 'Ctrl+Ą']) expect(parseQuickKey(bad), bad).toMatchObject({ ok: false })
+    for (const bad of ['', 'N', 'Shift+N', 'Ctrl+Alt', 'Ctrl+Alt+KK', 'Ctrl+Ctrl+K', 'Win+N', 'Win+Shift+N', 'Ctrl+Ą']) expect(parseQuickKey(bad), bad).toMatchObject({ ok: false })
     expect(quickKeyShown('Ctrl+Space')).toBe('Ctrl+Spacja')
   })
 
   it('uwaga pod polem: działa, wyłączony, „Skrót zajęty przez inny program”', () => {
-    expect(quickKeyNote({ key: 'Ctrl+Alt+N', state: 'taken' }, 'Ctrl+Alt+N')).toEqual({ text: expect.stringContaining('Skrót zajęty przez inny program'), warn: true })
-    expect(quickKeyNote({ key: 'Ctrl+Alt+N', state: 'on' }, 'Ctrl+Alt+N').warn).toBe(false)
+    expect(quickKeyNote({ key: 'Super+Alt+N', state: 'taken' }, 'Super+Alt+N')).toEqual({ text: expect.stringContaining('Skrót zajęty przez inny program'), warn: true })
+    expect(quickKeyNote({ key: 'Super+Alt+N', state: 'on' }, 'Super+Alt+N').warn).toBe(false)
     expect(quickKeyNote({ key: null, state: 'off' }, null).text).toContain('Wyłączony')
-    expect(quickKeyNote(null, 'Ctrl+Alt+N').warn).toBe(false)
+    expect(quickKeyNote(null, 'Super+Alt+N').warn).toBe(false)
   })
 })
 
@@ -249,5 +253,20 @@ describe('„Powtarzaj” na bloku zadania i próśb (D408)', () => {
     expect(repeatNote(planBlock({ id: 'p', categoryId: 'prosby', startMin: 600, durationMin: 30, requests: ['r1'] }))).toBe('Blok próśb należy do jednego dnia – nie powtarza się w serii.')
     expect(repeatNote(planBlock({ id: 'u', categoryId: 'inne', startMin: 600, durationMin: 30 }))).toBeNull()
     expect(repeatNote(planBlock({ id: 's', categoryId: 'trading', startMin: 600, durationMin: 30, origin: 'session' }))).toBeNull()
+  })
+})
+
+describe('plan poranny: zadania z „Dziś” zaznaczone od razu, prośby nie (D408)', () => {
+  const offered = () => morningCases(items([task('t1', { list: 'today' }), task('t2', { list: 'today' }), newRequest('r1', 1, { person: 'mama', estimateMin: 20, note: '' })]))
+  it('bez ruchu użytkownika: wszystkie zadania, żadna prośba', () => {
+    const c = morningChosen(offered(), [])
+    expect([c.requests, [...c.tasks].sort()]).toEqual([[], ['t1', 't2']])
+  })
+  it('zmiana zaznaczenia odwraca wybór: zadanie odznaczone, prośba zaznaczona', () => {
+    expect(morningChosen(offered(), ['t1', 'r1'])).toEqual({ requests: ['r1'], tasks: ['t2'] })
+    expect(isMorningChosen('task', 't1', [])).toBe(true)
+    expect(isMorningChosen('task', 't1', ['t1'])).toBe(false)
+    expect(isMorningChosen('request', 'r1', [])).toBe(false)
+    expect(isMorningChosen('request', 'r1', ['r1'])).toBe(true)
   })
 })

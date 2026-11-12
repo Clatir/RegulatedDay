@@ -162,7 +162,7 @@ W ciągu dnia przypomina Ci się nagle kilkanaście drobiazgów: wymienić filtr
   * *W tym tygodniu* – zadania wybrane do realizacji w bieżącym cyklu,
   * *Kiedyś / Może* – pomysły bez presji czasowej, które nie zaśmiecają codziennego widoku,
   * *Zrobione* – archiwum sukcesów.
-* **Szybki zapis:** Ctrl+Alt+N w dowolnej aplikacji otwiera małe okienko „Do skrzynki” (Enter zapisuje, Esc zamyka); to samo pole otwiera „+” na pasku pulpitu (D385).
+* **Szybki zapis:** Win+Alt+N w dowolnej aplikacji otwiera małe okienko „Do skrzynki” (Enter zapisuje, Esc zamyka); to samo pole otwiera „+” na pasku pulpitu (D385).
 * **Płynna zamiana w plan:** Zadanie ma tytuł, szacunek (domyślnie 30 min), kategorię i notatkę. Przeciągnięte z panelu przy osi „Dziś” albo ze strony „Sprawy” staje się blokiem elastycznym tej kategorii; plan poranny pozwala wybrać zadania z listy „Dziś” razem z prośbami. Po końcu bloku pasek pyta cicho: *„Zadanie zrobione? · Tak · Wraca na listę”* (D384).
 
 ---

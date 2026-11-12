@@ -111,18 +111,18 @@ describe('ustawienia bez liczb', () => {
 })
 
 describe('skrót szybkiego zapisu (D385, D402)', () => {
-  it('domyślnie Ctrl+Alt+N; wyłączony zostaje wyłączony; zły – domyślny', () => {
-    expect(DEFAULT_MACHINE_PREFS.quickKey).toBe('Ctrl+Alt+N')
-    expect(machinePrefsFrom({}).quickKey).toBe('Ctrl+Alt+N')
+  it('domyślnie Win+Alt+N (D408); wyłączony zostaje wyłączony; zły – domyślny', () => {
+    expect(DEFAULT_MACHINE_PREFS.quickKey).toBe('Super+Alt+N')
+    expect(machinePrefsFrom({}).quickKey).toBe('Super+Alt+N')
     expect(machinePrefsFrom({ quickKey: null }).quickKey).toBeNull()
-    expect(machinePrefsFrom({ quickKey: 'Q' }).quickKey).toBe('Ctrl+Alt+N')
+    expect(machinePrefsFrom({ quickKey: 'Q' }).quickKey).toBe('Super+Alt+N')
     expect(patchMachinePrefs(DEFAULT_MACHINE_PREFS, { quickKey: 'alt+shift+k' }).quickKey).toBe('Alt+Shift+K')
   })
 
-  it('zapis skrótu: modyfikatory w kolejności Ctrl, Alt, Shift, Super, jeden klawisz; bez Ctrl ani Alt – nie', () => {
+  it('zapis skrótu: modyfikatory w kolejności Super (Win), Ctrl, Alt, Shift, jeden klawisz; bez Ctrl ani Alt – nie', () => {
     expect(quickKeyFrom('Shift+Control+n')).toBe('Ctrl+Shift+N')
     expect(quickKeyFrom('Ctrl+Alt+F12')).toBe('Ctrl+Alt+F12')
-    expect(quickKeyFrom('Super+Alt+space')).toBe('Alt+Super+Space')
+    expect(quickKeyFrom('Super+Alt+space')).toBe('Super+Alt+Space')
     expect(quickKeyFrom('N')).toBeNull()
     expect(quickKeyFrom('Shift+N')).toBeNull()
     expect(quickKeyFrom('Ctrl+Ctrl+N')).toBeNull()

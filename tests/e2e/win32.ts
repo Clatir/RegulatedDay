@@ -82,7 +82,7 @@ public static class RdWin {
     return sb.Append("]").ToString();
   }
   public static string Foreground() { return GetForegroundWindow().ToInt64().ToString(); }
-  /** Keys pressed for real, as by a keyboard (virtual key codes, e.g. Ctrl+Alt+N = 0x11,0x12,0x4E): down in order, up in reverse. */
+  /** Keys pressed for real, as by a keyboard (virtual key codes, e.g. Win+Alt+N = 0x5B,0x12,0x4E): down in order, up in reverse. */
   public static void Keys(string codes) {
     var vks = new List<byte>();
     foreach (var c in codes.Split(',')) vks.Add(Convert.ToByte(c.Trim(), 16));
@@ -235,7 +235,7 @@ export interface TopWindow {
 /** Every top-level window, from the top of the z-order down. */
 export const topWindows = (): TopWindow[] => JSON.parse(ps('[RdWin]::Windows()')) as TopWindow[]
 export const foreground = (): string => ps('[RdWin]::Foreground()')
-/** Keys pressed for real (virtual key codes in hex, e.g. ['11', '12', '4E'] – Ctrl+Alt+N). */
+/** Keys pressed for real (virtual key codes in hex, e.g. ['5B', '12', '4E'] – Win+Alt+N). */
 export const keys = (codes: readonly string[]): void => void ps(`[RdWin]::Keys('${codes.join(',')}')`)
 /** The window is „topmost” (WS_EX_TOPMOST). */
 export const topMost = (hwnd: string): boolean => ps(`[RdWin]::TopMost(${hwnd})`) === 'True'

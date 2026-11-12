@@ -3,7 +3,7 @@
  * start, not with the bar's refreshes; its field saves a task of your own into „Skrzynka” on Enter and hides, Esc hides
  * it without saving (shown here from the test, as the shortcut would). „+” of the main window's bar unfolds the same
  * field in the bar; „+” of the desktop bar (it takes no keys) opens the icon's panel with it (T756).
- * The shortcut itself – Ctrl+Alt+N pressed for real, the window over the others with the focus, not on top after – only
+ * The shortcut itself – Win+Alt+N pressed for real, the window over the others with the focus, not on top after – only
  * in CI on Windows (`quick-windows.spec.ts`).
  */
 import { readdirSync, readFileSync } from 'node:fs'
@@ -61,8 +61,8 @@ test('„Do skrzynki”: nie wychodzi sam; Enter zapisuje zadanie w Skrzynce i c
       const bar = await viewPage(app, 'bar')
       await expect(bar.getByTestId('bar-quick')).toBeVisible()
       expect(await quickWindow(app)).toMatchObject({ visible: false, onTop: false })
-      // The shortcut's state for the settings: Ctrl+Alt+N (another program may hold it on a developer's computer).
-      expect(await page.evaluate(() => window.rd.quickShortcut())).toMatchObject({ key: 'Ctrl+Alt+N', state: expect.stringMatching(/^(on|taken)$/) })
+      // The shortcut's state for the settings: Win+Alt+N (another program may hold it on a developer's computer).
+      expect(await page.evaluate(() => window.rd.quickShortcut())).toMatchObject({ key: 'Super+Alt+N', state: expect.stringMatching(/^(on|taken)$/) })
 
       await showAsShortcut(app)
       const q = await quickPage(app)

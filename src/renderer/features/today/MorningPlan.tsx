@@ -32,7 +32,7 @@ import { logEvents, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
 import { planMorning, useCases } from '../../store/cases'
-import { caseTitle } from '../cases/casesLogic'
+import { caseTitle, isMorningChosen, morningChosen } from '../cases/casesLogic'
 import { toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { answerSeries } from '../series/seriesActions'
@@ -184,7 +184,9 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
   const offered = useMemo(() => morningCases(caseItems), [caseItems])
   const queued = requestsOn ? offered.requests : []
   const dayTasks = offered.tasks
-  const [chosen, setChosen] = useState<string[]>([])
+  // D408: the tasks of „Dziś” are chosen at once, the requests are not – `toggled` is what you changed against that.
+  const [toggled, setToggled] = useState<string[]>([])
+  const chosen = morningChosen({ requests: queued, tasks: dayTasks }, toggled)
   const approved = s.boundary.approved
   const proposal = s.boundary.proposal
 
@@ -207,11 +209,11 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
   // as one block, then each task, one after another from the first free place of the day.
   const addChosen = () =>
     run(async () => {
-      const reqs = queued.filter((x) => chosen.includes(x.record.id))
-      const tasks = dayTasks.filter((x) => chosen.includes(x.record.id))
+      const reqs = queued.filter((x) => chosen.requests.includes(x.record.id))
+      const tasks = dayTasks.filter((x) => chosen.tasks.includes(x.record.id))
       const start = freeStart(s, s.now, morningMinutes(reqs.map((x) => x.record), tasks.map((x) => x.record)))
       const r = await planMorning(date, raw, { requests: reqs.map((x) => x.record.id), tasks: tasks.map((x) => x.record.id) }, start)
-      if (r.saved) setChosen([])
+      if (r.saved) setToggled([])
     })
 
   return (
@@ -302,13 +304,13 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
           </span>
           {[...queued, ...dayTasks].map((x) => (
             <label key={x.record.id} className="flex items-center gap-2" data-testid="queue-item" data-case={x.record.id}>
-              <input type="checkbox" checked={chosen.includes(x.record.id)} onChange={(e) => setChosen(e.currentTarget.checked ? [...chosen, x.record.id] : chosen.filter((id) => id !== x.record.id))} />
+              <input type="checkbox" checked={isMorningChosen(x.record.kind, x.record.id, toggled)} onChange={() => setToggled(toggled.includes(x.record.id) ? toggled.filter((id) => id !== x.record.id) : [...toggled, x.record.id])} />
               <span>{caseTitle(x.record, names.rd)}</span>
               {x.record.kind === 'request' && <span className="text-muted">{x.record.note}</span>}
               <span className="num ml-auto text-muted">{durationLabel(x.estimateMin)}</span>
             </label>
           ))}
-          <button type="button" className="btn self-start" disabled={!chosen.length || busy} onClick={() => void addChosen()} data-testid="queue-add">
+          <button type="button" className="btn self-start" disabled={!(chosen.requests.length + chosen.tasks.length) || busy} onClick={() => void addChosen()} data-testid="queue-add">
             Dodaj do planu
           </button>
         </div>

@@ -115,7 +115,7 @@ describe('migracja próśb (D402, T750) – na kopii folderu', () => {
 })
 
 describe('szybki zapis i zadanie na osi (D385, D384)', () => {
-  it('Ctrl+Alt+N / „+”: zadanie własne w „Skrzynce”; bez tytułu – nic', async () => {
+  it('Win+Alt+N / „+”: zadanie własne w „Skrzynce”; bez tytułu – nic', async () => {
     const dir = join(root, 'data')
     mkdirSync(dir, { recursive: true })
     await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)

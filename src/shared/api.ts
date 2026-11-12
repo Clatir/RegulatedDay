@@ -117,7 +117,7 @@ export interface QuickAddResult {
 }
 
 /**
- * The global shortcut of the quick capture on this computer (D385, D402): its keys (an accelerator, „Ctrl+Alt+N”; null –
+ * The global shortcut of the quick capture on this computer (D385, D402): its keys (an accelerator, „Super+Alt+N” (Win+Alt+N); null –
  * switched off in the settings) and whether Windows took it – `taken`: another program holds it („Skrót zajęty przez inny
  * program”), `off`: switched off.
  */

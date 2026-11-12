@@ -99,7 +99,7 @@ export function CasesPage() {
       </div>
       {adding && <NewTask onClose={() => setAdding(false)} />}
       <FilterBar listKey="cases" options={options} shown={shown} total={all.length} />
-      {all.length === 0 && !adding && <EmptyState why="Nic tu jeszcze nie ma. Zadanie „na kiedyś” wpiszesz tutaj albo skrótem Ctrl+Alt+N z dowolnego miejsca – ląduje w Skrzynce, a rano wybierzesz je w planie." action={{ label: '+ Zadanie', run: () => setAdding(true) }} />}
+      {all.length === 0 && !adding && <EmptyState why="Nic tu jeszcze nie ma. Zadanie „na kiedyś” wpiszesz tutaj albo skrótem Win+Alt+N z dowolnego miejsca – ląduje w Skrzynce, a rano wybierzesz je w planie." action={{ label: '+ Zadanie', run: () => setAdding(true) }} />}
       {all.length > 0 &&
         sections.map((s) => (
           <section key={s.list} className="flex flex-col gap-1.5" data-testid={`cases-${s.list}`}>

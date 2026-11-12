@@ -4,7 +4,7 @@
  * it (the day's file and the record in one edit, „Cofnij” in the toast); „Powtarzaj” not offered on its block; the morning
  * plan's step of requests takes the tasks of „Dziś”; the shortcut of the quick capture in the settings (validated, switched
  * off). The pytanie „Zadanie zrobione?” of the bar and the ritual's lines are the unit and fs tests' (they need a block that
- * has run); the real Ctrl+Alt+N – `quick-windows.spec.ts` (CI on Windows).
+ * has run); the real Win+Alt+N – `quick-windows.spec.ts` (CI on Windows).
  */
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -163,7 +163,9 @@ test('plan poranny: krok próśb obejmuje zadania z „Dziś” – wybrane zada
       await expect(pick.getByTestId('queue-item')).toHaveCount(2)
       await expect(pick).toContainText('Wymienić filtr')
       await expect(pick).not.toContainText('Ze Skrzynki')
-      await pick.getByTestId('queue-item').filter({ hasText: 'Wymienić filtr' }).getByRole('checkbox').check()
+      // D408: the task of „Dziś” is chosen at once, the request is not.
+      await expect(pick.getByTestId('queue-item').filter({ hasText: 'Wymienić filtr' }).getByRole('checkbox')).toBeChecked()
+      await expect(pick.getByTestId('queue-item').filter({ hasText: 'zakupy' }).getByRole('checkbox')).not.toBeChecked()
       await pick.getByTestId('queue-add').click()
       await expect.poll(() => blocksOf(dataDir, today).map((b) => [b.task, b.durationMin, b.categoryId])).toEqual([['t1', 45, 'inne']])
       await expect.poll(() => records(dataDir).find((r) => r.id === 't1')!.block).toBe(blocksOf(dataDir, today)[0]!.id)
@@ -185,16 +187,16 @@ test('Ustawienia: skrót szybkiego zapisu – nieprawidłowy odrzucony z powodem
     await withMainLog(userData, async () => {
       await page.getByTestId('nav-settings').click()
       const key = page.getByTestId('pref-quick-key')
-      await expect(key).toHaveValue('Ctrl+Alt+N')
+      await expect(key).toHaveValue('Win+Alt+N')
       // A key without Ctrl or Alt is refused with its reason – nothing is sent (the default does not return in silence).
       await key.fill('N')
       await key.press('Enter')
       await expect(page.getByTestId('pref-quick-key-error')).toContainText('Ctrl lub Alt')
-      expect((await prefs(page)).quickKey).toBe('Ctrl+Alt+N')
-      await key.fill('ctrl+alt+f11')
+      expect((await prefs(page)).quickKey).toBe('Super+Alt+N')
+      await key.fill('win+alt+f11')
       await key.press('Enter')
-      await expect(key).toHaveValue('Ctrl+Alt+F11')
-      await expect.poll(async () => (await prefs(page)).quickKey).toBe('Ctrl+Alt+F11')
+      await expect(key).toHaveValue('Win+Alt+F11')
+      await expect.poll(async () => (await prefs(page)).quickKey).toBe('Super+Alt+F11')
       // Windows' answer is told under the field: it works, or another program holds it.
       await expect(page.getByTestId('pref-quick-note')).toContainText(/Otwiera małe okienko|Skrót zajęty przez inny program/)
       await page.getByTestId('pref-quick-on').click()
@@ -202,7 +204,7 @@ test('Ustawienia: skrót szybkiego zapisu – nieprawidłowy odrzucony z powodem
       await expect(page.getByTestId('pref-quick-note')).toContainText('Wyłączony')
       await expect(page.getByTestId('pref-quick-key')).toHaveCount(0)
       await page.getByTestId('pref-quick-on').click()
-      await expect.poll(async () => (await prefs(page)).quickKey).toBe('Ctrl+Alt+N')
+      await expect.poll(async () => (await prefs(page)).quickKey).toBe('Super+Alt+N')
     })
     expect(errors).toEqual([])
   } finally {

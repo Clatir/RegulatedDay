@@ -1,5 +1,5 @@
 /**
- * The window „Do skrzynki” (D385, D402): one small field over every window – only on your shortcut (Ctrl+Alt+N by
+ * The window „Do skrzynki” (D385, D402): one small field over every window – only on your shortcut (Win+Alt+N by
  * default, changed or switched off in the settings of this computer), an exception of D229 like „Zawsze na wierzchu”
  * (D291). It never comes up by itself: the one way up is `raise`, called only by the global shortcut registered here
  * (scripts/check-code.mjs checks this file – show, focus and „on top” only in `raise`, `raise` only from the shortcut's
