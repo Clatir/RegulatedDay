@@ -3,16 +3,17 @@
  * (`stepsAnswer`: a saved removal offers „Cofnij”), the keys that move a step (Alt+↑ / Alt+↓ – the keyboard's way to the
  * drag), the place a drop gives a step, the message of a refused op said before anything is sent.
  */
-import type { SaveAnswer } from '../../store/data'
+import { saveAnswer, type SaveAnswer } from '../../store/data'
 import { undoSteps, type StepsResult } from '../../store/steps'
 import { undoToast } from '../../store/ui'
 import { applyStepOp, moveStepOp, type Step, type StepOp } from '@shared/model/steps'
 
-/** What a change of steps became for a field: saved, refused (the text stays in the field), or asked (a question waits). */
+/** What a change of steps became for a field: saved, refused (the text stays in the field – also a failed send), or asked (a question waits). */
 export function stepsAnswer(op: StepOp, r: StepsResult): SaveAnswer {
   // A removal is the one change that loses something (the step and its tick on the day): „Cofnij” for 10 s, as every removal.
   if (r.saved && op.op === 'remove' && r.undo.length) undoToast('Krok usunięty', () => void undoSteps(r.undo))
-  return r.saved ? true : r.error ? false : 'asked'
+  // Not saved without a reason of ours: what the queue answered says it (a failed send or a broken file is a refusal – the field gets its text back).
+  return r.saved ? true : r.error ? false : saveAnswer(r.outcomes)
 }
 
 /** The op an Alt+arrow makes of the step `id` (the list shown): one place up or down; null – it is at the end already. */

@@ -14,11 +14,17 @@ import { marketDay } from '@shared/calendar/holidays'
 import { recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { tickEdits } from '@shared/engine/steps'
+import { createDay } from '@shared/engine/createDay'
+import { seriesBlockId } from '@shared/engine/series'
+import { RULES_VERSION } from '@shared/model/events'
 import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
 import { requestFrom } from '@shared/model/requests'
-import { placeLogical } from '@shared/time/day'
+import { seriesFrom, seriesJson, seriesPlans, typeOfDays, type Series } from '@shared/model/series'
+import { dayStart, logicalDayOf, placeLogical } from '@shared/time/day'
+import { addDays } from '@shared/time/zone'
 import { ALL_STEPS_TEXT, barStepText } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
+import { DataHub } from '../../src/main/data/hub'
 import { nodeFs } from '../../src/main/data/fsio'
 import { WidgetEngine, type NotifyIn } from '../../src/main/widget'
 
@@ -174,5 +180,50 @@ describe('linia kroku na pasku (D440, T793)', () => {
     expect(requestFrom(read(rel))!.steps.map((s) => s.done)).toEqual([true, false, false, false])
     expect(dayFileFrom(read(paths.day(DAY)), DAY).stepsDone.wd).toEqual(['s1'])
     await a.folder.close('quit')
+  })
+})
+
+describe('kroki serii w turze zapisu (przegląd, T790)', () => {
+  it('dzisiejsze wystąpienie zaczęte: „Cała seria” + krok A, potem + krok B z tego samego panelu – seria ma oba', async () => {
+    const today = logicalDayOf(Date.now())
+    const start = addDays(today, -7)
+    const series: Series = {
+      id: 'ang',
+      root: 'ang',
+      start,
+      until: null,
+      count: null,
+      versions: [{ from: start, block: { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: false, background: null, costs: null, bgCostPct: null, note: '', name: 'Angielski', routine: null, steps: [{ id: 's1', title: 'Słówka', order: 0, done: false }] }, rule: { kind: 'daily' }, special: 'held' }],
+      archived: false
+    }
+    mkdirSync(join(dataDir, 'series'), { recursive: true })
+    write(paths.record('series', 'ang'), seriesJson(series))
+    // Today made and its occurrence begun (a start in the log): a change of the series leaves today's block as it is.
+    const snapshot = createDay({ date: today, changes: [], templates: [], lectures: [], series: seriesPlans([series], typeOfDays([], () => null), marketDay), dayFile: null, holidays: marketDay, at: null })
+    const id = seriesBlockId(today, 'ang')
+    const t0 = dayStart(today)
+    const base = { c: 'pcb', v: RULES_VERSION, day: today, dom: 'timer' }
+    const lines = [
+      { ...base, id: 'pcb-0', n: 0, t: t0, l: t0, k: 'day.create', snapshot },
+      { ...base, id: 'pcb-1', n: 1, t: t0 + 60_000, l: t0 + 60_000, k: 'block.start', block: id, at: t0 + 60_000, bg: false, how: 'click', planned: { categoryId: 'inne', variantId: null, durationMin: 60, tag: null, fixed: false } }
+    ]
+    mkdirSync(join(dataDir, 'log', today.slice(0, 4), today), { recursive: true })
+    writeFileSync(join(dataDir, paths.log(today, 'pcb')), `${lines.map((x) => JSON.stringify(x)).join('\n')}\n`)
+    const hub = new DataHub({ userData: join(root, 'appdata'), computer: () => 'pca', computerName: 'PC A', appVersion: '1.14.0', runId: `run-${Math.random()}`, holidays: marketDay, idleSeconds: () => 0, log: () => undefined, writeGuardPlan: false, extraBackupDir: () => null, previousVersion: () => null, onChange: () => undefined })
+    try {
+      expect(await hub.open(dataDir)).toBe(true)
+      const target = { date: today, blockId: id }
+      for (const [k, title] of [['A', 'Krok A'], ['B', 'Krok B']] as const) {
+        const out = await hub.seriesChange(target, 'all', { stepsOp: { op: 'add', id: k, title, after: null } })
+        expect([out.ok, out.error]).toEqual([true, null])
+      }
+      const onDisk = seriesFrom(read(paths.record('series', 'ang')))!
+      expect(onDisk.versions.map((v) => [v.from, v.block.steps.map((x) => x.id)])).toEqual([
+        [start, ['s1']],
+        [today, ['s1', 'A', 'B']]
+      ])
+    } finally {
+      await hub.close('quit')
+    }
   })
 })

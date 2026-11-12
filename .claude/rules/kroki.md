@@ -21,14 +21,15 @@ paths:
 dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyta (D72); nic nie gra dźwięku.
 
 ## Pliki
-- `model/steps.ts` – `Step { id, title, order, done }`, `STEPS_MAX` 30, `STEP_TITLE_MAX` 200 (T789); `stepsFrom` (kolejność
-  po `order`, remis – kolejność w pliku; `done` nigdy z elementu listy), `stepsJson` / `withStepsJson` (zapis listy bez
-  `done`, w kolejności pliku, nieznane pola elementów zostają – T787), `applyStepOp` + `addStepOp` / `moveStepOp` (operacje po
+- `model/steps.ts` – `Step { id, title, order, done }`, `STEPS_MAX` 30 (tylko przy dodawaniu), `STEP_TITLE_MAX` 200 (T789);
+  `stepsFrom` (każdy krok, kolejność po `order`, remis – kolejność w pliku; `done` nigdy z elementu listy), `stepsJson` /
+  `withStepsJson` (zapis bez `done`, w kolejności pliku; pozycja niezmieniona albo nieodczytana zostaje jak w pliku – T787),
+  `stepOpFrom` (operacja z okna), `applyStepOp` + `addStepOp` / `moveStepOp` (operacje po
   id – ta sama na liście bloku i zadania, T790), `stepsCounter` („✓ 3/4”), `firstOpen`, `freshSteps`, `textWithSteps` (Ctrl K).
 - `engine/steps.ts` – zapisy na surowym JSON: `tickEdits`, `blockStepsEdits` (dzień + zadanie), `taskTickEdits`,
   `taskStepsEdits` (zadanie + blok od dziś), `templateStepsChanged`, `seriesStepsPatch`, `taskOfBlock`, `dayBlockNow`.
 - `renderer/store/steps.ts` – API okna: `tickBlockStep`, `changeBlockSteps`, `tickTaskStep`, `changeTaskSteps`,
-  `changeTemplateSteps`, `changeSeriesSteps` (zakres serii), `undoSteps`; wynik `StepsResult` (jak `CaseResult` bez `id`).
+  `changeTemplateSteps`, `changeSeriesSteps` (zakres serii), `changeSeriesListSteps` (lista serii w „Szablonach”), `undoSteps`; wynik `StepsResult` (jak `CaseResult` bez `id`).
 - `features/steps/` – ekrany (T795–T799): `StepsEditor` (lista, pole „Dodaj krok”, ptaszki, tytuł w miejscu, uchwyt i Alt+↑/↓),
   `stepsUi` (`stepsAnswer` – „Cofnij” po usunięciu, `keyMove`, `dropMove`, `refusedOp`), `blockSteps` (`saveBlockSteps` –
   panel dnia: szkic, zakres serii, dzień). Używają go `TodayPage` (slot `steps` w `BlockEditor`), `TemplatesPage`, `SeriesEditor`
@@ -39,13 +40,17 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
   (T786): plik dnia `stepsDone` (blok → krok → true; `DayFile.stepsDone`), zadanie – `stepsDone` w rekordzie (krok → true).
   `dayPlan` kładzie odhaczenia dnia na bloki planu (`done`); odhaczenie nigdy nie zapisuje bloku – blok szablonu i serii
   zostaje „jak ze źródła” (wystąpienie się nie odłącza: `sameOccurrence` porównuje listę bez odhaczeń).
-- `stepsDone` to `LEAF_MAPS` w `recordEdit` (T788): zapis liść po liściu także w nowej mapie – pierwsze odhaczenie na dwóch
+- `stepsDone` to `LEAF_MAPS` w `recordEdit` (T788; per rodzaj rekordu – dzień, sprawa): zapis liść po liściu także w nowej mapie – pierwsze odhaczenie na dwóch
   komputerach to dwa pola bez pytania; kopia konfliktowa łączy mapy sumą (odhaczony wygrywa).
 - Zmiana listy w dniu = blok w pliku dnia (`putBlock`, jak każda zmiana bloku tego dnia; usunięty krok traci odhaczenie);
-  seria: „Tylko to” – edycja dnia, „To i następne” / „Cała seria” – `seriesChange` z całą listą (bez odhaczeń).
+  seria: „Tylko to” – edycja dnia, „To i następne” / „Cała seria” i lista w „Szablonach” – `seriesChange` z operacją
+  (`SeriesPatch.stepsOp`), kładzioną w turze zapisu na liście każdej wersji od dnia zmiany (`changedFrom`, T790) – nigdy lista
+  z bloku okna (wystąpienie zaczęte dziś nie idzie za serią). `move` przed krok spoza listy – bez zmiany.
 - Zadanie i jego blok (T792): `caseBlock` kopiuje listę (te same id), `withTaskBlock` – odhaczenia zadania w dniu; zmiana w
   bloku idzie do zadania, gdy `taskOfBlock` (zadanie zaplanowane w tym bloku); zmiana w zadaniu – do bloku dnia od dziś.
-- Kopia dnia (`copiedDay`) – kroki odznaczone (nowe id); przeniesienie (`moveBetweenDays`) zabiera odhaczenia.
+  Nigdy po cichu osobno: dzień bloku nieczytelny – `DAY_UNREADABLE`, lustrzana operacja odrzucona – odmowa całej zmiany.
+- Kopia dnia (`copiedDay`) – kroki odznaczone (nowe id); przeniesienie (`moveBetweenDays`) zabiera odhaczenia: w dniu
+  docelowym dokładnie bieżące (`setStepsDone`), w źródłowym żadne.
 - Migawka starszej wersji bez pola `steps` (T791): bloki szablonu i serii biorą listę ze źródła (`snapshotOf`).
 - Pasek (T793): `WidgetView.steps` (`BarSteps`) – blok na pierwszym planie, pierwszy nieodhaczony; ukryte tylko w „Odcinam
   się”; akcja `step` `<blok>|<krok>` → `WidgetEngine.tickStep` (jedna edycja: dzień + zadanie). Tekst – `barStepText`.

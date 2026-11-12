@@ -122,6 +122,17 @@ export function setStepDone(raw: Raw, blockId: string, stepId: string, done: boo
   return { ...raw, stepsDone: all }
 }
 
+/**
+ * A block's ticks in the file set to exactly `ids` (a block that comes to a day with its ticks, or leaves it – none): every
+ * other tick of the block in the file goes (a block moved away and back never brings back a tick taken back meanwhile).
+ */
+export function setStepsDone(raw: Raw, blockId: string, ids: readonly string[]): Raw {
+  const all = isPlain(raw.stepsDone) ? { ...raw.stepsDone } : {}
+  if (!ids.length && !isPlain(all[blockId])) return raw
+  all[blockId] = Object.fromEntries(ids.map((id) => [id, true]))
+  return { ...raw, stepsDone: all }
+}
+
 /** The ids of a block's steps ticked off in the day's file. */
 export function stepsDoneIn(raw: Raw | null | undefined, blockId: string): string[] {
   const all = raw && isPlain(raw.stepsDone) ? raw.stepsDone : null

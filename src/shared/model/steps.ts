@@ -11,7 +11,8 @@
  *
  * The file keeps its order of the list (T787): a change of the order changes the steps' `order` and nothing else, a new step
  * goes at the end of the list in the file – every change is a field of one step, merged with another computer's change of
- * another step. Read tolerantly: a step without an id or a title is left out, fields this version does not know stay.
+ * another step. Read tolerantly: a step without an id or a title is left out of the list shown, yet stays in the file – as
+ * every item a write does not change, with the fields this version does not know.
  */
 import { newId } from './ids'
 
@@ -24,7 +25,7 @@ export interface Step {
   done: boolean
 }
 
-/** At most this many steps in one list, each title at most this long (T789). */
+/** At most this many steps in one list – counted only when adding (T789: a list may hold more after two computers added) – and each title at most this long. */
 export const STEPS_MAX = 30
 export const STEP_TITLE_MAX = 200
 
@@ -35,7 +36,8 @@ export const stepTitleOf = (v: unknown): string => (typeof v === 'string' ? v.re
 
 /**
  * The steps of a list as written (any version, also a snapshot of the log): in their order (`order`, ties – the file's),
- * at most `STEPS_MAX`, each id once; `done` from `done` (the ticks of its day or task), never from the file's item.
+ * each id once, every one read – the limit counts only when adding (T789: two computers adding at once may leave more);
+ * `done` from `done` (the ticks of its day or task), never from the file's item.
  */
 export function stepsFrom(v: unknown, done?: ReadonlySet<string>): Step[] {
   if (!Array.isArray(v) || v.length === 0) return []
@@ -49,7 +51,7 @@ export function stepsFrom(v: unknown, done?: ReadonlySet<string>): Step[] {
     out.push({ id: x.id, title, order: typeof x.order === 'number' && Number.isFinite(x.order) ? x.order : at, done: done?.has(x.id) === true, at })
   })
   out.sort((a, b) => a.order - b.order || a.at - b.at)
-  return out.slice(0, STEPS_MAX).map(({ at: _at, ...s }) => s)
+  return out.map(({ at: _at, ...s }) => s)
 }
 
 /** The same list to show (ids and titles in the same order) – ticks and the numbers of `order` aside. */
@@ -58,24 +60,32 @@ export function sameStepList(a: readonly Pick<Step, 'id' | 'title'>[], b: readon
 }
 
 /**
- * The list as written over the file's list `before` (T787): the file's items in the file's order, each with its fields
- * this version does not know, its title and order set; a step new to the file at the end; one not in `steps` out. No
- * `done` – a tick is the day's (or the task's). Undefined: no steps and none in the file (the field is not written).
+ * The list as written over the file's list `before` (T787): every item of the file in the file's order – one this version
+ * reads and `steps` changed gets its title and order (its other fields stay), one it reads unchanged or does not read at
+ * all (no title, no id, not an object, a second of an id) stays the file's own; a step new to the file at the end; one read
+ * and not in `steps` (removed) out. No `done` is ever written – a tick is the day's (or the task's). Undefined: no steps and
+ * no list in the file (the field is not written).
  */
-export function stepsJson(steps: readonly Step[], before?: unknown): Array<Record<string, unknown>> | undefined {
-  const raw = Array.isArray(before) ? before.filter(isPlain) : []
-  if (!steps.length && !Array.isArray(before)) return undefined
+export function stepsJson(steps: readonly Step[], before?: unknown): unknown[] | undefined {
+  if (!Array.isArray(before)) return steps.length ? steps.map((s) => ({ id: s.id, title: s.title, order: s.order })) : undefined
+  const read = new Map(stepsFrom(before).map((s) => [s.id, s]))
   const byId = new Map(steps.map((s) => [s.id, s]))
-  const out: Array<Record<string, unknown>> = []
+  const out: unknown[] = []
   const written = new Set<string>()
-  for (const x of raw) {
-    const s = typeof x.id === 'string' ? byId.get(x.id) : undefined
-    if (!s || written.has(s.id)) continue
-    written.add(s.id)
-    const { done: _done, ...rest } = x
-    out.push({ ...rest, id: s.id, title: s.title, order: s.order })
+  for (const x of before) {
+    const id = isPlain(x) && typeof x.id === 'string' ? x.id : null
+    const was = id != null && !written.has(id) ? read.get(id) : undefined
+    // Not read by this version (or a second item of an id): the file's own, as it is.
+    if (!was) {
+      out.push(x)
+      continue
+    }
+    written.add(was.id)
+    const s = byId.get(was.id)
+    if (!s) continue
+    out.push(s.title === was.title && s.order === was.order ? x : { ...(x as Record<string, unknown>), title: s.title, order: s.order })
   }
-  for (const s of steps) if (!written.has(s.id)) out.push({ id: s.id, title: s.title, order: s.order })
+  for (const s of steps) if (!read.has(s.id)) out.push({ id: s.id, title: s.title, order: s.order })
   return out
 }
 
@@ -118,6 +128,24 @@ export type StepOp =
   | { op: 'rename'; id: string; title: string }
   | { op: 'remove'; id: string }
   | { op: 'move'; id: string; before: string | null }
+
+/** An op from the window (untrusted – the series API): its shape checked; null – not one. */
+export function stepOpFrom(v: unknown): StepOp | null {
+  if (!isPlain(v) || typeof v.id !== 'string' || !v.id) return null
+  const idOrNull = (x: unknown) => x === null || x === undefined || (typeof x === 'string' && !!x)
+  switch (v.op) {
+    case 'add':
+      return typeof v.title === 'string' && idOrNull(v.after) ? { op: 'add', id: v.id, title: v.title, after: (v.after as string | null | undefined) ?? null } : null
+    case 'rename':
+      return typeof v.title === 'string' ? { op: 'rename', id: v.id, title: v.title } : null
+    case 'remove':
+      return { op: 'remove', id: v.id }
+    case 'move':
+      return idOrNull(v.before) ? { op: 'move', id: v.id, before: (v.before as string | null | undefined) ?? null } : null
+    default:
+      return null
+  }
+}
 
 /** A new step's op (its id made here): after `after` (null / undefined – at the end). */
 export const addStepOp = (title: string, after?: string | null): StepOp => ({ op: 'add', id: newId(8), title, after: after ?? null })
@@ -168,10 +196,11 @@ export function applyStepOp(steps: readonly Step[], op: StepOp): { steps: Step[]
     case 'remove':
       return { steps: i < 0 ? list : list.filter((s) => s.id !== op.id) }
     case 'move': {
-      if (i < 0 || op.before === op.id) return { steps: list }
+      // Before a step this list does not have (removed elsewhere, only on the other side of a task and its block): it stays.
+      if (i < 0 || op.before === op.id || (op.before != null && !list.some((x) => x.id === op.before))) return { steps: list }
       const [s] = list.splice(i, 1)
-      const at = op.before != null ? list.findIndex((x) => x.id === op.before) : -1
-      list.splice(at < 0 ? list.length : at, 0, s!)
+      const at = op.before != null ? list.findIndex((x) => x.id === op.before) : list.length
+      list.splice(at, 0, s!)
       return { steps: renumbered(list) }
     }
   }

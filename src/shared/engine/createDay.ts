@@ -290,7 +290,8 @@ function withDayTicks(b: PlanBlock, dayFile: DayFile | null): PlanBlock {
   // A file made by hand (a test, an import) may lack the field – no ticks then.
   const ticks = dayFile?.stepsDone?.[b.id]
   if (!Array.isArray(raw) || raw.length === 0) return Array.isArray(raw) ? b : { ...b, steps: [] }
-  const steps = withDone(raw === b.steps && raw.every((s) => typeof s?.done === 'boolean') ? b.steps : stepsFrom(raw), new Set(ticks ?? []))
+  // A list read already (a file's, a template's, a series') has `done` on every step; a raw one of the log is read here.
+  const steps = withDone(raw.every((s) => typeof s?.done === 'boolean') ? b.steps : stepsFrom(raw), new Set(ticks ?? []))
   return steps.every((s, i) => s === b.steps[i]) && steps.length === b.steps.length ? b : { ...b, steps }
 }
 

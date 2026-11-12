@@ -10,18 +10,17 @@
  *   task go together (T792): a tick or a change of the list in the block lays the same change onto the task while the task
  *   is planned in that very block; one made in the task lays it onto that block while its day is today or later (a day gone
  *   by is never rewritten – T769).
- * - A template's block: its list in the template's version (`templateStepsChanged`); a series: `seriesChange` with
- *   `{ block: { steps } }` (D401, D404 – „Tylko to” is the day's own edit, `blockStepsEdits`).
+ * - A template's block: its list in the template's version (`templateStepsChanged`); a series: `seriesChange` with the op
+ *   itself (`{ stepsOp }`, laid on each version in the write's turn – T790; D401, D404 – „Tylko to” is the day's own edit,
+ *   `blockStepsEdits`).
  */
-import { dayRaw, putBlock, setStepDone, stepsDoneIn, type Raw } from '../data/dayEdits'
-import { dayFileFrom, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from '../model/plan'
+import { dayRaw, isRaw, putBlock, setStepDone, stepsDoneIn, type Raw } from '../data/dayEdits'
+import { dayFileFrom, withTemplateVersion, type PlanBlock, type Template } from '../model/plan'
 import { requestFrom, type RequestRecord } from '../model/requests'
-import { applyStepOp, doneSetFrom, withDone, withStepsJson, type Step, type StepOp } from '../model/steps'
+import { applyStepOp, doneSetFrom, freshSteps, withDone, withStepsJson, type Step, type StepOp } from '../model/steps'
 
 /** Why a tick does nothing: the step is not in the block any more (removed on another computer). */
 export const STEP_GONE = 'Tego kroku już nie ma.'
-
-const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
 /** The block of the day as the file holds it now (a change of it made before), with the day's ticks; else `b` as the window knows it. */
 export function dayBlockNow(raw: Raw | null, date: string, b: PlanBlock): PlanBlock {
@@ -38,7 +37,7 @@ export function taskOfBlock(block: Pick<PlanBlock, 'id' | 'task'>, r: Pick<Reque
 
 /** A task's step ticked off (`stepsDone.<step>` = true) or not (the field gone). */
 export function taskStepDoneRaw(raw: Raw, stepId: string, done: boolean): Raw {
-  const m = isPlain(raw.stepsDone) ? { ...raw.stepsDone } : {}
+  const m = isRaw(raw.stepsDone) ? { ...raw.stepsDone } : {}
   if (done) m[stepId] = true
   else delete m[stepId]
   return { ...raw, stepsDone: m }
@@ -94,14 +93,16 @@ export function tickEdits(i: { date: string; day: Raw | null; block: PlanBlock; 
 
 /**
  * A change of a block's list on its day (D440: Enter, a title, a removal, a drag): the block in the day's file, and the
- * same op on the task's list when the task goes with the block (T792; the task's list full – the block's change alone).
+ * same op on the task's list when the task goes with the block (T792) – refused there (its list full), nothing changes:
+ * the two lists never part in silence.
  */
 export function blockStepsEdits(i: { date: string; day: Raw | null; block: PlanBlock; op: StepOp; task: Raw | null }): BlockStepsEdit | { error: string } {
   const d = dayStepsRaw(i.day, i.date, i.block, i.op)
   if ('error' in d) return d
   const r = i.task ? requestFrom(i.task) : null
   const t = i.task && taskOfBlock(d.block, r) ? taskStepsRaw(i.task, i.op) : null
-  return { day: d.raw, task: t && 'raw' in t ? t.raw : null, block: d.block }
+  if (t && 'error' in t) return t
+  return { day: d.raw, task: t ? t.raw : null, block: d.block }
 }
 
 // ------------------------------------------------------------------ a task from „Sprawy”
@@ -134,7 +135,10 @@ export function taskTickEdits(i: { record: Raw; stepId: string; done: boolean; d
   return { record, day }
 }
 
-/** A change of a task's list (the page „Sprawy”): its record, and the same op on its block's list when the block goes with it. */
+/**
+ * A change of a task's list (the page „Sprawy”): its record, and the same op on its block's list when the block goes with
+ * it – refused there (the block's list full), nothing changes (T792).
+ */
 export function taskStepsEdits(i: { record: Raw; op: StepOp; date: string | null; day: Raw | null; today: string }): TaskStepsEdit | { error: string } {
   const r = requestFrom(i.record)
   if (!r) return { error: 'Tej sprawy już nie ma.' }
@@ -143,7 +147,8 @@ export function taskStepsEdits(i: { record: Raw; op: StepOp; date: string | null
   if ('error' in t) return t
   const b = followedBlock(r, i.date, i.day, i.today)
   const d = b ? dayStepsRaw(i.day, i.date!, b, i.op) : null
-  return { record: t.raw, day: d && 'raw' in d ? d.raw : null }
+  if (d && 'error' in d) return d
+  return { record: t.raw, day: d ? d.raw : null }
 }
 
 // ------------------------------------------------------------------ a template's block
@@ -154,18 +159,25 @@ export function taskStepsEdits(i: { record: Raw; op: StepOp; date: string | null
  * refused.
  */
 export function templateStepsChanged(t: Template, from: string, blockId: string, op: StepOp): { template: Template } | { error: string } {
-  const inForce = templateVersionOn(t, from)
-  const v: TemplateVersion = t.versions.find((x) => x.from === from) ?? (inForce ? { ...inForce, from } : { from, blocks: [], budgetMin: null, maxMin: null })
-  const b = v.blocks.find((x) => x.id === blockId)
-  if (!b) return { error: 'Tego bloku już nie ma w szablonie.' }
-  const next = applyStepOp(b.steps, op)
-  if ('error' in next) return next
-  const version = { ...v, blocks: v.blocks.map((x) => (x.id === blockId ? { ...x, steps: next.steps } : x)) }
-  return { template: { ...t, versions: [...t.versions.filter((x) => x.from !== from), version].sort((a, b2) => (a.from < b2.from ? -1 : 1)) } }
+  let error: string | null = null
+  const template = withTemplateVersion(t, from, (v) => {
+    const b = v.blocks.find((x) => x.id === blockId)
+    const next = b ? applyStepOp(b.steps, op) : { error: 'Tego bloku już nie ma w szablonie.' }
+    if ('error' in next) {
+      error = next.error
+      return {}
+    }
+    return { blocks: v.blocks.map((x) => (x.id === blockId ? { ...x, steps: next.steps } : x)) }
+  })
+  return error != null ? { error } : { template }
 }
 
-/** The patch of `seriesChange` for a list of an occurrence changed by `op` (D401: „To i następne”, „Cała seria”). */
+/**
+ * A list of an occurrence changed by `op` as a whole new list (none ticked). Not for a change of the series: that goes as
+ * the op itself (`SeriesPatch.stepsOp`, laid on the version in force in the write's turn – T790); the list the window holds
+ * may be stale (an occurrence begun today does not follow the series).
+ */
 export function seriesStepsPatch(b: PlanBlock, op: StepOp): { block: { steps: Step[] } } | { error: string } {
   const next = applyStepOp(b.steps, op)
-  return 'error' in next ? next : { block: { steps: next.steps.map((s) => ({ ...s, done: false })) } }
+  return 'error' in next ? next : { block: { steps: freshSteps(next.steps) } }
 }

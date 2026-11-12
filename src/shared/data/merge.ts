@@ -10,6 +10,7 @@
  * the queue of edits; the bookkeeping fields of this app (`updatedAt`, `updatedBy`, `schema`).
  */
 import type { EditEntry } from '../api'
+import { classify, type FileKind } from './paths'
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 export type Path = Array<string>
@@ -232,22 +233,23 @@ export function setAt(root: unknown, path: Path, value: unknown): unknown {
 export function recordEdit(rel: string, before: Record<string, unknown> | null, after: Record<string, unknown> | null): EditEntry | null {
   // A removal carries the record as you saw it: changed elsewhere since, it is a question, never removed quietly (A3-09).
   if (!after) return before ? { rel, remove: true, edits: [], base: before } : null
-  if (!before) return { rel, create: true, edits: Object.entries(after).flatMap(([k, v]) => leafEdits([k], undefined, v)) }
-  const edits = diffRecords(before, after).flatMap((c) => leafEdits(c.path, c.before, c.after))
+  const maps = LEAF_MAPS[classify(rel)?.kind ?? 'settings']
+  if (!before) return { rel, create: true, edits: Object.entries(after).flatMap(([k, v]) => leafEdits(maps, [k], undefined, v)) }
+  const edits = diffRecords(before, after).flatMap((c) => leafEdits(maps, c.path, c.before, c.after))
   return edits.length ? { rel, edits } : null
 }
 
 /**
- * Maps of independent leaves (T788): the steps ticked off (`stepsDone` of a day – block → step → true, of a task – step →
- * true). Written leaf by leaf even where the map (or a block's part of it) is new, so the first tick on two computers is two
- * fields that both stay – never one whole map meeting the other's as a question.
+ * Maps of independent leaves by the kind of record (T788): the steps ticked off – `stepsDone` of a day (block → step →
+ * true) and of a sprawa (step → true). Written leaf by leaf even where the map (or a block's part of it) is new, so the
+ * first tick on two computers is two fields that both stay – never one whole map meeting the other's as a question.
  */
-export const LEAF_MAPS: ReadonlySet<string> = new Set(['stepsDone'])
+export const LEAF_MAPS: Partial<Record<FileKind, ReadonlySet<string>>> = { day: new Set(['stepsDone']), request: new Set(['stepsDone']) }
 
-function leafEdits(path: Path, base: unknown, value: unknown): Array<{ path: Path; base: unknown; value: unknown }> {
-  if (!LEAF_MAPS.has(path[0] ?? '')) return [{ path, base, value }]
-  if (isObject(value) && !isObject(base)) return Object.entries(value).flatMap(([k, v]) => leafEdits([...path, k], undefined, v))
-  if (isObject(base) && !isObject(value)) return Object.entries(base).flatMap(([k, v]) => leafEdits([...path, k], v, undefined))
+function leafEdits(maps: ReadonlySet<string> | undefined, path: Path, base: unknown, value: unknown): Array<{ path: Path; base: unknown; value: unknown }> {
+  if (!maps?.has(path[0] ?? '')) return [{ path, base, value }]
+  if (isObject(value) && !isObject(base)) return Object.entries(value).flatMap(([k, v]) => leafEdits(maps, [...path, k], undefined, v))
+  if (isObject(base) && !isObject(value)) return Object.entries(base).flatMap(([k, v]) => leafEdits(maps, [...path, k], v, undefined))
   return [{ path, base, value }]
 }
 

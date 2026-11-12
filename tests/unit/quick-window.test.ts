@@ -11,7 +11,17 @@ vi.mock('electron', () => {
     handlers = new Map<string, (e?: { preventDefault: () => void }) => void>()
     visible = false
     onTop = false
-    webContents = { setWindowOpenHandler: () => undefined, send: (ch: string) => calls.push(`send ${ch}`) }
+    webContents = {
+      open: undefined as undefined | (() => { action: string }),
+      navigate: undefined as undefined | ((e: { preventDefault: () => void }, url: string) => void),
+      setWindowOpenHandler(fn: () => { action: string }) {
+        this.open = fn
+      },
+      on(name: string, fn: (e: { preventDefault: () => void }, url: string) => void) {
+        if (name === 'will-navigate') this.navigate = fn
+      },
+      send: (ch: string) => calls.push(`send ${ch}`)
+    }
     on(name: string, fn: (e?: { preventDefault: () => void }) => void) {
       this.handlers.set(name, fn)
     }
@@ -65,6 +75,20 @@ function make(o: { refuse?: string[]; throws?: string[]; logs?: string[]; regist
   const win = (q as unknown as { win: { visible: boolean; onTop: boolean; handlers: Map<string, () => void> } }).win
   return { q, win, pressed, unregistered, states }
 }
+
+describe('okienko „Do skrzynki” nie nawiguje i nie otwiera okien (jak okno główne, T755)', () => {
+  it('przeciągnięty plik albo link nie wczytuje się w okienku, nowe okno jest odrzucone', () => {
+    const { q } = make()
+    const wc = (q as unknown as { win: { webContents: { open?: () => { action: string }; navigate?: (e: { preventDefault: () => void }, url: string) => void } } }).win.webContents
+    expect(wc.navigate).toBeDefined()
+    for (const url of ['https://example.com/', 'file:///C:/Users/x/plik.pdf', 'javascript:alert(1)']) {
+      const e = { preventDefault: vi.fn() }
+      wc.navigate!(e, url)
+      expect(e.preventDefault, url).toHaveBeenCalled()
+    }
+    expect(wc.open!()).toEqual({ action: 'deny' })
+  })
+})
 
 describe('okienko „Do skrzynki”', () => {
   it('ukryte od startu; tylko skrót pokazuje je na wierzchu z fokusem; ukryte – już nie na wierzchu', () => {

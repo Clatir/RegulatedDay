@@ -54,6 +54,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
     }
     if (from == null || to == null) continue
     const edge = f?.startedAt != null && f.endedAt == null ? edges?.get(p.id) : undefined
+    const counter = stepsCounter(p.steps)
     items.push({
       id: p.id,
       // As long as it lasts, also across the doubled hour of a 25-hour day (`logicalSpan` – the preview of a push the same).
@@ -66,7 +67,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       waits: info.waits,
       ...(p.origin === 'series' ? { series: true } : {}),
       // D440: the counter of its steps on the tile (none – nothing).
-      ...(stepsCounter(p.steps) ? { steps: stepsCounter(p.steps)! } : {}),
+      ...(counter ? { steps: counter } : {}),
       ...(edge ? { resize: 'end' as const } : {}),
       // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
       // a class imported from the PDF of „zjazdy” – D357, nor the second shift – D192), not passed.

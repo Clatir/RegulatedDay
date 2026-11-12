@@ -7,12 +7,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Series } from '@shared/model/series'
 import { settingsOn } from '@shared/model/settings'
-import { seriesStepsPatch } from '@shared/engine/steps'
 import { plDate } from '@shared/format'
 import { addDays } from '@shared/time/zone'
 import { useBusy } from '../../lib/busy'
 import { useData } from '../../store/data'
 import { BlockEditor } from '../plan/BlockEditor'
+import { changeSeriesListSteps } from '../../store/steps'
 import { StepsEditor } from '../steps/StepsEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { SeriesFields } from './SeriesFields'
@@ -109,10 +109,8 @@ export function SeriesEditor({ series, today, onClosed }: { series: Series; toda
             steps={block.steps}
             ticks={false}
             readOnly={ended}
-            onOp={(op) => {
-              const patch = seriesStepsPatch(block, op)
-              return 'error' in patch ? false : changeSeries({ seriesId: series.id }, 'all', patch, 'Seria zmieniona')
-            }}
+            // The op goes to each version's own list in the write's turn; „Cofnij” only for a removal (D443: an empty text – none).
+            onOp={(op) => changeSeriesListSteps(series.id, op, op.op === 'remove' ? 'Krok usunięty' : '')}
           />
         }
       />

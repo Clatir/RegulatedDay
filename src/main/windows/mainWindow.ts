@@ -10,6 +10,7 @@ import { minimumSize, windowBounds } from '@shared/bounds'
 import type { WindowPlace } from '@shared/config'
 import { PALETTE } from '@shared/theme'
 import { displays, primaryDisplay } from '../displays'
+import { keepOnPage } from './navigation'
 
 export interface MainWindowDeps {
   preload: string
@@ -62,13 +63,9 @@ export function createMainWindow(d: MainWindowDeps): BrowserWindow {
   }
   // Maximized at its first showing, never now: maximize() shows a hidden window – a start in the tray would open it (A4-02).
   if (d.saved?.maximized && !process.env.RD_WORK_AREA) maximizeAtShow.add(win)
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  keepOnPage(win.webContents)
   // The window keeps its own title (the identity's name), not the page's.
   win.on('page-title-updated', (e) => e.preventDefault())
-  const devUrl = process.env.ELECTRON_RENDERER_URL
-  win.webContents.on('will-navigate', (e, url) => {
-    if (!devUrl || !url.startsWith(devUrl)) e.preventDefault()
-  })
   const place = () => {
     const b = win.getNormalBounds()
     // Never shown since a start in the tray: still maximized for its first showing.

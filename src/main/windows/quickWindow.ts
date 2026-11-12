@@ -10,6 +10,7 @@ import { BrowserWindow, globalShortcut, screen } from 'electron'
 import { CH, type QuickShortcut } from '@shared/api'
 import type { MachinePrefs } from '@shared/machine'
 import { PALETTE } from '@shared/theme'
+import { keepOnPage } from './navigation'
 
 /** The shortcut this computer's settings ask for: its keys, null – switched off. */
 export const shortcutOf = (p: Pick<MachinePrefs, 'quickOn' | 'quickKey'>): string | null => (p.quickOn ? p.quickKey : null)
@@ -82,7 +83,8 @@ export class QuickWindow {
         additionalArguments: ['--rd-view=quick']
       }
     })
-    this.win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    // A file or a link dropped on it never loads in it, no window opens from it (as the main window, T755).
+    keepOnPage(this.win.webContents)
     this.win.on('page-title-updated', (e) => e.preventDefault())
     this.win.on('blur', () => this.close('utrata fokusu'))
     this.win.on('close', (e) => {

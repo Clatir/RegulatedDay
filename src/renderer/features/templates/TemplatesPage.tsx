@@ -18,7 +18,7 @@ import { pushedText } from '@shared/engine/pushApart'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
-import { planBlock, templateFrom, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
+import { planBlock, templateFrom, templateVersionOn, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { currentSeries } from '@shared/model/series'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn } from '@shared/model/settings'
 import { SERIES_MARK, seriesText } from '@shared/seriesText'
@@ -200,12 +200,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const change = (fn: (t: Template) => Template) => updateRecord(rel, changed(fn))
   const saveTemplate = (patch: Partial<Template>) => change((t) => ({ ...t, ...patch }))
   /** The template with the version from `from` changed (made when it is not there yet – a copy of the one in force then). */
-  const withVersion = (t: Template, patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)): Template => {
-    const inForceThen = templateVersionOn(t, from)
-    const v = t.versions.find((x) => x.from === from) ?? (inForceThen ? { ...inForceThen, from } : { from, blocks: [], budgetMin: null, maxMin: null })
-    const next = { ...v, ...(typeof patch === 'function' ? patch(v) : patch) }
-    return { ...t, versions: [...t.versions.filter((x) => x.from !== from), next].sort((a, b) => (a.from < b.from ? -1 : 1)) }
-  }
+  const withVersion = (t: Template, patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)): Template => withTemplateVersion(t, from, patch)
   /** Saves the template with the version from `from`. */
   const saveVersion = (patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)) => change((t) => withVersion(t, patch))
 

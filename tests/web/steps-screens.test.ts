@@ -140,6 +140,20 @@ describe('lista „Kroki” w panelu', () => {
     expect(add.value).toBe('')
   })
 
+  it('zapis odmówiony, a w międzyczasie wpisano coś innego – to zostaje, stary tytuł nie nadpisuje', async () => {
+    let finish: (v: boolean) => void = () => undefined
+    const m = editor()
+    m.onOp.mockImplementationOnce(() => new Promise<boolean>((r) => (finish = r)))
+    await render(m.el)
+    const add = q('step-add') as HTMLInputElement
+    setValue(add, 'Pierwszy')
+    await key(add, 'Enter')
+    expect(add.value).toBe('')
+    setValue(add, 'Drugi')
+    await act(async () => finish(false))
+    expect(add.value).toBe('Drugi')
+  })
+
   it('pusty tytuł: komunikat modelu pod polem i w toaście, nic nie wysłane', async () => {
     const m = editor()
     await render(m.el)
@@ -252,7 +266,10 @@ describe('odpowiedź na zmianę kroków', () => {
     expect(stepsAnswer({ op: 'move', id: 's1', before: null }, saved)).toBe(true)
     expect(useUi.getState().toasts).toEqual([])
     expect(stepsAnswer({ op: 'remove', id: 's1' }, { ...saved, saved: false, error: 'Nie.', undo: [] })).toBe(false)
-    expect(stepsAnswer({ op: 'remove', id: 's1' }, { ...saved, saved: false, undo: [] })).toBe('asked')
+    // Nothing saved and no reason of ours: the queue's answer decides – a conflict is a question, a failed send or a broken file a refusal.
+    expect(stepsAnswer({ op: 'remove', id: 's1' }, { ...saved, saved: false, outcomes: [{ status: 'conflict' }], undo: [] })).toBe('asked')
+    expect(stepsAnswer({ op: 'remove', id: 's1' }, { ...saved, saved: false, outcomes: null, undo: [] })).toBe(false)
+    expect(stepsAnswer({ op: 'remove', id: 's1' }, { ...saved, saved: false, outcomes: [{ status: 'broken' }], undo: [] })).toBe(false)
   })
 })
 
@@ -298,7 +315,7 @@ describe('zmiana kroków bloku w panelu (zakres serii – D401, D404)', () => {
     expect(w.seriesChange).not.toHaveBeenCalled()
   })
 
-  it('„Tylko to” – blok tego dnia w pliku dnia, seria nietknięta; „To i następne” / „Cała seria” – cała lista do serii, bez odhaczeń', async () => {
+  it('„Tylko to” – blok tego dnia w pliku dnia, seria nietknięta; „To i następne” / „Cała seria” – sama operacja do serii (`stepsOp`), nie lista z okna', async () => {
     const w = stub({}, { [DATE]: null })
     vi.mocked(askScope).mockResolvedValueOnce('only')
     expect(await saveBlockSteps(ctx(), occ(), add, false)).toBe(true)
@@ -309,10 +326,11 @@ describe('zmiana kroków bloku w panelu (zakres serii – D401, D404)', () => {
     const done = { ...occ(), steps: four(['s1']) }
     expect(await saveBlockSteps(ctx(), done, add, false)).toBe(true)
     expect(w.seriesChange).toHaveBeenCalledTimes(1)
-    const [target, scope, patch] = w.seriesChange.mock.calls[0] as [unknown, string, { block: { steps: Step[] } }]
+    const [target, scope, patch] = w.seriesChange.mock.calls[0] as [unknown, string, unknown]
     expect(target).toEqual({ date: DATE, blockId: done.id })
     expect(scope).toBe('following')
-    expect(patch.block.steps.map((s) => [s.title, s.done])).toEqual([...four().map((s) => [s.title, false]), ['Napisać changelog', false]])
+    // The op, never a list copied from the window: each version of the series lays it on its own list.
+    expect(patch).toEqual({ stepsOp: add })
   })
 
   it('zakres pytany raz na otwarty panel: trzy zmiany = jedno pytanie; nowy panel pyta znowu; „Anuluj” nic nie pamięta (T798)', async () => {
@@ -338,6 +356,30 @@ describe('zmiana kroków bloku w panelu (zakres serii – D401, D404)', () => {
     vi.mocked(askScope).mockResolvedValue('all')
     expect(await saveBlockSteps(cancelled, occ(), add, false)).toBe(true)
     expect(askScope).toHaveBeenCalledTimes(4)
+  })
+
+  it('„Cofnij” w zakresie serii tylko po usunięciu kroku (D443); dodanie i przestawienie – bez toastu', async () => {
+    const w = stub({}, { [DATE]: null })
+    w.seriesChange.mockImplementation(async () => ({ ok: true, error: null, code: null, seriesId: 'ang', outcomes: [], undo: [{ rel: 'series/ang.json', before: null, after: { id: 'ang' } }] }))
+    vi.mocked(askScope).mockResolvedValue('all')
+    const o = ctx()
+    expect(await saveBlockSteps(o, occ(), add, false)).toBe(true)
+    expect(await saveBlockSteps(o, occ(), { op: 'move', id: 's1', before: null }, false)).toBe(true)
+    expect(useUi.getState().toasts).toEqual([])
+    expect(await saveBlockSteps(o, occ(), { op: 'remove', id: 's1' }, false)).toBe(true)
+    expect(useUi.getState().toasts.map((t) => [t.text, t.action?.label])).toEqual([['Krok usunięty', 'Cofnij']])
+  })
+
+  it('zakres zapamiętany dopiero po zapisie: odmowa albo porażka – następna zmiana pyta znowu', async () => {
+    const w = stub({}, { [DATE]: null })
+    vi.mocked(askScope).mockResolvedValue('all')
+    w.seriesChange.mockResolvedValueOnce({ ok: false, error: 'Ta seria już się zakończyła.', code: 'ended', seriesId: 'ang', outcomes: [], undo: [] })
+    const o = ctx()
+    expect(await saveBlockSteps(o, occ(), add, false)).toBe(false)
+    expect(o.scope.current).toBeNull()
+    expect(await saveBlockSteps(o, occ(), add, false)).toBe(true)
+    expect(askScope).toHaveBeenCalledTimes(2)
+    expect(o.scope.current).toBe('all')
   })
 
   it('odhaczenie nigdy nie pyta (to, co robi `tickBlockStep`); blok własny dnia – bez pytania o zakres', async () => {

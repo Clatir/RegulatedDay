@@ -368,7 +368,6 @@ function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: Ba
   )
 }
 
-/** A line with its answers; „Skończył się o …” unfolds steps of ±5 min in the line itself, „Kroki ▸” a routine's steps. */
 /**
  * The step of the block in the foreground (D440): „☐ <krok> · krok 1/4” – the box is the tick (a click, also on the desktop
  * bar that takes no keys – D229), the next step comes with the view; after the last one „Wszystkie kroki ✓”. No sound.
@@ -395,6 +394,7 @@ export function StepLine({ steps, mode }: { steps: BarSteps; mode: BarMode }) {
   )
 }
 
+/** A line with its answers; „Skończył się o …” unfolds steps of ±5 min in the line itself, „Kroki ▸” a routine's steps. */
 function Line({ line, mode, onSteps }: { line: BarLine; mode: BarMode; onSteps?: (line: string) => void }) {
   const [pick, setPick] = useState<number | null>(null)
   const send = (actionId: string, value?: number) => act('line', `${line.id}|${actionId}${value != null ? `|${value}` : ''}`)

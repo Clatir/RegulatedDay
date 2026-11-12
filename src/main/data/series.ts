@@ -27,8 +27,10 @@ import {
   todayOccurrenceEdit,
   withEnd,
   type SeriesPatch,
-  type TodayDay
+  type TodayDay,
+  withStepsOp
 } from '@shared/engine/series'
+import { stepOpFrom } from '@shared/model/steps'
 import { newId } from '@shared/model/ids'
 import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
 import {
@@ -199,6 +201,11 @@ function patchFrom(v: unknown, start: string): SeriesPatch | null {
     if (!isRaw(v.block)) return null
     out.block = v.block as SeriesPatch['block']
   }
+  if (v.stepsOp !== undefined) {
+    const op = stepOpFrom(v.stepsOp)
+    if (!op) return null
+    out.stepsOp = op
+  }
   if (v.rule !== undefined) {
     const rule = seriesRuleFrom(v.rule, start)
     if (!rule) return null
@@ -334,9 +341,12 @@ export function seriesChange(io: SeriesIo, target: unknown, scope: unknown, patc
       const s = tg.series
       const p0 = patchFrom(patch, b.today)
       if (scope === 'only') {
-        if (!tg.date || !tg.block || !p0?.block) throw new SeriesEditError('invalid', '„Tylko to” zmienia jedno wystąpienie – wybierz blok dnia.')
+        if (!tg.date || !tg.block || !p0 || (!p0.block && !p0.stepsOp)) throw new SeriesEditError('invalid', '„Tylko to” zmienia jedno wystąpienie – wybierz blok dnia.')
+        // The occurrence's list changed by the op as the day holds it now (T790).
+        const listed = withStepsOp(tg.block, p0.stepsOp)
+        if ('error' in listed) throw new SeriesEditError('invalid', listed.error)
         // The occurrence's own fields with the change (checked as a block of a file).
-        const own = seriesBlockFrom({ ...tg.block, ...p0.block, startMin: p0.block.startMin ?? plannedStartMin(tg.block, tg.day!.ctx.plan) })
+        const own = seriesBlockFrom({ ...listed, ...p0.block, startMin: p0.block?.startMin ?? plannedStartMin(tg.block, tg.day!.ctx.plan) })
         if (!own) throw new SeriesEditError('invalid', 'Zmiana bloku jest niepełna.')
         const r = paths.day(tg.date)
         t.set(r, putBlock(dayRaw(await t.get(r), tg.date), { ...tg.block, ...own, anchor: null }))
@@ -363,12 +373,15 @@ export function seriesChange(io: SeriesIo, target: unknown, scope: unknown, patc
       // the other days with an entry keep theirs (D381). Today through `todayOccurrenceEdit`: it pushes apart what is after it.
       const tb = tg.block
       const entryOf = async (date: string) => dayFileFrom((await t.get(paths.day(date))) ?? {}, date).blocks.find((x) => x.id === tb!.id) ?? null
-      const own = tg.date && tb && p.block && tg.date >= b.today && !(tg.date === b.today && tg.day && begun(tg.day, tb.id)) ? await entryOf(tg.date) : null
-      if (own && tg.date! > b.today) {
+      const own = tg.date && tb && (p.block || p.stepsOp) && tg.date >= b.today && !(tg.date === b.today && tg.day && begun(tg.day, tb.id)) ? await entryOf(tg.date) : null
+      // Its own entry with the change: the fields, and the op on the entry's own list (refused there – the list as it was).
+      const ownNext = own ? withStepsOp({ ...own, ...p.block }, p.stepsOp) : null
+      const ownAfter = own && ownNext ? ('error' in ownNext ? { ...own, ...p.block } : ownNext) : null
+      if (own && ownAfter && tg.date! > b.today) {
         const r = paths.day(tg.date!)
-        t.set(r, putBlock(dayRaw(await t.get(r), tg.date!), { ...own, ...p.block }))
+        t.set(r, putBlock(dayRaw(await t.get(r), tg.date!), ownAfter))
       }
-      if (own && tg.date === b.today) await today(io, b, t, s.root, next, false, { was: own, next: { ...own, ...p.block } })
+      if (own && ownAfter && tg.date === b.today) await today(io, b, t, s.root, next, false, { was: own, next: ownAfter })
       else await today(io, b, t, s.root, next)
       // An end moved earlier takes the occurrences changed on their days after it, as „Zakończ serię” does (D404).
       const lastAfter = seriesLast(changed, typeOf(b), io.holidays)

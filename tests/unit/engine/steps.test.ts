@@ -79,7 +79,7 @@ describe('lista kroków (model)', () => {
     const before = stepsJson(steps)!
     const after = stepsJson(moved, before)!
     // The file's order stays – each step's own `order` is the change, no whole list to meet another computer's tick.
-    expect(after.map((x) => x.id)).toEqual(['s1', 's2', 's3', 's4'])
+    expect(after.map((x) => (x as { id: string }).id)).toEqual(['s1', 's2', 's3', 's4'])
     expect(diffRecords({ steps: before }, { steps: after }).map((c) => c.path.join('.'))).toEqual(['steps.#s1.order', 'steps.#s2.order', 'steps.#s3.order', 'steps.#s4.order'])
     expect(stepsFrom(after).map((s) => s.id)).toEqual(['s4', 's1', 's2', 's3'])
     // A move to the end, a rename and a removal.
@@ -90,17 +90,19 @@ describe('lista kroków (model)', () => {
     expect(ok(applyStepOp(steps, { op: 'rename', id: 'x', title: 'y' })).steps).toEqual(steps)
   })
 
-  it('odczyt tolerancyjny: bez id lub tytułu – pominięty, id raz, najwyżej 30, `done` z pliku nigdy; zapis bez `done`, nieznane pola zostają', () => {
+  it('odczyt tolerancyjny: bez id lub tytułu – pominięty, id raz, każdy odczytany (limit tylko przy dodawaniu), `done` z pliku nigdy; zapis bez `done`, pozycje nieodczytane zostają', () => {
     const raw = [{ id: 'b', title: 'drugi', order: 1, extra: 'nowsze pole', done: true }, { id: 'a', title: 'pierwszy', order: 0 }, { id: 'a', title: 'duplikat' }, { title: 'bez id' }, { id: 'c', title: '  ' }, 'x']
     expect(stepsFrom(raw)).toEqual([
       { id: 'a', title: 'pierwszy', order: 0, done: false },
       { id: 'b', title: 'drugi', order: 1, done: false }
     ])
     const many = Array.from({ length: 40 }, (_, i) => ({ id: `k${i}`, title: `krok ${i}`, order: i }))
-    expect(stepsFrom(many)).toHaveLength(STEPS_MAX)
+    expect(stepsFrom(many)).toHaveLength(40)
+    // „a” removed, „b” renamed (its other fields stay); what this version does not read stays as the file has it.
     const written = stepsJson([{ id: 'b', title: 'drugi!', order: 1, done: true }], raw)!
-    expect(written).toEqual([{ id: 'b', title: 'drugi!', order: 1, extra: 'nowsze pole' }])
+    expect(written).toEqual([{ id: 'b', title: 'drugi!', order: 1, extra: 'nowsze pole', done: true }, raw[2], raw[3], raw[4], raw[5]])
     expect(stepsJson([], undefined)).toBeUndefined()
+    expect(stepsJson([{ id: 'n', title: 'nowy', order: 0, done: true }], undefined)).toEqual([{ id: 'n', title: 'nowy', order: 0 }])
   })
 
   it('licznik „✓ 3/4” na kafelku i w panelu; bez kroków – nic', () => {

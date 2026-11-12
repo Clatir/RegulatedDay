@@ -6,10 +6,10 @@
  */
 import { REQUEST_CATEGORY, type CategoryRules } from '../model/categories'
 import { newId } from '../model/ids'
-import { dayRaw, putBlock, setMovedTo, setStepDone, takeBlock, type Raw } from '../data/dayEdits'
+import { dayRaw, putBlock, setMovedTo, setStepsDone, takeBlock, type Raw } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
 import { dayFileFrom, MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlock, type DayFile, type PlanBlock, type Template } from '../model/plan'
-import { freshSteps } from '../model/steps'
+import { doneIds, freshSteps } from '../model/steps'
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan, type BlockInfo } from './blocks'
 import { dayPlan, dayWakeMin, morningBound, wakeShiftedStart } from './createDay'
@@ -130,11 +130,11 @@ export function movedBlock(b: PlanBlock, plan: readonly PlanBlock[], fromDate: s
 export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou = true): { source: Raw; target: Raw } {
   const moved = movedBlock(b, plan, fromDate, byYou)
   const own = dayFileFrom(fromRaw ?? {}, fromDate).blocks.some((x) => x.id === b.id)
-  let source = setMovedTo(dayRaw(fromRaw, fromDate), b.id, toDate)
+  // Its ticks go with it (D440, D442): the target has exactly the ticks it has now (an old tick of the block there – from
+  // before it left that day – goes), the source none.
+  let source = setStepsDone(setMovedTo(dayRaw(fromRaw, fromDate), b.id, toDate), b.id, [])
   if (own) source = takeBlock(source, b.id)
-  let target = setMovedTo(putBlock(dayRaw(toRaw, toDate), moved), b.id, null)
-  // Its steps ticked off go with it (D440): the same block on another day.
-  for (const st of b.steps) if (st.done) target = setStepDone(target, b.id, st.id, true)
+  const target = setStepsDone(setMovedTo(putBlock(dayRaw(toRaw, toDate), moved), b.id, null), b.id, doneIds(b.steps))
   return { source, target }
 }
 

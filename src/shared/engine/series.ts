@@ -29,7 +29,7 @@ import {
   type TypeOf
 } from '../model/series'
 import type { DayTypeId } from '../model/settings'
-import { sameStepList, stepsFrom } from '../model/steps'
+import { applyStepOp, freshSteps, sameStepList, stepsFrom, type Step, type StepOp } from '../model/steps'
 import { dayStart } from '../time/day'
 import { addDays } from '../time/zone'
 import { computeDay, type DayContext, type DayState } from './day'
@@ -171,10 +171,24 @@ export function blockNotSeries(b: PlanBlock): SeriesEditError | null {
 /** A change of a series: its block's fields, its rule, its field „W dni szczególne”, its end. */
 export interface SeriesPatch {
   block?: Partial<SeriesBlock>
+  /**
+   * A change of its list „Kroki” (D440, T790): the op laid on each version's own list in the write's turn (`changedFrom`) –
+   * never a list the window copied from a block (an occurrence begun today does not follow the series).
+   */
+  stepsOp?: StepOp
   rule?: SeriesRule
   special?: SpecialDays
   until?: string | null
   count?: number | null
+}
+
+/**
+ * A block (of a version, of a day's entry) with its list changed by `op`; refused – why. No op: as it is.
+ */
+export function withStepsOp<T extends { steps: Step[] }>(b: T, op: StepOp | undefined): T | { error: string } {
+  if (!op) return b
+  const next = applyStepOp(b.steps, op)
+  return 'error' in next ? next : { ...b, steps: freshSteps(next.steps) }
 }
 
 /**
@@ -228,13 +242,19 @@ export function withEnd(s: Series, patch: Pick<SeriesPatch, 'until' | 'count'>, 
  * changed, never the whole block). Only its end changed: no version (`withEnd`).
  */
 export function changedFrom(s: Series, from: string, patch: SeriesPatch): Series {
-  if (patch.block === undefined && patch.rule === undefined && patch.special === undefined) return s
+  if (patch.block === undefined && patch.rule === undefined && patch.special === undefined && patch.stepsOp === undefined) return s
   const at = from < s.start ? s.start : from
   const base = seriesVersionOn(s, at) ?? s.versions[0]!
   // A new rule is one for every version from `at` on – its weeks counted once, from the version it starts in.
   const rule = ruleFrom(patch.rule, base.rule, at)
-  const apply = (v: SeriesVersion, f: string): SeriesVersion => ({ from: f, block: { ...v.block, ...patch.block }, rule: patch.rule ? rule : v.rule, special: patch.special ?? v.special })
-  return { ...s, versions: [...s.versions.filter((v) => v.from < at), apply(base, at), ...s.versions.filter((v) => v.from > at).map((v) => apply(v, v.from))] }
+  // The op of the list on each version's own list (T790); refused on the version it starts in – nothing changes, on a later
+  // one (its list full) – that one keeps its list.
+  const apply = (v: SeriesVersion, f: string, first: boolean): SeriesVersion => {
+    const block = withStepsOp({ ...v.block, ...patch.block }, patch.stepsOp)
+    if ('error' in block && first) throw new SeriesEditError('invalid', block.error)
+    return { from: f, block: 'error' in block ? { ...v.block, ...patch.block } : block, rule: patch.rule ? rule : v.rule, special: patch.special ?? v.special }
+  }
+  return { ...s, versions: [...s.versions.filter((v) => v.from < at), apply(base, at, true), ...s.versions.filter((v) => v.from > at).map((v) => apply(v, v.from, false))] }
 }
 
 /** The series ended on `last` (at least yesterday – a day gone by keeps its occurrence); `remove` – also out of the list. */

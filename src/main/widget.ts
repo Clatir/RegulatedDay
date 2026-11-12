@@ -1118,14 +1118,15 @@ export class WidgetEngine {
   }
 
   /**
-   * A step ticked off on the bar (D440, T793): the block as the bar's day has it now (`widgetModel` – the day's file with
-   * the queue), its tick in the day's file and – a block of a task planned in it – in the task's record, one edit of the
-   * queue. Ticked on another computer meanwhile – nothing to write; removed there – the bar says so. No sound (D440).
+   * A step ticked off on the bar (D440, T793): the block the bar shows (the model of its last count – of that day; another
+   * day or none counted: counted now), its list as the day's file holds it now (`tickEdits` reads the file with the queue),
+   * its tick in the day's file and – a block of a task planned in it – in the task's record, one edit of the queue. Ticked
+   * on another computer meanwhile – nothing to write; removed there – the bar says so. No sound (D440).
    */
   private async tickStep(day: string | undefined, blockId: string, stepId: string): Promise<void> {
     const folder = this.d.folder()
     if (!folder || !day) return
-    const m = await folder.widgetModel(this.now)
+    const m = this.model?.state.grid.date === day ? this.model : await folder.widgetModel(this.now)
     const block = m.state.grid.date === day ? m.ctx.plan.find((b) => b.id === blockId) : undefined
     if (!block) {
       this.say('Tego bloku już nie ma w planie.')

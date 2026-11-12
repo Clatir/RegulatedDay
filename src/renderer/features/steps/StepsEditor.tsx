@@ -69,7 +69,8 @@ export function StepsEditor({
       // After the last step; the field is cleared at once and given back when the save did not happen (as a new task's title).
       setText('')
       setError(null)
-      if (!(await send(addStepOp(title)))) setText(title)
+      // Not saved: the title comes back unless something was typed meanwhile (that stays).
+      if (!(await send(addStepOp(title)))) setText((now) => (now === '' ? title : now))
     })
 
   const move = (op: StepOp | null, id: string) => {

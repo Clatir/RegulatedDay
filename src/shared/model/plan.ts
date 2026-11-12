@@ -255,6 +255,18 @@ export function templateVersionOn(t: Template, date: string): TemplateVersion | 
   return found
 }
 
+/**
+ * The template with its version from `from` changed by `patch` – the version made when it is not there yet, as a copy of
+ * the one in force then (a change of a template applies from a date, by default tomorrow). One rule for the page of
+ * templates and the steps of a template's block.
+ */
+export function withTemplateVersion(t: Template, from: string, patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)): Template {
+  const inForceThen = templateVersionOn(t, from)
+  const v = t.versions.find((x) => x.from === from) ?? (inForceThen ? { ...inForceThen, from } : { from, blocks: [], budgetMin: null, maxMin: null })
+  const next = { ...v, ...(typeof patch === 'function' ? patch(v) : patch) }
+  return { ...t, versions: [...t.versions.filter((x) => x.from !== from), next].sort((a, b) => (a.from < b.from ? -1 : 1)) }
+}
+
 /** The template for a type and weekday on `date` (spec): the type's template for that weekday, else its default one. */
 export function templateFor(templates: readonly Template[], dayType: DayTypeId, weekday: number, date: string): { template: Template; version: TemplateVersion } | null {
   const live = templates.filter((t) => !t.archived && t.dayType === dayType)
