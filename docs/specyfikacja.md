@@ -2133,7 +2133,7 @@ Te zasady obowiązują każdy ekran i każdy typ rekordu: blok, prośbę, szablo
 
 | Konwencja | Zasada |
 | --- | --- |
-| Tworzenie | Ctrl+N tworzy rekord w bieżącym widoku: blok w planie, prośbę w kolejce, szablon wśród szablonów |
+| Tworzenie | Ctrl+N tworzy rekord w bieżącym widoku: blok w planie, zadanie w „Sprawach” (Skrzynka, D383), szablon wśród szablonów |
 | Usuwanie | zawsze z przyciskiem „Cofnij” przez 10 s; usunięty rekord zostaje w historii; „Usuń” przy zaczętym bloku kończy go w tej chwili i zdejmuje z planu, a jego przebieg zostaje w dniu jako „poza planem” i liczy się do budżetu i energii (D336) |
 | Historia | każdy rekord ma historię zmian z przywracaniem |
 | Edycja pól | zapis przy opuszczeniu pola albo Enterze, nie przy każdym klawiszu; Esc anuluje edycję, kolejny Esc zamyka okno; jeden porządek obsługi Esc |

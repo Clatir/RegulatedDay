@@ -356,13 +356,13 @@ test('panel przy kursorze (ikona pod strzałką ukrytych ikon): rośnie w miejsc
   }
 })
 
-test('konwencje: długość „1h30”, ułamek odrzucony z komunikatem, Esc cofa edycję, usunięcie z „Cofnij”, filtry', async () => {
+test('konwencje: długość „1h30”, ułamek odrzucony z komunikatem, Esc cofa edycję, usunięcie z „Cofnij”, filtry (Sprawy)', async () => {
   const { app, page, userData } = await launch({ data: true })
   try {
     await withMainLog(userData, async () => {
       await page.getByTestId('nav-requests').click()
       for (let i = 0; i < 3; i++) await page.getByTestId('request-new').click()
-      await expect(page.getByTestId('request-row')).toHaveCount(3)
+      await expect(page.getByTestId('case-row')).toHaveCount(3)
       const d = page.getByTestId('request-estimate').first()
       await d.fill('1h30')
       await d.press('Enter')
@@ -379,16 +379,20 @@ test('konwencje: długość „1h30”, ułamek odrzucony z komunikatem, Esc cof
       await note.press('Enter')
       await expect(note).toHaveValue('spacer z psem')
       await page.getByTestId('request-remove').first().click()
-      await expect(page.getByTestId('request-row')).toHaveCount(2)
+      await expect(page.getByTestId('case-row')).toHaveCount(2)
       await page.getByTestId('toast-action').click()
-      await expect(page.getByTestId('request-row')).toHaveCount(3)
+      await expect(page.getByTestId('case-row')).toHaveCount(3)
       await expect(page.getByTestId('request-note').first()).toHaveValue('spacer z psem')
-      // A filter by state: one of three, then all again.
-      await page.getByTestId('request-row').first().getByRole('button', { name: 'Zrobiona' }).click()
-      await page.getByTestId('filter-state:done').click()
-      await expect(page.getByTestId('count-requests')).toHaveText('1 z 3')
+      // „Zrobione” moves it to the list of done (Sprawy, D383); a task added with Ctrl+N and a filter by kind: one of four, then all again.
+      await page.getByTestId('case-row').first().getByTestId('case-done').click()
+      await expect(page.getByTestId('cases-done-list').getByTestId('case-row')).toHaveCount(1)
+      await page.keyboard.press('Control+KeyN')
+      await page.getByTestId('case-add-title').fill('Zadanie z Ctrl N')
+      await page.getByTestId('case-add-title').press('Enter')
+      await page.getByTestId('filter-kind:task').click()
+      await expect(page.getByTestId('count-cases')).toHaveText('1 z 4')
       await page.getByTestId('filters-clear').click()
-      await expect(page.getByTestId('count-requests')).toHaveText('3 z 3')
+      await expect(page.getByTestId('count-cases')).toHaveText('4 z 4')
     })
   } finally {
     await app.close()

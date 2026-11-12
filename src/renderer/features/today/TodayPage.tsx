@@ -4,7 +4,7 @@
  * exception), getting up later, the change of the day's type, the exchange for a work block added after the approval,
  * moving and copying.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { costText } from '@shared/costText'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
@@ -28,7 +28,7 @@ import { dayUsable, useDay, type DayModel } from '../../store/day'
 import { openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
 import { BlockEditor } from '../plan/BlockEditor'
-import { BlockSeries, blockMayRepeat } from '../series/BlockSeries'
+import { BlockSeries, RepeatNote, blockMayRepeat, repeatNote } from '../series/BlockSeries'
 import { askScope } from '../series/scopeAsk'
 import { changeSeries, removeSeries } from '../series/seriesActions'
 import { occurrenceRuleText, seriesBlockPatch, touchesSeries } from '../series/seriesForm'
@@ -44,6 +44,11 @@ import { blockFill } from '@shared/theme'
 import { begunIds, blockNow, clickResize, patchDayBlock, pushDayBlocks, removeDayBlock, setDayWake, tellFreed } from './dayActions'
 import { addChange, dragChange, pushedSpans, pushedStarts, type DayChange } from './dayPush'
 import { putBlock } from '@shared/data/dayEdits'
+import { estimateOf, type CaseItem } from '@shared/engine/cases'
+import { CasesPanel } from '../cases/CasesPanel'
+import { caseTitle } from '../cases/casesLogic'
+import { planOnAxis } from '../cases/planOnAxis'
+import { useCaseDrag } from '../cases/useCaseDrag'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -151,6 +156,17 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // after the wake (A6-24).
   const newHere = () => create(newBlockStart(model.state, isToday ? Math.ceil(Math.max(logicalMinuteOf(date, Date.now()), model.ctx.wakeMin) / 15) * 15 : model.ctx.wakeMin + 60))
   useNewShortcut(newHere)
+  // D384: a sprawa of the panel beside the axis put on it – dropped at a minute, or in the nearest free place from now. A day
+  // gone is history: no panel there (as no pushing, D367).
+  const casesOn = date >= today
+  const planCaseAt = (id: string, minute: number) => {
+    const r = requests.find((x) => x.id === id)
+    if (r) void planOnAxis(model, today, r, caseTitle(r, rd), minute)
+  }
+  const planCaseNext = (x: CaseItem) => planCaseAt(x.record.id, newBlockStart(model.state, isToday ? Math.ceil(Math.max(logicalMinuteOf(date, Date.now()), model.ctx.wakeMin) / 15) * 15 : model.ctx.wakeMin + 60, x.estimateMin))
+  const { drag: caseDrag, grab: grabCase } = useCaseDrag(planCaseAt)
+  const draggedCase = caseDrag?.minute != null ? requests.find((x) => x.id === caseDrag.id) : undefined
+  const ghost: BlockSpan | null = draggedCase && caseDrag?.minute != null ? { startMin: caseDrag.minute, endMin: caseDrag.minute + estimateOf(draggedCase) } : null
 
   const raw = model.data.dayFile
   const plan = model.ctx.plan
@@ -442,6 +458,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                     }
                   : null
               }
+              ghost={ghost}
               from={axis.from}
               to={axis.to}
             />
@@ -460,7 +477,13 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               setSelected(null)
             }}
             inSeries={!draft && block.origin === 'series'}
-            repeat={!draft && blockMayRepeat(block) ? <BlockSeries block={block} date={date} today={today} name={blockName(block, names)} onCreated={(id) => (follow.current = { from: block.id, to: seriesBlockId(date, id) })} /> : undefined}
+            repeat={
+              draft ? undefined : blockMayRepeat(block) ? (
+                <BlockSeries block={block} date={date} today={today} name={blockName(block, names)} onCreated={(id) => (follow.current = { from: block.id, to: seriesBlockId(date, id) })} />
+              ) : repeatNote(block) ? (
+                <RepeatNote text={repeatNote(block)!} />
+              ) : undefined
+            }
             actions={
               draft ? (
                 <>
@@ -494,7 +517,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             }
           />
         ) : (
-          <SidePanel model={model} names={names} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} />
+          <SidePanel model={model} names={names} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} cases={casesOn ? <CasesPanel drag={caseDrag} grab={grabCase} onPlan={planCaseNext} /> : undefined} />
         )}
       </div>
       {exchange && (
@@ -522,12 +545,13 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
 }
 
 /** Beside the plan when no block is selected: the warnings, the parked blocks, what the engine says of the day. */
-function SidePanel({ model, names, onSelect, onMove }: { model: DayModel; names: Names; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void }) {
+function SidePanel({ model, names, onSelect, onMove, cases }: { model: DayModel; names: Names; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
   const s = model.state
   const parked = model.ctx.plan.filter((b) => s.facts.blocks.get(b.id)?.parkedAt != null)
   const lm = (idx: number) => logicalClock(logicalMinuteOf(model.date, atOf(s.grid, idx)))
   return (
     <aside className="flex w-[300px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3 text-[12.5px]" data-testid="day-side">
+      {cases}
       <h3 className="text-[13px] font-medium">Dzień w liczbach</h3>
       <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
         <dt className="text-muted">Granica</dt>

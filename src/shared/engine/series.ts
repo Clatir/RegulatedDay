@@ -150,7 +150,7 @@ export function seriesAnswerRaw(raw: Raw | null, date: string, blockId: string, 
 /** Why a change of a series is refused (the window shows `message`). */
 export class SeriesEditError extends Error {
   constructor(
-    readonly code: 'kind' | 'series' | 'requests' | 'noStart' | 'ended' | 'notFound' | 'begun' | 'invalid',
+    readonly code: 'kind' | 'series' | 'requests' | 'task' | 'noStart' | 'ended' | 'notFound' | 'begun' | 'invalid',
     message: string
   ) {
     super(message)
@@ -162,6 +162,8 @@ export function blockNotSeries(b: PlanBlock): SeriesEditError | null {
   if (b.origin === 'series') return new SeriesEditError('series', 'Ten blok już należy do serii.')
   if (b.origin === 'session' || b.origin === 'lecture' || b.origin === 'zjazd' || b.tag === 'secondShift') return new SeriesEditError('kind', 'Blok sesji, wykładu ani zajęć zjazdu nie powtarza się w serii.')
   if (b.requests.length) return new SeriesEditError('requests', 'Blok próśb należy do jednego dnia – nie powtarza się w serii.')
+  // D408: a block made from a task of „Sprawy” belongs to its day too – the task is done once.
+  if (b.task) return new SeriesEditError('task', 'Blok zadania należy do jednego dnia – zadanie nie powtarza się w serii.')
   return null
 }
 

@@ -20,7 +20,7 @@ import { toast } from '../../store/ui'
 import { blockName } from '../plan/blockView'
 import { seriesBlockOf } from '../series/seriesForm'
 
-const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', series: 'Serie', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Prośby', routine: 'Rutyny' }
+const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', series: 'Serie', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Sprawy', routine: 'Rutyny' }
 const REASONS: Record<string, string> = { edit: 'przed edycją', delete: 'przed usunięciem', merge: 'przed scaleniem', conflict: 'wersja z konfliktu', restore: 'przed przywróceniem' }
 
 /** The record chosen, by its key, from the list as it is now – after „Przywróć” no longer „usunięty” (A7-10). */
@@ -36,7 +36,7 @@ export function HistoryPage() {
     void window.rd.historyList().then(setRecords).catch(() => setRecords([]))
   }, [stamp])
   if (!records) return <div className="p-6 text-muted">Czytam historię…</div>
-  if (!records.length) return <EmptyState why="Historia jest pusta: wersje zapisują się, gdy zmieniasz albo usuwasz plan, szablon, prośbę, rutynę czy ustawienia." />
+  if (!records.length) return <EmptyState why="Historia jest pusta: wersje zapisują się, gdy zmieniasz albo usuwasz plan, szablon, sprawę, rutynę czy ustawienia." />
   const kinds = [...new Set(records.map((r) => r.kind))].filter((k) => KIND_NAMES[k])
   return (
     <div className="flex min-h-0 flex-1" data-testid="history">
@@ -84,7 +84,8 @@ function RecordName({ r }: { r: HistoryRecord }) {
   if (r.kind === 'schedule') return <span>{lectures.find((t) => t.id === r.id)?.name || 'Wykład'}</span>
   if (r.kind === 'request') {
     const q = requests.find((t) => t.id === r.id)
-    return <span>Prośba{q ? `: ${personName(rd, q.person)}${q.note ? ` – ${q.note}` : ''}` : ''}</span>
+    // A task by its title, a request by its person and note (D383).
+    return <span>{q ? (q.kind === 'task' ? `Zadanie: ${q.title}` : `Prośba: ${personName(rd, q.person)}${q.note ? ` – ${q.note}` : ''}`) : 'Sprawa'}</span>
   }
   return <span>Rekord</span>
 }

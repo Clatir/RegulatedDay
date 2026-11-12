@@ -7,22 +7,20 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { marketDay } from '@shared/calendar/holidays'
-import { dayRaw, putBlock, setAsked, setCancelled, setSessionAnswer } from '@shared/data/dayEdits'
-import { paths } from '@shared/data/paths'
+import { putBlock, setAsked, setCancelled, setSessionAnswer } from '@shared/data/dayEdits'
 import { checkinStates } from '@shared/engine/energy'
 import { atOf } from '@shared/engine/grid'
 import { fromYesterday, holidayQuestions, lighterDay, morningWarnings, sessionQuestions, shiftNotice, weeklyAnalysisMove, type MorningInputs, type MorningWarning } from '@shared/engine/morning'
-import { freeStart, requestsBlock } from '@shared/engine/planEdit'
+import { morningCases, morningMinutes } from '@shared/engine/cases'
+import { freeStart } from '@shared/engine/planEdit'
 import { seriesQuestions } from '@shared/engine/series'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { POOLS, type Pool } from '@shared/model/categories'
 import type { Answer } from '@shared/model/events'
 import { dayFileFrom } from '@shared/model/plan'
-import { DEFAULT_ESTIMATE_MIN } from '@shared/model/requests'
 import { DAY_TYPE_NAMES } from '@shared/model/settings'
 import { seriesAskText } from '@shared/seriesText'
 import { monthOfDate } from '@shared/model/goals'
-import { personName } from '@shared/model/rd'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { Segmented, cx } from '../../components/ui'
@@ -30,9 +28,11 @@ import { CalibrationCard } from '../calibration/CalibrationEntry'
 import { SideBStep, sideBShown } from './SideBStep'
 import { GoalsStep } from './GoalsStep'
 import { goalsStepOpen } from './goalsStepLogic'
-import { dayFilesNow, editOf, isSaved, logEvents, rawRecord, trySaveWith, useData } from '../../store/data'
+import { logEvents, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
+import { planMorning, useCases } from '../../store/cases'
+import { caseTitle } from '../cases/casesLogic'
 import { toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { answerSeries } from '../series/seriesActions'
@@ -141,7 +141,7 @@ const WARNINGS: Record<MorningWarning, (m: DayModel, lm: (i: number) => string) 
 }
 
 function Plan({ model, names }: { model: DayModel; names: Names }) {
-  const { requests, templates, lectures, series, seriesPlans, rd } = useData()
+  const { templates, lectures, series, seriesPlans, rd } = useData()
   const date = model.date
   const s = model.state
   const g = s.grid
@@ -177,8 +177,13 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
   // D382: an occurrence of a series on a „zjazd” or a day of regeneration (its field „W dni szczególne” says „pytaj”) – kept or called off for the day.
   const seriesAsk = seriesQuestions(series, model.ctx.plan, model.dayFile, currentType, date)
   const warnings = morningWarnings(s)
-  // The tasks of „Sprawy” (D384) are not requests: their place in this step comes with its screen (`morningCases`).
-  const queued = requests.filter((r) => r.kind === 'request' && r.state === 'queued')
+  // D384: the step of requests offers the requests not done and not planned (not those of „Kiedyś / Może”) and the tasks of
+  // „Dziś” (`morningCases`); the requests chosen make one block, each task its own.
+  const { items: caseItems } = useCases()
+  const requestsOn = names.rd.general.modules.requests
+  const offered = useMemo(() => morningCases(caseItems), [caseItems])
+  const queued = requestsOn ? offered.requests : []
+  const dayTasks = offered.tasks
   const [chosen, setChosen] = useState<string[]>([])
   const approved = s.boundary.approved
   const proposal = s.boundary.proposal
@@ -198,28 +203,15 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
 
   const [busy, run] = useBusy()
   const answerSeriesAsk = (blockId: string, name: string, keep: boolean) => run(() => answerSeries(date, blockId, keep, keep ? null : `Odwołany na dziś: ${name}`))
-  // In its turn: only requests still in the queue (a second click finds them planned and adds nothing).
-  const addRequests = () =>
+  // In its turn (`planMorning`): only what is still not planned and not done (a second click adds nothing); the requests
+  // as one block, then each task, one after another from the first free place of the day.
+  const addChosen = () =>
     run(async () => {
-      const out = await trySaveWith(async () => {
-        const list = queued.filter((r) => chosen.includes(r.id) && rawRecord(paths.record('request', r.id))?.state === 'queued')
-        if (!list.length) return []
-        const minutes = list.reduce((sum, r) => sum + (r.estimateMin ?? DEFAULT_ESTIMATE_MIN), 0)
-        const b = requestsBlock(
-          list.map((r) => r.id),
-          minutes,
-          freeStart(s, s.now, minutes),
-          s.settings.categories.prosby
-        )
-        const day = (await dayFilesNow([date], () => raw))[date] ?? null
-        const reqEdits = list.map((r) => {
-          const rel = paths.record('request', r.id)
-          const before = rawRecord(rel)
-          return before ? editOf(rel, before, { ...before, state: 'planned', day: date, block: b.id }) : null
-        })
-        return [editOf(paths.day(date), day, putBlock(dayRaw(day, date), b)), ...reqEdits]
-      })
-      if (isSaved(out)) setChosen([])
+      const reqs = queued.filter((x) => chosen.includes(x.record.id))
+      const tasks = dayTasks.filter((x) => chosen.includes(x.record.id))
+      const start = freeStart(s, s.now, morningMinutes(reqs.map((x) => x.record), tasks.map((x) => x.record)))
+      const r = await planMorning(date, raw, { requests: reqs.map((x) => x.record.id), tasks: tasks.map((x) => x.record.id) }, start)
+      if (r.saved) setChosen([])
     })
 
   return (
@@ -303,18 +295,20 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
           </button>
         </Card>
       )}
-      {names.rd.general.modules.requests && queued.length > 0 && (
+      {(queued.length > 0 || dayTasks.length > 0) && (
         <div className="flex flex-col gap-1.5 rounded border border-line px-3 py-2" data-testid="queue-pick">
-          <span className="text-muted">Prośby z kolejki – wybrane razem będą jednym blokiem:</span>
-          {queued.map((r) => (
-            <label key={r.id} className="flex items-center gap-2">
-              <input type="checkbox" checked={chosen.includes(r.id)} onChange={(e) => setChosen(e.currentTarget.checked ? [...chosen, r.id] : chosen.filter((x) => x !== r.id))} />
-              <span>{personName(names.rd, r.person)}</span>
-              <span className="text-muted">{r.note}</span>
-              <span className="num ml-auto text-muted">{durationLabel(r.estimateMin ?? DEFAULT_ESTIMATE_MIN)}</span>
+          <span className="text-muted">
+            {queued.length > 0 && dayTasks.length > 0 ? 'Prośby z kolejki i zadania z „Dziś” – wybrane prośby będą jednym blokiem, każde zadanie swoim:' : queued.length > 0 ? 'Prośby z kolejki – wybrane razem będą jednym blokiem:' : 'Zadania z „Dziś” – każde wybrane będzie swoim blokiem:'}
+          </span>
+          {[...queued, ...dayTasks].map((x) => (
+            <label key={x.record.id} className="flex items-center gap-2" data-testid="queue-item" data-case={x.record.id}>
+              <input type="checkbox" checked={chosen.includes(x.record.id)} onChange={(e) => setChosen(e.currentTarget.checked ? [...chosen, x.record.id] : chosen.filter((id) => id !== x.record.id))} />
+              <span>{caseTitle(x.record, names.rd)}</span>
+              {x.record.kind === 'request' && <span className="text-muted">{x.record.note}</span>}
+              <span className="num ml-auto text-muted">{durationLabel(x.estimateMin)}</span>
             </label>
           ))}
-          <button type="button" className="btn self-start" disabled={!chosen.length || busy} onClick={() => void addRequests()} data-testid="queue-add">
+          <button type="button" className="btn self-start" disabled={!chosen.length || busy} onClick={() => void addChosen()} data-testid="queue-add">
             Dodaj do planu
           </button>
         </div>

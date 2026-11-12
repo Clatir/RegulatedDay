@@ -1017,7 +1017,8 @@ export class DataHub {
         date: c.date,
         // A task of „Sprawy” by its title (D384), a request by its note.
         name: text(r.name) ?? text(r.title) ?? text(r.note),
-        person: c.kind === 'request' ? text(r.person) : null,
+        person: c.kind === 'request' && r.kind !== 'task' ? text(r.person) : null,
+        ...(c.kind === 'request' && r.kind === 'task' ? { task: true } : {}),
         // 0 – the model's „unknown” (`requestFrom`), never a date.
         at: c.kind === 'request' && typeof r.createdAt === 'number' && Number.isFinite(r.createdAt) && r.createdAt > 0 ? r.createdAt : null
       }

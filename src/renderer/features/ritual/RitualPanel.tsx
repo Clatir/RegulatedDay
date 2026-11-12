@@ -19,7 +19,8 @@ import { logEvents, useData } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { openDay, toast } from '../../store/ui'
 import { nameById, type Names } from '../plan/blockView'
-import { PersonChoice } from '../requests/RequestsPage'
+import { PersonChoice } from '../cases/CasesPage'
+import { CasesRitualPart } from '../cases/CasesRitual'
 import { DayTime, typedOf, useTypedTime } from './dayTime'
 
 const BOUNDARY: Record<string, string> = { kept: 'dotrzymana', broken: 'niedotrzymana', noData: 'bez danych' }
@@ -441,6 +442,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
       </div>
       {failed && <p className="text-[12px] text-rose" data-testid="ritual-stale">Nie da się teraz odświeżyć rytuału – widać stan sprzed chwili.</p>}
       {list.length ? <ul className="flex flex-col gap-1.5">{list.map(row)}</ul> : <p className="text-[12.5px] text-muted">Nic z dnia nie czeka na wybór.</p>}
+      <CasesRitualPart date={date} />
       {view.felt.length > 0 && (
         <div className="flex flex-col gap-1" data-testid="ritual-felt">
           <span className="text-[12px] text-muted">Odczuwany koszt (nieobowiązkowo) – wobec kosztu w ustawieniach:</span>

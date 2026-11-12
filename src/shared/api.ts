@@ -183,6 +183,8 @@ export interface BackupRecord {
   /** A request's person (its id – the window names it) and when it was added: requests with one note told apart. */
   person: string | null
   at: number | null
+  /** A sprawa that is a task of your own (D384) – named by its title, not as a request. */
+  task?: boolean
 }
 
 /** Which window a renderer is (the preload reads it from its arguments); `sound` – the hidden window of sound. */
@@ -616,7 +618,7 @@ export interface SeriesResult {
   ok: boolean
   /** Why nothing was written (shown to you), null when it was. */
   error: string | null
-  code: 'kind' | 'series' | 'requests' | 'noStart' | 'ended' | 'notFound' | 'begun' | 'invalid' | null
+  code: 'kind' | 'series' | 'requests' | 'task' | 'noStart' | 'ended' | 'notFound' | 'begun' | 'invalid' | null
   /** The series the change made or changed (a new one with „Powtarzaj”), null – none. */
   seriesId: string | null
   /** The outcomes of the edits (for `editNotice`): a question means part of it waits for your answer. */

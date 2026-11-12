@@ -300,6 +300,18 @@ export interface CasePlan {
 }
 
 /**
+ * The block a sprawa makes on the axis at `startMin` (D384): a task – a flexible block of its category (a category gone:
+ * „Inne”) as long as its estimate, named by the task; a request – a block of requests. The window counts what the block
+ * pushes apart (D367) with it before the sprawa is written.
+ */
+export function caseBlock(r: RequestRecord, startMin: number, rules: Readonly<Record<string, CategoryRules>>): PlanBlock {
+  const est = estimateOf(r)
+  if (r.kind !== 'task') return requestsBlock([r.id], est, startMin, rules[REQUEST_CATEGORY])
+  const cat = r.categoryId && rules[r.categoryId] ? r.categoryId : DEFAULT_TASK_CATEGORY
+  return newUserBlock(cat, startMin, est, rules[cat], { task: r.id })
+}
+
+/**
  * A sprawa put on the axis of `date` at `startMin` (D384): a task – a flexible block of its category (a category gone:
  * „Inne”) as long as its estimate, the cost from the category, named by the task; a request – a block of requests (one
  * contact, as in the morning). The block it was planned in before is taken out of its day when it has not begun (a block
@@ -319,12 +331,7 @@ export function casePlan(i: CasePlanInput): CasePlan | null {
       days[was.day] = old.task === r.id || (old.requests.includes(r.id) && !others.length) ? takeBlock(raw, old.id) : old.requests.includes(r.id) ? putBlock(raw, { ...old, requests: others }) : raw
     }
   }
-  const est = estimateOf(r)
-  let block: PlanBlock
-  if (r.kind === 'task') {
-    const cat = r.categoryId && i.rules[r.categoryId] ? r.categoryId : DEFAULT_TASK_CATEGORY
-    block = newUserBlock(cat, i.startMin, est, i.rules[cat], { task: r.id })
-  } else block = requestsBlock([r.id], est, i.startMin, i.rules[REQUEST_CATEGORY])
+  const block = caseBlock(r, i.startMin, i.rules)
   days[i.date] = putBlock(fileOf(i.date), block)
   return { block, record: scheduledRaw(i.record, i.date, block.id, i.at), days }
 }

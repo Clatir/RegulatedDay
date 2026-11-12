@@ -22,6 +22,23 @@ export function blockMayRepeat(b: PlanBlock): boolean {
   return b.origin === 'series' || blockNotSeries(b) == null
 }
 
+/**
+ * The short reason „Powtarzaj” is not offered on a block of requests or of a task (D408) – said in the panel in place of the
+ * field; null for any other block (a session, a lecture… simply has no field, as before).
+ */
+export function repeatNote(b: PlanBlock): string | null {
+  return b.task || b.requests.length ? (blockNotSeries(b)?.message ?? null) : null
+}
+
+/** The note in place of „Powtarzaj” (`repeatNote`). */
+export function RepeatNote({ text }: { text: string }) {
+  return (
+    <p className="border-t border-line pt-3 text-[12px] text-muted" data-testid="series-unavailable">
+      Powtarzaj: niedostępne. {text}
+    </p>
+  )
+}
+
 export function BlockSeries({ block, date, today, name, onCreated }: { block: PlanBlock; date: string; today: string; name: string; onCreated?: (seriesId: string) => void }) {
   const series = useData((s) => s.series)
   const own = useMemo(() => seriesOfBlock(series, block, date), [series, block, date])
