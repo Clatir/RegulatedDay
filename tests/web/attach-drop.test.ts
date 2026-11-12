@@ -41,7 +41,8 @@ describe('co przeciągnięcie może nieść', () => {
   it('pliki, adres albo tekst – nic innego', () => {
     expect(attachable({ types: ['Files'] })).toBe(true)
     expect(attachable({ types: ['text/uri-list', 'text/plain'] })).toBe(true)
-    expect(attachable({ types: ['text/plain'] })).toBe(true)
+    // Plain text alone is not taken (its data cannot be read before the drop; a word is no link, T818).
+    expect(attachable({ types: ['text/plain'] })).toBe(false)
     expect(attachable({ types: ['text/html'] })).toBe(false)
     expect(attachable(null)).toBe(false)
     expect(hasFiles({ types: ['Files'] })).toBe(true)
@@ -79,10 +80,25 @@ describe('upuszczenie i wklejenie', () => {
     expect(useUi.getState().toasts.map((t) => t.text)).toEqual([NO_PATH_TEXT])
   })
 
-  it('adres z przeglądarki (text/uri-list) i sam tekst z adresem – jak „Dodaj link”; nic – false', async () => {
+  it('adres z przeglądarki (text/uri-list) i sam tekst z jawnym adresem (http, https, mailto, www.) – jak „Dodaj link”; nic – false', async () => {
     expect(await attachTransfer(owner, transfer({ 'text/plain': 'https://d.pl' }))).toBe(true)
-    expect(addLink).toHaveBeenCalledWith(owner, 'https://d.pl')
+    expect(addLink).toHaveBeenLastCalledWith(owner, 'https://d.pl')
+    expect(await attachTransfer(owner, transfer({ 'text/plain': 'www.d.pl/x' }))).toBe(true)
+    expect(addLink).toHaveBeenLastCalledWith(owner, 'www.d.pl/x')
+    expect(await attachTransfer(owner, transfer({ 'text/plain': 'mailto:ala@d.pl' }))).toBe(true)
     expect(await attachTransfer(owner, transfer({}))).toBe(false)
+    expect(addLink).toHaveBeenCalledTimes(3)
+  })
+
+  it('zwykły tekst upuszczony na miejsce (słowo, „plan.md”, goła domena) nie jest linkiem – nic się nie dzieje, żaden toast (T818)', async () => {
+    for (const text of ['słowo', 'plan.md', 'example.org/strona', 'ftp://x.pl/a', 'C:/dane/a.txt']) {
+      expect(await attachTransfer(owner, transfer({ 'text/plain': text }))).toBe(false)
+    }
+    expect(addLink).not.toHaveBeenCalled()
+    expect(useUi.getState().toasts).toHaveLength(0)
+    // Ctrl V sądzi inaczej (linkFromInput) – bez zmian.
+    expect(addressOf(transfer({ 'text/plain': 'plan.md' }), 'explicit')).toBeNull()
+    expect(addressOf(transfer({ 'text/plain': 'plan.md' }))).toBe('plan.md')
   })
 
   it('Ctrl V: adres dodaje link, pliki ze ścieżkami – pliki; zwykły tekst i pole tekstowe – nic', () => {
@@ -145,13 +161,22 @@ describe('miejsce, na które upuszcza się pliki (useAttachDrop)', () => {
 
   it('tekst przeciągany nad polem tekstowym zostaje polu (przeciągnięcie nie jest przyjęte, nic się nie dołącza)', async () => {
     const { zone, field } = await mount(owner)
-    const dt = transfer({ 'text/plain': 'https://x.pl' })
+    const dt = transfer({ 'text/uri-list': 'https://x.pl', 'text/plain': 'https://x.pl' })
     expect(fire(field, 'dragover', dt)).toBe(false)
     expect(fire(field, 'drop', dt)).toBe(false)
     expect(addLink).not.toHaveBeenCalled()
     // …a ten sam adres poza polem to link.
     expect(fire(zone, 'drop', dt)).toBe(true)
     expect(addLink).toHaveBeenCalledWith(owner, 'https://x.pl')
+  })
+
+  it('sam tekst (zaznaczone słowo z dokumentu) nie jest przyjmowany: bez podświetlenia, drop nic nie robi (T818)', async () => {
+    const { zone } = await mount(owner)
+    const dt = transfer({ 'text/plain': 'plan.md' })
+    expect(fire(zone, 'dragover', dt)).toBe(false)
+    expect(zone.dataset.over).toBeUndefined()
+    expect(fire(zone, 'drop', dt)).toBe(false)
+    expect(addLink).not.toHaveBeenCalled()
   })
 
   it('inne przeciągnięcie (np. html) i miejsce bez właściciela – nie są przyjmowane', async () => {

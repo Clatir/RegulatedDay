@@ -1,7 +1,7 @@
 /**
  * Files and links brought to a block from outside the window (SNT4, D410): dropped from the Explorer or a browser onto the
  * block's panel or its tile on the axis, pasted with Ctrl V. Files are named by their paths (`window.rd.pathForFile` – the
- * File object has none of its own); a link is an address from `text/uri-list` or the plain text. The window never navigates
+ * File object has none of its own); a link is an address from `text/uri-list` or a plain text that is one on its face. The window never navigates
  * to a dropped file (the main window refuses every `will-navigate`).
  */
 import { useRef, useState, type DragEvent, type HTMLAttributes } from 'react'
@@ -12,11 +12,15 @@ import { toast } from '../../store/ui'
 
 export const NO_PATH_TEXT = 'Nie da się dołączyć tego, co przeciągnięto – brak pliku na dysku ani adresu.'
 
-/** The transfer may hold a file or a link (known before the drop, from its types alone). */
+/**
+ * The transfer may hold a file or a link (known before the drop, from its types alone – the data are not readable until the
+ * drop): files and `text/uri-list` (a browser gives the address of a dragged link there). Plain text alone is never taken: a
+ * word dragged out of a document is no link (T818).
+ */
 export function attachable(dt: Pick<DataTransfer, 'types'> | null | undefined): boolean {
   if (!dt) return false
   const types = Array.from(dt.types ?? [])
-  return types.includes('Files') || types.includes('text/uri-list') || types.includes('text/plain')
+  return types.includes('Files') || types.includes('text/uri-list')
 }
 
 /** The transfer carries files themselves (a drop of text is judged apart – it is never taken from a field that holds text). */
@@ -29,8 +33,15 @@ export function textTarget(t: EventTarget | null): boolean {
   return el.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]') != null
 }
 
-/** The address a transfer carries as a link: the first line of its `text/uri-list` (no comments), else a one-line plain text; null – none. */
-export function addressOf(dt: Pick<DataTransfer, 'getData'>): string | null {
+/** A text that is an address on its face (T818): an explicit http, https or mailto scheme, or `www.` – never a bare name with a dot („plan.md”). */
+export const explicitAddress = (text: string): boolean => /^(?:https?:\/\/|mailto:)\S+$/i.test(text) || /^www\.\S+$/i.test(text)
+
+/**
+ * The address a transfer carries as a link: the first line of its `text/uri-list` (no comments), else a one-line plain text –
+ * with `plain: 'explicit'` (a drop) only one that is an address on its face (`explicitAddress`), with `'any'` (Ctrl V, which
+ * `linkFromInput` then judges) any; null – none.
+ */
+export function addressOf(dt: Pick<DataTransfer, 'getData'>, plain: 'explicit' | 'any' = 'any'): string | null {
   const list = dt.getData('text/uri-list')
   const uri = list
     .split(/\r?\n/)
@@ -38,7 +49,7 @@ export function addressOf(dt: Pick<DataTransfer, 'getData'>): string | null {
     .find((l) => l && !l.startsWith('#'))
   if (uri) return uri
   const text = dt.getData('text/plain').trim()
-  return text && !/[\r\n]/.test(text) ? text : null
+  return text && !/[\r\n]/.test(text) && (plain === 'any' || explicitAddress(text)) ? text : null
 }
 
 /** The paths of files the transfer holds (those without a path – a picture dragged out of a page – are left out). */
@@ -46,15 +57,18 @@ export function pathsOf(files: Iterable<File>): string[] {
   return [...files].map((f) => window.rd.pathForFile(f)).filter(Boolean)
 }
 
-/** What a drop or a paste brings to the block of `owner`: its files, else its link. True when something was taken. */
-export async function attachTransfer(owner: AttachmentOwner, dt: Pick<DataTransfer, 'getData' | 'files'>): Promise<boolean> {
+/**
+ * What a drop or a paste brings to the block of `owner`: its files, else its link (`plain` – see `addressOf`: a drop takes plain
+ * text only as an explicit address). True when something was taken.
+ */
+export async function attachTransfer(owner: AttachmentOwner, dt: Pick<DataTransfer, 'getData' | 'files'>, plain: 'explicit' | 'any' = 'explicit'): Promise<boolean> {
   const files = Array.from(dt.files ?? [])
   const paths = pathsOf(files)
   if (paths.length) {
     await attachFiles(owner, paths)
     return true
   }
-  const address = addressOf(dt)
+  const address = addressOf(dt, plain)
   if (address) {
     await addLink(owner, address)
     return true
@@ -73,7 +87,7 @@ export function pasteTransfer(owner: AttachmentOwner, e: Pick<ClipboardEvent, 'c
   const hasPaths = pathsOf(Array.from(dt.files ?? [])).length > 0
   const address = addressOf(dt)
   if (!hasPaths && !(address && linkFromInput(address))) return false
-  void attachTransfer(owner, dt)
+  void attachTransfer(owner, dt, 'any')
   return true
 }
 
