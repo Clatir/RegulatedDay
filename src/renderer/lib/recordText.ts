@@ -5,6 +5,7 @@
  */
 import { classify } from '@shared/data/paths'
 import { countLabel, durationLabel, logicalClock, plDate } from '@shared/format'
+import { ALL_DAY_COLOR_NAMES, type AllDayColor } from '@shared/model/allDay'
 import { fieldByKey } from '@shared/model/fields'
 import { categoryName, MODULE_NAMES, personName, type ModuleId, type RdFile } from '@shared/model/rd'
 import { DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
@@ -39,6 +40,7 @@ const BLOCK_FIELDS: Record<string, string> = {
 
 const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok' }
 const ROUTINE_FIELDS: Record<string, string> = { name: 'nazwa', normal: 'kroki (zwykła)', worse: 'kroki (na gorsze dni)', archived: 'archiwum' }
+const ALL_DAY_FIELDS: Record<string, string> = { title: 'tytuł', startDate: 'od', endDate: 'do', color: 'kolor', note: 'notatka', free: 'to wolne', calendarId: 'kalendarz' }
 const STATES: Record<string, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobiona', dropped: 'porzucona' }
 
 /** A value as shown: minutes and times as the fields show them, ids as names, objects briefly. */
@@ -59,6 +61,7 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
     if (key === 'categoryId') return categoryName(n.rd, v)
     if (key === 'person') return personName(n.rd, v)
     if (key === 'dayType') return DAY_TYPE_NAMES[v as DayTypeId] ?? v
+    if (key === 'color' && Object.hasOwn(ALL_DAY_COLOR_NAMES, v)) return ALL_DAY_COLOR_NAMES[v as AllDayColor]
     if (key === 'state') return STATES[v] ?? v
     if (key === 'tag') return v === 'secondShift' ? 'druga zmiana' : v === 'weeklyAnalysis' ? 'analiza tygodniowa' : v
     if (key === 'anchor' || key === 'block') return n.blockName?.(v) ?? 'inny blok'
@@ -119,6 +122,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames): s
   }
   if (kind === 'request') return REQUEST_FIELDS[a ?? ''] ?? 'inne pole prośby'
   if (kind === 'routine') return ROUTINE_FIELDS[a ?? ''] ?? 'inne pole rutyny'
+  if (kind === 'allDay') return ALL_DAY_FIELDS[a ?? ''] ?? 'inne pole wydarzenia'
   if (kind === 'schedule') return a === 'name' ? 'nazwa' : a === 'weekday' ? 'dzień tygodnia' : a === 'startMin' ? 'godzina' : a === 'durationMin' ? 'długość' : a === 'from' ? 'od' : a === 'to' ? 'do' : 'inne pole wykładu'
   if (kind === 'settings') {
     if (a === 'people') return b ? `osoba ${n.rd.people.find((p) => `#${p.id}` === b)?.name ?? ''}`.trim() : 'osoby'

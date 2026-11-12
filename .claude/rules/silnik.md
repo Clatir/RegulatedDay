@@ -108,6 +108,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   Nie dokładaj pętli po minutach z pełną prognozą bez takiego skoku.
 
 ## Pułapki
+- Wydarzenia całodniowe (D405) nie są wejściem dnia (`PlanInputs`, `DaySource`, `DayContext`) – strażnik `tests/unit/engine/all-day.test.ts`.
 - Godzina podwójna 25.10 (02:00–02:59) należy do dnia 24.10; dzień 24.10 ma 1500 minut, 27.03.2027 – 1380.
 - Zdarzenie z `at` w bieżącej minucie nie jest w `viewAt(m)` (ściśle przed m) – test przykładów liczy stan „inclusive”.
 - Blok zakotwiczony do bloku, którego nie ma, znika z planu (`dayPlan`, kaskadowo); kotwica do sesji w szablonie:

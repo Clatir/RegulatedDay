@@ -25,6 +25,9 @@ paths:
   dziś”, zobaczone „Wstałeś później?”) pyta `dayUsable` (pełny albo `away` – znany przy niedostępnym folderze, czeka).
 - Edycje dnia na surowym JSON: `shared/data/dayEdits.ts` (`putBlock`, `setCancelled`, `setAsked`…) – nieznane pola
   zostają. Szablon zapisuje `templateJson` (wersje jako mapa po dacie).
+- Wydarzenia (D405): `store/allDay.ts` (`saveAllDay(e, base)` – tylko pola zmienione na karcie, `removeAllDay` → rekord dla „Cofnij”,
+  `restoreAllDay`), `features/allday/freeDays.ts` („Wolne”: `askFreeDays`, `setFreeDays` – jeden zapis; dziś po utworzeniu dnia
+  → `duringDay`, `undoFreeDays`).
 
 ## Ekrany (`renderer/features/*`)
 - `wizard/` (D294) – kroki pierwszego i kolejnego komputera, szkic w `wizardStore`, podgląd dnia (`countDay`).

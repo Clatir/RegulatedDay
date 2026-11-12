@@ -7,6 +7,7 @@
 import { create } from 'zustand'
 import type { DataView, EditEntry, EditOutcome, EventIn, RawRecord } from '@shared/api'
 import { recordEdit } from '@shared/data/merge'
+import { allDayFrom, type AllDayEvent } from '@shared/model/allDay'
 import type { GoalsPatch } from '@shared/model/goals'
 import { newId } from '@shared/model/ids'
 import { lectureFrom, templateFrom, type LectureSeries, type Template } from '@shared/model/plan'
@@ -22,13 +23,15 @@ interface DataState {
   lectures: LectureSeries[]
   requests: RequestRecord[]
   routines: Routine[]
+  /** All-day events (D405), in no order (`eventsOn`, `eventsInRange` sort them). */
+  allDay: AllDayEvent[]
   /** Grows with every read (the day views read their day again). */
   stamp: number
 }
 
 const empty = rdFrom(undefined)
 
-export const useData = create<DataState>(() => ({ view: null, rd: empty, templates: [], lectures: [], requests: [], routines: [], stamp: 0 }))
+export const useData = create<DataState>(() => ({ view: null, rd: empty, templates: [], lectures: [], requests: [], routines: [], allDay: [], stamp: 0 }))
 
 const isDefined = <T>(v: T | null): v is T => v != null
 
@@ -47,6 +50,7 @@ function apply(view: DataView, news: boolean): void {
     lectures: view.lectures.map(lectureFrom).filter(isDefined),
     requests: view.requests.map(requestFrom).filter(isDefined),
     routines: view.routines.map(routineFrom).filter(isDefined),
+    allDay: (view.allDay ?? []).map(allDayFrom).filter(isDefined),
     stamp: s.stamp + 1
   }))
 }
@@ -97,7 +101,7 @@ export function rawRecord(rel: string): RawRecord | null {
   if (!v) return null
   if (rel === 'rd.json') return v.rd
   const [dir] = rel.split('/')
-  const list = dir === 'templates' ? v.templates : dir === 'schedule' ? v.lectures : dir === 'requests' ? v.requests : dir === 'routines' ? v.routines : null
+  const list = dir === 'templates' ? v.templates : dir === 'schedule' ? v.lectures : dir === 'requests' ? v.requests : dir === 'routines' ? v.routines : dir === 'allday' ? v.allDay : null
   const id = rel.slice(rel.indexOf('/') + 1).replace(/\.json$/, '')
   return list?.find((r) => r.id === id) ?? null
 }

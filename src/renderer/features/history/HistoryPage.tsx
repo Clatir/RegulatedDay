@@ -16,7 +16,7 @@ import { useBusy } from '../../lib/busy'
 import { rawRecord, reloadData, useData } from '../../store/data'
 import { toast } from '../../store/ui'
 
-const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Prośby', routine: 'Rutyny' }
+const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Prośby', routine: 'Rutyny', allDay: 'Wydarzenia' }
 const REASONS: Record<string, string> = { edit: 'przed edycją', delete: 'przed usunięciem', merge: 'przed scaleniem', conflict: 'wersja z konfliktu', restore: 'przed przywróceniem' }
 
 /** The record chosen, by its key, from the list as it is now – after „Przywróć” no longer „usunięty” (A7-10). */
@@ -66,11 +66,12 @@ export function HistoryPage() {
 }
 
 function RecordName({ r }: { r: HistoryRecord }) {
-  const { templates, requests, routines, lectures, rd } = useData()
+  const { templates, requests, routines, lectures, allDay, rd } = useData()
   if (r.kind === 'settings') return <span>Ustawienia wspólne</span>
   if (r.kind === 'day') return <span>Plan dnia {plDate(r.id)}</span>
   if (r.kind === 'template') return <span>{templates.find((t) => t.id === r.id)?.name ?? 'Szablon'}</span>
   if (r.kind === 'routine') return <span>{routines.find((t) => t.id === r.id)?.name ?? 'Rutyna'}</span>
+  if (r.kind === 'allDay') return <span>{allDay.find((t) => t.id === r.id)?.title ?? 'Wydarzenie'}</span>
   if (r.kind === 'schedule') return <span>{lectures.find((t) => t.id === r.id)?.name || 'Wykład'}</span>
   if (r.kind === 'request') {
     const q = requests.find((t) => t.id === r.id)

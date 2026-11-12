@@ -149,5 +149,6 @@ export function recordTitle(rel: string): string {
   if (rel.startsWith('schedule/')) return 'Plan wykładów'
   if (rel.startsWith('requests/')) return 'Prośba'
   if (rel.startsWith('routines/')) return 'Rutyna'
+  if (rel.startsWith('allday/')) return 'Wydarzenie'
   return 'Rekord'
 }

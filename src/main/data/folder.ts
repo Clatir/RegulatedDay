@@ -602,7 +602,7 @@ export class DataFolder {
     return { changes, templates, lectures }
   }
 
-  /** The records of a collection as this computer sees them (requests, routines …), through the same cache. */
+  /** The records of a collection as this computer sees them (requests, routines, all-day events …), through the same cache. */
   async collection(kind: keyof typeof ID_COLLECTIONS): Promise<Array<Record<string, unknown>>> {
     return (await this.cachedDir(ID_COLLECTIONS[kind], (v) => v, true, true)) as Array<Record<string, unknown>>
   }
@@ -2199,7 +2199,7 @@ export class DataFolder {
   private async joinCopies(day: string): Promise<void> {
     const year = Number(day.slice(0, 4))
     // Last year's days too (a copy of 31.12 seen on 1.01).
-    const dirs = ['', ID_COLLECTIONS.template, ID_COLLECTIONS.schedule, ID_COLLECTIONS.request, ID_COLLECTIONS.routine, `days/${year - 1}`, `days/${year}`, `days/${year + 1}`]
+    const dirs = ['', ID_COLLECTIONS.template, ID_COLLECTIONS.schedule, ID_COLLECTIONS.request, ID_COLLECTIONS.routine, ID_COLLECTIONS.allDay, `days/${year - 1}`, `days/${year}`, `days/${year + 1}`]
     const scanned = new Set(dirs)
     const seen = new Set<string>()
     for (const dir of dirs) {

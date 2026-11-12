@@ -145,7 +145,7 @@ function relOf(kind: string, id: string): string | null {
 
 const isPlain = (v: unknown): v is RawRecord => !!v && typeof v === 'object' && !Array.isArray(v)
 
-/** A record a backup can give back one by one: settings, templates, lectures, requests, routines, days. */
+/** A record a backup can give back one by one: settings, templates, lectures, requests, routines, all-day events, days. */
 function isRecordRel(rel: string): boolean {
   const c = classify(rel)
   return !!c && !c.conflict && c.kind !== 'log' && c.kind !== 'presence' && c.kind !== 'grades'
@@ -379,16 +379,17 @@ export class DataHub {
     return `${head}|${today}|${JSON.stringify(await this.records())}|${JSON.stringify(days)}|${read.events.length}|${f.unsynced}|${f.unavailable}|${JSON.stringify(this.service?.backup ?? null)}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}|${JSON.stringify(moved)}|${f.computers.map((c) => `${c.id}:${c.appVersion ?? ''}`).join(',')}`
   }
 
-  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines'>> {
+  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines' | 'allDay'>> {
     const f = this.service?.folder
-    if (!f) return { rd: null, templates: [], lectures: [], requests: [], routines: [] }
+    if (!f) return { rd: null, templates: [], lectures: [], requests: [], routines: [], allDay: [] }
     const settled = async <T>(p: Promise<T>, fallback: T) => p.catch(() => fallback)
     return {
       rd: (await settled(f.recordView(SETTINGS_FILE), undefined)) ?? null,
       templates: await settled(f.collection('template'), []),
       lectures: await settled(f.collection('schedule'), []),
       requests: await settled(f.collection('request'), []),
-      routines: await settled(f.collection('routine'), [])
+      routines: await settled(f.collection('routine'), []),
+      allDay: await settled(f.collection('allDay'), [])
     }
   }
 
@@ -905,14 +906,14 @@ export class DataHub {
     return listBackups(join(this.folder, 'backups'))
   }
 
-  /** The records a backup holds that can be taken back one by one (settings, templates, lectures, requests, routines, days). */
+  /** The records a backup holds that can be taken back one by one (settings, templates, lectures, requests, routines, all-day events, days). */
   async backupRecords(zipFile: string): Promise<string[]> {
     return (await backupEntries(zipFile)).filter(isRecordRel)
   }
 
   /**
    * The records of a backup as the window lists them (D321): each with its kind and what names it in the interface –
-   * a day its date, a template, routine or lecture its name, a request its note, person and day it was added – never an
+   * a day its date, a template, routine or lecture its name, an all-day event its title, a request its note, person and day it was added – never an
    * id. The ZIP is read once.
    */
   async backupContents(zipFile: string): Promise<BackupRecord[]> {
@@ -932,7 +933,7 @@ export class DataHub {
         rel,
         kind: c.kind,
         date: c.date,
-        name: text(r.name) ?? text(r.note),
+        name: text(r.name) ?? text(r.title) ?? text(r.note),
         person: c.kind === 'request' ? text(r.person) : null,
         // 0 – the model's „unknown” (`requestFrom`), never a date.
         at: c.kind === 'request' && typeof r.createdAt === 'number' && Number.isFinite(r.createdAt) && r.createdAt > 0 ? r.createdAt : null
