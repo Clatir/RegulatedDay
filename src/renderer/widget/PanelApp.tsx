@@ -13,12 +13,13 @@ export function PanelApp() {
   const [unfolded, setUnfolded] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useReportLayout(ref, unfolded)
-  // An opening by the desktop bar's „+” unfolds the field once: a bar drawn anew never opens it again from the same one.
+  // An opening by the desktop bar's „+” unfolds the field once: a bar drawn anew never opens it again from the same one –
+  // and it is spent only once a bar was there to take it (before the first view it waits, T772).
   const usedQuick = useRef<object | null>(null)
   const quickAt = target?.quick && usedQuick.current !== target ? target : null
   useEffect(() => {
-    if (quickAt) usedQuick.current = quickAt
-  }, [quickAt])
+    if (quickAt && view) usedQuick.current = quickAt
+  }, [quickAt, view])
   useEffect(() => {
     setWindowEscape(() => window.rd.panelClose())
     const off = window.rd.onPanelTarget(setTarget)

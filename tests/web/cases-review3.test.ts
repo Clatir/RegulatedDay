@@ -91,7 +91,7 @@ describe('rozsuwanie: licznik i plan dnia po zmianie (T770)', () => {
   it('start, który już taki jest, nie liczy się do „Przesunięto”', async () => {
     const c = { id: 'c', categoryId: 'inne', startMin: lm('11:00'), durationMin: 30, origin: 'user' as const }
     stub([newTask('t1', placeLogical(D1, 600), D1, { title: 'x' })!], { [D1]: { schema: 1, date: D1, blocks: [c] } })
-    const r = await planCase('t1', D1, lm('10:00'), { pushed: [{ block: planBlock(c), startMin: lm('11:00') }] })
+    const r = await planCase('t1', D1, lm('10:00'), { push: { blocks: [{ block: planBlock(c), startMin: lm('11:00') }], planOf: (file) => file.blocks } })
     expect(r).toMatchObject({ saved: true, moved: 0 })
   })
 
@@ -99,8 +99,7 @@ describe('rozsuwanie: licznik i plan dnia po zmianie (T770)', () => {
     stub([newTask('t1', placeLogical(D1, 600), D1, { title: 'x' })!], { [D1]: null })
     const model = modelOf(D1, [block({ id: 'tpl', cat: 'inne', at: '10:30', min: 30 })])
     const r = await planCase('t1', D1, lm('10:15'), {
-      pushed: [{ block: planBlock({ id: 'gone-tpl', categoryId: 'inne', startMin: lm('10:30'), durationMin: 30, origin: 'template' }), startMin: lm('10:45') }],
-      planOf: (file) => dayPlanOf(model, file)
+      push: { blocks: [{ block: planBlock({ id: 'gone-tpl', categoryId: 'inne', startMin: lm('10:30'), durationMin: 30, origin: 'template' }), startMin: lm('10:45') }], planOf: (file) => dayPlanOf(model, file) }
     })
     expect(r).toMatchObject({ saved: true, moved: 0 })
     expect(blocksAfter(r, D1).map((b) => b.id)).toEqual([r.block!.id])

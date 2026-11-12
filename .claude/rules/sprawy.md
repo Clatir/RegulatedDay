@@ -18,7 +18,7 @@ paths:
 # Sprawy, Skrzynka, szybki zapis (OPS2, L2)
 
 Źródło prawdy: D383, D384, D385, D402 (`docs/decyzje.md`), opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`
-„## 9. Prawdziwy Backlog i Skrzynka Spraw”. Decyzje T750–T758 (logika), T759–T771 (po przeglądach), T780–T785 (ekrany). Prośby w dniu (zdarzenia logu) – reguły `prosby-warianty.md`.
+„## 9. Prawdziwy Backlog i Skrzynka Spraw”. Decyzje T750–T758 (logika), T759–T774 (po przeglądach), T780–T785 (ekrany). Prośby w dniu (zdarzenia logu) – reguły `prosby-warianty.md`.
 
 ## Pliki
 - `model/requests.ts` – rekord sprawy w `requests/<id>.json` (te same pliki co prośby, T750): `kind` (`task` / `request`),
@@ -34,7 +34,7 @@ paths:
   `dayFactsOf`, `casesRitual`.
 - `renderer/store/cases.ts` – API okna: `useCases()` (listy dziś, z godzinami bloków; dni przez IPC `caseDays` – jeden odczyt
   dla wszystkich widoków), `createTask`, `createRequest`, `changeCase`, `moveCase`, `removeCase`,
-  `planCase(id, dzień, minuta, { begun, pushed, seen })`, `planMorning` (→ `MorningResult { made, skipped }`),
+  `planCase(id, dzień, minuta, { push: { blocks, planOf }, seen })` (→ `moved`; „zaczęty” z `caseDays.begun`), `planMorning` (→ `MorningResult { made, skipped }`),
   `answerTask`, `undoCase(undo)`, `useQuickShortcut()`; wynik `CaseResult` (`saved`, `error`, `outcomes`, `id`, `undo`);
   plik dnia nieczytelny teraz (bez `seen`) – nic nie zapisane, `DAY_UNREADABLE`.
 - Proces główny: `windows/quickWindow.ts` (okienko „Do skrzynki”, skrót globalny), `hub.quickAdd`, `hub.casesRitual` →

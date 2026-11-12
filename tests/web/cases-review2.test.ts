@@ -7,6 +7,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DataView, EditEntry, RawRecord, RdApi } from '@shared/api'
+import { dayPlan } from '@shared/engine/createDay'
 import { computeDay } from '@shared/engine/day'
 import { paths } from '@shared/data/paths'
 import { dayFileFrom, planBlock } from '@shared/model/plan'
@@ -62,7 +63,7 @@ describe('rozsuwanie przy zaplanowaniu sprawy (T764)', () => {
     const model = { date: D1, ctx, state: computeDay(ctx), data: { dayFile: { schema: 1, date: D1, blocks: [B] } } } as unknown as DayModel
     const p = planningOf(model, D1, requestFrom(reqR)!, lm('13:50'))
     expect(p.pushed.map((x) => [x.block.id, x.startMin])).toEqual([['B', lm('14:10')]])
-    const r = await planCase('r', D1, lm('13:50'), { pushed: p.pushed })
+    const r = await planCase('r', D1, lm('13:50'), { push: { blocks: p.pushed, planOf: (file) => dayPlan(model.ctx.snapshot, file) } })
     expect(r.saved).toBe(true)
     const after = blocksAfter(r, D1)
     expect(after.find((b) => b.id === 'B')).toMatchObject({ startMin: lm('14:10'), requests: ['s'] })

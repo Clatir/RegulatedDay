@@ -38,8 +38,15 @@ describe('stary blok sprawy: tylko dziś i później, niezaczęty według logu (
     expect(dayFileFrom(out.days[TODAY], TODAY).blocks.map((b) => [b.task, b.startMin])).toEqual([['t1', 720]])
   })
 
+  it('upuszczenie: stary blok dziś, „zaczęty” nieznany (log niepełny) – odmowa z powodem, nic nie liczone (T774)', () => {
+    const p = casePlan({ record: task(TODAY), date: '2026-11-13', startMin: 700, files: { '2026-11-13': null, [TODAY]: { schema: 1, date: TODAY, blocks: [old] } }, rules, at: at(TODAY, 9), begun: () => undefined })
+    expect(p).toEqual({ refused: 'begunUnknown' })
+    // Someone else's block under that id, or a day gone by: nothing to take – no refusal.
+    expect(casePlan({ record: task(YESTERDAY), date: TODAY, startMin: 700, files: { [TODAY]: null, [YESTERDAY]: { schema: 1, date: YESTERDAY, blocks: [old] } }, rules, at: at(TODAY, 9), begun: () => undefined })).toHaveProperty('block')
+  })
+
   it('upuszczenie: blok dnia minionego zostaje, choćby log mówił „niezaczęty”', () => {
-    const p = casePlan({ record: task(YESTERDAY), date: TODAY, startMin: 700, files: { [TODAY]: null, [YESTERDAY]: { schema: 1, date: YESTERDAY, blocks: [old] } }, rules, at: at(TODAY, 9), begun: () => false })!
-    expect(Object.keys(p.days)).toEqual([TODAY])
+    const p = casePlan({ record: task(YESTERDAY), date: TODAY, startMin: 700, files: { [TODAY]: null, [YESTERDAY]: { schema: 1, date: YESTERDAY, blocks: [old] } }, rules, at: at(TODAY, 9), begun: () => false })
+    expect(p && 'days' in p ? Object.keys(p.days) : p).toEqual([TODAY])
   })
 })

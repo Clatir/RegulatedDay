@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { DataView, EditEntry, RawRecord, RdApi } from '@shared/api'
 import { computeDay } from '@shared/engine/day'
 import { paths } from '@shared/data/paths'
-import { dayFileFrom, planBlock } from '@shared/model/plan'
+import { dayFileFrom, planBlock, type PlanBlock } from '@shared/model/plan'
 import { newTask, requestFrom } from '@shared/model/requests'
 import { placeLogical } from '@shared/time/day'
 import { planningOf } from '@renderer/features/cases/planOnAxis'
@@ -53,7 +53,7 @@ describe('ponowne zaplanowanie sprawy (T761)', () => {
   it('blok 14:00 niezaczęty, zaplanowane ponownie na 13:45: jeden blok zadania – stary nie wraca przez rozsuwane', async () => {
     const { sent } = stub([planned(D1)], { [D1]: { schema: 1, date: D1, blocks: [old] } })
     // The drop pushed the old block (it stood after the new one) – as the window counted it before the fix.
-    const r = await planCase('t1', D1, lm('13:45'), { pushed: [{ block: planBlock({ ...old, startMin: lm('14:00') }), startMin: lm('14:15') }] })
+    const r = await planCase('t1', D1, lm('13:45'), { push: { blocks: [{ block: planBlock({ ...old, startMin: lm('14:00') }), startMin: lm('14:15') }], planOf: (file: { blocks: PlanBlock[] }) => file.blocks } })
     expect(r.saved).toBe(true)
     expect(sent).toHaveLength(1)
     expect(blocksAfter(r, D1).filter((b) => b.task === 't1').map((b) => [b.id, b.startMin])).toEqual([[r.block!.id, lm('13:45')]])

@@ -113,8 +113,16 @@ export function dayFactsOf(date: string, events: readonly AnyEvent[]): { grid: R
 
 /** The blocks of a day parked or cancelled before they began (`block.park`, `block.cancel` in its log; „Cofnij” undoes them). */
 export function goneBlocks(date: string, events: readonly AnyEvent[]): Set<string> {
-  const out = new Set<string>()
-  for (const [id, f] of dayFactsOf(date, events).facts.blocks) if (f.startedAt == null && (f.parkedAt != null || f.cancelledAt != null)) out.add(id)
+  return new Set(blockFactsOf(date, events).gone)
+}
+
+/** The blocks of a day by its log (T768): `begun` – they ran; `gone` – parked or cancelled before they began. */
+export function blockFactsOf(date: string, events: readonly AnyEvent[]): { gone: string[]; begun: string[] } {
+  const out = { gone: [] as string[], begun: [] as string[] }
+  for (const [id, f] of dayFactsOf(date, events).facts.blocks) {
+    if (f.startedAt != null) out.begun.push(id)
+    else if (f.parkedAt != null || f.cancelledAt != null) out.gone.push(id)
+  }
   return out
 }
 
@@ -375,16 +383,28 @@ export function caseBlock(r: RequestRecord, startMin: number, rules: Readonly<Re
  * contact, as in the morning). The block it was planned in before is taken out of its day when it has not begun (a block
  * of several requests only loses this one) – the sprawa is planned once. Null: no sprawa in the file.
  */
-export function casePlan(i: CasePlanInput): CasePlan | null {
+/**
+ * Why `casePlan` changes nothing (T774): `begunUnknown` – the sprawa's old block stands on a day today or later and that
+ * day's log does not say whether it began: taking it out could undo a run, leaving it – a second block of the sprawa.
+ */
+export interface CasePlanRefusal {
+  refused: 'begunUnknown'
+}
+
+export function casePlan(i: CasePlanInput): CasePlan | CasePlanRefusal | null {
   const r = requestFrom(i.record)
   if (!r) return null
   const days: Record<string, Raw> = {}
   const fileOf = (date: string): Raw => days[date] ?? dayRaw(i.files[date] ?? null, date)
+  const today = logicalDayOf(i.at)
   const was = scheduledOf(r, (d) => (d in i.files || d in days ? dayFileFrom(fileOf(d), d) : undefined))
-  if (was?.known && oldBlockTakeable(was.day, logicalDayOf(i.at), i.begun(was.day, was.block))) {
+  if (was?.known && was.day >= today) {
     const raw = fileOf(was.day)
     const next = withoutOld(raw, was.day, was.block, r)
-    if (next !== raw) days[was.day] = next
+    const begun = i.begun(was.day, was.block)
+    // Only what would change the day matters: a block of someone else's under that id, or none – nothing to ask.
+    if (next !== raw && begun === undefined) return { refused: 'begunUnknown' }
+    if (next !== raw && oldBlockTakeable(was.day, today, begun)) days[was.day] = next
   }
   const block = caseBlock(r, i.startMin, i.rules)
   days[i.date] = putBlock(fileOf(i.date), block)

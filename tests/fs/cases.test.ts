@@ -4,14 +4,14 @@
  * quick capture into „Skrzynka”; a task put on the axis at 10:00 – a block of 30 min „Inne” and the task „zaplanowane”;
  * the end of its block – one question „Zadanie zrobione?” on two computers, answered on one – gone on both; the ritual.
  */
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
-import { casePlan, caseItems, listedRaw, listOf, scheduledOf, taskQuestionId } from '@shared/engine/cases'
+import { casePlan, caseItems, listedRaw, listOf, scheduledOf, taskQuestionId, type CasePlan } from '@shared/engine/cases'
 import { DEFAULT_CATEGORIES } from '@shared/model/categories'
 import { dayFileFrom } from '@shared/model/plan'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
@@ -21,6 +21,9 @@ import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs } from '../../src/main/data/fsio'
 import { DataHub } from '../../src/main/data/hub'
 import { WidgetEngine } from '../../src/main/widget'
+
+/** A planning that is no refusal (the cases here never are). */
+const planOk = (i: Parameters<typeof casePlan>[0]): CasePlan | null => casePlan(i) as CasePlan | null
 
 let root: string
 beforeEach(() => {
@@ -147,7 +150,7 @@ describe('szybki zapis i zadanie na osi (D385, D384)', () => {
       const rel = paths.record('request', id!)
       const record = (await hub.service!.folder.recordView(rel))!
       const files = await hub.dayFiles([today])
-      const p = casePlan({ record, date: today, startMin: 10 * 60, files: { [today]: files[today] ?? null }, rules, at: Date.now(), begun: () => false })!
+      const p = planOk({ record, date: today, startMin: 10 * 60, files: { [today]: files[today] ?? null }, rules, at: Date.now(), begun: () => false })!
       // One edit of the queue: the day's file and the record.
       const out = await hub.edit([recordEdit(paths.day(today), files[today] ?? null, p.days[today]!)!, recordEdit(rel, record, p.record)!])
       expect(out.every((o) => o.status === 'applied')).toBe(true)
@@ -319,6 +322,54 @@ describe('dni „Spraw” (T768)', () => {
       const again = hub.caseDayFolds
       await hub.caseDays([...past, ...coming].sort())
       expect(hub.caseDayFolds - again).toBe(coming.length + 1)
+    } finally {
+      await hub.close('quit')
+    }
+  })
+})
+
+describe('dni „Spraw” – pamięć i folder chwilowo niedostępny (T773)', () => {
+  it('pamięć dni minionych nie znika, gdy ktoś zapyta o inne dni (zaplanowanie, plan poranny)', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const today = logicalDayOf(Date.now())
+      const past = [addDays(today, -3), addDays(today, -2)]
+      await hub.caseDays(past)
+      await hub.caseDays([today])
+      const folds = hub.caseDayFolds
+      await hub.caseDays(past)
+      expect(hub.caseDayFolds - folds).toBe(0)
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('folder chwilowo niedostępny, dzień znany (`away`): jego bloki zaczęte i odeszłe są (jak `dayUsable`)', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const day = addDays(logicalDayOf(Date.now()), 1)
+    mkdirSync(join(dir, 'days', day.slice(0, 4)), { recursive: true })
+    writeFileSync(join(dir, paths.day(day)), JSON.stringify({ schema: 1, date: day, blocks: [{ id: 'b1', categoryId: 'inne', startMin: 600, durationMin: 30, origin: 'user', task: 't1' }] }))
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      hub.service!.folder.append({ day, dom: 'meta', k: 'observe.alive', at: Date.now() })
+      await hub.service!.folder.log.flush()
+      expect((await hub.caseDays([day])).begun).toEqual({ [day]: [] })
+      renameSync(dir, `${dir}-ukryty`)
+      try {
+        expect((await hub.service!.folder.readDay(day)).away).toBe(true)
+        const out = await hub.caseDays([day])
+        expect(out.begun).toEqual({ [day]: [] })
+        expect(out.gone).toEqual({ [day]: [] })
+      } finally {
+        renameSync(`${dir}-ukryty`, dir)
+      }
     } finally {
       await hub.close('quit')
     }

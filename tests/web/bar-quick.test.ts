@@ -110,14 +110,25 @@ describe('pole szybkiego zapisu: tekst tylko przez zmianę układu (T767)', () =
   })
 })
 
-describe('panel otwarty „+” paska pulpitu (T771)', () => {
+describe('panel otwarty „+” paska pulpitu (T771, T772)', () => {
   let target: ((t: { line: string | null; day: string | null; quick?: boolean } | null) => void) | null = null
+  const hadObserver = 'ResizeObserver' in globalThis
   beforeEach(() => {
     const rd: Partial<RdApi> = { onPanelTarget: (cb) => ((target = cb), () => undefined), panelTouch: () => undefined, panelClose: () => undefined, barLayout: () => undefined }
     ;(window as unknown as { rd: Partial<RdApi> }).rd = rd
+    if (!hadObserver)
+      (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
+        observe() {}
+        disconnect() {}
+      }
   })
   afterEach(() => {
+    // The panel unmounted while `window.rd` is still there (its cleanups call it), then the stubs go.
+    act(() => root?.unmount())
+    root = null
+    act(() => useWidget.setState({ view: null }))
     delete (window as unknown as { rd?: unknown }).rd
+    if (!hadObserver) delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver
   })
 
   it('każde nowe otwarcie daje fokus polu – także gdy już jest otwarte; flaga nie zostaje na później', async () => {
@@ -145,11 +156,7 @@ describe('panel otwarty „+” paska pulpitu (T771)', () => {
   })
 
   it('panel: „Odcinam się” w trakcie – ten sam pasek (tekst zostaje), otwarcie nie wraca ani nie zabiera fokusu', async () => {
-    ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
-      observe() {}
-      disconnect() {}
-    }
-    useWidget.setState({ view: dayView() })
+    act(() => useWidget.setState({ view: dayView() }))
     host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
@@ -173,7 +180,35 @@ describe('panel otwarty „+” paska pulpitu (T771)', () => {
       expect(document.activeElement).toBe(other)
     } finally {
       other.remove()
-      useWidget.setState({ view: null })
     }
+  })
+
+  it('„Odcinam się”: rozwinięte „⋯” zwija się (panel nie zostaje „rozwinięty”) i nie wraca po „Wracam”; pole szybkiego zapisu zostaje', async () => {
+    act(() => useWidget.setState({ view: dayView() }))
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(PanelApp)))
+    await act(async () => host!.querySelector<HTMLButtonElement>('[data-testid="bar-group-more"]')!.click())
+    expect(host.querySelector('[data-testid="bar-unfold-more"]')).not.toBeNull()
+    await act(async () => useWidget.setState({ view: { ...dayView(), hidden: true, stateLine: 'Odcinam się od 10:00' } }))
+    await act(async () => useWidget.setState({ view: dayView() }))
+    expect(host.querySelector('[data-testid="bar-unfold-more"]')).toBeNull()
+    // The quick field survives „Odcinam się” (its text) – and is the only unfold that does.
+    await act(async () => target!({ line: null, day: null, quick: true }))
+    await act(async () => useWidget.setState({ view: { ...dayView(), hidden: true, stateLine: 'Odcinam się od 10:00' } }))
+    expect(field()).not.toBeNull()
+  })
+
+  it('„+” przed pierwszym widokiem paska: pole otwiera się, gdy widok przyjdzie (otwarcie nie przepada)', async () => {
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(PanelApp)))
+    await act(async () => target!({ line: null, day: null, quick: true }))
+    expect(field()).toBeNull()
+    await act(async () => useWidget.setState({ view: dayView() }))
+    expect(field()).not.toBeNull()
+    expect(document.activeElement).toBe(field())
   })
 })

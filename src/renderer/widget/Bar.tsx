@@ -556,6 +556,11 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
   useEffect(() => {
     if (view.day == null) setUnfold((u) => (u === 'quick' ? u : null))
   }, [view.day])
+  // „Odcinam się” (the same bar in the panel, T771): what was unfolded folds – the panel is not kept „unfolded”, „⋯” never
+  // comes back after „Wracam”; only the field of the quick capture stays, with its text (T772).
+  useEffect(() => {
+    if (view.hidden) setUnfold((u) => (u === 'quick' ? u : null))
+  }, [view.hidden])
   // The group of „Zrobione automatycznie” folds with its „⋯”, with the day gone from the view and with the group itself.
   const groupGone = !view.autos.groups.some((g) => g.id === groupOpen)
   useEffect(() => {

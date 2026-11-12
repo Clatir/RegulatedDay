@@ -52,9 +52,8 @@ export const plannedText = (title: string, block: Pick<PlanBlock, 'startMin'>): 
 export async function planOnAxis(model: DayModel, today: string, r: RequestRecord, title: string, startMin: number): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
   const { pushed } = planningOf(model, today, r, startMin)
   const res = await planCase(r.id, model.date, startMin, {
-    pushed,
-    seen: (date) => (date === model.date ? model.data.dayFile : undefined),
-    planOf: (file) => dayPlan(model.ctx.snapshot, file)
+    push: { blocks: pushed, planOf: (file) => dayPlan(model.ctx.snapshot, file) },
+    seen: (date) => (date === model.date ? model.data.dayFile : undefined)
   })
   if (!res.saved || !res.block) return res
   if (res.moved > 0) {

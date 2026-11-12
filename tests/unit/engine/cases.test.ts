@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import {
   caseItems,
   casePlan,
+  type CasePlan,
   casesRitual,
   doneRecently,
   listedRaw,
@@ -33,6 +34,9 @@ import { blockName } from '@shared/blockName'
 import { rdFrom } from '@shared/model/rd'
 import { placeLogical } from '@shared/time/day'
 import { block, Scenario } from './dsl'
+
+/** A planning that is no refusal (the cases here never are). */
+const planOk = (i: Parameters<typeof casePlan>[0]): CasePlan | null => casePlan(i) as CasePlan | null
 
 const TODAY = '2026-11-12'
 const TOMORROW = '2026-11-13'
@@ -151,7 +155,7 @@ describe('zaplanowane (D384, D402)', () => {
 
   it('przeciągnięcie zadania na 10:00 – blok elastyczny 30 min „Inne” z kosztem kategorii, zadanie zaplanowane', () => {
     const task = newTask('t1', at(TODAY), TODAY, { title: 'Zadzwonić' })!
-    const p = casePlan({ record: task, date: TODAY, startMin: 600, files: { [TODAY]: null }, rules, at: at(TODAY, 9), begun: () => false })!
+    const p = planOk({ record: task, date: TODAY, startMin: 600, files: { [TODAY]: null }, rules, at: at(TODAY, 9), begun: () => false })!
     expect(p.block).toMatchObject({ categoryId: 'inne', startMin: 600, durationMin: 30, fixed: false, costs: null, task: 't1', origin: 'user' })
     expect(dayFileFrom(p.days[TODAY], TODAY).blocks.map((b) => b.id)).toEqual([p.block.id])
     expect(rec(p.record)).toMatchObject({ day: TODAY, block: p.block.id, state: 'planned', list: 'inbox' })
@@ -159,14 +163,14 @@ describe('zaplanowane (D384, D402)', () => {
 
   it('ponowne przeciągnięcie: stary niezaczęty blok wychodzi z dnia, zaczęty zostaje; prośba – blok próśb', () => {
     const task = newTask('t1', at(TODAY), TODAY, { title: 'x', categoryId: 'nauka', estimateMin: 45 })!
-    const first = casePlan({ record: task, date: TODAY, startMin: 600, files: { [TODAY]: null }, rules, at: at(TODAY, 9), begun: () => false })!
-    const again = casePlan({ record: first.record, date: TODAY, startMin: 720, files: first.days, rules, at: at(TODAY, 9), begun: () => false })!
+    const first = planOk({ record: task, date: TODAY, startMin: 600, files: { [TODAY]: null }, rules, at: at(TODAY, 9), begun: () => false })!
+    const again = planOk({ record: first.record, date: TODAY, startMin: 720, files: first.days, rules, at: at(TODAY, 9), begun: () => false })!
     expect(dayFileFrom(again.days[TODAY], TODAY).blocks).toEqual([expect.objectContaining({ id: again.block.id, startMin: 720, categoryId: 'nauka', durationMin: 45 })])
-    const kept = casePlan({ record: first.record, date: TOMORROW, startMin: 600, files: { ...first.days, [TOMORROW]: null }, rules, at: at(TODAY, 9), begun: () => true })!
+    const kept = planOk({ record: first.record, date: TOMORROW, startMin: 600, files: { ...first.days, [TOMORROW]: null }, rules, at: at(TODAY, 9), begun: () => true })!
     expect(kept.days[TODAY]).toBeUndefined()
     // The list stays where it was (D384: „zostaje na liście”).
     expect(rec(kept.record)).toMatchObject({ day: TOMORROW, block: kept.block.id, list: 'inbox' })
-    const req = casePlan({ record: newRequest('r1', 1, { person: 'mama', estimateMin: null, note: '' }), date: TODAY, startMin: 600, files: { [TODAY]: null }, rules, at: at(TODAY), begun: () => false })!
+    const req = planOk({ record: newRequest('r1', 1, { person: 'mama', estimateMin: null, note: '' }), date: TODAY, startMin: 600, files: { [TODAY]: null }, rules, at: at(TODAY), begun: () => false })!
     expect(req.block).toMatchObject({ categoryId: 'prosby', requests: ['r1'], durationMin: 15, task: null })
   })
 })

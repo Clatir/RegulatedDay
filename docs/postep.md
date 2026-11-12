@@ -74,7 +74,7 @@ Numery: D404, T700–T719 (L1), T750–T799 (L2, L3 – uzgodnione z sesją HKU1
 polecenie użytkownika (pytania zadane w D380–D386, D401–D403).
 **Dalej (12.11, decyzja użytkownika):** L3 po przeglądzie K (D380 zostaje). Po wydaniu L2 ta sesja robi SNT5 (podzadania) –
 pytania „Przed etapem” zadane: D440; noc 12/13.11 – D441 (scalanie w kolejce L2 → SNT4 → SNT5, nowe zachowanie „do potwierdzenia”).
-Numery: D440–D449, T772–T779 i T786–T799. SNT4 = sesja regulatedday-ab (D410–D439, T800–T849), HKU = regulatedday-d7 (D450–D459, T850–T899).
+Numery: D440–D449, T786–T799 (T772–T779 – ostatnie poprawki L2). SNT4 = sesja regulatedday-ab (D410–D439, T800–T849), HKU = regulatedday-d7 (D450–D459, T850–T899).
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
@@ -86,7 +86,7 @@ Numery: D440–D449, T772–T779 i T786–T799. SNT4 = sesja regulatedday-ab (D4
 (T751); „zaplanowane” wyliczane z pliku dnia i logu (T752, T760); sprawa na osi, plan poranny (T753, T761, T782); „Zadanie
 zrobione?” w pasku (T754); szybki zapis – skrót globalny, okienko, „+” (T755, T756, T759, T763 – domyślny Win+Alt+N, D408);
 rytuał (T757, T762, T783); Ctrl K (T758). Ekrany: `renderer/features/cases/` (strona, panel przy osi „Dziś”, przeciąganie,
-rytuał), pole skrótu w Ustawieniach, nazwy zadań w Historii, „Danych” i pytaniach (T780–T785). Decyzje T750–T771, T780–T785,
+rytuał), pole skrótu w Ustawieniach, nazwy zadań w Historii, „Danych” i pytaniach (T780–T785). Decyzje T750–T774, T780–T785,
 D408. Testy: 2300 unit, 43 E2E lokalnie (`cases.spec.ts`, `quick.spec.ts`; `quick-windows.spec.ts` tylko CI na Windows).
 Odbiór L2.1–L2.6.
 **Uwagi na później (L2):** przechwytywanie klawiszy w polu skrótu (dziś zwykły tekst); E2E „Zadanie zrobione?” w pasku (potrzebny
