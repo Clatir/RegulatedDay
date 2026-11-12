@@ -20,7 +20,7 @@ import { toast } from '../../store/ui'
 import { blockName } from '../plan/blockView'
 import { seriesBlockOf } from '../series/seriesForm'
 
-const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', series: 'Serie', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Prośby', routine: 'Rutyny', allDay: 'Wydarzenia' }
+const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', series: 'Serie', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Prośby', routine: 'Rutyny', allDay: 'Wydarzenia', attachment: 'Załączniki' }
 const REASONS: Record<string, string> = { edit: 'przed edycją', delete: 'przed usunięciem', merge: 'przed scaleniem', conflict: 'wersja z konfliktu', restore: 'przed przywróceniem' }
 
 /** The record chosen, by its key, from the list as it is now – after „Przywróć” no longer „usunięty” (A7-10). */
@@ -70,7 +70,7 @@ export function HistoryPage() {
 }
 
 function RecordName({ r }: { r: HistoryRecord }) {
-  const { templates, requests, routines, lectures, series, allDay, rd } = useData()
+  const { templates, requests, routines, lectures, series, allDay, attachments, rd } = useData()
   const today = useData((s) => s.view?.today ?? '')
   if (r.kind === 'settings') return <span>Ustawienia wspólne</span>
   if (r.kind === 'day') return <span>Plan dnia {plDate(r.id)}</span>
@@ -82,6 +82,7 @@ function RecordName({ r }: { r: HistoryRecord }) {
   }
   if (r.kind === 'routine') return <span>{routines.find((t) => t.id === r.id)?.name ?? 'Rutyna'}</span>
   if (r.kind === 'allDay') return <span>{allDay.find((t) => t.id === r.id)?.title ?? 'Wydarzenie'}</span>
+  if (r.kind === 'attachment') return <span>{attachments.find((t) => t.id === r.id)?.name ?? 'Załącznik'}</span>
   if (r.kind === 'schedule') return <span>{lectures.find((t) => t.id === r.id)?.name || 'Wykład'}</span>
   if (r.kind === 'request') {
     const q = requests.find((t) => t.id === r.id)

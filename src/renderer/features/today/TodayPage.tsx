@@ -12,6 +12,7 @@ import { freedByEdit } from '@shared/engine/gaps'
 import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
 import { leavesByCancel, newBlockStart, newUserBlock } from '@shared/engine/planEdit'
 import { seriesBlockId } from '@shared/engine/series'
+import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { categoryName } from '@shared/model/rd'
 import { seriesOfBlock } from '@shared/model/series'
 import type { PlanBlock } from '@shared/model/plan'
@@ -27,6 +28,8 @@ import { isSaved, saveAnswer, useData, type SendState } from '../../store/data'
 import { dayUsable, useDay, type DayModel } from '../../store/day'
 import { openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
+import { attachTransfer } from '../attachments/attachDrop'
+import { withAttachCounts } from '../attachments/attachView'
 import { BlockEditor } from '../plan/BlockEditor'
 import { BlockSeries, blockMayRepeat } from '../series/BlockSeries'
 import { askScope } from '../series/scopeAsk'
@@ -80,6 +83,13 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const isToday = date === today
   const names: Names = useMemo(() => ({ rd, settings: model.state.settings, routines, requests }), [rd, model.state.settings, routines, requests])
   const axis = useMemo(() => dayAxis(model, names, isToday ? now : null), [model, names, isToday, now])
+  // D410: the attachments of the day's blocks – the 📎 on a tile, a drop of files on it, the panel's section.
+  const attachments = useData((s) => s.attachments)
+  const dayPlace = useMemo<BlockPlace>(() => ({ scope: 'day', date, templateId: model.snapshot.templateId }), [date, model.snapshot.templateId])
+  const items = useMemo(() => {
+    const byId = new Map(model.ctx.plan.map((b) => [b.id, b]))
+    return withAttachCounts(axis.items, (id) => byId.get(id) ?? null, dayPlace, attachments)
+  }, [axis, model, dayPlace, attachments])
   const [selected, setSelected] = useState<string | null>(null)
   // The new block before „Dodaj” lives in the window's state: it comes back after another screen (A6-17).
   const stored = useUi((s) => s.blockDraft)
@@ -381,7 +391,11 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             {/* The all-day events of the day (D405), over the axis' column – the hours' column on the left stays empty. */}
             <AllDayBar key={date} dates={[date]} page="today" today={today} axisPx={46} endPx={axis.energy && axis.energy.samples.length > 0 ? 48 : 0} />
             <Timeline
-              items={axis.items}
+              items={items}
+              onAttachDrop={(id, dt) => {
+                const owner = ownerToAdd(model.ctx.plan.find((b) => b.id === id) ?? null, dayPlace)
+                if (owner) void attachTransfer(owner, dt)
+              }}
               markers={axis.markers}
               energy={axis.energy}
               selected={draft ? null : selected}
@@ -465,6 +479,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               setSelected(null)
             }}
             inSeries={!draft && block.origin === 'series'}
+            place={draft ? undefined : dayPlace}
             repeat={!draft && blockMayRepeat(block) ? <BlockSeries block={block} date={date} today={today} name={blockName(block, names)} onCreated={(id) => (follow.current = { from: block.id, to: seriesBlockId(date, id) })} /> : undefined}
             actions={
               draft ? (

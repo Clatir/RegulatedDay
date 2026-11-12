@@ -1073,11 +1073,13 @@ export class DataHub {
       }
       const r = isPlain(v) ? v : {}
       const text = (x: unknown) => (typeof x === 'string' && x.trim()) || null
+      const inner = (x: unknown): Record<string, unknown> => (isPlain(x) ? x : {})
       return {
         rel,
         kind: c.kind,
         date: c.date,
-        name: text(r.name) ?? text(r.title) ?? text(r.note),
+        // An attachment with no name of its own (D410) is named by its file, its page's title or its domain.
+        name: text(r.name) ?? text(r.title) ?? text(r.note) ?? (c.kind === 'attachment' ? (text(inner(r.file).fileName) ?? text(inner(r.link).title) ?? text(inner(r.link).domain)) : null),
         person: c.kind === 'request' ? text(r.person) : null,
         // 0 – the model's „unknown” (`requestFrom`), never a date.
         at: c.kind === 'request' && typeof r.createdAt === 'number' && Number.isFinite(r.createdAt) && r.createdAt > 0 ? r.createdAt : null

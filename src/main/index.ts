@@ -501,7 +501,8 @@ function createHub(): DataHub {
     // D410: files open in their programs, links in the browser – after the checks of `main/data/attachments.ts`.
     attachments: {
       shell: { openPath: (abs) => shell.openPath(abs), showItemInFolder: (abs) => shell.showItemInFolder(abs), openExternal: (url) => shell.openExternal(url) },
-      fetchMeta: (url) => fetchPageMeta(linkFetcher, url),
+      // The test identity (E2E, CI) never asks the network for a page's title: the link shows its domain (T813).
+      fetchMeta: identity.kind === 'test' ? async () => null : (url) => fetchPageMeta(linkFetcher, url),
       thumbOf
     }
   })
@@ -876,7 +877,9 @@ function registerIpc(): void {
   handle(CH.attachPick, async (e, owner: unknown) => {
     const win = BrowserWindow.fromWebContents(e.sender)
     const opts = { title: 'Dołącz plik', properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'> }
-    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    // The test identity (E2E, CI) takes the files from RD_E2E_ATTACH (paths split by ; or |) – the dialog of Windows cannot be driven by a test (T812).
+    const fromTest = identity.kind === 'test' && process.env.RD_E2E_ATTACH ? process.env.RD_E2E_ATTACH.split(/[;|]/).filter(Boolean) : null
+    const r = fromTest ? { canceled: false, filePaths: fromTest } : win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
     return r.canceled || !r.filePaths.length ? { added: [], failed: [] } : needHub().attachFiles(owner, r.filePaths)
   })
   handle(CH.addLink, (_e, owner: unknown, url: unknown) => needHub().addLink(owner, url))

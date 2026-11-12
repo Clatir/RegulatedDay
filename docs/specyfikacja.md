@@ -659,6 +659,12 @@ Wszystko w aplikacji jest blokiem. Nie ma osobnej listy zadań, więc aplikacja 
   (http i https otwiera domyślną przeglądarkę, inne adresy zostają tekstem). Pojedynczy Enter starej notatki to łamanie
   linii i tak wraca do pliku; samo otwarcie notatki niczego nie zapisuje. „Powiększ” rozwija notatkę na całe okno, Esc
   albo „Pomniejsz” wraca z tekstem (T660–T665).
+- Załączniki i linki bloku (D410, T811–T817): sekcja „Załączniki” w panelu bloku dnia, bloku szablonu i serii – pliki
+  („Dołącz plik…”, upuszczenie z Eksploratora na panel albo na kafelek bloku w „Dziś” i „Szablonach”) i linki („Dodaj link”,
+  Ctrl V adresu poza polem tekstowym, adres przeciągnięty z przeglądarki). Pozycja: obraz z miniaturą, inny plik z ikoną rodzaju,
+  nazwą i rozmiarem, link z ikoną strony, tytułem i domeną; klik otwiera; „Zmień nazwę”, „Pokaż w folderze”, „Usuń” (bez pytania,
+  „Cofnij”); „Otwórz wszystko (N)” od dwóch. Blok dnia pokazuje też załączniki swojego szablonu i serii z dopiskiem; zmienia się je
+  tam, gdzie leżą. Na kafelku znaczek 📎 z liczbą („Dziś”, „Szablony”, „Tydzień”).
 - Bloki stałe to sesje, druga zmiana, wykłady, zajęcia i jednorazowe terminy; nie przesuwa się ich początek. Elastyczne zachowują kolejność i przesuwa je rzeczywisty koniec poprzednika, nigdy jednak na godzinę wcześniejszą niż ich planowany początek. Gdy elastyczny trafi na stały, przeskakuje za niego, a aplikacja sprawdza warunek znacznika wariantów.
 - Blok stały zaplanowany na pierwszym planie zaczyna się sam o czasie z planu na pierwszym planie (widoczne w liście
   „zrobione automatycznie”), także gdy biegnie inny blok. Wyjątkiem są sesja (kategoria „Sesja tradingowa”, także druga

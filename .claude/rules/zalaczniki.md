@@ -9,11 +9,13 @@ paths:
   - "tests/unit/attachments.test.ts"
   - "tests/unit/link-fetch.test.ts"
   - "tests/fs/attachments*.test.ts"
+  - "tests/web/attach-*.test.ts"
+  - "tests/e2e/attachments.spec.ts"
 ---
 
 # Załączniki i linki bloków (SNT4)
 
-Źródło prawdy: D410; T800–T810. Część A (model, folder, kopie, IPC, otwieranie) – gotowa; ekrany – część B.
+Źródło prawdy: D410; T800–T810. Część A (model, folder, kopie, IPC, otwieranie) i część B (ekrany, T811–T817).
 
 ## Model (`shared/model/attachment.ts`)
 - Rekord `attachments/<id>.json`, plik w `attachments/<id>/<safeFileName>`. Format bloku bez zmian – właściciel w rekordzie:
@@ -42,6 +44,18 @@ paths:
   (`ZipWriter.addFile`, `streamSource`). Przywracanie: `restoreToFolder` (`copyTo`), `restoreAttachmentFiles` – nigdy nie
   nadpisuje ani nie usuwa.
 - Kopia przed aktualizacją bierze pliki tylko do `UPDATE_FILES_MAX` (1 GB razem, D412, T830) – powyżej same rekordy i linia w logu (`log`).
+
+## Ekrany (`renderer/features/attachments/`, T811–T817)
+- `AttachmentsSection` w `BlockEditor` (prop `place`: dzień z `snapshot.templateId` / szablon / seria; szkic bloku – bez `place`, bez sekcji).
+  Dodawanie zawsze do właściciela miejsca (`ownerToAdd`); blok dnia widzi też załączniki szablonu i serii z dopiskiem
+  („z szablonu”, „z serii”) – zmienia je tylko miejsce właściciela (`isOwnHere`: bez „Zmień nazwę” i „Usuń” w dniu).
+- Pozycja: ikona rodzaju (`fileKind`, `FileIcon`), miniatura leniwie (`attachmentThumb`, pamięć po id; null – ikona), nazwa i rozmiar
+  (`sizeText`) albo ikona strony i domena; klik otwiera po id; dopiski `MISSING_NOTE`, `PROGRAM_NOTE`; „Usuń” – `undoToast`.
+- Przeciąganie i wklejanie: `attachDrop.ts` (`useAttachDrop` – panel, `tileDrop` w `Timeline` – kafelek z `TimelineItem.attach`,
+  `attachTransfer`, `pasteTransfer` – `paste` na dokumencie, pole tekstowe i okno dialogowe go pomijają). `dragover` przyjmowany
+  tylko dla pliku albo adresu; tekst nad polem tekstowym i drop obsłużony przez pole – nie. Okno nie nawiguje (`will-navigate`).
+- Znaczek 📎N: `withAttachCounts` (Dziś, Szablony), „Tydzień” – `HorizonDay.templateId` + `attachmentsOfBlock` w `DayColumn`.
+- E2E: tożsamość testowa – `RD_E2E_ATTACH` zamiast okna wyboru (T812), brak pobierania tytułu linku (T813); upuszczenie – `tests/web`.
 
 ## Pułapki
 - Wzorzec kolekcji w `paths.ts` nie bierze „/” po id – plik załącznika o nazwie kopii („x (1).json”) nie jest rekordem (T801).
