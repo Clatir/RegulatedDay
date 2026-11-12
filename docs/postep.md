@@ -158,7 +158,10 @@ Ryzyka: zapis plików w folderze OneDrive (dwa komputery, plik przed rekordem, k
 tylko u prowadzącego), sprawdzenie adresu i pliku wykonywalnego przed `shell.openExternal`/`openPath`, pobieranie tytułu
 linku z sieci, wystąpienia szablonu i serii. Sprawy (L2) – osobne małe zadanie po scaleniu L2. Model: główna sesja
 Opus 5.5 · high; `wykonawca-opus` · xhigh – część A (model, folder danych, kopie, IPC, adresy), `wykonawca-sonnet` –
-część B (ekrany). Kolejka scalania: HKU1 (1.13.0) → L2 (1.14.0) → SNT4 (następna minor, zwykle 1.15.0).
+część B (ekrany). Kolejka scalania: HKU1 (1.13.0) → L2 (1.14.0) → SNT4 (następna minor, zwykle 1.15.0) → SNT5 (sesja L).
+**Zgoda użytkownika 12.11 ok. 21:30:** SNT4 do scalenia i wydania bez „dalej”; użytkownik niedostępny do 13.11 ok. 7:00 –
+pytanie o zachowanie widoczne w tym czasie = opcja rekomendowana jako D-decyzja „do potwierdzenia”, praca i scalenie
+idą dalej, rano lista takich decyzji. Numery: D410–D449, T800–T849 (HKU – D450–D459, T850–T899).
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
