@@ -7,16 +7,20 @@
 import type { NamingDay } from '../blockName'
 import { daySnapshotOf, type AnyEvent, type DaySnapshot } from '../model/events'
 import type { DayFile, LectureSeries, Template } from '../model/plan'
+import type { SeriesPlan } from '../model/series'
 import type { SettingsChange } from '../model/settings'
 import { addDays } from '../time/zone'
 import { createDay, dayPlan, dayWakeMin, nextWakeForBedtime, snapshotEntries, type HolidayLookup } from './createDay'
 import type { DayContext } from './day'
 import type { DayFacts } from './facts'
+import { withSeriesOccurrences } from './series'
 
 export interface PlanInputs {
   changes: readonly SettingsChange[]
   templates: readonly Template[]
   lectures: readonly LectureSeries[]
+  /** The series with their last days (D381, `seriesPlans`). */
+  series: readonly SeriesPlan[]
 }
 
 export interface DaySource {
@@ -27,10 +31,13 @@ export interface DaySource {
   nextFile: DayFile | null
 }
 
-/** The snapshot of a day: the log's, else computed now (`fromLog` tells which). */
+/**
+ * The snapshot of a day: the log's, else computed now (`fromLog` tells which). A snapshot a version without series wrote
+ * gets the day's occurrences laid over it (`withSeriesOccurrences`).
+ */
 export function snapshotOf(inp: PlanInputs, src: DaySource, holidays: HolidayLookup, at: number | null): { snapshot: DaySnapshot; fromLog: boolean } {
   const logged = daySnapshotOf(src.events)
-  if (logged) return { snapshot: logged, fromLog: true }
+  if (logged) return { snapshot: withSeriesOccurrences(logged, inp.series, src.date, holidays), fromLog: true }
   return { snapshot: createDay({ date: src.date, ...inp, dayFile: src.dayFile, holidays, at }), fromLog: false }
 }
 

@@ -38,11 +38,11 @@ export interface PlanBlock {
    */
   name: string | null
   /**
-   * Where it comes from: the template, the plan of lectures, the session layer, you, or the import of „zjazdy” from a PDF
-   * (D357: a fixed class of a „zjazd”; a version that does not know it reads it as yours).
+   * Where it comes from: the template, the plan of lectures, the session layer, you, the import of „zjazdy” from a PDF
+   * (D357: a fixed class of a „zjazd”) or a series (D381: an occurrence); a version that does not know one reads it as yours.
    */
-  origin: 'template' | 'lecture' | 'session' | 'user' | 'zjazd'
-  /** The session of the session layer, the lecture series, the template block it was made from. */
+  origin: 'template' | 'lecture' | 'session' | 'user' | 'zjazd' | 'series'
+  /** The session of the session layer, the lecture series, the template block it was made from, the series' root (D381). */
   sourceId: string | null
   /** The computer that records a lecture (spec „Plan wykładów”). */
   recorder: string | null
@@ -150,7 +150,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
   const anchor = typeof v.anchor === 'string' && v.anchor ? v.anchor : null
   const durationMin = intIn(v.durationMin, 1, MAX_BLOCK_MIN)
   if ((startMin == null && !anchor) || durationMin == null) return null
-  const origins = ['template', 'lecture', 'session', 'user', 'zjazd']
+  const origins = ['template', 'lecture', 'session', 'user', 'zjazd', 'series']
   return {
     id: v.id,
     categoryId: v.categoryId,

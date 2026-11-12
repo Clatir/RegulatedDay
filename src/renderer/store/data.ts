@@ -6,6 +6,7 @@
  */
 import { create } from 'zustand'
 import type { DataView, EditEntry, EditOutcome, EventIn, RawRecord } from '@shared/api'
+import { marketDay } from '@shared/calendar/holidays'
 import { recordEdit } from '@shared/data/merge'
 import type { GoalsPatch } from '@shared/model/goals'
 import { newId } from '@shared/model/ids'
@@ -13,6 +14,8 @@ import { lectureFrom, templateFrom, type LectureSeries, type Template } from '@s
 import { rdFrom, type RdFile } from '@shared/model/rd'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { routineFrom, type Routine } from '@shared/model/routines'
+import { seriesFrom, seriesPlans, typeOfDays, type Series, type SeriesPlan } from '@shared/model/series'
+import { isDayTypeId } from '@shared/model/settings'
 import { toast } from './ui'
 
 interface DataState {
@@ -22,13 +25,17 @@ interface DataState {
   lectures: LectureSeries[]
   requests: RequestRecord[]
   routines: Routine[]
+  /** The series (D381) – also the ended and removed ones (`archived`): their days gone by keep their occurrences. */
+  series: Series[]
+  /** The series as days are made from them (`PlanInputs.series`: their last days by the same files as the main process). */
+  seriesPlans: SeriesPlan[]
   /** Grows with every read (the day views read their day again). */
   stamp: number
 }
 
 const empty = rdFrom(undefined)
 
-export const useData = create<DataState>(() => ({ view: null, rd: empty, templates: [], lectures: [], requests: [], routines: [], stamp: 0 }))
+export const useData = create<DataState>(() => ({ view: null, rd: empty, templates: [], lectures: [], requests: [], routines: [], series: [], seriesPlans: [], stamp: 0 }))
 
 const isDefined = <T>(v: T | null): v is T => v != null
 
@@ -40,13 +47,21 @@ function apply(view: DataView, news: boolean): void {
   const json = JSON.stringify(view)
   if (json === lastJson && !news) return
   lastJson = json
+  const rd = rdFrom(view.rd ?? undefined)
+  const series = view.series.map(seriesFrom).filter(isDefined)
+  const ownType = (d: string) => {
+    const t = view.seriesDays[d]
+    return isDayTypeId(t) ? t : null
+  }
   useData.setState((s) => ({
     view,
-    rd: rdFrom(view.rd ?? undefined),
+    rd,
     templates: view.templates.map(templateFrom).filter(isDefined),
     lectures: view.lectures.map(lectureFrom).filter(isDefined),
     requests: view.requests.map(requestFrom).filter(isDefined),
     routines: view.routines.map(routineFrom).filter(isDefined),
+    series,
+    seriesPlans: seriesPlans(series, typeOfDays(rd.settings, ownType), marketDay),
     stamp: s.stamp + 1
   }))
 }
@@ -97,7 +112,7 @@ export function rawRecord(rel: string): RawRecord | null {
   if (!v) return null
   if (rel === 'rd.json') return v.rd
   const [dir] = rel.split('/')
-  const list = dir === 'templates' ? v.templates : dir === 'schedule' ? v.lectures : dir === 'requests' ? v.requests : dir === 'routines' ? v.routines : null
+  const list = dir === 'templates' ? v.templates : dir === 'schedule' ? v.lectures : dir === 'requests' ? v.requests : dir === 'routines' ? v.routines : dir === 'series' ? v.series : null
   const id = rel.slice(rel.indexOf('/') + 1).replace(/\.json$/, '')
   return list?.find((r) => r.id === id) ?? null
 }

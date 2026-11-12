@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import type { Pool } from '@shared/model/categories'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
+import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { cx } from '../../components/ui'
 import { useMachine } from '../../store/machine'
@@ -30,6 +31,8 @@ export interface TimelineItem {
   dim?: boolean
   /** Waits for „Zacznij” (a session, the second shift, the weekly analysis). */
   waits?: boolean
+  /** An occurrence of a series: the mark `SERIES_MARK` stands by its name (D401). */
+  series?: boolean
   /** Its planned start may be dragged (D305): not begun, with its own start time. */
   movable?: boolean
   /**
@@ -413,6 +416,11 @@ export function Timeline({
         <div className={cx('flex min-w-0 items-baseline gap-1.5', tiny ? 'text-[11px]' : 'pt-0.5 text-[12px]')}>
           {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(start)}</span>}
           <span className="truncate text-fg">{i.title}</span>
+          {i.series && (
+            <span className="shrink-0 text-muted" title="Z serii" aria-label="z serii" data-testid="series-mark">
+              {SERIES_MARK}
+            </span>
+          )}
         </div>
         {!tiny && !narrow && (
           <div className="truncate text-[11px] text-muted">

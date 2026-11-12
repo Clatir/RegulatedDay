@@ -63,6 +63,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       background: info.bg,
       dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),
       waits: info.waits,
+      ...(p.origin === 'series' ? { series: true } : {}),
       ...(edge ? { resize: 'end' as const } : {}),
       // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
       // a class imported from the PDF of „zjazdy” – D357, nor the second shift – D192), not passed.

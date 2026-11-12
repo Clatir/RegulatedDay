@@ -399,6 +399,6 @@ describe('D365 – zdarzenie skrócenia w logu', () => {
   })
 
   it('nowa wersja reguł: starsza wersja ustępuje prowadzenia (nie zna skrócenia)', () => {
-    expect(RULES_VERSION).toBe(7)
+    expect(RULES_VERSION).toBeGreaterThanOrEqual(7)
   })
 })

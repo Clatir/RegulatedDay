@@ -52,7 +52,7 @@ const write = (rel: string, value: unknown) => {
 const onDisk = (date: string) => (existsSync(join(dir, paths.day(date))) ? (JSON.parse(readFileSync(join(dir, paths.day(date)), 'utf8')) as Record<string, unknown>) : null)
 const planOn = (date: string) => {
   const file = dayFileFrom(onDisk(date) ?? {}, date)
-  return { file, plan: dayPlan(createDay({ date, changes: [], templates: [template], lectures: [], dayFile: file, holidays: marketDay, at: null }), file) }
+  return { file, plan: dayPlan(createDay({ date, changes: [], templates: [template], lectures: [], series: [], dayFile: file, holidays: marketDay, at: null }), file) }
 }
 const clock = (m: number | null) => (m == null ? null : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`)
 const day = (date: string, kind: ZjazdDay['kind'], rows: Array<[number, number, string, string, string]>): ZjazdDay => ({

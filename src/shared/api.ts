@@ -13,6 +13,8 @@ import type { RitualValue, RitualView } from './engine/ritual'
 import type { CloseHow } from './model/events'
 import type { DayTypeId } from './model/settings'
 import type { ZjazdDay, ZjazdWarning } from './import/zjazdy'
+import type { SeriesRule, SpecialDays } from './model/series'
+import type { SeriesPatch } from './engine/series'
 import type { IdentityKind } from './identity'
 import type { Rect } from './bounds'
 import type { BarSpot, MachinePrefs } from './machine'
@@ -91,7 +93,13 @@ export const CH = {
   stats: 'rd:stats',
   planPushed: 'rd:planPushed',
   planArranged: 'rd:planArranged',
-  searchDays: 'rd:searchDays'
+  searchDays: 'rd:searchDays',
+  seriesCreate: 'rd:seriesCreate',
+  seriesChange: 'rd:seriesChange',
+  seriesRemove: 'rd:seriesRemove',
+  seriesEnd: 'rd:seriesEnd',
+  seriesAnswer: 'rd:seriesAnswer',
+  seriesUndo: 'rd:seriesUndo'
 } as const
 
 /** The game for the window (D322): its view and the full-screen celebrations not shown on this computer yet. */
@@ -248,6 +256,13 @@ export interface DataView {
   lectures: RawRecord[]
   requests: RawRecord[]
   routines: RawRecord[]
+  /** The series (D381, series/<id>.json) – all of them, also the ended and removed ones. */
+  series: RawRecord[]
+  /**
+   * The own types of the days the counts of the series read (date → type, from the days' files): the window counts the
+   * series' last days from them as the main process does (`seriesPlans`).
+   */
+  seriesDays: Record<string, string>
   /**
    * Computers that have written a presence (for „komputer nagrywający”), this one first; another one still present carries
    * the version of its app (D388: the warning under a long note).
@@ -536,6 +551,52 @@ export interface ZjazdSaveResult {
   undo: ZjazdUndoDay[]
 }
 
+/**
+ * What a change of a series applies to (D381): „Tylko to” – this occurrence; „To i następne” – this one and the ones after
+ * it (the series splits); „Cała seria” – from today (today's occurrence while it has not begun).
+ */
+export type SeriesScope = 'only' | 'following' | 'all'
+
+/** A series by its record (the list in „Szablony”), or by one of its occurrences – a block of a day. */
+export type SeriesTarget = { seriesId: string } | { date: string; blockId: string }
+
+/** A new series from a block of a day (the field „Powtarzaj”): the block becomes its first occurrence. */
+export interface SeriesCreate {
+  date: string
+  blockId: string
+  rule: SeriesRule
+  /** „W dni szczególne” (D382) – default „pytaj”. */
+  special?: SpecialDays
+  /** Its end: the last day, the number of occurrences (both may be set – whichever comes first); none – never. */
+  until?: string | null
+  count?: number | null
+}
+
+/** A change of a series (or of one occurrence – „Tylko to”: only `block`). */
+export type { SeriesPatch }
+
+/** A file a change of a series wrote, before and after it (null: none) – for its „Cofnij”. */
+export interface SeriesUndoFile {
+  rel: string
+  before: RawRecord | null
+  after: RawRecord | null
+}
+
+/** What a change of a series did. */
+export interface SeriesResult {
+  /** Saved: every file written or waiting for the data folder (as `isSaved`); nothing to write is saved too. */
+  ok: boolean
+  /** Why nothing was written (shown to you), null when it was. */
+  error: string | null
+  code: 'kind' | 'series' | 'requests' | 'noStart' | 'ended' | 'notFound' | 'begun' | 'invalid' | null
+  /** The series the change made or changed (a new one with „Powtarzaj”), null – none. */
+  seriesId: string | null
+  /** The outcomes of the edits (for `editNotice`): a question means part of it waits for your answer. */
+  outcomes: EditOutcome[]
+  /** „Cofnij” of this change (`seriesUndo`); empty after a „Cofnij” itself. */
+  undo: SeriesUndoFile[]
+}
+
 export interface RdApi {
   view: ViewKind
   appInfo(): Promise<AppInfo>
@@ -677,4 +738,20 @@ export interface RdApi {
    * the queue.
    */
   zjazdyUndo(undo: ZjazdUndoDay[]): Promise<ZjazdSaveResult>
+  /**
+   * A new series from a block of a day (D381, the field „Powtarzaj”, D401: a block of yours, flexible or fixed – not a
+   * session, a lecture, a class of a „zjazd”, a block of requests): the series' record and the day's file as one edit. The
+   * block becomes the first occurrence when the rule falls on its day; a day gone by keeps it – the series starts today.
+   */
+  seriesCreate(input: SeriesCreate): Promise<SeriesResult>
+  /** A change of a series by its scope (the dialog „Tylko to · To i następne · Cała seria”; the list: `all`). */
+  seriesChange(target: SeriesTarget, scope: SeriesScope, patch: SeriesPatch): Promise<SeriesResult>
+  /** A removal by its scope; „To i następne” and „Cała seria” also take the occurrences changed on their days from today on. */
+  seriesRemove(target: SeriesTarget, scope: SeriesScope): Promise<SeriesResult>
+  /** The series ends on `last` (at least yesterday; today's occurrence stays when it has begun). */
+  seriesEnd(seriesId: string, last: string): Promise<SeriesResult>
+  /** The morning's answer about an occurrence on a special day (D382): `keep` – „zostaw”, else „odwołaj”. */
+  seriesAnswer(date: string, blockId: string, keep: boolean): Promise<SeriesResult>
+  /** „Cofnij” of one change of a series: each file back as before it, only while it stands as the change left it. */
+  seriesUndo(undo: SeriesUndoFile[]): Promise<SeriesResult>
 }

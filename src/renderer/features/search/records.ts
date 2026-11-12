@@ -12,6 +12,9 @@ import { templateVersionOn, type Template } from '@shared/model/plan'
 import { personName, type RdFile } from '@shared/model/rd'
 import { REQUEST_STATE_NAMES, requestStateOrder, type RequestRecord } from '@shared/model/requests'
 import type { Routine } from '@shared/model/routines'
+import { currentSeries, seriesVersionOn, type SeriesPlan } from '@shared/model/series'
+import { occurrenceBlock } from '@shared/engine/series'
+import { seriesText } from '@shared/seriesText'
 import { settingsOn } from '@shared/model/settings'
 import type { SearchRecord } from '@shared/search'
 import { addDays, weekday } from '@shared/time/zone'
@@ -55,6 +58,8 @@ export interface RecordsInput {
   templates: readonly Template[]
   requests: readonly RequestRecord[]
   routines: readonly Routine[]
+  /** The series with their last days (D381, `seriesPlans`) – each found once, by its name and rule; its occurrences are not blocks of the days here. */
+  series: readonly SeriesPlan[]
   /** The blocks of the days (`searchDays`); none while they are read. */
   blocks: readonly SearchBlock[]
   /** The names of the screens and the keys shown beside them (the menu's own). */
@@ -79,6 +84,16 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
     for (const b of templateVersionOn(t, addDays(i.today, 1))?.blocks ?? []) {
       out.push({ kind: 'templateBlock', id: b.id, parent: t.id, title: blockName(b, names), text: b.note, hint: `szablon: ${t.name}` })
     }
+  }
+
+  // A series is one record (D401, `currentSeries` – one per root).
+  const lastOf = new Map(i.series.map((p) => [p.series.id, p.last]))
+  for (const s of currentSeries(i.series.map((p) => p.series), i.today)) {
+    const v = seriesVersionOn(s, i.today) ?? s.versions[0]!
+    // Ended by its date or its count (`SeriesPlan.last`), as the list of „Szablony” says it.
+    const last = lastOf.get(s.id) ?? s.until
+    const ended = last != null && last < i.today
+    out.push({ kind: 'series', id: s.id, title: blockName(occurrenceBlock(s, v.block, i.today), names), text: seriesText(s, i.today), hint: ended ? 'seria zakończona' : 'seria' })
   }
 
   for (const r of [...i.requests].sort((a, b) => requestStateOrder(a.state) - requestStateOrder(b.state) || b.createdAt - a.createdAt)) {

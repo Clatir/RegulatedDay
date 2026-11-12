@@ -8,7 +8,10 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RawRecord, ZjazdSaveResult, ZjazdUndoDay } from '@shared/api'
+import { marketDay } from '@shared/calendar/holidays'
 import { dayRaw } from '@shared/data/dayEdits'
+import { seriesOnDay } from '@shared/engine/series'
+import { SERIES_MARK } from '@shared/seriesText'
 import { zjazdTypeRaw } from '@shared/import/zjazdDay'
 import { paths } from '@shared/data/paths'
 import { sessionShiftMin, sessionWindow } from '@shared/engine/createDay'
@@ -34,7 +37,7 @@ import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
 import { ZjazdyPreviewPanel } from './ZjazdyPreview'
 
 export function CalendarPage() {
-  const { rd, templates, lectures, stamp } = useData()
+  const { rd, templates, lectures, seriesPlans, stamp } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const brightness = useMachine((s) => s.prefs.brightness)
   const [month, setMonth] = useState(monthOf(today))
@@ -80,6 +83,8 @@ export function CalendarPage() {
     }))
       marks.push('sesje −1 h')
     if (own?.wakeMin != null) marks.push(`pobudka ${logicalClock(own.wakeMin)}`)
+    // A day with an occurrence of a series (D404) – the grid shows no blocks, only the mark.
+    if (seriesOnDay(seriesPlans, d, type, own, marketDay)) marks.push(SERIES_MARK)
     return { type, own: own?.dayType != null, marks, title: holidays.names.join(', ') || undefined }
   }
 
@@ -103,7 +108,7 @@ export function CalendarPage() {
     if (!isSaved(await saveDays(list, (r, d) => zjazdTypeRaw(r, d, t)))) return
     setSel(new Set())
     // A Saturday marked as a „zjazd”: the weekly analysis to Friday – asked once, here or in Friday's morning plan.
-    if (t === 'zjazd-stacjonarny' || t === 'zjazd-zdalny') setAsk(await analysisAsks(list, { changes: rd.settings, templates, lectures, dayType: t, fallback: fileOf }))
+    if (t === 'zjazd-stacjonarny' || t === 'zjazd-zdalny') setAsk(await analysisAsks(list, { changes: rd.settings, templates, lectures, series: seriesPlans, dayType: t, fallback: fileOf }))
   }
 
   const setWakeOf = async (v: number | null) => {
@@ -172,7 +177,7 @@ export function CalendarPage() {
       // A Saturday imported as a „zjazd”: the same question about the weekly analysis as when it is marked here; the toast
       // with „Cofnij” comes once it is answered, so that the answer goes back with the import.
       pending.current = { out, fridays: [], lost: [] }
-      const asks = out.undo.length ? await analysisAsks(out.undo.map((u) => u.date), { changes: rd.settings, templates, lectures }).catch(() => []) : []
+      const asks = out.undo.length ? await analysisAsks(out.undo.map((u) => u.date), { changes: rd.settings, templates, lectures, series: seriesPlans }).catch(() => []) : []
       setAsk(asks)
       if (!asks.length) savedToast()
     })

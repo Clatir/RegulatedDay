@@ -57,7 +57,14 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - E11 (T546–T550): `import/zjazdy.ts` (parser PDF z elementów tekstu), `import/zjazdDay.ts` (`zjazdDayRaw`,
   `withoutZjazd`, `zjazdTypeRaw`, `classImport`, `sameDayFile`); bloki `origin: 'zjazd'` i zajęcia zdalne w dniu zjazdu
   (`blockInfos(…, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
-  `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365).
+  `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365), 8 – serie w `day.create` (T716).
+- Serie (OPS1, D381, D382, D401, D404, T700–T719): `model/series.ts` (rekord, `ruleFallsOn`, `seriesVersionOn`,
+  `specialOutcome`, licznik `countedBefore`/`seriesLast`, `seriesPlans` – `SeriesPlan { series, last }`, `countDatesToRead`,
+  `seriesOfBlock`, `currentSeries` – lista), `engine/series.ts` (`seriesBlocks` w `createDay`, `pushedBySeries` – rozsuwanie
+  na osi planu bez bloków odwołanych w pliku dnia, z pamięcią; `withSeriesOccurrences` w `snapshotOf`, `seriesQuestions`,
+  `seriesAnswerRaw`, `changedFrom` – „Cała seria” i „To i następne” to wersje jednego rekordu (T715), `withEnd`, `endedOn`,
+  `todayOccurrenceEdit` ze znacznikiem `seriesOff`), słowa – `shared/seriesText.ts`. Każde miejsce budujące dzień podaje
+  `series` (wymagane w `PlanInputs`/`DayInputs`). Dni minione: zmiana tylko od dziś. Testy: `series.test.ts`.
 - E10 (T552–T554): `engine/week.ts` (`horizonDay` – dzień tygodnia i celów, `weekViewOf`, `sessionsOf`),
   `engine/goals.ts` (postęp „x z y”, `goalsStepShown`), `model/goals.ts` (cele w `rd.json`, zakresy).
 - E3: `engine/context.ts` (`dayContextOf`, `snapshotOf` – jedno źródło kontekstu dla prowadzącego i okna),

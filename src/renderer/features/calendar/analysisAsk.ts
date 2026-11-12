@@ -9,6 +9,7 @@ import { putBlock, setAsked, setCancelled } from '@shared/data/dayEdits'
 import type { HolidayLookup } from '@shared/engine/createDay'
 import { weeklyAnalysisMove } from '@shared/engine/morning'
 import { dayFileFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '@shared/model/plan'
+import type { SeriesPlan } from '@shared/model/series'
 import type { DayTypeId, SettingsChange } from '@shared/model/settings'
 import { addDays, weekday } from '@shared/time/zone'
 
@@ -22,6 +23,7 @@ export interface AnalysisContext {
   changes: readonly SettingsChange[]
   templates: readonly Template[]
   lectures: readonly LectureSeries[]
+  series: readonly SeriesPlan[]
   holidays?: HolidayLookup
   /** The files of days as they are now (default: the main process's); a day that cannot be read is not in the answer. */
   read?: (dates: string[]) => Promise<Record<string, RawRecord | null>>
@@ -46,7 +48,7 @@ export async function analysisAsks(dates: readonly string[], ctx: AnalysisContex
       if (x === d) return raw[x] ? dayFileFrom(raw[x], x) : ctx.dayType ? { ...dayFileFrom({}, d), dayType: ctx.dayType } : null
       return ctx.fallback?.(x) ?? null
     }
-    const m = weeklyAnalysisMove({ date: friday, changes: ctx.changes, templates: ctx.templates, lectures: ctx.lectures, holidays: ctx.holidays ?? marketDay, files: file }, friday)
+    const m = weeklyAnalysisMove({ date: friday, changes: ctx.changes, templates: ctx.templates, lectures: ctx.lectures, series: ctx.series, holidays: ctx.holidays ?? marketDay, files: file }, friday)
     if (m) out.push({ friday, ...m })
   }
   return out

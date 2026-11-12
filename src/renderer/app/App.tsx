@@ -12,6 +12,7 @@ import { commitActiveField } from '../lib/commit'
 import { modalOpen } from '../lib/escape'
 import { Bar } from '../widget/Bar'
 import { Palette } from '../features/search/Palette'
+import { SeriesScopeDialog } from '../features/series/scopeAsk'
 import { openSearch } from '../features/search/searchStore'
 import { DIGIT_PAGES, PAGE_LABEL, pageKeys } from './pages'
 import { Toasts } from '../components/Toasts'
@@ -161,6 +162,7 @@ export function App() {
         </div>
       )}
       <Palette />
+      <SeriesScopeDialog />
       <Toasts />
       <Celebration />
     </div>

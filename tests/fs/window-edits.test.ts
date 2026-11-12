@@ -310,7 +310,7 @@ describe('pobudka przesuwa bloki ręczne (D334)', () => {
 
   it('zmiana pobudki: bloki ręczne przed pierwszym stałym idą o różnicę jednym zapisem z „Cofnij”; blok dodany potem już nie', async () => {
     const date = addDays(today(), 2)
-    const wake = createDay({ date, changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null }).wakeMin
+    const wake = createDay({ date, changes: [], templates: [], lectures: [], series: [], dayFile: null, holidays: marketDay, at: null }).wakeMin
     // Placed by hand at 04:30 and 04:45 (before any fixed block of any day type), a fixed one at 12:00 and a flexible one after it.
     await put(date, 'rano', 4 * 60 + 30)
     await put(date, 'stały', 12 * 60, true)
@@ -353,7 +353,7 @@ describe('pobudka przesuwa bloki ręczne (D334)', () => {
 
   it('dzień liczony z migawki dnia, nie od nowa: wykład dodany po utworzeniu dnia nie wyznacza pierwszego bloku stałego', async () => {
     const date = addDays(today(), 2)
-    const logged = createDay({ date, changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null })
+    const logged = createDay({ date, changes: [], templates: [], lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
     await put(date, 'rano', 7 * 60 + 45)
     const seen = (d: string) => (d === date ? (fileOf(date) as unknown as RawRecord) : null)
     const lecture = { id: 'w', name: 'Wykład', categoryId: 'ogladanie', variantId: null, weekday: weekday(date), startMin: 7 * 60 + 30, durationMin: 60, from: '2026-01-01', to: '2099-12-31', exceptions: [], recorder: null, background: null, archived: false }
@@ -365,7 +365,7 @@ describe('pobudka przesuwa bloki ręczne (D334)', () => {
 
   it('„Cofnij” pobudki zostawia pobudkę zmienioną w międzyczasie, a oddaje bloki, które stoją jeszcze tam, gdzie je dał (A6-07)', async () => {
     const date = addDays(today(), 2)
-    const wake = createDay({ date, changes: [], templates: [], lectures: [], dayFile: null, holidays: marketDay, at: null }).wakeMin
+    const wake = createDay({ date, changes: [], templates: [], lectures: [], series: [], dayFile: null, holidays: marketDay, at: null }).wakeMin
     await put(date, 'rano', 4 * 60 + 30)
     const seen = (d: string) => (d === date ? (fileOf(date) as unknown as RawRecord) : null)
     expect(await setDayWake([date], seen, wake + 60)).toBe(true)

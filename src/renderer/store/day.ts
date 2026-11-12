@@ -110,6 +110,7 @@ export function useDay(date: string): DayModel | null {
   const rd = useData((s) => s.rd)
   const templates = useData((s) => s.templates)
   const lectures = useData((s) => s.lectures)
+  const series = useData((s) => s.seriesPlans)
   const calibration = useData((s) => s.view?.calibration === true)
   const tick = useNow(30_000)
   return useMemo(() => {
@@ -117,8 +118,8 @@ export function useDay(date: string): DayModel | null {
     // The day at this very instant (read when the data change or the clock ticks): an action written a moment ago – an
     // approval at 12:34:45 counts from the minute it rounds to – is in the day at once.
     void tick
-    return countDay(date, data, { changes: rd.settings, templates, lectures }, Date.now(), rd.general.modules.energy, calibration)
-  }, [data, date, rd, templates, lectures, tick, calibration])
+    return countDay(date, data, { changes: rd.settings, templates, lectures, series }, Date.now(), rd.general.modules.energy, calibration)
+  }, [data, date, rd, templates, lectures, series, tick, calibration])
 }
 
 /**

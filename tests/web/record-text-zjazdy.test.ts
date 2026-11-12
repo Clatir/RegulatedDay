@@ -20,6 +20,11 @@ describe('pola importu zjazdów w pytaniach i historii', () => {
     expect(valueText(undefined, { id: 'k1', categoryId: 'dojazd', variantId: 'zajecia', startMin: 585, durationMin: 90, name: 'Ekonomia · ćwiczenia' }, n)).toBe('Ekonomia · ćwiczenia 09:45, 1 h 30 min')
   })
 
+  it('odwołanie przez zmianę serii (T719): nazwa bloku, nie „inne pole dnia”', () => {
+    expect(fieldText(day, ['seriesOff', 'k1'], n)).toBe('Ekonomia · ćwiczenia: odwołany przez zmianę serii')
+    expect(fieldText(day, ['seriesOff'], n)).toBe('odwołane przez zmianę serii')
+  })
+
   it('zapis importu w pliku dnia: „import zjazdów”', () => {
     expect(fieldText(day, ['classImport'], n)).toBe('import zjazdów')
     expect(fieldText(day, ['classImport', 'changed', 'x', 'after'], n)).toBe('import zjazdów')
