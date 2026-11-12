@@ -65,6 +65,7 @@ const api: RdApi = {
   pinFolder: () => ipcRenderer.invoke(CH.pinFolder),
   openSystemSettings: (page) => ipcRenderer.invoke(CH.openSystemSettings, page),
   openDataFolder: () => ipcRenderer.invoke(CH.openDataFolder),
+  openLink: (url) => ipcRenderer.invoke(CH.openLink, url),
   setNightInstall: (on) => ipcRenderer.invoke(CH.setNightInstall, on),
   timer: (click) => ipcRenderer.invoke(CH.timer, click),
   answer: (id, answer, value) => ipcRenderer.invoke(CH.answer, id, answer, value ?? null),

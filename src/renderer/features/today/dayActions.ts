@@ -24,7 +24,7 @@ import { nameById, type Names } from '@shared/blockName'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { countLabel, logicalClock, plDate } from '@shared/format'
 import type { DaySnapshot } from '@shared/model/events'
-import { dayFilesNow, editOf, isSaved, trySaveWith, useData } from '../../store/data'
+import { dayFilesNow, editOf, isSaved, trySaveWith, useData, type SendState } from '../../store/data'
 import { dayUsable } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
 
@@ -34,11 +34,11 @@ export function dayFileEdit(date: string, before: RawRecord | null, next: (raw: 
 }
 
 /** The day's file changed by `next` from its version in its turn; null when nothing could be sent (the toast said why). */
-export function saveDay(date: string, seen: RawRecord | null, next: (raw: RawRecord) => RawRecord): Promise<EditOutcome[] | null> {
+export function saveDay(date: string, seen: RawRecord | null, next: (raw: RawRecord) => RawRecord, state?: SendState): Promise<EditOutcome[] | null> {
   return trySaveWith(async () => {
     const before = (await dayFilesNow([date], () => seen))[date] ?? null
     return [dayFileEdit(date, before, next)]
-  })
+  }, state)
 }
 
 /** A block as the day's file holds it now (a change of it made before), or as the window knows it. */
@@ -50,8 +50,8 @@ export function blockNow(raw: RawRecord, date: string, b: PlanBlock): PlanBlock 
  * Fields of a block changed (the panel of a block): over the block as the file holds it in its turn, so a change made a
  * moment before stays (A6-01).
  */
-export function patchDayBlock(date: string, seen: RawRecord | null, b: PlanBlock, patch: Partial<PlanBlock>): Promise<EditOutcome[] | null> {
-  return saveDay(date, seen, (raw) => putBlock(raw, { ...blockNow(raw, date, b), ...patch }))
+export function patchDayBlock(date: string, seen: RawRecord | null, b: PlanBlock, patch: Partial<PlanBlock>, state?: SendState): Promise<EditOutcome[] | null> {
+  return saveDay(date, seen, (raw) => putBlock(raw, { ...blockNow(raw, date, b), ...patch }), state)
 }
 
 /** A block the change pushes apart (D367): the block as the window knows it, and its new planned start. */

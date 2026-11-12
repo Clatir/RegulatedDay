@@ -62,6 +62,7 @@ export const CH = {
   pinFolder: 'rd:pinFolder',
   openSystemSettings: 'rd:openSystemSettings',
   openDataFolder: 'rd:openDataFolder',
+  openLink: 'rd:openLink',
   setNightInstall: 'rd:setNightInstall',
   timer: 'rd:timer',
   answer: 'rd:answer',
@@ -247,8 +248,11 @@ export interface DataView {
   lectures: RawRecord[]
   requests: RawRecord[]
   routines: RawRecord[]
-  /** Computers that have written a presence (for „komputer nagrywający”), this one first. */
-  computers: Array<{ id: string; name: string }>
+  /**
+   * Computers that have written a presence (for „komputer nagrywający”), this one first; another one still present carries
+   * the version of its app (D388: the warning under a long note).
+   */
+  computers: Array<{ id: string; name: string; appVersion?: string }>
   /** Own changes not yet in the folder (events and edits waiting for it, A3-07). */
   unsynced: number
   /** The data folder is not there now (its changes wait in the journal and the queue). */
@@ -598,6 +602,8 @@ export interface RdApi {
   pinFolder(): Promise<{ ok: boolean; error: string | null }>
   openSystemSettings(page: SystemSettingsPage): Promise<void>
   openDataFolder(): Promise<void>
+  /** A link of a note (D388, T663): opens in the default browser only when it is http or https – the main process checks it again. */
+  openLink(url: string): Promise<void>
   setNightInstall(on: boolean): Promise<AppInfo>
   /** A click of the timer (written by the main process; the same click twice does nothing the second time). */
   timer(click: TimerIn): Promise<TimerResult>

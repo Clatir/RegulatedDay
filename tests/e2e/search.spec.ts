@@ -66,7 +66,7 @@ test('Ctrl K: dwa słowa z notatki minionego dnia, Enter otwiera ten dzień z pa
       await expect(page.getByTestId('page-today')).toBeVisible()
       await expect(page.getByTestId('day-title')).toContainText(plDate(past))
       await expect(page.getByTestId('block-editor')).toBeVisible()
-      await expect(page.getByTestId('block-note')).toHaveValue(/Kowalski 600 100 200/)
+      await expect(page.getByTestId('block-note')).toContainText('Kowalski 600 100 200')
 
       // A phrase nobody has: the empty state says how the search looks.
       await page.keyboard.press('Control+k')

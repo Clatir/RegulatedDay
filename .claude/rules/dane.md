@@ -44,6 +44,9 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Stan folderu na komputerze: `%APPDATA%\Regulated Day\folders\<sha1>\` – `journal.v1.jsonl`, `queue.v1.json`,
   `life.json`/`closing.json` (znacznik życia folderu).
 - Kopie: `backups/daily/RRRR-MM-DD.zip`, `backups/weekly/RRRR-Www.zip`.
+- Notatka bloku (`PlanBlock.note`): zwykły tekst Markdown, do `NOTE_MAX` = 10 000 znaków (`shared/model/note.ts`, tnie `planBlockFrom` –
+  dni i szablony); wersja przed `LONG_NOTE_FROM` tnie na 2000, więc okno ostrzega przy dłuższej notatce, gdy obecny komputer
+  (`DataView.computers[].appVersion`, bez zapomnianych) ma starszą wersję.
 
 ## Pułapki
 - Nieczytelny plik ≠ pusty; błąd listy plików ≠ pusty folder (dzień „nieznany”, zadania prowadzącego czekają).
