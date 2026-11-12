@@ -7,6 +7,7 @@ import { useState } from 'react'
 import type { EditQuestion } from '@shared/api'
 import { countLabel, plural } from '@shared/format'
 import { dayFileFrom } from '@shared/model/plan'
+import type { RequestRecord } from '@shared/model/requests'
 import { Dialog } from '../components/Dialog'
 import { useBusy } from '../lib/busy'
 import { fieldText, keyOf, valueText } from '../lib/recordText'
@@ -49,6 +50,7 @@ export function QuestionsBanner() {
 
 function QuestionsDialog({ questions, onClose }: { questions: EditQuestion[]; onClose: () => void }) {
   const rd = useData((s) => s.rd)
+  const requests = useData((s) => s.requests)
   const answer = async (q: EditQuestion, choice: 'mine' | 'theirs') => {
     try {
       await window.rd.resolve(q.id, choice)
@@ -93,7 +95,7 @@ function QuestionsDialog({ questions, onClose }: { questions: EditQuestion[]; on
     >
       {questions.map((q) => (
         <div key={q.id} className="flex flex-col gap-1.5 rounded border border-line p-3 text-[12.5px]">
-          <span className="font-medium">{recordTitle(q.rel)}</span>
+          <span className="font-medium">{recordTitle(q.rel, requests)}</span>
           {q.kind === 'removed' && <span>Ten rekord usunięto na innym komputerze, a tutaj go zmieniłeś.</span>}
           {q.kind === 'changed' && <span>Ten rekord usunąłeś tutaj, a na innym komputerze go w tym czasie zmieniono.</span>}
           {q.kind === 'broken' && <span>Plik jest uszkodzony – przywróć go z historii; Twoja zmiana czeka.</span>}
@@ -141,13 +143,17 @@ export function newerChoices(questions: readonly EditQuestion[]): Array<{ id: st
 }
 
 /** The record a question is about, named for the interface. */
-export function recordTitle(rel: string): string {
+export function recordTitle(rel: string, requests: readonly Pick<RequestRecord, 'id' | 'kind' | 'title'>[] = []): string {
   if (rel === 'rd.json') return 'Ustawienia'
   const m = /^days\/\d{4}\/(\d{4}-\d{2}-\d{2})\.json$/.exec(rel)
   if (m) return `Plan dnia ${dayFileFrom({}, m[1]!).date.split('-').reverse().join('.')}`
   if (rel.startsWith('templates/')) return 'Szablon dnia'
   if (rel.startsWith('schedule/')) return 'Plan wykładów'
-  if (rel.startsWith('requests/')) return 'Prośba'
+  if (rel.startsWith('requests/')) {
+    // A task by its title, a request as a request; one that cannot be found (broken, removed) – a sprawa (D383).
+    const r = requests.find((x) => rel === `requests/${x.id}.json`)
+    return r ? (r.kind === 'task' ? `Zadanie: ${r.title}` : 'Prośba') : 'Sprawa'
+  }
   if (rel.startsWith('routines/')) return 'Rutyna'
   if (rel.startsWith('allday/')) return 'Wydarzenie'
   if (rel.startsWith('attachments/')) return 'Załącznik'

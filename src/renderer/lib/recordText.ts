@@ -7,6 +7,7 @@ import { classify } from '@shared/data/paths'
 import { countLabel, durationLabel, logicalClock, plDate } from '@shared/format'
 import { ALL_DAY_COLOR_NAMES, type AllDayColor } from '@shared/model/allDay'
 import { fieldByKey } from '@shared/model/fields'
+import { CASE_LIST_NAMES, type CaseList } from '@shared/model/requests'
 import { categoryName, MODULE_NAMES, personName, type ModuleId, type RdFile } from '@shared/model/rd'
 import { DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
 import { onDaysText, SPECIAL_DAYS_TEXT } from '@shared/seriesText'
@@ -39,7 +40,7 @@ const BLOCK_FIELDS: Record<string, string> = {
   byVariant: 'zmieniony wariantem'
 }
 
-const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok' }
+const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok', title: 'tytuł', kind: 'rodzaj', categoryId: 'kategoria', list: 'lista', listDay: 'dzień na liście „Dziś”', doneAt: 'zrobione' }
 const ROUTINE_FIELDS: Record<string, string> = { name: 'nazwa', normal: 'kroki (zwykła)', worse: 'kroki (na gorsze dni)', archived: 'archiwum' }
 const SERIES_FIELDS: Record<string, string> = { start: 'pierwszy dzień', until: 'koniec (dzień)', count: 'koniec (liczba razy)', archived: 'usunięta z listy', root: 'seria' }
 /** The kinds of a series' rule (D381) as the panel of a block says them. */
@@ -61,7 +62,7 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
   if (typeof v === 'number') {
     if (key === 'startMin' || key === 'waitUntilMin' || key === 'wakeMin' || key === 'maxMin' || key === 'bedtimeMin') return logicalClock(v)
     if (key && /Min$/.test(key)) return durationLabel(v)
-    if (key === 'savedAt' || key === 'createdAt' || key === 'at' || key === 'addedAt' || key === 'removedAt') return new Date(v).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })
+    if (key === 'savedAt' || key === 'createdAt' || key === 'at' || key === 'addedAt' || key === 'removedAt' || key === 'doneAt') return new Date(v).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })
     return String(v)
   }
   if (typeof v === 'string') {
@@ -71,6 +72,9 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
     if (key === 'color' && Object.hasOwn(ALL_DAY_COLOR_NAMES, v)) return ALL_DAY_COLOR_NAMES[v as AllDayColor]
     if (key === 'state') return STATES[v] ?? v
     if (key === 'kind' && (v === 'file' || v === 'link')) return v === 'file' ? 'plik' : 'link'
+    // „Sprawy” (D383): the list by its name, the kind as a task or a request.
+    if (key === 'list') return CASE_LIST_NAMES[v as CaseList] ?? v
+    if (key === 'kind' && (v === 'task' || v === 'request')) return v === 'task' ? 'zadanie' : 'prośba'
     if (key === 'special') return SPECIAL_DAYS_TEXT[v as keyof typeof SPECIAL_DAYS_TEXT] ?? v
     if (key === 'kind' && RULE_KINDS[v]) return RULE_KINDS[v]!
     if (key === 'tag') return v === 'secondShift' ? 'druga zmiana' : v === 'weeklyAnalysis' ? 'analiza tygodniowa' : v
@@ -144,7 +148,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames): s
     }
     return SERIES_FIELDS[a ?? ''] ?? 'inne pole serii'
   }
-  if (kind === 'request') return REQUEST_FIELDS[a ?? ''] ?? 'inne pole prośby'
+  if (kind === 'request') return REQUEST_FIELDS[a ?? ''] ?? 'inne pole sprawy'
   if (kind === 'routine') return ROUTINE_FIELDS[a ?? ''] ?? 'inne pole rutyny'
   if (kind === 'allDay') return ALL_DAY_FIELDS[a ?? ''] ?? 'inne pole wydarzenia'
   if (kind === 'attachment') return a === 'link' && b === 'title' ? 'tytuł linku' : a === 'link' && b === 'iconDataUrl' ? 'ikona linku' : (ATTACHMENT_FIELDS[a ?? ''] ?? 'inne pole załącznika')

@@ -27,9 +27,10 @@ const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e))
 export function backupRecordText(r: BackupRecord, rd: Pick<RdFile, 'people'>): string {
   if (r.kind === 'settings') return KIND.settings!
   if (r.kind === 'day' && r.date) return `${KIND.day} ${plDate(r.date)}`
-  const base = `${KIND[r.kind] ?? 'Rekord'}${r.name ? `: ${r.name}` : ''}`
+  // A task of „Sprawy” is a task by its title (D383), never „Prośba: osoba”.
+  const base = `${r.kind === 'request' && r.task ? 'Zadanie' : (KIND[r.kind] ?? 'Rekord')}${r.name ? `: ${r.name}` : ''}`
   if (r.kind !== 'request') return base
-  const more = [r.person ? personName(rd, r.person) : null, r.at != null ? `dodana ${plDate(logicalDayOf(r.at))}` : null].filter((x): x is string => !!x)
+  const more = [r.person ? personName(rd, r.person) : null, r.at != null ? `${r.task ? 'dodane' : 'dodana'} ${plDate(logicalDayOf(r.at))}` : null].filter((x): x is string => !!x)
   return more.length ? `${base} (${more.join(', ')})` : base
 }
 

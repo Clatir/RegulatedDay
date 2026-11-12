@@ -5,7 +5,7 @@ export const PAGE_LABEL: Record<Page, string> = {
   today: 'Dziś',
   calendar: 'Kalendarz',
   week: 'Tydzień',
-  requests: 'Prośby',
+  requests: 'Sprawy',
   templates: 'Szablony',
   routines: 'Rutyny',
   room: 'Pokój',

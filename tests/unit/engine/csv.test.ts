@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { csvOf, CSV_HEADERS } from '@shared/engine/csv'
 import { rdFrom } from '@shared/model/rd'
+import { requestFrom } from '@shared/model/requests'
 import { block, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
@@ -19,7 +20,7 @@ function day() {
   return s
 }
 
-const names = (s: Scenario) => ({ rd: rdFrom({ people: [{ id: 'mama', name: 'Mama; z „cudzysłowem”' }] }), settings: s.settings, routines: [], requests: [{ id: 'r1', person: 'mama', estimateMin: null, note: 'zakupy', createdAt: 0, state: 'done' as const, day: DATE, block: null }] })
+const names = (s: Scenario) => ({ rd: rdFrom({ people: [{ id: 'mama', name: 'Mama; z „cudzysłowem”' }] }), settings: s.settings, routines: [], requests: [requestFrom({ id: 'r1', person: 'mama', estimateMin: null, note: 'zakupy', createdAt: 0, state: 'done', day: DATE, block: null })!] })
 
 describe('eksport CSV – bezpieczeństwo', () => {
   it('tekst zaczynający się od =, +, -, @ nie staje się formułą w Excelu (apostrof z przodu)', () => {

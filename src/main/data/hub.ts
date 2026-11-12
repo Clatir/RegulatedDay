@@ -10,8 +10,11 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { AddLinkResult, AttachResult, AttachmentOpen, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { AddLinkResult, AttachResult, AttachmentOpen, CaseDays, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
+import { blockFactsOf, type CasesRitual } from '@shared/engine/cases'
+import { newId } from '@shared/model/ids'
+import { newTask } from '@shared/model/requests'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords, recordEdit } from '@shared/data/merge'
 import { isRaw } from '@shared/data/dayEdits'
@@ -38,6 +41,7 @@ import { backupEntries, createUpdateBackup, fillAttachmentFiles, listBackups, re
 import { addLink, attachFiles, attachmentThumb, nodeAttachmentFiles, openAttachment, openAttachments, showAttachment, ThumbCache, type AttachmentFiles, type AttachmentIo, type AttachmentShell, type MetaFetch } from './attachments'
 import { attachmentFrom } from '@shared/model/attachment'
 import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
+import type { DayRead } from './eventLog'
 import type { DataFolder, TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
@@ -46,6 +50,10 @@ import { DataService, STOP_TIMEOUT_MS, type ServiceOptions } from './service'
 
 /** No daily backup for this many days: the window warns (spec „po 3 dniach bez kopii także w oknie głównym”). */
 export const BACKUP_STALE_DAYS = 3
+/** The most days `caseDays` and `dayFiles` read at once (a guard; `caseDays`: today and later first). */
+export const CASE_DAYS_MAX = 62
+/** The most days gone by whose facts `caseDays` remembers (the oldest leave first). */
+export const CASE_DAY_MEMO_MAX = 400
 
 /**
  * The backups as the window shows them (A3-06): the last own failure, the newest daily backup and „none for 3 days” – 3
@@ -176,6 +184,10 @@ export class DataHub {
   private lastSignature = ''
   /** The series the window saw last, of its folder (`records`: a read that fails gives these). */
   private lastSeries: { folder: string | null; records: RawRecord[]; days: Record<string, string> } | null = null
+  /** The facts of the days gone by `caseDays` read, by the signature of their logs (T768). */
+  private readonly caseDayMemo = new Map<string, { key: string; facts: { gone: string[]; begun: string[] } }>()
+  /** How many days `caseDays` folded the facts of (the tests: its memory works). */
+  caseDayFolds = 0
   private retry: ReturnType<typeof setTimeout> | null = null
   private backedUp = false
   private openingDir: string | null = null
@@ -552,7 +564,7 @@ export class DataHub {
     const f = this.need()
     const out: Record<string, RawRecord | null> = {}
     // A file that cannot be read now is left out: unknown is never „no file” (an edit made against nothing would meet it).
-    for (const d of dates.slice(0, 62)) {
+    for (const d of dates.slice(0, CASE_DAYS_MAX)) {
       if (!isIsoDate(d)) continue
       try {
         out[d] = (await f.recordView(paths.day(d))) ?? null
@@ -560,6 +572,50 @@ export class DataHub {
         /* unreadable now */
       }
     }
+    return out
+  }
+
+  /**
+   * The days „Sprawy” look at (T760): their files as `dayFiles` gives them, and the blocks of each parked or cancelled in
+   * its log before they began (`goneBlocks`) – a sprawa planned in one is not „zaplanowane”. A day whose file or log
+   * cannot be read now is left out of that part.
+   */
+  async caseDays(dates: string[]): Promise<CaseDays> {
+    const f = this.need()
+    const today = logicalDayOf(f.clock.now())
+    // Today and the days to come first, then the days gone by from the newest – the limit (a guard) drops the oldest.
+    const unique = [...new Set(dates.filter((d) => isIsoDate(d)))]
+    const list = [...unique.filter((d) => d >= today).sort(), ...unique.filter((d) => d < today).sort().reverse()].slice(0, CASE_DAYS_MAX)
+    const gone: Record<string, string[]> = {}
+    const begun: Record<string, string[]> = {}
+    for (const d of list) {
+      try {
+        // Only a log known: read in full, or – the folder away for a moment – as read in full before (`away`, as `dayUsable`,
+        // T773). A part missing (another computer's log) could hold the „Cofnij” of a parking – such a day is unknown, its
+        // sprawy „zaplanowane” as its file says, never freed by it (T766).
+        const read = await f.readDay(d)
+        if (!read.complete && !read.away) continue
+        const facts = this.caseDayFacts(d, d < today, read)
+        gone[d] = facts.gone
+        begun[d] = facts.begun
+      } catch {
+        /* the log unreadable now */
+      }
+    }
+    // The memory bounded by its size, the oldest days out first – never by the list of the last call (a planning asks for
+    // one or two days, T773).
+    if (this.caseDayMemo.size > CASE_DAY_MEMO_MAX) for (const d of [...this.caseDayMemo.keys()].sort().slice(0, this.caseDayMemo.size - CASE_DAY_MEMO_MAX)) this.caseDayMemo.delete(d)
+    return { files: await this.dayFiles(list), gone, begun }
+  }
+
+  /** The blocks of a day gone and begun by its log; a day gone by from memory while its log is as it was (T768). */
+  private caseDayFacts(date: string, past: boolean, read: DayRead): { gone: string[]; begun: string[] } {
+    const key = JSON.stringify([read.lastByComputer, read.events.length, read.copies, read.complete])
+    const was = past ? this.caseDayMemo.get(date) : undefined
+    if (was?.key === key) return was.facts
+    this.caseDayFolds++
+    const out = blockFactsOf(date, read.events)
+    if (past) this.caseDayMemo.set(date, { key, facts: out })
     return out
   }
 
@@ -804,6 +860,29 @@ export class DataHub {
     this.changed()
     if (r.ok) void this.service?.tick()
     return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}) }
+  }
+
+  /**
+   * The quick capture (D385, D402): a task of your own – only its title – into „Skrzynka”, from the window „Do skrzynki”
+   * and the bar's field. Without an open folder, or without a title – not saved, with why; a folder away – it waits in the
+   * queue as every new record (saved).
+   */
+  async quickAdd(title: unknown): Promise<QuickAddResult> {
+    const f = this.service?.folder
+    if (!f) return { ok: false, error: 'Folder danych nie jest otwarty – nic nie zapisano.', id: null }
+    const now = f.clock.now()
+    const id = newId()
+    const raw = newTask(id, now, logicalDayOf(now), { title: typeof title === 'string' ? title : '' })
+    if (!raw) return { ok: false, error: 'Wpisz, co zapisać.', id: null }
+    const out = await this.edit([recordEdit(paths.record('request', id), null, raw)!])
+    const ok = out.every((o) => o.status === 'applied' || o.status === 'waiting')
+    return { ok, error: ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: ok ? id : null }
+  }
+
+  /** What a day's evening ritual says about „Sprawy” (D383, D384, D402). */
+  casesRitual(day: string): Promise<CasesRitual> {
+    if (!isIsoDate(day)) throw new Error('data dnia')
+    return this.need().casesRitual(day)
   }
 
   /** A day's ritual (D318) – counted by the helper process. */
@@ -1078,9 +1157,11 @@ export class DataHub {
         rel,
         kind: c.kind,
         date: c.date,
-        // An attachment with no name of its own (D410) is named by its file, its page's title or its domain.
+        // A task of „Sprawy” by its title (D384), a request by its note; an attachment with no name of its own (D410) by its
+        // file, its page's title or its domain.
         name: text(r.name) ?? text(r.title) ?? text(r.note) ?? (c.kind === 'attachment' ? (text(inner(r.file).fileName) ?? text(inner(r.link).title) ?? text(inner(r.link).domain)) : null),
-        person: c.kind === 'request' ? text(r.person) : null,
+        person: c.kind === 'request' && r.kind !== 'task' ? text(r.person) : null,
+        ...(c.kind === 'request' && r.kind === 'task' ? { task: true } : {}),
         // 0 – the model's „unknown” (`requestFrom`), never a date.
         at: c.kind === 'request' && typeof r.createdAt === 'number' && Number.isFinite(r.createdAt) && r.createdAt > 0 ? r.createdAt : null
       }

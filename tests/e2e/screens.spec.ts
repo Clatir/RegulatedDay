@@ -266,7 +266,7 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('nav-requests').click()
       await expect(page.getByTestId('request-note').first()).toHaveValue('zakupy')
       await page.getByTestId('request-new').click()
-      await expect(page.getByTestId('request-row')).toHaveCount(2)
+      await expect(page.getByTestId('case-row')).toHaveCount(2)
       // The new one (no note yet) comes first: its note.
       const note = page.getByTestId('request-note').first()
       await expect(note).toHaveValue('')

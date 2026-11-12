@@ -26,7 +26,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni), L2.4 (Win+Alt+N i okienko na wierzchu), L2.5 („+” na pasku pulpitu), L2.6 (dwa komputery i stare prośby po aktualizacji).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 - **W maszynie wirtualnej** (opcjonalnie): 68 z tych punktów może sprawdzić Cowork na świeżej instalacji, bez Twoich
@@ -138,6 +138,12 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] HKU1.3 „To wolne” – pytanie o typ dnia „Wolne” i „Cofnij”
    - [ ] HKU1.4 Miesiąc, plan poranny i Ctrl K
    - [ ] HKU1.5 Podpis wydarzenia na pasku pulpitu (Tylko Ty – pasek na pulpicie)
+   - [ ] L2.1 Strona „Sprawy”: zadanie z Ctrl N, listy, przenoszenie, „Zrobione”
+   - [ ] L2.2 Przeciągnięcie zadania na oś „Dziś”, „Zaplanuj”, „Cofnij” i „Powtarzaj” niedostępne
+   - [ ] L2.3 Plan poranny z zadaniami z „Dziś”, „Zadanie zrobione?” w pasku i rytuał
+   - [ ] L2.4 Win+Alt+N: okienko „Do skrzynki” na wierzchu tylko na skrót; skrót w Ustawieniach (Tylko Ty – pulpit)
+   - [ ] L2.5 „+” na pasku pulpitu otwiera panel przy kursorze z polem „Do skrzynki” (Tylko Ty – pulpit)
+   - [ ] L2.6 Dwa komputery – jedno pytanie „Zadanie zrobione?”; stare prośby po aktualizacji (Tylko Ty – OneDrive, Twoje dane)
    - [ ] SNT4.1 Plik z Eksploratora na panel bloku i kafelek osi (Tylko Ty – Eksplorator)
    - [ ] SNT4.2 Linki – „Dodaj link”, Ctrl V, przeciągnięcie z przeglądarki, tytuł ze strony (Tylko Ty – przeglądarka, sieć)
    - [ ] SNT4.3 Otwieranie – plik, program w folderze, „Otwórz wszystko”
@@ -1957,6 +1963,95 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   i prośbie; bez wydarzeń pasek wygląda jak przed 1.13.0 (D405).
 - **Nie przechodzi, gdy:** podpis wypycha przyciski paska, pasek skacze albo rośnie po najechaniu, podpis znika przy
   prośbie, albo po usunięciu wydarzeń zostaje puste miejsce.
+
+### L2 – „Sprawy” zamiast „Próśb” (1.14.0)
+
+#### L2.1 Strona „Sprawy”: zadanie z Ctrl N, listy, przenoszenie, „Zrobione” (1.14.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/cases.test.ts` (listy, 04:00, „Zrobione” 7 dni), `tests/web/cases-screens.test.ts`
+  (nagłówek „Dziś · 3 h 30 min”, „Pokaż starsze”, filtry, nazwy), `tests/e2e/cases.spec.ts` (Ctrl N, tytuł wymagany,
+  przeniesienie na „Dziś”), `tests/e2e/smoke.spec.ts` (długość „1h30”, „Cofnij” po usunięciu). Ty: rzut oka.
+- **Jak sprawdzić:** otwórz „Sprawy” (to samo miejsce w menu co „Prośby”). Ctrl N, wpisz tytuł, Enter. Zmień szacunek,
+  kategorię i notatkę w wierszu. W polu „Lista” przenieś zadanie na „Dziś”, potem na „Kiedyś / Może”; kliknij „Zrobione”.
+  Dodaj prośbę przyciskiem „+ Prośba” (osoba, szacunek). Usuń sprawę i kliknij „Cofnij”. Ctrl K – wpisz tytuł, Enter.
+- **Oczekiwany efekt:** nowe zadanie ma 30 min i kategorię „Inne”, ląduje w Skrzynce; pusty tytuł jest odrzucony z
+  komunikatem; nagłówek „Dziś” pokazuje sumę szacunków; „Zrobione” trzyma 7 dni, starsze – „Pokaż starsze”; prośba działa
+  jak dotąd (osoba, liczniki, „Osoby”); Ctrl K prowadzi do wiersza sprawy na tej stronie.
+- **Nie przechodzi, gdy:** zadanie bez tytułu się zapisuje, domyślne wartości są inne, „Cofnij” nie przywraca sprawy,
+  zadanie jest nazwane „osoba: ?” (na stronie, w Historii, w kopiach albo w pytaniach o zmiany), albo prośba straciła
+  tryby, licznik lub koszt.
+
+#### L2.2 Przeciągnięcie zadania na oś „Dziś”, „Zaplanuj”, „Cofnij” i „Powtarzaj” niedostępne (1.14.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/cases.spec.ts` (przeciągnięcie z panelu na 10:00 → blok 30 min „Inne” z tytułem, „Cofnij”,
+  „Zaplanuj”, brak „Powtarzaj”), `tests/web/cases-screens.test.ts` (rozsuwanie, jedna edycja pliku dnia i sprawy),
+  `tests/fs/series.test.ts` (odmowa serii z bloku zadania, D408). Ty: rzut oka.
+- **Jak sprawdzić:** przenieś zadanie na „Dziś”. W „Dziś” (bez zaznaczonego bloku) w panelu „Sprawy” przeciągnij je na
+  oś, na zajęte miejsce dnia przyszłego i na wolne. Kliknij „Cofnij” w rogu. Kliknij „Zaplanuj” przy innym zadaniu.
+  Otwórz panel bloku zadania.
+- **Oczekiwany efekt:** podczas przeciągania widać pasmo z godzinami; powstaje blok o długości szacunku, nazwany tytułem,
+  w kolorze kategorii; zajęte miejsce rozsuwa kolejne bloki elastyczne (pasek: „Przesunięto N bloków · Cofnij”); zadanie
+  zostaje na liście jako „zaplanowane <dzień> <godzina>”; „Cofnij” zdejmuje blok i zadanie wraca bez „zaplanowane”. W
+  panelu bloku zadania zamiast „Powtarzaj” jest wyjaśnienie, że blok zadania należy do jednego dnia.
+- **Nie przechodzi, gdy:** blok ma złą godzinę, długość albo nazwę kategorii zamiast tytułu, rozsuwanie rusza bloki
+  stałe, zadanie dostaje dwa bloki, „Cofnij” zostawia blok albo „zaplanowane”, albo „Powtarzaj” da się wybrać.
+
+#### L2.3 Plan poranny z zadaniami z „Dziś”, „Zadanie zrobione?” w pasku i rytuał (1.14.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/cases.spec.ts` (plan poranny: zadanie zaznaczone, prośba nie, osobny blok; rytuał: lista
+  niezrobionych i „Zrobione”), `tests/unit/engine/cases.test.ts` i `tests/fs/cases.test.ts` (pytanie w pasku po końcu
+  bloku, odpowiedź zapisem sprawy, linia cicha 3 h, rytuał z niedzielą). Pytanie w pasku w prawdziwym przebiegu: Ty.
+- **Jak sprawdzić:** zostaw dwa zadania na „Dziś”, rano w planie porannym kliknij „Dodaj do planu”. Uruchom blok
+  zadania na kilka minut i zakończ go; po jego końcu otwórz „⋯” albo pasek. Odpowiedz „Tak” przy jednym, przy drugim
+  „Wraca na listę”. Wieczorem w rytuale zobacz sekcję „Sprawy” (w niedzielę – też „Kiedyś / Może”).
+- **Oczekiwany efekt:** zadania z „Dziś” są w planie porannym zaznaczone, prośby nie; każde zadanie to osobny blok, prośby
+  razem; wybrane, a już zaplanowane sprawy krok pomija z komunikatem. Po końcu bloku pasek cicho pyta „Zadanie zrobione?
+  „<tytuł>” · Tak · Wraca na listę” (bez kropki, w trybie cichym w „⋯”); „Tak” przenosi zadanie do „Zrobione”, „Wraca na
+  listę” zdejmuje „zaplanowane”. Bez odpowiedzi po 3 godzinach pytanie zostaje tylko w rytuale. Rytuał mówi, które sprawy
+  z „Dziś” wrócą o 04:00 do „W tym tygodniu”.
+- **Nie przechodzi, gdy:** pasek pyta wcześniej niż po końcu bloku albo z dźwiękiem i kropką, odpowiedź nie zmienia sprawy,
+  pytanie wraca po odpowiedzi, plan poranny dubluje blok po drugim kliknięciu, albo rytuał nie wymienia niezrobionych.
+
+#### L2.4 Win+Alt+N: okienko „Do skrzynki” na wierzchu tylko na skrót; skrót w Ustawieniach (1.14.0)
+- [ ] Odebrane
+- **Tylko Ty:** okienko nad innymi aplikacjami i skrót globalny widać tylko na pulpicie. Testy sprawdzają logikę i
+  rejestrację skrótu (`tests/unit/quick-window.test.ts`, `tests/e2e/quick.spec.ts`), a prawdziwe naciśnięcie z oknem na
+  wierzchu – `tests/e2e/quick-windows.spec.ts` w CI na Windows; Twojego układu klawiatury i innych programów nie widzą.
+- **Jak sprawdzić:** z innego programu (np. przeglądarki) naciśnij Win+Alt+N, wpisz tytuł, Enter. Naciśnij znów i Esc.
+  Przez kilka minut pracy w aplikacji obserwuj, czy okienko samo się nie pojawia. W Ustawieniach, „Ten komputer”, zmień
+  skrót, wyłącz go i włącz z powrotem; wpisz skrót zajęty przez inny program, jeśli taki masz.
+- **Oczekiwany efekt:** okienko wychodzi nad inne okna z fokusem tylko na skrót; Enter zapisuje zadanie do Skrzynki i
+  okienko znika, Esc zamyka bez zapisu; po zamknięciu nie zostaje nad innymi oknami. Na polskim układzie pisanie „ń” nie
+  wywołuje okienka. Pole w Ustawieniach przyjmuje „Win+Alt+N”, odrzuca zły skrót z powodem, wyłączenie zostawia Twój skrót,
+  a zajęty przez inny program daje uwagę „Skrót zajęty przez inny program”.
+- **Nie przechodzi, gdy:** okienko pojawia się bez skrótu albo zostaje nad oknami po zamknięciu, skrót nie działa po
+  zmianie w Ustawieniach, „ń” wywołuje okienko, albo zajęty skrót nie ma uwagi.
+
+#### L2.5 „+” na pasku pulpitu otwiera panel przy kursorze z polem „Do skrzynki” (1.14.0)
+- [ ] Odebrane
+- **Tylko Ty:** pasek pulpitu i panel przy kursorze to okna poza zasięgiem testów na tym komputerze;
+  `tests/e2e/quick.spec.ts` sprawdza to z atrapą pomocnika, a kolejność okien – CI na Windows.
+- **Jak sprawdzić:** na pasku pulpitu kliknij „+”. Wpisz tytuł, Enter. W oknie głównym kliknij „+” w pasku i zrób to samo.
+  Włącz ciszę nocną albo „Odcinam się” i sprawdź, czy „+” jest (w panelu ikony).
+- **Oczekiwany efekt:** „+” na pasku pulpitu (który nie przyjmuje klawiszy) otwiera panel ikony przy kursorze z polem
+  „Do skrzynki” już aktywnym; Enter zapisuje do Skrzynki; w oknie głównym i w panelu pole rozwija się w samym pasku.
+  Okienko „Do skrzynki” się nie pokazuje. „+” jest zawsze: w nocy, w sesji, na zajęciach i przy „Odcinam się”.
+- **Nie przechodzi, gdy:** „+” otwiera okienko nad innymi aplikacjami, pole nie przyjmuje klawiszy, pasek pulpitu wychodzi
+  nad inne okna, albo „+” znika w którymś z trybów.
+
+#### L2.6 Dwa komputery – jedno pytanie „Zadanie zrobione?”; stare prośby po aktualizacji (1.14.0)
+- [ ] Odebrane
+- **Tylko Ty:** synchronizacja przez OneDrive i Twoje prawdziwe dane próśb – testy używają kopii folderu i symulatora
+  (`tests/fs/cases.test.ts`: pliki sprzed „Spraw” czytają się bez utraty pól), nie Twojego OneDrive.
+- **Jak sprawdzić:** przed aktualizacją zrób kopię folderu danych albo zostaw ją z automatycznej kopii. Po aktualizacji do
+  1.14.0 otwórz „Sprawy” i porównaj z tym, co było w „Prośbach”. Na drugim komputerze (starszym lub nowym) przy zakończonym
+  bloku zadania obserwuj pasek obu komputerów; odpowiedz na jednym.
+- **Oczekiwany efekt:** prośby „w kolejce” są w Skrzynce, „w planie” – w „Dziś” (dzisiejszy blok) albo „W tym tygodniu”,
+  „zrobione” i „porzucone” – w „Zrobione” (porzucone z dopiskiem), z osobą, szacunkiem i notatką bez zmian. Pytanie
+  „Zadanie zrobione?” jest na obu komputerach to samo i znika z obu po odpowiedzi (drugi najwyżej po minucie); nie ma
+  podwójnego. Komputer ze starszą wersją widzi zadanie jak prośbę „osoba: ?”, niczego nie gubiąc.
+- **Nie przechodzi, gdy:** któraś prośba zniknęła albo straciła pole, trafiła na złą listę, pytanie pojawia się dwa razy lub
+  wraca po odpowiedzi na drugim komputerze, albo starsza wersja gubi dane zadania.
 
 ### SNT4 – załączniki i linki w blokach (1.15.0)
 

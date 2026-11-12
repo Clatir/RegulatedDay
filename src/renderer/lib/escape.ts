@@ -38,11 +38,14 @@ export function handleEscape(): boolean {
   return false
 }
 
-export function installEscape(): void {
-  window.addEventListener('keydown', (e) => {
+/** The window's one listener of Esc; the answer takes it away again (the tests). */
+export function installEscape(): () => void {
+  const listener = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || e.defaultPrevented) return
     if (handleEscape()) e.preventDefault()
-  })
+  }
+  window.addEventListener('keydown', listener)
+  return () => window.removeEventListener('keydown', listener)
 }
 
 /**

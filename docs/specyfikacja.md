@@ -1694,7 +1694,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 | schedule/\<id>.json | plan wykładów jako bloki cykliczne |
 | days/RRRR/RRRR-MM-DD.json | Twoje edycje planu dnia, także przyszłych dni, i pobudka dnia; pisze go okno główne, także ukryte w zasobniku, a import zjazdów z PDF – proces główny jedną partią kolejki (typ dnia, zajęcia, `classImport` do cofnięcia, T546) |
 | log/RRRR/RRRR-MM-DD/\<komputer>.jsonl | dopisywany log zdarzeń dnia z tego komputera: utworzenie dnia z migawką, start, pauza, dalej, przedłużenie, check-in, sygnał, prośba, alarm, działania automatyczne, zobaczenie komunikatu albo pytania (identyfikator, sposób), zatwierdzenie granicy, zamrożenie z oceną dnia, korekta, pierwsza obecność dnia, przerwy w wejściu i w użyciu od 2 min, odcinki obserwacji, odcinki klasyfikacji minut, przeliczenia pory snu i każda akcja widgetu; pisze go tylko proces główny |
-| requests/\<id>.json | prośby |
+| requests/\<id>.json | sprawy (D383): zadania własne i prośby – rodzaj, tytuł, osoba, szacunek, kategoria, notatka, lista, blok, chwila zrobienia; pliki próśb sprzed „Spraw” czytane bez migracji, pole `state` w kroku dla starszych wersji (T750) |
 | routines/\<id>.json | rutyny |
 | allday/\<id>.json | wydarzenia całodniowe i wielodniowe (D405): tytuł, daty od–do, kolor, notatka, „To wolne”; tylko informacja – silnik dnia ich nie czyta |
 | attachments/\<id>.json, attachments/\<id>/\<plik> | załączniki bloków (D410): plik skopiowany do folderu albo link (tytuł, ikona strony), właściciel – blok dnia, blok szablonu albo seria; usunięty zostaje 30 dni, potem prowadzący kasuje plik i rekord (T800–T806) |
@@ -2143,7 +2143,7 @@ Te zasady obowiązują każdy ekran i każdy typ rekordu: blok, prośbę, szablo
 
 | Konwencja | Zasada |
 | --- | --- |
-| Tworzenie | Ctrl+N tworzy rekord w bieżącym widoku: blok w planie, prośbę w kolejce, szablon wśród szablonów |
+| Tworzenie | Ctrl+N tworzy rekord w bieżącym widoku: blok w planie, zadanie w „Sprawach” (Skrzynka, D383), szablon wśród szablonów |
 | Usuwanie | zawsze z przyciskiem „Cofnij” przez 10 s; usunięty rekord zostaje w historii; „Usuń” przy zaczętym bloku kończy go w tej chwili i zdejmuje z planu, a jego przebieg zostaje w dniu jako „poza planem” i liczy się do budżetu i energii (D336) |
 | Historia | każdy rekord ma historię zmian z przywracaniem |
 | Edycja pól | zapis przy opuszczeniu pola albo Enterze, nie przy każdym klawiszu; Esc anuluje edycję, kolejny Esc zamyka okno; jeden porządek obsługi Esc |

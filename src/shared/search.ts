@@ -35,7 +35,7 @@ export const GROUPS: ReadonlyArray<{ id: GroupId; label: string; kinds: readonly
   { id: 'block', label: 'Bloki', kinds: ['block'] },
   { id: 'allDay', label: 'Wydarzenia', kinds: ['allDay'] },
   { id: 'template', label: 'Szablony', kinds: ['template', 'templateBlock', 'series'] },
-  { id: 'request', label: 'Prośby', kinds: ['request'] },
+  { id: 'request', label: 'Sprawy', kinds: ['request'] },
   { id: 'routine', label: 'Rutyny', kinds: ['routine'] }
 ]
 

@@ -9,10 +9,17 @@ import { Bar, useReportLayout } from './Bar'
 
 export function PanelApp() {
   const view = useWidget((s) => s.view)
-  const [target, setTarget] = useState<{ line: string | null; day: string | null } | null>(null)
+  const [target, setTarget] = useState<{ line: string | null; day: string | null; quick?: boolean } | null>(null)
   const [unfolded, setUnfolded] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useReportLayout(ref, unfolded)
+  // An opening by the desktop bar's „+” unfolds the field once: a bar drawn anew never opens it again from the same one –
+  // and it is spent only once a bar was there to take it (before the first view it waits, T772).
+  const usedQuick = useRef<object | null>(null)
+  const quickAt = target?.quick && usedQuick.current !== target ? target : null
+  useEffect(() => {
+    if (quickAt && view) usedQuick.current = quickAt
+  }, [quickAt, view])
   useEffect(() => {
     setWindowEscape(() => window.rd.panelClose())
     const off = window.rd.onPanelTarget(setTarget)
@@ -26,15 +33,13 @@ export function PanelApp() {
   }, [])
   return (
     <div ref={ref} className="flex flex-col gap-2 border border-line-strong bg-panel p-2" data-testid="panel">
-      {view &&
-        (view.hidden ? (
-          // The widget hidden („Odcinam się”): the state line with „Wracam” (the bar's own hidden state).
-          <div className="flex flex-col gap-1.5 px-1 py-1" data-testid="panel-hidden">
-            <Bar view={view} mode="panel" grows="down" onUnfold={setUnfolded} />
-          </div>
-        ) : (
-          <Bar view={view} mode="panel" grows="down" onUnfold={setUnfolded} />
-        ))}
+      {view && (
+        // One structure whether the widget is hidden („Odcinam się”: the state line with „Wracam”) or not – the bar stays
+        // the same one (what is typed in its field stays, T771).
+        <div className={view.hidden ? 'flex flex-col gap-1.5 px-1 py-1' : 'contents'} data-testid={view.hidden ? 'panel-hidden' : 'panel-bar'}>
+          <Bar view={view} mode="panel" grows="down" onUnfold={setUnfolded} quickAt={quickAt} />
+        </div>
+      )}
       {target?.line && (
         <div className="rounded border border-lamp/50 bg-lamp-soft px-2 py-1 text-[12px] text-lamp" data-testid="panel-target">
           {/* The line's own words – never its id; gone meanwhile (answered, started): only where it came from. */}

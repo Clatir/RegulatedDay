@@ -205,6 +205,7 @@ export function Timeline({
   pushPreview,
   attached,
   onAttachDrop,
+  ghost,
   from,
   to,
   ...rest
@@ -256,6 +257,8 @@ export function Timeline({
    * is lit while they are over it; the gestures of the axis (the drag of a block, the edges, a new block) are pointer ones and stay as they were.
    */
   onAttachDrop?: (id: string, dt: DataTransfer) => void
+  /** The span a sprawa dragged from outside the axis would take (D384) – drawn as a band while it is held; null – none. */
+  ghost?: BlockSpan | null
   /** The range shown (logical minutes); the blocks and lines widen it. */
   from: number
   to: number
@@ -505,6 +508,10 @@ export function Timeline({
         style={{ height }}
         {...gridBind}
         data-testid="timeline-axis"
+        // The scale a drop from outside reads (`axisDrop.ts`): the minute at the top and at the bottom, pixels a minute.
+        data-lo={lo}
+        data-hi={hi}
+        data-ppm={PPM}
       >
         {hours.map((h) => (
           <div key={h} className="pointer-events-none absolute right-0 left-0 border-t border-line/60" style={{ top: y(h) }} />
@@ -518,6 +525,8 @@ export function Timeline({
         )}
         {/* D366: the range of a new block being dragged over an empty place. */}
         {grid.range && <RangeBand range={grid.range} lo={lo} ppm={PPM} withLength testId="create-range" />}
+        {/* D384: where a sprawa dragged from the panel beside the axis would stand. */}
+        {ghost && <RangeBand range={ghost} lo={lo} ppm={PPM} withLength testId="case-ghost" />}
         {/* D365: the hours of an edge being dragged, and what the end costs. */}
         {drag?.moved && !drag.dropped && drag.edge && (
           <div
