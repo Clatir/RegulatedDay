@@ -8,6 +8,7 @@ import { create } from 'zustand'
 import type { DataView, EditEntry, EditOutcome, EventIn, RawRecord } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
 import { recordEdit } from '@shared/data/merge'
+import { allDayFrom, type AllDayEvent } from '@shared/model/allDay'
 import type { GoalsPatch } from '@shared/model/goals'
 import { newId } from '@shared/model/ids'
 import { lectureFrom, templateFrom, type LectureSeries, type Template } from '@shared/model/plan'
@@ -29,13 +30,15 @@ interface DataState {
   series: Series[]
   /** The series as days are made from them (`PlanInputs.series`: their last days by the same files as the main process). */
   seriesPlans: SeriesPlan[]
+  /** All-day events (D405), in no order (`eventsOn`, `eventsInRange` sort them). */
+  allDay: AllDayEvent[]
   /** Grows with every read (the day views read their day again). */
   stamp: number
 }
 
 const empty = rdFrom(undefined)
 
-export const useData = create<DataState>(() => ({ view: null, rd: empty, templates: [], lectures: [], requests: [], routines: [], series: [], seriesPlans: [], stamp: 0 }))
+export const useData = create<DataState>(() => ({ view: null, rd: empty, templates: [], lectures: [], requests: [], routines: [], series: [], seriesPlans: [], allDay: [], stamp: 0 }))
 
 const isDefined = <T>(v: T | null): v is T => v != null
 
@@ -62,6 +65,7 @@ function apply(view: DataView, news: boolean): void {
     routines: view.routines.map(routineFrom).filter(isDefined),
     series,
     seriesPlans: seriesPlans(series, typeOfDays(rd.settings, ownType), marketDay),
+    allDay: (view.allDay ?? []).map(allDayFrom).filter(isDefined),
     stamp: s.stamp + 1
   }))
 }
@@ -112,7 +116,7 @@ export function rawRecord(rel: string): RawRecord | null {
   if (!v) return null
   if (rel === 'rd.json') return v.rd
   const [dir] = rel.split('/')
-  const list = dir === 'templates' ? v.templates : dir === 'schedule' ? v.lectures : dir === 'requests' ? v.requests : dir === 'routines' ? v.routines : dir === 'series' ? v.series : null
+  const list = dir === 'templates' ? v.templates : dir === 'schedule' ? v.lectures : dir === 'requests' ? v.requests : dir === 'routines' ? v.routines : dir === 'series' ? v.series : dir === 'allday' ? v.allDay : null
   const id = rel.slice(rel.indexOf('/') + 1).replace(/\.json$/, '')
   return list?.find((r) => r.id === id) ?? null
 }

@@ -1,10 +1,14 @@
 /**
  * A month as a grid (D295): weeks from Monday, every day a cell with its colour and marks; several dates are selected
  * by dragging or with Ctrl (Shift extends from the last one), a plain click on a day opens it (when the host wants that).
+ * A host may give the day's all-day events (D405): the first one with its colour's dot and „+N” for the rest, read only.
  */
 import { useRef, useState, type ReactNode } from 'react'
+import type { AllDayEvent } from '@shared/model/allDay'
+import { ALL_DAY_COLOR_HEX } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
 import { cx } from '../../components/ui'
+import { monthLabel } from '../allday/allDayText'
 
 export const MONTH_NAMES = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień']
 const WEEKDAYS = ['pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'nd']
@@ -46,7 +50,7 @@ export function MonthGrid({
   onSelect: (dates: Set<string>) => void
   /** A plain click: open the day (otherwise the click selects it). */
   onOpen?: (date: string) => void
-  cell: (date: string) => { tone: string | null; marks: ReactNode; title?: string }
+  cell: (date: string) => { tone: string | null; marks: ReactNode; title?: string; /** The day's events in their order (`eventsOn`); the wizard gives none. */ events?: readonly AllDayEvent[] }
   today: string
   'data-testid'?: string
 }) {
@@ -71,13 +75,14 @@ export function MonthGrid({
           const c = cell(d)
           const inMonth = d.startsWith(month)
           const sel = selected.has(d)
+          const ev = monthLabel(c.events ?? [])
           return (
             <button
               key={d}
               type="button"
               data-testid={`day-${d}`}
               aria-pressed={sel}
-              title={c.title}
+              title={[c.title, ev?.title].filter(Boolean).join('\n') || undefined}
               onMouseDown={(e) => {
                 if (e.button !== 0) return
                 if (e.shiftKey && last.current) {
@@ -109,7 +114,7 @@ export function MonthGrid({
                 setDrag(null)
               }}
               className={cx(
-                'relative flex h-[58px] flex-col items-start rounded border px-1.5 py-1 text-left',
+                'relative flex min-h-[58px] flex-col items-start rounded border px-1.5 py-1 text-left',
                 sel ? 'border-lamp ring-1 ring-lamp' : 'border-line',
                 // Outside the month: a dashed edge and a muted number – its text keeps its contrast (A8-05).
                 !inMonth && 'border-dashed text-muted',
@@ -118,6 +123,13 @@ export function MonthGrid({
               style={{ background: c.tone ?? undefined }}
             >
               <span className="num text-[12px]">{Number(d.slice(8, 10))}</span>
+              {ev && (
+                <span className="flex w-full min-w-0 items-center gap-1 text-[10px] leading-tight text-fg" data-testid={`day-events-${d}`}>
+                  <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: ALL_DAY_COLOR_HEX[ev.first.color] }} aria-hidden="true" />
+                  <span className="min-w-0 truncate">{ev.first.title}</span>
+                  {ev.more > 0 && <span className="shrink-0 text-muted">+{ev.more}</span>}
+                </span>
+              )}
               <span className="mt-auto flex w-full flex-wrap gap-0.5 text-[10px] leading-tight text-fg">{c.marks}</span>
             </button>
           )

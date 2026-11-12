@@ -3,6 +3,7 @@
  * slider. Brightness (50–100 %) darkens only the backgrounds, graphics and accent fills – never a text colour – so every
  * text keeps a contrast of at least 4.5:1 at every step (tests/unit/theme.test.ts checks each pair at each step).
  */
+import type { AllDayColor } from './model/allDay'
 
 export const PALETTE = {
   bg: '#211B23',
@@ -143,6 +144,12 @@ export const BLOCK_COLORS = ['#F2B66D', '#B49FCC', '#79AFAB', '#D49A97', '#C9B27
  */
 export const SEASON_COLORS = { winter: '#8FB3D9', spring: '#A3C49A', summer: '#C9B27A', autumn: '#D49A97' } as const
 
+/**
+ * The six colours of all-day events (D405) – of the blocks' palette, so a bar of an event is a block's fill
+ * (`blockFill`) with the text and the muted text on it checked for every one (`contrastPairs`).
+ */
+export const ALL_DAY_COLOR_HEX: Record<AllDayColor, string> = { amber: '#F2B66D', teal: '#79AFAB', rose: '#D49A97', lavender: '#B49FCC', sky: '#8FB3D9', green: '#A3C49A' }
+
 /** The CSS variables of the windows for a brightness (50–100 %): backgrounds, lines and accent fills only. */
 export function themeVars(brightness: number): Record<string, string> {
   const b = Math.min(1, Math.max(0.5, brightness))
@@ -204,6 +211,9 @@ export function contrastPairs(brightness: number): Array<{ name: string; text: s
       out.push({ name: `${tn} na bloku ${color}`, text, bg: blockFill(color, brightness) })
       out.push({ name: `${tn} na przygaszonym bloku ${color}`, text, bg: blockFillDim(color, brightness) })
     }
+  // The bars of all-day events (D405): the text and the muted text on the fill of every event colour.
+  for (const [id, color] of Object.entries(ALL_DAY_COLOR_HEX))
+    for (const [tn, text] of plainTexts) out.push({ name: `${tn} na wydarzeniu ${id}`, text, bg: blockFill(color, brightness) })
   // A primary button: its accent as text on a soft fill of the accent (never dark text on a full fill – that fill dims
   // with brightness and the dark text would lose its contrast).
   for (const [name, accent] of accentTexts) {

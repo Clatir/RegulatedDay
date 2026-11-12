@@ -54,6 +54,8 @@ import { ritualDue } from '@shared/engine/ritual'
 import { GameLine } from '../game/GameLine'
 import { PeersFreshness } from '../settings/ComputersSection'
 import { RitualPanel } from '../ritual/RitualPanel'
+import { AllDayBar } from '../allday/AllDayBar'
+import { AllDayLines } from '../allday/AllDayLines'
 import { UnclosedDays } from '../ritual/UnclosedDays'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
@@ -354,6 +356,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto">
           <div className="flex flex-col gap-3 p-4">
+            <AllDayLines page="today" />
             {lateWake && lateShown && <LateWakeCard model={model} lw={lateWake} names={names} />}
             {isToday && ritualFrom && <UnclosedDays />}
             {isToday && <MorningPlan model={model} names={names} />}
@@ -375,6 +378,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               </span>
               {axis.energy && <EnergyLegend reserve={axis.energy.reserve} />}
             </div>
+            {/* The all-day events of the day (D405), over the axis' column – the hours' column on the left stays empty. */}
+            <AllDayBar key={date} dates={[date]} page="today" today={today} axisPx={46} endPx={axis.energy && axis.energy.samples.length > 0 ? 48 : 0} />
             <Timeline
               items={axis.items}
               markers={axis.markers}

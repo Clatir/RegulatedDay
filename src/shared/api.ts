@@ -263,6 +263,8 @@ export interface DataView {
    * series' last days from them as the main process does (`seriesPlans`).
    */
   seriesDays: Record<string, string>
+  /** All-day and multi-day events (D405, allday/<id>.json) – never read by the engine of the day. */
+  allDay: RawRecord[]
   /**
    * Computers that have written a presence (for „komputer nagrywający”), this one first; another one still present carries
    * the version of its app (D388: the warning under a long note).

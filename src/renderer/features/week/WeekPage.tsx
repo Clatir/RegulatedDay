@@ -5,7 +5,7 @@
  * calendar (D295); a click on an empty place of a column (or a drag over it) opens the small window of a new block there
  * (D366). The arrows move by a week; the goals shown are the month of the week (`goalsMonthOfWeek`).
  */
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { logicalClock } from '@shared/format'
 import { settingsOn, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
@@ -17,11 +17,14 @@ import { cx } from '../../components/ui'
 import { useData } from '../../store/data'
 import { useWeekView } from '../../store/horizon'
 import { useMachine } from '../../store/machine'
-import { openDay, setBlockDraft } from '../../store/ui'
+import { openDay, setBlockDraft, takeFoundPick, useUi } from '../../store/ui'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockColor, blockName, type Names } from '../plan/blockView'
 import { DEFAULT_NEW_BLOCK_MIN, snapMinute, type GridRange } from '../plan/gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
+import { AllDayBar } from '../allday/AllDayBar'
+import { AllDayLines } from '../allday/AllDayLines'
+import { pendingCard } from '../allday/allDayView'
 import { GoalsPanel } from './GoalsPanel'
 import { WeekPushLine } from './WeekPushLine'
 import { NewBlockPopover } from './NewBlockPopover'
@@ -36,6 +39,23 @@ export function WeekPage() {
   const [week, setWeek] = useState(() => weekStart(today))
   const { view, failed } = useWeekView(week)
   const thisWeek = weekStart(today)
+  // Ctrl K on an all-day event (D405, as the other results): the week of its first day, set once; its card the strip of that
+  // week opens (`card`, until it has). One that is gone says so (`takeFoundPick`). The ask is forgotten as soon as it cannot be
+  // met – the event gone before the week was counted, or another week shown (the arrows): the card never opens later by itself.
+  const pick = useUi((s) => s.pick)
+  const events = useData((s) => s.allDay)
+  const [card, setCard] = useState<string | null>(null)
+  useEffect(() => {
+    const p = takeFoundPick((x) => x.kind === 'allDay', (x) => events.some((e) => e.id === x.id), 'Tego wydarzenia już nie ma.')
+    const e = p ? events.find((x) => x.id === p.id) : undefined
+    if (!e) return
+    setWeek(weekStart(e.startDate))
+    setCard(e.id)
+  }, [pick, events])
+  const waiting = pendingCard(card, week, events)
+  useEffect(() => {
+    if (card != null && waiting == null) setCard(null)
+  }, [card, waiting])
   return (
     <div className="flex flex-col gap-3 p-4" data-testid="week">
       <div className="flex items-center gap-2">
@@ -53,10 +73,11 @@ export function WeekPage() {
         </button>
       </div>
       <WeekPushLine />
+      <AllDayLines page="week" />
       <GoalsPanel month={goalsMonthOfWeek(week, today)} />
       {view ? (
         // Keyed by the week: another week is another grid – a window of a new block or a drag never goes with it (D371).
-        <WeekGrid key={view.days[0]?.date} days={view.days} from={view.from} to={view.to} />
+        <WeekGrid key={view.days[0]?.date} days={view.days} from={view.from} to={view.to} openCard={waiting} onCardOpened={() => setCard(null)} />
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="week-loading">
           {failed ? 'Nie da się teraz policzyć tego tygodnia.' : 'Liczę tydzień…'}
@@ -86,7 +107,7 @@ interface Held {
   range: GridRange
 }
 
-function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: number }) {
+function WeekGrid({ days, from, to, openCard, onCardOpened }: { days: HorizonDay[]; from: number; to: number; openCard: string | null; onCardOpened: () => void }) {
   const { rd, routines, requests } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -99,6 +120,7 @@ function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: nu
   const marks = hourMarks(lo, hi)
   const namesOf = useMemo(() => (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests }), [rd, routines, requests])
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(7, minmax(0, 1fr))` }
+  const dates = useMemo(() => days.map((d) => d.date), [days])
   /** The rectangle a column has on the screen; null when it is not there. */
   const columnRect = (i: number): DOMRect | null => bodyRef.current?.querySelector(`[data-testid="week-col-${days[i]?.date}"]`)?.getBoundingClientRect() ?? null
   // The columns do not move while a drag goes on: their rectangles are read once, when the pointer first asks.
@@ -130,11 +152,17 @@ function WeekGrid({ days, from, to }: { days: HorizonDay[]; from: number; to: nu
   return (
     <div className="flex select-none flex-col" data-testid="week-grid">
       {/* The headings stay in view while the axis scrolls. */}
-      <div className="sticky top-0 z-10 grid gap-x-1 border-b border-line bg-bg pb-1" style={cols}>
-        <span />
-        {days.map((d, i) => (
-          <ColumnHeading key={d.date} day={d} index={i} brightness={brightness} />
-        ))}
+      {/* The strip of all-day events (D405) stays with them, in the same columns. */}
+      <div className="sticky top-0 z-10 border-b border-line bg-bg pb-1">
+        <div className="grid gap-x-1" style={cols}>
+          <span />
+          {days.map((d, i) => (
+            <ColumnHeading key={d.date} day={d} index={i} brightness={brightness} />
+          ))}
+        </div>
+        <div className="mt-1">
+          <AllDayBar dates={dates} page="week" today={today} axisPx={AXIS_PX} gapClass="gap-x-1" openId={openCard} onOpened={onCardOpened} />
+        </div>
       </div>
       <div className="relative grid gap-x-1" style={cols} ref={bodyRef}>
         <div className="relative" style={{ height }} aria-hidden="true">

@@ -6,7 +6,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { termHolds } from '@renderer/lib/viewTerms'
-import { AutosList, Bar } from '@renderer/widget/Bar'
+import { AllDayLabel, AutosList, Bar } from '@renderer/widget/Bar'
 import { noFolderView, type WidgetView } from '@shared/widget'
 
 /** A bar with a day (`noFolderView` is the one without), the night's quiet on or off. */
@@ -93,5 +93,64 @@ describe('terminy w widoku paska (zegar monotoniczny okna)', () => {
     const gone = html(dayView({ pending: { button: 'zzz', text: 'Przedłuż +15: przedłużenie', left: 0 }, note: { text: 'nic nie biegnie', left: 0 } }))
     expect(gone).not.toContain('data-testid="bar-pending"')
     expect(gone).not.toContain('data-testid="bar-note-click"')
+  })
+})
+
+describe('podpis wydarzeń całodniowych na pasku pulpitu (D405)', () => {
+  const allDay = { color: '#79AFAB', text: 'Konferencja +1', full: 'Konferencja · Urlop' }
+
+  it('na pasku pulpitu: kropka w kolorze, skrócony tekst, bez title (podpowiedź byłaby osobnym oknem), przed nazwą bloku', () => {
+    const out = html(dayView({ allDay }), 'desktop')
+    expect(out).toContain('data-testid="bar-allday"')
+    expect(out).toContain('data-testid="bar-allday-text"')
+    expect(out).toContain('Konferencja +1')
+    expect(out).not.toContain('Urlop')
+    expect(out).toContain('background:#79AFAB')
+    expect(out).not.toContain('title=')
+    expect(out.indexOf('bar-allday"')).toBeLessThan(out.indexOf('data-testid="bar-block"'))
+  })
+
+  it('po najechaniu (stan otwarty) pokazuje wszystkie tytuły w miejscu', () => {
+    const out = renderToStaticMarkup(createElement(AllDayLabel, { allDay, open: true }))
+    expect(out).toContain('data-open="on"')
+    expect(out).toContain('Konferencja · Urlop')
+  })
+
+  it('podpis stoi też, gdy w pasku biegnie prośba bez bloku (RequestLine), i przy bloku', () => {
+    const running = { id: 'p1', day: '2026-10-21', mode: 'urgent' as const, person: 'Mama', from: Date.now(), estimateMin: null }
+    const out = html(dayView({ allDay, requests: { people: [], running, interrupted: null } }), 'desktop')
+    expect(out).toContain('data-testid="bar-request"')
+    expect(out).toContain('data-testid="bar-allday"')
+    expect(out).toContain('Konferencja +1')
+    expect(html(dayView({ allDay, block: { name: 'Praca', className: 'Praca', endsAt: null } }), 'desktop')).toContain('data-testid="bar-allday"')
+    const noLabel = html(dayView({ requests: { people: [], running, interrupted: null } }), 'desktop')
+    expect(noLabel).not.toContain('bar-allday')
+  })
+
+  it('najechanie nie zmienia wysokości wiersza: pełne tytuły w jednym wierszu (bez zawijania), nadmiar ucięty', () => {
+    for (const open of [false, true]) {
+      const out = renderToStaticMarkup(createElement(AllDayLabel, { allDay, open }))
+      expect(out).not.toContain('whitespace-normal')
+      expect(out).not.toContain('break-words')
+      expect(out).toContain('truncate')
+    }
+  })
+
+  it('po najechaniu podpis nie jest węższy niż bez najechania: nie kurczy się (shrink-0), rośnie tylko jego górna granica', () => {
+    const off = renderToStaticMarkup(createElement(AllDayLabel, { allDay, open: false }))
+    const on = renderToStaticMarkup(createElement(AllDayLabel, { allDay, open: true }))
+    // A neighbour without `flex-1` (the request line) would leave a flexible label narrower than it was.
+    const root = (s: string) => /^<span class="([^"]*)"/.exec(s)?.[1] ?? ''
+    expect(root(off).split(' ')).toContain('shrink-0')
+    expect(root(on).split(' ')).toContain('shrink-0')
+    expect(root(on)).not.toMatch(/flex-\[/)
+    const cap = (s: string) => Number(/max-w-\[(\d+)%\]/.exec(root(s))?.[1])
+    expect(cap(on)).toBeGreaterThan(cap(off))
+  })
+
+  it('bez wydarzeń dziś pasek wygląda jak dotąd; okno główne i panel podpisu nie mają', () => {
+    expect(html(dayView(), 'desktop')).not.toContain('bar-allday')
+    for (const mode of ['main', 'panel'] as const) expect(html(dayView({ allDay }), mode)).not.toContain('bar-allday')
+    expect(html(dayView(), 'desktop')).toBe(html(dayView({ allDay: null }), 'desktop'))
   })
 })

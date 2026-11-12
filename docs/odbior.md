@@ -133,6 +133,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] L1.2 „Tylko to · To i następne · Cała seria” przy zmianie i usunięciu
    - [ ] L1.3 Dni szczególne – „Wolne” bez wystąpienia, zjazd i dzień regeneracyjny – pytanie w planie porannym
    - [ ] L1.4 Lista serii w „Szablonach”, „Zakończ serię”, „Usuń serię” i Ctrl K
+   - [ ] HKU1.1 Pas całodniowy w „Dziś” – nowe wydarzenie, edycja, usunięcie i „Cofnij”
+   - [ ] HKU1.2 Wielodniowe w „Tygodniu” – belka przez kolumny, „+N więcej”, ‹ / ›
+   - [ ] HKU1.3 „To wolne” – pytanie o typ dnia „Wolne” i „Cofnij”
+   - [ ] HKU1.4 Miesiąc, plan poranny i Ctrl K
+   - [ ] HKU1.5 Podpis wydarzenia na pasku pulpitu (Tylko Ty – pasek na pulpicie)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1877,3 +1882,73 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   wynik (nie każde wystąpienie) i otwiera ją na liście.
 - **Nie przechodzi, gdy:** seria jest na liście kilka razy, zakończona albo usunięta dalej daje wystąpienia od dziś,
   usunięcie zmienia dni minione, albo Ctrl K pokazuje każde wystąpienie osobno.
+
+### HKU1 – wydarzenia całodniowe i wielodniowe (1.13.0)
+
+#### HKU1.1 Pas całodniowy w „Dziś” – nowe wydarzenie, edycja, usunięcie i „Cofnij” (1.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/all-day.test.ts`, `tests/unit/engine/all-day.test.ts` (dzień z wydarzeniem i bez –
+  ten sam budżet i regeneracja), `tests/web/all-day-bar.test.ts`, `tests/e2e/allday.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” kliknij w puste miejsce cienkiego pasa nad osią. Wpisz tytuł „Urodziny”, wybierz kolor,
+  w notatce pogrub słowo, „Zapisz”. Kliknij w wolny rząd pod belką i dodaj drugie wydarzenie. Kliknij w „Urodziny”,
+  zmień tytuł, „Zapisz”; potem otwórz je jeszcze raz i „Usuń”, a na górze strony „Cofnij”. Spójrz na podsumowanie dnia
+  przed dodaniem i po dodaniu.
+- **Oczekiwany efekt:** pas jest zawsze, także bez wydarzeń; wydarzenie stoi w nim w wybranym kolorze, a pod belkami
+  zostaje wolny rząd do kliknięcia; notatka zapisuje się z formatowaniem; po „Usuń” wydarzenie znika od razu i na górze
+  „Dziś” stoi „Usunięto „…” · Cofnij” (do 15 min), „Cofnij” przywraca wydarzenie w całości; budżet pracy, regeneracja
+  i granica w podsumowaniu dnia są takie same jak przed dodaniem (D405, D407).
+- **Nie przechodzi, gdy:** pasa nie ma bez wydarzeń, drugiego wydarzenia nie da się dodać kliknięciem, wydarzenie
+  pojawia się na osi godzin, „Cofnij” nie przywraca notatki albo koloru, albo zmienia się budżet lub regeneracja.
+
+#### HKU1.2 Wielodniowe w „Tygodniu” – belka przez kolumny, „+N więcej”, ‹ / › (1.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/all-day-bar.test.ts` (rzędy, „+N”, ‹ ›), `tests/e2e/allday.spec.ts` (przeciągnięcie
+  przez 3 dni). Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” przeciągnij po pasie od środy do piątku i zapisz „Konferencja”. Dodaj jeszcze cztery
+  wydarzenia na czwartek. Dodaj wydarzenie od niedzieli do wtorku następnego tygodnia. Przewiń siatkę w dół i przejdź
+  strzałką na następny tydzień.
+- **Oczekiwany efekt:** „Konferencja” to jedna belka przez trzy kolumny, równo z nagłówkami dni; w czwartku najwyżej
+  3 rzędy belek, reszta jako „+N więcej” – kliknięcie rozwija wszystkie rzędy, drugie zwija; wydarzenie przez koniec
+  tygodnia ma › w niedzielę, a w następnym tygodniu ‹ i ciągnie się od poniedziałku do wtorku; pas zostaje u góry przy
+  przewijaniu, pod nagłówkami dni.
+- **Nie przechodzi, gdy:** wielodniowe jest kilkoma osobnymi kawałkami, belki rozjeżdżają się z kolumnami, „+N” nie
+  rozwija albo liczy źle, brak ‹ / ›, albo pas przewija się razem z godzinami.
+
+#### HKU1.3 „To wolne” – pytanie o typ dnia „Wolne” i „Cofnij” (1.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/all-day.test.ts` (dni przyszłe, dni zamknięte i już „Wolne” pominięte, porcje po 62
+  dni, konflikt), `tests/web/all-day-card-save.test.ts`, `tests/e2e/allday.spec.ts` („Nie”, „Tak”, „Cofnij”). Okno
+  zmiany typu dla dziś – Ty (bez testu E2E dnia już utworzonego).
+- **Jak sprawdzić:** dodaj wydarzenie od jutra na 3 dni z „To wolne”, „Zapisz”. Najpierw „Nie”; zmień tylko tytuł
+  i zapisz; potem wyłącz i włącz „To wolne”, zapisz i „Tak”. Zajrzyj do „Kalendarza”, potem „Cofnij” na górze strony.
+  Na koniec dodaj wydarzenie „To wolne” od dziś do jutra i „Tak”.
+- **Oczekiwany efekt:** po pierwszym zapisie pod kartą „Ustawić typ dnia „Wolne” na <dni>? · Tak · Nie”; po samej
+  zmianie tytułu – bez pytania; po „Tak” trzy dni są „Wolne” w „Kalendarzu”, na górze linia z „Cofnij”, które przywraca
+  poprzednie typy; z dziś w zakresie jutro zmienia się od razu, a dla dziś otwiera się zwykłe okno zmiany typu dnia
+  z „Wolne” (D405–D407).
+- **Nie przechodzi, gdy:** typ dnia zmienia się bez „Tak”, pytanie pada po samej zmianie tytułu, pytanie obejmuje dni
+  minione albo zamknięte, „Cofnij” nie przywraca wszystkich dni, albo dziś zmienia się bez okna zmiany typu.
+
+#### HKU1.4 Miesiąc, plan poranny i Ctrl K (1.13.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/morning-allday.test.ts`, `tests/web/search-palette.test.ts`, `tests/e2e/allday.spec.ts`
+  (Ctrl K → „Tydzień” z kartą). Ty: rzut oka.
+- **Jak sprawdzić:** z wydarzeniami z HKU1.2 otwórz „Kalendarz”. W dniu „Konferencji” spójrz na kartę planu porannego.
+  Naciśnij Ctrl K, wpisz „konf” albo słowo z notatki, Enter.
+- **Oczekiwany efekt:** komórki dni miesiąca mają kropkę w kolorze i pierwsze wydarzenie, przy kilku „+N”, pełna lista
+  po najechaniu; plan poranny ma jedną linię „Dziś: Konferencja (2/3)” bez pytania; Ctrl K pokazuje wydarzenie w grupie
+  „Wydarzenia” z datami („18–20.11”), Enter otwiera „Tydzień” z dniem początku i otwartą kartą edycji.
+- **Nie przechodzi, gdy:** miesiąc nie pokazuje wydarzeń, plan poranny pyta o wydarzenie albo nie ma linii, Ctrl K nie
+  znajduje po notatce, albo Enter otwiera zły tydzień lub bez karty.
+
+#### HKU1.5 Podpis wydarzenia na pasku pulpitu (1.13.0)
+- [ ] Odebrane
+- **Tylko Ty:** wygląd paska na Twoim pulpicie. Automatycznie: `tests/unit/bar-all-day.test.ts`,
+  `tests/web/bar-render.test.ts`, `tests/e2e/allday.spec.ts` (podpis i ta sama wysokość po najechaniu).
+- **Jak sprawdzić:** z wydarzeniem na dziś o długim tytule (ponad 20 znaków) i drugim wydarzeniem spójrz na pasek
+  pulpitu; najedź na podpis; uruchom blok, potem prośbę; usuń oba wydarzenia.
+- **Oczekiwany efekt:** z lewej strony paska kropka w kolorze i tytuł skrócony do ok. 20 znaków z „+1”; po najechaniu
+  pełne tytuły w tym samym wierszu, pasek nie zmienia wysokości ani położenia; podpis zostaje przy biegnącym bloku
+  i prośbie; bez wydarzeń pasek wygląda jak przed 1.13.0 (D405).
+- **Nie przechodzi, gdy:** podpis wypycha przyciski paska, pasek skacze albo rośnie po najechaniu, podpis znika przy
+  prośbie, albo po usunięciu wydarzeń zostaje puste miejsce.

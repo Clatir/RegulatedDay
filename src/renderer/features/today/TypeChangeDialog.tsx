@@ -26,10 +26,10 @@ import { saveDay } from './dayActions'
 
 const POOL_NAMES = { head: 'głowa', emotions: 'emocje', senses: 'bodźce' } as const
 
-export function TypeChangeDialog({ model, names, isToday, onlyAdd, onClose }: { model: DayModel; names: Names; isToday: boolean; onlyAdd?: boolean; onClose: () => void }) {
+export function TypeChangeDialog({ model, names, isToday, onlyAdd, initialTo, onClose }: { model: DayModel; names: Names; isToday: boolean; onlyAdd?: boolean; /** The new type already chosen: the step after it (the proposals) opens at once (D406: „Wolne” after an all-day event). */ initialTo?: DayTypeId; onClose: () => void }) {
   const rd = useData((s) => s.rd)
   const current = model.state.facts.snapshots.at(-1)?.dayType ?? model.snapshot.dayType
-  const [to, setTo] = useState<DayTypeId | null>(onlyAdd ? current : null)
+  const [to, setTo] = useState<DayTypeId | null>(onlyAdd ? current : (initialTo ?? null))
   const date = model.date
   const raw = model.data.dayFile
   const duringDay = isToday && model.fromLog
