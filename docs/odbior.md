@@ -138,6 +138,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] HKU1.3 „To wolne” – pytanie o typ dnia „Wolne” i „Cofnij”
    - [ ] HKU1.4 Miesiąc, plan poranny i Ctrl K
    - [ ] HKU1.5 Podpis wydarzenia na pasku pulpitu (Tylko Ty – pasek na pulpicie)
+   - [ ] SNT4.1 Plik z Eksploratora na panel bloku i kafelek osi (Tylko Ty – Eksplorator)
+   - [ ] SNT4.2 Linki – „Dodaj link”, Ctrl V, przeciągnięcie z przeglądarki, tytuł ze strony (Tylko Ty – przeglądarka, sieć)
+   - [ ] SNT4.3 Otwieranie – plik, program w folderze, „Otwórz wszystko”
+   - [ ] SNT4.4 Załączniki szablonu i serii w wystąpieniach, usunięcie i „Cofnij”
+   - [ ] SNT4.5 Załącznik na drugim komputerze (Tylko Ty – OneDrive)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -1952,3 +1957,66 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   i prośbie; bez wydarzeń pasek wygląda jak przed 1.13.0 (D405).
 - **Nie przechodzi, gdy:** podpis wypycha przyciski paska, pasek skacze albo rośnie po najechaniu, podpis znika przy
   prośbie, albo po usunięciu wydarzeń zostaje puste miejsce.
+
+### SNT4 – załączniki i linki w blokach (1.15.0)
+
+#### SNT4.1 Plik z Eksploratora na panel bloku i kafelek osi (1.15.0)
+- [ ] Odebrane
+- **Tylko Ty:** przeciąganie z Eksploratora Windows (testy: `tests/web/attach-drop.test.ts`, `attach-timeline.test.ts`,
+  `tests/fs/attachments.test.ts`, E2E `attachments.spec.ts` przez „Dołącz plik…”).
+- **Jak sprawdzić:** w „Dziś” kliknij blok, przeciągnij z Eksploratora jeden plik PDF na panel bloku, potem dwa pliki
+  naraz (PDF i zrzut ekranu PNG) na kafelek innego bloku na osi. Upuść plik obok panelu, w pustym miejscu okna. Otwórz
+  folder danych → `attachments`.
+- **Oczekiwany efekt:** kafelek podświetla się przy przeciąganiu; w sekcji „Załączniki” pozycje z nazwą i rozmiarem
+  (KB/MB), PNG z miniaturą; na kafelku 📎1 i 📎2; w `attachments` folder na każdy plik z jego kopią, oryginał na pulpicie
+  bez zmian; upuszczenie obok niczego nie robi; przeciąganie bloków i ich krawędzi działa jak dotąd (D410).
+- **Nie przechodzi, gdy:** okno przechodzi na podgląd pliku po upuszczeniu, plik nie trafia do `attachments`, znaczek
+  📎 nie pojawia się, albo przeciągnięcie bloku po osi przestaje działać.
+
+#### SNT4.2 Linki – „Dodaj link”, Ctrl V, przeciągnięcie z przeglądarki, tytuł ze strony (1.15.0)
+- [ ] Odebrane
+- **Tylko Ty:** prawdziwa przeglądarka i sieć (testy: `tests/unit/link-fetch.test.ts`, `attachments.test.ts` – parser,
+  adresy; E2E – link z domeną bez sieci).
+- **Jak sprawdzić:** w panelu bloku „Dodaj link”, wpisz `github.com/Clatir/RegulatedDay`, Enter. Skopiuj adres strony
+  z przeglądarki, kliknij kafelek bloku i Ctrl V (poza polem notatki). Przeciągnij link z paska adresu przeglądarki na
+  kafelek. Wpisz w „Dodaj link” `javascript:alert(1)`. Kliknij nazwę linku i ją zmień. Ctrl V adresu w polu notatki.
+- **Oczekiwany efekt:** link dodaje się od razu z domeną, po chwili dostaje tytuł i ikonę strony; Ctrl V i przeciągnięcie
+  dodają link; `javascript:` daje komunikat i nic nie dodaje; zmieniona nazwa zostaje; w notatce Ctrl V wkleja zwykły
+  tekst (D410).
+- **Nie przechodzi, gdy:** tytuł nigdy się nie pojawia dla zwykłej strony (np. github.com, google.com), `javascript:`
+  albo `file:` zostaje dodany, albo Ctrl V w notatce dodaje link zamiast tekstu.
+
+#### SNT4.3 Otwieranie – plik, program w folderze, „Otwórz wszystko” (1.15.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/attachments.test.ts` (lista programów, adresy), `tests/fs/attachments.test.ts`
+  (ścieżka w `attachments/<id>/`). Ty: rzut oka.
+- **Jak sprawdzić:** kliknij PDF, potem link, potem dołącz mały `.exe` (np. instalator) i go kliknij. W bloku z trzema
+  załącznikami „Otwórz wszystko (3)”. Przy pliku „Pokaż w folderze”.
+- **Oczekiwany efekt:** PDF w domyślnym programie, link w przeglądarce; `.exe` ma dopisek „Program – kliknięcie pokaże go
+  w folderze.” i otwiera Eksplorator z zaznaczonym plikiem, nic się nie uruchamia; „Otwórz wszystko” otwiera wszystkie
+  (D410).
+- **Nie przechodzi, gdy:** `.exe` (albo `.bat`, `.msi`) się uruchamia, link otwiera się w oknie aplikacji, albo
+  „Otwórz wszystko” otwiera tylko pierwszy.
+
+#### SNT4.4 Załączniki szablonu i serii w wystąpieniach, usunięcie i „Cofnij” (1.15.0)
+- [ ] Odebrane
+- **Automatycznie:** E2E `attachments.spec.ts` (seria w wystąpieniu, usunięcie i „Cofnij”), `tests/unit/attachments.test.ts`
+  (`attachmentsOfBlock`), `tests/fs/attachments.test.ts` (sprzątanie po 30 dniach). Ty: rzut oka.
+- **Jak sprawdzić:** w „Szablonach” dołącz plik do bloku szablonu, w edycji serii – link. Otwórz dzień jutrzejszy
+  i blok z szablonu oraz wystąpienie serii. W „Dziś” dołącz plik do wystąpienia serii. Usuń załącznik i „Cofnij”; usuń
+  blok z załącznikiem w „Dziś” i „Cofnij”.
+- **Oczekiwany efekt:** w dniu widać załączniki z szablonu i serii z dopiskiem „z szablonu” / „z serii” (tylko otwórz
+  i pokaż w folderze); dodany w „Dziś” jest tylko w tym dniu; „Cofnij” przywraca załącznik i blok z jego załącznikami
+  (D410, D411, D414).
+- **Nie przechodzi, gdy:** załącznik szablonu nie widać w dniu z tego szablonu, dodany w dniu pojawia się w innych dniach
+  serii, albo po „Cofnij” bloku jego załączników nie ma.
+
+#### SNT4.5 Załącznik na drugim komputerze (1.15.0)
+- [ ] Odebrane
+- **Tylko Ty:** OneDrive i dwa komputery (testy: `tests/fs/attachments.test.ts` – plik po rekordzie, brak pliku).
+- **Jak sprawdzić:** na komputerze A dołącz zdjęcie (kilka MB) do bloku. Od razu otwórz ten blok na komputerze B,
+  potem jeszcze raz po zsynchronizowaniu OneDrive.
+- **Oczekiwany efekt:** na B najpierw pozycja z dopiskiem „Plik jeszcze nie dotarł z drugiego komputera (OneDrive).”,
+  kliknięcie daje komunikat, nie błąd; po dotarciu pliku dopisek znika, jest miniatura i plik się otwiera (D410).
+- **Nie przechodzi, gdy:** na B nie ma pozycji wcale, kliknięcie przed dotarciem daje błąd albo zawiesza aplikację,
+  albo po dotarciu dopisek zostaje.

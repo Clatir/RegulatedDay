@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.15.0
+- Załączniki w blokach: w panelu bloku („Dziś”, „Szablony”, edycja serii) jest sekcja „Załączniki”. Plik dołączasz, przeciągając go z Eksploratora na panel albo na kafelek bloku na osi „Dziś”, albo przyciskiem „Dołącz plik…”. Plik kopiuje się do folderu danych (`attachments/`), więc OneDrive przenosi go na drugi komputer; oryginał zostaje, gdzie był.
+- Linki: „Dodaj link”, Ctrl V adresu w panelu albo przeciągnięcie linku z przeglądarki. Aplikacja pobiera ze strony jej tytuł i ikonę (tytuł możesz zmienić). Otwierają się tylko adresy http, https i mailto.
+- Kliknięcie otwiera plik w domyślnym programie Windows, a link w przeglądarce; „Otwórz wszystko (N)” otwiera wszystkie naraz. Program (.exe, .bat, .msi i podobne) się nie uruchamia – aplikacja pokazuje go w folderze.
+- Obrazy mają miniaturę, inne pliki – ikonę rodzaju, nazwę i rozmiar. Na kafelku bloku w „Dziś”, „Szablonach” i „Tygodniu” znaczek 📎 z liczbą.
+- Załączniki dodane w szablonie albo w edycji serii widać we wszystkich wystąpieniach; dodane w „Dziś” – tylko w tym dniu. Plik, który jeszcze nie dotarł z drugiego komputera, ma dopisek.
+- Usunięcie bez pytania, z „Cofnij”; plik zostaje w folderze jeszcze 30 dni, potem aplikacja go kasuje. Kopie zapasowe mają listę załączników, a same pliki – kopia tygodniowa i kopia przed aktualizacją (do 1 GB).
+
 ## 1.13.0
 - Wydarzenia całodniowe i wielodniowe (urlop, wyjazd, konferencja, urodziny): nad osią „Dziś” i nad siatką „Tygodnia” jest cienki pas. Kliknięcie w jego puste miejsce otwiera kartę nowego wydarzenia, w „Tygodniu” możesz też przeciągnąć przez kilka dni. Kliknięcie w wydarzenie otwiera edycję.
 - Karta: tytuł, daty od i do, jeden z 6 kolorów, notatka z formatowaniem jak w bloku i pole „To wolne (urlop, wyjazd)”. Wydarzenie wielodniowe rysuje się w „Tygodniu” jedną belką przez kolumny; najwyżej 3 rzędy, reszta jako „+N więcej”, a ‹ / › mówią, że wydarzenie trwa poza tym tygodniem.
