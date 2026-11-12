@@ -8,7 +8,10 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RawRecord, ZjazdSaveResult, ZjazdUndoDay } from '@shared/api'
+import { marketDay } from '@shared/calendar/holidays'
 import { dayRaw } from '@shared/data/dayEdits'
+import { seriesOnDay } from '@shared/engine/series'
+import { SERIES_MARK } from '@shared/seriesText'
 import { zjazdTypeRaw } from '@shared/import/zjazdDay'
 import { paths } from '@shared/data/paths'
 import { sessionShiftMin, sessionWindow } from '@shared/engine/createDay'
@@ -80,6 +83,8 @@ export function CalendarPage() {
     }))
       marks.push('sesje −1 h')
     if (own?.wakeMin != null) marks.push(`pobudka ${logicalClock(own.wakeMin)}`)
+    // A day with an occurrence of a series (D404) – the grid shows no blocks, only the mark.
+    if (seriesOnDay(seriesPlans, d, type, own, marketDay)) marks.push(SERIES_MARK)
     return { type, own: own?.dayType != null, marks, title: holidays.names.join(', ') || undefined }
   }
 

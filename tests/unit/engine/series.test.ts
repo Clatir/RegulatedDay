@@ -20,6 +20,7 @@ import {
   newSeries,
   seriesAnswerRaw,
   seriesBlockId,
+  seriesOnDay,
   seriesQuestions,
   splitAt,
   todayOccurrenceEdit,
@@ -393,5 +394,26 @@ describe('opis reguły słowami (D401)', () => {
     const s = make('fizjo', { kind: 'weekly', every: 2, days: [4], anchor: '' }, '2026-11-12', { until: '2027-04-30' })
     expect(seriesText(s, '2026-11-12')).toBe('co 2 tygodnie w czwartek, do 30.04.2027')
     expect(weekday('2026-11-12')).toBe(4)
+  })
+})
+
+describe('znak serii w siatce miesiąca (D404)', () => {
+  const s = make('fizjo', { kind: 'weekly', every: 1, days: [4], anchor: '' }, '2026-11-12')
+  const plans = plansOf([s])
+  const id = seriesBlockId('2026-11-19', 'fizjo')
+  it('dzień z wystąpieniem ma znak, dzień bez wystąpienia – nie', () => {
+    expect(seriesOnDay(plans, '2026-11-19', 'zwykly', null, marketDay)).toBe(true)
+    expect(seriesOnDay(plans, '2026-11-18', 'zwykly', null, marketDay)).toBe(false)
+  })
+  it('odwołane i przeniesione wystąpienie – bez znaku; dzień, do którego przeniesione – ze znakiem', () => {
+    const cancelled = dayFileFrom(setCancelled({}, id, true), '2026-11-19')
+    expect(seriesOnDay(plans, '2026-11-19', 'zwykly', cancelled, marketDay)).toBe(false)
+    const moved = { ...dayFileFrom({}, '2026-11-19'), movedTo: { [id]: '2026-11-20' } }
+    expect(seriesOnDay(plans, '2026-11-19', 'zwykly', moved, marketDay)).toBe(false)
+    const target = dayFileFrom(putBlock({}, planBlock({ id, categoryId: 'inne', durationMin: 60, startMin: lm('17:00'), origin: 'series', sourceId: 'fizjo' })), '2026-11-20')
+    expect(seriesOnDay(plans, '2026-11-20', 'zwykly', target, marketDay)).toBe(true)
+  })
+  it('„Wolne” pomija wystąpienie – bez znaku', () => {
+    expect(seriesOnDay(plans, '2026-11-19', 'wolne', null, marketDay)).toBe(false)
   })
 })

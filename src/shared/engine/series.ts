@@ -290,3 +290,14 @@ export function todayOccurrenceEdit(raw: Raw | null, today: TodayDay, id: string
   }
   return after
 }
+
+/**
+ * Whether a day of the month grid shows the mark of a series (D404): an occurrence the rule puts on it that its file has
+ * not cancelled nor moved away, or an occurrence moved to it („Tylko to”). Counted from the files as they are – a cheap
+ * mark, without a snapshot of the day.
+ */
+export function seriesOnDay(plans: readonly SeriesPlan[], date: string, dayType: DayTypeId, dayFile: DayFile | null, holidays: PlHolidays): boolean {
+  if (dayFile?.blocks.some((b) => b.origin === 'series')) return true
+  const gone = new Set([...(dayFile?.cancelled ?? []), ...Object.keys(dayFile?.movedTo ?? {})])
+  return seriesBlocks(plans, date, dayType, holidays).some((b) => !gone.has(b.id))
+}
