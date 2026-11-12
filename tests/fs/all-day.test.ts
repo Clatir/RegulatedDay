@@ -13,7 +13,7 @@ import type { RawRecord, RdApi } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
 import { createDay } from '@shared/engine/createDay'
-import { allDayDraft, type AllDayEvent, type FreeDayInfo } from '@shared/model/allDay'
+import { allDayDraft, freeCandidateDays, type AllDayEvent, type FreeDayInfo } from '@shared/model/allDay'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { DataFolder } from '../../src/main/data/folder'
@@ -30,14 +30,14 @@ type FreeChange = { days: Array<{ date: string }> }
 const { reloadData, useData } = await load<{ reloadData: () => Promise<void>; useData: { getState: () => { allDay: AllDayEvent[] } } }>('../../src/renderer/store/data')
 const { useUi } = await load<{ useUi: { getState: () => { toasts: Toast[] }; setState: (s: { toasts: Toast[] }) => void } }>('../../src/renderer/store/ui')
 const { saveAllDay, removeAllDay, restoreAllDay } = await load<{
-  saveAllDay: (e: AllDayEvent, base?: AllDayEvent | null) => Promise<boolean>
+  saveAllDay: (e: AllDayEvent, base?: AllDayEvent | null) => Promise<AllDayEvent | null>
   removeAllDay: (id: string) => Promise<RawRecord | null>
   restoreAllDay: (raw: RawRecord) => Promise<boolean>
 }>('../../src/renderer/store/allDay')
 const { freeDayInfos, askFreeDays, setFreeDays, undoFreeDays, undoFreeLine } = await load<{
   freeDayInfos: (dates: string[], today: string) => Promise<Record<string, FreeDayInfo & { duringDay: boolean }>>
   askFreeDays: (e: AllDayEvent, today: string) => Promise<string[]>
-  setFreeDays: (dates: string[], today: string) => Promise<{ saved: boolean; change: FreeChange | null; duringDay: string | null; unreadable: string[] }>
+  setFreeDays: (dates: string[], today: string) => Promise<{ saved: boolean; asked: boolean; change: FreeChange | null; duringDay: string | null; unreadable: string[] }>
   undoFreeLine: (seq: number) => Promise<void>
   undoFreeDays: (change: FreeChange) => Promise<{ saved: boolean; undone: string[]; changed: string[]; unreadable: string[] }>
 }>('../../src/renderer/features/allday/freeDays')
@@ -180,29 +180,40 @@ describe('wydarzenia w oknie', () => {
 
   it('zapis z okna: nowe wydarzenie; zmiana pola zostawia nieznane pola i zmianę z innego komputera', async () => {
     const e = event('k1', '2026-11-18', '2026-11-20')
-    expect(await saveAllDay(e)).toBe(true)
+    expect(await saveAllDay(e)).not.toBeNull()
     expect(read(rel('k1'))).toMatchObject({ schema: 1, id: 'k1', title: 'Konferencja', startDate: '2026-11-18', endDate: '2026-11-20', calendarId: null, color: 'amber', note: '', free: false })
     // Another computer added a field this version does not know and changed the note meanwhile.
     write(rel('k1'), { ...read(rel('k1')), extra: { a: 1 }, note: 'sala 2' })
     await reloadData()
-    expect(await saveAllDay({ ...e, title: 'Konferencja PTE' }, e)).toBe(true)
+    expect(await saveAllDay({ ...e, title: 'Konferencja PTE' }, e)).not.toBeNull()
     expect(read(rel('k1'))).toMatchObject({ title: 'Konferencja PTE', note: 'sala 2', extra: { a: 1 } })
     expect((await hub.view()).questions).toEqual([])
   })
 
+  it('zapis oddaje rekord po zapisie – z polami z innego komputera, które karta zostawiła (od niego liczy się pytanie „Wolne”)', async () => {
+    const e = event('k1', '2026-11-18', '2026-11-20')
+    expect(await saveAllDay(e)).toMatchObject({ id: 'k1', endDate: '2026-11-20', free: false })
+    // Another computer extended the event meanwhile; this window turns „To wolne” on and leaves the days alone.
+    write(rel('k1'), { ...read(rel('k1')), endDate: '2026-11-25' })
+    await reloadData()
+    const saved = await saveAllDay({ ...e, free: true }, e)
+    expect(saved).toMatchObject({ id: 'k1', startDate: '2026-11-18', endDate: '2026-11-25', free: true })
+    expect(freeCandidateDays(saved!, '2026-11-18')).toHaveLength(8)
+  })
+
   it('pusty tytuł albo „do” przed „od”: nic nie zapisane, komunikat', async () => {
-    expect(await saveAllDay(event('k1', '2026-11-18', '2026-11-18', { title: '  ' }))).toBe(false)
-    expect(await saveAllDay(event('k2', '2026-11-18', '2026-11-18', { endDate: '2026-11-17' }))).toBe(false)
+    expect(await saveAllDay(event('k1', '2026-11-18', '2026-11-18', { title: '  ' }))).toBeNull()
+    expect(await saveAllDay(event('k2', '2026-11-18', '2026-11-18', { endDate: '2026-11-17' }))).toBeNull()
     expect(existsSync(join(dir, 'allday'))).toBe(false)
     expect(useUi.getState().toasts.filter((t) => t.kind === 'error').map((t) => t.text)).toEqual(['Wpisz tytuł wydarzenia.', 'Data „do” nie może być przed datą „od”.'])
   })
 
   it('zmiana wydarzenia usuniętego w międzyczasie: nic nie wraca, komunikat', async () => {
     const e = event('k1', '2026-11-18')
-    expect(await saveAllDay(e)).toBe(true)
+    expect(await saveAllDay(e)).not.toBeNull()
     rmSync(join(dir, rel('k1')))
     await reloadData()
-    expect(await saveAllDay({ ...e, title: 'Inny' }, e)).toBe(false)
+    expect(await saveAllDay({ ...e, title: 'Inny' }, e)).toBeNull()
     expect(existsSync(join(dir, rel('k1')))).toBe(false)
     expect(useUi.getState().toasts.some((t) => t.text.includes('już nie ma'))).toBe(true)
   })
@@ -226,7 +237,7 @@ describe('wydarzenia w oknie', () => {
   })
 
   it('usunięcie wydarzenia już usuniętego (gdzie indziej): nic się nie dzieje, komunikat jak przy zapisie', async () => {
-    expect(await saveAllDay(event('k1', '2026-11-18'))).toBe(true)
+    expect(await saveAllDay(event('k1', '2026-11-18'))).not.toBeNull()
     rmSync(join(dir, rel('k1')))
     await reloadData()
     useUi.setState({ toasts: [] })
@@ -298,6 +309,77 @@ describe('„To wolne” – typ „Wolne” na dni wydarzenia (D405)', () => {
   })
 })
 
+describe('wydarzenie na wiele dni – dayFiles czyta najwyżej 62 dni naraz', () => {
+  it('100 dni od jutra: pytanie i „Tak” obejmują wszystkie 100 dni, czytane porcjami po najwyżej 62', async () => {
+    const t = today()
+    const e = event('dl', addDays(t, 1), addDays(t, 100), { free: true })
+    const rd = (globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd
+    const sizes: number[] = []
+    const read = rd.dayFiles!
+    rd.dayFiles = async (dates) => {
+      sizes.push(dates.length)
+      return read(dates)
+    }
+    const asked = await askFreeDays(e, t)
+    expect(asked).toHaveLength(100)
+    const r = await setFreeDays(asked, t)
+    expect(r.unreadable).toEqual([])
+    expect(r.change!.days).toHaveLength(100)
+    expect(dayOf(addDays(t, 100))?.dayType).toBe('wolne')
+    expect(dayOf(addDays(t, 63))?.dayType).toBe('wolne')
+    expect(useUi.getState().toasts.filter((x) => x.kind === 'error')).toEqual([])
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(62)
+  })
+
+  it('dziś i 62 następne dni: żaden nie jest „nieczytelny”; dzień bez klucza w odpowiedzi (też poza pierwszą porcją) – nieczytelny, reszta zapisana', async () => {
+    const t = today()
+    const dates = [t, ...Array.from({ length: 62 }, (_, i) => addDays(t, i + 1))]
+    const r = await setFreeDays(dates, t)
+    expect(r.unreadable).toEqual([])
+    // Every day to come is written (today too, unless it is „Wolne” by its weekday already).
+    expect(r.change!.days.map((d) => d.date)).toEqual(expect.arrayContaining(dates.filter((d) => d !== t)))
+    const rd = (globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd
+    const read = rd.dayFiles!
+    rd.dayFiles = async (list) => {
+      const files = await read(list)
+      delete files[addDays(t, 80)]
+      return files
+    }
+    const later = Array.from({ length: 30 }, (_, i) => addDays(t, 70 + i))
+    const r2 = await setFreeDays(later, t)
+    expect(r2.unreadable).toEqual([addDays(t, 80)])
+    expect(r2.change!.days).toHaveLength(29)
+  })
+})
+
+describe('pytanie „Wolne” – dziś tylko, gdy da się je przeczytać drogą „Tak”', () => {
+  it('dziś bez klucza w odpowiedzi dayFiles: dziś nie trafia do pytania (dayData dałoby je odczytać, „Tak” nie)', async () => {
+    const t = today()
+    const rd = (globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd
+    const read = rd.dayFiles!
+    rd.dayFiles = async (dates) => {
+      const files = await read(dates)
+      delete files[t]
+      return files
+    }
+    expect((await freeDayInfos([t, addDays(t, 1)], t))[t]).toBeUndefined()
+    expect(await askFreeDays(event('u', t, addDays(t, 1), { free: true }), t)).toEqual([addDays(t, 1)])
+    rd.dayFiles = read
+    expect(await askFreeDays(event('u', t, addDays(t, 1), { free: true }), t)).toEqual([t, addDays(t, 1)])
+  })
+})
+
+describe('„Tak” – zapis z pytaniem konfliktu', () => {
+  it('konflikt z innym komputerem: nic nie zapisano, ale pytanie to zamknęło (asked) – bez drugiego „Tak”', async () => {
+    const t = today()
+    const rd = (globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd
+    rd.edit = async (entries) => entries.map(() => ({ status: 'conflict' as const }))
+    const r = await setFreeDays([addDays(t, 1), addDays(t, 2)], t)
+    expect(r).toMatchObject({ saved: false, asked: true, change: null, unreadable: [] })
+    expect(dayOf(addDays(t, 1))).toBeNull()
+  })
+})
+
 describe('„Tak” na pytaniu „Wolne” – dziś i dni nieczytelne', () => {
   it('brak klucza dnia w odpowiedzi dayFiles to dzień nieczytelny – także dziś: pominięty z komunikatem, plik nie powstaje; jedno wywołanie dayFiles na wszystkie dni', async () => {
     const t = today()
@@ -358,5 +440,21 @@ describe('linia „Wolne · Cofnij” – dni nieczytelne zostają na linii', ()
     await undoFreeLine(seq)
     expect(useAllDayLines.getState().lines.some((l) => l.seq === seq)).toBe(false)
     expect(dayOf(d2)).toMatchObject({ dayType: 'zwykly', wakeMin: 7 * 60 })
+  })
+
+  it('„Cofnij” zapisane tylko w części (drugi dzień z pytaniem konfliktu): linia zostaje z dniem, którego nie cofnięto', async () => {
+    const t = today()
+    const [d1, d2] = [addDays(t, 1), addDays(t, 2)]
+    write(paths.day(d2), { schema: 1, date: d2, dayType: 'zwykly', wakeMin: 7 * 60 })
+    await reloadData()
+    const r = await setFreeDays([d1, d2], t)
+    const seq = showAllDayLine('week', { kind: 'free', change: r.change! })
+    const rd = (globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd
+    // The first edit goes through, the second meets a change from another computer.
+    rd.edit = async (entries) => [...(await hub.edit([entries[0]!])), { status: 'conflict' as const }]
+    await undoFreeLine(seq)
+    expect(dayOf(d1)).toBeNull()
+    const line = useAllDayLines.getState().lines.find((l) => l.seq === seq)
+    expect(line?.change?.days.map((d) => d.date)).toEqual([d2])
   })
 })

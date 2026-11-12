@@ -23,6 +23,7 @@ import { DEFAULT_NEW_BLOCK_MIN, snapMinute, type GridRange } from '../plan/gridC
 import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { AllDayBar } from '../allday/AllDayBar'
 import { AllDayLines } from '../allday/AllDayLines'
+import { pendingCard } from '../allday/allDayView'
 import { GoalsPanel } from './GoalsPanel'
 import { WeekPushLine } from './WeekPushLine'
 import { NewBlockPopover } from './NewBlockPopover'
@@ -38,7 +39,8 @@ export function WeekPage() {
   const { view, failed } = useWeekView(week)
   const thisWeek = weekStart(today)
   // Ctrl K on an all-day event (D405, as the other results): the week of its first day, set once; its card the strip of that
-  // week opens (`card`, until it has). One that is gone says so (`takeFoundPick`).
+  // week opens (`card`, until it has). One that is gone says so (`takeFoundPick`). The ask is forgotten as soon as it cannot be
+  // met – the event gone before the week was counted, or another week shown (the arrows): the card never opens later by itself.
   const pick = useUi((s) => s.pick)
   const events = useData((s) => s.allDay)
   const [card, setCard] = useState<string | null>(null)
@@ -49,6 +51,10 @@ export function WeekPage() {
     setWeek(weekStart(e.startDate))
     setCard(e.id)
   }, [pick, events])
+  const waiting = pendingCard(card, week, events)
+  useEffect(() => {
+    if (card != null && waiting == null) setCard(null)
+  }, [card, waiting])
   return (
     <div className="flex flex-col gap-3 p-4" data-testid="week">
       <div className="flex items-center gap-2">
@@ -70,7 +76,7 @@ export function WeekPage() {
       <GoalsPanel month={goalsMonthOfWeek(week, today)} />
       {view ? (
         // Keyed by the week: another week is another grid – a window of a new block or a drag never goes with it (D371).
-        <WeekGrid key={view.days[0]?.date} days={view.days} from={view.from} to={view.to} openCard={card} onCardOpened={() => setCard(null)} />
+        <WeekGrid key={view.days[0]?.date} days={view.days} from={view.from} to={view.to} openCard={waiting} onCardOpened={() => setCard(null)} />
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="week-loading">
           {failed ? 'Nie da się teraz policzyć tego tygodnia.' : 'Liczę tydzień…'}

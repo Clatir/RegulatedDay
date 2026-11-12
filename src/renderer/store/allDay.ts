@@ -16,17 +16,22 @@ const GONE_TEXT = 'Tego wydarzenia już nie ma – usunięto je w międzyczasie.
 /** The file of an event. */
 export const allDayRel = (id: string): string => paths.record('allDay', id)
 
+/** True when the event has no record now (removed meanwhile): the card has nothing left to edit. */
+export const allDayGone = (id: string): boolean => rawRecord(allDayRel(id)) == null
+
 /**
  * An event saved: new (`base` null – created), or the fields that differ from `base` (the event as the card opened it)
- * written over the record as it is when the save's turn comes. False – nothing written: refused (the toast says why: an
- * empty title, dates the wrong way round), the event removed meanwhile, or the save did not go through.
+ * written over the record as it is when the save's turn comes. The answer is the event as it stands after the save – with the
+ * fields of another computer that the card left alone (the question „Wolne” is asked of it, not of the card's form); null –
+ * nothing written: refused (the toast says why: an empty title, dates the wrong way round), the event removed meanwhile
+ * (`allDayGone`), or the save did not go through.
  */
-export async function saveAllDay(e: AllDayEvent, base: AllDayEvent | null = null): Promise<boolean> {
+export async function saveAllDay(e: AllDayEvent, base: AllDayEvent | null = null): Promise<AllDayEvent | null> {
   const event = { ...e, title: e.title.trim() }
   const problem = allDayProblem(event)
   if (problem) {
     toast(problem, 'error', 6000)
-    return false
+    return null
   }
   const rel = allDayRel(event.id)
   let gone = false
@@ -48,9 +53,12 @@ export async function saveAllDay(e: AllDayEvent, base: AllDayEvent | null = null
   })
   if (gone) {
     toast(GONE_TEXT, 'info', 6000)
-    return false
+    return null
   }
-  return !there && isSaved(out)
+  if (there || !isSaved(out)) return null
+  // The record now (the view is read again after the write; a write waiting for the folder is in it too).
+  const now = rawRecord(rel)
+  return (now && allDayFrom(now)) ?? event
 }
 
 /**

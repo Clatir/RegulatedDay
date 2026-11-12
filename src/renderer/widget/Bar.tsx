@@ -119,15 +119,16 @@ function DragHandle() {
  * Today's all-day events at the left of the desktop bar (D405): the colour of the first one as a dot, its title cut to
  * about 20 characters with „+N” for the others. Read only – a click is the bar's own click; on hover the label shows
  * every full title in place (no tooltip: it would be a window of its own, D229). It takes its room from the block's
- * name (the flexible part): never wider than half of it, truncated; on hover it takes more of it, still one line – the
- * row never changes its height (the bar's window would be re-sized at every pass of the pointer, T748).
+ * name (the flexible part): never wider than 55% of the row, truncated; on hover only that cap rises (80%) – the label
+ * never shrinks (`shrink-0` in both states: a neighbour without `flex-1`, as in the request line, would leave it narrower),
+ * still one line – the row never changes its height (the bar's window would be re-sized at every pass of the pointer, T748).
  */
 export function AllDayLabel({ allDay, open }: { allDay: BarAllDay; open?: boolean }) {
   const [hover, setHover] = useState(false)
   const shown = open ?? hover
   return (
     <span
-      className={cx('flex min-w-0 items-center gap-1.5 text-[12px] text-fg', shown ? 'flex-[4]' : 'max-w-[55%] shrink-0')}
+      className={cx('flex min-w-0 items-center gap-1.5 text-[12px] text-fg', shown ? 'max-w-[80%] shrink-0' : 'max-w-[55%] shrink-0')}
       data-testid="bar-allday"
       data-open={shown ? 'on' : 'off'}
       onPointerEnter={() => setHover(true)}

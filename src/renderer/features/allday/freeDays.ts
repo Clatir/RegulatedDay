@@ -17,7 +17,7 @@ import { zjazdTypeRaw } from '@shared/import/zjazdDay'
 import { freeCandidateDays, freeDaysToAsk, type AllDayEvent, type FreeDayInfo } from '@shared/model/allDay'
 import { dayFileFrom } from '@shared/model/plan'
 import { settingsOn } from '@shared/model/settings'
-import { editOf, isSaved, trySaveWith, useData } from '../../store/data'
+import { editOf, isSaved, saveAnswer, trySaveWith, useData, type SendState } from '../../store/data'
 import { dropAllDayLine, narrowFreeLine, useAllDayLines } from '../../store/allDayLine'
 import { countDay, dayTypeNow, dayUsable } from '../../store/day'
 import { toast } from '../../store/ui'
@@ -46,17 +46,34 @@ function comingDay(raw: RawRecord | null, date: string): FreeDay {
   return { type: own ?? defaultDayType(date, settingsOn(useData.getState().rd.settings, date)), closed: false, duringDay: false }
 }
 
-/** The days from today among `dates` as they are now; a day that cannot be read now is not there. */
+/** The most days one `dayFiles` answers (the main process reads no more at once): a longer list goes in these portions. */
+export const DAY_FILES_MAX = 62
+
+/** The files of `dates` as `window.rd.dayFiles` gives them, read in portions of `DAY_FILES_MAX`; a day missing from the answer cannot be read now. */
+async function readDayFiles(dates: readonly string[]): Promise<Record<string, RawRecord | null>> {
+  const out: Record<string, RawRecord | null> = {}
+  for (let i = 0; i < dates.length; i += DAY_FILES_MAX) Object.assign(out, await window.rd.dayFiles(dates.slice(i, i + DAY_FILES_MAX)))
+  return out
+}
+
+/**
+ * The days from today among `dates` as they are now; a day that cannot be read now is not there – today too: it is read by
+ * the same road „Tak” reads it (`dayFiles`), so what is asked about is what „Tak” can write.
+ */
 export async function freeDayInfos(dates: readonly string[], today: string): Promise<Record<string, FreeDay>> {
   const out: Record<string, FreeDay> = {}
   const coming = [...new Set(dates)].filter((d) => d > today)
+  const withToday = dates.includes(today)
+  let files: Record<string, RawRecord | null> = {}
   try {
-    const files = coming.length ? await window.rd.dayFiles(coming) : {}
-    for (const d of coming) if (d in files) out[d] = comingDay(files[d] ?? null, d)
+    const want = withToday ? [today, ...coming] : coming
+    files = want.length ? await readDayFiles(want) : {}
   } catch {
-    /* the days to come not known now: none of them is offered */
+    /* the days not known now: none of them is offered */
+    return out
   }
-  if (dates.includes(today)) {
+  for (const d of coming) if (d in files) out[d] = comingDay(files[d] ?? null, d)
+  if (withToday && today in files) {
     const t = await todayDay(today)
     if (t) out[today] = t
   }
@@ -79,6 +96,8 @@ export interface FreeDaysChange {
 export interface FreeDaysResult {
   /** Every edit sent went through (written, or waiting for the folder). */
   saved: boolean
+  /** The save met a change from another computer (or its result is not known): it became a question at the top of the window – „Tak” again would only repeat it. */
+  asked: boolean
   /** The days written (null: none). */
   change: FreeDaysChange | null
   /** Today, made already: its change of type is the one during the day – not done here. */
@@ -89,10 +108,11 @@ export interface FreeDaysResult {
 
 /**
  * Whether the question „Wolne” may close after „Tak” answered `r`: not when nothing was written (the save failed, or every
- * day was unreadable – its toast has said why; „Tak” can be tried again). Some days written, today left to the dialog, or
- * nothing left to do (a saved answer with no day unreadable) – it closes.
+ * day was unreadable – its toast has said why; „Tak” can be tried again). Some days written, today left to the dialog, a save
+ * that became a question of its own (`asked` – the toast at the top of the window says so), or nothing left to do (a saved
+ * answer with no day unreadable) – it closes.
  */
-export const freeAnswerSettled = (r: FreeDaysResult): boolean => r.change != null || r.duringDay != null || (r.saved && r.unreadable.length === 0)
+export const freeAnswerSettled = (r: FreeDaysResult): boolean => r.change != null || r.duringDay != null || r.asked || (r.saved && r.unreadable.length === 0)
 
 const unreadableText = (dates: readonly string[]): string =>
   dates.length === 1 ? `Typ dnia ${plDateWithWeekday(dates[0]!)} się nie zmienił – plik tego dnia jest teraz nieczytelny.` : `Typ dni ${dates.map(plDateWithWeekday).join(', ')} się nie zmienił – ich pliki są teraz nieczytelne.`
@@ -107,9 +127,10 @@ export async function setFreeDays(dates: readonly string[], today: string): Prom
   const sent: FreeDaysChange['days'] = []
   const unreadable: string[] = []
   let duringDay: string | null = null
+  const state: SendState = { afterSend: false }
   const out = await trySaveWith(async () => {
-    // One read of every day's file, today's too: a day missing from the answer is one that cannot be read now – never no file.
-    const files = list.length ? await window.rd.dayFiles(list) : {}
+    // Every day's file is read in this turn, today's too (in portions of `DAY_FILES_MAX`): a day missing from the answer is one that cannot be read now – never no file.
+    const files = list.length ? await readDayFiles(list) : {}
     for (const d of list) {
       if (!(d in files)) {
         unreadable.push(d)
@@ -136,10 +157,10 @@ export async function setFreeDays(dates: readonly string[], today: string): Prom
       if (entry) sent.push({ date: d, entry, made: entry.create ? after : null })
     }
     return sent.map((x) => x.entry)
-  })
+  }, state)
   if (unreadable.length) toast(unreadableText(unreadable), 'error', 8000)
   const days = out ? sent.filter((_, i) => out[i]?.status === 'applied' || out[i]?.status === 'waiting') : []
-  return { saved: isSaved(out), change: days.length ? { days } : null, duringDay, unreadable }
+  return { saved: isSaved(out), asked: saveAnswer(out, state) === 'asked', change: days.length ? { days } : null, duringDay, unreadable }
 }
 
 export interface FreeDaysUndone {
@@ -160,7 +181,7 @@ export async function undoFreeDays(change: FreeDaysChange): Promise<FreeDaysUndo
   const r: FreeDaysUndone = { saved: false, undone: [], changed: [], unreadable: [] }
   const back: string[] = []
   const out = await trySaveWith(async () => {
-    const files = await window.rd.dayFiles(change.days.map((d) => d.date))
+    const files = await readDayFiles(change.days.map((d) => d.date))
     const edits: EditEntry[] = []
     for (const d of change.days) {
       if (!(d.date in files)) {
@@ -189,13 +210,17 @@ export async function undoFreeDays(change: FreeDaysChange): Promise<FreeDaysUndo
 /**
  * „Cofnij” of the line „Wolne” (D406): the days that still stand as it left them are given back; the line ends once nothing is
  * left to take back – a day whose file cannot be read now stays on it (with the days only it names) until its „Cofnij” is
- * done or the 15 minutes are out. A save that failed leaves the line as it is.
+ * done or the 15 minutes are out. A save that failed leaves the line as it is; one written only in part (a day met a change
+ * from another computer) takes from the line the days it did give back.
  */
 export async function undoFreeLine(which: number): Promise<void> {
   const line = useAllDayLines.getState().lines.find((l) => l.seq === which)
   if (!line || line.kind !== 'free') return
   const r = await undoFreeDays(line.change)
-  if (!r.saved) return
+  if (!r.saved) {
+    if (r.undone.length) narrowFreeLine(which, line.change.days.map((d) => d.date).filter((d) => !r.undone.includes(d)))
+    return
+  }
   if (r.unreadable.length) narrowFreeLine(which, r.unreadable)
   else dropAllDayLine(which)
 }

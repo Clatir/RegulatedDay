@@ -33,8 +33,10 @@ regeneracji ani typu dnia (silnik go nie czyta – T725).
   wydarzenia „To wolne”, i gdy `askFreeDays` daje dni; poprawka tytułu nie pyta. W miejscu karty; „Tak” = `setFreeDays` (linia „Wolne” z `change`),
   dzień `duringDay` → `FreeTodayDialog` (`TypeChangeDialog` z `initialTo: 'wolne'`, bez „Cofnij”); dziś sprawdzane ponownie przy „Tak” (już „Wolne”
   albo zamknięte – pominięte). Karta zamyka się po „Tak” wg `freeAnswerSettled` (nic nie zapisano – pytanie zostaje); „Nie”, Esc, klik poza zamykają.
-  `setFreeDays` czyta pliki wszystkich dni jednym `dayFiles`; brak klucza = nieczytelny (także dziś), nigdy brak pliku.
-- „Usuń” wydarzenia już usuniętego: ten sam komunikat co zapis (`GONE_TEXT`) i zamknięcie karty (`removeAllDay` → `tryRemoveRecord`).
+  `freeDayInfos` / `setFreeDays` / `undoFreeDays` czytają pliki dni porcjami po ≤ 62 (`DAY_FILES_MAX` = limit `hub.dayFiles`; wszystkie porcje w tej samej turze zapisu);
+  brak klucza = nieczytelny (także dziś – dziś trafia do pytania tylko, gdy da się je przeczytać tą drogą), nigdy brak pliku. Zapis z pytaniem konfliktu (`asked`) też zamyka pytanie.
+  Pytanie liczy się z rekordu po zapisie (`saveAllDay` oddaje go albo null), nie z formularza.
+- „Usuń” albo „Zapisz” wydarzenia już usuniętego: ten sam komunikat (`GONE_TEXT`) i zamknięcie karty (`allDayGone`; `removeAllDay` → `tryRemoveRecord`).
 
 ## Linie (`AllDayLines`, `store/allDayLine`)
 - Lista linii, każda z czasomierzem `UNDO_LINE_MS` i stroną (`today` / `week`) miejsca zmiany; tylko okno, pasek pulpitu ich nie ma (D406).
@@ -45,10 +47,11 @@ regeneracji ani typu dnia (silnik go nie czyta – T725).
 - Jak inne wyniki Ctrl K (T749): `openPick({ page: 'week' }, { kind: 'allDay', id })`; `WeekPage` bierze wybór `takeFoundPick` (brak wydarzenia –
   dymek „Tego wydarzenia już nie ma.”), raz ustawia tydzień dnia początku i daje id pasowi tego tygodnia (`openId`, `onOpened` zużywa je);
   osobnego kanału w `store/ui.ts` nie ma, ręczne przejście czyści `pick`.
+  Prośba o kartę żyje tylko, póki wydarzenie jest i pokazany tydzień to tydzień jego pierwszego dnia (`pendingCard`): zniknięcie wydarzenia albo strzałki ją czyszczą.
 
 ## Pasek, Ctrl K, plan poranny (część C, T740–T746)
 - Pasek pulpitu: `WidgetView.allDay` (`barAllDay`, `shortTitle` w `shared/widget.ts`) z wejścia `engineView({ allDay })`; `WidgetEngine.refreshNow`
   czyta `folder.collection('allDay')` (błąd = bez podpisu). Dziś = doba logiczna. Rysuje `AllDayLabel` (`Bar.tsx`) tylko w trybie `desktop`, w elastycznej
   części wiersza – także przy prośbie bez bloku (`RequestLine`, T748); pełne tytuły po najechaniu w miejscu (nie `title`), w jednym wierszu
-  (`truncate`, bez zawijania: wysokość wiersza = okno paska, najechanie jej nie zmienia). Bez wydarzeń znaczniki jak dotąd.
+  (`truncate`, bez zawijania: wysokość wiersza = okno paska, najechanie jej nie zmienia); po najechaniu rośnie tylko górna granica (55% → 80%), `shrink-0` w obu stanach – sąsiad bez `flex-1` nie zwęzi podpisu. Bez wydarzeń znaczniki jak dotąd.
 - Ctrl K: rodzaj `allDay` (grupa „Wydarzenia”), `choose` → `openPick({ page: 'week' }, { kind: 'allDay', id })`. Plan poranny: `morningAllDayLine`, linia `morning-allday` pod nagłówkiem.

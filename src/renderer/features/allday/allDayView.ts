@@ -5,6 +5,7 @@
  * Pure – the screens (`AllDayBar`, `AllDayCard`) only draw what this says.
  */
 import { weekLanes, type AllDayEvent, type AllDayLanes } from '@shared/model/allDay'
+import { weekStart } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
 import { WEEKDAY_SHORT } from '../week/weekText'
 import { dayIndexes } from '../week/weekLayout'
@@ -42,6 +43,16 @@ export function allDayLayout(events: readonly AllDayEvent[], dates: readonly str
 export function asksFreeAfter(base: AllDayEvent | null, saved: AllDayEvent): boolean {
   if (!saved.free) return false
   return !base || !base.free || base.startDate !== saved.startDate || base.endDate !== saved.endDate
+}
+
+/**
+ * The event whose card „Tydzień” still waits to open (Ctrl K, D405): `want` while the event is there and `week` is the week of
+ * its first day – the one whose strip opens it; null otherwise (the event gone before the week was counted, or the week
+ * changed by the arrows) – the page then forgets the ask, so the card never opens later by itself.
+ */
+export function pendingCard(want: string | null, week: string, events: readonly AllDayEvent[]): string | null {
+  const e = want == null ? undefined : events.find((x) => x.id === want)
+  return e && weekStart(e.startDate) === week ? e.id : null
 }
 
 /** The dates a drag over the strip took, from the column it began in to the one it ended in (either way round). */

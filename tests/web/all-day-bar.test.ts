@@ -8,7 +8,7 @@ import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { UNDO_LINE_MS } from '@shared/widget'
 import { cardProblems } from '@renderer/features/allday/AllDayCard'
 import { barTitle, monthLabel } from '@renderer/features/allday/allDayText'
-import { allDayLayout, asksFreeAfter, dragDates, freeAskDays, freeAskText, freeLineText } from '@renderer/features/allday/allDayView'
+import { allDayLayout, asksFreeAfter, dragDates, freeAskDays, freeAskText, freeLineText, pendingCard } from '@renderer/features/allday/allDayView'
 import { freeAnswerSettled } from '@renderer/features/allday/freeDays'
 import { allDayLineLeft, dropAllDayLine, linesOf, showAllDayLine, useAllDayLines } from '@renderer/store/allDayLine'
 import { columnAt } from '@renderer/features/week/weekLayout'
@@ -116,7 +116,7 @@ describe('pytanie „Wolne” – kiedy karta pyta (D405: raz)', () => {
 })
 
 describe('odpowiedź „Tak” – kiedy pytanie się zamyka', () => {
-  const none = { saved: true, change: null, duringDay: null, unreadable: [] as string[] }
+  const none = { saved: true, asked: false, change: null, duringDay: null, unreadable: [] as string[] }
   it('zapis się nie udał – pytanie zostaje', () => {
     expect(freeAnswerSettled({ ...none, saved: false })).toBe(false)
   })
@@ -125,10 +125,33 @@ describe('odpowiedź „Tak” – kiedy pytanie się zamyka', () => {
     expect(freeAnswerSettled({ ...none, unreadable: ['2026-11-19'] })).toBe(false)
   })
 
+  it('zapis spotkał zmianę z innego komputera i stał się pytaniem u góry okna – pytanie „Wolne” się zamyka (bez drugiego „Tak”)', () => {
+    expect(freeAnswerSettled({ ...none, saved: false, asked: true })).toBe(true)
+  })
+
   it('zapisano część albo dziś czeka na okno albo nie ma już o co pytać – zamyka się', () => {
     expect(freeAnswerSettled({ ...none, change: { days: [] }, unreadable: ['2026-11-19'] })).toBe(true)
     expect(freeAnswerSettled({ ...none, duringDay: '2026-11-18' })).toBe(true)
     expect(freeAnswerSettled(none)).toBe(true)
+  })
+})
+
+describe('Ctrl K na wydarzeniu – karta czeka na pas tygodnia, nigdy nie otwiera się później sama', () => {
+  const k = ev('k1', '2026-11-18', '2026-11-19')
+
+  it('czeka, póki wydarzenie jest i tydzień jest tygodniem jego pierwszego dnia', () => {
+    expect(pendingCard('k1', '2026-11-16', [k])).toBe('k1')
+    expect(pendingCard(null, '2026-11-16', [k])).toBeNull()
+  })
+
+  it('wydarzenie zniknęło, zanim policzono tydzień – nie czeka', () => {
+    expect(pendingCard('k1', '2026-11-16', [])).toBeNull()
+    expect(pendingCard('k1', '2026-11-16', [ev('k2', '2026-11-18')])).toBeNull()
+  })
+
+  it('tydzień zmieniony strzałkami (inny niż tydzień pierwszego dnia) – nie czeka', () => {
+    expect(pendingCard('k1', '2026-11-23', [k])).toBeNull()
+    expect(pendingCard('k1', '2026-11-09', [k])).toBeNull()
   })
 })
 

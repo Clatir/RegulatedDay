@@ -15,16 +15,13 @@ import { Field, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { commitActiveField } from '../../lib/commit'
 import { useEscapeLayer } from '../../lib/escape'
-import { allDayRel, removeAllDay, saveAllDay } from '../../store/allDay'
-import { rawRecord, useData } from '../../store/data'
+import { allDayGone, removeAllDay, saveAllDay } from '../../store/allDay'
+import { useData } from '../../store/data'
 import { NoteEditor } from '../note/NoteEditor'
 import { asksFreeAfter, freeAskText } from './allDayView'
 import { askFreeDays, freeAnswerSettled, setFreeDays, type FreeDaysResult } from './freeDays'
 
 export const ALL_DAY_CARD_WIDTH = 320
-
-/** No computers known yet: one array for every render (a selector must give the same value for the same state). */
-const NONE: never[] = []
 
 /** Why the title is not accepted (null: it is), and why the days are not – each under its own field. */
 export function cardProblems(e: Pick<AllDayEvent, 'title' | 'startDate' | 'endDate'>): { title: string | null; dates: string | null } {
@@ -68,7 +65,7 @@ export function AllDayCard({
   const [tried, setTried] = useState(false)
   const [ask, setAsk] = useState<string[] | null>(null)
   const [busy, run] = useBusy()
-  const computers = useData((s) => s.view?.computers ?? NONE)
+  const computers = useData((s) => s.view?.computers)
   useEscapeLayer(true, onClose)
   useEffect(() => {
     ref.current?.scrollIntoView({ block: 'nearest' })
@@ -92,10 +89,15 @@ export function AllDayCard({
         setTried(true)
         return
       }
-      if (!(await saveAllDay(e, base))) return
+      const saved = await saveAllDay(e, base)
+      if (!saved) {
+        // Removed meanwhile (the toast said so): nothing left to edit – the card ends as after „Usuń”. Any other refusal leaves it.
+        if (base && allDayGone(base.id)) onClose()
+        return
+      }
       // The question once (D405): when this save turned „To wolne” on or changed the days of such an event – the days from today on
-      // that are not „Wolne” and not closed.
-      const days = asksFreeAfter(base, e) ? await askFreeDays(e, today) : []
+      // that are not „Wolne” and not closed. Of the event as it stands after the save (another computer's fields included).
+      const days = asksFreeAfter(base, saved) ? await askFreeDays(saved, today) : []
       if (days.length) setAsk(days)
       else onClose()
     })
@@ -105,7 +107,7 @@ export function AllDayCard({
       const raw = await removeAllDay(base.id)
       if (!raw) {
         // Gone meanwhile (the toast said so): nothing left to edit here. A removal that did not go through leaves the card.
-        if (rawRecord(allDayRel(base.id)) == null) onClose()
+        if (allDayGone(base.id)) onClose()
         return
       }
       onRemoved(base.title, raw)
@@ -192,7 +194,7 @@ export function AllDayCard({
               />
             ))}
           </div>
-          <NoteEditor value={shown.note} onCommit={(note) => set({ note })} olderComputers={olderComputers(computers)} />
+          <NoteEditor value={shown.note} onCommit={(note) => set({ note })} olderComputers={olderComputers(computers ?? [])} />
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={shown.free} onChange={(e) => set({ free: e.currentTarget.checked })} data-testid="allday-free" />
             To wolne (urlop, wyjazd)

@@ -136,6 +136,18 @@ describe('podpis wydarzeń całodniowych na pasku pulpitu (D405)', () => {
     }
   })
 
+  it('po najechaniu podpis nie jest węższy niż bez najechania: nie kurczy się (shrink-0), rośnie tylko jego górna granica', () => {
+    const off = renderToStaticMarkup(createElement(AllDayLabel, { allDay, open: false }))
+    const on = renderToStaticMarkup(createElement(AllDayLabel, { allDay, open: true }))
+    // A neighbour without `flex-1` (the request line) would leave a flexible label narrower than it was.
+    const root = (s: string) => /^<span class="([^"]*)"/.exec(s)?.[1] ?? ''
+    expect(root(off).split(' ')).toContain('shrink-0')
+    expect(root(on).split(' ')).toContain('shrink-0')
+    expect(root(on)).not.toMatch(/flex-\[/)
+    const cap = (s: string) => Number(/max-w-\[(\d+)%\]/.exec(root(s))?.[1])
+    expect(cap(on)).toBeGreaterThan(cap(off))
+  })
+
   it('bez wydarzeń dziś pasek wygląda jak dotąd; okno główne i panel podpisu nie mają', () => {
     expect(html(dayView(), 'desktop')).not.toContain('bar-allday')
     for (const mode of ['main', 'panel'] as const) expect(html(dayView({ allDay }), mode)).not.toContain('bar-allday')
