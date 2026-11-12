@@ -29,6 +29,7 @@ import {
   type TypeOf
 } from '../model/series'
 import type { DayTypeId } from '../model/settings'
+import { sameStepList, stepsFrom } from '../model/steps'
 import { dayStart } from '../time/day'
 import { addDays } from '../time/zone'
 import { computeDay, type DayContext, type DayState } from './day'
@@ -246,7 +247,8 @@ export function endedOn(s: Series, last: string, today: string, remove: boolean)
 /** Whether a block of a day's file still is the occurrence as `occ` makes it (not changed on its day – „Tylko to”). */
 export function sameOccurrence(b: Raw | PlanBlock, occ: PlanBlock): boolean {
   const r = b as Record<string, unknown>
-  return SERIES_BLOCK_FIELDS.every((k) => JSON.stringify(r[k] ?? null) === JSON.stringify(occ[k] ?? null))
+  // Its steps as a list (D440, T786): a tick is its day's, never a change of the occurrence; a file's list read as a file's.
+  return SERIES_BLOCK_FIELDS.every((k) => (k === 'steps' ? sameStepList(stepsFrom(r.steps), stepsFrom(occ.steps)) : JSON.stringify(r[k] ?? null) === JSON.stringify(occ[k] ?? null)))
 }
 
 /** Today's day for an edit of today's occurrence: its context and state as this computer counts them now. */

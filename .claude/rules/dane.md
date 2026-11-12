@@ -105,6 +105,8 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Rozjazd zegara (`read.ahead`) tylko po `t` zdarzeń innych komputerów; zegar logiczny ponad 24 h z przodu wraca do
   zegara komputera przy `stamp()` (`onClamp` – log). Szablon: `templateJson(t, before)` na surowym pliku.
 - Odczyt i zapis rekordów obok kolejki (łączenie kopii konfliktowych) – tylko przez `queue.exclusive`.
+- Kroki (D440, reguły `kroki.md`): lista w bloku / rekordzie, odhaczenia w `stepsDone` (plik dnia, rekord zadania) – w
+  `recordEdit` liść po liściu (`LEAF_MAPS`, T788), kopia konfliktowa łączy je sumą; starsza wersja zachowuje oba pola.
 - Sprawy (T750–T758, reguły `sprawy.md`): te same pliki `requests/`, bez migracji w miejscu; `hub.quickAdd` (szybki zapis),
   `folder.casesRitual`; 04:00 i „zaplanowane” liczone z daty i plików dni – nic nie zapisuje prowadzący.
 - Listy do pokazania (`collection`: prośby, rutyny, szablony, wykłady w oknie) biorą plik sprawdzony w ciągu

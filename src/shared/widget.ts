@@ -159,6 +159,26 @@ export interface WidgetView {
   routines: BarRoutine[]
   /** Today's all-day events as the desktop bar's label (D405), null: none today. */
   allDay: BarAllDay | null
+  /** The steps of the block in the foreground (D440): its first step not ticked off, or all ticked; null – none. */
+  steps: BarSteps | null
+}
+
+/**
+ * The step line of the bar (D440): „☐ <krok> · krok 1/4” with its tick (the action `step` – `<block>|<step>`), after the
+ * last one „Wszystkie kroki ✓” (no tick). No sound, no dot: it stands while the block runs in the foreground.
+ */
+export interface BarSteps {
+  /** The block in the foreground the steps are of. */
+  block: string
+  /** The first step not ticked off (`n` – its place in the list, 1 = the first); null – all ticked off. */
+  step: { id: string; title: string; n: number } | null
+  total: number
+}
+
+/** The bar's words of its step line (D440). */
+export const ALL_STEPS_TEXT = 'Wszystkie kroki ✓'
+export function barStepText(s: BarSteps): string {
+  return s.step ? `${s.step.title} · krok ${s.step.n}/${s.total}` : ALL_STEPS_TEXT
 }
 
 /** A routine to tick off (D328): its line, its block, and its steps in each version (`worse` empty: none to pick). */
@@ -250,7 +270,8 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
     variants: NO_VARIANTS,
     ritual: false,
     routines: [],
-    allDay: null
+    allDay: null,
+    steps: null
   }
 }
 

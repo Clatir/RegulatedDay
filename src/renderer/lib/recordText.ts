@@ -36,11 +36,12 @@ const BLOCK_FIELDS: Record<string, string> = {
   moves: 'licznik przeniesień',
   requests: 'prośby',
   routine: 'rutyna',
+  steps: 'kroki',
   movedFrom: 'przeniesiony z',
   byVariant: 'zmieniony wariantem'
 }
 
-const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok', title: 'tytuł', kind: 'rodzaj', categoryId: 'kategoria', list: 'lista', listDay: 'dzień na liście „Dziś”', doneAt: 'zrobione' }
+const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok', title: 'tytuł', kind: 'rodzaj', categoryId: 'kategoria', list: 'lista', listDay: 'dzień na liście „Dziś”', doneAt: 'zrobione', steps: 'kroki', stepsDone: 'odhaczone kroki' }
 const ROUTINE_FIELDS: Record<string, string> = { name: 'nazwa', normal: 'kroki (zwykła)', worse: 'kroki (na gorsze dni)', archived: 'archiwum' }
 const SERIES_FIELDS: Record<string, string> = { start: 'pierwszy dzień', until: 'koniec (dzień)', count: 'koniec (liczba razy)', archived: 'usunięta z listy', root: 'seria' }
 /** The kinds of a series' rule (D381) as the panel of a block says them. */
@@ -122,6 +123,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames): s
     if (a === 'sessions') return 'odpowiedzi warstwy sesji'
     if (a === 'asked') return 'pytania tego dnia'
     if (a === 'classImport') return 'import zjazdów'
+    if (a === 'stepsDone') return b ? `${blockPart(b, undefined)}: odhaczone kroki` : 'odhaczone kroki'
     if (a === 'seriesOff') return b ? `${blockPart(b, undefined)}: odwołany przez zmianę serii` : 'odwołane przez zmianę serii'
     return 'inne pole dnia'
   }

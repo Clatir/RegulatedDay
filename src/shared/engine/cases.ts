@@ -13,7 +13,7 @@
  * - the morning's step (requests and the tasks of „Dziś”), the bar's „Zadanie zrobione?” and the ritual's lines.
  */
 import { REQUEST_CATEGORY, type CategoryRules } from '../model/categories'
-import { dayRaw, isRaw, putBlock, takeBlock, type Raw } from '../data/dayEdits'
+import { dayRaw, isRaw, putBlock, setStepDone, takeBlock, type Raw } from '../data/dayEdits'
 import { dayFileFrom, type DayFile, type PlanBlock } from '../model/plan'
 import {
   CASE_NOTE_MAX,
@@ -374,7 +374,15 @@ export function caseBlock(r: RequestRecord, startMin: number, rules: Readonly<Re
   const est = estimateOf(r)
   if (r.kind !== 'task') return requestsBlock([r.id], est, startMin, rules[REQUEST_CATEGORY])
   const cat = r.categoryId && rules[r.categoryId] ? r.categoryId : DEFAULT_TASK_CATEGORY
-  return newUserBlock(cat, startMin, est, rules[cat], { task: r.id })
+  // D440: the block gets the task's steps – the same ids, ticked as the task has them (`withTaskBlock` writes the ticks).
+  return newUserBlock(cat, startMin, est, rules[cat], { task: r.id, steps: r.steps.map((x) => ({ ...x })) })
+}
+
+/** A day's file with a new block of a task: the block, and its steps the task has ticked off ticked on the day (D440). */
+export function withTaskBlock(raw: Raw, b: PlanBlock): Raw {
+  let out = putBlock(raw, b)
+  for (const x of b.steps) if (x.done) out = setStepDone(out, b.id, x.id, true)
+  return out
 }
 
 /**
@@ -407,7 +415,7 @@ export function casePlan(i: CasePlanInput): CasePlan | CasePlanRefusal | null {
     if (next !== raw && oldBlockTakeable(was.day, today, begun)) days[was.day] = next
   }
   const block = caseBlock(r, i.startMin, i.rules)
-  days[i.date] = putBlock(fileOf(i.date), block)
+  days[i.date] = withTaskBlock(fileOf(i.date), block)
   return { block, record: scheduledRaw(i.record, i.date, block.id, i.at), days }
 }
 
@@ -520,7 +528,7 @@ export function morningPlan(i: MorningPlanInput): MorningPlan {
   for (const raw of tasks) {
     const r = requestFrom(raw)!
     const b = caseBlock(r, at, i.rules)
-    day = putBlock(day, b)
+    day = withTaskBlock(day, b)
     blocks.push(b)
     at += b.durationMin
     records.push({ id: r.id, raw: scheduledRaw(raw, i.date, b.id, i.at) })

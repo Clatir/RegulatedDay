@@ -6,9 +6,10 @@
  */
 import { REQUEST_CATEGORY, type CategoryRules } from '../model/categories'
 import { newId } from '../model/ids'
-import { dayRaw, putBlock, setMovedTo, takeBlock, type Raw } from '../data/dayEdits'
+import { dayRaw, putBlock, setMovedTo, setStepDone, takeBlock, type Raw } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
 import { dayFileFrom, MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlock, type DayFile, type PlanBlock, type Template } from '../model/plan'
+import { freshSteps } from '../model/steps'
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan, type BlockInfo } from './blocks'
 import { dayPlan, dayWakeMin, morningBound, wakeShiftedStart } from './createDay'
@@ -131,7 +132,9 @@ export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanB
   const own = dayFileFrom(fromRaw ?? {}, fromDate).blocks.some((x) => x.id === b.id)
   let source = setMovedTo(dayRaw(fromRaw, fromDate), b.id, toDate)
   if (own) source = takeBlock(source, b.id)
-  const target = setMovedTo(putBlock(dayRaw(toRaw, toDate), moved), b.id, null)
+  let target = setMovedTo(putBlock(dayRaw(toRaw, toDate), moved), b.id, null)
+  // Its steps ticked off go with it (D440): the same block on another day.
+  for (const st of b.steps) if (st.done) target = setStepDone(target, b.id, st.id, true)
   return { source, target }
 }
 
@@ -159,6 +162,8 @@ export function copiedDay(plan: readonly PlanBlock[]): PlanBlock[] {
       movedFrom: null,
       // A request belongs to one day: a copy is a plain block of its category; no variant changed it there.
       requests: [],
+      // Its steps start again on the day of the copy (D440): the copy has new ids, the day's ticks are the original's.
+      steps: freshSteps(b.steps),
       byVariant: false
     })
   }

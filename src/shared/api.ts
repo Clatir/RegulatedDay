@@ -272,6 +272,8 @@ export type WidgetAction =
   | 'quickAdd'
   /** „+” of the desktop bar: the icon's panel opens with the field (T756). */
   | 'quickOpen'
+  /** The tick of the bar's step line (D440): `<block>|<step>` ticked off on the bar's day. */
+  | 'step'
 
 /** The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests). */
 export type BarActionId = 'placeBar' | 'corner' | 'openPanel'
@@ -377,6 +379,8 @@ export interface SearchBlock {
   id: string
   title: string
   note: string
+  /** Its steps (D440) – found as its text; absent from a main process without steps. */
+  steps?: Array<{ title: string }>
 }
 
 /** The blocks of every day file of the data folder; `complete` false: some file could not be read now (never taken for none). */

@@ -12,6 +12,7 @@ import { addDays, daysBetween, isIsoDate, weekday } from '../time/zone'
 import { weekStart } from '../time/day'
 import { MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlockFrom, type PlanBlock } from './plan'
 import { settingsOn, type DayTypeId, type SettingsChange } from './settings'
+import { freshSteps, withStepsJson, type Step } from './steps'
 
 /** The rule of a series (D381, D401). `monthWeekday.nth`: 1–4, or -1 – the last one of the month. */
 export type SeriesRule =
@@ -49,10 +50,12 @@ export interface SeriesBlock {
   note: string
   name: string | null
   routine: string | null
+  /** Its list „Kroki” (D440): every occurrence starts with none ticked – a tick is its day's (T786). */
+  steps: Step[]
 }
 
 /** The fields of `SeriesBlock`: what a change of the series writes and what tells an occurrence changed on its own day. */
-export const SERIES_BLOCK_FIELDS = ['categoryId', 'variantId', 'startMin', 'durationMin', 'fixed', 'background', 'costs', 'bgCostPct', 'note', 'name', 'routine'] as const satisfies ReadonlyArray<keyof SeriesBlock>
+export const SERIES_BLOCK_FIELDS = ['categoryId', 'variantId', 'startMin', 'durationMin', 'fixed', 'background', 'costs', 'bgCostPct', 'note', 'name', 'routine', 'steps'] as const satisfies ReadonlyArray<keyof SeriesBlock>
 
 export interface SeriesVersion {
   /** The version applies from this date (the first one: the series' start). */
@@ -145,7 +148,8 @@ export function seriesBlockOf(b: Pick<PlanBlock, keyof SeriesBlock> & { startMin
     bgCostPct: b.bgCostPct,
     note: b.note,
     name: b.name,
-    routine: b.routine
+    routine: b.routine,
+    steps: freshSteps(b.steps)
   }
 }
 
@@ -190,7 +194,7 @@ export function seriesJson(s: Series, before?: RawRecord | null): RawRecord {
   for (const v of s.versions) {
     const was = isPlain(rawVersions[v.from]) ? (rawVersions[v.from] as Record<string, unknown>) : {}
     const keep = (k: string) => (isPlain(was[k]) ? (was[k] as Record<string, unknown>) : {})
-    versions[v.from] = { ...was, block: { ...keep('block'), ...v.block }, rule: { ...(keep('rule').kind === v.rule.kind ? keep('rule') : {}), ...v.rule }, special: v.special }
+    versions[v.from] = { ...was, block: withStepsJson({ ...keep('block'), ...v.block } as Record<string, unknown>, v.block.steps, keep('block').steps), rule: { ...(keep('rule').kind === v.rule.kind ? keep('rule') : {}), ...v.rule }, special: v.special }
   }
   const { versions: _v, ...rest } = isPlain(before) ? before : {}
   return { ...rest, schema: 1, id: s.id, root: s.root, start: s.start, until: s.until, count: s.count, archived: s.archived, versions }

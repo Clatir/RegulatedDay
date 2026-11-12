@@ -130,7 +130,7 @@ describe('rekordy wyszukiwarki', () => {
   })
 
   it('seria to jeden rekord (nazwa i reguła, D401): części po „To i następne” – jedna, usunięta – żadna; Enter otwiera „Szablony”', () => {
-    const block = { categoryId: 'inne', variantId: null, startMin: 1020, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null }
+    const block = { categoryId: 'inne', variantId: null, startMin: 1020, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null, steps: [] }
     const part = (id: string, start: string, until: string | null, archived = false): Series => ({ id, root: 'fizjo', start, until, count: null, versions: [{ from: start, block, rule: { kind: 'weekly', every: 2, days: [4], anchor: start }, special: 'ask' }], archived })
     const plan = (x: Series, last: string | null = x.until) => ({ series: x, last })
     const rs = searchRecords({ ...input(), series: [plan(part('fizjo', '2026-10-01', '2026-11-04')), plan(part('fizjo2', '2026-11-05', null)), plan({ ...part('gone', '2026-10-01', '2026-11-09', true), root: 'gone' })] })

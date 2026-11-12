@@ -5,6 +5,7 @@
  * change of another field on another computer.
  */
 import { planBlockFrom, type PlanBlock } from '../model/plan'
+import { sameStepList, stepsFrom, withStepsJson } from '../model/steps'
 import { deepEqual } from './merge'
 
 export type Raw = Record<string, unknown>
@@ -39,11 +40,19 @@ export function putRawBlock(raw: Raw, b: Raw): Raw {
  * version does not know stay too.
  */
 export function blockJson(b: PlanBlock, before?: Raw): Raw {
-  if (!before) return { ...b }
+  // Its steps (D440, T786, T787): the list without the day's ticks, in the file's order; none and none before – no field.
+  if (!before) return withStepsJson({ ...b } as Raw, b.steps)
   // Read as the day's file reads its blocks (an origin unknown to this version is „user” there too).
   const was = planBlockFrom(before) as unknown as Raw | null
   const out: Raw = { ...before }
-  for (const [k, v] of Object.entries(b)) if (!was || !(k in before) || !deepEqual(was[k], v)) out[k] = v
+  for (const [k, v] of Object.entries(b)) {
+    if (k === 'steps') continue
+    if (!was || !(k in before) || !deepEqual(was[k], v)) out[k] = v
+  }
+  // The list changed (ids, titles, order) – the ticks of the day are never the list's.
+  const steps = b.steps ?? []
+  const wasSteps = stepsFrom(before.steps)
+  if (!sameStepList(wasSteps, steps) || wasSteps.some((s, i) => s.order !== steps[i]!.order)) return withStepsJson(out, steps, before.steps)
   return out
 }
 
@@ -101,4 +110,21 @@ export function setDayField(raw: Raw, key: 'dayType' | 'wakeMin', value: unknown
   if (value == null) delete next[key]
   else next[key] = value
   return next
+}
+
+/** The ticks of a day's block in the file (D440, T786): `stepsDone.<block>.<step>` = true, or the field gone (not ticked). */
+export function setStepDone(raw: Raw, blockId: string, stepId: string, done: boolean): Raw {
+  const all = isPlain(raw.stepsDone) ? { ...raw.stepsDone } : {}
+  const m = isPlain(all[blockId]) ? { ...(all[blockId] as Raw) } : {}
+  if (done) m[stepId] = true
+  else delete m[stepId]
+  all[blockId] = m
+  return { ...raw, stepsDone: all }
+}
+
+/** The ids of a block's steps ticked off in the day's file. */
+export function stepsDoneIn(raw: Raw | null | undefined, blockId: string): string[] {
+  const all = raw && isPlain(raw.stepsDone) ? raw.stepsDone : null
+  const m = all && isPlain(all[blockId]) ? (all[blockId] as Raw) : null
+  return m ? Object.keys(m).filter((k) => m[k] === true) : []
 }

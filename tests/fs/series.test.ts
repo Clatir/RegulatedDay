@@ -144,7 +144,7 @@ describe('zmiany i usunięcie serii (D381)', () => {
     start: start(),
     until: null,
     count: null,
-    versions: [{ from: start(), block: { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null }, rule: { kind: 'daily' }, special: 'ask' }],
+    versions: [{ from: start(), block: { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null, steps: [] }, rule: { kind: 'daily' }, special: 'ask' }],
     archived: false
   })
 

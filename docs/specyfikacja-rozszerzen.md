@@ -135,11 +135,12 @@ Dekompozycję dużego bloku pracy na małe, konkretne kroki oraz możliwość ic
 ### Scenariusz z życia
 Zaplanowałeś 90-minutowy blok „Wdrożenie nowej funkcji”. Blok jest duży i łatwo stracić wątek albo rozproszyć się w połowie czasu.
 * **Przed zmianą:** Blok to jedna wielka bryła czasu; nie wiesz dokładnie, na jakim etapie jesteś.
-* **Dzięki funkcji:** Rozbijasz blok na 4 kroki: 1. Napisać testy, 2. Przygotować logikę, 3. Sprawdzić na Windowsie, 4. Zrobić commit. Uruchamiasz blok. Minimalizujesz okno. Na pasku pulpitu przy zegarze widzisz: `[ ] Napisać testy · krok 1/4`. Gdy skończysz testy, klikasz mały ptaszek wprost na pasku pulpitu – zadanie zostaje skreślone z cichym dźwiękiem sukcesu, a pasek sam wyświetla kolejny krok: `[ ] Przygotować logikę · krok 2/4`.
+* **Dzięki funkcji:** Rozbijasz blok na 4 kroki: 1. Napisać testy, 2. Przygotować logikę, 3. Sprawdzić na Windowsie, 4. Zrobić commit. Uruchamiasz blok. Minimalizujesz okno. Na pasku pulpitu przy zegarze widzisz: `[ ] Napisać testy · krok 1/4`. Gdy skończysz testy, klikasz mały ptaszek wprost na pasku pulpitu – krok zostaje odhaczony (bez dźwięku, D440), a pasek sam wyświetla kolejny krok: `[ ] Przygotować logikę · krok 2/4`; po ostatnim – „Wszystkie kroki ✓”.
 
 ### Jak wygląda praca z tą funkcją
 * **Szybkie dodawanie:** Wpisujesz treść kroku, wciskasz `Enter` i od razu wpisujesz kolejny.
-* **Wskaźnik postępu:** Na osi czasu blok pokazuje licznik (np. `✓ 3/4`), dając poczucie realnego posuwania się naprzód.
+* **Wskaźnik postępu:** Na osi czasu i w panelu bloku licznik (np. `✓ 3/4`), dając poczucie realnego posuwania się naprzód; kroki niczego nie liczą (energia, punktacja), a koniec bloku z nieodhaczonymi krokami o nic nie pyta (D440).
+* **Szablony, serie i Sprawy (D440):** kroki bloku szablonu i serii każdego dnia startują odznaczone; blok z zadania „Spraw” dostaje jego kroki, a odhaczenie w bloku odhacza je w zadaniu.
 * **Praca bez rozpraszania:** Nie musisz co chwilę otwierać głównego programu, by sprawdzić, co masz teraz zrobić – kolejny krok zawsze czuwa na pasku pulpitu.
 
 ---

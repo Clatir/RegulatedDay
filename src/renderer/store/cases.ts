@@ -151,7 +151,7 @@ export interface CaseResult {
  * Edits of several files in one turn: `make` puts each file's version before and after (a file put twice keeps its
  * first before) or says why nothing is written; saved together – one edit of the queue.
  */
-async function change(make: (put: (rel: string, before: RawRecord | null, after: RawRecord | null) => void) => Promise<string | null> | string | null): Promise<CaseResult> {
+export async function change(make: (put: (rel: string, before: RawRecord | null, after: RawRecord | null) => void) => Promise<string | null> | string | null): Promise<CaseResult> {
   let error: string | null = null
   let undo: CaseUndoFile[] = []
   const out = await trySaveWith(async () => {
@@ -369,6 +369,11 @@ export async function planMorning(date: string, seen: RawRecord | null, chosen: 
 
 /** „Cofnij” of one change: each file back as it was before it – only while it stands as the change left it. */
 export function undoCase(undo: readonly CaseUndoFile[]): Promise<CaseResult> {
+  return undoFiles(undo, ['day', 'request'])
+}
+
+/** „Cofnij” of the files of one change of the kinds named (a day's file, a record of `kinds`) – each only while it stands as the change left it. */
+export function undoFiles(undo: readonly CaseUndoFile[], kinds: readonly string[]): Promise<CaseResult> {
   return change(async (put) => {
     const dates = undo.flatMap((u) => {
       const c = classify(u.rel)
@@ -378,7 +383,7 @@ export function undoCase(undo: readonly CaseUndoFile[]): Promise<CaseResult> {
     if (!days) return DAY_UNREADABLE
     for (const u of undo) {
       const c = classify(u.rel)
-      if (!c || c.conflict || (c.kind !== 'day' && c.kind !== 'request')) continue
+      if (!c || c.conflict || !kinds.includes(c.kind)) continue
       const now = c.kind === 'day' ? (days[c.date!] ?? null) : rawRecord(u.rel)
       const stands = now == null ? u.after == null : u.after != null && isRaw(now) && sameContentAs(now, u.after)
       // Changed since (here or on another computer): never written over.

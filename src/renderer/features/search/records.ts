@@ -19,6 +19,7 @@ import { currentSeries, seriesVersionOn, type SeriesPlan } from '@shared/model/s
 import { occurrenceBlock } from '@shared/engine/series'
 import { seriesText } from '@shared/seriesText'
 import { settingsOn } from '@shared/model/settings'
+import { textWithSteps } from '@shared/model/steps'
 import type { SearchRecord } from '@shared/search'
 import { addDays, weekday } from '@shared/time/zone'
 import { PAGES, type Page } from '../../store/ui'
@@ -87,7 +88,7 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
     const hint = t.archived ? 'w archiwum' : undefined
     out.push({ kind: 'template', id: t.id, title: t.name, ...(hint ? { hint } : {}) })
     for (const b of templateVersionOn(t, addDays(i.today, 1))?.blocks ?? []) {
-      out.push({ kind: 'templateBlock', id: b.id, parent: t.id, title: blockName(b, names), text: b.note, hint: `szablon: ${t.name}` })
+      out.push({ kind: 'templateBlock', id: b.id, parent: t.id, title: blockName(b, names), text: textWithSteps(b.note, b.steps), hint: `szablon: ${t.name}` })
     }
   }
 
@@ -98,7 +99,7 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
     // Ended by its date or its count (`SeriesPlan.last`), as the list of „Szablony” says it.
     const last = lastOf.get(s.id) ?? s.until
     const ended = last != null && last < i.today
-    out.push({ kind: 'series', id: s.id, title: blockName(occurrenceBlock(s, v.block, i.today), names), text: seriesText(s, i.today), hint: ended ? 'seria zakończona' : 'seria' })
+    out.push({ kind: 'series', id: s.id, title: blockName(occurrenceBlock(s, v.block, i.today), names), text: textWithSteps(seriesText(s, i.today), v.block.steps), hint: ended ? 'seria zakończona' : 'seria' })
   }
 
   // „Sprawy” (D383, SNT6): in the order of the lists, the newest first; the hint says what it is and where it lies. The
@@ -107,13 +108,13 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
   const lists = shown.map((r) => ({ r, list: listOf(r, i.today) }))
   for (const { r, list } of lists.sort((a, b) => CASE_LISTS.indexOf(a.list) - CASE_LISTS.indexOf(b.list) || b.r.createdAt - a.r.createdAt)) {
     const title = r.kind === 'task' ? r.title || 'zadanie' : personName(i.rd, r.person)
-    out.push({ kind: 'request', id: r.id, title, text: r.note, hint: `${r.kind === 'task' ? 'zadanie' : 'prośba'} · ${CASE_LIST_NAMES[list]}${r.state === 'dropped' ? ' · porzucone' : ''}` })
+    out.push({ kind: 'request', id: r.id, title, text: textWithSteps(r.note, r.steps), hint: `${r.kind === 'task' ? 'zadanie' : 'prośba'} · ${CASE_LIST_NAMES[list]}${r.state === 'dropped' ? ' · porzucone' : ''}` })
   }
   for (const r of [...i.routines].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
     out.push({ kind: 'routine', id: r.id, title: r.name, text: [...r.normal, ...r.worse].map((s) => s.name).filter(Boolean).join(' · '), ...(r.archived ? { hint: 'w archiwum' } : {}) })
   }
   // „Wydarzenie”: its dates are the hint („18–20.11”); Enter opens its card in „Tydzień” (D405).
   for (const e of [...(i.allDay ?? [])].sort(compareAllDay)) out.push({ kind: 'allDay', id: e.id, title: e.title, text: e.note, hint: rangeText(e) })
-  for (const b of i.blocks) out.push({ kind: 'block', id: b.id, date: b.date, title: b.title, text: b.note, hint: dayHint(b.date, i.today) })
+  for (const b of i.blocks) out.push({ kind: 'block', id: b.id, date: b.date, title: b.title, text: textWithSteps(b.note, b.steps), hint: dayHint(b.date, i.today) })
   return out
 }

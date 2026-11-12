@@ -26,6 +26,7 @@ import { timerNow, type TimerNow } from '@shared/engine/timer'
 import { pushedText } from '@shared/engine/pushApart'
 import { energyOrderVariant } from '@shared/engine/energyOrder'
 import { casesFrom, isDone, taskAnswerRaw } from '@shared/engine/cases'
+import { tickEdits } from '@shared/engine/steps'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { applyVariant, keepPlan, markerCause, planCause, variantCauses, variantsFor, type Variant, type VariantCause, type VariantTrigger } from '@shared/engine/variants'
 import type { NoticeKind } from '@shared/machine'
@@ -984,6 +985,12 @@ export class WidgetEngine {
         const ids = [...new Set((places ?? '').split(',').map(num))].flatMap((k) => (k != null && steps[k] ? [steps[k]!.id] : []))
         return this.routineDone(day, r, version as RoutineVersion, ids)
       }
+      case 'step': {
+        // The tick of the step line (D440): `<block>|<step>` – the bar's day; no sound, no window.
+        const [block, step] = (arg ?? '').split('|')
+        if (!block || !step) return
+        return this.tickStep(day, block, step)
+      }
       case 'variants': {
         const [what, which] = (arg ?? '').split('|')
         if (what === 'open') return this.openVariants()
@@ -1107,6 +1114,35 @@ export class WidgetEngine {
     const entry = recordEdit(rel, before, taskAnswerRaw(before, answer, this.now))
     const res = entry ? await this.d.edit([entry]) : []
     if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odpowiedź spotkała się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
+    return this.refresh()
+  }
+
+  /**
+   * A step ticked off on the bar (D440, T793): the block as the bar's day has it now (`widgetModel` – the day's file with
+   * the queue), its tick in the day's file and – a block of a task planned in it – in the task's record, one edit of the
+   * queue. Ticked on another computer meanwhile – nothing to write; removed there – the bar says so. No sound (D440).
+   */
+  private async tickStep(day: string | undefined, blockId: string, stepId: string): Promise<void> {
+    const folder = this.d.folder()
+    if (!folder || !day) return
+    const m = await folder.widgetModel(this.now)
+    const block = m.state.grid.date === day ? m.ctx.plan.find((b) => b.id === blockId) : undefined
+    if (!block) {
+      this.say('Tego bloku już nie ma w planie.')
+      return this.refresh()
+    }
+    const rel = paths.day(day)
+    const before = ((await folder.recordView(rel)) as RawRecord | undefined) ?? null
+    const taskRel = block.task ? paths.record('request', block.task) : null
+    const taskBefore = taskRel ? (((await folder.recordView(taskRel)) as RawRecord | undefined) ?? null) : null
+    const out = tickEdits({ date: day, day: before, block, stepId, done: true, task: taskBefore })
+    if ('error' in out) {
+      this.say(out.error)
+      return this.refresh()
+    }
+    const entries = [recordEdit(rel, before, out.day), taskRel && out.task ? recordEdit(taskRel, taskBefore, out.task) : null].filter((e): e is EditEntry => e != null)
+    const res = entries.length ? await this.d.edit(entries) : []
+    if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odhaczenie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
     return this.refresh()
   }
 

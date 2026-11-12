@@ -830,7 +830,7 @@ export class DataFolder {
       }
       const names = namesOn(date)
       // An occurrence of a series is found as its series (one record, D401), never once per day.
-      return plan.filter((b) => b.origin !== 'series').map((b) => ({ date, id: b.id, title: blockName(b, names), note: b.note }))
+      return plan.filter((b) => b.origin !== 'series').map((b) => ({ date, id: b.id, title: blockName(b, names), note: b.note, ...(b.steps.length ? { steps: b.steps.map((x) => ({ title: x.title })) } : {}) }))
     })
     return { blocks: per.flat(), complete }
   }
