@@ -35,6 +35,10 @@ Wszystkie wiadomości do użytkownika po polsku. Pytania zawsze klikalne (AskUse
    w `docs/postep.md`, wszystko wypchnięte. Po każdym scalonym PR zaproponuj `/clear` (D351).
 
 ## PR, scalanie (D285), wydanie
+- **Paczki (D413):** wydanie po 2–3 gotowych zadaniach sesji (np. raz na noc). Zadanie: pełne testy lokalne (lista wyżej)
+  i `/code-review`, potem `git merge` do gałęzi paczki `claude/paczka-<opis>` – bez PR i bez CI; wpis w postępie i punkty
+  odbioru jak dotąd (wersja – ta paczki). Paczka: `version` raz, jedna sekcja `CHANGELOG.md` dla wszystkich zadań, jeden PR
+  do `main` z pełnym CI (Linux i Windows) i zasady scalania niżej bez zmian.
 - Nowa wersja: `version` w `package.json` + sekcja `## X.Y.Z` w `CHANGELOG.md` (CI sprawdza `scripts/release-notes.mjs`).
 - PR scalam sam, gdy CI na Linuksie i Windows jest zielone, nie ma konfliktu ani otwartych uwag i nic nie czeka na decyzję
   użytkownika. Po scaleniu sprawdzam, że zadanie Windows na `main` opublikowało wydanie (czerwone E2E na `main` = brak wydania).

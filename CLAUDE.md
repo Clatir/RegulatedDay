@@ -11,7 +11,8 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
 - Zachowanie widoczne dla użytkownika zmienia się tylko po pytaniu, nigdy zgodą hurtem. Sprawy techniczne rozstrzygaj
   sam i dopisz jako T-decyzję.
 - PR-y otwieraj i scalaj bez pytania, gdy CI jest zielone i nic nie czeka na decyzję (D285, D333). Do `main` pisze
-  naraz jedna sesja; po scaleniu sprawdź, że zadanie Windows w CI opublikowało wydanie.
+  naraz jedna sesja; po scaleniu sprawdź, że zadanie Windows w CI opublikowało wydanie. Wydanie po paczce 2–3 zadań
+  (D413): zadanie – testy lokalne i `/code-review`, scalenie do gałęzi paczki bez CI; paczka – jeden PR z pełnym CI.
 - Plan napraw (D349, D351): główna sesja na Opus 5.5 · high zleca test i poprawkę każdego zadania wykonawcy
   z `.claude/agents/` według kolumny „Wykonawca” w `docs/plan.md`, a sama sprawdza, robi `/code-review`, PR i scalanie.
 - **Tokeny (D351):** `/code-review` według ryzyka (xhigh – silnik dnia, folder danych, pasek i okna, instalator;

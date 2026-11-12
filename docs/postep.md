@@ -156,7 +156,8 @@ wolna przy scaleniu; scalenie tylko po uzgodnieniu z sesją ciągu L i po „1.1
 `.claude/worktrees/ws4`, gałąź `claude/snt4-zalaczniki` od 96201f8. Numery D410–D439, T800–T849 (L – D440–D449, HKU –
 D450–D459, T850–T899). Model: główna Opus 5.5 · high; część A `wykonawca-opus`, część B `wykonawca-sonnet`; przegląd xhigh.
 Kolejka do `main`: L2 (1.14.0) → SNT4 (zwykle 1.15.0) → SNT5 (sesja L). **Zgoda 12.11 ok. 21:30:** do scalenia i wydania
-bez „dalej”; do 13.11 ok. 7:00 pytanie o zachowanie = rekomendacja jako D „do potwierdzenia”, praca i scalenie idą dalej.
+bez „dalej”; do 13.11 ok. 7:00 pytanie o zachowanie = rekomendacja jako D „do potwierdzenia”, praca i scalenie idą dalej. Kolejka (decyzja 12.11 ok. 22:15): po scaleniu L2 (PR #79) od razu merge
+`origin/main` i CI PR równolegle z wydaniem 1.14.0; scalenie SNT4 dopiero po publikacji 1.14.0.
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
