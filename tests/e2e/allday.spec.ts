@@ -4,11 +4,14 @@
  * przeciągnięcie przez trzy dni daje jedną belkę na trzy kolumny; „Usuń” bez pytania, linia „Usunięto … · Cofnij” w oknie;
  * „To wolne” pyta raz o typ „Wolne” i „Cofnij” przywraca dni.
  */
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import { launch, withMainLog } from './app'
+import { rangeText } from '../../src/shared/model/allDay'
+import { addDays } from '../../src/shared/time/zone'
+import { shortTitle } from '../../src/shared/widget'
+import { launch, viewPage, withMainLog } from './app'
 import { seedAwake } from './seedAwake'
 
 interface Stored {
@@ -253,3 +256,105 @@ async function nextWeek(page: Page): Promise<string[]> {
   await expect(page.getByTestId(`week-day-${monday}`)).toBeVisible({ timeout: 30_000 })
   return weekDates(page)
 }
+
+/** An event in the folder as the app writes it (allday/<id>.json). */
+function seedEvent(dir: string, e: { id: string; title: string; startDate: string; endDate: string; color?: string; note?: string }): void {
+  const folder = join(dir, 'allday')
+  mkdirSync(folder, { recursive: true })
+  writeFileSync(join(folder, `${e.id}.json`), JSON.stringify({ schema: 1, color: 'amber', note: '', free: false, calendarId: null, updatedAt: Date.now(), ...e }, null, 2))
+}
+
+test('Ctrl K (D405): wydarzenie znalezione po tytule i po słowie z notatki, Enter otwiera „Tydzień” z kartą edycji tego wydarzenia', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-allday-search-'))
+  const { today } = seedAwake(dataDir, [])
+  seedEvent(dataDir, { id: 'k1', title: 'Konferencja', startDate: addDays(today, -1), endDate: addDays(today, 1), color: 'teal', note: 'Sala czterdzieści hotel' })
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      for (const query of ['konf', 'hotel']) {
+        await page.getByTestId('nav-today').click()
+        await expect(page.getByTestId('today')).toBeVisible()
+        await page.keyboard.press('Control+k')
+        await page.getByTestId('search-input').fill(query)
+        const hit = page.locator('[data-testid="search-hit"][data-kind="allDay"]')
+        await expect(hit).toHaveCount(1, { timeout: 15_000 })
+        await expect(hit).toContainText('Konferencja')
+        await expect(hit).toContainText(rangeText({ startDate: addDays(today, -1), endDate: addDays(today, 1) }))
+        await page.keyboard.press('Enter')
+        await expect(page.getByTestId('search')).toHaveCount(0)
+        await expect(page.getByTestId('week')).toBeVisible()
+        await expect(page.getByTestId('allday-card')).toBeVisible({ timeout: 15_000 })
+        await expect(page.getByTestId('allday-title')).toHaveValue('Konferencja')
+        await expect(page.getByTestId('allday-remove')).toBeVisible()
+        await page.getByTestId('allday-cancel').click()
+        await expect(page.getByTestId('allday-card')).toHaveCount(0)
+      }
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Dziś (D405): plan poranny ma jedną linię „Dziś: …” bez pytania; pasek pulpitu – kropka, tytuł skrócony i „+N”, pełne tytuły po najechaniu, bez podpowiedzi title', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-allday-bar-'))
+  const { today } = seedAwake(dataDir, [])
+  const long = 'Konferencja branżowa w Krakowie'
+  seedEvent(dataDir, { id: 'k1', title: long, startDate: addDays(today, -1), endDate: addDays(today, 1), color: 'teal' })
+  seedEvent(dataDir, { id: 'k2', title: 'Urlop', startDate: today, endDate: today, color: 'rose' })
+  seedEvent(dataDir, { id: 'k3', title: 'Jutro', startDate: addDays(today, 1), endDate: addDays(today, 1) })
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      // The morning plan: one line, every event of today in the order of the strip, no button of its own.
+      const line = page.getByTestId('morning-allday')
+      await expect(line).toHaveText(`Dziś: ${long} (2/3) · Urlop`, { timeout: 15_000 })
+      await expect(line.locator('button')).toHaveCount(0)
+
+      // The desktop bar: the first event cut with „…”, „+1” for the other, the colour dot, the block's name stays.
+      const bar = await viewPage(app, 'bar')
+      const label = bar.getByTestId('bar-allday')
+      await expect(label).toBeVisible({ timeout: 30_000 })
+      await expect(bar.getByTestId('bar-allday-text')).toHaveText(`${shortTitle(long)} +1`)
+      await expect(bar.getByTestId('bar-allday-dot')).toHaveCSS('background-color', 'rgb(121, 175, 171)')
+      await expect(bar.getByTestId('bar-block')).toBeVisible()
+      expect(await bar.locator('[title]').count()).toBe(0)
+      // Hover: every title in place; leaving brings the short text back.
+      await label.hover()
+      await expect(bar.getByTestId('bar-allday-text')).toHaveText(`${long} · Urlop`)
+      await bar.mouse.move(0, 400)
+      await expect(bar.getByTestId('bar-allday-text')).toHaveText(`${shortTitle(long)} +1`)
+      // The window's own bar and the panel have no label (only the desktop bar, D405).
+      await expect(page.getByTestId('bar-main')).toBeVisible()
+      await expect(page.getByTestId('bar-allday')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Dziś (D405): bez wydarzeń dziś pasek pulpitu i plan poranny nie mają podpisu ani linii (wydarzenie z innego dnia nie liczy się)', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-allday-none-'))
+  const { today } = seedAwake(dataDir, [])
+  seedEvent(dataDir, { id: 'k3', title: 'Jutro', startDate: addDays(today, 1), endDate: addDays(today, 2) })
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByTestId('morning-plan')).toBeVisible()
+      const bar = await viewPage(app, 'bar')
+      await expect(bar.getByTestId('bar-block')).toBeVisible({ timeout: 30_000 })
+      await expect(bar.getByTestId('bar-allday')).toHaveCount(0)
+      await expect(page.getByTestId('morning-allday')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

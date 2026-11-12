@@ -5,6 +5,8 @@ paths:
   - "src/shared/model/allDay.ts"
   - "tests/web/all-day-bar.test.ts"
   - "tests/e2e/allday.spec.ts"
+  - "src/renderer/features/today/morningAllDay.ts"
+  - "tests/unit/bar-all-day.test.ts"
 ---
 
 # Wydarzenia całodniowe – ekrany (HKU1 część B)
@@ -35,3 +37,9 @@ regeneracji ani typu dnia (silnik go nie czyta – T725).
 ## Z zewnątrz (Ctrl K, część C)
 - `openAllDayCard(id)` (`store/ui.ts`): „Tydzień”, `WeekPage` ustawia tydzień dnia początku (brak wydarzenia – dymek), pas tego tygodnia bierze
   `openAllDay` raz (`takeOpenAllDay`) i otwiera kartę edycji. Ręczne przejście czyści `openAllDay`.
+
+## Pasek, Ctrl K, plan poranny (część C, T740–T746)
+- Pasek pulpitu: `WidgetView.allDay` (`barAllDay`, `shortTitle` w `shared/widget.ts`) z wejścia `engineView({ allDay })`; `WidgetEngine.refreshNow`
+  czyta `folder.collection('allDay')` (błąd = bez podpisu). Dziś = doba logiczna. Rysuje `AllDayLabel` (`Bar.tsx`) tylko w trybie `desktop`, w elastycznej
+  części wiersza; pełne tytuły po najechaniu w miejscu (nie `title`). Bez wydarzeń znaczniki jak dotąd.
+- Ctrl K: rodzaj `allDay` (grupa „Wydarzenia”), `choose` → `openAllDayCard`. Plan poranny: `morningAllDayLine`, linia `morning-allday` pod nagłówkiem.

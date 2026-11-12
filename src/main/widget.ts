@@ -31,6 +31,7 @@ import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
 import { dayFileFrom } from '@shared/model/plan'
 import { personName } from '@shared/model/rd'
+import { allDayFrom, type AllDayEvent } from '@shared/model/allDay'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { ROUTINE_VERSION_NAMES, ROUTINE_VERSIONS, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
 import { logicalDayOf } from '@shared/time/day'
@@ -315,6 +316,8 @@ export class WidgetEngine {
       const rd = m.rd
       const routines = (await folder.collection('routine').catch(() => [])).map(routineFrom).filter((x): x is Routine => !!x)
       const requests = (await folder.collection('request').catch(() => [])).map(requestFrom).filter((x): x is RequestRecord => !!x)
+      // A collection not readable now leaves the bar without the label, never without the bar (D405).
+      const allDay = (await folder.collection('allDay').catch(() => [])).map(allDayFrom).filter((x): x is AllDayEvent => !!x)
       const names = { rd, settings: m.state.settings, routines, requests }
       if (this.pending && this.pending.until <= mono) this.pending = null
       if (this.note && this.note.until <= mono) this.note = null
@@ -343,7 +346,8 @@ export class WidgetEngine {
           person: (id) => personName(rd, id),
           carried: m.carried,
           ritualFrom: await folder.ritualDay(),
-          routines
+          routines,
+          allDay
         }),
         note: this.note ? { text: this.note.text, left: this.note.until - mono } : null
       }

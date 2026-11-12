@@ -6,7 +6,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { termHolds } from '@renderer/lib/viewTerms'
-import { AutosList, Bar } from '@renderer/widget/Bar'
+import { AllDayLabel, AutosList, Bar } from '@renderer/widget/Bar'
 import { noFolderView, type WidgetView } from '@shared/widget'
 
 /** A bar with a day (`noFolderView` is the one without), the night's quiet on or off. */
@@ -93,5 +93,32 @@ describe('terminy w widoku paska (zegar monotoniczny okna)', () => {
     const gone = html(dayView({ pending: { button: 'zzz', text: 'Przedłuż +15: przedłużenie', left: 0 }, note: { text: 'nic nie biegnie', left: 0 } }))
     expect(gone).not.toContain('data-testid="bar-pending"')
     expect(gone).not.toContain('data-testid="bar-note-click"')
+  })
+})
+
+describe('podpis wydarzeń całodniowych na pasku pulpitu (D405)', () => {
+  const allDay = { color: '#79AFAB', text: 'Konferencja +1', full: 'Konferencja · Urlop' }
+
+  it('na pasku pulpitu: kropka w kolorze, skrócony tekst, bez title (podpowiedź byłaby osobnym oknem), przed nazwą bloku', () => {
+    const out = html(dayView({ allDay }), 'desktop')
+    expect(out).toContain('data-testid="bar-allday"')
+    expect(out).toContain('data-testid="bar-allday-text"')
+    expect(out).toContain('Konferencja +1')
+    expect(out).not.toContain('Urlop')
+    expect(out).toContain('background:#79AFAB')
+    expect(out).not.toContain('title=')
+    expect(out.indexOf('bar-allday"')).toBeLessThan(out.indexOf('data-testid="bar-block"'))
+  })
+
+  it('po najechaniu (stan otwarty) pokazuje wszystkie tytuły w miejscu', () => {
+    const out = renderToStaticMarkup(createElement(AllDayLabel, { allDay, open: true }))
+    expect(out).toContain('data-open="on"')
+    expect(out).toContain('Konferencja · Urlop')
+  })
+
+  it('bez wydarzeń dziś pasek wygląda jak dotąd; okno główne i panel podpisu nie mają', () => {
+    expect(html(dayView(), 'desktop')).not.toContain('bar-allday')
+    for (const mode of ['main', 'panel'] as const) expect(html(dayView({ allDay }), mode)).not.toContain('bar-allday')
+    expect(html(dayView(), 'desktop')).toBe(html(dayView({ allDay: null }), 'desktop'))
   })
 })

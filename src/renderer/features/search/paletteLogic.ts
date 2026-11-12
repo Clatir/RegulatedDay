@@ -5,7 +5,7 @@
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { GROUP_SIZE, parseRecents, recordKey, rememberRecent, type GroupId, type SearchGroup, type SearchRecord } from '@shared/search'
-import { navigate, openDay, openPick, openRitual, type Page } from '../../store/ui'
+import { navigate, openAllDayCard, openDay, openPick, openRitual, type Page } from '../../store/ui'
 
 export type Row =
   | { type: 'head'; label: string }
@@ -59,6 +59,9 @@ export function choose(r: SearchRecord, today: string): void {
       return
     case 'block':
       openPick({ page: 'today', day: r.date === today ? null : r.date! }, { kind: 'block', id: r.id, date: r.date! })
+      return
+    case 'allDay':
+      openAllDayCard(r.id)
       return
     case 'template':
       openPick({ page: 'templates' }, { kind: 'template', id: r.id })

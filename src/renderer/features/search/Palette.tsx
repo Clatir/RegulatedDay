@@ -45,7 +45,7 @@ function PaletteBody() {
   const [days, setDays] = useState<Days>('loading')
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLDivElement>(null)
-  const { rd, templates, requests, routines } = useData()
+  const { rd, templates, requests, routines, allDay } = useData()
   const viewToday = useData((s) => s.view?.today ?? null)
   const today = todayOf(viewToday)
   useEscapeLayer(true, closeSearch)
@@ -70,8 +70,8 @@ function PaletteBody() {
     }
   }, [])
   const records = useMemo(
-    () => searchRecords({ today, rd, templates, requests, routines, blocks: typeof days === 'object' ? days.blocks : [], pageLabel: PAGE_LABEL, pageKeys }),
-    [today, rd, templates, requests, routines, days]
+    () => searchRecords({ today, rd, templates, requests, routines, allDay, blocks: typeof days === 'object' ? days.blocks : [], pageLabel: PAGE_LABEL, pageKeys }),
+    [today, rd, templates, requests, routines, allDay, days]
   )
   const index = useMemo(() => buildIndex(records), [records])
   const qw = useMemo(() => queryWords(query), [query])
@@ -140,7 +140,7 @@ function PaletteBody() {
           aria-controls="search-list"
           aria-activedescendant={rowAt >= 0 ? `search-row-${rowAt}` : undefined}
           aria-label="Szukaj"
-          placeholder="Szukaj bloków, notatek, szablonów, próśb, rutyn, ustawień…"
+          placeholder="Szukaj bloków, notatek, wydarzeń, szablonów, próśb, rutyn, ustawień…"
           className="input h-[42px] w-full shrink-0 rounded-none border-x-0 border-t-0 px-4 text-[14px]"
           data-testid="search-input"
         />

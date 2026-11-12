@@ -61,6 +61,36 @@ afterEach(() => {
   delete (globalThis as { localStorage?: unknown }).localStorage
 })
 
+const allDayEvents = [
+  { id: 'ev1', title: 'Konferencja', startDate: '2026-11-18', endDate: '2026-11-20', calendarId: null, color: 'teal' as const, note: 'Kraków, hotel przy rynku', free: false },
+  { id: 'ev2', title: 'Urlop', startDate: '2026-12-24', endDate: '2026-12-24', calendarId: null, color: 'amber' as const, note: '', free: true }
+]
+
+describe('wydarzenia całodniowe w wyszukiwarce (D405)', () => {
+  const found = (q: string) => search(searchRecords({ ...input(), allDay: allDayEvents }), q, TODAY)
+
+  it('rekord: tytuł, notatka jako tekst, daty jako podpowiedź („18–20.11”, „24.12”), nazwą, nigdy id', () => {
+    const recs = searchRecords({ ...input(), allDay: allDayEvents }).filter((r) => r.kind === 'allDay')
+    expect(recs).toEqual([
+      { kind: 'allDay', id: 'ev1', title: 'Konferencja', text: 'Kraków, hotel przy rynku', hint: '18–20.11' },
+      { kind: 'allDay', id: 'ev2', title: 'Urlop', text: '', hint: '24.12' }
+    ])
+  })
+
+  it('znajdowane po tytule i po słowie z notatki, w grupie „Wydarzenia”', () => {
+    for (const q of ['konf', 'rynku', 'krakow']) {
+      const g = found(q).find((x) => x.id === 'allDay')
+      expect(g?.label).toBe('Wydarzenia')
+      expect(g?.hits.map((h) => h.record.id)).toEqual(['ev1'])
+    }
+  })
+
+  it('bez wydarzeń w danych nie ma rekordów ani grupy', () => {
+    expect(searchRecords(input()).some((r) => r.kind === 'allDay')).toBe(false)
+    expect(search(searchRecords(input()), 'konf', TODAY).some((g) => g.id === 'allDay')).toBe(false)
+  })
+})
+
 describe('rekordy wyszukiwarki', () => {
   it('ekrany, polecenia, ustawienia, kategorie, szablony z blokami, prośby (także zrobione), rutyny z krokami i bloki dni', () => {
     const rs = searchRecords(input([{ date: '2026-11-09', id: 'a', title: 'Analiza', note: 'Kowalski podał numer' }]))
@@ -148,6 +178,11 @@ describe('Enter na wyniku (T653)', () => {
     expect(go(rec('routine', 'rano'))).toEqual(['routines', { kind: 'routine', id: 'rano' }])
     expect(go(rec('category', 'analiza'))).toEqual(['settings', { kind: 'category', id: 'analiza' }])
     expect(go(rec('setting', 'settings-data'))).toEqual(['settings', { kind: 'setting', id: 'settings-data' }])
+  })
+
+  it('wydarzenie całodniowe: „Tydzień” z kartą tego wydarzenia (openAllDay), bez wyboru (D405)', () => {
+    choose(rec('allDay', 'ev1'), TODAY)
+    expect([ui().page, ui().pick, ui().openAllDay]).toEqual(['week', null, 'ev1'])
   })
 
   it('ekran: przejście bez wyboru', () => {

@@ -23,6 +23,7 @@ import { personName } from '@shared/model/rd'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { Segmented, cx } from '../../components/ui'
+import { morningAllDayLine } from './morningAllDay'
 import { CalibrationCard } from '../calibration/CalibrationEntry'
 import { SideBStep, sideBShown } from './SideBStep'
 import { GoalsStep } from './GoalsStep'
@@ -61,6 +62,8 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   const month = monthOfDate(model.date)
   const goalsClosed = useUi((u) => u.goalsClosed)
   const goals = goalsStepOpen(names.rd.goals[month], month, goalsClosed, approvedByYou)
+  // Today's all-day events: one information line under the header – no question, no step (D405).
+  const allDayLine = morningAllDayLine(useData((d) => d.allDay), model.date)
   return (
     <section className="rounded-lg border border-line bg-panel" data-testid="morning-plan">
       <button type="button" className="flex w-full items-center gap-2 px-4 py-2.5 text-left" onClick={() => setOpen(!open)}>
@@ -69,6 +72,11 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
         <span className="flex-1" />
         <span className="text-muted">{open ? '▴' : '▾'}</span>
       </button>
+      {allDayLine && (
+        <div className="px-4 pb-2.5 text-[12.5px] text-muted" data-testid="morning-allday">
+          {allDayLine}
+        </div>
+      )}
       {open && (
         <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
           {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : needCheckin && !skipCheckin ? <Checkin model={model} onSkip={() => setSkipCheckin(true)} /> : <Plan model={model} names={names} />}

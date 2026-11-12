@@ -2,7 +2,8 @@
  * What the widget shows (spec „Widget”: the bar at the top of the main window, in the icon's panel and on the desktop,
  * and the icon by the clock): the engine's view (E4b) – without a data folder one neutral line (`noFolderView`, D327).
  */
-import { ENGINE_TONE_SET, iconColor, TONE_SETS, toneColor, type Tone, type ToneSetId, type WarnStep } from './theme'
+import { compareAllDay, eventsOn, type AllDayEvent } from './model/allDay'
+import { ALL_DAY_COLOR_HEX, ENGINE_TONE_SET, iconColor, TONE_SETS, toneColor, type Tone, type ToneSetId, type WarnStep } from './theme'
 
 /**
  * How long a line of a change of the plan with its „Cofnij” stays: „Przestawiono: …” after a variant (D313), „Przesunięto
@@ -62,6 +63,34 @@ export interface AutoGroup {
   id: string
   text: string
   items: AutoItem[]
+}
+
+/** The longest title the bar's all-day label shows (D405); a longer one ends in „…”. */
+export const BAR_ALL_DAY_CHARS = 20
+
+/**
+ * The label of today's all-day events at the left of the desktop bar (D405, read only): the colour of the first one
+ * (hex, a dot), its title shortened with „+N” for the others (`text`) and every title (`full`, shown on hover inside the
+ * bar – a native tooltip would be a window of its own, D229).
+ */
+export interface BarAllDay {
+  color: string
+  text: string
+  full: string
+}
+
+/** A title cut to `max` characters with an ellipsis (the cut never ends in a space). */
+export function shortTitle(title: string, max = BAR_ALL_DAY_CHARS): string {
+  const chars = Array.from(title.trim())
+  return chars.length <= max ? chars.join('') : `${chars.slice(0, max - 1).join('').trimEnd()}…`
+}
+
+/** The bar's label for `today`: null when no event touches it (the bar then looks as before – no empty place). */
+export function barAllDay(events: readonly AllDayEvent[], today: string): BarAllDay | null {
+  const list = eventsOn(events, today).sort(compareAllDay)
+  const first = list[0]
+  if (!first) return null
+  return { color: ALL_DAY_COLOR_HEX[first.color], text: `${shortTitle(first.title)}${list.length > 1 ? ` +${list.length - 1}` : ''}`, full: list.map((e) => e.title.trim()).join(' · ') }
 }
 
 export interface WidgetView {
@@ -128,6 +157,8 @@ export interface WidgetView {
   ritual: boolean
   /** The routines whose lines the bar shows (D328): „Kroki ▸” unfolds the steps of the line's routine. */
   routines: BarRoutine[]
+  /** Today's all-day events as the desktop bar's label (D405), null: none today. */
+  allDay: BarAllDay | null
 }
 
 /** A routine to tick off (D328): its line, its block, and its steps in each version (`worse` empty: none to pick). */
@@ -218,7 +249,8 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
     requests: NO_REQUESTS,
     variants: NO_VARIANTS,
     ritual: false,
-    routines: []
+    routines: [],
+    allDay: null
   }
 }
 

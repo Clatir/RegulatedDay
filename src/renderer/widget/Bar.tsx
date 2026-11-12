@@ -11,7 +11,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode 
 import type { WidgetAction } from '@shared/api'
 import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
 import { barBackground, TONE_SETS } from '@shared/theme'
-import { SEEN_LINE, type AutoItem, type BarLine, type BarRoutine, type RunningRequest, type WidgetView } from '@shared/widget'
+import { SEEN_LINE, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
@@ -111,6 +111,31 @@ function DragHandle() {
       onLostPointerCapture={() => end('lost')}
     >
       ⠿
+    </span>
+  )
+}
+
+/**
+ * Today's all-day events at the left of the desktop bar (D405): the colour of the first one as a dot, its title cut to
+ * about 20 characters with „+N” for the others. Read only – a click is the bar's own click; on hover the label shows
+ * every full title in place (no tooltip: it would be a window of its own, D229). It takes its room from the block's
+ * name (the flexible part): never wider than half of it, truncated.
+ */
+export function AllDayLabel({ allDay, open }: { allDay: BarAllDay; open?: boolean }) {
+  const [hover, setHover] = useState(false)
+  const shown = open ?? hover
+  return (
+    <span
+      className={cx('flex min-w-0 items-center gap-1.5 text-[12px] text-fg', shown ? 'flex-[4]' : 'max-w-[55%] shrink-0')}
+      data-testid="bar-allday"
+      data-open={shown ? 'on' : 'off'}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => setHover(false)}
+    >
+      <span className="h-[8px] w-[8px] shrink-0 rounded-full" style={{ background: allDay.color }} data-testid="bar-allday-dot" />
+      <span className={cx('min-w-0', shown ? 'whitespace-normal break-words' : 'truncate')} data-testid="bar-allday-text">
+        {shown ? allDay.full : allDay.text}
+      </span>
     </span>
   )
 }
@@ -686,9 +711,13 @@ export function Bar({ view, mode, grows = 'up', onUnfold }: { view: WidgetView; 
           {running && !view.block ? (
             <RequestLine run={running} mode={mode} now={now} />
           ) : (
-            <span className="min-w-[120px] flex-1 truncate text-fg" data-testid="bar-block">
-              {view.block ? view.block.name : view.night ? clockOf(now) : 'Bez bloku'}
-              {view.block && !quiet && <span className="ml-1.5 text-[12px] text-muted">{view.block.className}</span>}
+            <span className="flex min-w-[120px] flex-1 items-center gap-2">
+              {/* Today's all-day events (D405): only on the desktop bar, only when there is one – nothing else moves. */}
+              {mode === 'desktop' && view.allDay && <AllDayLabel allDay={view.allDay} />}
+              <span className="min-w-0 flex-1 truncate text-fg" data-testid="bar-block">
+                {view.block ? view.block.name : view.night ? clockOf(now) : 'Bez bloku'}
+                {view.block && !quiet && <span className="ml-1.5 text-[12px] text-muted">{view.block.className}</span>}
+              </span>
             </span>
           )}
           {view.block && (
