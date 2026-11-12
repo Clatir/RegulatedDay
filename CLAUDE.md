@@ -35,8 +35,8 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
 - `docs/specyfikacja.md` – aktualne reguły (v29), ~420 KB. **Nie czytaj w całości:** Grep po nagłówku `##` albo
   identyfikatorze, potem `Read` z `offset`/`limit`. Rozdziały: Model dnia, Model energii, Bloki, Zakres 1.0, Timer,
   Grywalizacja, Wygląd, Dane i ustawienia, Konwencje interfejsu, Jakość i protokół, Plan budowy.
-- `docs/decyzje.md` – decyzje D (użytkownik), `docs/decyzje-techniczne.md` – T400 i nowsze,
-  `docs/decyzje-techniczne-T1-T399.md` – starsze T (D308, T535); czytaj Grepem po numerze. Nie zmieniaj D bez
+- `docs/decyzje.md` – decyzje D (użytkownik), `docs/decyzje-techniczne.md` – T500 i nowsze, starsze T –
+  `docs/decyzje-techniczne-T1-T399.md` i `-T400-T499.md` (D308, T535, T840); czytaj Grepem po numerze. Nie zmieniaj D bez
   pytania; nowa decyzja wskazuje, którą zastępuje.
 - `docs/plan.md` – tylko praca do zrobienia: ciągi, rodzaj, model, szacunek, „gotowe, gdy” (D317, D349).
   `docs/postep.md` – stan bieżący i kolejka (≤ 20 KB; zakończone wpisy → `docs/archiwum/postep-*.md`).
