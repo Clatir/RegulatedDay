@@ -6,6 +6,8 @@
  * file with the day (`engine/cases.ts`); `state` stays the field the versions before „Sprawy” read and write – the new
  * version keeps it in step, so an older version on another computer still shows and changes it without losing a field.
  * „Zrobione teraz”, urgent and evening requests are started in the widget (E5) – they are events of the log.
+ * HKU2 (D409, D451): „Termin” (`dueDate`) and „Wykonać” (`doDate`) of every sprawa, and the day of the last move by hand
+ * (`listSetDay`) – the date of doing puts it on „Dziś” on its day, counted like the lists (never written at 04:00).
  */
 import { isIsoDate } from '../time/zone'
 
@@ -55,6 +57,15 @@ export interface RequestRecord {
   listDay: string | null
   /** When it was marked done; null – not done, or done before „Sprawy” (`doneDayOf`). */
   doneAt: number | null
+  /** „Termin” (D409): the day it has to be done by – a task and a request alike; null – none. */
+  dueDate: string | null
+  /** „Wykonać” (D409, D451): the day it is to be done on – on that day it is on „Dziś” (`engine/cases.ts`); null – none. */
+  doDate: string | null
+  /**
+   * The logical day it was last moved to a list by hand (T851) – a move on its date of doing or after it wins over the
+   * date (D451); null – never moved since the date was set (setting the date clears it), or a file written before HKU2.
+   */
+  listSetDay: string | null
 }
 
 /** The estimate's range (a field of whole minutes, like a block's length). */
@@ -70,6 +81,8 @@ export const CASE_NOTE_MAX = 500
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const estimateFrom = (est: unknown): number | null => (typeof est === 'number' && Number.isInteger(est) && est >= ESTIMATE_RANGE[0] && est <= ESTIMATE_RANGE[1] ? est : null)
+/** A day of the record ('RRRR-MM-DD'); anything else – none (a broken date reads as no date, D409). */
+export const dateFrom = (v: unknown): string | null => (isIsoDate(v) ? v : null)
 /** A title as stored: one line, trimmed, at most `TITLE_MAX`. */
 export const titleOf = (v: unknown): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, TITLE_MAX) : '')
 
@@ -90,13 +103,16 @@ export function requestFrom(v: unknown): RequestRecord | null {
     block: typeof v.block === 'string' && v.block ? v.block : null,
     list: isCaseList(v.list) ? v.list : null,
     listDay: isIsoDate(v.listDay) ? v.listDay : null,
-    doneAt: typeof v.doneAt === 'number' && Number.isFinite(v.doneAt) && v.doneAt > 0 ? v.doneAt : null
+    doneAt: typeof v.doneAt === 'number' && Number.isFinite(v.doneAt) && v.doneAt > 0 ? v.doneAt : null,
+    dueDate: dateFrom(v.dueDate),
+    doDate: dateFrom(v.doDate),
+    listSetDay: dateFrom(v.listSetDay)
   }
 }
 
 /** The new request's fields (as written: the queue creates the file) – in „Skrzynka”, as a request „w kolejce” was. */
-export function newRequest(id: string, at: number, p: { person: string | null; estimateMin: number | null; note: string }): Record<string, unknown> {
-  return { schema: REQUEST_SCHEMA, id, kind: 'request', person: p.person, estimateMin: p.estimateMin, note: p.note, createdAt: at, state: 'queued', day: null, block: null, list: 'inbox', listDay: null, doneAt: null }
+export function newRequest(id: string, at: number, p: { person: string | null; estimateMin: number | null; note: string; dueDate?: string | null; doDate?: string | null }): Record<string, unknown> {
+  return { schema: REQUEST_SCHEMA, id, kind: 'request', person: p.person, estimateMin: p.estimateMin, note: p.note, createdAt: at, state: 'queued', day: null, block: null, list: 'inbox', listDay: null, doneAt: null, dueDate: dateFrom(p.dueDate), doDate: dateFrom(p.doDate) }
 }
 
 /** What a new task is made of (D384): the title required, the rest from the defaults. */
@@ -107,6 +123,9 @@ export interface NewTask {
   note?: string
   /** Its list (default „Skrzynka” – the quick capture, D385). */
   list?: CaseList
+  /** „Termin” and „Wykonać” (D409; the quick capture's „!jutro” / „@pt” – `parseQuickDates`); none by default. */
+  dueDate?: string | null
+  doDate?: string | null
 }
 
 /**
@@ -131,6 +150,8 @@ export function newTask(id: string, at: number, today: string, p: NewTask): Reco
     block: null,
     list,
     listDay: list === 'today' ? today : null,
-    doneAt: list === 'done' ? at : null
+    doneAt: list === 'done' ? at : null,
+    dueDate: dateFrom(p.dueDate),
+    doDate: dateFrom(p.doDate)
   }
 }

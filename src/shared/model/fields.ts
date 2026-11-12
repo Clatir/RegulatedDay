@@ -27,7 +27,7 @@ export interface NumberField {
   group: FieldGroup
 }
 
-export type FieldGroup = 'dayTypes' | 'sleep' | 'boundary' | 'energy' | 'reminders' | 'timer' | 'care'
+export type FieldGroup = 'dayTypes' | 'sleep' | 'boundary' | 'energy' | 'reminders' | 'timer' | 'care' | 'cases'
 
 export const FIELD_GROUP_NAMES: Record<FieldGroup, string> = {
   dayTypes: 'Typy dni',
@@ -36,7 +36,9 @@ export const FIELD_GROUP_NAMES: Record<FieldGroup, string> = {
   energy: 'Energia',
   reminders: 'Przypomnienia',
   timer: 'Pytania w ciągu dnia',
-  care: 'Przerwy, woda i samotność'
+  care: 'Przerwy, woda i samotność',
+  // Drawn by the settings beside the quick capture's shortcut (D451), not as a section of its own.
+  cases: 'Sprawy'
 }
 
 /** The fields of one day type (their label names the type in the settings' table). */
@@ -83,7 +85,8 @@ export const NUMBER_FIELDS: readonly NumberField[] = [
   { key: 'waterEveryMin', scope: 'general', path: ['waterEveryMin'], label: 'Woda co', kind: 'duration', range: GENERAL_RANGES.waterEveryMin, group: 'care', hint: 'Przy przejściu między blokami po 2/3 odstępu.' },
   { key: 'breakAfterMin', scope: 'general', path: ['breakAfterMin'], label: 'Przerwa po ciągłej pracy', kind: 'duration', range: GENERAL_RANGES.breakAfterMin, offAllowed: true, group: 'care', hint: '0 wyłącza propozycję.' },
   { key: 'breakMin', scope: 'general', path: ['breakMin'], label: 'Długość przerwy', kind: 'duration', range: GENERAL_RANGES.breakMin, group: 'care' },
-  { key: 'solitudeAfterMin', scope: 'general', path: ['solitudeAfterMin'], label: 'Samotność po kontakcie dłuższym niż', kind: 'duration', range: GENERAL_RANGES.solitudeAfterMin, offAllowed: true, group: 'care', hint: '0 wyłącza sugestię.' }
+  { key: 'solitudeAfterMin', scope: 'general', path: ['solitudeAfterMin'], label: 'Samotność po kontakcie dłuższym niż', kind: 'duration', range: GENERAL_RANGES.solitudeAfterMin, offAllowed: true, group: 'care', hint: '0 wyłącza sugestię.' },
+  { key: 'deadlineDays', scope: 'general', path: ['deadlineDays'], label: 'Terminy w planie porannym', kind: 'integer', range: GENERAL_RANGES.deadlineDays, unit: 'dni', group: 'cases', hint: 'Plan poranny pokazuje sprawy po terminie i z terminem do tylu dni naprzód (2 – dziś, jutro i pojutrze).' }
 ]
 
 export function fieldByKey(key: string): NumberField | undefined {

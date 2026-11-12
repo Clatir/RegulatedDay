@@ -2,6 +2,8 @@
 paths:
   - "src/shared/model/requests.ts"
   - "src/shared/engine/cases.ts"
+  - "src/shared/engine/caseDates.ts"
+  - "src/shared/quickDates.ts"
   - "src/renderer/store/cases.ts"
   - "src/main/windows/quickWindow.ts"
   - "src/renderer/widget/QuickApp.tsx"
@@ -18,7 +20,7 @@ paths:
 # Sprawy, Skrzynka, szybki zapis (OPS2, L2)
 
 Źródło prawdy: D383, D384, D385, D402 (`docs/decyzje.md`), opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`
-„## 9. Prawdziwy Backlog i Skrzynka Spraw”. Decyzje T750–T758 (logika), T759–T774 (po przeglądach), T780–T785 (ekrany). Prośby w dniu (zdarzenia logu) – reguły `prosby-warianty.md`.
+„## 9. Prawdziwy Backlog i Skrzynka Spraw”. Decyzje T750–T758 (logika), T759–T774 (po przeglądach), T780–T785 (ekrany); terminy i daty wykonania HKU2 – D409, D451, T850–T856. Prośby w dniu (zdarzenia logu) – reguły `prosby-warianty.md`.
 
 ## Pliki
 - `model/requests.ts` – rekord sprawy w `requests/<id>.json` (te same pliki co prośby, T750): `kind` (`task` / `request`),
@@ -37,6 +39,10 @@ paths:
   `planCase(id, dzień, minuta, { push: { blocks, planOf }, seen })` (→ `moved`; „zaczęty” z `caseDays.begun`), `planMorning` (→ `MorningResult { made, skipped }`),
   `answerTask`, `undoCase(undo)`, `useQuickShortcut()`; wynik `CaseResult` (`saved`, `error`, `outcomes`, `id`, `undo`);
   plik dnia nieczytelny teraz (bez `seen`) – nic nie zapisane, `DAY_UNREADABLE`.
+- HKU2 (terminy): pola `dueDate`, `doDate`, `listSetDay` (dzień ręcznego przeniesienia, T851); `listOf` liczy datę wykonania
+  (T852), `caseCompare` – kolejność list (termin, potem `caseOrder`; HKU3 wstawi grupy P1–P4 w `caseGroupOf`);
+  `engine/caseDates.ts` – `dueBadge`, `doText`, `deadlineCases` + „Pomiń” w `asked` dnia (`deadline:<id>`); `shared/quickDates.ts`
+  (lekki – okienko „Do skrzynki”) – `parseQuickDates` (`hub.quickAdd`, `createTask`), `shortDay`, `dayWord`; próg `general.deadlineDays`.
 - Proces główny: `windows/quickWindow.ts` (okienko „Do skrzynki”, skrót globalny), `hub.quickAdd`, `hub.casesRitual` →
   `folder.casesRitual`; pasek: `engineView` (linie `task:`), `WidgetEngine` (akcje `quickAdd`, `quickOpen`, linia `task`).
 
@@ -65,6 +71,8 @@ paths:
 - Lista spraw w procesie głównym (`collection`) bywa do 60 s stara (`LIST_TRUST_MS`) – przed zapisem czytaj rekord
   (`recordView`) i sprawdź warunek jeszcze raz (`answerTask`).
 - `listOf` potrzebuje dnia logicznego (`logicalDayOf`), nie daty kalendarza – po północy do 04:00 to jeszcze wczoraj.
+- Każda zmiana listy z ręki ustawia `listSetDay` (`listedRaw`) – inaczej data wykonania zabierze sprawę z listy, na którą ją
+  przeniesiono; ustawienie nowej `doDate` je czyści. `onTodayOf(r, dzień)` zależy od dnia (data wykonania).
 - Nowe pole `PlanBlock.task` – w `planBlock()`, `planBlockFrom` i literale `blockInfos` (jak każde pole bloku).
 - E2E: `cases.spec.ts` (strona, przeciągnięcie z panelu na oś, plan poranny, skrót w Ustawieniach; „Zadanie zrobione?” i rytuał – testy
   jednostkowe i `fs`, bo potrzebują zakończonego bloku), `quick.spec.ts` (wszędzie; okienko pokazane z testu), `quick-windows.spec.ts` – prawdziwy Win+Alt+N

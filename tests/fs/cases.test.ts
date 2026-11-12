@@ -138,6 +138,29 @@ describe('szybki zapis i zadanie na osi (D385, D384)', () => {
     }
   })
 
+  it('słowa daty na końcu tytułu (D409): „!jutro” – termin, „@dziś” – data wykonania, znikają z tytułu; same słowa – nic', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const today = logicalDayOf(Date.now())
+      const r = await hub.quickAdd('Zapłacić czynsz !jutro @dziś')
+      expect(r).toMatchObject({ ok: true, error: null })
+      const file = JSON.parse(readFileSync(join(dir, paths.record('request', r.id!)), 'utf8')) as Record<string, unknown>
+      expect(file).toMatchObject({ kind: 'task', title: 'Zapłacić czynsz', list: 'inbox', dueDate: addDays(today, 1), doDate: today })
+      // The date of doing is today: on „Dziś” at once – counted, the file says „Skrzynka” (D451).
+      expect(listOf(requestFrom(file)!, today)).toBe('today')
+      // An unknown word stays in the title.
+      const kept = await hub.quickAdd('Kup mleko !coś')
+      expect(JSON.parse(readFileSync(join(dir, paths.record('request', kept.id!)), 'utf8'))).toMatchObject({ title: 'Kup mleko !coś', dueDate: null, doDate: null })
+      expect(await hub.quickAdd('!jutro')).toEqual({ ok: false, error: 'Wpisz, co zapisać.', id: null })
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
   it('przeciągnięcie na „Dziś” 10:00 tworzy blok 30 min „Inne”, zadanie „zaplanowane”; blok usunięty – zadanie wraca, „Cofnij” przywraca', async () => {
     const dir = join(root, 'data')
     mkdirSync(dir, { recursive: true })

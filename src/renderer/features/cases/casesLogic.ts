@@ -3,7 +3,7 @@
  * as the page shows them (the header of „Dziś” with its sum, „Zrobione” of the last 7 days and „Pokaż starsze”), the line
  * that says where a sprawa stands („zaplanowane …”, „wróciło z Dziś …”, „porzucone”), and the texts that name a sprawa (a task by its title, a request by its person).
  */
-import { caseName, caseOrder, todayHeader, todayMinutes, type CaseItem } from '@shared/engine/cases'
+import { caseCompare, caseName, todayHeader, todayMinutes, type CaseItem } from '@shared/engine/cases'
 import { countLabel, logicalClock, plDate } from '@shared/format'
 import { personName, type RdFile } from '@shared/model/rd'
 import { CASE_LISTS, CASE_LIST_NAMES, type CaseList, type RequestRecord } from '@shared/model/requests'
@@ -17,11 +17,11 @@ export interface CaseSection {
   older: number
 }
 
-/** The lists in their order (D383); the items of each in the order of `caseOrder`, `keep` filtering what the filters hide. */
+/** The lists in their order (D383); the items of each in the order of `caseCompare` (due dates first – D409), `keep` filtering what the filters hide. */
 export function sectionsOf(items: readonly CaseItem[], o: { showOlder: boolean; keep?: (x: CaseItem) => boolean }): CaseSection[] {
   const kept = o.keep ? items.filter(o.keep) : [...items]
   return CASE_LISTS.map((list) => {
-    const own = kept.filter((x) => x.list === list).sort(caseOrder)
+    const own = kept.filter((x) => x.list === list).sort(caseCompare)
     // The header of „Dziś” says the sum of its estimates – of all of them, not only of those a filter leaves (D402).
     const title = list === 'today' ? todayHeader(todayMinutes(items.filter((x) => x.list === 'today'))) : CASE_LIST_NAMES[list]
     if (list !== 'done' || o.showOlder) return { list, title, items: own, older: 0 }

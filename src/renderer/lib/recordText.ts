@@ -40,7 +40,7 @@ const BLOCK_FIELDS: Record<string, string> = {
   byVariant: 'zmieniony wariantem'
 }
 
-const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok', title: 'tytuł', kind: 'rodzaj', categoryId: 'kategoria', list: 'lista', listDay: 'dzień na liście „Dziś”', doneAt: 'zrobione' }
+const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok', title: 'tytuł', kind: 'rodzaj', categoryId: 'kategoria', list: 'lista', listDay: 'dzień na liście „Dziś”', doneAt: 'zrobione', dueDate: 'termin', doDate: 'wykonać', listSetDay: 'dzień przeniesienia na listę' }
 const ROUTINE_FIELDS: Record<string, string> = { name: 'nazwa', normal: 'kroki (zwykła)', worse: 'kroki (na gorsze dni)', archived: 'archiwum' }
 const SERIES_FIELDS: Record<string, string> = { start: 'pierwszy dzień', until: 'koniec (dzień)', count: 'koniec (liczba razy)', archived: 'usunięta z listy', root: 'seria' }
 /** The kinds of a series' rule (D381) as the panel of a block says them. */

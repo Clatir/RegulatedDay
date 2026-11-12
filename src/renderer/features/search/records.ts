@@ -13,7 +13,8 @@ import { FIELD_GROUP_NAMES } from '@shared/model/fields'
 import { templateVersionOn, type Template } from '@shared/model/plan'
 import { personName, type RdFile } from '@shared/model/rd'
 import { CASE_LIST_NAMES, CASE_LISTS, type RequestRecord } from '@shared/model/requests'
-import { listOf } from '@shared/engine/cases'
+import { isDone, listOf } from '@shared/engine/cases'
+import { shortDay } from '@shared/quickDates'
 import type { Routine } from '@shared/model/routines'
 import { currentSeries, seriesVersionOn, type SeriesPlan } from '@shared/model/series'
 import { occurrenceBlock } from '@shared/engine/series'
@@ -107,7 +108,9 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
   const lists = shown.map((r) => ({ r, list: listOf(r, i.today) }))
   for (const { r, list } of lists.sort((a, b) => CASE_LISTS.indexOf(a.list) - CASE_LISTS.indexOf(b.list) || b.r.createdAt - a.r.createdAt)) {
     const title = r.kind === 'task' ? r.title || 'zadanie' : personName(i.rd, r.person)
-    out.push({ kind: 'request', id: r.id, title, text: r.note, hint: `${r.kind === 'task' ? 'zadanie' : 'prośba'} · ${CASE_LIST_NAMES[list]}${r.state === 'dropped' ? ' · porzucone' : ''}` })
+    // Its due date (D409), as long as it is not done – the badge's rule.
+    const due = r.dueDate && !isDone(r) ? ` · termin ${shortDay(r.dueDate, i.today)}` : ''
+    out.push({ kind: 'request', id: r.id, title, text: r.note, hint: `${r.kind === 'task' ? 'zadanie' : 'prośba'} · ${CASE_LIST_NAMES[list]}${r.state === 'dropped' ? ' · porzucone' : ''}${due}` })
   }
   for (const r of [...i.routines].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
     out.push({ kind: 'routine', id: r.id, title: r.name, text: [...r.normal, ...r.worse].map((s) => s.name).filter(Boolean).join(' · '), ...(r.archived ? { hint: 'w archiwum' } : {}) })

@@ -3,7 +3,9 @@
  * - which list a sprawa is on today: as written, „Dziś” only on the day it was put there (at 04:00 after it, not done, it
  *   is in „W tym tygodniu” – counted from the date, never written, so two computers can never write it twice, T751); a
  *   file from before „Sprawy” by its `state` (D402: „w kolejce” → Skrzynka, „w planie” → Dziś for today's block, else W tym
- *   tygodniu, „zrobione” and „porzucone” → Zrobione);
+ *   tygodniu, „zrobione” and „porzucone” → Zrobione); the date of doing (HKU2: D409, D451) puts it on „Dziś” on its day
+ *   and on „W tym tygodniu” before it in its week – counted the same way, a move by hand on the date or after it wins
+ *   (`listSetDay`, T851); the lists ordered by the due date first (`caseCompare`, T854);
  * - „zaplanowane <dzień> <godzina>”: the block it was put into is still in its day (the block removed or cancelled – the
  *   sprawa is back on its list without a write, its „Cofnij” brings „zaplanowane” back with the block, T752);
  * - the edits of a sprawa as new versions of its raw file – fields it does not set stay (an older version's too), and
@@ -17,6 +19,7 @@ import { dayRaw, isRaw, putBlock, takeBlock, type Raw } from '../data/dayEdits'
 import { dayFileFrom, type DayFile, type PlanBlock } from '../model/plan'
 import {
   CASE_NOTE_MAX,
+  dateFrom,
   DEFAULT_ESTIMATE_MIN,
   DEFAULT_TASK_CATEGORY,
   DEFAULT_TASK_MIN,
@@ -27,7 +30,7 @@ import {
   type CaseList,
   type RequestRecord
 } from '../model/requests'
-import { logicalDayOf } from '../time/day'
+import { logicalDayOf, weekStart } from '../time/day'
 import { addDays, isIsoDate, weekday } from '../time/zone'
 import { durationLabel } from '../format'
 import type { DayContext, DayState } from './day'
@@ -42,19 +45,14 @@ export const isDone = (r: Pick<RequestRecord, 'state'>): boolean => r.state === 
 /** The estimate the plan counts a sprawa with: its own, else a task's 30 min (D384) or a request's 15. */
 export const estimateOf = (r: Pick<RequestRecord, 'kind' | 'estimateMin'>): number => r.estimateMin ?? (r.kind === 'task' ? DEFAULT_TASK_MIN : DEFAULT_ESTIMATE_MIN)
 
-/**
- * The logical day the sprawa was put on „Dziś” (not done): as written, or – a file from before „Sprawy” – a request „w
- * planie”: the day of its block (D402). Null: not on „Dziś” of any day.
- */
-export function onTodayOf(r: RequestRecord): string | null {
-  if (isDone(r)) return null
+/** The day „Dziś” the record itself says (not done): as written, or – a file from before „Sprawy” – a request „w planie”: its block's day (D402). */
+function writtenTodayOf(r: RequestRecord): string | null {
   if (r.list != null && r.list !== 'done') return r.list === 'today' ? r.listDay : null
   return r.state === 'planned' ? r.day : null
 }
 
-/** The list a sprawa is on, on the logical day `today`. */
-export function listOf(r: RequestRecord, today: string): CaseList {
-  if (isDone(r)) return 'done'
+/** The list as written, on the logical day `today` (not done) – without the date of doing. */
+function writtenListOf(r: RequestRecord, today: string): CaseList {
   if (r.list != null && r.list !== 'done') {
     if (r.list !== 'today') return r.list
     // „Dziś” of an earlier day: back in „W tym tygodniu” since the 04:00 after it (D383). A later day (another computer's
@@ -66,9 +64,60 @@ export function listOf(r: RequestRecord, today: string): CaseList {
   return 'inbox'
 }
 
+/**
+ * The last logical day the sprawa was moved to a list by hand (T851): `listSetDay`, or – a move to „Dziś” by a version
+ * that does not write it – the day it was put on „Dziś”; the later of the two. Null: no move since its date was set.
+ */
+function movedDayOf(r: RequestRecord): string | null {
+  const today = r.list === 'today' ? r.listDay : null
+  if (r.listSetDay == null) return today
+  return today != null && today > r.listSetDay ? today : r.listSetDay
+}
+
+/**
+ * The date of doing that decides the list (D451): set, and no move by hand on that day or after it (that move wins – the
+ * sprawa stays where you put it). Null: the list is the written one.
+ */
+function doDayOf(r: RequestRecord): string | null {
+  if (r.doDate == null) return null
+  const moved = movedDayOf(r)
+  return moved != null && moved >= r.doDate ? null : r.doDate
+}
+
+/** The last day (Sunday) of the week of `day` – the week of „W tym tygodniu” is Monday to Sunday (D451). */
+export const weekEndOf = (day: string): string => addDays(weekStart(day), 6)
+
+/**
+ * The logical day the sprawa is on „Dziś” of, as seen on the logical day `day` (not done): its date of doing once that
+ * day has come (D451), else the day it was put there by hand, or – a file from before „Sprawy” – a request „w planie”:
+ * the day of its block (D402). Null: not on „Dziś” of any day.
+ */
+export function onTodayOf(r: RequestRecord, day: string): string | null {
+  if (isDone(r)) return null
+  const d = doDayOf(r)
+  return d != null && d <= day ? d : writtenTodayOf(r)
+}
+
+/**
+ * The list a sprawa is on, on the logical day `today` – counted, never written (D383, D451): its date of doing puts it on
+ * „Dziś” on that day and on „W tym tygodniu” after it, like any of „Dziś”; before it, a date in this week takes it out of
+ * „Skrzynka” and „Kiedyś / Może” to „W tym tygodniu” – unless you moved it by hand since the date was set (that move holds
+ * until the date). A move by hand on the date or after it wins over the date.
+ */
+export function listOf(r: RequestRecord, today: string): CaseList {
+  if (isDone(r)) return 'done'
+  const written = writtenListOf(r, today)
+  const d = doDayOf(r)
+  if (d == null) return written
+  if (d === today) return 'today'
+  if (d < today) return 'week'
+  if (movedDayOf(r) != null) return written
+  return (written === 'inbox' || written === 'someday') && d <= weekEndOf(today) ? 'week' : written
+}
+
 /** The day whose „Dziś” the sprawa came back from at 04:00 (D383) – an earlier day than `today`; null: none. */
 export function rolledFrom(r: RequestRecord, today: string): string | null {
-  const d = onTodayOf(r)
+  const d = onTodayOf(r, today)
   return d != null && d < today ? d : null
 }
 
@@ -198,6 +247,27 @@ export function caseOrder(a: CaseItem, b: CaseItem): number {
   return b.record.createdAt - a.record.createdAt
 }
 
+/** The group of a sprawa in the order of a list (T854): with a due date first (D409); HKU3 puts P1–P4 between (D450). */
+export const DUE_GROUP = 0
+export const REST_GROUP = 9
+export const caseGroupOf = (x: CaseItem): number => (x.list !== 'done' && x.record.dueDate != null ? DUE_GROUP : REST_GROUP)
+
+/**
+ * The order of the lists (D409, T854): the sprawy past their due date and with one first, the nearest date on top; then
+ * the rest in the order of before (`caseOrder` – also within one due date). „Zrobione” as before.
+ */
+export function caseCompare(a: CaseItem, b: CaseItem): number {
+  if (a.list === 'done' && b.list === 'done') return caseOrder(a, b)
+  const ga = caseGroupOf(a)
+  const gb = caseGroupOf(b)
+  if (ga !== gb) return ga - gb
+  if (ga === DUE_GROUP) {
+    const by = a.record.dueDate!.localeCompare(b.record.dueDate!)
+    if (by) return by
+  }
+  return caseOrder(a, b)
+}
+
 /** The sum of the estimates of „Dziś” (D402: the header „Dziś · 3 h 30 min”, nothing compared with the plan). */
 export function todayMinutes(items: readonly CaseItem[]): number {
   return items.reduce((sum, x) => sum + (x.list === 'today' ? x.estimateMin : 0), 0)
@@ -231,14 +301,15 @@ function mirrored(next: Raw, was: RequestRecord): Raw {
 
 /**
  * A sprawa moved to a list at `at` (D383): „Dziś” keeps the day; „Zrobione” – the moment it was done; out of „Zrobione”
- * it starts again without a block. Unchanged when it is there already (no edit).
+ * it starts again without a block. Unchanged when it is there already (no edit). The day of the move is kept (T851): on
+ * the date of doing or after it, it wins over the date (D451).
  */
 export function listedRaw(raw: Raw, list: CaseList, at: number): Raw {
   const r = requestFrom(raw)
   if (!r) return raw
   const today = logicalDayOf(at)
   if (listOf(r, today) === list && r.list === list && (list !== 'today' || r.listDay === today)) return raw
-  const next: Raw = { ...based(raw, r, today), list, listDay: list === 'today' ? today : null }
+  const next: Raw = { ...based(raw, r, today), list, listDay: list === 'today' ? today : null, listSetDay: today }
   // Done already (before „Sprawy” without its moment): the moment stays as it was.
   if (list === 'done') next.doneAt = isDone(r) ? r.doneAt : at
   else {
@@ -259,7 +330,8 @@ export function scheduledRaw(raw: Raw, day: string, block: string, at: number): 
   const next: Raw = { ...based(raw, r, today), day, block }
   if (isDone(r) || next.list === 'done') {
     const list: CaseList = day <= today ? 'today' : 'week'
-    Object.assign(next, { list, listDay: list === 'today' ? today : null, doneAt: null })
+    // A change of its list like a move by hand (T851): a date of doing gone by does not take it off „Dziś” again.
+    Object.assign(next, { list, listDay: list === 'today' ? today : null, doneAt: null, listSetDay: today })
   }
   return mirrored(next, { ...r, state: 'queued' })
 }
@@ -279,6 +351,9 @@ export interface CasePatch {
   categoryId?: string | null
   note?: string
   person?: string | null
+  /** „Termin” and „Wykonać” (D409): a day 'RRRR-MM-DD', null – cleared. */
+  dueDate?: string | null
+  doDate?: string | null
 }
 
 /**
@@ -303,6 +378,16 @@ export function patchedRaw(raw: Raw, patch: CasePatch, at: number): { raw: Raw }
   if (kind === 'task' && next.categoryId == null && r.categoryId == null) next.categoryId = DEFAULT_TASK_CATEGORY
   if (patch.note !== undefined) next.note = patch.note.slice(0, CASE_NOTE_MAX)
   if (patch.person !== undefined) next.person = patch.person || null
+  if (patch.dueDate !== undefined) {
+    if (patch.dueDate != null && !dateFrom(patch.dueDate)) return { error: 'Termin: nie ma takiego dnia.' }
+    next.dueDate = patch.dueDate
+  }
+  if (patch.doDate !== undefined) {
+    if (patch.doDate != null && !dateFrom(patch.doDate)) return { error: 'Wykonać: nie ma takiego dnia.' }
+    next.doDate = patch.doDate
+    // A new date of doing is newer than any move by hand before it (T851): the date decides the list again.
+    if (patch.doDate !== r.doDate) next.listSetDay = null
+  }
   return { raw: next }
 }
 
@@ -591,7 +676,7 @@ export interface CasesRitual {
 export function casesRitual(date: string, today: string, records: readonly RequestRecord[], questions: readonly TaskQuestion[]): CasesRitual {
   const asked = new Set(questions.map((q) => q.task))
   return {
-    back: records.filter((r) => onTodayOf(r) === date && !asked.has(r.id)).sort((a, b) => a.createdAt - b.createdAt),
+    back: records.filter((r) => onTodayOf(r, date) === date && !asked.has(r.id)).sort((a, b) => a.createdAt - b.createdAt),
     questions: [...questions],
     someday: weekday(date) === 7 ? records.filter((r) => listOf(r, today) === 'someday').length : null
   }
