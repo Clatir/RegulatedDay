@@ -55,3 +55,5 @@ regeneracji ani typu dnia (silnik go nie czyta – T725).
   części wiersza – także przy prośbie bez bloku (`RequestLine`, T748); pełne tytuły po najechaniu w miejscu (nie `title`), w jednym wierszu
   (`truncate`, bez zawijania: wysokość wiersza = okno paska, najechanie jej nie zmienia); po najechaniu rośnie tylko górna granica (55% → 80%), `shrink-0` w obu stanach – sąsiad bez `flex-1` nie zwęzi podpisu. Bez wydarzeń znaczniki jak dotąd.
 - Ctrl K: rodzaj `allDay` (grupa „Wydarzenia”), `choose` → `openPick({ page: 'week' }, { kind: 'allDay', id })`. Plan poranny: `morningAllDayLine`, linia `morning-allday` pod nagłówkiem.
+- Wydarzenia (D405): `store/allDay.ts` (`saveAllDay(e, base)` – tylko pola zmienione na karcie, `removeAllDay` → rekord dla „Cofnij”,
+  `restoreAllDay`), `allday/freeDays.ts` („Wolne”: `askFreeDays`, `setFreeDays` – jeden zapis; dziś po utworzeniu dnia → `duringDay`, `undoFreeDays`).
