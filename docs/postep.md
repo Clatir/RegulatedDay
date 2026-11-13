@@ -28,24 +28,17 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   każdy otwiera się (7–10 plików) – E3.12; `backups\daily\2026-10-27.zip` (9 plików) – E6b.2 do sprawdzenia po
   następnym dniu z aplikacją po 12:00; `main.log` – „kreator zakończony” 27.10 (E3.1), aktualizacje 0.7.0→0.10.1 czyste
   (E6b.1–E7b.1; 0.2.0–0.6.0 przeskoczone, więc E5.1 i E6a.1 tylko „dane całe”).
-- Rejestry decyzji (D308, T535, T840): `docs/decyzje.md` – D; `docs/decyzje-techniczne.md` – T500 i nowsze,
-  `docs/decyzje-techniczne-T1-T399.md` – T1–T399, `docs/decyzje-techniczne-T400-T499.md` – T400–T499; zastąpione w całości w `docs/archiwum/decyzje-zastapione.md`. D188
+- Rejestry decyzji (D308, T535, T840, T857, T935): `docs/decyzje.md` – D; `docs/decyzje-techniczne.md` – T700 i nowsze,
+  `docs/decyzje-techniczne-T1-T399.md` – T1–T399, `docs/decyzje-techniczne-T400-T499.md` – T400–T499, `docs/decyzje-techniczne-T500-T599.md` – T500–T599,
+  `docs/decyzje-techniczne-T600-T699.md` – T600–T699; zastąpione w całości w `docs/archiwum/decyzje-zastapione.md`. D188
   cofnięta przez T303, ale cytowana w D150 i specyfikacji – zostaje w rejestrze.
 - `docs/plan.md` ma od 7.11 plan rozszerzeń (GCal, Notion, Sunsama); wykonawcy i przeglądy według ryzyka (D354).
   10.11: blok 1 = ciąg J (SNT7, SNT8, FBL2 w trzech częściach), pytania odpowiedziane (D363–D369), FBL1 odłożone
   (D364); blok 2 = ciąg L (OPS1 → OPS2 → OPS3), pytania odpowiedziane (D380–D386); bloki 3–4 bez decyzji o starcie.
   Opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`.
 
-### SNT3 i SNT6 – stan
-Sesja równoległa do ciągu J (wyjątek od „jedna sesja do `main`”, zgoda 10.11); numery D387–D399 (D380–D386 zajął ciąg L, PR #66),
-T650–T699 (zajęte D387–D388, T650–T674).
-
-| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
-| --- | --- | --- | --- | --- |
-| SNT6 wyszukiwarka Ctrl K | 1.7.0 | #67 | scalone 11.11 (d76ce2b), wydanie 1.7.0 z runu 43079086202 | ok. 2,5 h (4–6 h) |
-| SNT3 Markdown w notatkach | 1.9.0 | #71 | scalone 12.11 (16c1568); runy `main` po #71 i #73 czerwone na nocnych E2E (J2, E3 – godzina); wydanie 1.9.0 12.11 z runu 43148191553 po #75 (sesja J) | po przejęciu ok. 4 h (6–9 h) |
-
-Wpisy obu zadań, „Uwagi na później” i „Pytania na później” – `docs/archiwum/postep-SNT.md`.
+- **Zakończone ciągi i zadania:** ciąg J (1.4.0–1.11.0) – `docs/archiwum/postep-ciag-J.md`; ciąg F (1.0.1–1.0.8) –
+  `docs/archiwum/postep-ciag-F.md`; SNT6 (1.7.0), SNT3 (1.9.0), SNT4 (1.15.0) – `docs/archiwum/postep-SNT.md`.
 
 ## Kolejka (według `docs/plan.md`, D317)
 1. Ty: odbiór według `docs/odbior.md` (aktualizacja do najnowszej wersji); poza maszyną od razu E4b.12 (godzina próby →
@@ -66,8 +59,9 @@ Wpisy obu zadań, „Uwagi na później” i „Pytania na później” – `doc
 5. Ciąg L (blok 2, D380) – w toku od 12.11 w osobnej sesji (drzewo `.claude/worktrees/wl1`, bez pauz między pozycjami –
    polecenie użytkownika 12.11): L1 OPS1 serie (1.12.0, scalone) → L2 OPS2 „Sprawy” (1.14.0, wydane 13.11) → SNT5 kroki
    (1.16.0, gotowe na gałęzi) → L3 OPS3 bufory (po K). Równolegle sesja HKU1 (blok 4, numery D405+, T720–T749, wydaje 1.13.0); do `main` scala naraz
-   jedna – HKU1 pierwsze, L2 po nim. Bloki 3–4 poza HKU1 bez
-   decyzji o starcie; FBL1 odłożone (D364).
+   jedna – HKU1 pierwsze, L2 po nim. FBL1 odłożone (D364).
+6. Blok 3 – paczka SNT (D416, sesja `regulatedday-ab`): SNT4b, SNT1, SNT2 gotowe – PR paczki 1.18.0 (sekcja
+   „Blok 3 – paczka SNT”); po wydaniu Blok 3 zakończony. Blok 4: HKU2 i HKU3 – PR #82 (sesja `regulatedday-d7`).
 
 ## Ciąg L – stan (D380)
 Numery: D404, T700–T719 (L1), T750–T799 (L2, L3 – uzgodnione z sesją HKU1 12.11); kolejne D – osobno od HKU1 (ma D405, D406). „Przed etapem” pominięte na
@@ -82,37 +76,6 @@ Numery: D440–D449, T786–T799 (T772–T779 – ostatnie poprawki L2). SNT4 = 
 | SNT5 podzadania (kroki) | 1.16.0 | #81 | scalone 13.11, wydanie 1.16.0 opublikowane 13.11; D442–D444 potwierdzone 13.11; wpis i uwagi – `docs/archiwum/postep-ciag-L.md` | ok. 4 h (wykonawcy; plan 3–4,5 h) |
 
 
-## Ciąg J – stan (D363)
-**Przed ciągiem J (10.11):** zakres i „Gotowe, gdy” – `docs/plan.md`; decyzje D363–D369 (pytania w trzech rundach
-10.11). Ryzyka: J1 – trwający blok i koszt przedłużenia poza paskiem (wyjątek D365), J3 – zapis wielu bloków dnia
-jedną partią z jednym „Cofnij”, J4 – pytanie w pasku na dwóch komputerach (prowadzący, identyfikator). Przygotować:
-nic. Model: główna sesja Opus 5.5 · high; wykonawcy według tabeli planu, po kolei w jednym drzewie roboczym (J1 i J2
-zmieniają `Timeline.tsx`, J3 korzysta z J1). Wersje 1.4.0–1.8.0.
-
-| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
-| --- | --- | --- | --- | --- |
-| J-plan, CI `release-next`, J1–J4 | 1.4.0–1.8.0 | #61–#65, #69, #70 | scalone 10–11.11; wpisy – `docs/archiwum/postep-ciag-J.md` | – |
-| J3b rozsuwanie przy „Dodaj” z karty „Tygodnia” | 1.11.0 | – | PR po J5 i #74 (gałąź `claude/j3b-rozsuwanie-tydzien`, drzewo `.claude/worktrees/wj6`, od J5); dwie rundy high (9 + 10 uwag); D400, T624–T631; **uwagi na później:** zbędny odczyt pliku dnia w `pushedFor` (`dayData` → same logi), „Cofnij” w oknie pomija cały dzień przy zmienionym polu, a pasek pyta per pole (wspólny `undoEdits`) | ok. 2,5 h (1–2 h) |
-| J5 FBL2c „Ułóż pod energię” | 1.10.0 | #72 | scalone 12.11 (przed nim #73 i #75 – testy E2E zależne od pory: `week.spec` D366 i E3 po północy); dwie rundy xhigh (12 + 15 uwag); D377–D379, T608–T623 | ok. 4,5 h (4–6 h) – pytania D377–D379 |
-
-**J5 – wpis (11.11):** `engine/energyOrder.ts` – przerwy między stałymi z prognozy, kandydaci elastyczni (też chronieni, D377), wszystkie kolejności do 6 bloków, zamiany dla 7–12, szacunek energii (od początku przerwy, przełączenie w stały za przerwą – T613, T620), prawdziwe przeliczenie 2 najlepszych na przerwę, razem najwyżej 4 (T609); próg: minimum < 60 i +5 (T608); przed zatwierdzeniem granicy do maksimum dnia (T617); zmiana `start` w `variants.ts`, `Variant.mends: false` (wybór nie gasi przyczyny – D379, T621); pasek `openVariants`/`arranged`, IPC `planArranged`; plan poranny – karta „Ułóż · Zostaw” (`asked.energyOrder`), pamięć wyniku `energyOrderCached` (klucz z krokiem 5 min, T616). Testy: `energy-order.test.ts` (unit i web), `widget.test.ts`. Odbiór J5.1–J5.3. **Uwagi na później:** koszt `openVariants` w procesie głównym (≤ 4 przeliczenia + układanie przy kliknięciu); kopie `pools`/`clamp`/`SWITCH`/`CONTACT`/`FREE_REST_MIN` z `energy.ts` i `day.ts`; `dayFileFrom` przy każdej zmianie w `applyVariant` i trzy kopie `blockNow` (okno, pasek, warianty); powielony pomocnik edycji w `tests/fs/widget.test.ts`.
-
-## Ciąg F – stan (wpisy: `docs/archiwum/postep-ciag-F.md`)
-| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
-| --- | --- | --- | --- | --- |
-| F1–F3 opisy odbioru, logi | – (z 1.0.1) | #44 | scalone 3.11 | ok. 1 h (1,25–2 h) |
-| G1 koniec pracy | 1.0.1 | #45 | wydane 4.11 | ok. 7 h (2–3 h) – dziewięć rund przeglądu |
-| G2 pasek od pierwszej chwili | 1.0.2 | #46 | wydane 4.11 | ok. 4 h (2–3 h) |
-| H1 plan i pasek | 1.0.3 | #47 | wydane 4.11 | ok. 3,5 h (2,5–3 h) |
-| H2 ekrany po decyzjach | 1.0.4 | #48 | wydane 4.11 | ok. 4,5 h (3–4 h) |
-| G3 folder danych niedostępny | 1.0.5 | #50 | wydane 8.11 | ok. 2,5 h (1,5–2,5 h) |
-| G4 pasek pulpitu pod oknami | 1.0.6 | #51 | wydane 8.11 | ok. 2 h (2–3 h) |
-| H3 autostart, znacznik życia | 1.0.7 | #53 | wydane 8.11 | ok. 1,5 h (1–1,5 h) |
-| G5 instalator zamyka łagodnie | 1.0.8 | #52 | wydane 9.11 | ok. 7 h zegarowo, równolegle z G4 i H3 (1,5–2,5 h) |
-| **Razem** | 1.0.1–1.0.8 | 9 PR-ów | zakończony 9.11 | ok. 30 h zegarowo – G3–H3 razem ok. 10 h, 8.11 17:30 – 9.11 3:45 (16,5–24,5 h) |
-
-Propozycje na później z przeglądów G1–H2 (architektura, bez zmian w działaniu) – w ich wpisach w archiwum.
-
 ## Blok 4 (HKU) – stan
 **Blok 4 zamknięty 13.11:** HKU1 (1.13.0), HKU2 + HKU3 (1.17.0, paczka D413). Wpisy – `docs/archiwum/postep-HKU.md`.
 Odbiór: HKU1.1–1.5, HKU2.1–2.4, HKU3.1–3.2 w `docs/odbior.md`. Numery HKU wolne: D458–D459, T886–T899.
@@ -123,19 +86,36 @@ Odbiór: HKU1.1–1.5, HKU2.1–2.4, HKU3.1–3.2 w `docs/odbior.md`. Numery HKU
 | HKU2 termin i data wykonania | 1.17.0 | #82 | wydane 13.11 10:32 (run 43389466888) |
 | HKU3 priorytety i macierz | 1.17.0 | #82 | wydane 13.11 10:32 |
 
-## SNT4 – stan
-**Przed SNT4 (12.11):** załączniki i linki w blokach; pytania 12.11 – D410 (D411, D412 do potwierdzenia). Drzewo
-`.claude/worktrees/ws4`, gałąź `claude/snt4-zalaczniki` od 96201f8. Numery D410–D439, T800–T849 (L – D440–D449, HKU –
-D450–D459, T850–T899). Model: główna Opus 5.5 · high; część A `wykonawca-opus`, część B `wykonawca-sonnet`; przegląd xhigh.
-Kolejka do `main`: L2 (1.14.0) → SNT4 (zwykle 1.15.0) → SNT5 (sesja L). **Zgoda 12.11 ok. 21:30:** do wydania bez „dalej”; do 13.11 7:00 pytanie o zachowanie = rekomendacja jako D „do
-potwierdzenia”. Po scaleniu L2 (PR #79) od razu merge `origin/main` i CI PR; scalenie po publikacji 1.14.0. Od następnej
-paczki – D413.
+## Blok 3 – paczka SNT (D416)
+**Przed etapem (13.11, 07:20):** koniec Bloku 3 – SNT4b → SNT1 → SNT2 bez pauz do „dalej” (D416), jedna paczka według
+D413: gałąź `claude/paczka-blok3`, drzewo `.claude/worktrees/ws4m`, jeden PR do `main` po #82 (HKU, 1.17.0) i #83,
+wersja – następna minor przy scaleniu (zwykle 1.18.0). Sesja `regulatedday-ab`; numery D416–D439, T841–T849 i T900–T949.
+Decyzje: D415 (SNT4b), D417 (SNT1 – „3 dni”, przenoszenie między dniami, krzywa energii), D418 (SNT1 – „Agenda”,
+miesiąc), D419 (SNT2 – kalendarz jako grupa kategorii, ukrycie tylko w widoku). Ryzyka: SNT4b – kosz załączników
+i „Cofnij” serii (folder danych); SNT1 – zapis dwóch plików dni jedną partią z jednym „Cofnij” i rozsuwaniem (D367);
+SNT2 – nowe pole kategorii (migracja formatu, dwa komputery). Przygotować: nic. Model: główna sesja Opus 5.5 · high;
+SNT4b `wykonawca-opus` · xhigh; SNT1 `wykonawca-opus` (przenoszenie między dniami) + `wykonawca-sonnet` (widoki) · xhigh;
+SNT2 `wykonawca-sonnet` (migracja – przegląd xhigh). Szacunek 11,5–17,5 h, wydanie dziś ok. 20:00–02:00.
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| SNT4 załączniki i linki | 1.15.0 | #80 | części A i B, trzy rundy xhigh (15 + 15 + 15 uwag; trzecia – 6 poprawek), merge `origin/main` (L2); PR po zielonym teście lokalnym, scalenie po publikacji 1.14.0; D410–D414 (D411, D412, D414 do potwierdzenia), T800–T840 | ok. 5 h (3,5–5 h; +1,5 h szablon i seria) – trzy rundy przeglądu |
+| SNT4 załączniki i linki | 1.15.0 | #80 | wydane 13.11; wpis – `docs/archiwum/postep-SNT.md` | ok. 5 h (3,5–5 h) |
+| SNT4b usuwanie załączników szablonu i serii | 1.18.0 (paczka) | PR paczki | gotowe 13.11: trzy rundy xhigh (14 + 14 + 13 uwag), kolejka zależnych wpisów `after` (T923, T926–T931); D415, D420, D421, D423; T841–T849, T920–T934 | ok. 4 h (1,5–2,5 h) |
+| SNT1 widoki wielodniowe, przenoszenie, miesiąc | 1.18.0 (paczka) | PR paczki | gotowe 13.11: część A cztery rundy xhigh (15 + 13 + 12 + 14), część B high (10); D417, D418, D422, D424, D426; T900–T919, T936–T939, T950–T969, T980–T986 | ok. 6 h (6–9 h) |
+| SNT2 kalendarze – warstwy | 1.18.0 (paczka) | PR paczki | gotowe 13.11: część A trzy rundy xhigh (14 + 15 + 15), część B dwie rundy (10 + 15); D419, D425, D427, D428; T940–T949, T970–T979, T990–T1012 | ok. 5 h (4–6 h) |
 
-**Do potwierdzenia rano:** D411, D412, D414. Wpis, „Uwagi na później” – `docs/archiwum/postep-SNT.md` („SNT4”).
+**Paczka 1.18.0 (13.11):** SNT4b, SNT1 i SNT2 w jednym PR (D413, D416); wykonawcy w drzewach `ws4m` (paczka), `ws4n`
+(SNT1), `ws4s` (SNT2), scalone do `claude/paczka-blok3` z `main` 1.17.0 (b0c4aa5). Rejestr T: T600–T699 w osobnym pliku
+(T935, uzupełnia T857), T700+ w `docs/decyzje-techniczne.md`. Odbiór: SNT4b.1–3, SNT1.1–7, SNT2.1–6 w `docs/odbior.md`
+(Tylko Ty: SNT4b.3, SNT1.7, SNT2.6). Niestabilne przy obciążeniu lokalnie (osobno zielone): `tests/sim/two-computers`,
+`tests/fs/cases` (EPERM), E2E szybkiego zapisu „!jutro” i przeciągania w `week.spec` – do obserwacji w CI.
+**Uwagi na później:** SNT1 – pytanie o samo `movedTo` w źródle przy jednoczesnym przeniesieniu tego samego bloku na dwóch
+komputerach zostawia blok w obu dniach do odpowiedzi; „Przenieś na…” przy niepoliczonym dniu bierze plan okna (T964);
+pierwsze otwarcie dawnego tygodnia – krzywe bez `moduleStates` (T950). SNT2 – po „moje” na usuniętym bloku dnia `setAt`
+tworzy element bez `id` (jak przed T948, tylko poza listą `calendars`); warianty z procesu głównego nie dopisują
+„(w tym M ukrytych)”; „Tydzień” i „3 dni” nie pokazują bloku odkrytego z Ctrl K (Ctrl K otwiera „Dziś”); w „Dziś”
+dopisek o ukrytych to osobny dymek okna, bo linię „Przesunięto” rysuje pasek (T1010). SNT4b – starsza wersja na drugim
+komputerze kładzie zależne wpisy kolejki osobno (T923). `docs/decyzje.md`: D400 stoi przed D380 (kolejność historyczna).
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy

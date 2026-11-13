@@ -201,16 +201,22 @@ export function chooser(choices: ReadonlyMap<string, Side> | Record<string, Side
 
 /**
  * `root` with `value` at `path` (a `#id` part = the array item of that id; objects made on the way); undefined removes the
- * field (or the array item). The root is not changed.
+ * field (or the array item). The root is not changed. `listKey` (the key of the array the `#id` part is in – set by the recursion
+ * itself) says the list is one of `ITEM_LISTS`: an item of it that is not there is made with its id (T992).
  */
-export function setAt(root: unknown, path: Path, value: unknown): unknown {
+export function setAt(root: unknown, path: Path, value: unknown, listKey?: string): unknown {
   if (!path.length) return value
   const [part, ...rest] = path as [string, ...string[]]
   if (part.startsWith('#')) {
     const id = part.slice(1)
     const arr = Array.isArray(root) ? root : []
     const i = arr.findIndex((x) => isObject(x) && x.id === id)
-    const next = setAt(i >= 0 ? arr[i] : undefined, rest, value)
+    // A list of ITEM_LISTS merges item by item only while every item has its id: an item that is not there is made with it (the
+    // answer „mine” to a question about an item removed elsewhere), and there is nothing to take away from one that is not there.
+    // Every other list (blocks of a day, of a template, of a series) is laid as it always was.
+    const listed = listKey !== undefined && ITEM_LIST_KEYS.has(listKey)
+    if (listed && i < 0 && value === undefined) return [...arr]
+    const next = setAt(i >= 0 ? arr[i] : listed ? { id } : undefined, rest, value)
     const out = [...arr]
     if (next === undefined) {
       if (i >= 0) out.splice(i, 1)
@@ -219,7 +225,7 @@ export function setAt(root: unknown, path: Path, value: unknown): unknown {
     return out
   }
   const obj = isObject(root) ? root : {}
-  const next = setAt(obj[part], rest, value)
+  const next = setAt(obj[part], rest, value, part)
   const out: Record<string, unknown> = { ...obj }
   if (next === undefined) delete out[part]
   else out[part] = next
@@ -233,9 +239,10 @@ export function setAt(root: unknown, path: Path, value: unknown): unknown {
 export function recordEdit(rel: string, before: Record<string, unknown> | null, after: Record<string, unknown> | null): EditEntry | null {
   // A removal carries the record as you saw it: changed elsewhere since, it is a question, never removed quietly (A3-09).
   if (!after) return before ? { rel, remove: true, edits: [], base: before } : null
-  const maps = LEAF_MAPS[classify(rel)?.kind ?? 'settings']
-  if (!before) return { rel, create: true, edits: Object.entries(after).flatMap(([k, v]) => leafEdits(maps, [k], undefined, v)) }
-  const edits = diffRecords(before, after).flatMap((c) => leafEdits(maps, c.path, c.before, c.after))
+  const kind = classify(rel)?.kind ?? 'settings'
+  const maps = LEAF_MAPS[kind]
+  if (!before) return { rel, create: true, edits: Object.entries(after).flatMap(([k, v]) => itemEdits(kind, [k], undefined, v) ?? leafEdits(maps, [k], undefined, v)) }
+  const edits = diffRecords(before, after).flatMap((c) => itemEdits(kind, c.path, c.before, c.after) ?? leafEdits(maps, c.path, c.before, c.after))
   return edits.length ? { rel, edits } : null
 }
 
@@ -245,6 +252,40 @@ export function recordEdit(rel: string, before: Record<string, unknown> | null, 
  * first tick on two computers is two fields that both stay – never one whole map meeting the other's as a question.
  */
 export const LEAF_MAPS: Partial<Record<FileKind, ReadonlySet<string>>> = { day: new Set(['stepsDone']), request: new Set(['stepsDone']) }
+
+/**
+ * Lists of records with ids written item by item and field by field (T944, D419): rd.json's `calendars`. The first item of a
+ * list the file does not have yet (an old folder), a new item, and the first change of an item the file does not have
+ * (the default calendar) are edits of their fields – the `id` first, so the item exists for the ones after it – never one edit of
+ * the whole list or item. Two computers adding the first calendar, or changing two fields of one, so meet in no question.
+ */
+export const ITEM_LISTS: Partial<Record<FileKind, ReadonlySet<string>>> = { settings: new Set(['calendars']) }
+/** The keys of those lists (`setAt` knows only the key of the array it is in). */
+const ITEM_LIST_KEYS: ReadonlySet<string> = new Set(Object.values(ITEM_LISTS).flatMap((keys) => [...keys]))
+/**
+ * Maps of records by id in rd.json (T973, D419): `categories`. The first write of an entry the file does not have yet (the
+ * first calendar of a default category) is the edits of its fields – two computers writing the first different fields of one
+ * entry meet in no question. The entry's removal stays one edit.
+ */
+export const ITEM_MAPS: Partial<Record<FileKind, ReadonlySet<string>>> = { settings: new Set(['categories']) }
+
+function itemEdits(kind: FileKind, path: Path, base: unknown, value: unknown): Array<{ path: Path; base: unknown; value: unknown }> | null {
+  if (base !== undefined) return null
+  const fields = (at: Path, item: Record<string, unknown>) =>
+    Object.entries(item)
+      .sort(([a], [b]) => (a === 'id' ? -1 : b === 'id' ? 1 : 0))
+      .map(([k, v]) => ({ path: [...at, k], base: undefined, value: v }))
+  if (ITEM_LISTS[kind]?.has(path[0] ?? '')) {
+    if (path.length === 1 && isIdArray(value) && value.length) return value.flatMap((item) => fields([path[0]!, `#${item.id}`], item))
+    if (path.length === 2 && path[1]!.startsWith('#') && isObject(value)) return fields(path, value)
+  } else if (ITEM_MAPS[kind]?.has(path[0] ?? '') && isObject(value)) {
+    // An entry: its fields; the whole map the file has no key for yet: each of its entries so (T993).
+    if (path.length === 2 && Object.keys(value).length) return fields(path, value)
+    if (path.length === 1 && Object.keys(value).length)
+      return Object.entries(value).flatMap(([id, entry]) => (isObject(entry) && Object.keys(entry).length ? fields([path[0]!, id], entry) : [{ path: [path[0]!, id], base: undefined, value: entry }]))
+  }
+  return null
+}
 
 function leafEdits(maps: ReadonlySet<string> | undefined, path: Path, base: unknown, value: unknown): Array<{ path: Path; base: unknown; value: unknown }> {
   if (!maps?.has(path[0] ?? '')) return [{ path, base, value }]

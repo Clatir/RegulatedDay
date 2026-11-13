@@ -8,11 +8,11 @@
  */
 import type { EditEntry, RawRecord } from '../api'
 import { recordEdit } from '../data/merge'
-import { paths } from '../data/paths'
+import { classify, paths } from '../data/paths'
 import { isIsoDate } from '../time/zone'
 import { templateBlockId } from '../engine/createDay'
 import { derivedId, isId } from './ids'
-import type { PlanBlock } from './plan'
+import { templateBlockAlive, templateBlockOn, type PlanBlock, type Template } from './plan'
 
 export const ATTACHMENT_SCHEMA = 1
 
@@ -54,6 +54,12 @@ export interface Attachment {
   /** Removed (D410: its file stays 30 days, „Cofnij” and a backup bring it back); null – not removed. */
   removedAt: number | null
 }
+
+/**
+ * Said when a change that takes attachments with it finds their list unreadable (T842, T848): it waits for it – unknown is
+ * never „none”.
+ */
+export const ATTACHMENTS_UNREAD_TEXT = 'Listy załączników nie da się teraz odczytać – nic nie zostało zapisane, spróbuj za chwilę.'
 
 /** 30 days after its removal an attachment's file and record go (D410) – the leader's task (T806). */
 export const ATTACHMENT_KEEP_MS = 30 * 24 * 60 * 60_000
@@ -229,6 +235,12 @@ export function removalEdits(raws: readonly RawRecord[], ids: readonly string[],
   return out
 }
 
+/** What „Cofnij” of the removals `entries` (made at `at`, `removalEdits`) needs – their ids by their files; null – none. */
+export function attachmentUndoOf(entries: readonly EditEntry[], at: number): AttachmentUndo | null {
+  const ids = entries.map((e) => classify(e.rel)?.id).filter((id): id is string => !!id)
+  return ids.length ? { ids, removedAt: at } : null
+}
+
 /** „Cofnij” of a removal: the attachments still removed at that very instant (`AttachmentUndo`) brought back. */
 export function restoreEdits(raws: readonly RawRecord[], undo: AttachmentUndo): EditEntry[] {
   const out: EditEntry[] = []
@@ -244,6 +256,40 @@ export function restoreEdits(raws: readonly RawRecord[], undo: AttachmentUndo): 
 /** The attachments of a day's block a removal of the block removes with it (T805): its own (a day's) – not the template's nor the series'. */
 export function ownAttachmentIds(list: readonly Attachment[], blockId: string): string[] {
   return list.filter((a) => a.removedAt == null && a.owner.scope === 'day' && a.owner.blockId === blockId).map((a) => a.id)
+}
+
+/**
+ * The attachments a change of a template takes with it (D415, D420, T841, T847): `before` – the template as it was,
+ * `after` – as the change leaves it (null – removed), `tomorrow` – the first day it still makes (today is made already).
+ * The template's own of a block that was alive (`templateBlockAlive`) and is not any more – from every day, the days gone by
+ * too; the days' own from tomorrow of an occurrence on a day whose version had the block and has it no more (between
+ * the version a block left and a later one that keeps it, too). A removed template takes all of its own and the days' own
+ * of its blocks from tomorrow. An occurrence is known by its id, derived from its day, the template and the block (also a
+ * copy brought back by a change of the day's type – `templateOfDayBlock`), on the day the attachment was added on.
+ */
+export function templateRemovalIds(list: readonly Attachment[], templateId: string, before: Template | null, after: Template | null, tomorrow: string): string[] {
+  // The blocks whose days the change moves (a removed template – all of them): only their days can lose them. The version in
+  // force changes only where a version starts – compared there, before and after.
+  const starts = [...new Set([...(before?.versions ?? []), ...(after?.versions ?? [])].map((v) => v.from))]
+  const daysOf = (t: Template | null, id: string) => starts.map((d) => (t && templateBlockOn(t, id, d) ? 1 : 0)).join('')
+  const blocks = new Set<string>()
+  for (const v of before?.versions ?? []) for (const b of v.blocks) if (!after || daysOf(before, b.id) !== daysOf(after, b.id)) blocks.add(b.id)
+  if (!after) for (const a of list) if (a.owner.scope === 'template' && a.owner.templateId === templateId) blocks.add(a.owner.blockId)
+  const goes = (blockId: string, date: string | null): boolean => {
+    if (!after) return true
+    if (!before) return false
+    return date == null ? templateBlockAlive(before, blockId, tomorrow) && !templateBlockAlive(after, blockId, tomorrow) : templateBlockOn(before, blockId, date) && !templateBlockOn(after, blockId, date)
+  }
+  return list
+    .filter((a) => {
+      if (a.removedAt != null) return false
+      const o = a.owner
+      if (o.scope === 'template') return o.templateId === templateId && goes(o.blockId, null)
+      if (o.scope !== 'day' || o.date < tomorrow) return false
+      for (const b of blocks) if (templateOfDayBlock({ id: o.blockId, sourceId: b }, o.date, [templateId]) === templateId) return goes(b, o.date)
+      return false
+    })
+    .map((a) => a.id)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

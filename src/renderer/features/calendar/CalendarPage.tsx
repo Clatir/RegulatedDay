@@ -3,6 +3,8 @@
  * early close of the market, the week of the session shift, its own wake); several dates are selected by dragging or
  * with Ctrl and get a type or a wake at once; a click on a day opens its plan. Marking a Saturday as a „zjazd” asks
  * once whether the weekly analysis goes to Friday 20:00–21:00 instead of the second shift (spec „Typy dni i szablony”).
+ * Every day also shows up to three bars of its all-day events and fixed blocks, „+N” for all the rest it holds and the dot of
+ * its load (D418, D422 – `useMonthView`, `monthCellView`).
  * „Wczytaj PDF zjazdów” (D357) reads a schedule into a preview you correct; only „Zapisz” writes the days (the same
  * question for a Saturday), its toast has „Cofnij”.
  */
@@ -22,15 +24,22 @@ import { dayFileFrom } from '@shared/model/plan'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn, type DayTypeId } from '@shared/model/settings'
 import { blockFill } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
+import type { MonthDay } from '@shared/engine/calendarViews'
 import { Dialog } from '../../components/Dialog'
+import { calendarSieve } from '@shared/model/calendars'
+import { useCalendarFilter } from '../calendars/calendarFilter'
+import { CalendarChips } from '../calendars/CalendarChips'
+import { useVisibleAllDayIn } from '../calendars/visibleViews'
 import { TimeField } from '../../components/fields'
 import { dayFilesNow, editNotice, editOf, isSaved, trySaveWith, useData } from '../../store/data'
 import { useBusy } from '../../lib/busy'
+import { useMonthView } from '../../store/horizon'
 import { useMachine } from '../../store/machine'
 import { openDay, toast, undoToast } from '../../store/ui'
 import { setWakeOnDays } from '../today/dayActions'
 import { analysisAsks, answerOf, type AnalysisAsk } from './analysisAsk'
 import { DAY_TYPE_COLORS, holidayMarks } from './dayTypes'
+import { emptyMonthDay, monthCellView, visibleMonthDay } from './monthCellView'
 import { gridDates, MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
 import { questionsText, savedText, skippedLines, undoList, undoneText, unchangedText } from './zjazdyDraft'
 import { noteFriday, runInTurn, type PendingImport } from './zjazdyRun'
@@ -38,7 +47,7 @@ import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
 import { ZjazdyPreviewPanel } from './ZjazdyPreview'
 
 export function CalendarPage() {
-  const { rd, templates, lectures, seriesPlans, stamp, allDay } = useData()
+  const { rd, templates, lectures, seriesPlans, stamp, routines, requests } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const brightness = useMachine((s) => s.prefs.brightness)
   const [month, setMonth] = useState(monthOf(today))
@@ -50,6 +59,25 @@ export function CalendarPage() {
   const pending = useRef<PendingImport | null>(null)
   const [wake, setWake] = useState<number | null>(null)
   const dates = useMemo(() => gridDates(month), [month])
+  // The fixed blocks and the load of each day of the month (D418), counted by the main process; the days of the neighbouring
+  // months on the grid have their all-day events only.
+  const { view: monthView } = useMonthView(month)
+  // D419, D425: the cells leave out the blocks and all-day events of the unchecked calendars (the dot of the load stays as counted);
+  // „ukryte: N” = the blocks of the month and the events of the grid they take out.
+  const hiddenCalendars = useCalendarFilter((s) => s.hidden)
+  const { shown: shownEvents, hiddenInRange: hiddenEvents } = useVisibleAllDayIn(dates[0]!, dates.at(-1)!)
+  const { monthDays, hiddenBlocks } = useMemo(() => {
+    const days = new Map<string, MonthDay>()
+    let hiddenBlocks = 0
+    // The hidden calendars and the calendar of each category are resolved once for the month, not for each day.
+    const sieve = calendarSieve(hiddenCalendars, rd)
+    for (const d of monthView?.days ?? []) {
+      const v = visibleMonthDay(d, sieve)
+      days.set(d.date, v.day)
+      hiddenBlocks += v.hiddenCount
+    }
+    return { monthDays: days, hiddenBlocks }
+  }, [monthView, hiddenCalendars, rd])
   useEffect(() => {
     let alive = true
     // The Fridays before the grid's Saturdays too (the weekly analysis), and the day after its end.
@@ -196,7 +224,7 @@ export function CalendarPage() {
 
   const [y, m] = month.split('-')
   return (
-    <div className="flex flex-col gap-3 p-4" data-testid="calendar">
+    <div className="flex flex-col gap-3 p-4" data-testid="calendar" data-counted={monthView ? 'true' : undefined}>
       {importing && <ZjazdyPreviewPanel busy={busy} onSave={(days) => void saveImport(days)} onCancel={closeZjazdy} />}
       {!importing && (
         <>
@@ -225,6 +253,7 @@ export function CalendarPage() {
               ))}
             </span>
           </div>
+          <CalendarChips hiddenCount={hiddenBlocks + hiddenEvents} />
           <MonthGrid
             month={month}
             today={today}
@@ -236,7 +265,8 @@ export function CalendarPage() {
               return {
                 tone: blockFill(DAY_TYPE_COLORS[i.type], brightness),
                 title: i.title,
-                events: eventsOn(allDay, d),
+                events: eventsOn(shownEvents, d),
+                detail: monthCellView(monthDays.get(d) ?? emptyMonthDay(d), shownEvents, { rd, settings: settingsOn(rd.settings, d), routines, requests }, brightness),
                 marks: i.marks.map((x) => (
                   <span key={x} className="rounded-sm bg-bg/60 px-1">
                     {x}

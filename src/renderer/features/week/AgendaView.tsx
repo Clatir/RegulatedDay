@@ -1,0 +1,95 @@
+/**
+ * „Agenda” (D418): the days from today as a list, one day after another – the all-day events on top, then the blocks by the
+ * hour (its hour, its name, its length, its category); a day with nothing is one line. A click on a day opens it (`openDay`, as in
+ * „Tydzień”), a click on a block opens the block in its day (`openPick`, as the result of Ctrl K does – D418).
+ */
+import type { AgendaDay } from '@shared/engine/calendarViews'
+import { logicalClock } from '@shared/format'
+import { rangeText } from '@shared/model/allDay'
+import { settingsOn } from '@shared/model/settings'
+import { ALL_DAY_COLOR_HEX } from '@shared/theme'
+import { cx } from '../../components/ui'
+import { useData } from '../../store/data'
+import { openDay, openPick } from '../../store/ui'
+import { blockColor, type Names } from '../plan/blockView'
+import { blockStateText } from './weekText'
+import { AGENDA_EMPTY, agendaHeading, agendaRow } from './weekViews'
+
+/** `agenda` – the days as `agendaOf` makes them, with what the calendar filter lets through (D419, D425: `AgendaBody` of the page). */
+export function AgendaView({ agenda, hiddenByDate, today }: { agenda: readonly AgendaDay[]; hiddenByDate: Readonly<Record<string, number>>; today: string }) {
+  const { rd, routines, requests } = useData()
+  const namesOf = (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests })
+  return (
+    <div className="flex flex-col gap-2" data-testid="agenda">
+      {agenda.map((d) => (
+        <AgendaDayCard key={d.date} day={d} hidden={hiddenByDate[d.date] ?? 0} today={today} names={namesOf(d.date)} />
+      ))}
+    </div>
+  )
+}
+
+/** `hidden` – what the unchecked calendars hid of the day (blocks and events): a day with nothing left says so, not „nic” (D419). */
+function AgendaDayCard({ day, hidden, today, names }: { day: AgendaDay; hidden: number; today: string; names: Names }) {
+  // A day that cannot be read now has no blocks to show – its all-day events (not part of any day's count) still are (as in the month).
+  const unknown = day.read === 'unknown'
+  const empty = day.allDay.length === 0 && day.blocks.length === 0
+  return (
+    <section className={cx('rounded border px-3 py-2', day.date === today ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid={`agenda-day-${day.date}`} data-when={day.when}>
+      <button type="button" className={cx('num text-left text-[13px] font-medium hover:underline', day.date === today && 'text-lamp')} onClick={() => openDay(day.date)} title="Otwórz plan dnia" data-testid={`agenda-heading-${day.date}`}>
+        {agendaHeading(day.date, today)}
+      </button>
+      {empty && !unknown ? (
+        hidden > 0 ? (
+          <p className="mt-1 text-[12.5px] text-muted" data-testid={`agenda-hidden-${day.date}`}>
+            ukryte: {hidden}
+          </p>
+        ) : (
+          <p className="mt-1 text-[12.5px] text-muted" data-testid={`agenda-empty-${day.date}`}>
+            {AGENDA_EMPTY}
+          </p>
+        )
+      ) : (
+        <ul className="mt-1 flex flex-col gap-0.5">
+          {day.allDay.map((e) => (
+            <li key={e.id} className="flex items-center gap-2 text-[12.5px]" data-testid={`agenda-allday-${e.id}`}>
+              <span className="inline-block h-[8px] w-[8px] shrink-0 rounded-full" style={{ background: ALL_DAY_COLOR_HEX[e.color] }} aria-hidden="true" />
+              <span className="min-w-0 truncate text-fg">{e.title}</span>
+              <span className="num shrink-0 text-muted">{rangeText(e)}</span>
+            </li>
+          ))}
+          {unknown && (
+            <li className="text-[12.5px] text-muted" data-testid={`agenda-unknown-${day.date}`}>
+              nie da się teraz odczytać
+            </li>
+          )}
+          {day.blocks.map((b) => {
+            const row = agendaRow(b, names)
+            return (
+              <li key={b.id}>
+                <button
+                  type="button"
+                  onClick={() => openPick({ page: 'today', day: day.date === today ? null : day.date }, { kind: 'block', id: b.id, date: day.date })}
+                  className="grid w-full grid-cols-[48px_minmax(0,1fr)_auto_minmax(0,150px)] items-center gap-2 rounded border-l-[3px] px-1.5 py-0.5 text-left text-[12.5px] hover:bg-hover"
+                  style={{ borderLeftColor: blockColor(b.categoryId, names) }}
+                  data-testid={`agenda-block-${day.date}-${b.id}`}
+                  data-state={b.state}
+                >
+                  <span className="num text-fg">{logicalClock(b.startMin)}</span>
+                  <span className="min-w-0 truncate text-fg">
+                    {row.name}
+                    {b.state !== 'planned' && <span className="ml-1 text-muted">{`· ${blockStateText(b.state, b.outsidePlan)}`}</span>}
+                  </span>
+                  <span className="num text-muted">{row.length}</span>
+                  <span className="min-w-0 truncate text-muted" data-testid="agenda-category">
+                    {/* A block named after its category would say it twice. */}
+                    {(row.name.startsWith('+ ') ? row.name.slice(2) : row.name) === row.category ? '' : row.category}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}

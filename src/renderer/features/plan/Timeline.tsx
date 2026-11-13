@@ -10,6 +10,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
+import type { EnergyTrack } from '@shared/engine/energyTrack'
 import type { Pool } from '@shared/model/categories'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import type { DueBadge } from '@shared/engine/caseDates'
@@ -22,6 +23,7 @@ import { attachBadge, attachBadgeTitle } from '../attachments/attachView'
 import { useMachine } from '../../store/machine'
 import { DueMark } from '../cases/DueMark'
 import { PriorityMark } from '../cases/PriorityMark'
+import { poolPath, POOL_COLOR, POOL_NAME } from './energyDraw'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
 
@@ -32,6 +34,10 @@ export interface TimelineItem {
   title: string
   marks: string[]
   color: string
+  /** The block's category – the calendar it belongs to (D419: the views of the window hide the unchecked calendars' blocks). */
+  categoryId: string
+  /** Drawn in spite of its calendar being unchecked (D427: the block whose panel is open): the calendar's name, said on the tile. */
+  hiddenIn?: string
   background: boolean
   /** Passed, parked or cancelled: shown dimmed. */
   dim?: boolean
@@ -81,14 +87,9 @@ export interface TimelineMarker {
   dashed?: boolean
 }
 
-export interface EnergyTrack {
-  /** Samples of the three pools (0–100) at logical minutes. */
-  samples: Array<{ at: number; head: number; emotions: number; senses: number }>
-  reserve: number
-}
+/** The energy's curve beside the axis (the one sampling: `@shared/engine/energyTrack`). */
+export type { EnergyTrack }
 
-const POOL_COLOR: Record<Pool, string> = { head: '#F2B66D', emotions: '#D49A97', senses: '#79AFAB' }
-const POOL_NAME: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce' }
 const TONE: Record<TimelineMarker['tone'], string> = { lamp: '#F2B66D', rose: '#D49A97', sea: '#79AFAB', muted: '#B8AAB0', fg: '#EEE3D6' }
 /** Pixels per minute of the axis. */
 const PPM = 1.1
@@ -218,9 +219,12 @@ export function Timeline({
   ghost,
   from,
   to,
+  extent,
   ...rest
 }: {
   items: TimelineItem[]
+  /** The spans that bound the axis, when they are more than `items` (the blocks of an unchecked calendar are not drawn – D427). */
+  extent?: ReadonlyArray<Pick<TimelineItem, 'startMin' | 'endMin'>>
   markers: TimelineMarker[]
   energy?: EnergyTrack | null
   selected: string | null
@@ -313,8 +317,11 @@ export function Timeline({
       window.removeEventListener('pointercancel', end)
     }
   }, [holding])
-  const lo = Math.floor(Math.min(from, ...items.map((i) => i.startMin), ...markers.map((m) => m.at)) / 60) * 60
-  const hi = Math.ceil(Math.max(to, ...items.map((i) => i.endMin), ...markers.map((m) => m.at)) / 60) * 60
+  // The range of the axis (and so the place a click or a drag creates a block in) is that of ALL the day's blocks, the hidden ones too
+  // (D427): hiding a calendar never moves the hours.
+  const span = extent ?? items
+  const lo = Math.floor(Math.min(from, ...span.map((i) => i.startMin), ...markers.map((m) => m.at)) / 60) * 60
+  const hi = Math.ceil(Math.max(to, ...span.map((i) => i.endMin), ...markers.map((m) => m.at)) / 60) * 60
   // D366: a click on a gap (or in the column of hours) creates a block on the quarter, a drag one with its start and end.
   const grid = useGridCreate({
     lo,
@@ -464,6 +471,8 @@ export function Timeline({
           // dimmed, A8-05).
           ...(pushedTo ? { outline: `1px dashed ${i.color}`, outlineOffset: -1 } : {})
         }}
+        title={i.hiddenIn ? `${i.title} · z ukrytego kalendarza ${i.hiddenIn}` : undefined}
+        data-hidden-calendar={i.hiddenIn}
         data-waiting={waiting ? 'true' : undefined}
         data-pushed={pushedTo ? 'true' : undefined}
         data-dim={i.dim ? 'on' : undefined}
@@ -477,6 +486,11 @@ export function Timeline({
           {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(start)}</span>}
           <span className="truncate text-fg">{i.title}</span>
           {i.badge && !narrow && <DueMark badge={i.badge} compact testId="block-due" />}
+          {i.hiddenIn && (
+            <span className={cx('truncate text-muted', tiny ? 'text-[10px]' : 'text-[11px]')} data-testid="hidden-calendar">
+              z ukrytego kalendarza {i.hiddenIn}
+            </span>
+          )}
           {i.series && (
             <span className="shrink-0 text-muted" title="Z serii" aria-label="z serii" data-testid="series-mark">
               {SERIES_MARK}
@@ -503,11 +517,7 @@ export function Timeline({
     )
   }
 
-  const energyPath = (pool: Pool) =>
-    energy?.samples
-      .filter((s) => Number.isFinite(s[pool]))
-      .map((s, k) => `${k ? 'L' : 'M'}${((s[pool] / 100) * 40).toFixed(1)},${y(s.at).toFixed(1)}`)
-      .join(' ') ?? ''
+  const energyPath = (pool: Pool) => poolPath(energy, pool, (v) => (v / 100) * 40, y)
 
   return (
     <div className="flex select-none" data-testid={rest['data-testid'] ?? 'timeline'}>

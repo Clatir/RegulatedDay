@@ -125,6 +125,54 @@ describe('folder danych dla okna głównego', () => {
     expect(folder.queue.questions()).toEqual([])
   })
 
+  it('wpis, który idzie z innym (`after`): czeka, gdy tamten jest pytaniem; „ich” zabiera go ze sobą, „moje” zapisuje oba (T923)', async () => {
+    const r2 = paths.record('request', 'r2')
+    write(req, { schema: 1, id: 'r1', note: 'a' })
+    write(r2, { schema: 1, id: 'r2', note: 'x' })
+    const { folder } = await make()
+    // Elsewhere the note became „c”: the first entry is a question, the one that goes with it waits.
+    write(req, { schema: 1, id: 'r1', note: 'c' })
+    const out = await folder.edit([{ rel: req, edits: [{ path: ['note'], base: 'a', value: 'b' }] }, { rel: r2, edits: [{ path: ['note'], base: 'x', value: 'y' }], after: [0] }])
+    expect(out.map((o) => o.status)).toEqual(['conflict', 'waiting'])
+    expect(read(r2).note).toBe('x')
+    await folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'theirs')
+    await folder.queue.apply(folder.records)
+    expect([read(req).note, read(r2).note, folder.queue.pending.length]).toEqual(['c', 'x', 0])
+    // Again, „mine” this time: both are written.
+    write(req, { schema: 1, id: 'r1', note: 'd' })
+    await folder.edit([{ rel: req, edits: [{ path: ['note'], base: 'c', value: 'e' }] }, { rel: r2, edits: [{ path: ['note'], base: 'x', value: 'y' }], after: [0] }])
+    await folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'mine')
+    await folder.queue.apply(folder.records)
+    expect([read(req).note, read(r2).note, folder.queue.pending.length]).toEqual(['e', 'y', 0])
+  })
+
+  it('wpis zależny czekający za pytaniem: późniejszy wpis jego pliku idzie po nim; widok i licznik „czeka na folder” go nie liczą (T926–T928)', async () => {
+    const att = paths.record('attachment', 'a1')
+    write(req, { schema: 1, id: 'r1', note: 'a' })
+    write(att, { schema: 1, id: 'a1', removedAt: null })
+    const { folder } = await make()
+    write(req, { schema: 1, id: 'r1', note: 'c' })
+    // The block's removal is a question; its attachment's removal goes with it; then „Cofnij” of the attachment alone.
+    await folder.edit([{ rel: req, edits: [{ path: ['note'], base: 'a', value: 'b' }] }, { rel: att, edits: [{ path: ['removedAt'], base: null, value: 5 }], after: [0] }])
+    expect((await folder.edit([{ rel: att, edits: [{ path: ['removedAt'], base: 5, value: null }] }]))[0]!.status).toBe('waiting')
+    // Shown as the folder has it until your answer; nothing of it waits for the folder.
+    expect((await folder.recordView(att))!.removedAt).toBeNull()
+    expect(folder.unsynced).toBe(0)
+    await folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'mine')
+    await folder.queue.apply(folder.records)
+    // Laid in their order: removed, then brought back.
+    expect([read(req).note, read(att).removedAt, folder.queue.pending.length]).toEqual(['b', null, 0])
+  })
+
+  it('kolejka z pliku: `after` inny niż lista nie zatrzymuje przebiegów (T929)', async () => {
+    write(req, { schema: 1, id: 'r1', note: 'a' })
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(join(stateDir, 'queue.v1.json'), JSON.stringify({ format: 1, entries: [{ id: 'q1', rel: req, at: 1, schema: 1, edits: [{ path: ['note'], base: 'a', value: 'b' }], after: 'zly' }] }))
+    const { folder } = await make()
+    await folder.queue.apply(folder.records)
+    expect([read(req).note, folder.queue.pending.length]).toEqual(['b', 0])
+  })
+
   it('rekord usunięty gdzie indziej: pytanie, nigdy ciche przywrócenie; „przywróć” odtwarza go z ostatniej wersji z moją zmianą', async () => {
     write(req, { schema: 1, id: 'r1', note: 'a', person: 'p1' })
     const { folder } = await make()

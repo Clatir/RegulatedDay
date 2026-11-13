@@ -28,10 +28,10 @@ import { addDays, weekday } from '@shared/time/zone'
 import { UNDO_LINE_MS } from '@shared/widget'
 import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
-import { isSaved, saveRecord, storedAnswer, tryRemoveRecord, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
+import { isSaved, saveRecord, storedAnswer, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
 import { countDay } from '../../store/day'
 import { useNewShortcut } from '../../lib/escape'
-import { takeFoundPick, undoToast, useUi } from '../../store/ui'
+import { takeFoundPick, useUi } from '../../store/ui'
 import { attachTransfer } from '../attachments/attachDrop'
 import { withAttachCounts } from '../attachments/attachView'
 import { BlockEditor } from '../plan/BlockEditor'
@@ -46,6 +46,7 @@ import { stepsAnswer } from '../steps/stepsUi'
 import { changeTemplateSteps } from '../../store/steps'
 import { SettingNumber } from '../settings/SettingNumber'
 import { templateAdd, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
+import { removeTemplate, removeTemplateBlock } from './templateActions'
 
 export function TemplatesPage() {
   const templates = useData((s) => s.templates)
@@ -276,11 +277,9 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     await saveRecord(paths.record('template', id), null, templateJson(c))
     onCopied(id)
   }
+  // D415: with the attachments of its blocks; „Cofnij” brings back both.
   const remove = async () => {
-    const { saved, before } = await tryRemoveRecord(rel)
-    if (!saved) return
-    onRemoved()
-    undoToast(`Usunięty szablon: ${template.name}`, () => void saveRecord(rel, null, before))
+    if (await removeTemplate(template.id, template.name)) onRemoved()
   }
 
   return (
@@ -416,7 +415,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           steps={<StepsEditor steps={block.steps} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}
           onClose={() => setSelected(null)}
           actions={
-            <button type="button" className="btn" onClick={() => void saveVersion((v) => ({ blocks: v.blocks.filter((b) => b.id !== block.id) })).then(() => setSelected(null))} data-testid="template-block-remove">
+            // D415: out of the version from the date shown, with its attachments when no later version keeps it; „Cofnij”.
+            <button type="button" className="btn" onClick={() => void removeTemplateBlock(template.id, from, block, blockName(block, names)).then(() => setSelected(null))} data-testid="template-block-remove">
               Usuń z szablonu ({blockName(block, names)})
             </button>
           }

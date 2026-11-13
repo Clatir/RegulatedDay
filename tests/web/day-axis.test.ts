@@ -211,7 +211,7 @@ describe('przeciąganie bloków na osi (D305)', () => {
   })
 
   it('D365: upuszczony po zmianie długości blok czeka, aż oś pokaże nowy koniec', () => {
-    const item = (endMin: number): TimelineItem => ({ id: 'a', startMin: 600, endMin, title: 'a', marks: [], color: '#fff', background: false })
+    const item = (endMin: number): TimelineItem => ({ id: 'a', startMin: 600, endMin, title: 'a', marks: [], color: '#fff', categoryId: 'inne', background: false })
     const drop = { id: 'a', from: 600, fromEnd: 660 }
     // Ten sam start i stary koniec – dzień jeszcze nie odczytał zmiany.
     expect(dropSettled([item(660)], drop)).toBe(false)
@@ -219,7 +219,7 @@ describe('przeciąganie bloków na osi (D305)', () => {
   })
 
   it('D365: trwający blok po planowanym końcu (pokazany koniec = teraz, tyka) czeka na dokładny koniec, nie na zmianę minuty', () => {
-    const item = (endMin: number): TimelineItem => ({ id: 'a', startMin: 600, endMin, title: 'a', marks: [], color: '#fff', background: false, resize: 'end' })
+    const item = (endMin: number): TimelineItem => ({ id: 'a', startMin: 600, endMin, title: 'a', marks: [], color: '#fff', categoryId: 'inne', background: false, resize: 'end' })
     const drop = { id: 'a', from: 600, fromEnd: 607, exactEnd: 640 }
     expect(dropSettled([item(607)], drop)).toBe(false)
     expect(dropSettled([item(608)], drop)).toBe(false)

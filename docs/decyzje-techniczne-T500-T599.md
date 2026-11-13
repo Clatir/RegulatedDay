@@ -1,6 +1,7 @@
 # Rejestr decyzji technicznych – T500–T599
 
-Wydzielone z `docs/decyzje-techniczne.md` (T857); nowsze T – tam. Szukaj Grepem po numerze w `docs/decyzje-techniczne*.md`.
+Wydzielone z `docs/decyzje-techniczne.md` (T857); T600–T699 – `docs/decyzje-techniczne-T600-T699.md` (T935), T700 i nowsze –
+`docs/decyzje-techniczne.md`. Szukaj Grepem po numerze w `docs/decyzje-techniczne*.md`.
 
 | Nr | Decyzja |
 | --- | --- |

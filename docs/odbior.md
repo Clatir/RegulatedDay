@@ -26,7 +26,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni), L2.4 (Win+Alt+N i okienko na wierzchu), L2.5 („+” na pasku pulpitu), L2.6 (dwa komputery i stare prośby po aktualizacji), SNT5.4 (pasek pulpitu z krokiem i ptaszkiem), SNT5.5 (dwa komputery – odhaczenia z obu), SNT5.6 (plik albo link przeciągnięty na okno).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni), L2.4 (Win+Alt+N i okienko na wierzchu), L2.5 („+” na pasku pulpitu), L2.6 (dwa komputery i stare prośby po aktualizacji), SNT5.4 (pasek pulpitu z krokiem i ptaszkiem), SNT5.5 (dwa komputery – odhaczenia z obu), SNT5.6 (plik albo link przeciągnięty na okno), SNT4b.3, SNT1.7, SNT2.6 (dwa komputery).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 - **W maszynie wirtualnej** (opcjonalnie): 68 z tych punktów może sprawdzić Cowork na świeżej instalacji, bez Twoich
@@ -161,6 +161,22 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] SNT5.4 Pasek pulpitu: „☐ krok · krok 1/4” z ptaszkiem, „Wszystkie kroki ✓” (Tylko Ty – pasek na pulpicie)
    - [ ] SNT5.5 Dwa komputery – odhaczenia z obu zostają (Tylko Ty – OneDrive)
    - [ ] SNT5.6 Plik albo link przeciągnięty na okno aplikacji nic nie psuje (Tylko Ty – pulpit)
+   - [ ] SNT4b.1 „Usuń z szablonu” i usunięcie szablonu
+   - [ ] SNT4b.2 Seria: „To i następne”, „Cała seria”, „Zakończ serię”
+   - [ ] SNT4b.3 Usunięcie z konfliktem nie gubi załączników (Tylko Ty – OneDrive)
+   - [ ] SNT1.1 Przełącznik „Tydzień · 3 dni · Agenda” zapamiętany
+   - [ ] SNT1.2 Krzywa energii w kolumnach „Tygodnia” i „3 dni”
+   - [ ] SNT1.3 Przeciąganie bloku między kolumnami
+   - [ ] SNT1.4 Zakotwiczone przy przenoszeniu
+   - [ ] SNT1.5 „Agenda” – 7 dni od dziś
+   - [ ] SNT1.6 Miesiąc – paski, „+N” i kropka obciążenia
+   - [ ] SNT1.7 Przeniesienie przy zmianie z drugiego komputera (Tylko Ty – OneDrive)
+   - [ ] SNT2.1 Ustawienia → „Kalendarze”: dodawanie do 12, nazwa, kolor, usuwanie z „Cofnij”
+   - [ ] SNT2.2 Kategoria i wydarzenie całodniowe w kalendarzu (pole „Kalendarz”)
+   - [ ] SNT2.3 Żetony nad widokami, „ukryte: N”, zapamiętane na tym komputerze
+   - [ ] SNT2.4 Ukrycie tylko w widoku – energia, pasek pulpitu i powiadomienia bez zmian
+   - [ ] SNT2.5 Ctrl K z ukrytego kalendarza – podpis „z ukrytego kalendarza”
+   - [ ] SNT2.6 Dwa komputery – kalendarze na obu, starsza wersja nie gubi (Tylko Ty – OneDrive)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -2286,3 +2302,130 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
   któraś P1 ma blok – bez linii (D450, D456).
 - **Nie przechodzi, gdy:** przeciągnięcie nie zapisuje albo zapisuje po puszczeniu poza oknem, sprawy zrobione są
   w macierzy, linia pojawia się mimo bloku P1, albo blokuje plan.
+
+## Wszystkie punkty
+
+### SNT4b – załączniki przy usuwaniu szablonu i serii (1.18.0)
+
+#### SNT4b.1 „Usuń z szablonu” i usunięcie szablonu – załączniki do kosza, „Cofnij” przywraca (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/attachments.test.ts` („Usuń z szablonu”: załączniki bloku ze wszystkich dni i własne dni od jutra, „Cofnij” przywraca blok z załącznikami; usunięcie szablonu z „Cofnij”; blok zostaje w późniejszej wersji szablonu). Ty: rzut oka.
+- **Jak sprawdzić:** w „Szablonach” otwórz szablon z blokiem „Blok A” i dołącz do tego bloku plik (np. PDF). Otwórz dzień jutrzejszy, w którym blok z szablonu jest, i dzisiejszy dzień. Wróć do szablonu, kliknij blok A i „Usuń z szablonu (Blok A)”. Obejrzyj pasek. Kliknij „Cofnij”. Potem przy szablonie kliknij „Usuń” (cały szablon) i „Cofnij” w jego pasku.
+- **Oczekiwany efekt:** po „Usuń z szablonu” pasek mówi „Usunięty z szablonu: Blok A · Cofnij”; załącznik szablonu znika z dni, w których blok z szablonu był (także minionych), a własne załączniki dni od jutra idą do kosza na 30 dni; dzisiejszy dzień, który już powstał z szablonu, zostaje ze swoim blokiem i załącznikami; „Cofnij” przywraca blok z załącznikami (D415, D420). Po usunięciu całego szablonu pasek mówi „Usunięty szablon: <nazwa> · Cofnij”, załączniki jego bloków i własne dni od jutra idą do kosza, a „Cofnij” przywraca szablon i załączniki.
+- **Nie przechodzi, gdy:** załącznik szablonu nadal widać w dniu jutrzejszym albo w dniu minionym z tego szablonu; załącznik dodany dziś do bloku w dniu dzisiejszym znika; „Cofnij” przywraca tylko blok bez załączników; pasek nie mówi „Usunięty z szablonu: …” albo nie ma „Cofnij”.
+
+#### SNT4b.2 Seria: „To i następne”, „Cała seria”, „Zakończ serię” – załączniki serii do kosza, dni przed końcem zostają (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/series.test.ts` („Cała seria”: załączniki serii znikają ze wszystkich dni, własne – od dziś, „Cofnij” przywraca; „To i następne”: załączniki serii znikają, własne – od dnia wystąpienia; „Zakończ serię”: załączniki serii i dni przed końcem zostają, zmienione pojedynczo po końcu oddają swoje, z „Cofnij”; koniec na wczoraj z zaczętym i zmienionym wystąpieniem; lista nieczytelna – seria się kończy, załączniki zostają), `tests/fs/attachments.test.ts` (własne załączniki wystąpienia znikają z nim). Dzisiejsze niezaczęte wystąpienie zdjęte przez „Zakończ serię” (D423) nie ma testu – sprawdź ręcznie. Ty: rzut oka.
+- **Jak sprawdzić:** w edycji serii dołącz plik do serii (załącznik serii). Dołącz plik do wystąpienia jutrzejszego w „Dziś” i do wystąpienia za dwa dni. Potem:
+  1. Jutrzejsze wystąpienie → „To i następne” → usuń blok. Sprawdź załączniki dnia jutrzejszego i dnia po nim, potem „Cofnij”.
+  2. „Cała seria” → usuń. Sprawdź załącznik serii w dniach wcześniejszych i dzisiaj, potem „Cofnij”.
+  3. „Zakończ serię” z ostatnim dniem dziś+2. Sprawdź załącznik serii i załączniki dnia dziś+1 oraz dnia dziś+2 (zostają). Wystąpienie dziś+5 wcześniej zmień pojedynczo („Tylko to”) i zobacz jego załącznik po „Zakończ serię” (idzie do kosza). Potem „Cofnij”.
+- **Oczekiwany efekt:** „To i następne” i „Cała seria” zabierają załącznik serii ze wszystkich dni, także minionych; własne załączniki wystąpień od dnia (dziś, albo od daty wystąpienia) idą do kosza, własne załączniki dni minionych zostają; „Zakończ serię” zostawia załącznik serii i załączniki dni przed końcem; wystąpienie po końcu zmienione pojedynczo oddaje swój załącznik do kosza; dzisiejsze niezaczęte wystąpienie zdjęte z dzisiejszego planu też oddaje swój załącznik (D423); każda zmiana ma „Cofnij”, które przywraca załączniki (D415, D421, D423).
+- **Nie przechodzi, gdy:** po „Zakończ serię” znika załącznik serii albo załącznik dnia przed końcem; wystąpienie po końcu zmienione pojedynczo zostaje w planie ze swoim załącznikiem (a nie oddaje go do kosza); po „To i następne” znika załącznik dnia sprzed wystąpienia; „Cofnij” nie przywraca załączników; dzisiejsze niezaczęte zdjęte z planu zostawia załącznik w kolejnych dniach bez kosza.
+
+#### SNT4b.3 Usunięcie z konfliktem nie gubi załączników (Tylko Ty – OneDrive) (1.18.0)
+- [ ] Odebrane
+- **Tylko Ty:** dwa komputery przez OneDrive – testy symulują zmianę z drugiego komputera w kopii folderu danych (`tests/fs/attachments.test.ts`: szablon zapisany po zmianie z innego komputera – „Cofnij” jest, zmiana szablonu z innego komputera zostawia załączniki, rekord czeka na pytanie). Prawdziwego konfliktu OneDrive i jego pytania testy nie widzą.
+- **Jak sprawdzić:** na komputerze A usuń z szablonu blok z załącznikiem (zanim OneDrive zsynchronizuje). Na komputerze B zmień inny blok tego samego szablonu. Poczekaj na synchronizację i obejrzyj pytanie o konflikt na A. Odpowiedz zgodnie z pytaniem (raz zostaw zmianę z A, potem z B – na osobnych szablonach) i sprawdź załącznik w koszu oraz w dniach tego szablonu.
+- **Oczekiwany efekt:** załączniki czekają razem ze zmianą: przed odpowiedzią na pytanie nie znikają osobno z jednego komputera; po odpowiedzi załącznik usuniętego bloku jest w koszu z „Cofnij”, a załącznik zostawionego bloku zostaje; nic nie przepada po drodze.
+- **Nie przechodzi, gdy:** załącznik znika na jednym komputerze przed odpowiedzią na pytanie; po odpowiedzi blok ma załącznik, którego nie ma ani w dniu, ani w koszu, albo odwrotnie; aplikacja nie pyta o konflikt przy samym usunięciu z załącznikiem; pozycja „Plik jeszcze nie dotarł” zostaje na stałe.
+
+---
+
+### SNT1 – widoki „Tydzień · 3 dni · Agenda”, krzywa, przeciąganie, miesiąc (1.18.0)
+
+#### SNT1.1 Przełącznik „Tydzień · 3 dni · Agenda” zapamiętany; „3 dni” = wczoraj · dziś · jutro (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/week-page-modes.test.ts` (trzy widoki, „3 dni” z strzałkami o dzień i „Dziś”, zapamiętany wybór), `tests/web/week-views.test.ts` (kolejność trzech widoków, nieznana wartość – „Tydzień”, zapamiętany na tym komputerze), `tests/fs/multi-day.test.ts` (dni „3 dni” w podanej kolejności). E2E `tests/e2e/week.spec.ts` (przełącznik zapamiętany). Ty: rzut oka.
+- **Jak sprawdzić:** otwórz „Tydzień”. Przełącz na „3 dni”, potem „Agenda”, potem z powrotem na „Tydzień”. W „3 dniach” kliknij strzałkę w prawo i w lewo, potem „Dziś”. Zamknij okno główne i otwórz je ponownie.
+- **Oczekiwany efekt:** przełącznik „Tydzień · 3 dni · Agenda” w nagłówku strony; „3 dni” pokazuje wczoraj, dziś i jutro w większej skali; strzałka przesuwa o jeden dzień, „Dziś” wraca do dnia dzisiejszego w środku; po ponownym otwarciu okna zostaje ostatnio wybrany widok (na tym komputerze).
+- **Nie przechodzi, gdy:** po ponownym otwarciu okna zawsze wraca „Tydzień”; „3 dni” pokazuje dwa dni albo dzień sprzed wczoraj; strzałka nie przesuwa o dzień albo opróżnia stronę, zanim przyjdą nowe dane.
+
+#### SNT1.2 Krzywa energii w kolumnach „Tygodnia” i „3 dni” – dzień przyszły z przyjętymi wartościami, bez krzywej przed check-inem (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/day-grid.test.ts` (krzywa w tle kolumny; dzień przyszły – linie rzadsze i jaśniejsze, z podpisem „przyjęte”; bez krzywej przed check-inem), `tests/web/week-views.test.ts` (wspólne rysowanie krzywej, trzy pule z kolorami), `tests/unit/engine/multi-day.test.ts` (dzień przyszły od przyjętego check-inu 100 / 100 / 100 o 04:00; dzisiaj bez check-inu – brak krzywej), `tests/fs/multi-day.test.ts` (krzywa dnia liczy się od nowa po przeniesieniu bloku). E2E `tests/e2e/week.spec.ts` („3 dni” z krzywą „przyjęte” jutro). Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” zobacz kolumnę dzisiejszą i jutrzejszą, w „3 dniach” – wczoraj, dziś i jutro. Porównaj tło dnia dzisiejszego po check-inie z tłem jutra. W dniu, który minął bez check-inu, sprawdź kolumnę. Przenieś blok na jutro (SNT1.3) i zobacz, czy krzywa w kolumnie jutra się zmieniła.
+- **Oczekiwany efekt:** w tle kolumny są cienkie linie trzech pul energii, bez podpisu, dla dnia ze znaną energią; dla dnia przyszłego krzywa startuje od przyjętych 100 / 100 / 100 o 04:00, jest jaśniejsza i przerywana, z podpisem „przyjęte”; dzisiaj przed check-inem i dzień minięty bez check-inu – krzywej nie ma; po przeniesieniu bloku krzywa kolumny się przelicza.
+- **Nie przechodzi, gdy:** krzywa dla jutra jest tak samo mocna jak dla dnia ze znaną energią albo nie ma podpisu „przyjęte”; dzisiaj przed check-inem rysuje się krzywa; dzień minięty bez check-inu ma krzywą; po przeniesieniu bloku krzywa kolumny nie zmienia się.
+
+#### SNT1.3 Przeciąganie bloku między kolumnami i w kolumnie – rozsuwanie, pasek „Przeniesiono … · Cofnij”, dzień miniony odmawia (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/week-move.test.ts` (przeniesienie na jutro z godziną upuszczenia, pasek i jedno „Cofnij” dla obu dni, rozsunięcie na zajętym miejscu, nowa godzina w kolumnie, dzień miniony – odmowa), `tests/web/day-grid.test.ts` (miejsce upuszczenia z krokiem 5 min, dzień miniony), E2E `tests/e2e/week.spec.ts` (wtorek → środa z linią „Przeniesiono … · Cofnij”, w „3 dniach” zmiana godziny jutra). Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” przeciągnij blok elastyczny (niezaczęty, bez kotwicy) z dzisiaj na jutro. Zobacz pasek nad kolumnami, potem kliknij „Cofnij”. Przeciągnij ten sam blok w tej samej kolumnie o około 30 minut później. Na zajętym miejscu upuść blok elastyczny i zobacz, czy kolejny się rozsuwa. Spróbuj przeciągnąć sesję albo wykład (nie da się chwycić). Spróbuj przeciągnąć blok na wczoraj (odmowa). Powtórz przeciągnięcie na jutro w „3 dniach”.
+- **Oczekiwany efekt:** blok ląduje na jutrze o godzinie, na którą go upuściłeś (krok 5 min); pasek „Przeniesiono: <nazwa> na <dzień> · Cofnij”; przy rozsunięciu dopisek „· przesunięto N bloków”; „Cofnij” przywraca oba dni; w tej samej kolumnie zmienia się tylko godzina, bez paska; przy rozsunięciu w tej samej kolumnie pasek „Przesunięto N bloków w 1 dniu · Cofnij”; sesja, wykład, zjazd, druga zmiana i blok z kotwicą nie mają uchwytu; dzień miniony – blok się nie rusza i nic nie jest zapisane (D417, D422).
+- **Nie przechodzi, gdy:** blok ląduje w innym dniu albo godzinie niż na przeciągnięciu; „Cofnij” przywraca tylko jeden dzień; pasek brakuje albo ma inną nazwę; na zajętym miejscu blok nakłada się na inny zamiast go rozsunąć; sesja albo blok na dzień miniony da się przeciągnąć; blok znika z obu dni.
+
+#### SNT1.4 Zakotwiczone przy przenoszeniu – niezaczęte jadą, zaczęte i zaparkowane zostają; „Przenieś na…” z tym samym dymkiem (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/week-move.test.ts` (zakotwiczone niezaczęte idą z blokiem, zaczęty zostaje z paskiem „został – już trwa”, zaparkowany zakotwiczony zostaje i linia mówi „zaparkowany”, „Przenieś na…” z tą samą linią, „Cofnij” przywraca kotwicę), `tests/unit/engine/multi-day.test.ts` (zakotwiczone wprost i dalej jadą; zostają sesja, zaparkowany, odwołany, nieprzenośny; wariant „na jutro”), `tests/fs/multi-day.test.ts` (zakotwiczone idą razem; zaczęty zostaje z własną godziną). Ty: rzut oka.
+- **Jak sprawdzić:** dzisiaj zaplanuj blok A (elastyczny), a do niego zakotwicz: B (niezaczęty), C (uruchom „Start” i zostaw trwający – zaczęty) i D (zaparkowany). Przeciągnij A na jutro i obejrzyj pasek. Potem w panelu bloku A kliknij „Przenieś na…” na pojutrze i obejrzyj dymek.
+- **Oczekiwany efekt:** na jutrze są A i B; C i D zostają dzisiaj, każdy o własnej godzinie, bez kotwicy; pasek mówi, co zostało i dlaczego: „Przeniesiono: A na <jutro> · C został – już trwa · D został – zaparkowany · Cofnij”; „Przenieś na…” w panelu bloku A daje dymek „Przeniesiono: … · Cofnij” w tych samych słowach; „Cofnij” przywraca oba dni i kotwicę C (D424, D426).
+- **Nie przechodzi, gdy:** zaczęty albo zaparkowany blok jedzie na jutro; niezaczęty zakotwiczony zostaje dzisiaj zamiast jechać z blokiem; pasek nie mówi, który został i dlaczego; „Przenieś na…” nie pokazuje dymka z „Cofnij”; „Cofnij” nie przywraca kotwicy zaczętego bloku.
+
+#### SNT1.5 „Agenda” – 7 dni od dziś, całodniowe na górze, klik w blok otwiera jego dzień (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/week-page-modes.test.ts` (siedem dni od dziś po kolei, dzień bez niczego – „nic”, całodniowe nad blokami, klik w blok otwiera blok w jego dniu, dzień nieodczytany tak to mówi), `tests/unit/engine/multi-day.test.ts` (Agenda: 7 dni od dziś, po dniach, całodniowe na górze, dzień bez bloków – pusta lista), `tests/fs/multi-day.test.ts` (Agenda bez krzywych energii). E2E `tests/e2e/week.spec.ts` („Agenda” z blokiem jutra otwierającym dzień). Ty: rzut oka.
+- **Jak sprawdzić:** przełącz na „Agenda”. Zobacz dzisiaj i jutro z nazwami bloków, dalsze dni po kolei. Znajdź dzień bez bloków. Kliknij blok jutrzejszy. Wróć i kliknij nagłówek innego dnia.
+- **Oczekiwany efekt:** siedem dni od dziś po kolei; wydarzenia całodniowe na górze dnia; bloki po godzinie (godzina, nazwa, długość, kategoria); dzień bez bloków – jedna linia „nic”; klik w blok otwiera jego dzień w „Dziś” z tym blokiem (jak wynik Ctrl K); klik w nagłówek dnia otwiera sam dzień.
+- **Nie przechodzi, gdy:** agenda pokazuje inną liczbę dni albo zaczyna od wczoraj; całodniowe są pod blokami; klik w blok nie otwiera jego dnia; dzień bez bloków nie ma linii „nic”.
+
+#### SNT1.6 Miesiąc – do 3 pasków, „+N”, kropka obciążenia w trzech odcieniach (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/month-cells.test.ts` (do trzech pasków, „+N”, dzień bez niczego, kropka obciążenia ze zdaniem „Praca … z …”, kolor dnia zostaje), `tests/unit/engine/multi-day.test.ts` (progi obciążenia: poniżej 80 %, 80–100 %, powyżej 100 % budżetu; komórka: najpierw całodniowe, potem stałe bloki; „+N” liczy wszystko, czego nie widać), `tests/fs/multi-day.test.ts` (miesiąc: bloki stałe bez sesji i obciążenie wobec budżetu). E2E `tests/e2e/week.spec.ts` („Miesiąc” – paski i „+N”). Ty: rzut oka.
+- **Jak sprawdzić:** w widoku miesiąca znajdź dzień z trzema blokami stałymi, dzień z pięcioma blokami (także sesją) i dzień bez niczego. Znajdź dzień z pracą powyżej budżetu i dzień z pracą poniżej 80 %. Najedź myszą na kropkę, potem na komórkę z „+N”.
+- **Oczekiwany efekt:** w komórce są najwyżej trzy paski: najpierw wydarzenia całodniowe, potem stałe bloki po godzinie; reszta bloków dnia, także elastycznych i sesji, jako „+N”; dzień bez bloków nie ma pasków ani „+N”; kropka obciążenia ma trzy odcienie (poniżej 80 %, 80–100 %, powyżej 100 % budżetu) i zdanie „Praca … z …”; dzień bez pracy nie ma kropki; kolor typu dnia zostaje.
+- **Nie przechodzi, gdy:** w komórce jest więcej niż trzy paski; „+N” nie liczy elastycznych albo sesji; kropka ma inną liczbę odcieni albo nie zmienia się przy progach; dzień bez bloków ma kropkę albo „+N”; komórka dnia z sąsiedniego miesiąca pokazuje bloki (ma pokazać tylko wydarzenia całodniowe).
+
+#### SNT1.7 Przeniesienie przy zmianie z drugiego komputera – blok nigdy nie znika z obu dni (Tylko Ty – OneDrive) (1.18.0)
+- [ ] Odebrane
+- **Tylko Ty:** dwa komputery przez OneDrive – testy symulują konflikt na kopii plików dni (`tests/web/week-move.test.ts`: cel albo źródło w konflikcie – pytanie, źródło czeka, blok w swoim dniu; `tests/fs/multi-day.test.ts`: właściciel w konflikcie nie kładzie niczego, T960). Prawdziwej synchronizacji OneDrive testy nie widzą.
+- **Jak sprawdzić:** na komputerze A przeciągnij blok z wtorku na środę, zanim OneDrive zsynchronizuje. Na komputerze B w tym samym czasie zmień ten blok we wtorek (np. tytuł) albo przenieś go na czwartek. Poczekaj na synchronizację. Obejrzyj wtorek i środę na obu komputerach.
+- **Oczekiwany efekt:** blok jest w jednym dniu na obu komputerach i nigdy nie zniknął z obu; przy konflikcie aplikacja pyta, a do czasu odpowiedzi źródło czeka z blokiem w swoim dniu; po odpowiedzi blok zostaje w jednym dniu, bez kopii konfliktowej przy samym przeniesieniu.
+- **Nie przechodzi, gdy:** blok znika z obu dni na którymkolwiek komputerze; po synchronizacji blok jest w dwóch dniach bez pytania; aplikacja pyta o konflikt bez przyczyny albo zawiesza się; „Cofnij” nie przywraca bloku w jego dniu.
+
+---
+
+### SNT2 – kalendarze jako warstwy (1.18.0)
+
+#### SNT2.1 Ustawienia → „Kalendarze”: dodawanie do 12, nazwa, kolor, usuwanie z „Cofnij”; „Moje” nie do usunięcia (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/calendars-settings.test.ts` (na początku tylko „Moje”, bez „Usuń”; dodanie – nazwa z pola, kolor z palety, pole się czyści; pusta nazwa nic nie dodaje; przy 12 kalendarzach „Dodaj” i pole wyłączone z podpowiedzią; zmiana koloru; usunięcie z „Cofnij”, toast mówi też o wydarzeniach całodniowych; „Cofnij” przy 12 kalendarzach odmawia), `tests/unit/calendars.test.ts` (limit 12; zmiana nazwy i koloru „Moje”; „Moje” nie da się usunąć; usunięcie przenosi kategorie do „Moje”). Ty: rzut oka.
+- **Jak sprawdzić:** w Ustawieniach dodaj kalendarz „Praca” z innym kolorem. Zmień jego nazwę i kolor. Dodaj kolejne do dwunastu i zobacz przycisk „Dodaj” (wyłączony, z podpowiedzią). Usuń „Praca” i kliknij „Cofnij” w toaście. Przy „Moje” sprawdź, że nie ma „Usuń”, a nazwę da się zmienić.
+- **Oczekiwany efekt:** lista kalendarzy zaczyna się od „Moje” (bez „Usuń”); dodanie: nazwa z pola, kolor z palety, wiersz na liście, pole się czyści; od 12 kalendarzy „Dodaj” wyłączone z podpowiedzią; usunięcie kalendarza oddaje jego kategorie i wydarzenia do „Moje”, toast mówi, ile ich było; „Cofnij” przywraca kalendarz na jego miejsce razem z kategoriami; „Moje” można przemianować i przekolorować, nie usunąć (D419, D425).
+- **Nie przechodzi, gdy:** przy „Moje” jest „Usuń”; przy dwunastu kalendarzach da się dodać kolejny; po usunięciu kategorie albo wydarzenia nie wracają do „Moje”; toast nie mówi, ile ich było; „Cofnij” nie przywraca kalendarza na jego miejsce albo odmawia bez powodu.
+
+#### SNT2.2 Kategoria i wydarzenie całodniowe w kalendarzu – pole „Kalendarz” przy dwóch kalendarzach lub więcej (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/calendars-settings.test.ts` („wybór w wierszu kategorii: przenosi ją do kalendarza i z powrotem do „Moje””), `tests/web/calendars-allday-card.test.ts` (przy jednym kalendarzu pola nie ma; przy dwóch – lista, domyślnie „Moje”, wybór zapisuje kalendarz, powrót do „Moje”; wydarzenie w kalendarzu, którego już nie ma, pokazuje „Moje”), `tests/web/calendars-records.test.ts` (nazwa kalendarza w tekstach rekordu), `tests/unit/calendars.test.ts` (kategoria w kalendarzu; zniknięty kalendarz – „Moje”; wydarzenie całodniowe bez kalendarza – „Moje”), `tests/fs/calendars.test.ts` (kategoria przypisana do kalendarza usuniętego na drugim komputerze czyta się jako „Moje”). Ty: rzut oka.
+- **Jak sprawdzić:** zanim dodasz drugi kalendarz, otwórz kartę wydarzenia całodniowego – pola „Kalendarz” nie ma. Dodaj kalendarz „Praca”. W wierszu kategorii „Inne obowiązki” w Ustawieniach wybierz „Praca”, potem z powrotem „Moje”. Otwórz wydarzenie całodniowe, zmień „Kalendarz” na „Praca” i zapisz.
+- **Oczekiwany efekt:** kategoria należy do jednego kalendarza (domyślnie „Moje”); blok trafia do kalendarza przez swoją kategorię; wydarzenie całodniowe ma pole „Kalendarz” (domyślnie „Moje”); pole jest tylko przy dwóch kalendarzach lub więcej; wybór działa od razu; koszt i budżet pracy nie zmieniają się przez przypisanie (D419, D425).
+- **Nie przechodzi, gdy:** pole „Kalendarz” jest przy jednym kalendarzu; po zapisaniu wybranego kalendarza wydarzenie wraca do „Moje”; przypisanie kategorii zmienia koszt albo budżet pracy dnia; kategoria przypisana do usuniętego kalendarza pokazuje nazwę zamiast „Moje”.
+
+#### SNT2.3 Żetony nad widokami – odznaczenie chowa bloki i wydarzenia, „ukryte: N”, zapamiętane na tym komputerze (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/calendars-chips.test.ts` (po jednym żetonie na kalendarz, w kolejności i z kolorem; klik wyłącza i włącza; „ukryte: N” tylko gdy coś ukryte; jeden kalendarz – żetonów nie ma; wybór wraca po ponownym uruchomieniu okna; zapamiętane ukrycie przy jednym kalendarzu nic nie chowa), `tests/web/calendars-views.test.ts` (żetony nad siatką „Tygodnia”; „Tydzień”, „3 dni”, „Agenda”, miesiąc chowają swoje bloki i liczą „ukryte”; „ukryte: N” w „Tygodniu” liczy cały tydzień; oś „Dziś” ma te same godziny co bez ukrycia), `tests/e2e/calendars.spec.ts` (żetony nad „Dziś” i „Tygodniem”; po restarcie okna nadal odznaczony; zaznaczony – blok wraca), `tests/unit/calendars.test.ts` (odznaczony kalendarz ukrywa tylko swoje bloki, licznik „ukryte: N”). Ty: rzut oka.
+- **Jak sprawdzić:** bez drugiego kalendarza sprawdź „Dziś”, „Tydzień”, „3 dni”, „Agendę” i „Kalendarz” (miesiąc) – żetonów nie ma. Dodaj kalendarz „Praca” z kategorią, która ma blok na dziś (SNT2.2). Żetony pojawiają się nad każdym z tych widoków, ten sam wybór we wszystkich. Odznacz „Praca”: blok znika z osi „Dziś” i z kolumny „Tygodnia”, pojawia się „ukryte: N”. Zamknij i otwórz okno. Zaznacz „Praca” ponownie.
+- **Oczekiwany efekt:** nad widokami („Dziś”, „Tydzień”, „3 dni”, „Agenda”, miesiąc w „Kalendarzu”) jest po jednym żetonie na kalendarz, w kolejności z Ustawień, z kolorem; odznaczony kalendarz chowa swoje bloki i wydarzenia całodniowe; obok widoku „ukryte: N” (tylko gdy N > 0); przy jednym kalendarzu żetonów nie ma i nic nie jest ukryte; wybór zapamiętany na tym komputerze – po ponownym otwarciu okna zostaje; oś „Dziś” ma te same godziny co bez ukrycia; w „Agendzie” dzień, któremu ukrycie zabrało wszystko, pisze „ukryte: N” zamiast „nic” (D419, D427, D428).
+- **Nie przechodzi, gdy:** przy jednym kalendarzu jest żeton albo „ukryte”; odznaczony kalendarz zostaje w widoku; po restarcie okna wraca zaznaczony; „ukryte: N” w „Tygodniu” liczy tylko jeden dzień; oś „Dziś” skraca się albo rozszerza przy ukryciu; w „Agendzie” dzień z samymi ukrytymi pisze „nic”.
+
+#### SNT2.4 Ukrycie tylko w widoku – energia, granica dnia, pasek pulpitu i powiadomienia bez zmian; rozsuwanie liczy ukryte (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/calendars-views.test.ts` (rozsuwanie: „Przesunięto N bloków (w tym M ukrytych)”, bez ukrytych – jak dotąd; linia „Tygodnia” sumuje ukryte z dni; `hiddenBlocksAmong`), `tests/web/calendars-chips.test.ts` (wyłączony kalendarz zabiera swoje bloki i liczy je w „ukryte”), `tests/unit/calendars.test.ts` (odznaczony kalendarz ukrywa tylko swoje bloki; reszta zostaje w kolejności). Ty: energia, granica dnia, kropka obciążenia, pasek pulpitu i powiadomienia – rzut oka (CI tego nie widzi, pulpitu i powiadomień nie sprawdza).
+- **Jak sprawdzić:** ukryj „Praca” z blokiem na dziś. Na „Dziś” przeciągnij widoczny blok na zajęte miejsce, tak żeby rozsunął blok z „Praca”. Zobacz linię w oknie „Przesunięto N bloków (w tym M ukrytych) · Cofnij” i pasek pulpitu (bez dopisku o ukrytych). Zobacz krzywą energii, granicę dnia i kropkę obciążenia w miesiącu – bez zmian. Zobacz, czy blok z „Praca” ma powiadomienie jak przed ukryciem. Ukryj „Praca” z blokiem trwającym (Start): znika z osi w oknie, a na pasku pulpitu zostaje.
+- **Oczekiwany efekt:** ukrycie zmienia tylko to, co widać w oknie; energia (krzywa), granica dnia, nagłówki dni, kropka obciążenia w miesiącu, budżet, pasek pulpitu i powiadomienia zostają jak bez ukrycia; rozsuwanie przesuwa też ukryte bloki; linia w oknie mówi „Przesunięto N bloków (w tym M ukrytych) · Cofnij”, pasek pulpitu bez dopisku; blok trwający z ukrytego kalendarza znika z osi, ale jest na pasku pulpitu (D419, D427, D428).
+- **Nie przechodzi, gdy:** krzywa energii, granica dnia albo kropka obciążenia zmieniają się przy ukryciu; pasek pulpitu albo powiadomienie znika dla ukrytego bloku; rozsuwanie zostawia ukryty blok na zajętym miejscu; linia w oknie nie mówi „w tym M ukrytych” albo pasek pulpitu to mówi; blok trwający z ukrytego kalendarza nie ma paska na pulpicie.
+
+#### SNT2.5 Ctrl K: wynik z ukrytego kalendarza otwiera się z podpisem „z ukrytego kalendarza <nazwa>”; zwykła karta zamyka się po odznaczeniu (1.18.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/calendars-views.test.ts` („wynik Ctrl K z ukrytego kalendarza: karta się otwiera, pasek wydarzenia z podpisem, nie liczy się do „ukryte”; po zamknięciu karty znika”; „otwarta karta wydarzenia zamyka się, gdy odznaczysz jego kalendarz”; „karta widocznego kalendarza zostaje, gdy odznaczysz inny”), `tests/e2e/calendars.spec.ts` (Ctrl K na bloku z ukrytego kalendarza: podpis „z ukrytego kalendarza Praca”; po zamknięciu panelu blok znika z osi). Ty: rzut oka.
+- **Jak sprawdzić:** ukryj „Praca” z blokiem na dziś i wydarzeniem całodniowym. Naciśnij Ctrl K, wpisz tytuł bloku z „Praca”, Enter: zobacz panel bloku z podpisem „z ukrytego kalendarza Praca” i kafelek na osi z tym samym podpisem; żeton „Praca” dalej odznaczony. Zamknij panel – blok znika z osi. Ctrl K na wydarzeniu z „Praca” otwiera kartę; odznacz „Praca” przy otwartej karcie – karta się zamyka. Otwórz kartę wydarzenia z „Dom” i odznacz „Praca” – karta zostaje.
+- **Oczekiwany efekt:** wynik Ctrl K z ukrytego kalendarza (blok albo wydarzenie) otwiera się mimo ukrycia: panel bloku albo karta wydarzenia; na osi jest kafelek albo pasek z podpisem „z ukrytego kalendarza <nazwa>”, dopóki panel albo karta są otwarte; nie liczy się do „ukryte: N”; żetony bez zmian; po zamknięciu znów ukryty; zwykła karta wydarzenia zamyka się po odznaczeniu jej kalendarza, a karta z widocznego kalendarza zostaje (D427).
+- **Nie przechodzi, gdy:** wynik Ctrl K z ukrytego kalendarza nie otwiera się albo nie ma podpisu; żeton zmienia stan po Ctrl K; po zamknięciu panelu blok zostaje na osi; zwykła karta zostaje po odznaczeniu jej kalendarza; wynik Ctrl K liczy się do „ukryte”.
+
+#### SNT2.6 Dwa komputery – kalendarze dodane na obu bez pytania, kolejność taka sama; starsza wersja nie gubi kalendarzy (Tylko Ty – OneDrive) (1.18.0)
+- [ ] Odebrane
+- **Tylko Ty:** dwa komputery przez OneDrive – testy symulują zapis z dwóch komputerów na kopii folderu danych (`tests/fs/calendars.test.ts`: dwa komputery dopisały różne kalendarze – oba zostają, bez pytania; dwa komputery dodają pierwszy kalendarz do starego pliku – oba zostają; nazwa zmieniona tu, a kalendarz usunięty gdzie indziej – pytanie; starsza wersja zmienia inne ustawienie – kalendarze i pole kategorii zostają; `tests/unit/calendars.test.ts`: dwa komputery dodały kalendarz z tą samą bazą – oba zostają, kolejność taka sama). Prawdziwej synchronizacji OneDrive testy nie widzą.
+- **Jak sprawdzić:** na komputerze A dodaj kalendarz „Praca”, zanim OneDrive zsynchronizuje. Na B w tym samym czasie dodaj „Dom” z innym kolorem. Poczekaj na synchronizację. Sprawdź na obu komputerach: oba kalendarze są, w tej samej kolejności, bez pytania o konflikt. Potem na B uruchom starszą wersję (sprzed 1.18.0), zmień na niej coś innego w ustawieniach i sprawdź na obu komputerach, że kalendarze i przypisania kategorii zostały.
+- **Oczekiwany efekt:** kalendarze dodane na obu komputerach są oba, bez pytania, w tej samej kolejności; starsza wersja, która zmienia inne ustawienie, nie gubi kalendarzy ani przypisań kategorii; „Moje” zostaje pierwszy.
+- **Nie przechodzi, gdy:** po synchronizacji któryś kalendarz znika albo jest dwa razy; aplikacja pyta o konflikt przy samym dodaniu; kolejność różni się między komputerami; starsza wersja usuwa kalendarze albo przypisania kategorii do „Moje”; „Moje” znika.

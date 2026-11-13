@@ -26,7 +26,8 @@ export type WorkerTask =
   | { kind: 'csv'; days: CsvDay[]; dir: string }
   | { kind: 'backup'; dataDir: string; backupsDir: string; date: string }
   | { kind: 'ritual'; ctx: DayContext; at: number }
-  | { kind: 'horizon'; ctx: DayContext; when: HorizonWhen; frozen: FrozenDay | null }
+  /** `curve` – the curve of its energy counted (D417; absent – not, T914); `moduleOn` – the energy module now (T966). */
+  | { kind: 'horizon'; ctx: DayContext; when: HorizonWhen; frozen: FrozenDay | null; curve?: boolean; moduleOn?: boolean }
 
 /** What each task gives back. */
 export interface WorkerResults {
@@ -70,7 +71,7 @@ export async function runTask<T extends WorkerTask>(t: T): Promise<WorkerResult<
       case 'ritual':
         return ritualView(t.ctx, t.at)
       case 'horizon':
-        return horizonDay(t.ctx, t.when, t.frozen)
+        return horizonDay(t.ctx, t.when, t.frozen, { curve: t.curve === true, moduleOn: t.moduleOn !== false })
     }
   })()
   return out as WorkerResult<T>

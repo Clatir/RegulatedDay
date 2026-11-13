@@ -18,6 +18,7 @@ import { takeFoundPick, takePick, toast, useUi } from '../../store/ui'
 import { BarPlaceMap } from './BarPlaceMap'
 import { QuickKeyField } from './QuickKeyField'
 import { QUICK_KEY_HELP } from './quickKey'
+import { CalendarsSection } from './CalendarsSection'
 import { CategoriesSection } from './CategoriesSection'
 import { LecturesSection } from './LecturesSection'
 import { DayTypesSection, FieldsSection, FromBar, ModulesSection, RegenWaysSection, SessionsSection } from './SharedSettings'
@@ -83,6 +84,7 @@ export function SettingsPage() {
           <SessionsSection />
           <FieldsSection group="boundary" />
           <FieldsSection group="energy" />
+          <CalendarsSection />
           <CategoriesSection />
           <RegenWaysSection />
           <LecturesSection />

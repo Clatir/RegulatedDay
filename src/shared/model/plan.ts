@@ -137,6 +137,12 @@ const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v ==
 const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback)
 const intIn = (v: unknown, min: number, max: number): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : null)
 
+/**
+ * A block of its day's own layers (D401, D424, T980): a session of the layer, a lecture of the plan, a class of a „zjazd”, the
+ * second shift – never a series, never moved to another day with the block it is anchored to. The one structural rule.
+ */
+export const layerKept = (b: Pick<PlanBlock, 'origin' | 'tag'>): boolean => b.origin === 'session' || b.origin === 'lecture' || b.origin === 'zjazd' || b.tag === 'secondShift'
+
 /** Logical minutes a plan may use: 04:00 to 03:59 of the night after. */
 export const PLAN_MIN = 240
 export const PLAN_MAX = 1679
@@ -254,6 +260,19 @@ export function templateVersionOn(t: Template, date: string): TemplateVersion | 
   for (const v of t.versions) if (v.from <= date) found = v
   return found
 }
+
+/**
+ * A block of a template is alive (D415, T847): it still makes days from `tomorrow` on – the version in force then or a
+ * later one has it (today is made already). One only in versions before stays in the days gone by – its attachments go
+ * with its removal. The one rule of adding an attachment to it (`ownerAlive`) and of what its removal takes.
+ */
+export function templateBlockAlive(t: Template, blockId: string, tomorrow: string): boolean {
+  const inForce = templateVersionOn(t, tomorrow)
+  return t.versions.some((v) => (v === inForce || v.from > tomorrow) && v.blocks.some((b) => b.id === blockId))
+}
+
+/** The version of `t` in force on `date` makes the block `blockId` (that day of origin „template” has it). */
+export const templateBlockOn = (t: Template, blockId: string, date: string): boolean => !!templateVersionOn(t, date)?.blocks.some((b) => b.id === blockId)
 
 /**
  * The version a version from `from` is written over (a template's, a series'): its own of that date, else the last one

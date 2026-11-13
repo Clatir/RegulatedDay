@@ -11,7 +11,7 @@ import type { Raw } from '../data/dayEdits'
 import { dayBlocks, dayRaw, putBlock, setAsked, setCancelled, takeBlock } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
 import { derivedId } from '../model/ids'
-import { dayFileFrom, planBlock, type DayFile, type PlanBlock } from '../model/plan'
+import { dayFileFrom, layerKept, planBlock, type DayFile, type PlanBlock } from '../model/plan'
 import {
   SERIES_BLOCK_FIELDS,
   countedBefore,
@@ -161,7 +161,7 @@ export class SeriesEditError extends Error {
 /** Why a block cannot be made a series (D401: any block of yours, flexible or fixed; not a session, a lecture, a class). */
 export function blockNotSeries(b: PlanBlock): SeriesEditError | null {
   if (b.origin === 'series') return new SeriesEditError('series', 'Ten blok już należy do serii.')
-  if (b.origin === 'session' || b.origin === 'lecture' || b.origin === 'zjazd' || b.tag === 'secondShift') return new SeriesEditError('kind', 'Blok sesji, wykładu ani zajęć zjazdu nie powtarza się w serii.')
+  if (layerKept(b)) return new SeriesEditError('kind', 'Blok sesji, wykładu ani zajęć zjazdu nie powtarza się w serii.')
   if (b.requests.length) return new SeriesEditError('requests', 'Blok próśb należy do jednego dnia – nie powtarza się w serii.')
   // D408: a block made from a task of „Sprawy” belongs to its day too – the task is done once.
   if (b.task) return new SeriesEditError('task', 'Blok zadania należy do jednego dnia – zadanie nie powtarza się w serii.')

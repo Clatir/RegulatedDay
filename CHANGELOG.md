@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.18.0
+- „Tydzień” ma przełącznik „Tydzień · 3 dni · Agenda” (wybór zostaje zapamiętany). „3 dni” pokazuje wczoraj, dziś i jutro w większej skali; strzałki przesuwają o dzień. „Agenda” to lista 7 dni od dziś bez pustych godzin: wydarzenia całodniowe na górze dnia, potem bloki z godziną, długością i kategorią; kliknięcie otwiera blok w „Dziś”.
+- W kolumnach „Tygodnia” i „3 dni” za blokami biegnie cienka krzywa energii. Dla dni przyszłych liczy się od pełnej energii o 04:00 – jest bledsza i ma podpis „przyjęte”.
+- Blok przeciągasz między kolumnami „Tygodnia” i „3 dni” (na dziś i dni przyszłe) albo w górę i w dół w tej samej kolumnie. Zajęte miejsce rozsuwa kolejne bloki, a pasek „Przeniesiono: <nazwa> na <dzień> · Cofnij” przywraca oba dni. Bloki zakotwiczone jadą razem z blokiem; zaczęte, zaparkowane, odwołane, stałe i z kategorii „nie przenosić na jutro” zostają w swoim dniu, a pasek mówi, które i dlaczego. „Przenieś na…” w panelu bloku działa tak samo i pokazuje ten sam pasek.
+- Miesiąc w „Kalendarzu”: w komórce dnia do trzech pasków bloków stałych i wydarzeń całodniowych, „+N” dla reszty bloków i kropka obciążenia (praca dnia wobec budżetu, trzy odcienie).
+- Kalendarze: w Ustawieniach → „Kalendarze” dodasz do 12 kalendarzy (nazwa, kolor), a każdą kategorię i wydarzenie całodniowe przypiszesz do jednego z nich (domyślnie „Moje”). Żetony nad „Dziś”, „Tygodniem”, „3 dniami”, „Agendą” i miesiącem chowają bloki wybranego kalendarza tylko w widoku – energia, granica dnia, pasek pulpitu i powiadomienia liczą je dalej; nagłówek mówi „ukryte: N”. Przy jednym kalendarzu żetonów nie ma.
+- Załączniki: usunięcie bloku z szablonu, usunięcie szablonu, „To i następne” i „Cała seria” wyrzucają jego załączniki do kosza (30 dni) i wracają z „Cofnij”. „Usuń z szablonu” ma teraz pasek „Usunięty z szablonu: <nazwa> · Cofnij”. „Zakończ serię” zostawia załączniki dni przed końcem.
+- Poprawki: przeniesienie bloku na inny dzień nie gubi już bloków zakotwiczonych do niego; zmiana, która trafi na zmianę z drugiego komputera, nie wyrzuca załączników, zanim odpowiesz na pytanie.
+
 ## 1.17.0
 - Terminy spraw: przy zadaniu i prośbie przycisk „Terminy” otwiera dwa pola – „Termin” (termin ostateczny) i „Wykonać” (kiedy chcesz to zrobić) – z przyciskami „Dziś”, „Jutro”, „Koniec tygodnia” i „Wyczyść”.
 - Znaczki „Po terminie”, „Termin dziś”, „Termin jutro”, „Termin za N dni” na liście „Spraw”, w panelu przy osi „Dziś” i na kafelku bloku zadania. Sprawy z terminem stoją na górze listy, najbliższy pierwszy.

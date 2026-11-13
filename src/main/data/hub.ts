@@ -29,7 +29,8 @@ import { reviewPrompt } from '@shared/engine/calibration'
 import type { SideB } from '@shared/engine/sideB'
 import type { StatsPeriod, StatsResult } from '@shared/engine/stats'
 import type { GoalsView } from '@shared/engine/goals'
-import type { WeekView } from '@shared/engine/week'
+import { DAYS_VIEW_MAX, type DaysView, type WeekView } from '@shared/engine/week'
+import type { MonthView } from '@shared/engine/calendarViews'
 import { goalsPatchFrom, isMonth } from '@shared/model/goals'
 import { keptOnRestore, rdFrom } from '@shared/model/rd'
 import { requestCounters } from '@shared/engine/requests'
@@ -43,7 +44,7 @@ import { addLink, attachmentImage, commitFiles, nodeAttachmentFiles, openAttachm
 import { attachmentFrom, ownerFrom, type AttachmentOwner } from '@shared/model/attachment'
 import { dayContextOf } from '@shared/engine/context'
 import { seriesFrom } from '@shared/model/series'
-import { templateFrom } from '@shared/model/plan'
+import { templateBlockAlive, templateFrom } from '@shared/model/plan'
 import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
 import type { DayRead } from './eventLog'
 import { UnknownRecordError, type DataFolder, type TimerClick } from './folder'
@@ -395,16 +396,25 @@ export class DataHub {
     await Promise.race([drops, new Promise((r) => setTimeout(r, CLOSE_DROP_MS).unref?.())])
   }
 
-  /** The window reads again only when what it would read changed (every check of the folder calls this). */
-  changed(): void {
-    void this.signature()
+  /**
+   * The window reads again only when what it would read changed (every check of the folder calls this). The signatures are
+   * counted one after another (T934): an older one finishing after a newer one never stands as the last – the window would
+   * be told twice. Done once this one is counted (tests wait for it).
+   */
+  changed(): Promise<void> {
+    const run = this.signing
+      .then(() => this.signature())
       .then((sig) => {
         if (sig === this.lastSignature) return
         this.lastSignature = sig
         this.o.onChange()
       })
       .catch(() => this.o.onChange())
+    this.signing = run
+    return run
   }
+
+  private signing: Promise<void> = Promise.resolve()
 
   private async signature(): Promise<string> {
     const f = this.service?.folder
@@ -420,7 +430,7 @@ export class DataHub {
     return `${head}|${today}|${JSON.stringify(await this.records())}|${JSON.stringify(days)}|${read.events.length}|${f.unsynced}|${f.unavailable}|${JSON.stringify(this.service?.backup ?? null)}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}|${JSON.stringify(moved)}|${f.computers.map((c) => `${c.id}:${c.appVersion ?? ''}`).join(',')}`
   }
 
-  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines' | 'series' | 'seriesDays' | 'allDay' | 'attachments' | 'attachmentsMissing'>> {
+  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines' | 'series' | 'seriesDays' | 'allDay' | 'attachments' | 'attachmentsUnread' | 'attachmentsMissing'>> {
     const f = this.service?.folder
     if (!f) return { rd: null, templates: [], lectures: [], requests: [], routines: [], series: [], seriesDays: {}, allDay: [], attachments: [], attachmentsMissing: [] }
     const settled = async <T>(p: Promise<T>, fallback: T) => p.catch(() => fallback)
@@ -431,9 +441,16 @@ export class DataHub {
     } catch {
       rdKnown = false
     }
+    // Attachments not readable now: none shown, and a change that takes them with it waits (T848).
+    let attachments: RawRecord[] = []
+    let attachmentsUnread = false
+    try {
+      attachments = await f.collection('attachment')
+    } catch {
+      attachmentsUnread = true
+    }
     // The series as last seen when they cannot be read now (T717): never „none” – the days to come would lose their
     // occurrences and the panel its „Powtarzaj”.
-    const attachments = await settled(f.collection('attachment'), [])
     let series = this.lastSeries?.folder === this.folder ? this.lastSeries : { folder: this.folder, records: [], days: {} }
     try {
       if (!rdKnown) throw new Error(SETTINGS_FILE)
@@ -452,6 +469,7 @@ export class DataHub {
       seriesDays: series.days,
       allDay: await settled(f.collection('allDay'), []),
       attachments,
+      attachmentsUnread,
       attachmentsMissing: await this.missingFiles(attachments)
     }
   }
@@ -913,18 +931,24 @@ export class DataHub {
   }
 
   /**
-   * The block an attachment is added to is still there (T839): a day's – in that day's plan or moved from it to another
-   * day; a template's – in some version of its template (D411: one taken out stays in the versions before); a series' – a
-   * series of that root. Not known now (a file unreadable) – yes: a record shown is better than one removed by mistake.
+   * The block an attachment is added to is still there (T839, T844, T847): a day's – in that day's plan or moved from it
+   * to another day; a template's – `templateBlockAlive` from tomorrow, the rule its removal goes by (D415: one taken out
+   * had its attachments removed, though the days gone by keep it); a series' – a series of that root not removed („Cała
+   * seria”). Not known now (a file unreadable) – yes: a record shown is better than one removed by mistake.
    */
   private async ownerAlive(owner: AttachmentOwner): Promise<boolean> {
     try {
       const f = this.need()
       if (owner.scope === 'template') {
         const t = templateFrom(await f.recordView(paths.record('template', owner.templateId)))
-        return !!t && t.versions.some((v) => v.blocks.some((b) => b.id === owner.blockId))
+        return !!t && templateBlockAlive(t, owner.blockId, addDays(logicalDayOf(f.clock.now()), 1))
       }
-      if (owner.scope === 'series') return (await f.collection('series')).some((r) => seriesFrom(r)?.root === owner.root)
+      if (owner.scope === 'series') {
+        return (await f.collection('series')).some((r) => {
+          const s = seriesFrom(r)
+          return !!s && s.root === owner.root && !s.archived
+        })
+      }
       const read = await f.readDay(owner.date)
       const dayFile = await f.dayFile(owner.date, true)
       if (dayFile?.movedTo[owner.blockId]) return true
@@ -968,7 +992,8 @@ export class DataHub {
     const clean = entries.map((e) => {
       const c = classify(e.rel)
       if (!c || c.conflict || c.kind === 'log' || c.kind === 'presence' || c.kind === 'grades') throw new Error(`nie można edytować ${e.rel}`)
-      return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true, ...(e.remove === true && e.base !== undefined ? { base: e.base } : {}) }
+      const after = Array.isArray(e.after) ? e.after.filter((i): i is number => Number.isInteger(i)) : []
+      return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true, ...(e.remove === true && e.base !== undefined ? { base: e.base } : {}), ...(after.length ? { after } : {}) }
     })
     const out = await f.edit(clean)
     this.changed()
@@ -1117,6 +1142,23 @@ export class DataHub {
   async weekView(date: string): Promise<WeekView> {
     if (!isIsoDate(date)) throw new Error('data tygodnia')
     return this.need().weekView(date)
+  }
+
+  /**
+   * Days of the horizon on one axis (D417 „3 dni”, D418 „Agenda”): 1 to `DAYS_VIEW_MAX` dates, each a date, none twice
+   * (checked here – the window never asks the helper process for an unbounded count); `opts.energy` false – without the
+   * curves of energy (T954; anything else – with them).
+   */
+  async daysView(dates: unknown, opts?: unknown): Promise<DaysView> {
+    if (!Array.isArray(dates) || !dates.length || dates.length > DAYS_VIEW_MAX || !dates.every(isIsoDate) || new Set(dates).size !== dates.length) throw new Error('dni widoku')
+    const energy = !(opts && typeof opts === 'object' && (opts as { energy?: unknown }).energy === false)
+    return this.need().daysView(dates as string[], undefined, energy)
+  }
+
+  /** The month shown in „Kalendarz” (D418, 'RRRR-MM'): its days' fixed blocks and load. */
+  async monthView(month: unknown): Promise<MonthView> {
+    if (typeof month !== 'string' || !isMonth(month)) throw new Error('miesiąc kalendarza')
+    return this.need().monthView(month)
   }
 
   /** A month's goals (D356) with the month before's and the progress so far. */
