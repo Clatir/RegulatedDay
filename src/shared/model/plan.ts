@@ -137,6 +137,12 @@ const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v ==
 const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback)
 const intIn = (v: unknown, min: number, max: number): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : null)
 
+/**
+ * A block of its day's own layers (D401, D424, T980): a session of the layer, a lecture of the plan, a class of a „zjazd”, the
+ * second shift – never a series, never moved to another day with the block it is anchored to. The one structural rule.
+ */
+export const layerKept = (b: Pick<PlanBlock, 'origin' | 'tag'>): boolean => b.origin === 'session' || b.origin === 'lecture' || b.origin === 'zjazd' || b.tag === 'secondShift'
+
 /** Logical minutes a plan may use: 04:00 to 03:59 of the night after. */
 export const PLAN_MIN = 240
 export const PLAN_MAX = 1679

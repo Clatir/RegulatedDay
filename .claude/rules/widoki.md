@@ -17,7 +17,7 @@ paths:
 # Widoki wielodniowe (SNT1)
 
 Źródło prawdy: D417, D418, D422, D424, specyfikacja „Widoki wielodniowe” (rozdział „Konwencje interfejsu”); decyzje T900–T918 i
-T950–T955, T960–T966 (część A), T936–T939 (ekrany).
+T950–T955, T960–T969, T980–T986 (część A; D426), T936–T939 (ekrany).
 „Tydzień” (D356, D366, D371, D400) – reguły `interfejs.md`.
 
 ## Dane (część A)
@@ -36,7 +36,8 @@ T950–T955, T960–T966 (część A), T936–T939 (ekrany).
   upuszczenia) → `{ status, push, pushed }`: `saved` – gdy `push` ≠ null, `showWeekPush(push)` (linia „Cofnij” nad kolumnami);
   `pending` – pytanie o konflikt albo wynik nieznany (nic nie ponawiać, bez linii); `failed` – nic nie zapisano; `refused` – dzień miniony.
 - Inny dzień: jedna edycja – cel właścicielem, źródło i rozsunięte za nim (`withOwner`, T952; właściciel w konflikcie nie kładzie
-  nic – T960); grupa z `moveGroup(plan, id, stayingIds(fakty))` (D424, T951, T961) w `moveBetweenDays` – każda droga („Przenieś
+  nic – T960); grupa z `moveGroup(plan, id, stayRuleOf(fakty, ustawienia))` (D424, D426, T951, T961, T980; części wspólne –
+  `stayedOf`, `movedDay` w `store/weekPush.ts`, T982; widok kolejki bez właściciela-pytania – T967) w `moveBetweenDays` – każda droga („Przenieś
   na…” – dzień liczony w turze, dymek `tellMoved`, T964; wariant „na jutro” – `moveRoots`, `byVariant` grupy, T962, T963). Ten sam dzień = przeciągnięcie D305 bez sprawdzania
   zakotwiczonych (T955): bez rozsunięcia `push` null (bez linii), z rozsunięciem linia jak „Dodaj” (T917).
 - `WeekPush.move` (`name`, `to`, `stayed`) – „Cofnij” oba dni albo żaden (źródło właścicielem, T953), `weekPushStanding` – oba;

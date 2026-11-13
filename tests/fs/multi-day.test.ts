@@ -211,6 +211,9 @@ describe('przeniesienie na prawdziwej kolejce – właściciel w konflikcie nie 
     // Nothing of the owner written: the block is not on Friday while the question waits.
     expect(file(FRI).blocks ?? []).toEqual([])
     expect(file(THU).blocks!.map((b) => b.id)).toEqual(['x'])
+    // Nor shown so to the window (T967): a move asked again sees the block on its own day, never as already on Friday.
+    expect(((await folder.recordView(paths.day(FRI))) as { blocks?: unknown[] } | undefined)?.blocks ?? []).toEqual([])
+    expect(((await folder.recordView(paths.day(THU))) as { blocks?: Array<{ id: string }> }).blocks!.map((b) => b.id)).toEqual(['x'])
     // „Theirs”: both entries go – the block on its own day only.
     expect(await folder.queue.resolve(out[0]!.id, 'theirs')).toBe(true)
     await folder.edit([])

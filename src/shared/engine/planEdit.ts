@@ -8,13 +8,14 @@ import { REQUEST_CATEGORY, type CategoryRules } from '../model/categories'
 import { newId } from '../model/ids'
 import { blockJson, dayBlocks, dayRaw, isRaw, putBlock, putRawBlock, setMovedTo, setStepsDone, stepsDoneIn, takeBlock, type Raw } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
-import { dayFileFrom, MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlock, type DayFile, type PlanBlock, type Template } from '../model/plan'
+import { dayFileFrom, layerKept, MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlock, type DayFile, type PlanBlock, type Template } from '../model/plan'
 import { freshSteps } from '../model/steps'
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan, type BlockInfo } from './blocks'
 import { dayPlan, dayWakeMin, morningBound, wakeShiftedStart } from './createDay'
 import type { DayState } from './day'
-import type { BlockFact } from './facts'
+import { stayingIds, type BlockFact, type DayFacts } from './facts'
+import type { RulesSettings } from '../model/settings'
 import { atOf, idxOfLogical } from './grid'
 
 /** A start kept in the logical day (04:00–03:59). */
@@ -129,25 +130,44 @@ export function movedBlock(b: PlanBlock, plan: readonly PlanBlock[], fromDate: s
 const movedOrigin = (o: PlanBlock['origin']): PlanBlock['origin'] => (o === 'session' || o === 'lecture' || o === 'zjazd' || o === 'template' ? 'user' : o)
 
 /**
- * A block of a kind that never leaves its day with another one (T961): a session, a lecture, a class of a „zjazd” (theirs is
- * that day's layer or plan) or the second shift.
+ * What keeps a block anchored to the moved one on its day (D424, D426, T961, T980): its state – begun or done, parked,
+ * cancelled (`ids`, from `stayingIds`) – and its kind, by the categories of the day (`categories`).
  */
-const keptKind = (b: PlanBlock): boolean => b.origin === 'session' || b.origin === 'lecture' || b.origin === 'zjazd' || b.tag === 'secondShift'
+export interface StayRule {
+  ids: ReadonlySet<string>
+  categories: Readonly<Record<string, CategoryRules>>
+}
+
+/** No block stays by its state nor by its category – only by its layer (`layerKept`). */
+export const NO_STAY: StayRule = { ids: new Set(), categories: {} }
+
+/** The rule of a day as counted: its facts (none – no state known) and its settings. */
+export const stayRuleOf = (facts: Pick<DayFacts, 'blocks'> | null | undefined, settings: Pick<RulesSettings, 'categories'>): StayRule => ({ ids: facts ? stayingIds(facts) : new Set(), categories: settings.categories })
 
 /**
- * What goes with a block moved to another day (D424, T951, T961): the blocks anchored to it – directly or through one
- * another – that have not begun, are on the day (not parked nor cancelled: `stay`, from `stayingIds`) and may move (not a
- * session, a lecture, a class of a „zjazd” nor the second shift) – `followers`, in the plan's order: they go with it, still
- * anchored; any other stays on its day (`stayers`) with its own hour, and what is anchored to it stays with it.
+ * A block of a kind that keeps its day (D426, T980): of its day's layers (`layerKept` – a session of the layer, a lecture, a
+ * class of a „zjazd”, the second shift), the weekly analysis, a session of a category of the kind „sesja” (D338), a block of a
+ * category „nie przenosić na jutro” or protected.
  */
-export function moveGroup(plan: readonly PlanBlock[], id: string, stay: ReadonlySet<string> = new Set()): { followers: PlanBlock[]; stayers: PlanBlock[] } {
+function keptKind(b: PlanBlock, categories: StayRule['categories']): boolean {
+  if (layerKept(b) || b.tag === 'weeklyAnalysis') return true
+  const r = categories[b.categoryId]
+  return r != null && (r.kind === 'session' || r.noMoveTomorrow || r.protected)
+}
+
+/**
+ * What goes with a block moved to another day (D424, D426, T951, T961, T980): the blocks anchored to it – directly or through
+ * one another – that have not begun, are on the day and may move (`StayRule`) – `followers`, in the plan's order: they go
+ * with it, still anchored; any other stays on its day (`stayers`) with its own hour, and what is anchored to it stays with it.
+ */
+export function moveGroup(plan: readonly PlanBlock[], id: string, stay: StayRule = NO_STAY): { followers: PlanBlock[]; stayers: PlanBlock[] } {
   const going = new Set([id])
   const staying = new Set<string>()
   for (let grew = true; grew; ) {
     grew = false
     for (const b of plan) {
       if (b.anchor == null || !going.has(b.anchor) || going.has(b.id) || staying.has(b.id)) continue
-      ;(stay.has(b.id) || keptKind(b) ? staying : going).add(b.id)
+      ;(stay.ids.has(b.id) || keptKind(b, stay.categories) ? staying : going).add(b.id)
       grew = true
     }
   }
@@ -158,15 +178,21 @@ export function moveGroup(plan: readonly PlanBlock[], id: string, stay: Readonly
  * The blocks among `ids` a variant moves as moves of their own (T962): those not going already as a follower of another one
  * of them (`moveGroup`) – a block anchored to a moved one goes with it, never as a second move.
  */
-export function moveRoots(plan: readonly PlanBlock[], ids: readonly string[], stay: ReadonlySet<string> = new Set()): string[] {
+export function moveRoots(plan: readonly PlanBlock[], ids: readonly string[], stay: StayRule = NO_STAY): string[] {
   const along = new Set(ids.flatMap((id) => moveGroup(plan, id, stay).followers.map((f) => f.id)))
   return ids.filter((id) => !along.has(id))
 }
 
-/** Why a block anchored to the moved one stayed on its day (D424, T965): it runs, it is over, parked, cancelled, or of a kind that stays. */
+/**
+ * Where a block that stays on its day stands (D424, T961): its planned start – its anchor's end – kept in the logical day,
+ * else its own start, else 09:00. The one rule of the write (`moveSource`) and of a variant's count (`planWith`).
+ */
+export const stayerStart = (s: PlanBlock, plan: readonly PlanBlock[]): number => inDay(plannedStartMin(s, plan) ?? s.startMin ?? 9 * 60)
+
+/** Why a block anchored to the moved one stayed on its day (D424, D426, T965): it runs, it is over, parked, cancelled, or of a kind that stays. */
 export type StayHow = 'running' | 'done' | 'parked' | 'cancelled' | 'kept'
 
-export function stayHowOf(_b: PlanBlock, f: Pick<BlockFact, 'startedAt' | 'endedAt' | 'parkedAt' | 'cancelledAt'> | undefined): StayHow {
+export function stayHowOf(f: Pick<BlockFact, 'startedAt' | 'endedAt' | 'parkedAt' | 'cancelledAt'> | undefined): StayHow {
   if (f?.startedAt != null) return f.endedAt != null ? 'done' : 'running'
   if (f?.parkedAt != null) return 'parked'
   if (f?.cancelledAt != null) return 'cancelled'
@@ -177,8 +203,8 @@ export function stayHowOf(_b: PlanBlock, f: Pick<BlockFact, 'startedAt' | 'ended
 export interface MoveOptions {
   /** Its start on the target (where it was dropped in a column of „Tydzień” or „3 dni”); none – its planned time, as „Przenieś na…”. */
   startMin?: number
-  /** The blocks of the day that stay (`stayingIds`: begun, parked, cancelled): one anchored to the block stays on its day (D424, T961). */
-  stay?: ReadonlySet<string>
+  /** What keeps a block anchored to it on its day (`stayRuleOf`: its state and its category – D424, D426, T961, T980). */
+  stay?: StayRule
   /** Moved by a variant (D313): the whole group is marked (`byVariant` – no note for accuracy, T963). */
   byVariant?: boolean
 }
@@ -198,7 +224,7 @@ export function moveSource(fromRaw: Raw | null, file: DayFile, b: PlanBlock, pla
   }
   for (const s of group.stayers) {
     const now = file.blocks.find((x) => x.id === s.id) ?? s
-    source = putBlock(source, { ...now, anchor: null, startMin: inDay(plannedStartMin(s, plan) ?? now.startMin ?? 9 * 60) })
+    source = putBlock(source, { ...now, anchor: null, startMin: stayerStart({ ...s, startMin: s.startMin ?? now.startMin }, plan) })
   }
   return source
 }

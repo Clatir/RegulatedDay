@@ -7,21 +7,19 @@
  * of „Tydzień” counts them – D400). One edit of the queue (T952) and one „Cofnij” for both days (`WeekPush.move`).
  */
 import type { EditEntry, EditOutcome } from '@shared/api'
-import { nameById, type Names } from '@shared/blockName'
+import type { Names } from '@shared/blockName'
 import { dayRaw } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { movableBlock, plannedSpan } from '@shared/engine/blocks'
 import { mayMoveBetween } from '@shared/engine/calendarViews'
-import { namingOf } from '@shared/engine/context'
-import { stayingIds } from '@shared/engine/facts'
-import { moveBetweenDays, movedBlock, stayHowOf, type StayHow } from '@shared/engine/planEdit'
+import { moveBetweenDays, movedBlock, stayRuleOf } from '@shared/engine/planEdit'
 import { pushApart, withBlock } from '@shared/engine/pushApart'
 import { plDateWithWeekday } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
 import { logicalDayOf } from '@shared/time/day'
 import { countedDay, type DayModel } from '../../store/day'
 import { editOf, isSaved, trySaveWith, withOwner, type SendState } from '../../store/data'
-import type { WeekPush, WeekPushedDay } from '../../store/weekPush'
+import { MOVE_GONE_TEXT, movedDay, stayedOf, type Stayed, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 import { blockNow, withPushed, type PushedStart } from '../today/dayActions'
 import { dragChange, onUnsettled, pushedStarts } from '../today/dayPush'
 
@@ -58,7 +56,7 @@ export interface WeekMoved {
 }
 
 /** The texts of a move refused in its turn (the toast says „Nie zapisano: …”). */
-export const MOVE_GONE_TEXT = 'tego bloku nie ma już w planie dnia'
+export { MOVE_GONE_TEXT }
 export const MOVE_BEGUN_TEXT = 'blok już się zaczął albo nie da się go przeciągnąć'
 export const moveUnreadableText = (date: string): string => `plik dnia ${plDateWithWeekday(date)} jest teraz nieczytelny – spróbuj za chwilę`
 export const moveUncountedText = (date: string): string => `log dnia ${plDateWithWeekday(date)} jest teraz nieczytelny – spróbuj za chwilę`
@@ -91,27 +89,15 @@ export async function moveWeekBlock(m: WeekMove, at = Date.now()): Promise<WeekM
 }
 
 /**
- * What the write came to (T952, T919): every entry written or waiting for the folder – saved; nothing sent, or a broken file
- * with nothing written (a broken file is never written over, and what goes with it waits with it) – failed; else pending.
+ * What the write came to (T952, T919, T986): every entry written or waiting for the folder – saved; nothing sent, or a broken
+ * file with nothing written and no question that may still write (a broken file is never written over, and what goes with it
+ * waits with it) – failed; else pending.
  */
 export function statusOf(out: readonly EditOutcome[] | null, state: SendState): WeekMoveStatus {
   if (out == null) return state.afterSend ? 'pending' : 'failed'
   if (isSaved(out)) return 'saved'
-  return out.some((o) => o.status === 'broken') && !out.some((o) => o.status === 'applied') ? 'failed' : 'pending'
-}
-
-/**
- * The target's whole change from its two entries (T952): the block with its followers, and the pushed starts over them – for
- * „Cofnij” and the bar. A field in both: its base from the first, its value from the second.
- */
-function wholeOf(bring: EditEntry | null, push: EditEntry | null): EditEntry | null {
-  if (!bring || !push) return bring ?? push
-  const edits = bring.edits.map((e) => {
-    const later = push.edits.find((p) => p.path.join('\u0001') === e.path.join('\u0001'))
-    return later ? { ...e, value: later.value } : e
-  })
-  for (const p of push.edits) if (!edits.some((e) => e.path.join('\u0001') === p.path.join('\u0001'))) edits.push(p)
-  return { ...bring, edits }
+  const asked = out.some((o) => o.status === 'conflict' || o.status === 'removedElsewhere' || o.status === 'changedElsewhere')
+  return out.some((o) => o.status === 'broken') && !asked && !out.some((o) => o.status === 'applied') ? 'failed' : 'pending'
 }
 
 /**
@@ -156,7 +142,7 @@ async function moveWithinDay(m: WeekMove, today: string, at: number): Promise<We
  */
 async function moveToDay(m: WeekMove, today: string, at: number): Promise<WeekMoved> {
   const days: WeekPushedDay[] = []
-  let stayed: Array<{ name: string; how: StayHow }> = []
+  let stayed: Stayed[] = []
   let pushed = 0
   const state: SendState = { afterSend: false }
   const out = await trySaveWith(async () => {
@@ -169,20 +155,18 @@ async function moveToDay(m: WeekMove, today: string, at: number): Promise<WeekMo
     const was = movingOf(source, m.blockId, today)
     // As the source's file holds it (a change made a moment before stays), as „Przenieś na…” moves it.
     const b = blockNow(dayRaw(fromFile, m.from), m.from, was)
-    const facts = source.state.facts
-    const two = moveBetweenDays(fromFile, toFile, b, source.ctx.plan, m.from, m.to, true, { startMin: m.startMin, stay: stayingIds(facts) })
-    const naming = namingOf(source.ctx, facts)
-    stayed = two.stayers.map((s) => ({ name: m.names ? nameById(s.id, naming, m.names) : 'blok', how: stayHowOf(s, facts.blocks.get(s.id)) }))
+    const two = moveBetweenDays(fromFile, toFile, b, source.ctx.plan, m.from, m.to, true, { startMin: m.startMin, stay: stayRuleOf(source.state.facts, source.ctx.snapshot.settings) })
+    stayed = stayedOf(two.stayers, { ctx: source.ctx, facts: source.state.facts }, m.names)
     const starts = there ? pushedOn(there, movedBlock(b, source.ctx.plan, m.from, true, m.startMin), two.followers) : []
     const toAll = withPushed(two.target, m.to, (r) => r, starts)
     // The target in two entries: the block with its followers (the owner), then the pushed starts over it.
     const bring = editOf(paths.day(m.to), toFile, two.target)
     const push = editOf(paths.day(m.to), two.target, toAll)
     const leave = editOf(paths.day(m.from), fromFile, two.source)
-    // What „Cofnij” takes back: each day's whole change (the target's – its two entries as one).
-    const whole = wholeOf(bring, push)
-    if (leave) days.push({ date: m.from, entry: leave, made: leave.create ? two.source : null, moved: 0 })
-    if (whole) days.push({ date: m.to, entry: whole, made: whole.create ? toAll : null, moved: starts.length })
+    // What „Cofnij” takes back: each day's whole change – the target's from its content before and after both entries (T968;
+    // their paths may nest: a list of blocks made and a pushed block in it).
+    const whole = editOf(paths.day(m.to), toFile, toAll)
+    days.push(...movedDay(m.from, leave, two.source), ...movedDay(m.to, whole, toAll, starts.length))
     pushed = starts.length
     return withOwner(bring, [leave, push].filter((e): e is EditEntry => e != null))
   }, state)

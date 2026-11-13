@@ -19,10 +19,11 @@ import { tellMoved, undoWeekLine, undoWeekPush, weekPushStanding } from '@render
 import type { Names } from '@shared/blockName'
 import { moveTarget } from '@shared/engine/planEdit'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
-import { MOVE_BEGUN_TEXT, moveWeekBlock, statusOf, type WeekMove } from '@renderer/features/week/weekMove'
+import { MOVE_BEGUN_TEXT, MOVE_GONE_TEXT, moveWeekBlock, statusOf, type WeekMove } from '@renderer/features/week/weekMove'
 import { stayedText, weekPushLineText } from '@renderer/features/week/weekText'
 import { moveDayBlock } from '@renderer/features/today/dayActions'
 import { isSaved, useData } from '@renderer/store/data'
+import { countDay } from '@renderer/store/day'
 import { useUi } from '@renderer/store/ui'
 import { dropWeekPushDays, showWeekPush, useWeekPush } from '@renderer/store/weekPush'
 import { block, lm, Scenario } from '../unit/engine/dsl'
@@ -321,14 +322,61 @@ describe('T965 – dlaczego zakotwiczony został', () => {
   })
 })
 
+describe('T968 – cała zmiana celu z treści pliku', () => {
+  it('cel bez listy bloków, rozsunięty blok szablonu: linia stoi, „Cofnij” przywraca oba dni', async () => {
+    const tpl = templateFrom({ id: 't', dayType: 'zwykly', versions: [{ from: '2020-01-01', blocks: [{ id: 'an', categoryId: 'analiza', startMin: lm('12:00'), durationMin: 30 }] }] })!
+    // The template's block on Wednesday comes from the snapshot: the file has no list of blocks at all.
+    const s = stub({ [D1]: fileOf(D1, [flex('x', '11:00', 60)]), [D2]: { schema: 1, date: D2 } })
+    useData.setState({ templates: [tpl] })
+    const r = await moveWeekBlock(mv('x', D1, D2, '12:00'), AT)
+    expect(r).toMatchObject({ status: 'saved', pushed: 1 })
+    // Blocks added to a file without a list (its whole list) and the pushed one over it: one change of the day's content.
+    expect(weekPushStanding(r.push!, { ...s.files })).toBe(true)
+    await undoWeekPush(r.push!)
+    expect(blocksOf(s.files[D2], D2)).toEqual([])
+    expect(blocksOf(s.files[D1], D1).map((b) => b.id)).toEqual(['x'])
+  })
+})
+
 describe('T919 – wynik zapisu przeniesienia', () => {
   const st = { afterSend: true }
   it('uszkodzony plik bez żadnego zapisu – nic nie zapisano; z zapisem czegoś – w toku', () => {
     expect(statusOf([{ status: 'broken' }], st)).toBe('failed')
-    expect(statusOf([{ status: 'conflict' }, { status: 'broken' }], st)).toBe('failed')
+    expect(statusOf([{ status: 'waiting' }, { status: 'broken' }], st)).toBe('failed')
     expect(statusOf([{ status: 'applied' }, { status: 'broken' }], st)).toBe('pending')
     expect(statusOf([{ status: 'conflict' }, { status: 'waiting' }], st)).toBe('pending')
     expect(statusOf([{ status: 'applied' }, { status: 'waiting' }], st)).toBe('saved')
+  })
+
+  it('uszkodzony plik obok pytania – w toku: odpowiedź może jeszcze zapisać (T986)', () => {
+    expect(statusOf([{ status: 'conflict' }, { status: 'broken' }], st)).toBe('pending')
+    expect(statusOf([{ status: 'broken' }, { status: 'changedElsewhere' }], st)).toBe('pending')
+  })
+})
+
+describe('„Przenieś na…” – blok, którego nie ma, i dzień, którego nie da się policzyć (T983, T982)', () => {
+  it('policzony dzień nie ma już bloku (przeniesiony albo usunięty gdzie indziej) – nic się nie zapisuje', async () => {
+    const x = flex('x', '11:00', 60)
+    // The window still shows it; the file of its day has it no more.
+    const s = stub({ [D1]: fileOf(D1, []), [D2]: null })
+    const r = await moveDayBlock(D1, fileOf(D1, [x]), [x], x, D2, null, true, { name: 'Raport' })
+    expect(r).toEqual({ out: null, push: null })
+    expect(s.sent).toEqual([])
+    expect(useUi.getState().toasts.some((t) => t.text.includes(MOVE_GONE_TEXT))).toBe(true)
+  })
+
+  it('dzień niepoliczalny teraz: zostający nazwany i z powodem z dnia, jaki widziało okno', async () => {
+    const x = flex('x', '11:00', 60)
+    const y = flex('y', '11:00', 30, { startMin: null, anchor: 'x', categoryId: 'analiza' })
+    const started = new Scenario({ date: D1, plan: [x, y] }).start('y', '09:00').events
+    const s = stub({ [D1]: fileOf(D1, [x, y]), [D2]: null }, { incomplete: [D1] })
+    const names: Names = { rd: useData.getState().rd, settings: DEFAULT_SETTINGS, routines: [], requests: [] }
+    const data: DayData = { date: D1, dayFile: s.files[D1]!, nextFile: null, prevFile: null, events: started, complete: true, unknown: false, away: false }
+    const seen = countDay(D1, data, { changes: [], templates: [], lectures: [], series: [] }, AT, false)
+    const r = await moveDayBlock(D1, s.files[D1]!, seen.ctx.plan, x, D2, null, true, { name: 'Raport', names, seen })
+    expect(isSaved(r.out)).toBe(true)
+    expect(r.push?.move?.stayed).toEqual([{ name: 'Analiza', how: 'running' }])
+    expect(blocksOf(s.files[D1], D1).map((b) => [b.id, b.anchor])).toEqual([['y', null]])
   })
 })
 

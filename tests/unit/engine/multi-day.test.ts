@@ -11,13 +11,13 @@ import { dayPlan } from '@shared/engine/createDay'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
 import { ASSUMED_CHECKIN, ENERGY_SAMPLE_MIN, energyTrack } from '@shared/engine/energyTrack'
-import { foldFacts, stayingIds } from '@shared/engine/facts'
+import { foldFacts } from '@shared/engine/facts'
 import { gridOf, idxOfLogical } from '@shared/engine/grid'
-import { moveBetweenDays, moveGroup, moveRoots, stayHowOf } from '@shared/engine/planEdit'
-import { applyVariant, planWith } from '@shared/engine/variants'
+import { moveBetweenDays, moveGroup, moveRoots, stayerStart, stayHowOf, stayRuleOf } from '@shared/engine/planEdit'
+import { applyVariant, planWith, variantCauses, variantsFor } from '@shared/engine/variants'
 import { agendaDates, daysViewOf, horizonDay, threeDays, unknownDay, weekViewOf, type HorizonBlock, type HorizonDay } from '@shared/engine/week'
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
-import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
+import { dayFileFrom, layerKept, type PlanBlock } from '@shared/model/plan'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { dayEnd, placeLogical } from '@shared/time/day'
 import { block, lm, Scenario } from './dsl'
@@ -191,13 +191,49 @@ describe('D417 – przeniesienie na inny dzień z godziną upuszczenia', () => {
     const y = block({ id: 'y', cat: 'inne', after: 'x', min: 30, origin: 'user' })
     const z = block({ id: 'z', cat: 'inne', after: 'y', min: 15, origin: 'user' })
     const s = new Scenario({ date: TODAY, plan: [x, y, z] })
-    expect(planWith(s.contextAt(NOW), [{ k: 'tomorrow', block: 'x' }], computeDay(s.contextAt(NOW)).facts).map((b) => b.id)).toEqual([])
+    expect(planWith(s.contextAt(NOW), [{ k: 'tomorrow', block: 'x' }], stayRuleOf(computeDay(s.contextAt(NOW)).facts, DEFAULT_SETTINGS)).map((b) => b.id)).toEqual([])
     s.presence('07:30').start('y', '11:00')
     const ctx = s.contextAt(NOW)
-    expect(planWith(ctx, [{ k: 'tomorrow', block: 'x' }], computeDay(ctx).facts).map((b) => [b.id, b.anchor, b.startMin])).toEqual([
+    expect(planWith(ctx, [{ k: 'tomorrow', block: 'x' }], stayRuleOf(computeDay(ctx).facts, DEFAULT_SETTINGS)).map((b) => [b.id, b.anchor, b.startMin])).toEqual([
       ['y', null, lm('14:00')],
       ['z', 'y', null]
     ])
+  })
+
+  it('etykieta wariantu liczy bloki, które faktycznie jadą (z zakotwiczonymi); pierwsza nazwa – korzeń (T985)', () => {
+    const DATE = '2026-10-28'
+    const plan = [block({ id: 'a', cat: 'inne', at: '08:00', min: 120 }), block({ id: 'b', cat: 'analiza', at: '10:00', min: 120 }), block({ id: 'c', cat: 'inne', after: 'b', min: 30 })]
+    const s = new Scenario({ date: DATE, plan }).observe('07:00', null)
+    s.approve('12:15', '07:30')
+    s.start('a', '08:00').end('a', '10:45').request('r1', '08:30', '09:15', 'urgent')
+    s.events.filter((e) => (e as { k?: string }).k?.startsWith('request.')).forEach((e) => ((e as { t: number }).t = s.at('10:45')))
+    const st = s.state('10:46')
+    const cause = variantCauses(st, null).at(-1)!
+    const v = variantsFor(s.contextAt(s.at('10:46')), st, cause, (b) => ({ analiza: 'Analiza', inne: 'Inne' })[b.categoryId] ?? b.categoryId)
+    const away = v.find((x) => x.id === 'tomorrow')!
+    expect(away.changes).toEqual([{ k: 'tomorrow', block: 'b' }])
+    expect(away.label).toMatch(/^Przesuń Analiza i 1 inne na jutro/)
+  })
+
+  it('zostający w ocenie wariantu stoi tam, gdzie postawi go zapis – w dobie logicznej, bez godziny: 09:00 (T984)', () => {
+    const x = { ...block({ id: 'x', cat: 'inne', at: '13:00', min: 60, origin: 'user' }), startMin: null }
+    const y = block({ id: 'y', cat: 'inne', after: 'x', min: 30, origin: 'user' })
+    const ctx = { ...new Scenario({ date: TODAY, plan: [x, y] }).contextAt(NOW), plan: [x, y] }
+    const left = planWith(ctx, [{ k: 'tomorrow', block: 'x' }], { ids: new Set(['y']), categories: {} })
+    expect(left.map((b) => [b.id, b.anchor, b.startMin])).toEqual([['y', null, 9 * 60]])
+    expect(left[0]!.startMin).toBe(stayerStart(y, [x, y]))
+  })
+
+  it('zostają też sesja własna (kategoria rodzaju sesja), analiza tygodniowa, „nie przenosić na jutro” i chronione (D426, T980)', () => {
+    const x = block({ id: 'x', cat: 'inne', at: '09:00', min: 60, origin: 'user' })
+    const after = (id: string, cat: string, o: Partial<PlanBlock> = {}) => ({ ...block({ id, cat, after: 'x', min: 15, origin: 'user' }), ...o })
+    const plan = [x, after('go', 'inne'), after('own', 'sesja'), after('wa', 'analiza', { tag: 'weeklyAnalysis' }), after('meal', 'posilek'), after('rut', 'rutyny'), after('reg', 'regeneracja')]
+    const g = moveGroup(plan, 'x', stayRuleOf(null, DEFAULT_SETTINGS))
+    expect(g.followers.map((b) => b.id)).toEqual(['go'])
+    expect(g.stayers.map((b) => b.id)).toEqual(['own', 'wa', 'meal', 'rut', 'reg'])
+    // The same rule for the series (one predicate of the layers' blocks).
+    expect(layerKept(after('s', 'sesja', { origin: 'session' }))).toBe(true)
+    expect(layerKept(after('own2', 'sesja'))).toBe(false)
   })
 
   it('zostają też zaparkowany, odwołany i nieprzenośny (sesja, wykład, zjazd, druga zmiana) – jadą tylko niezaczęte, aktywne, przenośne (T961)', () => {
@@ -208,10 +244,10 @@ describe('D417 – przeniesienie na inny dzień z godziną upuszczenia', () => {
     s.presence('07:30').raw({ k: 'block.park', block: 'park', at: s.at('08:00') }, '08:00').raw({ k: 'block.cancel', block: 'off', at: s.at('08:01') }, '08:01')
     const facts = computeDay(s.contextAt(NOW)).facts
     expect([facts.blocks.get('park')?.parkedAt != null, facts.blocks.get('off')?.cancelledAt != null]).toEqual([true, true])
-    const g = moveGroup(plan, 'x', stayingIds(facts))
+    const g = moveGroup(plan, 'x', stayRuleOf(facts, DEFAULT_SETTINGS))
     expect(g.followers.map((b) => b.id)).toEqual(['go'])
     expect(g.stayers.map((b) => b.id)).toEqual(['park', 'off', 'ses', 'lec', 'zj', 'ds'])
-    expect(g.stayers.map((b) => stayHowOf(b, facts.blocks.get(b.id)))).toEqual(['parked', 'cancelled', 'kept', 'kept', 'kept', 'kept'])
+    expect(g.stayers.map((b) => stayHowOf(facts.blocks.get(b.id)))).toEqual(['parked', 'cancelled', 'kept', 'kept', 'kept', 'kept'])
   })
 
   it('zaczęty zakotwiczony zostaje w swoim dniu z własną godziną (bez kotwicy), a to, co za nim – z nim (D424)', () => {
@@ -220,9 +256,9 @@ describe('D417 – przeniesienie na inny dzień z godziną upuszczenia', () => {
     const z = block({ id: 'z', cat: 'inne', after: 'y', min: 15, origin: 'user' })
     const w = block({ id: 'w', cat: 'inne', after: 'x', min: 20, origin: 'user' })
     const plan = [x, y, z, w]
-    expect(moveGroup(plan, 'x', new Set(['y']))).toEqual({ followers: [w], stayers: [y] })
+    expect(moveGroup(plan, 'x', { ids: new Set(['y']), categories: {} })).toEqual({ followers: [w], stayers: [y] })
     const fromRaw = { schema: 1, date: FUT, blocks: plan.map((b) => ({ ...b })) }
-    const two = moveBetweenDays(fromRaw, null, x, plan, FUT, '2026-11-06', true, { startMin: lm('15:00'), stay: new Set(['y']) })
+    const two = moveBetweenDays(fromRaw, null, x, plan, FUT, '2026-11-06', true, { startMin: lm('15:00'), stay: { ids: new Set(['y']), categories: {} } })
     expect(two.stayers.map((b) => b.id)).toEqual(['y'])
     // y keeps its place: 10:00, after x as planned; z stays anchored to y.
     expect(dayFileFrom(two.source, FUT).blocks.map((b) => [b.id, b.startMin, b.anchor])).toEqual([

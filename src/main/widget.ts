@@ -12,7 +12,7 @@ import { blockName, nameById } from '@shared/blockName'
 import { namingOf } from '@shared/engine/context'
 import { costText } from '@shared/costText'
 import { dayRaw, putBlock } from '@shared/data/dayEdits'
-import { inverseEdit, recordEdit } from '@shared/data/merge'
+import { editStands, inverseEdit, recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { engineView, POOL_TEXT, RESERVE_REGEN_MIN, warnDeadlines } from '@shared/engineView'
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
@@ -195,6 +195,8 @@ interface Moved {
   until: number
   /** Counts the lines: the newest first. */
   seq: number
+  /** A block moved to tomorrow (T969): `edits` – tomorrow, then today; „Cofnij” takes both back or neither. */
+  pair?: boolean
 }
 
 /** The bar while the day cannot be counted (a file not readable now): no actions, one line why. */
@@ -625,16 +627,20 @@ export class WidgetEngine {
     const before = await Promise.all(rels.map(async (rel) => ((await folder.recordView(rel)) as RawRecord | undefined) ?? null))
     const after = applyVariant(m.ctx, before[0]!, before[1]!, v, next, m.state.facts)
     const made = [after.today, after.tomorrow]
-    const edits = rels.flatMap((rel, k) => {
+    const both = rels.flatMap((rel, k) => {
       const entry = recordEdit(rel, before[k]!, made[k]!)
       return entry ? [{ entry, made: made[k]! }] : []
     })
-    if (!edits.length) {
+    if (!both.length) {
       if (v.mends === false) this.say(PLAN_ALREADY)
       else if (p.cause) this.closeCauses(p.cause)
       return this.refresh()
     }
-    const out = await this.d.edit(edits.map((x) => x.entry))
+    // A block to tomorrow (T969, as T952): tomorrow is the owner of the edit, today's half that lets it go goes with it – a
+    // question about tomorrow keeps today waiting („theirs” takes both), so the block never stands on neither day.
+    const pair = both.length === 2 && v.changes.some((c) => c.k === 'tomorrow')
+    const edits = pair ? [both[1]!, both[0]!] : both
+    const out = await this.d.edit(pair ? [edits[0]!.entry, { ...edits[1]!.entry, after: [0] }] : edits.map((x) => x.entry))
     if (out.some((o) => o.status !== 'applied' && o.status !== 'waiting')) {
       this.say('Wariant spotkał się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
       return this.refresh()
@@ -646,7 +652,7 @@ export class WidgetEngine {
       if (r.ok) started = after.start
       else if (r.why) this.say(r.why)
     }
-    this.moved.set('variant', { text: `Przestawiono: ${v.label}`, day, edits, started, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq })
+    this.moved.set('variant', { text: `Przestawiono: ${v.label}`, day, edits, started, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq, pair })
     return this.refresh()
   }
 
@@ -690,14 +696,19 @@ export class WidgetEngine {
     if (!mv || !folder) return
     this.moved.delete(kind)
     if (mv.started) await this.d.timer({ a: 'finish', block: mv.started, day: mv.day })
-    const back: EditEntry[] = []
+    let back: EditEntry[] = []
     let kept = false
     for (const x of mv.edits) {
-      const inv = inverseEdit(x.entry, ((await folder.recordView(x.entry.rel)) as RawRecord | undefined) ?? null, x.made)
+      const now = ((await folder.recordView(x.entry.rel)) as RawRecord | undefined) ?? null
+      // A field changed since is a question – except in a move to tomorrow, which goes back only as it left both days.
+      const inv = !mv.pair || editStands(x.entry, now, x.made) ? inverseEdit(x.entry, now, x.made) : null
       if (inv) back.push(inv)
       else kept = true
     }
-    const out = await this.d.edit(back)
+    // A move to tomorrow goes back whole (T969, as T953): today's half that brings it back is the owner, tomorrow's goes with
+    // it; one of them changed since – both stay.
+    if (mv.pair) back = kept ? [] : [back[1]!, { ...back[0]!, after: [0] }]
+    const out = back.length ? await this.d.edit(back) : []
     if (kept || out.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say(`Część planu zmieniła się od ${kind === 'push' ? 'przesunięcia' : 'wariantu'} – zostaje tak, jak jest teraz.`)
     return this.refresh()
   }
