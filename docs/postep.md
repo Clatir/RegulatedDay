@@ -150,7 +150,9 @@ paczki – D413.
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| SNT4 załączniki i linki | 1.15.0? | – | część A gotowa (T800–T810, commit na gałęzi); część B w toku | – (3,5–5 h; szablon i seria +1,5 h) |
+| SNT4 załączniki i linki | 1.15.0 | – | części A i B, trzy rundy xhigh (15 + 15 + 15 uwag; trzecia – 6 poprawek), merge `origin/main` (L2); PR po zielonym teście lokalnym, scalenie po publikacji 1.14.0; D410–D414 (D411, D412, D414 do potwierdzenia), T800–T840 | ok. 5 h (3,5–5 h; +1,5 h szablon i seria) – trzy rundy przeglądu |
+
+**Do potwierdzenia rano:** D411, D412, D414. Wpis, „Uwagi na później” – `docs/archiwum/postep-SNT.md` („SNT4”).
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy
