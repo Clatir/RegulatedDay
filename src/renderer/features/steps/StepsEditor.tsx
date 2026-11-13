@@ -6,7 +6,7 @@
  * field when it was not). A template's list has no ticks (`ticks` off: every day starts with none, D440).
  */
 import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
-import { addStepOp, STEP_NO_TITLE, STEP_TITLE_MAX, stepsCounter, type Step, type StepOp } from '@shared/model/steps'
+import { addStepOp, STEP_NO_TITLE, STEP_TITLE_MAX, stepsCounter, type Step, type StepOp, type StepsKind } from '@shared/model/steps'
 import { FieldShell, TextField } from '../../components/fields'
 import { cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
@@ -17,6 +17,7 @@ import { dropMove, keyMove, refusedOp } from './stepsUi'
 export function StepsEditor({
   steps,
   ticks,
+  kind = 'block',
   onTick,
   onOp,
   readOnly
@@ -24,6 +25,8 @@ export function StepsEditor({
   steps: readonly Step[]
   /** Show the boxes (a block of a day, a task); off – a template's or a series' list. */
   ticks: boolean
+  /** Whose list it is – a refusal before the send names it (a task's full list – „w zadaniu”). */
+  kind?: StepsKind
   onTick?: (id: string, done: boolean) => void | Promise<unknown>
   /** One change of the list; the answer says whether it was saved (false – refused, the field keeps the text). */
   onOp: (op: StepOp) => Promise<SaveAnswer> | SaveAnswer | void
@@ -50,7 +53,7 @@ export function StepsEditor({
   }, [steps])
 
   const send = async (op: StepOp): Promise<boolean> => {
-    const refused = refusedOp(steps, op)
+    const refused = refusedOp(steps, op, kind)
     if (refused) {
       setError(refused)
       toast(refused, 'error', 6000)

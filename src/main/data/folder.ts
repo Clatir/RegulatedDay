@@ -896,7 +896,7 @@ export class DataFolder {
     for (const e of entries) {
       const id = `${this.o.computer}-${at.toString(36)}-${(this.editSeq++).toString(36)}`
       ids.push(id)
-      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}) })
+      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}), ...(e.guards?.length ? { guards: e.guards } : {}) })
     }
     // All of them on the disk at once, or none (A3-15): a save that fails leaves no part of it to be written later.
     this.queue.add(...queued)

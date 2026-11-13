@@ -145,6 +145,9 @@ export function editNotice(out: readonly EditOutcome[]): { text: string; kind: '
   if (out.some((o) => o.status === 'changedElsewhere')) return { text: 'Tego rekordu nie usunięto – w tym czasie zmieniono go na innym komputerze. Odpowiedz na pytanie u góry okna.', kind: 'info' }
   if (out.some((o) => o.status === 'conflict' || o.status === 'removedElsewhere')) return { text: 'Ta zmiana spotkała się ze zmianą z innego komputera – odpowiedz na pytanie u góry okna.', kind: 'info' }
   if (out.some((o) => o.status === 'broken')) return { text: 'Plik jest uszkodzony i nie jest nadpisywany – przywróć go z historii.', kind: 'error' }
+  // A guard of the edit failed in the queue's turn (T793): nothing written, said with its reason.
+  const refused = out.find((o) => o.status === 'refused')
+  if (refused) return { text: refused.why ?? 'Zmiana nie została zapisana – w tym czasie zmienił się plan dnia.', kind: 'info' }
   return null
 }
 

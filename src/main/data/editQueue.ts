@@ -9,7 +9,9 @@
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { deepEqual, sameContentAs, setAt, valueAt, type Path } from '@shared/data/merge'
-import { paths } from '@shared/data/paths'
+import { classify, paths } from '@shared/data/paths'
+import type { EditGuard } from '@shared/api'
+import { dayFileFrom } from '@shared/model/plan'
 import { earlierOnce } from '@shared/model/rd'
 import { BrokenRecordError, type RecordStore } from './records'
 
@@ -37,6 +39,8 @@ export interface QueuedEdit {
   remove?: boolean
   /** A removal: the record as you saw it (undefined – an entry written before 0.25.0: removed as it is). */
   base?: unknown
+  /** Checked on the files as they are when the entry is laid (T793): one failed – the entry is refused, nothing written. */
+  guards?: EditGuard[]
 }
 
 /** Why an entry waits behind an earlier one for the same file that is still a question (it never goes by itself). */
@@ -50,6 +54,8 @@ export type Outcome =
   | { id: string; status: 'changedElsewhere' }
   | { id: string; status: 'broken' }
   | { id: string; status: 'waiting'; why: string }
+  /** A guard failed in the turn of the write (T793): nothing of it written, it leaves the queue – no question. */
+  | { id: string; status: 'refused'; why: string }
 
 interface QueueFile {
   format: number
@@ -220,7 +226,7 @@ export class EditQueue {
       }
       const outcome = await this.applyOne(records, edit)
       out.push(outcome)
-      if (outcome.status === 'applied') this.outcomes.delete(edit.id)
+      if (outcome.status === 'applied' || outcome.status === 'refused') this.outcomes.delete(edit.id)
       else {
         this.outcomes.set(edit.id, outcome)
         keep.push(edit)
@@ -230,7 +236,7 @@ export class EditQueue {
     }
     // Applied entries leave; a question keeps only its fields that met a change elsewhere. Entries added while this ran
     // (an edit during a slow write) stay for the next run.
-    if (out.some((o) => o.status === 'applied' || o.status === 'conflict')) {
+    if (out.some((o) => o.status === 'applied' || o.status === 'conflict' || o.status === 'refused')) {
       const seen = new Set(out.map((o) => o.id))
       this.entries = [...keep, ...this.entries.filter((e) => !seen.has(e.id))]
       this.persist()
@@ -295,7 +301,29 @@ export class EditQueue {
     }
   }
 
+  /**
+   * The guards of an entry on the files as they are now (T793): null – all hold; `wait` – a file of one cannot be read now
+   * (the entry waits, as any); else the reason it is refused.
+   */
+  private async guardsFail(records: RecordStore, guards: readonly EditGuard[]): Promise<{ wait: string } | { refuse: string } | null> {
+    for (const g of guards) {
+      const date = classify(g.rel)?.date
+      const r = await records.read(g.rel)
+      if (r.status === 'unreadable') return { wait: r.why }
+      if (r.status === 'broken' || !date) return { refuse: g.why }
+      const file = r.status === 'ok' ? dayFileFrom(r.value, date) : null
+      const inPlan = (!g.inFile || !!file?.blocks.some((b) => b.id === g.block)) && !file?.cancelled.includes(g.block) && !(file && g.block in file.movedTo)
+      if (!inPlan) return { refuse: g.why }
+    }
+    return null
+  }
+
   private async applyOneNow(records: RecordStore, edit: QueuedEdit): Promise<Outcome> {
+    if (edit.guards?.length) {
+      const failed = await this.guardsFail(records, edit.guards)
+      if (failed && 'wait' in failed) return { id: edit.id, status: 'waiting', why: failed.wait }
+      if (failed) return { id: edit.id, status: 'refused', why: failed.refuse }
+    }
     const cur = await records.read(edit.rel)
     if (cur.status === 'unreadable') return { id: edit.id, status: 'waiting', why: cur.why }
     if (cur.status === 'broken') return { id: edit.id, status: 'broken' }

@@ -24,7 +24,7 @@ import { dayStart, logicalDayOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { ALL_STEPS_TEXT, barStepText } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
-import { DataHub } from '../../src/main/data/hub'
+import { DataHub, guardsOf } from '../../src/main/data/hub'
 import { nodeFs } from '../../src/main/data/fsio'
 import { WidgetEngine, type NotifyIn } from '../../src/main/widget'
 
@@ -51,7 +51,7 @@ const write = (rel: string, v: unknown) => writeFileSync(join(dataDir, rel), JSO
 const read = (rel: string) => JSON.parse(readFileSync(join(dataDir, rel), 'utf8')) as Record<string, unknown>
 const asEdits = (entries: EditEntry[]) => entries.map((e) => ({ ...e, edits: e.edits.map((x) => ({ ...x, path: x.path.map(String) })) }))
 
-async function computer(id: string, clock: { now: number }) {
+async function computer(id: string, clock: { now: number }, o: { beforeEdit?: () => void } = {}) {
   const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, `state-${id}`), computer: id, computerName: id.toUpperCase(), appVersion: '1.14.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => true })
   const shown: NotifyIn[] = []
   const w = new WidgetEngine({
@@ -60,7 +60,11 @@ async function computer(id: string, clock: { now: number }) {
       const r = await folder.timerClick(c as never)
       return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
     },
-    edit: async (entries) => (await folder.edit(asEdits(entries))).map((o) => ({ status: o.status })),
+    edit: async (entries) => {
+      // Another computer's change landing between the bar's read and the queue's write (the write's turn).
+      o.beforeEdit?.()
+      return (await folder.edit(asEdits(entries))).map((x) => ({ status: x.status, ...('why' in x ? { why: x.why } : {}) }))
+    },
     answer: async () => ({ ok: true, why: null, confirm: null }),
     seen: async () => 0,
     clickedApp: () => undefined,
@@ -183,6 +187,30 @@ describe('linia kroku na pasku (D440, T793)', () => {
     await a.folder.close('quit')
   })
 
+  it('blok usunięty między odczytem paska a zapisem kolejki: kolejka sprawdza blok w swojej turze – nic w dniu ani w zadaniu (przegląd 3, T793)', async () => {
+    write(paths.day(DAY), { schema: 1, date: DAY, blocks: [{ ...blockRaw, task: 't1' }, { ...blockRaw, id: 'inny', startMin: 14 * 60 }] })
+    const rel = paths.record('request', 't1')
+    write(rel, { schema: 1, id: 't1', kind: 'task', title: 'Wdrożenie', estimateMin: 90, categoryId: 'inne', note: '', createdAt: 1, state: 'planned', day: DAY, block: 'wd', list: 'today', listDay: DAY, doneAt: null, steps })
+    const clock = { now: placeLogical(DAY, 10 * 60) }
+    let gone = false
+    const a = await computer('pca', clock, {
+      beforeEdit: () => {
+        if (gone) write(paths.day(DAY), { schema: 1, date: DAY, blocks: [{ ...blockRaw, id: 'inny', startMin: 14 * 60 }], cancelled: {}, updatedAt: 2 })
+      }
+    })
+    expect((await a.folder.timerClick({ a: 'start', block: 'wd', day: DAY } as never)).ok).toBe(true)
+    clock.now += 60_000
+    await a.w.refresh()
+    gone = true
+    await a.w.act('step', 'wd|s1', 'bar')
+    expect(a.w.current().note?.text).toBe('Tego bloku już nie ma w planie.')
+    expect(read(paths.day(DAY)).stepsDone).toBeUndefined()
+    expect(read(rel).stepsDone).toBeUndefined()
+    // Not a question: nothing waits in the queue.
+    expect(a.folder.queue.pending).toEqual([])
+    await a.folder.close('quit')
+  })
+
   it('blok zadania: ptaszek na pasku odhacza krok w bloku i w zadaniu, jedną edycją', async () => {
     write(paths.day(DAY), { schema: 1, date: DAY, blocks: [{ ...blockRaw, task: 't1' }] })
     const rel = paths.record('request', 't1')
@@ -238,6 +266,33 @@ describe('kroki serii w turze zapisu (przegląd, T790)', () => {
         [start, ['s1']],
         [today, ['s1', 'A', 'B']]
       ])
+    } finally {
+      await hub.close('quit')
+    }
+  })
+})
+
+describe('warunek zmiany przez okno i pasek (hub, przegląd 3, T793)', () => {
+  it('`guardsOf`: tylko plik dnia, id bloku i powód; inny kształt – odmowa całej zmiany', () => {
+    expect(guardsOf(undefined)).toEqual({})
+    expect(guardsOf([{ kind: 'dayBlock', rel: paths.day(DAY), block: 'wd', inFile: true, why: 'x' }])).toEqual({ guards: [{ kind: 'dayBlock', rel: paths.day(DAY), block: 'wd', inFile: true, why: 'x' }] })
+    expect(() => guardsOf([{ kind: 'dayBlock', rel: 'rd.json', block: 'wd', inFile: true, why: 'x' }])).toThrow()
+    expect(() => guardsOf([{ kind: 'inny', rel: paths.day(DAY), block: 'wd', inFile: true, why: 'x' }])).toThrow()
+  })
+
+  it('`hub.edit` niesie warunek do kolejki: blok, którego nie ma w pliku dnia – „refused” z powodem, nic nie zapisane', async () => {
+    write(paths.day(DAY), { schema: 1, date: DAY, blocks: [{ ...blockRaw, id: 'inny' }] })
+    const hub = new DataHub({ userData: join(root, 'appdata-hub'), computer: () => 'pca', computerName: 'PC A', appVersion: '1.14.0', runId: `run-${Math.random()}`, holidays: marketDay, idleSeconds: () => 0, log: () => undefined, writeGuardPlan: false, extraBackupDir: () => null, previousVersion: () => null, onChange: () => undefined })
+    try {
+      expect(await hub.open(dataDir)).toBe(true)
+      const before = read(paths.day(DAY))
+      const entry = recordEdit(paths.day(DAY), before, { ...before, stepsDone: { wd: { s1: true } } })!
+      const out = await hub.edit([{ ...entry, guards: [{ kind: 'dayBlock', rel: paths.day(DAY), block: 'wd', inFile: true, why: 'Tego bloku już nie ma w planie.' }] }])
+      expect(out).toEqual([{ status: 'refused', why: 'Tego bloku już nie ma w planie.' }])
+      expect(read(paths.day(DAY)).stepsDone).toBeUndefined()
+      // The block there: the same edit is written.
+      const ok = await hub.edit([{ ...entry, guards: [{ kind: 'dayBlock', rel: paths.day(DAY), block: 'inny', inFile: true, why: 'x' }] }])
+      expect(ok).toEqual([{ status: 'applied' }])
     } finally {
       await hub.close('quit')
     }

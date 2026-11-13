@@ -422,9 +422,18 @@ export interface EditEntry {
   remove?: boolean
   /** A removal: the record as you saw it when you removed it (A3-09). */
   base?: unknown
+  /** What the files must still hold when the queue lays the entry (its turn of the write); else it is refused (T793). */
+  guards?: EditGuard[]
 }
 
-export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting'; why?: string }
+/**
+ * A condition the queue checks in its turn of the write, on the files as they are then (T793): `dayBlock` – the block is in
+ * the plan of the day by its file (`rel`): in the file when `inFile`, never cancelled nor moved away. Failed – the entry is
+ * refused with `why`, nothing of it written, no question.
+ */
+export type EditGuard = { kind: 'dayBlock'; rel: string; block: string; inFile: boolean; why: string }
+
+export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting' | 'refused'; why?: string }
 
 /**
  * A record chosen from a backup: what the queue did with it, `behindQuestion` – it waits for your answer to an earlier

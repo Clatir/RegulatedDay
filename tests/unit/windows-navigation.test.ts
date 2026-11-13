@@ -57,3 +57,22 @@ describe('okna paska, panelu i dźwięku nie nawigują i nie otwierają okien', 
     })
   }
 })
+
+describe('adres serwera deweloperskiego – po pochodzeniu, nie po początku tekstu (przegląd 3)', () => {
+  it('tylko ten sam origin wczytuje się w oknie; „localhost:5173@evil”, inny port – zatrzymane', async () => {
+    const { keepOnPage } = await import('../../src/main/windows/navigation')
+    let navigate: ((e: { preventDefault: () => void }, url: string) => void) | null = null
+    keepOnPage({ setWindowOpenHandler: () => undefined, on: ((name: string, fn: typeof navigate) => void (name === 'will-navigate' && (navigate = fn))) as never }, 'http://localhost:5173')
+    const stopped = (url: string) => {
+      const e = { preventDefault: vi.fn() }
+      navigate!(e, url)
+      return e.preventDefault.mock.calls.length > 0
+    }
+    expect(stopped('http://localhost:5173/')).toBe(false)
+    expect(stopped('http://localhost:5173/index.html?view=panel')).toBe(false)
+    expect(stopped('http://localhost:5173@evil.example/')).toBe(true)
+    expect(stopped('http://localhost:51730/')).toBe(true)
+    expect(stopped('https://localhost:5173/')).toBe(true)
+    expect(stopped('nie adres')).toBe(true)
+  })
+})

@@ -23,9 +23,12 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
 ## Pliki
 - `model/steps.ts` – `Step { id, title, order, done }`, `STEPS_MAX` 30 (tylko przy dodawaniu), `STEP_TITLE_MAX` 200 (T789);
   `stepsFrom` (każdy krok, kolejność po `order`, remis – kolejność w pliku; `done` nigdy z elementu listy), `stepsJson` /
-  `withStepsJson` (zapis bez `done`, w kolejności pliku; pozycja niezmieniona albo nieodczytana zostaje jak w pliku – T787),
+  `withStepsJson` (zapis bez `done`, w kolejności pliku; lista niezmieniona – plik jak był; pozycja niezmieniona albo
+  nieczytelna zostaje jak w pliku, zmieniona/usunięta zabiera czytelne pozycje swojego id – T787), `refusalFor` (pełna lista
+  zadania – „w zadaniu”),
   `stepOpFrom` (operacja z okna), `applyStepOp` + `addStepOp` / `moveStepOp` (operacje po
   id – ta sama na liście bloku i zadania, T790), `stepsCounter` („✓ 3/4”), `firstOpen`, `freshSteps`, `textWithSteps` (Ctrl K).
+  Nowa wersja serii i szablonu pisze się na surowej wersji, z której powstaje (`sourceVersionKey` w `model/plan.ts`).
 - `engine/steps.ts` – zapisy na surowym JSON: `tickEdits`, `blockStepsEdits` (dzień + zadanie), `taskTickEdits`,
   `taskStepsEdits` (zadanie + blok od dziś), `templateStepsChanged`, `taskOfBlock`, `dayBlockNow`.
 - `renderer/store/steps.ts` – API okna: `tickBlockStep`, `changeBlockSteps`, `tickTaskStep`, `changeTaskSteps`,
@@ -48,10 +51,14 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
   z bloku okna (wystąpienie zaczęte dziś nie idzie za serią). `move` przed krok spoza listy – bez zmiany.
 - Zadanie i jego blok (T792): `caseBlock` kopiuje listę (te same id), `withTaskBlock` – odhaczenia zadania w dniu; zmiana w
   bloku idzie do zadania, gdy `taskOfBlock` (zadanie zaplanowane w tym bloku); zmiana w zadaniu – do bloku dnia od dziś.
-  Nigdy po cichu osobno: dzień bloku nieczytelny – `DAY_UNREADABLE`, lustrzana operacja odrzucona – odmowa całej zmiany.
+  Nigdy po cichu osobno: którykolwiek dzień drogi bloku (`movedTo`) nieczytelny – `DAY_UNREADABLE` (nie wiadomo, gdzie blok
+  stoi), lustrzana operacja odrzucona – odmowa całej zmiany. Odpowiedź dla pola – `caseAnswer` (`store/cases.ts`: wysłane
+  bez wyniku = „asked”; tytuł nowego zadania wtedy nie wraca – `submitTitle`).
 - Kopia dnia (`copiedDay`) – kroki odznaczone (nowe id); przeniesienie (`moveBetweenDays`) zabiera odhaczenia: w dniu
   docelowym dokładnie te z pliku dnia źródłowego (`stepsDoneIn` – nie z podanego bloku; `setStepsDone`), w źródłowym żadne.
-- Pasek: ptaszek sprawdza blok w turze zapisu – plan z pliku dnia teraz na migawce z modelu paska (`dayPlan`).
+- Pasek: ptaszek sprawdza blok najpierw w planie z pliku dnia teraz (na migawce modelu paska), potem w turze zapisu kolejki –
+  każdy wpis edycji (dzień i zadanie) niesie `EditGuard` `dayBlock` (`api.ts`), który `EditQueue` sprawdza na pliku dnia przy
+  zapisie; niespełniony – wynik `refused` z powodem, nic nie zapisane, bez pytania (T793).
 - Migawka starszej wersji bez pola `steps` (T791): bloki szablonu i serii biorą listę ze źródła (`snapshotOf`).
 - Pasek (T793): `WidgetView.steps` (`BarSteps`) – blok na pierwszym planie, pierwszy nieodhaczony; ukryte tylko w „Odcinam
   się”; akcja `step` `<blok>|<krok>` → `WidgetEngine.tickStep` (jedna edycja: dzień + zadanie). Tekst – `barStepText`.

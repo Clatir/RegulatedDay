@@ -7,7 +7,7 @@
  *
  * Until a data folder is open the widget shows one neutral line („Brak folderu danych · Otwórz okno”, D327).
  */
-import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind } from '@shared/api'
+import type { EditEntry, EditGuard, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind } from '@shared/api'
 import { blockName, nameById } from '@shared/blockName'
 import { namingOf } from '@shared/engine/context'
 import { costText } from '@shared/costText'
@@ -134,6 +134,9 @@ export function stepDelay(deadlines: readonly number[], viewAt: number, now = vi
   const at = Math.min(...deadlines.flatMap((d) => [d - 15 * MIN, d - 5 * MIN, d]).filter((x) => x > viewAt))
   return Number.isFinite(at) && at - viewAt <= REFRESH_MS ? Math.max(0, at - now) : null
 }
+
+/** What the bar says of a click of a block that is not in the day's plan any more (a step's tick – T793). */
+const BLOCK_GONE = 'Tego bloku już nie ma w planie.'
 
 /** „Zapisano: … · Cofnij” of a routine saved from the bar stays this long. */
 const ROUTINE_UNDO_MS = 60_000
@@ -1119,12 +1122,13 @@ export class WidgetEngine {
   }
 
   /**
-   * A step ticked off on the bar (D440, T793): the block checked in the write's turn – in the day's plan as the day's file
-   * holds it now (with the queue) over the snapshot the bar counted (the model of its last count, of that day; another day
-   * or none: counted now) – a block taken out, cancelled or moved away meanwhile gets no tick (none orphaned in the day nor
-   * in its task); its list as the file holds it (`tickEdits`), its tick in the day's file and – a block of a task planned in
-   * it – in the task's record, one edit of the queue. Ticked on another computer meanwhile – nothing to write; removed there
-   * – the bar says so. No sound (D440).
+   * A step ticked off on the bar (D440, T793): the block in the day's plan as the day's file holds it now (with the queue)
+   * over the snapshot the bar counted (the model of its last count, of that day; another day or none: counted now) – a
+   * block gone already is said at once; its list as the file holds it (`tickEdits`); its tick in the day's file and – a
+   * block of a task planned in it – in the task's record, one edit of the queue whose every entry carries the guard of the
+   * block (`EditGuard` `dayBlock`): the queue checks it on the day's file in its own turn of the write – a block taken out,
+   * cancelled or moved away meanwhile (another computer) gets no tick, nor its task – „Tego bloku już nie ma w planie.”.
+   * Ticked on another computer meanwhile – nothing to write. No sound (D440).
    */
   private async tickStep(day: string | undefined, blockId: string, stepId: string): Promise<void> {
     const folder = this.d.folder()
@@ -1132,9 +1136,10 @@ export class WidgetEngine {
     const m = this.model?.state.grid.date === day ? this.model : await folder.widgetModel(this.now)
     const rel = paths.day(day)
     const before = ((await folder.recordView(rel)) as RawRecord | undefined) ?? null
-    const block = m.state.grid.date === day ? dayPlan(m.ctx.snapshot, before ? dayFileFrom(before, day) : null).find((b) => b.id === blockId) : undefined
+    const file = before ? dayFileFrom(before, day) : null
+    const block = m.state.grid.date === day ? dayPlan(m.ctx.snapshot, file).find((b) => b.id === blockId) : undefined
     if (!block) {
-      this.say('Tego bloku już nie ma w planie.')
+      this.say(BLOCK_GONE)
       return this.refresh()
     }
     const taskRel = block.task ? paths.record('request', block.task) : null
@@ -1144,9 +1149,12 @@ export class WidgetEngine {
       this.say(out.error)
       return this.refresh()
     }
-    const entries = [recordEdit(rel, before, out.day), taskRel && out.task ? recordEdit(taskRel, taskBefore, out.task) : null].filter((e): e is EditEntry => e != null)
+    const guards: EditGuard[] = [{ kind: 'dayBlock', rel, block: block.id, inFile: !!file?.blocks.some((b) => b.id === block.id), why: BLOCK_GONE }]
+    const entries = [recordEdit(rel, before, out.day), taskRel && out.task ? recordEdit(taskRel, taskBefore, out.task) : null].filter((e): e is EditEntry => e != null).map((e) => ({ ...e, guards }))
     const res = entries.length ? await this.d.edit(entries) : []
-    if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odhaczenie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
+    const refused = res.find((o) => o.status === 'refused')
+    if (refused) this.say(refused.why ?? BLOCK_GONE)
+    else if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odhaczenie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
     return this.refresh()
   }
 

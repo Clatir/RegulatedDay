@@ -17,7 +17,7 @@
 import { dayRaw, isRaw, putBlock, setStepDone, stepsDoneIn, type Raw } from '../data/dayEdits'
 import { dayFileFrom, withTemplateVersion, type PlanBlock, type Template } from '../model/plan'
 import { requestFrom, type RequestRecord } from '../model/requests'
-import { applyStepOp, doneSetFrom, freshSteps, STEPS_FULL, STEPS_FULL_TASK, withDone, withStepsJson, type Step, type StepOp } from '../model/steps'
+import { applyStepOp, doneSetFrom, refusalFor, withDone, withStepsJson, type Step, type StepOp } from '../model/steps'
 
 /** Why a tick does nothing: the step is not in the block any more (removed on another computer). */
 export const STEP_GONE = 'Tego kroku już nie ma.'
@@ -49,7 +49,7 @@ export function taskStepsRaw(raw: Raw, op: StepOp): { raw: Raw; steps: Step[] } 
   if (!r) return { error: 'Tej sprawy już nie ma.' }
   const next = applyStepOp(r.steps, op)
   // The task's list full: said as the task's (its own change, or the block's change it refuses – T792).
-  if ('error' in next) return next.error === STEPS_FULL ? { error: STEPS_FULL_TASK } : next
+  if ('error' in next) return { error: refusalFor(next.error, 'task') }
   let out = withStepsJson({ ...raw }, next.steps, raw.steps)
   if (op.op === 'remove' && doneSetFrom(raw.stepsDone).has(op.id)) out = taskStepDoneRaw(out, op.id, false)
   return { raw: out, steps: next.steps }

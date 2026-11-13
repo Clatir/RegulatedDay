@@ -18,6 +18,7 @@ import { stepsAnswer } from '@renderer/features/steps/stepsUi'
 import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 import { changeTaskSteps, tickBlockStep } from '@renderer/store/steps'
+import { DAY_UNREADABLE } from '@renderer/store/cases'
 
 const four = (): Step[] => ['Napisać testy', 'Przygotować logikę', 'Sprawdzić na Windowsie', 'Zrobić commit'].map((title, order) => ({ id: `s${order + 1}`, title, order, done: false }))
 const TODAY = logicalDayOf(Date.now())
@@ -63,14 +64,24 @@ describe('„Przenieś” z panelu zabiera odhaczenia (przegląd 2, T786)', () =
   })
 })
 
-describe('zadanie: dzień miniony bloku nieczytelny – zmiana zadania idzie sama (przegląd 2, T792)', () => {
-  it('blok w dniu minionym, którego pliku nie da się odczytać: tylko rekord (dzień od dziś nieczytelny – odmowa, `steps-review.test.ts`)', async () => {
+describe('zadanie: dzień bloku w łańcuchu nieczytelny – nie wiadomo, gdzie blok stoi (przegląd 3, T792)', () => {
+  it('11-10 → 11-15, 11-10 nieczytelny: odmowa `DAY_UNREADABLE`, nic nie zapisane; dzień miniony czytelny, blok w nim – sam rekord', async () => {
     const past = addDays(TODAY, -3)
     const task = { ...newTask('t1', Date.now(), TODAY, { title: 'Wdrożenie' })!, day: past, block: 'tb', state: 'planned', steps: four().map(({ done: _d, ...s }) => s) }
-    const { sent } = stub({ requests: [task] })
+    // The day gone by cannot be read now: its `movedTo` may send the block to today or later – nothing written.
+    const a = stub({ requests: [task] })
+    expect(await changeTaskSteps('t1', addStepOp('nowy'))).toMatchObject({ saved: false, error: DAY_UNREADABLE })
+    expect(a.sent).toEqual([])
+    // Read: the block stayed on the day gone by (never written) – the task's change alone.
+    const blockRaw = { id: 'tb', categoryId: 'inne', startMin: 600, durationMin: 60, origin: 'user', task: 't1', steps: four().map(({ done: _d, ...s }) => s) }
+    const b = stub({ requests: [task], days: { [past]: { schema: 1, date: past, blocks: [blockRaw] } } })
     const r = await changeTaskSteps('t1', addStepOp('nowy'))
     expect([r.saved, r.error]).toEqual([true, null])
-    expect(sent[0]!.map((e) => e.rel)).toEqual([paths.record('request', 't1')])
+    expect(b.sent[0]!.map((e) => e.rel)).toEqual([paths.record('request', 't1')])
+    // Moved from it to today (read): the block there goes with the task.
+    const c = stub({ requests: [task], days: { [past]: { schema: 1, date: past, blocks: [], movedTo: { tb: TODAY } }, [TODAY]: { schema: 1, date: TODAY, blocks: [blockRaw] } } })
+    expect((await changeTaskSteps('t1', addStepOp('nowy'))).saved).toBe(true)
+    expect(c.sent[0]!.map((e) => e.rel).sort()).toEqual([paths.day(TODAY), paths.record('request', 't1')].sort())
   })
 })
 

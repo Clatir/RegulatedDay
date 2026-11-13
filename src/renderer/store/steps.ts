@@ -17,7 +17,7 @@ import { dayFileFrom, templateFrom, type PlanBlock } from '@shared/model/plan'
 import { requestFrom } from '@shared/model/requests'
 import type { StepOp } from '@shared/model/steps'
 import { logicalDayOf } from '@shared/time/day'
-import { changeSeries } from '../features/series/seriesActions'
+import { changeSeries, changeSeriesWith } from '../features/series/seriesActions'
 import { change, DAY_UNREADABLE, undoFiles, type CaseResult, type CaseUndoFile } from './cases'
 import { rawRecord, type SaveAnswer } from './data'
 
@@ -68,24 +68,23 @@ export function changeBlockSteps(date: string, block: PlanBlock, op: StepOp, see
 }
 
 /**
- * The day and the file of the block a task is planned in now (`scheduledOf`, a move followed), read in this turn; null –
- * not planned (the block gone), or its way leads through a day gone by that cannot be read now (such a day is never
- * written – T769 – the task's change goes alone); `unreadable` – a day from today on cannot be read now: its block would
- * part from the task in silence, so nothing is written (T792).
+ * The day and the file of the block a task is planned in now (`scheduledOf`, every move followed – each day of the way read
+ * in this turn); null – not planned (the block gone); `unreadable` – a day of the way cannot be read now: where the block
+ * stands now is not known (that day's `movedTo` may send it to today or later, T769), so nothing is written – the task and
+ * its block never part in silence (T792). One rule for days gone by and to come.
  */
-async function taskDay(id: string, today: string): Promise<{ date: string; raw: RawRecord | null } | null | 'unreadable'> {
+async function taskDay(id: string): Promise<{ date: string; raw: RawRecord | null } | null | 'unreadable'> {
   const r = requestFrom(rawRecord(taskRel(id)))
   if (!r?.day || !r.block) return null
   const files: Record<string, RawRecord | null> = {}
   for (let more: string | null = r.day; more && !(more in files); more = caseDayToRead(r, files)) {
     const read = await window.rd.dayFiles([more])
-    if (!(more in read)) return more >= today ? 'unreadable' : null
+    if (!(more in read)) return 'unreadable'
     files[more] = read[more] ?? null
   }
+  // Every day of the way read: the block's day is known (or the block is gone).
   const s = scheduledOf(r, (d) => (d in files ? (files[d] ? dayFileFrom(files[d], d) : null) : undefined))
-  if (!s) return null
-  if (s.known) return { date: s.day, raw: files[s.day] ?? null }
-  return s.day >= today ? 'unreadable' : null
+  return s ? { date: s.day, raw: files[s.day] ?? null } : null
 }
 
 /** A task's change of steps: its record, and its block's day when the block goes with it (today or later – T769). */
@@ -95,7 +94,7 @@ function taskChange(id: string, make: (record: RawRecord, date: string | null, d
     const record = rawRecord(rel)
     if (!record) return 'Tej sprawy już nie ma.'
     const today = logicalDayOf(Date.now())
-    const where = await taskDay(id, today)
+    const where = await taskDay(id)
     if (where === 'unreadable') return DAY_UNREADABLE
     const out = make(record, where?.date ?? null, where?.raw ?? null, today)
     if ('error' in out) return out.error
@@ -137,10 +136,12 @@ export function changeTemplateSteps(templateId: string, from: string, blockId: s
  * scope; „Tylko to” is the day's own edit, `changeBlockSteps`): the series API with the op itself (`stepsOp`), laid on each
  * version's own list in the write's turn (T790, T517) – never a list copied from the block the window holds (an occurrence
  * begun today does not follow the series); its „Cofnij” toast says `text` (empty – none). The ticks stay the day's (T786).
- * `_block` and `_seen` – kept for the callers of before; the op needs neither.
+ * `refused` – the series refused it (an answer with a reason, e.g. it ended – the panel asks the scope again); a send that
+ * failed or a question is no refusal.
  */
-export function changeSeriesSteps(target: { date: string; blockId: string }, _block: PlanBlock, scope: Exclude<SeriesScope, 'only'>, op: StepOp, text: string, _seen?: RawRecord | null): Promise<SaveAnswer> {
-  return changeSeries(target, scope, { stepsOp: op }, text)
+export async function changeSeriesSteps(target: { date: string; blockId: string }, scope: Exclude<SeriesScope, 'only'>, op: StepOp, text: string): Promise<{ answer: SaveAnswer; refused: boolean }> {
+  const { answer, result } = await changeSeriesWith(target, scope, { stepsOp: op }, text)
+  return { answer, refused: result?.error != null }
 }
 
 /**

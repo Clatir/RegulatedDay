@@ -66,19 +66,27 @@ export function sameStepList(a: readonly Pick<Step, 'id' | 'title'>[], b: readon
   return a.length === b.length && a.every((x, i) => x.id === b[i]!.id && x.title === b[i]!.title)
 }
 
+/** An item a version reads as a step where it is the first of its id: an object with an id and a title. */
+const readable = (x: unknown): x is Record<string, unknown> & { id: string } => isPlain(x) && typeof x.id === 'string' && !!x.id && !!stepTitleOf(x.title)
+
 /**
- * The list as written over the file's list `before` (T787), in the file's order:
- * - the item this version reads for a step `steps` keeps unchanged – the file's own (other items of its id too); changed –
- *   its title and order set, its other fields kept, the other items of its id out; removed – every item of its id out (a
- *   second item of an id never comes back as the step);
- * - an item without a number `order` gets the place it is read at (its order no longer moves when items before it go);
- * - an item this version does not read (no title, no id, not an object) – the file's own, as it is;
+ * The list as written over the file's list `before` (T787):
+ * - the list read is the list given (ids, titles, order) – the file's list as it is, every item untouched (items without a
+ *   number `order` too);
+ * - else, in the file's order: the item read for a step kept unchanged – the file's own, its other items too; for a step
+ *   changed – its title and order set (its other fields kept), the other items of its id this version reads (a duplicate
+ *   with a title) out; for a step removed – every item of its id this version reads out (a duplicate never comes back as
+ *   the step); an item of an id without a title or not read at all (not an object, no id) – the file's own; an item read
+ *   without a number `order` gets the place it is read at (its order no longer moves when items before it go);
  * - a step new to the file at the end.
  * No `done` is ever written – a tick is the day's (or the task's). Undefined: no steps and no list in the file.
  */
 export function stepsJson(steps: readonly Step[], before?: unknown): unknown[] | undefined {
   if (!Array.isArray(before)) return steps.length ? steps.map((s) => ({ id: s.id, title: s.title, order: s.order })) : undefined
-  const read = new Map(readItems(before).map((r) => [r.step.id, r]))
+  const items = readItems(before)
+  const now = [...items].sort((a, b) => a.step.order - b.step.order || a.at - b.at).map((r) => r.step)
+  if (now.length === steps.length && now.every((x, i) => x.id === steps[i]!.id && x.title === steps[i]!.title && x.order === steps[i]!.order)) return [...before]
+  const read = new Map(items.map((r) => [r.step.id, r]))
   const byId = new Map(steps.map((s) => [s.id, s]))
   /** Whether the step of `id` (read) stays exactly as the file has it – its own item and every other of its id stay. */
   const untouched = (id: string): boolean => {
@@ -89,20 +97,15 @@ export function stepsJson(steps: readonly Step[], before?: unknown): unknown[] |
   }
   const out: unknown[] = []
   before.forEach((x, at) => {
-    const id = isPlain(x) && typeof x.id === 'string' ? x.id : null
-    const r = id != null ? read.get(id) : undefined
-    // Not read by this version (no title, not an object, an id it never reads): the file's own, as it is.
-    if (!r) {
+    const r = readable(x) ? read.get(x.id) : undefined
+    // Not read by this version (no title, not an object, no id): the file's own, as it is.
+    if (!r || untouched(r.step.id)) {
       out.push(x)
       return
     }
-    if (untouched(r.step.id)) {
-      out.push(x)
-      return
-    }
-    // Changed or removed: only the read item of its id, with the change (removed – none).
+    // Changed or removed: only the read item of its id, with the change (removed – none); its other readable items out.
     const s = byId.get(r.step.id)
-    if (s && r.at === at) out.push({ ...(x as Record<string, unknown>), title: s.title, order: s.order })
+    if (s && r.at === at) out.push({ ...x, title: s.title, order: s.order })
   })
   for (const s of steps) if (!read.has(s.id)) out.push({ id: s.id, title: s.title, order: s.order })
   return out
@@ -120,9 +123,6 @@ export const freshSteps = (steps: readonly Step[] | undefined): Step[] => (steps
 
 /** The steps with the ticks of `done` (by id). */
 export const withDone = (steps: readonly Step[] | undefined, done: ReadonlySet<string>): Step[] => (steps ?? []).map((s) => (s.done === done.has(s.id) ? s : { ...s, done: done.has(s.id) }))
-
-/** The ids of the ticked steps. */
-export const doneIds = (steps: readonly Step[] | undefined): string[] => (steps ?? []).filter((s) => s.done).map((s) => s.id)
 
 /** The counter on the tile of the axis and in the panel (D440): „✓ 3/4”; null – no steps. */
 export function stepsCounter(steps: readonly Pick<Step, 'done'>[] | undefined): string | null {
@@ -181,6 +181,10 @@ export const STEP_NO_TITLE = 'Krok potrzebuje treści.'
 export const STEPS_FULL = `Najwyżej ${STEPS_MAX} kroków w bloku.`
 /** The same of a task's list (its own, or the task of a block refusing the block's change – T792). */
 export const STEPS_FULL_TASK = `Najwyżej ${STEPS_MAX} kroków w zadaniu.`
+/** Whose list a refusal is about: a block's (a day, a template, a series) or a task's. */
+export type StepsKind = 'block' | 'task'
+/** A refusal of the model said for the list it is about (the full list of a task – „w zadaniu”). */
+export const refusalFor = (error: string, kind: StepsKind): string => (kind === 'task' && error === STEPS_FULL ? STEPS_FULL_TASK : error)
 
 /** The list numbered again 0, 1, 2 … in the order given (only the steps whose place changed get a new `order`). */
 function renumbered(list: readonly Step[]): Step[] {

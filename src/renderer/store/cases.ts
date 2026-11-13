@@ -30,7 +30,7 @@ import { newRequest, newTask, requestFrom, type CaseList, type NewTask } from '@
 import { settingsOn } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { useNow } from '../lib/clock'
-import { editOf, isSaved, rawRecord, trySaveWith, useData, type SendState } from './data'
+import { editOf, isSaved, rawRecord, saveAnswer, trySaveWith, useData, type SaveAnswer, type SendState } from './data'
 import { toast } from './ui'
 
 const relOf = (id: string): string => paths.record('request', id)
@@ -150,6 +150,15 @@ export interface CaseResult {
    * folder may have it – `saveAnswer` says „asked”, never a refusal); absent – a result made without a send.
    */
   sent?: SendState
+}
+
+/**
+ * What a change became for a field or a button (one reading for every screen of „Sprawy” and the steps): saved – true; a
+ * refusal of ours (`error`) or nothing sent – false (the field gets its text back); sent and its answer not known (a failure
+ * after the queue took it) or a question – `'asked'`: never given back, a second Enter would make it twice.
+ */
+export function caseAnswer(r: Pick<CaseResult, 'saved' | 'error' | 'outcomes' | 'sent'>): SaveAnswer {
+  return r.saved ? true : r.error ? false : saveAnswer(r.outcomes, r.sent)
 }
 
 /**

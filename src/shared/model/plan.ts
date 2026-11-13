@@ -256,6 +256,20 @@ export function templateVersionOn(t: Template, date: string): TemplateVersion | 
 }
 
 /**
+ * The version a version from `from` is written over (a template's, a series'): its own of that date, else the last one
+ * before it – a new version is a copy of the one in force then, and what that one keeps (items and fields this version does
+ * not read) goes on in it. Undefined – none before it.
+ */
+export function sourceVersionKey(keys: Iterable<string>, from: string): string | undefined {
+  let best: string | undefined
+  for (const k of keys) {
+    if (k === from) return k
+    if (k < from && (best === undefined || k > best)) best = k
+  }
+  return best
+}
+
+/**
  * The template with its version from `from` changed by `patch` – the version made when it is not there yet, as a copy of
  * the one in force then (a change of a template applies from a date, by default tomorrow). One rule for the page of
  * templates and the steps of a template's block.

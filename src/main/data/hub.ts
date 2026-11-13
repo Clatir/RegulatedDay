@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { CaseDays, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { CaseDays, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditGuard, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import { blockFactsOf, type CasesRitual } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
@@ -119,6 +119,18 @@ function isNewer(a: string, b: string): boolean {
 
 /** The questions of conflict copies have ids of their own (the copy's path after this). */
 const COPY_PREFIX = 'copy:'
+
+/** The guards of an edit from a window or the bar (untrusted): each checked – a day's file, a block id, a reason. */
+export function guardsOf(v: unknown): { guards?: EditGuard[] } {
+  if (!Array.isArray(v) || !v.length) return {}
+  const guards: EditGuard[] = []
+  for (const g of v.slice(0, 20) as Array<Partial<EditGuard> | null>) {
+    const c = g && typeof g.rel === 'string' ? classify(g.rel) : null
+    if (!g || g.kind !== 'dayBlock' || !c || c.kind !== 'day' || c.conflict || typeof g.block !== 'string' || typeof g.inFile !== 'boolean' || typeof g.why !== 'string') throw new Error('nieprawidłowy warunek zmiany')
+    guards.push({ kind: 'dayBlock', rel: c.canonical, block: g.block, inFile: g.inFile, why: g.why.slice(0, 200) })
+  }
+  return { guards }
+}
 
 /**
  * The fields a question shows: a conflict – yours and theirs; a removal of a record changed elsewhere – what changed
@@ -751,11 +763,11 @@ export class DataHub {
     const clean = entries.map((e) => {
       const c = classify(e.rel)
       if (!c || c.conflict || c.kind === 'log' || c.kind === 'presence' || c.kind === 'grades') throw new Error(`nie można edytować ${e.rel}`)
-      return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true, ...(e.remove === true && e.base !== undefined ? { base: e.base } : {}) }
+      return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true, ...(e.remove === true && e.base !== undefined ? { base: e.base } : {}), ...guardsOf(e.guards) }
     })
     const out = await f.edit(clean)
     this.changed()
-    return out.map((o) => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}) }))
+    return out.map((o) => ({ status: o.status, ...(o.status === 'waiting' || o.status === 'refused' ? { why: o.why } : {}) }))
   }
 
   async events(drafts: EventIn[]): Promise<void> {

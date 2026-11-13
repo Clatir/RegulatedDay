@@ -10,7 +10,7 @@
 import type { RawRecord } from '../api'
 import { addDays, daysBetween, isIsoDate, weekday } from '../time/zone'
 import { weekStart } from '../time/day'
-import { MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlockFrom, type PlanBlock } from './plan'
+import { MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlockFrom, sourceVersionKey, type PlanBlock } from './plan'
 import { settingsOn, type DayTypeId, type SettingsChange } from './settings'
 import { freshSteps, withStepsJson, type Step } from './steps'
 
@@ -194,7 +194,7 @@ export function seriesJson(s: Series, before?: RawRecord | null): RawRecord {
   for (const v of s.versions) {
     // A new version (`changedFrom`) is a copy of the one in force at its date: what that one keeps (its block's list with
     // the items this version does not read, fields it does not know) goes on in it too – as `templateJson` copies them.
-    const source = isPlain(rawVersions[v.from]) ? v.from : Object.keys(rawVersions).filter((from) => from < v.from && isPlain(rawVersions[from])).sort().at(-1)
+    const source = sourceVersionKey(Object.keys(rawVersions).filter((from) => isPlain(rawVersions[from])), v.from)
     const was = source != null ? (rawVersions[source] as Record<string, unknown>) : {}
     const keep = (k: string) => (isPlain(was[k]) ? (was[k] as Record<string, unknown>) : {})
     versions[v.from] = { ...was, block: withStepsJson({ ...keep('block'), ...v.block } as Record<string, unknown>, v.block.steps, keep('block').steps), rule: { ...(keep('rule').kind === v.rule.kind ? keep('rule') : {}), ...v.rule }, special: v.special }

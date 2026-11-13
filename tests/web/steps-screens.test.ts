@@ -370,7 +370,7 @@ describe('zmiana kroków bloku w panelu (zakres serii – D401, D404)', () => {
     expect(useUi.getState().toasts.map((t) => [t.text, t.action?.label])).toEqual([['Krok usunięty', 'Cofnij']])
   })
 
-  it('zakres zapamiętany od razu po odpowiedzi (D443): drugie przestawienie bez czekania nie pyta; zapis, który padł, zakresu nie zmienia; „Anuluj” nic nie pamięta', async () => {
+  it('zakres zapamiętany od razu po odpowiedzi (D443): drugie przestawienie bez czekania nie pyta; odmowa serii zdejmuje zakres (przegląd 3), porażka wysłania – zostaje; „Anuluj” nic nie pamięta', async () => {
     const w = stub({}, { [DATE]: null })
     vi.mocked(askScope).mockResolvedValue('all')
     let finish: (r: SeriesResult) => void = () => undefined
@@ -386,18 +386,26 @@ describe('zmiana kroków bloku w panelu (zakres serii – D401, D404)', () => {
     expect(await second).toBe(true)
     expect(askScope).toHaveBeenCalledTimes(1)
     expect(w.seriesChange).toHaveBeenCalledTimes(2)
-    // The save failed, the scope stays: the next change does not ask either.
+    // The series refused the change („ended” – a refusal of the scope picked): the scope goes, the next change asks again.
+    expect(o.scope.current).toBeNull()
     expect(await move('s3')).toBe(true)
-    expect(askScope).toHaveBeenCalledTimes(1)
+    expect(askScope).toHaveBeenCalledTimes(2)
+    expect(o.scope.current).toBe('all')
+    // A send that failed (the bridge): no answer of the series – the scope stays, nothing asked.
+    w.seriesChange.mockImplementationOnce(async () => Promise.reject(new Error('IPC')))
+    expect(await move('s1')).toBe(false)
+    expect(o.scope.current).toBe('all')
+    expect(await move('s2')).toBe(true)
+    expect(askScope).toHaveBeenCalledTimes(2)
     // „Anuluj”: nothing is kept, the next change asks again.
     vi.mocked(askScope).mockResolvedValue(null)
     const cancelled = ctx()
     expect(await saveBlockSteps(cancelled, occ(), add, false)).toBe(false)
     expect(cancelled.scope.current).toBeNull()
-    expect(askScope).toHaveBeenCalledTimes(2)
+    expect(askScope).toHaveBeenCalledTimes(3)
     vi.mocked(askScope).mockResolvedValue('only')
     expect(await saveBlockSteps(cancelled, occ(), add, false)).toBe(true)
-    expect(askScope).toHaveBeenCalledTimes(3)
+    expect(askScope).toHaveBeenCalledTimes(4)
     expect(cancelled.scope.current).toBe('only')
   })
 

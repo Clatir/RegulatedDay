@@ -21,7 +21,7 @@ import { EmptyState, Section, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
-import { changeCase, createRequest, createTask, moveCase, removeCase, undoCase, useCases } from '../../store/cases'
+import { caseAnswer, changeCase, createRequest, createTask, moveCase, removeCase, undoCase, useCases } from '../../store/cases'
 import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
 import { changeTaskSteps, tickTaskStep } from '../../store/steps'
@@ -142,7 +142,7 @@ function NewTask({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('')
   const [busy, run] = useBusy()
   // Once: the field is cleared at once and a second Enter (or „Dodaj”) while it saves does nothing; a save that did not happen gives the title back.
-  const add = () => submitTitle(run, title, { set: setTitle, save: async (t) => (await createTask({ title: t })).saved, done: onClose })
+  const add = () => submitTitle(run, title, { set: setTitle, save: async (t) => caseAnswer(await createTask({ title: t })), done: onClose })
   return (
     <div className="flex items-center gap-2" data-testid="case-add">
       <input
@@ -227,7 +227,7 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
       </div>
       {isTask && stepsOpen && (
         <div className="border-t border-line pt-1.5" data-testid="case-steps">
-          <StepsEditor steps={r.steps} ticks onTick={(id, d) => tickTaskStep(r.id, id, d)} onOp={async (op) => stepsAnswer(op, await changeTaskSteps(r.id, op))} />
+          <StepsEditor steps={r.steps} ticks kind="task" onTick={(id, d) => tickTaskStep(r.id, id, d)} onOp={async (op) => stepsAnswer(op, await changeTaskSteps(r.id, op))} />
         </div>
       )}
       {planning && <PlanForm x={x} today={today} title={caseTitle(r, rd)} onDone={() => setPlanning(false)} />}

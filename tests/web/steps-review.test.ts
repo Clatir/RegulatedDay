@@ -48,12 +48,11 @@ function stub(o: { requests?: RawRecord[]; days?: Record<string, RawRecord | nul
 describe('zakres serii: operacja na wersji w turze zapisu (przegląd, T790)', () => {
   it('„Cała seria” i „To i następne” wysyłają operację, nie listę z bloku okna – dwa kroki z rzędu z tego samego bloku: oba', async () => {
     const { calls } = stub()
-    // Today's occurrence begun: the window's block does not follow the series – its list stays the old one.
-    const stale = planBlock({ id: 'occ', categoryId: 'inne', startMin: 600, durationMin: 60, origin: 'series', sourceId: 'ang', steps: four() })
+    // Today's occurrence begun: the window's block does not follow the series – no list of it goes, only the op.
     const a = addStepOp('A')
     const b = addStepOp('B')
-    expect(await store.changeSeriesSteps({ date: TODAY, blockId: 'occ' }, stale, 'all', a, '')).toBe(true)
-    expect(await store.changeSeriesSteps({ date: TODAY, blockId: 'occ' }, stale, 'following', b, '')).toBe(true)
+    expect(await store.changeSeriesSteps({ date: TODAY, blockId: 'occ' }, 'all', a, '')).toEqual({ answer: true, refused: false })
+    expect(await store.changeSeriesSteps({ date: TODAY, blockId: 'occ' }, 'following', b, '')).toEqual({ answer: true, refused: false })
     expect(calls).toEqual([
       [{ date: TODAY, blockId: 'occ' }, 'all', { stepsOp: a }],
       [{ date: TODAY, blockId: 'occ' }, 'following', { stepsOp: b }]

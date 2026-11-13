@@ -8,6 +8,7 @@ import { newBlockStart } from '@shared/engine/planEdit'
 import type { RdFile } from '@shared/model/rd'
 import type { CaseItem } from '@shared/engine/cases'
 import type { oneAtATime } from '../../lib/busy'
+import type { SaveAnswer } from '../../store/data'
 import { caseTitle } from './casesLogic'
 
 /** Where the day stands for the search: is it today, the logical minute now (only today's), and the day's wake. */
@@ -31,13 +32,16 @@ export const queueRowText = (x: CaseItem, rd: Pick<RdFile, 'people'>): string =>
 
 /**
  * A title field that saves once (a second Enter, or Enter and „Dodaj”, while the save runs does nothing): the field is cleared
- * at once, and given back when the save did not happen; `done` runs after a save. `run` is the screen's `useBusy` runner.
+ * at once; `done` runs after a save; the title comes back only when nothing was saved (`false`) – sent and its answer not
+ * known (`'asked'`, `caseAnswer`) it stays away, the field open: a second Enter must not make the sprawa twice. `run` is the
+ * screen's `useBusy` runner.
  */
-export async function submitTitle(run: ReturnType<typeof oneAtATime>, title: string, o: { set: (title: string) => void; save: (title: string) => Promise<boolean>; done: () => void }): Promise<void> {
+export async function submitTitle(run: ReturnType<typeof oneAtATime>, title: string, o: { set: (title: string) => void; save: (title: string) => Promise<SaveAnswer>; done: () => void }): Promise<void> {
   await run(async () => {
     if (!title.trim()) return
     o.set('')
-    if (await o.save(title)) o.done()
-    else o.set(title)
+    const answer = await o.save(title)
+    if (answer === true) o.done()
+    else if (answer === false) o.set(title)
   })
 }
