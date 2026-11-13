@@ -56,7 +56,7 @@ import type { DayTypeId } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import type { DataFolder, Inputs } from './folder'
-import { attachmentFrom, attachmentJson, attachmentRel, type Attachment } from '@shared/model/attachment'
+import { ATTACHMENTS_UNREAD_TEXT, attachmentFrom, attachmentJson, attachmentRel, type Attachment } from '@shared/model/attachment'
 
 export interface SeriesIo {
   folder: DataFolder
@@ -67,10 +67,18 @@ export interface SeriesIo {
 
 const SCOPES: readonly SeriesScope[] = ['only', 'following', 'all']
 
-/** The records one change touches: each read once (as this computer sees it), its new content kept until the edit. */
+/**
+ * The records one change touches: each read once (as this computer sees it), its new content kept until the edit. A record
+ * that goes with others (`needs` – an attachment taken with its block, T923) is laid by the queue only once they are.
+ */
 class Touched {
-  private readonly files = new Map<string, { before: RawRecord | null; after: RawRecord | null }>()
+  private readonly files = new Map<string, { before: RawRecord | null; after: RawRecord | null; needs?: readonly string[] }>()
   constructor(private readonly folder: DataFolder) {}
+
+  /** A record as it was before the change and as the change leaves it (undefined – not read by it). */
+  change(rel: string): { before: RawRecord | null; after: RawRecord | null } | undefined {
+    return this.files.get(rel)
+  }
 
   async get(rel: string): Promise<RawRecord | null> {
     const had = this.files.get(rel)
@@ -86,18 +94,24 @@ class Touched {
     return before
   }
 
-  set(rel: string, after: RawRecord | null): void {
+  set(rel: string, after: RawRecord | null, needs?: readonly string[]): void {
     const had = this.files.get(rel)
-    this.files.set(rel, { before: had ? had.before : null, after })
+    this.files.set(rel, { before: had ? had.before : null, after, ...(needs?.length ? { needs } : {}) })
   }
 
+  /** The edit's entries – those that go with others after them, with their places (`EditEntry.after`) – and the „Cofnij”. */
   entries(): { entries: EditEntry[]; undo: SeriesUndoFile[] } {
     const entries: EditEntry[] = []
     const undo: SeriesUndoFile[] = []
-    for (const [rel, { before, after }] of this.files) {
+    const at = new Map<string, number>()
+    const ordered = [...this.files].sort(([, x], [, y]) => (x.needs ? 1 : 0) - (y.needs ? 1 : 0))
+    for (const [rel, { before, after, needs }] of ordered) {
       const e = recordEdit(rel, before, after)
       if (!e) continue
-      entries.push(e)
+      // Only those written by this edit: one unchanged is laid already.
+      const deps = (needs ?? []).map((r) => at.get(r)).filter((i): i is number => i != null)
+      at.set(rel, entries.length)
+      entries.push(deps.length ? { ...e, after: deps } : e)
       undo.push({ rel, before, after })
     }
     return { entries, undo }
@@ -165,8 +179,8 @@ async function today(io: SeriesIo, b: Base, t: Touched, root: string, next: read
 }
 
 /**
- * The occurrences changed on their days that a removal or an end took out of the days' files (id → the occurrence's own
- * day), and those begun today that stayed.
+ * The occurrences changed on their days that a removal or an end took out of the days' files (id → the file it left), and
+ * those begun today that stayed.
  */
 interface Dropped {
   dropped: Map<string, string>
@@ -174,23 +188,26 @@ interface Dropped {
 }
 
 /**
- * The last day of `s` before the change when another record shares its root (an older split into parts, T702, T849):
- * what its removal or end takes stays within its days – the other part's go on. Null – no other part, no bound.
+ * The days of `s` before the change when another record shares its root (an older split into parts, T702, T849, T924):
+ * what its removal or end takes stays within them – the other part's go on. Null – no other part, no bound.
  */
-function partEnd(b: Base, s: Series): string | null {
+function partDays(b: Base, s: Series): { start: string; last: string | null } | null {
   if (!b.inp.series.some((p) => p.series.root === s.root && p.series.id !== s.id)) return null
-  return b.inp.series.find((p) => p.series.id === s.id)?.last ?? null
+  return { start: s.start, last: b.inp.series.find((p) => p.series.id === s.id)?.last ?? null }
 }
+
+/** A day of `s` from `from` on, within its part's days (`partDays`). */
+const ofPart = (part: ReturnType<typeof partDays>, from: string) => (date: string) => date >= from && (!part || (date >= part.start && (part.last == null || date <= part.last)))
 
 /**
  * The occurrences of `s` changed on their days („Tylko to”) from `from` on – an exception on its own day or one moved to
  * another – taken out of the days' files with a removal or an end (D381: the series is gone from that day on); of an
- * older part, only those of its own days (`partEnd`). Today's goes with `today` (it may have begun).
+ * older part, only those of its own days (`partDays`). Today's goes with `today` (it may have begun).
  */
 async function dropChanged(io: SeriesIo, b: Base, t: Touched, s: Series, from: string): Promise<Dropped> {
   const out: Dropped = { dropped: new Map(), kept: new Set() }
   const root = s.root
-  const until = partEnd(b, s)
+  const inPart = ofPart(partDays(b, s), from)
   const own = seriesBlockId(b.today, root)
   let dates: string[]
   try {
@@ -205,7 +222,7 @@ async function dropChanged(io: SeriesIo, b: Base, t: Touched, s: Series, from: s
     if (!raw) continue
     const file = dayFileFrom(raw, date)
     const dayOfOcc = (x: PlanBlock) => x.movedFrom ?? date
-    const gone = file.blocks.filter((x) => x.origin === 'series' && x.sourceId === root && dayOfOcc(x) >= from && (until == null || dayOfOcc(x) <= until) && !(date === b.today && x.id === own))
+    const gone = file.blocks.filter((x) => x.origin === 'series' && x.sourceId === root && inPart(dayOfOcc(x)) && !(date === b.today && x.id === own))
     if (!gone.length) continue
     // Today: one that has begun stays (it is part of the day's history).
     const day = date === b.today ? await dayOf(io, b, date, raw) : null
@@ -216,7 +233,7 @@ async function dropChanged(io: SeriesIo, b: Base, t: Touched, s: Series, from: s
         continue
       }
       next = takeBlock(next, x.id)
-      out.dropped.set(x.id, dayOfOcc(x))
+      out.dropped.set(x.id, rel)
     }
     if (next !== raw) t.set(rel, next)
   }
@@ -415,8 +432,8 @@ export function seriesChange(io: SeriesIo, target: unknown, scope: unknown, patc
       }
       if (own && ownAfter && tg.date === b.today) await today(io, b, t, s.root, next, false, { was: own, next: ownAfter })
       else await today(io, b, t, s.root, next)
-      // An end moved earlier takes the occurrences changed on their days after it, as „Zakończ serię” does (D404) – and the
-      // own attachments of the occurrences after it (D415, T920).
+      // An end moved earlier takes the occurrences changed on their days after it, as „Zakończ serię” does (D404) – with
+      // their own attachments (D421, T920).
       const lastAfter = seriesLast(changed, typeOf(b), io.holidays)
       if (endChanged && lastAfter != null && (lastBefore == null || lastAfter < lastBefore)) {
         const after = addDays(lastAfter, 1)
@@ -449,8 +466,8 @@ export function seriesRemove(io: SeriesIo, target: unknown, scope: unknown): Pro
         const r = paths.day(tg.date)
         const base = dayRaw(await t.get(r), tg.date)
         t.set(r, tg.day.ctx.snapshot.blocks.some((x) => x.id === tg.block!.id) ? setCancelled(base, tg.block.id, true) : takeBlock(base, tg.block.id))
-        // The occurrence's own attachments go with it (D410, T805) – in the same edit, back with its „Cofnij”.
-        await removeOwnAttachments(io, b, t, tg.block.id)
+        // The occurrence's own attachments go with it (D410, T805) – in the same edit, laid only once its day is (T923).
+        await removeOwnAttachments(io, b, t, tg.block.id, r)
         return s.id
       }
       const from0 = scope === 'all' ? b.today : tg.date && tg.date > b.today ? tg.date : b.today
@@ -466,48 +483,49 @@ export function seriesRemove(io: SeriesIo, target: unknown, scope: unknown): Pro
 }
 
 /**
- * The attachments `takes` picks, removed softly in the change's edit (D410). The list only says which may be taken (it is
- * trusted from memory for a minute, LIST_TRUST_MS); each is read again as this computer sees it now and changed from that
- * (T839) – a change from another computer stays, one removed there stays so. The list not readable now: `skip` – none go
- * (a removal of one occurrence, T805), `refuse` – nothing is written (unknown is never „none”, T842).
+ * The attachments `takes` picks, removed softly in the change's edit (D410), each laid only once the records it answers
+ * with (its block's – the series, a day's file) are (T923). The list only says which may be taken (it is trusted from
+ * memory for a minute, LIST_TRUST_MS); each is read again as this computer sees it now and changed from that (T839) – a
+ * change from another computer stays, one removed there stays so. The list not readable now: `skip` – none go (one
+ * occurrence, an end – D421), `refuse` – nothing is written (a removal: unknown is never „none”, T842).
  */
-async function removeAttachmentsWhere(io: SeriesIo, b: Base, t: Touched, takes: (a: Attachment) => boolean, unread: 'skip' | 'refuse'): Promise<void> {
+async function removeAttachmentsWhere(io: SeriesIo, b: Base, t: Touched, takes: (a: Attachment) => readonly string[] | null, unread: 'skip' | 'refuse'): Promise<void> {
   let raws: RawRecord[]
   try {
     raws = await io.folder.collection('attachment')
   } catch {
     if (unread === 'skip') return
-    throw new SeriesEditError('invalid', 'Listy załączników nie da się teraz odczytać – nic nie zostało zapisane, spróbuj za chwilę.')
+    throw new SeriesEditError('invalid', ATTACHMENTS_UNREAD_TEXT)
   }
-  const live = (a: Attachment | null): a is Attachment => !!a && a.removedAt == null && takes(a)
-  const ids = raws.map(attachmentFrom).filter(live).map((a) => a.id)
+  const needs = (a: Attachment | null): readonly string[] | null => (a && a.removedAt == null ? takes(a) : null)
+  const ids = raws.map(attachmentFrom).filter((a) => needs(a) != null).map((a) => a!.id)
   for (const id of ids) {
     const rel = attachmentRel(id)
     const before = await t.get(rel)
     const a = before ? attachmentFrom(before) : null
-    if (!before || !live(a)) continue
-    t.set(rel, attachmentJson({ ...a, removedAt: b.now }, before))
+    const goesWith = needs(a)
+    if (!before || !a || !goesWith) continue
+    t.set(rel, attachmentJson({ ...a, removedAt: b.now }, before), goesWith)
   }
 }
 
 /**
- * The attachments a removal or an end of a series takes with it (D415; T842, T849, T920): the days' own of its occurrences
- * from `from` on (the day after its new last day; of an older part only those of its days – `partEnd`) – an occurrence by
- * its id on the day it was added on, or one taken out of a day's file with the series (`dropped`, by its own day); one
- * begun today stays with its own (`kept`). A removal (`withSeries`) – also the series' own, from every day, the days gone
- * by too, unless another part of the same root still makes days. „Zakończ serię” keeps the series' own: they stay with
- * the days before the end. In the change's edit – back with its „Cofnij”; the list not readable now – nothing is written.
+ * The attachments a removal or an end of a series takes with it (D415, D421; T842, T849, T920, T924): the days' own of
+ * the occurrences this change takes out of the days' files – changed on their days (`dropped`; of an older part only its
+ * days) and today's when the change takes it out of today's plan (one changed on its day, begun or moved stays, and its
+ * own with it). A removal (`removal`) also takes the days' own of every occurrence of its days from `from` on (in no
+ * file) and the series' own, from every day, the days gone by too – unless another part of the same root still makes
+ * days. An end keeps those: they stay with the days before it, and so do the series' own. Each goes with the records its
+ * block stands on (the series, the day's file – T923); the list not readable now – a removal is refused, an end goes on.
  */
-async function removeSeriesAttachments(io: SeriesIo, b: Base, t: Touched, s: Series, from: string, gone: Dropped, withSeries: boolean): Promise<void> {
+async function removeSeriesAttachments(io: SeriesIo, b: Base, t: Touched, s: Series, from: string, gone: Dropped, removal: boolean): Promise<void> {
   const root = s.root
-  const until = partEnd(b, s)
-  const inPart = (date: string) => date >= from && (until == null || date <= until)
-  const kept = new Set(gone.kept)
-  // Today's occurrence begun (an end moved to yesterday leaves it in the plan): it stays with its own.
-  if (from <= b.today) {
-    const id = seriesBlockId(b.today, root)
-    if (begun(await dayOf(io, b, b.today, await t.get(paths.day(b.today))), id)) kept.add(id)
-  }
+  const inPart = ofPart(partDays(b, s), from)
+  const series = paths.record('series', s.id)
+  const todayRel = paths.day(b.today)
+  const todayId = seriesBlockId(b.today, root)
+  const day = t.change(todayRel)
+  const todayTaken = from <= b.today && !!day && touchedBlocks({ rel: todayRel, kind: 'day', date: b.today, ...day }).has(todayId)
   const shared = b.inp.series.some((p) => p.series.root === root && p.series.id !== s.id && !p.series.archived && (p.last == null || p.last >= b.today))
   await removeAttachmentsWhere(
     io,
@@ -515,19 +533,21 @@ async function removeSeriesAttachments(io: SeriesIo, b: Base, t: Touched, s: Ser
     t,
     (a) => {
       const o = a.owner
-      if (o.scope === 'series') return withSeries && !shared && o.root === root
-      if (o.scope !== 'day' || kept.has(o.blockId)) return false
-      const dropped = gone.dropped.get(o.blockId)
-      return dropped != null ? inPart(dropped) : inPart(o.date) && o.blockId === seriesBlockId(o.date, root)
+      if (o.scope === 'series') return removal && !shared && o.root === root ? [series] : null
+      if (o.scope !== 'day' || gone.kept.has(o.blockId)) return null
+      const file = gone.dropped.get(o.blockId)
+      if (file) return [series, file]
+      if (o.blockId === todayId) return todayTaken ? [series, todayRel] : null
+      return removal && inPart(o.date) && o.blockId === seriesBlockId(o.date, root) ? [series] : null
     },
-    'refuse'
+    removal ? 'refuse' : 'skip'
   )
 }
 
-/** The attachments a block of a day had of its own (not the series'), removed in the change's edit (T805). */
-function removeOwnAttachments(io: SeriesIo, b: Base, t: Touched, blockId: string): Promise<void> {
+/** The attachments a block of a day had of its own (not the series'), removed with it – once its day's file (`day`) is laid (T805, T923). */
+function removeOwnAttachments(io: SeriesIo, b: Base, t: Touched, blockId: string, day: string): Promise<void> {
   // The list not readable now: they stay (not shown without their block).
-  return removeAttachmentsWhere(io, b, t, (a) => a.owner.scope === 'day' && a.owner.blockId === blockId, 'skip')
+  return removeAttachmentsWhere(io, b, t, (a) => (a.owner.scope === 'day' && a.owner.blockId === blockId ? [day] : null), 'skip')
 }
 
 /**
@@ -559,7 +579,7 @@ export function seriesEnd(io: SeriesIo, seriesId: unknown, last: unknown): Promi
       if (!s) throw new SeriesEditError('notFound', 'Tej serii już nie ma.')
       const yesterday = addDays(b.today, -1)
       const ended = await endFrom(io, b, t, s, addDays(last < yesterday ? yesterday : last, 1), false)
-      // D415: the series' own stay with the days before the end; the occurrences after it take their own (T920).
+      // D421: the series' own and the days' before the end stay; what the end takes out of the days' files takes its own (T920).
       await removeSeriesAttachments(io, b, t, s, addDays(ended.last, 1), ended, false)
       return s.id
     },
@@ -641,19 +661,23 @@ export function seriesUndo(io: SeriesIo, undo: unknown): Promise<SeriesResult> {
     io,
     async (t) => {
       const list = Array.isArray(undo) ? undo.slice(0, UNDO_FILES_MAX + UNDO_ATTACHMENTS_MAX) : []
+      // `all` – every file of the list, `files` – those taken back (within the limits); one left out is never back, so an
+      // attachment whose block stands on it stays removed (T925).
+      const all: UndoFile[] = []
       const files: UndoFile[] = []
       let [others, attachments] = [0, 0]
       for (const u of list) {
         if (!isRaw(u) || typeof u.rel !== 'string') continue
         const c = classify(u.rel)
         if (!c || c.conflict || (c.kind !== 'series' && c.kind !== 'day' && c.kind !== 'attachment')) continue
-        if (c.kind === 'attachment' ? ++attachments > UNDO_ATTACHMENTS_MAX : ++others > UNDO_FILES_MAX) continue
-        files.push({ rel: c.canonical, kind: c.kind, date: c.date, before: isRaw(u.before) ? u.before : null, after: isRaw(u.after) ? u.after : null })
+        const f: UndoFile = { rel: c.canonical, kind: c.kind, date: c.date, before: isRaw(u.before) ? u.before : null, after: isRaw(u.after) ? u.after : null }
+        all.push(f)
+        if (!(c.kind === 'attachment' ? ++attachments > UNDO_ATTACHMENTS_MAX : ++others > UNDO_FILES_MAX)) files.push(f)
       }
       const touched = new Map<string, Set<string>>()
-      for (const f of files) if (f.kind === 'day') touched.set(f.rel, touchedBlocks(f))
+      for (const f of all) if (f.kind === 'day') touched.set(f.rel, touchedBlocks(f))
       const back = new Set<string>()
-      const put = async (f: UndoFile) => {
+      const put = async (f: UndoFile, needs?: readonly string[]) => {
         const now = await t.get(f.rel)
         if (sameAs(now, f.before)) {
           back.add(f.rel)
@@ -661,14 +685,16 @@ export function seriesUndo(io: SeriesIo, undo: unknown): Promise<SeriesResult> {
         }
         // Changed since (here or on another computer): never written over.
         if (!sameAs(now, f.after)) return
-        t.set(f.rel, f.before)
+        t.set(f.rel, f.before, needs)
         back.add(f.rel)
       }
       for (const f of files) if (f.kind !== 'attachment') await put(f)
       for (const f of files) {
         if (f.kind !== 'attachment') continue
         const a = f.before ? attachmentFrom(f.before) : null
-        if (!a || standsOn(files, touched, a).every((x) => back.has(x.rel))) await put(f)
+        const on = a ? standsOn(all, touched, a) : []
+        // Back with the files its block stands on – laid only once they are (T923).
+        if (on.every((x) => back.has(x.rel))) await put(f, on.map((x) => x.rel))
       }
       return null
     },

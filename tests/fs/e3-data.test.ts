@@ -125,6 +125,27 @@ describe('folder danych dla okna głównego', () => {
     expect(folder.queue.questions()).toEqual([])
   })
 
+  it('wpis, który idzie z innym (`after`): czeka, gdy tamten jest pytaniem; „ich” zabiera go ze sobą, „moje” zapisuje oba (T923)', async () => {
+    const r2 = paths.record('request', 'r2')
+    write(req, { schema: 1, id: 'r1', note: 'a' })
+    write(r2, { schema: 1, id: 'r2', note: 'x' })
+    const { folder } = await make()
+    // Elsewhere the note became „c”: the first entry is a question, the one that goes with it waits.
+    write(req, { schema: 1, id: 'r1', note: 'c' })
+    const out = await folder.edit([{ rel: req, edits: [{ path: ['note'], base: 'a', value: 'b' }] }, { rel: r2, edits: [{ path: ['note'], base: 'x', value: 'y' }], after: [0] }])
+    expect(out.map((o) => o.status)).toEqual(['conflict', 'waiting'])
+    expect(read(r2).note).toBe('x')
+    await folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'theirs')
+    await folder.queue.apply(folder.records)
+    expect([read(req).note, read(r2).note, folder.queue.pending.length]).toEqual(['c', 'x', 0])
+    // Again, „mine” this time: both are written.
+    write(req, { schema: 1, id: 'r1', note: 'd' })
+    await folder.edit([{ rel: req, edits: [{ path: ['note'], base: 'c', value: 'e' }] }, { rel: r2, edits: [{ path: ['note'], base: 'x', value: 'y' }], after: [0] }])
+    await folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'mine')
+    await folder.queue.apply(folder.records)
+    expect([read(req).note, read(r2).note, folder.queue.pending.length]).toEqual(['e', 'y', 0])
+  })
+
   it('rekord usunięty gdzie indziej: pytanie, nigdy ciche przywrócenie; „przywróć” odtwarza go z ostatniej wersji z moją zmianą', async () => {
     write(req, { schema: 1, id: 'r1', note: 'a', person: 'p1' })
     const { folder } = await make()

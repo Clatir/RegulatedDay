@@ -37,10 +37,17 @@ export interface QueuedEdit {
   remove?: boolean
   /** A removal: the record as you saw it (undefined – an entry written before 0.25.0: removed as it is). */
   base?: unknown
+  /**
+   * The entries (ids) this one goes with (T923): it is laid only once they are – while one of them waits or is a question,
+   * it waits too; one answered „theirs” takes it out with it (the attachments a removal took go back to how they were).
+   */
+  after?: string[]
 }
 
 /** Why an entry waits behind an earlier one for the same file that is still a question (it never goes by itself). */
 export const BEHIND_QUESTION = 'czeka na odpowiedź na wcześniejsze pytanie'
+/** Why an entry waits for the entries it goes with (`QueuedEdit.after`). */
+export const AFTER_OWNER = 'czeka na zapis zmiany, z którą idzie'
 
 export type Outcome =
   | { id: string; status: 'applied' }
@@ -208,11 +215,14 @@ export class EditQueue {
     if (this.unread) return this.entries.map((e) => ({ id: e.id, status: 'waiting' as const, why: 'kolejka nieczytelna' }))
     const out: Outcome[] = []
     const keep: QueuedEdit[] = []
-    // An entry for a file waits behind an earlier one for the same file that is still a question (its fields come after).
+    // An entry for a file waits behind an earlier one for the same file that is still a question (its fields come after);
+    // one that goes with others waits until they are laid (T923).
     const blocked = new Set<string>()
+    const pending = new Set(this.entries.map((e) => e.id))
     for (const edit of [...this.entries]) {
-      if (blocked.has(edit.rel)) {
-        const waiting: Outcome = { id: edit.id, status: 'waiting', why: BEHIND_QUESTION }
+      const behind = blocked.has(edit.rel)
+      if (behind || edit.after?.some((id) => pending.has(id))) {
+        const waiting: Outcome = { id: edit.id, status: 'waiting', why: behind ? BEHIND_QUESTION : AFTER_OWNER }
         out.push(waiting)
         this.outcomes.set(edit.id, waiting)
         keep.push(edit)
@@ -220,8 +230,10 @@ export class EditQueue {
       }
       const outcome = await this.applyOne(records, edit)
       out.push(outcome)
-      if (outcome.status === 'applied') this.outcomes.delete(edit.id)
-      else {
+      if (outcome.status === 'applied') {
+        this.outcomes.delete(edit.id)
+        pending.delete(edit.id)
+      } else {
         this.outcomes.set(edit.id, outcome)
         keep.push(edit)
         // A later edit of the file was made on top of this one (its bases are this one's values): it goes after it.
@@ -265,7 +277,18 @@ export class EditQueue {
     const o = this.outcomes.get(id)
     if (!e || !o) return false
     if (choice === 'theirs') {
-      this.entries = this.entries.filter((x) => x.id !== id)
+      // The entries that go with it leave with it (T923), and those that go with them.
+      const drop = new Set([id])
+      for (let grew = true; grew; ) {
+        grew = false
+        for (const x of this.entries) {
+          if (drop.has(x.id) || !x.after?.some((a) => drop.has(a))) continue
+          drop.add(x.id)
+          grew = true
+        }
+      }
+      this.entries = this.entries.filter((x) => !drop.has(x.id))
+      for (const x of drop) if (x !== id) this.outcomes.delete(x)
     } else if (o.status === 'conflict') {
       for (const f of e.edits) {
         const met = o.fields.find((x) => pathEq(x.path, f.path))

@@ -447,6 +447,11 @@ export interface EditEntry {
   remove?: boolean
   /** A removal: the record as you saw it when you removed it (A3-09). */
   base?: unknown
+  /**
+   * The entries before it in the same edit (by their place) it goes with (T923): laid only once they are; one of them a
+   * question – it waits; answered „theirs” – it goes too (the attachments a removal of their block took).
+   */
+  after?: number[]
 }
 
 export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting'; why?: string }

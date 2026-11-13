@@ -875,7 +875,7 @@ export class DataFolder {
    * Your edits from the main window (spec „Edycje plików … trafiają najpierw do lokalnej trwałej kolejki”): each goes to
    * the queue on the disk first, then the queue is laid onto the folder; what met a change elsewhere stays a question.
    */
-  async edit(entries: ReadonlyArray<Omit<QueuedEdit, 'id' | 'at' | 'schema'> & { schema?: number }>): Promise<Outcome[]> {
+  async edit(entries: ReadonlyArray<Omit<QueuedEdit, 'id' | 'at' | 'schema' | 'after'> & { schema?: number; after?: readonly number[] }>): Promise<Outcome[]> {
     // A new record only where there is none: a file that is there but cannot be read now (OneDrive still fetching it) or
     // that came meanwhile is never taken as missing – its every field would be a question about a change you never made.
     const fresh: string[] = []
@@ -905,8 +905,10 @@ export class DataFolder {
     const queued: QueuedEdit[] = []
     for (const e of entries) {
       const id = `${this.o.computer}-${at.toString(36)}-${(this.editSeq++).toString(36)}`
+      // The entries before it in this edit it goes with (T923), by their place.
+      const after = [...new Set(e.after ?? [])].filter((i) => Number.isInteger(i) && i >= 0 && i < ids.length).map((i) => ids[i]!)
       ids.push(id)
-      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}) })
+      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}), ...(after.length ? { after } : {}) })
     }
     // All of them on the disk at once, or none (A3-15): a save that fails leaves no part of it to be written later.
     this.queue.add(...queued)

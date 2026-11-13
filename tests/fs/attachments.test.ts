@@ -372,7 +372,15 @@ describe('usunięcie i „Cofnij” (D410, T805)', () => {
     // A template with a block of the same id (archived – it makes no day).
     write(paths.record('template', 'zwykly'), { schema: 1, id: 'zwykly', name: 'Zwykły', dayType: 'zwykly', weekdays: [], archived: true, versions: { '2026-01-01': { blocks: [planBlock({ id: 'moj', categoryId: 'inne', startMin: 9 * 60, durationMin: 30, origin: 'template' })] } } })
     const tpl = (await store.attachFiles({ scope: 'template', templateId: 'zwykly', blockId: 'moj' }, [source('b.txt')])).added[0]!
+    const edit = vi.spyOn(hub.service!.folder, 'edit')
     expect(await removeDayBlock(date, null, b, false, 'Mój')).toBe(true)
+    // Laid only once the day's file is (T923).
+    const entries = edit.mock.calls.at(-1)![0]
+    vi.restoreAllMocks()
+    expect(entries.map((e) => [e.rel, e.after ?? null])).toEqual([
+      [paths.day(date), null],
+      [attachmentRel(id), [0]]
+    ])
     expect(recordOf(id)!.removedAt).toEqual(expect.any(Number))
     expect(recordOf(tpl)!.removedAt).toBeNull()
     useUi.getState().toasts.find((t) => t.text === 'Usunięty: Mój')!.action!.run()
@@ -408,7 +416,7 @@ describe('szablon: usunięcie bloku i szablonu zdejmuje ich załączniki, „Cof
   const t = (blockId: string): AttachmentOwner => ({ scope: 'template', templateId: 'zw', blockId })
   const occ = (date: string, blockId: string) => own(templateBlockId(date, 'zw', blockId), date)
 
-  it('„Usuń z szablonu”: jego załączniki ze wszystkich dni i własne dni od daty zmiany – jedną edycją; „Cofnij” przywraca blok i załączniki', async () => {
+  it('„Usuń z szablonu”: jego załączniki ze wszystkich dni i własne dni od jutra, które tracą blok – zapisane po szablonie; „Cofnij” przywraca blok i załączniki (T847, T923)', async () => {
     const [a, b] = [blockOf('a', 'Blok A'), blockOf('b', 'Blok B')]
     write(tplRel, tpl({ '2026-01-01': [a, b] }))
     const [tomorrow, later] = [addDays(today(), 1), addDays(today(), 6)]

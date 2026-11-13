@@ -55,6 +55,12 @@ export interface Attachment {
   removedAt: number | null
 }
 
+/**
+ * Said when a change that takes attachments with it finds their list unreadable (T842, T848): it waits for it – unknown is
+ * never „none”.
+ */
+export const ATTACHMENTS_UNREAD_TEXT = 'Listy załączników nie da się teraz odczytać – nic nie zostało zapisane, spróbuj za chwilę.'
+
 /** 30 days after its removal an attachment's file and record go (D410) – the leader's task (T806). */
 export const ATTACHMENT_KEEP_MS = 30 * 24 * 60 * 60_000
 /** The longest name kept (the interface's, not the file's). */
@@ -256,10 +262,14 @@ export function ownAttachmentIds(list: readonly Attachment[], blockId: string): 
  * copy brought back by a change of the day's type – `templateOfDayBlock`), on the day the attachment was added on.
  */
 export function templateRemovalIds(list: readonly Attachment[], templateId: string, before: Template | null, after: Template | null, tomorrow: string): string[] {
+  // The blocks whose days the change moves (a removed template – all of them): only their days can lose them. The version in
+  // force changes only where a version starts – compared there, before and after.
+  const starts = [...new Set([...(before?.versions ?? []), ...(after?.versions ?? [])].map((v) => v.from))]
+  const daysOf = (t: Template | null, id: string) => starts.map((d) => (t && templateBlockOn(t, id, d) ? 1 : 0)).join('')
   const blocks = new Set<string>()
-  for (const v of before?.versions ?? []) for (const b of v.blocks) blocks.add(b.id)
-  for (const a of list) if (a.owner.scope === 'template' && a.owner.templateId === templateId) blocks.add(a.owner.blockId)
-  const goes = (blockId: string, date: string | null): boolean => {
+  for (const v of before?.versions ?? []) for (const b of v.blocks) if (!after || daysOf(before, b.id) !== daysOf(after, b.id)) blocks.add(b.id)
+  if (!after) for (const a of list) if (a.owner.scope === 'template' && a.owner.templateId === templateId) blocks.add(a.owner.blockId)
+  const goes =(blockId: string, date: string | null): boolean => {
     if (!after) return true
     if (!before) return false
     return date == null ? templateBlockAlive(before, blockId, tomorrow) && !templateBlockAlive(after, blockId, tomorrow) : templateBlockOn(before, blockId, date) && !templateBlockOn(after, blockId, date)

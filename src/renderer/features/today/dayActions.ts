@@ -291,7 +291,9 @@ export async function removeDayBlock(date: string, seen: RawRecord | null, b: Pl
     const at = Date.now()
     const removed = removalEdits(view?.attachments ?? [], ownAttachmentIds(list, b.id), at)
     attachments = removed.length ? { ids: removed.map((e) => e.rel.slice(e.rel.indexOf('/') + 1, -'.json'.length)), removedAt: at } : null
-    return [editOf(paths.day(date), before, left), ...removed]
+    // Laid only once the day's file is (T923): a question about the day keeps them until your answer, „theirs” – live.
+    const day = editOf(paths.day(date), before, left)
+    return day ? [day, ...removed.map((e) => ({ ...e, after: [0] }))] : removed
   })
   if (!isSaved(out)) {
     if (ends && refusedEdit(out)) {

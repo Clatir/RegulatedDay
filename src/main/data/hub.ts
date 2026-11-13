@@ -981,7 +981,8 @@ export class DataHub {
     const clean = entries.map((e) => {
       const c = classify(e.rel)
       if (!c || c.conflict || c.kind === 'log' || c.kind === 'presence' || c.kind === 'grades') throw new Error(`nie można edytować ${e.rel}`)
-      return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true, ...(e.remove === true && e.base !== undefined ? { base: e.base } : {}) }
+      const after = Array.isArray(e.after) ? e.after.filter((i): i is number => Number.isInteger(i)) : []
+      return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true, ...(e.remove === true && e.base !== undefined ? { base: e.base } : {}), ...(after.length ? { after } : {}) }
     })
     const out = await f.edit(clean)
     this.changed()
