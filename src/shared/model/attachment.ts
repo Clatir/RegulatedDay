@@ -12,7 +12,7 @@ import { paths } from '../data/paths'
 import { isIsoDate } from '../time/zone'
 import { templateBlockId } from '../engine/createDay'
 import { derivedId, isId } from './ids'
-import type { PlanBlock } from './plan'
+import { templateBlockAlive, templateBlockOn, type PlanBlock, type Template } from './plan'
 
 export const ATTACHMENT_SCHEMA = 1
 
@@ -247,20 +247,31 @@ export function ownAttachmentIds(list: readonly Attachment[], blockId: string): 
 }
 
 /**
- * The attachments a removal of blocks of a template takes with it (D415, T841): the template's own of those blocks – they
- * go from every day, the days gone by too – and the days' own of their occurrences from `from` on (the day it is removed
- * from; a day made before keeps its block and its own). An occurrence is known by its id, derived from its day, the
- * template and the block (also a copy brought back by a change of the day's type – `templateOfDayBlock`), on the day the
- * attachment was added on.
+ * The attachments a change of a template takes with it (D415, D420, T841, T847): `before` – the template as it was,
+ * `after` – as the change leaves it (null – removed), `tomorrow` – the first day it still makes (today is made already).
+ * The template's own of a block that was alive (`templateBlockAlive`) and is not any more – from every day, the days gone by
+ * too; the days' own from tomorrow of an occurrence on a day whose version had the block and has it no more (between
+ * the version a block left and a later one that keeps it, too). A removed template takes all of its own and the days' own
+ * of its blocks from tomorrow. An occurrence is known by its id, derived from its day, the template and the block (also a
+ * copy brought back by a change of the day's type – `templateOfDayBlock`), on the day the attachment was added on.
  */
-export function templateRemovalIds(list: readonly Attachment[], templateId: string, blockIds: readonly string[], from: string): string[] {
+export function templateRemovalIds(list: readonly Attachment[], templateId: string, before: Template | null, after: Template | null, tomorrow: string): string[] {
+  const blocks = new Set<string>()
+  for (const v of before?.versions ?? []) for (const b of v.blocks) blocks.add(b.id)
+  for (const a of list) if (a.owner.scope === 'template' && a.owner.templateId === templateId) blocks.add(a.owner.blockId)
+  const goes = (blockId: string, date: string | null): boolean => {
+    if (!after) return true
+    if (!before) return false
+    return date == null ? templateBlockAlive(before, blockId, tomorrow) && !templateBlockAlive(after, blockId, tomorrow) : templateBlockOn(before, blockId, date) && !templateBlockOn(after, blockId, date)
+  }
   return list
     .filter((a) => {
       if (a.removedAt != null) return false
       const o = a.owner
-      if (o.scope === 'template') return o.templateId === templateId && blockIds.includes(o.blockId)
-      if (o.scope !== 'day' || o.date < from) return false
-      return blockIds.some((b) => templateOfDayBlock({ id: o.blockId, sourceId: b }, o.date, [templateId]) === templateId)
+      if (o.scope === 'template') return o.templateId === templateId && goes(o.blockId, null)
+      if (o.scope !== 'day' || o.date < tomorrow) return false
+      for (const b of blocks) if (templateOfDayBlock({ id: o.blockId, sourceId: b }, o.date, [templateId]) === templateId) return goes(b, o.date)
+      return false
     })
     .map((a) => a.id)
 }

@@ -325,6 +325,11 @@ export interface DataView {
   /** Attachments of blocks (D410, attachments/<id>.json) – also the removed ones (their „Cofnij”, 30 days). */
   attachments: RawRecord[]
   /**
+   * The list of attachments could not be read now (`attachments` is then empty, not „none”): a change that takes
+   * attachments with it waits for it (T848).
+   */
+  attachmentsUnread?: boolean
+  /**
    * Attachments whose file is not on this computer yet (the record came first – OneDrive brings the file later, T802):
    * the window shows them as „not here yet”; opening one says so instead of failing.
    */

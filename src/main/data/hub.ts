@@ -42,7 +42,7 @@ import { addLink, attachmentImage, commitFiles, nodeAttachmentFiles, openAttachm
 import { attachmentFrom, ownerFrom, type AttachmentOwner } from '@shared/model/attachment'
 import { dayContextOf } from '@shared/engine/context'
 import { seriesFrom } from '@shared/model/series'
-import { blockInTemplateFrom, templateFrom } from '@shared/model/plan'
+import { templateBlockAlive, templateFrom } from '@shared/model/plan'
 import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
 import type { DayRead } from './eventLog'
 import { UnknownRecordError, type DataFolder, type TimerClick } from './folder'
@@ -419,7 +419,7 @@ export class DataHub {
     return `${head}|${today}|${JSON.stringify(await this.records())}|${JSON.stringify(days)}|${read.events.length}|${f.unsynced}|${f.unavailable}|${JSON.stringify(this.service?.backup ?? null)}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}|${JSON.stringify(moved)}|${f.computers.map((c) => `${c.id}:${c.appVersion ?? ''}`).join(',')}`
   }
 
-  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines' | 'series' | 'seriesDays' | 'allDay' | 'attachments' | 'attachmentsMissing'>> {
+  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines' | 'series' | 'seriesDays' | 'allDay' | 'attachments' | 'attachmentsUnread' | 'attachmentsMissing'>> {
     const f = this.service?.folder
     if (!f) return { rd: null, templates: [], lectures: [], requests: [], routines: [], series: [], seriesDays: {}, allDay: [], attachments: [], attachmentsMissing: [] }
     const settled = async <T>(p: Promise<T>, fallback: T) => p.catch(() => fallback)
@@ -430,9 +430,16 @@ export class DataHub {
     } catch {
       rdKnown = false
     }
+    // Attachments not readable now: none shown, and a change that takes them with it waits (T848).
+    let attachments: RawRecord[] = []
+    let attachmentsUnread = false
+    try {
+      attachments = await f.collection('attachment')
+    } catch {
+      attachmentsUnread = true
+    }
     // The series as last seen when they cannot be read now (T717): never „none” – the days to come would lose their
     // occurrences and the panel its „Powtarzaj”.
-    const attachments = await settled(f.collection('attachment'), [])
     let series = this.lastSeries?.folder === this.folder ? this.lastSeries : { folder: this.folder, records: [], days: {} }
     try {
       if (!rdKnown) throw new Error(SETTINGS_FILE)
@@ -451,6 +458,7 @@ export class DataHub {
       seriesDays: series.days,
       allDay: await settled(f.collection('allDay'), []),
       attachments,
+      attachmentsUnread,
       attachmentsMissing: await this.missingFiles(attachments)
     }
   }
@@ -912,9 +920,9 @@ export class DataHub {
   }
 
   /**
-   * The block an attachment is added to is still there (T839, T844): a day's – in that day's plan or moved from it to another
-   * day; a template's – in the version of its template in force tomorrow or a later one (D415: one taken out of them had
-   * its attachments removed, though the days gone by keep it); a series' – a series of that root not removed („Cała
+   * The block an attachment is added to is still there (T839, T844, T847): a day's – in that day's plan or moved from it
+   * to another day; a template's – `templateBlockAlive` from tomorrow, the rule its removal goes by (D415: one taken out
+   * had its attachments removed, though the days gone by keep it); a series' – a series of that root not removed („Cała
    * seria”). Not known now (a file unreadable) – yes: a record shown is better than one removed by mistake.
    */
   private async ownerAlive(owner: AttachmentOwner): Promise<boolean> {
@@ -922,7 +930,7 @@ export class DataHub {
       const f = this.need()
       if (owner.scope === 'template') {
         const t = templateFrom(await f.recordView(paths.record('template', owner.templateId)))
-        return !!t && blockInTemplateFrom(t, owner.blockId, addDays(logicalDayOf(f.clock.now()), 1))
+        return !!t && templateBlockAlive(t, owner.blockId, addDays(logicalDayOf(f.clock.now()), 1))
       }
       if (owner.scope === 'series') {
         return (await f.collection('series')).some((r) => {
