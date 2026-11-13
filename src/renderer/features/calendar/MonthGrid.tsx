@@ -1,16 +1,20 @@
 /**
  * A month as a grid (D295): weeks from Monday, every day a cell with its colour and marks; several dates are selected
  * by dragging or with Ctrl (Shift extends from the last one), a plain click on a day opens it (when the host wants that).
- * A host may give the day's all-day events (D405): the first one with its colour's dot and „+N” for the rest, read only.
+ * A host may give the day's all-day events (D405): the first one with its colour's dot and „+N” for the rest, read only – or the
+ * detail of the day (D418, D422: up to three miniature bars, „+N” for all the rest, the dot of the load), which takes their place.
  */
 import { useRef, useState, type ReactNode } from 'react'
 import type { AllDayEvent } from '@shared/model/allDay'
-import { ALL_DAY_COLOR_HEX } from '@shared/theme'
+import { ALL_DAY_COLOR_HEX, PALETTE } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
 import { cx } from '../../components/ui'
 import { monthLabel } from '../allday/allDayText'
+import type { MonthCellView } from './monthCellView'
 
 export const MONTH_NAMES = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień']
+/** The dot of the load in three shades of one colour (D418): the more of the budget, the fuller it is. */
+const LOAD_OPACITY = { low: 0.3, mid: 0.65, high: 1 } as const
 const WEEKDAYS = ['pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'nd']
 
 export function monthOf(date: string): string {
@@ -50,7 +54,15 @@ export function MonthGrid({
   onSelect: (dates: Set<string>) => void
   /** A plain click: open the day (otherwise the click selects it). */
   onOpen?: (date: string) => void
-  cell: (date: string) => { tone: string | null; marks: ReactNode; title?: string; /** The day's events in their order (`eventsOn`); the wizard gives none. */ events?: readonly AllDayEvent[] }
+  cell: (date: string) => {
+    tone: string | null
+    marks: ReactNode
+    title?: string
+    /** The day's events in their order (`eventsOn`); the wizard gives none. */
+    events?: readonly AllDayEvent[]
+    /** The bars, „+N” and the load of the day (D418, `monthCellView`); none – the first event's line, as the wizard has it. */
+    detail?: MonthCellView
+  }
   today: string
   'data-testid'?: string
 }) {
@@ -114,7 +126,8 @@ export function MonthGrid({
                 setDrag(null)
               }}
               className={cx(
-                'relative flex min-h-[58px] flex-col items-start rounded border px-1.5 py-1 text-left',
+                'relative flex flex-col items-start rounded border px-1.5 py-1 text-left',
+                c.detail ? 'min-h-[84px]' : 'min-h-[58px]',
                 sel ? 'border-lamp ring-1 ring-lamp' : 'border-line',
                 // Outside the month: a dashed edge and a muted number – its text keeps its contrast (A8-05).
                 !inMonth && 'border-dashed text-muted',
@@ -123,12 +136,37 @@ export function MonthGrid({
               style={{ background: c.tone ?? undefined }}
             >
               <span className="num text-[12px]">{Number(d.slice(8, 10))}</span>
-              {ev && (
-                <span className="flex w-full min-w-0 items-center gap-1 text-[10px] leading-tight text-fg" data-testid={`day-events-${d}`}>
-                  <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: ALL_DAY_COLOR_HEX[ev.first.color] }} aria-hidden="true" />
-                  <span className="min-w-0 truncate">{ev.first.title}</span>
-                  {ev.more > 0 && <span className="shrink-0 text-muted">+{ev.more}</span>}
+              {c.detail?.load && (
+                <span
+                  className="absolute top-1.5 right-1.5 inline-block h-[8px] w-[8px] rounded-full ring-1 ring-fg/40"
+                  style={{ background: PALETTE.lamp, opacity: LOAD_OPACITY[c.detail.load.level] }}
+                  title={c.detail.load.title}
+                  aria-label={c.detail.load.title}
+                  data-testid={`month-load-${d}`}
+                  data-level={c.detail.load.level}
+                />
+              )}
+              {c.detail ? (
+                <span className="flex w-full min-w-0 flex-col gap-px" data-testid={`month-bars-${d}`}>
+                  {c.detail.bars.map((b) => (
+                    <span key={b.key} className="block h-[12px] truncate rounded-[2px] border-l-2 px-1 text-[9.5px] leading-[12px] text-fg" style={{ background: b.fill, borderLeftColor: b.edge }} title={b.title} data-testid={`month-bar-${d}`}>
+                      {b.label}
+                    </span>
+                  ))}
+                  {c.detail.more > 0 && (
+                    <span className="num text-[10px] leading-tight text-muted" data-testid={`month-more-${d}`}>
+                      +{c.detail.more}
+                    </span>
+                  )}
                 </span>
+              ) : (
+                ev && (
+                  <span className="flex w-full min-w-0 items-center gap-1 text-[10px] leading-tight text-fg" data-testid={`day-events-${d}`}>
+                    <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: ALL_DAY_COLOR_HEX[ev.first.color] }} aria-hidden="true" />
+                    <span className="min-w-0 truncate">{ev.first.title}</span>
+                    {ev.more > 0 && <span className="shrink-0 text-muted">+{ev.more}</span>}
+                  </span>
+                )
               )}
               <span className="mt-auto flex w-full flex-wrap gap-0.5 text-[10px] leading-tight text-fg">{c.marks}</span>
             </button>

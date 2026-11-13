@@ -245,8 +245,10 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('nav-calendar').click()
       await expect(page.getByTestId('calendar')).toBeVisible()
       const todayCell = page.getByTestId(`day-${logicalToday()}`)
-      // The days' files read first (today's own type „zwykły” is marked from its file) – then the text to keep.
+      // The days' files read first (today's own type „zwykły” is marked from its file) and the month counted (the bars, „+N” and
+      // the dot of the load of D418 come with it) – then the text to keep.
       await expect(todayCell).toContainText('zwykły')
+      await expect(page.getByTestId('calendar')).toHaveAttribute('data-counted', 'true', { timeout: 30_000 })
       const todayText = (await todayCell.textContent()) ?? ''
       await todayCell.click({ modifiers: ['Control'] })
       await page.getByTestId('calendar-type-zjazd-zdalny').click()
