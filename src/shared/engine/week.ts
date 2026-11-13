@@ -15,7 +15,8 @@ import { isKnown } from '../model/events'
 import type { Step } from '../model/steps'
 import type { BoundaryOutcome } from './outcome'
 import { dayOutcome } from './outcome'
-import { blockInfos, plannedSpan, type BlockInfo } from './blocks'
+import { blockInfos, movableBlock, plannedSpan, type BlockInfo } from './blocks'
+import { columnEnergy, type EnergyTrack } from './energyTrack'
 import { namingOf } from './context'
 import { snapshotEntries } from './createDay'
 import { computeDay, type DayContext, type DayState } from './day'
@@ -54,6 +55,21 @@ export interface HorizonBlock {
   background: boolean
   /** Its steps with the ticks of the day (D440) – the counter „✓ 3/4” on the tile; absent – none. */
   steps?: Step[]
+  /**
+   * It may be dragged to another place or another day (D417: the rule of „Dziś”, D305 – `movableBlock`; never on a day gone
+   * by); absent – not.
+   */
+  movable?: true
+  /** Fixed in the plan (its hour is fixed: a meeting, a lecture, a class of a „zjazd”, a session); absent – flexible. */
+  fixed?: true
+  /** A trading session (a category of the kind „sesja”) or the second shift (D192); absent – not. */
+  session?: true
+}
+
+/** The day's work against its budget (minutes, spec „Budżet pracy”): run so far and forecast from now; a day gone by – as written. */
+export interface HorizonBudget {
+  workMin: number
+  limitMin: number
 }
 
 /**
@@ -107,6 +123,10 @@ export interface HorizonDay {
   /** Minutes of study blocks run (today: so far). */
   studyMin: number
   sessions: SessionCount
+  /** The energy's curve of the column (D417, `columnEnergy`); null – not known (no check-in), the module off, or not read. */
+  energy: EnergyTrack | null
+  /** Work against the budget (D418 – the load of a day of the month); null – not read, or a day gone by nobody used. */
+  budget: HorizonBudget | null
 }
 
 /** A frozen day: the events its freeze counted and its stored grade. */
@@ -119,7 +139,7 @@ const NO_SESSIONS: SessionCount = { clean: 0, extended: 0, outsidePlan: 0 }
 
 /** A day whose log cannot be read now: no blocks, no measures. */
 export function unknownDay(date: string, when: HorizonWhen): HorizonDay {
-  return { date, when, read: 'unknown', dayType: null, templateId: null, frozen: false, blocks: [], wakeMin: null, bedtimeMin: null, boundary: null, extensionMin: 0, regen: null, studyMin: 0, sessions: { ...NO_SESSIONS } }
+  return { date, when, read: 'unknown', dayType: null, templateId: null, frozen: false, blocks: [], wakeMin: null, bedtimeMin: null, boundary: null, extensionMin: 0, regen: null, studyMin: 0, sessions: { ...NO_SESSIONS }, energy: null, budget: null }
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -153,6 +173,9 @@ function begunState(f: BlockFact, when: HorizonWhen): HorizonBlockState {
   return f.runs.some((r) => r.to === OPEN) ? 'running' : 'paused'
 }
 
+/** A trading session (a category of the kind „sesja”) or the second shift (D192: it is a session). */
+const isSessionBlock = (b: BlockInfo): boolean => b.rules.kind === 'session' || b.secondShift
+
 /**
  * The blocks of the day on the axis, as the day's own axis places them (`dayAxis`): a begun block where it ran, one still
  * to come today where the forecast puts it, otherwise at its planned time (an anchored one after its anchor); blocks
@@ -166,8 +189,21 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
   const placed = new Map(state.forecast.map((p) => [p.block.id, p]))
   const naming = namingOf(ctx, state.facts)
   const out: HorizonBlock[] = []
-  const push = (info: BlockInfo, named: NamedBlock, from: number, to: number, st: HorizonBlockState, outsidePlan: boolean, steps?: Step[]) =>
-    out.push({ id: info.id, named, categoryId: info.categoryId, startMin: lm(from), endMin: lm(Math.max(to, from + 1)), state: st, outsidePlan, background: info.bg, ...(steps?.length ? { steps } : {}) })
+  const push = (info: BlockInfo, named: NamedBlock, from: number, to: number, st: HorizonBlockState, outsidePlan: boolean, steps?: Step[], movable = false) =>
+    out.push({
+      id: info.id,
+      named,
+      categoryId: info.categoryId,
+      startMin: lm(from),
+      endMin: lm(Math.max(to, from + 1)),
+      state: st,
+      outsidePlan,
+      background: info.bg,
+      ...(steps?.length ? { steps } : {}),
+      ...(movable ? { movable: true as const } : {}),
+      ...(info.fixed ? { fixed: true as const } : {}),
+      ...(isSessionBlock(info) ? { session: true as const } : {})
+    })
   for (const p of ctx.plan) {
     const info = byId.get(p.id)
     if (!info) continue
@@ -184,7 +220,8 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
     const to = fc?.to ?? span?.end
     if (from == null || to == null) continue
     const st: HorizonBlockState = gone ?? (when === 'past' || (nowIdx != null && to <= nowIdx) ? 'missed' : 'planned')
-    push(info, named, from, to, st, false, p.steps)
+    // D417: as „Dziś” drags it (`movableBlock`, where the axis shows its end); a day gone by stays as it was.
+    push(info, named, from, to, st, false, p.steps, when !== 'past' && movableBlock(info, f, to, nowIdx))
   }
   for (const info of state.blocks) {
     if (info.inPlan) continue
@@ -250,9 +287,10 @@ export function sessionsOf(ctx: DayContext, state: DayState, when: HorizonWhen):
 
 /**
  * One day of the horizon (`when` – against today; `frozen` – a frozen day's freeze), counted once: its column of the week
- * and its measures of the month's goals.
+ * and its measures of the month's goals, the curve of its energy (D417; `energyOn` – the module as the settings have it) and
+ * its work against the budget (D418).
  */
-export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay | null = null): HorizonDay {
+export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay | null = null, energyOn = true): HorizonDay {
   const past = when === 'past'
   if (past && !ctx.events.length && ctx.snapshot.dayType !== 'zjazd-stacjonarny') return quietDay(ctx)
   // A day gone by as its grade counts it (as written, to its end); a frozen one up to the events its freeze named.
@@ -299,7 +337,10 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
     extensionMin,
     regen,
     studyMin: when === 'future' ? 0 : studyMinutes(state, when),
-    sessions: sessionsOf(counted, state, when)
+    sessions: sessionsOf(counted, state, when),
+    // Drawn with the axis it lies under (a frozen day's later corrections too).
+    energy: columnEnergy(axis.ctx, axis.state, when, energyOn),
+    budget: { workMin: state.budgetUsedMin + state.budget.forecastMin, limitMin: state.budget.limitMin }
   }
 }
 
@@ -318,7 +359,19 @@ function quietDay(ctx: DayContext): HorizonDay {
     const span = info ? plannedSpan(info, byId) : null
     if (!info || !span) continue
     const named: NamedBlock = { categoryId: p.categoryId, variantId: p.variantId, routine: p.routine, requests: p.requests, note: p.note, origin: p.origin, sourceId: p.sourceId }
-    blocks.push({ id: p.id, named, categoryId: p.categoryId, startMin: lm(span.start), endMin: lm(Math.max(span.end, span.start + 1)), state: 'missed', outsidePlan: false, background: info.bg, ...(p.steps.length ? { steps: p.steps } : {}) })
+    blocks.push({
+      id: p.id,
+      named,
+      categoryId: p.categoryId,
+      startMin: lm(span.start),
+      endMin: lm(Math.max(span.end, span.start + 1)),
+      state: 'missed',
+      outsidePlan: false,
+      background: info.bg,
+      ...(p.steps.length ? { steps: p.steps } : {}),
+      ...(info.fixed ? { fixed: true as const } : {}),
+      ...(isSessionBlock(info) ? { session: true as const } : {})
+    })
   }
   blocks.sort((a, b) => a.startMin - b.startMin || (a.id < b.id ? -1 : 1))
   return { ...unknownDay(ctx.date, 'past'), read: 'full', dayType: ctx.snapshot.dayType, templateId: ctx.snapshot.templateId, blocks, wakeMin: ctx.wakeMin, boundary: 'free' }
@@ -343,8 +396,26 @@ export interface WeekView {
 
 /** The week from Monday `week` from its days (any order; a missing one – not read). */
 export function weekViewOf(week: string, today: string, days: readonly HorizonDay[]): WeekView {
+  return { week, ...daysViewOf(weekDates(week), today, days) }
+}
+
+/** The days one view of days asks for at most (`daysView`: „3 dni”, „Agenda” – two weeks with room, T908). */
+export const DAYS_VIEW_MAX = 14
+
+/** Days of the horizon on one axis of hours (D417: „3 dni”, D418: „Agenda”) – the week's columns for any dates. */
+export interface DaysView {
+  today: string
+  /** In the order of the dates asked. */
+  days: HorizonDay[]
+  /** The common axis (logical minutes), as the week's (`WeekView.from`, `WeekView.to`). */
+  from: number
+  to: number
+}
+
+/** The days `dates` from the days counted (any order; a missing one – not read), on the common axis of the week. */
+export function daysViewOf(dates: readonly string[], today: string, days: readonly HorizonDay[]): DaysView {
   const byDate = new Map(days.map((d) => [d.date, d]))
-  const list = weekDates(week).map((date) => byDate.get(date) ?? unknownDay(date, whenOf(date, today)))
+  const list = dates.map((date) => byDate.get(date) ?? unknownDay(date, whenOf(date, today)))
   let from = 6 * 60
   let to = 22 * 60
   for (const d of list) {
@@ -355,5 +426,11 @@ export function weekViewOf(week: string, today: string, days: readonly HorizonDa
       to = Math.max(to, b.endMin)
     }
   }
-  return { week, today, days: list, from: Math.max(240, from), to: Math.min(1680, to) }
+  return { today, days: list, from: Math.max(240, from), to: Math.min(1680, to) }
 }
+
+/** The dates of „3 dni” around `date` (D417): the day before, the day, the day after – the arrows move by one day. */
+export const threeDays = (date: string): string[] => [addDays(date, -1), date, addDays(date, 1)]
+
+/** The dates of „Agenda” (D418): seven days from `today`. */
+export const agendaDates = (today: string): string[] => Array.from({ length: 7 }, (_, i) => addDays(today, i))

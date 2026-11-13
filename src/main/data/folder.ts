@@ -29,7 +29,8 @@ import { requestAction, type RequestAction } from '@shared/engine/requests'
 import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft } from '@shared/engine/timer'
 import { dayStart, weekStart } from '@shared/time/day'
 import { goalsDates, goalsProgress, type GoalsView } from '@shared/engine/goals'
-import { unknownDay, weekDates, weekViewOf, whenOf, type HorizonDay, type WeekView } from '@shared/engine/week'
+import { daysViewOf, unknownDay, weekDates, weekViewOf, whenOf, type DaysView, type HorizonDay, type WeekView } from '@shared/engine/week'
+import { monthDates, monthDayOf, type MonthView } from '@shared/engine/calendarViews'
 import { goalsEdits, NO_GOALS, previousMonth, type GoalsPatch } from '@shared/model/goals'
 import { computeEnergy, newDescents, type EnergyState } from '@shared/engine/energy'
 import { betterFreeze, foldFacts, isRunning, isRunningRequest, type BlockFact, type DayFacts } from '@shared/engine/facts'
@@ -135,8 +136,11 @@ const PEOPLE_DAYS = 28
 const PEOPLE_RECOUNT_MS = 15 * 60_000
 /** The rituals of this many days back are remembered (the morning shows at most 72 h of days to close). */
 const RITUAL_MEMO_DAYS = 4
-/** The days of the horizon remembered at most (the ones asked last): a month of goals and the week shown, with room. */
-const HORIZON_MEMO_DAYS = 70
+/**
+ * The days of the horizon remembered at most (the ones asked last): a month of goals, the month of „Kalendarz” (D418), the
+ * week shown, „3 dni” and „Agenda” (D417), with room – 14 weeks (T907; before SNT1: 70).
+ */
+const HORIZON_MEMO_DAYS = 98
 
 /** Why an answer of the ritual was refused, in words (never the choice's id). */
 function refusalOf(choice: string): string {
@@ -1422,8 +1426,11 @@ export class DataFolder {
   private async horizonDays(dates: readonly string[], at: number): Promise<HorizonDay[]> {
     const today = logicalDayOf(at)
     const inp = await this.inputs(true).catch(() => null)
+    // The energy module as the settings have it (D417: the columns' curves; a day's own switches in its log win). rd.json
+    // not readable now – as its default (on); `inputs` read it a moment before, so this is that same version.
+    const energyOn = rdFrom(await this.recordView(paths.settings).catch(() => undefined)).general.modules.energy
     const out: HorizonDay[] = []
-    for (const date of dates) out.push(inp ? await this.horizonDay(date, today, at, inp) : unknownDay(date, whenOf(date, today)))
+    for (const date of dates) out.push(inp ? await this.horizonDay(date, today, at, inp, energyOn) : unknownDay(date, whenOf(date, today)))
     // The days asked last stay remembered (two months and a week: a month's goals and the week shown).
     for (const d of this.horizonMemo.keys()) if (this.horizonMemo.size > HORIZON_MEMO_DAYS) this.horizonMemo.delete(d)
     return out
@@ -1437,7 +1444,7 @@ export class DataFolder {
    * timed out or started again): this day unknown – said in the log, by its date and the kind of the error – the others
    * go on.
    */
-  private async horizonDay(date: string, today: string, at: number, inp: Inputs): Promise<HorizonDay> {
+  private async horizonDay(date: string, today: string, at: number, inp: Inputs, energyOn: boolean): Promise<HorizonDay> {
     const when = whenOf(date, today)
     const next = addDays(date, 1)
     try {
@@ -1446,7 +1453,7 @@ export class DataFolder {
       const nextFile = await this.dayFile(next, true)
       const made = daySnapshotOf(read.events) != null
       const records = made ? [this.recordSig(paths.day(date)), this.recordSig(paths.day(next)), nextWakeForBedtime(null, nextFile, inp.changes, next)] : this.contextSig(date)
-      const key = JSON.stringify([when === 'today' ? Math.floor(at / 60_000) : when === 'future' ? today : null, read.lastByComputer, read.events.length, read.copies, records, this.queue.pending.length])
+      const key = JSON.stringify([when === 'today' ? Math.floor(at / 60_000) : when === 'future' ? today : null, read.lastByComputer, read.events.length, read.copies, records, this.queue.pending.length, energyOn])
       const was = this.horizonMemo.get(date)
       let day: HorizonDay
       let seq: number
@@ -1457,7 +1464,7 @@ export class DataFolder {
           const run = (async () => {
             const ctx = dayContextOf(inp, { date, events: read.events, dayFile, nextFile }, this.o.holidays, at)
             const frozen = when === 'past' ? foldFacts(gridOf(date), read.events).frozen : null
-            return (this.o.worker ?? inProcess).run({ kind: 'horizon', ctx, when, frozen: frozen ? { know: frozen.know, grade: frozen.grade } : null })
+            return (this.o.worker ?? inProcess).run({ kind: 'horizon', ctx, when, frozen: frozen ? { know: frozen.know, grade: frozen.grade } : null, energyOn })
           })()
           const mine = { key, run, seq: ++this.horizonSeq }
           job = mine
@@ -1489,6 +1496,20 @@ export class DataFolder {
   async weekView(date: string, at = this.clock.now()): Promise<WeekView> {
     const week = weekStart(date)
     return weekViewOf(week, logicalDayOf(at), await this.horizonDays(weekDates(week), at))
+  }
+
+  /** Days of the horizon on one axis (D417 „3 dni”, D418 „Agenda”): each as the week counts it, in the order asked. */
+  async daysView(dates: readonly string[], at = this.clock.now()): Promise<DaysView> {
+    return daysViewOf(dates, logicalDayOf(at), await this.horizonDays(dates, at))
+  }
+
+  /**
+   * The month shown in „Kalendarz” (D418): each of its days as the week counts it, given as its fixed blocks and its load of
+   * work against the budget (`monthDayOf`) – the cell's bars and „+N” the window lays with the all-day events (`monthCell`).
+   */
+  async monthView(month: string, at = this.clock.now()): Promise<MonthView> {
+    const days = await this.horizonDays(monthDates(month), at)
+    return { month, today: logicalDayOf(at), days: days.map(monthDayOf) }
   }
 
   /**

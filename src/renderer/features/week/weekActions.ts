@@ -7,7 +7,7 @@ import { editStands, inverseEdit } from '@shared/data/merge'
 import { plDateWithWeekday } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
 import { isSaved, trySaveWith, useData } from '../../store/data'
-import { countDay, dayUsable } from '../../store/day'
+import { countDay, dayUsable, type DayModel } from '../../store/day'
 import { toast } from '../../store/ui'
 import { dropWeekPushDays, useWeekPush, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 import { dayFileEdit, withPushed, type PushedStart } from '../today/dayActions'
@@ -76,14 +76,22 @@ export interface WeekAdded extends WeekAdds {
  * added as before the pushing, never refused (D72).
  */
 async function pushedFor(date: string, base: RawRecord | null, block: PlanBlock): Promise<PushedStart[]> {
+  const model = await countedDay(date, base)
+  return model ? pushedStarts(model.ctx.plan, addChange(model, block, true)) : []
+}
+
+/**
+ * A day as the engine has it now, counted on `base` – its file as the edit is made on it (its logs from `dayData`; the energy
+ * not counted). Null: the day cannot be counted now (its logs not read whole, the bridge fails).
+ */
+export async function countedDay(date: string, base: RawRecord | null): Promise<DayModel | null> {
   try {
     const data = await window.rd.dayData(date)
-    if (!dayUsable(data)) return []
+    if (!dayUsable(data)) return null
     const { rd, templates, lectures, seriesPlans } = useData.getState()
-    const model = countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures, series: seriesPlans }, Date.now(), false)
-    return pushedStarts(model.ctx.plan, addChange(model, block, true))
+    return countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures, series: seriesPlans }, Date.now(), false)
   } catch {
-    return []
+    return null
   }
 }
 
@@ -190,6 +198,16 @@ export async function undoWeekPush(push: WeekPush): Promise<WeekUndone> {
   const out = await trySaveWith(async () => {
     const files = await window.rd.dayFiles(push.days.map((d) => d.date))
     const back: EditEntry[] = []
+    // D417: a block moved between two days goes back to both or to none – one day alone would leave it on neither day
+    // or on both. A day not readable now: nothing is done, the line stays; one changed since: both stay as they are.
+    if (push.move) {
+      r.unreadable = push.days.filter((d) => !(d.date in files)).map((d) => d.date)
+      if (r.unreadable.length) return []
+      if (!push.days.every((d) => weekPushStands(d, files[d.date] ?? null))) {
+        r.changed = push.days.map((d) => d.date)
+        return []
+      }
+    }
     for (const d of push.days) {
       if (!(d.date in files)) {
         r.unreadable.push(d.date)

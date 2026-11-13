@@ -6,7 +6,7 @@
  */
 import { REQUEST_CATEGORY, type CategoryRules } from '../model/categories'
 import { newId } from '../model/ids'
-import { dayRaw, putBlock, setMovedTo, setStepsDone, stepsDoneIn, takeBlock, type Raw } from '../data/dayEdits'
+import { blockJson, dayBlocks, dayRaw, isRaw, putBlock, putRawBlock, setMovedTo, setStepsDone, stepsDoneIn, takeBlock, type Raw } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
 import { dayFileFrom, MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlock, type DayFile, type PlanBlock, type Template } from '../model/plan'
 import { freshSteps } from '../model/steps'
@@ -126,9 +126,11 @@ export function movedBlock(b: PlanBlock, plan: readonly PlanBlock[], fromDate: s
 /**
  * The two files of a move (spec „Przeniesienie”): the source notes where the block went (one of yours leaves its blocks),
  * the target takes it – and forgets a move of the same block away from it before (a block moved back is there again).
+ * `startMin` – its start on the target (D417: where it was dropped in a column of „Tydzień” or „3 dni”); none – its planned
+ * time, as „Przenieś na…”.
  */
-export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou = true): { source: Raw; target: Raw } {
-  const moved = movedBlock(b, plan, fromDate, byYou)
+export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou = true, startMin?: number): { source: Raw; target: Raw } {
+  const moved = movedBlock(b, plan, fromDate, byYou, startMin)
   const own = dayFileFrom(fromRaw ?? {}, fromDate).blocks.some((x) => x.id === b.id)
   // Its ticks go with it (D440, D442): the target has exactly the ticks the source day has for it now – its file says them,
   // whatever ticks the block given carries (one read from the file has none) – an old tick of the block there (from before
@@ -136,7 +138,11 @@ export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanB
   const ticks = stepsDoneIn(fromRaw, b.id)
   let source = setStepsDone(setMovedTo(dayRaw(fromRaw, fromDate), b.id, toDate), b.id, [])
   if (own) source = takeBlock(source, b.id)
-  const target = setStepsDone(setMovedTo(putBlock(dayRaw(toRaw, toDate), moved), b.id, null), b.id, ticks)
+  // The block as the source's file holds it goes whole (T901): fields this version does not know (a newer one wrote them)
+  // stay with it – only what the move changes is written over them.
+  const raw = dayBlocks(dayRaw(fromRaw, fromDate)).find((x) => isRaw(x) && x.id === b.id) as Raw | undefined
+  const base = dayRaw(toRaw, toDate)
+  const target = setStepsDone(setMovedTo(raw ? putRawBlock(base, blockJson(moved, raw)) : putBlock(base, moved), b.id, null), b.id, ticks)
   return { source, target }
 }
 

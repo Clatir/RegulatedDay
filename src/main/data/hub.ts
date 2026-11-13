@@ -28,7 +28,8 @@ import { reviewPrompt } from '@shared/engine/calibration'
 import type { SideB } from '@shared/engine/sideB'
 import type { StatsPeriod, StatsResult } from '@shared/engine/stats'
 import type { GoalsView } from '@shared/engine/goals'
-import type { WeekView } from '@shared/engine/week'
+import { DAYS_VIEW_MAX, type DaysView, type WeekView } from '@shared/engine/week'
+import type { MonthView } from '@shared/engine/calendarViews'
 import { goalsPatchFrom, isMonth } from '@shared/model/goals'
 import { keptOnRestore, rdFrom } from '@shared/model/rd'
 import { requestCounters } from '@shared/engine/requests'
@@ -1113,6 +1114,21 @@ export class DataHub {
   async weekView(date: string): Promise<WeekView> {
     if (!isIsoDate(date)) throw new Error('data tygodnia')
     return this.need().weekView(date)
+  }
+
+  /**
+   * Days of the horizon on one axis (D417 „3 dni”, D418 „Agenda”): 1 to `DAYS_VIEW_MAX` dates, each a date, none twice
+   * (checked here – the window never asks the helper process for an unbounded count).
+   */
+  async daysView(dates: unknown): Promise<DaysView> {
+    if (!Array.isArray(dates) || !dates.length || dates.length > DAYS_VIEW_MAX || !dates.every(isIsoDate) || new Set(dates).size !== dates.length) throw new Error('dni widoku')
+    return this.need().daysView(dates as string[])
+  }
+
+  /** The month shown in „Kalendarz” (D418, 'RRRR-MM'): its days' fixed blocks and load. */
+  async monthView(month: unknown): Promise<MonthView> {
+    if (typeof month !== 'string' || !isMonth(month)) throw new Error('miesiąc kalendarza')
+    return this.need().monthView(month)
   }
 
   /** A month's goals (D356) with the month before's and the progress so far. */

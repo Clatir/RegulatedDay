@@ -4,8 +4,9 @@
  * dimmed when passed, parked or cancelled; the lines of the wake, the boundary (approved – solid, a proposal – dashed),
  * the maximum, the hard end, the bedtime's forecast and now; the energy's forecast (after the check-in).
  */
-import { ownHourBlock, plannedSpan } from '@shared/engine/blocks'
+import { movableBlock, plannedSpan } from '@shared/engine/blocks'
 import { namingOf } from '@shared/engine/context'
+import { energyTrack } from '@shared/engine/energyTrack'
 import { atOf, logicalSpan } from '@shared/engine/grid'
 import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
@@ -70,8 +71,9 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       ...(counter ? { steps: counter } : {}),
       ...(edge ? { resize: 'end' as const } : {}),
       // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
-      // a class imported from the PDF of „zjazdy” – D357, nor the second shift – D192), not passed.
-      movable: gone == null && f?.startedAt == null && ownHourBlock(info) && (nowIdx == null || to > nowIdx)
+      // a class imported from the PDF of „zjazdy” – D357, nor the second shift – D192), not passed – the one rule of
+      // `movableBlock`, also for the columns of „Tydzień” and „3 dni” (D417).
+      movable: movableBlock(info, f, to, nowIdx)
     })
   }
   // Blocks begun outside the plan („Pracuję”, a block begun by hand) or taken out of it after they began (D336): where
@@ -103,16 +105,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
   markers.push({ at: lm(state.bedtime.forecast), label: `pora snu ${logicalClock(lm(state.bedtime.forecast))}`, tone: 'muted' })
   if (nowIdx != null && nowIdx >= 0 && nowIdx <= g.length) markers.push({ at: lm(nowIdx), label: `teraz ${logicalClock(lm(nowIdx))}`, tone: 'fg' })
 
-  let energy: EnergyTrack | null = null
-  const e = model.energy
-  if (e.known && e.enabled) {
-    const samples: EnergyTrack['samples'] = []
-    for (let k = 0; k < Math.min(g.length, e.series.head.length); k += 10) {
-      const v = { head: e.series.head[k]!, emotions: e.series.emotions[k]!, senses: e.series.senses[k]! }
-      if (Number.isFinite(v.head)) samples.push({ at: lm(k), ...v })
-    }
-    energy = { samples, reserve: e.reserve }
-  }
+  // The one sampling of the curve (`energyTrack` – the columns of „Tydzień” and „3 dni” draw the same, D417).
+  const energy = energyTrack(model.date, g, model.energy)
   return { items, markers, energy, from: Math.min(lm(state.wake) - 30, 6 * 60), to: Math.max(lm(state.bedtime.forecast) + 30, 22 * 60) }
 }
 

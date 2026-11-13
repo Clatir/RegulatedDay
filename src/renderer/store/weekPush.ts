@@ -20,6 +20,11 @@ export interface WeekPushedDay {
 /** The days a „Dodaj” wrote (D400), for the one „Cofnij” of the line „Przesunięto N bloków w K dniach” – only when it pushed some. */
 export interface WeekPush {
   days: WeekPushedDay[]
+  /**
+   * A block dragged to another place of a column or to another day (D417, `moveWeekBlock`): its days go back together or
+   * not at all (`undoWeekPush`); the line names the move. Absent – a „Dodaj”.
+   */
+  move?: { blockId: string; from: string; to: string }
 }
 
 export interface WeekPushLine {

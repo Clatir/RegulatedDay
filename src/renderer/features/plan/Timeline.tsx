@@ -10,6 +10,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
+import type { EnergyTrack } from '@shared/engine/energyTrack'
 import type { Pool } from '@shared/model/categories'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import { SERIES_MARK } from '@shared/seriesText'
@@ -73,11 +74,8 @@ export interface TimelineMarker {
   dashed?: boolean
 }
 
-export interface EnergyTrack {
-  /** Samples of the three pools (0–100) at logical minutes. */
-  samples: Array<{ at: number; head: number; emotions: number; senses: number }>
-  reserve: number
-}
+/** The energy's curve beside the axis (the one sampling: `@shared/engine/energyTrack`). */
+export type { EnergyTrack }
 
 const POOL_COLOR: Record<Pool, string> = { head: '#F2B66D', emotions: '#D49A97', senses: '#79AFAB' }
 const POOL_NAME: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce' }
