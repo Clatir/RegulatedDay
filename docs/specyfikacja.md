@@ -659,6 +659,12 @@ Wszystko w aplikacji jest blokiem. Nie ma osobnej listy zadań, więc aplikacja 
   (http i https otwiera domyślną przeglądarkę, inne adresy zostają tekstem). Pojedynczy Enter starej notatki to łamanie
   linii i tak wraca do pliku; samo otwarcie notatki niczego nie zapisuje. „Powiększ” rozwija notatkę na całe okno, Esc
   albo „Pomniejsz” wraca z tekstem (T660–T665).
+- Załączniki i linki bloku (D410, T811–T817): sekcja „Załączniki” w panelu bloku dnia, bloku szablonu i serii – pliki
+  („Dołącz plik…”, upuszczenie z Eksploratora na panel albo na kafelek bloku w „Dziś” i „Szablonach”) i linki („Dodaj link”,
+  Ctrl V adresu poza polem tekstowym, adres przeciągnięty z przeglądarki). Pozycja: obraz z miniaturą, inny plik z ikoną rodzaju,
+  nazwą i rozmiarem, link z ikoną strony, tytułem i domeną; klik otwiera; „Zmień nazwę”, „Pokaż w folderze”, „Usuń” (bez pytania,
+  „Cofnij”); „Otwórz wszystko (N)” od dwóch. Blok dnia pokazuje też załączniki swojego szablonu i serii z dopiskiem; zmienia się je
+  tam, gdzie leżą. Na kafelku znaczek 📎 z liczbą („Dziś”, „Szablony”, „Tydzień”).
 - Bloki stałe to sesje, druga zmiana, wykłady, zajęcia i jednorazowe terminy; nie przesuwa się ich początek. Elastyczne zachowują kolejność i przesuwa je rzeczywisty koniec poprzednika, nigdy jednak na godzinę wcześniejszą niż ich planowany początek. Gdy elastyczny trafi na stały, przeskakuje za niego, a aplikacja sprawdza warunek znacznika wariantów.
 - Blok stały zaplanowany na pierwszym planie zaczyna się sam o czasie z planu na pierwszym planie (widoczne w liście
   „zrobione automatycznie”), także gdy biegnie inny blok. Wyjątkiem są sesja (kategoria „Sesja tradingowa”, także druga
@@ -1691,6 +1697,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 | requests/\<id>.json | sprawy (D383): zadania własne i prośby – rodzaj, tytuł, osoba, szacunek, kategoria, notatka, lista, blok, chwila zrobienia; pliki próśb sprzed „Spraw” czytane bez migracji, pole `state` w kroku dla starszych wersji (T750) |
 | routines/\<id>.json | rutyny |
 | allday/\<id>.json | wydarzenia całodniowe i wielodniowe (D405): tytuł, daty od–do, kolor, notatka, „To wolne”; tylko informacja – silnik dnia ich nie czyta |
+| attachments/\<id>.json, attachments/\<id>/\<plik> | załączniki bloków (D410): plik skopiowany do folderu albo link (tytuł, ikona strony), właściciel – blok dnia, blok szablonu albo seria; usunięty zostaje 30 dni, potem prowadzący kasuje plik i rekord (T800–T806) |
 | .presence/\<komputer>.json | obecność każdego komputera: wersja aplikacji i reguł, 10 ostatnich wersji z pierwszym i ostatnim uruchomieniem i awariami na każdej, „instaluję wersję X”, ostatnia obecność, ostatnie użycie, ostatnie wejście poza aplikacją, stan (używany, bezczynny, „Odcinam się”, „mniej pytań”, zamknięty), stan blokady ekranu, zasilanie (sieć, bateria, oszczędzanie baterii), widziany prowadzący, stan synchronizacji i ostatnie zdarzenie zapisane dla każdego otwartego dnia, także bez zdarzeń |
 | .history/ | poprzednie wersje rekordów |
 | grades/RRRR/\<komputer>.jsonl | oceny dni zamrożonych przez ten komputer; plik pochodny, da się go odtworzyć z logów |
@@ -1792,6 +1799,8 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 - Kopia ZIP powstaje raz na dzień logiczny, po 12:00. Tworzy ją komputer prowadzący: co godzinę, przy starcie i po wybudzeniu sprawdza, czy kopia z tego dnia już jest, i tworzy ją przy pierwszej okazji. Kopia jest odporna na zapisy w trakcie pakowania.
 - Domyślnie trafia do podfolderu backups/ w folderze danych; każdy komputer może wskazać dodatkowe miejsce poza OneDrive i sam kopiuje tam najnowszą kopię, także gdy nie prowadzi. Przechowywanych jest 14 kopii dziennych i 8 tygodniowych.
 - Nieudana kopia daje ostrzeżenie w widgecie od razu, a po 3 dniach bez kopii także w oknie głównym.
+- Załączniki (D410): lista załączników jest w każdej kopii, ich pliki tylko w tygodniowej i w kopii przed aktualizacją;
+  przywrócenie kopii bez plików niczego nie usuwa, a przywrócone rekordy biorą z kopii pliki, których w folderze brak (T809).
 - Przywracanie w aplikacji: wybrane rekordy albo cały folder do nowego folderu – w Ustawieniach → „Dane” razem z
   eksportem CSV (zakres dat, domyślnie bieżący miesiąc): lista kopii od najnowszej, przy każdej „Wybrane rekordy…”
   (rekordy nazwane jak w interfejsie, zaznaczone wracają do tego folderu jako Twoja zmiana) i „Cały folder do nowego…”
@@ -2172,7 +2181,7 @@ W FI zakres ze specyfikacji był gotowy po 2 dniach, a poprawki po przeglądzie 
 **Dokumenty w repozytorium**
 
 - Krótki CLAUDE.md jako indeks, bez mapy kodu (w ICTTJ urósł do około 157 KB, w FI do 123 KB).
-- docs/specyfikacja.md z aktualnymi regułami (bez osobistych treści z wywiadu, D279; pełna wersja zostaje w dokumencie specyfikacji poza repozytorium), docs/decyzje.md z numerami D (Twoje) i docs/decyzje-techniczne.md z numerami T (techniczne, D308; T1–T399 w docs/decyzje-techniczne-T1-T399.md, T535), w których nowa decyzja wskazuje, którą zastępuje, oraz docs/plan.md i docs/postep.md.
+- docs/specyfikacja.md z aktualnymi regułami (bez osobistych treści z wywiadu, D279; pełna wersja zostaje w dokumencie specyfikacji poza repozytorium), docs/decyzje.md z numerami D (Twoje) i docs/decyzje-techniczne.md z numerami T (techniczne, D308; T1–T399 w docs/decyzje-techniczne-T1-T399.md, T535; T400–T499 w docs/decyzje-techniczne-T400-T499.md, T840), w których nowa decyzja wskazuje, którą zastępuje, oraz docs/plan.md i docs/postep.md.
 - CHANGELOG to opis zmian dla Ciebie, pokazywany w aplikacji jako „Co nowego”. Lista „do sprawdzenia” jest w docs/odbior.md (D307). Także postep.md i decyzje.md mają limit rozmiaru, a decyzje zastąpione trafiają do archiwum.
 
 **Testy**

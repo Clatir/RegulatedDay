@@ -8,13 +8,15 @@
  * and end (D366); the column of hours counts as the axis for both. While a block is dragged, the blocks it pushes apart
  * stand at their new places (D367, `pushPreview`).
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import type { Pool } from '@shared/model/categories'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { cx } from '../../components/ui'
+import { attachable, hasFiles, textTarget } from '../attachments/attachDrop'
+import { attachBadge, attachBadgeTitle } from '../attachments/attachView'
 import { useMachine } from '../../store/machine'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
@@ -42,6 +44,11 @@ export interface TimelineItem {
    * runs, of a kind that has its own hour) – no handle on its top, its start stays.
    */
   resize?: 'end'
+  /**
+   * The number of the block's attachments (D410: 📎N on the tile when above 0); any number, 0 too, makes the tile take files
+   * and links dropped on it (`onAttachDrop`). Left out – a tile that takes no drop (a block begun outside the plan).
+   */
+  attach?: number
 }
 
 /** What bounds a block's bottom edge besides the 5 min and the day's length (D365: a running block – not before now, not past the day). */
@@ -158,6 +165,34 @@ interface Drag {
   dropped: boolean
 }
 
+/**
+ * The handlers of a tile that takes files and links dropped on it (D410): `dragover` is cancelled only for a file or a link (a
+ * drag of text over a field is not taken), the tile is lit while they are over it, the drop goes to `take`.
+ */
+function tileDrop(id: string, take: (id: string, dt: DataTransfer) => void, over: string | null, setOver: (id: string | null) => void) {
+  const accepts = (e: DragEvent): boolean => attachable(e.dataTransfer) && (hasFiles(e.dataTransfer) || !textTarget(e.target))
+  const enter = (e: DragEvent) => {
+    if (!accepts(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    if (over !== id) setOver(id)
+  }
+  return {
+    onDragEnter: enter,
+    onDragOver: enter,
+    onDragLeave: (e: DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null)
+    },
+    onDrop: (e: DragEvent) => {
+      setOver(null)
+      if (!accepts(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+      take(id, e.dataTransfer)
+    }
+  }
+}
+
 export function Timeline({
   items,
   markers,
@@ -171,6 +206,7 @@ export function Timeline({
   edgeLimits,
   pushPreview,
   attached,
+  onAttachDrop,
   ghost,
   from,
   to,
@@ -218,6 +254,11 @@ export function Timeline({
    * down to `endMin` (its added part dashed), `node` – „Potwierdź · Anuluj” – stands at that edge. Gone: the block is at its end.
    */
   attached?: { id: string; endMin: number; seq: number; node: ReactNode } | null
+  /**
+   * Files or a link from outside the window dropped on a tile that has `attach` (D410): the block's id and the transfer. The tile
+   * is lit while they are over it; the gestures of the axis (the drag of a block, the edges, a new block) are pointer ones and stay as they were.
+   */
+  onAttachDrop?: (id: string, dt: DataTransfer) => void
   /** The span a sprawa dragged from outside the axis would take (D384) – drawn as a band while it is held; null – none. */
   ghost?: BlockSpan | null
   /** The range shown (logical minutes); the blocks and lines widen it. */
@@ -235,6 +276,8 @@ export function Timeline({
   }
   // The click that ends a drag selects nothing.
   const dropped = useRef(false)
+  // The tile a file or a link is dragged over (D410).
+  const [dropOver, setDropOver] = useState<string | null>(null)
   // A dropped block stands at its new start until the day's items bring it there (the edit read back).
   useEffect(() => {
     const d = dragRef.current
@@ -398,6 +441,7 @@ export function Timeline({
           selected === i.id ? 'ring-1 ring-lamp' : 'hover:brightness-110',
           i.waits && 'border-dashed',
           draggable && !dragged && 'cursor-grab',
+          dropOver === i.id && 'ring-2 ring-lamp',
           dragged && 'z-20 shadow-lg',
           dragged && (drag.edge ? 'cursor-ns-resize' : 'cursor-grabbing')
         )}
@@ -415,6 +459,8 @@ export function Timeline({
         data-waiting={waiting ? 'true' : undefined}
         data-pushed={pushedTo ? 'true' : undefined}
         data-dim={i.dim ? 'on' : undefined}
+        data-drop={dropOver === i.id ? 'on' : undefined}
+        {...(onAttachDrop && i.attach !== undefined ? tileDrop(i.id, onAttachDrop, dropOver, setDropOver) : {})}
       >
         {topEdge && <span data-edge="top" data-testid={`block-${i.id}-edge-top`} className={cx('absolute inset-x-0 top-0 z-10 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         {endEdge && <span data-edge="end" data-testid={`block-${i.id}-edge-end`} className={cx('absolute inset-x-0 bottom-0 z-10 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
@@ -431,6 +477,11 @@ export function Timeline({
               {i.steps}
             </span>
           )}
+          {i.attach ? (
+            <span className="num shrink-0 text-[11px] text-muted" title={attachBadgeTitle(i.attach)} aria-label={attachBadgeTitle(i.attach)} data-testid="attach-badge">
+              {attachBadge(i.attach)}
+            </span>
+          ) : null}
         </div>
         {!tiny && !narrow && (
           <div className="truncate text-[11px] text-muted">

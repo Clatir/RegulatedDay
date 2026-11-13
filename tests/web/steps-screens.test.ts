@@ -480,7 +480,7 @@ describe('licznik „✓ 3/4” na kafelku', () => {
     expect('steps' in by.b!).toBe(false)
     const { BlockBox } = await import('@renderer/features/week/WeekPage')
     const names = { rd: rdFrom({}), settings: s.settings, routines: [], requests: [] }
-    const html = (b: (typeof d.blocks)[number]) => renderToStaticMarkup(createElement(BlockBox, { block: b, lo: 6 * 60, lane: 0, lanes: 1, names, brightness: 100, date: day }))
+    const html = (b: (typeof d.blocks)[number]) => renderToStaticMarkup(createElement(BlockBox, { block: b, lo: 6 * 60, lane: 0, lanes: 1, names, brightness: 100, date: day, attach: 0 }))
     expect(html(by.a!)).toContain('✓ 1/4')
     expect(html(by.b!)).not.toContain('steps-counter')
   })

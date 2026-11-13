@@ -366,3 +366,16 @@ describe('tydzień', () => {
     expect([weekViewOf('2026-11-02', '2026-11-04', []).from, weekViewOf('2026-11-02', '2026-11-04', []).to]).toEqual([6 * 60, 22 * 60])
   })
 })
+
+describe('szablon dnia (załączniki bloków na kafelkach, D410)', () => {
+  const withTemplate = (ctx: ReturnType<typeof pastCtx>, templateId: string | null) => ({ ...ctx, snapshot: { ...ctx.snapshot, templateId } })
+
+  it('dzień niesie id szablonu z migawki – i dzień przeliczony, i dzień bez zdarzeń; nieczytelny go nie ma', () => {
+    const s = pastDay()
+    expect(horizonDay(withTemplate(pastCtx(s), 't7'), 'past').templateId).toBe('t7')
+    expect(horizonDay(withTemplate(pastCtx(s), null), 'past').templateId).toBeNull()
+    const quiet = new Scenario({ date: PAST, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] })
+    expect(horizonDay(withTemplate(quiet.contextAt(dayEnd(PAST) + 3_600_000), 't8'), 'past').templateId).toBe('t8')
+    expect(unknownDay(PAST, 'past').templateId).toBeNull()
+  })
+})

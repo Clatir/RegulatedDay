@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { logicalClock } from '@shared/format'
+import { attachmentsOfBlock, type BlockPlace } from '@shared/model/attachment'
 import { settingsOn, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
 import { stepsCounter } from '@shared/model/steps'
 import { SERIES_MARK } from '@shared/seriesText'
@@ -25,6 +26,7 @@ import { DEFAULT_NEW_BLOCK_MIN, snapMinute, type GridRange } from '../plan/gridC
 import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { AllDayBar } from '../allday/AllDayBar'
 import { AllDayLines } from '../allday/AllDayLines'
+import { attachBadge, attachBadgeTitle, dayPlace } from '../attachments/attachView'
 import { pendingCard } from '../allday/allDayView'
 import { GoalsPanel } from './GoalsPanel'
 import { WeekPushLine } from './WeekPushLine'
@@ -293,6 +295,11 @@ function DayColumn({
   waiting: NewPick | null
 }) {
   const lanes = useMemo(() => laneLayout(day.blocks), [day.blocks])
+  // D410: the attachments of each block (its own, the template's, the series') – 📎N on its tile.
+  const attachments = useData((s) => s.attachments)
+  const templates = useData((s) => s.templates)
+  const place = useMemo<BlockPlace>(() => dayPlace(day.date, day.templateId, templates), [day.date, day.templateId, templates])
+  const attachCount = (b: HorizonBlock): number => (b.outsidePlan ? 0 : attachmentsOfBlock(attachments, { id: b.id, origin: b.named.origin ?? 'user', sourceId: b.named.sourceId ?? null }, place).length)
   const grid = useGridCreate({
     lo,
     hi,
@@ -319,7 +326,7 @@ function DayColumn({
         <div key={h} className="pointer-events-none absolute right-0 left-0 border-t border-line/60" style={{ top: axisY(h, lo) }} />
       ))}
       {lanes.map(({ item, lane, lanes: n }) => (
-        <BlockBox key={item.id} block={item} lo={lo} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} />
+        <BlockBox key={item.id} block={item} lo={lo} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} />
       ))}
       {shown && <RangeBand range={shown} lo={lo} ppm={WEEK_PPM} testId={held ? 'week-range' : 'week-range-waiting'} />}
     </div>
@@ -327,14 +334,14 @@ function DayColumn({
 }
 
 /** A block on the axis: its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. A click opens its day (D366). */
-export function BlockBox({ block: b, lo, lane, lanes, names, brightness, date }: { block: HorizonBlock; lo: number; lane: number; lanes: number; names: Names; brightness: number; date: string }) {
+export function BlockBox({ block: b, lo, lane, lanes, names, brightness, date, attach }: { block: HorizonBlock; lo: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number }) {
   const { top, height } = blockSpan(b, lo)
   const color = blockColor(b.categoryId, names)
   const dim = b.state === 'missed' || b.state === 'parked' || b.state === 'cancelled'
   const name = blockName(b.named, names)
   // D440: the counter of the steps „✓ 3/4” (none – nothing).
   const counter = stepsCounter(b.steps)
-  const title = `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}${b.background ? ' · w tle' : ''}`
+  const title = `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}${b.background ? ' · w tle' : ''}${attach ? ` · ${attachBadgeTitle(attach)}` : ''}`
   return (
     <button
       type="button"
@@ -368,10 +375,20 @@ export function BlockBox({ block: b, lo, lane, lanes, names, brightness, date }:
             {counter}
           </span>
         )}
+        {attach > 0 && height < 30 && (
+          <span className="num ml-1 text-muted" data-testid="attach-badge">
+            {attachBadge(attach)}
+          </span>
+        )}
       </span>
       {height >= 30 && (
         <span className="num block truncate text-muted">
           {logicalClock(b.startMin)}–{logicalClock(b.endMin)}
+          {attach > 0 && (
+            <span className="ml-1" data-testid="attach-badge">
+              {attachBadge(attach)}
+            </span>
+          )}
         </span>
       )}
     </button>

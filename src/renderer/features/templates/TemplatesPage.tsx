@@ -16,6 +16,7 @@ import { paths } from '@shared/data/paths'
 import { copiedTemplate } from '@shared/engine/planEdit'
 import { pushedText } from '@shared/engine/pushApart'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
+import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
 import { planBlock, templateFrom, templateVersionOn, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
@@ -31,6 +32,8 @@ import { isSaved, saveRecord, storedAnswer, tryRemoveRecord, tryUpdateRecord, up
 import { countDay } from '../../store/day'
 import { useNewShortcut } from '../../lib/escape'
 import { takeFoundPick, undoToast, useUi } from '../../store/ui'
+import { attachTransfer } from '../attachments/attachDrop'
+import { withAttachCounts } from '../attachments/attachView'
 import { BlockEditor } from '../plan/BlockEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis } from '../plan/dayItems'
@@ -253,7 +256,15 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const axis = useMemo(() => dayAxis(model, names, null), [model, names])
   // Template blocks have the day's derived ids: the block of the version is found by its source.
   const byPlanId = useMemo(() => new Map(model.ctx.plan.filter((b) => b.origin === 'template' && b.sourceId).map((b) => [b.id, b.sourceId!])), [model])
-  const items = useMemo(() => axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), steps: undefined, movable: i.movable === true && byPlanId.has(i.id) })), [axis, byPlanId])
+  // D410: the attachments of the version's blocks (those of the template, by the block's id in it) – 📎N on the tile, a drop of files on it.
+  const attachments = useData((s) => s.attachments)
+  const attachPlace = useMemo<BlockPlace>(() => ({ scope: 'template', templateId: template.id }), [template.id])
+  const items = useMemo(() => {
+    // A template's list has no ticks: no counter „✓ n/m” on its tiles (D443).
+    const own = axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), steps: undefined, movable: i.movable === true && byPlanId.has(i.id) }))
+    const blocks = new Map(version.blocks.map((b) => [b.id, b]))
+    return withAttachCounts(own, (id) => blocks.get(id) ?? null, attachPlace, attachments)
+  }, [axis, byPlanId, version.blocks, attachPlace, attachments])
   const block = version.blocks.find((b) => b.id === selected) ?? null
   /** A block of the version changed; answers what became of the save (the panel's note puts back what it shows only when it was refused – also when the template is gone: nothing was written; a question keeps it). */
   const patchBlock = (id: string, patch: Partial<PlanBlock>): Promise<SaveAnswer> => {
@@ -351,6 +362,10 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           )}
           <Timeline
             items={items}
+            onAttachDrop={(id, dt) => {
+              const owner = ownerToAdd(version.blocks.find((b) => b.id === id) ?? null, attachPlace)
+              if (owner) void attachTransfer(owner, dt)
+            }}
             markers={axis.markers}
             selected={selected}
             onSelect={(id) => setSelected(version.blocks.some((b) => b.id === id) ? id : null)}
@@ -397,6 +412,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           names={names}
           computers={view.computers}
           sessions={settings.sessions}
+          place={attachPlace}
           onChange={(patch) => patchBlock(block.id, patch)}
           // D440: the list without boxes – every day made from the template starts with none ticked.
           steps={<StepsEditor steps={block.steps} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}

@@ -96,6 +96,7 @@ export function SeriesEditor({ series, today, onClosed }: { series: Series; toda
         names={names}
         computers={view.computers}
         inSeries
+        place={{ scope: 'series', root: series.root }}
         readOnly={ended}
         onChange={(p) => {
           const b = seriesBlockPatch(p)

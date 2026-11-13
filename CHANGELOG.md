@@ -7,6 +7,14 @@
 - Kroki mają też bloki szablonów i serii (w „Szablonach” sama lista, każdego dnia startuje odznaczona); zmiana listy w wystąpieniu serii pyta „Tylko to · To i następne · Cała seria” raz na otwarcie panelu. W „Sprawach” zadanie ma przycisk „Kroki ✓ 1/4” z listą pod wierszem; blok z zadania dostaje jego kroki, a odhaczenie w bloku odhacza je w zadaniu (i odwrotnie).
 - Poprawka: okna aplikacji nie dają się przenawigować plikiem ani linkiem przeciągniętym na okno.
 
+## 1.15.0
+- Załączniki w blokach: w panelu bloku („Dziś”, „Szablony”, edycja serii) jest sekcja „Załączniki”. Plik dołączasz, przeciągając go z Eksploratora na panel albo na kafelek bloku na osi „Dziś”, albo przyciskiem „Dołącz plik…”. Plik kopiuje się do folderu danych (`attachments/`), więc OneDrive przenosi go na drugi komputer; oryginał zostaje, gdzie był.
+- Linki: „Dodaj link”, Ctrl V adresu w panelu albo przeciągnięcie linku z przeglądarki. Aplikacja pobiera ze strony jej tytuł i ikonę (tytuł możesz zmienić). Otwierają się tylko adresy http, https i mailto.
+- Kliknięcie otwiera plik w domyślnym programie Windows, a link w przeglądarce; „Otwórz wszystko (N)” otwiera wszystkie naraz. Program (.exe, .bat, .msi i podobne) się nie uruchamia – aplikacja pokazuje go w folderze.
+- Obrazy mają miniaturę, inne pliki – ikonę rodzaju, nazwę i rozmiar. Na kafelku bloku w „Dziś”, „Szablonach” i „Tygodniu” znaczek 📎 z liczbą.
+- Załączniki dodane w szablonie albo w edycji serii widać we wszystkich wystąpieniach; dodane w „Dziś” – tylko w tym dniu. Plik, który jeszcze nie dotarł z drugiego komputera, ma dopisek.
+- Usunięcie bez pytania, z „Cofnij”; plik zostaje w folderze jeszcze 30 dni, potem aplikacja go kasuje. Kopie zapasowe mają listę załączników, a same pliki – kopia tygodniowa i kopia przed aktualizacją (do 1 GB).
+
 ## 1.14.0
 - „Sprawy” zamiast „Próśb” – ta sama pozycja w menu i ten sam skrót. Sprawa to zadanie własne (tytuł, szacunek domyślnie 30 min, kategoria domyślnie „Inne”, notatka) albo prośba (osoba, szacunek, notatka – tryby i koszt kontaktu jak dotąd). Listy: Skrzynka · Dziś · W tym tygodniu · Kiedyś / Może · Zrobione. Nagłówek „Dziś” mówi sumę szacunków („Dziś · 3 h 30 min”), „Zrobione” pokazuje ostatnie 7 dni i ma „Pokaż starsze”. Ctrl N dodaje zadanie, Ctrl K znajduje sprawy.
 - „Dziś” to lista bez godzin: zadanie nie zajmuje czasu na osi, dopóki go nie ustawisz. Niezrobione o 04:00 wracają do „W tym tygodniu” (z dopiskiem, skąd), a wieczorny rytuał je wymienia; w niedzielę przypomina też, ile spraw czeka w „Kiedyś / Może”.

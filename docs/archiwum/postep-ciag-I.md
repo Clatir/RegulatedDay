@@ -101,7 +101,7 @@ Wpisy zadań ciągu I (4.11, 4.10, E10–E12) po scaleniu ich PR-ów. Stan bież
 - Czas: ok. 07:30–22:00 zegarowo (szacunek planu 25–45 h dla E9–E12 bez E9 i K) – równolegle po 2–3 drzewa.
 - Po ciągu: K, gdy aplikacja zaproponuje przegląd kalibracji (najwcześniej ok. 12.11), potem E9.
 
-## Ciąg I – stan (D353)
+## Ciąg I – tabela stanu (przeniesiona z `docs/postep.md` 13.11.2026)
 **Przed ciągiem I (9.11):** zakres – `docs/plan.md`, „Ciąg I”; decyzje D352 (tekst linii twardego końca), D353 (kształt
 ciągu), D354 (wykonawcy rozszerzeń). Ryzyka: 4.11 – nazwy bloków w czterech miejscach (log i silnik bez zmian, T543);
 4.10 – pasek i powiadomienia. Przygotować: nic do 1.0.10; do E11 – PDF z terminami zjazdów (poza

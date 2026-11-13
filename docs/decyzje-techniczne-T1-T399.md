@@ -1,7 +1,8 @@
 # Rejestr decyzji technicznych – T1–T399
 
-T1–T399 (od 8.11.2026 osobny plik, T535); T400–T599 – `docs/decyzje-techniczne-T400-T599.md`, T600 i nowsze – `docs/decyzje-techniczne.md`, Twoje decyzje D – `docs/decyzje.md`
-(D308). Zastąpione w całości trafiają do `docs/archiwum/decyzje-zastapione.md`.
+T1–T399 (od 8.11.2026 osobny plik, T535); T400–T499 – `docs/decyzje-techniczne-T400-T499.md` (T840), T500 i nowsze –
+`docs/decyzje-techniczne.md`, Twoje decyzje D – `docs/decyzje.md` (D308). Zastąpione w całości trafiają do
+`docs/archiwum/decyzje-zastapione.md`.
 
 **Decyzje techniczne (T)**, zaakceptowane 21.10.2026; szczegóły są w rozdziałach specyfikacji
 

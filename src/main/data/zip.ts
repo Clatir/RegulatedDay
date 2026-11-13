@@ -39,6 +39,8 @@ const BATCH = 256
 const READ_CONCURRENCY = 16
 /** Written in chunks of about this size. */
 const FLUSH_BYTES = 1 << 20
+/** A streamed file is read in chunks of this size (T809). */
+const STREAM_CHUNK = 1 << 20
 
 const VERSION_MADE_BY = (3 << 8) | 63 // UNIX, spec 6.3 – the external attributes carry the file mode
 const VERSION_NEEDED = 20
@@ -88,6 +90,10 @@ class ZipWriter {
   private offset = 0
   private chunks: Buffer[] = []
   private pending = 0
+  /** Bytes on the disk so far (each write goes at its position). */
+  private flushed = 0
+  /** An entry was taken back: the file is cut to its end at the finish. */
+  private cut = false
 
   constructor(private readonly fh: fs.FileHandle) {}
 
@@ -125,16 +131,121 @@ class ZipWriter {
     await this.write(head, entry.name, extra, body)
   }
 
+  /**
+   * One file streamed from the disk, stored as it is (T809: an attachment of any size never whole in memory): the local
+   * header first with the size known from its stat, the content in chunks while its CRC is counted, then the CRC written
+   * into the header (no data descriptor). From 4 GB on the entry has ZIP64 sizes. A file that cannot be opened or read now,
+   * or whose size changed meanwhile, is left out (false – T836): what of it was written is taken back (the next entry
+   * goes in its place, the ZIP is cut to its end in `finish`). A failure to write the ZIP itself still fails it.
+   */
+  async addFile(name: string, file: ZipFileContent): Promise<boolean> {
+    let src: fs.FileHandle
+    try {
+      src = await withRetry(() => fs.open(file.path, 'r'))
+    } catch {
+      return false
+    }
+    const zip64 = file.size >= MAX32
+    const { date, time } = dosDateTime(file.mtime)
+    const entry: Entry = { name: Buffer.from(name, 'utf8'), crc: 0, size: file.size, csize: file.size, method: 0, time, date, unix: Math.floor(file.mtime.getTime() / 1000), offset: this.offset }
+    const extra = timestampExtra(entry.unix)
+    const sizes = zip64 ? Buffer.alloc(20) : Buffer.alloc(0)
+    if (zip64) {
+      sizes.writeUInt16LE(0x0001, 0)
+      sizes.writeUInt16LE(16, 2)
+      sizes.writeBigUInt64LE(BigInt(file.size), 4)
+      sizes.writeBigUInt64LE(BigInt(file.size), 12)
+    }
+    const head = Buffer.alloc(30)
+    head.writeUInt32LE(0x04034b50, 0)
+    head.writeUInt16LE(zip64 ? VERSION_ZIP64 : VERSION_NEEDED, 4)
+    head.writeUInt16LE(FLAG_UTF8, 6)
+    head.writeUInt16LE(0, 8)
+    head.writeUInt16LE(time, 10)
+    head.writeUInt16LE(date, 12)
+    head.writeUInt32LE(0, 14)
+    head.writeUInt32LE(zip64 ? MAX32 : file.size, 18)
+    head.writeUInt32LE(zip64 ? MAX32 : file.size, 22)
+    head.writeUInt16LE(entry.name.length, 26)
+    head.writeUInt16LE(extra.length + sizes.length, 28)
+    let crc = 0
+    let read = 0
+    let readFailed = false
+    try {
+      await this.write(head, entry.name, extra, sizes)
+      await this.flush()
+      const buf = Buffer.allocUnsafe(STREAM_CHUNK)
+      for (;;) {
+        let bytesRead: number
+        try {
+          bytesRead = (await withRetry(() => src.read(buf, 0, buf.length, null))).bytesRead
+        } catch {
+          readFailed = true
+          break
+        }
+        if (!bytesRead) break
+        read += bytesRead
+        if (read > file.size) break
+        const chunk = buf.subarray(0, bytesRead)
+        crc = zlib.crc32(chunk, crc)
+        await this.writeNow(chunk)
+      }
+    } finally {
+      await src.close()
+    }
+    if (readFailed || read !== file.size) {
+      // Taken back: the header and the part written stay as bytes past the next entry's start until written over or cut.
+      this.offset = entry.offset
+      this.flushed = entry.offset
+      this.cut = true
+      return false
+    }
+    entry.crc = crc >>> 0
+    const c = Buffer.alloc(4)
+    c.writeUInt32LE(entry.crc, 0)
+    await this.fh.write(c, 0, 4, entry.offset + 14)
+    this.entries.push(entry)
+    return true
+  }
+
+  /**
+   * One entry copied as another ZIP holds it (T837: the weekly backup from a daily one) – its compressed bytes, method, CRC,
+   * sizes and times as they are, never unpacked and packed again.
+   */
+  async addRaw(name: string, c: ZipRawContent): Promise<void> {
+    if (c.size >= MAX32 || c.raw.length >= MAX32) throw new Error(`Plik za duży do kopii: ${name}`)
+    const entry: Entry = { name: Buffer.from(name, 'utf8'), crc: c.crc >>> 0, size: c.size, csize: c.raw.length, method: c.method, time: c.time, date: c.date, unix: c.unix, offset: this.offset }
+    const extra = timestampExtra(entry.unix)
+    const head = Buffer.alloc(30)
+    head.writeUInt32LE(0x04034b50, 0)
+    head.writeUInt16LE(VERSION_NEEDED, 4)
+    head.writeUInt16LE(FLAG_UTF8, 6)
+    head.writeUInt16LE(entry.method, 8)
+    head.writeUInt16LE(entry.time, 10)
+    head.writeUInt16LE(entry.date, 12)
+    head.writeUInt32LE(entry.crc, 14)
+    head.writeUInt32LE(entry.csize, 18)
+    head.writeUInt32LE(entry.size, 22)
+    head.writeUInt16LE(entry.name.length, 26)
+    head.writeUInt16LE(extra.length, 28)
+    this.entries.push(entry)
+    await this.write(head, entry.name, extra, c.raw)
+  }
+
   /** The central directory and the end records; the file is complete once this resolves. */
   async finish(): Promise<number> {
     const cdStart = this.offset
     for (const e of this.entries) {
-      const zip64 = e.offset >= MAX32
-      const extra = zip64 ? Buffer.alloc(12) : Buffer.alloc(0)
+      // ZIP64 extended information: the 64-bit values of the fields that do not fit, in their order (sizes, offset).
+      const bigSize = e.size >= MAX32 || e.csize >= MAX32
+      const bigOffset = e.offset >= MAX32
+      const values = [...(bigSize ? [e.size, e.csize] : []), ...(bigOffset ? [e.offset] : [])]
+      const zip64 = values.length > 0
+      const extra = zip64 ? Buffer.alloc(4 + 8 * values.length) : Buffer.alloc(0)
       if (zip64) {
         extra.writeUInt16LE(0x0001, 0)
-        extra.writeUInt16LE(8, 2)
-        extra.writeBigUInt64LE(BigInt(e.offset), 4)
+        extra.writeUInt16LE(8 * values.length, 2)
+        values.forEach((v, i) => extra.writeBigUInt64LE(BigInt(v), 4 + 8 * i))
       }
       const time = timestampExtra(e.unix)
       const rec = Buffer.alloc(46)
@@ -146,15 +257,15 @@ class ZipWriter {
       rec.writeUInt16LE(e.time, 12)
       rec.writeUInt16LE(e.date, 14)
       rec.writeUInt32LE(e.crc, 16)
-      rec.writeUInt32LE(e.csize, 20)
-      rec.writeUInt32LE(e.size, 24)
+      rec.writeUInt32LE(bigSize ? MAX32 : e.csize, 20)
+      rec.writeUInt32LE(bigSize ? MAX32 : e.size, 24)
       rec.writeUInt16LE(e.name.length, 28)
       rec.writeUInt16LE(time.length + extra.length, 30)
       rec.writeUInt16LE(0, 32)
       rec.writeUInt16LE(0, 34)
       rec.writeUInt16LE(0, 36)
       rec.writeUInt32LE((FILE_MODE << 16) >>> 0, 38)
-      rec.writeUInt32LE(zip64 ? MAX32 : e.offset, 42)
+      rec.writeUInt32LE(bigOffset ? MAX32 : e.offset, 42)
       await this.write(rec, e.name, time, extra)
     }
     const cdSize = this.offset - cdStart
@@ -191,6 +302,8 @@ class ZipWriter {
     end.writeUInt16LE(0, 20)
     await this.write(end)
     await this.flush()
+    // A streamed entry taken back may have left bytes past the end (T836).
+    if (this.cut) await this.fh.truncate(this.flushed)
     return count
   }
 
@@ -209,7 +322,19 @@ class ZipWriter {
     const buf = Buffer.concat(this.chunks)
     this.chunks = []
     this.pending = 0
-    for (let at = 0; at < buf.length; ) at += (await this.fh.write(buf, at, buf.length - at)).bytesWritten
+    await this.writeAt(buf)
+  }
+
+  /** Bytes written now (after what is buffered – `flush` first), at the end of what the file holds. */
+  private async writeNow(buf: Buffer): Promise<void> {
+    this.offset += buf.length
+    await this.writeAt(buf)
+  }
+
+  /** Every write at its position: the CRC of a streamed entry is written back into its header later (T809). */
+  private async writeAt(buf: Buffer): Promise<void> {
+    for (let at = 0; at < buf.length; ) at += (await this.fh.write(buf, at, buf.length - at, this.flushed + at)).bytesWritten
+    this.flushed += buf.length
   }
 }
 
@@ -239,12 +364,44 @@ function readFile(abs: string): Promise<{ st: Stats; data: Buffer } | null> {
 /** One file of a ZIP: its name, and its content with its time (null = left out – gone meanwhile). */
 export interface ZipSource {
   name: string
-  read: () => ZipContent | null | Promise<ZipContent | null>
+  read: () => ZipContent | ZipFileContent | ZipRawContent | null | Promise<ZipContent | ZipFileContent | ZipRawContent | null>
 }
 
 export interface ZipContent {
   data: Buffer
   mtime: Date
+}
+
+/** An entry of another ZIP as it is stored there (T837): written as it is. */
+export interface ZipRawContent {
+  raw: Buffer
+  method: number
+  crc: number
+  size: number
+  time: number
+  date: number
+  unix: number
+}
+
+/** A file streamed into the ZIP (stored, never whole in memory – T809): where it is, its size and time from its stat. */
+export interface ZipFileContent {
+  path: string
+  size: number
+  mtime: Date
+}
+
+/** A file of any size streamed from the disk when its turn comes (an attachment's, T809); gone = left out. */
+export function streamSource(abs: string, name: string): ZipSource {
+  return {
+    name,
+    read: async () => {
+      const st = await withRetry(() => fs.stat(abs)).catch((e: unknown) => {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null
+        throw e
+      })
+      return st?.isFile() ? { path: abs, size: st.size, mtime: st.mtime } : null
+    }
+  }
 }
 
 /** A file on the disk, read whole at once when its turn comes; gone = left out, unreadable = an error. */
@@ -304,6 +461,14 @@ export async function writeZipFile(outFile: string, items: readonly ZipSource[])
           const name = batch[j]!.name
           if (!content) {
             skipped.push(name)
+            continue
+          }
+          if ('path' in content) {
+            if (!(await zip.addFile(name, content))) skipped.push(name)
+            continue
+          }
+          if ('raw' in content) {
+            await zip.addRaw(name, content)
             continue
           }
           const compress = content.data.length > 0 && !/\.(webp|png|jpe?g|zip)$/i.test(name)
@@ -375,6 +540,10 @@ export interface ZipEntry {
   flags: number
   /** Where its local header is. */
   offset: number
+  /** Its DOS time and date as stored, and its time of modification (UTC seconds) from the extended timestamp – null: none. */
+  time: number
+  date: number
+  unix: number | null
 }
 
 const damaged = (why: string) => new Error(`Uszkodzony plik ZIP: ${why}`)
@@ -440,12 +609,16 @@ async function readDirectory(fh: fs.FileHandle, fileSize: number): Promise<ZipEn
       csize: cd.readUInt32LE(p + 20),
       size: cd.readUInt32LE(p + 24),
       flags,
-      offset: cd.readUInt32LE(p + 42)
+      offset: cd.readUInt32LE(p + 42),
+      time: cd.readUInt16LE(p + 12),
+      date: cd.readUInt16LE(p + 14),
+      unix: null
     }
     // ZIP64 extended information: the 64-bit values of the fields set to 0xFFFFFFFF, in this order.
     for (let q = nameEnd; q + 4 <= extraEnd; ) {
       const id = cd.readUInt16LE(q)
       const len = cd.readUInt16LE(q + 2)
+      if (q + 4 + len > extraEnd) throw damaged('pole dodatkowe poza wpisem')
       if (id === 0x0001) {
         let at = q + 4
         const field = (): number => {
@@ -458,6 +631,8 @@ async function readDirectory(fh: fs.FileHandle, fileSize: number): Promise<ZipEn
         if (entry.csize === MAX32) entry.csize = field()
         if (entry.offset === MAX32) entry.offset = field()
       }
+      // The extended timestamp: its flags, then the time of modification when flag 1 is set.
+      if (id === 0x5455 && len >= 5 && cd[q + 4]! & 1) entry.unix = cd.readUInt32LE(q + 5)
       q += 4 + len
     }
     entries.push(entry)
@@ -488,15 +663,19 @@ export class ZipReader {
     }
   }
 
-  /** The content of one entry (stored or deflated), never more bytes than its declared size. */
-  async read(entry: ZipEntry): Promise<Buffer> {
+  /** Where the bytes of an entry begin (after its local header), checked to lie in the file with all of them. */
+  private async dataStart(entry: ZipEntry): Promise<number> {
     if (entry.flags & FLAG_ENCRYPTED) throw damaged(`${entry.name}: wpis zaszyfrowany`)
     if (entry.offset + LOCAL_LEN > this.fileSize) throw damaged(`${entry.name}: wpis poza plikiem`)
     const head = await readAt(this.fh, entry.offset, LOCAL_LEN)
     if (head.readUInt32LE(0) !== SIG_LOCAL) throw damaged(`${entry.name}: nagłówek wpisu`)
     const dataAt = entry.offset + LOCAL_LEN + head.readUInt16LE(26) + head.readUInt16LE(28)
     if (dataAt + entry.csize > this.fileSize) throw damaged(`${entry.name}: wpis poza plikiem`)
-    const raw = await readAt(this.fh, dataAt, entry.csize)
+    return dataAt
+  }
+
+  /** The content of an entry from its bytes as stored (stored or deflated), checked against its size and CRC. */
+  private async unpack(entry: ZipEntry, raw: Buffer): Promise<Buffer> {
     let data: Buffer
     if (entry.method === 0) data = raw
     else if (entry.method === 8) {
@@ -508,6 +687,52 @@ export class ZipReader {
     } else throw damaged(`${entry.name}: nieobsługiwana metoda kompresji ${entry.method}`)
     if (data.length !== entry.size || zlib.crc32(data) >>> 0 !== entry.crc) throw damaged(`${entry.name}: zawartość nie zgadza się z sumą kontrolną`)
     return data
+  }
+
+  /**
+   * The entry's bytes as stored (compressed or not), for a copy into another ZIP (T836): checked first – unpacked to count
+   * its size and CRC, never packed again – so a damaged entry of a daily backup fails the weekly one instead of going on.
+   */
+  async readRaw(entry: ZipEntry): Promise<Buffer> {
+    const raw = await readAt(this.fh, await this.dataStart(entry), entry.csize)
+    await this.unpack(entry, raw)
+    return raw
+  }
+
+  /** The content of one entry (stored or deflated), never more bytes than its declared size. */
+  async read(entry: ZipEntry): Promise<Buffer> {
+    return this.unpack(entry, await readAt(this.fh, await this.dataStart(entry), entry.csize))
+  }
+
+  /**
+   * One entry written to `abs` (a new file – never over one that is there, `wx`): a stored one streamed in chunks with its
+   * CRC checked (an attachment of any size, T809), a deflated one read whole. A content that does not match its sum
+   * leaves no file behind.
+   */
+  async copyTo(entry: ZipEntry, abs: string): Promise<void> {
+    if (entry.method !== 0) {
+      await fs.writeFile(abs, await this.read(entry), { flag: 'wx' })
+      return
+    }
+    const dataAt = await this.dataStart(entry)
+    if (entry.csize !== entry.size) throw damaged(`${entry.name}: wpis poza plikiem`)
+    const out = await fs.open(abs, 'wx')
+    let ok = false
+    try {
+      let crc = 0
+      for (let at = 0; at < entry.size; ) {
+        const chunk = await readAt(this.fh, dataAt + at, Math.min(1 << 20, entry.size - at))
+        crc = zlib.crc32(chunk, crc)
+        for (let w = 0; w < chunk.length; ) w += (await out.write(chunk, w, chunk.length - w, at + w)).bytesWritten
+        at += chunk.length
+      }
+      if (crc >>> 0 !== entry.crc) throw damaged(`${entry.name}: zawartość nie zgadza się z sumą kontrolną`)
+      await out.sync()
+      ok = true
+    } finally {
+      await out.close()
+      if (!ok) await fs.rm(abs, { force: true }).catch(() => undefined)
+    }
   }
 
   close(): Promise<void> {

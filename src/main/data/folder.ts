@@ -70,9 +70,13 @@ import { isRootGone, rootGuarded, type DataFs } from './fsio'
 import { RecordHistory } from './history'
 import { PresenceStore, stillForgotten } from './presenceStore'
 import { RecordStore } from './records'
+import { nodeAttachmentFiles, type AttachmentFiles } from './attachments'
+import { attachmentFrom, purgeDue } from '@shared/model/attachment'
 import { mapLimit } from '../datastore/concurrency'
 
 export const OBSERVE_EVERY_MS = 5 * 60_000
+/** The leader looks for attachments to delete this often (T806). */
+export const ATTACHMENT_SWEEP_MS = 60 * 60_000
 
 /** What the main window may write to a day's log, and what each concerns (spec „Każde zdarzenie podaje, czego dotyczy”). */
 const USER_EVENTS: Record<string, Domain> = {
@@ -235,6 +239,8 @@ export interface FolderOptions {
   worker?: Worker
   /** The app's log (main.log): what the folder leaves out and why – a day the statistics could not count, never the content of a record. */
   log?: (level: 'info' | 'warn' | 'error', msg: string) => void
+  /** The files of attachments (D410; tests: a faulty one) – the leader deletes them 30 days after a removal (T806). */
+  attachmentFiles?: AttachmentFiles
 }
 
 export interface CheckResult {
@@ -358,6 +364,8 @@ export class DataFolder {
   private horizonSeq = 0
   /** Changes of the goals one at a time, each made from rd.json as it is in its turn. */
   private goalsTurn: Promise<unknown> = Promise.resolve()
+  /** When the leader last looked for attachments to delete (T806). */
+  private lastAttachmentSweep: number | null = null
 
   private constructor(private readonly o: FolderOptions) {
     this.rulesVersion = o.rulesVersion ?? RULES_VERSION
@@ -1078,6 +1086,8 @@ export class DataFolder {
         } catch (e) {
           problems.push(`zamrażanie: ${String(e)}`)
         }
+        // Attachments removed 30 days ago go with their files (D410, T806). Apart, so they never stop the rest.
+        await this.attachmentSweep(now, problems).catch((e) => problems.push(`załączniki: ${String(e)}`))
       } catch (e) {
         problems.push(`zadania prowadzącego: ${String(e)}`)
       }
@@ -2390,7 +2400,7 @@ export class DataFolder {
   private async joinCopies(day: string): Promise<void> {
     const year = Number(day.slice(0, 4))
     // Last year's days too (a copy of 31.12 seen on 1.01).
-    const dirs = ['', ID_COLLECTIONS.template, ID_COLLECTIONS.schedule, ID_COLLECTIONS.request, ID_COLLECTIONS.routine, ID_COLLECTIONS.series, ID_COLLECTIONS.allDay, `days/${year - 1}`, `days/${year}`, `days/${year + 1}`]
+    const dirs = ['', ID_COLLECTIONS.template, ID_COLLECTIONS.schedule, ID_COLLECTIONS.request, ID_COLLECTIONS.routine, ID_COLLECTIONS.series, ID_COLLECTIONS.allDay, ID_COLLECTIONS.attachment, `days/${year - 1}`, `days/${year}`, `days/${year + 1}`]
     const scanned = new Set(dirs)
     const seen = new Set<string>()
     for (const dir of dirs) {
@@ -2412,6 +2422,46 @@ export class DataFolder {
     // A question goes only when its folder was looked at and the copy is not there any more (joined, removed).
     const dirOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '')
     for (const k of [...this.copyConflicts.keys()]) if (scanned.has(dirOf(k)) && !seen.has(k)) this.copyConflicts.delete(k)
+  }
+
+  /**
+   * The leader's deletion of attachments (D410, T806): at most once per `ATTACHMENT_SWEEP_MS`, every record removed 30
+   * days ago or more – its folder attachments/<id>/ first, then the record (its last version stays in the history). A
+   * listing that fails deletes nothing (unknown is never empty); a record that cannot be read now, is broken, or has an
+   * edit of this computer still in the queue („Cofnij”) is left; each is read again before it goes, beside the queue
+   * (`queue.exclusive`). Answers how many went.
+   */
+  async attachmentSweep(now = this.clock.now(), problems: string[] = []): Promise<number> {
+    if (this.lastAttachmentSweep != null && now - this.lastAttachmentSweep < ATTACHMENT_SWEEP_MS) return 0
+    const dir = ID_COLLECTIONS.attachment
+    // Tried again in an hour also after a listing that failed (no warning every 15 s; 30 days are not counted to the minute).
+    this.lastAttachmentSweep = now
+    const entries = await this.o.fs.list(join(this.o.dataDir, dir))
+    const files = this.o.attachmentFiles ?? nodeAttachmentFiles
+    let gone = 0
+    for (const e of entries) {
+      if (e.dir || !e.name.endsWith('.json')) continue
+      const rel = `${dir}/${e.name}`
+      const c = classify(rel)
+      if (!c || c.conflict || c.kind !== 'attachment' || !c.id) continue
+      const id = c.id
+      if (this.queue.relsUnder(dir).includes(rel)) continue
+      try {
+        const done = await this.queue.exclusive(async () => {
+          const r = await this.records.read(rel)
+          const a = r.status === 'ok' ? attachmentFrom(r.value) : null
+          if (!a || !purgeDue(a, now) || this.queue.relsUnder(dir).includes(rel)) return false
+          await files.removeDir(this.o.dataDir, id)
+          await this.records.remove(rel)
+          return true
+        })
+        if (done) gone++
+      } catch (err) {
+        problems.push(`załącznik ${id}: ${String(err)}`)
+      }
+    }
+    if (gone) this.o.log?.('info', `załączniki: usunięto ${gone} (30 dni po usunięciu)`)
+    return gone
   }
 
   /** Your answer to a conflict copy: „mine” – the file's values, „theirs” – the copy's; then the copy goes. */
