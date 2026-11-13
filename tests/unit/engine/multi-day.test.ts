@@ -11,13 +11,13 @@ import { dayPlan } from '@shared/engine/createDay'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
 import { ASSUMED_CHECKIN, ENERGY_SAMPLE_MIN, energyTrack } from '@shared/engine/energyTrack'
-import { foldFacts } from '@shared/engine/facts'
+import { foldFacts, stayingIds } from '@shared/engine/facts'
 import { gridOf, idxOfLogical } from '@shared/engine/grid'
-import { moveBetweenDays, moveGroup } from '@shared/engine/planEdit'
-import { applyVariant } from '@shared/engine/variants'
+import { moveBetweenDays, moveGroup, moveRoots, stayHowOf } from '@shared/engine/planEdit'
+import { applyVariant, planWith } from '@shared/engine/variants'
 import { agendaDates, daysViewOf, horizonDay, threeDays, unknownDay, weekViewOf, type HorizonBlock, type HorizonDay } from '@shared/engine/week'
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
-import { dayFileFrom } from '@shared/model/plan'
+import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { dayEnd, placeLogical } from '@shared/time/day'
 import { block, lm, Scenario } from './dsl'
@@ -153,15 +153,65 @@ describe('D417 – przeniesienie na inny dzień z godziną upuszczenia', () => {
     const v = { id: 't', label: '', effect: { workEndMin: null, extensionMin: 0, regenMin: 0, withinBoundary: true }, changes: [{ k: 'tomorrow' as const, block: 'x' }] }
     const s = new Scenario({ date: TODAY, plan: [x, y] })
     const raw = { schema: 1, date: TODAY, blocks: [x, y].map((b) => ({ ...b })) }
-    const along = applyVariant(s.contextAt(NOW), raw, null, v, FUT)
-    expect(dayFileFrom(along.tomorrow!, FUT).blocks.map((b) => [b.id, b.anchor])).toEqual([
-      ['x', null],
-      ['y', 'x']
+    // The facts of the day as the caller counted it (T966 – no second fold of the log).
+    const facts = () => computeDay(s.contextAt(NOW)).facts
+    const along = applyVariant(s.contextAt(NOW), raw, null, v, FUT, facts())
+    // The whole group is marked as moved by a variant (T963 – no note for accuracy for any of them).
+    expect(dayFileFrom(along.tomorrow!, FUT).blocks.map((b) => [b.id, b.anchor, b.byVariant])).toEqual([
+      ['x', null, true],
+      ['y', 'x', true]
     ])
     s.presence('07:30').start('y', '11:00')
-    const kept = applyVariant(s.contextAt(NOW), raw, null, v, FUT)
+    const kept = applyVariant(s.contextAt(NOW), raw, null, v, FUT, facts())
     expect(dayFileFrom(kept.tomorrow!, FUT).blocks.map((b) => b.id)).toEqual(['x'])
     expect(dayFileFrom(kept.today, TODAY).blocks.map((b) => [b.id, b.anchor, b.startMin])).toEqual([['y', null, lm('14:00')]])
+  })
+
+  it('wariant z blokiem i jego zakotwiczonym jako dwiema zmianami: zakotwiczony to nie osobny ruch (T962)', () => {
+    const x = block({ id: 'x', cat: 'inne', at: '13:00', min: 60, origin: 'user' })
+    const y = { ...block({ id: 'y', cat: 'inne', after: 'x', min: 30, origin: 'user' }), steps: [{ id: 's1', title: 'a', order: 0, done: false }] }
+    const s = new Scenario({ date: TODAY, plan: [x, y] })
+    const raw = { schema: 1, date: TODAY, blocks: [x, y].map((b) => ({ ...b })), stepsDone: { y: { s1: true } } }
+    // The candidates of a variant: the roots only – a block anchored to another one moved goes as its follower.
+    expect(moveRoots([x, y], ['y', 'x'])).toEqual(['x'])
+    for (const order of [['x', 'y'], ['y', 'x']]) {
+      const v = { id: 't', label: '', effect: { workEndMin: null, extensionMin: 0, regenMin: 0, withinBoundary: true }, changes: order.map((block) => ({ k: 'tomorrow' as const, block })) }
+      const r = applyVariant(s.contextAt(NOW), raw, null, v, FUT, computeDay(s.contextAt(NOW)).facts)
+      const file = dayFileFrom(r.tomorrow!, FUT)
+      expect(file.blocks.map((b) => [b.id, b.anchor, b.byVariant])).toEqual([
+        ['x', null, true],
+        ['y', 'x', true]
+      ])
+      expect(file.stepsDone).toEqual({ y: ['s1'] })
+    }
+  })
+
+  it('ocena wariantu = zapis: z planu schodzi blok i cała grupa (także pośrednio zakotwiczone), zostający – bez kotwicy (T962)', () => {
+    const x = block({ id: 'x', cat: 'inne', at: '13:00', min: 60, origin: 'user' })
+    const y = block({ id: 'y', cat: 'inne', after: 'x', min: 30, origin: 'user' })
+    const z = block({ id: 'z', cat: 'inne', after: 'y', min: 15, origin: 'user' })
+    const s = new Scenario({ date: TODAY, plan: [x, y, z] })
+    expect(planWith(s.contextAt(NOW), [{ k: 'tomorrow', block: 'x' }], computeDay(s.contextAt(NOW)).facts).map((b) => b.id)).toEqual([])
+    s.presence('07:30').start('y', '11:00')
+    const ctx = s.contextAt(NOW)
+    expect(planWith(ctx, [{ k: 'tomorrow', block: 'x' }], computeDay(ctx).facts).map((b) => [b.id, b.anchor, b.startMin])).toEqual([
+      ['y', null, lm('14:00')],
+      ['z', 'y', null]
+    ])
+  })
+
+  it('zostają też zaparkowany, odwołany i nieprzenośny (sesja, wykład, zjazd, druga zmiana) – jadą tylko niezaczęte, aktywne, przenośne (T961)', () => {
+    const x = block({ id: 'x', cat: 'inne', at: '09:00', min: 60, origin: 'user' })
+    const after = (id: string, o: Partial<PlanBlock> = {}) => ({ ...block({ id, cat: 'inne', after: 'x', min: 15, origin: 'user' }), ...o })
+    const plan = [x, after('go'), after('park'), after('off'), after('ses', { origin: 'session', categoryId: 'sesja' }), after('lec', { origin: 'lecture' }), after('zj', { origin: 'zjazd' }), after('ds', { tag: 'secondShift' })]
+    const s = new Scenario({ date: TODAY, plan })
+    s.presence('07:30').raw({ k: 'block.park', block: 'park', at: s.at('08:00') }, '08:00').raw({ k: 'block.cancel', block: 'off', at: s.at('08:01') }, '08:01')
+    const facts = computeDay(s.contextAt(NOW)).facts
+    expect([facts.blocks.get('park')?.parkedAt != null, facts.blocks.get('off')?.cancelledAt != null]).toEqual([true, true])
+    const g = moveGroup(plan, 'x', stayingIds(facts))
+    expect(g.followers.map((b) => b.id)).toEqual(['go'])
+    expect(g.stayers.map((b) => b.id)).toEqual(['park', 'off', 'ses', 'lec', 'zj', 'ds'])
+    expect(g.stayers.map((b) => stayHowOf(b, facts.blocks.get(b.id)))).toEqual(['parked', 'cancelled', 'kept', 'kept', 'kept', 'kept'])
   })
 
   it('zaczęty zakotwiczony zostaje w swoim dniu z własną godziną (bez kotwicy), a to, co za nim – z nim (D424)', () => {
@@ -172,7 +222,7 @@ describe('D417 – przeniesienie na inny dzień z godziną upuszczenia', () => {
     const plan = [x, y, z, w]
     expect(moveGroup(plan, 'x', new Set(['y']))).toEqual({ followers: [w], stayers: [y] })
     const fromRaw = { schema: 1, date: FUT, blocks: plan.map((b) => ({ ...b })) }
-    const two = moveBetweenDays(fromRaw, null, x, plan, FUT, '2026-11-06', true, { startMin: lm('15:00'), begun: new Set(['y']) })
+    const two = moveBetweenDays(fromRaw, null, x, plan, FUT, '2026-11-06', true, { startMin: lm('15:00'), stay: new Set(['y']) })
     expect(two.stayers.map((b) => b.id)).toEqual(['y'])
     // y keeps its place: 10:00, after x as planned; z stays anchored to y.
     expect(dayFileFrom(two.source, FUT).blocks.map((b) => [b.id, b.startMin, b.anchor])).toEqual([
@@ -212,7 +262,7 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
     expect(horizonDay(s.contextAt(NOW), 'today').energy).toBeNull()
     s.checkin('07:40', { head: [0, 0], emotions: [0, 0], senses: [0, 0] })
     expect(horizonDay(s.contextAt(NOW), 'today').energy).not.toBeNull()
-    expect(horizonDay(s.contextAt(NOW), 'today', null, false).energy).toBeNull()
+    expect(horizonDay(s.contextAt(NOW), 'today', null, { moduleOn: false }).energy).toBeNull()
   })
 
   it('dzień miniony: z logu jak historia; bez check-inu – brak krzywej', () => {
@@ -233,11 +283,11 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
     s.presence('07:30').using('07:30', '21:00').checkin('07:40', { head: [0, 0], emotions: [0, 0], senses: [0, 0] }).ran('a', '09:00', '10:00')
     const ctx = s.contextAt(dayEnd(PAST) + 3_600_000)
     // The module off today: the day gone by had it on (its check-in) – its curve stays.
-    expect(horizonDay(ctx, 'past', null, false).energy).not.toBeNull()
+    expect(horizonDay(ctx, 'past', null, { moduleOn: false }).energy).not.toBeNull()
     // Frozen with the module off that day (its grade): none; with it on: the curve.
     const know = Object.fromEntries([...new Set(s.events.map((e) => e.c))].map((c) => [c, Math.max(...s.events.filter((e) => e.c === c).map((e) => e.n))]))
-    expect(horizonDay(ctx, 'past', { know, grade: { modules: { energy: false, projects: true, requests: true } } }, true).energy).toBeNull()
-    expect(horizonDay(ctx, 'past', { know, grade: { modules: { energy: true, projects: true, requests: true } } }, false).energy).not.toBeNull()
+    expect(horizonDay(ctx, 'past', { know, grade: { modules: { energy: false, projects: true, requests: true } } }, { moduleOn: true }).energy).toBeNull()
+    expect(horizonDay(ctx, 'past', { know, grade: { modules: { energy: true, projects: true, requests: true } } }, { moduleOn: false }).energy).not.toBeNull()
   })
 
   it('dzień przyszły: z planu od przyjętego check-inu (100 / 100 / 100 od 04:00, T903) – plan obniża krzywą, przeniesienie ją zmienia', () => {
@@ -252,7 +302,7 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
     expect(sampleAt(later, lm('13:00')).head).toBeGreaterThan(sampleAt(heavy, lm('13:00')).head)
     expect(sampleAt(later, lm('19:00')).head).toBeLessThan(sampleAt(later, lm('15:00')).head)
     // The module off: none.
-    expect(horizonDay(futureDay().contextAt(NOW), 'future', null, false).energy).toBeNull()
+    expect(horizonDay(futureDay().contextAt(NOW), 'future', null, { moduleOn: false }).energy).toBeNull()
   })
 
   it('przyjęty check-in tylko dla energii: dzień przyszły liczy się jak bez niego (blok, budżet, pora snu)', () => {
@@ -260,7 +310,7 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
     const d = horizonDay(ctx, 'future')
     const state = computeDay(ctx)
     // The same day with the module off (no check-in assumed at all): all but the curve the same.
-    expect({ ...d, energy: null }).toEqual(horizonDay(ctx, 'future', null, false))
+    expect({ ...d, energy: null }).toEqual(horizonDay(ctx, 'future', null, { moduleOn: false }))
     expect(d.budget).toEqual({ workMin: state.budgetUsedMin + state.budget.forecastMin, limitMin: state.budget.limitMin })
     expect(d.budget).toEqual({ workMin: 180, limitMin: DEFAULT_SETTINGS.dayTypes.zwykly.budgetMin })
     expect(ctx.events).toEqual([])
@@ -268,7 +318,7 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
 
   it('bez krzywej, gdy nikt jej nie rysuje (miesiąc, cele – T914): reszta dnia ta sama', () => {
     const ctx = futureDay().contextAt(NOW)
-    const none = horizonDay(ctx, 'future', null, null)
+    const none = horizonDay(ctx, 'future', null, { curve: false })
     expect(none.energy).toBeNull()
     expect({ ...horizonDay(ctx, 'future'), energy: null }).toEqual(none)
   })

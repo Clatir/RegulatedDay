@@ -137,3 +137,19 @@ export function countDay(date: string, data: DayData, inputs: PlanInputs, at: nu
   const energy = computeEnergy(ctx, state, { moduleOn: energyOn, calibration })
   return { date, data, dayFile, snapshot, fromLog, ctx, state, energy, events }
 }
+
+/**
+ * A day as the engine has it now, counted on `base` – its file as the edit is made on it (its logs from `dayData`; the energy
+ * not counted) – for an edit made in its turn („Dodaj” and a drag of „Tydzień”, „Przenieś na…”). Null: the day cannot be
+ * counted now (its logs not read whole, the bridge fails).
+ */
+export async function countedDay(date: string, base: RawRecord | null, at = Date.now()): Promise<DayModel | null> {
+  try {
+    const data = await window.rd.dayData(date)
+    if (!dayUsable(data)) return null
+    const { rd, templates, lectures, seriesPlans } = useData.getState()
+    return countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures, series: seriesPlans }, at, false)
+  } catch {
+    return null
+  }
+}

@@ -623,7 +623,7 @@ export class WidgetEngine {
     const next = addDays(day, 1)
     const rels = [paths.day(day), paths.day(next)] as const
     const before = await Promise.all(rels.map(async (rel) => ((await folder.recordView(rel)) as RawRecord | undefined) ?? null))
-    const after = applyVariant(m.ctx, before[0]!, before[1]!, v, next)
+    const after = applyVariant(m.ctx, before[0]!, before[1]!, v, next, m.state.facts)
     const made = [after.today, after.tomorrow]
     const edits = rels.flatMap((rel, k) => {
       const entry = recordEdit(rel, before[k]!, made[k]!)

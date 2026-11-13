@@ -10,12 +10,12 @@ import { blockJson, dayRaw, putBlock, setAsked, setCancelled, setDayField, takeB
 import { paths } from '@shared/data/paths'
 import { marketDay } from '@shared/calendar/holidays'
 import { namingOf, snapshotOf } from '@shared/engine/context'
-import { foldFacts, type DayFacts } from '@shared/engine/facts'
+import { begunIds, foldFacts, stayingIds } from '@shared/engine/facts'
 import type { Freed } from '@shared/engine/gaps'
 import { gridOf } from '@shared/engine/grid'
 import type { AnyEvent } from '@shared/model/events'
 import { createDay } from '@shared/engine/createDay'
-import { copiedDay, moveBetweenDays, wakeChange } from '@shared/engine/planEdit'
+import { copiedDay, moveBetweenDays, stayHowOf, wakeChange, type StayHow } from '@shared/engine/planEdit'
 import type { DayContext, DayState } from '@shared/engine/day'
 import type { EnergyState } from '@shared/engine/energy'
 import { energyOrderVariant, lowestEnergy } from '@shared/engine/energyOrder'
@@ -26,8 +26,9 @@ import { countLabel, logicalClock, plDate } from '@shared/format'
 import type { DaySnapshot } from '@shared/model/events'
 import { attachmentUndoOf, ownAttachmentIds, removalEdits, restoreEdits, type AttachmentUndo } from '@shared/model/attachment'
 import { dayFilesNow, editOf, isSaved, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
-import { dayUsable } from '../../store/day'
+import { countedDay, dayUsable } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
+import type { WeekPush, WeekPushedDay } from '../../store/weekPush'
 
 /** The edit of a day's file `before` (null: none yet, it is made) by `next` – null when it changes nothing. */
 export function dayFileEdit(date: string, before: RawRecord | null, next: (raw: RawRecord) => RawRecord): EditEntry | null {
@@ -327,8 +328,8 @@ export async function removeDayBlock(date: string, seen: RawRecord | null, b: Pl
   return true
 }
 
-/** The blocks that have begun – a changed wake leaves them where they ran. */
-export const begunIds = (facts: Pick<DayFacts, 'blocks'>): Set<string> => new Set([...facts.blocks].filter(([, f]) => f.startedAt != null).map(([id]) => id))
+/** The blocks that have begun – a changed wake leaves them where they ran (one rule with the engine: `facts.begunIds`). */
+export { begunIds }
 
 /** What a change of wake counts a day from: its snapshot as the engine has it, and the blocks that stay where they ran. */
 export interface WakeDay {
@@ -424,20 +425,42 @@ function undoWake(was: WakeWas): Promise<EditOutcome[] | null> {
   })
 }
 
+/** What „Przenieś na…” came to: the write's outcome, and the move for its „Cofnij” (`tellMoved`; null – nothing saved). */
+export interface DayMoved {
+  out: EditOutcome[] | null
+  push: WeekPush | null
+}
+
 /**
  * A block moved to another day (spec „Przeniesienie”): it leaves this day (its id stays, the move is noted), comes to
- * the target with the day it came from and one move more when you moved it – with the blocks anchored to it that have not
- * begun (`begun`; one begun stays with its own hour – D424, T951). The target is the owner of the edit, the source goes with
- * it (T952): the block never leaves its day before the target has it.
+ * the target with the day it came from and one move more when you moved it – with the blocks anchored to it that go (D424,
+ * T951, T961; one begun, parked, cancelled or of a kind that stays keeps its day with its own hour). The day is counted in
+ * the turn of the write (T964): a block that began after the window was drawn stays; a day that cannot be counted now – the
+ * window's plan and `opts.stay`. The target is the owner of the edit, the source goes with it (T952): the block never leaves
+ * its day before the target has it. `opts.name`, `opts.names` – the words of „Przeniesiono: …” (`tellMoved`).
  */
-export function moveDayBlock(fromDate: string, fromRaw: RawRecord | null, plan: readonly PlanBlock[], b: PlanBlock, toDate: string, toRaw: RawRecord | null, byYou = true, begun: ReadonlySet<string> = new Set()): Promise<EditOutcome[] | null> {
-  return trySaveWith(async () => {
+export async function moveDayBlock(fromDate: string, fromRaw: RawRecord | null, plan: readonly PlanBlock[], b: PlanBlock, toDate: string, toRaw: RawRecord | null, byYou = true, opts: { name?: string; names?: Names; stay?: ReadonlySet<string> } = {}): Promise<DayMoved> {
+  const days: WeekPushedDay[] = []
+  let stayed: Array<{ name: string; how: StayHow }> = []
+  const out = await trySaveWith(async () => {
     const now = await dayFilesNow([fromDate, toDate], (d) => (d === fromDate ? fromRaw : toRaw))
     const from = now[fromDate] ?? null
     const to = now[toDate] ?? null
-    const { source, target } = moveBetweenDays(from, to, blockNow(dayRaw(from, fromDate), fromDate, b), plan, fromDate, toDate, byYou, { begun })
-    return withOwner(editOf(paths.day(toDate), to, target), [editOf(paths.day(fromDate), from, source)].filter((e): e is EditEntry => e != null))
+    const day = await countedDay(fromDate, from)
+    const dayPlan = day?.ctx.plan ?? plan
+    const facts = day?.state.facts
+    const block = blockNow(dayRaw(from, fromDate), fromDate, dayPlan.find((x) => x.id === b.id) ?? b)
+    const two = moveBetweenDays(from, to, block, dayPlan, fromDate, toDate, byYou, { stay: facts ? stayingIds(facts) : opts.stay })
+    const naming = day ? namingOf(day.ctx, day.state.facts) : null
+    stayed = two.stayers.map((s) => ({ name: opts.names && naming ? nameById(s.id, naming, opts.names) : 'blok', how: stayHowOf(s, facts?.blocks.get(s.id)) }))
+    const bring = editOf(paths.day(toDate), to, two.target)
+    const leave = editOf(paths.day(fromDate), from, two.source)
+    if (leave) days.push({ date: fromDate, entry: leave, made: leave.create ? two.source : null, moved: 0 })
+    if (bring) days.push({ date: toDate, entry: bring, made: bring.create ? two.target : null, moved: 0 })
+    return withOwner(bring, leave ? [leave] : [])
   })
+  const move = { blockId: b.id, name: opts.name ?? 'blok', from: fromDate, to: toDate, ...(stayed.length ? { stayed } : {}) }
+  return { out, push: isSaved(out) && days.length ? { days, move } : null }
 }
 
 /** The fields a copy of a day sets in its target (spec „Skopiuj ten dzień do…”). */

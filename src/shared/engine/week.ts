@@ -174,6 +174,16 @@ function begunState(f: BlockFact, when: HorizonWhen): HorizonBlockState {
 }
 
 /**
+ * What the curve of a day's energy is counted with (T966): `curve` false – none (the month, the goals, „Agenda” – T914,
+ * T954); `moduleOn` – the energy module as the settings have it now, for today and a day to come (a day gone by has its own –
+ * `gradeEnergy`, T950). Both default to true.
+ */
+export interface HorizonEnergy {
+  curve?: boolean
+  moduleOn?: boolean
+}
+
+/**
  * The energy module of a day gone by for its curve (T950): its grade's (`modules.energy` – on all day, or off at some moment:
  * off all day, or its own switches in its log decide), else on – a day not frozen has a check-in only if the module was on.
  */
@@ -296,11 +306,11 @@ export function sessionsOf(ctx: DayContext, state: DayState, when: HorizonWhen):
 
 /**
  * One day of the horizon (`when` – against today; `frozen` – a frozen day's freeze), counted once: its column of the week
- * and its measures of the month's goals, the curve of its energy (D417; `energyOn` – the energy module as the settings have
- * it now, for today and a day to come – a day gone by has its own, T950; null – no curve asked for: the month, the goals,
- * „Agenda”, T914, T954) and its work against the budget (D418).
+ * and its measures of the month's goals, the curve of its energy (D417, `HorizonEnergy`) and its work against the budget (D418).
  */
-export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay | null = null, energyOn: boolean | null = true): HorizonDay {
+export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay | null = null, opts: HorizonEnergy = {}): HorizonDay {
+  const curve = opts.curve !== false
+  const moduleOn = opts.moduleOn !== false
   const past = when === 'past'
   if (past && !ctx.events.length && ctx.snapshot.dayType !== 'zjazd-stacjonarny') return quietDay(ctx)
   // A day gone by as its grade counts it (as written, to its end); a frozen one up to the events its freeze named.
@@ -351,7 +361,7 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
     // Drawn with the axis it lies under (a frozen day's later corrections too); not counted when nobody draws it. A day gone
     // by with its module of that day (T950): its grade's; not frozen – on (its check-in was given with the module on, and
     // its own switches in its log decide the rest).
-    energy: energyOn == null ? null : columnEnergy(axis.ctx, axis.state, when, past ? gradeEnergy(frozen) : energyOn),
+    energy: curve ? columnEnergy(axis.ctx, axis.state, when, past ? gradeEnergy(frozen) : moduleOn) : null,
     // A day gone by nobody used has no measure of its work (as its regeneration – T904).
     budget: past && !presence && state.dayType !== 'zjazd-stacjonarny' ? null : { workMin: state.budgetUsedMin + state.budget.forecastMin, limitMin: state.budget.limitMin }
   }

@@ -3,13 +3,17 @@
  * tygodniu, z krzywą energii kolumny i budżetem), miesiąc „Kalendarza” (`monthView` – bloki stałe i obciążenie każdego dnia),
  * moduł energii z rd.json (wyłączony – bez krzywej; zmiana liczy dni od nowa), sprawdzanie wejścia w DataHub.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
+import { blockJson } from '@shared/data/dayEdits'
+import { recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
+import { moveBetweenDays } from '@shared/engine/planEdit'
 import { threeDays } from '@shared/engine/week'
+import { planBlock } from '@shared/model/plan'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { placeLogical } from '@shared/time/day'
 import { DataFolder } from '../../src/main/data/folder'
@@ -39,7 +43,7 @@ async function make() {
   const asked: Array<[string, boolean | null]> = []
   const run = (t: Parameters<typeof inProcess.run>[0]) => {
     runs.push(t.kind === 'horizon' ? `${t.kind}:${t.ctx.date}` : t.kind)
-    if (t.kind === 'horizon') asked.push([t.ctx.date, t.energyOn ?? null])
+    if (t.kind === 'horizon') asked.push([t.ctx.date, t.curve === true ? (t.moduleOn !== false) : null])
     return inProcess.run(t)
   }
   const folder = await DataFolder.open({
@@ -183,6 +187,44 @@ describe('miesiąc „Kalendarza” w folderze danych (D418)', () => {
     expect(thu.fixed.map((b) => b.id)).toEqual(['meet'])
     expect(thu.load).not.toBeNull()
     expect(m.days.find((d) => d.date === '2026-11-06')!.load).toBe('high')
+  })
+})
+
+describe('przeniesienie na prawdziwej kolejce – właściciel w konflikcie nie kładzie niczego (T960)', () => {
+  it('cel z polem spornym: bloku w celu nie ma, źródło czeka; „ich” – blok tylko w swoim dniu', async () => {
+    const x = planBlock({ id: 'x', categoryId: 'inne', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user' })
+    const fromFile = { schema: 1, date: THU, blocks: [blockJson(x)] }
+    // The block once came to Thursday from Friday (Friday notes it): the move back takes that note off Friday.
+    const FRI = '2026-11-06'
+    const toFile = { schema: 1, date: FRI, movedTo: { x: THU } }
+    day(THU, fromFile.blocks)
+    writeFileSync(join(dataDir, paths.day(FRI)), JSON.stringify(toFile))
+    const two = moveBetweenDays(fromFile, toFile, x, [x], THU, FRI, true, { startMin: 12 * 60 })
+    const owner = recordEdit(paths.day(FRI), toFile, two.target)!
+    const leave = { ...recordEdit(paths.day(THU), fromFile, two.source)!, after: [0] }
+    // Meanwhile another computer noted another move of it on Friday: the owner's note meets that change.
+    writeFileSync(join(dataDir, paths.day(FRI)), JSON.stringify({ ...toFile, movedTo: { x: '2026-11-20' } }))
+    const { folder } = await make()
+    const out = await folder.edit([owner, leave])
+    expect(out.map((o) => o.status)).toEqual(['conflict', 'waiting'])
+    const file = (d: string) => JSON.parse(readFileSync(join(dataDir, paths.day(d)), 'utf8')) as { blocks?: Array<{ id: string }>; movedTo?: Record<string, string> }
+    // Nothing of the owner written: the block is not on Friday while the question waits.
+    expect(file(FRI).blocks ?? []).toEqual([])
+    expect(file(THU).blocks!.map((b) => b.id)).toEqual(['x'])
+    // „Theirs”: both entries go – the block on its own day only.
+    expect(await folder.queue.resolve(out[0]!.id, 'theirs')).toBe(true)
+    await folder.edit([])
+    expect(file(FRI).blocks ?? []).toEqual([])
+    expect(file(THU).blocks!.map((b) => b.id)).toEqual(['x'])
+    expect(file(THU).movedTo ?? {}).toEqual({})
+  })
+
+  it('wpis bez zależnych dalej kładzie pola niesporne (pytanie tylko o resztę) – jak dotąd', async () => {
+    writeFileSync(join(dataDir, paths.day(THU)), JSON.stringify({ schema: 1, date: THU, wakeMin: 400, dayType: 'zwykly' }))
+    const { folder } = await make()
+    const out = await folder.edit([{ rel: paths.day(THU), edits: [{ path: ['wakeMin'], base: 300, value: 420 }, { path: ['dayType'], base: 'zwykly', value: 'wolne' }] }])
+    expect(out.map((o) => o.status)).toEqual(['conflict'])
+    expect(JSON.parse(readFileSync(join(dataDir, paths.day(THU)), 'utf8'))).toMatchObject({ wakeMin: 400, dayType: 'wolne' })
   })
 })
 

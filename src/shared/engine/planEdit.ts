@@ -14,6 +14,7 @@ import { logicalMinuteOf } from '../time/day'
 import { plannedSpan, type BlockInfo } from './blocks'
 import { dayPlan, dayWakeMin, morningBound, wakeShiftedStart } from './createDay'
 import type { DayState } from './day'
+import type { BlockFact } from './facts'
 import { atOf, idxOfLogical } from './grid'
 
 /** A start kept in the logical day (04:00–03:59). */
@@ -128,39 +129,67 @@ export function movedBlock(b: PlanBlock, plan: readonly PlanBlock[], fromDate: s
 const movedOrigin = (o: PlanBlock['origin']): PlanBlock['origin'] => (o === 'session' || o === 'lecture' || o === 'zjazd' || o === 'template' ? 'user' : o)
 
 /**
- * What goes with a block moved to another day (D424, T951): the blocks anchored to it – directly or through one another –
- * that have not begun (`followers`, in the plan's order: they go with it, still anchored); one that has begun stays on its
- * day (`stayers`) with its own hour, and what is anchored to it stays with it.
+ * A block of a kind that never leaves its day with another one (T961): a session, a lecture, a class of a „zjazd” (theirs is
+ * that day's layer or plan) or the second shift.
  */
-export function moveGroup(plan: readonly PlanBlock[], id: string, begun: ReadonlySet<string> = new Set()): { followers: PlanBlock[]; stayers: PlanBlock[] } {
+const keptKind = (b: PlanBlock): boolean => b.origin === 'session' || b.origin === 'lecture' || b.origin === 'zjazd' || b.tag === 'secondShift'
+
+/**
+ * What goes with a block moved to another day (D424, T951, T961): the blocks anchored to it – directly or through one
+ * another – that have not begun, are on the day (not parked nor cancelled: `stay`, from `stayingIds`) and may move (not a
+ * session, a lecture, a class of a „zjazd” nor the second shift) – `followers`, in the plan's order: they go with it, still
+ * anchored; any other stays on its day (`stayers`) with its own hour, and what is anchored to it stays with it.
+ */
+export function moveGroup(plan: readonly PlanBlock[], id: string, stay: ReadonlySet<string> = new Set()): { followers: PlanBlock[]; stayers: PlanBlock[] } {
   const going = new Set([id])
   const staying = new Set<string>()
   for (let grew = true; grew; ) {
     grew = false
     for (const b of plan) {
       if (b.anchor == null || !going.has(b.anchor) || going.has(b.id) || staying.has(b.id)) continue
-      ;(begun.has(b.id) ? staying : going).add(b.id)
+      ;(stay.has(b.id) || keptKind(b) ? staying : going).add(b.id)
       grew = true
     }
   }
   return { followers: plan.filter((b) => b.id !== id && going.has(b.id)), stayers: plan.filter((b) => staying.has(b.id)) }
 }
 
-/** What a move takes besides the block: its start on the target (D417) and the blocks that have begun (D424 – they stay). */
+/**
+ * The blocks among `ids` a variant moves as moves of their own (T962): those not going already as a follower of another one
+ * of them (`moveGroup`) – a block anchored to a moved one goes with it, never as a second move.
+ */
+export function moveRoots(plan: readonly PlanBlock[], ids: readonly string[], stay: ReadonlySet<string> = new Set()): string[] {
+  const along = new Set(ids.flatMap((id) => moveGroup(plan, id, stay).followers.map((f) => f.id)))
+  return ids.filter((id) => !along.has(id))
+}
+
+/** Why a block anchored to the moved one stayed on its day (D424, T965): it runs, it is over, parked, cancelled, or of a kind that stays. */
+export type StayHow = 'running' | 'done' | 'parked' | 'cancelled' | 'kept'
+
+export function stayHowOf(_b: PlanBlock, f: Pick<BlockFact, 'startedAt' | 'endedAt' | 'parkedAt' | 'cancelledAt'> | undefined): StayHow {
+  if (f?.startedAt != null) return f.endedAt != null ? 'done' : 'running'
+  if (f?.parkedAt != null) return 'parked'
+  if (f?.cancelledAt != null) return 'cancelled'
+  return 'kept'
+}
+
+/** What a move takes besides the block: its start on the target (D417) and the blocks that stay (D424). */
 export interface MoveOptions {
   /** Its start on the target (where it was dropped in a column of „Tydzień” or „3 dni”); none – its planned time, as „Przenieś na…”. */
   startMin?: number
-  /** The blocks of the day that have begun (`begunIds`): one anchored to the block stays on its day (D424). */
-  begun?: ReadonlySet<string>
+  /** The blocks of the day that stay (`stayingIds`: begun, parked, cancelled): one anchored to the block stays on its day (D424, T961). */
+  stay?: ReadonlySet<string>
+  /** Moved by a variant (D313): the whole group is marked (`byVariant` – no note for accuracy, T963). */
+  byVariant?: boolean
 }
 
 /**
  * The source's half of a move (D424): the day notes where the block and its followers went (`movedTo`), one of yours leaves
- * its blocks, their ticks leave it (they go with them); a block anchored to it that has begun stays with its own hour – its
- * planned start, no anchor (it would leave the plan with its anchor gone). Made over the file as it is.
+ * its blocks, their ticks leave it (they go with them); a block anchored to it that stays keeps its own hour – its planned
+ * start, no anchor (it would leave the plan with its anchor gone). Made over the file as it is (`file` – the same, parsed).
  */
-export function moveSource(fromRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, group: { followers: readonly PlanBlock[]; stayers: readonly PlanBlock[] }): Raw {
-  const file = dayFileFrom(fromRaw ?? {}, fromDate)
+export function moveSource(fromRaw: Raw | null, file: DayFile, b: PlanBlock, plan: readonly PlanBlock[], toDate: string, group: { followers: readonly PlanBlock[]; stayers: readonly PlanBlock[] }): Raw {
+  const fromDate = file.date
   const own = new Set(file.blocks.map((x) => x.id))
   let source = dayRaw(fromRaw, fromDate)
   for (const id of [b.id, ...group.followers.map((f) => f.id)]) {
@@ -182,31 +211,32 @@ export function moveSource(fromRaw: Raw | null, b: PlanBlock, plan: readonly Pla
  * file holds it goes whole (T901): fields this version does not know (a newer one wrote them) stay with it – only what the
  * move changes is written over them.
  */
-export function moveTarget(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou: boolean, startMin: number | undefined, followers: readonly PlanBlock[]): Raw {
+export function moveTarget(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou: boolean, startMin: number | undefined, followers: readonly PlanBlock[], byVariant = false): Raw {
   const raws = dayBlocks(dayRaw(fromRaw, fromDate))
   const put = (raw: Raw, moved: PlanBlock): Raw => {
     const was = raws.find((x) => isRaw(x) && x.id === moved.id) as Raw | undefined
     return setStepsDone(setMovedTo(was ? putRawBlock(raw, blockJson(moved, was)) : putBlock(raw, moved), moved.id, null), moved.id, stepsDoneIn(fromRaw, moved.id))
   }
-  let target = put(dayRaw(toRaw, toDate), movedBlock(b, plan, fromDate, byYou, startMin))
+  const mark = byVariant ? { byVariant: true } : {}
+  let target = put(dayRaw(toRaw, toDate), { ...movedBlock(b, plan, fromDate, byYou, startMin), ...mark })
   // A follower keeps its anchor (its hour is its anchor's end), the day it came from and one move more, as the block.
-  for (const f of followers) target = put(target, { ...f, movedFrom: fromDate, moves: f.moves + (byYou ? 1 : 0), origin: movedOrigin(f.origin) })
+  for (const f of followers) target = put(target, { ...f, movedFrom: fromDate, moves: f.moves + (byYou ? 1 : 0), origin: movedOrigin(f.origin), ...mark })
   return target
 }
 
 /**
  * The two files of a move (spec „Przeniesienie”, D424 – every way: „Przenieś na…”, a variant, „Tydzień”): the source notes
- * where the block went (one of yours leaves its blocks), the target takes it, with the blocks anchored to it that have not
- * begun (`moveGroup`); one that has begun stays on its day with its own hour (`moveSource`, `moveTarget`). The blocks given
- * as the plan has them – the file's version of each is taken where the file has one.
+ * where the block went (one of yours leaves its blocks), the target takes it, with the blocks anchored to it that go
+ * (`moveGroup`); one that stays keeps its day with its own hour (`moveSource`, `moveTarget`). The blocks given as the plan has
+ * them – the file's version of each is taken where the file has one (the file parsed once).
  */
 export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou = true, opts: MoveOptions = {}): { source: Raw; target: Raw; followers: PlanBlock[]; stayers: PlanBlock[] } {
-  const group = moveGroup(plan, b.id, opts.begun)
-  const inFile = dayFileFrom(fromRaw ?? {}, fromDate).blocks
-  const followers = group.followers.map((f) => inFile.find((x) => x.id === f.id) ?? f)
+  const group = moveGroup(plan, b.id, opts.stay)
+  const file = dayFileFrom(fromRaw ?? {}, fromDate)
+  const followers = group.followers.map((f) => file.blocks.find((x) => x.id === f.id) ?? f)
   return {
-    source: moveSource(fromRaw, b, plan, fromDate, toDate, group),
-    target: moveTarget(fromRaw, toRaw, b, plan, fromDate, toDate, byYou, opts.startMin, followers),
+    source: moveSource(fromRaw, file, b, plan, toDate, group),
+    target: moveTarget(fromRaw, toRaw, b, plan, fromDate, toDate, byYou, opts.startMin, followers, opts.byVariant),
     followers,
     stayers: group.stayers
   }

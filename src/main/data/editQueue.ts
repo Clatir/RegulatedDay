@@ -401,6 +401,10 @@ export class EditQueue {
         applied.push(f)
       } else conflicts.push({ ...f, now })
     }
+    // An entry others go with (`after`) is laid whole or not at all (T960): with a field that met a change elsewhere nothing
+    // of it is written until you answer – „theirs” then takes it and them out with nothing of it left (a block moved to
+    // another day never stays on both: its target is the owner, the source goes with it).
+    if (conflicts.length && this.entries.some((x) => x.after?.includes(edit.id))) return { id: edit.id, status: 'conflict', fields: conflicts }
     if (applied.length) await records.write(edit.rel, { ...(value as Record<string, unknown>), updatedAt: stamp, updatedBy: this.o.computer }, 'edit')
     if (conflicts.length) {
       // What did not meet a change elsewhere is written; the rest stays queued as a question.

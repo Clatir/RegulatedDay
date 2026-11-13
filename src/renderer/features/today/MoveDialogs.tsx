@@ -3,26 +3,35 @@
  * do…” (the plan of this day to the days you mark in the month – spec „Szablony dnia …, kopiowanie dnia”).
  */
 import { useState } from 'react'
+import { blockName, type Names } from '@shared/blockName'
+import { stayingIds } from '@shared/engine/facts'
 import { plDate } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
 import { addDays } from '@shared/time/zone'
 import { Dialog } from '../../components/Dialog'
 import { DateField } from '../../components/fields'
 import type { DayModel } from '../../store/day'
-import { isSaved } from '../../store/data'
+import { isSaved, useData } from '../../store/data'
 import { useBusy } from '../../lib/busy'
 import { MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from '../calendar/MonthGrid'
-import { begunIds, copyDayTo, moveDayBlock } from './dayActions'
+import { tellMoved } from '../week/weekActions'
+import { copyDayTo, moveDayBlock } from './dayActions'
 
 export function MoveDialog({ model, block, today, onClose }: { model: DayModel; block: PlanBlock; today: string; onClose: () => void }) {
   const [to, setTo] = useState(addDays(model.date, 1))
   const [busy, run] = useBusy()
+  const { rd, routines, requests } = useData()
   // The window stays open when the move was not saved (the toast says why).
   const move = () =>
     run(async () => {
       if (to === model.date) return onClose()
-      // The blocks anchored to it go with it; one begun stays on this day (D424).
-      if (isSaved(await moveDayBlock(model.date, model.data.dayFile, model.ctx.plan, block, to, null, true, begunIds(model.state.facts)))) onClose()
+      // The blocks anchored to it go with it, one that stays is said – the day counted in the turn of the write (D424, T964);
+      // the window's facts stand in only for a day that cannot be counted then.
+      const names: Names = { rd, settings: model.state.settings, routines, requests }
+      const r = await moveDayBlock(model.date, model.data.dayFile, model.ctx.plan, block, to, null, true, { name: blockName(block, names), names, stay: stayingIds(model.state.facts) })
+      if (!isSaved(r.out)) return
+      if (r.push) tellMoved(r.push)
+      onClose()
     })
   return (
     <Dialog

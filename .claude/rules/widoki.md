@@ -17,7 +17,7 @@ paths:
 # Widoki wielodniowe (SNT1)
 
 Źródło prawdy: D417, D418, D422, D424, specyfikacja „Widoki wielodniowe” (rozdział „Konwencje interfejsu”); decyzje T900–T918 i
-T950–T955 (część A), T936–T939 (ekrany).
+T950–T955, T960–T966 (część A), T936–T939 (ekrany).
 „Tydzień” (D356, D366, D371, D400) – reguły `interfejs.md`.
 
 ## Dane (część A)
@@ -35,11 +35,12 @@ T950–T955 (część A), T936–T939 (ekrany).
   `names` – nazwy dnia źródłowego dla zaczętego zakotwiczonego, `at` – zegar, domyślnie teraz: „dziś” liczone w chwili
   upuszczenia) → `{ status, push, pushed }`: `saved` – gdy `push` ≠ null, `showWeekPush(push)` (linia „Cofnij” nad kolumnami);
   `pending` – pytanie o konflikt albo wynik nieznany (nic nie ponawiać, bez linii); `failed` – nic nie zapisano; `refused` – dzień miniony.
-- Inny dzień: jedna edycja – cel właścicielem, źródło i rozsunięte za nim (`withOwner`, T952); grupa z `moveGroup` (D424, T951)
-  w `moveBetweenDays` – każda droga („Przenieś na…”, wariant „na jutro”). Ten sam dzień = przeciągnięcie D305 bez sprawdzania
+- Inny dzień: jedna edycja – cel właścicielem, źródło i rozsunięte za nim (`withOwner`, T952; właściciel w konflikcie nie kładzie
+  nic – T960); grupa z `moveGroup(plan, id, stayingIds(fakty))` (D424, T951, T961) w `moveBetweenDays` – każda droga („Przenieś
+  na…” – dzień liczony w turze, dymek `tellMoved`, T964; wariant „na jutro” – `moveRoots`, `byVariant` grupy, T962, T963). Ten sam dzień = przeciągnięcie D305 bez sprawdzania
   zakotwiczonych (T955): bez rozsunięcia `push` null (bez linii), z rozsunięciem linia jak „Dodaj” (T917).
 - `WeekPush.move` (`name`, `to`, `stayed`) – „Cofnij” oba dni albo żaden (źródło właścicielem, T953), `weekPushStanding` – oba;
-  `weekPushLineText` – „Przeniesiono: … · … został – już trwa · przesunięto N bloków” (T915, T951).
+  `weekPushLineText` – „Przeniesiono: … · … został – już trwa · przesunięto N bloków” (T915, T951; powód zostania – `stayedText`, T965).
 - Pola bloku: `moveTarget` niesie surowy blok (T901), kroki (`stepsDone`), `movedTo` dla bloku szablonu i serii; własne
   załączniki widzi po id (`sameOwner`), załączniki szablonu – nie (blok staje się Twój, jak „Przenieś na…”).
 

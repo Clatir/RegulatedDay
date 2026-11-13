@@ -5,7 +5,7 @@
  * cel, potem źródło (T912), jedno „Cofnij” dla obu i linia „Przeniesiono: <nazwa> na <dzień>”; tylko bloki, które da się
  * przeciągnąć w „Dziś” (D305), tylko dziś i dni przyszłe – „dziś” z zegara w chwili upuszczenia; ten sam dzień – jak „Dziś”.
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DataView, DayData, EditEntry, EditOutcome, RawRecord, RdApi } from '@shared/api'
 import { blockJson } from '@shared/data/dayEdits'
 import { setAt } from '@shared/data/merge'
@@ -15,12 +15,12 @@ import { createDay } from '@shared/engine/createDay'
 import { dayFileFrom, templateFrom, type PlanBlock } from '@shared/model/plan'
 import type { AnyEvent } from '@shared/model/events'
 import { placeLogical } from '@shared/time/day'
-import { undoWeekLine, undoWeekPush, weekPushStanding } from '@renderer/features/week/weekActions'
+import { tellMoved, undoWeekLine, undoWeekPush, weekPushStanding } from '@renderer/features/week/weekActions'
 import type { Names } from '@shared/blockName'
 import { moveTarget } from '@shared/engine/planEdit'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
-import { MOVE_BEGUN_TEXT, moveWeekBlock, type WeekMove } from '@renderer/features/week/weekMove'
-import { weekPushLineText } from '@renderer/features/week/weekText'
+import { MOVE_BEGUN_TEXT, moveWeekBlock, statusOf, type WeekMove } from '@renderer/features/week/weekMove'
+import { stayedText, weekPushLineText } from '@renderer/features/week/weekText'
 import { moveDayBlock } from '@renderer/features/today/dayActions'
 import { isSaved, useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
@@ -275,8 +275,11 @@ describe('„Przenieś na…” w panelu bloku – ta sama droga (D424, T951, T9
     const x = flex('x', '11:00', 60)
     const y = flex('y', '11:00', 30, { startMin: null, anchor: 'x' })
     const z = flex('z', '11:00', 15, { startMin: null, anchor: 'x' })
-    const s = stub({ [D1]: fileOf(D1, [x, y, z]), [D2]: null })
-    expect(isSaved(await moveDayBlock(D1, s.files[D1]!, [x, y, z], x, D2, null, true, new Set(['z'])))).toBe(true)
+    // z began after the window was drawn: the day counted in the turn of the write knows it (T964) – the caller's set does not.
+    const started = new Scenario({ date: D1, plan: [x, y, z] }).start('z', '09:00').events
+    const s = stub({ [D1]: fileOf(D1, [x, y, z]), [D2]: null }, { events: { [D1]: started } })
+    const r = await moveDayBlock(D1, s.files[D1]!, [x, y, z], x, D2, null, true, { name: 'Raport' })
+    expect(isSaved(r.out)).toBe(true)
     expect(s.sent[0]!.map((e) => [dateOf(e.rel), e.after])).toEqual([
       [D2, undefined],
       [D1, [0]]
@@ -286,6 +289,46 @@ describe('„Przenieś na…” w panelu bloku – ta sama droga (D424, T951, T9
       ['y', 'x']
     ])
     expect(blocksOf(s.files[D1], D1).map((b) => [b.id, b.anchor, b.startMin])).toEqual([['z', null, lm('12:00')]])
+    // The same words as the line of „Tydzień” (D424, T964), with its „Cofnij” for both days.
+    tellMoved(r.push!)
+    const t = useUi.getState().toasts.at(-1)!
+    expect(t.text).toBe('Przeniesiono: Raport na wt 6.01 · blok został – już trwa')
+    t.action!.run()
+    await vi.waitFor(() => expect(blocksOf(s.files[D1], D1).map((b) => b.id).sort()).toEqual(['x', 'y', 'z']))
+    expect(s.files[D2]).toBeNull()
+  })
+})
+
+describe('T965 – dlaczego zakotwiczony został', () => {
+  it('trwa, zrobiony, zaparkowany, odwołany, w swoim dniu; kilka – liczba mnoga', () => {
+    expect(stayedText([])).toBe('')
+    expect(stayedText([{ name: 'A', how: 'running' }])).toBe(' · A został – już trwa')
+    expect(stayedText([{ name: 'A', how: 'done' }])).toBe(' · A został – już zrobiony')
+    expect(stayedText([{ name: 'A', how: 'parked' }, { name: 'B', how: 'parked' }])).toBe(' · A, B zostały – zaparkowane')
+    expect(stayedText([{ name: 'S', how: 'kept' }, { name: 'C', how: 'cancelled' }])).toBe(' · C został – odwołany · S został w swoim dniu')
+  })
+
+  it('zaparkowany zakotwiczony w „Tygodniu”: zostaje w swoim dniu i linia mówi „zaparkowany”', async () => {
+    const x = flex('x', '11:00', 60)
+    const y = flex('y', '11:00', 30, { startMin: null, anchor: 'x' })
+    const sc = new Scenario({ date: D1, plan: [x, y] })
+    sc.raw({ k: 'block.park', block: 'y', at: sc.at('08:00') }, '08:00')
+    const s = stub({ [D1]: fileOf(D1, [x, y]), [D2]: fileOf(D2, []) }, { events: { [D1]: sc.events } })
+    const r = await moveWeekBlock(mv('x', D1, D2, '12:00', 'Raport'), AT)
+    expect(r.status).toBe('saved')
+    expect(blocksOf(s.files[D1], D1).map((b) => [b.id, b.anchor])).toEqual([['y', null]])
+    expect(weekPushLineText(r.push!)).toBe('Przeniesiono: Raport na wt 6.01 · blok został – zaparkowany')
+  })
+})
+
+describe('T919 – wynik zapisu przeniesienia', () => {
+  const st = { afterSend: true }
+  it('uszkodzony plik bez żadnego zapisu – nic nie zapisano; z zapisem czegoś – w toku', () => {
+    expect(statusOf([{ status: 'broken' }], st)).toBe('failed')
+    expect(statusOf([{ status: 'conflict' }, { status: 'broken' }], st)).toBe('failed')
+    expect(statusOf([{ status: 'applied' }, { status: 'broken' }], st)).toBe('pending')
+    expect(statusOf([{ status: 'conflict' }, { status: 'waiting' }], st)).toBe('pending')
+    expect(statusOf([{ status: 'applied' }, { status: 'waiting' }], st)).toBe('saved')
   })
 })
 

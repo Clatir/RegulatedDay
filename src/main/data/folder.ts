@@ -137,6 +137,12 @@ const PEOPLE_RECOUNT_MS = 15 * 60_000
 /** The rituals of this many days back are remembered (the morning shows at most 72 h of days to close). */
 const RITUAL_MEMO_DAYS = 4
 /**
+ * What the curve of a counted day of the horizon was counted with (T966): none (null), its own module (a day gone by – T950),
+ * or the module now, on or off (today, a day to come).
+ */
+type CurveKey = null | 'own' | 'on' | 'off'
+
+/**
  * The days of the horizon remembered at most (the ones asked last): a month of goals, the month of „Kalendarz” (D418), the
  * week shown, „3 dni” and „Agenda” (D417), with room – 14 weeks (T907; before SNT1: 70).
  */
@@ -361,10 +367,10 @@ export class DataFolder {
   /**
    * The days of the horizon (the week, the month's goals – D356, T553), each counted again only on a change of what it is
    * made of; the ones asked last stay (a hit goes to the end). Days being counted now: one count of a day for every ask.
-   * `energyOn` – the module its curve was counted with (null: none counted – T914).
+   * `curve` – what its curve was counted with (`CurveKey`; null: none counted – T914, T966).
    */
-  private readonly horizonMemo = new Map<string, { key: string; day: HorizonDay; seq: number; energyOn: boolean | null }>()
-  private readonly horizonRuns = new Map<string, { key: string; energyOn: boolean | null; run: Promise<HorizonDay>; seq: number }>()
+  private readonly horizonMemo = new Map<string, { key: string; day: HorizonDay; seq: number; curve: CurveKey }>()
+  private readonly horizonRuns = new Map<string, { key: string; curve: CurveKey; run: Promise<HorizonDay>; seq: number }>()
   /** The counts of days of the horizon begun so far: a later one's result is never written over by an earlier one's. */
   private horizonSeq = 0
   /** Changes of the goals one at a time, each made from rd.json as it is in its turn. */
@@ -1431,9 +1437,9 @@ export class DataFolder {
     const inp = await this.inputs(true).catch(() => null)
     // The curves (D417): the energy module as the settings have it now (your queued change too) – for today and the days to
     // come; a day gone by tells its own from its grade and its log (`horizonDay`, T950) – nothing read for it here.
-    const now = energy && inp ? rdFrom(await this.recordView(paths.settings).catch(() => undefined)).general.modules.energy : null
+    const moduleOn = energy && inp ? rdFrom(await this.recordView(paths.settings).catch(() => undefined)).general.modules.energy : true
     const out: HorizonDay[] = []
-    for (const date of dates) out.push(inp ? await this.horizonDay(date, today, at, inp, now == null ? null : date < today ? true : now) : unknownDay(date, whenOf(date, today)))
+    for (const date of dates) out.push(inp ? await this.horizonDay(date, today, at, inp, energy, moduleOn) : unknownDay(date, whenOf(date, today)))
     // The days asked last stay remembered (`HORIZON_MEMO_DAYS`: the month of „Kalendarz”, the goals, the week and the days shown).
     for (const d of this.horizonMemo.keys()) if (this.horizonMemo.size > HORIZON_MEMO_DAYS) this.horizonMemo.delete(d)
     return out
@@ -1447,12 +1453,14 @@ export class DataFolder {
    * timed out or started again): this day unknown – said in the log, by its date and the kind of the error – the others
    * go on.
    */
-  private async horizonDay(date: string, today: string, at: number, inp: Inputs, energyOn: boolean | null): Promise<HorizonDay> {
+  private async horizonDay(date: string, today: string, at: number, inp: Inputs, curve: boolean, moduleOn: boolean): Promise<HorizonDay> {
     const when = whenOf(date, today)
     const next = addDays(date, 1)
-    // A count serves an ask when it is of the same day and has the curve asked for (T914): one without a curve (the month,
-    // the goals – `energyOn` null) is served by any; one with it only by a count with the same module.
-    const serves = (e: boolean | null) => energyOn == null || e === energyOn
+    // What the curve is counted with (T914, T966): none, or with the module of the day – a day gone by its own (T950), today
+    // and a day to come the module now. A count serves an ask when it is of the same day and has the curve asked for: one
+    // without a curve (the month, the goals, „Agenda”) is served by any; one with it only by a count with the same.
+    const want: CurveKey = !curve ? null : when === 'past' ? 'own' : moduleOn ? 'on' : 'off'
+    const serves = (e: CurveKey) => want == null || e === want
     try {
       const read = await this.log.readDay(date)
       const dayFile = await this.dayFile(date, true)
@@ -1463,17 +1471,17 @@ export class DataFolder {
       const was = this.horizonMemo.get(date)
       let day: HorizonDay
       let seq: number
-      let counted: boolean | null
-      if (was?.key === key && serves(was.energyOn)) ({ day, seq, energyOn: counted } = was)
+      let counted: CurveKey
+      if (was?.key === key && serves(was.curve)) ({ day, seq, curve: counted } = was)
       else {
         let job = this.horizonRuns.get(date)
-        if (job?.key !== key || !serves(job.energyOn)) {
+        if (job?.key !== key || !serves(job.curve)) {
           const run = (async () => {
             const ctx = dayContextOf(inp, { date, events: read.events, dayFile, nextFile }, this.o.holidays, at)
             const frozen = when === 'past' ? foldFacts(gridOf(date), read.events).frozen : null
-            return (this.o.worker ?? inProcess).run({ kind: 'horizon', ctx, when, frozen: frozen ? { know: frozen.know, grade: frozen.grade } : null, energyOn })
+            return (this.o.worker ?? inProcess).run({ kind: 'horizon', ctx, when, frozen: frozen ? { know: frozen.know, grade: frozen.grade } : null, curve, moduleOn })
           })()
-          const mine = { key, energyOn, run, seq: ++this.horizonSeq }
+          const mine = { key, curve: want, run, seq: ++this.horizonSeq }
           job = mine
           this.horizonRuns.set(date, mine)
           void run.then(
@@ -1483,15 +1491,15 @@ export class DataFolder {
         }
         day = await job.run
         seq = job.seq
-        counted = job.energyOn
+        counted = job.curve
       }
       // Remembered (the last asked at the end) – unless a count begun later has written the day already, or the same day is
       // remembered with its curve (a count without one never takes its place).
       const now = this.horizonMemo.get(date)
-      const richer = now != null && now.key === key && now.energyOn != null && counted == null
+      const richer = now != null && now.key === key && now.curve != null && counted == null
       if (!now || (now.seq <= seq && !richer)) {
         this.horizonMemo.delete(date)
-        this.horizonMemo.set(date, { key, day, seq, energyOn: counted })
+        this.horizonMemo.set(date, { key, day, seq, curve: counted })
       } else if (richer) {
         this.horizonMemo.delete(date)
         this.horizonMemo.set(date, now)

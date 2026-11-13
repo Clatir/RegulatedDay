@@ -6,12 +6,13 @@ import { putBlock } from '@shared/data/dayEdits'
 import { editStands, inverseEdit } from '@shared/data/merge'
 import { plDateWithWeekday } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
-import { isSaved, trySaveWith, useData, withOwner } from '../../store/data'
-import { countDay, dayUsable, type DayModel } from '../../store/day'
-import { toast } from '../../store/ui'
+import { isSaved, trySaveWith, withOwner } from '../../store/data'
+import { countedDay } from '../../store/day'
+import { toast, undoToast } from '../../store/ui'
 import { dropWeekPushDays, useWeekPush, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 import { dayFileEdit, withPushed, type PushedStart } from '../today/dayActions'
 import { addChange, pushedStarts } from '../today/dayPush'
+import { weekPushLineText } from './weekText'
 
 /** The toast for days whose files cannot be read now: named, with what was done about the rest. */
 export function unreadableText(dates: readonly string[]): string {
@@ -80,20 +81,6 @@ async function pushedFor(date: string, base: RawRecord | null, block: PlanBlock)
   return model ? pushedStarts(model.ctx.plan, addChange(model, block, true)) : []
 }
 
-/**
- * A day as the engine has it now, counted on `base` – its file as the edit is made on it (its logs from `dayData`; the energy
- * not counted). Null: the day cannot be counted now (its logs not read whole, the bridge fails).
- */
-export async function countedDay(date: string, base: RawRecord | null, at = Date.now()): Promise<DayModel | null> {
-  try {
-    const data = await window.rd.dayData(date)
-    if (!dayUsable(data)) return null
-    const { rd, templates, lectures, seriesPlans } = useData.getState()
-    return countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures, series: seriesPlans }, at, false)
-  } catch {
-    return null
-  }
-}
 
 /**
  * Each block put into the plan of its day – the day's own file as it is when this turn comes (made when the day has none
@@ -244,6 +231,14 @@ export async function undoWeekPush(push: WeekPush): Promise<WeekUndone> {
   if (r.changed.length) toast('Część planu zmieniła się od przesunięcia – zostaje tak, jak jest teraz.', 'info', 6000)
   if (r.unreadable.length) toast(undoUnreadableText(r.unreadable), 'error', 6000)
   return r
+}
+
+/**
+ * A move of „Przenieś na…” said (D424, T964): the words of the line of „Tydzień” („Przeniesiono: <nazwa> na <dzień> · <nazwa>
+ * został – …”) in a toast with its „Cofnij” – both days back, or none (`undoWeekPush`).
+ */
+export function tellMoved(push: WeekPush): void {
+  undoToast(weekPushLineText(push), () => void undoWeekPush(push))
 }
 
 /**

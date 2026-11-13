@@ -6,6 +6,7 @@
  */
 import { create } from 'zustand'
 import type { EditEntry, RawRecord } from '@shared/api'
+import type { StayHow } from '@shared/engine/planEdit'
 import { UNDO_LINE_MS } from '@shared/widget'
 
 /** What „Dodaj” did to one day of the range: the one edit of its file, the file it created, how many blocks it pushed apart. */
@@ -26,7 +27,7 @@ export interface WeekPush {
    * „<stayed> został – już trwa” (D424) – the names as the window named them at the move. Absent – a „Dodaj”, or a push
    * within one day.
    */
-  move?: { blockId: string; name: string; from: string; to: string; stayed?: string[] }
+  move?: { blockId: string; name: string; from: string; to: string; stayed?: Array<{ name: string; how: StayHow }> }
 }
 
 export interface WeekPushLine {
