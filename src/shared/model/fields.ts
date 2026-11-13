@@ -37,7 +37,7 @@ export const FIELD_GROUP_NAMES: Record<FieldGroup, string> = {
   reminders: 'Przypomnienia',
   timer: 'Pytania w ciągu dnia',
   care: 'Przerwy, woda i samotność',
-  // Drawn by the settings beside the quick capture's shortcut (D451), not as a section of its own.
+  // The section „Sprawy” of the shared settings (D452); the quick capture's shortcut stays in „Ten komputer”.
   cases: 'Sprawy'
 }
 
@@ -86,7 +86,7 @@ export const NUMBER_FIELDS: readonly NumberField[] = [
   { key: 'breakAfterMin', scope: 'general', path: ['breakAfterMin'], label: 'Przerwa po ciągłej pracy', kind: 'duration', range: GENERAL_RANGES.breakAfterMin, offAllowed: true, group: 'care', hint: '0 wyłącza propozycję.' },
   { key: 'breakMin', scope: 'general', path: ['breakMin'], label: 'Długość przerwy', kind: 'duration', range: GENERAL_RANGES.breakMin, group: 'care' },
   { key: 'solitudeAfterMin', scope: 'general', path: ['solitudeAfterMin'], label: 'Samotność po kontakcie dłuższym niż', kind: 'duration', range: GENERAL_RANGES.solitudeAfterMin, offAllowed: true, group: 'care', hint: '0 wyłącza sugestię.' },
-  { key: 'deadlineDays', scope: 'general', path: ['deadlineDays'], label: 'Terminy w planie porannym', kind: 'integer', range: GENERAL_RANGES.deadlineDays, unit: 'dni', group: 'cases', hint: 'Plan poranny pokazuje sprawy po terminie i z terminem do tylu dni naprzód (2 – dziś, jutro i pojutrze).' }
+  { key: 'deadlineDays', scope: 'general', path: ['deadlineDays'], label: 'Ostrzegaj o terminie na', kind: 'integer', range: GENERAL_RANGES.deadlineDays, unit: 'dni', group: 'cases', hint: 'Plan poranny pokazuje sprawy po terminie i z terminem do tylu dni naprzód (2 – dziś, jutro i pojutrze).' }
 ]
 
 export function fieldByKey(key: string): NumberField | undefined {

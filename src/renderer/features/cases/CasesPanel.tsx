@@ -8,21 +8,24 @@ import { durationLabel } from '@shared/format'
 import { useData } from '../../store/data'
 import { navigate } from '../../store/ui'
 import { useCases } from '../../store/cases'
+import { dueBadge } from '@shared/engine/caseDates'
 import type { CaseItem } from '@shared/engine/cases'
 import { cx } from '../../components/ui'
 import { caseTitle, sectionsOf, statusParts } from './casesLogic'
+import { DueMark } from './DueMark'
 import type { CaseDragState } from './useCaseDrag'
 
 export function CasesPanel({ drag, grab, onPlan }: { drag: CaseDragState | null; grab: (id: string, e: React.PointerEvent) => void; onPlan: (item: CaseItem) => void }) {
   const rd = useData((s) => s.rd)
-  const { items } = useCases()
+  const { items, today } = useCases()
   // Requests belong to their module (spec „Moduły”): switched off, the panel holds the tasks' alone, as the page does.
   const requestsOn = rd.general.modules.requests
   const sections = sectionsOf(items.filter((x) => requestsOn || x.record.kind === 'task'), { showOlder: false }).filter((s) => s.list === 'today' || s.list === 'inbox')
   const dragged = drag ? items.find((x) => x.record.id === drag.id) : undefined
   const row = (x: CaseItem) => {
     const title = caseTitle(x.record, rd)
-    const parts = statusParts(x).filter((p) => p.startsWith('zaplanowane'))
+    const parts = statusParts(x, today).filter((p) => p.startsWith('zaplanowane') || p.startsWith('wykonać'))
+    const badge = dueBadge(x.record, today)
     return (
       <li
         key={x.record.id}
@@ -39,6 +42,7 @@ export function CasesPanel({ drag, grab, onPlan }: { drag: CaseDragState | null;
           <span className="min-w-0 flex-1 truncate text-[12.5px]" title={title}>
             {title}
           </span>
+          {badge && <DueMark badge={badge} />}
           <span className="num shrink-0 text-[11.5px] text-muted">{durationLabel(x.estimateMin)}</span>
           <button type="button" className="shrink-0 text-[11.5px] text-lamp hover:underline" onClick={() => onPlan(x)} data-testid="case-plan" title="Postaw w najbliższym wolnym miejscu osi">
             Zaplanuj

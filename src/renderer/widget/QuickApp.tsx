@@ -2,10 +2,13 @@
  * „Do skrzynki” (D385): the window of the quick capture – one field, shown over every window only by your shortcut. Enter
  * saves a task of your own with this title into „Skrzynka” (the window hides then), Esc hides it; the text stays while
  * it is hidden for another reason (a click elsewhere) and is gone once saved. A refusal (no folder, no title) is said
- * under the field. Prośby are added as before – this makes only tasks.
+ * under the field. Prośby are added as before – this makes only tasks. The words of dates at the end of the title (`!jutro`,
+ * `@pt` – D409) are told under the field before Enter, in the place of the refusal (the window's height stays).
  */
 import { useEffect, useRef, useState } from 'react'
 import { TITLE_MAX } from '@shared/model/requests'
+import { parseQuickDates } from '@shared/quickDates'
+import { logicalDayOf } from '@shared/time/day'
 import { setWindowEscape } from '../lib/escape'
 
 export function QuickApp() {
@@ -13,6 +16,7 @@ export function QuickApp() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const input = useRef<HTMLInputElement>(null)
+  const preview = parseQuickDates(text, logicalDayOf(Date.now())).preview
   useEffect(() => {
     setWindowEscape(() => window.rd.quickClose())
     const off = window.rd.onQuickShown(() => {
@@ -63,10 +67,16 @@ export function QuickApp() {
         }}
         data-testid="quick-title"
       />
-      {error && (
+      {error ? (
         <span className="text-[12px] text-rose" data-testid="quick-error">
           {error}
         </span>
+      ) : (
+        preview && (
+          <span className="text-[12px] text-muted" data-testid="quick-preview">
+            {preview}
+          </span>
+        )
       )}
     </div>
   )

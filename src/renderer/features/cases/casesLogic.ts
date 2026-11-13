@@ -3,10 +3,13 @@
  * as the page shows them (the header of „Dziś” with its sum, „Zrobione” of the last 7 days and „Pokaż starsze”), the line
  * that says where a sprawa stands („zaplanowane …”, „wróciło z Dziś …”, „porzucone”), and the texts that name a sprawa (a task by its title, a request by its person).
  */
-import { caseCompare, caseName, todayHeader, todayMinutes, type CaseItem } from '@shared/engine/cases'
+import { deadlineCases, doText, type DueBadge } from '@shared/engine/caseDates'
+import { caseCompare, caseName, todayHeader, todayMinutes, weekEndOf, type CaseItem } from '@shared/engine/cases'
 import { countLabel, logicalClock, plDate } from '@shared/format'
+import type { PlanBlock } from '@shared/model/plan'
 import { personName, type RdFile } from '@shared/model/rd'
 import { CASE_LISTS, CASE_LIST_NAMES, type CaseList, type RequestRecord } from '@shared/model/requests'
+import { addDays } from '@shared/time/zone'
 
 /** One list of the page: its title (with the sum of „Dziś”), its items in order, how many older ones „Zrobione” keeps back. */
 export interface CaseSection {
@@ -35,12 +38,15 @@ export const caseTitle = (r: RequestRecord, rd: Pick<RdFile, 'people'>): string 
 
 /**
  * Where a sprawa stands, in words (D383, D384, D402): the block it was put into („zaplanowane 12.11.2026 10:00” – the hour
- * as long as the day's file is read), the „Dziś” it came back from at 04:00, what was done or let go. Empty – nothing to say.
+ * as long as the day's file is read), the „Dziś” it came back from at 04:00, the date of doing that does not decide the list
+ * yet („wykonać pn 23.11” – D451, with `today`), what was done or let go. Empty – nothing to say.
  */
-export function statusParts(x: CaseItem): string[] {
+export function statusParts(x: CaseItem, today?: string): string[] {
   const out: string[] = []
   if (x.scheduled) out.push(`zaplanowane ${plDate(x.scheduled.day)}${x.scheduled.startMin != null ? ` ${logicalClock(x.scheduled.startMin)}` : ''}`)
   if (x.rolledFrom) out.push(`wróciło z „Dziś” ${plDate(x.rolledFrom)}`)
+  const doing = today ? doText(x.record, today) : null
+  if (doing) out.push(doing)
   if (x.list === 'done') {
     if (x.record.state === 'dropped') out.push('porzucone')
     if (x.doneDay) out.push(`zrobione ${plDate(x.doneDay)}`)
@@ -76,3 +82,25 @@ export function morningChosen(offered: { requests: readonly CaseItem[]; tasks: r
   const ids = (list: readonly CaseItem[], kind: 'task' | 'request') => list.map((x) => x.record.id).filter((id) => isMorningChosen(kind, id, toggled))
   return { requests: ids(offered.requests, 'request'), tasks: ids(offered.tasks, 'task') }
 }
+
+/** The buttons of a date field of a sprawa (D409, D451): „Dziś”, „Jutro”, „Koniec tygodnia” (the Sunday of this week – on a Sunday, that one). */
+export const DATE_PRESETS = [
+  { id: 'today', label: 'Dziś' },
+  { id: 'tomorrow', label: 'Jutro' },
+  { id: 'week', label: 'Koniec tygodnia' }
+] as const
+
+export type DatePreset = (typeof DATE_PRESETS)[number]['id']
+
+/** The day a button of a date field sets (`today` – the logical day). */
+export const presetDate = (id: DatePreset, today: string): string => (id === 'today' ? today : id === 'tomorrow' ? addDays(today, 1) : weekEndOf(today))
+
+/** How a due date's badge is drawn: past it red („over”), the rest muted („soon”) – D409. */
+export const dueTone = (b: Pick<DueBadge, 'kind'>): 'over' | 'soon' => (b.kind === 'over' ? 'over' : 'soon')
+
+/**
+ * The morning plan's card „Terminy” (D409): `deadlineCases` of the sprawy the page shows (the module of requests off – the tasks'
+ * alone, as the page and the panel have it – T763). Empty – no card.
+ */
+export const morningDeadlines = (items: readonly CaseItem[], requestsOn: boolean, blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string, thresholdDays: number, asked: Readonly<Record<string, string>>): CaseItem[] =>
+  deadlineCases(items.filter((x) => requestsOn || x.record.kind === 'task'), blocks, today, thresholdDays, asked)

@@ -6,6 +6,7 @@
  */
 import { ownHourBlock, plannedSpan } from '@shared/engine/blocks'
 import { namingOf } from '@shared/engine/context'
+import { dueBadge } from '@shared/engine/caseDates'
 import { atOf, logicalSpan } from '@shared/engine/grid'
 import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
@@ -14,6 +15,7 @@ import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import type { DayModel } from '../../store/day'
 import { blockColor, blockMarks, blockName, nameById, type Names } from './blockView'
+import { dueTone } from '../cases/casesLogic'
 import type { EnergyTrack, TimelineItem, TimelineMarker } from './Timeline'
 
 export interface DayAxis {
@@ -24,7 +26,11 @@ export interface DayAxis {
   to: number
 }
 
-export function dayAxis(model: DayModel, names: Names, now: number | null): DayAxis {
+/**
+ * `today` – the logical day of the window (D409): the block of a task shows the task's due date badge, from `today` on (a day
+ * gone by – none); null (the templates, the wizard) – none.
+ */
+export function dayAxis(model: DayModel, names: Names, now: number | null, today: string | null = null): DayAxis {
   const { state, ctx } = model
   const g = state.grid
   const lm = (idx: number) => logicalMinuteOf(model.date, atOf(g, idx))
@@ -64,6 +70,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),
       waits: info.waits,
       ...(p.origin === 'series' ? { series: true } : {}),
+      ...taskBadge(p.task, names, today, model.date),
       ...(edge ? { resize: 'end' as const } : {}),
       // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
       // a class imported from the PDF of „zjazdy” – D357, nor the second shift – D192), not passed.
@@ -110,6 +117,14 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
     energy = { samples, reserve: e.reserve }
   }
   return { items, markers, energy, from: Math.min(lm(state.wake) - 30, 6 * 60), to: Math.max(lm(state.bedtime.forecast) + 30, 22 * 60) }
+}
+
+/** The due-date badge of the task of a block (D409), for a day that is not gone by. */
+function taskBadge(task: string | null | undefined, names: Names, today: string | null, date: string): { badge?: TimelineItem['badge'] } {
+  if (!task || today == null || date < today) return {}
+  const r = names.requests.find((x) => x.id === task)
+  const b = r ? dueBadge(r, today) : null
+  return b ? { badge: { text: b.text, tone: dueTone(b) } } : {}
 }
 
 /** The day's numbers in words (the plan's summary). */

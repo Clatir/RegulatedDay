@@ -5,6 +5,8 @@
  * plan's step of requests takes the tasks of „Dziś”; the shortcut of the quick capture in the settings (validated, switched
  * off). The pytanie „Zadanie zrobione?” of the bar and the ritual's lines are the unit and fs tests' (they need a block that
  * has run); the real Win+Alt+N – `quick-windows.spec.ts` (CI on Windows).
+ * HKU2 (D409, D451): the due date set by a button of the row and its badge, the words „!jutro” of the new task (the line under the
+ * field, saved without the word), the card „Terminy” of the morning plan with „Na Dziś” and „Pomiń”, the threshold in the settings.
  */
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -13,6 +15,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { paths } from '../../src/shared/data/paths'
 import { dayFileFrom } from '../../src/shared/model/plan'
 import { newRequest, newTask } from '../../src/shared/model/requests'
+import { addDays } from '../../src/shared/time/zone'
 import { launch, withMainLog } from './app'
 import { seedAwake } from './seedAwake'
 
@@ -232,6 +235,136 @@ test('rytuał wieczorny: niezrobione zadanie z „Dziś” wymienione („wróc�
       await part.getByTestId('ritual-case-done').click()
       await expect.poll(() => records(dataDir)[0]!.list).toBe('done')
       await expect(page.getByTestId('ritual-case-back')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Sprawy: termin ustawiony przyciskiem „Jutro” – znaczek „Termin jutro” na liście, „Wyczyść” go zdejmuje; „Po terminie” czerwony', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-due-'))
+  const { today } = seedAwake(dataDir, [])
+  putRecord(dataDir, newTask('t1', Date.now(), today, { title: 'Zapłacić podatek' })!)
+  putRecord(dataDir, newTask('t2', Date.now() - 1, today, { title: 'Oddać formularz', dueDate: addDays(today, -2) })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.getByTestId('nav-requests').click()
+      const rows = page.getByTestId('cases-inbox-list').getByTestId('case-row')
+      await expect(rows).toHaveCount(2)
+      // The one past its date is first, with the red badge; the other has none yet.
+      await expect(rows.first().getByTestId('case-title')).toHaveValue('Oddać formularz')
+      await expect(rows.first().getByTestId('case-due')).toHaveText('Po terminie')
+      await expect(rows.first().getByTestId('case-due')).toHaveAttribute('data-tone', 'over')
+      const row = rows.nth(1)
+      await expect(row.getByTestId('case-title')).toHaveValue('Zapłacić podatek')
+      await expect(row.getByTestId('case-due')).toHaveCount(0)
+      // „Terminy” of the row: „Jutro” sets the due date, the field shows it.
+      await row.getByTestId('case-dates-open').click()
+      await row.getByTestId('case-due-tomorrow').click()
+      await expect(row.getByTestId('case-due')).toHaveText('Termin jutro')
+      await expect(row.getByTestId('case-due')).toHaveAttribute('data-tone', 'soon')
+      await expect.poll(() => records(dataDir).find((r) => r.id === 't1')!.dueDate).toBe(addDays(today, 1))
+      await expect(row.getByTestId('case-due-date')).toHaveValue(/\d{2}\.\d{2}\.\d{4}/)
+      // The date of doing: „Dziś” – the sprawa goes to „Dziś” (its date of doing is today); the due date stays.
+      await row.getByTestId('case-do-today').click()
+      await expect.poll(() => records(dataDir).find((r) => r.id === 't1')!.doDate).toBe(today)
+      const moved = page.getByTestId('cases-today-list').getByTestId('case-row')
+      await expect(moved).toHaveCount(1)
+      await expect(moved.getByTestId('case-due')).toHaveText('Termin jutro')
+      // „Wyczyść”: the badge goes (the row is a new one on the other list – its dates open again).
+      await moved.getByTestId('case-dates-open').click()
+      await moved.getByTestId('case-due-clear').click()
+      await expect(moved.getByTestId('case-due')).toHaveCount(0)
+      await expect.poll(() => records(dataDir).find((r) => r.id === 't1')!.dueDate).toBeNull()
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Sprawy: szybki zapis „!jutro” – podgląd pod polem przed Enter, zadanie zapisane bez słowa w tytule z terminem na jutro', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-quickdate-'))
+  const { today } = seedAwake(dataDir, [])
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.getByTestId('nav-requests').click()
+      await page.keyboard.press('Control+KeyN')
+      const field = page.getByTestId('case-add-title')
+      await expect(field).toBeFocused()
+      await expect(page.getByTestId('case-add-preview')).toHaveCount(0)
+      await field.fill('Napisać raport !jutro @dziś')
+      await expect(page.getByTestId('case-add-preview')).toHaveText('Termin: jutro · Wykonać: dziś')
+      await field.press('Enter')
+      await expect.poll(() => records(dataDir).map((r) => [r.title, r.dueDate, r.doDate])).toEqual([['Napisać raport', addDays(today, 1), today]])
+      // The date of doing is today: it stands on „Dziś”, with its badge, the words gone from the title.
+      const row = page.getByTestId('cases-today-list').getByTestId('case-row')
+      await expect(row).toHaveCount(1)
+      await expect(row.getByTestId('case-title')).toHaveValue('Napisać raport')
+      await expect(row.getByTestId('case-due')).toHaveText('Termin jutro')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('plan poranny: karta „Terminy” – sprawy po terminie i z terminem w progu; „Pomiń” chowa do końca dnia, „Na Dziś” przenosi na „Dziś”; pusta – bez karty', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-deadlines-'))
+  const { today } = seedAwake(dataDir, [])
+  putRecord(dataDir, newTask('a', Date.now(), today, { title: 'Zapłacić podatek', dueDate: addDays(today, -1) })!)
+  putRecord(dataDir, newTask('b', Date.now() - 1, today, { title: 'Wysłać faktury', dueDate: addDays(today, 1) })!)
+  putRecord(dataDir, newTask('c', Date.now() - 2, today, { title: 'Daleki termin', dueDate: addDays(today, 5) })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('morning-plan')).toBeVisible({ timeout: 30_000 })
+      if (await page.getByTestId('side-b').isVisible()) await page.getByTestId('side-b-done').click()
+      await page.getByTestId('goals-skip').click()
+      await page.getByTestId('checkin-skip').click()
+      const card = page.getByTestId('deadline-card')
+      await expect(card).toBeVisible()
+      // The one past its date and the one due tomorrow (the threshold is 2 days) – not the one in 5 days.
+      await expect(card.getByTestId('deadline-item')).toHaveCount(2)
+      await expect(card).not.toContainText('Daleki termin')
+      await expect(card.getByTestId('deadline-item').first()).toContainText('Zapłacić podatek')
+      await expect(card.getByTestId('deadline-item').first().getByTestId('case-due')).toHaveText('Po terminie')
+      // „Pomiń”: gone from the card, kept in the day's file (every computer), the sprawa itself untouched.
+      await card.getByTestId('deadline-item').filter({ hasText: 'Wysłać faktury' }).getByTestId('deadline-skip').click()
+      await expect(card.getByTestId('deadline-item')).toHaveCount(1)
+      await expect.poll(() => (readJson(join(dataDir, paths.day(today)))?.asked as Record<string, string> | undefined)?.['deadline:b']).toBe('skip')
+      expect(records(dataDir).find((r) => r.id === 'b')!.list).toBe('inbox')
+      // „Na Dziś”: the list changes, the card is gone (nothing is left on it), the step of tasks offers the sprawa.
+      await card.getByTestId('deadline-today').click()
+      await expect.poll(() => records(dataDir).find((r) => r.id === 'a')!.list).toBe('today')
+      await expect(page.getByTestId('deadline-card')).toHaveCount(0)
+      await expect(page.getByTestId('queue-pick')).toContainText('Zapłacić podatek')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Ustawienia: sekcja „Sprawy” – próg terminu w planie porannym (domyślnie 2 dni, 1–7), zapisany we wspólnych ustawieniach', async () => {
+  const { app, page, userData, errors } = await launch({ data: true })
+  try {
+    await withMainLog(userData, async () => {
+      await page.getByTestId('nav-settings').click()
+      await expect(page.getByTestId('settings-cases')).toContainText('Ostrzegaj o terminie na')
+      const field = page.getByTestId('setting-deadlineDays')
+      await expect(field).toHaveValue('2')
+      await field.fill('9')
+      await field.press('Enter')
+      await expect(page.getByTestId('setting-deadlineDays-error')).toBeVisible()
+      await field.fill('5')
+      await field.press('Enter')
+      await page.getByTestId('nav-today').click()
+      await page.getByTestId('nav-settings').click()
+      await expect(page.getByTestId('setting-deadlineDays')).toHaveValue('5')
     })
     expect(errors).toEqual([])
   } finally {

@@ -85,7 +85,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const date = model.date
   const isToday = date === today
   const names: Names = useMemo(() => ({ rd, settings: model.state.settings, routines, requests }), [rd, model.state.settings, routines, requests])
-  const axis = useMemo(() => dayAxis(model, names, isToday ? now : null), [model, names, isToday, now])
+  const axis = useMemo(() => dayAxis(model, names, isToday ? now : null, today), [model, names, isToday, now, today])
   const [selected, setSelected] = useState<string | null>(null)
   // The new block before „Dodaj” lives in the window's state: it comes back after another screen (A6-17).
   const stored = useUi((s) => s.blockDraft)

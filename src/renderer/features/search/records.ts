@@ -47,6 +47,7 @@ export const SETTING_SECTIONS: Array<{ id: string; title: string; keys?: string 
   { id: 'settings-reminders', title: FIELD_GROUP_NAMES.reminders },
   { id: 'settings-timer', title: FIELD_GROUP_NAMES.timer },
   { id: 'settings-care', title: FIELD_GROUP_NAMES.care },
+  { id: 'settings-cases', title: FIELD_GROUP_NAMES.cases, keys: 'termin terminy plan poranny ostrzegaj' },
   { id: 'settings-calibration', title: 'Kalibracja' },
   { id: 'settings-data', title: 'Dane', keys: 'folder kopie zapasowe' },
   { id: 'settings-computers', title: 'Komputery' },

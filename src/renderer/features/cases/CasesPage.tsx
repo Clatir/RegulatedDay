@@ -8,12 +8,14 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { RequestCounters } from '@shared/api'
+import { dueBadge } from '@shared/engine/caseDates'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
 import { durationLabel } from '@shared/format'
 import { personName } from '@shared/model/rd'
 import { CASE_LIST_NAMES, CASE_LISTS, ESTIMATE_RANGE, TITLE_MAX, CASE_NOTE_MAX, DEFAULT_ESTIMATE_MIN, DEFAULT_TASK_CATEGORY, type CaseList } from '@shared/model/requests'
 import { settingsOn } from '@shared/model/settings'
-import { logicalMinuteOf } from '@shared/time/day'
+import { parseQuickDates } from '@shared/quickDates'
+import { logicalDayOf, logicalMinuteOf } from '@shared/time/day'
 import { FilterBar, useFilters } from '../../components/FilterBar'
 import { Choice, DateField, DurationField, TextField, TimeField } from '../../components/fields'
 import { EmptyState, Section, cx } from '../../components/ui'
@@ -25,7 +27,8 @@ import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
 import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 import { categoryOptions } from '../plan/blockView'
-import { caseTitle, filterOf, sectionsOf, statusParts } from './casesLogic'
+import { caseTitle, DATE_PRESETS, filterOf, presetDate, sectionsOf, statusParts } from './casesLogic'
+import { DueMark } from './DueMark'
 import { nextFreeStart, submitTitle } from './casesUi'
 import { planOnAxis } from './planOnAxis'
 
@@ -96,7 +99,7 @@ export function CasesPage() {
             + Prośba
           </button>
         )}
-        <span className="text-[12px] text-muted">Ctrl N – nowe zadanie</span>
+        <span className="text-[12px] text-muted">Ctrl N – nowe zadanie · „!jutro” na końcu tytułu ustawia termin, „@pt” – datę wykonania</span>
       </div>
       {adding && <NewTask onClose={() => setAdding(false)} />}
       <FilterBar listKey="cases" options={options} shown={shown} total={all.length} />
@@ -137,34 +140,44 @@ export function CasesPage() {
 function NewTask({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('')
   const [busy, run] = useBusy()
+  // D409: the words of dates at the end of the title – what they set, said under the field before Enter.
+  const today = logicalDayOf(useNow(60_000))
+  const preview = parseQuickDates(title, today).preview
   // Once: the field is cleared at once and a second Enter (or „Dodaj”) while it saves does nothing; a save that did not happen gives the title back.
   const add = () => submitTitle(run, title, { set: setTitle, save: async (t) => (await createTask({ title: t })).saved, done: onClose })
   return (
-    <div className="flex items-center gap-2" data-testid="case-add">
-      <input
-        autoFocus
-        className="input min-w-0 flex-1"
-        value={title}
-        readOnly={busy}
-        maxLength={TITLE_MAX}
-        placeholder="Tytuł zadania – Enter dodaje do Skrzynki"
-        aria-label="Tytuł zadania"
-        onChange={(e) => setTitle(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') void add()
-          if (e.key === 'Escape') {
-            e.stopPropagation()
-            onClose()
-          }
-        }}
-        data-testid="case-add-title"
-      />
-      <button type="button" className="btn btn-accent" disabled={busy || !title.trim()} onClick={() => void add()} data-testid="case-add-save">
-        Dodaj
-      </button>
-      <button type="button" className="btn" onClick={onClose}>
-        Anuluj
-      </button>
+    <div className="flex flex-col gap-1" data-testid="case-add">
+      <div className="flex items-center gap-2">
+        <input
+          autoFocus
+          className="input min-w-0 flex-1"
+          value={title}
+          readOnly={busy}
+          maxLength={TITLE_MAX}
+          placeholder="Tytuł zadania – Enter dodaje do Skrzynki"
+          aria-label="Tytuł zadania"
+          onChange={(e) => setTitle(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void add()
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              onClose()
+            }
+          }}
+          data-testid="case-add-title"
+        />
+        <button type="button" className="btn btn-accent" disabled={busy || !title.trim()} onClick={() => void add()} data-testid="case-add-save">
+          Dodaj
+        </button>
+        <button type="button" className="btn" onClick={onClose}>
+          Anuluj
+        </button>
+      </div>
+      {preview && (
+        <span className="text-[12px] text-muted" data-testid="case-add-preview">
+          {preview}
+        </span>
+      )}
     </div>
   )
 }
@@ -175,12 +188,14 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
   const isTask = r.kind === 'task'
   const names = useMemo(() => ({ rd, settings: settingsOn(rd.settings, today) }), [rd, today])
   const [planning, setPlanning] = useState(false)
+  const [dating, setDating] = useState(false)
   const set = (patch: Parameters<typeof changeCase>[1]) => void changeCase(r.id, patch)
   const remove = async () => {
     const res = await removeCase(r.id)
     if (res.saved) undoToast(isTask ? 'Zadanie usunięte' : 'Prośba usunięta', () => void undoCase(res.undo))
   }
-  const parts = statusParts(x)
+  const parts = statusParts(x, today)
+  const badge = dueBadge(r, today)
   const done = x.list === 'done'
   return (
     <div className={cx('flex flex-col gap-1 rounded border px-3 py-1.5', marked ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
@@ -195,6 +210,7 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
         {isTask ? <Choice value={r.categoryId ?? DEFAULT_TASK_CATEGORY} options={categoryOptions(names, r.categoryId ?? DEFAULT_TASK_CATEGORY)} onChange={(categoryId) => set({ categoryId })} aria-label="Kategoria" data-testid="case-category" /> : <span className="text-[12px] text-muted">prośba</span>}
       </div>
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
+        {badge && <DueMark badge={badge} />}
         <span className="min-w-0 flex-1 text-muted" data-testid="case-status">
           {parts.join(' · ')}
         </span>
@@ -207,13 +223,48 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
             <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={planning} onClick={() => setPlanning(!planning)} data-testid="case-plan-open">
               Zaplanuj
             </button>
+            <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={dating} onClick={() => setDating(!dating)} data-testid="case-dates-open">
+              Terminy
+            </button>
           </>
         )}
         <button type="button" className="h-[24px] px-1.5 text-[12px] text-muted hover:text-rose" onClick={() => void remove()} data-testid="request-remove">
           Usuń
         </button>
       </div>
+      {dating && !done && <DatesForm x={x} today={today} set={set} />}
       {planning && <PlanForm x={x} today={today} title={caseTitle(r, rd)} onDone={() => setPlanning(false)} />}
+    </div>
+  )
+}
+
+/**
+ * „Termin” and „Wykonać” of a sprawa (D409, D451): the date typed (`DateField`: „20.11”, „20.11.2026”), or by a button – „Dziś”,
+ * „Jutro”, „Koniec tygodnia”, „Wyczyść”; saved at once by `changeCase`. Under the row's fields, so the grid of the row stays as it is.
+ */
+function DatesForm({ x, today, set }: { x: CaseItem; today: string; set: (patch: { dueDate?: string | null; doDate?: string | null }) => void }) {
+  const r = x.record
+  return (
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-line pt-1.5 text-[12px]" data-testid="case-dates-form">
+      <DateRow label="Termin" id="due" value={r.dueDate} today={today} onSet={(dueDate) => set({ dueDate })} />
+      <DateRow label="Wykonać" id="do" value={r.doDate} today={today} onSet={(doDate) => set({ doDate })} />
+    </div>
+  )
+}
+
+function DateRow({ label, id, value, today, onSet }: { label: string; id: 'due' | 'do'; value: string | null; today: string; onSet: (date: string | null) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-muted">{label}</span>
+      <DateField value={value} today={today} onCommit={onSet} placeholder="brak" shellClassName="w-[110px]" aria-label={label} errorPlacement="float" data-testid={`case-${id}-date`} />
+      {DATE_PRESETS.map((p) => (
+        <button key={p.id} type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => onSet(presetDate(p.id, today))} data-testid={`case-${id}-${p.id}`}>
+          {p.label}
+        </button>
+      ))}
+      <button type="button" className="h-[24px] px-1.5 text-muted hover:text-fg" disabled={value == null} onClick={() => onSet(null)} data-testid={`case-${id}-clear`}>
+        Wyczyść
+      </button>
     </div>
   )
 }

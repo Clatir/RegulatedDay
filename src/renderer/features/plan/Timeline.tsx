@@ -33,6 +33,8 @@ export interface TimelineItem {
   waits?: boolean
   /** An occurrence of a series: the mark `SERIES_MARK` stands by its name (D401). */
   series?: boolean
+  /** The due date of the task the block is of (D409): „Po terminie” (red) or „Termin jutro” … (muted) by its name; none for days gone by. */
+  badge?: { text: string; tone: 'over' | 'soon' }
   /** Its planned start may be dragged (D305): not begun, with its own start time. */
   movable?: boolean
   /**
@@ -419,6 +421,11 @@ export function Timeline({
         <div className={cx('flex min-w-0 items-baseline gap-1.5', tiny ? 'text-[11px]' : 'pt-0.5 text-[12px]')}>
           {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(start)}</span>}
           <span className="truncate text-fg">{i.title}</span>
+          {i.badge && !narrow && (
+            <span className={cx('shrink-0 text-[10.5px]', i.badge.tone === 'over' ? 'text-rose' : 'text-muted')} data-testid="block-due" data-tone={i.badge.tone}>
+              {i.badge.text}
+            </span>
+          )}
           {i.series && (
             <span className="shrink-0 text-muted" title="Z serii" aria-label="z serii" data-testid="series-mark">
               {SERIES_MARK}

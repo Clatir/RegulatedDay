@@ -11,6 +11,8 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode 
 import type { WidgetAction } from '@shared/api'
 import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
 import { TITLE_MAX } from '@shared/model/requests'
+import { parseQuickDates } from '@shared/quickDates'
+import { logicalDayOf } from '@shared/time/day'
 import { barBackground, TONE_SETS } from '@shared/theme'
 import { SEEN_LINE, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
@@ -279,7 +281,8 @@ function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode;
 /**
  * The field of the quick capture (D385, D402): a title, Enter saves it as a task into „Skrzynka” (the main process says
  * why when it cannot), Esc folds it – in the main window's bar and in the icon's panel (the desktop bar takes no keys: its
- * „+” opens the panel with this field, T756).
+ * „+” opens the panel with this field, T756). The words of dates at the end of the title (`!jutro`, `@pt` – D409) are told in a line
+ * under the field before Enter – the field is never in the desktop bar itself, so its height does not change (D229).
  */
 function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: BarMode; close: () => void; text: string; setText: (t: string) => void; takeFocus: () => boolean; input: React.RefObject<HTMLInputElement | null> }) {
   useEscapeLayer(true, close)
@@ -293,27 +296,35 @@ function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: Ba
     setText('')
     close()
   }
+  const preview = parseQuickDates(text, logicalDayOf(Date.now())).preview
   return (
-    <div className="flex items-center gap-1.5" data-testid="bar-quick-field">
-      <span className="shrink-0 text-[12px] text-muted">Do skrzynki:</span>
-      <input
-        ref={input}
-        className="input h-[24px] min-w-0 flex-1 text-[12px]"
-        value={text}
-        maxLength={TITLE_MAX}
-        placeholder="Enter zapisuje"
-        onChange={(e) => setText(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            save()
-          }
-        }}
-        data-testid="bar-quick-title"
-      />
-      <BarButton mode={mode} accent testId="bar-quick-save" onAct={save}>
-        Zapisz
-      </BarButton>
+    <div className="flex flex-col gap-0.5" data-testid="bar-quick-field">
+      <div className="flex items-center gap-1.5">
+        <span className="shrink-0 text-[12px] text-muted">Do skrzynki:</span>
+        <input
+          ref={input}
+          className="input h-[24px] min-w-0 flex-1 text-[12px]"
+          value={text}
+          maxLength={TITLE_MAX}
+          placeholder="Enter zapisuje"
+          onChange={(e) => setText(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              save()
+            }
+          }}
+          data-testid="bar-quick-title"
+        />
+        <BarButton mode={mode} accent testId="bar-quick-save" onAct={save}>
+          Zapisz
+        </BarButton>
+      </div>
+      {preview && (
+        <span className="text-[12px] text-muted" data-testid="bar-quick-preview">
+          {preview}
+        </span>
+      )}
     </div>
   )
 }

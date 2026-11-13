@@ -9,6 +9,8 @@ paths:
   - "src/renderer/widget/QuickApp.tsx"
   - "src/renderer/features/cases/**"
   - "src/renderer/features/settings/quickKey.ts"
+  - "src/renderer/features/plan/dayItems.ts"
+  - "src/renderer/features/today/MorningPlan.tsx"
   - "tests/web/cases-screens.test.ts"
   - "tests/e2e/cases.spec.ts"
   - "tests/unit/engine/cases*.test.ts"
@@ -50,6 +52,7 @@ paths:
   `statusParts`, `caseTitle`, teksty rytuału), `CasesPanel` + `useCaseDrag` + `planOnAxis` (panel przy osi „Dziś”, T781; oś mówi skalę w
   `data-lo/hi/ppm`, `plan/axisDrop.ts`), `CasesRitual` (rytuał, T783); ustawienia – `settings/QuickKeyField` i `quickKey.ts` (T784);
   plan poranny – `MorningPlan` przez `morningCases` / `planMorning` (T782). Testy ekranów bez DOM: `tests/web/cases-screens.test.ts`.
+- HKU2 B (ekrany terminów, T860–T866): wiersz strony – przycisk „Terminy” → `DatesForm` (`DateField` + `DATE_PRESETS` / `presetDate`), `DueMark` (znaczek, `dueTone`), `statusParts(x, today)` z `doText`; kafelek na osi – `TimelineItem.badge` z `dayAxis(…, today)` (`taskBadge`); karta „Terminy” planu porannego – `morningDeadlines`; podgląd szybkiego zapisu (`preview`) w `QuickApp`, `QuickField` paska i `NewTask`; sekcja „Sprawy” ustawień (`FieldsSection group="cases"`). Testy: `tests/web/cases-dates-view.test.ts`, E2E w `cases.spec.ts` i `quick.spec.ts`.
 
 ## Zasady
 - Nic nie migruje w miejscu: stary plik czyta się jako sprawa, nowa wersja dopisuje `kind`/`list` przy pierwszej zmianie

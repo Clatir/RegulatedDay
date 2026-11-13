@@ -149,13 +149,13 @@ Wpis HKU1 i „Przed HKU1” – `docs/archiwum/postep-HKU.md`. Drzewo `.claude/
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
 | HKU1 wydarzenia całodniowe | 1.13.0 | #78 | wydane 12.11 22:05 (run 43291188216); D405–D407, T720–T749 | ok. 7 h (2–3 h) |
-| HKU2 termin i data wykonania | paczka | – | część A (logika, T850–T856) gotowa 13.11; część B (ekrany) w toku; D409, D451, D452 | – (2–3 h) |
+| HKU2 termin i data wykonania | paczka | – | części A i B gotowe 13.11 (T850–T857, T860–T866), przegląd w toku; D409, D451–D453 | – (2–3 h) |
 | HKU3 priorytety i macierz | paczka | – | D450; po HKU2 | – (2,5–3,5 h) |
 
 **Blok 4 bez pauz (12.11, zgoda użytkownika):** HKU2 i HKU3 idą po kolei bez „dalej”; pytania o zachowanie widoczne dla użytkownika dalej przed zmianą – w nocy 12/13.11 (do ok. 7:00) rozstrzygam rekomendacją, zapis D „bez pytania – do potwierdzenia”, lista niżej, rano pytania do użytkownika. Numery HKU: D405–D409, D450–D459, T720–T749, T850–T899 (SNT4 – D410–D449, T800–T849; L – D404, D408, T700–T799). Kolejka do `main`: 1.13.0 (HKU1) → L2 1.14.0 → SNT4 1.15.0 → HKU2 → HKU3; przed scaleniem pytanie do sesji L (regulatedday-a8) i SNT4 (regulatedday-ab).
 **Do potwierdzenia rano (noc 12/13.11):** D451 (pola dat w wierszu sprawy, data wykonania wyliczana, ręczne
 przeniesienie w dniu daty wygrywa), D452 (szczegóły z budowy HKU2: przeniesienie przed datą, karta terminów bez spraw
-z „Dziś”, „!pt” w piątek, format „cz 19.11”, sekcja „Sprawy” w Ustawieniach, Ctrl K).
+z „Dziś”, „!pt” w piątek, format „cz 19.11”, sekcja „Sprawy” w Ustawieniach, Ctrl K), D453 (ekrany HKU2: przycisk „Terminy”, znaczek w linii statusu i na kafelku, podgląd, miejsce karty i sekcji).
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy

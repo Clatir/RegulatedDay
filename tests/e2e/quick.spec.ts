@@ -9,6 +9,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { addDays } from '../../src/shared/time/zone'
 import { launch, viewPage, withMainLog } from './app'
 
 const QUICK_TITLE = 'Regulated Day – do skrzynki'
@@ -105,6 +106,37 @@ test('„+” w pasku okna głównego rozwija pole – Enter zapisuje do Skrzynk
       await expect.poll(async () => (await tasks(app)).map((t) => t.title).sort()).toEqual(['Sprawdzić błąd w kodzie', 'Zadzwonić do ubezpieczyciela'])
       // The okienko „Do skrzynki” never came up for it.
       expect(await quickWindow(app)).toMatchObject({ visible: false, onTop: false })
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('szybki zapis z „!jutro” (D409): podgląd „Termin: jutro” pod polem okienka i pola paska przed Enter; zadanie bez słowa w tytule z terminem na jutro', async () => {
+  const { app, page, userData, errors } = await launch({ data: true })
+  try {
+    await withMainLog(userData, async () => {
+      const bar = page.getByTestId('bar-main')
+      await expect(bar).toBeVisible({ timeout: 30_000 })
+      const today = await page.evaluate(() => window.rd.dataView().then((v) => v.today))
+      await showAsShortcut(app)
+      const q = await quickPage(app)
+      await expect(q.getByTestId('quick-preview')).toHaveCount(0)
+      await q.getByTestId('quick-title').fill('Odebrać paczkę !jutro')
+      await expect(q.getByTestId('quick-preview')).toHaveText('Termin: jutro')
+      await q.getByTestId('quick-title').press('Enter')
+      await expect.poll(() => tasks(app)).toEqual([expect.objectContaining({ title: 'Odebrać paczkę', dueDate: addDays(today, 1), doDate: null })])
+
+      // The field of the bar: the same line under it.
+      await bar.getByTestId('bar-quick').click()
+      await bar.getByTestId('bar-quick-title').fill('Zapłacić rachunek @dziś')
+      await expect(bar.getByTestId('bar-quick-preview')).toHaveText('Wykonać: dziś')
+      await bar.getByTestId('bar-quick-title').press('Enter')
+      await expect.poll(async () => (await tasks(app)).map((t) => [t.title, t.doDate != null]).sort()).toEqual([
+        ['Odebrać paczkę', false],
+        ['Zapłacić rachunek', true]
+      ])
     })
     expect(errors).toEqual([])
   } finally {

@@ -211,6 +211,11 @@ export function contrastPairs(brightness: number): Array<{ name: string; text: s
       out.push({ name: `${tn} na bloku ${color}`, text, bg: blockFill(color, brightness) })
       out.push({ name: `${tn} na przygaszonym bloku ${color}`, text, bg: blockFillDim(color, brightness) })
     }
+  // „Po terminie” on the tile of a task's block (D409): the rose accent on the fill of every colour, dimmed too.
+  for (const color of BLOCK_COLORS) {
+    out.push({ name: `róż na bloku ${color}`, text: PALETTE.rose, bg: blockFill(color, brightness) })
+    out.push({ name: `róż na przygaszonym bloku ${color}`, text: PALETTE.rose, bg: blockFillDim(color, brightness) })
+  }
   // The bars of all-day events (D405): the text and the muted text on the fill of every event colour.
   for (const [id, color] of Object.entries(ALL_DAY_COLOR_HEX))
     for (const [tn, text] of plainTexts) out.push({ name: `${tn} na wydarzeniu ${id}`, text, bg: blockFill(color, brightness) })
