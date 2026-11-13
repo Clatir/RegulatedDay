@@ -150,6 +150,14 @@ export const SEASON_COLORS = { winter: '#8FB3D9', spring: '#A3C49A', summer: '#C
  */
 export const ALL_DAY_COLOR_HEX: Record<AllDayColor, string> = { amber: '#F2B66D', teal: '#79AFAB', rose: '#D49A97', lavender: '#B49FCC', sky: '#8FB3D9', green: '#A3C49A' }
 
+/**
+ * The four colours of the priority stripes (HKU3, D450): P1 – rose, P2 – lamp, P3 – sea, P4 – a grey a shade lighter than the lack's („brak”): at 3:1 on the fill of a block
+ * (the lack's own grey gave 2.86:1 on amber). A stripe is a graphic, not a text (3:1 on the card, the window and the blocks is checked in `tests/unit/theme.test.ts`); it is not dimmed with
+ * the brightness (it would lose its edge against the darker card) – the windows have it as `--color-prio-p1` … from `styles/index.css`,
+ * and the word that says the quarter stands beside it (the label).
+ */
+export const PRIORITY_COLORS = { p1: PALETTE.rose, p2: PALETTE.lamp, p3: PALETTE.sea, p4: '#938790' } as const
+
 /** The CSS variables of the windows for a brightness (50–100 %): backgrounds, lines and accent fills only. */
 export function themeVars(brightness: number): Record<string, string> {
   const b = Math.min(1, Math.max(0.5, brightness))
@@ -211,6 +219,11 @@ export function contrastPairs(brightness: number): Array<{ name: string; text: s
       out.push({ name: `${tn} na bloku ${color}`, text, bg: blockFill(color, brightness) })
       out.push({ name: `${tn} na przygaszonym bloku ${color}`, text, bg: blockFillDim(color, brightness) })
     }
+  // „Po terminie” on the tile of a task's block (D409): the rose accent on the fill of every colour, dimmed too.
+  for (const color of BLOCK_COLORS) {
+    out.push({ name: `róż na bloku ${color}`, text: PALETTE.rose, bg: blockFill(color, brightness) })
+    out.push({ name: `róż na przygaszonym bloku ${color}`, text: PALETTE.rose, bg: blockFillDim(color, brightness) })
+  }
   // The bars of all-day events (D405): the text and the muted text on the fill of every event colour.
   for (const [id, color] of Object.entries(ALL_DAY_COLOR_HEX))
     for (const [tn, text] of plainTexts) out.push({ name: `${tn} na wydarzeniu ${id}`, text, bg: blockFill(color, brightness) })

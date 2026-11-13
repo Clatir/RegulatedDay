@@ -74,7 +74,8 @@ describe('komunikat pod odrzuconym polem (D347)', () => {
     }
     expect(bad).toEqual([])
     const req = readFileSync(`${dir}/cases/CasesPage.tsx`, 'utf8')
-    expect(req.match(/errorPlacement="float"/g)).toHaveLength(3)
+    // The grid row's title, estimate and note, and the date fields of „Terminy” (D451, T860 – one JSX tag for both).
+    expect(req.match(/errorPlacement="float"/g)).toHaveLength(4)
   })
 
   it('CommitField i pole tekstowe z wymaganą wartością pokazują komunikat we wspólnej powłoce, a w rogu zostaje toast', () => {

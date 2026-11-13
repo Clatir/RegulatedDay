@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { marketDay } from '@shared/calendar/holidays'
 import { putBlock, setAsked, setCancelled, setSessionAnswer } from '@shared/data/dayEdits'
+import { dueBadge } from '@shared/engine/caseDates'
 import { checkinStates } from '@shared/engine/energy'
 import { atOf } from '@shared/engine/grid'
 import { fromYesterday, holidayQuestions, lighterDay, morningWarnings, sessionQuestions, shiftNotice, weeklyAnalysisMove, type MorningInputs, type MorningWarning } from '@shared/engine/morning'
@@ -32,13 +33,15 @@ import { goalsStepOpen } from './goalsStepLogic'
 import { logEvents, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
-import { planMorning, useCases, type MorningResult } from '../../store/cases'
-import { caseTitle, isMorningChosen, morningChosen } from '../cases/casesLogic'
+import { moveCase, planMorning, useCases, type MorningResult } from '../../store/cases'
+import { caseTitle, isMorningChosen, morningChosen, morningDeadlines, morningPriorityLine } from '../cases/casesLogic'
+import { rememberCasesView, rememberMatrixFilter } from '../cases/casesView'
 import { queueRowText } from '../cases/casesUi'
-import { toast, useUi } from '../../store/ui'
+import { DueMark } from '../cases/DueMark'
+import { navigate, toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { answerSeries } from '../series/seriesActions'
-import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, variantStarts } from './dayActions'
+import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, skipDeadline, variantStarts } from './dayActions'
 
 /**
  * What the screen says after „Dodaj do planu” (`planMorning`, D384): nothing made (every chosen sprawa was planned or done meanwhile)
@@ -49,6 +52,9 @@ export function morningOutcome(r: Pick<MorningResult, 'saved' | 'made' | 'skippe
   if (r.made === 0) return { clear: false, note: 'Nic nie dodano – wybrane sprawy są już zaplanowane albo zrobione.' }
   return { clear: true, note: r.skipped.length ? `Pominięto: ${r.skipped.map(name).join(', ')} – są już zaplanowane albo zrobione.` : null }
 }
+
+/** No answers asked in the day's file yet (a stable value for the memo of the card „Terminy”). */
+const NO_ASKED: Readonly<Record<string, string>> = {}
 
 const QUESTIONS: Array<{ pool: Pool; text: string }> = [
   { pool: 'head', text: 'Trudno zebrać myśli?' },
@@ -198,12 +204,17 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
   const warnings = morningWarnings(s)
   // D384: the step of requests offers the requests not done and not planned (not those of „Kiedyś / Może”) and the tasks of
   // „Dziś” (`morningCases`); the requests chosen make one block, each task its own.
-  const { items: caseItems } = useCases()
+  const { items: caseItems, today: caseToday } = useCases()
   const requestsOn = names.rd.general.modules.requests
   const offered = useMemo(() => morningCases(caseItems), [caseItems])
   const queued = requestsOn ? offered.requests : []
   const dayTasks = offered.tasks
   // D408: the tasks of „Dziś” are chosen at once, the requests are not – `toggled` is what you changed against that.
+  // D409: the card „Terminy” – the sprawy past their date and due within the threshold (`general.deadlineDays`) that have no block today;
+  // „Na Dziś” moves one to the list „Dziś” (then the step above offers it), „Pomiń” leaves it out to the day's end (the day's `asked`).
+  const deadlines = useMemo(() => morningDeadlines(caseItems, requestsOn, model.ctx.plan, caseToday, rd.general.deadlineDays, model.dayFile?.asked ?? NO_ASKED, offered), [caseItems, requestsOn, model.ctx.plan, caseToday, rd.general.deadlineDays, model.dayFile, offered])
+  // D450: one line of the sprawy „Ważne i pilne” of „Dziś” and „W tym tygodniu” that have no place in today's plan; nothing blocks.
+  const priorityLine = useMemo(() => morningPriorityLine(caseItems, requestsOn, model.ctx.plan, caseToday), [caseItems, requestsOn, model.ctx.plan, caseToday])
   const [toggled, setToggled] = useState<string[]>([])
   // What the last „Dodaj do planu” left out or did not do (`morningOutcome`); gone with the next change of the choice.
   const [note, setNote] = useState<string | null>(null)
@@ -324,18 +335,54 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
           </button>
         </Card>
       )}
+      {deadlines.length > 0 && (
+        <div className="flex flex-col gap-1.5 rounded border border-line px-3 py-2" data-testid="deadline-card">
+          <span className="text-muted">Terminy – sprawy po terminie i z terminem w najbliższych dniach, bez bloku na dziś:</span>
+          {deadlines.map((x) => {
+            const badge = dueBadge(x.record, caseToday)
+            return (
+              <div key={x.record.id} className="flex flex-wrap items-center gap-2" data-testid="deadline-item" data-case={x.record.id}>
+                <span className="min-w-0 flex-1 truncate">{queueRowText(x, names.rd)}</span>
+                {badge && <DueMark badge={badge} />}
+                <button type="button" className="btn" disabled={busy} onClick={() => void run(async () => void (await moveCase(x.record.id, 'today')))} data-testid="deadline-today">
+                  Na Dziś
+                </button>
+                <button type="button" className="btn" disabled={busy} onClick={() => void run(async () => void (await skipDeadline(date, raw, x.record.id)))} data-testid="deadline-skip">
+                  Pomiń
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {priorityLine && (
+        <div className="flex flex-wrap items-center gap-2 rounded border border-line px-3 py-2" data-testid="priority-line">
+          <span className="flex-1" data-testid="priority-line-text">
+            {priorityLine}
+          </span>
+          {/* The matrix puts them all under „Ważne i pilne”, whichever list they stand on – the page opens on it. */}
+          <button type="button" className="btn" onClick={() => (rememberCasesView('matrix'), rememberMatrixFilter('all'), navigate('requests'))} data-testid="priority-line-open">
+            Pokaż w „Sprawach”
+          </button>
+        </div>
+      )}
       {(queued.length > 0 || dayTasks.length > 0) && (
         <div className="flex flex-col gap-1.5 rounded border border-line px-3 py-2" data-testid="queue-pick">
           <span className="text-muted">
             {queued.length > 0 && dayTasks.length > 0 ? 'Prośby z kolejki i zadania z „Dziś” – wybrane prośby będą jednym blokiem, każde zadanie swoim:' : queued.length > 0 ? 'Prośby z kolejki – wybrane razem będą jednym blokiem:' : 'Zadania z „Dziś” – każde wybrane będzie swoim blokiem:'}
           </span>
-          {[...queued, ...dayTasks].map((x) => (
-            <label key={x.record.id} className="flex items-center gap-2" data-testid="queue-item" data-case={x.record.id}>
-              <input type="checkbox" checked={isMorningChosen(x.record.kind, x.record.id, toggled)} onChange={() => (setNote(null), setToggled(toggled.includes(x.record.id) ? toggled.filter((id) => id !== x.record.id) : [...toggled, x.record.id]))} />
-              <span>{queueRowText(x, names.rd)}</span>
-              <span className="num ml-auto text-muted">{durationLabel(x.estimateMin)}</span>
-            </label>
-          ))}
+          {[...queued, ...dayTasks].map((x) => {
+            // D454: the sprawy of this step are not on the card „Terminy” – their badge of the due date stands here.
+            const badge = dueBadge(x.record, caseToday)
+            return (
+              <label key={x.record.id} className="flex items-center gap-2" data-testid="queue-item" data-case={x.record.id}>
+                <input type="checkbox" checked={isMorningChosen(x.record.kind, x.record.id, toggled)} onChange={() => (setNote(null), setToggled(toggled.includes(x.record.id) ? toggled.filter((id) => id !== x.record.id) : [...toggled, x.record.id]))} />
+                <span>{queueRowText(x, names.rd)}</span>
+                {badge && <DueMark badge={badge} />}
+                <span className="num ml-auto text-muted">{durationLabel(x.estimateMin)}</span>
+              </label>
+            )
+          })}
           <button type="button" className="btn self-start" disabled={!(chosen.requests.length + chosen.tasks.length) || busy} onClick={() => void addChosen()} data-testid="queue-add">
             Dodaj do planu
           </button>

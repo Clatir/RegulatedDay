@@ -89,6 +89,7 @@ export function SettingsPage() {
           <FieldsSection group="reminders" />
           <FieldsSection group="timer" />
           <FieldsSection group="care" />
+          <FieldsSection group="cases" />
           <CalibrationSection />
           <DataSection />
           <ComputersSection />

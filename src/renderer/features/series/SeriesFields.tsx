@@ -4,11 +4,12 @@
  * szczególne” (odbywa się · pomiń · pytaj). Shared by the field „Powtarzaj” of a block's panel and the edit of a series in the
  * list of „Szablony”; the draft is the caller's (`seriesForm.ts`) – nothing is saved here.
  */
+import { WEEKDAY_SHORT } from '@shared/format'
 import { SPECIAL_DAYS } from '@shared/model/series'
 import { SPECIAL_DAYS_TEXT } from '@shared/seriesText'
 import { Choice, DateField, IntegerField } from '../../components/fields'
 import { Field, Segmented } from '../../components/ui'
-import { END_CHOICES, NTH_CHOICES, RULE_CHOICES, WEEKDAY_NAMES, WEEKDAY_SHORT, draftProblem, type EndChoice, type RuleChoice, type SeriesDraft } from './seriesForm'
+import { END_CHOICES, NTH_CHOICES, RULE_CHOICES, WEEKDAY_NAMES, draftProblem, type EndChoice, type RuleChoice, type SeriesDraft } from './seriesForm'
 
 const LABEL = 92
 

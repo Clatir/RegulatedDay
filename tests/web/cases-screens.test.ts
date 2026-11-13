@@ -18,7 +18,7 @@ import { placeLogical } from '@shared/time/day'
 import { morningOutcome } from '@renderer/features/today/MorningPlan'
 import { nextFreeStart, queueRowText, startSearchFrom, submitTitle } from '@renderer/features/cases/casesUi'
 import { oneAtATime } from '@renderer/lib/busy'
-import { backText, caseTitle, filterOf, isMorningChosen, morningChosen, sectionsOf, somedayText, statusParts } from '@renderer/features/cases/casesLogic'
+import { afterRequestAdded, backText, caseTitle, filterOf, isMorningChosen, morningChosen, sectionsOf, somedayText, statusParts } from '@renderer/features/cases/casesLogic'
 import { planningOf, plannedText, planOnAxis } from '@renderer/features/cases/planOnAxis'
 import { dropMinute, HOURS_PX, type AxisPoint } from '@renderer/features/plan/axisDrop'
 import { repeatNote } from '@renderer/features/series/BlockSeries'
@@ -51,6 +51,15 @@ describe('listy strony „Sprawy” (D383, D402)', () => {
     expect(s[1]!.title).toBe('Dziś · 1 h 30 min')
     expect(s[1]!.items.map((x) => x.record.id)).toEqual(['old'])
     expect(sectionsOf(list, { showOlder: false })[1]!.items.map((x) => x.record.id)).toEqual(['new', 'old'])
+  })
+
+  it('nowa prośba: odmowa zapisu nic nie zmienia; zapisana otwiera listy, a filtry czyści tylko, gdy by ją ukryły', () => {
+    expect(afterRequestAdded(null, [])).toBeNull()
+    expect(afterRequestAdded(null, ['kind:task'])).toBeNull()
+    expect(afterRequestAdded('r9', [])).toEqual({ bring: 'r9', clearFilters: false })
+    expect(afterRequestAdded('r9', ['kind:request', 'person:?'])).toEqual({ bring: 'r9', clearFilters: false })
+    expect(afterRequestAdded('r9', ['kind:task'])).toEqual({ bring: 'r9', clearFilters: true })
+    expect(afterRequestAdded('r9', ['person:p1'])).toEqual({ bring: 'r9', clearFilters: true })
   })
 
   it('filtry: rodzaj i osoba; filtr osoby zostawia tylko prośby (zadanie nie ma osoby)', () => {

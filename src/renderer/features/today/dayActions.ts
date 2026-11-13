@@ -9,6 +9,7 @@ import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult } from '@s
 import { blockJson, dayRaw, putBlock, setAsked, setCancelled, setDayField, takeBlock } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { marketDay } from '@shared/calendar/holidays'
+import { deadlineSkippedRaw } from '@shared/engine/caseDates'
 import { namingOf, snapshotOf } from '@shared/engine/context'
 import { foldFacts, type DayFacts } from '@shared/engine/facts'
 import type { Freed } from '@shared/engine/gaps'
@@ -172,6 +173,14 @@ export const PLAN_ALREADY_TEXT = 'Plan już jest tak ułożony.'
 /** „Zostaw” of the morning plan's „Ułóż pod energię” (D377): the card does not come back that day. */
 export function leaveEnergyOrder(date: string, seen: RawRecord | null): Promise<EditOutcome[] | null> {
   return saveDay(date, seen, (r) => setAsked(r, ENERGY_ORDER_ASKED, 'leave'))
+}
+
+/**
+ * „Pomiń” of a sprawa on the morning plan's card of due dates (D409, T855): its answer in the day's `asked` – the card
+ * leaves it out to the day's end, on every computer (`deadlineCases`). „Na Dziś” is `moveCase(id, 'today')`.
+ */
+export function skipDeadline(date: string, seen: RawRecord | null, id: string): Promise<EditOutcome[] | null> {
+  return saveDay(date, seen, (r) => deadlineSkippedRaw(r, date, id))
 }
 
 /** The new starts of „Ułóż pod energię” (D369) as blocks of the plan the window knows (one gone from it meanwhile – left out). */

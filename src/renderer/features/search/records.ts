@@ -12,8 +12,9 @@ import { compareAllDay, rangeText, type AllDayEvent } from '@shared/model/allDay
 import { FIELD_GROUP_NAMES } from '@shared/model/fields'
 import { templateVersionOn, type Template } from '@shared/model/plan'
 import { personName, type RdFile } from '@shared/model/rd'
-import { CASE_LIST_NAMES, CASE_LISTS, type RequestRecord } from '@shared/model/requests'
-import { listOf } from '@shared/engine/cases'
+import { CASE_LIST_NAMES, CASE_LISTS, PRIORITY_NAMES, type RequestRecord } from '@shared/model/requests'
+import { isDone, listOf } from '@shared/engine/cases'
+import { shortDay } from '@shared/quickDates'
 import type { Routine } from '@shared/model/routines'
 import { currentSeries, seriesVersionOn, type SeriesPlan } from '@shared/model/series'
 import { occurrenceBlock } from '@shared/engine/series'
@@ -47,6 +48,7 @@ export const SETTING_SECTIONS: Array<{ id: string; title: string; keys?: string 
   { id: 'settings-reminders', title: FIELD_GROUP_NAMES.reminders },
   { id: 'settings-timer', title: FIELD_GROUP_NAMES.timer },
   { id: 'settings-care', title: FIELD_GROUP_NAMES.care },
+  { id: 'settings-cases', title: FIELD_GROUP_NAMES.cases, keys: 'termin terminy plan poranny ostrzegaj' },
   { id: 'settings-calibration', title: 'Kalibracja' },
   { id: 'settings-data', title: 'Dane', keys: 'folder kopie zapasowe' },
   { id: 'settings-computers', title: 'Komputery' },
@@ -108,7 +110,11 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
   const lists = shown.map((r) => ({ r, list: listOf(r, i.today) }))
   for (const { r, list } of lists.sort((a, b) => CASE_LISTS.indexOf(a.list) - CASE_LISTS.indexOf(b.list) || b.r.createdAt - a.r.createdAt)) {
     const title = r.kind === 'task' ? r.title || 'zadanie' : personName(i.rd, r.person)
-    out.push({ kind: 'request', id: r.id, title, text: textWithSteps(r.note, r.steps), hint: `${r.kind === 'task' ? 'zadanie' : 'prośba'} · ${CASE_LIST_NAMES[list]}${r.state === 'dropped' ? ' · porzucone' : ''}` })
+    // Its due date (D409), as long as it is not done – the badge's rule.
+    const due = r.dueDate && !isDone(r) ? ` · termin ${shortDay(r.dueDate, i.today)}` : ''
+    // Its priority (D450) as long as it is not done, in lower case: „· ważne i pilne”.
+    const priority = r.priority && !isDone(r) ? ` · ${PRIORITY_NAMES[r.priority].name.toLowerCase()}` : ''
+    out.push({ kind: 'request', id: r.id, title, text: textWithSteps(r.note, r.steps), hint: `${r.kind === 'task' ? 'zadanie' : 'prośba'} · ${CASE_LIST_NAMES[list]}${r.state === 'dropped' ? ' · porzucone' : ''}${due}${priority}` })
   }
   for (const r of [...i.routines].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
     out.push({ kind: 'routine', id: r.id, title: r.name, text: [...r.normal, ...r.worse].map((s) => s.name).filter(Boolean).join(' · '), ...(r.archived ? { hint: 'w archiwum' } : {}) })

@@ -7,7 +7,7 @@
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
@@ -134,6 +134,52 @@ describe('szybki zapis i zadanie na osi (D385, D384)', () => {
       expect(file).toMatchObject({ kind: 'task', title: 'Zamówić karmę dla kota', list: 'inbox', estimateMin: 30, categoryId: 'inne', state: 'queued', person: null })
       expect(listOf(requestFrom(file)!, logicalDayOf(Date.now()))).toBe('inbox')
     } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('słowa daty na końcu tytułu (D409): „!jutro” – termin, „@dziś” – data wykonania, znikają z tytułu; same słowa – nic', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const today = logicalDayOf(Date.now())
+      const r = await hub.quickAdd('Zapłacić czynsz !jutro @dziś')
+      expect(r).toMatchObject({ ok: true, error: null })
+      const file = JSON.parse(readFileSync(join(dir, paths.record('request', r.id!)), 'utf8')) as Record<string, unknown>
+      expect(file).toMatchObject({ kind: 'task', title: 'Zapłacić czynsz', list: 'inbox', dueDate: addDays(today, 1), doDate: today })
+      // The date of doing is today: on „Dziś” at once – counted, the file says „Skrzynka” (D451).
+      expect(listOf(requestFrom(file)!, today)).toBe('today')
+      // An unknown word stays in the title.
+      const kept = await hub.quickAdd('Kup mleko !coś')
+      expect(JSON.parse(readFileSync(join(dir, paths.record('request', kept.id!)), 'utf8'))).toMatchObject({ title: 'Kup mleko !coś', dueDate: null, doDate: null })
+      expect(await hub.quickAdd('!jutro')).toEqual({ ok: false, error: 'Wpisz, co zapisać.', id: null })
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('podgląd słów daty liczy „dziś” z zegara procesu głównego – tego samego, którego używa zapis (D454)', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      // No folder: the clock of the window's own computer.
+      expect(hub.quickToday()).toBe(logicalDayOf(Date.now()))
+      expect(await hub.open(dir)).toBe(true)
+      // The folder's clock a few days ahead (not the window's Date.now()): the day the preview counts from, and the one the save uses.
+      const ahead = placeLogical(addDays(logicalDayOf(Date.now()), 3), 10 * 60)
+      vi.spyOn(hub.service!.folder.clock, 'now').mockReturnValue(ahead)
+      const today = logicalDayOf(ahead)
+      expect(hub.quickToday()).toBe(today)
+      const r = await hub.quickAdd('Zapłacić !jutro')
+      const file = JSON.parse(readFileSync(join(dir, paths.record('request', r.id!)), 'utf8')) as Record<string, unknown>
+      expect(file.dueDate).toBe(addDays(today, 1))
+    } finally {
+      vi.restoreAllMocks()
       await hub.close('quit')
     }
   })
