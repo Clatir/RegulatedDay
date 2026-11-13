@@ -66,7 +66,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `todayOccurrenceEdit` ze znacznikiem `seriesOff`), słowa – `shared/seriesText.ts`. Każde miejsce budujące dzień podaje
   `series` (wymagane w `PlanInputs`/`DayInputs`). Dni minione: zmiana tylko od dziś. Testy: `series.test.ts`.
 - E10 (T552–T554): `engine/week.ts` (`horizonDay` – dzień tygodnia i celów, `weekViewOf`, `sessionsOf`),
-  `engine/goals.ts` (postęp „x z y”, `goalsStepShown`), `model/goals.ts` (cele w `rd.json`, zakresy). SNT1 (T900–T909, reguły
+  `engine/goals.ts` (postęp „x z y”, `goalsStepShown`), `model/goals.ts` (cele w `rd.json`, zakresy). SNT1 (T900–T918, reguły
   `widoki.md`): `horizonDay` daje też `movable` (`blocks.ts` `movableBlock` – jedna reguła z osią „Dziś”), `energy`, `budget`;
   `daysViewOf`, `engine/calendarViews.ts`, `engine/energyTrack.ts`.
 - E3: `engine/context.ts` (`dayContextOf`, `snapshotOf` – jedno źródło kontekstu dla prowadzącego i okna),

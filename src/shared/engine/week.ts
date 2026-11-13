@@ -287,10 +287,10 @@ export function sessionsOf(ctx: DayContext, state: DayState, when: HorizonWhen):
 
 /**
  * One day of the horizon (`when` – against today; `frozen` – a frozen day's freeze), counted once: its column of the week
- * and its measures of the month's goals, the curve of its energy (D417; `energyOn` – the module as the settings have it) and
- * its work against the budget (D418).
+ * and its measures of the month's goals, the curve of its energy (D417; `energyOn` – the energy module during the day before
+ * its own switches, T913; null – no curve asked for: the month, the goals, T914) and its work against the budget (D418).
  */
-export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay | null = null, energyOn = true): HorizonDay {
+export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay | null = null, energyOn: boolean | null = true): HorizonDay {
   const past = when === 'past'
   if (past && !ctx.events.length && ctx.snapshot.dayType !== 'zjazd-stacjonarny') return quietDay(ctx)
   // A day gone by as its grade counts it (as written, to its end); a frozen one up to the events its freeze named.
@@ -338,9 +338,10 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
     regen,
     studyMin: when === 'future' ? 0 : studyMinutes(state, when),
     sessions: sessionsOf(counted, state, when),
-    // Drawn with the axis it lies under (a frozen day's later corrections too).
-    energy: columnEnergy(axis.ctx, axis.state, when, energyOn),
-    budget: { workMin: state.budgetUsedMin + state.budget.forecastMin, limitMin: state.budget.limitMin }
+    // Drawn with the axis it lies under (a frozen day's later corrections too); not counted when nobody draws it.
+    energy: energyOn == null ? null : columnEnergy(axis.ctx, axis.state, when, energyOn),
+    // A day gone by nobody used has no measure of its work (as its regeneration – T904).
+    budget: past && !presence && state.dayType !== 'zjazd-stacjonarny' ? null : { workMin: state.budgetUsedMin + state.budget.forecastMin, limitMin: state.budget.limitMin }
   }
 }
 

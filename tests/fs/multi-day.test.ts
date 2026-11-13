@@ -35,6 +35,13 @@ afterEach(() => rmSync(root, { recursive: true, force: true }))
 async function make() {
   const clock = { now: placeLogical(WED, 12 * 60) }
   const runs: string[] = []
+  /** Each count of a day: its date and the module its curve was asked with (null – none). */
+  const asked: Array<[string, boolean | null]> = []
+  const run = (t: Parameters<typeof inProcess.run>[0]) => {
+    runs.push(t.kind === 'horizon' ? `${t.kind}:${t.ctx.date}` : t.kind)
+    if (t.kind === 'horizon') asked.push([t.ctx.date, t.energyOn ?? null])
+    return inProcess.run(t)
+  }
   const folder = await DataFolder.open({
     fs: nodeFs,
     dataDir,
@@ -45,10 +52,10 @@ async function make() {
     clock: { wall: () => clock.now, mono: () => clock.now },
     holidays: marketDay,
     oneDriveRunning: () => true,
-    worker: { run: (t) => (runs.push(t.kind === 'horizon' ? `${t.kind}:${t.ctx.date}` : t.kind), inProcess.run(t)) as never },
+    worker: { run: run as never },
     log: () => undefined
   })
-  return { folder, runs }
+  return { folder, runs, asked, clock }
 }
 
 describe('„3 dni” i „Agenda” w folderze danych', () => {
@@ -98,6 +105,39 @@ describe('„3 dni” i „Agenda” w folderze danych', () => {
     // The analysis 09:00–12:00 no more: at 12:30 the head is higher, at 19:30 (after it) lower than at 15:30.
     expect(at(now, 12 * 60 + 30)).toBeGreaterThan(at(was, 12 * 60 + 30))
     expect(at(now, 19 * 60 + 30)).toBeLessThan(at(now, 15 * 60 + 30))
+  })
+})
+
+describe('krzywa energii w folderze danych – moduł dnia i kto ją liczy (T913, T914)', () => {
+  it('dzień miniony: moduł z tamtego dnia (wyłączony dopiero dziś – krzywa jest), nie dzisiejsze ustawienie', async () => {
+    rd({ general: { modules: { energy: false } } })
+    const { folder } = await make()
+    // Tuesday: you used it and gave a check-in; today at 08:00 the module went off (its state before: on).
+    folder.append({ day: TUE, dom: 'meta', k: 'presence.first', at: placeLogical(TUE, 7 * 60) })
+    folder.append({ day: TUE, dom: 'energy', k: 'energy.checkin', at: placeLogical(TUE, 7 * 60 + 30), answers: { head: [0, 0], emotions: [0, 0], senses: [0, 0] } })
+    folder.append({ day: WED, dom: 'energy', k: 'energy.module', at: placeLogical(WED, 8 * 60), on: false, was: true })
+    const v = await folder.daysView([TUE, THU])
+    expect(v.days[0]!.energy).not.toBeNull()
+    // A day to come – as the settings have it now (off).
+    expect(v.days[1]!.energy).toBeNull()
+  })
+
+  it('miesiąc i cele nie liczą krzywej; tydzień po miesiącu liczy dzień od nowa z krzywą, miesiąc po tygodniu – z pamięci', async () => {
+    const { folder, asked } = await make()
+    await folder.monthView('2026-11')
+    expect(asked.length).toBe(30)
+    expect(asked.every(([, e]) => e === null)).toBe(true)
+    asked.length = 0
+    const v = await folder.daysView([THU])
+    expect(asked).toEqual([[THU, true]])
+    expect(v.days[0]!.energy).toMatchObject({ assumed: true })
+    asked.length = 0
+    await folder.monthView('2026-11')
+    // THU is remembered with its curve (it serves the month); the rest of the month too – only today goes on with the minute.
+    expect(asked.filter(([d]) => d === THU)).toEqual([])
+    asked.length = 0
+    await folder.daysView([THU])
+    expect(asked).toEqual([])
   })
 })
 

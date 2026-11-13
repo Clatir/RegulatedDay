@@ -361,9 +361,10 @@ export class DataFolder {
   /**
    * The days of the horizon (the week, the month's goals – D356, T553), each counted again only on a change of what it is
    * made of; the ones asked last stay (a hit goes to the end). Days being counted now: one count of a day for every ask.
+   * `energyOn` – the module its curve was counted with (null: none counted – T914).
    */
-  private readonly horizonMemo = new Map<string, { key: string; day: HorizonDay; seq: number }>()
-  private readonly horizonRuns = new Map<string, { key: string; run: Promise<HorizonDay>; seq: number }>()
+  private readonly horizonMemo = new Map<string, { key: string; day: HorizonDay; seq: number; energyOn: boolean | null }>()
+  private readonly horizonRuns = new Map<string, { key: string; energyOn: boolean | null; run: Promise<HorizonDay>; seq: number }>()
   /** The counts of days of the horizon begun so far: a later one's result is never written over by an earlier one's. */
   private horizonSeq = 0
   /** Changes of the goals one at a time, each made from rd.json as it is in its turn. */
@@ -1423,17 +1424,35 @@ export class DataFolder {
    * to the events its freeze named), today live, a day to come from its plan. rd.json or the list of templates not
    * readable now (OneDrive still bringing them): every day unknown – never a refusal of the week or of the progress.
    */
-  private async horizonDays(dates: readonly string[], at: number): Promise<HorizonDay[]> {
+  private async horizonDays(dates: readonly string[], at: number, energy = false): Promise<HorizonDay[]> {
     const today = logicalDayOf(at)
     const inp = await this.inputs(true).catch(() => null)
-    // The energy module as the settings have it (D417: the columns' curves; a day's own switches in its log win). rd.json
-    // not readable now – as its default (on); `inputs` read it a moment before, so this is that same version.
-    const energyOn = rdFrom(await this.recordView(paths.settings).catch(() => undefined)).general.modules.energy
+    const moduleOf = energy && inp ? await this.energyModules(dates, today) : null
     const out: HorizonDay[] = []
-    for (const date of dates) out.push(inp ? await this.horizonDay(date, today, at, inp, energyOn) : unknownDay(date, whenOf(date, today)))
-    // The days asked last stay remembered (two months and a week: a month's goals and the week shown).
+    for (const date of dates) out.push(inp ? await this.horizonDay(date, today, at, inp, moduleOf ? moduleOf(date) : null) : unknownDay(date, whenOf(date, today)))
+    // The days asked last stay remembered (`HORIZON_MEMO_DAYS`: the month of „Kalendarz”, the goals, the week and the days shown).
     for (const d of this.horizonMemo.keys()) if (this.horizonMemo.size > HORIZON_MEMO_DAYS) this.horizonMemo.delete(d)
     return out
+  }
+
+  /**
+   * The energy module of each day before its own switches (D417, T913 – the column's curve, as the grade and the history
+   * count it): a day gone by – as it was then (`moduleStates`: the first later change says what it was), today and a day to
+   * come – as the settings have it now (your queued change too). A day gone by whose module cannot be told now (a log not
+   * readable on the way back) – no curve (false), never the module of today.
+   */
+  private async energyModules(dates: readonly string[], today: string): Promise<(date: string) => boolean> {
+    const now = rdFrom(await this.recordView(paths.settings).catch(() => undefined)).general.modules.energy
+    const past = dates.filter((d) => d < today).sort()
+    const during = past.length ? await this.moduleStates(past[0]!, today, true).catch(() => null) : null
+    return (date) => {
+      if (date >= today) return now
+      try {
+        return during ? during(date).energy : false
+      } catch {
+        return false
+      }
+    }
   }
 
   /**
@@ -1444,29 +1463,33 @@ export class DataFolder {
    * timed out or started again): this day unknown – said in the log, by its date and the kind of the error – the others
    * go on.
    */
-  private async horizonDay(date: string, today: string, at: number, inp: Inputs, energyOn: boolean): Promise<HorizonDay> {
+  private async horizonDay(date: string, today: string, at: number, inp: Inputs, energyOn: boolean | null): Promise<HorizonDay> {
     const when = whenOf(date, today)
     const next = addDays(date, 1)
+    // A count serves an ask when it is of the same day and has the curve asked for (T914): one without a curve (the month,
+    // the goals – `energyOn` null) is served by any; one with it only by a count with the same module.
+    const serves = (e: boolean | null) => energyOn == null || e === energyOn
     try {
       const read = await this.log.readDay(date)
       const dayFile = await this.dayFile(date, true)
       const nextFile = await this.dayFile(next, true)
       const made = daySnapshotOf(read.events) != null
       const records = made ? [this.recordSig(paths.day(date)), this.recordSig(paths.day(next)), nextWakeForBedtime(null, nextFile, inp.changes, next)] : this.contextSig(date)
-      const key = JSON.stringify([when === 'today' ? Math.floor(at / 60_000) : when === 'future' ? today : null, read.lastByComputer, read.events.length, read.copies, records, this.queue.pending.length, energyOn])
+      const key = JSON.stringify([when === 'today' ? Math.floor(at / 60_000) : when === 'future' ? today : null, read.lastByComputer, read.events.length, read.copies, records, this.queue.pending.length])
       const was = this.horizonMemo.get(date)
       let day: HorizonDay
       let seq: number
-      if (was?.key === key) ({ day, seq } = was)
+      let counted: boolean | null
+      if (was?.key === key && serves(was.energyOn)) ({ day, seq, energyOn: counted } = was)
       else {
         let job = this.horizonRuns.get(date)
-        if (job?.key !== key) {
+        if (job?.key !== key || !serves(job.energyOn)) {
           const run = (async () => {
             const ctx = dayContextOf(inp, { date, events: read.events, dayFile, nextFile }, this.o.holidays, at)
             const frozen = when === 'past' ? foldFacts(gridOf(date), read.events).frozen : null
             return (this.o.worker ?? inProcess).run({ kind: 'horizon', ctx, when, frozen: frozen ? { know: frozen.know, grade: frozen.grade } : null, energyOn })
           })()
-          const mine = { key, run, seq: ++this.horizonSeq }
+          const mine = { key, energyOn, run, seq: ++this.horizonSeq }
           job = mine
           this.horizonRuns.set(date, mine)
           void run.then(
@@ -1476,12 +1499,18 @@ export class DataFolder {
         }
         day = await job.run
         seq = job.seq
+        counted = job.energyOn
       }
-      // Remembered (the last asked at the end) – unless a count begun later has written the day already.
+      // Remembered (the last asked at the end) – unless a count begun later has written the day already, or the same day is
+      // remembered with its curve (a count without one never takes its place).
       const now = this.horizonMemo.get(date)
-      if (!now || now.seq <= seq) {
+      const richer = now != null && now.key === key && now.energyOn != null && counted == null
+      if (!now || (now.seq <= seq && !richer)) {
         this.horizonMemo.delete(date)
-        this.horizonMemo.set(date, { key, day, seq })
+        this.horizonMemo.set(date, { key, day, seq, energyOn: counted })
+      } else if (richer) {
+        this.horizonMemo.delete(date)
+        this.horizonMemo.set(date, now)
       }
       return read.complete ? day : { ...day, read: 'partial' }
     } catch (e) {
@@ -1495,12 +1524,12 @@ export class DataFolder {
   /** The week of `date` (D356): its seven days from Monday, as this computer sees them. */
   async weekView(date: string, at = this.clock.now()): Promise<WeekView> {
     const week = weekStart(date)
-    return weekViewOf(week, logicalDayOf(at), await this.horizonDays(weekDates(week), at))
+    return weekViewOf(week, logicalDayOf(at), await this.horizonDays(weekDates(week), at, true))
   }
 
   /** Days of the horizon on one axis (D417 „3 dni”, D418 „Agenda”): each as the week counts it, in the order asked. */
   async daysView(dates: readonly string[], at = this.clock.now()): Promise<DaysView> {
-    return daysViewOf(dates, logicalDayOf(at), await this.horizonDays(dates, at))
+    return daysViewOf(dates, logicalDayOf(at), await this.horizonDays(dates, at, true))
   }
 
   /**

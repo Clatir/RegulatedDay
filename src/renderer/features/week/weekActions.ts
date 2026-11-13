@@ -84,12 +84,12 @@ async function pushedFor(date: string, base: RawRecord | null, block: PlanBlock)
  * A day as the engine has it now, counted on `base` – its file as the edit is made on it (its logs from `dayData`; the energy
  * not counted). Null: the day cannot be counted now (its logs not read whole, the bridge fails).
  */
-export async function countedDay(date: string, base: RawRecord | null): Promise<DayModel | null> {
+export async function countedDay(date: string, base: RawRecord | null, at = Date.now()): Promise<DayModel | null> {
   try {
     const data = await window.rd.dayData(date)
     if (!dayUsable(data)) return null
     const { rd, templates, lectures, seriesPlans } = useData.getState()
-    return countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures, series: seriesPlans }, Date.now(), false)
+    return countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures, series: seriesPlans }, at, false)
   } catch {
     return null
   }
@@ -165,7 +165,9 @@ export const weekPushStands = (d: WeekPushedDay, now: RawRecord | null): boolean
  * stands, or one whose file cannot be read now (it is left out of `files`; „Cofnij” judges it when it is clicked).
  */
 export function weekPushStanding(push: WeekPush, files: Readonly<Record<string, RawRecord | null>> | null): boolean {
-  return files == null || push.days.some((d) => !(d.date in files) || weekPushStands(d, files[d.date] ?? null))
+  const stands = (d: WeekPushedDay) => !(d.date in files!) || weekPushStands(d, files![d.date] ?? null)
+  // D417: a move goes back only with both its days as it left them (`undoWeekPush`) – one changed, nothing to take back.
+  return files == null || (push.move ? push.days.every(stands) : push.days.some(stands))
 }
 
 /** The toast for days whose files cannot be read now when „Cofnij” asks: nothing was done there, they stay to take back. */

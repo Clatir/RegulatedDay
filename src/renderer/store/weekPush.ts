@@ -21,10 +21,11 @@ export interface WeekPushedDay {
 export interface WeekPush {
   days: WeekPushedDay[]
   /**
-   * A block dragged to another place of a column or to another day (D417, `moveWeekBlock`): its days go back together or
-   * not at all (`undoWeekPush`); the line names the move. Absent – a „Dodaj”.
+   * A block dragged to another day (D417, `moveWeekBlock`): its days go back together or not at all (`undoWeekPush`); the
+   * line says „Przeniesiono: <name> na <to>” (D422) – the name as the window named it at the move. Absent – a „Dodaj”, or a
+   * push within one day.
    */
-  move?: { blockId: string; from: string; to: string }
+  move?: { blockId: string; name: string; from: string; to: string }
 }
 
 export interface WeekPushLine {
@@ -69,5 +70,5 @@ export function dropWeekPushDays(which: number, dates: readonly string[]): void 
   const days = useWeekPush.getState().line?.seq === which ? useWeekPush.getState().line!.push.days.filter((d) => !dates.includes(d.date)) : null
   if (!days) return
   if (!days.length) clearWeekPush(which)
-  else useWeekPush.setState((s) => (s.line?.seq === which ? { line: { ...s.line, push: { days } } } : s))
+  else useWeekPush.setState((s) => (s.line?.seq === which ? { line: { ...s.line, push: { ...s.line.push, days } } } : s))
 }

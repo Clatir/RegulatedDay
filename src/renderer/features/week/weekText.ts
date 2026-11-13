@@ -178,6 +178,9 @@ export const weekPushedText = (blocks: number, days: number): string => `${pushe
  */
 export function weekPushLineText(push: WeekPush): string {
   const blocks = push.days.reduce((n, d) => n + d.moved, 0)
+  // D422: a block moved to another day – its name and the day as its column's heading says it („wt 6.01”, T915), and what it
+  // pushed apart there.
+  if (push.move) return `Przeniesiono: ${push.move.name} na ${dayHeading(push.move.to, weekday(push.move.to) - 1)}${blocks > 0 ? ` · ${pushedText(blocks).toLowerCase()}` : ''}`
   if (blocks > 0) return weekPushedText(blocks, push.days.filter((d) => d.moved > 0).length)
   return `Nowy blok w ${countLabel(push.days.length, 'dniu', 'dniach', 'dniach')}`
 }

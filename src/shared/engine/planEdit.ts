@@ -117,33 +117,79 @@ export function movedBlock(b: PlanBlock, plan: readonly PlanBlock[], fromDate: s
     anchor: null,
     movedFrom: fromDate,
     moves: b.moves + (byYou ? 1 : 0),
-    // A block moved to another day is yours there (the template of that day has its own; a class imported for one day
-    // is a block of that day's „zjazd” only – an import of the other day never takes it).
-    origin: b.origin === 'session' || b.origin === 'lecture' || b.origin === 'zjazd' ? 'user' : b.origin === 'template' ? 'user' : b.origin
+    origin: movedOrigin(b.origin)
   }
 }
 
 /**
- * The two files of a move (spec „Przeniesienie”): the source notes where the block went (one of yours leaves its blocks),
- * the target takes it – and forgets a move of the same block away from it before (a block moved back is there again).
- * `startMin` – its start on the target (D417: where it was dropped in a column of „Tydzień” or „3 dni”); none – its planned
- * time, as „Przenieś na…”.
+ * A block moved to another day is yours there (the template of that day has its own; a class imported for one day is a
+ * block of that day's „zjazd” only – an import of the other day never takes it); an occurrence of a series stays one.
  */
-export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou = true, startMin?: number): { source: Raw; target: Raw } {
-  const moved = movedBlock(b, plan, fromDate, byYou, startMin)
-  const own = dayFileFrom(fromRaw ?? {}, fromDate).blocks.some((x) => x.id === b.id)
-  // Its ticks go with it (D440, D442): the target has exactly the ticks the source day has for it now – its file says them,
-  // whatever ticks the block given carries (one read from the file has none) – an old tick of the block there (from before
-  // it left that day) goes; the source keeps none.
-  const ticks = stepsDoneIn(fromRaw, b.id)
-  let source = setStepsDone(setMovedTo(dayRaw(fromRaw, fromDate), b.id, toDate), b.id, [])
-  if (own) source = takeBlock(source, b.id)
-  // The block as the source's file holds it goes whole (T901): fields this version does not know (a newer one wrote them)
-  // stay with it – only what the move changes is written over them.
-  const raw = dayBlocks(dayRaw(fromRaw, fromDate)).find((x) => isRaw(x) && x.id === b.id) as Raw | undefined
-  const base = dayRaw(toRaw, toDate)
-  const target = setStepsDone(setMovedTo(raw ? putRawBlock(base, blockJson(moved, raw)) : putBlock(base, moved), b.id, null), b.id, ticks)
-  return { source, target }
+const movedOrigin = (o: PlanBlock['origin']): PlanBlock['origin'] => (o === 'session' || o === 'lecture' || o === 'zjazd' || o === 'template' ? 'user' : o)
+
+/** The blocks of the plan anchored to `id` – directly or through one another – in the plan's order (D417, T911). */
+export function anchoredTo(plan: readonly PlanBlock[], id: string): PlanBlock[] {
+  const ids = new Set([id])
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const b of plan) {
+      if (b.anchor == null || !ids.has(b.anchor) || ids.has(b.id)) continue
+      ids.add(b.id)
+      grew = true
+    }
+  }
+  return plan.filter((b) => b.id !== id && ids.has(b.id))
+}
+
+/** What a move takes besides the block (D417): its start on the target and the blocks anchored to it (T911). */
+export interface MoveOptions {
+  /** Its start on the target (where it was dropped in a column of „Tydzień” or „3 dni”); none – its planned time, as „Przenieś na…”. */
+  startMin?: number
+  /** Blocks anchored to it (`anchoredTo`): they go with it and stay anchored – as on its day, where they follow it. */
+  followers?: readonly PlanBlock[]
+}
+
+/**
+ * The source's half of a move: the day notes where each block went (`movedTo`), one of yours leaves its blocks, their ticks
+ * leave it (they go with them). Made over the file as it is (`moveBetweenDays` – a write of the source after the target's).
+ */
+export function moveSource(fromRaw: Raw | null, ids: readonly string[], fromDate: string, toDate: string): Raw {
+  const own = new Set(dayFileFrom(fromRaw ?? {}, fromDate).blocks.map((x) => x.id))
+  let source = dayRaw(fromRaw, fromDate)
+  for (const id of ids) {
+    source = setStepsDone(setMovedTo(source, id, toDate), id, [])
+    if (own.has(id)) source = takeBlock(source, id)
+  }
+  return source
+}
+
+/**
+ * The target's half of a move: it takes the block (and its followers, still anchored to it) – and forgets a move of the
+ * same block away from it before (a block moved back is there again). Their ticks go with them (D440, D442): the target has
+ * exactly the ticks the source day has for each now – its file says them, whatever ticks the block given carries (one read
+ * from the file has none) – an old tick of the block there (from before it left that day) goes. Each block as the source's
+ * file holds it goes whole (T901): fields this version does not know (a newer one wrote them) stay with it – only what the
+ * move changes is written over them.
+ */
+export function moveTarget(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou = true, opts: MoveOptions = {}): Raw {
+  const raws = dayBlocks(dayRaw(fromRaw, fromDate))
+  const put = (raw: Raw, moved: PlanBlock): Raw => {
+    const was = raws.find((x) => isRaw(x) && x.id === moved.id) as Raw | undefined
+    return setStepsDone(setMovedTo(was ? putRawBlock(raw, blockJson(moved, was)) : putBlock(raw, moved), moved.id, null), moved.id, stepsDoneIn(fromRaw, moved.id))
+  }
+  let target = put(dayRaw(toRaw, toDate), movedBlock(b, plan, fromDate, byYou, opts.startMin))
+  // A follower keeps its anchor (its hour is its anchor's end), the day it came from and one move more, as the block.
+  for (const f of opts.followers ?? []) target = put(target, { ...f, movedFrom: fromDate, moves: f.moves + (byYou ? 1 : 0), origin: movedOrigin(f.origin) })
+  return target
+}
+
+/**
+ * The two files of a move (spec „Przeniesienie”): the source notes where the block went (one of yours leaves its blocks),
+ * the target takes it (`moveSource`, `moveTarget`).
+ */
+export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou = true, opts: MoveOptions = {}): { source: Raw; target: Raw } {
+  const ids = [b.id, ...(opts.followers ?? []).map((f) => f.id)]
+  return { source: moveSource(fromRaw, ids, fromDate, toDate), target: moveTarget(fromRaw, toRaw, b, plan, fromDate, toDate, byYou, opts) }
 }
 
 /**

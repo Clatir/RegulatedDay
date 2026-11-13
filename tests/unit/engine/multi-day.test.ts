@@ -13,7 +13,7 @@ import { computeEnergy } from '@shared/engine/energy'
 import { ASSUMED_CHECKIN, ENERGY_SAMPLE_MIN, energyTrack } from '@shared/engine/energyTrack'
 import { foldFacts } from '@shared/engine/facts'
 import { gridOf, idxOfLogical } from '@shared/engine/grid'
-import { moveBetweenDays } from '@shared/engine/planEdit'
+import { anchoredTo, moveBetweenDays } from '@shared/engine/planEdit'
 import { agendaDates, daysViewOf, horizonDay, threeDays, unknownDay, weekViewOf, type HorizonBlock, type HorizonDay } from '@shared/engine/week'
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { dayFileFrom } from '@shared/model/plan'
@@ -95,7 +95,7 @@ describe('D417 – które bloki przeciągasz między kolumnami (reguła „Dziś
 describe('D417 – przeniesienie na inny dzień z godziną upuszczenia', () => {
   it('blok szablonu: na celu Twój, z nową godziną, licznikiem i dniem, z którego przyszedł; źródło – movedTo', () => {
     const t = block({ id: 't1', cat: 'analiza', at: '09:00', min: 60 })
-    const { source, target } = moveBetweenDays(null, null, t, [t], FUT, '2026-11-06', true, lm('14:30'))
+    const { source, target } = moveBetweenDays(null, null, t, [t], FUT, '2026-11-06', true, { startMin: lm('14:30') })
     expect(source.movedTo).toEqual({ t1: '2026-11-06' })
     const moved = dayFileFrom(target, '2026-11-06').blocks.find((b) => b.id === 't1')
     expect(moved).toMatchObject({ startMin: lm('14:30'), origin: 'user', moves: 1, movedFrom: FUT })
@@ -106,19 +106,43 @@ describe('D417 – przeniesienie na inny dzień z godziną upuszczenia', () => {
   it('blok z pliku źródła idzie cały – pola nieznane tej wersji zostają (T901)', () => {
     const x = block({ id: 'x', cat: 'inne', at: '09:00', min: 60, origin: 'user' })
     const fromRaw = { schema: 1, date: FUT, blocks: [{ ...x, note: 'n', newer: { kept: true } }] }
-    const { target } = moveBetweenDays(fromRaw, null, { ...x, note: 'n' }, [x], FUT, '2026-11-06', true, lm('10:00'))
+    const { target } = moveBetweenDays(fromRaw, null, { ...x, note: 'n' }, [x], FUT, '2026-11-06', true, { startMin: lm('10:00') })
     expect((target.blocks as Array<Record<string, unknown>>)[0]).toMatchObject({ id: 'x', note: 'n', newer: { kept: true }, startMin: lm('10:00'), moves: 1, movedFrom: FUT })
   })
 
   it('wystąpienie serii zostaje wystąpieniem („Tylko to”, movedTo); odhaczone kroki idą z blokiem', () => {
     const occ = { ...block({ id: 'o1', cat: 'inne', at: '09:00', min: 60, origin: 'series', source: 'ser' }), steps: [{ id: 's1', title: 'a', order: 0, done: false }] }
     const fromRaw = { schema: 1, date: FUT, stepsDone: { o1: { s1: true } } }
-    const { source, target } = moveBetweenDays(fromRaw, null, occ, [occ], FUT, '2026-11-06', true, lm('16:00'))
+    const { source, target } = moveBetweenDays(fromRaw, null, occ, [occ], FUT, '2026-11-06', true, { startMin: lm('16:00') })
     expect(source.movedTo).toEqual({ o1: '2026-11-06' })
     expect((source.stepsDone as Record<string, unknown>).o1).toBeUndefined()
     const file = dayFileFrom(target, '2026-11-06')
     expect(file.blocks[0]).toMatchObject({ id: 'o1', origin: 'series', sourceId: 'ser', startMin: lm('16:00') })
     expect(file.stepsDone).toEqual({ o1: ['s1'] })
+  })
+
+  it('bloki zakotwiczone do przenoszonego (wprost i dalej) idą z nim i zostają zakotwiczone (T911)', () => {
+    const x = block({ id: 'x', cat: 'inne', at: '09:00', min: 60, origin: 'user' })
+    const y = block({ id: 'y', cat: 'inne', after: 'x', min: 30, origin: 'user' })
+    const z = block({ id: 'z', cat: 'inne', after: 'y', min: 15 })
+    const other = block({ id: 'o', cat: 'inne', at: '13:00', min: 30, origin: 'user' })
+    const plan = [x, y, z, other]
+    expect(anchoredTo(plan, 'x').map((b) => b.id)).toEqual(['y', 'z'])
+    expect(anchoredTo(plan, 'o')).toEqual([])
+    const fromRaw = { schema: 1, date: FUT, blocks: [x, y, other].map((b) => ({ ...b })) }
+    const { source, target } = moveBetweenDays(fromRaw, null, x, plan, FUT, '2026-11-06', true, { startMin: lm('15:00'), followers: [y, z] })
+    // Gone from the source together (one of yours out of its blocks, the template's – by `movedTo`); the other stays.
+    expect(source.movedTo).toEqual({ x: '2026-11-06', y: '2026-11-06', z: '2026-11-06' })
+    expect(dayFileFrom(source, FUT).blocks.map((b) => b.id)).toEqual(['o'])
+    const there = dayFileFrom(target, '2026-11-06').blocks
+    expect(there.map((b) => [b.id, b.startMin, b.anchor, b.movedFrom, b.moves, b.origin])).toEqual([
+      ['x', lm('15:00'), null, FUT, 1, 'user'],
+      ['y', null, 'x', FUT, 1, 'user'],
+      ['z', null, 'y', FUT, 1, 'user']
+    ])
+    // On the target day they follow it, as on its own day.
+    const snap = { ...new Scenario({ date: '2026-11-06', plan: [] }).snapshot }
+    expect(dayPlan(snap, dayFileFrom(target, '2026-11-06')).map((b) => b.id)).toEqual(['x', 'y', 'z'])
   })
 })
 
@@ -187,6 +211,27 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
     expect(d.budget).toEqual({ workMin: state.budgetUsedMin + state.budget.forecastMin, limitMin: state.budget.limitMin })
     expect(d.budget).toEqual({ workMin: 180, limitMin: DEFAULT_SETTINGS.dayTypes.zwykly.budgetMin })
     expect(ctx.events).toEqual([])
+  })
+
+  it('bez krzywej, gdy nikt jej nie rysuje (miesiąc, cele – T914): reszta dnia ta sama', () => {
+    const ctx = futureDay().contextAt(NOW)
+    const none = horizonDay(ctx, 'future', null, null)
+    expect(none.energy).toBeNull()
+    expect({ ...horizonDay(ctx, 'future'), energy: null }).toEqual(none)
+  })
+})
+
+describe('D418 – praca wobec budżetu dnia', () => {
+  it('dzień miniony bez Twojej obecności – bez miary pracy (jak regeneracja, T904); z obecnością – jak zapisano', () => {
+    const plan = [block({ id: 'a', cat: 'inne', at: '09:00', min: 60, origin: 'user' })]
+    const at = dayEnd(PAST) + 3_600_000
+    // Events of another computer only (an observation): counted in full, nobody used the day.
+    const nobody = new Scenario({ date: PAST, plan }).observe('10:00', '10:05', 'pcb')
+    const d = horizonDay(nobody.contextAt(at), 'past')
+    expect([d.regen, d.budget]).toEqual([null, null])
+    const used = new Scenario({ date: PAST, plan, settings: { transitionBufferMin: 0 } })
+    used.presence('07:30').using('07:30', '21:00').ran('a', '09:00', '10:00')
+    expect(horizonDay(used.contextAt(at), 'past').budget).toMatchObject({ workMin: 60 })
   })
 })
 
@@ -273,6 +318,27 @@ describe('D418 – komórka dnia w miesiącu', () => {
     expect(c.load).toBe('mid')
     // Fewer than 3: all, no „+N”.
     expect(monthCell(monthDayOf(day({ blocks: [hb('meet', '10:00', 60, { fixed: true })] })), [])).toMatchObject({ items: [{ kind: 'block' }], more: 0 })
+  })
+
+  it('„+N” liczy wszystko, czego nie widać: całodniowe i bloki bez paska – też elastyczne i sesje (D422); bez zdjętych z dnia', () => {
+    const blocks = [
+      hb('lon', '08:00', 180, { fixed: true, session: true }),
+      hb('meet', '10:00', 60, { fixed: true }),
+      hb('f1', '11:00', 60),
+      hb('f2', '13:00', 60),
+      hb('w', '18:00', 90, { fixed: true }),
+      hb('park', '19:30', 30, { state: 'parked' }),
+      hb('off', '20:00', 30, { fixed: true, state: 'cancelled' })
+    ]
+    const m = monthDayOf(day({ blocks }))
+    expect(m.blockCount).toBe(5)
+    const c = monthCell(m, [ev('e1', 'Urodziny', FUT), ev('e2', 'Urlop', FUT)])
+    // The events in their order (the same days: by title – „Urlop” before „Urodziny”).
+    expect(c.items.map((i) => (i.kind === 'allDay' ? i.event.id : i.block.id))).toEqual(['e2', 'e1', 'meet'])
+    // 2 events + 5 blocks on the day, 3 bars: the event-free rest – „w”, the session and the two flexible ones.
+    expect(c.more).toBe(4)
+    // Only flexible blocks: no bar, every one „+N”.
+    expect(monthCell(monthDayOf(day({ blocks: [hb('f1', '11:00', 60), hb('f2', '13:00', 60)] })), [])).toMatchObject({ items: [], more: 2 })
   })
 
   it('daty miesiąca od pierwszego do ostatniego dnia', () => {
