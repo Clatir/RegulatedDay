@@ -1,0 +1,63 @@
+/**
+ * The name of a block (D430): „+ Blok” opens the panel of a new block with the cursor in „Nazwa”; the name typed and „Dodaj” –
+ * the tile says the name in the category's place and the category beside its hours („14:00–15:00 · Inne obowiązki”), the day's
+ * file has the name. Tomorrow (the wake at 12:00 in `seedAwake`): a new block in the day's first free place after the wake – a
+ * whole hour at any hour the test runs (no exchange, no forecast moving it). D431: Enter in „Nazwa” of a new block adds it as
+ * „Dodaj” does.
+ */
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { expect, test } from '@playwright/test'
+import { paths } from '../../src/shared/data/paths'
+import { dayFileFrom } from '../../src/shared/model/plan'
+import { addDays } from '../../src/shared/time/zone'
+import { launch, withMainLog } from './app'
+import { seedAwake } from './seedAwake'
+
+test('nazwa bloku (D430, D431): „+ Blok”, kursor w polu „Nazwa”, „Dodaj” – kafelek z nazwą i kategorią przy godzinach; Enter w nazwie nowego bloku dodaje go', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-block-name-'))
+  const { today } = seedAwake(dataDir, [])
+  const tomorrow = addDays(today, 1)
+  const tomorrowFile = join(dataDir, paths.day(tomorrow))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('day-add')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('day-next').click()
+      await expect(page.getByTestId('day-title')).not.toContainText('Dziś')
+      await page.getByTestId('day-add').click()
+      await expect(page.getByTestId('block-editor')).toBeVisible()
+      const name = page.getByTestId('block-name')
+      await expect(name).toBeFocused()
+      // The placeholder: what the block is called without a name.
+      await expect(name).toHaveAttribute('placeholder', 'Inne obowiązki')
+      await page.keyboard.type('Analiza rynku')
+      await page.getByTestId('block-add').click()
+      const tile = page.locator('[data-block-title="Analiza rynku"]')
+      await expect(tile).toBeVisible({ timeout: 15_000 })
+      // Its hours (where the day's first free place is), then the category.
+      await expect(tile).toContainText(/\d\d:\d\d–\d\d:\d\d · Inne obowiązki/)
+      // The panel stays on the block added, with its name.
+      await expect(name).toHaveValue('Analiza rynku')
+      await expect
+        .poll(() => dayFileFrom(JSON.parse(readFileSync(tomorrowFile, 'utf8')), tomorrow).blocks.map((b) => [b.categoryId, b.name, b.durationMin]))
+        .toEqual([['inne', 'Analiza rynku', 60]])
+      // D431: the next new block – Enter in its name adds it, no „Dodaj” clicked.
+      await page.getByTestId('day-add').click()
+      await expect(name).toBeFocused()
+      await expect(name).toHaveValue('')
+      await page.keyboard.type('Przegląd tygodnia')
+      await page.keyboard.press('Enter')
+      await expect(page.locator('[data-block-title="Przegląd tygodnia"]')).toBeVisible({ timeout: 15_000 })
+      await expect(page.getByTestId('block-add')).toHaveCount(0)
+      await expect
+        .poll(() => dayFileFrom(JSON.parse(readFileSync(tomorrowFile, 'utf8')), tomorrow).blocks.map((b) => b.name))
+        .toEqual(['Analiza rynku', 'Przegląd tygodnia'])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

@@ -46,8 +46,8 @@ export interface NamingDay {
 /**
  * What names a block of the day by its id: its entry in the plan. One not in the plan (taken out after it began – D336 –
  * or begun outside it): its category and variant as its start wrote them (spec: a later edit never changes them), where it
- * came from, its routine and requests from the snapshot's entry while that is the same block (the same category – a session
- * „Sesja NY”, D338); one that has not begun – the snapshot's entry; null without any of them.
+ * came from, its own name (D431), its routine and requests from the snapshot's entry while that is the same block (the same
+ * category – a session „Sesja NY”, D338); one that has not begun – the snapshot's entry; null without any of them.
  */
 export function namedById(id: string, day: NamingDay): NamedBlock | null {
   const p = day.plan.find((b) => b.id === id)
@@ -56,7 +56,7 @@ export function namedById(id: string, day: NamingDay): NamedBlock | null {
   const planned = day.planned(id)
   if (!planned || typeof planned.categoryId !== 'string' || !planned.categoryId) return snap
   const started = namedOf({ categoryId: planned.categoryId, variantId: planned.variantId ?? null })
-  return snap?.categoryId === planned.categoryId ? { ...started, origin: snap.origin, sourceId: snap.sourceId, routine: snap.routine, requests: snap.requests, task: snap.task, note: snap.note } : started
+  return snap?.categoryId === planned.categoryId ? { ...started, origin: snap.origin, sourceId: snap.sourceId, name: snap.name, routine: snap.routine, requests: snap.requests, task: snap.task, note: snap.note } : started
 }
 
 /** The name of a block of the day by its id (`namedById`), the same on the axis, in the ritual, the CSV and the bar; „blok” when nothing names it. */
@@ -90,4 +90,15 @@ export function blockName(b: NamedBlock, n: Names): string {
   const rules = n.settings.categories[b.categoryId]
   const variant = b.variantId ? rules?.variants.find((v) => v.id === b.variantId) : undefined
   return variant?.name ?? categoryName(n.rd, b.categoryId)
+}
+
+/**
+ * What a block with its own name (D430) is besides it: the name it would have without one (its task, routine, variant or
+ * category) – said small beside its hours on its tile („09:00–09:45 · Analiza”). Null: no name of its own, or the same
+ * words (said once).
+ */
+export function blockKind(b: NamedBlock, n: Names): string | null {
+  if (!b.name) return null
+  const kind = blockName({ ...b, name: null }, n)
+  return kind === b.name ? null : kind
 }

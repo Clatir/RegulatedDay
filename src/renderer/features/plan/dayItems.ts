@@ -18,7 +18,7 @@ import { stepsCounter } from '@shared/model/steps'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import type { DayModel } from '../../store/day'
-import { blockColor, blockMarks, blockName, nameById, type Names } from './blockView'
+import { blockColor, blockKind, blockMarks, blockName, nameById, type Names } from './blockView'
 import type { EnergyTrack, TimelineItem, TimelineMarker } from './Timeline'
 
 export interface DayAxis {
@@ -66,11 +66,14 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
     if (from == null || to == null) continue
     const edge = f?.startedAt != null && f.endedAt == null ? edges?.get(p.id) : undefined
     const counter = stepsCounter(p.steps)
+    const kind = blockKind(p, names)
     items.push({
       id: p.id,
       // As long as it lasts, also across the doubled hour of a 25-hour day (`logicalSpan` – the preview of a push the same).
       ...logicalSpan(g, from, Math.max(to, from + 1)),
       title: gone ? `${blockName(p, names)} (${gone})` : blockName(p, names),
+      // D430: its category beside its hours when its own name is in the category's place.
+      ...(kind ? { kind } : {}),
       marks: [...blockMarks(p, { afterWork: info.afterWorkMark, fromYesterday: p.movedFrom === yesterday }), ...(f?.startedAt != null && f.endedAt == null ? ['biegnie'] : [])],
       color: blockColor(p.categoryId, names),
       categoryId: p.categoryId,

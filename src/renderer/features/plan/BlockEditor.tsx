@@ -1,5 +1,6 @@
 /**
- * The editing panel of a block (D293: on the right of the plan): its category and variant, its start or the block it
+ * The editing panel of a block (D293: on the right of the plan): its own name (D430: „Nazwa” on top – empty, it is named as
+ * before; a new block has the cursor in it), its category and variant, its start or the block it
  * follows („po sesji NY”), its length, fixed or flexible, in the foreground or the background, the marks of the second
  * shift and the weekly analysis, its routine, the computer recording a lecture, „Powtarzaj” (`repeat`, D381: a slot of the day's panel),
  * its list „Kroki” (`steps`, D440 – a slot of the screen, above the note), its note (a live Markdown editor, D388), its
@@ -8,13 +9,13 @@
  */
 import type { ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
-import type { PlanBlock } from '@shared/model/plan'
+import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
 import { routineMinutes } from '@shared/model/routines'
 import type { SessionDef } from '@shared/model/settings'
 import { SESSION_ANCHOR } from '@shared/engine/createDay'
 import { olderComputers } from '@shared/model/note'
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
-import { Choice, DurationField, TimeField } from '../../components/fields'
+import { Choice, DurationField, TextField, TimeField } from '../../components/fields'
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import type { SaveAnswer } from '../../store/data'
@@ -36,7 +37,8 @@ export function BlockEditor({
   repeat,
   steps,
   inSeries,
-  place
+  place,
+  newBlock
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -60,6 +62,11 @@ export function BlockEditor({
    * not saved yet has nothing to attach to). Files and links dropped on the panel go to it.
    */
   place?: BlockPlace
+  /**
+   * A new block not saved yet (before „Dodaj”): the cursor starts in „Nazwa” (D430), Enter there adds it as „Dodaj” does, with
+   * the name typed (`add`, D431). Left out – an existing block: Enter only commits the name.
+   */
+  newBlock?: { add: (name: string | null) => void }
 }) {
   useEscapeLayer(true, onClose)
   const owner = place ? ownerToAdd(block, place) : null
@@ -83,6 +90,21 @@ export function BlockEditor({
           Zamknij
         </button>
       </div>
+      {/* D430: its own name, as the title of an event; empty – named as before (the placeholder says how). */}
+      <Field label="Nazwa" labelWidth={92}>
+        <TextField
+          value={block.name ?? ''}
+          max={BLOCK_NAME_MAX}
+          placeholder={blockName({ ...block, name: null }, names)}
+          onCommit={(v) => void set({ name: v || null })}
+          readOnly={readOnly}
+          autoFocus={newBlock != null}
+          onEnter={newBlock ? (v) => newBlock.add(v || null) : undefined}
+          errorPlacement="below"
+          aria-label="Nazwa bloku"
+          data-testid="block-name"
+        />
+      </Field>
       <Field label="Kategoria" labelWidth={92}>
         <Choice value={block.categoryId} options={categoryOptions(names, block.categoryId)} onChange={(categoryId) => set({ categoryId, variantId: null })} aria-label="Kategoria" data-testid="block-category" />
       </Field>

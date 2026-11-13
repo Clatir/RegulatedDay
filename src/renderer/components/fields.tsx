@@ -188,7 +188,7 @@ export function DateField({ today, past, ...p }: Omit<CommitFieldProps<string>, 
 }
 
 /** A text (a name, a note): saved on leaving the field or Enter, Esc throws the edit away; trimmed, at most `max` characters. */
-export function TextField({ value, onCommit, max = 80, multiline, placeholder, className, shellClassName, errorPlacement, required, ...rest }: {
+export function TextField({ value, onCommit, max = 80, multiline, placeholder, className, shellClassName, errorPlacement, required, readOnly, autoFocus, onEnter, ...rest }: {
   value: string
   onCommit: (v: string) => void
   max?: number
@@ -199,6 +199,11 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
   errorPlacement?: ErrorPlacement
   /** An empty text is refused (a name). */
   required?: boolean
+  readOnly?: boolean
+  /** The cursor in the field when it appears (the name of a new block, D430). */
+  autoFocus?: boolean
+  /** Enter (a single line): after the text is committed, this with it (trimmed) – the name of a new block adds it (D431). */
+  onEnter?: (v: string) => void
   'aria-label'?: string
   'data-testid'?: string
 }) {
@@ -215,7 +220,7 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
       setError(null)
       return
     }
-    if (draft == null) return
+    if (draft == null || readOnly) return
     const v = draft.trim().slice(0, max)
     setDraft(null)
     if (required && !v) {
@@ -231,6 +236,8 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
     placeholder,
     maxLength: max,
     spellCheck: false,
+    readOnly,
+    autoFocus,
     'aria-label': rest['aria-label'],
     'data-testid': rest['data-testid'],
     onBlur: commit,
@@ -241,7 +248,11 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
       setError(null)
     },
     onKeyDown: (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && (!multiline || e.ctrlKey)) e.currentTarget.blur()
+      if (e.key === 'Enter' && (!multiline || e.ctrlKey)) {
+        const v = (draft ?? value).trim().slice(0, max)
+        e.currentTarget.blur()
+        if (onEnter && !readOnly && !(required && !v)) onEnter(v)
+      }
       if (e.key === 'Escape' && draft != null) {
         e.stopPropagation()
         e.preventDefault()

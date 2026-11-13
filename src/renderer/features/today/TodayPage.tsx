@@ -531,6 +531,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               setSelected(null)
             }}
             inSeries={!draft && block.origin === 'series'}
+            // D430, D431: „+ Blok” (Ctrl+N, a range on the axis, „Więcej” of „Tydzień”) – the cursor in „Nazwa”, Enter there
+            // adds the block as „Dodaj” (with the name just typed – the draft of this render does not have it yet).
+            newBlock={draft ? { add: (name) => void add({ ...draft, name }) } : undefined}
             steps={
               <StepsEditor
                 steps={block.steps}
