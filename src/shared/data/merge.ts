@@ -235,7 +235,8 @@ export function recordEdit(rel: string, before: Record<string, unknown> | null, 
   if (!after) return before ? { rel, remove: true, edits: [], base: before } : null
   const maps = LEAF_MAPS[classify(rel)?.kind ?? 'settings']
   if (!before) return { rel, create: true, edits: Object.entries(after).flatMap(([k, v]) => leafEdits(maps, [k], undefined, v)) }
-  const edits = diffRecords(before, after).flatMap((c) => leafEdits(maps, c.path, c.before, c.after))
+  const lists = ITEM_LISTS[classify(rel)?.kind ?? 'settings']
+  const edits = diffRecords(before, after).flatMap((c) => itemEdits(lists, c.path, c.before, c.after) ?? leafEdits(maps, c.path, c.before, c.after))
   return edits.length ? { rel, edits } : null
 }
 
@@ -245,6 +246,25 @@ export function recordEdit(rel: string, before: Record<string, unknown> | null, 
  * first tick on two computers is two fields that both stay – never one whole map meeting the other's as a question.
  */
 export const LEAF_MAPS: Partial<Record<FileKind, ReadonlySet<string>>> = { day: new Set(['stepsDone']), request: new Set(['stepsDone']) }
+
+/**
+ * Lists of records with ids written item by item and field by field (T944, D419): rd.json's `calendars`. The first item of a
+ * list the file does not have yet (an old folder), a new item, and the first change of an item the file does not have
+ * (the default calendar) are edits of their fields – the `id` first, so the item exists for the ones after it – never one edit of
+ * the whole list or item. Two computers adding the first calendar, or changing two fields of one, so meet in no question.
+ */
+export const ITEM_LISTS: Partial<Record<FileKind, ReadonlySet<string>>> = { settings: new Set(['calendars']) }
+
+function itemEdits(lists: ReadonlySet<string> | undefined, path: Path, base: unknown, value: unknown): Array<{ path: Path; base: unknown; value: unknown }> | null {
+  if (!lists?.has(path[0] ?? '') || base !== undefined) return null
+  const fields = (at: Path, item: Record<string, unknown>) =>
+    Object.entries(item)
+      .sort(([a], [b]) => (a === 'id' ? -1 : b === 'id' ? 1 : 0))
+      .map(([k, v]) => ({ path: [...at, k], base: undefined, value: v }))
+  if (path.length === 1 && isIdArray(value)) return value.flatMap((item) => fields([path[0]!, `#${item.id}`], item))
+  if (path.length === 2 && path[1]!.startsWith('#') && isObject(value)) return fields(path, value)
+  return null
+}
 
 function leafEdits(maps: ReadonlySet<string> | undefined, path: Path, base: unknown, value: unknown): Array<{ path: Path; base: unknown; value: unknown }> {
   if (!maps?.has(path[0] ?? '')) return [{ path, base, value }]

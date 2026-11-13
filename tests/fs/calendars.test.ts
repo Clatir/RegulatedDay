@@ -10,8 +10,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
 import { recordEdit as editOf } from '@shared/data/merge'
-import { addCalendarRaw, calendarOfCategory, newCalendar, removeCalendarRaw, setCategoryCalendarRaw } from '@shared/model/calendars'
-import { rdFrom } from '@shared/model/rd'
+import { addCalendarRaw, calendarOfCategory, newCalendar, removeCalendarRaw, setCategoryCalendarRaw, updateCalendarRaw } from '@shared/model/calendars'
+import { CATEGORY_COLORS, rdFrom } from '@shared/model/rd'
 import { placeLogical } from '@shared/time/day'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs } from '../../src/main/data/fsio'
@@ -114,6 +114,23 @@ describe('kalendarze w folderze danych', () => {
     await folder.check()
     expect(folder.copyConflicts.size).toBe(0)
     expect(read(paths.settings).calendars).toEqual([a, b])
+  })
+
+  it('T940/T944: dwa komputery dodają pierwszy kalendarz do starego pliku (obie edycje z tej samej bazy) – oba zostają, bez pytania; tak samo dwie pierwsze zmiany „Moje”', async () => {
+    write(paths.settings, OLD)
+    const folder = await open()
+    const a = newCalendar(rdFrom(OLD).calendars, 'Praca')!
+    const b = newCalendar(rdFrom(OLD).calendars, 'Dom')!
+    const out = await folder.edit([
+      editOf(paths.settings, OLD, addCalendarRaw(OLD, a))!,
+      editOf(paths.settings, OLD, addCalendarRaw(OLD, b))!,
+      editOf(paths.settings, OLD, updateCalendarRaw(OLD, 'moje', { name: 'Prywatne' }))!,
+      editOf(paths.settings, OLD, updateCalendarRaw(OLD, 'moje', { color: CATEGORY_COLORS[5] }))!
+    ])
+    expect(out.map((o) => o.status)).toEqual(['applied', 'applied', 'applied', 'applied'])
+    expect(folder.queue.questions()).toHaveLength(0)
+    const rd = rdFrom(read(paths.settings))
+    expect(rd.calendars.map((c) => [c.name, c.color])).toEqual([['Prywatne', CATEGORY_COLORS[5]], ['Praca', a.color], ['Dom', b.color]])
   })
 
   it('kalendarz usunięty tu, a na drugim komputerze przypisana do niego kategoria: czyta się jako „Moje”', async () => {

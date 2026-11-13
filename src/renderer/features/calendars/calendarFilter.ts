@@ -1,12 +1,14 @@
 /**
- * Which calendars the window's views hide (D419): a habit of this computer, kept in the window's own storage (nothing in
+ * Which calendars the window's views hide (D419, D425): a habit of this computer, kept in the window's own storage (nothing in
  * the data folder – the same way as `plan/lastCategory.ts`). Storage that cannot be read or written is no memory, never an
- * error. A calendar id the folder no longer has hides nothing (`filterBlocks` knows only the calendars that exist).
- * The views of the window call `useCalendarFilter(blocks)` and show `shown` with `hiddenCount` in `CalendarChips`.
+ * error. What is remembered works only while there are two calendars or more and only for calendars that exist
+ * (`filterBlocks`): with one, the chips are not there to bring the blocks back, so nothing is hidden. A view calls
+ * `useVisibleBlocks(blocks)` (and `useVisibleAllDay(events)` for the strip of all-day events) and shows `shown`; the count
+ * goes to `CalendarChips` as „ukryte: N”.
  */
 import { useMemo } from 'react'
 import { create } from 'zustand'
-import { filterBlocks } from '@shared/model/calendars'
+import { filterAllDay, filterBlocks } from '@shared/model/calendars'
 import { useData } from '../../store/data'
 
 const KEY = 'rd.hiddenCalendars'
@@ -34,8 +36,6 @@ interface CalendarFilter {
   hidden: string[]
   /** A calendar checked ↔ unchecked. */
   toggle: (id: string) => void
-  /** Reads the memory again (the storage changed under the store). */
-  reload: () => void
 }
 
 export const useCalendarFilter = create<CalendarFilter>((set, get) => ({
@@ -45,8 +45,7 @@ export const useCalendarFilter = create<CalendarFilter>((set, get) => ({
     const hidden = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
     saveHiddenCalendars(hidden)
     set({ hidden })
-  },
-  reload: () => set({ hidden: loadHiddenCalendars() })
+  }
 }))
 
 /**
@@ -57,4 +56,11 @@ export function useVisibleBlocks<T extends { categoryId: string }>(blocks: reado
   const rd = useData((x) => x.rd)
   const hidden = useCalendarFilter((x) => x.hidden)
   return useMemo(() => filterBlocks(blocks, hidden, rd), [blocks, hidden, rd])
+}
+
+/** As `useVisibleBlocks` for all-day events (D425): each by its own calendar. */
+export function useVisibleAllDay<T extends { calendarId: string | null }>(events: readonly T[]): { shown: T[]; hiddenCount: number } {
+  const rd = useData((x) => x.rd)
+  const hidden = useCalendarFilter((x) => x.hidden)
+  return useMemo(() => filterAllDay(events, hidden, rd), [events, hidden, rd])
 }

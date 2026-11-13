@@ -2,7 +2,8 @@
  * All-day and multi-day events (D405, HKU1; allday/<id>.json): a title, the dates from and to (inclusive), one of six
  * fixed colours, a one-line note and „To wolne (urlop, wyjazd)”. An event is information only: it never changes the
  * budget, the regeneration or the day's type – the engine of the day never reads it (its inputs have no place for it).
- * `calendarId` is reserved for calendars joined later (SNT2): always null from this version, kept as found.
+ * `calendarId` (D425, SNT2): the event's calendar (`model/calendars.ts`); null – „Moje”, an id the file no longer has reads as „Moje”.
+ * Hiding a calendar in the views hides its events too; the old versions keep the field as found.
  */
 import { NOTE_MAX } from './note'
 import { addDays, daysBetween, isIsoDate } from '../time/zone'

@@ -1,30 +1,53 @@
 // @vitest-environment jsdom
 /**
- * Kalendarze w ustawieniach (SNT2, D419): dodanie, nazwa, kolor, usunięcie z „Cofnij”; „Moje” zawsze jest; kategoria wybiera
- * kalendarz w swoim wierszu. Zapis idzie przez `saveRd` (tu: atrapa, która stosuje zmianę do rekordu rd.json i czyta go na nowo).
+ * Kalendarze w ustawieniach (SNT2, D419, D425): dodanie, nazwa, kolor, usunięcie z „Cofnij” (odwrócona edycja); „Moje” zawsze
+ * jest; limit 12; kategoria wybiera kalendarz w swoim wierszu. Zapis idzie przez `trySaveWith` – tu atrapa kolejki: edycja
+ * kładzie się na rekord rd.json tak jak w `editQueue` (pole, którego baza nie zgadza się z plikiem, to konflikt).
  */
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { calendarOfCategory } from '@shared/model/calendars'
+import type { EditEntry } from '@shared/api'
+import { calendarOfCategory, MAX_CALENDARS } from '@shared/model/calendars'
 import { CATEGORY_COLORS, rdFrom } from '@shared/model/rd'
 import { CalendarsSection } from '@renderer/features/settings/CalendarsSection'
 import { CategoriesSection } from '@renderer/features/settings/CategoriesSection'
 import { useData } from '@renderer/store/data'
 import { closeToast, useUi } from '@renderer/store/ui'
 
-let file: Record<string, unknown> = { schema: 1 }
-const mocks = vi.hoisted(() => ({ saved: 0 }))
+const fake = vi.hoisted(() => ({ file: { schema: 1 } as Record<string, unknown>, answer: 'queue' as 'queue' | 'refused' | 'conflict', sent: 0 }))
 vi.mock('@renderer/store/data', async (orig) => {
   const real = await orig<typeof import('@renderer/store/data')>()
+  const { deepEqual, setAt, valueAt } = await import('@shared/data/merge')
+  const { rdFrom: read } = await import('@shared/model/rd')
+  const trySaveWith = async (make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>) => {
+    const list = (await make()).filter((e): e is EditEntry => !!e)
+    if (!list.length) return []
+    if (fake.answer === 'refused') return null
+    fake.sent++
+    if (fake.answer === 'conflict') return list.map(() => ({ id: 'x', status: 'conflict' as const, fields: [] }))
+    return list.map(() => {
+      let ok = true
+      let value: unknown = fake.file
+      for (const e of list)
+        for (const f of e.edits) {
+          const now = valueAt(value, f.path)
+          if (deepEqual(now, f.value)) continue
+          if (deepEqual(now, f.base)) value = setAt(value, f.path, f.value)
+          else ok = false
+        }
+      fake.file = value as Record<string, unknown>
+      real.useData.setState({ rd: read(fake.file) })
+      return { id: 'x', status: ok ? ('applied' as const) : ('conflict' as const), fields: [] }
+    })
+  }
+  const trySaveRd = (fn: (raw: Record<string, unknown>) => Record<string, unknown>) => trySaveWith(() => [real.editOf('rd.json', fake.file, fn({ ...fake.file }))])
   return {
     ...real,
-    saveRd: vi.fn(async (fn: (raw: Record<string, unknown>) => Record<string, unknown>) => {
-      file = fn({ ...file })
-      mocks.saved++
-      real.useData.setState({ rd: (await import('@shared/model/rd')).rdFrom(file) })
-      return [{ status: 'applied' }]
-    })
+    rawRecord: (rel: string) => (rel === 'rd.json' ? fake.file : null),
+    trySaveWith,
+    trySaveRd,
+    saveRd: async (fn: (raw: Record<string, unknown>) => Record<string, unknown>) => (await trySaveRd(fn)) ?? []
   }
 })
 
@@ -33,10 +56,14 @@ let host: HTMLElement | null = null
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
-beforeEach(() => {
-  file = { schema: 1 }
-  mocks.saved = 0
+const load = (file: Record<string, unknown>) => {
+  fake.file = file
   useData.setState({ rd: rdFrom(file) })
+}
+beforeEach(() => {
+  fake.answer = 'queue'
+  fake.sent = 0
+  load({ schema: 1 })
   for (const t of useUi.getState().toasts) closeToast(t.id)
 })
 afterEach(() => {
@@ -60,6 +87,7 @@ const typeInto = (input: HTMLInputElement, value: string) =>
   })
 const click = (el: Element | null) => act(async () => (el as HTMLElement).click())
 const rdNow = () => useData.getState().rd
+const cal = (id: string, name: string, order: number, extra: Record<string, unknown> = {}) => ({ id, name, color: CATEGORY_COLORS[order % 8], order, ...extra })
 
 describe('lista kalendarzy', () => {
   it('na początku tylko „Moje”, bez „Usuń”', async () => {
@@ -78,42 +106,99 @@ describe('lista kalendarzy', () => {
     expect((q('calendar-new') as HTMLInputElement).value).toBe('')
   })
 
+  it('zapis, który nie poszedł (odmowa): nazwa wraca do pola; zapis, który został pytaniem (konflikt): nie wraca – drugi wpis byłby duplikatem', async () => {
+    const { q } = await show(CalendarsSection)
+    fake.answer = 'refused'
+    await typeInto(q('calendar-new') as HTMLInputElement, 'Praca')
+    await click(q('calendar-add'))
+    expect((q('calendar-new') as HTMLInputElement).value).toBe('Praca')
+    expect(rdNow().calendars).toHaveLength(1)
+    fake.answer = 'conflict'
+    await click(q('calendar-add'))
+    expect((q('calendar-new') as HTMLInputElement).value).toBe('')
+  })
+
   it('pusta nazwa nic nie dodaje', async () => {
     const { q } = await show(CalendarsSection)
     expect((q('calendar-add') as HTMLButtonElement).disabled).toBe(true)
-    expect(mocks.saved).toBe(0)
+    expect(fake.sent).toBe(0)
+  })
+
+  it('D425: przy 12 kalendarzach „Dodaj” i pole są wyłączone, z podpowiedzią', async () => {
+    load({ schema: 1, calendars: Array.from({ length: MAX_CALENDARS - 1 }, (_, i) => cal(`k${i}`, `K${i}`, i + 1)) })
+    const { q } = await show(CalendarsSection)
+    expect(rdNow().calendars).toHaveLength(MAX_CALENDARS)
+    expect((q('calendar-new') as HTMLInputElement).disabled).toBe(true)
+    expect((q('calendar-add') as HTMLButtonElement).disabled).toBe(true)
+    expect(q('calendar-limit')!.textContent).toContain('Najwyżej 12 kalendarzy')
+    act(() => root?.unmount())
+    load({ schema: 1 })
+    host?.remove()
+    const fewer = await show(CalendarsSection)
+    expect(fewer.q('calendar-limit')).toBeNull()
   })
 
   it('zmiana koloru przez paletę', async () => {
-    file = { schema: 1, calendars: [{ id: 'praca', name: 'Praca', color: CATEGORY_COLORS[1] }] }
-    useData.setState({ rd: rdFrom(file) })
+    load({ schema: 1, calendars: [cal('praca', 'Praca', 1)] })
     const { all } = await show(CalendarsSection)
     const row = all('calendar-row')[1]!
-    const target = row.querySelectorAll<HTMLElement>('[data-testid="calendar-color"]')[4]!
-    await click(target)
+    await click(row.querySelectorAll<HTMLElement>('[data-testid="calendar-color"]')[4]!)
     expect(rdNow().calendars[1]!.color).toBe(CATEGORY_COLORS[4])
   })
 
-  it('usunięcie: kategorie wracają do „Moje”, toast z „Cofnij” przywraca kalendarz i kategorie', async () => {
-    file = { schema: 1, calendars: [{ id: 'praca', name: 'Praca', color: CATEGORY_COLORS[1] }], categories: { analiza: { name: 'Analiza', calendar: 'praca' } } }
-    useData.setState({ rd: rdFrom(file) })
+  it('usunięcie: kategorie wracają do „Moje”, toast z „Cofnij” przywraca kalendarz na jego miejsce i jego kategorie', async () => {
+    load({
+      schema: 1,
+      calendars: [cal('a', 'A', 1), cal('praca', 'Praca', 2), cal('c', 'C', 3)],
+      categories: { analiza: { name: 'Analiza', calendar: 'praca' } }
+    })
     const { all } = await show(CalendarsSection)
-    await click(all('calendar-remove')[0]!)
-    expect(rdNow().calendars.map((c) => c.id)).toEqual(['moje'])
+    await click(all('calendar-remove')[1]!)
+    expect(rdNow().calendars.map((c) => c.id)).toEqual(['moje', 'a', 'c'])
     expect(calendarOfCategory(rdNow(), 'analiza')).toBe('moje')
     const toast = useUi.getState().toasts.at(-1)!
     expect(toast.text).toBe('Usunięto kalendarz „Praca” – jego kategorie (1) wróciły do „Moje”.')
     expect(toast.action?.label).toBe('Cofnij')
     await act(async () => void toast.action!.run())
-    expect(rdNow().calendars.map((c) => c.id)).toEqual(['moje', 'praca'])
+    // Na swoim miejscu (kolejka dokleja wpis na koniec tablicy – kolejność daje pole order) i z kategorią.
+    expect(rdNow().calendars.map((c) => c.id)).toEqual(['moje', 'a', 'praca', 'c'])
     expect(calendarOfCategory(rdNow(), 'analiza')).toBe('praca')
+  })
+
+  it('„Cofnij” oddaje kalendarz taki, jaki był: pola nowszej wersji i kolor spoza palety zostają', async () => {
+    load({ schema: 1, calendars: [{ id: 'k', name: 'Praca', color: '#123456', order: 1, przyszle: { x: 1 } }] })
+    const { all } = await show(CalendarsSection)
+    await click(all('calendar-remove')[0]!)
+    expect(fake.file.calendars).toEqual([])
+    await act(async () => void useUi.getState().toasts.at(-1)!.action!.run())
+    expect((fake.file.calendars as unknown[])[0]).toEqual({ id: 'k', name: 'Praca', color: '#123456', order: 1, przyszle: { x: 1 } })
+  })
+
+  it('„Cofnij” po zmianie kategorii od usunięcia nie nadpisuje jej – mówi, że nic nie cofnięto', async () => {
+    load({ schema: 1, calendars: [cal('praca', 'Praca', 1)], categories: { analiza: { name: 'Analiza', calendar: 'praca' } } })
+    const { all } = await show(CalendarsSection)
+    await click(all('calendar-remove')[0]!)
+    const toast = useUi.getState().toasts.at(-1)!
+    // Gdzie indziej kategoria przypisana do innego kalendarza.
+    await act(async () => load({ ...fake.file, categories: { analiza: { name: 'Analiza', calendar: 'inny' } } }))
+    await act(async () => void toast.action!.run())
+    expect(rdNow().calendars.map((c) => c.id)).toEqual(['moje'])
+    expect(useUi.getState().toasts.at(-1)!.text).toContain('zmieniły się od usunięcia')
+  })
+
+  it('usunięcie, które nie poszło (odmowa zapisu), nie udaje sukcesu: bez „Usunięto … Cofnij”', async () => {
+    load({ schema: 1, calendars: [cal('praca', 'Praca', 1)] })
+    const { all } = await show(CalendarsSection)
+    fake.answer = 'refused'
+    await click(all('calendar-remove')[0]!)
+    expect(useUi.getState().toasts.some((t) => t.text.startsWith('Usunięto'))).toBe(false)
+    expect(rdNow().calendars.map((c) => c.id)).toEqual(['moje', 'praca'])
   })
 })
 
 describe('kalendarz kategorii', () => {
   it('wybór w wierszu kategorii: przenosi ją do kalendarza i z powrotem do „Moje”', async () => {
-    file = { schema: 1, calendars: [{ id: 'praca', name: 'Praca', color: CATEGORY_COLORS[1] }] }
-    useData.setState({ rd: rdFrom(file) })
+    load({ schema: 1, calendars: [cal('praca', 'Praca', 1)] })
     const { all } = await show(CategoriesSection)
     const row = all('category-row').find((r) => r.dataset.category === 'analiza')!
     await click(row.querySelector('[data-testid="category-more"]'))
@@ -130,7 +215,7 @@ describe('kalendarz kategorii', () => {
       select.dispatchEvent(new Event('change', { bubbles: true }))
     })
     expect(calendarOfCategory(rdNow(), 'analiza')).toBe('moje')
-    // Wpis, który miał tylko kalendarz (kategoria domyślna nieznana plikowi), znika razem z nim.
-    expect(file.categories as Record<string, unknown>).toEqual({})
+    // Zostaje wpis kategorii z samą nazwą/wartością domyślną – nie cały wpis jest edytowany, tylko pole kalendarza.
+    expect((fake.file.categories as Record<string, Record<string, unknown>>).analiza).not.toHaveProperty('calendar')
   })
 })

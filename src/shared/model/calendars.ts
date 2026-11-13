@@ -1,15 +1,17 @@
 /**
- * Calendars (SNT2, D419, spec „Kalendarze”): a calendar is a group of categories with a name and a colour. Every
+ * Calendars (SNT2, D419, D425, spec „Kalendarze”): a calendar is a group of categories with a name and a colour. Every
  * category belongs to exactly one calendar (the default „Moje” unless it says otherwise) and a block is in the
- * calendar of its category – the cost, the work budget and the rest of the engine still come from the category, so
- * nothing here is read by the day's engine. Unchecking a calendar hides its blocks only in the views of the window
- * (`filterBlocks`); the energy, the boundary, the desktop bar and the notifications count them as before.
+ * calendar of its category; an all-day event names its calendar itself (`calendarId`, null – „Moje”). The cost, the work
+ * budget and the rest of the engine still come from the category, so nothing here is read by the day's engine. Unchecking
+ * a calendar hides its blocks and events only in the views of the window (`filterBlocks`, `filterAllDay`); the energy, the
+ * boundary, the desktop bar and the notifications count them as before. With one calendar nothing is hidden.
  *
- * In rd.json: `calendars` – a list of items with an id (the queue merges it item by item, two computers adding different
- * calendars meet in no question; the order of the list is the order of the calendars) and `categories.<id>.calendar`.
- * Old data has neither: it reads as the one calendar „Moje” holding every category, and nothing is written until you
- * change something. A calendar the file does not know (removed on another computer) reads as „Moje”. Fields of an item
- * this version does not know stay (the helpers below touch only their own).
+ * In rd.json: `calendars` – a list of items with an id and an `order` (the queue merges it item by item and field by field,
+ * `ITEM_LISTS` in merge.ts: two computers adding different calendars meet in no question; the order is the `order` field,
+ * never the place in the array, which a „Cofnij” or a merge changes) and `categories.<id>.calendar`. Old data has neither:
+ * it reads as the one calendar „Moje” holding every category, and nothing is written until you change something. A
+ * calendar the file does not know (removed on another computer) reads as „Moje”. What this version does not know – fields
+ * of an item, items that are no objects – stays: the helpers below touch only their own.
  */
 import { BLOCK_COLORS } from '../theme'
 import { newId } from './ids'
@@ -17,7 +19,7 @@ import { newId } from './ids'
 /** The calendar that always exists: it cannot be removed, a category with no calendar is in it. */
 export const DEFAULT_CALENDAR_ID = 'moje'
 export const DEFAULT_CALENDAR_NAME = 'Moje'
-/** The most calendars the settings make (the chips over a view stay a row); a file with more is still read whole. */
+/** The most calendars the settings make (D425; the chips over a view stay a row); a file with more is still read whole. */
 export const MAX_CALENDARS = 12
 export const CALENDAR_NAME_MAX = 60
 
@@ -26,6 +28,8 @@ export interface Calendar {
   name: string
   /** One of the palette of category colours (`BLOCK_COLORS`). */
   color: string
+  /** Where it stands among the calendars („Moje” 0, then the file's `order`, a missing one after those that have it). */
+  order: number
 }
 
 type Raw = Record<string, unknown>
@@ -33,24 +37,30 @@ const isPlain = (v: unknown): v is Raw => !!v && typeof v === 'object' && !Array
 const isColor = (v: unknown): v is string => typeof v === 'string' && (BLOCK_COLORS as readonly string[]).includes(v)
 const cleanName = (v: unknown): string => (typeof v === 'string' ? v.trim().slice(0, CALENDAR_NAME_MAX) : '')
 
-/** The calendar list as read: „Moje” first (its name and colour from the file when it was changed), then the file's, in its order. */
+/** The calendar list as read: „Moje” first (its name and colour from the file when they were changed), then the file's by `order`. */
 export function calendarsFrom(v: unknown): Calendar[] {
-  const out: Calendar[] = [{ id: DEFAULT_CALENDAR_ID, name: DEFAULT_CALENDAR_NAME, color: BLOCK_COLORS[0] }]
+  const moje: Calendar = { id: DEFAULT_CALENDAR_ID, name: DEFAULT_CALENDAR_NAME, color: BLOCK_COLORS[0], order: 0 }
+  const others: Array<Calendar & { index: number }> = []
   const seen = new Set<string>([DEFAULT_CALENDAR_ID])
-  for (const x of Array.isArray(v) ? v : []) {
-    if (!isPlain(x) || typeof x.id !== 'string' || !x.id) continue
+  const items = Array.isArray(v) ? v : []
+  items.forEach((x, index) => {
+    if (!isPlain(x) || typeof x.id !== 'string' || !x.id) return
     const name = cleanName(x.name)
     if (x.id === DEFAULT_CALENDAR_ID) {
-      // The default one is a first item of the list whatever place its entry has; a missing or empty part stays default.
-      if (name) out[0]!.name = name
-      if (isColor(x.color)) out[0]!.color = x.color
-      continue
+      // The default one is first whatever place its entry has; a missing or empty part stays default.
+      if (name) moje.name = name
+      if (isColor(x.color)) moje.color = x.color
+      return
     }
-    if (seen.has(x.id) || !name) continue
+    if (seen.has(x.id) || !name) return
     seen.add(x.id)
-    out.push({ id: x.id, name, color: isColor(x.color) ? x.color : BLOCK_COLORS[out.length % BLOCK_COLORS.length]! })
-  }
-  return out
+    const order = typeof x.order === 'number' && Number.isFinite(x.order) ? x.order : Number.POSITIVE_INFINITY
+    others.push({ id: x.id, name, color: isColor(x.color) ? x.color : BLOCK_COLORS[(others.length + 1) % BLOCK_COLORS.length]!, order, index })
+  })
+  others.sort((a, b) => a.order - b.order || a.index - b.index)
+  // A missing `order` takes its place after the ones that have it (the array's order among themselves).
+  let last = Math.max(0, ...others.map((c) => (Number.isFinite(c.order) ? c.order : 0)))
+  return [moje, ...others.map(({ index: _i, ...c }) => ({ ...c, order: Number.isFinite(c.order) ? c.order : ++last }))]
 }
 
 /** The calendar a category's rd.json meta names (a string; whether it exists is `calendarOfCategory`'s to say). */
@@ -60,10 +70,18 @@ export function categoryCalendarFrom(v: unknown): string | undefined {
 
 type CalendarSource = { categories: Record<string, { calendar?: string }>; calendars: ReadonlyArray<{ id: string }> }
 
+/** The calendar of each category: the one it names if it exists, else „Moje”. The calendars known are counted once per call. */
+function categoryResolver(rd: CalendarSource): (categoryId: string) => string {
+  const known = new Set(rd.calendars.map((c) => c.id))
+  return (categoryId) => {
+    const id = rd.categories[categoryId]?.calendar
+    return id && known.has(id) ? id : DEFAULT_CALENDAR_ID
+  }
+}
+
 /** The calendar of a category: the one it names if it exists, else „Moje” (also for a category the settings no longer have). */
 export function calendarOfCategory(rd: CalendarSource, categoryId: string): string {
-  const id = rd.categories[categoryId]?.calendar
-  return id && rd.calendars.some((c) => c.id === id) ? id : DEFAULT_CALENDAR_ID
+  return categoryResolver(rd)(categoryId)
 }
 
 /** The calendar of a block: that of its category. */
@@ -71,36 +89,48 @@ export function calendarOfBlock(rd: CalendarSource, block: { categoryId: string 
   return calendarOfCategory(rd, block.categoryId)
 }
 
-/** The blocks of the calendars not unchecked, in their order; the same array when nothing is unchecked. */
-export function visibleBlocks<T extends { categoryId: string }>(blocks: readonly T[], hidden: readonly string[], rd: CalendarSource): T[] {
-  return filterBlocks(blocks, hidden, rd).shown
+/** The calendar of an all-day event (D425): the one it names if it exists, else „Moje”. */
+export function calendarOfEvent(rd: Pick<CalendarSource, 'calendars'>, event: { calendarId: string | null }): string {
+  return event.calendarId && rd.calendars.some((c) => c.id === event.calendarId) ? event.calendarId : DEFAULT_CALENDAR_ID
 }
 
-/** How many of the blocks sit in an unchecked calendar („ukryte: N” of a view). */
-export function hiddenBlockCount<T extends { categoryId: string }>(blocks: readonly T[], hidden: readonly string[], rd: CalendarSource): number {
-  return filterBlocks(blocks, hidden, rd).hiddenCount
+/** The calendars the views hide: those of `hidden` that exist, and none while there is one calendar only (no chips to bring them back). */
+function hiddenSet(hidden: readonly string[], rd: Pick<CalendarSource, 'calendars'>): ReadonlySet<string> {
+  if (rd.calendars.length < 2 || hidden.length === 0) return new Set()
+  const known = new Set(rd.calendars.map((c) => c.id))
+  return new Set(hidden.filter((id) => known.has(id)))
 }
 
-/** What a view shows of `blocks` and how many it hides (a calendar id unknown now hides nothing). */
+/** What a view shows of `blocks` and how many it hides („ukryte: N”); the same array when nothing is hidden. */
 export function filterBlocks<T extends { categoryId: string }>(blocks: readonly T[], hidden: readonly string[], rd: CalendarSource): { shown: T[]; hiddenCount: number } {
-  if (hidden.length === 0) return { shown: blocks as T[], hiddenCount: 0 }
-  const off = new Set(hidden)
-  const shown = blocks.filter((b) => !off.has(calendarOfBlock(rd, b)))
+  const off = hiddenSet(hidden, rd)
+  if (off.size === 0) return { shown: blocks as T[], hiddenCount: 0 }
+  const calendarOf = categoryResolver(rd)
+  const shown = blocks.filter((b) => !off.has(calendarOf(b.categoryId)))
   return { shown, hiddenCount: blocks.length - shown.length }
 }
 
-/** A new calendar: the first palette colour no calendar has yet (then the palette goes round); null: no name or the limit. */
+/** As `filterBlocks` for all-day events (D425), by their own calendar. */
+export function filterAllDay<T extends { calendarId: string | null }>(events: readonly T[], hidden: readonly string[], rd: Pick<CalendarSource, 'calendars'>): { shown: T[]; hiddenCount: number } {
+  const off = hiddenSet(hidden, rd)
+  if (off.size === 0) return { shown: events as T[], hiddenCount: 0 }
+  const shown = events.filter((e) => !off.has(calendarOfEvent(rd, e)))
+  return { shown, hiddenCount: events.length - shown.length }
+}
+
+/** A new calendar: the first palette colour no calendar has yet (then the palette goes round), the last place; null: no name or the limit. */
 export function newCalendar(existing: readonly Calendar[], name: string): Calendar | null {
   const n = cleanName(name)
   if (!n || existing.length >= MAX_CALENDARS) return null
   const used = new Set(existing.map((c) => c.color))
   const color = BLOCK_COLORS.find((c) => !used.has(c)) ?? BLOCK_COLORS[existing.length % BLOCK_COLORS.length]!
-  return { id: newId(10), name: n, color }
+  return { id: newId(10), name: n, color, order: Math.max(0, ...existing.map((c) => c.order)) + 1 }
 }
 
 // rd.json as a record: the edits of the settings (each makes a whole new record, the window's `saveRd` diffs it).
 
-const calendarItems = (raw: Raw): Raw[] => (Array.isArray(raw.calendars) ? (raw.calendars as unknown[]).filter(isPlain) : [])
+const calendarItems = (raw: Raw): unknown[] => (Array.isArray(raw.calendars) ? (raw.calendars as unknown[]) : [])
+const isItem = (x: unknown, id: string): x is Raw => isPlain(x) && x.id === id
 const categoryMetas = (raw: Raw): Record<string, Raw> => (isPlain(raw.categories) ? (raw.categories as Record<string, Raw>) : {})
 
 /** The list with a calendar added at its end. */
@@ -108,30 +138,31 @@ export function addCalendarRaw(raw: Raw, calendar: Calendar): Raw {
   return { ...raw, calendars: [...calendarItems(raw), { ...calendar }] }
 }
 
-/** A calendar's name and colour changed; „Moje” gets its entry (first on the list) at its first change. */
+/**
+ * A calendar's name and colour changed. „Moje” gets its entry at its first change – with only the field changed (the
+ * diff makes its fields edits of their own, so two first changes of different fields on two computers both stay).
+ */
 export function updateCalendarRaw(raw: Raw, id: string, patch: { name?: string; color?: string }): Raw {
   const items = calendarItems(raw)
   const clean: Raw = {}
-  if (patch.name !== undefined) clean.name = cleanName(patch.name)
+  const name = patch.name === undefined ? '' : cleanName(patch.name)
+  if (name) clean.name = name
   if (patch.color !== undefined && isColor(patch.color)) clean.color = patch.color
-  if (clean.name === '') delete clean.name
-  if (items.some((x) => x.id === id)) return { ...raw, calendars: items.map((x) => (x.id === id ? { ...x, ...clean } : x)) }
-  if (id !== DEFAULT_CALENDAR_ID) return raw
-  return { ...raw, calendars: [{ id, name: DEFAULT_CALENDAR_NAME, color: BLOCK_COLORS[0], ...clean }, ...items] }
+  if (items.some((x) => isItem(x, id))) return { ...raw, calendars: items.map((x) => (isItem(x, id) ? { ...x, ...clean } : x)) }
+  if (id !== DEFAULT_CALENDAR_ID || Object.keys(clean).length === 0) return raw
+  return { ...raw, calendars: [...items, { id, ...clean }] }
 }
 
-/** A category put in a calendar; in „Moje” its field goes (what the file did not name is the default). */
+/**
+ * A category put in a calendar; in „Moje” its field goes (what the file did not name is the default) – only that field, so a
+ * colour changed meanwhile on another computer is no conflict.
+ */
 export function setCategoryCalendarRaw(raw: Raw, categoryId: string, calendarId: string): Raw {
   const cats = categoryMetas(raw)
   const meta = { ...(cats[categoryId] ?? {}) }
   if (calendarId === DEFAULT_CALENDAR_ID) {
-    if (!(categoryId in cats) || !('calendar' in meta)) return raw
+    if (!('calendar' in meta)) return raw
     delete meta.calendar
-    // An entry that held only the calendar (a default category the file did not know) goes with it.
-    if (Object.keys(meta).length === 0) {
-      const { [categoryId]: _gone, ...rest } = cats
-      return { ...raw, categories: rest }
-    }
   } else meta.calendar = calendarId
   return { ...raw, categories: { ...cats, [categoryId]: meta } }
 }
@@ -143,26 +174,10 @@ export function categoriesOfCalendarRaw(raw: Raw, id: string): string[] {
     .map(([cid]) => cid)
 }
 
-/** A calendar removed – its categories go back to „Moje”; „Moje” itself stays. */
+/** A calendar removed – its categories go back to „Moje”; „Moje” itself stays. Items this version does not read stay. */
 export function removeCalendarRaw(raw: Raw, id: string): Raw {
   if (id === DEFAULT_CALENDAR_ID) return raw
-  let out: Raw = { ...raw, calendars: calendarItems(raw).filter((x) => x.id !== id) }
+  let out: Raw = { ...raw, calendars: calendarItems(raw).filter((x) => !isItem(x, id)) }
   for (const cid of categoriesOfCalendarRaw(raw, id)) out = setCategoryCalendarRaw(out, cid, DEFAULT_CALENDAR_ID)
   return out
-}
-
-/** „Cofnij” of a removal: the calendar back at its place in the list (`index` among the items) and its categories in it. */
-export function restoreCalendarRaw(raw: Raw, calendar: Calendar, index: number, categoryIds: readonly string[]): Raw {
-  const items = calendarItems(raw).filter((x) => x.id !== calendar.id)
-  items.splice(Math.min(Math.max(index, 0), items.length), 0, { ...calendar })
-  let out: Raw = { ...raw, calendars: items }
-  for (const cid of categoryIds) out = setCategoryCalendarRaw(out, cid, calendar.id)
-  return out
-}
-
-/** The place of a calendar among the items of the record (for „Cofnij”); the end when it is not there. */
-export function calendarIndexRaw(raw: Raw, id: string): number {
-  const items = calendarItems(raw)
-  const i = items.findIndex((x) => x.id === id)
-  return i < 0 ? items.length : i
 }

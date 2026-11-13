@@ -5,10 +5,10 @@
  */
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CATEGORY_COLORS, rdFrom } from '@shared/model/rd'
 import { CalendarChips } from '@renderer/features/calendars/CalendarChips'
-import { loadHiddenCalendars, useCalendarFilter, useVisibleBlocks } from '@renderer/features/calendars/calendarFilter'
+import { loadHiddenCalendars, useCalendarFilter, useVisibleAllDay, useVisibleBlocks } from '@renderer/features/calendars/calendarFilter'
 import { useData } from '@renderer/store/data'
 
 const RD = rdFrom({
@@ -85,13 +85,13 @@ describe('żetony kalendarzy', () => {
 })
 
 describe('pamięć na tym komputerze', () => {
-  it('wybór zapisuje się w pamięci okna i wraca po ponownym wczytaniu', () => {
+  it('wybór zapisuje się w pamięci okna i wraca po ponownym uruchomieniu okna (nowy moduł czyta pamięć)', async () => {
     useCalendarFilter.getState().toggle('praca')
     useCalendarFilter.getState().toggle('dom')
     expect(JSON.parse(localStorage.getItem('rd.hiddenCalendars')!)).toEqual(['praca', 'dom'])
-    useCalendarFilter.setState({ hidden: [] })
-    useCalendarFilter.getState().reload()
-    expect(useCalendarFilter.getState().hidden).toEqual(['praca', 'dom'])
+    vi.resetModules()
+    const fresh = await import('@renderer/features/calendars/calendarFilter')
+    expect(fresh.useCalendarFilter.getState().hidden).toEqual(['praca', 'dom'])
   })
 
   it('zepsuta albo niedostępna pamięć to brak pamięci, nie błąd', () => {
@@ -125,6 +125,35 @@ describe('widok pokazuje bloki kalendarzy niewyłączonych', () => {
     await act(async () => root!.render(createElement(View)))
     return () => seen
   }
+
+  it('D425: przy jednym kalendarzu zapamiętane ukrycie nie działa (nie ma żetonów, żeby je cofnąć); nieistniejące id nic nie ukrywa', async () => {
+    useCalendarFilter.setState({ hidden: ['moje', 'praca', 'zniknal'] })
+    useData.setState({ rd: rdFrom(undefined) })
+    const seen = await probe()
+    expect(seen().hiddenCount).toBe(0)
+    expect(seen().shown).toHaveLength(4)
+    // Dwa kalendarze: znane id działa, nieznane – nie.
+    await act(async () => useData.setState({ rd: RD }))
+    expect(seen().hiddenCount).toBe(2)
+    expect(seen().shown).toEqual([{ categoryId: 'sprawy' }, { categoryId: 'sprawy' }])
+  })
+
+  it('wydarzenia całodniowe: każde w swoim kalendarzu, chowają się razem z nim (D425)', async () => {
+    const events = [{ calendarId: null }, { calendarId: 'praca' }, { calendarId: 'dom' }]
+    let seen: { shown: unknown[]; hiddenCount: number } = { shown: [], hiddenCount: -1 }
+    const View = () => {
+      seen = useVisibleAllDay(events)
+      return null
+    }
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(View)))
+    expect(seen.hiddenCount).toBe(0)
+    await act(async () => useCalendarFilter.getState().toggle('praca'))
+    expect(seen.shown).toEqual([{ calendarId: null }, { calendarId: 'dom' }])
+    expect(seen.hiddenCount).toBe(1)
+  })
 
   it('wyłączony kalendarz zabiera swoje bloki i liczy je w „ukryte”; włączony – oddaje', async () => {
     const seen = await probe()
