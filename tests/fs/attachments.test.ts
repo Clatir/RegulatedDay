@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AttachPrepared, AttachResult, RawRecord, RdApi } from '@shared/api'
+import type { AttachPrepared, AttachResult, EditEntry, RawRecord, RdApi } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
 import { ATTACHMENT_IMAGE_MAX, ATTACHMENT_KEEP_MS, attachmentImageUrl, attachmentRel, type Attachment, type AttachmentOwner, type AttachmentUndo, type BlockPlace } from '@shared/model/attachment'
@@ -372,11 +372,49 @@ describe('usunięcie i „Cofnij” (D410, T805)', () => {
     // A template with a block of the same id (archived – it makes no day).
     write(paths.record('template', 'zwykly'), { schema: 1, id: 'zwykly', name: 'Zwykły', dayType: 'zwykly', weekdays: [], archived: true, versions: { '2026-01-01': { blocks: [planBlock({ id: 'moj', categoryId: 'inne', startMin: 9 * 60, durationMin: 30, origin: 'template' })] } } })
     const tpl = (await store.attachFiles({ scope: 'template', templateId: 'zwykly', blockId: 'moj' }, [source('b.txt')])).added[0]!
+    const edit = vi.spyOn(hub.service!.folder, 'edit')
     expect(await removeDayBlock(date, null, b, false, 'Mój')).toBe(true)
+    // Laid only once the day's file is (T923).
+    const entries = edit.mock.calls.at(-1)![0]
+    vi.restoreAllMocks()
+    expect(entries.map((e) => [e.rel, e.after ?? null])).toEqual([
+      [paths.day(date), null],
+      [attachmentRel(id), [0]]
+    ])
     expect(recordOf(id)!.removedAt).toEqual(expect.any(Number))
     expect(recordOf(tpl)!.removedAt).toBeNull()
+    // „Cofnij”: one edit – the day back and its attachment with it (T931).
+    const again = vi.spyOn(hub.service!.folder, 'edit')
     useUi.getState().toasts.find((t) => t.text === 'Usunięty: Mój')!.action!.run()
     await vi.waitFor(() => expect(recordOf(id)!.removedAt).toBeNull())
+    const back = again.mock.calls.map((c) => c[0].map((e) => [e.rel, e.after ?? null]))
+    vi.restoreAllMocks()
+    expect(back).toEqual([
+      [
+        [paths.day(date), null],
+        [attachmentRel(id), [0]]
+      ]
+    ])
+  })
+
+  it('usunięcie bloku dnia, gdy rekord załącznika spotkał zmianę z innego komputera: blok usunięty, „Cofnij” jest (T931)', async () => {
+    const date = addDays(today(), 1)
+    const b = planBlock({ id: 'moj', categoryId: 'inne', startMin: 10 * 60, durationMin: 30 })
+    await patchDayBlock(date, null, b, {})
+    const id = (await store.attachFiles(own('moj', date), [source('a.txt')])).added[0]!
+    await reloadData()
+    // Removed meanwhile on another computer (the window has not seen it): the attachment's entry is a question.
+    write(attachmentRel(id), { ...recordOf(id)!, removedAt: 5 })
+    expect(await removeDayBlock(date, null, b, false, 'Mój')).toBe(true)
+    expect(useUi.getState().toasts.some((t) => t.text === 'Usunięty: Mój')).toBe(true)
+  })
+})
+
+describe('wysyłka zmian okna: `after` idzie za swoimi wpisami (T930)', () => {
+  it('wpis bez zmiany (null) wypada, a pozycje `after` przesuwają się za nim', async () => {
+    const { sentEntries } = await load<{ sentEntries: (made: ReadonlyArray<EditEntry | null>) => EditEntry[] }>('../../src/renderer/store/data')
+    const e = (rel: string, after?: number[]): EditEntry => ({ rel, edits: [], ...(after ? { after } : {}) })
+    expect(sentEntries([null, e('a'), e('b', [1]), null, e('c', [0, 2])])).toEqual([e('a'), e('b', [0]), e('c', [1])])
   })
 })
 
@@ -408,7 +446,7 @@ describe('szablon: usunięcie bloku i szablonu zdejmuje ich załączniki, „Cof
   const t = (blockId: string): AttachmentOwner => ({ scope: 'template', templateId: 'zw', blockId })
   const occ = (date: string, blockId: string) => own(templateBlockId(date, 'zw', blockId), date)
 
-  it('„Usuń z szablonu”: jego załączniki ze wszystkich dni i własne dni od daty zmiany – jedną edycją; „Cofnij” przywraca blok i załączniki', async () => {
+  it('„Usuń z szablonu”: jego załączniki ze wszystkich dni i własne dni od jutra, które tracą blok – zapisane po szablonie; „Cofnij” przywraca blok i załączniki (T847, T923)', async () => {
     const [a, b] = [blockOf('a', 'Blok A'), blockOf('b', 'Blok B')]
     write(tplRel, tpl({ '2026-01-01': [a, b] }))
     const [tomorrow, later] = [addDays(today(), 1), addDays(today(), 6)]
@@ -435,15 +473,75 @@ describe('szablon: usunięcie bloku i szablonu zdejmuje ich załączniki, „Cof
     expect(templateFrom(fileAt(tplRel))!.versions.map((x) => x.blocks.map((y) => y.id))).toEqual([['a', 'b']])
   })
 
-  it('blok zostaje w późniejszej wersji szablonu: jego załączniki zostają', async () => {
+  it('blok zostaje w późniejszej wersji szablonu: jego załączniki zostają, własne dni bez bloku – do kosza (T847)', async () => {
     const a = blockOf('a', 'Blok A')
     const far = addDays(today(), 20)
     write(tplRel, tpl({ '2026-01-01': [a], [far]: [a] }))
     link('t-a', t('a'))
-    link('d-a', occ(addDays(today(), 3), 'a'))
+    link('d-luka', occ(addDays(today(), 3), 'a'))
+    link('d-potem', occ(addDays(far, 1), 'a'))
     await reloadData()
     expect(await (await templateActions()).removeTemplateBlock('zw', addDays(today(), 1), a, 'Blok A')).toBe(true)
-    expect(['t-a', 'd-a'].map(removed)).toEqual([null, null])
+    expect(['t-a', 'd-potem'].map(removed)).toEqual([null, null])
+    // Between tomorrow and the later version the block makes no day: its own of those days go.
+    expect(removed('d-luka')).toEqual(expect.any(Number))
+  })
+
+  it('wyjęty z późniejszej wersji, a wersja od jutra go ma: załączniki szablonu zostają, własne dni – od tamtej wersji (T847)', async () => {
+    const a = blockOf('a', 'Blok A')
+    const [tomorrow, later] = [addDays(today(), 1), addDays(today(), 7)]
+    write(tplRel, tpl({ '2026-01-01': [a], [tomorrow]: [a], [later]: [a] }))
+    link('t-a', t('a'))
+    link('d-przed', occ(addDays(today(), 3), 'a'))
+    link('d-po', occ(addDays(later, 2), 'a'))
+    await reloadData()
+    expect(await (await templateActions()).removeTemplateBlock('zw', later, a, 'Blok A')).toBe(true)
+    expect(['t-a', 'd-przed'].map(removed)).toEqual([null, null])
+    expect(removed('d-po')).toEqual(expect.any(Number))
+  })
+
+  it('lista załączników nieczytelna: usunięcie bloku i szablonu odmawia – nic nie zapisane (T848)', async () => {
+    const a = blockOf('a', 'Blok A')
+    write(tplRel, tpl({ '2026-01-01': [a] }))
+    link('t-a', t('a'))
+    const folder = hub.service!.folder
+    const real = folder.collection.bind(folder)
+    vi.spyOn(folder, 'collection').mockImplementation((kind) => (kind === 'attachment' ? Promise.reject(new Error('EIO')) : real(kind)))
+    await reloadData()
+    const before = fileAt(tplRel)
+    const actions = await templateActions()
+    expect(await actions.removeTemplateBlock('zw', addDays(today(), 1), a, 'Blok A')).toBe(false)
+    expect(await actions.removeTemplate('zw', 'Mój szablon')).toBe(false)
+    expect(fileAt(tplRel)).toEqual(before)
+    expect(removed('t-a')).toBeNull()
+    expect(useUi.getState().toasts.map((x) => x.text)).toContain('Listy załączników nie da się teraz odczytać – nic nie zostało zapisane, spróbuj za chwilę.')
+    vi.restoreAllMocks()
+  })
+
+  it('zmiana szablonu spotkała zmianę z innego komputera: jego załączniki zostają (T848)', async () => {
+    const [a, b] = [blockOf('a', 'Blok A'), blockOf('b', 'Blok B')]
+    write(tplRel, tpl({ '2026-01-01': [a, b] }))
+    link('t-a', t('a'))
+    await reloadData()
+    // Another computer changed the version from tomorrow meanwhile (the window has not seen it yet).
+    write(tplRel, tpl({ '2026-01-01': [a, b], [addDays(today(), 1)]: [a] }))
+    expect(await (await templateActions()).removeTemplateBlock('zw', addDays(today(), 1), a, 'Blok A')).toBe(false)
+    expect(removed('t-a')).toBeNull()
+    // The attachment's removal waits for your answer (T923): „theirs” takes it out – the block stays with its attachment.
+    const folder = hub.service!.folder
+    await folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'theirs')
+    await folder.queue.apply(folder.records)
+    expect([removed('t-a'), folder.queue.pending.length]).toEqual([null, 0])
+  })
+
+  it('rekord załącznika spotkał zmianę z innego komputera: szablon zapisany – „Cofnij” jest (T931)', async () => {
+    const a = blockOf('a', 'Blok A')
+    write(tplRel, tpl({ '2026-01-01': [a] }))
+    link('t-a', t('a'))
+    await reloadData()
+    write(attachmentRel('t-a'), { ...recordOf('t-a')!, removedAt: 5 })
+    expect(await (await templateActions()).removeTemplateBlock('zw', addDays(today(), 1), a, 'Blok A')).toBe(true)
+    expect(useUi.getState().toasts.some((x) => x.text === 'Usunięty z szablonu: Blok A')).toBe(true)
   })
 
   it('usunięcie szablonu: załączniki jego bloków i własne dni od jutra; „Cofnij” przywraca szablon i załączniki', async () => {

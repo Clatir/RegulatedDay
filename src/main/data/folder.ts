@@ -880,7 +880,7 @@ export class DataFolder {
    * Your edits from the main window (spec „Edycje plików … trafiają najpierw do lokalnej trwałej kolejki”): each goes to
    * the queue on the disk first, then the queue is laid onto the folder; what met a change elsewhere stays a question.
    */
-  async edit(entries: ReadonlyArray<Omit<QueuedEdit, 'id' | 'at' | 'schema'> & { schema?: number }>): Promise<Outcome[]> {
+  async edit(entries: ReadonlyArray<Omit<QueuedEdit, 'id' | 'at' | 'schema' | 'after'> & { schema?: number; after?: readonly number[] }>): Promise<Outcome[]> {
     // A new record only where there is none: a file that is there but cannot be read now (OneDrive still fetching it) or
     // that came meanwhile is never taken as missing – its every field would be a question about a change you never made.
     const fresh: string[] = []
@@ -910,8 +910,10 @@ export class DataFolder {
     const queued: QueuedEdit[] = []
     for (const e of entries) {
       const id = `${this.o.computer}-${at.toString(36)}-${(this.editSeq++).toString(36)}`
+      // The entries before it in this edit it goes with (T923), by their place.
+      const after = [...new Set(e.after ?? [])].filter((i) => Number.isInteger(i) && i >= 0 && i < ids.length).map((i) => ids[i]!)
       ids.push(id)
-      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}) })
+      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}), ...(after.length ? { after } : {}) })
     }
     // All of them on the disk at once, or none (A3-15): a save that fails leaves no part of it to be written later.
     this.queue.add(...queued)
@@ -2640,12 +2642,12 @@ export class DataFolder {
 
   /**
    * Your own changes not yet in the folder (spec „N zmian zapisze się po powrocie folderu”, A3-07): your events not in its
-   * logs (no bookkeeping of the app's own – A3-07 review) and the queue's edits waiting for the folder – none of a file with
-   * a question (its edits wait for your answer, not for the folder).
+   * logs (no bookkeeping of the app's own – A3-07 review) and the queue's edits waiting for the folder – none that waits for
+   * your answer (`answerBound`: a question, one behind it for its file, one that goes with these – T927).
    */
   get unsynced(): number {
-    const asked = new Set(this.queue.questions().map((q) => q.edit.rel))
-    return this.log.pendingEvents + this.queue.pending.filter((e) => !asked.has(e.rel)).length
+    const asked = this.queue.answerBound()
+    return this.log.pendingEvents + this.queue.pending.filter((e) => !asked.has(e.id)).length
   }
 
   /**
@@ -2653,8 +2655,8 @@ export class DataFolder {
    * held by OneDrive or an antivirus, a share failing) is said too – nothing pretends to be saved.
    */
   get unsyncedSince(): number | null {
-    const asked = new Set(this.queue.questions().map((q) => q.edit.rel))
-    const times = [this.log.pendingSince, ...this.queue.pending.filter((e) => !asked.has(e.rel)).map((e) => e.at)].filter((x): x is number => x != null)
+    const asked = this.queue.answerBound()
+    const times = [this.log.pendingSince, ...this.queue.pending.filter((e) => !asked.has(e.id)).map((e) => e.at)].filter((x): x is number => x != null)
     return times.length ? Math.min(...times) : null
   }
 

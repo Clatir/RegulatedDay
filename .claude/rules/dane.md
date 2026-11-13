@@ -70,6 +70,10 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   automatyczne – reguły `timer.md`.
 - Dwa przebiegi kolejki naraz gubiły wpisy – `apply` i `resolve` idą po kolei; wpis za nierozstrzygniętym tego samego
   pliku czeka. Błąd zapisu jednego wpisu (także nowego rekordu) = „czeka”, nigdy wyjątek przerywający przebieg.
+  Wpis z `after` (`EditEntry.after` – miejsca wcześniejszych wpisów tej edycji, T923) kładzie się dopiero po nich; pytanie
+  przy nich – czeka, „ich” zabiera go razem z nimi (np. załączniki zdjęte z blokiem). Wpisy jednej edycji poza tym są niezależne.
+  Czekający wpis blokuje swój plik (T926); czekające na odpowiedź (`answerBound`) nie liczą się do „zapisze się po powrocie”, a
+  zależne od nich nie wchodzą do `overlay` (T927, T928). `hub.changed()` – podpisy po kolei, obietnica do czekania (T934).
 - Prowadzący liczy dzień z plików folderu (`inputs()`, `dayFile(d)`), okno – z kolejką (`inputs(true)`, `recordView`):
   edycja jeszcze niezapisana nie może trafić do wspólnej migawki dnia. `updatedAt` pliku nigdy się nie cofa.
 - Pasek (też wybór dnia – `barActiveDay`), pytania, odpowiedzi, kliknięcia timera, akcje dnia (`dayAction`), `ritual()`

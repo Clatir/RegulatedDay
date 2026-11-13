@@ -256,13 +256,17 @@ export function templateVersionOn(t: Template, date: string): TemplateVersion | 
 }
 
 /**
- * A block of a template still makes days from `date` on (D415): the version in force then or a later one has it. One
- * only in versions before it stays in the days gone by – its attachments went with its removal.
+ * A block of a template is alive (D415, T847): it still makes days from `tomorrow` on – the version in force then or a
+ * later one has it (today is made already). One only in versions before stays in the days gone by – its attachments go
+ * with its removal. The one rule of adding an attachment to it (`ownerAlive`) and of what its removal takes.
  */
-export function blockInTemplateFrom(t: Template, blockId: string, date: string): boolean {
-  const inForce = templateVersionOn(t, date)
-  return t.versions.some((v) => (v === inForce || v.from > date) && v.blocks.some((b) => b.id === blockId))
+export function templateBlockAlive(t: Template, blockId: string, tomorrow: string): boolean {
+  const inForce = templateVersionOn(t, tomorrow)
+  return t.versions.some((v) => (v === inForce || v.from > tomorrow) && v.blocks.some((b) => b.id === blockId))
 }
+
+/** The version of `t` in force on `date` makes the block `blockId` (that day of origin „template” has it). */
+export const templateBlockOn = (t: Template, blockId: string, date: string): boolean => !!templateVersionOn(t, date)?.blocks.some((b) => b.id === blockId)
 
 /**
  * The version a version from `from` is written over (a template's, a series'): its own of that date, else the last one

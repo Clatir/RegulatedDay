@@ -16,7 +16,7 @@ paths:
 
 # Załączniki i linki bloków (SNT4)
 
-Źródło prawdy: D410, D412, D414, D415 (zastępuje D411); T800–T810, T830–T839, T841–T846. Część A (model, folder, kopie, IPC, otwieranie) i część B (ekrany, T811–T817).
+Źródło prawdy: D410, D412, D414, D415 (zastępuje D411), D420, D421, D423; T800–T810, T830–T839, T841–T849, T920–T934. Część A (model, folder, kopie, IPC, otwieranie) i część B (ekrany, T811–T817).
 
 ## Model (`shared/model/attachment.ts`)
 - Rekord `attachments/<id>.json`, plik w `attachments/<id>/<safeFileName>`. Format bloku bez zmian – właściciel w rekordzie:
@@ -43,11 +43,17 @@ paths:
 ## Usuwanie i sprzątanie
 - Miękkie `removedAt`, „Cofnij” = `AttachmentUndo` (ta sama chwila). Blok dnia (`removeDayBlock`) i „Tylko to” serii
   (`seriesRemove`/`seriesUndo`) zdejmują własne załączniki w tej samej edycji (T805).
-- D415 (T841–T843): „Usuń z szablonu” i „Usuń” szablonu (`templateActions.ts`, `templateRemovalIds`), „To i następne” i
-  „Cała seria” (`removeSeriesAttachments`) zdejmują załączniki właściciela `template`/`series` ze wszystkich dni i własne dni
-  od daty usunięcia, w tej samej edycji; blok w późniejszej wersji szablonu (`blockInTemplateFrom`) – zostają. „Zakończ
-  serię” – nic. `seriesUndo` przywraca załącznik tylko z plikami, na których stoi jego blok (`standsOn`) – inaczej zostaje w koszu.
-- `ownerAlive` (T844): szablon – blok w wersji od jutra albo późniejszej; seria – bez `archived`.
+- Usunięcie załącznika idzie z plikami swojego bloku (T923): `EditEntry.after` – kolejka kładzie je dopiero po nich, pytanie
+  przy nich – czekają, „ich” – odpadają razem. W oknie zawsze `withOwner`, wynik i „Cofnij” po wpisie właściciela (T930, T931).
+- D415, D420 – szablon (`templateActions.ts`, T847): „Usuń z szablonu” i „Usuń” szablonu – jedna edycja; `templateRemovalIds(przed,
+  po, jutro)`: szablonu bloku, który przestał żyć (`templateBlockAlive` – ta sama reguła w `ownerAlive`), i własne dni od jutra,
+  których wersja straciła blok. Lista nieczytelna (`attachmentsUnread`, `ATTACHMENTS_UNREAD_TEXT`) – odmowa (T848).
+- D415, D421 – seria (`removeSeriesAttachments`, T842, T849, T920, T924): „To i następne” i „Cała seria” – załączniki serii
+  (chyba że inna część korzenia trwa) i własne dni od końca; „Zakończ serię” i koniec wcześniej – tylko wystąpień zdjętych z plików
+  dni (lista nieczytelna – nic, seria się kończy). Dzisiejsze – tylko gdy zmiana je zdjęła (`takenFrom`, D423). Część starszej serii – `partDays`.
+- `seriesUndo` (T843, T921, T925): załącznik wraca tylko z plikami, w których zmiana dotknęła jego bloku (`standsOn`,
+  `touchedBlocks`; plik równy stanowi sprzed zmiany – wrócił; plik ponad limit 400 – nie wraca); załączniki do 2000.
+- `ownerAlive` (T844, T847): szablon – `templateBlockAlive` od jutra; seria – bez `archived`.
 - Sprzątanie: prowadzący, `folder.attachmentSweep` (co godzinę, 30 dni, `queue.exclusive`, błąd listy = nic). Folderu bez
   rekordu nigdy nie kasuje (T806).
 

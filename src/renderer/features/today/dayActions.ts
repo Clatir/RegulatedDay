@@ -24,9 +24,8 @@ import { nameById, type Names } from '@shared/blockName'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { countLabel, logicalClock, plDate } from '@shared/format'
 import type { DaySnapshot } from '@shared/model/events'
-import { ownAttachmentIds, removalEdits, type AttachmentUndo } from '@shared/model/attachment'
-import { restoreAttachments } from '../../store/attachments'
-import { dayFilesNow, editOf, isSaved, trySaveWith, useData, type SendState } from '../../store/data'
+import { attachmentUndoOf, ownAttachmentIds, removalEdits, restoreEdits, type AttachmentUndo } from '@shared/model/attachment'
+import { dayFilesNow, editOf, isSaved, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
 import { dayUsable } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
 
@@ -280,8 +279,10 @@ export async function removeDayBlock(date: string, seen: RawRecord | null, b: Pl
       return false
     }
   }
-  // The block's own attachments go with it in the same edit (D410, T805); its „Cofnij” brings them back.
+  // The block's own attachments go with it in the same edit (D410, T805), laid only once the day's file is (T923): a
+  // question about the day keeps them until your answer, „theirs” – live. Its „Cofnij” brings them back.
   let attachments: AttachmentUndo | null = null
+  const made = { day: false }
   const out = await trySaveWith(async () => {
     const before = (await dayFilesNow([date], () => seen))[date] ?? null
     const raw = dayRaw(before, date)
@@ -290,20 +291,30 @@ export async function removeDayBlock(date: string, seen: RawRecord | null, b: Pl
     const { view, attachments: list } = useData.getState()
     const at = Date.now()
     const removed = removalEdits(view?.attachments ?? [], ownAttachmentIds(list, b.id), at)
-    attachments = removed.length ? { ids: removed.map((e) => e.rel.slice(e.rel.indexOf('/') + 1, -'.json'.length)), removedAt: at } : null
-    return [editOf(paths.day(date), before, left), ...removed]
+    attachments = attachmentUndoOf(removed, at)
+    const day = editOf(paths.day(date), before, left)
+    made.day = !!day
+    return withOwner(day, removed)
   })
-  if (!isSaved(out)) {
-    if (ends && refusedEdit(out)) {
+  // The day's own entry says what became of the removal (T931): a record of an attachment that met a question is not it.
+  const plan = made.day && out ? out.slice(0, 1) : out
+  if (!isSaved(plan)) {
+    if (ends && refusedEdit(plan)) {
       const r = await clickTimer(b.id, date, 'undoRemove')
       if (!r.ok) toast(`Blok „${name}” nie otworzył się z powrotem: ${r.why ?? 'spróbuj „Pracuję”'} – został poza planem.`, 'error', 8000)
     }
     return false
   }
   const restore = async () => {
-    const back = await saveDay(date, left, (raw) => (inSnapshot ? setCancelled(raw, b.id, false) : putBlock(raw, gone)))
-    if (!isSaved(back)) return
-    if (attachments) await restoreAttachments(attachments)
+    // One edit: the day back and, with it, its attachments (T931).
+    const was = { day: false }
+    const back = await trySaveWith(async () => {
+      const before = (await dayFilesNow([date], () => left))[date] ?? null
+      const day = dayFileEdit(date, before, (raw) => (inSnapshot ? setCancelled(raw, b.id, false) : putBlock(raw, gone)))
+      was.day = !!day
+      return withOwner(day, attachments ? restoreEdits(useData.getState().view?.attachments ?? [], attachments) : [])
+    })
+    if (!isSaved(was.day && back ? back.slice(0, 1) : back)) return
     if (!ends) return
     const r = await clickTimer(b.id, date, 'undoRemove')
     if (r.ok) return

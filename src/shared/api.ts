@@ -328,6 +328,11 @@ export interface DataView {
   /** Attachments of blocks (D410, attachments/<id>.json) – also the removed ones (their „Cofnij”, 30 days). */
   attachments: RawRecord[]
   /**
+   * The list of attachments could not be read now (`attachments` is then empty, not „none”): a change that takes
+   * attachments with it waits for it (T848).
+   */
+  attachmentsUnread?: boolean
+  /**
    * Attachments whose file is not on this computer yet (the record came first – OneDrive brings the file later, T802):
    * the window shows them as „not here yet”; opening one says so instead of failing.
    */
@@ -445,6 +450,11 @@ export interface EditEntry {
   remove?: boolean
   /** A removal: the record as you saw it when you removed it (A3-09). */
   base?: unknown
+  /**
+   * The entries before it in the same edit (by their place) it goes with (T923): laid only once they are; one of them a
+   * question – it waits; answered „theirs” – it goes too (the attachments a removal of their block took).
+   */
+  after?: number[]
 }
 
 export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting'; why?: string }

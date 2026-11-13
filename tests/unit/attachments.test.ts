@@ -28,7 +28,7 @@ import { charsetOf, cleanTitle, decodeEntities, iconDataUrl, imageKindOf, pageTe
 import { isOutsideBackup, isDataFile } from '../../src/main/data/backup'
 import { templateBlockId } from '@shared/engine/createDay'
 import { derivedId } from '@shared/model/ids'
-import { blockInTemplateFrom, planBlock } from '@shared/model/plan'
+import { templateBlockAlive, planBlock, withTemplateVersion, type Template } from '@shared/model/plan'
 
 const file = (id: string, owner: Attachment['owner'], o: Partial<Attachment> = {}): Attachment => ({
   id,
@@ -370,35 +370,56 @@ describe('runda 2 przeglądu', () => {
 describe('usunięcie bloku szablonu zdejmuje jego załączniki (D415)', () => {
   const tz = (blockId: string, templateId = 'zw') => ({ scope: 'template' as const, templateId, blockId })
   const day = (date: string, blockId: string) => ({ scope: 'day' as const, date, blockId })
+  const v = (from: string, ids: string[]) => ({ from, blocks: ids.map((id) => planBlock({ id, categoryId: 'inne', startMin: 600, durationMin: 30, origin: 'template' })), budgetMin: null, maxMin: null })
+  const tpl = (...versions: ReturnType<typeof v>[]): Template => ({ id: 'zw', name: 'Zwykły', dayType: 'zwykly', weekdays: [], archived: false, versions })
+  const occ = (date: string, blockId = 'a') => day(date, templateBlockId(date, 'zw', blockId))
 
-  it('załączniki bloku szablonu ze wszystkich dni, własne dni jego wystąpień – od daty usunięcia (też kopia „back”)', () => {
-    const [before, from, later] = ['2026-11-13', '2026-11-14', '2026-11-20']
+  it('załączniki bloku szablonu ze wszystkich dni, własne dni jego wystąpień – od jutra (też kopia „back”); szablon usunięty – wszystkie', () => {
+    const [today, tomorrow, later] = ['2026-11-13', '2026-11-14', '2026-11-20']
     const list = [
       file('t-a', tz('a')),
       file('t-b', tz('b')),
       file('t-a-inny', tz('a', 'inny')),
-      file('d-przed', day(before, templateBlockId(before, 'zw', 'a'))),
-      file('d-od', day(from, templateBlockId(from, 'zw', 'a'))),
+      file('d-dzis', occ(today)),
+      file('d-jutro', occ(tomorrow)),
       file('d-back', day(later, derivedId(later, 'back', templateBlockId(later, 'zw', 'a')))),
       file('d-inny', day(later, templateBlockId(later, 'inny', 'a'))),
-      file('d-b', day(later, templateBlockId(later, 'zw', 'b'))),
+      file('d-b', occ(later, 'b')),
       file('d-wlasny', day(later, 'a')),
       file('t-a-kosz', tz('a'), { removedAt: 5 })
     ]
-    expect(templateRemovalIds(list, 'zw', ['a'], from).sort()).toEqual(['d-back', 'd-od', 't-a'])
+    const before = tpl(v('2026-01-01', ['a', 'b']))
+    const after = withTemplateVersion(before, tomorrow, (x) => ({ blocks: x.blocks.filter((b) => b.id !== 'a') }))
+    expect(templateRemovalIds(list, 'zw', before, after, tomorrow).sort()).toEqual(['d-back', 'd-jutro', 't-a'])
     // A whole template: every block of it.
-    expect(templateRemovalIds(list, 'zw', ['a', 'b'], from).sort()).toEqual(['d-b', 'd-back', 'd-od', 't-a', 't-b'])
+    expect(templateRemovalIds(list, 'zw', before, null, tomorrow).sort()).toEqual(['d-b', 'd-back', 'd-jutro', 't-a', 't-b'])
+  })
+
+  it('blok zostaje w wersji od jutra: załączniki szablonu zostają, własne dni – tylko od wersji, z której go wyjęto (T847)', () => {
+    const tomorrow = '2026-11-14'
+    const before = tpl(v('2026-01-01', ['a']), v(tomorrow, ['a']), v('2026-11-20', ['a']))
+    const after = withTemplateVersion(before, '2026-11-20', { blocks: [] })
+    const list = [file('t-a', tz('a')), file('d-16', occ('2026-11-16')), file('d-25', occ('2026-11-25'))]
+    expect(templateRemovalIds(list, 'zw', before, after, tomorrow)).toEqual(['d-25'])
+  })
+
+  it('blok zostaje w późniejszej wersji: znikają tylko własne dni, w których go już nie ma (T847)', () => {
+    const tomorrow = '2026-11-14'
+    const before = tpl(v('2026-01-01', ['a']), v('2026-12-01', ['a']))
+    const after = withTemplateVersion(before, tomorrow, { blocks: [] })
+    const list = [file('t-a', tz('a')), file('d-20', occ('2026-11-20')), file('d-1202', occ('2026-12-02'))]
+    expect(templateRemovalIds(list, 'zw', before, after, tomorrow)).toEqual(['d-20'])
   })
 
   it('blok szablonu żyje od daty, gdy ma go wersja obowiązująca wtedy albo któraś późniejsza', () => {
     const v = (from: string, ids: string[]) => ({ from, blocks: ids.map((id) => planBlock({ id, categoryId: 'inne', startMin: 600, durationMin: 30, origin: 'template' })), budgetMin: null, maxMin: null })
     const t = { id: 'zw', name: 'Zwykły', dayType: 'zwykly' as const, weekdays: [], archived: false, versions: [v('2026-01-01', ['a', 'b']), v('2026-11-14', ['b']), v('2026-12-01', ['b', 'c'])] }
     // Only in a version before: gone from that day on.
-    expect(blockInTemplateFrom(t, 'a', '2026-11-14')).toBe(false)
-    expect(blockInTemplateFrom(t, 'a', '2026-11-13')).toBe(true)
-    expect(blockInTemplateFrom(t, 'b', '2026-11-20')).toBe(true)
+    expect(templateBlockAlive(t, 'a', '2026-11-14')).toBe(false)
+    expect(templateBlockAlive(t, 'a', '2026-11-13')).toBe(true)
+    expect(templateBlockAlive(t, 'b', '2026-11-20')).toBe(true)
     // Only in a later version: there from then on.
-    expect(blockInTemplateFrom(t, 'c', '2026-11-14')).toBe(true)
-    expect(blockInTemplateFrom(t, 'x', '2026-11-14')).toBe(false)
+    expect(templateBlockAlive(t, 'c', '2026-11-14')).toBe(true)
+    expect(templateBlockAlive(t, 'x', '2026-11-14')).toBe(false)
   })
 })

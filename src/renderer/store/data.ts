@@ -167,10 +167,38 @@ export interface SendState {
   afterSend: boolean
 }
 
+/**
+ * The entries that change something, in their order – `after` (places of the entries an entry goes with, T923) follows
+ * them to their places in the list sent (one with nothing to write – none).
+ */
+export function sentEntries(made: ReadonlyArray<EditEntry | null>): EditEntry[] {
+  const place = new Map<number, number>()
+  const out: EditEntry[] = []
+  made.forEach((e, i) => {
+    if (!e) return
+    place.set(i, out.length)
+    // The entry itself when nothing moves (callers compare what they made with what was sent).
+    if (!e.after) return void out.push(e)
+    const after = e.after.map((x) => place.get(x)).filter((x): x is number => x != null && x < out.length)
+    if (after.length === e.after.length && after.every((x, k) => x === e.after![k])) return void out.push(e)
+    const { after: _a, ...rest } = e
+    out.push(after.length ? { ...rest, after } : rest)
+  })
+  return out
+}
+
+/**
+ * `owner` and the entries that go with it (T923, T930): laid by the queue only once `owner` is – a question about it keeps
+ * them waiting, „theirs” takes them out with it. No owner (nothing to write) – they go on their own.
+ */
+export function withOwner(owner: EditEntry | null, deps: readonly EditEntry[]): EditEntry[] {
+  return owner ? [owner, ...deps.map((e) => ({ ...e, after: [0] }))] : [...deps]
+}
+
 /** Sends edits made by `make` (in its turn); null when nothing could be sent – the toast said why. */
 async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>, state?: SendState): Promise<EditOutcome[] | null> {
   try {
-    const list = (await make()).filter((e): e is EditEntry => !!e)
+    const list = sentEntries(await make())
     if (!list.length) return []
     const out = await window.rd.edit(list)
     // The queue took it: from now on a failure leaves the result unknown, never „not saved”.
