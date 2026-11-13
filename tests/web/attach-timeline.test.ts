@@ -8,7 +8,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Timeline, type TimelineItem } from '@renderer/features/plan/Timeline'
 
-const item = (id: string, startMin: number, extra: Partial<TimelineItem> = {}): TimelineItem => ({ id, startMin, endMin: startMin + 60, title: `Blok ${id}`, marks: [], color: '#888888', background: false, ...extra })
+const item = (id: string, startMin: number, extra: Partial<TimelineItem> = {}): TimelineItem => ({ id, startMin, endMin: startMin + 60, title: `Blok ${id}`, marks: [], color: '#888888', categoryId: 'inne', background: false, ...extra })
 
 let root: Root | null = null
 let host: HTMLElement | null = null

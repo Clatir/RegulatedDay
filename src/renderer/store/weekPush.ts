@@ -21,6 +21,8 @@ export interface WeekPushedDay {
   /** The file the edit created (null: the file was there). */
   made: RawRecord | null
   moved: number
+  /** How many of the pushed blocks an unchecked calendar hides (D419, T1003): the line says „(w tym M ukrytych)”. */
+  hidden?: number
 }
 
 /** The days a „Dodaj” wrote (D400), for the one „Cofnij” of the line „Przesunięto N bloków w K dniach” – only when it pushed some. */
@@ -55,7 +57,7 @@ export function stayedOf(stayers: readonly PlanBlock[], day: { ctx: Pick<DayCont
 }
 
 /** A day a move wrote, for its „Cofnij” (none when its edit changed nothing). */
-export const movedDay = (date: string, entry: EditEntry | null, after: RawRecord, moved = 0): WeekPushedDay[] => (entry ? [{ date, entry, made: entry.create ? after : null, moved }] : [])
+export const movedDay = (date: string, entry: EditEntry | null, after: RawRecord, moved = 0, hidden = 0): WeekPushedDay[] => (entry ? [{ date, entry, made: entry.create ? after : null, moved, hidden }] : [])
 
 export interface WeekPushLine {
   /** Which line it is (a newer one is another). */

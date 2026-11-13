@@ -3,9 +3,7 @@
  * hour (its hour, its name, its length, its category); a day with nothing is one line. A click on a day opens it (`openDay`, as in
  * „Tydzień”), a click on a block opens the block in its day (`openPick`, as the result of Ctrl K does – D418).
  */
-import { useMemo } from 'react'
-import { agendaOf, type AgendaDay } from '@shared/engine/calendarViews'
-import type { HorizonDay } from '@shared/engine/week'
+import type { AgendaDay } from '@shared/engine/calendarViews'
 import { logicalClock } from '@shared/format'
 import { rangeText } from '@shared/model/allDay'
 import { settingsOn } from '@shared/model/settings'
@@ -17,21 +15,21 @@ import { blockColor, type Names } from '../plan/blockView'
 import { blockStateText } from './weekText'
 import { AGENDA_EMPTY, agendaHeading, agendaRow } from './weekViews'
 
-export function AgendaView({ days, today }: { days: readonly HorizonDay[]; today: string }) {
+/** `agenda` – the days as `agendaOf` makes them, with what the calendar filter lets through (D419, D425: `AgendaBody` of the page). */
+export function AgendaView({ agenda, hiddenByDate, today }: { agenda: readonly AgendaDay[]; hiddenByDate: Readonly<Record<string, number>>; today: string }) {
   const { rd, routines, requests } = useData()
-  const allDay = useData((s) => s.allDay)
-  const agenda = useMemo(() => agendaOf(days, allDay), [days, allDay])
   const namesOf = (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests })
   return (
     <div className="flex flex-col gap-2" data-testid="agenda">
       {agenda.map((d) => (
-        <AgendaDayCard key={d.date} day={d} today={today} names={namesOf(d.date)} />
+        <AgendaDayCard key={d.date} day={d} hidden={hiddenByDate[d.date] ?? 0} today={today} names={namesOf(d.date)} />
       ))}
     </div>
   )
 }
 
-function AgendaDayCard({ day, today, names }: { day: AgendaDay; today: string; names: Names }) {
+/** `hidden` – what the unchecked calendars hid of the day (blocks and events): a day with nothing left says so, not „nic” (D419). */
+function AgendaDayCard({ day, hidden, today, names }: { day: AgendaDay; hidden: number; today: string; names: Names }) {
   // A day that cannot be read now has no blocks to show – its all-day events (not part of any day's count) still are (as in the month).
   const unknown = day.read === 'unknown'
   const empty = day.allDay.length === 0 && day.blocks.length === 0
@@ -41,9 +39,15 @@ function AgendaDayCard({ day, today, names }: { day: AgendaDay; today: string; n
         {agendaHeading(day.date, today)}
       </button>
       {empty && !unknown ? (
-        <p className="mt-1 text-[12.5px] text-muted" data-testid={`agenda-empty-${day.date}`}>
-          {AGENDA_EMPTY}
-        </p>
+        hidden > 0 ? (
+          <p className="mt-1 text-[12.5px] text-muted" data-testid={`agenda-hidden-${day.date}`}>
+            ukryte: {hidden}
+          </p>
+        ) : (
+          <p className="mt-1 text-[12.5px] text-muted" data-testid={`agenda-empty-${day.date}`}>
+            {AGENDA_EMPTY}
+          </p>
+        )
       ) : (
         <ul className="mt-1 flex flex-col gap-0.5">
           {day.allDay.map((e) => (

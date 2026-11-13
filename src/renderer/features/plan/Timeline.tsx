@@ -34,6 +34,12 @@ export interface TimelineItem {
   title: string
   marks: string[]
   color: string
+  /** The block's category – the calendar it belongs to (D419: the views of the window hide the unchecked calendars' blocks). */
+  categoryId: string
+  /** Running, or begun outside the plan: never hidden with its calendar (its handles and its question stay – D419, T1002). */
+  always?: boolean
+  /** Drawn in spite of its calendar being unchecked (D427: the block whose panel is open, a running one): the calendar's name, said on the tile. */
+  hiddenIn?: string
   background: boolean
   /** Passed, parked or cancelled: shown dimmed. */
   dim?: boolean
@@ -215,9 +221,12 @@ export function Timeline({
   ghost,
   from,
   to,
+  extent,
   ...rest
 }: {
   items: TimelineItem[]
+  /** The spans that bound the axis, when they are more than `items` (the blocks of an unchecked calendar are not drawn – D427). */
+  extent?: ReadonlyArray<Pick<TimelineItem, 'startMin' | 'endMin'>>
   markers: TimelineMarker[]
   energy?: EnergyTrack | null
   selected: string | null
@@ -310,8 +319,11 @@ export function Timeline({
       window.removeEventListener('pointercancel', end)
     }
   }, [holding])
-  const lo = Math.floor(Math.min(from, ...items.map((i) => i.startMin), ...markers.map((m) => m.at)) / 60) * 60
-  const hi = Math.ceil(Math.max(to, ...items.map((i) => i.endMin), ...markers.map((m) => m.at)) / 60) * 60
+  // The range of the axis (and so the place a click or a drag creates a block in) is that of ALL the day's blocks, the hidden ones too
+  // (D427): hiding a calendar never moves the hours.
+  const span = extent ?? items
+  const lo = Math.floor(Math.min(from, ...span.map((i) => i.startMin), ...markers.map((m) => m.at)) / 60) * 60
+  const hi = Math.ceil(Math.max(to, ...span.map((i) => i.endMin), ...markers.map((m) => m.at)) / 60) * 60
   // D366: a click on a gap (or in the column of hours) creates a block on the quarter, a drag one with its start and end.
   const grid = useGridCreate({
     lo,
@@ -461,6 +473,8 @@ export function Timeline({
           // dimmed, A8-05).
           ...(pushedTo ? { outline: `1px dashed ${i.color}`, outlineOffset: -1 } : {})
         }}
+        title={i.hiddenIn ? `${i.title} · z ukrytego kalendarza ${i.hiddenIn}` : undefined}
+        data-hidden-calendar={i.hiddenIn}
         data-waiting={waiting ? 'true' : undefined}
         data-pushed={pushedTo ? 'true' : undefined}
         data-dim={i.dim ? 'on' : undefined}
@@ -474,6 +488,11 @@ export function Timeline({
           {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(start)}</span>}
           <span className="truncate text-fg">{i.title}</span>
           {i.badge && !narrow && <DueMark badge={i.badge} compact testId="block-due" />}
+          {i.hiddenIn && (
+            <span className={cx('truncate text-muted', tiny ? 'text-[10px]' : 'text-[11px]')} data-testid="hidden-calendar">
+              z ukrytego kalendarza {i.hiddenIn}
+            </span>
+          )}
           {i.series && (
             <span className="shrink-0 text-muted" title="Z serii" aria-label="z serii" data-testid="series-mark">
               {SERIES_MARK}

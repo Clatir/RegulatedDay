@@ -24,7 +24,12 @@ import { dayFileFrom } from '@shared/model/plan'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn, type DayTypeId } from '@shared/model/settings'
 import { blockFill } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
+import type { MonthDay } from '@shared/engine/calendarViews'
 import { Dialog } from '../../components/Dialog'
+import { calendarSieve } from '@shared/model/calendars'
+import { useCalendarFilter } from '../calendars/calendarFilter'
+import { CalendarChips } from '../calendars/CalendarChips'
+import { useVisibleAllDayIn } from '../calendars/visibleViews'
 import { TimeField } from '../../components/fields'
 import { dayFilesNow, editNotice, editOf, isSaved, trySaveWith, useData } from '../../store/data'
 import { useBusy } from '../../lib/busy'
@@ -34,7 +39,7 @@ import { openDay, toast, undoToast } from '../../store/ui'
 import { setWakeOnDays } from '../today/dayActions'
 import { analysisAsks, answerOf, type AnalysisAsk } from './analysisAsk'
 import { DAY_TYPE_COLORS, holidayMarks } from './dayTypes'
-import { emptyMonthDay, monthCellView } from './monthCellView'
+import { emptyMonthDay, monthCellView, visibleMonthDay } from './monthCellView'
 import { gridDates, MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
 import { questionsText, savedText, skippedLines, undoList, undoneText, unchangedText } from './zjazdyDraft'
 import { noteFriday, runInTurn, type PendingImport } from './zjazdyRun'
@@ -42,7 +47,7 @@ import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
 import { ZjazdyPreviewPanel } from './ZjazdyPreview'
 
 export function CalendarPage() {
-  const { rd, templates, lectures, seriesPlans, stamp, allDay, routines, requests } = useData()
+  const { rd, templates, lectures, seriesPlans, stamp, routines, requests } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const brightness = useMachine((s) => s.prefs.brightness)
   const [month, setMonth] = useState(monthOf(today))
@@ -57,7 +62,22 @@ export function CalendarPage() {
   // The fixed blocks and the load of each day of the month (D418), counted by the main process; the days of the neighbouring
   // months on the grid have their all-day events only.
   const { view: monthView } = useMonthView(month)
-  const monthDays = useMemo(() => new Map((monthView?.days ?? []).map((d) => [d.date, d])), [monthView])
+  // D419, D425: the cells leave out the blocks and all-day events of the unchecked calendars (the dot of the load stays as counted);
+  // „ukryte: N” = the blocks of the month and the events of the grid they take out.
+  const hiddenCalendars = useCalendarFilter((s) => s.hidden)
+  const { shown: shownEvents, hiddenInRange: hiddenEvents } = useVisibleAllDayIn(dates[0]!, dates.at(-1)!)
+  const { monthDays, hiddenBlocks } = useMemo(() => {
+    const days = new Map<string, MonthDay>()
+    let hiddenBlocks = 0
+    // The hidden calendars and the calendar of each category are resolved once for the month, not for each day.
+    const sieve = calendarSieve(hiddenCalendars, rd)
+    for (const d of monthView?.days ?? []) {
+      const v = visibleMonthDay(d, sieve)
+      days.set(d.date, v.day)
+      hiddenBlocks += v.hiddenCount
+    }
+    return { monthDays: days, hiddenBlocks }
+  }, [monthView, hiddenCalendars, rd])
   useEffect(() => {
     let alive = true
     // The Fridays before the grid's Saturdays too (the weekly analysis), and the day after its end.
@@ -233,6 +253,7 @@ export function CalendarPage() {
               ))}
             </span>
           </div>
+          <CalendarChips hiddenCount={hiddenBlocks + hiddenEvents} />
           <MonthGrid
             month={month}
             today={today}
@@ -244,8 +265,8 @@ export function CalendarPage() {
               return {
                 tone: blockFill(DAY_TYPE_COLORS[i.type], brightness),
                 title: i.title,
-                events: eventsOn(allDay, d),
-                detail: monthCellView(monthDays.get(d) ?? emptyMonthDay(d), allDay, { rd, settings: settingsOn(rd.settings, d), routines, requests }, brightness),
+                events: eventsOn(shownEvents, d),
+                detail: monthCellView(monthDays.get(d) ?? emptyMonthDay(d), shownEvents, { rd, settings: settingsOn(rd.settings, d), routines, requests }, brightness),
                 marks: i.marks.map((x) => (
                   <span key={x} className="rounded-sm bg-bg/60 px-1">
                     {x}

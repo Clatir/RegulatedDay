@@ -1,6 +1,6 @@
 /**
  * The card of an all-day event (D405, D406): a small window beside the strip – the title, the days from and to, one of six
- * colours, the note (the block's Markdown editor, D388), „To wolne (urlop, wyjazd)”; „Zapisz” · „Anuluj” · „Usuń” (only an
+ * colours, the calendar (D425; only with two or more – „Moje” is none), the note (the block's Markdown editor, D388), „To wolne (urlop, wyjazd)”; „Zapisz” · „Anuluj” · „Usuń” (only an
  * event that exists). Esc, „Anuluj” and a click outside close it and save nothing; a removal asks nothing (its line „Cofnij”
  * is the strip's). After a „Zapisz” that turns „To wolne” on or changes the days of such an event the same window asks once
  * about the type „Wolne” for its days (T733: a mended title asks nothing).
@@ -8,9 +8,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RawRecord } from '@shared/api'
 import { ALL_DAY_COLORS, ALL_DAY_COLOR_NAMES, ALL_DAY_TITLE_MAX, allDayProblem, type AllDayEvent } from '@shared/model/allDay'
+import { DEFAULT_CALENDAR_ID, calendarOfEvent } from '@shared/model/calendars'
 import { olderComputers } from '@shared/model/note'
 import { ALL_DAY_COLOR_HEX, blockFill } from '@shared/theme'
-import { DateField } from '../../components/fields'
+import { Choice, DateField } from '../../components/fields'
 import { Field, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { commitActiveField } from '../../lib/commit'
@@ -66,6 +67,7 @@ export function AllDayCard({
   const [ask, setAsk] = useState<string[] | null>(null)
   const [busy, run] = useBusy()
   const computers = useData((s) => s.view?.computers)
+  const calendars = useData((s) => s.rd.calendars)
   useEscapeLayer(true, onClose)
   useEffect(() => {
     ref.current?.scrollIntoView({ block: 'nearest' })
@@ -194,6 +196,17 @@ export function AllDayCard({
               />
             ))}
           </div>
+          {calendars.length > 1 && (
+            <Field label="Kalendarz" labelWidth={64}>
+              <Choice
+                value={calendarOfEvent({ calendars }, shown)}
+                options={calendars.map((c) => ({ value: c.id, label: c.name }))}
+                onChange={(id) => set({ calendarId: id === DEFAULT_CALENDAR_ID ? null : id })}
+                aria-label="Kalendarz"
+                data-testid="allday-calendar"
+              />
+            </Field>
+          )}
           <NoteEditor value={shown.note} onCommit={(note) => set({ note })} olderComputers={olderComputers(computers ?? [])} />
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={shown.free} onChange={(e) => set({ free: e.currentTarget.checked })} data-testid="allday-free" />

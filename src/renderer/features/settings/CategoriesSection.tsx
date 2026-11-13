@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { newId } from '@shared/model/ids'
+import { calendarOfCategory, setCategoryCalendarRaw } from '@shared/model/calendars'
 import type { CategoryRules } from '@shared/model/categories'
 import { CATEGORY_COLORS } from '@shared/model/rd'
 import { RANGES } from '@shared/model/settings'
@@ -17,6 +18,7 @@ import { useMachine } from '../../store/machine'
 import { useBusy } from '../../lib/busy'
 import { takeFoundPick, useUi } from '../../store/ui'
 import { CLASS_NAMES, blockColor } from '../plan/blockView'
+import { saveCalendars } from './calendarEdits'
 import { SettingNumber } from './SettingNumber'
 import { useShared } from './SharedSettings'
 
@@ -129,6 +131,17 @@ export function CategoriesSection() {
                       aria-label={col ? `kolor ${col}` : 'kolor klasy'}
                     />
                   ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[12px] text-muted">Kalendarz</span>
+                  <Choice
+                    value={calendarOfCategory(rd, id)}
+                    options={rd.calendars.map((cal) => ({ value: cal.id, label: cal.name }))}
+                    onChange={(cal) => void saveCalendars((raw) => setCategoryCalendarRaw(raw, id, cal))}
+                    className="w-[200px]"
+                    aria-label="Kalendarz kategorii"
+                    data-testid="category-calendar"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {FLAGS.map(([k, label]) => (

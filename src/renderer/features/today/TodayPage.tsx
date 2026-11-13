@@ -70,6 +70,9 @@ import { PeersFreshness } from '../settings/ComputersSection'
 import { RitualPanel } from '../ritual/RitualPanel'
 import { AllDayBar } from '../allday/AllDayBar'
 import { AllDayLines } from '../allday/AllDayLines'
+import { useVisibleBlocks } from '../calendars/calendarFilter'
+import { CalendarChips } from '../calendars/CalendarChips'
+import { axisWithRevealed, useVisibleAllDayIn } from '../calendars/visibleViews'
 import { UnclosedDays } from '../ritual/UnclosedDays'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
@@ -102,6 +105,10 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     const byId = new Map(model.ctx.plan.map((b) => [b.id, b]))
     return withAttachCounts(axis.items, (id) => byId.get(id) ?? null, dayPlace, attachments)
   }, [axis, model, dayPlace, attachments])
+  // D419, D425: the axis draws the blocks of the checked calendars only (and the strip its events); the curve of energy, the
+  // boundary, the push of blocks (counted from the day) and the numbers of the day stay whole. „ukryte: N” counts both.
+  const seen = useVisibleBlocks(items)
+  const { hiddenInRange: hiddenEvents } = useVisibleAllDayIn(date, date)
   const [selected, setSelected] = useState<string | null>(null)
   // The new block before „Dodaj” lives in the window's state: it comes back after another screen (A6-17).
   const stored = useUi((s) => s.blockDraft)
@@ -206,6 +213,11 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     }
   }, [pick, date, plan])
   const block = draft ?? plan.find((b) => b.id === selected) ?? null
+  // D427: what the axis draws of a hidden calendar's blocks: the one whose panel is open (Ctrl K found it – or it was open when the
+  // calendar was unchecked) and the ones that must stay (running, begun outside the plan – T1002), each with the calendar's name on its
+  // tile. Not counted as „ukryte”. The axis keeps the hours of all the blocks (`extent`), the pushing of blocks is counted from the day.
+  const openId = block?.id ?? null
+  const axisItems = useMemo(() => axisWithRevealed(items, seen.shown, openId, rd), [items, seen, openId, rd])
   // The scope picked for the steps of a block of a series holds while its panel stays open (T798): another block or none – asked again.
   const stepsScope = useRef<SeriesScope | null>(null)
   useEffect(() => {
@@ -411,6 +423,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               </p>
             )}
             {!model.data.complete && !model.data.unknown && <p className="text-[12px] text-rose">Nie wszystkie logi tego dnia dało się teraz odczytać – dzień może być niepełny.</p>}
+            <CalendarChips hiddenCount={axisItems.hiddenCount + hiddenEvents} />
             <div className="flex items-center justify-between gap-3">
               <span className="text-[12px] text-muted" data-testid="day-summary">
                 {daySummary(model).join(' · ')}
@@ -420,7 +433,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             {/* The all-day events of the day (D405), over the axis' column – the hours' column on the left stays empty. */}
             <AllDayBar key={date} dates={[date]} page="today" today={today} axisPx={46} endPx={axis.energy && axis.energy.samples.length > 0 ? 48 : 0} />
             <Timeline
-              items={items}
+              items={axisItems.items}
+              extent={items}
               onAttachDrop={(id, dt) => {
                 const owner = ownerToAdd(model.ctx.plan.find((b) => b.id === id) ?? null, dayPlace)
                 if (owner) void attachTransfer(owner, dt)

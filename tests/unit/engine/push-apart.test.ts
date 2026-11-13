@@ -210,7 +210,7 @@ describe('D367 – rozsuwanie: kolejne bloki elastyczne dostają nowe godziny', 
   })
 
   it('tekst paska: „Przesunięto 1 blok”, „2 bloki”, „5 bloków”', () => {
-    expect([1, 2, 5].map(pushedText)).toEqual(['Przesunięto 1 blok', 'Przesunięto 2 bloki', 'Przesunięto 5 bloków'])
+    expect([1, 2, 5].map((n) => pushedText(n))).toEqual(['Przesunięto 1 blok', 'Przesunięto 2 bloki', 'Przesunięto 5 bloków'])
   })
 })
 

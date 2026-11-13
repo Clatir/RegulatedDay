@@ -1,0 +1,105 @@
+/**
+ * Which calendars the window's views hide (D419, D425): a habit of this computer, kept in the window's own storage (nothing in
+ * the data folder – the same way as `plan/lastCategory.ts`). Storage that cannot be read or written is no memory, never an
+ * error. What is remembered works only while there are two calendars or more and only for calendars that exist
+ * (`filterBlocks`): with one, the chips are not there to bring the blocks back, so nothing is hidden – and what was remembered is
+ * forgotten once rd.json is read and there is one calendar only (T972, T990: it would come back with the next calendar added and hide
+ * „Moje” again, unasked). A view calls
+ * `useVisibleBlocks(blocks)` (and `useVisibleAllDay(events)` for the strip of all-day events) and shows `shown`; the count
+ * goes to `CalendarChips` as „ukryte: N”.
+ */
+import { useMemo } from 'react'
+import { create } from 'zustand'
+import { filterAllDay, filterBlocks } from '@shared/model/calendars'
+import { useData } from '../../store/data'
+
+const KEY = 'rd.hiddenCalendars'
+
+/** The calendar ids remembered as unchecked (none when nothing is stored or the storage is not there). */
+export function loadHiddenCalendars(): string[] {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(KEY) ?? '[]')
+    return Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && x !== ''))] : []
+  } catch {
+    return []
+  }
+}
+
+function saveHiddenCalendars(ids: readonly string[]): void {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(ids))
+  } catch {
+    // No storage: the calendars are all shown again at the next start.
+  }
+}
+
+interface CalendarFilter {
+  /** The unchecked calendars (ids). */
+  hidden: string[]
+  /**
+   * The all-day event shown in spite of its calendar being unchecked (D427: the one Ctrl K found, while its card is open) – its
+   * id; null – none. Not remembered (nothing of it is stored). A block's reveal is the page's own (`TodayPage`: the block whose panel is open).
+   */
+  revealed: string | null
+  /** A calendar checked ↔ unchecked. */
+  toggle: (id: string) => void
+  reveal: (eventId: string | null) => void
+}
+
+export const useCalendarFilter = create<CalendarFilter>((set, get) => ({
+  hidden: loadHiddenCalendars(),
+  revealed: null,
+  reveal: (eventId) => set({ revealed: eventId }),
+  toggle: (id) => {
+    const cur = get().hidden
+    const hidden = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
+    saveHiddenCalendars(hidden)
+    set({ hidden })
+  }
+}))
+
+// With one calendar the memory is cleared – only when rd.json itself is read (`view.rd`): a window that is starting, a folder being
+// opened or a file that cannot be read now has none (the list is then the default one) and must not forget (T990).
+useData.subscribe((state) => {
+  if (state.view?.rd != null && state.rd.calendars.length < 2 && useCalendarFilter.getState().hidden.length) {
+    saveHiddenCalendars([])
+    useCalendarFilter.setState({ hidden: [] })
+  }
+})
+
+/**
+ * What a view shows of its blocks (anything with a `categoryId`): the blocks outside the unchecked calendars, and how many it
+ * hides („ukryte: N”). Only for the views of the window – the engine, the bar and the notifications never ask.
+ */
+export function useVisibleBlocks<T extends { categoryId: string }>(blocks: readonly T[]): { shown: T[]; hiddenCount: number } {
+  const rd = useData((x) => x.rd)
+  const hidden = useCalendarFilter((x) => x.hidden)
+  return useMemo(() => filterBlocks(blocks, hidden, rd), [blocks, hidden, rd])
+}
+
+/**
+ * As `useVisibleBlocks` for all-day events (D425): each by its own calendar. The event Ctrl K found (`revealed`, D427) stays in
+ * `shown` in order, is not counted as hidden, and `revealedId` names it (the bar says where it comes from) – only while it is
+ * one that would be hidden.
+ */
+export function useVisibleAllDay<T extends { calendarId: string | null; id?: string }>(events: readonly T[]): { shown: T[]; hiddenCount: number; revealedId: string | null } {
+  const rd = useData((x) => x.rd)
+  const hidden = useCalendarFilter((x) => x.hidden)
+  const revealed = useCalendarFilter((x) => x.revealed)
+  return useMemo(() => {
+    const r = filterAllDay(events, hidden, rd)
+    if (r.hiddenCount === 0 || revealed == null) return { ...r, revealedId: null }
+    const back = events.find((e) => e.id === revealed)
+    const kept = new Set<T>(r.shown)
+    if (!back || kept.has(back)) return { ...r, revealedId: null }
+    return { shown: events.filter((e) => e === back || kept.has(e)), hiddenCount: r.hiddenCount - 1, revealedId: revealed }
+  }, [events, hidden, rd, revealed])
+}
+
+/**
+ * How many of `blocks` the unchecked calendars hide – for a count made outside a view (the line after blocks were pushed apart,
+ * D419: „w tym M ukrytych”), from the state of the window as it is now.
+ */
+export function hiddenBlocksAmong(blocks: readonly { categoryId: string }[]): number {
+  return filterBlocks(blocks, useCalendarFilter.getState().hidden, useData.getState().rd).hiddenCount
+}

@@ -170,6 +170,7 @@ describe('komórka miesiąca (D418, D422)', () => {
     dayType: 'roboczy',
     fixed: blocks.filter((b) => b.fixed),
     blockCount: blocks.length,
+    categories: blocks.map((b) => b.categoryId),
     load: 'low',
     workMin: 310,
     limitMin: 360,

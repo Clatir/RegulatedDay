@@ -170,7 +170,7 @@ export function pastWarning(dates: readonly string[], today: string): string | n
 }
 
 /** The line after „Dodaj” pushed blocks apart in the days of a range (D400): „Przesunięto 5 bloków w 3 dniach”. */
-export const weekPushedText = (blocks: number, days: number): string => `${pushedText(blocks)} w ${countLabel(days, 'dniu', 'dniach', 'dniach')}`
+export const weekPushedText = (blocks: number, days: number, hidden = 0): string => `${pushedText(blocks, hidden)} w ${countLabel(days, 'dniu', 'dniach', 'dniach')}`
 
 /** Why each kind of block stayed, one and several (D424, T965). */
 const STAYED: Record<StayHow, [string, string]> = {
@@ -199,12 +199,13 @@ export function stayedText(stayed: ReadonlyArray<{ name: string; how: StayHow }>
  */
 export function weekPushLineText(push: WeekPush): string {
   const blocks = push.days.reduce((n, d) => n + d.moved, 0)
+  const hidden = push.days.reduce((n, d) => n + (d.hidden ?? 0), 0)
   // D422: a block moved to another day – its name and the day as its column's heading says it („wt 6.01”, T915); D424: the
   // blocks anchored to it that had begun and stayed; then what it pushed apart there.
   if (push.move) {
     const { name, to, stayed = [] } = push.move
-    return `Przeniesiono: ${name} na ${dayHeading(to, dayIndex(to))}${stayedText(stayed)}${blocks > 0 ? ` · ${pushedText(blocks).toLowerCase()}` : ''}`
+    return `Przeniesiono: ${name} na ${dayHeading(to, dayIndex(to))}${stayedText(stayed)}${blocks > 0 ? ` · ${pushedText(blocks, hidden).toLowerCase()}` : ''}`
   }
-  if (blocks > 0) return weekPushedText(blocks, push.days.filter((d) => d.moved > 0).length)
+  if (blocks > 0) return weekPushedText(blocks, push.days.filter((d) => d.moved > 0).length, hidden)
   return `Nowy blok w ${countLabel(push.days.length, 'dniu', 'dniach', 'dniach')}`
 }

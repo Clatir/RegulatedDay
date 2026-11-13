@@ -216,5 +216,8 @@ export function axisMoves(ctx: DayContext, state: DayState, plan: readonly PlanB
 /** The plan with `b` in place of its block of the same id, or added (the plan after a change of one block). */
 export const withBlock = (plan: readonly PlanBlock[], b: PlanBlock): PlanBlock[] => (plan.some((x) => x.id === b.id) ? plan.map((x) => (x.id === b.id ? b : x)) : [...plan, b])
 
-/** The bar's line after a push (D367): „Przesunięto 3 bloki”. */
-export const pushedText = (n: number): string => `Przesunięto ${countLabel(n, 'blok', 'bloki', 'bloków')}`
+/**
+ * The bar's line after a push (D367): „Przesunięto 3 bloki”; `hidden` – how many of them the window hides (an unchecked
+ * calendar, D419, T1003): „Przesunięto 3 bloki (w tym 1 ukryty)”.
+ */
+export const pushedText = (n: number, hidden = 0): string => `Przesunięto ${countLabel(n, 'blok', 'bloki', 'bloków')}${hidden > 0 ? ` (w tym ${countLabel(Math.min(hidden, n), 'ukryty', 'ukryte', 'ukrytych')})` : ''}`

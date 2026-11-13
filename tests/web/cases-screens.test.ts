@@ -195,7 +195,7 @@ describe('sprawa przeciągnięta na oś (D384, D367, planOnAxis)', () => {
     expect(sent[0]!.map((e) => e.rel).sort()).toEqual([paths.day(TODAY), paths.record('request', 't1')].sort())
     const after = res.undo.find((u) => u.rel === paths.day(TODAY))!.after
     expect(dayFileFrom(after, TODAY).blocks.map((b) => [b.id, b.startMin]).sort()).toEqual([['a', lm('10:30')], ['b', lm('11:30')], [res.block!.id, lm('10:00')]].sort())
-    expect(planPushed).toHaveBeenCalledWith(TODAY, 2, expect.objectContaining({ rel: paths.day(TODAY) }), null)
+    expect(planPushed).toHaveBeenCalledWith(TODAY, 2, expect.objectContaining({ rel: paths.day(TODAY) }), null, undefined, 0)
     // The toast „Cofnij” says where.
     const [toast] = useUi.getState().toasts
     expect(toast).toMatchObject({ text: plannedText('Zadzwonić do banku', res.block!), action: { label: 'Cofnij' } })
