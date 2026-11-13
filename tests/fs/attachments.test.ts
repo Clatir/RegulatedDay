@@ -6,7 +6,7 @@
  * also with the block's removal in the same edit –, the leader's deletion 30 days after a removal (nothing on a failed
  * listing), the link's title fetched afterwards into the link's own fields, OneDrive's conflict copies of the records.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -62,7 +62,8 @@ const shell: AttachmentShell = {
 }
 
 beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'rd-att-'))
+  // The full path: on the Windows runner the temp folder is a short 8.3 name (RUNNER~1) and the code answers with realpath.
+  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'rd-att-')))
   dir = join(root, 'data')
   outside = join(root, 'pulpit')
   mkdirSync(dir, { recursive: true })
