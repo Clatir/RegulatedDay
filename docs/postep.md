@@ -141,18 +141,14 @@ wolna przy scaleniu; scalenie tylko po uzgodnieniu z sesją ciągu L i po „1.1
 **HKU1 – wpis (12.11):** kolekcja `allday/<id>.json` (silnik dnia jej nie czyta), pas nad osią „Dziś” i siatką „Tygodnia” (belki `weekLanes`, 3 rzędy + „+N”, wolny rząd), karta z notatką Markdown, linie „Cofnij” 15 min w oknie, „Wolne” (porcje po 62 dni, dziś – okno zmiany typu), miesiąc, plan poranny, pasek pulpitu, Ctrl K; reguły `.claude/rules/allday.md`. Odbiór HKU1.1–HKU1.5. **Uwagi na później:** brak E2E okna „Wolne” dla dziś już utworzonego; opis ekranów wydarzeń w specyfikacji; `NONE` – trzecia stała w oknie (wspólna stała zamiast kopii).
 
 ## SNT4 – stan
-**Przed SNT4 (12.11):** załączniki i linki w blokach; pytania 12.11 – D410 (D411, D412 do potwierdzenia). Drzewo
-`.claude/worktrees/ws4`, gałąź `claude/snt4-zalaczniki` od 96201f8. Numery D410–D439, T800–T849 (L – D440–D449, HKU –
-D450–D459, T850–T899). Model: główna Opus 5.5 · high; część A `wykonawca-opus`, część B `wykonawca-sonnet`; przegląd xhigh.
-Kolejka do `main`: L2 (1.14.0) → SNT4 (zwykle 1.15.0) → SNT5 (sesja L). **Zgoda 12.11 ok. 21:30:** do wydania bez „dalej”; do 13.11 7:00 pytanie o zachowanie = rekomendacja jako D „do
-potwierdzenia”. Po scaleniu L2 (PR #79) od razu merge `origin/main` i CI PR; scalenie po publikacji 1.14.0. Od następnej
-paczki – D413.
+SNT4 (załączniki i linki) – **wydane 1.15.0** (PR #80, 13.11 04:28Z); D410–D415, T800–T840; wpis i „Uwagi na później” –
+`docs/archiwum/postep-SNT.md` („SNT4”). 13.11: D412 i D414 potwierdzone, D411 zastąpiona przez D415 – zadanie SNT4b
+w następnej paczce SNT (D413). Numery SNT dalej: D416–D439, T841–T849.
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| SNT4 załączniki i linki | 1.15.0 | #80 | części A i B, trzy rundy xhigh (15 + 15 + 15 uwag; trzecia – 6 poprawek), merge `origin/main` (L2); PR po zielonym teście lokalnym, scalenie po publikacji 1.14.0; D410–D414 (D411, D412, D414 do potwierdzenia), T800–T840 | ok. 5 h (3,5–5 h; +1,5 h szablon i seria) – trzy rundy przeglądu |
-
-**Do potwierdzenia rano:** D411, D412, D414. Wpis, „Uwagi na później” – `docs/archiwum/postep-SNT.md` („SNT4”).
+| SNT4 załączniki i linki | 1.15.0 | #80 | wydane 13.11 | ok. 5 h (3,5–5 h; +1,5 h szablon i seria) |
+| SNT4b usuwanie załączników szablonu i serii (D415) | następna paczka SNT | – | czeka – „Przed etapem” z paczką; gałąź `claude/snt4b-usuwanie-zalacznikow` (tylko decyzja i plan) | – (1,5–2,5 h) |
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy
