@@ -145,15 +145,13 @@ export function editNotice(out: readonly EditOutcome[]): { text: string; kind: '
   if (out.some((o) => o.status === 'changedElsewhere')) return { text: 'Tego rekordu nie usunięto – w tym czasie zmieniono go na innym komputerze. Odpowiedz na pytanie u góry okna.', kind: 'info' }
   if (out.some((o) => o.status === 'conflict' || o.status === 'removedElsewhere')) return { text: 'Ta zmiana spotkała się ze zmianą z innego komputera – odpowiedz na pytanie u góry okna.', kind: 'info' }
   if (out.some((o) => o.status === 'broken')) return { text: 'Plik jest uszkodzony i nie jest nadpisywany – przywróć go z historii.', kind: 'error' }
-  // A guard of the edit failed in the queue's turn (T793): nothing written, said with its reason.
-  const refused = out.find((o) => o.status === 'refused')
-  if (refused) return { text: refused.why ?? 'Zmiana nie została zapisana – w tym czasie zmienił się plan dnia.', kind: 'info' }
   return null
 }
 
 /**
- * Filled in by a save for a caller that must tell „not sent” from „sent, the result not known”: `afterSend` is set when the
- * failure came after the edit was handed to the main process (it may have been written).
+ * Filled in by a save for a caller that must tell „not sent” from „sent, the result not known”: `afterSend` is set once the
+ * main process answered the edit (the queue took it) – a failure after that (the view read again, the notice) may hide a
+ * write; one before it (the main process refused the edit before its queue) wrote nothing.
  */
 export interface SendState {
   afterSend: boolean
@@ -164,8 +162,9 @@ async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | Reado
   try {
     const list = (await make()).filter((e): e is EditEntry => !!e)
     if (!list.length) return []
-    if (state) state.afterSend = true
     const out = await window.rd.edit(list)
+    // The queue took it: from now on a failure leaves the result unknown, never „not saved”.
+    if (state) state.afterSend = true
     await reloadData()
     const notice = editNotice(out)
     if (notice) toast(notice.text, notice.kind, 8000)

@@ -7,7 +7,7 @@
  *
  * Until a data folder is open the widget shows one neutral line („Brak folderu danych · Otwórz okno”, D327).
  */
-import type { EditEntry, EditGuard, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind } from '@shared/api'
+import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind } from '@shared/api'
 import { blockName, nameById } from '@shared/blockName'
 import { namingOf } from '@shared/engine/context'
 import { costText } from '@shared/costText'
@@ -1122,13 +1122,13 @@ export class WidgetEngine {
   }
 
   /**
-   * A step ticked off on the bar (D440, T793): the block in the day's plan as the day's file holds it now (with the queue)
-   * over the snapshot the bar counted (the model of its last count, of that day; another day or none: counted now) – a
-   * block gone already is said at once; its list as the file holds it (`tickEdits`); its tick in the day's file and – a
-   * block of a task planned in it – in the task's record, one edit of the queue whose every entry carries the guard of the
-   * block (`EditGuard` `dayBlock`): the queue checks it on the day's file in its own turn of the write – a block taken out,
-   * cancelled or moved away meanwhile (another computer) gets no tick, nor its task – „Tego bloku już nie ma w planie.”.
-   * Ticked on another computer meanwhile – nothing to write. No sound (D440).
+   * A step ticked off on the bar (D440, T793): just before the write the day's file is read again (with the queue) and the
+   * block looked for in the day's plan made of it over the snapshot the bar counted (the model of its last count, of that
+   * day; another day or none: counted now) – a block taken out, cancelled or moved away (another computer, the bar not
+   * counted since) gets nothing written: „Tego bloku już nie ma w planie.”. Then its list as the file holds it
+   * (`tickEdits`), its tick in the day's file and – a block of a task planned in it – in the task's record: one edit of the
+   * queue with both entries. The moment between that read and the queue's write is accepted (T793): a tick orphaned by a
+   * change landing in it shows nowhere, and after a „Cofnij” of that change it is the true state. No sound (D440).
    */
   private async tickStep(day: string | undefined, blockId: string, stepId: string): Promise<void> {
     const folder = this.d.folder()
@@ -1136,8 +1136,7 @@ export class WidgetEngine {
     const m = this.model?.state.grid.date === day ? this.model : await folder.widgetModel(this.now)
     const rel = paths.day(day)
     const before = ((await folder.recordView(rel)) as RawRecord | undefined) ?? null
-    const file = before ? dayFileFrom(before, day) : null
-    const block = m.state.grid.date === day ? dayPlan(m.ctx.snapshot, file).find((b) => b.id === blockId) : undefined
+    const block = m.state.grid.date === day ? dayPlan(m.ctx.snapshot, before ? dayFileFrom(before, day) : null).find((b) => b.id === blockId) : undefined
     if (!block) {
       this.say(BLOCK_GONE)
       return this.refresh()
@@ -1149,12 +1148,9 @@ export class WidgetEngine {
       this.say(out.error)
       return this.refresh()
     }
-    const guards: EditGuard[] = [{ kind: 'dayBlock', rel, block: block.id, inFile: !!file?.blocks.some((b) => b.id === block.id), why: BLOCK_GONE }]
-    const entries = [recordEdit(rel, before, out.day), taskRel && out.task ? recordEdit(taskRel, taskBefore, out.task) : null].filter((e): e is EditEntry => e != null).map((e) => ({ ...e, guards }))
+    const entries = [recordEdit(rel, before, out.day), taskRel && out.task ? recordEdit(taskRel, taskBefore, out.task) : null].filter((e): e is EditEntry => e != null)
     const res = entries.length ? await this.d.edit(entries) : []
-    const refused = res.find((o) => o.status === 'refused')
-    if (refused) this.say(refused.why ?? BLOCK_GONE)
-    else if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odhaczenie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
+    if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odhaczenie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
     return this.refresh()
   }
 

@@ -4,11 +4,14 @@
  * – a question), and the field of a new task gives its title back only when nothing was sent – a second Enter never adds the
  * task twice.
  */
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { DataView, RdApi } from '@shared/api'
 import { addStepOp, STEPS_FULL, STEPS_FULL_TASK, STEPS_MAX, stepsFrom } from '@shared/model/steps'
 import { refusedOp } from '@renderer/features/steps/stepsUi'
 import { submitTitle } from '@renderer/features/cases/casesUi'
-import { caseAnswer } from '@renderer/store/cases'
+import { caseAnswer, createTask } from '@renderer/store/cases'
+import { useData } from '@renderer/store/data'
+import { useUi } from '@renderer/store/ui'
 import { oneAtATime } from '@renderer/lib/busy'
 
 const full = stepsFrom(Array.from({ length: STEPS_MAX }, (_, i) => ({ id: `k${i}`, title: `krok ${i}`, order: i })))
@@ -37,5 +40,35 @@ describe('odpowiedź zmiany jednym pomocnikiem (przegląd 3)', () => {
     await submitTitle(oneAtATime(), 'Napisać raport', o)
     expect(fields).toEqual([''])
     expect(o.done).not.toHaveBeenCalled()
+  })
+})
+
+describe('„wysłane” dopiero po odpowiedzi kolejki (przegląd 4, `SendState`)', () => {
+  const data = useData.getState()
+  afterEach(() => {
+    delete (globalThis as { window?: unknown }).window
+    useData.setState(data, true)
+    useUi.setState({ toasts: [] })
+  })
+  const stub = (edit: RdApi['edit']) => {
+    const view = { status: 'open', rd: null, templates: [], lectures: [], requests: [], routines: [], series: [], seriesDays: {} } as unknown as DataView
+    ;(globalThis as unknown as { window: { rd: Partial<RdApi> } }).window = { rd: { edit, dataView: async () => view } }
+    useData.setState({ view, requests: [] })
+  }
+  it('proces główny odrzuca zmianę przed kolejką – `false`, tytuł wraca do pola', async () => {
+    stub(async () => Promise.reject(new Error('ten rekord już jest w folderze')))
+    const fields: string[] = []
+    await submitTitle(oneAtATime(), 'Napisać raport', { set: (t) => fields.push(t), save: async (t) => caseAnswer(await createTask({ title: t })), done: vi.fn() })
+    expect(fields).toEqual(['', 'Napisać raport'])
+  })
+  it('kolejka przyjęła, potem błąd (odpowiedź nie do odczytania) – `asked`, tytuł nie wraca', async () => {
+    // An answer of the queue that breaks what follows it (the notice): a failure after the queue took the edit.
+    stub(async () => undefined as never)
+    const r = await createTask({ title: 'Napisać raport' })
+    expect(r.sent).toEqual({ afterSend: true })
+    expect(caseAnswer(r)).toBe('asked')
+    const fields: string[] = []
+    await submitTitle(oneAtATime(), 'Napisać raport', { set: (t) => fields.push(t), save: async (t) => caseAnswer(await createTask({ title: t })), done: vi.fn() })
+    expect(fields).toEqual([''])
   })
 })

@@ -195,7 +195,9 @@ function isIdRecord(rel: string): boolean {
 export class UnknownRecordError extends Error {
   constructor(
     readonly rel: string,
-    why: string
+    why: string,
+    /** The file is broken (not only unreadable now): it will not be read as it is until restored. */
+    readonly broken = false
   ) {
     super(`${rel}: ${why}`)
   }
@@ -537,7 +539,7 @@ export class DataFolder {
     if (r.status !== 'ok') {
       this.lookedAt.delete(rel)
       if (old) return old.value
-      throw new UnknownRecordError(rel, r.why)
+      throw new UnknownRecordError(rel, r.why, r.status === 'broken')
     }
     this.absent.delete(rel)
     this.cache.set(rel, { ...st, value: r.value })
@@ -896,7 +898,7 @@ export class DataFolder {
     for (const e of entries) {
       const id = `${this.o.computer}-${at.toString(36)}-${(this.editSeq++).toString(36)}`
       ids.push(id)
-      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}), ...(e.guards?.length ? { guards: e.guards } : {}) })
+      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}) })
     }
     // All of them on the disk at once, or none (A3-15): a save that fails leaves no part of it to be written later.
     this.queue.add(...queued)

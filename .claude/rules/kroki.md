@@ -48,17 +48,20 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
 - Zmiana listy w dniu = blok w pliku dnia (`putBlock`, jak każda zmiana bloku tego dnia; usunięty krok traci odhaczenie);
   seria: „Tylko to” – edycja dnia, „To i następne” / „Cała seria” i lista w „Szablonach” – `seriesChange` z operacją
   (`SeriesPatch.stepsOp`), kładzioną w turze zapisu na liście każdej wersji od dnia zmiany (`changedFrom`, T790) – nigdy lista
-  z bloku okna (wystąpienie zaczęte dziś nie idzie za serią). `move` przed krok spoza listy – bez zmiany.
+  z bloku okna (wystąpienie zaczęte dziś nie idzie za serią). `move` przed krok spoza listy – bez zmiany. Zapamiętany zakres
+  panelu zdejmuje tylko odmowa zakresu (`code` `ended` / `notFound`); `invalid`, porażka wysłania i pytanie go zostawiają.
 - Zadanie i jego blok (T792): `caseBlock` kopiuje listę (te same id), `withTaskBlock` – odhaczenia zadania w dniu; zmiana w
   bloku idzie do zadania, gdy `taskOfBlock` (zadanie zaplanowane w tym bloku); zmiana w zadaniu – do bloku dnia od dziś.
-  Nigdy po cichu osobno: którykolwiek dzień drogi bloku (`movedTo`) nieczytelny – `DAY_UNREADABLE` (nie wiadomo, gdzie blok
-  stoi), lustrzana operacja odrzucona – odmowa całej zmiany. Odpowiedź dla pola – `caseAnswer` (`store/cases.ts`: wysłane
+  Nigdy po cichu osobno: dzień drogi bloku (`movedTo`) chwilowo nieczytelny – `DAY_UNREADABLE` (nie wiadomo, gdzie blok stoi);
+  dzień miniony uszkodzony (`CaseDays.broken` – nie odczyta się nigdy) kończy drogę: zmiana zadania idzie sama; lustrzana
+  operacja odrzucona – odmowa całej zmiany. Odpowiedź dla pola – `caseAnswer` (`store/cases.ts`: wysłane
   bez wyniku = „asked”; tytuł nowego zadania wtedy nie wraca – `submitTitle`).
 - Kopia dnia (`copiedDay`) – kroki odznaczone (nowe id); przeniesienie (`moveBetweenDays`) zabiera odhaczenia: w dniu
   docelowym dokładnie te z pliku dnia źródłowego (`stepsDoneIn` – nie z podanego bloku; `setStepsDone`), w źródłowym żadne.
-- Pasek: ptaszek sprawdza blok najpierw w planie z pliku dnia teraz (na migawce modelu paska), potem w turze zapisu kolejki –
-  każdy wpis edycji (dzień i zadanie) niesie `EditGuard` `dayBlock` (`api.ts`), który `EditQueue` sprawdza na pliku dnia przy
-  zapisie; niespełniony – wynik `refused` z powodem, nic nie zapisane, bez pytania (T793).
+- Pasek: ptaszek tuż przed zapisem czyta plik dnia od nowa (`recordView`, z kolejką) i szuka bloku w `dayPlan` z niego na
+  migawce modelu paska; nie ma – „Tego bloku już nie ma w planie.”, nic nie zapisane; dzień i zadanie jedną edycją. Chwila
+  między tym odczytem a zapisem kolejki jest przyjęta (T793): osierocone `stepsDone` niczego nie pokazuje. Kolejka zostaje
+  ogólna – bez warunków na wpisach.
 - Migawka starszej wersji bez pola `steps` (T791): bloki szablonu i serii biorą listę ze źródła (`snapshotOf`).
 - Pasek (T793): `WidgetView.steps` (`BarSteps`) – blok na pierwszym planie, pierwszy nieodhaczony; ukryte tylko w „Odcinam
   się”; akcja `step` `<blok>|<krok>` → `WidgetEngine.tickStep` (jedna edycja: dzień + zadanie). Tekst – `barStepText`.

@@ -30,12 +30,16 @@ afterEach(() => {
   useUi.setState({ toasts: [] })
 })
 
-function stub(o: { requests?: RawRecord[]; days?: Record<string, RawRecord | null>; edit?: RdApi['edit'] } = {}) {
+function stub(o: { requests?: RawRecord[]; days?: Record<string, RawRecord | null>; edit?: RdApi['edit']; broken?: string[] } = {}) {
   const sent: EditEntry[][] = []
   const days = o.days ?? {}
   const view = (): DataView => ({ status: 'open', rd: null, templates: [], lectures: [], requests: o.requests ?? [], routines: [], series: [], seriesDays: {} }) as unknown as DataView
   const rd: Partial<RdApi> = {
     dayFiles: async (dates) => Object.fromEntries(dates.filter((d) => d in days).map((d) => [d, days[d] ?? null])),
+    caseDays: async (dates) => {
+      const known = dates.filter((d) => d in days)
+      return { files: Object.fromEntries(known.map((d) => [d, days[d] ?? null])), gone: {}, begun: {}, ...(o.broken ? { broken: dates.filter((d) => o.broken!.includes(d)) } : {}) }
+    },
     edit: o.edit ?? (async (entries) => (sent.push(entries), entries.map(() => ({ status: 'applied' as const })))),
     dataView: async () => view()
   }
@@ -85,13 +89,38 @@ describe('zadanie: dzień bloku w łańcuchu nieczytelny – nie wiadomo, gdzie 
   })
 })
 
+describe('dzień drogi bloku uszkodzony a chwilowo nieczytelny (przegląd 4, T792)', () => {
+  const past = addDays(TODAY, -3)
+  const task = () => ({ ...newTask('t1', Date.now(), TODAY, { title: 'Wdrożenie' })!, day: past, block: 'tb', state: 'planned', steps: four().map(({ done: _d, ...s }) => s) })
+  it('dzień miniony uszkodzony – łańcuch kończy się na nim, zmiana zadania idzie sama', async () => {
+    const { sent } = stub({ requests: [task()], broken: [past] })
+    const r = await changeTaskSteps('t1', addStepOp('nowy'))
+    expect([r.saved, r.error]).toEqual([true, null])
+    expect(sent[0]!.map((e) => e.rel)).toEqual([paths.record('request', 't1')])
+  })
+  it('dzień miniony chwilowo nieczytelny – odmowa „spróbuj za chwilę”; uszkodzony dzień od dziś – też odmowa', async () => {
+    const a = stub({ requests: [task()] })
+    expect(await changeTaskSteps('t1', addStepOp('nowy'))).toMatchObject({ saved: false, error: DAY_UNREADABLE })
+    expect(a.sent).toEqual([])
+    const b = stub({ requests: [{ ...task(), day: TODAY }], broken: [TODAY] })
+    expect(await changeTaskSteps('t1', addStepOp('nowy'))).toMatchObject({ saved: false, error: DAY_UNREADABLE })
+    expect(b.sent).toEqual([])
+  })
+})
+
 describe('wynik nieznany po wysłaniu – pytanie, nie odmowa (przegląd 2, kontrakt `SaveAnswer`)', () => {
-  it('błąd po przekazaniu do kolejki: `sent.afterSend`, `stepsAnswer` daje `asked`; odmowa przed wysłaniem – `false`', async () => {
+  it('błąd po przyjęciu przez kolejkę: `sent.afterSend`, `stepsAnswer` daje `asked`; odmowa procesu głównego przed kolejką i przed wysłaniem – `false` (przegląd 4)', async () => {
     const block = planBlock({ id: 'b1', categoryId: 'inne', startMin: 600, durationMin: 60, steps: four() })
-    stub({ days: { [TODAY]: null }, edit: async () => Promise.reject(new Error('IPC po wysłaniu')) })
+    // The queue answered, what follows failed (an answer that breaks the notice): not known – a question.
+    stub({ days: { [TODAY]: null }, edit: async () => undefined as never })
     const r = await tickBlockStep(TODAY, block, 's1', true)
     expect(r).toMatchObject({ saved: false, error: null, outcomes: null, sent: { afterSend: true } })
     expect(stepsAnswer({ op: 'rename', id: 's1', title: 'x' }, r)).toBe('asked')
+    // The main process refused the edit before its queue: nothing written – a refusal.
+    stub({ days: { [TODAY]: null }, edit: async () => Promise.reject(new Error('plik jest teraz nieczytelny')) })
+    const before = await tickBlockStep(TODAY, block, 's1', true)
+    expect(before.sent).toEqual({ afterSend: false })
+    expect(stepsAnswer({ op: 'rename', id: 's1', title: 'x' }, before)).toBe(false)
     // Refused before anything was sent (no such step): a refusal.
     stub({ days: { [TODAY]: null } })
     const no = await tickBlockStep(TODAY, block, 'nie-ma', true)

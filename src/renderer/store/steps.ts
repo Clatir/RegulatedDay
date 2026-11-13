@@ -69,18 +69,23 @@ export function changeBlockSteps(date: string, block: PlanBlock, op: StepOp, see
 
 /**
  * The day and the file of the block a task is planned in now (`scheduledOf`, every move followed – each day of the way read
- * in this turn); null – not planned (the block gone); `unreadable` – a day of the way cannot be read now: where the block
- * stands now is not known (that day's `movedTo` may send it to today or later, T769), so nothing is written – the task and
- * its block never part in silence (T792). One rule for days gone by and to come.
+ * in this turn, `caseDays`); null – not planned (the block gone), or the way ends on a day gone by whose file is broken for
+ * good (`CaseDays.broken` – never read again, never written: the task's change goes alone); `unreadable` – a day of the way
+ * cannot be read for a moment (or one from today on is broken): where the block stands is not known (its `movedTo` may send
+ * it to today or later, T769), so nothing is written – the task and its block never part in silence (T792).
  */
-async function taskDay(id: string): Promise<{ date: string; raw: RawRecord | null } | null | 'unreadable'> {
+async function taskDay(id: string, today: string): Promise<{ date: string; raw: RawRecord | null } | null | 'unreadable'> {
   const r = requestFrom(rawRecord(taskRel(id)))
   if (!r?.day || !r.block) return null
   const files: Record<string, RawRecord | null> = {}
   for (let more: string | null = r.day; more && !(more in files); more = caseDayToRead(r, files)) {
-    const read = await window.rd.dayFiles([more])
-    if (!(more in read)) return 'unreadable'
-    files[more] = read[more] ?? null
+    const read = await window.rd.caseDays([more])
+    if (!(more in read.files)) {
+      // Broken for good on a day gone by (never written – T769): the way ends there, the task's change goes alone; any
+      // other day not read – for a moment, or one to come – nothing is written („spróbuj za chwilę”).
+      return more < today && read.broken?.includes(more) ? null : 'unreadable'
+    }
+    files[more] = read.files[more] ?? null
   }
   // Every day of the way read: the block's day is known (or the block is gone).
   const s = scheduledOf(r, (d) => (d in files ? (files[d] ? dayFileFrom(files[d], d) : null) : undefined))
@@ -94,7 +99,7 @@ function taskChange(id: string, make: (record: RawRecord, date: string | null, d
     const record = rawRecord(rel)
     if (!record) return 'Tej sprawy już nie ma.'
     const today = logicalDayOf(Date.now())
-    const where = await taskDay(id)
+    const where = await taskDay(id, today)
     if (where === 'unreadable') return DAY_UNREADABLE
     const out = make(record, where?.date ?? null, where?.raw ?? null, today)
     if ('error' in out) return out.error
@@ -136,12 +141,14 @@ export function changeTemplateSteps(templateId: string, from: string, blockId: s
  * scope; „Tylko to” is the day's own edit, `changeBlockSteps`): the series API with the op itself (`stepsOp`), laid on each
  * version's own list in the write's turn (T790, T517) – never a list copied from the block the window holds (an occurrence
  * begun today does not follow the series); its „Cofnij” toast says `text` (empty – none). The ticks stay the day's (T786).
- * `refused` – the series refused it (an answer with a reason, e.g. it ended – the panel asks the scope again); a send that
- * failed or a question is no refusal.
+ * `refused` – the series refused the scope (`ended`, `notFound` – the panel asks the scope again); a refusal of the change
+ * itself (`invalid`), a send that failed or a question is none.
  */
 export async function changeSeriesSteps(target: { date: string; blockId: string }, scope: Exclude<SeriesScope, 'only'>, op: StepOp, text: string): Promise<{ answer: SaveAnswer; refused: boolean }> {
   const { answer, result } = await changeSeriesWith(target, scope, { stepsOp: op }, text)
-  return { answer, refused: result?.error != null }
+  // A refusal of the scope picked: the series ended, or it is not there any more – the panel asks again. A refusal of the
+  // change itself (`invalid` – a full list, an unreadable file for a moment) keeps the scope.
+  return { answer, refused: result?.code === 'ended' || result?.code === 'notFound' }
 }
 
 /**

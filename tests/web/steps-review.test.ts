@@ -29,13 +29,17 @@ afterEach(() => {
 
 const okResult: SeriesResult = { ok: true, error: null, code: null, seriesId: 'ang', outcomes: [], undo: [] }
 
-function stub(o: { requests?: RawRecord[]; days?: Record<string, RawRecord | null>; edit?: RdApi['edit']; dayFiles?: RdApi['dayFiles'] } = {}) {
+function stub(o: { requests?: RawRecord[]; days?: Record<string, RawRecord | null>; edit?: RdApi['edit']; dayFiles?: RdApi['dayFiles']; broken?: string[] } = {}) {
   const sent: EditEntry[][] = []
   const calls: unknown[][] = []
   const days = o.days ?? {}
   const view = (): DataView => ({ status: 'open', rd: null, templates: [], lectures: [], requests: o.requests ?? [], routines: [], series: [], seriesDays: {} }) as unknown as DataView
   const rd: Partial<RdApi> = {
     dayFiles: o.dayFiles ?? (async (dates) => Object.fromEntries(dates.filter((d) => d in days).map((d) => [d, days[d] ?? null]))),
+    caseDays: async (dates) => {
+      const known = dates.filter((d) => d in days)
+      return { files: Object.fromEntries(known.map((d) => [d, days[d] ?? null])), gone: {}, begun: {}, ...(o.broken ? { broken: dates.filter((d) => o.broken!.includes(d)) } : {}) }
+    },
     edit: o.edit ?? (async (entries) => (sent.push(entries), entries.map(() => ({ status: 'applied' as const })))),
     dataView: async () => view(),
     seriesChange: async (...args) => (calls.push(args), okResult)

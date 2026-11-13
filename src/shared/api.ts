@@ -119,6 +119,11 @@ export interface CaseDays {
   gone: Record<string, string[]>
   /** The blocks begun by the log (of a day whose log is known – read in full or `away`; T769: an old block not begun may go). */
   begun: Record<string, string[]>
+  /**
+   * The days whose file is broken (it will never be read as it is – restored from the history at most), apart from those
+   * that cannot be read now (left out of `files` too, but read again in a moment). Absent – none, or a main process before it.
+   */
+  broken?: string[]
 }
 
 /** The quick capture saved (D385): the new task's id; refused – why (no folder, no title). */
@@ -422,18 +427,9 @@ export interface EditEntry {
   remove?: boolean
   /** A removal: the record as you saw it when you removed it (A3-09). */
   base?: unknown
-  /** What the files must still hold when the queue lays the entry (its turn of the write); else it is refused (T793). */
-  guards?: EditGuard[]
 }
 
-/**
- * A condition the queue checks in its turn of the write, on the files as they are then (T793): `dayBlock` – the block is in
- * the plan of the day by its file (`rel`): in the file when `inFile`, never cancelled nor moved away. Failed – the entry is
- * refused with `why`, nothing of it written, no question.
- */
-export type EditGuard = { kind: 'dayBlock'; rel: string; block: string; inFile: boolean; why: string }
-
-export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting' | 'refused'; why?: string }
+export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting'; why?: string }
 
 /**
  * A record chosen from a backup: what the queue did with it, `behindQuestion` – it waits for your answer to an earlier

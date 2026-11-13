@@ -62,6 +62,10 @@ function stub(records: { requests?: RawRecord[]; templates?: RawRecord[] }, days
   const view = (): DataView => ({ status: 'open', rd: null, templates: state.templates, lectures: [], requests: state.requests, routines: [], series: [], seriesDays: {} }) as unknown as DataView
   const rd: Partial<RdApi> = {
     dayFiles: async (dates) => Object.fromEntries(dates.filter((d) => d in state.days).map((d) => [d, state.days[d] ?? null])),
+    caseDays: async (dates) => {
+      const known = dates.filter((d) => d in state.days)
+      return { files: Object.fromEntries(known.map((d) => [d, state.days[d] ?? null])), gone: {}, begun: {} }
+    },
     edit: async (entries) => (sent.push(entries), entries.map(() => ({ status: 'applied' as const }))),
     dataView: async () => view()
   }

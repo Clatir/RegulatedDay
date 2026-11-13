@@ -283,6 +283,10 @@ function stub(records: { requests?: RawRecord[]; templates?: RawRecord[] } = {},
   const seriesChange = vi.fn(async (..._a: unknown[]): Promise<SeriesResult> => ({ ok: true, error: null, code: null, seriesId: 'ang', outcomes: [], undo: [] }))
   const rd: Partial<RdApi> = {
     dayFiles: async (dates) => Object.fromEntries(dates.filter((d) => d in state.days).map((d) => [d, state.days[d] ?? null])),
+    caseDays: async (dates) => {
+      const known = dates.filter((d) => d in state.days)
+      return { files: Object.fromEntries(known.map((d) => [d, state.days[d] ?? null])), gone: {}, begun: {} }
+    },
     edit: async (entries) => (sent.push(entries), entries.map(() => ({ status: 'applied' as const }))),
     dataView: async () => view(),
     seriesChange: seriesChange as never,
@@ -356,6 +360,20 @@ describe('zmiana kroków bloku w panelu (zakres serii – D401, D404)', () => {
     vi.mocked(askScope).mockResolvedValue('all')
     expect(await saveBlockSteps(cancelled, occ(), add, false)).toBe(true)
     expect(askScope).toHaveBeenCalledTimes(4)
+  })
+
+  it('zakres zdejmuje tylko odmowa zakresu (`ended`, `notFound`); odmowa samej zmiany (`invalid`) – zakres zostaje (przegląd 4)', async () => {
+    const w = stub({}, { [DATE]: null })
+    vi.mocked(askScope).mockResolvedValue('all')
+    const o = ctx()
+    const refuse = (code: string) => w.seriesChange.mockImplementationOnce(async () => ({ ok: false, error: 'odmowa', code, seriesId: 'ang', outcomes: [], undo: [] }) as never)
+    refuse('invalid')
+    expect(await saveBlockSteps(o, occ(), add, false)).toBe(false)
+    expect(o.scope.current).toBe('all')
+    refuse('notFound')
+    expect(await saveBlockSteps(o, occ(), add, false)).toBe(false)
+    expect(o.scope.current).toBeNull()
+    expect(askScope).toHaveBeenCalledTimes(1)
   })
 
   it('„Cofnij” w zakresie serii tylko po usunięciu kroku (D443); dodanie i przestawienie – bez toastu', async () => {
