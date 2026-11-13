@@ -102,6 +102,7 @@ const api: RdApi = {
   seriesUndo: (undo) => ipcRenderer.invoke(CH.seriesUndo, undo),
   quickAdd: (title) => ipcRenderer.invoke(CH.quickAdd, title),
   quickClose: () => ipcRenderer.send(CH.quickClose),
+  quickToday: () => ipcRenderer.invoke(CH.quickToday),
   onQuickShown: (cb) => on(CH.onQuickShown, cb),
   quickShortcut: () => ipcRenderer.invoke(CH.quickShortcut),
   onQuickShortcut: (cb) => on(CH.onQuickShortcut, cb),

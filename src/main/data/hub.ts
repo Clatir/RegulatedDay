@@ -796,6 +796,12 @@ export class DataHub {
     return { ok, error: ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: ok ? id : null }
   }
 
+  /** The logical day of the clock `quickAdd` saves with (D454: the preview of the words of dates counts from it, not from the window's clock). */
+  quickToday(): string {
+    const f = this.service?.folder
+    return logicalDayOf(f ? f.clock.now() : Date.now())
+  }
+
   /** What a day's evening ritual says about „Sprawy” (D383, D384, D402). */
   casesRitual(day: string): Promise<CasesRitual> {
     if (!isIsoDate(day)) throw new Error('data dnia')

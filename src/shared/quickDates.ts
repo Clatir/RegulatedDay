@@ -41,10 +41,14 @@ function dayOfWord(word: string, today: string): string | null {
   if (w === 'jutro') return addDays(today, 1)
   const wd = WEEKDAY_WORDS.get(w)
   if (wd != null) return addDays(today, (wd - weekday(today) + 7) % 7 || 7)
-  if (!/^\d/.test(w)) return null
+  // A date only with its dots (D454): „20.11”, „20.11.2027” – „1/2”, „3”, „12-03” and the like stay in the title.
+  if (!/^\d{1,2}\.\d{1,2}(\.\d{4})?$/.test(w)) return null
   const p = parseDate(w, today)
   return p.ok ? p.value : null
 }
+
+/** The line under the field before Enter (D409) counted from `today` – the main process's logical day (D454); null: that day is not known yet. */
+export const quickPreview = (text: string, today: string | null): string | null => (today == null ? null : parseQuickDates(text, today).preview)
 
 /** What the words at the end of a title set (D409): the title without them, the days, the line under the field. */
 export interface QuickDates {

@@ -15,7 +15,6 @@ import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import type { DayModel } from '../../store/day'
 import { blockColor, blockMarks, blockName, nameById, type Names } from './blockView'
-import { dueTone } from '../cases/casesLogic'
 import type { EnergyTrack, TimelineItem, TimelineMarker } from './Timeline'
 
 export interface DayAxis {
@@ -124,7 +123,7 @@ function taskBadge(task: string | null | undefined, names: Names, today: string 
   if (!task || today == null || date < today) return {}
   const r = names.requests.find((x) => x.id === task)
   const b = r ? dueBadge(r, today) : null
-  return b ? { badge: { text: b.text, tone: dueTone(b) } } : {}
+  return b ? { badge: b } : {}
 }
 
 /** The day's numbers in words (the plan's summary). */

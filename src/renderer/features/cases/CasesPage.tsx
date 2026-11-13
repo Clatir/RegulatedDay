@@ -27,7 +27,7 @@ import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
 import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 import { categoryOptions } from '../plan/blockView'
-import { caseTitle, DATE_PRESETS, filterOf, presetDate, sectionsOf, statusParts } from './casesLogic'
+import { caseTitle, DATE_PRESETS, doDateNote, filterOf, presetDate, sectionsOf, statusParts } from './casesLogic'
 import { DueMark } from './DueMark'
 import { nextFreeStart, submitTitle } from './casesUi'
 import { planOnAxis } from './planOnAxis'
@@ -247,12 +247,12 @@ function DatesForm({ x, today, set }: { x: CaseItem; today: string; set: (patch:
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-line pt-1.5 text-[12px]" data-testid="case-dates-form">
       <DateRow label="Termin" id="due" value={r.dueDate} today={today} onSet={(dueDate) => set({ dueDate })} />
-      <DateRow label="Wykonać" id="do" value={r.doDate} today={today} onSet={(doDate) => set({ doDate })} />
+      <DateRow label="Wykonać" id="do" value={r.doDate} today={today} note={doDateNote(r.doDate, today)} onSet={(doDate) => set({ doDate })} />
     </div>
   )
 }
 
-function DateRow({ label, id, value, today, onSet }: { label: string; id: 'due' | 'do'; value: string | null; today: string; onSet: (date: string | null) => void }) {
+function DateRow({ label, id, value, today, note, onSet }: { label: string; id: 'due' | 'do'; value: string | null; today: string; note?: string | null; onSet: (date: string | null) => void }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-muted">{label}</span>
@@ -265,6 +265,11 @@ function DateRow({ label, id, value, today, onSet }: { label: string; id: 'due' 
       <button type="button" className="h-[24px] px-1.5 text-muted hover:text-fg" disabled={value == null} onClick={() => onSet(null)} data-testid={`case-${id}-clear`}>
         Wyczyść
       </button>
+      {note && (
+        <span className="basis-full text-[11.5px] text-muted" role="status" data-testid={`case-${id}-note`}>
+          {note}
+        </span>
+      )}
     </div>
   )
 }

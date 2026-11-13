@@ -7,7 +7,7 @@
  */
 import { useMemo, useState } from 'react'
 import { DAY_TYPE_FIELDS, FIELD_GROUP_NAMES, NUMBER_FIELDS, type FieldGroup } from '@shared/model/fields'
-import { plDate } from '@shared/format'
+import { plDate, WEEKDAY_SHORT } from '@shared/format'
 import { newId } from '@shared/model/ids'
 import { MODULES, MODULE_NAMES } from '@shared/model/rd'
 import { DAY_TYPES, DAY_TYPE_NAMES, NY_ZONE, RANGES, sessionWithEnd, sessionWithStart, settingsOn, type DayTypeId, type RulesSettings, type SessionChoice, type SessionDef } from '@shared/model/settings'
@@ -22,7 +22,6 @@ import { SettingNumber } from './SettingNumber'
 import { changeFrom, saveGeneral, saveSettings, saveSettingsFrom, setFromDate, setModule, useSettingsFrom, type FromMode } from './settingsStore'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
-const SHORT_DAYS = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd']
 
 /**
  * The settings in force from the chosen date, and the function that saves a change of them (today's type is read only
@@ -196,7 +195,7 @@ export function SessionsSection() {
       <span className="text-[12px] text-muted">Warstwa sesji: czy dzień danego typu ma sesje (kliknięcie zmienia: tak → nie → pytaj).</span>
       <div className="grid items-center gap-1" style={{ gridTemplateColumns: '150px repeat(7, minmax(0, 1fr))' }}>
         <span />
-        {SHORT_DAYS.map((d) => (
+        {WEEKDAY_SHORT.map((d) => (
           <span key={d} className="text-center text-[11px] text-muted">
             {d}
           </span>

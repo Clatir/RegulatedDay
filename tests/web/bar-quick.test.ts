@@ -22,6 +22,12 @@ beforeAll(() => {
 })
 afterAll(() => uninstallEscape())
 
+/** The logical day the main process answers (D454: the preview counts from it, not from the window's clock) – a Monday far from today. */
+const MAIN_DAY = '2030-05-06'
+beforeEach(() => {
+  ;(window as unknown as { rd: Partial<RdApi> }).rd = { quickToday: () => Promise.resolve(MAIN_DAY) }
+})
+
 let root: Root | null = null
 let host: HTMLElement | null = null
 afterEach(() => {
@@ -58,6 +64,22 @@ describe('„+” bez dnia w pasku', () => {
 })
 
 const field = () => host!.querySelector<HTMLInputElement>('[data-testid="bar-quick-title"]')
+
+describe('podgląd słów daty liczy dzień z procesu głównego (D454)', () => {
+  it('„!pt” przy dniu głównego procesu (pn 06.05.2030) to pt 10.05, nie piątek według zegara okna', async () => {
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(Bar, { view: dayView(), mode: 'main' })))
+    await act(async () => host!.querySelector<HTMLButtonElement>('[data-testid="bar-quick"]')!.click())
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      set.call(field()!, 'Zapłacić !pt')
+      field()!.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(host.querySelector('[data-testid="bar-quick-preview"]')?.textContent).toBe('Termin: pt 10.05')
+  })
+})
 async function openWith(text: string) {
   await act(async () => host!.querySelector<HTMLButtonElement>('[data-testid="bar-quick"]')!.click())
   await act(async () => {
@@ -114,7 +136,7 @@ describe('panel otwarty „+” paska pulpitu (T771, T772)', () => {
   let target: ((t: { line: string | null; day: string | null; quick?: boolean } | null) => void) | null = null
   const hadObserver = 'ResizeObserver' in globalThis
   beforeEach(() => {
-    const rd: Partial<RdApi> = { onPanelTarget: (cb) => ((target = cb), () => undefined), panelTouch: () => undefined, panelClose: () => undefined, barLayout: () => undefined }
+    const rd: Partial<RdApi> = { quickToday: () => Promise.resolve(MAIN_DAY), onPanelTarget: (cb) => ((target = cb), () => undefined), panelTouch: () => undefined, panelClose: () => undefined, barLayout: () => undefined }
     ;(window as unknown as { rd: Partial<RdApi> }).rd = rd
     if (!hadObserver)
       (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {

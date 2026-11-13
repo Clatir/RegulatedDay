@@ -7,20 +7,22 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { TITLE_MAX } from '@shared/model/requests'
-import { parseQuickDates } from '@shared/quickDates'
-import { logicalDayOf } from '@shared/time/day'
+import { quickPreview } from '@shared/quickDates'
 import { setWindowEscape } from '../lib/escape'
+import { useQuickToday } from './quickToday'
 
 export function QuickApp() {
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const input = useRef<HTMLInputElement>(null)
-  const preview = parseQuickDates(text, logicalDayOf(Date.now())).preview
+  const { today, reload } = useQuickToday(text === '')
+  const preview = quickPreview(text, today)
   useEffect(() => {
     setWindowEscape(() => window.rd.quickClose())
     const off = window.rd.onQuickShown(() => {
       setError(null)
+      reload()
       input.current?.focus()
       input.current?.select()
     })
@@ -28,7 +30,7 @@ export function QuickApp() {
       setWindowEscape(null)
       off()
     }
-  }, [])
+  }, [reload])
   const save = async () => {
     if (busy) return
     setBusy(true)

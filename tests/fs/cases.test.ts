@@ -7,7 +7,7 @@
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
@@ -157,6 +157,29 @@ describe('szybki zapis i zadanie na osi (D385, D384)', () => {
       expect(JSON.parse(readFileSync(join(dir, paths.record('request', kept.id!)), 'utf8'))).toMatchObject({ title: 'Kup mleko !coś', dueDate: null, doDate: null })
       expect(await hub.quickAdd('!jutro')).toEqual({ ok: false, error: 'Wpisz, co zapisać.', id: null })
     } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('podgląd słów daty liczy „dziś” z zegara procesu głównego – tego samego, którego używa zapis (D454)', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      // No folder: the clock of the window's own computer.
+      expect(hub.quickToday()).toBe(logicalDayOf(Date.now()))
+      expect(await hub.open(dir)).toBe(true)
+      // The folder's clock a few days ahead (not the window's Date.now()): the day the preview counts from, and the one the save uses.
+      const ahead = placeLogical(addDays(logicalDayOf(Date.now()), 3), 10 * 60)
+      vi.spyOn(hub.service!.folder.clock, 'now').mockReturnValue(ahead)
+      const today = logicalDayOf(ahead)
+      expect(hub.quickToday()).toBe(today)
+      const r = await hub.quickAdd('Zapłacić !jutro')
+      const file = JSON.parse(readFileSync(join(dir, paths.record('request', r.id!)), 'utf8')) as Record<string, unknown>
+      expect(file.dueDate).toBe(addDays(today, 1))
+    } finally {
+      vi.restoreAllMocks()
       await hub.close('quit')
     }
   })

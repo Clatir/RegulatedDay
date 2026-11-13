@@ -95,6 +95,9 @@ export type DatePreset = (typeof DATE_PRESETS)[number]['id']
 /** The day a button of a date field sets (`today` – the logical day). */
 export const presetDate = (id: DatePreset, today: string): string => (id === 'today' ? today : id === 'tomorrow' ? addDays(today, 1) : weekEndOf(today))
 
+/** What stands under the field „Wykonać” (D454): a date that has gone by does not change the list – said, never refused (D72). */
+export const doDateNote = (doDate: string | null, today: string): string | null => (doDate != null && doDate < today ? 'Ta data już minęła' : null)
+
 /** How a due date's badge is drawn: past it red („over”), the rest muted („soon”) – D409. */
 export const dueTone = (b: Pick<DueBadge, 'kind'>): 'over' | 'soon' => (b.kind === 'over' ? 'over' : 'soon')
 

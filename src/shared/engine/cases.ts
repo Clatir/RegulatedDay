@@ -385,8 +385,24 @@ export function patchedRaw(raw: Raw, patch: CasePatch, at: number): { raw: Raw }
   if (patch.doDate !== undefined) {
     if (patch.doDate != null && !dateFrom(patch.doDate)) return { error: 'Wykonać: nie ma takiego dnia.' }
     next.doDate = patch.doDate
-    // A new date of doing is newer than any move by hand before it (T851): the date decides the list again.
-    if (patch.doDate !== r.doDate) next.listSetDay = null
+    if (patch.doDate !== r.doDate) {
+      const today = logicalDayOf(at)
+      // A new date of doing is newer than any move by hand before it (T851): the date decides the list again.
+      next.listSetDay = null
+      if (patch.doDate != null && patch.doDate < today && !isDone(r)) {
+        // Gone already when it is typed (D454): it changes nothing – the sprawa stays on the list it is on now (even if its
+        // old date of doing put it there). That is written as a move by hand today (a move on the date or after it wins over
+        // it, T851), so no „wróciło z „Dziś”” for a date of the past.
+        const shown = listOf(r, today)
+        if (shown !== writtenListOf(r, today)) Object.assign(next, { list: shown, listDay: shown === 'today' ? today : null })
+        next.listSetDay = today
+      } else if (patch.doDate != null && patch.doDate > today && next.list === 'today' && next.listDay != null && next.listDay >= today) {
+        // A day to come (D454): the date decides for a sprawa standing on „Dziś” now too – it goes to „W tym tygodniu” and the
+        // date brings it back (its `listDay` would count as a move by hand and hold it on „Dziś”).
+        next.list = 'week'
+        next.listDay = null
+      }
+    }
   }
   return { raw: next }
 }
@@ -509,13 +525,14 @@ export function caseDayToRead(r: Pick<RequestRecord, 'day' | 'block'>, files: Re
 
 /**
  * What the morning plan's step of requests offers (D384): the requests not done and not planned (in Skrzynka, Dziś or W
- * tym tygodniu – „Kiedyś / Może” stays out of the daily view), and the tasks of „Dziś” not planned.
+ * tym tygodniu – „Kiedyś / Może” stays out of the daily view), and the tasks of „Dziś” not planned – each in the order of
+ * the lists (the due date first, `caseCompare`, D454).
  */
 export function morningCases(items: readonly CaseItem[]): { requests: CaseItem[]; tasks: CaseItem[] } {
   const open = items.filter((x) => x.list !== 'done' && !x.scheduled)
   return {
-    requests: open.filter((x) => x.record.kind === 'request' && x.list !== 'someday').sort(caseOrder),
-    tasks: open.filter((x) => x.record.kind === 'task' && x.list === 'today').sort(caseOrder)
+    requests: open.filter((x) => x.record.kind === 'request' && x.list !== 'someday').sort(caseCompare),
+    tasks: open.filter((x) => x.record.kind === 'task' && x.list === 'today').sort(caseCompare)
   }
 }
 

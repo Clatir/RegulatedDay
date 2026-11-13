@@ -12,6 +12,7 @@ import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
+import { plDate } from '../../src/shared/format'
 import { paths } from '../../src/shared/data/paths'
 import { dayFileFrom } from '../../src/shared/model/plan'
 import { newRequest, newTask } from '../../src/shared/model/requests'
@@ -273,8 +274,14 @@ test('Sprawy: termin ustawiony przyciskiem „Jutro” – znaczek „Termin jut
       const moved = page.getByTestId('cases-today-list').getByTestId('case-row')
       await expect(moved).toHaveCount(1)
       await expect(moved.getByTestId('case-due')).toHaveText('Termin jutro')
-      // „Wyczyść”: the badge goes (the row is a new one on the other list – its dates open again).
+      // A date of doing that has gone by (D454): the note under the field, the sprawa stays on „Dziś”, nothing refused.
       await moved.getByTestId('case-dates-open').click()
+      await moved.getByTestId('case-do-date').fill(plDate(addDays(today, -3)))
+      await moved.getByTestId('case-do-date').press('Enter')
+      await expect(moved.getByTestId('case-do-note')).toHaveText('Ta data już minęła')
+      await expect.poll(() => records(dataDir).find((r) => r.id === 't1')!.doDate).toBe(addDays(today, -3))
+      await expect(page.getByTestId('cases-today-list').getByTestId('case-row')).toHaveCount(1)
+      // „Wyczyść”: the badge goes (the row is a new one on the other list – its dates open again).
       await moved.getByTestId('case-due-clear').click()
       await expect(moved.getByTestId('case-due')).toHaveCount(0)
       await expect.poll(() => records(dataDir).find((r) => r.id === 't1')!.dueDate).toBeNull()
@@ -342,6 +349,8 @@ test('plan poranny: karta „Terminy” – sprawy po terminie i z terminem w pr
       await expect.poll(() => records(dataDir).find((r) => r.id === 'a')!.list).toBe('today')
       await expect(page.getByTestId('deadline-card')).toHaveCount(0)
       await expect(page.getByTestId('queue-pick')).toContainText('Zapłacić podatek')
+      // D454: in the step the sprawa has the badge of its due date (the card no longer says it).
+      await expect(page.getByTestId('queue-item').filter({ hasText: 'Zapłacić podatek' }).getByTestId('case-due')).toHaveText('Po terminie')
     })
     expect(errors).toEqual([])
   } finally {

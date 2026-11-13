@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { dueBadge } from '@shared/engine/caseDates'
-import { caseItems } from '@shared/engine/cases'
+import { caseItems, listedRaw } from '@shared/engine/cases'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
 import { newRequest, newTask, requestFrom, type NewTask } from '@shared/model/requests'
@@ -14,7 +14,7 @@ import { planBlock } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { parseQuickDates } from '@shared/quickDates'
 import { placeLogical } from '@shared/time/day'
-import { DATE_PRESETS, dueTone, morningDeadlines, presetDate, sectionsOf, statusParts } from '@renderer/features/cases/casesLogic'
+import { DATE_PRESETS, doDateNote, dueTone, morningDeadlines, presetDate, sectionsOf, statusParts } from '@renderer/features/cases/casesLogic'
 import { dayAxis } from '@renderer/features/plan/dayItems'
 import type { DayModel } from '@renderer/store/day'
 import { Scenario } from '../unit/engine/dsl'
@@ -43,6 +43,15 @@ describe('przyciski dat pól „Termin” i „Wykonać” (D409, D451)', () => 
     expect(presetDate('week', SUN)).toBe(SUN)
     expect(presetDate('week', MON)).toBe('2026-11-22')
     expect(presetDate('tomorrow', SUN)).toBe(MON)
+  })
+})
+
+describe('komunikat pod polem „Wykonać” (D454)', () => {
+  it('data, która minęła – „Ta data już minęła”; dziś, przyszła i brak – nic', () => {
+    expect(doDateNote('2026-11-10', WED)).toBe('Ta data już minęła')
+    expect(doDateNote(WED, WED)).toBeNull()
+    expect(doDateNote(THU, WED)).toBeNull()
+    expect(doDateNote(null, WED)).toBeNull()
   })
 })
 
@@ -82,8 +91,14 @@ describe('karta „Terminy” planu porannego (D409, D452)', () => {
   const list = () => items([task('over', { dueDate: '2026-11-09' }), task('soon', { dueDate: THU }), task('far', { dueDate: '2026-11-20' }), task('none'), task('onToday', { dueDate: THU, list: 'today' }), newRequest('r', at(WED), { person: 'mama', estimateMin: 10, note: '', dueDate: WED })])
   const ids = (xs: Array<{ record: { id: string } }>) => xs.map((x) => x.record.id)
 
-  it('po terminie i z terminem w progu, bez „Dziś” i bez dalekich', () => {
-    expect(ids(morningDeadlines(list(), true, [], WED, 2, {}))).toEqual(['over', 'r', 'soon'])
+  it('po terminie i z terminem w progu, bez „Dziś”, bez dalekich i bez prośby z kroku próśb (D454: tam ma znaczek)', () => {
+    expect(ids(morningDeadlines(list(), true, [], WED, 2, {}))).toEqual(['over', 'soon'])
+  })
+
+  it('prośba z „Kiedyś / Może” (poza krokiem próśb) zostaje na karcie, prośba w „Skrzynce” – nie (D454)', () => {
+    const r = (id: string) => newRequest(id, at(WED), { person: 'mama', estimateMin: 10, note: '', dueDate: WED })
+    const l = items([r('inbox'), listedRaw(r('some'), 'someday', at(WED))])
+    expect(ids(morningDeadlines(l, true, [], WED, 2, {}))).toEqual(['some'])
   })
 
   it('moduł próśb wyłączony – bez próśb, jak strona', () => {
@@ -91,8 +106,8 @@ describe('karta „Terminy” planu porannego (D409, D452)', () => {
   })
 
   it('„Pomiń” (asked) chowa sprawę; sprawa z blokiem dziś też nie jest na karcie; pusta – pusta lista (brak karty)', () => {
-    expect(ids(morningDeadlines(list(), true, [], WED, 2, { 'deadline:over': 'skip' }))).toEqual(['r', 'soon'])
-    expect(ids(morningDeadlines(list(), true, [{ task: 'soon', requests: [] }], WED, 2, {}))).toEqual(['over', 'r'])
+    expect(ids(morningDeadlines(list(), true, [], WED, 2, { 'deadline:over': 'skip' }))).toEqual(['soon'])
+    expect(ids(morningDeadlines(list(), true, [{ task: 'soon', requests: [] }], WED, 2, {}))).toEqual(['over'])
     expect(morningDeadlines(items([task('a'), task('b', { dueDate: '2026-11-30' })]), true, [], WED, 2, {})).toEqual([])
   })
 
@@ -117,8 +132,8 @@ describe('znaczek na kafelku bloku zadania na osi „Dziś” (D409)', () => {
   }
 
   it('termin jutro – znaczek „Termin jutro”, po terminie – „Po terminie” w tonie „over”; blok bez zadania – bez znaczka', () => {
-    expect(axis(FRI, DATE).get('b1')).toEqual({ text: 'Termin jutro', tone: 'soon' })
-    expect(axis('2026-11-10', DATE).get('b1')).toEqual({ text: 'Po terminie', tone: 'over' })
+    expect(axis(FRI, DATE).get('b1')).toMatchObject({ kind: 'tomorrow', text: 'Termin jutro' })
+    expect(axis('2026-11-10', DATE).get('b1')).toMatchObject({ kind: 'over', text: 'Po terminie' })
     expect(axis(FRI, DATE).get('b2')).toBeUndefined()
   })
 
@@ -130,7 +145,7 @@ describe('znaczek na kafelku bloku zadania na osi „Dziś” (D409)', () => {
   })
 
   it('dzień przyszły: znaczek liczony od dzisiejszego dnia, nie od dnia osi', () => {
-    expect(axis('2026-11-14', '2026-11-11').get('b1')).toEqual({ text: 'Termin za 3 dni', tone: 'soon' })
+    expect(axis('2026-11-14', '2026-11-11').get('b1')).toMatchObject({ kind: 'days', days: 3, text: 'Termin za 3 dni' })
   })
 })
 

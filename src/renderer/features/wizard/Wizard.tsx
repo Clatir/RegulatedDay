@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { DAY_TYPE_FIELDS } from '@shared/model/fields'
-import { durationLabel, logicalClock, plDate } from '@shared/format'
+import { durationLabel, logicalClock, plDate, WEEKDAY_SHORT } from '@shared/format'
 import { POOLS, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
 import { MODULES, MODULE_NAMES, rdFrom } from '@shared/model/rd'
@@ -30,7 +30,6 @@ import { SettingNumber } from '../settings/SettingNumber'
 import { draftChanges, draftTemplates, failedFinish, finishRecords, newLecture, patchSettings, patchWizard, takeProbe, useWizard, type Corner } from './wizardStore'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
-const SHORT_DAYS = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd']
 
 type StepId = 'folder' | 'week' | 'hours' | 'work' | 'regen' | 'sessions' | 'secondShift' | 'lectures' | 'calendar' | 'people' | 'regenWays' | 'costs' | 'modules' | 'computer' | 'summary'
 
@@ -343,7 +342,7 @@ function StepSessions() {
         <span className="text-[12px] text-muted">Warstwa sesji: czy dzień danego typu ma sesje (pytaj – pytanie w planie porannym, bez odpowiedzi sesja zostaje).</span>
         <div className="grid items-center gap-1" style={{ gridTemplateColumns: '150px repeat(7, minmax(0, 1fr))' }}>
           <span />
-          {SHORT_DAYS.map((d) => (
+          {WEEKDAY_SHORT.map((d) => (
             <span key={d} className="text-center text-[11px] text-muted">
               {d}
             </span>

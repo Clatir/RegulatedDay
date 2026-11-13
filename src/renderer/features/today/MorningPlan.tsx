@@ -357,13 +357,18 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
           <span className="text-muted">
             {queued.length > 0 && dayTasks.length > 0 ? 'Prośby z kolejki i zadania z „Dziś” – wybrane prośby będą jednym blokiem, każde zadanie swoim:' : queued.length > 0 ? 'Prośby z kolejki – wybrane razem będą jednym blokiem:' : 'Zadania z „Dziś” – każde wybrane będzie swoim blokiem:'}
           </span>
-          {[...queued, ...dayTasks].map((x) => (
-            <label key={x.record.id} className="flex items-center gap-2" data-testid="queue-item" data-case={x.record.id}>
-              <input type="checkbox" checked={isMorningChosen(x.record.kind, x.record.id, toggled)} onChange={() => (setNote(null), setToggled(toggled.includes(x.record.id) ? toggled.filter((id) => id !== x.record.id) : [...toggled, x.record.id]))} />
-              <span>{queueRowText(x, names.rd)}</span>
-              <span className="num ml-auto text-muted">{durationLabel(x.estimateMin)}</span>
-            </label>
-          ))}
+          {[...queued, ...dayTasks].map((x) => {
+            // D454: the sprawy of this step are not on the card „Terminy” – their badge of the due date stands here.
+            const badge = dueBadge(x.record, caseToday)
+            return (
+              <label key={x.record.id} className="flex items-center gap-2" data-testid="queue-item" data-case={x.record.id}>
+                <input type="checkbox" checked={isMorningChosen(x.record.kind, x.record.id, toggled)} onChange={() => (setNote(null), setToggled(toggled.includes(x.record.id) ? toggled.filter((id) => id !== x.record.id) : [...toggled, x.record.id]))} />
+                <span>{queueRowText(x, names.rd)}</span>
+                {badge && <DueMark badge={badge} />}
+                <span className="num ml-auto text-muted">{durationLabel(x.estimateMin)}</span>
+              </label>
+            )
+          })}
           <button type="button" className="btn self-start" disabled={!(chosen.requests.length + chosen.tasks.length) || busy} onClick={() => void addChosen()} data-testid="queue-add">
             Dodaj do planu
           </button>

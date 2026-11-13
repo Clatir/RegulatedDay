@@ -15,7 +15,7 @@ import { deepEqual } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { copiedTemplate } from '@shared/engine/planEdit'
 import { pushedText } from '@shared/engine/pushApart'
-import { durationLabel, logicalClock, plDate } from '@shared/format'
+import { durationLabel, logicalClock, plDate, WEEKDAY_SHORT } from '@shared/format'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
 import { planBlock, templateFrom, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
@@ -41,7 +41,6 @@ import { seriesBlockOf } from '../series/seriesForm'
 import { SettingNumber } from '../settings/SettingNumber'
 import { templateAdd, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
 
-const DAYS = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd']
 
 export function TemplatesPage() {
   const templates = useData((s) => s.templates)
@@ -118,7 +117,7 @@ export function TemplatesPage() {
                   data-testid="template-item"
                 >
                   <span>{t.name}</span>
-                  <span className="text-[11.5px] text-muted">{t.weekdays.length ? t.weekdays.map((d) => DAYS[d - 1]).join(', ') : 'domyślny dla typu'}</span>
+                  <span className="text-[11.5px] text-muted">{t.weekdays.length ? t.weekdays.map((d) => WEEKDAY_SHORT[d - 1]).join(', ') : 'domyślny dla typu'}</span>
                 </button>
               ))}
             </div>
@@ -303,7 +302,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           </Field>
           <Field label="Dni tygodnia" labelWidth={140} hint="Bez zaznaczonych dni szablon jest domyślny dla swojego typu – używany, gdy dzień tygodnia nie ma własnego.">
             <div className="flex gap-1">
-              {DAYS.map((d, i) => (
+              {WEEKDAY_SHORT.map((d, i) => (
                 <button
                   key={d}
                   type="button"

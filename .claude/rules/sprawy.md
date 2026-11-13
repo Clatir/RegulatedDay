@@ -7,6 +7,7 @@ paths:
   - "src/renderer/store/cases.ts"
   - "src/main/windows/quickWindow.ts"
   - "src/renderer/widget/QuickApp.tsx"
+  - "src/renderer/widget/quickToday.ts"
   - "src/renderer/features/cases/**"
   - "src/renderer/features/settings/quickKey.ts"
   - "src/renderer/features/plan/dayItems.ts"
@@ -22,7 +23,7 @@ paths:
 # Sprawy, Skrzynka, szybki zapis (OPS2, L2)
 
 Źródło prawdy: D383, D384, D385, D402 (`docs/decyzje.md`), opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`
-„## 9. Prawdziwy Backlog i Skrzynka Spraw”. Decyzje T750–T758 (logika), T759–T774 (po przeglądach), T780–T785 (ekrany); terminy i daty wykonania HKU2 – D409, D451, T850–T856. Prośby w dniu (zdarzenia logu) – reguły `prosby-warianty.md`.
+„## 9. Prawdziwy Backlog i Skrzynka Spraw”. Decyzje T750–T758 (logika), T759–T774 (po przeglądach), T780–T785 (ekrany); terminy i daty wykonania HKU2 – D409, D451–D454, T850–T869. Prośby w dniu (zdarzenia logu) – reguły `prosby-warianty.md`.
 
 ## Pliki
 - `model/requests.ts` – rekord sprawy w `requests/<id>.json` (te same pliki co prośby, T750): `kind` (`task` / `request`),
@@ -75,7 +76,10 @@ paths:
   (`recordView`) i sprawdź warunek jeszcze raz (`answerTask`).
 - `listOf` potrzebuje dnia logicznego (`logicalDayOf`), nie daty kalendarza – po północy do 04:00 to jeszcze wczoraj.
 - Każda zmiana listy z ręki ustawia `listSetDay` (`listedRaw`) – inaczej data wykonania zabierze sprawę z listy, na którą ją
-  przeniesiono; ustawienie nowej `doDate` je czyści. `onTodayOf(r, dzień)` zależy od dnia (data wykonania).
+  przeniesiono; ustawienie nowej `doDate` je czyści – chyba że data już minęła (nie zmienia listy: `listSetDay` = dziś) albo jest
+  przyszła (sprawa z „Dziś” schodzi na „W tym tygodniu”, T867). `onTodayOf(r, dzień)` zależy od dnia (data wykonania).
+- Podgląd słów daty (`quickPreview`) bierze „dziś” z `window.rd.quickToday()` (zegar procesu głównego), nie z `Date.now()` okna (T869);
+  karta „Terminy” pomija sprawy z kroku próśb (`morningCases`) – tam stoi `DueMark` (T868).
 - Nowe pole `PlanBlock.task` – w `planBlock()`, `planBlockFrom` i literale `blockInfos` (jak każde pole bloku).
 - E2E: `cases.spec.ts` (strona, przeciągnięcie z panelu na oś, plan poranny, skrót w Ustawieniach; „Zadanie zrobione?” i rytuał – testy
   jednostkowe i `fs`, bo potrzebują zakończonego bloku), `quick.spec.ts` (wszędzie; okienko pokazane z testu), `quick-windows.spec.ts` – prawdziwy Win+Alt+N

@@ -5,6 +5,7 @@
  */
 import type { SeriesCreate, SeriesScope } from '@shared/api'
 import { occurrenceBlock, type SeriesPatch } from '@shared/engine/series'
+import { WEEKDAY_SHORT } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
 import { DEFAULT_SPECIAL, SERIES_BLOCK_FIELDS, SERIES_COUNT_MAX, seriesVersionOn, type Series, type SeriesBlock, type SeriesRule, type SpecialDays } from '@shared/model/series'
 import { seriesRuleText } from '@shared/seriesText'
@@ -57,7 +58,7 @@ export const NTH_CHOICES: ReadonlyArray<{ value: string; label: string }> = [
 ]
 
 export const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'] as const
-export const WEEKDAY_SHORT = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'] as const
+export { WEEKDAY_SHORT }
 
 /** What a new series starts as, from the day of its block: the rules' fields fall on that day, no end, asks on special days. */
 export function newDraft(date: string): SeriesDraft {

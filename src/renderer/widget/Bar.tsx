@@ -11,8 +11,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode 
 import type { WidgetAction } from '@shared/api'
 import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
 import { TITLE_MAX } from '@shared/model/requests'
-import { parseQuickDates } from '@shared/quickDates'
-import { logicalDayOf } from '@shared/time/day'
+import { quickPreview } from '@shared/quickDates'
 import { barBackground, TONE_SETS } from '@shared/theme'
 import { SEEN_LINE, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
@@ -21,6 +20,7 @@ import { cx } from '../components/ui'
 import { useStepPicks } from '../lib/stepPicks'
 import { termHolds } from '../lib/viewTerms'
 import { useEscapeLayer } from '../lib/escape'
+import { useQuickToday } from './quickToday'
 
 export type BarMode = 'main' | 'panel' | 'desktop'
 type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | null
@@ -296,7 +296,8 @@ function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: Ba
     setText('')
     close()
   }
-  const preview = parseQuickDates(text, logicalDayOf(Date.now())).preview
+  const { today } = useQuickToday(text === '')
+  const preview = quickPreview(text, today)
   return (
     <div className="flex flex-col gap-0.5" data-testid="bar-quick-field">
       <div className="flex items-center gap-1.5">

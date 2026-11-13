@@ -872,6 +872,7 @@ function registerIpc(): void {
     return r
   })
   ipcMain.on(CH.quickClose, () => quick?.close('Esc'))
+  handle(CH.quickToday, () => needHub().quickToday())
   // The settings ask for its state (opened, T759): one Windows refused is tried again first.
   handle(CH.quickShortcut, () => quick?.retry() ?? { key: shortcutOf(prefs()), state: 'off' })
   handle(CH.casesRitual, (_e, day: unknown) => needHub().casesRitual(String(day)))
