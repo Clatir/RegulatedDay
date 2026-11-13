@@ -77,6 +77,8 @@ paths:
   nieczytelny albo (od dziś) z niepełnym logiem – `DAY_UNREADABLE`; dzień miniony nigdy nie jest przepisywany (T769).
 - Skrót: `quickKey` + `quickOn` (wyłączenie zostawia Twój klucz); zajęty – ponawiany (ustawienia, `quickShortcut`, co 60 s – T759).
 - „Zadanie zrobione?”: odpowiedź to rekord (T754) – nie `question.answer`; linia `task:<dzień>:<blok>`, cicha, 3 h.
+- Kroki zadania (D440, T792, reguły `kroki.md`): `RequestRecord.steps` + `stepsDone`; `caseBlock` kopiuje listę do bloku,
+  `withTaskBlock` – odhaczenia; zmiany w bloku i w zadaniu idą w obie strony (`engine/steps.ts`).
 - „Powtarzaj” nie dotyczy bloku zadania ani próśb (D408): `blockNotSeries` (kod `task` / `requests`), w panelu bloku `RepeatNote`.
 - Okienko „Do skrzynki” na wierzch tylko w `raise()` ze skrótu (`check-code` – `checkQuickWindow`); „+” paska pulpitu
   otwiera panel z polem (pasek nie przyjmuje klawiszy, T756). „+” jest w każdym trybie paska.

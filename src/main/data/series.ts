@@ -27,8 +27,10 @@ import {
   todayOccurrenceEdit,
   withEnd,
   type SeriesPatch,
-  type TodayDay
+  type TodayDay,
+  withStepsOp
 } from '@shared/engine/series'
+import { stepOpFrom } from '@shared/model/steps'
 import { newId } from '@shared/model/ids'
 import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
 import {
@@ -53,6 +55,7 @@ import type { DayTypeId } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import type { DataFolder, Inputs } from './folder'
+import { attachmentFrom, attachmentJson, attachmentRel, ownAttachmentIds, type Attachment } from '@shared/model/attachment'
 
 export interface SeriesIo {
   folder: DataFolder
@@ -199,6 +202,11 @@ function patchFrom(v: unknown, start: string): SeriesPatch | null {
     if (!isRaw(v.block)) return null
     out.block = v.block as SeriesPatch['block']
   }
+  if (v.stepsOp !== undefined) {
+    const op = stepOpFrom(v.stepsOp)
+    if (!op) return null
+    out.stepsOp = op
+  }
   if (v.rule !== undefined) {
     const rule = seriesRuleFrom(v.rule, start)
     if (!rule) return null
@@ -334,9 +342,12 @@ export function seriesChange(io: SeriesIo, target: unknown, scope: unknown, patc
       const s = tg.series
       const p0 = patchFrom(patch, b.today)
       if (scope === 'only') {
-        if (!tg.date || !tg.block || !p0?.block) throw new SeriesEditError('invalid', '„Tylko to” zmienia jedno wystąpienie – wybierz blok dnia.')
+        if (!tg.date || !tg.block || !p0 || (!p0.block && !p0.stepsOp)) throw new SeriesEditError('invalid', '„Tylko to” zmienia jedno wystąpienie – wybierz blok dnia.')
+        // The occurrence's list changed by the op as the day holds it now (T790).
+        const listed = withStepsOp(tg.block, p0.stepsOp)
+        if ('error' in listed) throw new SeriesEditError('invalid', listed.error)
         // The occurrence's own fields with the change (checked as a block of a file).
-        const own = seriesBlockFrom({ ...tg.block, ...p0.block, startMin: p0.block.startMin ?? plannedStartMin(tg.block, tg.day!.ctx.plan) })
+        const own = seriesBlockFrom({ ...listed, ...p0.block, startMin: p0.block?.startMin ?? plannedStartMin(tg.block, tg.day!.ctx.plan) })
         if (!own) throw new SeriesEditError('invalid', 'Zmiana bloku jest niepełna.')
         const r = paths.day(tg.date)
         t.set(r, putBlock(dayRaw(await t.get(r), tg.date), { ...tg.block, ...own, anchor: null }))
@@ -363,12 +374,15 @@ export function seriesChange(io: SeriesIo, target: unknown, scope: unknown, patc
       // the other days with an entry keep theirs (D381). Today through `todayOccurrenceEdit`: it pushes apart what is after it.
       const tb = tg.block
       const entryOf = async (date: string) => dayFileFrom((await t.get(paths.day(date))) ?? {}, date).blocks.find((x) => x.id === tb!.id) ?? null
-      const own = tg.date && tb && p.block && tg.date >= b.today && !(tg.date === b.today && tg.day && begun(tg.day, tb.id)) ? await entryOf(tg.date) : null
-      if (own && tg.date! > b.today) {
+      const own = tg.date && tb && (p.block || p.stepsOp) && tg.date >= b.today && !(tg.date === b.today && tg.day && begun(tg.day, tb.id)) ? await entryOf(tg.date) : null
+      // Its own entry with the change: the fields, and the op on the entry's own list (refused there – the list as it was).
+      const ownNext = own ? withStepsOp({ ...own, ...p.block }, p.stepsOp) : null
+      const ownAfter = own && ownNext ? ('error' in ownNext ? { ...own, ...p.block } : ownNext) : null
+      if (own && ownAfter && tg.date! > b.today) {
         const r = paths.day(tg.date!)
-        t.set(r, putBlock(dayRaw(await t.get(r), tg.date!), { ...own, ...p.block }))
+        t.set(r, putBlock(dayRaw(await t.get(r), tg.date!), ownAfter))
       }
-      if (own && tg.date === b.today) await today(io, b, t, s.root, next, false, { was: own, next: { ...own, ...p.block } })
+      if (own && ownAfter && tg.date === b.today) await today(io, b, t, s.root, next, false, { was: own, next: ownAfter })
       else await today(io, b, t, s.root, next)
       // An end moved earlier takes the occurrences changed on their days after it, as „Zakończ serię” does (D404).
       const lastAfter = seriesLast(changed, typeOf(b), io.holidays)
@@ -400,6 +414,8 @@ export function seriesRemove(io: SeriesIo, target: unknown, scope: unknown): Pro
         const r = paths.day(tg.date)
         const base = dayRaw(await t.get(r), tg.date)
         t.set(r, tg.day.ctx.snapshot.blocks.some((x) => x.id === tg.block!.id) ? setCancelled(base, tg.block.id, true) : takeBlock(base, tg.block.id))
+        // The occurrence's own attachments go with it (D410, T805) – in the same edit, back with its „Cofnij”.
+        await removeOwnAttachments(io, b, t, tg.block.id)
         return s.id
       }
       const from0 = scope === 'all' ? b.today : tg.date && tg.date > b.today ? tg.date : b.today
@@ -409,6 +425,27 @@ export function seriesRemove(io: SeriesIo, target: unknown, scope: unknown): Pro
     },
     io.folder
   )
+}
+
+/** The attachments a block of a day had of its own (not the series'), removed in the change's edit (T805). */
+async function removeOwnAttachments(io: SeriesIo, b: Base, t: Touched, blockId: string): Promise<void> {
+  let raws: RawRecord[]
+  try {
+    raws = await io.folder.collection('attachment')
+  } catch {
+    // The list cannot be read now: the attachments stay (they are not shown without their block).
+    return
+  }
+  // The list only says which may be the block's (it is trusted from memory for a minute, LIST_TRUST_MS); each is read again
+  // as this computer sees it now and changed from that (T839) – a change from another computer stays, one removed there stays so.
+  const own = new Set(ownAttachmentIds(raws.map(attachmentFrom).filter((a): a is Attachment => !!a), blockId))
+  for (const id of own) {
+    const rel = attachmentRel(id)
+    const before = await t.get(rel)
+    const a = before ? attachmentFrom(before) : null
+    if (!before || !a || a.removedAt != null || a.owner.scope !== 'day' || a.owner.blockId !== blockId) continue
+    t.set(rel, attachmentJson({ ...a, removedAt: b.now }, before))
+  }
 }
 
 /** The series ends the day before `from` (`remove` – also out of the list): today's occurrence and the changed ones after it go. */
@@ -466,7 +503,7 @@ export function seriesUndo(io: SeriesIo, undo: unknown): Promise<SeriesResult> {
       for (const u of list) {
         if (!isRaw(u) || typeof u.rel !== 'string') continue
         const c = classify(u.rel)
-        if (!c || c.conflict || (c.kind !== 'series' && c.kind !== 'day')) continue
+        if (!c || c.conflict || (c.kind !== 'series' && c.kind !== 'day' && c.kind !== 'attachment')) continue
         const before = isRaw(u.before) ? u.before : null
         const after = isRaw(u.after) ? u.after : null
         const now = await t.get(c.canonical)

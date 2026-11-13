@@ -49,7 +49,7 @@ import { dayLengthMin, placeLogical } from '@shared/time/day'
 import { RULES_VERSION, type AnyEvent } from '@shared/model/events'
 import { lm, Scenario } from './dsl'
 
-const physio: SeriesBlock = { categoryId: 'inne', variantId: null, startMin: lm('17:00'), durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null }
+const physio: SeriesBlock = { categoryId: 'inne', variantId: null, startMin: lm('17:00'), durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null, steps: [] }
 const flexible: SeriesBlock = { ...physio, fixed: false, name: 'Angielski', startMin: lm('17:00'), durationMin: 45 }
 
 const make = (id: string, rule: SeriesRule, start: string, o: { block?: SeriesBlock; until?: string | null; count?: number | null; special?: Series['versions'][number]['special'] } = {}): Series =>

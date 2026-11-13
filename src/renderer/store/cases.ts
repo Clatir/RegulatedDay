@@ -31,7 +31,7 @@ import { newRequest, newTask, requestFrom, type CaseList, type NewTask } from '@
 import { settingsOn } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { useNow } from '../lib/clock'
-import { editOf, isSaved, rawRecord, trySaveWith, useData } from './data'
+import { editOf, isSaved, rawRecord, saveAnswer, trySaveWith, useData, type SaveAnswer, type SendState } from './data'
 import { toast } from './ui'
 
 const relOf = (id: string): string => paths.record('request', id)
@@ -146,15 +146,30 @@ export interface CaseResult {
   id: string | null
   /** „Cofnij” of this change (`undoCase`); empty when nothing was saved. */
   undo: CaseUndoFile[]
+  /**
+   * Whether the edits were handed to the queue (`SendState.afterSend`): no outcomes after it – the result is not known (the
+   * folder may have it – `saveAnswer` says „asked”, never a refusal); absent – a result made without a send.
+   */
+  sent?: SendState
+}
+
+/**
+ * What a change became for a field or a button (one reading for every screen of „Sprawy” and the steps): saved – true; a
+ * refusal of ours (`error`) or nothing sent – false (the field gets its text back); sent and its answer not known (a failure
+ * after the queue took it) or a question – `'asked'`: never given back, a second Enter would make it twice.
+ */
+export function caseAnswer(r: Pick<CaseResult, 'saved' | 'error' | 'outcomes' | 'sent'>): SaveAnswer {
+  return r.saved ? true : r.error ? false : saveAnswer(r.outcomes, r.sent)
 }
 
 /**
  * Edits of several files in one turn: `make` puts each file's version before and after (a file put twice keeps its
  * first before) or says why nothing is written; saved together – one edit of the queue.
  */
-async function change(make: (put: (rel: string, before: RawRecord | null, after: RawRecord | null) => void) => Promise<string | null> | string | null): Promise<CaseResult> {
+export async function change(make: (put: (rel: string, before: RawRecord | null, after: RawRecord | null) => void) => Promise<string | null> | string | null): Promise<CaseResult> {
   let error: string | null = null
   let undo: CaseUndoFile[] = []
+  const sent: SendState = { afterSend: false }
   const out = await trySaveWith(async () => {
     const files = new Map<string, { before: RawRecord | null; after: RawRecord | null }>()
     error = await make((rel, before, after) => {
@@ -164,10 +179,10 @@ async function change(make: (put: (rel: string, before: RawRecord | null, after:
     if (error) return []
     undo = [...files].map(([rel, f]) => ({ rel, before: f.before, after: f.after })).filter((f) => (f.before == null ? f.after != null : f.after == null || !sameContentAs(f.before, f.after)))
     return undo.map((f) => editOf(f.rel, f.before, f.after))
-  })
+  }, sent)
   if (error) toast(error, 'error', 6000)
   const saved = !error && isSaved(out)
-  return { saved, error, outcomes: out, id: null, undo: saved ? undo : [] }
+  return { saved, error, outcomes: out, id: null, undo: saved ? undo : [], sent }
 }
 
 /**
@@ -376,6 +391,11 @@ export async function planMorning(date: string, seen: RawRecord | null, chosen: 
 
 /** „Cofnij” of one change: each file back as it was before it – only while it stands as the change left it. */
 export function undoCase(undo: readonly CaseUndoFile[]): Promise<CaseResult> {
+  return undoFiles(undo, ['day', 'request'])
+}
+
+/** „Cofnij” of the files of one change of the kinds named (a day's file, a record of `kinds`) – each only while it stands as the change left it. */
+export function undoFiles(undo: readonly CaseUndoFile[], kinds: readonly string[]): Promise<CaseResult> {
   return change(async (put) => {
     const dates = undo.flatMap((u) => {
       const c = classify(u.rel)
@@ -385,7 +405,7 @@ export function undoCase(undo: readonly CaseUndoFile[]): Promise<CaseResult> {
     if (!days) return DAY_UNREADABLE
     for (const u of undo) {
       const c = classify(u.rel)
-      if (!c || c.conflict || (c.kind !== 'day' && c.kind !== 'request')) continue
+      if (!c || c.conflict || !kinds.includes(c.kind)) continue
       const now = c.kind === 'day' ? (days[c.date!] ?? null) : rawRecord(u.rel)
       const stands = now == null ? u.after == null : u.after != null && isRaw(now) && sameContentAs(now, u.after)
       // Changed since (here or on another computer): never written over.

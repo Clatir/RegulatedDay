@@ -65,7 +65,12 @@ export async function createSeries(input: SeriesCreate, text: string): Promise<{
 
 /** A change by its scope („Tylko to” goes through the day's own edit – this is „To i następne” and „Cała seria”, and the list's). */
 export async function changeSeries(target: SeriesTarget, scope: SeriesScope, patch: SeriesPatch, text: string): Promise<SaveAnswer> {
-  return (await call(() => window.rd.seriesChange(target, scope, patch), text)).answer
+  return (await changeSeriesWith(target, scope, patch, text)).answer
+}
+
+/** As `changeSeries`, with the series' answer (`result` null – the bridge failed: no answer at all). */
+export function changeSeriesWith(target: SeriesTarget, scope: SeriesScope, patch: SeriesPatch, text: string): Promise<{ answer: SaveAnswer; result: SeriesResult | null }> {
+  return call(() => window.rd.seriesChange(target, scope, patch), text)
 }
 
 /** A removal by its scope. */

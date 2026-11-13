@@ -156,5 +156,6 @@ export function recordTitle(rel: string, requests: readonly Pick<RequestRecord, 
   }
   if (rel.startsWith('routines/')) return 'Rutyna'
   if (rel.startsWith('allday/')) return 'Wydarzenie'
+  if (rel.startsWith('attachments/')) return 'Załącznik'
   return 'Rekord'
 }

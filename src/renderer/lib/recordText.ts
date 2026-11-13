@@ -36,17 +36,20 @@ const BLOCK_FIELDS: Record<string, string> = {
   moves: 'licznik przeniesień',
   requests: 'prośby',
   routine: 'rutyna',
+  steps: 'kroki',
   movedFrom: 'przeniesiony z',
   byVariant: 'zmieniony wariantem'
 }
 
-const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok', title: 'tytuł', kind: 'rodzaj', categoryId: 'kategoria', list: 'lista', listDay: 'dzień na liście „Dziś”', doneAt: 'zrobione', dueDate: 'termin', doDate: 'wykonać', listSetDay: 'dzień przeniesienia na listę', priority: 'priorytet' }
+const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok', title: 'tytuł', kind: 'rodzaj', categoryId: 'kategoria', list: 'lista', listDay: 'dzień na liście „Dziś”', doneAt: 'zrobione', dueDate: 'termin', doDate: 'wykonać', listSetDay: 'dzień przeniesienia na listę', priority: 'priorytet', steps: 'kroki', stepsDone: 'odhaczone kroki' }
 const ROUTINE_FIELDS: Record<string, string> = { name: 'nazwa', normal: 'kroki (zwykła)', worse: 'kroki (na gorsze dni)', archived: 'archiwum' }
 const SERIES_FIELDS: Record<string, string> = { start: 'pierwszy dzień', until: 'koniec (dzień)', count: 'koniec (liczba razy)', archived: 'usunięta z listy', root: 'seria' }
 /** The kinds of a series' rule (D381) as the panel of a block says them. */
 const RULE_KINDS: Record<string, string> = { daily: 'codziennie', workdays: 'w dni robocze', weekly: 'co tydzień lub co kilka tygodni', monthDay: 'wybranego dnia miesiąca', monthWeekday: 'wybranego dnia tygodnia miesiąca' }
 const RULE_FIELDS: Record<string, string> = { kind: 'reguła', every: 'reguła: co ile tygodni', days: 'reguła: dni tygodnia', anchor: 'reguła: tydzień początkowy', day: 'reguła: dzień miesiąca', nth: 'reguła: który z kolei', weekday: 'reguła: dzień tygodnia' }
 const ALL_DAY_FIELDS: Record<string, string> = { title: 'tytuł', startDate: 'od', endDate: 'do', color: 'kolor', note: 'notatka', free: 'to wolne', calendarId: 'kalendarz' }
+/** An attachment's fields (D410): its name, the file or the link, whose it is, its removal. */
+const ATTACHMENT_FIELDS: Record<string, string> = { kind: 'rodzaj', name: 'nazwa', file: 'plik', link: 'link', owner: 'do czego należy', addedAt: 'dodany', removedAt: 'usunięcie' }
 const STATES: Record<string, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobiona', dropped: 'porzucona' }
 
 /** A value as shown: minutes and times as the fields show them, ids as names, objects briefly. */
@@ -60,7 +63,7 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
   if (typeof v === 'number') {
     if (key === 'startMin' || key === 'waitUntilMin' || key === 'wakeMin' || key === 'maxMin' || key === 'bedtimeMin') return logicalClock(v)
     if (key && /Min$/.test(key)) return durationLabel(v)
-    if (key === 'savedAt' || key === 'createdAt' || key === 'at' || key === 'doneAt') return new Date(v).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })
+    if (key === 'savedAt' || key === 'createdAt' || key === 'at' || key === 'addedAt' || key === 'removedAt' || key === 'doneAt') return new Date(v).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })
     return String(v)
   }
   if (typeof v === 'string') {
@@ -69,6 +72,7 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
     if (key === 'dayType') return DAY_TYPE_NAMES[v as DayTypeId] ?? v
     if (key === 'color' && Object.hasOwn(ALL_DAY_COLOR_NAMES, v)) return ALL_DAY_COLOR_NAMES[v as AllDayColor]
     if (key === 'state') return STATES[v] ?? v
+    if (key === 'kind' && (v === 'file' || v === 'link')) return v === 'file' ? 'plik' : 'link'
     // „Sprawy” (D383): the list by its name, the kind as a task or a request.
     if (key === 'list') return CASE_LIST_NAMES[v as CaseList] ?? v
     if (key === 'priority' && isPriority(v)) return PRIORITY_NAMES[v].name
@@ -99,6 +103,10 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
       const name = typeof v.name === 'string' && v.name.trim() ? v.name.trim() : categoryName(n.rd, v.categoryId)
       return `${name}${start}${dur}`
     }
+    // An attachment's parts (D410): the file by its name, the link by its title or domain, the owner by its kind.
+    if (key === 'file' && typeof v.fileName === 'string') return v.fileName
+    if (key === 'link') return typeof v.title === 'string' && v.title ? v.title : typeof v.domain === 'string' && v.domain ? v.domain : 'link'
+    if (key === 'owner') return v.scope === 'day' ? 'blok dnia' : v.scope === 'template' ? 'blok szablonu' : v.scope === 'series' ? 'seria' : 'inny'
     if (typeof v.name === 'string') return v.name
     return 'zmienione ustawienia'
   }
@@ -123,6 +131,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames): s
     if (a === 'sessions') return 'odpowiedzi warstwy sesji'
     if (a === 'asked') return 'pytania tego dnia'
     if (a === 'classImport') return 'import zjazdów'
+    if (a === 'stepsDone') return b ? `${blockPart(b, undefined)}: odhaczone kroki` : 'odhaczone kroki'
     if (a === 'seriesOff') return b ? `${blockPart(b, undefined)}: odwołany przez zmianę serii` : 'odwołane przez zmianę serii'
     return 'inne pole dnia'
   }
@@ -145,6 +154,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames): s
   if (kind === 'request') return REQUEST_FIELDS[a ?? ''] ?? 'inne pole sprawy'
   if (kind === 'routine') return ROUTINE_FIELDS[a ?? ''] ?? 'inne pole rutyny'
   if (kind === 'allDay') return ALL_DAY_FIELDS[a ?? ''] ?? 'inne pole wydarzenia'
+  if (kind === 'attachment') return a === 'link' && b === 'title' ? 'tytuł linku' : a === 'link' && b === 'iconDataUrl' ? 'ikona linku' : (ATTACHMENT_FIELDS[a ?? ''] ?? 'inne pole załącznika')
   if (kind === 'schedule') return a === 'name' ? 'nazwa' : a === 'weekday' ? 'dzień tygodnia' : a === 'startMin' ? 'godzina' : a === 'durationMin' ? 'długość' : a === 'from' ? 'od' : a === 'to' ? 'do' : 'inne pole wykładu'
   if (kind === 'settings') {
     if (a === 'people') return b ? `osoba ${n.rd.people.find((p) => `#${p.id}` === b)?.name ?? ''}`.trim() : 'osoby'

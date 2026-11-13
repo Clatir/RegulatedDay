@@ -14,6 +14,7 @@ import { dueBadge } from '@shared/engine/caseDates'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
 import { durationLabel } from '@shared/format'
 import { personName } from '@shared/model/rd'
+import { stepsCounter } from '@shared/model/steps'
 import { CASE_LIST_NAMES, CASE_LISTS, ESTIMATE_RANGE, priorityFrom, TITLE_MAX, CASE_NOTE_MAX, DEFAULT_ESTIMATE_MIN, DEFAULT_TASK_CATEGORY, type CaseList } from '@shared/model/requests'
 import { settingsOn } from '@shared/model/settings'
 import { parseQuickDates } from '@shared/quickDates'
@@ -24,9 +25,10 @@ import { EmptyState, Section, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
-import { changeCase, createRequest, createTask, moveCase, removeCase, undoCase, useCases } from '../../store/cases'
+import { caseAnswer, changeCase, createRequest, createTask, moveCase, removeCase, undoCase, useCases } from '../../store/cases'
 import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
+import { changeTaskSteps, tickTaskStep } from '../../store/steps'
 import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 import { categoryOptions } from '../plan/blockView'
 import { caseTitle, DATE_PRESETS, afterRequestAdded, doDateNote, filterOf, PRIORITY_CHOICES, presetDate, sectionsOf, statusParts, type PriorityChoice } from './casesLogic'
@@ -36,6 +38,8 @@ import { DueMark } from './DueMark'
 import { PriorityMark } from './PriorityMark'
 import { nextFreeStart, submitTitle } from './casesUi'
 import { planOnAxis } from './planOnAxis'
+import { StepsEditor } from '../steps/StepsEditor'
+import { stepsAnswer } from '../steps/stepsUi'
 
 export function CasesPage() {
   const rd = useData((s) => s.rd)
@@ -179,7 +183,7 @@ function NewTask({ onClose }: { onClose: () => void }) {
   const today = logicalDayOf(useNow(60_000))
   const preview = parseQuickDates(title, today).preview
   // Once: the field is cleared at once and a second Enter (or „Dodaj”) while it saves does nothing; a save that did not happen gives the title back.
-  const add = () => submitTitle(run, title, { set: setTitle, save: async (t) => (await createTask({ title: t })).saved, done: onClose })
+  const add = () => submitTitle(run, title, { set: setTitle, save: async (t) => caseAnswer(await createTask({ title: t })), done: onClose })
   return (
     <div className="flex flex-col gap-1" data-testid="case-add">
       <div className="flex items-center gap-2">
@@ -224,6 +228,9 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
   const names = useMemo(() => ({ rd, settings: settingsOn(rd.settings, today) }), [rd, today])
   const [planning, setPlanning] = useState(false)
   const [dating, setDating] = useState(false)
+  // D440: a task's steps open under its row (as the note of a request is read there); the counter stays in the row.
+  const [stepsOpen, setStepsOpen] = useState(false)
+  const counter = isTask ? stepsCounter(r.steps) : null
   const set = (patch: Parameters<typeof changeCase>[1]) => void changeCase(r.id, patch)
   const remove = async () => {
     const res = await removeCase(r.id)
@@ -251,6 +258,11 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
           {parts.join(' · ')}
         </span>
         <Choice value={x.list} options={CASE_LISTS.map((l) => ({ value: l, label: CASE_LIST_NAMES[l] }))} onChange={(list: CaseList) => void moveCase(r.id, list)} className="h-[24px] text-[12px]" aria-label="Lista" data-testid="case-list" />
+        {isTask && (
+          <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={stepsOpen} onClick={() => setStepsOpen(!stepsOpen)} data-testid="case-steps-toggle">
+            Kroki{counter ? ` ${counter}` : ''}
+          </button>
+        )}
         {!done && (
           <>
             <Choice value={(r.priority ?? 'none') as PriorityChoice} options={PRIORITY_CHOICES} onChange={(v: PriorityChoice) => set({ priority: priorityFrom(v) })} className="h-[24px] text-[12px]" aria-label="Priorytet" data-testid="case-priority-choice" />
@@ -270,6 +282,11 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
         </button>
       </div>
       {dating && !done && <DatesForm x={x} set={set} />}
+      {isTask && stepsOpen && (
+        <div className="border-t border-line pt-1.5" data-testid="case-steps">
+          <StepsEditor steps={r.steps} ticks kind="task" onTick={(id, d) => tickTaskStep(r.id, id, d)} onOp={async (op) => stepsAnswer(op, await changeTaskSteps(r.id, op))} />
+        </div>
+      )}
       {planning && <PlanForm x={x} today={today} title={caseTitle(r, rd)} onDone={() => setPlanning(false)} />}
     </div>
   )

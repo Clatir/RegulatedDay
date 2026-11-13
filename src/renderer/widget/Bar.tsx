@@ -13,7 +13,7 @@ import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/r
 import { TITLE_MAX } from '@shared/model/requests'
 import { quickPreview } from '@shared/quickDates'
 import { barBackground, TONE_SETS } from '@shared/theme'
-import { SEEN_LINE, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type RunningRequest, type WidgetView } from '@shared/widget'
+import { ALL_STEPS_TEXT, barStepText, SEEN_LINE, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
@@ -376,6 +376,32 @@ function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: Ba
           ✓ Zapisz zaznaczone{done.size ? ` (${done.size})` : ''}
         </BarButton>
       </div>
+    </div>
+  )
+}
+
+/**
+ * The step of the block in the foreground (D440): „☐ <krok> · krok 1/4” – the box is the tick (a click, also on the desktop
+ * bar that takes no keys – D229), the next step comes with the view; after the last one „Wszystkie kroki ✓”. No sound.
+ */
+export function StepLine({ steps, mode }: { steps: BarSteps; mode: BarMode }) {
+  const step = steps.step
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 text-[12.5px]" data-testid="bar-step">
+      {step ? (
+        <>
+          <BarButton mode={mode} testId="bar-step-tick" label={`Odhacz: ${step.title}`} onAct={() => act('step', `${steps.block}|${step.id}`)}>
+            ☐
+          </BarButton>
+          <span className="min-w-0 truncate text-fg" data-testid="bar-step-text">
+            {barStepText(steps)}
+          </span>
+        </>
+      ) : (
+        <span className="text-muted" data-testid="bar-step-text">
+          {ALL_STEPS_TEXT}
+        </span>
+      )}
     </div>
   )
 }
@@ -869,6 +895,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
             <RequestLine run={running} mode={mode} now={now} />
           </div>
         )}
+        {view.steps && view.block && <StepLine steps={view.steps} mode={mode} />}
         {view.requests.interrupted && (
           <div className="text-[12px] text-muted" data-testid="bar-interrupted">
             {view.requests.interrupted}

@@ -26,7 +26,7 @@ import {
 } from '@renderer/features/series/seriesForm'
 
 const own = planBlock({ id: 'own', categoryId: 'inne', startMin: 17 * 60, durationMin: 60, origin: 'user' })
-const block: SeriesBlock = { categoryId: own.categoryId, variantId: null, startMin: 17 * 60, durationMin: 60, fixed: false, background: null, costs: own.costs, bgCostPct: null, note: '', name: null, routine: null }
+const block: SeriesBlock = { categoryId: own.categoryId, variantId: null, startMin: 17 * 60, durationMin: 60, fixed: false, background: null, costs: own.costs, bgCostPct: null, note: '', name: null, routine: null, steps: [] }
 const series = (rule: SeriesRule, end: { until: string | null; count: number | null } = { until: null, count: null }, start = '2026-11-12') => newSeries('s1', block, start, rule, 'ask', end)
 const blockOf = (o: Partial<Parameters<typeof planBlock>[0]>) => planBlock({ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60, origin: 'user', ...o })
 

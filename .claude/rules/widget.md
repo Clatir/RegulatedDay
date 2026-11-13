@@ -91,6 +91,9 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   odpowiedzi (odmowa odpowiedzi linii – nic), potem jedna edycja pliku dnia i linia `moved:push`; nieudana edycja – `unmark`
   (`undo` odpowiedzi) i pytanie zostaje (T601, T602); odmowa `mark` przy „Zostaw” – powód w pasku.
 
+- Kroki (D440, T793, reguły `kroki.md`): `WidgetView.steps` – „☐ <krok> · krok 1/4” pod blokiem na pierwszym planie
+  (`StepLine`, ptaszek `bar-step-tick` = akcja `step` `<blok>|<krok>` → `tickStep`), po ostatnim „Wszystkie kroki ✓”; w każdym
+  trybie poza „Odcinam się”; bez dźwięku i kropki.
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
 

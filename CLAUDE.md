@@ -11,7 +11,8 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
 - Zachowanie widoczne dla użytkownika zmienia się tylko po pytaniu, nigdy zgodą hurtem. Sprawy techniczne rozstrzygaj
   sam i dopisz jako T-decyzję.
 - PR-y otwieraj i scalaj bez pytania, gdy CI jest zielone i nic nie czeka na decyzję (D285, D333). Do `main` pisze
-  naraz jedna sesja; po scaleniu sprawdź, że zadanie Windows w CI opublikowało wydanie.
+  naraz jedna sesja; po scaleniu sprawdź, że zadanie Windows w CI opublikowało wydanie. Wydanie po paczce 2–3 zadań
+  (D413): zadanie – testy lokalne i `/code-review`, scalenie do gałęzi paczki bez CI; paczka – jeden PR z pełnym CI.
 - Plan napraw (D349, D351): główna sesja na Opus 5.5 · high zleca test i poprawkę każdego zadania wykonawcy
   z `.claude/agents/` według kolumny „Wykonawca” w `docs/plan.md`, a sama sprawdza, robi `/code-review`, PR i scalanie.
 - **Tokeny (D351):** `/code-review` według ryzyka (xhigh – silnik dnia, folder danych, pasek i okna, instalator;
@@ -34,9 +35,9 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
 - `docs/specyfikacja.md` – aktualne reguły (v29), ~420 KB. **Nie czytaj w całości:** Grep po nagłówku `##` albo
   identyfikatorze, potem `Read` z `offset`/`limit`. Rozdziały: Model dnia, Model energii, Bloki, Zakres 1.0, Timer,
   Grywalizacja, Wygląd, Dane i ustawienia, Konwencje interfejsu, Jakość i protokół, Plan budowy.
-- `docs/decyzje.md` – decyzje D (użytkownik), `docs/decyzje-techniczne.md` – T400 i nowsze,
-  `docs/decyzje-techniczne-T1-T399.md` i `-T500-T599.md` – starsze T (D308, T535, T857); czytaj Grepem po numerze. Nie zmieniaj D bez
-  pytania; nowa decyzja wskazuje, którą zastępuje.
+- `docs/decyzje.md` – decyzje D (użytkownik), `docs/decyzje-techniczne.md` – T600 i nowsze, starsze T –
+  `docs/decyzje-techniczne-T1-T399.md`, `-T400-T499.md` i `-T500-T599.md` (D308, T535, T840, T857); czytaj
+  Grepem po numerze. Nie zmieniaj D bez pytania; nowa decyzja wskazuje, którą zastępuje.
 - `docs/plan.md` – tylko praca do zrobienia: ciągi, rodzaj, model, szacunek, „gotowe, gdy” (D317, D349).
   `docs/postep.md` – stan bieżący i kolejka (≤ 20 KB; zakończone wpisy → `docs/archiwum/postep-*.md`).
 - `docs/odbior.md` – listy do odbioru na Windows (oczekiwany efekt i błędy blokujące każdego punktu); opisy

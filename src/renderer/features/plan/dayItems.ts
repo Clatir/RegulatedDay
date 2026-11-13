@@ -13,6 +13,7 @@ import { atOf, logicalSpan } from '@shared/engine/grid'
 import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
 import { durationLabel, logicalClock } from '@shared/format'
+import { stepsCounter } from '@shared/model/steps'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import type { DayModel } from '../../store/day'
@@ -63,6 +64,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
     }
     if (from == null || to == null) continue
     const edge = f?.startedAt != null && f.endedAt == null ? edges?.get(p.id) : undefined
+    const counter = stepsCounter(p.steps)
     items.push({
       id: p.id,
       // As long as it lasts, also across the doubled hour of a 25-hour day (`logicalSpan` – the preview of a push the same).
@@ -76,6 +78,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       ...(p.origin === 'series' ? { series: true } : {}),
       ...taskBadge(sprawa, today, model.date),
       ...taskPriority(sprawa),
+      // D440: the counter of its steps on the tile (none – nothing).
+      ...(counter ? { steps: counter } : {}),
       ...(edge ? { resize: 'end' as const } : {}),
       // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
       // a class imported from the PDF of „zjazdy” – D357, nor the second shift – D192), not passed.

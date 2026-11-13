@@ -10,6 +10,7 @@ import { BrowserWindow, screen } from 'electron'
 import type { Rect } from '@shared/bounds'
 import type { PanelTarget } from '@shared/protocol'
 import { PALETTE } from '@shared/theme'
+import { keepOnPage } from './navigation'
 
 export const PANEL_GRACE_MS = 500
 export const PANEL_IDLE_MS = 60_000
@@ -79,7 +80,8 @@ export class IconPanel {
         additionalArguments: ['--rd-view=panel']
       }
     })
-    this.win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    // A file or a link dropped on it never loads in it, no window opens from it (as every window, T755).
+    keepOnPage(this.win.webContents)
     this.win.on('page-title-updated', (e) => e.preventDefault())
     this.win.on('blur', () => {
       if (closesOnBlur({ helperRunning: this.d.helperRunning(), stayOnTop: this.d.stayOnTop?.() === true, sinceOpenMs: Date.now() - this.openedAt })) this.close('utrata fokusu')

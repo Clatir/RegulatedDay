@@ -11,6 +11,7 @@
  * HKU3 (D450): the quarter of the Eisenhower matrix (`priority`) of every sprawa – none by default.
  */
 import { isIsoDate } from '../time/zone'
+import { doneSetFrom, stepsFrom, type Step } from './steps'
 
 export const REQUEST_SCHEMA = 1
 
@@ -88,6 +89,11 @@ export interface RequestRecord {
   listSetDay: string | null
   /** The quarter of the Eisenhower matrix (D450); null – none. A done sprawa keeps it but lists do not order it by it. */
   priority: Priority | null
+  /**
+   * A task's list „Kroki” (D440, T786): in the file `steps` (the list) and `stepsDone` (step id → true); its block gets a
+   * copy of the list, and a tick in the block ticks it here too (`engine/steps.ts`). A version that does not know them keeps them.
+   */
+  steps: Step[]
 }
 
 /** The estimate's range (a field of whole minutes, like a block's length). */
@@ -129,7 +135,8 @@ export function requestFrom(v: unknown): RequestRecord | null {
     dueDate: dateFrom(v.dueDate),
     doDate: dateFrom(v.doDate),
     listSetDay: dateFrom(v.listSetDay),
-    priority: priorityFrom(v.priority)
+    priority: priorityFrom(v.priority),
+    steps: stepsFrom(v.steps, doneSetFrom(v.stepsDone))
   }
 }
 

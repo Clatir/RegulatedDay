@@ -11,6 +11,7 @@ import { SESSION_CATEGORY } from '../model/categories'
 import type { DaySnapshot } from '../model/events'
 import { PLAN_MAX, PLAN_MIN, planBlock, templateFor, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
 import type { SeriesPlan } from '../model/series'
+import { stepsFrom, withDone } from '../model/steps'
 import { DEFAULT_SETTINGS, settingsOn, type DayTypeId, type RulesSettings, type SessionDef, type SettingsChange } from '../model/settings'
 import { dayEnd, dayStart, logicalMinuteOf, placeLogical } from '../time/day'
 import { MINUTE, PL_ZONE, addDays, offsetMin, placeWall, weekday } from '../time/zone'
@@ -276,7 +277,22 @@ export function dayPlan(snapshot: DaySnapshot, dayFile: DayFile | null): PlanBlo
       }
     }
   }
-  return [...out.values()]
+  return [...out.values()].map((b) => withDayTicks(b, dayFile))
+}
+
+/**
+ * A block of the plan with its steps as the day has them (D440, T786): the list read as a file's (a block of a snapshot
+ * of the log is raw – one written by a version without steps has none), each step ticked by the day's file. Unchanged
+ * blocks stay the same objects.
+ */
+function withDayTicks(b: PlanBlock, dayFile: DayFile | null): PlanBlock {
+  const raw = (b as { steps?: unknown }).steps
+  // A file made by hand (a test, an import) may lack the field – no ticks then.
+  const ticks = dayFile?.stepsDone?.[b.id]
+  if (!Array.isArray(raw) || raw.length === 0) return Array.isArray(raw) ? b : { ...b, steps: [] }
+  // A list read already (a file's, a template's, a series') has `done` on every step; a raw one of the log is read here.
+  const steps = withDone(raw.every((s) => typeof s?.done === 'boolean') ? b.steps : stepsFrom(raw), new Set(ticks ?? []))
+  return steps.every((s, i) => s === b.steps[i]) && steps.length === b.steps.length ? b : { ...b, steps }
 }
 
 /**

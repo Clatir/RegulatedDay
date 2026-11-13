@@ -16,6 +16,7 @@ import type { DayTypeId } from './model/settings'
 import type { ZjazdDay, ZjazdWarning } from './import/zjazdy'
 import type { SeriesRule, SpecialDays } from './model/series'
 import type { SeriesPatch } from './engine/series'
+import type { AttachmentOwner } from './model/attachment'
 import type { IdentityKind } from './identity'
 import type { Rect } from './bounds'
 import type { BarSpot, MachinePrefs } from './machine'
@@ -101,6 +102,13 @@ export const CH = {
   seriesEnd: 'rd:seriesEnd',
   seriesAnswer: 'rd:seriesAnswer',
   seriesUndo: 'rd:seriesUndo',
+  attachFiles: 'rd:attachFiles',
+  attachPick: 'rd:attachPick',
+  attachCommit: 'rd:attachCommit',
+  addLink: 'rd:addLink',
+  openAttachment: 'rd:openAttachment',
+  openAttachments: 'rd:openAttachments',
+  showAttachment: 'rd:showAttachment',
   quickAdd: 'rd:quickAdd',
   quickClose: 'rd:quickClose',
   quickToday: 'rd:quickToday',
@@ -120,6 +128,11 @@ export interface CaseDays {
   gone: Record<string, string[]>
   /** The blocks begun by the log (of a day whose log is known – read in full or `away`; T769: an old block not begun may go). */
   begun: Record<string, string[]>
+  /**
+   * The days whose file is broken (it will never be read as it is – restored from the history at most), apart from those
+   * that cannot be read now (left out of `files` too, but read again in a moment). Absent – none, or a main process before it.
+   */
+  broken?: string[]
 }
 
 /** The quick capture saved (D385): the new task's id; refused – why (no folder, no title). */
@@ -273,6 +286,8 @@ export type WidgetAction =
   | 'quickAdd'
   /** „+” of the desktop bar: the icon's panel opens with the field (T756). */
   | 'quickOpen'
+  /** The tick of the bar's step line (D440): `<block>|<step>` ticked off on the bar's day. */
+  | 'step'
 
 /** The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests). */
 export type BarActionId = 'placeBar' | 'corner' | 'openPanel'
@@ -308,6 +323,13 @@ export interface DataView {
   seriesDays: Record<string, string>
   /** All-day and multi-day events (D405, allday/<id>.json) – never read by the engine of the day. */
   allDay: RawRecord[]
+  /** Attachments of blocks (D410, attachments/<id>.json) – also the removed ones (their „Cofnij”, 30 days). */
+  attachments: RawRecord[]
+  /**
+   * Attachments whose file is not on this computer yet (the record came first – OneDrive brings the file later, T802):
+   * the window shows them as „not here yet”; opening one says so instead of failing.
+   */
+  attachmentsMissing: string[]
   /**
    * Computers that have written a presence (for „komputer nagrywający”), this one first; another one still present carries
    * the version of its app (D388: the warning under a long note).
@@ -378,6 +400,8 @@ export interface SearchBlock {
   id: string
   title: string
   note: string
+  /** Its steps (D440) – found as its text; absent from a main process without steps. */
+  steps?: Array<{ title: string }>
 }
 
 /** The blocks of every day file of the data folder; `complete` false: some file could not be read now (never taken for none). */
@@ -642,6 +666,39 @@ export interface SeriesResult {
   undo: SeriesUndoFile[]
 }
 
+/** What a drop or a choice of files for a block did (D410): the attachments made, and each file that did not go with why. */
+export interface AttachResult {
+  added: string[]
+  failed: Array<{ name: string; error: string }>
+}
+
+/** Files copied for a block, their records not written yet (T839): the copies (`attachCommit` writes them) and each file that did not go. */
+export interface AttachPrepared {
+  ids: string[]
+  failed: Array<{ name: string; error: string }>
+}
+
+/** A link added (D410): its attachment, or why not (an address that does not open, nothing saved). */
+export interface AddLinkResult {
+  ok: boolean
+  id: string | null
+  error: string | null
+}
+
+/**
+ * An attachment opened (D410, T803, T804): `opened` – the file in its program, `link` – the address in the browser or the
+ * mail program, `shown` – shown in its folder (a file Windows would run: the window says so with `text`). Not opened:
+ * `missing` – the file is not on this computer yet, `gone` – no such attachment (any more), `refused` – an address or a
+ * path that does not open, `failed` – Windows refused (its words in `text`).
+ */
+export interface AttachmentOpen {
+  id: string
+  ok: boolean
+  how: 'opened' | 'link' | 'shown' | null
+  code: 'missing' | 'gone' | 'refused' | 'failed' | null
+  text: string | null
+}
+
 export interface RdApi {
   view: ViewKind
   appInfo(): Promise<AppInfo>
@@ -799,6 +856,28 @@ export interface RdApi {
   seriesAnswer(date: string, blockId: string, keep: boolean): Promise<SeriesResult>
   /** „Cofnij” of one change of a series: each file back as before it, only while it stands as the change left it. */
   seriesUndo(undo: SeriesUndoFile[]): Promise<SeriesResult>
+  /**
+   * The path of a file dropped from Explorer (Electron's `webUtils.getPathForFile` – `File.path` is gone); '' – not a file
+   * of the disk (a picture dragged from a page).
+   */
+  pathForFile(file: File): string
+  /**
+   * Files dropped on a block (D410): copied into the data folder – no records yet (T839); `attachCommit` writes them in the
+   * turn of the window's edits (a block removed meanwhile gets them removed).
+   */
+  attachFiles(owner: AttachmentOwner, paths: string[]): Promise<AttachPrepared>
+  /** „Dołącz plik…”: the main process asks for the files (its own dialog) and copies them; none chosen – none. */
+  attachPick(owner: AttachmentOwner): Promise<AttachPrepared>
+  /** The records of copies made (`attachFiles`, `attachPick`) – one edit (`AttachResult`). */
+  attachCommit(ids: string[]): Promise<AttachResult>
+  /** A link added (D410): written at once; the page's title and icon follow on their own (the view changes). */
+  addLink(owner: AttachmentOwner, url: string): Promise<AddLinkResult>
+  /** An attachment opened by its id – the main process takes its path or address from the record (`AttachmentOpen`). */
+  openAttachment(id: string): Promise<AttachmentOpen>
+  /** „Otwórz wszystko (N)”: one after another by the same rules. */
+  openAttachments(ids: string[]): Promise<AttachmentOpen[]>
+  /** „Pokaż w folderze” of a file attachment. */
+  showAttachment(id: string): Promise<AttachmentOpen>
   /** The quick capture (D385): a task of your own with this title into „Skrzynka” (the window „Do skrzynki”). */
   quickAdd(title: string): Promise<QuickAddResult>
   /** The window „Do skrzynki” closes (Esc, after Enter saved). */

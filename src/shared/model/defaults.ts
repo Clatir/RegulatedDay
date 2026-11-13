@@ -8,9 +8,10 @@
 import type { RawRecord } from '../api'
 import { paths } from '../data/paths'
 import { ANALYSIS_CATEGORY, SESSION_CATEGORY } from './categories'
-import { planBlock, templateFrom, type LectureSeries, type PlanBlock, type Template, type TemplateVersion } from './plan'
+import { planBlock, sourceVersionKey, templateFrom, type LectureSeries, type PlanBlock, type Template, type TemplateVersion } from './plan'
 import { RD_SCHEMA, type CategoryMeta, type GeneralSettings, type Person } from './rd'
 import { DEFAULT_SETTINGS, type DayTypeId, type RulesSettings } from './settings'
+import { withStepsJson } from './steps'
 
 /** The wizard's settings apply from the start (every day before the first one too: the day of the wizard is outside the game). */
 export const SETUP_FROM = '2020-01-01'
@@ -70,12 +71,19 @@ export function templateJson(t: Template, before?: RawRecord | null): RawRecord 
   for (const v of t.versions) {
     // A new version (from tomorrow, a review's) is a copy of the one in force at its date: what that one keeps of a newer
     // version goes on in it too.
-    const source = rawVersions.has(v.from) ? v.from : [...rawVersions.keys()].filter((from) => from < v.from).sort().at(-1)
+    const source = sourceVersionKey(rawVersions.keys(), v.from)
     const { from: _f, ...raw } = (source != null ? rawVersions.get(source) : undefined) ?? {}
     const rawBlocks = Array.isArray(raw.blocks) ? raw.blocks.filter(isPlain) : isPlain(raw.blocks) ? Object.values(raw.blocks).filter(isPlain) : []
     const readIds = new Set(read?.versions.find((x) => x.from === source)?.blocks.map((b) => b.id) ?? [])
     const unreadable = rawBlocks.filter((x) => !(typeof x.id === 'string' && readIds.has(x.id)) && !v.blocks.some((b) => b.id === x.id))
-    const blocks = [...v.blocks.map((b) => ({ ...(rawBlocks.find((x) => x.id === b.id) ?? {}), ...b })), ...unreadable]
+    // A block's steps (D440, T787): the list in the file's order, without ticks (a template's block has none).
+    const blocks = [
+      ...v.blocks.map((b) => {
+        const raw = rawBlocks.find((x) => x.id === b.id)
+        return withStepsJson({ ...(raw ?? {}), ...b } as Record<string, unknown>, b.steps, raw?.steps)
+      }),
+      ...unreadable
+    ]
     versions[v.from] = { ...raw, blocks, budgetMin: v.budgetMin, maxMin: v.maxMin }
   }
   return {

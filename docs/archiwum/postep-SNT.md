@@ -36,3 +36,21 @@ Wpisy zadań SNT po scaleniu ich PR-ów. Stan bieżący i kolejka – `docs/post
   adresu gołego linku (poprawka: wymusić `<…>`); degradacja bloków w części zagnieżdżeń; encje w starych notatkach są
   dekodowane.
 - **Pytania na później:** „http://a” (≤ 8 znaków) przy pisaniu nie staje się już linkiem.
+
+## SNT4 – załączniki i linki w blokach (1.15.0)
+**SNT4 – wpis (13.11):** kolekcja `attachments/<id>.json` + plik w `attachments/<id>/` (format bloku bez zmian – właściciel w rekordzie:
+dzień, szablon, seria; T800), najpierw plik, potem rekord; dodanie w dwóch połowach (kopia poza kolejką okna, zapis w turze ze sprawdzeniem
+właściciela – T839); otwieranie po id z `realInside`, programy – „Pokaż w folderze” (T803, T832); linki http/https/mailto (T804, T833); tytuł
+i ikona z sieci w sesji bez ciasteczek, parser liniowy (T807, T834, T835); obrazy przez schemat `rd-attachment://` dekodowane w oknie (T837);
+sprzątanie po 30 dniach u prowadzącego (T806); kopie: dzienna bez plików, tygodniowa i przed aktualizacją z plikami (do 1 GB, T809, T830, T836),
+przywracanie dociąga pliki (T838); ekrany: sekcja „Załączniki” w panelu dnia, szablonu i serii, upuszczenie na kafelek osi, Ctrl V, 📎N (T811–T818);
+rejestr T w trzech plikach (T840). Reguły `.claude/rules/zalaczniki.md`. Odbiór SNT4.1–SNT4.5.
+**Do potwierdzenia rano:** D411 (usunięcie bloku szablonu/serii nie usuwa załączników), D412 (pliki w kopii przed aktualizacją do 1 GB), D414
+(w „Dziś” dodanie tylko do dnia; dla wszystkich wystąpień – szablon/edycja serii).
+**Uwagi na później (SNT4):** „Cofnij” bloku usuniętego w trakcie kopiowania nie przywraca tej kopii (zapisana od razu jako usunięta); dołączanie
+w chwili otwierania nowego folderu („Przejdź”, przywracanie) może rozdzielić plik i rekord – `dataDir` brać z usługi, nie z `this.folder`;
+kopie przygotowane przy zamknięciu w trakcie kopiowania / po awarii zostają bez rekordu (brak sprzątania folderów bez rekordu); `attachmentFileRelOf`
+odrzuca rekordy nowszej wersji przy dociąganiu plików; „nas:5000” (host bez kropki z portem) odrzucany; `ownerAlive` powiela `ownContext`;
+`IMAGE_TYPES` i `THUMB_EXTS` – jedna lista; `restoreAttachmentFiles(ids, only)` – samo `only`; lista rodzajów rekordów w czterech miejscach okna;
+blok zadania (L2) zdjęty „Cofnij”/„Wraca na listę” zostawia niewidoczne załączniki (T805); ZIP64 > 4 GB nietestowany; wpis o załącznikach w
+`interfejs.md` pominięty (limit 20 KB).

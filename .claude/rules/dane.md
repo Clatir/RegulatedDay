@@ -47,6 +47,8 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Wydarzenia całodniowe (D405, T720–T729): `allday/<id>.json` (`ID_COLLECTIONS.allDay`, model `shared/model/allDay.ts`) – lista
   okna (`collection('allDay')`, `DataView.allDay`), kopie konfliktowe (`joinCopies`), historia i kopie zapasowe jak inne rekordy;
   `inputs()`, `dayFile` i kontekst dnia ich nie czytają (strażnik `tests/unit/engine/all-day.test.ts`).
+- Załączniki (D410, T800–T810): `attachments/<id>.json` (`ID_COLLECTIONS.attachment`) + plik w `attachments/<id>/` (nigdy rekord –
+  T801); w kopii dziennej tylko rekordy, pliki w tygodniowej i przed aktualizacją; sprzątanie prowadzącego – reguły `zalaczniki.md`.
 - Notatka bloku (`PlanBlock.note`): zwykły tekst Markdown, do `NOTE_MAX` = 10 000 znaków (`shared/model/note.ts`, tnie `planBlockFrom` –
   dni i szablony); wersja przed `LONG_NOTE_FROM` tnie na 2000, więc okno ostrzega przy dłuższej notatce, gdy obecny komputer
   (`DataView.computers[].appVersion`, bez zapomnianych) ma starszą wersję.
@@ -105,6 +107,11 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Rozjazd zegara (`read.ahead`) tylko po `t` zdarzeń innych komputerów; zegar logiczny ponad 24 h z przodu wraca do
   zegara komputera przy `stamp()` (`onClamp` – log). Szablon: `templateJson(t, before)` na surowym pliku.
 - Odczyt i zapis rekordów obok kolejki (łączenie kopii konfliktowych) – tylko przez `queue.exclusive`.
+- Plik uszkodzony a chwilowo nieczytelny: `UnknownRecordError.broken` (z `cachedJson`); `hub.caseDays` zwraca dni z uszkodzonym
+  plikiem w `broken` (poza `files`, jak nieczytelne) – kroki zadania kończą na takim dniu minionym drogę bloku (T792).
+  `SendState.afterSend` – dopiero po odpowiedzi `edit` procesu głównego (kolejka przyjęła wpis); odmowa przed kolejką = nic.
+- Kroki (D440, reguły `kroki.md`): lista w bloku / rekordzie, odhaczenia w `stepsDone` (plik dnia, rekord zadania) – w
+  `recordEdit` liść po liściu (`LEAF_MAPS`, T788), kopia konfliktowa łączy je sumą; starsza wersja zachowuje oba pola.
 - Sprawy (T750–T758, reguły `sprawy.md`): te same pliki `requests/`, bez migracji w miejscu; `hub.quickAdd` (szybki zapis),
   `folder.casesRitual`; 04:00 i „zaplanowane” liczone z daty i plików dni – nic nie zapisuje prowadzący.
 - Listy do pokazania (`collection`: prośby, rutyny, szablony, wykłady w oknie) biorą plik sprawdzony w ciągu

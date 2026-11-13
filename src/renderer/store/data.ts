@@ -9,6 +9,7 @@ import type { DataView, EditEntry, EditOutcome, EventIn, RawRecord } from '@shar
 import { marketDay } from '@shared/calendar/holidays'
 import { recordEdit } from '@shared/data/merge'
 import { allDayFrom, type AllDayEvent } from '@shared/model/allDay'
+import { attachmentFrom, type Attachment } from '@shared/model/attachment'
 import type { GoalsPatch } from '@shared/model/goals'
 import { newId } from '@shared/model/ids'
 import { lectureFrom, templateFrom, type LectureSeries, type Template } from '@shared/model/plan'
@@ -32,13 +33,17 @@ interface DataState {
   seriesPlans: SeriesPlan[]
   /** All-day events (D405), in no order (`eventsOn`, `eventsInRange` sort them). */
   allDay: AllDayEvent[]
+  /** Attachments of blocks (D410) – also the removed ones (`attachmentsOfBlock` leaves them out), in no order. */
+  attachments: Attachment[]
+  /** Attachments whose file is not on this computer yet (`DataView.attachmentsMissing`). */
+  attachmentsMissing: ReadonlySet<string>
   /** Grows with every read (the day views read their day again). */
   stamp: number
 }
 
 const empty = rdFrom(undefined)
 
-export const useData = create<DataState>(() => ({ view: null, rd: empty, templates: [], lectures: [], requests: [], routines: [], series: [], seriesPlans: [], allDay: [], stamp: 0 }))
+export const useData = create<DataState>(() => ({ view: null, rd: empty, templates: [], lectures: [], requests: [], routines: [], series: [], seriesPlans: [], allDay: [], attachments: [], attachmentsMissing: new Set(), stamp: 0 }))
 
 const isDefined = <T>(v: T | null): v is T => v != null
 
@@ -66,6 +71,8 @@ function apply(view: DataView, news: boolean): void {
     series,
     seriesPlans: seriesPlans(series, typeOfDays(rd.settings, ownType), marketDay),
     allDay: (view.allDay ?? []).map(allDayFrom).filter(isDefined),
+    attachments: (view.attachments ?? []).map(attachmentFrom).filter(isDefined),
+    attachmentsMissing: new Set(view.attachmentsMissing ?? []),
     stamp: s.stamp + 1
   }))
 }
@@ -116,7 +123,7 @@ export function rawRecord(rel: string): RawRecord | null {
   if (!v) return null
   if (rel === 'rd.json') return v.rd
   const [dir] = rel.split('/')
-  const list = dir === 'templates' ? v.templates : dir === 'schedule' ? v.lectures : dir === 'requests' ? v.requests : dir === 'routines' ? v.routines : dir === 'series' ? v.series : dir === 'allday' ? v.allDay : null
+  const list = dir === 'templates' ? v.templates : dir === 'schedule' ? v.lectures : dir === 'requests' ? v.requests : dir === 'routines' ? v.routines : dir === 'series' ? v.series : dir === 'allday' ? v.allDay : dir === 'attachments' ? (v.attachments ?? null) : null
   const id = rel.slice(rel.indexOf('/') + 1).replace(/\.json$/, '')
   return list?.find((r) => r.id === id) ?? null
 }
@@ -140,17 +147,21 @@ export function inTurn<T>(fn: () => Promise<T>): Promise<T> {
   return run
 }
 
+/** What a broken file is said with (never written over – restored from the history). */
+export const BROKEN_FILE_TEXT = 'Plik jest uszkodzony i nie jest nadpisywany – przywróć go z historii.'
+
 /** What the window says after edits that did not simply apply (spec „nic nie udaje sukcesu”); null – nothing. */
 export function editNotice(out: readonly EditOutcome[]): { text: string; kind: 'info' | 'error' } | null {
   if (out.some((o) => o.status === 'changedElsewhere')) return { text: 'Tego rekordu nie usunięto – w tym czasie zmieniono go na innym komputerze. Odpowiedz na pytanie u góry okna.', kind: 'info' }
   if (out.some((o) => o.status === 'conflict' || o.status === 'removedElsewhere')) return { text: 'Ta zmiana spotkała się ze zmianą z innego komputera – odpowiedz na pytanie u góry okna.', kind: 'info' }
-  if (out.some((o) => o.status === 'broken')) return { text: 'Plik jest uszkodzony i nie jest nadpisywany – przywróć go z historii.', kind: 'error' }
+  if (out.some((o) => o.status === 'broken')) return { text: BROKEN_FILE_TEXT, kind: 'error' }
   return null
 }
 
 /**
- * Filled in by a save for a caller that must tell „not sent” from „sent, the result not known”: `afterSend` is set when the
- * failure came after the edit was handed to the main process (it may have been written).
+ * Filled in by a save for a caller that must tell „not sent” from „sent, the result not known”: `afterSend` is set once the
+ * main process answered the edit (the queue took it) – a failure after that (the view read again, the notice) may hide a
+ * write; one before it (the main process refused the edit before its queue) wrote nothing.
  */
 export interface SendState {
   afterSend: boolean
@@ -161,8 +172,9 @@ async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | Reado
   try {
     const list = (await make()).filter((e): e is EditEntry => !!e)
     if (!list.length) return []
-    if (state) state.afterSend = true
     const out = await window.rd.edit(list)
+    // The queue took it: from now on a failure leaves the result unknown, never „not saved”.
+    if (state) state.afterSend = true
     await reloadData()
     const notice = editNotice(out)
     if (notice) toast(notice.text, notice.kind, 8000)

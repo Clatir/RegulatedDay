@@ -6,9 +6,10 @@
  */
 import { REQUEST_CATEGORY, type CategoryRules } from '../model/categories'
 import { newId } from '../model/ids'
-import { dayRaw, putBlock, setMovedTo, takeBlock, type Raw } from '../data/dayEdits'
+import { dayRaw, putBlock, setMovedTo, setStepsDone, stepsDoneIn, takeBlock, type Raw } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
 import { dayFileFrom, MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlock, type DayFile, type PlanBlock, type Template } from '../model/plan'
+import { freshSteps } from '../model/steps'
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan, type BlockInfo } from './blocks'
 import { dayPlan, dayWakeMin, morningBound, wakeShiftedStart } from './createDay'
@@ -129,9 +130,13 @@ export function movedBlock(b: PlanBlock, plan: readonly PlanBlock[], fromDate: s
 export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou = true): { source: Raw; target: Raw } {
   const moved = movedBlock(b, plan, fromDate, byYou)
   const own = dayFileFrom(fromRaw ?? {}, fromDate).blocks.some((x) => x.id === b.id)
-  let source = setMovedTo(dayRaw(fromRaw, fromDate), b.id, toDate)
+  // Its ticks go with it (D440, D442): the target has exactly the ticks the source day has for it now – its file says them,
+  // whatever ticks the block given carries (one read from the file has none) – an old tick of the block there (from before
+  // it left that day) goes; the source keeps none.
+  const ticks = stepsDoneIn(fromRaw, b.id)
+  let source = setStepsDone(setMovedTo(dayRaw(fromRaw, fromDate), b.id, toDate), b.id, [])
   if (own) source = takeBlock(source, b.id)
-  const target = setMovedTo(putBlock(dayRaw(toRaw, toDate), moved), b.id, null)
+  const target = setStepsDone(setMovedTo(putBlock(dayRaw(toRaw, toDate), moved), b.id, null), b.id, ticks)
   return { source, target }
 }
 
@@ -159,6 +164,8 @@ export function copiedDay(plan: readonly PlanBlock[]): PlanBlock[] {
       movedFrom: null,
       // A request belongs to one day: a copy is a plain block of its category; no variant changed it there.
       requests: [],
+      // Its steps start again on the day of the copy (D440): the copy has new ids, the day's ticks are the original's.
+      steps: freshSteps(b.steps),
       byVariant: false
     })
   }

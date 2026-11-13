@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { CaseDays, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import { blockFactsOf, type CasesRitual } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
@@ -38,14 +38,26 @@ import { logicalDayOf, placeLogical, weekStart } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { writeFileAtomic } from '../datastore/atomic'
-import { backupEntries, createUpdateBackup, listBackups, readBackupFiles, restoreToFolder, type BackupInfo } from './backup'
+import { attachmentFileRelOf, backupEntries, createUpdateBackup, fillAttachmentFiles, listBackups, readBackupFiles, restoreAttachmentFiles, restoreToFolder, type BackupInfo } from './backup'
+import { addLink, attachmentImage, commitFiles, nodeAttachmentFiles, openAttachment, openAttachments, prepareFiles, showAttachment, type AttachmentFiles, type AttachmentIo, type AttachmentShell, type MetaFetch, type PreparedFile } from './attachments'
+import { attachmentFrom, ownerFrom, type AttachmentOwner } from '@shared/model/attachment'
+import { dayContextOf } from '@shared/engine/context'
+import { seriesFrom } from '@shared/model/series'
+import { templateFrom } from '@shared/model/plan'
 import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
 import type { DayRead } from './eventLog'
-import type { DataFolder, TimerClick } from './folder'
+import { UnknownRecordError, type DataFolder, type TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
 import { seriesAnswer, seriesChange, seriesCreate, seriesEnd, seriesRemove, seriesUndo, type SeriesIo } from './series'
 import { DataService, STOP_TIMEOUT_MS, type ServiceOptions } from './service'
+
+/** A copy for a block whose record the window never wrote (`commitFiles`) goes after this (T839). */
+export const PREPARED_MS = 10 * 60_000
+const FOLDER_CHANGED = 'folder danych zmienił się w trakcie – plik nie został dołączony'
+const EXPIRED = 'kopia pliku wygasła – dołącz go jeszcze raz'
+/** How long a close waits for the copies whose records will never be written to go (best effort, T839). */
+const CLOSE_DROP_MS = 300
 
 /** No daily backup for this many days: the window warns (spec „po 3 dniach bez kopii także w oknie głównym”). */
 export const BACKUP_STALE_DAYS = 3
@@ -107,6 +119,13 @@ export interface HubOptions {
   gameScreens?: boolean
   /** This computer now works in another folder (a whole backup restored into a new one): its config remembers it. */
   onFolder?: (dir: string) => void
+  /**
+   * What attachments need of Electron (D410): `shell` opens files and links, `fetchMeta` reads a page's title and icon
+   * (a session of its own); `files` – the files in the folder (tests: faulty). Images go to the window by their own scheme
+   * (`attachmentImage`, T837).
+   * Without `shell` nothing opens (the answer says so).
+   */
+  attachments?: { shell?: AttachmentShell; fetchMeta?: MetaFetch; files?: AttachmentFiles }
 }
 
 /** `a` is a newer version than `b` (versions that cannot be compared: no). */
@@ -274,7 +293,9 @@ export class DataHub {
       const prev = this.o.previousVersion()
       const due = !!prev && isNewer(this.o.appVersion, prev)
       if (due && !this.backedUp) {
-        const r = await createUpdateBackup(dir, join(dir, 'backups'), prev, this.o.appVersion)
+        const r = await createUpdateBackup(dir, join(dir, 'backups'), prev, this.o.appVersion, {
+          log: (level, msg) => this.o.log(level, msg)
+        })
         // Made (or there already): not again; failed: tried again at the next opening.
         if (!r || r.ok) this.backedUp = true
         if (r?.ok) this.o.log('info', `kopia przed aktualizacją ${prev} → ${this.o.appVersion}: ${r.files} plików`)
@@ -358,6 +379,9 @@ export class DataHub {
     // the folder it opened, and no retry is armed any more.
     this.shutdown = true
     this.closing = true
+    // Copies whose records the window will never write now (T839): beside the folder's stop, best effort – a file held
+    // never eats the time the quit has (`QUIT_DATA_CLOSE_MS`); one left stays a folder without a record.
+    const drops = Promise.allSettled([...this.prepared.keys()].map((id) => this.dropPrepared(id)))
     if (this.retry) clearTimeout(this.retry)
     this.retry = null
     try {
@@ -368,6 +392,7 @@ export class DataHub {
     } finally {
       this.closing = false
     }
+    await Promise.race([drops, new Promise((r) => setTimeout(r, CLOSE_DROP_MS).unref?.())])
   }
 
   /** The window reads again only when what it would read changed (every check of the folder calls this). */
@@ -395,9 +420,9 @@ export class DataHub {
     return `${head}|${today}|${JSON.stringify(await this.records())}|${JSON.stringify(days)}|${read.events.length}|${f.unsynced}|${f.unavailable}|${JSON.stringify(this.service?.backup ?? null)}|${f.queue.questions().length}|${f.copyConflicts.size}|${f.leader.leader}|${JSON.stringify(moved)}|${f.computers.map((c) => `${c.id}:${c.appVersion ?? ''}`).join(',')}`
   }
 
-  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines' | 'series' | 'seriesDays' | 'allDay'>> {
+  private async records(): Promise<Pick<DataView, 'rd' | 'templates' | 'lectures' | 'requests' | 'routines' | 'series' | 'seriesDays' | 'allDay' | 'attachments' | 'attachmentsMissing'>> {
     const f = this.service?.folder
-    if (!f) return { rd: null, templates: [], lectures: [], requests: [], routines: [], series: [], seriesDays: {}, allDay: [] }
+    if (!f) return { rd: null, templates: [], lectures: [], requests: [], routines: [], series: [], seriesDays: {}, allDay: [], attachments: [], attachmentsMissing: [] }
     const settled = async <T>(p: Promise<T>, fallback: T) => p.catch(() => fallback)
     let rd: RawRecord | null = null
     let rdKnown = true
@@ -408,6 +433,7 @@ export class DataHub {
     }
     // The series as last seen when they cannot be read now (T717): never „none” – the days to come would lose their
     // occurrences and the panel its „Powtarzaj”.
+    const attachments = await settled(f.collection('attachment'), [])
     let series = this.lastSeries?.folder === this.folder ? this.lastSeries : { folder: this.folder, records: [], days: {} }
     try {
       if (!rdKnown) throw new Error(SETTINGS_FILE)
@@ -424,8 +450,34 @@ export class DataHub {
       routines: await settled(f.collection('routine'), []),
       series: series.records,
       seriesDays: series.days,
-      allDay: await settled(f.collection('allDay'), [])
+      allDay: await settled(f.collection('allDay'), []),
+      attachments,
+      attachmentsMissing: await this.missingFiles(attachments)
     }
+  }
+
+  /** Files of attachments seen here in this folder (they never change: once here, here – until the record goes). */
+  private readonly seenFiles = new Set<string>()
+
+  /**
+   * The attachments not removed whose file is not on this computer yet (T802: OneDrive brings the record first); a file
+   * that cannot be looked at now is not „missing” (opening it says why).
+   */
+  private async missingFiles(raws: readonly RawRecord[]): Promise<string[]> {
+    const dir = this.folder
+    if (!dir) return []
+    const files = this.o.attachments?.files ?? nodeAttachmentFiles
+    const out: string[] = []
+    for (const raw of raws) {
+      const a = attachmentFrom(raw)
+      if (!a?.file || a.removedAt != null) continue
+      const key = `${dir}|${a.id}|${a.file.fileName}`
+      if (this.seenFiles.has(key)) continue
+      const at = await files.realInside(dir, a.id, a.file.fileName).catch(() => null)
+      if (at === 'missing') out.push(a.id)
+      else if (at) this.seenFiles.add(key)
+    }
+    return out.sort()
   }
 
   async view(): Promise<DataView> {
@@ -525,18 +577,27 @@ export class DataHub {
   }
 
   async dayFiles(dates: string[]): Promise<Record<string, RawRecord | null>> {
+    return (await this.dayFilesRead(dates)).files
+  }
+
+  /**
+   * The days' files as `dayFiles` gives them, and the days whose file is broken (`UnknownRecordError.broken` – never read as
+   * it is) apart from those unreadable for a moment: both left out of `files` (unknown is never „no file”).
+   */
+  private async dayFilesRead(dates: string[]): Promise<{ files: Record<string, RawRecord | null>; broken: string[] }> {
     const f = this.need()
-    const out: Record<string, RawRecord | null> = {}
+    const files: Record<string, RawRecord | null> = {}
+    const broken: string[] = []
     // A file that cannot be read now is left out: unknown is never „no file” (an edit made against nothing would meet it).
     for (const d of dates.slice(0, CASE_DAYS_MAX)) {
       if (!isIsoDate(d)) continue
       try {
-        out[d] = (await f.recordView(paths.day(d))) ?? null
-      } catch {
-        /* unreadable now */
+        files[d] = (await f.recordView(paths.day(d))) ?? null
+      } catch (e) {
+        if (e instanceof UnknownRecordError && e.broken) broken.push(d)
       }
     }
-    return out
+    return { files, broken }
   }
 
   /**
@@ -569,7 +630,8 @@ export class DataHub {
     // The memory bounded by its size, the oldest days out first – never by the list of the last call (a planning asks for
     // one or two days, T773).
     if (this.caseDayMemo.size > CASE_DAY_MEMO_MAX) for (const d of [...this.caseDayMemo.keys()].sort().slice(0, this.caseDayMemo.size - CASE_DAY_MEMO_MAX)) this.caseDayMemo.delete(d)
-    return { files: await this.dayFiles(list), gone, begun }
+    const { files, broken } = await this.dayFilesRead(list)
+    return { files, gone, begun, ...(broken.length ? { broken } : {}) }
   }
 
   /** The blocks of a day gone and begun by its log; a day gone by from memory while its log is as it was (T768). */
@@ -745,6 +807,160 @@ export class DataHub {
   /** „Cofnij” of one change of a series. */
   seriesUndo(undo: unknown): Promise<SeriesResult> {
     return seriesUndo(this.seriesIo(), undo)
+  }
+
+  /** The page's title of the last link added still being fetched (tests wait for it). */
+  linkMeta: Promise<void> = Promise.resolve()
+
+  private attachmentIo(): AttachmentIo {
+    const f = this.need()
+    const dataDir = this.folder!
+    const env = this.o.attachments ?? {}
+    const refused = async () => Promise.reject(new Error('otwieranie niedostępne'))
+    return {
+      folder: f,
+      dataDir,
+      files: env.files ?? nodeAttachmentFiles,
+      // Only into the folder it began in (T839): another one opened meanwhile never gets records of files it has not.
+      edit: (entries) => (this.service?.folder === f && this.folder === dataDir ? this.edit(entries) : Promise.reject(new Error(FOLDER_CHANGED))),
+      now: () => f.clock.now(),
+      shell: env.shell ?? { openPath: async () => 'otwieranie niedostępne', showItemInFolder: () => undefined, openExternal: refused },
+      fetchMeta: env.fetchMeta,
+      log: (level, msg) => this.o.log(level, msg)
+    }
+  }
+
+  /** Copies made for blocks, their records not written yet (`prepareFiles` → `commitFiles`), with the folder they went to. */
+  private readonly prepared = new Map<string, { file: PreparedFile; io: AttachmentIo; timer: ReturnType<typeof setTimeout> }>()
+
+  /**
+   * Files for a block (D410), the first half (T839): copied into the folder – no records yet. The window writes them in
+   * its turn (`commitFiles`); copies never written within `PREPARED_MS` (a window gone) go.
+   */
+  async prepareFiles(owner: unknown, sources: unknown): Promise<AttachPrepared> {
+    const io = this.attachmentIo()
+    const p = await prepareFiles(io, owner, sources)
+    for (const file of p.made) {
+      const timer = setTimeout(() => void this.dropPrepared(file.id), PREPARED_MS)
+      timer.unref?.()
+      this.prepared.set(file.id, { file, io, timer })
+    }
+    return { ids: p.made.map((m) => m.id), failed: p.failed }
+  }
+
+  /** A copy whose record was never written: its folder goes. */
+  private async dropPrepared(id: string): Promise<void> {
+    const p = this.prepared.get(id)
+    if (!p) return
+    this.prepared.delete(id)
+    clearTimeout(p.timer)
+    // Its name for the message of a late `commitFiles` (the last ones only).
+    this.droppedNames.set(id, String(p.file.raw.name))
+    while (this.droppedNames.size > 200) this.droppedNames.delete(this.droppedNames.keys().next().value!)
+    await p.io.files.removeDir(p.io.dataDir, id).catch(() => undefined)
+  }
+
+  /** The names of copies dropped before their records were written (`dropPrepared`). */
+  private readonly droppedNames = new Map<string, string>()
+
+  /**
+   * The records of copies made (`prepareFiles`), in the window's turn (T839): in the folder they were copied to – another
+   * one open since: none, the copies go; their block gone meanwhile (a day's block removed while they were copied) – the
+   * records are written removed at once (the files go after 30 days, D410).
+   */
+  async commitFiles(ids: unknown): Promise<AttachResult> {
+    const asked = (Array.isArray(ids) ? ids : []).map(String)
+    const list = asked.map((id) => this.prepared.get(id)).filter((p): p is NonNullable<typeof p> => !!p)
+    for (const p of list) {
+      this.prepared.delete(p.file.id)
+      clearTimeout(p.timer)
+    }
+    // A copy no longer waiting (gone after `PREPARED_MS` or at a close, or written already): said, never silence.
+    const failed: AttachResult['failed'] = asked.filter((id) => !list.some((p) => p.file.id === id)).map((id) => ({ name: this.droppedNames.get(id) ?? 'plik', error: EXPIRED }))
+    const added: string[] = []
+    const byFolder = new Map<AttachmentIo, PreparedFile[]>()
+    for (const p of list) byFolder.set(p.io, [...(byFolder.get(p.io) ?? []), p.file])
+    for (const [io, files] of byFolder) {
+      if (this.service?.folder !== io.folder || this.folder !== io.dataDir) {
+        for (const f of files) {
+          await io.files.removeDir(io.dataDir, f.id).catch(() => undefined)
+          failed.push({ name: String(f.raw.name), error: FOLDER_CHANGED })
+        }
+        continue
+      }
+      const alive = new Map<string, boolean>()
+      for (const f of files) {
+        const key = JSON.stringify(f.owner)
+        if (!alive.has(key)) alive.set(key, await this.ownerAlive(f.owner))
+      }
+      const now = io.now()
+      for (const gone of [false, true]) {
+        const part = files.filter((f) => !alive.get(JSON.stringify(f.owner)) === gone)
+        if (!part.length) continue
+        const r = await commitFiles(io, part, gone ? now : null)
+        added.push(...r.added)
+        failed.push(...r.failed)
+      }
+    }
+    return { added, failed }
+  }
+
+  /** Files for a block at once (both halves – tests, a caller outside the window). */
+  async attachFiles(owner: unknown, sources: unknown): Promise<AttachResult> {
+    const p = await this.prepareFiles(owner, sources)
+    const r = await this.commitFiles(p.ids)
+    return { added: r.added, failed: [...p.failed, ...r.failed] }
+  }
+
+  /**
+   * The block an attachment is added to is still there (T839): a day's – in that day's plan or moved from it to another
+   * day; a template's – in some version of its template (D411: one taken out stays in the versions before); a series' – a
+   * series of that root. Not known now (a file unreadable) – yes: a record shown is better than one removed by mistake.
+   */
+  private async ownerAlive(owner: AttachmentOwner): Promise<boolean> {
+    try {
+      const f = this.need()
+      if (owner.scope === 'template') {
+        const t = templateFrom(await f.recordView(paths.record('template', owner.templateId)))
+        return !!t && t.versions.some((v) => v.blocks.some((b) => b.id === owner.blockId))
+      }
+      if (owner.scope === 'series') return (await f.collection('series')).some((r) => seriesFrom(r)?.root === owner.root)
+      const read = await f.readDay(owner.date)
+      const dayFile = await f.dayFile(owner.date, true)
+      if (dayFile?.movedTo[owner.blockId]) return true
+      const nextFile = await f.dayFile(addDays(owner.date, 1), true).catch(() => null)
+      const ctx = dayContextOf(await f.inputs(true), { date: owner.date, events: read.events, dayFile, nextFile }, this.o.holidays, f.clock.now())
+      return ctx.plan.some((b) => b.id === owner.blockId)
+    } catch {
+      return true
+    }
+  }
+
+  /** A link for a block: written at once, the page's title and icon afterwards (`linkMeta`); a block gone meanwhile – no link. */
+  async addLink(owner: unknown, url: unknown): Promise<AddLinkResult> {
+    const o = ownerFrom(owner)
+    if (o && !(await this.ownerAlive(o))) return { ok: false, id: null, error: 'tego bloku już nie ma' }
+    const { result, meta } = await addLink(this.attachmentIo(), owner, url)
+    this.linkMeta = meta
+    return result
+  }
+
+  openAttachment(id: unknown): Promise<AttachmentOpen> {
+    return openAttachment(this.attachmentIo(), id)
+  }
+
+  openAttachments(ids: unknown): Promise<AttachmentOpen[]> {
+    return openAttachments(this.attachmentIo(), ids)
+  }
+
+  showAttachment(id: unknown): Promise<AttachmentOpen> {
+    return showAttachment(this.attachmentIo(), id)
+  }
+
+  /** The file of an image attachment for an address of `rd-attachment://img/<id>` (the window's `<img>`, T837). */
+  async attachmentImage(address: string): Promise<{ ok: true; abs: string; type: string } | { ok: false; status: 400 | 403 | 404 | 413 }> {
+    if (!this.service?.folder || !this.folder) return { ok: false, status: 404 }
+    return attachmentImage(this.attachmentIo(), address)
   }
 
   async edit(entries: EditEntry[]): Promise<EditOutcome[]> {
@@ -1075,12 +1291,14 @@ export class DataHub {
       }
       const r = isPlain(v) ? v : {}
       const text = (x: unknown) => (typeof x === 'string' && x.trim()) || null
+      const inner = (x: unknown): Record<string, unknown> => (isPlain(x) ? x : {})
       return {
         rel,
         kind: c.kind,
         date: c.date,
-        // A task of „Sprawy” by its title (D384), a request by its note.
-        name: text(r.name) ?? text(r.title) ?? text(r.note),
+        // A task of „Sprawy” by its title (D384), a request by its note; an attachment with no name of its own (D410) by its
+        // file, its page's title or its domain.
+        name: text(r.name) ?? text(r.title) ?? text(r.note) ?? (c.kind === 'attachment' ? (text(inner(r.file).fileName) ?? text(inner(r.link).title) ?? text(inner(r.link).domain)) : null),
         person: c.kind === 'request' && r.kind !== 'task' ? text(r.person) : null,
         ...(c.kind === 'request' && r.kind === 'task' ? { task: true } : {}),
         // 0 – the model's „unknown” (`requestFrom`), never a date.
@@ -1190,7 +1408,25 @@ export class DataHub {
     // itself) – or „the same already” (nothing written).
     const done = entries.length ? await this.edit(entries) : []
     const statusOf = (o: EditOutcome | undefined): RestoreOutcome['status'] => (!o ? 'waiting' : o.status === 'waiting' && o.why === BEHIND_QUESTION ? 'behindQuestion' : o.status)
-    return [...entries.map((e, i) => ({ rel: e.rel, status: statusOf(done[i]) })), ...same.map((rel) => ({ rel, status: 'same' as const }))]
+    const out: RestoreOutcome[] = [...entries.map((e, i) => ({ rel: e.rel, status: statusOf(done[i]) })), ...same.map((rel) => ({ rel, status: 'same' as const }))]
+    // The files of the attachments chosen (T838, T839) – only of a record written, waiting for the folder or the same
+    // already (one behind a question gets none: a folder without its record is never cleaned up): from the backup when it
+    // has them (a weekly one, D410), else from the folder's weekly backups; never over a file there.
+    const wantedFiles = new Set(
+      out.flatMap((o) => {
+        const c = classify(o.rel)
+        const file = c?.kind === 'attachment' && (o.status === 'applied' || o.status === 'waiting' || o.status === 'same') ? attachmentFileRelOf(files.get(o.rel) ?? null) : null
+        return file ? [file] : []
+      })
+    )
+    if (wantedFiles.size && this.folder) {
+      const folder = this.folder
+      const ids = new Set([...wantedFiles].map((rel) => rel.split('/')[1]!))
+      // Two steps apart (T838): a backup whose files cannot be read now never keeps the weekly ones from bringing theirs.
+      await restoreAttachmentFiles(zipFile, ids, folder, wantedFiles).catch((e) => this.o.log('warn', 'pliki załączników z wybranej kopii nie wróciły', e))
+      await fillAttachmentFiles(folder, wantedFiles, { backupsDir: join(folder, 'backups') }).catch((e) => this.o.log('warn', 'pliki załączników z kopii tygodniowych nie wróciły', e))
+    }
+    return out
   }
 
   /**
@@ -1203,7 +1439,8 @@ export class DataHub {
   async restoreWhole(zipFile: string, target: string, at = Date.now()): Promise<{ to: string; ok: boolean; error: string | null }> {
     const to = resolve(target)
     if (this.folder && within(to, this.folder)) throw new Error('Nowy folder leży w obecnym folderze danych – wybierz folder poza nim.')
-    const files = await restoreToFolder(zipFile, to)
+    // The attachments' files a daily backup lacks: from this folder, else its weekly backups (T838).
+    const files = await restoreToFolder(zipFile, to, this.folder ? { from: this.folder, backupsDir: join(this.folder, 'backups') } : {})
     this.o.log('info', `kopia ${zipFile} przywrócona do ${to}: ${files} plików`)
     this.moving = { from: this.folder, to, at, error: null }
     return { to, ...(await this.moveTo(to)) }

@@ -26,7 +26,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni), L2.4 (Win+Alt+N i okienko na wierzchu), L2.5 („+” na pasku pulpitu), L2.6 (dwa komputery i stare prośby po aktualizacji).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni), L2.4 (Win+Alt+N i okienko na wierzchu), L2.5 („+” na pasku pulpitu), L2.6 (dwa komputery i stare prośby po aktualizacji), SNT5.4 (pasek pulpitu z krokiem i ptaszkiem), SNT5.5 (dwa komputery – odhaczenia z obu), SNT5.6 (plik albo link przeciągnięty na okno).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 - **W maszynie wirtualnej** (opcjonalnie): 68 z tych punktów może sprawdzić Cowork na świeżej instalacji, bez Twoich
@@ -150,6 +150,17 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] L2.4 Win+Alt+N: okienko „Do skrzynki” na wierzchu tylko na skrót; skrót w Ustawieniach (Tylko Ty – pulpit)
    - [ ] L2.5 „+” na pasku pulpitu otwiera panel przy kursorze z polem „Do skrzynki” (Tylko Ty – pulpit)
    - [ ] L2.6 Dwa komputery – jedno pytanie „Zadanie zrobione?”; stare prośby po aktualizacji (Tylko Ty – OneDrive, Twoje dane)
+   - [ ] SNT4.1 Plik z Eksploratora na panel bloku i kafelek osi (Tylko Ty – Eksplorator)
+   - [ ] SNT4.2 Linki – „Dodaj link”, Ctrl V, przeciągnięcie z przeglądarki, tytuł ze strony (Tylko Ty – przeglądarka, sieć)
+   - [ ] SNT4.3 Otwieranie – plik, program w folderze, „Otwórz wszystko”
+   - [ ] SNT4.4 Załączniki szablonu i serii w wystąpieniach, usunięcie i „Cofnij”
+   - [ ] SNT4.5 Załącznik na drugim komputerze (Tylko Ty – OneDrive)
+   - [ ] SNT5.1 Lista „Kroki” w panelu bloku – Enter, ptaszek, tytuł w miejscu, usuwanie i „Cofnij”
+   - [ ] SNT5.2 Kolejność kroków (przeciągnięcie, Alt+↑/↓) i licznik „✓ 3/4” na kafelku „Dziś” i „Tygodnia”
+   - [ ] SNT5.3 Kroki w szablonie, w serii („Tylko to · To i następne · Cała seria”) i w zadaniu w „Sprawach”
+   - [ ] SNT5.4 Pasek pulpitu: „☐ krok · krok 1/4” z ptaszkiem, „Wszystkie kroki ✓” (Tylko Ty – pasek na pulpicie)
+   - [ ] SNT5.5 Dwa komputery – odhaczenia z obu zostają (Tylko Ty – OneDrive)
+   - [ ] SNT5.6 Plik albo link przeciągnięty na okno aplikacji nic nie psuje (Tylko Ty – pulpit)
 3. Dzień z sesją:
    - [ ] E4a.5 Sesja i nieusypianie komputera
    - [ ] E8j.3 Logowanie w czasie sesji: komputer nie zasypia
@@ -2053,6 +2064,150 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   podwójnego. Komputer ze starszą wersją widzi zadanie jak prośbę „osoba: ?”, niczego nie gubiąc.
 - **Nie przechodzi, gdy:** któraś prośba zniknęła albo straciła pole, trafiła na złą listę, pytanie pojawia się dwa razy lub
   wraca po odpowiedzi na drugim komputerze, albo starsza wersja gubi dane zadania.
+
+### SNT4 – załączniki i linki w blokach (1.15.0)
+
+#### SNT4.1 Plik z Eksploratora na panel bloku i kafelek osi (1.15.0)
+- [ ] Odebrane
+- **Tylko Ty:** przeciąganie z Eksploratora Windows (testy: `tests/web/attach-drop.test.ts`, `attach-timeline.test.ts`,
+  `tests/fs/attachments.test.ts`, E2E `attachments.spec.ts` przez „Dołącz plik…”).
+- **Jak sprawdzić:** w „Dziś” kliknij blok, przeciągnij z Eksploratora jeden plik PDF na panel bloku, potem dwa pliki
+  naraz (PDF i zrzut ekranu PNG) na kafelek innego bloku na osi. Upuść plik obok panelu, w pustym miejscu okna. Otwórz
+  folder danych → `attachments`.
+- **Oczekiwany efekt:** kafelek podświetla się przy przeciąganiu; w sekcji „Załączniki” pozycje z nazwą i rozmiarem
+  (KB/MB), PNG z miniaturą; na kafelku 📎1 i 📎2; w `attachments` folder na każdy plik z jego kopią, oryginał na pulpicie
+  bez zmian; upuszczenie obok niczego nie robi; przeciąganie bloków i ich krawędzi działa jak dotąd (D410).
+- **Nie przechodzi, gdy:** okno przechodzi na podgląd pliku po upuszczeniu, plik nie trafia do `attachments`, znaczek
+  📎 nie pojawia się, albo przeciągnięcie bloku po osi przestaje działać.
+
+#### SNT4.2 Linki – „Dodaj link”, Ctrl V, przeciągnięcie z przeglądarki, tytuł ze strony (1.15.0)
+- [ ] Odebrane
+- **Tylko Ty:** prawdziwa przeglądarka i sieć (testy: `tests/unit/link-fetch.test.ts`, `attachments.test.ts` – parser,
+  adresy; E2E – link z domeną bez sieci).
+- **Jak sprawdzić:** w panelu bloku „Dodaj link”, wpisz `github.com/Clatir/RegulatedDay`, Enter. Skopiuj adres strony
+  z przeglądarki, kliknij kafelek bloku i Ctrl V (poza polem notatki). Przeciągnij link z paska adresu przeglądarki na
+  kafelek. Wpisz w „Dodaj link” `javascript:alert(1)`. Kliknij nazwę linku i ją zmień. Ctrl V adresu w polu notatki.
+- **Oczekiwany efekt:** link dodaje się od razu z domeną, po chwili dostaje tytuł i ikonę strony; Ctrl V i przeciągnięcie
+  dodają link; `javascript:` daje komunikat i nic nie dodaje; zmieniona nazwa zostaje; w notatce Ctrl V wkleja zwykły
+  tekst (D410).
+- **Nie przechodzi, gdy:** tytuł nigdy się nie pojawia dla zwykłej strony (np. github.com, google.com), `javascript:`
+  albo `file:` zostaje dodany, albo Ctrl V w notatce dodaje link zamiast tekstu.
+
+#### SNT4.3 Otwieranie – plik, program w folderze, „Otwórz wszystko” (1.15.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/attachments.test.ts` (lista programów, adresy), `tests/fs/attachments.test.ts`
+  (ścieżka w `attachments/<id>/`). Ty: rzut oka.
+- **Jak sprawdzić:** kliknij PDF, potem link, potem dołącz mały `.exe` (np. instalator) i go kliknij. W bloku z trzema
+  załącznikami „Otwórz wszystko (3)”. Przy pliku „Pokaż w folderze”.
+- **Oczekiwany efekt:** PDF w domyślnym programie, link w przeglądarce; `.exe` ma dopisek „Program – kliknięcie pokaże go
+  w folderze.” i otwiera Eksplorator z zaznaczonym plikiem, nic się nie uruchamia; „Otwórz wszystko” otwiera wszystkie
+  (D410).
+- **Nie przechodzi, gdy:** `.exe` (albo `.bat`, `.msi`) się uruchamia, link otwiera się w oknie aplikacji, albo
+  „Otwórz wszystko” otwiera tylko pierwszy.
+
+#### SNT4.4 Załączniki szablonu i serii w wystąpieniach, usunięcie i „Cofnij” (1.15.0)
+- [ ] Odebrane
+- **Automatycznie:** E2E `attachments.spec.ts` (seria w wystąpieniu, usunięcie i „Cofnij”), `tests/unit/attachments.test.ts`
+  (`attachmentsOfBlock`), `tests/fs/attachments.test.ts` (sprzątanie po 30 dniach). Ty: rzut oka.
+- **Jak sprawdzić:** w „Szablonach” dołącz plik do bloku szablonu, w edycji serii – link. Otwórz dzień jutrzejszy
+  i blok z szablonu oraz wystąpienie serii. W „Dziś” dołącz plik do wystąpienia serii. Usuń załącznik i „Cofnij”; usuń
+  blok z załącznikiem w „Dziś” i „Cofnij”.
+- **Oczekiwany efekt:** w dniu widać załączniki z szablonu i serii z dopiskiem „z szablonu” / „z serii” (tylko otwórz
+  i pokaż w folderze); dodany w „Dziś” jest tylko w tym dniu; „Cofnij” przywraca załącznik i blok z jego załącznikami
+  (D410, D411, D414).
+- **Nie przechodzi, gdy:** załącznik szablonu nie widać w dniu z tego szablonu, dodany w dniu pojawia się w innych dniach
+  serii, albo po „Cofnij” bloku jego załączników nie ma.
+
+#### SNT4.5 Załącznik na drugim komputerze (1.15.0)
+- [ ] Odebrane
+- **Tylko Ty:** OneDrive i dwa komputery (testy: `tests/fs/attachments.test.ts` – plik po rekordzie, brak pliku).
+- **Jak sprawdzić:** na komputerze A dołącz zdjęcie (kilka MB) do bloku. Od razu otwórz ten blok na komputerze B,
+  potem jeszcze raz po zsynchronizowaniu OneDrive.
+- **Oczekiwany efekt:** na B najpierw pozycja z dopiskiem „Plik jeszcze nie dotarł z drugiego komputera (OneDrive).”,
+  kliknięcie daje komunikat, nie błąd; po dotarciu pliku dopisek znika, jest miniatura i plik się otwiera (D410).
+- **Nie przechodzi, gdy:** na B nie ma pozycji wcale, kliknięcie przed dotarciem daje błąd albo zawiesza aplikację,
+  albo po dotarciu dopisek zostaje.
+
+### SNT5 – kroki bloku i zadania (1.16.0)
+
+#### SNT5.1 Lista „Kroki” w panelu bloku – Enter, ptaszek, tytuł w miejscu, usuwanie i „Cofnij” (1.16.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/steps-screens.test.ts` (pole „Dodaj krok” – Enter dodaje i zostaje, pusty tytuł, 30 kroków,
+  ptaszek, tytuł w miejscu, „Cofnij” tylko po usunięciu), `tests/unit/engine/steps.test.ts`, `tests/fs/steps.test.ts`
+  (zapis dnia: lista w bloku, odhaczenia w `stepsDone`), `tests/e2e/steps-screens.spec.ts` (trzy kroki Enterem, ptaszek,
+  „✓ 1/3” na kafelku, usunięcie z „Cofnij”). Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” kliknij blok. W panelu nad notatką, w polu „Dodaj krok”, wpisz trzy kroki, po każdym Enter.
+  Odhacz pierwszy. Zmień tytuł drugiego i opuść pole. Usuń trzeci („×”) i kliknij „Cofnij”. Spróbuj dodać pusty krok.
+  Skopiuj dzień („Skopiuj ten dzień do…”) i obejrzyj blok w skopiowanym dniu.
+- **Oczekiwany efekt:** pole zostaje z kursorem po Enter; licznik przy nagłówku „Kroki” mówi „✓ 1/3”; zmiana tytułu zapisuje
+  się po opuszczeniu pola; po usunięciu jest „Krok usunięty · Cofnij” (inne zmiany – bez komunikatu); pusty krok jest
+  odrzucony z komunikatem „Krok potrzebuje treści.”; w skopiowanym dniu kroki są odznaczone.
+- **Nie przechodzi, gdy:** po Enter pole traci kursor, pusty krok dodaje się bez komunikatu, „Cofnij” nie przywraca kroku
+  (z jego ptaszkiem), albo zmiana kroku pokazuje pytanie o konflikt w zwykłym użyciu na jednym komputerze.
+
+#### SNT5.2 Kolejność kroków (przeciągnięcie, Alt+↑/↓) i licznik „✓ 3/4” na kafelku „Dziś” i „Tygodnia” (1.16.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/steps-screens.test.ts` (uchwyt, Alt+strzałki, licznik na osi i w „Tygodniu”),
+  `tests/e2e/steps-screens.spec.ts` (Alt+↓ i przeciągnięcie uchwytu „⋮⋮”, licznik na kafelku). Ty: rzut oka.
+- **Jak sprawdzić:** w panelu bloku z kilkoma krokami przeciągnij uchwyt „⋮⋮” ostatniego kroku na pierwszy; potem na kroku
+  (kursor w tytule) wciśnij Alt+↓ i Alt+↑. Odhacz dwa kroki i spójrz na kafelek bloku w „Dziś” oraz w „Tygodniu”. Blok bez kroków
+  porównaj z blokiem z krokami.
+- **Oczekiwany efekt:** krok zmienia miejsce, a jego ptaszek idzie z nim; kursor zostaje na przestawionym kroku; kafelek
+  pokazuje „✓ 2/4” obok nazwy (w „Tygodniu” też), a blok bez kroków nie ma licznika; kroki nic nie zmieniają w energii,
+  punktach ani budżecie dnia.
+- **Nie przechodzi, gdy:** przeciągnięcie nie zmienia kolejności albo ją odwraca, ptaszek zostaje przy miejscu zamiast przy
+  kroku, Alt+strzałki zmieniają coś poza listą, licznik na kafelku nie zgadza się z panelem, albo kafelek bez kroków ma „✓ 0/0”.
+
+#### SNT5.3 Kroki w szablonie, w serii („Tylko to · To i następne · Cała seria”) i w zadaniu w „Sprawach” (1.16.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/steps-screens.test.ts` (szablon bez ptaszków, zakres serii raz na panel, wiersz zadania),
+  `tests/web/steps-review*.test.ts`, `tests/unit/engine/steps*.test.ts`, `tests/fs/steps.test.ts` (lista na każdej
+  wersji serii, blok zadania i zadanie zgodne w obie strony), `tests/e2e/steps.spec.ts`, `series.spec.ts`, `cases.spec.ts`.
+  Ty: rzut oka.
+- **Jak sprawdzić:** w „Szablonach” otwórz blok szablonu, dodaj dwa kroki; sprawdź dzień z tego szablonu jutro. W „Dziś” otwórz
+  wystąpienie serii (↻) i dodaj krok – wybierz zakres; dodaj drugi. W „Sprawach” rozwiń „Kroki” przy zadaniu, dodaj krok,
+  zaplanuj zadanie na oś i odhacz krok w panelu jego bloku, potem sprawdź go na stronie „Sprawy”.
+- **Oczekiwany efekt:** w szablonie jest sama lista (bez ptaszków i licznika), a każdy dzień z niego startuje z krokami
+  odznaczonymi; pytanie o zakres pada raz po otwarciu panelu wystąpienia i obowiązuje do jego zamknięcia, ptaszek nie pyta;
+  prośba nie ma kroków; blok z zadania ma jego kroki, a odhaczenie w bloku odhacza je w zadaniu (i odwrotnie), także po
+  przeniesieniu bloku.
+- **Nie przechodzi, gdy:** kroki szablonu albo serii wracają odhaczone następnego dnia, pytanie o zakres pada przy każdym
+  Enterze, zmiana serii nie dociera do wystąpień od dziś, albo zadanie i jego blok mają różne listy lub odhaczenia.
+
+#### SNT5.4 Pasek pulpitu: „☐ krok · krok 1/4” z ptaszkiem, „Wszystkie kroki ✓” (1.16.0)
+- [ ] Odebrane
+- **Tylko Ty:** pasek na prawdziwym pulpicie (kliknięcie bez klawiszy, nad innymi oknami) – testy sprawdzają widok i
+  odhaczenie w atrapie pomocnika (`tests/web/steps.test.ts`, `tests/e2e/steps.spec.ts`), nie Twojego pulpitu.
+- **Jak sprawdzić:** zaplanuj blok z trzema krokami i uruchom go („Start”). Zminimalizuj okno główne. Na pasku pulpitu kliknij
+  ptaszek przy kroku, potem przy następnym i ostatnim. Powtórz w trybie „Odcinam się” (linia kroku znika) i z blokiem w tle.
+- **Oczekiwany efekt:** pasek pokazuje „☐ <pierwszy nieodhaczony krok> · krok 1/3” z ptaszkiem; klik odhacza krok i od razu
+  pokazuje następny, bez dźwięku i bez kropki; po ostatnim jest „Wszystkie kroki ✓” bez ptaszka; w oknie głównym ten sam
+  krok jest odhaczony; w „Odcinam się” i dla bloku w tle linii kroku nie ma.
+- **Nie przechodzi, gdy:** ptaszek nic nie robi albo odhacza inny krok, pasek gra dźwięk, po ostatnim kroku nadal pokazuje
+  ptaszek, linia kroku jest widoczna w „Odcinam się”, albo pasek wychodzi nad inne okna bez „Zawsze na wierzchu”.
+
+#### SNT5.5 Dwa komputery – odhaczenia z obu zostają (1.16.0)
+- [ ] Odebrane
+- **Tylko Ty:** synchronizacja przez OneDrive między dwoma komputerami – testy używają kopii folderu i symulatora
+  (`tests/fs/steps.test.ts`, `tests/unit/engine/steps*.test.ts`: odhaczenia liść po liściu, kopia konfliktowa łączy je sumą).
+- **Jak sprawdzić:** na obu komputerach otwórz ten sam dzień z blokiem z czterema krokami. Na pierwszym odhacz krok 1, na
+  drugim krok 3 (zanim OneDrive zsynchronizuje). Poczekaj na synchronizację i obejrzyj panel bloku na obu komputerach. Potem
+  na jednym zmień tytuł kroku 2, na drugim dodaj krok.
+- **Oczekiwany efekt:** na obu komputerach odhaczone są kroki 1 i 3 (odhaczenia z obu zostają), bez pytania o konflikt;
+  zmiana tytułu i nowy krok też łączą się bez pytania (zmiany różnych kroków nie kolidują).
+- **Nie przechodzi, gdy:** któreś odhaczenie znika, aplikacja pyta o konflikt przy samych odhaczeniach, albo zmiany różnych
+  kroków kończą się kopią konfliktową.
+
+#### SNT5.6 Plik albo link przeciągnięty na okno aplikacji nic nie psuje (1.16.0)
+- [ ] Odebrane
+- **Tylko Ty:** przeciąganie z Eksploratora i przeglądarki na prawdziwe okna – testy sprawdzają blokadę nawigacji okien
+  (`tests/unit/windows-navigation.test.ts`), nie Twój pulpit.
+- **Jak sprawdzić:** przeciągnij plik z Eksploratora (np. obraz lub PDF) na okno główne, na okienko „Do skrzynki” (Win+Alt+N)
+  i na panel ikony. Przeciągnij na okno główne link z przeglądarki.
+- **Oczekiwany efekt:** okno zostaje na swojej stronie – nic się nie otwiera ani nie zastępuje strony aplikacji; skróty i
+  przyciski działają dalej.
+- **Nie przechodzi, gdy:** okno pokazuje przeciągnięty plik albo stronę zamiast aplikacji, robi się pusta po upuszczeniu,
+  albo trzeba zrestartować aplikację.
 
 ### HKU2 i HKU3 – terminy, data wykonania, priorytety (1.17.0)
 

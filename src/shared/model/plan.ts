@@ -7,6 +7,7 @@
 import { isIsoDate } from '../time/zone'
 import { NOTE_MAX } from './note'
 import { DAY_TYPES, type DayTypeId } from './settings'
+import { doneSetFrom, stepsFrom, type Step } from './steps'
 
 /** „druga zmiana” and „analiza tygodniowa” (spec „Model dnia”): a block with either waits for „Zacznij”. */
 export type BlockTag = 'secondShift' | 'weeklyAnalysis'
@@ -57,6 +58,12 @@ export interface PlanBlock {
   task: string | null
   /** The routine whose steps this block is (spec „Rutyna”). */
   routine: string | null
+  /**
+   * Its list „Kroki” (D440, `model/steps.ts`): in memory with the ticks of its day (`dayPlan` – a block of a file or a
+   * template has none ticked); a version that does not know the field keeps it in the file. A block of a snapshot written
+   * by such a version has none (`dayPlan` makes it an empty list).
+   */
+  steps: Step[]
   /** The day this block was moved from (the morning plan shows „z wczoraj”). */
   movedFrom: string | null
   /** A variant of a change of the plan shortened it or moved it (the game: „niezmieniony przez warianty”). */
@@ -122,6 +129,8 @@ export interface DayFile {
    * question answered on any computer is never asked again.
    */
   asked: Record<string, string>
+  /** The steps ticked off on this day (D440, T786): block id → its ticked step ids (in the file a map block → step → true). */
+  stepsDone: Record<string, string[]>
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -178,6 +187,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     requests: Array.isArray(v.requests) ? [...new Set(v.requests.filter((x): x is string => typeof x === 'string' && !!x))].slice(0, 50) : [],
     task: typeof v.task === 'string' && v.task ? v.task : null,
     routine: typeof v.routine === 'string' && v.routine ? v.routine : null,
+    steps: stepsFrom(v.steps),
     movedFrom: isIsoDate(v.movedFrom) ? v.movedFrom : null,
     byVariant: v.byVariant === true
   }
@@ -204,6 +214,7 @@ export function planBlock(p: Partial<PlanBlock> & Pick<PlanBlock, 'id' | 'catego
     requests: [],
     task: null,
     routine: null,
+    steps: [],
     movedFrom: null,
     byVariant: false,
     ...p
@@ -242,6 +253,32 @@ export function templateVersionOn(t: Template, date: string): TemplateVersion | 
   let found: TemplateVersion | null = null
   for (const v of t.versions) if (v.from <= date) found = v
   return found
+}
+
+/**
+ * The version a version from `from` is written over (a template's, a series'): its own of that date, else the last one
+ * before it – a new version is a copy of the one in force then, and what that one keeps (items and fields this version does
+ * not read) goes on in it. Undefined – none before it.
+ */
+export function sourceVersionKey(keys: Iterable<string>, from: string): string | undefined {
+  let best: string | undefined
+  for (const k of keys) {
+    if (k === from) return k
+    if (k < from && (best === undefined || k > best)) best = k
+  }
+  return best
+}
+
+/**
+ * The template with its version from `from` changed by `patch` – the version made when it is not there yet, as a copy of
+ * the one in force then (a change of a template applies from a date, by default tomorrow). One rule for the page of
+ * templates and the steps of a template's block.
+ */
+export function withTemplateVersion(t: Template, from: string, patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)): Template {
+  const inForceThen = templateVersionOn(t, from)
+  const v = t.versions.find((x) => x.from === from) ?? (inForceThen ? { ...inForceThen, from } : { from, blocks: [], budgetMin: null, maxMin: null })
+  const next = { ...v, ...(typeof patch === 'function' ? patch(v) : patch) }
+  return { ...t, versions: [...t.versions.filter((x) => x.from !== from), next].sort((a, b) => (a.from < b.from ? -1 : 1)) }
 }
 
 /** The template for a type and weekday on `date` (spec): the type's template for that weekday, else its default one. */
@@ -288,6 +325,12 @@ export function dayFileFrom(v: unknown, date: string): DayFile {
   if (isPlain(r.movedTo)) for (const [k, x] of Object.entries(r.movedTo)) if (isIsoDate(x)) movedTo[k] = x
   const asked: Record<string, string> = {}
   if (isPlain(r.asked)) for (const [k, x] of Object.entries(r.asked)) if (typeof x === 'string') asked[k] = x.slice(0, 40)
+  const stepsDone: Record<string, string[]> = {}
+  if (isPlain(r.stepsDone))
+    for (const [k, x] of Object.entries(r.stepsDone)) {
+      const ids = [...doneSetFrom(x)]
+      if (ids.length) stepsDone[k] = ids
+    }
   return {
     schema: 1,
     date,
@@ -304,7 +347,8 @@ export function dayFileFrom(v: unknown, date: string): DayFile {
             .map(([k]) => k)
         : [],
     movedTo,
-    asked
+    asked,
+    stepsDone
   }
 }
 

@@ -42,7 +42,7 @@ const write = (rel: string, value: unknown) => {
   writeFileSync(join(dataDir, rel), JSON.stringify(value))
 }
 
-const block = { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null }
+const block = { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null, steps: [] }
 const series = (id: string, start: string, o: Partial<Series> & { special?: 'held' | 'skip' | 'ask' } = {}): Series => ({
   id,
   root: id,
