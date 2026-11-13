@@ -63,12 +63,19 @@ export function useGoalsView(month: string): { view: GoalsView | null; failed: b
 
 const dayLists = new ViewCache<DaysView>()
 const calendarMonths = new ViewCache<MonthView>()
-const readDays = (key: string) => window.rd.daysView(key.split(','))
+/** The key of a list of days: its dates, and `-` for a list without the curves of energy. */
+const readDays = (key: string) => {
+  const [list, plain] = key.split('|')
+  return window.rd.daysView(list!.split(','), { energy: plain !== '-' })
+}
 const readMonth = (month: string) => window.rd.monthView(month)
 
-/** Days on one axis (D417 „3 dni” – `threeDays`, D418 „Agenda” – `agendaDates`; null until read), as `useWeekView`. */
-export function useDaysView(dates: readonly string[]): { view: DaysView | null; failed: boolean } {
-  return useCounted(dates.join(','), readDays, dayLists)
+/**
+ * Days on one axis (D417 „3 dni” – `threeDays`, D418 „Agenda” – `agendaDates`; null until read), as `useWeekView`; `energy`
+ * false – without the curves of energy (the list of „Agenda” draws none, T954).
+ */
+export function useDaysView(dates: readonly string[], opts: { energy?: boolean } = {}): { view: DaysView | null; failed: boolean } {
+  return useCounted(`${dates.join(',')}|${opts.energy === false ? '-' : '+'}`, readDays, dayLists)
 }
 
 /** The month of „Kalendarz” ('RRRR-MM', D418): its days' fixed blocks and load (null until read), as `useWeekView`. */

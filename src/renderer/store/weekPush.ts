@@ -22,10 +22,11 @@ export interface WeekPush {
   days: WeekPushedDay[]
   /**
    * A block dragged to another day (D417, `moveWeekBlock`): its days go back together or not at all (`undoWeekPush`); the
-   * line says „Przeniesiono: <name> na <to>” (D422) – the name as the window named it at the move. Absent – a „Dodaj”, or a
-   * push within one day.
+   * line says „Przeniesiono: <name> na <to>” (D422) and, for the blocks anchored to it that had begun and stayed on its day,
+   * „<stayed> został – już trwa” (D424) – the names as the window named them at the move. Absent – a „Dodaj”, or a push
+   * within one day.
    */
-  move?: { blockId: string; name: string; from: string; to: string }
+  move?: { blockId: string; name: string; from: string; to: string; stayed?: string[] }
 }
 
 export interface WeekPushLine {

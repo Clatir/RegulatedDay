@@ -6,7 +6,7 @@ import { putBlock } from '@shared/data/dayEdits'
 import { editStands, inverseEdit } from '@shared/data/merge'
 import { plDateWithWeekday } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
-import { isSaved, trySaveWith, useData } from '../../store/data'
+import { isSaved, trySaveWith, useData, withOwner } from '../../store/data'
 import { countDay, dayUsable, type DayModel } from '../../store/day'
 import { toast } from '../../store/ui'
 import { dropWeekPushDays, useWeekPush, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
@@ -222,12 +222,24 @@ export async function undoWeekPush(push: WeekPush): Promise<WeekUndone> {
         sent.push(d.date)
       } else r.changed.push(d.date)
     }
+    // A move back (T953): the source's half that brings the block back is the owner, the target's that takes it off goes
+    // with it – a question about the source keeps the block on the target, „theirs” leaves it there; never on neither day.
+    if (push.move) {
+      const i = sent.indexOf(push.move.from)
+      if (i > 0) {
+        back.unshift(...back.splice(i, 1))
+        sent.unshift(...sent.splice(i, 1))
+      }
+      return i >= 0 ? withOwner(back[0]!, back.slice(1)) : back
+    }
     return back
   })
   out?.forEach((o, i) => {
     if (o.status === 'applied' || o.status === 'waiting') r.undone.push(sent[i]!)
   })
   r.saved = isSaved(out)
+  // A move goes back whole: a half waiting for your answer about the other is not undone yet (the line stays).
+  if (push.move && !r.saved) r.undone = []
   if (!r.saved) return r
   if (r.changed.length) toast('Część planu zmieniła się od przesunięcia – zostaje tak, jak jest teraz.', 'info', 6000)
   if (r.unreadable.length) toast(undoUnreadableText(r.unreadable), 'error', 6000)

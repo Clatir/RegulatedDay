@@ -16,9 +16,13 @@ import { dayFileFrom, templateFrom, type PlanBlock } from '@shared/model/plan'
 import type { AnyEvent } from '@shared/model/events'
 import { placeLogical } from '@shared/time/day'
 import { undoWeekLine, undoWeekPush, weekPushStanding } from '@renderer/features/week/weekActions'
-import { MOVE_BEGUN_TEXT, MOVE_FOLLOWER_TEXT, moveWeekBlock, type WeekMove } from '@renderer/features/week/weekMove'
+import type { Names } from '@shared/blockName'
+import { moveTarget } from '@shared/engine/planEdit'
+import { DEFAULT_SETTINGS } from '@shared/model/settings'
+import { MOVE_BEGUN_TEXT, moveWeekBlock, type WeekMove } from '@renderer/features/week/weekMove'
 import { weekPushLineText } from '@renderer/features/week/weekText'
-import { useData } from '@renderer/store/data'
+import { moveDayBlock } from '@renderer/features/today/dayActions'
+import { isSaved, useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 import { dropWeekPushDays, showWeekPush, useWeekPush } from '@renderer/store/weekPush'
 import { block, lm, Scenario } from '../unit/engine/dsl'
@@ -45,7 +49,8 @@ afterEach(() => {
 
 /**
  * The folder as the window sees it: the files change as the edits sent apply (a removal – no file); `answer` – the status
- * of an entry (absent: applied; anything else leaves the file as it is).
+ * of an entry (absent: applied; anything else leaves the file as it is). As the queue (T923): an entry that goes with others
+ * (`after`) waits while one of them is not applied.
  */
 function stub(start: Record<string, RawRecord | null>, o: { events?: Record<string, AnyEvent[]>; unreadable?: string[]; incomplete?: string[] } = {}) {
   const files: Record<string, RawRecord | null> = { ...start }
@@ -64,8 +69,10 @@ function stub(start: Record<string, RawRecord | null>, o: { events?: Record<stri
     },
     edit: async (entries) => {
       const call = sent.push(entries) - 1
+      const laid: boolean[] = []
       return entries.map((e) => {
-        const status = s.answer?.(e, call) ?? 'applied'
+        const status = e.after?.some((i) => !laid[i]) ? 'waiting' : (s.answer?.(e, call) ?? 'applied')
+        laid.push(status === 'applied')
         if (status !== 'applied') return { status }
         const date = dateOf(e.rel)
         if (e.remove) files[date] = null
@@ -86,11 +93,12 @@ const startOf = (raw: RawRecord | null | undefined, date: string, id: string) =>
 const rels = (s: { sent: EditEntry[][] }) => s.sent.map((c) => c.map((e) => dateOf(e.rel)))
 
 describe('D417 – przeniesienie bloku na inny dzień', () => {
-  it('blok trafia do dnia docelowego z godziną upuszczenia; źródło – movedTo; najpierw cel, potem źródło (T912)', async () => {
+  it('blok trafia do dnia docelowego z godziną upuszczenia; źródło – movedTo; jedna edycja: cel, za nim źródło (T952)', async () => {
     const s = stub({ [D1]: fileOf(D1, [flex('x', '11:00', 60)]), [D2]: fileOf(D2, []) })
     const r = await moveWeekBlock(mv('x', D1, D2, '12:00', 'Raport'), AT)
     expect(r.status).toBe('saved')
-    expect(rels(s)).toEqual([[D2], [D1]])
+    expect(rels(s)).toEqual([[D2, D1]])
+    expect(s.sent[0]!.map((e) => e.after)).toEqual([undefined, [0]])
     // A block of yours leaves the source's blocks; the move is noted.
     expect(blocksOf(s.files[D1], D1).map((b) => b.id)).toEqual([])
     expect(dayFileFrom(s.files[D1]!, D1).movedTo).toEqual({ x: D2 })
@@ -143,14 +151,38 @@ describe('D417 – przeniesienie bloku na inny dzień', () => {
     expect(blocksOf(s.files[D2], D2)).toEqual([])
   })
 
-  it('zakotwiczony blok, który już się zaczął – nic się nie przenosi, komunikat', async () => {
+  it('zaczęty zakotwiczony zostaje w swoim dniu z własną godziną; pasek go nazywa; „Cofnij” przywraca kotwicę (D424)', async () => {
     const x = flex('x', '11:00', 60)
-    const y = flex('y', '11:00', 30, { startMin: null, anchor: 'x' })
+    const y = flex('y', '11:00', 30, { startMin: null, anchor: 'x', categoryId: 'analiza' })
     const started = new Scenario({ date: D1, plan: [x, y] }).start('y', '09:00').events
     const s = stub({ [D1]: fileOf(D1, [x, y]), [D2]: fileOf(D2, []) }, { events: { [D1]: started } })
-    expect(await moveWeekBlock(mv('x', D1, D2, '12:00'), AT)).toEqual({ status: 'failed', push: null, pushed: 0 })
-    expect(s.sent).toEqual([])
-    expect(useUi.getState().toasts.some((t) => t.text.includes(MOVE_FOLLOWER_TEXT))).toBe(true)
+    const names: Names = { rd: useData.getState().rd, settings: DEFAULT_SETTINGS, routines: [], requests: [] }
+    const r = await moveWeekBlock({ ...mv('x', D1, D2, '12:00', 'Raport'), names }, AT)
+    expect(r.status).toBe('saved')
+    expect(blocksOf(s.files[D1], D1).map((b) => [b.id, b.startMin, b.anchor])).toEqual([['y', lm('12:00'), null]])
+    expect(dayFileFrom(s.files[D1]!, D1).movedTo).toEqual({ x: D2 })
+    expect(blocksOf(s.files[D2], D2).map((b) => b.id)).toEqual(['x'])
+    expect(weekPushLineText(r.push!)).toBe('Przeniesiono: Raport na wt 6.01 · Analiza został – już trwa')
+    await undoWeekPush(r.push!)
+    expect(
+      blocksOf(s.files[D1], D1)
+        .map((b) => [b.id, b.startMin, b.anchor])
+        .sort()
+    ).toEqual([
+      ['x', lm('11:00'), null],
+      ['y', null, 'x']
+    ])
+  })
+
+  it('pusta zmiana celu (blok już tam jest – inny komputer): źródło i tak go oddaje, wynik prawdziwy', async () => {
+    const x = flex('x', '11:00', 60)
+    const from = fileOf(D1, [x])
+    const there = moveTarget(from, fileOf(D2, []), x, [x], D1, D2, true, lm('12:00'), [])
+    const s = stub({ [D1]: from, [D2]: there })
+    const r = await moveWeekBlock(mv('x', D1, D2, '12:00'), AT)
+    expect(r.status).toBe('saved')
+    expect(rels(s)).toEqual([[D1]])
+    expect(dayFileFrom(s.files[D1]!, D1).movedTo).toEqual({ x: D2 })
   })
 
   it('na zajętym miejscu rozsuwa kolejne elastyczne dnia docelowego – w tym samym wpisie tego dnia', async () => {
@@ -238,66 +270,78 @@ describe('D417 – przeniesienie bloku na inny dzień', () => {
   })
 })
 
-describe('T912 – dwa pliki: połowa nigdy nie zostaje sama', () => {
-  const files = () => ({ [D1]: fileOf(D1, [flex('x', '11:00', 60)]), [D2]: fileOf(D2, []) })
+describe('„Przenieś na…” w panelu bloku – ta sama droga (D424, T951, T952)', () => {
+  it('zakotwiczone niezaczęte idą z blokiem, zaczęty zostaje; cel jest właścicielem edycji, źródło za nim', async () => {
+    const x = flex('x', '11:00', 60)
+    const y = flex('y', '11:00', 30, { startMin: null, anchor: 'x' })
+    const z = flex('z', '11:00', 15, { startMin: null, anchor: 'x' })
+    const s = stub({ [D1]: fileOf(D1, [x, y, z]), [D2]: null })
+    expect(isSaved(await moveDayBlock(D1, s.files[D1]!, [x, y, z], x, D2, null, true, new Set(['z'])))).toBe(true)
+    expect(s.sent[0]!.map((e) => [dateOf(e.rel), e.after])).toEqual([
+      [D2, undefined],
+      [D1, [0]]
+    ])
+    expect(blocksOf(s.files[D2], D2).map((b) => [b.id, b.anchor])).toEqual([
+      ['x', null],
+      ['y', 'x']
+    ])
+    expect(blocksOf(s.files[D1], D1).map((b) => [b.id, b.anchor, b.startMin])).toEqual([['z', null, lm('12:00')]])
+  })
+})
 
-  it('cel nie przyjął zapisu (uszkodzony plik): źródła nie dotyka', async () => {
+describe('T952 – jedna edycja z zależnością: blok nigdy w żadnym dniu', () => {
+  const files = () => ({ [D1]: fileOf(D1, [flex('x', '11:00', 60)]), [D2]: fileOf(D2, [flex('a', '12:00', 30)]) })
+
+  it('cel (właściciel) uszkodzony: źródło czeka z nim – nic nie zapisane, blok w swoim dniu', async () => {
     const s = stub(files())
-    s.answer = (e) => (dateOf(e.rel) === D2 ? 'broken' : null)
+    s.answer = (e) => (dateOf(e.rel) === D2 && !e.after ? 'broken' : null)
     expect(await moveWeekBlock(mv('x', D1, D2, '12:00'), AT)).toEqual({ status: 'failed', push: null, pushed: 0 })
-    expect(rels(s)).toEqual([[D2]])
     expect(blocksOf(s.files[D1], D1).map((b) => b.id)).toEqual(['x'])
+    expect(dayFileFrom(s.files[D1]!, D1).movedTo).toEqual({})
   })
 
-  it('cel spotkał zmianę z innego komputera (pytanie): źródło czeka – blok zostaje w swoim dniu', async () => {
+  it('cel spotkał zmianę z innego komputera (pytanie): źródło czeka na odpowiedź – blok w swoim dniu, bez linii', async () => {
     const s = stub(files())
-    s.answer = (e) => (dateOf(e.rel) === D2 ? 'conflict' : null)
+    s.answer = (e) => (dateOf(e.rel) === D2 && !e.after ? 'conflict' : null)
     expect(await moveWeekBlock(mv('x', D1, D2, '12:00'), AT)).toEqual({ status: 'pending', push: null, pushed: 0 })
-    expect(rels(s)).toEqual([[D2]])
     expect(blocksOf(s.files[D1], D1).map((b) => b.id)).toEqual(['x'])
   })
 
-  it('źródło odrzucone na dobre (uszkodzony plik): cel cofnięty – blok nigdy w żadnym dniu', async () => {
-    const s = stub(files())
-    s.answer = (e) => (dateOf(e.rel) === D1 && !e.remove && e.edits.some((f) => f.path[0] === 'movedTo') ? 'broken' : null)
-    const r = await moveWeekBlock(mv('x', D1, D2, '12:00'), AT)
-    expect(r).toEqual({ status: 'failed', push: null, pushed: 0 })
-    expect(rels(s)).toEqual([[D2], [D1], [D2]])
-    expect(blocksOf(s.files[D1], D1).map((b) => b.id)).toEqual(['x'])
-    expect(blocksOf(s.files[D2], D2)).toEqual([])
-  })
-
-  it('źródło nieczytelne po zapisie celu: cel cofnięty', async () => {
-    const s = stub(files())
-    s.answer = (e, call) => {
-      if (call === 0) s.unreadable = [D1]
-      return null
-    }
-    expect((await moveWeekBlock(mv('x', D1, D2, '12:00'), AT)).status).toBe('failed')
-    expect(blocksOf(s.files[D2], D2)).toEqual([])
-  })
-
-  it('źródło spotkało zmianę z innego komputera (pytanie): cel zostaje – w najgorszym razie blok w obu dniach, nigdy zgubiony', async () => {
+  it('źródło spotkało zmianę (pytanie): cel ma blok, bez linii i bez znacznika – do odpowiedzi', async () => {
     const s = stub(files())
     s.answer = (e) => (dateOf(e.rel) === D1 ? 'conflict' : null)
-    expect(await moveWeekBlock(mv('x', D1, D2, '12:00'), AT)).toEqual({ status: 'pending', push: null, pushed: 0 })
-    expect(blocksOf(s.files[D2], D2).map((b) => b.id)).toEqual(['x'])
-    expect(blocksOf(s.files[D1], D1).map((b) => b.id)).toEqual(['x'])
+    const r = await moveWeekBlock(mv('x', D1, D2, '12:00'), AT)
+    expect(r).toEqual({ status: 'pending', push: null, pushed: 0 })
+    expect(blocksOf(s.files[D2], D2).map((b) => b.id)).toContain('x')
   })
 
-  it('źródło odrzucone, a celu nie da się już cofnąć (zmieniony w międzyczasie): cel zostaje z „Cofnij” w linii', async () => {
+  it('rozsunięcie celu za blokiem – osobny wpis za właścicielem; jego pytanie nie zatrzymuje przeniesienia', async () => {
     const s = stub(files())
-    s.answer = (e, call) => {
-      if (call === 1) {
-        // Meanwhile the moved block was dragged again on the target.
-        s.files[D2] = { ...s.files[D2]!, blocks: (s.files[D2]!.blocks as RawRecord[]).map((b) => ({ ...b, startMin: lm('13:00') })) }
-        return 'broken'
-      }
-      return null
-    }
-    const r = await moveWeekBlock(mv('x', D1, D2, '12:00', 'Raport'), AT)
+    s.answer = (e) => (dateOf(e.rel) === D2 && e.after && e.edits.every((f) => f.path.at(-1) === 'startMin') ? 'conflict' : null)
+    const r = await moveWeekBlock(mv('x', D1, D2, '12:00'), AT)
+    expect(s.sent[0]!.map((e) => [dateOf(e.rel), e.after])).toEqual([
+      [D2, undefined],
+      [D1, [0]],
+      [D2, [0]]
+    ])
     expect(r.status).toBe('pending')
-    expect(r.push).toMatchObject({ days: [{ date: D2 }], move: { name: 'Raport' } })
+    expect(blocksOf(s.files[D2], D2).map((b) => b.id)).toContain('x')
+    expect(dayFileFrom(s.files[D1]!, D1).movedTo).toEqual({ x: D2 })
+  })
+
+  it('„Cofnij”: źródło przywraca blok jako właściciel, zdjęcie z celu idzie za nim – pytanie o źródło zostawia blok w celu', async () => {
+    const s = stub(files())
+    const r = await moveWeekBlock(mv('x', D1, D2, '12:00'), AT)
+    s.sent.length = 0
+    s.answer = (e) => (dateOf(e.rel) === D1 ? 'conflict' : null)
+    const done = await undoWeekPush(r.push!)
+    expect(s.sent[0]!.map((e) => [dateOf(e.rel), e.after])).toEqual([
+      [D1, undefined],
+      [D2, [0]]
+    ])
+    expect(done.saved).toBe(false)
+    expect(done.undone).toEqual([])
+    expect(blocksOf(s.files[D2], D2).map((b) => b.id)).toContain('x')
   })
 })
 
@@ -362,7 +406,8 @@ describe('D417, D422 – dzisiaj i ten sam dzień', () => {
     expect(s.told).toHaveLength(1)
     const [day, count, entry, made, line] = s.told[0]!
     expect([day, count, made, line]).toEqual([TODAY, 1, null, false])
-    expect(entry).toBe(s.sent[0]![0])
+    // The day's whole change (the block and the pushed one) – the one the window's „Cofnij” takes back too.
+    expect(entry).toBe(r.push!.days.find((d) => d.date === TODAY)!.entry)
   })
 
   it('w obrębie dnia z rozsunięciem: nowa godzina i przesunięte w jednym wpisie, linia jak „Dodaj” (bez przeniesienia); „Cofnij” wraca', async () => {
@@ -379,6 +424,18 @@ describe('D417, D422 – dzisiaj i ten sam dzień', () => {
     expect(blocksOf(s.files[D1], D1).map((b) => [b.id, b.startMin])).toEqual([
       ['x', lm('12:00')],
       ['a', lm('11:00')]
+    ])
+  })
+
+  it('w obrębie dnia z zaczętym zakotwiczonym: zmiana godziny jak w „Dziś”, bez sprawdzania zakotwiczonych (D424)', async () => {
+    const x = flex('x', '12:00', 60)
+    const y = flex('y', '12:00', 30, { startMin: null, anchor: 'x' })
+    const started = new Scenario({ date: D1, plan: [x, y] }).start('y', '09:00').events
+    const s = stub({ [D1]: fileOf(D1, [x, y]) }, { events: { [D1]: started } })
+    expect((await moveWeekBlock(mv('x', D1, D1, '13:00'), AT)).status).toBe('saved')
+    expect(blocksOf(s.files[D1], D1).map((b) => [b.id, b.startMin, b.anchor])).toEqual([
+      ['x', lm('13:00'), null],
+      ['y', null, 'x']
     ])
   })
 

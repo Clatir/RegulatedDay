@@ -152,9 +152,9 @@ function ThreeDaysBody({ middle }: { middle: string }) {
   )
 }
 
-/** „Agenda” (D418): the seven days from today. */
+/** „Agenda” (D418): the seven days from today – a list, no curves of energy to count (T954). */
 function AgendaBody({ today }: { today: string }) {
-  const { view, failed } = useDaysView(agendaDates(today))
+  const { view, failed } = useDaysView(agendaDates(today), { energy: false })
   return (
     <>
       {view ? (

@@ -223,11 +223,10 @@ const draggableKind = (b: BlockInfo): boolean => b.inPlan && b.origin !== 'sessi
  * A block of the plan the axis lets you drag to another place (D305; between the days of „Tydzień” and „3 dni” the same –
  * D417): not begun, not taken off the day (parked, cancelled), of its own hour (`ownHourBlock`), and not passed – it ends
  * after now (`endIdx` – where the axis shows its end; `nowIdx` null: a day to come). A day gone by is never edited by
- * dragging (its axis has no `onMove`): the caller says so. `anchored` (T911): a block anchored to the one dragged to
- * another day, which goes with it – the same rule but its hour is its anchor's.
+ * dragging (its axis has no `onMove`): the caller says so.
  */
-export function movableBlock(b: BlockInfo, f: Pick<BlockFact, 'startedAt' | 'parkedAt' | 'cancelledAt'> | undefined, endIdx: number, nowIdx: number | null, anchored = false): boolean {
-  return f?.startedAt == null && f?.parkedAt == null && f?.cancelledAt == null && (anchored ? b.anchor != null && draggableKind(b) : ownHourBlock(b)) && (nowIdx == null || endIdx > nowIdx)
+export function movableBlock(b: BlockInfo, f: Pick<BlockFact, 'startedAt' | 'parkedAt' | 'cancelledAt'> | undefined, endIdx: number, nowIdx: number | null): boolean {
+  return f?.startedAt == null && f?.parkedAt == null && f?.cancelledAt == null && ownHourBlock(b) && (nowIdx == null || endIdx > nowIdx)
 }
 
 /** Counts for the boundary, the end of work and its forecast (spec: no „nie przerywa regeneracji”, no „po pracy”). */

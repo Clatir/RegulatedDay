@@ -173,6 +173,15 @@ function begunState(f: BlockFact, when: HorizonWhen): HorizonBlockState {
   return f.runs.some((r) => r.to === OPEN) ? 'running' : 'paused'
 }
 
+/**
+ * The energy module of a day gone by for its curve (T950): its grade's (`modules.energy` – on all day, or off at some moment:
+ * off all day, or its own switches in its log decide), else on – a day not frozen has a check-in only if the module was on.
+ */
+function gradeEnergy(frozen: FrozenDay | null): boolean {
+  const m = frozen && isPlain(frozen.grade.modules) ? frozen.grade.modules.energy : undefined
+  return typeof m === 'boolean' ? m : true
+}
+
 /** A trading session (a category of the kind „sesja”) or the second shift (D192: it is a session). */
 const isSessionBlock = (b: BlockInfo): boolean => b.rules.kind === 'session' || b.secondShift
 
@@ -287,8 +296,9 @@ export function sessionsOf(ctx: DayContext, state: DayState, when: HorizonWhen):
 
 /**
  * One day of the horizon (`when` – against today; `frozen` – a frozen day's freeze), counted once: its column of the week
- * and its measures of the month's goals, the curve of its energy (D417; `energyOn` – the energy module during the day before
- * its own switches, T913; null – no curve asked for: the month, the goals, T914) and its work against the budget (D418).
+ * and its measures of the month's goals, the curve of its energy (D417; `energyOn` – the energy module as the settings have
+ * it now, for today and a day to come – a day gone by has its own, T950; null – no curve asked for: the month, the goals,
+ * „Agenda”, T914, T954) and its work against the budget (D418).
  */
 export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay | null = null, energyOn: boolean | null = true): HorizonDay {
   const past = when === 'past'
@@ -338,8 +348,10 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
     regen,
     studyMin: when === 'future' ? 0 : studyMinutes(state, when),
     sessions: sessionsOf(counted, state, when),
-    // Drawn with the axis it lies under (a frozen day's later corrections too); not counted when nobody draws it.
-    energy: energyOn == null ? null : columnEnergy(axis.ctx, axis.state, when, energyOn),
+    // Drawn with the axis it lies under (a frozen day's later corrections too); not counted when nobody draws it. A day gone
+    // by with its module of that day (T950): its grade's; not frozen – on (its check-in was given with the module on, and
+    // its own switches in its log decide the rest).
+    energy: energyOn == null ? null : columnEnergy(axis.ctx, axis.state, when, past ? gradeEnergy(frozen) : energyOn),
     // A day gone by nobody used has no measure of its work (as its regeneration – T904).
     budget: past && !presence && state.dayType !== 'zjazd-stacjonarny' ? null : { workMin: state.budgetUsedMin + state.budget.forecastMin, limitMin: state.budget.limitMin }
   }

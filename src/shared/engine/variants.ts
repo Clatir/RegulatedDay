@@ -16,8 +16,8 @@ import { logicalMinuteOf } from '../time/day'
 import { isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
 import type { EnergyState } from './energy'
-import { endShiftOf, OPEN, type BlockFact } from './facts'
-import { atOf } from './grid'
+import { endShiftOf, foldFacts, OPEN, type BlockFact } from './facts'
+import { atOf, gridOf } from './grid'
 import { moveBetweenDays, newUserBlock } from './planEdit'
 import { suggestRegen } from './reserve'
 import { secondShiftStart } from './timer'
@@ -418,6 +418,7 @@ export function applyVariant(ctx: DayContext, today: Raw | null, tomorrow: Raw |
   let t = dayRaw(today, ctx.date)
   let next = tomorrow
   let start: string | null = null
+  let begun: ReadonlySet<string> | undefined
   for (const c of v.changes) {
     const b = ctx.plan.find((x) => x.id === (c as { block?: string }).block)
     // A block a variant changed is marked: it gives no note for accuracy (the game).
@@ -425,7 +426,9 @@ export function applyVariant(ctx: DayContext, today: Raw | null, tomorrow: Raw |
     // A new start („Ułóż pod energię”) over the block as the file holds it, without the mark: its length stays as planned (T610).
     else if (c.k === 'start' && b) t = putBlock(t, { ...(dayFileFrom(t, ctx.date).blocks.find((x) => x.id === b.id) ?? b), startMin: c.startMin })
     else if (c.k === 'tomorrow' && b) {
-      const moved = moveBetweenDays(t, next, { ...b, byVariant: true }, ctx.plan, ctx.date, tomorrowDate, false)
+      // The blocks anchored to it go with it; one begun stays today with its own hour (D424, T951).
+      begun ??= new Set([...foldFacts(gridOf(ctx.date), ctx.events).blocks].filter(([, f]) => f.startedAt != null).map(([id]) => id))
+      const moved = moveBetweenDays(t, next, { ...b, byVariant: true }, ctx.plan, ctx.date, tomorrowDate, false, { begun })
       t = moved.source
       next = moved.target
     } else if (c.k === 'regen') {

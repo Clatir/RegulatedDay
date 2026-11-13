@@ -426,15 +426,17 @@ function undoWake(was: WakeWas): Promise<EditOutcome[] | null> {
 
 /**
  * A block moved to another day (spec „Przeniesienie”): it leaves this day (its id stays, the move is noted), comes to
- * the target with the day it came from and one move more when you moved it.
+ * the target with the day it came from and one move more when you moved it – with the blocks anchored to it that have not
+ * begun (`begun`; one begun stays with its own hour – D424, T951). The target is the owner of the edit, the source goes with
+ * it (T952): the block never leaves its day before the target has it.
  */
-export function moveDayBlock(fromDate: string, fromRaw: RawRecord | null, plan: readonly PlanBlock[], b: PlanBlock, toDate: string, toRaw: RawRecord | null, byYou = true): Promise<EditOutcome[] | null> {
+export function moveDayBlock(fromDate: string, fromRaw: RawRecord | null, plan: readonly PlanBlock[], b: PlanBlock, toDate: string, toRaw: RawRecord | null, byYou = true, begun: ReadonlySet<string> = new Set()): Promise<EditOutcome[] | null> {
   return trySaveWith(async () => {
     const now = await dayFilesNow([fromDate, toDate], (d) => (d === fromDate ? fromRaw : toRaw))
     const from = now[fromDate] ?? null
     const to = now[toDate] ?? null
-    const { source, target } = moveBetweenDays(from, to, blockNow(dayRaw(from, fromDate), fromDate, b), plan, fromDate, toDate, byYou)
-    return [editOf(paths.day(fromDate), from, source), editOf(paths.day(toDate), to, target)]
+    const { source, target } = moveBetweenDays(from, to, blockNow(dayRaw(from, fromDate), fromDate, b), plan, fromDate, toDate, byYou, { begun })
+    return withOwner(editOf(paths.day(toDate), to, target), [editOf(paths.day(fromDate), from, source)].filter((e): e is EditEntry => e != null))
   })
 }
 

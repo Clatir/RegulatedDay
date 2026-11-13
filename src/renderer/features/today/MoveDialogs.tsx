@@ -12,7 +12,7 @@ import type { DayModel } from '../../store/day'
 import { isSaved } from '../../store/data'
 import { useBusy } from '../../lib/busy'
 import { MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from '../calendar/MonthGrid'
-import { copyDayTo, moveDayBlock } from './dayActions'
+import { begunIds, copyDayTo, moveDayBlock } from './dayActions'
 
 export function MoveDialog({ model, block, today, onClose }: { model: DayModel; block: PlanBlock; today: string; onClose: () => void }) {
   const [to, setTo] = useState(addDays(model.date, 1))
@@ -21,7 +21,8 @@ export function MoveDialog({ model, block, today, onClose }: { model: DayModel; 
   const move = () =>
     run(async () => {
       if (to === model.date) return onClose()
-      if (isSaved(await moveDayBlock(model.date, model.data.dayFile, model.ctx.plan, block, to, null))) onClose()
+      // The blocks anchored to it go with it; one begun stays on this day (D424).
+      if (isSaved(await moveDayBlock(model.date, model.data.dayFile, model.ctx.plan, block, to, null, true, begunIds(model.state.facts)))) onClose()
     })
   return (
     <Dialog

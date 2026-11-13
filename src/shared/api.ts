@@ -832,9 +832,9 @@ export interface RdApi {
   /**
    * Days on one axis as the week counts them (D417 „3 dni” – `threeDays`, D418 „Agenda” – `agendaDates`): 1 to
    * `DAYS_VIEW_MAX` dates, in their order; each with its blocks (`movable` – may be dragged, D417), the curve of its energy
-   * and its work against the budget. Another list is refused (an error).
+   * (`energy: false` – none counted: „Agenda”, T954) and its work against the budget. Another list is refused (an error).
    */
-  daysView(dates: string[]): Promise<DaysView>
+  daysView(dates: string[], opts?: { energy?: boolean }): Promise<DaysView>
   /**
    * The month shown in „Kalendarz” ('RRRR-MM', D418): each of its days with its fixed blocks and its load (`monthDayOf`); the
    * cell with the all-day events – `monthCell`.

@@ -1136,11 +1136,13 @@ export class DataHub {
 
   /**
    * Days of the horizon on one axis (D417 „3 dni”, D418 „Agenda”): 1 to `DAYS_VIEW_MAX` dates, each a date, none twice
-   * (checked here – the window never asks the helper process for an unbounded count).
+   * (checked here – the window never asks the helper process for an unbounded count); `opts.energy` false – without the
+   * curves of energy (T954; anything else – with them).
    */
-  async daysView(dates: unknown): Promise<DaysView> {
+  async daysView(dates: unknown, opts?: unknown): Promise<DaysView> {
     if (!Array.isArray(dates) || !dates.length || dates.length > DAYS_VIEW_MAX || !dates.every(isIsoDate) || new Set(dates).size !== dates.length) throw new Error('dni widoku')
-    return this.need().daysView(dates as string[])
+    const energy = !(opts && typeof opts === 'object' && (opts as { energy?: unknown }).energy === false)
+    return this.need().daysView(dates as string[], undefined, energy)
   }
 
   /** The month shown in „Kalendarz” (D418, 'RRRR-MM'): its days' fixed blocks and load. */

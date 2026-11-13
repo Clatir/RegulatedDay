@@ -108,7 +108,7 @@ describe('„3 dni” i „Agenda” w folderze danych', () => {
   })
 })
 
-describe('krzywa energii w folderze danych – moduł dnia i kto ją liczy (T913, T914)', () => {
+describe('krzywa energii w folderze danych – moduł dnia i kto ją liczy (T914, T950, T954)', () => {
   it('dzień miniony: moduł z tamtego dnia (wyłączony dopiero dziś – krzywa jest), nie dzisiejsze ustawienie', async () => {
     rd({ general: { modules: { energy: false } } })
     const { folder } = await make()
@@ -138,6 +138,31 @@ describe('krzywa energii w folderze danych – moduł dnia i kto ją liczy (T913
     asked.length = 0
     await folder.daysView([THU])
     expect(asked).toEqual([])
+  })
+
+  it('„Agenda” bez krzywych (T954): dni liczone bez nich; przez DataHub – opcja `energy: false`', async () => {
+    const { folder, asked } = await make()
+    const v = await folder.daysView([THU], undefined, false)
+    expect(asked).toEqual([[THU, null]])
+    expect(v.days[0]!.energy).toBeNull()
+  })
+
+  it('kolumny minione nie czytają logów innych dni; nieczytelny log dziś nie gasi ich krzywych (T950)', async () => {
+    const { folder } = await make()
+    folder.append({ day: TUE, dom: 'meta', k: 'presence.first', at: placeLogical(TUE, 7 * 60) })
+    folder.append({ day: TUE, dom: 'energy', k: 'energy.checkin', at: placeLogical(TUE, 7 * 60 + 30), answers: { head: [0, 0], emotions: [0, 0], senses: [0, 0] } })
+    const log = (folder as unknown as { log: { readDay: (d: string) => Promise<unknown> } }).log
+    const read = log.readDay.bind(log)
+    const reads: string[] = []
+    log.readDay = async (d: string) => {
+      reads.push(d)
+      // Today's log not readable now (OneDrive still bringing it).
+      if (d === WED) throw new Error('nieczytelny')
+      return read(d)
+    }
+    const v = await folder.daysView([TUE])
+    expect(v.days[0]!.energy).not.toBeNull()
+    expect([...new Set(reads)]).toEqual([TUE])
   })
 })
 
@@ -183,6 +208,9 @@ describe('okno – „3 dni”, „Agenda” i miesiąc przez DataHub', () => {
       expect(await hub.open(dir)).toBe(true)
       for (const bad of [null, '2026-11-04', [], ['2026-02-30'], [WED, WED], Array.from({ length: 15 }, (_, i) => `2026-11-${String(i + 1).padStart(2, '0')}`)]) await expect(hub.daysView(bad)).rejects.toThrow('dni widoku')
       expect((await hub.daysView([THU, WED])).days.map((d) => d.date)).toEqual([THU, WED])
+      // Without the curves only when asked so in so many words (T954) – a day to come of the hub's real clock.
+      expect((await hub.daysView(['2099-01-05'], { energy: false })).days[0]!.energy).toBeNull()
+      expect((await hub.daysView(['2099-01-05'], { energy: 'nie' })).days[0]!.energy).not.toBeNull()
       for (const bad of ['2026-13', '2026-1', 202611, null]) await expect(hub.monthView(bad)).rejects.toThrow('miesiąc kalendarza')
       expect((await hub.monthView('2026-02')).days).toHaveLength(28)
     } finally {

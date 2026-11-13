@@ -149,7 +149,8 @@ describe('„Agenda” (D418)', () => {
   }
   it('siedem dni od dziś, po dniach; dzień bez niczego – jedna linia „nic”', async () => {
     await mountAgenda()
-    expect(vi.mocked(useDaysView)).toHaveBeenLastCalledWith(agendaDates(TODAY))
+    // A list: no curves of energy counted (T954).
+    expect(vi.mocked(useDaysView)).toHaveBeenLastCalledWith(agendaDates(TODAY), { energy: false })
     expect([...all('[data-testid^="agenda-day-"]')].map((d) => d.getAttribute('data-testid'))).toEqual(agendaDates(TODAY).map((d) => `agenda-day-${d}`))
     expect(q('agenda-heading-2026-11-18')!.textContent).toBe('Dziś · środa 18.11')
     expect(q('agenda-heading-2026-11-19')!.textContent).toBe('Jutro · czwartek 19.11')

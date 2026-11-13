@@ -121,7 +121,8 @@ describe('przeciąganie bloku między kolumnami (D417)', () => {
     expect(q('week-grid')!.getAttribute('data-dragging')).toBe('true')
     pointer(window, 'pointerup', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8, 0)
     expect(moveWeekBlock).toHaveBeenCalledTimes(1)
-    expect(moveWeekBlock).toHaveBeenCalledWith({ blockId: 'a', name: 'Inne obowiązki', from: TODAY, to: DATES[2], startMin: 720 })
+    // With the names of the source day (D424: a begun block anchored to it is named in the line).
+    expect(moveWeekBlock).toHaveBeenCalledWith({ blockId: 'a', name: 'Inne obowiązki', names: expect.objectContaining({ settings: expect.anything() }), from: TODAY, to: DATES[2], startMin: 720 })
     await act(async () => undefined)
     expect(useWeekPush.getState().line?.push.move?.to).toBe(DATES[2])
     // The band is gone once it is saved; the drag is over.
@@ -159,7 +160,7 @@ describe('przeciąganie bloku między kolumnami (D417)', () => {
     pointer(window, 'pointermove', colLeft(1) + 20, COL_TOP + 240 * WEEK_PPM + 8 + 33)
     expect(q('week-drop')!.getAttribute('data-start')).toBe('640')
     pointer(window, 'pointerup', colLeft(1) + 20, COL_TOP + 240 * WEEK_PPM + 8 + 33, 0)
-    expect(moveWeekBlock).toHaveBeenCalledWith({ blockId: 'a', name: 'Inne obowiązki', from: TODAY, to: TODAY, startMin: 640 })
+    expect(moveWeekBlock).toHaveBeenCalledWith({ blockId: 'a', name: 'Inne obowiązki', names: expect.objectContaining({ settings: expect.anything() }), from: TODAY, to: TODAY, startMin: 640 })
     await act(async () => undefined)
     vi.mocked(moveWeekBlock).mockClear()
     // Out and back to where it stood (the 4 px passed, the minute the same): nothing to write.

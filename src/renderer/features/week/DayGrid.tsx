@@ -168,7 +168,7 @@ export function DayGrid({
   const land = async (h: Lift, at: BlockDrop) => {
     busy.current = true
     try {
-      const res = await moveWeekBlock({ blockId: h.id, name: h.name, from: h.date, to: latest.current.days[at.index]!.date, startMin: at.startMin })
+      const res = await moveWeekBlock({ blockId: h.id, name: h.name, names: namesOf(h.date), from: h.date, to: latest.current.days[at.index]!.date, startMin: at.startMin })
       if (res.push) showWeekPush(res.push)
       if (res.status === 'refused') toast(PAST_DROP_TEXT, 'info')
     } catch (e) {

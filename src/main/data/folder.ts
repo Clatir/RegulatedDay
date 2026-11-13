@@ -1429,32 +1429,14 @@ export class DataFolder {
   private async horizonDays(dates: readonly string[], at: number, energy = false): Promise<HorizonDay[]> {
     const today = logicalDayOf(at)
     const inp = await this.inputs(true).catch(() => null)
-    const moduleOf = energy && inp ? await this.energyModules(dates, today) : null
+    // The curves (D417): the energy module as the settings have it now (your queued change too) – for today and the days to
+    // come; a day gone by tells its own from its grade and its log (`horizonDay`, T950) – nothing read for it here.
+    const now = energy && inp ? rdFrom(await this.recordView(paths.settings).catch(() => undefined)).general.modules.energy : null
     const out: HorizonDay[] = []
-    for (const date of dates) out.push(inp ? await this.horizonDay(date, today, at, inp, moduleOf ? moduleOf(date) : null) : unknownDay(date, whenOf(date, today)))
+    for (const date of dates) out.push(inp ? await this.horizonDay(date, today, at, inp, now == null ? null : date < today ? true : now) : unknownDay(date, whenOf(date, today)))
     // The days asked last stay remembered (`HORIZON_MEMO_DAYS`: the month of „Kalendarz”, the goals, the week and the days shown).
     for (const d of this.horizonMemo.keys()) if (this.horizonMemo.size > HORIZON_MEMO_DAYS) this.horizonMemo.delete(d)
     return out
-  }
-
-  /**
-   * The energy module of each day before its own switches (D417, T913 – the column's curve, as the grade and the history
-   * count it): a day gone by – as it was then (`moduleStates`: the first later change says what it was), today and a day to
-   * come – as the settings have it now (your queued change too). A day gone by whose module cannot be told now (a log not
-   * readable on the way back) – no curve (false), never the module of today.
-   */
-  private async energyModules(dates: readonly string[], today: string): Promise<(date: string) => boolean> {
-    const now = rdFrom(await this.recordView(paths.settings).catch(() => undefined)).general.modules.energy
-    const past = dates.filter((d) => d < today).sort()
-    const during = past.length ? await this.moduleStates(past[0]!, today, true).catch(() => null) : null
-    return (date) => {
-      if (date >= today) return now
-      try {
-        return during ? during(date).energy : false
-      } catch {
-        return false
-      }
-    }
   }
 
   /**
@@ -1530,8 +1512,8 @@ export class DataFolder {
   }
 
   /** Days of the horizon on one axis (D417 „3 dni”, D418 „Agenda”): each as the week counts it, in the order asked. */
-  async daysView(dates: readonly string[], at = this.clock.now()): Promise<DaysView> {
-    return daysViewOf(dates, logicalDayOf(at), await this.horizonDays(dates, at, true))
+  async daysView(dates: readonly string[], at = this.clock.now(), energy = true): Promise<DaysView> {
+    return daysViewOf(dates, logicalDayOf(at), await this.horizonDays(dates, at, energy))
   }
 
   /**
