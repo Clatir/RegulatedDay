@@ -5,7 +5,7 @@
  * fraction. Durations („90”, „1:30”, „1h30”), times of the logical day („+1” before 04:00) and dates without a year
  * („3.01” – the nearest such date) are parsed by @shared/format.
  */
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { clock, durationLabel, logicalClock, parseDate, parseDuration, parseInteger, parseLogicalTime, plDate, type Parsed } from '@shared/format'
 import { parseField } from '@shared/model/fields'
 import { toast } from '../store/ui'
@@ -188,7 +188,7 @@ export function DateField({ today, past, ...p }: Omit<CommitFieldProps<string>, 
 }
 
 /** A text (a name, a note): saved on leaving the field or Enter, Esc throws the edit away; trimmed, at most `max` characters. */
-export function TextField({ value, onCommit, max = 80, multiline, placeholder, className, shellClassName, errorPlacement, required, ...rest }: {
+export function TextField({ value, onCommit, max = 80, multiline, placeholder, className, shellClassName, errorPlacement, required, readOnly, autoFocus, onEnter, ...rest }: {
   value: string
   onCommit: (v: string) => void
   max?: number
@@ -199,6 +199,14 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
   errorPlacement?: ErrorPlacement
   /** An empty text is refused (a name). */
   required?: boolean
+  readOnly?: boolean
+  /** The cursor in the field when it appears (the name of a new block, D430) – without scrolling what is around it. */
+  autoFocus?: boolean
+  /**
+   * Enter in a single-line field (not while a character is composed): the text committed, then this with it (trimmed) – the
+   * name of a new block adds it (D431). `false`: nothing was done – the cursor stays in the field, Enter may come again.
+   */
+  onEnter?: (v: string) => boolean | void
   'aria-label'?: string
   'data-testid'?: string
 }) {
@@ -207,6 +215,12 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
   const errorId = useId()
   useEscapeLayer(error != null, () => setError(null))
   const cancelled = useRef(false)
+  const input = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
+  // The cursor in it once it appears; the page does not jump to it (a window that brings itself into view does that).
+  // Only when it appears, as the attribute `autoFocus` does.
+  useEffect(() => {
+    if (autoFocus) input.current?.focus({ preventScroll: true })
+  }, [])
   const shown = draft ?? value
   const commit = () => {
     if (cancelled.current) {
@@ -215,7 +229,7 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
       setError(null)
       return
     }
-    if (draft == null) return
+    if (draft == null || readOnly) return
     const v = draft.trim().slice(0, max)
     setDraft(null)
     if (required && !v) {
@@ -231,6 +245,8 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
     placeholder,
     maxLength: max,
     spellCheck: false,
+    readOnly,
+    ref: input,
     'aria-label': rest['aria-label'],
     'data-testid': rest['data-testid'],
     onBlur: commit,
@@ -241,8 +257,16 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
       setError(null)
     },
     onKeyDown: (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && (!multiline || e.ctrlKey)) e.currentTarget.blur()
-      if (e.key === 'Escape' && draft != null) {
+      // A character being composed (IME): its Enter is the composition's, not the field's.
+      if (e.key === 'Enter' && (!multiline || e.ctrlKey) && !e.nativeEvent.isComposing) {
+        const v = (draft ?? value).trim().slice(0, max)
+        const el = e.currentTarget
+        el.blur()
+        if (onEnter && !multiline && !readOnly && !(required && !v) && onEnter(v) === false) el.focus({ preventScroll: true })
+      }
+      // Esc while a character is composed (IME) is the composition's: the edit stays, nothing around closes.
+      if (e.key === 'Escape' && e.nativeEvent.isComposing) e.stopPropagation()
+      else if (e.key === 'Escape' && draft != null) {
         e.stopPropagation()
         e.preventDefault()
         cancelled.current = true

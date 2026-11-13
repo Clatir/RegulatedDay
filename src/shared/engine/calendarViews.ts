@@ -4,6 +4,7 @@
  * „Agenda” (D418: seven days, the all-day events on top, then the blocks by the hour). Pure: from the days of the horizon
  * (`HorizonDay`, one count of each day) and the all-day events (never an input of a day – D405, T725).
  */
+import { namedOfPlan } from '../blockName'
 import { eventsOn, type AllDayEvent } from '../model/allDay'
 import type { HorizonBlock, HorizonBlockState, HorizonDay, HorizonRead, HorizonWhen } from './week'
 
@@ -57,12 +58,8 @@ export interface MonthBlock {
 
 /** The block of the month's day of a block of the horizon (T1015): the fields `blockName` reads, the hour, the state. */
 export function monthBlockOf(b: HorizonBlock): MonthBlock {
-  const n = b.named
-  const named: MonthNamed = { categoryId: n.categoryId, variantId: n.variantId, routine: n.routine, requests: n.requests }
-  if (n.origin !== undefined) named.origin = n.origin
-  if (n.sourceId !== undefined) named.sourceId = n.sourceId
-  if (n.name !== undefined) named.name = n.name
-  if (n.task !== undefined) named.task = n.task
+  // The fields that name it (`namedOfPlan`, the one list) without its note.
+  const { note: _note, ...named } = namedOfPlan(b.named)
   return {
     id: b.id,
     named,

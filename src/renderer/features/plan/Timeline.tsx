@@ -32,6 +32,11 @@ export interface TimelineItem {
   startMin: number
   endMin: number
   title: string
+  /**
+   * A block with its own name (D430): what it is besides the name (its category or variant – `blockKind`), said small beside
+   * its hours („09:00–09:45 · Analiza”); absent – no name of its own (the title is that already).
+   */
+  kind?: string
   marks: string[]
   color: string
   /** The block's category – the calendar it belongs to (D419: the views of the window hide the unchecked calendars' blocks). */
@@ -510,6 +515,7 @@ export function Timeline({
         {!tiny && !narrow && (
           <div className="truncate text-[11px] text-muted">
             {logicalClock(start)}–{logicalClock(end)}
+            {i.kind ? ` · ${i.kind}` : ''}
             {i.marks.length ? ` · ${i.marks.join(' · ')}` : ''}
           </div>
         )}

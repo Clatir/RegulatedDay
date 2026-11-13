@@ -13,6 +13,7 @@
  */
 import { REQUEST_CATEGORY } from '../model/categories'
 import { CLOSE_HOWS, isKnown, type AnyEvent, type CloseHow, type FeltCost } from '../model/events'
+import type { PlanBlock } from '../model/plan'
 import { questionId } from '../model/ids'
 import { dayStart } from '../time/day'
 import { addDays } from '../time/zone'
@@ -283,9 +284,10 @@ function endAt(state: DayState, b: BlockFact, at: number, end: number): TimerDra
 
 /**
  * What an answer of a row writes (null: not a choice of that row). `item` – a block of the summary row; `value` – an
- * instant (ms) for „skończył się o …”, „Pracowałem do …”, a person, a stretch for „zaznacz odcinek”.
+ * instant (ms) for „skończył się o …”, „Pracowałem do …”, a person, a stretch for „zaznacz odcinek”. `plan` – the day's plan: a
+ * start the answer writes („odbył się”, a meal after an absence) carries what names the block (T1024).
  */
-export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at: number, value: RitualValue = null, item: string | null = null): TimerDraft[] | null {
+export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at: number, value: RitualValue = null, item: string | null = null, plan: readonly PlanBlock[] = []): TimerDraft[] | null {
   const g = state.grid
   const f = state.facts
   const ms = typeof value === 'number' ? value : null
@@ -318,18 +320,18 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
       if (choice === 'ok') {
         // Counted out: „odlicz” (the note for accuracy and the calibration come back, D272); ended when you left: the time
         // from the return – after a project „projekt”, after a work block „odpoczynek”.
-        if (row.mode === 'counted') return [...(answerEvents(state, q, 'keep', at) ?? []), mark]
+        if (row.mode === 'counted') return [...(answerEvents(state, q, 'keep', at, null, plan) ?? []), mark]
         return [...(row.explain ? explainCheck(row.explain, at) : []), mark]
       }
-      if (choice === 'end' || choice === 'leave' || choice === 'subtract') return answerEvents(state, q, choice, at)
+      if (choice === 'end' || choice === 'leave' || choice === 'subtract') return answerEvents(state, q, choice, at, null, plan)
       return explainAnswer(state, row.explain, choice, at, ms)
     }
     case 'away':
     case 'shutdown': {
       const asked = row.kind === 'away' ? row.end : row.at
       const q = question(state, row.question, row.kind === 'away' ? 'return' : 'shutdown', row.block, asked)
-      if (choice === 'ok') return [...(answerEvents(state, q, 'keep', at) ?? []), mark]
-      if (choice === 'endedAt' && ms != null) return answerEvents(state, q, 'endedAt', at, ms)
+      if (choice === 'ok') return [...(answerEvents(state, q, 'keep', at, null, plan) ?? []), mark]
+      if (choice === 'endedAt' && ms != null) return answerEvents(state, q, 'endedAt', at, ms, plan)
       return null
     }
     case 'fixedMinutes':
@@ -344,7 +346,7 @@ export function ritualAnswer(state: DayState, row: RitualRow, choice: string, at
         // at its planned time – times never given by you, so never a sample nor a note (T500).
         const info = state.blocks.find((b) => b.id === row.block)!
         return [
-          { k: 'block.start', block: row.block, at: row.used?.from ?? atOf(g, row.from), bg: info.bg, planned: startPlanned(info), confirmUntil: null, how: 'plan' },
+          { k: 'block.start', block: row.block, at: row.used?.from ?? atOf(g, row.from), bg: info.bg, planned: startPlanned(info, plan), confirmUntil: null, how: 'plan' },
           { k: 'block.end', block: row.block, at: row.used?.to ?? atOf(g, row.to), done: true, rule: null }
         ]
       }
@@ -394,7 +396,7 @@ export function effectBase(ctx: DayContext, state: DayState): EffectBase {
 /** What a row's ✓ changes in the day's outcome against the day with it untouched (spec); null – no ✓. */
 export function ritualEffect(ctx: DayContext, state: DayState, row: RitualRow, at: number, base: EffectBase = effectBase(ctx, state)): RitualEffect | null {
   const check = CHECK[row.kind]
-  const drafts = check ? ritualAnswer(state, row, check, at) : null
+  const drafts = check ? ritualAnswer(state, row, check, at, null, null, ctx.plan) : null
   if (!drafts) return null
   return { changes: outcomeChanges(base.outcome, frozenOutcome(ctx, simEvents(ctx, drafts, at), base.forecast)), forecast: base.forecast }
 }

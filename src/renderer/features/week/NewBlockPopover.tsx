@@ -1,20 +1,22 @@
 /**
- * The small window of a new block on „Tydzień” (D366, D371): where the empty grid was clicked or dragged over – the category
- * and the length, „Dodaj” (saves the block in each of the days at that hour), „Anuluj” and „Więcej” (one day only: the full
- * editing of „Dziś”, the block still unsaved). The days gone by among them are warned of, nothing is refused (D72). Esc and
+ * The small window of a new block on „Tydzień” (D366, D371): where the empty grid was clicked or dragged over – its name (D431:
+ * on top, the cursor in it, Enter adds as „Dodaj”; empty – named as before), the category and the length, „Dodaj” (saves the
+ * block in each of the days at that hour), „Anuluj” and „Więcej” (one day only: the full editing of „Dziś”, the block still
+ * unsaved, with its name). The days gone by among them are warned of, nothing is refused (D72). Esc and
  * a click outside close it, nothing is saved by that.
  */
 import { useEffect, useRef, useState } from 'react'
+import { namedOf } from '@shared/blockName'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { newUserBlock } from '@shared/engine/planEdit'
 import { logicalClock } from '@shared/format'
-import type { PlanBlock } from '@shared/model/plan'
-import { Choice, DurationField } from '../../components/fields'
+import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
+import { Choice, DurationField, TextField } from '../../components/fields'
 import { Field } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useEscapeLayer } from '../../lib/escape'
 import { useDay, type DayModel } from '../../store/day'
-import { categoryOptions, type Names } from '../plan/blockView'
+import { blockName, categoryOptions, type Names } from '../plan/blockView'
 import { lastNewBlockCategory, rememberNewBlockCategory, startCategory } from '../plan/lastCategory'
 import { ExchangeDialog } from '../today/ExchangeDialog'
 import { showWeekPush } from '../../store/weekPush'
@@ -71,6 +73,8 @@ export function NewBlockPopover({
     )
   )
   const [length, setLength] = useState(durationMin)
+  // D431: the name typed (committed on leaving the field or Enter); empty – the block is named as before.
+  const [name, setName] = useState('')
   const [exchange, setExchange] = useState<{ entry: Entry; rest: Entry[]; proposal: ExchangeProposal } | null>(null)
   const [busy, run] = useBusy()
   const todayIn = dates.includes(today)
@@ -89,7 +93,7 @@ export function NewBlockPopover({
     document.addEventListener('pointerdown', away)
     return () => document.removeEventListener('pointerdown', away)
   }, [exchange, onClose])
-  const blockOn = (date: string): PlanBlock => newUserBlock(categoryId, startMin, length, namesOf(date).settings.categories[categoryId])
+  const blockOn = (date: string, n = name): PlanBlock => newUserBlock(categoryId, startMin, length, namesOf(date).settings.categories[categoryId], { name: n || null })
   /**
    * Saves the entries, all the days in one go; the days where nothing was written stay in the window (their toast said which),
    * the ones that wait for an answer to a question (a conflict) or whose outcome is not known do not – added again they
@@ -100,12 +104,17 @@ export function NewBlockPopover({
     if (saved.length) rememberNewBlockCategory(categoryId)
     // Blocks pushed apart in the days written (D400): the window's one line with its „Cofnij” for them all.
     if (push) showWeekPush(push)
-    if (failed.length) onDates(failed)
-    else onClose()
+    if (failed.length) {
+      onDates(failed)
+      backToName()
+    } else onClose()
   }
-  const add = () =>
+  /** The window stays open after Enter or „Dodaj” (days not written, the exchange left): the cursor back in „Nazwa” (T1028). */
+  const backToName = () => ref.current?.querySelector<HTMLInputElement>('[data-testid="week-new-name"]')?.focus({ preventScroll: true })
+  /** „Dodaj”, or Enter in „Nazwa” with the name just typed (`n` – this render's state does not have it yet). */
+  const add = (n = name) =>
     run(async () => {
-      const entries = dates.map((date) => ({ date, block: blockOn(date) }))
+      const entries = dates.map((date) => ({ date, block: blockOn(date, n) }))
       const mine = entries.find((e) => e.date === today)
       if (mine && model) {
         const proposal = proposeExchange(model.ctx, model.state, mine.block)
@@ -118,6 +127,7 @@ export function NewBlockPopover({
       await save(entries)
     })
   const warning = pastWarning(dates, today)
+  const locked = busy || (todayIn && !model)
   return (
     <div
       ref={ref}
@@ -136,6 +146,23 @@ export function NewBlockPopover({
           {dates.length > 1 ? `–${logicalClock(startMin + length)}` : ''}
         </span>
       </h3>
+      <Field label="Nazwa" labelWidth={70}>
+        <TextField
+          value={name}
+          max={BLOCK_NAME_MAX}
+          placeholder={blockName(namedOf({ categoryId, variantId: null }), names)}
+          onCommit={setName}
+          // „Dodaj” off (today's day still counted, a save running): nothing – the cursor stays, Enter may come again.
+          onEnter={(v) => {
+            if (locked) return false
+            void add(v)
+          }}
+          autoFocus
+          errorPlacement="below"
+          aria-label="Nazwa bloku"
+          data-testid="week-new-name"
+        />
+      </Field>
       <Field label="Kategoria" labelWidth={70}>
         <Choice value={categoryId} options={categoryOptions(names, categoryId)} onChange={setCategoryId} aria-label="Kategoria" data-testid="week-new-category" />
       </Field>
@@ -148,7 +175,7 @@ export function NewBlockPopover({
         </p>
       )}
       <div className="flex gap-2 pt-1">
-        <button type="button" className="btn btn-accent" disabled={busy || (todayIn && !model)} onClick={() => void add()} data-testid="week-new-add">
+        <button type="button" className="btn btn-accent" disabled={locked} onClick={() => void add()} data-testid="week-new-add">
           Dodaj
         </button>
         <button type="button" className="btn" onClick={onClose} data-testid="week-new-cancel">
@@ -170,7 +197,10 @@ export function NewBlockPopover({
             const rest = exchange.rest
             setExchange(null)
             // Today's block is in (or the exchange was left): added – the other days follow, else everything stays as it was.
-            if (!added) return
+            if (!added) {
+              backToName()
+              return
+            }
             rememberNewBlockCategory(categoryId)
             void run(async () => {
               if (rest.length) await save(rest)

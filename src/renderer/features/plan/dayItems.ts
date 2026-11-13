@@ -5,6 +5,7 @@
  * the maximum, the hard end, the bedtime's forecast and now; the energy's forecast (after the check-in).
  */
 import { movableBlock, plannedSpan } from '@shared/engine/blocks'
+import { namedById } from '@shared/blockName'
 import { namingOf } from '@shared/engine/context'
 import { dueBadge } from '@shared/engine/caseDates'
 import { isDone } from '@shared/engine/cases'
@@ -18,7 +19,7 @@ import { stepsCounter } from '@shared/model/steps'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import type { DayModel } from '../../store/day'
-import { blockColor, blockMarks, blockName, nameById, type Names } from './blockView'
+import { blockColor, blockKind, blockMarks, blockName, type Names } from './blockView'
 import type { EnergyTrack, TimelineItem, TimelineMarker } from './Timeline'
 
 export interface DayAxis {
@@ -66,11 +67,14 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
     if (from == null || to == null) continue
     const edge = f?.startedAt != null && f.endedAt == null ? edges?.get(p.id) : undefined
     const counter = stepsCounter(p.steps)
+    const kind = blockKind(p, names)
     items.push({
       id: p.id,
       // As long as it lasts, also across the doubled hour of a 25-hour day (`logicalSpan` – the preview of a push the same).
       ...logicalSpan(g, from, Math.max(to, from + 1)),
       title: gone ? `${blockName(p, names)} (${gone})` : blockName(p, names),
+      // D430: its category beside its hours when its own name is in the category's place.
+      ...(kind ? { kind } : {}),
       marks: [...blockMarks(p, { afterWork: info.afterWorkMark, fromYesterday: p.movedFrom === yesterday }), ...(f?.startedAt != null && f.endedAt == null ? ['biegnie'] : [])],
       color: blockColor(p.categoryId, names),
       categoryId: p.categoryId,
@@ -90,17 +94,21 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
     })
   }
   // Blocks begun outside the plan („Pracuję”, a block begun by hand) or taken out of it after they began (D336): where
-  // they ran, named as everywhere (`nameById`).
+  // they ran, named as everywhere (`namedById`).
   const naming = namingOf(ctx, state.facts)
   for (const info of state.blocks) {
     if (info.inPlan) continue
     const f = state.facts.blocks.get(info.id)
     if (!f || f.startedAt == null) continue
     const to = f.endedAt ?? Math.max(nowIdx ?? f.startedAt, plannedEndOf(state, info, f))
+    // Named as everywhere (`namedById`); with its own name its category beside its hours, as „Tydzień” has it (`BlockBox`).
+    const named = namedById(info.id, naming)
+    const kind = named ? blockKind(named, names) : null
     items.push({
       id: info.id,
       ...logicalSpan(g, f.startedAt, Math.max(to, f.startedAt + 1)),
-      title: nameById(info.id, naming, names),
+      title: named ? blockName(named, names) : 'blok',
+      ...(kind ? { kind } : {}),
       marks: f.endedAt == null ? ['poza planem', 'biegnie'] : ['poza planem'],
       color: blockColor(info.categoryId, names),
       categoryId: info.categoryId,

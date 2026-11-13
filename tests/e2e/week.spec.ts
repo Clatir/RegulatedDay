@@ -172,7 +172,7 @@ test('krok „Cele na <miesiąc>” (D360): „Pomiń” chowa go na cały miesi
 })
 
 const dayFileOf = (dir: string, date: string): string => join(dir, 'days', date.slice(0, 4), `${date}.json`)
-type PlanFileBlock = { id: string; categoryId: string; startMin: number; durationMin: number }
+type PlanFileBlock = { id: string; categoryId: string; startMin: number; durationMin: number; name?: string | null }
 const planOf = (dir: string, date: string): PlanFileBlock[] => (existsSync(dayFileOf(dir, date)) ? (JSON.parse(readFileSync(dayFileOf(dir, date), 'utf8')) as { blocks: PlanFileBlock[] }).blocks : [])
 const plusDays = (date: string, n: number): string => new Date(Date.parse(`${date}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 
@@ -312,7 +312,7 @@ test('Tydzień (D366): klik w pusty wtorek – okienko, „Dodaj” zapisuje blo
   }
 })
 
-test('Tydzień (D366): „Więcej” otwiera pełną edycję dnia z blokiem jeszcze niezapisanym, „Dodaj” w niej go zapisuje', async () => {
+test('Tydzień (D366, D431): „Więcej” otwiera pełną edycję dnia z blokiem jeszcze niezapisanym (z nazwą z okienka), „Dodaj” w niej go zapisuje', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-more-'))
   seed(dataDir)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
@@ -324,6 +324,9 @@ test('Tydzień (D366): „Więcej” otwiera pełną edycję dnia z blokiem jesz
       const h = await freeHour(page, thu, 120)
       await page.mouse.click(await centreOf(page, thu), await hourY(page, h))
       await expect(page.getByTestId('week-new')).toBeVisible()
+      // D431: the cursor in „Nazwa” at once; the name goes to the day's panel with the block.
+      await expect(page.getByTestId('week-new-name')).toBeFocused()
+      await page.keyboard.type('Analiza rynku')
       await page.getByTestId('week-new-duration').fill('45')
       await page.getByTestId('week-new-duration').press('Enter')
       await page.getByTestId('week-new-more').click()
@@ -332,9 +335,39 @@ test('Tydzień (D366): „Więcej” otwiera pełną edycję dnia z blokiem jesz
       await expect(page.getByTestId('block-editor')).toBeVisible()
       await expect(page.getByTestId('block-start')).toHaveValue(clockOf(h))
       await expect(page.getByTestId('block-duration')).toHaveValue('45 min')
+      await expect(page.getByTestId('block-name')).toHaveValue('Analiza rynku')
+      await expect(page.getByTestId('block-name')).toBeFocused()
       expect(planOf(dataDir, thu)).toEqual([])
       await page.getByTestId('block-add').click()
-      await expect.poll(() => planOf(dataDir, thu).map((b) => [b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([[h, 45]])
+      await expect.poll(() => planOf(dataDir, thu).map((b) => [b.startMin, b.durationMin, b.name]), { timeout: 15_000 }).toEqual([[h, 45, 'Analiza rynku']])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Tydzień (D431): okienko „Nowy blok” – kursor w polu „Nazwa”, Enter zapisuje blok z nazwą, kafelek z kategorią przy godzinach', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-name-'))
+  seed(dataDir)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      const { tue } = await nextWeek(page)
+      const h = await freeHour(page, tue, 120)
+      await page.mouse.click(await centreOf(page, tue), await hourY(page, h))
+      const small = page.getByTestId('week-new')
+      await expect(small).toBeVisible()
+      await expect(page.getByTestId('week-new-name')).toBeFocused()
+      await page.keyboard.type('Analiza rynku')
+      await page.keyboard.press('Enter')
+      await expect(small).toBeHidden()
+      await expect.poll(() => planOf(dataDir, tue).map((b) => [b.categoryId, b.name, b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([['inne', 'Analiza rynku', h, 60]])
+      const tile = page.getByTestId(`week-block-${tue}-${planOf(dataDir, tue)[0]!.id}`)
+      await expect(tile).toContainText('Analiza rynku')
+      await expect(tile).toContainText(`${clockOf(h)}–${clockOf(h + 60)} · Inne obowiązki`)
     })
     expect(errors).toEqual([])
   } finally {

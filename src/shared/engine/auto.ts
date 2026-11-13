@@ -11,6 +11,7 @@
  */
 import { REGEN_CATEGORY, type Place } from '../model/categories'
 import { derivedId, questionId } from '../model/ids'
+import type { PlanBlock } from '../model/plan'
 import { lastInputAt, firstUseAfter, firstUseFrom, lastOutsideBefore, type Activity, type Interval } from './activity'
 import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
@@ -321,7 +322,8 @@ function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, Shu
         block: b.id,
         at: from,
         bg,
-        planned: { categoryId: b.categoryId, variantId: b.variantId, durationMin: b.durationMin, tag: b.secondShift ? 'secondShift' : b.weeklyAnalysis ? 'weeklyAnalysis' : null, fixed: true, costs: b.costs, bgCostPct: b.bgCostPct },
+        // As a click writes it (T1024): with what names the block.
+        planned: startPlanned(b, inp.ctx.plan),
         confirmUntil: null,
         how: 'auto'
       })
@@ -609,7 +611,7 @@ const MEAL_AFTER_MIN = 45
  * „Cofnij”), else the stretch is no rest; „regeneracja” – a block of regeneration over it; „byłem na prośbie” – a
  * request after the fact (its person asked in the ritual).
  */
-function absenceWhat(state: DayState, block: string, answer: 'meal' | 'regen' | 'request', away: number, back: number, now: number): TimerDraft[] {
+function absenceWhat(state: DayState, block: string, answer: 'meal' | 'regen' | 'request', away: number, back: number, now: number, plan: readonly PlanBlock[]): TimerDraft[] {
   const a = idxOf(state.grid, away)
   const b = idxOf(state.grid, back)
   const id = (kind: string) => derivedId(state.grid.date, 'absence', kind, block, a)
@@ -622,7 +624,7 @@ function absenceWhat(state: DayState, block: string, answer: 'meal' | 'regen' | 
       .sort((p, q) => p.span.start - q.span.start)[0]
     if (!meal) return [{ k: 'rest.not', at: now, from: away, to: back }]
     return [
-      { k: 'block.start', block: meal.x.id, at: away, bg: false, planned: startPlanned(meal.x), confirmUntil: null, how: 'plan', autoRule: 'absenceMeal' },
+      { k: 'block.start', block: meal.x.id, at: away, bg: false, planned: startPlanned(meal.x, plan), confirmUntil: null, how: 'plan', autoRule: 'absenceMeal' },
       { k: 'block.end', block: meal.x.id, at: back, done: true, rule: 'absenceMeal', autoRule: 'absenceMeal' }
     ]
   }
@@ -644,8 +646,11 @@ function absenceSpan(activity: Activity, away: number): { from: number; to: numb
   return { from: away, to: x && x.to < activity.now ? x.to : null }
 }
 
-/** What an answer to a question writes (the main process adds the base fields); null: the answer is a timer action. */
-export function answerEvents(state: DayState, q: Question, answer: string, at: number, value: number | null = null): TimerDraft[] | null {
+/**
+ * What an answer to a question writes (the main process adds the base fields); null: the answer is a timer action. `plan` – the
+ * day's plan: a start it writes (a meal after an absence) carries what names the block (T1024).
+ */
+export function answerEvents(state: DayState, q: Question, answer: string, at: number, value: number | null = null, plan: readonly PlanBlock[] = []): TimerDraft[] | null {
   const f = q.block ? state.facts.blocks.get(q.block) : undefined
   const mark: TimerDraft = { k: 'question.answer', at, question: q.id, answer, value }
   switch (q.kind) {
@@ -710,7 +715,7 @@ export function answerEvents(state: DayState, q: Question, answer: string, at: n
         const last = f.runs.at(-1)
         const still = !!pause && f.endedAt == null && (resume ? last?.from === resume.at && last.to === OPEN : last?.to === pause.at)
         const ended = still ? [{ k: 'undo', at, target: pause.id, reason: answer } as TimerDraft, ...(resume ? [{ k: 'undo', at, target: resume.id, reason: answer } as TimerDraft] : []), { k: 'block.end', block: q.block, at: away, done: null, rule: 'absence' }] : []
-        return [...ended, ...absenceWhat(state, q.block, answer, away, Math.max(away + MIN, back), at), mark]
+        return [...ended, ...absenceWhat(state, q.block, answer, away, Math.max(away + MIN, back), at, plan), mark]
       }
       return [mark]
     }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.0
+- Nazwa bloku: na górze panelu bloku i okienka „Nowy blok” w „Tygodniu” jest pole „Nazwa” – jak tytuł wydarzenia w Google Calendar. Przy nowym bloku kursor stoi od razu w nim, a Enter dodaje blok. Blok z nazwą pokazuje ją na kafelku zamiast kategorii, a kategorię małym drukiem przy godzinach („09:00–09:45 · Analiza”); pasek pulpitu, miesiąc i wyszukiwarka pokazują nazwę. Nazwę nadasz też blokom szablonów i serii – dni z nich ją dostają, a zmiana w jednym dniu zmienia tylko ten dzień. Puste pole – blok nazywa się jak dotąd.
+- Poprawki: zajęcia z PDF zjazdów pokazują swoją nazwę także w „Tygodniu”, „3 dniach”, „Agendzie” i miesiącu, a bloki zadań – tytuł zadania, jak w „Dziś”; blok usunięty z planu w trakcie zachowuje swoją nazwę na osi i pasku pulpitu.
+
 ## 1.18.1
 - Miesiąc w „Kalendarzu”: w komórce dnia paski mają też nazwy bloków elastycznych – najpierw wydarzenia całodniowe i bloki stałe, potem elastyczne po godzinie; reszta jako „+N”.
 

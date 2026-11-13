@@ -21,7 +21,7 @@ import { useMachine } from '../../store/machine'
 import { openDay, setBlockDraft, toast } from '../../store/ui'
 import { showWeekPush } from '../../store/weekPush'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
-import { blockColor, blockName, type Names } from '../plan/blockView'
+import { blockColor, blockKind, blockName, type Names } from '../plan/blockView'
 import { DEFAULT_NEW_BLOCK_MIN, dragStarted, snapMinute, type GridRange } from '../plan/gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { AllDayBar } from '../allday/AllDayBar'
@@ -493,6 +493,8 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
   const color = blockColor(b.categoryId, names)
   const dim = b.state === 'missed' || b.state === 'parked' || b.state === 'cancelled'
   const name = blockName(b.named, names)
+  // D430: a block with its own name says its category beside its hours.
+  const kind = blockKind(b.named, names)
   // D440: the counter of the steps „✓ 3/4” (none – nothing).
   const counter = stepsCounter(b.steps)
   const title = `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}${b.background ? ' · w tle' : ''}${attach ? ` · ${attachBadgeTitle(attach)}` : ''}`
@@ -542,6 +544,7 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
       {height >= 30 && (
         <span className="num block truncate text-muted">
           {logicalClock(b.startMin)}–{logicalClock(b.endMin)}
+          {kind ? ` · ${kind}` : ''}
           {attach > 0 && (
             <span className="ml-1" data-testid="attach-badge">
               {attachBadge(attach)}
