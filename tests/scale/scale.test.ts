@@ -37,7 +37,8 @@ beforeAll(() => {
   factor = Math.max(1, calibrate(join(root, 'calibration')) / REFERENCE_MS)
 }, 300_000)
 
-afterAll(() => rmSync(root, { recursive: true, force: true }))
+// Deleting three years of generated files can take longer than the default 10 s hook timeout on the Windows runner.
+afterAll(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }), 120_000)
 
 describe('test skali (3 lata danych)', () => {
   it('zestaw ma rozmiar z celu: ~1100 dni, ~15 000 bloków, ~3000 próśb', () => {
