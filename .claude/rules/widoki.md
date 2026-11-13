@@ -48,9 +48,9 @@ T950–T955 (część A), T936–T939 (ekrany).
   `rememberWeekMode`); każdy widok ma własne ciało (`WeekBody`, `ThreeDaysBody`, `AgendaBody`) i własny hook, żeby nie liczyć dni
   niewidocznego widoku. „3 dni”: środek `three-title[data-middle]`, `three-prev|next|today`.
 - `DayGrid` (siatka „Tygodnia” i „3 dni”, `ppm`: `WEEK_PPM` / `THREE_DAYS_PPM`; `weekLayout.ts` ma skalę jako opcjonalny parametr) –
-  `BlockBox` nadal eksportowany też z `WeekPage`. Przeciąganie bloku: nasłuch okna ustawiany przy naciśnięciu na bloku `movable`,
+  `BlockBox` eksportowany z `DayGrid` (T959). Przeciąganie bloku: nasłuch okna ustawiany przy naciśnięciu na bloku `movable`,
   miejsce z `dropStart` + `dropOn` (`mayMoveBetween`), podgląd `week-drop[data-start][data-denied]`, wynik `moveWeekBlock` →
-  `showWeekPush`; klik po przeciągnięciu wyciszony (`BlockGrab.consumed`).
+  `showWeekPush`; klik po przeciągnięciu wyciszony do następnego kliknięcia (`BlockGrab.consumed`), Esc w fazie przechwytywania (T957). Agenda: klik w blok = `openPick` (T956).
 - `EnergyBackdrop` (`week-energy-<data>[data-assumed]`, podpis `week-energy-assumed-<data>`), `AgendaView` (`agenda-day-`,
   `agenda-heading-`, `agenda-block-<dzień>-<id>`, `agenda-empty-`), komórka miesiąca – `monthCellView` + `MonthGrid` (`detail`):
   `month-bar-`, `month-more-`, `month-load-` – **bez prefiksu `day-`** (E2E wybierają komórki przez `[data-testid^="day-"]`);

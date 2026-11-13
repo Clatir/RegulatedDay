@@ -84,7 +84,10 @@ describe('komórka miesiąca z paskami (D418, D422)', () => {
     await mount(days, [])
     const dots = ['10', '11', '12'].map((n) => q(`month-load-2026-11-${n}`)!)
     expect(dots.map((d) => d.getAttribute('data-level'))).toEqual(['low', 'mid', 'high'])
-    expect(dots.map((d) => d.style.opacity)).toEqual(['0.3', '0.65', '1'])
+    // The shade is the fill's alone; the edge (the ring) and the dot as a whole stay fully visible – even the lowest level shows.
+    expect(dots.map((d) => d.style.background)).toEqual(['rgba(242, 182, 109, 0.3)', 'rgba(242, 182, 109, 0.65)', 'rgb(242, 182, 109)'])
+    expect(dots.map((d) => d.style.opacity)).toEqual(['', '', ''])
+    expect(dots[0]!.className).toContain('ring-lamp')
     expect(dots[0]!.title).toBe('Praca 2 h z 6 h 40 min')
     expect(dots[2]!.getAttribute('aria-label')).toBe('Praca 7 h 40 min z 6 h 40 min')
     expect(q('month-load-2026-11-13')).toBeNull()

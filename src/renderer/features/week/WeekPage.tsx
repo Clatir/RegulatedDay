@@ -9,8 +9,8 @@
  * The heading of the page switches the view (SNT1, T936; remembered by this computer): „Tydzień”, „3 dni” (D417 – yesterday,
  * today and tomorrow in a larger scale, the arrows move by a day) and „Agenda” (D418 – seven days from today as a list).
  */
-import { useEffect, useState } from 'react'
-import { threeDays, agendaDates } from '@shared/engine/week'
+import { useEffect, useRef, useState } from 'react'
+import { threeDays, agendaDates, type DaysView } from '@shared/engine/week'
 import { weekStart } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { useData } from '../../store/data'
@@ -25,8 +25,6 @@ import { THREE_DAYS_PPM, goalsMonthOfWeek } from './weekLayout'
 import { weekTitle } from './weekText'
 import { WeekPushLine } from './WeekPushLine'
 import { lastWeekMode, rememberWeekMode, shiftDay, threeDaysTitle, WEEK_MODES, type WeekMode } from './weekViews'
-
-export { BlockBox } from './DayGrid'
 
 export function WeekPage() {
   const today = useData((s) => s.view?.today ?? '')
@@ -137,7 +135,12 @@ function WeekBody({ week, today, openCard, onCardOpened }: { week: string; today
 
 /** „3 dni” (D417): the day before, the day, the day after on one axis in a larger scale – the same columns as „Tydzień”. */
 function ThreeDaysBody({ middle }: { middle: string }) {
-  const { view, failed } = useDaysView(threeDays(middle))
+  const read = useDaysView(threeDays(middle))
+  // The last days shown stay while the next are counted (an arrow does not blank the page): the grid is replaced when they come.
+  const last = useRef<DaysView | null>(null)
+  if (read.view) last.current = read.view
+  const view = read.view ?? last.current
+  const failed = read.failed
   return (
     <>
       {view ? (

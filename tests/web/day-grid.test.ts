@@ -8,12 +8,13 @@
  */
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DataView } from '@shared/api'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { DayGrid } from '@renderer/features/week/DayGrid'
 import { THREE_DAYS_PPM, WEEK_PPM } from '@renderer/features/week/weekLayout'
 import { moveWeekBlock } from '@renderer/features/week/weekMove'
+import { installEscape, onEscapeLayer } from '@renderer/lib/escape'
 import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 import { useWeekPush } from '@renderer/store/weekPush'
@@ -49,15 +50,21 @@ const day = (date: string, blocks: HorizonBlock[], o: Partial<HorizonDay> = {}):
 // The block „a” of today, 10:00–11:00, may be moved; „f” (a lecture) of tomorrow may not; „p” of yesterday is not movable either.
 const days = (o: { energyTomorrow?: HorizonDay['energy'] } = {}): HorizonDay[] => [day(DATES[0]!, [block('p', 540, 600)]), day(TODAY, [block('a', 600, 660, { movable: true })]), day(DATES[2]!, [block('f', 840, 900, { fixed: true })], { energy: o.energyTomorrow ?? null })]
 
+let removeEscape: (() => void) | null = null
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  removeEscape = installEscape()
 })
+afterAll(() => removeEscape?.())
 let root: Root | null = null
 let host: HTMLElement | null = null
 let ppm = WEEK_PPM
+/** The top of the grid's body on the screen (the page scrolled: it moves, the columns follow it). */
+let bodyTop = COL_TOP
 const rect = (left: number, top: number, width: number, height: number) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect
 
 beforeEach(() => {
+  bodyTop = COL_TOP
   vi.mocked(moveWeekBlock).mockReset()
   useData.setState({ view: { today: TODAY, allDay: [], computers: [] } as unknown as DataView })
   useUi.setState({ page: 'week', day: null, toasts: [] })
@@ -65,10 +72,11 @@ beforeEach(() => {
   // The columns and the block „a” have the places the test says; the rest has none (jsdom).
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     const id = this.getAttribute('data-testid') ?? ''
+    if (id === 'week-body') return rect(60, bodyTop, 400, 2000)
     const col = DATES.findIndex((d) => id === `week-col-${d}`)
-    if (col >= 0) return rect(colLeft(col), COL_TOP, 96, 2000)
+    if (col >= 0) return rect(colLeft(col), bodyTop, 96, 2000)
     const m = /^week-block-(\d{4}-\d{2}-\d{2})-a$/.exec(id)
-    if (m) return rect(colLeft(DATES.indexOf(m[1]!)), COL_TOP + (600 - 360) * ppm, 96, 60 * ppm)
+    if (m) return rect(colLeft(DATES.indexOf(m[1]!)), bodyTop + (600 - 360) * ppm, 96, 60 * ppm)
     return rect(0, 0, 0, 0)
   })
 })
@@ -83,12 +91,13 @@ afterEach(() => {
   useUi.setState({ page: 'week', day: null })
 })
 
+const grid = (list: HorizonDay[], scale: number) => createElement(DayGrid, { days: list, from: 360, to: 1320, ppm: scale, mode: scale === WEEK_PPM ? 'week' : '3days', openCard: null, onCardOpened: () => undefined })
 async function mount(list: HorizonDay[], scale = WEEK_PPM): Promise<void> {
   ppm = scale
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
-  await act(async () => root!.render(createElement(DayGrid, { days: list, from: 360, to: 1320, ppm: scale, mode: scale === WEEK_PPM ? 'week' : '3days', openCard: null, onCardOpened: () => undefined })))
+  await act(async () => root!.render(grid(list, scale)))
 }
 const q = (id: string) => host!.querySelector<HTMLElement>(`[data-testid="${id}"]`)
 /** A pointer event of the left button (jsdom has no PointerEvent: a mouse event with the pointer's id). */
@@ -182,6 +191,64 @@ describe('przeciąganie bloku między kolumnami (D417)', () => {
     pointer(window, 'pointerup', colLeft(0) + 20, COL_TOP + 300 * WEEK_PPM + 8, 0)
     expect(moveWeekBlock).not.toHaveBeenCalled()
     expect(q('week-drop')).toBeNull()
+  })
+
+  it('Esc w trakcie przeciągania wycisza klik także wtedy, gdy przycisk puszczony jest dużo później', async () => {
+    await mount(days())
+    pointer(blockA(), 'pointerdown', colLeft(1) + 20, COL_TOP + 240 * WEEK_PPM + 8)
+    pointer(window, 'pointermove', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8)
+    act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })))
+    await new Promise((r) => setTimeout(r, 30))
+    pointer(window, 'pointerup', colLeft(1) + 20, COL_TOP + 240 * WEEK_PPM + 8, 0)
+    act(() => blockA().click())
+    expect(useUi.getState().page).toBe('week')
+    expect(moveWeekBlock).not.toHaveBeenCalled()
+    // Only that click: the next one is a click again.
+    act(() => blockA().click())
+    expect(useUi.getState().page).toBe('today')
+  })
+
+  it('Esc przeciągania nie zamyka przy okazji warstwy pod nim; Esc bez przeciągania – zamyka', async () => {
+    const closed = vi.fn()
+    const off = onEscapeLayer(closed)
+    await mount(days())
+    pointer(blockA(), 'pointerdown', colLeft(1) + 20, COL_TOP + 240 * WEEK_PPM + 8)
+    pointer(window, 'pointermove', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8)
+    const esc = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true, bubbles: true })
+    act(() => void window.dispatchEvent(esc))
+    expect(esc.defaultPrevented).toBe(true)
+    expect(q('week-drop')).toBeNull()
+    expect(closed).not.toHaveBeenCalled()
+    act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true, bubbles: true })))
+    expect(closed).toHaveBeenCalledTimes(1)
+    off()
+  })
+
+  it('pasmo upuszczenia ma długość chwyconego bloku, także gdy widok odświeżył się bez niego w trakcie', async () => {
+    const long = (): HorizonDay[] => [day(DATES[0]!, []), day(TODAY, [block('a', 600, 690, { movable: true })]), day(DATES[2]!, [])]
+    await mount(long())
+    pointer(blockA(), 'pointerdown', colLeft(1) + 20, COL_TOP + 240 * WEEK_PPM + 8)
+    pointer(window, 'pointermove', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8)
+    expect(Number(q('week-drop')!.getAttribute('data-end')) - Number(q('week-drop')!.getAttribute('data-start'))).toBe(90)
+    // The view is read again (the block is gone from it – e.g. moved by another computer): the held block keeps its length.
+    await act(async () => root!.render(grid([day(DATES[0]!, []), day(TODAY, []), day(DATES[2]!, [])], WEEK_PPM)))
+    pointer(window, 'pointermove', colLeft(2) + 20, COL_TOP + 400 * WEEK_PPM + 8)
+    expect(Number(q('week-drop')!.getAttribute('data-end')) - Number(q('week-drop')!.getAttribute('data-start'))).toBe(90)
+  })
+
+  it('w trakcie przeciągania kolumn nie szuka się od nowa, a przewinięcie strony przesuwa miejsce', async () => {
+    await mount(days())
+    pointer(blockA(), 'pointerdown', colLeft(1) + 20, COL_TOP + 240 * WEEK_PPM + 8)
+    pointer(window, 'pointermove', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8)
+    const search = vi.spyOn(Element.prototype, 'querySelector')
+    for (const dy of [361, 362, 364, 365]) pointer(window, 'pointermove', colLeft(2) + 20, COL_TOP + dy * WEEK_PPM + 8)
+    expect(search.mock.calls.filter(([sel]) => String(sel).includes('week-col-'))).toHaveLength(0)
+    expect(q('week-drop')!.getAttribute('data-start')).toBe('725')
+    // The page scrolled 40 px while the block was held: the same pointer is 50 minutes lower in the column.
+    bodyTop = COL_TOP - 40
+    pointer(window, 'pointermove', colLeft(2) + 20, COL_TOP + 364 * WEEK_PPM + 8)
+    expect(q('week-drop')!.getAttribute('data-start')).toBe('775')
+    search.mockRestore()
   })
 
   it('Esc w trakcie przeciągania odwołuje je', async () => {

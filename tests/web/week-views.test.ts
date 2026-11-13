@@ -11,6 +11,7 @@ import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { rdFrom } from '@shared/model/rd'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { emptyMonthDay, loadTitle, monthCellView } from '@renderer/features/calendar/monthCellView'
+import { poolPath, POOL_COLOR, POOL_NAME, POOLS } from '@renderer/features/plan/energyDraw'
 import { THREE_DAYS_PPM, WEEK_PPM, axisHeight, axisY, blockSpan } from '@renderer/features/week/weekLayout'
 import { AGENDA_EMPTY, agendaHeading, agendaRow, dropOn, dropStart, dropStays, lastWeekMode, parseWeekMode, rememberWeekMode, sameDrop, threeDaysTitle, WEEK_MODES } from '@renderer/features/week/weekViews'
 
@@ -69,6 +70,20 @@ describe('przełącznik widoków (T936)', () => {
     })
     expect(lastWeekMode()).toBe('week')
     expect(() => rememberWeekMode('agenda')).not.toThrow()
+  })
+})
+
+describe('wspólne rysowanie krzywej energii (oś „Dziś” i kolumny)', () => {
+  const track = { samples: [{ at: 360, head: 100, emotions: 90, senses: 80 }, { at: 370, head: 60, emotions: Number.NaN, senses: 70 }] }
+  it('ścieżka po próbkach pominiętych bez wartości, w skali rysunku', () => {
+    expect(poolPath(track, 'head', (v) => (v / 100) * 40, (at) => at - 360)).toBe('M40.0,0.0 L24.0,10.0')
+    expect(poolPath(track, 'emotions', (v) => v, (at) => at)).toBe('M90.0,360.0')
+    expect(poolPath(null, 'head', (v) => v, (at) => at)).toBe('')
+  })
+  it('trzy pule z kolorami i nazwami', () => {
+    expect(POOLS).toEqual(['head', 'emotions', 'senses'])
+    expect(POOL_NAME.head).toBe('głowa')
+    expect(POOL_COLOR.senses).toBe('#79AFAB')
   })
 })
 

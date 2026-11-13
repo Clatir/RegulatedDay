@@ -13,8 +13,12 @@ import { monthLabel } from '../allday/allDayText'
 import type { MonthCellView } from './monthCellView'
 
 export const MONTH_NAMES = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień']
-/** The dot of the load in three shades of one colour (D418): the more of the budget, the fuller it is. */
-const LOAD_OPACITY = { low: 0.3, mid: 0.65, high: 1 } as const
+/** The dot of the load in three shades of one colour (D418): the more of the budget, the fuller its fill; its edge is always whole. */
+const LOAD_FILL = { low: 0.3, mid: 0.65, high: 1 } as const
+const lamp = (alpha: number): string => {
+  const n = Number.parseInt(PALETTE.lamp.slice(1), 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+}
 const WEEKDAYS = ['pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'nd']
 
 export function monthOf(date: string): string {
@@ -138,8 +142,8 @@ export function MonthGrid({
               <span className="num text-[12px]">{Number(d.slice(8, 10))}</span>
               {c.detail?.load && (
                 <span
-                  className="absolute top-1.5 right-1.5 inline-block h-[8px] w-[8px] rounded-full ring-1 ring-fg/40"
-                  style={{ background: PALETTE.lamp, opacity: LOAD_OPACITY[c.detail.load.level] }}
+                  className="absolute top-1.5 right-1.5 inline-block h-[8px] w-[8px] rounded-full ring-1 ring-lamp"
+                  style={{ background: lamp(LOAD_FILL[c.detail.load.level]) }}
                   title={c.detail.load.title}
                   aria-label={c.detail.load.title}
                   data-testid={`month-load-${d}`}

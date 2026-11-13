@@ -114,6 +114,22 @@ describe('przełącznik widoków „Tydzień · 3 dni · Agenda” (T936)', () =
     expect(q('three-title')!.getAttribute('data-middle')).toBe(TODAY)
   })
 
+  it('„3 dni”: strzałka nie opróżnia strony – do czasu nowego odczytu widać poprzednie dni', async () => {
+    await mount()
+    await click('week-mode-3days')
+    expect(all('[data-testid^="week-col-"]')).toHaveLength(3)
+    // The days of the day after are not counted yet.
+    vi.mocked(useDaysView).mockImplementation((dates) => (dates[1] === TODAY ? { view: daysViewOf(dates, TODAY, dates.map((d) => day(d))), failed: false } : { view: null, failed: false }))
+    await click('three-next')
+    expect(q('three-title')!.getAttribute('data-middle')).toBe('2026-11-19')
+    expect(q('three-loading')).toBeNull()
+    expect([...all('[data-testid^="week-col-"]')].map((c) => c.getAttribute('data-testid'))).toEqual(threeDays(TODAY).map((d) => `week-col-${d}`))
+    // They are counted: the grid is the new days'.
+    vi.mocked(useDaysView).mockImplementation((dates) => ({ view: daysViewOf(dates, TODAY, dates.map((d) => day(d))), failed: false }))
+    await click('three-next')
+    expect([...all('[data-testid^="week-col-"]')].map((c) => c.getAttribute('data-testid'))).toEqual(threeDays('2026-11-20').map((d) => `week-col-${d}`))
+  })
+
   it('wybór widoku jest zapamiętany na tym komputerze', async () => {
     await mount()
     await click('week-mode-3days')
@@ -177,19 +193,33 @@ describe('„Agenda” (D418)', () => {
     expect(items[0]!.getAttribute('data-testid')).toBe('agenda-allday-e1')
     expect(items[1]!.querySelector('[data-testid="agenda-block-2026-11-18-a"]')).not.toBeNull()
   })
-  it('klik w blok i w nagłówek otwiera ten dzień (jak klik w „Tygodniu”)', async () => {
+  it('klik w blok otwiera BLOK w jego dniu (jak wynik Ctrl K), w nagłówek – sam dzień', async () => {
     await mountAgenda()
     await click('agenda-block-2026-11-20-l')
     expect(useUi.getState().page).toBe('today')
     expect(useUi.getState().day).toBe('2026-11-20')
-    useUi.setState({ page: 'week', day: null })
+    expect(useUi.getState().pick).toEqual({ kind: 'block', id: 'l', date: '2026-11-20' })
+    // Today's own block: today's day (null), the pick all the same.
+    act(() => useUi.setState({ page: 'week', day: '2026-11-20', pick: null }))
+    await click('agenda-block-2026-11-18-a')
+    expect(useUi.getState().day).toBeNull()
+    expect(useUi.getState().pick).toEqual({ kind: 'block', id: 'a', date: '2026-11-18' })
+    act(() => useUi.setState({ page: 'week', day: null, pick: null }))
     await click('agenda-heading-2026-11-22')
     expect(useUi.getState().day).toBe('2026-11-22')
+    expect(useUi.getState().pick).toBeNull()
   })
   it('dzień, którego nie da się teraz odczytać, tak to mówi (zamiast „nic”)', async () => {
     vi.mocked(useDaysView).mockImplementation((dates) => ({ view: daysViewOf(dates, TODAY, dates.map((d) => ({ ...day(d), read: d === '2026-11-19' ? ('unknown' as const) : ('full' as const) }))), failed: false }))
     await mountAgenda()
     expect(q('agenda-unknown-2026-11-19')!.textContent).toBe('nie da się teraz odczytać')
     expect(q('agenda-empty-2026-11-19')).toBeNull()
+  })
+  it('dzień nieodczytany nie chowa swoich wydarzeń całodniowych (nie są wejściem żadnego dnia)', async () => {
+    useData.setState({ allDay: [{ ...allDayDraft('e9', '2026-11-19'), title: 'Urlop' }] })
+    vi.mocked(useDaysView).mockImplementation((dates) => ({ view: daysViewOf(dates, TODAY, dates.map((d) => ({ ...day(d), read: d === '2026-11-19' ? ('unknown' as const) : ('full' as const) }))), failed: false }))
+    await mountAgenda()
+    expect(q('agenda-allday-e9')!.textContent).toContain('Urlop')
+    expect(q('agenda-unknown-2026-11-19')!.textContent).toBe('nie da się teraz odczytać')
   })
 })

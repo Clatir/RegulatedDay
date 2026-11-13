@@ -116,14 +116,18 @@ export function DayGrid({
   const dates = useMemo(() => days.map((d) => d.date), [days])
   /** The rectangle a column has on the screen; null when it is not there. */
   const columnRect = (i: number): DOMRect | null => bodyRef.current?.querySelector(`[data-testid="week-col-${days[i]?.date}"]`)?.getBoundingClientRect() ?? null
-  // The columns do not move while a drag goes on: their rectangles are read once, when the pointer first asks.
-  const rects = useRef<Array<{ left: number; right: number }> | null>(null)
-  const readRects = (): Array<{ left: number; right: number }> => {
-    const out: Array<{ left: number; right: number }> = []
+  // The columns do not move while a drag goes on: their rectangles are read once, when the pointer first asks – with the
+  // column's distance from the top of the grid's body (`off`), so that a page scrolled meanwhile is followed by one read of the body.
+  type ColumnBox = { left: number; right: number; off: number }
+  const rects = useRef<ColumnBox[] | null>(null)
+  const readRects = (): ColumnBox[] => {
+    const out: ColumnBox[] = []
+    const body = bodyRef.current?.getBoundingClientRect()
+    if (!body) return []
     for (let i = 0; i < days.length; i++) {
       const r = columnRect(i)
       if (!r) return []
-      out.push({ left: r.left, right: r.right })
+      out.push({ left: r.left, right: r.right, off: r.top - body.top })
     }
     return out
   }
@@ -151,18 +155,38 @@ export function DayGrid({
   const busy = useRef(false)
   const muted = useRef(false)
   const [flight, setFlight] = useState<string | null>(null)
-  const [drop, setDrop] = useState<{ blockId: string; at: BlockDrop } | null>(null)
-  useEffect(() => () => unlisten.current?.(), [])
+  /** The block held, where it would land and how long it is (the band of its drop – kept from the lift, the view may change meanwhile). */
+  const [drop, setDrop] = useState<{ blockId: string; at: BlockDrop; durationMin: number } | null>(null)
+  const unmute = useRef<(() => void) | null>(null)
+  useEffect(
+    () => () => {
+      unlisten.current?.()
+      unmute.current?.()
+    },
+    []
+  )
   const stop = () => {
     unlisten.current?.()
     unlisten.current = null
     lift.current = null
     setFlight(null)
   }
-  /** The click that follows a drag is no click on the block (it would open the day). */
+  /**
+   * The click that follows a drag is no click on the block (it would open the day) – whenever the button is let go: the mute
+   * lasts to the next click (the window hears it after the block) or the next press, not for one turn of the loop (Esc comes first).
+   */
   const muteClick = () => {
+    unmute.current?.()
     muted.current = true
-    setTimeout(() => (muted.current = false), 0)
+    const off = () => {
+      muted.current = false
+      window.removeEventListener('click', off)
+      window.removeEventListener('pointerdown', off, true)
+      unmute.current = null
+    }
+    window.addEventListener('click', off)
+    window.addEventListener('pointerdown', off, true)
+    unmute.current = off
   }
   /** The block put down on `at`: the move, and the line with „Cofnij” it leaves (a refusal has said why by its toast). */
   const land = async (h: Lift, at: BlockDrop) => {
@@ -197,13 +221,14 @@ export function DayGrid({
         setFlight(h.id)
       }
       const L = latest.current
-      const i = columnUnder(ev.clientX, h.col)
-      const r = columnRect(i)
-      if (!r || !L.days[i]) return
-      const startMin = dropStart({ pointerY: ev.clientY, colTop: r.top, grabPx: h.grabPx, ppm: L.ppm, lo: L.lo, hi: L.hi, durationMin: h.durationMin })
+      const boxes = (rects.current ??= readRects())
+      const body = bodyRef.current?.getBoundingClientRect()
+      const i = columnAt(ev.clientX, boxes, h.col)
+      if (!body || !boxes[i] || !L.days[i]) return
+      const startMin = dropStart({ pointerY: ev.clientY, colTop: body.top + boxes[i]!.off, grabPx: h.grabPx, ppm: L.ppm, lo: L.lo, hi: L.hi, durationMin: h.durationMin })
       const next = dropOn(i, startMin, h.date, L.days[i].date, L.today)
       h.last = next
-      setDrop((was) => (was && sameDrop(was.at, next) ? was : { blockId: h.id, at: next }))
+      setDrop((was) => (was && sameDrop(was.at, next) ? was : { blockId: h.id, at: next, durationMin: h.durationMin }))
     }
     const up = (ev: globalThis.PointerEvent) => {
       if (ev.pointerId !== h.pointer) return
@@ -218,22 +243,30 @@ export function DayGrid({
       }
       void land(h, at)
     }
-    const cancel = (ev: globalThis.PointerEvent | KeyboardEvent) => {
-      if ('pointerId' in ev && ev.pointerId !== h.pointer) return
-      if ('key' in ev && ev.key !== 'Escape') return
+    const cancel = (ev: globalThis.PointerEvent) => {
+      if (ev.pointerId !== h.pointer) return
       if (h.moved) muteClick()
+      stop()
+      setDrop(null)
+    }
+    // Esc of a drag in progress is the drag's alone (heard first, in the capture phase): it must not close a layer under it too.
+    const escape = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape' || !h.moved) return
+      ev.preventDefault()
+      ev.stopPropagation()
+      muteClick()
       stop()
       setDrop(null)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', cancel)
-    window.addEventListener('keydown', cancel)
+    window.addEventListener('keydown', escape, true)
     unlisten.current = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', cancel)
-      window.removeEventListener('keydown', cancel)
+      window.removeEventListener('keydown', escape, true)
     }
   }
   const refusing = drop?.at.denied === true && flight != null
@@ -257,7 +290,7 @@ export function DayGrid({
           <AllDayBar dates={dates} page="week" today={today} axisPx={AXIS_PX} gapClass="gap-x-1" openId={openCard} onOpened={onCardOpened} />
         </div>
       </div>
-      <div className="relative grid gap-x-1" style={cols} ref={bodyRef}>
+      <div className="relative grid gap-x-1" style={cols} ref={bodyRef} data-testid="week-body">
         <div className="relative" style={{ height }} aria-hidden="true">
           {marks.map((h) => (
             <span key={h} className="num absolute right-1.5 -translate-y-1/2 text-[11px] text-muted" style={{ top: Math.max(axisY(h, lo, ppm), 7) }} data-testid={`week-hour-${h}`}>
@@ -288,7 +321,7 @@ export function DayGrid({
             held={held && spanHeld.includes(i) ? held.range : null}
             waiting={pick?.dates.includes(d.date) ? pick : null}
             grab={(b) => ({ down: grab(b, d.date, i), consumed: () => muted.current, dragging: flight === b.id })}
-            drop={drop && drop.at.index === i ? { ...drop.at, durationMin: dropLength(days, drop.blockId) } : null}
+            drop={drop && drop.at.index === i ? { ...drop.at, durationMin: drop.durationMin } : null}
           />
         ))}
         {pick && (
@@ -313,15 +346,6 @@ export function DayGrid({
       </div>
     </div>
   )
-}
-
-/** The length of the block `id` among the days' blocks (the band of its drop is as long). */
-function dropLength(days: readonly HorizonDay[], id: string): number {
-  for (const d of days) {
-    const b = d.blocks.find((x) => x.id === id)
-    if (b) return b.endMin - b.startMin
-  }
-  return DEFAULT_NEW_BLOCK_MIN
 }
 
 function ColumnHeading({ day, brightness }: { day: HorizonDay; brightness: number }) {

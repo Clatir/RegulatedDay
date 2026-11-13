@@ -19,6 +19,7 @@ import { cx } from '../../components/ui'
 import { attachable, hasFiles, textTarget } from '../attachments/attachDrop'
 import { attachBadge, attachBadgeTitle } from '../attachments/attachView'
 import { useMachine } from '../../store/machine'
+import { poolPath, POOL_COLOR, POOL_NAME } from './energyDraw'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
 
@@ -77,8 +78,6 @@ export interface TimelineMarker {
 /** The energy's curve beside the axis (the one sampling: `@shared/engine/energyTrack`). */
 export type { EnergyTrack }
 
-export const POOL_COLOR: Record<Pool, string> = { head: '#F2B66D', emotions: '#D49A97', senses: '#79AFAB' }
-export const POOL_NAME: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce' }
 const TONE: Record<TimelineMarker['tone'], string> = { lamp: '#F2B66D', rose: '#D49A97', sea: '#79AFAB', muted: '#B8AAB0', fg: '#EEE3D6' }
 /** Pixels per minute of the axis. */
 const PPM = 1.1
@@ -491,11 +490,7 @@ export function Timeline({
     )
   }
 
-  const energyPath = (pool: Pool) =>
-    energy?.samples
-      .filter((s) => Number.isFinite(s[pool]))
-      .map((s, k) => `${k ? 'L' : 'M'}${((s[pool] / 100) * 40).toFixed(1)},${y(s.at).toFixed(1)}`)
-      .join(' ') ?? ''
+  const energyPath = (pool: Pool) => poolPath(energy, pool, (v) => (v / 100) * 40, y)
 
   return (
     <div className="flex select-none" data-testid={rest['data-testid'] ?? 'timeline'}>
