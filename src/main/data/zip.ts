@@ -618,6 +618,7 @@ async function readDirectory(fh: fs.FileHandle, fileSize: number): Promise<ZipEn
     for (let q = nameEnd; q + 4 <= extraEnd; ) {
       const id = cd.readUInt16LE(q)
       const len = cd.readUInt16LE(q + 2)
+      if (q + 4 + len > extraEnd) throw damaged('pole dodatkowe poza wpisem')
       if (id === 0x0001) {
         let at = q + 4
         const field = (): number => {
@@ -662,26 +663,19 @@ export class ZipReader {
     }
   }
 
-  /** The content of one entry (stored or deflated), never more bytes than its declared size. */
-  /** The entry's bytes as stored (compressed or not), never checked – for a copy into another ZIP (T837). */
-  async readRaw(entry: ZipEntry): Promise<Buffer> {
+  /** Where the bytes of an entry begin (after its local header), checked to lie in the file with all of them. */
+  private async dataStart(entry: ZipEntry): Promise<number> {
     if (entry.flags & FLAG_ENCRYPTED) throw damaged(`${entry.name}: wpis zaszyfrowany`)
     if (entry.offset + LOCAL_LEN > this.fileSize) throw damaged(`${entry.name}: wpis poza plikiem`)
     const head = await readAt(this.fh, entry.offset, LOCAL_LEN)
     if (head.readUInt32LE(0) !== SIG_LOCAL) throw damaged(`${entry.name}: nagłówek wpisu`)
     const dataAt = entry.offset + LOCAL_LEN + head.readUInt16LE(26) + head.readUInt16LE(28)
     if (dataAt + entry.csize > this.fileSize) throw damaged(`${entry.name}: wpis poza plikiem`)
-    return readAt(this.fh, dataAt, entry.csize)
+    return dataAt
   }
 
-  async read(entry: ZipEntry): Promise<Buffer> {
-    if (entry.flags & FLAG_ENCRYPTED) throw damaged(`${entry.name}: wpis zaszyfrowany`)
-    if (entry.offset + LOCAL_LEN > this.fileSize) throw damaged(`${entry.name}: wpis poza plikiem`)
-    const head = await readAt(this.fh, entry.offset, LOCAL_LEN)
-    if (head.readUInt32LE(0) !== SIG_LOCAL) throw damaged(`${entry.name}: nagłówek wpisu`)
-    const dataAt = entry.offset + LOCAL_LEN + head.readUInt16LE(26) + head.readUInt16LE(28)
-    if (dataAt + entry.csize > this.fileSize) throw damaged(`${entry.name}: wpis poza plikiem`)
-    const raw = await readAt(this.fh, dataAt, entry.csize)
+  /** The content of an entry from its bytes as stored (stored or deflated), checked against its size and CRC. */
+  private async unpack(entry: ZipEntry, raw: Buffer): Promise<Buffer> {
     let data: Buffer
     if (entry.method === 0) data = raw
     else if (entry.method === 8) {
@@ -696,6 +690,21 @@ export class ZipReader {
   }
 
   /**
+   * The entry's bytes as stored (compressed or not), for a copy into another ZIP (T836): checked first – unpacked to count
+   * its size and CRC, never packed again – so a damaged entry of a daily backup fails the weekly one instead of going on.
+   */
+  async readRaw(entry: ZipEntry): Promise<Buffer> {
+    const raw = await readAt(this.fh, await this.dataStart(entry), entry.csize)
+    await this.unpack(entry, raw)
+    return raw
+  }
+
+  /** The content of one entry (stored or deflated), never more bytes than its declared size. */
+  async read(entry: ZipEntry): Promise<Buffer> {
+    return this.unpack(entry, await readAt(this.fh, await this.dataStart(entry), entry.csize))
+  }
+
+  /**
    * One entry written to `abs` (a new file – never over one that is there, `wx`): a stored one streamed in chunks with its
    * CRC checked (an attachment of any size, T809), a deflated one read whole. A content that does not match its sum
    * leaves no file behind.
@@ -705,12 +714,8 @@ export class ZipReader {
       await fs.writeFile(abs, await this.read(entry), { flag: 'wx' })
       return
     }
-    if (entry.flags & FLAG_ENCRYPTED) throw damaged(`${entry.name}: wpis zaszyfrowany`)
-    if (entry.offset + LOCAL_LEN > this.fileSize) throw damaged(`${entry.name}: wpis poza plikiem`)
-    const head = await readAt(this.fh, entry.offset, LOCAL_LEN)
-    if (head.readUInt32LE(0) !== SIG_LOCAL) throw damaged(`${entry.name}: nagłówek wpisu`)
-    const dataAt = entry.offset + LOCAL_LEN + head.readUInt16LE(26) + head.readUInt16LE(28)
-    if (dataAt + entry.csize > this.fileSize || entry.csize !== entry.size) throw damaged(`${entry.name}: wpis poza plikiem`)
+    const dataAt = await this.dataStart(entry)
+    if (entry.csize !== entry.size) throw damaged(`${entry.name}: wpis poza plikiem`)
     const out = await fs.open(abs, 'wx')
     let ok = false
     try {

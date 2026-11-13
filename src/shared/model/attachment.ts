@@ -11,7 +11,7 @@ import { recordEdit } from '../data/merge'
 import { paths } from '../data/paths'
 import { isIsoDate } from '../time/zone'
 import { templateBlockId } from '../engine/createDay'
-import { isId } from './ids'
+import { derivedId, isId } from './ids'
 import type { PlanBlock } from './plan'
 
 export const ATTACHMENT_SCHEMA = 1
@@ -161,9 +161,17 @@ export type BlockPlace =
  */
 export function templateOfDayBlock(block: Pick<PlanBlock, 'id' | 'sourceId'>, date: string, candidates: ReadonlyArray<string | null | undefined>): string | null {
   if (!block.sourceId) return null
-  for (const t of candidates) if (t && templateBlockId(date, t, block.sourceId) === block.id) return t
+  for (const t of candidates) {
+    if (!t) continue
+    // A block brought back by a change of the day's type is a copy of the parked one: `derivedId(date, 'back', id)`.
+    let id = templateBlockId(date, t, block.sourceId)
+    for (let back = 0; back <= BACK_DEPTH; back++, id = derivedId(date, 'back', id)) if (id === block.id) return t
+  }
   return null
 }
+
+/** How many changes of the day's type back a block of the template is still found (a copy of a copy …, T831). */
+const BACK_DEPTH = 4
 
 /**
  * The owners whose attachments a block sees (D410): a block of a day its own, and those of the template block it was made
@@ -294,11 +302,20 @@ export const EXECUTABLE_EXTS: ReadonlySet<string> = new Set([
   'library-ms', 'search-ms', 'searchconnector-ms', 'settingcontent-ms', 'appx', 'appxbundle', 'msix', 'msixbundle', 'appinstaller', 'diagcab',
   'xll', 'ade', 'adp', 'mde', 'accde', 'jnlp', 'py', 'pyw', 'pyz', 'pyc', 'rb', 'pl', 'sh', 'bash', 'theme', 'themepack', 'deskthemepack', 'mof', 'vsto',
   // T832: what Windows installs, mounts, connects to or runs add-ins of when opened.
-  'msu', 'ppkg', 'wsb', 'rdp', 'iso', 'img', 'vhd', 'vhdx', 'mht', 'mhtml', 'xla', 'xlam', 'ppa', 'ppam', 'ins', 'isp', 'vsix', 'cer', 'crt', 'der', 'p7b'
+  'msu', 'ppkg', 'wsb', 'rdp', 'iso', 'img', 'vhd', 'vhdx', 'mht', 'mhtml', 'xla', 'xlam', 'ppa', 'ppam', 'ins', 'isp', 'vsix', 'cer', 'crt', 'der', 'p7b',
+  // Certificates, keys and lists Windows imports with a wizard; OneNote packages and sections (embedded files run from them).
+  'pfx', 'p12', 'p7r', 'p7c', 'p7s', 'spc', 'sst', 'crl', 'stl', 'one', 'onepkg'
 ])
 
 /** Windows would run the file of this name (T803). */
 export const isExecutableName = (name: string): boolean => EXECUTABLE_EXTS.has(extOf(name))
+
+/**
+ * The scheme the window shows images of attachments by (T837): `rd-attachment://img/<id>` – the main process finds the file
+ * from the record (never from the address) and answers with its bytes; the window decodes and scales it (`<img>`).
+ */
+export const ATTACHMENT_SCHEME = 'rd-attachment'
+export const attachmentImageUrl = (id: string): string => `${ATTACHMENT_SCHEME}://img/${id}`
 
 /** The images with a thumbnail (D410, T808). */
 export const THUMB_EXTS: ReadonlySet<string> = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'])
@@ -347,7 +364,8 @@ export function linkFromInput(raw: string): string | null {
   const text = raw.trim()
   if (!text || /\s/.test(text)) return null
   // A host with a port („localhost:3000”, „intranet.local:8080/wiki”) – no scheme, though it looks like one (T833).
-  if (/^[a-z0-9][a-z0-9.-]*:\d{1,5}(?:[/?#]|$)/i.test(text)) return safeAttachmentUrl(`https://${text}`)
+  const hostPort = /^([a-z0-9][a-z0-9.-]*):\d{1,5}(?:[/?#]|$)/i.exec(text)
+  if (hostPort && (hostPort[1]!.includes('.') || hostPort[1]!.toLowerCase() === 'localhost')) return safeAttachmentUrl(`https://${text}`)
   if (/^[a-z][a-z0-9+.-]*:/i.test(text)) return safeAttachmentUrl(text)
   if (text.startsWith('\\') || text.startsWith('/') || text.startsWith('.')) return null
   if (/^[^@/]+@[^@/]+\.[^@/]+$/.test(text)) return safeAttachmentUrl(`mailto:${text}`)

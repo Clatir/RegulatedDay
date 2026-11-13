@@ -60,7 +60,6 @@ const TPL = { scope: 'template', templateId: 't1', blockId: 's1' } as const
 
 let root: Root | null = null
 let host: HTMLElement | null = null
-const thumb = vi.fn(async (_id: string): Promise<string | null> => null)
 
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -68,8 +67,7 @@ beforeAll(() => {
 })
 beforeEach(() => {
   vi.clearAllMocks()
-  thumb.mockImplementation(async () => null)
-  ;(window as unknown as { rd: unknown }).rd = { attachmentThumb: thumb, pathForFile: (f: File) => `C:\\${f.name}` }
+  ;(window as unknown as { rd: unknown }).rd = { pathForFile: (f: File) => `C:\\${f.name}` }
   for (const x of useUi.getState().toasts) closeToast(x.id)
 })
 afterEach(() => {
@@ -167,28 +165,23 @@ describe('lista załączników', () => {
 })
 
 describe('miniatury i dopiski', () => {
-  it('obraz: miniatura z attachmentThumb po załadowaniu, do tego czasu ikona; brak miniatury – ikona zostaje', async () => {
-    let done: (v: string | null) => void = () => undefined
-    thumb.mockImplementation(() => new Promise((r) => (done = r)))
-    const { q } = await show([file('a1', 'foto.png', OWN, 1)])
-    expect(thumb).toHaveBeenCalledWith('a1')
-    expect(q('attachment-thumb')).toBeNull()
-    expect(q('attachment-icon')!.getAttribute('data-kind')).toBe('image')
-    await act(async () => done('data:image/png;base64,QUJD'))
-    expect(q('attachment-thumb')!.getAttribute('src')).toBe('data:image/png;base64,QUJD')
-    expect(q('attachment-icon')).toBeNull()
-  })
-
-  it('miniatura null (plik jeszcze nie dotarł, zepsuty obraz) – ikona; plik inny niż obraz miniatury nie pyta', async () => {
-    const { q } = await show([file('a2', 'zepsuty.jpg', OWN, 1), file('a3', 'tekst.pdf', OWN, 2)])
-    expect(q('attachment-thumb')).toBeNull()
-    expect(thumb.mock.calls.map((c) => c[0])).toEqual(['a2'])
+  it('obraz: z adresu procesu głównego (rd-attachment://img/<id>), ikona do załadowania; nie załadował się – ikona zostaje (T837)', async () => {
+    const { q, all } = await show([file('a1', 'foto.png', OWN, 1), file('a2', 'zepsuty.jpg', OWN, 2), file('a3', 'tekst.pdf', OWN, 3), file('a4', 'rys.svg', OWN, 4)])
+    const imgs = all('attachment-thumb') as HTMLImageElement[]
+    expect(imgs.map((i) => i.getAttribute('src'))).toEqual(['rd-attachment://img/a1', 'rd-attachment://img/a2'])
+    expect(imgs.every((i) => i.classList.contains('hidden'))).toBe(true)
+    await act(async () => void imgs[0]!.dispatchEvent(new Event('load')))
+    await act(async () => void imgs[1]!.dispatchEvent(new Event('error')))
+    expect((all('attachment-thumb') as HTMLImageElement[]).map((i) => [i.getAttribute('src'), i.classList.contains('hidden')])).toEqual([['rd-attachment://img/a1', false]])
+    // The icons left: the broken image, the PDF and the SVG (never asked for).
+    expect(all('attachment-icon').map((i) => i.getAttribute('data-kind'))).toEqual(['image', 'pdf', 'image'])
+    expect(q('attachment-thumb')).not.toBeNull()
   })
 
   it('plik, który jeszcze nie dotarł z drugiego komputera – dopisek (bez pytania o miniaturę)', async () => {
     const { all } = await show([file('a1', 'foto.png', OWN, 1)], { missing: ['a1'] })
+    expect(all('attachment-thumb')).toEqual([])
     expect(all('attachment-note').map((n) => n.textContent)).toEqual([MISSING_NOTE])
-    expect(thumb).not.toHaveBeenCalled()
   })
 
   it('program: dopisek, a kliknięcie otwiera przez proces główny, który go tylko pokaże – bez toastu', async () => {

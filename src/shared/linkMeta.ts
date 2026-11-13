@@ -36,16 +36,43 @@ export function cleanTitle(raw: string): string | null {
   return points.length > TITLE_MAX ? `${points.slice(0, TITLE_MAX - 1).join('').trimEnd()}…` : t
 }
 
-const ATTR = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g
-/** The most of a tag's inside its attributes are read from (a longer one – its start): the attribute pattern backtracks. */
+/** The most of a tag's inside its attributes are read from (a longer one – its start). */
 const TAG_INSIDE_MAX = 2048
+const isSpace = (c: string) => c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f'
 
-/** The attributes of a tag's inside (`<meta …>`), names in lower case – of its first `TAG_INSIDE_MAX` characters. */
-function attrsOf(inside: string): Record<string, string> {
+/**
+ * The attributes of a tag's inside (`<meta …>`), names in lower case, the first of a name kept – read by hand in one pass
+ * (T834: every character looked at once – a pattern backtracked over a long name without „=”). A value in quotes, in
+ * apostrophes or bare; a name without a value is ''.
+ */
+function attrsOf(insideAll: string): Record<string, string> {
+  const inside = insideAll.slice(0, TAG_INSIDE_MAX)
   const out: Record<string, string> = {}
-  for (const m of inside.slice(0, TAG_INSIDE_MAX).matchAll(ATTR)) {
-    const k = m[1]!.toLowerCase()
-    if (!(k in out)) out[k] = m[2] ?? m[3] ?? m[4] ?? ''
+  const n = inside.length
+  let i = 0
+  while (i < n) {
+    while (i < n && (isSpace(inside[i]!) || inside[i] === '/')) i++
+    const from = i
+    while (i < n && !isSpace(inside[i]!) && inside[i] !== '=' && inside[i] !== '/' && inside[i] !== '>') i++
+    const name = inside.slice(from, i).toLowerCase()
+    while (i < n && isSpace(inside[i]!)) i++
+    let value = ''
+    if (inside[i] === '=') {
+      i++
+      while (i < n && isSpace(inside[i]!)) i++
+      const q = inside[i]
+      if (q === '"' || q === "'") {
+        const close = inside.indexOf(q, i + 1)
+        value = inside.slice(i + 1, close < 0 ? n : close)
+        i = close < 0 ? n : close + 1
+      } else {
+        const v = i
+        while (i < n && !isSpace(inside[i]!) && inside[i] !== '>') i++
+        value = inside.slice(v, i)
+      }
+    }
+    if (name && !(name in out)) out[name] = value
+    if (i === from) i++
   }
   return out
 }
@@ -56,9 +83,9 @@ export interface PageMeta {
   icons: string[]
 }
 
-const httpUrl = (href: string, base: string): string | null => {
+const httpUrl = (href: string, base: string | null): string | null => {
   try {
-    const u = new URL(decodeEntities(href.trim()), base)
+    const u = base ? new URL(decodeEntities(href.trim()), base) : new URL(decodeEntities(href.trim()))
     return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null
   } catch {
     return null
@@ -122,9 +149,9 @@ function scanPage(html: string): { tags: Array<{ name: string; inside: string }>
  * (sites put their name into the second), comments and scripts skipped; icons of `<link rel="icon">` (and „shortcut icon”,
  * „apple-touch-icon”) that are no SVG, then /favicon.ico of the page's origin. Linear in the page's length (T834).
  */
-export function parsePageMeta(html: string, pageUrl: string): PageMeta {
+export function parsePageMeta(html: string, pageUrl: string | null): PageMeta {
   const page = scanPage(html)
-  let base = pageUrl
+  let base: string | null = pageUrl
   let og: string | null = null
   const icons: string[] = []
   for (const { name: tag, inside } of page.tags) {
@@ -141,8 +168,8 @@ export function parsePageMeta(html: string, pageUrl: string): PageMeta {
   }
   const title = og ?? (page.title != null ? cleanTitle(page.title) : null)
   try {
-    const fav = new URL('/favicon.ico', pageUrl).href
-    if (/^https?:/.test(fav) && !icons.includes(fav)) icons.push(fav)
+    const fav = pageUrl ? new URL('/favicon.ico', pageUrl).href : null
+    if (fav && /^https?:/.test(fav) && !icons.includes(fav)) icons.push(fav)
   } catch {
     /* no origin */
   }

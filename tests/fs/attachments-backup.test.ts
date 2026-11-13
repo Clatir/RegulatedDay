@@ -179,3 +179,54 @@ describe('przywrócenie kopii bez plików dociąga pliki (T838)', () => {
     expect(existsSync(join(out, 'attachments', 'a3'))).toBe(false)
   })
 })
+
+describe('runda 2: ZIP (T836)', () => {
+  /** Where the content of the entry `name` of a ZIP begins (after its local header). */
+  async function dataAt(file: string, name: string): Promise<{ at: number; csize: number }> {
+    const e = await withZip(file, async (zip) => zip.entries.find((x) => x.name === name)!)
+    const b = readFileSync(file)
+    return { at: e.offset + 30 + b.readUInt16LE(e.offset + 26) + b.readUInt16LE(e.offset + 28), csize: e.csize }
+  }
+
+  it('uszkodzony wpis dziennej: kopia tygodniowa się nie robi (głośno), nie przechodzi po cichu', async () => {
+    put(data, 'rd.json', `${JSON.stringify({ format: 1, tekst: 'zażółć gęślą jaźń '.repeat(50) })}\n`)
+    await createDailyBackup(data, backups, '2026-11-08')
+    const daily = join(backups, 'daily', '2026-11-08.zip')
+    const { at, csize } = await dataAt(daily, 'rd.json')
+    const b = readFileSync(daily)
+    b[at + Math.floor(csize / 2)]! ^= 0xff
+    writeFileSync(daily, b)
+    const next = await createDailyBackup(data, backups, '2026-11-09')
+    expect(next.ok && next.rotateError).toMatch(/Uszkodzony plik ZIP/)
+    expect(existsSync(join(backups, 'weekly', '2026-W45.zip'))).toBe(false)
+  })
+
+  it('pole dodatkowe poza katalogiem plików – „Uszkodzony plik ZIP”, nie RangeError', async () => {
+    const file = join(root, 'z.zip')
+    await writeZipFile(file, [{ name: 'a.json', read: () => ({ data: Buffer.from('{}'), mtime: new Date() }) }])
+    const b = readFileSync(file)
+    const end = b.length - 22
+    const cd = b.readUInt32LE(end + 16)
+    const q = cd + 46 + b.readUInt16LE(cd + 28)
+    // Its size „in ZIP64” and an extra field of ZIP64 longer than what is left of the directory.
+    b.writeUInt32LE(0xffffffff, cd + 24)
+    b.writeUInt16LE(0x0001, q)
+    b.writeUInt16LE(8, q + 2)
+    writeFileSync(file, b)
+    await expect(withZip(file, async () => null)).rejects.toThrow(/Uszkodzony plik ZIP/)
+  })
+})
+
+describe('runda 2: dociąganie plików plik po pliku (T838)', () => {
+  it('w obecnym folderze jest inny plik tego id – brakujący plik rekordu i tak z kopii tygodniowej', async () => {
+    makeData()
+    await createDailyBackup(data, backups, '2026-11-08')
+    await createDailyBackup(data, backups, '2026-11-09')
+    rmSync(join(data, 'attachments', 'a1', 'film.mp4'))
+    put(data, 'attachments/a1/inny.txt', 'obcy plik')
+    const out = join(root, 'nowy')
+    await restoreToFolder(join(backups, 'daily', '2026-11-09.zip'), out, { from: data, backupsDir: backups })
+    expect(readFileSync(join(out, 'attachments', 'a1', 'film.mp4')).equals(big)).toBe(true)
+    expect(existsSync(join(out, 'attachments', 'a1', 'inny.txt'))).toBe(false)
+  })
+})

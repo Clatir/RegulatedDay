@@ -6,7 +6,7 @@
  * goes in its turn after the edits sent before it (`trySaveWith`); a new attachment – new records of new ids – never waits
  * for them nor holds them (T839: the dialog of files open, gigabytes copied).
  */
-import type { AddLinkResult, AttachmentOpen, AttachResult } from '@shared/api'
+import type { AddLinkResult, AttachmentOpen, AttachPrepared, AttachResult } from '@shared/api'
 import { recordEdit } from '@shared/data/merge'
 import {
   ATTACHMENT_NAME_MAX,
@@ -23,7 +23,7 @@ import {
   type BlockPlace
 } from '@shared/model/attachment'
 import type { PlanBlock } from '@shared/model/plan'
-import { isSaved, rawRecord, reloadData, trySaveWith, useData } from './data'
+import { inTurn, isSaved, rawRecord, reloadData, trySaveWith, useData } from './data'
 import { toast } from './ui'
 
 /** What a change of an attachment says when it is gone (removed elsewhere, deleted after 30 days). */
@@ -49,15 +49,31 @@ function sayFailed(r: AttachResult): void {
   toast(text, 'error', 8000)
 }
 
-/** Outside the turn of the window's edits (T839): new records of new ids need no order and never hold the edits after them. */
-async function attachCall(call: () => Promise<AttachResult>): Promise<AttachResult> {
-  let r: AttachResult
+/**
+ * The files copied outside the turn of the window's edits (T839: the dialog open, gigabytes copied never hold them), their
+ * records written in it – after an edit sent before (a block removed meanwhile is known then: they come removed) and before
+ * the next one, which sees them (the view is read again in the turn).
+ */
+async function attachCall(call: () => Promise<AttachPrepared>): Promise<AttachResult> {
+  const fail = (e: unknown) => [{ name: '', error: e instanceof Error ? e.message : String(e) }]
+  let p: AttachPrepared
   try {
-    r = await call()
+    p = await call()
   } catch (e) {
-    r = { added: [], failed: [{ name: '', error: e instanceof Error ? e.message : String(e) }] }
+    p = { ids: [], failed: fail(e) }
   }
-  await reloadData()
+  const committed = p.ids.length
+    ? await inTurn(async () => {
+        try {
+          return await window.rd.attachCommit(p.ids)
+        } catch (e) {
+          return { added: [], failed: fail(e) }
+        } finally {
+          await reloadData()
+        }
+      })
+    : { added: [], failed: [] }
+  const r: AttachResult = { added: committed.added, failed: [...p.failed, ...committed.failed] }
   sayFailed(r)
   return r
 }
@@ -78,13 +94,14 @@ export async function addLink(owner: AttachmentOwner, input: string): Promise<st
     toast(LINK_INPUT_TEXT, 'error', 6000)
     return null
   }
-  // A new record of a new id: outside the turn of the edits (T839).
-  let r: AddLinkResult
-  try {
-    r = await window.rd.addLink(owner, url)
-  } catch (e) {
-    r = { ok: false, id: null, error: e instanceof Error ? e.message : String(e) }
-  }
+  // In the turn of the edits (quick – nothing copied): a block removed just before is known to the main process (T839).
+  const r = await inTurn(async (): Promise<AddLinkResult> => {
+    try {
+      return await window.rd.addLink(owner, url)
+    } catch (e) {
+      return { ok: false, id: null, error: e instanceof Error ? e.message : String(e) }
+    }
+  })
   await reloadData()
   if (!r.ok) toast(`Nie dodano linku: ${r.error ?? 'spróbuj jeszcze raz'}`, 'error', 6000)
   return r.ok ? r.id : null

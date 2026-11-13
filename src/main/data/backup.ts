@@ -27,6 +27,7 @@ import { dirname, join, resolve, sep } from 'node:path'
 import type { BackupItem } from '@shared/api'
 import { attachmentFileOf, classify, isIgnoredPath, sanitizeRelPath } from '@shared/data/paths'
 import { addDays, daysBetween, isIsoDate, weekday } from '@shared/time/zone'
+import { attachmentFileRel, attachmentFrom } from '@shared/model/attachment'
 import { pathExists, removeFile, tempPathFor, withRetry } from '../datastore/atomic'
 import { diskSource, streamSource, walkFiles, withZip, writeZipFile, zipFolder, type ZipEntry, type ZipSource } from './zip'
 
@@ -450,7 +451,8 @@ export async function restoreToFolder(zipFile: string, targetDir: string, more: 
       for (const { rel } of files) {
         const c = classify(rel)
         if (c?.kind !== 'attachment' || c.conflict || !c.id || inZip.has(c.id)) continue
-        if (fileKindRecord(await fs.readFile(join(tmp, ...rel.split('/'))).catch(() => null))) wanted.add(c.id)
+        const file = attachmentFileRelOf(await fs.readFile(join(tmp, ...rel.split('/'))).catch(() => null))
+        if (file) wanted.add(file)
       }
       if (wanted.size) await fillAttachmentFiles(tmp, wanted, more)
       if (await pathExists(target)) await fs.rmdir(target)
@@ -469,58 +471,48 @@ export interface AttachmentSources {
   backupsDir?: string | null
 }
 
-/** A record (its bytes) of an attachment that is a file. */
-function fileKindRecord(bytes: Buffer | null): boolean {
+/** The file of an attachment a record (its bytes) names – attachments/<id>/<name>; null – a link, or no attachment. */
+export function attachmentFileRelOf(bytes: Buffer | null): string | null {
   try {
-    const v = bytes ? (JSON.parse(bytes.toString('utf8')) as unknown) : null
-    return !!v && typeof v === 'object' && (v as Record<string, unknown>).kind === 'file'
+    const a = attachmentFrom(bytes ? (JSON.parse(bytes.toString('utf8')) as unknown) : null)
+    return a ? attachmentFileRel(a) : null
   } catch {
-    return false
+    return null
   }
 }
 
-/** attachments/<id>/ in `dir` holds a file of its own (not a hidden temp file); one that cannot be read – no. */
-async function hasAttachmentFiles(dir: string, id: string): Promise<boolean> {
-  const names = await fs.readdir(join(dir, 'attachments', id), { withFileTypes: true }).catch(() => [])
-  return names.some((n) => n.isFile() && isAttachmentFile(`attachments/${id}/${n.name}`))
-}
-
 /**
- * The files of the attachments `ids` that `dataDir` lacks, brought from where they still are (T838): the folder `from`
- * (the data folder now, when a whole backup goes elsewhere), then the weekly backups of `backupsDir`, the newest first.
- * Never written over, never removed; a source that cannot be read is passed by. The ids still without their files.
+ * The files of attachments `wanted` (attachments/<id>/<name>, each the one file its record names) that `dataDir` lacks,
+ * brought from where they still are (T838): the folder `from` (the data folder now, when a whole backup goes elsewhere),
+ * then the weekly backups of `backupsDir`, the newest first – file by file. Never written over, never removed; a source
+ * that cannot be read is passed by. The files still missing.
  */
-export async function fillAttachmentFiles(dataDir: string, ids: ReadonlySet<string>, more: AttachmentSources): Promise<string[]> {
+export async function fillAttachmentFiles(dataDir: string, wanted: ReadonlySet<string>, more: AttachmentSources): Promise<string[]> {
   const left = new Set<string>()
-  for (const id of ids) if (!(await hasAttachmentFiles(dataDir, id))) left.add(id)
+  for (const rel of wanted) if (isAttachmentFile(rel) && !(await pathExists(join(dataDir, ...rel.split('/'))))) left.add(rel)
   if (more.from) {
-    for (const id of [...left]) {
-      const src = join(more.from, 'attachments', id)
-      const names = await fs.readdir(src, { withFileTypes: true }).catch(() => [])
-      let copied = false
-      for (const n of names) {
-        if (!n.isFile() || !isAttachmentFile(`attachments/${id}/${n.name}`)) continue
-        const target = join(dataDir, 'attachments', id, n.name)
-        if (await pathExists(target)) continue
-        const tmp = tempPathFor(target)
-        try {
-          await fs.mkdir(dirname(target), { recursive: true })
-          await withRetry(() => fs.copyFile(join(src, n.name), tmp))
-          await withRetry(() => fs.rename(tmp, target))
-          copied = true
-        } catch {
-          await fs.rm(tmp, { force: true }).catch(() => undefined)
-        }
+    for (const rel of [...left]) {
+      const src = join(more.from, ...rel.split('/'))
+      const target = join(dataDir, ...rel.split('/'))
+      const tmp = tempPathFor(target)
+      try {
+        if (!(await fs.stat(src)).isFile()) continue
+        await fs.mkdir(dirname(target), { recursive: true })
+        await withRetry(() => fs.copyFile(src, tmp))
+        await withRetry(() => fs.rename(tmp, target))
+        left.delete(rel)
+      } catch {
+        await fs.rm(tmp, { force: true }).catch(() => undefined)
       }
-      if (copied) left.delete(id)
     }
   }
   if (more.backupsDir && left.size) {
     const weekly = join(more.backupsDir, 'weekly')
     for (const name of await listNames(weekly, 'weekly').catch(() => [] as string[])) {
       if (!left.size) break
-      const done = await restoreAttachmentFiles(join(weekly, name), left, dataDir).catch(() => [] as string[])
-      for (const rel of done) left.delete(attachmentFileOf(rel)!.id)
+      const ids = new Set([...left].map((rel) => attachmentFileOf(rel)!.id))
+      const done = await restoreAttachmentFiles(join(weekly, name), ids, dataDir, left).catch(() => [] as string[])
+      for (const rel of done) left.delete(rel)
     }
   }
   return [...left]
@@ -572,7 +564,7 @@ export async function readBackupFiles(zipFile: string, wanted: (rel: string) => 
  * daily one, takes nothing away). Each through a hidden temp file renamed into place; the root of the data folder must be
  * there (nothing is made in place of a folder that is away). The files written.
  */
-export async function restoreAttachmentFiles(zipFile: string, ids: ReadonlySet<string>, dataDir: string): Promise<string[]> {
+export async function restoreAttachmentFiles(zipFile: string, ids: ReadonlySet<string>, dataDir: string, only?: ReadonlySet<string>): Promise<string[]> {
   if (!ids.size) return []
   await fs.stat(dataDir)
   return withZip(zipFile, async (zip) => {
@@ -581,7 +573,7 @@ export async function restoreAttachmentFiles(zipFile: string, ids: ReadonlySet<s
       if (entry.name.endsWith('/')) continue
       const rel = safeRelPath(entry.name)
       const f = rel && isAttachmentFile(rel) ? attachmentFileOf(rel) : null
-      if (!rel || !f || !ids.has(f.id)) continue
+      if (!rel || !f || !ids.has(f.id) || (only && !only.has(rel))) continue
       const target = join(dataDir, ...rel.split('/'))
       if (await pathExists(target)) continue
       await fs.mkdir(dirname(target), { recursive: true })

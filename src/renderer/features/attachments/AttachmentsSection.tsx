@@ -7,7 +7,7 @@
  * they belong (T811). A removal has its „Cofnij” in a toast (the window's way).
  */
 import { useEffect, useRef, useState } from 'react'
-import { attachmentsOfBlock, ATTACHMENT_NAME_MAX, type Attachment, type AttachmentOwner, type BlockPlace } from '@shared/model/attachment'
+import { attachmentImageUrl, attachmentsOfBlock, ATTACHMENT_NAME_MAX, isImageName, type Attachment, type AttachmentOwner, type BlockPlace } from '@shared/model/attachment'
 import type { PlanBlock } from '@shared/model/plan'
 import { TextField } from '../../components/fields'
 import { cx } from '../../components/ui'
@@ -20,32 +20,29 @@ import { FileIcon, GlobeIcon } from './AttachmentIcon'
 import { fileKind, isOwnHere, KIND_LABEL, MISSING_NOTE, originTag, PROGRAM_NOTE, sizeText } from './attachView'
 import { pasteTransfer } from './attachDrop'
 
-/** Thumbnails already made (they never change: an attachment's file is never rewritten) – the panel opens with them at once. */
-const THUMBS = new Map<string, string>()
-
-/** The thumbnail of an image attachment, loaded when it is shown (null – none yet: the icon stands in). */
-function useThumb(id: string, wanted: boolean, missing: boolean): string | null {
-  const [url, setUrl] = useState<string | null>(THUMBS.get(id) ?? null)
-  useEffect(() => {
-    if (!wanted) return
-    const have = THUMBS.get(id)
-    if (have) {
-      setUrl(have)
-      return
-    }
-    let live = true
-    void window.rd
-      .attachmentThumb(id)
-      .then((v) => {
-        if (v) THUMBS.set(id, v)
-        if (live) setUrl(v)
-      })
-      .catch(() => undefined)
-    return () => {
-      live = false
-    }
-  }, [id, wanted, missing])
-  return wanted ? url : null
+/**
+ * The image of an attachment (T837): loaded by the window from the main process's address (`rd-attachment://img/<id>` – the
+ * main process finds the file from the record and streams it), decoded and scaled here; the kind's icon until it is loaded
+ * and when it does not load (a broken image, not here yet).
+ */
+function Thumb({ id }: { id: string }) {
+  const [state, setState] = useState<'loading' | 'shown' | 'failed'>('loading')
+  return (
+    <>
+      {state !== 'shown' && <FileIcon kind="image" />}
+      {state !== 'failed' && (
+        <img
+          src={attachmentImageUrl(id)}
+          alt=""
+          decoding="async"
+          onLoad={() => setState('shown')}
+          onError={() => setState('failed')}
+          className={cx('max-h-8 max-w-8 object-contain', state !== 'shown' && 'hidden')}
+          data-testid="attachment-thumb"
+        />
+      )}
+    </>
+  )
 }
 
 function AttachmentRow({ a, place }: { a: Attachment; place: BlockPlace }) {
@@ -62,7 +59,8 @@ function AttachmentRow({ a, place }: { a: Attachment; place: BlockPlace }) {
   const tag = originTag(a, place)
   const file = a.file
   const kind = file ? fileKind(file.fileName, file.ext) : null
-  const thumb = useThumb(a.id, kind === 'image' && !missing, missing)
+  // Only an image of a kind the main process shows (never SVG), only once its file is here.
+  const image = !!file && kind === 'image' && isImageName(file.fileName) && !missing
   const program = kind === 'program' || shown
   const meta = file ? sizeText(file.size) : a.link && a.link.domain !== a.name ? a.link.domain : ''
   const open = () =>
@@ -94,8 +92,8 @@ function AttachmentRow({ a, place }: { a: Attachment; place: BlockPlace }) {
         ) : (
           <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => void open()} disabled={busy} title={a.link?.url ?? file?.fileName} data-testid="attachment-open">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-sm text-muted">
-              {thumb ? (
-                <img src={thumb} alt="" className="max-h-8 max-w-8 object-contain" data-testid="attachment-thumb" />
+              {image ? (
+                <Thumb id={a.id} />
               ) : a.link ? (
                 a.link.iconDataUrl ? (
                   <img src={a.link.iconDataUrl} alt="" className="h-5 w-5 object-contain" data-testid="attachment-site-icon" />
