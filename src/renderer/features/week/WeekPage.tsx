@@ -9,7 +9,8 @@
  * The heading of the page switches the view (SNT1, T936; remembered by this computer): „Tydzień”, „3 dni” (D417 – yesterday,
  * today and tomorrow in a larger scale, the arrows move by a day) and „Agenda” (D418 – seven days from today as a list).
  * Each view starts with the chips of the calendars (D419: `CalendarChips`, „ukryte: N” of the days it shows) and draws the blocks and
- * all-day events of the checked calendars only (`useVisibleDays`, `useVisibleAllDay`).
+ * all-day events of the checked calendars only (`useVisibleDays` for the days' blocks, `useVisibleAllDayIn` for the events and their
+ * count – it also keeps the event Ctrl K opened, `revealedId`, D427).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { agendaOf } from '@shared/engine/calendarViews'

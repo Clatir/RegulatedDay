@@ -7,7 +7,7 @@
 import { useMemo } from 'react'
 import type { AllDayEvent } from '@shared/model/allDay'
 import { eventsInRange } from '@shared/model/allDay'
-import { calendarName, calendarOfCategory, filterBlocks } from '@shared/model/calendars'
+import { calendarName, calendarOfCategory, calendarSieve, filterBlocks } from '@shared/model/calendars'
 import { useData } from '../../store/data'
 import { useCalendarFilter, useVisibleAllDay } from './calendarFilter'
 
@@ -23,7 +23,9 @@ export function useVisibleDays<B extends { categoryId: string }, D extends { blo
   const hidden = useCalendarFilter((x) => x.hidden)
   return useMemo(() => {
     if (!days) return { days: NONE, hiddenCount: 0, hiddenByDay: NONE }
-    const rs = days.map((d) => filterBlocks(d.blocks, hidden, rd))
+    // The hidden set and the calendar of each category are resolved once for all the days.
+    const sieve = calendarSieve(hidden, rd)
+    const rs = days.map((d) => filterBlocks(d.blocks, hidden, rd, sieve))
     const hiddenCount = rs.reduce((n, r) => n + r.hiddenCount, 0)
     return {
       days: hiddenCount === 0 ? (days as D[]) : days.map((d, i) => (rs[i]!.hiddenCount === 0 ? d : { ...d, blocks: rs[i]!.shown })),
@@ -35,11 +37,11 @@ export function useVisibleDays<B extends { categoryId: string }, D extends { blo
 
 /**
  * What the axis of „Dziś” draws of its items once the unchecked calendars' blocks are out (`shown`): the block whose panel is open
- * (`openId` – Ctrl K found it, or it was open when its calendar was unchecked, D427) and the blocks that must stay (`always`: running,
- * begun outside the plan – T1002) come back, each with the calendar's name (`hiddenIn`). `hiddenCount` – the blocks still hidden
- * („ukryte: N” counts only what the view would not show). Nothing hidden – `shown` itself.
+ * (`openId` – Ctrl K found it, or it was open when its calendar was unchecked, D427) comes back with the calendar's name
+ * (`hiddenIn`); a running block of an unchecked calendar is hidden like any other (D428 – the bar of the desktop shows it).
+ * `hiddenCount` – the blocks still hidden („ukryte: N” counts only what the view would not show). Nothing hidden – `shown` itself.
  */
-export function axisWithRevealed<T extends { id: string; categoryId: string; always?: boolean; hiddenIn?: string }>(
+export function axisWithRevealed<T extends { id: string; categoryId: string; hiddenIn?: string }>(
   items: readonly T[],
   shown: T[],
   openId: string | null,
@@ -50,7 +52,7 @@ export function axisWithRevealed<T extends { id: string; categoryId: string; alw
   let revealed = 0
   const list = items.flatMap((i): T[] => {
     if (drawn.has(i)) return [i]
-    if (!i.always && i.id !== openId) return []
+    if (i.id !== openId) return []
     revealed++
     return [{ ...i, hiddenIn: calendarName(rd, calendarOfCategory(rd, i.categoryId)) }]
   })

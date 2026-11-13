@@ -70,7 +70,8 @@ import { PeersFreshness } from '../settings/ComputersSection'
 import { RitualPanel } from '../ritual/RitualPanel'
 import { AllDayBar } from '../allday/AllDayBar'
 import { AllDayLines } from '../allday/AllDayLines'
-import { useVisibleBlocks } from '../calendars/calendarFilter'
+import { pushedText } from '@shared/engine/pushApart'
+import { hiddenBlocksAmong, useVisibleBlocks } from '../calendars/calendarFilter'
 import { CalendarChips } from '../calendars/CalendarChips'
 import { axisWithRevealed, useVisibleAllDayIn } from '../calendars/visibleViews'
 import { UnclosedDays } from '../ritual/UnclosedDays'
@@ -275,8 +276,15 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const saveChange = async (c: DayChange) => {
     // D368: a block shortened today by its bottom edge frees its end – the bar may ask about the gap (a move, the top edge: no).
     const freed = isToday && c.was ? freedByEdit(model.state, c.was, c.block) : null
-    const out = await pushDayBlocks(date, raw, (r) => putBlock(r, c.was ? { ...blockNow(r, date, c.was), ...c.patch } : c.block), pushedStarts(plan, c))
-    if (isSaved(out)) void tellFreed(date, freed)
+    const pushed = pushedStarts(plan, c)
+    const out = await pushDayBlocks(date, raw, (r) => putBlock(r, c.was ? { ...blockNow(r, date, c.was), ...c.patch } : c.block), pushed)
+    if (isSaved(out)) {
+      void tellFreed(date, freed)
+      // D428: the pushing counts the blocks of an unchecked calendar too; the line of the bar (the desktop's, the same one) never
+      // says so – the window does, here (the block whose panel is open is drawn, so not hidden).
+      const hidden = hiddenBlocksAmong(pushed.map((p) => p.block), openId)
+      if (pushed.length && hidden) toast(pushedText(pushed.length, hidden), 'info')
+    }
     return out
   }
   /**

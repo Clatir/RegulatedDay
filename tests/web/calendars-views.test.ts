@@ -90,7 +90,7 @@ function setEvents(events: AllDayEvent[]): void {
 
 beforeEach(() => {
   localStorage.clear()
-  useCalendarFilter.setState({ hidden: [] })
+  useCalendarFilter.setState({ hidden: [], revealed: null })
   useData.setState({ rd: RD_TWO })
   setEvents([])
   useUi.setState({ page: 'week', day: null, pick: null, toasts: [] })
@@ -105,7 +105,7 @@ afterEach(() => {
   host?.remove()
   root = null
   host = null
-  useCalendarFilter.setState({ hidden: [] })
+  useCalendarFilter.setState({ hidden: [], revealed: null })
   useData.setState({ view: null, allDay: [], rd: rdFrom(undefined) })
 })
 
@@ -326,6 +326,43 @@ describe('Ctrl K i karta wydarzenia z ukrytego kalendarza (D427)', () => {
     expect(q('allday-bar-e1')).toBeNull()
   })
 
+  it('odkrycie bez opóźnienia: karta z Ctrl K i pole filtra ustawione razem (jedno zdarzenie), pasek jest od razu', async () => {
+    setEvents([event('e1', 'Zjazd', LECTURE_DAY, 'praca')])
+    useCalendarFilter.setState({ hidden: ['praca'] })
+    useUi.setState({ page: 'week', pick: { kind: 'allDay', id: 'e1' } })
+    await mountWeek('week')
+    expect(useCalendarFilter.getState().revealed).toBe('e1')
+    // After the card closes the filter is told at once.
+    await click('allday-cancel')
+    expect(useCalendarFilter.getState().revealed).toBeNull()
+  })
+
+  it('klik w pasek odkryty z Ctrl K: karta otwiera się dalej jako odkryta – pasek zostaje, nie liczy się do „ukryte”', async () => {
+    setEvents([event('e1', 'Zjazd', LECTURE_DAY, 'praca')])
+    useCalendarFilter.setState({ hidden: ['praca'] })
+    useUi.setState({ page: 'week', pick: { kind: 'allDay', id: 'e1' } })
+    await mountWeek('week')
+    await click('allday-cancel')
+    // Closed: the bar is gone; Ctrl K again opens it, then the bar itself is clicked.
+    await act(async () => useUi.setState({ pick: { kind: 'allDay', id: 'e1' } }))
+    expect(q('allday-card')).not.toBeNull()
+    await click('allday-bar-e1')
+    expect(q('allday-card')).not.toBeNull()
+    expect(q('allday-bar-e1')).not.toBeNull()
+    expect(useCalendarFilter.getState().revealed).toBe('e1')
+  })
+
+  it('zamykanie po odznaczeniu liczy się według BIEŻĄCEGO kalendarza wydarzenia, nie tego z chwili otwarcia karty', async () => {
+    setEvents([event('e1', 'Zjazd', LECTURE_DAY, 'dom')])
+    useCalendarFilter.setState({ hidden: ['praca'] })
+    await mountWeek('week')
+    await click('allday-bar-e1')
+    expect(q('allday-card')).not.toBeNull()
+    // Another computer moves the event to „Praca” (unchecked) while the card is open.
+    await act(async () => setEvents([event('e1', 'Zjazd', LECTURE_DAY, 'praca')]))
+    expect(q('allday-card')).toBeNull()
+  })
+
   it('karta wydarzenia widocznego kalendarza zostaje, gdy odznaczysz inny', async () => {
     setEvents([event('e1', 'Zjazd', LECTURE_DAY, 'praca')])
     await mountWeek('week')
@@ -335,25 +372,25 @@ describe('Ctrl K i karta wydarzenia z ukrytego kalendarza (D427)', () => {
   })
 })
 
-describe('oś „Dziś”: bloki ukrytego kalendarza, które zostają (D427, T1002)', () => {
-  const item = (id: string, categoryId: string, o: { startMin?: number; always?: boolean } = {}) => ({ id, categoryId, startMin: o.startMin ?? 600, endMin: (o.startMin ?? 600) + 60, ...(o.always ? { always: true } : {}) })
-  const items = [item('a', 'inne'), item('n', 'nauka', { startMin: 700 }), item('r', 'nauka', { startMin: 800, always: true }), item('o', 'nauka', { startMin: 900 })]
+describe('oś „Dziś”: blok ukrytego kalendarza, który zostaje (D427, D428)', () => {
+  const item = (id: string, categoryId: string, startMin = 600, marks: string[] = []) => ({ id, categoryId, startMin, endMin: startMin + 60, marks })
+  // „r” runs now – a running block of an unchecked calendar is hidden like any other (D428: the bar of the desktop shows it).
+  const items = [item('a', 'inne'), item('n', 'nauka', 700), item('r', 'nauka', 800, ['biegnie']), item('o', 'nauka', 900)]
   const shown = items.filter((i) => i.categoryId !== 'nauka')
 
-  it('otwarty blok i blok trwający wracają z nazwą kalendarza, reszta ukryta; „ukryte” liczy tylko tę resztę', () => {
+  it('wraca tylko blok z otwartym panelem, z nazwą kalendarza; „ukryte” liczy resztę, także trwający', () => {
     const out = axisWithRevealed(items, shown, 'n', RD_TWO)
     expect(out.items.map((i) => [i.id, (i as { hiddenIn?: string }).hiddenIn])).toEqual([
       ['a', undefined],
-      ['n', 'Praca'],
-      ['r', 'Praca']
+      ['n', 'Praca']
     ])
-    expect(out.hiddenCount).toBe(1)
+    expect(out.hiddenCount).toBe(2)
   })
 
-  it('bez otwartego bloku wraca tylko trwający; nic ukryte – te same pozycje', () => {
+  it('bez otwartego bloku znikają wszystkie, także trwający; nic ukryte – te same pozycje', () => {
     const out = axisWithRevealed(items, shown, null, RD_TWO)
-    expect(out.items.map((i) => i.id)).toEqual(['a', 'r'])
-    expect(out.hiddenCount).toBe(2)
+    expect(out.items.map((i) => i.id)).toEqual(['a'])
+    expect(out.hiddenCount).toBe(3)
     expect(axisWithRevealed(shown, shown, 'n', RD_TWO).items).toBe(shown)
   })
 })
@@ -406,6 +443,8 @@ describe('rozsuwanie: linia mówi, ile ukrytych (D419, T1003)', () => {
     expect(hiddenBlocksAmong([{ categoryId: 'inne' }, { categoryId: 'nauka' }, { categoryId: 'nauka' }])).toBe(0)
     useCalendarFilter.setState({ hidden: ['praca'] })
     expect(hiddenBlocksAmong([{ categoryId: 'inne' }, { categoryId: 'nauka' }, { categoryId: 'nauka' }])).toBe(2)
+    // The block drawn in spite of its calendar (its panel is open – D427) is not hidden.
+    expect(hiddenBlocksAmong([{ id: 'a', categoryId: 'inne' }, { id: 'n', categoryId: 'nauka' }, { id: 'm', categoryId: 'nauka' }], 'n')).toBe(1)
   })
 })
 

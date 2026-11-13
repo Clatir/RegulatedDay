@@ -755,10 +755,10 @@ export interface RdApi {
    * Blocks pushed apart (D367), already saved by the window as the one edit `entry` of the day's file (`made` – the file
    * it created, else null): the bar keeps „Przesunięto N bloków · Cofnij” – its „Cofnij” takes that edit back – and the
    * push checks the marker of variants of today.  false (D400: a „Dodaj” of the week, whose one „Cofnij” is the window's):
-   * only the marker's trigger, no line of the bar. `hidden` – how many of the pushed blocks the window hides (an unchecked
-   * calendar, D419): the line says „(w tym M ukrytych)” (T1003).
+   * only the marker's trigger, no line of the bar. The bar's line never says how many of the blocks the window hides
+   * (D428: that is the window's own line).
    */
-  planPushed(day: string, count: number, entry: EditEntry, made: RawRecord | null, line?: boolean, hidden?: number): Promise<void>
+  planPushed(day: string, count: number, entry: EditEntry, made: RawRecord | null, line?: boolean): Promise<void>
   /**
    * „Ułóż pod energię” (D369) applied in the morning plan, already saved by the window as the one edit `entry` of today's
    * file (`made` – the file it created, else null): the bar keeps „Przestawiono: <label> · Cofnij” as after a variant (D313).

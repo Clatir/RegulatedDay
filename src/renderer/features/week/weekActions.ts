@@ -137,7 +137,7 @@ export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block
   if (!days.some((d) => d.moved > 0)) return { ...r, push: null }
   if (mine) {
     try {
-      await window.rd.planPushed(mine.date, mine.moved, mine.entry, mine.made, false, mine.hidden ?? 0)
+      await window.rd.planPushed(mine.date, mine.moved, mine.entry, mine.made, false)
     } catch {
       // The plan is saved; only the bar's marker is missing (the main process is closing).
     }

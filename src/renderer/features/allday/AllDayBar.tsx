@@ -68,22 +68,27 @@ export function AllDayBar({
   const [typeToday, setTypeToday] = useState(false)
   const unlisten = useRef<(() => void) | null>(null)
   useEffect(() => () => unlisten.current?.(), [])
-  // The bars of the unchecked calendars are not drawn (D425) – but the event Ctrl K found is, with its card open (D427: `revealed`
-  // of the filter, `Open.revealed`); a card of an event whose calendar is unchecked meanwhile closes (its bar is gone).
+  // The bars of the unchecked calendars are not drawn (D425) – but the event Ctrl K found is, while its card is open (D427): the
+  // card is set and the filter told (`revealed`, which the views count by) in the same event – `put`, the one way a card opens or
+  // closes – so no frame draws the bar without it. A card of an event whose calendar is unchecked meanwhile closes (D428, its bar is
+  // gone), unless Ctrl K opened it.
   const rd = useData((s) => s.rd)
   const hiddenCalendars = useCalendarFilter((s) => s.hidden)
   const reveal = useCalendarFilter((s) => s.reveal)
+  const told = useRef(false)
+  const put = (c: Open | null) => {
+    setCard(c)
+    told.current = !!c?.revealed
+    reveal(c?.revealed ? c.event.id : null)
+  }
+  useEffect(() => () => (told.current ? reveal(null) : undefined), [reveal])
   const { shown, revealedId } = useVisibleAllDay(events)
   const layout = allDayLayout(shown, dates, expanded)
-  const revealedId0 = card?.revealed ? card.event.id : null
   useEffect(() => {
-    if (!revealedId0) return
-    reveal(revealedId0)
-    return () => reveal(null)
-  }, [revealedId0, reveal])
-  useEffect(() => {
-    if (card && !card.revealed && card.base && filterAllDay([card.base], hiddenCalendars, rd).hiddenCount > 0) setCard(null)
-  }, [card, hiddenCalendars, rd])
+    if (!card || card.revealed) return
+    const now = events.find((e) => e.id === card.event.id)
+    if (now && filterAllDay([now], hiddenCalendars, rd).hiddenCount > 0) put(null)
+  }, [card, events, hiddenCalendars, rd])
   const columns = `${axisPx}px repeat(${dates.length}, minmax(0, 1fr))${endPx ? ` ${endPx}px` : ''}`
   const col = (i: number) => i + 2
 
@@ -96,9 +101,10 @@ export function AllDayBar({
   }
   const openNew = (from: number, to: number, left: number, right: number) => {
     const { startDate, endDate } = dragDates(dates, from, to)
-    setCard({ seq: ++asks.current, event: allDayDraft(newId(), startDate, endDate), base: null, place: placeAt(left, right) })
+    put({ seq: ++asks.current, event: allDayDraft(newId(), startDate, endDate), base: null, place: placeAt(left, right) })
   }
-  const openEdit = (event: AllDayEvent, left: number, right: number) => setCard({ seq: ++asks.current, event, base: event, place: placeAt(left, right) })
+  // A click on the bar Ctrl K showed opens its card as before – still shown in spite of its calendar (D427).
+  const openEdit = (event: AllDayEvent, left: number, right: number) => put({ seq: ++asks.current, event, base: event, place: placeAt(left, right), ...(event.id === revealedId ? { revealed: true } : {}) })
 
   // Ctrl K (D405): the card of the event the page asked for – once, by the strip of the week of its first day.
   useEffect(() => {
@@ -108,7 +114,7 @@ export function AllDayBar({
     onOpened?.()
     const col0 = Math.max(0, dates.indexOf(e.startDate))
     const r = cellRect(col0)
-    setCard({ seq: ++asks.current, event: e, base: e, place: placeAt(r?.left ?? 0, r?.right ?? 0), revealed: true })
+    put({ seq: ++asks.current, event: e, base: e, place: placeAt(r?.left ?? 0, r?.right ?? 0), revealed: true })
   }, [openId, events, dates, page])
 
   /** The drag over several columns („Tydzień” only): from the column it began in to the one under the pointer. */
@@ -259,7 +265,7 @@ export function AllDayBar({
           today={today}
           place={card.place}
           brightness={brightness}
-          onClose={() => setCard(null)}
+          onClose={() => put(null)}
           onRemoved={(title, raw) => showAllDayLine(page, { kind: 'removed', title, raw })}
           onFree={onFree}
         />

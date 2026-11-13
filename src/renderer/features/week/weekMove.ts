@@ -192,7 +192,7 @@ function pushedOn(day: DayModel, block: PlanBlock, followers: readonly PlanBlock
 async function tellBar(d: WeekPushedDay, today: string): Promise<void> {
   if (d.date !== today || d.moved === 0) return
   try {
-    await window.rd.planPushed(d.date, d.moved, d.entry, d.made, false, d.hidden ?? 0)
+    await window.rd.planPushed(d.date, d.moved, d.entry, d.made, false)
   } catch {
     // The plan is saved; only the bar's marker is missing (the main process is closing).
   }

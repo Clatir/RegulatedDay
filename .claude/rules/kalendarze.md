@@ -27,17 +27,20 @@ paths:
   pusty wpis kategorii `{}` zostaje (T991). „Cofnij” usunięcia = `inverseEdit` + `editStands` w turze zapisu (T945), limit 12 i
   nieczytelny rekord osobno (T995).
 - Widoki: `useVisibleBlocks(bloki)` i `useVisibleAllDay(wydarzenia)` (`features/calendars/calendarFilter.ts`) → `{ shown, hiddenCount }`
-  (czyste `filterBlocks`, `filterAllDay` – jedyna droga). Przy jednym kalendarzu (D425) ukrycie nie działa, nieistniejące id nic nie
+  (`useVisibleAllDay` także `revealedId`; czyste `filterBlocks`, `filterAllDay`, `calendarSieve` – jedyna droga). Przy jednym kalendarzu (D425) ukrycie nie działa, nieistniejące id nic nie
   ukrywa; pamięć ukrytych jest zapominana przy jednym kalendarzu, tylko gdy `view.rd` wczytany (T972, T990). `<CalendarChips hiddenCount={…} />` nad widokiem: nic przy jednym kalendarzu, „ukryte: N” gdy N > 0. Pamięć ukrytych:
-  `localStorage` `rd.hiddenCalendars` na tym komputerze, nigdy folder danych. Wpięte (część B, T997–T1005): „Dziś” (`TodayPage`:
+  `localStorage` `rd.hiddenCalendars` na tym komputerze, nigdy folder danych. Wpięte (część B, T997–T1012): „Dziś” (`TodayPage`:
   `useVisibleBlocks(items)` – `TimelineItem.categoryId` z `dayAxis`; krzywa, znaczniki i rozsuwanie z dnia, nie z pozycji; `axisWithRevealed` zwraca
-  blok z otwartym panelem i bloki `always` (trwający, poza planem – T1002) z podpisem `hiddenIn`, `Timeline` `extent` = godziny wszystkich bloków – D427),
+  tylko blok z otwartym panelem z podpisem `hiddenIn` – trwający blok ukrytego kalendarza chowa się jak inne, D428; `Timeline` `extent` = godziny wszystkich bloków – D427),
   „Tydzień” / „3 dni” (`useVisibleDays` z `calendars/visibleViews.ts` w `WeekBody`/`ThreeDaysBody` przed `DayGrid`; „3 dni” liczy z dni ostatniego
   odczytu), „Agenda” (po `agendaOf`; dzień bez nic pokazuje „ukryte: N”, T1004), miesiąc (`visibleMonthDay` + jedno `calendarSieve` na miesiąc,
-  `MonthDay.categories` – kropka obciążenia z silnika); paski całodniowych filtruje `AllDayBar` (`useVisibleAllDay`), licznik i lista wydarzeń widoku
-  `useVisibleAllDayIn(od, do)`. Ctrl K (D427, T1000, T1001): blok z otwartym panelem i wydarzenie z kartą z Ctrl K (`useCalendarFilter.revealed`) są
-  rysowane mimo ukrycia, z podpisem „z ukrytego kalendarza <nazwa>”, poza „ukryte: N”; karta zwykła zamyka się po odznaczeniu jej kalendarza.
-  Rozsuwanie liczy ukryte bloki dalej, a linia po zapisie mówi „(w tym M ukrytych)” (T1003: `hiddenBlocksAmong`, `planPushed` 6. argument).
+  `MonthDay.categories` – kropka obciążenia z silnika); paski całodniowych filtruje `AllDayBar` (`useVisibleAllDay` → `{ shown, hiddenCount, revealedId }`), licznik i lista wydarzeń widoku
+  `useVisibleAllDayIn(od, do)` → `{ shown, hiddenInRange, revealedId }`. Ctrl K (D427, T1000, T1001, T1006): blok z otwartym panelem i wydarzenie z kartą
+  z Ctrl K są rysowane mimo ukrycia, z podpisem „z ukrytego kalendarza <nazwa>”, poza „ukryte: N”; wydarzenie – przez `useCalendarFilter.revealed`,
+  ustawiane w `AllDayBar.put` razem z kartą (jedna droga otwarcia i zamknięcia, klik w odkryty pasek zostaje odkryty), blok – przez `openId` strony;
+  karta zwykła zamyka się po odznaczeniu bieżącego kalendarza wydarzenia (D428, T1007). Rozsuwanie liczy ukryte bloki dalej; dopisek „(w tym M ukrytych)”
+  tylko w linii okna („Tydzień”, „3 dni”: `WeekPushedDay.hidden`; „Dziś”: toast w `saveChange`, `hiddenBlocksAmong(bloki, openId)`), pasek pulpitu
+  bez zmian – `planPushed` bez dopisku (D428, T1009, T1010).
   Żetony pierwsze w treści widoku (po przełączniku i liniach „Cofnij”). Nowy widok blokowy ma przejść przez `useVisibleBlocks` / `useVisibleDays`;
   nie filtruj krzywej energii, nagłówków dni, budżetu, paska, wariantów ani wyszukiwania. Testy: `tests/web/calendars-views.test.ts`, `tests/e2e/calendars.spec.ts`.
 - Ustawienia: `CalendarsSection` (dodaj – do 12, nazwa, kolor, usuń z „Cofnij”), wybór „Kalendarz” w wierszu kategorii

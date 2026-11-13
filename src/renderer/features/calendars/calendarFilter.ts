@@ -100,6 +100,8 @@ export function useVisibleAllDay<T extends { calendarId: string | null; id?: str
  * How many of `blocks` the unchecked calendars hide – for a count made outside a view (the line after blocks were pushed apart,
  * D419: „w tym M ukrytych”), from the state of the window as it is now.
  */
-export function hiddenBlocksAmong(blocks: readonly { categoryId: string }[]): number {
-  return filterBlocks(blocks, useCalendarFilter.getState().hidden, useData.getState().rd).hiddenCount
+export function hiddenBlocksAmong(blocks: readonly { id?: string; categoryId: string }[], shownId: string | null = null): number {
+  // The block „Dziś” shows in spite of its calendar (its panel is open – D427) is not hidden.
+  const rest = shownId == null ? blocks : blocks.filter((b) => b.id !== shownId)
+  return filterBlocks(rest, useCalendarFilter.getState().hidden, useData.getState().rd).hiddenCount
 }

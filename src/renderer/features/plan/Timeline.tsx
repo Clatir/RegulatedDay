@@ -36,9 +36,7 @@ export interface TimelineItem {
   color: string
   /** The block's category – the calendar it belongs to (D419: the views of the window hide the unchecked calendars' blocks). */
   categoryId: string
-  /** Running, or begun outside the plan: never hidden with its calendar (its handles and its question stay – D419, T1002). */
-  always?: boolean
-  /** Drawn in spite of its calendar being unchecked (D427: the block whose panel is open, a running one): the calendar's name, said on the tile. */
+  /** Drawn in spite of its calendar being unchecked (D427: the block whose panel is open): the calendar's name, said on the tile. */
   hiddenIn?: string
   background: boolean
   /** Passed, parked or cancelled: shown dimmed. */
