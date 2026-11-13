@@ -112,6 +112,38 @@ describe('pamięć na tym komputerze', () => {
   })
 })
 
+describe('pamięć ukrycia przy jednym kalendarzu (T972)', () => {
+  it('po wczytaniu danych z jednym kalendarzem zapamiętane ukrycie jest zapominane – dodanie drugiego kalendarza go nie przywraca (nie chowa „Moje”)', async () => {
+    useCalendarFilter.setState({ hidden: ['moje'] })
+    localStorage.setItem('rd.hiddenCalendars', JSON.stringify(['moje']))
+    // Dane jeszcze nie wczytane (lista domyślna – jeden kalendarz): nic nie jest zapominane.
+    await act(async () => useData.setState({ view: null, rd: rdFrom(undefined) }))
+    expect(useCalendarFilter.getState().hidden).toEqual(['moje'])
+    // Wczytane, jeden kalendarz: zapomniane.
+    await act(async () => useData.setState({ view: {} as never, rd: rdFrom(undefined) }))
+    expect(useCalendarFilter.getState().hidden).toEqual([])
+    expect(JSON.parse(localStorage.getItem('rd.hiddenCalendars')!)).toEqual([])
+    // Drugi kalendarz: „Moje” nadal widoczne.
+    await act(async () => useData.setState({ rd: RD }))
+    expect(useCalendarFilter.getState().hidden).toEqual([])
+    expect(filterShown()).toBe(4)
+    await act(async () => useData.setState({ view: null }))
+  })
+})
+
+const filterShown = () => {
+  let n = 0
+  const View = () => {
+    n = useVisibleBlocks(blocks).shown.length
+    return null
+  }
+  const h = document.createElement('div')
+  const r = createRoot(h)
+  act(() => r.render(createElement(View)))
+  act(() => r.unmount())
+  return n
+}
+
 describe('widok pokazuje bloki kalendarzy niewyłączonych', () => {
   async function probe() {
     let seen: { shown: unknown[]; hiddenCount: number } = { shown: [], hiddenCount: -1 }

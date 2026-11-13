@@ -130,7 +130,28 @@ describe('kalendarze w folderze danych', () => {
     expect(out.map((o) => o.status)).toEqual(['applied', 'applied', 'applied', 'applied'])
     expect(folder.queue.questions()).toHaveLength(0)
     const rd = rdFrom(read(paths.settings))
-    expect(rd.calendars.map((c) => [c.name, c.color])).toEqual([['Prywatne', CATEGORY_COLORS[5]], ['Praca', a.color], ['Dom', b.color]])
+    expect(rd.calendars.map((c) => [c.name, c.color])).toEqual([['Prywatne', CATEGORY_COLORS[5]], ...[['Praca', a.color, a.id], ['Dom', b.color, b.id]].sort((x, y) => (x![2]! < y![2]! ? -1 : 1)).map((x) => [x![0], x![1]])])
+  })
+
+  it('T948: nazwa kalendarza zmieniona tu, a usuniętego gdzie indziej: pytanie; „moje” zapisuje wpis Z id (lista dalej scala się po wpisach)', async () => {
+    const k = { id: 'k', name: 'Praca', color: CATEGORY_COLORS[1], order: 1 }
+    write(paths.settings, { ...OLD, calendars: [k] })
+    const folder = await open()
+    const seen = { ...OLD, calendars: [k] }
+    // Gdzie indziej kalendarz usunięty (plik go nie ma).
+    write(paths.settings, { ...OLD, calendars: [] })
+    const out = await folder.edit([editOf(paths.settings, seen, updateCalendarRaw(seen, 'k', { name: 'Firma' }))!])
+    expect(out[0]!.status).toBe('conflict')
+    const [q] = folder.queue.questions()
+    await folder.queue.resolve(q!.edit.id, 'mine')
+    await folder.queue.apply(folder.records)
+    const items = read(paths.settings).calendars as Array<Record<string, unknown>>
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ id: 'k', name: 'Firma' })
+    // Lista dalej scala się po wpisach: dopisanie drugiego kalendarza z bazą sprzed to zmiana pól wpisu, nie całej listy.
+    const next = { ...OLD, calendars: items }
+    const added = addCalendarRaw(next, { id: 'z', name: 'Z', color: CATEGORY_COLORS[2], order: 2 })
+    expect(editOf(paths.settings, next, added)!.edits[0]!.path).toEqual(['calendars', '#z', 'id'])
   })
 
   it('kalendarz usunięty tu, a na drugim komputerze przypisana do niego kategoria: czyta się jako „Moje”', async () => {

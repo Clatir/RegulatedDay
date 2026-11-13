@@ -6,31 +6,39 @@
  * calendar applies at once (not a dated setting): the engine never reads it. At most `MAX_CALENDARS`.
  */
 import { useState } from 'react'
-import type { EditEntry, RawRecord } from '@shared/api'
-import { editStands, inverseEdit } from '@shared/data/merge'
+import type { EditEntry } from '@shared/api'
+import { countLabel } from '@shared/format'
 import { CALENDAR_NAME_MAX, DEFAULT_CALENDAR_ID, MAX_CALENDARS, addCalendarRaw, categoriesOfCalendarRaw, newCalendar, removeCalendarRaw, updateCalendarRaw, type Calendar } from '@shared/model/calendars'
-import { CATEGORY_COLORS } from '@shared/model/rd'
+import { CATEGORY_COLORS, rdFrom } from '@shared/model/rd'
 import { blockFill } from '@shared/theme'
 import { TextField } from '../../components/fields'
 import { Section, cx } from '../../components/ui'
-import { editOf, rawRecord, saveAnswer, saveRd, trySaveRd, trySaveWith, useData } from '../../store/data'
+import { rawRecord, saveAnswer, storedAnswer, trySaveWith, useData, type SendState } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { useBusy } from '../../lib/busy'
 import { toast, undoToast } from '../../store/ui'
+import '../calendars/calendarFilter' // loads the memory of the hidden calendars, which forgets them while there is one calendar (T972)
+import { saveCalendars, undoEntries } from './calendarEdits'
 
-/** „Cofnij” of a removal: the edit turned over, only while rd.json still stands as the removal left it. */
-async function undoRemoval(entry: EditEntry): Promise<void> {
+/** „Cofnij” of a removal: the entries turned over, only while rd.json still stands as the removal left it and the limit allows. */
+async function undoRemoval(entries: readonly EditEntry[]): Promise<void> {
+  if (useData.getState().rd.calendars.length >= MAX_CALENDARS) {
+    toast(`Nie cofnięto usunięcia – jest już ${MAX_CALENDARS} kalendarzy (najwięcej). Usuń któryś i spróbuj jeszcze raz.`, 'error', 6000)
+    return
+  }
   let changed = false
-  const out = await trySaveWith(() => {
-    const now = rawRecord('rd.json')
-    if (!now || !editStands(entry, now, null)) {
-      changed = true
-      return []
-    }
-    return [inverseEdit(entry, now, null)]
+  await trySaveWith(() => {
+    const back = undoEntries(entries, rawRecord('rd.json'))
+    changed = back == null
+    return back ?? []
   })
   if (changed) toast('Ustawienia kalendarzy zmieniły się od usunięcia – zostają tak, jak są teraz.', 'info', 6000)
-  else if (out != null && out.length === 0) toast('Nie cofnięto usunięcia – ustawień nie można teraz zmienić.', 'error', 6000)
+}
+
+/** What the removal gives back to „Moje”, for its toast: „2 kategorie i 1 wydarzenie”. */
+function movedText(categories: number, events: number): string {
+  const parts = [categories ? countLabel(categories, 'kategoria', 'kategorie', 'kategorii') : '', events ? countLabel(events, 'wydarzenie', 'wydarzenia', 'wydarzeń') : ''].filter(Boolean)
+  return parts.length ? ` – do „Moje” wraca: ${parts.join(' i ')}` : ''
 }
 
 export function CalendarsSection() {
@@ -40,32 +48,35 @@ export function CalendarsSection() {
   const [busy, run] = useBusy()
   const full = calendars.length >= MAX_CALENDARS
 
-  // The name is taken at once: a second click (or Enter and a click) while it saves adds no second calendar. It comes back to
-  // the field only when nothing was saved; a save that became a question (`'asked'`) may still be written – no second try.
+  // The name is taken at once: a second click (or Enter and a click) while it saves adds no second calendar. It comes back to the
+  // field only when nothing was sent (a refusal, the limit met meanwhile): a save that became a question or whose result is not
+  // known after the send may be written – no second try. The calendar is made in the turn of the save, from the record then.
   const add = () =>
     run(async () => {
-      const cal = newCalendar(calendars, name)
-      if (!cal) return
+      const n = name.trim()
+      if (!n) return
       setName('')
-      const out = await trySaveRd((raw) => addCalendarRaw(raw, cal))
-      if (saveAnswer(out) === false) setName(cal.name)
+      const state: SendState = { afterSend: false }
+      let made = false
+      const { out } = await saveCalendars((raw) => {
+        const cal = newCalendar(rdFrom(raw).calendars, n)
+        made = cal != null
+        return cal ? addCalendarRaw(raw, cal) : raw
+      }, state)
+      if (!made || storedAnswer(out, state) === false) setName(n)
     })
 
   const remove = (cal: Calendar) =>
     run(async () => {
-      // What it takes, made in the turn of the save: the edit of the record as it is then (for „Cofnij”).
-      let entry: EditEntry | null = null
+      // What it takes, counted in the turn of the save from the record as it is then.
       let moved = 0
-      const out = await trySaveWith(() => {
-        const before = rawRecord('rd.json') as RawRecord | null
-        if (!before) return []
-        moved = categoriesOfCalendarRaw(before, cal.id).length
-        entry = editOf('rd.json', before, removeCalendarRaw({ ...before }, cal.id))
-        return [entry]
+      const { out, entries } = await saveCalendars((raw) => {
+        moved = categoriesOfCalendarRaw(raw, cal.id).length
+        return removeCalendarRaw(raw, cal.id)
       })
-      const saved = entry as EditEntry | null
-      if (!saved || saveAnswer(out) !== true) return
-      undoToast(`Usunięto kalendarz „${cal.name}”${moved ? ` – jego kategorie (${moved}) wróciły do „Moje”` : ''}.`, () => void undoRemoval(saved))
+      if (!entries.length || saveAnswer(out) !== true) return
+      const events = useData.getState().allDay.filter((e) => e.calendarId === cal.id).length
+      undoToast(`Usunięto kalendarz „${cal.name}”${movedText(moved, events)}.`, () => void undoRemoval(entries))
     })
 
   return (
@@ -76,7 +87,7 @@ export function CalendarsSection() {
       {calendars.map((c) => (
         <div key={c.id} className="flex flex-wrap items-center gap-2 rounded border border-line px-2.5 py-1.5" data-testid="calendar-row" data-calendar={c.id}>
           <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: blockFill(c.color, brightness), border: `1px solid ${c.color}` }} />
-          <TextField value={c.name} onCommit={(n) => void saveRd((raw) => updateCalendarRaw(raw, c.id, { name: n }))} required max={CALENDAR_NAME_MAX} shellClassName="w-[200px]" aria-label="Nazwa kalendarza" />
+          <TextField value={c.name} onCommit={(n) => void saveCalendars((raw) => updateCalendarRaw(raw, c.id, { name: n }))} required max={CALENDAR_NAME_MAX} shellClassName="w-[200px]" aria-label="Nazwa kalendarza" />
           <span className="ml-3 text-[12px] text-muted">Kolor</span>
           {CATEGORY_COLORS.map((col) => (
             <button
@@ -84,7 +95,7 @@ export function CalendarsSection() {
               type="button"
               className={cx('h-5 w-5 rounded-sm border', c.color === col ? 'ring-1 ring-lamp' : '')}
               style={{ background: blockFill(col, brightness), borderColor: col }}
-              onClick={() => void saveRd((raw) => updateCalendarRaw(raw, c.id, { color: col }))}
+              onClick={() => void saveCalendars((raw) => updateCalendarRaw(raw, c.id, { color: col }))}
               aria-label={`kolor ${col}`}
               aria-pressed={c.color === col}
               data-testid="calendar-color"

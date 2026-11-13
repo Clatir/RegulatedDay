@@ -10,8 +10,9 @@
  * `ITEM_LISTS` in merge.ts: two computers adding different calendars meet in no question; the order is the `order` field,
  * never the place in the array, which a „Cofnij” or a merge changes) and `categories.<id>.calendar`. Old data has neither:
  * it reads as the one calendar „Moje” holding every category, and nothing is written until you change something. A
- * calendar the file does not know (removed on another computer) reads as „Moje”. What this version does not know – fields
- * of an item, items that are no objects – stays: the helpers below touch only their own.
+ * calendar the file does not know (removed on another computer) reads as „Moje”. Fields of an item this version does not know
+ * stay; an element of the list that is no item with an id (it would end the item-by-item merge of the whole list) goes with the
+ * first write of the list (T970). Two calendars with the same `order` (two computers adding one each) stand by their id.
  */
 import { BLOCK_COLORS } from '../theme'
 import { newId } from './ids'
@@ -57,7 +58,13 @@ export function calendarsFrom(v: unknown): Calendar[] {
     const order = typeof x.order === 'number' && Number.isFinite(x.order) ? x.order : Number.POSITIVE_INFINITY
     others.push({ id: x.id, name, color: isColor(x.color) ? x.color : BLOCK_COLORS[(others.length + 1) % BLOCK_COLORS.length]!, order, index })
   })
-  others.sort((a, b) => a.order - b.order || a.index - b.index)
+  // By `order`; a tie by the id (the same on every computer), a missing one after those that have it, in the array's order.
+  others.sort((a, b) => {
+    const fa = Number.isFinite(a.order)
+    const fb = Number.isFinite(b.order)
+    if (fa && fb) return a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    return fa === fb ? a.index - b.index : fa ? -1 : 1
+  })
   // A missing `order` takes its place after the ones that have it (the array's order among themselves).
   let last = Math.max(0, ...others.map((c) => (Number.isFinite(c.order) ? c.order : 0)))
   return [moje, ...others.map(({ index: _i, ...c }) => ({ ...c, order: Number.isFinite(c.order) ? c.order : ++last }))]
@@ -118,7 +125,11 @@ export function filterAllDay<T extends { calendarId: string | null }>(events: re
   return { shown, hiddenCount: events.length - shown.length }
 }
 
-/** A new calendar: the first palette colour no calendar has yet (then the palette goes round), the last place; null: no name or the limit. */
+/**
+ * A new calendar: the first palette colour no calendar has yet (then the palette goes round), the last place; null: no name or the
+ * limit. Made from the calendars as the record has them in the turn of the save (T517) – a place and a colour taken from a
+ * list read before would repeat the ones another computer's calendar took meanwhile.
+ */
 export function newCalendar(existing: readonly Calendar[], name: string): Calendar | null {
   const n = cleanName(name)
   if (!n || existing.length >= MAX_CALENDARS) return null
@@ -129,7 +140,8 @@ export function newCalendar(existing: readonly Calendar[], name: string): Calend
 
 // rd.json as a record: the edits of the settings (each makes a whole new record, the window's `saveRd` diffs it).
 
-const calendarItems = (raw: Raw): unknown[] => (Array.isArray(raw.calendars) ? (raw.calendars as unknown[]) : [])
+/** The items of the list a write keeps: those with an id (what is no item would end the merge by items – T970). */
+const calendarItems = (raw: Raw): Raw[] => (Array.isArray(raw.calendars) ? (raw.calendars as unknown[]).filter((x): x is Raw => isPlain(x) && typeof x.id === 'string' && x.id !== '') : [])
 const isItem = (x: unknown, id: string): x is Raw => isPlain(x) && x.id === id
 const categoryMetas = (raw: Raw): Record<string, Raw> => (isPlain(raw.categories) ? (raw.categories as Record<string, Raw>) : {})
 
@@ -149,6 +161,9 @@ export function updateCalendarRaw(raw: Raw, id: string, patch: { name?: string; 
   if (name) clean.name = name
   if (patch.color !== undefined && isColor(patch.color)) clean.color = patch.color
   if (items.some((x) => isItem(x, id))) return { ...raw, calendars: items.map((x) => (isItem(x, id) ? { ...x, ...clean } : x)) }
+  // Its entry is made only for what differs from the defaults: a click on the colour it already has writes nothing.
+  if (clean.name === DEFAULT_CALENDAR_NAME) delete clean.name
+  if (clean.color === BLOCK_COLORS[0]) delete clean.color
   if (id !== DEFAULT_CALENDAR_ID || Object.keys(clean).length === 0) return raw
   return { ...raw, calendars: [...items, { id, ...clean }] }
 }
@@ -180,4 +195,19 @@ export function removeCalendarRaw(raw: Raw, id: string): Raw {
   let out: Raw = { ...raw, calendars: calendarItems(raw).filter((x) => !isItem(x, id)) }
   for (const cid of categoriesOfCalendarRaw(raw, id)) out = setCategoryCalendarRaw(out, cid, DEFAULT_CALENDAR_ID)
   return out
+}
+
+/** The categories whose entry `before` had fields in and `after` has empty (the calendar was all it held) – to be dropped. */
+export function emptiedCategoriesRaw(before: Raw, after: Raw): string[] {
+  const was = categoryMetas(before)
+  return Object.entries(categoryMetas(after))
+    .filter(([id, m]) => isPlain(m) && Object.keys(m).length === 0 && isPlain(was[id]) && Object.keys(was[id]!).length > 0)
+    .map(([id]) => id)
+}
+
+/** The record without those entries of `categories`. */
+export function dropCategoriesRaw(raw: Raw, ids: readonly string[]): Raw {
+  const cats = { ...categoryMetas(raw) }
+  for (const id of ids) delete cats[id]
+  return { ...raw, categories: cats }
 }

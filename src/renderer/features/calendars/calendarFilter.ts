@@ -2,7 +2,9 @@
  * Which calendars the window's views hide (D419, D425): a habit of this computer, kept in the window's own storage (nothing in
  * the data folder – the same way as `plan/lastCategory.ts`). Storage that cannot be read or written is no memory, never an
  * error. What is remembered works only while there are two calendars or more and only for calendars that exist
- * (`filterBlocks`): with one, the chips are not there to bring the blocks back, so nothing is hidden. A view calls
+ * (`filterBlocks`): with one, the chips are not there to bring the blocks back, so nothing is hidden – and what was remembered is
+ * forgotten once the data is read and there is one calendar only (T972: it would come back with the next calendar added and hide
+ * „Moje” again, unasked). A view calls
  * `useVisibleBlocks(blocks)` (and `useVisibleAllDay(events)` for the strip of all-day events) and shows `shown`; the count
  * goes to `CalendarChips` as „ukryte: N”.
  */
@@ -47,6 +49,14 @@ export const useCalendarFilter = create<CalendarFilter>((set, get) => ({
     set({ hidden })
   }
 }))
+
+// With one calendar the memory is cleared (only once the data of the folder is read: before it the list is the default one).
+useData.subscribe((state) => {
+  if (state.view && state.rd.calendars.length < 2 && useCalendarFilter.getState().hidden.length) {
+    saveHiddenCalendars([])
+    useCalendarFilter.setState({ hidden: [] })
+  }
+})
 
 /**
  * What a view shows of its blocks (anything with a `categoryId`): the blocks outside the unchecked calendars, and how many it

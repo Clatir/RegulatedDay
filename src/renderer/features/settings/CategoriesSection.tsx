@@ -18,6 +18,7 @@ import { useMachine } from '../../store/machine'
 import { useBusy } from '../../lib/busy'
 import { takeFoundPick, useUi } from '../../store/ui'
 import { CLASS_NAMES, blockColor } from '../plan/blockView'
+import { saveCalendars } from './calendarEdits'
 import { SettingNumber } from './SettingNumber'
 import { useShared } from './SharedSettings'
 
@@ -136,7 +137,7 @@ export function CategoriesSection() {
                   <Choice
                     value={calendarOfCategory(rd, id)}
                     options={rd.calendars.map((cal) => ({ value: cal.id, label: cal.name }))}
-                    onChange={(cal) => void saveRd((raw) => setCategoryCalendarRaw(raw, id, cal))}
+                    onChange={(cal) => void saveCalendars((raw) => setCategoryCalendarRaw(raw, id, cal))}
                     className="w-[200px]"
                     aria-label="Kalendarz kategorii"
                     data-testid="category-calendar"

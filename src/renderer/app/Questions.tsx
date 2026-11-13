@@ -102,7 +102,7 @@ function QuestionsDialog({ questions, onClose }: { questions: EditQuestion[]; on
           {(q.kind === 'conflict' || q.kind === 'changed') &&
             q.fields.map((f) => (
               <div key={f.path.join('.')} className="grid grid-cols-[1fr_1fr_1fr] gap-2">
-                <span className="text-muted">{fieldText(q.rel, f.path, names)}</span>
+                <span className="text-muted">{fieldText(q.rel, f.path, names, [f.mine, f.theirs])}</span>
                 <span>
                   {q.kind === 'changed' ? 'gdy usuwałeś: ' : 'tutaj: '}
                   {valueText(keyOf(f.path), f.mine, names)}

@@ -116,7 +116,7 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
 }
 
 /** A field of a record (its path) as the interface names it. */
-export function fieldText(rel: string, path: readonly string[], n: TextNames): string {
+export function fieldText(rel: string, path: readonly string[], n: TextNames, values: readonly unknown[] = []): string {
   const c = classify(rel)
   const kind = c?.kind
   const [a, b, ...rest] = path
@@ -165,7 +165,9 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames): s
     if (a === 'calendars') {
       if (!b) return 'kalendarze'
       const cal = n.rd.calendars.find((c) => `#${c.id}` === b)
-      return `${cal ? `kalendarz ${cal.name}` : 'kalendarz'}${rest[0] === 'name' ? ': nazwa' : rest[0] === 'color' ? ': kolor' : rest[0] === 'order' ? ': kolejność' : ''}`
+      // A calendar the settings no longer have is named by the name in the question (its values: yours, theirs, before, after).
+      const named = cal?.name ?? (rest[0] === 'name' ? values.find((v): v is string => typeof v === 'string' && v !== '') : undefined)
+      return `${named ? `kalendarz ${named}` : 'kalendarz'}${rest[0] === 'name' ? ': nazwa' : rest[0] === 'color' ? ': kolor' : rest[0] === 'order' ? ': kolejność' : ''}`
     }
     if (a === 'general') {
       if (b === 'modules') return rest[0] ? `moduł ${MODULE_NAMES[rest[0] as ModuleId] ?? ''}`.trim() : 'moduły'

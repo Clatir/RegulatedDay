@@ -15,31 +15,41 @@ import { CategoriesSection } from '@renderer/features/settings/CategoriesSection
 import { useData } from '@renderer/store/data'
 import { closeToast, useUi } from '@renderer/store/ui'
 
-const fake = vi.hoisted(() => ({ file: { schema: 1 } as Record<string, unknown>, answer: 'queue' as 'queue' | 'refused' | 'conflict', sent: 0 }))
+const fake = vi.hoisted(() => ({ file: { schema: 1 } as Record<string, unknown>, answer: 'queue' as 'queue' | 'refused' | 'conflict' | 'lost', sent: 0, entries: [] as EditEntry[] }))
 vi.mock('@renderer/store/data', async (orig) => {
   const real = await orig<typeof import('@renderer/store/data')>()
   const { deepEqual, setAt, valueAt } = await import('@shared/data/merge')
   const { rdFrom: read } = await import('@shared/model/rd')
-  const trySaveWith = async (make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>) => {
+  const trySaveWith = async (make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>, state?: { afterSend: boolean }) => {
     const list = (await make()).filter((e): e is EditEntry => !!e)
     if (!list.length) return []
     if (fake.answer === 'refused') return null
     fake.sent++
+    // The queue took it: from now on a failure leaves the result unknown (`SendState`).
+    if (state) state.afterSend = true
+    if (fake.answer === 'lost') return null
     if (fake.answer === 'conflict') return list.map(() => ({ id: 'x', status: 'conflict' as const, fields: [] }))
-    return list.map(() => {
+    // The entries one after another, as the queue lays them: an entry that goes after another waits for it.
+    const statuses: Array<'applied' | 'conflict' | 'waiting'> = []
+    for (const e of list) {
+      if (e.after?.some((i) => statuses[i] !== 'applied')) {
+        statuses.push('waiting')
+        continue
+      }
       let ok = true
       let value: unknown = fake.file
-      for (const e of list)
-        for (const f of e.edits) {
-          const now = valueAt(value, f.path)
-          if (deepEqual(now, f.value)) continue
-          if (deepEqual(now, f.base)) value = setAt(value, f.path, f.value)
-          else ok = false
-        }
+      for (const f of e.edits) {
+        const now = valueAt(value, f.path)
+        if (deepEqual(now, f.value)) continue
+        if (deepEqual(now, f.base)) value = setAt(value, f.path, f.value)
+        else ok = false
+      }
       fake.file = value as Record<string, unknown>
-      real.useData.setState({ rd: read(fake.file) })
-      return { id: 'x', status: ok ? ('applied' as const) : ('conflict' as const), fields: [] }
-    })
+      statuses.push(ok ? 'applied' : 'conflict')
+    }
+    real.useData.setState({ rd: read(fake.file) })
+    fake.entries.push(...list)
+    return statuses.map((status) => ({ id: 'x', status, fields: [] }))
   }
   const trySaveRd = (fn: (raw: Record<string, unknown>) => Record<string, unknown>) => trySaveWith(() => [real.editOf('rd.json', fake.file, fn({ ...fake.file }))])
   return {
@@ -63,6 +73,7 @@ const load = (file: Record<string, unknown>) => {
 beforeEach(() => {
   fake.answer = 'queue'
   fake.sent = 0
+  fake.entries = []
   load({ schema: 1 })
   for (const t of useUi.getState().toasts) closeToast(t.id)
 })
@@ -118,6 +129,26 @@ describe('lista kalendarzy', () => {
     expect((q('calendar-new') as HTMLInputElement).value).toBe('')
   })
 
+  it('błąd PO wysłaniu (wynik nieznany): nazwa nie wraca do pola – folder może ją mieć, drugi wpis byłby duplikatem', async () => {
+    const { q } = await show(CalendarsSection)
+    fake.answer = 'lost'
+    await typeInto(q('calendar-new') as HTMLInputElement, 'Praca')
+    await click(q('calendar-add'))
+    expect(fake.sent).toBe(1)
+    expect((q('calendar-new') as HTMLInputElement).value).toBe('')
+  })
+
+  it('kolejność i kolor nowego kalendarza liczone z rekordu w turze zapisu, nie z listy z ostatniego rysowania', async () => {
+    const { q } = await show(CalendarsSection)
+    // Między rysowaniem a zapisem na drugim komputerze powstał kalendarz (rekord ma go, ekran jeszcze nie).
+    fake.file = { schema: 1, calendars: [cal('inny', 'Inny', 1)] }
+    await typeInto(q('calendar-new') as HTMLInputElement, 'Praca')
+    await click(q('calendar-add'))
+    const added = (fake.file.calendars as Array<Record<string, unknown>>).find((c) => c.name === 'Praca')!
+    expect(added.order).toBe(2)
+    expect(added.color).toBe(CATEGORY_COLORS[2])
+  })
+
   it('pusta nazwa nic nie dodaje', async () => {
     const { q } = await show(CalendarsSection)
     expect((q('calendar-add') as HTMLButtonElement).disabled).toBe(true)
@@ -136,6 +167,15 @@ describe('lista kalendarzy', () => {
     host?.remove()
     const fewer = await show(CalendarsSection)
     expect(fewer.q('calendar-limit')).toBeNull()
+  })
+
+  it('kliknięcie koloru, który „Moje” już ma, nic nie zapisuje', async () => {
+    const { all } = await show(CalendarsSection)
+    await click(all('calendar-color')[0]!)
+    expect(fake.sent).toBe(0)
+    expect(fake.file).toEqual({ schema: 1 })
+    await click(all('calendar-color')[3]!)
+    expect(fake.sent).toBe(1)
   })
 
   it('zmiana koloru przez paletę', async () => {
@@ -157,12 +197,47 @@ describe('lista kalendarzy', () => {
     expect(rdNow().calendars.map((c) => c.id)).toEqual(['moje', 'a', 'c'])
     expect(calendarOfCategory(rdNow(), 'analiza')).toBe('moje')
     const toast = useUi.getState().toasts.at(-1)!
-    expect(toast.text).toBe('Usunięto kalendarz „Praca” – jego kategorie (1) wróciły do „Moje”.')
+    expect(toast.text).toBe('Usunięto kalendarz „Praca” – do „Moje” wraca: 1 kategoria.')
     expect(toast.action?.label).toBe('Cofnij')
     await act(async () => void toast.action!.run())
     // Na swoim miejscu (kolejka dokleja wpis na koniec tablicy – kolejność daje pole order) i z kategorią.
     expect(rdNow().calendars.map((c) => c.id)).toEqual(['moje', 'a', 'praca', 'c'])
     expect(calendarOfCategory(rdNow(), 'analiza')).toBe('praca')
+  })
+
+  it('toast usunięcia mówi też o wydarzeniach całodniowych, które wracają do „Moje” (D425, T947)', async () => {
+    load({ schema: 1, calendars: [cal('praca', 'Praca', 1)], categories: { analiza: { name: 'Analiza', calendar: 'praca' }, sesja: { name: 'Sesja', calendar: 'praca' } } })
+    const ev = (id: string, calendarId: string | null) => ({ id, title: id, startDate: '2026-11-18', endDate: '2026-11-18', calendarId, color: 'amber' as const, note: '', free: false })
+    await act(async () => useData.setState({ allDay: [ev('a', 'praca'), ev('b', 'praca'), ev('c', 'praca'), ev('d', null)] }))
+    const { all } = await show(CalendarsSection)
+    await click(all('calendar-remove')[0]!)
+    expect(useUi.getState().toasts.at(-1)!.text).toBe('Usunięto kalendarz „Praca” – do „Moje” wraca: 2 kategorie i 3 wydarzenia.')
+    await act(async () => useData.setState({ allDay: [] }))
+  })
+
+  it('„Cofnij” przy 12 kalendarzach odmawia z komunikatem (D425) i niczego nie zmienia', async () => {
+    load({ schema: 1, calendars: Array.from({ length: MAX_CALENDARS - 1 }, (_, i) => cal(`k${i}`, `K${i}`, i + 1)) })
+    const { all } = await show(CalendarsSection)
+    await click(all('calendar-remove')[0]!)
+    const toast = useUi.getState().toasts.at(-1)!
+    // Zanim ktoś kliknie „Cofnij”, dodano kalendarz – znów jest 12.
+    await act(async () => load({ ...fake.file, calendars: [...(fake.file.calendars as unknown[]), cal('nowy', 'Nowy', 20)] }))
+    const before = fake.sent
+    await act(async () => void toast.action!.run())
+    expect(rdNow().calendars).toHaveLength(MAX_CALENDARS)
+    expect(fake.sent).toBe(before)
+    expect(useUi.getState().toasts.at(-1)!.text).toContain('jest już 12 kalendarzy')
+  })
+
+  it('„Cofnij” usunięcia kalendarza z kategorią, która miała tylko kalendarz: wpis kategorii wraca (odwrócone oba wpisy)', async () => {
+    load({ schema: 1, calendars: [cal('praca', 'Praca', 1)], categories: { sesja: { calendar: 'praca' } } })
+    const { all } = await show(CalendarsSection)
+    await click(all('calendar-remove')[0]!)
+    expect(fake.file.categories).toEqual({})
+    expect(fake.entries.at(-1)!.after).toEqual([0])
+    await act(async () => void useUi.getState().toasts.at(-1)!.action!.run())
+    expect(fake.file.categories).toEqual({ sesja: { calendar: 'praca' } })
+    expect(calendarOfCategory(rdNow(), 'sesja')).toBe('praca')
   })
 
   it('„Cofnij” oddaje kalendarz taki, jaki był: pola nowszej wersji i kolor spoza palety zostają', async () => {
@@ -216,6 +291,7 @@ describe('kalendarz kategorii', () => {
     })
     expect(calendarOfCategory(rdNow(), 'analiza')).toBe('moje')
     // Zostaje wpis kategorii z samą nazwą/wartością domyślną – nie cały wpis jest edytowany, tylko pole kalendarza.
-    expect((fake.file.categories as Record<string, Record<string, unknown>>).analiza).not.toHaveProperty('calendar')
+    // Wpis, który miał tylko kalendarz, znika drugim wpisem (po pierwszym); sam kalendarz zszedł zmianą jednego pola.
+    expect(fake.file.categories).toEqual({})
   })
 })

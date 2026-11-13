@@ -68,7 +68,6 @@ export function AllDayCard({
   const [busy, run] = useBusy()
   const computers = useData((s) => s.view?.computers)
   const calendars = useData((s) => s.rd.calendars)
-  const rd = useData((s) => s.rd)
   useEscapeLayer(true, onClose)
   useEffect(() => {
     ref.current?.scrollIntoView({ block: 'nearest' })
@@ -200,7 +199,7 @@ export function AllDayCard({
           {calendars.length > 1 && (
             <Field label="Kalendarz" labelWidth={64}>
               <Choice
-                value={calendarOfEvent(rd, shown)}
+                value={calendarOfEvent({ calendars }, shown)}
                 options={calendars.map((c) => ({ value: c.id, label: c.name }))}
                 onChange={(id) => set({ calendarId: id === DEFAULT_CALENDAR_ID ? null : id })}
                 aria-label="Kalendarz"

@@ -253,20 +253,27 @@ describe('zmiany listy kalendarzy (rekord rd.json)', () => {
     expect(rdFrom(removeCalendarRaw(raw, 'moje')).calendars.map((c) => c.id)).toContain('moje')
   })
 
-  it('pola, których ta wersja nie zna, zostają przy kalendarzu i kategorii po zmianie; elementy listy, które nie są wpisami, też', () => {
+  it('pola, których ta wersja nie zna, zostają przy kalendarzu i kategorii po zmianie', () => {
     const raw = {
       schema: 1,
       futureTop: { x: 1 },
-      calendars: ['zapomniany tekst', 7, { id: 'praca', name: 'Praca', color: CATEGORY_COLORS[2], order: 1, przyszle: 'tak' }],
+      calendars: [{ id: 'praca', name: 'Praca', color: CATEGORY_COLORS[2], order: 1, przyszle: 'tak' }],
       categories: { analiza: { name: 'Analiza', calendar: 'praca', przyszle: 5 } }
     }
     const out = updateCalendarRaw(setCategoryCalendarRaw(raw, 'analiza', 'moje'), 'praca', { name: 'Firma' })
     expect(out.futureTop).toEqual({ x: 1 })
-    expect(out.calendars).toEqual(['zapomniany tekst', 7, { id: 'praca', name: 'Firma', color: CATEGORY_COLORS[2], order: 1, przyszle: 'tak' }])
+    expect(out.calendars).toEqual([{ id: 'praca', name: 'Firma', color: CATEGORY_COLORS[2], order: 1, przyszle: 'tak' }])
     expect((out.categories as Record<string, Record<string, unknown>>).analiza!.przyszle).toBe(5)
-    const removed = removeCalendarRaw(raw, 'praca')
-    expect(removed.calendars).toEqual(['zapomniany tekst', 7])
-    expect(addCalendarRaw(raw, { id: 'dom', name: 'Dom', color: CATEGORY_COLORS[1], order: 2 }).calendars).toHaveLength(4)
+  })
+
+  it('T970: element listy, który nie jest wpisem z id (kończyłby scalanie po wpisach), odpada przy pierwszym zapisie listy; potem lista scala się po wpisach', () => {
+    const raw = { schema: 1, calendars: ['zapomniany tekst', 7, { bez: 'id' }, { id: 'praca', name: 'Praca', color: CATEGORY_COLORS[2], order: 1 }] }
+    const added = addCalendarRaw(raw, { id: 'dom', name: 'Dom', color: CATEGORY_COLORS[1], order: 2 })
+    expect(added.calendars).toEqual([{ id: 'praca', name: 'Praca', color: CATEGORY_COLORS[2], order: 1 }, { id: 'dom', name: 'Dom', color: CATEGORY_COLORS[1], order: 2 }])
+    expect(removeCalendarRaw(raw, 'praca').calendars).toEqual([])
+    expect(rdFrom(raw).calendars.map((c) => c.id)).toEqual(['moje', 'praca'])
+    const e = recordEdit('rd.json', added, addCalendarRaw(added, { id: 'x', name: 'X', color: CATEGORY_COLORS[3], order: 3 }))!
+    expect(e.edits[0]!.path).toEqual(['calendars', '#x', 'id'])
   })
 })
 
@@ -297,7 +304,8 @@ describe('zapis kalendarzy przez kolejkę (diff pole po polu)', () => {
     const second = lay(first.file, eb)
     expect(first.conflicts).toEqual([])
     expect(second.conflicts).toEqual([])
-    expect(rdFrom(second.file).calendars.map((c) => c.name)).toEqual(['Moje', 'Praca', 'Dom'])
+    // Ten sam order – kolejność po id (taka sama na obu komputerach), nie po miejscu w pliku.
+    expect(rdFrom(second.file).calendars.map((c) => c.name).sort()).toEqual(['Dom', 'Moje', 'Praca'])
   })
 
   it('pierwsza zmiana „Moje”: dwie różne zmiany (nazwa, kolor) na dwóch komputerach zostają obie, bez pytania', () => {
@@ -355,5 +363,84 @@ describe('zapis kalendarzy przez kolejkę (diff pole po polu)', () => {
     const moved = { ...removed, categories: { analiza: { ...OLD.categories.analiza, calendar: 'inny' } } }
     expect(editStands(removal, moved, null)).toBe(false)
     expect(lay(moved, inverseEdit(removal, moved, null)).conflicts).toEqual([['categories', 'analiza', 'calendar']])
+  })
+})
+
+describe('odporność kolejki i scalania na szczegóły (runda 2)', () => {
+  it('T948/setAt: brakujący wpis `#id` powstaje z id (odpowiedź „moje” na pytanie o pole usuniętego kalendarza); zdjęcie pola z wpisu, którego nie ma, nic nie tworzy', () => {
+    const made = setAt({ calendars: [{ id: 'a', name: 'A' }] }, ['calendars', '#b', 'name'], 'B') as { calendars: unknown[] }
+    expect(made.calendars).toEqual([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }])
+    expect(setAt({ calendars: [] }, ['calendars', '#b', 'name'], undefined)).toEqual({ calendars: [] })
+    // Cały wpis jako wartość – bez zmian (wartość to wpis).
+    expect(setAt({ calendars: [] }, ['calendars', '#b'], { id: 'b', name: 'B' })).toEqual({ calendars: [{ id: 'b', name: 'B' }] })
+    // Wpis z id: lista nadal scala się po wpisach.
+    expect(recordEdit('rd.json', { ...OLD, calendars: [made.calendars[0]] }, { ...OLD, calendars: made.calendars })!.edits[0]!.path).toEqual(['calendars', '#b', 'id'])
+  })
+
+  it('T949: odwrotność dodania kalendarza (zapisanego polami) to usunięcie całego wpisu – nie zostaje wpis bez id', () => {
+    const cal = newCalendar(rdFrom(OLD).calendars, 'Praca')!
+    const add = recordEdit('rd.json', OLD, addCalendarRaw(OLD, cal))!
+    const added = lay(OLD, add).file
+    const inv = inverseEdit(add, added, null)!
+    expect(inv.edits).toEqual([{ path: ['calendars', `#${cal.id}`], base: cal, value: undefined }])
+    expect(editStands(add, added, null)).toBe(true)
+    const back = lay(added, inv)
+    expect(back.conflicts).toEqual([])
+    expect(back.file.calendars).toEqual([])
+    // Pole dopisane wpisowi, który plik już miał: odwrotność zdejmuje tylko to pole, wpis zostaje z id.
+    const withMoje = lay(OLD, recordEdit('rd.json', OLD, updateCalendarRaw(OLD, 'moje', { name: 'Prywatne' }))!).file
+    const second = recordEdit('rd.json', withMoje, updateCalendarRaw(withMoje, 'moje', { color: CATEGORY_COLORS[5] }))!
+    const after = lay(withMoje, second).file
+    expect(lay(after, inverseEdit(second, after, null)!).file.calendars).toEqual([{ id: 'moje', name: 'Prywatne' }])
+  })
+
+  it('T973: kategoria domyślna bez wpisu w pliku – pierwszy przydział to edycja jednego pola; równoległy pierwszy kolor tej samej kategorii nie daje pytania', () => {
+    const cal = newCalendar(rdFrom(OLD).calendars, 'Praca')!
+    const withCal = addCalendarRaw(OLD, cal)
+    const assign = recordEdit('rd.json', withCal, setCategoryCalendarRaw(withCal, 'sesja', cal.id))!
+    expect(assign.edits).toEqual([{ path: ['categories', 'sesja', 'calendar'], base: undefined, value: cal.id }])
+    const colour = recordEdit('rd.json', withCal, { ...withCal, categories: { ...(withCal.categories as object), sesja: { color: CATEGORY_COLORS[3] } } })!
+    const r = lay(lay(withCal, colour).file, assign)
+    expect(r.conflicts).toEqual([])
+    expect((r.file.categories as Record<string, Record<string, unknown>>).sesja).toEqual({ color: CATEGORY_COLORS[3], calendar: cal.id })
+    // Nowa kategoria własna (wpis cały nowy) – też polami; usunięcie wpisu zostaje jednym zapisem.
+    const created = recordEdit('rd.json', OLD, { ...OLD, categories: { ...OLD.categories, nowa: { name: 'Nowa', color: null, archived: false } } })!
+    expect(created.edits.map((f) => f.path)).toEqual([['categories', 'nowa', 'name'], ['categories', 'nowa', 'color'], ['categories', 'nowa', 'archived']])
+    const gone = recordEdit('rd.json', { ...OLD, categories: { ...OLD.categories, x: { calendar: 'k' } } }, OLD)!
+    expect(gone.edits.map((f) => f.path)).toEqual([['categories', 'x']])
+  })
+
+  it('T974: dwa komputery dodały kalendarz z tą samą bazą (ten sam order) – oba zostają, kolejność po id, taka sama na obu, „Cofnij” jej nie odwraca', () => {
+    const a = newCalendar(rdFrom(OLD).calendars, 'Praca')!
+    const b = newCalendar(rdFrom(OLD).calendars, 'Dom')!
+    expect(a.order).toBe(b.order)
+    const rawAB = addCalendarRaw(addCalendarRaw(OLD, a), b)
+    const rawBA = addCalendarRaw(addCalendarRaw(OLD, b), a)
+    const ids = [a.id, b.id].sort()
+    expect(rdFrom(rawAB).calendars.slice(1).map((c) => c.id)).toEqual(ids)
+    expect(rdFrom(rawBA).calendars.slice(1).map((c) => c.id)).toEqual(ids)
+    // Usunięcie pierwszego z pary i cofnięcie: ten sam porządek.
+    const removal = recordEdit('rd.json', rawAB, removeCalendarRaw(rawAB, ids[0]!))!
+    const removed = lay(rawAB, removal).file
+    const back = lay(removed, inverseEdit(removal, removed, null)!).file
+    expect(rdFrom(back).calendars.slice(1).map((c) => c.id)).toEqual(ids)
+  })
+
+  it('T975: pierwszy zapis rd.json (create) z kalendarzami to edycje pól wpisów, id pierwsze; kładzie się na plik, który tymczasem ma już kalendarz', () => {
+    const cal = newCalendar(rdFrom(undefined).calendars, 'Praca')!
+    const e = recordEdit('rd.json', null, addCalendarRaw({ schema: 1 }, cal))!
+    expect(e.create).toBe(true)
+    expect(e.edits.map((f) => f.path)).toEqual([['schema'], ['calendars', `#${cal.id}`, 'id'], ['calendars', `#${cal.id}`, 'name'], ['calendars', `#${cal.id}`, 'color'], ['calendars', `#${cal.id}`, 'order']])
+    const other = addCalendarRaw({ schema: 1 }, { id: 'inny', name: 'Inny', color: CATEGORY_COLORS[2], order: 1 })
+    const r = lay(other, e)
+    expect(r.conflicts).toEqual([])
+    expect(rdFrom(r.file).calendars.map((c) => c.id).sort()).toEqual(['inny', 'moje', cal.id].sort())
+  })
+
+  it('T976: kliknięcie nazwy albo koloru, które „Moje” już ma, niczego nie zmienia', () => {
+    expect(updateCalendarRaw(OLD, 'moje', { color: CATEGORY_COLORS[0] })).toBe(OLD)
+    expect(updateCalendarRaw(OLD, 'moje', { name: 'Moje' })).toBe(OLD)
+    const named = updateCalendarRaw(OLD, 'moje', { name: 'Moje', color: CATEGORY_COLORS[2] })
+    expect((named.calendars as unknown[])[0]).toEqual({ id: 'moje', color: CATEGORY_COLORS[2] })
   })
 })
