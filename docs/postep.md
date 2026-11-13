@@ -60,8 +60,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    polecenie użytkownika 12.11): L1 OPS1 serie (1.12.0, scalone) → L2 OPS2 „Sprawy” (1.14.0, wydane 13.11) → SNT5 kroki
    (1.16.0, gotowe na gałęzi) → L3 OPS3 bufory (po K). Równolegle sesja HKU1 (blok 4, numery D405+, T720–T749, wydaje 1.13.0); do `main` scala naraz
    jedna – HKU1 pierwsze, L2 po nim. FBL1 odłożone (D364).
-6. Blok 3 – paczka SNT (D416, sesja `regulatedday-ab`): SNT4b → SNT1 → SNT2 bez pauz, jeden PR do `main` po #82 i #83
-   (sekcja „Blok 3 – paczka SNT”). Blok 4: HKU2 i HKU3 – PR #82 (sesja `regulatedday-d7`).
+6. Blok 3 – paczka SNT (D416, sesja `regulatedday-ab`): SNT4b, SNT1, SNT2 gotowe – PR paczki 1.18.0 (sekcja
+   „Blok 3 – paczka SNT”); po wydaniu Blok 3 zakończony. Blok 4: HKU2 i HKU3 – PR #82 (sesja `regulatedday-d7`).
 
 ## Ciąg L – stan (D380)
 Numery: D404, T700–T719 (L1), T750–T799 (L2, L3 – uzgodnione z sesją HKU1 12.11); kolejne D – osobno od HKU1 (ma D405, D406). „Przed etapem” pominięte na
@@ -100,9 +100,22 @@ SNT2 `wykonawca-sonnet` (migracja – przegląd xhigh). Szacunek 11,5–17,5 h, 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
 | SNT4 załączniki i linki | 1.15.0 | #80 | wydane 13.11; wpis – `docs/archiwum/postep-SNT.md` | ok. 5 h (3,5–5 h) |
-| SNT4b usuwanie załączników szablonu i serii (D415) | paczka | – | w toku od 13.11 07:30 | – (1,5–2,5 h) |
-| SNT1 widoki „3 dni”, „Agenda”, miesiąc, przenoszenie (D417, D418) | paczka | – | czeka na SNT4b | – (6–9 h) |
-| SNT2 kalendarze – warstwy (D419) | paczka | – | czeka na SNT1 | – (4–6 h) |
+| SNT4b usuwanie załączników szablonu i serii | 1.18.0 (paczka) | PR paczki | gotowe 13.11: trzy rundy xhigh (14 + 14 + 13 uwag), kolejka zależnych wpisów `after` (T923, T926–T931); D415, D420, D421, D423; T841–T849, T920–T934 | ok. 4 h (1,5–2,5 h) |
+| SNT1 widoki wielodniowe, przenoszenie, miesiąc | 1.18.0 (paczka) | PR paczki | gotowe 13.11: część A cztery rundy xhigh (15 + 13 + 12 + 14), część B high (10); D417, D418, D422, D424, D426; T900–T919, T936–T939, T950–T969, T980–T986 | ok. 6 h (6–9 h) |
+| SNT2 kalendarze – warstwy | 1.18.0 (paczka) | PR paczki | gotowe 13.11: część A trzy rundy xhigh (14 + 15 + 15), część B dwie rundy (10 + 15); D419, D425, D427, D428; T940–T949, T970–T979, T990–T1012 | ok. 5 h (4–6 h) |
+
+**Paczka 1.18.0 (13.11):** SNT4b, SNT1 i SNT2 w jednym PR (D413, D416); wykonawcy w drzewach `ws4m` (paczka), `ws4n`
+(SNT1), `ws4s` (SNT2), scalone do `claude/paczka-blok3` z `main` 1.17.0 (b0c4aa5). Rejestr T: T600–T699 w osobnym pliku
+(T935, uzupełnia T857), T700+ w `docs/decyzje-techniczne.md`. Odbiór: SNT4b.1–3, SNT1.1–7, SNT2.1–6 w `docs/odbior.md`
+(Tylko Ty: SNT4b.3, SNT1.7, SNT2.6). Niestabilne przy obciążeniu lokalnie (osobno zielone): `tests/sim/two-computers`,
+`tests/fs/cases` (EPERM), E2E szybkiego zapisu „!jutro” i przeciągania w `week.spec` – do obserwacji w CI.
+**Uwagi na później:** SNT1 – pytanie o samo `movedTo` w źródle przy jednoczesnym przeniesieniu tego samego bloku na dwóch
+komputerach zostawia blok w obu dniach do odpowiedzi; „Przenieś na…” przy niepoliczonym dniu bierze plan okna (T964);
+pierwsze otwarcie dawnego tygodnia – krzywe bez `moduleStates` (T950). SNT2 – po „moje” na usuniętym bloku dnia `setAt`
+tworzy element bez `id` (jak przed T948, tylko poza listą `calendars`); warianty z procesu głównego nie dopisują
+„(w tym M ukrytych)”; „Tydzień” i „3 dni” nie pokazują bloku odkrytego z Ctrl K (Ctrl K otwiera „Dziś”); w „Dziś”
+dopisek o ukrytych to osobny dymek okna, bo linię „Przesunięto” rysuje pasek (T1010). SNT4b – starsza wersja na drugim
+komputerze kładzie zależne wpisy kolejki osobno (T923). `docs/decyzje.md`: D400 stoi przed D380 (kolejność historyczna).
 
 ## Oszczędzanie tokenów – zasady pracy (8.11, D351, T535–T538)
 - Audyt zużycia tokenów (8.11): najwięcej kosztowały rundy `/code-review` xhigh (G1 – dziewięć rund, ok. 7 h przy
