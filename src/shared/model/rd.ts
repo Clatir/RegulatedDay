@@ -8,6 +8,7 @@
  * item (`#id` paths), so two computers adding different items merge without a question.
  */
 import { BLOCK_COLORS } from '../theme'
+import { calendarsFrom, categoryCalendarFrom, type Calendar } from './calendars'
 import { DEFAULT_CATEGORIES } from './categories'
 import { goalsFrom, type MonthGoals } from './goals'
 import { changeFrom, changeOrder, type SettingsChange } from './settings'
@@ -59,6 +60,8 @@ export interface CategoryMeta {
   /** One of CATEGORY_COLORS; null: the colour of its class. */
   color: string | null
   archived: boolean
+  /** The calendar it belongs to (D419, `model/calendars.ts`); none: „Moje”. Present only when the file names one. */
+  calendar?: string
 }
 
 export interface Person {
@@ -72,6 +75,8 @@ export interface RdFile {
   settings: SettingsChange[]
   general: GeneralSettings
   categories: Record<string, CategoryMeta>
+  /** The calendars (D419): „Moje” first, then the file's in its order; groups of categories, only the views of the window read them. */
+  calendars: Calendar[]
   people: Person[]
   /** The first computer's wizard finished (when, on which computer): the folder holds this app's data. */
   setup: { at: number; by: string } | null
@@ -175,10 +180,12 @@ function categoriesFrom(v: unknown): Record<string, CategoryMeta> {
     const before = out[id]
     const name = typeof x.name === 'string' && x.name.trim() ? x.name.trim().slice(0, 60) : before?.name
     if (!name) continue
+    const calendar = categoryCalendarFrom(x.calendar)
     out[id] = {
       name,
       color: typeof x.color === 'string' && (CATEGORY_COLORS as readonly string[]).includes(x.color) ? x.color : (before?.color ?? null),
-      archived: x.archived === true
+      archived: x.archived === true,
+      ...(calendar ? { calendar } : {})
     }
   }
   return out
@@ -207,6 +214,7 @@ export function rdFrom(v: unknown): RdFile {
     settings,
     general: generalFrom(r.general),
     categories: categoriesFrom(r.categories),
+    calendars: calendarsFrom(r.calendars),
     people: peopleFrom(r.people),
     setup,
     ritualFrom: isIsoDate(r.ritualFrom) ? r.ritualFrom : null,
