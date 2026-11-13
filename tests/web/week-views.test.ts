@@ -5,7 +5,7 @@
  * what a day of the month shows – the bars, „+N”, the dot of the load with its sentence.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { agendaOf, type MonthDay } from '@shared/engine/calendarViews'
+import { agendaOf, monthBlockOf, type MonthDay } from '@shared/engine/calendarViews'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { rdFrom } from '@shared/model/rd'
@@ -168,15 +168,13 @@ describe('komórka miesiąca (D418, D422)', () => {
     when: 'future',
     read: 'full',
     dayType: 'roboczy',
-    fixed: blocks.filter((b) => b.fixed),
-    blockCount: blocks.length,
-    categories: blocks.map((b) => b.categoryId),
+    blocks: blocks.map(monthBlockOf),
     load: 'low',
     workMin: 310,
     limitMin: 360,
     ...o
   })
-  it('do trzech pasków: najpierw wydarzenia całodniowe, potem stałe bloki; reszta jako „+N”', () => {
+  it('do trzech pasków: najpierw wydarzenia całodniowe, potem stałe bloki, potem elastyczne; reszta jako „+N”', () => {
     const fixed = [1, 2, 3].map((i) => block(`f${i}`, 600 + i * 60, 660 + i * 60, { fixed: true }))
     const flexible = block('x', 900, 930)
     const v = monthCellView(m([...fixed, flexible]), [event('e1', 'Konferencja', '2026-11-18')], names, 1)
@@ -190,10 +188,10 @@ describe('komórka miesiąca (D418, D422)', () => {
     expect(v.bars).toEqual([])
     expect(v.more).toBe(0)
   })
-  it('elastyczne bloki i sesje to „+N”, nie paski', () => {
+  it('elastyczny blok ma pasek (D429), sesja to „+N”, nie pasek', () => {
     const v = monthCellView(m([block('a', 600, 660), block('b', 700, 760, { session: true })]), [], names, 1)
-    expect(v.bars).toEqual([])
-    expect(v.more).toBe(2)
+    expect(v.bars.map((b) => b.key)).toEqual(['block-a'])
+    expect(v.more).toBe(1)
   })
   it('kropka obciążenia ma zdanie z pracą i budżetem; bez obciążenia – bez kropki', () => {
     expect(monthCellView(m([]), [], names, 1).load).toEqual({ level: 'low', title: 'Praca 5 h 10 min z 6 h' })

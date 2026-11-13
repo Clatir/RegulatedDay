@@ -1155,7 +1155,7 @@ export class DataHub {
     return this.need().daysView(dates as string[], undefined, energy)
   }
 
-  /** The month shown in „Kalendarz” (D418, 'RRRR-MM'): its days' fixed blocks and load. */
+  /** The month shown in „Kalendarz” (D418, 'RRRR-MM'): its days' blocks (all of them, D429) and load. */
   async monthView(month: unknown): Promise<MonthView> {
     if (typeof month !== 'string' || !isMonth(month)) throw new Error('miesiąc kalendarza')
     return this.need().monthView(month)

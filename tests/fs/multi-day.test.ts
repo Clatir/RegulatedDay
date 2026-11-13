@@ -1,6 +1,6 @@
 /**
  * SNT1 część A w folderze danych (D417, D418): „3 dni” i „Agenda” (`daysView` – dni w podanej kolejności, każdy jak w
- * tygodniu, z krzywą energii kolumny i budżetem), miesiąc „Kalendarza” (`monthView` – bloki stałe i obciążenie każdego dnia),
+ * tygodniu, z krzywą energii kolumny i budżetem), miesiąc „Kalendarza” (`monthView` – wszystkie bloki dnia po godzinie i obciążenie każdego dnia, D429),
  * moduł energii z rd.json (wyłączony – bez krzywej; zmiana liczy dni od nowa), sprawdzanie wejścia w DataHub.
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -170,8 +170,8 @@ describe('krzywa energii w folderze danych – moduł dnia i kto ją liczy (T914
   })
 })
 
-describe('miesiąc „Kalendarza” w folderze danych (D418)', () => {
-  it('każdy dzień miesiąca: bloki stałe bez sesji i obciążenie pracy wobec budżetu', async () => {
+describe('miesiąc „Kalendarza” w folderze danych (D418, D429)', () => {
+  it('każdy dzień miesiąca: wszystkie bloki dnia po godzinie (sesje z flagą) i obciążenie pracy wobec budżetu', async () => {
     day(THU, [
       { id: 'meet', categoryId: 'inne', startMin: 18 * 60, durationMin: 60, fixed: true, origin: 'user' },
       { id: 'flex', categoryId: 'inne', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user' }
@@ -183,8 +183,10 @@ describe('miesiąc „Kalendarza” w folderze danych (D418)', () => {
     expect(m.days).toHaveLength(30)
     expect(m.days[0]!.date).toBe('2026-11-01')
     const thu = m.days.find((d) => d.date === THU)!
-    // The sessions of the layer (London, NY) are fixed too – not in the cell (T905).
-    expect(thu.fixed.map((b) => b.id)).toEqual(['meet'])
+    // Every block of the day by the hour (D429); the sessions of the layer (London, NY) are in it, flagged – they get no bar (T905, T1013).
+    expect(thu.blocks.filter((b) => b.fixed && !b.session).map((b) => b.id)).toEqual(['meet'])
+    expect(thu.blocks.find((b) => b.id === 'flex')).toMatchObject({ fixed: false, session: false, startMin: 11 * 60 })
+    expect(thu.blocks.some((b) => b.session)).toBe(true)
     expect(thu.load).not.toBeNull()
     expect(m.days.find((d) => d.date === '2026-11-06')!.load).toBe('high')
   })

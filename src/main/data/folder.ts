@@ -1525,7 +1525,7 @@ export class DataFolder {
   }
 
   /**
-   * The month shown in „Kalendarz” (D418): each of its days as the week counts it, given as its fixed blocks and its load of
+   * The month shown in „Kalendarz” (D418): each of its days as the week counts it, given as its blocks (D429) and its load of
    * work against the budget (`monthDayOf`) – the cell's bars and „+N” the window lays with the all-day events (`monthCell`).
    */
   async monthView(month: string, at = this.clock.now()): Promise<MonthView> {

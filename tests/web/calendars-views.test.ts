@@ -250,8 +250,9 @@ describe('miesiąc w „Kalendarzu” (D419)', () => {
     month: '2026-11',
     today: TODAY,
     days: [
-      // Two fixed blocks (one of each calendar) and a flexible one of „Praca”: two bars and „+1”; with „Praca” hidden one bar, no „+N”.
-      monthDayOf(day(D, [block('f1', 540, 600, 'inne', { fixed: true }), block('f2', 600, 660, 'nauka', { fixed: true }), block('g', 700, 760, 'nauka')], { budget: { workMin: 500, limitMin: 400 } as never }))
+      // Two fixed blocks (one of each calendar) and two flexible ones (D429): three bars (f1, f2, g) and „+1”; with „Praca” hidden
+      // the bars of f2 and of the flexible g go too: two bars (f1, h), no „+N”.
+      monthDayOf(day(D, [block('f1', 540, 600, 'inne', { fixed: true }), block('f2', 600, 660, 'nauka', { fixed: true }), block('g', 700, 760, 'nauka'), block('h', 800, 860, 'inne')], { budget: { workMin: 500, limitMin: 400 } as never }))
     ]
   })
   beforeEach(() => {
@@ -266,22 +267,22 @@ describe('miesiąc w „Kalendarzu” (D419)', () => {
     await act(async () => root!.render(createElement(CalendarPage)))
   }
 
-  it('wszystko pokazane: dwa paski i „+1”; żetony nad siatką', async () => {
+  it('wszystko pokazane: trzy paski (stałe, potem elastyczny) i „+1”; żetony nad siatką', async () => {
     await mount()
     expect(q('calendar-chips')).not.toBeNull()
-    expect(host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)).toHaveLength(2)
+    expect(host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)).toHaveLength(3)
     expect(q(`month-more-${D}`)!.textContent).toBe('+1')
     expect(hiddenText()).toBeNull()
   })
 
-  it('„Praca” ukryta: znika jej pasek i jej część „+N”, wydarzenia też; kropka obciążenia bez zmian; „ukryte: 3”', async () => {
+  it('„Praca” ukryta: znika jej pasek (też elastycznego bloku) i jej część „+N”, wydarzenia też; kropka obciążenia bez zmian; „ukryte: 3”', async () => {
     setEvents([event('e1', 'Zjazd', D, 'praca')])
     await mount()
     const level = q(`month-load-${D}`)!.getAttribute('data-level')
     expect(level).toBe('high')
     hide('praca')
     await act(async () => undefined)
-    expect([...host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)].map((b) => b.textContent)).toEqual(['Inne obowiązki'])
+    expect([...host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)].map((b) => b.textContent)).toEqual(['Inne obowiązki', 'Inne obowiązki'])
     expect(q(`month-more-${D}`)).toBeNull()
     expect(q(`month-load-${D}`)!.getAttribute('data-level')).toBe(level)
     expect(q(`month-load-${D}`)!.title).toBe('Praca 8 h 20 min z 6 h 40 min')
@@ -293,7 +294,7 @@ describe('miesiąc w „Kalendarzu” (D419)', () => {
     hide('praca')
     await mount()
     expect(q('calendar-chips')).toBeNull()
-    expect(host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)).toHaveLength(2)
+    expect(host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)).toHaveLength(3)
   })
 })
 
@@ -470,10 +471,10 @@ describe('oś „Dziś” (D419)', () => {
   })
 })
 
-describe('miesiąc: dzień z silnika niesie kategorie swoich bloków', () => {
-  it('`categories` = kategoria każdego bloku z `blockCount` (bez zdjętych z dnia)', () => {
-    const m = monthDayOf(day(TODAY, [block('a', 600, 660, 'inne'), block('b', 700, 760, 'nauka'), block('c', 800, 860, 'nauka', { state: 'cancelled' })]))
-    expect(m.blockCount).toBe(2)
-    expect(m.categories).toEqual(['inne', 'nauka'])
+describe('miesiąc: dzień z silnika niesie swoje bloki (D429, T1013)', () => {
+  it('`blocks` = każdy blok dnia po godzinie z kategorią, nazwą i godzinami (bez zdjętych z dnia)', () => {
+    const m = monthDayOf(day(TODAY, [block('a', 600, 660, 'inne', { fixed: true }), block('b', 700, 760, 'nauka'), block('c', 800, 860, 'nauka', { state: 'cancelled' })]))
+    expect(m.blocks.map((b) => [b.id, b.categoryId, b.startMin, b.endMin, b.fixed, b.session])).toEqual([['a', 'inne', 600, 660, true, false], ['b', 'nauka', 700, 760, false, false]])
+    expect(m.blocks[0]!.named).toBeDefined()
   })
 })

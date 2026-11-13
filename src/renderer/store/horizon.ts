@@ -78,7 +78,7 @@ export function useDaysView(dates: readonly string[], opts: { energy?: boolean }
   return useCounted(`${dates.join(',')}|${opts.energy === false ? '-' : '+'}`, readDays, dayLists)
 }
 
-/** The month of „Kalendarz” ('RRRR-MM', D418): its days' fixed blocks and load (null until read), as `useWeekView`. */
+/** The month of „Kalendarz” ('RRRR-MM', D418): its days' blocks (all of them, D429) and load (null until read), as `useWeekView`. */
 export function useMonthView(month: string): { view: MonthView | null; failed: boolean } {
   return useCounted(month, readMonth, calendarMonths)
 }
