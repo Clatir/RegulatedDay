@@ -138,6 +138,12 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] HKU1.3 „To wolne” – pytanie o typ dnia „Wolne” i „Cofnij”
    - [ ] HKU1.4 Miesiąc, plan poranny i Ctrl K
    - [ ] HKU1.5 Podpis wydarzenia na pasku pulpitu (Tylko Ty – pasek na pulpicie)
+   - [ ] HKU2.1 Termin i data wykonania w wierszu sprawy, znaczki
+   - [ ] HKU2.2 Data wykonania przenosi sprawę na „Dziś” (następnego dnia)
+   - [ ] HKU2.3 Słowa daty w szybkim zapisie
+   - [ ] HKU2.4 Karta „Terminy” w planie porannym i próg w Ustawieniach
+   - [ ] HKU3.1 Priorytet w wierszu sprawy, pasek i kolejność
+   - [ ] HKU3.2 Macierz Eisenhowera i linia w planie porannym
    - [ ] L2.1 Strona „Sprawy”: zadanie z Ctrl N, listy, przenoszenie, „Zrobione”
    - [ ] L2.2 Przeciągnięcie zadania na oś „Dziś”, „Zaplanuj”, „Cofnij” i „Powtarzaj” niedostępne
    - [ ] L2.3 Plan poranny z zadaniami z „Dziś”, „Zadanie zrobione?” w pasku i rytuał
@@ -2202,3 +2208,81 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   przyciski działają dalej.
 - **Nie przechodzi, gdy:** okno pokazuje przeciągnięty plik albo stronę zamiast aplikacji, robi się pusta po upuszczeniu,
   albo trzeba zrestartować aplikację.
+
+### HKU2 i HKU3 – terminy, data wykonania, priorytety (1.17.0)
+
+Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy odbiorze powiedz, co zmienić.
+
+#### HKU2.1 Termin i data wykonania w wierszu sprawy, znaczki (1.17.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/cases-dates.test.ts`, `tests/unit/engine/cases-review4.test.ts`,
+  `tests/web/cases-dates-view.test.ts`, `tests/e2e/cases.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Sprawach” przy zadaniu kliknij „Terminy”, ustaw „Termin” przyciskiem „Jutro”. Drugiemu zadaniu
+  wpisz termin sprzed dwóch dni, trzeciemu – za 5 dni. Zaplanuj jedno z nich w „Dziś” i spójrz na kafelek bloku
+  na osi oraz na panel spraw przy osi.
+- **Oczekiwany efekt:** na początku linii statusu „Termin jutro”, „Po terminie” (różowy), „Termin za 5 dni”; sprawy
+  z terminem stoją na górze listy, najbliższy termin pierwszy; ten sam znaczek w panelu przy osi i na kafelku bloku
+  zadania (D409, D453).
+- **Nie przechodzi, gdy:** znaczek liczy dni źle, sprawa zrobiona ma znaczek, kolejność nie zaczyna się od terminów,
+  albo kafelek bloku nie ma znaczka.
+
+#### HKU2.2 Data wykonania przenosi sprawę na „Dziś” (1.17.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/cases-dates.test.ts`, `tests/unit/engine/cases-review4.test.ts`. Ty: następnego
+  dnia rano.
+- **Jak sprawdzić:** zadaniu ze „Skrzynki” ustaw „Wykonać” = jutro, drugiemu – datę za miesiąc, trzeciemu (na „Dziś”) –
+  pojutrze. Czwartemu wpisz datę wykonania sprzed tygodnia. Następnego dnia rano otwórz „Sprawy”.
+- **Oczekiwany efekt:** dziś pierwsze stoi na „W tym tygodniu” (jeśli jutro jest w tym tygodniu), drugie w „Skrzynce”
+  z dopiskiem „wykonać …”, trzecie zeszło z „Dziś”; przy czwartym pod polem „Ta data już minęła” i sprawa nie zmienia
+  listy; jutro rano pierwsze stoi na „Dziś” (D451, D454, D455).
+- **Nie przechodzi, gdy:** sprawa nie trafia na „Dziś” w dniu daty, data przeszła przenosi sprawę, albo dalsza data
+  trzyma ją na „W tym tygodniu”.
+
+#### HKU2.3 Słowa daty w szybkim zapisie (1.17.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/cases-dates.test.ts` (parser), `tests/web/bar-quick.test.ts`,
+  `tests/e2e/quick.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** Win+Alt+N, wpisz „Zapłacić rachunek !pt @jutro”, poczekaj na podgląd, Enter. Na stronie „Sprawy”
+  dodaj „Rata 1/2 !20.11” i „Raport !2026-12-05”.
+- **Oczekiwany efekt:** pod polem przed Enter „Termin: pt … · Wykonać: jutro”; w „Skrzynce” zadanie „Zapłacić rachunek”
+  bez słów, z terminem i datą wykonania; „Rata 1/2” zostaje z „1/2” w tytule i terminem 20.11; „Raport” z terminem
+  5.12 (D409, D455).
+- **Nie przechodzi, gdy:** słowa zostają w tytule, podgląd pokazuje inny dzień niż zapis, albo „1/2” znika z tytułu.
+
+#### HKU2.4 Karta „Terminy” w planie porannym i próg w Ustawieniach (1.17.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/cases-dates-view.test.ts`, `tests/e2e/cases.spec.ts` („Terminy”, „Pomiń”, próg).
+  Ty: rano.
+- **Jak sprawdzić:** ze sprawami z terminem dziś i pojutrze (bez bloku, poza „Dziś”) otwórz plan poranny; przy jednej
+  „Pomiń”, przy drugiej „Na Dziś”. W Ustawieniach → „Sprawy” zmień próg na 1 dzień i otwórz plan poranny jeszcze raz.
+- **Oczekiwany efekt:** karta „Terminy” przed krokiem próśb i zadań; „Pomiń” chowa sprawę do końca dnia, „Na Dziś”
+  przenosi ją na listę „Dziś”; przy progu 1 sprawa z terminem pojutrze znika z karty; nic nie blokuje planu (D409,
+  D452–D454).
+- **Nie przechodzi, gdy:** karta pokazuje sprawy z blokiem albo z kroku próśb i zadań, „Pomiń” nie działa do końca
+  dnia, albo próg nic nie zmienia.
+
+#### HKU3.1 Priorytet w wierszu sprawy, pasek i kolejność (1.17.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/cases-priority.test.ts`, `tests/web/cases-priority-view.test.ts`,
+  `tests/unit/theme.test.ts`, `tests/e2e/cases.spec.ts`. Ty: rzut oka (kolory w jasnym i ciemnym motywie).
+- **Jak sprawdzić:** przy trzech zadaniach na „Dziś” ustaw „Priorytet”: „Ważne i pilne”, „Pilne”, „Ani to, ani to”;
+  jednemu dodaj termin jutro. Zaplanuj zadanie „Ważne i pilne” w „Dziś” i spójrz na kafelek.
+- **Oczekiwany efekt:** wąski kolorowy pasek z lewej przy sprawie (różowy, morski, szary), też w panelu przy osi i na
+  kafelku bloku – oddzielony od krawędzi kategorii; kolejność: najpierw sprawa z terminem, potem „Ważne i pilne”,
+  „Pilne”, „Ani to, ani to”, bez priorytetu (D450, D456).
+- **Nie przechodzi, gdy:** paska nie widać na kafelku przy kategorii tego samego koloru, kolejność się nie zgadza,
+  albo pasek jest przy sprawie zrobionej.
+
+#### HKU3.2 Macierz Eisenhowera i linia w planie porannym (1.17.0)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/cases-priority-view.test.ts`, `tests/e2e/cases.spec.ts` (macierz, przeciąganie,
+  linia). Ty: rzut oka.
+- **Jak sprawdzić:** w „Sprawach” przełącz „Listy · Macierz”; przeciągnij sprawę z „Ważne” do „Ważne i pilne”, inną do
+  „Bez priorytetu”; przeciągnij jedną i puść poza oknem; zmień filtr na „Dziś”; przejdź na „Dziś” i wróć. Dodaj
+  „+ Prośba” w widoku macierzy. Rano, z P1 na „Dziś” bez bloku – spójrz na plan poranny.
+- **Oczekiwany efekt:** cztery pola z opisanymi osiami i „Bez priorytetu” pod nimi; przeciągnięcie zmienia priorytet
+  od razu, puszczenie poza oknem nic nie zmienia; po powrocie nadal „Macierz” z filtrem „Dziś”; „+ Prośba” przełącza na listy z polem
+  do wpisania; w planie porannym „N spraw ważnych i pilnych bez miejsca w planie” z „Pokaż w „Sprawach””, a gdy
+  któraś P1 ma blok – bez linii (D450, D456).
+- **Nie przechodzi, gdy:** przeciągnięcie nie zapisuje albo zapisuje po puszczeniu poza oknem, sprawy zrobione są
+  w macierzy, linia pojawia się mimo bloku P1, albo blokuje plan.

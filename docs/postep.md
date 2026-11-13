@@ -126,19 +126,18 @@ zmieniają `Timeline.tsx`, J3 korzysta z J1). Wersje 1.4.0–1.8.0.
 
 Propozycje na później z przeglądów G1–H2 (architektura, bez zmian w działaniu) – w ich wpisach w archiwum.
 
-## HKU1 – stan
-**Przed HKU1 (12.11):** wydarzenia całodniowe i wielodniowe (blok 4); pytania w trzech rundach 12.11 – D405. Sesja
-równoległa do ciągu J i ciągu L (numery D405+, T720+), drzewo `.claude/worktrees/whku1` od 1ac13ea (1.11.0), gałąź
-`claude/hku1-calodniowe`. Ryzyka: pas w „Tygodniu” w siatce z przyklejonymi nagłówkami kolumn, podpis na pasku
-pulpitu (przegląd xhigh), propozycja „Wolne” na dziś (reguły dzisiejszej zmiany typu dnia). Model: główna sesja
-Opus 5.5 · high; `wykonawca-opus` · xhigh – model, plik i silnik, `wykonawca-sonnet` – ekrany. Wersja – następna
-wolna przy scaleniu; scalenie tylko po uzgodnieniu z sesją ciągu L i po „1.11.0 wydane” od sesji ciągu J.
+## Blok 4 (HKU) – stan
+Wpis HKU1 i „Przed HKU1” – `docs/archiwum/postep-HKU.md`. Drzewo `.claude/worktrees/whku1`, paczka HKU2 + HKU3 na
+`claude/paczka-hku2-hku3` (D413: jeden PR, jedna wersja, jedno wydanie), od 6587e46 (L2, 1.14.0).
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| HKU1 wydarzenia całodniowe | 1.13.0 | – | gałąź gotowa: części A–C, dwie rundy xhigh (15 + 13 uwag), merge L1 (1.12.0); PR po zielonym CI, scalenie po znaku sesji L; D405–D407, T720–T749 | ok. 7 h (2–3 h) – zakres D405 (pasek pulpitu, Ctrl K, miesiąc, plan poranny) i dwie rundy |
+| HKU1 wydarzenia całodniowe | 1.13.0 | #78 | wydane 12.11 22:05 (run 43291188216); D405–D407, T720–T749 | ok. 7 h (2–3 h) |
+| HKU2 termin i data wykonania | 1.17.0 (paczka) | – | gotowe 13.11: części A i B, dwie rundy high (8 + 9 uwag); T850–T869, T880; D409, D451–D455 | – (2–3 h) |
+| HKU3 priorytety i macierz | 1.17.0 (paczka) | – | gotowe 13.11: dwie rundy high; T870–T884; D450, D456 | – (2,5–3,5 h) |
 
-**HKU1 – wpis (12.11):** kolekcja `allday/<id>.json` (silnik dnia jej nie czyta), pas nad osią „Dziś” i siatką „Tygodnia” (belki `weekLanes`, 3 rzędy + „+N”, wolny rząd), karta z notatką Markdown, linie „Cofnij” 15 min w oknie, „Wolne” (porcje po 62 dni, dziś – okno zmiany typu), miesiąc, plan poranny, pasek pulpitu, Ctrl K; reguły `.claude/rules/allday.md`. Odbiór HKU1.1–HKU1.5. **Uwagi na później:** brak E2E okna „Wolne” dla dziś już utworzonego; opis ekranów wydarzeń w specyfikacji; `NONE` – trzecia stała w oknie (wspólna stała zamiast kopii).
+**Blok 4 bez pauz (12.11, zgoda użytkownika):** HKU2 i HKU3 bez „dalej”; w nocy 12/13.11 zachowanie widoczne rozstrzygam rekomendacją (D „do potwierdzenia”, lista niżej). Numery HKU: D405–D409, D450–D459, T720–T749, T850–T899. Kolejka do `main`: SNT5 1.16.0 → paczka HKU2 + HKU3 1.17.0 (`main` wcielony 13.11, 4e70878); przed scaleniem pytanie do sesji L (regulatedday-a8) i SNT4 (regulatedday-ab).
+**Potwierdzone 13.11 rano (D457):** D451–D455 bez zmian; D456 – filtr macierzy pamiętany po zmianie strony (w paczce 1.17.0).
 
 ## SNT4 – stan
 **Przed SNT4 (12.11):** załączniki i linki w blokach; pytania 12.11 – D410 (D411, D412 do potwierdzenia). Drzewo

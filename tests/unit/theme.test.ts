@@ -1,6 +1,7 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { BRIGHTNESS_STEPS } from '@shared/machine'
-import { BLOCK_COLORS, contrast, contrastPairs, iconColor, PALETTE, SEASON_COLORS, themeVars, toneColor, TONES, HIDDEN_ICON } from '@shared/theme'
+import { BLOCK_COLORS, blockFill, blockFillDim, contrast, contrastPairs, iconColor, PALETTE, PRIORITY_COLORS, SEASON_COLORS, themeVars, toneColor, TONES, HIDDEN_ICON } from '@shared/theme'
 
 describe('kontrast (Wygląd i nazwy: co najmniej 4,5:1 przy każdej jasności)', () => {
   for (const step of BRIGHTNESS_STEPS) {
@@ -23,6 +24,31 @@ describe('kontrast (Wygląd i nazwy: co najmniej 4,5:1 przy każdej jasności)',
 
   it('okładki kaset (D322) to kolory bloków – napis na nich ma sprawdzony kontrast', () => {
     for (const c of Object.values(SEASON_COLORS)) expect(BLOCK_COLORS).toContain(c)
+  })
+})
+
+describe('paski priorytetu (D450)', () => {
+  it('cztery różne kolory z palety motywu; pasek (grafika) odcina się od karty i tła okna co najmniej 3:1 przy każdej jasności', () => {
+    expect(new Set(Object.values(PRIORITY_COLORS)).size).toBe(4)
+    for (const step of BRIGHTNESS_STEPS) {
+      const v = themeVars(step)
+      for (const [p, color] of Object.entries(PRIORITY_COLORS))
+        for (const bg of [v['--color-panel']!, v['--color-bg']!, v['--color-raised']!]) expect(contrast(color, bg), `${p} na ${bg} przy ${step}`).toBeGreaterThanOrEqual(3)
+    }
+  })
+})
+
+describe('paski priorytetu na kafelku bloku i jedno źródło kolorów (D450)', () => {
+  it('pasek odcina się 3:1 od wypełnienia bloku każdej kategorii – aktywnego i przygaszonego, przy każdej jasności (kolor pasków bywa kolorem kategorii: rozdziela je odstęp 2 px w tle kafelka)', () => {
+    for (const step of BRIGHTNESS_STEPS)
+      for (const block of BLOCK_COLORS)
+        for (const [name, fill] of [['blok', blockFill(block, step)], ['przygaszony blok', blockFillDim(block, step)]] as const)
+          for (const [p, color] of Object.entries(PRIORITY_COLORS)) expect(contrast(color, fill), `${p} na: ${name} ${block} przy ${step}`).toBeGreaterThanOrEqual(3)
+  })
+
+  it('tokeny --color-prio-* w styles/index.css mają te same kolory co PRIORITY_COLORS (jedno źródło)', () => {
+    const css = readFileSync(new URL('../../src/renderer/styles/index.css', import.meta.url), 'utf8')
+    for (const [p, color] of Object.entries(PRIORITY_COLORS)) expect(new RegExp(`--color-prio-${p}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(css)?.[1]?.toUpperCase(), p).toBe(color.toUpperCase())
   })
 })
 

@@ -116,6 +116,7 @@ const api: RdApi = {
   showAttachment: (id) => ipcRenderer.invoke(CH.showAttachment, id),
   quickAdd: (title) => ipcRenderer.invoke(CH.quickAdd, title),
   quickClose: () => ipcRenderer.send(CH.quickClose),
+  quickToday: () => ipcRenderer.invoke(CH.quickToday),
   onQuickShown: (cb) => on(CH.onQuickShown, cb),
   quickShortcut: () => ipcRenderer.invoke(CH.quickShortcut),
   onQuickShortcut: (cb) => on(CH.onQuickShortcut, cb),

@@ -24,6 +24,7 @@ import {
   type CasePatch,
   type GoneOf
 } from '@shared/engine/cases'
+import { parseQuickDates } from '@shared/quickDates'
 import { newId } from '@shared/model/ids'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom, type CaseList, type NewTask } from '@shared/model/requests'
@@ -184,12 +185,18 @@ export async function change(make: (put: (rel: string, before: RawRecord | null,
   return { saved, error, outcomes: out, id: null, undo: saved ? undo : [], sent }
 }
 
-/** A new task (D384: title required; 30 min, „Inne” by default; „Skrzynka” unless said). */
+/**
+ * A new task (D384: title required; 30 min, „Inne” by default; „Skrzynka” unless said). The words of dates at the title's
+ * end („!jutro”, „@pt” – D409, `parseQuickDates`; the field shows its `preview` before Enter) set the due date and the date
+ * of doing and leave the title – a date given in `p` wins over its word.
+ */
 export async function createTask(p: NewTask): Promise<CaseResult> {
   const id = newId()
   const at = Date.now()
   const r = await change((put) => {
-    const raw = newTask(id, at, logicalDayOf(at), p)
+    const today = logicalDayOf(at)
+    const q = parseQuickDates(p.title, today)
+    const raw = newTask(id, at, today, { ...p, title: q.title, dueDate: p.dueDate !== undefined ? p.dueDate : q.dueDate, doDate: p.doDate !== undefined ? p.doDate : q.doDate })
     if (!raw) return 'Zadanie potrzebuje tytułu.'
     put(relOf(id), null, raw)
     return null

@@ -36,13 +36,16 @@ export interface GeneralSettings {
   breakMin: number
   /** The solitude suggestion after contact longer than this (0 = off). */
   solitudeAfterMin: number
+  /** The morning plan's card of due dates (D409): the sprawy due within this many days after today (2: today to the day after). */
+  deadlineDays: number
 }
 
 export const GENERAL_RANGES = {
   waterEveryMin: [15, 120],
   breakAfterMin: [30, 240],
   breakMin: [5, 60],
-  solitudeAfterMin: [10, 180]
+  solitudeAfterMin: [10, 180],
+  deadlineDays: [1, 7]
 } as const
 
 export const DEFAULT_GENERAL: GeneralSettings = {
@@ -50,7 +53,8 @@ export const DEFAULT_GENERAL: GeneralSettings = {
   waterEveryMin: 45,
   breakAfterMin: 90,
   breakMin: 15,
-  solitudeAfterMin: 30
+  solitudeAfterMin: 30,
+  deadlineDays: 2
 }
 
 /** What a category is called and how it looks; its rules are dated settings (RulesSettings.categories). */
@@ -153,7 +157,8 @@ export function generalFrom(v: unknown): GeneralSettings {
     waterEveryMin: intIn(r.waterEveryMin, GENERAL_RANGES.waterEveryMin, DEFAULT_GENERAL.waterEveryMin),
     breakAfterMin: intOrOff(r.breakAfterMin, GENERAL_RANGES.breakAfterMin, DEFAULT_GENERAL.breakAfterMin),
     breakMin: intIn(r.breakMin, GENERAL_RANGES.breakMin, DEFAULT_GENERAL.breakMin),
-    solitudeAfterMin: intOrOff(r.solitudeAfterMin, GENERAL_RANGES.solitudeAfterMin, DEFAULT_GENERAL.solitudeAfterMin)
+    solitudeAfterMin: intOrOff(r.solitudeAfterMin, GENERAL_RANGES.solitudeAfterMin, DEFAULT_GENERAL.solitudeAfterMin),
+    deadlineDays: intIn(r.deadlineDays, GENERAL_RANGES.deadlineDays, DEFAULT_GENERAL.deadlineDays)
   }
 }
 

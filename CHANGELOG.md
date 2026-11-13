@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.17.0
+- Terminy spraw: przy zadaniu i prośbie przycisk „Terminy” otwiera dwa pola – „Termin” (termin ostateczny) i „Wykonać” (kiedy chcesz to zrobić) – z przyciskami „Dziś”, „Jutro”, „Koniec tygodnia” i „Wyczyść”.
+- Znaczki „Po terminie”, „Termin dziś”, „Termin jutro”, „Termin za N dni” na liście „Spraw”, w panelu przy osi „Dziś” i na kafelku bloku zadania. Sprawy z terminem stoją na górze listy, najbliższy pierwszy.
+- Data wykonania: w tym dniu sprawa sama staje na „Dziś”; wcześniej w tym tygodniu – na „W tym tygodniu”, dalsza data – w „Skrzynce” z dopiskiem „wykonać …”. Ręczne przeniesienie w dniu daty wygrywa.
+- Szybki zapis rozumie słowa na końcu tytułu: „!jutro”, „!pt”, „!20.11” ustawiają termin, „@jutro” – datę wykonania; podgląd pod polem pokazuje, co zostanie zapisane.
+- Plan poranny ma kartę „Terminy” (sprawy po terminie i z bliskim terminem, bez bloku) z „Na Dziś” i „Pomiń”; próg w Ustawieniach → „Sprawy” (domyślnie 2 dni).
+- Priorytety: pole „Priorytet” – „Ważne i pilne”, „Ważne”, „Pilne”, „Ani to, ani to” – z kolorowym paskiem przy sprawie i na kafelku bloku; po terminach listy idą według priorytetu.
+- Na stronie „Sprawy” przełącznik „Listy · Macierz”: macierz Eisenhowera 2×2 z polem „Bez priorytetu”, filtrem list (widok i filtr zostają po zmianie strony) i przeciąganiem między polami. Gdy sprawy ważne i pilne nie mają dziś miejsca w planie, plan poranny mówi to jedną linią.
+
 ## 1.16.0
 - Kroki bloku: w panelu bloku nad notatką jest lista „Kroki”. Wpisz krok i wciśnij Enter – pole zostaje na kolejny. Ptaszek odhacza krok (tylko na tym dniu), tytuł zmienisz w miejscu, „×” usuwa krok (z „Cofnij”), a kolejność zmienisz przeciągnięciem uchwytu „⋮⋮” albo klawiszami Alt+↑ / Alt+↓ na kroku. Najwyżej 30 kroków, tytuł do 200 znaków. Kroki niczego nie liczą (energia, punkty), a koniec bloku z nieodhaczonymi krokami o nic nie pyta.
 - Licznik „✓ 3/4” stoi przy nagłówku listy, na kafelku bloku w „Dziś” i w „Tygodniu”; blok bez kroków nie ma licznika. Ctrl K znajduje kroki jak tekst bloku albo sprawy.

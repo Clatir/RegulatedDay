@@ -7,7 +7,7 @@ import { classify } from '@shared/data/paths'
 import { countLabel, durationLabel, logicalClock, plDate } from '@shared/format'
 import { ALL_DAY_COLOR_NAMES, type AllDayColor } from '@shared/model/allDay'
 import { fieldByKey } from '@shared/model/fields'
-import { CASE_LIST_NAMES, type CaseList } from '@shared/model/requests'
+import { CASE_LIST_NAMES, isPriority, PRIORITY_NAMES, type CaseList } from '@shared/model/requests'
 import { categoryName, MODULE_NAMES, personName, type ModuleId, type RdFile } from '@shared/model/rd'
 import { DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
 import { onDaysText, SPECIAL_DAYS_TEXT } from '@shared/seriesText'
@@ -41,7 +41,7 @@ const BLOCK_FIELDS: Record<string, string> = {
   byVariant: 'zmieniony wariantem'
 }
 
-const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok', title: 'tytuł', kind: 'rodzaj', categoryId: 'kategoria', list: 'lista', listDay: 'dzień na liście „Dziś”', doneAt: 'zrobione', steps: 'kroki', stepsDone: 'odhaczone kroki' }
+const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok', title: 'tytuł', kind: 'rodzaj', categoryId: 'kategoria', list: 'lista', listDay: 'dzień na liście „Dziś”', doneAt: 'zrobione', dueDate: 'termin', doDate: 'wykonać', listSetDay: 'dzień przeniesienia na listę', priority: 'priorytet', steps: 'kroki', stepsDone: 'odhaczone kroki' }
 const ROUTINE_FIELDS: Record<string, string> = { name: 'nazwa', normal: 'kroki (zwykła)', worse: 'kroki (na gorsze dni)', archived: 'archiwum' }
 const SERIES_FIELDS: Record<string, string> = { start: 'pierwszy dzień', until: 'koniec (dzień)', count: 'koniec (liczba razy)', archived: 'usunięta z listy', root: 'seria' }
 /** The kinds of a series' rule (D381) as the panel of a block says them. */
@@ -75,6 +75,7 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
     if (key === 'kind' && (v === 'file' || v === 'link')) return v === 'file' ? 'plik' : 'link'
     // „Sprawy” (D383): the list by its name, the kind as a task or a request.
     if (key === 'list') return CASE_LIST_NAMES[v as CaseList] ?? v
+    if (key === 'priority' && isPriority(v)) return PRIORITY_NAMES[v].name
     if (key === 'kind' && (v === 'task' || v === 'request')) return v === 'task' ? 'zadanie' : 'prośba'
     if (key === 'special') return SPECIAL_DAYS_TEXT[v as keyof typeof SPECIAL_DAYS_TEXT] ?? v
     if (key === 'kind' && RULE_KINDS[v]) return RULE_KINDS[v]!
