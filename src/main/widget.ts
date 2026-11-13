@@ -27,6 +27,7 @@ import { pushedText } from '@shared/engine/pushApart'
 import { energyOrderVariant } from '@shared/engine/energyOrder'
 import { casesFrom, isDone, taskAnswerRaw } from '@shared/engine/cases'
 import { tickEdits } from '@shared/engine/steps'
+import { dayPlan } from '@shared/engine/createDay'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { applyVariant, keepPlan, markerCause, planCause, variantCauses, variantsFor, type Variant, type VariantCause, type VariantTrigger } from '@shared/engine/variants'
 import type { NoticeKind } from '@shared/machine'
@@ -1118,22 +1119,24 @@ export class WidgetEngine {
   }
 
   /**
-   * A step ticked off on the bar (D440, T793): the block the bar shows (the model of its last count – of that day; another
-   * day or none counted: counted now), its list as the day's file holds it now (`tickEdits` reads the file with the queue),
-   * its tick in the day's file and – a block of a task planned in it – in the task's record, one edit of the queue. Ticked
-   * on another computer meanwhile – nothing to write; removed there – the bar says so. No sound (D440).
+   * A step ticked off on the bar (D440, T793): the block checked in the write's turn – in the day's plan as the day's file
+   * holds it now (with the queue) over the snapshot the bar counted (the model of its last count, of that day; another day
+   * or none: counted now) – a block taken out, cancelled or moved away meanwhile gets no tick (none orphaned in the day nor
+   * in its task); its list as the file holds it (`tickEdits`), its tick in the day's file and – a block of a task planned in
+   * it – in the task's record, one edit of the queue. Ticked on another computer meanwhile – nothing to write; removed there
+   * – the bar says so. No sound (D440).
    */
   private async tickStep(day: string | undefined, blockId: string, stepId: string): Promise<void> {
     const folder = this.d.folder()
     if (!folder || !day) return
     const m = this.model?.state.grid.date === day ? this.model : await folder.widgetModel(this.now)
-    const block = m.state.grid.date === day ? m.ctx.plan.find((b) => b.id === blockId) : undefined
+    const rel = paths.day(day)
+    const before = ((await folder.recordView(rel)) as RawRecord | undefined) ?? null
+    const block = m.state.grid.date === day ? dayPlan(m.ctx.snapshot, before ? dayFileFrom(before, day) : null).find((b) => b.id === blockId) : undefined
     if (!block) {
       this.say('Tego bloku już nie ma w planie.')
       return this.refresh()
     }
-    const rel = paths.day(day)
-    const before = ((await folder.recordView(rel)) as RawRecord | undefined) ?? null
     const taskRel = block.task ? paths.record('request', block.task) : null
     const taskBefore = taskRel ? (((await folder.recordView(taskRel)) as RawRecord | undefined) ?? null) : null
     const out = tickEdits({ date: day, day: before, block, stepId, done: true, task: taskBefore })

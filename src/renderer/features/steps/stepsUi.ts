@@ -13,7 +13,8 @@ export function stepsAnswer(op: StepOp, r: StepsResult): SaveAnswer {
   // A removal is the one change that loses something (the step and its tick on the day): „Cofnij” for 10 s, as every removal.
   if (r.saved && op.op === 'remove' && r.undo.length) undoToast('Krok usunięty', () => void undoSteps(r.undo))
   // Not saved without a reason of ours: what the queue answered says it (a failed send or a broken file is a refusal – the field gets its text back).
-  return r.saved ? true : r.error ? false : saveAnswer(r.outcomes)
+  // Sent and no answer (a failure after the queue took it): not known – a question, never a refusal (a second Enter would add it twice).
+  return r.saved ? true : r.error ? false : saveAnswer(r.outcomes, r.sent)
 }
 
 /** The op an Alt+arrow makes of the step `id` (the list shown): one place up or down; null – it is at the end already. */

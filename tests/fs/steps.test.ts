@@ -167,6 +167,22 @@ describe('linia kroku na pasku (D440, T793)', () => {
     await a.folder.close('quit')
   })
 
+  it('blok usunięty w międzyczasie (inny komputer, pasek jeszcze go pokazuje): „Tego bloku już nie ma w planie.”, nic nie zapisane (przegląd 2)', async () => {
+    write(paths.day(DAY), { schema: 1, date: DAY, blocks: [blockRaw, { ...blockRaw, id: 'inny', startMin: 14 * 60 }] })
+    const clock = { now: placeLogical(DAY, 10 * 60) }
+    const a = await computer('pca', clock)
+    expect((await a.folder.timerClick({ a: 'start', block: 'wd', day: DAY } as never)).ok).toBe(true)
+    clock.now += 60_000
+    await a.w.refresh()
+    expect(a.w.current().steps?.block).toBe('wd')
+    // Another computer took the block out of the day's file; the bar has not counted since.
+    write(paths.day(DAY), { schema: 1, date: DAY, blocks: [{ ...blockRaw, id: 'inny', startMin: 14 * 60 }], updatedAt: 1 })
+    await a.w.act('step', 'wd|s1', 'bar')
+    expect(a.w.current().note?.text).toBe('Tego bloku już nie ma w planie.')
+    expect(read(paths.day(DAY)).stepsDone).toBeUndefined()
+    await a.folder.close('quit')
+  })
+
   it('blok zadania: ptaszek na pasku odhacza krok w bloku i w zadaniu, jedną edycją', async () => {
     write(paths.day(DAY), { schema: 1, date: DAY, blocks: [{ ...blockRaw, task: 't1' }] })
     const rel = paths.record('request', 't1')

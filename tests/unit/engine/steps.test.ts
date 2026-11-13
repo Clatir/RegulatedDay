@@ -16,7 +16,7 @@ import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
 import { copiedDay, moveBetweenDays } from '@shared/engine/planEdit'
 import { changedFrom, newSeries, sameOccurrence, seriesBlockId, todayOccurrenceEdit } from '@shared/engine/series'
-import { blockStepsEdits, dayBlockNow, seriesStepsPatch, STEP_GONE, taskStepsEdits, taskTickEdits, templateStepsChanged, tickEdits } from '@shared/engine/steps'
+import { blockStepsEdits, dayBlockNow, STEP_GONE, taskStepsEdits, taskTickEdits, templateStepsChanged, tickEdits } from '@shared/engine/steps'
 import { timerNow } from '@shared/engine/timer'
 import { blockJson, putBlock, setStepDone, stepsDoneIn } from '@shared/data/dayEdits'
 import { diffRecords, merge3, recordEdit } from '@shared/data/merge'
@@ -98,9 +98,10 @@ describe('lista kroków (model)', () => {
     ])
     const many = Array.from({ length: 40 }, (_, i) => ({ id: `k${i}`, title: `krok ${i}`, order: i }))
     expect(stepsFrom(many)).toHaveLength(40)
-    // „a” removed, „b” renamed (its other fields stay); what this version does not read stays as the file has it.
+    // „b” renamed (its other fields stay); what this version does not read stays as the file has it.
     const written = stepsJson([{ id: 'b', title: 'drugi!', order: 1, done: true }], raw)!
-    expect(written).toEqual([{ id: 'b', title: 'drugi!', order: 1, extra: 'nowsze pole', done: true }, raw[2], raw[3], raw[4], raw[5]])
+    // „a” removed: its second item (the duplicate) goes too – it would come back as „a” (review 2).
+    expect(written).toEqual([{ id: 'b', title: 'drugi!', order: 1, extra: 'nowsze pole', done: true }, raw[3], raw[4], raw[5]])
     expect(stepsJson([], undefined)).toBeUndefined()
     expect(stepsJson([{ id: 'n', title: 'nowy', order: 0, done: true }], undefined)).toEqual([{ id: 'n', title: 'nowy', order: 0 }])
   })
@@ -273,15 +274,13 @@ describe('kroki serii (D401, D404)', () => {
     expect(sameOccurrence({ ...occ, steps: own }, was)).toBe(false)
   })
 
-  it('zmiana listy „To i następne” / „Cała seria”: łatka serii z całą listą bez odhaczeń; zapis serii bez `done`, nieznane pola zostają', () => {
-    const occ = day(null).ctx.plan.find((b) => b.id === id)!
-    const patch = ok(seriesStepsPatch({ ...occ, steps: occ.steps.map((x) => ({ ...x, done: true })) }, { op: 'remove', id: 's4' }))
-    expect(patch.block.steps.map((x) => [x.id, x.done])).toEqual([
+  it('zmiana listy „To i następne” / „Cała seria”: operacja na wersji (T790), bez odhaczeń; zapis serii bez `done`', () => {
+    const changed = changedFrom(s, DAY, { stepsOp: { op: 'remove', id: 's4' } })
+    expect(changed.versions.at(-1)!.block.steps.map((x) => [x.id, x.done])).toEqual([
       ['s1', false],
       ['s2', false],
       ['s3', false]
     ])
-    const changed = changedFrom(s, DAY, patch)
     const json = seriesJson(changed, seriesJson(s))
     const back = seriesFrom(json)!
     expect(back.versions.at(-1)!.block.steps.map((x) => x.title)).toEqual(['Napisać testy', 'Przygotować logikę', 'Sprawdzić na Windowsie'])

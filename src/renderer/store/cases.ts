@@ -30,7 +30,7 @@ import { newRequest, newTask, requestFrom, type CaseList, type NewTask } from '@
 import { settingsOn } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { useNow } from '../lib/clock'
-import { editOf, isSaved, rawRecord, trySaveWith, useData } from './data'
+import { editOf, isSaved, rawRecord, trySaveWith, useData, type SendState } from './data'
 import { toast } from './ui'
 
 const relOf = (id: string): string => paths.record('request', id)
@@ -145,6 +145,11 @@ export interface CaseResult {
   id: string | null
   /** „Cofnij” of this change (`undoCase`); empty when nothing was saved. */
   undo: CaseUndoFile[]
+  /**
+   * Whether the edits were handed to the queue (`SendState.afterSend`): no outcomes after it – the result is not known (the
+   * folder may have it – `saveAnswer` says „asked”, never a refusal); absent – a result made without a send.
+   */
+  sent?: SendState
 }
 
 /**
@@ -154,6 +159,7 @@ export interface CaseResult {
 export async function change(make: (put: (rel: string, before: RawRecord | null, after: RawRecord | null) => void) => Promise<string | null> | string | null): Promise<CaseResult> {
   let error: string | null = null
   let undo: CaseUndoFile[] = []
+  const sent: SendState = { afterSend: false }
   const out = await trySaveWith(async () => {
     const files = new Map<string, { before: RawRecord | null; after: RawRecord | null }>()
     error = await make((rel, before, after) => {
@@ -163,10 +169,10 @@ export async function change(make: (put: (rel: string, before: RawRecord | null,
     if (error) return []
     undo = [...files].map(([rel, f]) => ({ rel, before: f.before, after: f.after })).filter((f) => (f.before == null ? f.after != null : f.after == null || !sameContentAs(f.before, f.after)))
     return undo.map((f) => editOf(f.rel, f.before, f.after))
-  })
+  }, sent)
   if (error) toast(error, 'error', 6000)
   const saved = !error && isSaved(out)
-  return { saved, error, outcomes: out, id: null, undo: saved ? undo : [] }
+  return { saved, error, outcomes: out, id: null, undo: saved ? undo : [], sent }
 }
 
 /** A new task (D384: title required; 30 min, „Inne” by default; „Skrzynka” unless said). */

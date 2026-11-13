@@ -17,7 +17,7 @@
 import { dayRaw, isRaw, putBlock, setStepDone, stepsDoneIn, type Raw } from '../data/dayEdits'
 import { dayFileFrom, withTemplateVersion, type PlanBlock, type Template } from '../model/plan'
 import { requestFrom, type RequestRecord } from '../model/requests'
-import { applyStepOp, doneSetFrom, freshSteps, withDone, withStepsJson, type Step, type StepOp } from '../model/steps'
+import { applyStepOp, doneSetFrom, freshSteps, STEPS_FULL, STEPS_FULL_TASK, withDone, withStepsJson, type Step, type StepOp } from '../model/steps'
 
 /** Why a tick does nothing: the step is not in the block any more (removed on another computer). */
 export const STEP_GONE = 'Tego kroku już nie ma.'
@@ -48,7 +48,8 @@ export function taskStepsRaw(raw: Raw, op: StepOp): { raw: Raw; steps: Step[] } 
   const r = requestFrom(raw)
   if (!r) return { error: 'Tej sprawy już nie ma.' }
   const next = applyStepOp(r.steps, op)
-  if ('error' in next) return next
+  // The task's list full: said as the task's (its own change, or the block's change it refuses – T792).
+  if ('error' in next) return next.error === STEPS_FULL ? { error: STEPS_FULL_TASK } : next
   let out = withStepsJson({ ...raw }, next.steps, raw.steps)
   if (op.op === 'remove' && doneSetFrom(raw.stepsDone).has(op.id)) out = taskStepDoneRaw(out, op.id, false)
   return { raw: out, steps: next.steps }
@@ -170,14 +171,4 @@ export function templateStepsChanged(t: Template, from: string, blockId: string,
     return { blocks: v.blocks.map((x) => (x.id === blockId ? { ...x, steps: next.steps } : x)) }
   })
   return error != null ? { error } : { template }
-}
-
-/**
- * A list of an occurrence changed by `op` as a whole new list (none ticked). Not for a change of the series: that goes as
- * the op itself (`SeriesPatch.stepsOp`, laid on the version in force in the write's turn – T790); the list the window holds
- * may be stale (an occurrence begun today does not follow the series).
- */
-export function seriesStepsPatch(b: PlanBlock, op: StepOp): { block: { steps: Step[] } } | { error: string } {
-  const next = applyStepOp(b.steps, op)
-  return 'error' in next ? next : { block: { steps: freshSteps(next.steps) } }
 }

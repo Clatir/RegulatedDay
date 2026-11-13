@@ -16,7 +16,7 @@ import { templateJson } from '@shared/model/defaults'
 import { dayFileFrom, planBlock, templateFrom, type Template } from '@shared/model/plan'
 import { newTask } from '@shared/model/requests'
 import { seriesFrom, seriesJson, type SeriesBlock } from '@shared/model/series'
-import { addStepOp, applyStepOp, STEPS_FULL, STEPS_MAX, stepsFrom, stepsJson, withDone, type Step } from '@shared/model/steps'
+import { addStepOp, applyStepOp, STEPS_FULL, STEPS_FULL_TASK, STEPS_MAX, stepsFrom, stepsJson, withDone, type Step } from '@shared/model/steps'
 import { lm } from './dsl'
 
 const DAY = '2026-11-18'
@@ -102,7 +102,8 @@ describe('zadanie i blok nie rozjeżdżają się po cichu (przegląd, T792)', ()
     expect(taskStepsEdits({ record: task, op: addStepOp('nowy'), date: DAY, day, today: DAY })).toEqual({ error: STEPS_FULL })
     const fullTask = { ...task, steps: list(STEPS_MAX) }
     const small = planBlock({ ...block, steps: stepsFrom(list(5)) })
-    expect(blockStepsEdits({ date: DAY, day: putBlock({ schema: 1, date: DAY }, small), block: small, op: addStepOp('nowy'), task: fullTask })).toEqual({ error: STEPS_FULL })
+    // The task's list is the full one: said as the task's (review 2).
+    expect(blockStepsEdits({ date: DAY, day: putBlock({ schema: 1, date: DAY }, small), block: small, op: addStepOp('nowy'), task: fullTask })).toEqual({ error: STEPS_FULL_TASK })
     // A tick of a step the other side does not have is no refusal: the side that has it.
     expect(ok(tickEdits({ date: DAY, day, block, stepId: 'k20', done: true, task })).task).toBeNull()
   })

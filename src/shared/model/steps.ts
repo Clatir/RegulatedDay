@@ -34,24 +34,31 @@ const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v ==
 /** A title as stored: one line, trimmed, at most `STEP_TITLE_MAX`. */
 export const stepTitleOf = (v: unknown): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, STEP_TITLE_MAX) : '')
 
-/**
- * The steps of a list as written (any version, also a snapshot of the log): in their order (`order`, ties – the file's),
- * each id once, every one read – the limit counts only when adding (T789: two computers adding at once may leave more);
- * `done` from `done` (the ticks of its day or task), never from the file's item.
- */
-export function stepsFrom(v: unknown, done?: ReadonlySet<string>): Step[] {
-  if (!Array.isArray(v) || v.length === 0) return []
+/** The items of a file's list this version reads: for each id the first item with a title, with its place in the file. */
+function readItems(v: readonly unknown[]): Array<{ at: number; step: Omit<Step, 'done'> }> {
   const seen = new Set<string>()
-  const out: Array<Step & { at: number }> = []
+  const out: Array<{ at: number; step: Omit<Step, 'done'> }> = []
   v.forEach((x, at) => {
     if (!isPlain(x) || typeof x.id !== 'string' || !x.id || seen.has(x.id)) return
     const title = stepTitleOf(x.title)
     if (!title) return
     seen.add(x.id)
-    out.push({ id: x.id, title, order: typeof x.order === 'number' && Number.isFinite(x.order) ? x.order : at, done: done?.has(x.id) === true, at })
+    out.push({ at, step: { id: x.id, title, order: typeof x.order === 'number' && Number.isFinite(x.order) ? x.order : at } })
   })
-  out.sort((a, b) => a.order - b.order || a.at - b.at)
-  return out.map(({ at: _at, ...s }) => s)
+  return out
+}
+
+/**
+ * The steps of a list as written (any version, also a snapshot of the log): in their order (`order`, ties – the file's;
+ * an item without a number – its place in the file), each id once, every one read – the limit counts only when adding
+ * (T789: two computers adding at once may leave more); `done` from `done` (the ticks of its day or task), never from the
+ * file's item.
+ */
+export function stepsFrom(v: unknown, done?: ReadonlySet<string>): Step[] {
+  if (!Array.isArray(v) || v.length === 0) return []
+  return readItems(v)
+    .sort((a, b) => a.step.order - b.step.order || a.at - b.at)
+    .map(({ step }) => ({ ...step, done: done?.has(step.id) === true }))
 }
 
 /** The same list to show (ids and titles in the same order) – ticks and the numbers of `order` aside. */
@@ -60,31 +67,43 @@ export function sameStepList(a: readonly Pick<Step, 'id' | 'title'>[], b: readon
 }
 
 /**
- * The list as written over the file's list `before` (T787): every item of the file in the file's order – one this version
- * reads and `steps` changed gets its title and order (its other fields stay), one it reads unchanged or does not read at
- * all (no title, no id, not an object, a second of an id) stays the file's own; a step new to the file at the end; one read
- * and not in `steps` (removed) out. No `done` is ever written – a tick is the day's (or the task's). Undefined: no steps and
- * no list in the file (the field is not written).
+ * The list as written over the file's list `before` (T787), in the file's order:
+ * - the item this version reads for a step `steps` keeps unchanged – the file's own (other items of its id too); changed –
+ *   its title and order set, its other fields kept, the other items of its id out; removed – every item of its id out (a
+ *   second item of an id never comes back as the step);
+ * - an item without a number `order` gets the place it is read at (its order no longer moves when items before it go);
+ * - an item this version does not read (no title, no id, not an object) – the file's own, as it is;
+ * - a step new to the file at the end.
+ * No `done` is ever written – a tick is the day's (or the task's). Undefined: no steps and no list in the file.
  */
 export function stepsJson(steps: readonly Step[], before?: unknown): unknown[] | undefined {
   if (!Array.isArray(before)) return steps.length ? steps.map((s) => ({ id: s.id, title: s.title, order: s.order })) : undefined
-  const read = new Map(stepsFrom(before).map((s) => [s.id, s]))
+  const read = new Map(readItems(before).map((r) => [r.step.id, r]))
   const byId = new Map(steps.map((s) => [s.id, s]))
-  const out: unknown[] = []
-  const written = new Set<string>()
-  for (const x of before) {
-    const id = isPlain(x) && typeof x.id === 'string' ? x.id : null
-    const was = id != null && !written.has(id) ? read.get(id) : undefined
-    // Not read by this version (or a second item of an id): the file's own, as it is.
-    if (!was) {
-      out.push(x)
-      continue
-    }
-    written.add(was.id)
-    const s = byId.get(was.id)
-    if (!s) continue
-    out.push(s.title === was.title && s.order === was.order ? x : { ...(x as Record<string, unknown>), title: s.title, order: s.order })
+  /** Whether the step of `id` (read) stays exactly as the file has it – its own item and every other of its id stay. */
+  const untouched = (id: string): boolean => {
+    const r = read.get(id)!
+    const s = byId.get(id)
+    const x = before[r.at] as Record<string, unknown>
+    return !!s && s.title === r.step.title && s.order === r.step.order && typeof x.order === 'number' && Number.isFinite(x.order)
   }
+  const out: unknown[] = []
+  before.forEach((x, at) => {
+    const id = isPlain(x) && typeof x.id === 'string' ? x.id : null
+    const r = id != null ? read.get(id) : undefined
+    // Not read by this version (no title, not an object, an id it never reads): the file's own, as it is.
+    if (!r) {
+      out.push(x)
+      return
+    }
+    if (untouched(r.step.id)) {
+      out.push(x)
+      return
+    }
+    // Changed or removed: only the read item of its id, with the change (removed – none).
+    const s = byId.get(r.step.id)
+    if (s && r.at === at) out.push({ ...(x as Record<string, unknown>), title: s.title, order: s.order })
+  })
   for (const s of steps) if (!read.has(s.id)) out.push({ id: s.id, title: s.title, order: s.order })
   return out
 }
@@ -160,6 +179,8 @@ export function moveStepOp(steps: readonly Pick<Step, 'id'>[], id: string, to: n
 /** Why a change of a list is refused (the panel says it under the field). */
 export const STEP_NO_TITLE = 'Krok potrzebuje treści.'
 export const STEPS_FULL = `Najwyżej ${STEPS_MAX} kroków w bloku.`
+/** The same of a task's list (its own, or the task of a block refusing the block's change – T792). */
+export const STEPS_FULL_TASK = `Najwyżej ${STEPS_MAX} kroków w zadaniu.`
 
 /** The list numbered again 0, 1, 2 … in the order given (only the steps whose place changed get a new `order`). */
 function renumbered(list: readonly Step[]): Step[] {

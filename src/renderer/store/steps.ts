@@ -19,7 +19,7 @@ import type { StepOp } from '@shared/model/steps'
 import { logicalDayOf } from '@shared/time/day'
 import { changeSeries } from '../features/series/seriesActions'
 import { change, DAY_UNREADABLE, undoFiles, type CaseResult, type CaseUndoFile } from './cases'
-import { rawRecord, saveAnswer, type SaveAnswer } from './data'
+import { rawRecord, type SaveAnswer } from './data'
 
 /** What a change of steps did: saved (written or waiting for the folder), its outcomes, its „Cofnij” (`undoSteps`). */
 export type StepsResult = Omit<CaseResult, 'id'>
@@ -69,21 +69,23 @@ export function changeBlockSteps(date: string, block: PlanBlock, op: StepOp, see
 
 /**
  * The day and the file of the block a task is planned in now (`scheduledOf`, a move followed), read in this turn; null –
- * not planned (the block gone); `unreadable` – a day on the way cannot be read now: the task's change would part it from
- * its block in silence, so nothing is written (T792, as T769).
+ * not planned (the block gone), or its way leads through a day gone by that cannot be read now (such a day is never
+ * written – T769 – the task's change goes alone); `unreadable` – a day from today on cannot be read now: its block would
+ * part from the task in silence, so nothing is written (T792).
  */
-async function taskDay(id: string): Promise<{ date: string; raw: RawRecord | null } | null | 'unreadable'> {
+async function taskDay(id: string, today: string): Promise<{ date: string; raw: RawRecord | null } | null | 'unreadable'> {
   const r = requestFrom(rawRecord(taskRel(id)))
   if (!r?.day || !r.block) return null
   const files: Record<string, RawRecord | null> = {}
   for (let more: string | null = r.day; more && !(more in files); more = caseDayToRead(r, files)) {
     const read = await window.rd.dayFiles([more])
-    if (!(more in read)) return 'unreadable'
+    if (!(more in read)) return more >= today ? 'unreadable' : null
     files[more] = read[more] ?? null
   }
   const s = scheduledOf(r, (d) => (d in files ? (files[d] ? dayFileFrom(files[d], d) : null) : undefined))
   if (!s) return null
-  return s.known ? { date: s.day, raw: files[s.day] ?? null } : 'unreadable'
+  if (s.known) return { date: s.day, raw: files[s.day] ?? null }
+  return s.day >= today ? 'unreadable' : null
 }
 
 /** A task's change of steps: its record, and its block's day when the block goes with it (today or later – T769). */
@@ -92,9 +94,10 @@ function taskChange(id: string, make: (record: RawRecord, date: string | null, d
     const rel = taskRel(id)
     const record = rawRecord(rel)
     if (!record) return 'Tej sprawy już nie ma.'
-    const where = await taskDay(id)
+    const today = logicalDayOf(Date.now())
+    const where = await taskDay(id, today)
     if (where === 'unreadable') return DAY_UNREADABLE
-    const out = make(record, where?.date ?? null, where?.raw ?? null, logicalDayOf(Date.now()))
+    const out = make(record, where?.date ?? null, where?.raw ?? null, today)
     if ('error' in out) return out.error
     put(rel, record, out.record)
     if (where && out.day) put(paths.day(where.date), where.raw, out.day)
@@ -130,17 +133,13 @@ export function changeTemplateSteps(templateId: string, from: string, blockId: s
 }
 
 /**
- * A series' list changed from an occurrence by its scope (D401, D404 – the panel asks „Tylko to · To i następne · Cała
- * seria”): „Tylko to” – the day's own edit (`changeBlockSteps`); the others – the series API with the op itself
- * (`stepsOp`), laid on each version's own list in the write's turn (T790, T517) – never a list copied from `block` (an
- * occurrence begun today does not follow the series, its list may be old); its „Cofnij” toast says `text` (empty – none).
- * The ticks stay the day's (T786). Not saved: a refusal, a broken file or a failed send – `false`; a question – `'asked'`.
+ * A series' list changed from an occurrence by its scope „To i następne” / „Cała seria” (D401, D404 – the panel asks the
+ * scope; „Tylko to” is the day's own edit, `changeBlockSteps`): the series API with the op itself (`stepsOp`), laid on each
+ * version's own list in the write's turn (T790, T517) – never a list copied from the block the window holds (an occurrence
+ * begun today does not follow the series); its „Cofnij” toast says `text` (empty – none). The ticks stay the day's (T786).
+ * `_block` and `_seen` – kept for the callers of before; the op needs neither.
  */
-export async function changeSeriesSteps(target: { date: string; blockId: string }, block: PlanBlock, scope: SeriesScope, op: StepOp, text: string, seen?: RawRecord | null): Promise<SaveAnswer> {
-  if (scope === 'only') {
-    const r = await changeBlockSteps(target.date, block, op, seen)
-    return r.saved ? true : r.error ? false : saveAnswer(r.outcomes)
-  }
+export function changeSeriesSteps(target: { date: string; blockId: string }, _block: PlanBlock, scope: Exclude<SeriesScope, 'only'>, op: StepOp, text: string, _seen?: RawRecord | null): Promise<SaveAnswer> {
   return changeSeries(target, scope, { stepsOp: op }, text)
 }
 

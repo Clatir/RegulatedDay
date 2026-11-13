@@ -4,8 +4,9 @@
  * is this day's block, „To i następne” and „Cała seria” the series with the whole list (the ticks stay the day's, T786);
  * any other block – the day's own (a block of a task: its task too, T792). A tick is never asked (`tickBlockStep`).
  * The scope is asked once for the open panel (T798): the first change of the list picks it (`scope.current`), the next changes
- * of that block keep it until the screen resets it (the panel closed, another block selected); „Anuluj” and a change that
- * was not saved keep nothing. „Cofnij” only for a removal (D443): the series API says it when its text is not empty.
+ * of that block keep it until the screen resets it (the panel closed, another block selected). It is kept at once when the
+ * question is answered (D443) – before the save, whatever the save becomes, so a quick second change never asks again;
+ * only „Anuluj” keeps nothing. „Cofnij” only for a removal (D443): the series API says it when its text is not empty.
  */
 import type { RawRecord, SeriesScope } from '@shared/api'
 import type { PlanBlock } from '@shared/model/plan'
@@ -33,9 +34,7 @@ export async function saveBlockSteps(
   const of = seriesOfBlock(o.series, b, o.date)
   const scope = of ? (o.scope.current ?? (await askScope('change', blockName(b, o.names), occurrenceRuleText(of, o.date, o.today)))) : 'only'
   if (!scope) return false
-  const answer =
-    scope === 'only' ? stepsAnswer(op, await changeBlockSteps(o.date, b, op, o.raw)) : await changeSeriesSteps({ date: o.date, blockId: b.id }, b, scope, op, op.op === 'remove' ? 'Krok usunięty' : '', o.raw)
-  // The scope holds only once a change was saved with it.
-  if (of && answer === true) o.scope.current = scope
-  return answer
+  if (of) o.scope.current = scope
+  if (scope === 'only') return stepsAnswer(op, await changeBlockSteps(o.date, b, op, o.raw))
+  return changeSeriesSteps({ date: o.date, blockId: b.id }, b, scope, op, op.op === 'remove' ? 'Krok usunięty' : '', o.raw)
 }

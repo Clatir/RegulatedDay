@@ -128,8 +128,10 @@ export function setStepDone(raw: Raw, blockId: string, stepId: string, done: boo
  */
 export function setStepsDone(raw: Raw, blockId: string, ids: readonly string[]): Raw {
   const all = isPlain(raw.stepsDone) ? { ...raw.stepsDone } : {}
-  if (!ids.length && !isPlain(all[blockId])) return raw
-  all[blockId] = Object.fromEntries(ids.map((id) => [id, true]))
+  if (!ids.length && !(blockId in all)) return raw
+  // None: the block's key goes (no empty map left behind – its leaves go as removals, `LEAF_MAPS`).
+  if (ids.length) all[blockId] = Object.fromEntries(ids.map((id) => [id, true]))
+  else delete all[blockId]
   return { ...raw, stepsDone: all }
 }
 

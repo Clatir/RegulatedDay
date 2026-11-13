@@ -192,7 +192,10 @@ export function seriesJson(s: Series, before?: RawRecord | null): RawRecord {
   const rawVersions = isPlain(before?.versions) ? before.versions : {}
   const versions: Record<string, unknown> = {}
   for (const v of s.versions) {
-    const was = isPlain(rawVersions[v.from]) ? (rawVersions[v.from] as Record<string, unknown>) : {}
+    // A new version (`changedFrom`) is a copy of the one in force at its date: what that one keeps (its block's list with
+    // the items this version does not read, fields it does not know) goes on in it too – as `templateJson` copies them.
+    const source = isPlain(rawVersions[v.from]) ? v.from : Object.keys(rawVersions).filter((from) => from < v.from && isPlain(rawVersions[from])).sort().at(-1)
+    const was = source != null ? (rawVersions[source] as Record<string, unknown>) : {}
     const keep = (k: string) => (isPlain(was[k]) ? (was[k] as Record<string, unknown>) : {})
     versions[v.from] = { ...was, block: withStepsJson({ ...keep('block'), ...v.block } as Record<string, unknown>, v.block.steps, keep('block').steps), rule: { ...(keep('rule').kind === v.rule.kind ? keep('rule') : {}), ...v.rule }, special: v.special }
   }

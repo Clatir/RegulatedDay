@@ -15,6 +15,7 @@ import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 import { DAY_UNREADABLE } from '@renderer/store/cases'
 import * as store from '@renderer/store/steps'
+import { stepsAnswer } from '@renderer/features/steps/stepsUi'
 
 const four = (): Step[] => ['Napisać testy', 'Przygotować logikę', 'Sprawdzić na Windowsie', 'Zrobić commit'].map((title, order) => ({ id: `s${order + 1}`, title, order, done: false }))
 const TODAY = logicalDayOf(Date.now())
@@ -66,12 +67,11 @@ describe('zakres serii: operacja na wersji w turze zapisu (przegląd, T790)', ()
     expect(calls).toEqual([[{ seriesId: 'ang' }, 'all', { stepsOp: op }]])
   })
 
-  it('„Tylko to” niezapisane: plik uszkodzony albo nieudane wysłanie – odmowa (`false`), nie pytanie', async () => {
+  it('„Tylko to” (edycja dnia) niezapisane: plik uszkodzony – odmowa (`false`); błąd po wysłaniu – pytanie (przegląd 2: `steps-review2.test.ts`)', async () => {
     const block = planBlock({ id: 'occ', categoryId: 'inne', startMin: 600, durationMin: 60, origin: 'series', sourceId: 'ang', steps: four() })
     stub({ days: { [TODAY]: null }, edit: async (entries) => entries.map(() => ({ status: 'broken' as const })) })
-    expect(await store.changeSeriesSteps({ date: TODAY, blockId: 'occ' }, block, 'only', addStepOp('x'), '')).toBe(false)
-    stub({ days: { [TODAY]: null }, edit: async () => Promise.reject(new Error('IPC')) })
-    expect(await store.changeSeriesSteps({ date: TODAY, blockId: 'occ' }, block, 'only', addStepOp('x'), '')).toBe(false)
+    const op = addStepOp('x')
+    expect(stepsAnswer(op, await store.changeBlockSteps(TODAY, block, op))).toBe(false)
   })
 })
 

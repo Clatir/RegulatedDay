@@ -370,16 +370,35 @@ describe('zmiana kroków bloku w panelu (zakres serii – D401, D404)', () => {
     expect(useUi.getState().toasts.map((t) => [t.text, t.action?.label])).toEqual([['Krok usunięty', 'Cofnij']])
   })
 
-  it('zakres zapamiętany dopiero po zapisie: odmowa albo porażka – następna zmiana pyta znowu', async () => {
+  it('zakres zapamiętany od razu po odpowiedzi (D443): drugie przestawienie bez czekania nie pyta; zapis, który padł, zakresu nie zmienia; „Anuluj” nic nie pamięta', async () => {
     const w = stub({}, { [DATE]: null })
     vi.mocked(askScope).mockResolvedValue('all')
-    w.seriesChange.mockResolvedValueOnce({ ok: false, error: 'Ta seria już się zakończyła.', code: 'ended', seriesId: 'ang', outcomes: [], undo: [] })
+    let finish: (r: SeriesResult) => void = () => undefined
+    w.seriesChange.mockImplementationOnce(() => new Promise<SeriesResult>((r) => (finish = r)))
     const o = ctx()
-    expect(await saveBlockSteps(o, occ(), add, false)).toBe(false)
-    expect(o.scope.current).toBeNull()
-    expect(await saveBlockSteps(o, occ(), add, false)).toBe(true)
+    const move = (id: string) => saveBlockSteps(o, occ(), { op: 'move', id, before: null }, false)
+    // Two moves without waiting for the first save: one question, both go with its answer.
+    const first = move('s1')
+    await vi.waitFor(() => expect(o.scope.current).toBe('all'))
+    const second = move('s2')
+    finish({ ok: false, error: 'Ta seria już się zakończyła.', code: 'ended', seriesId: 'ang', outcomes: [], undo: [] })
+    expect(await first).toBe(false)
+    expect(await second).toBe(true)
+    expect(askScope).toHaveBeenCalledTimes(1)
+    expect(w.seriesChange).toHaveBeenCalledTimes(2)
+    // The save failed, the scope stays: the next change does not ask either.
+    expect(await move('s3')).toBe(true)
+    expect(askScope).toHaveBeenCalledTimes(1)
+    // „Anuluj”: nothing is kept, the next change asks again.
+    vi.mocked(askScope).mockResolvedValue(null)
+    const cancelled = ctx()
+    expect(await saveBlockSteps(cancelled, occ(), add, false)).toBe(false)
+    expect(cancelled.scope.current).toBeNull()
     expect(askScope).toHaveBeenCalledTimes(2)
-    expect(o.scope.current).toBe('all')
+    vi.mocked(askScope).mockResolvedValue('only')
+    expect(await saveBlockSteps(cancelled, occ(), add, false)).toBe(true)
+    expect(askScope).toHaveBeenCalledTimes(3)
+    expect(cancelled.scope.current).toBe('only')
   })
 
   it('odhaczenie nigdy nie pyta (to, co robi `tickBlockStep`); blok własny dnia – bez pytania o zakres', async () => {
