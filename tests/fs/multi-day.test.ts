@@ -183,8 +183,10 @@ describe('miesiąc „Kalendarza” w folderze danych (D418)', () => {
     expect(m.days).toHaveLength(30)
     expect(m.days[0]!.date).toBe('2026-11-01')
     const thu = m.days.find((d) => d.date === THU)!
-    // The sessions of the layer (London, NY) are fixed too – not in the cell (T905).
-    expect(thu.fixed.map((b) => b.id)).toEqual(['meet'])
+    // Every block of the day by the hour (D429); the sessions of the layer (London, NY) are in it, flagged – they get no bar (T905, T1013).
+    expect(thu.blocks.filter((b) => b.fixed && !b.session).map((b) => b.id)).toEqual(['meet'])
+    expect(thu.blocks.find((b) => b.id === 'flex')).toMatchObject({ fixed: false, session: false, startMin: 11 * 60 })
+    expect(thu.blocks.some((b) => b.session)).toBe(true)
     expect(thu.load).not.toBeNull()
     expect(m.days.find((d) => d.date === '2026-11-06')!.load).toBe('high')
   })

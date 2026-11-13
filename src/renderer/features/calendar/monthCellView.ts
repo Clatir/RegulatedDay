@@ -1,6 +1,6 @@
 /**
- * What a day of the month shows besides its colour and marks (D418, D422): the miniature bars of its all-day events and fixed
- * blocks, „+N” for everything else it holds, and the dot of the load. From `monthCell` (`@shared/engine/calendarViews`, the
+ * What a day of the month shows besides its colour and marks (D418, D422, D429): the miniature bars of its all-day events,
+ * fixed and flexible blocks, „+N” for everything else it holds, and the dot of the load. From `monthCell` (`@shared/engine/calendarViews`, the
  * same count for every place) – here only the words and the colours of what is drawn.
  */
 import { monthCell, type LoadLevel, type MonthDay } from '@shared/engine/calendarViews'
@@ -40,7 +40,7 @@ export interface MonthCellView {
 export const loadTitle = (workMin: number, limitMin: number): string => `Praca ${durationLabel(workMin)} z ${durationLabel(limitMin)}`
 
 /** A day with nothing known of its blocks (a day of the neighbouring month's weeks, not read): its all-day events only. */
-export const emptyMonthDay = (date: string): MonthDay => ({ date, when: 'future', read: 'unknown', dayType: null, fixed: [], blockCount: 0, categories: [], load: null, workMin: null, limitMin: null })
+export const emptyMonthDay = (date: string): MonthDay => ({ date, when: 'future', read: 'unknown', dayType: null, blocks: [], load: null, workMin: null, limitMin: null })
 
 /**
  * The day as the cell shows it with the unchecked calendars' blocks left out (D419): their bars and their share of „+N” go;
@@ -49,9 +49,9 @@ export const emptyMonthDay = (date: string): MonthDay => ({ date, when: 'future'
  */
 export function visibleMonthDay(day: MonthDay, sieve: CalendarSieve): { day: MonthDay; hiddenCount: number } {
   if (sieve.none) return { day, hiddenCount: 0 }
-  const categories = day.categories.filter((c) => !sieve.hidesCategory(c))
-  if (categories.length === day.categories.length) return { day, hiddenCount: 0 }
-  return { day: { ...day, fixed: day.fixed.filter((b) => !sieve.hidesCategory(b.categoryId)), blockCount: categories.length, categories }, hiddenCount: day.categories.length - categories.length }
+  const blocks = day.blocks.filter((b) => !sieve.hidesCategory(b.categoryId))
+  if (blocks.length === day.blocks.length) return { day, hiddenCount: 0 }
+  return { day: { ...day, blocks }, hiddenCount: day.blocks.length - blocks.length }
 }
 
 /** The cell of `day` (null – not counted: `emptyMonthDay`), its words and colours; `names` as the window names blocks. */

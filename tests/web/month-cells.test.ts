@@ -7,8 +7,7 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
-import type { MonthDay } from '@shared/engine/calendarViews'
-import type { HorizonBlock } from '@shared/engine/week'
+import type { MonthBlock, MonthDay } from '@shared/engine/calendarViews'
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { rdFrom } from '@shared/model/rd'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
@@ -17,7 +16,7 @@ import { emptyMonthDay, monthCellView } from '@renderer/features/calendar/monthC
 
 const names = { rd: rdFrom({}), settings: DEFAULT_SETTINGS, routines: [], requests: [] }
 const named = { categoryId: 'inne', variantId: null, routine: null, requests: [], note: '', origin: 'user' as const, sourceId: null }
-const fixed = (id: string, startMin: number): HorizonBlock => ({ id, named, categoryId: 'inne', startMin, endMin: startMin + 60, state: 'planned', outsidePlan: false, background: false, fixed: true })
+const block = (id: string, startMin: number, o: Partial<MonthBlock> = {}): MonthBlock => ({ id, named, categoryId: 'inne', startMin, endMin: startMin + 60, fixed: false, session: false, ...o })
 const month = (date: string, o: Partial<MonthDay>): MonthDay => ({ ...emptyMonthDay(date), read: 'full', dayType: 'roboczy', ...o })
 const event = (id: string, title: string, date: string): AllDayEvent => ({ ...allDayDraft(id, date), title })
 
@@ -59,12 +58,23 @@ const q = (id: string) => host!.querySelector<HTMLElement>(`[data-testid="${id}"
 
 describe('komórka miesiąca z paskami (D418, D422)', () => {
   it('trzy paski, reszta dnia w „+N”', async () => {
-    const blocks = [fixed('f1', 540), fixed('f2', 600), fixed('f3', 660)]
-    await mount({ [D]: month(D, { fixed: blocks, blockCount: 6, load: 'low', workMin: 100, limitMin: 400 }) }, [event('e1', 'Konferencja', D)])
+    const blocks = [block('f1', 540, { fixed: true }), block('f2', 600, { fixed: true }), block('f3', 660, { fixed: true }), block('s1', 480, { fixed: true, session: true }), block('x1', 720), block('x2', 780)]
+    await mount({ [D]: month(D, { blocks, load: 'low', workMin: 100, limitMin: 400 }) }, [event('e1', 'Konferencja', D)])
     expect(host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)).toHaveLength(3)
     expect([...host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)].map((b) => b.textContent)).toEqual(['Konferencja', 'Inne obowiązki', 'Inne obowiązki'])
     // 1 event + 6 blocks, 3 bars: „+N” is the other four (D422).
     expect(q(`month-more-${D}`)!.textContent).toBe('+4')
+  })
+
+  it('D429: po wydarzeniach i stałych paski mają nazwy bloków elastycznych, z godzinami w podpowiedzi', async () => {
+    const flex = (id: string, startMin: number, categoryId: string): MonthBlock => block(id, startMin, { categoryId, named: { ...named, categoryId } })
+    // The day's blocks come by the hour (`monthDayOf`).
+    await mount({ [D]: month(D, { blocks: [flex('o', 540, 'inne'), flex('n', 600, 'nauka'), block('m', 840, { fixed: true })] }) }, [])
+    const bars = [...host!.querySelectorAll<HTMLElement>(`[data-testid="month-bar-${D}"]`)]
+    expect(bars.map((b) => b.textContent)).toEqual(['Inne obowiązki', 'Inne obowiązki', 'Nauka (NotebookLM)'])
+    // The fixed one first (14:00), then the flexible ones by the hour (09:00, 10:00).
+    expect(bars.map((b) => b.title)).toEqual(['Inne obowiązki · 14:00–15:00', 'Inne obowiązki · 09:00–10:00', 'Nauka (NotebookLM) · 10:00–11:00'])
+    expect(q(`month-more-${D}`)).toBeNull()
   })
 
   it('dzień bez niczego: bez pasków i bez „+N”; numer dnia zostaje', async () => {

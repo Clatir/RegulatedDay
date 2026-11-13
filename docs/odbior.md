@@ -171,6 +171,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] SNT1.5 „Agenda” – 7 dni od dziś
    - [ ] SNT1.6 Miesiąc – paski, „+N” i kropka obciążenia
    - [ ] SNT1.7 Przeniesienie przy zmianie z drugiego komputera (Tylko Ty – OneDrive)
+   - [ ] SNT1.8 Nazwy bloków elastycznych w miesiącu (1.18.1)
    - [ ] SNT2.1 Ustawienia → „Kalendarze”: dodawanie do 12, nazwa, kolor, usuwanie z „Cofnij”
    - [ ] SNT2.2 Kategoria i wydarzenie całodniowe w kalendarzu (pole „Kalendarz”)
    - [ ] SNT2.3 Żetony nad widokami, „ukryte: N”, zapamiętane na tym komputerze
@@ -2383,6 +2384,13 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** na komputerze A przeciągnij blok z wtorku na środę, zanim OneDrive zsynchronizuje. Na komputerze B w tym samym czasie zmień ten blok we wtorek (np. tytuł) albo przenieś go na czwartek. Poczekaj na synchronizację. Obejrzyj wtorek i środę na obu komputerach.
 - **Oczekiwany efekt:** blok jest w jednym dniu na obu komputerach i nigdy nie zniknął z obu; przy konflikcie aplikacja pyta, a do czasu odpowiedzi źródło czeka z blokiem w swoim dniu; po odpowiedzi blok zostaje w jednym dniu, bez kopii konfliktowej przy samym przeniesieniu.
 - **Nie przechodzi, gdy:** blok znika z obu dni na którymkolwiek komputerze; po synchronizacji blok jest w dwóch dniach bez pytania; aplikacja pyta o konflikt bez przyczyny albo zawiesza się; „Cofnij” nie przywraca bloku w jego dniu.
+
+#### SNT1.8 Nazwy bloków elastycznych w miesiącu (1.18.1)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/multi-day.test.ts` (kolejność pasków: całodniowe, stałe, elastyczne po godzinie; limit 3; „+N”; sesje bez paska), `tests/web/month-cells.test.ts` (nazwa i godziny elastycznego bloku na pasku), `tests/web/calendars-views.test.ts` (ukryty kalendarz – bez paska elastycznego bloku i bez „+N”, „ukryte: N”), `tests/web/week-views.test.ts`, `tests/fs/multi-day.test.ts`. E2E `tests/e2e/week.spec.ts` („Miesiąc” z blokami elastycznymi, dzień przyszły). Ty: rzut oka.
+- **Jak sprawdzić:** w widoku miesiąca znajdź dzień przyszły z kilkoma blokami elastycznymi (bez bloków stałych) i dzień z blokiem stałym i elastycznymi. Najedź myszą na pasek bloku elastycznego. Ukryj kalendarz, do którego należy jeden z nich.
+- **Oczekiwany efekt:** paski mają nazwy bloków elastycznych (jak w „Dziś”), po wydarzeniach całodniowych i blokach stałych, elastyczne po godzinie startu; podpowiedź paska to nazwa z godzinami; reszta dnia jako „+N”; wysokość komórki bez zmian; ukryty kalendarz nie ma paska ani udziału w „+N”; kropka obciążenia bez zmian.
+- **Nie przechodzi, gdy:** blok elastyczny przed stałym albo przed wydarzeniem całodniowym; więcej niż trzy paski; sesja ma pasek; ukryty blok dalej ma pasek; komórka wyższa niż przedtem.
 
 ---
 

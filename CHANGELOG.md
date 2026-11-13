@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.18.1
+- Miesiąc w „Kalendarzu”: w komórce dnia paski mają też nazwy bloków elastycznych – najpierw wydarzenia całodniowe i bloki stałe, potem elastyczne po godzinie; reszta jako „+N”.
+
 ## 1.18.0
 - „Tydzień” ma przełącznik „Tydzień · 3 dni · Agenda” (wybór zostaje zapamiętany). „3 dni” pokazuje wczoraj, dziś i jutro w większej skali; strzałki przesuwają o dzień. „Agenda” to lista 7 dni od dziś bez pustych godzin: wydarzenia całodniowe na górze dnia, potem bloki z godziną, długością i kategorią; kliknięcie otwiera blok w „Dziś”.
 - W kolumnach „Tygodnia” i „3 dni” za blokami biegnie cienka krzywa energii. Dla dni przyszłych liczy się od pełnej energii o 04:00 – jest bledsza i ma podpis „przyjęte”.

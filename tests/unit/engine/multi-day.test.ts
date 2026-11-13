@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { blockInfos, movableBlock } from '@shared/engine/blocks'
-import { agendaOf, LOAD_HIGH_PCT, LOAD_MID_PCT, loadLevel, mayMoveBetween, monthCell, monthDates, monthDayOf, monthFixed, type MonthDay } from '@shared/engine/calendarViews'
+import { agendaOf, LOAD_HIGH_PCT, LOAD_MID_PCT, loadLevel, mayMoveBetween, monthCell, monthDates, monthDayOf, type MonthDay } from '@shared/engine/calendarViews'
 import { dayPlan } from '@shared/engine/createDay'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
@@ -440,12 +440,12 @@ describe('D418 – komórka dnia w miesiącu', () => {
       hb('off', '19:00', 30, { fixed: true, state: 'cancelled' }),
       hb('park', '19:30', 30, { fixed: true, state: 'parked' })
     ]
-    expect(blocks.filter(monthFixed).map((b) => b.id)).toEqual(['meet', 'w'])
     const m = monthDayOf(day({ blocks }))
     expect(m).toMatchObject({ date: FUT, when: 'future', read: 'full', dayType: 'zwykly', load: 'mid', workMin: 400, limitMin: 480 })
-    expect(m.fixed.map((b) => b.id)).toEqual(['meet', 'w'])
+    // Every block of the day by the hour (D429) – but the ones taken off it; the bars take only the fixed ones first.
+    expect(m.blocks.map((b) => [b.id, b.fixed, b.session])).toEqual([['lon', true, true], ['meet', true, false], ['flex', false, false], ['w', true, false]])
     // Not read: no load, no blocks.
-    expect(monthDayOf(unknownDay(FUT, 'future'))).toMatchObject({ read: 'unknown', fixed: [], load: null, workMin: null, limitMin: null })
+    expect(monthDayOf(unknownDay(FUT, 'future'))).toMatchObject({ read: 'unknown', blocks: [], load: null, workMin: null, limitMin: null })
   })
 
   it('do 3 pasków: najpierw całodniowe, potem stałe po godzinie; reszta jako „+N”', () => {
@@ -470,14 +470,40 @@ describe('D418 – komórka dnia w miesiącu', () => {
       hb('off', '20:00', 30, { fixed: true, state: 'cancelled' })
     ]
     const m = monthDayOf(day({ blocks }))
-    expect(m.blockCount).toBe(5)
+    expect(m.blocks).toHaveLength(5)
     const c = monthCell(m, [ev('e1', 'Urodziny', FUT), ev('e2', 'Urlop', FUT)])
     // The events in their order (the same days: by title – „Urlop” before „Urodziny”).
     expect(c.items.map((i) => (i.kind === 'allDay' ? i.event.id : i.block.id))).toEqual(['e2', 'e1', 'meet'])
-    // 2 events + 5 blocks on the day, 3 bars: the event-free rest – „w”, the session and the two flexible ones.
+    // 2 events + 5 blocks on the day, 3 bars: the rest – „w”, the session and the two flexible ones.
     expect(c.more).toBe(4)
-    // Only flexible blocks: no bar, every one „+N”.
-    expect(monthCell(monthDayOf(day({ blocks: [hb('f1', '11:00', 60), hb('f2', '13:00', 60)] })), [])).toMatchObject({ items: [], more: 2 })
+    // Two flexible blocks: both get a bar (D429), no „+N”.
+    expect(monthCell(monthDayOf(day({ blocks: [hb('f1', '11:00', 60), hb('f2', '13:00', 60)] })), [])).toMatchObject({ items: [{ kind: 'block' }, { kind: 'block' }], more: 0 })
+    // Only sessions: no bar, every one „+N”.
+    expect(monthCell(monthDayOf(day({ blocks: [hb('lon', '08:00', 60, { fixed: true, session: true }), hb('ny', '15:30', 60, { fixed: true, session: true })] })), [])).toMatchObject({ items: [], more: 2 })
+  })
+
+  it('D429: paski – całodniowe, potem stałe po godzinie, potem elastyczne po godzinie; limit 3, reszta „+N”', () => {
+    const blocks = [
+      hb('f2', '14:00', 60),
+      hb('meet', '16:00', 60, { fixed: true }),
+      hb('f1', '09:00', 60),
+      hb('lon', '08:00', 180, { fixed: true, session: true }),
+      hb('park', '10:00', 30, { state: 'parked' })
+    ]
+    const m = monthDayOf(day({ blocks }))
+    const bars = (c: ReturnType<typeof monthCell>): string[] => c.items.map((i) => (i.kind === 'allDay' ? `allDay:${i.event.id}` : `block:${i.block.id}`))
+    // No events: the fixed one first, then the flexible ones by the hour (never the session, never the parked one).
+    const none = monthCell(m, [])
+    expect(bars(none)).toEqual(['block:meet', 'block:f1', 'block:f2'])
+    expect(none.more).toBe(1)
+    // An event takes the first bar: the fixed block, one flexible – and „+N” is the other flexible one and the session.
+    const one = monthCell(m, [ev('e1', 'Urodziny', FUT)])
+    expect(bars(one)).toEqual(['allDay:e1', 'block:meet', 'block:f1'])
+    expect(one.more).toBe(2)
+    // Flexible blocks only: bars by the hour, at most 3, the rest „+N”.
+    const flex = monthCell(monthDayOf(day({ blocks: [hb('c', '15:00', 30), hb('a', '09:00', 30), hb('d', '16:00', 30), hb('b', '10:00', 30)] })), [])
+    expect(bars(flex)).toEqual(['block:a', 'block:b', 'block:c'])
+    expect(flex.more).toBe(1)
   })
 
   it('daty miesiąca od pierwszego do ostatniego dnia', () => {

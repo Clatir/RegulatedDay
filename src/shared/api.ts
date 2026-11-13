@@ -838,7 +838,7 @@ export interface RdApi {
    */
   daysView(dates: string[], opts?: { energy?: boolean }): Promise<DaysView>
   /**
-   * The month shown in „Kalendarz” ('RRRR-MM', D418): each of its days with its fixed blocks and its load (`monthDayOf`); the
+   * The month shown in „Kalendarz” ('RRRR-MM', D418): each of its days with its blocks and its load (`monthDayOf`, D429); the
    * cell with the all-day events – `monthCell`.
    */
   monthView(month: string): Promise<MonthView>

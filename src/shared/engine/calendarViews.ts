@@ -1,6 +1,6 @@
 /**
  * The views of many days besides „Tydzień” (SNT1): which days a block may be dragged between (D417), the cell of a day of
- * the month (D418: the bars of its fixed blocks and all-day events, „+N”, the load of work against the budget) and the
+ * the month (D418, D429: the bars of its all-day events, fixed and flexible blocks, „+N”, the load of work against the budget) and the
  * „Agenda” (D418: seven days, the all-day events on top, then the blocks by the hour). Pure: from the days of the horizon
  * (`HorizonDay`, one count of each day) and the all-day events (never an input of a day – D405, T725).
  */
@@ -31,28 +31,35 @@ export function loadLevel(workMin: number, limitMin: number): LoadLevel {
   return pct > LOAD_HIGH_PCT ? 'high' : pct >= LOAD_MID_PCT ? 'mid' : 'low'
 }
 
-/**
- * A fixed block of the month's cell (D418: meetings, lectures, the classes of a „zjazd”, T905): fixed in the plan, not a
- * trading session nor the second shift (they are on every working day), not taken off the day (parked, cancelled).
- */
-export const monthFixed = (b: HorizonBlock): boolean => b.fixed === true && b.session !== true && onDay(b)
-
 /** Not taken off the day before it began (parked, cancelled). */
 const onDay = (b: HorizonBlock): boolean => b.state !== 'parked' && b.state !== 'cancelled'
 
-/** A day of the month as the main process gives it (D418): its fixed blocks by the hour and its load. */
+/**
+ * A block of the month's day (D429): what a bar needs – its name, category and hour – and what decides whether it gets one
+ * (`fixed`: fixed in the plan; `session`: a trading session or the second shift – never a bar, D422).
+ */
+export interface MonthBlock {
+  id: string
+  named: HorizonBlock['named']
+  categoryId: string
+  startMin: number
+  endMin: number
+  fixed: boolean
+  session: boolean
+}
+
+/** A day of the month as the main process gives it (D418): its blocks by the hour and its load. */
 export interface MonthDay {
   date: string
   when: HorizonWhen
   read: HorizonRead
   /** The type in force (null – not read). */
   dayType: string | null
-  /** Every fixed block of the day (`monthFixed`), by the hour. */
-  fixed: HorizonBlock[]
-  /** Every block of the day – fixed or not, sessions too – but the ones taken off it (parked, cancelled): „+N” (D422). */
-  blockCount: number
-  /** The category of each block `blockCount` counts, in any order – what the window needs to leave out the blocks of a calendar it hides (D419). */
-  categories: string[]
+  /**
+   * Every block of the day – fixed or not, sessions too – but the ones taken off it (parked, cancelled), by the hour (D429, T1013):
+   * the bars (`monthCell`), „+N” (D422) and what the window leaves out of the calendars it hides (D419) all come from this list.
+   */
+  blocks: MonthBlock[]
   /** The work of the day against its budget; null – not read, or a day gone by nobody used. */
   load: LoadLevel | null
   workMin: number | null
@@ -62,15 +69,15 @@ export interface MonthDay {
 /** The month's day of a day of the horizon. */
 export function monthDayOf(d: HorizonDay): MonthDay {
   const b = d.read === 'unknown' ? null : d.budget
-  const categories = d.blocks.filter(onDay).map((x) => x.categoryId)
   return {
     date: d.date,
     when: d.when,
     read: d.read,
     dayType: d.dayType,
-    fixed: d.blocks.filter(monthFixed).sort((a, b) => a.startMin - b.startMin || (a.id < b.id ? -1 : 1)),
-    blockCount: categories.length,
-    categories,
+    blocks: d.blocks
+      .filter(onDay)
+      .sort((x, y) => x.startMin - y.startMin || (x.id < y.id ? -1 : 1))
+      .map((x) => ({ id: x.id, named: x.named, categoryId: x.categoryId, startMin: x.startMin, endMin: x.endMin, fixed: x.fixed === true, session: x.session === true })),
     load: b ? loadLevel(b.workMin, b.limitMin) : null,
     workMin: b?.workMin ?? null,
     limitMin: b?.limitMin ?? null
@@ -95,26 +102,27 @@ export function monthDates(month: string): string[] {
 /** The bars a cell of the month shows at most (D418). */
 export const MONTH_CELL_BARS = 3
 
-/** One bar of a cell: an all-day event or a fixed block. */
-export type MonthItem = { kind: 'allDay'; event: AllDayEvent } | { kind: 'block'; block: HorizonBlock }
+/** One bar of a cell: an all-day event or a block. */
+export type MonthItem = { kind: 'allDay'; event: AllDayEvent } | { kind: 'block'; block: MonthBlock }
 
 export interface MonthCell {
-  /** At most `MONTH_CELL_BARS`: the all-day events first (their order), then the fixed blocks by the hour. */
+  /** At most `MONTH_CELL_BARS`: the all-day events first (their order), then the fixed blocks by the hour, then the flexible ones by the hour (D429). */
   items: MonthItem[]
-  /** All the rest of the day (D422, T905): the all-day events and every block not shown as a bar – „+N”; 0 – none. */
+  /** All the rest of the day (D422, T1013): the all-day events and every block not shown as a bar – „+N”; 0 – none. */
   more: number
   load: LoadLevel | null
 }
 
 /**
- * The cell of a day of the month (D418, D422): its all-day events and fixed blocks, at most `max` bars; „+N” – everything
- * else the day holds: the events and blocks without a bar, the flexible ones and the sessions too.
+ * The cell of a day of the month (D418, D422, D429): its all-day events, fixed blocks and flexible ones, at most `max` bars;
+ * „+N” – everything else the day holds: the events and blocks without a bar, the sessions too (they never get one).
  */
 export function monthCell(day: MonthDay, allDay: readonly AllDayEvent[], max = MONTH_CELL_BARS): MonthCell {
   const events = eventsOn(allDay, day.date)
-  const bars: MonthItem[] = [...events.map((event) => ({ kind: 'allDay' as const, event })), ...day.fixed.map((block) => ({ kind: 'block' as const, block }))]
+  const barred = (fixed: boolean): MonthItem[] => day.blocks.filter((b) => !b.session && b.fixed === fixed).map((block) => ({ kind: 'block' as const, block }))
+  const bars: MonthItem[] = [...events.map((event) => ({ kind: 'allDay' as const, event })), ...barred(true), ...barred(false)]
   const items = bars.slice(0, max)
-  return { items, more: Math.max(0, events.length + day.blockCount - items.length), load: day.load }
+  return { items, more: Math.max(0, events.length + day.blocks.length - items.length), load: day.load }
 }
 
 /** A block of „Agenda” (D418): its hour, what names it, its length and category. */

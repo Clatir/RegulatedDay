@@ -855,6 +855,40 @@ test('Przeciąganie bloku (SNT1, D417, D422): wtorek → środa z podglądem mie
   }
 })
 
+test('Miesiąc (D429): po bloku stałym paski mają nazwy bloków elastycznych po godzinie, z godzinami w podpowiedzi', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-month-flex-'))
+  seed(dataDir)
+  const today = logicalToday()
+  // The 15th of the next month: a day to come at any time. One fixed block (06:30) and two flexible ones before every block
+  // of the template (04:05, 04:50) – the fixed bar first, then the flexible ones by the hour.
+  const next = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 15)).toISOString().slice(0, 10)
+  seedDay(dataDir, next, [
+    { id: 'f1', startMin: 6 * 60 + 30, durationMin: 60, fixed: true },
+    { id: 'x2', startMin: 4 * 60 + 50, durationMin: 30 },
+    { id: 'x1', startMin: 4 * 60 + 5, durationMin: 30 }
+  ])
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-calendar').click()
+      await expect(page.getByTestId('calendar')).toBeVisible()
+      await page.getByTestId('month-next').click()
+      await expect(page.getByTestId('calendar')).toHaveAttribute('data-counted', 'true', { timeout: 30_000 })
+      const bars = page.getByTestId(`month-bar-${next}`)
+      await expect(bars).toHaveCount(3, { timeout: 30_000 })
+      await expect(bars.nth(0)).toHaveAttribute('title', /06:30–07:30/)
+      await expect(bars.nth(1)).toHaveAttribute('title', /04:05–04:35/)
+      await expect(bars.nth(1)).toHaveText('Inne obowiązki')
+      await expect(bars.nth(2)).toHaveAttribute('title', /04:50–05:20/)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('Miesiąc (SNT1, D418, D422): w komórce dnia do trzech pasków stałych bloków, „+N” za resztę i kropka obciążenia ze zdaniem', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-month-'))
   seed(dataDir)
