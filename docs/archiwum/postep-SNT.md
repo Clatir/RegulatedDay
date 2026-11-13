@@ -54,3 +54,15 @@ odrzuca rekordy nowszej wersji przy dociąganiu plików; „nas:5000” (host be
 `IMAGE_TYPES` i `THUMB_EXTS` – jedna lista; `restoreAttachmentFiles(ids, only)` – samo `only`; lista rodzajów rekordów w czterech miejscach okna;
 blok zadania (L2) zdjęty „Cofnij”/„Wraca na listę” zostawia niewidoczne załączniki (T805); ZIP64 > 4 GB nietestowany; wpis o załącznikach w
 `interfejs.md` pominięty (limit 20 KB).
+
+## SNT3 i SNT6 – tabela z `docs/postep.md` (przeniesiona 13.11)
+
+Sesja równoległa do ciągu J (wyjątek od „jedna sesja do `main`”, zgoda 10.11); numery D387–D399 (D380–D386 zajął ciąg L, PR #66),
+T650–T699 (zajęte D387–D388, T650–T674).
+
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| SNT6 wyszukiwarka Ctrl K | 1.7.0 | #67 | scalone 11.11 (d76ce2b), wydanie 1.7.0 z runu 43079086202 | ok. 2,5 h (4–6 h) |
+| SNT3 Markdown w notatkach | 1.9.0 | #71 | scalone 12.11 (16c1568); runy `main` po #71 i #73 czerwone na nocnych E2E (J2, E3 – godzina); wydanie 1.9.0 12.11 z runu 43148191553 po #75 (sesja J) | po przejęciu ok. 4 h (6–9 h) |
+
+Wpisy obu zadań, „Uwagi na później” i „Pytania na później” – `docs/archiwum/postep-SNT.md`.
