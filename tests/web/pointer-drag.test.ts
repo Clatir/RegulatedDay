@@ -11,12 +11,13 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { MatrixField } from '@shared/engine/casePriority'
 import { useCaseDrag, type CaseDragState } from '@renderer/features/cases/useCaseDrag'
 import { useMatrixDrag, type MatrixDragState } from '@renderer/features/cases/useMatrixDrag'
+import type { GrabEvent } from '@renderer/features/cases/usePointerDrag'
 
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
 
-type Grab = (id: string, e: { button: number; clientX: number; clientY: number; target: EventTarget }) => void
+type Grab = (id: string, e: GrabEvent) => void
 let root: Root | null = null
 let host: HTMLElement | null = null
 let field: HTMLElement | null = null
@@ -68,7 +69,7 @@ describe('przeciąganie sprawy w macierzy – koniec gestu', () => {
     expect(drops).toEqual([])
     press(out)
     ptr('pointermove', 60, 40)
-    expect(out.drag).toMatchObject({ id: 'c1', over: 'p1' })
+    expect(out.drag).toMatchObject({ id: 'c1', target: 'p1' })
     ptr('pointerup', 60, 40, 0)
     expect(drops).toEqual([['c1', 'p1']])
     expect(out.drag).toBeNull()
@@ -108,6 +109,27 @@ describe('przeciąganie sprawy w macierzy – koniec gestu', () => {
     expect(drops).toEqual([])
   })
 
+  it('blur po samym wciśnięciu (przed progiem) nie anuluje – dalszy ruch wciąż przeciąga', () => {
+    const { out, drops } = mountMatrix('p1')
+    press(out)
+    act(() => void window.dispatchEvent(new Event('blur')))
+    ptr('pointermove', 60, 40)
+    expect(out.drag).toMatchObject({ id: 'c1', target: 'p1' })
+    ptr('pointerup', 60, 40, 0)
+    expect(drops).toEqual([['c1', 'p1']])
+  })
+
+  it('Esc w trakcie przeciągania nie dociera do innego nasłuchu okna w fazie przechwytywania (stopImmediatePropagation)', () => {
+    const { out } = mountMatrix('p1')
+    press(out)
+    ptr('pointermove', 60, 40)
+    const other = vi.fn()
+    window.addEventListener('keydown', other, true)
+    key('Escape')
+    window.removeEventListener('keydown', other, true)
+    expect(other).not.toHaveBeenCalled()
+  })
+
   it('ruch bez wciśniętego przycisku (puszczone poza oknem) kończy gest bez zapisu', () => {
     const { out, drops } = mountMatrix('p1')
     press(out)
@@ -131,7 +153,7 @@ describe('przeciąganie sprawy w macierzy – koniec gestu', () => {
     const none = mountMatrix(null)
     press(none.out)
     ptr('pointermove', 60, 40)
-    expect(none.out.drag).toMatchObject({ id: 'c1', over: null })
+    expect(none.out.drag).toMatchObject({ id: 'c1', target: null })
     ptr('pointerup', 60, 40, 0)
     expect(none.drops).toEqual([])
     expect(none.out.drag).toBeNull()
@@ -153,7 +175,7 @@ describe('przeciąganie sprawy z panelu na oś – ten sam koniec gestu', () => 
     act(() => root!.render(createElement(Probe)))
     press(out)
     ptr('pointermove', 60, 40)
-    expect(out.drag).toMatchObject({ id: 'c1', minute: null })
+    expect(out.drag).toMatchObject({ id: 'c1', target: null })
     key('Escape')
     expect(out.drag).toBeNull()
     press(out)

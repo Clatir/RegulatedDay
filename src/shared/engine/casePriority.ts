@@ -6,7 +6,7 @@
 import { plural } from '../format'
 import type { PlanBlock } from '../model/plan'
 import { PRIORITIES, type CaseList, type Priority } from '../model/requests'
-import { caseCompare, withoutPlaceToday, type CaseItem, type CasePatch } from './cases'
+import { caseCompare, isDone, withoutPlaceToday, type CaseItem, type CasePatch } from './cases'
 
 // ------------------------------------------------------------------ the matrix
 
@@ -68,7 +68,8 @@ export function dropPatch(x: Pick<CaseItem, 'list' | 'record'> | undefined, fiel
  * block of requests, „zaplanowane” today) – none: no line.
  */
 export function priorityWithoutPlace(items: readonly CaseItem[], blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string): CaseItem[] {
-  const urgent = items.filter((x) => x.record.priority === 'p1' && (x.list === 'today' || x.list === 'week'))
+  // `list` already excludes the done ones; `isDone` is kept as defence in depth (a done sprawa must never raise the line).
+  const urgent = items.filter((x) => x.record.priority === 'p1' && !isDone(x.record) && (x.list === 'today' || x.list === 'week'))
   const bare = withoutPlaceToday(urgent, blocks, today)
   // Any of them with a place – no line; none – all of them.
   return bare.length === urgent.length ? bare.sort(caseCompare) : []

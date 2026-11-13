@@ -153,8 +153,8 @@ test('plan poranny: krok próśb obejmuje zadania z „Dziś” – wybrane zada
   const { today } = seedAwake(dataDir, [])
   const t = newTask('t1', Date.now(), today, { title: 'Wymienić filtr', list: 'today', estimateMin: 45 })!
   putRecord(dataDir, t)
-  putRecord(dataDir, newTask('t2', Date.now() - 1, today, { title: 'Ze Skrzynki' })!)
-  putRecord(dataDir, newRequest('r1', Date.now() - 2, { person: null, estimateMin: 20, note: 'zakupy' }))
+  putRecord(dataDir, newTask('t2', Date.now() - 1000, today, { title: 'Ze Skrzynki' })!)
+  putRecord(dataDir, newRequest('r1', Date.now() - 2000, { person: null, estimateMin: 20, note: 'zakupy' }))
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
@@ -249,7 +249,7 @@ test('Sprawy: termin ustawiony przyciskiem „Jutro” – znaczek „Termin jut
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-due-'))
   const { today } = seedAwake(dataDir, [])
   putRecord(dataDir, newTask('t1', Date.now(), today, { title: 'Zapłacić podatek' })!)
-  putRecord(dataDir, newTask('t2', Date.now() - 1, today, { title: 'Oddać formularz', dueDate: addDays(today, -2) })!)
+  putRecord(dataDir, newTask('t2', Date.now() - 1000, today, { title: 'Oddać formularz', dueDate: addDays(today, -2) })!)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
@@ -325,8 +325,8 @@ test('plan poranny: karta „Terminy” – sprawy po terminie i z terminem w pr
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-deadlines-'))
   const { today } = seedAwake(dataDir, [])
   putRecord(dataDir, newTask('a', Date.now(), today, { title: 'Zapłacić podatek', dueDate: addDays(today, -1) })!)
-  putRecord(dataDir, newTask('b', Date.now() - 1, today, { title: 'Wysłać faktury', dueDate: addDays(today, 1) })!)
-  putRecord(dataDir, newTask('c', Date.now() - 2, today, { title: 'Daleki termin', dueDate: addDays(today, 5) })!)
+  putRecord(dataDir, newTask('b', Date.now() - 1000, today, { title: 'Wysłać faktury', dueDate: addDays(today, 1) })!)
+  putRecord(dataDir, newTask('c', Date.now() - 2000, today, { title: 'Daleki termin', dueDate: addDays(today, 5) })!)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
@@ -387,8 +387,8 @@ test('Sprawy: priorytet w wierszu – pasek z lewej i kolejność; przełącznik
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-priority-'))
   const { today } = seedAwake(dataDir, [])
   putRecord(dataDir, newTask('t1', Date.now(), today, { title: 'Napisać raport' })!)
-  putRecord(dataDir, newTask('t2', Date.now() - 1, today, { title: 'Zapłacić czynsz', priority: 'p2' })!)
-  putRecord(dataDir, newTask('t3', Date.now() - 2, today, { title: 'Posprzątać biurko' })!)
+  putRecord(dataDir, newTask('t2', Date.now() - 1000, today, { title: 'Zapłacić czynsz', priority: 'p2' })!)
+  putRecord(dataDir, newTask('t3', Date.now() - 2000, today, { title: 'Posprzątać biurko' })!)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
@@ -500,9 +500,9 @@ function seedPriorityMorning(prefix: string) {
   const dataDir = mkdtempSync(join(tmpdir(), prefix))
   const { today } = seedAwake(dataDir, [])
   putRecord(dataDir, newTask('a', Date.now(), today, { title: 'Oddać wniosek', list: 'today', priority: 'p1' })!)
-  putRecord(dataDir, newTask('b', Date.now() - 1, today, { title: 'Zapłacić podatek', list: 'week', priority: 'p1' })!)
-  putRecord(dataDir, newTask('c', Date.now() - 2, today, { title: 'Kiedyś ważne', list: 'someday', priority: 'p1' })!)
-  putRecord(dataDir, newTask('d', Date.now() - 3, today, { title: 'Tylko ważne', list: 'today', priority: 'p2' })!)
+  putRecord(dataDir, newTask('b', Date.now() - 1000, today, { title: 'Zapłacić podatek', list: 'week', priority: 'p1' })!)
+  putRecord(dataDir, newTask('c', Date.now() - 2000, today, { title: 'Kiedyś ważne', list: 'someday', priority: 'p1' })!)
+  putRecord(dataDir, newTask('d', Date.now() - 3000, today, { title: 'Tylko ważne', list: 'today', priority: 'p2' })!)
   return { dataDir, today }
 }
 
@@ -554,7 +554,7 @@ test('plan poranny: bez spraw „Ważne i pilne” nie ma linii o priorytecie', 
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-priority-none-'))
   const { today } = seedAwake(dataDir, [])
   putRecord(dataDir, newTask('a', Date.now(), today, { title: 'Zwykłe zadanie', list: 'today' })!)
-  putRecord(dataDir, newTask('b', Date.now() - 1, today, { title: 'Tylko ważne', list: 'week', priority: 'p2' })!)
+  putRecord(dataDir, newTask('b', Date.now() - 1000, today, { title: 'Tylko ważne', list: 'week', priority: 'p2' })!)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
@@ -591,6 +591,17 @@ test('Sprawy: „+ Prośba” i Ctrl K „Nowa prośba” w widoku „Macierz”
       await expect(fresh).toHaveCount(1)
       await expect(fresh.getByTestId('request-note')).toBeFocused()
 
+      // A saved filter that would hide the new request („zadania”) is cleared – the row exists and has the focus (as by Ctrl K).
+      await page.getByTestId('cases-view-lists').click()
+      await page.getByTestId('filter-kind:task').click()
+      await expect(fresh).toHaveCount(0)
+      await page.getByTestId('cases-view-matrix').click()
+      await page.getByTestId('request-new').click()
+      await expect(page.getByTestId('cases-view-lists')).toHaveAttribute('aria-pressed', 'true')
+      await expect(fresh).toHaveCount(2)
+      await expect(fresh.locator('[data-testid="request-note"]:focus')).toHaveCount(1)
+      await expect(page.getByTestId('filter-kind:task')).toHaveAttribute('aria-pressed', 'false')
+
       // Ctrl K „Nowa prośba” from the matrix: the same.
       await page.getByTestId('cases-view-matrix').click()
       await expect(page.getByTestId('cases-matrix')).toBeVisible()
@@ -598,7 +609,7 @@ test('Sprawy: „+ Prośba” i Ctrl K „Nowa prośba” w widoku „Macierz”
       await page.getByTestId('search-input').fill('Nowa prośba')
       await page.keyboard.press('Enter')
       await expect(page.getByTestId('cases-view-lists')).toHaveAttribute('aria-pressed', 'true')
-      await expect(fresh).toHaveCount(2)
+      await expect(fresh).toHaveCount(3)
       await expect(fresh.locator('[data-testid="request-note"]:focus')).toHaveCount(1)
     })
     expect(errors).toEqual([])

@@ -73,6 +73,16 @@ export function filterOf(filters: readonly string[]): (x: CaseItem) => boolean {
 }
 
 /**
+ * What the page does once a new request is written (`id` – its id, null when the write was refused): null – nothing (the view stays as it
+ * was); otherwise the lists open on it and its row is brought in, the filters cleared when they would hide it (no person yet – as the
+ * search (Ctrl K) does for a sprawa it opens).
+ */
+export function afterRequestAdded(id: string | null, filters: readonly string[]): { bring: string; clearFilters: boolean } | null {
+  if (!id) return null
+  return { bring: id, clearFilters: !filterOf(filters)({ record: { kind: 'request', person: null } } as CaseItem) }
+}
+
+/**
  * The morning plan's step (D384, D408): the tasks of „Dziś” are chosen at once, the requests are not. What you change is kept as a
  * list of ids toggled against that default (a task unchecked, a request checked), so a task that comes later is chosen too.
  */

@@ -4,17 +4,11 @@
  * and letting go over the axis drops it. A short move is a click. The panel says what is dragged (`CaseDragState`), the page what a
  * drop does.
  */
-import { useMemo } from 'react'
 import { axisPoint, dropMinute } from '../plan/axisDrop'
-import { usePointerDrag, type GrabEvent } from './usePointerDrag'
+import { usePointerDrag, type GrabEvent, type PointerDragState } from './usePointerDrag'
 
-/** What is held: the sprawa, where the pointer is, and the minute of the axis under it (null – not over the axis). */
-export interface CaseDragState {
-  id: string
-  x: number
-  y: number
-  minute: number | null
-}
+/** What is held: the sprawa, where the pointer is, and the minute of the axis under it (`target`; null – not over the axis). */
+export type CaseDragState = PointerDragState<number>
 
 /** The minute of the axis under a point of the window; null – not over the axis. */
 function minuteAt(x: number, y: number): number | null {
@@ -23,7 +17,5 @@ function minuteAt(x: number, y: number): number | null {
 }
 
 export function useCaseDrag(onDrop: (id: string, minute: number) => void): { drag: CaseDragState | null; grab: (id: string, e: GrabEvent) => void } {
-  const { drag, grab } = usePointerDrag(minuteAt, onDrop)
-  const state = useMemo<CaseDragState | null>(() => (drag ? { id: drag.id, x: drag.x, y: drag.y, minute: drag.target } : null), [drag])
-  return { drag: state, grab }
+  return usePointerDrag(minuteAt, onDrop)
 }

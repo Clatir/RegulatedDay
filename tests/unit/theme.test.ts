@@ -47,7 +47,7 @@ describe('paski priorytetu na kafelku bloku i jedno źródło kolorów (D450)', 
   })
 
   it('tokeny --color-prio-* w styles/index.css mają te same kolory co PRIORITY_COLORS (jedno źródło)', () => {
-    const css = readFileSync('src/renderer/styles/index.css', 'utf8')
+    const css = readFileSync(new URL('../../src/renderer/styles/index.css', import.meta.url), 'utf8')
     for (const [p, color] of Object.entries(PRIORITY_COLORS)) expect(new RegExp(`--color-prio-${p}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(css)?.[1]?.toUpperCase(), p).toBe(color.toUpperCase())
   })
 })

@@ -29,7 +29,7 @@ import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
 import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 import { categoryOptions } from '../plan/blockView'
-import { caseTitle, DATE_PRESETS, doDateNote, filterOf, PRIORITY_CHOICES, presetDate, sectionsOf, statusParts, type PriorityChoice } from './casesLogic'
+import { caseTitle, DATE_PRESETS, afterRequestAdded, doDateNote, filterOf, PRIORITY_CHOICES, presetDate, sectionsOf, statusParts, type PriorityChoice } from './casesLogic'
 import { CasesMatrix } from './CasesMatrix'
 import { readCasesView, rememberCasesView, type CasesView } from './casesView'
 import { DueMark } from './DueMark'
@@ -52,10 +52,14 @@ export function CasesPage() {
   const [bring, setBring] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const addRequest = async () => {
-    // The new request is edited in its row of the lists (its note field gets the focus), not in the matrix.
-    setView('lists')
+    // The new request is edited in its row of the lists (its note field gets the focus), not in the matrix: the view switches only
+    // once it is written (a refused write leaves the view as it was), and the filters that would hide it are cleared (as Ctrl K does).
     const r = await createRequest({ person: null, estimateMin: DEFAULT_ESTIMATE_MIN, note: '' })
-    if (r.id) setBring(r.id)
+    const next = afterRequestAdded(r.id, filters)
+    if (!next) return
+    setView('lists')
+    if (next.clearFilters) setFilters([])
+    setBring(next.bring)
   }
   useNewShortcut(() => setAdding(true))
   // What the search (Ctrl K) left here: the command „Nowa prośba”, or a sprawa – its filters cleared when they hide it, „Zrobione”

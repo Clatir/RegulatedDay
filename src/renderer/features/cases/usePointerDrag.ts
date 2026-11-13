@@ -59,23 +59,28 @@ export function usePointerDrag<T>(resolve: (x: number, y: number) => T | null, o
       const target = at.current(ev.clientX, ev.clientY)
       if (target != null) drop.current(id, target)
     }
-    // Esc cancels a drag that has started (before it, Esc is the window's as ever); the capture phase and `preventDefault` keep it from closing a layer too.
+    // Esc cancels a drag that has started (before it, Esc is the window's as ever); the capture phase, `preventDefault` and `stopImmediatePropagation` keep it from closing a layer too (another listener of the window included).
     const key = (ev: KeyboardEvent) => {
       if (ev.key !== 'Escape' || !moved) return
       ev.preventDefault()
       ev.stopPropagation()
+      ev.stopImmediatePropagation()
       stop()
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', end)
     window.addEventListener('pointercancel', end)
-    window.addEventListener('blur', stop)
+    // A mere press is not a drag: losing the focus cancels only the one that has started.
+    const blur = () => {
+      if (moved) stop()
+    }
+    window.addEventListener('blur', blur)
     window.addEventListener('keydown', key, true)
     off.current = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', end)
       window.removeEventListener('pointercancel', end)
-      window.removeEventListener('blur', stop)
+      window.removeEventListener('blur', blur)
       window.removeEventListener('keydown', key, true)
       off.current = null
     }

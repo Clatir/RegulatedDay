@@ -66,10 +66,10 @@ export function CasesMatrix({ items, today }: { items: readonly CaseItem[]; toda
     return (
       <section
         key={f}
-        className={cx('relative flex min-w-0 flex-col gap-1.5 rounded border py-2 pr-2 pl-3.5', f === 'none' ? 'min-h-[64px]' : 'min-h-[132px]', drag?.over === f ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')}
+        className={cx('relative flex min-w-0 flex-col gap-1.5 rounded border py-2 pr-2 pl-3.5', f === 'none' ? 'min-h-[64px]' : 'min-h-[132px]', drag?.target === f ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')}
         data-matrix-field={f}
         data-testid={`matrix-${f}`}
-        data-over={drag?.over === f ? 'true' : undefined}
+        data-over={drag?.target === f ? 'true' : undefined}
         aria-label={name}
       >
         {f !== 'none' && <PriorityMark priority={f} testId={`matrix-${f}-stripe`} />}

@@ -169,8 +169,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   }
   const planCaseNext = (x: CaseItem) => planCaseAt(x.record.id, nextPlace(x.estimateMin))
   const { drag: caseDrag, grab: grabCase } = useCaseDrag(planCaseAt)
-  const draggedCase = caseDrag?.minute != null ? requests.find((x) => x.id === caseDrag.id) : undefined
-  const ghost: BlockSpan | null = draggedCase && caseDrag?.minute != null ? { startMin: caseDrag.minute, endMin: caseDrag.minute + estimateOf(draggedCase) } : null
+  const draggedCase = caseDrag?.target != null ? requests.find((x) => x.id === caseDrag.id) : undefined
+  const ghost: BlockSpan | null = draggedCase && caseDrag?.target != null ? { startMin: caseDrag.target, endMin: caseDrag.target + estimateOf(draggedCase) } : null
 
   const raw = model.data.dayFile
   const plan = model.ctx.plan
