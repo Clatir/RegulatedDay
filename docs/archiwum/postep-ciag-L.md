@@ -6,6 +6,7 @@ Wiersze i wpisy zadań ciągu L po scaleniu ich PR-ów. Stan bieżący i kolejka
 | --- | --- | --- | --- | --- |
 | L1 OPS1 serie powtarzalne | 1.12.0 | #77 | scalone 12.11, wydanie 1.12.0 opublikowane 12.11; logika `wykonawca-opus`, ekrany `wykonawca-sonnet`; dwie rundy xhigh (15 + 15 uwag; poprawione z testami – seria jednym rekordem, `RULES_VERSION` 8, rozsuwanie po „Cała seria” dziś, pamięć typów dni licznika) | ok. 5 h (5–8 h) |
 | L2 OPS2 „Sprawy” | 1.14.0 | #79 | scalone 12.11, wydanie 1.14.0 opublikowane 13.11 (run na `main` padł raz na chwiejnym teście wydajności `note-markdown`, ponowiony); logika `wykonawca-opus`, ekrany `wykonawca-sonnet`, przegląd xhigh | ok. 4 h (wykonawcy; plan 8–12 h) |
+| SNT5 podzadania (kroki) | 1.16.0 | #81 | scalone 13.11, wydanie 1.16.0 opublikowane 13.11; D442–D444 potwierdzone 13.11; logika `wykonawca-opus`, ekrany `wykonawca-sonnet`; przegląd xhigh w 5 rundach | ok. 4 h (wykonawcy; plan 3–4,5 h) |
 
 **L1 – wpis (12.11):** seria = rekord `series/<id>.json` z wersjami od daty (`model/series.ts`; „Cała seria” i „To i następne” –
 nowa wersja od dnia, jeden licznik, T715); wystąpienia w migawce dnia jak bloki szablonu (`engine/series.ts`, `origin: 'series'`,
@@ -34,3 +35,16 @@ zakończony blok); przeciąganie z panelu bez klawiatury i dotyku (jest „Zapla
 przez `retry()`; `hub.caseDays` czyta dni po kolei, bez `Promise.all` i pamięci; `check-code` nie widzi aliasów `webContents`
 okienka poza `quickWindow.ts`; test „timer E4a/E4b” w `screens.spec` raz niestabilny lokalnie. `quickWindow.lastError` nie zerowany po wyłączeniu i włączeniu
 skrótu; plik dnia parsowany wielokrotnie w `morningPlan`/`pushedInto`; `planCase` – osobne IPC `caseDays` na każdy dzień łańcucha.
+
+**SNT5 – wpis (13.11):** kroki bloku i zadania (D440; D442–D444 rozstrzygnięte w nocy według D441, potwierdzone 13.11):
+lista `{id, title, order}` w bloku dnia, szablonu, serii i zadaniu; odhaczenia dniowe w `stepsDone` pliku dnia i zadania, liść po
+liściu (T786–T792); linia kroku z ptaszkiem na pasku (T793); ekrany `renderer/features/steps/` w panelu bloku (Enter, przeciąganie,
+Alt+↑/↓, „Cofnij” tylko po usunięciu), „Szablonach”, serii i „Sprawach”, licznik na kafelku „Dziś” i „Tygodnia” (T795–T799). Przy
+okazji: okna nie dają się przenawigować plikiem lub linkiem (`windows/navigation.ts`, `keepOnPage`), test `note-markdown` – najlepszy z 5.
+Decyzje: D440, D442, D443, T786–T799. Przegląd xhigh w 4 rundach (poprawki z testami, dopiski w T786–T793). Testy: 2526 unit, 44 E2E lokalnie. Odbiór SNT5.1–SNT5.6 (SNT5.4–SNT5.6 – Tylko Ty).
+**Uwagi na później (SNT5, rundy zakończone po 5 przeglądach – przypadki brzegowe):** ptaszek z paska – wyścig odczyt→zapis
+z drugim komputerem może dać odhaczenie w zadaniu bez bloku (warunek w kolejce wycofany w rundzie 4 jako zły poziom);
+uszkodzony plik minionego dnia z `movedTo` na dziś – zmiana kroków zadania idzie sama; `folder.edit` odrzucony po zapisie
+rekordu (`persist` EPERM/ENOSPC) daje w oknie „nic nie zapisano” (`afterSend`) – możliwy duplikat; `taskDay` przez `caseDays`
+(log na każdy dzień drogi); reguła `check-code` „każde `BrowserWindow` ma `keepOnPage`”. **Rejestr T po scaleniu z SNT4:** obowiązuje
+podział T400–T499 (T840), nasz T400–T599 (T794) usunięty; T786–T793 i T795–T799 na końcu `docs/decyzje-techniczne.md`.
