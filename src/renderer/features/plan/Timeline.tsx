@@ -30,6 +30,8 @@ export interface TimelineItem {
   title: string
   marks: string[]
   color: string
+  /** The block's category – the calendar it belongs to (D419: the views of the window hide the unchecked calendars' blocks). */
+  categoryId: string
   background: boolean
   /** Passed, parked or cancelled: shown dimmed. */
   dim?: boolean

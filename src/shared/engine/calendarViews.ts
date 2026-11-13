@@ -51,6 +51,8 @@ export interface MonthDay {
   fixed: HorizonBlock[]
   /** Every block of the day – fixed or not, sessions too – but the ones taken off it (parked, cancelled): „+N” (D422). */
   blockCount: number
+  /** The category of each block `blockCount` counts, in any order – what the window needs to leave out the blocks of a calendar it hides (D419). */
+  categories: string[]
   /** The work of the day against its budget; null – not read, or a day gone by nobody used. */
   load: LoadLevel | null
   workMin: number | null
@@ -67,6 +69,7 @@ export function monthDayOf(d: HorizonDay): MonthDay {
     dayType: d.dayType,
     fixed: d.blocks.filter(monthFixed).sort((a, b) => a.startMin - b.startMin || (a.id < b.id ? -1 : 1)),
     blockCount: d.blocks.filter(onDay).length,
+    categories: d.blocks.filter(onDay).map((b) => b.categoryId),
     load: b ? loadLevel(b.workMin, b.limitMin) : null,
     workMin: b?.workMin ?? null,
     limitMin: b?.limitMin ?? null

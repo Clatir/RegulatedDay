@@ -6,6 +6,7 @@ paths:
   - "tests/unit/calendars.test.ts"
   - "tests/fs/calendars.test.ts"
   - "tests/web/calendars-*.test.ts"
+  - "tests/e2e/calendars.spec.ts"
 ---
 
 # Kalendarze (SNT2, D419, D425, T940–T996)
@@ -28,8 +29,13 @@ paths:
 - Widoki: `useVisibleBlocks(bloki)` i `useVisibleAllDay(wydarzenia)` (`features/calendars/calendarFilter.ts`) → `{ shown, hiddenCount }`
   (czyste `filterBlocks`, `filterAllDay` – jedyna droga). Przy jednym kalendarzu (D425) ukrycie nie działa, nieistniejące id nic nie
   ukrywa; pamięć ukrytych jest zapominana przy jednym kalendarzu, tylko gdy `view.rd` wczytany (T972, T990). `<CalendarChips hiddenCount={…} />` nad widokiem: nic przy jednym kalendarzu, „ukryte: N” gdy N > 0. Pamięć ukrytych:
-  `localStorage` `rd.hiddenCalendars` na tym komputerze, nigdy folder danych. Żetony wpina część B – nowy widok blokowy ma przejść
-  przez `useVisibleBlocks`.
+  `localStorage` `rd.hiddenCalendars` na tym komputerze, nigdy folder danych. Wpięte (część B, T997–T999): „Dziś” (`TodayPage`:
+  `useVisibleBlocks(items)` – `TimelineItem.categoryId` z `dayAxis`; krzywa, znaczniki i rozsuwanie z dnia, nie z pozycji), „Tydzień” / „3 dni”
+  (`useVisibleDays` z `calendars/visibleViews.ts` w `WeekBody`/`ThreeDaysBody` przed `DayGrid`), „Agenda” (po `agendaOf`), miesiąc
+  (`visibleMonthDay` w `monthCellView.ts` – `MonthDay.categories`, kropka obciążenia z silnika); paski całodniowych filtruje `AllDayBar`
+  (`useVisibleAllDay`), licznik wydarzeń widoku `useHiddenAllDay(od, do)`. Żetony pierwsze w treści widoku (po przełączniku i liniach „Cofnij”).
+  Nowy widok blokowy ma przejść przez `useVisibleBlocks` / `useVisibleDays`; nie filtruj krzywej energii, nagłówków dni, budżetu,
+  paska, wariantów ani wyszukiwania (Ctrl K otwiera blok i kartę wydarzenia z ukrytego kalendarza jak dotąd). Testy: `tests/web/calendars-views.test.ts`, `tests/e2e/calendars.spec.ts`.
 - Ustawienia: `CalendarsSection` (dodaj – do 12, nazwa, kolor, usuń z „Cofnij”), wybór „Kalendarz” w wierszu kategorii
   (`CategoriesSection`) i w karcie wydarzenia (`AllDayCard`, przy ≥ 2 kalendarzach). Zmiany od razu (nie ustawienia z datą).
 - Teksty pól i wartości: `recordText.ts` (T946). Testy: `tests/unit/calendars.test.ts`, `tests/fs/calendars.test.ts`, `tests/web/calendars-*.test.ts`.

@@ -63,6 +63,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       title: gone ? `${blockName(p, names)} (${gone})` : blockName(p, names),
       marks: [...blockMarks(p, { afterWork: info.afterWorkMark, fromYesterday: p.movedFrom === yesterday }), ...(f?.startedAt != null && f.endedAt == null ? ['biegnie'] : [])],
       color: blockColor(p.categoryId, names),
+      categoryId: p.categoryId,
       background: info.bg,
       dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),
       waits: info.waits,
@@ -90,6 +91,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       title: nameById(info.id, naming, names),
       marks: f.endedAt == null ? ['poza planem', 'biegnie'] : ['poza planem'],
       color: blockColor(info.categoryId, names),
+      categoryId: info.categoryId,
       background: false,
       dim: f.endedAt != null,
       waits: false

@@ -55,7 +55,7 @@ describe('godzina wpisana w rytuale (A6-14, A8-09)', () => {
 })
 
 describe('przeciągnięty blok nie wraca na chwilę na stare miejsce (A6-16)', () => {
-  const item = (startMin: number): TimelineItem => ({ id: 'a', startMin, endMin: startMin + 60, title: 'Praca', marks: [], color: '#888', background: false })
+  const item = (startMin: number): TimelineItem => ({ id: 'a', startMin, endMin: startMin + 60, title: 'Praca', marks: [], color: '#888', categoryId: 'inne', background: false })
 
   it('blokada upuszczenia trwa, dopóki nowe elementy dnia pokazują blok na starym miejscu', () => {
     const drop = { id: 'a', from: 10 * 60 }

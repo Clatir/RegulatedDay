@@ -16,6 +16,7 @@ import { cx } from '../../components/ui'
 import { useData } from '../../store/data'
 import { showAllDayLine, type AllDayLinePage } from '../../store/allDayLine'
 import { useMachine } from '../../store/machine'
+import { useVisibleAllDay } from '../calendars/calendarFilter'
 import { columnAt, popoverPlace } from '../week/weekLayout'
 import { ALL_DAY_CARD_WIDTH, AllDayCard } from './AllDayCard'
 import { barTitle } from './allDayText'
@@ -64,7 +65,9 @@ export function AllDayBar({
   const [typeToday, setTypeToday] = useState(false)
   const unlisten = useRef<(() => void) | null>(null)
   useEffect(() => () => unlisten.current?.(), [])
-  const layout = allDayLayout(events, dates, expanded)
+  // The bars of the unchecked calendars are not drawn (D425); a card asked for by Ctrl K (`openId`) is found among all the events.
+  const { shown } = useVisibleAllDay(events)
+  const layout = allDayLayout(shown, dates, expanded)
   const columns = `${axisPx}px repeat(${dates.length}, minmax(0, 1fr))${endPx ? ` ${endPx}px` : ''}`
   const col = (i: number) => i + 2
 
