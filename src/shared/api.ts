@@ -127,6 +127,11 @@ export interface CaseDays {
   gone: Record<string, string[]>
   /** The blocks begun by the log (of a day whose log is known – read in full or `away`; T769: an old block not begun may go). */
   begun: Record<string, string[]>
+  /**
+   * The days whose file is broken (it will never be read as it is – restored from the history at most), apart from those
+   * that cannot be read now (left out of `files` too, but read again in a moment). Absent – none, or a main process before it.
+   */
+  broken?: string[]
 }
 
 /** The quick capture saved (D385): the new task's id; refused – why (no folder, no title). */
@@ -280,6 +285,8 @@ export type WidgetAction =
   | 'quickAdd'
   /** „+” of the desktop bar: the icon's panel opens with the field (T756). */
   | 'quickOpen'
+  /** The tick of the bar's step line (D440): `<block>|<step>` ticked off on the bar's day. */
+  | 'step'
 
 /** The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests). */
 export type BarActionId = 'placeBar' | 'corner' | 'openPanel'
@@ -392,6 +399,8 @@ export interface SearchBlock {
   id: string
   title: string
   note: string
+  /** Its steps (D440) – found as its text; absent from a main process without steps. */
+  steps?: Array<{ title: string }>
 }
 
 /** The blocks of every day file of the data folder; `complete` false: some file could not be read now (never taken for none). */

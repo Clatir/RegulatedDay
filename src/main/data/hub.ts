@@ -45,7 +45,7 @@ import { seriesFrom } from '@shared/model/series'
 import { templateFrom } from '@shared/model/plan'
 import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
 import type { DayRead } from './eventLog'
-import type { DataFolder, TimerClick } from './folder'
+import { UnknownRecordError, type DataFolder, type TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
 import { seriesAnswer, seriesChange, seriesCreate, seriesEnd, seriesRemove, seriesUndo, type SeriesIo } from './series'
@@ -576,18 +576,27 @@ export class DataHub {
   }
 
   async dayFiles(dates: string[]): Promise<Record<string, RawRecord | null>> {
+    return (await this.dayFilesRead(dates)).files
+  }
+
+  /**
+   * The days' files as `dayFiles` gives them, and the days whose file is broken (`UnknownRecordError.broken` – never read as
+   * it is) apart from those unreadable for a moment: both left out of `files` (unknown is never „no file”).
+   */
+  private async dayFilesRead(dates: string[]): Promise<{ files: Record<string, RawRecord | null>; broken: string[] }> {
     const f = this.need()
-    const out: Record<string, RawRecord | null> = {}
+    const files: Record<string, RawRecord | null> = {}
+    const broken: string[] = []
     // A file that cannot be read now is left out: unknown is never „no file” (an edit made against nothing would meet it).
     for (const d of dates.slice(0, CASE_DAYS_MAX)) {
       if (!isIsoDate(d)) continue
       try {
-        out[d] = (await f.recordView(paths.day(d))) ?? null
-      } catch {
-        /* unreadable now */
+        files[d] = (await f.recordView(paths.day(d))) ?? null
+      } catch (e) {
+        if (e instanceof UnknownRecordError && e.broken) broken.push(d)
       }
     }
-    return out
+    return { files, broken }
   }
 
   /**
@@ -620,7 +629,8 @@ export class DataHub {
     // The memory bounded by its size, the oldest days out first – never by the list of the last call (a planning asks for
     // one or two days, T773).
     if (this.caseDayMemo.size > CASE_DAY_MEMO_MAX) for (const d of [...this.caseDayMemo.keys()].sort().slice(0, this.caseDayMemo.size - CASE_DAY_MEMO_MAX)) this.caseDayMemo.delete(d)
-    return { files: await this.dayFiles(list), gone, begun }
+    const { files, broken } = await this.dayFilesRead(list)
+    return { files, gone, begun, ...(broken.length ? { broken } : {}) }
   }
 
   /** The blocks of a day gone and begun by its log; a day gone by from memory while its log is as it was (T768). */

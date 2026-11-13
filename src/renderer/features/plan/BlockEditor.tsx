@@ -2,7 +2,8 @@
  * The editing panel of a block (D293: on the right of the plan): its category and variant, its start or the block it
  * follows („po sesji NY”), its length, fixed or flexible, in the foreground or the background, the marks of the second
  * shift and the weekly analysis, its routine, the computer recording a lecture, „Powtarzaj” (`repeat`, D381: a slot of the day's panel),
- * its note (a live Markdown editor, D388), its attachments (`place`, D410). Every field saves on leaving it (spec „Edycja pól”); the panel changes nothing by itself.
+ * its list „Kroki” (`steps`, D440 – a slot of the screen, above the note), its note (a live Markdown editor, D388), its
+ * attachments (`place`, D410). Every field saves on leaving it (spec „Edycja pól”); the panel changes nothing by itself.
  * A block of a series (`inSeries`, also the one edited in the list of „Szablony”) has its own hour and no marks: no „po bloku”, no „Oznaczenie” (D401).
  */
 import type { ReactNode } from 'react'
@@ -33,6 +34,7 @@ export function BlockEditor({
   actions,
   readOnly,
   repeat,
+  steps,
   inSeries,
   place
 }: {
@@ -49,6 +51,8 @@ export function BlockEditor({
   readOnly?: boolean
   /** The field „Powtarzaj” (a series' fields), above the note. */
   repeat?: ReactNode
+  /** The list „Kroki” (`StepsEditor`, D440), above the note – the screen saves its changes (a day's block, a template's, a series'). */
+  steps?: ReactNode
   /** The block is an occurrence of a series (or the series' own block): it keeps its own hour and carries no mark. */
   inSeries?: boolean
   /**
@@ -182,6 +186,7 @@ export function BlockEditor({
         </Field>
       )}
       {repeat}
+      {steps}
       <NoteEditor value={block.note} onCommit={(note) => set({ note })} olderComputers={olderComputers(computers)} readOnly={readOnly} />
       {place && <AttachmentsSection block={block} place={place} owner={owner} dropOver={drop.over} />}
       {block.moves > 0 && <p className="text-[12px] text-muted">Przeniesiony {block.moves}×.</p>}

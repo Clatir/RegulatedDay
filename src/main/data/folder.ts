@@ -199,7 +199,9 @@ function isIdRecord(rel: string): boolean {
 export class UnknownRecordError extends Error {
   constructor(
     readonly rel: string,
-    why: string
+    why: string,
+    /** The file is broken (not only unreadable now): it will not be read as it is until restored. */
+    readonly broken = false
   ) {
     super(`${rel}: ${why}`)
   }
@@ -545,7 +547,7 @@ export class DataFolder {
     if (r.status !== 'ok') {
       this.lookedAt.delete(rel)
       if (old) return old.value
-      throw new UnknownRecordError(rel, r.why)
+      throw new UnknownRecordError(rel, r.why, r.status === 'broken')
     }
     this.absent.delete(rel)
     this.cache.set(rel, { ...st, value: r.value })
@@ -838,7 +840,7 @@ export class DataFolder {
       }
       const names = namesOn(date)
       // An occurrence of a series is found as its series (one record, D401), never once per day.
-      return plan.filter((b) => b.origin !== 'series').map((b) => ({ date, id: b.id, title: blockName(b, names), note: b.note }))
+      return plan.filter((b) => b.origin !== 'series').map((b) => ({ date, id: b.id, title: blockName(b, names), note: b.note, ...(b.steps.length ? { steps: b.steps.map((x) => ({ title: x.title })) } : {}) }))
     })
     return { blocks: per.flat(), complete }
   }

@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('electron', () => {
   class BrowserWindow {
     handlers = new Map<string, (e: { preventDefault: () => void }) => void>()
-    webContents = { setWindowOpenHandler: () => undefined, send: () => undefined }
+    webContents = { setWindowOpenHandler: () => undefined, on: () => undefined, send: () => undefined }
     on(name: string, fn: (e: { preventDefault: () => void }) => void) {
       this.handlers.set(name, fn)
     }

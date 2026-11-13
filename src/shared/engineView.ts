@@ -34,7 +34,8 @@ import type { RequestRecord } from './model/requests'
 import type { Routine } from './model/routines'
 import type { AllDayEvent } from './model/allDay'
 import { ENGINE_TONE_SET, iconColor, toneColor, type Tone, type WarnStep } from './theme'
-import { barAllDay, NO_VARIANTS, type BarLine, type BarPending, type BarRoutine, type RunningRequest, type WidgetView } from './widget'
+import { firstOpen } from './model/steps'
+import { barAllDay, NO_VARIANTS, type BarLine, type BarPending, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from './widget'
 
 const MIN = 60_000
 
@@ -402,6 +403,11 @@ export function engineView(i: EngineInput): WidgetView {
     .map(autoItem)
     .reverse()
 
+  // The steps of the block in the foreground (D440): its list as its day has it ticked – the first not ticked, or all
+  // ticked. Beside the block wherever the block is (a quiet mode, the night too); never while the widget is hidden.
+  const fgSteps = front ? i.ctx.plan.find((b) => b.id === front.fg.info.id)?.steps : undefined
+  const open1 = fgSteps?.length ? firstOpen(fgSteps) : null
+  const steps: BarSteps | null = front && fgSteps?.length ? { block: front.fg.info.id, step: open1 ? { id: open1.step.id, title: open1.step.title, n: open1.n } : null, total: fgSteps.length } : null
   const block = front ? { name: nameOf(front.fg.info.id), className: `${CLASS_NAME[front.fg.info.rules.cls] ?? ''}${reserve ? ' · rezerwa energii' : ''}`, endsAt: front.endsAt } : null
   const nextFixed = state.blocks
     .filter((b) => (b.fixed || b.waits) && b.inPlan && b.start != null && at(b.start) > now && state.facts.blocks.get(b.id)?.startedAt == null)
@@ -462,6 +468,7 @@ export function engineView(i: EngineInput): WidgetView {
     // Today's ritual due and not closed, not in the night – also in „Odcinam się” (D318, T505).
     ritual: !modes.night && !state.facts.closed && state.grid.date === logicalDayOf(now) && ritualDue(state, logicalDayOf(now), i.ritualFrom ?? null),
     routines,
-    allDay: barAllDay(i.allDay ?? [], logicalDayOf(now))
+    allDay: barAllDay(i.allDay ?? [], logicalDayOf(now)),
+    steps: hidden ? null : steps
   }
 }

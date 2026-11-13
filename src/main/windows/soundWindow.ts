@@ -5,6 +5,7 @@
  * /F sends its WM_CLOSE to one window of the app only, this one when nothing is shown – and the app ends (T396, E4a.13).
  */
 import { BrowserWindow } from 'electron'
+import { keepOnPage } from './navigation'
 
 export class SoundWindow {
   private readonly win: BrowserWindow
@@ -30,7 +31,8 @@ export class SoundWindow {
         additionalArguments: ['--rd-view=sound']
       }
     })
-    this.win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    // A file or a link dropped on it never loads in it, no window opens from it (as every window, T755).
+    keepOnPage(this.win.webContents)
     // Its own title, as every window (not the page's „Regulated Day”): a list of the app's windows tells it apart.
     this.win.on('page-title-updated', (e) => e.preventDefault())
     this.win.on('close', (e) => {

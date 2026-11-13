@@ -135,11 +135,13 @@ Dekompozycję dużego bloku pracy na małe, konkretne kroki oraz możliwość ic
 ### Scenariusz z życia
 Zaplanowałeś 90-minutowy blok „Wdrożenie nowej funkcji”. Blok jest duży i łatwo stracić wątek albo rozproszyć się w połowie czasu.
 * **Przed zmianą:** Blok to jedna wielka bryła czasu; nie wiesz dokładnie, na jakim etapie jesteś.
-* **Dzięki funkcji:** Rozbijasz blok na 4 kroki: 1. Napisać testy, 2. Przygotować logikę, 3. Sprawdzić na Windowsie, 4. Zrobić commit. Uruchamiasz blok. Minimalizujesz okno. Na pasku pulpitu przy zegarze widzisz: `[ ] Napisać testy · krok 1/4`. Gdy skończysz testy, klikasz mały ptaszek wprost na pasku pulpitu – zadanie zostaje skreślone z cichym dźwiękiem sukcesu, a pasek sam wyświetla kolejny krok: `[ ] Przygotować logikę · krok 2/4`.
+* **Dzięki funkcji:** Rozbijasz blok na 4 kroki: 1. Napisać testy, 2. Przygotować logikę, 3. Sprawdzić na Windowsie, 4. Zrobić commit. Uruchamiasz blok. Minimalizujesz okno. Na pasku pulpitu przy zegarze widzisz: `[ ] Napisać testy · krok 1/4`. Gdy skończysz testy, klikasz mały ptaszek wprost na pasku pulpitu – krok zostaje odhaczony (bez dźwięku, D440), a pasek sam wyświetla kolejny krok: `[ ] Przygotować logikę · krok 2/4`; po ostatnim – „Wszystkie kroki ✓”.
 
 ### Jak wygląda praca z tą funkcją
 * **Szybkie dodawanie:** Wpisujesz treść kroku, wciskasz `Enter` i od razu wpisujesz kolejny.
-* **Wskaźnik postępu:** Na osi czasu blok pokazuje licznik (np. `✓ 3/4`), dając poczucie realnego posuwania się naprzód.
+* **Lista w panelu bloku:** sekcja „Kroki” nad notatką – pole „Dodaj krok”, ptaszek (odhacza zawsze tylko ten dzień), tytuł edytowany w miejscu, „×” usuwa (z „Cofnij”), kolejność zmieniasz przeciągnięciem uchwytu „⋮⋮” albo Alt+↑ / Alt+↓ na kroku; do 30 kroków, tytuł do 200 znaków. W bloku serii pierwsza zmiana listy pyta o zakres („Tylko to · To i następne · Cała seria”), wybór obowiązuje, dopóki panel jest otwarty na tym bloku; ptaszek nie pyta.
+* **Wskaźnik postępu:** Na osi czasu i w panelu bloku licznik (np. `✓ 3/4`), dając poczucie realnego posuwania się naprzód; kroki niczego nie liczą (energia, punktacja), a koniec bloku z nieodhaczonymi krokami o nic nie pyta (D440).
+* **Szablony, serie i Sprawy (D440; w „Szablonach” i serii sama lista bez ptaszków, w „Sprawach” lista rozwija się pod wierszem zadania, prośby nie mają kroków):** kroki bloku szablonu i serii każdego dnia startują odznaczone; blok z zadania „Spraw” dostaje jego kroki, a odhaczenie w bloku odhacza je w zadaniu.
 * **Praca bez rozpraszania:** Nie musisz co chwilę otwierać głównego programu, by sprawdzić, co masz teraz zrobić – kolejny krok zawsze czuwa na pasku pulpitu.
 
 ---

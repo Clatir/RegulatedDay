@@ -49,12 +49,20 @@ describe('trySaveWith zaznacza, że błąd był po wysłaniu (T670)', () => {
     delete (globalThis as { window?: unknown }).window
   })
 
-  it('wywołanie edit odrzucone po wysłaniu: null i afterSend', async () => {
-    stub(() => Promise.reject(new Error('IPC')))
+  it('kolejka przyjęła, błąd po odpowiedzi: null i afterSend – pytanie (SNT5, przegląd 4)', async () => {
+    // An answer that breaks what follows it (the notice): the queue took the edit, the result is not known.
+    stub(() => Promise.resolve(undefined as never))
     const state: SendState = { afterSend: false }
     expect(await trySaveWith(() => [entry], state)).toBeNull()
     expect(state.afterSend).toBe(true)
     expect(saveAnswer(null, state)).toBe('asked')
+  })
+  it('wywołanie edit odrzucone (proces główny odmówił przed kolejką): null, afterSend false – odrzucone (SNT5, przegląd 4)', async () => {
+    stub(() => Promise.reject(new Error('plik jest teraz nieczytelny')))
+    const state: SendState = { afterSend: false }
+    expect(await trySaveWith(() => [entry], state)).toBeNull()
+    expect(state.afterSend).toBe(false)
+    expect(saveAnswer(null, state)).toBe(false)
   })
   it('błąd przy budowie edycji (przed wysłaniem): null, afterSend zostaje false', async () => {
     const edit = vi.fn(() => Promise.resolve(s('applied')))

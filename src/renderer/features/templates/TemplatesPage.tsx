@@ -19,7 +19,7 @@ import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
-import { planBlock, templateFrom, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
+import { planBlock, templateFrom, templateVersionOn, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { currentSeries } from '@shared/model/series'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn } from '@shared/model/settings'
 import { SERIES_MARK, seriesText } from '@shared/seriesText'
@@ -41,6 +41,9 @@ import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { Timeline } from '../plan/Timeline'
 import { SeriesEditor, useSeriesNames } from '../series/SeriesEditor'
 import { seriesBlockOf } from '../series/seriesForm'
+import { StepsEditor } from '../steps/StepsEditor'
+import { stepsAnswer } from '../steps/stepsUi'
+import { changeTemplateSteps } from '../../store/steps'
 import { SettingNumber } from '../settings/SettingNumber'
 import { templateAdd, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
 
@@ -200,12 +203,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const change = (fn: (t: Template) => Template) => updateRecord(rel, changed(fn))
   const saveTemplate = (patch: Partial<Template>) => change((t) => ({ ...t, ...patch }))
   /** The template with the version from `from` changed (made when it is not there yet – a copy of the one in force then). */
-  const withVersion = (t: Template, patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)): Template => {
-    const inForceThen = templateVersionOn(t, from)
-    const v = t.versions.find((x) => x.from === from) ?? (inForceThen ? { ...inForceThen, from } : { from, blocks: [], budgetMin: null, maxMin: null })
-    const next = { ...v, ...(typeof patch === 'function' ? patch(v) : patch) }
-    return { ...t, versions: [...t.versions.filter((x) => x.from !== from), next].sort((a, b) => (a.from < b.from ? -1 : 1)) }
-  }
+  const withVersion = (t: Template, patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)): Template => withTemplateVersion(t, from, patch)
   /** Saves the template with the version from `from`. */
   const saveVersion = (patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)) => change((t) => withVersion(t, patch))
 
@@ -262,7 +260,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const attachments = useData((s) => s.attachments)
   const attachPlace = useMemo<BlockPlace>(() => ({ scope: 'template', templateId: template.id }), [template.id])
   const items = useMemo(() => {
-    const own = axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), movable: i.movable === true && byPlanId.has(i.id) }))
+    // A template's list has no ticks: no counter „✓ n/m” on its tiles (D443).
+    const own = axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), steps: undefined, movable: i.movable === true && byPlanId.has(i.id) }))
     const blocks = new Map(version.blocks.map((b) => [b.id, b]))
     return withAttachCounts(own, (id) => blocks.get(id) ?? null, attachPlace, attachments)
   }, [axis, byPlanId, version.blocks, attachPlace, attachments])
@@ -415,6 +414,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           sessions={settings.sessions}
           place={attachPlace}
           onChange={(patch) => patchBlock(block.id, patch)}
+          // D440: the list without boxes – every day made from the template starts with none ticked.
+          steps={<StepsEditor steps={block.steps} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}
           onClose={() => setSelected(null)}
           actions={
             <button type="button" className="btn" onClick={() => void saveVersion((v) => ({ blocks: v.blocks.filter((b) => b.id !== block.id) })).then(() => setSelected(null))} data-testid="template-block-remove">

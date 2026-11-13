@@ -12,6 +12,8 @@ import { addDays } from '@shared/time/zone'
 import { useBusy } from '../../lib/busy'
 import { useData } from '../../store/data'
 import { BlockEditor } from '../plan/BlockEditor'
+import { changeSeriesListSteps } from '../../store/steps'
+import { StepsEditor } from '../steps/StepsEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { SeriesFields } from './SeriesFields'
 import { changeSeries, endSeries, removeSeries } from './seriesActions'
@@ -102,6 +104,16 @@ export function SeriesEditor({ series, today, onClosed }: { series: Series; toda
           return changeSeries({ seriesId: series.id }, 'all', { block: b }, 'Seria zmieniona')
         }}
         onClose={onClosed}
+        // D440: the series' list without boxes (every occurrence starts with none ticked), changed for the whole series from today.
+        steps={
+          <StepsEditor
+            steps={block.steps}
+            ticks={false}
+            readOnly={ended}
+            // The op goes to each version's own list in the write's turn; „Cofnij” only for a removal (D443: an empty text – none).
+            onOp={(op) => changeSeriesListSteps(series.id, op, op.op === 'remove' ? 'Krok usunięty' : '')}
+          />
+        }
       />
     </div>
   )

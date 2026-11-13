@@ -13,6 +13,7 @@
 import { BrowserWindow } from 'electron'
 import type { Rect } from '@shared/bounds'
 import { PALETTE } from '@shared/theme'
+import { keepOnPage } from './navigation'
 
 export interface BarApply {
   visible?: boolean
@@ -60,7 +61,8 @@ export class DesktopBar {
         additionalArguments: ['--rd-view=bar']
       }
     })
-    this.win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    // A file or a link dropped on it never loads in it, no window opens from it (as every window, T755).
+    keepOnPage(this.win.webContents)
     this.win.on('page-title-updated', (e) => e.preventDefault())
     this.win.on('close', (e) => {
       // Never destroyed (the app's quit destroys it): a close from outside only hides it.

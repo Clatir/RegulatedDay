@@ -8,6 +8,7 @@
  * „Zrobione teraz”, urgent and evening requests are started in the widget (E5) – they are events of the log.
  */
 import { isIsoDate } from '../time/zone'
+import { doneSetFrom, stepsFrom, type Step } from './steps'
 
 export const REQUEST_SCHEMA = 1
 
@@ -55,6 +56,11 @@ export interface RequestRecord {
   listDay: string | null
   /** When it was marked done; null – not done, or done before „Sprawy” (`doneDayOf`). */
   doneAt: number | null
+  /**
+   * A task's list „Kroki” (D440, T786): in the file `steps` (the list) and `stepsDone` (step id → true); its block gets a
+   * copy of the list, and a tick in the block ticks it here too (`engine/steps.ts`). A version that does not know them keeps them.
+   */
+  steps: Step[]
 }
 
 /** The estimate's range (a field of whole minutes, like a block's length). */
@@ -90,7 +96,8 @@ export function requestFrom(v: unknown): RequestRecord | null {
     block: typeof v.block === 'string' && v.block ? v.block : null,
     list: isCaseList(v.list) ? v.list : null,
     listDay: isIsoDate(v.listDay) ? v.listDay : null,
-    doneAt: typeof v.doneAt === 'number' && Number.isFinite(v.doneAt) && v.doneAt > 0 ? v.doneAt : null
+    doneAt: typeof v.doneAt === 'number' && Number.isFinite(v.doneAt) && v.doneAt > 0 ? v.doneAt : null,
+    steps: stepsFrom(v.steps, doneSetFrom(v.stepsDone))
   }
 }
 

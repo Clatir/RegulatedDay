@@ -12,6 +12,7 @@ import { freedByEdit } from '@shared/engine/gaps'
 import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
 import { leavesByCancel, newUserBlock } from '@shared/engine/planEdit'
 import { seriesBlockId } from '@shared/engine/series'
+import type { SeriesScope } from '@shared/api'
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { categoryName } from '@shared/model/rd'
 import { seriesOfBlock } from '@shared/model/series'
@@ -33,6 +34,9 @@ import { dayPlace as placeOfDay, withAttachCounts } from '../attachments/attachV
 import { BlockEditor } from '../plan/BlockEditor'
 import { BlockSeries, RepeatNote, blockMayRepeat, repeatNote } from '../series/BlockSeries'
 import { askScope } from '../series/scopeAsk'
+import { StepsEditor } from '../steps/StepsEditor'
+import { saveBlockSteps } from '../steps/blockSteps'
+import { tickBlockStep } from '../../store/steps'
 import { changeSeries, removeSeries } from '../series/seriesActions'
 import { occurrenceRuleText, seriesBlockPatch, touchesSeries } from '../series/seriesForm'
 import { blockName, type Names } from '../plan/blockView'
@@ -201,6 +205,11 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     }
   }, [pick, date, plan])
   const block = draft ?? plan.find((b) => b.id === selected) ?? null
+  // The scope picked for the steps of a block of a series holds while its panel stays open (T798): another block or none – asked again.
+  const stepsScope = useRef<SeriesScope | null>(null)
+  useEffect(() => {
+    stepsScope.current = null
+  }, [block?.id])
   // „Powtarzaj” made the block the series' first occurrence – another id: the panel follows it once the day shows it.
   const follow = useRef<{ from: string; to: string } | null>(null)
   useEffect(() => {
@@ -499,6 +508,14 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               setSelected(null)
             }}
             inSeries={!draft && block.origin === 'series'}
+            steps={
+              <StepsEditor
+                steps={block.steps}
+                ticks={!draft}
+                onTick={(id, done) => tickBlockStep(date, block, id, done, raw)}
+                onOp={(op) => saveBlockSteps({ date, today, raw, series, names, patchDraft: (steps) => patchBlockDraft(date, { steps }), scope: stepsScope }, block, op, draft != null)}
+              />
+            }
             place={draft ? undefined : dayPlace}
             repeat={
               draft ? undefined : blockMayRepeat(block) ? (

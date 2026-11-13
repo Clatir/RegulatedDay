@@ -146,6 +146,7 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
           requests: [],
           task: null,
           routine: null,
+          steps: [],
           movedFrom: null,
           byVariant: false
         },

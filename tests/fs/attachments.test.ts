@@ -373,7 +373,7 @@ describe('usunięcie i „Cofnij” (D410, T805)', () => {
 describe('seria: „Tylko to” zdejmuje załączniki wystąpienia, „Cofnij” je przywraca (T805)', () => {
   it('własne załączniki wystąpienia znikają z nim jedną zmianą; załączniki serii zostają', async () => {
     const start = addDays(today(), -3)
-    write(paths.record('series', 'fizjo'), seriesJson({ id: 'fizjo', root: 'fizjo', start, until: null, count: null, archived: false, versions: [{ from: start, block: { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjo', routine: null }, rule: { kind: 'daily' }, special: 'ask' }] }))
+    write(paths.record('series', 'fizjo'), seriesJson({ id: 'fizjo', root: 'fizjo', start, until: null, count: null, archived: false, versions: [{ from: start, block: { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjo', routine: null, steps: [] }, rule: { kind: 'daily' }, special: 'ask' }] }))
     const d = addDays(today(), 2)
     const occ = seriesBlockId(d, 'fizjo')
     const mine = (await store.attachFiles(own(occ, d), [source('skierowanie.pdf')])).added[0]!
@@ -453,7 +453,7 @@ describe('wybrane rekordy z kopii: pliki tylko dla zapisanych, brakujące z kopi
 describe('seria „Tylko to”: załącznik z pliku, nie z listy w pamięci (T839)', () => {
   it('zmiana z drugiego komputera zostaje; usunięty już tam – bez zmiany', async () => {
     const start = addDays(today(), -3)
-    write(paths.record('series', 'fizjo'), seriesJson({ id: 'fizjo', root: 'fizjo', start, until: null, count: null, archived: false, versions: [{ from: start, block: { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjo', routine: null }, rule: { kind: 'daily' }, special: 'ask' }] }))
+    write(paths.record('series', 'fizjo'), seriesJson({ id: 'fizjo', root: 'fizjo', start, until: null, count: null, archived: false, versions: [{ from: start, block: { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjo', routine: null, steps: [] }, rule: { kind: 'daily' }, special: 'ask' }] }))
     const d = addDays(today(), 2)
     const occ = seriesBlockId(d, 'fizjo')
     const a = (await store.attachFiles(own(occ, d), [source('a.pdf')])).added[0]!
