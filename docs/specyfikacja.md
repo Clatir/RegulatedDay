@@ -664,7 +664,10 @@ Wszystko w aplikacji jest blokiem. Nie ma osobnej listy zadań, więc aplikacja 
   Ctrl V adresu poza polem tekstowym, adres przeciągnięty z przeglądarki). Pozycja: obraz z miniaturą, inny plik z ikoną rodzaju,
   nazwą i rozmiarem, link z ikoną strony, tytułem i domeną; klik otwiera; „Zmień nazwę”, „Pokaż w folderze”, „Usuń” (bez pytania,
   „Cofnij”); „Otwórz wszystko (N)” od dwóch. Blok dnia pokazuje też załączniki swojego szablonu i serii z dopiskiem; zmienia się je
-  tam, gdzie leżą. Na kafelku znaczek 📎 z liczbą („Dziś”, „Szablony”, „Tydzień”).
+  tam, gdzie leżą. Na kafelku znaczek 📎 z liczbą („Dziś”, „Szablony”, „Tydzień”). Usunięcie bloku z szablonu (też całego
+  szablonu), „To i następne” i „Cała seria” zabierają załączniki tego bloku szablonu albo serii ze wszystkich dni, także
+  minionych, i własne załączniki dni od daty usunięcia – do kosza na 30 dni, z „Cofnij” tej zmiany; „Zakończ serię” ich nie
+  rusza (D415, T841–T846).
 - Bloki stałe to sesje, druga zmiana, wykłady, zajęcia i jednorazowe terminy; nie przesuwa się ich początek. Elastyczne zachowują kolejność i przesuwa je rzeczywisty koniec poprzednika, nigdy jednak na godzinę wcześniejszą niż ich planowany początek. Gdy elastyczny trafi na stały, przeskakuje za niego, a aplikacja sprawdza warunek znacznika wariantów.
 - Blok stały zaplanowany na pierwszym planie zaczyna się sam o czasie z planu na pierwszym planie (widoczne w liście
   „zrobione automatycznie”), także gdy biegnie inny blok. Wyjątkiem są sesja (kategoria „Sesja tradingowa”, także druga
@@ -1697,7 +1700,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 | requests/\<id>.json | sprawy (D383): zadania własne i prośby – rodzaj, tytuł, osoba, szacunek, kategoria, notatka, lista, blok, chwila zrobienia; pliki próśb sprzed „Spraw” czytane bez migracji, pole `state` w kroku dla starszych wersji (T750) |
 | routines/\<id>.json | rutyny |
 | allday/\<id>.json | wydarzenia całodniowe i wielodniowe (D405): tytuł, daty od–do, kolor, notatka, „To wolne”; tylko informacja – silnik dnia ich nie czyta |
-| attachments/\<id>.json, attachments/\<id>/\<plik> | załączniki bloków (D410): plik skopiowany do folderu albo link (tytuł, ikona strony), właściciel – blok dnia, blok szablonu albo seria; usunięty zostaje 30 dni, potem prowadzący kasuje plik i rekord (T800–T806) |
+| attachments/\<id>.json, attachments/\<id>/\<plik> | załączniki bloków (D410): plik skopiowany do folderu albo link (tytuł, ikona strony), właściciel – blok dnia, blok szablonu albo seria; usunięty zostaje 30 dni, potem prowadzący kasuje plik i rekord (T800–T806); z blokiem szablonu i serią – D415 |
 | .presence/\<komputer>.json | obecność każdego komputera: wersja aplikacji i reguł, 10 ostatnich wersji z pierwszym i ostatnim uruchomieniem i awariami na każdej, „instaluję wersję X”, ostatnia obecność, ostatnie użycie, ostatnie wejście poza aplikacją, stan (używany, bezczynny, „Odcinam się”, „mniej pytań”, zamknięty), stan blokady ekranu, zasilanie (sieć, bateria, oszczędzanie baterii), widziany prowadzący, stan synchronizacji i ostatnie zdarzenie zapisane dla każdego otwartego dnia, także bez zdarzeń |
 | .history/ | poprzednie wersje rekordów |
 | grades/RRRR/\<komputer>.jsonl | oceny dni zamrożonych przez ten komputer; plik pochodny, da się go odtworzyć z logów |

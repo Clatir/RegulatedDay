@@ -6,6 +6,7 @@ paths:
   - "src/main/data/linkFetch.ts"
   - "src/renderer/store/attachments.ts"
   - "src/renderer/features/attachments/**"
+  - "src/renderer/features/templates/templateActions.ts"
   - "tests/unit/attachments.test.ts"
   - "tests/unit/link-fetch.test.ts"
   - "tests/fs/attachments*.test.ts"
@@ -15,7 +16,7 @@ paths:
 
 # Załączniki i linki bloków (SNT4)
 
-Źródło prawdy: D410–D412; T800–T810, T830–T839. Część A (model, folder, kopie, IPC, otwieranie) i część B (ekrany, T811–T817).
+Źródło prawdy: D410, D412, D414, D415 (zastępuje D411); T800–T810, T830–T839, T841–T846. Część A (model, folder, kopie, IPC, otwieranie) i część B (ekrany, T811–T817).
 
 ## Model (`shared/model/attachment.ts`)
 - Rekord `attachments/<id>.json`, plik w `attachments/<id>/<safeFileName>`. Format bloku bez zmian – właściciel w rekordzie:
@@ -41,7 +42,12 @@ paths:
 
 ## Usuwanie i sprzątanie
 - Miękkie `removedAt`, „Cofnij” = `AttachmentUndo` (ta sama chwila). Blok dnia (`removeDayBlock`) i „Tylko to” serii
-  (`seriesRemove`/`seriesUndo`) zdejmują własne załączniki w tej samej edycji; inne drogi – nie (T805).
+  (`seriesRemove`/`seriesUndo`) zdejmują własne załączniki w tej samej edycji (T805).
+- D415 (T841–T843): „Usuń z szablonu” i „Usuń” szablonu (`templateActions.ts`, `templateRemovalIds`), „To i następne” i
+  „Cała seria” (`removeSeriesAttachments`) zdejmują załączniki właściciela `template`/`series` ze wszystkich dni i własne dni
+  od daty usunięcia, w tej samej edycji; blok w późniejszej wersji szablonu (`blockInTemplateFrom`) – zostają. „Zakończ
+  serię” – nic. `seriesUndo` przywraca załącznik tylko z plikami, na których stoi jego blok (`standsOn`) – inaczej zostaje w koszu.
+- `ownerAlive` (T844): szablon – blok w wersji od jutra albo późniejszej; seria – bez `archived`.
 - Sprzątanie: prowadzący, `folder.attachmentSweep` (co godzinę, 30 dni, `queue.exclusive`, błąd listy = nic). Folderu bez
   rekordu nigdy nie kasuje (T806).
 

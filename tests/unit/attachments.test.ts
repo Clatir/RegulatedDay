@@ -21,12 +21,14 @@ import {
   restoreEdits,
   safeAttachmentUrl,
   safeFileName,
+  templateRemovalIds,
   type Attachment
 } from '@shared/model/attachment'
 import { charsetOf, cleanTitle, decodeEntities, iconDataUrl, imageKindOf, pageText, parsePageMeta } from '@shared/linkMeta'
 import { isOutsideBackup, isDataFile } from '../../src/main/data/backup'
 import { templateBlockId } from '@shared/engine/createDay'
 import { derivedId } from '@shared/model/ids'
+import { blockInTemplateFrom, planBlock } from '@shared/model/plan'
 
 const file = (id: string, owner: Attachment['owner'], o: Partial<Attachment> = {}): Attachment => ({
   id,
@@ -362,5 +364,41 @@ describe('runda 2 przeglądu', () => {
     expect(linkFromInput('localhost:3000')).toBe('https://localhost:3000/')
     expect(linkFromInput('10.0.0.1:8080/x')).toBe('https://10.0.0.1:8080/x')
     expect(linkFromInput('intranet.local:8080/wiki')).toBe('https://intranet.local:8080/wiki')
+  })
+})
+
+describe('usunięcie bloku szablonu zdejmuje jego załączniki (D415)', () => {
+  const tz = (blockId: string, templateId = 'zw') => ({ scope: 'template' as const, templateId, blockId })
+  const day = (date: string, blockId: string) => ({ scope: 'day' as const, date, blockId })
+
+  it('załączniki bloku szablonu ze wszystkich dni, własne dni jego wystąpień – od daty usunięcia (też kopia „back”)', () => {
+    const [before, from, later] = ['2026-11-13', '2026-11-14', '2026-11-20']
+    const list = [
+      file('t-a', tz('a')),
+      file('t-b', tz('b')),
+      file('t-a-inny', tz('a', 'inny')),
+      file('d-przed', day(before, templateBlockId(before, 'zw', 'a'))),
+      file('d-od', day(from, templateBlockId(from, 'zw', 'a'))),
+      file('d-back', day(later, derivedId(later, 'back', templateBlockId(later, 'zw', 'a')))),
+      file('d-inny', day(later, templateBlockId(later, 'inny', 'a'))),
+      file('d-b', day(later, templateBlockId(later, 'zw', 'b'))),
+      file('d-wlasny', day(later, 'a')),
+      file('t-a-kosz', tz('a'), { removedAt: 5 })
+    ]
+    expect(templateRemovalIds(list, 'zw', ['a'], from).sort()).toEqual(['d-back', 'd-od', 't-a'])
+    // A whole template: every block of it.
+    expect(templateRemovalIds(list, 'zw', ['a', 'b'], from).sort()).toEqual(['d-b', 'd-back', 'd-od', 't-a', 't-b'])
+  })
+
+  it('blok szablonu żyje od daty, gdy ma go wersja obowiązująca wtedy albo któraś późniejsza', () => {
+    const v = (from: string, ids: string[]) => ({ from, blocks: ids.map((id) => planBlock({ id, categoryId: 'inne', startMin: 600, durationMin: 30, origin: 'template' })), budgetMin: null, maxMin: null })
+    const t = { id: 'zw', name: 'Zwykły', dayType: 'zwykly' as const, weekdays: [], archived: false, versions: [v('2026-01-01', ['a', 'b']), v('2026-11-14', ['b']), v('2026-12-01', ['b', 'c'])] }
+    // Only in a version before: gone from that day on.
+    expect(blockInTemplateFrom(t, 'a', '2026-11-14')).toBe(false)
+    expect(blockInTemplateFrom(t, 'a', '2026-11-13')).toBe(true)
+    expect(blockInTemplateFrom(t, 'b', '2026-11-20')).toBe(true)
+    // Only in a later version: there from then on.
+    expect(blockInTemplateFrom(t, 'c', '2026-11-14')).toBe(true)
+    expect(blockInTemplateFrom(t, 'x', '2026-11-14')).toBe(false)
   })
 })

@@ -17,6 +17,7 @@ import { createDay, dayPlan } from '@shared/engine/createDay'
 import { RULES_VERSION, type AnyEvent } from '@shared/model/events'
 import { dayStart, logicalMinuteOf } from '@shared/time/day'
 import { seriesAskKey, seriesBlockId } from '@shared/engine/series'
+import { attachmentRel } from '@shared/model/attachment'
 import { dayFileFrom, planBlock, type PlanBlock } from '@shared/model/plan'
 import { seriesFrom, seriesJson, seriesPlans, typeOfDays, type Series } from '@shared/model/series'
 import { logicalDayOf } from '@shared/time/day'
@@ -354,5 +355,120 @@ describe('zmiany i usunięcie serii (D381)', () => {
     expect((await planOn(addDays(today, 1))).some((b) => b.origin === 'series')).toBe(false)
     expect((await planOn(addDays(today, 3))).some((b) => b.origin === 'series')).toBe(true)
     expect((await planOn(addDays(today, 4))).some((b) => b.origin === 'series')).toBe(false)
+  })
+})
+
+describe('załączniki przy usuwaniu serii (D415, zastępuje D411)', () => {
+  const start = () => addDays(today, -7)
+  const series = (id = 'fizjo'): Series => ({
+    id,
+    root: id,
+    start: start(),
+    until: null,
+    count: null,
+    versions: [{ from: start(), block: { categoryId: 'inne', variantId: null, startMin: 22 * 60, durationMin: 60, fixed: true, background: null, costs: null, bgCostPct: null, note: '', name: 'Fizjoterapeuta', routine: null, steps: [] }, rule: { kind: 'daily' }, special: 'ask' }],
+    archived: false
+  })
+  /** A link of a block (no file to copy): its record only. */
+  const attach = (id: string, owner: Record<string, unknown>) =>
+    write(attachmentRel(id), { schema: 1, id, kind: 'link', name: '', file: null, link: { url: 'https://example.org/', title: null, iconDataUrl: null, domain: 'example.org' }, owner, addedAt: 1, removedAt: null })
+  const removedAt = (id: string) => onDisk(attachmentRel(id))?.removedAt ?? null
+  const occ = (date: string, root = 'fizjo') => ({ scope: 'day', date, blockId: seriesBlockId(date, root) })
+
+  it('„Cała seria”: załączniki serii znikają ze wszystkich dni, własne – od dziś; dni minione i inne serie zostają; „Cofnij” przywraca', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    write(paths.record('series', 'inna'), seriesJson(series('inna')))
+    const [past, fut] = [addDays(today, -2), addDays(today, 3)]
+    attach('ser', { scope: 'series', root: 'fizjo' })
+    attach('dzis', occ(today))
+    attach('przysz', occ(fut))
+    attach('minione', occ(past))
+    attach('inna-ser', { scope: 'series', root: 'inna' })
+    attach('inna-dzien', occ(fut, 'inna'))
+    attach('obcy', { scope: 'day', date: fut, blockId: 'ang' })
+    const out = await hub.seriesRemove({ seriesId: 'fizjo' }, 'all')
+    expect(out.ok).toBe(true)
+    const at = removedAt('ser')
+    expect(at).toEqual(expect.any(Number))
+    expect(['dzis', 'przysz'].map(removedAt)).toEqual([at, at])
+    expect(['minione', 'inna-ser', 'inna-dzien', 'obcy'].map(removedAt)).toEqual([null, null, null, null])
+    // Only the records change (the files stay 30 days), in the change's own edit – back with its „Cofnij”.
+    expect(out.undo.map((u) => u.rel)).toEqual(expect.arrayContaining(['ser', 'dzis', 'przysz'].map(attachmentRel)))
+    expect((await hub.seriesUndo(out.undo)).ok).toBe(true)
+    expect(['ser', 'dzis', 'przysz'].map(removedAt)).toEqual([null, null, null])
+    expect(seriesOnDisk().find((s) => s.id === 'fizjo')!.archived).toBe(false)
+  })
+
+  it('„Cała seria” z dzisiejszym wystąpieniem zaczętym: ono zostaje razem z własnymi załącznikami', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const plans = seriesPlans([series()], typeOfDays([], () => null), marketDay)
+    const snapshot = createDay({ date: today, changes: [], templates: [], lectures: [], series: plans, dayFile: null, holidays: marketDay, at: null })
+    const t0 = dayStart(today)
+    const base = { c: 'pcb', v: RULES_VERSION, day: today, dom: 'timer' }
+    const id = seriesBlockId(today, 'fizjo')
+    const lines = [
+      { ...base, id: 'pcb-0', n: 0, t: t0, l: t0, k: 'day.create', snapshot },
+      { ...base, id: 'pcb-1', n: 1, t: t0 + 60_000, l: t0 + 60_000, k: 'block.start', block: id, at: t0 + 60_000, bg: false, how: 'click', planned: { categoryId: 'inne', variantId: null, durationMin: 60, tag: null, fixed: true } }
+    ]
+    write(paths.log(today, 'pcb'), `${lines.map((x) => JSON.stringify(x)).join('\n')}\n`)
+    attach('ser', { scope: 'series', root: 'fizjo' })
+    attach('dzis', occ(today))
+    attach('jutro', occ(addDays(today, 1)))
+    expect((await hub.seriesRemove({ seriesId: 'fizjo' }, 'all')).ok).toBe(true)
+    expect([removedAt('ser'), removedAt('jutro')]).toEqual([expect.any(Number), expect.any(Number)])
+    expect(removedAt('dzis')).toBeNull()
+  })
+
+  it('„To i następne”: załączniki serii znikają, własne – od dnia wystąpienia; dni przed nim zostają', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const [before, d, after] = [addDays(today, 1), addDays(today, 3), addDays(today, 5)]
+    attach('ser', { scope: 'series', root: 'fizjo' })
+    attach('przed', occ(before))
+    attach('to', occ(d))
+    attach('po', occ(after))
+    const out = await hub.seriesRemove({ date: d, blockId: seriesBlockId(d, 'fizjo') }, 'following')
+    expect(out.ok).toBe(true)
+    expect(['ser', 'to', 'po'].map(removedAt)).toEqual([expect.any(Number), expect.any(Number), expect.any(Number)])
+    expect(removedAt('przed')).toBeNull()
+    expect((await hub.seriesUndo(out.undo)).ok).toBe(true)
+    expect(['ser', 'to', 'po'].map(removedAt)).toEqual([null, null, null])
+  })
+
+  it('„To i następne”: wystąpienie przeniesione na dzień przed końcem znika z własnymi załącznikami (dodanymi w dniu, na który je przeniesiono)', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const [moved, target, from] = [addDays(today, 9), addDays(today, 1), addDays(today, 3)]
+    const id = seriesBlockId(moved, 'fizjo')
+    write(paths.day(moved), { schema: 1, date: moved, movedTo: { [id]: target } })
+    write(paths.day(target), dayFileWith(target, [planBlock({ ...series().versions[0]!.block, id, startMin: 20 * 60, origin: 'series', sourceId: 'fizjo', movedFrom: moved })]))
+    attach('przeniesione', { scope: 'day', date: target, blockId: id })
+    attach('wlasne-dnia', occ(target))
+    expect((await hub.seriesRemove({ date: from, blockId: seriesBlockId(from, 'fizjo') }, 'following')).ok).toBe(true)
+    expect(removedAt('przeniesione')).toEqual(expect.any(Number))
+    expect(removedAt('wlasne-dnia')).toBeNull()
+  })
+
+  it('„Zakończ serię” nie usuwa załączników – zostają przy dniach przed końcem', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    attach('ser', { scope: 'series', root: 'fizjo' })
+    attach('przysz', occ(addDays(today, 3)))
+    attach('dzis', occ(today))
+    expect((await hub.seriesEnd('fizjo', addDays(today, -1))).ok).toBe(true)
+    expect(seriesOnDisk()[0]!.until).toBe(addDays(today, -1))
+    expect(['ser', 'przysz', 'dzis'].map(removedAt)).toEqual([null, null, null])
+  })
+
+  it('„Cofnij”, gdy plik dnia zmienił się w międzyczasie: dzień zostaje, a jego załączniki zostają w koszu (bez załączników bez bloku)', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const d = addDays(today, 2)
+    attach('wlasny', occ(d))
+    const out = await hub.seriesRemove({ date: d, blockId: seriesBlockId(d, 'fizjo') }, 'only')
+    expect(out.ok).toBe(true)
+    const at = removedAt('wlasny')
+    expect(at).toEqual(expect.any(Number))
+    // Another computer changes the day meanwhile: „Cofnij” never writes over it – the occurrence stays out of the plan.
+    write(paths.day(d), { ...onDisk(paths.day(d))!, blocks: { ang: own('ang', 9 * 60) } })
+    await hub.seriesUndo(out.undo)
+    expect((await planOn(d)).some((b) => b.id === seriesBlockId(d, 'fizjo'))).toBe(false)
+    expect(removedAt('wlasny')).toBe(at)
   })
 })

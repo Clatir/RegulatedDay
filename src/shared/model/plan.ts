@@ -256,6 +256,15 @@ export function templateVersionOn(t: Template, date: string): TemplateVersion | 
 }
 
 /**
+ * A block of a template still makes days from `date` on (D415): the version in force then or a later one has it. One
+ * only in versions before it stays in the days gone by – its attachments went with its removal.
+ */
+export function blockInTemplateFrom(t: Template, blockId: string, date: string): boolean {
+  const inForce = templateVersionOn(t, date)
+  return t.versions.some((v) => (v === inForce || v.from > date) && v.blocks.some((b) => b.id === blockId))
+}
+
+/**
  * The version a version from `from` is written over (a template's, a series'): its own of that date, else the last one
  * before it – a new version is a copy of the one in force then, and what that one keeps (items and fields this version does
  * not read) goes on in it. Undefined – none before it.

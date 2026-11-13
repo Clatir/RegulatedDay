@@ -2,8 +2,8 @@
  * Załączniki i linki bloków (SNT4, D410): „Dołącz plik…” w panelu bloku (the test identity takes the files from RD_E2E_ATTACH
  * instead of the dialog of Windows – T812) – the file copied into attachments/<id>/ of the data folder, its original untouched,
  * a name and a size, a thumbnail for an image; „Dodaj link” (no network in the test identity – the domain stands for the title,
- * T813); the 📎N of the tile; a removal and „Cofnij”; an attachment of a series seen in its occurrence. A drop from the Explorer
- * is tested in tests/web (the window has no real files to drag here).
+ * T813); the 📎N of the tile; a removal and „Cofnij”; an attachment of a series seen in its occurrence, gone with „Cała seria”
+ * and back with its „Cofnij” (D415). A drop from the Explorer is tested in tests/web (the window has no real files to drag here).
  */
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -145,6 +145,25 @@ test('załączniki bloku: plik z „Dołącz plik…” w folderze danych, minia
       await expect(page.getByTestId('attachment-origin')).toHaveText(['z serii', 'z serii'])
       // Where they are the series', they are changed there: no „Usuń” here.
       await expect(page.getByTestId('attachment-remove')).toHaveCount(0)
+
+      // D415: „Usuń” · „Cała seria” takes the series' attachments with it (soft – the files stay 30 days); „Cofnij” brings
+      // back the series and them.
+      const seriesRecords = () =>
+        readdirSync(join(dataDir, 'attachments'))
+          .filter((n) => n.endsWith('.json'))
+          .map((n) => JSON.parse(readFileSync(join(dataDir, 'attachments', n), 'utf8')) as { owner: { scope: string }; removedAt: number | null })
+          .filter((r) => r.owner.scope === 'series')
+      expect(seriesRecords().map((r) => r.removedAt)).toEqual([null, null])
+      await page.getByTestId('block-remove').click()
+      await expect(page.getByTestId('series-scope')).toBeVisible()
+      await page.getByTestId('series-scope-all').click()
+      await expect(occurrence).toHaveCount(0, { timeout: 30_000 })
+      await expect.poll(() => seriesRecords().map((r) => typeof r.removedAt), { timeout: 30_000 }).toEqual(['number', 'number'])
+      expect(folders().length).toBe(4)
+      await page.getByRole('status').filter({ hasText: 'Usunięta seria' }).getByTestId('toast-action').click()
+      await expect(occurrence).toHaveCount(1, { timeout: 30_000 })
+      await expect(occurrence.getByTestId('attach-badge')).toHaveText('📎2')
+      await expect.poll(() => seriesRecords().map((r) => r.removedAt), { timeout: 30_000 }).toEqual([null, null])
     })
     expect(errors).toEqual([])
   } finally {

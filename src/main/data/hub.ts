@@ -42,7 +42,7 @@ import { addLink, attachmentImage, commitFiles, nodeAttachmentFiles, openAttachm
 import { attachmentFrom, ownerFrom, type AttachmentOwner } from '@shared/model/attachment'
 import { dayContextOf } from '@shared/engine/context'
 import { seriesFrom } from '@shared/model/series'
-import { templateFrom } from '@shared/model/plan'
+import { blockInTemplateFrom, templateFrom } from '@shared/model/plan'
 import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
 import type { DayRead } from './eventLog'
 import { UnknownRecordError, type DataFolder, type TimerClick } from './folder'
@@ -912,18 +912,24 @@ export class DataHub {
   }
 
   /**
-   * The block an attachment is added to is still there (T839): a day's – in that day's plan or moved from it to another
-   * day; a template's – in some version of its template (D411: one taken out stays in the versions before); a series' – a
-   * series of that root. Not known now (a file unreadable) – yes: a record shown is better than one removed by mistake.
+   * The block an attachment is added to is still there (T839, T844): a day's – in that day's plan or moved from it to another
+   * day; a template's – in the version of its template in force tomorrow or a later one (D415: one taken out of them had
+   * its attachments removed, though the days gone by keep it); a series' – a series of that root not removed („Cała
+   * seria”). Not known now (a file unreadable) – yes: a record shown is better than one removed by mistake.
    */
   private async ownerAlive(owner: AttachmentOwner): Promise<boolean> {
     try {
       const f = this.need()
       if (owner.scope === 'template') {
         const t = templateFrom(await f.recordView(paths.record('template', owner.templateId)))
-        return !!t && t.versions.some((v) => v.blocks.some((b) => b.id === owner.blockId))
+        return !!t && blockInTemplateFrom(t, owner.blockId, addDays(logicalDayOf(f.clock.now()), 1))
       }
-      if (owner.scope === 'series') return (await f.collection('series')).some((r) => seriesFrom(r)?.root === owner.root)
+      if (owner.scope === 'series') {
+        return (await f.collection('series')).some((r) => {
+          const s = seriesFrom(r)
+          return !!s && s.root === owner.root && !s.archived
+        })
+      }
       const read = await f.readDay(owner.date)
       const dayFile = await f.dayFile(owner.date, true)
       if (dayFile?.movedTo[owner.blockId]) return true
