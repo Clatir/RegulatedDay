@@ -567,6 +567,15 @@ export function morningCases(items: readonly CaseItem[]): { requests: CaseItem[]
   }
 }
 
+/**
+ * The sprawy of `items` with no place in today's plan: no block of their own (`PlanBlock.task`), not in a block of requests, not
+ * „zaplanowane” today (D409, D450) – one reading for both morning cards (`deadlineCases`, `priorityWithoutPlace`). Order kept.
+ */
+export function withoutPlaceToday(items: readonly CaseItem[], blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string): CaseItem[] {
+  const inPlan = new Set(blocks.flatMap((b) => [...(b.task ? [b.task] : []), ...b.requests]))
+  return items.filter((x) => !inPlan.has(x.record.id) && x.scheduled?.day !== today)
+}
+
 /** The minutes the chosen ones take (the place is looked for once, for all of them). */
 export function morningMinutes(requests: readonly RequestRecord[], tasks: readonly RequestRecord[]): number {
   const req = requests.reduce((s, r) => s + estimateOf(r), 0)

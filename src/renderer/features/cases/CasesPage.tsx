@@ -52,6 +52,8 @@ export function CasesPage() {
   const [bring, setBring] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const addRequest = async () => {
+    // The new request is edited in its row of the lists (its note field gets the focus), not in the matrix.
+    setView('lists')
     const r = await createRequest({ person: null, estimateMin: DEFAULT_ESTIMATE_MIN, note: '' })
     if (r.id) setBring(r.id)
   }
@@ -77,12 +79,13 @@ export function CasesPage() {
   }, [pick, all])
   useEffect(() => {
     if (!bring) return
-    const row = document.querySelector(`[data-case="${bring}"]`)
+    // The row of the lists – the matrix's card carries `data-case` too, but is not edited in place.
+    const row = document.querySelector(`[data-testid="case-row"][data-case="${bring}"]`)
     if (!row) return
     setBring(null)
     row.scrollIntoView({ block: 'center' })
     row.querySelector<HTMLElement>('[data-testid="case-title"], [data-testid="request-note"]')?.focus()
-  }, [bring, filters, showOlder, all])
+  }, [bring, filters, showOlder, all, view])
 
   const sections = sectionsOf(all, { showOlder, keep })
   const shown = sections.reduce((n, s) => n + s.items.length, 0)

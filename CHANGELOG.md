@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.17.0
+- Terminy spraw: przy zadaniu i prośbie przycisk „Terminy” otwiera dwa pola – „Termin” (termin ostateczny) i „Wykonać” (kiedy chcesz to zrobić) – z przyciskami „Dziś”, „Jutro”, „Koniec tygodnia” i „Wyczyść”.
+- Znaczki „Po terminie”, „Termin dziś”, „Termin jutro”, „Termin za N dni” na liście „Spraw”, w panelu przy osi „Dziś” i na kafelku bloku zadania. Sprawy z terminem stoją na górze listy, najbliższy pierwszy.
+- Data wykonania: w tym dniu sprawa sama staje na „Dziś”; wcześniej w tym tygodniu – na „W tym tygodniu”, dalsza data – w „Skrzynce” z dopiskiem „wykonać …”. Ręczne przeniesienie w dniu daty wygrywa.
+- Szybki zapis rozumie słowa na końcu tytułu: „!jutro”, „!pt”, „!20.11” ustawiają termin, „@jutro” – datę wykonania; podgląd pod polem pokazuje, co zostanie zapisane.
+- Plan poranny ma kartę „Terminy” (sprawy po terminie i z bliskim terminem, bez bloku) z „Na Dziś” i „Pomiń”; próg w Ustawieniach → „Sprawy” (domyślnie 2 dni).
+- Priorytety: pole „Priorytet” – „Ważne i pilne”, „Ważne”, „Pilne”, „Ani to, ani to” – z kolorowym paskiem przy sprawie i na kafelku bloku; po terminach listy idą według priorytetu.
+- Na stronie „Sprawy” przełącznik „Listy · Macierz”: macierz Eisenhowera 2×2 z polem „Bez priorytetu”, filtrem list i przeciąganiem między polami. Gdy sprawy ważne i pilne nie mają dziś miejsca w planie, plan poranny mówi to jedną linią.
+
 ## 1.14.0
 - „Sprawy” zamiast „Próśb” – ta sama pozycja w menu i ten sam skrót. Sprawa to zadanie własne (tytuł, szacunek domyślnie 30 min, kategoria domyślnie „Inne”, notatka) albo prośba (osoba, szacunek, notatka – tryby i koszt kontaktu jak dotąd). Listy: Skrzynka · Dziś · W tym tygodniu · Kiedyś / Może · Zrobione. Nagłówek „Dziś” mówi sumę szacunków („Dziś · 3 h 30 min”), „Zrobione” pokazuje ostatnie 7 dni i ma „Pokaż starsze”. Ctrl N dodaje zadanie, Ctrl K znajduje sprawy.
 - „Dziś” to lista bez godzin: zadanie nie zajmuje czasu na osi, dopóki go nie ustawisz. Niezrobione o 04:00 wracają do „W tym tygodniu” (z dopiskiem, skąd), a wieczorny rytuał je wymienia; w niedzielę przypomina też, ile spraw czeka w „Kiedyś / Może”.

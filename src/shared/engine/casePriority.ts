@@ -6,7 +6,7 @@
 import { plural } from '../format'
 import type { PlanBlock } from '../model/plan'
 import { PRIORITIES, type CaseList, type Priority } from '../model/requests'
-import { caseCompare, isDone, type CaseItem, type CasePatch } from './cases'
+import { caseCompare, withoutPlaceToday, type CaseItem, type CasePatch } from './cases'
 
 // ------------------------------------------------------------------ the matrix
 
@@ -28,7 +28,6 @@ export type MatrixField = Priority | 'none'
 /** The lists a filter of the matrix picks (`all` – every list not done); the order the filter is shown in (D450). */
 export type MatrixFilter = Exclude<CaseList, 'done'> | 'all'
 export const MATRIX_FILTERS: readonly MatrixFilter[] = ['inbox', 'today', 'week', 'someday', 'all']
-export const isMatrixFilter = (v: unknown): v is MatrixFilter => (MATRIX_FILTERS as readonly unknown[]).includes(v)
 
 export interface Matrix {
   /** The sprawy of each quarter, in the order of `caseCompare`. */
@@ -49,7 +48,7 @@ export const matrixCounts = (items: readonly CaseItem[]): Record<MatrixFilter, n
   Object.fromEntries(MATRIX_FILTERS.map((f) => [f, items.filter((x) => x.list !== 'done' && (f === 'all' || x.list === f)).length])) as Record<MatrixFilter, number>
 
 /** The priority a field stands for. */
-export const fieldPriority = (f: MatrixField): Priority | null => (f === 'none' ? null : f)
+const fieldPriority = (f: MatrixField): Priority | null => (f === 'none' ? null : f)
 
 /**
  * What dropping a sprawa on a field changes (D450): one patch, `changeCase` writes it in one go; null – nothing (it is there
@@ -69,10 +68,10 @@ export function dropPatch(x: Pick<CaseItem, 'list' | 'record'> | undefined, fiel
  * block of requests, „zaplanowane” today) – none: no line.
  */
 export function priorityWithoutPlace(items: readonly CaseItem[], blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string): CaseItem[] {
-  const inPlan = new Set(blocks.flatMap((b) => [...(b.task ? [b.task] : []), ...b.requests]))
-  const urgent = items.filter((x) => x.record.priority === 'p1' && !isDone(x.record) && (x.list === 'today' || x.list === 'week'))
-  if (urgent.some((x) => inPlan.has(x.record.id) || x.scheduled?.day === today)) return []
-  return urgent.sort(caseCompare)
+  const urgent = items.filter((x) => x.record.priority === 'p1' && (x.list === 'today' || x.list === 'week'))
+  const bare = withoutPlaceToday(urgent, blocks, today)
+  // Any of them with a place – no line; none – all of them.
+  return bare.length === urgent.length ? bare.sort(caseCompare) : []
 }
 
 /** The morning plan's line (D450): „3 sprawy ważne i pilne bez miejsca w planie”; null – none to say (no line). */

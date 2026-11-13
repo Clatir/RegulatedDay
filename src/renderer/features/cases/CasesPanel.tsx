@@ -15,6 +15,7 @@ import { caseTitle, sectionsOf, statusParts } from './casesLogic'
 import { DueMark } from './DueMark'
 import { PriorityMark } from './PriorityMark'
 import type { CaseDragState } from './useCaseDrag'
+import { ownControl } from './usePointerDrag'
 
 export function CasesPanel({ drag, grab, onPlan }: { drag: CaseDragState | null; grab: (id: string, e: React.PointerEvent) => void; onPlan: (item: CaseItem) => void }) {
   const rd = useData((s) => s.rd)
@@ -33,7 +34,7 @@ export function CasesPanel({ drag, grab, onPlan }: { drag: CaseDragState | null;
         className={cx('relative flex cursor-grab touch-none select-none flex-col gap-0.5 rounded border border-line bg-bg px-2 py-1.5', drag?.id === x.record.id && 'opacity-50')}
         onPointerDown={(e) => {
           // Not a text selection of the row's words while it is dragged.
-          if (e.button === 0 && !(e.target instanceof Element && e.target.closest('button, input, select, textarea, a'))) e.preventDefault()
+          if (e.button === 0 && !ownControl(e.target)) e.preventDefault()
           grab(x.record.id, e)
         }}
         data-testid="case-chip"

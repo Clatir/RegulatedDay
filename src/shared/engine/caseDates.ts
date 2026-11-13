@@ -13,7 +13,7 @@ import type { PlanBlock } from '../model/plan'
 import type { RequestRecord } from '../model/requests'
 import { dayWord, shortDay } from '../quickDates'
 import { addDays, daysBetween } from '../time/zone'
-import { caseCompare, isDone, listOf, weekEndOf, type CaseItem } from './cases'
+import { caseCompare, isDone, listOf, weekEndOf, withoutPlaceToday, type CaseItem } from './cases'
 
 /** Up to this many days ahead the badge counts the days („Termin za 7 dni”); further – the date (D409). */
 export const DUE_DAYS_COUNTED = 7
@@ -66,12 +66,9 @@ export function deadlineSkippedRaw(raw: Raw | null, date: string, id: string): R
  */
 export function deadlineCases(items: readonly CaseItem[], blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string, thresholdDays: number, asked: Readonly<Record<string, string>>, stepIds: ReadonlySet<string>): CaseItem[] {
   const last = addDays(today, thresholdDays)
-  const inPlan = new Set(blocks.flatMap((b) => [...(b.task ? [b.task] : []), ...b.requests]))
-  return items
-    .filter((x) => {
-      const due = x.record.dueDate
-      if (due == null || due > last || x.list === 'done' || x.list === 'today') return false
-      return !stepIds.has(x.record.id) && !inPlan.has(x.record.id) && x.scheduled?.day !== today && asked[deadlineAskKey(x.record.id)] == null
-    })
-    .sort(caseCompare)
+  const due = items.filter((x) => {
+    const d = x.record.dueDate
+    return d != null && d <= last && x.list !== 'done' && x.list !== 'today' && !stepIds.has(x.record.id) && asked[deadlineAskKey(x.record.id)] == null
+  })
+  return withoutPlaceToday(due, blocks, today).sort(caseCompare)
 }

@@ -483,6 +483,11 @@ test('priorytet: pasek przy sprawie w panelu przy osi „Dziś” i na kafelku j
       const edge = await tile.evaluate((el) => getComputedStyle(el).borderLeftColor)
       const stripe = await tile.getByTestId('block-priority').evaluate((el) => getComputedStyle(el).backgroundColor)
       expect(edge).not.toBe(stripe)
+      // Not against the edge: 2 px of the tile's own background between them (the colours may be the same – two stripes, not one).
+      const edgeWidth = await tile.evaluate((el) => parseFloat(getComputedStyle(el).borderLeftWidth))
+      const tileBox = (await tile.boundingBox())!
+      const stripeBox = (await tile.getByTestId('block-priority').boundingBox())!
+      expect(stripeBox.x - (tileBox.x + edgeWidth)).toBeGreaterThanOrEqual(1.9)
     })
     expect(errors).toEqual([])
   } finally {
@@ -559,6 +564,42 @@ test('plan poranny: bez spraw „Ważne i pilne” nie ma linii o priorytecie', 
       await page.getByTestId('checkin-skip').click()
       await expect(page.getByTestId('queue-pick')).toContainText('Zwykłe zadanie')
       await expect(page.getByTestId('priority-line')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Sprawy: „+ Prośba” i Ctrl K „Nowa prośba” w widoku „Macierz” przełączają na „Listy” i dają fokus polu nowej prośby (HKU3)', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-matrix-new-'))
+  const { today } = seedAwake(dataDir, [])
+  putRecord(dataDir, newTask('t1', Date.now(), today, { title: 'Napisać raport', priority: 'p1' })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await page.getByTestId('nav-requests').click()
+      await page.getByTestId('cases-view-matrix').click()
+      await expect(page.getByTestId('cases-matrix')).toBeVisible()
+      const fresh = page.locator('[data-testid="case-row"][data-kind="request"]')
+
+      // The button: the lists, the note field of the new request focused (the matrix has no row to edit).
+      await page.getByTestId('request-new').click()
+      await expect(page.getByTestId('cases-view-lists')).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.getByTestId('cases-matrix')).toHaveCount(0)
+      await expect(fresh).toHaveCount(1)
+      await expect(fresh.getByTestId('request-note')).toBeFocused()
+
+      // Ctrl K „Nowa prośba” from the matrix: the same.
+      await page.getByTestId('cases-view-matrix').click()
+      await expect(page.getByTestId('cases-matrix')).toBeVisible()
+      await page.keyboard.press('Control+k')
+      await page.getByTestId('search-input').fill('Nowa prośba')
+      await page.keyboard.press('Enter')
+      await expect(page.getByTestId('cases-view-lists')).toHaveAttribute('aria-pressed', 'true')
+      await expect(fresh).toHaveCount(2)
+      await expect(fresh.locator('[data-testid="request-note"]:focus')).toHaveCount(1)
     })
     expect(errors).toEqual([])
   } finally {

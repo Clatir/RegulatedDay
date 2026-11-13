@@ -8,7 +8,7 @@ import { ownHourBlock, plannedSpan } from '@shared/engine/blocks'
 import { namingOf } from '@shared/engine/context'
 import { dueBadge } from '@shared/engine/caseDates'
 import { isDone } from '@shared/engine/cases'
-import type { Priority } from '@shared/model/requests'
+import type { Priority, RequestRecord } from '@shared/model/requests'
 import { atOf, logicalSpan } from '@shared/engine/grid'
 import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
@@ -36,6 +36,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
   const g = state.grid
   const lm = (idx: number) => logicalMinuteOf(model.date, atOf(g, idx))
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  // The sprawa of a block's task, found once per block by id (its badge and its priority).
+  const sprawaOf = new Map(names.requests.map((r) => [r.id, r]))
   const yesterday = addDays(model.date, -1)
   const nowIdx = now != null ? Math.round((now - g.start) / 60_000) : null
   // D365: a block running now (of its own hour – not a session, a lecture, a class of a „zjazd”, the second shift) has its bottom edge.
@@ -46,6 +48,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
     const info = byId.get(p.id)
     if (!info) continue
     const span = plannedSpan(info, byId)
+    const sprawa = p.task ? sprawaOf.get(p.task) : undefined
     const f = state.facts.blocks.get(p.id)
     const gone = f?.parkedAt != null && f.startedAt == null ? 'zaparkowany' : f?.cancelledAt != null && f.startedAt == null ? 'odwołany' : null
     // A started block stands where it ran (E4a); one still to come where the forecast puts it today, else at its plan.
@@ -71,8 +74,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),
       waits: info.waits,
       ...(p.origin === 'series' ? { series: true } : {}),
-      ...taskBadge(p.task, names, today, model.date),
-      ...taskPriority(p.task, names),
+      ...taskBadge(sprawa, today, model.date),
+      ...taskPriority(sprawa),
       ...(edge ? { resize: 'end' as const } : {}),
       // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
       // a class imported from the PDF of „zjazdy” – D357, nor the second shift – D192), not passed.
@@ -122,16 +125,14 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
 }
 
 /** The due-date badge of the task of a block (D409), for a day that is not gone by. */
-function taskBadge(task: string | null | undefined, names: Names, today: string | null, date: string): { badge?: TimelineItem['badge'] } {
-  if (!task || today == null || date < today) return {}
-  const r = names.requests.find((x) => x.id === task)
-  const b = r ? dueBadge(r, today) : null
+function taskBadge(r: RequestRecord | undefined, today: string | null, date: string): { badge?: TimelineItem['badge'] } {
+  if (!r || today == null || date < today) return {}
+  const b = dueBadge(r, today)
   return b ? { badge: b } : {}
 }
 
 /** The priority of the task of a block (D450), as long as the task is not done – on any day the block stands on. */
-function taskPriority(task: string | null | undefined, names: Names): { priority?: Priority } {
-  const r = task ? names.requests.find((x) => x.id === task) : undefined
+function taskPriority(r: RequestRecord | undefined): { priority?: Priority } {
   return r?.priority && !isDone(r) ? { priority: r.priority } : {}
 }
 

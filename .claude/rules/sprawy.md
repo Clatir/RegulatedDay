@@ -25,7 +25,7 @@ paths:
 # Sprawy, Skrzynka, szybki zapis (OPS2, L2)
 
 Źródło prawdy: D383, D384, D385, D402 (`docs/decyzje.md`), opis dla użytkownika – `docs/specyfikacja-rozszerzen.md`
-„## 9. Prawdziwy Backlog i Skrzynka Spraw”. Decyzje T750–T758 (logika), T759–T774 (po przeglądach), T780–T785 (ekrany); terminy i daty wykonania HKU2 – D409, D451–D454, T850–T869; priorytety i macierz HKU3 – D450, T870–T879. Prośby w dniu (zdarzenia logu) – reguły `prosby-warianty.md`.
+„## 9. Prawdziwy Backlog i Skrzynka Spraw”. Decyzje T750–T758 (logika), T759–T774 (po przeglądach), T780–T785 (ekrany); terminy i daty wykonania HKU2 – D409, D451–D454, T850–T869; priorytety i macierz HKU3 – D450, T870–T884. Prośby w dniu (zdarzenia logu) – reguły `prosby-warianty.md`.
 
 ## Pliki
 - `model/requests.ts` – rekord sprawy w `requests/<id>.json` (te same pliki co prośby, T750): `kind` (`task` / `request`),
@@ -56,10 +56,10 @@ paths:
   `data-lo/hi/ppm`, `plan/axisDrop.ts`), `CasesRitual` (rytuał, T783); ustawienia – `settings/QuickKeyField` i `quickKey.ts` (T784);
   plan poranny – `MorningPlan` przez `morningCases` / `planMorning` (T782). Testy ekranów bez DOM: `tests/web/cases-screens.test.ts`.
 - HKU2 B (ekrany terminów, T860–T866): wiersz strony – przycisk „Terminy” → `DatesForm` (`DateField` + `DATE_PRESETS` / `presetDate`), `DueMark` (znaczek, `dueTone`), `statusParts(x, today)` z `doText`; kafelek na osi – `TimelineItem.badge` z `dayAxis(…, today)` (`taskBadge`); karta „Terminy” planu porannego – `morningDeadlines`; podgląd szybkiego zapisu (`preview`) w `QuickApp`, `QuickField` paska i `NewTask`; sekcja „Sprawy” ustawień (`FieldsSection group="cases"`). Testy: `tests/web/cases-dates-view.test.ts`, E2E w `cases.spec.ts` i `quick.spec.ts`.
-- HKU3 (priorytety, D450, T870–T879): `priority` rekordu (`'p1'`–`'p4'` | null, `PRIORITY_NAMES` – jedno miejsce nazw), `CasePatch.priority`; `engine/casePriority.ts` –
+- HKU3 (priorytety, D450, T870–T884): `priority` rekordu (`'p1'`–`'p4'` | null, `PRIORITY_NAMES` – jedno miejsce nazw), `CasePatch.priority`; `engine/casePriority.ts` –
   macierz (`MATRIX_ROWS`, `matrixOf`, `matrixCounts`, `dropPatch`) i linia planu porannego (`priorityWithoutPlace`, `priorityLine`; to nie silnik dnia).
   Ekrany: `PriorityMark` (pasek 3 px: wiersz strony, chip panelu, kafelek bloku – `TimelineItem.priority`), `Choice` „Priorytet” w drugim wierszu wiersza,
-  `CasesMatrix` + `useMatrixDrag` (cel: `data-matrix-field`), `casesView.ts` (pamięć „Listy · Macierz” w localStorage), `morningPriorityLine`.
+  `CasesMatrix` + `useMatrixDrag` (cel: `data-matrix-field`; gest wspólny z `useCaseDrag` – `usePointerDrag`, `ownControl`: Esc, blur i puszczenie poza oknem kończą bez zapisu, T883), `casesView.ts` (pamięć „Listy · Macierz” w localStorage), `morningPriorityLine`.
   Testy: `tests/unit/engine/cases-priority.test.ts`, `tests/web/cases-priority-view.test.ts`, E2E w `cases.spec.ts`, kontrast pasków w `theme.test.ts`.
 
 ## Zasady
@@ -82,8 +82,9 @@ paths:
   otwiera panel z polem (pasek nie przyjmuje klawiszy, T756). „+” jest w każdym trybie paska.
 
 ## Pułapki
-- Pasek priorytetu to grafika, nie tekst: `PRIORITY_COLORS` / tokeny `--color-prio-*` nie są ściemniane jasnością (ściemnione tło karty zabrałoby im kontrast – test 3:1);
+- Pasek priorytetu to grafika, nie tekst: `PRIORITY_COLORS` / tokeny `--color-prio-*` nie są ściemniane jasnością (ściemnione tło karty zabrałoby im kontrast – test 3:1 także względem `blockFill`; na kafelku bloku pasek stoi 2 px od krawędzi kategorii – `PriorityMark apart`, T882);
   tekst nigdy nie niesie priorytetu samym kolorem (`aria-label` i `title` = nazwa ćwiartki). Pasek pulpitu bez priorytetu (D229).
+- Nowa prośba z macierzy (przycisk, Ctrl K) przełącza na „Listy” – wiersz do edycji jest tylko tam; efekt `bring` szuka `case-row`, nie karty (T881).
 - Linia planu porannego liczy sprawy P1 „Dziś” i „W tym tygodniu” bez miejsca (blok zadania, blok próśb, „zaplanowane” dziś); „Kiedyś / Może” i „Skrzynka” nie.
 - Lista spraw w procesie głównym (`collection`) bywa do 60 s stara (`LIST_TRUST_MS`) – przed zapisem czytaj rekord
   (`recordView`) i sprawdź warunek jeszcze raz (`answerTask`).

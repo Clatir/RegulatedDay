@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { caseCompare, caseGroupOf, caseItems, listedRaw, morningCases, patchedRaw, type CaseItem } from '@shared/engine/cases'
-import { dropPatch, fieldPriority, MATRIX_FILTERS, MATRIX_ROWS, matrixCounts, matrixOf, priorityLine, priorityWithoutPlace } from '@shared/engine/casePriority'
+import { dropPatch, MATRIX_FILTERS, MATRIX_ROWS, matrixCounts, matrixOf, priorityLine, priorityWithoutPlace } from '@shared/engine/casePriority'
 import { newRequest, newTask, NO_PRIORITY_NAME, PRIORITIES, PRIORITY_NAMES, priorityFrom, requestFrom, type NewTask, type RequestRecord } from '@shared/model/requests'
 import { placeLogical } from '@shared/time/day'
 
@@ -162,7 +162,7 @@ describe('macierz: pola, filtr, „Bez priorytetu” (D450)', () => {
     const done = items([{ ...task('c'), state: 'done', list: 'done', doneAt: at(WED) }])[0]!
     expect(dropPatch(done, 'p1')).toBeNull()
     expect(dropPatch(undefined, 'p1')).toBeNull()
-    expect([fieldPriority('none'), fieldPriority('p3')]).toEqual([null, 'p3'])
+    expect(dropPatch(none, 'p3')).toEqual({ priority: 'p3' })
   })
 
   it('zapis po upuszczeniu to `patchedRaw` z jednym polem – reszta rekordu bez zmian', () => {

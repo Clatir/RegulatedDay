@@ -18,6 +18,7 @@ import { caseTitle } from './casesLogic'
 import { DueMark } from './DueMark'
 import { PriorityMark } from './PriorityMark'
 import { useMatrixDrag, type MatrixDragState } from './useMatrixDrag'
+import { ownControl } from './usePointerDrag'
 
 const FILTER_LABELS: Record<MatrixFilter, string> = { inbox: CASE_LIST_NAMES.inbox, today: CASE_LIST_NAMES.today, week: CASE_LIST_NAMES.week, someday: CASE_LIST_NAMES.someday, all: 'wszystkie' }
 
@@ -42,7 +43,7 @@ export function CasesMatrix({ items, today }: { items: readonly CaseItem[]; toda
         className={cx('flex cursor-grab touch-none select-none flex-col gap-0.5 rounded border border-line bg-bg px-2 py-1.5', drag?.id === x.record.id && 'opacity-50')}
         onPointerDown={(e) => {
           // Not a text selection of the card's words while it is dragged.
-          if (e.button === 0 && !(e.target instanceof Element && e.target.closest('button, input, select, textarea, a'))) e.preventDefault()
+          if (e.button === 0 && !ownControl(e.target)) e.preventDefault()
           grab(x.record.id, e)
         }}
         data-testid="matrix-card"
