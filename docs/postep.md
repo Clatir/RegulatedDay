@@ -77,17 +77,14 @@ Numery: D440–D449, T786–T799 (T772–T779 – ostatnie poprawki L2). SNT4 = 
 
 
 ## Blok 4 (HKU) – stan
-Wpis HKU1 i „Przed HKU1” – `docs/archiwum/postep-HKU.md`. Drzewo `.claude/worktrees/whku1`, paczka HKU2 + HKU3 na
-`claude/paczka-hku2-hku3` (D413: jeden PR, jedna wersja, jedno wydanie), od 6587e46 (L2, 1.14.0).
+**Blok 4 zamknięty 13.11:** HKU1 (1.13.0), HKU2 + HKU3 (1.17.0, paczka D413). Wpisy – `docs/archiwum/postep-HKU.md`.
+Odbiór: HKU1.1–1.5, HKU2.1–2.4, HKU3.1–3.2 w `docs/odbior.md`. Numery HKU wolne: D458–D459, T886–T899.
 
-| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
-| --- | --- | --- | --- | --- |
-| HKU1 wydarzenia całodniowe | 1.13.0 | #78 | wydane 12.11 22:05 (run 43291188216); D405–D407, T720–T749 | ok. 7 h (2–3 h) |
-| HKU2 termin i data wykonania | 1.17.0 (paczka) | – | gotowe 13.11: części A i B, dwie rundy high (8 + 9 uwag); T850–T869, T880; D409, D451–D455 | – (2–3 h) |
-| HKU3 priorytety i macierz | 1.17.0 (paczka) | – | gotowe 13.11: dwie rundy high; T870–T884; D450, D456 | – (2,5–3,5 h) |
-
-**Blok 4 bez pauz (12.11, zgoda użytkownika):** HKU2 i HKU3 bez „dalej”; w nocy 12/13.11 zachowanie widoczne rozstrzygam rekomendacją (D „do potwierdzenia”, lista niżej). Numery HKU: D405–D409, D450–D459, T720–T749, T850–T899. Kolejka do `main`: SNT5 1.16.0 → paczka HKU2 + HKU3 1.17.0 (`main` wcielony 13.11, 4e70878); przed scaleniem pytanie do sesji L (regulatedday-a8) i SNT4 (regulatedday-ab).
-**Potwierdzone 13.11 rano (D457):** D451–D455 bez zmian; D456 – filtr macierzy pamiętany po zmianie strony (w paczce 1.17.0).
+| Zadanie | Wersja | PR | Stan |
+| --- | --- | --- | --- |
+| HKU1 wydarzenia całodniowe | 1.13.0 | #78 | wydane 12.11 22:05 |
+| HKU2 termin i data wykonania | 1.17.0 | #82 | wydane 13.11 10:32 (run 43389466888) |
+| HKU3 priorytety i macierz | 1.17.0 | #82 | wydane 13.11 10:32 |
 
 ## Blok 3 – paczka SNT (D416)
 **Przed etapem (13.11, 07:20):** koniec Bloku 3 – SNT4b → SNT1 → SNT2 bez pauz do „dalej” (D416), jedna paczka według
