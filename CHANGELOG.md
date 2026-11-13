@@ -7,7 +7,7 @@
 - Szybki zapis rozumie słowa na końcu tytułu: „!jutro”, „!pt”, „!20.11” ustawiają termin, „@jutro” – datę wykonania; podgląd pod polem pokazuje, co zostanie zapisane.
 - Plan poranny ma kartę „Terminy” (sprawy po terminie i z bliskim terminem, bez bloku) z „Na Dziś” i „Pomiń”; próg w Ustawieniach → „Sprawy” (domyślnie 2 dni).
 - Priorytety: pole „Priorytet” – „Ważne i pilne”, „Ważne”, „Pilne”, „Ani to, ani to” – z kolorowym paskiem przy sprawie i na kafelku bloku; po terminach listy idą według priorytetu.
-- Na stronie „Sprawy” przełącznik „Listy · Macierz”: macierz Eisenhowera 2×2 z polem „Bez priorytetu”, filtrem list i przeciąganiem między polami. Gdy sprawy ważne i pilne nie mają dziś miejsca w planie, plan poranny mówi to jedną linią.
+- Na stronie „Sprawy” przełącznik „Listy · Macierz”: macierz Eisenhowera 2×2 z polem „Bez priorytetu”, filtrem list (widok i filtr zostają po zmianie strony) i przeciąganiem między polami. Gdy sprawy ważne i pilne nie mają dziś miejsca w planie, plan poranny mówi to jedną linią.
 
 ## 1.16.0
 - Kroki bloku: w panelu bloku nad notatką jest lista „Kroki”. Wpisz krok i wciśnij Enter – pole zostaje na kolejny. Ptaszek odhacza krok (tylko na tym dniu), tytuł zmienisz w miejscu, „×” usuwa krok (z „Cofnij”), a kolejność zmienisz przeciągnięciem uchwytu „⋮⋮” albo klawiszami Alt+↑ / Alt+↓ na kroku. Najwyżej 30 kroków, tytuł do 200 znaków. Kroki niczego nie liczą (energia, punkty), a koniec bloku z nieodhaczonymi krokami o nic nie pyta.

@@ -3,7 +3,7 @@
  * above, „Pilne” and „Ani to, ani to” below (the classic layout: „ważne” down the page, „pilne” across it) – and under them the
  * field „Bez priorytetu”. A card is dragged from field to field: one `changeCase` writes the new priority. In a field the sprawy
  * stand in the order of the lists (due dates first), each with its due date's badge and the name of its list. A filter picks
- * the list (default: all). Nothing here blocks (D72).
+ * the list (default: all; remembered by the window – `casesView.ts`, D457). Nothing here blocks (D72).
  */
 import { useState } from 'react'
 import { dueBadge } from '@shared/engine/caseDates'
@@ -17,6 +17,7 @@ import { useData } from '../../store/data'
 import { caseTitle } from './casesLogic'
 import { DueMark } from './DueMark'
 import { PriorityMark } from './PriorityMark'
+import { readMatrixFilter, rememberMatrixFilter } from './casesView'
 import { useMatrixDrag, type MatrixDragState } from './useMatrixDrag'
 import { ownControl } from './usePointerDrag'
 
@@ -24,7 +25,9 @@ const FILTER_LABELS: Record<MatrixFilter, string> = { inbox: CASE_LIST_NAMES.inb
 
 export function CasesMatrix({ items, today }: { items: readonly CaseItem[]; today: string }) {
   const rd = useData((s) => s.rd)
-  const [filter, setFilter] = useState<MatrixFilter>('all')
+  // D457: the filter is remembered by the window, as the view is.
+  const [filter, setFilterNow] = useState<MatrixFilter>(readMatrixFilter)
+  const setFilter = (f: MatrixFilter) => (rememberMatrixFilter(f), setFilterNow(f))
   const matrix = matrixOf(items, filter)
   const counts = matrixCounts(items)
   const { drag, grab } = useMatrixDrag((id, field) => {

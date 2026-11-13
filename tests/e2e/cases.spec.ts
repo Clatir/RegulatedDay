@@ -441,10 +441,13 @@ test('Sprawy: priorytet w wierszu – pasek z lewej i kolejność; przełącznik
       await expect.poll(() => records(dataDir).filter((r) => r.priority == null).length).toBe(2)
       await expect(page.getByTestId('matrix-none').getByTestId('matrix-card')).toHaveCount(2)
 
-      // The choice is remembered by the window: away and back – still the matrix; „Listy” remembered too.
+      // The choice is remembered by the window: away and back – still the matrix, with its filter (D457); „Listy” remembered too.
+      await page.getByTestId('matrix-filter-inbox').click()
       await page.getByTestId('nav-today').click()
       await page.getByTestId('nav-requests').click()
       await expect(page.getByTestId('cases-matrix')).toBeVisible()
+      await expect(page.getByTestId('matrix-filter-inbox')).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.getByTestId('matrix-filter-all')).toHaveAttribute('aria-pressed', 'false')
       await page.getByTestId('cases-view-lists').click()
       await expect(page.getByTestId('cases-inbox-list')).toBeVisible()
       await page.getByTestId('nav-today').click()
@@ -539,9 +542,12 @@ test('plan poranny: „Pokaż w „Sprawach”” z linii o priorytecie otwiera 
       await page.getByTestId('goals-skip').click()
       await page.getByTestId('checkin-skip').click()
       await expect(page.getByTestId('priority-line-text')).toHaveText('2 sprawy ważne i pilne bez miejsca w planie')
-      // The link: the page „Sprawy” on the matrix, the sprawa under „Ważne i pilne”.
+      // The link: the page „Sprawy” on the matrix, the sprawa under „Ważne i pilne” – a filter remembered from before (D457)
+      // that would hide it is put back to „wszystkie”.
+      await page.evaluate(() => localStorage.setItem('rd.casesMatrixFilter', 'someday'))
       await page.getByTestId('priority-line-open').click()
       await expect(page.getByTestId('cases-matrix')).toBeVisible()
+      await expect(page.getByTestId('matrix-filter-all')).toHaveAttribute('aria-pressed', 'true')
       await expect(page.getByTestId('matrix-p1')).toContainText('Zapłacić podatek')
     })
     expect(errors).toEqual([])

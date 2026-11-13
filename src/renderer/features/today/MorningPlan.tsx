@@ -35,7 +35,7 @@ import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
 import { moveCase, planMorning, useCases, type MorningResult } from '../../store/cases'
 import { caseTitle, isMorningChosen, morningChosen, morningDeadlines, morningPriorityLine } from '../cases/casesLogic'
-import { rememberCasesView } from '../cases/casesView'
+import { rememberCasesView, rememberMatrixFilter } from '../cases/casesView'
 import { queueRowText } from '../cases/casesUi'
 import { DueMark } from '../cases/DueMark'
 import { navigate, toast, useUi } from '../../store/ui'
@@ -361,7 +361,7 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
             {priorityLine}
           </span>
           {/* The matrix puts them all under „Ważne i pilne”, whichever list they stand on – the page opens on it. */}
-          <button type="button" className="btn" onClick={() => (rememberCasesView('matrix'), navigate('requests'))} data-testid="priority-line-open">
+          <button type="button" className="btn" onClick={() => (rememberCasesView('matrix'), rememberMatrixFilter('all'), navigate('requests'))} data-testid="priority-line-open">
             Pokaż w „Sprawach”
           </button>
         </div>

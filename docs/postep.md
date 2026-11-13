@@ -137,9 +137,7 @@ Wpis HKU1 i „Przed HKU1” – `docs/archiwum/postep-HKU.md`. Drzewo `.claude/
 | HKU3 priorytety i macierz | 1.17.0 (paczka) | – | gotowe 13.11: dwie rundy high; T870–T884; D450, D456 | – (2,5–3,5 h) |
 
 **Blok 4 bez pauz (12.11, zgoda użytkownika):** HKU2 i HKU3 bez „dalej”; w nocy 12/13.11 zachowanie widoczne rozstrzygam rekomendacją (D „do potwierdzenia”, lista niżej). Numery HKU: D405–D409, D450–D459, T720–T749, T850–T899. Kolejka do `main`: SNT5 1.16.0 → paczka HKU2 + HKU3 1.17.0 (`main` wcielony 13.11, 4e70878); przed scaleniem pytanie do sesji L (regulatedday-a8) i SNT4 (regulatedday-ab).
-**Do potwierdzenia rano (noc 12/13.11):** D451 (pola dat w wierszu sprawy, data wykonania wyliczana, ręczne
-przeniesienie w dniu daty wygrywa), D452 (szczegóły z budowy HKU2: przeniesienie przed datą, karta terminów bez spraw
-z „Dziś”, „!pt” w piątek, format „cz 19.11”, sekcja „Sprawy” w Ustawieniach, Ctrl K), D453 (ekrany HKU2: przycisk „Terminy”, znaczek w linii statusu i na kafelku, podgląd, miejsce karty i sekcji).
+**Potwierdzone 13.11 rano (D457):** D451–D455 bez zmian; D456 – filtr macierzy pamiętany po zmianie strony (w paczce 1.17.0).
 
 ## SNT4 – stan
 **Przed SNT4 (12.11):** załączniki i linki w blokach; pytania 12.11 – D410 (D411, D412 do potwierdzenia). Drzewo

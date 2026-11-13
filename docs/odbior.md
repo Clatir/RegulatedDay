@@ -2281,7 +2281,7 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
   „Bez priorytetu”; przeciągnij jedną i puść poza oknem; zmień filtr na „Dziś”; przejdź na „Dziś” i wróć. Dodaj
   „+ Prośba” w widoku macierzy. Rano, z P1 na „Dziś” bez bloku – spójrz na plan poranny.
 - **Oczekiwany efekt:** cztery pola z opisanymi osiami i „Bez priorytetu” pod nimi; przeciągnięcie zmienia priorytet
-  od razu, puszczenie poza oknem nic nie zmienia; po powrocie nadal „Macierz”; „+ Prośba” przełącza na listy z polem
+  od razu, puszczenie poza oknem nic nie zmienia; po powrocie nadal „Macierz” z filtrem „Dziś”; „+ Prośba” przełącza na listy z polem
   do wpisania; w planie porannym „N spraw ważnych i pilnych bez miejsca w planie” z „Pokaż w „Sprawach””, a gdy
   któraś P1 ma blok – bez linii (D450, D456).
 - **Nie przechodzi, gdy:** przeciągnięcie nie zapisuje albo zapisuje po puszczeniu poza oknem, sprawy zrobione są

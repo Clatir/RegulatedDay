@@ -16,7 +16,7 @@ import { newRequest, newTask, requestFrom, type NewTask } from '@shared/model/re
 import { placeLogical } from '@shared/time/day'
 import { PAGE_LABEL, pageKeys } from '@renderer/app/pages'
 import { PRIORITY_CHOICES, morningPriorityLine, sectionsOf } from '@renderer/features/cases/casesLogic'
-import { readCasesView, rememberCasesView } from '@renderer/features/cases/casesView'
+import { readCasesView, readMatrixFilter, rememberCasesView, rememberMatrixFilter } from '@renderer/features/cases/casesView'
 import { dayAxis } from '@renderer/features/plan/dayItems'
 import { searchRecords } from '@renderer/features/search/records'
 import { fieldText, valueText } from '@renderer/lib/recordText'
@@ -186,6 +186,28 @@ describe('widok „Listy” / „Macierz” pamiętany przez okno (D450)', () =>
   it('brak pamięci w ogóle (storage niedostępne) – „Listy”', () => {
     expect(readCasesView()).toBe('lists')
     expect(() => rememberCasesView('matrix')).not.toThrow()
+  })
+
+  it('filtr macierzy pamiętany (D457): bez zapisu „wszystkie”, zapisany wraca, obca wartość i pamięć, która rzuca – „wszystkie”', () => {
+    const s = storage()
+    vi.stubGlobal('localStorage', s.api)
+    expect(readMatrixFilter()).toBe('all')
+    rememberMatrixFilter('week')
+    expect(s.map.get('rd.casesMatrixFilter')).toBe('week')
+    expect(readMatrixFilter()).toBe('week')
+    vi.stubGlobal('localStorage', storage({ 'rd.casesMatrixFilter': 'done' }).api)
+    expect(readMatrixFilter()).toBe('all')
+    const broken = {
+      getItem: () => {
+        throw new Error('denied')
+      },
+      setItem: () => {
+        throw new Error('denied')
+      }
+    }
+    vi.stubGlobal('localStorage', broken)
+    expect(readMatrixFilter()).toBe('all')
+    expect(() => rememberMatrixFilter('today')).not.toThrow()
   })
 })
 
