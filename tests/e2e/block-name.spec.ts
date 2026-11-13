@@ -61,3 +61,32 @@ test('nazwa bloku (D430, D431): „+ Blok”, kursor w polu „Nazwa”, „Doda
     await app.close()
   }
 })
+
+test('nazwa bloku (D431): nowy blok na osi „Szablonów” – zapisany od razu, panel z kursorem w polu „Nazwa”', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-block-name-tpl-'))
+  seedAwake(dataDir, [])
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-templates').click()
+      await page.getByTestId('template-item').first().click()
+      const hours = page.getByTestId('template-timeline').getByTestId('timeline-hours')
+      await hours.scrollIntoViewIfNeeded()
+      const box = (await hours.boundingBox())!
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+      await expect(page.getByTestId('block-editor')).toBeVisible({ timeout: 15_000 })
+      const name = page.getByTestId('block-name')
+      await expect(name).toBeFocused()
+      await page.keyboard.type('Plan tygodnia')
+      await page.keyboard.press('Enter')
+      await expect(page.getByTestId('template-timeline').locator('[data-block-title="Plan tygodnia"]')).toBeVisible({ timeout: 15_000 })
+      // Enter only commits the name of a block already saved: the panel stays.
+      await expect(page.getByTestId('block-editor')).toBeVisible()
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

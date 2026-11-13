@@ -23,6 +23,7 @@ import { addDays, weekday } from '@shared/time/zone'
 import { atOf } from '@shared/engine/grid'
 import { TimeField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
+import { useBusy } from '../../lib/busy'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
 import { isSaved, saveAnswer, useData, type SendState } from '../../store/data'
@@ -116,6 +117,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const draft = stored?.date === date ? stored.block : null
   const setDraft = (b: PlanBlock | null) => setBlockDraft(date, b)
   const [exchange, setExchange] = useState<{ block: PlanBlock; proposal: ExchangeProposal } | null>(null)
+  // „Dodaj” and Enter in the name of the new block (D431): one save at a time – a second one while the first saves is ignored.
+  const [adding, runAdd] = useBusy()
   const [dialog, setDialog] = useState<null | 'type' | 'copy' | { move: PlanBlock } | 'addType'>(null)
   const [menu, setMenu] = useState(false)
   // D365: the bottom edge of a running block dropped past the boundary – its cost waits for „Potwierdź” or „Anuluj” for 10 s,
@@ -533,7 +536,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             inSeries={!draft && block.origin === 'series'}
             // D430, D431: „+ Blok” (Ctrl+N, a range on the axis, „Więcej” of „Tydzień”) – the cursor in „Nazwa”, Enter there
             // adds the block as „Dodaj” (with the name just typed – the draft of this render does not have it yet).
-            newBlock={draft ? { add: (name) => void add({ ...draft, name }) } : undefined}
+            newBlock={draft ? { add: (name) => void runAdd(() => add({ ...draft, name })) } : undefined}
             steps={
               <StepsEditor
                 steps={block.steps}
@@ -553,7 +556,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             actions={
               draft ? (
                 <>
-                  <button type="button" className="btn btn-accent" onClick={() => void add(draft)} data-testid="block-add">
+                  <button type="button" className="btn btn-accent" disabled={adding} onClick={() => void runAdd(() => add(draft))} data-testid="block-add">
                     Dodaj
                   </button>
                   <button type="button" className="btn" onClick={() => setDraft(null)}>

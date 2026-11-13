@@ -155,6 +155,8 @@ export const DRAG_STEP_MIN = 5
 export const MIN_BLOCK_MIN = 5
 /** The longest own name of a block. */
 export const BLOCK_NAME_MAX = 120
+/** A block's own name as read from a file or a log (D430, D431): trimmed, at most `BLOCK_NAME_MAX`; anything else or empty – none. */
+export const blockNameFrom = (v: unknown): string | null => (typeof v === 'string' ? v.trim().slice(0, BLOCK_NAME_MAX) || null : null)
 
 function costsFrom(v: unknown): PlanBlock['costs'] {
   if (!isPlain(v)) return null
@@ -185,7 +187,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     costs: costsFrom(v.costs),
     bgCostPct: intIn(v.bgCostPct, 0, 100),
     note: str(v.note).slice(0, NOTE_MAX),
-    name: str(v.name).trim().slice(0, BLOCK_NAME_MAX) || null,
+    name: blockNameFrom(v.name),
     origin: origins.includes(v.origin as string) ? (v.origin as PlanBlock['origin']) : origin,
     sourceId: typeof v.sourceId === 'string' ? v.sourceId : null,
     recorder: typeof v.recorder === 'string' ? v.recorder : null,

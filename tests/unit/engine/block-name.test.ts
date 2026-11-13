@@ -12,11 +12,15 @@ import { putBlock } from '@shared/data/dayEdits'
 import { activityOf } from '@shared/engine/activity'
 import { createDay, dayPlan, templateBlockId } from '@shared/engine/createDay'
 import { newSeries, seriesBlockId } from '@shared/engine/series'
+import { namingOf } from '@shared/engine/context'
+import { computeDay } from '@shared/engine/day'
+import { foldFacts } from '@shared/engine/facts'
+import { gridOf } from '@shared/engine/grid'
 import { timerAction } from '@shared/engine/timer'
 import { agendaOf, monthBlockOf } from '@shared/engine/calendarViews'
 import { horizonDay } from '@shared/engine/week'
 import { engineView } from '@shared/engineView'
-import { dayFileFrom, planBlock, type DayFile, type Template } from '@shared/model/plan'
+import { BLOCK_NAME_MAX, dayFileFrom, planBlock, type DayFile, type PlanBlock, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { newTask, requestFrom, type RequestRecord } from '@shared/model/requests'
 import { seriesPlans, typeOfDays, type SeriesBlock } from '@shared/model/series'
@@ -138,5 +142,58 @@ describe('blok wyjęty z planu po starcie zachowuje własną nazwę (D336, D431)
 
   it('inna kategoria przy starcie (inny blok o tym id) – jak dotąd, kategoria ze startu', () => {
     expect(nameById('b', day({ categoryId: 'inne', variantId: null }), names)).toBe('Inne obowiązki')
+  })
+})
+
+describe('nazwa zapisana przy starcie bloku (D336, D431, T1024)', () => {
+  const date = '2026-10-28'
+  /** A block of `plan` started at 08:00 by a click (the real start: `timerAction`), then the day without it in its plan and with `snapshot` blocks. */
+  function startedThenGone(plan: PlanBlock[], snapshotBlocks: PlanBlock[]) {
+    const s = new Scenario({ date, plan }).observe('07:00', null)
+    const t = s.at('08:00')
+    const r = timerAction(s.contextAt(t), s.stateAt(t), { a: 'start', block: 'a' }, t)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, t)
+    const at = s.at('08:30')
+    const ctx = s.contextAt(at, { plan: [], snapshot: { ...s.snapshot, blocks: snapshotBlocks } })
+    return { s, ctx, at, start: r.events.find((e) => e.k === 'block.start') as unknown as { planned: Record<string, unknown> } }
+  }
+  const own = { ...block({ id: 'a', cat: 'analiza', at: '08:00', min: 60, origin: 'user' }), name: 'Analiza rynku' }
+
+  it('start zapisuje nazwę z planu w `planned`; blok bez nazwy – null', () => {
+    expect(startedThenGone([own], []).start.planned.name).toBe('Analiza rynku')
+    expect(startedThenGone([{ ...own, name: null }], []).start.planned.name).toBeNull()
+  })
+
+  it('blok dodany ręcznie (nie ma go w migawce), zaczęty i usunięty w trakcie – zachowuje nazwę; pasek pulpitu też', () => {
+    const { ctx, at, s } = startedThenGone([own], [])
+    const names = { rd: rdFrom({}), settings: s.settings, routines: [], requests: [] }
+    const state = computeDay(ctx)
+    expect(nameById('a', namingOf(ctx, state.facts), names)).toBe('Analiza rynku')
+    const view = engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, at, 'pca'), now: at, name: (b) => blockName(b, names), care: { waterOn: false, waterEveryMin: 45, breakAfterMin: 90, solitudeAfterMin: 30 }, modePrefs: { sessionMode: true, classMode: true }, pending: null })
+    expect(view.block!.name).toBe('Analiza rynku')
+  })
+
+  it('blok szablonu przemianowany tylko dziś i odwołany po starcie – nazwa z chwili startu, nie stara z migawki', () => {
+    const today = { ...own, origin: 'template' as const, name: 'Analiza tygodnia' }
+    const { ctx, s } = startedThenGone([today], [{ ...today, name: 'Analiza rynku' }])
+    const names = { rd: rdFrom({}), settings: s.settings, routines: [], requests: [] }
+    expect(nameById('a', namingOf(ctx, computeDay(ctx).facts), names)).toBe('Analiza tygodnia')
+  })
+
+  it('start zapisany przez starszą wersję (bez pola) – jak dotąd: nazwa z migawki, gdy to ten sam blok', () => {
+    const g = gridOf(date)
+    const ev = (planned: Record<string, unknown>) => ({ id: 'pca-1', c: 'pca', n: 1, t: g.start + 60 * 60_000, l: g.start + 60 * 60_000, v: 8, day: date, dom: 'timer', k: 'block.start', block: 'a', at: g.start + 4 * 60 * 60_000, bg: false, planned, confirmUntil: null, how: 'click' })
+    const base = { categoryId: 'analiza', variantId: null, durationMin: 60, tag: null, fixed: false }
+    const day = (planned: Record<string, unknown>): NamingDay => {
+      const f = foldFacts(g, [ev(planned)] as never)
+      return { plan: [], snapshotBlock: (id) => (id === 'a' ? own : null), planned: (id) => f.blocks.get(id)?.planned }
+    }
+    expect(nameById('a', day(base), names)).toBe('Analiza rynku')
+    // A name written: read as a block's name of a file is (trimmed, at most BLOCK_NAME_MAX, anything else – none).
+    expect(nameById('a', day({ ...base, name: '  Przegląd  ' }), names)).toBe('Przegląd')
+    expect(nameById('a', day({ ...base, name: 'x'.repeat(BLOCK_NAME_MAX + 5) }), names)).toBe('x'.repeat(BLOCK_NAME_MAX))
+    expect(nameById('a', day({ ...base, name: 42 }), names)).toBe('Analiza')
+    expect(nameById('a', day({ ...base, name: null }), names)).toBe('Analiza')
   })
 })

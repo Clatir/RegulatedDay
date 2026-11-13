@@ -99,8 +99,12 @@ export type TimerEvent =
       block: string
       at: number
       bg: boolean
-      /** What the plan said at the start – a later edit of the plan never changes it (spec); costs since E2. */
-      planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null }
+      /**
+       * What the plan said at the start – a later edit of the plan never changes it (spec); costs since E2. `name` – its own
+       * name then (D431, 1.19.0; null – none): a block taken out of the plan after it began keeps it. Absent – a start by an
+       * older version, or of a block outside the plan: named by the snapshot (`namedById`).
+       */
+      planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null; name?: string | null }
       /** Minutes after the boundary confirmed in advance up to this instant (two clicks, „Dodaj bez wymiany”). */
       confirmUntil: number | null
       /** 'plan' – it happened at its planned time, said afterwards (the ritual): its times are no measure. */

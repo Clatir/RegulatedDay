@@ -7,17 +7,21 @@
  * A block without a name looks as before. D431: the small window „Nowy blok” of „Tydzień” has the field too (the cursor in it,
  * the name in the block it saves and in the one „Więcej” takes to the day); Enter in the name of a new block adds it.
  */
+import { readFileSync } from 'node:fs'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { blockKind, blockName } from '@shared/blockName'
 import { computeDay } from '@shared/engine/day'
+import { timerAction } from '@shared/engine/timer'
 import { computeEnergy } from '@shared/engine/energy'
 import { agendaOf, monthBlockOf } from '@shared/engine/calendarViews'
 import { horizonDay } from '@shared/engine/week'
 import { BLOCK_NAME_MAX, planBlock, type PlanBlock } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
+import { TextField } from '@renderer/components/fields'
 import { BlockEditor } from '@renderer/features/plan/BlockEditor'
 import { dayAxis } from '@renderer/features/plan/dayItems'
 import { Timeline } from '@renderer/features/plan/Timeline'
@@ -31,7 +35,7 @@ import type { DayModel } from '@renderer/store/day'
 import { closeToast, useUi } from '@renderer/store/ui'
 import { block as dslBlock, Scenario } from '../unit/engine/dsl'
 
-vi.mock('@renderer/features/week/weekActions', async (orig) => ({ ...(await orig<typeof import('@renderer/features/week/weekActions')>()), addWeekBlocks: vi.fn(async () => ({ saved: ['2026-11-18'], failed: [], pending: [], push: null })) }))
+vi.mock('@renderer/features/week/weekActions', async (orig) => ({ ...(await orig<typeof import('@renderer/features/week/weekActions')>()), addWeekBlocks: vi.fn(async () => ({ saved: ['2026-11-18'], failed: [], pending: [], unknown: false, push: null })) }))
 
 const names = { rd: rdFrom({}), settings: DEFAULT_SETTINGS, routines: [], requests: [] }
 
@@ -55,7 +59,7 @@ afterEach(() => {
   vi.mocked(addWeekBlocks).mockClear()
 })
 
-async function mount(block: PlanBlock, o: { newBlock?: { add: (name: string | null) => void }; readOnly?: boolean } = {}) {
+async function mount(block: PlanBlock, o: { newBlock?: { add: (name: string | null) => void }; focusName?: boolean; readOnly?: boolean } = {}) {
   const onChange = vi.fn((_p: Partial<PlanBlock>) => undefined)
   host = document.createElement('div')
   document.body.append(host)
@@ -81,6 +85,7 @@ const typeEnter = (el: HTMLInputElement, v: string) =>
     }
     el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
   })
+const enter = (el: Element, o: KeyboardEventInit = {}) => act(() => void el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...o })))
 
 const analiza = planBlock({ id: 'b1', categoryId: 'analiza', startMin: 9 * 60, durationMin: 45, origin: 'user' })
 
@@ -154,6 +159,24 @@ describe('pole „Nazwa” w panelu bloku', () => {
     expect(document.activeElement).not.toBe(field)
   })
 
+  it('nowy blok w „Szablonach” (zapisany od razu): kursor w polu „Nazwa” (`focusName`), Enter tylko zatwierdza (D431)', async () => {
+    const { field, onChange } = await mount(analiza, { focusName: true })
+    expect(document.activeElement).toBe(field)
+    typeEnter(field, 'Plan tygodnia')
+    expect(onChange).toHaveBeenCalledWith({ name: 'Plan tygodnia' })
+    const page = readFileSync('src/renderer/features/templates/TemplatesPage.tsx', 'utf8')
+    // The block made on the template's axis opens its panel with the cursor in „Nazwa”.
+    expect(page).toMatch(/focusName=\{fresh === block\.id\}/)
+    expect(page).toMatch(/setFresh\(b\.id\)/)
+  })
+
+  it('„Dziś”: Enter w nazwie i „Dodaj” idą przez jedną blokadę zapisu (`useBusy`) – blok nie zapisze się dwa razy', () => {
+    const page = readFileSync('src/renderer/features/today/TodayPage.tsx', 'utf8')
+    expect(page).toMatch(/const \[adding, runAdd\] = useBusy\(\)/)
+    expect(page).toMatch(/disabled=\{adding\} onClick=\{\(\) => void runAdd\(\(\) => add\(draft\)\)\} data-testid="block-add"/)
+    expect(page).toMatch(/newBlock=\{draft \? \{ add: \(name\) => void runAdd\(\(\) => add\(\{ \.\.\.draft, name \}\)\) \} : undefined\}/)
+  })
+
   it('zakończona seria (tylko do odczytu): pole nie przyjmuje wpisu', async () => {
     const { field } = await mount({ ...analiza, origin: 'series' }, { readOnly: true })
     expect(field.readOnly).toBe(true)
@@ -203,6 +226,24 @@ describe('kafelek bloku z nazwą', () => {
     expect(lines.p![1]).toBe('10:00–10:45')
     expect(lines.s![1]).toBe('11:00–11:45')
     expect(lines.v![1]).toBe('12:00–12:45 · Nauka — słuchanie')
+  })
+
+  it('oś „Dziś”: blok zaczęty i usunięty z planu w trakcie – nazwa i kategoria przy godzinach, jak w „Tygodniu”', () => {
+    const own = { ...dslBlock({ id: 'a', cat: 'analiza', at: '08:00', min: 60, origin: 'user' }), name: 'Analiza rynku' }
+    const s = new Scenario({ date: '2026-10-28', plan: [own] }).observe('07:00', null)
+    const t = s.at('08:00')
+    const r = timerAction(s.contextAt(t), s.stateAt(t), { a: 'start', block: 'a' }, t)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, t)
+    const at = s.at('08:30')
+    // Taken out of the plan after it began; a block added by hand – none in the snapshot.
+    const ctx = s.contextAt(at, { plan: [], snapshot: { ...s.snapshot, blocks: [] } })
+    const state = computeDay(ctx)
+    const n = { ...names, settings: s.settings }
+    const item = dayAxis({ date: '2026-10-28', ctx, state, energy: computeEnergy(ctx, state) } as unknown as DayModel, n, at).items.find((i) => i.id === 'a')!
+    expect([item.title, item.kind]).toEqual(['Analiza rynku', 'Analiza'])
+    const col = horizonDay(ctx, 'today').blocks.find((b) => b.id === 'a')!
+    expect([blockName(col.named, n), blockKind(col.named, n)]).toEqual(['Analiza rynku', 'Analiza'])
   })
 
   it('oś „Dziś”: oznaczenia idą za kategorią', () => {
@@ -290,5 +331,79 @@ describe('okienko „Nowy blok” w „Tygodniu” (D431)', () => {
     expect(onMore).toHaveBeenCalledTimes(1)
     expect(onMore.mock.calls[0]![0].name).toBe('Analiza rynku')
     expect(addWeekBlocks).not.toHaveBeenCalled()
+  })
+})
+
+describe('okienko „Nowy blok”: Enter w trakcie zapisu, kursor bez przewijania (D431)', () => {
+  const D = '2026-11-18'
+  const mountPopover = async () => {
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () =>
+      root!.render(createElement(NewBlockPopover, { dates: [D], startMin: 9 * 60, durationMin: 60, today: '2026-11-13', namesOf: () => names, place: { left: 0, top: 0 }, onClose: () => undefined, onDates: () => undefined, onMore: () => undefined }))
+    )
+    return host.querySelector<HTMLInputElement>('[data-testid="week-new-name"]')!
+  }
+
+  it('Enter, gdy „Dodaj” jest wyłączone (zapis trwa) – nic nie zapisuje drugi raz, kursor zostaje w polu', async () => {
+    let finish: (v: Awaited<ReturnType<typeof addWeekBlocks>>) => void = () => undefined
+    vi.mocked(addWeekBlocks).mockImplementationOnce(() => new Promise((r) => (finish = r)))
+    const field = await mountPopover()
+    typeEnter(field, 'Analiza rynku')
+    await act(async () => undefined)
+    expect(addWeekBlocks).toHaveBeenCalledTimes(1)
+    act(() => field.focus())
+    enter(field)
+    expect(addWeekBlocks).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(field)
+    await act(async () => finish({ saved: [D], failed: [], pending: [], unknown: false, push: null }))
+  })
+
+  it('kursor w polu bez przewijania siatki (`preventScroll`)', async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    const field = await mountPopover()
+    expect(focus.mock.contexts).toContain(field)
+    expect(focus.mock.calls[focus.mock.contexts.indexOf(field)]).toEqual([{ preventScroll: true }])
+    focus.mockRestore()
+  })
+})
+
+describe('TextField: Enter z `onEnter`', () => {
+  const field = async (o: { multiline?: boolean } = {}) => {
+    const onEnter = vi.fn()
+    const onCommit = vi.fn()
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(TextField, { value: '', onCommit, onEnter, 'data-testid': 'f', ...o })))
+    return { onEnter, onCommit, el: host.querySelector<HTMLInputElement>('[data-testid="f"]')! }
+  }
+
+  it('Enter w trakcie składania znaku (IME) – nic: ani zatwierdzenia, ani `onEnter`', async () => {
+    const { el, onEnter, onCommit } = await field()
+    act(() => {
+      el.focus()
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, 'あ')
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    enter(el, { isComposing: true })
+    expect(onEnter).not.toHaveBeenCalled()
+    expect(onCommit).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(el)
+  })
+
+  it('pole wielowierszowe: Ctrl+Enter zatwierdza, `onEnter` nie (tylko pole jednowierszowe)', async () => {
+    const { el, onEnter, onCommit } = await field({ multiline: true })
+    const area = host!.querySelector<HTMLTextAreaElement>('textarea')!
+    act(() => {
+      area.focus()
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(area, 'notatka')
+      area.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    enter(area, { ctrlKey: true })
+    expect(onCommit).toHaveBeenCalledWith('notatka')
+    expect(onEnter).not.toHaveBeenCalled()
+    expect(el ?? area).toBeTruthy()
   })
 })

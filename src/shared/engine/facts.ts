@@ -11,7 +11,7 @@
 import type { Costs } from '../model/categories'
 import { compareEvents, eventAt, isKnown, type AnyEvent, type CloseHow, type EventBase, type LogEvent, type MinuteClass } from '../model/events'
 import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
-import type { PlanBlock } from '../model/plan'
+import { blockNameFrom, type PlanBlock } from '../model/plan'
 import type { RoutineVersion } from '../model/routines'
 import { atOf, idxOf, type Grid } from './grid'
 
@@ -73,7 +73,8 @@ export interface BlockFact {
   startedAt: number | null
   endedAt: number | null
   runs: Run[]
-  planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null } | null
+  /** As its start wrote it (`block.start`); `name` only when the start wrote one (D431), read as a file's (`blockNameFrom`). */
+  planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null; name?: string | null } | null
   confirms: Confirm[]
   /** Confirmed „Przedłuż”, in order. */
   extends: Array<{ at: number; minutes: number }>
@@ -320,7 +321,8 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         }
         const at = idx(e.at)
         b.startedAt = at
-        b.planned = { ...e.planned, variantId: e.planned.variantId ?? null, tag: e.planned.tag ?? null, fixed: e.planned.fixed === true }
+        const { name, ...planned } = e.planned
+        b.planned = { ...planned, variantId: planned.variantId ?? null, tag: planned.tag ?? null, fixed: planned.fixed === true, ...(name !== undefined ? { name: blockNameFrom(name) } : {}) }
         b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })
         if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil), order: orderOf(e) })
         break

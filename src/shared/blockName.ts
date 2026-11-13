@@ -34,20 +34,34 @@ export const namedOf = (b: { categoryId: string; variantId: string | null; origi
   ...more
 })
 
+/**
+ * What names a block (`NamedBlock`) of a block of the plan or of what names one – those fields alone, nothing else of it (its hour,
+ * its steps …): the one list of them for the columns of „Tydzień”, the month and `namedById`.
+ */
+export function namedOfPlan(b: NamedBlock): NamedBlock {
+  const out: NamedBlock = { categoryId: b.categoryId, variantId: b.variantId, routine: b.routine, requests: b.requests, note: b.note }
+  if (b.origin !== undefined) out.origin = b.origin
+  if (b.sourceId !== undefined) out.sourceId = b.sourceId
+  if (b.name !== undefined) out.name = b.name
+  if (b.task !== undefined) out.task = b.task
+  return out
+}
+
 /** What names the blocks of a day by id (`namingOf` in engine/context.ts builds it from the day and its facts). */
 export interface NamingDay {
   plan: readonly PlanBlock[]
   /** The snapshot's entry of a block (also one cancelled for the day, a session the answer „tak” added); null: none. */
   snapshotBlock: (id: string) => PlanBlock | null
-  /** What a block's start wrote of its plan; null or undefined: it has not begun. */
-  planned: (id: string) => { categoryId: string; variantId: string | null } | null | undefined
+  /** What a block's start wrote of its plan (`name` – its own name then, D431; absent – an older start); null or undefined: it has not begun. */
+  planned: (id: string) => { categoryId: string; variantId: string | null; name?: string | null } | null | undefined
 }
 
 /**
  * What names a block of the day by its id: its entry in the plan. One not in the plan (taken out after it began – D336 –
- * or begun outside it): its category and variant as its start wrote them (spec: a later edit never changes them), where it
- * came from, its own name (D431), its routine and requests from the snapshot's entry while that is the same block (the same
- * category – a session „Sesja NY”, D338); one that has not begun – the snapshot's entry; null without any of them.
+ * or begun outside it): its category, variant and own name as its start wrote them (spec: a later edit never changes them;
+ * the name since 1.19.0 – D431, also of a block added by hand, none in the snapshot), where it came from, its routine,
+ * requests, task and note from the snapshot's entry while that is the same block (the same category – a session „Sesja NY”,
+ * D338; an older start without a name – the snapshot's too); one that has not begun – the snapshot's entry; null without any of them.
  */
 export function namedById(id: string, day: NamingDay): NamedBlock | null {
   const p = day.plan.find((b) => b.id === id)
@@ -55,8 +69,9 @@ export function namedById(id: string, day: NamingDay): NamedBlock | null {
   const snap = day.snapshotBlock(id)
   const planned = day.planned(id)
   if (!planned || typeof planned.categoryId !== 'string' || !planned.categoryId) return snap
-  const started = namedOf({ categoryId: planned.categoryId, variantId: planned.variantId ?? null })
-  return snap?.categoryId === planned.categoryId ? { ...started, origin: snap.origin, sourceId: snap.sourceId, name: snap.name, routine: snap.routine, requests: snap.requests, task: snap.task, note: snap.note } : started
+  const own = planned.name !== undefined ? { name: planned.name } : {}
+  const started = namedOf({ categoryId: planned.categoryId, variantId: planned.variantId ?? null }, own)
+  return snap?.categoryId === planned.categoryId ? { ...namedOfPlan(snap), categoryId: started.categoryId, variantId: started.variantId, ...own } : started
 }
 
 /** The name of a block of the day by its id (`namedById`), the same on the axis, in the ritual, the CSV and the bar; „blok” when nothing names it. */

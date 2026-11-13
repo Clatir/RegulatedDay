@@ -179,6 +179,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const tomorrow = addDays(today, 1)
   const [from, setFrom] = useState(tomorrow)
   const [selected, setSelected] = useState<string | null>(null)
+  // D431: the block just made on the axis (saved at once) – its panel opens with the cursor in „Nazwa”; another selection forgets it.
+  const [fresh, setFresh] = useState<string | null>(null)
+  useEffect(() => {
+    if (fresh != null && selected !== fresh) setFresh(null)
+  }, [selected])
   // The block the search picked (only one of the version shown – the one in force from tomorrow).
   useEffect(() => {
     if (!openBlock) return
@@ -393,7 +398,10 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
             onCreate={(min, durationMin = DEFAULT_NEW_BLOCK_MIN) => {
               // D366; D367: on a taken place it pushes the flexible blocks after it apart.
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin, origin: 'template' })
-              void saveChange(templateAdd(model, b)).then(() => setSelected(b.id))
+              void saveChange(templateAdd(model, b)).then(() => {
+                setFresh(b.id)
+                setSelected(b.id)
+              })
             }}
             from={axis.from}
             to={axis.to}
@@ -410,6 +418,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           computers={view.computers}
           sessions={settings.sessions}
           place={attachPlace}
+          focusName={fresh === block.id}
           onChange={(patch) => patchBlock(block.id, patch)}
           // D440: the list without boxes – every day made from the template starts with none ticked.
           steps={<StepsEditor steps={block.steps} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}

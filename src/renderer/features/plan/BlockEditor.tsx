@@ -38,7 +38,8 @@ export function BlockEditor({
   steps,
   inSeries,
   place,
-  newBlock
+  newBlock,
+  focusName
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -67,6 +68,8 @@ export function BlockEditor({
    * the name typed (`add`, D431). Left out – an existing block: Enter only commits the name.
    */
   newBlock?: { add: (name: string | null) => void }
+  /** A block just made and saved at once (a click or a range on the axis of „Szablony”): the cursor starts in „Nazwa” too (D431). */
+  focusName?: boolean
 }) {
   useEscapeLayer(true, onClose)
   const owner = place ? ownerToAdd(block, place) : null
@@ -98,7 +101,7 @@ export function BlockEditor({
           placeholder={blockName({ ...block, name: null }, names)}
           onCommit={(v) => void set({ name: v || null })}
           readOnly={readOnly}
-          autoFocus={newBlock != null}
+          autoFocus={newBlock != null || focusName === true}
           onEnter={newBlock ? (v) => newBlock.add(v || null) : undefined}
           errorPlacement="below"
           aria-label="Nazwa bloku"

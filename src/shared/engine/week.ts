@@ -10,9 +10,8 @@
  * counts live, a day to come from its plan (templates, lectures, sessions, the day's file – a „zjazd” marked in the
  * calendar). Pure, one `computeDay` a day (no loop over minutes with a full forecast).
  */
-import { namedById, namedOf, type NamedBlock } from '../blockName'
+import { namedById, namedOf, namedOfPlan, type NamedBlock } from '../blockName'
 import { isKnown } from '../model/events'
-import type { PlanBlock } from '../model/plan'
 import type { Step } from '../model/steps'
 import type { BoundaryOutcome } from './outcome'
 import { dayOutcome } from './outcome'
@@ -196,11 +195,6 @@ function gradeEnergy(frozen: FrozenDay | null): boolean {
 /** A trading session (a category of the kind „sesja”) or the second shift (D192: it is a session). */
 const isSessionBlock = (b: BlockInfo): boolean => b.rules.kind === 'session' || b.secondShift
 
-/**
- * What names a block of the plan in the columns, „Agenda” and the month (`blockName`), as in „Dziś”: also its own name (D357,
- * D430) and its task (D384 – the task's title, D431).
- */
-const planNamed = (p: PlanBlock): NamedBlock => ({ categoryId: p.categoryId, variantId: p.variantId, routine: p.routine, requests: p.requests, note: p.note, origin: p.origin, sourceId: p.sourceId, name: p.name, task: p.task })
 
 /**
  * The blocks of the day on the axis, as the day's own axis places them (`dayAxis`): a begun block where it ran, one still
@@ -234,7 +228,8 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
     const info = byId.get(p.id)
     if (!info) continue
     const f = state.facts.blocks.get(p.id)
-    const named = planNamed(p)
+    // As in „Dziś” (`namedOfPlan`): also its own name (D357, D430) and its task (D384 – the task's title, D431).
+    const named = namedOfPlan(p)
     if (f?.startedAt != null) {
       push(info, named, f.startedAt, begunEnd(state, info, f, nowIdx), begunState(f, when), false, p.steps)
       continue
@@ -388,7 +383,7 @@ function quietDay(ctx: DayContext): HorizonDay {
     const info = byId.get(p.id)
     const span = info ? plannedSpan(info, byId) : null
     if (!info || !span) continue
-    const named = planNamed(p)
+    const named = namedOfPlan(p)
     blocks.push({
       id: p.id,
       named,

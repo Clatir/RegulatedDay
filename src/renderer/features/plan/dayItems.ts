@@ -5,6 +5,7 @@
  * the maximum, the hard end, the bedtime's forecast and now; the energy's forecast (after the check-in).
  */
 import { movableBlock, plannedSpan } from '@shared/engine/blocks'
+import { namedById } from '@shared/blockName'
 import { namingOf } from '@shared/engine/context'
 import { dueBadge } from '@shared/engine/caseDates'
 import { isDone } from '@shared/engine/cases'
@@ -100,10 +101,14 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
     const f = state.facts.blocks.get(info.id)
     if (!f || f.startedAt == null) continue
     const to = f.endedAt ?? Math.max(nowIdx ?? f.startedAt, plannedEndOf(state, info, f))
+    // Named as everywhere (`namedById`); with its own name its category beside its hours, as „Tydzień” has it (`BlockBox`).
+    const named = namedById(info.id, naming)
+    const kind = named ? blockKind(named, names) : null
     items.push({
       id: info.id,
       ...logicalSpan(g, f.startedAt, Math.max(to, f.startedAt + 1)),
-      title: nameById(info.id, naming, names),
+      title: named ? blockName(named, names) : nameById(info.id, naming, names),
+      ...(kind ? { kind } : {}),
       marks: f.endedAt == null ? ['poza planem', 'biegnie'] : ['poza planem'],
       color: blockColor(info.categoryId, names),
       categoryId: info.categoryId,

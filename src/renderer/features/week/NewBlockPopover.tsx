@@ -6,6 +6,7 @@
  * a click outside close it, nothing is saved by that.
  */
 import { useEffect, useRef, useState } from 'react'
+import { namedOf } from '@shared/blockName'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { newUserBlock } from '@shared/engine/planEdit'
 import { logicalClock } from '@shared/format'
@@ -92,7 +93,7 @@ export function NewBlockPopover({
     document.addEventListener('pointerdown', away)
     return () => document.removeEventListener('pointerdown', away)
   }, [exchange, onClose])
-  const blockOn = (date: string, n = name): PlanBlock => ({ ...newUserBlock(categoryId, startMin, length, namesOf(date).settings.categories[categoryId]), name: n || null })
+  const blockOn = (date: string, n = name): PlanBlock => newUserBlock(categoryId, startMin, length, namesOf(date).settings.categories[categoryId], { name: n || null })
   /**
    * Saves the entries, all the days in one go; the days where nothing was written stay in the window (their toast said which),
    * the ones that wait for an answer to a question (a conflict) or whose outcome is not known do not – added again they
@@ -145,10 +146,12 @@ export function NewBlockPopover({
         <TextField
           value={name}
           max={BLOCK_NAME_MAX}
-          placeholder={blockName(blockOn(dates[0]!, ''), names)}
+          placeholder={blockName(namedOf({ categoryId, variantId: null }), names)}
           onCommit={setName}
+          // „Dodaj” off (today's day still counted, a save running): nothing – the cursor stays, Enter may come again.
           onEnter={(v) => {
-            if (!locked) void add(v)
+            if (locked) return false
+            void add(v)
           }}
           autoFocus
           errorPlacement="below"
