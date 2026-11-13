@@ -19,7 +19,7 @@ import type { StepOp } from '@shared/model/steps'
 import { logicalDayOf } from '@shared/time/day'
 import { changeSeries, changeSeriesWith } from '../features/series/seriesActions'
 import { change, DAY_UNREADABLE, undoFiles, type CaseResult, type CaseUndoFile } from './cases'
-import { rawRecord, type SaveAnswer } from './data'
+import { BROKEN_FILE_TEXT, rawRecord, type SaveAnswer } from './data'
 
 /** What a change of steps did: saved (written or waiting for the folder), its outcomes, its „Cofnij” (`undoSteps`). */
 export type StepsResult = Omit<CaseResult, 'id'>
@@ -71,19 +71,21 @@ export function changeBlockSteps(date: string, block: PlanBlock, op: StepOp, see
  * The day and the file of the block a task is planned in now (`scheduledOf`, every move followed – each day of the way read
  * in this turn, `caseDays`); null – not planned (the block gone), or the way ends on a day gone by whose file is broken for
  * good (`CaseDays.broken` – never read again, never written: the task's change goes alone); `unreadable` – a day of the way
- * cannot be read for a moment (or one from today on is broken): where the block stands is not known (its `movedTo` may send
- * it to today or later, T769), so nothing is written – the task and its block never part in silence (T792).
+ * cannot be read for a moment: where the block stands is not known (its `movedTo` may send it to today or later, T769), so
+ * nothing is written – the task and its block never part in silence (T792); `broken` – one from today on is broken: nothing
+ * written either, said as a broken file (restore it from the history – waiting would not help).
  */
-async function taskDay(id: string, today: string): Promise<{ date: string; raw: RawRecord | null } | null | 'unreadable'> {
+async function taskDay(id: string, today: string): Promise<{ date: string; raw: RawRecord | null } | null | 'unreadable' | 'broken'> {
   const r = requestFrom(rawRecord(taskRel(id)))
   if (!r?.day || !r.block) return null
   const files: Record<string, RawRecord | null> = {}
   for (let more: string | null = r.day; more && !(more in files); more = caseDayToRead(r, files)) {
     const read = await window.rd.caseDays([more])
     if (!(more in read.files)) {
-      // Broken for good on a day gone by (never written – T769): the way ends there, the task's change goes alone; any
-      // other day not read – for a moment, or one to come – nothing is written („spróbuj za chwilę”).
-      return more < today && read.broken?.includes(more) ? null : 'unreadable'
+      // Broken for good on a day gone by (never written – T769): the way ends there, the task's change goes alone; broken
+      // from today on – nothing is written, „przywróć z historii”; not read for a moment – nothing either („spróbuj za chwilę”).
+      if (read.broken?.includes(more)) return more < today ? null : 'broken'
+      return 'unreadable'
     }
     files[more] = read.files[more] ?? null
   }
@@ -101,6 +103,7 @@ function taskChange(id: string, make: (record: RawRecord, date: string | null, d
     const today = logicalDayOf(Date.now())
     const where = await taskDay(id, today)
     if (where === 'unreadable') return DAY_UNREADABLE
+    if (where === 'broken') return BROKEN_FILE_TEXT
     const out = make(record, where?.date ?? null, where?.raw ?? null, today)
     if ('error' in out) return out.error
     put(rel, record, out.record)

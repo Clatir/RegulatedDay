@@ -1127,8 +1127,9 @@ export class WidgetEngine {
    * day; another day or none: counted now) – a block taken out, cancelled or moved away (another computer, the bar not
    * counted since) gets nothing written: „Tego bloku już nie ma w planie.”. Then its list as the file holds it
    * (`tickEdits`), its tick in the day's file and – a block of a task planned in it – in the task's record: one edit of the
-   * queue with both entries. The moment between that read and the queue's write is accepted (T793): a tick orphaned by a
-   * change landing in it shows nowhere, and after a „Cofnij” of that change it is the true state. No sound (D440).
+   * queue with both entries. The moment between that read and the queue's write is accepted (T793, a rare race with another
+   * computer): a tick of the day orphaned by a change landing in it is not seen (after a „Cofnij” of that change it is the
+   * true state), yet the task's own entry may show its step ticked. No sound (D440).
    */
   private async tickStep(day: string | undefined, blockId: string, stepId: string): Promise<void> {
     const folder = this.d.folder()

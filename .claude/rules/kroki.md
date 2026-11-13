@@ -60,7 +60,8 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
   docelowym dokładnie te z pliku dnia źródłowego (`stepsDoneIn` – nie z podanego bloku; `setStepsDone`), w źródłowym żadne.
 - Pasek: ptaszek tuż przed zapisem czyta plik dnia od nowa (`recordView`, z kolejką) i szuka bloku w `dayPlan` z niego na
   migawce modelu paska; nie ma – „Tego bloku już nie ma w planie.”, nic nie zapisane; dzień i zadanie jedną edycją. Chwila
-  między tym odczytem a zapisem kolejki jest przyjęta (T793): osierocone `stepsDone` niczego nie pokazuje. Kolejka zostaje
+  między tym odczytem a zapisem kolejki jest przyjęta (T793, rzadki wyścig z drugim komputerem): osierocone `stepsDone` dnia
+  jest niewidoczne, ale wpis w zadaniu bloku może pokazać krok jako odhaczony. Kolejka zostaje
   ogólna – bez warunków na wpisach.
 - Migawka starszej wersji bez pola `steps` (T791): bloki szablonu i serii biorą listę ze źródła (`snapshotOf`).
 - Pasek (T793): `WidgetView.steps` (`BarSteps`) – blok na pierwszym planie, pierwszy nieodhaczony; ukryte tylko w „Odcinam

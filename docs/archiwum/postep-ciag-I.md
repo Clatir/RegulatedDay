@@ -100,3 +100,19 @@ Wpisy zadań ciągu I (4.11, 4.10, E10–E12) po scaleniu ich PR-ów. Stan bież
   E11 xhigh ×2, E10 xhigh ×2, E12 high ×2.
 - Czas: ok. 07:30–22:00 zegarowo (szacunek planu 25–45 h dla E9–E12 bez E9 i K) – równolegle po 2–3 drzewa.
 - Po ciągu: K, gdy aplikacja zaproponuje przegląd kalibracji (najwcześniej ok. 12.11), potem E9.
+
+## Ciąg I – stan (D353)
+**Przed ciągiem I (9.11):** zakres – `docs/plan.md`, „Ciąg I”; decyzje D352 (tekst linii twardego końca), D353 (kształt
+ciągu), D354 (wykonawcy rozszerzeń). Ryzyka: 4.11 – nazwy bloków w czterech miejscach (log i silnik bez zmian, T543);
+4.10 – pasek i powiadomienia. Przygotować: nic do 1.0.10; do E11 – PDF z terminami zjazdów (poza
+repozytorium, D279). Model: główna sesja Opus 5.5 · high; 4.11 `wykonawca-opus`, 4.10 `wykonawca-sonnet` – równolegle
+w drzewach `.claude/worktrees/w411`, `w410`.
+
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| 4.11 nazwa usuniętej sesji | 1.0.9 | #56 | scalone 9.11 (cc8bd04) | ok. 4,5 h (0,5–1 h) – dwie przebudowy po przeglądzie |
+| 4.10 linia twardego końca | 1.0.10 | #55 | scalone 9.11 (1410e4e); wpis – archiwum ciągu I | ok. 5 h (1–1,5 h) – trzy rundy przeglądu |
+| I-plan E10–E12 | – | – | pytania odpowiedziane 9.11 (D356–D359), kolejność T545 | ok. 0,5 h (1–2 h) |
+| E11 import zjazdów | 1.1.0 | #57 | scalone 9.11 (c621868); wpis – archiwum ciągu I | ok. 8 h (6–9 h) – dwie rundy przeglądu xhigh |
+| E10 tydzień i cele | 1.2.0 | #58 | scalone 9.11; wpis – archiwum ciągu I; decyzje D360, D361 | ok. 6 h (8–12 h) – dwie rundy przeglądu xhigh |
+| E12 statystyki | 1.3.0 | #59 | scalone 9.11 (06e6b8c); wpis – archiwum ciągu I; decyzja D362 | ok. 4 h (5–8 h) – dwie rundy przeglądu high |

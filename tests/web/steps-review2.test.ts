@@ -19,6 +19,7 @@ import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 import { changeTaskSteps, tickBlockStep } from '@renderer/store/steps'
 import { DAY_UNREADABLE } from '@renderer/store/cases'
+import { BROKEN_FILE_TEXT } from '@renderer/store/data'
 
 const four = (): Step[] => ['Napisać testy', 'Przygotować logikę', 'Sprawdzić na Windowsie', 'Zrobić commit'].map((title, order) => ({ id: `s${order + 1}`, title, order, done: false }))
 const TODAY = logicalDayOf(Date.now())
@@ -102,8 +103,9 @@ describe('dzień drogi bloku uszkodzony a chwilowo nieczytelny (przegląd 4, T79
     const a = stub({ requests: [task()] })
     expect(await changeTaskSteps('t1', addStepOp('nowy'))).toMatchObject({ saved: false, error: DAY_UNREADABLE })
     expect(a.sent).toEqual([])
+    // Broken from today on: nothing written, said as a broken file – „przywróć z historii”, not „spróbuj za chwilę” (przegląd 5).
     const b = stub({ requests: [{ ...task(), day: TODAY }], broken: [TODAY] })
-    expect(await changeTaskSteps('t1', addStepOp('nowy'))).toMatchObject({ saved: false, error: DAY_UNREADABLE })
+    expect(await changeTaskSteps('t1', addStepOp('nowy'))).toMatchObject({ saved: false, error: BROKEN_FILE_TEXT })
     expect(b.sent).toEqual([])
   })
 })
