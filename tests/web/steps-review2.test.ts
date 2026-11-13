@@ -60,12 +60,13 @@ describe('„Przenieś” z panelu zabiera odhaczenia (przegląd 2, T786)', () =
     // The block as the plan of the panel has it (its ticks of the day), or as the file has it (none) – the same move.
     const shown = { ...b, steps: four().map((s) => ({ ...s, done: s.id === 's2' })) }
     await moveDayBlock(TODAY, from, [shown], shown, tomorrow, null)
-    const [source, target] = sent[0]!
+    // The target is the owner of the edit, the source goes with it (T952).
+    const [target, source] = sent[0]!
     expect(leafs(target!)).toEqual([['stepsDone.b1.s2', true]])
     expect(leafs(source!)).toEqual([['stepsDone.b1.s2', undefined]])
     sent.length = 0
     await moveDayBlock(TODAY, from, [b], b, tomorrow, null)
-    expect(leafs(sent[0]![1]!)).toEqual([['stepsDone.b1.s2', true]])
+    expect(leafs(sent[0]![0]!)).toEqual([['stepsDone.b1.s2', true]])
   })
 })
 

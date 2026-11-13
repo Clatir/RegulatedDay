@@ -7,6 +7,8 @@ import { addDays } from '@shared/time/zone'
 
 /** Pixels a minute takes on the axis (a 16-hour day is about 770 px; the day's plan has 1.1). */
 export const WEEK_PPM = 0.8
+/** The larger scale of „3 dni” (D417): a 16-hour day is about 1150 px. */
+export const THREE_DAYS_PPM = 1.2
 /** The shortest a block is drawn (a 5-minute block stays a line of text). */
 export const WEEK_MIN_BLOCK_PX = 14
 
@@ -17,8 +19,8 @@ export function axisRange(from: number, to: number): { lo: number; hi: number } 
   return { lo, hi }
 }
 
-/** The height of the axis in pixels. */
-export const axisHeight = (lo: number, hi: number): number => Math.round((hi - lo) * WEEK_PPM)
+/** The height of the axis in pixels (`ppm`: pixels a minute – the scale of the view). */
+export const axisHeight = (lo: number, hi: number, ppm = WEEK_PPM): number => Math.round((hi - lo) * ppm)
 
 /** The marks of the hours: every full hour from `lo` to `hi`. */
 export function hourMarks(lo: number, hi: number): number[] {
@@ -28,11 +30,11 @@ export function hourMarks(lo: number, hi: number): number[] {
 }
 
 /** A minute's distance from the top of the axis, in pixels. */
-export const axisY = (min: number, lo: number): number => Math.round((min - lo) * WEEK_PPM * 10) / 10
+export const axisY = (min: number, lo: number, ppm = WEEK_PPM): number => Math.round((min - lo) * ppm * 10) / 10
 
 /** Where a block sits on the axis: its top and height in pixels (never shorter than `WEEK_MIN_BLOCK_PX`). */
-export function blockSpan(b: { startMin: number; endMin: number }, lo: number): { top: number; height: number } {
-  return { top: axisY(b.startMin, lo), height: Math.max(WEEK_MIN_BLOCK_PX, Math.round((b.endMin - b.startMin) * WEEK_PPM * 10) / 10 - 1) }
+export function blockSpan(b: { startMin: number; endMin: number }, lo: number, ppm = WEEK_PPM): { top: number; height: number } {
+  return { top: axisY(b.startMin, lo, ppm), height: Math.max(WEEK_MIN_BLOCK_PX, Math.round((b.endMin - b.startMin) * ppm * 10) / 10 - 1) }
 }
 
 export interface Lane<T> {

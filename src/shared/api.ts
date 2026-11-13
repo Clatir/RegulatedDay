@@ -7,7 +7,8 @@ import type { Celebration, GameView } from './engine/progress'
 import type { SideB } from './engine/sideB'
 import type { StatsPeriod, StatsResult } from './engine/stats'
 import type { GoalsView } from './engine/goals'
-import type { WeekView } from './engine/week'
+import type { DaysView, WeekView } from './engine/week'
+import type { MonthView } from './engine/calendarViews'
 import type { GoalsPatch } from './model/goals'
 import type { RitualValue, RitualView } from './engine/ritual'
 import type { CasesRitual } from './engine/cases'
@@ -90,6 +91,8 @@ export const CH = {
   zjazdySave: 'rd:zjazdySave',
   zjazdyUndo: 'rd:zjazdyUndo',
   weekView: 'rd:weekView',
+  daysView: 'rd:daysView',
+  monthView: 'rd:monthView',
   goals: 'rd:goals',
   setGoals: 'rd:setGoals',
   stats: 'rd:stats',
@@ -827,6 +830,17 @@ export interface RdApi {
    * days gone by – as it was), boundary and regeneration against the minimum; only a view.
    */
   weekView(date: string): Promise<WeekView>
+  /**
+   * Days on one axis as the week counts them (D417 „3 dni” – `threeDays`, D418 „Agenda” – `agendaDates`): 1 to
+   * `DAYS_VIEW_MAX` dates, in their order; each with its blocks (`movable` – may be dragged, D417), the curve of its energy
+   * (`energy: false` – none counted: „Agenda”, T954) and its work against the budget. Another list is refused (an error).
+   */
+  daysView(dates: string[], opts?: { energy?: boolean }): Promise<DaysView>
+  /**
+   * The month shown in „Kalendarz” ('RRRR-MM', D418): each of its days with its fixed blocks and its load (`monthDayOf`); the
+   * cell with the all-day events – `monthCell`.
+   */
+  monthView(month: string): Promise<MonthView>
   /** A month's goals ('RRRR-MM', D356): as rd.json holds them, the month before's, the progress „x z y” so far. */
   goals(month: string): Promise<GoalsView>
   /**

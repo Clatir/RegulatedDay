@@ -16,9 +16,9 @@ import { logicalMinuteOf } from '../time/day'
 import { isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
 import type { EnergyState } from './energy'
-import { endShiftOf, OPEN, type BlockFact } from './facts'
+import { endShiftOf, OPEN, type BlockFact, type DayFacts } from './facts'
 import { atOf } from './grid'
-import { moveBetweenDays, newUserBlock } from './planEdit'
+import { moveBetweenDays, moveGroup, moveRoots, newUserBlock, stayerStart, stayRuleOf, type StayRule } from './planEdit'
 import { suggestRegen } from './reserve'
 import { secondShiftStart } from './timer'
 
@@ -203,12 +203,21 @@ function gapOfNow(state: DayState): { from: number; to: number } {
   return { from, to: Number.POSITIVE_INFINITY }
 }
 
-/** The plan with the changes laid on (a block moved to tomorrow leaves today's plan; a regeneration comes in). */
-export function planWith(ctx: DayContext, changes: readonly VariantChange[]): PlanBlock[] {
+/**
+ * The plan with the changes laid on (a block moved to tomorrow leaves today's plan with the blocks that go with it – as the
+ * write moves them, `moveGroup` with `stay` (`stayRuleOf` of the day): one anchored to it that stays keeps its own hour, at
+ * the same place the write gives it (`stayerStart`), T962, T984; a regeneration comes in).
+ */
+export function planWith(ctx: DayContext, changes: readonly VariantChange[], stay?: StayRule): PlanBlock[] {
   let plan = [...ctx.plan]
   for (const c of changes) {
     if (c.k === 'shorten') plan = plan.map((b) => (b.id === c.block ? { ...b, durationMin: c.toMin } : b))
-    else if (c.k === 'tomorrow') plan = plan.filter((b) => b.id !== c.block && b.anchor !== c.block)
+    else if (c.k === 'tomorrow') {
+      const { followers, stayers } = moveGroup(plan, c.block, stay)
+      const gone = new Set([c.block, ...followers.map((f) => f.id)])
+      const kept = new Map(stayers.map((s) => [s.id, { ...s, anchor: null, startMin: stayerStart(s, plan) }]))
+      plan = plan.filter((b) => !gone.has(b.id)).map((b) => kept.get(b.id) ?? b)
+    }
     else if (c.k === 'start') plan = plan.map((b) => (b.id === c.block ? { ...b, startMin: c.startMin } : b))
     else plan.push(newUserBlock(REGEN_CATEGORY, c.startMin, c.durationMin, ctx.snapshot.settings.categories[REGEN_CATEGORY], { id: `variant-regen-${c.startMin}`, variantId: c.variantId }))
   }
@@ -221,9 +230,12 @@ export interface Judged {
   after: DayState
 }
 
-/** The day counted again with the changes (none – the day as it is, not counted again). */
-export function judgeDay(ctx: DayContext, before: DayState, changes: readonly VariantChange[]): Judged {
-  const after = changes.length ? computeDay({ ...ctx, plan: planWith(ctx, changes) }) : before
+/**
+ * The day counted again with the changes (none – the day as it is, not counted again); `stay` – what keeps a block anchored
+ * to a moved one on its day (counted once by the caller; none given – from `before`).
+ */
+export function judgeDay(ctx: DayContext, before: DayState, changes: readonly VariantChange[], stay?: StayRule): Judged {
+  const after = changes.length ? computeDay({ ...ctx, plan: planWith(ctx, changes, stay ?? stayRuleOf(before.facts, ctx.snapshot.settings)) }) : before
   const end = after.lastWorkForecast
   const boundary = before.boundary.approved ?? before.boundary.proposal
   // Extension: the forecast's minutes of work after the boundary, as the exchange counts them.
@@ -249,13 +261,15 @@ export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCaus
   let counts = 0
   // The same changes (in any order) are counted once: the first step of a search is often the linear try already judged.
   const judged = new Map<string, Judged>()
+  // What keeps a block anchored to a moved one today (D426) – counted once for every judge and move of this cause (T981).
+  const stay = stayRuleOf(state.facts, ctx.snapshot.settings)
   const judge = (changes: readonly VariantChange[]): Judged => {
-    if (!changes.length) return judgeDay(ctx, state, changes)
+    if (!changes.length) return judgeDay(ctx, state, changes, stay)
     const key = changes.map((c) => JSON.stringify(c)).sort().join('|')
     let j = judged.get(key)
     if (!j) {
       counts++
-      j = judgeDay(ctx, state, changes)
+      j = judgeDay(ctx, state, changes, stay)
       judged.set(key, j)
     }
     return j
@@ -363,7 +377,8 @@ export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCaus
       moved += c.info.durationMin
     }
     if (away.length) {
-      const movesOf = (ids: readonly string[]): VariantChange[] => ids.map((block) => ({ k: 'tomorrow', block }))
+      // A block anchored to another one moved goes with it – never a move of its own (T962).
+      const movesOf = (ids: readonly string[]): VariantChange[] => moveRoots(ctx.plan, ids, stay).map((block) => ({ k: 'tomorrow', block }))
       let best = judge(movesOf(away))
       if (!best.effect.withinBoundary) {
         const tried: string[] = []
@@ -381,8 +396,12 @@ export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCaus
           best = day
         }
       }
-      const firstName = names(byId.get(away[0]!)!)
-      add('tomorrow', (e) => `Przesuń ${firstName}${away.length > 1 ? ` i ${away.length - 1} inne` : ''} na jutro · koniec pracy ${e.workEndMin != null ? logicalClock(e.workEndMin) : '—'}`, movesOf(away), best)
+      // The words count the blocks that go (T985): each move of its own with what goes with it; the first name – its root.
+      const moves = movesOf(away)
+      const going = moves.flatMap((c) => (c.k === 'tomorrow' ? [c.block, ...moveGroup(ctx.plan, c.block, stay).followers.map((f) => f.id)] : []))
+      const root = moves[0]!.k === 'tomorrow' ? moves[0]!.block : away[0]!
+      const firstName = names(byId.get(root) ?? byId.get(away[0]!)!)
+      add('tomorrow', (e) => `Przesuń ${firstName}${going.length > 1 ? ` i ${going.length - 1} inne` : ''} na jutro · koniec pracy ${e.workEndMin != null ? logicalClock(e.workEndMin) : '—'}`, moves, best)
     }
     add('keep', (e) => `Zostaw · przedłużenie ${e.extensionMin} min`, [])
     return out
@@ -412,20 +431,33 @@ export const keepPlan = (ctx: DayContext, state: DayState): Variant => ({ id: 'k
 /**
  * A chosen variant as the files of the days (the window writes them as edits): a shortened block with its new length; a
  * block to tomorrow moved with its id (a move of a variant does not count to its moves, spec „Przeniesienie”); a
- * regeneration added to today's plan from now – its id is returned so the bar starts it at once.
+ * regeneration added to today's plan from now – its id is returned so the bar starts it at once. `facts` – the day as the
+ * caller counted it: a block anchored to the moved one that has begun, is parked or cancelled, or of a kind that keeps its
+ * day stays today (D424, D426, T961, T980).
  */
-export function applyVariant(ctx: DayContext, today: Raw | null, tomorrow: Raw | null, v: Variant, tomorrowDate: string): { today: Raw; tomorrow: Raw | null; start: string | null } {
+export function applyVariant(ctx: DayContext, today: Raw | null, tomorrow: Raw | null, v: Variant, tomorrowDate: string, facts?: Pick<DayFacts, 'blocks'>): { today: Raw; tomorrow: Raw | null; start: string | null } {
   let t = dayRaw(today, ctx.date)
   let next = tomorrow
   let start: string | null = null
+  const stay = stayRuleOf(facts, ctx.snapshot.settings)
+  // The moves of their own: a block that goes as a follower of another moved one is never moved a second time, whatever the
+  // order of the changes (T962).
+  const roots = new Set(
+    moveRoots(
+      ctx.plan,
+      v.changes.flatMap((c) => (c.k === 'tomorrow' ? [c.block] : [])),
+      stay
+    )
+  )
   for (const c of v.changes) {
     const b = ctx.plan.find((x) => x.id === (c as { block?: string }).block)
     // A block a variant changed is marked: it gives no note for accuracy (the game).
     if (c.k === 'shorten' && b) t = putBlock(t, { ...b, durationMin: c.toMin, byVariant: true })
     // A new start („Ułóż pod energię”) over the block as the file holds it, without the mark: its length stays as planned (T610).
     else if (c.k === 'start' && b) t = putBlock(t, { ...(dayFileFrom(t, ctx.date).blocks.find((x) => x.id === b.id) ?? b), startMin: c.startMin })
-    else if (c.k === 'tomorrow' && b) {
-      const moved = moveBetweenDays(t, next, { ...b, byVariant: true }, ctx.plan, ctx.date, tomorrowDate, false)
+    else if (c.k === 'tomorrow' && b && roots.has(b.id)) {
+      // The blocks anchored to it go with it, all marked; one that stays keeps today with its own hour (D424, T951, T963).
+      const moved = moveBetweenDays(t, next, b, ctx.plan, ctx.date, tomorrowDate, false, { stay, byVariant: true })
       t = moved.source
       next = moved.target
     } else if (c.k === 'regen') {

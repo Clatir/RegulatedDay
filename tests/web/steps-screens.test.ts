@@ -478,7 +478,7 @@ describe('licznik „✓ 3/4” na kafelku', () => {
     const by = Object.fromEntries(d.blocks.map((b) => [b.id, b]))
     expect(by.a!.steps!.map((x) => x.done)).toEqual([true, false, false, false])
     expect('steps' in by.b!).toBe(false)
-    const { BlockBox } = await import('@renderer/features/week/WeekPage')
+    const { BlockBox } = await import('@renderer/features/week/DayGrid')
     const names = { rd: rdFrom({}), settings: s.settings, routines: [], requests: [] }
     const html = (b: (typeof d.blocks)[number]) => renderToStaticMarkup(createElement(BlockBox, { block: b, lo: 6 * 60, lane: 0, lanes: 1, names, brightness: 100, date: day, attach: 0 }))
     expect(html(by.a!)).toContain('✓ 1/4')

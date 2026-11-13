@@ -48,7 +48,8 @@ import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/
 import { EnergyLegend, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
-import { begunIds, blockNow, clickResize, patchDayBlock, pushDayBlocks, removeDayBlock, setDayWake, tellFreed } from './dayActions'
+import { begunIds } from '@shared/engine/facts'
+import { blockNow, clickResize, patchDayBlock, pushDayBlocks, removeDayBlock, setDayWake, tellFreed } from './dayActions'
 import { addChange, dragChange, pushedSpans, pushedStarts, type DayChange } from './dayPush'
 import { putBlock } from '@shared/data/dayEdits'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
@@ -579,7 +580,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
       {dialog === 'type' && <TypeChangeDialog model={model} names={names} isToday={isToday} onClose={() => setDialog(null)} />}
       {dialog === 'addType' && <TypeChangeDialog model={model} names={names} isToday onlyAdd onClose={() => setDialog(null)} />}
       {dialog === 'copy' && <CopyDayDialog model={model} today={today} onClose={() => setDialog(null)} />}
-      {dialog && typeof dialog === 'object' && 'move' in dialog && <MoveDialog model={model} block={dialog.move} today={today} onClose={() => setDialog(null)} />}
+      {dialog && typeof dialog === 'object' && 'move' in dialog && <MoveDialog model={model} block={dialog.move} names={names} today={today} onClose={() => setDialog(null)} />}
     </div>
   )
 }

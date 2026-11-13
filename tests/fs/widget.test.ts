@@ -1747,6 +1747,35 @@ describe('warianty w pasku (D313)', () => {
     expect(w.current().note?.text).toBe('Część planu zmieniła się od wariantu – zostaje tak, jak jest teraz.')
   })
 
+  it('„na jutro” jedną edycją z zależnością: jutro spotkało zmianę – dziś czeka, blok nigdy w żadnym dniu (T969)', async () => {
+    const { w, folder } = await over()
+    const next = addDays(DAY, 1)
+    writeFileSync(join(dataDir, tomorrowRel), JSON.stringify({ schema: 1, date: next, wakeMin: 420 }))
+    const edit = folder.edit.bind(folder)
+    // Another computer writes tomorrow's blocks between the bar's read and its write.
+    folder.edit = async (entries) => {
+      if (entries.some((e) => e.rel === tomorrowRel)) writeFileSync(join(dataDir, tomorrowRel), JSON.stringify({ schema: 1, date: next, wakeMin: 420, blocks: [{ id: 'zz', categoryId: 'inne', startMin: 9 * 60, durationMin: 30, fixed: false, origin: 'user' }] }))
+      return edit(entries)
+    }
+    await w.act('variants', 'open', 'bar')
+    await w.act('variants', 'pick|tomorrow', 'bar')
+    // Tomorrow is the owner: its question keeps today's half waiting – the block stays today.
+    expect(await ids(folder, paths.day(DAY))).toEqual(['a', 'b'])
+    expect(await ids(folder, tomorrowRel)).toEqual(['zz'])
+  })
+
+  it('„Cofnij” wariantu „na jutro”: oba dni wracają jedną edycją; jutro zmienione od wariantu – oba zostają (T969)', async () => {
+    const { w, folder } = await over()
+    await w.act('variants', 'open', 'bar')
+    await w.act('variants', 'pick|tomorrow', 'bar')
+    const tomorrow = (await folder.recordView(tomorrowRel)) as { blocks: unknown[] }
+    await folder.edit([{ rel: tomorrowRel, edits: [{ path: ['blocks'], base: tomorrow.blocks, value: [...tomorrow.blocks, { id: 'd', categoryId: 'inne', startMin: 9 * 60, durationMin: 30, fixed: false, origin: 'user' }] }] }])
+    await w.act('line', 'moved:variant|undo', 'bar')
+    // Never on both days: today keeps without it, tomorrow with it.
+    expect(await ids(folder, paths.day(DAY))).toEqual(['a'])
+    expect(await ids(folder, tomorrowRel)).toEqual(['b', 'd'])
+  })
+
   it('wariant, którego nie da się zapisać, nie gasi znacznika', async () => {
     const { w, folder, failEdits } = await over()
     await w.act('variants', 'open', 'bar')

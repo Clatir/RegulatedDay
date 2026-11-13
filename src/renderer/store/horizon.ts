@@ -5,7 +5,8 @@
  */
 import { useEffect, useState } from 'react'
 import type { GoalsView } from '@shared/engine/goals'
-import type { WeekView } from '@shared/engine/week'
+import type { MonthView } from '@shared/engine/calendarViews'
+import type { DaysView, WeekView } from '@shared/engine/week'
 import { weekStart } from '@shared/time/day'
 import { useNow } from '../lib/clock'
 import { useData } from './data'
@@ -58,4 +59,26 @@ export function useWeekView(date: string): { view: WeekView | null; failed: bool
 /** A month's goals ('RRRR-MM') with the month before's and the progress so far (null until read). */
 export function useGoalsView(month: string): { view: GoalsView | null; failed: boolean } {
   return useCounted(month, readGoals, months)
+}
+
+const dayLists = new ViewCache<DaysView>()
+const calendarMonths = new ViewCache<MonthView>()
+/** The key of a list of days: its dates, and `-` for a list without the curves of energy. */
+const readDays = (key: string) => {
+  const [list, plain] = key.split('|')
+  return window.rd.daysView(list!.split(','), { energy: plain !== '-' })
+}
+const readMonth = (month: string) => window.rd.monthView(month)
+
+/**
+ * Days on one axis (D417 „3 dni” – `threeDays`, D418 „Agenda” – `agendaDates`; null until read), as `useWeekView`; `energy`
+ * false – without the curves of energy (the list of „Agenda” draws none, T954).
+ */
+export function useDaysView(dates: readonly string[], opts: { energy?: boolean } = {}): { view: DaysView | null; failed: boolean } {
+  return useCounted(`${dates.join(',')}|${opts.energy === false ? '-' : '+'}`, readDays, dayLists)
+}
+
+/** The month of „Kalendarz” ('RRRR-MM', D418): its days' fixed blocks and load (null until read), as `useWeekView`. */
+export function useMonthView(month: string): { view: MonthView | null; failed: boolean } {
+  return useCounted(month, readMonth, calendarMonths)
 }

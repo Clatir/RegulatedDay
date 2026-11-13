@@ -9,7 +9,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { HorizonBlock } from '@shared/engine/week'
 import { rdFrom } from '@shared/model/rd'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
-import { BlockBox } from '@renderer/features/week/WeekPage'
+import { BlockBox } from '@renderer/features/week/DayGrid'
 
 const names = { rd: rdFrom({}), settings: DEFAULT_SETTINGS, routines: [], requests: [] }
 const tile = (id: string, minutes: number): HorizonBlock => ({ id, named: { categoryId: 'inne', variantId: null, routine: null, requests: [], note: '', origin: 'user', sourceId: null }, categoryId: 'inne', startMin: 9 * 60, endMin: 9 * 60 + minutes, state: 'planned', outsidePlan: false, background: false })

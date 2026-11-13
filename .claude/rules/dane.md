@@ -71,7 +71,9 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Dwa przebiegi kolejki naraz gubiły wpisy – `apply` i `resolve` idą po kolei; wpis za nierozstrzygniętym tego samego
   pliku czeka. Błąd zapisu jednego wpisu (także nowego rekordu) = „czeka”, nigdy wyjątek przerywający przebieg.
   Wpis z `after` (`EditEntry.after` – miejsca wcześniejszych wpisów tej edycji, T923) kładzie się dopiero po nich; pytanie
-  przy nich – czeka, „ich” zabiera go razem z nimi (np. załączniki zdjęte z blokiem). Wpisy jednej edycji poza tym są niezależne.
+  przy nich – czeka, „ich” zabiera go razem z nimi (np. załączniki zdjęte z blokiem). Wpis, z którym idą inne, przy polu spornym
+  nie kładzie nic (także pól niespornych, T960) – cały albo wcale – i widok (`overlay`) go nie pokazuje (T967). Wpisy jednej
+  edycji poza tym są niezależne.
   Czekający wpis blokuje swój plik (T926); czekające na odpowiedź (`answerBound`) nie liczą się do „zapisze się po powrocie”, a
   zależne od nich nie wchodzą do `overlay` (T927, T928). `hub.changed()` – podpisy po kolei, obietnica do czekania (T934).
 - Prowadzący liczy dzień z plików folderu (`inputs()`, `dayFile(d)`), okno – z kolejką (`inputs(true)`, `recordView`):
@@ -90,7 +92,9 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   Import zjazdów (T546, T548): `DataHub.zjazdyPreview` / `zjazdySave` / `zjazdyUndo` – jedna partia kolejki
   (`zjazdyWrite`), PDF przez `main/import/pdfText.ts` (pdfjs leniwie, tylko proces główny).
   Tydzień i cele (T552, T553): `folder.horizonDays` (zadanie `horizon`, pamięć per dzień, `unknown` + `warn`),
-  `weekView`, `goalsView`, `setGoals` (pola liściowe `goals.RRRR-MM.*` w `rd.json`, po kolei przez kolejkę).
+  `weekView`, `goalsView`, `setGoals` (pola liściowe `goals.RRRR-MM.*` w `rd.json`, po kolei przez kolejkę); SNT1: `daysView`,
+  `monthView`, krzywa tylko dla tygodnia i dni (`horizonDays(…, energy)`, „Agenda” bez niej – T914, T954); moduł dnia minionego
+  liczy `horizonDay` z oceny i logu dnia (T950 – bez `moduleStates`), pamięć 98 dni (T907, T908).
 - Serie (T700–T719): `series/<id>.json`; `inputs()` daje `series` (`SeriesPlan[]`) i `seriesDays` – typy dni licznika z plików
   (`countTypes`, równolegle; bez serii „odbywa się”; seria zakończona przed wczoraj – `settledTypes`, osobno z kolejką i bez, tylko
   pewne odczyty, do zapisu/zmiany kolejki/listy dni z zakresu, 10 min), `seriesOf` pamięta wynik

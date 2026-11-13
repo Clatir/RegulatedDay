@@ -6,12 +6,13 @@ import { putBlock } from '@shared/data/dayEdits'
 import { editStands, inverseEdit } from '@shared/data/merge'
 import { plDateWithWeekday } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
-import { isSaved, trySaveWith, useData } from '../../store/data'
-import { countDay, dayUsable } from '../../store/day'
-import { toast } from '../../store/ui'
+import { isSaved, trySaveWith, withOwner } from '../../store/data'
+import { countedDay } from '../../store/day'
+import { toast, undoToast } from '../../store/ui'
 import { dropWeekPushDays, useWeekPush, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 import { dayFileEdit, withPushed, type PushedStart } from '../today/dayActions'
 import { addChange, pushedStarts } from '../today/dayPush'
+import { weekPushLineText } from './weekText'
 
 /** The toast for days whose files cannot be read now: named, with what was done about the rest. */
 export function unreadableText(dates: readonly string[]): string {
@@ -76,16 +77,10 @@ export interface WeekAdded extends WeekAdds {
  * added as before the pushing, never refused (D72).
  */
 async function pushedFor(date: string, base: RawRecord | null, block: PlanBlock): Promise<PushedStart[]> {
-  try {
-    const data = await window.rd.dayData(date)
-    if (!dayUsable(data)) return []
-    const { rd, templates, lectures, seriesPlans } = useData.getState()
-    const model = countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures, series: seriesPlans }, Date.now(), false)
-    return pushedStarts(model.ctx.plan, addChange(model, block, true))
-  } catch {
-    return []
-  }
+  const model = await countedDay(date, base)
+  return model ? pushedStarts(model.ctx.plan, addChange(model, block, true)) : []
 }
+
 
 /**
  * Each block put into the plan of its day – the day's own file as it is when this turn comes (made when the day has none
@@ -157,7 +152,9 @@ export const weekPushStands = (d: WeekPushedDay, now: RawRecord | null): boolean
  * stands, or one whose file cannot be read now (it is left out of `files`; „Cofnij” judges it when it is clicked).
  */
 export function weekPushStanding(push: WeekPush, files: Readonly<Record<string, RawRecord | null>> | null): boolean {
-  return files == null || push.days.some((d) => !(d.date in files) || weekPushStands(d, files[d.date] ?? null))
+  const stands = (d: WeekPushedDay) => !(d.date in files!) || weekPushStands(d, files![d.date] ?? null)
+  // D417: a move goes back only with both its days as it left them (`undoWeekPush`) – one changed, nothing to take back.
+  return files == null || (push.move ? push.days.every(stands) : push.days.some(stands))
 }
 
 /** The toast for days whose files cannot be read now when „Cofnij” asks: nothing was done there, they stay to take back. */
@@ -190,6 +187,16 @@ export async function undoWeekPush(push: WeekPush): Promise<WeekUndone> {
   const out = await trySaveWith(async () => {
     const files = await window.rd.dayFiles(push.days.map((d) => d.date))
     const back: EditEntry[] = []
+    // D417: a block moved between two days goes back to both or to none – one day alone would leave it on neither day
+    // or on both. A day not readable now: nothing is done, the line stays; one changed since: both stay as they are.
+    if (push.move) {
+      r.unreadable = push.days.filter((d) => !(d.date in files)).map((d) => d.date)
+      if (r.unreadable.length) return []
+      if (!push.days.every((d) => weekPushStands(d, files[d.date] ?? null))) {
+        r.changed = push.days.map((d) => d.date)
+        return []
+      }
+    }
     for (const d of push.days) {
       if (!(d.date in files)) {
         r.unreadable.push(d.date)
@@ -202,16 +209,36 @@ export async function undoWeekPush(push: WeekPush): Promise<WeekUndone> {
         sent.push(d.date)
       } else r.changed.push(d.date)
     }
+    // A move back (T953): the source's half that brings the block back is the owner, the target's that takes it off goes
+    // with it – a question about the source keeps the block on the target, „theirs” leaves it there; never on neither day.
+    if (push.move) {
+      const i = sent.indexOf(push.move.from)
+      if (i > 0) {
+        back.unshift(...back.splice(i, 1))
+        sent.unshift(...sent.splice(i, 1))
+      }
+      return i >= 0 ? withOwner(back[0]!, back.slice(1)) : back
+    }
     return back
   })
   out?.forEach((o, i) => {
     if (o.status === 'applied' || o.status === 'waiting') r.undone.push(sent[i]!)
   })
   r.saved = isSaved(out)
+  // A move goes back whole: a half waiting for your answer about the other is not undone yet (the line stays).
+  if (push.move && !r.saved) r.undone = []
   if (!r.saved) return r
   if (r.changed.length) toast('Część planu zmieniła się od przesunięcia – zostaje tak, jak jest teraz.', 'info', 6000)
   if (r.unreadable.length) toast(undoUnreadableText(r.unreadable), 'error', 6000)
   return r
+}
+
+/**
+ * A move of „Przenieś na…” said (D424, T964): the words of the line of „Tydzień” („Przeniesiono: <nazwa> na <dzień> · <nazwa>
+ * został – …”) in a toast with its „Cofnij” – both days back, or none (`undoWeekPush`).
+ */
+export function tellMoved(push: WeekPush): void {
+  undoToast(weekPushLineText(push), () => void undoWeekPush(push))
 }
 
 /**

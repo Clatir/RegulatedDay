@@ -186,14 +186,19 @@ export class EditQueue {
   /**
    * A record as this computer sees it: `value` (the file now; undefined = no file) with the queued edits of `rel` laid
    * over it in order – your change shows at once, also while the folder is away. An entry that goes with one waiting for
-   * your answer is not laid (T928): „theirs” would take it out – till then the record is as the folder has it.
+   * your answer is not laid (T928): „theirs” would take it out – till then the record is as the folder has it. Nor is an
+   * entry others go with that is itself a question (T967): it is laid whole or not at all (T960), so nothing of it is in
+   * the folder – a change made from what the window sees (a move asked again) never takes it for written.
    */
   overlay(rel: string, value: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
     let v: unknown = value
     const bound = this.entries.some((e) => e.rel === rel && e.after) ? this.answerBound() : null
+    const owners = new Set(this.entries.flatMap((e) => e.after ?? []))
+    const asked = this.entries.some((e) => e.rel === rel && owners.has(e.id)) ? new Set(this.questions().map((q) => q.edit.id)) : null
     for (const e of this.entries) {
       if (e.rel !== rel) continue
       if (bound && e.after?.some((a) => bound.has(a))) continue
+      if (asked?.has(e.id) && owners.has(e.id)) continue
       if (e.remove) {
         v = undefined
         continue
@@ -401,6 +406,10 @@ export class EditQueue {
         applied.push(f)
       } else conflicts.push({ ...f, now })
     }
+    // An entry others go with (`after`) is laid whole or not at all (T960): with a field that met a change elsewhere nothing
+    // of it is written until you answer – „theirs” then takes it and them out with nothing of it left (a block moved to
+    // another day never stays on both: its target is the owner, the source goes with it).
+    if (conflicts.length && this.entries.some((x) => x.after?.includes(edit.id))) return { id: edit.id, status: 'conflict', fields: conflicts }
     if (applied.length) await records.write(edit.rel, { ...(value as Record<string, unknown>), updatedAt: stamp, updatedBy: this.o.computer }, 'edit')
     if (conflicts.length) {
       // What did not meet a change elsewhere is written; the rest stays queued as a question.

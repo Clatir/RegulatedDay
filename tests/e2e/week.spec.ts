@@ -189,11 +189,12 @@ async function nextWeek(page: Page): Promise<{ tue: string; wed: string; thu: st
  * The first full hour from 6:00 on of a day's column (of each of the days) that has room for `minutes` with no block in it –
  * the days of the next week come with the blocks of their templates, so a place to click is looked for, not assumed.
  */
-async function freeHour(page: Page, dates: string | string[], minutes: number): Promise<number> {
-  // 0.8 px a minute: the axis of „Tydzień” (WEEK_PPM).
+async function freeHour(page: Page, dates: string | string[], minutes: number, near?: number, ppm = 0.8): Promise<number> {
+  // 0.8 px a minute: the axis of „Tydzień” (WEEK_PPM); „3 dni” – 1.2. `near`: the free hour closest to it (else the first).
   const list = Array.isArray(dates) ? dates : [dates]
   const found = await page.evaluate(
-    ([ds, px]) => {
+    ([ds, px, around]) => {
+      let best: number | null = null
       const col = document.querySelector(`[data-testid="week-col-${ds[0]}"]`)!.getBoundingClientRect()
       const blocks = ds.flatMap((d) =>
         [...document.querySelectorAll(`[data-testid^="week-block-${d}-"]`)].map((e) => {
@@ -206,11 +207,13 @@ async function freeHour(page: Page, dates: string | string[], minutes: number): 
         const r = label.getBoundingClientRect()
         const y = r.top + r.height / 2 - col.top
         if (hour < 360 || y + (px as number) + 8 > col.height) continue
-        if (!blocks.some(([a, b]) => a! < y + (px as number) + 8 && b! > y - 8)) return hour
+        if (blocks.some(([a, b]) => a! < y + (px as number) + 8 && b! > y - 8)) continue
+        if (around == null) return hour
+        if (best == null || Math.abs(hour - (around as number)) < Math.abs(best - (around as number))) best = hour
       }
-      return null
+      return best
     },
-    [list, minutes * 0.8] as const
+    [list, minutes * ppm, near ?? null] as const
   )
   expect(found, `a free ${minutes} min on ${list.join(', ')}`).not.toBeNull()
   return found!
@@ -687,6 +690,207 @@ test('Tydzień (D400): „Dodaj” na zajęte miejsce w trzech przyszłych dniac
           .poll(() => planOf(dataDir, d).map((b) => [b.id, b.startMin, b.durationMin]).sort(), { timeout: 15_000 })
           .toEqual(first[d]!.map((b) => [b.id, b.startMin, b.durationMin]).sort())
       }
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+/** A day's file with the blocks given (the rest of the day comes from its template, as for every day to come). */
+function seedDay(dir: string, date: string, blocks: Array<{ id: string; startMin: number; durationMin: number; fixed?: boolean; categoryId?: string }>): void {
+  mkdirSync(dirname(dayFileOf(dir, date)), { recursive: true })
+  writeFileSync(dayFileOf(dir, date), JSON.stringify({ schema: 1, date, blocks: blocks.map((b) => ({ categoryId: 'inne', fixed: false, ...b })) }))
+}
+
+/** The Monday on or before `date`. */
+const mondayOf = (date: string): string => plusDays(date, -((new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7))
+/** A column's first line as the page words it: „śr 25.11” (`dayHeading`). */
+const headingOf = (date: string): string => `${['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'][(new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7]} ${Number(date.slice(8, 10))}.${date.slice(5, 7)}`
+
+test('Widoki (SNT1, D417, D418, T936): przełącznik zapamiętany, „3 dni” z krzywą „przyjęte” jutro, „Agenda” z blokiem jutra otwierającym dzień', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-views-'))
+  seed(dataDir)
+  const today = logicalToday()
+  const yesterday = plusDays(today, -1)
+  const tomorrow = plusDays(today, 1)
+  seedDay(dataDir, tomorrow, [{ id: 'ag1', startMin: 11 * 60, durationMin: 60 }])
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-week').click()
+      // „Tydzień” first: seven columns; the switch names the three views.
+      await expect(page.getByTestId('week-mode-week')).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.locator('[data-testid^="week-col-"]')).toHaveCount(7, { timeout: 30_000 })
+      await expect(page.getByTestId('week-modes')).toContainText('Tydzień')
+      await expect(page.getByTestId('week-modes')).toContainText('3 dni')
+      await expect(page.getByTestId('week-modes')).toContainText('Agenda')
+
+      // „3 dni”: yesterday, today, tomorrow – the arrows move by a day, „Dziś” goes back.
+      await page.getByTestId('week-mode-3days').click()
+      await expect(page.locator('[data-testid^="week-col-"]')).toHaveCount(3)
+      for (const d of [yesterday, today, tomorrow]) await expect(page.getByTestId(`week-col-${d}`)).toBeVisible()
+      await expect(page.getByTestId('three-title')).toHaveAttribute('data-middle', today)
+      await expect(page.getByTestId('three-today')).toBeDisabled()
+      await expect(page.getByTestId('week-grid')).toHaveAttribute('data-mode', '3days')
+      // The energy's curve behind tomorrow's blocks, counted from the assumed check-in (D422); none for the day gone by.
+      await expect(page.getByTestId(`week-energy-${tomorrow}`)).toHaveAttribute('data-assumed', 'true', { timeout: 30_000 })
+      await expect(page.getByTestId(`week-energy-assumed-${tomorrow}`)).toHaveText('przyjęte')
+      await expect(page.getByTestId(`week-energy-${yesterday}`)).toHaveCount(0)
+      await shot(page, 'snt1-01-three-days')
+      await page.getByTestId('three-next').click()
+      await expect(page.getByTestId('three-title')).toHaveAttribute('data-middle', tomorrow)
+      await expect(page.getByTestId(`week-col-${plusDays(today, 2)}`)).toBeVisible()
+      await expect(page.getByTestId('three-today')).toBeEnabled()
+      await page.getByTestId('three-today').click()
+      await expect(page.getByTestId('three-title')).toHaveAttribute('data-middle', today)
+
+      // The view is remembered: another page and back, „3 dni” is still there.
+      await page.getByTestId('nav-stats').click()
+      await expect(page.getByTestId('week')).toHaveCount(0)
+      await page.getByTestId('nav-week').click()
+      await expect(page.getByTestId('week')).toHaveAttribute('data-mode', '3days')
+
+      // „Agenda”: seven days from today, a day after a day; tomorrow's block has its hour, name, length – a click opens its day.
+      await page.getByTestId('week-mode-agenda').click()
+      await expect(page.locator('[data-testid^="agenda-day-"]')).toHaveCount(7, { timeout: 30_000 })
+      await expect(page.getByTestId(`agenda-day-${today}`)).toBeVisible()
+      await expect(page.getByTestId(`agenda-day-${plusDays(today, 6)}`)).toBeVisible()
+      await expect(page.getByTestId(`agenda-heading-${today}`)).toContainText('Dziś')
+      await expect(page.getByTestId(`agenda-heading-${tomorrow}`)).toContainText('Jutro')
+      const row = page.getByTestId(`agenda-block-${tomorrow}-ag1`)
+      await expect(row).toContainText('11:00')
+      await expect(row).toContainText('Inne obowiązki')
+      await expect(row).toContainText('1 h')
+      await shot(page, 'snt1-02-agenda')
+      await row.click()
+      await expect(page.getByTestId('day-today')).toBeVisible()
+      await expect(page.getByTestId('day-title')).toContainText(`${tomorrow.slice(8)}.${tomorrow.slice(5, 7)}.`)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Przeciąganie bloku (SNT1, D417, D422): wtorek → środa z podglądem miejsca i linią „Przeniesiono … · Cofnij” przywracającą oba dni; w „3 dniach” zmiana godziny jutra', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-drag-'))
+  seed(dataDir)
+  const today = logicalToday()
+  const tomorrow = plusDays(today, 1)
+  // The days of the next week: none gone, none today – the same at every hour of the day.
+  const tue = plusDays(mondayOf(today), 8)
+  const wed = plusDays(tue, 1)
+  seedDay(dataDir, tue, [{ id: 'mv1', startMin: 12 * 60, durationMin: 60 }])
+  seedDay(dataDir, tomorrow, [{ id: 'mv2', startMin: 14 * 60, durationMin: 60 }])
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await nextWeek(page)
+      const src = page.getByTestId(`week-block-${tue}-mv1`)
+      await expect(src).toBeVisible({ timeout: 30_000 })
+      await expect(src).toHaveAttribute('data-movable', 'true')
+      await src.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      const h = await freeHour(page, wed, 90, 12 * 60)
+      const targetY = await hourY(page, h)
+      const box = (await src.boundingBox())!
+      const sx = box.x + box.width / 2
+      const sy = box.y + 10
+      // Held 10 px under the block's top, taken to the free hour of Wednesday: its place is shown while the button is held.
+      await page.mouse.move(sx, sy)
+      await page.mouse.down()
+      await page.mouse.move(sx + 30, sy + 10, { steps: 4 })
+      await page.mouse.move(await centreOf(page, wed), targetY + 10, { steps: 8 })
+      const band = page.getByTestId('week-drop')
+      await expect(band).toHaveAttribute('data-start', String(h))
+      await expect(band).toContainText(`${clockOf(h)}–${clockOf(h + 60)}`)
+      await expect(page.getByTestId('week-grid')).toHaveAttribute('data-dragging', 'true')
+      await page.mouse.up()
+      // Written: the block is Wednesday's at that hour (the same id), Tuesday's file lets it go.
+      await expect.poll(() => planOf(dataDir, wed).find((b) => b.id === 'mv1')?.startMin, { timeout: 15_000 }).toBe(h)
+      await expect.poll(() => planOf(dataDir, tue).some((b) => b.id === 'mv1'), { timeout: 15_000 }).toBe(false)
+      await expect(page.getByTestId(`week-block-${wed}-mv1`)).toBeVisible({ timeout: 15_000 })
+      await expect(page.getByTestId(`week-block-${tue}-mv1`)).toHaveCount(0)
+      const line = page.getByTestId('week-pushed')
+      await expect(line).toContainText(`Przeniesiono: Inne obowiązki na ${headingOf(wed)}`)
+      await shot(page, 'snt1-03-moved')
+      // „Cofnij”: both days as they were.
+      await page.getByTestId('week-pushed-undo').click()
+      await expect(line).toHaveCount(0)
+      await expect.poll(() => planOf(dataDir, tue).find((b) => b.id === 'mv1')?.startMin, { timeout: 15_000 }).toBe(12 * 60)
+      await expect.poll(() => planOf(dataDir, wed).some((b) => b.id === 'mv1'), { timeout: 15_000 }).toBe(false)
+      await expect(page.getByTestId(`week-block-${tue}-mv1`)).toBeVisible({ timeout: 15_000 })
+
+      // A click on the block with no movement opens its day, as before.
+      await page.getByTestId(`week-block-${tue}-mv1`).click()
+      await expect(page.getByTestId('day-today')).toBeVisible()
+      await expect(page.getByTestId('day-title')).toContainText(`${tue.slice(8)}.${tue.slice(5, 7)}.`)
+
+      // „3 dni”: tomorrow's block dragged within its column takes the hour as on the axis of „Dziś” (5 min, no line when nothing is pushed).
+      await page.getByTestId('nav-week').click()
+      await page.getByTestId('week-mode-3days').click()
+      const mine = page.getByTestId(`week-block-${tomorrow}-mv2`)
+      await expect(mine).toBeVisible({ timeout: 30_000 })
+      await mine.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      const h2 = await freeHour(page, tomorrow, 90, 14 * 60, 1.2)
+      const y2 = await hourY(page, h2)
+      const box2 = (await mine.boundingBox())!
+      const x2 = box2.x + box2.width / 2
+      await page.mouse.move(x2, box2.y + 10)
+      await page.mouse.down()
+      await page.mouse.move(x2, box2.y + 30, { steps: 3 })
+      await page.mouse.move(x2, y2 + 10, { steps: 6 })
+      await expect(page.getByTestId('week-drop')).toHaveAttribute('data-start', String(h2))
+      await page.mouse.up()
+      await expect.poll(() => planOf(dataDir, tomorrow).find((b) => b.id === 'mv2')?.startMin, { timeout: 15_000 }).toBe(h2)
+      await expect(page.getByTestId('week-pushed')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Miesiąc (SNT1, D418, D422): w komórce dnia do trzech pasków stałych bloków, „+N” za resztę i kropka obciążenia ze zdaniem', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-month-'))
+  seed(dataDir)
+  const today = logicalToday()
+  // The 15th of the next month: a day to come at any time, with three fixed blocks (06:30, 07:30, 08:30) and two flexible ones.
+  const next = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 15)).toISOString().slice(0, 10)
+  seedDay(dataDir, next, [
+    { id: 'f1', startMin: 6 * 60 + 30, durationMin: 60, fixed: true },
+    { id: 'f2', startMin: 7 * 60 + 30, durationMin: 60, fixed: true },
+    { id: 'f3', startMin: 8 * 60 + 30, durationMin: 60, fixed: true },
+    { id: 'x1', startMin: 13 * 60, durationMin: 30 },
+    { id: 'x2', startMin: 15 * 60, durationMin: 30 }
+  ])
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-calendar').click()
+      await expect(page.getByTestId('calendar')).toBeVisible()
+      await page.getByTestId('month-next').click()
+      await expect(page.getByTestId('calendar')).toHaveAttribute('data-counted', 'true', { timeout: 30_000 })
+      const bars = page.getByTestId(`month-bar-${next}`)
+      await expect(bars).toHaveCount(3, { timeout: 30_000 })
+      await expect(bars.nth(0)).toHaveAttribute('title', /06:30–07:30/)
+      await expect(bars.nth(2)).toHaveAttribute('title', /08:30–09:30/)
+      // Everything else the day holds – the two flexible blocks and whatever its template brings – is „+N”.
+      await expect(page.getByTestId(`month-more-${next}`)).toHaveText(/^\+([2-9]|\d{2,})$/)
+      // The dot of the load: a level and the sentence about the work and the budget.
+      const dot = page.getByTestId(`month-load-${next}`)
+      await expect(dot).toHaveAttribute('data-level', /^(low|mid|high)$/)
+      await expect(dot).toHaveAttribute('title', /^Praca .+ z .+$/)
+      await shot(page, 'snt1-04-month')
+      // The colour of the day and the selection stay: a click with Ctrl selects the day.
+      await page.getByTestId(`day-${next}`).click({ modifiers: ['Control'] })
+      await expect(page.getByTestId(`day-${next}`)).toHaveAttribute('aria-pressed', 'true')
     })
     expect(errors).toEqual([])
   } finally {
