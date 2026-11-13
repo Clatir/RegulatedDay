@@ -26,9 +26,10 @@ import { blockFill } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
 import type { MonthDay } from '@shared/engine/calendarViews'
 import { Dialog } from '../../components/Dialog'
-import { useCalendarFilter, useVisibleAllDay } from '../calendars/calendarFilter'
+import { calendarSieve } from '@shared/model/calendars'
+import { useCalendarFilter } from '../calendars/calendarFilter'
 import { CalendarChips } from '../calendars/CalendarChips'
-import { useHiddenAllDay } from '../calendars/visibleViews'
+import { useVisibleAllDayIn } from '../calendars/visibleViews'
 import { TimeField } from '../../components/fields'
 import { dayFilesNow, editNotice, editOf, isSaved, trySaveWith, useData } from '../../store/data'
 import { useBusy } from '../../lib/busy'
@@ -46,7 +47,7 @@ import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
 import { ZjazdyPreviewPanel } from './ZjazdyPreview'
 
 export function CalendarPage() {
-  const { rd, templates, lectures, seriesPlans, stamp, allDay, routines, requests } = useData()
+  const { rd, templates, lectures, seriesPlans, stamp, routines, requests } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const brightness = useMachine((s) => s.prefs.brightness)
   const [month, setMonth] = useState(monthOf(today))
@@ -64,13 +65,14 @@ export function CalendarPage() {
   // D419, D425: the cells leave out the blocks and all-day events of the unchecked calendars (the dot of the load stays as counted);
   // „ukryte: N” = the blocks of the month and the events of the grid they take out.
   const hiddenCalendars = useCalendarFilter((s) => s.hidden)
-  const shownEvents = useVisibleAllDay(allDay).shown
-  const hiddenEvents = useHiddenAllDay(dates[0]!, dates.at(-1)!)
+  const { shown: shownEvents, hiddenInRange: hiddenEvents } = useVisibleAllDayIn(dates[0]!, dates.at(-1)!)
   const { monthDays, hiddenBlocks } = useMemo(() => {
     const days = new Map<string, MonthDay>()
     let hiddenBlocks = 0
+    // The hidden calendars and the calendar of each category are resolved once for the month, not for each day.
+    const sieve = calendarSieve(hiddenCalendars, rd)
     for (const d of monthView?.days ?? []) {
-      const v = visibleMonthDay(d, hiddenCalendars, rd)
+      const v = visibleMonthDay(d, sieve)
       days.set(d.date, v.day)
       hiddenBlocks += v.hiddenCount
     }

@@ -36,12 +36,20 @@ function saveHiddenCalendars(ids: readonly string[]): void {
 interface CalendarFilter {
   /** The unchecked calendars (ids). */
   hidden: string[]
+  /**
+   * The all-day event shown in spite of its calendar being unchecked (D427: the one Ctrl K found, while its card is open) – its
+   * id; null – none. Not remembered (nothing of it is stored). A block's reveal is the page's own (`TodayPage`: the block whose panel is open).
+   */
+  revealed: string | null
   /** A calendar checked ↔ unchecked. */
   toggle: (id: string) => void
+  reveal: (eventId: string | null) => void
 }
 
 export const useCalendarFilter = create<CalendarFilter>((set, get) => ({
   hidden: loadHiddenCalendars(),
+  revealed: null,
+  reveal: (eventId) => set({ revealed: eventId }),
   toggle: (id) => {
     const cur = get().hidden
     const hidden = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
@@ -69,9 +77,29 @@ export function useVisibleBlocks<T extends { categoryId: string }>(blocks: reado
   return useMemo(() => filterBlocks(blocks, hidden, rd), [blocks, hidden, rd])
 }
 
-/** As `useVisibleBlocks` for all-day events (D425): each by its own calendar. */
-export function useVisibleAllDay<T extends { calendarId: string | null }>(events: readonly T[]): { shown: T[]; hiddenCount: number } {
+/**
+ * As `useVisibleBlocks` for all-day events (D425): each by its own calendar. The event Ctrl K found (`revealed`, D427) stays in
+ * `shown` in order, is not counted as hidden, and `revealedId` names it (the bar says where it comes from) – only while it is
+ * one that would be hidden.
+ */
+export function useVisibleAllDay<T extends { calendarId: string | null; id?: string }>(events: readonly T[]): { shown: T[]; hiddenCount: number; revealedId: string | null } {
   const rd = useData((x) => x.rd)
   const hidden = useCalendarFilter((x) => x.hidden)
-  return useMemo(() => filterAllDay(events, hidden, rd), [events, hidden, rd])
+  const revealed = useCalendarFilter((x) => x.revealed)
+  return useMemo(() => {
+    const r = filterAllDay(events, hidden, rd)
+    if (r.hiddenCount === 0 || revealed == null) return { ...r, revealedId: null }
+    const back = events.find((e) => e.id === revealed)
+    const kept = new Set<T>(r.shown)
+    if (!back || kept.has(back)) return { ...r, revealedId: null }
+    return { shown: events.filter((e) => e === back || kept.has(e)), hiddenCount: r.hiddenCount - 1, revealedId: revealed }
+  }, [events, hidden, rd, revealed])
+}
+
+/**
+ * How many of `blocks` the unchecked calendars hide – for a count made outside a view (the line after blocks were pushed apart,
+ * D419: „w tym M ukrytych”), from the state of the window as it is now.
+ */
+export function hiddenBlocksAmong(blocks: readonly { categoryId: string }[]): number {
+  return filterBlocks(blocks, useCalendarFilter.getState().hidden, useData.getState().rd).hiddenCount
 }

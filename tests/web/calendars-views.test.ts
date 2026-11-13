@@ -11,6 +11,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import type { DataView } from '@shared/api'
 import { monthDayOf, type MonthView } from '@shared/engine/calendarViews'
 import { computeDay } from '@shared/engine/day'
+import { pushedText } from '@shared/engine/pushApart'
+import { addDays } from '@shared/time/zone'
 import { computeEnergy } from '@shared/engine/energy'
 import { daysViewOf, weekDates, weekViewOf, type HorizonBlock, type HorizonDay } from '@shared/engine/week'
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
@@ -18,8 +20,11 @@ import { filterBlocks } from '@shared/model/calendars'
 import { CATEGORY_COLORS, rdFrom } from '@shared/model/rd'
 import { weekStart } from '@shared/time/day'
 import { CalendarPage } from '@renderer/features/calendar/CalendarPage'
-import { useCalendarFilter } from '@renderer/features/calendars/calendarFilter'
+import { hiddenBlocksAmong, useCalendarFilter } from '@renderer/features/calendars/calendarFilter'
+import { axisWithRevealed } from '@renderer/features/calendars/visibleViews'
 import { dayAxis } from '@renderer/features/plan/dayItems'
+import { Timeline, type TimelineItem } from '@renderer/features/plan/Timeline'
+import { weekPushLineText } from '@renderer/features/week/weekText'
 import { WeekPage } from '@renderer/features/week/WeekPage'
 import { useData } from '@renderer/store/data'
 import { useDaysView, useMonthView, useWeekView } from '@renderer/store/horizon'
@@ -64,6 +69,7 @@ const day = (date: string, blocks: HorizonBlock[], o: Partial<HorizonDay> = {}):
 /** Today: „a” of „Moje” (10:00); the 20th: a lecture „l” of „Praca” (09:00) and „x” of „Moje” (14:00). */
 const blocksOf = (date: string): HorizonBlock[] =>
   date === TODAY ? [block('a', 600, 690, 'inne')] : date === LECTURE_DAY ? [block('l', 540, 600, 'nauka', { fixed: true }), block('x', 840, 900, 'inne')] : []
+const plusDay = (date: string, n: number): string => addDays(date, n)
 const event = (id: string, title: string, date: string, calendarId: string | null): AllDayEvent => ({ ...allDayDraft(id, date), title, calendarId })
 
 beforeAll(() => {
@@ -179,6 +185,22 @@ describe('„3 dni” (D419)', () => {
     expect(q('week-grid')!.getAttribute('data-mode')).toBe('3days')
   })
 
+  it('strzałka: do czasu odczytu widać poprzednie dni – wydarzenia liczą się z tych samych dni co bloki, nie z nowych dat', async () => {
+    setEvents([event('e1', 'Zjazd', LECTURE_DAY, 'praca')])
+    await mountWeek('3days')
+    hide('praca')
+    await act(async () => undefined)
+    // 17.–19.11 are drawn: the event of the 20th is not among them.
+    expect(hiddenText()).toBeNull()
+    vi.mocked(useDaysView).mockImplementation((dates) => (dates.includes(LECTURE_DAY) ? { view: null, failed: false } : { view: daysViewOf(dates, TODAY, dates.map((d) => day(d, blocksOf(d)))), failed: false }))
+    await click('three-next')
+    expect(q('three-title')!.getAttribute('data-middle')).toBe(plusDay(TODAY, 1))
+    // The next days are not read yet: the grid still shows 17.–19.11, and so does the count.
+    expect(q(`week-col-${TODAY}`)).not.toBeNull()
+    expect(q(`week-col-${LECTURE_DAY}`)).toBeNull()
+    expect(hiddenText()).toBeNull()
+  })
+
   it('kalendarz bez bloków i wydarzeń w widoku – „ukryte” bez zmian (nic)', async () => {
     await mountWeek('3days')
     hide('dom')
@@ -203,7 +225,10 @@ describe('„Agenda” (D419)', () => {
     hide('praca', 'moje')
     await act(async () => undefined)
     expect(q(`agenda-block-${TODAY}-a`)).toBeNull()
-    expect(q(`agenda-empty-${TODAY}`)).not.toBeNull()
+    // A day with nothing left says what was hidden, not „nic” (D419); one with nothing at all still says „nic”.
+    expect(q(`agenda-empty-${TODAY}`)).toBeNull()
+    expect(q(`agenda-hidden-${TODAY}`)!.textContent).toBe('ukryte: 1')
+    expect(q(`agenda-empty-${plusDay(TODAY, 1)}`)).not.toBeNull()
     expect(hiddenText()).toBe('ukryte: 4')
   })
 
@@ -269,6 +294,118 @@ describe('miesiąc w „Kalendarzu” (D419)', () => {
     await mount()
     expect(q('calendar-chips')).toBeNull()
     expect(host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)).toHaveLength(2)
+  })
+})
+
+describe('Ctrl K i karta wydarzenia z ukrytego kalendarza (D427)', () => {
+  it('wynik Ctrl K z ukrytego kalendarza: karta się otwiera, pasek wydarzenia jest widoczny z podpisem, nie liczy się do „ukryte”; po zamknięciu karty znika', async () => {
+    setEvents([event('e1', 'Zjazd', LECTURE_DAY, 'praca'), event('e2', 'Wyjazd', LECTURE_DAY, 'praca')])
+    useCalendarFilter.setState({ hidden: ['praca'] })
+    useUi.setState({ page: 'week', pick: { kind: 'allDay', id: 'e1' } })
+    await mountWeek('week')
+    expect(q('allday-card')).not.toBeNull()
+    expect(q('allday-bar-e1')!.getAttribute('data-hidden-calendar')).toBe('z ukrytego kalendarza Praca')
+    expect(q('allday-hidden-calendar')!.textContent).toBe('z ukrytego kalendarza Praca')
+    expect(q('allday-bar-e2')).toBeNull()
+    // The chips are as they were; hidden are the lecture of the 20th and e2 – not e1, which is drawn.
+    expect(chip('praca').getAttribute('aria-pressed')).toBe('false')
+    expect(hiddenText()).toBe('ukryte: 2')
+    await click('allday-cancel')
+    expect(q('allday-card')).toBeNull()
+    expect(q('allday-bar-e1')).toBeNull()
+    expect(hiddenText()).toBe('ukryte: 3')
+  })
+
+  it('otwarta karta wydarzenia zamyka się, gdy odznaczysz jego kalendarz (jego paska już nie ma)', async () => {
+    setEvents([event('e1', 'Zjazd', LECTURE_DAY, 'praca')])
+    await mountWeek('week')
+    await click('allday-bar-e1')
+    expect(q('allday-card')).not.toBeNull()
+    await act(async () => chip('praca').click())
+    expect(q('allday-card')).toBeNull()
+    expect(q('allday-bar-e1')).toBeNull()
+  })
+
+  it('karta wydarzenia widocznego kalendarza zostaje, gdy odznaczysz inny', async () => {
+    setEvents([event('e1', 'Zjazd', LECTURE_DAY, 'praca')])
+    await mountWeek('week')
+    await click('allday-bar-e1')
+    await act(async () => chip('dom').click())
+    expect(q('allday-card')).not.toBeNull()
+  })
+})
+
+describe('oś „Dziś”: bloki ukrytego kalendarza, które zostają (D427, T1002)', () => {
+  const item = (id: string, categoryId: string, o: { startMin?: number; always?: boolean } = {}) => ({ id, categoryId, startMin: o.startMin ?? 600, endMin: (o.startMin ?? 600) + 60, ...(o.always ? { always: true } : {}) })
+  const items = [item('a', 'inne'), item('n', 'nauka', { startMin: 700 }), item('r', 'nauka', { startMin: 800, always: true }), item('o', 'nauka', { startMin: 900 })]
+  const shown = items.filter((i) => i.categoryId !== 'nauka')
+
+  it('otwarty blok i blok trwający wracają z nazwą kalendarza, reszta ukryta; „ukryte” liczy tylko tę resztę', () => {
+    const out = axisWithRevealed(items, shown, 'n', RD_TWO)
+    expect(out.items.map((i) => [i.id, (i as { hiddenIn?: string }).hiddenIn])).toEqual([
+      ['a', undefined],
+      ['n', 'Praca'],
+      ['r', 'Praca']
+    ])
+    expect(out.hiddenCount).toBe(1)
+  })
+
+  it('bez otwartego bloku wraca tylko trwający; nic ukryte – te same pozycje', () => {
+    const out = axisWithRevealed(items, shown, null, RD_TWO)
+    expect(out.items.map((i) => i.id)).toEqual(['a', 'r'])
+    expect(out.hiddenCount).toBe(2)
+    expect(axisWithRevealed(shown, shown, 'n', RD_TWO).items).toBe(shown)
+  })
+})
+
+describe('oś w „Dziś”: godziny z wszystkich bloków (D427)', () => {
+  it('zakres osi liczy się z `extent`, choć ukryty blok nie jest rysowany; podpis „z ukrytego kalendarza” na pozycji z `hiddenIn`', async () => {
+    const mk = (id: string, startMin: number, o: Partial<TimelineItem> = {}): TimelineItem => ({ id, startMin, endMin: startMin + 60, title: `Blok ${id}`, marks: [], color: '#888888', categoryId: 'inne', background: false, ...o })
+    const visible = mk('a', 600)
+    const late = mk('z', 23 * 60)
+    const mount = async (props: Record<string, unknown>) => {
+      host = document.createElement('div')
+      document.body.append(host)
+      root = createRoot(host)
+      await act(async () => root!.render(createElement(Timeline, { markers: [], selected: null, onSelect: () => undefined, from: 8 * 60, to: 18 * 60, ...props } as never)))
+    }
+    await mount({ items: [visible] })
+    const hiOf = () => Number(q('timeline-axis')!.getAttribute('data-hi'))
+    const alone = hiOf()
+    act(() => root?.unmount())
+    host?.remove()
+    await mount({ items: [visible], extent: [visible, late] })
+    expect(hiOf()).toBeGreaterThan(alone)
+    expect(hiOf()).toBeGreaterThanOrEqual(24 * 60)
+    expect(q('block-z')).toBeNull()
+    act(() => root?.unmount())
+    host?.remove()
+    await mount({ items: [mk('a', 600, { hiddenIn: 'Praca' })] })
+    expect(q('block-a')!.getAttribute('data-hidden-calendar')).toBe('Praca')
+    expect(q('hidden-calendar')!.textContent).toBe('z ukrytego kalendarza Praca')
+  })
+})
+
+describe('rozsuwanie: linia mówi, ile ukrytych (D419, T1003)', () => {
+  it('„Przesunięto N bloków (w tym M ukrytych)”; bez ukrytych – jak dotąd', () => {
+    expect(pushedText(3)).toBe('Przesunięto 3 bloki')
+    expect(pushedText(3, 0)).toBe('Przesunięto 3 bloki')
+    expect(pushedText(3, 1)).toBe('Przesunięto 3 bloki (w tym 1 ukryty)')
+    expect(pushedText(5, 2)).toBe('Przesunięto 5 bloków (w tym 2 ukryte)')
+    expect(pushedText(8, 5)).toBe('Przesunięto 8 bloków (w tym 5 ukrytych)')
+  })
+
+  it('linia „Tygodnia” sumuje ukryte z dni; ukryte w bloku przeniesionym i „Dodaj” też', () => {
+    const d = (date: string, moved: number, hidden?: number) => ({ date, entry: { rel: `days/${date}.json`, edits: [] }, made: null, moved, ...(hidden != null ? { hidden } : {}) })
+    expect(weekPushLineText({ days: [d('2026-11-24', 2, 1), d('2026-11-25', 1, 1)] })).toBe('Przesunięto 3 bloki (w tym 2 ukryte) w 2 dniach')
+    expect(weekPushLineText({ days: [d('2026-11-24', 2)] })).toBe('Przesunięto 2 bloki w 1 dniu')
+    expect(weekPushLineText({ days: [d('2026-11-25', 2, 1)], move: { blockId: 'b', name: 'Analiza', from: '2026-11-24', to: '2026-11-25' } })).toContain('przesunięto 2 bloki (w tym 1 ukryty)')
+  })
+
+  it('`hiddenBlocksAmong` liczy bloki odznaczonych kalendarzy według stanu okna', () => {
+    expect(hiddenBlocksAmong([{ categoryId: 'inne' }, { categoryId: 'nauka' }, { categoryId: 'nauka' }])).toBe(0)
+    useCalendarFilter.setState({ hidden: ['praca'] })
+    expect(hiddenBlocksAmong([{ categoryId: 'inne' }, { categoryId: 'nauka' }, { categoryId: 'nauka' }])).toBe(2)
   })
 })
 

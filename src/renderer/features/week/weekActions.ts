@@ -9,6 +9,7 @@ import type { PlanBlock } from '@shared/model/plan'
 import { isSaved, trySaveWith, withOwner } from '../../store/data'
 import { countedDay } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
+import { hiddenBlocksAmong } from '../calendars/calendarFilter'
 import { dropWeekPushDays, useWeekPush, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 import { dayFileEdit, withPushed, type PushedStart } from '../today/dayActions'
 import { addChange, pushedStarts } from '../today/dayPush'
@@ -118,7 +119,7 @@ export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block
         if (edit) {
           edits.push(edit)
           sent.push(e.date)
-          written.set(e.date, { date: e.date, entry: edit, made: edit.create ? after : null, moved: starts.length })
+          written.set(e.date, { date: e.date, entry: edit, made: edit.create ? after : null, moved: starts.length, hidden: hiddenBlocksAmong(starts.map((s) => s.block)) })
         }
       } catch {
         // A file the edit cannot be made on (a broken one): this day is left as an unreadable one, the others go on.
@@ -136,7 +137,7 @@ export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block
   if (!days.some((d) => d.moved > 0)) return { ...r, push: null }
   if (mine) {
     try {
-      await window.rd.planPushed(mine.date, mine.moved, mine.entry, mine.made, false)
+      await window.rd.planPushed(mine.date, mine.moved, mine.entry, mine.made, false, mine.hidden ?? 0)
     } catch {
       // The plan is saved; only the bar's marker is missing (the main process is closing).
     }

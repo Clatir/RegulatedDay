@@ -1949,17 +1949,32 @@ describe('rozsuwanie w pasku (D367)', () => {
     expect(ids.indexOf('wait:ses')).toBeLessThan(ids.indexOf('moved:push'))
   })
 
+  it('D419, T1003: blok ukryty w oknie (odznaczony kalendarz) też jest przesuwany – linia mówi „(w tym M ukrytych)”', async () => {
+    const { w, folder } = await make({ from: placeLogical(DAY, 9 * 60) })
+    await w.refresh()
+    const entry = await pushX(folder)
+    await w.pushed(DAY, 3, { entry, made: null }, true, 2)
+    expect(w.current().lines[0]).toMatchObject({ id: 'moved:push', text: 'Przesunięto 3 bloki (w tym 2 ukryte)' })
+    await w.pushed(DAY, 3, { entry, made: null }, true, 1)
+    expect(w.current().lines[0]).toMatchObject({ id: 'moved:push', text: 'Przesunięto 3 bloki (w tym 1 ukryty)' })
+  })
+
   it('IPC: odpowiedź nie czeka na przeliczenie paska (okno nie wisi na „Dodaj”), błąd przeliczenia idzie do logu', async () => {
     const entry = { rel: paths.day(DAY), edits: [{ path: ['blocks', '#a', 'startMin'], base: 600, value: 660 }] }
     const calls: unknown[][] = []
     const logs: string[] = []
     const never = { pushed: (...a: unknown[]) => (calls.push(a), new Promise<void>(() => undefined)) }
     expect(planPushedIpc(never, () => undefined, DAY, 2, entry, null)).toBeUndefined()
-    expect(calls).toEqual([[DAY, 2, { entry, made: null }, true]])
+    expect(calls).toEqual([[DAY, 2, { entry, made: null }, true, 0]])
     // D400: a „Dodaj” of the week says it has no line of its own.
     planPushedIpc(never, () => undefined, DAY, 2, entry, null, false)
-    expect(calls[1]).toEqual([DAY, 2, { entry, made: null }, false])
-    calls.pop()
+    expect(calls[1]).toEqual([DAY, 2, { entry, made: null }, false, 0])
+    // D419, T1003: how many of the pushed blocks the window hides – a whole number up to the count, anything else is none.
+    planPushedIpc(never, () => undefined, DAY, 2, entry, null, true, 1)
+    planPushedIpc(never, () => undefined, DAY, 2, entry, null, true, 3)
+    planPushedIpc(never, () => undefined, DAY, 2, entry, null, true, 'x')
+    expect(calls.slice(2).map((c) => c[4])).toEqual([1, 0, 0])
+    calls.length = 1
     const failing = { pushed: () => Promise.reject(new Error('folder')) }
     planPushedIpc(failing, (_l, msg) => void logs.push(msg), DAY, 1, entry, null)
     await vi.waitFor(() => expect(logs).toEqual(['pasek nie przeliczył się po przesunięciu bloków']))

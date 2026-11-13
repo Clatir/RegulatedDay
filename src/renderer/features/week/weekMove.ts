@@ -19,6 +19,7 @@ import type { PlanBlock } from '@shared/model/plan'
 import { logicalDayOf } from '@shared/time/day'
 import { countedDay, type DayModel } from '../../store/day'
 import { editOf, isSaved, trySaveWith, withOwner, type SendState } from '../../store/data'
+import { hiddenBlocksAmong } from '../calendars/calendarFilter'
 import { MOVE_GONE_TEXT, movedDay, stayedOf, type Stayed, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 import { blockNow, withPushed, type PushedStart } from '../today/dayActions'
 import { dragChange, onUnsettled, pushedStarts } from '../today/dayPush'
@@ -121,7 +122,7 @@ async function moveWithinDay(m: WeekMove, today: string, at: number): Promise<We
     // Its start over the block as the file holds it then (as `draggedBlock` of „Dziś” is saved), then the pushed ones.
     const after = withPushed(dayRaw(file, m.from), m.from, (r) => r, [{ block: was, startMin: c.block.startMin! }, ...starts])
     const entry = editOf(paths.day(m.from), file, after)
-    if (entry) day = { date: m.from, entry, made: entry.create ? after : null, moved: starts.length }
+    if (entry) day = { date: m.from, entry, made: entry.create ? after : null, moved: starts.length, hidden: hiddenBlocksAmong(starts.map((s) => s.block)) }
     return [entry]
   }, state)
   const status = statusOf(out, state)
@@ -166,7 +167,7 @@ async function moveToDay(m: WeekMove, today: string, at: number): Promise<WeekMo
     // What „Cofnij” takes back: each day's whole change – the target's from its content before and after both entries (T968;
     // their paths may nest: a list of blocks made and a pushed block in it).
     const whole = editOf(paths.day(m.to), toFile, toAll)
-    days.push(...movedDay(m.from, leave, two.source), ...movedDay(m.to, whole, toAll, starts.length))
+    days.push(...movedDay(m.from, leave, two.source), ...movedDay(m.to, whole, toAll, starts.length, hiddenBlocksAmong(starts.map((s) => s.block))))
     pushed = starts.length
     return withOwner(bring, [leave, push].filter((e): e is EditEntry => e != null))
   }, state)
@@ -191,7 +192,7 @@ function pushedOn(day: DayModel, block: PlanBlock, followers: readonly PlanBlock
 async function tellBar(d: WeekPushedDay, today: string): Promise<void> {
   if (d.date !== today || d.moved === 0) return
   try {
-    await window.rd.planPushed(d.date, d.moved, d.entry, d.made, false)
+    await window.rd.planPushed(d.date, d.moved, d.entry, d.made, false, d.hidden ?? 0)
   } catch {
     // The plan is saved; only the bar's marker is missing (the main process is closing).
   }

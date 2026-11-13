@@ -97,7 +97,7 @@ describe('rozsuwanie przy zaplanowaniu sprawy (T764)', () => {
     const res = await planOnAxis(model, D1, requestFrom(t)!, 'x', lm('10:15'))
     expect(blocksAfter(res, D1).find((b) => b.id === 'tpl')).toMatchObject({ startMin: lm('10:45') })
     expect(res.moved).toBe(1)
-    expect(planPushed).toHaveBeenCalledWith(D1, 1, expect.anything(), expect.anything())
+    expect(planPushed).toHaveBeenCalledWith(D1, 1, expect.anything(), expect.anything(), undefined, 0)
   })
 })
 

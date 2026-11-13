@@ -64,6 +64,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       marks: [...blockMarks(p, { afterWork: info.afterWorkMark, fromYesterday: p.movedFrom === yesterday }), ...(f?.startedAt != null && f.endedAt == null ? ['biegnie'] : [])],
       color: blockColor(p.categoryId, names),
       categoryId: p.categoryId,
+      // A block that runs now is never hidden with its calendar (T1002): its handles and the question of its edge are in use.
+      ...(f?.startedAt != null && f.endedAt == null ? { always: true } : {}),
       background: info.bg,
       dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),
       waits: info.waits,
@@ -92,6 +94,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       marks: f.endedAt == null ? ['poza planem', 'biegnie'] : ['poza planem'],
       color: blockColor(info.categoryId, names),
       categoryId: info.categoryId,
+      // Begun outside the plan: never hidden with its calendar either (T1002).
+      always: true,
       background: false,
       dim: f.endedAt != null,
       waits: false

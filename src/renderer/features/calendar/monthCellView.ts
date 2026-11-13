@@ -7,7 +7,7 @@ import { monthCell, type LoadLevel, type MonthDay } from '@shared/engine/calenda
 import { barTitle } from '../allday/allDayText'
 import { durationLabel, logicalClock } from '@shared/format'
 import type { AllDayEvent } from '@shared/model/allDay'
-import { filterBlocks } from '@shared/model/calendars'
+import type { CalendarSieve } from '@shared/model/calendars'
 import { ALL_DAY_COLOR_HEX, blockFill } from '@shared/theme'
 import { blockColor, blockName, type Names } from '../plan/blockView'
 
@@ -47,13 +47,11 @@ export const emptyMonthDay = (date: string): MonthDay => ({ date, when: 'future'
  * the load, its numbers (the dot) stay as the engine counted them. `hiddenCount` – the blocks it took out (for „ukryte: N”).
  * Nothing hidden – the very `day`.
  */
-export function visibleMonthDay(day: MonthDay, hidden: readonly string[], rd: Parameters<typeof filterBlocks>[2]): { day: MonthDay; hiddenCount: number } {
-  const kept = filterBlocks(day.categories.map((categoryId) => ({ categoryId })), hidden, rd)
-  if (kept.hiddenCount === 0) return { day, hiddenCount: 0 }
-  return {
-    day: { ...day, fixed: filterBlocks(day.fixed, hidden, rd).shown, blockCount: kept.shown.length, categories: kept.shown.map((c) => c.categoryId) },
-    hiddenCount: kept.hiddenCount
-  }
+export function visibleMonthDay(day: MonthDay, sieve: CalendarSieve): { day: MonthDay; hiddenCount: number } {
+  if (sieve.none) return { day, hiddenCount: 0 }
+  const categories = day.categories.filter((c) => !sieve.hidesCategory(c))
+  if (categories.length === day.categories.length) return { day, hiddenCount: 0 }
+  return { day: { ...day, fixed: day.fixed.filter((b) => !sieve.hidesCategory(b.categoryId)), blockCount: categories.length, categories }, hiddenCount: day.categories.length - categories.length }
 }
 
 /** The cell of `day` (null – not counted: `emptyMonthDay`), its words and colours; `names` as the window names blocks. */

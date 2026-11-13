@@ -13,6 +13,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { agendaOf } from '@shared/engine/calendarViews'
+import { eventsOn } from '@shared/model/allDay'
 import { threeDays, agendaDates, type DaysView } from '@shared/engine/week'
 import { weekStart } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -21,9 +22,8 @@ import { useDaysView, useWeekView } from '../../store/horizon'
 import { takeFoundPick, useUi } from '../../store/ui'
 import { pendingCard } from '../allday/allDayView'
 import { AllDayLines } from '../allday/AllDayLines'
-import { useVisibleAllDay } from '../calendars/calendarFilter'
 import { CalendarChips } from '../calendars/CalendarChips'
-import { useHiddenAllDay, useVisibleDays } from '../calendars/visibleViews'
+import { useVisibleAllDayIn, useVisibleDays } from '../calendars/visibleViews'
 import { AgendaView } from './AgendaView'
 import { DayGrid } from './DayGrid'
 import { GoalsPanel } from './GoalsPanel'
@@ -124,10 +124,10 @@ export function WeekPage() {
 function WeekBody({ week, today, openCard, onCardOpened }: { week: string; today: string; openCard: string | null; onCardOpened: () => void }) {
   const { view, failed } = useWeekView(week)
   const seen = useVisibleDays(view?.days)
-  const hiddenEvents = useHiddenAllDay(week, addDays(week, 6))
+  const { hiddenInRange } = useVisibleAllDayIn(week, addDays(week, 6))
   return (
     <>
-      <CalendarChips hiddenCount={seen.hiddenCount + hiddenEvents} />
+      <CalendarChips hiddenCount={seen.hiddenCount + hiddenInRange} />
       <GoalsPanel month={goalsMonthOfWeek(week, today)} />
       {view ? (
         // Keyed by the week: another week is another grid – a window of a new block or a drag never goes with it (D371).
@@ -151,11 +151,13 @@ function ThreeDaysBody({ middle }: { middle: string }) {
   const view = read.view ?? last.current
   const failed = read.failed
   const seen = useVisibleDays(view?.days)
-  const dates = threeDays(middle)
-  const hiddenEvents = useHiddenAllDay(dates[0]!, dates.at(-1)!)
+  // The days the page shows are the last read's (`view`) – the blocks and the events are counted over the same ones (not over the
+  // days an arrow has just asked for, which are not drawn until they are read).
+  const shownDates = view ? view.days.map((d) => d.date) : threeDays(middle)
+  const { hiddenInRange } = useVisibleAllDayIn(shownDates[0]!, shownDates.at(-1)!)
   return (
     <>
-      <CalendarChips hiddenCount={seen.hiddenCount + hiddenEvents} />
+      <CalendarChips hiddenCount={seen.hiddenCount + hiddenInRange} />
       {view ? (
         <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} ppm={THREE_DAYS_PPM} mode="3days" openCard={null} onCardOpened={() => undefined} />
       ) : (
@@ -173,16 +175,21 @@ function AgendaBody({ today }: { today: string }) {
   const dates = agendaDates(today)
   const { view, failed } = useDaysView(dates, { energy: false })
   const allDay = useData((s) => s.allDay)
-  const events = useVisibleAllDay(allDay)
+  const events = useVisibleAllDayIn(dates[0]!, dates.at(-1)!)
   // The list as it is drawn (the blocks taken off a day are not on it), then the blocks of the unchecked calendars out of it.
   const listed = useMemo(() => (view ? agendaOf(view.days, events.shown) : null), [view, events.shown])
   const seen = useVisibleDays(listed)
-  const hiddenEvents = useHiddenAllDay(dates[0]!, dates.at(-1)!)
+  // What each day hides (its blocks and its events): a day with nothing left says so instead of „nic” (D419).
+  const hiddenByDate = useMemo(() => {
+    const out: Record<string, number> = {}
+    for (const [i, d] of (listed ?? []).entries()) out[d.date] = (seen.hiddenByDay[i] ?? 0) + eventsOn(allDay, d.date).length - eventsOn(events.shown, d.date).length
+    return out
+  }, [listed, seen.hiddenByDay, allDay, events.shown])
   return (
     <>
-      <CalendarChips hiddenCount={seen.hiddenCount + hiddenEvents} />
+      <CalendarChips hiddenCount={seen.hiddenCount + events.hiddenInRange} />
       {view ? (
-        <AgendaView agenda={seen.days} today={today} />
+        <AgendaView agenda={seen.days} hiddenByDate={hiddenByDate} today={today} />
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="agenda-loading">
           {failed ? 'Nie da się teraz policzyć tych dni.' : 'Liczę dni…'}

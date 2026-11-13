@@ -15,6 +15,7 @@ import { planCase, undoCase, type CaseResult } from '../../store/cases'
 import { editOf } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { undoToast } from '../../store/ui'
+import { hiddenBlocksAmong } from '../calendars/calendarFilter'
 import { addChange, pushedStarts } from '../today/dayPush'
 
 /**
@@ -61,7 +62,8 @@ export async function planOnAxis(model: DayModel, today: string, r: RequestRecor
     // sprawa then reads as not „zaplanowane” by itself – its block is gone, T752).
     const u = res.undo.find((x) => x.rel === paths.day(model.date))
     const entry = u ? editOf(u.rel, u.before, u.after) : null
-    if (entry) await window.rd.planPushed(model.date, res.moved, entry, entry.create ? u!.after : null).catch(() => undefined)
+    // D419: how many of them an unchecked calendar hides (the line says so, T1003).
+    if (entry) await window.rd.planPushed(model.date, res.moved, entry, entry.create ? u!.after : null, undefined, Math.min(res.moved, hiddenBlocksAmong(pushed.map((p) => p.block)))).catch(() => undefined)
   }
   undoToast(plannedText(title, res.block), () => void undoCase(res.undo))
   return res

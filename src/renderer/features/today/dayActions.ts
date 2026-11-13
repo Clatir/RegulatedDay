@@ -28,6 +28,7 @@ import { attachmentUndoOf, ownAttachmentIds, removalEdits, restoreEdits, type At
 import { dayFilesNow, editOf, isSaved, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
 import { countedDay, dayUsable, type DayModel } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
+import { hiddenBlocksAmong } from '../calendars/calendarFilter'
 import { MOVE_GONE_TEXT, movedDay, stayedOf, type Stayed, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 
 /** The edit of a day's file `before` (null: none yet, it is made) by `next` – null when it changes nothing. */
@@ -89,7 +90,8 @@ export async function pushDayBlocks(date: string, seen: RawRecord | null, change
   })
   if (isSaved(out) && sent.entry && pushed.length) {
     try {
-      await window.rd.planPushed(date, pushed.length, sent.entry, sent.made)
+      // D419: the pushing counts the blocks of an unchecked calendar too (the axis does not draw them) – the line says how many.
+      await window.rd.planPushed(date, pushed.length, sent.entry, sent.made, undefined, hiddenBlocksAmong(pushed.map((p) => p.block)))
     } catch {
       // The plan is saved; only the bar's „Cofnij” of it is missing (the main process is closing).
     }

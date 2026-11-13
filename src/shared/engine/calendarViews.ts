@@ -62,14 +62,15 @@ export interface MonthDay {
 /** The month's day of a day of the horizon. */
 export function monthDayOf(d: HorizonDay): MonthDay {
   const b = d.read === 'unknown' ? null : d.budget
+  const categories = d.blocks.filter(onDay).map((x) => x.categoryId)
   return {
     date: d.date,
     when: d.when,
     read: d.read,
     dayType: d.dayType,
     fixed: d.blocks.filter(monthFixed).sort((a, b) => a.startMin - b.startMin || (a.id < b.id ? -1 : 1)),
-    blockCount: d.blocks.filter(onDay).length,
-    categories: d.blocks.filter(onDay).map((b) => b.categoryId),
+    blockCount: categories.length,
+    categories,
     load: b ? loadLevel(b.workMin, b.limitMin) : null,
     workMin: b?.workMin ?? null,
     limitMin: b?.limitMin ?? null

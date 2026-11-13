@@ -108,13 +108,33 @@ function hiddenSet(hidden: readonly string[], rd: Pick<CalendarSource, 'calendar
   return new Set(hidden.filter((id) => known.has(id)))
 }
 
-/** What a view shows of `blocks` and how many it hides („ukryte: N”); the same array when nothing is hidden. */
-export function filterBlocks<T extends { categoryId: string }>(blocks: readonly T[], hidden: readonly string[], rd: CalendarSource): { shown: T[]; hiddenCount: number } {
+/**
+ * What the unchecked calendars hide, resolved once (the hidden set and the calendar of each category): a view that filters many
+ * lists (the days of a month) makes one and asks it for each. `none` – nothing is hidden (one calendar, or none unchecked).
+ */
+export interface CalendarSieve {
+  none: boolean
+  /** Whether the blocks of this category are hidden. */
+  hidesCategory: (categoryId: string) => boolean
+}
+
+export function calendarSieve(hidden: readonly string[], rd: CalendarSource): CalendarSieve {
   const off = hiddenSet(hidden, rd)
-  if (off.size === 0) return { shown: blocks as T[], hiddenCount: 0 }
+  if (off.size === 0) return { none: true, hidesCategory: () => false }
   const calendarOf = categoryResolver(rd)
-  const shown = blocks.filter((b) => !off.has(calendarOf(b.categoryId)))
+  return { none: false, hidesCategory: (categoryId) => off.has(calendarOf(categoryId)) }
+}
+
+/** What a view shows of `blocks` and how many it hides („ukryte: N”); the same array when nothing is hidden. */
+export function filterBlocks<T extends { categoryId: string }>(blocks: readonly T[], hidden: readonly string[], rd: CalendarSource, sieve: CalendarSieve = calendarSieve(hidden, rd)): { shown: T[]; hiddenCount: number } {
+  if (sieve.none) return { shown: blocks as T[], hiddenCount: 0 }
+  const shown = blocks.filter((b) => !sieve.hidesCategory(b.categoryId))
   return { shown, hiddenCount: blocks.length - shown.length }
+}
+
+/** The name of a calendar (the id of one that is not there reads as „Moje”, as everywhere). */
+export function calendarName(rd: { calendars: ReadonlyArray<{ id: string; name: string }> }, calendarId: string): string {
+  return rd.calendars.find((c) => c.id === calendarId)?.name ?? DEFAULT_CALENDAR_NAME
 }
 
 /** As `filterBlocks` for all-day events (D425), by their own calendar. */

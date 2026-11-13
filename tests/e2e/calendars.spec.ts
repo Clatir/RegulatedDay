@@ -27,7 +27,7 @@ function seed(dir: string): void {
     writeFileSync(join(dir, r.rel), JSON.stringify(r.value, null, 2))
   }
   mkdirSync(join(dir, 'days', today.slice(0, 4)), { recursive: true })
-  writeFileSync(join(dir, 'days', today.slice(0, 4), `${today}.json`), JSON.stringify({ schema: 1, date: today, blocks: [{ id: 'w1', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: false }] }))
+  writeFileSync(join(dir, 'days', today.slice(0, 4), `${today}.json`), JSON.stringify({ schema: 1, date: today, blocks: [{ id: 'w1', categoryId: 'inne', startMin: 10 * 60, durationMin: 60, fixed: false, note: 'zebranie kwartalne alfa' }] }))
 }
 
 test('kalendarze: żetony nad „Dziś” i „Tygodniem”, odznaczony kalendarz chowa blok, po restarcie okna nadal ukryty, zaznaczony – wraca', async () => {
@@ -63,6 +63,19 @@ test('kalendarze: żetony nad „Dziś” i „Tygodniem”, odznaczony kalendar
       await expect(page.getByTestId('block-w1')).toHaveCount(0)
       await expect(page.getByTestId('calendar-hidden-count')).toHaveText('ukryte: 1')
       await expect(page.getByTestId('day-summary')).toContainText('budżet pracy')
+      // Ctrl K (D427): the result of a hidden calendar shows in spite of it – the panel, the tile on the axis with where it
+      // comes from, not counted as hidden; with the panel closed it is hidden again.
+      await page.keyboard.press('Control+k')
+      await page.getByTestId('search-input').fill('kwartalne')
+      const hit = page.locator('[data-testid="search-hit"][data-kind="block"]')
+      await expect(hit).toHaveCount(1, { timeout: 30_000 })
+      await page.keyboard.press('Enter')
+      await expect(page.getByTestId('block-editor')).toBeVisible()
+      await expect(page.getByTestId('block-w1')).toHaveAttribute('data-hidden-calendar', 'Praca')
+      await expect(page.getByTestId('calendar-hidden-count')).toHaveCount(0)
+      await page.getByTestId('block-editor-close').click()
+      await expect(page.getByTestId('block-w1')).toHaveCount(0)
+      await expect(page.getByTestId('calendar-hidden-count')).toHaveText('ukryte: 1')
       // „Tydzień”: the same chips (one choice for all the views of the window), the block gone from today's column.
       await page.getByTestId('nav-week').click()
       await expect(page.getByTestId(`week-col-${today}`)).toBeVisible({ timeout: 30_000 })
