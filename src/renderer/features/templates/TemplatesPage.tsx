@@ -41,7 +41,6 @@ import { seriesBlockOf } from '../series/seriesForm'
 import { SettingNumber } from '../settings/SettingNumber'
 import { templateAdd, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
 
-
 export function TemplatesPage() {
   const templates = useData((s) => s.templates)
   const series = useData((s) => s.series)

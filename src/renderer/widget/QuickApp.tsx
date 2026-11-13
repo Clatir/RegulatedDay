@@ -16,7 +16,7 @@ export function QuickApp() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const input = useRef<HTMLInputElement>(null)
-  const { today, reload } = useQuickToday(text === '')
+  const { today, reload } = useQuickToday(text)
   const preview = quickPreview(text, today)
   useEffect(() => {
     setWindowEscape(() => window.rd.quickClose())

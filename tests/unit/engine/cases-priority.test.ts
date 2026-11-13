@@ -211,8 +211,14 @@ describe('plan poranny: linia spraw „Ważne i pilne” bez miejsca w planie (D
     expect(ids(priorityWithoutPlace([planned(THU)], [], WED))).toEqual(['s'])
   })
 
-  it('liczy tylko te bez miejsca: z dwóch jedna z blokiem – „1 sprawa …”', () => {
-    expect(line([p1('a'), p1('b')], [{ task: 'a' }])).toBe('1 sprawa ważna i pilna bez miejsca w planie')
+  it('D450 dosłownie: linia tylko, gdy żadna z nich nie ma dziś bloku – z dwóch jedna z blokiem: brak linii', () => {
+    expect(line([p1('a'), p1('b')], [{ task: 'a' }])).toBeNull()
+    expect(line([p1('a'), p1('b')], [{ task: 'b' }])).toBeNull()
+    // Without any block the line counts them all (N is the number of such sprawy).
+    expect(line([p1('a'), p1('b'), p1('c', { list: 'week' })])).toBe('3 sprawy ważne i pilne bez miejsca w planie')
+    // A block of another sprawa (not on the lists counted) is no place for them.
+    expect(line([p1('a'), p1('b')], [{ task: 'x' }])).toBe('2 sprawy ważne i pilne bez miejsca w planie')
+    expect(line([p1('a'), p1('b', { list: 'someday' })], [{ task: 'b' }])).toBe('1 sprawa ważna i pilna bez miejsca w planie')
   })
 
   it('„Kiedyś / Może” z datą wykonania w przyszłości zostaje poza linią', () => {

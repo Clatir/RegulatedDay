@@ -347,11 +347,24 @@ export function scheduledRaw(raw: Raw, day: string, block: string, at: number): 
   return mirrored(next, { ...r, state: 'queued' })
 }
 
-/** No longer planned (D384 „Wraca na listę”): the block forgotten, the list as it was. */
+/** The list a date of doing in the future puts a sprawa taken off „Dziś” on (D455): this week's – „W tym tygodniu”, a later one – „Skrzynka”. */
+const futureDateList = (doDate: string, today: string): CaseList => (doDate <= weekEndOf(today) ? 'week' : 'inbox')
+
+/**
+ * No longer planned (D384 „Wraca na listę”): the block forgotten, the list as it was – except a sprawa a block held on „Dziś”
+ * against a date of doing to come (`patchedRaw`, D455): it goes where that date puts it, as it would have without the block.
+ */
 export function unscheduledRaw(raw: Raw, at: number): Raw {
   const r = requestFrom(raw)
   if (!r) return raw
-  return mirrored({ ...based(raw, r, logicalDayOf(at)), day: null, block: null }, r)
+  const today = logicalDayOf(at)
+  const next: Raw = { ...based(raw, r, today), day: null, block: null }
+  // No move by hand since the date was set (`listSetDay` – a move to „Dziś” writes it, `patchedRaw` clears it).
+  if (!isDone(r) && r.list === 'today' && r.doDate != null && r.doDate > today && r.listSetDay == null) {
+    next.list = futureDateList(r.doDate, today)
+    next.listDay = null
+  }
+  return mirrored(next, r)
 }
 
 /** A change of a sprawa's fields from a window. */
@@ -376,7 +389,8 @@ export interface CasePatch {
 export function patchedRaw(raw: Raw, patch: CasePatch, at: number): { raw: Raw } | { error: string } {
   const r = requestFrom(raw)
   if (!r) return { error: 'Tej sprawy już nie ma.' }
-  const next: Raw = based(raw, r, logicalDayOf(at))
+  const today = logicalDayOf(at)
+  const next: Raw = based(raw, r, today)
   const kind = patch.kind ?? r.kind
   if (patch.kind !== undefined) next.kind = patch.kind
   if (patch.title !== undefined) next.title = titleOf(patch.title)
@@ -403,7 +417,6 @@ export function patchedRaw(raw: Raw, patch: CasePatch, at: number): { raw: Raw }
     if (patch.doDate != null && !dateFrom(patch.doDate)) return { error: 'Wykonać: nie ma takiego dnia.' }
     next.doDate = patch.doDate
     if (patch.doDate !== r.doDate) {
-      const today = logicalDayOf(at)
       // A new date of doing is newer than any move by hand before it (T851): the date decides the list again.
       next.listSetDay = null
       if (patch.doDate != null && patch.doDate < today && !isDone(r)) {
@@ -413,10 +426,11 @@ export function patchedRaw(raw: Raw, patch: CasePatch, at: number): { raw: Raw }
         const shown = listOf(r, today)
         if (shown !== writtenListOf(r, today)) Object.assign(next, { list: shown, listDay: shown === 'today' ? today : null })
         next.listSetDay = today
-      } else if (patch.doDate != null && patch.doDate > today && next.list === 'today' && next.listDay != null && next.listDay >= today) {
-        // A day to come (D454): the date decides for a sprawa standing on „Dziś” now too – it goes to „W tym tygodniu” and the
-        // date brings it back (its `listDay` would count as a move by hand and hold it on „Dziś”).
-        next.list = 'week'
+      } else if (patch.doDate != null && patch.doDate > today && next.list === 'today' && next.listDay != null && next.listDay >= today && !(r.day === today && r.block)) {
+        // A day to come (D454): the date decides for a sprawa standing on „Dziś” now too – it goes to „W tym tygodniu” (the date
+        // in this week) or „Skrzynka” (a later one, D455) and the date brings it back (its `listDay` would count as a move by hand
+        // and hold it on „Dziś”). One planned today in a block stays (the block holds it; D455) – `unscheduledRaw` sends it on.
+        next.list = futureDateList(patch.doDate, today)
         next.listDay = null
       }
     }

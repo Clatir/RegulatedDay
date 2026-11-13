@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { dueBadge } from '@shared/engine/caseDates'
-import { caseItems, listedRaw } from '@shared/engine/cases'
+import { caseItems, listedRaw, morningCases } from '@shared/engine/cases'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
 import { newRequest, newTask, requestFrom, type NewTask } from '@shared/model/requests'
@@ -90,31 +90,33 @@ describe('kolejność na stronie – sprawy z terminem pierwsze (D409, T854)', (
 describe('karta „Terminy” planu porannego (D409, D452)', () => {
   const list = () => items([task('over', { dueDate: '2026-11-09' }), task('soon', { dueDate: THU }), task('far', { dueDate: '2026-11-20' }), task('none'), task('onToday', { dueDate: THU, list: 'today' }), newRequest('r', at(WED), { person: 'mama', estimateMin: 10, note: '', dueDate: WED })])
   const ids = (xs: Array<{ record: { id: string } }>) => xs.map((x) => x.record.id)
+  /** The card as the morning plan asks for it: the step's offer (`morningCases`) counted once and given on (D454). */
+  const dl = (l: ReturnType<typeof items>, requestsOn: boolean, blocks: Array<{ task: string | null; requests: string[] }>, days: number, asked: Record<string, string>) => morningDeadlines(l, requestsOn, blocks, WED, days, asked, morningCases(l))
 
   it('po terminie i z terminem w progu, bez „Dziś”, bez dalekich i bez prośby z kroku próśb (D454: tam ma znaczek)', () => {
-    expect(ids(morningDeadlines(list(), true, [], WED, 2, {}))).toEqual(['over', 'soon'])
+    expect(ids(dl(list(), true, [], 2, {}))).toEqual(['over', 'soon'])
   })
 
   it('prośba z „Kiedyś / Może” (poza krokiem próśb) zostaje na karcie, prośba w „Skrzynce” – nie (D454)', () => {
     const r = (id: string) => newRequest(id, at(WED), { person: 'mama', estimateMin: 10, note: '', dueDate: WED })
     const l = items([r('inbox'), listedRaw(r('some'), 'someday', at(WED))])
-    expect(ids(morningDeadlines(l, true, [], WED, 2, {}))).toEqual(['some'])
+    expect(ids(dl(l, true, [], 2, {}))).toEqual(['some'])
   })
 
   it('moduł próśb wyłączony – bez próśb, jak strona', () => {
-    expect(ids(morningDeadlines(list(), false, [], WED, 2, {}))).toEqual(['over', 'soon'])
+    expect(ids(dl(list(), false, [], 2, {}))).toEqual(['over', 'soon'])
   })
 
   it('„Pomiń” (asked) chowa sprawę; sprawa z blokiem dziś też nie jest na karcie; pusta – pusta lista (brak karty)', () => {
-    expect(ids(morningDeadlines(list(), true, [], WED, 2, { 'deadline:over': 'skip' }))).toEqual(['soon'])
-    expect(ids(morningDeadlines(list(), true, [{ task: 'soon', requests: [] }], WED, 2, {}))).toEqual(['over'])
-    expect(morningDeadlines(items([task('a'), task('b', { dueDate: '2026-11-30' })]), true, [], WED, 2, {})).toEqual([])
+    expect(ids(dl(list(), true, [], 2, { 'deadline:over': 'skip' }))).toEqual(['soon'])
+    expect(ids(dl(list(), true, [{ task: 'soon', requests: [] }], 2, {}))).toEqual(['over'])
+    expect(dl(items([task('a'), task('b', { dueDate: '2026-11-30' })]), true, [], 2, {})).toEqual([])
   })
 
   it('próg: 1 dzień – dziś i jutro, 7 dni – tydzień naprzód', () => {
     const l = items([task('d0', { dueDate: WED }), task('d1', { dueDate: THU }), task('d2', { dueDate: FRI }), task('d7', { dueDate: '2026-11-18' }), task('d8', { dueDate: '2026-11-19' })])
-    expect(ids(morningDeadlines(l, true, [], WED, 1, {}))).toEqual(['d0', 'd1'])
-    expect(ids(morningDeadlines(l, true, [], WED, 7, {}))).toEqual(['d0', 'd1', 'd2', 'd7'])
+    expect(ids(dl(l, true, [], 1, {}))).toEqual(['d0', 'd1'])
+    expect(ids(dl(l, true, [], 7, {}))).toEqual(['d0', 'd1', 'd2', 'd7'])
   })
 })
 

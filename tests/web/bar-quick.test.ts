@@ -7,7 +7,7 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RdApi } from '@shared/api'
 import { installEscape } from '@renderer/lib/escape'
 import { useWidget } from '@renderer/store/widget'
@@ -24,8 +24,11 @@ afterAll(() => uninstallEscape())
 
 /** The logical day the main process answers (D454: the preview counts from it, not from the window's clock) – a Monday far from today. */
 const MAIN_DAY = '2030-05-06'
+/** What the main process answers now – a test moves it past 04:00 while the field is open. */
+let mainDay = MAIN_DAY
 beforeEach(() => {
-  ;(window as unknown as { rd: Partial<RdApi> }).rd = { quickToday: () => Promise.resolve(MAIN_DAY) }
+  mainDay = MAIN_DAY
+  ;(window as unknown as { rd: Partial<RdApi> }).rd = { quickToday: () => Promise.resolve(mainDay) }
 })
 
 let root: Root | null = null
@@ -78,6 +81,44 @@ describe('podgląd słów daty liczy dzień z procesu głównego (D454)', () => 
       field()!.dispatchEvent(new Event('input', { bubbles: true }))
     })
     expect(host.querySelector('[data-testid="bar-quick-preview"]')?.textContent).toBe('Termin: pt 10.05')
+  })
+
+  const typeInto = (text: string) =>
+    act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      set.call(field()!, text)
+      field()!.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  const preview = () => host!.querySelector('[data-testid="bar-quick-preview"]')?.textContent
+  async function openField() {
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(Bar, { view: dayView(), mode: 'main' })))
+    await act(async () => host!.querySelector<HTMLButtonElement>('[data-testid="bar-quick"]')!.click())
+  }
+
+  it('dzień jest pytany przy każdej zmianie tekstu: po 04:00 przy otwartym polu następny znak liczy od nowego dnia', async () => {
+    await openField()
+    await typeInto('x !śr')
+    expect(preview()).toBe('Termin: śr 08.05')
+    mainDay = '2030-05-09'
+    await typeInto('xx !śr')
+    expect(preview()).toBe('Termin: śr 15.05')
+  })
+
+  it('i bez pisania: wpisany tekst, pole otwarte – dzień odświeża się co 30 s', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    try {
+      await openField()
+      await typeInto('x !śr')
+      expect(preview()).toBe('Termin: śr 08.05')
+      mainDay = '2030-05-09'
+      await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)))
+      expect(preview()).toBe('Termin: śr 15.05')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 async function openWith(text: string) {

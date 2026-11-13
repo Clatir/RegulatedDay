@@ -262,7 +262,7 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
           Usuń
         </button>
       </div>
-      {dating && !done && <DatesForm x={x} today={today} set={set} />}
+      {dating && !done && <DatesForm x={x} set={set} />}
       {planning && <PlanForm x={x} today={today} title={caseTitle(r, rd)} onDone={() => setPlanning(false)} />}
     </div>
   )
@@ -272,8 +272,11 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
  * „Termin” and „Wykonać” of a sprawa (D409, D451): the date typed (`DateField`: „20.11”, „20.11.2026”), or by a button – „Dziś”,
  * „Jutro”, „Koniec tygodnia”, „Wyczyść”; saved at once by `changeCase`. Under the row's fields, so the grid of the row stays as it is.
  */
-function DatesForm({ x, today, set }: { x: CaseItem; today: string; set: (patch: { dueDate?: string | null; doDate?: string | null }) => void }) {
+export function DatesForm({ x, set }: { x: CaseItem; set: (patch: { dueDate?: string | null; doDate?: string | null }) => void }) {
   const r = x.record
+  // The day the save counts (`changeCase` – the window's clock at that moment), not the page's, read up to 30 s ago (D455): the
+  // note, the buttons „Dziś” / „Jutro” and a date typed without its year all count from it. Rendered again after every save.
+  const today = logicalDayOf(Date.now())
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-line pt-1.5 text-[12px]" data-testid="case-dates-form">
       <DateRow label="Termin" id="due" value={r.dueDate} today={today} onSet={(dueDate) => set({ dueDate })} />

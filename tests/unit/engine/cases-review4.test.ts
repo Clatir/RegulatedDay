@@ -4,8 +4,8 @@
  * a krok porządkuje je jak listy (termin najpierw); słowa daty tylko ze słowem dnia albo z kropkami.
  */
 import { describe, expect, it } from 'vitest'
-import { caseItems, casesRitual, listedRaw, listOf, morningCases, patchedRaw, rolledFrom } from '@shared/engine/cases'
-import { deadlineCases } from '@shared/engine/caseDates'
+import { caseItems, casesRitual, listedRaw, listOf, morningCases, patchedRaw, rolledFrom, scheduledRaw, unscheduledRaw } from '@shared/engine/cases'
+import { deadlineCases, doText } from '@shared/engine/caseDates'
 import { parseQuickDates } from '@shared/quickDates'
 import { newRequest, newTask, requestFrom, type NewTask, type RequestRecord } from '@shared/model/requests'
 import { placeLogical } from '@shared/time/day'
@@ -51,6 +51,55 @@ describe('data wykonania na dzień przyszły a sprawa z „Dziś” (D454)', () 
   it('data równa dziś – „Dziś” (bez zmian reguły); data jutrzejsza ze „Skrzynki” – „W tym tygodniu”', () => {
     expect(listOf(rec(patched(task(), { doDate: WED }, WED)), WED)).toBe('today')
     expect(listOf(rec(patched(task(), { doDate: THU }, WED)), WED)).toBe('week')
+  })
+})
+
+describe('data wykonania poza bieżącym tygodniem i sprawa zaplanowana dziś (D455)', () => {
+  const NEXT_MONTH = '2026-12-14'
+  const NEXT_MON = '2026-11-16'
+
+  it('dalsza data zdejmuje sprawę z „Dziś” do „Skrzynki” z dopiskiem „wykonać …”, a w swoim tygodniu i dniu przywraca', () => {
+    const onToday = listedRaw(task(), 'today', at(MON))
+    const set = rec(patched(onToday, { doDate: NEXT_MONTH }, MON))
+    expect(listOf(set, MON)).toBe('inbox')
+    expect(listOf(set, THU)).toBe('inbox')
+    expect(doText(set, MON)).toBe('wykonać pn 14.12')
+    expect(rolledFrom(set, TUE)).toBeNull()
+    expect(listOf(set, NEXT_MONTH)).toBe('today')
+    expect(casesRitual(MON, MON, [set], []).back).toEqual([])
+  })
+
+  it('poniedziałek następnego tygodnia to już „Skrzynka”; niedziela bieżącego – „W tym tygodniu”', () => {
+    const onToday = listedRaw(task(), 'today', at(WED))
+    expect(listOf(rec(patched(onToday, { doDate: NEXT_MON }, WED)), WED)).toBe('inbox')
+    expect(listOf(rec(patched(onToday, { doDate: '2026-11-15' }, WED)), WED)).toBe('week')
+  })
+
+  it('sprawa zaplanowana dziś w bloku zostaje na „Dziś” (blok ją trzyma), także przy dalszej dacie', () => {
+    const planned = scheduledRaw(listedRaw(task(), 'today', at(MON)), MON, 'b1', at(MON))
+    for (const date of [THU, NEXT_MONTH]) {
+      const set = patched(planned, { doDate: date }, MON)
+      expect(set).toMatchObject({ list: 'today', listDay: MON, day: MON, block: 'b1', doDate: date })
+      expect(listOf(rec(set), MON)).toBe('today')
+    }
+  })
+
+  it('po zdjęciu bloku („Wraca na listę”) sprawa idzie tam, gdzie data ją kieruje: dalsza data – „Skrzynka”, w tygodniu – „W tym tygodniu”', () => {
+    const planned = scheduledRaw(listedRaw(task(), 'today', at(MON)), MON, 'b1', at(MON))
+    const far = rec(unscheduledRaw(patched(planned, { doDate: NEXT_MONTH }, MON), at(MON)))
+    expect(far).toMatchObject({ list: 'inbox', listDay: null, day: null, block: null, state: 'queued' })
+    expect(listOf(far, TUE)).toBe('inbox')
+    expect(listOf(far, NEXT_MONTH)).toBe('today')
+    const near = rec(unscheduledRaw(patched(planned, { doDate: THU }, MON), at(MON)))
+    expect(near).toMatchObject({ list: 'week', listDay: null, day: null, block: null })
+    expect(listOf(near, THU)).toBe('today')
+  })
+
+  it('zdjęcie bloku nie rusza sprawy bez daty ani przeniesionej ręcznie na „Dziś” po ustawieniu daty', () => {
+    const plain = scheduledRaw(listedRaw(task(), 'today', at(MON)), MON, 'b1', at(MON))
+    expect(unscheduledRaw(plain, at(MON))).toMatchObject({ list: 'today', listDay: MON })
+    const byHand = scheduledRaw(listedRaw(task({ doDate: NEXT_MONTH }), 'today', at(MON)), MON, 'b1', at(MON))
+    expect(unscheduledRaw(byHand, at(MON))).toMatchObject({ list: 'today', listDay: MON })
   })
 })
 
@@ -107,7 +156,7 @@ describe('krok próśb i zadań planu porannego a karta „Terminy” (D454)', (
     expect(offered.requests.map((x) => x.record.id)).toEqual(['r1'])
     expect(offered.tasks.map((x) => x.record.id)).toEqual(['t2'])
     expect(
-      deadlineCases(list, [], WED, 2)
+      deadlineCases(list, [], WED, 2, {}, new Set(offered.requests.map((x) => x.record.id)))
         .map((x) => x.record.id)
         .sort()
     ).toEqual(['r2', 't1'])
@@ -136,8 +185,16 @@ describe('słowa daty szybkiego zapisu – tylko słowa dnia i daty z kropką (D
     expect(parseQuickDates('x !pt', WED)).toMatchObject({ dueDate: FRI })
   })
 
-  it('reszta zostaje w tytule: „@1/2”, „!3”, „!12-03”, „!2026-12-05”, „!31.02”, „!5.13”, „!20.11.”', () => {
-    for (const w of ['@1/2', '!3', '!12-03', '!2026-12-05', '!31.02', '!5.13', '!32.01', '!20.11.', '!1/2/2027']) {
+  it('data RRRR-MM-DD (prawdziwy dzień) to słowo daty; z ukośnikiem albo nieistniejąca – zostaje w tytule (D455)', () => {
+    expect(parseQuickDates('x !2026-11-20', WED)).toMatchObject({ title: 'x', dueDate: '2026-11-20', preview: 'Termin: pt 20.11' })
+    expect(parseQuickDates('x @2027-01-05', WED)).toMatchObject({ title: 'x', doDate: '2027-01-05' })
+    for (const w of ['!20/11', '@1/2', '!2026-02-30', '!2026-13-01', '!2026-11-20.']) {
+      expect(parseQuickDates(`Kup mleko ${w}`, WED)).toEqual({ title: `Kup mleko ${w}`, dueDate: null, doDate: null, preview: null })
+    }
+  })
+
+  it('reszta zostaje w tytule: „@1/2”, „!3”, „!12-03”, „!31.02”, „!5.13”, „!20.11.”', () => {
+    for (const w of ['@1/2', '!3', '!12-03', '!31.02', '!5.13', '!32.01', '!20.11.', '!1/2/2027']) {
       expect(parseQuickDates(`Kup mleko ${w}`, WED)).toEqual({ title: `Kup mleko ${w}`, dueDate: null, doDate: null, preview: null })
     }
   })

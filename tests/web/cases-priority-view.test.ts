@@ -143,8 +143,9 @@ describe('linia planu porannego i moduł próśb (D450, T763)', () => {
     expect(morningPriorityLine(list, false, [], WED)).toBe('1 sprawa ważna i pilna bez miejsca w planie')
   })
 
-  it('blok zadania dziś zdejmuje linię; bez P1 – brak linii', () => {
+  it('blok zadania dziś zdejmuje linię – także gdy to blok jednej z kilku; bez P1 – brak linii', () => {
     expect(morningPriorityLine(items([p1('a')]), true, [{ task: 'a', requests: [] }], WED)).toBeNull()
+    expect(morningPriorityLine(items([p1('a'), p1('b')]), true, [{ task: 'a', requests: [] }], WED)).toBeNull()
     expect(morningPriorityLine(items([task('x', { list: 'today' })]), true, [], WED)).toBeNull()
   })
 })

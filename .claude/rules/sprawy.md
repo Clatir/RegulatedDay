@@ -47,7 +47,7 @@ paths:
 - HKU2 (terminy): pola `dueDate`, `doDate`, `listSetDay` (dzień ręcznego przeniesienia, T851); `listOf` liczy datę wykonania
   (T852), `caseCompare` – kolejność list (termin, potem P1–P4, potem reszta – `caseGroupOf` 0 / 1–4 / 9, w grupie `caseOrder`);
   `engine/caseDates.ts` – `dueBadge`, `doText`, `deadlineCases` + „Pomiń” w `asked` dnia (`deadline:<id>`); `shared/quickDates.ts`
-  (lekki – okienko „Do skrzynki”) – `parseQuickDates` (`hub.quickAdd`, `createTask`), `shortDay`, `dayWord`; próg `general.deadlineDays`.
+  (lekki – okienko „Do skrzynki”) – `parseQuickDates` (`hub.quickAdd`, `createTask`; słowa: dzień, `d.mm[.rrrr]`, `rrrr-mm-dd`, nie z ukośnikiem – D455), `shortDay`, `dayWord`; próg `general.deadlineDays`.
 - Proces główny: `windows/quickWindow.ts` (okienko „Do skrzynki”, skrót globalny), `hub.quickAdd`, `hub.casesRitual` →
   `folder.casesRitual`; pasek: `engineView` (linie `task:`), `WidgetEngine` (akcje `quickAdd`, `quickOpen`, linia `task`).
 
@@ -66,6 +66,9 @@ paths:
 - Nic nie migruje w miejscu: stary plik czyta się jako sprawa, nowa wersja dopisuje `kind`/`list` przy pierwszej zmianie
   (`based`), `state` zawsze w kroku (`mirrored`). Zrobione = `state` `done`/`dropped` – starsza wersja tym decyduje.
 - 04:00 (D383) liczy `listOf` z daty – nic nie zapisuje (żadnego działania automatycznego, `RULES_VERSION` bez zmian).
+- Data wykonania w przyszłości (D454, D455, T880): `patchedRaw` zdejmuje sprawę z „Dziś” na „W tym tygodniu” (data do niedzieli) albo
+  „Skrzynkę” (dalsza); zaplanowana dziś w bloku zostaje, `unscheduledRaw` odsyła ją potem według daty. Dzień dla pól „Terminy” i podglądu
+  szybkiego zapisu to dzień zapisu (zegar okna przy `changeCase`, zegar procesu głównego przy `quickAdd`), nie dzień sprzed 30 s.
 - „Zaplanowane” = blok rekordu jest w pliku dnia i nie jest zaparkowany ani odwołany przed startem w logu dnia; usunięcie /
   odwołanie / „Cofnij” bloku nie piszą rekordu (T752, T760). Plan poranny planuje według tej samej reguły (T761).
 - Ponowne zaplanowanie: stary niezaczęty blok sprawy wychodzi z dnia (także po `movedTo`) i nie wraca przez rozsuwane –

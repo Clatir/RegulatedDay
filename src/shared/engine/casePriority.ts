@@ -64,14 +64,15 @@ export function dropPatch(x: Pick<CaseItem, 'list' | 'record'> | undefined, fiel
 // ------------------------------------------------------------------ the morning plan
 
 /**
- * The sprawy „Ważne i pilne” of „Dziś” and „W tym tygodniu” (not done) that have no place in today's plan: no block of their own,
- * not in a block of requests, not „zaplanowane” today. In the order of the lists.
+ * The sprawy „Ważne i pilne” of „Dziś” and „W tym tygodniu” (not done) when none of them has a place in today's plan (D450 to the
+ * letter: „a żadna nie ma dziś bloku”) – all of them, in the order of the lists; when any has one (a block of its own, a place in a
+ * block of requests, „zaplanowane” today) – none: no line.
  */
 export function priorityWithoutPlace(items: readonly CaseItem[], blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string): CaseItem[] {
   const inPlan = new Set(blocks.flatMap((b) => [...(b.task ? [b.task] : []), ...b.requests]))
-  return items
-    .filter((x) => x.record.priority === 'p1' && !isDone(x.record) && (x.list === 'today' || x.list === 'week') && !inPlan.has(x.record.id) && x.scheduled?.day !== today)
-    .sort(caseCompare)
+  const urgent = items.filter((x) => x.record.priority === 'p1' && !isDone(x.record) && (x.list === 'today' || x.list === 'week'))
+  if (urgent.some((x) => inPlan.has(x.record.id) || x.scheduled?.day === today)) return []
+  return urgent.sort(caseCompare)
 }
 
 /** The morning plan's line (D450): „3 sprawy ważne i pilne bez miejsca w planie”; null – none to say (no line). */

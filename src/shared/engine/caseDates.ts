@@ -13,7 +13,7 @@ import type { PlanBlock } from '../model/plan'
 import type { RequestRecord } from '../model/requests'
 import { dayWord, shortDay } from '../quickDates'
 import { addDays, daysBetween } from '../time/zone'
-import { caseCompare, isDone, listOf, morningCases, weekEndOf, type CaseItem } from './cases'
+import { caseCompare, isDone, listOf, weekEndOf, type CaseItem } from './cases'
 
 /** Up to this many days ahead the badge counts the days („Termin za 7 dni”); further – the date (D409). */
 export const DUE_DAYS_COUNTED = 7
@@ -60,19 +60,18 @@ export function deadlineSkippedRaw(raw: Raw | null, date: string, id: string): R
  * The morning plan's card of due dates (D409): the sprawy not done past their due date or due within `thresholdDays`
  * after today (2: today, tomorrow and the day after), without a block on today's axis (a task's block – `PlanBlock.task`;
  * a request – in a block of requests; or „zaplanowane” today), not on „Dziś” already (its „Na Dziś” would do nothing –
- * T855), not a request the step of requests offers (D454 – `morningCases`: its badge stands there) and not skipped today (`asked` of the day's file). In the order of the lists – the nearest date first. Nothing is
- * blocked (D72); the module of requests is the caller's (the page's rule – T763).
+ * T855), not a request the step of requests offers (D454: its badge stands there – `stepIds`, the ids of the requests the caller's
+ * `morningCases` gave, counted once by the morning plan, not again here) and not skipped today (`asked` of the day's file). In the order
+ * of the lists – the nearest date first. Nothing is blocked (D72); the module of requests is the caller's (the page's rule – T763).
  */
-export function deadlineCases(items: readonly CaseItem[], blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string, thresholdDays: number, asked: Readonly<Record<string, string>> = {}): CaseItem[] {
+export function deadlineCases(items: readonly CaseItem[], blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string, thresholdDays: number, asked: Readonly<Record<string, string>>, stepIds: ReadonlySet<string>): CaseItem[] {
   const last = addDays(today, thresholdDays)
   const inPlan = new Set(blocks.flatMap((b) => [...(b.task ? [b.task] : []), ...b.requests]))
-  // What the step of requests and tasks offers has its badge of the due date there (D454), not on this card.
-  const inStep = new Set(morningCases(items).requests.map((x) => x.record.id))
   return items
     .filter((x) => {
       const due = x.record.dueDate
       if (due == null || due > last || x.list === 'done' || x.list === 'today') return false
-      return !inStep.has(x.record.id) && !inPlan.has(x.record.id) && x.scheduled?.day !== today && asked[deadlineAskKey(x.record.id)] == null
+      return !stepIds.has(x.record.id) && !inPlan.has(x.record.id) && x.scheduled?.day !== today && asked[deadlineAskKey(x.record.id)] == null
     })
     .sort(caseCompare)
 }

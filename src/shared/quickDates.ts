@@ -32,8 +32,8 @@ const WEEKDAY_WORDS = new Map<string, number>([
 
 /**
  * The day a word of the quick capture names (T856): „dziś” / „dzis”, „jutro”, a weekday – the nearest such day from
- * tomorrow on (on a Friday „pt” is the next Friday), a date „20.11” – the nearest such day from today on, „20.11.2027” –
- * that one. Null: not a day.
+ * tomorrow on (on a Friday „pt” is the next Friday), a date „20.11” – the nearest such day from today on, „20.11.2027” and
+ * „2027-11-20” – that one (a real day only). Null: not a day.
  */
 function dayOfWord(word: string, today: string): string | null {
   const w = word.toLowerCase()
@@ -41,8 +41,9 @@ function dayOfWord(word: string, today: string): string | null {
   if (w === 'jutro') return addDays(today, 1)
   const wd = WEEKDAY_WORDS.get(w)
   if (wd != null) return addDays(today, (wd - weekday(today) + 7) % 7 || 7)
-  // A date only with its dots (D454): „20.11”, „20.11.2027” – „1/2”, „3”, „12-03” and the like stay in the title.
-  if (!/^\d{1,2}\.\d{1,2}(\.\d{4})?$/.test(w)) return null
+  // A date only with its dots or as „RRRR-MM-DD” (D454, D455): „20.11”, „20.11.2027”, „2027-11-20” – „20/11”, „1/2”, „3”,
+  // „12-03” and the like stay in the title (fractions, instalments).
+  if (!/^(\d{1,2}\.\d{1,2}(\.\d{4})?|\d{4}-\d{1,2}-\d{1,2})$/.test(w)) return null
   const p = parseDate(w, today)
   return p.ok ? p.value : null
 }

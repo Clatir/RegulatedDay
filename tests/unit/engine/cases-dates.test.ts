@@ -5,7 +5,7 @@
  * card of due dates with its threshold and its „Pomiń”, and the words of the quick capture („!jutro”, „@pt”, „!20.11”).
  */
 import { describe, expect, it } from 'vitest'
-import { caseCompare, caseItems, casesRitual, listedRaw, listOf, patchedRaw, rolledFrom, scheduledRaw, type CaseItem } from '@shared/engine/cases'
+import { caseCompare, caseItems, casesRitual, listedRaw, listOf, morningCases, patchedRaw, rolledFrom, scheduledRaw, type CaseItem } from '@shared/engine/cases'
 import { DEADLINE_SKIP, deadlineAskKey, deadlineCases, deadlineSkippedRaw, doText, dueBadge } from '@shared/engine/caseDates'
 import { parseQuickDates } from '@shared/quickDates'
 import { dayFileFrom, planBlock } from '@shared/model/plan'
@@ -26,6 +26,8 @@ const at = (date: string, hh = 12) => placeLogical(date, hh * 60)
 const rec = (raw: Record<string, unknown>): RequestRecord => requestFrom(raw)!
 const task = (p: Partial<NewTask> = {}, id = 't', on = WED) => newTask(id, at(on), on, { title: 'x', ...p })!
 const item = (raw: Record<string, unknown>, today: string): CaseItem => caseItems([rec(raw)], today, () => null)[0]!
+/** The ids of the requests the morning plan's step offers (D454) – what `deadlineCases` is given. */
+const stepOf = (xs: readonly CaseItem[]) => new Set(morningCases(xs).requests.map((x) => x.record.id))
 
 describe('pola terminu i daty wykonania (D409)', () => {
   it('stary plik bez pól czyta się bez zmian: bez terminu, bez daty wykonania, lista jak dotąd', () => {
@@ -219,9 +221,9 @@ describe('plan poranny: terminy (D409)', () => {
   const items = raws.map((raw) => item(raw, WED))
 
   it('próg 1 – dziś i jutro; 2 (domyślnie) – do pojutrza; 7 – tydzień; po terminie zawsze', () => {
-    expect(ids(deadlineCases(items, [], WED, 1))).toEqual(['over', 'today', 'd1'])
-    expect(ids(deadlineCases(items, [], WED, DEFAULT_GENERAL.deadlineDays))).toEqual(['over', 'today', 'd1', 'd2'])
-    expect(ids(deadlineCases(items, [], WED, 7))).toEqual(['over', 'today', 'd1', 'd2', 'd3', 'd7'])
+    expect(ids(deadlineCases(items, [], WED, 1, {}, stepOf(items)))).toEqual(['over', 'today', 'd1'])
+    expect(ids(deadlineCases(items, [], WED, DEFAULT_GENERAL.deadlineDays, {}, stepOf(items)))).toEqual(['over', 'today', 'd1', 'd2'])
+    expect(ids(deadlineCases(items, [], WED, 7, {}, stepOf(items)))).toEqual(['over', 'today', 'd1', 'd2', 'd3', 'd7'])
   })
 
   it('bez spraw z blokiem dziś (zadanie i prośba w bloku próśb), zrobionych, z listy „Dziś” i pominiętych dziś', () => {
@@ -234,9 +236,9 @@ describe('plan poranny: terminy (D409)', () => {
     const blocks = [planBlock({ id: 'b1', categoryId: 'inne', startMin: 600, durationMin: 30, task: 'd1' }), planBlock({ id: 'b2', categoryId: 'prosby', startMin: 700, durationMin: 15, requests: ['req'] })]
     const day = dayFileFrom(deadlineSkippedRaw(null, WED, 'today'), WED)
     expect(day.asked[deadlineAskKey('today')]).toBe(DEADLINE_SKIP)
-    expect(ids(deadlineCases(more, blocks, WED, 2, day.asked))).toEqual(['over', 'd2'])
+    expect(ids(deadlineCases(more, blocks, WED, 2, day.asked, stepOf(more)))).toEqual(['over', 'd2'])
     // „Pomiń” is of that day: the next day it is back.
-    expect(ids(deadlineCases(items, [], THU, 2)).includes('today')).toBe(true)
+    expect(ids(deadlineCases(items, [], THU, 2, {}, stepOf(items))).includes('today')).toBe(true)
   })
 })
 

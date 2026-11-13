@@ -490,13 +490,19 @@ test('priorytet: pasek przy sprawie w panelu przy osi „Dziś” i na kafelku j
   }
 })
 
-test('plan poranny: linia „N spraw ważnych i pilnych bez miejsca w planie” – tylko „Dziś” i „W tym tygodniu”, znika z blokiem dziś; „Pokaż w „Sprawach”” otwiera macierz', async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-priority-morning-'))
+/** Two sprawy „Ważne i pilne” (one of „Dziś”, one of „W tym tygodniu”), one of „Kiedyś / Może” and one „Ważne” – the morning plan's line (D450). */
+function seedPriorityMorning(prefix: string) {
+  const dataDir = mkdtempSync(join(tmpdir(), prefix))
   const { today } = seedAwake(dataDir, [])
   putRecord(dataDir, newTask('a', Date.now(), today, { title: 'Oddać wniosek', list: 'today', priority: 'p1' })!)
   putRecord(dataDir, newTask('b', Date.now() - 1, today, { title: 'Zapłacić podatek', list: 'week', priority: 'p1' })!)
   putRecord(dataDir, newTask('c', Date.now() - 2, today, { title: 'Kiedyś ważne', list: 'someday', priority: 'p1' })!)
   putRecord(dataDir, newTask('d', Date.now() - 3, today, { title: 'Tylko ważne', list: 'today', priority: 'p2' })!)
+  return { dataDir, today }
+}
+
+test('plan poranny: linia „N spraw ważnych i pilnych bez miejsca w planie” – tylko „Dziś” i „W tym tygodniu”, znika, gdy którakolwiek z nich dostaje blok dziś (D450 dosłownie)', async () => {
+  const { dataDir, today } = seedPriorityMorning('rd-e2e-cases-priority-morning-')
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
@@ -506,10 +512,28 @@ test('plan poranny: linia „N spraw ważnych i pilnych bez miejsca w planie” 
       await page.getByTestId('checkin-skip').click()
       // „Dziś” and „W tym tygodniu” – not „Kiedyś / Może”, not the P2 one.
       await expect(page.getByTestId('priority-line-text')).toHaveText('2 sprawy ważne i pilne bez miejsca w planie')
-      // The tasks of „Dziś” get their blocks (the step chose them at once): the one of the week is left without a place.
+      // The tasks of „Dziś” get their blocks (the step chose them at once): one of the sprawy „Ważne i pilne” has a place – no line,
+      // though the one of the week still has none (the line speaks only when none of them has a place).
       await page.getByTestId('queue-pick').getByTestId('queue-add').click()
       await expect.poll(() => blocksOf(dataDir, today).map((b) => b.task).sort()).toEqual(['a', 'd'])
-      await expect(page.getByTestId('priority-line-text')).toHaveText('1 sprawa ważna i pilna bez miejsca w planie')
+      await expect(page.getByTestId('priority-line')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('plan poranny: „Pokaż w „Sprawach”” z linii o priorytecie otwiera macierz', async () => {
+  const { dataDir } = seedPriorityMorning('rd-e2e-cases-priority-link-')
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('morning-plan')).toBeVisible({ timeout: 30_000 })
+      if (await page.getByTestId('side-b').isVisible()) await page.getByTestId('side-b-done').click()
+      await page.getByTestId('goals-skip').click()
+      await page.getByTestId('checkin-skip').click()
+      await expect(page.getByTestId('priority-line-text')).toHaveText('2 sprawy ważne i pilne bez miejsca w planie')
       // The link: the page „Sprawy” on the matrix, the sprawa under „Ważne i pilne”.
       await page.getByTestId('priority-line-open').click()
       await expect(page.getByTestId('cases-matrix')).toBeVisible()

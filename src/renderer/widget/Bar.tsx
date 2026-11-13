@@ -296,7 +296,7 @@ function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: Ba
     setText('')
     close()
   }
-  const { today } = useQuickToday(text === '')
+  const { today } = useQuickToday(text)
   const preview = quickPreview(text, today)
   return (
     <div className="flex flex-col gap-0.5" data-testid="bar-quick-field">

@@ -12,8 +12,6 @@ import { addDays, weekday } from '@shared/time/zone'
 import { MONTH_NAMES } from '../calendar/MonthGrid'
 import type { WeekPush } from '../../store/weekPush'
 
-// One list of the short names (`@shared/format`); kept exported here for the screens that take it from this file.
-export { WEEKDAY_SHORT }
 export const WEEKDAY_FULL = WEEKDAY_NAMES
 
 const day = (d: string) => String(Number(d.slice(8, 10)))

@@ -100,7 +100,7 @@ export const presetDate = (id: DatePreset, today: string): string => (id === 'to
 export const doDateNote = (doDate: string | null, today: string): string | null => (doDate != null && doDate < today ? 'Ta data już minęła' : null)
 
 /**
- * The morning plan's line of the sprawy „Ważne i pilne” without a place in today's plan (D450, `priorityWithoutPlace`; the module of
+ * The morning plan's line of the sprawy „Ważne i pilne” when none of them has a place in today's plan (D450, `priorityWithoutPlace`; the module of
  * requests off – the tasks' alone, as the page has it – T763). Null – no line.
  */
 export const morningPriorityLine = (items: readonly CaseItem[], requestsOn: boolean, blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string): string | null =>
@@ -115,7 +115,8 @@ export const dueTone = (b: Pick<DueBadge, 'kind'>): 'over' | 'soon' => (b.kind =
 
 /**
  * The morning plan's card „Terminy” (D409): `deadlineCases` of the sprawy the page shows (the module of requests off – the tasks'
- * alone, as the page and the panel have it – T763). Empty – no card.
+ * alone, as the page and the panel have it – T763). `offered` – what the step of requests and tasks offers (`morningCases`, counted once
+ * by the morning plan): its requests have their badge there, not on the card (D454). Empty – no card.
  */
-export const morningDeadlines = (items: readonly CaseItem[], requestsOn: boolean, blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string, thresholdDays: number, asked: Readonly<Record<string, string>>): CaseItem[] =>
-  deadlineCases(items.filter((x) => requestsOn || x.record.kind === 'task'), blocks, today, thresholdDays, asked)
+export const morningDeadlines = (items: readonly CaseItem[], requestsOn: boolean, blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string, thresholdDays: number, asked: Readonly<Record<string, string>>, offered: { requests: readonly CaseItem[] }): CaseItem[] =>
+  deadlineCases(items.filter((x) => requestsOn || x.record.kind === 'task'), blocks, today, thresholdDays, asked, new Set(offered.requests.map((x) => x.record.id)))
