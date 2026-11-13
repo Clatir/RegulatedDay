@@ -33,6 +33,7 @@ import {
   type Priority,
   type RequestRecord
 } from '../model/requests'
+import { repeatPatched, REPEAT_ONLY_TASK, taskRepeatJson, type TaskRepeatInput } from '../model/taskRepeat'
 import { logicalDayOf, weekStart } from '../time/day'
 import { addDays, isIsoDate, weekday } from '../time/zone'
 import { durationLabel } from '../format'
@@ -380,6 +381,8 @@ export interface CasePatch {
   doDate?: string | null
   /** The quarter of the matrix (D450): P1–P4, null – none. */
   priority?: Priority | null
+  /** „Powtarzaj” of a task (D465): the rule and its end, null – „Nie powtarzaj”. */
+  repeat?: TaskRepeatInput | null
 }
 
 /**
@@ -412,6 +415,17 @@ export function patchedRaw(raw: Raw, patch: CasePatch, at: number): { raw: Raw }
   if (patch.priority !== undefined) {
     if (patch.priority != null && !isPriority(patch.priority)) return { error: 'Priorytet: nie ma takiej ćwiartki.' }
     next.priority = patch.priority
+  }
+  if (patch.repeat !== undefined) {
+    if (patch.repeat === null) next.repeat = null
+    else {
+      if (kind !== 'task') return { error: REPEAT_ONLY_TASK }
+      // A weekly rule counts its weeks from the task's date (after this patch's dates), else from the day of the change.
+      const base = dateFrom(patch.doDate !== undefined ? patch.doDate : r.doDate) ?? dateFrom(patch.dueDate !== undefined ? patch.dueDate : r.dueDate) ?? today
+      const p = repeatPatched(patch.repeat, r.repeat, base)
+      if ('error' in p) return p
+      next.repeat = taskRepeatJson(p.repeat, raw.repeat)
+    }
   }
   if (patch.doDate !== undefined) {
     if (patch.doDate != null && !dateFrom(patch.doDate)) return { error: 'Wykonać: nie ma takiego dnia.' }

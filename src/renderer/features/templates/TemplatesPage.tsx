@@ -422,7 +422,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           focusName={fresh === block.id}
           onChange={(patch) => patchBlock(block.id, patch)}
           // D440: the list without boxes – every day made from the template starts with none ticked.
-          steps={<StepsEditor steps={block.steps} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}
+          steps={<StepsEditor steps={block.steps} lengthMin={block.durationMin} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}
           onClose={() => setSelected(null)}
           actions={
             // D415: out of the version from the date shown, with its attachments when no later version keeps it; „Cofnij”.

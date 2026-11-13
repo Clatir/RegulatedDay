@@ -7,7 +7,9 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { CaseDays, EditOutcome, QuickShortcut, RawRecord } from '@shared/api'
+import { marketDay } from '@shared/calendar/holidays'
 import { isRaw, putBlock } from '@shared/data/dayEdits'
+import { nextTaskRaw } from '@shared/engine/caseRepeat'
 import { sameContentAs } from '@shared/data/merge'
 import { classify, paths } from '@shared/data/paths'
 import {
@@ -24,7 +26,7 @@ import {
   type CasePatch,
   type GoneOf
 } from '@shared/engine/cases'
-import { parseQuickDates } from '@shared/quickDates'
+import { dayWord, parseQuickDates } from '@shared/quickDates'
 import { newId } from '@shared/model/ids'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom, type CaseList, type NewTask } from '@shared/model/requests'
@@ -32,7 +34,7 @@ import { settingsOn } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { useNow } from '../lib/clock'
 import { editOf, isSaved, rawRecord, saveAnswer, trySaveWith, useData, type SaveAnswer, type SendState } from './data'
-import { toast } from './ui'
+import { toast, undoToast } from './ui'
 
 const relOf = (id: string): string => paths.record('request', id)
 
@@ -146,6 +148,8 @@ export interface CaseResult {
   id: string | null
   /** „Cofnij” of this change (`undoCase`); empty when nothing was saved. */
   undo: CaseUndoFile[]
+  /** D465: the id of the next task this change made (a task that repeats ticked off); null or absent – none. */
+  next?: string | null
   /**
    * Whether the edits were handed to the queue (`SendState.afterSend`): no outcomes after it – the result is not known (the
    * folder may have it – `saveAnswer` says „asked”, never a refusal); absent – a result made without a send.
@@ -214,17 +218,40 @@ export async function createRequest(p: { person: string | null; estimateMin: num
   return { ...r, id: r.saved ? id : null }
 }
 
-/** One record changed by `fn` from what it is in its turn (or refused with why); gone – „Tej sprawy już nie ma.”. */
-function changeRecord(id: string, fn: (raw: RawRecord, at: number) => { raw: RawRecord } | { error: string }): Promise<CaseResult> {
-  return change((put) => {
+/** What the tick of a task that repeats says (D465): „Następne: „Podlać kwiaty” – wykonać jutro” (its „Cofnij” takes both back). */
+export function nextTaskText(raw: RawRecord, today: string): string {
+  const r = requestFrom(raw)
+  const date = r?.doDate ?? r?.dueDate
+  return `Następne: „${r?.title || 'zadanie'}”${date ? ` – ${r?.doDate ? 'wykonać' : 'termin'} ${dayWord(date, today)}` : ''}`
+}
+
+/**
+ * One record changed by `fn` from what it is in its turn (or refused with why); gone – „Tej sprawy już nie ma.”. A task that
+ * repeats taken to „Zrobione” by it (D465) gets its next task in the same edit – unless the window has that one already (made
+ * on another computer, or before a tick taken back by hand): the next one is never written twice; „Cofnij” then for both.
+ */
+async function changeRecord(id: string, fn: (raw: RawRecord, at: number) => { raw: RawRecord } | { error: string }): Promise<CaseResult> {
+  // The next task this change made (written in the callback – its last run counts).
+  const made: { raw: RawRecord | null } = { raw: null }
+  const r = await change((put) => {
+    made.raw = null
     const rel = relOf(id)
     const before = rawRecord(rel)
     if (!before) return 'Tej sprawy już nie ma.'
-    const next = fn({ ...before }, Date.now())
+    const at = Date.now()
+    const next = fn({ ...before }, at)
     if ('error' in next) return next.error
     put(rel, before, next.raw)
+    const n = nextTaskRaw(before, next.raw, at, marketDay)
+    if (n && !rawRecord(relOf(n.id))) {
+      put(relOf(n.id), null, n.raw)
+      made.raw = n.raw
+    }
     return null
   })
+  const next = r.saved ? made.raw : null
+  if (next) undoToast(nextTaskText(next, logicalDayOf(Date.now())), () => void undoCase(r.undo))
+  return { ...r, next: next ? String(next.id) : null }
 }
 
 /** Its fields (title, estimate, category, note, person, kind) – refused with why (a task without a title). */

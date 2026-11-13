@@ -13,7 +13,8 @@ import { END_CHOICES, NTH_CHOICES, RULE_CHOICES, WEEKDAY_NAMES, draftProblem, ty
 
 const LABEL = 92
 
-export function SeriesFields({ draft, onChange, today, readOnly, allowNone = true }: { draft: SeriesDraft; onChange: (patch: Partial<SeriesDraft>) => void; today: string; readOnly?: boolean; allowNone?: boolean }) {
+/** `special` off – no „W dni szczególne” (a task of „Sprawy”, D465: it is no block of a day). */
+export function SeriesFields({ draft, onChange, today, readOnly, allowNone = true, special = true }: { draft: SeriesDraft; onChange: (patch: Partial<SeriesDraft>) => void; today: string; readOnly?: boolean; allowNone?: boolean; special?: boolean }) {
   const set = (patch: Partial<SeriesDraft>) => (readOnly ? undefined : onChange(patch))
   const problem = draftProblem(draft)
   const choices = allowNone ? RULE_CHOICES : RULE_CHOICES.filter((c) => c.value !== 'none')
@@ -76,9 +77,11 @@ export function SeriesFields({ draft, onChange, today, readOnly, allowNone = tru
               {draft.end === 'until' && <DateField today={today} value={draft.until} onCommit={(until) => set({ until })} shellClassName="w-[120px]" aria-label="Ostatni dzień" errorPlacement="below" data-testid="series-until" />}
             </div>
           </Field>
-          <Field label="W dni szczególne" labelWidth={LABEL} hint="Wolne, zjazdy i dni regeneracyjne: pytaj – w wolny dzień wystąpienie znika, w zjazd i dzień regeneracyjny plan poranny pyta.">
-            <Segmented value={draft.special} options={SPECIAL_DAYS.map((s) => ({ value: s, label: SPECIAL_DAYS_TEXT[s] }))} onChange={(special) => set({ special })} aria-label="W dni szczególne" data-testid="series-special" />
-          </Field>
+          {special && (
+            <Field label="W dni szczególne" labelWidth={LABEL} hint="Wolne, zjazdy i dni regeneracyjne: pytaj – w wolny dzień wystąpienie znika, w zjazd i dzień regeneracyjny plan poranny pyta.">
+              <Segmented value={draft.special} options={SPECIAL_DAYS.map((s) => ({ value: s, label: SPECIAL_DAYS_TEXT[s] }))} onChange={(special) => set({ special })} aria-label="W dni szczególne" data-testid="series-special" />
+            </Field>
+          )}
         </>
       )}
     </div>

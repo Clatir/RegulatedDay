@@ -6,11 +6,14 @@
  * its list „Kroki” (`steps`, D440 – a slot of the screen, above the note), its note (a live Markdown editor, D388), its
  * attachments (`place`, D410). Every field saves on leaving it (spec „Edycja pól”); the panel changes nothing by itself.
  * A block of a series (`inSeries`, also the one edited in the list of „Szablony”) has its own hour and no marks: no „po bloku”, no „Oznaczenie” (D401).
+ * D460: choosing a routine copies its usual steps into „Kroki” in the same change (`routineStepsCopy`) – a block of a task
+ * keeps its list (it goes with the task's, T792); „bez rutyny” leaves the steps.
  */
 import type { ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
 import { routineMinutes } from '@shared/model/routines'
+import { routineStepsCopy } from '@shared/model/steps'
 import type { SessionDef } from '@shared/model/settings'
 import { SESSION_ANCHOR } from '@shared/engine/createDay'
 import { olderComputers } from '@shared/model/note'
@@ -19,7 +22,9 @@ import { Choice, DurationField, TextField, TimeField } from '../../components/fi
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import type { SaveAnswer } from '../../store/data'
+import { toast } from '../../store/ui'
 import { useAttachDrop } from '../attachments/attachDrop'
+import { routineCutText } from '../steps/stepsUi'
 import { AttachmentsSection } from '../attachments/AttachmentsSection'
 import { NoteEditor } from '../note/NoteEditor'
 import { anchorCandidates, blockName, categoryOptions, type Names } from './blockView'
@@ -199,7 +204,11 @@ export function BlockEditor({
             options={[{ value: '-', label: 'bez rutyny' }, ...names.routines.filter((r) => !r.archived || r.id === block.routine).map((r) => ({ value: r.id, label: r.name }))]}
             onChange={(v) => {
               const r = names.routines.find((x) => x.id === v)
-              set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}) })
+              // D460: its steps with the routine, as one change of the block (the copy of the routine chosen before is replaced).
+              const was = block.routine ? names.routines.find((x) => x.id === block.routine) : null
+              const copy = r && !block.task && r.normal.length ? routineStepsCopy(block.steps, was, r) : null
+              const out = set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}), ...(copy ? { steps: copy.steps } : {}) })
+              if (copy?.cut) void Promise.resolve(out).then((saved) => saved !== false && toast(routineCutText(copy.cut), 'info', 6000))
             }}
             aria-label="Rutyna"
             data-testid="block-routine"

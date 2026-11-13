@@ -108,6 +108,7 @@ export function SeriesEditor({ series, today, onClosed }: { series: Series; toda
         steps={
           <StepsEditor
             steps={block.steps}
+            lengthMin={block.durationMin}
             ticks={false}
             readOnly={ended}
             // The op goes to each version's own list in the write's turn; „Cofnij” only for a removal (D443: an empty text – none).

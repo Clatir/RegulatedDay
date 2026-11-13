@@ -821,7 +821,8 @@ Wszystko w aplikacji jest blokiem. Nie ma osobnej listy zadań, więc aplikacja 
   pierwszego użycia komputera liczy się według planu, a gdy pierwsze użycie wypada po progu późnego wstania, według
   Twojej odpowiedzi na propozycję przesunięcia, bez odpowiedzi według planu. Aplikacja nigdy nie zmienia kolejności
   kroków, najwyżej przesuwa całą rutynę w czasie. Kroki odhaczasz po powrocie do komputera, wszystkie naraz albo
-  pojedynczo.
+  pojedynczo. Wybór rutyny w panelu bloku kopiuje jej kroki (wersja zwykła, z czasem) do „Kroków” bloku; potem są
+  niezależne od rutyny (D460, „Podzadania” w specyfikacji rozszerzeń).
 - **Prośba** ma osobę wybraną z listy (z „+ dodaj osobę”), szacunek czasu i jeden z trzech trybów:
   - **do kolejki:** wybierasz ją rano w planie;
   - **zrobione teraz:** jedno kliknięcie z osobą, bez szacunku, czas liczy się do „Koniec” po powrocie, a bez niego do
@@ -1702,7 +1703,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 | schedule/\<id>.json | plan wykładów jako bloki cykliczne |
 | days/RRRR/RRRR-MM-DD.json | Twoje edycje planu dnia, także przyszłych dni, i pobudka dnia; pisze go okno główne, także ukryte w zasobniku, a import zjazdów z PDF – proces główny jedną partią kolejki (typ dnia, zajęcia, `classImport` do cofnięcia, T546) |
 | log/RRRR/RRRR-MM-DD/\<komputer>.jsonl | dopisywany log zdarzeń dnia z tego komputera: utworzenie dnia z migawką, start, pauza, dalej, przedłużenie, check-in, sygnał, prośba, alarm, działania automatyczne, zobaczenie komunikatu albo pytania (identyfikator, sposób), zatwierdzenie granicy, zamrożenie z oceną dnia, korekta, pierwsza obecność dnia, przerwy w wejściu i w użyciu od 2 min, odcinki obserwacji, odcinki klasyfikacji minut, przeliczenia pory snu i każda akcja widgetu; pisze go tylko proces główny |
-| requests/\<id>.json | sprawy (D383): zadania własne i prośby – rodzaj, tytuł, osoba, szacunek, kategoria, notatka, lista, blok, chwila zrobienia; pliki próśb sprzed „Spraw” czytane bez migracji, pole `state` w kroku dla starszych wersji (T750) |
+| requests/\<id>.json | sprawy (D383): zadania własne i prośby – rodzaj, tytuł, osoba, szacunek, kategoria, notatka, lista, blok, chwila zrobienia, powtarzanie zadania (`repeat`, D465; następne zadanie ma identyfikator wyliczony z poprzedniego – T1041); pliki próśb sprzed „Spraw” czytane bez migracji, pole `state` w kroku dla starszych wersji (T750) |
 | routines/\<id>.json | rutyny |
 | allday/\<id>.json | wydarzenia całodniowe i wielodniowe (D405): tytuł, daty od–do, kolor, notatka, „To wolne”; tylko informacja – silnik dnia ich nie czyta |
 | attachments/\<id>.json, attachments/\<id>/\<plik> | załączniki bloków (D410): plik skopiowany do folderu albo link (tytuł, ikona strony), właściciel – blok dnia, blok szablonu albo seria; usunięty zostaje 30 dni, potem prowadzący kasuje plik i rekord (T800–T806); z blokiem szablonu i serią – D415 |

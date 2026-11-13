@@ -8,8 +8,8 @@ paths:
   - "tests/e2e/steps-screens.spec.ts"
   - "src/shared/data/dayEdits.ts"
   - "src/shared/data/merge.ts"
-  - "tests/unit/engine/steps.test.ts"
-  - "tests/web/steps.test.ts"
+  - "tests/unit/engine/steps*.test.ts"
+  - "tests/web/steps*.test.ts"
   - "tests/fs/steps.test.ts"
   - "tests/e2e/steps.spec.ts"
 ---
@@ -21,7 +21,9 @@ paths:
 dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyta (D72); nic nie gra dźwięku.
 
 ## Pliki
-- `model/steps.ts` – `Step { id, title, order, done }`, `STEPS_MAX` 30 (tylko przy dodawaniu), `STEP_TITLE_MAX` 200 (T789);
+- `model/steps.ts` – `Step { id, title, order, done, min? }`, `STEPS_MAX` 40 (tylko przy dodawaniu; tyle co rutyna – T1031), `STEP_TITLE_MAX` 200 (T789);
+  czas kroku (D460, T1030): `min` 1–240 (`STEP_MIN_RANGE`, `stepMinOf`; brak – pola nie ma, nigdy `min: undefined`), operacja `{ op: 'min' }`,
+  `stepsTime` (suma i nadmiar wobec długości bloku), `routineStepsCopy` (kroki rutyny do bloku – T1032); `sameStepList` porównuje też czas;
   `stepsFrom` (każdy krok, kolejność po `order`, remis – kolejność w pliku; `done` nigdy z elementu listy), `stepsJson` /
   `withStepsJson` (zapis bez `done`, w kolejności pliku; lista niezmieniona – plik jak był; pozycja niezmieniona albo
   nieczytelna zostaje jak w pliku, zmieniona/usunięta zabiera czytelne pozycje swojego id – T787), `refusalFor` (pełna lista
@@ -33,8 +35,9 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
   `taskStepsEdits` (zadanie + blok od dziś), `templateStepsChanged`, `taskOfBlock`, `dayBlockNow`.
 - `renderer/store/steps.ts` – API okna: `tickBlockStep`, `changeBlockSteps`, `tickTaskStep`, `changeTaskSteps`,
   `changeTemplateSteps`, `changeSeriesSteps` („To i następne” / „Cała seria”), `changeSeriesListSteps` (lista serii w „Szablonach”), `undoSteps`; wynik `StepsResult` (jak `CaseResult` bez `id`; `sent` – `SendState`: wysłane bez odpowiedzi = „asked”, nie odmowa).
-- `features/steps/` – ekrany (T795–T799): `StepsEditor` (lista, pole „Dodaj krok”, ptaszki, tytuł w miejscu, uchwyt i Alt+↑/↓),
-  `stepsUi` (`stepsAnswer` – „Cofnij” po usunięciu, `keyMove`, `dropMove`, `refusedOp`), `blockSteps` (`saveBlockSteps` –
+- `features/steps/` – ekrany (T795–T799): `StepsEditor` (lista, pole „Dodaj krok”, ptaszki, tytuł w miejscu, uchwyt i Alt+↑/↓,
+  pole „czas” kroku i linia „kroki: X min z Y” z ostrzeżeniem – `lengthMin`, w zadaniu bez niego, D460),
+  `stepsUi` (`stepsAnswer` – „Cofnij” po usunięciu, `keyMove`, `dropMove`, `refusedOp`, `stepsTimeLine`, `stepMinParse`, `routineCutText`), `blockSteps` (`saveBlockSteps` –
   panel dnia: szkic, zakres serii, dzień). Używają go `TodayPage` (slot `steps` w `BlockEditor`), `TemplatesPage`, `SeriesEditor`
   (bez ptaszków) i `CasesPage` (wiersz zadania); licznik – `TimelineItem.steps` (`dayAxis`), `HorizonBlock.steps` (Tydzień).
 
@@ -67,7 +70,14 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
 - Pasek (T793): `WidgetView.steps` (`BarSteps`) – blok na pierwszym planie, pierwszy nieodhaczony; ukryte tylko w „Odcinam
   się”; akcja `step` `<blok>|<krok>` → `WidgetEngine.tickStep` (jedna edycja: dzień + zadanie). Tekst – `barStepText`.
 
+- Kroki z rutyny (D460, T1032–T1034): „Rutyna” w `BlockEditor` daje jedną zmianę `{ routine, durationMin, steps }` (`onChange` każdego
+  ekranu: szkic, dzień, „Tylko to” / zakres serii przez `seriesBlockPatch`, szablon, lista serii) – lista pusta albo nietknięta kopia
+  poprzedniej rutyny (tytuły i czasy, nic nieodhaczone) wymieniona, inna – rutyna na końcu, ponad 40 pominięte z dymkiem; blok zadania
+  (`block.task`) bez kopii (lista idzie z zadaniem, T792); „bez rutyny” kroków nie rusza; długość bloku nigdy nie idzie za krokami.
+
 ## Pułapki
+- Starsza wersja (bez czasu kroku) pisze listę pozycja po pozycji: zmieniona pozycja zachowuje `min` (`{ ...x, title, order }`),
+  dodany przez nią krok jest bez czasu (T1030). Ta wersja zdejmuje `min` tylko, gdy sama zmieniła czas kroku.
 - Nowe pole bloku – `planBlock()`, `planBlockFrom` i literał w `blockInfos`; `blockJson` pisze `steps` przez `withStepsJson`
   (bez pola, gdy pusto i w pliku nie było – pusta lista byłaby zmianą do spotkania z cudzą).
 - Blok migawki z logu jest surowy (może nie mieć `steps`) – czytaj przez plan (`dayPlan`), nie przez `snapshot.blocks`.

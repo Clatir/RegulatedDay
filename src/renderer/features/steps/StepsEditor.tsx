@@ -4,15 +4,18 @@
  * place (the handle „⋮⋮”; Alt+↑ / Alt+↓ on a row – the keyboard's way), the counter „✓ 3/4” by the heading. The list changes
  * nothing by itself: every change is an op (`StepOp`) the screen saves – answering whether it was (the text stays in the
  * field when it was not). A template's list has no ticks (`ticks` off: every day starts with none, D440).
+ * D460: each step may have a time (the field beside its title, empty allowed); the sum is said under the heading – „kroki:
+ * 45 min z 1 h” with the block's length (`lengthMin`), „kroki: 45 min” in a task – with a warning when it is over the block
+ * (nothing is refused: the block's length never follows the steps).
  */
 import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { addStepOp, STEP_NO_TITLE, STEP_TITLE_MAX, stepsCounter, type Step, type StepOp, type StepsKind } from '@shared/model/steps'
-import { FieldShell, TextField } from '../../components/fields'
+import { CommitField, FieldShell, TextField } from '../../components/fields'
 import { cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import type { SaveAnswer } from '../../store/data'
 import { toast } from '../../store/ui'
-import { dropMove, keyMove, refusedOp } from './stepsUi'
+import { dropMove, keyMove, refusedOp, stepMinParse, stepMinText, stepsTimeLine } from './stepsUi'
 
 export function StepsEditor({
   steps,
@@ -20,7 +23,8 @@ export function StepsEditor({
   kind = 'block',
   onTick,
   onOp,
-  readOnly
+  readOnly,
+  lengthMin
 }: {
   steps: readonly Step[]
   /** Show the boxes (a block of a day, a task); off – a template's or a series' list. */
@@ -31,6 +35,8 @@ export function StepsEditor({
   /** One change of the list; the answer says whether it was saved (false – refused, the field keeps the text). */
   onOp: (op: StepOp) => Promise<SaveAnswer> | SaveAnswer | void
   readOnly?: boolean
+  /** The block's length (D460: „kroki: X min z Y” and the warning past it); left out – a task (the sum alone). */
+  lengthMin?: number | null
 }) {
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -41,6 +47,7 @@ export function StepsEditor({
   const refocus = useRef<string | null>(null)
   const [drag, setDrag] = useState<{ id: string; over: { id: string; after: boolean } | null } | null>(null)
   const counter = ticks ? stepsCounter(steps) : null
+  const time = stepsTimeLine(steps, lengthMin)
 
   useEffect(() => {
     const id = refocus.current
@@ -111,7 +118,17 @@ export function StepsEditor({
             {counter}
           </span>
         )}
+        {time && (
+          <span className="num text-[12px] text-muted" data-testid="steps-time">
+            {time.text}
+          </span>
+        )}
       </div>
+      {time?.warning && (
+        <p className="text-[12px] text-lamp" role="status" data-testid="steps-over">
+          {time.warning}
+        </p>
+      )}
       {steps.length > 0 && (
         <ul ref={list} className="flex flex-col gap-0.5" data-testid="steps-list">
           {steps.map((s) => {
@@ -163,6 +180,20 @@ export function StepsEditor({
                   errorPlacement="below"
                   aria-label={`Krok: ${s.title}`}
                   data-testid="step-title"
+                />
+                <CommitField<number | null>
+                  value={s.min ?? null}
+                  parse={stepMinParse}
+                  format={stepMinText}
+                  // Only a time that differs is sent (an empty field left empty is no change).
+                  onCommit={(min) => void ((min ?? null) !== (s.min ?? null) && send({ op: 'min', id: s.id, min }))}
+                  placeholder="czas"
+                  readOnly={readOnly}
+                  shellClassName="w-[64px] shrink-0"
+                  className="h-[24px] w-full text-[12px]"
+                  errorPlacement="float"
+                  aria-label={`Czas kroku: ${s.title}`}
+                  data-testid="step-min"
                 />
                 {!readOnly && (
                   <button type="button" className="px-1 text-[13px] leading-none text-muted hover:text-rose" onClick={() => void send({ op: 'remove', id: s.id })} aria-label={`Usuń krok: ${s.title}`} data-testid="step-remove">

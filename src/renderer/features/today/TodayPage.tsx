@@ -541,6 +541,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             steps={
               <StepsEditor
                 steps={block.steps}
+                lengthMin={block.durationMin}
                 ticks={!draft}
                 onTick={(id, done) => tickBlockStep(date, block, id, done, raw)}
                 onOp={(op) => saveBlockSteps({ date, today, raw, series, names, patchDraft: (steps) => patchBlockDraft(date, { steps }), scope: stepsScope }, block, op, draft != null)}

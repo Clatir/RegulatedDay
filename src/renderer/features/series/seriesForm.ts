@@ -7,6 +7,7 @@ import type { SeriesCreate, SeriesScope } from '@shared/api'
 import { occurrenceBlock, type SeriesPatch } from '@shared/engine/series'
 import type { PlanBlock } from '@shared/model/plan'
 import { DEFAULT_SPECIAL, SERIES_BLOCK_FIELDS, SERIES_COUNT_MAX, seriesVersionOn, type Series, type SeriesBlock, type SeriesRule, type SpecialDays } from '@shared/model/series'
+import type { TaskRepeat, TaskRepeatInput } from '@shared/model/taskRepeat'
 import { seriesRuleText } from '@shared/seriesText'
 import { addDays, weekday } from '@shared/time/zone'
 
@@ -77,22 +78,47 @@ export function newDraft(date: string): SeriesDraft {
   }
 }
 
-/** The draft of a series as it is on `date` (the version in force there, its first one before it): what the form edits. */
-export function draftOf(s: Series, date: string): SeriesDraft {
-  const v = seriesVersionOn(s, date) ?? s.versions[0]!
+/** The draft of a rule with its end, the other fields from `date` (`newDraft`). */
+function ruleDraft(r: SeriesRule, end: { until: string | null; count: number | null }, date: string): SeriesDraft {
   const d = newDraft(date)
-  const r = v.rule
   return {
     ...d,
     kind: r.kind,
     ...(r.kind === 'weekly' ? { every: r.every, days: [...r.days] } : {}),
     ...(r.kind === 'monthDay' ? { day: r.day } : {}),
     ...(r.kind === 'monthWeekday' ? { nth: r.nth, weekday: r.weekday } : {}),
-    end: s.count != null ? 'count' : s.until != null ? 'until' : 'never',
-    count: s.count ?? d.count,
-    until: s.until ?? d.until,
-    special: v.special
+    end: end.count != null ? 'count' : end.until != null ? 'until' : 'never',
+    count: end.count ?? d.count,
+    until: end.until ?? d.until
   }
+}
+
+/** The draft of a series as it is on `date` (the version in force there, its first one before it): what the form edits. */
+export function draftOf(s: Series, date: string): SeriesDraft {
+  const v = seriesVersionOn(s, date) ?? s.versions[0]!
+  return { ...ruleDraft(v.rule, s, date), special: v.special }
+}
+
+/**
+ * „Powtarzaj” of a task (D465): the draft of its repeat (none – „Nie powtarzaj”, the fields from `date`: the task's date, else
+ * today), and what a draft sets (`repeatInputOf`: null – „Nie powtarzaj”; undefined – the rule incomplete, nothing to save).
+ */
+export function repeatDraft(rep: TaskRepeat | null, date: string): SeriesDraft {
+  return rep ? ruleDraft(rep.rule, rep, date) : newDraft(date)
+}
+export function repeatInputOf(d: SeriesDraft): TaskRepeatInput | null | undefined {
+  if (d.kind === 'none') return null
+  const rule = ruleOf(d)
+  return rule ? { rule, ...endOf(d) } : undefined
+}
+/** Whether the draft sets another repeat than the task's (`rep`) – „Zapisz powtarzanie” only then. */
+export function repeatChanged(rep: TaskRepeat | null, d: SeriesDraft): boolean {
+  const input = repeatInputOf(d)
+  if (input === undefined) return false
+  if (input === null || rep === null) return (input === null) !== (rep === null)
+  const { anchor: _a, ...was } = rep.rule as SeriesRule & { anchor?: string }
+  const { anchor: _b, ...now } = input.rule as SeriesRule & { anchor?: string }
+  return JSON.stringify(was) !== JSON.stringify(now) || input.until !== rep.until || input.count !== rep.count
 }
 
 /** The rule the draft makes (a weekly one's weeks are counted by the main process: `anchor` is left empty); null – none, or incomplete. */
