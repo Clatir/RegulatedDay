@@ -109,11 +109,11 @@ const api: RdApi = {
   },
   attachFiles: (owner, paths) => ipcRenderer.invoke(CH.attachFiles, owner, paths),
   attachPick: (owner) => ipcRenderer.invoke(CH.attachPick, owner),
+  attachCommit: (ids) => ipcRenderer.invoke(CH.attachCommit, ids),
   addLink: (owner, url) => ipcRenderer.invoke(CH.addLink, owner, url),
   openAttachment: (id) => ipcRenderer.invoke(CH.openAttachment, id),
   openAttachments: (ids) => ipcRenderer.invoke(CH.openAttachments, ids),
-  showAttachment: (id) => ipcRenderer.invoke(CH.showAttachment, id),
-  attachmentThumb: (id) => ipcRenderer.invoke(CH.attachmentThumb, id)
+  showAttachment: (id) => ipcRenderer.invoke(CH.showAttachment, id)
 }
 
 contextBridge.exposeInMainWorld('rd', api)

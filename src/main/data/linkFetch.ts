@@ -60,7 +60,7 @@ async function readUpTo(res: Response, max: number): Promise<{ bytes: Uint8Array
 }
 
 /** A GET whose redirects the fetch follows (or – one that answers them – by hand, at most `MAX_REDIRECTS`), each to http or https; null – not 2xx there. */
-async function get(fetcher: Fetcher, url: string, signal: AbortSignal, accept: string): Promise<{ res: Response; url: string } | null> {
+async function get(fetcher: Fetcher, url: string, signal: AbortSignal, accept: string): Promise<{ res: Response; url: string | null } | null> {
   let at = url
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     if (!isHttp(at)) return null
@@ -77,7 +77,9 @@ async function get(fetcher: Fetcher, url: string, signal: AbortSignal, accept: s
       await res.body?.cancel().catch(() => undefined)
       return null
     }
-    return { res, url: res.url || at }
+    // Where it ended is known only from the answer (T835): Electron's may have none after following – then no address
+    // relative to the page is guessed from the one asked for.
+    return { res, url: res.url || null }
   }
   return null
 }
@@ -104,7 +106,7 @@ export async function fetchPageMeta(fetcher: Fetcher, url: string, timeoutMs = M
     const type = got.res.headers.get('content-type')
     if (type && !/html|xml/i.test(type)) {
       await got.res.body?.cancel().catch(() => undefined)
-      return { meta: { title: null, icons: [new URL('/favicon.ico', got.url).href] } }
+      return { meta: { title: null, icons: got.url ? [new URL('/favicon.ico', got.url).href] : [] } }
     }
     const { bytes } = await readUpTo(got.res, PAGE_BYTES_MAX)
     return { meta: parsePageMeta(pageText(bytes.subarray(0, PAGE_BYTES_MAX), type), got.url) }

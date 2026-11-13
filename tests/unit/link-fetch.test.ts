@@ -19,7 +19,10 @@ function net(routes: Record<string, () => Response | Promise<Response>>): { fetc
     inits.push(init)
     const r = routes[url]
     if (!r) return new Response('nie ma', { status: 404 })
-    return r()
+    // As a fetch says where the answer came from (one that does not – `url: ''` – has its own test).
+    const res = await r()
+    if (!res.url) Object.defineProperty(res, 'url', { value: url })
+    return res
   }
   return { fetcher, asked, inits }
 }
@@ -118,5 +121,21 @@ describe('jak Electron: przekierowania idą przez stos sieciowy (T835)', () => {
   it('przekierowanie poza http/https – nic', async () => {
     const f = electronNet({ 'https://e.com/': () => redirect('file:///C:/Windows/win.ini') })
     expect(await fetchPageMeta(f, 'https://e.com/')).toBeNull()
+  })
+})
+
+describe('odpowiedź bez adresu (url: \'\') po przekierowaniu (T835)', () => {
+  it('ikony względne i /favicon.ico nie liczą się od adresu, o który pytano; bezwzględne z dokumentu – tak', async () => {
+    const asked: string[] = []
+    const f: Fetcher = async (url) => {
+      asked.push(url)
+      if (url === 'https://stary.example/') return html('<title>T</title><link rel="icon" href="/wzgledna.png"><link rel="icon" href="https://cdn.example/abs.png">')
+      if (url === 'https://cdn.example/abs.png') return new Response(PNG)
+      return new Response(PNG)
+    }
+    expect(await fetchPageMeta(f, 'https://stary.example/')).toEqual({ title: 'T', iconDataUrl: expect.stringMatching(/^data:image\/png/) })
+    expect(asked).toEqual(['https://stary.example/', 'https://cdn.example/abs.png'])
+    const none: Fetcher = async () => html('<title>T</title><link rel="icon" href="/wzgledna.png">')
+    expect(await fetchPageMeta(none, 'https://stary.example/')).toEqual({ title: 'T', iconDataUrl: null })
   })
 })

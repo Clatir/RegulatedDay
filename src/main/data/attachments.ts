@@ -14,6 +14,7 @@ import { recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import {
   ATTACHMENT_NAME_MAX,
+  ATTACHMENT_SCHEME,
   attachmentFrom,
   attachmentJson,
   attachmentRel,
@@ -24,7 +25,8 @@ import {
   ownerFrom,
   safeAttachmentUrl,
   safeFileName,
-  type Attachment
+  type Attachment,
+  type AttachmentOwner
 } from '@shared/model/attachment'
 import { isId, newId } from '@shared/model/ids'
 import { tempPathFor, withRetry } from '../datastore/atomic'
@@ -127,16 +129,11 @@ export interface AttachmentIo {
   now: () => number
   shell: AttachmentShell
   fetchMeta?: MetaFetch
-  /** A thumbnail of an image file as a data URL (Electron's nativeImage), null – none. */
-  thumbOf?: (abs: string) => Promise<string | null> | string | null
   log?: (level: 'info' | 'warn' | 'error', msg: string) => void
 }
 
 /** Files of one drop or one choice at most (more – the rest is refused with the reason). */
 export const ATTACH_MAX = 50
-/** An image larger than this gets no thumbnail (decoded whole in the main process). */
-export const THUMB_FILE_MAX = 50 * 1024 * 1024
-export const THUMB_PX = 96
 
 export const MISSING_TEXT = 'Ten plik jeszcze nie dotarł na ten komputer – OneDrive go przenosi. Spróbuj za chwilę.'
 export const GONE_TEXT = 'Tego załącznika już nie ma.'
@@ -174,16 +171,24 @@ const shownName = (source: string): string =>
 
 const saved = (out: readonly EditOutcome[]): boolean => out.every((o) => o.status === 'applied' || o.status === 'waiting')
 
+/** A copy made for a block whose record is not written yet (`prepareFiles` → `commitFiles`). */
+export interface PreparedFile {
+  id: string
+  owner: AttachmentOwner
+  raw: Record<string, unknown>
+}
+
 /**
- * Files dropped or chosen for a block (D410): each copied first (T802 – the file, then its record), the records of all
- * the copies as one edit. A copy that fails has no record and is said by name; when the edit itself fails, the copies go.
+ * Files dropped or chosen for a block (D410), the first half (T839): each copied into the data folder (T802 – the file,
+ * then its record), no record yet – the window writes them in the turn of its edits (`commitFiles`), so a block removed
+ * while gigabytes are copied is known then. A copy that fails is said by name.
  */
-export async function attachFiles(io: AttachmentIo, ownerIn: unknown, sourcesIn: unknown): Promise<AttachResult> {
+export async function prepareFiles(io: AttachmentIo, ownerIn: unknown, sourcesIn: unknown): Promise<{ made: PreparedFile[]; failed: AttachResult['failed'] }> {
   const owner = ownerFrom(ownerIn)
-  if (!owner) return { added: [], failed: [{ name: '', error: 'nie wiadomo, do którego bloku' }] }
+  if (!owner) return { made: [], failed: [{ name: '', error: 'nie wiadomo, do którego bloku' }] }
   const sources = Array.isArray(sourcesIn) ? sourcesIn.filter((s): s is string => typeof s === 'string' && s.length > 0) : []
   const failed: AttachResult['failed'] = []
-  const made: Array<{ id: string; raw: Record<string, unknown> }> = []
+  const made: PreparedFile[] = []
   for (const [i, source] of sources.entries()) {
     const name = shownName(source) || 'plik'
     if (i >= ATTACH_MAX) {
@@ -204,18 +209,28 @@ export async function attachFiles(io: AttachmentIo, ownerIn: unknown, sourcesIn:
       continue
     }
     const a: Attachment = { id, kind: 'file', name, file: { fileName, size, ext: extOf(fileName) }, link: null, owner, addedAt: io.now(), removedAt: null }
-    made.push({ id, raw: attachmentJson(a) })
+    made.push({ id, owner, raw: attachmentJson(a) })
   }
+  return { made, failed }
+}
+
+/**
+ * The records of copies made (`prepareFiles`) as one edit (T839). `removedAt` – the block is gone meanwhile (removed while
+ * the files were copied): the records are written removed at once, so the leader deletes the files after 30 days (D410)
+ * and „Cofnij” of the block's removal can still bring them back. Each copy by its own record: written or waiting – it
+ * stays; any other answer, or none (an error after the edit may have gone) – it stays while its record may be there (in
+ * the folder, unreadable now, or in the queue); only the copy of a record surely not there goes. A file without a record
+ * is better than a record without its file.
+ */
+export async function commitFiles(io: AttachmentIo, made: readonly PreparedFile[], removedAt: number | null = null): Promise<AttachResult> {
+  const failed: AttachResult['failed'] = []
   if (!made.length) return { added: [], failed }
   let out: EditOutcome[] | null = null
   try {
-    out = await io.edit(made.map((m) => recordEdit(attachmentRel(m.id), null, m.raw)!))
+    out = await io.edit(made.map((m) => recordEdit(attachmentRel(m.id), null, removedAt == null ? m.raw : { ...m.raw, removedAt })!))
   } catch (e) {
     io.log?.('warn', `załączniki: rekordy nie zapisały się – ${e instanceof Error ? e.message : String(e)}`)
   }
-  // Each copy by its own record (T839): written or waiting – it stays; any other answer, or none (an error after the edit
-  // may have gone), – it stays while its record may be there (in the folder, unreadable now, or in the queue); only the copy
-  // of a record surely not there goes. A file without a record is better than a record without its file.
   const added: string[] = []
   for (const [i, m] of made.entries()) {
     const o = out?.[i]
@@ -227,6 +242,13 @@ export async function attachFiles(io: AttachmentIo, ownerIn: unknown, sourcesIn:
     failed.push({ name: String(m.raw.name), error: 'nie zapisano – spróbuj jeszcze raz' })
   }
   return { added, failed }
+}
+
+/** Both halves at once (`prepareFiles`, `commitFiles`) – for a caller with no turn of the window's edits to wait for. */
+export async function attachFiles(io: AttachmentIo, ownerIn: unknown, sourcesIn: unknown): Promise<AttachResult> {
+  const p = await prepareFiles(io, ownerIn, sourcesIn)
+  const r = await commitFiles(io, p.made)
+  return { added: r.added, failed: [...p.failed, ...r.failed] }
 }
 
 /** The record of an attachment may be there: queued here, or a file in the folder (also one that cannot be read now). */
@@ -340,49 +362,30 @@ export async function showAttachment(io: AttachmentIo, idIn: unknown): Promise<A
   return { id, ok: true, how: 'shown', code: null, text: null }
 }
 
-/** Thumbnails made in this run (the files never change: by id and size), the newest kept. */
-const THUMBS_KEPT = 300
-
-export class ThumbCache {
-  private readonly map = new Map<string, string | null>()
-
-  get(key: string): string | null | undefined {
-    const v = this.map.get(key)
-    if (v !== undefined) {
-      this.map.delete(key)
-      this.map.set(key, v)
-    }
-    return v
-  }
-
-  set(key: string, v: string | null): void {
-    this.map.set(key, v)
-    while (this.map.size > THUMBS_KEPT) this.map.delete(this.map.keys().next().value!)
-  }
-}
+/** The content types of the images shown (T837) – by the name's extension, the same list as the thumbnails. */
+const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp' }
 
 /**
- * The thumbnail of an image attachment (D410, T808, T837): png, jpg, gif, webp or bmp up to `THUMB_FILE_MAX`, made without
- * holding the main process (`thumbOf` – Windows' own thumbnails, asynchronous) and kept in memory only – nothing is written
- * in the folder. None (no image, not here yet, too large, Windows gave none) is null and never remembered: a file that
- * comes later, or a thumbnail Windows makes later, shows at the next ask.
+ * The file an address of `ATTACHMENT_SCHEME` shows (T837, the window's `<img>`): `rd-attachment://img/<id>` of an
+ * attachment there is (not removed), a file of an image kind (never a program's, never SVG), its path built from the record
+ * and checked to lie in its own folder (`realInside`) – the address names nothing but the id. Not here yet – 404 (the window
+ * shows the kind's icon; the next look asks again), refused – 403, anything else – 404 or 400.
  */
-export async function attachmentThumb(io: AttachmentIo, cache: ThumbCache, idIn: unknown): Promise<string | null> {
-  const a = await current(io, idIn)
-  if (!a?.file || !isImageName(a.file.fileName) || !io.thumbOf) return null
-  const key = `${a.id}:${a.file.size}`
-  const known = cache.get(key)
-  if (known !== undefined) return known
-  const where = await fileOf(io, a.id, a)
-  if (!where.ok) return null
-  const st = await fs.stat(where.abs).catch(() => null)
-  if (!st || st.size > THUMB_FILE_MAX) return null
-  let url: string | null = null
+export async function attachmentImage(io: AttachmentIo, address: string): Promise<{ ok: true; abs: string; type: string } | { ok: false; status: 400 | 403 | 404 }> {
+  let u: URL
   try {
-    url = await io.thumbOf(where.abs)
+    u = new URL(address)
   } catch {
-    url = null
+    return { ok: false, status: 400 }
   }
-  if (url) cache.set(key, url)
-  return url
+  const id = u.pathname.replace(/^\//, '')
+  if (u.protocol !== `${ATTACHMENT_SCHEME}:` || u.hostname !== 'img' || u.search || !isId(id)) return { ok: false, status: 400 }
+  const a = await current(io, id)
+  if (!a?.file) return { ok: false, status: 404 }
+  const type = IMAGE_TYPES[extOf(a.file.fileName)]
+  if (!type || !isImageName(a.file.fileName) || isExecutableName(a.file.fileName)) return { ok: false, status: 404 }
+  const where = await fileOf(io, id, a)
+  if (!where.ok) return { ok: false, status: where.result.code === 'missing' ? 404 : 403 }
+  if (isExecutableName(basename(where.abs)) || IMAGE_TYPES[extOf(basename(where.abs))] !== type) return { ok: false, status: 403 }
+  return { ok: true, abs: where.abs, type }
 }

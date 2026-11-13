@@ -25,7 +25,7 @@ import { DEFAULT_NEW_BLOCK_MIN, snapMinute, type GridRange } from '../plan/gridC
 import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { AllDayBar } from '../allday/AllDayBar'
 import { AllDayLines } from '../allday/AllDayLines'
-import { attachBadge, attachBadgeTitle } from '../attachments/attachView'
+import { attachBadge, attachBadgeTitle, dayPlace } from '../attachments/attachView'
 import { pendingCard } from '../allday/allDayView'
 import { GoalsPanel } from './GoalsPanel'
 import { WeekPushLine } from './WeekPushLine'
@@ -296,7 +296,8 @@ function DayColumn({
   const lanes = useMemo(() => laneLayout(day.blocks), [day.blocks])
   // D410: the attachments of each block (its own, the template's, the series') – 📎N on its tile.
   const attachments = useData((s) => s.attachments)
-  const place = useMemo<BlockPlace>(() => ({ scope: 'day', date: day.date, templateId: day.templateId }), [day.date, day.templateId])
+  const templates = useData((s) => s.templates)
+  const place = useMemo<BlockPlace>(() => dayPlace(day.date, day.templateId, templates), [day.date, day.templateId, templates])
   const attachCount = (b: HorizonBlock): number => (b.outsidePlan ? 0 : attachmentsOfBlock(attachments, { id: b.id, origin: b.named.origin ?? 'user', sourceId: b.named.sourceId ?? null }, place).length)
   const grid = useGridCreate({
     lo,

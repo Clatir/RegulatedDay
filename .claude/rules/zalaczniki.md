@@ -21,19 +21,23 @@ paths:
 - Rekord `attachments/<id>.json`, plik w `attachments/<id>/<safeFileName>`. Format bloku bez zmian – właściciel w rekordzie:
   `day {date, blockId}` (dopasowanie po samym `blockId`), `template {templateId, blockId}`, `series {root}` (T800).
 - Co widzi blok: `attachmentsOfBlock(list, block, place)`; `place` = `{ scope: 'day', date, templateId, templateIds? }` (szablon z migawki
-  dnia; blok szablonu rozpoznany po swoim id – `templateOfDayBlock`, T831), `{ scope: 'template', templateId }`, `{ scope: 'series', root }`.
+  dnia, wszystkie szablony – `dayPlace` w `attachView`; blok szablonu, też „back” po zmianie typu, rozpoznany po swoim id – `templateOfDayBlock`,
+  T831), `{ scope: 'template', templateId }`, `{ scope: 'series', root }`.
   Dodawanie: `ownerToAdd(block, place)`.
 - `name` pusta = nazwa pliku / tytuł strony / domena (`attachmentFrom` wylicza); zmiana nazwy na pustą przywraca wyliczoną.
 
 ## Proces główny (`main/data/attachments.ts`)
-- Kolejność: kopia pliku (tymczasowy + `rename`), dopiero potem rekordy jedną edycją (T802). Brak pliku na tym komputerze –
-  `DataView.attachmentsMissing`, otwarcie `code: 'missing'`.
+- Kolejność: kopia pliku (tymczasowy + `rename`), dopiero potem rekordy jedną edycją (T802). Dwie połowy (T839): `prepareFiles`
+  (IPC `attachFiles`/`attachPick` – poza turą okna) i `commitFiles` (`attachCommit` w turze okna; ten sam folder, blok usunięty –
+  rekord od razu z `removedAt`, `ownerAlive`); niezapisana kopia znika po `PREPARED_MS`. Brak pliku – `attachmentsMissing`, `code: 'missing'`.
 - Otwieranie tylko po id, ścieżka z rekordu przez `realInside` (realpath, bez junction), wykonywalne → „pokaż w folderze”
   (`EXECUTABLE_EXTS`), linki `safeAttachmentUrl` ponownie przed `openExternal` (T803, T804). Okno nigdy nie podaje ścieżki do otwarcia.
-- Tytuł i ikona linku: `linkFetch.fetchPageMeta` (sesja w pamięci, ręczne przekierowania, limity), parser czysty w
+- Tytuł i ikona linku: `linkFetch.fetchPageMeta` (sesja w pamięci, limity), parser czysty w
   `shared/linkMeta.ts`; zapis tylko `link.title` / `link.iconDataUrl` (T807). W testach atrapa `Fetcher`, nigdy sieć.
-- Miniatury: `nativeImage.createThumbnailFromPath` w `index.ts` (`thumbOf`, asynchronicznie), w pamięci tylko gotowe (T837).
-- Parser strony liniowy (`scanPage`, T834); przekierowania – `redirect: 'follow'` + sprawdzenie `response.url` (T835).
+- Obrazy: okno ładuje `<img src="rd-attachment://img/<id>">` (`attachmentImageUrl`), proces główny (`protocol.handle`,
+  `attachmentImage`) szuka pliku z rekordu (obraz, `realInside`) i oddaje go strumieniem; dekoduje okno (T837).
+- Parser strony liniowy (`scanPage`, atrybuty ręcznie, T834); przekierowania – `redirect: 'follow'`, `response.url` http/https,
+  pusty – bez ikon względnych i `/favicon.ico` (T835).
 
 ## Usuwanie i sprzątanie
 - Miękkie `removedAt`, „Cofnij” = `AttachmentUndo` (ta sama chwila). Blok dnia (`removeDayBlock`) i „Tylko to” serii
@@ -51,7 +55,7 @@ paths:
 - `AttachmentsSection` w `BlockEditor` (prop `place`: dzień z `snapshot.templateId` / szablon / seria; szkic bloku – bez `place`, bez sekcji).
   Dodawanie zawsze do właściciela miejsca (`ownerToAdd`); blok dnia widzi też załączniki szablonu i serii z dopiskiem
   („z szablonu”, „z serii”) – zmienia je tylko miejsce właściciela (`isOwnHere`: bez „Zmień nazwę” i „Usuń” w dniu).
-- Pozycja: ikona rodzaju (`fileKind`, `FileIcon`), miniatura leniwie (`attachmentThumb`, pamięć po id; null – ikona), nazwa i rozmiar
+- Pozycja: ikona rodzaju (`fileKind`, `FileIcon`), obraz (`Thumb`: ikona do załadowania i przy błędzie), nazwa i rozmiar
   (`sizeText`) albo ikona strony i domena; klik otwiera po id; dopiski `MISSING_NOTE`, `PROGRAM_NOTE`; „Usuń” – `undoToast`.
 - Przeciąganie i wklejanie: `attachDrop.ts` (`useAttachDrop` – panel, `tileDrop` w `Timeline` – kafelek z `TimelineItem.attach`,
   `attachTransfer`, `pasteTransfer` – `paste` na dokumencie, pole tekstowe i okno dialogowe go pomijają). `dragover` przyjmowany

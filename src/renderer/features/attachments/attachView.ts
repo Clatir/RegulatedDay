@@ -65,6 +65,12 @@ export function originTag(a: Pick<Attachment, 'owner'>, place: BlockPlace): stri
 /** The attachment is the shown block's own: only then it can be renamed or removed here (T811). */
 export const isOwnHere = (a: Pick<Attachment, 'owner'>, place: BlockPlace): boolean => originTag(a, place) == null
 
+/**
+ * Where a day's block is shown, for its attachments (T831): the day, the template of its snapshot and every template there
+ * is – a block left by a change of the day's type is found in its own template by its id.
+ */
+export const dayPlace = (date: string, templateId: string | null, templates: readonly { id: string }[]): BlockPlace => ({ scope: 'day', date, templateId, templateIds: templates.map((t) => t.id) })
+
 export const MISSING_NOTE = 'Plik jeszcze nie dotarł z drugiego komputera (OneDrive).'
 export const PROGRAM_NOTE = 'Program – kliknięcie pokaże go w folderze.'
 

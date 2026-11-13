@@ -10,10 +10,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AttachResult, RawRecord, RdApi } from '@shared/api'
+import type { AttachPrepared, AttachResult, RawRecord, RdApi } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
-import { ATTACHMENT_KEEP_MS, attachmentRel, type Attachment, type AttachmentOwner, type AttachmentUndo, type BlockPlace } from '@shared/model/attachment'
+import { ATTACHMENT_KEEP_MS, attachmentImageUrl, attachmentRel, type Attachment, type AttachmentOwner, type AttachmentUndo, type BlockPlace } from '@shared/model/attachment'
 import { planBlock, type PlanBlock } from '@shared/model/plan'
 import { seriesJson } from '@shared/model/series'
 import { seriesBlockId } from '@shared/engine/series'
@@ -23,7 +23,7 @@ import { nodeAttachmentFiles, type AttachmentFiles, type AttachmentShell } from 
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
 import { DataHub } from '../../src/main/data/hub'
-import { writeZipFile } from '../../src/main/data/zip'
+import { withZip, writeZipFile } from '../../src/main/data/zip'
 
 const load = <T,>(rel: string): Promise<T> => import(/* @vite-ignore */ rel) as Promise<T>
 interface Toast {
@@ -54,8 +54,6 @@ let hub: DataHub
 let files: AttachmentFiles
 let calls: string[]
 let meta: { title: string | null; iconDataUrl: string | null } | null
-/** The thumbnails Electron would make (async, like `nativeImage.createThumbnailFromPath`); null – it could not. */
-let thumbs: (abs: string) => string | null
 
 const shell: AttachmentShell = {
   openPath: async (abs) => (calls.push(`open:${abs}`), ''),
@@ -71,7 +69,6 @@ beforeEach(async () => {
   mkdirSync(outside, { recursive: true })
   calls = []
   meta = null
-  thumbs = (abs) => `data:image/png;base64,${Buffer.from(abs).toString('base64')}`
   files = nodeAttachmentFiles
   hub = new DataHub({
     userData: join(root, 'appdata'),
@@ -89,7 +86,6 @@ beforeEach(async () => {
     attachments: {
       shell,
       fetchMeta: async () => meta,
-      thumbOf: async (abs) => thumbs(abs),
       files: {
         copyIn: (...a) => files.copyIn(...a),
         realInside: (...a) => files.realInside(...a),
@@ -105,15 +101,17 @@ beforeEach(async () => {
       dayData: (date) => hub.day(date),
       edit: (entries) => hub.edit(entries),
       logEvents: (events) => hub.events(events),
-      attachFiles: (owner, p) => hub.attachFiles(owner, p),
+      attachFiles: (owner, p) => hub.prepareFiles(owner, p),
+      attachCommit: (ids) => hub.commitFiles(ids),
       addLink: (owner, url) => hub.addLink(owner, url),
       openAttachment: (id) => hub.openAttachment(id),
       openAttachments: (ids) => hub.openAttachments(ids),
-      showAttachment: (id) => hub.showAttachment(id),
-      attachmentThumb: (id) => hub.attachmentThumb(id)
+      showAttachment: (id) => hub.showAttachment(id)
     }
   }
   useUi.setState({ toasts: [] })
+  // Today's block the attachments of the tests belong to (`own()`): one that is gone gets its attachments removed (T839).
+  write(paths.day(today()), { schema: 1, date: today(), blocks: { blk: planBlock({ id: 'blk', categoryId: 'inne', startMin: 20 * 60, durationMin: 30 }) } })
   await reloadData()
 })
 afterEach(async () => {
@@ -250,16 +248,37 @@ describe('otwieranie – okno podaje tylko id (T803, T804)', () => {
     expect(calls).toEqual([])
   })
 
-  it('miniatura: plik jeszcze nie dotarł albo Windows jej nie dał – null bez zapamiętania, potem się pojawia (T837)', async () => {
+  it('obraz dla okna (rd-attachment://img/<id>): tylko obraz z rekordu, w swoim folderze; plik jeszcze nie dotarł – 404, potem jest (T837)', async () => {
     write(attachmentRel('p3'), fileRecord('p3', 'zdjęcie.webp'))
-    expect(await hub.attachmentThumb('p3')).toBeNull()
+    expect(await hub.attachmentImage(attachmentImageUrl('p3'))).toEqual({ ok: false, status: 404 })
     write('attachments/p3/zdjęcie.webp', 'webp')
-    let fail = true
-    const real = thumbs
-    thumbs = (abs) => (fail ? null : real(abs))
-    expect(await hub.attachmentThumb('p3')).toBeNull()
-    fail = false
-    expect(await hub.attachmentThumb('p3')).toMatch(/^data:image\/png;base64,/)
+    expect(await hub.attachmentImage(attachmentImageUrl('p3'))).toEqual({ ok: true, abs: join(dir, 'attachments', 'p3', 'zdjęcie.webp'), type: 'image/webp' })
+  })
+
+  it('obraz dla okna – odmowa: id spoza rekordów, usunięty, nie obraz, program, SVG, ścieżka poza folderem, junction, zły adres (T837)', async () => {
+    write(attachmentRel('i1'), fileRecord('i1', 'plan.pdf'))
+    write('attachments/i1/plan.pdf', 'pdf')
+    write(attachmentRel('i2'), fileRecord('i2', 'foto.png.exe'))
+    write('attachments/i2/foto.png.exe', 'MZ')
+    write(attachmentRel('i3'), fileRecord('i3', 'rys.svg'))
+    write('attachments/i3/rys.svg', '<svg/>')
+    write(attachmentRel('i4'), fileRecord('i4', 'foto.png', { removedAt: 5 }))
+    write('attachments/i4/foto.png', 'png')
+    write(attachmentRel('i5'), fileRecord('i5', '..\\..\\rd.json'))
+    for (const id of ['i1', 'i2', 'i3', 'i4', 'i5', 'brak']) expect(await hub.attachmentImage(attachmentImageUrl(id)), id).toMatchObject({ ok: false, status: 404 })
+    mkdirSync(join(dir, 'attachments'), { recursive: true })
+    writeFileSync(join(outside, 'cudze.png'), 'png')
+    let junction = true
+    try {
+      symlinkSync(outside, join(dir, 'attachments', 'j2'), 'junction')
+    } catch {
+      junction = false
+    }
+    if (junction) {
+      write(attachmentRel('j2'), fileRecord('j2', 'cudze.png'))
+      expect(await hub.attachmentImage(attachmentImageUrl('j2'))).toEqual({ ok: false, status: 403 })
+    }
+    for (const bad of ['rd-attachment://img/../rd.json', 'rd-attachment://inne/i1', 'https://img/i1', 'rd-attachment://img/i1?x=1', 'nie adres']) expect(await hub.attachmentImage(bad), bad).toMatchObject({ ok: false })
   })
 
   it('dowiązanie (junction) folderu załącznika poza folder danych – odmowa', async () => {
@@ -286,14 +305,11 @@ describe('otwieranie – okno podaje tylko id (T803, T804)', () => {
     expect(calls).toEqual(['url:https://example.com/a'])
   })
 
-  it('miniatura tylko obrazu, w pamięci; nic nie zapisuje w folderze', async () => {
+  it('obraz dla okna: wielkość liter rozszerzenia bez znaczenia, nic nie zapisuje w folderze', async () => {
     write(attachmentRel('p1'), fileRecord('p1', 'foto.JPG'))
     write('attachments/p1/foto.JPG', 'jpg')
-    write(attachmentRel('p2'), fileRecord('p2', 'plan.pdf'))
-    write('attachments/p2/plan.pdf', 'pdf')
     const before = readdirSync(join(dir, 'attachments', 'p1'))
-    expect(await hub.attachmentThumb('p1')).toMatch(/^data:image\/png;base64,/)
-    expect(await hub.attachmentThumb('p2')).toBeNull()
+    expect(await hub.attachmentImage(attachmentImageUrl('p1'))).toMatchObject({ ok: true, type: 'image/jpeg' })
     expect(readdirSync(join(dir, 'attachments', 'p1'))).toEqual(before)
   })
 })
@@ -342,6 +358,8 @@ describe('usunięcie i „Cofnij” (D410, T805)', () => {
     const b = planBlock({ id: 'moj', categoryId: 'inne', startMin: 10 * 60, durationMin: 30 })
     await patchDayBlock(date, null, b, {})
     const id = (await store.attachFiles(own('moj', date), [source('a.txt')])).added[0]!
+    // A template with a block of the same id (archived – it makes no day).
+    write(paths.record('template', 'zwykly'), { schema: 1, id: 'zwykly', name: 'Zwykły', dayType: 'zwykly', weekdays: [], archived: true, versions: { '2026-01-01': { blocks: [planBlock({ id: 'moj', categoryId: 'inne', startMin: 9 * 60, durationMin: 30, origin: 'template' })] } } })
     const tpl = (await store.attachFiles({ scope: 'template', templateId: 'zwykly', blockId: 'moj' }, [source('b.txt')])).added[0]!
     expect(await removeDayBlock(date, null, b, false, 'Mój')).toBe(true)
     expect(recordOf(id)!.removedAt).toEqual(expect.any(Number))
@@ -401,6 +419,22 @@ describe('wybrane rekordy z kopii: pliki tylko dla zapisanych, brakujące z kopi
     expect(readFileSync(join(dir, 'attachments', 'd1', 'skan.pdf'), 'utf8')).toBe('nowsza')
   })
 
+  it('pliki wybranej kopii nieczytelne – pliki z kopii tygodniowych i tak wracają (T838)', async () => {
+    const rec = JSON.stringify(fileRecord('u1', 'skan.pdf'))
+    const chosen = join(root, 'uszkodzona.zip')
+    await zipOf(chosen, [[attachmentRel('u1'), rec], ['attachments/u1/skan.pdf', 'zawartość '.repeat(40)]])
+    // The file's entry damaged (its record is fine).
+    const e = await withZip(chosen, async (zip) => zip.entries.find((x) => x.name === 'attachments/u1/skan.pdf')!)
+    const b = readFileSync(chosen)
+    const at = e.offset + 30 + b.readUInt16LE(e.offset + 26) + b.readUInt16LE(e.offset + 28)
+    b[at + 2]! ^= 0xff
+    writeFileSync(chosen, b)
+    mkdirSync(join(dir, 'backups', 'weekly'), { recursive: true })
+    await zipOf(join(dir, 'backups', 'weekly', '2026-W45.zip'), [[attachmentRel('u1'), rec], ['attachments/u1/skan.pdf', 'z tygodniowej']])
+    expect((await hub.restoreRecords(chosen, [attachmentRel('u1')])).map((o) => o.status)).toEqual(['applied'])
+    expect(readFileSync(join(dir, 'attachments', 'u1', 'skan.pdf'), 'utf8')).toBe('z tygodniowej')
+  })
+
   it('rekord czeka na pytanie: pliku nie ma (folder bez rekordu nie powstaje)', async () => {
     write(attachmentRel('q1'), fileRecord('q1', 'a.pdf', { name: 'teraz' }))
     await reloadData()
@@ -436,15 +470,65 @@ describe('seria „Tylko to”: załącznik z pliku, nie z listy w pamięci (T83
 describe('okno: dołączanie nie trzyma kolejki zapisów (T839)', () => {
   it('okno wyboru plików otwarte – zmiana nazwy innego załącznika zapisuje się od razu', async () => {
     const id = (await store.attachFiles(own(), [source('a.txt')])).added[0]!
-    let release: (r: AttachResult) => void = () => undefined
+    let release: (r: AttachPrepared) => void = () => undefined
     const rd = (globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd
-    rd.attachPick = () => new Promise<AttachResult>((r) => (release = r))
+    rd.attachPick = () => new Promise<AttachPrepared>((r) => (release = r))
     const picking = store.pickFiles(own())
     const renamed = await Promise.race([store.renameAttachment(id, 'Nowa'), new Promise<'czeka'>((r) => setTimeout(() => r('czeka'), 3000))])
     expect(renamed).toBe(true)
-    release({ added: [], failed: [] })
+    release({ ids: [], failed: [] })
     await picking
     expect(recordOf(id)!.name).toBe('Nowa')
+  })
+})
+
+describe('runda 2: kopiowanie poza kolejką, rekord w kolejce okna (T839)', () => {
+  /** A copy that waits until `release()` (gigabytes on their way). */
+  function slowCopies() {
+    const o = { copying: false, release: () => undefined as void }
+    let open: () => void = () => undefined
+    const gate = new Promise<void>((r) => (open = r))
+    o.release = () => open()
+    files = {
+      ...nodeAttachmentFiles,
+      copyIn: async (...a) => {
+        o.copying = true
+        await gate
+        return nodeAttachmentFiles.copyIn(...a)
+      }
+    }
+    return o
+  }
+
+  it('blok usunięty w trakcie kopiowania: rekord zapisuje się od razu usunięty (sprzątanie po 30 dniach); link do usuniętego – odmowa', async () => {
+    const date = addDays(today(), 1)
+    const b = planBlock({ id: 'moj2', categoryId: 'inne', startMin: 10 * 60, durationMin: 30 })
+    await patchDayBlock(date, null, b, {})
+    const slow = slowCopies()
+    const adding = store.attachFiles(own('moj2', date), [source('duży.mov')])
+    await vi.waitFor(() => expect(slow.copying).toBe(true))
+    expect(await removeDayBlock(date, null, b, false, 'Mój')).toBe(true)
+    slow.release()
+    const r = await adding
+    expect(r.added).toHaveLength(1)
+    expect(recordOf(r.added[0]!)!.removedAt).toEqual(expect.any(Number))
+    expect(await store.addLink(own('moj2', date), 'example.com')).toBeNull()
+  })
+
+  it('folder danych zmieniony w trakcie kopiowania: rekordu nie ma w żadnym, kopia znika (T839)', async () => {
+    const other = join(root, 'inny')
+    mkdirSync(other, { recursive: true })
+    const slow = slowCopies()
+    const adding = store.attachFiles(own(), [source('a.txt')])
+    await vi.waitFor(() => expect(slow.copying).toBe(true))
+    expect(await hub.open(other)).toBe(true)
+    slow.release()
+    const r = await adding
+    expect(r.added).toEqual([])
+    expect(r.failed[0]!.error).toContain('folder danych zmienił się')
+    const left = existsSync(join(dir, 'attachments')) ? readdirSync(join(dir, 'attachments')) : []
+    expect(left).toEqual([])
+    expect(existsSync(join(other, 'attachments'))).toBe(false)
   })
 })
 

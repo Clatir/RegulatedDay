@@ -26,6 +26,7 @@ import {
 import { charsetOf, cleanTitle, decodeEntities, iconDataUrl, imageKindOf, pageText, parsePageMeta } from '@shared/linkMeta'
 import { isOutsideBackup, isDataFile } from '../../src/main/data/backup'
 import { templateBlockId } from '@shared/engine/createDay'
+import { derivedId } from '@shared/model/ids'
 
 const file = (id: string, owner: Attachment['owner'], o: Partial<Attachment> = {}): Attachment => ({
   id,
@@ -329,5 +330,37 @@ describe('wrogi HTML strony – koszt liniowy (T834)', () => {
     const html = '<!doctype html><HTML><Head><!-- <title>x</title> --><TITLE>Strona</TITLE><Script>var a="<title>z</title>"</Script><META property="og:title" content="Tytuł &amp; więcej"><LINK REL="Icon" HREF="/f.png"></Head></HTML>'
     expect(parsePageMeta(html, 'https://e.com/a')).toEqual({ title: 'Tytuł & więcej', icons: ['https://e.com/f.png', 'https://e.com/favicon.ico'] })
     expect(parsePageMeta('<title>Ą & B</title><titlex>nie</titlex>', 'https://e.com/').title).toBe('Ą & B')
+  })
+})
+
+describe('runda 2 przeglądu', () => {
+  it('atrybuty znacznika liniowo: 250 × długa nazwa bez „=” (T834)', () => {
+    const html = `${`<meta ${'a'.repeat(2040)}>`.repeat(250)}<meta property="og:title" content="Jest">`
+    const t = performance.now()
+    expect(parsePageMeta(html, 'https://e.com/').title).toBe('Jest')
+    expect(performance.now() - t).toBeLessThan(250)
+    // Attribute forms still read: quoted either way, unquoted, without a value, upper case, „/” before „>”.
+    expect(parsePageMeta(`<META PROPERTY='og:title' CONTENT=Bez-cudzysłowu data-x checked/>`, 'https://e.com/').title).toBe('Bez-cudzysłowu')
+    expect(parsePageMeta('<link rel="icon" href="/a.png"/><link rel=icon href=/b.png>', 'https://e.com/').icons).toEqual(['https://e.com/a.png', 'https://e.com/b.png', 'https://e.com/favicon.ico'])
+  })
+
+  it('blok przywrócony zmianą typu dnia (id „back”) zostaje przy załącznikach swojego szablonu (T831)', () => {
+    const date = '2026-11-12'
+    const list = [file('tz', { scope: 'template', templateId: 'zwykly', blockId: 'analiza' })]
+    const back = { id: derivedId(date, 'back', templateBlockId(date, 'zwykly', 'analiza')), origin: 'template' as const, sourceId: 'analiza' }
+    expect(attachmentsOfBlock(list, back, { scope: 'day', date, templateId: 'zwykly' }).map((a) => a.id)).toEqual(['tz'])
+    const backTwice = { ...back, id: derivedId(date, 'back', back.id) }
+    expect(attachmentsOfBlock(list, backTwice, { scope: 'day', date, templateId: 'zwykly' }).map((a) => a.id)).toEqual(['tz'])
+  })
+
+  it('certyfikaty i pakiety, które Windows otwiera kreatorem (T832)', () => {
+    for (const n of ['klucz.pfx', 'klucz.p12', 'a.p7r', 'a.p7c', 'a.spc', 'a.sst', 'a.crl', 'notes.one', 'notes.onepkg']) expect(isExecutableName(n), n).toBe(true)
+  })
+
+  it('tel:, skype:, callto: – nie host z portem (T833)', () => {
+    for (const bad of ['tel:112', 'skype:123', 'callto:997', 'sip:1000', 'news:42']) expect(linkFromInput(bad), bad).toBeNull()
+    expect(linkFromInput('localhost:3000')).toBe('https://localhost:3000/')
+    expect(linkFromInput('10.0.0.1:8080/x')).toBe('https://10.0.0.1:8080/x')
+    expect(linkFromInput('intranet.local:8080/wiki')).toBe('https://intranet.local:8080/wiki')
   })
 })

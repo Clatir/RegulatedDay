@@ -6,11 +6,12 @@
  */
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { createReadStream, existsSync, readFileSync } from 'node:fs'
 import { rename } from 'node:fs/promises'
 import { hostname, release } from 'node:os'
 import { join } from 'node:path'
-import { BrowserWindow, Menu, app, clipboard, crashReporter, dialog, ipcMain, nativeImage, net, powerMonitor, powerSaveBlocker, screen, session, shell, utilityProcess, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
+import { Readable } from 'node:stream'
+import { BrowserWindow, Menu, app, clipboard, crashReporter, dialog, ipcMain, net, powerMonitor, powerSaveBlocker, protocol, screen, session, shell, utilityProcess, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
 import {
   CH,
   type AppInfo,
@@ -39,7 +40,7 @@ import { compareVersions } from '@shared/update'
 import { systemSettingsUrl } from '@shared/systemSettings'
 import { safeLinkUrl } from '@shared/noteLink'
 import { fetchPageMeta, type Fetcher } from './data/linkFetch'
-import { THUMB_PX } from './data/attachments'
+import { ATTACHMENT_SCHEME } from '@shared/model/attachment'
 import type { UpdateView } from '@shared/updateView'
 import { BAR_NOTE_FAILED, BAR_NOTE_HELPER, type WidgetView } from '@shared/widget'
 import { identity } from './identity'
@@ -82,6 +83,8 @@ const userData = app.getPath('userData')
 const updateDir = join(userData, 'update')
 const helperDir = app.isPackaged ? join(process.resourcesPath, 'helper') : join(app.getAppPath(), 'build', 'helper')
 const config = new ConfigStore(userData, Number(process.env.RD_CONFIG_WRITE_DELAY_MS) || 0)
+// Images of attachments in the window (T837): a scheme of its own, before the app is ready (Electron's rule).
+protocol.registerSchemesAsPrivileged([{ scheme: ATTACHMENT_SCHEME, privileges: { standard: true, secure: true, stream: true } }])
 /** An unreadable config.json is read again this often (held by an antivirus or a backup at the start with Windows). */
 const CONFIG_RETRY_MS = 10_000
 const preload = join(__dirname, '../preload/index.js')
@@ -452,21 +455,16 @@ const worker = new WorkerHost({
 const linkFetcher: Fetcher = (url, init) => session.fromPartition('rd-link-meta', { cache: false }).fetch(url, init)
 
 /**
- * A thumbnail of an image attachment (T808, T837): at most `THUMB_PX` on its longer side, a PNG data URL; null – none.
- * Windows and macOS – the system's own thumbnail, asynchronous (the main process never decodes a large image itself and a
- * file only in the cloud never holds it); elsewhere (Linux – CI, tests) the image decoded here.
+ * An image of an attachment for the window's `<img src="rd-attachment://img/<id>">` (T837): the main process finds the file
+ * from the record (`hub.attachmentImage` – an image kind, in its own folder) and streams it from the disk; the window decodes
+ * and scales it. Nothing is decoded nor read whole here – a file only in the cloud is brought by the read on a worker
+ * thread, never holding the main one.
  */
-async function thumbOf(abs: string): Promise<string | null> {
-  if (process.platform === 'win32' || process.platform === 'darwin') {
-    const img = await nativeImage.createThumbnailFromPath(abs, { width: THUMB_PX, height: THUMB_PX }).catch(() => null)
-    return img && !img.isEmpty() ? img.toDataURL() : null
-  }
-  const img = nativeImage.createFromPath(abs)
-  if (img.isEmpty()) return null
-  const { width, height } = img.getSize()
-  if (!width || !height) return null
-  const small = width >= height ? img.resize({ width: Math.min(THUMB_PX, width), quality: 'good' }) : img.resize({ height: Math.min(THUMB_PX, height), quality: 'good' })
-  return small.toDataURL()
+async function attachmentImageResponse(address: string): Promise<Response> {
+  const r = hub ? await hub.attachmentImage(address).catch(() => null) : null
+  if (!r?.ok) return new Response(null, { status: r?.status ?? 404 })
+  const body = Readable.toWeb(createReadStream(r.abs)) as unknown as ReadableStream
+  return new Response(body, { headers: { 'content-type': r.type, 'x-content-type-options': 'nosniff', 'cache-control': 'no-cache' } })
 }
 
 function createHub(): DataHub {
@@ -510,8 +508,7 @@ function createHub(): DataHub {
     attachments: {
       shell: { openPath: (abs) => shell.openPath(abs), showItemInFolder: (abs) => shell.showItemInFolder(abs), openExternal: (url) => shell.openExternal(url) },
       // The test identity (E2E, CI) never asks the network for a page's title: the link shows its domain (T813).
-      fetchMeta: identity.kind === 'test' ? async () => null : (url) => fetchPageMeta(linkFetcher, url),
-      thumbOf
+      fetchMeta: identity.kind === 'test' ? async () => null : (url) => fetchPageMeta(linkFetcher, url)
     }
   })
 }
@@ -881,20 +878,20 @@ function registerIpc(): void {
   handle(CH.seriesAnswer, (_e, date: unknown, blockId: unknown, keep: unknown) => needHub().seriesAnswer(date, blockId, keep))
   handle(CH.seriesUndo, (_e, undo: unknown) => needHub().seriesUndo(undo))
   // Attachments of blocks (D410): the window names an attachment by its id – a path or an address to open never comes from it.
-  handle(CH.attachFiles, (_e, owner: unknown, paths: unknown) => needHub().attachFiles(owner, paths))
+  handle(CH.attachFiles, (_e, owner: unknown, paths: unknown) => needHub().prepareFiles(owner, paths))
+  handle(CH.attachCommit, (_e, ids: unknown) => needHub().commitFiles(ids))
   handle(CH.attachPick, async (e, owner: unknown) => {
     const win = BrowserWindow.fromWebContents(e.sender)
     const opts = { title: 'Dołącz plik', properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'> }
     // The test identity (E2E, CI) takes the files from RD_E2E_ATTACH (paths split by ; or |) – the dialog of Windows cannot be driven by a test (T812).
     const fromTest = identity.kind === 'test' && process.env.RD_E2E_ATTACH ? process.env.RD_E2E_ATTACH.split(/[;|]/).filter(Boolean) : null
     const r = fromTest ? { canceled: false, filePaths: fromTest } : win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
-    return r.canceled || !r.filePaths.length ? { added: [], failed: [] } : needHub().attachFiles(owner, r.filePaths)
+    return r.canceled || !r.filePaths.length ? { ids: [], failed: [] } : needHub().prepareFiles(owner, r.filePaths)
   })
   handle(CH.addLink, (_e, owner: unknown, url: unknown) => needHub().addLink(owner, url))
   handle(CH.openAttachment, (_e, id: unknown) => needHub().openAttachment(id))
   handle(CH.openAttachments, (_e, ids: unknown) => needHub().openAttachments(ids))
   handle(CH.showAttachment, (_e, id: unknown) => needHub().showAttachment(id))
-  handle(CH.attachmentThumb, (_e, id: unknown) => needHub().attachmentThumb(id))
   // „Tydzień” and the month's goals (D356).
   handle(CH.weekView, (_e, date: unknown) => needHub().weekView(String(date)))
   handle(CH.goals, (_e, month: unknown) => needHub().goals(String(month)))
@@ -1151,6 +1148,7 @@ async function main(): Promise<void> {
   else if (config.loadFailed) hub.unknownFolder('ustawienia tego komputera (config.json) są nieczytelne – czytam je ponownie')
   if (quitting) return
   denyPermissions(session.defaultSession)
+  session.defaultSession.protocol.handle(ATTACHMENT_SCHEME, (req) => attachmentImageResponse(req.url))
   app.on('session-created', denyPermissions)
   if (identity.kind === 'test' && identity.protocol && process.platform === 'win32') app.setAsDefaultProtocolClient(identity.protocol)
 

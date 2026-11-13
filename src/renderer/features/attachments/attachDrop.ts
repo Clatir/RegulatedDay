@@ -39,15 +39,18 @@ export const explicitAddress = (text: string): boolean => /^(?:https?:\/\/|mailt
 /**
  * The address a transfer carries as a link: the first line of its `text/uri-list` (no comments), else a one-line plain text –
  * with `plain: 'explicit'` (a drop) only one that is an address on its face (`explicitAddress`), with `'any'` (Ctrl V, which
- * `linkFromInput` then judges) any; null – none.
+ * `linkFromInput` then judges) any; null – none. Beside a `text/uri-list` (also an empty one or only comments) or files
+ * (also ones without a path) the plain text is never taken (T818).
  */
-export function addressOf(dt: Pick<DataTransfer, 'getData'>, plain: 'explicit' | 'any' = 'any'): string | null {
+export function addressOf(dt: Pick<DataTransfer, 'getData'> & Partial<Pick<DataTransfer, 'types'>>, plain: 'explicit' | 'any' = 'any'): string | null {
   const list = dt.getData('text/uri-list')
   const uri = list
     .split(/\r?\n/)
     .map((l) => l.trim())
     .find((l) => l && !l.startsWith('#'))
   if (uri) return uri
+  const types = Array.from(dt.types ?? [])
+  if (list || types.includes('text/uri-list') || types.includes('Files')) return null
   const text = dt.getData('text/plain').trim()
   return text && !/[\r\n]/.test(text) && (plain === 'any' || explicitAddress(text)) ? text : null
 }
@@ -61,7 +64,7 @@ export function pathsOf(files: Iterable<File>): string[] {
  * What a drop or a paste brings to the block of `owner`: its files, else its link (`plain` – see `addressOf`: a drop takes plain
  * text only as an explicit address). True when something was taken.
  */
-export async function attachTransfer(owner: AttachmentOwner, dt: Pick<DataTransfer, 'getData' | 'files'>, plain: 'explicit' | 'any' = 'explicit'): Promise<boolean> {
+export async function attachTransfer(owner: AttachmentOwner, dt: Pick<DataTransfer, 'getData' | 'files'> & Partial<Pick<DataTransfer, 'types'>>, plain: 'explicit' | 'any' = 'explicit'): Promise<boolean> {
   const files = Array.from(dt.files ?? [])
   const paths = pathsOf(files)
   if (paths.length) {

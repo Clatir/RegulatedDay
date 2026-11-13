@@ -29,7 +29,7 @@ import { dayUsable, useDay, type DayModel } from '../../store/day'
 import { openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
 import { attachTransfer } from '../attachments/attachDrop'
-import { withAttachCounts } from '../attachments/attachView'
+import { dayPlace as placeOfDay, withAttachCounts } from '../attachments/attachView'
 import { BlockEditor } from '../plan/BlockEditor'
 import { BlockSeries, blockMayRepeat } from '../series/BlockSeries'
 import { askScope } from '../series/scopeAsk'
@@ -85,7 +85,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const axis = useMemo(() => dayAxis(model, names, isToday ? now : null), [model, names, isToday, now])
   // D410: the attachments of the day's blocks – the 📎 on a tile, a drop of files on it, the panel's section.
   const attachments = useData((s) => s.attachments)
-  const dayPlace = useMemo<BlockPlace>(() => ({ scope: 'day', date, templateId: model.snapshot.templateId }), [date, model.snapshot.templateId])
+  const templates = useData((s) => s.templates)
+  const dayPlace = useMemo<BlockPlace>(() => placeOfDay(date, model.snapshot.templateId, templates), [date, model.snapshot.templateId, templates])
   const items = useMemo(() => {
     const byId = new Map(model.ctx.plan.map((b) => [b.id, b]))
     return withAttachCounts(axis.items, (id) => byId.get(id) ?? null, dayPlace, attachments)

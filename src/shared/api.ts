@@ -103,11 +103,11 @@ export const CH = {
   seriesUndo: 'rd:seriesUndo',
   attachFiles: 'rd:attachFiles',
   attachPick: 'rd:attachPick',
+  attachCommit: 'rd:attachCommit',
   addLink: 'rd:addLink',
   openAttachment: 'rd:openAttachment',
   openAttachments: 'rd:openAttachments',
-  showAttachment: 'rd:showAttachment',
-  attachmentThumb: 'rd:attachmentThumb'
+  showAttachment: 'rd:showAttachment'
 } as const
 
 /** The game for the window (D322): its view and the full-screen celebrations not shown on this computer yet. */
@@ -620,6 +620,12 @@ export interface AttachResult {
   failed: Array<{ name: string; error: string }>
 }
 
+/** Files copied for a block, their records not written yet (T839): the copies (`attachCommit` writes them) and each file that did not go. */
+export interface AttachPrepared {
+  ids: string[]
+  failed: Array<{ name: string; error: string }>
+}
+
 /** A link added (D410): its attachment, or why not (an address that does not open, nothing saved). */
 export interface AddLinkResult {
   ok: boolean
@@ -803,10 +809,15 @@ export interface RdApi {
    * of the disk (a picture dragged from a page).
    */
   pathForFile(file: File): string
-  /** Files dropped on a block (D410): copied into the data folder, then their records – one edit (`AttachResult`). */
-  attachFiles(owner: AttachmentOwner, paths: string[]): Promise<AttachResult>
-  /** „Dołącz plik…”: the main process asks for the files (its own dialog) and attaches them; none chosen – nothing added. */
-  attachPick(owner: AttachmentOwner): Promise<AttachResult>
+  /**
+   * Files dropped on a block (D410): copied into the data folder – no records yet (T839); `attachCommit` writes them in the
+   * turn of the window's edits (a block removed meanwhile gets them removed).
+   */
+  attachFiles(owner: AttachmentOwner, paths: string[]): Promise<AttachPrepared>
+  /** „Dołącz plik…”: the main process asks for the files (its own dialog) and copies them; none chosen – none. */
+  attachPick(owner: AttachmentOwner): Promise<AttachPrepared>
+  /** The records of copies made (`attachFiles`, `attachPick`) – one edit (`AttachResult`). */
+  attachCommit(ids: string[]): Promise<AttachResult>
   /** A link added (D410): written at once; the page's title and icon follow on their own (the view changes). */
   addLink(owner: AttachmentOwner, url: string): Promise<AddLinkResult>
   /** An attachment opened by its id – the main process takes its path or address from the record (`AttachmentOpen`). */
@@ -815,6 +826,4 @@ export interface RdApi {
   openAttachments(ids: string[]): Promise<AttachmentOpen[]>
   /** „Pokaż w folderze” of a file attachment. */
   showAttachment(id: string): Promise<AttachmentOpen>
-  /** The thumbnail of an image attachment (a data URL, about 96 px), null – none. */
-  attachmentThumb(id: string): Promise<string | null>
 }

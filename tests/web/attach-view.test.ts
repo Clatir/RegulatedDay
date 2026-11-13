@@ -3,7 +3,7 @@
  * of a day's block comes from, the counts of the tiles of the axis.
  */
 import { describe, expect, it } from 'vitest'
-import { attachBadge, attachBadgeTitle, fileKind, isOwnHere, originTag, sizeText, withAttachCounts } from '@renderer/features/attachments/attachView'
+import { attachBadge, attachBadgeTitle, dayPlace, fileKind, isOwnHere, originTag, sizeText, withAttachCounts } from '@renderer/features/attachments/attachView'
 import type { Attachment, BlockPlace } from '@shared/model/attachment'
 import { templateBlockId } from '@shared/engine/createDay'
 
@@ -106,5 +106,15 @@ describe('znaczek 📎N', () => {
       ['b3', 0],
       ['poza', undefined]
     ])
+  })
+})
+
+describe('miejsce bloku dnia ze wszystkimi szablonami (T831)', () => {
+  it('blok szablonu zostawiony po zmianie typu dnia widzi załączniki swojego szablonu', () => {
+    const date = '2026-11-18'
+    const list = [a('t-sob', { scope: 'template', templateId: 'sobota', blockId: 'analiza' })]
+    const fromSobota = { id: templateBlockId(date, 'sobota', 'analiza'), origin: 'template' as const, sourceId: 'analiza' }
+    const place = dayPlace(date, 'zwykly', [{ id: 'zwykly' }, { id: 'sobota' }])
+    expect(withAttachCounts([{ id: 'x' }], () => fromSobota, place, list)).toEqual([{ id: 'x', attach: 1 }])
   })
 })

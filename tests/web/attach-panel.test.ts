@@ -28,7 +28,7 @@ beforeAll(() => {
 })
 beforeEach(() => {
   vi.mocked(attachFiles).mockClear()
-  ;(window as unknown as { rd: unknown }).rd = { pathForFile: (f: File) => `C:/${f.name}`, attachmentThumb: async () => null }
+  ;(window as unknown as { rd: unknown }).rd = { pathForFile: (f: File) => `C:/${f.name}` }
 })
 afterEach(() => {
   act(() => root?.unmount())
