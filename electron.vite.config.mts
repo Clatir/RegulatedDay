@@ -18,7 +18,8 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // rd-attachment: – images of attachments, streamed by the main process from the record's file (T837).
+  "img-src 'self' data: blob: rd-attachment:",
   "font-src 'self' data:",
   "connect-src 'self'",
   "media-src 'self' data: blob:",

@@ -86,6 +86,8 @@ export interface HorizonDay {
   read: HorizonRead
   /** The type in force (after a change of type during the day – the new one); null when not read. */
   dayType: string | null
+  /** The template the day was made from (its snapshot's; null – none, or not read): the attachments of its blocks show on the tiles (D410). */
+  templateId: string | null
   /** Frozen: its grade is final; a day gone by from the ritual's first day and not frozen is preliminary (`goalsProgress`). */
   frozen: boolean
   blocks: HorizonBlock[]
@@ -114,7 +116,7 @@ const NO_SESSIONS: SessionCount = { clean: 0, extended: 0, outsidePlan: 0 }
 
 /** A day whose log cannot be read now: no blocks, no measures. */
 export function unknownDay(date: string, when: HorizonWhen): HorizonDay {
-  return { date, when, read: 'unknown', dayType: null, frozen: false, blocks: [], wakeMin: null, bedtimeMin: null, boundary: null, extensionMin: 0, regen: null, studyMin: 0, sessions: { ...NO_SESSIONS } }
+  return { date, when, read: 'unknown', dayType: null, templateId: null, frozen: false, blocks: [], wakeMin: null, bedtimeMin: null, boundary: null, extensionMin: 0, regen: null, studyMin: 0, sessions: { ...NO_SESSIONS } }
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -285,6 +287,7 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
     when,
     read: 'full',
     dayType: state.dayType,
+    templateId: ctx.snapshot.templateId,
     frozen: frozen != null,
     blocks: axisBlocks(axis.ctx, axis.state, when),
     wakeMin: lm(state.wake),
@@ -315,7 +318,7 @@ function quietDay(ctx: DayContext): HorizonDay {
     blocks.push({ id: p.id, named, categoryId: p.categoryId, startMin: lm(span.start), endMin: lm(Math.max(span.end, span.start + 1)), state: 'missed', outsidePlan: false, background: info.bg })
   }
   blocks.sort((a, b) => a.startMin - b.startMin || (a.id < b.id ? -1 : 1))
-  return { ...unknownDay(ctx.date, 'past'), read: 'full', dayType: ctx.snapshot.dayType, blocks, wakeMin: ctx.wakeMin, boundary: 'free' }
+  return { ...unknownDay(ctx.date, 'past'), read: 'full', dayType: ctx.snapshot.dayType, templateId: ctx.snapshot.templateId, blocks, wakeMin: ctx.wakeMin, boundary: 'free' }
 }
 
 /** Where a date stands against today. */

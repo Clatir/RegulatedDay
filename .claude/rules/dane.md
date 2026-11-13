@@ -47,6 +47,8 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Wydarzenia całodniowe (D405, T720–T729): `allday/<id>.json` (`ID_COLLECTIONS.allDay`, model `shared/model/allDay.ts`) – lista
   okna (`collection('allDay')`, `DataView.allDay`), kopie konfliktowe (`joinCopies`), historia i kopie zapasowe jak inne rekordy;
   `inputs()`, `dayFile` i kontekst dnia ich nie czytają (strażnik `tests/unit/engine/all-day.test.ts`).
+- Załączniki (D410, T800–T810): `attachments/<id>.json` (`ID_COLLECTIONS.attachment`) + plik w `attachments/<id>/` (nigdy rekord –
+  T801); w kopii dziennej tylko rekordy, pliki w tygodniowej i przed aktualizacją; sprzątanie prowadzącego – reguły `zalaczniki.md`.
 - Notatka bloku (`PlanBlock.note`): zwykły tekst Markdown, do `NOTE_MAX` = 10 000 znaków (`shared/model/note.ts`, tnie `planBlockFrom` –
   dni i szablony); wersja przed `LONG_NOTE_FROM` tnie na 2000, więc okno ostrzega przy dłuższej notatce, gdy obecny komputer
   (`DataView.computers[].appVersion`, bez zapomnianych) ma starszą wersję.

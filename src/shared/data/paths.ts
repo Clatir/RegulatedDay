@@ -11,10 +11,13 @@ export const BACKUPS_DIR = 'backups'
 export const PRESENCE_DIR = '.presence'
 export const HISTORY_DIR = '.history'
 
-export type FileKind = 'settings' | 'template' | 'schedule' | 'day' | 'log' | 'request' | 'routine' | 'series' | 'allDay' | 'presence' | 'grades'
+export type FileKind = 'settings' | 'template' | 'schedule' | 'day' | 'log' | 'request' | 'routine' | 'series' | 'allDay' | 'attachment' | 'presence' | 'grades'
 
-/** Collections of records stored one file per id (`series` – D381, series/<id>.json; `allDay` – all-day events, D405: allday/<id>.json). */
-export const ID_COLLECTIONS = { template: 'templates', schedule: 'schedule', request: 'requests', routine: 'routines', series: 'series', allDay: 'allday' } as const
+/**
+ * Collections of records stored one file per id (`series` – D381, series/<id>.json; `allDay` – all-day events, D405:
+ * allday/<id>.json; `attachment` – attachments of blocks, D410: attachments/<id>.json, its file in attachments/<id>/).
+ */
+export const ID_COLLECTIONS = { template: 'templates', schedule: 'schedule', request: 'requests', routine: 'routines', series: 'series', allDay: 'allday', attachment: 'attachments' } as const
 export type IdKind = keyof typeof ID_COLLECTIONS
 
 const ID = '[0-9a-z][0-9a-z_-]{0,63}'
@@ -28,7 +31,20 @@ export const paths = {
   logDir: (date: string) => `log/${date.slice(0, 4)}/${date}`,
   log: (date: string, computer: string) => `log/${date.slice(0, 4)}/${date}/${computer}.jsonl`,
   presence: (computer: string) => `${PRESENCE_DIR}/${computer}.json`,
-  grades: (year: string, computer: string) => `grades/${year}/${computer}.jsonl`
+  grades: (year: string, computer: string) => `grades/${year}/${computer}.jsonl`,
+  /** The folder of an attachment's file (D410, T801): attachments/<id>/ – never a record of the collection. */
+  attachmentDir: (id: string) => `${ID_COLLECTIONS.attachment}/${id}`
+}
+
+const ATTACHMENT_FILE = new RegExp(`^${ID_COLLECTIONS.attachment}/(${ID})/([^/]+)$`)
+
+/**
+ * A file of an attachment (D410, T801): attachments/<id>/<name> – its id, or null for any other path. Such a file is no
+ * record (whatever its name – „notatki.json”, „x (1).json”), never in a daily backup, and the scanner never reads it.
+ */
+export function attachmentFileOf(rel: string): { id: string; name: string } | null {
+  const m = ATTACHMENT_FILE.exec(toPosix(rel))
+  return m ? { id: m[1]!, name: m[2]! } : null
 }
 
 export interface Classified {
@@ -75,7 +91,9 @@ interface Pattern {
 const PATTERNS: Pattern[] = [
   ...Object.entries(ID_COLLECTIONS).map(([kind, dir]) => ({
     kind: kind as FileKind,
-    re: new RegExp(`^${dir}/(${ID})(.*)\\.json$`),
+    // The rest after the id never holds a „/”: a file in a subfolder of a collection (an attachment's own file,
+    // attachments/<id>/notatki.json – T801) is never a record nor a conflict copy of one.
+    re: new RegExp(`^${dir}/(${ID})([^/]*)\\.json$`),
     ext: '.json' as const,
     fields: (m: RegExpExecArray) => ({ id: m[1]!, date: null, computer: null })
   })),

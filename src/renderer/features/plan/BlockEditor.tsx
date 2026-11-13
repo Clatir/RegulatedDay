@@ -2,7 +2,7 @@
  * The editing panel of a block (D293: on the right of the plan): its category and variant, its start or the block it
  * follows („po sesji NY”), its length, fixed or flexible, in the foreground or the background, the marks of the second
  * shift and the weekly analysis, its routine, the computer recording a lecture, „Powtarzaj” (`repeat`, D381: a slot of the day's panel),
- * its note (a live Markdown editor, D388). Every field saves on leaving it (spec „Edycja pól”); the panel changes nothing by itself.
+ * its note (a live Markdown editor, D388), its attachments (`place`, D410). Every field saves on leaving it (spec „Edycja pól”); the panel changes nothing by itself.
  * A block of a series (`inSeries`, also the one edited in the list of „Szablony”) has its own hour and no marks: no „po bloku”, no „Oznaczenie” (D401).
  */
 import type { ReactNode } from 'react'
@@ -12,10 +12,13 @@ import { routineMinutes } from '@shared/model/routines'
 import type { SessionDef } from '@shared/model/settings'
 import { SESSION_ANCHOR } from '@shared/engine/createDay'
 import { olderComputers } from '@shared/model/note'
+import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { Choice, DurationField, TimeField } from '../../components/fields'
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import type { SaveAnswer } from '../../store/data'
+import { useAttachDrop } from '../attachments/attachDrop'
+import { AttachmentsSection } from '../attachments/AttachmentsSection'
 import { NoteEditor } from '../note/NoteEditor'
 import { anchorCandidates, blockName, categoryOptions, type Names } from './blockView'
 
@@ -30,7 +33,8 @@ export function BlockEditor({
   actions,
   readOnly,
   repeat,
-  inSeries
+  inSeries,
+  place
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -47,8 +51,15 @@ export function BlockEditor({
   repeat?: ReactNode
   /** The block is an occurrence of a series (or the series' own block): it keeps its own hour and carries no mark. */
   inSeries?: boolean
+  /**
+   * Where the block is shown (the day with its template, a template, a series): its „Załączniki” (D410). Left out – none (a block
+   * not saved yet has nothing to attach to). Files and links dropped on the panel go to it.
+   */
+  place?: BlockPlace
 }) {
   useEscapeLayer(true, onClose)
+  const owner = place ? ownerToAdd(block, place) : null
+  const drop = useAttachDrop(owner)
   const rules = names.settings.categories[block.categoryId]
   const variants = (rules?.variants ?? []).filter((v) => !v.archived || v.id === block.variantId)
   const set = (patch: Partial<PlanBlock>): void | Promise<SaveAnswer> => (readOnly ? undefined : onChange(patch))
@@ -61,7 +72,7 @@ export function BlockEditor({
       ]
   const routine = block.routine ? names.routines.find((r) => r.id === block.routine) : undefined
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3" data-testid="block-editor">
+    <aside className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3" data-testid="block-editor" {...drop.bind}>
       <div className="flex items-center gap-2">
         <h3 className="min-w-0 flex-1 truncate text-[14px] font-medium">{blockName(block, names)}</h3>
         <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={onClose} data-testid="block-editor-close">
@@ -172,6 +183,7 @@ export function BlockEditor({
       )}
       {repeat}
       <NoteEditor value={block.note} onCommit={(note) => set({ note })} olderComputers={olderComputers(computers)} readOnly={readOnly} />
+      {place && <AttachmentsSection block={block} place={place} owner={owner} dropOver={drop.over} />}
       {block.moves > 0 && <p className="text-[12px] text-muted">Przeniesiony {block.moves}×.</p>}
       {actions && <div className="flex flex-wrap gap-2 border-t border-line pt-3">{actions}</div>}
     </aside>

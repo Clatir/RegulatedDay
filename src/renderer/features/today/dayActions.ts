@@ -24,6 +24,8 @@ import { nameById, type Names } from '@shared/blockName'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { countLabel, logicalClock, plDate } from '@shared/format'
 import type { DaySnapshot } from '@shared/model/events'
+import { ownAttachmentIds, removalEdits, type AttachmentUndo } from '@shared/model/attachment'
+import { restoreAttachments } from '../../store/attachments'
 import { dayFilesNow, editOf, isSaved, trySaveWith, useData, type SendState } from '../../store/data'
 import { dayUsable } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
@@ -278,12 +280,18 @@ export async function removeDayBlock(date: string, seen: RawRecord | null, b: Pl
       return false
     }
   }
+  // The block's own attachments go with it in the same edit (D410, T805); its „Cofnij” brings them back.
+  let attachments: AttachmentUndo | null = null
   const out = await trySaveWith(async () => {
     const before = (await dayFilesNow([date], () => seen))[date] ?? null
     const raw = dayRaw(before, date)
     if (!inSnapshot) gone = blockNow(raw, date, b)
     left = inSnapshot ? setCancelled(raw, b.id, true) : takeBlock(raw, b.id)
-    return [editOf(paths.day(date), before, left)]
+    const { view, attachments: list } = useData.getState()
+    const at = Date.now()
+    const removed = removalEdits(view?.attachments ?? [], ownAttachmentIds(list, b.id), at)
+    attachments = removed.length ? { ids: removed.map((e) => e.rel.slice(e.rel.indexOf('/') + 1, -'.json'.length)), removedAt: at } : null
+    return [editOf(paths.day(date), before, left), ...removed]
   })
   if (!isSaved(out)) {
     if (ends && refusedEdit(out)) {
@@ -295,6 +303,7 @@ export async function removeDayBlock(date: string, seen: RawRecord | null, b: Pl
   const restore = async () => {
     const back = await saveDay(date, left, (raw) => (inSnapshot ? setCancelled(raw, b.id, false) : putBlock(raw, gone)))
     if (!isSaved(back)) return
+    if (attachments) await restoreAttachments(attachments)
     if (!ends) return
     const r = await clickTimer(b.id, date, 'undoRemove')
     if (r.ok) return

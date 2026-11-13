@@ -9,6 +9,7 @@ import type { DataView, EditEntry, EditOutcome, EventIn, RawRecord } from '@shar
 import { marketDay } from '@shared/calendar/holidays'
 import { recordEdit } from '@shared/data/merge'
 import { allDayFrom, type AllDayEvent } from '@shared/model/allDay'
+import { attachmentFrom, type Attachment } from '@shared/model/attachment'
 import type { GoalsPatch } from '@shared/model/goals'
 import { newId } from '@shared/model/ids'
 import { lectureFrom, templateFrom, type LectureSeries, type Template } from '@shared/model/plan'
@@ -32,13 +33,17 @@ interface DataState {
   seriesPlans: SeriesPlan[]
   /** All-day events (D405), in no order (`eventsOn`, `eventsInRange` sort them). */
   allDay: AllDayEvent[]
+  /** Attachments of blocks (D410) – also the removed ones (`attachmentsOfBlock` leaves them out), in no order. */
+  attachments: Attachment[]
+  /** Attachments whose file is not on this computer yet (`DataView.attachmentsMissing`). */
+  attachmentsMissing: ReadonlySet<string>
   /** Grows with every read (the day views read their day again). */
   stamp: number
 }
 
 const empty = rdFrom(undefined)
 
-export const useData = create<DataState>(() => ({ view: null, rd: empty, templates: [], lectures: [], requests: [], routines: [], series: [], seriesPlans: [], allDay: [], stamp: 0 }))
+export const useData = create<DataState>(() => ({ view: null, rd: empty, templates: [], lectures: [], requests: [], routines: [], series: [], seriesPlans: [], allDay: [], attachments: [], attachmentsMissing: new Set(), stamp: 0 }))
 
 const isDefined = <T>(v: T | null): v is T => v != null
 
@@ -66,6 +71,8 @@ function apply(view: DataView, news: boolean): void {
     series,
     seriesPlans: seriesPlans(series, typeOfDays(rd.settings, ownType), marketDay),
     allDay: (view.allDay ?? []).map(allDayFrom).filter(isDefined),
+    attachments: (view.attachments ?? []).map(attachmentFrom).filter(isDefined),
+    attachmentsMissing: new Set(view.attachmentsMissing ?? []),
     stamp: s.stamp + 1
   }))
 }
@@ -116,7 +123,7 @@ export function rawRecord(rel: string): RawRecord | null {
   if (!v) return null
   if (rel === 'rd.json') return v.rd
   const [dir] = rel.split('/')
-  const list = dir === 'templates' ? v.templates : dir === 'schedule' ? v.lectures : dir === 'requests' ? v.requests : dir === 'routines' ? v.routines : dir === 'series' ? v.series : dir === 'allday' ? v.allDay : null
+  const list = dir === 'templates' ? v.templates : dir === 'schedule' ? v.lectures : dir === 'requests' ? v.requests : dir === 'routines' ? v.routines : dir === 'series' ? v.series : dir === 'allday' ? v.allDay : dir === 'attachments' ? (v.attachments ?? null) : null
   const id = rel.slice(rel.indexOf('/') + 1).replace(/\.json$/, '')
   return list?.find((r) => r.id === id) ?? null
 }
