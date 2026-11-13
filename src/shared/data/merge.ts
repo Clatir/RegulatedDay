@@ -9,7 +9,7 @@
  * Changed against FI: the labels for the interface stay in FI (this app shows conflicts from E3 on), `setAt` added for
  * the queue of edits; the bookkeeping fields of this app (`updatedAt`, `updatedBy`, `schema`).
  */
-import type { EditEntry, FieldEditIn } from '../api'
+import type { EditEntry } from '../api'
 import { classify, type FileKind } from './paths'
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
@@ -201,19 +201,22 @@ export function chooser(choices: ReadonlyMap<string, Side> | Record<string, Side
 
 /**
  * `root` with `value` at `path` (a `#id` part = the array item of that id; objects made on the way); undefined removes the
- * field (or the array item). The root is not changed.
+ * field (or the array item). The root is not changed. `listKey` (the key of the array the `#id` part is in – set by the recursion
+ * itself) says the list is one of `ITEM_LISTS`: an item of it that is not there is made with its id (T992).
  */
-export function setAt(root: unknown, path: Path, value: unknown): unknown {
+export function setAt(root: unknown, path: Path, value: unknown, listKey?: string): unknown {
   if (!path.length) return value
   const [part, ...rest] = path as [string, ...string[]]
   if (part.startsWith('#')) {
     const id = part.slice(1)
     const arr = Array.isArray(root) ? root : []
     const i = arr.findIndex((x) => isObject(x) && x.id === id)
-    // An item that is not there is made with its id (a field laid on it – the answer „mine” to a question about an item removed
-    // elsewhere – never makes an item without one, which would end the item-by-item merge of its list); nothing to take away from it.
-    if (i < 0 && value === undefined) return [...arr]
-    const next = setAt(i >= 0 ? arr[i] : { id }, rest, value)
+    // A list of ITEM_LISTS merges item by item only while every item has its id: an item that is not there is made with it (the
+    // answer „mine” to a question about an item removed elsewhere), and there is nothing to take away from one that is not there.
+    // Every other list (blocks of a day, of a template, of a series) is laid as it always was.
+    const listed = listKey !== undefined && ITEM_LIST_KEYS.has(listKey)
+    if (listed && i < 0 && value === undefined) return [...arr]
+    const next = setAt(i >= 0 ? arr[i] : listed ? { id } : undefined, rest, value)
     const out = [...arr]
     if (next === undefined) {
       if (i >= 0) out.splice(i, 1)
@@ -222,7 +225,7 @@ export function setAt(root: unknown, path: Path, value: unknown): unknown {
     return out
   }
   const obj = isObject(root) ? root : {}
-  const next = setAt(obj[part], rest, value)
+  const next = setAt(obj[part], rest, value, part)
   const out: Record<string, unknown> = { ...obj }
   if (next === undefined) delete out[part]
   else out[part] = next
@@ -257,6 +260,8 @@ export const LEAF_MAPS: Partial<Record<FileKind, ReadonlySet<string>>> = { day: 
  * the whole list or item. Two computers adding the first calendar, or changing two fields of one, so meet in no question.
  */
 export const ITEM_LISTS: Partial<Record<FileKind, ReadonlySet<string>>> = { settings: new Set(['calendars']) }
+/** The keys of those lists (`setAt` knows only the key of the array it is in). */
+const ITEM_LIST_KEYS: ReadonlySet<string> = new Set(Object.values(ITEM_LISTS).flatMap((keys) => [...keys]))
 /**
  * Maps of records by id in rd.json (T973, D419): `categories`. The first write of an entry the file does not have yet (the
  * first calendar of a default category) is the edits of its fields – two computers writing the first different fields of one
@@ -273,7 +278,12 @@ function itemEdits(kind: FileKind, path: Path, base: unknown, value: unknown): A
   if (ITEM_LISTS[kind]?.has(path[0] ?? '')) {
     if (path.length === 1 && isIdArray(value) && value.length) return value.flatMap((item) => fields([path[0]!, `#${item.id}`], item))
     if (path.length === 2 && path[1]!.startsWith('#') && isObject(value)) return fields(path, value)
-  } else if (ITEM_MAPS[kind]?.has(path[0] ?? '') && path.length === 2 && isObject(value) && Object.keys(value).length) return fields(path, value)
+  } else if (ITEM_MAPS[kind]?.has(path[0] ?? '') && isObject(value)) {
+    // An entry: its fields; the whole map the file has no key for yet: each of its entries so (T993).
+    if (path.length === 2 && Object.keys(value).length) return fields(path, value)
+    if (path.length === 1 && Object.keys(value).length)
+      return Object.entries(value).flatMap(([id, entry]) => (isObject(entry) && Object.keys(entry).length ? fields([path[0]!, id], entry) : [{ path: [path[0]!, id], base: undefined, value: entry }]))
+  }
   return null
 }
 
@@ -291,27 +301,7 @@ function leafEdits(maps: ReadonlySet<string> | undefined, path: Path, base: unkn
  */
 export function inverseEdit(e: EditEntry, now: Record<string, unknown> | null, made: Record<string, unknown> | null): EditEntry | null {
   if (e.create) return now && sameContentAs(now, made) ? { rel: e.rel, remove: true, edits: [], base: made } : null
-  // An item of a list written field by field (`ITEM_LISTS`, its `id` among them) goes as one removal of the item – field by
-  // field it would leave an item without its id (T949).
-  const lists = ITEM_LISTS[classify(e.rel)?.kind ?? 'settings']
-  const created = new Map<string, Record<string, unknown>>()
-  for (const x of e.edits) {
-    if (!lists?.has(x.path[0] ?? '') || x.path.length !== 3 || !x.path[1]!.startsWith('#') || x.base !== undefined || x.value === undefined) continue
-    const key = `${x.path[0]}\u0001${x.path[1]}`
-    created.set(key, { ...(created.get(key) ?? {}), [x.path[2]!]: x.value })
-  }
-  const items = new Set([...created].filter(([, item]) => 'id' in item).map(([key]) => key))
-  const done = new Set<string>()
-  const edits: FieldEditIn[] = []
-  for (const x of e.edits) {
-    const key = `${x.path[0]}\u0001${x.path[1]}`
-    if (x.path.length === 3 && items.has(key) && x.base === undefined) {
-      if (done.has(key)) continue
-      done.add(key)
-      edits.push({ path: [x.path[0]!, x.path[1]!], base: created.get(key), value: undefined })
-    } else edits.push({ path: x.path, base: x.value, value: x.base })
-  }
-  return { rel: e.rel, edits }
+  return { rel: e.rel, edits: e.edits.map((x) => ({ path: x.path, base: x.value, value: x.base })) }
 }
 
 /**

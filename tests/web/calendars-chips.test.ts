@@ -116,11 +116,16 @@ describe('pamięć ukrycia przy jednym kalendarzu (T972)', () => {
   it('po wczytaniu danych z jednym kalendarzem zapamiętane ukrycie jest zapominane – dodanie drugiego kalendarza go nie przywraca (nie chowa „Moje”)', async () => {
     useCalendarFilter.setState({ hidden: ['moje'] })
     localStorage.setItem('rd.hiddenCalendars', JSON.stringify(['moje']))
-    // Dane jeszcze nie wczytane (lista domyślna – jeden kalendarz): nic nie jest zapominane.
+    // Dane jeszcze nie wczytane (start, zmiana folderu, rd.json chwilowo nieczytelny: widok ma `rd: null`, lista – domyślna,
+    // jeden kalendarz): nic nie jest zapominane, pamięć przeżywa restart.
     await act(async () => useData.setState({ view: null, rd: rdFrom(undefined) }))
     expect(useCalendarFilter.getState().hidden).toEqual(['moje'])
-    // Wczytane, jeden kalendarz: zapomniane.
-    await act(async () => useData.setState({ view: {} as never, rd: rdFrom(undefined) }))
+    await act(async () => useData.setState({ view: { status: 'opening', rd: null } as never, rd: rdFrom(undefined) }))
+    expect(useCalendarFilter.getState().hidden).toEqual(['moje'])
+    await act(async () => useData.setState({ view: { status: 'open', rd: null } as never, rd: rdFrom(undefined) }))
+    expect(useCalendarFilter.getState().hidden).toEqual(['moje'])
+    // rd.json wczytany i jeden kalendarz: zapomniane.
+    await act(async () => useData.setState({ view: { status: 'open', rd: { schema: 1 } } as never, rd: rdFrom(undefined) }))
     expect(useCalendarFilter.getState().hidden).toEqual([])
     expect(JSON.parse(localStorage.getItem('rd.hiddenCalendars')!)).toEqual([])
     // Drugi kalendarz: „Moje” nadal widoczne.

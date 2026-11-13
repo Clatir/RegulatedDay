@@ -170,7 +170,7 @@ export function updateCalendarRaw(raw: Raw, id: string, patch: { name?: string; 
 
 /**
  * A category put in a calendar; in „Moje” its field goes (what the file did not name is the default) – only that field, so a
- * colour changed meanwhile on another computer is no conflict.
+ * colour changed meanwhile on another computer is no conflict. An entry left empty stays (`{}` reads as the defaults – T991).
  */
 export function setCategoryCalendarRaw(raw: Raw, categoryId: string, calendarId: string): Raw {
   const cats = categoryMetas(raw)
@@ -195,19 +195,4 @@ export function removeCalendarRaw(raw: Raw, id: string): Raw {
   let out: Raw = { ...raw, calendars: calendarItems(raw).filter((x) => !isItem(x, id)) }
   for (const cid of categoriesOfCalendarRaw(raw, id)) out = setCategoryCalendarRaw(out, cid, DEFAULT_CALENDAR_ID)
   return out
-}
-
-/** The categories whose entry `before` had fields in and `after` has empty (the calendar was all it held) – to be dropped. */
-export function emptiedCategoriesRaw(before: Raw, after: Raw): string[] {
-  const was = categoryMetas(before)
-  return Object.entries(categoryMetas(after))
-    .filter(([id, m]) => isPlain(m) && Object.keys(m).length === 0 && isPlain(was[id]) && Object.keys(was[id]!).length > 0)
-    .map(([id]) => id)
-}
-
-/** The record without those entries of `categories`. */
-export function dropCategoriesRaw(raw: Raw, ids: readonly string[]): Raw {
-  const cats = { ...categoryMetas(raw) }
-  for (const id of ids) delete cats[id]
-  return { ...raw, categories: cats }
 }

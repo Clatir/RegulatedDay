@@ -3,7 +3,7 @@
  * the data folder – the same way as `plan/lastCategory.ts`). Storage that cannot be read or written is no memory, never an
  * error. What is remembered works only while there are two calendars or more and only for calendars that exist
  * (`filterBlocks`): with one, the chips are not there to bring the blocks back, so nothing is hidden – and what was remembered is
- * forgotten once the data is read and there is one calendar only (T972: it would come back with the next calendar added and hide
+ * forgotten once rd.json is read and there is one calendar only (T972, T990: it would come back with the next calendar added and hide
  * „Moje” again, unasked). A view calls
  * `useVisibleBlocks(blocks)` (and `useVisibleAllDay(events)` for the strip of all-day events) and shows `shown`; the count
  * goes to `CalendarChips` as „ukryte: N”.
@@ -50,9 +50,10 @@ export const useCalendarFilter = create<CalendarFilter>((set, get) => ({
   }
 }))
 
-// With one calendar the memory is cleared (only once the data of the folder is read: before it the list is the default one).
+// With one calendar the memory is cleared – only when rd.json itself is read (`view.rd`): a window that is starting, a folder being
+// opened or a file that cannot be read now has none (the list is then the default one) and must not forget (T990).
 useData.subscribe((state) => {
-  if (state.view && state.rd.calendars.length < 2 && useCalendarFilter.getState().hidden.length) {
+  if (state.view?.rd != null && state.rd.calendars.length < 2 && useCalendarFilter.getState().hidden.length) {
     saveHiddenCalendars([])
     useCalendarFilter.setState({ hidden: [] })
   }

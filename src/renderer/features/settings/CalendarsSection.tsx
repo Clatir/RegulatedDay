@@ -7,9 +7,10 @@
  */
 import { useState } from 'react'
 import type { EditEntry } from '@shared/api'
+import { editStands, inverseEdit } from '@shared/data/merge'
 import { countLabel } from '@shared/format'
-import { CALENDAR_NAME_MAX, DEFAULT_CALENDAR_ID, MAX_CALENDARS, addCalendarRaw, categoriesOfCalendarRaw, newCalendar, removeCalendarRaw, updateCalendarRaw, type Calendar } from '@shared/model/calendars'
-import { CATEGORY_COLORS, rdFrom } from '@shared/model/rd'
+import { CALENDAR_NAME_MAX, DEFAULT_CALENDAR_ID, MAX_CALENDARS, addCalendarRaw, calendarsFrom, categoriesOfCalendarRaw, newCalendar, removeCalendarRaw, updateCalendarRaw, type Calendar } from '@shared/model/calendars'
+import { CATEGORY_COLORS } from '@shared/model/rd'
 import { blockFill } from '@shared/theme'
 import { TextField } from '../../components/fields'
 import { Section, cx } from '../../components/ui'
@@ -18,21 +19,25 @@ import { useMachine } from '../../store/machine'
 import { useBusy } from '../../lib/busy'
 import { toast, undoToast } from '../../store/ui'
 import '../calendars/calendarFilter' // loads the memory of the hidden calendars, which forgets them while there is one calendar (T972)
-import { saveCalendars, undoEntries } from './calendarEdits'
+import { saveCalendars } from './calendarEdits'
 
-/** „Cofnij” of a removal: the entries turned over, only while rd.json still stands as the removal left it and the limit allows. */
-async function undoRemoval(entries: readonly EditEntry[]): Promise<void> {
-  if (useData.getState().rd.calendars.length >= MAX_CALENDARS) {
-    toast(`Nie cofnięto usunięcia – jest już ${MAX_CALENDARS} kalendarzy (najwięcej). Usuń któryś i spróbuj jeszcze raz.`, 'error', 6000)
-    return
-  }
-  let changed = false
+/**
+ * „Cofnij” of a removal: the edit turned over (`inverseEdit`), only while rd.json still stands as the removal left it; the limit is
+ * checked on the record in the turn of the save (T517, T995). An rd.json that cannot be read now is said so, with „Cofnij” again.
+ */
+async function undoRemoval(entry: EditEntry): Promise<void> {
+  let problem: 'limit' | 'unreadable' | 'changed' | null = null
   await trySaveWith(() => {
-    const back = undoEntries(entries, rawRecord('rd.json'))
-    changed = back == null
-    return back ?? []
+    const now = rawRecord('rd.json')
+    problem = null
+    if (!now) problem = 'unreadable'
+    else if (calendarsFrom(now.calendars).length >= MAX_CALENDARS) problem = 'limit'
+    else if (!editStands(entry, now, null)) problem = 'changed'
+    return problem ? [] : [inverseEdit(entry, now, null)]
   })
-  if (changed) toast('Ustawienia kalendarzy zmieniły się od usunięcia – zostają tak, jak są teraz.', 'info', 6000)
+  if (problem === 'limit') toast(`Nie cofnięto usunięcia – jest już ${MAX_CALENDARS} kalendarzy (najwięcej). Usuń któryś i spróbuj jeszcze raz.`, 'error', 6000)
+  else if (problem === 'unreadable') toast('Nie da się teraz cofnąć usunięcia – ustawień nie można odczytać. Spróbuj za chwilę.', 'error', 10_000, { label: 'Cofnij', run: () => void undoRemoval(entry) })
+  else if (problem === 'changed') toast('Ustawienia kalendarzy zmieniły się od usunięcia – zostają tak, jak są teraz.', 'info', 6000)
 }
 
 /** What the removal gives back to „Moje”, for its toast: „2 kategorie i 1 wydarzenie”. */
@@ -59,7 +64,7 @@ export function CalendarsSection() {
       const state: SendState = { afterSend: false }
       let made = false
       const { out } = await saveCalendars((raw) => {
-        const cal = newCalendar(rdFrom(raw).calendars, n)
+        const cal = newCalendar(calendarsFrom(raw.calendars), n)
         made = cal != null
         return cal ? addCalendarRaw(raw, cal) : raw
       }, state)
@@ -70,13 +75,13 @@ export function CalendarsSection() {
     run(async () => {
       // What it takes, counted in the turn of the save from the record as it is then.
       let moved = 0
-      const { out, entries } = await saveCalendars((raw) => {
+      const { out, entry } = await saveCalendars((raw) => {
         moved = categoriesOfCalendarRaw(raw, cal.id).length
         return removeCalendarRaw(raw, cal.id)
       })
-      if (!entries.length || saveAnswer(out) !== true) return
+      if (!entry || saveAnswer(out) !== true) return
       const events = useData.getState().allDay.filter((e) => e.calendarId === cal.id).length
-      undoToast(`Usunięto kalendarz „${cal.name}”${movedText(moved, events)}.`, () => void undoRemoval(entries))
+      undoToast(`Usunięto kalendarz „${cal.name}”${movedText(moved, events)}.`, () => void undoRemoval(entry))
     })
 
   return (

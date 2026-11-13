@@ -1,41 +1,26 @@
 /**
  * Saving a change of the calendars (D419): rd.json changed by a function of the record as it is in the turn of the save
- * (T517), as the edits of the fields that differ – and, when a category's entry held only its calendar and is empty now, the
- * removal of that entry as a second edit that goes only after the first (`EditEntry.after`, T923): the first one is a change of
- * the one field (a colour changed meanwhile elsewhere is no conflict), the second leaves no empty entry behind (T971).
- * „Cofnij” turns the entries over, last first.
+ * (T517), as the edit of the fields that differ. An entry of a category left empty (`{}`) stays – it reads as the defaults
+ * (T991). rd.json that cannot be read now is not written: nothing is sent and the toast says so (T994) – a record made from
+ * nothing would be written over the one OneDrive has not delivered yet.
  */
 import type { EditEntry, EditOutcome, RawRecord } from '@shared/api'
-import { editStands, inverseEdit } from '@shared/data/merge'
-import { dropCategoriesRaw, emptiedCategoriesRaw } from '@shared/model/calendars'
 import { editOf, rawRecord, trySaveWith, type SendState } from '../../store/data'
+import { toast } from '../../store/ui'
 
-/** The entries that turn `before` into `after` (none: no change). */
-export function calendarEntries(before: RawRecord | null, after: RawRecord): EditEntry[] {
-  const first = editOf('rd.json', before, after)
-  if (!first) return []
-  const emptied = before ? emptiedCategoriesRaw(before, after) : []
-  if (!emptied.length) return [first]
-  const second = editOf('rd.json', after, dropCategoriesRaw(after, emptied))
-  return second ? [first, { ...second, after: [0] }] : [first]
-}
+export const SETTINGS_UNREADABLE_TEXT = 'Ustawień nie da się teraz odczytać – zmiana nie została zapisana. Spróbuj za chwilę.'
 
-/** rd.json changed by `fn`, in its turn; `entries` are what was sent (for „Cofnij”), empty when nothing changed. */
-export async function saveCalendars(fn: (raw: RawRecord) => RawRecord, state?: SendState): Promise<{ out: EditOutcome[] | null; entries: EditEntry[] }> {
-  let entries: EditEntry[] = []
+/** rd.json changed by `fn`, in its turn; `entry` is what was sent (for „Cofnij”), null when nothing changed or nothing was sent. */
+export async function saveCalendars(fn: (raw: RawRecord) => RawRecord, state?: SendState): Promise<{ out: EditOutcome[] | null; entry: EditEntry | null }> {
+  let entry: EditEntry | null = null
   const out = await trySaveWith(() => {
     const before = rawRecord('rd.json')
-    entries = calendarEntries(before, fn(before ? { ...before } : { schema: 1 }))
-    return entries
+    if (!before) {
+      toast(SETTINGS_UNREADABLE_TEXT, 'error', 6000)
+      return []
+    }
+    entry = editOf('rd.json', before, fn({ ...before }))
+    return [entry]
   }, state)
-  return { out, entries }
-}
-
-/** What „Cofnij” sends for `entries` made earlier: null – rd.json changed since in a field they set (nothing is sent). */
-export function undoEntries(entries: readonly EditEntry[], now: RawRecord | null): EditEntry[] | null {
-  if (!now || !entries.every((e) => editStands(e, now, null))) return null
-  const back = [...entries].reverse().map((e) => inverseEdit(e, now, null))
-  if (back.some((e) => !e)) return null
-  // The entries that went after another go after it again (in the reverse order the first is last).
-  return (back as EditEntry[]).map((e, i) => (i === 0 ? e : { ...e, after: [i - 1] }))
+  return { out, entry }
 }

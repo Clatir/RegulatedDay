@@ -8,7 +8,7 @@ paths:
   - "tests/web/calendars-*.test.ts"
 ---
 
-# Kalendarze (SNT2, D419, D425, T940–T979)
+# Kalendarze (SNT2, D419, D425, T940–T996)
 
 Źródło prawdy: specyfikacja, punkt **Kalendarze** pod „Kategorie” (Grep `**Kalendarze (D419`).
 
@@ -21,12 +21,13 @@ paths:
   pole). Odczyt starych danych niczego nie przepisuje. Zmiany tylko przez funkcje `*Raw` z `model/calendars.ts` w zapisie okna –
   nieznane pola wpisów zostają, element listy bez `id` odpada przy pierwszym zapisie (T970). `recordEdit` zapisuje listę `calendars`
   pole po polu (`ITEM_LISTS`, T944, i wpisy `categories` – `ITEM_MAPS`, T973, także przy create, T975): nowy wpis i pierwsza zmiana
-  „Moje” to edycje pól (`id` pierwsze; `setAt` tworzy wpis z `id`, T948; `inverseEdit` odwraca dodanie wpisu jednym usunięciem, T949).
-  Zapis zmian kalendarzy: `saveCalendars` / `calendarEntries` (`settings/calendarEdits.ts`) – pusty wpis kategorii znika drugim wpisem
-  z `after` (T971). „Cofnij” usunięcia = `undoEntries` (`inverseEdit` + `editStands`, T945), przy 12 kalendarzach odmowa (T978).
+  „Moje” to edycje pól (`id` pierwsze; `setAt` tworzy wpis z `id` tylko w listach `ITEM_LISTS`, T948/T992; `ITEM_MAPS` także gdy plik nie ma klucza `categories`, T993).
+  Zapis zmian kalendarzy: `saveCalendars` (`settings/calendarEdits.ts`) – jeden wpis; nieczytelny `rd.json` = nic nie wysyłamy (T994);
+  pusty wpis kategorii `{}` zostaje (T991). „Cofnij” usunięcia = `inverseEdit` + `editStands` w turze zapisu (T945), limit 12 i
+  nieczytelny rekord osobno (T995).
 - Widoki: `useVisibleBlocks(bloki)` i `useVisibleAllDay(wydarzenia)` (`features/calendars/calendarFilter.ts`) → `{ shown, hiddenCount }`
   (czyste `filterBlocks`, `filterAllDay` – jedyna droga). Przy jednym kalendarzu (D425) ukrycie nie działa, nieistniejące id nic nie
-  ukrywa; pamięć ukrytych jest zapominana przy jednym kalendarzu (T972). `<CalendarChips hiddenCount={…} />` nad widokiem: nic przy jednym kalendarzu, „ukryte: N” gdy N > 0. Pamięć ukrytych:
+  ukrywa; pamięć ukrytych jest zapominana przy jednym kalendarzu, tylko gdy `view.rd` wczytany (T972, T990). `<CalendarChips hiddenCount={…} />` nad widokiem: nic przy jednym kalendarzu, „ukryte: N” gdy N > 0. Pamięć ukrytych:
   `localStorage` `rd.hiddenCalendars` na tym komputerze, nigdy folder danych. Żetony wpina część B – nowy widok blokowy ma przejść
   przez `useVisibleBlocks`.
 - Ustawienia: `CalendarsSection` (dodaj – do 12, nazwa, kolor, usuń z „Cofnij”), wybór „Kalendarz” w wierszu kategorii

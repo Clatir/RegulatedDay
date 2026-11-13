@@ -377,21 +377,27 @@ describe('odporność kolejki i scalania na szczegóły (runda 2)', () => {
     expect(recordEdit('rd.json', { ...OLD, calendars: [made.calendars[0]] }, { ...OLD, calendars: made.calendars })!.edits[0]!.path).toEqual(['calendars', '#b', 'id'])
   })
 
-  it('T949: odwrotność dodania kalendarza (zapisanego polami) to usunięcie całego wpisu – nie zostaje wpis bez id', () => {
-    const cal = newCalendar(rdFrom(OLD).calendars, 'Praca')!
-    const add = recordEdit('rd.json', OLD, addCalendarRaw(OLD, cal))!
-    const added = lay(OLD, add).file
-    const inv = inverseEdit(add, added, null)!
-    expect(inv.edits).toEqual([{ path: ['calendars', `#${cal.id}`], base: cal, value: undefined }])
-    expect(editStands(add, added, null)).toBe(true)
-    const back = lay(added, inv)
-    expect(back.conflicts).toEqual([])
-    expect(back.file.calendars).toEqual([])
-    // Pole dopisane wpisowi, który plik już miał: odwrotność zdejmuje tylko to pole, wpis zostaje z id.
-    const withMoje = lay(OLD, recordEdit('rd.json', OLD, updateCalendarRaw(OLD, 'moje', { name: 'Prywatne' }))!).file
-    const second = recordEdit('rd.json', withMoje, updateCalendarRaw(withMoje, 'moje', { color: CATEGORY_COLORS[5] }))!
-    const after = lay(withMoje, second).file
-    expect(lay(after, inverseEdit(second, after, null)!).file.calendars).toEqual([{ id: 'moje', name: 'Prywatne' }])
+  it('T992: wpis `#id` z id powstaje tylko w listach ITEM_LISTS; w pozostałych (bloki dnia) układanie jak przed T948 – bez duchów z id', () => {
+    const day = { blocks: [{ id: 'b1', startMin: 600 }] }
+    // Blok usunięty gdzie indziej, a odpowiedź „moje” kładzie jego pole: jak zawsze – element z samym polem, nie z id.
+    expect(setAt(day, ['blocks', '#gone', 'startMin'], 700)).toEqual({ blocks: [{ id: 'b1', startMin: 600 }, { startMin: 700 }] })
+    // Zdjęcie pola z bloku, którego nie ma: jak zawsze – pusty element.
+    expect(setAt(day, ['blocks', '#gone', 'startMin'], undefined)).toEqual({ blocks: [{ id: 'b1', startMin: 600 }, {}] })
+    // Lista kalendarzy: z id, a zdjęcie pola z nieistniejącego wpisu niczego nie tworzy.
+    expect(setAt({ calendars: [] }, ['calendars', '#k', 'name'], 'K')).toEqual({ calendars: [{ id: 'k', name: 'K' }] })
+    expect(setAt({ calendars: [] }, ['calendars', '#k', 'name'], undefined)).toEqual({ calendars: [] })
+  })
+
+  it('T993: plik bez klucza `categories` – pierwszy zapis kategorii to edycje pól wpisów, nie jedna edycja całej mapy', () => {
+    const noCats = { schema: 1 }
+    const e = recordEdit('rd.json', noCats, { schema: 1, categories: { sesja: { calendar: 'k' }, analiza: { color: CATEGORY_COLORS[2] }, pusta: {} } })!
+    expect(e.edits.map((f) => f.path)).toEqual([['categories', 'sesja', 'calendar'], ['categories', 'analiza', 'color'], ['categories', 'pusta']])
+    // Dwa komputery zapisujące pierwsze różne pola jednej kategorii: oba zostają.
+    const a = recordEdit('rd.json', noCats, { schema: 1, categories: { sesja: { calendar: 'k' } } })!
+    const b = recordEdit('rd.json', noCats, { schema: 1, categories: { sesja: { color: CATEGORY_COLORS[3] } } })!
+    const r = lay(lay(noCats, a).file, b)
+    expect(r.conflicts).toEqual([])
+    expect(r.file.categories).toEqual({ sesja: { calendar: 'k', color: CATEGORY_COLORS[3] } })
   })
 
   it('T973: kategoria domyślna bez wpisu w pliku – pierwszy przydział to edycja jednego pola; równoległy pierwszy kolor tej samej kategorii nie daje pytania', () => {

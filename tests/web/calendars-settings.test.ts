@@ -15,7 +15,7 @@ import { CategoriesSection } from '@renderer/features/settings/CategoriesSection
 import { useData } from '@renderer/store/data'
 import { closeToast, useUi } from '@renderer/store/ui'
 
-const fake = vi.hoisted(() => ({ file: { schema: 1 } as Record<string, unknown>, answer: 'queue' as 'queue' | 'refused' | 'conflict' | 'lost', sent: 0, entries: [] as EditEntry[] }))
+const fake = vi.hoisted(() => ({ file: { schema: 1 } as Record<string, unknown>, answer: 'queue' as 'queue' | 'refused' | 'conflict' | 'lost', sent: 0, entries: [] as EditEntry[], unreadable: false }))
 vi.mock('@renderer/store/data', async (orig) => {
   const real = await orig<typeof import('@renderer/store/data')>()
   const { deepEqual, setAt, valueAt } = await import('@shared/data/merge')
@@ -54,7 +54,7 @@ vi.mock('@renderer/store/data', async (orig) => {
   const trySaveRd = (fn: (raw: Record<string, unknown>) => Record<string, unknown>) => trySaveWith(() => [real.editOf('rd.json', fake.file, fn({ ...fake.file }))])
   return {
     ...real,
-    rawRecord: (rel: string) => (rel === 'rd.json' ? fake.file : null),
+    rawRecord: (rel: string) => (rel === 'rd.json' && !fake.unreadable ? fake.file : null),
     trySaveWith,
     trySaveRd,
     saveRd: async (fn: (raw: Record<string, unknown>) => Record<string, unknown>) => (await trySaveRd(fn)) ?? []
@@ -74,6 +74,7 @@ beforeEach(() => {
   fake.answer = 'queue'
   fake.sent = 0
   fake.entries = []
+  fake.unreadable = false
   load({ schema: 1 })
   for (const t of useUi.getState().toasts) closeToast(t.id)
 })
@@ -81,6 +82,7 @@ afterEach(() => {
   act(() => root?.unmount())
   host?.remove()
   root = host = null
+  useData.setState({ allDay: [] })
 })
 
 async function show(el: Parameters<typeof createElement>[0]) {
@@ -212,7 +214,6 @@ describe('lista kalendarzy', () => {
     const { all } = await show(CalendarsSection)
     await click(all('calendar-remove')[0]!)
     expect(useUi.getState().toasts.at(-1)!.text).toBe('Usunięto kalendarz „Praca” – do „Moje” wraca: 2 kategorie i 3 wydarzenia.')
-    await act(async () => useData.setState({ allDay: [] }))
   })
 
   it('„Cofnij” przy 12 kalendarzach odmawia z komunikatem (D425) i niczego nie zmienia', async () => {
@@ -229,15 +230,50 @@ describe('lista kalendarzy', () => {
     expect(useUi.getState().toasts.at(-1)!.text).toContain('jest już 12 kalendarzy')
   })
 
-  it('„Cofnij” usunięcia kalendarza z kategorią, która miała tylko kalendarz: wpis kategorii wraca (odwrócone oba wpisy)', async () => {
-    load({ schema: 1, calendars: [cal('praca', 'Praca', 1)], categories: { sesja: { calendar: 'praca' } } })
+  it('T995: limit przy „Cofnij” sprawdzany na rekordzie w turze zapisu, nie na widoku sprzed niej', async () => {
+    load({ schema: 1, calendars: Array.from({ length: MAX_CALENDARS - 1 }, (_, i) => cal(`k${i}`, `K${i}`, i + 1)) })
     const { all } = await show(CalendarsSection)
     await click(all('calendar-remove')[0]!)
-    expect(fake.file.categories).toEqual({})
-    expect(fake.entries.at(-1)!.after).toEqual([0])
-    await act(async () => void useUi.getState().toasts.at(-1)!.action!.run())
-    expect(fake.file.categories).toEqual({ sesja: { calendar: 'praca' } })
-    expect(calendarOfCategory(rdNow(), 'sesja')).toBe('praca')
+    const toast = useUi.getState().toasts.at(-1)!
+    // Rekord ma już 12 kalendarzy (zmiana z drugiego komputera), okno jeszcze nie zdążyło jej odczytać.
+    fake.file = { ...fake.file, calendars: [...(fake.file.calendars as unknown[]), cal('nowy', 'Nowy', 20)] }
+    expect(rdNow().calendars).toHaveLength(MAX_CALENDARS - 1)
+    const before = fake.sent
+    await act(async () => void toast.action!.run())
+    expect(fake.sent).toBe(before)
+    expect(useUi.getState().toasts.at(-1)!.text).toContain('jest już 12 kalendarzy')
+  })
+
+  it('T994: rd.json nieczytelny teraz – dodanie, usunięcie i zmiana nic nie wysyłają (nie zakładają pliku z niczego), toast to mówi, nazwa wraca do pola', async () => {
+    load({ schema: 1, calendars: [cal('praca', 'Praca', 1)] })
+    const { all, q } = await show(CalendarsSection)
+    fake.unreadable = true
+    await typeInto(q('calendar-new') as HTMLInputElement, 'Dom')
+    await click(q('calendar-add'))
+    expect(fake.sent).toBe(0)
+    expect((q('calendar-new') as HTMLInputElement).value).toBe('Dom')
+    expect(useUi.getState().toasts.at(-1)!.text).toContain('Ustawień nie da się teraz odczytać')
+    await click(all('calendar-remove')[0]!)
+    expect(fake.sent).toBe(0)
+    expect(useUi.getState().toasts.some((t) => t.text.startsWith('Usunięto'))).toBe(false)
+    await click(all('calendar-color')[3]!)
+    expect(fake.sent).toBe(0)
+    expect(fake.file).toEqual({ schema: 1, calendars: [cal('praca', 'Praca', 1)] })
+  })
+
+  it('T995: „Cofnij” przy nieczytelnym rd.json mówi, że nie da się teraz, nie że ustawienia się zmieniły – i daje „Cofnij” jeszcze raz', async () => {
+    load({ schema: 1, calendars: [cal('praca', 'Praca', 1)] })
+    const { all } = await show(CalendarsSection)
+    await click(all('calendar-remove')[0]!)
+    const toast = useUi.getState().toasts.at(-1)!
+    fake.unreadable = true
+    await act(async () => void toast.action!.run())
+    const again = useUi.getState().toasts.at(-1)!
+    expect(again.text).toBe('Nie da się teraz cofnąć usunięcia – ustawień nie można odczytać. Spróbuj za chwilę.')
+    expect(again.action?.label).toBe('Cofnij')
+    fake.unreadable = false
+    await act(async () => void again.action!.run())
+    expect(rdNow().calendars.map((c) => c.id)).toEqual(['moje', 'praca'])
   })
 
   it('„Cofnij” oddaje kalendarz taki, jaki był: pola nowszej wersji i kolor spoza palety zostają', async () => {
@@ -291,7 +327,8 @@ describe('kalendarz kategorii', () => {
     })
     expect(calendarOfCategory(rdNow(), 'analiza')).toBe('moje')
     // Zostaje wpis kategorii z samą nazwą/wartością domyślną – nie cały wpis jest edytowany, tylko pole kalendarza.
-    // Wpis, który miał tylko kalendarz, znika drugim wpisem (po pierwszym); sam kalendarz zszedł zmianą jednego pola.
-    expect(fake.file.categories).toEqual({})
+    // Wpis, który miał tylko kalendarz, zostaje pusty (`{}` czyta się jak ustawienia domyślne – T991): sam kalendarz zszedł zmianą jednego pola.
+    expect(fake.file.categories).toEqual({ analiza: {} })
+    expect(fake.entries.every((e) => e.after === undefined && e.edits.every((f) => f.path.length === 3))).toBe(true)
   })
 })
