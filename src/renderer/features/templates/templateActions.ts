@@ -116,3 +116,12 @@ function done(made: Made, out: Awaited<ReturnType<typeof trySaveWith>>, rel: str
   undoToast(text, () => void undoRemoval(rel, after, before, attachments))
   return true
 }
+
+/**
+ * The block just made on the axis of a template whose panel opens with the cursor in „Nazwa” (D431, T1027): kept while it is
+ * selected and its panel has not shown yet (its save may come later than the selection); once shown, or another block picked,
+ * forgotten – coming back to it later does not put the cursor there again.
+ */
+export function freshAfter(fresh: string | null, selected: string | null, shown: string | null): string | null {
+  return fresh != null && selected === fresh && shown !== fresh ? fresh : null
+}

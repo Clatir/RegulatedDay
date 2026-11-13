@@ -536,7 +536,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             inSeries={!draft && block.origin === 'series'}
             // D430, D431: „+ Blok” (Ctrl+N, a range on the axis, „Więcej” of „Tydzień”) – the cursor in „Nazwa”, Enter there
             // adds the block as „Dodaj” (with the name just typed – the draft of this render does not have it yet).
-            newBlock={draft ? { add: (name) => void runAdd(() => add({ ...draft, name })) } : undefined}
+            // A save running: Enter refused, the cursor stays in the field (T1028).
+            newBlock={draft ? { add: (name) => (adding ? false : void runAdd(() => add({ ...draft, name }))) } : undefined}
             steps={
               <StepsEditor
                 steps={block.steps}

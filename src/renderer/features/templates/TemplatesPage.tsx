@@ -46,7 +46,7 @@ import { stepsAnswer } from '../steps/stepsUi'
 import { changeTemplateSteps } from '../../store/steps'
 import { SettingNumber } from '../settings/SettingNumber'
 import { templateAdd, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
-import { removeTemplate, removeTemplateBlock } from './templateActions'
+import { freshAfter, removeTemplate, removeTemplateBlock } from './templateActions'
 
 export function TemplatesPage() {
   const templates = useData((s) => s.templates)
@@ -181,9 +181,6 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const [selected, setSelected] = useState<string | null>(null)
   // D431: the block just made on the axis (saved at once) – its panel opens with the cursor in „Nazwa”; another selection forgets it.
   const [fresh, setFresh] = useState<string | null>(null)
-  useEffect(() => {
-    if (fresh != null && selected !== fresh) setFresh(null)
-  }, [selected])
   // The block the search picked (only one of the version shown – the one in force from tomorrow).
   useEffect(() => {
     if (!openBlock) return
@@ -270,6 +267,9 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     return withAttachCounts(own, (id) => blocks.get(id) ?? null, attachPlace, attachments)
   }, [axis, byPlanId, version.blocks, attachPlace, attachments])
   const block = version.blocks.find((b) => b.id === selected) ?? null
+  // The cursor in „Nazwa” once (T1027): forgotten when its panel has shown (or another block is picked) – coming back to it does not set it again.
+  const shownId = block?.id ?? null
+  useEffect(() => setFresh((f) => freshAfter(f, selected, shownId)), [selected, shownId])
   /** A block of the version changed; answers what became of the save (the panel's note puts back what it shows only when it was refused – also when the template is gone: nothing was written; a question keeps it). */
   const patchBlock = (id: string, patch: Partial<PlanBlock>): Promise<SaveAnswer> => {
     const state: SendState = { afterSend: false }
@@ -398,7 +398,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
             onCreate={(min, durationMin = DEFAULT_NEW_BLOCK_MIN) => {
               // D366; D367: on a taken place it pushes the flexible blocks after it apart.
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin, origin: 'template' })
-              void saveChange(templateAdd(model, b)).then(() => {
+              void saveChange(templateAdd(model, b)).then((saved) => {
+                if (!saved) return
                 setFresh(b.id)
                 setSelected(b.id)
               })

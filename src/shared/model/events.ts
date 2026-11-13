@@ -34,6 +34,21 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  */
 export const RULES_VERSION = 8
 
+/** What a block's start wrote of its plan (`block.start.planned`). */
+export interface StartPlanned {
+  categoryId: string
+  variantId: string | null
+  durationMin: number
+  tag: PlanBlock['tag']
+  fixed: boolean
+  costs?: Costs | null
+  bgCostPct?: number | null
+  name?: string | null
+  task?: string | null
+  routine?: string | null
+  requests?: string[]
+}
+
 export interface EventBase {
   /** Unique: `<computer>-<n>` for your actions, derived from the data for automatic ones (both computers write the same). */
   id: string
@@ -100,11 +115,11 @@ export type TimerEvent =
       at: number
       bg: boolean
       /**
-       * What the plan said at the start – a later edit of the plan never changes it (spec); costs since E2. `name` – its own
-       * name then (D431, 1.19.0; null – none): a block taken out of the plan after it began keeps it. Absent – a start by an
-       * older version, or of a block outside the plan: named by the snapshot (`namedById`).
+       * What the plan said at the start – a later edit of the plan never changes it (spec); costs since E2. `name`, `task`,
+       * `routine`, `requests` – what named it then (D431, 1.19.0; null – none): a block taken out of the plan after it began
+       * keeps its name. Absent – a start by an older version, or of a block outside the plan: named by the snapshot (`namedById`).
        */
-      planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null; name?: string | null }
+      planned: StartPlanned
       /** Minutes after the boundary confirmed in advance up to this instant (two clicks, „Dodaj bez wymiany”). */
       confirmUntil: number | null
       /** 'plan' – it happened at its planned time, said afterwards (the ritual): its times are no measure. */

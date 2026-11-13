@@ -28,6 +28,7 @@ import { Timeline } from '@renderer/features/plan/Timeline'
 import { seriesBlockPatch, touchesSeries } from '@renderer/features/series/seriesForm'
 import { agendaRow } from '@renderer/features/week/weekViews'
 import { emptyMonthDay, monthCellView } from '@renderer/features/calendar/monthCellView'
+import { freshAfter } from '@renderer/features/templates/templateActions'
 import { NewBlockPopover } from '@renderer/features/week/NewBlockPopover'
 import { addWeekBlocks } from '@renderer/features/week/weekActions'
 import { installEscape } from '@renderer/lib/escape'
@@ -59,7 +60,7 @@ afterEach(() => {
   vi.mocked(addWeekBlocks).mockClear()
 })
 
-async function mount(block: PlanBlock, o: { newBlock?: { add: (name: string | null) => void }; focusName?: boolean; readOnly?: boolean } = {}) {
+async function mount(block: PlanBlock, o: { newBlock?: { add: (name: string | null) => boolean | void }; focusName?: boolean; readOnly?: boolean } = {}) {
   const onChange = vi.fn((_p: Partial<PlanBlock>) => undefined)
   host = document.createElement('div')
   document.body.append(host)
@@ -174,7 +175,7 @@ describe('pole „Nazwa” w panelu bloku', () => {
     const page = readFileSync('src/renderer/features/today/TodayPage.tsx', 'utf8')
     expect(page).toMatch(/const \[adding, runAdd\] = useBusy\(\)/)
     expect(page).toMatch(/disabled=\{adding\} onClick=\{\(\) => void runAdd\(\(\) => add\(draft\)\)\} data-testid="block-add"/)
-    expect(page).toMatch(/newBlock=\{draft \? \{ add: \(name\) => void runAdd\(\(\) => add\(\{ \.\.\.draft, name \}\)\) \} : undefined\}/)
+    expect(page).toMatch(/newBlock=\{draft \? \{ add: \(name\) => \(adding \? false : void runAdd\(\(\) => add\(\{ \.\.\.draft, name \}\)\)\) \} : undefined\}/)
   })
 
   it('zakończona seria (tylko do odczytu): pole nie przyjmuje wpisu', async () => {
@@ -362,10 +363,23 @@ describe('okienko „Nowy blok”: Enter w trakcie zapisu, kursor bez przewijani
 
   it('kursor w polu bez przewijania siatki (`preventScroll`)', async () => {
     const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    try {
+      const field = await mountPopover()
+      expect(focus.mock.contexts).toContain(field)
+      expect(focus.mock.calls[focus.mock.contexts.indexOf(field)]).toEqual([{ preventScroll: true }])
+    } finally {
+      focus.mockRestore()
+    }
+  })
+
+  it('Enter, po którym okienko zostaje (dzień niezapisany) – kursor wraca do pola nazwy (T1028, uzupełnione)', async () => {
+    vi.mocked(addWeekBlocks).mockResolvedValueOnce({ saved: [], failed: [D], pending: [], unknown: false, push: null })
     const field = await mountPopover()
-    expect(focus.mock.contexts).toContain(field)
-    expect(focus.mock.calls[focus.mock.contexts.indexOf(field)]).toEqual([{ preventScroll: true }])
-    focus.mockRestore()
+    typeEnter(field, 'Analiza rynku')
+    await act(async () => undefined)
+    expect(addWeekBlocks).toHaveBeenCalledTimes(1)
+    expect(host!.querySelector('[data-testid="week-new"]')).not.toBeNull()
+    expect(document.activeElement).toBe(host!.querySelector('[data-testid="week-new-name"]'))
   })
 })
 
@@ -404,6 +418,38 @@ describe('TextField: Enter z `onEnter`', () => {
     enter(area, { ctrlKey: true })
     expect(onCommit).toHaveBeenCalledWith('notatka')
     expect(onEnter).not.toHaveBeenCalled()
-    expect(el ?? area).toBeTruthy()
+    expect(el).toBe(area)
+  })
+
+  it('Esc w trakcie składania znaku (IME) nie odrzuca wpisu – pole zatwierdza go przy wyjściu', async () => {
+    const { el, onCommit } = await field()
+    act(() => {
+      el.focus()
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, 'Analiza')
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => void el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true, isComposing: true })))
+    expect(document.activeElement).toBe(el)
+    act(() => el.blur())
+    expect(onCommit).toHaveBeenCalledWith('Analiza')
+  })
+})
+
+describe('nowy blok szablonu: kursor w nazwie tylko raz (T1027, uzupełnione)', () => {
+  it('zrobiony blok trzyma kursor, póki jego panel się nie pokaże; pokazany albo inny wybór – zapomniany', () => {
+    expect(freshAfter('b', 'b', null)).toBe('b')
+    expect(freshAfter('b', 'b', 'b')).toBeNull()
+    expect(freshAfter('b', 'c', null)).toBeNull()
+    expect(freshAfter(null, 'b', 'b')).toBeNull()
+  })
+})
+
+describe('panel nowego bloku: Enter odrzucony przez trwający zapis zostawia kursor (T1028, uzupełnione)', () => {
+  it('`add` zwraca `false` – kursor wraca do pola, nic nie dodane drugi raz', async () => {
+    const add = vi.fn(() => false as const)
+    const { field } = await mount(analiza, { newBlock: { add } })
+    typeEnter(field, 'Analiza rynku')
+    expect(add).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(field)
   })
 })

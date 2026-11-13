@@ -2111,7 +2111,7 @@ export class DataFolder {
       const { ctx, state, activity, laid } = await this.barDay(day, read, now, true)
       const q = questionsOf({ ctx, state, activity, now }).find((x) => x.id === id)
       if (!q) return { ok: false, why: 'to pytanie już nie czeka', confirm: null }
-      const drafts = answerEvents(state, q, answer, now, value)
+      const drafts = answerEvents(state, q, answer, now, value, ctx.plan)
       if (drafts) {
         await this.writeOn(day, laid, drafts)
         return { ok: true, events: drafts, confirm: null }
@@ -2371,7 +2371,7 @@ export class DataFolder {
     return this.dayAction(day, (state, now, ctx) => {
       const row = ritualRows(state, ritualActivity(ctx, state)).find((r) => r.id === rowId)
       if (!row) return 'tego wiersza już nie ma'
-      return ritualAnswer(state, row, choice, now, value, item) ?? refusalOf(choice)
+      return ritualAnswer(state, row, choice, now, value, item, ctx.plan) ?? refusalOf(choice)
     })
   }
 

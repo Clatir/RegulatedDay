@@ -104,9 +104,13 @@ export function NewBlockPopover({
     if (saved.length) rememberNewBlockCategory(categoryId)
     // Blocks pushed apart in the days written (D400): the window's one line with its „Cofnij” for them all.
     if (push) showWeekPush(push)
-    if (failed.length) onDates(failed)
-    else onClose()
+    if (failed.length) {
+      onDates(failed)
+      backToName()
+    } else onClose()
   }
+  /** The window stays open after Enter or „Dodaj” (days not written, the exchange left): the cursor back in „Nazwa” (T1028). */
+  const backToName = () => ref.current?.querySelector<HTMLInputElement>('[data-testid="week-new-name"]')?.focus({ preventScroll: true })
   /** „Dodaj”, or Enter in „Nazwa” with the name just typed (`n` – this render's state does not have it yet). */
   const add = (n = name) =>
     run(async () => {
@@ -193,7 +197,10 @@ export function NewBlockPopover({
             const rest = exchange.rest
             setExchange(null)
             // Today's block is in (or the exchange was left): added – the other days follow, else everything stays as it was.
-            if (!added) return
+            if (!added) {
+              backToName()
+              return
+            }
             rememberNewBlockCategory(categoryId)
             void run(async () => {
               if (rest.length) await save(rest)

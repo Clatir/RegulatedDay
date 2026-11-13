@@ -195,7 +195,6 @@ function gradeEnergy(frozen: FrozenDay | null): boolean {
 /** A trading session (a category of the kind „sesja”) or the second shift (D192: it is a session). */
 const isSessionBlock = (b: BlockInfo): boolean => b.rules.kind === 'session' || b.secondShift
 
-
 /**
  * The blocks of the day on the axis, as the day's own axis places them (`dayAxis`): a begun block where it ran, one still
  * to come today where the forecast puts it, otherwise at its planned time (an anchored one after its anchor); blocks

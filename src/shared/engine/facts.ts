@@ -9,9 +9,9 @@
  * every minute by the values in force when it began.
  */
 import type { Costs } from '../model/categories'
-import { compareEvents, eventAt, isKnown, type AnyEvent, type CloseHow, type EventBase, type LogEvent, type MinuteClass } from '../model/events'
+import { compareEvents, eventAt, isKnown, type AnyEvent, type CloseHow, type EventBase, type LogEvent, type MinuteClass, type StartPlanned } from '../model/events'
 import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
-import { blockNameFrom, type PlanBlock } from '../model/plan'
+import { blockNameFrom, requestIdsFrom, type PlanBlock } from '../model/plan'
 import type { RoutineVersion } from '../model/routines'
 import { atOf, idxOf, type Grid } from './grid'
 
@@ -73,8 +73,11 @@ export interface BlockFact {
   startedAt: number | null
   endedAt: number | null
   runs: Run[]
-  /** As its start wrote it (`block.start`); `name` only when the start wrote one (D431), read as a file's (`blockNameFrom`). */
-  planned: { categoryId: string; variantId: string | null; durationMin: number; tag: PlanBlock['tag']; fixed: boolean; costs?: Costs | null; bgCostPct?: number | null; name?: string | null } | null
+  /**
+   * As its start wrote it (`block.start`); `name`, `task`, `routine`, `requests` only when the start wrote them as such (D431,
+   * T1024 – `startNaming`), else no key: the snapshot names the block.
+   */
+  planned: StartPlanned | null
   confirms: Confirm[]
   /** Confirmed „Przedłuż”, in order. */
   extends: Array<{ at: number; minutes: number }>
@@ -266,6 +269,24 @@ const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open'
 export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k) || e.dom === 'energy'
 
 /** Fold the day's events (any order given; folded in their full order). */
+/**
+ * What names a block as its start wrote it (D431, T1024: own name, task, routine, requests), each read as a block of a file
+ * reads it: null – none then; a value that is not one (not a text, empty after trimming, not a list) – as no field (no key:
+ * the snapshot names the block, as for a start written by an older version).
+ */
+function startNaming(v: { name?: unknown; task?: unknown; routine?: unknown; requests?: unknown }): Pick<StartPlanned, 'name' | 'task' | 'routine' | 'requests'> {
+  const out: Pick<StartPlanned, 'name' | 'task' | 'routine' | 'requests'> = {}
+  const id = (x: unknown): string | null | undefined => (x === null ? null : typeof x === 'string' && x ? x : undefined)
+  const name = v.name === null ? null : (blockNameFrom(v.name) ?? undefined)
+  if (name !== undefined) out.name = name
+  const task = id(v.task)
+  if (task !== undefined) out.task = task
+  const routine = id(v.routine)
+  if (routine !== undefined) out.routine = routine
+  if (Array.isArray(v.requests)) out.requests = requestIdsFrom(v.requests)
+  return out
+}
+
 export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
   const f: DayFacts = {
     grid,
@@ -321,8 +342,8 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         }
         const at = idx(e.at)
         b.startedAt = at
-        const { name, ...planned } = e.planned
-        b.planned = { ...planned, variantId: planned.variantId ?? null, tag: planned.tag ?? null, fixed: planned.fixed === true, ...(name !== undefined ? { name: blockNameFrom(name) } : {}) }
+        const { name, task, routine, requests, ...planned } = e.planned
+        b.planned = { ...planned, variantId: planned.variantId ?? null, tag: planned.tag ?? null, fixed: planned.fixed === true, ...startNaming({ name, task, routine, requests }) }
         b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })
         if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil), order: orderOf(e) })
         break

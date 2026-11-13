@@ -264,7 +264,9 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
         el.blur()
         if (onEnter && !multiline && !readOnly && !(required && !v) && onEnter(v) === false) el.focus({ preventScroll: true })
       }
-      if (e.key === 'Escape' && draft != null) {
+      // Esc while a character is composed (IME) is the composition's: the edit stays, nothing around closes.
+      if (e.key === 'Escape' && e.nativeEvent.isComposing) e.stopPropagation()
+      else if (e.key === 'Escape' && draft != null) {
         e.stopPropagation()
         e.preventDefault()
         cancelled.current = true

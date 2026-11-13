@@ -19,7 +19,7 @@ import { stepsCounter } from '@shared/model/steps'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import type { DayModel } from '../../store/day'
-import { blockColor, blockKind, blockMarks, blockName, nameById, type Names } from './blockView'
+import { blockColor, blockKind, blockMarks, blockName, type Names } from './blockView'
 import type { EnergyTrack, TimelineItem, TimelineMarker } from './Timeline'
 
 export interface DayAxis {
@@ -94,7 +94,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
     })
   }
   // Blocks begun outside the plan („Pracuję”, a block begun by hand) or taken out of it after they began (D336): where
-  // they ran, named as everywhere (`nameById`).
+  // they ran, named as everywhere (`namedById`).
   const naming = namingOf(ctx, state.facts)
   for (const info of state.blocks) {
     if (info.inPlan) continue
@@ -107,7 +107,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
     items.push({
       id: info.id,
       ...logicalSpan(g, f.startedAt, Math.max(to, f.startedAt + 1)),
-      title: named ? blockName(named, names) : nameById(info.id, naming, names),
+      title: named ? blockName(named, names) : 'blok',
       ...(kind ? { kind } : {}),
       marks: f.endedAt == null ? ['poza planem', 'biegnie'] : ['poza planem'],
       color: blockColor(info.categoryId, names),

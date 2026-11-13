@@ -65,9 +65,10 @@ export function BlockEditor({
   place?: BlockPlace
   /**
    * A new block not saved yet (before „Dodaj”): the cursor starts in „Nazwa” (D430), Enter there adds it as „Dodaj” does, with
-   * the name typed (`add`, D431). Left out – an existing block: Enter only commits the name.
+   * the name typed (`add`, D431; `false` – refused, a save running: the cursor stays, T1028). Left out – an existing block:
+   * Enter only commits the name.
    */
-  newBlock?: { add: (name: string | null) => void }
+  newBlock?: { add: (name: string | null) => boolean | void }
   /** A block just made and saved at once (a click or a range on the axis of „Szablony”): the cursor starts in „Nazwa” too (D431). */
   focusName?: boolean
 }) {

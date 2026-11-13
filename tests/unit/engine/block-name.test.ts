@@ -10,6 +10,8 @@ import { marketDay } from '@shared/calendar/holidays'
 import { blockKind, blockName, nameById, type NamingDay } from '@shared/blockName'
 import { putBlock } from '@shared/data/dayEdits'
 import { activityOf } from '@shared/engine/activity'
+import { answerEvents, autoActions, questionsOf } from '@shared/engine/auto'
+import { ritualActivity, ritualAnswer, ritualRows } from '@shared/engine/ritual'
 import { createDay, dayPlan, templateBlockId } from '@shared/engine/createDay'
 import { newSeries, seriesBlockId } from '@shared/engine/series'
 import { namingOf } from '@shared/engine/context'
@@ -193,7 +195,77 @@ describe('nazwa zapisana przy starcie bloku (D336, D431, T1024)', () => {
     // A name written: read as a block's name of a file is (trimmed, at most BLOCK_NAME_MAX, anything else – none).
     expect(nameById('a', day({ ...base, name: '  Przegląd  ' }), names)).toBe('Przegląd')
     expect(nameById('a', day({ ...base, name: 'x'.repeat(BLOCK_NAME_MAX + 5) }), names)).toBe('x'.repeat(BLOCK_NAME_MAX))
-    expect(nameById('a', day({ ...base, name: 42 }), names)).toBe('Analiza')
+    // Not a name (not a text, empty after trimming) – as no field: the snapshot decides (T1024, uzupełnione); null – none at the start.
+    expect(nameById('a', day({ ...base, name: 42 }), names)).toBe('Analiza rynku')
+    expect(nameById('a', day({ ...base, name: '   ' }), names)).toBe('Analiza rynku')
     expect(nameById('a', day({ ...base, name: null }), names)).toBe('Analiza')
+  })
+})
+
+describe('start każdą drogą niesie to, co nazywa blok (T1024, uzupełnione)', () => {
+  const date = '2026-10-28'
+  const startOf = (events: ReadonlyArray<{ k: string; block?: string }>, id: string) => events.find((e) => e.k === 'block.start' && e.block === id) as unknown as { planned: Record<string, unknown> } | undefined
+  const act = (s: Scenario, time: string) => {
+    const t = s.at(time)
+    const ctx = s.contextAt(t)
+    const state = s.stateAt(t)
+    return { t, ctx, state, activity: activityOf(ctx.events, state.grid.start, t, 'pca') }
+  }
+
+  it('automatyczny start bloku stałego (`fixedStart`) zapisuje nazwę', () => {
+    const s = new Scenario({ date, plan: [{ ...block({ id: 'f', cat: 'inne', at: '09:00', min: 60, fixed: true, origin: 'user' }), name: 'Spotkanie zespołu' }] }).observe('07:00', null)
+    const { t, ctx, state, activity } = act(s, '09:01')
+    const start = startOf(autoActions({ ctx, state, activity, now: t, gate: t }), 'f')
+    expect(start?.planned.name).toBe('Spotkanie zespołu')
+  })
+
+  it('blok zadania dodany do dnia, zaczęty i usunięty w trakcie – zachowuje tytuł zadania (zadanie, rutyna i prośby w `planned`)', () => {
+    const task = requestFrom(newTask('t1', 1, '2026-10-27', { title: 'Wdrożenie' }))! as RequestRecord
+    const own = { ...block({ id: 'a', cat: 'inne', at: '08:00', min: 60, origin: 'user' }), task: 't1' }
+    const s = new Scenario({ date, plan: [own] }).observe('07:00', null)
+    const { t, ctx, state } = act(s, '08:00')
+    const r = timerAction(ctx, state, { a: 'start', block: 'a' }, t)
+    if (!r.ok) throw new Error(r.why)
+    expect(startOf(r.events, 'a')!.planned).toMatchObject({ task: 't1', routine: null, requests: [] })
+    s.write(r.events, t)
+    const gone = s.contextAt(s.at('08:30'), { plan: [], snapshot: { ...s.snapshot, blocks: [] } })
+    expect(nameById('a', namingOf(gone, computeDay(gone).facts), { ...names, requests: [task] })).toBe('Wdrożenie')
+  })
+
+  it('zadanie, rutyna i prośby ze startu czytane jak z pliku; nieprawidłowe – jak brak pola (migawka)', () => {
+    const g = gridOf(date)
+    const ev = (planned: Record<string, unknown>) => ({ id: 'pca-1', c: 'pca', n: 1, t: g.start + 60 * 60_000, l: g.start + 60 * 60_000, v: 8, day: date, dom: 'timer', k: 'block.start', block: 'a', at: g.start + 4 * 60 * 60_000, bg: false, planned, confirmUntil: null, how: 'click' })
+    const base = { categoryId: 'inne', variantId: null, durationMin: 60, tag: null, fixed: false }
+    const f = (planned: Record<string, unknown>) => foldFacts(g, [ev(planned)] as never).blocks.get('a')!.planned!
+    expect(f({ ...base, task: 't1', routine: 'rano', requests: ['r1', 'r1', 7, 'r2'] })).toMatchObject({ task: 't1', routine: 'rano', requests: ['r1', 'r2'] })
+    const bad = f({ ...base, task: 5, routine: '', requests: 'r1' })
+    expect(['task' in bad, 'routine' in bad, 'requests' in bad]).toEqual([false, false, false])
+    expect(f({ ...base, task: null, routine: null })).toMatchObject({ task: null, routine: null })
+  })
+
+  it('rytuał „odbył się” zapisuje start z nazwą bloku z planu', () => {
+    const plan = [block({ id: 'x', cat: 'inne', at: '08:00', min: 60 }), { ...block({ id: 'b', cat: 'inne', at: '10:00', min: 60 }), name: 'Przegląd tygodnia' }]
+    const s = new Scenario({ date, plan }).using('07:00', '23:59')
+    s.ran('x', '08:00', '09:00')
+    const { t, ctx, state } = act(s, '20:00')
+    const row = ritualRows(state, ritualActivity(ctx, state)).find((r) => r.kind === 'skipped' && (r as { block: string }).block === 'b')!
+    const drafts = ritualAnswer(state, row, 'happened', t, null, null, ctx.plan)!
+    expect(startOf(drafts, 'b')!.planned.name).toBe('Przegląd tygodnia')
+  })
+
+  it('„posiłek” po nieobecności: start posiłku z planu niesie jego nazwę', () => {
+    const plan = [block({ id: 'a', cat: 'inne', at: '08:00', min: 180 }), { ...block({ id: 'obiad', cat: 'posilek', at: '09:00', min: 30 }), name: 'Obiad z rodziną' }]
+    const s = new Scenario({ date, plan }).observe('07:00', null)
+    const c = act(s, '08:00')
+    const r = timerAction(c.ctx, c.state, { a: 'start', block: 'a' }, c.t)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, c.t)
+    s.gap('08:30', '09:15')
+    const l = act(s, '09:16')
+    s.write(autoActions({ ctx: l.ctx, state: l.state, activity: l.activity, now: l.t, gate: l.t }), l.t)
+    const q = act(s, '09:20')
+    const question = questionsOf({ ctx: q.ctx, state: q.state, activity: q.activity, now: q.t }).find((x) => x.kind === 'absence')!
+    const drafts = answerEvents(q.state, question, 'meal', q.t, null, q.ctx.plan)!
+    expect(startOf(drafts, 'obiad')!.planned.name).toBe('Obiad z rodziną')
   })
 })
