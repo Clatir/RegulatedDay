@@ -24,10 +24,13 @@ import {
   DEFAULT_TASK_CATEGORY,
   DEFAULT_TASK_MIN,
   ESTIMATE_RANGE,
+  isPriority,
+  PRIORITIES,
   requestFrom,
   titleOf,
   type CaseKind,
   type CaseList,
+  type Priority,
   type RequestRecord
 } from '../model/requests'
 import { logicalDayOf, weekStart } from '../time/day'
@@ -247,14 +250,22 @@ export function caseOrder(a: CaseItem, b: CaseItem): number {
   return b.record.createdAt - a.record.createdAt
 }
 
-/** The group of a sprawa in the order of a list (T854): with a due date first (D409); HKU3 puts P1–P4 between (D450). */
+/**
+ * The group of a sprawa in the order of a list (T854, T870): with a due date first (D409), then P1, P2, P3, P4 (1–4, D450),
+ * then the rest – a sprawa without a priority (and every one done).
+ */
 export const DUE_GROUP = 0
 export const REST_GROUP = 9
-export const caseGroupOf = (x: CaseItem): number => (x.list !== 'done' && x.record.dueDate != null ? DUE_GROUP : REST_GROUP)
+export const caseGroupOf = (x: CaseItem): number => {
+  if (x.list === 'done') return REST_GROUP
+  if (x.record.dueDate != null) return DUE_GROUP
+  return x.record.priority != null ? 1 + PRIORITIES.indexOf(x.record.priority) : REST_GROUP
+}
 
 /**
- * The order of the lists (D409, T854): the sprawy past their due date and with one first, the nearest date on top; then
- * the rest in the order of before (`caseOrder` – also within one due date). „Zrobione” as before.
+ * The order of the lists (D409, T854, D450): the sprawy past their due date and with one first, the nearest date on top; then
+ * P1, P2, P3, P4, then those without a priority – each group in the order of before (`caseOrder` – also within one due date).
+ * „Zrobione” as before.
  */
 export function caseCompare(a: CaseItem, b: CaseItem): number {
   if (a.list === 'done' && b.list === 'done') return caseOrder(a, b)
@@ -354,6 +365,8 @@ export interface CasePatch {
   /** „Termin” and „Wykonać” (D409): a day 'RRRR-MM-DD', null – cleared. */
   dueDate?: string | null
   doDate?: string | null
+  /** The quarter of the matrix (D450): P1–P4, null – none. */
+  priority?: Priority | null
 }
 
 /**
@@ -381,6 +394,10 @@ export function patchedRaw(raw: Raw, patch: CasePatch, at: number): { raw: Raw }
   if (patch.dueDate !== undefined) {
     if (patch.dueDate != null && !dateFrom(patch.dueDate)) return { error: 'Termin: nie ma takiego dnia.' }
     next.dueDate = patch.dueDate
+  }
+  if (patch.priority !== undefined) {
+    if (patch.priority != null && !isPriority(patch.priority)) return { error: 'Priorytet: nie ma takiej ćwiartki.' }
+    next.priority = patch.priority
   }
   if (patch.doDate !== undefined) {
     if (patch.doDate != null && !dateFrom(patch.doDate)) return { error: 'Wykonać: nie ma takiego dnia.' }

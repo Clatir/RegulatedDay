@@ -13,11 +13,13 @@ import { durationLabel, logicalClock } from '@shared/format'
 import type { Pool } from '@shared/model/categories'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import type { DueBadge } from '@shared/engine/caseDates'
+import type { Priority } from '@shared/model/requests'
 import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { cx } from '../../components/ui'
 import { useMachine } from '../../store/machine'
 import { DueMark } from '../cases/DueMark'
+import { PriorityMark } from '../cases/PriorityMark'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
 
@@ -37,6 +39,8 @@ export interface TimelineItem {
   series?: boolean
   /** The due date of the task the block is of (D409): „Po terminie” (red) or „Termin jutro” … (muted) by its name; none for days gone by. */
   badge?: DueBadge
+  /** The priority of the task the block is of (D450): a narrow stripe on the tile's left, inside the category's edge; the colour of the block stays the category's. */
+  priority?: Priority
   /** Its planned start may be dragged (D305): not begun, with its own start time. */
   movable?: boolean
   /**
@@ -418,6 +422,7 @@ export function Timeline({
         data-pushed={pushedTo ? 'true' : undefined}
         data-dim={i.dim ? 'on' : undefined}
       >
+        {i.priority && <PriorityMark priority={i.priority} testId="block-priority" />}
         {topEdge && <span data-edge="top" data-testid={`block-${i.id}-edge-top`} className={cx('absolute inset-x-0 top-0 z-10 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         {endEdge && <span data-edge="end" data-testid={`block-${i.id}-edge-end`} className={cx('absolute inset-x-0 bottom-0 z-10 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         <div className={cx('flex min-w-0 items-baseline gap-1.5', tiny ? 'text-[11px]' : 'pt-0.5 text-[12px]')}>

@@ -8,6 +8,7 @@
  * „Zrobione teraz”, urgent and evening requests are started in the widget (E5) – they are events of the log.
  * HKU2 (D409, D451): „Termin” (`dueDate`) and „Wykonać” (`doDate`) of every sprawa, and the day of the last move by hand
  * (`listSetDay`) – the date of doing puts it on „Dziś” on its day, counted like the lists (never written at 04:00).
+ * HKU3 (D450): the quarter of the Eisenhower matrix (`priority`) of every sprawa – none by default.
  */
 import { isIsoDate } from '../time/zone'
 
@@ -34,6 +35,25 @@ export const CASE_LISTS: readonly CaseList[] = ['inbox', 'today', 'week', 'somed
 export const OPEN_LISTS: readonly CaseList[] = ['inbox', 'today', 'week', 'someday']
 export const CASE_LIST_NAMES: Record<CaseList, string> = { inbox: 'Skrzynka', today: 'Dziś', week: 'W tym tygodniu', someday: 'Kiedyś / Może', done: 'Zrobione' }
 export const isCaseList = (v: unknown): v is CaseList => (CASE_LISTS as readonly unknown[]).includes(v)
+
+/**
+ * The quarter of the Eisenhower matrix (D450): P1 „Ważne i pilne”, P2 „Ważne”, P3 „Pilne”, P4 „Ani to, ani to”; null – none
+ * (the default). The order of this list is the order the lists show them in (`caseGroupOf`).
+ */
+export type Priority = 'p1' | 'p2' | 'p3' | 'p4'
+export const PRIORITIES: readonly Priority[] = ['p1', 'p2', 'p3', 'p4']
+/** The names of the quarters in one place: in full (headings, the choice) and short (a tight place). */
+export const PRIORITY_NAMES: Record<Priority, { name: string; short: string }> = {
+  p1: { name: 'Ważne i pilne', short: 'P1' },
+  p2: { name: 'Ważne', short: 'P2' },
+  p3: { name: 'Pilne', short: 'P3' },
+  p4: { name: 'Ani to, ani to', short: 'P4' }
+}
+/** What stands for the lack of a quarter (the choice, the matrix's field). */
+export const NO_PRIORITY_NAME = 'Bez priorytetu'
+export const isPriority = (v: unknown): v is Priority => (PRIORITIES as readonly unknown[]).includes(v)
+/** A priority from a file or a patch: a quarter or null – anything else reads as none (D450). */
+export const priorityFrom = (v: unknown): Priority | null => (isPriority(v) ? v : null)
 
 export interface RequestRecord {
   id: string
@@ -66,6 +86,8 @@ export interface RequestRecord {
    * date (D451); null – never moved since the date was set (setting the date clears it), or a file written before HKU2.
    */
   listSetDay: string | null
+  /** The quarter of the Eisenhower matrix (D450); null – none. A done sprawa keeps it but lists do not order it by it. */
+  priority: Priority | null
 }
 
 /** The estimate's range (a field of whole minutes, like a block's length). */
@@ -106,13 +128,14 @@ export function requestFrom(v: unknown): RequestRecord | null {
     doneAt: typeof v.doneAt === 'number' && Number.isFinite(v.doneAt) && v.doneAt > 0 ? v.doneAt : null,
     dueDate: dateFrom(v.dueDate),
     doDate: dateFrom(v.doDate),
-    listSetDay: dateFrom(v.listSetDay)
+    listSetDay: dateFrom(v.listSetDay),
+    priority: priorityFrom(v.priority)
   }
 }
 
 /** The new request's fields (as written: the queue creates the file) – in „Skrzynka”, as a request „w kolejce” was. */
-export function newRequest(id: string, at: number, p: { person: string | null; estimateMin: number | null; note: string; dueDate?: string | null; doDate?: string | null }): Record<string, unknown> {
-  return { schema: REQUEST_SCHEMA, id, kind: 'request', person: p.person, estimateMin: p.estimateMin, note: p.note, createdAt: at, state: 'queued', day: null, block: null, list: 'inbox', listDay: null, doneAt: null, dueDate: dateFrom(p.dueDate), doDate: dateFrom(p.doDate) }
+export function newRequest(id: string, at: number, p: { person: string | null; estimateMin: number | null; note: string; dueDate?: string | null; doDate?: string | null; priority?: Priority | null }): Record<string, unknown> {
+  return { schema: REQUEST_SCHEMA, id, kind: 'request', person: p.person, estimateMin: p.estimateMin, note: p.note, createdAt: at, state: 'queued', day: null, block: null, list: 'inbox', listDay: null, doneAt: null, dueDate: dateFrom(p.dueDate), doDate: dateFrom(p.doDate), priority: priorityFrom(p.priority) }
 }
 
 /** What a new task is made of (D384): the title required, the rest from the defaults. */
@@ -126,6 +149,8 @@ export interface NewTask {
   /** „Termin” and „Wykonać” (D409; the quick capture's „!jutro” / „@pt” – `parseQuickDates`); none by default. */
   dueDate?: string | null
   doDate?: string | null
+  /** Its quarter of the matrix (D450); none by default. */
+  priority?: Priority | null
 }
 
 /**
@@ -152,6 +177,7 @@ export function newTask(id: string, at: number, today: string, p: NewTask): Reco
     listDay: list === 'today' ? today : null,
     doneAt: list === 'done' ? at : null,
     dueDate: dateFrom(p.dueDate),
-    doDate: dateFrom(p.doDate)
+    doDate: dateFrom(p.doDate),
+    priority: priorityFrom(p.priority)
   }
 }

@@ -7,6 +7,8 @@
 import { ownHourBlock, plannedSpan } from '@shared/engine/blocks'
 import { namingOf } from '@shared/engine/context'
 import { dueBadge } from '@shared/engine/caseDates'
+import { isDone } from '@shared/engine/cases'
+import type { Priority } from '@shared/model/requests'
 import { atOf, logicalSpan } from '@shared/engine/grid'
 import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
@@ -70,6 +72,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       waits: info.waits,
       ...(p.origin === 'series' ? { series: true } : {}),
       ...taskBadge(p.task, names, today, model.date),
+      ...taskPriority(p.task, names),
       ...(edge ? { resize: 'end' as const } : {}),
       // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
       // a class imported from the PDF of „zjazdy” – D357, nor the second shift – D192), not passed.
@@ -124,6 +127,12 @@ function taskBadge(task: string | null | undefined, names: Names, today: string 
   const r = names.requests.find((x) => x.id === task)
   const b = r ? dueBadge(r, today) : null
   return b ? { badge: b } : {}
+}
+
+/** The priority of the task of a block (D450), as long as the task is not done – on any day the block stands on. */
+function taskPriority(task: string | null | undefined, names: Names): { priority?: Priority } {
+  const r = task ? names.requests.find((x) => x.id === task) : undefined
+  return r?.priority && !isDone(r) ? { priority: r.priority } : {}
 }
 
 /** The day's numbers in words (the plan's summary). */

@@ -34,10 +34,11 @@ import { logEvents, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
 import { moveCase, planMorning, useCases, type MorningResult } from '../../store/cases'
-import { caseTitle, isMorningChosen, morningChosen, morningDeadlines } from '../cases/casesLogic'
+import { caseTitle, isMorningChosen, morningChosen, morningDeadlines, morningPriorityLine } from '../cases/casesLogic'
+import { rememberCasesView } from '../cases/casesView'
 import { queueRowText } from '../cases/casesUi'
 import { DueMark } from '../cases/DueMark'
-import { toast, useUi } from '../../store/ui'
+import { navigate, toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { answerSeries } from '../series/seriesActions'
 import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, skipDeadline, variantStarts } from './dayActions'
@@ -212,6 +213,8 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
   // D409: the card „Terminy” – the sprawy past their date and due within the threshold (`general.deadlineDays`) that have no block today;
   // „Na Dziś” moves one to the list „Dziś” (then the step above offers it), „Pomiń” leaves it out to the day's end (the day's `asked`).
   const deadlines = useMemo(() => morningDeadlines(caseItems, requestsOn, model.ctx.plan, caseToday, rd.general.deadlineDays, model.dayFile?.asked ?? NO_ASKED), [caseItems, requestsOn, model.ctx.plan, caseToday, rd.general.deadlineDays, model.dayFile])
+  // D450: one line of the sprawy „Ważne i pilne” of „Dziś” and „W tym tygodniu” that have no place in today's plan; nothing blocks.
+  const priorityLine = useMemo(() => morningPriorityLine(caseItems, requestsOn, model.ctx.plan, caseToday), [caseItems, requestsOn, model.ctx.plan, caseToday])
   const [toggled, setToggled] = useState<string[]>([])
   // What the last „Dodaj do planu” left out or did not do (`morningOutcome`); gone with the next change of the choice.
   const [note, setNote] = useState<string | null>(null)
@@ -350,6 +353,17 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
               </div>
             )
           })}
+        </div>
+      )}
+      {priorityLine && (
+        <div className="flex flex-wrap items-center gap-2 rounded border border-line px-3 py-2" data-testid="priority-line">
+          <span className="flex-1" data-testid="priority-line-text">
+            {priorityLine}
+          </span>
+          {/* The matrix puts them all under „Ważne i pilne”, whichever list they stand on – the page opens on it. */}
+          <button type="button" className="btn" onClick={() => (rememberCasesView('matrix'), navigate('requests'))} data-testid="priority-line-open">
+            Pokaż w „Sprawach”
+          </button>
         </div>
       )}
       {(queued.length > 0 || dayTasks.length > 0) && (

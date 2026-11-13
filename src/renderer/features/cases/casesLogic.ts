@@ -4,11 +4,12 @@
  * that says where a sprawa stands („zaplanowane …”, „wróciło z Dziś …”, „porzucone”), and the texts that name a sprawa (a task by its title, a request by its person).
  */
 import { deadlineCases, doText, type DueBadge } from '@shared/engine/caseDates'
+import { priorityLine, priorityWithoutPlace } from '@shared/engine/casePriority'
 import { caseCompare, caseName, todayHeader, todayMinutes, weekEndOf, type CaseItem } from '@shared/engine/cases'
 import { countLabel, logicalClock, plDate } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
 import { personName, type RdFile } from '@shared/model/rd'
-import { CASE_LISTS, CASE_LIST_NAMES, type CaseList, type RequestRecord } from '@shared/model/requests'
+import { CASE_LISTS, CASE_LIST_NAMES, NO_PRIORITY_NAME, PRIORITIES, PRIORITY_NAMES, type CaseList, type Priority, type RequestRecord } from '@shared/model/requests'
 import { addDays } from '@shared/time/zone'
 
 /** One list of the page: its title (with the sum of „Dziś”), its items in order, how many older ones „Zrobione” keeps back. */
@@ -97,6 +98,17 @@ export const presetDate = (id: DatePreset, today: string): string => (id === 'to
 
 /** What stands under the field „Wykonać” (D454): a date that has gone by does not change the list – said, never refused (D72). */
 export const doDateNote = (doDate: string | null, today: string): string | null => (doDate != null && doDate < today ? 'Ta data już minęła' : null)
+
+/**
+ * The morning plan's line of the sprawy „Ważne i pilne” without a place in today's plan (D450, `priorityWithoutPlace`; the module of
+ * requests off – the tasks' alone, as the page has it – T763). Null – no line.
+ */
+export const morningPriorityLine = (items: readonly CaseItem[], requestsOn: boolean, blocks: readonly Pick<PlanBlock, 'task' | 'requests'>[], today: string): string | null =>
+  priorityLine(priorityWithoutPlace(items.filter((x) => requestsOn || x.record.kind === 'task'), blocks, today).length)
+
+/** The choice of a sprawa's priority in its row (D450): „Bez priorytetu” (the default) and the four quarters. */
+export type PriorityChoice = Priority | 'none'
+export const PRIORITY_CHOICES: Array<{ value: PriorityChoice; label: string }> = [{ value: 'none', label: NO_PRIORITY_NAME }, ...PRIORITIES.map((p) => ({ value: p, label: PRIORITY_NAMES[p].name }))]
 
 /** How a due date's badge is drawn: past it red („over”), the rest muted („soon”) – D409. */
 export const dueTone = (b: Pick<DueBadge, 'kind'>): 'over' | 'soon' => (b.kind === 'over' ? 'over' : 'soon')

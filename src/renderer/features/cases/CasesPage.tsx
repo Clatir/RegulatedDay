@@ -5,6 +5,8 @@
  * Kiedyś / Może · Zrobione (the last 7 days, „Pokaż starsze”). A sprawa moves between the lists, is edited in place, removed
  * with „Cofnij”, put on the axis of a day with „Zaplanuj” (it stays on its list as „zaplanowane <dzień> <godzina>”); the
  * ones that came back from „Dziś” at 04:00 say so. Ctrl+N adds a task. The counters and the people are the requests' as before.
+ * HKU3 (D450): the switch „Listy · Macierz” on top (remembered by the window – `casesView.ts`), the quarter of a sprawa chosen in its row
+ * (its stripe on the left), the matrix of Eisenhower (`CasesMatrix`) in place of the lists.
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { RequestCounters } from '@shared/api'
@@ -12,7 +14,7 @@ import { dueBadge } from '@shared/engine/caseDates'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
 import { durationLabel } from '@shared/format'
 import { personName } from '@shared/model/rd'
-import { CASE_LIST_NAMES, CASE_LISTS, ESTIMATE_RANGE, TITLE_MAX, CASE_NOTE_MAX, DEFAULT_ESTIMATE_MIN, DEFAULT_TASK_CATEGORY, type CaseList } from '@shared/model/requests'
+import { CASE_LIST_NAMES, CASE_LISTS, ESTIMATE_RANGE, priorityFrom, TITLE_MAX, CASE_NOTE_MAX, DEFAULT_ESTIMATE_MIN, DEFAULT_TASK_CATEGORY, type CaseList } from '@shared/model/requests'
 import { settingsOn } from '@shared/model/settings'
 import { parseQuickDates } from '@shared/quickDates'
 import { logicalDayOf, logicalMinuteOf } from '@shared/time/day'
@@ -27,8 +29,11 @@ import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
 import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 import { categoryOptions } from '../plan/blockView'
-import { caseTitle, DATE_PRESETS, doDateNote, filterOf, presetDate, sectionsOf, statusParts } from './casesLogic'
+import { caseTitle, DATE_PRESETS, doDateNote, filterOf, PRIORITY_CHOICES, presetDate, sectionsOf, statusParts, type PriorityChoice } from './casesLogic'
+import { CasesMatrix } from './CasesMatrix'
+import { readCasesView, rememberCasesView, type CasesView } from './casesView'
 import { DueMark } from './DueMark'
+import { PriorityMark } from './PriorityMark'
 import { nextFreeStart, submitTitle } from './casesUi'
 import { planOnAxis } from './planOnAxis'
 
@@ -41,6 +46,8 @@ export function CasesPage() {
   const [filters, setFilters] = useFilters('cases')
   const keep = filterOf(filters)
   const [showOlder, setShowOlder] = useState(false)
+  const [view, setViewNow] = useState<CasesView>(readCasesView)
+  const setView = (v: CasesView) => (rememberCasesView(v), setViewNow(v))
   const [chosen, setChosen] = useState<string | null>(null)
   const [bring, setBring] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
@@ -61,6 +68,8 @@ export function CasesPage() {
     const p = takeFoundPick((x) => x.kind === 'request', (x) => all.some((r) => r.record.id === x.id), 'Tej sprawy nie ma już.')
     const x = p ? all.find((r) => r.record.id === p.id) : undefined
     if (!x) return
+    // The row is edited in place: the lists, not the matrix.
+    if (view !== 'lists') setView('lists')
     if (!keep(x)) setFilters([])
     if (x.list === 'done' && !x.recent) setShowOlder(true)
     setChosen(x.record.id)
@@ -89,6 +98,7 @@ export function CasesPage() {
   ].filter((o) => o.count > 0 || filters.includes(o.id))
   return (
     <div className="flex flex-col gap-4 p-4" data-testid="requests">
+      <ViewSwitch view={view} onChange={setView} />
       {requestsOn && <Counters />}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="btn btn-accent" onClick={() => setAdding(true)} data-testid="case-new">
@@ -102,9 +112,11 @@ export function CasesPage() {
         <span className="text-[12px] text-muted">Ctrl N – nowe zadanie · „!jutro” na końcu tytułu ustawia termin, „@pt” – datę wykonania</span>
       </div>
       {adding && <NewTask onClose={() => setAdding(false)} />}
-      <FilterBar listKey="cases" options={options} shown={shown} total={all.length} />
+      {view === 'lists' && <FilterBar listKey="cases" options={options} shown={shown} total={all.length} />}
       {all.length === 0 && !adding && <EmptyState why="Nic tu jeszcze nie ma. Zadanie „na kiedyś” wpiszesz tutaj albo skrótem Win+Alt+N z dowolnego miejsca – ląduje w Skrzynce, a rano wybierzesz je w planie." action={{ label: '+ Zadanie', run: () => setAdding(true) }} />}
+      {all.length > 0 && view === 'matrix' && <CasesMatrix items={all} today={today} />}
       {all.length > 0 &&
+        view === 'lists' &&
         sections.map((s) => (
           <section key={s.list} className="flex flex-col gap-1.5" data-testid={`cases-${s.list}`}>
             <h3 className="flex items-baseline gap-2 text-[13px] font-medium">
@@ -132,6 +144,22 @@ export function CasesPage() {
           <People />
         </Section>
       )}
+    </div>
+  )
+}
+
+/** „Listy · Macierz” (D450): two buttons, the one on shown pressed. */
+function ViewSwitch({ view, onChange }: { view: CasesView; onChange: (v: CasesView) => void }) {
+  return (
+    <div className="flex items-center gap-1.5" role="group" aria-label="Widok spraw" data-testid="cases-view">
+      {([
+        ['lists', 'Listy'],
+        ['matrix', 'Macierz']
+      ] as const).map(([id, label]) => (
+        <button key={id} type="button" className="chip" aria-pressed={view === id} onClick={() => onChange(id)} data-testid={`cases-view-${id}`}>
+          {label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -198,7 +226,8 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
   const badge = dueBadge(r, today)
   const done = x.list === 'done'
   return (
-    <div className={cx('flex flex-col gap-1 rounded border px-3 py-1.5', marked ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
+    <div className={cx('relative flex flex-col gap-1 rounded border px-3 py-1.5', marked ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
+      {!done && r.priority && <PriorityMark priority={r.priority} />}
       <div className="grid items-center gap-2" style={{ gridTemplateColumns: '220px 110px minmax(0,1fr) 150px' }}>
         {isTask ? (
           <TextField value={r.title} onCommit={(title) => set({ title })} required max={TITLE_MAX} placeholder="tytuł" aria-label="Tytuł" errorPlacement="float" data-testid="case-title" />
@@ -217,6 +246,7 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
         <Choice value={x.list} options={CASE_LISTS.map((l) => ({ value: l, label: CASE_LIST_NAMES[l] }))} onChange={(list: CaseList) => void moveCase(r.id, list)} className="h-[24px] text-[12px]" aria-label="Lista" data-testid="case-list" />
         {!done && (
           <>
+            <Choice value={(r.priority ?? 'none') as PriorityChoice} options={PRIORITY_CHOICES} onChange={(v: PriorityChoice) => set({ priority: priorityFrom(v) })} className="h-[24px] text-[12px]" aria-label="Priorytet" data-testid="case-priority-choice" />
             <button type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => void moveCase(r.id, 'done')} data-testid="case-done">
               Zrobione
             </button>

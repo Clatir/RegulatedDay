@@ -7,11 +7,13 @@
  * has run); the real Win+Alt+N – `quick-windows.spec.ts` (CI on Windows).
  * HKU2 (D409, D451): the due date set by a button of the row and its badge, the words „!jutro” of the new task (the line under the
  * field, saved without the word), the card „Terminy” of the morning plan with „Na Dziś” and „Pomiń”, the threshold in the settings.
+ * HKU3 (D450): the priority chosen in the row (its stripe, the order), the switch „Listy · Macierz” remembered by the window, the drop
+ * between the fields of the matrix, the stripe in the panel and on the tile of a block, the morning plan's line of the sprawy „Ważne i pilne”.
  */
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { plDate } from '../../src/shared/format'
 import { paths } from '../../src/shared/data/paths'
 import { dayFileFrom } from '../../src/shared/model/plan'
@@ -62,8 +64,8 @@ async function drag(page: Page, from: { x: number; y: number }, to: { x: number;
   await page.mouse.up()
 }
 
-const center = async (page: Page, testId: string) => {
-  const b = (await page.getByTestId(testId).first().boundingBox())!
+const center = async (page: Page, testId: string, within?: Locator) => {
+  const b = (await (within ?? page).getByTestId(testId).first().boundingBox())!
   return { x: b.x + Math.min(b.width / 2, 60), y: b.y + b.height / 2 }
 }
 
@@ -374,6 +376,165 @@ test('Ustawienia: sekcja „Sprawy” – próg terminu w planie porannym (domy�
       await page.getByTestId('nav-today').click()
       await page.getByTestId('nav-settings').click()
       await expect(page.getByTestId('setting-deadlineDays')).toHaveValue('5')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Sprawy: priorytet w wierszu – pasek z lewej i kolejność; przełącznik „Macierz”, przeciągnięcie z „Ważne” do „Ważne i pilne”, wybór pamiętany po zmianie strony', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-priority-'))
+  const { today } = seedAwake(dataDir, [])
+  putRecord(dataDir, newTask('t1', Date.now(), today, { title: 'Napisać raport' })!)
+  putRecord(dataDir, newTask('t2', Date.now() - 1, today, { title: 'Zapłacić czynsz', priority: 'p2' })!)
+  putRecord(dataDir, newTask('t3', Date.now() - 2, today, { title: 'Posprzątać biurko' })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await page.getByTestId('nav-requests').click()
+      const rows = page.getByTestId('cases-inbox-list').getByTestId('case-row')
+      await expect(rows).toHaveCount(3)
+      // D450: P2 first (set in the file), then the two without a priority as they were (the newest first); no stripe without one.
+      await expect(rows.nth(0).getByTestId('case-title')).toHaveValue('Zapłacić czynsz')
+      await expect(rows.nth(0).getByTestId('case-priority')).toHaveAttribute('data-priority', 'p2')
+      await expect(rows.nth(1).getByTestId('case-title')).toHaveValue('Napisać raport')
+      await expect(rows.nth(1).getByTestId('case-priority')).toHaveCount(0)
+      await expect(rows.nth(1).getByTestId('case-priority-choice')).toHaveValue('none')
+      // „Ważne i pilne” chosen in the row: the stripe, the record and the place in the list (above P2).
+      await rows.nth(1).getByTestId('case-priority-choice').selectOption('p1')
+      await expect.poll(() => records(dataDir).find((r) => r.id === 't1')!.priority).toBe('p1')
+      await expect(rows.nth(0).getByTestId('case-title')).toHaveValue('Napisać raport')
+      await expect(rows.nth(0).getByTestId('case-priority')).toHaveAttribute('aria-label', 'Ważne i pilne')
+      await expect(rows.nth(0).getByTestId('case-priority')).toHaveAttribute('data-priority', 'p1')
+      await expect(rows.nth(2).getByTestId('case-priority-choice')).toHaveValue('none')
+
+      // The switch „Listy · Macierz”: the matrix in place of the lists.
+      await expect(page.getByTestId('cases-view-lists')).toHaveAttribute('aria-pressed', 'true')
+      await page.getByTestId('cases-view-matrix').click()
+      await expect(page.getByTestId('cases-matrix')).toBeVisible()
+      await expect(page.getByTestId('cases-inbox-list')).toHaveCount(0)
+      const p1 = page.getByTestId('matrix-p1')
+      const p2 = page.getByTestId('matrix-p2')
+      await expect(p1.getByTestId('matrix-card')).toHaveCount(1)
+      await expect(p1).toContainText('Napisać raport')
+      await expect(p2).toContainText('Zapłacić czynsz')
+      await expect(page.getByTestId('matrix-none')).toContainText('Posprzątać biurko')
+      await expect(page.getByTestId('matrix-p3')).toContainText('Pusto.')
+      // The filter picks the list: nothing of „Dziś” yet; „wszystkie” brings them back.
+      await page.getByTestId('matrix-filter-today').click()
+      await expect(page.getByTestId('matrix-card')).toHaveCount(0)
+      await page.getByTestId('matrix-filter-all').click()
+      await expect(page.getByTestId('matrix-card')).toHaveCount(3)
+
+      // Dragged from „Ważne” to „Ważne i pilne”: one write, the card in its new field.
+      await drag(page, await center(page, 'matrix-card', p2), await center(page, 'matrix-p1'), async () => {
+        await expect(page.getByTestId('matrix-drag')).toContainText('Zapłacić czynsz')
+        await expect(p1).toHaveAttribute('data-over', 'true')
+      })
+      await expect.poll(() => records(dataDir).find((r) => r.id === 't2')!.priority).toBe('p1')
+      await expect(p1.getByTestId('matrix-card')).toHaveCount(2)
+      await expect(p2.getByTestId('matrix-card')).toHaveCount(0)
+      // Into „Bez priorytetu”: the priority is cleared.
+      await drag(page, await center(page, 'matrix-card', p1), await center(page, 'matrix-none'))
+      await expect.poll(() => records(dataDir).filter((r) => r.priority == null).length).toBe(2)
+      await expect(page.getByTestId('matrix-none').getByTestId('matrix-card')).toHaveCount(2)
+
+      // The choice is remembered by the window: away and back – still the matrix; „Listy” remembered too.
+      await page.getByTestId('nav-today').click()
+      await page.getByTestId('nav-requests').click()
+      await expect(page.getByTestId('cases-matrix')).toBeVisible()
+      await page.getByTestId('cases-view-lists').click()
+      await expect(page.getByTestId('cases-inbox-list')).toBeVisible()
+      await page.getByTestId('nav-today').click()
+      await page.getByTestId('nav-requests').click()
+      await expect(page.getByTestId('cases-inbox-list')).toBeVisible()
+      await expect(page.getByTestId('cases-matrix')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('priorytet: pasek przy sprawie w panelu przy osi „Dziś” i na kafelku jej bloku (kolor bloku dalej z kategorii)', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-priority-axis-'))
+  const { today } = seedAwake(dataDir, [])
+  putRecord(dataDir, newTask('t1', Date.now(), today, { title: 'Wymienić filtr', list: 'today', priority: 'p1' })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      const chip = page.getByTestId('cases-panel-today').getByTestId('case-chip')
+      await expect(chip.getByTestId('case-priority')).toHaveAttribute('data-priority', 'p1')
+      await expect(chip.getByTestId('case-priority')).toHaveAttribute('aria-label', 'Ważne i pilne')
+      await page.getByTestId('timeline-axis').evaluate((el) => el.scrollIntoView({ block: 'start' }))
+      const axis = (await page.getByTestId('timeline-axis').boundingBox())!
+      const lo = Number(await page.getByTestId('timeline-axis').getAttribute('data-lo'))
+      const ppm = Number(await page.getByTestId('timeline-axis').getAttribute('data-ppm'))
+      await drag(page, await center(page, 'case-chip'), { x: axis.x + axis.width / 3, y: axis.y + (10 * 60 - lo) * ppm + 1 })
+      await expect.poll(() => blocksOf(dataDir, today).length, { timeout: 15_000 }).toBe(1)
+      const tile = page.getByTestId(`block-${blocksOf(dataDir, today)[0]!.id}`)
+      await expect(tile.getByTestId('block-priority')).toHaveAttribute('data-priority', 'p1')
+      await expect(tile.getByTestId('block-priority')).toHaveAttribute('aria-label', 'Ważne i pilne')
+      // The colour of the tile stays the category's („Inne”): its edge is not the priority's.
+      const edge = await tile.evaluate((el) => getComputedStyle(el).borderLeftColor)
+      const stripe = await tile.getByTestId('block-priority').evaluate((el) => getComputedStyle(el).backgroundColor)
+      expect(edge).not.toBe(stripe)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('plan poranny: linia „N spraw ważnych i pilnych bez miejsca w planie” – tylko „Dziś” i „W tym tygodniu”, znika z blokiem dziś; „Pokaż w „Sprawach”” otwiera macierz', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-priority-morning-'))
+  const { today } = seedAwake(dataDir, [])
+  putRecord(dataDir, newTask('a', Date.now(), today, { title: 'Oddać wniosek', list: 'today', priority: 'p1' })!)
+  putRecord(dataDir, newTask('b', Date.now() - 1, today, { title: 'Zapłacić podatek', list: 'week', priority: 'p1' })!)
+  putRecord(dataDir, newTask('c', Date.now() - 2, today, { title: 'Kiedyś ważne', list: 'someday', priority: 'p1' })!)
+  putRecord(dataDir, newTask('d', Date.now() - 3, today, { title: 'Tylko ważne', list: 'today', priority: 'p2' })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('morning-plan')).toBeVisible({ timeout: 30_000 })
+      if (await page.getByTestId('side-b').isVisible()) await page.getByTestId('side-b-done').click()
+      await page.getByTestId('goals-skip').click()
+      await page.getByTestId('checkin-skip').click()
+      // „Dziś” and „W tym tygodniu” – not „Kiedyś / Może”, not the P2 one.
+      await expect(page.getByTestId('priority-line-text')).toHaveText('2 sprawy ważne i pilne bez miejsca w planie')
+      // The tasks of „Dziś” get their blocks (the step chose them at once): the one of the week is left without a place.
+      await page.getByTestId('queue-pick').getByTestId('queue-add').click()
+      await expect.poll(() => blocksOf(dataDir, today).map((b) => b.task).sort()).toEqual(['a', 'd'])
+      await expect(page.getByTestId('priority-line-text')).toHaveText('1 sprawa ważna i pilna bez miejsca w planie')
+      // The link: the page „Sprawy” on the matrix, the sprawa under „Ważne i pilne”.
+      await page.getByTestId('priority-line-open').click()
+      await expect(page.getByTestId('cases-matrix')).toBeVisible()
+      await expect(page.getByTestId('matrix-p1')).toContainText('Zapłacić podatek')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('plan poranny: bez spraw „Ważne i pilne” nie ma linii o priorytecie', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-priority-none-'))
+  const { today } = seedAwake(dataDir, [])
+  putRecord(dataDir, newTask('a', Date.now(), today, { title: 'Zwykłe zadanie', list: 'today' })!)
+  putRecord(dataDir, newTask('b', Date.now() - 1, today, { title: 'Tylko ważne', list: 'week', priority: 'p2' })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('morning-plan')).toBeVisible({ timeout: 30_000 })
+      if (await page.getByTestId('side-b').isVisible()) await page.getByTestId('side-b-done').click()
+      await page.getByTestId('goals-skip').click()
+      await page.getByTestId('checkin-skip').click()
+      await expect(page.getByTestId('queue-pick')).toContainText('Zwykłe zadanie')
+      await expect(page.getByTestId('priority-line')).toHaveCount(0)
     })
     expect(errors).toEqual([])
   } finally {

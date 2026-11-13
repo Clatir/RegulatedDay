@@ -13,6 +13,7 @@ import type { CaseItem } from '@shared/engine/cases'
 import { cx } from '../../components/ui'
 import { caseTitle, sectionsOf, statusParts } from './casesLogic'
 import { DueMark } from './DueMark'
+import { PriorityMark } from './PriorityMark'
 import type { CaseDragState } from './useCaseDrag'
 
 export function CasesPanel({ drag, grab, onPlan }: { drag: CaseDragState | null; grab: (id: string, e: React.PointerEvent) => void; onPlan: (item: CaseItem) => void }) {
@@ -29,7 +30,7 @@ export function CasesPanel({ drag, grab, onPlan }: { drag: CaseDragState | null;
     return (
       <li
         key={x.record.id}
-        className={cx('flex cursor-grab touch-none select-none flex-col gap-0.5 rounded border border-line bg-bg px-2 py-1.5', drag?.id === x.record.id && 'opacity-50')}
+        className={cx('relative flex cursor-grab touch-none select-none flex-col gap-0.5 rounded border border-line bg-bg px-2 py-1.5', drag?.id === x.record.id && 'opacity-50')}
         onPointerDown={(e) => {
           // Not a text selection of the row's words while it is dragged.
           if (e.button === 0 && !(e.target instanceof Element && e.target.closest('button, input, select, textarea, a'))) e.preventDefault()
@@ -38,6 +39,7 @@ export function CasesPanel({ drag, grab, onPlan }: { drag: CaseDragState | null;
         data-testid="case-chip"
         data-case={x.record.id}
       >
+        {x.record.priority && <PriorityMark priority={x.record.priority} />}
         <div className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-[12.5px]" title={title}>
             {title}

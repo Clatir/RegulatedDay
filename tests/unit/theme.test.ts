@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BRIGHTNESS_STEPS } from '@shared/machine'
-import { BLOCK_COLORS, contrast, contrastPairs, iconColor, PALETTE, SEASON_COLORS, themeVars, toneColor, TONES, HIDDEN_ICON } from '@shared/theme'
+import { BLOCK_COLORS, contrast, contrastPairs, iconColor, PALETTE, PRIORITY_COLORS, SEASON_COLORS, themeVars, toneColor, TONES, HIDDEN_ICON } from '@shared/theme'
 
 describe('kontrast (Wygląd i nazwy: co najmniej 4,5:1 przy każdej jasności)', () => {
   for (const step of BRIGHTNESS_STEPS) {
@@ -23,6 +23,17 @@ describe('kontrast (Wygląd i nazwy: co najmniej 4,5:1 przy każdej jasności)',
 
   it('okładki kaset (D322) to kolory bloków – napis na nich ma sprawdzony kontrast', () => {
     for (const c of Object.values(SEASON_COLORS)) expect(BLOCK_COLORS).toContain(c)
+  })
+})
+
+describe('paski priorytetu (D450)', () => {
+  it('cztery różne kolory z palety motywu; pasek (grafika) odcina się od karty i tła okna co najmniej 3:1 przy każdej jasności', () => {
+    expect(new Set(Object.values(PRIORITY_COLORS)).size).toBe(4)
+    for (const step of BRIGHTNESS_STEPS) {
+      const v = themeVars(step)
+      for (const [p, color] of Object.entries(PRIORITY_COLORS))
+        for (const bg of [v['--color-panel']!, v['--color-bg']!, v['--color-raised']!]) expect(contrast(color, bg), `${p} na ${bg} przy ${step}`).toBeGreaterThanOrEqual(3)
+    }
   })
 })
 

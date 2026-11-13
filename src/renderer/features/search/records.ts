@@ -12,7 +12,7 @@ import { compareAllDay, rangeText, type AllDayEvent } from '@shared/model/allDay
 import { FIELD_GROUP_NAMES } from '@shared/model/fields'
 import { templateVersionOn, type Template } from '@shared/model/plan'
 import { personName, type RdFile } from '@shared/model/rd'
-import { CASE_LIST_NAMES, CASE_LISTS, type RequestRecord } from '@shared/model/requests'
+import { CASE_LIST_NAMES, CASE_LISTS, PRIORITY_NAMES, type RequestRecord } from '@shared/model/requests'
 import { isDone, listOf } from '@shared/engine/cases'
 import { shortDay } from '@shared/quickDates'
 import type { Routine } from '@shared/model/routines'
@@ -111,7 +111,9 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
     const title = r.kind === 'task' ? r.title || 'zadanie' : personName(i.rd, r.person)
     // Its due date (D409), as long as it is not done – the badge's rule.
     const due = r.dueDate && !isDone(r) ? ` · termin ${shortDay(r.dueDate, i.today)}` : ''
-    out.push({ kind: 'request', id: r.id, title, text: r.note, hint: `${r.kind === 'task' ? 'zadanie' : 'prośba'} · ${CASE_LIST_NAMES[list]}${r.state === 'dropped' ? ' · porzucone' : ''}${due}` })
+    // Its priority (D450) as long as it is not done, in lower case: „· ważne i pilne”.
+    const priority = r.priority && !isDone(r) ? ` · ${PRIORITY_NAMES[r.priority].name.toLowerCase()}` : ''
+    out.push({ kind: 'request', id: r.id, title, text: r.note, hint: `${r.kind === 'task' ? 'zadanie' : 'prośba'} · ${CASE_LIST_NAMES[list]}${r.state === 'dropped' ? ' · porzucone' : ''}${due}${priority}` })
   }
   for (const r of [...i.routines].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
     out.push({ kind: 'routine', id: r.id, title: r.name, text: [...r.normal, ...r.worse].map((s) => s.name).filter(Boolean).join(' · '), ...(r.archived ? { hint: 'w archiwum' } : {}) })
