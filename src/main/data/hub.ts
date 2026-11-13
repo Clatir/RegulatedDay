@@ -394,16 +394,25 @@ export class DataHub {
     await Promise.race([drops, new Promise((r) => setTimeout(r, CLOSE_DROP_MS).unref?.())])
   }
 
-  /** The window reads again only when what it would read changed (every check of the folder calls this). */
-  changed(): void {
-    void this.signature()
+  /**
+   * The window reads again only when what it would read changed (every check of the folder calls this). The signatures are
+   * counted one after another (T934): an older one finishing after a newer one never stands as the last – the window would
+   * be told twice. Done once this one is counted (tests wait for it).
+   */
+  changed(): Promise<void> {
+    const run = this.signing
+      .then(() => this.signature())
       .then((sig) => {
         if (sig === this.lastSignature) return
         this.lastSignature = sig
         this.o.onChange()
       })
       .catch(() => this.o.onChange())
+    this.signing = run
+    return run
   }
+
+  private signing: Promise<void> = Promise.resolve()
 
   private async signature(): Promise<string> {
     const f = this.service?.folder

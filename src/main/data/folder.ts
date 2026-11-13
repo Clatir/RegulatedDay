@@ -2592,12 +2592,12 @@ export class DataFolder {
 
   /**
    * Your own changes not yet in the folder (spec „N zmian zapisze się po powrocie folderu”, A3-07): your events not in its
-   * logs (no bookkeeping of the app's own – A3-07 review) and the queue's edits waiting for the folder – none of a file with
-   * a question (its edits wait for your answer, not for the folder).
+   * logs (no bookkeeping of the app's own – A3-07 review) and the queue's edits waiting for the folder – none that waits for
+   * your answer (`answerBound`: a question, one behind it for its file, one that goes with these – T927).
    */
   get unsynced(): number {
-    const asked = new Set(this.queue.questions().map((q) => q.edit.rel))
-    return this.log.pendingEvents + this.queue.pending.filter((e) => !asked.has(e.rel)).length
+    const asked = this.queue.answerBound()
+    return this.log.pendingEvents + this.queue.pending.filter((e) => !asked.has(e.id)).length
   }
 
   /**
@@ -2605,8 +2605,8 @@ export class DataFolder {
    * held by OneDrive or an antivirus, a share failing) is said too – nothing pretends to be saved.
    */
   get unsyncedSince(): number | null {
-    const asked = new Set(this.queue.questions().map((q) => q.edit.rel))
-    const times = [this.log.pendingSince, ...this.queue.pending.filter((e) => !asked.has(e.rel)).map((e) => e.at)].filter((x): x is number => x != null)
+    const asked = this.queue.answerBound()
+    const times = [this.log.pendingSince, ...this.queue.pending.filter((e) => !asked.has(e.id)).map((e) => e.at)].filter((x): x is number => x != null)
     return times.length ? Math.min(...times) : null
   }
 

@@ -58,6 +58,15 @@ export type Outcome =
   | { id: string; status: 'broken' }
   | { id: string; status: 'waiting'; why: string }
 
+/** An entry as read from the queue's file: `after` only as a list of ids (anything else would stop every run – T929). */
+function withAfterRead(e: QueuedEdit): QueuedEdit {
+  const raw = (e as { after?: unknown }).after
+  if (raw === undefined) return e
+  const after = Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []
+  const { after: _a, ...rest } = e
+  return after.length ? { ...rest, after } : rest
+}
+
 interface QueueFile {
   format: number
   entries: QueuedEdit[]
@@ -98,13 +107,15 @@ export class EditQueue {
     }
     const waiting = this.unread ? this.entries : []
     this.unread = false
+    this.bound = null
     try {
       const raw = JSON.parse(text) as Partial<QueueFile> & Record<string, unknown>
       const { format: _f, entries, ...extra } = raw
       this.extra = extra
-      const read = Array.isArray(entries) ? entries.filter((e) => e && typeof e.id === 'string' && typeof e.rel === 'string' && Array.isArray(e.edits)) : []
+      const read = (Array.isArray(entries) ? entries.filter((e) => e && typeof e.id === 'string' && typeof e.rel === 'string' && Array.isArray(e.edits)) : []).map(withAfterRead)
       const ids = new Set(read.map((e) => e.id))
       this.entries = [...read, ...waiting.filter((e) => !ids.has(e.id))]
+      this.bound = null
     } catch {
       // A broken queue is set aside for a look; a rename that fails leaves it where it is (and nothing is written over).
       try {
@@ -148,16 +159,41 @@ export class EditQueue {
   add(...edits: QueuedEdit[]): void {
     this.persist([...this.entries, ...edits])
     this.entries.push(...edits)
+    this.bound = null
+  }
+
+  /** `answerBound` counted once per change of the entries or their outcomes. */
+  private bound: Set<string> | null = null
+
+  /**
+   * The entries that wait for your answer to a question, not for the folder (T927): the questions, the entries behind one
+   * for the same file, and those that go with one of these (`after`) – in their order, so a chain is followed through.
+   */
+  answerBound(): ReadonlySet<string> {
+    if (this.bound) return this.bound
+    const asked = new Set(this.questions().map((q) => q.edit.id))
+    const out = new Set<string>()
+    const rels = new Set<string>()
+    for (const e of this.entries) {
+      if (!asked.has(e.id) && !rels.has(e.rel) && !e.after?.some((a) => out.has(a))) continue
+      out.add(e.id)
+      rels.add(e.rel)
+    }
+    this.bound = out
+    return out
   }
 
   /**
    * A record as this computer sees it: `value` (the file now; undefined = no file) with the queued edits of `rel` laid
-   * over it in order – your change shows at once, also while the folder is away.
+   * over it in order – your change shows at once, also while the folder is away. An entry that goes with one waiting for
+   * your answer is not laid (T928): „theirs” would take it out – till then the record is as the folder has it.
    */
   overlay(rel: string, value: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
     let v: unknown = value
+    const bound = this.entries.some((e) => e.rel === rel && e.after) ? this.answerBound() : null
     for (const e of this.entries) {
       if (e.rel !== rel) continue
+      if (bound && e.after?.some((a) => bound.has(a))) continue
       if (e.remove) {
         v = undefined
         continue
@@ -225,7 +261,10 @@ export class EditQueue {
         const waiting: Outcome = { id: edit.id, status: 'waiting', why: behind ? BEHIND_QUESTION : AFTER_OWNER }
         out.push(waiting)
         this.outcomes.set(edit.id, waiting)
+        this.bound = null
         keep.push(edit)
+        // A later edit of its file goes after it, as after any entry not laid (T926).
+        blocked.add(edit.rel)
         continue
       }
       const outcome = await this.applyOne(records, edit)
@@ -235,6 +274,7 @@ export class EditQueue {
         pending.delete(edit.id)
       } else {
         this.outcomes.set(edit.id, outcome)
+        this.bound = null
         keep.push(edit)
         // A later edit of the file was made on top of this one (its bases are this one's values): it goes after it.
         blocked.add(edit.rel)
@@ -247,6 +287,7 @@ export class EditQueue {
       this.entries = [...keep, ...this.entries.filter((e) => !seen.has(e.id))]
       this.persist()
     }
+    this.bound = null
     return out
   }
 
@@ -304,6 +345,7 @@ export class EditQueue {
       e.create = true
     } else return false
     this.outcomes.delete(id)
+    this.bound = null
     this.persist()
     return true
   }

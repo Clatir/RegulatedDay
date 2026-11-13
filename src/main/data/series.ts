@@ -183,7 +183,7 @@ async function today(io: SeriesIo, b: Base, t: Touched, root: string, next: read
  * those begun today that stayed.
  */
 interface Dropped {
-  dropped: Map<string, string>
+  dropped: Map<string, Set<string>>
   kept: Set<string>
 }
 
@@ -233,7 +233,8 @@ async function dropChanged(io: SeriesIo, b: Base, t: Touched, s: Series, from: s
         continue
       }
       next = takeBlock(next, x.id)
-      out.dropped.set(x.id, rel)
+      // One id may leave two files (its entry on its own day and a copy moved to another, T932).
+      out.dropped.set(x.id, new Set([...(out.dropped.get(x.id) ?? []), rel]))
     }
     if (next !== raw) t.set(rel, next)
   }
@@ -510,6 +511,22 @@ async function removeAttachmentsWhere(io: SeriesIo, b: Base, t: Touched, takes: 
 }
 
 /**
+ * The change took the block `id` out of the day's plan in this file (T933): in the file as it leaves it, the block is
+ * cancelled, marked cancelled by its series (`seriesOff`) or its entry is gone – one rewritten (changed fields) stays.
+ */
+function takenFrom(f: { before: RawRecord | null; after: RawRecord | null } | undefined, date: string, id: string): boolean {
+  if (!f || !f.after) return false
+  const read = (raw: RawRecord | null) => (raw ? dayFileFrom(raw, date) : null)
+  const [was, now] = [read(f.before), read(f.after)]
+  const off = f.after[SERIES_OFF]
+  const offNow = isRaw(off) && !!off[id]
+  const offBefore = !!f.before && isRaw(f.before[SERIES_OFF]) && !!(f.before[SERIES_OFF] as Raw)[id]
+  if (now!.cancelled.includes(id) && !was?.cancelled.includes(id)) return true
+  if (offNow && !offBefore) return true
+  return !!was?.blocks.some((x) => x.id === id) && !now!.blocks.some((x) => x.id === id)
+}
+
+/**
  * The attachments a removal or an end of a series takes with it (D415, D421; T842, T849, T920, T924): the days' own of
  * the occurrences this change takes out of the days' files – changed on their days (`dropped`; of an older part only its
  * days) and today's when the change takes it out of today's plan (one changed on its day, begun or moved stays, and its
@@ -524,8 +541,7 @@ async function removeSeriesAttachments(io: SeriesIo, b: Base, t: Touched, s: Ser
   const series = paths.record('series', s.id)
   const todayRel = paths.day(b.today)
   const todayId = seriesBlockId(b.today, root)
-  const day = t.change(todayRel)
-  const todayTaken = from <= b.today && !!day && touchedBlocks({ rel: todayRel, kind: 'day', date: b.today, ...day }).has(todayId)
+  const todayTaken = from <= b.today && takenFrom(t.change(todayRel), b.today, todayId)
   const shared = b.inp.series.some((p) => p.series.root === root && p.series.id !== s.id && !p.series.archived && (p.last == null || p.last >= b.today))
   await removeAttachmentsWhere(
     io,
@@ -535,8 +551,8 @@ async function removeSeriesAttachments(io: SeriesIo, b: Base, t: Touched, s: Ser
       const o = a.owner
       if (o.scope === 'series') return removal && !shared && o.root === root ? [series] : null
       if (o.scope !== 'day' || gone.kept.has(o.blockId)) return null
-      const file = gone.dropped.get(o.blockId)
-      if (file) return [series, file]
+      const files = gone.dropped.get(o.blockId)
+      if (files) return [series, ...files]
       if (o.blockId === todayId) return todayTaken ? [series, todayRel] : null
       return removal && inPart(o.date) && o.blockId === seriesBlockId(o.date, root) ? [series] : null
     },

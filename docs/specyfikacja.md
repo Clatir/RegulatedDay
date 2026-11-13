@@ -668,8 +668,9 @@ Wszystko w aplikacji jest blokiem. Nie ma osobnej listy zadań, więc aplikacja 
   szablonu), „To i następne” i „Cała seria” zabierają załączniki tego bloku szablonu albo serii ze wszystkich dni, także
   minionych, i własne załączniki dni od daty usunięcia – do kosza na 30 dni, z „Cofnij” tej zmiany („Usuń z szablonu” –
   pasek „Usunięty z szablonu: <nazwa> · Cofnij”, D420); „Zakończ serię” zostawia załączniki serii i dni przed końcem, a
-  wystąpienia po końcu zmienione pojedynczo, które znikają z planu, oddają swoje do kosza; gdy listy załączników nie da się
-  odczytać, seria i tak się kończy, a te załączniki zostają (D415, D421, T841–T849, T920–T925).
+  wystąpienia po końcu zmienione pojedynczo, które znikają z planu, oddają swoje do kosza – tak samo dzisiejsze niezaczęte
+  wystąpienie, które zdejmuje z dzisiejszego planu; gdy listy załączników nie da się odczytać, seria i tak się kończy, a te
+  załączniki zostają (D415, D421, D423, T841–T849, T920–T934).
 - Bloki stałe to sesje, druga zmiana, wykłady, zajęcia i jednorazowe terminy; nie przesuwa się ich początek. Elastyczne zachowują kolejność i przesuwa je rzeczywisty koniec poprzednika, nigdy jednak na godzinę wcześniejszą niż ich planowany początek. Gdy elastyczny trafi na stały, przeskakuje za niego, a aplikacja sprawdza warunek znacznika wariantów.
 - Blok stały zaplanowany na pierwszym planie zaczyna się sam o czasie z planu na pierwszym planie (widoczne w liście
   „zrobione automatycznie”), także gdy biegnie inny blok. Wyjątkiem są sesja (kategoria „Sesja tradingowa”, także druga

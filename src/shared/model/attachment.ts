@@ -8,7 +8,7 @@
  */
 import type { EditEntry, RawRecord } from '../api'
 import { recordEdit } from '../data/merge'
-import { paths } from '../data/paths'
+import { classify, paths } from '../data/paths'
 import { isIsoDate } from '../time/zone'
 import { templateBlockId } from '../engine/createDay'
 import { derivedId, isId } from './ids'
@@ -235,6 +235,12 @@ export function removalEdits(raws: readonly RawRecord[], ids: readonly string[],
   return out
 }
 
+/** What „Cofnij” of the removals `entries` (made at `at`, `removalEdits`) needs – their ids by their files; null – none. */
+export function attachmentUndoOf(entries: readonly EditEntry[], at: number): AttachmentUndo | null {
+  const ids = entries.map((e) => classify(e.rel)?.id).filter((id): id is string => !!id)
+  return ids.length ? { ids, removedAt: at } : null
+}
+
 /** „Cofnij” of a removal: the attachments still removed at that very instant (`AttachmentUndo`) brought back. */
 export function restoreEdits(raws: readonly RawRecord[], undo: AttachmentUndo): EditEntry[] {
   const out: EditEntry[] = []
@@ -269,7 +275,7 @@ export function templateRemovalIds(list: readonly Attachment[], templateId: stri
   const blocks = new Set<string>()
   for (const v of before?.versions ?? []) for (const b of v.blocks) if (!after || daysOf(before, b.id) !== daysOf(after, b.id)) blocks.add(b.id)
   if (!after) for (const a of list) if (a.owner.scope === 'template' && a.owner.templateId === templateId) blocks.add(a.owner.blockId)
-  const goes =(blockId: string, date: string | null): boolean => {
+  const goes = (blockId: string, date: string | null): boolean => {
     if (!after) return true
     if (!before) return false
     return date == null ? templateBlockAlive(before, blockId, tomorrow) && !templateBlockAlive(after, blockId, tomorrow) : templateBlockOn(before, blockId, date) && !templateBlockOn(after, blockId, date)
