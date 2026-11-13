@@ -65,42 +65,28 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 ## Ciąg L – stan (D380)
 Numery: D404, T700–T719 (L1), T750–T799 (L2, L3 – uzgodnione z sesją HKU1 12.11); kolejne D – osobno od HKU1 (ma D405, D406). „Przed etapem” pominięte na
 polecenie użytkownika (pytania zadane w D380–D386, D401–D403).
-**Dalej (13.11):** L3 po przeglądzie K (D380 zostaje). L2 wydane (1.14.0); SNT5 (podzadania) gotowe na gałęzi – pytania „Przed etapem”: D440;
-D441 (noc 12/13.11): nowe zachowanie „do potwierdzenia” (D442, D443) – rano lista do zatwierdzenia albo cofnięcia.
+**Dalej (13.11):** L3 po przeglądzie K (D380 zostaje). L2 wydane (1.14.0), SNT5 wydane (1.16.0); D442–D444 (noc 12/13.11, D441) potwierdzone 13.11.
 Numery: D440–D449, T786–T799 (T772–T779 – ostatnie poprawki L2). SNT4 = sesja regulatedday-ab (D410–D439, T800–T849), HKU = regulatedday-d7 (D450–D459, T850–T899).
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
 | L1 OPS1 serie powtarzalne | 1.12.0 | #77 | scalone 12.11, wydanie 1.12.0 opublikowane 12.11; wpis i uwagi – `docs/archiwum/postep-ciag-L.md` | ok. 5 h (5–8 h) |
 | L2 OPS2 „Sprawy” | 1.14.0 | #79 | scalone 12.11, wydanie 1.14.0 opublikowane 13.11 (run na `main` padł raz na chwiejnym teście wydajności `note-markdown`, ponowiony); wpis i uwagi – `docs/archiwum/postep-ciag-L.md` | ok. 4 h (wykonawcy; plan 8–12 h) |
-| SNT5 podzadania (kroki) | 1.16.0 | – | gałąź `claude/snt5-kroki` (HEAD – ostatni commit gałęzi); PR po wydaniu SNT4 (1.15.0): `git merge origin/main`, konflikty `package.json`, `CHANGELOG.md`, rejestr T; logika `wykonawca-opus`, ekrany `wykonawca-sonnet` | czas ok. 4 h (wykonawcy; plan 3–4,5 h) |
+| SNT5 podzadania (kroki) | 1.16.0 | #81 | scalone 13.11, wydanie 1.16.0 opublikowane 13.11; D442–D444 potwierdzone 13.11; wpis i uwagi – `docs/archiwum/postep-ciag-L.md` | ok. 4 h (wykonawcy; plan 3–4,5 h) |
 
-**SNT5 – wpis (13.11):** kroki bloku i zadania (D440; D442 i D443 **do potwierdzenia** według D441 – rano lista dla użytkownika):
-lista `{id, title, order}` w bloku dnia, szablonu, serii i zadaniu; odhaczenia dniowe w `stepsDone` pliku dnia i zadania, liść po
-liściu (T786–T792); linia kroku z ptaszkiem na pasku (T793); ekrany `renderer/features/steps/` w panelu bloku (Enter, przeciąganie,
-Alt+↑/↓, „Cofnij” tylko po usunięciu), „Szablonach”, serii i „Sprawach”, licznik na kafelku „Dziś” i „Tygodnia” (T795–T799). Przy
-okazji: okna nie dają się przenawigować plikiem lub linkiem (`windows/navigation.ts`, `keepOnPage`), test `note-markdown` – najlepszy z 5.
-Decyzje: D440, D442, D443, T786–T799. Przegląd xhigh w 4 rundach (poprawki z testami, dopiski w T786–T793). Testy: 2526 unit, 44 E2E lokalnie. Odbiór SNT5.1–SNT5.6 (SNT5.4–SNT5.6 – Tylko Ty).
-**Uwagi na później (SNT5, rundy zakończone po 5 przeglądach – przypadki brzegowe):** ptaszek z paska – wyścig odczyt→zapis
-z drugim komputerem może dać odhaczenie w zadaniu bez bloku (warunek w kolejce wycofany w rundzie 4 jako zły poziom);
-uszkodzony plik minionego dnia z `movedTo` na dziś – zmiana kroków zadania idzie sama; `folder.edit` odrzucony po zapisie
-rekordu (`persist` EPERM/ENOSPC) daje w oknie „nic nie zapisano” (`afterSend`) – możliwy duplikat; `taskDay` przez `caseDays`
-(log na każdy dzień drogi); reguła `check-code` „każde `BrowserWindow` ma `keepOnPage`”. **Rejestr T po scaleniu z SNT4:** obowiązuje
-podział T400–T499 (T840), nasz T400–T599 (T794) usunięty; T786–T793 i T795–T799 na końcu `docs/decyzje-techniczne.md`.
 
-## HKU1 – stan
-**Przed HKU1 (12.11):** wydarzenia całodniowe i wielodniowe (blok 4); pytania w trzech rundach 12.11 – D405. Sesja
-równoległa do ciągu J i ciągu L (numery D405+, T720+), drzewo `.claude/worktrees/whku1` od 1ac13ea (1.11.0), gałąź
-`claude/hku1-calodniowe`. Ryzyka: pas w „Tygodniu” w siatce z przyklejonymi nagłówkami kolumn, podpis na pasku
-pulpitu (przegląd xhigh), propozycja „Wolne” na dziś (reguły dzisiejszej zmiany typu dnia). Model: główna sesja
-Opus 5.5 · high; `wykonawca-opus` · xhigh – model, plik i silnik, `wykonawca-sonnet` – ekrany. Wersja – następna
-wolna przy scaleniu; scalenie tylko po uzgodnieniu z sesją ciągu L i po „1.11.0 wydane” od sesji ciągu J.
+## Blok 4 (HKU) – stan
+Wpis HKU1 i „Przed HKU1” – `docs/archiwum/postep-HKU.md`. Drzewo `.claude/worktrees/whku1`, paczka HKU2 + HKU3 na
+`claude/paczka-hku2-hku3` (D413: jeden PR, jedna wersja, jedno wydanie), od 6587e46 (L2, 1.14.0).
 
 | Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
 | --- | --- | --- | --- | --- |
-| HKU1 wydarzenia całodniowe | 1.13.0 | – | gałąź gotowa: części A–C, dwie rundy xhigh (15 + 13 uwag), merge L1 (1.12.0); PR po zielonym CI, scalenie po znaku sesji L; D405–D407, T720–T749 | ok. 7 h (2–3 h) – zakres D405 (pasek pulpitu, Ctrl K, miesiąc, plan poranny) i dwie rundy |
+| HKU1 wydarzenia całodniowe | 1.13.0 | #78 | wydane 12.11 22:05 (run 43291188216); D405–D407, T720–T749 | ok. 7 h (2–3 h) |
+| HKU2 termin i data wykonania | 1.17.0 (paczka) | – | gotowe 13.11: części A i B, dwie rundy high (8 + 9 uwag); T850–T869, T880; D409, D451–D455 | – (2–3 h) |
+| HKU3 priorytety i macierz | 1.17.0 (paczka) | – | gotowe 13.11: dwie rundy high; T870–T884; D450, D456 | – (2,5–3,5 h) |
 
-**HKU1 – wpis (12.11):** kolekcja `allday/<id>.json` (silnik dnia jej nie czyta), pas nad osią „Dziś” i siatką „Tygodnia” (belki `weekLanes`, 3 rzędy + „+N”, wolny rząd), karta z notatką Markdown, linie „Cofnij” 15 min w oknie, „Wolne” (porcje po 62 dni, dziś – okno zmiany typu), miesiąc, plan poranny, pasek pulpitu, Ctrl K; reguły `.claude/rules/allday.md`. Odbiór HKU1.1–HKU1.5. **Uwagi na później:** brak E2E okna „Wolne” dla dziś już utworzonego; opis ekranów wydarzeń w specyfikacji; `NONE` – trzecia stała w oknie (wspólna stała zamiast kopii).
+**Blok 4 bez pauz (12.11, zgoda użytkownika):** HKU2 i HKU3 bez „dalej”; w nocy 12/13.11 zachowanie widoczne rozstrzygam rekomendacją (D „do potwierdzenia”, lista niżej). Numery HKU: D405–D409, D450–D459, T720–T749, T850–T899. Kolejka do `main`: SNT5 1.16.0 → paczka HKU2 + HKU3 1.17.0 (`main` wcielony 13.11, 4e70878); przed scaleniem pytanie do sesji L (regulatedday-a8) i SNT4 (regulatedday-ab).
+**Potwierdzone 13.11 rano (D457):** D451–D455 bez zmian; D456 – filtr macierzy pamiętany po zmianie strony (w paczce 1.17.0).
 
 ## Blok 3 – paczka SNT (D416)
 **Przed etapem (13.11, 07:20):** koniec Bloku 3 – SNT4b → SNT1 → SNT2 bez pauz do „dalej” (D416), jedna paczka według

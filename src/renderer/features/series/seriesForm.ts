@@ -57,7 +57,6 @@ export const NTH_CHOICES: ReadonlyArray<{ value: string; label: string }> = [
 ]
 
 export const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'] as const
-export const WEEKDAY_SHORT = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'] as const
 
 /** What a new series starts as, from the day of its block: the rules' fields fall on that day, no end, asks on special days. */
 export function newDraft(date: string): SeriesDraft {

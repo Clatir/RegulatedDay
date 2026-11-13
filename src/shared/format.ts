@@ -51,6 +51,9 @@ export const plDate = (date: string): string => `${date.slice(8, 10)}.${date.sli
 /** The names of the weekdays, Monday first (the nominative, lower case). */
 export const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'] as const
 
+/** The short names of the weekdays, Monday first („pn”, „wt”, … – the settings' table, the badges of „Sprawy”). */
+export const WEEKDAY_SHORT = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'] as const
+
 /** 'RRRR-MM-DD' → „12.10.2030 · sobota” (the date with the day of the week). */
 export const plDateWithWeekday = (date: string): string => `${plDate(date)} · ${WEEKDAY_NAMES[weekday(date) - 1]}`
 

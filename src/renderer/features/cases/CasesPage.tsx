@@ -5,16 +5,20 @@
  * Kiedyś / Może · Zrobione (the last 7 days, „Pokaż starsze”). A sprawa moves between the lists, is edited in place, removed
  * with „Cofnij”, put on the axis of a day with „Zaplanuj” (it stays on its list as „zaplanowane <dzień> <godzina>”); the
  * ones that came back from „Dziś” at 04:00 say so. Ctrl+N adds a task. The counters and the people are the requests' as before.
+ * HKU3 (D450): the switch „Listy · Macierz” on top (remembered by the window – `casesView.ts`), the quarter of a sprawa chosen in its row
+ * (its stripe on the left), the matrix of Eisenhower (`CasesMatrix`) in place of the lists.
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { RequestCounters } from '@shared/api'
+import { dueBadge } from '@shared/engine/caseDates'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
 import { durationLabel } from '@shared/format'
 import { personName } from '@shared/model/rd'
 import { stepsCounter } from '@shared/model/steps'
-import { CASE_LIST_NAMES, CASE_LISTS, ESTIMATE_RANGE, TITLE_MAX, CASE_NOTE_MAX, DEFAULT_ESTIMATE_MIN, DEFAULT_TASK_CATEGORY, type CaseList } from '@shared/model/requests'
+import { CASE_LIST_NAMES, CASE_LISTS, ESTIMATE_RANGE, priorityFrom, TITLE_MAX, CASE_NOTE_MAX, DEFAULT_ESTIMATE_MIN, DEFAULT_TASK_CATEGORY, type CaseList } from '@shared/model/requests'
 import { settingsOn } from '@shared/model/settings'
-import { logicalMinuteOf } from '@shared/time/day'
+import { parseQuickDates } from '@shared/quickDates'
+import { logicalDayOf, logicalMinuteOf } from '@shared/time/day'
 import { FilterBar, useFilters } from '../../components/FilterBar'
 import { Choice, DateField, DurationField, TextField, TimeField } from '../../components/fields'
 import { EmptyState, Section, cx } from '../../components/ui'
@@ -27,7 +31,11 @@ import { useDay } from '../../store/day'
 import { changeTaskSteps, tickTaskStep } from '../../store/steps'
 import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 import { categoryOptions } from '../plan/blockView'
-import { caseTitle, filterOf, sectionsOf, statusParts } from './casesLogic'
+import { caseTitle, DATE_PRESETS, afterRequestAdded, doDateNote, filterOf, PRIORITY_CHOICES, presetDate, sectionsOf, statusParts, type PriorityChoice } from './casesLogic'
+import { CasesMatrix } from './CasesMatrix'
+import { readCasesView, rememberCasesView, type CasesView } from './casesView'
+import { DueMark } from './DueMark'
+import { PriorityMark } from './PriorityMark'
 import { nextFreeStart, submitTitle } from './casesUi'
 import { planOnAxis } from './planOnAxis'
 import { StepsEditor } from '../steps/StepsEditor'
@@ -42,12 +50,20 @@ export function CasesPage() {
   const [filters, setFilters] = useFilters('cases')
   const keep = filterOf(filters)
   const [showOlder, setShowOlder] = useState(false)
+  const [view, setViewNow] = useState<CasesView>(readCasesView)
+  const setView = (v: CasesView) => (rememberCasesView(v), setViewNow(v))
   const [chosen, setChosen] = useState<string | null>(null)
   const [bring, setBring] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const addRequest = async () => {
+    // The new request is edited in its row of the lists (its note field gets the focus), not in the matrix: the view switches only
+    // once it is written (a refused write leaves the view as it was), and the filters that would hide it are cleared (as Ctrl K does).
     const r = await createRequest({ person: null, estimateMin: DEFAULT_ESTIMATE_MIN, note: '' })
-    if (r.id) setBring(r.id)
+    const next = afterRequestAdded(r.id, filters)
+    if (!next) return
+    setView('lists')
+    if (next.clearFilters) setFilters([])
+    setBring(next.bring)
   }
   useNewShortcut(() => setAdding(true))
   // What the search (Ctrl K) left here: the command „Nowa prośba”, or a sprawa – its filters cleared when they hide it, „Zrobione”
@@ -62,6 +78,8 @@ export function CasesPage() {
     const p = takeFoundPick((x) => x.kind === 'request', (x) => all.some((r) => r.record.id === x.id), 'Tej sprawy nie ma już.')
     const x = p ? all.find((r) => r.record.id === p.id) : undefined
     if (!x) return
+    // The row is edited in place: the lists, not the matrix.
+    if (view !== 'lists') setView('lists')
     if (!keep(x)) setFilters([])
     if (x.list === 'done' && !x.recent) setShowOlder(true)
     setChosen(x.record.id)
@@ -69,12 +87,13 @@ export function CasesPage() {
   }, [pick, all])
   useEffect(() => {
     if (!bring) return
-    const row = document.querySelector(`[data-case="${bring}"]`)
+    // The row of the lists – the matrix's card carries `data-case` too, but is not edited in place.
+    const row = document.querySelector(`[data-testid="case-row"][data-case="${bring}"]`)
     if (!row) return
     setBring(null)
     row.scrollIntoView({ block: 'center' })
     row.querySelector<HTMLElement>('[data-testid="case-title"], [data-testid="request-note"]')?.focus()
-  }, [bring, filters, showOlder, all])
+  }, [bring, filters, showOlder, all, view])
 
   const sections = sectionsOf(all, { showOlder, keep })
   const shown = sections.reduce((n, s) => n + s.items.length, 0)
@@ -90,6 +109,7 @@ export function CasesPage() {
   ].filter((o) => o.count > 0 || filters.includes(o.id))
   return (
     <div className="flex flex-col gap-4 p-4" data-testid="requests">
+      <ViewSwitch view={view} onChange={setView} />
       {requestsOn && <Counters />}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="btn btn-accent" onClick={() => setAdding(true)} data-testid="case-new">
@@ -100,12 +120,14 @@ export function CasesPage() {
             + Prośba
           </button>
         )}
-        <span className="text-[12px] text-muted">Ctrl N – nowe zadanie</span>
+        <span className="text-[12px] text-muted">Ctrl N – nowe zadanie · „!jutro” na końcu tytułu ustawia termin, „@pt” – datę wykonania</span>
       </div>
       {adding && <NewTask onClose={() => setAdding(false)} />}
-      <FilterBar listKey="cases" options={options} shown={shown} total={all.length} />
+      {view === 'lists' && <FilterBar listKey="cases" options={options} shown={shown} total={all.length} />}
       {all.length === 0 && !adding && <EmptyState why="Nic tu jeszcze nie ma. Zadanie „na kiedyś” wpiszesz tutaj albo skrótem Win+Alt+N z dowolnego miejsca – ląduje w Skrzynce, a rano wybierzesz je w planie." action={{ label: '+ Zadanie', run: () => setAdding(true) }} />}
+      {all.length > 0 && view === 'matrix' && <CasesMatrix items={all} today={today} />}
       {all.length > 0 &&
+        view === 'lists' &&
         sections.map((s) => (
           <section key={s.list} className="flex flex-col gap-1.5" data-testid={`cases-${s.list}`}>
             <h3 className="flex items-baseline gap-2 text-[13px] font-medium">
@@ -137,38 +159,64 @@ export function CasesPage() {
   )
 }
 
+/** „Listy · Macierz” (D450): two buttons, the one on shown pressed. */
+function ViewSwitch({ view, onChange }: { view: CasesView; onChange: (v: CasesView) => void }) {
+  return (
+    <div className="flex items-center gap-1.5" role="group" aria-label="Widok spraw" data-testid="cases-view">
+      {([
+        ['lists', 'Listy'],
+        ['matrix', 'Macierz']
+      ] as const).map(([id, label]) => (
+        <button key={id} type="button" className="chip" aria-pressed={view === id} onClick={() => onChange(id)} data-testid={`cases-view-${id}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** A new task (D384): its title – Enter adds it to „Skrzynka” (30 min, „Inne”; the rest is edited in its row), Esc closes. */
 function NewTask({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('')
   const [busy, run] = useBusy()
+  // D409: the words of dates at the end of the title – what they set, said under the field before Enter.
+  const today = logicalDayOf(useNow(60_000))
+  const preview = parseQuickDates(title, today).preview
   // Once: the field is cleared at once and a second Enter (or „Dodaj”) while it saves does nothing; a save that did not happen gives the title back.
   const add = () => submitTitle(run, title, { set: setTitle, save: async (t) => caseAnswer(await createTask({ title: t })), done: onClose })
   return (
-    <div className="flex items-center gap-2" data-testid="case-add">
-      <input
-        autoFocus
-        className="input min-w-0 flex-1"
-        value={title}
-        readOnly={busy}
-        maxLength={TITLE_MAX}
-        placeholder="Tytuł zadania – Enter dodaje do Skrzynki"
-        aria-label="Tytuł zadania"
-        onChange={(e) => setTitle(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') void add()
-          if (e.key === 'Escape') {
-            e.stopPropagation()
-            onClose()
-          }
-        }}
-        data-testid="case-add-title"
-      />
-      <button type="button" className="btn btn-accent" disabled={busy || !title.trim()} onClick={() => void add()} data-testid="case-add-save">
-        Dodaj
-      </button>
-      <button type="button" className="btn" onClick={onClose}>
-        Anuluj
-      </button>
+    <div className="flex flex-col gap-1" data-testid="case-add">
+      <div className="flex items-center gap-2">
+        <input
+          autoFocus
+          className="input min-w-0 flex-1"
+          value={title}
+          readOnly={busy}
+          maxLength={TITLE_MAX}
+          placeholder="Tytuł zadania – Enter dodaje do Skrzynki"
+          aria-label="Tytuł zadania"
+          onChange={(e) => setTitle(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void add()
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              onClose()
+            }
+          }}
+          data-testid="case-add-title"
+        />
+        <button type="button" className="btn btn-accent" disabled={busy || !title.trim()} onClick={() => void add()} data-testid="case-add-save">
+          Dodaj
+        </button>
+        <button type="button" className="btn" onClick={onClose}>
+          Anuluj
+        </button>
+      </div>
+      {preview && (
+        <span className="text-[12px] text-muted" data-testid="case-add-preview">
+          {preview}
+        </span>
+      )}
     </div>
   )
 }
@@ -179,6 +227,7 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
   const isTask = r.kind === 'task'
   const names = useMemo(() => ({ rd, settings: settingsOn(rd.settings, today) }), [rd, today])
   const [planning, setPlanning] = useState(false)
+  const [dating, setDating] = useState(false)
   // D440: a task's steps open under its row (as the note of a request is read there); the counter stays in the row.
   const [stepsOpen, setStepsOpen] = useState(false)
   const counter = isTask ? stepsCounter(r.steps) : null
@@ -187,10 +236,12 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
     const res = await removeCase(r.id)
     if (res.saved) undoToast(isTask ? 'Zadanie usunięte' : 'Prośba usunięta', () => void undoCase(res.undo))
   }
-  const parts = statusParts(x)
+  const parts = statusParts(x, today)
+  const badge = dueBadge(r, today)
   const done = x.list === 'done'
   return (
-    <div className={cx('flex flex-col gap-1 rounded border px-3 py-1.5', marked ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
+    <div className={cx('relative flex flex-col gap-1 rounded border px-3 py-1.5', marked ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
+      {!done && r.priority && <PriorityMark priority={r.priority} />}
       <div className="grid items-center gap-2" style={{ gridTemplateColumns: '220px 110px minmax(0,1fr) 150px' }}>
         {isTask ? (
           <TextField value={r.title} onCommit={(title) => set({ title })} required max={TITLE_MAX} placeholder="tytuł" aria-label="Tytuł" errorPlacement="float" data-testid="case-title" />
@@ -202,6 +253,7 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
         {isTask ? <Choice value={r.categoryId ?? DEFAULT_TASK_CATEGORY} options={categoryOptions(names, r.categoryId ?? DEFAULT_TASK_CATEGORY)} onChange={(categoryId) => set({ categoryId })} aria-label="Kategoria" data-testid="case-category" /> : <span className="text-[12px] text-muted">prośba</span>}
       </div>
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
+        {badge && <DueMark badge={badge} />}
         <span className="min-w-0 flex-1 text-muted" data-testid="case-status">
           {parts.join(' · ')}
         </span>
@@ -213,11 +265,15 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
         )}
         {!done && (
           <>
+            <Choice value={(r.priority ?? 'none') as PriorityChoice} options={PRIORITY_CHOICES} onChange={(v: PriorityChoice) => set({ priority: priorityFrom(v) })} className="h-[24px] text-[12px]" aria-label="Priorytet" data-testid="case-priority-choice" />
             <button type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => void moveCase(r.id, 'done')} data-testid="case-done">
               Zrobione
             </button>
             <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={planning} onClick={() => setPlanning(!planning)} data-testid="case-plan-open">
               Zaplanuj
+            </button>
+            <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={dating} onClick={() => setDating(!dating)} data-testid="case-dates-open">
+              Terminy
             </button>
           </>
         )}
@@ -225,12 +281,52 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
           Usuń
         </button>
       </div>
+      {dating && !done && <DatesForm x={x} set={set} />}
       {isTask && stepsOpen && (
         <div className="border-t border-line pt-1.5" data-testid="case-steps">
           <StepsEditor steps={r.steps} ticks kind="task" onTick={(id, d) => tickTaskStep(r.id, id, d)} onOp={async (op) => stepsAnswer(op, await changeTaskSteps(r.id, op))} />
         </div>
       )}
       {planning && <PlanForm x={x} today={today} title={caseTitle(r, rd)} onDone={() => setPlanning(false)} />}
+    </div>
+  )
+}
+
+/**
+ * „Termin” and „Wykonać” of a sprawa (D409, D451): the date typed (`DateField`: „20.11”, „20.11.2026”), or by a button – „Dziś”,
+ * „Jutro”, „Koniec tygodnia”, „Wyczyść”; saved at once by `changeCase`. Under the row's fields, so the grid of the row stays as it is.
+ */
+export function DatesForm({ x, set }: { x: CaseItem; set: (patch: { dueDate?: string | null; doDate?: string | null }) => void }) {
+  const r = x.record
+  // The day the save counts (`changeCase` – the window's clock at that moment), not the page's, read up to 30 s ago (D455): the
+  // note, the buttons „Dziś” / „Jutro” and a date typed without its year all count from it. Rendered again after every save.
+  const today = logicalDayOf(Date.now())
+  return (
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-line pt-1.5 text-[12px]" data-testid="case-dates-form">
+      <DateRow label="Termin" id="due" value={r.dueDate} today={today} onSet={(dueDate) => set({ dueDate })} />
+      <DateRow label="Wykonać" id="do" value={r.doDate} today={today} note={doDateNote(r.doDate, today)} onSet={(doDate) => set({ doDate })} />
+    </div>
+  )
+}
+
+function DateRow({ label, id, value, today, note, onSet }: { label: string; id: 'due' | 'do'; value: string | null; today: string; note?: string | null; onSet: (date: string | null) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-muted">{label}</span>
+      <DateField value={value} today={today} onCommit={onSet} placeholder="brak" shellClassName="w-[110px]" aria-label={label} errorPlacement="float" data-testid={`case-${id}-date`} />
+      {DATE_PRESETS.map((p) => (
+        <button key={p.id} type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => onSet(presetDate(p.id, today))} data-testid={`case-${id}-${p.id}`}>
+          {p.label}
+        </button>
+      ))}
+      <button type="button" className="h-[24px] px-1.5 text-muted hover:text-fg" disabled={value == null} onClick={() => onSet(null)} data-testid={`case-${id}-clear`}>
+        Wyczyść
+      </button>
+      {note && (
+        <span className="basis-full text-[11.5px] text-muted" role="status" data-testid={`case-${id}-note`}>
+          {note}
+        </span>
+      )}
     </div>
   )
 }

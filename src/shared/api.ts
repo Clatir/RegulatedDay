@@ -111,6 +111,7 @@ export const CH = {
   showAttachment: 'rd:showAttachment',
   quickAdd: 'rd:quickAdd',
   quickClose: 'rd:quickClose',
+  quickToday: 'rd:quickToday',
   onQuickShown: 'rd:onQuickShown',
   quickShortcut: 'rd:quickShortcut',
   onQuickShortcut: 'rd:onQuickShortcut',
@@ -891,6 +892,8 @@ export interface RdApi {
   quickAdd(title: string): Promise<QuickAddResult>
   /** The window „Do skrzynki” closes (Esc, after Enter saved). */
   quickClose(): void
+  /** The logical day by the main process's clock – the one the quick capture saves with; the preview of its words counts from it (D454). */
+  quickToday(): Promise<string>
   /** The window „Do skrzynki” was shown by the shortcut: its field takes the keys. */
   onQuickShown(cb: () => void): () => void
   /** The global shortcut of the quick capture on this computer, for the settings (D402: „Skrót zajęty przez inny program”). */

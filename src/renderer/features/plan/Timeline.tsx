@@ -12,12 +12,16 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } 
 import { durationLabel, logicalClock } from '@shared/format'
 import type { Pool } from '@shared/model/categories'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
+import type { DueBadge } from '@shared/engine/caseDates'
+import type { Priority } from '@shared/model/requests'
 import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { cx } from '../../components/ui'
 import { attachable, hasFiles, textTarget } from '../attachments/attachDrop'
 import { attachBadge, attachBadgeTitle } from '../attachments/attachView'
 import { useMachine } from '../../store/machine'
+import { DueMark } from '../cases/DueMark'
+import { PriorityMark } from '../cases/PriorityMark'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
 
@@ -35,6 +39,10 @@ export interface TimelineItem {
   waits?: boolean
   /** An occurrence of a series: the mark `SERIES_MARK` stands by its name (D401). */
   series?: boolean
+  /** The due date of the task the block is of (D409): „Po terminie” (red) or „Termin jutro” … (muted) by its name; none for days gone by. */
+  badge?: DueBadge
+  /** The priority of the task the block is of (D450): a narrow stripe on the tile's left, inside the category's edge; the colour of the block stays the category's. */
+  priority?: Priority
   /** The counter of the block's steps „✓ 3/4” (D440, `stepsCounter`); none – no steps. */
   steps?: string
   /** Its planned start may be dragged (D305): not begun, with its own start time. */
@@ -462,11 +470,13 @@ export function Timeline({
         data-drop={dropOver === i.id ? 'on' : undefined}
         {...(onAttachDrop && i.attach !== undefined ? tileDrop(i.id, onAttachDrop, dropOver, setDropOver) : {})}
       >
+        {i.priority && <PriorityMark priority={i.priority} testId="block-priority" apart />}
         {topEdge && <span data-edge="top" data-testid={`block-${i.id}-edge-top`} className={cx('absolute inset-x-0 top-0 z-10 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         {endEdge && <span data-edge="end" data-testid={`block-${i.id}-edge-end`} className={cx('absolute inset-x-0 bottom-0 z-10 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         <div className={cx('flex min-w-0 items-baseline gap-1.5', tiny ? 'text-[11px]' : 'pt-0.5 text-[12px]')}>
           {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(start)}</span>}
           <span className="truncate text-fg">{i.title}</span>
+          {i.badge && !narrow && <DueMark badge={i.badge} compact testId="block-due" />}
           {i.series && (
             <span className="shrink-0 text-muted" title="Z serii" aria-label="z serii" data-testid="series-mark">
               {SERIES_MARK}

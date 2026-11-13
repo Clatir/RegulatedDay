@@ -6,13 +6,12 @@
 import type { GoalsProgress } from '@shared/engine/goals'
 import { pushedText } from '@shared/engine/pushApart'
 import type { HorizonBlockState, HorizonDay } from '@shared/engine/week'
-import { countLabel, durationLabel, formatNumber, ofLabel, WEEKDAY_NAMES } from '@shared/format'
+import { countLabel, durationLabel, formatNumber, ofLabel, WEEKDAY_NAMES, WEEKDAY_SHORT } from '@shared/format'
 import type { GoalArea } from '@shared/model/goals'
 import { addDays, weekday } from '@shared/time/zone'
 import { MONTH_NAMES } from '../calendar/MonthGrid'
 import type { WeekPush } from '../../store/weekPush'
 
-export const WEEKDAY_SHORT = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'] as const
 export const WEEKDAY_FULL = WEEKDAY_NAMES
 
 const day = (d: string) => String(Number(d.slice(8, 10)))

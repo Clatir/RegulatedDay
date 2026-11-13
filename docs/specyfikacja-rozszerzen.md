@@ -180,9 +180,11 @@ Do piątku do 16:00 musisz złożyć deklarację podatkową. Jednak wiesz, że c
 * **Dzięki funkcji:** Zadanie ma **Termin (Due Date): Piątek 16:00**, ale planujesz je w kalendarzu na **Wtorek 10:00–11:30**. Aplikacja wie, że jeśli we wtorek coś Ci wypadnie, masz jeszcze bufor bezpieczeństwa. Gdybyś jednak do czwartku nie miał zaplanowanego czasu na to zadanie, aplikacja w planie porannym wyświetli wyraźne, spokojne ostrzeżenie: *„Termin mija jutro, a nie masz jeszcze na to zarezerwowanego czasu w planie!”*.
 
 ### Jak wygląda praca z tą funkcją
-* **Wizualne etykiety:** Zadania zbliżające się do terminu zyskują subtelny wskaźnik czasu pozostałego do końca (np. *„zostały 2 dni”*).
-* **Ochrona przed spóźnieniem:** Jeśli spróbujesz zaplanować blok wykonania po terminie ostatecznym, program od razu Cię o tym poinformuje.
-* **Wskaźnik w planie porannym:** Poranny rytuał pilnuje, by żadne zadanie z bliskim terminem nie zostało pominięte bez Twojej świadomej decyzji.
+* **Dwa pola przy każdej sprawie** (zadanie własne i prośba): *Termin* – termin ostateczny, *Wykonać* – dzień, w którym chcesz to zrobić. Ustawiasz je w edycji wiersza sprawy przyciskami „Dziś”, „Jutro”, „Koniec tygodnia”, „Wyczyść” (D409, D451).
+* **Data wykonania przestawia listę sama** (liczona, nic się nie zapisuje o 04:00): w jej dniu sprawa stoi na „Dziś”, niezrobiona następnego dnia – na „W tym tygodniu” jak każda z „Dziś”; przed nią, gdy wypada w bieżącym tygodniu, sprawa ze „Skrzynki” i „Kiedyś / Może” stoi na „W tym tygodniu”; dalsza data – na swojej liście z dopiskiem *„wykonać <dzień>”*. Ręczne przeniesienie w dniu daty albo po nim wygrywa z datą; przeniesienie przed datą – w dniu daty sprawa i tak trafi na „Dziś” (D451).
+* **Znaczki terminu:** *„Po terminie”* (czerwony), *„Termin dziś”*, *„Termin jutro”*, *„Termin za N dni”* do 7 dni, dalej sama data – na liście „Spraw”, w panelu przy osi „Dziś” i na kafelku bloku zadania; pasek pulpitu bez terminów. Na każdej liście najpierw sprawy po terminie i z najbliższym terminem (D409).
+* **Plan poranny:** jedna karta ze sprawami po terminie i z terminem w progu (domyślnie 2 dni: dziś, jutro, pojutrze; Ustawienia, 1–7) bez bloku na osi – przy każdej „Na Dziś” i „Pomiń” (do końca dnia); nic nie jest blokowane, a po terminie nic nie dzieje się samo poza znaczkiem i kartą (D409).
+* **Szybki zapis:** słowo na końcu tytułu *„!jutro”*, *„!pt”*, *„!20.11”* ustawia termin, *„@jutro”* – datę wykonania (oba w jednym tytule); rozpoznane słowo znika z tytułu, a pod polem przed Enter widać np. *„Termin: pt 20.11”* (D409).
 
 ---
 

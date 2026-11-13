@@ -15,6 +15,7 @@ import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import { blockFactsOf, type CasesRitual } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
 import { newTask } from '@shared/model/requests'
+import { parseQuickDates } from '@shared/quickDates'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords, recordEdit } from '@shared/data/merge'
 import { isRaw } from '@shared/data/dayEdits'
@@ -1017,19 +1018,28 @@ export class DataHub {
 
   /**
    * The quick capture (D385, D402): a task of your own – only its title – into „Skrzynka”, from the window „Do skrzynki”
-   * and the bar's field. Without an open folder, or without a title – not saved, with why; a folder away – it waits in the
-   * queue as every new record (saved).
+   * and the bar's field; the words of dates at the title's end („!jutro”, „@pt”, „!20.11” – D409) set its due date and
+   * its date of doing and leave the title. Without an open folder, or without a title – not saved, with why; a folder
+   * away – it waits in the queue as every new record (saved).
    */
   async quickAdd(title: unknown): Promise<QuickAddResult> {
     const f = this.service?.folder
     if (!f) return { ok: false, error: 'Folder danych nie jest otwarty – nic nie zapisano.', id: null }
     const now = f.clock.now()
     const id = newId()
-    const raw = newTask(id, now, logicalDayOf(now), { title: typeof title === 'string' ? title : '' })
+    const today = logicalDayOf(now)
+    const q = parseQuickDates(typeof title === 'string' ? title : '', today)
+    const raw = newTask(id, now, today, { title: q.title, dueDate: q.dueDate, doDate: q.doDate })
     if (!raw) return { ok: false, error: 'Wpisz, co zapisać.', id: null }
     const out = await this.edit([recordEdit(paths.record('request', id), null, raw)!])
     const ok = out.every((o) => o.status === 'applied' || o.status === 'waiting')
     return { ok, error: ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: ok ? id : null }
+  }
+
+  /** The logical day of the clock `quickAdd` saves with (D454: the preview of the words of dates counts from it, not from the window's clock). */
+  quickToday(): string {
+    const f = this.service?.folder
+    return logicalDayOf(f ? f.clock.now() : Date.now())
   }
 
   /** What a day's evening ritual says about „Sprawy” (D383, D384, D402). */

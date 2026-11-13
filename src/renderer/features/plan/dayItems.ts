@@ -6,6 +6,9 @@
  */
 import { ownHourBlock, plannedSpan } from '@shared/engine/blocks'
 import { namingOf } from '@shared/engine/context'
+import { dueBadge } from '@shared/engine/caseDates'
+import { isDone } from '@shared/engine/cases'
+import type { Priority, RequestRecord } from '@shared/model/requests'
 import { atOf, logicalSpan } from '@shared/engine/grid'
 import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
@@ -25,11 +28,17 @@ export interface DayAxis {
   to: number
 }
 
-export function dayAxis(model: DayModel, names: Names, now: number | null): DayAxis {
+/**
+ * `today` – the logical day of the window (D409): the block of a task shows the task's due date badge, from `today` on (a day
+ * gone by – none); null (the templates, the wizard) – none.
+ */
+export function dayAxis(model: DayModel, names: Names, now: number | null, today: string | null = null): DayAxis {
   const { state, ctx } = model
   const g = state.grid
   const lm = (idx: number) => logicalMinuteOf(model.date, atOf(g, idx))
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  // The sprawa of a block's task, found once per block by id (its badge and its priority).
+  const sprawaOf = new Map(names.requests.map((r) => [r.id, r]))
   const yesterday = addDays(model.date, -1)
   const nowIdx = now != null ? Math.round((now - g.start) / 60_000) : null
   // D365: a block running now (of its own hour – not a session, a lecture, a class of a „zjazd”, the second shift) has its bottom edge.
@@ -40,6 +49,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
     const info = byId.get(p.id)
     if (!info) continue
     const span = plannedSpan(info, byId)
+    const sprawa = p.task ? sprawaOf.get(p.task) : undefined
     const f = state.facts.blocks.get(p.id)
     const gone = f?.parkedAt != null && f.startedAt == null ? 'zaparkowany' : f?.cancelledAt != null && f.startedAt == null ? 'odwołany' : null
     // A started block stands where it ran (E4a); one still to come where the forecast puts it today, else at its plan.
@@ -66,6 +76,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
       dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),
       waits: info.waits,
       ...(p.origin === 'series' ? { series: true } : {}),
+      ...taskBadge(sprawa, today, model.date),
+      ...taskPriority(sprawa),
       // D440: the counter of its steps on the tile (none – nothing).
       ...(counter ? { steps: counter } : {}),
       ...(edge ? { resize: 'end' as const } : {}),
@@ -114,6 +126,18 @@ export function dayAxis(model: DayModel, names: Names, now: number | null): DayA
     energy = { samples, reserve: e.reserve }
   }
   return { items, markers, energy, from: Math.min(lm(state.wake) - 30, 6 * 60), to: Math.max(lm(state.bedtime.forecast) + 30, 22 * 60) }
+}
+
+/** The due-date badge of the task of a block (D409), for a day that is not gone by. */
+function taskBadge(r: RequestRecord | undefined, today: string | null, date: string): { badge?: TimelineItem['badge'] } {
+  if (!r || today == null || date < today) return {}
+  const b = dueBadge(r, today)
+  return b ? { badge: b } : {}
+}
+
+/** The priority of the task of a block (D450), as long as the task is not done – on any day the block stands on. */
+function taskPriority(r: RequestRecord | undefined): { priority?: Priority } {
+  return r?.priority && !isDone(r) ? { priority: r.priority } : {}
 }
 
 /** The day's numbers in words (the plan's summary). */

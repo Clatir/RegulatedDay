@@ -4,10 +4,10 @@
  * card's question „Wolne” and the lines.
  * Pure – the screens (`AllDayBar`, `AllDayCard`) only draw what this says.
  */
+import { WEEKDAY_SHORT } from '@shared/format'
 import { weekLanes, type AllDayEvent, type AllDayLanes } from '@shared/model/allDay'
 import { weekStart } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
-import { WEEKDAY_SHORT } from '../week/weekText'
 import { dayIndexes } from '../week/weekLayout'
 
 /** How many rows of bars the strip shows before „+N więcej”. */
