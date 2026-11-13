@@ -923,6 +923,8 @@ function registerIpc(): void {
   handle(CH.caseDays, (_e, dates: unknown) => needHub().caseDays(Array.isArray(dates) ? dates.map(String) : []))
   // „Tydzień” and the month's goals (D356).
   handle(CH.weekView, (_e, date: unknown) => needHub().weekView(String(date)))
+  handle(CH.daysView, (_e, dates: unknown, opts: unknown) => needHub().daysView(dates, opts))
+  handle(CH.monthView, (_e, month: unknown) => needHub().monthView(month))
   handle(CH.goals, (_e, month: unknown) => needHub().goals(String(month)))
   handle(CH.setGoals, (_e, month: unknown, patch: unknown) => needHub().setGoals(month, patch))
   handle(CH.answer, (_e, id: string, answer: string, value: number | null) => needHub().answer(String(id), String(answer), typeof value === 'number' && Number.isFinite(value) ? value : null))

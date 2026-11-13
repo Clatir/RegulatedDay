@@ -28,7 +28,8 @@ import { reviewPrompt } from '@shared/engine/calibration'
 import type { SideB } from '@shared/engine/sideB'
 import type { StatsPeriod, StatsResult } from '@shared/engine/stats'
 import type { GoalsView } from '@shared/engine/goals'
-import type { WeekView } from '@shared/engine/week'
+import { DAYS_VIEW_MAX, type DaysView, type WeekView } from '@shared/engine/week'
+import type { MonthView } from '@shared/engine/calendarViews'
 import { goalsPatchFrom, isMonth } from '@shared/model/goals'
 import { keptOnRestore, rdFrom } from '@shared/model/rd'
 import { requestCounters } from '@shared/engine/requests'
@@ -394,16 +395,25 @@ export class DataHub {
     await Promise.race([drops, new Promise((r) => setTimeout(r, CLOSE_DROP_MS).unref?.())])
   }
 
-  /** The window reads again only when what it would read changed (every check of the folder calls this). */
-  changed(): void {
-    void this.signature()
+  /**
+   * The window reads again only when what it would read changed (every check of the folder calls this). The signatures are
+   * counted one after another (T934): an older one finishing after a newer one never stands as the last – the window would
+   * be told twice. Done once this one is counted (tests wait for it).
+   */
+  changed(): Promise<void> {
+    const run = this.signing
+      .then(() => this.signature())
       .then((sig) => {
         if (sig === this.lastSignature) return
         this.lastSignature = sig
         this.o.onChange()
       })
       .catch(() => this.o.onChange())
+    this.signing = run
+    return run
   }
+
+  private signing: Promise<void> = Promise.resolve()
 
   private async signature(): Promise<string> {
     const f = this.service?.folder
@@ -1122,6 +1132,23 @@ export class DataHub {
   async weekView(date: string): Promise<WeekView> {
     if (!isIsoDate(date)) throw new Error('data tygodnia')
     return this.need().weekView(date)
+  }
+
+  /**
+   * Days of the horizon on one axis (D417 „3 dni”, D418 „Agenda”): 1 to `DAYS_VIEW_MAX` dates, each a date, none twice
+   * (checked here – the window never asks the helper process for an unbounded count); `opts.energy` false – without the
+   * curves of energy (T954; anything else – with them).
+   */
+  async daysView(dates: unknown, opts?: unknown): Promise<DaysView> {
+    if (!Array.isArray(dates) || !dates.length || dates.length > DAYS_VIEW_MAX || !dates.every(isIsoDate) || new Set(dates).size !== dates.length) throw new Error('dni widoku')
+    const energy = !(opts && typeof opts === 'object' && (opts as { energy?: unknown }).energy === false)
+    return this.need().daysView(dates as string[], undefined, energy)
+  }
+
+  /** The month shown in „Kalendarz” (D418, 'RRRR-MM'): its days' fixed blocks and load. */
+  async monthView(month: unknown): Promise<MonthView> {
+    if (typeof month !== 'string' || !isMonth(month)) throw new Error('miesiąc kalendarza')
+    return this.need().monthView(month)
   }
 
   /** A month's goals (D356) with the month before's and the progress so far. */

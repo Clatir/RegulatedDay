@@ -7,7 +7,7 @@
 import { REGEN_CATEGORY, type CategoryRules, type Costs } from '../model/categories'
 import type { PlanBlock } from '../model/plan'
 import type { RulesSettings } from '../model/settings'
-import type { DayFacts } from './facts'
+import type { BlockFact, DayFacts } from './facts'
 import { idxOfLogical, type Grid } from './grid'
 
 export interface BlockInfo {
@@ -214,8 +214,20 @@ export function startPlanned(info: BlockInfo, plan: readonly PlanBlock[] = []): 
  * Before its start its place and length move (`dayItems` – `movable`, with „not begun” and „not passed”), once running
  * the end of its planned length (`engine/resize.ts`).
  */
-export const ownHourBlock = (b: BlockInfo): boolean =>
-  b.inPlan && b.anchor == null && b.start != null && b.origin !== 'session' && b.origin !== 'lecture' && b.origin !== 'zjazd' && !b.secondShift
+export const ownHourBlock = (b: BlockInfo): boolean => b.anchor == null && b.start != null && draggableKind(b)
+
+/** A block of the plan of a kind the axis drags (D305): not a session, a lecture, a class of a „zjazd” nor the second shift. */
+const draggableKind = (b: BlockInfo): boolean => b.inPlan && b.origin !== 'session' && b.origin !== 'lecture' && b.origin !== 'zjazd' && !b.secondShift
+
+/**
+ * A block of the plan the axis lets you drag to another place (D305; between the days of „Tydzień” and „3 dni” the same –
+ * D417): not begun, not taken off the day (parked, cancelled), of its own hour (`ownHourBlock`), and not passed – it ends
+ * after now (`endIdx` – where the axis shows its end; `nowIdx` null: a day to come). A day gone by is never edited by
+ * dragging (its axis has no `onMove`): the caller says so.
+ */
+export function movableBlock(b: BlockInfo, f: Pick<BlockFact, 'startedAt' | 'parkedAt' | 'cancelledAt'> | undefined, endIdx: number, nowIdx: number | null): boolean {
+  return f?.startedAt == null && f?.parkedAt == null && f?.cancelledAt == null && ownHourBlock(b) && (nowIdx == null || endIdx > nowIdx)
+}
 
 /** Counts for the boundary, the end of work and its forecast (spec: no „nie przerywa regeneracji”, no „po pracy”). */
 export const isBoundaryWork = (b: BlockInfo): boolean => b.isWork && !b.rules.keepsRegen && !b.afterWorkMark && !b.secondShift

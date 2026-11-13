@@ -510,6 +510,33 @@ describe('załączniki przy usuwaniu serii (D415, zastępuje D411)', () => {
     expect(removedAt('dzis')).toBeNull()
   })
 
+  it('koniec na wczoraj ze zmianą bloku od dziś: dzisiejsze wystąpienie przepisane zostaje w planie – i jego załączniki (T933)', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const id = seriesBlockId(today, 'fizjo')
+    // Today's occurrence written into today's file (as a change of the series from today writes it).
+    write(paths.day(today), dayFileWith(today, [planBlock({ ...series().versions[0]!.block, id, origin: 'series', sourceId: 'fizjo' })]))
+    attach('dzis', occ(today))
+    expect((await hub.seriesChange({ date: today, blockId: id }, 'all', { block: { durationMin: 30 }, until: addDays(today, -1) })).ok).toBe(true)
+    expect((await planOn(today)).find((b) => b.id === id)?.durationMin).toBe(30)
+    expect(removedAt('dzis')).toBeNull()
+  })
+
+  it('wystąpienie zdjęte z dwóch plików dni (wpis na swoim dniu i kopia przeniesiona): załącznik idzie z oboma (T932)', async () => {
+    write(paths.record('series', 'fizjo'), seriesJson(series()))
+    const [d, e] = [addDays(today, 4), addDays(today, 2)]
+    const id = seriesBlockId(d, 'fizjo')
+    const entry = (extra: Partial<PlanBlock>) => planBlock({ ...series().versions[0]!.block, id, startMin: 20 * 60, origin: 'series', sourceId: 'fizjo', ...extra })
+    write(paths.day(d), dayFileWith(d, [entry({})]))
+    write(paths.day(e), dayFileWith(e, [entry({ movedFrom: d })]))
+    attach('z', occ(d))
+    const edit = vi.spyOn(hub.service!.folder, 'edit')
+    expect((await hub.seriesRemove({ date: addDays(today, 1), blockId: seriesBlockId(addDays(today, 1), 'fizjo') }, 'following')).ok).toBe(true)
+    const entries = edit.mock.calls[0]![0]
+    vi.restoreAllMocks()
+    const at = (rel: string) => entries.findIndex((x) => x.rel === rel)
+    expect([...(entries[at(attachmentRel('z'))]!.after ?? [])].sort()).toEqual([at(paths.record('series', 'fizjo')), at(paths.day(d)), at(paths.day(e))].sort())
+  })
+
   it('„Zakończ serię”, gdy listy załączników nie da się odczytać: seria i tak się kończy, załączniki zostają (D421)', async () => {
     write(paths.record('series', 'fizjo'), seriesJson(series()))
     const changed = addDays(today, 4)

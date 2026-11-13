@@ -151,6 +151,16 @@ export interface Segment {
   l: number
 }
 
+/** The blocks that have begun – a changed wake leaves them where they ran (D334). */
+export const begunIds = (facts: Pick<DayFacts, 'blocks'>): Set<string> => new Set([...facts.blocks].filter(([, f]) => f.startedAt != null).map(([id]) => id))
+
+/**
+ * The blocks a move to another day leaves on their day when they are anchored to the moved one (D424, T961): begun, parked
+ * or cancelled – none of them goes on to come alive on the other day.
+ */
+export const stayingIds = (facts: Pick<DayFacts, 'blocks'>): Set<string> =>
+  new Set([...facts.blocks].filter(([, f]) => f.startedAt != null || f.parkedAt != null || f.cancelledAt != null).map(([id]) => id))
+
 export interface DayFacts {
   grid: Grid
   blocks: Map<string, BlockFact>

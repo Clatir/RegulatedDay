@@ -206,14 +206,14 @@ describe('tydzień w folderze danych – błędy jednego dnia i pamięć', () =>
 
   it('pamięć: dzień, o który pytano niedawno, zostaje (trafienie przesuwa go na koniec), wypadają najdawniej pytane', async () => {
     const { folder, runs } = await studied()
-    // Ten weeks gone by – 70 days, as many as are remembered.
-    const weeks = Array.from({ length: 10 }, (_, i) => addDays('2026-08-24', 7 * i))
+    // Fourteen weeks gone by – 98 days, as many as are remembered (T907: the month of „Kalendarz” too).
+    const weeks = Array.from({ length: 14 }, (_, i) => addDays('2026-07-27', 7 * i))
     for (const w of weeks) await folder.weekView(w)
     runs.length = 0
     await folder.weekView(weeks[0]!)
     expect(runs).toEqual([])
-    // A week more: the 7 days asked longest ago go – the week of 31.08, not the one just asked again.
-    await folder.weekView('2026-08-17')
+    // A week more: the 7 days asked longest ago go – the week of 3.08, not the one just asked again.
+    await folder.weekView('2026-07-20')
     runs.length = 0
     await folder.weekView(weeks[0]!)
     expect(runs).toEqual([])

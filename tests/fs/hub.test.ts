@@ -204,22 +204,20 @@ describe('folder danych okna głównego (DataHub)', () => {
     expect(await hub.open(dirA)).toBe(true)
     try {
       await vi.waitFor(() => expect(o.changes).toBeGreaterThan(0))
-      // Settled: a check with nothing new tells the window nothing.
-      const settled = async () => {
-        let before = -1
-        while (before !== o.changes) {
-          before = o.changes
-          hub.changed()
-          await new Promise((r) => setTimeout(r, 50))
-        }
+      // Settled: a check with nothing new tells the window nothing (each check waited for – no fixed delays).
+      for (let before = -1; before !== o.changes; ) {
+        before = o.changes
+        await hub.changed()
       }
-      await settled()
       const n = o.changes
       const today = logicalDayOf(hub.service!.folder.clock.now())
       mkdirSync(join(dirA, paths.day(today), '..'), { recursive: true })
       writeFileSync(join(dirA, paths.day(today)), JSON.stringify({ schema: 1, date: today, wakeMin: 7 * 60 }))
-      hub.changed()
-      await vi.waitFor(() => expect(o.changes).toBe(n + 1))
+      await hub.changed()
+      expect(o.changes).toBe(n + 1)
+      // Told once: the next check finds nothing new.
+      await hub.changed()
+      expect(o.changes).toBe(n + 1)
     } finally {
       await hub.close('quit')
     }

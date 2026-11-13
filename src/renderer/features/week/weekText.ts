@@ -4,6 +4,7 @@
  * (D72: a goal is no grade and blocks nothing).
  */
 import type { GoalsProgress } from '@shared/engine/goals'
+import type { StayHow } from '@shared/engine/planEdit'
 import { pushedText } from '@shared/engine/pushApart'
 import type { HorizonBlockState, HorizonDay } from '@shared/engine/week'
 import { countLabel, durationLabel, formatNumber, ofLabel, WEEKDAY_NAMES } from '@shared/format'
@@ -172,12 +173,39 @@ export function pastWarning(dates: readonly string[], today: string): string | n
 /** The line after „Dodaj” pushed blocks apart in the days of a range (D400): „Przesunięto 5 bloków w 3 dniach”. */
 export const weekPushedText = (blocks: number, days: number): string => `${pushedText(blocks)} w ${countLabel(days, 'dniu', 'dniach', 'dniach')}`
 
+/** Why each kind of block stayed, one and several (D424, T965). */
+const STAYED: Record<StayHow, [string, string]> = {
+  running: ['został – już trwa', 'zostały – już trwają'],
+  done: ['został – już zrobiony', 'zostały – już zrobione'],
+  parked: ['został – zaparkowany', 'zostały – zaparkowane'],
+  cancelled: ['został – odwołany', 'zostały – odwołane'],
+  kept: ['został w swoim dniu', 'zostały w swoim dniu']
+}
+
+/**
+ * The blocks anchored to the moved one that stayed on its day (D424, T965), by why – „ · Analiza został – już trwa ·
+ * Spacer, Obiad zostały – zaparkowane”; none – nothing.
+ */
+export function stayedText(stayed: ReadonlyArray<{ name: string; how: StayHow }>): string {
+  const order: StayHow[] = ['running', 'done', 'parked', 'cancelled', 'kept']
+  return order
+    .map((how) => stayed.filter((s) => s.how === how).map((s) => s.name))
+    .flatMap((names, i) => (names.length ? [` · ${names.join(', ')} ${STAYED[order[i]!][names.length === 1 ? 0 : 1]}`] : []))
+    .join('')
+}
+
 /**
  * The line's words from the days it still holds: the blocks they pushed and the days that pushed them; when none of them
  * pushed (what is left to take back is only a new block – a day that could not be read then), „Nowy blok w K dniach”.
  */
 export function weekPushLineText(push: WeekPush): string {
   const blocks = push.days.reduce((n, d) => n + d.moved, 0)
+  // D422: a block moved to another day – its name and the day as its column's heading says it („wt 6.01”, T915); D424: the
+  // blocks anchored to it that had begun and stayed; then what it pushed apart there.
+  if (push.move) {
+    const { name, to, stayed = [] } = push.move
+    return `Przeniesiono: ${name} na ${dayHeading(to, dayIndex(to))}${stayedText(stayed)}${blocks > 0 ? ` · ${pushedText(blocks).toLowerCase()}` : ''}`
+  }
   if (blocks > 0) return weekPushedText(blocks, push.days.filter((d) => d.moved > 0).length)
   return `Nowy blok w ${countLabel(push.days.length, 'dniu', 'dniach', 'dniach')}`
 }

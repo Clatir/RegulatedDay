@@ -9,13 +9,13 @@
  * attachments.
  */
 import type { EditEntry, RawRecord } from '@shared/api'
-import { classify, paths } from '@shared/data/paths'
-import { ATTACHMENTS_UNREAD_TEXT, removalEdits, restoreEdits, templateRemovalIds, type AttachmentUndo } from '@shared/model/attachment'
+import { paths } from '@shared/data/paths'
+import { ATTACHMENTS_UNREAD_TEXT, attachmentUndoOf, removalEdits, restoreEdits, templateRemovalIds, type AttachmentUndo } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
 import { templateFrom, withTemplateVersion, type PlanBlock, type Template } from '@shared/model/plan'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
-import { editOf, isSaved, rawRecord, trySaveWith, useData } from '../../store/data'
+import { editOf, isSaved, rawRecord, trySaveWith, useData, withOwner } from '../../store/data'
 import { toast, undoToast } from '../../store/ui'
 
 /** The first day a template still makes (today is made from it already). */
@@ -29,8 +29,7 @@ function withAttachments(edit: EditEntry, templateId: string, before: Template |
   const { view, attachments } = useData.getState()
   const at = Date.now()
   const removed = removalEdits(view?.attachments ?? [], templateRemovalIds(attachments, templateId, before, after, tomorrowOf()), at)
-  const ids = removed.map((e) => classify(e.rel)?.id).filter((id): id is string => !!id)
-  return { entries: [edit, ...removed.map((e) => ({ ...e, after: [0] }))], undo: ids.length ? { ids, removedAt: at } : null }
+  return { entries: withOwner(edit, removed), undo: attachmentUndoOf(removed, at) }
 }
 
 /** „Cofnij”: the template back as `before` over what the change left (`after`), its attachments with it (T923). */
@@ -39,7 +38,7 @@ function undoRemoval(rel: string, after: RawRecord | null, before: RawRecord, at
     const back = editOf(rel, after, before)
     const restore = attachments ? restoreEdits(useData.getState().view?.attachments ?? [], attachments) : []
     // The template stands as before already (nothing to write): the attachments alone.
-    return back ? [back, ...restore.map((e) => ({ ...e, after: [0] }))] : restore
+    return withOwner(back, restore)
   })
 }
 
@@ -103,14 +102,17 @@ export async function removeTemplate(templateId: string, name: string): Promise<
   return done(made, out, rel, `Usunięty szablon: ${name}`)
 }
 
-/** After the edit: refused for the list – said; saved – „Cofnij” for the template and its attachments. */
+/**
+ * After the edit: refused for the list – said; the template's change (the first entry – a record of an attachment that met
+ * a question is not it, T931) saved – „Cofnij” for the template and its attachments.
+ */
 function done(made: Made, out: Awaited<ReturnType<typeof trySaveWith>>, rel: string, text: string): boolean {
   if (made.unread) {
     toast(ATTACHMENTS_UNREAD_TEXT, 'error', 8000)
     return false
   }
   const { before, after, attachments } = made
-  if (!before || !isSaved(out)) return false
+  if (!before || !out || !isSaved(out.slice(0, 1))) return false
   undoToast(text, () => void undoRemoval(rel, after, before, attachments))
   return true
 }

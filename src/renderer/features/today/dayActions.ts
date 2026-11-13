@@ -10,12 +10,12 @@ import { blockJson, dayRaw, putBlock, setAsked, setCancelled, setDayField, takeB
 import { paths } from '@shared/data/paths'
 import { marketDay } from '@shared/calendar/holidays'
 import { namingOf, snapshotOf } from '@shared/engine/context'
-import { foldFacts, type DayFacts } from '@shared/engine/facts'
+import { begunIds, foldFacts } from '@shared/engine/facts'
 import type { Freed } from '@shared/engine/gaps'
 import { gridOf } from '@shared/engine/grid'
 import type { AnyEvent } from '@shared/model/events'
 import { createDay } from '@shared/engine/createDay'
-import { copiedDay, moveBetweenDays, wakeChange } from '@shared/engine/planEdit'
+import { copiedDay, moveBetweenDays, stayRuleOf, wakeChange } from '@shared/engine/planEdit'
 import type { DayContext, DayState } from '@shared/engine/day'
 import type { EnergyState } from '@shared/engine/energy'
 import { energyOrderVariant, lowestEnergy } from '@shared/engine/energyOrder'
@@ -24,11 +24,11 @@ import { nameById, type Names } from '@shared/blockName'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { countLabel, logicalClock, plDate } from '@shared/format'
 import type { DaySnapshot } from '@shared/model/events'
-import { ownAttachmentIds, removalEdits, type AttachmentUndo } from '@shared/model/attachment'
-import { restoreAttachments } from '../../store/attachments'
-import { dayFilesNow, editOf, isSaved, trySaveWith, useData, type SendState } from '../../store/data'
-import { dayUsable } from '../../store/day'
+import { attachmentUndoOf, ownAttachmentIds, removalEdits, restoreEdits, type AttachmentUndo } from '@shared/model/attachment'
+import { dayFilesNow, editOf, isSaved, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
+import { countedDay, dayUsable, type DayModel } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
+import { MOVE_GONE_TEXT, movedDay, stayedOf, type Stayed, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 
 /** The edit of a day's file `before` (null: none yet, it is made) by `next` – null when it changes nothing. */
 export function dayFileEdit(date: string, before: RawRecord | null, next: (raw: RawRecord) => RawRecord): EditEntry | null {
@@ -280,8 +280,10 @@ export async function removeDayBlock(date: string, seen: RawRecord | null, b: Pl
       return false
     }
   }
-  // The block's own attachments go with it in the same edit (D410, T805); its „Cofnij” brings them back.
+  // The block's own attachments go with it in the same edit (D410, T805), laid only once the day's file is (T923): a
+  // question about the day keeps them until your answer, „theirs” – live. Its „Cofnij” brings them back.
   let attachments: AttachmentUndo | null = null
+  const made = { day: false }
   const out = await trySaveWith(async () => {
     const before = (await dayFilesNow([date], () => seen))[date] ?? null
     const raw = dayRaw(before, date)
@@ -290,22 +292,30 @@ export async function removeDayBlock(date: string, seen: RawRecord | null, b: Pl
     const { view, attachments: list } = useData.getState()
     const at = Date.now()
     const removed = removalEdits(view?.attachments ?? [], ownAttachmentIds(list, b.id), at)
-    attachments = removed.length ? { ids: removed.map((e) => e.rel.slice(e.rel.indexOf('/') + 1, -'.json'.length)), removedAt: at } : null
-    // Laid only once the day's file is (T923): a question about the day keeps them until your answer, „theirs” – live.
+    attachments = attachmentUndoOf(removed, at)
     const day = editOf(paths.day(date), before, left)
-    return day ? [day, ...removed.map((e) => ({ ...e, after: [0] }))] : removed
+    made.day = !!day
+    return withOwner(day, removed)
   })
-  if (!isSaved(out)) {
-    if (ends && refusedEdit(out)) {
+  // The day's own entry says what became of the removal (T931): a record of an attachment that met a question is not it.
+  const plan = made.day && out ? out.slice(0, 1) : out
+  if (!isSaved(plan)) {
+    if (ends && refusedEdit(plan)) {
       const r = await clickTimer(b.id, date, 'undoRemove')
       if (!r.ok) toast(`Blok „${name}” nie otworzył się z powrotem: ${r.why ?? 'spróbuj „Pracuję”'} – został poza planem.`, 'error', 8000)
     }
     return false
   }
   const restore = async () => {
-    const back = await saveDay(date, left, (raw) => (inSnapshot ? setCancelled(raw, b.id, false) : putBlock(raw, gone)))
-    if (!isSaved(back)) return
-    if (attachments) await restoreAttachments(attachments)
+    // One edit: the day back and, with it, its attachments (T931).
+    const was = { day: false }
+    const back = await trySaveWith(async () => {
+      const before = (await dayFilesNow([date], () => left))[date] ?? null
+      const day = dayFileEdit(date, before, (raw) => (inSnapshot ? setCancelled(raw, b.id, false) : putBlock(raw, gone)))
+      was.day = !!day
+      return withOwner(day, attachments ? restoreEdits(useData.getState().view?.attachments ?? [], attachments) : [])
+    })
+    if (!isSaved(was.day && back ? back.slice(0, 1) : back)) return
     if (!ends) return
     const r = await clickTimer(b.id, date, 'undoRemove')
     if (r.ok) return
@@ -318,8 +328,6 @@ export async function removeDayBlock(date: string, seen: RawRecord | null, b: Pl
   return true
 }
 
-/** The blocks that have begun – a changed wake leaves them where they ran. */
-export const begunIds = (facts: Pick<DayFacts, 'blocks'>): Set<string> => new Set([...facts.blocks].filter(([, f]) => f.startedAt != null).map(([id]) => id))
 
 /** What a change of wake counts a day from: its snapshot as the engine has it, and the blocks that stay where they ran. */
 export interface WakeDay {
@@ -415,18 +423,45 @@ function undoWake(was: WakeWas): Promise<EditOutcome[] | null> {
   })
 }
 
+/** What „Przenieś na…” came to: the write's outcome, and the move for its „Cofnij” (`tellMoved`; null – nothing saved). */
+export interface DayMoved {
+  out: EditOutcome[] | null
+  push: WeekPush | null
+}
+
 /**
  * A block moved to another day (spec „Przeniesienie”): it leaves this day (its id stays, the move is noted), comes to
- * the target with the day it came from and one move more when you moved it.
+ * the target with the day it came from and one move more when you moved it – with the blocks anchored to it that go (D424,
+ * D426, T951, T961, T980; one begun, parked, cancelled or of a kind that keeps its day stays with its own hour). The day is
+ * counted in the turn of the write (T964): a block that began after the window was drawn stays, and a block no longer in its
+ * plan (moved or removed elsewhere) is not moved – „Nie zapisano: …” (T983); a day that cannot be counted now – as the window
+ * saw it (`opts.seen`: its plan, facts and names; else `plan`). The target is the owner of the edit, the source goes with it
+ * (T952): the block never leaves its day before the target has it. `opts.name`, `opts.names` – the words of „Przeniesiono: …”
+ * (`tellMoved`).
  */
-export function moveDayBlock(fromDate: string, fromRaw: RawRecord | null, plan: readonly PlanBlock[], b: PlanBlock, toDate: string, toRaw: RawRecord | null, byYou = true): Promise<EditOutcome[] | null> {
-  return trySaveWith(async () => {
+export async function moveDayBlock(fromDate: string, fromRaw: RawRecord | null, plan: readonly PlanBlock[], b: PlanBlock, toDate: string, toRaw: RawRecord | null, byYou = true, opts: { name?: string; names?: Names; seen?: Pick<DayModel, 'ctx' | 'state'> } = {}): Promise<DayMoved> {
+  const days: WeekPushedDay[] = []
+  let stayed: Stayed[] = []
+  const out = await trySaveWith(async () => {
     const now = await dayFilesNow([fromDate, toDate], (d) => (d === fromDate ? fromRaw : toRaw))
     const from = now[fromDate] ?? null
     const to = now[toDate] ?? null
-    const { source, target } = moveBetweenDays(from, to, blockNow(dayRaw(from, fromDate), fromDate, b), plan, fromDate, toDate, byYou)
-    return [editOf(paths.day(fromDate), from, source), editOf(paths.day(toDate), to, target)]
+    const counted = await countedDay(fromDate, from)
+    const day = counted ?? opts.seen ?? null
+    const dayPlan = day?.ctx.plan ?? plan
+    const was = dayPlan.find((x) => x.id === b.id)
+    if (counted && !was) throw new Error(MOVE_GONE_TEXT)
+    const block = blockNow(dayRaw(from, fromDate), fromDate, was ?? b)
+    const settings = day?.ctx.snapshot.settings ?? opts.names?.settings
+    const two = moveBetweenDays(from, to, block, dayPlan, fromDate, toDate, byYou, { stay: settings ? stayRuleOf(day?.state.facts, settings) : undefined })
+    stayed = stayedOf(two.stayers, day ? { ctx: day.ctx, facts: day.state.facts } : null, opts.names)
+    const bring = editOf(paths.day(toDate), to, two.target)
+    const leave = editOf(paths.day(fromDate), from, two.source)
+    days.push(...movedDay(fromDate, leave, two.source), ...movedDay(toDate, bring, two.target))
+    return withOwner(bring, leave ? [leave] : [])
   })
+  const move = { blockId: b.id, name: opts.name ?? 'blok', from: fromDate, to: toDate, ...(stayed.length ? { stayed } : {}) }
+  return { out, push: isSaved(out) && days.length ? { days, move } : null }
 }
 
 /** The fields a copy of a day sets in its target (spec „Skopiuj ten dzień do…”). */
