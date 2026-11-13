@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.0
+- Kroki bloku: w panelu bloku nad notatką jest lista „Kroki”. Wpisz krok i wciśnij Enter – pole zostaje na kolejny. Ptaszek odhacza krok (tylko na tym dniu), tytuł zmienisz w miejscu, „×” usuwa krok (z „Cofnij”), a kolejność zmienisz przeciągnięciem uchwytu „⋮⋮” albo klawiszami Alt+↑ / Alt+↓ na kroku. Najwyżej 30 kroków, tytuł do 200 znaków. Kroki niczego nie liczą (energia, punkty), a koniec bloku z nieodhaczonymi krokami o nic nie pyta.
+- Licznik „✓ 3/4” stoi przy nagłówku listy, na kafelku bloku w „Dziś” i w „Tygodniu”; blok bez kroków nie ma licznika. Ctrl K znajduje kroki jak tekst bloku albo sprawy.
+- Pasek pulpitu w trakcie bloku z krokami pokazuje „☐ <krok> · krok 1/4” z ptaszkiem: klik odhacza krok i pokazuje następny – bez dźwięku; po ostatnim jest „Wszystkie kroki ✓”. W „Odcinam się” i dla bloku w tle linii kroku nie ma.
+- Kroki mają też bloki szablonów i serii (w „Szablonach” sama lista, każdego dnia startuje odznaczona); zmiana listy w wystąpieniu serii pyta „Tylko to · To i następne · Cała seria” raz na otwarcie panelu. W „Sprawach” zadanie ma przycisk „Kroki ✓ 1/4” z listą pod wierszem; blok z zadania dostaje jego kroki, a odhaczenie w bloku odhacza je w zadaniu (i odwrotnie).
+- Poprawka: okna aplikacji nie dają się przenawigować plikiem ani linkiem przeciągniętym na okno.
+
 ## 1.14.0
 - „Sprawy” zamiast „Próśb” – ta sama pozycja w menu i ten sam skrót. Sprawa to zadanie własne (tytuł, szacunek domyślnie 30 min, kategoria domyślnie „Inne”, notatka) albo prośba (osoba, szacunek, notatka – tryby i koszt kontaktu jak dotąd). Listy: Skrzynka · Dziś · W tym tygodniu · Kiedyś / Może · Zrobione. Nagłówek „Dziś” mówi sumę szacunków („Dziś · 3 h 30 min”), „Zrobione” pokazuje ostatnie 7 dni i ma „Pokaż starsze”. Ctrl N dodaje zadanie, Ctrl K znajduje sprawy.
 - „Dziś” to lista bez godzin: zadanie nie zajmuje czasu na osi, dopóki go nie ustawisz. Niezrobione o 04:00 wracają do „W tym tygodniu” (z dopiskiem, skąd), a wieczorny rytuał je wymienia; w niedzielę przypomina też, ile spraw czeka w „Kiedyś / Może”.
