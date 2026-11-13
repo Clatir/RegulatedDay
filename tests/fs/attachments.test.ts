@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AttachPrepared, AttachResult, RawRecord, RdApi } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
-import { ATTACHMENT_KEEP_MS, attachmentImageUrl, attachmentRel, type Attachment, type AttachmentOwner, type AttachmentUndo, type BlockPlace } from '@shared/model/attachment'
+import { ATTACHMENT_IMAGE_MAX, ATTACHMENT_KEEP_MS, attachmentImageUrl, attachmentRel, type Attachment, type AttachmentOwner, type AttachmentUndo, type BlockPlace } from '@shared/model/attachment'
 import { planBlock, type PlanBlock } from '@shared/model/plan'
 import { seriesJson } from '@shared/model/series'
 import { seriesBlockId } from '@shared/engine/series'
@@ -529,6 +529,43 @@ describe('runda 2: kopiowanie poza kolejką, rekord w kolejce okna (T839)', () =
     const left = existsSync(join(dir, 'attachments')) ? readdirSync(join(dir, 'attachments')) : []
     expect(left).toEqual([])
     expect(existsSync(join(other, 'attachments'))).toBe(false)
+  })
+})
+
+describe('runda 3 (T839, T837)', () => {
+  it('zapis kopii, której już nie ma (wygasła, zapisana) – komunikat w „failed”, nie cisza', async () => {
+    const r = await hub.attachFiles(own(), [source('a.txt')])
+    expect(r.added).toHaveLength(1)
+    // The same copy again (already written), and one never made.
+    const again = await hub.commitFiles([r.added[0]!, 'nieznana'])
+    expect(again.added).toEqual([])
+    expect(again.failed).toHaveLength(2)
+    expect(again.failed.every((f) => f.error.includes('wygasła'))).toBe(true)
+    // A copy dropped after its time keeps its name for the message.
+    const p = await hub.prepareFiles(own(), [source('raport.pdf')])
+    await (hub as unknown as { dropPrepared: (id: string) => Promise<void> }).dropPrepared(p.ids[0]!)
+    expect((await hub.commitFiles(p.ids)).failed).toEqual([{ name: 'raport.pdf', error: expect.stringContaining('wygasła') }])
+  })
+
+  it('zamknięcie nie czeka na usuwanie zablokowanych kopii: folder zatrzymuje się od razu', async () => {
+    files = { ...nodeAttachmentFiles, removeDir: () => new Promise<void>(() => undefined) }
+    await hub.prepareFiles(own(), [source('a.txt'), source('b.txt')])
+    const t = Date.now()
+    const closed = await Promise.race([hub.close('quit').then(() => 'zamknięty'), new Promise<string>((r) => setTimeout(() => r('czeka'), 5000))])
+    expect(closed).toBe('zamknięty')
+    expect(Date.now() - t).toBeLessThan(3000)
+    expect(hub.service).toBeNull()
+  })
+
+  it('obraz ponad 20 MB: protokół odmawia (413), do limitu – tak', async () => {
+    write(attachmentRel('w1'), fileRecord('w1', 'duże.png'))
+    mkdirSync(join(dir, 'attachments', 'w1'), { recursive: true })
+    writeFileSync(join(dir, 'attachments', 'w1', 'duże.png'), Buffer.alloc(ATTACHMENT_IMAGE_MAX + 1, 1))
+    write(attachmentRel('w2'), fileRecord('w2', 'w-sam-raz.png'))
+    mkdirSync(join(dir, 'attachments', 'w2'), { recursive: true })
+    writeFileSync(join(dir, 'attachments', 'w2', 'w-sam-raz.png'), Buffer.alloc(ATTACHMENT_IMAGE_MAX, 1))
+    expect(await hub.attachmentImage(attachmentImageUrl('w1'))).toEqual({ ok: false, status: 413 })
+    expect(await hub.attachmentImage(attachmentImageUrl('w2'))).toMatchObject({ ok: true })
   })
 })
 

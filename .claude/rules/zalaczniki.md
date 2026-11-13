@@ -35,9 +35,9 @@ paths:
 - Tytuł i ikona linku: `linkFetch.fetchPageMeta` (sesja w pamięci, limity), parser czysty w
   `shared/linkMeta.ts`; zapis tylko `link.title` / `link.iconDataUrl` (T807). W testach atrapa `Fetcher`, nigdy sieć.
 - Obrazy: okno ładuje `<img src="rd-attachment://img/<id>">` (`attachmentImageUrl`), proces główny (`protocol.handle`,
-  `attachmentImage`) szuka pliku z rekordu (obraz, `realInside`) i oddaje go strumieniem; dekoduje okno (T837).
+  `attachmentImage`) szuka pliku z rekordu (obraz, `realInside`, do `ATTACHMENT_IMAGE_MAX` 20 MB) i oddaje go strumieniem; dekoduje okno (T837).
 - Parser strony liniowy (`scanPage`, atrybuty ręcznie, T834); przekierowania – `redirect: 'follow'`, `response.url` http/https,
-  pusty – bez ikon względnych i `/favicon.ico` (T835).
+  pusty – baza ikon to adres zapytania (T835).
 
 ## Usuwanie i sprzątanie
 - Miękkie `removedAt`, „Cofnij” = `AttachmentUndo` (ta sama chwila). Blok dnia (`removeDayBlock`) i „Tylko to” serii

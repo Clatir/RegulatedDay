@@ -13,6 +13,7 @@ import type { AddLinkResult, AttachResult, AttachmentOpen, EditEntry, EditOutcom
 import { recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import {
+  ATTACHMENT_IMAGE_MAX,
   ATTACHMENT_NAME_MAX,
   ATTACHMENT_SCHEME,
   attachmentFrom,
@@ -371,7 +372,7 @@ const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg
  * and checked to lie in its own folder (`realInside`) – the address names nothing but the id. Not here yet – 404 (the window
  * shows the kind's icon; the next look asks again), refused – 403, anything else – 404 or 400.
  */
-export async function attachmentImage(io: AttachmentIo, address: string): Promise<{ ok: true; abs: string; type: string } | { ok: false; status: 400 | 403 | 404 }> {
+export async function attachmentImage(io: AttachmentIo, address: string): Promise<{ ok: true; abs: string; type: string } | { ok: false; status: 400 | 403 | 404 | 413 }> {
   let u: URL
   try {
     u = new URL(address)
@@ -387,5 +388,9 @@ export async function attachmentImage(io: AttachmentIo, address: string): Promis
   const where = await fileOf(io, id, a)
   if (!where.ok) return { ok: false, status: where.result.code === 'missing' ? 404 : 403 }
   if (isExecutableName(basename(where.abs)) || IMAGE_TYPES[extOf(basename(where.abs))] !== type) return { ok: false, status: 403 }
+  // Larger than a thumbnail is worth (the window shows the kind's icon for it, by the record's size).
+  const st = await fs.stat(where.abs).catch(() => null)
+  if (!st) return { ok: false, status: 404 }
+  if (st.size > ATTACHMENT_IMAGE_MAX) return { ok: false, status: 413 }
   return { ok: true, abs: where.abs, type }
 }

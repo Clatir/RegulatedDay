@@ -39,8 +39,10 @@ export const explicitAddress = (text: string): boolean => /^(?:https?:\/\/|mailt
 /**
  * The address a transfer carries as a link: the first line of its `text/uri-list` (no comments), else a one-line plain text –
  * with `plain: 'explicit'` (a drop) only one that is an address on its face (`explicitAddress`), with `'any'` (Ctrl V, which
- * `linkFromInput` then judges) any; null – none. Beside a `text/uri-list` (also an empty one or only comments) or files
- * (also ones without a path) the plain text is never taken (T818).
+ * `linkFromInput` then judges) any; null – none. Beside a `text/uri-list` (also an empty one or only comments) the plain
+ * text is never taken, beside files only when pasted (`'any'`): a drop of files without a path takes no text (T818), while
+ * the clipboard of Excel or Word holds a picture without a path next to the address that was copied (its files, when they
+ * give paths, go first – `attachTransfer`).
  */
 export function addressOf(dt: Pick<DataTransfer, 'getData'> & Partial<Pick<DataTransfer, 'types'>>, plain: 'explicit' | 'any' = 'any'): string | null {
   const list = dt.getData('text/uri-list')
@@ -50,7 +52,7 @@ export function addressOf(dt: Pick<DataTransfer, 'getData'> & Partial<Pick<DataT
     .find((l) => l && !l.startsWith('#'))
   if (uri) return uri
   const types = Array.from(dt.types ?? [])
-  if (list || types.includes('text/uri-list') || types.includes('Files')) return null
+  if (list || types.includes('text/uri-list') || (plain === 'explicit' && types.includes('Files'))) return null
   const text = dt.getData('text/plain').trim()
   return text && !/[\r\n]/.test(text) && (plain === 'any' || explicitAddress(text)) ? text : null
 }

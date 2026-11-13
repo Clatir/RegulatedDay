@@ -124,18 +124,20 @@ describe('jak Electron: przekierowania idą przez stos sieciowy (T835)', () => {
   })
 })
 
-describe('odpowiedź bez adresu (url: \'\') po przekierowaniu (T835)', () => {
-  it('ikony względne i /favicon.ico nie liczą się od adresu, o który pytano; bezwzględne z dokumentu – tak', async () => {
+describe('odpowiedź bez adresu (url: \'\'), jak bywa w Electronie (T835)', () => {
+  it('ikona względna i /favicon.ico liczą się od adresu, o który pytano', async () => {
     const asked: string[] = []
     const f: Fetcher = async (url) => {
       asked.push(url)
-      if (url === 'https://stary.example/') return html('<title>T</title><link rel="icon" href="/wzgledna.png"><link rel="icon" href="https://cdn.example/abs.png">')
-      if (url === 'https://cdn.example/abs.png') return new Response(PNG)
+      // `new Response` has no url of its own – as Electron's answer may have none.
+      if (url === 'https://strona.example/a/') return html('<title>T</title><link rel="icon" href="/static/i.png">')
       return new Response(PNG)
     }
-    expect(await fetchPageMeta(f, 'https://stary.example/')).toEqual({ title: 'T', iconDataUrl: expect.stringMatching(/^data:image\/png/) })
-    expect(asked).toEqual(['https://stary.example/', 'https://cdn.example/abs.png'])
-    const none: Fetcher = async () => html('<title>T</title><link rel="icon" href="/wzgledna.png">')
-    expect(await fetchPageMeta(none, 'https://stary.example/')).toEqual({ title: 'T', iconDataUrl: null })
+    expect(await fetchPageMeta(f, 'https://strona.example/a/')).toEqual({ title: 'T', iconDataUrl: expect.stringMatching(/^data:image\/png/) })
+    expect(asked).toEqual(['https://strona.example/a/', 'https://strona.example/static/i.png'])
+    const fav: string[] = []
+    const g: Fetcher = async (url) => (fav.push(url), url.endsWith('favicon.ico') ? new Response(PNG) : html('<title>T</title>'))
+    expect((await fetchPageMeta(g, 'https://strona.example/a/'))!.iconDataUrl).toMatch(/^data:image\/png/)
+    expect(fav).toEqual(['https://strona.example/a/', 'https://strona.example/favicon.ico'])
   })
 })

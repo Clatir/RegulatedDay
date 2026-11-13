@@ -7,7 +7,7 @@
  * they belong (T811). A removal has its „Cofnij” in a toast (the window's way).
  */
 import { useEffect, useRef, useState } from 'react'
-import { attachmentImageUrl, attachmentsOfBlock, ATTACHMENT_NAME_MAX, isImageName, type Attachment, type AttachmentOwner, type BlockPlace } from '@shared/model/attachment'
+import { attachmentImageUrl, attachmentsOfBlock, ATTACHMENT_IMAGE_MAX, ATTACHMENT_NAME_MAX, isImageName, type Attachment, type AttachmentOwner, type BlockPlace } from '@shared/model/attachment'
 import type { PlanBlock } from '@shared/model/plan'
 import { TextField } from '../../components/fields'
 import { cx } from '../../components/ui'
@@ -60,7 +60,8 @@ function AttachmentRow({ a, place }: { a: Attachment; place: BlockPlace }) {
   const file = a.file
   const kind = file ? fileKind(file.fileName, file.ext) : null
   // Only an image of a kind the main process shows (never SVG), only once its file is here.
-  const image = !!file && kind === 'image' && isImageName(file.fileName) && !missing
+  // A larger one is never decoded for 32 px (T837) – the protocol refuses it too.
+  const image = !!file && kind === 'image' && isImageName(file.fileName) && file.size <= ATTACHMENT_IMAGE_MAX && !missing
   const program = kind === 'program' || shown
   const meta = file ? sizeText(file.size) : a.link && a.link.domain !== a.name ? a.link.domain : ''
   const open = () =>

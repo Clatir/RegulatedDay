@@ -316,6 +316,8 @@ export const isExecutableName = (name: string): boolean => EXECUTABLE_EXTS.has(e
  */
 export const ATTACHMENT_SCHEME = 'rd-attachment'
 export const attachmentImageUrl = (id: string): string => `${ATTACHMENT_SCHEME}://img/${id}`
+/** A larger image gets no thumbnail (T837): the window decodes it whole for 32 px – the kind's icon instead. */
+export const ATTACHMENT_IMAGE_MAX = 20 * 1024 * 1024
 
 /** The images with a thumbnail (D410, T808). */
 export const THUMB_EXTS: ReadonlySet<string> = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'])

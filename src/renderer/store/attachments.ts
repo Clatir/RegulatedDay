@@ -3,8 +3,9 @@
  * adding files and links (the main process copies the file before its record – `window.rd.attachFiles`, `addLink`), a
  * new name, a removal with „Cofnij” and opening. A removal is soft (`removedAt`); its answer is what „Cofnij” needs
  * (`AttachmentUndo`) – only the attachments still removed at that very instant come back. A change of a record that is there
- * goes in its turn after the edits sent before it (`trySaveWith`); a new attachment – new records of new ids – never waits
- * for them nor holds them (T839: the dialog of files open, gigabytes copied).
+ * goes in its turn after the edits sent before it (`trySaveWith`). New files: the dialog and the copying go outside that
+ * turn (gigabytes never hold it), their records in it (`attachCommit` – a block removed meanwhile is known then), and so
+ * does a new link (`addLink` – quick, nothing copied) (T839).
  */
 import type { AddLinkResult, AttachmentOpen, AttachPrepared, AttachResult } from '@shared/api'
 import { recordEdit } from '@shared/data/merge'

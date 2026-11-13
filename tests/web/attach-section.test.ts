@@ -178,6 +178,12 @@ describe('miniatury i dopiski', () => {
     expect(q('attachment-thumb')).not.toBeNull()
   })
 
+  it('obraz ponad 20 MB – bez <img> (okno nie dekoduje go dla 32 px), ikona rodzaju (T837)', async () => {
+    const { all } = await show([file('a1', 'duże.png', OWN, 1, 20 * 1024 * 1024 + 1), file('a2', 'małe.png', OWN, 2, 20 * 1024 * 1024)])
+    expect((all('attachment-thumb') as HTMLImageElement[]).map((i) => [i.getAttribute('src'), i.getAttribute('decoding')])).toEqual([['rd-attachment://img/a2', 'async']])
+    expect(all('attachment-icon').map((i) => i.getAttribute('data-kind'))).toEqual(['image', 'image'])
+  })
+
   it('plik, który jeszcze nie dotarł z drugiego komputera – dopisek (bez pytania o miniaturę)', async () => {
     const { all } = await show([file('a1', 'foto.png', OWN, 1)], { missing: ['a1'] })
     expect(all('attachment-thumb')).toEqual([])

@@ -54,6 +54,9 @@ import { DataService, STOP_TIMEOUT_MS, type ServiceOptions } from './service'
 /** A copy for a block whose record the window never wrote (`commitFiles`) goes after this (T839). */
 export const PREPARED_MS = 10 * 60_000
 const FOLDER_CHANGED = 'folder danych zmienił się w trakcie – plik nie został dołączony'
+const EXPIRED = 'kopia pliku wygasła – dołącz go jeszcze raz'
+/** How long a close waits for the copies whose records will never be written to go (best effort, T839). */
+const CLOSE_DROP_MS = 300
 
 /** No daily backup for this many days: the window warns (spec „po 3 dniach bez kopii także w oknie głównym”). */
 export const BACKUP_STALE_DAYS = 3
@@ -375,8 +378,9 @@ export class DataHub {
     // the folder it opened, and no retry is armed any more.
     this.shutdown = true
     this.closing = true
-    // Copies whose records the window will never write now (T839).
-    for (const id of [...this.prepared.keys()]) await this.dropPrepared(id)
+    // Copies whose records the window will never write now (T839): beside the folder's stop, best effort – a file held
+    // never eats the time the quit has (`QUIT_DATA_CLOSE_MS`); one left stays a folder without a record.
+    const drops = Promise.allSettled([...this.prepared.keys()].map((id) => this.dropPrepared(id)))
     if (this.retry) clearTimeout(this.retry)
     this.retry = null
     try {
@@ -387,6 +391,7 @@ export class DataHub {
     } finally {
       this.closing = false
     }
+    await Promise.race([drops, new Promise((r) => setTimeout(r, CLOSE_DROP_MS).unref?.())])
   }
 
   /** The window reads again only when what it would read changed (every check of the folder calls this). */
@@ -838,8 +843,14 @@ export class DataHub {
     if (!p) return
     this.prepared.delete(id)
     clearTimeout(p.timer)
+    // Its name for the message of a late `commitFiles` (the last ones only).
+    this.droppedNames.set(id, String(p.file.raw.name))
+    while (this.droppedNames.size > 200) this.droppedNames.delete(this.droppedNames.keys().next().value!)
     await p.io.files.removeDir(p.io.dataDir, id).catch(() => undefined)
   }
+
+  /** The names of copies dropped before their records were written (`dropPrepared`). */
+  private readonly droppedNames = new Map<string, string>()
 
   /**
    * The records of copies made (`prepareFiles`), in the window's turn (T839): in the folder they were copied to – another
@@ -847,12 +858,14 @@ export class DataHub {
    * records are written removed at once (the files go after 30 days, D410).
    */
   async commitFiles(ids: unknown): Promise<AttachResult> {
-    const list = (Array.isArray(ids) ? ids : []).map((id) => this.prepared.get(String(id))).filter((p): p is NonNullable<typeof p> => !!p)
+    const asked = (Array.isArray(ids) ? ids : []).map(String)
+    const list = asked.map((id) => this.prepared.get(id)).filter((p): p is NonNullable<typeof p> => !!p)
     for (const p of list) {
       this.prepared.delete(p.file.id)
       clearTimeout(p.timer)
     }
-    const failed: AttachResult['failed'] = []
+    // A copy no longer waiting (gone after `PREPARED_MS` or at a close, or written already): said, never silence.
+    const failed: AttachResult['failed'] = asked.filter((id) => !list.some((p) => p.file.id === id)).map((id) => ({ name: this.droppedNames.get(id) ?? 'plik', error: EXPIRED }))
     const added: string[] = []
     const byFolder = new Map<AttachmentIo, PreparedFile[]>()
     for (const p of list) byFolder.set(p.io, [...(byFolder.get(p.io) ?? []), p.file])
@@ -934,7 +947,7 @@ export class DataHub {
   }
 
   /** The file of an image attachment for an address of `rd-attachment://img/<id>` (the window's `<img>`, T837). */
-  async attachmentImage(address: string): Promise<{ ok: true; abs: string; type: string } | { ok: false; status: 400 | 403 | 404 }> {
+  async attachmentImage(address: string): Promise<{ ok: true; abs: string; type: string } | { ok: false; status: 400 | 403 | 404 | 413 }> {
     if (!this.service?.folder || !this.folder) return { ok: false, status: 404 }
     return attachmentImage(this.attachmentIo(), address)
   }

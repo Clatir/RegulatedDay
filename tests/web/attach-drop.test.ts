@@ -203,11 +203,22 @@ describe('obok listy adresów albo plików zwykły tekst nigdy (T818, runda 2)',
   it('pusta albo sama komentarzowa uri-list, pliki bez ścieżki – text/plain nie jest brany', async () => {
     expect(addressOf(transfer({ 'text/uri-list': '', 'text/plain': 'https://zly.pl' }))).toBeNull()
     expect(addressOf(transfer({ 'text/uri-list': '# tylko komentarz', 'text/plain': 'https://zly.pl' }))).toBeNull()
-    expect(addressOf(transfer({ 'text/plain': 'https://zly.pl' }, [file('brak')]))).toBeNull()
+    expect(addressOf(transfer({ 'text/plain': 'https://zly.pl' }, [file('brak')]), 'explicit')).toBeNull()
     expect(await attachTransfer(owner, transfer({ 'text/plain': 'https://zly.pl' }, [file('brak')]))).toBe(true)
     expect(addLink).not.toHaveBeenCalled()
     expect(useUi.getState().toasts.some((t) => t.text === NO_PATH_TEXT)).toBe(true)
     // Plain text alone – as before.
     expect(addressOf(transfer({ 'text/plain': 'https://c.pl' }))).toBe('https://c.pl')
+  })
+})
+
+describe('Ctrl V ze schowka Excela albo Worda: obrazek bez ścieżki i adres w tekście (T818, runda 3)', () => {
+  it('pliki bez ścieżki – adres z tekstu wklejony jako link; przy upuszczeniu dalej nie', async () => {
+    const ev = (dt: ReturnType<typeof transfer>) => ({ clipboardData: dt as unknown as DataTransfer, target: document.body, defaultPrevented: false })
+    expect(pasteTransfer(owner, ev(transfer({ 'text/plain': 'https://e.pl/arkusz' }, [file('brak')])))).toBe(true)
+    await vi.waitFor(() => expect(addLink).toHaveBeenCalledWith(owner, 'https://e.pl/arkusz'))
+    vi.mocked(addLink).mockClear()
+    expect(await attachTransfer(owner, transfer({ 'text/plain': 'https://e.pl/arkusz' }, [file('brak')]))).toBe(true)
+    expect(addLink).not.toHaveBeenCalled()
   })
 })
