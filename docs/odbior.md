@@ -2389,8 +2389,8 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/multi-day.test.ts` (kolejność pasków: całodniowe, stałe, elastyczne po godzinie; limit 3; „+N”; sesje bez paska), `tests/web/month-cells.test.ts` (nazwa i godziny elastycznego bloku na pasku), `tests/web/calendars-views.test.ts` (ukryty kalendarz – bez paska elastycznego bloku i bez „+N”, „ukryte: N”), `tests/web/week-views.test.ts`, `tests/fs/multi-day.test.ts`. E2E `tests/e2e/week.spec.ts` („Miesiąc” z blokami elastycznymi, dzień przyszły). Ty: rzut oka.
 - **Jak sprawdzić:** w widoku miesiąca znajdź dzień przyszły z kilkoma blokami elastycznymi (bez bloków stałych) i dzień z blokiem stałym i elastycznymi. Najedź myszą na pasek bloku elastycznego. Ukryj kalendarz, do którego należy jeden z nich.
-- **Oczekiwany efekt:** paski mają nazwy bloków elastycznych (jak w „Dziś”), po wydarzeniach całodniowych i blokach stałych, elastyczne po godzinie startu; podpowiedź paska to nazwa z godzinami; reszta dnia jako „+N”; wysokość komórki bez zmian; ukryty kalendarz nie ma paska ani udziału w „+N”; kropka obciążenia bez zmian.
-- **Nie przechodzi, gdy:** blok elastyczny przed stałym albo przed wydarzeniem całodniowym; więcej niż trzy paski; sesja ma pasek; ukryty blok dalej ma pasek; komórka wyższa niż przedtem.
+- **Oczekiwany efekt:** paski mają nazwy bloków elastycznych (jak w „Dziś”), po wydarzeniach całodniowych i blokach stałych, elastyczne po godzinie startu; podpowiedź paska to nazwa, godziny i stan jak w „Tygodniu” (np. „· w planie”, „· zrobiony”); elastyczny blok niewykonany (dzień miniony) albo w tle nie ma paska i jest w „+N”; blok stały zostaje z paskiem; reszta dnia jako „+N”; wysokość komórki bez zmian; ukryty kalendarz nie ma paska ani udziału w „+N”; kropka obciążenia bez zmian.
+- **Nie przechodzi, gdy:** blok elastyczny przed stałym albo przed wydarzeniem całodniowym; więcej niż trzy paski; sesja ma pasek; niewykonany albo działający w tle elastyczny blok ma pasek; ukryty blok dalej ma pasek; komórka wyższa niż przedtem.
 
 ---
 

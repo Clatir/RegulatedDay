@@ -25,10 +25,10 @@ T950–T955, T960–T969, T980–T986 (część A; D426), T936–T939 (ekrany).
   bloki z `movable` (D417 – `movableBlock`, ta sama reguła co oś „Dziś”), `fixed`, `session`; `energy` (`EnergyTrack`, T903 –
   przyszły z `assumed`: jaśniej, podpis „przyjęte”, D422; tylko `weekView`/`daysView` – T914; miniony – moduł z oceny, T950),
   `budget` (praca wobec budżetu; miniony bez obecności – null, T918). IPC: `weekView(data)`, `daysView(daty, { energy })` („3 dni”
-  – `threeDays`, „Agenda” – `agendaDates` z `energy: false`, T954; 1–14 dat), `monthView('RRRR-MM')` (`MonthDay` z `blocks` – każdy blok dnia po godzinie `{ id, named, categoryId, startMin, endMin, fixed, session }`, bez zdjętych z dnia; T1013).
+  – `threeDays`, „Agenda” – `agendaDates` z `energy: false`, T954; 1–14 dat), `monthView('RRRR-MM')` (`MonthDay` z `blocks` – każdy blok dnia po godzinie (kolejność z `horizonDay`) `MonthBlock` z `monthBlockOf`: `{ id, named (bez note), categoryId, startMin, endMin, fixed, session, state, background, outsidePlan }`, bez zdjętych z dnia; T1013, T1015).
   Okno: `useWeekView`, `useDaysView(daty, { energy })`, `useMonthView`.
-- Czyste (`engine/calendarViews.ts`): `mayMoveBetween`, `loadLevel` (T904), `monthDayOf`, `monthCell` (całodniowe z
-  `DataView.allDay`, potem stałe, potem elastyczne po godzinie – bez sesji; 3 paski, „+N” – wszystko poza paskami, D422, D429, T1013), `agendaOf` (T906), `monthDates`.
+- Czyste (`engine/calendarViews.ts`): `mayMoveBetween`, `loadLevel` (T904), `monthDayOf`, `monthBlockOf`, `monthBarred`, `monthCell` (całodniowe z
+  `DataView.allDay`, potem stałe, potem elastyczne po godzinie – bez sesji, bez elastycznych `missed` i w tle; 3 paski, „+N” – wszystko poza paskami, D422, D429, T1013–T1016; podpowiedź paska ze stanem – `blockStateText`), `agendaOf` (T906), `monthDates`.
   Filtr kalendarzy (`visibleMonthDay`) zdejmuje bloki z `MonthDay.blocks` – ukryty blok nie ma paska ani „+N”.
 
 ## Przeniesienie (D417, D422, D424, T900, T909, T914–T917, T951–T955)

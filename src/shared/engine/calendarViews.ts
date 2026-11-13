@@ -34,19 +34,54 @@ export function loadLevel(workMin: number, limitMin: number): LoadLevel {
 /** Not taken off the day before it began (parked, cancelled). */
 const onDay = (b: HorizonBlock): boolean => b.state !== 'parked' && b.state !== 'cancelled'
 
+/** What names a block of the month (`blockName` reads these and nothing else – never the note nor the steps, T1015). */
+export type MonthNamed = Omit<HorizonBlock['named'], 'note'>
+
 /**
- * A block of the month's day (D429): what a bar needs – its name, category and hour – and what decides whether it gets one
- * (`fixed`: fixed in the plan; `session`: a trading session or the second shift – never a bar, D422).
+ * A block of the month's day (D429): what a bar needs – its name, category, hour and state – and what decides whether it gets
+ * one (`fixed`: fixed in the plan; `session`: a trading session or the second shift – never a bar, D422; `state`, `background`:
+ * a flexible block that was missed or runs in the background has none, T1014).
  */
 export interface MonthBlock {
   id: string
-  named: HorizonBlock['named']
+  named: MonthNamed
   categoryId: string
   startMin: number
   endMin: number
   fixed: boolean
   session: boolean
+  state: HorizonBlockState
+  background: boolean
+  outsidePlan: boolean
 }
+
+/** The block of the month's day of a block of the horizon (T1015): the fields `blockName` reads, the hour, the state. */
+export function monthBlockOf(b: HorizonBlock): MonthBlock {
+  const n = b.named
+  const named: MonthNamed = { categoryId: n.categoryId, variantId: n.variantId, routine: n.routine, requests: n.requests }
+  if (n.origin !== undefined) named.origin = n.origin
+  if (n.sourceId !== undefined) named.sourceId = n.sourceId
+  if (n.name !== undefined) named.name = n.name
+  if (n.task !== undefined) named.task = n.task
+  return {
+    id: b.id,
+    named,
+    categoryId: b.categoryId,
+    startMin: b.startMin,
+    endMin: b.endMin,
+    fixed: b.fixed === true,
+    session: b.session === true,
+    state: b.state,
+    background: b.background,
+    outsidePlan: b.outsidePlan
+  }
+}
+
+/**
+ * Whether the block gets a bar (D429, T1014, T1016): never a session; a fixed block always (as in 1.18.0); a flexible one only when
+ * it is or will be in the day – not one missed (`missed`: a day gone by, not done) nor one in the background.
+ */
+export const monthBarred = (b: MonthBlock): boolean => !b.session && (b.fixed || (b.state !== 'missed' && !b.background))
 
 /** A day of the month as the main process gives it (D418): its blocks by the hour and its load. */
 export interface MonthDay {
@@ -56,8 +91,9 @@ export interface MonthDay {
   /** The type in force (null – not read). */
   dayType: string | null
   /**
-   * Every block of the day – fixed or not, sessions too – but the ones taken off it (parked, cancelled), by the hour (D429, T1013):
-   * the bars (`monthCell`), „+N” (D422) and what the window leaves out of the calendars it hides (D419) all come from this list.
+   * Every block of the day – fixed or not, sessions too – but the ones taken off it (parked, cancelled), by the hour (D429, T1013;
+   * the order of `HorizonDay.blocks`, which `horizonDay` sorts): the bars (`monthCell`), „+N” (D422) and what the window leaves
+   * out of the calendars it hides (D419) all come from this list.
    */
   blocks: MonthBlock[]
   /** The work of the day against its budget; null – not read, or a day gone by nobody used. */
@@ -74,10 +110,7 @@ export function monthDayOf(d: HorizonDay): MonthDay {
     when: d.when,
     read: d.read,
     dayType: d.dayType,
-    blocks: d.blocks
-      .filter(onDay)
-      .sort((x, y) => x.startMin - y.startMin || (x.id < y.id ? -1 : 1))
-      .map((x) => ({ id: x.id, named: x.named, categoryId: x.categoryId, startMin: x.startMin, endMin: x.endMin, fixed: x.fixed === true, session: x.session === true })),
+    blocks: d.blocks.filter(onDay).map(monthBlockOf),
     load: b ? loadLevel(b.workMin, b.limitMin) : null,
     workMin: b?.workMin ?? null,
     limitMin: b?.limitMin ?? null
@@ -115,11 +148,12 @@ export interface MonthCell {
 
 /**
  * The cell of a day of the month (D418, D422, D429): its all-day events, fixed blocks and flexible ones, at most `max` bars;
- * „+N” – everything else the day holds: the events and blocks without a bar, the sessions too (they never get one).
+ * „+N” – everything else the day holds: the events and blocks without a bar – the sessions, the flexible ones missed or in the
+ * background (`monthBarred`).
  */
 export function monthCell(day: MonthDay, allDay: readonly AllDayEvent[], max = MONTH_CELL_BARS): MonthCell {
   const events = eventsOn(allDay, day.date)
-  const barred = (fixed: boolean): MonthItem[] => day.blocks.filter((b) => !b.session && b.fixed === fixed).map((block) => ({ kind: 'block' as const, block }))
+  const barred = (fixed: boolean): MonthItem[] => day.blocks.filter((b) => monthBarred(b) && b.fixed === fixed).map((block) => ({ kind: 'block' as const, block }))
   const bars: MonthItem[] = [...events.map((event) => ({ kind: 'allDay' as const, event })), ...barred(true), ...barred(false)]
   const items = bars.slice(0, max)
   return { items, more: Math.max(0, events.length + day.blocks.length - items.length), load: day.load }

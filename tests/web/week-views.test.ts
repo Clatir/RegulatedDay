@@ -5,7 +5,7 @@
  * what a day of the month shows – the bars, „+N”, the dot of the load with its sentence.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { agendaOf, type MonthDay } from '@shared/engine/calendarViews'
+import { agendaOf, monthBlockOf, type MonthDay } from '@shared/engine/calendarViews'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { rdFrom } from '@shared/model/rd'
@@ -168,7 +168,7 @@ describe('komórka miesiąca (D418, D422)', () => {
     when: 'future',
     read: 'full',
     dayType: 'roboczy',
-    blocks: blocks.map((b) => ({ id: b.id, named: b.named, categoryId: b.categoryId, startMin: b.startMin, endMin: b.endMin, fixed: b.fixed === true, session: b.session === true })),
+    blocks: blocks.map(monthBlockOf),
     load: 'low',
     workMin: 310,
     limitMin: 360,

@@ -473,7 +473,7 @@ describe('oś „Dziś” (D419)', () => {
 
 describe('miesiąc: dzień z silnika niesie swoje bloki (D429, T1013)', () => {
   it('`blocks` = każdy blok dnia po godzinie z kategorią, nazwą i godzinami (bez zdjętych z dnia)', () => {
-    const m = monthDayOf(day(TODAY, [block('b', 700, 760, 'nauka'), block('a', 600, 660, 'inne', { fixed: true }), block('c', 800, 860, 'nauka', { state: 'cancelled' })]))
+    const m = monthDayOf(day(TODAY, [block('a', 600, 660, 'inne', { fixed: true }), block('b', 700, 760, 'nauka'), block('c', 800, 860, 'nauka', { state: 'cancelled' })]))
     expect(m.blocks.map((b) => [b.id, b.categoryId, b.startMin, b.endMin, b.fixed, b.session])).toEqual([['a', 'inne', 600, 660, true, false], ['b', 'nauka', 700, 760, false, false]])
     expect(m.blocks[0]!.named).toBeDefined()
   })

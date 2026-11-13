@@ -1,6 +1,6 @@
 /**
  * SNT1 część A w folderze danych (D417, D418): „3 dni” i „Agenda” (`daysView` – dni w podanej kolejności, każdy jak w
- * tygodniu, z krzywą energii kolumny i budżetem), miesiąc „Kalendarza” (`monthView` – bloki stałe i obciążenie każdego dnia),
+ * tygodniu, z krzywą energii kolumny i budżetem), miesiąc „Kalendarza” (`monthView` – wszystkie bloki dnia po godzinie i obciążenie każdego dnia, D429),
  * moduł energii z rd.json (wyłączony – bez krzywej; zmiana liczy dni od nowa), sprawdzanie wejścia w DataHub.
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -170,8 +170,8 @@ describe('krzywa energii w folderze danych – moduł dnia i kto ją liczy (T914
   })
 })
 
-describe('miesiąc „Kalendarza” w folderze danych (D418)', () => {
-  it('każdy dzień miesiąca: bloki stałe bez sesji i obciążenie pracy wobec budżetu', async () => {
+describe('miesiąc „Kalendarza” w folderze danych (D418, D429)', () => {
+  it('każdy dzień miesiąca: wszystkie bloki dnia po godzinie (sesje z flagą) i obciążenie pracy wobec budżetu', async () => {
     day(THU, [
       { id: 'meet', categoryId: 'inne', startMin: 18 * 60, durationMin: 60, fixed: true, origin: 'user' },
       { id: 'flex', categoryId: 'inne', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user' }

@@ -3,8 +3,8 @@
  * early close of the market, the week of the session shift, its own wake); several dates are selected by dragging or
  * with Ctrl and get a type or a wake at once; a click on a day opens its plan. Marking a Saturday as a „zjazd” asks
  * once whether the weekly analysis goes to Friday 20:00–21:00 instead of the second shift (spec „Typy dni i szablony”).
- * Every day also shows up to three bars of its all-day events and fixed blocks, „+N” for all the rest it holds and the dot of
- * its load (D418, D422 – `useMonthView`, `monthCellView`).
+ * Every day also shows up to three bars of its all-day events, fixed blocks and flexible blocks, „+N” for all the rest it holds
+ * and the dot of its load (D418, D422, D429 – `useMonthView`, `monthCellView`).
  * „Wczytaj PDF zjazdów” (D357) reads a schedule into a preview you correct; only „Zapisz” writes the days (the same
  * question for a Saturday), its toast has „Cofnij”.
  */
@@ -59,7 +59,7 @@ export function CalendarPage() {
   const pending = useRef<PendingImport | null>(null)
   const [wake, setWake] = useState<number | null>(null)
   const dates = useMemo(() => gridDates(month), [month])
-  // The fixed blocks and the load of each day of the month (D418), counted by the main process; the days of the neighbouring
+  // The blocks (all of them, D429) and the load of each day of the month (D418), counted by the main process; the days of the neighbouring
   // months on the grid have their all-day events only.
   const { view: monthView } = useMonthView(month)
   // D419, D425: the cells leave out the blocks and all-day events of the unchecked calendars (the dot of the load stays as counted);

@@ -10,6 +10,7 @@ import type { AllDayEvent } from '@shared/model/allDay'
 import type { CalendarSieve } from '@shared/model/calendars'
 import { ALL_DAY_COLOR_HEX, blockFill } from '@shared/theme'
 import { blockColor, blockName, type Names } from '../plan/blockView'
+import { blockStateText } from '../week/weekText'
 
 /** One miniature bar of a cell. */
 export interface MonthBar {
@@ -64,8 +65,9 @@ export function monthCellView(day: MonthDay, allDay: readonly AllDayEvent[], nam
     }
     const b = item.block
     const color = blockColor(b.categoryId, names)
-    const name = blockName(b.named, names)
-    return { key: `block-${b.id}`, label: name, fill: blockFill(color, brightness), edge: color, title: `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)}` }
+    // `note` names nothing – the month does not carry it (T1015).
+    const name = blockName({ ...b.named, note: '' }, names)
+    return { key: `block-${b.id}`, label: name, fill: blockFill(color, brightness), edge: color, title: `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}` }
   })
   const load = cell.load && day.workMin != null && day.limitMin != null ? { level: cell.load, title: loadTitle(day.workMin, day.limitMin) } : null
   return { bars, more: cell.more, load }
