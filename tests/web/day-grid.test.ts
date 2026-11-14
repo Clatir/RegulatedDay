@@ -3,8 +3,8 @@
  * The columns of „Tydzień” and „3 dni” (SNT1, D417, D422): a block that may be moved is dragged to another hour or another day –
  * the place it would take is shown while it is held (a day gone by refused), the drop is `moveWeekBlock` with the 5-minute hour
  * of the column under the pointer and the line „Cofnij” it leaves; Esc and a refused place change nothing; a click without
- * movement opens the day as before; a block that may not be moved has no grip. The energy's curve behind the blocks, fainter
- * with the caption „przyjęte” for the assumed check-in.
+ * movement opens the day as before; a block that may not be moved has no grip. The energy's strip at the left edge (D500), the
+ * blocks right of it, fainter with the caption „przyjęte” for the assumed check-in; its hover and its legend.
  */
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -12,6 +12,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { DataView } from '@shared/api'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { DayGrid } from '@renderer/features/week/DayGrid'
+import { POOL_COLOR } from '@renderer/features/plan/energyDraw'
+import { ASSUMED_FACTOR, EnergyStripLegend, STRIP_OPACITY, STRIP_WIDTH } from '@renderer/features/week/EnergyStrip'
 import { THREE_DAYS_PPM, WEEK_PPM } from '@renderer/features/week/weekLayout'
 import { moveWeekBlock } from '@renderer/features/week/weekMove'
 import { installEscape, onEscapeLayer } from '@renderer/lib/escape'
@@ -294,37 +296,84 @@ describe('przeciąganie bloku między kolumnami (D417)', () => {
   })
 })
 
-describe('krzywa energii w tle kolumny (D417, D422)', () => {
-  const track = (assumed?: true) => ({ samples: [{ at: 360, head: 100, emotions: 100, senses: 100 }, { at: 600, head: 80, emotions: 90, senses: 70 }, { at: 900, head: 50, emotions: 60, senses: 40 }], reserve: 30, ...(assumed ? { assumed } : {}) })
-  it('dzień ze znaną energią: trzy linie za blokami, bez podpisu', async () => {
+describe('pasek energii przy lewej krawędzi kolumny (D500, D422)', () => {
+  // 06:00 bodźce 99 (the weakest – a tie would be głowa); 10:00 bodźce 40 (uwaga at the reserve 30); 15:00 bodźce 20 (below the reserve).
+  const track = (assumed?: true) => ({ samples: [{ at: 360, head: 100, emotions: 100, senses: 99 }, { at: 600, head: 80, emotions: 90, senses: 40 }, { at: 900, head: 50, emotions: 60, senses: 20 }], reserve: 30, ...(assumed ? { assumed } : {}) })
+  const rects = (date: string) => [...q(`week-energy-${date}`)!.querySelectorAll('rect')]
+  it('dzień ze znaną energią: wąski pasek przy lewej krawędzi w kolorze najsłabszej puli, w trzech odcieniach', async () => {
     const list = days()
     list[1] = { ...list[1]!, energy: track() }
     await mount(list)
     const svg = q(`week-energy-${TODAY}`)!
-    expect(svg.querySelectorAll('path')).toHaveLength(3)
+    expect(svg.getAttribute('width')).toBe(String(STRIP_WIDTH))
     expect(svg.getAttribute('data-assumed')).toBeNull()
     expect(q(`week-energy-assumed-${TODAY}`)).toBeNull()
-    // Behind the blocks: before them in the column, and no hold on the pointer.
-    expect(svg.getAttribute('class')).toContain('pointer-events-none')
-    expect(svg.compareDocumentPosition(blockA()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0)
+    const r = rects(TODAY)
+    expect(r.map((x) => x.getAttribute('data-state'))).toEqual(['ok', 'watch', 'low'])
+    expect(new Set(r.map((x) => x.getAttribute('data-pool')))).toEqual(new Set(['senses']))
+    expect(r.map((x) => x.getAttribute('fill'))).toEqual(Array(3).fill(POOL_COLOR.senses))
+    expect(r.map((x) => Number(x.getAttribute('opacity')))).toEqual([STRIP_OPACITY.ok, STRIP_OPACITY.watch, STRIP_OPACITY.low])
+    // From the first sample to the last, touching.
+    expect(r[0]!.getAttribute('data-from')).toBe('360')
+    expect(r.at(-1)!.getAttribute('data-to')).toBe('900')
   })
-  it('dzień przyszły: linie rzadsze i jaśniejsze, z podpisem „przyjęte”', async () => {
+  it('nic pod blokami: bloki stoją na prawo od paska; dzień bez energii – od krawędzi', async () => {
+    const list = days()
+    list[1] = { ...list[1]!, energy: track() }
+    await mount(list)
+    expect(q(`week-blocks-${TODAY}`)!.style.left).toBe(`${STRIP_WIDTH + 1}px`)
+    expect(q(`week-blocks-${TODAY}`)!.contains(blockA())).toBe(true)
+    expect(q(`week-energy-hit-${TODAY}`)!.style.width).toBe(`${STRIP_WIDTH + 1}px`)
+    expect(q(`week-blocks-${DATES[0]}`)!.style.left).toBe('0px')
+  })
+  it('dzień przyszły (przyjęte 100/100/100): pasek jaśniejszy, z podpisem „przyjęte”', async () => {
     await mount(days({ energyTomorrow: track(true) }))
     const svg = q(`week-energy-${DATES[2]}`)!
     expect(svg.getAttribute('data-assumed')).toBe('true')
-    expect(svg.querySelector('path')!.getAttribute('stroke-dasharray')).toBe('3 3')
+    expect(Number(rects(DATES[2]!)[0]!.getAttribute('opacity'))).toBeCloseTo(STRIP_OPACITY.ok * ASSUMED_FACTOR, 9)
     expect(q(`week-energy-assumed-${DATES[2]}`)!.textContent).toBe('przyjęte')
   })
-  it('bez krzywej (przed check-inem, dzień minął bez check-inu, moduł wyłączony) – nic nie jest rysowane', async () => {
+  it('bez energii (przed check-inem, dzień minął bez check-inu, moduł wyłączony) – nic nie jest rysowane', async () => {
     await mount(days())
     expect(host!.querySelectorAll('[data-testid^="week-energy-"]')).toHaveLength(0)
   })
-  it('punkt krzywej leży tam, gdzie godzina na osi tej skali', async () => {
+  it('odcinek leży tam, gdzie godzina na osi tej skali', async () => {
     const list = days()
     list[1] = { ...list[1]!, energy: track() }
     await mount(list, THREE_DAYS_PPM)
-    const d = q(`week-energy-${TODAY}`)!.querySelector('path')!.getAttribute('d')!
-    // The second sample: 10:00 is 240 minutes under the top of the axis (06:00), 1.2 px each – 288 px; 80 → x = 2 + 80 * 0.96.
-    expect(d).toContain('L78.8,288.0')
+    // 06:00 is the top of the axis; the run from 06:00 starts at 0, the last ends at 15:00 – 540 minutes, 1.2 px each.
+    const r = rects(TODAY)
+    expect(r[0]!.getAttribute('y')).toBe('0')
+    expect(Number(r.at(-1)!.getAttribute('y')) + Number(r.at(-1)!.getAttribute('height'))).toBeCloseTo(540 * THREE_DAYS_PPM, 6)
+  })
+  it('najechanie na pasek: godzina i trzy wartości', async () => {
+    const list = days()
+    list[1] = { ...list[1]!, energy: track() }
+    await mount(list)
+    const hit = q(`week-energy-hit-${TODAY}`)!
+    // The hit area is at the column's top (y = 100); 10:00 is 240 minutes under 06:00.
+    vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(function (this: Element) {
+      return rect(colLeft(1), COL_TOP, STRIP_WIDTH + 1, 2000)
+    })
+    act(() => void hit.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: colLeft(1) + 2, clientY: COL_TOP + 240 * WEEK_PPM })))
+    expect(q(`week-energy-hover-${TODAY}`)!.textContent).toBe('10:00 · głowa 80 · emocje 90 · bodźce 40')
+    act(() => void hit.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })))
+    expect(q(`week-energy-hover-${TODAY}`)).toBeNull()
+  })
+})
+
+describe('legenda paska energii (D500)', () => {
+  it('„energia 0–100”, pule i nazwy odcieni', async () => {
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(EnergyStripLegend)))
+    const text = q('week-energy-legend')!.textContent!
+    expect(text).toContain('energia 0–100')
+    expect(text).toContain('najsłabsza pula')
+    expect(text).toContain('G głowa')
+    expect(q('week-energy-legend-ok')!.textContent).toBe('dobrze')
+    expect(q('week-energy-legend-watch')!.textContent).toBe('uwaga (mniej niż 15 nad rezerwą)')
+    expect(q('week-energy-legend-low')!.textContent).toBe('poniżej rezerwy')
   })
 })
