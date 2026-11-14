@@ -99,6 +99,10 @@ export function autoText(a: AutoAction, blockName: string, clock: string): strin
       return `${name} zaczęty o ${clock} (bez komputera, według planu)`
     case 'awayPlan':
       return `${name} skończony o ${clock} (według planu)`
+    case 'groupStart':
+      return `${name} zaczęty o ${clock} (razem z grupą)`
+    case 'groupPlan':
+      return `${name} skończony o ${clock} (według planu, w tle grupy)`
     case 'plan':
       return `${name} skończony o ${clock} (według planu)`
     case 'fixedNoReaction':

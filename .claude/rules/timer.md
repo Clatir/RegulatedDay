@@ -59,6 +59,9 @@ paths:
   wejściu ≥ `AWAY_START_MIN` (od jej początku; regeneracja z limitem, sprawdzanie od nowa T465 – T1138–T1140), liczone przed `fixedStartLists` – wcześniejszy start idzie pierwszy, stałe czekają przebieg; `fixedStart` nie
   widzi z przodu bloku „poza komputerem” kończonego najpóźniej w chwili startu; „Cofnij” startu (`awayStartUndoable` –
   tylko póki blok ruszała sama aplikacja) cofa jego automatyczny koniec. „Tydzień” (`week.ts`) rysuje zamieniony jak oś.
+- Grupa równoległa (D476, D493, D494, D499, T1190–T1199): `block.start.group` (`BlockFact.group`) – start grupy
+  `groupStarts` (`groupOf` z `parallel.ts`, 1.23-A), z przodu `groupFront` (to samo w `energy.ts`), `front` (pasek „+K w
+  tle”), `groupStart`/`groupPlan` w `auto.ts`; blok spoza grupy pauzuje całą grupę, „Dalej” w grupie nic nie zaczyna.
 - `activityOf` bez żadnego komputera = cały czas bez wejścia; w testach dodaj `observe(...)` (DSL) – inaczej blok
   stały „przy komputerze” nie zacznie się (czeka na pierwsze użycie).
 - Otwarty odcinek innego komputera liczy się tylko do jego ostatniego `observe.alive` (`alive` w DSL).

@@ -242,7 +242,9 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
     const from = Math.max(p.from, now)
     const to = Math.min(p.to, end)
     if (to <= from) continue
-    const why = p.bg ? (p.running ? (lastWhy.get(p.block.id) ?? 'planned') : 'planned') : null
+    // A block of a parallel group to come stands behind its first block (`alongside`, the forecast): no cost, as when it
+    // runs behind (D476, T1199).
+    const why = p.bg ? (p.running ? (lastWhy.get(p.block.id) ?? 'planned') : p.block.alongside != null && !p.block.bg ? 'group' : 'planned') : null
     spans.push(span(p.block, from, to, p.bg, { why, planned: !p.running }))
   }
   const upToNow = (to: number) => Math.min(to === OPEN ? now : to, now)

@@ -4,7 +4,10 @@
  * foreground; „front” brings another block of the group to the foreground.
  */
 import { describe, expect, it } from 'vitest'
+import { activityOf } from '@shared/engine/activity'
+import { autoActions, type AutoEvent } from '@shared/engine/auto'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
+import { autoText } from '@shared/engineView'
 import { block, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
@@ -25,6 +28,15 @@ function startGroup(s: Scenario, time: string, front: string, rest: string[], ro
     return { categoryId: p.categoryId, variantId: null, durationMin: p.durationMin, fixed: false, costs: null, bgCostPct: null }
   }
   s.write([front, ...rest].map((id) => ({ k: 'block.start', block: id, at: t, bg: id !== front, planned: planned(id), confirmUntil: null, how: 'click', group: root })), t)
+}
+
+function leader(s: Scenario, time: string): AutoEvent[] {
+  const t = s.at(time)
+  const ctx = s.contextAt(t)
+  const state = s.stateAt(t)
+  const out = autoActions({ ctx, state, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, gate: t })
+  s.write(out, t)
+  return out.filter((e) => e.autoRule !== 'boundary')
 }
 
 const fgOf = (s: Scenario, time: string) => timerNow(s.state(time)).fg?.info.id ?? null
@@ -101,5 +113,119 @@ describe('zmiana pierwszego planu w grupie (D494)', () => {
     // An outside block started in front while b runs behind.
     s.start('c', '08:20')
     expect(click(s, '08:25', { a: 'front', block: 'b' })).toMatchObject({ ok: false })
+  })
+})
+
+describe('start i koniec grupy z planu (D493, D499)', () => {
+  const beside = (b: ReturnType<typeof block>, root: string) => ({ ...b, alongside: root })
+  /** a (analiza 60) + b (nauka 90, obok a) + c (inne 30, obok a) o 08:00; potem d o 10:00 i blok stały f o 12:00. */
+  const groupPlan = () => [
+    block({ id: 'a', cat: 'analiza', at: '08:00', min: 60 }),
+    beside(block({ id: 'b', cat: 'nauka', at: '08:00', min: 90 }), 'a'),
+    beside(block({ id: 'c', cat: 'inne', at: '08:00', min: 30 }), 'a'),
+    block({ id: 'd', cat: 'inne', at: '10:00', min: 30 })
+  ]
+  const day = (plan = groupPlan()) => new Scenario({ date: DATE, plan }).observe('07:00', null)
+
+  it('„Zacznij” na bloku grupy zaczyna całą grupę: kliknięty na pierwszym planie, reszta w tle (T1193)', () => {
+    const s = day()
+    const r = click(s, '08:00', { a: 'start', block: 'b' })
+    expect(r.ok && r.events.map((e) => [e.k, e.block, e.bg, e.group])).toEqual([
+      ['block.start', 'b', false, 'a'],
+      ['block.start', 'a', true, 'a'],
+      ['block.start', 'c', true, 'a']
+    ])
+    expect(fgOf(s, '08:10')).toBe('b')
+    expect(bgOf(s, '08:10')).toEqual(['a', 'c'])
+  })
+
+  it('cała grupa także ponad limit bloków naraz (D499, pytanie 5)', () => {
+    const plan = [...groupPlan(), beside(block({ id: 'e', cat: 'inne', at: '08:00', min: 30 }), 'a'), beside(block({ id: 'g', cat: 'inne', at: '08:00', min: 30 }), 'a')]
+    const s = day(plan)
+    const r = click(s, '08:00', { a: 'start', block: 'a' })
+    expect(r.ok && r.events.filter((e) => e.k === 'block.start').map((e) => e.block)).toEqual(['a', 'b', 'c', 'e', 'g'])
+  })
+
+  it('blok grupy w tle kończy się sam o planowanym końcu, pierwszy plan biegnie dalej (D499, T1198)', () => {
+    const s = day()
+    click(s, '08:00', { a: 'start', block: 'b' })
+    expect(leader(s, '08:29')).toEqual([])
+    expect(leader(s, '08:30')).toMatchObject([{ k: 'block.end', block: 'c', at: s.at('08:30'), done: true, autoRule: 'groupPlan' }])
+    expect(fgOf(s, '08:31')).toBe('b')
+    const a = s.state('08:31').facts.autos.find((x) => x.rule === 'groupPlan')!
+    expect(autoText(a, 'Inne obowiązki', '08:30')).toBe('Inne obowiązki skończony o 08:30 (według planu, w tle grupy)')
+  })
+
+  it('„Dalej” na pierwszym planie, gdy grupa biegnie: kończy go, przejmuje ostatnio zaczęty, następny blok planu się nie zaczyna (D499, T1196)', () => {
+    const s = day()
+    click(s, '08:00', { a: 'start', block: 'c' })
+    const r = click(s, '08:20', { a: 'next' })
+    expect(r.ok && r.events.map((e) => [e.k, e.block])).toEqual([['block.end', 'c']])
+    expect(['a', 'b']).toContain(fgOf(s, '08:21'))
+    expect(timerNow(s.state('08:21')).fg!.info.id).not.toBe('d')
+  })
+
+  it('„Zacznij” na bloku spoza grupy: cała grupa pauzuje niedokończona i staje na miejscu klikniętego (D499, T1195)', () => {
+    const s = day()
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const r = click(s, '08:15', { a: 'start', block: 'd' })
+    expect(r.ok && r.events.map((e) => [e.k, e.block, e.place ?? null])).toEqual([
+      ['block.pause', 'a', s.at('10:00')],
+      ['block.pause', 'b', s.at('10:00')],
+      ['block.pause', 'c', s.at('10:00')],
+      ['block.start', 'd', null]
+    ])
+    expect(fgOf(s, '08:16')).toBe('d')
+    expect(bgOf(s, '08:16')).toEqual([])
+  })
+
+  it('„Zacznij” na innym bloku tej samej grupy, który biegnie w tle – odmowa; na niezaczętym bloku grupy – on z przodu, reszta w tle (T1194)', () => {
+    const s = day()
+    click(s, '08:00', { a: 'start', block: 'a' })
+    expect(click(s, '08:05', { a: 'start', block: 'b' })).toMatchObject({ ok: false })
+    expect(click(s, '08:05', { a: 'front', block: 'b' }).ok).toBe(true)
+    expect(fgOf(s, '08:06')).toBe('b')
+  })
+
+  it('blok stały grupy zaczyna się sam i zaczyna całą grupę (D499, pytanie 3, T1197)', () => {
+    const plan = [block({ id: 'f', cat: 'zajecia-zdalne', at: '09:00', min: 60, fixed: true }), beside(block({ id: 'n', cat: 'nauka', at: '09:00', min: 45 }), 'f')]
+    const s = day(plan)
+    const out = leader(s, '09:00')
+    expect(out.map((e) => [e.k, e.block, e.autoRule, e.bg, e.group])).toEqual([
+      ['block.start', 'f', 'fixedStart', false, 'f'],
+      ['block.start', 'n', 'groupStart', true, 'f']
+    ])
+    const a = s.state('09:01').facts.autos.find((x) => x.rule === 'groupStart')!
+    expect(autoText(a, 'Nauka', '09:00')).toBe('Nauka zaczęty o 09:00 (razem z grupą)')
+  })
+
+  it('blok bez komputera grupy zaczyna się sam i zaczyna całą grupę (D475, D499, T1197)', () => {
+    const plan = [block({ id: 'p', cat: 'posilek', at: '13:00', min: 30 }), beside(block({ id: 'r', cat: 'regeneracja', at: '13:00', min: 30 }), 'p')]
+    const s = day(plan).gap('12:50', null)
+    expect(leader(s, '13:10').map((e) => [e.block, e.autoRule, e.bg])).toEqual([
+      ['p', 'awayStart', false],
+      ['r', 'groupStart', true]
+    ])
+  })
+
+  it('praca i budżet liczą się raz na minutę, choć biegną dwa bloki pracy (D476)', () => {
+    const s = day()
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const solo = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'analiza', at: '08:00', min: 60 })] }).observe('07:00', null)
+    click(solo, '08:00', { a: 'start', block: 'a' })
+    expect(s.state('08:40').budgetUsedMin).toBe(solo.state('08:40').budgetUsedMin)
+  })
+})
+
+describe('prognoza energii grupy, która się jeszcze nie zaczęła (D476, T1199)', () => {
+  it('bloki grupy w tle prognozy nic nie kosztują – jak sam blok z pierwszego planu', () => {
+    const checkin: Parameters<Scenario['checkin']>[1] = { head: [2, 2], emotions: [2, 2], senses: [2, 2] }
+    const mk = (plan: ReturnType<typeof block>[]) => new Scenario({ date: DATE, plan }).observe('07:00', null).checkin('07:30', checkin)
+    const a = block({ id: 'a', cat: 'analiza', at: '10:00', min: 60 })
+    const grouped = mk([a, { ...block({ id: 'b', cat: 'nauka', at: '10:00', min: 60 }), alongside: 'a' }])
+    const solo = mk([a])
+    // 11:00 – after the group (index from 04:00).
+    const at11 = (s: Scenario) => { const e = s.energy('08:00').series; return [e.head[7 * 60], e.emotions[7 * 60], e.senses[7 * 60]] }
+    expect(at11(grouped)).toEqual(at11(solo))
   })
 })

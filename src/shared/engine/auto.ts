@@ -18,7 +18,7 @@ import type { DayContext, DayState } from './day'
 import { blockAt, endShiftOf, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
 import { requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
-import { awayStartOf, awayStartUndoable, fixedWorkLeft, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
+import { awayStartOf, awayStartUndoable, fixedWorkLeft, groupRootIn, groupStarts, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
 /** The rules of a request's end without „Koniec” (`requestEndOf`). */
@@ -211,6 +211,11 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
   return null
 }
 
+/** The start of the rest of a parallel group with a block begun by itself (D499) – each on its own row with „Cofnij”. */
+export const GROUP_START_RULE = 'groupStart'
+/** The end of a block of a parallel group behind at its planned end (D499), done – on its own row with „Cofnij”. */
+export const GROUP_PLAN_RULE = 'groupPlan'
+
 /** The end of a commute begun by itself at its planned end (D486): „według planu”, on its own row with „Cofnij”. */
 export const AWAY_PLAN_RULE = 'awayPlan'
 
@@ -270,7 +275,10 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
     if (known > inp.now || known > inp.gate || from >= fixedFgAt) continue
     const id = derivedId(date, 'auto', 'awayStart', 'block.start', b.id, at(b.start!))
     if (state.facts.undone.has(id)) continue
-    return [{ id, autoRule: 'awayStart', k: 'block.start', block: b.id, at: from, bg: false, planned: startPlanned(b, inp.ctx.plan), confirmUntil: null, how: 'auto' }]
+    const root = groupRootIn(inp.ctx.plan, b.id)
+    const lead: AutoEvent = { id, autoRule: 'awayStart', k: 'block.start', block: b.id, at: from, bg: false, planned: startPlanned(b, inp.ctx.plan), confirmUntil: null, how: 'auto', ...(root != null ? { group: root } : {}) }
+    // D499 (T1197): the rest of its parallel group begins with it, behind.
+    return [lead, ...groupStarts(inp.ctx, state, b.id, from, 'auto').map((e) => auto(date, GROUP_START_RULE, e as TimerDraft & { block: string }))]
   }
   return []
 }
@@ -421,9 +429,12 @@ function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, Shu
         // As a click writes it (T1024): with what names the block.
         planned: startPlanned(b, inp.ctx.plan),
         confirmUntil: null,
-        how: 'auto'
+        how: 'auto',
+        ...(groupRootIn(inp.ctx.plan, b.id) != null ? { group: groupRootIn(inp.ctx.plan, b.id)! } : {})
       })
     )
+    // D499 (T1197): a block of a parallel group begun by itself begins the whole group, as „Zacznij” does.
+    for (const e of groupStarts(inp.ctx, state, b.id, from, 'auto')) list.push(auto(date, GROUP_START_RULE, e as TimerDraft & { block: string }))
     out.push(list)
   }
   return out
@@ -514,6 +525,11 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
         const end = sessionLastInputEnd(activity, runFrom, inp.now)
         if (end && due(end.due)) take([auto(date, 'lastInput', { k: 'block.end', block: b.id, at: end.at, done: null, rule: 'lastInput' })])
       }
+      continue
+    }
+    // A block of a parallel group behind ends by itself at its planned end, done; the one in front goes on (D499, T1198).
+    if (tb !== fg && f.group != null && !b.bg) {
+      if (due(endAt) && nowIdx >= tb.plannedEnd) take([auto(date, GROUP_PLAN_RULE, { k: 'block.end', block: b.id, at: endAt, done: true, rule: GROUP_PLAN_RULE })])
       continue
     }
     if (tb !== fg) continue
