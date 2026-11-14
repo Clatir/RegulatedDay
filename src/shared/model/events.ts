@@ -35,9 +35,13 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * out of the extension and the end of work (and wait for „Zacznij” at a weekly analysis) and freeze the day so; it gives
  * way to this one as the leader. 10 – blocks away from the computer begin by themselves at their hour (D475, rule
  * `awayStart`) and a start swaps with the running block (D478, `block.pause.place`): an older version would write no such
- * start and put the swapped block back at its own place in the forecast; it gives way to this one as the leader.
+ * start and put the swapped block back at its own place in the forecast; it gives way to this one as the leader. 10 in
+ * 1.23-A too – parallel blocks (D476, T1162): a group takes its time once in the forecast – an older version would count its
+ * blocks one after another (the computed end of work, the hard end, the freeze). 11 – the two together and the timer of a
+ * parallel group (D476, D493, `block.start.group`): an older version would charge the blocks behind and leave the
+ * foreground empty when the block in front ends; it gives way to this one as the leader.
  */
-export const RULES_VERSION = 10
+export const RULES_VERSION = 11
 
 /** What a block's start wrote of its plan (`block.start.planned`). */
 export interface StartPlanned {
@@ -128,6 +132,11 @@ export type TimerEvent =
       confirmUntil: number | null
       /** 'plan' – it happened at its planned time, said afterwards (the ritual): its times are no measure. */
       how: 'click' | 'auto' | 'start' | 'plan'
+      /**
+       * A block of a parallel group begun with it (D476, D493): the id of the group's first block. Its background run is
+       * the group's – it costs no energy, and the foreground falls to it when the block in front ends (T1190).
+       */
+      group?: string
     })
   /** `place` (ms, D478): where the paused block stands – the place of the block whose start swapped with it. */
   | (EventBase & { k: 'block.pause'; block: string; at: number; place?: number })

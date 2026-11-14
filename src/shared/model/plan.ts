@@ -64,6 +64,13 @@ export interface PlanBlock {
   movedFrom: string | null
   /** A variant of a change of the plan shortened it or moved it (the game: „niezmieniony przez warianty”). */
   byVariant: boolean
+  /**
+   * Parallel blocks (D476, D492): the block of the plan this one stands beside – the first block of its group, the one the
+   * others were dropped on; null – none. A block of a group starts with that block and keeps its own length (`engine/parallel.ts`;
+   * its own `startMin` is the group's start written at the drop, for a version that does not know the field: it shows the
+   * block there, one after another, and keeps the field in the file).
+   */
+  alongside: string | null
 }
 
 export interface TemplateVersion {
@@ -198,7 +205,8 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     routine: typeof v.routine === 'string' && v.routine ? v.routine : null,
     steps: stepsFrom(v.steps),
     movedFrom: isIsoDate(v.movedFrom) ? v.movedFrom : null,
-    byVariant: v.byVariant === true
+    byVariant: v.byVariant === true,
+    alongside: typeof v.alongside === 'string' && v.alongside && v.alongside !== v.id ? v.alongside : null
   }
 }
 
@@ -224,6 +232,7 @@ export function planBlock(p: Partial<PlanBlock> & Pick<PlanBlock, 'id' | 'catego
     steps: [],
     movedFrom: null,
     byVariant: false,
+    alongside: null,
     ...p
   }
 }

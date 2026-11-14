@@ -620,6 +620,122 @@ test('rozsuwanie (D367): blok przeciągnięty na zajęte miejsce przesuwa kolejn
   }
 })
 
+test('bloki równoległe (D476, D492): blok upuszczony na prawą część innego staje obok niego – „Równolegle z …”, oba obok siebie na osi, za grupą przesunięty; „Cofnij” w pasku przywraca plik', async () => {
+  // Tomorrow – a day to come at any hour of the run: „a” 13:00 (60 min), „c” 14:00, „b” 16:00 (90 min) of yours, no sessions.
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-parallel-'))
+  seed(dataDir)
+  const tomorrow = addDays(logicalToday(), 1)
+  const own = (id: string, startMin: number, durationMin = 60) => ({ id, categoryId: 'inne', startMin, durationMin, fixed: false, origin: 'user' })
+  const dayFile = join(dataDir, 'days', tomorrow.slice(0, 4), `${tomorrow}.json`)
+  mkdirSync(dirname(dayFile), { recursive: true })
+  writeFileSync(
+    dayFile,
+    JSON.stringify({
+      schema: 1,
+      date: tomorrow,
+      dayType: 'zwykly',
+      sessions: Object.fromEntries(DEFAULT_SESSIONS.map((s) => [s.id, 'no'])),
+      blocks: [own('a', 13 * 60), own('c', 14 * 60), own('b', 16 * 60, 90)]
+    })
+  )
+  type Raw = { id: string; startMin: number; alongside?: string | null }
+  const file = () => Object.fromEntries((JSON.parse(readFileSync(dayFile, 'utf8')) as { blocks: Raw[] }).blocks.map((b) => [b.id, [b.startMin, b.alongside ?? null]]))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('day-next').click()
+      const a = page.getByTestId('block-a')
+      const b = page.getByTestId('block-b')
+      await expect(b).toHaveAttribute('data-movable', 'true')
+      // „b” in the middle of the view, „a” 3 h above it.
+      await b.scrollIntoViewIfNeeded()
+      const boxA = (await a.boundingBox())!
+      const boxB = (await b.boundingBox())!
+      // „b” by its right part, up onto the right part of „a” (the left part of a tile is a move to that hour – D367).
+      const x = boxB.x + boxB.width * 0.85
+      await page.mouse.move(x, boxB.y + 20)
+      await page.mouse.down()
+      await page.mouse.move(x, boxB.y - 40, { steps: 4 })
+      await page.mouse.move(x, boxA.y + 30, { steps: 6 })
+      await expect(page.getByTestId('parallel-hint')).toHaveText('Równolegle z Inne obowiązki')
+      // „c” waits for the end of the group (16:30 – „b” is 90 min long), dashed while „b” is held.
+      await expect(page.getByTestId('block-c')).toHaveAttribute('data-pushed', 'true')
+      await expect(page.getByTestId('block-c')).toContainText('14:30')
+      await page.mouse.up()
+      // One edit of the day's file: „b” beside „a” at its start, „c” after the group.
+      await expect.poll(file).toEqual({ a: [780, null], c: [870, null], b: [780, 'a'] })
+      // Side by side on the axis (D476): two lanes.
+      await expect(a).toHaveAttribute('data-lane', '0/2')
+      await expect(b).toHaveAttribute('data-lane', '1/2')
+      await expect(page.getByTestId('block-c')).toContainText('14:30')
+      const line = page.getByTestId('bar-line-moved:push')
+      const more = page.getByTestId('bar-main').getByTestId('bar-group-more')
+      await expect(async () => {
+        if (!(await line.count()) && (await more.count()) && (await more.getAttribute('aria-pressed')) !== 'true') await more.click()
+        await expect(line).toContainText('Przesunięto 1 blok', { timeout: 1_000 })
+      }).toPass({ timeout: 10_000 })
+      await page.getByTestId('bar-act-moved-undo').click()
+      await expect.poll(file).toEqual({ a: [780, null], c: [840, null], b: [960, null] })
+      await expect(a).not.toHaveAttribute('data-lane', '0/2')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('bloki równoległe (D492): bez przesunięcia – dymek „Równolegle z …” z „Cofnij”; odciągnięcie bloku z grupy stawia je znowu po kolei', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-parallel-undo-'))
+  seed(dataDir)
+  const tomorrow = addDays(logicalToday(), 1)
+  const own = (id: string, startMin: number) => ({ id, categoryId: 'inne', startMin, durationMin: 60, fixed: false, origin: 'user' })
+  const dayFile = join(dataDir, 'days', tomorrow.slice(0, 4), `${tomorrow}.json`)
+  mkdirSync(dirname(dayFile), { recursive: true })
+  writeFileSync(dayFile, JSON.stringify({ schema: 1, date: tomorrow, dayType: 'zwykly', sessions: Object.fromEntries(DEFAULT_SESSIONS.map((s) => [s.id, 'no'])), blocks: [own('a', 13 * 60), own('b', 16 * 60)] }))
+  type Raw = { id: string; startMin: number; alongside?: string | null }
+  const file = () => Object.fromEntries((JSON.parse(readFileSync(dayFile, 'utf8')) as { blocks: Raw[] }).blocks.map((b) => [b.id, [b.startMin, b.alongside ?? null]]))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('day-next').click()
+      const a = page.getByTestId('block-a')
+      const b = page.getByTestId('block-b')
+      await expect(b).toHaveAttribute('data-movable', 'true')
+      await b.scrollIntoViewIfNeeded()
+      const drop = async (from: { x: number; y: number }, to: { x: number; y: number }) => {
+        await page.mouse.move(from.x, from.y)
+        await page.mouse.down()
+        await page.mouse.move(from.x, from.y - 30, { steps: 4 })
+        await page.mouse.move(to.x, to.y, { steps: 6 })
+        await page.mouse.up()
+      }
+      const boxA = (await a.boundingBox())!
+      const boxB = (await b.boundingBox())!
+      await drop({ x: boxB.x + boxB.width * 0.85, y: boxB.y + 20 }, { x: boxB.x + boxB.width * 0.85, y: boxA.y + 30 })
+      await expect.poll(file).toEqual({ a: [780, null], b: [780, 'a'] })
+      const toast = page.getByRole('status').filter({ hasText: 'Równolegle z Inne obowiązki' })
+      await expect(toast).toBeVisible()
+      await toast.getByTestId('toast-action').click()
+      await expect.poll(file).toEqual({ a: [780, null], b: [960, null] })
+      // Again, then „b” dragged away by its name (the left part) to 18:00: it leaves the group – one after another again.
+      await drop({ x: boxB.x + boxB.width * 0.85, y: boxB.y + 20 }, { x: boxB.x + boxB.width * 0.85, y: boxA.y + 30 })
+      await expect.poll(file).toEqual({ a: [780, null], b: [780, 'a'] })
+      await expect(b).toHaveAttribute('data-lane', '1/2')
+      const now = (await b.boundingBox())!
+      await drop({ x: now.x + 10, y: now.y + 20 }, { x: now.x + 10, y: now.y + 20 + 5 * 60 * 1.1 })
+      await expect.poll(file).toEqual({ a: [780, null], b: [1080, null] })
+      await expect(b).not.toHaveAttribute('data-lane', '1/2')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('rozsuwanie w „Szablonach” (D367, D372): blok przeciągnięty na zajęty przesuwa kolejne w nowej wersji szablonu; „Cofnij” na stronie przywraca szablon', async () => {
   // The ordinary day's template with three blocks of its own in the evening (after any session):
   // the day it makes (from tomorrow) has nothing else between them, on any day of the week.

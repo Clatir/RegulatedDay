@@ -23,7 +23,7 @@ import { useEscapeLayer } from '../lib/escape'
 import { useQuickToday } from './quickToday'
 
 export type BarMode = 'main' | 'panel' | 'desktop'
-type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | null
+type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | 'parallel' | null
 
 const SIGNALS: Array<[string, string]> = [
   ['glasses', 'okulary'],
@@ -557,6 +557,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
   const brightness = useMachine((s) => s.prefs.brightness)
   const pulse = useMachine((s) => s.prefs.barPulse)
   const [unfold, setUnfold] = useState<Unfold>(null)
+  const parallel = view.background.filter((b) => b.group)
   /** The field of the quick capture was just opened: its mount takes the focus (a mount after a change of layout does not). */
   const quickFocus = useRef(false)
   // The flag of an opening lives one commit: set by a click or by `quickAt` (after this effect – declared first), spent by
@@ -709,6 +710,20 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
               </span>
             ))}
           </div>
+        </div>
+      )}
+      {unfold === 'parallel' && (
+        <div className="flex flex-col gap-1.5" data-testid="bar-parallel-list">
+          {parallel.map((b) => (
+            <div key={b.id} className="flex flex-wrap items-center gap-1.5" data-testid={`bar-parallel-${b.id}`}>
+              <span className="text-[12px] text-muted">
+                {b.name} do {clockOf(b.endsAt)}
+              </span>
+              <BarButton mode={mode} testId={`bar-front-${b.id}`} onAct={() => (act('front', b.id), setUnfold(null))}>
+                Na pierwszy plan
+              </BarButton>
+            </div>
+          ))}
         </div>
       )}
       {unfold === 'more' && (
@@ -879,6 +894,12 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
                 {view.block && !quiet && <span className="ml-1.5 text-[12px] text-muted">{view.block.className}</span>}
               </span>
             </span>
+          )}
+          {view.block && parallel.length > 0 && (
+            // D494: the blocks of the parallel group behind – the list unfolds, and any of them comes to the foreground.
+            <BarButton mode={mode} testId="bar-parallel" pressed={unfold === 'parallel'} onAct={() => toggle('parallel')}>
+              +{parallel.length} w tle
+            </BarButton>
           )}
           {view.block && (
             <span className={cx('num shrink-0 text-[14px]', left < 0 ? 'text-rose' : 'text-fg')} data-testid="bar-countdown">

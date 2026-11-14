@@ -275,6 +275,7 @@ export type WidgetAction =
   | 'better'
   | 'start'
   | 'bgEnd'
+  | 'front'
   | 'bgExtend'
   | 'undo'
   | 'signal'

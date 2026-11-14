@@ -7,6 +7,10 @@
  */
 import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult } from '@shared/api'
 import { blockJson, dayRaw, putBlock, setAsked, setCancelled, setDayField, takeBlock } from '@shared/data/dayEdits'
+import { editStands, inverseEdit } from '@shared/data/merge'
+import { pushedStarts, type ParallelChange } from './dayPush'
+import { pushedText } from '@shared/engine/pushApart'
+import { hiddenBlocksAmong } from '../calendars/calendarFilter'
 import { paths } from '@shared/data/paths'
 import { marketDay } from '@shared/calendar/holidays'
 import { deadlineSkippedRaw } from '@shared/engine/caseDates'
@@ -68,6 +72,20 @@ export function patchDayBlock(date: string, seen: RawRecord | null, b: PlanBlock
   return saveDay(date, seen, (raw) => putBlock(raw, { ...blockNow(raw, date, b), ...patch }), state)
 }
 
+/**
+ * A change of a block saved (D305, D365, D492): its fields over the block as the file holds it in its turn (a new block – whole),
+ * after the other blocks of its group the change writes (`others` – it left the group as its first block, T1166), each over
+ * the block as the file holds it then.
+ */
+export function putChange(raw: RawRecord, date: string, plan: readonly PlanBlock[], c: { was: PlanBlock | null; block: PlanBlock; patch: Partial<PlanBlock>; others: ReadonlyArray<{ id: string; patch: Partial<PlanBlock> }> }): RawRecord {
+  let r = raw
+  for (const o of c.others) {
+    const b = plan.find((x) => x.id === o.id)
+    if (b) r = putBlock(r, { ...blockNow(r, date, b), ...o.patch })
+  }
+  return putBlock(r, c.was ? { ...blockNow(r, date, c.was), ...c.patch } : c.block)
+}
+
 /** A block the change pushes apart (D367): the block as the window knows it, and its new planned start. */
 export interface PushedStart {
   block: PlanBlock
@@ -90,8 +108,13 @@ export function withPushed(raw: RawRecord, date: string, change: (raw: RawRecord
  * a variant, D313): its „Cofnij” takes this one edit back, the day's file as it was before it. Nothing pushed – the change
  * alone, as before.
  */
-export async function pushDayBlocks(date: string, seen: RawRecord | null, change: (raw: RawRecord) => RawRecord, pushed: readonly PushedStart[]): Promise<EditOutcome[] | null> {
-  const sent: { entry: EditEntry | null; made: RawRecord | null } = { entry: null, made: null }
+export async function pushDayBlocks(
+  date: string,
+  seen: RawRecord | null,
+  change: (raw: RawRecord) => RawRecord,
+  pushed: readonly PushedStart[],
+  sent: { entry: EditEntry | null; made: RawRecord | null } = { entry: null, made: null }
+): Promise<EditOutcome[] | null> {
   const out = await trySaveWith(async () => {
     const before = (await dayFilesNow([date], () => seen))[date] ?? null
     const after = withPushed(dayRaw(before, date), date, change, pushed)
@@ -108,6 +131,45 @@ export async function pushDayBlocks(date: string, seen: RawRecord | null, change
   }
   return out
 }
+
+/**
+ * A block dropped onto another one saved (D492): the change and the blocks it pushes apart as one edit of the day (`pushDayBlocks`),
+ * then said – `text` („Równolegle z …”, or the note of a full group): nothing pushed – with „Cofnij” for 10 s (the edit taken back
+ * while the file stands as it left it); pushed – the bar's line „Przesunięto N bloków · Cofnij” takes it back, the window only
+ * says it (as a new block, `newBlocksToast`).
+ */
+export async function saveParallel(date: string, seen: RawRecord | null, plan: readonly PlanBlock[], c: ParallelChange, openId: string | null): Promise<EditOutcome[] | null> {
+  const sent: { entry: EditEntry | null; made: RawRecord | null } = { entry: null, made: null }
+  const pushed = pushedStarts(plan, c)
+  // D428: blocks of an unchecked calendar pushed too – the window says so (the bar's line never does), as after a drag.
+  const hidden = hiddenBlocksAmong(pushed.map((p) => p.block), openId)
+  const text = hidden ? `${c.text} · ${pushedText(pushed.length, hidden)}` : c.text
+  const out = await pushDayBlocks(date, seen, (r) => putChange(r, date, plan, c), pushed, sent)
+  if (!isSaved(out) || !sent.entry) return out
+  if (pushed.length) toast(text, 'info')
+  else undoEditToast(date, sent.entry, sent.made, text)
+  return out
+}
+
+/**
+ * A saved edit of a day said for 10 s with „Cofnij” (D492): the edit taken back in its turn while the file stands as it left it
+ * (`editStands`, `inverseEdit` – a field changed since is a question); changed since – it stays, and the toast says so.
+ */
+export function undoEditToast(date: string, entry: EditEntry, made: RawRecord | null, text: string): void {
+  undoToast(text, () => {
+    let stood = true
+    void trySaveWith(async () => {
+      const now = (await dayFilesNow([date], () => null))[date] ?? null
+      stood = editStands(entry, now, made)
+      return [stood ? inverseEdit(entry, now, made) : null]
+    }).then((o) => {
+      if (isSaved(o) && !stood) toast(PLAN_CHANGED_TEXT, 'info', 6000)
+    })
+  })
+}
+
+/** The words of a „Cofnij” that came too late (the day's plan changed since the edit). */
+export const PLAN_CHANGED_TEXT = 'Plan zmienił się od tej zmiany – zostaje tak, jak jest teraz.'
 
 /** The key of the morning plan's answer „Zostaw” to „Ułóż pod energię” in the day's `asked` (D377). */
 export const ENERGY_ORDER_ASKED = 'energyOrder'

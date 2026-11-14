@@ -72,7 +72,7 @@ export const gapId = (date: string, key: string): string => `gap:${date}:${key}`
 export const gapText = (minutes: number): string => `Luka ${durationLabel(minutes)}`
 
 /** Ends that come when the plan says (a fixed block's window): never early. */
-const PLANNED_ENDS = new Set(['plan', 'fixedNoReaction'])
+const PLANNED_ENDS = new Set(['plan', 'fixedNoReaction', 'groupPlan'])
 
 const goneOf = (state: DayState, id: string): boolean => {
   const f = state.facts.blocks.get(id)

@@ -27,12 +27,14 @@ export interface NumberField {
   group: FieldGroup
 }
 
-export type FieldGroup = 'dayTypes' | 'sleep' | 'boundary' | 'energy' | 'reminders' | 'timer' | 'care' | 'cases'
+export type FieldGroup = 'dayTypes' | 'sleep' | 'boundary' | 'plan' | 'energy' | 'reminders' | 'timer' | 'care' | 'cases'
 
 export const FIELD_GROUP_NAMES: Record<FieldGroup, string> = {
   dayTypes: 'Typy dni',
   sleep: 'Sen',
   boundary: 'Granica i przejścia',
+  // Parallel blocks (D476): how many at once.
+  plan: 'Plan dnia',
   energy: 'Energia',
   reminders: 'Przypomnienia',
   timer: 'Pytania w ciągu dnia',
@@ -86,6 +88,7 @@ export const NUMBER_FIELDS: readonly NumberField[] = [
   { key: 'breakAfterMin', scope: 'general', path: ['breakAfterMin'], label: 'Przerwa po ciągłej pracy', kind: 'duration', range: GENERAL_RANGES.breakAfterMin, offAllowed: true, group: 'care', hint: '0 wyłącza propozycję.' },
   { key: 'breakMin', scope: 'general', path: ['breakMin'], label: 'Długość przerwy', kind: 'duration', range: GENERAL_RANGES.breakMin, group: 'care' },
   { key: 'solitudeAfterMin', scope: 'general', path: ['solitudeAfterMin'], label: 'Samotność po kontakcie dłuższym niż', kind: 'duration', range: GENERAL_RANGES.solitudeAfterMin, offAllowed: true, group: 'care', hint: '0 wyłącza sugestię.' },
+  { key: 'parallelMax', scope: 'general', path: ['parallelMax'], label: 'Najwięcej bloków naraz', kind: 'integer', range: GENERAL_RANGES.parallelMax, group: 'plan', hint: 'Blok przeciągnięty na inny biegnie razem z nim; ponad tę liczbę staje zaraz po grupie.' },
   { key: 'deadlineDays', scope: 'general', path: ['deadlineDays'], label: 'Ostrzegaj o terminie na', kind: 'integer', range: GENERAL_RANGES.deadlineDays, unit: 'dni', group: 'cases', hint: 'Plan poranny pokazuje sprawy po terminie i z terminem do tylu dni naprzód (2 – dziś, jutro i pojutrze).' }
 ]
 

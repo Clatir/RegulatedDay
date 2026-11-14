@@ -991,6 +991,9 @@ export class WidgetEngine {
       case 'bgEnd':
         if (arg) click = { a: 'finish', block: arg }
         break
+      case 'front':
+        if (arg) click = { a: 'front', block: arg }
+        break
       case 'bgExtend': {
         const [block, min] = (arg ?? '').split('|')
         if (block) click = { a: 'extend', block, minutes: num(min) ?? 15 }

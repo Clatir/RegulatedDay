@@ -904,6 +904,69 @@ test('Przeciąganie bloku (SNT1, D417, D422): wtorek → środa z podglądem mie
   }
 })
 
+test('Bloki równoległe w „Tygodniu” (D492): blok upuszczony na prawą część innego w tym samym dniu i z innego dnia staje obok niego, podgląd mówi „Równolegle z …”', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-parallel-'))
+  seed(dataDir)
+  const today = logicalToday()
+  // The days of the next week: none gone, none today – the same at every hour of the day.
+  const tue = plusDays(mondayOf(today), 8)
+  const wed = plusDays(tue, 1)
+  seedDay(dataDir, tue, [
+    { id: 'pa', startMin: 12 * 60, durationMin: 60 },
+    { id: 'pb', startMin: 17 * 60, durationMin: 30 }
+  ])
+  seedDay(dataDir, wed, [{ id: 'pw', startMin: 17 * 60, durationMin: 30 }])
+  const of = (date: string, id: string) => {
+    const b = planOf(dataDir, date).find((x) => x.id === id) as (PlanFileBlock & { alongside?: string | null }) | undefined
+    return b ? [b.startMin, b.alongside ?? null] : null
+  }
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await nextWeek(page)
+      const target = page.getByTestId(`week-block-${tue}-pa`)
+      await expect(target).toBeVisible({ timeout: 30_000 })
+      await target.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      /** Block `id` of `date` taken by its middle onto the right part of „pa”; the button still held. */
+      const hold = async (date: string, id: string) => {
+        const src = page.getByTestId(`week-block-${date}-${id}`)
+        await expect(src).toHaveAttribute('data-movable', 'true')
+        const box = (await src.boundingBox())!
+        const t = (await target.boundingBox())!
+        await page.mouse.move(box.x + box.width / 2, box.y + 5)
+        await page.mouse.down()
+        await page.mouse.move(box.x + box.width / 2 + 10, box.y + 25, { steps: 4 })
+        await page.mouse.move(t.x + t.width * 0.85, t.y + t.height / 2, { steps: 8 })
+      }
+      const band = page.getByTestId('week-drop')
+
+      // Within Tuesday: beside „pa” at its start; nothing pushed – the toast with „Cofnij”.
+      await hold(tue, 'pb')
+      await expect(band).toHaveAttribute('data-note', 'Równolegle z Inne obowiązki')
+      await expect(band).toHaveAttribute('data-start', String(12 * 60))
+      await page.mouse.up()
+      await expect.poll(() => of(tue, 'pb'), { timeout: 15_000 }).toEqual([12 * 60, 'pa'])
+      const toast = page.getByRole('status').filter({ hasText: 'Równolegle z Inne obowiązki' })
+      await expect(toast).toBeVisible()
+      await toast.getByTestId('toast-action').click()
+      await expect.poll(() => of(tue, 'pb'), { timeout: 15_000 }).toEqual([17 * 60, null])
+
+      // From Wednesday onto „pa”: moved to Tuesday beside it (the line „Przeniesiono …” takes it back).
+      await hold(wed, 'pw')
+      await expect(band).toHaveAttribute('data-note', 'Równolegle z Inne obowiązki')
+      await page.mouse.up()
+      await expect.poll(() => of(tue, 'pw'), { timeout: 15_000 }).toEqual([12 * 60, 'pa'])
+      await expect.poll(() => of(wed, 'pw'), { timeout: 15_000 }).toBeNull()
+      await expect(page.getByTestId('week-pushed')).toContainText(`Przeniesiono: Inne obowiązki na ${headingOf(tue)}`)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('Miesiąc (D429): po bloku stałym paski mają nazwy bloków elastycznych po godzinie, z godzinami w podpowiedzi', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-month-flex-'))
   seed(dataDir)

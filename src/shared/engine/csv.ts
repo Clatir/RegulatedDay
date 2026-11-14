@@ -49,7 +49,8 @@ const END_RULE: Record<string, string> = {
   firstUse: 'koniec przy powrocie',
   lastInput: 'koniec przy ostatnim wejściu',
   fixedNoReaction: 'koniec według planu',
-  awayPlan: 'koniec według planu'
+  awayPlan: 'koniec według planu',
+  groupPlan: 'koniec według planu'
 }
 const EXPLAIN: Record<string, string> = { work: 'praca', project: 'projekt', rest: 'odpoczynek' }
 

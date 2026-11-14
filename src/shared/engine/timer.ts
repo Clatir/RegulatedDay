@@ -18,6 +18,7 @@ import type { DayContext, DayState } from './day'
 import { workedUntilOf } from './explain'
 import { OPEN, compareOrder, endShiftOf, type EventOrder, isRunning, type AutoAction, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
 import { atOf, idxOf } from './grid'
+import { groupOf } from './parallel'
 
 /** „Przedłuż” of a fixed block works up to this long after its planned end (spec „Timer”, D227). */
 export const FIXED_EXTEND_WINDOW_MIN = 30
@@ -103,6 +104,8 @@ export type TimerAction =
   /** A routine's steps ticked off with its version (D328), and its „Cofnij”. */
   | { a: 'routineDone'; block: string; version: RoutineVersion; steps: string[] }
   | { a: 'routineUndo'; block: string }
+  /** D494: another block of a parallel group running behind comes to the foreground; the one in front goes behind it. */
+  | { a: 'front'; block: string }
   /** „Usuń” a block that has begun (D336): it ends now (the window takes it out of the plan), and „Cofnij” of that. */
   | { a: 'removeBegun'; block: string }
   | { a: 'undoRemove'; block: string }
@@ -285,12 +288,16 @@ export function workEndOpen(state: DayState, t: TimerNow = timerNow(state), isWo
 export function fixedStartPair(state: DayState, a: AutoAction): { ids: string[]; alive: boolean } | null {
   if (a.rule !== 'fixedStart') return null
   const autos = state.facts.autos.filter((x) => x.rule === 'fixedStart' && x.at === a.at)
-  const pause = autos.find((x) => x.k === 'block.pause')
+  // The pauses of that start – of the block in front and of its parallel group (T1195, T1209): they go back together.
+  const pauses = autos.filter((x) => x.k === 'block.pause')
+  const pause = pauses[0]
   const start = autos.find((x) => x.k === 'block.start' && state.facts.blocks.get(x.block ?? '')?.runs[0]?.bg === false)
-  if (!pause || !start || (a.id !== pause.id && a.id !== start.id)) return null
+  if (!pause || !start || (a.id !== start.id && !pauses.some((p) => p.id === a.id))) return null
   const fixed = state.facts.blocks.get(start.block ?? '')
   const flexible = state.facts.blocks.get(pause.block ?? '')
+  const mates = pauses.slice(1).map((p) => ({ p, f: state.facts.blocks.get(p.block ?? '') }))
   const alive =
+    mates.every(({ p, f }) => f != null && f.endedAt == null && f.runs.at(-1)?.to === p.at) &&
     fixed != null &&
     flexible != null &&
     fixed.startedAt != null &&
@@ -301,7 +308,7 @@ export function fixedStartPair(state: DayState, a: AutoAction): { ids: string[];
     fixed.endChanges.length === 0 &&
     flexible.endedAt == null &&
     flexible.runs.at(-1)?.to === pause.at
-  return { ids: [pause.id, start.id], alive }
+  return { ids: [...pauses.map((p) => p.id), start.id], alive }
 }
 
 /**
@@ -315,11 +322,51 @@ export function awayStartOf(state: Pick<DayState, 'facts'>, block: string): Auto
   return state.facts.autos.find((a) => a.k === 'block.start' && a.rule === 'awayStart' && a.block === block)
 }
 
+/** The starts of the rest of a parallel group written with block start `a` (rule `groupStart`, the same instant and group, T1204). */
+export function groupStartsWith(state: DayState, a: AutoAction): AutoAction[] {
+  const group = a.block ? state.facts.blocks.get(a.block)?.group : null
+  if (!group) return []
+  const out: AutoAction[] = []
+  for (const x of state.facts.autos) {
+    if (x.rule !== 'groupStart' || x.k !== 'block.start' || x.at !== a.at || x.block == null || state.facts.blocks.get(x.block)?.group !== group) continue
+    // A mate you touched since (ended, paused, extended) stays (T1209) – as its lead's start, only while the app alone ran it.
+    if (!untouched(state, x.block)) continue
+    out.push(x)
+    const end = state.facts.blocks.get(x.block)?.endId
+    const auto = end ? state.facts.autos.find((y) => y.id === end) : undefined
+    if (auto) out.push(auto)
+  }
+  return out
+}
+
+/** A block begun by the app that only the app ran since: one run, running or ended by an automatic end, no „Przedłuż”. */
+function untouched(state: DayState, block: string): boolean {
+  const f = state.facts.blocks.get(block)
+  if (!f || f.startedAt == null || f.runs.length !== 1 || f.endChanges.length) return false
+  return f.endedAt == null ? f.runs[0]!.to === OPEN : state.facts.autos.some((x) => x.id === f.endId)
+}
+
 export function awayStartUndoable(state: DayState, a: AutoAction): boolean {
   if (a.rule !== 'awayStart' || a.k !== 'block.start' || !a.block) return true
   const f = state.facts.blocks.get(a.block)
   if (!f || f.startedAt == null || f.runs.length !== 1 || f.endChanges.length) return false
   return f.endedAt == null ? f.runs[0]!.to === OPEN : state.facts.autos.some((x) => x.id === f.endId)
+}
+
+/**
+ * The block of a parallel group that takes the foreground when nothing else is in front (D493, T1191): of the blocks running
+ * in the background as blocks of a group (begun with `group`, not planned in the background), the one whose last run began
+ * last – the same order the timer's foreground keeps. Null – none.
+ */
+export function groupFront<T extends { info: BlockInfo; fact: BlockFact; running: boolean; bg: boolean }>(blocks: readonly T[]): T | null {
+  const lastRun = (t: T) => t.fact.runs.at(-1)?.from ?? t.fact.startedAt ?? 0
+  const begun = (t: T) => t.fact.runs.at(-1)?.begun
+  let best: T | null = null
+  for (const t of blocks) {
+    if (!t.running || !t.bg || t.fact.group == null || t.info.bg) continue
+    if (!best || lastRun(t) > lastRun(best) || (lastRun(t) === lastRun(best) && compareOrder(begun(t)!, begun(best)!) > 0)) best = t
+  }
+  return best
 }
 
 export function timerNow(state: DayState): TimerNow {
@@ -345,9 +392,15 @@ export function timerNow(state: DayState): TimerNow {
   // One block in the foreground: the latest started or resumed (two after a pause of sync – the later wins the place).
   const lastRun = (t: TimerBlock) => t.fact.runs.at(-1)?.from ?? t.startedAt
   const fgRunning = started.filter((t) => t.running && !t.bg).sort((a, b) => lastRun(b) - lastRun(a))
-  const fg = fgRunning[0] ?? null
+  // D493 (T1191): nothing in the foreground – the block in front ended – and blocks of a parallel group run behind: the one
+  // begun last is in front (`groupFront`, the same rule energy counts by). Not while a request or „Odcinam się” holds the
+  // foreground (T1200): the block it interrupted comes back after it.
+  const frontHeld = state.facts.requests.some((r) => r.to === OPEN) || state.facts.disconnect.some((d) => d.to === OPEN)
+  const fg = fgRunning[0] ?? (frontHeld ? null : groupFront(started))
+  if (fg && fg.bg) fg.bg = false
   const bg = started.filter((t) => t.running && (t.bg || (fg != null && t !== fg && !t.bg)))
-  const paused = started.filter((t) => !t.running && !t.bg)
+  // A block of a parallel group paused behind (the whole group paused) waits too (T1201).
+  const paused = started.filter((t) => !t.running && (!t.bg || (t.fact.group != null && !t.info.bg)))
 
   const gone = (b: BlockInfo) => {
     const f = state.facts.blocks.get(b.id)
@@ -452,13 +505,93 @@ export const NOT_BEGUN = 'ten blok się nie zaczął'
  */
 const swaps = (b: BlockInfo) => !b.isRegen && placeOf(b.rules, b.variantId) !== 'away'
 
+/** The first block of the parallel group of block `id` of the plan (D476), null – a block of no group (alone). */
+export function groupRootIn(plan: DayContext['plan'], id: string): string | null {
+  const g = groupOf(plan, id)
+  return g.length > 1 ? g[0]! : null
+}
+
+/**
+ * The other blocks of `lead`'s parallel group begun with it (D493, T1193): behind, as blocks of the group (`group` – its
+ * first block); a paused one resumes behind; one running, ended, parked or cancelled stays as it is. Every block of the
+ * group, also over the limit of blocks at once (D499 – the limit holds where blocks are put together, `parallel.ts`). `auto`
+ * – the rule of an automatic start (the leader's derived ids), none for a click.
+ */
+export function groupStarts(ctx: DayContext, state: DayState, lead: string, at: number, how: 'click' | 'auto', confirmed = false): TimerDraft[] {
+  const ids = groupOf(ctx.plan, lead)
+  if (ids.length < 2) return []
+  const root = ids[0]!
+  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  const out: TimerDraft[] = []
+  for (const id of ids) {
+    const info = byId.get(id)
+    if (id === lead || !info) continue
+    const f = state.facts.blocks.get(id)
+    // A session waits for its own „Zacznij” (D192); a fixed block never begins before its window (spec „Timer”, T1208).
+    if (!mayJoin(state, info, f, at, byId)) continue
+    // Work past the approved boundary nobody confirmed (T1205): with the click's second click (its cost is the group's,
+    // `groupCost`); begun by itself – it waits for its own „Zacznij”.
+    const cost = startCost(state, info, at)
+    if (cost && (how === 'auto' || !confirmed)) continue
+    const confirmUntil = cost ? at + leftOf(state, info, idxOf(state.grid, at)) * 60_000 : null
+    if (f?.startedAt != null) {
+      out.push({ k: 'block.resume', block: id, at, confirmUntil })
+      if (!(f.runs.at(-1)?.bg ?? false)) out.push({ k: 'block.fg', block: id, at, bg: true })
+      continue
+    }
+    out.push({ k: 'block.start', block: id, at, bg: true, planned: startPlanned(info, ctx.plan), confirmUntil, how, group: root })
+  }
+  return out
+}
+
+/** The first cost of the other blocks of `lead`'s group a click starts with it (T1205), null – none. */
+export function groupCost(ctx: DayContext, state: DayState, lead: string, at: number): ActionCost | null {
+  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  for (const id of groupOf(ctx.plan, lead)) {
+    const info = byId.get(id)
+    const f = state.facts.blocks.get(id)
+    if (id === lead || !info || !mayJoin(state, info, f, at, byId)) continue
+    const cost = startCost(state, info, at)
+    if (cost) return cost
+  }
+  return null
+}
+
+/**
+ * Whether a block of a group begins (or resumes) with its group now (T1193, T1208, T1209): not over, not running, not parked
+ * nor cancelled before its start; not a session (its own „Zacznij”), not a fixed block outside its window.
+ */
+function mayJoin(state: DayState, info: BlockInfo, f: BlockFact | undefined, at: number, byId: Map<string, BlockInfo>): boolean {
+  if (f?.endedAt != null || (f && isRunning(f))) return false
+  if (f?.startedAt == null && f && (f.parkedAt != null || f.cancelledAt != null)) return false
+  if (f?.startedAt == null && info.waits) return false
+  if (f?.startedAt == null && info.fixed) {
+    const span = plannedSpan(info, byId)
+    const m = idxOf(state.grid, at)
+    if (!span || m < span.start || m >= span.end) return false
+  }
+  return true
+}
+
+/** The running blocks of the parallel group `group` (the one in front and those behind). */
+const runningOfGroup = (t: TimerNow, group: string): TimerBlock[] => [t.fg, ...t.bg].filter((x): x is TimerBlock => x != null && x.fact.group === group)
+
 /** The events of starting (or resuming) `info` at `at`, with what happens to the block in the foreground. */
 function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockInfo, at: number, confirmed: boolean): TimerDraft[] {
   const out: TimerDraft[] = []
   const f = state.facts.blocks.get(info.id)
   const fg = t.fg
   const toBg = info.bg
-  if (!toBg && fg && fg.info.id !== info.id) {
+  // A block of the running parallel group in front (D476): the clicked one of the same group comes to the front, the one in
+  // front goes behind it (T1194); a block outside the group pauses the whole group (D499, T1195).
+  const fgGroup = fg?.fact.group ?? null
+  const clickedGroup = groupRootIn(ctx.plan, info.id)
+  const sameGroup = fgGroup != null && clickedGroup === fgGroup
+  const groupMates = fg && fgGroup != null && !sameGroup && !toBg ? runningOfGroup(t, fgGroup).filter((x) => x !== fg && !isFixedLike(x.info) && !x.info.bg) : []
+  let matePlace: number | null = null
+  if (!toBg && fg && fg.info.id !== info.id && sameGroup) {
+    out.push({ k: 'block.fg', block: fg.info.id, at, bg: true })
+  } else if (!toBg && fg && fg.info.id !== info.id) {
     if (fg.info.fixed || fg.info.waits) {
       // A fixed block is never paused: it goes on in the background (spec „Przerwania”).
       out.push({ k: 'block.fg', block: fg.info.id, at, bg: true })
@@ -474,16 +607,27 @@ function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockI
       // Its planned place: its own hour; without one (anchored, a paused block's rest) – where the forecast shows it.
       const place = !info.inPlan ? null : (info.start ?? state.forecast.find((p) => p.block.id === info.id && !p.running)?.from)
       out.push({ k: 'block.pause', block: fg.info.id, at, ...(place != null ? { place: atOf(state.grid, place) } : {}) })
+      // The whole group goes there, each block of it paused, not done (D499).
+      matePlace = place ?? null
     } else {
       // The start ends a regeneration (a break), or a block away from the computer – a click there means you are back: the
       // running one ends here, done.
       out.push({ k: 'block.end', block: fg.info.id, at, done: fg.info.fixed ? null : true, rule: null, fin: true })
     }
   }
+  // The rest of the group in front pauses with it, whatever happened to the block in front (D499, T1195): sent behind
+  // (fixed), paused, swapped (at the clicked one's place) or ended; a fixed block of it is never paused.
+  for (const x of groupMates) out.push({ k: 'block.pause', block: x.info.id, at, ...(matePlace != null ? { place: atOf(state.grid, matePlace) } : {}) })
   const left = leftOf(state, info, idxOf(state.grid, at))
   const confirmUntil = confirmed ? at + left * 60_000 : null
-  if (f?.startedAt != null) out.push({ k: 'block.resume', block: info.id, at, confirmUntil })
-  else out.push({ k: 'block.start', block: info.id, at, bg: toBg, planned: startPlanned(info, ctx.plan), confirmUntil, how: 'click' })
+  // A block of a group paused behind resumes in front – the clicked one is in front (T1201).
+  if (f?.startedAt != null) {
+    out.push({ k: 'block.resume', block: info.id, at, confirmUntil })
+    if ((f.runs.at(-1)?.bg ?? false) && !toBg) out.push({ k: 'block.fg', block: info.id, at, bg: false })
+  }
+  else out.push({ k: 'block.start', block: info.id, at, bg: toBg, planned: startPlanned(info, ctx.plan), confirmUntil, how: 'click', ...(clickedGroup != null ? { group: clickedGroup } : {}) })
+  // D493: the rest of its group begins with it, behind; a resumed block of a running group needs none.
+  if (clickedGroup != null && !sameGroup) out.push(...groupStarts(ctx, state, info.id, at, 'click', confirmed))
   return out
 }
 
@@ -508,7 +652,8 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       const f = state.facts.blocks.get(info.id)
       if (f?.endedAt != null) return no(ALREADY_OVER)
       if (f && isRunning(f)) return no('ten blok już biegnie')
-      const cost = startCost(state, info, at)
+      // The blocks of its group begun with it may cost too (T1205): one second click for all.
+      const cost = startCost(state, info, at) ?? groupCost(ctx, state, info.id, at)
       if (cost && !act.confirm) return no('koszt do potwierdzenia', cost)
       return yes(startEvents(ctx, state, t, info, at, cost != null))
     }
@@ -527,6 +672,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
         fixed: false,
         bg: false,
         start: m,
+        alongside: null,
         anchor: null,
         durationMin: act.durationMin,
         waits: false,
@@ -553,6 +699,18 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (cost) start.confirmUntil = at + act.durationMin * 60_000
       return yes(events)
     }
+    case 'front': {
+      // D494 (T1192): only a block of a parallel group running behind; the one in front – of a group or not – goes behind
+      // as a block of the group (it costs no energy there), the chosen one to the foreground.
+      const target = t.bg.find((x) => x.info.id === act.block)
+      if (!target || target.fact.group == null || target.info.bg) return no('ten blok nie biegnie w tle grupy')
+      const events: TimerDraft[] = []
+      // Only within the group in front (T1206): another group's block behind, or one in front outside the group – refused.
+      if (t.fg && t.fg.fact.group !== target.fact.group) return no('na pierwszym planie biegnie blok spoza tej grupy')
+      if (t.fg) events.push({ k: 'block.fg', block: t.fg.info.id, at, bg: true })
+      events.push({ k: 'block.fg', block: target.info.id, at, bg: false })
+      return yes(events)
+    }
     case 'pause': {
       const fg = t.fg
       if (!fg) return no('nic nie biegnie na pierwszym planie')
@@ -564,9 +722,12 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       const fg = t.fg
       // „Dalej” (D484, T1121): done explicitly – unless as not done.
       if (fg) events.push({ k: 'block.end', block: fg.info.id, at: endInstant(state, fg, at), done: isFixedLike(fg.info) ? null : (act.done ?? true), rule: null, fin: act.done !== false })
+      // Other blocks of its parallel group still run: the foreground falls to the one begun last, nothing else begins (D499,
+      // T1196).
+      if (fg?.fact.group != null && runningOfGroup(t, fg.fact.group).some((x) => x !== fg && !x.info.bg)) return yes(events)
       const next = t.next
       if (!next) return events.length ? yes(events) : no('w planie nie ma następnego bloku')
-      const cost = startCost(state, next, at)
+      const cost = startCost(state, next, at) ?? groupCost(ctx, state, next.id, at)
       // The first click ends the running block; what comes next waits for the second (spec „Dalej kończy wtedy …”).
       if (cost && !act.confirm) return events.length ? yes(events, cost) : no('koszt do potwierdzenia', cost)
       const after: TimerNow = { ...t, fg: null }
@@ -629,6 +790,9 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
         const last = lastWorkStop(state)
         end = last != null ? Math.min(at, atOf(state.grid, last)) : at
       }
+      // The work of its parallel group behind ends with it (T1202) – done, as „Skończyłem”; a meal beside it goes on.
+      if (fg?.info.isWork && fg.fact.group != null)
+        for (const x of runningOfGroup(t, fg.fact.group)) if (x !== fg && x.info.isWork && !isFixedLike(x.info) && !x.info.bg) events.push({ k: 'block.end', block: x.info.id, at, done: true, rule: null })
       events.push({ k: 'work.end', at, end })
       // Blocks anchored to the one ending go with it – only a work block ends here (a meal in the foreground goes on).
       events.push(...workEndParking(state, fg?.info.isWork ? fg.info.id : null, at))
@@ -678,7 +842,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       // it never began.
       if (a.rule === 'awayStart' && a.k === 'block.start') {
         if (!awayStartUndoable(state, a)) return no('tego już nie cofniesz – blok zmienił się po starcie')
-        pair = state.facts.autos.filter((x) => x.k === 'block.end' && x.block === a.block && state.facts.blocks.get(a.block!)?.endId === x.id)
+        pair = [...state.facts.autos.filter((x) => x.k === 'block.end' && x.block === a.block && state.facts.blocks.get(a.block!)?.endId === x.id), ...groupStartsWith(state, a)]
       }
       // A fixed start's pause and that start go back together, either way, while the fixed block runs and the flexible one
       // stands in that pause (the flexible block goes on as before, the fixed one stays unstarted – it can be started by
@@ -706,6 +870,8 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
         if (!tb) continue
         if (tb.info.waits) events.push({ k: 'block.end', block: tb.info.id, at, done: null, rule: 'disconnect', autoRule: 'disconnect' })
         else if (tb === t.fg && !isFixedLike(tb.info)) events.push({ k: 'block.pause', block: tb.info.id, at, autoRule: 'disconnect' })
+        // The rest of its parallel group pauses with it (T1203).
+        else if (t.fg?.fact.group != null && tb.fact.group === t.fg.fact.group && !isFixedLike(tb.info) && !tb.info.bg) events.push({ k: 'block.pause', block: tb.info.id, at, autoRule: 'disconnect' })
       }
       return yes(events)
     }

@@ -188,6 +188,13 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] 1.22-B.2 Posiłek zaczyna się sam, gdy odejdziesz od komputera (1.22.0)
    - [ ] 1.22-B.3 Dojazd sam, koniec o planowanym końcu (1.22.0)
    - [ ] 1.22-B.4 „Wstałeś później?” po przesunięciu rutyny (1.22.0)
+   - [ ] R1 Blok upuszczony na inny staje obok niego (1.23.0)
+   - [ ] R2 Wyjście z grupy i „Cofnij” bez przesunięcia (1.23.0)
+   - [ ] R3 Limit bloków naraz (1.23.0)
+   - [ ] R4 „Tydzień” i „3 dni” – bloki równoległe (1.23.0)
+   - [ ] R5 Nakładające się bloki obok siebie (1.23.0)
+   - [ ] 1.23-B.1 Start grupy i pierwszy plan (1.23.0)
+   - [ ] 1.23-B.2 Grupa a reszta dnia (1.23.0)
    - [ ] SNT2.1 Ustawienia → „Kalendarze”: dodawanie do 12, nazwa, kolor, usuwanie z „Cofnij”
    - [ ] SNT2.2 Kategoria i wydarzenie całodniowe w kalendarzu (pole „Kalendarz”)
    - [ ] SNT2.3 Żetony nad widokami, „ukryte: N”, zapamiętane na tym komputerze
@@ -2417,6 +2424,59 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w „Dziś” kliknij „+ Blok” i od razu pisz „Analiza rynku” (bez klikania w pole), wybierz kategorię „Analiza”, „Dodaj”. Kliknij „+ Blok” jeszcze raz, wpisz nazwę i wciśnij Enter. W „Tygodniu” kliknij puste miejsce, wpisz nazwę w okienku i wciśnij Enter; drugi raz wpisz nazwę i kliknij „Więcej”. Obejrzyj dzień z zajęciami z PDF zjazdów i blok zadania w „Tygodniu”, „Agendzie” i miesiącu. Zacznij blok dodany przez „+ Blok” z nazwą i usuń go w trakcie. Otwórz panel bloku bez nazwy i zobacz podpowiedź w polu. Zmień nazwę istniejącego bloku, potem wyczyść ją. Zobacz blok z nazwą w „Tygodniu”, „3 dniach”, „Agendzie”, w miesiącu i na pasku pulpitu, gdy trwa. W „Szablonach” kliknij pustą oś (kursor stoi w „Nazwa”), nadaj nazwę blokowi szablonu i zobacz dzień z tego szablonu; zmień tam nazwę w jednym dniu. Nadaj nazwę serii („Szablony” → seria) i zmień ją w jednym wystąpieniu w „Dziś”. Wpisz nazwę w Ctrl K.
 - **Oczekiwany efekt:** pole „Nazwa” jest na samej górze panelu, nad „Kategorią”, i na górze okienka „Nowy blok” w „Tygodniu”; przy każdym nowym bloku kursor stoi w nim, a Enter dodaje blok jak „Dodaj”; w istniejącym bloku Enter tylko zatwierdza nazwę; „Więcej” przenosi nazwę do panelu dnia; blok usunięty w trakcie zostaje na osi „poza planem” ze swoją nazwą i kategorią przy godzinach, na pasku pulpitu też z nazwą; puste pole – blok nazywa się jak dotąd, podpowiedź w polu mówi jak; kafelek bloku z nazwą ma nazwę w miejscu kategorii, a przy godzinach małym drukiem kategorię („09:00–09:45 · Analiza”); blok bez nazwy wygląda jak przedtem; „Agenda” – nazwa i kategoria raz; miesiąc i pasek pulpitu – sama nazwa; dzień z szablonu ma nazwę bloku szablonu, a zmiana w jednym dniu zmienia tylko ten dzień; zmiana nazwy wystąpienia serii pyta „Tylko to · To i następne · Cała seria”; Ctrl K znajduje blok po nazwie; zajęcia z PDF mają swoją nazwę także w „Tygodniu”, „3 dniach”, „Agendzie” i miesiącu, a blok zadania – tytuł zadania jak w „Dziś” (D430, D431).
 - **Nie przechodzi, gdy:** pola nie ma albo stoi pod „Kategorią” (w panelu albo w okienku „Tygodnia”); po „+ Blok” albo w okienku trzeba kliknąć w pole, żeby pisać; Enter w nazwie nowego bloku go nie dodaje albo w istniejącym bloku robi coś więcej niż zatwierdzenie; „Więcej” gubi nazwę; blok zadania w „Tygodniu” nazywa się kategorią; same spacje zapisują pustą nazwę zamiast nazwy jak dotąd; kafelek z nazwą nie pokazuje kategorii przy godzinach albo pokazuje ją dwa razy; blok bez nazwy wygląda inaczej niż przedtem; zmiana nazwy w jednym dniu zmienia szablon albo inne dni; wystąpienie serii nie pyta o zakres; pasek pulpitu albo miesiąc pokazują kategorię zamiast nazwy.
+
+---
+
+### R – bloki równoległe, plan i widoki (1.23.0, część A; D476, D492–D498)
+
+#### R1 Blok upuszczony na inny staje obok niego (D492)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („bloki równoległe”), `tests/web/parallel-drop.test.ts`, `tests/unit/engine/parallel.test.ts`.
+- **Jak sprawdzić:** jutro w „Dziś”: blok A 13:00 (1 h), C 14:00, B 16:00 (1,5 h). Chwyć B za prawą część kafelka i przeciągnij na prawą część A; puść. Potem „Cofnij” w pasku.
+- **Oczekiwany efekt:** w trakcie dymek „Równolegle z <nazwa A>”, B rysuje się w prawej połowie A, C przerywaną ramką o 14:30; po puszczeniu A i B stoją obok siebie od 13:00, C o 14:30, pasek „Przesunięto 1 blok · Cofnij”; „Cofnij” przywraca B na 16:00 i C na 14:00.
+- **Nie przechodzi, gdy:** B ląduje po A zamiast obok; C nie czeka do końca B; przeciągnięcie za nazwę (lewa część) przestaje rozsuwać jak dotąd.
+
+#### R2 Wyjście z grupy i „Cofnij” bez przesunięcia (D492, D497, D498)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („bez przesunięcia”), `tests/unit/engine/parallel.test.ts`.
+- **Jak sprawdzić:** ustaw B obok A, gdy nic po nich nie stoi – kliknij „Cofnij” w dymku; ustaw znowu i przeciągnij B za nazwę na 18:00; ustaw trzeci blok obok A i przeciągnij A w inne miejsce; zmień w panelu „Początek” bloku z grupy.
+- **Oczekiwany efekt:** dymek „Równolegle z <nazwa A> · Cofnij” cofa zmianę; odciągnięty blok stoi tam, gdzie go puszczono, sam; po odciągnięciu A pozostałe dwa zostają razem o starej godzinie; nowy „Początek” wyjmuje blok z grupy.
+- **Nie przechodzi, gdy:** odciągnięty blok wraca do grupy; reszta grupy rozjeżdża się po wyjściu A.
+
+#### R3 Limit bloków naraz (D476, D492)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/settings-fields.test.ts` (D476), `tests/web/parallel-drop.test.ts`.
+- **Jak sprawdzić:** Ustawienia → „Plan dnia” → „Najwięcej bloków naraz” 2; upuść trzeci blok na grupę dwóch.
+- **Oczekiwany efekt:** podgląd i dymek „Najwyżej 2 bloki naraz – zmienisz w Ustawieniach”; blok staje zaraz po grupie, sam; nic nie jest zablokowane.
+- **Nie przechodzi, gdy:** trzeci blok dołącza do grupy albo przeciągnięcie jest odrzucone.
+
+#### R4 „Tydzień” i „3 dni” (D476, D492)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/week.spec.ts` („Bloki równoległe w „Tygodniu””), `tests/web/parallel-drop.test.ts`.
+- **Jak sprawdzić:** w przyszłym tygodniu przeciągnij blok wtorku na prawą część innego bloku wtorku, potem blok środy na blok wtorku; to samo w „3 dniach”.
+- **Oczekiwany efekt:** pasmo upuszczenia mówi „Równolegle z <nazwa>”; bloki stoją obok siebie w kolumnie; blok ze środy przechodzi na wtorek obok celu z linią „Przeniesiono … · Cofnij”.
+- **Nie przechodzi, gdy:** blok staje po celu albo zostaje w środzie.
+
+#### R5 Nakładające się bloki obok siebie (D476)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/parallel-drop.test.ts` (pasy), `tests/e2e/screens.spec.ts` (`data-lane`).
+- **Jak sprawdzić:** w „Dziś” i „Szablonach” zobacz blok w tle (np. pranie) w czasie innego bloku i grupę równoległą.
+- **Oczekiwany efekt:** nakładające się kafelki dzielą szerokość osi po równo (przy trzech i więcej bez godzin na kafelku); wąskiej kolumny tła po prawej już nie ma; reszta dnia ma całą szerokość.
+- **Nie przechodzi, gdy:** kafelki się zakrywają albo blok w tle nadal stoi w wąskiej kolumnie.
+
+#### 1.23-B.1 Start grupy i pierwszy plan (D493, D494)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/parallel-timer.test.ts`, `tests/web/bar-parallel.test.ts`.
+- **Jak sprawdzić:** ułóż trzy bloki równolegle (przeciągnij dwa na trzeci), kliknij „Zacznij” na środkowym.
+- **Oczekiwany efekt:** pasek pokazuje kliknięty blok z czasem i „+2 w tle”; klik w dopisek – lista dwóch bloków z „Na pierwszy plan”, wybór zmienia blok w pasku; „Dalej” na bloku z przodu kończy go i pokazuje w pasku inny blok grupy, a następny blok planu się nie zaczyna.
+- **Nie przechodzi, gdy:** zaczyna się tylko kliknięty blok; dopisek liczy blok w tle spoza grupy (np. sesję); po „Dalej” pasek pokazuje „Bez bloku” albo zaczyna następny blok planu.
+
+#### 1.23-B.2 Grupa a reszta dnia (D499)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/parallel-timer.test.ts`.
+- **Jak sprawdzić:** w biegnącej grupie kliknij „Zacznij” na bloku spoza niej; potem wróć do grupy „Zacznij” na jednym z jej bloków; poczekaj na planowany koniec krótszego bloku grupy.
+- **Oczekiwany efekt:** cała grupa pauzuje i stoi na osi w miejscu klikniętego bloku; po powrocie biegnie cała, kliknięty z przodu; krótszy blok o swoim końcu kończy się sam („… skończony o HH:MM (według planu, w tle grupy)” z „Cofnij”), a blok z przodu biegnie dalej.
+- **Nie przechodzi, gdy:** w tle grupa biegnie dalej za blokiem spoza niej; po powrocie biegnie tylko kliknięty; krótszy blok biegnie w tle po swoim końcu.
 
 ---
 

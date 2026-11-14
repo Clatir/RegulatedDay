@@ -16,7 +16,7 @@ import { compareEvents, isKnown, type AnyEvent, type EnergyEvent } from '../mode
 import { DEFAULT_SETTINGS, type RulesSettings } from '../model/settings'
 import type { BlockInfo } from './blocks'
 import { REST_FREE, settingsAtMinute, type DayContext, type DayState } from './day'
-import { OPEN } from './facts'
+import { compareOrder, type EventOrder, OPEN } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
 
 const UNIT = 2000
@@ -84,8 +84,11 @@ export interface EnergyOptions {
   calibration?: boolean
 }
 
-/** Why a block runs in the background: planned so, sent there (full cost), or set aside by a flexible block started over it. */
-type BgWhy = 'planned' | 'forced' | 'aside'
+/**
+ * Why a block runs in the background: planned so, sent there (full cost), set aside by a flexible block started over it, or
+ * behind as a block of a parallel group (D476: no cost – only the block in front costs).
+ */
+type BgWhy = 'planned' | 'forced' | 'aside' | 'group'
 
 /** What a block is to energy: as its start event says, else as planned. */
 interface Kind {
@@ -107,6 +110,10 @@ interface Span extends Kind {
   returned: boolean
   /** Only in the forecast (not begun yet). */
   planned: boolean
+  /** Begun as a block of a parallel group (D476): the group's first block; in the forecast – the block it stands beside. */
+  groupId?: string | null
+  /** When its run began among the events (the order of the timer's foreground, T1191). */
+  order?: EventOrder
 }
 
 const pools = <T>(f: (p: Pool) => T): Record<Pool, T> => ({ head: f('head'), emotions: f('emotions'), senses: f('senses') })
@@ -201,14 +208,14 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   }
 
   // The runs of the log, cut at now; a run begun at now stays (empty) – its block is in the forecast from now.
-  const actual: Array<{ b: BlockInfo; runs: Array<{ from: number; to: number; bg: boolean }> }> = []
+  const actual: Array<{ b: BlockInfo; group: string | null; runs: Array<{ from: number; to: number; bg: boolean; order: EventOrder }> }> = []
   for (const b of day.blocks) {
     const f = day.facts.blocks.get(b.id)
     if (!f) continue
     const runs = f.runs
       .filter((r) => r.from <= now)
-      .map((r) => ({ from: Math.max(0, r.from), to: Math.max(0, r.from, Math.min(r.to === OPEN ? now : r.to, now, end)), bg: r.bg }))
-    actual.push({ b, runs })
+      .map((r) => ({ from: Math.max(0, r.from), to: Math.max(0, r.from, Math.min(r.to === OPEN ? now : r.to, now, end)), bg: r.bg, order: r.begun }))
+    actual.push({ b, group: !b.bg ? f.group : null, runs })
   }
   const span = (b: BlockInfo, from: number, to: number, bg: boolean, rest: Partial<Span> = {}): Span => ({ ...kindOf(b), from, to, bg, why: null, returned: false, planned: false, ...rest })
   /** What is in the foreground of the log at k (or begins there) besides `except`. */
@@ -219,18 +226,19 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   }
   const spans: Span[] = []
   const lastWhy = new Map<string, BgWhy | null>()
-  for (const { b, runs } of actual) {
+  for (const { b, group, runs } of actual) {
     const kind = kindOf(b)
     let why: BgWhy | null = null
     runs.forEach((r, i) => {
       const prev = runs[i - 1]
       if (!r.bg) why = null
+      else if (group) why = 'group'
       else if (b.bg) why = 'planned'
       // A flexible block runs in the background by your choice: its share (T438).
       else if (kind.flexible) why = 'aside'
       else if (!prev) why = 'forced'
       else if (!prev.bg) why = kind.rules.background && frontOver(r.from, b)?.flexible ? 'aside' : 'forced'
-      if (r.to > r.from) spans.push(span(b, r.from, r.to, r.bg, { why, returned: !r.bg && !!prev?.bg && prev.to === r.from }))
+      if (r.to > r.from) spans.push(span(b, r.from, r.to, r.bg, { why, returned: !r.bg && !!prev?.bg && prev.to === r.from, groupId: group, order: r.order }))
       if (r.to === now) lastWhy.set(b.id, why)
     })
   }
@@ -238,8 +246,12 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
     const from = Math.max(p.from, now)
     const to = Math.min(p.to, end)
     if (to <= from) continue
-    const why = p.bg ? (p.running ? (lastWhy.get(p.block.id) ?? 'planned') : 'planned') : null
-    spans.push(span(p.block, from, to, p.bg, { why, planned: !p.running }))
+    // A block of a parallel group to come stands behind its first block (`alongside`, the forecast): no cost, as when it
+    // runs behind (D476, T1199).
+    const why = p.bg ? (p.running ? (lastWhy.get(p.block.id) ?? 'planned') : p.block.alongside != null && !p.block.bg ? 'group' : 'planned') : null
+    const groupId = p.running ? (day.facts.blocks.get(p.block.id)?.group ?? null) : (p.block.alongside ?? null)
+    const order = p.running ? day.facts.blocks.get(p.block.id)?.runs.at(-1)?.begun : undefined
+    spans.push(span(p.block, from, to, p.bg, { why, planned: !p.running, groupId, ...(order ? { order } : {}) }))
   }
   const upToNow = (to: number) => Math.min(to === OPEN ? now : to, now)
   const requests = day.facts.requests.map((r) => ({ id: r.id, from: r.from, to: upToNow(r.to) }))
@@ -258,6 +270,17 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
       if (cur == null) fgAt[k] = x
       else if (Array.isArray(cur)) cur.push(x)
       else fgAt[k] = [cur, x]
+    }
+  }
+
+  // Blocks of a parallel group behind (D476, D493): at a minute with nothing in front, the one whose run began last.
+  const groupAt: Array<Span | null> = new Array(end).fill(null)
+  for (const x of spans) {
+    if (!x.bg || x.why !== 'group') continue
+    for (let k = x.from; k < x.to; k++) {
+      const cur = groupAt[k]
+      // The one begun last – by its minute, then by the order of events (the same click: the last written), as `groupFront`.
+      if (!cur || cur.from < x.from || (cur.from === x.from && cur.order && x.order && compareOrder(x.order, cur.order) > 0)) groupAt[k] = x
     }
   }
 
@@ -287,8 +310,9 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
     } else if (discAt[k]) {
       // „Odcinam się” is regeneration: quiet, a weighted blanket, warm light (spec).
       add(k, regenVariant(s, 'cisza'), 100)
-    } else if (fg) {
-      const main = Array.isArray(fg) ? pickFront(fg, s) : fg
+    } else if (fg || groupAt[k]) {
+      // Nothing in front but blocks of a parallel group behind: the one begun last is in front (D493, T1191).
+      const main = fg ? (Array.isArray(fg) ? pickFront(fg, s) : fg) : groupAt[k]!
       frontSpan[k] = main
       add(k, costOf(main, s), 100)
       // Beside a regeneration another fixed block waits (spec „Bloki”).
@@ -297,12 +321,28 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
       // Time without a block that is regeneration counts as „gra, film” (D146, T181).
       add(k, regenVariant(s, 'gra'), 100)
     }
-    hasFront[k] = reqAt[k] != null || discAt[k] || fg ? 1 : 0
+    hasFront[k] = reqAt[k] != null || discAt[k] || fg || groupAt[k] ? 1 : 0
   }
   for (const x of spans) {
     if (!x.bg) continue
     for (let k = x.from; k < x.to; k++) {
       const s = settingsBy[k]!
+      // Behind as a block of a parallel group: no cost behind a block of its own group (or nothing – then it is in front,
+      // counted above); behind another block – as a block set aside (flexible: its share) or sent behind (fixed: full, T1199).
+      if (x.why === 'group') {
+        const front = frontSpan[k]
+        // A request or „Odcinam się” in front: a fixed block of a group goes on behind at full cost, as any fixed one (T1209).
+        if (!front && (reqAt[k] != null || discAt[k]) && !x.flexible && !isRegen(x)) {
+          add(k, costOf(x, s), isSession(x) ? 0 : 100)
+          continue
+        }
+        if (!front || front.groupId === x.groupId || front.block.id === x.groupId) continue
+        // As without the group: set aside (its share) when flexible, or fixed of a category that may run behind a flexible
+        // block in front; else sent behind – full cost.
+        const aside = x.flexible || (x.rules.background && front.flexible)
+        add(k, costOf(x, s), isSession(x) ? 0 : aside ? (x.bgPct ?? s.backgroundCostPct) : 100)
+        continue
+      }
       add(k, costOf(x, s), isSession(x) ? (hasFront[k] ? 0 : 100) : x.why === 'forced' ? 100 : (x.bgPct ?? s.backgroundCostPct))
     }
   }

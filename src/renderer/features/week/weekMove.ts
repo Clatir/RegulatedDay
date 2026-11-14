@@ -6,7 +6,7 @@
  * its own day (the drag of „Dziś”, D305). On the taken place the flexible blocks after it are pushed apart (D367, as „Dodaj”
  * of „Tydzień” counts them – D400). One edit of the queue (T952) and one „Cofnij” for both days (`WeekPush.move`).
  */
-import type { EditEntry, EditOutcome } from '@shared/api'
+import type { EditEntry, EditOutcome, RawRecord } from '@shared/api'
 import type { Names } from '@shared/blockName'
 import { dayRaw } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
@@ -21,8 +21,10 @@ import { countedDay, type DayModel } from '../../store/day'
 import { editOf, isSaved, trySaveWith, withOwner, type SendState } from '../../store/data'
 import { hiddenBlocksAmong } from '../calendars/calendarFilter'
 import { MOVE_GONE_TEXT, movedDay, stayedOf, type Stayed, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
-import { blockNow, withPushed, type PushedStart } from '../today/dayActions'
-import { dragChange, onUnsettled, pushedStarts } from '../today/dayPush'
+import { blockNow, putChange, withPushed, type PushedStart } from '../today/dayActions'
+import { axisEndOf, dragChange, onUnsettled, parallelChange, pushedStarts } from '../today/dayPush'
+import { blockName } from '../plan/blockView'
+import { groupEndMin, parallelDrop, parallelFullText, parallelJoinText } from '@shared/engine/parallel'
 
 /** Where a block was dropped: its day (`from`), the day of the column it was dropped on (`to`) and its new start there. */
 export interface WeekMove {
@@ -35,6 +37,11 @@ export interface WeekMove {
   startMin: number
   /** The names of the source day (D424: a block anchored to it that stays is named in the line); none – „blok”. */
   names?: Names
+  /**
+   * Dropped onto block `target` of the column (D492): beside its group, or right after it when the group holds `max` blocks
+   * (`startMin` is then the preview's – counted again here from the day as it is).
+   */
+  onto?: { target: string; max: number }
 }
 
 /**
@@ -54,6 +61,11 @@ export interface WeekMoved {
   push: WeekPush | null
   /** The blocks the move pushed apart on the target day. */
   pushed: number
+  /**
+   * A drop onto a block (D492): what to say („Równolegle z …”, the note of a full group) and – nothing pushed within the day, so
+   * no line – the edit its „Cofnij” takes back; null – the line takes it back.
+   */
+  parallel?: { text: string; undo: { date: string; entry: EditEntry; made: RawRecord | null } | null }
 }
 
 /** The texts of a move refused in its turn (the toast says „Nie zapisano: …”). */
@@ -108,6 +120,8 @@ export function statusOf(out: readonly EditOutcome[] | null, state: SendState): 
  */
 async function moveWithinDay(m: WeekMove, today: string, at: number): Promise<WeekMoved> {
   let day: WeekPushedDay | null = null
+  let text: string | null = null
+  let same = false
   const state: SendState = { afterSend: false }
   const out = await trySaveWith(async () => {
     const files = await window.rd.dayFiles([m.from])
@@ -117,19 +131,31 @@ async function moveWithinDay(m: WeekMove, today: string, at: number): Promise<We
     if (!source) throw new Error(moveUncountedText(m.from))
     const was = movingOf(source, m.blockId, today)
     const span = { startMin: m.startMin, endMin: m.startMin + was.durationMin }
-    const c = dragChange(source, m.blockId, span, null, span, true)!
+    // D492: onto a block of the day – beside its group (or after it, full), counted from the day as it is now.
+    const onto = m.onto ? parallelChange(source, m.blockId, m.onto.target, m.onto.max, axisEndOf(source, m.from === today), (b) => (m.names ? blockName(b, m.names) : 'blok'), true) : null
+    if (m.onto && onto == null) throw new Error(MOVE_GONE_TEXT)
+    if (onto === 'same') {
+      same = true
+      return []
+    }
+    if (onto) text = onto.text
+    const c = onto ?? dragChange(source, m.blockId, span, null, span, true)!
     const starts = pushedStarts(source.ctx.plan, c)
-    // Its start over the block as the file holds it then (as `draggedBlock` of „Dziś” is saved), then the pushed ones.
-    const after = withPushed(dayRaw(file, m.from), m.from, (r) => r, [{ block: was, startMin: c.block.startMin! }, ...starts])
+    // Its start over the block as the file holds it then (as `draggedBlock` of „Dziś” is saved) – out of its group, the others of
+    // it together (D492, T1166) – then the pushed ones.
+    const after = withPushed(dayRaw(file, m.from), m.from, (r) => putChange(r, m.from, source.ctx.plan, { ...c, was }), starts)
     const entry = editOf(paths.day(m.from), file, after)
     if (entry) day = { date: m.from, entry, made: entry.create ? after : null, moved: starts.length, hidden: hiddenBlocksAmong(starts.map((s) => s.block)) }
     return [entry]
   }, state)
+  if (same) return { status: 'saved', push: null, pushed: 0 }
   const status = statusOf(out, state)
   const d = day as WeekPushedDay | null
-  if (status !== 'saved' || !d || d.moved === 0) return { status, push: null, pushed: 0 }
+  const said = text
+  const parallel = status === 'saved' && d && said != null ? { parallel: { text: said, undo: d.moved === 0 ? { date: d.date, entry: d.entry, made: d.made } : null } } : {}
+  if (status !== 'saved' || !d || d.moved === 0) return { status, push: null, pushed: 0, ...parallel }
   await tellBar(d, today)
-  return { status, push: { days: [d] }, pushed: d.moved }
+  return { status, push: { days: [d] }, pushed: d.moved, ...parallel }
 }
 
 /**
@@ -145,6 +171,7 @@ async function moveToDay(m: WeekMove, today: string, at: number): Promise<WeekMo
   const days: WeekPushedDay[] = []
   let stayed: Stayed[] = []
   let pushed = 0
+  let text: string | null = null
   const state: SendState = { afterSend: false }
   const out = await trySaveWith(async () => {
     const files = await window.rd.dayFiles([m.from, m.to])
@@ -156,9 +183,14 @@ async function moveToDay(m: WeekMove, today: string, at: number): Promise<WeekMo
     const was = movingOf(source, m.blockId, today)
     // As the source's file holds it (a change made a moment before stays), as „Przenieś na…” moves it.
     const b = blockNow(dayRaw(fromFile, m.from), m.from, was)
-    const two = moveBetweenDays(fromFile, toFile, b, source.ctx.plan, m.from, m.to, true, { startMin: m.startMin, stay: stayRuleOf(source.state.facts, source.ctx.snapshot.settings) })
+    // D492: onto a block of the target – beside its group at its start (or right after it, full), counted from that day.
+    const onto = m.onto && there ? ontoOtherDay(there, movedBlock(b, source.ctx.plan, m.from, true, m.startMin), m.onto, m.to === today, m.names) : null
+    const startMin = onto?.startMin ?? m.startMin
+    const alongside = onto?.alongside ?? null
+    if (onto) text = onto.text
+    const two = moveBetweenDays(fromFile, toFile, b, source.ctx.plan, m.from, m.to, true, { startMin, alongside, stay: stayRuleOf(source.state.facts, source.ctx.snapshot.settings) })
     stayed = stayedOf(two.stayers, { ctx: source.ctx, facts: source.state.facts }, m.names)
-    const starts = there ? pushedOn(there, movedBlock(b, source.ctx.plan, m.from, true, m.startMin), two.followers) : []
+    const starts = there ? pushedOn(there, { ...movedBlock(b, source.ctx.plan, m.from, true, startMin), alongside }, two.followers) : []
     const toAll = withPushed(two.target, m.to, (r) => r, starts)
     // The target in two entries: the block with its followers (the owner), then the pushed starts over it.
     const bring = editOf(paths.day(m.to), toFile, two.target)
@@ -175,7 +207,28 @@ async function moveToDay(m: WeekMove, today: string, at: number): Promise<WeekMo
   if (status !== 'saved') return { status, push: null, pushed: 0 }
   const target = days.find((d) => d.date === m.to)
   if (target) await tellBar(target, today)
-  return { status, push: days.length ? { days, move: { blockId: m.blockId, name: m.name, from: m.from, to: m.to, ...(stayed.length ? { stayed } : {}) } } : null, pushed }
+  const said = text
+  return {
+    status,
+    push: days.length ? { days, move: { blockId: m.blockId, name: m.name, from: m.from, to: m.to, ...(stayed.length ? { stayed } : {}) } } : null,
+    pushed,
+    ...(said != null ? { parallel: { text: said, undo: null } } : {})
+  }
+}
+
+/**
+ * A block moved to another day and dropped onto block `onto.target` there (D492): its start and the block it stands beside –
+ * the first of the target's group, at its start – or, the group full, right after it as a block of its own. Null – the target
+ * is not in that day's plan (the drop is a move to its hour), or a block of the same group already.
+ */
+function ontoOtherDay(there: DayModel, moved: PlanBlock, onto: { target: string; max: number }, isToday: boolean, names: Names | undefined): { startMin: number; alongside: string | null; text: string } | null {
+  const plan = withBlock(there.ctx.plan, { ...moved, alongside: null })
+  const end = axisEndOf(there, isToday)
+  const drop = parallelDrop(plan, moved.id, onto.target, onto.max, (root) => groupEndMin(there.ctx.plan, root, end))
+  if (!drop || drop.kind === 'same' || drop.patch.startMin == null || !Number.isFinite(drop.patch.startMin)) return null
+  const root = there.ctx.plan.find((x) => x.id === drop.root)
+  const text = drop.kind === 'join' ? parallelJoinText(root && names ? blockName(root, names) : 'blok') : parallelFullText(onto.max)
+  return { startMin: drop.patch.startMin, alongside: drop.patch.alongside ?? null, text }
 }
 
 /**
@@ -185,7 +238,7 @@ async function moveToDay(m: WeekMove, today: string, at: number): Promise<WeekMo
 function pushedOn(day: DayModel, block: PlanBlock, followers: readonly PlanBlock[]): PushedStart[] {
   const plan = followers.reduce((p, f) => withBlock(p, f), withBlock(day.ctx.plan, block))
   const pushed = pushApart(day.ctx, day.state, plan, block.id, { onUnsettled })
-  return pushedStarts(day.ctx.plan, { was: null, block, patch: block, pushed })
+  return pushedStarts(day.ctx.plan, { pushed })
 }
 
 /** Today's pushing told to the bar for the marker of variants only (D400: no line of its own – the one „Cofnij” is the window's). */
