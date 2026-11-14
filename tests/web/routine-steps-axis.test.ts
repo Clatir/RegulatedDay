@@ -84,6 +84,13 @@ describe('oś „Dziś”: kroki rutyny i ukończone bloki', () => {
     expect(finishedBlock(undefined)).toBe(false)
   })
 
+  it('D483: dojazd zaczęty sam i skończony sam o planowanym końcu (`awayPlan`) – ✓ na osi', () => {
+    expect(finishedBlock({ endedAt: 10, done: null, endRule: 'awayPlan' })).toBe(true)
+    const s = new Scenario({ date: DATE, plan: [at('d', '08:00', 30, { categoryId: 'dojazd', variantId: 'dojazd' })] }).observe('07:00', null)
+    s.start('d', '08:00').write([{ k: 'block.end', block: 'd', at: s.at('08:30'), done: null, rule: 'awayPlan' }], s.at('08:30'))
+    expect(axis(s, '11:00').get('d')).toMatchObject({ dim: true, finished: true })
+  })
+
   it('przegląd 4: blok skończony po bezczynności nie ma ✓ na osi', () => {
     const s = new Scenario({ date: DATE, plan: [at('a', '08:00', 30)] }).observe('07:00', null)
     s.start('a', '08:00').write([{ k: 'block.end', block: 'a', at: s.at('08:20'), done: null, rule: 'idle' }], s.at('08:20'))

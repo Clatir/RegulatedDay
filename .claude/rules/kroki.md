@@ -93,7 +93,7 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
   `stepsFinish` (`block.end`, reguła `steps`, tylko blok zaczęty i nieskończony dnia bieżącego; inaczej cicho nic) i `undoStepsFinish`
   („Cofnij”: koniec cofnięty, krok zostaje odhaczony; odmowa po starcie innego bloku, prośby, „Odcinam się”). Okno – dymek
   „Skończono: <nazwa>”, pasek – linia `stepsFinished:<blok>` przez 60 s (dopiero po całym zapisie – T1114). Oś: blok ukończony jawnie
-  (`finishedBlock`: `done` true albo reguła `steps`/`endNow`/`finished`/`plan`/`fixedNoReaction`; nie koniec z nieobecności – T1106) ma
+  (`finishedBlock`: `done` true albo reguła `steps`/`endNow`/`finished`/`plan`/`fixedNoReaction`/`awayPlan` (D483); nie koniec z nieobecności – T1106) ma
   „✓ ” przed nazwą (`block-finished`, D477). „Sprawy”: `taskTickEdits.block.finished` → `tickCaseStep` (T1113).
 - Jedno odhaczenie rutyny (D479, T1108, T1109): odhaczenia tylko w `stepsDone`, wersja tylko w `routineSteps`, `routine.done` = „zapisana”
   (zamyka kartę i linię). Karta (`RoutineCard`) i „Kroki ▸” paska to widoki listy dnia (`routinesDue(…, dayFile)`: `steps`, `version`) –

@@ -33,9 +33,10 @@ export interface DayAxis {
 
 /**
  * The ends of a block that say it is done though they carry no `done` (T1106): its last step (`steps`), „Skończyłem” of a fixed
- * block or a session (`endNow`, `finished`), a fixed block ended at its planned end (`plan`, `fixedNoReaction`).
+ * block or a session (`endNow`, `finished`), a fixed block ended at its planned end (`plan`, `fixedNoReaction`), a commute begun
+ * by itself and ended by itself at its planned end (`awayPlan`, D483 – „według planu”).
  */
-const DONE_ENDS: ReadonlySet<string> = new Set(['steps', 'endNow', 'finished', 'plan', 'fixedNoReaction'])
+const DONE_ENDS: ReadonlySet<string> = new Set(['steps', 'endNow', 'finished', 'plan', 'fixedNoReaction', 'awayPlan'])
 
 /**
  * A block done (D477, T1106): ended as done explicitly – `done` true („Skończyłem”, „Dalej” of a flexible block, the end of a
