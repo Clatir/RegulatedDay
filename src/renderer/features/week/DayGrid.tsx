@@ -470,7 +470,8 @@ function DayColumn({
     onRange: (r, _rect, x) => onPick(index, columnUnder(x, index), r)
   })
   const shown = held ?? (waiting ? { startMin: waiting.startMin, endMin: waiting.startMin + waiting.durationMin } : null)
-  const stripped = hasEnergy(day.energy)
+  // Not at every move of a drag: once a day's energy (T1293).
+  const stripped = useMemo(() => hasEnergy(day.energy), [day.energy])
   return (
     <div
       className={cx('relative overflow-hidden rounded-sm border-x border-line', day.when === 'today' ? 'bg-panel' : 'bg-transparent')}

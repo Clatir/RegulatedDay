@@ -378,6 +378,8 @@ export function Timeline({
   const span = [...(extent ?? items), ...(draft ? [draft] : [])]
   const lo = Math.floor(Math.min(from, ...span.map((i) => i.startMin), ...markers.map((m) => m.at)) / 60) * 60
   const hi = Math.ceil(Math.max(to, ...span.map((i) => i.endMin), ...markers.map((m) => m.at)) / 60) * 60
+  // The line „teraz” of the axis: the lanes stand its numbers on it and draw it in its colour (D500).
+  const nowMarker = markers.find((m) => m.now)
   // D366: a click on a gap (or in the column of hours) creates a block on the quarter, a drag one with its start and end;
   // with `clickCreates` off (D496, „Dziś”) a bare click makes nothing – only a drag does.
   const grid = useGridCreate({
@@ -720,7 +722,7 @@ export function Timeline({
         ))}
       </div>
       {/* D500: the energy beside the axis – three lanes G · E · B (`EnergyLanes`). */}
-      {energy && hasEnergy(energy) && <EnergyLanes track={energy} lo={lo} ppm={PPM} height={height} nowAt={markers.find((m) => m.now)?.at ?? null} nowColor={TONE.fg} />}
+      {hasEnergy(energy) && <EnergyLanes track={energy} lo={lo} ppm={PPM} height={height} nowAt={nowMarker?.at ?? null} nowColor={TONE[nowMarker?.tone ?? 'fg']} />}
     </div>
   )
 }

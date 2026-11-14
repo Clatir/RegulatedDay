@@ -614,7 +614,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               <span className="text-[12px] text-muted" data-testid="day-summary">
                 {daySummary(model).join(' · ')}
               </span>
-              {axis.energy && hasEnergy(axis.energy) && <EnergyLegend reserve={axis.energy.reserve} />}
+              {hasEnergy(axis.energy) && <EnergyLegend reserve={axis.energy.reserve} />}
             </div>
             {/* The all-day events of the day (D405), over the axis' column – the hours' column on the left stays empty. */}
             <AllDayBar key={date} dates={[date]} page="today" today={today} axisPx={46} endPx={hasEnergy(axis.energy) ? LANES_WIDTH : 0} />

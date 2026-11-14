@@ -21,7 +21,7 @@ export const BAR_BELOW_OPACITY = 0.3
 /** The height of a number at „teraz”: it stands centred on the line (half above, half below). */
 export const NOW_CHIP_HEIGHT = 12
 
-/** `nowColor` – the colour of the axis' line „teraz” (`TONE.fg` in `Timeline`), the lanes draw it on. */
+/** `nowColor` – the colour of the axis' line „teraz” (the tone of its marker in `Timeline`), the lanes draw it on. */
 export function EnergyLanes({ track, lo, ppm, height, nowAt, nowColor }: { track: EnergyTrack; lo: number; ppm: number; height: number; nowAt: number | null; nowColor: string }) {
   const clip = useId().replace(/[^a-zA-Z0-9_-]/g, '')
   const curves = useMemo(() => poolCurves(track), [track])
@@ -35,12 +35,15 @@ export function EnergyLanes({ track, lo, ppm, height, nowAt, nowColor }: { track
     })
   }, [curves, lo, ppm, track.reserve])
   const now = nowAt == null ? null : valuesAt(curves, nowAt)
-  const [hover, setHover] = useState<{ at: number; text: string } | null>(null)
+  // The state holds only the sample's minute; its words and values are read from the current track at each render, so a
+  // forecast counted again under a standing pointer shows its new numbers (T1291).
+  const [hover, setHover] = useState<number | null>(null)
   const onMove = (e: MouseEvent<HTMLDivElement>) => {
     const s = nearestSample(track, lo + (e.clientY - e.currentTarget.getBoundingClientRect().top) / ppm)
     // A new state only when the pointer reaches another sample.
-    setHover((h) => (s == null ? null : h?.at === s.at ? h : { at: s.at, text: hoverText(s.at, s) }))
+    setHover(s?.at ?? null)
   }
+  const sample = hover == null ? null : nearestSample(track, hover)
   const reserveX = (i: number) => laneLeft(i) + (track.reserve / 100) * LANE_WIDTH
   return (
     <div className="relative shrink-0 border-l border-line" style={{ width: LANES_WIDTH, height }} onMouseMove={onMove} onMouseLeave={() => setHover(null)} data-testid="energy-track">
@@ -65,7 +68,7 @@ export function EnergyLanes({ track, lo, ppm, height, nowAt, nowColor }: { track
           )
         })}
         {nowAt != null && <line x1={0} x2={LANES_WIDTH} y1={y(nowAt)} y2={y(nowAt)} stroke={nowColor} strokeWidth={1} data-testid="energy-now-line" />}
-        {hover && <line x1={0} x2={LANES_WIDTH} y1={y(hover.at)} y2={y(hover.at)} stroke={nowColor} strokeOpacity={0.5} strokeWidth={1} />}
+        {sample && <line x1={0} x2={LANES_WIDTH} y1={y(sample.at)} y2={y(sample.at)} stroke={nowColor} strokeOpacity={0.5} strokeWidth={1} />}
       </svg>
       {/* The letters over the lanes – they stay at the top while the axis scrolls. */}
       <div className="pointer-events-none sticky top-0 z-10 h-3 bg-bg/85" data-testid="energy-letters">
@@ -91,9 +94,9 @@ export function EnergyLanes({ track, lo, ppm, height, nowAt, nowColor }: { track
           ))}
         </div>
       )}
-      {hover && (
-        <div className="num pointer-events-none absolute right-full z-30 mr-1 -translate-y-1/2 rounded-sm border border-line bg-bg/95 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-fg" style={{ top: y(hover.at) }} data-testid="energy-hover">
-          {hover.text}
+      {sample && (
+        <div className="num pointer-events-none absolute right-full z-30 mr-1 -translate-y-1/2 rounded-sm border border-line bg-bg/95 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-fg" style={{ top: y(sample.at) }} data-testid="energy-hover">
+          {hoverText(sample.at, sample)}
         </div>
       )}
     </div>
