@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.21.0
+- „Niezamknięte dni” rano: po „Jak zapisano”, „Wolne” albo „Nie pamiętam” pojawia się „Zamknięto <dzień>: … · Cofnij”. „Cofnij” przywraca dzień na listę, dopóki aplikacja go nie zamroziła.
+- Wyszukiwarka ma przycisk: u dołu menu bocznego jest „Szukaj · Ctrl K”.
+- Szybki zapis „+”: po zapisaniu zadania pasek mówi „Dodano do Skrzynki: <tytuł>” – także po zapisie skrótem globalnym.
+- Pokój przy wyłączonej grze ma przycisk „Otwórz Ustawienia”, który od razu pokazuje sekcję „Moduły”.
+- Statystyki wyjaśniają, kiedy dzień jest „zamrożony”: po oknie korekty – 24 h od otwarcia następnego dnia, najpóźniej 72 h po końcu dnia.
+
 ## 1.20.0
 - Nowy blok zapisuje się sam: w panelu nowego bloku w „Dziś” i w okienku „Nowy blok” w „Tygodniu” nie ma już „Dodaj”. Blok zapisuje się przy pierwszym zatwierdzonym polu albo gdy klikniesz gdzie indziej lub zamkniesz panel, a potem pokazuje „Dodano blok · Cofnij”. Esc odrzuca nietknięty szkic. Przypadkowe kliknięcie osi nie tworzy bloku.
 - Zaznaczony odcinek: po przeciągnięciu po osi „Dziś” (i po „+ Blok”, Ctrl+N) nowy blok od razu stoi na osi jako kafelek z przerywaną ramką i godzinami, zanim go opiszesz.

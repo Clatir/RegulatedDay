@@ -817,6 +817,7 @@ function registerIpc(): void {
   handle(CH.ritual, (_e, day: unknown) => needHub().ritual(String(day)))
   handle(CH.ritualAnswer, (_e, day: unknown, row: unknown, choice: unknown, value: unknown, item: unknown) => needHub().ritualAnswer(String(day), String(row), String(choice), ritualValue(value), typeof item === 'string' ? item : null))
   handle(CH.closeDay, (_e, day: unknown, how: unknown) => needHub().closeDay(String(day), String(how) as CloseHow))
+  handle(CH.undoClose, (_e, day: unknown, ids: unknown) => needHub().undoClose(String(day), Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : []))
   handle(CH.unclosedDays, () => needHub().unclosedDays())
   handle(CH.computerList, () => needHub().computerList())
   // A folder picked in a window of Windows over the window that asked (the wizard's data folder, „Dane” in the settings).
@@ -913,7 +914,11 @@ function registerIpc(): void {
   // „Sprawy” (D383–D385, D402): the quick capture – saved from „Do skrzynki”, the window hides; its shortcut for the settings.
   handle(CH.quickAdd, async (e, title: unknown) => {
     const r = await quickAdd(typeof title === 'string' ? title.slice(0, 1000) : '')
-    if (r.ok && viewOf(e.sender) === 'quick') quick?.close('zapisano')
+    if (r.ok && viewOf(e.sender) === 'quick') {
+      quick?.close('zapisano')
+      // D470: the bar says where it went – the quick window is gone already.
+      void widget.quickSaid(typeof title === 'string' ? title : '')
+    }
     return r
   })
   ipcMain.on(CH.quickClose, () => quick?.close('Esc'))

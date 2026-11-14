@@ -10,6 +10,7 @@ import { blockFill, SEASON_COLORS } from '@shared/theme'
 import { weekday } from '@shared/time/zone'
 import { EmptyState, Section } from '../../components/ui'
 import { useData } from '../../store/data'
+import { openPick } from '../../store/ui'
 import { useGame } from '../../store/game'
 import { useMachine } from '../../store/machine'
 import { RoomArt } from './RoomArt'
@@ -17,6 +18,9 @@ import { gameLine, nextText, SEASON_NAMES, stepText, wayName, weekLabel } from '
 
 /** The statuses of this many last days. */
 const STATUS_DAYS = 14
+
+/** „Otwórz Ustawienia” of the empty room (D471): the settings at their „Moduły” (the search's way to a section – `pick`). */
+export const openModules = (): void => openPick({ page: 'settings' }, { kind: 'setting', id: 'settings-modules' })
 
 export function RoomPage() {
   const game = useGame((s) => s.game)
@@ -26,7 +30,7 @@ export function RoomPage() {
   const rd = useData((s) => s.rd)
   const today = useData((s) => s.view?.today ?? '')
   const b = useMachine((s) => s.prefs.brightness)
-  if (!on) return <EmptyState why="Gra jest wyłączona – włączysz ją w Ustawieniach → Moduły." data-testid="room-off" />
+  if (!on) return <EmptyState why="Gra jest wyłączona – włączysz ją w Ustawieniach → Moduły." action={{ label: 'Otwórz Ustawienia', run: openModules }} data-testid="room-off" />
   if (!game) {
     // Not counted yet, or the count failed before any came: never „no game” for someone with months of it.
     if (failed) return <EmptyState why="Nie mogę teraz policzyć gry – spróbuję za chwilę sam." data-testid="room-failed" />

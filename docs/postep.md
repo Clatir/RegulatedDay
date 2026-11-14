@@ -79,8 +79,20 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 | Przegląd xhigh runda 1 (a+b+c): 13 uwag | `w120f`, `w120e` | poprawione i scalone (T1045, T1049, T1070–T1072) |
 | E2E E3 w nocy („+ Blok” o 02:20 – ta sama wartość pola nie zapisywała) | `w120g` | poprawione i scalone (T1077, T1078) |
 | Przegląd xhigh runda 2 (poprawki + U3/U4): 14 uwag | `w120h` (Del, okna, „+ Nowa…”), `w120g` (`TodayPage`, `draftSave`) | poprawione i scalone (T1067, T1073–T1076, T1079–T1080); runda 3 nie będzie (D351) |
-| PR 1.20.0 | `w120` | PR #88 scalony 14.11 (`main` b6d638e); run na `main` 43553628411 nie wydał 1.20.0 – E2E „!jutro” na Windows padł dwa razy (Ctrl+N przed wejściem „Spraw”) |
-| Poprawka testu „!jutro” | `w120`, gałąź `claude/1.20.0-e2e-jutro` | test czeka na „Dziś” i „Sprawy” przed Ctrl+N (jak test obok); PR, po scaleniu run na `main` wydaje 1.20.0, Setup.exe do Pobranych |
+| PR 1.20.0 | `w120` | PR #88 + poprawka testu „!jutro” PR #89 scalone 14.11; 1.20.0 wydane 14.11 08:48 (run 43569379305) |
+
+8. **1.21.0 – przegląd intuicyjności (14.11, D468–D472, T1081–T1093):** skan `src/renderer` (trzy obszary), 7 uwag, użytkownik
+   wybrał 1–6; punkt 2 (okno „Analiza tygodniowa”) odpadł – usunięte w 1.20.0 (D467). Gałąź `claude/1.21.0-intuicyjnosc`
+   (drzewo `w121`), jeden PR i jeden CI. Odbiór I1–I4 w `docs/odbior.md`. Uwagi na później: „Cofnij” zamknięcia nie sprawdza
+   zdarzeń zapisanych po nim (np. `block.fix`); po „Pomiń” przywrócony dzień wraca dopiero po ponownym otwarciu „Dziś”;
+   bez folderu danych pasek nie pokazuje noty (błędy szybkiego zapisu prawie niewidoczne).
+9. **1.22.0 – reklamacja rutyn i timer (po wydaniu 1.21.0, jeden PR i jeden CI, przegląd xhigh – silnik dnia):** D473 kroki rutyny
+   w bloku z rutyną (także z szablonu i serii; przyczyna reklamacji: w 1.20.0 kopia tylko przy ręcznym wyborze rutyny w
+   `BlockEditor.pickRoutine`), D474 ostatni odhaczony krok kończy blok („Skończono: … · Cofnij”), D475 elastyczne bloki kategorii
+   „poza komputerem” zaczynają się same o swojej godzinie, gdy nic nie biegnie, D477 ✓ przed nazwą ukończonego bloku na osi
+   „Dziś”, D478 „Zacznij” na innym bloku zamienia go miejscami z biegnącym (biegnący nie znika). Numery od D479, T1100.
+10. **1.23.0 – bloki równoległe (D476, po 1.22.0):** przeciągnięcie bloku na inny = biegną razem, najwyżej N (Ustawienia, domyślnie 3),
+   pierwszy plan = ostatnio zaczęty, energia tylko z niego; widoki pokazują nakładające się bloki obok siebie. Szacunek 6–10 h.
 
 **Do pokazania użytkownikowi przy odbiorze 1.20.0:** klik w blok w „Tygodniu” i „3 dniach” otwiera „Dziś” z zaznaczonym
 blokiem (T1066 – Del działa po kliknięciu); „+ Nowa…” dla Wariantu i Kategorii nie ma na dniu minionym (T1067); wieczorny

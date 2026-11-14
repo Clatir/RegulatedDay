@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, CloseResult, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import { blockFactsOf, type CasesRitual } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
@@ -1063,9 +1063,17 @@ export class DataHub {
     return { ok: r.ok, why: r.ok ? null : r.why, confirm: null }
   }
 
-  /** A day closed (the ritual, „Jak zapisano”, „Wolne”, „Nie pamiętam”). */
-  async closeDay(day: string, how: CloseHow): Promise<TimerResult> {
+  /** A day closed (the ritual, „Jak zapisano”, „Wolne”, „Nie pamiętam”), with the ids of its events for „Cofnij” (D468). */
+  async closeDay(day: string, how: CloseHow): Promise<CloseResult> {
     const r = await this.need().closeDay(day, how)
+    this.changed()
+    if (r.ok) void this.service?.tick()
+    return { ok: r.ok, why: r.ok ? null : r.why, confirm: null, written: r.ok ? r.written : [] }
+  }
+
+  /** „Cofnij” of a close (D468): its events undone – the day is among the days not closed again. */
+  async undoClose(day: string, ids: string[]): Promise<TimerResult> {
+    const r = await this.need().undoClose(day, ids)
     this.changed()
     if (r.ok) void this.service?.tick()
     return { ok: r.ok, why: r.ok ? null : r.why, confirm: null }

@@ -2410,6 +2410,38 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 
 ---
 
+### I – intuicyjność (1.21.0, D468–D472)
+
+#### I1 „Cofnij” zamknięcia dnia rano (D468)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/close-undo.test.ts`, `tests/web/unclosed-undo.test.ts`.
+- **Jak sprawdzić:** rano przy „Niezamkniętych dniach” kliknij „Wolne” przy jednym dniu, potem „Cofnij” w dymku; zamknij go „Nie pamiętam” i zostaw.
+- **Oczekiwany efekt:** dymek „Zamknięto <dzień>: wolny · Cofnij”; po „Cofnij” dzień wraca na listę; po drugim zamknięciu dzień znika i nie wraca.
+- **Nie przechodzi, gdy:** brak dymka; „Cofnij” nie przywraca dnia albo zmienia inny dzień.
+
+#### I2 „Szukaj · Ctrl K” w menu (D469)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/side-menu-search.test.ts`.
+- **Jak sprawdzić:** kliknij „Szukaj” u dołu menu bocznego.
+- **Oczekiwany efekt:** otwiera się ta sama wyszukiwarka co po Ctrl K; skróty Ctrl+cyfra ekranów bez zmian.
+- **Nie przechodzi, gdy:** pozycji nie ma albo zmienia kolejność ekranów.
+
+#### I3 Potwierdzenie szybkiego zapisu (D470)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/widget.test.ts` (D470), `tests/web/bar-render.test.ts`.
+- **Jak sprawdzić:** w pasku „+”, wpisz „Kupić mleko !jutro”, Enter; potem to samo skrótem globalnym szybkiego zapisu.
+- **Oczekiwany efekt:** pasek mówi „Dodano do Skrzynki: Kupić mleko” spokojnym kolorem (nie czerwonym), zadanie jest w Skrzynce.
+- **Nie przechodzi, gdy:** brak potwierdzenia albo jest czerwone jak błąd.
+
+#### I4 Pokój – „Otwórz Ustawienia” (D471) i statystyki – „zamrożone” (D472)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/room-off.test.ts`, `tests/web/stats-view.test.ts`.
+- **Jak sprawdzić:** wyłącz grę, otwórz „Pokój” i kliknij przycisk; otwórz „Statystyki”.
+- **Oczekiwany efekt:** przycisk otwiera Ustawienia na sekcji „Moduły”; nota nad statystykami mówi, kiedy dzień się zamraża.
+- **Nie przechodzi, gdy:** przycisk prowadzi gdzie indziej; nota bez wyjaśnienia.
+
+---
+
 ### U – uwagi po 1.19.0 (1.20.0, D460–D467)
 
 #### U2 i U7 Nowy blok zapisuje się sam, szkic na osi (D461, D466)

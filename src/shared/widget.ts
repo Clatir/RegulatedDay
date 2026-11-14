@@ -147,8 +147,8 @@ export interface WidgetView {
   recording: boolean
   /** The computers recording a lecture now – the tones never play on them (A8-04). */
   recorders: string[]
-  /** Why a click did nothing (shown in the bar for a few seconds), null: nothing to say. */
-  note: { text: string; left: number } | null
+  /** Why a click did nothing (shown in the bar for a few seconds), null: nothing to say; `ok`: a confirmation (the quick capture, D470), not a refusal. */
+  note: { text: string; left: number; ok?: true } | null
   /** „Prośba ▸” and the request running now (D311, D312). */
   requests: BarRequests
   /** The marker of variants and, while its panel is open, the variants (D313). */

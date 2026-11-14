@@ -82,7 +82,7 @@ paths:
 - Serie (T709): `useData().series` / `seriesPlans` (do `countDay`), `window.rd.series*` → `SeriesResult` – reguły `dane.md`.
   Ekrany (T711–T714): `features/series/` (`BlockSeries`, `SeriesFields`, `seriesForm`, `scopeAsk`, `seriesActions`, `SeriesEditor`); testy `tests/web/series-*`, `tests/e2e/series.spec.ts`.
 - `app/Questions.tsx` – pytania kolejki i kopii konfliktowych; `lib/recordText.ts` – pola i wartości po ludzku.
-- `search/` (SNT6, D387, T650–T653) – paleta Ctrl K (`Palette`, `searchStore`; skrót w `useHotkeys` w `App.tsx`, `app/pages.ts` – nazwy ekranów i
+- `search/` (SNT6, D387, T650–T653) – paleta Ctrl K (`Palette`, `searchStore`; skrót w `useHotkeys` w `App.tsx`, „Szukaj” w `app/SideMenu.tsx` (D469, bez cyfry), `app/pages.ts` – nazwy ekranów i
   klawisze menu). Dopasowanie i kolejność – czyste `shared/search.ts` (`fold` – bez ogonków i „ł” jawnie, zakresy podświetleń w oryginale,
   `buildIndex`/`searchIndex`, `compareDays`, grupy po 5); rekordy: `search/records.ts` (statyczne ekrany, sekcje ustawień po `data-testid`,
   polecenia + dane okna), dni z `window.rd.searchDays()` (`folder.searchDays`: pliki dni przez `recordView` – czytane po rozmiarze i czasie, bez

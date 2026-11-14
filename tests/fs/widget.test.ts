@@ -42,7 +42,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; modePrefs?: () => { sessionMode: boolean; classMode: boolean } } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null }> } = {}) {
   // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
   // alone (Windows sets the time back or forward – the monotonic clock goes on).
   const clock = {
@@ -108,7 +108,8 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       now: () => clock.now,
       mono: () => clock.mono,
       batterySaver: () => o.batterySaver ?? false,
-      backup: () => (o.backupFailed ? { failed: { error: 'plik zajęty' } } : null)
+      backup: () => (o.backupFailed ? { failed: { error: 'plik zajęty' } } : null),
+      ...(o.quickAdd ? { quickAdd: o.quickAdd } : {})
     })
   const w = build()
   return { folder, clock, w, build, shown, failLater, views, closeFolder: () => (open = false), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
@@ -2489,5 +2490,48 @@ describe('„Ułóż pod energię” w pasku i z planu porannego (D369, D374, D3
     expect(arrangedIn('jutro', 'Ułóż', entry, null)).toBeNull()
     expect(arrangedIn(DAY, 'Ułóż', { ...entry, rel: paths.day(addDays(DAY, 1)) }, null)).toBeNull()
     expect(arrangedIn(DAY, 'Ułóż', { ...entry, remove: true }, null)).toBeNull()
+  })
+})
+
+describe('szybki zapis „+” – potwierdzenie w pasku (D470)', () => {
+  it('po udanym zapisie pasek mówi „Dodano do Skrzynki: <tytuł>” (bez słów daty), 6 s, spokojnym kolorem – nie jak błąd', async () => {
+    const saved: string[] = []
+    const { w, clock } = await make({
+      quickAdd: async (t) => {
+        saved.push(t)
+        return { ok: true, error: null }
+      }
+    })
+    await w.refresh()
+    await w.act('quickAdd', '  Zamówić   karmę !jutro', 'bar')
+    expect(saved).toEqual(['  Zamówić   karmę !jutro'])
+    expect(w.current().note).toEqual({ text: 'Dodano do Skrzynki: Zamówić karmę', left: 6_000, ok: true })
+    clock.now += 7_000
+    await w.refresh()
+    expect(w.current().note).toBeNull()
+  })
+
+  it('długi tytuł jest skrócony do 40 znaków z wielokropkiem; krótki zostaje cały', async () => {
+    const { w } = await make({ quickAdd: async () => ({ ok: true, error: null }) })
+    await w.refresh()
+    await w.act('quickAdd', `Zadzwonić ${'x'.repeat(100)}`, 'bar')
+    const text = w.current().note!.text
+    expect(text).toBe(`Dodano do Skrzynki: Zadzwonić ${'x'.repeat(29)}…`)
+    expect([...text.slice('Dodano do Skrzynki: '.length)]).toHaveLength(40)
+  })
+
+  it('odmowa mówi tylko powód (jak dotąd), bez potwierdzenia', async () => {
+    const { w } = await make({ quickAdd: async () => ({ ok: false, error: 'Wpisz, co zapisać.' }) })
+    await w.refresh()
+    await w.act('quickAdd', '!jutro', 'bar')
+    expect(w.current().note).toMatchObject({ text: 'Wpisz, co zapisać.' })
+    expect(w.current().note).not.toHaveProperty('ok')
+  })
+
+  it('szybki zapis skrótem globalnym: quickSaid mówi to samo w pasku', async () => {
+    const { w } = await make()
+    await w.refresh()
+    await w.quickSaid('Kup mleko @pt')
+    expect(w.current().note).toMatchObject({ text: 'Dodano do Skrzynki: Kup mleko', ok: true })
   })
 })

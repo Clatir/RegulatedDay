@@ -72,6 +72,7 @@ const api: RdApi = {
   ritual: (day) => ipcRenderer.invoke(CH.ritual, day),
   ritualAnswer: (day, row, choice, value, item) => ipcRenderer.invoke(CH.ritualAnswer, day, row, choice, value ?? null, item ?? null),
   closeDay: (day, how) => ipcRenderer.invoke(CH.closeDay, day, how),
+  undoClose: (day, ids) => ipcRenderer.invoke(CH.undoClose, day, ids),
   unclosedDays: () => ipcRenderer.invoke(CH.unclosedDays),
   computerList: () => ipcRenderer.invoke(CH.computerList),
   exportCsv: (from, to) => ipcRenderer.invoke(CH.exportCsv, from, to),

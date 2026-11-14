@@ -981,7 +981,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
           </div>
         )}
         {view.note && holds(view.note.left) && (
-          <div className="text-[12px] text-rose" data-testid="bar-note-click">
+          <div className={cx('text-[12px]', view.note.ok ? 'text-fg' : 'text-rose')} data-testid="bar-note-click">
             {view.note.text}
           </div>
         )}

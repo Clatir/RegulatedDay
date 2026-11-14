@@ -21,9 +21,9 @@ paths:
   (przerwa 10–30 min po projekcie); `actual` z odpowiedziami, `known` – odpowiedzi od minuty po nich (T413);
   `asWritten` (zamrożenie, „Jak zapisano”: po pracy odpoczynek także do minimum); `regen.explainMin`, `forecastMin`.
 - `engine/outcome.ts` – `dayOutcome` (granica kept / broken / noData, regeneracja, projekty, pula), `outcomeChanges`.
-- `engine/ritual.ts` – `ritualRows`, `ritualAnswer`, `ritualEffect`, `closeEvents`, `closeEffect`, `unclosedDays`.
+- `engine/ritual.ts` – `ritualRows`, `ritualAnswer`, `ritualEffect`, `closeEvents`, `closeEffect`, `closeUndoEvents`, `unclosedDays`.
 - `facts.ts`: `closed` (`ritual.close`), `notRest` (`rest.not`), `block.fix` (po kolei, niepasująca = problem),
-  `block.mark`, `request.person`. `main/data/folder.ts`: `ritual`, `ritualAnswer`, `closeDay`, `unclosedDays`.
+  `block.mark`, `request.person`. `main/data/folder.ts`: `ritual`, `ritualAnswer`, `closeDay`, `undoClose`, `unclosedDays`.
 
 ## Zasady
 - Czas do wyjaśnienia tylko po bloku pracy albo projektu zakończonym `twoQuestions`, `idle`, `absence` (bez
@@ -47,6 +47,11 @@ paths:
 - Twardy koniec w czasie do wyjaśnienia po projekcie mija przy pierwszym wejściu (`atInput`, także gdy w międzyczasie
   stałby się „nieosiągalny”); energia w czasie do wyjaśnienia stoi także po odpowiedzi (`rest` zerowane).
 - Skutek ✓: ocena „jak zapisano” (`asWritten`) z ✓ i bez; wieczorem z prognozą regeneracji do pory snu.
+- „Cofnij” zamknięcia rano (D468): `closeDay` oddaje id zapisanych zdarzeń (`dayAction` → `written`, z `writeOn`), okno
+  posyła je do `undoClose` (też `dayAction`) – `closeUndoEvents` pisze `undo` tylko dla nich: jedno `ritual.close` i to, co
+  `closeEvents` pisze z nim (ten sam komputer i ta sama chwila: `work.end`, `block.end` z regułą `workEnd`). Odmowa: dzień
+  zamrożony, zamknięcie cofnięte / nie w logu, obce id, inne niecofnięte `ritual.close` dnia. Wszystko poza faktami czyta
+  zamknięcie przez `foldFacts` (`facts.closed`), więc cofnięte znika wszędzie; `undo` z logu innego komputera składa się tak samo.
 
 ## Pułapki
 - Silnik sam czyta użycie z logu: w testach komputer musi mieć „obserwacja trwa” (`Scenario.using`), inaczej otwarty
@@ -64,5 +69,6 @@ paths:
   się” – czasy z użycia komputerów w oknie sesji (`used`, T500), więc wiersze licz z `ritualRows(state,
   ritualActivity(ctx, state))` – z `null` sesja dostaje godziny z planu.
 - Ekrany (0.12.0): `renderer/features/ritual/` – `RitualPanel` (karta w „Dziś”, wiersze po godzinach, `effectText`,
-  `untouched`), `UnclosedDays` (rano); IPC `ritual`, `ritualAnswer`, `closeDay`, `unclosedDays` (hub). Odczuwany koszt –
+  `untouched`), `UnclosedDays` (rano, toast „Zamknięto …” – `closedToastText`, `dayTitle`); IPC `ritual`, `ritualAnswer`,
+  `closeDay`, `undoClose`, `unclosedDays` (hub). Odczuwany koszt –
   zdarzenie `cost.felt` (`feltRows`); do propozycji kosztów wchodzi z ekranem kalibracji (T505).

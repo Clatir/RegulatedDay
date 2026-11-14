@@ -4,7 +4,8 @@
  * morning after „Zamknij dzień” – „Wolne” and „Nie pamiętam” (a day without data); a day without a confirmed end of work
  * has one click „Koniec pracy o … ✓”, with „Pracowałem do …” (after a block counted as a project „Projekt do …”) when
  * time to explain follows it. A day without your presence, left unanswered, freezes as free. Yesterday closed, with
- * what came after its close, has one line of information with „Popraw”.
+ * what came after its close, has one line of information with „Popraw”. A close from here says so in a toast with
+ * „Cofnij” (D468): the events of that close undone, the day is back on the list.
  */
 import { useEffect, useState } from 'react'
 import type { UnclosedDay } from '@shared/api'
@@ -15,11 +16,22 @@ import type { CloseHow } from '@shared/model/events'
 import { logicalMinuteOf } from '@shared/time/day'
 import { weekday } from '@shared/time/zone'
 import { useData } from '../../store/data'
-import { openDay, toast } from '../../store/ui'
+import { openDay, toast, undoToast } from '../../store/ui'
 import { DayTime, typedOf, useTypedTime } from './dayTime'
 import { effectText } from './RitualPanel'
 
 const WEEKDAYS = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
+
+/** How the morning closes a day (the evening ritual is the card in „Dziś”). */
+export type MorningClose = Exclude<CloseHow, 'ritual'>
+
+const CLOSED_AS: Record<MorningClose, string> = { asWritten: 'jak zapisano', free: 'wolny', unknown: 'bez danych' }
+
+/** A day of the list as its row names it: „piątek 13.11.2026”. */
+export const dayTitle = (date: string): string => `${WEEKDAYS[weekday(date) - 1]} ${plDate(date)}`
+
+/** The toast after a close from the list (D468): „Zamknięto piątek 13.11.2026: wolny”. */
+export const closedToastText = (date: string, how: MorningClose): string => `Zamknięto ${dayTitle(date)}: ${CLOSED_AS[how]}`
 
 export function UnclosedDays() {
   const stamp = useData((s) => s.stamp)
@@ -60,7 +72,13 @@ export function UnclosedDays() {
     }
     setTick((x) => x + 1)
   }
-  const close = (date: string, how: CloseHow) => run(() => window.rd.closeDay(date, how))
+  const close = (date: string, how: MorningClose) =>
+    run(async () => {
+      const r = await window.rd.closeDay(date, how)
+      // „Cofnij” (D468) undoes the events of this close (their ids, T1081); a refusal is said as the others are.
+      if (r.ok && r.written.length) undoToast(closedToastText(date, how), () => void run(() => window.rd.undoClose(date, r.written)))
+      return r
+    })
   const answer = (date: string, row: string, choice: string, value: number | null = null) => run(() => window.rd.ritualAnswer(date, row, choice, value))
   const clockOf = (date: string, idx: number) => logicalClock(logicalMinuteOf(date, atOf(gridOf(date), idx)))
 
@@ -101,7 +119,7 @@ export function UnclosedDays() {
       </div>
       {failed && <p className="text-[12px] text-rose" data-testid="unclosed-stale">Nie da się teraz odświeżyć listy – widać stan sprzed chwili (dzień mógł zostać zamknięty na innym komputerze).</p>}
       {days.map((d) => {
-        const title = `${WEEKDAYS[weekday(d.date) - 1]} ${plDate(d.date)}`
+        const title = dayTitle(d.date)
         if (d.closed) {
           const later = d.ritual.rows.filter((r) => r.afterClose).length
           return (

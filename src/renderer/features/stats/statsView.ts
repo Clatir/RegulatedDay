@@ -116,6 +116,11 @@ export function daysNote(r: Pick<StatsResult, 'days' | 'first' | 'last' | 'unrea
   return parts.join(' · ')
 }
 
+/** The note over the charts (D472): the days counted, what counts, and when the app freezes a day (spec „Statusy dni i passa”: the correction window). */
+export function statsNote(r: Pick<StatsResult, 'days' | 'first' | 'last' | 'unreadable'>): string {
+  return `${daysNote(r)}. Liczą się tylko dni zamrożone – potwierdzone dane, bez dnia dzisiejszego. Aplikacja zamraża dzień po oknie korekty: 24 h od otwarcia następnego dnia, najpóźniej 72 h po końcu dnia.`
+}
+
 /** Why the screen shows no numbers (too few frozen days), or null. */
 export function tooLittle(r: Pick<StatsResult, 'enough' | 'days' | 'unreadable'>, min: number): string | null {
   if (r.enough) return null

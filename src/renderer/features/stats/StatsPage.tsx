@@ -16,7 +16,7 @@ import {
   accuracyBars,
   axisOf,
   checkinsText,
-  daysNote,
+  statsNote,
   ENERGY_AXIS,
   energyText,
   feltBars,
@@ -116,7 +116,7 @@ export function StatsPage() {
       {loaded === null && <EmptyState why="Liczę statystyki…" data-testid="stats-loading" />}
       {result && (
         <>
-          <Note testId="stats-days">{daysNote(result)}. Liczą się tylko dni zamrożone – potwierdzone dane, bez dnia dzisiejszego.</Note>
+          <Note testId="stats-days">{statsNote(result)}</Note>
           {little ? (
             <EmptyState why={little} data-testid="stats-too-little" />
           ) : (
