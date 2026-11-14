@@ -1,0 +1,262 @@
+// @vitest-environment jsdom
+/**
+ * Readable energy (D500, T1280–T1283): the smoothed shape of a pool never goes above nor below the forecast's values, the spans
+ * at or above the reserve, the weakest pool and its shade (dobrze · uwaga · poniżej rezerwy), the words of the hover; beside the
+ * axis of „Dziś” the three lanes G · E · B with their bars, the reserve's tick in each, the lighter bar below it, the numbers at
+ * „teraz” and the legend „energia 0–100”.
+ */
+import { act, createElement } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import type { EnergyTrack } from '@shared/engine/energyTrack'
+import { EnergyLanes, EnergyLegend, LANE_WIDTH, laneLeft, LANES_WIDTH } from '@renderer/features/plan/EnergyLanes'
+import {
+  curveAt,
+  hoverText,
+  laneAreaPath,
+  nearestSample,
+  poolCurve,
+  POOL_COLOR,
+  POOL_LETTER,
+  POOL_NAME,
+  POOLS,
+  spansAtLeast,
+  stripRuns,
+  stripState,
+  valuesAt,
+  poolCurves
+} from '@renderer/features/plan/energyDraw'
+import { Timeline } from '@renderer/features/plan/Timeline'
+
+const sample = (at: number, head: number, emotions: number, senses: number) => ({ at, head, emotions, senses })
+const track = (samples: EnergyTrack['samples'], reserve = 30): EnergyTrack => ({ samples, reserve })
+
+describe('wygładzenie bez przestrzelenia (T1280)', () => {
+  it('krzywa przechodzi przez każdą próbkę i między dwiema nigdy nie wychodzi poza ich wartości', () => {
+    // A rough forecast: rises, falls, flat parts, a sharp drop – every 10 minutes.
+    const values = [100, 98, 90, 91, 60, 60, 60, 20, 35, 100, 0, 0, 50]
+    const c = poolCurve(track(values.map((v, k) => sample(600 + k * 10, v, v, v))), 'head')
+    for (let k = 0; k < values.length; k++) expect(curveAt(c, 600 + k * 10)).toBeCloseTo(values[k]!, 9)
+    for (let k = 0; k < values.length - 1; k++) {
+      const lo = Math.min(values[k]!, values[k + 1]!)
+      const hi = Math.max(values[k]!, values[k + 1]!)
+      for (let m = 0; m <= 10; m += 0.25) {
+        const v = curveAt(c, 600 + k * 10 + m)!
+        expect(v).toBeGreaterThanOrEqual(lo - 1e-9)
+        expect(v).toBeLessThanOrEqual(hi + 1e-9)
+      }
+    }
+  })
+  it('losowe prognozy (0–100, odstępy 10 i 20 min): zawsze w granicach sąsiednich próbek', () => {
+    let seed = 7
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31)
+    for (let run = 0; run < 50; run++) {
+      const samples = Array.from({ length: 30 }, (_, k) => sample(240 + k * 10 + (k > 15 ? 10 : 0), Math.round(rnd() * 100), 50, 50))
+      const c = poolCurve(track(samples), 'head')
+      for (let k = 0; k < samples.length - 1; k++) {
+        const a = samples[k]!
+        const b = samples[k + 1]!
+        for (let at = a.at; at <= b.at; at += 0.5) {
+          const v = curveAt(c, at)!
+          expect(v).toBeGreaterThanOrEqual(Math.min(a.head, b.head) - 1e-9)
+          expect(v).toBeLessThanOrEqual(Math.max(a.head, b.head) + 1e-9)
+        }
+      }
+    }
+  })
+  it('na szczycie i w dołku krzywa jest płaska – nie wychodzi nad szczyt ani pod dołek', () => {
+    const c = poolCurve(track([sample(0, 40, 0, 0), sample(10, 80, 0, 0), sample(20, 40, 0, 0)]), 'head')
+    expect(c.m[1]).toBe(0)
+    expect(Math.max(...Array.from({ length: 21 }, (_, k) => curveAt(c, k)!))).toBeCloseTo(80, 9)
+  })
+  it('próbka bez wartości jest pominięta; poza próbkami – brak wartości', () => {
+    const c = poolCurve(track([sample(360, 100, 90, 80), sample(370, 60, Number.NaN, 70)]), 'emotions')
+    expect(c.t).toEqual([360])
+    expect(curveAt(c, 360)).toBe(90)
+    expect(curveAt(c, 370)).toBeNull()
+    expect(curveAt(poolCurve(null, 'head'), 0)).toBeNull()
+  })
+  it('słupek pasa: od lewej krawędzi do krzywej i z powrotem, odcinki jako krzywe Béziera', () => {
+    const c = poolCurve(track([sample(360, 100, 0, 0), sample(370, 50, 0, 0)]), 'head')
+    // A lane at x = 3, 12 px wide: 100 → 15, 50 → 9; the axis from 06:00, 1 px a minute.
+    const d = laneAreaPath(c, 3, (v) => 3 + (v / 100) * 12, (at) => at - 360)
+    expect(d.startsWith('M3.0,0.0 L15.0,0.0 C')).toBe(true)
+    expect(d.endsWith('9.0,10.0 L3.0,10.0 Z')).toBe(true)
+    expect(laneAreaPath(poolCurve(null, 'head'), 0, (v) => v, (at) => at)).toBe('')
+  })
+})
+
+describe('jaśniej poniżej rezerwy (D500)', () => {
+  it('przedziały na rezerwie i nad nią: krzywa schodzi pod rezerwę i wraca – dwa przedziały, granice tam, gdzie krzywa = rezerwa', () => {
+    const c = poolCurve(track([sample(600, 60, 0, 0), sample(610, 20, 0, 0), sample(620, 60, 0, 0)]), 'head')
+    const spans = spansAtLeast(c, 30)
+    expect(spans).toHaveLength(2)
+    expect(spans[0]![0]).toBe(600)
+    expect(spans[1]![1]).toBe(620)
+    expect(curveAt(c, spans[0]![1])).toBeCloseTo(30, 6)
+    expect(curveAt(c, spans[1]![0])).toBeCloseTo(30, 6)
+    expect(spans[0]![1]).toBeGreaterThan(600)
+    expect(spans[0]![1]).toBeLessThan(610)
+  })
+  it('cały dzień nad rezerwą – jeden przedział; cały pod nią – żaden', () => {
+    const above = poolCurve(track([sample(0, 50, 0, 0), sample(10, 40, 0, 0)]), 'head')
+    expect(spansAtLeast(above, 30)).toEqual([[0, 10]])
+    const below = poolCurve(track([sample(0, 20, 0, 0), sample(10, 10, 0, 0)]), 'head')
+    expect(spansAtLeast(below, 30)).toEqual([])
+  })
+})
+
+describe('pasek kolumny: najsłabsza pula i jej odcień (D500, T1281)', () => {
+  it('przy rezerwie 30: poniżej 30 – poniżej rezerwy, 30–44 – uwaga, od 45 – dobrze', () => {
+    expect(stripState({ head: 29, emotions: 80, senses: 80 }, 30)).toEqual({ pool: 'head', state: 'low' })
+    expect(stripState({ head: 80, emotions: 30, senses: 80 }, 30)).toEqual({ pool: 'emotions', state: 'watch' })
+    expect(stripState({ head: 80, emotions: 80, senses: 44 }, 30)).toEqual({ pool: 'senses', state: 'watch' })
+    expect(stripState({ head: 80, emotions: 80, senses: 45 }, 30)).toEqual({ pool: 'senses', state: 'ok' })
+  })
+  it('liczy na liczbach z ekranu (zaokrąglonych): 44,6 to 45 – dobrze; remis – pierwsza pula', () => {
+    expect(stripState({ head: 80, emotions: 44.6, senses: 80 }, 30).state).toBe('ok')
+    expect(stripState({ head: 50, emotions: 50, senses: 50 }, 30).pool).toBe('head')
+  })
+  it('odcinki paska: co minutę ta sama pula i ten sam odcień łączą się, zmiana – nowy odcinek', () => {
+    const runs = stripRuns(track([sample(600, 90, 80, 70), sample(610, 90, 80, 70), sample(620, 90, 80, 20)]))
+    expect(runs[0]).toMatchObject({ from: 600, pool: 'senses', state: 'ok' })
+    expect(runs.at(-1)).toMatchObject({ to: 620, pool: 'senses', state: 'low' })
+    expect(runs.map((r) => r.state)).toEqual(['ok', 'watch', 'low'])
+    // The runs touch: each starts where the one before ends.
+    for (let k = 1; k < runs.length; k++) expect(runs[k]!.from).toBe(runs[k - 1]!.to)
+    expect(stripRuns(null)).toEqual([])
+  })
+})
+
+describe('podpowiedź po najechaniu (D500)', () => {
+  it('„10:30 · głowa 71 · emocje 66 · bodźce 41” – z najbliższej próbki prognozy', () => {
+    const t = track([sample(620, 75, 70, 45), sample(630, 71, 66, 41), sample(640, 68, 60, 38)])
+    const s = nearestSample(t, 633)!
+    expect(hoverText(s.at, s)).toBe('10:30 · głowa 71 · emocje 66 · bodźce 41')
+    expect(nearestSample(track([]), 600)).toBeNull()
+  })
+  it('wartości zaokrąglone', () => {
+    expect(hoverText(630, { head: 70.6, emotions: 66.2, senses: 41.49 })).toBe('10:30 · głowa 71 · emocje 66 · bodźce 41')
+  })
+  it('trzy pule z kolorami, nazwami i literami G · E · B', () => {
+    expect(POOLS).toEqual(['head', 'emotions', 'senses'])
+    expect(POOLS.map((p) => POOL_LETTER[p])).toEqual(['G', 'E', 'B'])
+    expect(POOL_NAME.head).toBe('głowa')
+    expect(POOL_COLOR.senses).toBe('#79AFAB')
+  })
+})
+
+let root: Root | null = null
+let host: HTMLElement | null = null
+beforeAll(() => {
+  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+})
+afterEach(() => {
+  act(() => root?.unmount())
+  host?.remove()
+  root = null
+  host = null
+  vi.restoreAllMocks()
+})
+async function render(el: ReturnType<typeof createElement>): Promise<void> {
+  host = document.createElement('div')
+  document.body.append(host)
+  root = createRoot(host)
+  await act(async () => root!.render(el))
+}
+const q = (id: string) => host!.querySelector<HTMLElement>(`[data-testid="${id}"]`)
+/** The numbers of a path's points (the place of a bar's edge). */
+const xs = (d: string) => [...d.matchAll(/(-?\d+\.\d),(-?\d+\.\d)/g)].map((m) => Number(m[1]))
+
+describe('trzy pasy przy osi „Dziś” (D500)', () => {
+  // 06:00–07:00 at 1 px a minute: głowa 100 → 40, emocje 50 throughout, bodźce 20 (below the reserve 30) → 60.
+  const t = track([sample(360, 100, 50, 20), sample(390, 70, 50, 40), sample(420, 40, 50, 60)])
+  const lanes = (nowAt: number | null = null) => render(createElement(EnergyLanes, { track: t, lo: 360, ppm: 1, height: 60, nowAt }))
+
+  it('trzy wąskie pasy G · E · B obok siebie, każdy 0–100: słupek od lewej krawędzi pasa, 100 = cała szerokość', async () => {
+    await lanes()
+    expect(q('energy-track')!.style.width).toBe(`${LANES_WIDTH}px`)
+    for (const p of POOLS) expect(q(`energy-lane-${p}`)).not.toBeNull()
+    expect(laneLeft(2) + LANE_WIDTH + 3).toBe(LANES_WIDTH)
+    const head = xs(q('energy-bar-head')!.getAttribute('d')!)
+    expect(head[0]).toBe(laneLeft(0))
+    expect(head[1]).toBe(laneLeft(0) + LANE_WIDTH)
+    // Emocje stand at 50 all along: half of the lane.
+    const emo = xs(q('energy-bar-emotions')!.getAttribute('d')!)
+    expect(emo[1]).toBe(laneLeft(1) + LANE_WIDTH / 2)
+    expect(Math.max(...emo)).toBeCloseTo(laneLeft(1) + LANE_WIDTH / 2, 1)
+  })
+  it('litery G · E · B nad pasami', async () => {
+    await lanes()
+    expect(q('energy-letters')!.textContent).toBe('GEB')
+    expect(q('energy-letters')!.className).toContain('sticky')
+  })
+  it('rezerwa to kreska w każdym pasie, w miejscu jej wartości', async () => {
+    await lanes()
+    for (const [i, p] of POOLS.entries()) {
+      const line = q(`energy-reserve-${p}`)!
+      expect(Number(line.getAttribute('x1'))).toBeCloseTo(laneLeft(i) + 0.3 * LANE_WIDTH, 6)
+    }
+  })
+  it('słupek poniżej rezerwy jaśniejszy: pełny kolor tylko tam, gdzie pula stoi na rezerwie albo nad nią', async () => {
+    await lanes()
+    const full = q('energy-bar-full-senses')!
+    expect(full.getAttribute('opacity')).toBe('0.85')
+    expect(q('energy-bar-senses')!.getAttribute('opacity')).toBe('0.3')
+    const clip = host!.querySelector(full.getAttribute('clip-path')!.replace(/^url\((.*)\)$/, '$1'))!
+    const rects = [...clip.querySelectorAll('rect')]
+    // Bodźce cross the reserve once, between 06:00 (20) and 06:30 (40): full from there to 07:00.
+    expect(rects).toHaveLength(1)
+    const from = Number(rects[0]!.getAttribute('data-from'))
+    expect(from).toBeGreaterThan(360)
+    expect(from).toBeLessThan(390)
+    expect(rects[0]!.getAttribute('data-to')).toBe('420.0')
+    // Głowa never goes below 30: full all along.
+    const head = host!.querySelector(q('energy-bar-full-head')!.getAttribute('clip-path')!.replace(/^url\((.*)\)$/, '$1'))!
+    expect([...head.querySelectorAll('rect')].map((r) => [r.getAttribute('data-from'), r.getAttribute('data-to')])).toEqual([['360.0', '420.0']])
+  })
+  it('przy kresce „teraz” trzy aktualne liczby', async () => {
+    await lanes(390)
+    expect(q('energy-now')!.style.top).toBe('30px')
+    expect(q('energy-now-head')!.textContent).toBe('70')
+    expect(q('energy-now-emotions')!.textContent).toBe('50')
+    expect(q('energy-now-senses')!.textContent).toBe('40')
+    expect(q('energy-now-line')).not.toBeNull()
+  })
+  it('bez „teraz” (dzień miniony, przyszły) – bez liczb', async () => {
+    await lanes(null)
+    expect(q('energy-now')).toBeNull()
+  })
+  it('najechanie pokazuje godzinę i trzy wartości, zjechanie je chowa', async () => {
+    await lanes()
+    vi.spyOn(q('energy-track')!, 'getBoundingClientRect').mockReturnValue({ top: 100, left: 0, width: 48, height: 60 } as DOMRect)
+    act(() => void q('energy-track')!.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 128 })))
+    expect(q('energy-hover')!.textContent).toBe('06:30 · głowa 70 · emocje 50 · bodźce 40')
+    act(() => void q('energy-track')!.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })))
+    expect(q('energy-hover')).toBeNull()
+  })
+  it('liczby „teraz” to wygładzone wartości z chwili, zaokrąglone', () => {
+    const c = poolCurves(t)
+    expect(valuesAt(c, 390)).toEqual({ head: 70, emotions: 50, senses: 40 })
+    expect(valuesAt(c, 300)).toBeNull()
+  })
+  it('oś „Dziś” rysuje pasy i stawia liczby przy linii „teraz” z jej znaczników', async () => {
+    await render(createElement(Timeline, { items: [], markers: [{ at: 390, label: 'teraz 06:30', tone: 'fg', now: true }], energy: t, selected: null, onSelect: () => undefined, from: 360, to: 420 }))
+    expect(q('energy-letters')).not.toBeNull()
+    expect(q('energy-now-senses')!.textContent).toBe('40')
+  })
+  it('oś bez energii (przed check-inem, moduł wyłączony) – bez pasów', async () => {
+    await render(createElement(Timeline, { items: [], markers: [], energy: null, selected: null, onSelect: () => undefined, from: 360, to: 420 }))
+    expect(q('energy-track')).toBeNull()
+  })
+  it('legenda mówi „energia 0–100”, nazywa litery, rezerwę i jaśniejszy słupek', async () => {
+    await render(createElement(EnergyLegend, { reserve: 30 }))
+    const text = q('energy-legend')!.textContent!
+    expect(text).toContain('energia 0–100')
+    expect(text).toContain('G głowa')
+    expect(text).toContain('E emocje')
+    expect(text).toContain('B bodźce')
+    expect(text).toContain('rezerwa 30')
+    expect(text).toContain('jaśniej – poniżej rezerwy')
+  })
+})

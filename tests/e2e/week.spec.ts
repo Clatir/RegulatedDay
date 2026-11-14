@@ -757,7 +757,7 @@ const mondayOf = (date: string): string => plusDays(date, -((new Date(`${date}T1
 /** A column's first line as the page words it: „śr 25.11” (`dayHeading`). */
 const headingOf = (date: string): string => `${['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'][(new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7]} ${Number(date.slice(8, 10))}.${date.slice(5, 7)}`
 
-test('Widoki (SNT1, D417, D418, T936): przełącznik zapamiętany, „3 dni” z krzywą „przyjęte” jutro, „Agenda” z blokiem jutra otwierającym dzień', async () => {
+test('Widoki (SNT1, D417, D418, T936): przełącznik zapamiętany, „3 dni” z paskiem energii „przyjęte” jutro, „Agenda” z blokiem jutra otwierającym dzień', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-views-'))
   seed(dataDir)
   const today = logicalToday()
@@ -784,10 +784,15 @@ test('Widoki (SNT1, D417, D418, T936): przełącznik zapamiętany, „3 dni” z
       await expect(page.getByTestId('three-title')).toHaveAttribute('data-middle', today)
       await expect(page.getByTestId('three-today')).toBeDisabled()
       await expect(page.getByTestId('week-grid')).toHaveAttribute('data-mode', '3days')
-      // The energy's curve behind tomorrow's blocks, counted from the assumed check-in (D422); none for the day gone by.
+      // The energy's strip at the left edge of tomorrow's column, counted from the assumed check-in (D422, D500): all at 100 –
+      // „dobrze”; the blocks right of it; none for the day gone by; the legend over the columns names the scale and the shades.
       await expect(page.getByTestId(`week-energy-${tomorrow}`)).toHaveAttribute('data-assumed', 'true', { timeout: 30_000 })
       await expect(page.getByTestId(`week-energy-assumed-${tomorrow}`)).toHaveText('przyjęte')
+      await expect(page.getByTestId(`week-energy-${tomorrow}`).locator('rect').first()).toHaveAttribute('data-state', 'ok')
+      await expect(page.getByTestId(`week-blocks-${tomorrow}`)).toHaveCSS('left', '6px')
       await expect(page.getByTestId(`week-energy-${yesterday}`)).toHaveCount(0)
+      await expect(page.getByTestId('week-energy-legend')).toContainText('energia 0–100')
+      await expect(page.getByTestId('week-energy-legend-low')).toHaveText('poniżej rezerwy')
       await shot(page, 'snt1-01-three-days')
       await page.getByTestId('three-next').click()
       await expect(page.getByTestId('three-title')).toHaveAttribute('data-middle', tomorrow)
