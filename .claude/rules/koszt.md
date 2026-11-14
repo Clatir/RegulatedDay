@@ -20,7 +20,8 @@ paths:
 
 ## Jedna reguła kosztu
 - `model/blockCosts.ts`: `baseCosts(kategorie, kategoria, wariant, rezerwa)` – koszt bez własnego; `blockCosts` = `own ?? base`
-  (+ `base`, `own`); zakres puli tylko z `RANGES.cost` (`COST_MIN`/`COST_MAX`, `isPoolCost`; `costsFrom` w `plan.ts`, `block.cost`,
+  (+ `base`, `own`, `baseFrom: 'variant'` – baza to własny koszt wariantu, `baseFromOf`; D510: przycisk „Jak wariant (…)”, inaczej
+  „Jak podkategoria (…)” – `TileCost.resetLabel`); zakres puli tylko z `RANGES.cost` (`COST_MIN`/`COST_MAX`, `isPoolCost`; `costsFrom` w `plan.ts`, `block.cost`,
   krok okienka, kalibracja). Silnik (`energy.ts` `costOf`) liczy `own ?? baseCosts(…)` bez obiektów w pętlach minut.
 - Blok zaczęty (reguła A, `engine/costChange.ts`): koszt ze startu (`startCostOf` – `block.start.planned`, bez pól – z planu),
   zmieniony od minuty zdarzeniem `block.cost` (`block`, `at`, `costs` lub null; dziedzina timera, w `PASSIVE` – bierne dla silnika
@@ -35,7 +36,7 @@ paths:
 - `TimelineItem.cost` („Dziś”, `dayAxis` tylko z `today` – Szablony i kreator bez napisu) i `HorizonBlock.cost` (`week.ts`, tylko z
   krzywą – „Tydzień”, „3 dni”): zaczęty – `begunCosts`, inny – `blockCosts`. `Timeline.onCosts` / `BlockBox.onCosts` → `saveTileCosts`.
 - `TileCost` (napis + okienko w portalu): `edit` = `costEditable(fakt, dzień miniony, minięty)` – niezaczęty nieminięty, zaczęty do
-  końca (także poza planem); skończony i dzień miniony – sam napis. Kliknięcia to zamiary (krok puli, „Jak kategoria”) po kolei –
+  końca (także poza planem); skończony i dzień miniony – sam napis. Kliknięcia to zamiary (krok puli, „Jak podkategoria”) po kolei –
   pierwszy od razu, każdy nad tym, co zapisane, gdy przyjdzie jego kolej; żaden nie przepada, wyjątek = odmowa; okienko pokazuje
   zapisane + czekające; ponowne otwarcie – liczby z kafelka i nowa pamięć zakresu (`CostAsk`). Otwarte pytanie o zakres serii
   (`useScopeAsked`, z dowolnego miejsca) chowa okienko na czas pytania. Uchwyty krawędzi (`z-30`) nad napisem (`z-20`); miejsce w

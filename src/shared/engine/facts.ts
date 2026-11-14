@@ -307,7 +307,7 @@ const newBlock = (id: string): BlockFact => ({
 })
 
 /** Events that never change the timer's facts (they do not make segments stale either); energy never does either. */
-const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown', 'block.exchange', 'cost.felt', 'routine.done', 'plan.freed', 'block.cost'])
+const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown', 'block.exchange', 'cost.felt', 'routine.done', 'plan.freed', 'block.cost', 'tree.change'])
 
 export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k) || e.dom === 'energy'
 

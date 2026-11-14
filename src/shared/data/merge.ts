@@ -216,6 +216,9 @@ export function setAt(root: unknown, path: Path, value: unknown, listKey?: strin
     // Every other list (blocks of a day, of a template, of a series) is laid as it always was.
     const listed = listKey !== undefined && ITEM_LIST_KEYS.has(listKey)
     if (listed && i < 0 && value === undefined) return [...arr]
+    // Its id taken away (the „Cofnij” of the item's first edits, `id` first – T1316): the item goes whole – one left without its id would
+    // end the merge by items of the whole list.
+    if (listed && i >= 0 && value === undefined && rest.length === 1 && rest[0] === 'id') return arr.filter((_, j) => j !== i)
     const next = setAt(i >= 0 ? arr[i] : listed ? { id } : undefined, rest, value)
     const out = [...arr]
     if (next === undefined) {
@@ -277,12 +280,12 @@ function entryEdits(keys: ReadonlySet<string> | undefined, before: Record<string
 export const LEAF_MAPS: Partial<Record<FileKind, ReadonlySet<string>>> = { day: new Set(['stepsDone']), request: new Set(['stepsDone']) }
 
 /**
- * Lists of records with ids written item by item and field by field (T944, D419): rd.json's `calendars`. The first item of a
+ * Lists of records with ids written item by item and field by field (T944, D419): rd.json's `calendars` and `categoryGroups` (D510, T1310). The first item of a
  * list the file does not have yet (an old folder), a new item, and the first change of an item the file does not have
  * (the default calendar) are edits of their fields – the `id` first, so the item exists for the ones after it – never one edit of
  * the whole list or item. Two computers adding the first calendar, or changing two fields of one, so meet in no question.
  */
-export const ITEM_LISTS: Partial<Record<FileKind, ReadonlySet<string>>> = { settings: new Set(['calendars']) }
+export const ITEM_LISTS: Partial<Record<FileKind, ReadonlySet<string>>> = { settings: new Set(['calendars', 'categoryGroups']) }
 /** The keys of those lists (`setAt` knows only the key of the array it is in). */
 const ITEM_LIST_KEYS: ReadonlySet<string> = new Set(Object.values(ITEM_LISTS).flatMap((keys) => [...keys]))
 /**

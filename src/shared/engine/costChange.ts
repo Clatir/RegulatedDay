@@ -7,7 +7,7 @@
  * stay as they were counted, so the log counted again at any later moment gives the same past. One rule for the energy (`energy.ts`:
  * `Kind`, `costOf`), the calibration's evidence and the tile's label (`begunCosts`).
  */
-import { baseCosts, type BlockCosts } from '../model/blockCosts'
+import { baseCosts, baseFromOf, type BlockCosts } from '../model/blockCosts'
 import type { Costs } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type LogEvent, type StartPlanned } from '../model/events'
 import { plannedSpan, type BlockInfo } from './blocks'
@@ -59,7 +59,7 @@ export function startCostOf(b: Pick<BlockInfo, 'categoryId' | 'variantId' | 'cos
 
 /**
  * What a block costs at minute k (now, by default) as the engine counts it – for the tile of a begun block (D501): from its start and its
- * changes; `base` – its variant's or category's in the settings of now (what „Jak kategoria” goes back to).
+ * changes; `base` – its variant's or subcategory's in the settings of now (what „Jak podkategoria” / „Jak wariant” goes back to).
  */
 export function begunCosts(
   ctx: Pick<DayContext, 'events' | 'snapshot'>,
@@ -72,8 +72,9 @@ export function begunCosts(
   const start = startCostOf(b, state.facts.blocks.get(b.id)?.planned)
   const changes = all.get(b.id)
   const own = changes ? ownAt(changes, k, start.own) : start.own
-  const base = baseCosts(state.settings.categories, start.cat, start.variant, ctx.snapshot.settings.categories[start.cat] ?? b.rules)
-  return { costs: own ?? base, base, own: own != null }
+  const fallback = ctx.snapshot.settings.categories[start.cat] ?? b.rules
+  const base = baseCosts(state.settings.categories, start.cat, start.variant, fallback)
+  return { costs: own ?? base, base, own: own != null, ...baseFromOf(state.settings.categories, start.cat, start.variant, fallback) }
 }
 
 /**

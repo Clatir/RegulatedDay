@@ -5,12 +5,14 @@
  * name and colour – a change refused leaves no category without rules).
  */
 import type { CategoryRules, Costs } from '@shared/model/categories'
+import { OTHER_GROUP } from '@shared/model/categoryTree'
 import { CATEGORY_COLORS } from '@shared/model/rd'
 import { RANGES } from '@shared/model/settings'
 import { blockFill } from '@shared/theme'
 import { cx } from '../../components/ui'
-import { saveRd } from '../../store/data'
+import { isSaved, saveRd } from '../../store/data'
 import { useMachine } from '../../store/machine'
+import { logTreeChange } from './categoryTreeEdits'
 import { SettingNumber } from './SettingNumber'
 
 export const FLAGS: Array<[keyof CategoryRules, string]> = [
@@ -47,12 +49,15 @@ export const setMeta = (id: string, patch: Record<string, unknown>) =>
   })
 
 /**
- * A new category `id`: its rules by `save` (the settings' change – dated as the caller says), then its name and colour. False –
- * the rules were refused: nothing else is written.
+ * A new category `id` (a subcategory of the tree, D510): its rules by `save` (the settings' change – dated as the caller says), then its
+ * name, colour and – `group` – the category of the tree it is in (none, or „Inne”: no field, it is in „Inne”; a group named writes
+ * `tree.change`, T1313). False – the rules were refused: nothing else is written.
  */
-export async function createCategory(save: (patch: Record<string, unknown>) => Promise<boolean>, id: string, rules: Record<string, unknown>, meta: { name: string; color: string | null }): Promise<boolean> {
+export async function createCategory(save: (patch: Record<string, unknown>) => Promise<boolean>, id: string, rules: Record<string, unknown>, meta: { name: string; color: string | null; group?: string }): Promise<boolean> {
   if (!(await save({ categories: { [id]: rules } }))) return false
-  await setMeta(id, { name: meta.name.slice(0, 60), color: meta.color, archived: false })
+  const group = meta.group && meta.group !== OTHER_GROUP ? meta.group : null
+  const out = await setMeta(id, { name: meta.name.slice(0, 60), color: meta.color, archived: false, ...(group ? { group } : {}) })
+  if (group && isSaved(out)) await logTreeChange()
   return true
 }
 
