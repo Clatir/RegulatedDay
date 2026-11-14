@@ -16,28 +16,32 @@ paths:
 
 # Koszt na kafelku (D501)
 
-Źródło prawdy: specyfikacja „Koszt na kafelku (D501)” (rozdział Bloki), decyzje T1270–T1279.
+Źródło prawdy: specyfikacja „Koszt na kafelku (D501)” (rozdział Bloki), decyzje T1270–T1279, T1300–T1306.
 
 ## Jedna reguła kosztu
 - `model/blockCosts.ts`: `baseCosts(kategorie, kategoria, wariant, rezerwa)` – koszt bez własnego; `blockCosts` = `own ?? base`
-  (+ `base`, `own`); zakres puli tylko z `RANGES.cost` (`COST_MIN`/`COST_MAX`, `isPoolCost`; `costsFrom` w `plan.ts`, `energy.cost`,
+  (+ `base`, `own`); zakres puli tylko z `RANGES.cost` (`COST_MIN`/`COST_MAX`, `isPoolCost`; `costsFrom` w `plan.ts`, `block.cost`,
   krok okienka, kalibracja). Silnik (`energy.ts` `costOf`) liczy `own ?? baseCosts(…)` bez obiektów w pętlach minut.
 - Blok zaczęty (reguła A, `engine/costChange.ts`): koszt ze startu (`startCostOf` – `block.start.planned`, bez pól – z planu),
-  zmieniony od minuty zdarzeniem `energy.cost` (`block`, `at`, `costs` lub null; dziedzina energii – bierne dla silnika dnia).
-  `costChangesOf` – po minucie, potem `compareEvents` (ostatnia w minucie wygrywa); `ownAt(k)`. Minuty przed zmianą zostają,
-  przeliczenie logu daje to samo. To samo w energii (`Kind.changes`), dowodach kalibracji (`costEvidence`) i na kafelku (`begunCosts`).
-- Starsza wersja: `energy.cost` nieznane – pomija (licz po starcie), bez szybszej instalacji (`unknownTimerEvents` tylko `timer`);
-  `RULES_VERSION` 13 – ustępuje prowadzenia (zejścia, zamrożenie).
+  zmieniony od minuty zdarzeniem `block.cost` (`block`, `at`, `costs` lub null; dziedzina timera, w `PASSIVE` – bierne dla silnika
+  dnia; `energy.cost` pierwszych wersji 1.24 czytane tak samo, nie pisane). Liczy się tylko zmiana po starcie bloku w kolejności logu
+  (`BlockFact.startOrder`) – zmiana cofniętego startu nie sięga następnego. `costChangesOf(zdarzenia, fakty)` – po minucie, potem
+  `compareEvents` (ostatnia w minucie wygrywa); `ownAt(k)`. Minuty przed zmianą zostają, przeliczenie logu daje to samo. To samo w
+  energii (`Kind.changes`), dowodach kalibracji (`costEvidence`, klucz raz na odcinek między zmianami) i na kafelku (`begunCosts`).
+- Starsza wersja (≤ 1.23): `block.cost` to nieznane zdarzenie timera – pomija je (blok po starcie), `unknownTimerEvents` → instalacja w
+  nocy bez 24 h; `RULES_VERSION` 13 – ustępuje prowadzenia (zejścia, zamrożenie). Nic innego nie czyta nieznanych zdarzeń (T1300).
 
 ## Kafelek i zapis
-- `TimelineItem.cost` („Dziś”, `dayAxis` tylko z `today` – Szablony i kreator bez napisu) i `HorizonBlock.cost` (`week.ts`): zaczęty –
-  `begunCosts`, inny – `blockCosts`. `Timeline.onCosts` / `BlockBox.onCosts` → `saveTileCosts`.
+- `TimelineItem.cost` („Dziś”, `dayAxis` tylko z `today` – Szablony i kreator bez napisu) i `HorizonBlock.cost` (`week.ts`, tylko z
+  krzywą – „Tydzień”, „3 dni”): zaczęty – `begunCosts`, inny – `blockCosts`. `Timeline.onCosts` / `BlockBox.onCosts` → `saveTileCosts`.
 - `TileCost` (napis + okienko w portalu): `edit` = `costEditable(fakt, dzień miniony, minięty)` – niezaczęty nieminięty, zaczęty do
-  końca (także poza planem); skończony i dzień miniony – sam napis. Kliknięcia po kolei (pierwszy od razu, kolejny po poprzednim);
-  zapis inny niż `true` – okienko wraca do kafelka, czekające kliknięcia przepadają; ponowne otwarcie – liczby z kafelka;
-  pytanie o zakres serii (`useScopeAsked`) zamyka okienko. Uchwyty krawędzi (`z-30`) nad napisem (`z-20`); miejsce w wierszu
-  godzin – `costRoom(tight)`.
-- Zapis jeden dla „Dziś”, „3 dni”, „Tygodnia”: `plan/costSave.ts` `saveTileCosts` – blok serii pyta `seriesFirst` (`series/seriesScope.ts`,
-  ten sam kod co pole panelu w `TodayPage.saveFields`); w kolejce okna dzień czytany bez liczenia (`plannedDay`: plan + `foldFacts`):
-  niezaczęty → plik dnia (`patchedBlock` z `dayActions`), zaczęty → `logEvents` `energy.cost` (chwila z zegara procesu głównego,
-  `USER_EVENTS`); „To i następne” / „Cała seria” → seria, a zaczęte wystąpienie dodatkowo zdarzenie.
+  końca (także poza planem); skończony i dzień miniony – sam napis. Kliknięcia to zamiary (krok puli, „Jak kategoria”) po kolei –
+  pierwszy od razu, każdy nad tym, co zapisane, gdy przyjdzie jego kolej; żaden nie przepada, wyjątek = odmowa; okienko pokazuje
+  zapisane + czekające; ponowne otwarcie – liczby z kafelka i nowa pamięć zakresu (`CostAsk`). Otwarte pytanie o zakres serii
+  (`useScopeAsked`, z dowolnego miejsca) chowa okienko na czas pytania. Uchwyty krawędzi (`z-30`) nad napisem (`z-20`); miejsce w
+  wierszu godzin – `costRoom(tight)`.
+- Zapis jeden dla „Dziś”, „3 dni”, „Tygodnia”: `plan/costSave.ts` `saveTileCosts(cel, koszt, { ask })` – niezaczęty blok serii pyta
+  `changeScope` (`series/seriesScope.ts`, ten sam kod co pole panelu – `seriesFirst` w `TodayPage.saveFields`) raz na okienko
+  (`ask.scope`); zaczęty blok serii – bez pytania, tylko on od teraz. W kolejce okna dzień czytany raz bez liczenia (`plannedDay`:
+  `dayData` – plan, `foldFacts`, plik): niezaczęty → plik dnia (`patchedBlock` z `dayActions`), zaczęty → `logEvents` `block.cost`
+  (chwila z zegara procesu głównego, `USER_EVENTS`); minięty zegarem (`windowPassed` – stały/czekający po końcu okna) – odmowa.

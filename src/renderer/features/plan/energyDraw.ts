@@ -137,8 +137,13 @@ export function spansAtLeast(c: Curve, level: number): Array<[number, number]> {
   return out
 }
 
+/** A value as the screen shows it – an integer made by `onScreen` only (T1290: the one rounding of the strip's numbers). */
+export type OnScreen = number & { readonly __onScreen: true }
+/** Rounds a value of a pool to the number the screen shows. */
+export const onScreen = (v: number): OnScreen => Math.round(v) as OnScreen
+
 /** The three pools at a minute, as numbers on the screen (rounded); null outside the samples. */
-export type PoolValues = Record<Pool, number>
+export type PoolValues = Record<Pool, OnScreen>
 
 /** The three smoothed pools at the minute `at`, rounded – the numbers beside „teraz” (D500). */
 export function valuesAt(curves: Record<Pool, Curve>, at: number): PoolValues | null {
@@ -146,7 +151,7 @@ export function valuesAt(curves: Record<Pool, Curve>, at: number): PoolValues | 
   for (const p of POOLS) {
     const v = curveAt(curves[p], at)
     if (v == null) return null
-    out[p] = Math.round(v)
+    out[p] = onScreen(v)
   }
   return out
 }
@@ -174,12 +179,13 @@ export const WATCH_ABOVE_RESERVE = 15
 
 /**
  * The weakest pool at a minute and its shade (D500): below the reserve – „poniżej rezerwy”, less than 15 above it – „uwaga”,
- * else „dobrze”. Read on the rounded numbers, as the hover shows them (T1281); a tie – the first pool (głowa, emocje, bodźce).
+ * else „dobrze”. The values are the numbers on the screen – rounded once, by `valuesAt` (T1281); the type `OnScreen`
+ * lets nothing else in (T1290). A tie – the first pool (głowa, emocje, bodźce).
  */
-export function stripState(v: Record<Pool, number>, reserve: number): { pool: Pool; state: StripState } {
+export function stripState(v: PoolValues, reserve: number): { pool: Pool; state: StripState } {
   let pool: Pool = POOLS[0]!
-  for (const p of POOLS) if (Math.round(v[p]) < Math.round(v[pool])) pool = p
-  const w = Math.round(v[pool])
+  for (const p of POOLS) if (v[p] < v[pool]) pool = p
+  const w = v[pool]
   return { pool, state: w < reserve ? 'low' : w < reserve + WATCH_ABOVE_RESERVE ? 'watch' : 'ok' }
 }
 
@@ -198,21 +204,49 @@ export interface StripRun {
 export function stripRuns(track: Pick<EnergyTrack, 'samples' | 'reserve'> | null | undefined): StripRun[] {
   if (!track) return []
   const curves = poolCurves(track)
-  const all = POOLS.map((p) => curves[p].t)
-  const from = Math.max(...all.map((t) => t[0] ?? Infinity))
-  const to = Math.min(...all.map((t) => t[t.length - 1] ?? -Infinity))
+  const span = spanOf(curves)
+  if (!span) return []
+  const [from, to] = span
   const out: StripRun[] = []
-  if (!(from <= to)) return out
-  for (let at = from; at <= to; at++) {
+  for (let at = from; at < to; at++) {
     const v = valuesAt(curves, at)
     if (!v) continue
     const { pool, state } = stripState(v, track.reserve)
     const last = out[out.length - 1]
-    if (last && last.pool === pool && last.state === state) last.to = Math.min(at + 1, to)
-    else out.push({ from: at, to: Math.min(at + 1, to), pool, state })
+    if (last && last.pool === pool && last.state === state) last.to = at + 1
+    else out.push({ from: at, to: at + 1, pool, state })
   }
-  return out.filter((r) => r.to > r.from)
+  return out
 }
+
+/** The span of the curves: from the latest first point to the earliest last one; null when it is not a span (T1290). */
+function spanOf(curves: Record<Pool, Curve>): [number, number] | null {
+  let from = -Infinity
+  let to = Infinity
+  for (const p of POOLS) {
+    const { t } = curves[p]
+    if (t.length === 0) return null
+    from = Math.max(from, t[0]!)
+    to = Math.min(to, t.at(-1)!)
+  }
+  return from < to ? [from, to] : null
+}
+
+/**
+ * The minutes every pool has a value for – from the latest first point of the curves to the earliest last one; null when that
+ * is not a span (no track, one sample, pools that never overlap): nothing to draw, neither the lanes nor the strip (T1286).
+ * Read from the curves, not the raw samples (T1290): `poolCurve` keeps only rising times, so a track in the wrong order or
+ * with two samples of one time has no span here, as it has no curve – the lanes and the strip never disagree.
+ */
+export function energySpan(track: Pick<EnergyTrack, 'samples'> | null | undefined): [number, number] | null {
+  return spanOf(poolCurves(track))
+}
+
+/**
+ * The day has energy to draw (D500): the one test for the lanes of „Dziś”, the strip, its legend and the blocks' offset.
+ * A type guard, so the callers read the track as there (the false branch narrows nothing worth using – T1293).
+ */
+export const hasEnergy = <T extends Pick<EnergyTrack, 'samples'>>(track: T | null | undefined): track is T => energySpan(track) != null
 
 /** The three curves of a track. */
 export function poolCurves(track: Pick<EnergyTrack, 'samples'> | null | undefined): Record<Pool, Curve> {

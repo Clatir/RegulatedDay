@@ -1,5 +1,5 @@
 /**
- * D501, rule A: the cost of a begun block changed in the window of its tile – `energy.cost` in the day's log from its minute on. The engine
+ * D501, rule A: the cost of a begun block changed in the window of its tile – `block.cost` in the day's log from its minute on. The engine
  * counts the block by its start (`block.start.planned`) up to that minute and by the new cost from it to the block's end; the minutes gone by
  * stay as they were counted, the log counted again gives the same, the last change wins, a block behind (D38 – its share) and a block of a
  * parallel group (D476: behind – nothing, in front – its cost) follow the same rule. The tile says what the engine counts now (`begunCosts`).
@@ -23,10 +23,10 @@ const sc = (plan: PlanBlock[]) => new Scenario({ date: DATE, plan: [...plan, LAT
 const A = () => block({ id: 'a', cat: 'analiza', at: '09:00', min: 60 })
 const HIGH: Costs = { head: 5, emotions: 0, senses: -1 }
 
-/** The change written as the window writes it (`energy.cost`, the energy's domain) at the instant of `time`. */
-function change(s: Scenario, id: string, time: string, costs: Costs | null): Scenario {
+/** The change written as the window writes it (`block.cost`, the timer's domain – T1300) at the instant of `time`. */
+function change(s: Scenario, id: string, time: string, costs: Costs | null, k = 'block.cost'): Scenario {
   const t = s.at(time)
-  return s.write([{ k: 'energy.cost', dom: 'energy', block: id, at: t, costs }], t)
+  return s.write([{ k, dom: k === 'block.cost' ? 'timer' : 'energy', block: id, at: t, costs }], t)
 }
 const now = (s: Scenario, time: string) => s.energy(time).now!
 /** The state at the start of the minute `time` as the engine counts it at `at` (the past, then the forecast). */
@@ -36,7 +36,7 @@ const seriesAt = (s: Scenario, at: string, time: string) => {
   return { head: e.series.head[k], emotions: e.series.emotions[k], senses: e.series.senses[k] }
 }
 
-describe('zmiana kosztu zaczętego bloku (D501, energy.cost)', () => {
+describe('zmiana kosztu zaczętego bloku (D501, block.cost)', () => {
   it('przed zmianą – koszt ze startu, od minuty zmiany do końca bloku – nowy', () => {
     const s = sc([A()]).checkin('08:00', MID).start('a', '09:00')
     change(s, 'a', '09:30', HIGH).end('a', '10:00')
@@ -140,21 +140,50 @@ describe('zmiana kosztu zaczętego bloku (D501, energy.cost)', () => {
     expect(costEvidence(ctx, computeDay(ctx), true)!.minutes).toEqual({ analiza: 40 })
   })
 
-  it('zdarzenie: znane z polem block, at i costs (−5…5 albo null); bierne dla silnika dnia; nieznany rodzaj energii nic nie psuje', () => {
-    const line = (o: Record<string, unknown>) => JSON.stringify({ id: 'x', c: 'pca', n: 1, t: 1, l: 1, v: 13, day: DATE, dom: 'energy', at: 1, ...o })
-    expect(parseEvent(line({ k: 'energy.cost', block: 'a', costs: HIGH }))).toMatchObject({ ok: true })
-    expect(parseEvent(line({ k: 'energy.cost', block: 'a', costs: null }))).toMatchObject({ ok: true })
-    expect(parseEvent(line({ k: 'energy.cost', block: 'a', costs: { head: 6, emotions: 0, senses: 0 } }))).toEqual({ ok: false, why: 'pole costs' })
-    expect(parseEvent(line({ k: 'energy.cost', block: 'a', costs: { head: 1.5, emotions: 0, senses: 0 } }))).toEqual({ ok: false, why: 'pole costs' })
-    expect(parseEvent(line({ k: 'energy.cost', costs: null }))).toEqual({ ok: false, why: 'pole block' })
-    const parsed = parseEvent(line({ k: 'energy.cost', block: 'a', costs: null }))
+  it('zdarzenie: znane z polem block, at i costs (−5…5 albo null); bierne dla silnika dnia; nieznany rodzaj timera nic nie psuje', () => {
+    const line = (o: Record<string, unknown>) => JSON.stringify({ id: 'x', c: 'pca', n: 1, t: 1, l: 1, v: 13, day: DATE, dom: 'timer', at: 1, ...o })
+    expect(parseEvent(line({ k: 'block.cost', block: 'a', costs: HIGH }))).toMatchObject({ ok: true })
+    expect(parseEvent(line({ k: 'block.cost', block: 'a', costs: null }))).toMatchObject({ ok: true })
+    expect(parseEvent(line({ k: 'block.cost', block: 'a', costs: { head: 6, emotions: 0, senses: 0 } }))).toEqual({ ok: false, why: 'pole costs' })
+    expect(parseEvent(line({ k: 'block.cost', block: 'a', costs: { head: 1.5, emotions: 0, senses: 0 } }))).toEqual({ ok: false, why: 'pole costs' })
+    expect(parseEvent(line({ k: 'block.cost', costs: null }))).toEqual({ ok: false, why: 'pole block' })
+    const parsed = parseEvent(line({ k: 'block.cost', block: 'a', costs: null }))
+    // The timer's domain, but no fact of the timer: the day engine never counts it (no stale segments, T416).
     expect(parsed.ok && isPassive(parsed.event)).toBe(true)
-    // As a version before it reads it: an unknown kind, kept and skipped – the energy as without it.
+    // As a version before it reads it: an unknown event of the timer, kept and skipped – the day and the energy as without it.
     const s = sc([A()]).checkin('08:00', MID).start('a', '09:00').end('a', '10:00')
     const ctx = s.contextAt(s.at('10:00'))
-    const unknown = { ...ctx.events[0]!, id: 'pcb-1', c: 'pcb', k: 'energy.later', unknown: true, raw: {} } as unknown as AnyEvent
+    const unknown = { ...ctx.events[0]!, id: 'pcb-1', c: 'pcb', k: 'block.later', dom: 'timer', block: 'a', costs: HIGH, unknown: true, raw: {} } as unknown as AnyEvent
     expect(isKnown(unknown)).toBe(false)
     const withUnknown = { ...ctx, events: [...ctx.events, unknown] }
-    expect(computeEnergy(withUnknown, computeDay(withUnknown)).now).toEqual(now(s, '10:00'))
+    const day = computeDay(withUnknown)
+    const plain = computeDay(ctx)
+    expect(computeEnergy(withUnknown, day).now).toEqual(now(s, '10:00'))
+    expect([day.boundary, day.workEnd, day.bedtime, day.facts.blocks.get('a')]).toEqual([plain.boundary, plain.workEnd, plain.bedtime, plain.facts.blocks.get('a')])
+  })
+
+  it('zmiana z pierwszych wersji 1.24 (energy.cost, dziedzina energii) liczy się tak samo', () => {
+    const s = sc([A()]).checkin('08:00', MID).start('a', '09:00')
+    change(s, 'a', '09:30', HIGH, 'energy.cost').end('a', '10:00')
+    expect(now(s, '10:00')).toEqual({ head: 53, emotions: 63.5, senses: 65 })
+  })
+
+  it('zmiana należy do startu, po którym ją zapisano: start cofnięty („Cofnij”) i ponowny – blok kosztuje znów jak w planie', () => {
+    const s = sc([A()]).checkin('08:00', MID)
+    const t = s.at('09:00')
+    s.write([{ id: 'auto-start', k: 'block.start', block: 'a', at: t, bg: false, planned: { categoryId: 'analiza', variantId: null, durationMin: 60, fixed: false, costs: null, bgCostPct: null }, confirmUntil: null, how: 'auto', autoRule: 'awayStart' }], t)
+    change(s, 'a', '09:10', HIGH)
+    // The start taken back – and the block begun again later: the change of the first start never reaches it.
+    s.write([{ k: 'undo', at: s.at('09:20'), target: 'auto-start' }], s.at('09:20'))
+    s.start('a', '09:30').end('a', '10:00')
+    const plain = sc([A()]).checkin('08:00', MID).start('a', '09:30').end('a', '10:00')
+    expect(now(s, '10:00')).toEqual(now(plain, '10:00'))
+    // A change after the new start counts.
+    const again = sc([A()]).checkin('08:00', MID)
+    again.write([{ id: 'auto-start', k: 'block.start', block: 'a', at: t, bg: false, planned: { categoryId: 'analiza', variantId: null, durationMin: 60, fixed: false, costs: null, bgCostPct: null }, confirmUntil: null, how: 'auto', autoRule: 'awayStart' }], t)
+    again.write([{ k: 'undo', at: again.at('09:20'), target: 'auto-start' }], again.at('09:20'))
+    again.start('a', '09:30')
+    change(again, 'a', '09:30', HIGH).end('a', '10:00')
+    expect(now(again, '10:00')).toEqual({ head: 65 - 7.5, emotions: 65, senses: 65 + 1.5 })
   })
 })

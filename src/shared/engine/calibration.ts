@@ -14,7 +14,7 @@ import { templateVersionOn, type Template } from '../model/plan'
 import type { RulesSettings } from '../model/settings'
 import { addDays } from '../time/zone'
 import { settingsAtMinute, type DayContext, type DayState } from './day'
-import { costChangesOf, ownAt } from './costChange'
+import { costChangesOf } from './costChange'
 import { anchorEffect } from './energy'
 import { OPEN, ranMinutes } from './facts'
 import { blockEvidence } from './game'
@@ -143,18 +143,23 @@ export function costEvidence(ctx: DayContext, state: DayState, energyOn: boolean
   const from = Math.min(...checkins)
   const now = Math.min(state.now, g.length)
   const fg: Array<string | null> = new Array(Math.max(0, now)).fill(null)
-  // D501: a begun block's cost changed from a minute on (`energy.cost`) – a minute of its own cost is no evidence for its category.
-  const changes = costChangesOf(events, g)
-  const runs: Array<{ from: number; to: number; key: (k: number) => string | null }> = []
+  // D501: a begun block's cost changed from a minute on (`block.cost`) – a minute of its own cost is no evidence for its category.
+  // Its key is counted once for each stretch between its changes (from the start's cost, then each change from its minute).
+  const changes = costChangesOf(ctx.events, state.facts)
+  const runs: Array<{ from: number; to: number; keys: Array<{ from: number; key: string | null }> }> = []
   for (const f of state.facts.blocks.values()) {
     if (!f.planned) continue
     const planned = f.planned
-    const key = costKey(state.settings, planned)
-    const changed = changes.get(f.id)
-    const keyAt = changed ? (k: number) => costKey(state.settings, { ...planned, costs: ownAt(changed, k, planned.costs ?? null) }) : () => key
-    for (const r of f.runs) if (!r.bg) runs.push({ from: r.from, to: r.to === OPEN ? now : r.to, key: keyAt })
+    const keys = [{ from: Number.NEGATIVE_INFINITY, key: costKey(state.settings, planned) }]
+    for (const c of changes.get(f.id) ?? []) keys.push({ from: c.at, key: costKey(state.settings, { ...planned, costs: c.costs }) })
+    for (const r of f.runs) if (!r.bg) runs.push({ from: r.from, to: r.to === OPEN ? now : r.to, keys })
   }
-  for (const r of runs.sort((a, b) => a.from - b.from)) for (let k = Math.max(r.from, from); k < Math.min(r.to, now); k++) fg[k] = r.key(k)
+  for (const r of runs.sort((a, b) => a.from - b.from)) {
+    r.keys.forEach((s, i) => {
+      const until = Math.min(r.to, now, r.keys[i + 1]?.from ?? Number.POSITIVE_INFINITY)
+      for (let k = Math.max(r.from, from, s.from); k < until; k++) fg[k] = s.key
+    })
+  }
   const minutes: Record<string, number> = {}
   for (let k = from; k < now; k++) if (fg[k]) minutes[fg[k]!] = (minutes[fg[k]!] ?? 0) + 1
   const residual: Record<string, Costs> = {}

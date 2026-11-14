@@ -54,7 +54,9 @@ import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
-import { EnergyLegend, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
+import { Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
+import { EnergyLegend, LANES_WIDTH } from '../plan/EnergyLanes'
+import { hasEnergy } from '../plan/energyDraw'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
 import { begunIds } from '@shared/engine/facts'
@@ -610,10 +612,10 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               <span className="text-[12px] text-muted" data-testid="day-summary">
                 {daySummary(model).join(' · ')}
               </span>
-              {axis.energy && <EnergyLegend reserve={axis.energy.reserve} />}
+              {hasEnergy(axis.energy) && <EnergyLegend reserve={axis.energy.reserve} />}
             </div>
             {/* The all-day events of the day (D405), over the axis' column – the hours' column on the left stays empty. */}
-            <AllDayBar key={date} dates={[date]} page="today" today={today} axisPx={46} endPx={axis.energy && axis.energy.samples.length > 0 ? 48 : 0} />
+            <AllDayBar key={date} dates={[date]} page="today" today={today} axisPx={46} endPx={hasEnergy(axis.energy) ? LANES_WIDTH : 0} />
             <Timeline
               items={axisItems.items}
               extent={items}
@@ -621,9 +623,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                 const owner = ownerToAdd(model.ctx.plan.find((b) => b.id === id) ?? null, dayPlace)
                 if (owner) void attachTransfer(owner, dt)
               }}
-              // D501: the window of the cost on a tile – one path with „3 dni” and „Tydzień” (a block of a series asks its scope as the panel
-              // does; a begun block costs so from now on).
-              onCosts={(id, costs) => saveTileCosts({ date, blockId: id, names, ofSeries: plan.find((x) => x.id === id)?.origin === 'series' }, costs)}
+              // D501: the window of the cost on a tile – one path with „3 dni” and „Tydzień” (a block of a series not begun asks its scope as
+              // the panel does, once a window; a begun block costs so from now on).
+              onCosts={(id, costs, ask) => saveTileCosts({ date, blockId: id, names, ofSeries: plan.find((x) => x.id === id)?.origin === 'series' }, costs, { ask })}
               markers={axis.markers}
               energy={axis.energy}
               selected={draft ? null : selected}

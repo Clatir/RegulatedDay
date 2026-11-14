@@ -181,8 +181,9 @@ function begunState(f: BlockFact, when: HorizonWhen): HorizonBlockState {
 
 /**
  * What the curve of a day's energy is counted with (T966): `curve` false – none (the month, the goals, „Agenda” – T914,
- * T954); `moduleOn` – the energy module as the settings have it now, for today and a day to come (a day gone by has its own –
- * `gradeEnergy`, T950). Both default to true.
+ * T954), nor the cost on the blocks' tiles (D501, T1305: only the columns of „Tydzień” and „3 dni” draw tiles); `moduleOn` – the
+ * energy module as the settings have it now, for today and a day to come (a day gone by has its own – `gradeEnergy`, T950). Both
+ * default to true.
  */
 export interface HorizonEnergy {
   curve?: boolean
@@ -206,7 +207,7 @@ const isSessionBlock = (b: BlockInfo): boolean => b.rules.kind === 'session'
  * to come today where the forecast puts it, otherwise at its planned time (an anchored one after its anchor); blocks
  * begun outside the plan where they ran.
  */
-function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): HorizonBlock[] {
+function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen, withCosts: boolean): HorizonBlock[] {
   const g = state.grid
   const lm = (idx: number) => logicalMinuteOf(ctx.date, atOf(g, idx))
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
@@ -217,7 +218,7 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
   const naming = namingOf(ctx, state.facts)
   // D501: the cost on the tile – a begun block's as the engine counts it now (its start, its changes), another's as planned; changed there
   // on a day not gone by: a block still to come (into the plan), a begun one until it ends (from now on) – `costEditable`.
-  const changes = costChangesOf(ctx.events, g)
+  const changes = withCosts ? costChangesOf(ctx.events, state.facts) : new Map()
   const tileCost = (info: BlockInfo, st: HorizonBlockState): TileCost => {
     const f = state.facts.blocks.get(info.id)
     const costs = f?.startedAt != null ? begunCosts(ctx, state, info, changes) : blockCosts(info, state.settings.categories, info.rules)
@@ -239,7 +240,7 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
       ...(info.fixed ? { fixed: true as const } : {}),
       ...(isSessionBlock(info) ? { session: true as const } : {}),
       ...(info.alongside != null ? { alongside: info.alongside } : {}),
-      cost: tileCost(info, st)
+      ...(withCosts ? { cost: tileCost(info, st) } : {})
     })
   for (const p of ctx.plan) {
     const info = byId.get(p.id)
@@ -371,7 +372,7 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
     dayType: state.dayType,
     templateId: ctx.snapshot.templateId,
     frozen: frozen != null,
-    blocks: axisBlocks(axis.ctx, axis.state, when),
+    blocks: axisBlocks(axis.ctx, axis.state, when, curve),
     wakeMin: lm(state.wake),
     bedtimeMin: lm(state.bedtime.forecast),
     boundary,

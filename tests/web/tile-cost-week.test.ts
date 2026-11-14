@@ -116,11 +116,11 @@ describe('koszt na kafelku „Tygodnia” i „3 dni” (D501)', () => {
     expect(useUi.getState().page).toBe('week')
     expect(useUi.getState().day).toBeNull()
     click(q('cost-pop-emotions-plus')!)
-    expect(saveTileCosts).toHaveBeenLastCalledWith(expect.objectContaining({ date: DATES[1], blockId: 'f', ofSeries: false }), { head: 3, emotions: 2, senses: 1 })
+    expect(saveTileCosts).toHaveBeenLastCalledWith(expect.objectContaining({ date: DATES[1], blockId: 'f', ofSeries: false }), { head: 3, emotions: 2, senses: 1 }, { ask: { scope: null } })
     await act(async () => undefined)
     click(q('cost-pop-reset')!)
     await act(async () => undefined)
-    expect(saveTileCosts).toHaveBeenLastCalledWith(expect.objectContaining({ date: DATES[1], blockId: 'f' }), null)
+    expect(saveTileCosts).toHaveBeenLastCalledWith(expect.objectContaining({ date: DATES[1], blockId: 'f' }), null, expect.anything())
   })
 
   it('wiersz godzin zostawia miejsce na napis w rogu według trybu: „3 dni” – na napis ze spacjami, „Tydzień” – na skrót', async () => {

@@ -10,7 +10,7 @@
  * The check-in and the signals are anchors: a signal carries the exact state before it as its computer knew it, so
  * corrections of times before it never change the state after it; a descent the leader registered stays. A block counts
  * as it began (its start event): a later edit of the plan never changes its past; a change of its cost in the window of its tile
- * (`energy.cost`, D501) counts from its minute on (`costChange.ts`).
+ * (`block.cost`, D501) counts from its minute on (`costChange.ts`).
  */
 import { POOLS, REGEN_CATEGORY, REQUEST_CATEGORY, costsOf, type CategoryRules, type Costs, type Pool, type PoolValues } from '../model/categories'
 import { baseCosts } from '../model/blockCosts'
@@ -99,7 +99,7 @@ interface Kind {
   cat: string
   variant: string | null
   own: Costs | null
-  /** Its cost changed from a minute on (D501, `energy.cost`), in the order they apply; null – none (the cost of its start all along). */
+  /** Its cost changed from a minute on (D501, `block.cost`), in the order they apply; null – none (the cost of its start all along). */
   changes: readonly CostChange[] | null
   bgPct: number | null
   rules: CategoryRules
@@ -193,8 +193,8 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   const checkins = events.filter((e) => e.k === 'energy.checkin')
   const c0 = checkins.length ? Math.min(...checkins.map((e) => idx(e.at))) : null
 
-  // D501: the changes of a begun block's cost from a minute on (up to now, as the energy events above).
-  const changes = costChangesOf(events, g)
+  // D501: the changes of a begun block's cost from a minute on (only after its start – `costChange.ts`).
+  const changes = costChangesOf(ctx.events, day.facts)
   const kinds = new Map<string, Kind>()
   const kindOf = (b: BlockInfo): Kind => {
     let k = kinds.get(b.id)

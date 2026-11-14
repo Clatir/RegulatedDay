@@ -58,7 +58,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
   const items: TimelineItem[] = []
   const placed = new Map(state.forecast.map((p) => [p.block.id, p]))
   // D501: the changes of begun blocks' costs, once for the day.
-  const changes = costChangesOf(ctx.events, g)
+  const changes = costChangesOf(ctx.events, state.facts)
   for (const p of ctx.plan) {
     const info = byId.get(p.id)
     if (!info) continue

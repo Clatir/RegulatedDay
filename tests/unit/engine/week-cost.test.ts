@@ -30,11 +30,18 @@ describe('koszt na kafelku widoków wielodniowych (D501)', () => {
     s.start('own', '10:00').start('x', '10:05', { cat: 'analiza', min: 20 }).ran('a', '08:05', '09:00')
     s.opts.plan[1] = { ...s.opts.plan[1]!, costs: { head: 1, emotions: 1, senses: 1 } }
     const t = s.at('10:10')
-    s.write([{ k: 'energy.cost', dom: 'energy', block: 'x', at: t, costs: { head: 0, emotions: 0, senses: 0 } }], t)
+    s.write([{ k: 'block.cost', block: 'x', at: t, costs: { head: 0, emotions: 0, senses: 0 } }], t)
     const by = Object.fromEntries(horizonDay(s.contextAt(s.at('10:15')), 'today').blocks.map((b) => [b.id, b]))
     expect(by.own!.cost).toMatchObject({ costs: { head: 5, emotions: 0, senses: -1 }, own: true, edit: true })
     expect(by.x).toMatchObject({ outsidePlan: true, cost: { costs: { head: 0, emotions: 0, senses: 0 }, own: true, edit: true } })
     expect(by.a!.cost).toMatchObject({ edit: false })
+  })
+
+  it('koszt liczy się tylko dla kafelków („Tydzień”, „3 dni” – z krzywą); miesiąc, cele i „Agenda” (bez krzywej) go nie mają', () => {
+    const s = new Scenario({ date: DATE, plan })
+    const ctx = s.contextAt(s.at('04:00'))
+    expect(horizonDay(ctx, 'future').blocks.every((b) => b.cost != null)).toBe(true)
+    expect(horizonDay(ctx, 'future', null, { curve: false }).blocks.some((b) => b.cost != null)).toBe(false)
   })
 
   it('dzień miniony: koszt jest, zmienić go nie wolno (zaczęty, niezaczęty, poza planem)', () => {

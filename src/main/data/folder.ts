@@ -97,9 +97,9 @@ const USER_EVENTS: Record<string, Domain> = {
   'cost.felt': 'energy',
   // Time freed in today's plan (D375): the timer's – an older version, whose bar would not ask about the gap, installs at once.
   'plan.freed': 'timer',
-  // The cost of a begun block from a minute on (D501): the energy's – passive for the day engine, an older version skips it and
-  // installs no faster for it (it gives way as the leader by the rules version).
-  'energy.cost': 'energy'
+  // The cost of a begun block from a minute on (D501, T1300): the timer's on purpose – an older version, which counts the block by
+  // its start, installs the new version without the 24 h (`unknownTimerEvents`); passive for this version's day engine (`PASSIVE`).
+  'block.cost': 'timer'
 }
 /** The journal keeps own events of this many days back (spec: until the day's freeze plus 7 days – freezing is E6). */
 export const JOURNAL_KEEP_DAYS = 14

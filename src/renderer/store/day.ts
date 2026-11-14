@@ -129,35 +129,42 @@ export function useDay(date: string): DayModel | null {
  * `calibration` – the calibration period (reactions of energy only inform).
  */
 export function countDay(date: string, data: DayData, inputs: PlanInputs, at: number, energyOn = true, calibration = false): DayModel {
-  const { events, dayFile, snapshot, fromLog, ctx } = contextOfDay(date, data, inputs, at)
-  const state = computeDay(ctx)
-  const energy = computeEnergy(ctx, state, { moduleOn: energyOn, calibration })
-  return { date, data, dayFile, snapshot, fromLog, ctx, state, energy, events }
-}
-
-/** What the day is made of at `at`: its events, files and snapshot, and the engine's context – nothing counted yet. */
-function contextOfDay(date: string, data: DayData, inputs: PlanInputs, at: number) {
   const events = data.events as AnyEvent[]
   const dayFile = data.dayFile ? dayFileFrom(data.dayFile, date) : null
   const nextFile = data.nextFile ? dayFileFrom(data.nextFile, addDays(date, 1)) : null
   const src = { date, events, dayFile, nextFile }
   const { snapshot, fromLog } = snapshotOf(inputs, src, marketDay, at)
-  return { events, dayFile, snapshot, fromLog, ctx: dayContextOf(inputs, src, marketDay, at) }
+  const ctx = dayContextOf(inputs, src, marketDay, at)
+  const state = computeDay(ctx)
+  const energy = computeEnergy(ctx, state, { moduleOn: energyOn, calibration })
+  return { date, data, dayFile, snapshot, fromLog, ctx, state, energy, events }
+}
+
+/** A day read for an edit made in its turn without counting it (`plannedDay`): its plan, the facts of its log and its file. */
+export interface PlannedDay {
+  ctx: DayContext
+  facts: DayFacts
+  /** The day's file as the edit is made on it (with your queued edits, as `dayFiles` gives it). */
+  file: RawRecord | null
 }
 
 /**
- * A day's plan and the facts of its log now, on `base` – its file as the edit is made on it – without counting the day (D501: an action
- * that has to know in its turn whether a block is in the plan, has begun or ended). Null: its logs are not read whole now.
+ * A day's plan and the facts of its log now – one read (`dayData`: its logs and its file), one snapshot – without counting the day (D501:
+ * an action that has to know in its turn whether a block is in the plan, has begun or ended). `'file'` – its file cannot be read now,
+ * `'log'` – its logs are not read whole (or the bridge failed).
  */
-export async function plannedDay(date: string, base: RawRecord | null, at = Date.now()): Promise<{ ctx: DayContext; facts: DayFacts } | null> {
+export async function plannedDay(date: string, at = Date.now()): Promise<PlannedDay | 'file' | 'log'> {
   try {
     const data = await window.rd.dayData(date)
-    if (!dayUsable(data)) return null
+    if (data.unknown) return 'file'
+    if (!dayUsable(data)) return 'log'
     const { rd, templates, lectures, seriesPlans } = useData.getState()
-    const { ctx } = contextOfDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures, series: seriesPlans }, at)
-    return { ctx, facts: foldFacts(gridOf(date), ctx.events) }
+    const events = data.events as AnyEvent[]
+    const src = { date, events, dayFile: data.dayFile ? dayFileFrom(data.dayFile, date) : null, nextFile: data.nextFile ? dayFileFrom(data.nextFile, addDays(date, 1)) : null }
+    const ctx = dayContextOf({ changes: rd.settings, templates, lectures, series: seriesPlans }, src, marketDay, at)
+    return { ctx, facts: foldFacts(gridOf(date), events), file: data.dayFile }
   } catch {
-    return null
+    return 'log'
   }
 }
 

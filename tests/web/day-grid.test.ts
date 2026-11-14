@@ -13,7 +13,7 @@ import type { DataView } from '@shared/api'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { DayGrid } from '@renderer/features/week/DayGrid'
 import { POOL_COLOR } from '@renderer/features/plan/energyDraw'
-import { ASSUMED_FACTOR, EnergyStripLegend, STRIP_OPACITY, STRIP_WIDTH } from '@renderer/features/week/EnergyStrip'
+import { ASSUMED_FACTOR, EnergyStripLegend, hoverPlace, STRIP_OPACITY, STRIP_WIDTH } from '@renderer/features/week/EnergyStrip'
 import { THREE_DAYS_PPM, WEEK_PPM } from '@renderer/features/week/weekLayout'
 import { moveWeekBlock } from '@renderer/features/week/weekMove'
 import { installEscape, onEscapeLayer } from '@renderer/lib/escape'
@@ -82,7 +82,17 @@ beforeEach(() => {
     return rect(0, 0, 0, 0)
   })
 })
+/** The pointer capture jsdom lacks, stubbed for one test and taken off again in `afterEach` (T1295). */
+const capture = ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture'] as const
+function stubPointerCapture(): void {
+  for (const name of capture) Object.defineProperty(Element.prototype, name, { value: name === 'hasPointerCapture' ? () => false : () => undefined, configurable: true, writable: true })
+}
+/** The width of the window as the page's content sees it (without a scrollbar); jsdom has none. */
+function stubClientWidth(width: number): void {
+  vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(width)
+}
 afterEach(() => {
+  for (const name of capture) Reflect.deleteProperty(Element.prototype, name)
   act(() => root?.unmount())
   host?.remove()
   root = null
@@ -347,6 +357,7 @@ describe('pasek energii przy lewej krawędzi kolumny (D500, D422)', () => {
     expect(Number(r.at(-1)!.getAttribute('y')) + Number(r.at(-1)!.getAttribute('height'))).toBeCloseTo(540 * THREE_DAYS_PPM, 6)
   })
   it('najechanie na pasek: godzina i trzy wartości', async () => {
+    stubClientWidth(1000)
     const list = days()
     list[1] = { ...list[1]!, energy: track() }
     await mount(list)
@@ -356,9 +367,106 @@ describe('pasek energii przy lewej krawędzi kolumny (D500, D422)', () => {
       return rect(colLeft(1), COL_TOP, STRIP_WIDTH + 1, 2000)
     })
     act(() => void hit.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: colLeft(1) + 2, clientY: COL_TOP + 240 * WEEK_PPM })))
-    expect(q(`week-energy-hover-${TODAY}`)!.textContent).toBe('10:00 · głowa 80 · emocje 90 · bodźce 40')
+    const hover = document.querySelector<HTMLElement>(`[data-testid="week-energy-hover-${TODAY}"]`)!
+    expect(hover.textContent).toBe('10:00 · głowa 80 · emocje 90 · bodźce 40')
+    // Whole: out of the column, which clips what leaves it (T1287) – on the page, right of the strip, at the sample's height.
+    expect(q(`week-col-${TODAY}`)!.contains(hover)).toBe(false)
+    expect(hover.className).toContain('fixed')
+    expect(hover.style.left).toBe(`${colLeft(1) + STRIP_WIDTH + 1 + 3}px`)
+    expect(hover.style.top).toBe(`${COL_TOP + 240 * WEEK_PPM}px`)
     act(() => void hit.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })))
-    expect(q(`week-energy-hover-${TODAY}`)).toBeNull()
+    expect(document.querySelector(`[data-testid="week-energy-hover-${TODAY}"]`)).toBeNull()
+  })
+  it('podpowiedź przy prawej krawędzi okna staje na lewo od paska', () => {
+    expect(hoverPlace({ left: 100, right: 106 }, 50, 1000)).toEqual({ top: 50, left: 109 })
+    expect(hoverPlace({ left: 900, right: 906 }, 50, 1000)).toEqual({ top: 50, right: 103 })
+  })
+  it('podpowiedź nie wychodzi za lewą krawędź okna: gdy nie mieści się po żadnej stronie paska, stoi od 4 px (T1292)', () => {
+    expect(hoverPlace({ left: 100, right: 106 }, 50, 200)).toEqual({ top: 50, left: 4 })
+    expect(hoverPlace({ left: 267, right: 273 }, 50, 400)).toEqual({ top: 50, right: 136 })
+    expect(hoverPlace({ left: 266, right: 272 }, 50, 400)).toEqual({ top: 50, left: 4 })
+  })
+  /** The strip's hit area at `left`, `top` – what the hover reads when it is placed. */
+  const hitAt = (left: number, top: number) => vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(function (this: Element) { return rect(left, top, STRIP_WIDTH + 1, 2000) })
+  const hoverOf = () => document.querySelector<HTMLElement>(`[data-testid="week-energy-hover-${TODAY}"]`)
+  const hoverOn = async (energy: HorizonDay['energy']) => {
+    const list = days()
+    list[1] = { ...list[1]!, energy }
+    await mount(list)
+    hitAt(colLeft(1), COL_TOP)
+    act(() => void q(`week-energy-hit-${TODAY}`)!.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: colLeft(1) + 2, clientY: COL_TOP + 240 * WEEK_PPM })))
+    return list
+  }
+  it('szerokość okna to szerokość treści bez paska przewijania, nie `innerWidth` (T1292)', async () => {
+    stubClientWidth(900)
+    const list = days()
+    list[1] = { ...list[1]!, energy: track() }
+    await mount(list)
+    hitAt(700, COL_TOP)
+    act(() => void q(`week-energy-hit-${TODAY}`)!.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 702, clientY: COL_TOP + 240 * WEEK_PPM })))
+    // 706 + 3 + 260 > 900: left of the strip (innerWidth 1024 in jsdom would put it right).
+    expect(hoverOf()!.style.right).toBe('203px')
+    expect(hoverOf()!.style.left).toBe('')
+  })
+  it('podpowiedź podąża za paskiem: przewinięcie i zmiana rozmiaru okna przeliczają jej miejsce (T1292)', async () => {
+    stubClientWidth(1000)
+    await hoverOn(track())
+    expect(hoverOf()!.style.top).toBe(`${COL_TOP + 240 * WEEK_PPM}px`)
+    // The grid scrolls 50 px up: the sample (and the strip) is 50 px higher.
+    hitAt(colLeft(1), COL_TOP - 50)
+    act(() => void document.dispatchEvent(new Event('scroll')))
+    expect(hoverOf()!.style.top).toBe(`${COL_TOP - 50 + 240 * WEEK_PPM}px`)
+    // The column moves 40 px right (the window was resized).
+    hitAt(colLeft(1) + 40, COL_TOP - 50)
+    act(() => void window.dispatchEvent(new Event('resize')))
+    expect(hoverOf()!.style.left).toBe(`${colLeft(1) + 40 + STRIP_WIDTH + 1 + 3}px`)
+  })
+  it('po przeliczeniu prognozy przy stojącym kursorze podpowiedź ma nowe liczby (T1291)', async () => {
+    stubClientWidth(1000)
+    const list = await hoverOn(track())
+    expect(hoverOf()!.textContent).toBe('10:00 · głowa 80 · emocje 90 · bodźce 40')
+    const again = [...list]
+    again[1] = { ...list[1]!, energy: { ...track(), samples: [{ at: 360, head: 100, emotions: 100, senses: 99 }, { at: 600, head: 70, emotions: 85, senses: 35 }, { at: 900, head: 50, emotions: 60, senses: 20 }] } }
+    await act(async () => root!.render(grid(again, WEEK_PPM)))
+    expect(hoverOf()!.textContent).toBe('10:00 · głowa 70 · emocje 85 · bodźce 35')
+  })
+  it('dzień traci energię i ją odzyskuje: po drodze nie wraca duch podpowiedzi (T1292)', async () => {
+    stubClientWidth(1000)
+    const list = await hoverOn(track())
+    expect(hoverOf()).not.toBeNull()
+    const none = [...list]
+    none[1] = { ...list[1]!, energy: null }
+    await act(async () => root!.render(grid(none, WEEK_PPM)))
+    expect(hoverOf()).toBeNull()
+    await act(async () => root!.render(grid(list, WEEK_PPM)))
+    expect(q(`week-energy-${TODAY}`)).not.toBeNull()
+    expect(hoverOf()).toBeNull()
+  })
+  it('jedna próbka (nic do narysowania): bez paska, bloki od krawędzi kolumny (T1286)', async () => {
+    const list = days()
+    list[1] = { ...list[1]!, energy: { samples: [{ at: 600, head: 80, emotions: 90, senses: 40 }], reserve: 30 } }
+    await mount(list)
+    expect(q(`week-energy-${TODAY}`)).toBeNull()
+    expect(q(`week-blocks-${TODAY}`)!.style.left).toBe('0px')
+  })
+  it('miejsce przeciąganego bloku stoi tam, gdzie bloki – na prawo od paska (T1288)', async () => {
+    await mount(days({ energyTomorrow: track(true) }))
+    pointer(blockA(), 'pointerdown', colLeft(1) + 20, COL_TOP + 240 * WEEK_PPM + 8)
+    pointer(window, 'pointermove', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8)
+    expect(q(`week-blocks-${DATES[2]}`)!.contains(q('week-drop'))).toBe(true)
+    pointer(window, 'pointerup', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8, 0)
+    await act(async () => undefined)
+  })
+  it('zakres nowego bloku też stoi na prawo od paska (T1288)', async () => {
+    // jsdom has no pointer capture (the column takes the pointer once the drag begins).
+    stubPointerCapture()
+    await mount(days({ energyTomorrow: track(true) }))
+    const col = q(`week-col-${DATES[2]}`)!
+    pointer(col, 'pointerdown', colLeft(2) + 40, COL_TOP + 600 * WEEK_PPM)
+    pointer(col, 'pointermove', colLeft(2) + 40, COL_TOP + 660 * WEEK_PPM)
+    expect(q('week-range')).not.toBeNull()
+    expect(q(`week-blocks-${DATES[2]}`)!.contains(q('week-range'))).toBe(true)
+    pointer(col, 'pointerup', colLeft(2) + 40, COL_TOP + 660 * WEEK_PPM, 0)
   })
 })
 

@@ -9,13 +9,17 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
-import { EnergyLanes, EnergyLegend, LANE_WIDTH, laneLeft, LANES_WIDTH } from '@renderer/features/plan/EnergyLanes'
+import { EnergyLanes, EnergyLegend, LANE_WIDTH, laneLeft, LANES_WIDTH, NOW_CHIP_HEIGHT } from '@renderer/features/plan/EnergyLanes'
 import {
   curveAt,
+  energySpan,
+  hasEnergy,
   hoverText,
   laneAreaPath,
   nearestSample,
+  onScreen,
   poolCurve,
+  type PoolValues,
   POOL_COLOR,
   POOL_LETTER,
   POOL_NAME,
@@ -30,6 +34,8 @@ import { Timeline } from '@renderer/features/plan/Timeline'
 
 const sample = (at: number, head: number, emotions: number, senses: number) => ({ at, head, emotions, senses })
 const track = (samples: EnergyTrack['samples'], reserve = 30): EnergyTrack => ({ samples, reserve })
+/** Three values as the screen shows them (rounded once – what `stripState` takes). */
+const shown = (head: number, emotions: number, senses: number): PoolValues => ({ head: onScreen(head), emotions: onScreen(emotions), senses: onScreen(senses) })
 
 describe('wygładzenie bez przestrzelenia (T1280)', () => {
   it('krzywa przechodzi przez każdą próbkę i między dwiema nigdy nie wychodzi poza ich wartości', () => {
@@ -108,14 +114,39 @@ describe('jaśniej poniżej rezerwy (D500)', () => {
 
 describe('pasek kolumny: najsłabsza pula i jej odcień (D500, T1281)', () => {
   it('przy rezerwie 30: poniżej 30 – poniżej rezerwy, 30–44 – uwaga, od 45 – dobrze', () => {
-    expect(stripState({ head: 29, emotions: 80, senses: 80 }, 30)).toEqual({ pool: 'head', state: 'low' })
-    expect(stripState({ head: 80, emotions: 30, senses: 80 }, 30)).toEqual({ pool: 'emotions', state: 'watch' })
-    expect(stripState({ head: 80, emotions: 80, senses: 44 }, 30)).toEqual({ pool: 'senses', state: 'watch' })
-    expect(stripState({ head: 80, emotions: 80, senses: 45 }, 30)).toEqual({ pool: 'senses', state: 'ok' })
+    expect(stripState(shown(29, 80, 80), 30)).toEqual({ pool: 'head', state: 'low' })
+    expect(stripState(shown(80, 30, 80), 30)).toEqual({ pool: 'emotions', state: 'watch' })
+    expect(stripState(shown(80, 80, 44), 30)).toEqual({ pool: 'senses', state: 'watch' })
+    expect(stripState(shown(80, 80, 45), 30)).toEqual({ pool: 'senses', state: 'ok' })
   })
-  it('liczy na liczbach z ekranu (zaokrąglonych): 44,6 to 45 – dobrze; remis – pierwsza pula', () => {
-    expect(stripState({ head: 80, emotions: 44.6, senses: 80 }, 30).state).toBe('ok')
-    expect(stripState({ head: 50, emotions: 50, senses: 50 }, 30).pool).toBe('head')
+  it('liczy na liczbach z ekranu (zaokrąglonych raz, w `valuesAt`): 44,6 to 45 – dobrze; remis – pierwsza pula', () => {
+    const runs = stripRuns(track([sample(600, 80, 44.6, 80), sample(610, 80, 44.6, 80)]))
+    expect(runs).toEqual([{ from: 600, to: 610, pool: 'emotions', state: 'ok' }])
+    expect(stripState(shown(50, 50, 50), 30).pool).toBe('head')
+  })
+  it('stripState przyjmuje tylko liczby z ekranu: surowa wartość nie przechodzi kontroli typów (T1290)', () => {
+    // @ts-expect-error – 44.6 is not rounded by `onScreen`; the strip's one rounding is `valuesAt`.
+    stripState({ head: 44.6, emotions: 80, senses: 80 }, 30)
+    expect(onScreen(44.6)).toBe(45)
+  })
+  it('próbki w złej kolejności albo o jednym czasie – brak energii: odcinek z krzywych, nie z surowych próbek (T1290)', () => {
+    // `poolCurve` keeps only rising times: a track read backwards has one point per pool, so no span.
+    const backwards = track([sample(610, 80, 70, 60), sample(600, 80, 70, 60)])
+    expect(energySpan(backwards)).toBeNull()
+    expect(hasEnergy(backwards)).toBe(false)
+    expect(stripRuns(backwards)).toEqual([])
+    const twice = track([sample(600, 80, 70, 60), sample(600, 50, 40, 30)])
+    expect(hasEnergy(twice)).toBe(false)
+    expect(energySpan(track([sample(600, 80, 70, 60), sample(610, 80, 70, 60), sample(605, 1, 1, 1)]))).toEqual([600, 610])
+  })
+  it('dzień ma energię do narysowania tylko, gdy wszystkie pule mają wspólny odcinek czasu (T1286)', () => {
+    expect(hasEnergy(track([sample(600, 80, 70, 60), sample(610, 80, 70, 60)]))).toBe(true)
+    expect(energySpan(track([sample(600, 80, 70, 60), sample(610, 80, 70, 60), sample(620, 1, Number.NaN, 2)]))).toEqual([600, 610])
+    // One sample; pools that never overlap; nothing.
+    expect(hasEnergy(track([sample(600, 80, 70, 60)]))).toBe(false)
+    expect(hasEnergy(track([sample(600, 80, Number.NaN, 60), sample(610, Number.NaN, 70, 60)]))).toBe(false)
+    expect(hasEnergy(null)).toBe(false)
+    expect(stripRuns(track([sample(600, 80, 70, 60)]))).toEqual([])
   })
   it('odcinki paska: co minutę ta sama pula i ten sam odcień łączą się, zmiana – nowy odcinek', () => {
     const runs = stripRuns(track([sample(600, 90, 80, 70), sample(610, 90, 80, 70), sample(620, 90, 80, 20)]))
@@ -171,7 +202,7 @@ const xs = (d: string) => [...d.matchAll(/(-?\d+\.\d),(-?\d+\.\d)/g)].map((m) =>
 describe('trzy pasy przy osi „Dziś” (D500)', () => {
   // 06:00–07:00 at 1 px a minute: głowa 100 → 40, emocje 50 throughout, bodźce 20 (below the reserve 30) → 60.
   const t = track([sample(360, 100, 50, 20), sample(390, 70, 50, 40), sample(420, 40, 50, 60)])
-  const lanes = (nowAt: number | null = null) => render(createElement(EnergyLanes, { track: t, lo: 360, ppm: 1, height: 60, nowAt }))
+  const lanes = (nowAt: number | null = null) => render(createElement(EnergyLanes, { track: t, lo: 360, ppm: 1, height: 60, nowAt, nowColor: '#EEE3D6' }))
 
   it('trzy wąskie pasy G · E · B obok siebie, każdy 0–100: słupek od lewej krawędzi pasa, 100 = cała szerokość', async () => {
     await lanes()
@@ -215,13 +246,32 @@ describe('trzy pasy przy osi „Dziś” (D500)', () => {
     const head = host!.querySelector(q('energy-bar-full-head')!.getAttribute('clip-path')!.replace(/^url\((.*)\)$/, '$1'))!
     expect([...head.querySelectorAll('rect')].map((r) => [r.getAttribute('data-from'), r.getAttribute('data-to')])).toEqual([['360.0', '420.0']])
   })
-  it('przy kresce „teraz” trzy aktualne liczby', async () => {
+  it('przy kresce „teraz” trzy aktualne liczby, każda wyśrodkowana na kresce', async () => {
     await lanes(390)
-    expect(q('energy-now')!.style.top).toBe('30px')
+    // „teraz” at 06:30 is 30 px under the top: a number 12 px high stands from 24 px to 36 px.
+    for (const p of POOLS) {
+      expect(q(`energy-now-${p}`)!.style.top).toBe(`${30 - NOW_CHIP_HEIGHT / 2}px`)
+      expect(q(`energy-now-${p}`)!.style.height).toBe(`${NOW_CHIP_HEIGHT}px`)
+    }
+    expect(q('energy-now-line')!.getAttribute('y1')).toBe('30')
+    expect(q('energy-now-line')!.getAttribute('stroke')).toBe('#EEE3D6')
     expect(q('energy-now-head')!.textContent).toBe('70')
     expect(q('energy-now-emotions')!.textContent).toBe('50')
     expect(q('energy-now-senses')!.textContent).toBe('40')
     expect(q('energy-now-line')).not.toBeNull()
+  })
+  it('podpowiedź po przeliczeniu prognozy przy stojącym kursorze pokazuje nowe liczby, nie stare (T1291)', async () => {
+    const lanesOf = (tr: EnergyTrack) => createElement(EnergyLanes, { track: tr, lo: 360, ppm: 1, height: 60, nowAt: null, nowColor: '#EEE3D6' })
+    await render(lanesOf(t))
+    vi.spyOn(q('energy-track')!, 'getBoundingClientRect').mockReturnValue({ top: 100, left: 0, width: 48, height: 60 } as DOMRect)
+    act(() => void q('energy-track')!.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 128 })))
+    expect(q('energy-hover')!.textContent).toBe('06:30 · głowa 70 · emocje 50 · bodźce 40')
+    // The forecast is counted again; the pointer has not moved.
+    await act(async () => root!.render(lanesOf(track([sample(360, 100, 50, 20), sample(390, 65, 55, 33), sample(420, 40, 50, 60)]))))
+    expect(q('energy-hover')!.textContent).toBe('06:30 · głowa 65 · emocje 55 · bodźce 33')
+    // The track lost its samples: no hover left.
+    await act(async () => root!.render(lanesOf(track([]))))
+    expect(q('energy-hover')).toBeNull()
   })
   it('bez „teraz” (dzień miniony, przyszły) – bez liczb', async () => {
     await lanes(null)
@@ -245,8 +295,16 @@ describe('trzy pasy przy osi „Dziś” (D500)', () => {
     expect(q('energy-letters')).not.toBeNull()
     expect(q('energy-now-senses')!.textContent).toBe('40')
   })
+  it('linia „teraz” w pasach ma kolor znacznika „teraz” osi, nie stały (T1294)', async () => {
+    await render(createElement(Timeline, { items: [], markers: [{ at: 390, label: 'teraz 06:30', tone: 'lamp', now: true }], energy: t, selected: null, onSelect: () => undefined, from: 360, to: 420 }))
+    expect(q('energy-now-line')!.getAttribute('stroke')).toBe('#F2B66D')
+  })
   it('oś bez energii (przed check-inem, moduł wyłączony) – bez pasów', async () => {
     await render(createElement(Timeline, { items: [], markers: [], energy: null, selected: null, onSelect: () => undefined, from: 360, to: 420 }))
+    expect(q('energy-track')).toBeNull()
+  })
+  it('oś z jedną próbką energii – nic do narysowania, bez pustej kolumny pasów (T1286)', async () => {
+    await render(createElement(Timeline, { items: [], markers: [], energy: track([sample(360, 80, 70, 60)]), selected: null, onSelect: () => undefined, from: 360, to: 420 }))
     expect(q('energy-track')).toBeNull()
   })
   it('legenda mówi „energia 0–100”, nazywa litery, rezerwę i jaśniejszy słupek', async () => {

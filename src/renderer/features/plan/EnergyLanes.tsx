@@ -6,7 +6,6 @@
  */
 import { useId, useMemo, useState, type MouseEvent } from 'react'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
-import type { Pool } from '@shared/model/categories'
 import { ENERGY_SCALE, hoverText, laneAreaPath, nearestSample, poolCurves, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, RESERVE_COLOR, spansAtLeast, valuesAt } from './energyDraw'
 
 /** The width of the column of lanes (the strip of all-day events leaves the same place free over it). */
@@ -19,35 +18,46 @@ export const laneLeft = (i: number): number => LANE_GAP + i * (LANE_WIDTH + LANE
 /** The opacity of the bar at or above the reserve, and below it (D500: lighter). */
 export const BAR_OPACITY = 0.85
 export const BAR_BELOW_OPACITY = 0.3
-/** The colour of the line „teraz” (the axis' own, `TONE.fg` in `Timeline`). */
-const NOW_COLOR = '#EEE3D6'
+/** The height of a number at „teraz”: it stands centred on the line (half above, half below). */
+export const NOW_CHIP_HEIGHT = 12
 
-export function EnergyLanes({ track, lo, ppm, height, nowAt }: { track: EnergyTrack; lo: number; ppm: number; height: number; nowAt: number | null }) {
+/** `nowColor` – the colour of the axis' line „teraz” (the tone of its marker in `Timeline`), the lanes draw it on. */
+export function EnergyLanes({ track, lo, ppm, height, nowAt, nowColor }: { track: EnergyTrack; lo: number; ppm: number; height: number; nowAt: number | null; nowColor: string }) {
   const clip = useId().replace(/[^a-zA-Z0-9_-]/g, '')
   const curves = useMemo(() => poolCurves(track), [track])
   const y = (min: number) => (min - lo) * ppm
+  // The bars and their spans at or above the reserve: counted once a track and a scale, not at every move of the pointer.
+  const drawn = useMemo(() => {
+    const yOf = (min: number) => (min - lo) * ppm
+    return POOLS.map((p, i) => {
+      const x0 = laneLeft(i)
+      return { pool: p, x0, d: laneAreaPath(curves[p], x0, (v) => x0 + (v / 100) * LANE_WIDTH, yOf), spans: spansAtLeast(curves[p], track.reserve) }
+    })
+  }, [curves, lo, ppm, track.reserve])
   const now = nowAt == null ? null : valuesAt(curves, nowAt)
-  const [hover, setHover] = useState<{ at: number; text: string } | null>(null)
+  // The state holds only the sample's minute; its words and values are read from the current track at each render, so a
+  // forecast counted again under a standing pointer shows its new numbers (T1291).
+  const [hover, setHover] = useState<number | null>(null)
   const onMove = (e: MouseEvent<HTMLDivElement>) => {
     const s = nearestSample(track, lo + (e.clientY - e.currentTarget.getBoundingClientRect().top) / ppm)
-    setHover(s ? { at: s.at, text: hoverText(s.at, s) } : null)
+    // A new state only when the pointer reaches another sample.
+    setHover(s?.at ?? null)
   }
+  const sample = hover == null ? null : nearestSample(track, hover)
   const reserveX = (i: number) => laneLeft(i) + (track.reserve / 100) * LANE_WIDTH
   return (
     <div className="relative shrink-0 border-l border-line" style={{ width: LANES_WIDTH, height }} onMouseMove={onMove} onMouseLeave={() => setHover(null)} data-testid="energy-track">
       <svg width={LANES_WIDTH} height={height} className="absolute top-0 left-0" role="img" aria-label={`${ENERGY_SCALE}: ${POOLS.map((p) => POOL_NAME[p]).join(', ')}; rezerwa ${track.reserve}`}>
         <defs>
-          {POOLS.map((p) => (
+          {drawn.map(({ pool: p, spans }) => (
             <clipPath key={p} id={`${clip}-${p}`}>
-              {spansAtLeast(curves[p], track.reserve).map(([a, b]) => (
+              {spans.map(([a, b]) => (
                 <rect key={a} x={0} width={LANES_WIDTH} y={y(a)} height={Math.max(0, y(b) - y(a))} data-from={a.toFixed(1)} data-to={b.toFixed(1)} />
               ))}
             </clipPath>
           ))}
         </defs>
-        {POOLS.map((p: Pool, i) => {
-          const x0 = laneLeft(i)
-          const d = laneAreaPath(curves[p], x0, (v) => x0 + (v / 100) * LANE_WIDTH, y)
+        {drawn.map(({ pool: p, x0, d }, i) => {
           return (
             <g key={p} data-testid={`energy-lane-${p}`}>
               <rect x={x0} width={LANE_WIDTH} y={0} height={height} fill={POOL_COLOR[p]} opacity={0.08} />
@@ -57,8 +67,8 @@ export function EnergyLanes({ track, lo, ppm, height, nowAt }: { track: EnergyTr
             </g>
           )
         })}
-        {nowAt != null && <line x1={0} x2={LANES_WIDTH} y1={y(nowAt)} y2={y(nowAt)} stroke={NOW_COLOR} strokeWidth={1} data-testid="energy-now-line" />}
-        {hover && <line x1={0} x2={LANES_WIDTH} y1={y(hover.at)} y2={y(hover.at)} stroke={NOW_COLOR} strokeOpacity={0.5} strokeWidth={1} />}
+        {nowAt != null && <line x1={0} x2={LANES_WIDTH} y1={y(nowAt)} y2={y(nowAt)} stroke={nowColor} strokeWidth={1} data-testid="energy-now-line" />}
+        {sample && <line x1={0} x2={LANES_WIDTH} y1={y(sample.at)} y2={y(sample.at)} stroke={nowColor} strokeOpacity={0.5} strokeWidth={1} />}
       </svg>
       {/* The letters over the lanes – they stay at the top while the axis scrolls. */}
       <div className="pointer-events-none sticky top-0 z-10 h-3 bg-bg/85" data-testid="energy-letters">
@@ -69,17 +79,24 @@ export function EnergyLanes({ track, lo, ppm, height, nowAt }: { track: EnergyTr
         ))}
       </div>
       {nowAt != null && now && (
-        <div className="pointer-events-none absolute right-0 left-0 z-10 -translate-y-1/2" style={{ top: y(nowAt) }} data-testid="energy-now">
+        // Each number centred on the line „teraz”: its top half its height above the line.
+        <div className="pointer-events-none absolute inset-0 z-10" data-testid="energy-now">
           {POOLS.map((p, i) => (
-            <span key={p} className="num absolute top-0 rounded-[2px] bg-bg/90 text-center text-[9px] leading-3" style={{ left: laneLeft(i) - 1, width: LANE_WIDTH + 2, color: POOL_COLOR[p] }} aria-label={`${POOL_NAME[p]} ${now[p]}`} data-testid={`energy-now-${p}`}>
+            <span
+              key={p}
+              className="num absolute rounded-[2px] bg-bg/90 text-center text-[9px]"
+              style={{ top: y(nowAt) - NOW_CHIP_HEIGHT / 2, height: NOW_CHIP_HEIGHT, lineHeight: `${NOW_CHIP_HEIGHT}px`, left: laneLeft(i) - 1, width: LANE_WIDTH + 2, color: POOL_COLOR[p] }}
+              aria-label={`${POOL_NAME[p]} ${now[p]}`}
+              data-testid={`energy-now-${p}`}
+            >
               {now[p]}
             </span>
           ))}
         </div>
       )}
-      {hover && (
-        <div className="num pointer-events-none absolute right-full z-30 mr-1 -translate-y-1/2 rounded-sm border border-line bg-bg/95 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-fg" style={{ top: y(hover.at) }} data-testid="energy-hover">
-          {hover.text}
+      {sample && (
+        <div className="num pointer-events-none absolute right-full z-30 mr-1 -translate-y-1/2 rounded-sm border border-line bg-bg/95 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-fg" style={{ top: y(sample.at) }} data-testid="energy-hover">
+          {hoverText(sample.at, sample)}
         </div>
       )}
     </div>

@@ -19,7 +19,7 @@ export interface BlockCosts {
 
 /**
  * The cost on a tile (D501): `edit` – its window may be opened (`costEditable`: a block not begun – into the plan; begun and not ended – from
- * now on, `energy.cost`; never on a day gone by).
+ * now on, `block.cost`; never on a day gone by).
  */
 export type TileCost = BlockCosts & { edit: boolean }
 

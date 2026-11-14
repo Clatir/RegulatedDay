@@ -26,10 +26,12 @@ import type { SaveAnswer } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { DueMark } from '../cases/DueMark'
 import { PriorityMark } from '../cases/PriorityMark'
-import { EnergyLanes, EnergyLegend } from './EnergyLanes'
+import { EnergyLanes } from './EnergyLanes'
+import { hasEnergy } from './energyDraw'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
 import { inParallelZone, tileAt, tileLanes } from './parallelDrag'
+import type { CostAsk } from './costSave'
 import { costRoom, TileCost } from './TileCost'
 
 export interface TimelineItem {
@@ -335,7 +337,7 @@ export function Timeline({
    */
   onAttachDrop?: (id: string, dt: DataTransfer) => void
   /** The block's own cost set in the window of its tile (D501), or null – the category's again; left out – the cost is only told. */
-  onCosts?: (id: string, costs: Costs | null) => void | Promise<SaveAnswer>
+  onCosts?: (id: string, costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>
   /** The span a sprawa dragged from outside the axis would take (D384) – drawn as a band while it is held; null – none. */
   ghost?: BlockSpan | null
   /** The new block not saved yet (D466): a dashed tile with its hours; null – none. The axis widens to hold it. */
@@ -389,6 +391,8 @@ export function Timeline({
   const span = [...(extent ?? items), ...(draft ? [draft] : [])]
   const lo = Math.floor(Math.min(from, ...span.map((i) => i.startMin), ...markers.map((m) => m.at)) / 60) * 60
   const hi = Math.ceil(Math.max(to, ...span.map((i) => i.endMin), ...markers.map((m) => m.at)) / 60) * 60
+  // The line „teraz” of the axis: the lanes stand its numbers on it and draw it in its colour (D500).
+  const nowMarker = markers.find((m) => m.now)
   // D366: a click on a gap (or in the column of hours) creates a block on the quarter, a drag one with its start and end;
   // with `clickCreates` off (D496, „Dziś”) a bare click makes nothing – only a drag does.
   const grid = useGridCreate({
@@ -483,7 +487,7 @@ export function Timeline({
     const costAt = !i.cost ? null : !tiny && !narrow ? 'corner' : tiny && lane.lanes === 1 ? 'row' : 'hover'
     const costLabel = (className: string) =>
       i.cost && costAt && (
-        <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} onChange={onCosts ? (costs) => onCosts(i.id, costs) : undefined} />
+        <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} onChange={onCosts ? (costs, ask) => onCosts(i.id, costs, ask) : undefined} />
       )
     return (
       <button
@@ -742,10 +746,7 @@ export function Timeline({
         ))}
       </div>
       {/* D500: the energy beside the axis – three lanes G · E · B (`EnergyLanes`). */}
-      {energy && energy.samples.length > 0 && <EnergyLanes track={energy} lo={lo} ppm={PPM} height={height} nowAt={markers.find((m) => m.now)?.at ?? null} />}
+      {hasEnergy(energy) && <EnergyLanes track={energy} lo={lo} ppm={PPM} height={height} nowAt={nowMarker?.at ?? null} nowColor={TONE[nowMarker?.tone ?? 'fg']} />}
     </div>
   )
 }
-
-/** The legend of the energy beside the axis (D500) – where „Dziś” has always taken it from. */
-export { EnergyLegend }

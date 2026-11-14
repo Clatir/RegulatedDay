@@ -73,7 +73,7 @@ describe('koszt na kafelku osi (D501)', () => {
     s.opts.plan[1] = { ...s.opts.plan[1]!, costs: { head: 1, emotions: 1, senses: 1 } }
     expect(axis(s, '10:10').get('own')!.cost).toMatchObject({ costs: { head: 5, emotions: 0, senses: -1 }, own: true, edit: true })
     const t = s.at('10:20')
-    s.write([{ k: 'energy.cost', dom: 'energy', block: 'own', at: t, costs: null }], t)
+    s.write([{ k: 'block.cost', block: 'own', at: t, costs: null }], t)
     expect(axis(s, '10:20').get('own')!.cost).toMatchObject({ costs: { head: 3, emotions: 1, senses: 1 }, own: false, edit: true })
   })
 })
@@ -189,15 +189,15 @@ describe('okienko kosztu bloku', () => {
   it('[+] i [−] zapisują własny koszt całego bloku (nowe trzy liczby)', async () => {
     const { onCosts } = await open()
     click(q('cost-pop-head-plus')!)
-    expect(onCosts).toHaveBeenLastCalledWith('a', { head: 4, emotions: 1, senses: 1 })
+    expect(onCosts).toHaveBeenLastCalledWith('a', { head: 4, emotions: 1, senses: 1 }, expect.anything())
     expect(q('cost-pop-head-value')!.textContent).toBe('4')
     click(q('cost-pop-senses-minus')!)
     // Over what the window shows now: the clicks that follow each other do not undo one another (saved one after another).
     await act(async () => undefined)
-    expect(onCosts).toHaveBeenLastCalledWith('a', { head: 4, emotions: 1, senses: 0 })
+    expect(onCosts).toHaveBeenLastCalledWith('a', { head: 4, emotions: 1, senses: 0 }, expect.anything())
   })
 
-  it('zapisy idą po kolei: następny klik czeka na poprzedni, a po odmowie poprzedniego – przepada; okienko mówi to, co zapisane', async () => {
+  it('zapisy idą po kolei, żaden klik nie przepada: następny czeka na poprzedni i liczy się od tego, co zapisane', async () => {
     let answer!: (a: boolean) => void
     const onCosts = vi.fn(() => new Promise<boolean>((r) => (answer = r)))
     await mount([item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 }))], { onCosts })
@@ -207,15 +207,35 @@ describe('okienko kosztu bloku', () => {
     expect(q('cost-pop-head-value')!.textContent).toBe('5')
     // The second waits for the first.
     expect(onCosts).toHaveBeenCalledTimes(1)
+    // The first refused: the second goes over what is saved (3 + 1), the window shows it.
     await act(async () => answer(false))
-    expect(onCosts).toHaveBeenCalledTimes(1)
-    expect(q('cost-pop-head-value')!.textContent).toBe('3')
-    // Written: the next one goes, over what was clicked.
-    click(q('cost-pop-head-plus')!)
-    click(q('cost-pop-head-plus')!)
+    expect(onCosts).toHaveBeenCalledTimes(2)
+    expect(onCosts).toHaveBeenLastCalledWith('a', { head: 4, emotions: 1, senses: 1 }, expect.anything())
+    expect(q('cost-pop-head-value')!.textContent).toBe('4')
     await act(async () => answer(true))
-    expect(onCosts).toHaveBeenCalledTimes(3)
-    expect(onCosts).toHaveBeenLastCalledWith('a', { head: 5, emotions: 1, senses: 1 })
+    expect(q('cost-pop-head-value')!.textContent).toBe('4')
+    // Written: the next one goes over it.
+    click(q('cost-pop-head-plus')!)
+    expect(onCosts).toHaveBeenLastCalledWith('a', { head: 5, emotions: 1, senses: 1 }, expect.anything())
+    await act(async () => answer(true))
+  })
+
+  it('zapis, który rzuca wyjątek, nie zatrzymuje kolejki: liczy się jak odmowa, następne kliknięcia idą dalej', async () => {
+    const onCosts = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('most')
+      })
+      .mockResolvedValue(true)
+    await mount([item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 }))], { onCosts })
+    click(q('block-a-cost')!)
+    click(q('cost-pop-head-plus')!)
+    await act(async () => undefined)
+    expect(q('cost-pop-head-value')!.textContent).toBe('3')
+    click(q('cost-pop-head-plus')!)
+    await act(async () => undefined)
+    expect(onCosts).toHaveBeenCalledTimes(2)
+    expect(q('cost-pop-head-value')!.textContent).toBe('4')
   })
 
   it('zapis, który stał się pytaniem albo ma wynik nieznany (asked) – okienko wraca do zapisanego', async () => {
@@ -240,11 +260,14 @@ describe('okienko kosztu bloku', () => {
     expect(q('cost-pop-head-value')!.textContent).toBe('3')
   })
 
-  it('pytanie o zakres serii zamyka okienko (stałoby nad pytaniem); klik czekający za tym, który pyta, przepada – nikt nie pyta drugi raz', async () => {
-    const onCosts = vi.fn(async () => {
-      // The save of a block of a series: first the day is read, then the question.
+  it('pytanie o zakres serii: okienko ustępuje mu i wraca po nim; zakres pada raz na otwarte okienko, żaden klik nie przepada', async () => {
+    const scopes: unknown[] = []
+    // The save of a block of a series (as `saveTileCosts`): the day read, then the question – only while the window has no scope yet.
+    const onCosts = vi.fn(async (_id: string, _costs: unknown, ask: { scope: string | null }) => {
       await Promise.resolve()
-      return (await askScope('change', 'Blok a', 'codziennie')) === 'only'
+      ask.scope ??= await askScope('change', 'Blok a', 'codziennie')
+      scopes.push(ask.scope)
+      return ask.scope != null
     })
     await mount([item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 }))], { onCosts })
     act(() => root!.render(createElement('div', null, createElement(Timeline, { items: [item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 }))], markers: [], selected: null, onSelect: vi.fn(), onMove: vi.fn(), onCosts, from: 6 * 60, to: 22 * 60 }), createElement(SeriesScopeDialog))))
@@ -253,11 +276,40 @@ describe('okienko kosztu bloku', () => {
     click(q('cost-pop-head-plus')!)
     await act(async () => undefined)
     expect(q('series-scope')).not.toBeNull()
+    // Out of the question's way meanwhile.
     expect(q('cost-pop')).toBeNull()
-    await act(async () => click(q('series-scope-only')!))
+    await act(async () => click(q('series-scope-following')!))
     await act(async () => undefined)
-    expect(onCosts).toHaveBeenCalledTimes(1)
     expect(q('series-scope')).toBeNull()
+    // Back where it stood, with both clicks saved by the scope picked once.
+    expect(q('cost-pop')).not.toBeNull()
+    expect(onCosts).toHaveBeenCalledTimes(2)
+    expect(onCosts).toHaveBeenLastCalledWith('a', { head: 5, emotions: 1, senses: 1 }, expect.anything())
+    expect(scopes).toEqual(['following', 'following'])
+    expect(q('cost-pop-head-value')!.textContent).toBe('5')
+    // The next click of this window: no question.
+    click(q('cost-pop-senses-minus')!)
+    await act(async () => void (await new Promise((r) => setTimeout(r, 0))))
+    expect(q('series-scope')).toBeNull()
+    expect(scopes).toHaveLength(3)
+  })
+
+  it('pytanie o zakres z innego miejsca (panel) nie gubi kliknięć okienka: ustępuje mu i wraca', async () => {
+    const onCosts = vi.fn().mockResolvedValue(true)
+    await mount([item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 }))], { onCosts })
+    act(() => root!.render(createElement('div', null, createElement(Timeline, { items: [item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 }))], markers: [], selected: null, onSelect: vi.fn(), onMove: vi.fn(), onCosts, from: 6 * 60, to: 22 * 60 }), createElement(SeriesScopeDialog))))
+    click(q('block-a-cost')!)
+    click(q('cost-pop-head-plus')!)
+    let asked!: Promise<unknown>
+    act(() => void (asked = askScope('change', 'Blok z panelu', 'codziennie')))
+    expect(q('cost-pop')).toBeNull()
+    await act(async () => click(q('series-scope-cancel')!))
+    await act(async () => asked)
+    expect(q('cost-pop')).not.toBeNull()
+    click(q('cost-pop-head-plus')!)
+    await act(async () => undefined)
+    expect(onCosts).toHaveBeenCalledTimes(2)
+    expect(onCosts).toHaveBeenLastCalledWith('a', { head: 5, emotions: 1, senses: 1 }, expect.anything())
   })
 
   it('[+] przy 5 i [−] przy −5 nic nie zmieniają ani nie zapisują', async () => {
@@ -273,7 +325,7 @@ describe('okienko kosztu bloku', () => {
     const { onCosts } = await open(cost({ head: 5, emotions: 0, senses: -1 }, { own: true }))
     click(q('cost-pop-reset')!)
     expect(onCosts).toHaveBeenCalledTimes(1)
-    expect(onCosts).toHaveBeenCalledWith('a', null)
+    expect(onCosts).toHaveBeenCalledWith('a', null, expect.anything())
     expect(q('cost-pop-head-value')!.textContent).toBe('3')
     click(q('cost-pop-reset')!)
     expect(onCosts).toHaveBeenCalledTimes(1)

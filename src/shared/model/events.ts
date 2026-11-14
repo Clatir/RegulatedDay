@@ -43,8 +43,9 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * foreground empty when the block in front ends; it gives way to this one as the leader. 12 – the block of a group that
  * takes the front is written there (`groupFront`, T1259): an older version would leave it behind in the log (no cost, no
  * work in front for requests and the forecast); it gives way to this one as the leader. 13 – the cost of a begun block changed
- * from a minute on (D501, `energy.cost`): an older version skips the event and counts the block by its start's costs to its end
- * – the descents it would register (`energy.reserve`) and the reward of the frozen day; it gives way to this one as the leader.
+ * from a minute on (D501, `block.cost`): an older version skips the event and counts the block by its start's costs to its end
+ * – the descents it would register (`energy.reserve`) and the reward of the frozen day; it gives way to this one as the leader
+ * (and, the event being the timer's, installs the new version without the 24 h – `unknownTimerEvents`).
  */
 export const RULES_VERSION = 13
 
@@ -143,6 +144,14 @@ export type TimerEvent =
        */
       group?: string
     })
+  /**
+   * The cost per hour of a begun block changed in the window of its tile (D501): from the minute of `at` to the block's end it costs
+   * `costs` (null – its variant's or category's again) instead of what its start wrote (`block.start.planned`); the minutes before
+   * stay as they were counted, and only a change after the block's start (in the log's order) counts – the last of a minute wins
+   * (`costChange.ts`). Passive for the day engine (`PASSIVE`). The timer's domain on purpose (T1300): an older version keeps it as
+   * an unknown event of the timer, counts the block by its start and installs the new version without the 24 h.
+   */
+  | (EventBase & { k: 'block.cost'; block: string; at: number; costs: Costs | null })
   /** `place` (ms, D478): where the paused block stands – the place of the block whose start swapped with it. */
   | (EventBase & { k: 'block.pause'; block: string; at: number; place?: number })
   | (EventBase & { k: 'block.resume'; block: string; at: number; confirmUntil: number | null })
@@ -279,12 +288,7 @@ export type EnergyEvent =
   | (EventBase & { k: 'energy.reserve'; at: number; pool: Pool; silent: boolean })
   /** The energy module switched on or off (a shared setting that works at once), with the state before. */
   | (EventBase & { k: 'energy.module'; at: number; on: boolean; was?: boolean })
-  /**
-   * The cost per hour of a begun block changed in the window of its tile (D501): from the minute of `at` to the block's end it costs
-   * `costs` (null – its variant's or category's again) instead of what its start wrote (`block.start.planned`); the minutes before
-   * stay as they were counted. The last change of a minute wins (`costChange.ts`). An older version skips it (unknown, the energy's
-   * domain: no faster install) and counts the block by its start.
-   */
+  /** `block.cost` as the first builds of 1.24 wrote it (the energy's domain) – read the same, never written (T1300). */
   | (EventBase & { k: 'energy.cost'; at: number; block: string; costs: Costs | null })
 
 /** An event of a kind this version does not know: kept, skipped by the rules. */
@@ -376,7 +380,8 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'energy.relative': { at: isNum, pool: isPool, delta: (v) => v === -10 || v === 0 || v === 10, before: isValues },
   'energy.reserve': { at: isNum, pool: isPool },
   'energy.module': { at: isNum, on: (v) => typeof v === 'boolean', was: (v) => v === undefined || typeof v === 'boolean' },
-  'energy.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) }
+  'energy.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) },
+  'block.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) }
 }
 
 export const KNOWN_KINDS: ReadonlySet<string> = new Set(Object.keys(NEEDS))

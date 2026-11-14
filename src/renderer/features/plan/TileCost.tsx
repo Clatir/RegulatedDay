@@ -3,9 +3,11 @@
  * „3·1·1” in the week) and, on a click, a small window beside the tile for this block alone – „głowa”, „emocje”, „bodźce” with [−] and
  * [+] between −5 and 5, and „Jak kategoria (3·1·1)”, which gives the block's own cost up. The tile places the label (`className`);
  * a press and a click on it stop here, so they neither drag the block nor open its panel. The window stands over the page (a portal,
- * the tile clips what is inside it), closes with Esc, a press elsewhere, a scroll, a resize and the question of a series' scope (it would
- * stand over the question). Its clicks are saved one after another; it shows what is saved – a click at once, and what the tile says
- * again when a save does not surely write (refused, a question, unknown; the clicks queued after it are dropped).
+ * the tile clips what is inside it), closes with Esc, a press elsewhere, a scroll and a resize; while a question of a series' scope is open
+ * it steps aside (it would stand over the question) and comes back after it. Its clicks are saved one after another, each as what it
+ * does (a step of a pool, „Jak kategoria”) over what is saved when its turn comes – a click is never lost, a save that did not surely
+ * write (refused, a question, unknown) leaves the window at what is saved. A block of a series asks its scope once while the window is
+ * open (`CostAsk`, D501): the next clicks use it.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
@@ -16,8 +18,18 @@ import { useEscapeLayer } from '../../lib/escape'
 import { useOutsidePointer } from '../../lib/outside'
 import type { SaveAnswer } from '../../store/data'
 import { useScopeAsked } from '../series/scopeAsk'
+import type { CostAsk } from './costSave'
 import { POOL_COLOR, POOL_NAME } from './energyDraw'
 import { NO_GRID } from './gridDrag'
+
+/** What the window shows: three costs and whether they are the block's own. */
+interface Shown {
+  costs: Costs
+  own: boolean
+}
+const sameShown = (a: Shown, b: Shown): boolean => a.own === b.own && sameCosts(a.costs, b.costs)
+/** A click of the window: a step of a pool, or „Jak kategoria”; `ask` – the memory of the window it was made in. */
+type Op = ({ k: 'step'; pool: Pool; by: 1 | -1 } | { k: 'reset' }) & { ask: CostAsk }
 
 /** The size the window is placed by (its width is fixed, its height a little over three rows and the button). */
 const POP_W = 232
@@ -65,28 +77,38 @@ export function TileCost({
   className?: string
   /** Where the tile put it: in the corner, at the end of the name's row, or shown only while the pointer is over the tile. */
   place?: 'corner' | 'row' | 'hover'
-  /** The block's own cost, or null – the category's again. Left out: no window (the label only says). */
-  onChange?: (costs: Costs | null) => void | Promise<SaveAnswer>
+  /**
+   * The block's own cost, or null – the category's again; `ask` – the memory of this open window (the scope of a series picked by its
+   * first change). Left out: no window (the label only says).
+   */
+  onChange?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>
 }) {
   const editable = cost.edit && onChange != null
   const label = useRef<HTMLSpanElement>(null)
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null)
   const open = place != null
   const close = () => setPlace(null)
-  // What the window shows: the block's cost as it is saved (the tile's), and – at once – what a click just asked for.
-  const saved = (c: TileCostInfo) => ({ costs: c.costs, own: c.own })
-  const [shown, setShown] = useState(() => saved(cost))
+  // What is saved (`base`: the tile's, or what a save just wrote) and the clicks not saved yet (`ops`, the first one on its way); the
+  // window shows the clicks over what is saved.
+  const saved = (c: TileCostInfo): Shown => ({ costs: c.costs, own: c.own })
   const latest = useRef(cost)
   latest.current = cost
-  // The clicks are saved one after another (`queue`); `pending` – sent or waiting; `round` – a click of an older round is dropped.
-  const queue = useRef<Promise<void>>(Promise.resolve())
-  const pending = useRef(0)
-  const round = useRef(0)
+  const base = useRef<Shown>(saved(cost))
+  const ops = useRef<Op[]>([])
+  const running = useRef(false)
+  const ask = useRef<CostAsk>({ scope: null })
+  const [shown, setShown] = useState<Shown>(() => saved(cost))
+  const apply = (v: Shown, op: Op): Shown => (op.k === 'reset' ? { costs: latest.current.base, own: false } : { costs: costStep(v.costs, op.pool, op.by), own: true })
+  const showNow = () => setShown(ops.current.reduce(apply, base.current))
   useEffect(() => {
-    if (pending.current === 0) setShown(saved(cost))
+    if (running.current) return
+    base.current = saved(cost)
+    showNow()
   }, [cost.costs.head, cost.costs.emotions, cost.costs.senses, cost.own])
+  // A question of a series' scope is open: the window steps aside for it (it would stand over the question) and comes back after it.
+  const asked = useScopeAsked()
   useEscapeLayer(open, close)
-  useOutsidePointer(open, `[data-cost-of="${id}"]`, close)
+  useOutsidePointer(open && !asked, `[data-cost-of="${id}"]`, close)
   useEffect(() => {
     if (!open) return
     window.addEventListener('scroll', close, true)
@@ -100,44 +122,46 @@ export function TileCost({
   useLayoutEffect(() => {
     if (!editable) setPlace(null)
   }, [editable])
-  // The question of a series' scope opens (the save of a click asks it): the window goes – it would stand over the question – and the
-  // clicks queued behind that one are dropped (none asks a second time).
-  const asked = useScopeAsked()
-  useLayoutEffect(() => {
-    if (!asked) return
-    setPlace(null)
-    round.current++
-  }, [asked])
 
   const toggle = () => {
     if (open) return close()
     const r = label.current?.getBoundingClientRect()
     if (!r) return
-    // Opened again: what the tile says (unless a click is still being saved – then what it asked for).
-    if (pending.current === 0) setShown(saved(cost))
+    // Opened again: a new memory of the scope, and what the tile says (unless clicks are still being saved – then them over it).
+    ask.current = { scope: null }
+    if (!running.current) base.current = saved(cost)
+    showNow()
     setPlace(popPlace(r, { width: window.innerWidth, height: window.innerHeight }))
   }
-  const save = (next: Costs | null) => {
-    if (!onChange) return
-    setShown({ costs: next ?? cost.base, own: next != null })
-    const mine = round.current
-    const run = async () => {
-      // A save that answers nothing (`void`) is taken as written.
-      let answer: SaveAnswer = false
-      if (mine === round.current) answer = (await Promise.resolve(onChange(next)).catch((): SaveAnswer => false)) ?? true
-      pending.current--
-      if (mine !== round.current || answer === true) return
-      // Not surely written (refused, a question, unknown): the clicks after it are dropped and the window shows what is saved.
-      round.current++
-      setShown(saved(latest.current))
+  /** The clicks one after another, each over what is saved when its turn comes; the first one is sent at once. */
+  const drain = async () => {
+    running.current = true
+    while (ops.current.length) {
+      const op = ops.current[0]!
+      const next = apply(base.current, op)
+      if (!sameShown(next, base.current) && onChange) {
+        let answer: SaveAnswer
+        try {
+          // A save that answers nothing (`void`) is taken as written; one that throws – as refused.
+          answer = (await onChange(next.own ? next.costs : null, op.ask)) ?? true
+        } catch {
+          answer = false
+        }
+        if (answer === true) base.current = next
+      }
+      ops.current.shift()
+      showNow()
     }
-    // Nothing on its way: sent at once; else after the click before it.
-    queue.current = pending.current++ === 0 ? run() : queue.current.then(run)
+    running.current = false
   }
-  const step = (pool: Pool, by: 1 | -1) => {
-    const next = costStep(shown.costs, pool, by)
-    if (!sameCosts(next, shown.costs)) save(next)
+  const push = (op: Op) => {
+    const now = ops.current.reduce(apply, base.current)
+    if (sameShown(apply(now, op), now)) return
+    ops.current.push(op)
+    showNow()
+    if (!running.current) void drain()
   }
+  const step = (pool: Pool, by: 1 | -1) => push({ k: 'step', pool, by, ask: ask.current })
 
   const c = cost.costs
   const sep = tight ? '·' : ' · '
@@ -180,7 +204,9 @@ export function TileCost({
           </span>
         ))}
       </span>
+      {/* Stepped aside while a question of a series' scope is open – it comes back where it stood after it. */}
       {place &&
+        !asked &&
         createPortal(
           <div
             role="dialog"
@@ -210,7 +236,7 @@ export function TileCost({
                 </button>
               </div>
             ))}
-            <button type="button" className="btn mt-0.5" aria-pressed={!shown.own} onClick={() => shown.own && save(null)} data-testid="cost-pop-reset">
+            <button type="button" className="btn mt-0.5" aria-pressed={!shown.own} onClick={() => push({ k: 'reset', ask: ask.current })} data-testid="cost-pop-reset">
               Jak kategoria ({costsText(cost.base, true)})
             </button>
           </div>,

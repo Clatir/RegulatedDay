@@ -29,9 +29,10 @@ import { AllDayBar } from '../allday/AllDayBar'
 import { attachBadge, attachBadgeTitle, dayPlace } from '../attachments/attachView'
 import { EnergyStrip, STRIP_WIDTH } from './EnergyStrip'
 import { costRoom, TileCost } from '../plan/TileCost'
+import { hasEnergy } from '../plan/energyDraw'
 import { NewBlockPopover } from './NewBlockPopover'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
-import { saveTileCosts } from '../plan/costSave'
+import { saveTileCosts, type CostAsk } from '../plan/costSave'
 import { moveWeekBlock } from './weekMove'
 import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, type Tone } from './weekText'
 import { DENIED_TEXT, dropOn, dropStart, dropStays, sameDrop, weekOnto, type BlockDrop } from './weekViews'
@@ -476,7 +477,8 @@ function DayColumn({
     onRange: (r, _rect, x) => onPick(index, columnUnder(x, index), r)
   })
   const shown = held ?? (waiting ? { startMin: waiting.startMin, endMin: waiting.startMin + waiting.durationMin } : null)
-  const stripped = day.energy != null && day.energy.samples.length > 0
+  // Not at every move of a drag: once a day's energy (T1293).
+  const stripped = useMemo(() => hasEnergy(day.energy), [day.energy])
   return (
     <div
       className={cx('relative overflow-hidden rounded-sm border-x border-line', day.when === 'today' ? 'bg-panel' : 'bg-transparent')}
@@ -492,11 +494,12 @@ function DayColumn({
       <EnergyStrip date={day.date} track={day.energy} lo={lo} ppm={ppm} height={height} />
       <div className="absolute inset-y-0 right-0" style={{ left: stripped ? STRIP_WIDTH + 1 : 0 }} data-testid={`week-blocks-${day.date}`}>
         {lanes.map(({ item, lane, lanes: n }) => (
-          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} onCosts={(costs) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs)} />
+          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
         ))}
+        {/* The place a new or a dragged block would take – where the blocks stand, right of the strip (T1288). */}
+        {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
+        {drop && <DropBand range={{ startMin: drop.startMin, endMin: drop.startMin + drop.durationMin }} lo={lo} ppm={ppm} denied={drop.denied} note={drop.onto?.text} />}
       </div>
-      {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
-      {drop && <DropBand range={{ startMin: drop.startMin, endMin: drop.startMin + drop.durationMin }} lo={lo} ppm={ppm} denied={drop.denied} note={drop.onto?.text} />}
     </div>
   )
 }
@@ -522,7 +525,7 @@ function DropBand({ range, lo, ppm, denied, note }: { range: GridRange; lo: numb
 }
 
 /** A block on the axis: its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. A click opens its day (D366). */
-export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, onCosts }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; onCosts?: (costs: Costs | null) => void | Promise<SaveAnswer> }) {
+export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, onCosts }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer> }) {
   const { top, height } = blockSpan(b, lo, ppm)
   const color = blockColor(b.categoryId, names)
   const dim = b.state === 'missed' || b.state === 'parked' || b.state === 'cancelled'
