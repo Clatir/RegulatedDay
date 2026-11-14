@@ -327,3 +327,13 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1052 | „Koniec” w „Postaw na osi” (Sprawy) zmienia długość bloku (`durationMin` przez `planCase` → `caseBlock`), nie szacunek sprawy |
 | T1053 | W okienku „Tygodnia” Początek, Koniec i Długość dotyczą wszystkich wybranych dni |
 | T1054 | Pole „Koniec” (`parseEnd`, `EndField`): koniec ≤ początek albo jawne „+1” = następna doba z dopiskiem „+1 dzień”; limity `MIN_BLOCK_MIN` (5 min) i `MAX_BLOCK_MIN` (24 h) z komunikatem pod polem; blok „po bloku” – napis „ok. HH:MM” z prognozy osi „Dziś”, w szablonach i seriach „—” |
+| T1055 | D467: `PlanBlock` bez `tag` i `waitUntilMin` (i bez typu `BlockTag`); stare pola zostają w pliku dnia i szablonu nieczytane – `blockJson` i `templateJson` nadpisują tylko pola modelu, więc starsza wersja na drugim komputerze dalej je widzi |
+| T1056 | Zdarzenie startu bloku (`block.start.planned`) nie zapisuje `tag`; `tag` ze starszych zdarzeń fakty pomijają, a starsza wersja czyta jego brak jako `null` |
+| T1057 | `RULES_VERSION` 9 (D467): starsza wersja ustępuje prowadzenia i nie zamraża dni według drugiej zmiany (jak przy wersji 6); dni już zamrożone zachowują zapisaną ocenę, niezamrożone liczą się od nowa według D467 |
+| T1058 | Na „Zacznij” czeka tylko blok stały kategorii rodzaju sesja – do swojego planowanego końca |
+| T1059 | Domyślny szablon dnia zwykłego jest pusty (bez dawnej sesji 20:00, która bez kroku kreatora co dzień byłaby przekroczeniem po maksimum 19:00); sobota zachowuje blok `analiza-tygodniowa` 9:00–10:00 jako zwykły blok elastyczny. Szablony użytkownika się nie zmieniają |
+| T1060 | Oznaczenie „po pracy” (D209) zostaje – wylicza je silnik, teraz od każdej innej pracy dnia |
+| T1061 | Przed świętem w USA aplikacja pyta tylko o sesje z warstwy sesji; w dzień skróconej sesji – bez pytania |
+| T1062 | Usunięte bez zastępstwa: `moveToNow` i `action2` („Przesuń na teraz”), `analysisAsk`, `noteFriday` i `undoList` (piątki w „Cofnij” importu zjazdów), `secondShiftStart`, `templates` w `TypeChangeInput` |
+| T1063 | Przykład „Model dnia” w specyfikacji: druga zmiana → blok życia „Sprawy domowe” 20:00–21:00, jej przedłużenie → analiza 21:00–21:30 potwierdzona z góry; liczby przykładu bez zmian |
+| T1064 | `recordText` dalej nazywa pola `tag` i `waitUntilMin` (pytanie o konflikt ze starszą wersją może je pokazać); powód blokady usypiania dla bloku spoza sesji – „blok bez usypiania” |
