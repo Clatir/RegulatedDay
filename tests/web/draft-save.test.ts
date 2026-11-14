@@ -165,7 +165,8 @@ describe('„Dziś” prowadzi szkic przez pierwszy zapis (D461)', () => {
     expect(page).toContain('escapeDraft(firstSave.of(draft.id) != null, touchedNow(draft.id))')
     expect(page).toContain("{cancelWord ? 'Odwołaj na ten dzień' : 'Usuń'}")
     expect(page).toContain("useDeleteResolver('block', (id) => (deleteTarget && block!.id === id ? deleteTarget : null))")
-    expect(page).toContain('removeAsks={() => stepsAskScope({ date, series, scope: stepsScope }, block, draft != null)}')
+    // A list of the block's routine (D473) asks no series' scope (T1102).
+    expect(page).toContain('removeAsks={() => stepsAskScope({ date, series, scope: stepsScope }, block, draft != null, routineList != null)}')
     expect(page).toMatch(/<BlockEditor\n\s*key=\{block\.id\}\n\s*day=\{date\}/)
   })
 

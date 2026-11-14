@@ -24,15 +24,20 @@ import { stepsAnswer } from './stepsUi'
  * Whether the next change of the list of `b` asks the scope by itself (a block of a series, its scope not picked yet for the
  * panel) – `StepsEditor.removeAsks`: Del then asks no question of its own (D462). A new block's draft never asks.
  */
-export function stepsAskScope(o: { date: string; series: readonly Series[]; scope: { current: SeriesScope | null } }, b: PlanBlock, isDraft: boolean): boolean {
-  return !isDraft && o.scope.current == null && seriesOfBlock(o.series, b, o.date) != null
+export function stepsAskScope(o: { date: string; series: readonly Series[]; scope: { current: SeriesScope | null } }, b: PlanBlock, isDraft: boolean, routineList = false): boolean {
+  return !isDraft && !routineList && o.scope.current == null && seriesOfBlock(o.series, b, o.date) != null
 }
 
+/**
+ * `routineList` – the list shown is the block's routine's (D473): its change is the day's own (T1102 – the routine's steps are
+ * not the series', so no scope is asked; the routine's list with the change becomes the day's block's own).
+ */
 export async function saveBlockSteps(
   o: { date: string; today: string; raw: RawRecord | null | undefined; series: readonly Series[]; names: Names; patchDraft: (steps: PlanBlock['steps']) => void; scope: { current: SeriesScope | null } },
   b: PlanBlock,
   op: StepOp,
-  isDraft: boolean
+  isDraft: boolean,
+  routineList = false
 ): Promise<SaveAnswer> {
   if (isDraft) {
     const next = applyStepOp(b.steps, op)
@@ -40,6 +45,7 @@ export async function saveBlockSteps(
     o.patchDraft(next.steps)
     return true
   }
+  if (routineList) return stepsAnswer(op, await changeBlockSteps(o.date, b, op, o.raw))
   const of = seriesOfBlock(o.series, b, o.date)
   const scope = of ? (o.scope.current ?? (await askScope('change', blockName(b, o.names), occurrenceRuleText(of, o.date, o.today)))) : 'only'
   if (!scope) return false

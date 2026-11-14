@@ -14,9 +14,11 @@
  *   itself (`{ stepsOp }`, laid on each version in the write's turn – T790; D401, D404 – „Tylko to” is the day's own edit,
  *   `blockStepsEdits`).
  */
-import { dayRaw, isRaw, putBlock, setStepDone, stepsDoneIn, type Raw } from '../data/dayEdits'
+import { dayRaw, isRaw, putBlock, setRoutineSteps, setStepDone, stepsDoneIn, type Raw } from '../data/dayEdits'
 import { dayFileFrom, withTemplateVersion, type PlanBlock, type Template } from '../model/plan'
 import { requestFrom, type RequestRecord } from '../model/requests'
+import { routineList, routineStepsOf, type RoutineSteps } from '../model/routineSteps'
+import type { Routine, RoutineVersion } from '../model/routines'
 import { applyStepOp, doneSetFrom, refusalFor, withDone, withStepsJson, type Step, type StepOp } from '../model/steps'
 
 /** Why a tick does nothing: the step is not in the block any more (removed on another computer). */
@@ -26,6 +28,16 @@ export const STEP_GONE = 'Tego kroku już nie ma.'
 export function dayBlockNow(raw: Raw | null, date: string, b: PlanBlock): PlanBlock {
   const own = raw ? dayFileFrom(raw, date).blocks.find((x) => x.id === b.id) : undefined
   return own ? { ...own, steps: withDone(own.steps, new Set(stepsDoneIn(raw, b.id))) } : b
+}
+
+/**
+ * The list of the routine of the block `b` (as `dayBlockNow` gives it) on its day as the day's file `raw` holds it now (D473,
+ * T1100): null – the block has a list of its own (or none from a routine). The window and the bar give their routines.
+ */
+export function routineStepsNow(raw: Raw | null, date: string, b: PlanBlock, routines: readonly Routine[] | undefined): RoutineSteps | null {
+  if (b.steps.length || !b.routine || !routines) return null
+  const file = raw ? dayFileFrom(raw, date) : null
+  return routineStepsOf(b, routines, file?.routineSteps, new Set(raw ? stepsDoneIn(raw, b.id) : []))
 }
 
 /** The task goes with this block (T792): a task of `block.task`, planned in this very block (`r.block`). */
@@ -57,14 +69,19 @@ export function taskStepsRaw(raw: Raw, op: StepOp): { raw: Raw; steps: Step[] } 
 
 // ------------------------------------------------------------------ a block of a day
 
-/** The day's file with a block's list changed by `op` (a removed step loses its tick of the day). */
-export function dayStepsRaw(raw: Raw | null, date: string, b: PlanBlock, op: StepOp): { raw: Raw; block: PlanBlock } | { error: string } {
+/**
+ * The day's file with a block's list changed by `op` (a removed step loses its tick of the day). A list of the block's routine
+ * (D473, `routines` given) changed becomes the block's own (T1102): the routine's list with the op, the day's entry of it gone.
+ */
+export function dayStepsRaw(raw: Raw | null, date: string, b: PlanBlock, op: StepOp, routines?: readonly Routine[]): { raw: Raw; block: PlanBlock } | { error: string } {
   const base = dayRaw(raw, date)
   const cur = dayBlockNow(base, date, b)
-  const next = applyStepOp(cur.steps, op)
+  const routine = routineStepsNow(base, date, cur, routines)
+  const next = applyStepOp(routine ? routine.steps : cur.steps, op)
   if ('error' in next) return next
   const block = { ...cur, steps: next.steps }
   let out = putBlock(base, block)
+  if (routine) out = setRoutineSteps(out, b.id, null)
   if (op.op === 'remove' && stepsDoneIn(base, b.id).includes(op.id)) out = setStepDone(out, b.id, op.id, false)
   return { raw: out, block }
 }
@@ -76,20 +93,90 @@ export interface BlockStepsEdit {
   task: Raw | null
   /** The block as the change leaves it (with the day's ticks). */
   block: PlanBlock
+  /** The list the block shows after the change (its own, or its routine's – D473), with the day's ticks. */
+  steps: Step[]
+  /**
+   * D474: this tick made the list whole – the step ticked off now was the last one not ticked (the block then ends as done,
+   * `stepsFinish`); never for a tick taken back, a step ticked already, a change of the list. A routine saved
+   * (`routineSaveEdits`): the list is whole after the save.
+   */
+  finished?: boolean
 }
 
 /**
  * A tick of a block's step on its day (D440: the panel's box, the bar's ✓): the day's `stepsDone`, and the task's own when
- * it goes with the block (T792). A step the block does not have now – `STEP_GONE`.
+ * it goes with the block (T792). A step the block does not have now – `STEP_GONE`. A step of the block's routine (D473,
+ * `routines` given): the day keeps the routine's list from this first tick on (`routineSteps`, T1100) – the block is never
+ * written. `finished` – the tick made the list whole (D474).
  */
-export function tickEdits(i: { date: string; day: Raw | null; block: PlanBlock; stepId: string; done: boolean; task: Raw | null }): BlockStepsEdit | { error: string } {
+export function tickEdits(i: { date: string; day: Raw | null; block: PlanBlock; stepId: string; done: boolean; task: Raw | null; routines?: readonly Routine[] }): BlockStepsEdit | { error: string } {
   const base = dayRaw(i.day, i.date)
   const cur = dayBlockNow(base, i.date, i.block)
-  if (!cur.steps.some((s) => s.id === i.stepId)) return { error: STEP_GONE }
-  const day = setStepDone(base, cur.id, i.stepId, i.done)
+  const routine = routineStepsNow(base, i.date, cur, i.routines)
+  const list = routine ? routine.steps : cur.steps
+  const was = list.find((s) => s.id === i.stepId)
+  if (!was) return { error: STEP_GONE }
+  let day = setStepDone(base, cur.id, i.stepId, i.done)
+  if (routine && !routine.kept) day = setRoutineSteps(day, cur.id, { routine: routine.routineId, version: routine.version, steps: routine.steps })
   const r = i.task ? requestFrom(i.task) : null
   const task = i.task && taskOfBlock(cur, r) && r!.steps.some((s) => s.id === i.stepId) ? taskStepDoneRaw(i.task, i.stepId, i.done) : null
-  return { day, task, block: { ...cur, steps: cur.steps.map((s) => (s.id === i.stepId ? { ...s, done: i.done } : s)) } }
+  const steps = list.map((s) => (s.id === i.stepId ? { ...s, done: i.done } : s))
+  const finished = i.done && !was.done && steps.every((s) => s.done)
+  return { day, task, block: routine ? cur : { ...cur, steps }, steps, ...(finished ? { finished } : {}) }
+}
+
+/**
+ * A routine saved with its version and the steps done (T1108 – „✓ Wszystkie”, „gorsze dni” and „Zapisz zaznaczone” of the
+ * card in „Dziś” and of the bar, D328): the day's ticks of the block's list become exactly `done` (the steps of the list
+ * only; ticks are the day's – `stepsDone`, one state with the panel), after the version picked for the block's routine
+ * (`routineVersionEdits`; a list of the block's own has none). The block is never written. `finished` – the list is whole
+ * after it (D474: the block then ends).
+ */
+export function routineSaveEdits(i: { date: string; day: Raw | null; block: PlanBlock; version: RoutineVersion; done: readonly string[]; task: Raw | null; routines: readonly Routine[] }): BlockStepsEdit | { error: string } {
+  let day: Raw = dayRaw(i.day, i.date)
+  let task = i.task
+  const cur = dayBlockNow(day, i.date, i.block)
+  const routine = routineStepsNow(day, i.date, cur, i.routines)
+  if (routine?.routine && routine.version !== i.version && (i.version === 'normal' || routine.routine.worse.length)) {
+    const v = routineVersionEdits({ date: i.date, day, block: cur, version: i.version, routines: i.routines })
+    if ('error' in v) return v
+    day = v.day
+  }
+  const want = new Set(i.done)
+  const list = routineStepsNow(day, i.date, cur, i.routines)?.steps ?? cur.steps
+  let taskTouched = false
+  for (const s of list) {
+    if (s.done === want.has(s.id)) continue
+    const out = tickEdits({ date: i.date, day, block: cur, stepId: s.id, done: want.has(s.id), task, routines: i.routines })
+    if ('error' in out) return out
+    day = out.day
+    if (out.task) {
+      task = out.task
+      taskTouched = true
+    }
+  }
+  const steps = list.map((s) => (s.done === want.has(s.id) ? s : { ...s, done: want.has(s.id) }))
+  const finished = steps.length > 0 && steps.every((s) => s.done)
+  return { day, task: taskTouched ? task : null, block: cur, steps, ...(finished ? { finished } : {}) }
+}
+
+/** Why the version of a block's routine cannot be picked (D473): its list is not the routine's, or the routine has no such version. */
+export const ROUTINE_VERSION_NONE = 'Ten blok nie ma kroków rutyny do wyboru wersji.'
+
+/**
+ * The version of the block's routine picked on its day (D473 „w gorszy dzień wersja na gorsze dni”, T1101 – one click, as the
+ * card's): the day keeps that version's list of the routine as it is now (`routineSteps`); the day's ticks stay as they are
+ * (a step of the other version keeps its tick – picked back, it shows again). The block is never written. Refused – why.
+ */
+export function routineVersionEdits(i: { date: string; day: Raw | null; block: PlanBlock; version: RoutineVersion; routines: readonly Routine[] }): BlockStepsEdit | { error: string } {
+  const base = dayRaw(i.day, i.date)
+  const cur = dayBlockNow(base, i.date, i.block)
+  const routine = routineStepsNow(base, i.date, cur, i.routines)
+  if (!routine?.routine || (i.version === 'worse' && !routine.routine.worse.length)) return { error: ROUTINE_VERSION_NONE }
+  // The version the day keeps already: nothing to write.
+  if (routine.kept && routine.version === i.version) return { day: base, task: null, block: cur, steps: routine.steps }
+  const list = routineList(routine.routine, i.version)
+  return { day: setRoutineSteps(base, cur.id, { routine: routine.routineId, version: i.version, steps: list }), task: null, block: cur, steps: withDone(list, new Set(stepsDoneIn(base, cur.id))) }
 }
 
 /**
@@ -97,13 +184,13 @@ export function tickEdits(i: { date: string; day: Raw | null; block: PlanBlock; 
  * same op on the task's list when the task goes with the block (T792) – refused there (its list full), nothing changes:
  * the two lists never part in silence.
  */
-export function blockStepsEdits(i: { date: string; day: Raw | null; block: PlanBlock; op: StepOp; task: Raw | null }): BlockStepsEdit | { error: string } {
-  const d = dayStepsRaw(i.day, i.date, i.block, i.op)
+export function blockStepsEdits(i: { date: string; day: Raw | null; block: PlanBlock; op: StepOp; task: Raw | null; routines?: readonly Routine[] }): BlockStepsEdit | { error: string } {
+  const d = dayStepsRaw(i.day, i.date, i.block, i.op, i.routines)
   if ('error' in d) return d
   const r = i.task ? requestFrom(i.task) : null
   const t = i.task && taskOfBlock(d.block, r) ? taskStepsRaw(i.task, i.op) : null
   if (t && 'error' in t) return t
-  return { day: d.raw, task: t ? t.raw : null, block: d.block }
+  return { day: d.raw, task: t ? t.raw : null, block: d.block, steps: d.block.steps }
 }
 
 // ------------------------------------------------------------------ a task from „Sprawy”

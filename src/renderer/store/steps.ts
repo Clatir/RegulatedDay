@@ -11,15 +11,16 @@
 import type { RawRecord, SeriesScope } from '@shared/api'
 import { paths } from '@shared/data/paths'
 import { caseDayToRead, scheduledOf } from '@shared/engine/cases'
-import { blockStepsEdits, taskStepsEdits, taskTickEdits, templateStepsChanged, tickEdits } from '@shared/engine/steps'
+import { blockStepsEdits, routineSaveEdits, routineVersionEdits, taskStepsEdits, taskTickEdits, templateStepsChanged, tickEdits } from '@shared/engine/steps'
 import { templateJson } from '@shared/model/defaults'
 import { dayFileFrom, templateFrom, type PlanBlock } from '@shared/model/plan'
 import { requestFrom } from '@shared/model/requests'
-import type { StepOp } from '@shared/model/steps'
+import type { Routine, RoutineVersion } from '@shared/model/routines'
+import type { Step, StepOp } from '@shared/model/steps'
 import { logicalDayOf } from '@shared/time/day'
 import { changeSeries, changeSeriesWith } from '../features/series/seriesActions'
 import { change, DAY_UNREADABLE, undoFiles, type CaseResult, type CaseUndoFile } from './cases'
-import { BROKEN_FILE_TEXT, rawRecord, type SaveAnswer } from './data'
+import { BROKEN_FILE_TEXT, rawRecord, useData, type SaveAnswer } from './data'
 
 /** What a change of steps did: saved (written or waiting for the folder), its outcomes, its „Cofnij” (`undoSteps`). */
 export type StepsResult = Omit<CaseResult, 'id'>
@@ -49,22 +50,57 @@ function blockChange(date: string, block: PlanBlock, seen: RawRecord | null | un
   }).then(result)
 }
 
+/** The routines the window knows now (D473: the list of a block's routine without steps of its own). */
+const routinesNow = (): readonly Routine[] => useData.getState().routines
+
 /**
  * A step of a block ticked off (`done`) or not on its day (the panel's box – D440): never a change of the block itself (a
- * block of the template or the series stays theirs, T786); a block of a task – the task's tick too (T792). `seen` – the
- * day's file as the window knows it, for one not readable now.
+ * block of the template or the series stays theirs, T786); a block of a task – the task's tick too (T792); a step of the
+ * block's routine (D473) – the day keeps the routine's list from the first tick on (T1100). `seen` – the day's file as the
+ * window knows it, for one not readable now. `finished` – saved, and the tick made the list whole (D474: the block then ends).
  */
-export function tickBlockStep(date: string, block: PlanBlock, stepId: string, done: boolean, seen?: RawRecord | null): Promise<StepsResult> {
-  return blockChange(date, block, seen, (day, task) => tickEdits({ date, day, block, stepId, done, task }))
+export async function tickBlockStep(date: string, block: PlanBlock, stepId: string, done: boolean, seen?: RawRecord | null): Promise<StepsDone> {
+  return withList(date, block, seen, (day, task) => tickEdits({ date, day, block, stepId, done, task, routines: routinesNow() }))
+}
+
+/** What a tick or a routine's save did: as `StepsResult`, and the list after it with `finished` (saved and whole – D474). */
+export type StepsDone = StepsResult & { finished: boolean; steps: Step[] }
+
+/** A change of the block's ticks with what it left: its list and whether it is whole (`finished`), once saved. */
+async function withList(date: string, block: PlanBlock, seen: RawRecord | null | undefined, make: (day: RawRecord | null, task: RawRecord | null) => ReturnType<typeof tickEdits>): Promise<StepsDone> {
+  let left: { finished: boolean; steps: Step[] } = { finished: false, steps: [] }
+  const r = await blockChange(date, block, seen, (day, task) => {
+    const out = make(day, task)
+    if (!('error' in out)) left = { finished: out.finished === true, steps: out.steps }
+    return out
+  })
+  return { ...r, finished: r.saved && left.finished, steps: left.steps }
+}
+
+/**
+ * A routine saved from its card in „Dziś” (D328, T1108 – „✓ Wszystkie”, „Zapisz zaznaczone”): the day's ticks of the block's
+ * list become exactly `done`, after the version picked; the ticks stay the day's, one state with the panel (`stepsDone`).
+ */
+export function saveRoutineSteps(date: string, block: PlanBlock, version: RoutineVersion, done: readonly string[], seen?: RawRecord | null): Promise<StepsDone> {
+  return withList(date, block, seen, (day, task) => routineSaveEdits({ date, day, block, version, done, task, routines: routinesNow() }))
 }
 
 /**
  * A block's list changed on its day (D440: Enter – `addStepOp(title, after)`, a title – `rename`, a removal, a drag –
  * `moveStepOp(steps, id, to)`): the block written into the day's file as every change of a block of the day is (a block of
- * the template or of a series – for this day only, „Tylko to”); a block of a task – the same op on the task's list (T792).
+ * the template or of a series – for this day only, „Tylko to”); a block of a task – the same op on the task's list (T792);
+ * the list of the block's routine (D473) – the routine's list with the change becomes the block's own (T1102).
  */
 export function changeBlockSteps(date: string, block: PlanBlock, op: StepOp, seen?: RawRecord | null): Promise<StepsResult> {
-  return blockChange(date, block, seen, (day, task) => blockStepsEdits({ date, day, block, op, task }))
+  return blockChange(date, block, seen, (day, task) => blockStepsEdits({ date, day, block, op, task, routines: routinesNow() }))
+}
+
+/**
+ * The version of the block's routine picked on its day (D473, T1101 – „zwykła” / „na gorsze dni” above its list): the day keeps
+ * that version's list; the ticks stay the day's.
+ */
+export function pickRoutineVersion(date: string, block: PlanBlock, version: RoutineVersion, seen?: RawRecord | null): Promise<StepsResult> {
+  return blockChange(date, block, seen, (day) => routineVersionEdits({ date, day, block, version, routines: routinesNow() }))
 }
 
 /**

@@ -15,6 +15,7 @@ import { atOf, logicalSpan } from '@shared/engine/grid'
 import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
 import { durationLabel, logicalClock } from '@shared/format'
+import { shownSteps } from '@shared/model/routineSteps'
 import { stepsCounter } from '@shared/model/steps'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -29,6 +30,12 @@ export interface DayAxis {
   from: number
   to: number
 }
+
+/**
+ * A block done (D477, T1106): it ended and was not left unfinished (`done` false – parked after it began, „Usuń”, „Dalej” as
+ * not done); a fixed block ended by its window or by „Skończyłem” (`done` null) is done too. The axis puts ✓ before its name.
+ */
+export const finishedBlock = (f: { endedAt: number | null; done: boolean | null } | undefined): boolean => f?.endedAt != null && f.done !== false
 
 /**
  * `today` – the logical day of the window (D409): the block of a task shows the task's due date badge, from `today` on (a day
@@ -66,7 +73,9 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
     }
     if (from == null || to == null) continue
     const edge = f?.startedAt != null && f.endedAt == null ? edges?.get(p.id) : undefined
-    const counter = stepsCounter(p.steps)
+    // D473: a block of a day („Dziś”) of a routine without steps of its own counts the routine's – the templates' and the
+    // wizard's axes (`today` null) count their own lists only, as their panels show them (T1103).
+    const counter = stepsCounter(today != null ? shownSteps(p, names.routines, model.dayFile) : p.steps)
     const kind = blockKind(p, names)
     items.push({
       id: p.id,
@@ -80,6 +89,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       categoryId: p.categoryId,
       background: info.bg,
       dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),
+      // D477: ended and not left unfinished – ✓ before its name.
+      ...(finishedBlock(f) ? { finished: true } : {}),
       waits: info.waits,
       ...(p.origin === 'series' ? { series: true } : {}),
       ...taskBadge(sprawa, today, model.date),
@@ -114,6 +125,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       categoryId: info.categoryId,
       background: false,
       dim: f.endedAt != null,
+      ...(finishedBlock(f) ? { finished: true } : {}),
       waits: false
     })
   }

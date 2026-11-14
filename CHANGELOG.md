@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.22.0
+- Kroki rutyny w bloku: blok z rutyną, który nie ma własnych kroków – także rutyna z szablonu dnia i z serii – pokazuje w „Krokach” kroki rutyny z nazwą i czasem, a na kafelku licznik „✓ 0/3”; widać je też na pasku pulpitu, gdy blok trwa. Nad listą wybierasz jednym kliknięciem „zwykła” albo „na gorsze dni” – ten sam wybór na karcie rutyny w „Dziś” i na pasku przełącza też panel. Odhaczenia zapisują się w dniu i są wspólne: ptaszek w panelu widać na karcie rutyny i w „Kroki ▸” na pasku, a ptaszek na karcie – w panelu; gdy wszystkie kroki są odhaczone, karta rutyny znika. Zmiana rutyny w „Rutynach” zmienia kroki bloków, w których tego dnia jeszcze nic nie odhaczyłeś; dzień z odhaczonym krokiem zachowuje swoją listę.
+- Ostatni krok kończy blok: odhaczenie ostatniego kroku (rutyna, zadanie, każdy blok z krokami – w panelu, na karcie rutyny albo na pasku) kończy trwający blok jako skończony w tej chwili. W oknie i na pasku pojawia się „Skończono: <nazwa> · Cofnij” – „Cofnij” pozwala mu biec dalej.
+- Ukończony blok zostaje na osi „Dziś” przygaszony, ze znakiem ✓ przed nazwą (bez przekreślenia); blok niedokończony – bez ✓.
+
 ## 1.21.0
 - „Niezamknięte dni” rano: po „Jak zapisano”, „Wolne” albo „Nie pamiętam” pojawia się dymek „Zamknięto <dzień>: … · Cofnij”. „Cofnij” przywraca dzień na listę, dopóki aplikacja go nie zamroziła.
 - Wyszukiwarka ma przycisk: u dołu menu bocznego jest „Szukaj · Ctrl K”.

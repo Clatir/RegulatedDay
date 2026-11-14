@@ -957,12 +957,14 @@ test('rutyny (D328): karta w „Dziś” z wersją i krokami; „Kroki ▸” w 
   try {
     await withMainLog(userData, async () => {
       await expect(page.getByTestId('routine-card')).toHaveCount(2, { timeout: 30_000 })
-      // The card: the version „na gorsze dni”, one step ticked, „Zapisz zaznaczone”.
+      // The card: the version „na gorsze dni” (the day's, T1108), its one step ticked – the list whole, the routine saved:
+      // the card closes by itself (D474), the tick is the day's.
       const card = page.getByTestId('routine-card').first()
       await card.getByTestId('routine-card-version').getByText('na gorsze dni').click()
-      await card.getByTestId('routine-card-step-woda').check()
-      await card.getByTestId('routine-card-save').click()
+      await expect(card.getByTestId('routine-card-step-kot')).toHaveCount(0)
+      await card.getByTestId('routine-card-step-woda').click()
       await expect(page.getByTestId('routine-card')).toHaveCount(1)
+      await expect.poll(() => (JSON.parse(readFileSync(dayFile, 'utf8')) as { stepsDone?: Record<string, unknown> }).stepsDone?.rut).toEqual({ woda: true })
       await shot(page, 'e8-routine-card')
       // The bar (not in the night's quiet): „Kroki ▸” unfolds the steps of the other routine; its save closes the card.
       await expect.poll(() => page.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()

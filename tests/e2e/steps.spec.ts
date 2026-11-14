@@ -1,7 +1,8 @@
 /**
  * Steps on the bar (SNT5, D440): a block with steps running – the desktop bar and the window's own bar show „☐ <krok> ·
  * krok 1/2”; the tick (a click, the desktop bar takes no keys – D229) ticks it off in the day's file and shows the next
- * one in every bar, after the last „Wszystkie kroki ✓” without a tick. Runs at any hour: the block starts from its panel.
+ * one in every bar; the last one ends the block (D474): „Skończono: <nazwa> · Cofnij”, its „Cofnij” lets it run on with
+ * „Wszystkie kroki ✓” without a tick. Runs at any hour: the block starts from its panel.
  */
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -10,7 +11,7 @@ import { expect, test } from '@playwright/test'
 import { launch, viewPage, withMainLog } from './app'
 import { seedAwake } from './seedAwake'
 
-test('kroki (D440): ptaszek na pasku pulpitu i w pasku okna odhacza krok i pokazuje następny, po ostatnim „Wszystkie kroki ✓”', async () => {
+test('kroki (D440, D474): ptaszek na pasku pulpitu i w pasku okna odhacza krok i pokazuje następny, ostatni kończy blok – „Skończono · Cofnij”', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-steps-'))
   const steps = [
     { id: 's1', title: 'Napisać testy', order: 0 },
@@ -33,8 +34,17 @@ test('kroki (D440): ptaszek na pasku pulpitu i w pasku okna odhacza krok i pokaz
       await expect(bar.getByTestId('bar-step-text')).toHaveText('Zrobić commit · krok 2/2')
       await expect(page.getByTestId('bar-step-text')).toHaveText('Zrobić commit · krok 2/2')
       await page.getByTestId('bar-step-tick').click()
-      await expect(bar.getByTestId('bar-step-text')).toHaveText('Wszystkie kroki ✓')
+      // D474: the last step ends the block now, done – „Skończono: <nazwa> · Cofnij” in every bar; the block's tile has ✓ (D477).
+      const finished = bar.getByTestId('bar-line-stepsFinished:late')
+      await expect(finished).toContainText('Skończono: Inne obowiązki', { timeout: 15_000 })
+      await expect(page.getByTestId('bar-line-stepsFinished:late')).toContainText('Skończono: Inne obowiązki')
+      await expect(bar.getByTestId('bar-step')).toHaveCount(0)
+      await expect(page.getByTestId('block-late').getByTestId('block-finished')).toBeVisible()
+      // „Cofnij”: the block runs on (the step stays ticked off) – „Wszystkie kroki ✓” without a tick.
+      await finished.getByTestId('bar-act-stepsFinished-undo').click()
+      await expect(bar.getByTestId('bar-step-text')).toHaveText('Wszystkie kroki ✓', { timeout: 15_000 })
       await expect(bar.getByTestId('bar-step-tick')).toHaveCount(0)
+      await expect(page.getByTestId('block-late').getByTestId('block-finished')).toHaveCount(0)
       // The ticks are the day's (T786): the block's list stays as it was.
       const file = JSON.parse(readFileSync(dayFile, 'utf8')) as { stepsDone?: unknown; blocks: Array<{ id: string; steps?: unknown }> }
       expect(file.stepsDone).toEqual({ late: { s1: true, s2: true } })

@@ -5,7 +5,8 @@
  * change of another field on another computer.
  */
 import { planBlockFrom, type PlanBlock } from '../model/plan'
-import { sameStepList, stepsFrom, withStepsJson } from '../model/steps'
+import { ROUTINE_STEPS } from '../model/routineSteps'
+import { sameStepList, stepsFrom, stepsJson, withStepsJson, type Step } from '../model/steps'
 import { deepEqual } from './merge'
 
 export type Raw = Record<string, unknown>
@@ -133,6 +134,23 @@ export function setStepsDone(raw: Raw, blockId: string, ids: readonly string[]):
   if (ids.length) all[blockId] = Object.fromEntries(ids.map((id) => [id, true]))
   else delete all[blockId]
   return { ...raw, stepsDone: all }
+}
+
+/**
+ * The list of a block's routine the day keeps from now on (D473, T1100: `routineSteps.<block>` = `{ routine, version, steps }`,
+ * the steps as a list is written – no `done`), or none any more (null: the field's entry goes, no empty map left behind).
+ */
+export function setRoutineSteps(raw: Raw, blockId: string, entry: { routine: string; version: string; steps: readonly Step[] } | null): Raw {
+  const all = isPlain(raw[ROUTINE_STEPS]) ? { ...(raw[ROUTINE_STEPS] as Raw) } : {}
+  if (!entry) {
+    if (!(blockId in all)) return raw
+    delete all[blockId]
+    if (Object.keys(all).length) return { ...raw, [ROUTINE_STEPS]: all }
+    const { [ROUTINE_STEPS]: _gone, ...rest } = raw
+    return rest
+  }
+  all[blockId] = { routine: entry.routine, version: entry.version, steps: stepsJson(entry.steps) ?? [] }
+  return { ...raw, [ROUTINE_STEPS]: all }
 }
 
 /** The ids of a block's steps ticked off in the day's file. */

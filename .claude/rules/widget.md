@@ -57,7 +57,9 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   (panel, okno, kliknięcie paska) i kliknięcie powiadomienia (`handleArgv` → `seen(…, notification)`).
 - Rutyny (D328, T520): `engine/routineCheck.ts` (`routinesDue`) – linia `routine:<dzień>:<blok>` z akcjami `all`, `steps`
   (rozwinięcie w pasku z `WidgetView.routines`, akcja `routine` `<blok>|<wersja>|<kroki>`), `worse`; ten sam zapis
-  `routineDone` co karta w „Dziś” (`RoutineCard`). Pulsowanie (D225): `pulseClass` w `Bar`, klasy w `index.css`.
+  `routineDone` co karta w „Dziś” (`RoutineCard`). Od 1.22 (T1108) karta i „Kroki ▸” to widoki listy bloku z dnia (`BarRoutine.version`,
+  `done` – start rozwinięcia), zapis pisze też odhaczenia (`routineSaveEdits`) i wersję, a `all` bierze wersję dnia; jedna linia „Cofnij”
+  po krokach (`stepsUndo`: `routineSaved:` / `stepsFinished:`). Pulsowanie (D225): `pulseClass` w `Bar`, klasy w `index.css`.
 - `engine/modes.ts` (sesja, zajęcia, „mniej pytań”, noc, „Odcinam się”), `engine/care.ts` (woda, ciąg pracy, kontakt).
 - Linie mają id `rodzaj:…` – pytania silnika `reguła:dzień:blok:próg`; `line|akcja|wartość` w `widgetAction('line')`.
 - Prośby (D311, D312, T503): `WidgetView.requests` – 3 osoby (`folder.widgetModel().people`), trwająca prośba (także
@@ -95,7 +97,9 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 
 - Kroki (D440, T793, reguły `kroki.md`): `WidgetView.steps` – „☐ <krok> · krok 1/4” pod blokiem na pierwszym planie
   (`StepLine`, ptaszek `bar-step-tick` = akcja `step` `<blok>|<krok>` → `tickStep`), po ostatnim „Wszystkie kroki ✓”; w każdym
-  trybie poza „Odcinam się”; bez dźwięku i kropki.
+  trybie poza „Odcinam się”; bez dźwięku i kropki. Blok rutyny bez własnych kroków – kroki rutyny (D473: `engineView` z `dayFile`,
+  `tickStep` z rutynami). Ostatni ptaszek kończy blok (D474): `finishBySteps` → timer `stepsFinish`, linia `stepsFinished:<blok>`
+  „Skończono: <nazwa> · Cofnij” przez `ROUTINE_UNDO_MS` (jak `routineSaved`), „Cofnij” = `undoStepsFinish`.
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
 

@@ -40,7 +40,10 @@ import { askScope } from '../series/scopeAsk'
 import { removeTarget, useDeleteResolver, useDeleteSelected, type DeleteTarget } from '../../lib/deleteKey'
 import { StepsEditor } from '../steps/StepsEditor'
 import { saveBlockSteps, stepsAskScope } from '../steps/blockSteps'
-import { tickBlockStep } from '../../store/steps'
+import { finishBySteps } from '../steps/stepsFinish'
+import { RoutineVersionPick } from '../steps/RoutineVersionPick'
+import { pickRoutineVersion, tickBlockStep } from '../../store/steps'
+import { routineStepsOf } from '@shared/model/routineSteps'
 import { changeSeries, removeSeries } from '../series/seriesActions'
 import { occurrenceRuleText, seriesBlockPatch, touchesSeries } from '../series/seriesForm'
 import { blockName, type Names } from '../plan/blockView'
@@ -240,6 +243,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     }
   }, [pick, date, plan])
   const block = draft ?? plan.find((b) => b.id === selected) ?? null
+  // D473: a block of a routine without steps of its own shows the routine's in „Kroki” (a new block's draft – its own list only).
+  const routineList = block && !draft ? routineStepsOf(block, routines, model.dayFile?.routineSteps, new Set(model.dayFile?.stepsDone[block.id] ?? [])) : null
   // D427: what the axis draws of a hidden calendar's blocks: the one whose panel is open (Ctrl K found it – or it was open when the
   // calendar was unchecked) and the ones that must stay (running, begun outside the plan – T1002), each with the calendar's name on its
   // tile. Not counted as „ukryte”. The axis keeps the hours of all the blocks (`extent`), the pushing of blocks is counted from the day.
@@ -437,12 +442,24 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
       .then((ok) => (ok ? true : 'asked'))
   }
   /**
+   * A tick of the panel (D440); the last step ticked off today saves the block's routine (its card closes, T1108) and ends the
+   * block now, done (D474 – „Skończono: … · Cofnij”).
+   */
+  const tickStep = async (b: PlanBlock, id: string, done: boolean) => {
+    const r = await tickBlockStep(date, b, id, done, raw)
+    const version = routineStepsOf(b, routines, model.dayFile?.routineSteps)?.version ?? 'normal'
+    if (r.finished && isToday) await finishBySteps(date, b, blockName(b, names), b.routine ? { version, steps: r.steps.map((s) => s.id) } : null)
+    return r
+  }
+  /**
    * A change of the steps of the block in the panel (`isDraft` as in `changeBlock`): the new block's go into its draft (over the
    * latest draft) – and once its first save has started, also after it as the block's own change (written, T1072); a block of the
-   * plan – as ever; a draft gone meanwhile – nothing.
+   * plan – as ever; a draft gone meanwhile – nothing. `fromRoutine` – the list is the block's routine's (D473, T1102).
    */
-  const changeSteps = (b: PlanBlock, op: StepOp, isDraft: boolean): Promise<SaveAnswer> => {
+  const changeSteps =(b: PlanBlock, op: StepOp, isDraft: boolean, fromRoutine = false): Promise<SaveAnswer> => {
     const o = { date, today, raw, series, names, patchDraft: (steps: PlanBlock['steps']) => patchBlockDraft(date, { steps }), scope: stepsScope }
+    // The list of the block's routine (D473): its change is the day's own, never asked of a series (T1102).
+    if (fromRoutine && !isDraft) return saveBlockSteps(o, b, op, false, true)
     const d = draftNow(b.id)
     const shown = d ? saveBlockSteps(o, d, op, true) : null
     const later = firstSave.after(b.id, () => saveBlockSteps(o, d ?? b, op, false))
@@ -687,12 +704,13 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             newBlock={draft ? { add: (name) => (firstSave.of(draft.id) ? false : void changeBlock(draft, { name }, true)) } : undefined}
             steps={
               <StepsEditor
-                steps={block.steps}
+                steps={routineList?.steps ?? block.steps}
                 lengthMin={block.durationMin}
                 ticks={!draft}
-                onTick={(id, done) => tickBlockStep(date, block, id, done, raw)}
-                onOp={(op) => changeSteps(block, op, draft != null)}
-                removeAsks={() => stepsAskScope({ date, series, scope: stepsScope }, block, draft != null)}
+                onTick={(id, done) => tickStep(block, id, done)}
+                onOp={(op) => changeSteps(block, op, draft != null, routineList != null)}
+                removeAsks={() => stepsAskScope({ date, series, scope: stepsScope }, block, draft != null, routineList != null)}
+                aside={routineList?.routine?.worse.length ? <RoutineVersionPick version={routineList.version} onPick={(v) => void pickRoutineVersion(date, block, v, raw)} /> : undefined}
               />
             }
             place={draft ? undefined : dayPlace}

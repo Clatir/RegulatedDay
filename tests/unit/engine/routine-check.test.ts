@@ -90,7 +90,8 @@ describe('linia rutyny w pasku (D328)', () => {
     const line = v.lines.find((l) => l.id === `routine:${DATE}:rut`)!
     expect(line).toMatchObject({ text: 'Rutyna poranna', dot: false })
     expect(line.actions.map((a) => a.label)).toEqual(['✓ Wszystkie', 'Kroki ▸', 'gorsze dni'])
-    expect(v.routines).toEqual([{ line: line.id, block: 'rut', name: 'Rutyna poranna', normal: morning.normal, worse: morning.worse }])
+    // T1108: the day's version of the block and its ticks (none here) – „Kroki ▸” starts from them.
+    expect(v.routines).toEqual([{ line: line.id, block: 'rut', name: 'Rutyna poranna', normal: morning.normal, worse: morning.worse, version: 'normal', done: [] }])
   })
 
   it('bez wersji na gorsze dni – bez „gorsze dni”; po zapisie i po 3 h od końca rutyny linii nie ma', () => {

@@ -29,7 +29,8 @@ import { endsAtOf, fixedStartPair, laterWork, plannedEndOf, setsWorkEnd, timerNo
 import { workedUntilOf } from './engine/explain'
 import { namedById, type NamedBlock } from './blockName'
 import { namingOf } from './engine/context'
-import type { PlanBlock } from './model/plan'
+import type { DayFile, PlanBlock } from './model/plan'
+import { shownSteps } from './model/routineSteps'
 import type { RequestRecord } from './model/requests'
 import type { Routine } from './model/routines'
 import type { AllDayEvent } from './model/allDay'
@@ -65,8 +66,10 @@ export interface EngineInput {
   carried?: RunningRequest | null
   /** The first day of the ritual (D320): from it the bar has „Rytuał” after the end of work. */
   ritualFrom?: string | null
-  /** The routines (D328): a routine of a block begun today and not ticked off has its line. */
+  /** The routines (D328): a routine of a block begun today and not ticked off has its line; D473 – its steps on the step line. */
   routines?: readonly Routine[]
+  /** The day's file (D473): the routine's list it keeps for a block and the ticks of its steps (none – the routine as it is). */
+  dayFile?: DayFile | null
   /** The records of „Sprawy” (D384): a task whose block ended asks „Zadanie zrobione?”. */
   cases?: readonly RequestRecord[]
   /** The all-day events (D405): today's are the label at the left of the desktop bar (read only, never an input of the day). */
@@ -364,10 +367,10 @@ export function engineView(i: EngineInput): WidgetView {
   // for 3 h after the routine; the card in „Dziś” keeps them to the day's end (T520).
   const routines: BarRoutine[] = []
   if (!hidden && !modes.night && state.grid.date === logicalDayOf(now))
-    for (const r of routinesDue(i.ctx, state, i.routines ?? [])) {
+    for (const r of routinesDue(i.ctx, state, i.routines ?? [], i.dayFile)) {
       if (state.now >= r.to + ROUTINE_LINE_MIN) continue
       const line = `routine:${state.grid.date}:${r.block}`
-      routines.push({ line, block: r.block, name: nameOf(r.block), normal: r.normal, worse: r.worse })
+      routines.push({ line, block: r.block, name: nameOf(r.block), normal: r.normal, worse: r.worse, version: r.version, done: r.steps.filter((s) => s.done).map((s) => s.id) })
       lines.push({ id: line, text: nameOf(r.block), actions: [{ id: 'all', label: '✓ Wszystkie' }, { id: 'steps', label: 'Kroki ▸' }, ...(r.worse.length ? [{ id: 'worse', label: 'gorsze dni' }] : [])], dot: false })
     }
   // „Zadanie zrobione? · Tak · Wraca na listę” (D384, T754): quiet lines (no dot) after the routines, today, for 3 h after
@@ -402,8 +405,10 @@ export function engineView(i: EngineInput): WidgetView {
     .reverse()
 
   // The steps of the block in the foreground (D440): its list as its day has it ticked – the first not ticked, or all
-  // ticked. Beside the block wherever the block is (a quiet mode, the night too); never while the widget is hidden.
-  const fgSteps = front ? i.ctx.plan.find((b) => b.id === front.fg.info.id)?.steps : undefined
+  // ticked. Beside the block wherever the block is (a quiet mode, the night too); never while the widget is hidden. A block of
+  // a routine without steps of its own – the routine's (D473).
+  const fgPlan = front ? i.ctx.plan.find((b) => b.id === front.fg.info.id) : undefined
+  const fgSteps = fgPlan ? shownSteps(fgPlan, i.routines, i.dayFile) : undefined
   const open1 = fgSteps?.length ? firstOpen(fgSteps) : null
   const steps: BarSteps | null = front && fgSteps?.length ? { block: front.fg.info.id, step: open1 ? { id: open1.step.id, title: open1.step.title, n: open1.n } : null, total: fgSteps.length } : null
   const block = front ? { name: nameOf(front.fg.info.id), className: `${CLASS_NAME[front.fg.info.rules.cls] ?? ''}${reserve ? ' · rezerwa energii' : ''}`, endsAt: front.endsAt } : null

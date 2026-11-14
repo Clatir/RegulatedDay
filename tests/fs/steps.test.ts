@@ -2,7 +2,7 @@
  * Steps in the data folder (SNT5, D440, T786–T793) on a copy of a folder: two computers ticking off steps of one block –
  * A and B each from the file as it was before the other's tick, and a conflict copy of OneDrive – nothing lost, no
  * question; the fields a version without steps does not know stay in the files it writes; the bar's step line with its
- * tick („☐ Napisać testy · krok 1/4”, then the next, after the last „Wszystkie kroki ✓”), a task's block ticking the task
+ * tick („☐ Napisać testy · krok 1/4”, then the next; the last ends the block – D474 – and its „Cofnij” shows „Wszystkie kroki ✓”), a task's block ticking the task
  * too – without a sound or a notification.
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -136,8 +136,48 @@ describe('kroki na dwóch komputerach (T788)', () => {
   })
 })
 
+describe('rutyna na pasku – jedno odhaczenie z panelem (D473, D479, T1108)', () => {
+  it('„✓ Wszystkie” odhacza kroki w dniu i zapisuje rutynę; „Cofnij” zdejmuje oba; ostatni krok linii kroku zapisuje rutynę i kończy blok', async () => {
+    mkdirSync(join(dataDir, 'routines'), { recursive: true })
+    write(paths.record('routine', 'r'), { schema: 1, id: 'r', name: 'Poranna', normal: [{ id: 'woda', name: 'woda', min: 2 }, { id: 'kot', name: 'kot', min: 8 }], worse: [] })
+    write(paths.day(DAY), { schema: 1, date: DAY, blocks: [{ id: 'rut', categoryId: 'rutyny', startMin: 10 * 60, durationMin: 10, fixed: false, origin: 'user', routine: 'r' }] })
+    const clock = { now: placeLogical(DAY, 10 * 60 + 5) }
+    const a = await computer('pca', clock)
+    await a.w.refresh()
+    const line = `routine:${DAY}:rut`
+    const lines = () => a.w.current().lines.map((l) => l.id)
+    const done = async () => (await a.folder.readDay(DAY)).events.filter((e) => e.k === 'routine.done').length
+    expect(lines()).toContain(line)
+    // „✓ Wszystkie”: the steps ticked off in the day (the panel's state), the routine saved – the block not begun stays.
+    await a.w.act('line', `${line}|all`, 'bar')
+    expect(dayFileFrom(read(paths.day(DAY)), DAY).stepsDone.rut?.sort()).toEqual(['kot', 'woda'])
+    expect(await done()).toBe(1)
+    expect(a.w.current().lines.find((l) => l.id === 'routineSaved:rut')).toMatchObject({ text: 'Zapisano: Poranna (zwykła) – 2 z 2' })
+    expect(lines()).not.toContain(line)
+    // „Cofnij”: the routine waits again and its ticks are gone.
+    clock.now += 1_000
+    await a.w.act('line', 'routineSaved:rut|undo', 'bar')
+    expect(dayFileFrom(read(paths.day(DAY)), DAY).stepsDone.rut).toBeUndefined()
+    expect(lines()).toContain(line)
+    // The block runs: the step line has the routine's steps; the last tick saves the routine and ends the block (D474).
+    expect((await a.folder.timerClick({ a: 'start', block: 'rut', day: DAY } as never)).ok).toBe(true)
+    clock.now += 60_000
+    await a.w.refresh()
+    expect(a.w.current().steps).toMatchObject({ block: 'rut', step: { id: 'woda', n: 1 }, total: 2 })
+    await a.w.act('step', 'rut|woda', 'bar')
+    clock.now += 1_000
+    await a.w.act('step', 'rut|kot', 'bar')
+    expect(a.w.current().lines.find((l) => l.id === 'stepsFinished:rut')).toMatchObject({ text: 'Skończono: Poranna' })
+    expect(lines()).not.toContain(line)
+    expect(await done()).toBe(2)
+    expect(a.w.current().block).toBeNull()
+    expect(a.w.current().note).toBeNull()
+    await a.folder.close('quit')
+  })
+})
+
 describe('linia kroku na pasku (D440, T793)', () => {
-  it('„☐ Napisać testy · krok 1/4”, klik odhacza i pokazuje następny, po ostatnim „Wszystkie kroki ✓”; bez dźwięku i powiadomień', async () => {
+  it('„☐ Napisać testy · krok 1/4”, klik odhacza i pokazuje następny, ostatni kończy blok (D474) – „Skończono · Cofnij”, po „Cofnij” „Wszystkie kroki ✓”; bez dźwięku i powiadomień', async () => {
     write(paths.day(DAY), { schema: 1, date: DAY, blocks: [blockRaw] })
     const clock = { now: placeLogical(DAY, 10 * 60) }
     const a = await computer('pca', clock)
@@ -157,9 +197,18 @@ describe('linia kroku na pasku (D440, T793)', () => {
       clock.now += 1_000
       await a.w.act('step', `wd|${s}`, 'bar')
     }
+    // D474: the last step ends the block now, done – „Skończono: Inne obowiązki · Cofnij” instead of the step line.
+    expect(line()).toBeNull()
+    const finished = () => a.w.current().lines.find((l) => l.id === 'stepsFinished:wd')
+    expect(finished()).toMatchObject({ text: 'Skończono: Inne obowiązki', actions: [{ id: 'undo', label: 'Cofnij' }], dot: false })
+    expect(a.w.current().block).toBeNull()
+    expect(dayFileFrom(read(paths.day(DAY)), DAY).stepsDone.wd!.sort()).toEqual(['s1', 's2', 's3', 's4'])
+    // „Cofnij”: the block runs on, every step ticked off – „Wszystkie kroki ✓”, nothing to tick.
+    clock.now += 1_000
+    await a.w.act('line', 'stepsFinished:wd|undo', 'bar')
+    expect(finished()).toBeUndefined()
     expect(line()).toBe(ALL_STEPS_TEXT)
     expect(a.w.current().steps!.step).toBeNull()
-    expect(dayFileFrom(read(paths.day(DAY)), DAY).stepsDone.wd!.sort()).toEqual(['s1', 's2', 's3', 's4'])
     expect(a.shown).toEqual([])
     // A step gone (removed on another computer): the bar says so, nothing written.
     clock.now += 1_000

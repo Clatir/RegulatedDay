@@ -808,7 +808,11 @@ Wszystko w aplikacji jest blokiem. Nie ma osobnej listy zadań, więc aplikacja 
   Twojej odpowiedzi na propozycję przesunięcia, bez odpowiedzi według planu. Aplikacja nigdy nie zmienia kolejności
   kroków, najwyżej przesuwa całą rutynę w czasie. Kroki odhaczasz po powrocie do komputera, wszystkie naraz albo
   pojedynczo. Wybór rutyny w panelu bloku kopiuje jej kroki (wersja zwykła, z czasem) do „Kroków” bloku; potem są
-  niezależne od rutyny (D460, „Podzadania” w specyfikacji rozszerzeń).
+  niezależne od rutyny (D460, „Podzadania” w specyfikacji rozszerzeń). Blok z rutyną bez własnych kroków (także z
+  szablonu i serii) pokazuje w „Krokach” kroki rutyny – wersję zwykłą albo, jednym kliknięciem, na gorsze dni; odhaczenia
+  zapisują się w dniu, a zmiana rutyny zmienia kroki bloków, w których tego dnia nic nie odhaczono (D473). Wybór wersji i
+  odhaczenia są jedne dla panelu bloku, karty rutyny w „Dziś” i paska; odhaczenie wszystkich kroków zapisuje rutynę (D479).
+  Odhaczenie ostatniego kroku każdego bloku kończy go jako skończony – „Skończono: <nazwa> · Cofnij” (D474).
 - **Prośba** ma osobę wybraną z listy (z „+ dodaj osobę”), szacunek czasu i jeden z trzech trybów:
   - **do kolejki:** wybierasz ją rano w planie;
   - **zrobione teraz:** jedno kliknięcie z osobą, bez szacunku, czas liczy się do „Koniec” po powrocie, a bez niego do
