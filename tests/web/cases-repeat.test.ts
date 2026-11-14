@@ -114,6 +114,26 @@ describe('„Zrobione” zadania, które się powtarza (D465)', () => {
     expect(useUi.getState().toasts).toEqual([])
   })
 
+  it('następne idzie z odhaczeniem (T923): kładzie się dopiero po nim – pytanie przy zadaniu trzyma je, „ich” zabiera; „Cofnij” – tak samo', async () => {
+    const { sent, set } = stub([daily()])
+    const r = await moveCase('t1', 'done')
+    const tick = sent[0]!.findIndex((e) => e.rel === rel('t1'))
+    expect(sent[0]![tick]!.after).toBeUndefined()
+    expect(sent[0]!.find((e) => e.rel === rel(nextTaskId('t1')))!.after).toEqual([tick])
+    // „Cofnij” of both: the next one leaves only once the task is back (a question about it keeps the next one).
+    for (const u of r.undo) set(u.rel, u.after)
+    expect((await undoCase(r.undo)).saved).toBe(true)
+    const back = sent[1]!.findIndex((e) => e.rel === rel('t1'))
+    expect(sent[1]![back]!.after).toBeUndefined()
+    expect(sent[1]!.find((e) => e.rel === rel(nextTaskId('t1')))).toMatchObject({ remove: true, after: [back] })
+    // „Tak” of „Zadanie zrobione?” in the window – the same.
+    for (const t of useUi.getState().toasts) closeToast(t.id)
+    const s2 = stub([daily()])
+    await answerTask('t1', 'done')
+    const tick2 = s2.sent[0]!.findIndex((e) => e.rel === rel('t1'))
+    expect(s2.sent[0]!.find((e) => e.rel === rel(nextTaskId('t1')))!.after).toEqual([tick2])
+  })
+
   it('„Powtarzaj” zapisuje regułę i koniec (`changeCase`); prośba – odmowa', async () => {
     const { sent } = stub([newTask('t2', Date.now(), TODAY, { title: 'Raz' })!])
     expect((await changeCase('t2', { repeat: { rule: { kind: 'workdays' }, until: null, count: 5 } })).saved).toBe(true)
@@ -153,6 +173,35 @@ describe('wiersz zadania: pole „Powtarzaj” i reguła słowami (D465)', () =>
     if ('error' in after) throw new Error(after.error)
     await act(async () => set(rel('t2'), after.raw))
     expect(q('case-status', host!.querySelector<HTMLElement>('[data-case="t2"]')!)!.textContent).toContain('↻ codziennie')
+  })
+
+  it('niezapisana zasada zostaje, gdy zmienia się data zadania (tu albo na drugim komputerze); zmiana zapisanego powtarzania pokazuje je od nowa', async () => {
+    const t = newTask('t2', Date.now(), TODAY, { title: 'Raz', list: 'week', doDate: addDays(TODAY, 3) })!
+    const { sent, set } = stub([t])
+    await render()
+    const row = () => host!.querySelector<HTMLElement>('[data-case="t2"]')!
+    await act(async () => q('case-repeat-open', row())!.click())
+    const pick = async (v: string) =>
+      act(async () => {
+        const rule = q('series-rule', row()) as HTMLSelectElement
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(rule, v)
+        rule.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+    await pick('workdays')
+    expect(q('case-repeat-save', row())).not.toBeNull()
+    // „Wykonać” moved meanwhile (the defaults of a new rule count from it): the rule being edited stays.
+    const moved = patchedRaw(t, { doDate: addDays(TODAY, 5) }, Date.now())
+    if ('error' in moved) throw new Error(moved.error)
+    await act(async () => set(rel('t2'), moved.raw))
+    expect((q('series-rule', row()) as HTMLSelectElement).value).toBe('workdays')
+    expect(q('case-repeat-save', row())).not.toBeNull()
+    // The repeat itself saved on another computer: the form shows it.
+    const saved = patchedRaw(moved.raw, { repeat: { rule: { kind: 'daily' }, until: null, count: null } }, Date.now())
+    if ('error' in saved) throw new Error(saved.error)
+    await act(async () => set(rel('t2'), saved.raw))
+    expect((q('series-rule', row()) as HTMLSelectElement).value).toBe('daily')
+    expect(q('case-repeat-save', row())).toBeNull()
+    expect(sent).toEqual([])
   })
 
   it('tekst w wierszu (czysty): reguła przy zadaniu niezrobionym, w „Zrobione” – nie', () => {

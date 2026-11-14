@@ -136,6 +136,11 @@ export interface CaseUndoFile {
   rel: string
   before: RawRecord | null
   after: RawRecord | null
+  /**
+   * The file this one goes with (T923: the next task of a task that repeats goes with its tick): its entry is laid only
+   * after that file's – a question about it keeps this one waiting, „ich” takes it out with it; absent – on its own.
+   */
+  owner?: string
 }
 
 /** What a change of „Sprawy” did: saved (written or waiting for the folder), its edits' outcomes, its „Cofnij”. */
@@ -168,21 +173,29 @@ export function caseAnswer(r: Pick<CaseResult, 'saved' | 'error' | 'outcomes' | 
 
 /**
  * Edits of several files in one turn: `make` puts each file's version before and after (a file put twice keeps its
- * first before) or says why nothing is written; saved together – one edit of the queue.
+ * first before) or says why nothing is written; saved together – one edit of the queue. `owner` – the file put before
+ * this one that it goes with (`CaseUndoFile.owner`, T923); not written by this change – this one goes on its own.
  */
-export async function change(make: (put: (rel: string, before: RawRecord | null, after: RawRecord | null) => void) => Promise<string | null> | string | null): Promise<CaseResult> {
+export async function change(make: (put: (rel: string, before: RawRecord | null, after: RawRecord | null, owner?: string) => void) => Promise<string | null> | string | null): Promise<CaseResult> {
   let error: string | null = null
   let undo: CaseUndoFile[] = []
   const sent: SendState = { afterSend: false }
   const out = await trySaveWith(async () => {
-    const files = new Map<string, { before: RawRecord | null; after: RawRecord | null }>()
-    error = await make((rel, before, after) => {
+    const files = new Map<string, CaseUndoFile>()
+    error = await make((rel, before, after, owner) => {
       const had = files.get(rel)
-      files.set(rel, { before: had ? had.before : before, after })
+      const by = owner ?? had?.owner
+      files.set(rel, { rel, before: had ? had.before : before, after, ...(by ? { owner: by } : {}) })
     })
     if (error) return []
-    undo = [...files].map(([rel, f]) => ({ rel, before: f.before, after: f.after })).filter((f) => (f.before == null ? f.after != null : f.after == null || !sameContentAs(f.before, f.after)))
-    return undo.map((f) => editOf(f.rel, f.before, f.after))
+    undo = [...files.values()].filter((f) => (f.before == null ? f.after != null : f.after == null || !sameContentAs(f.before, f.after)))
+    const place = new Map(undo.map((f, i) => [f.rel, i]))
+    return undo.map((f, i) => {
+      const e = editOf(f.rel, f.before, f.after)
+      const o = f.owner != null ? place.get(f.owner) : undefined
+      // Places in this list; `sentEntries` follows them to the list sent (an owner with nothing to write – on its own).
+      return e && o != null && o < i ? { ...e, after: [o] } : e
+    })
   }, sent)
   if (error) toast(error, 'error', 6000)
   const saved = !error && isSaved(out)
@@ -229,6 +242,8 @@ export function nextTaskText(raw: RawRecord, today: string): string {
  * One record changed by `fn` from what it is in its turn (or refused with why); gone – „Tej sprawy już nie ma.”. A task that
  * repeats taken to „Zrobione” by it (D465) gets its next task in the same edit – unless the window has that one already (made
  * on another computer, or before a tick taken back by hand): the next one is never written twice; „Cofnij” then for both.
+ * The next one goes with the tick (T923, `owner`): a tick that meets a change elsewhere keeps it waiting, „ich” takes it out –
+ * never an open task and its next one side by side; its „Cofnij” removes the next one only after the task is back.
  */
 async function changeRecord(id: string, fn: (raw: RawRecord, at: number) => { raw: RawRecord } | { error: string }): Promise<CaseResult> {
   // The next task this change made (written in the callback – its last run counts).
@@ -244,7 +259,7 @@ async function changeRecord(id: string, fn: (raw: RawRecord, at: number) => { ra
     put(rel, before, next.raw)
     const n = nextTaskRaw(before, next.raw, at, marketDay)
     if (n && !rawRecord(relOf(n.id))) {
-      put(relOf(n.id), null, n.raw)
+      put(relOf(n.id), null, n.raw, rel)
       made.raw = n.raw
     }
     return null
@@ -436,7 +451,7 @@ export function undoFiles(undo: readonly CaseUndoFile[], kinds: readonly string[
       const now = c.kind === 'day' ? (days[c.date!] ?? null) : rawRecord(u.rel)
       const stands = now == null ? u.after == null : u.after != null && isRaw(now) && sameContentAs(now, u.after)
       // Changed since (here or on another computer): never written over.
-      if (stands) put(u.rel, now, u.before)
+      if (stands) put(u.rel, now, u.before, u.owner)
     }
     return null
   })

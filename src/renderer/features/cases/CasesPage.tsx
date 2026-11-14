@@ -331,10 +331,11 @@ export function DatesForm({ x, set }: { x: CaseItem; set: (patch: { dueDate?: st
 function RepeatForm({ x, today, onSaved }: { x: CaseItem; today: string; onSaved: () => void }) {
   const r = x.record
   const base = useMemo(() => repeatDraft(r.repeat, r.doDate ?? r.dueDate ?? today), [r.repeat, r.doDate, r.dueDate, today])
-  const sig = JSON.stringify(base)
+  // The saved repeat changed (here, on another computer) or another task: the form shows it again. Not the defaults of a new
+  // rule counted from the task's date and today – a date moved meanwhile or 04:00 never wipes the rule being edited.
+  const saved = JSON.stringify([r.id, r.repeat ?? null])
   const [draft, setDraft] = useState<SeriesDraft>(base)
-  // The repeat changed (here, on another computer): the form shows it again.
-  useEffect(() => setDraft(base), [sig])
+  useEffect(() => setDraft(base), [saved])
   const [busy, run] = useBusy()
   const input = repeatInputOf(draft)
   const save = () =>
@@ -385,7 +386,8 @@ function PlanForm({ x, today, title, onDone }: { x: CaseItem; today: string; tit
   const now = useNow(60_000)
   const [date, setDate] = useState(x.scheduled?.day && x.scheduled.day >= today ? x.scheduled.day : today)
   const [start, setStart] = useState<number | null>(null)
-  // D464: the end typed changes the block's length (the sprawa's estimate stays); null – the estimate.
+  // D464: the end typed changes the block's length (the sprawa's estimate stays); null – the estimate. The start shown stays:
+  // a proposal is pinned first (counted again for the longer block it would move to another free place).
   const [length, setLength] = useState<number | null>(null)
   const long = length ?? estimateOf(x.record)
   const model = useDay(date)
@@ -409,7 +411,7 @@ function PlanForm({ x, today, title, onDone }: { x: CaseItem; today: string; tit
       <span className="text-muted">od</span>
       <TimeField value={at} onCommit={setStart} shellClassName="w-[76px]" aria-label="Początek" data-testid="case-plan-start" />
       <span className="text-muted">do</span>
-      {at != null ? <EndField startMin={at} durationMin={long} onCommit={setLength} shellClassName="w-[76px]" aria-label="Koniec" data-testid="case-plan-end" /> : null}
+      {at != null ? <EndField startMin={at} durationMin={long} onCommit={(l) => (setStart(at), setLength(l))} shellClassName="w-[76px]" aria-label="Koniec" data-testid="case-plan-end" /> : null}
       <span className="text-muted" data-testid="case-plan-length">
         {durationLabel(long)}
       </span>
