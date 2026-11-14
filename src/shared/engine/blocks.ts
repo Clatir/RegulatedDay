@@ -10,6 +10,7 @@ import type { PlanBlock } from '../model/plan'
 import type { RulesSettings } from '../model/settings'
 import type { BlockFact, DayFacts } from './facts'
 import { idxOfLogical, type Grid } from './grid'
+import { groupRootOf, placedAfter } from './parallel'
 
 export interface BlockInfo {
   id: string
@@ -24,6 +25,11 @@ export interface BlockInfo {
   /** Planned start (index), null when anchored. */
   start: number | null
   anchor: string | null
+  /**
+   * The block of the plan it runs beside (D476, D492, T1161): the first block of its group – its start is that block's, its
+   * length its own (`plannedSpan`, the forecast); null – none, or the block it names is not in the plan (a block of its own).
+   */
+  alongside: string | null
   durationMin: number
   /** A fixed block of a category of the kind „sesja”: starts only after „Zacznij”, up to its planned end (D192, D467). */
   waits: boolean
@@ -89,6 +95,7 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
       bg: p.background ?? rules.startsInBackground,
       start,
       anchor: p.anchor,
+      alongside: null,
       durationMin: p.durationMin,
       // A mark an older version wrote („druga zmiana”, „analiza tygodniowa”) is never read: the category decides (D467).
       waits: rules.kind === 'session' && p.fixed,
@@ -139,13 +146,24 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
           routine: null,
           steps: [],
           movedFrom: null,
-          byVariant: false
+          byVariant: false,
+          alongside: null
         },
         false
       )
     )
   }
   const byId = new Map(out.map((b) => [b.id, b]))
+  // D492 (T1161): a block beside another block of the plan starts with the first block of its group.
+  const planned = new Map(plan.map((p) => [p.id, p]))
+  for (const b of out) {
+    const root = b.inPlan ? groupRootOf(planned, b.id) : null
+    // A group's block whose own start waits for this one (a file of another computer: anchored after it) – no group, no cycle.
+    if (root == null || placedAfter(planned, root, b.id)) continue
+    b.alongside = root
+    b.start = byId.get(root)!.start
+    b.anchor = null
+  }
   // D359: a remote class on a day of „zjazd” – of the import, of the template, added by you – is a block of the „zjazd”
   // (it moves the maximum, never an extension), by the type in force at its planned start (begun outside the plan: its
   // first run); on other days as before.
@@ -163,6 +181,10 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
 
 /** Planned end by the plan's own times (anchors follow their anchor's planned end). */
 export function plannedSpan(b: BlockInfo, byId: Map<string, BlockInfo>, depth = 0): { start: number; end: number } | null {
+  // A block beside another (D492): from the start of its group's block (an anchored one too), as long as itself.
+  const root = b.alongside != null && depth <= 20 ? byId.get(b.alongside) : undefined
+  const along = root ? plannedSpan(root, byId, depth + 1) : null
+  if (along) return { start: along.start, end: along.start + b.durationMin }
   if (b.start != null) return { start: b.start, end: b.start + b.durationMin }
   if (!b.anchor || depth > 20) return null
   const a = byId.get(b.anchor)

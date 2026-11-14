@@ -97,6 +97,6 @@ describe('D467 – blok z dawnym oznaczeniem to zwykły blok swojej kategorii', 
   })
 
   it('wersja reguł rośnie: starsza wersja nie zamraża dni według drugiej zmiany (prowadzi nowsza)', () => {
-    expect(RULES_VERSION).toBe(9)
+    expect(RULES_VERSION).toBeGreaterThanOrEqual(9)
   })
 })

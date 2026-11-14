@@ -6,6 +6,12 @@
  * of different categories in the foreground. A block waiting for „Zacznij” stands at its planned start, and once that
  * has passed, at now at the earliest (until its window ends); a session counts with its typical length.
  *
+ * A group of parallel blocks (D476, D492, T1162) takes its time once: a block beside another one not begun yet stands where
+ * the forecast puts the group's first block, as long as itself; the first block is in the foreground (the others in the
+ * background – until the timer of the group, 1.23-B, picks the foreground by „Zacznij”), and what comes after the group in
+ * the foreground waits for its longest block in the foreground. A group whose first block has no place in the forecast (in
+ * the background and not begun, gone, its window passed) – its blocks are counted each by itself, at the group's start.
+ *
  * Two modes: 'window' – waiting blocks in their planned window at full length (the boundary's proposal, the maximum, the
  * variants' marker); 'typical' – from now with the typical length (energy, budget, hard end, pool).
  */
@@ -87,6 +93,48 @@ export function forecast(inp: ForecastInput): Forecast {
     return m + Math.max(0, length - ranMinutes(f, m))
   }
 
+  // Parallel groups (T1162): the blocks not begun beside a block of the plan, by that block's id.
+  const beside = new Map<string, BlockInfo[]>()
+  for (const b of inp.blocks) {
+    if (b.alongside == null || status(b) !== 'open') continue
+    const root = byId.get(b.alongside)
+    if (!root || !b.inPlan) continue
+    beside.set(root.id, [...(beside.get(root.id) ?? []), b])
+  }
+  /** Where the group's first block has a place: running, a fixed or waiting one not begun, one of the foreground chain. */
+  const rootPlaced = (r: BlockInfo): boolean => {
+    const s = status(r)
+    return s === 'running' || s === 'paused' || (s === 'open' && ((r.fixed || r.waits) && r.start != null ? true : !r.bg))
+  }
+  // The first block gone (cancelled or parked before its start, over already): the group stays together (D497) – its first block
+  // not begun stands for it, the others beside that one.
+  for (const [rootId, list] of [...beside]) {
+    const s = status(byId.get(rootId)!)
+    if ((s !== 'gone' && s !== 'ended') || list.length < 2) continue
+    beside.delete(rootId)
+    beside.set(list[0]!.id, list.slice(1))
+  }
+  const grouped = new Set<string>()
+  for (const [rootId, list] of beside) if (rootPlaced(byId.get(rootId)!)) for (const b of list) grouped.add(b.id)
+  /**
+   * The blocks beside a placed first block: at its place, as long as each; the first block in the foreground keeps it, else
+   * the first of them in the foreground takes it – the others are in the background. Returns those of the foreground by
+   * their own kind (not „w tle”): each takes the foreground over once the one before it ends (D493), so they hold it all.
+   */
+  const putBeside = (root: Placed): Placed[] => {
+    let front = !root.bg
+    const out: Placed[] = []
+    for (const b of beside.get(root.block.id) ?? []) {
+      if (!grouped.has(b.id)) continue
+      const bg = front || b.bg
+      if (!bg) front = true
+      const p: Placed = { block: b, from: root.from, to: root.from + b.durationMin, bg, due: root.due, running: false }
+      put(p)
+      if (!b.bg) out.push(p)
+    }
+    return out
+  }
+
   // 1. Started blocks: running ones go on from now to their planned end (past it: they end now); paused ones wait.
   const paused: BlockInfo[] = []
   for (const b of inp.blocks) {
@@ -101,14 +149,24 @@ export function forecast(inp: ForecastInput): Forecast {
 
   // 2. Fixed blocks not started: at their times; waiting ones from their start, then from now, until their window ends.
   const fixedFg: Placed[] = []
-  for (const b of inp.blocks) {
-    if (status(b) !== 'open' || !(b.fixed || b.waits) || b.start == null) continue
+  const besideRunning: Placed[] = []
+  for (const p of [...placed]) if (p.running) besideRunning.push(...putBeside(p))
+  /** A group whose first block is dropped: its blocks are counted each by itself (T1162) – the fixed ones here, the others in the chain. */
+  const release = (rootId: string, fixed: BlockInfo[]) => {
+    for (const x of beside.get(rootId) ?? []) if (grouped.delete(x.id) && (x.fixed || x.waits)) fixed.push(x)
+  }
+  const fixedQueue = [...inp.blocks]
+  for (let i = 0; i < fixedQueue.length; i++) {
+    const b = fixedQueue[i]!
+    // A block released by its group's first block comes again at the end of the queue: placed once.
+    if (placedById.has(b.id) || grouped.has(b.id) || status(b) !== 'open' || !(b.fixed || b.waits) || b.start == null) continue
     let from = b.start
     let to = b.start + b.durationMin
     if (b.waits) {
       const w = waitWindow(b)!
       if (m >= w.end) {
         dropped.add(b.id)
+        release(b.id, fixedQueue)
         continue
       }
       if (mode === 'typical') {
@@ -120,6 +178,7 @@ export function forecast(inp: ForecastInput): Forecast {
       if (to <= m) {
         // A fixed block whose planned end has passed does not start any more: it counts as cancelled.
         dropped.add(b.id)
+        release(b.id, fixedQueue)
         continue
       }
       from = Math.max(from, m)
@@ -127,6 +186,8 @@ export function forecast(inp: ForecastInput): Forecast {
     const p: Placed = { block: b, from, to, bg: b.bg, due: b.start, running: false }
     put(p)
     if (!b.bg) fixedFg.push(p)
+    // The group of a fixed block takes the foreground with it: a flexible block jumps behind the longest of them.
+    fixedFg.push(...putBeside(p))
   }
   fixedFg.sort((a, b) => a.from - b.from)
 
@@ -138,13 +199,15 @@ export function forecast(inp: ForecastInput): Forecast {
     return a && depth < 50 ? plannedKey(a, depth + 1) + a.durationMin : Number.POSITIVE_INFINITY
   }
   const chain = inp.blocks
-    .filter((b) => (status(b) === 'open' && !b.bg && (b.anchor != null || (!b.fixed && !b.waits))) || paused.includes(b))
+    .filter((b) => !grouped.has(b.id) && ((status(b) === 'open' && !b.bg && (b.anchor != null || (!b.fixed && !b.waits))) || paused.includes(b)))
     .sort((a, b) => plannedKey(a) - plannedKey(b) || (a.anchor ? 1 : 0) - (b.anchor ? 1 : 0) || (a.id < b.id ? -1 : 1))
 
   // The cursor: where the foreground is free from – the running foreground block's end, else now; the cursor without the
   // floor of now follows the real end of the last foreground block.
   const runningFg = placed.filter((p) => p.running && !p.bg)
-  let cursor = runningFg.length ? Math.max(...runningFg.map((p) => p.to)) : m
+  // The group of a running block: its blocks in the foreground hold the foreground as the running one does.
+  const heldFg = [...runningFg, ...besideRunning]
+  let cursor = heldFg.length ? Math.max(...heldFg.map((p) => p.to)) : m
   let cursorDue = cursor
   // An urgent request runs to its estimate (spec „Prośba”: the forecast knows it at once) – the foreground is free after it.
   for (const r of view.requests) if (r.to === OPEN && r.mode === 'urgent' && r.estimateMin != null) cursor = Math.max(cursor, r.from + r.estimateMin)
@@ -168,6 +231,8 @@ export function forecast(inp: ForecastInput): Forecast {
       const ap = placedById.get(b.anchor)
       if (dropped.has(b.anchor)) {
         dropped.add(b.id)
+        // Its group has no place now: its blocks are counted each by itself, at the group's start (T1162).
+        for (const x of beside.get(b.id) ?? []) if (grouped.delete(x.id) && !x.bg && !x.fixed && !x.waits) pending.push(x)
         continue
       }
       let anchorEnd: number | null = af?.endedAt ?? ap?.to ?? null
@@ -178,6 +243,7 @@ export function forecast(inp: ForecastInput): Forecast {
           continue
         }
         dropped.add(b.id)
+        for (const x of beside.get(b.id) ?? []) if (grouped.delete(x.id) && !x.bg && !x.fixed && !x.waits) pending.push(x)
         continue
       }
       // The anchor ended in the background or in the foreground: no buffer either way.
@@ -200,9 +266,12 @@ export function forecast(inp: ForecastInput): Forecast {
     }
     const p: Placed = { block: b, from, to: from + left, bg: false, due, running: false }
     put(p)
+    // The group takes its time once (T1162): what comes after it in the foreground waits for the longest of it there.
+    const group = [p, ...putBeside(p)]
+    const groupTo = Math.max(...group.map((x) => x.to))
     if (!b.anchor || from >= cursor) {
-      cursor = Math.max(cursor, p.to)
-      cursorDue = Math.max(cursorDue, due + left)
+      cursor = Math.max(cursor, groupTo)
+      cursorDue = Math.max(cursorDue, due + (groupTo - from))
       prevCat = b.categoryId
     }
   }

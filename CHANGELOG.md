@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.23.0
+- Bloki równoległe: przeciągnij blok na prawą część innego bloku – w trakcie widać „Równolegle z <nazwa>” – a po puszczeniu oba stoją w tym samym czasie, obok siebie; przeciągnięty zaczyna się razem z celem i zachowuje swoją długość. Grupa zajmuje czas raz: następne bloki czekają do końca najdłuższego z grupy i rozsuwają się z „Przesunięto N bloków · Cofnij”, a bez przesunięcia dymek ma „Cofnij”. Działa w „Dziś”, „Tygodniu” i „3 dniach” – także z innego dnia.
+- Blok z grupy przeciągnięty w inne miejsce (także ten, na który upuszczono inny), z nową godziną „Początek” albo przeniesiony na inny dzień wychodzi z grupy; reszta grupy zostaje razem.
+- Ustawienia → „Plan dnia” → „Najwięcej bloków naraz” (domyślnie 3): blok ponad limit staje zaraz po grupie z notą „Najwyżej 3 bloki naraz – zmienisz w Ustawieniach”.
+- Nakładające się bloki – równoległe, w tle, kolizje – stoją na osi „Dziś” i w „Szablonach” obok siebie, dzieląc szerokość; wąskiej kolumny bloków w tle już nie ma.
+
 ## 1.21.0
 - „Niezamknięte dni” rano: po „Jak zapisano”, „Wolne” albo „Nie pamiętam” pojawia się dymek „Zamknięto <dzień>: … · Cofnij”. „Cofnij” przywraca dzień na listę, dopóki aplikacja go nie zamroziła.
 - Wyszukiwarka ma przycisk: u dołu menu bocznego jest „Szukaj · Ctrl K”.

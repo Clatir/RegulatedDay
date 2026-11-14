@@ -140,3 +140,14 @@ describe('skrót szybkiego zapisu (D385, D402)', () => {
     expect(quickKeyFrom(7)).toBeNull()
   })
 })
+
+describe('D476 – najwięcej bloków naraz', () => {
+  it('domyślnie 3, zakres 1–5; plik bez pola (starsza wersja) – 3; pole w sekcji „Plan dnia”', () => {
+    expect(DEFAULT_GENERAL.parallelMax).toBe(3)
+    expect(generalFrom({}).parallelMax).toBe(3)
+    expect(generalFrom({ parallelMax: 5 }).parallelMax).toBe(5)
+    expect(generalFrom({ parallelMax: 6 }).parallelMax).toBe(3)
+    const f = NUMBER_FIELDS.find((x) => x.key === 'parallelMax')!
+    expect(f).toMatchObject({ scope: 'general', group: 'plan', label: 'Najwięcej bloków naraz', range: [1, 5] })
+  })
+})

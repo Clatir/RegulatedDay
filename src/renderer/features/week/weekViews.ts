@@ -4,6 +4,8 @@
  * apart from the storage – the screens only draw what these give.
  */
 import { mayMoveBetween } from '@shared/engine/calendarViews'
+import { groupEndMin, groupOf, groupRootOf, PARALLEL_SAME_TEXT, parallelFullText, parallelJoinText } from '@shared/engine/parallel'
+import type { HorizonBlock } from '@shared/engine/week'
 import type { AgendaBlock } from '@shared/engine/calendarViews'
 import { durationLabel } from '@shared/format'
 import { categoryName } from '@shared/model/rd'
@@ -67,6 +69,38 @@ export interface BlockDrop {
   startMin: number
   /** A day gone by (D417): the block is shown refused and a drop there changes nothing. */
   denied: boolean
+  /** Dropped onto a block of the column (D492): beside it, or after its full group; absent – a move to `startMin`. */
+  onto?: WeekOnto
+}
+
+/** A drop onto a block of a column (D492): the block, where the dragged one would start, what is said; `same` – its own group, nothing changes. */
+export interface WeekOnto {
+  target: string
+  startMin: number
+  text: string
+  same: boolean
+}
+
+/** A block of a column that takes no drop onto it: begun outside the plan, run already, passed, parked or cancelled. */
+const NO_ONTO: ReadonlySet<HorizonBlock['state']> = new Set(['ran', 'missed', 'parked', 'cancelled'])
+
+/**
+ * The dragged block over the right part of block `target` of a column (`blocks` – the column's, D492; the group by the rules of
+ * `engine/parallel.ts`): beside the target's group at the start of its first block – „Równolegle z <its name>”; the group holding
+ * `max` blocks – right after the group, with the note of a full group; a block of its own group – nothing changes. Null – the
+ * target takes no drop (the drag stays a move). The save counts it again from the day's plan (`moveWeekBlock`).
+ */
+export function weekOnto(blocks: readonly HorizonBlock[], dragged: string, target: string, max: number, nameOf: (b: HorizonBlock) => string): WeekOnto | null {
+  const t = blocks.find((b) => b.id === target)
+  if (!t || t.id === dragged || t.outsidePlan || NO_ONTO.has(t.state)) return null
+  const linked = blocks.filter((b) => !b.outsidePlan).map((b) => ({ id: b.id, alongside: b.alongside ?? null }))
+  const rootId = groupRootOf(new Map(linked.map((b) => [b.id, b])), target) ?? target
+  const root = blocks.find((b) => b.id === rootId) ?? t
+  const group = groupOf(linked, rootId)
+  if (group.includes(dragged)) return { target, startMin: root.startMin, text: PARALLEL_SAME_TEXT, same: true }
+  const ends = new Map(blocks.map((b) => [b.id, b.endMin]))
+  if (group.length + 1 > max) return { target, startMin: groupEndMin(linked, rootId, (id) => ends.get(id) ?? null), text: parallelFullText(max), same: false }
+  return { target, startMin: root.startMin, text: parallelJoinText(nameOf(root)), same: false }
 }
 
 /**
@@ -87,7 +121,8 @@ export function dropOn(index: number, startMin: number, from: string, to: string
 }
 
 /** A drop that has not changed: nothing to draw again (the pointer moves a good deal more often than a minute of the grid). */
-export const sameDrop = (a: BlockDrop | null, b: BlockDrop | null): boolean => a === b || (a != null && b != null && a.index === b.index && a.startMin === b.startMin && a.denied === b.denied)
+export const sameDrop = (a: BlockDrop | null, b: BlockDrop | null): boolean =>
+  a === b || (a != null && b != null && a.index === b.index && a.startMin === b.startMin && a.denied === b.denied && a.onto?.target === b.onto?.target && a.onto?.text === b.onto?.text)
 
 /** What a drop that changes nothing is: the same day and the same start. */
 export const dropStays = (from: string, to: string, was: number, now: number): boolean => from === to && was === now

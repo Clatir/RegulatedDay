@@ -33,9 +33,11 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * older version would make the day without them; it gives way to this one as the leader. 9 – no marks of a block (D467):
  * the evening block once marked as the second shift is work of its category – an older version would keep its minutes
  * out of the extension and the end of work (and wait for „Zacznij” at a weekly analysis) and freeze the day so; it gives
- * way to this one as the leader.
+ * way to this one as the leader. 10 – parallel blocks (D476, T1162): a group takes its time once in the forecast – an older
+ * version would count its blocks one after another (the computed end of work, the hard end, the freeze); it gives way to this
+ * one as the leader.
  */
-export const RULES_VERSION = 9
+export const RULES_VERSION = 10
 
 /** What a block's start wrote of its plan (`block.start.planned`). */
 export interface StartPlanned {

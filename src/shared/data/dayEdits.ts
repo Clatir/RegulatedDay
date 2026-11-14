@@ -56,13 +56,23 @@ export function blockJson(b: PlanBlock, before?: Raw): Raw {
   return out
 }
 
-/** The block put into the day (replacing one with its id, keeping its unknown fields). */
+/**
+ * The block put into the day (replacing one with its id, keeping its unknown fields). The blocks of the file beside it
+ * (`alongside`, D492, T1161) get its start too: the window places them with it whatever they hold, a version that does not
+ * know the field shows them at their own start – with the group, not where it stood once.
+ */
 export function putBlock(raw: Raw, b: PlanBlock): Raw {
   const before = dayBlocks(raw).find((x) => isPlain(x) && x.id === b.id) as Raw | undefined
-  return putRawBlock(raw, before ? blockJson(b, before) : blockJson(b))
+  const out = putRawBlock(raw, before ? blockJson(b, before) : blockJson(b))
+  if (b.startMin == null) return out
+  const beside = dayBlocks(out).filter((x): x is Raw => isPlain(x) && x.alongside === b.id && x.id !== b.id && x.startMin !== b.startMin)
+  return beside.reduce((r, x) => putRawBlock(r, { ...x, startMin: b.startMin }), out)
 }
 
-/** A block of your own taken out of the file (a new block you added and then removed). */
+/**
+ * A block of your own taken out of the file (a new block you added and then removed). The blocks beside it keep naming it: the
+ * first of them stands for it while it is gone (`groupRootOf`, T1166), and its „Cofnij” brings the whole group back.
+ */
 export function takeBlock(raw: Raw, id: string): Raw {
   return { ...raw, blocks: dayBlocks(raw).filter((x) => !(isPlain(x) && x.id === id)) }
 }

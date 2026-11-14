@@ -64,6 +64,8 @@ export interface HorizonBlock {
   fixed?: true
   /** A trading session (a category of the kind „sesja”, D192); absent – not. */
   session?: true
+  /** Beside the block with this id – the first block of its group of parallel blocks (D492); absent – none. */
+  alongside?: string
 }
 
 /** The day's work against its budget (minutes, spec „Budżet pracy”): run so far and forecast from now; a day gone by – as written. */
@@ -221,7 +223,8 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
       ...(steps?.length ? { steps } : {}),
       ...(movable ? { movable: true as const } : {}),
       ...(info.fixed ? { fixed: true as const } : {}),
-      ...(isSessionBlock(info) ? { session: true as const } : {})
+      ...(isSessionBlock(info) ? { session: true as const } : {}),
+      ...(info.alongside != null ? { alongside: info.alongside } : {})
     })
   for (const p of ctx.plan) {
     const info = byId.get(p.id)

@@ -83,6 +83,7 @@ export function SettingsPage() {
           <FieldsSection group="sleep" />
           <SessionsSection />
           <FieldsSection group="boundary" />
+          <FieldsSection group="plan" />
           <FieldsSection group="energy" />
           <CalendarsSection />
           <CategoriesSection />

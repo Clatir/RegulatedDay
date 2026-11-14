@@ -1,12 +1,13 @@
 /**
  * The plan of a day as a vertical axis of time (D293): a block's height follows its length, gaps without a block are
- * seen, collisions and blocks in the background go to a narrow column beside it, the energy forecast runs beside the
+ * seen, blocks that overlap – parallel ones (D476), in the background, collisions – stand side by side, the energy forecast runs beside the
  * axis, and the lines of the wake, the boundary, the maximum, the hard end, the bedtime and now cross it. A click on a
  * block selects it (its editing panel opens on the right), a click on a gap creates a block there; a movable block is
  * dragged with the left button to a new start, in steps of 5 min (D305), and by its edges to a new length (D365): the
  * bottom edge moves its end, the top one its start with the same end. A drag over a gap creates a block with that start
  * and end (D366); the column of hours counts as the axis for both. While a block is dragged, the blocks it pushes apart
- * stand at their new places (D367, `pushPreview`).
+ * stand at their new places (D367, `pushPreview`); dropped onto the right part of another block, it stands beside it (D492,
+ * `parallelPreview` – „Równolegle z …”).
  */
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
@@ -26,6 +27,7 @@ import { PriorityMark } from '../cases/PriorityMark'
 import { poolPath, POOL_COLOR, POOL_NAME } from './energyDraw'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
+import { inParallelZone, tileAt, tileLanes } from './parallelDrag'
 
 export interface TimelineItem {
   id: string
@@ -93,6 +95,18 @@ export interface EdgeLimits {
 export interface BlockSpan {
   startMin: number
   endMin: number
+}
+
+/**
+ * A block dragged onto another one (D492): what the drop would do – said on the axis (`text`: „Równolegle z …”, or the note of
+ * a full group), where the dragged block would stand (`span`) and the blocks it pushes apart (by id, null – none); `same` – a
+ * block of its own group: the drop changes nothing.
+ */
+export interface ParallelHint {
+  text: string
+  span: BlockSpan
+  pushed: ReadonlyMap<string, BlockSpan> | null
+  same?: boolean
 }
 
 /** The edge of a block dragged by its handle: the top one moves its start, the bottom one its end (D365). */
@@ -190,6 +204,8 @@ interface Drag {
   exact: boolean
   moved: boolean
   dropped: boolean
+  /** The block whose right part it is over (D492: dropped there, it stands beside it); null – a move to its hour. */
+  onto: string | null
 }
 
 /**
@@ -233,6 +249,8 @@ export function Timeline({
   resizeNote,
   edgeLimits,
   pushPreview,
+  parallelPreview,
+  onParallel,
   attached,
   onAttachDrop,
   ghost,
@@ -283,6 +301,16 @@ export function Timeline({
    * pointer (D372) – drawn and said there.
    */
   pushPreview?: (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan) => ReadonlyMap<string, BlockSpan> | null
+  /**
+   * D492: what dropping the dragged block `id` onto block `target` does (null – `target` takes no drop: the drag stays a move to
+   * its hour). Asked while the pointer is over the right part of another tile; with it the tile is drawn where the drop puts it.
+   */
+  parallelPreview?: (id: string, target: string) => ParallelHint | null
+  /**
+   * D492: the block `id` dropped onto block `target`: the span it is held at until the day shows it, or false when nothing was
+   * asked (the day changed since the preview) – it goes back at once.
+   */
+  onParallel?: (id: string, target: string) => BlockSpan | false
   /**
    * A block's end waiting for a confirmation (D365: a running block's extension past the boundary): the block is drawn
    * down to `endMin` (its added part dashed), `node` – „Potwierdź · Anuluj” – stands at that edge. Gone: the block is at its end.
@@ -362,25 +390,6 @@ export function Timeline({
   const y = (min: number) => (min - lo) * PPM
   const height = (hi - lo) * PPM
 
-  // The foreground column takes the blocks in time order; one that overlaps the one before goes beside it (a collision).
-  const lanes = useMemo(() => {
-    const main: TimelineItem[] = []
-    const side: TimelineItem[] = []
-    let end = Number.NEGATIVE_INFINITY
-    for (const i of [...items].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin)) {
-      if (i.background || i.dim) {
-        ;(i.background ? side : main).push(i)
-        continue
-      }
-      if (i.startMin < end) side.push(i)
-      else {
-        main.push(i)
-        end = i.endMin
-      }
-    }
-    return { main, side }
-  }, [items])
-
   const hours: number[] = []
   for (let h = lo; h <= hi; h += 60) hours.push(h)
 
@@ -388,22 +397,65 @@ export function Timeline({
   // shows it (the hold); counted once for each place of the drag on the day shown (`items`), not on every render.
   const previewOf = useRef(pushPreview)
   previewOf.current = pushPreview
-  const pushKey = drag?.moved && pushPreview ? `${drag.id}|${drag.edge ?? ''}|${drag.start}|${drag.end}|${drag.from}|${drag.fromEnd}` : null
-  const pushed = useMemo(
+  // D492: the drop onto another block – counted once for each block the dragged one is over during one drag on one count of
+  // the day (`items`), not on every move of the pointer (a full count of the day and its push each time).
+  const hints = useRef<{ items: TimelineItem[]; id: string; of: Map<string, ParallelHint | null> } | null>(null)
+  const hintOf = (id: string, target: string): ParallelHint | null => {
+    if (!parallelPreview) return null
+    if (hints.current?.items !== items || hints.current.id !== id) hints.current = { items, id, of: new Map() }
+    const of = hints.current.of
+    if (!of.has(target)) of.set(target, parallelPreview(id, target))
+    return of.get(target) ?? null
+  }
+  // Kept after the drop until the day shows it (the hold): the pushed blocks stay drawn where the drop puts them.
+  const onto = drag?.moved ? drag.onto : null
+  const hint = drag && onto ? hintOf(drag.id, onto) : null
+  const pushKey = drag?.moved && pushPreview && !drag.onto ? `${drag.id}|${drag.edge ?? ''}|${drag.start}|${drag.end}|${drag.from}|${drag.fromEnd}` : null
+  const pushedByMove = useMemo(
     () => (pushKey && drag ? (previewOf.current?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) ?? null) : null),
     // The drag's place is in the key; a new count of the day brings new items.
     [pushKey, items]
   )
-  // Where the dragged block is drawn: under the pointer, or where it will stand (`pushPreview` with its own id).
-  const dragShown: BlockSpan | null = drag ? (pushed?.get(drag.id) ?? { startMin: drag.start, endMin: drag.end }) : null
+  const pushed = onto ? (hint?.pushed ?? null) : pushedByMove
+  // Where the dragged block is drawn: under the pointer, where it will stand (`pushPreview` with its own id), or beside the
+  // block it is dropped onto (D492).
+  const dragShown: BlockSpan | null = drag ? (hint && !hint.same ? hint.span : (pushed?.get(drag.id) ?? { startMin: drag.start, endMin: drag.end })) : null
 
-  const box = (i: TimelineItem, narrow: boolean) => {
+  /** Where a tile is drawn now: dragged, pushed apart by the drag, waiting for a confirmation of its end, or at its place. */
+  const spanOf = (i: TimelineItem) => {
     const dragged = drag?.id === i.id && drag.moved
     const pushedTo = dragged ? undefined : pushed?.get(i.id)
     // Waiting for a confirmation (and not being dragged again): at the end it asks for.
     const waiting = !dragged && attached?.id === i.id
     const start = dragged ? dragShown!.startMin : pushedTo ? pushedTo.startMin : i.startMin
     const end = dragged ? dragShown!.endMin : waiting ? attached.endMin : pushedTo ? pushedTo.endMin : i.endMin
+    return { dragged, pushedTo, waiting, start, end }
+  }
+  // D476: tiles that overlap where they are drawn stand side by side (a tile at least `MIN_H` high).
+  // The dragged one is not among them: the tiles under it keep their places while it is held (the one it would be dropped onto
+  // stays under the pointer); it is drawn over the whole column, or – dropped onto a block (D492) – in the right half of it.
+  const lanes = tileLanes(
+    items
+      .filter((i) => !(drag?.moved && drag.id === i.id))
+      .map((i) => {
+        const s = spanOf(i)
+        return { id: i.id, startMin: s.start, endMin: s.end }
+      }),
+    MIN_H / PPM
+  )
+  const draggedLane = (id: string) => (onto && drag?.id === id ? { lane: 1, lanes: 2 } : drag?.moved && drag.id === id ? { lane: 0, lanes: 1 } : null)
+
+  /** The tile under the pointer at (`x`, `y`) whose right part takes the dragged block `id` (D492), or null. */
+  const ontoAt = (id: string, x: number, py: number): string | null => {
+    const tile = parallelPreview ? tileAt(x, py, id) : null
+    return tile && inParallelZone(x, py, tile.rect) && hintOf(id, tile.id) ? tile.id : null
+  }
+
+  const box = (i: TimelineItem) => {
+    const { dragged, pushedTo, waiting, start, end } = spanOf(i)
+    const lane = draggedLane(i.id) ?? lanes.get(i.id) ?? { lane: 0, lanes: 1 }
+    // Three tiles side by side and more: no hours on them (narrow), as the old column of the background had it.
+    const narrow = lane.lanes >= 3
     const top = y(start)
     const h = Math.max(MIN_H, (end - start) * PPM - 1)
     const tiny = h < 34
@@ -416,6 +468,8 @@ export function Timeline({
         key={i.id}
         type="button"
         data-testid={`block-${i.id}`}
+        data-tile-id={i.id}
+        data-lane={lane.lanes > 1 ? `${lane.lane}/${lane.lanes}` : undefined}
         {...NO_GRID}
         data-block-title={i.title}
         data-movable={draggable ? 'true' : undefined}
@@ -440,7 +494,7 @@ export function Timeline({
           dropped.current = false
           e.currentTarget.setPointerCapture(e.pointerId)
           const limits = (edge === 'end' && i.resize === 'end' ? edgeLimits?.(i.id) : null) ?? {}
-          setDrag({ id: i.id, pointer: e.pointerId, y0: e.clientY, edge, from: i.startMin, fromEnd: i.endMin, start: i.startMin, end: i.endMin, limits, exact: edge === 'end' && i.movable !== true, moved: false, dropped: false })
+          setDrag({ id: i.id, pointer: e.pointerId, y0: e.clientY, edge, from: i.startMin, fromEnd: i.endMin, start: i.startMin, end: i.endMin, limits, exact: edge === 'end' && i.movable !== true, moved: false, dropped: false, onto: null })
         }}
         onPointerMove={(e) => {
           const d = dragRef.current
@@ -456,14 +510,28 @@ export function Timeline({
                     const s = draggedStart(d.from, dy)
                     return { startMin: s, endMin: d.fromEnd + s - d.from }
                   })()
-          if (!d.moved || span.startMin !== d.start || span.endMin !== d.end) setDrag({ ...d, moved: true, start: span.startMin, end: span.endMin })
+          // D492: the body over the right part of another tile – a drop onto it.
+          const over = d.edge == null ? ontoAt(d.id, e.clientX, e.clientY) : null
+          if (!d.moved || span.startMin !== d.start || span.endMin !== d.end || over !== d.onto) setDrag({ ...d, moved: true, start: span.startMin, end: span.endMin, onto: over })
         }}
         onPointerUp={(e) => {
           const d = dragRef.current
           if (!d || d.id !== i.id || d.pointer !== e.pointerId || d.dropped) return
           // Where it will stand: as drawn now (`dragShown`), under the pointer otherwise.
           const at = drag?.id === d.id && dragShown ? dragShown : { startMin: d.start, endMin: d.end }
-          if (!d.moved || staysPut(at, d)) {
+          // D492: dropped onto another block – beside it (onto a block of its own group: nothing changes). What it does is read now,
+          // for the drag as the last move left it (`dragRef`), not from the last render.
+          const over = d.moved && d.onto && onParallel ? hintOf(d.id, d.onto) : null
+          if (d.moved && d.onto && over && onParallel) {
+            const asked = over.same ? false : onParallel(i.id, d.onto)
+            // Nothing saved (its own group, or the day changed since the preview): the block goes back at once.
+            if (!asked) setDrag(null)
+            else {
+              const held = { ...d, start: asked.startMin, end: asked.endMin, dropped: true }
+              setDrag(held)
+              setTimeout(() => dragRef.current === held && setDrag(null), DROP_HOLD_MS)
+            }
+          } else if (!d.moved || staysPut(at, d)) {
             setDrag(null)
             if (!d.moved) return
           } else {
@@ -481,18 +549,23 @@ export function Timeline({
           setTimeout(() => (dropped.current = false), 0)
         }}
         className={cx(
-          'absolute right-0 left-0 overflow-hidden rounded-[3px] border-l-[3px] px-1.5 text-left leading-tight transition-colors',
+          'absolute overflow-hidden rounded-[3px] border-l-[3px] px-1.5 text-left leading-tight transition-colors',
           selected === i.id ? 'ring-1 ring-lamp' : 'hover:brightness-110',
           i.waits && 'border-dashed',
           draggable && !dragged && 'cursor-grab',
           dropOver === i.id && 'ring-2 ring-lamp',
           dragged && 'z-20 shadow-lg',
-          dragged && (drag.edge ? 'cursor-ns-resize' : 'cursor-grabbing')
+          dragged && (drag?.edge ? 'cursor-ns-resize' : 'cursor-grabbing'),
+          // D492: the tile the dragged one is dropped onto is lit.
+          onto === i.id && 'ring-2 ring-lamp'
         )}
         // Dimmed by its fill and edge, never its text (A8-05).
         style={{
           top,
           height: h,
+          // Its lane across the column (D476): side by side with the tiles it overlaps, 2 px apart.
+          left: `calc(${(lane.lane / lane.lanes) * 100}% + ${lane.lane ? 1 : 0}px)`,
+          width: `calc(${100 / lane.lanes}% - ${lane.lanes > 1 ? 2 : 0}px)`,
           background: i.dim ? blockFillDim(i.color, brightness) : blockFill(i.color, brightness),
           borderLeftColor: i.dim ? blockEdgeDim(i.color) : i.color,
           ...(waiting ? { borderBottom: `2px dashed ${i.color}` } : {}),
@@ -573,8 +646,8 @@ export function Timeline({
         {hours.map((h) => (
           <div key={h} className="pointer-events-none absolute right-0 left-0 border-t border-line/60" style={{ top: y(h) }} />
         ))}
-        <div className="absolute inset-y-0 right-[96px] left-1.5">
-          {lanes.main.map((i) => box(i, false))}
+        <div className="absolute inset-y-0 right-1.5 left-1.5">
+          {items.map((i) => box(i))}
           {draft && (
             <div
               className="absolute right-0 left-0 z-10 cursor-default overflow-hidden rounded-[3px] border border-dashed px-1.5 text-left leading-tight"
@@ -596,7 +669,6 @@ export function Timeline({
             </div>
           )}
         </div>
-        <div className="absolute inset-y-0 right-1.5 w-[86px]">{lanes.side.map((i) => box(i, true))}</div>
         {attached && (
           <div className="absolute right-3 z-30" style={{ top: y(attached.endMin) }} onClick={(e) => e.stopPropagation()} {...NO_GRID}>
             {attached.node}
@@ -606,6 +678,16 @@ export function Timeline({
         {grid.range && <RangeBand range={grid.range} lo={lo} ppm={PPM} withLength testId="create-range" />}
         {/* D384: where a sprawa dragged from the panel beside the axis would stand. */}
         {ghost && <RangeBand range={ghost} lo={lo} ppm={PPM} withLength testId="case-ghost" />}
+        {/* D492: what the drop onto another block does – „Równolegle z …”, or the note of a full group. */}
+        {hint && dragShown && !drag?.dropped && (
+          <div
+            className="num pointer-events-none absolute right-3 z-30 -translate-y-full rounded-sm border border-line bg-bg/90 px-1.5 py-0.5 text-[11px] text-fg"
+            style={{ top: y(dragShown.startMin) }}
+            data-testid="parallel-hint"
+          >
+            {hint.text}
+          </div>
+        )}
         {/* D365: the hours of an edge being dragged, and what the end costs. */}
         {drag?.moved && !drag.dropped && drag.edge && (
           <div

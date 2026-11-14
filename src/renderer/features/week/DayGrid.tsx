@@ -31,7 +31,9 @@ import { NewBlockPopover } from './NewBlockPopover'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { moveWeekBlock } from './weekMove'
 import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, type Tone } from './weekText'
-import { DENIED_TEXT, dropOn, dropStart, dropStays, sameDrop, type BlockDrop } from './weekViews'
+import { DENIED_TEXT, dropOn, dropStart, dropStays, sameDrop, weekOnto, type BlockDrop } from './weekViews'
+import { inParallelZone, tileAt } from '../plan/parallelDrag'
+import { undoEditToast } from '../today/dayActions'
 
 const AXIS_PX = 48
 const TONE_CLASS: Record<Tone, string> = { ok: 'text-sea', bad: 'text-rose', muted: 'text-muted', plain: 'text-fg' }
@@ -150,8 +152,8 @@ export function DayGrid({
   const spanHeld = held ? dayIndexes(held.from, held.to) : []
 
   // A block dragged (D417): its listeners are the window's (the pointer leaves the block at once), they read what the page has now.
-  const latest = useRef({ days, lo, hi, ppm, today })
-  latest.current = { days, lo, hi, ppm, today }
+  const latest = useRef({ days, lo, hi, ppm, today, max: rd.general.parallelMax })
+  latest.current = { days, lo, hi, ppm, today, max: rd.general.parallelMax }
   const lift = useRef<Lift | null>(null)
   const unlisten = useRef<(() => void) | null>(null)
   const busy = useRef(false)
@@ -194,8 +196,15 @@ export function DayGrid({
   const land = async (h: Lift, at: BlockDrop) => {
     busy.current = true
     try {
-      const res = await moveWeekBlock({ blockId: h.id, name: h.name, names: namesOf(h.date), from: h.date, to: latest.current.days[at.index]!.date, startMin: at.startMin })
+      const onto = at.onto ? { target: at.onto.target, max: latest.current.max } : undefined
+      const res = await moveWeekBlock({ blockId: h.id, name: h.name, names: namesOf(h.date), from: h.date, to: latest.current.days[at.index]!.date, startMin: at.startMin, ...(onto ? { onto } : {}) })
       if (res.push) showWeekPush(res.push)
+      // D492: „Równolegle z …” – with „Cofnij” when no line above the columns takes it back.
+      if (res.parallel) {
+        const u = res.parallel.undo
+        if (u) undoEditToast(u.date, u.entry, u.made, res.parallel.text)
+        else toast(res.parallel.text, 'info')
+      }
       if (res.status === 'refused') toast(PAST_DROP_TEXT, 'info')
     } catch (e) {
       toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
@@ -203,6 +212,11 @@ export function DayGrid({
       busy.current = false
       setDrop(null)
     }
+  }
+  /** The block of column `day` under the pointer whose right part takes the dragged block `id` (D492), and what the drop does there. */
+  const ontoAt = (id: string, day: HorizonDay, x: number, y: number, max: number) => {
+    const tile = tileAt(x, y, id, day.date)
+    return tile && inParallelZone(x, y, tile.rect) ? weekOnto(day.blocks, id, tile.id, max, (b) => blockName(b.named, namesOf(day.date))) : null
   }
   const grab = (b: HorizonBlock, date: string, col: number) => (e: PointerEvent<HTMLElement>) => {
     if (e.button !== 0 || !b.movable || busy.current || lift.current) return
@@ -228,7 +242,10 @@ export function DayGrid({
       const i = columnAt(ev.clientX, boxes, h.col)
       if (!body || !boxes[i] || !L.days[i]) return
       const startMin = dropStart({ pointerY: ev.clientY, colTop: body.top + boxes[i]!.off, grabPx: h.grabPx, ppm: L.ppm, lo: L.lo, hi: L.hi, durationMin: h.durationMin })
-      const next = dropOn(i, startMin, h.date, L.days[i].date, L.today)
+      const plain = dropOn(i, startMin, h.date, L.days[i].date, L.today)
+      // D492: over the right part of another block of the column – a drop onto it (beside it, or after its full group).
+      const onto = plain.denied ? null : ontoAt(h.id, L.days[i], ev.clientX, ev.clientY, L.max)
+      const next: BlockDrop = onto ? { ...plain, startMin: onto.startMin, onto } : plain
       h.last = next
       setDrop((was) => (was && sameDrop(was.at, next) ? was : { blockId: h.id, at: next, durationMin: h.durationMin }))
     }
@@ -238,8 +255,8 @@ export function DayGrid({
       stop()
       if (!h.moved) return
       muteClick()
-      // A day gone by, or the place it already has: nothing is written.
-      if (!at || at.denied || dropStays(h.date, latest.current.days[at.index]?.date ?? h.date, h.startMin, at.startMin)) {
+      // A day gone by, the place it already has, or a block of its own group: nothing is written.
+      if (!at || at.denied || at.onto?.same || (!at.onto && dropStays(h.date, latest.current.days[at.index]?.date ?? h.date, h.startMin, at.startMin))) {
         setDrop(null)
         return
       }
@@ -468,13 +485,13 @@ function DayColumn({
         <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} />
       ))}
       {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
-      {drop && <DropBand range={{ startMin: drop.startMin, endMin: drop.startMin + drop.durationMin }} lo={lo} ppm={ppm} denied={drop.denied} />}
+      {drop && <DropBand range={{ startMin: drop.startMin, endMin: drop.startMin + drop.durationMin }} lo={lo} ppm={ppm} denied={drop.denied} note={drop.onto?.text} />}
     </div>
   )
 }
 
 /** The place a block being dragged would take (D417): its hours; over a day gone by – refused, said in words. */
-function DropBand({ range, lo, ppm, denied }: { range: GridRange; lo: number; ppm: number; denied: boolean }) {
+function DropBand({ range, lo, ppm, denied, note }: { range: GridRange; lo: number; ppm: number; denied: boolean; note?: string }) {
   return (
     <div
       className={cx('num pointer-events-none absolute right-0 left-0 z-20 overflow-hidden rounded-[3px] border border-dashed px-1 text-[11px] leading-[14px] text-fg', denied ? 'border-rose bg-rose/10' : 'border-lamp bg-lamp/20')}
@@ -483,9 +500,12 @@ function DropBand({ range, lo, ppm, denied }: { range: GridRange; lo: number; pp
       data-start={range.startMin}
       data-end={range.endMin}
       data-denied={denied ? 'true' : undefined}
+      data-note={note}
     >
       {logicalClock(range.startMin)}–{logicalClock(range.endMin)}
       {denied ? ` · ${DENIED_TEXT}` : ''}
+      {/* D492: a drop onto a block – „Równolegle z …”, or the note of a full group. */}
+      {note ? ` · ${note}` : ''}
     </div>
   )
 }
@@ -512,6 +532,8 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
       {...NO_GRID}
       title={title}
       data-testid={`week-block-${date}-${b.id}`}
+      data-tile-id={b.id}
+      data-tile-date={date}
       data-state={b.state}
       data-outside={b.outsidePlan ? 'true' : undefined}
       data-movable={grab ? 'true' : undefined}
