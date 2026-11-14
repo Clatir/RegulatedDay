@@ -174,12 +174,13 @@ export const WATCH_ABOVE_RESERVE = 15
 
 /**
  * The weakest pool at a minute and its shade (D500): below the reserve – „poniżej rezerwy”, less than 15 above it – „uwaga”,
- * else „dobrze”. Read on the rounded numbers, as the hover shows them (T1281); a tie – the first pool (głowa, emocje, bodźce).
+ * else „dobrze”. The values are the numbers on the screen – rounded once, by `valuesAt` (T1281); a tie – the first pool
+ * (głowa, emocje, bodźce).
  */
-export function stripState(v: Record<Pool, number>, reserve: number): { pool: Pool; state: StripState } {
+export function stripState(v: PoolValues, reserve: number): { pool: Pool; state: StripState } {
   let pool: Pool = POOLS[0]!
-  for (const p of POOLS) if (Math.round(v[p]) < Math.round(v[pool])) pool = p
-  const w = Math.round(v[pool])
+  for (const p of POOLS) if (v[p] < v[pool]) pool = p
+  const w = v[pool]
   return { pool, state: w < reserve ? 'low' : w < reserve + WATCH_ABOVE_RESERVE ? 'watch' : 'ok' }
 }
 
@@ -196,14 +197,12 @@ export interface StripRun {
  * minutes of the same weakest pool and shade joined (T1281).
  */
 export function stripRuns(track: Pick<EnergyTrack, 'samples' | 'reserve'> | null | undefined): StripRun[] {
-  if (!track) return []
+  const span = energySpan(track)
+  if (!track || !span) return []
   const curves = poolCurves(track)
-  const all = POOLS.map((p) => curves[p].t)
-  const from = Math.max(...all.map((t) => t[0] ?? Infinity))
-  const to = Math.min(...all.map((t) => t[t.length - 1] ?? -Infinity))
+  const [from, to] = span
   const out: StripRun[] = []
-  if (!(from <= to)) return out
-  for (let at = from; at <= to; at++) {
+  for (let at = from; at < to; at++) {
     const v = valuesAt(curves, at)
     if (!v) continue
     const { pool, state } = stripState(v, track.reserve)
@@ -211,8 +210,27 @@ export function stripRuns(track: Pick<EnergyTrack, 'samples' | 'reserve'> | null
     if (last && last.pool === pool && last.state === state) last.to = Math.min(at + 1, to)
     else out.push({ from: at, to: Math.min(at + 1, to), pool, state })
   }
-  return out.filter((r) => r.to > r.from)
+  return out
 }
+
+/**
+ * The minutes every pool has a value for – from the latest first sample to the earliest last one; null when that is not a
+ * span (no track, one sample, pools that never overlap): nothing to draw, neither the lanes nor the strip (T1286).
+ */
+export function energySpan(track: Pick<EnergyTrack, 'samples'> | null | undefined): [number, number] | null {
+  let from = -Infinity
+  let to = Infinity
+  for (const p of POOLS) {
+    const t = (track?.samples ?? []).filter((s) => Number.isFinite(s[p])).map((s) => s.at)
+    if (t.length === 0) return null
+    from = Math.max(from, Math.min(...t))
+    to = Math.min(to, Math.max(...t))
+  }
+  return from < to ? [from, to] : null
+}
+
+/** The day has energy to draw (D500): the one test for the lanes of „Dziś”, the strip, its legend and the blocks' offset. */
+export const hasEnergy = (track: Pick<EnergyTrack, 'samples'> | null | undefined): boolean => energySpan(track) != null
 
 /** The three curves of a track. */
 export function poolCurves(track: Pick<EnergyTrack, 'samples'> | null | undefined): Record<Pool, Curve> {

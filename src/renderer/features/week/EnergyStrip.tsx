@@ -6,8 +6,9 @@
  * shows the hour and the three values („10:30 · głowa 71 · emocje 66 · bodźce 41”).
  */
 import { useMemo, useState, type MouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
-import { ENERGY_SCALE, hoverText, nearestSample, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, STRIP_STATE_NAME, stripRuns, WATCH_ABOVE_RESERVE, type StripState } from '../plan/energyDraw'
+import { ENERGY_SCALE, hasEnergy, hoverText, nearestSample, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, STRIP_STATE_NAME, stripRuns, WATCH_ABOVE_RESERVE, type StripState } from '../plan/energyDraw'
 import { axisY } from './weekLayout'
 
 /** The caption of a strip counted from the assumed check-in. */
@@ -18,15 +19,28 @@ export const STRIP_WIDTH = 5
 export const STRIP_OPACITY: Record<StripState, number> = { ok: 0.3, watch: 0.65, low: 1 }
 export const ASSUMED_FACTOR = 0.5
 const STATES: readonly StripState[] = ['ok', 'watch', 'low']
+/** The room the hover takes beside the strip (its words are about 230 px); past the window's right edge it stands left. */
+export const HOVER_ROOM = 260
+const HOVER_GAP = 3
+
+/**
+ * Where the hover stands on the screen (T1287): right of the strip at the pointer's height – out of the column, which clips
+ * what leaves it; when that would pass the window's right edge, left of the strip.
+ */
+export function hoverPlace(strip: { left: number; right: number }, y: number, windowWidth: number): { top: number; left?: number; right?: number } {
+  return strip.right + HOVER_GAP + HOVER_ROOM <= windowWidth ? { top: y, left: strip.right + HOVER_GAP } : { top: y, right: windowWidth - strip.left + HOVER_GAP }
+}
 
 export function EnergyStrip({ date, track, lo, ppm, height }: { date: string; track: EnergyTrack | null; lo: number; ppm: number; height: number }) {
   const runs = useMemo(() => stripRuns(track), [track])
-  const [hover, setHover] = useState<{ at: number; text: string } | null>(null)
-  if (!track || track.samples.length === 0) return null
+  const [hover, setHover] = useState<{ at: number; text: string; place: ReturnType<typeof hoverPlace> } | null>(null)
+  if (!track || !hasEnergy(track)) return null
   const assumed = track.assumed === true
   const onMove = (e: MouseEvent<HTMLDivElement>) => {
-    const s = nearestSample(track, lo + (e.clientY - e.currentTarget.getBoundingClientRect().top) / ppm)
-    setHover(s ? { at: s.at, text: hoverText(s.at, s) } : null)
+    const r = e.currentTarget.getBoundingClientRect()
+    const s = nearestSample(track, lo + (e.clientY - r.top) / ppm)
+    // A new state only when the pointer reaches another sample.
+    setHover((h) => (s == null ? null : h?.at === s.at ? h : { at: s.at, text: hoverText(s.at, s), place: hoverPlace(r, r.top + axisY(s.at, lo, ppm), window.innerWidth) }))
   }
   return (
     <>
@@ -57,15 +71,18 @@ export function EnergyStrip({ date, track, lo, ppm, height }: { date: string; tr
           ))}
         </svg>
       </div>
-      {hover && (
-        <div
-          className="num pointer-events-none absolute z-30 -translate-y-1/2 rounded-sm border border-line bg-bg/95 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-fg"
-          style={{ top: axisY(hover.at, lo, ppm), left: STRIP_WIDTH + 3 }}
-          data-testid={`week-energy-hover-${date}`}
-        >
-          {hover.text}
-        </div>
-      )}
+      {/* Out of the column (it clips what leaves it, T1287): on the page, at the strip's sample. */}
+      {hover &&
+        createPortal(
+          <div
+            className="num pointer-events-none fixed z-50 -translate-y-1/2 rounded-sm border border-line bg-bg/95 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-fg"
+            style={hover.place}
+            data-testid={`week-energy-hover-${date}`}
+          >
+            {hover.text}
+          </div>,
+          document.body
+        )}
       {assumed && (
         <span className="pointer-events-none absolute top-0.5 right-1 text-[10px] leading-none text-muted" data-testid={`week-energy-assumed-${date}`}>
           {ASSUMED_CAPTION}
