@@ -349,3 +349,5 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1074 | Tło okna (`data-dialog-backdrop`, także palety Ctrl K) nie jest „gdzie indziej” (`IN_DIALOG` w `outside.ts`, `AllDayCard`); `holdGesture` kończy się chwilę po puszczeniu przycisku i przepuszcza klik z klawiatury (`detail === 0`) |
 | T1075 | „+ Nowa…” (wariant, kategoria) przekazuje nową rzecz do bloku, gdy dane panelu (`names.settings`) ją mają (najdłużej 2 s, `HAND_ON_MS`), przez najnowsze `onCreated`; pola kategorii wspólne w `settings/categoryFields.tsx` |
 | T1076 | „Powtarzaj”: formularz nietknięty idzie za nową datą zadania, tknięty zostaje (uzupełnia T1071) |
+| T1077 | `CommitField` ma `commitSame`: wpisana i zatwierdzona wartość idzie dalej, także gdy jest taka sama – `BlockEditor` włącza ją dla Początku, Końca i Długości tylko w nowym bloku (D461: zapisuje pierwsze zatwierdzone pole; „+ Blok” o 02:20 dostaje 03:30 +1 i wpisane „3:30” musi zapisać szkic i zapytać o wymianę) |
+| T1078 | Zapisany szkic zdejmuje `dropSavedDraft(date, id)` – tylko szkic o tym id, więc nowy szkic z Ctrl+N zrobiony tuż po zapisie poprzedniego zostaje |
