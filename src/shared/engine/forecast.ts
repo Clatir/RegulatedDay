@@ -205,8 +205,24 @@ export function forecast(inp: ForecastInput): Forecast {
     const a = b.anchor ? byId.get(b.anchor) : undefined
     return a && depth < 50 ? plannedKey(a, depth + 1) + a.durationMin : Number.POSITIVE_INFINITY
   }
+  // A parallel group paused whole (1.23-B: a start outside it, „Odcinam się”, a fixed start – T1211): its blocks come back
+  // together, as before its start – the first of them in the chain (its planned order), the others beside it.
+  const pausedOf = new Map<string, BlockInfo[]>()
+  for (const b of paused) {
+    const g = fact(b.id)?.group
+    if (g == null || b.bg) continue
+    pausedOf.set(g, [...(pausedOf.get(g) ?? []), b])
+  }
+  const pausedLead = new Map<string, BlockInfo[]>()
+  const pausedMates = new Set<string>()
+  for (const list of pausedOf.values()) {
+    if (list.length < 2) continue
+    const sorted = [...list].sort((a, b) => plannedKey(a) - plannedKey(b) || (a.id < b.id ? -1 : 1))
+    pausedLead.set(sorted[0]!.id, sorted.slice(1))
+    for (const x of sorted.slice(1)) pausedMates.add(x.id)
+  }
   const chain = inp.blocks
-    .filter((b) => !grouped.has(b.id) && ((status(b) === 'open' && !b.bg && (b.anchor != null || (!b.fixed && !b.waits))) || paused.includes(b)))
+    .filter((b) => !grouped.has(b.id) && !pausedMates.has(b.id) && ((status(b) === 'open' && !b.bg && (b.anchor != null || (!b.fixed && !b.waits))) || paused.includes(b)))
     .sort((a, b) => plannedKey(a) - plannedKey(b) || (a.anchor ? 1 : 0) - (b.anchor ? 1 : 0) || (a.id < b.id ? -1 : 1))
 
   // The cursor: where the foreground is free from – the running foreground block's end, else now; the cursor without the
@@ -278,6 +294,14 @@ export function forecast(inp: ForecastInput): Forecast {
     put(p)
     // The group takes its time once (T1162): what comes after it in the foreground waits for the longest of it there.
     const group = [p, ...putBeside(p)]
+    // The paused blocks of its parallel group come back with it (T1211): beside it, each for what is left of it, behind.
+    for (const x of pausedLead.get(b.id) ?? []) {
+      const fx = fact(x.id)!
+      const rest = Math.max(0, (fx.planned?.durationMin ?? x.durationMin) + endShiftOf(fx) - ranMinutes(fx, m))
+      const q: Placed = { block: x, from, to: from + rest, bg: true, due, running: false }
+      put(q)
+      group.push(q)
+    }
     const groupTo = Math.max(...group.map((x) => x.to))
     if (!b.anchor || place != null || from >= cursor) {
       cursor = Math.max(cursor, groupTo)

@@ -470,3 +470,21 @@ describe('grupa – poprawki po drugim przeglądzie (T1206, T1209)', () => {
     expect(click(resume, '18:12', { a: 'start', block: 'm' })).toMatchObject({ ok: false, confirm: { block: 'w' } })
   })
 })
+
+describe('prognoza zapauzowanej grupy (T1211)', () => {
+  it('cała grupa zapauzowana wraca w prognozie razem, a następny blok czeka do końca najdłuższego', () => {
+    const beside = (b: ReturnType<typeof block>, root: string) => ({ ...b, alongside: root })
+    const plan = [block({ id: 'a', cat: 'analiza', at: '08:00', min: 60 }), beside(block({ id: 'b', cat: 'nauka', at: '08:00', min: 120 }), 'a'), beside(block({ id: 'c', cat: 'inne', at: '08:00', min: 120 }), 'a'), block({ id: 'd', cat: 'inne', at: '10:30', min: 30 })]
+    const s = new Scenario({ date: DATE, plan }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    click(s, '08:20', { a: 'cutOff' })
+    click(s, '08:21', { a: 'back' })
+    const st = s.state('08:25')
+    const at = (id: string) => st.forecast.find((p) => p.block.id === id)!
+    expect(at('b').from).toBe(at('a').from)
+    expect(at('c').from).toBe(at('a').from)
+    // b and c have 100 min left: d waits for them, not for a block after another.
+    expect(at('d').from).toBeGreaterThanOrEqual(at('b').to)
+    expect(at('d').from - at('a').from).toBeLessThan(130)
+  })
+})
