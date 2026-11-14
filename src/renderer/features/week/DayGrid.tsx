@@ -27,6 +27,7 @@ import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { AllDayBar } from '../allday/AllDayBar'
 import { attachBadge, attachBadgeTitle, dayPlace } from '../attachments/attachView'
 import { EnergyStrip, STRIP_WIDTH } from './EnergyStrip'
+import { hasEnergy } from '../plan/energyDraw'
 import { NewBlockPopover } from './NewBlockPopover'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { moveWeekBlock } from './weekMove'
@@ -469,7 +470,7 @@ function DayColumn({
     onRange: (r, _rect, x) => onPick(index, columnUnder(x, index), r)
   })
   const shown = held ?? (waiting ? { startMin: waiting.startMin, endMin: waiting.startMin + waiting.durationMin } : null)
-  const stripped = day.energy != null && day.energy.samples.length > 0
+  const stripped = hasEnergy(day.energy)
   return (
     <div
       className={cx('relative overflow-hidden rounded-sm border-x border-line', day.when === 'today' ? 'bg-panel' : 'bg-transparent')}
@@ -487,9 +488,10 @@ function DayColumn({
         {lanes.map(({ item, lane, lanes: n }) => (
           <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} />
         ))}
+        {/* The place a new or a dragged block would take – where the blocks stand, right of the strip (T1288). */}
+        {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
+        {drop && <DropBand range={{ startMin: drop.startMin, endMin: drop.startMin + drop.durationMin }} lo={lo} ppm={ppm} denied={drop.denied} note={drop.onto?.text} />}
       </div>
-      {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
-      {drop && <DropBand range={{ startMin: drop.startMin, endMin: drop.startMin + drop.durationMin }} lo={lo} ppm={ppm} denied={drop.denied} note={drop.onto?.text} />}
     </div>
   )
 }

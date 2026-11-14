@@ -13,7 +13,7 @@ import type { DataView } from '@shared/api'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { DayGrid } from '@renderer/features/week/DayGrid'
 import { POOL_COLOR } from '@renderer/features/plan/energyDraw'
-import { ASSUMED_FACTOR, EnergyStripLegend, STRIP_OPACITY, STRIP_WIDTH } from '@renderer/features/week/EnergyStrip'
+import { ASSUMED_FACTOR, EnergyStripLegend, hoverPlace, STRIP_OPACITY, STRIP_WIDTH } from '@renderer/features/week/EnergyStrip'
 import { THREE_DAYS_PPM, WEEK_PPM } from '@renderer/features/week/weekLayout'
 import { moveWeekBlock } from '@renderer/features/week/weekMove'
 import { installEscape, onEscapeLayer } from '@renderer/lib/escape'
@@ -356,9 +356,47 @@ describe('pasek energii przy lewej krawędzi kolumny (D500, D422)', () => {
       return rect(colLeft(1), COL_TOP, STRIP_WIDTH + 1, 2000)
     })
     act(() => void hit.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: colLeft(1) + 2, clientY: COL_TOP + 240 * WEEK_PPM })))
-    expect(q(`week-energy-hover-${TODAY}`)!.textContent).toBe('10:00 · głowa 80 · emocje 90 · bodźce 40')
+    const hover = document.querySelector<HTMLElement>(`[data-testid="week-energy-hover-${TODAY}"]`)!
+    expect(hover.textContent).toBe('10:00 · głowa 80 · emocje 90 · bodźce 40')
+    // Whole: out of the column, which clips what leaves it (T1287) – on the page, right of the strip, at the sample's height.
+    expect(q(`week-col-${TODAY}`)!.contains(hover)).toBe(false)
+    expect(hover.className).toContain('fixed')
+    expect(hover.style.left).toBe(`${colLeft(1) + STRIP_WIDTH + 1 + 3}px`)
+    expect(hover.style.top).toBe(`${COL_TOP + 240 * WEEK_PPM}px`)
     act(() => void hit.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })))
-    expect(q(`week-energy-hover-${TODAY}`)).toBeNull()
+    expect(document.querySelector(`[data-testid="week-energy-hover-${TODAY}"]`)).toBeNull()
+  })
+  it('podpowiedź przy prawej krawędzi okna staje na lewo od paska', () => {
+    expect(hoverPlace({ left: 100, right: 106 }, 50, 1000)).toEqual({ top: 50, left: 109 })
+    expect(hoverPlace({ left: 900, right: 906 }, 50, 1000)).toEqual({ top: 50, right: 103 })
+  })
+  it('jedna próbka (nic do narysowania): bez paska, bloki od krawędzi kolumny (T1286)', async () => {
+    const list = days()
+    list[1] = { ...list[1]!, energy: { samples: [{ at: 600, head: 80, emotions: 90, senses: 40 }], reserve: 30 } }
+    await mount(list)
+    expect(q(`week-energy-${TODAY}`)).toBeNull()
+    expect(q(`week-blocks-${TODAY}`)!.style.left).toBe('0px')
+  })
+  it('miejsce przeciąganego bloku stoi tam, gdzie bloki – na prawo od paska (T1288)', async () => {
+    await mount(days({ energyTomorrow: track(true) }))
+    pointer(blockA(), 'pointerdown', colLeft(1) + 20, COL_TOP + 240 * WEEK_PPM + 8)
+    pointer(window, 'pointermove', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8)
+    expect(q(`week-blocks-${DATES[2]}`)!.contains(q('week-drop'))).toBe(true)
+    pointer(window, 'pointerup', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8, 0)
+    await act(async () => undefined)
+  })
+  it('zakres nowego bloku też stoi na prawo od paska (T1288)', async () => {
+    // jsdom has no pointer capture (the column takes the pointer once the drag begins).
+    Element.prototype.setPointerCapture = () => undefined
+    Element.prototype.releasePointerCapture = () => undefined
+    Element.prototype.hasPointerCapture = () => false
+    await mount(days({ energyTomorrow: track(true) }))
+    const col = q(`week-col-${DATES[2]}`)!
+    pointer(col, 'pointerdown', colLeft(2) + 40, COL_TOP + 600 * WEEK_PPM)
+    pointer(col, 'pointermove', colLeft(2) + 40, COL_TOP + 660 * WEEK_PPM)
+    expect(q('week-range')).not.toBeNull()
+    expect(q(`week-blocks-${DATES[2]}`)!.contains(q('week-range'))).toBe(true)
+    pointer(col, 'pointerup', colLeft(2) + 40, COL_TOP + 660 * WEEK_PPM, 0)
   })
 })
 

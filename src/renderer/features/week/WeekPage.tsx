@@ -28,6 +28,7 @@ import { useVisibleAllDayIn, useVisibleDays } from '../calendars/visibleViews'
 import { AgendaView } from './AgendaView'
 import { DayGrid } from './DayGrid'
 import { EnergyStripLegend } from './EnergyStrip'
+import { hasEnergy } from '../plan/energyDraw'
 import { GoalsPanel } from './GoalsPanel'
 import { THREE_DAYS_PPM, goalsMonthOfWeek } from './weekLayout'
 import { weekTitle } from './weekText'
@@ -122,9 +123,6 @@ export function WeekPage() {
   )
 }
 
-/** Some column shows the strip of energy (D500) – the legend of its shades stands over the columns. */
-const hasEnergy = (days: ReadonlyArray<{ energy: { samples: unknown[] } | null }>): boolean => days.some((d) => d.energy != null && d.energy.samples.length > 0)
-
 /** „Tydzień”: the month's goals, then the seven columns. */
 function WeekBody({ week, today, openCard, onCardOpened }: { week: string; today: string; openCard: string | null; onCardOpened: () => void }) {
   const { view, failed } = useWeekView(week)
@@ -137,7 +135,8 @@ function WeekBody({ week, today, openCard, onCardOpened }: { week: string; today
       {view ? (
         // Keyed by the week: another week is another grid – a window of a new block or a drag never goes with it (D371).
         <>
-          {hasEnergy(view.days) && <EnergyStripLegend />}
+          {/* Some column shows the strip of energy (D500) – the legend of its shades stands over the columns. */}
+          {view.days.some((d) => hasEnergy(d.energy)) && <EnergyStripLegend />}
           <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} openCard={openCard} onCardOpened={onCardOpened} />
         </>
       ) : (
@@ -168,7 +167,8 @@ function ThreeDaysBody({ middle }: { middle: string }) {
       <CalendarChips hiddenCount={seen.hiddenCount + hiddenInRange} />
       {view ? (
         <>
-          {hasEnergy(view.days) && <EnergyStripLegend />}
+          {/* Some column shows the strip of energy (D500) – the legend of its shades stands over the columns. */}
+          {view.days.some((d) => hasEnergy(d.energy)) && <EnergyStripLegend />}
           <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} ppm={THREE_DAYS_PPM} mode="3days" openCard={null} onCardOpened={() => undefined} />
         </>
       ) : (

@@ -23,7 +23,8 @@ import { attachBadge, attachBadgeTitle } from '../attachments/attachView'
 import { useMachine } from '../../store/machine'
 import { DueMark } from '../cases/DueMark'
 import { PriorityMark } from '../cases/PriorityMark'
-import { EnergyLanes, EnergyLegend } from './EnergyLanes'
+import { EnergyLanes } from './EnergyLanes'
+import { hasEnergy } from './energyDraw'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
 import { inParallelZone, tileAt, tileLanes } from './parallelDrag'
@@ -719,10 +720,7 @@ export function Timeline({
         ))}
       </div>
       {/* D500: the energy beside the axis – three lanes G · E · B (`EnergyLanes`). */}
-      {energy && energy.samples.length > 0 && <EnergyLanes track={energy} lo={lo} ppm={PPM} height={height} nowAt={markers.find((m) => m.now)?.at ?? null} />}
+      {energy && hasEnergy(energy) && <EnergyLanes track={energy} lo={lo} ppm={PPM} height={height} nowAt={markers.find((m) => m.now)?.at ?? null} nowColor={TONE.fg} />}
     </div>
   )
 }
-
-/** The legend of the energy beside the axis (D500) – where „Dziś” has always taken it from. */
-export { EnergyLegend }
