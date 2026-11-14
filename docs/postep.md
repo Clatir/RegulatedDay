@@ -72,10 +72,11 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 
 | Zadanie | Drzewo | Stan |
 | --- | --- | --- |
-| U1 + U6 (kroki z rutyny, powtarzanie spraw) | `w120a` | w toku (`wykonawca-opus`) |
-| U2 + U7 + U5 (autozapis, szkic na osi, „Koniec”) | `w120b` | w toku (`wykonawca-sonnet`) |
-| U8 (bez oznaczeń i drugiej zmiany) | `w120c` | w toku (`wykonawca-opus`) |
-| U3 + U4 (Del, „+ Nowa…”) | `w120d` | po scaleniu a–c |
+| U1 + U6 (kroki z rutyny, powtarzanie spraw) | `w120a` | scalone (T1030–T1044) |
+| U2 + U7 + U5 (autozapis, szkic na osi, „Koniec”) | `w120b` | scalone (T1045–T1054) |
+| U8 (bez oznaczeń i drugiej zmiany) | `w120c` | scalone (T1055–T1064) |
+| U3 + U4 (Del, „+ Nowa…”) | `w120d` | w toku (`wykonawca-sonnet`, od stanu po a+b) |
+| Przegląd xhigh runda 1 (a+b+c): 13 uwag | `w120f` (szkic, okienko Tygodnia), `w120e` (powtarzanie, Sprawy) | poprawki w toku (`wykonawca-opus`); runda 2 po scaleniu d, e, f |
 
 ## Ciąg L – stan (D380)
 Numery: D404, T700–T719 (L1), T750–T799 (L2, L3 – uzgodnione z sesją HKU1 12.11); kolejne D – osobno od HKU1 (ma D405, D406). „Przed etapem” pominięte na
