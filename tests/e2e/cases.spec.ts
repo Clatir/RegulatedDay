@@ -301,7 +301,10 @@ test('Sprawy: szybki zapis „!jutro” – podgląd pod polem przed Enter, zada
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
+      // Ctrl+N belongs to the page: pressed before „Sprawy” is up, it falls on „Dziś” (failed twice on the 1.20.0 run).
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
       await page.getByTestId('nav-requests').click()
+      await expect(page.getByTestId('requests')).toBeVisible()
       await page.keyboard.press('Control+KeyN')
       const field = page.getByTestId('case-add-title')
       await expect(field).toBeFocused()

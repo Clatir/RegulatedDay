@@ -64,7 +64,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    miesiąca 1.18.1 (D429) scalona w PR #86 (`main` 16db060). Na prośbę użytkownika 13.11 wieczorem: nazwa bloku jak
    tytuł w Google Calendar (D430, D431) – 1.19.0, PR z gałęzi `claude/1.19.0-nazwa-bloku` (drzewo `ws4q`), scalić po
    wydaniu 1.18.1 (sekcja „Blok 3 – paczka SNT”). Blok 4 zamknięty (1.17.0). 1.19.0 scalone (PR #87, `main` b23f382).
-7. **Uwagi po 1.19.0 → 1.20.0 (14.11, D460–D467, w toku):** osiem uwag użytkownika, pytania odpowiedziane 14.11 ok. 00:30,
+7. **Uwagi po 1.19.0 → 1.20.0 (14.11, D460–D467, czeka na odbiór):** osiem uwag użytkownika, pytania odpowiedziane 14.11 ok. 00:30,
    bez pauz do wydania (użytkownik niedostępny ok. 9 h). Jedna gałąź `claude/1.20.0-uwagi` (drzewo `w120`), jeden PR
    i jeden run (wypychanie gałęzi bez PR nie uruchamia CI). Zadania U1–U8, wykonawcy i drzewa – `docs/plan.md`,
    „Uwagi po 1.19.0”. Numery D460–D469, T1030–T1080. 1.19.0 wydane 13.11 23:54 (run 43518181223). Scalić, gdy na
@@ -79,7 +79,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 | Przegląd xhigh runda 1 (a+b+c): 13 uwag | `w120f`, `w120e` | poprawione i scalone (T1045, T1049, T1070–T1072) |
 | E2E E3 w nocy („+ Blok” o 02:20 – ta sama wartość pola nie zapisywała) | `w120g` | poprawione i scalone (T1077, T1078) |
 | Przegląd xhigh runda 2 (poprawki + U3/U4): 14 uwag | `w120h` (Del, okna, „+ Nowa…”), `w120g` (`TodayPage`, `draftSave`) | poprawione i scalone (T1067, T1073–T1076, T1079–T1080); runda 3 nie będzie (D351) |
-| PR 1.20.0 | `w120` | PR #88 otwarty 14.11; po zielonym CI scalić (D285), sprawdzić wydanie 1.20.0 z runu na `main`, Setup.exe do Pobranych |
+| PR 1.20.0 | `w120` | PR #88 scalony 14.11 (`main` b6d638e); run na `main` 43553628411 nie wydał 1.20.0 – E2E „!jutro” na Windows padł dwa razy (Ctrl+N przed wejściem „Spraw”) |
+| Poprawka testu „!jutro” | `w120`, gałąź `claude/1.20.0-e2e-jutro` | test czeka na „Dziś” i „Sprawy” przed Ctrl+N (jak test obok); PR, po scaleniu run na `main` wydaje 1.20.0, Setup.exe do Pobranych |
 
 **Do pokazania użytkownikowi przy odbiorze 1.20.0:** klik w blok w „Tygodniu” i „3 dniach” otwiera „Dziś” z zaznaczonym
 blokiem (T1066 – Del działa po kliknięciu); „+ Nowa…” dla Wariantu i Kategorii nie ma na dniu minionym (T1067); wieczorny
@@ -87,7 +88,7 @@ blok dawnej drugiej zmiany w szablonie liczy się teraz jak praca (granica, prze
 zapisuje go (T1080).
 **Uwagi na później:** `tests/e2e/quick.spec.ts` „„+” w pasku okna głównego…” niestabilny już na 1.19.0 (lokalnie 2 na 6) –
 zapis z pola paska czasem nie dochodzi; `AllDayCard` ma własny nasłuch kliku poza kartą – przejść na `useOutsidePointer`;
-`cases.spec` „!jutro” chwiejny pod obciążeniem (Ctrl+N tuż po menu); porzucenie zadania nie ma akcji w interfejsie, więc
+porzucenie zadania nie ma akcji w interfejsie, więc
 nie tworzy następnego (T1042).
 
 ## Ciąg L – stan (D380)
