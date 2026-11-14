@@ -355,13 +355,19 @@ describe('strefa komputera i szybkość', () => {
   })
 
   it('3 lata × 365 dni × 4 rynki marketDay – wyraźnie poniżej 200 ms (bez gotowej pamięci)', async () => {
-    vi.resetModules()
-    const fresh = await import('@shared/calendar/holidays')
     const dates = Array.from({ length: 3 * 365 }, (_, i) => new Date(Date.UTC(2040, 0, 1 + i)).toISOString().slice(0, 10))
-    const start = performance.now()
+    // Each try starts with an empty cache (a fresh module). The fastest of three: one try measured 13 ms to 54 ms on a loaded
+    // machine (the first run of the code is cold, a parallel worker stalls it), the rule is about the cost, not the machine.
+    let ms = Infinity
     let shut = 0
-    for (const market of MARKETS) for (const date of dates) if (fresh.marketDay(market, date).closed) shut++
-    const ms = performance.now() - start
+    for (let i = 0; i < 3; i++) {
+      vi.resetModules()
+      const fresh = await import('@shared/calendar/holidays')
+      shut = 0
+      const start = performance.now()
+      for (const market of MARKETS) for (const date of dates) if (fresh.marketDay(market, date).closed) shut++
+      ms = Math.min(ms, performance.now() - start)
+    }
     expect(shut).toBeGreaterThan(3 * 3 * 104)
     expect(ms).toBeLessThan(200)
   })

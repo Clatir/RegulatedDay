@@ -108,8 +108,18 @@ test('Sprawy (D462): klik w wiersz zaznacza go, Del pyta i usuwa z „Cofnij”;
       const note = page.getByTestId('request-note').first()
       await note.fill('spacer')
       await note.press('Enter')
-      await note.press('Delete')
+      // Enter commits and leaves the field; it shows the text again once the save is back. The cursor is put in the field by
+      // hand: `press` on a field without the focus puts it at the start (Playwright), so Del took the first letter whenever
+      // the save was back in time – „pacer” after „Cofnij”, or a second question (a request's name carries its note).
+      await expect(note).toHaveValue('spacer')
+      await note.click()
+      await page.keyboard.press('Home')
+      await page.keyboard.press('Delete')
+      // Del erases the letter after the cursor and asks nothing; Esc gives the saved text back.
+      await expect(note).toHaveValue('pacer')
       await expect(page.getByTestId('delete-ask')).toHaveCount(0)
+      await page.keyboard.press('Escape')
+      await expect(note).toHaveValue('spacer')
       // A click on the row (its edge, beside the fields) selects it.
       await page.getByTestId('case-row').first().click({ position: { x: 4, y: 4 } })
       await page.keyboard.press('Delete')

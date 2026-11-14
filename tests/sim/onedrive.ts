@@ -72,6 +72,14 @@ function walk(root: string, dir = ''): string[] {
 export class OneDriveSim {
   /** What each side's file was when the sync last saw or wrote it: rel → hash. */
   private readonly known = new Map<string, Map<string, string>>()
+  /**
+   * The file as the sync last read it: its identity, size and time of modification with the hash of what it held. Every
+   * step looks at every file; one that still stands the same is not read and hashed again. The app replaces a file by a
+   * rename (a new identity) or appends to it (a new size), and a reused identity with the same size would also need the
+   * same time of modification – two writes within one tick of the file clock, while the steps of the sync between two
+   * checks are further apart.
+   */
+  private readonly stamps = new Map<string, { sig: string; hash: string }>()
   private readonly sent = new Map<string, Buffer[]>()
   private transfers: Transfer[] = []
   readonly paused = new Set<string>()
@@ -98,6 +106,18 @@ export class OneDriveSim {
       const known = this.known.get(side.name)!
       for (const rel of walk(side.dir)) {
         const abs = join(side.dir, rel)
+        const key = `${side.name}:${rel}`
+        let sig: string
+        try {
+          // bigint: a 64-bit NTFS file id and the time in nanoseconds, exactly (a Number rounds them).
+          const st = statSync(abs, { bigint: true })
+          sig = `${st.ino}:${st.size}:${st.mtimeNs}`
+        } catch {
+          continue
+        }
+        const stamp = this.stamps.get(key)
+        // Unchanged since the sync last read it, and the sync knows it as that: nothing new to send.
+        if (stamp?.sig === sig && known.get(rel) === stamp.hash) continue
         let bytes: Buffer
         try {
           bytes = readFileSync(abs)
@@ -105,6 +125,7 @@ export class OneDriveSim {
           continue
         }
         const h = hash(bytes)
+        this.stamps.set(key, { sig, hash: h })
         if (known.get(rel) === h) continue
         known.set(rel, h)
         const to = this.other(side)

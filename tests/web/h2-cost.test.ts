@@ -24,7 +24,9 @@ describe('koszt startu (D339)', () => {
 })
 
 describe('wersja w Ustawieniach (D344)', () => {
-  it('„<numer> · zainstalowana”: numer z tego samego źródła co „Wersja” w Aktualizacjach', async () => {
+  // The first import of the settings page pulls in the whole window's module tree: 28 s on a busy machine (the transform of
+  // every file), a fraction of that on a quiet one; slow, not stuck.
+  it('„<numer> · zainstalowana”: numer z tego samego źródła co „Wersja” w Aktualizacjach', { timeout: 120_000 }, async () => {
     const { appVersionText } = await import('@renderer/features/settings/SettingsPage')
     expect(appVersionText({ version: '1.0.4', identity: 'production' })).toBe('1.0.4 · zainstalowana')
     expect(appVersionText({ version: '1.0.4', identity: 'test' })).toBe('1.0.4 · testowa (Regulated Day Test)')

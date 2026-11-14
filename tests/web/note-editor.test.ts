@@ -204,7 +204,9 @@ describe('notatka jako pole (T662)', () => {
     expect(m.editor.getText()).toBe('zdalnie')
   })
 
-  it('wartość z zewnątrz wchodzi także wtedy, gdy jej zapis Markdown przekracza limit (filtr limitu jej nie dotyczy)', async () => {
+  // The library's `getMarkdown` of 1700 adjacent emphases is not linear: 0,7 s for 425, 2 s for 850, 10,5 s for 1700 on a busy
+  // machine (15–20 s in a loaded run), so the default 30 s of the suite is too close; it is slow, not stuck.
+  it('wartość z zewnątrz wchodzi także wtedy, gdy jej zapis Markdown przekracza limit (filtr limitu jej nie dotyczy)', { timeout: 120_000 }, async () => {
     const m = await mount('a')
     act(() => loadNote(m.editor, '__x__ '.repeat(1700)))
     expect(m.editor.getMarkdown().length).toBeGreaterThan(NOTE_MAX)
