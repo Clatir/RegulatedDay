@@ -16,6 +16,7 @@ import { SERIES_MARK } from '@shared/seriesText'
 import { zjazdTypeRaw } from '@shared/import/zjazdDay'
 import { paths } from '@shared/data/paths'
 import { sessionShiftMin, sessionWindow } from '@shared/engine/createDay'
+import { knownSessionDefs } from '@shared/model/templateSessions'
 import { logicalClock } from '@shared/format'
 import type { ZjazdDay } from '@shared/import/zjazdy'
 import { eventsOn } from '@shared/model/allDay'
@@ -44,7 +45,7 @@ import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
 import { ZjazdyPreviewPanel } from './ZjazdyPreview'
 
 export function CalendarPage() {
-  const { rd, seriesPlans, stamp, routines, requests } = useData()
+  const { rd, seriesPlans, stamp, routines, requests, templates } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const brightness = useMachine((s) => s.prefs.brightness)
   const [month, setMonth] = useState(monthOf(today))
@@ -99,7 +100,8 @@ export function CalendarPage() {
     if (own?.dayType) marks.push(DAY_TYPE_NAMES[type].replace('Zjazd ', 'zjazd ').toLowerCase())
     const holidays = holidayMarks(d)
     marks.push(...holidays.marks)
-    if (s.sessions.some((x) => {
+    // Every session known that day – of the templates (D511) and of the layer.
+    if (knownSessionDefs(rd.settings, templates, d).some((x) => {
       const w = sessionWindow(x, d)
       return w != null && sessionShiftMin(x, w.start) !== 0
     }))

@@ -22,6 +22,10 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `model/ids.ts` (losowe i wyliczane identyfikatory).
 - `engine/createDay.ts` – deterministyczna migawka dnia (szablon, ustawienia daty, wykłady, sesje ze strefy NY ze
   skróceniem, przesunięcie pobudki) i `dayPlan` (migawka + plik dnia).
+- Sesje w szablonach (D511, T1340–T1353): wpis = blok szablonu kategorii sesji z `PlanBlock.session` (godzina polska „jak zwykle”);
+  `model/templateSessions.ts` – `daySettings` (sesje szablonu w `settings.sessions` migawki – jedno źródło dla `createDay`,
+  `addedSessions`, pytań, maksimum, zmiany typu), `entryDef`, `knownSessionDefs`, `templateBlockPatch`; `model/sessionMigration.ts`
+  – `moveSessions` (raz, od dnia, kopie `<id>_<dni>` z `Template.blockIdsOf`, zmiana `sesje-w-szablonach`). Dni sprzed niej – warstwa.
 - `engine/facts.ts` – log → fakty (przebiegi bloków, prośby, „Odcinam się”, zatwierdzenia, odcinki); `viewAt(f, m)`.
 - `engine/blocks.ts` – `BlockInfo` (klasa, czeka na „Zacznij” – tylko stała sesja, wykład/zjazd, oznaczenie „po pracy”).
   Oznaczeń bloku nie ma (D467): `PlanBlock` nie ma `tag` ani `waitUntilMin` – stare pola zostają w pliku nieczytane
@@ -60,7 +64,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `withoutZjazd`, `zjazdTypeRaw`, `classImport`, `sameDayFile`); bloki `origin: 'zjazd'` i zajęcia zdalne w dniu zjazdu
   (`blockInfos(…, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
   `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365), 8 – serie w `day.create` (T716), 9 – bez drugiej
-  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501).
+  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501), 14 – sesje w szablonach (D511).
 - Serie (OPS1, D381, D382, D401, D404, T700–T719): `model/series.ts` (rekord, `ruleFallsOn`, `seriesVersionOn`,
   `specialOutcome`, licznik `countedBefore`/`seriesLast`, `seriesPlans` – `SeriesPlan { series, last }`, `countDatesToRead`,
   `seriesOfBlock`, `currentSeries` – lista), `engine/series.ts` (`seriesBlocks` w `createDay`, `pushedBySeries` – rozsuwanie
@@ -127,7 +131,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - Godzina podwójna 25.10 (02:00–02:59) należy do dnia 24.10; dzień 24.10 ma 1500 minut, 27.03.2027 – 1380.
 - Zdarzenie z `at` w bieżącej minucie nie jest w `viewAt(m)` (ściśle przed m) – test przykładów liczy stan „inclusive”.
 - Blok zakotwiczony do bloku, którego nie ma, znika z planu (`dayPlan`, kaskadowo); kotwica do sesji w szablonie:
-  `session:<id>`.
+  `session:<id>` albo id wpisu sesji (D511).
 - `afterWorkAsProject` nie czyni bloku projektem w prognozie – tylko oznaczenie „po pracy” albo start po ważnym końcu.
 - Testy przykładów: `tests/unit/engine/dsl.ts` (plan w godzinach polskich, zdarzenia po zegarze). Każdy wiersz
   przykładu ze specyfikacji jest osobnym testem w `model-dnia.test.ts`.

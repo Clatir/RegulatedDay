@@ -29,7 +29,10 @@ export interface TypeChangeInput {
   /** The pools now (shown with a switch to a later maximum), null when energy is unknown or off. */
   energyNow: PoolValues | null
   to: DayTypeId
-  /** The settings in force at the switch (with this day's changes „od dziś”). */
+  /**
+   * The settings in force at the switch (with this day's changes „od dziś”), with the sessions of the new type's template
+   * (`daySettings`, D511).
+   */
   settings: RulesSettings
   /** „Dodaj bloki typu …” later in the day: the missing blocks of the type, whatever its maximum. */
   withAdd?: boolean
@@ -107,15 +110,15 @@ function missingBlocks(inp: TypeChangeInput): Array<{ block: PlanBlock; session:
   const out: Array<{ block: PlanBlock; session: string | null; ask: boolean }> = []
   const inPlan = (id: string) => ctx.plan.some((b) => b.id === id) && notBegun(state, id)
   const nowMin = state.now
-  // Sessions of the layer of the new type on this weekday (asked ones unchecked).
+  // Sessions of the new type on this weekday – its template's (D511, „pytaj rano” unchecked) and the layer's (asked ones
+  // unchecked).
   const layer = settings.dayTypes[to].sessions[weekday(date) - 1] ?? 'no'
-  if (layer !== 'no') {
-    for (const def of settings.sessions) {
-      const b = sessionBlock(def, date, ctx.snapshot.holidays)
-      if (!b || inPlan(b.id)) continue
-      if (idxOfLogical(state.grid, b.startMin! + b.durationMin) <= nowMin) continue
-      out.push({ block: b, session: def.id, ask: layer === 'ask' })
-    }
+  for (const def of settings.sessions) {
+    if (!def.block && layer === 'no') continue
+    const b = sessionBlock(def, date, ctx.snapshot.holidays)
+    if (!b || inPlan(b.id)) continue
+    if (idxOfLogical(state.grid, b.startMin! + b.durationMin) <= nowMin) continue
+    out.push({ block: b, session: def.id, ask: def.ask ?? layer === 'ask' })
   }
   // Blocks parked today by an earlier switch: back as copies (the parked one stays parked in the log).
   for (const [id, f] of state.facts.blocks) {
@@ -186,7 +189,7 @@ export function applyTypeChange(inp: TypeChangeInput, plan: TypeChangePlan, choi
   for (const block of parked) events.push({ k: 'block.park', day, block, at, rule: 'type' })
   for (const block of cancelled) events.push({ k: 'block.cancel', day, block, at, rule: 'type' })
   const added = plan.add.filter((a) => choice.add.includes(a.block.id))
-  const blocks = added.filter((a) => !a.session).map((a) => a.block)
+  const blocks = added.filter((a) => !byAnswer(ctx, a)).map((a) => a.block)
   const sessionsYes = added.filter((a) => a.session).map((a) => a.session!)
   const requestBlocks = plan.requests.filter((b) => choice.returnRequests.includes(b.id))
 
@@ -261,13 +264,13 @@ export function addTypeBlocks(inp: TypeChangeInput, plan: TypeChangePlan, add: r
   const g = state.grid
   const at = atOf(g, state.now)
   const added = plan.add.filter((a) => add.includes(a.block.id))
-  const blocks = added.filter((a) => !a.session).map((a) => a.block)
+  const blocks = added.filter((a) => !byAnswer(ctx, a)).map((a) => a.block)
   const sessionsYes = added.filter((a) => a.session).map((a) => a.session!)
   const events: Array<Record<string, unknown>> = []
   let boundary: TypeChangeResult['boundary'] = null
   const approved = state.boundary.approved
   if (approved != null && added.length) {
-    const sessions = added.filter((a) => a.session).map((a) => a.block)
+    const sessions = added.filter((a) => byAnswer(ctx, a)).map((a) => a.block)
     const sim = computeDay({ ...ctx, plan: [...ctx.plan, ...blocks, ...sessions], now: at + 60_000 })
     let next = Math.max(state.now, sim.boundary.proposal ?? approved)
     const cap = morningBoundary(state, inp.to, ctx.snapshot.dayType)
@@ -278,6 +281,14 @@ export function addTypeBlocks(inp: TypeChangeInput, plan: TypeChangePlan, add: r
     }
   }
   return { events, blocks, sessionsYes, requestBlocks: [], boundary }
+}
+
+/**
+ * A session the answer „tak” brings to the day by itself: one of the day's snapshot (`dayPlan`). One of the new type's
+ * template only (D511) – not in it – goes into the day's file as a block, with its answer.
+ */
+function byAnswer(ctx: DayContext, a: AddCandidate): boolean {
+  return a.session != null && ctx.snapshot.settings.sessions.some((d) => d.id === a.session)
 }
 
 /** The boundary approved before the first change of type, when the day was planned with `to` (the cap of a return to it). */

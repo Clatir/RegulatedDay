@@ -10,7 +10,8 @@ import { paths } from '../data/paths'
 import { ANALYSIS_CATEGORY } from './categories'
 import { planBlock, sourceVersionKey, templateFrom, type LectureSeries, type PlanBlock, type Template, type TemplateVersion } from './plan'
 import { RD_SCHEMA, type CategoryMeta, type GeneralSettings, type Person } from './rd'
-import { DEFAULT_SETTINGS, type DayTypeId, type RulesSettings } from './settings'
+import { moveSessions, movedTemplates } from './sessionMigration'
+import { DEFAULT_SETTINGS, type DayTypeId, type RulesSettings, type SettingsChange } from './settings'
 import { withStepsJson } from './steps'
 
 /** The wizard's settings apply from the start (every day before the first one too: the day of the wizard is outside the game). */
@@ -93,6 +94,8 @@ export function templateJson(t: Template, before?: RawRecord | null): RawRecord 
     dayType: t.dayType,
     weekdays: t.weekdays,
     archived: t.archived,
+    // A copy of D511's move of sessions keeps the days' ids of its original (`Template.blockIdsOf`).
+    ...(t.blockIdsOf ? { blockIdsOf: t.blockIdsOf } : {}),
     versions
   }
 }
@@ -112,11 +115,18 @@ export interface FirstSetup {
   days: Record<string, DayTypeId>
 }
 
-/** The records the first computer creates at „Zakończ”. */
+/**
+ * The records the first computer creates at „Zakończ”. The step „Sesje” sets the sessions and the grid „tak / nie / pytaj”;
+ * they go into the templates from the start (D511) – the move of `model/sessionMigration.ts`, so the folder is never moved
+ * again.
+ */
 export function firstComputerRecords(s: FirstSetup, at: number, computer: string): Array<{ rel: string; value: RawRecord }> {
+  const setup: SettingsChange = { id: SETUP_CHANGE_ID, from: SETUP_FROM, at: null, made: at, patch: settingsPatch(DEFAULT_SETTINGS, s.settings) }
+  const move = moveSessions([setup], s.templates, SETUP_FROM)
+  const templates = move ? movedTemplates(s.templates, move) : s.templates
   const rd: RawRecord = {
     schema: RD_SCHEMA,
-    settings: [{ id: SETUP_CHANGE_ID, from: SETUP_FROM, at: null, made: at, patch: settingsPatch(DEFAULT_SETTINGS, s.settings) }],
+    settings: move ? [setup, move.change] : [setup],
     general: s.general,
     categories: s.categories,
     people: s.people,
@@ -124,7 +134,7 @@ export function firstComputerRecords(s: FirstSetup, at: number, computer: string
   }
   return [
     { rel: paths.settings, value: rd },
-    ...s.templates.map((t) => ({ rel: paths.record('template', t.id), value: templateJson(t) })),
+    ...templates.map((t) => ({ rel: paths.record('template', t.id), value: templateJson(t) })),
     ...s.lectures.map((l) => ({ rel: paths.record('schedule', l.id), value: lectureJson(l) })),
     ...Object.entries(s.days).map(([date, dayType]) => ({ rel: paths.day(date), value: { schema: 1, date, dayType } as RawRecord }))
   ]

@@ -105,6 +105,8 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   + `seriesDays` (`folder.seriesView`, hub przy błędzie – ostatnie znane). Zmiany: `main/data/series.ts` (hub `series*`) –
   rekordy z kolejką, jedna partia `edit`, typy dni nowego licznika czytane przed liczeniem (`ensureTypes`), dziś tylko
   niezaczęte; `folder.dayDatesFrom`. `searchDays` pomija wystąpienia. Testy: `tests/fs/series*.test.ts`.
+- Sesje w szablonach (D511, T1347): prowadzący w `check()` przed `day.create` – `sessionsStart` (raz, `moveSessions` z widoku z kolejką;
+  wpis rd.json albo szablonu w kolejce – czeka; szablony, potem zmiana rd.json z `after`); `day.snapshot` z okna – `daySettings`.
 - Folder bez korzenia (T515): `DataFolder.open` owija `fs` w `rootGuarded` – zapis nie tworzy samego folderu danych;
   `check()` bez korzenia zwraca od razu („nieustalony”). Testy, które otwierają folder, muszą go najpierw utworzyć.
 - Korzeń znika w trakcie (E8b.1, `isRootGone` = ENOROOT): `cachedJson` oddaje wersję znaną (zaufaną jak świeżo

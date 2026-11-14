@@ -12,6 +12,7 @@ import { addTypeBlocks, applyTypeChange, planTypeChange, type TypeChangeInput } 
 import { durationLabel, logicalClock } from '@shared/format'
 import { POOLS } from '@shared/model/categories'
 import { DAY_TYPES, DAY_TYPE_NAMES, settingsOn, type DayTypeId } from '@shared/model/settings'
+import { daySettings } from '@shared/model/templateSessions'
 import { atOf } from '@shared/engine/grid'
 import { logicalMinuteOf } from '@shared/time/day'
 import { weekday } from '@shared/time/zone'
@@ -83,12 +84,13 @@ export function TypeChangeDialog({ model, names, isToday, onlyAdd, initialTo, on
 }
 
 function DuringDay({ model, names, to, onlyAdd, onClose }: { model: DayModel; names: Names; to: DayTypeId; onlyAdd: boolean; onClose: () => void }) {
-  const { rd } = useData()
+  const { rd, templates } = useData()
   const date = model.date
   const raw = model.data.dayFile
   const inp: TypeChangeInput = useMemo(
-    () => ({ ctx: model.ctx, state: model.state, energyNow: model.energy.known ? model.energy.now : null, to, settings: settingsOn(rd.settings, date, model.ctx.now), withAdd: onlyAdd }),
-    [model, to, rd.settings, date, onlyAdd]
+    // The settings with the sessions of the new type's template (D511).
+    () => ({ ctx: model.ctx, state: model.state, energyNow: model.energy.known ? model.energy.now : null, to, settings: daySettings(settingsOn(rd.settings, date, model.ctx.now), templates, to, date), withAdd: onlyAdd }),
+    [model, to, rd.settings, templates, date, onlyAdd]
   )
   const plan = useMemo(() => planTypeChange(inp), [inp])
   const [park, setPark] = useState<string[]>(plan.park.map((b) => b.id))

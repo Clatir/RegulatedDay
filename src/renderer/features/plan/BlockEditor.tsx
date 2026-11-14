@@ -48,6 +48,7 @@ export function BlockEditor({
   actions,
   readOnly,
   repeat,
+  session,
   steps,
   inSeries,
   place,
@@ -70,6 +71,8 @@ export function BlockEditor({
   readOnly?: boolean
   /** The field „Powtarzaj” (a series' fields), above the note. */
   repeat?: ReactNode
+  /** „Według czasu” and „pytaj rano” of a template's session (D511, `SessionFields`), above „Powtarzaj”. */
+  session?: ReactNode
   /** The list „Kroki” (`StepsEditor`, D440), above the note – the screen saves its changes (a day's block, a template's, a series'). */
   steps?: ReactNode
   /** The block is an occurrence of a series (or the series' own block): it keeps its own hour and carries no mark. */
@@ -236,6 +239,7 @@ export function BlockEditor({
           <Choice value={block.recorder ?? '-'} options={[{ value: '-', label: 'nie wskazano' }, ...computers.map((c) => ({ value: c.id, label: c.name }))]} onChange={(v) => set({ recorder: v === '-' ? null : v })} aria-label="Komputer nagrywający" />
         </Field>
       )}
+      {session}
       {repeat}
       {steps}
       <NoteEditor value={block.note} onCommit={(note) => set({ note })} olderComputers={olderComputers(computers)} readOnly={readOnly} />

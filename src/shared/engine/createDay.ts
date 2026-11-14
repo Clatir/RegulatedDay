@@ -9,10 +9,11 @@
 import { derivedId } from '../model/ids'
 import { SESSION_CATEGORY } from '../model/categories'
 import type { DaySnapshot } from '../model/events'
-import { PLAN_MAX, PLAN_MIN, planBlock, templateFor, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
+import { PLAN_MAX, PLAN_MIN, planBlock, planBlockFrom, templateFor, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
 import type { SeriesPlan } from '../model/series'
 import { stepsFrom, withDone } from '../model/steps'
 import { DEFAULT_SETTINGS, settingsOn, type DayTypeId, type RulesSettings, type SessionDef, type SettingsChange } from '../model/settings'
+import { allTemplateSessions, daySettings, isSessionEntry } from '../model/templateSessions'
 import { dayEnd, dayStart, logicalMinuteOf, placeLogical } from '../time/day'
 import { MINUTE, PL_ZONE, addDays, offsetMin, placeWall, weekday } from '../time/zone'
 import { pushedBySeries, seriesBlocks } from './series'
@@ -77,8 +78,9 @@ export function sessionShiftMin(def: SessionDef, at: number): number {
 }
 
 /**
- * A session of the layer as a block of `date`: fixed, of the session category, placed from its zone and ending at the
- * early close of its markets (as the day's holidays say); null when it does not fall in the day or closes before it starts.
+ * A session as a block of `date`: fixed, of the session category, placed from its zone and ending at the early close of its
+ * markets (as the day's holidays say); null when it does not fall in the day or closes before it starts. A template's
+ * session (D511) is its block of the template – its category, variant, name, note, steps and costs – at that place.
  */
 export function sessionBlock(def: SessionDef, date: string, holidays: DaySnapshot['holidays']): PlanBlock | null {
   const win = sessionWindow(def, date)
@@ -89,9 +91,11 @@ export function sessionBlock(def: SessionDef, date: string, holidays: DaySnapsho
     if (h?.earlyCloseAt != null) end = Math.min(end, h.earlyCloseAt)
   }
   if (end <= win.start) return null
+  const src = def.block ? planBlockFrom(def.block, 'template') : null
   return planBlock({
+    ...(src ? { variantId: src.variantId, background: src.background, costs: src.costs, bgCostPct: src.bgCostPct, note: src.note, name: src.name, routine: src.routine, steps: src.steps } : {}),
     id: sessionBlockId(date, def.id),
-    categoryId: SESSION_CATEGORY,
+    categoryId: src?.categoryId ?? SESSION_CATEGORY,
     startMin: Math.round(logicalMinuteOf(date, win.start)),
     durationMin: Math.round((end - win.start) / MINUTE),
     fixed: true,
@@ -106,10 +110,14 @@ export function lecturesOn(lectures: readonly LectureSeries[], date: string): Le
   return lectures.filter((s) => !s.archived && s.weekday === wd && s.from <= date && date <= s.to && !s.exceptions.includes(date))
 }
 
-/** Whether the session layer keeps a session on this day: your answer, else the layer („pytaj” without an answer keeps it). */
-function sessionKept(settings: RulesSettings, type: DayTypeId, date: string, sessionId: string, dayFile: DayFile | null): boolean {
-  const answer = dayFile?.sessions[sessionId]
+/**
+ * Whether a session is kept on this day: your answer, else a template's always (D511 – „pytaj rano” without an answer keeps
+ * it), a session of the layer by the layer („pytaj” without an answer keeps it).
+ */
+function sessionKept(settings: RulesSettings, type: DayTypeId, date: string, def: SessionDef, dayFile: DayFile | null): boolean {
+  const answer = dayFile?.sessions[def.id]
   if (answer) return answer === 'yes'
+  if (def.block) return true
   const choice = settings.dayTypes[type].sessions[weekday(date) - 1] ?? 'no'
   return choice !== 'no'
 }
@@ -117,8 +125,10 @@ function sessionKept(settings: RulesSettings, type: DayTypeId, date: string, ses
 /** The deterministic snapshot of a day. */
 export function createDay(inp: DayInputs): DaySnapshot {
   const { date, dayFile } = inp
-  const settings = settingsOn(inp.changes, date, inp.at)
-  const dayType = dayFile?.dayType ?? defaultDayType(date, settings)
+  const inForce = settingsOn(inp.changes, date, inp.at)
+  const dayType = dayFile?.dayType ?? defaultDayType(date, inForce)
+  // The day's sessions: its template's (D511) and what is left of the layer of sessions of the settings.
+  const settings = daySettings(inForce, inp.templates, dayType, date)
   const params = settings.dayTypes[dayType]
   const tpl = templateFor(inp.templates, dayType, weekday(date), date)
   const changes = inp.changes.filter((c) => c.from < date || (c.from === date && (c.at == null || (inp.at != null && c.at <= inp.at)))).map((c) => c.id).sort()
@@ -136,29 +146,38 @@ export function createDay(inp: DayInputs): DaySnapshot {
   }
   noteMarket('PL')
 
-  // The session layer: fixed blocks of the session category, placed from their zone, ending at the market's early close.
+  // The sessions: fixed blocks of the session category, placed from their zone, ending at the market's early close.
   const sessionIds = new Map<string, string>()
   let shift = 0
   for (const def of settings.sessions) {
     // Every session's markets, kept or not: a session added later the same day (an answer „tak”, a change of type)
     // ends at its market's early close too.
     for (const m of def.markets) noteMarket(m)
-    if (!sessionKept(settings, dayType, date, def.id, dayFile)) continue
+    if (!sessionKept(settings, dayType, date, def, dayFile)) continue
     const block = sessionBlock(def, date, holidays)
     if (!block) continue
     sessionIds.set(def.id, block.id)
     shift = Math.min(shift, sessionShiftMin(def, placeLogical(date, block.startMin!)))
     blocks.push(block)
   }
+  // The markets of the sessions of every template (D511), as of every session of the layer: one a change of type brings from
+  // another template ends at its early close.
+  for (const def of allTemplateSessions(inp.templates, settings.categories, date)) for (const m of def.markets) noteMarket(m)
 
   // The template's blocks; anchors to template blocks and sessions get the day's ids. A block anchored to a session that
-  // is not on this day is not on it either (a cancelled session cancels the blocks anchored to it).
+  // is not on this day is not on it either (a cancelled session cancels the blocks anchored to it). The template's sessions
+  // (D511) are the sessions above – a block anchored to one by its id follows it as „session:<id>” does. A copy made by the
+  // move of sessions makes the ids of its original (`blockIdsOf`).
   if (tpl) {
-    const ids = new Map(tpl.version.blocks.map((b) => [b.id, templateBlockId(date, tpl.template.id, b.id)]))
+    const entries = new Set(tpl.version.blocks.filter((b) => isSessionEntry(b, settings.categories)).map((b) => b.id))
+    const idsOf = tpl.template.blockIdsOf ?? tpl.template.id
+    const ids = new Map(tpl.version.blocks.map((b) => [b.id, templateBlockId(date, idsOf, b.id)]))
     for (const b of tpl.version.blocks) {
+      if (entries.has(b.id)) continue
       let anchor: string | null = null
       if (b.anchor) {
-        anchor = b.anchor.startsWith(SESSION_ANCHOR) ? (sessionIds.get(b.anchor.slice(SESSION_ANCHOR.length)) ?? null) : (ids.get(b.anchor) ?? null)
+        const session = b.anchor.startsWith(SESSION_ANCHOR) ? b.anchor.slice(SESSION_ANCHOR.length) : entries.has(b.anchor) ? b.anchor : null
+        anchor = session != null ? (sessionIds.get(session) ?? null) : (ids.get(b.anchor) ?? null)
         if (!anchor) continue
       }
       blocks.push({ ...b, id: ids.get(b.id)!, anchor, startMin: anchor ? null : b.startMin, origin: 'template', sourceId: b.id })
@@ -213,7 +232,7 @@ export function createDay(inp: DayInputs): DaySnapshot {
   return { ...snapshot, blocks: pushedBySeries(snapshot, date, nextWakeMin, gone) }
 }
 
-/** The snapshot's blocks with the session layer's answers given after the day was made (spec „Sesje tradingowe”): „nie” takes a session away, „tak” brings one the day was made without. */
+/** The snapshot's blocks with the sessions' answers given after the day was made (spec „Sesje tradingowe”): „nie” takes a session away, „tak” brings one the day was made without. */
 function snapshotBlocksOf(snapshot: DaySnapshot, dayFile: DayFile | null): PlanBlock[] {
   const answers = dayFile?.sessions ?? {}
   const blocks = snapshot.blocks.filter((b) => !(b.origin === 'session' && b.sourceId && answers[b.sourceId] === 'no'))
@@ -253,7 +272,9 @@ export function dayPlan(snapshot: DaySnapshot, dayFile: DayFile | null): PlanBlo
   const shift = wakeShift(snapshot, dayFile, snapshotBlocks, own)
   const out = new Map<string, PlanBlock>()
   for (const b of snapshotBlocks) if (!gone.has(b.id)) out.set(b.id, own.get(b.id) ?? shift(b))
-  for (const b of own.values()) if (!gone.has(b.id) && !out.has(b.id)) out.set(b.id, b)
+  // A session of the file (one a change of type brought, D511 – none of the snapshot's sessions to bring back) leaves by „nie” too.
+  const answers = dayFile?.sessions ?? {}
+  for (const b of own.values()) if (!gone.has(b.id) && !out.has(b.id) && !(b.origin === 'session' && b.sourceId && answers[b.sourceId] === 'no')) out.set(b.id, b)
   // A block in a cycle of anchors (anchored to itself, or A→B→A) can never start: it leaves the plan.
   const cyclic = new Set<string>()
   for (const [id, b] of out) {

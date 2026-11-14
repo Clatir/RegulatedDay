@@ -11,7 +11,8 @@ import { durationLabel, logicalClock, plDate, WEEKDAY_SHORT } from '@shared/form
 import { POOLS, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
 import { MODULES, MODULE_NAMES, rdFrom } from '@shared/model/rd'
-import { DAY_TYPES, DAY_TYPE_NAMES, NY_ZONE, RANGES, sessionWithEnd, sessionWithStart, type DayTypeId, type SessionChoice } from '@shared/model/settings'
+import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, sessionWithEnd, sessionWithStart, type DayTypeId, type SessionChoice } from '@shared/model/settings'
+import { SESSION_ZONES } from '@shared/model/templateSessions'
 import { placeLogical } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
 import { Choice, ClockField, DateField, DurationField, EndField, TextField, TimeField } from '../../components/fields'
@@ -323,7 +324,7 @@ function StepSessions() {
   const s = useWizard((x) => x.settings)
   return (
     <div className="flex flex-col gap-4">
-      <Lead>Sesje mają własną strefę (jak killzones ICT w czasie Nowego Jorku), więc w Polsce przesuwają się same, także w tygodniach, gdy USA i Europa zmieniają czas w inne niedziele.</Lead>
+      <Lead>Sesje mają własną strefę (jak killzones ICT w czasie Nowego Jorku), więc w Polsce przesuwają się same, także w tygodniach, gdy USA i Europa zmieniają czas w inne niedziele. Po „Zakończ” są wpisami w szablonach typów dni – zmienisz je potem w „Szablonach”.</Lead>
       <div className="flex flex-col gap-2">
         {s.sessions.map((x, i) => (
           <div key={x.id} className="flex flex-wrap items-center gap-2">
@@ -366,13 +367,8 @@ function StepSessions() {
   )
 }
 
-const ZONES = [
-  { value: NY_ZONE, label: 'Nowy Jork' },
-  { value: 'Europe/London', label: 'Londyn' },
-  { value: 'Europe/Warsaw', label: 'Warszawa' },
-  { value: 'Asia/Tokyo', label: 'Tokio' },
-  { value: 'Australia/Sydney', label: 'Sydney' }
-]
+/** „Według czasu” (D511): the sessions go into the templates at „Zakończ” (`firstComputerRecords`). */
+const ZONES = [...SESSION_ZONES]
 
 function StepLectures({ today }: { today: string }) {
   const lectures = useWizard((x) => x.lectures)

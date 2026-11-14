@@ -39,7 +39,6 @@ export const SETTING_SECTIONS: Array<{ id: string; title: string; keys?: string 
   { id: 'settings-modules', title: 'Moduły' },
   { id: 'settings-daytypes', title: 'Typy dni' },
   { id: 'settings-sleep', title: FIELD_GROUP_NAMES.sleep },
-  { id: 'settings-sessions', title: 'Sesje' },
   { id: 'settings-boundary', title: FIELD_GROUP_NAMES.boundary },
   { id: 'settings-energy', title: FIELD_GROUP_NAMES.energy },
   { id: 'settings-categories', title: 'Kategorie' },

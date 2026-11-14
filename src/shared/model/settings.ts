@@ -35,7 +35,15 @@ export interface DayTypeParams {
   sessions: SessionChoice[]
 }
 
-/** A session of the session layer, in its own reference zone (ICT killzones in New York time). */
+/** A market whose holidays and early closes concern a session (spec „kalendarz świąt”). */
+export type SessionMarket = 'NYSE' | 'CME_FX' | 'UK'
+
+/**
+ * A session of the day, in its own reference zone (ICT killzones in New York time): of the layer of sessions of the settings
+ * (before D511), or an entry of the day's template (D511, `model/templateSessions.ts`) – then with its own „pytaj rano” (`ask`)
+ * and the template's block it makes the day's block of (`block`, read again by `planBlockFrom`). A day's snapshot keeps the
+ * sessions of its day in `settings.sessions` (a version before D511 reads them there too).
+ */
 export interface SessionDef {
   id: string
   name: string
@@ -44,7 +52,11 @@ export interface SessionDef {
   startMin: number
   endMin: number
   /** The markets whose holidays and early closes concern it (spec „kalendarz świąt”). */
-  markets: Array<'NYSE' | 'CME_FX' | 'UK'>
+  markets: SessionMarket[]
+  /** A template's session (D511): asked about in the morning; none – the layer's choice of the day decides. */
+  ask?: boolean
+  /** A template's session (D511): the template's block it is (its category, name, note, steps, costs …). */
+  block?: unknown
 }
 
 export interface Reminders {
@@ -271,19 +283,36 @@ export function sessionWithEnd(s: SessionDef, clockMin: number): SessionDef {
   return { ...s, endMin: clockMin > s.startMin ? clockMin : clockMin + 1440 }
 }
 
+export const isSessionMarket = (m: unknown): m is SessionMarket => m === 'NYSE' || m === 'CME_FX' || m === 'UK'
+
+/** A time zone the calendar knows (`Intl`). */
+export function isZone(zone: unknown): zone is string {
+  if (typeof zone !== 'string' || !zone) return false
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone })
+    return true
+  } catch {
+    return false
+  }
+}
+
 function sessionsFrom(v: unknown, fallback: SessionDef[]): SessionDef[] {
   if (!Array.isArray(v)) return fallback
   const out: SessionDef[] = []
   for (const s of v) {
-    if (!isPlain(s) || typeof s.id !== 'string' || typeof s.name !== 'string' || typeof s.zone !== 'string') continue
+    if (!isPlain(s) || typeof s.id !== 'string' || typeof s.name !== 'string' || !isZone(s.zone)) continue
     if (!inRange(s.startMin, [0, 1439]) || !inRange(s.endMin, [1, 1440 * 2]) || s.endMin <= s.startMin) continue
-    try {
-      new Intl.DateTimeFormat('en-US', { timeZone: s.zone })
-    } catch {
-      continue
-    }
-    const markets = Array.isArray(s.markets) ? s.markets.filter((m): m is SessionDef['markets'][number] => m === 'NYSE' || m === 'CME_FX' || m === 'UK') : []
-    out.push({ id: s.id, name: s.name.slice(0, 40), zone: s.zone, startMin: s.startMin, endMin: s.endMin, markets })
+    const markets = Array.isArray(s.markets) ? s.markets.filter(isSessionMarket) : []
+    out.push({
+      id: s.id,
+      name: s.name.slice(0, 40),
+      zone: s.zone,
+      startMin: s.startMin,
+      endMin: s.endMin,
+      markets,
+      ...(typeof s.ask === 'boolean' ? { ask: s.ask } : {}),
+      ...(isPlain(s.block) ? { block: s.block } : {})
+    })
   }
   return out
 }

@@ -69,7 +69,11 @@ export const isOwnHere = (a: Pick<Attachment, 'owner'>, place: BlockPlace): bool
  * Where a day's block is shown, for its attachments (T831): the day, the template of its snapshot and every template there
  * is – a block left by a change of the day's type is found in its own template by its id.
  */
-export const dayPlace = (date: string, templateId: string | null, templates: readonly { id: string }[]): BlockPlace => ({ scope: 'day', date, templateId, templateIds: templates.map((t) => t.id) })
+export const dayPlace = (date: string, templateId: string | null, templates: readonly { id: string; blockIdsOf?: string | null }[]): BlockPlace => {
+  // D511: a copy of the move of sessions – its days' blocks have its original's ids.
+  const copies = templates.filter((t) => t.blockIdsOf)
+  return { scope: 'day', date, templateId, templateIds: templates.map((t) => t.id), ...(copies.length ? { idsOf: Object.fromEntries(copies.map((t) => [t.id, t.blockIdsOf!])) } : {}) }
+}
 
 export const MISSING_NOTE = 'Plik jeszcze nie dotarł z drugiego komputera (OneDrive).'
 export const PROGRAM_NOTE = 'Program – kliknięcie pokaże go w folderze.'

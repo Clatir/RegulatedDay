@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { writeFileAtomic } from '../datastore/atomic'
 import type { ComputerRow, SearchCorpus } from '@shared/api'
 import { EventClock, type ClockSources } from '@shared/data/clock'
-import { sameContentAs, setAt, type MergeConflict } from '@shared/data/merge'
+import { recordEdit, sameContentAs, setAt, type MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { readLogText } from '@shared/data/logText'
 import { activityOf, type Activity } from '@shared/engine/activity'
@@ -59,6 +59,9 @@ import { routineFrom, type Routine } from '@shared/model/routines'
 import { countDatesToRead, ruleDates, seriesFrom, seriesLast, seriesPlans, typeOfDays, type Series, type SeriesPlan } from '@shared/model/series'
 import type { CsvDay } from '@shared/engine/csv'
 import { changeOrder, isDayTypeId, settingsOn, type DayTypeId, type SettingsChange } from '@shared/model/settings'
+import { templateJson } from '@shared/model/defaults'
+import { moveSessions, sessionsMoved } from '@shared/model/sessionMigration'
+import { daySettings } from '@shared/model/templateSessions'
 import { decideLeader, minuteGate, SILENT_MS, soundComputer, type LeaderDecision, type Peer } from '@shared/sync/leader'
 import type { SyncState } from '@shared/sync/syncLines'
 import type { Presence } from '@shared/sync/presence'
@@ -1059,6 +1062,9 @@ export class DataFolder {
     if (read?.ahead) problems.push('zegar: zdarzenie innego komputera ponad 24 h przed zegarem tego komputera – działania automatyczne czekają')
     if (this.leader.iLead && settled && read?.complete && !read.ahead) {
       try {
+        // D511: the layer of sessions into the templates, once – before the day is made, so it is made with them. Apart, so
+        // a move that cannot be written now stops nothing else.
+        await this.sessionsStart(now).catch((e) => problems.push(`sesje w szablonach: ${String(e)}`))
         // The day is made once, by the leader (a derived id: two leaders after a pause of sync write the same event).
         if (!daySnapshotOf(read.events)) {
           const inp = await this.inputs()
@@ -1176,6 +1182,39 @@ export class DataFolder {
     const bytes = await this.o.fs.read(abs)
     const cut = !!bytes && bytes.length > 0 && bytes[bytes.length - 1] !== 0x0a
     await this.o.fs.append(abs, `${cut ? '\n' : ''}${JSON.stringify(line)}\n`)
+  }
+
+  /**
+   * D511: the leader moves the layer of sessions into the templates once, from today (`moveSessions` – deterministic: two
+   * leaders after a pause of sync write the same records), as this computer sees the folder with its queued edits; an edit
+   * of rd.json or of a template still in the queue (waiting, a question) – it waits, never written again. One edit: the
+   * templates first, rd.json's change after them (`after`) – till it is laid the days keep the layer, and an entry of a
+   * template and a session of the layer with one id are one session (`daySettings`).
+   */
+  private async sessionsStart(now: number): Promise<void> {
+    if (this.queue.pending.some((e) => e.rel === paths.settings || e.rel.startsWith(`${ID_COLLECTIONS.template}/`))) return
+    const rd = await this.recordView(paths.settings)
+    // No wizard yet, or the move made (the change in rd.json): nothing to read further.
+    if (!rd || sessionsMoved(rdFrom(rd).settings)) return
+    const inp = await this.inputs(true)
+    const move = moveSessions(inp.changes, inp.templates, logicalDayOf(now))
+    if (!move) return
+    const entries: Array<NonNullable<ReturnType<typeof recordEdit>>> = []
+    for (const t of move.changed) {
+      const rel = paths.record('template', t.id)
+      const before = await this.recordView(rel)
+      if (!before) throw new Error(`szablon ${t.id} jest teraz nieczytelny`)
+      const e = recordEdit(rel, before, templateJson(t, before))
+      if (e) entries.push(e)
+    }
+    for (const t of move.made) {
+      const e = recordEdit(paths.record('template', t.id), null, templateJson(t))
+      if (e) entries.push(e)
+    }
+    const list = Array.isArray(rd.settings) ? rd.settings : []
+    const settings = recordEdit(paths.settings, rd, { ...rd, settings: [...list, move.change] })
+    if (settings) entries.push({ ...settings, after: entries.map((_, i) => i) })
+    if (entries.length) await this.edit(entries)
   }
 
   /**
@@ -2629,8 +2668,10 @@ export class DataFolder {
       delete draft.id
       if (k === 'day.snapshot') {
         if (!isDayTypeId(d.dayType)) throw new Error('zdarzenie day.snapshot: typ dnia')
-        // Your own action: the settings with your own queued change (a change „od dziś” just made, also offline).
-        draft.settings = settingsOn((await this.inputs(true)).changes, d.day, at)
+        // Your own action: the settings with your own queued change (a change „od dziś” just made, also offline), with the
+        // sessions of the type's template (D511 – the rule of the maximum of a day without sessions reads them).
+        const inp = await this.inputs(true)
+        draft.settings = daySettings(settingsOn(inp.changes, d.day, at), inp.templates, d.dayType, d.day)
       }
       const check = parseEvent(JSON.stringify({ ...draft, id: 'x', c: this.o.computer, n: 0, t: now, l: now, v: this.rulesVersion }))
       if (!check.ok || !isKnown(check.event)) throw new Error(`zdarzenie ${k}: ${check.ok ? 'nieznane' : check.why}`)

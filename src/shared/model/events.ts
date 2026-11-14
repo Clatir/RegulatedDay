@@ -45,9 +45,13 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * work in front for requests and the forecast); it gives way to this one as the leader. 13 – the cost of a begun block changed
  * from a minute on (D501, `block.cost`): an older version skips the event and counts the block by its start's costs to its end
  * – the descents it would register (`energy.reserve`) and the reward of the frozen day; it gives way to this one as the leader
- * (and, the event being the timer's, installs the new version without the 24 h – `unknownTimerEvents`).
+ * (and, the event being the timer's, installs the new version without the 24 h – `unknownTimerEvents`). 14 – sessions in the
+ * templates (D511, `model/sessionMigration.ts`): the leader moves the layer of sessions into the templates once and makes the
+ * days with them (an hour earlier in the weeks of the shift, shortened by an early close, asked about with „pytaj rano”) – an
+ * older version reads the entries as fixed blocks of their category at their Polish hour (no shift, no early close, no
+ * question, never twice: the layer is empty from the move); it gives way to this one as the leader and freezes no day.
  */
-export const RULES_VERSION = 13
+export const RULES_VERSION = 14
 
 /** What a block's start wrote of its plan (`block.start.planned`). */
 export interface StartPlanned {
