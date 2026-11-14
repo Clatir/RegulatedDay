@@ -304,6 +304,11 @@ export function fixedStartPair(state: DayState, a: AutoAction): { ids: string[];
  * Afterwards the row is information (a click ended, paused or extended the block – taking the start back would leave those
  * events without a start). Every other action: true.
  */
+/** The start of a block the app began by itself (D475, rule `awayStart`), or undefined: begun by you, or not begun. */
+export function awayStartOf(state: Pick<DayState, 'facts'>, block: string): AutoAction | undefined {
+  return state.facts.autos.find((a) => a.k === 'block.start' && a.rule === 'awayStart' && a.block === block)
+}
+
 export function awayStartUndoable(state: DayState, a: AutoAction): boolean {
   if (a.rule !== 'awayStart' || a.k !== 'block.start' || !a.block) return true
   const f = state.facts.blocks.get(a.block)

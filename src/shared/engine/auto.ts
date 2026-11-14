@@ -18,7 +18,7 @@ import type { DayContext, DayState } from './day'
 import { blockAt, endShiftOf, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
 import { requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
-import { awayStartUndoable, fixedWorkLeft, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
+import { awayStartOf, awayStartUndoable, fixedWorkLeft, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
 /** The rules of a request's end without „Koniec” (`requestEndOf`). */
@@ -175,7 +175,7 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
   if (f.startedAt == null || placeOf(info) !== 'away') return null
   const start = atOf(state.grid, f.startedAt)
   const length = (f.planned?.durationMin ?? info.durationMin) + endShiftOf(f)
-  const begunByItself = state.facts.autos.some((a) => a.k === 'block.start' && a.rule === 'awayStart' && a.block === info.id)
+  const begunByItself = awayStartOf(state, info.id) != null
   // A commute and stationary classes end by their plan or „Tak” (D224); regeneration waiting before a fixed block too. A
   // commute the app began by itself (D486, T1142) ends at the return to a computer, at the latest at its planned end.
   if (info.rules.kind === 'commute') {
@@ -183,11 +183,19 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
     // Its planned end with its pauses (`plannedEndOf`), the return counted from its last run (a resume after a pause).
     const plannedEnd = atOf(state.grid, plannedEndOf(state, info, f))
     const back = firstUseAfter(activity, runFromOf(state.grid, f), AWAY_GAP_MIN)
+    // Its end by the plan taken back by „Cofnij” (a traffic jam): it ends at the return, or at the bedtime (T1151).
+    const byPlan = awayEndEvent(c.date, info.id, { at: plannedEnd, rule: AWAY_PLAN_RULE })
+    if (state.facts.undone.has(byPlan.id)) {
+      if (back) return { at: back.use, rule: 'firstUse' }
+      const bedtime = atOf(state.grid, state.bedtime.effective)
+      return c.inp.now >= bedtime ? { at: Math.max(plannedEnd, bedtime), rule: 'bedtime' } : null
+    }
     if (back && back.use < plannedEnd) return { at: back.use, rule: 'firstUse' }
     return c.inp.now >= plannedEnd ? { at: plannedEnd, rule: AWAY_PLAN_RULE } : null
   }
   // A regeneration the app began by itself (D475) has the same limit (T1139): a long absence is no hours of rest.
-  const autoRegen = info.isRegen && begunByItself
+  // So does a block of home requests (T1152).
+  const autoRegen = (info.isRegen || info.isRequestCat) && begunByItself
   const limited = info.rules.kind === 'meal' || info.rules.kind === 'routine' || info.categoryId === 'sprawy' || autoRegen
   const listening = info.isWork || info.isProject
   const limit = limited ? start + (length + AWAY_LIMIT_EXTRA_MIN) * MIN : listening ? start + length * MIN : null
@@ -242,9 +250,6 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
   const at = (idx: number) => atOf(state.grid, idx)
   // Since when the foreground is free (ms): the last run of the foreground that stopped, request or „Odcinam się”.
   let free = state.grid.start
-  // A block of work (a commute) not before the day's first use (T1147): begun while you slept it would make work and
-  // approve the boundary.
-  const firstUse = dayFirstUse(state, activity)
   for (const [, f] of state.facts.blocks) for (const r of f.runs) if (!r.bg && r.to !== OPEN) free = Math.max(free, at(r.to))
   for (const r of state.facts.requests) if (r.to !== OPEN) free = Math.max(free, at(r.to))
   for (const d of state.facts.disconnect) if (d.to !== OPEN) free = Math.max(free, at(d.to))
@@ -253,8 +258,8 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
   for (const b of candidates) {
     const f = state.facts.blocks.get(b.id)
     if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) continue
-    if (b.isWork && firstUse == null) continue
-    const lo = Math.max(at(b.start!), free, b.isWork ? firstUse! : Number.NEGATIVE_INFINITY)
+    // A commute too before the day's first use (D490 replaces T1147): it never approves the boundary (`day.ts`, T1149).
+    const lo = Math.max(at(b.start!), free)
     const hi = Math.min(at(b.start! + b.durationMin), bedtime)
     // The first stretch without input from `lo` long enough to tell you left (an open one up to now).
     const away = activity.idle.find((x) => x.to - Math.max(x.from, lo) >= AWAY_START_MIN * MIN && Math.max(x.from, lo) < hi)

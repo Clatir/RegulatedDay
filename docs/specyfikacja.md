@@ -198,7 +198,8 @@ Każda funkcja korzysta z tych samych definicji dnia i czasu; nie ma drugiego sp
   i zmieniane tylko edycją tego bloku: granica liczy się bez niego, a zaczęty po pierwszym końcu pracy liczy się jak
   projekt (niżej); blok zakotwiczony do bloku pracy nigdy go nie ma. Zatwierdzasz ją w planie porannym; zatwierdzenie
   granicy jest zatwierdzeniem planu. Bez zatwierdzenia propozycja zatwierdza się sama w chwili startu pierwszego bloku
-  pracy, a pasek pokazuje to w liście „zrobione automatycznie”. Edycje planu do tej chwili nie wywołują propozycji
+  pracy – nie bloku pracy poza komputerem, który aplikacja zaczęła sama (dojazd, gdy spałeś, D490) – a pasek pokazuje to
+  w liście „zrobione automatycznie”. Edycje planu do tej chwili nie wywołują propozycji
   wymiany. Plan poranny zrobiony później może granicę jeszcze zmienić, ale najwyżej do prognozy bloków, które były w
   planie w chwili automatycznego zatwierdzenia; bloki pracy dodane po nim dostają propozycję wymiany jak zwykle.
   „Cofnij” przy tym działaniu otwiera granicę do zatwierdzenia w planie albo w rytuale; propozycja nie zatwierdza się
@@ -864,13 +865,17 @@ Wersja 1.0 zawiera wszystko, co działa jako hamulec w czasie i energii, wraz z 
   projekty po porze snu i ostatnie użycie komputera po porze snu. Miara z dni, w których jej moduł był wyłączony, ma
   dopisek „brak pomiaru” zamiast zera. Do tego regeneracja i prośby według osób.
 - Przypomnienie o planie porannym przychodzi 30 min po pobudce, ale nie później niż 20 min przed pierwszym blokiem stałym pracy i nigdy w sesji; gdy ta chwila wypada przed pobudką, przychodzi w chwili pobudki.
-- Późne wstanie to pierwsze użycie komputera później niż 30 min po planowanym końcu porannej rutyny, gdy plan poranny
-  nie jest zrobiony. W trybie sesji, także gdy sesja czeka na „Zacznij”, propozycja czeka do jego końca. Granica
-  zostaje. Propozycja zaczyna się od pytania „Wstałeś później? · Tak · Nie” (D199): „Nie” zamyka ją bez zmian, a „Tak”
-  pokazuje przesunięcie rutyn, opieki i posiłków oraz skrócenie albo zaparkowanie bloków pracy; plan zmienia się dopiero
-  po akceptacji, a bloki, które już minęły, są wtedy oznaczone do potwierdzenia. Raz pokazane pytanie czeka na odpowiedź
-  (albo rytuał): koniec porannej rutyny, z którego je policzono, zapisuje się w pliku dnia przy pierwszym pokazaniu i
-  późniejszy blok rutyny go nie zmienia (D337).
+- Późne wstanie (D488, D489, zastępuje wyzwalacz pierwszego użycia komputera z D199): bloki bez komputera – także poranna
+  rutyna – zaczynają się same, również zanim włączysz komputer, więc o późnym wstaniu mówisz, przesuwając pierwszy blok
+  dnia (zwykle rutynę: „Cofnij” jej automatycznego startu na liście „Zrobione automatycznie” i przeciągnięcie na osi).
+  Gdy rano – przed 12:00 – stoi on co najmniej 20 min później niż w planie (z pobudką dnia), pada pytanie „Wstałeś później? · Tak · Nie”; samo pierwsze użycie komputera o nic nie pyta. W trybie sesji, także
+  gdy sesja czeka na „Zacznij”, propozycja czeka do jego końca. Granica zostaje. „Nie” zamyka ją bez zmian, a „Tak”
+  pokazuje resztę poranka – rutyny, opiekę i posiłki przed pierwszym blokiem stałym – przesuniętą o to samo opóźnienie
+  (blok, który rozsuwanie przeciągnięcia przesunęło dalej, zostaje), a każdy blok przed pierwszym blokiem stałym, który
+  aplikacja zaczęła sama, gdy spałeś – także dojazd i regeneracja – ma cofnięty start i też idzie (D490) oraz skrócenie albo zaparkowanie bloków pracy; plan zmienia się dopiero po
+  akceptacji, a bloki stałe, które minęły przed nową godziną pierwszego bloku, są wtedy oznaczone do potwierdzenia. Raz
+  pokazane pytanie czeka na odpowiedź (albo rytuał): godzina, na którą przesunięto pierwszy blok, zapisuje się w logu przy
+  pierwszym pokazaniu i kolejne przesunięcie jej nie zmienia (D337).
 
 **W ciągu dnia**
 

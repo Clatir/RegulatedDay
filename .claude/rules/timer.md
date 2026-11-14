@@ -93,7 +93,8 @@ paths:
   `endChanges` sortowane tak przed pętlą, ta sama kolejność dla sumy) do swojego
   końca (`confirmWindows` w `day.ts`). Limity krawędzi (`runningEdges`: `earliestEnd`, `latestEnd`) liczy jedno
   `limitsOf` w `resize.ts` – także podgląd; oba na siatce, zawsze `earliestEnd ≤ latestEnd`.
-- Późne wstanie (`lateWake.ts`, D488, T1144) – pierwszy blok dnia przesunięty w planie ≥ 20 min później niż w migawce
-  (z pobudką dnia); pierwsze użycie komputera nic nie znaczy.
+- Późne wstanie (`lateWake.ts`, D488, T1144, T1150) – pierwszy blok dnia przesunięty w planie ≥ 20 min później niż w
+  migawce (z pobudką dnia); „Tak” cofa starty `awayStart` poranka (`applyLateWake`). Granica sama – od pierwszej pracy
+  przy komputerze (`approvalStart`, D490, T1149).
 - Prowadzący sprawdza `idle`, `firstUse`, `limit`, `absence`, `lastInput`, `awayPlan` (i start `awayStart`) przy każdym sprawdzeniu i cofa je, gdy
   późniejszy log z wejściem im przeczy (T465) – nowa reguła końca zależna od wejścia musi tam trafić.

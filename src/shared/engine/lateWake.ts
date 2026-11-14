@@ -17,6 +17,7 @@ import { PLAN_MAX, PLAN_MIN, type DayFile, type PlanBlock } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { dayWakeMin, firstFixedStart, morningBound, wakeShiftedStart } from './createDay'
 import { isBoundaryWork } from './blocks'
+import { awayStartOf, awayStartUndoable } from './timer'
 import { computeDay, type DayContext, type DayState } from './day'
 import { atOf } from './grid'
 
@@ -26,7 +27,7 @@ export const LATE_WAKE_MIN = 20
 const MORNING_END_MIN = 12 * 60
 /**
  * The proposal shown is a `question.seen` of the log (D337): its id carries the hour the day's first block was moved to
- * when it was shown and the day's wake – `lateWake:<day>:<hour>:<wake>`. The log keeps the first (`facts.seen`, the same
+ * when it was shown and the day's wake – `lateWakeMoved:<day>:<hour>:<wake>` (not `lateWake:` – D199's end of the routine). The log keeps the first (`facts.seen`, the same
  * on every computer): moving the block again does not take the question away. The window reports it like any question.
  */
 export const lateWakeSeenId = (date: string, lw: Pick<LateWake, 'movedMin' | 'wakeMin'>): string => `lateWakeMoved:${date}:${lw.movedMin}:${lw.wakeMin}`
@@ -62,7 +63,11 @@ export interface LateWake {
   delayMin: number
   /** The proposal waits for the end of a session (logical minute), null: it is shown now. */
   waitUntilMin: number | null
-  shifts: Array<{ block: PlanBlock; toStartMin: number }>
+  /**
+   * The blocks it moves; `undo` – a block the app began by itself (D475) while you slept: „Tak” takes that start back
+   * (with its automatic end, „Cofnij”) before moving it (D490, T1150).
+   */
+  shifts: Array<{ block: PlanBlock; toStartMin: number; undo?: string }>
   shortens: Array<{ block: PlanBlock; toMin: number }>
   parks: PlanBlock[]
   /** Fixed blocks that passed before the first block's new hour: to be confirmed (E4a's „do potwierdzenia”). */
@@ -81,11 +86,15 @@ function plannedStarts(ctx: DayContext, dayFile: DayFile | null): Map<string, nu
   return out
 }
 
-/** The day's first block: the earliest flexible block of the snapshot with a start of its own (the morning routine as a rule). */
+/**
+ * The day's first block: the earliest flexible block of the snapshot with a start of its own still in the day's plan (the
+ * morning routine as a rule) – one cancelled or moved to another day is not it (T1153).
+ */
 function firstBlockOf(ctx: DayContext, planned: ReadonlyMap<string, number>): PlanBlock | null {
+  const inPlan = new Set(ctx.plan.map((b) => b.id))
   let best: PlanBlock | null = null
   for (const b of ctx.snapshot.blocks) {
-    if (b.fixed || b.anchor || b.startMin == null) continue
+    if (b.fixed || b.anchor || b.startMin == null || !inPlan.has(b.id)) continue
     if (!best || planned.get(b.id)! < planned.get(best.id)!) best = b
   }
   return best
@@ -104,10 +113,10 @@ export function detectLateWake(ctx: DayContext, state: DayState, dayFile: DayFil
   const movedMin = lateWakeSeenEnd(state.facts.seen, ctx.date, ctx.wakeMin) ?? first.startMin
   const delayMin = movedMin - plannedMin
   if (delayMin < LATE_WAKE_MIN) return null
-  // Only a morning (T1148): the new hour before the day's first fixed block and before 12:00 – moving the routine in the
-  // afternoon to the evening is no late wake.
+  // Only a morning (T1148, T1153): the new hour before 12:00 – moving the routine in the afternoon to the evening is no
+  // late wake; a fixed block it passed is to be confirmed (`passed`).
   const firstFixed = firstFixedStart(ctx.plan)
-  if (movedMin >= Math.min(firstFixed, MORNING_END_MIN)) return null
+  if (movedMin >= MORNING_END_MIN) return null
   const g = state.grid
 
   // A session waiting for „Zacznij” or running now: the proposal waits for its end.
@@ -118,17 +127,24 @@ export function detectLateWake(ctx: DayContext, state: DayState, dayFile: DayFil
     if (b.start <= state.now && state.now < end) waitUntilMin = Math.max(waitUntilMin ?? 0, logicalMinuteOf(ctx.date, atOf(g, end)))
   }
 
-  // The rest of the morning – routines, care and meals before the first fixed block, not begun – moves by the delay from
-  // its planned hour (one the push of the move took further keeps its place), in their order (D488).
+  // The rest of the morning before the first fixed block moves by the delay from its planned hour (one the push of the
+  // move took further keeps its place), in their order (D488): routines, care and meals not begun, and every block the app
+  // began by itself while you slept – a commute and a regeneration too (D490, T1150): its start is taken back.
   const shifts: LateWake['shifts'] = []
   for (const b of [...ctx.plan].sort((x, y) => (x.startMin ?? 0) - (y.startMin ?? 0))) {
     const rules = state.settings.categories[b.categoryId]
-    if (b.id === first.id || !rules || rules.cls !== 'life' || b.fixed || b.anchor || b.startMin == null) continue
+    if (b.id === first.id || !rules || b.fixed || b.anchor || b.startMin == null) continue
     const from = planned.get(b.id) ?? b.startMin
     if (from >= firstFixed) continue
-    if (state.facts.blocks.get(b.id)?.startedAt != null) continue
+    let undo: string | undefined
+    if (state.facts.blocks.get(b.id)?.startedAt != null) {
+      // Begun by itself and touched by nothing but the app since (`awayStartUndoable`); begun by you – it stays.
+      const a = awayStartOf(state, b.id)
+      if (!a || !awayStartUndoable(state, a)) continue
+      undo = a.id
+    } else if (rules.cls !== 'life') continue
     const to = Math.min(PLAN_MAX - b.durationMin, from + delayMin)
-    if (to > b.startMin) shifts.push({ block: b, toStartMin: to })
+    if (to > b.startMin || undo) shifts.push({ block: b, toStartMin: Math.max(to, b.startMin), ...(undo ? { undo } : {}) })
   }
   const passed = ctx.plan.filter((b) => b.fixed && b.startMin != null && b.startMin + b.durationMin <= movedMin && state.facts.blocks.get(b.id)?.startedAt == null)
 
@@ -141,7 +157,16 @@ export function detectLateWake(ctx: DayContext, state: DayState, dayFile: DayFil
   if (boundary != null) {
     const moved = new Map(shifts.map((s) => [s.block.id, { ...s.block, startMin: s.toStartMin }]))
     let plan = ctx.plan.map((b) => moved.get(b.id) ?? b)
-    const fcEnd = (p: readonly PlanBlock[]) => computeDay({ ...ctx, plan: p }).forecastWorkEnd
+    // Counted without the starts „Tak” takes back (and their automatic ends): those blocks are to come at their new hour.
+    const dropped = new Set<string>()
+    for (const s of shifts) {
+      if (!s.undo) continue
+      dropped.add(s.undo)
+      const end = state.facts.blocks.get(s.block.id)?.endId
+      if (end && state.facts.autos.some((a) => a.id === end)) dropped.add(end)
+    }
+    const events = dropped.size ? ctx.events.filter((e) => !dropped.has(e.id)) : ctx.events
+    const fcEnd = (p: readonly PlanBlock[]) => computeDay({ ...ctx, events, plan: p }).forecastWorkEnd
     let over = (fcEnd(plan) ?? 0) - boundary
     const flexible = state.forecast
       .filter((p) => p.block.inPlan && isBoundaryWork(p.block) && !p.block.fixed && !p.block.waits && !p.running && state.facts.blocks.get(p.block.id)?.startedAt == null)

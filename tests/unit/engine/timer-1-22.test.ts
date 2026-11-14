@@ -9,7 +9,9 @@ import { autoActions, nextDeadline, questionsOf, type AutoEvent } from '@shared/
 import { blockAt, pausedPlaceOf } from '@shared/engine/facts'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { autoText, engineView } from '@shared/engineView'
-import { block, hhmm, Scenario } from './dsl'
+import { computeDay } from '@shared/engine/day'
+import { detectLateWake } from '@shared/engine/lateWake'
+import { block, hhmm, lm, Scenario } from './dsl'
 
 const DATE = '2026-10-28' // a Wednesday
 
@@ -232,12 +234,6 @@ describe('bloki bez komputera zaczynają się same (D475)', () => {
     expect(leader(s, '13:56')).toMatchObject([{ k: 'block.end', at: s.at('13:55'), autoRule: 'awayPlan' }])
   })
 
-  it('dojazd (blok pracy) nie zaczyna się sam przed pierwszym użyciem dnia (T1147)', () => {
-    const s = day([block({ id: 'p', cat: 'dojazd', variant: 'dojazd', at: '07:30', min: 30 }), block({ id: 'a', cat: 'inne', at: '10:00', min: 60 })]).observe('09:20', null)
-    expect(leader(s, '09:21')).toEqual([])
-    expect(s.state('09:22').boundary.approvedAt).toBeNull()
-  })
-
   it('także przed pierwszym użyciem komputera w dniu – poranna rutyna (D488, T1143)', () => {
     const s = day([block({ id: 'r', cat: 'rutyny', at: '07:00', min: 45 })]).observe('09:20', null)
     expect(leader(s, '09:21')).toMatchObject([{ k: 'block.start', block: 'r', at: s.at('07:00'), autoRule: 'awayStart' }])
@@ -388,5 +384,98 @@ describe('zamiana – poprawki po drugim przeglądzie (T1130–T1132, T1141)', (
     const line = (time: string) => barView(s, time).lines.find((l) => l.id === 'paused:a')
     expect(line('08:51')).toMatchObject({ dot: false })
     expect(line('10:01')).toMatchObject({ dot: true })
+  })
+})
+
+describe('D490: dojazd przed pierwszym użyciem i granica; „Tak” cofa starty poranka', () => {
+  it('dojazd zaczyna się sam także przed pierwszym użyciem, ale granicę zatwierdza dopiero blok przy komputerze (T1149)', () => {
+    const s = day([block({ id: 'p', cat: 'dojazd', variant: 'dojazd', at: '07:30', min: 30 }), block({ id: 'a', cat: 'inne', at: '10:00', min: 60 })]).observe('09:20', null)
+    expect(leader(s, '09:21')).toMatchObject([{ k: 'block.start', block: 'p', at: s.at('07:30'), autoRule: 'awayStart' }])
+    expect(leader(s, '09:21')).toMatchObject([{ k: 'block.end', block: 'p', at: s.at('08:00'), autoRule: 'awayPlan' }])
+    expect(s.state('09:22').boundary.approvedAt).toBeNull()
+    expect(leader(s, '09:23', false).filter((e) => e.autoRule === 'boundary')).toEqual([])
+    click(s, '10:00', { a: 'start', block: 'a' })
+    const st = s.state('10:01')
+    expect(hhmm(st, st.boundary.approvedAt)).toBe('10:00')
+  })
+
+  it('dojazd i zajęcia zaczęte Twoim kliknięciem zatwierdzają granicę jak dotąd – dzień zajęć stacjonarnych też (T1149)', () => {
+    const s = day([block({ id: 'p', cat: 'dojazd', variant: 'dojazd', at: '08:00', min: 30 }), block({ id: 'a', cat: 'inne', at: '09:00', min: 60 })]).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'p' })
+    const st = s.state('08:20')
+    expect(hhmm(st, st.boundary.approvedAt)).toBe('08:00')
+    const classes = new Scenario({ date: DATE, dayType: 'zjazd-stacjonarny', plan: [block({ id: 'z', cat: 'dojazd', variant: 'zajecia', at: '09:00', min: 120, fixed: true })] }).observe('07:00', null)
+    leader(classes, '09:00')
+    expect(classes.state('09:30').boundary.approvedAt).not.toBeNull()
+  })
+
+  it('dojazd zaczęty sam: „Cofnij” końca według planu – kończy go powrót, nie biegnie bez końca (T1151)', () => {
+    const s = day([block({ id: 'p', cat: 'dojazd', variant: 'dojazd', at: '13:00', min: 30 })]).observe('07:00', null).gap('12:50', '13:40')
+    leader(s, '13:10')
+    const [end] = leader(s, '13:31')
+    expect(end).toMatchObject({ autoRule: 'awayPlan' })
+    expect(click(s, '13:32', { a: 'undo', target: end!.id }).ok).toBe(true)
+    expect(leader(s, '13:41')).toMatchObject([{ k: 'block.end', block: 'p', at: s.at('13:40'), autoRule: 'firstUse' }])
+  })
+
+  it('prośby domowe zaczęte same mają limit jak posiłek (T1152)', () => {
+    const s = day([block({ id: 'p', cat: 'prosby', at: '13:00', min: 30 })]).observe('07:00', null).gap('12:50', '18:00')
+    leader(s, '13:10')
+    expect(leader(s, '18:01')).toMatchObject([{ k: 'block.end', block: 'p', at: s.at('14:00'), autoRule: 'limit' }])
+  })
+
+  it('„Wstałeś później?” po przesunięciu rutyny: śniadanie zaczęte samo we śnie idzie z „Cofnij” jego startu (T1150)', () => {
+    const plan = [block({ id: 'ru', cat: 'rutyny', at: '06:00', min: 45 }), block({ id: 'po', cat: 'posilek', at: '07:30', min: 30 }), block({ id: 'ob', cat: 'posilek', at: '08:30', min: 20 })]
+    const s = day(plan).observe('09:20', null)
+    // The app wrote the morning by itself while you slept: the routine, then breakfast; the second meal you start yourself.
+    for (let i = 0; i < 6; i++) leader(s, '09:21')
+    const autoStart = (id: string) => s.state('09:22').facts.autos.find((a) => a.rule === 'awayStart' && a.block === id)!
+    expect(autoStart('ru')).toBeDefined()
+    expect(autoStart('po')).toBeDefined()
+    expect(click(s, '09:25', { a: 'undo', target: autoStart('ru').id }).ok).toBe(true)
+    const t = s.at('09:30')
+    const moved = plan.map((b) => (b.id === 'ru' ? { ...b, startMin: lm('09:30') } : b))
+    const ctx = s.contextAt(t, { plan: moved })
+    const lw = detectLateWake(ctx, computeDay(ctx), null)!
+    expect(lw.delayMin).toBe(210)
+    expect(lw.shifts.find((x) => x.block.id === 'po')).toMatchObject({ toStartMin: lm('11:00'), undo: autoStart('po').id })
+  })
+
+  it('„Tak” liczy pracę bez cofanych startów, cofa też dojazd zaczęty we śnie; pierwszy blok odwołany – następny (T1150, T1153)', () => {
+    const plan = [block({ id: 'ru', cat: 'rutyny', at: '06:00', min: 45 }), block({ id: 'po', cat: 'posilek', at: '07:00', min: 60 }), block({ id: 'dj', cat: 'dojazd', variant: 'dojazd', at: '09:00', min: 30 }), block({ id: 'na', cat: 'inne', at: '11:00', min: 240 })]
+    const s = day(plan, { transitionBufferMin: 0 }).observe('09:20', null)
+    s.approve('15:15', '05:00')
+    for (let i = 0; i < 8; i++) leader(s, '09:21')
+    const start = (id: string) => s.state('09:22').facts.autos.find((a) => a.rule === 'awayStart' && a.block === id)
+    expect(start('dj')).toBeDefined()
+    click(s, '09:25', { a: 'undo', target: start('ru')!.id })
+    const moved = plan.map((b) => (b.id === 'ru' ? { ...b, startMin: lm('09:30') } : b))
+    const ctx = s.contextAt(s.at('09:30'), { plan: moved })
+    const lw = detectLateWake(ctx, computeDay(ctx), null)!
+    expect(lw.shifts.map((x) => [x.block.id, x.undo != null])).toEqual([
+      ['po', true],
+      ['dj', true]
+    ])
+    // The meal and the commute come again at their new hours: the duties no longer fit before 15:15.
+    expect(lw.shortens.map((x) => x.block.id).concat(lw.parks.map((b) => b.id))).toContain('na')
+    // The day's first block cancelled for the day: the next one is the first.
+    const noRu = s.contextAt(s.at('09:30'), { plan: moved.filter((b) => b.id !== 'ru').map((b) => (b.id === 'po' ? { ...b, startMin: lm('09:30') } : b)) })
+    expect(detectLateWake(noRu, computeDay(noRu), null)?.first.id).toBe('po')
+  })
+
+  it('rutyna przesunięta za blok stały: pytanie pada, a minięty blok stały jest do potwierdzenia (T1153)', () => {
+    const plan = [block({ id: 'ru', cat: 'rutyny', at: '06:00', min: 45 }), block({ id: 'st', cat: 'inne', at: '07:00', min: 30, fixed: true })]
+    const s = day(plan)
+    const ctx = s.contextAt(s.at('08:10'), { plan: plan.map((b) => (b.id === 'ru' ? { ...b, startMin: lm('08:00') } : b)) })
+    const lw = detectLateWake(ctx, computeDay(ctx), null)!
+    expect(lw.passed.map((b) => b.id)).toEqual(['st'])
+  })
+
+  it('blok zaczęty Twoim kliknięciem zostaje w propozycji bez zmian (T1150)', () => {
+    const plan = [block({ id: 'ru', cat: 'rutyny', at: '06:00', min: 45 }), block({ id: 'po', cat: 'posilek', at: '07:30', min: 30 })]
+    const s = day(plan).observe('07:20', null)
+    click(s, '07:30', { a: 'start', block: 'po' })
+    const ctx = s.contextAt(s.at('07:40'), { plan: plan.map((b) => (b.id === 'ru' ? { ...b, startMin: lm('07:00') } : b)) })
+    expect(detectLateWake(ctx, computeDay(ctx), null)!.shifts).toEqual([])
   })
 })

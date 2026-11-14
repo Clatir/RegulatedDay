@@ -4,14 +4,16 @@
  * after „Zastosuj”. Asked once a day (the answer is the day's, on every computer).
  */
 import { useState } from 'react'
-import { putBlock, setAsked } from '@shared/data/dayEdits'
+import { setAsked } from '@shared/data/dayEdits'
 import type { LateWake } from '@shared/engine/lateWake'
 import { durationLabel, logicalClock } from '@shared/format'
 import { useBusy } from '../../lib/busy'
-import { isSaved, logEvents } from '../../store/data'
+import { logEvents } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { blockName, type Names } from '../plan/blockView'
-import { blockNow, saveDay } from './dayActions'
+import { saveDay } from './dayActions'
+import { applyLateWake } from './lateWakeApply'
+import { toast } from '../../store/ui'
 
 export function LateWakeCard({ model, lw, names }: { model: DayModel; lw: LateWake; names: Names }) {
   const [stage, setStage] = useState<'ask' | 'proposal'>('ask')
@@ -19,16 +21,16 @@ export function LateWakeCard({ model, lw, names }: { model: DayModel; lw: LateWa
   const raw = model.data.dayFile
   const answer = (a: string) => saveDay(date, raw, (r) => setAsked(r, 'lateWake', a))
   const [busy, run] = useBusy()
-  // The blocks are parked only when the moves were saved (A6-08).
+  // The starts the app made while you slept are taken back first (D490); the blocks are parked only when the moves were
+  // saved (A6-08).
   const apply = () =>
     run(async () => {
-      const out = await saveDay(date, raw, (r) => {
-        let next = r
-        for (const s of lw.shifts) next = putBlock(next, { ...blockNow(next, date, s.block), startMin: s.toStartMin })
-        for (const s of lw.shortens) next = putBlock(next, { ...blockNow(next, date, s.block), durationMin: s.toMin })
-        return setAsked(next, 'lateWake', 'yes')
+      const r = await applyLateWake(lw, date, {
+        undo: (target) => window.rd.timer({ a: 'undo', target, day: date }).catch((e: unknown) => ({ ok: false, why: e instanceof Error ? e.message : String(e) })),
+        save: (edit) => saveDay(date, raw, edit),
+        park: (events) => logEvents(events)
       })
-      if (isSaved(out) && lw.parks.length) await logEvents(lw.parks.map((b) => ({ k: 'block.park', day: date, block: b.id, rule: 'lateWake' })))
+      if (r.kept.length) toast(`Nie cofnięto startu: ${r.kept.map((b) => blockName(b, names)).join(', ')} – ${r.why ?? ''}`, 'error', 8000)
     })
   return (
     <section className="flex flex-col gap-2 rounded-lg border border-lamp/50 bg-lamp-soft px-4 py-3 text-[12.5px]" data-testid="late-wake">
@@ -50,7 +52,8 @@ export function LateWakeCard({ model, lw, names }: { model: DayModel; lw: LateWa
           <ul className="list-disc pl-5">
             {lw.shifts.map((s) => (
               <li key={s.block.id}>
-                {blockName(s.block, names)}: {logicalClock(s.block.startMin!)} → {logicalClock(s.toStartMin)}
+                {blockName(s.block, names)}: {s.toStartMin === s.block.startMin ? logicalClock(s.toStartMin) : `${logicalClock(s.block.startMin!)} → ${logicalClock(s.toStartMin)}`}
+                {s.undo ? ' (zaczął się sam – start zostanie cofnięty)' : ''}
               </li>
             ))}
             {lw.shortens.map((s) => (
