@@ -1,7 +1,9 @@
 /**
  * Nowy blok zapisuje się sam (D461), stoi na osi jako szkic (D466) i ma godzinę końca (D464). „Dziś” (jutro: pobudka o 12:00
  * w `seedAwake`, pusty plan – bez wymiany, bez rozsuwania): kliknięcie osi tylko otwiera szkic (kafelek z przerywaną ramką, nic w
- * pliku), Esc i każde opuszczenie nietkniętego szkicu go odrzucają (przypadkowy klik nie tworzy bloku); szkic wyciągnięty przeciągnięciem po osi zapisuje się takim, jaki jest, przy „Zamknij”, kliku gdzie indziej, zmianie dnia i ekranu (z „Cofnij”); pierwsze zatwierdzone
+ * pliku), Esc odrzuca nietknięty szkic, każde opuszczenie nietkniętego szkicu z gołego kliknięcia osi też (przypadkowy klik nie tworzy
+ * bloku); szkic z przeciągnięcia, „+ Blok” i Ctrl+N zapisuje się takim, jaki jest, przy „Zamknij”, kliku gdzie indziej, zmianie dnia i
+ * ekranu (z „Cofnij”, T1045); pierwsze zatwierdzone
  * pole zapisuje blok, a panel edytuje go dalej. Pole „Koniec” zmienia długość (początek zostaje), po północy z dopiskiem „+1 dzień”.
  * „Postaw na osi” w Sprawach i wykłady w ustawieniach mają je też.
  */
@@ -63,7 +65,7 @@ async function tomorrowPage(prefix: string) {
   return { ...run, dataDir, today, tomorrow }
 }
 
-test('nowy blok (D461, D466): kliknięcie osi to tylko szkic na osi (przerywana ramka, godziny), Esc go odrzuca; „Zamknij” zapisuje; „Dodaj” nie ma', async () => {
+test('nowy blok (D461, D466): kliknięcie osi to tylko szkic na osi (przerywana ramka, godziny), Esc go odrzuca; „Zamknij” zapisuje „+ Blok” i przeciągnięcie; „Dodaj” nie ma', async () => {
   const { app, page, userData, errors, dataDir, tomorrow } = await tomorrowPage('rd-e2e-autosave-draft-')
   try {
     await withMainLog(userData, async () => {
@@ -91,15 +93,15 @@ test('nowy blok (D461, D466): kliknięcie osi to tylko szkic na osi (przerywana 
       await page.getByTestId('day-title').click()
       await expect(tile).toHaveCount(0)
       await expect(page.getByTestId('block-editor')).toHaveCount(0)
-      // „+ Blok” untouched and „Zamknij”: thrown away too.
+      // „+ Blok” untouched and Esc: thrown away (Esc throws away a draft not touched).
       await page.getByTestId('day-add').click()
       await expect(tile).toBeVisible()
-      await page.getByTestId('block-editor-close').click()
+      await page.keyboard.press('Escape')
       await expect(tile).toHaveCount(0)
       expect(spans(dataDir, tomorrow)).toEqual([])
 
-      // A range dragged over the axis is on purpose: „Zamknij” saves it as it stands (an hour of „Inne”), the dashed tile becomes the block.
-      await dragAxis(page)
+      // „+ Blok” is on purpose (T1045): „Zamknij” saves it untouched, as it stands (an hour of „Inne”), the dashed tile becomes the block.
+      await page.getByTestId('day-add').click()
       await expect(tile).toBeVisible()
       const first = await page.getByTestId('block-start').inputValue()
       await page.getByTestId('block-editor-close').click()
@@ -108,6 +110,13 @@ test('nowy blok (D461, D466): kliknięcie osi to tylko szkic na osi (przerywana 
       await expect(tile).toHaveCount(0)
       await expect(page.getByTestId('block-editor')).toHaveCount(0)
       await expect(page.locator(`[data-testid="block-${blocksOn(dataDir, tomorrow)[0]!.id}"]`)).toContainText(first)
+
+      // A range dragged over the axis is on purpose too: „Zamknij” saves it as it stands.
+      await dragAxis(page, 0.8)
+      await expect(tile).toBeVisible()
+      await page.getByTestId('block-editor-close').click()
+      await expect.poll(() => spans(dataDir, tomorrow).length, { timeout: 15_000 }).toBe(2)
+      await expect(tile).toHaveCount(0)
     })
     expect(errors).toEqual([])
   } finally {
@@ -151,6 +160,26 @@ test('nowy blok (D461, D464): pierwsze zatwierdzone pole zapisuje blok, panel ed
       await page.getByTestId('block-end').press('Enter')
       await expect(page.getByTestId('block-end-error')).toHaveText('Blok trwa najkrócej 5 min.')
       expect(spans(dataDir, tomorrow)).toEqual([['inne', 20 * 60, 13 * 60, null]])
+
+      // Fields committed one after another without waiting (while the first save and the writes after it still run): every
+      // one is written, none is lost (T1066).
+      await page.getByTestId('block-editor-close').click()
+      await expect(page.getByTestId('block-editor')).toHaveCount(0)
+      await page.getByTestId('day-add').click()
+      await expect(page.getByTestId('draft-tile')).toBeVisible()
+      await page.getByTestId('block-start').fill('15:00')
+      await page.getByTestId('block-start').press('Enter')
+      await page.getByTestId('block-duration').fill('2h')
+      await page.getByTestId('block-duration').press('Enter')
+      await page.getByTestId('block-start').fill('15:30')
+      await page.getByTestId('block-start').press('Enter')
+      await page.getByTestId('block-name').fill('Szybki')
+      await page.getByTestId('block-name').press('Enter')
+      await page.getByTestId('block-duration').fill('45')
+      await page.getByTestId('block-duration').press('Enter')
+      await expect
+        .poll(() => spans(dataDir, tomorrow).find((b) => b[0] === 'inne' && b[1] !== 20 * 60), { timeout: 15_000 })
+        .toEqual(['inne', 15 * 60 + 30, 45, 'Szybki'])
     })
     expect(errors).toEqual([])
   } finally {
@@ -200,13 +229,29 @@ test('nowy blok (D461): klik gdzie indziej, zmiana dnia i zmiana ekranu zapisuj�
       await expect(page.getByTestId('draft-tile')).toBeVisible()
       await page.keyboard.press('Control+Digit2')
       await expect.poll(() => spans(dataDir, tomorrow).length, { timeout: 15_000 }).toBe(4)
-      // „+ Blok” untouched, another screen: nothing is made.
+      // Another day, empty: a bare click of the axis untouched and another screen – nothing is made.
       await page.getByTestId('nav-today').click()
-      await page.getByTestId('day-add').click()
+      await page.getByTestId('day-next').click()
+      const later = addDays(tomorrow, 1)
+      await clickAxis(page)
       await expect(page.getByTestId('draft-tile')).toBeVisible()
       await page.keyboard.press('Control+Digit2')
       await page.keyboard.press('Control+Digit1')
       await expect(page.getByTestId('day-add')).toBeVisible()
+      await expect(page.getByTestId('draft-tile')).toHaveCount(0)
+      expect(blocksOn(dataDir, later)).toEqual([])
+      // „+ Blok” untouched is on purpose (T1045): another screen saves it as it stands.
+      await page.getByTestId('day-add').click()
+      await expect(page.getByTestId('draft-tile')).toBeVisible()
+      await page.keyboard.press('Control+Digit2')
+      await expect.poll(() => blocksOn(dataDir, later).length, { timeout: 15_000 }).toBe(1)
+      // Ctrl+N untouched and a click elsewhere: saved too.
+      await page.keyboard.press('Control+Digit1')
+      await expect(page.getByTestId('day-add')).toBeVisible()
+      await page.keyboard.press('Control+KeyN')
+      await expect(page.getByTestId('draft-tile')).toBeVisible()
+      await page.getByTestId('day-title').click()
+      await expect.poll(() => blocksOn(dataDir, later).length, { timeout: 15_000 }).toBe(2)
       await expect(page.getByTestId('draft-tile')).toHaveCount(0)
       expect(spans(dataDir, tomorrow)).toHaveLength(4)
     })

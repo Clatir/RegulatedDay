@@ -171,11 +171,10 @@ describe('pole „Nazwa” w panelu bloku', () => {
     expect(page).toMatch(/setFresh\(b\.id\)/)
   })
 
-  it('„Dziś”: Enter w nazwie i zatwierdzenie pola idą przez jedno zapisywanie szkicu (`saving`) – blok nie zapisze się dwa razy (D461: bez „Dodaj”)', () => {
+  it('„Dziś”: Enter w nazwie i zatwierdzenie pola idą przez jeden pierwszy zapis szkicu (`firstSave`) – blok nie zapisze się dwa razy (D461: bez „Dodaj”, T1066)', () => {
     const page = readFileSync('src/renderer/features/today/TodayPage.tsx', 'utf8')
     expect(page).not.toContain('block-add')
-    expect(page).toMatch(/const saving = useRef<Promise<boolean> \| null>\(null\)/)
-    expect(page).toMatch(/newBlock=\{draft \? \{ add: \(name\) => \(saving\.current \? false : void commitDraft\(\{ name \}\)\) \} : undefined\}/)
+    expect(page).toMatch(/newBlock=\{draft \? \{ add: \(name\) => \(firstSave\.of\(draft\.id\) \? false : void changeBlock\(draft, \{ name \}, true\)\) \} : undefined\}/)
   })
 
   it('zakończona seria (tylko do odczytu): pole nie przyjmuje wpisu', async () => {
