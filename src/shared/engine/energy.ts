@@ -16,7 +16,7 @@ import { compareEvents, isKnown, type AnyEvent, type EnergyEvent } from '../mode
 import { DEFAULT_SETTINGS, type RulesSettings } from '../model/settings'
 import type { BlockInfo } from './blocks'
 import { REST_FREE, settingsAtMinute, type DayContext, type DayState } from './day'
-import { OPEN } from './facts'
+import { compareOrder, type EventOrder, OPEN } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
 
 const UNIT = 2000
@@ -110,6 +110,10 @@ interface Span extends Kind {
   returned: boolean
   /** Only in the forecast (not begun yet). */
   planned: boolean
+  /** Begun as a block of a parallel group (D476): the group's first block; in the forecast – the block it stands beside. */
+  groupId?: string | null
+  /** When its run began among the events (the order of the timer's foreground, T1191). */
+  order?: EventOrder
 }
 
 const pools = <T>(f: (p: Pool) => T): Record<Pool, T> => ({ head: f('head'), emotions: f('emotions'), senses: f('senses') })
@@ -204,14 +208,14 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   }
 
   // The runs of the log, cut at now; a run begun at now stays (empty) – its block is in the forecast from now.
-  const actual: Array<{ b: BlockInfo; group: boolean; runs: Array<{ from: number; to: number; bg: boolean; begun: number }> }> = []
+  const actual: Array<{ b: BlockInfo; group: string | null; runs: Array<{ from: number; to: number; bg: boolean; order: EventOrder }> }> = []
   for (const b of day.blocks) {
     const f = day.facts.blocks.get(b.id)
     if (!f) continue
     const runs = f.runs
       .filter((r) => r.from <= now)
-      .map((r) => ({ from: Math.max(0, r.from), to: Math.max(0, r.from, Math.min(r.to === OPEN ? now : r.to, now, end)), bg: r.bg, begun: r.from }))
-    actual.push({ b, group: f.group != null && !b.bg, runs })
+      .map((r) => ({ from: Math.max(0, r.from), to: Math.max(0, r.from, Math.min(r.to === OPEN ? now : r.to, now, end)), bg: r.bg, order: r.begun }))
+    actual.push({ b, group: !b.bg ? f.group : null, runs })
   }
   const span = (b: BlockInfo, from: number, to: number, bg: boolean, rest: Partial<Span> = {}): Span => ({ ...kindOf(b), from, to, bg, why: null, returned: false, planned: false, ...rest })
   /** What is in the foreground of the log at k (or begins there) besides `except`. */
@@ -234,7 +238,7 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
       else if (kind.flexible) why = 'aside'
       else if (!prev) why = 'forced'
       else if (!prev.bg) why = kind.rules.background && frontOver(r.from, b)?.flexible ? 'aside' : 'forced'
-      if (r.to > r.from) spans.push(span(b, r.from, r.to, r.bg, { why, returned: !r.bg && !!prev?.bg && prev.to === r.from }))
+      if (r.to > r.from) spans.push(span(b, r.from, r.to, r.bg, { why, returned: !r.bg && !!prev?.bg && prev.to === r.from, groupId: group, order: r.order }))
       if (r.to === now) lastWhy.set(b.id, why)
     })
   }
@@ -245,7 +249,8 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
     // A block of a parallel group to come stands behind its first block (`alongside`, the forecast): no cost, as when it
     // runs behind (D476, T1199).
     const why = p.bg ? (p.running ? (lastWhy.get(p.block.id) ?? 'planned') : p.block.alongside != null && !p.block.bg ? 'group' : 'planned') : null
-    spans.push(span(p.block, from, to, p.bg, { why, planned: !p.running }))
+    const groupId = p.running ? (day.facts.blocks.get(p.block.id)?.group ?? null) : (p.block.alongside ?? null)
+    spans.push(span(p.block, from, to, p.bg, { why, planned: !p.running, groupId }))
   }
   const upToNow = (to: number) => Math.min(to === OPEN ? now : to, now)
   const requests = day.facts.requests.map((r) => ({ id: r.id, from: r.from, to: upToNow(r.to) }))
@@ -271,7 +276,11 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   const groupAt: Array<Span | null> = new Array(end).fill(null)
   for (const x of spans) {
     if (!x.bg || x.why !== 'group') continue
-    for (let k = x.from; k < x.to; k++) if (!groupAt[k] || groupAt[k]!.from < x.from) groupAt[k] = x
+    for (let k = x.from; k < x.to; k++) {
+      const cur = groupAt[k]
+      // The one begun last – by its minute, then by the order of events (the same click: the last written), as `groupFront`.
+      if (!cur || cur.from < x.from || (cur.from === x.from && cur.order && x.order && compareOrder(x.order, cur.order) > 0)) groupAt[k] = x
+    }
   }
 
   // The summed cost an hour of every minute (hundredths), what is in the foreground, and fixed blocks running behind it.
@@ -316,9 +325,15 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   for (const x of spans) {
     if (!x.bg) continue
     for (let k = x.from; k < x.to; k++) {
-      // Behind as a block of a parallel group: no cost; in front when nothing else is (counted above).
-      if (x.why === 'group') continue
       const s = settingsBy[k]!
+      // Behind as a block of a parallel group: no cost behind a block of its own group (or nothing – then it is in front,
+      // counted above); behind another block – as a block set aside (flexible: its share) or sent behind (fixed: full, T1199).
+      if (x.why === 'group') {
+        const front = frontSpan[k]
+        if (!front || front === x || front.groupId === x.groupId || (front.block.id === x.groupId)) continue
+        add(k, costOf(x, s), isSession(x) ? 0 : x.flexible ? (x.bgPct ?? s.backgroundCostPct) : 100)
+        continue
+      }
       add(k, costOf(x, s), isSession(x) ? (hasFront[k] ? 0 : 100) : x.why === 'forced' ? 100 : (x.bgPct ?? s.backgroundCostPct))
     }
   }

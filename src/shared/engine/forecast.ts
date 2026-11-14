@@ -213,7 +213,9 @@ export function forecast(inp: ForecastInput): Forecast {
   // floor of now follows the real end of the last foreground block.
   const runningFg = placed.filter((p) => p.running && !p.bg)
   // The group of a running block: its blocks in the foreground hold the foreground as the running one does.
-  const heldFg = [...runningFg, ...besideRunning]
+  // A parallel group begun (1.23-B, T1207): its blocks behind hold the foreground to the end of the longest, as before its start.
+  const groupBehind = placed.filter((p) => p.running && p.bg && !p.block.bg && fact(p.block.id)?.group != null)
+  const heldFg = [...runningFg, ...besideRunning, ...groupBehind]
   let cursor = heldFg.length ? Math.max(...heldFg.map((p) => p.to)) : m
   let cursorDue = cursor
   // An urgent request runs to its estimate (spec „Prośba”: the forecast knows it at once) – the foreground is free after it.

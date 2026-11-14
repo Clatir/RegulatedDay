@@ -18,7 +18,7 @@ import type { DayContext, DayState } from './day'
 import { blockAt, endShiftOf, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
 import { requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
-import { awayStartOf, awayStartUndoable, fixedWorkLeft, groupRootIn, groupStarts, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
+import { awayStartOf, awayStartUndoable, fixedWorkLeft, groupRootIn, groupStarts, groupStartsWith, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
 /** The rules of a request's end without „Koniec” (`requestEndOf`). */
@@ -219,6 +219,17 @@ export const GROUP_PLAN_RULE = 'groupPlan'
 /** The end of a commute begun by itself at its planned end (D486): „według planu”, on its own row with „Cofnij”. */
 export const AWAY_PLAN_RULE = 'awayPlan'
 
+/**
+ * The rest of a parallel group begun with a block that began by itself (D499, T1197): each start or resume on its own row
+ * (`groupStart`, „Cofnij”); a resumed one sent behind (`block.fg`) – an id of its own, no row (T1204).
+ */
+function groupAutoStarts(inp: AutoInput, lead: string, at: number): AutoEvent[] {
+  const date = inp.state.grid.date
+  return groupStarts(inp.ctx, inp.state, lead, at, 'auto').map((e) =>
+    e.k === 'block.fg' ? ({ ...e, id: derivedId(date, 'auto', GROUP_START_RULE, 'block.fg', String(e.block), e.at) } as AutoEvent) : auto(date, GROUP_START_RULE, e as TimerDraft & { block: string })
+  )
+}
+
 /** The automatic end of a block away from the computer by `awayEnd` (one id for the rule and the check that waits for it). */
 const awayEndEvent = (date: string, block: string, away: { at: number; rule: string }): AutoEvent => auto(date, away.rule, { k: 'block.end', block, at: away.at, done: null, rule: away.rule })
 
@@ -278,7 +289,7 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
     const root = groupRootIn(inp.ctx.plan, b.id)
     const lead: AutoEvent = { id, autoRule: 'awayStart', k: 'block.start', block: b.id, at: from, bg: false, planned: startPlanned(b, inp.ctx.plan), confirmUntil: null, how: 'auto', ...(root != null ? { group: root } : {}) }
     // D499 (T1197): the rest of its parallel group begins with it, behind.
-    return [lead, ...groupStarts(inp.ctx, state, b.id, from, 'auto').map((e) => auto(date, GROUP_START_RULE, e as TimerDraft & { block: string }))]
+    return [lead, ...groupAutoStarts(inp, b.id, from)]
   }
   return []
 }
@@ -418,7 +429,12 @@ function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, Shu
     const list: AutoEvent[] = []
     if (!bg && front) {
       if (front.info.protectedLife || isFixedLike(front.info)) bg = true
-      else list.push(auto(date, 'fixedStart', { k: 'block.pause', block: front.info.id, at: from }))
+      else {
+        list.push(auto(date, 'fixedStart', { k: 'block.pause', block: front.info.id, at: from }))
+        // The rest of its parallel group pauses with it (D499, T1195).
+        if (front.fact.group != null)
+          for (const x of t.bg) if (x.fact.group === front.fact.group && !isFixedLike(x.info) && !x.info.bg) list.push(auto(date, 'fixedStart', { k: 'block.pause', block: x.info.id, at: from }))
+      }
     }
     list.push(
       auto(date, 'fixedStart', {
@@ -434,7 +450,7 @@ function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, Shu
       })
     )
     // D499 (T1197): a block of a parallel group begun by itself begins the whole group, as „Zacznij” does.
-    for (const e of groupStarts(inp.ctx, state, b.id, from, 'auto')) list.push(auto(date, GROUP_START_RULE, e as TimerDraft & { block: string }))
+    list.push(...groupAutoStarts(inp, b.id, from))
     out.push(list)
   }
   return out
@@ -623,7 +639,8 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     if (activity.idle.some((x) => x.from <= from + MIN && x.to - from >= AWAY_START_MIN * MIN)) continue
     const f = state.facts.blocks.get(a.block)
     const end = f?.endId ? state.facts.autos.find((x) => x.id === f.endId) : undefined
-    take([a, ...(end ? [end] : [])].map((x) => ({ id: derivedId(date, 'auto', 'revalidate', x.id), k: 'undo', at: inp.now, target: x.id, reason: 'later log', autoRule: 'revalidate' })))
+    // The rest of its group begun with it goes back too (T1204).
+    take([a, ...(end ? [end] : []), ...groupStartsWith(state, a)].map((x) => ({ id: derivedId(date, 'auto', 'revalidate', x.id), k: 'undo', at: inp.now, target: x.id, reason: 'later log', autoRule: 'revalidate' })))
   }
   // The same for a request's end by input (the first use, the limit, the bedtime), with the block it resumed (the rule
   // resumes it again at the new end).
