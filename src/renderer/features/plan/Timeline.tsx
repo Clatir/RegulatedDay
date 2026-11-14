@@ -46,6 +46,8 @@ export interface TimelineItem {
   background: boolean
   /** Passed, parked or cancelled: shown dimmed. */
   dim?: boolean
+  /** Done (D477): ended and not left unfinished – ✓ before its name, no strike-through (its tile dimmed as every ended one). */
+  finished?: boolean
   /** Waits for „Zacznij” (a fixed session). */
   waits?: boolean
   /** An occurrence of a series: the mark `SERIES_MARK` stands by its name (D401). */
@@ -513,7 +515,14 @@ export function Timeline({
         {endEdge && <span data-edge="end" data-testid={`block-${i.id}-edge-end`} className={cx('absolute inset-x-0 bottom-0 z-10 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         <div className={cx('flex min-w-0 items-baseline gap-1.5', tiny ? 'text-[11px]' : 'pt-0.5 text-[12px]')}>
           {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(start)}</span>}
-          <span className="truncate text-fg">{i.title}</span>
+          <span className="truncate text-fg">
+            {i.finished && (
+              <span className="text-muted" aria-label="ukończony" data-testid="block-finished">
+                ✓{' '}
+              </span>
+            )}
+            {i.title}
+          </span>
           {i.badge && !narrow && <DueMark badge={i.badge} compact testId="block-due" />}
           {i.hiddenIn && (
             <span className={cx('truncate text-muted', tiny ? 'text-[10px]' : 'text-[11px]')} data-testid="hidden-calendar">

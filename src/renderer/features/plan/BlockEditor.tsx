@@ -6,8 +6,9 @@
  * its list „Kroki” (`steps`, D440 – a slot of the screen, above the note), its note (a live Markdown editor, D388), its
  * attachments (`place`, D410). Every field saves on leaving it (spec „Edycja pól”); the panel changes nothing by itself.
  * A block of a series (`inSeries`, also the one edited in the list of „Szablony”) has its own hour and no marks: no „po bloku” (D401).
- * D460: choosing a routine copies its usual steps into „Kroki” in the same change (`routineStepsCopy`) – a block of a task
- * keeps its list (it goes with the task's, T792); „bez rutyny” leaves the steps.
+ * D480 (replaces the copy of D460): choosing a routine only points at it – its length goes with it, its steps never: a block
+ * without steps of its own shows the routine's (D473, `model/routineSteps.ts`) until its day ticks one; a list of the block's own
+ * (also a copy made by 1.20–1.21) stays as it is; „bez rutyny” leaves the steps.
  * D463: the lists „Kategoria”, „Wariant” and „Rutyna” end with „+ Nowa…” – a window in the middle of the screen with all the fields of the thing
  * (`NewThingDialogs`); once saved, the new one is chosen in the block like one picked from the list (a field committed, D461) – a
  * variant and a category once the panel's data (`names`) have it. A variant and a category are made from today on, so a block
@@ -17,7 +18,6 @@ import { useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
 import { routineMinutes, type Routine } from '@shared/model/routines'
-import { routineStepsCopy } from '@shared/model/steps'
 import type { SessionDef } from '@shared/model/settings'
 import { SESSION_ANCHOR } from '@shared/engine/createDay'
 import { olderComputers } from '@shared/model/note'
@@ -27,9 +27,7 @@ import { Choice, DurationField, EndField, TextField, TimeField } from '../../com
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import { useData, type SaveAnswer } from '../../store/data'
-import { toast } from '../../store/ui'
 import { useAttachDrop } from '../attachments/attachDrop'
-import { routineCutText } from '../steps/stepsUi'
 import { AttachmentsSection } from '../attachments/AttachmentsSection'
 import { NoteEditor } from '../note/NoteEditor'
 import { anchorCandidates, blockName, categoryOptions, type Names } from './blockView'
@@ -122,13 +120,8 @@ export function BlockEditor({
   // A variant and a category are made „od dziś”: a day gone by would not have them (T1067).
   const newDated = blockDay == null || (today !== '' && blockDay >= today)
   const newOption = (dated: boolean) => (readOnly || (dated && !newDated) ? [] : [NEW_OPTION])
-  // D460: its steps with the routine, as one change of the block (the copy of the routine chosen before is replaced).
-  const pickRoutine = (r: Routine | undefined) => {
-    const was = block.routine ? names.routines.find((x) => x.id === block.routine) : null
-    const copy = r && !block.task && r.normal.length ? routineStepsCopy(block.steps, was, r) : null
-    const out = set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}), ...(copy ? { steps: copy.steps } : {}) })
-    if (copy?.cut) void Promise.resolve(out).then((saved) => saved !== false && toast(routineCutText(copy.cut), 'info', 6000))
-  }
+  // D480: the routine and its length – its steps are never copied (the block shows the routine's while it has none of its own).
+  const pickRoutine = (r: Routine | undefined) => void set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}) })
   return (
     <aside className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3" data-testid="block-editor" {...drop.bind}>
       <div className="flex items-center gap-2">

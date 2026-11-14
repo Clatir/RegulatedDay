@@ -186,8 +186,12 @@ export interface BarRoutine {
   line: string
   block: string
   name: string
+  /** The steps of each version as the day shows them (T1108; a list of the block's own – `normal`, no `worse`); `min` 0 – no time. */
   normal: Array<{ id: string; name: string; min: number }>
   worse: Array<{ id: string; name: string; min: number }>
+  /** The version the day picked for the block (D479) and the ids its day has ticked off – „Kroki ▸” starts from them. */
+  version?: 'normal' | 'worse'
+  done?: string[]
 }
 
 /** A request running now: its line in place of the block (D312); `day` – the day its „Koniec” goes to (also before 04:00). */

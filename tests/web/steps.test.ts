@@ -7,7 +7,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { DataView, EditEntry, RawRecord, RdApi } from '@shared/api'
+import type { DataView, EditEntry, RawRecord, RdApi, TimerIn } from '@shared/api'
 import { paths } from '@shared/data/paths'
 import { addStepOp, moveStepOp, type Step } from '@shared/model/steps'
 import { templateJson } from '@shared/model/defaults'
@@ -20,6 +20,7 @@ import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 import { changeBlockSteps, changeTaskSteps, changeTemplateSteps, tickBlockStep, tickTaskStep, undoSteps } from '@renderer/store/steps'
 import { DAY_UNREADABLE } from '@renderer/store/cases'
+import { tickCaseStep } from '@renderer/features/steps/stepsFinish'
 
 const four = (): Step[] => ['Napisać testy', 'Przygotować logikę', 'Sprawdzić na Windowsie', 'Zrobić commit'].map((title, order) => ({ id: `s${order + 1}`, title, order, done: false }))
 
@@ -147,5 +148,24 @@ describe('kroki w oknie (store/steps.ts)', () => {
     expect(sent[0]![0]!.rel).toBe(paths.record('template', 'zw'))
     expect(paths1(sent[0]!)).toEqual([`${paths.record('template', 'zw')}:versions.2099-01-01`])
     expect(await changeTemplateSteps('brak', '2099-01-01', 'w', { op: 'remove', id: 's1' })).toMatchObject({ saved: false, error: 'Tego szablonu już nie ma.' })
+  })
+})
+
+describe('„Sprawy”: ostatni krok zadania kończy jego biegnący blok (D474, przegląd 12)', () => {
+  it('odhaczenie ostatniego kroku w „Sprawach” – `stepsFinish` bloku zadania dziś i „Skończono: <tytuł> · Cofnij”; nie ostatni – nic', async () => {
+    const steps = four().slice(0, 2).map(({ done: _d, ...s }) => s)
+    const task = { ...newTask('t1', Date.now(), TODAY, { title: 'Raport' })!, day: TODAY, block: 'tb', state: 'planned', steps, stepsDone: { s1: true } }
+    const day = { schema: 1, date: TODAY, blocks: [{ id: 'tb', categoryId: 'inne', startMin: 600, durationMin: 90, origin: 'user', task: 't1', steps }], stepsDone: { tb: { s1: true } } }
+    stub({ requests: [task] }, { [TODAY]: day })
+    const calls: TimerIn[] = []
+    ;(globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd.timer = async (c) => (calls.push(c), { ok: true, why: null, confirm: null })
+    const r = await tickCaseStep('t1', 's2', true, 'Raport', TODAY)
+    expect(r.saved).toBe(true)
+    expect(calls.map((c) => [c.a, c.block, c.day])).toEqual([['stepsFinish', 'tb', TODAY]])
+    expect(useUi.getState().toasts.at(-1)?.text).toBe('Skończono: Raport')
+    // A tick taken back ends nothing.
+    calls.length = 0
+    await tickCaseStep('t1', 's2', false, 'Raport', TODAY)
+    expect(calls).toEqual([])
   })
 })

@@ -8,6 +8,7 @@
 import { isIsoDate } from '../time/zone'
 import { NOTE_MAX } from './note'
 import { DAY_TYPES, type DayTypeId } from './settings'
+import { routineStepsEntries, type RoutineStepsEntry } from './routineSteps'
 import { doneSetFrom, stepsFrom, type Step } from './steps'
 
 export interface PlanBlock {
@@ -126,6 +127,11 @@ export interface DayFile {
   asked: Record<string, string>
   /** The steps ticked off on this day (D440, T786): block id → its ticked step ids (in the file a map block → step → true). */
   stepsDone: Record<string, string[]>
+  /**
+   * The lists of its blocks' routines the day keeps (D473, T1100: written at the first tick or the version picked – `model/
+   * routineSteps.ts`); a block not in it shows its routine as the routine is now. Unknown to older versions (kept in the file).
+   */
+  routineSteps?: Record<string, RoutineStepsEntry>
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -362,7 +368,8 @@ export function dayFileFrom(v: unknown, date: string): DayFile {
         : [],
     movedTo,
     asked,
-    stepsDone
+    stepsDone,
+    routineSteps: routineStepsEntries(r.routineSteps)
   }
 }
 

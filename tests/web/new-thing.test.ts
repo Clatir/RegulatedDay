@@ -2,7 +2,7 @@
 /**
  * „+ Nowa…” in the lists of a block's panel (D463): „Kategoria”, „Wariant” and „Rutyna” end with it; it opens a window in the middle of
  * the screen with the fields of the thing; „Zapisz” makes the thing through the same save as its screen and the block takes it (the
- * routine with its steps and length, D460); „Anuluj” and Esc leave the block as it was; a list of a panel that cannot change (read
+ * routine with its length – its steps never copied, D480); „Anuluj” and Esc leave the block as it was; a list of a panel that cannot change (read
  * only) has no such item.
  */
 import { act, createElement } from 'react'
@@ -101,7 +101,7 @@ describe('lista kończy się pozycją „+ Nowa…”', () => {
 })
 
 describe('„+ Nowa…” → rutyna', () => {
-  it('okno na środku z nazwą i krokami; „Zapisz” tworzy rutynę i blok ją przyjmuje (kroki, długość)', async () => {
+  it('okno na środku z nazwą i krokami; „Zapisz” tworzy rutynę i blok ją przyjmuje (długość, bez kopii kroków – D480)', async () => {
     const onChange = await mount(routineBlock)
     choose('block-routine', '__new__')
     expect(q('new-routine')).not.toBeNull()
@@ -133,7 +133,8 @@ describe('„+ Nowa…” → rutyna', () => {
     expect(q('new-routine')).toBeNull()
     expect(onChange).toHaveBeenCalledTimes(1)
     expect(onChange.mock.calls[0]![0]).toMatchObject({ routine: made.id, durationMin: 10 })
-    expect(onChange.mock.calls[0]![0].steps).toHaveLength(1)
+    // D480: its steps are never copied – the block shows the routine's (D473).
+    expect('steps' in onChange.mock.calls[0]![0]).toBe(false)
   })
 
   it('Esc i „Anuluj” zostawiają blok – nic nie zapisano; bez nazwy „Zapisz” jest nieaktywne', async () => {

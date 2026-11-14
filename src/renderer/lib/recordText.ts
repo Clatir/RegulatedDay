@@ -137,6 +137,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames, va
     if (a === 'asked') return 'pytania tego dnia'
     if (a === 'classImport') return 'import zjazdów'
     if (a === 'stepsDone') return b ? `${blockPart(b, undefined)}: odhaczone kroki` : 'odhaczone kroki'
+    if (a === 'routineSteps') return b ? `${blockPart(b, undefined)}: kroki rutyny` : 'kroki rutyn'
     if (a === 'seriesOff') return b ? `${blockPart(b, undefined)}: odwołany przez zmianę serii` : 'odwołane przez zmianę serii'
     return 'inne pole dnia'
   }

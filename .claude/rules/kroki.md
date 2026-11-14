@@ -1,6 +1,10 @@
 ---
 paths:
   - "src/shared/model/steps.ts"
+  - "src/shared/model/routineSteps.ts"
+  - "src/shared/engine/routineCheck.ts"
+  - "src/shared/engine/stepsFlow.ts"
+  - "src/renderer/features/today/RoutineCard.tsx"
   - "src/shared/engine/steps.ts"
   - "src/renderer/store/steps.ts"
   - "src/renderer/features/steps/*"
@@ -12,6 +16,8 @@ paths:
   - "tests/web/steps*.test.ts"
   - "tests/fs/steps.test.ts"
   - "tests/e2e/steps.spec.ts"
+  - "tests/e2e/routine-steps.spec.ts"
+  - "tests/unit/engine/routine-steps.test.ts"
 ---
 
 # Kroki bloku i zadania (SNT5)
@@ -23,7 +29,7 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
 ## Pliki
 - `model/steps.ts` – `Step { id, title, order, done, min? }`, `STEPS_MAX` 40 (tylko przy dodawaniu; tyle co rutyna – T1031), `STEP_TITLE_MAX` 200 (T789);
   czas kroku (D460, T1030): `min` 1–240 (`STEP_MIN_RANGE`, `stepMinOf`; brak – pola nie ma, nigdy `min: undefined`), operacja `{ op: 'min' }`,
-  `stepsTime` (suma i nadmiar wobec długości bloku), `routineStepsCopy` (kroki rutyny do bloku – T1032); `sameStepList` porównuje też czas;
+  `stepsTime` (suma i nadmiar wobec długości bloku); `sameStepList` porównuje też czas (kopii kroków rutyny nie ma – D480, T1111);
   `stepsFrom` (każdy krok, kolejność po `order`, remis – kolejność w pliku; `done` nigdy z elementu listy), `stepsJson` /
   `withStepsJson` (zapis bez `done`, w kolejności pliku; lista niezmieniona – plik jak był; pozycja niezmieniona albo
   nieczytelna zostaje jak w pliku, zmieniona/usunięta zabiera czytelne pozycje swojego id – T787), `refusalFor` (pełna lista
@@ -31,13 +37,18 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
   `stepOpFrom` (operacja z okna), `applyStepOp` + `addStepOp` / `moveStepOp` (operacje po
   id – ta sama na liście bloku i zadania, T790), `stepsCounter` („✓ 3/4”), `firstOpen`, `freshSteps`, `textWithSteps` (Ctrl K).
   Nowa wersja serii i szablonu pisze się na surowej wersji, z której powstaje (`sourceVersionKey` w `model/plan.ts`).
-- `engine/steps.ts` – zapisy na surowym JSON: `tickEdits`, `blockStepsEdits` (dzień + zadanie), `taskTickEdits`,
-  `taskStepsEdits` (zadanie + blok od dziś), `templateStepsChanged`, `taskOfBlock`, `dayBlockNow`.
-- `renderer/store/steps.ts` – API okna: `tickBlockStep`, `changeBlockSteps`, `tickTaskStep`, `changeTaskSteps`,
+- `model/routineSteps.ts` (D473, T1100–T1103) – kroki rutyny bloku bez własnych: `routineStepsOf` (lista, wersja, `kept`), `shownSteps`
+  (własna albo rutyny – panel, licznik osi, pasek), `routineList` (wersja rutyny jako lista: id kroków rutyny, „krok N”, czas),
+  `routineStepsEntries` (pole pliku dnia `routineSteps.<blok>` = `{ routine, version, steps }`, `DayFile.routineSteps`), `ROUTINE_STEPS`.
+- `engine/steps.ts` – zapisy na surowym JSON: `tickEdits` (`routines` – krok rutyny; `finished` – lista cała, D474), `blockStepsEdits`
+  (dzień + zadanie; lista rutyny po zmianie – własna bloku, T1102), `routineVersionEdits` (wersja rutyny, T1101), `routineStepsNow`,
+  `taskTickEdits`, `taskStepsEdits` (zadanie + blok od dziś), `templateStepsChanged`, `taskOfBlock`, `dayBlockNow`; `dayEdits.setRoutineSteps`.
+- `renderer/store/steps.ts` – API okna: `tickBlockStep` (`finished`), `changeBlockSteps`, `pickRoutineVersion`, `tickTaskStep`, `changeTaskSteps`,
   `changeTemplateSteps`, `changeSeriesSteps` („To i następne” / „Cała seria”), `changeSeriesListSteps` (lista serii w „Szablonach”), `undoSteps`; wynik `StepsResult` (jak `CaseResult` bez `id`; `sent` – `SendState`: wysłane bez odpowiedzi = „asked”, nie odmowa).
 - `features/steps/` – ekrany (T795–T799): `StepsEditor` (lista, pole „Dodaj krok”, ptaszki, tytuł w miejscu, uchwyt i Alt+↑/↓,
   pole „czas” kroku i linia „kroki: X min z Y” z ostrzeżeniem – `lengthMin`, w zadaniu bez niego, D460),
-  `stepsUi` (`stepsAnswer` – „Cofnij” po usunięciu, `keyMove`, `dropMove`, `refusedOp`, `stepsTimeLine`, `stepMinParse`, `routineCutText`), `blockSteps` (`saveBlockSteps` –
+  `RoutineVersionPick` (slot `aside` nagłówka), `stepsFinish` (`finishBySteps`, `undoFinish` – D474),
+  `stepsUi` (`stepsAnswer` – „Cofnij” po usunięciu, `keyMove`, `dropMove`, `refusedOp`, `stepsTimeLine`, `stepMinParse`), `blockSteps` (`saveBlockSteps` –
   panel dnia: szkic, zakres serii, dzień). Używają go `TodayPage` (slot `steps` w `BlockEditor`), `TemplatesPage`, `SeriesEditor`
   (bez ptaszków) i `CasesPage` (wiersz zadania); licznik – `TimelineItem.steps` (`dayAxis`), `HorizonBlock.steps` (Tydzień).
 
@@ -70,10 +81,29 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
 - Pasek (T793): `WidgetView.steps` (`BarSteps`) – blok na pierwszym planie, pierwszy nieodhaczony; ukryte tylko w „Odcinam
   się”; akcja `step` `<blok>|<krok>` → `WidgetEngine.tickStep` (jedna edycja: dzień + zadanie). Tekst – `barStepText`.
 
-- Kroki z rutyny (D460, T1032–T1034): „Rutyna” w `BlockEditor` daje jedną zmianę `{ routine, durationMin, steps }` (`onChange` każdego
-  ekranu: szkic, dzień, „Tylko to” / zakres serii przez `seriesBlockPatch`, szablon, lista serii) – lista pusta albo nietknięta kopia
-  poprzedniej rutyny (tytuły i czasy, nic nieodhaczone) wymieniona, inna – rutyna na końcu, ponad 40 pominięte z dymkiem; blok zadania
-  (`block.task`) bez kopii (lista idzie z zadaniem, T792); „bez rutyny” kroków nie rusza; długość bloku nigdy nie idzie za krokami.
+- Wybór rutyny (D480, T1111 – zastępuje kopię D460, T1032): „Rutyna” w `BlockEditor` daje `{ routine, durationMin }` (`onChange` każdego
+  ekranu: szkic, dzień, „Tylko to” / zakres serii przez `seriesBlockPatch`, szablon, lista serii) – kroków nie rusza nigdy; blok bez
+  własnych kroków pokazuje rutynę (niżej), kopia z 1.20–1.21 zostaje własną listą; długość bloku nigdy nie idzie za krokami.
+- Kroki rutyny bez kopii (D473, T1100–T1103): blok z rutyną bez własnych kroków (szablon, seria, Twój – nie zadanie) pokazuje
+  definicję rutyny, dopóki dzień nic nie odhaczy ani nie wybierze wersji; potem lista w `routineSteps` pliku dnia (zmiana rutyny
+  jej nie rusza). Odhaczenie nie pisze bloku; wybór wersji tylko `routineSteps`; zmiana listy – własna lista bloku (`putBlock`),
+  bez pytania o zakres serii. Okno, pasek (`engineView` z `dayFile`) i `tickStep` podają rutyny – bez nich (stare wywołanie) krok rutyny
+  „już nie istnieje”. Tydzień, Szablony, seria, Ctrl K – tylko własne listy.
+- Ostatni krok kończy blok (D474, T1104, T1105): `tickEdits.finished` → okno `finishBySteps` / pasek `finishBySteps` – timer
+  `stepsFinish` (`block.end`, reguła `steps`, tylko blok zaczęty i nieskończony dnia bieżącego; inaczej cicho nic) i `undoStepsFinish`
+  („Cofnij”: koniec cofnięty, krok zostaje odhaczony; odmowa po starcie innego bloku, prośby, „Odcinam się”). Okno – dymek
+  „Skończono: <nazwa>”, pasek – linia `stepsFinished:<blok>` przez 60 s (dopiero po całym zapisie – T1114). Oś: blok ukończony jawnie
+  (`finishedBlock`: `done` true albo reguła `steps`/`endNow`/`finished`/`plan`/`fixedNoReaction`/`awayPlan` (D483); nie koniec z nieobecności – T1106) ma
+  „✓ ” przed nazwą (`block-finished`, D477). „Sprawy”: `taskTickEdits.block.finished` → `tickCaseStep` (T1113).
+- Jedno odhaczenie rutyny (D479, T1108, T1109): odhaczenia tylko w `stepsDone`, wersja tylko w `routineSteps`, `routine.done` = „zapisana”
+  (zamyka kartę i linię). Karta (`RoutineCard`) i „Kroki ▸” paska to widoki listy dnia (`routinesDue(…, dayFile)`: `steps`, `version`) –
+  ptaszek karty = `tickBlockStep`, wersja = `pickRoutineVersion`; „Kroki ▸” zaczyna od `RoutineDue.ticked` (obie wersje). Kolejność
+  końca listy – jedna, `engine/stepsFlow.ts` (T1120): `listWhole` (ostatni ptaszek: `routine.done` ≤ 40 id + `stepsFinish`), `routineSaved`
+  (zapis karty/paska: `routineDone` → odhaczenia `routineSaveEdits` – tylko dokłada, T1112 – → przy całej liście i zapisanych
+  odhaczeniach `stepsFinish`), `undoAfterSteps` (koniec najpierw – odmowa zatrzymuje resztę, D482); woła ją okno
+  (`features/steps/stepsFinish.ts`) i pasek (`WidgetEngine`). Odmowy bez słowa – po kodzie (`quietRefusal`, `ResultCode`).
+  Przeniesienie bloku zabiera wpis `routineSteps` z odhaczeniami (T1118); `routineSteps` w `ITEM_MAPS` (T1117); odhaczenia
+  zawsze z pliku (`dayBlockNow`, T1119); zatrzymana lista „na gorsze dni” bez tej wersji w rutynie – dalej `worse` (T1116).
 
 ## Pułapki
 - Starsza wersja (bez czasu kroku) pisze listę pozycja po pozycji: zmieniona pozycja zachowuje `min` (`{ ...x, title, order }`),

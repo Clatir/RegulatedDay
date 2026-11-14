@@ -293,6 +293,8 @@ export type WidgetAction =
   | 'quickOpen'
   /** The tick of the bar's step line (D440): `<block>|<step>` ticked off on the bar's day. */
   | 'step'
+  /** The version of a routine picked in „Kroki ▸” (D481): `<block>|<version>` – the day's version of the block at once. */
+  | 'routineVersion'
 
 /** The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests). */
 export type BarActionId = 'placeBar' | 'corner' | 'openPanel'
@@ -516,8 +518,8 @@ export interface TimerResult {
   ok: boolean
   why: string | null
   confirm: { block: string; minutes: number; overrun: boolean; bedtime: boolean } | null
-  /** Why it did nothing, when the caller must tell it from other refusals (D336): never read from `why`. */
-  code?: 'alreadyOver' | 'notBegun'
+  /** Why it did nothing, when the caller must tell it from other refusals (D336, T1109): never read from `why`. */
+  code?: 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine'
 }
 
 /** A day closed (D468): `written` – the ids of the events of the close, for its „Cofnij” (none when refused). */

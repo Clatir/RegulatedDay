@@ -341,8 +341,9 @@ function QuickButton({ mode, open, toggle }: { mode: BarMode; open: boolean; tog
 
 /**
  * „Kroki ▸” of a routine unfolded (D328): its steps ticked one by one, the version („zwykła” or „gorsze dni”) and
- * „✓ Zapisz zaznaczone” – the same save as the card in „Dziś”. Another version starts with nothing ticked. The steps go
- * by their places in the version (an action's argument is short – 40 ids would not fit, A6-10 review).
+ * „✓ Zapisz zaznaczone” – the same save as the card in „Dziś”. It starts as the day has the block (T1108: its version and
+ * ticks, one state with the panel „Kroki”); the save writes the version and the ticks into the day. The steps go by their
+ * places in the version (an action's argument is short – 40 ids would not fit, A6-10 review).
  */
 function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: BarMode; close: () => void }) {
   const { version, steps, done, setVersion, flip } = useStepPicks(routine)
@@ -358,7 +359,17 @@ function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: Ba
         <span className="text-[12px] text-muted">{routine.name}</span>
         {routine.worse.length > 0 &&
           (['normal', 'worse'] as const).map((v) => (
-            <BarButton key={v} mode={mode} pressed={version === v} testId={`bar-routine-version-${v}`} onAct={() => setVersion(v)}>
+            <BarButton
+              key={v}
+              mode={mode}
+              pressed={version === v}
+              testId={`bar-routine-version-${v}`}
+              // D481: the day's version of the block at once – the panel „Kroki” and the card in „Dziś” switch with it.
+              onAct={() => {
+                setVersion(v)
+                if (v !== version) act('routineVersion', `${routine.block}|${v}`)
+              }}
+            >
               {v === 'normal' ? 'zwykła' : 'gorsze dni'}
             </BarButton>
           ))}
@@ -367,7 +378,8 @@ function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: Ba
         {steps.map((s, k) => (
           <BarButton key={s.id} mode={mode} pressed={done.has(s.id)} testId={`bar-routine-step-${s.id}`} onAct={() => flip(s.id)}>
             {done.has(s.id) ? '✓ ' : ''}
-            {s.name || `krok ${k + 1}`} · {s.min} min
+            {s.name || `krok ${k + 1}`}
+            {s.min > 0 ? ` · ${s.min} min` : ''}
           </BarButton>
         ))}
       </div>
