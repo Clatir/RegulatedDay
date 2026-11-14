@@ -31,8 +31,8 @@ function ownBlockOf(model: DayModel, r: RequestRecord): string | null {
  * What puts a sprawa on the axis: the block it would make (for the preview and the push) and the pushed blocks – counted
  * on the day without the sprawa's own block of before, which the drop takes out (T761): it is neither pushed nor pushes.
  */
-export function planningOf(model: DayModel, today: string, r: RequestRecord, startMin: number) {
-  const block = caseBlock(r, startMin, model.state.settings.categories)
+export function planningOf(model: DayModel, today: string, r: RequestRecord, startMin: number, durationMin?: number) {
+  const block = caseBlock(r, startMin, model.state.settings.categories, durationMin)
   const own = ownBlockOf(model, r)
   const ctx = own ? { ...model.ctx, plan: model.ctx.plan.filter((b) => b.id !== own) } : model.ctx
   const day = own ? { ctx, state: computeDay(ctx) } : model
@@ -47,11 +47,13 @@ export const plannedText = (title: string, block: Pick<PlanBlock, 'startMin'>): 
 /**
  * The sprawa `r` on the axis of `model`'s day at `startMin`: whether its old block began is the log's (`planCase`, T769);
  * the day's file as the window knows it is the fallback for one not readable now; the pushed blocks are written while the
- * day's plan after the change has them (its snapshot with the new file, T770). Returns whether it was saved.
+ * day's plan after the change has them (its snapshot with the new file, T770); `durationMin` – the block's length when not the estimate
+ * (D464). Returns whether it was saved.
  */
-export async function planOnAxis(model: DayModel, today: string, r: RequestRecord, title: string, startMin: number): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
-  const { pushed } = planningOf(model, today, r, startMin)
+export async function planOnAxis(model: DayModel, today: string, r: RequestRecord, title: string, startMin: number, durationMin?: number): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
+  const { pushed } = planningOf(model, today, r, startMin, durationMin)
   const res = await planCase(r.id, model.date, startMin, {
+    ...(durationMin != null ? { durationMin } : {}),
     push: { blocks: pushed, planOf: (file) => dayPlan(model.ctx.snapshot, file) },
     seen: (date) => (date === model.date ? model.data.dayFile : undefined)
   })

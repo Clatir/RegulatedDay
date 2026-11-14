@@ -20,7 +20,7 @@ import { settingsOn } from '@shared/model/settings'
 import { parseQuickDates } from '@shared/quickDates'
 import { logicalDayOf, logicalMinuteOf } from '@shared/time/day'
 import { FilterBar, useFilters } from '../../components/FilterBar'
-import { Choice, DateField, DurationField, TextField, TimeField } from '../../components/fields'
+import { Choice, DateField, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { EmptyState, Section, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useNow } from '../../lib/clock'
@@ -339,15 +339,18 @@ function PlanForm({ x, today, title, onDone }: { x: CaseItem; today: string; tit
   const now = useNow(60_000)
   const [date, setDate] = useState(x.scheduled?.day && x.scheduled.day >= today ? x.scheduled.day : today)
   const [start, setStart] = useState<number | null>(null)
+  // D464: the end typed changes the block's length (the sprawa's estimate stays); null – the estimate.
+  const [length, setLength] = useState<number | null>(null)
+  const long = length ?? estimateOf(x.record)
   const model = useDay(date)
-  const proposed = model ? nextFreeStart(model.state, { isToday: date === today, nowMin: logicalMinuteOf(date, now), wakeMin: model.ctx.wakeMin }, estimateOf(x.record)) : null
+  const proposed = model ? nextFreeStart(model.state, { isToday: date === today, nowMin: logicalMinuteOf(date, now), wakeMin: model.ctx.wakeMin }, long) : null
   const at = start ?? proposed
   const [busy, setBusy] = useState(false)
   const save = async () => {
     if (!model || at == null) return
     setBusy(true)
     try {
-      const res = await planOnAxis(model, today, x.record, title, at)
+      const res = await planOnAxis(model, today, x.record, title, at, length ?? undefined)
       if (res.saved) onDone()
     } finally {
       setBusy(false)
@@ -359,7 +362,11 @@ function PlanForm({ x, today, title, onDone }: { x: CaseItem; today: string; tit
       <DateField value={date} today={today} onCommit={(d) => (setDate(d), setStart(null))} shellClassName="w-[130px]" aria-label="Dzień" data-testid="case-plan-date" />
       <span className="text-muted">od</span>
       <TimeField value={at} onCommit={setStart} shellClassName="w-[76px]" aria-label="Początek" data-testid="case-plan-start" />
-      <span className="text-muted">{durationLabel(estimateOf(x.record))}</span>
+      <span className="text-muted">do</span>
+      {at != null ? <EndField startMin={at} durationMin={long} onCommit={setLength} shellClassName="w-[76px]" aria-label="Koniec" data-testid="case-plan-end" /> : null}
+      <span className="text-muted" data-testid="case-plan-length">
+        {durationLabel(long)}
+      </span>
       <button type="button" className="btn btn-accent h-[24px] px-2 text-[12px]" disabled={!model || at == null || busy} onClick={() => void save()} data-testid="case-plan-save">
         Postaw na osi
       </button>

@@ -171,11 +171,11 @@ describe('pole „Nazwa” w panelu bloku', () => {
     expect(page).toMatch(/setFresh\(b\.id\)/)
   })
 
-  it('„Dziś”: Enter w nazwie i „Dodaj” idą przez jedną blokadę zapisu (`useBusy`) – blok nie zapisze się dwa razy', () => {
+  it('„Dziś”: Enter w nazwie i zatwierdzenie pola idą przez jedno zapisywanie szkicu (`saving`) – blok nie zapisze się dwa razy (D461: bez „Dodaj”)', () => {
     const page = readFileSync('src/renderer/features/today/TodayPage.tsx', 'utf8')
-    expect(page).toMatch(/const \[adding, runAdd\] = useBusy\(\)/)
-    expect(page).toMatch(/disabled=\{adding\} onClick=\{\(\) => void runAdd\(\(\) => add\(draft\)\)\} data-testid="block-add"/)
-    expect(page).toMatch(/newBlock=\{draft \? \{ add: \(name\) => \(adding \? false : void runAdd\(\(\) => add\(\{ \.\.\.draft, name \}\)\)\) \} : undefined\}/)
+    expect(page).not.toContain('block-add')
+    expect(page).toMatch(/const saving = useRef<Promise<boolean> \| null>\(null\)/)
+    expect(page).toMatch(/newBlock=\{draft \? \{ add: \(name\) => \(saving\.current \? false : void commitDraft\(\{ name \}\)\) \} : undefined\}/)
   })
 
   it('zakończona seria (tylko do odczytu): pole nie przyjmuje wpisu', async () => {
@@ -294,7 +294,7 @@ describe('okienko „Nowy blok” w „Tygodniu” (D431)', () => {
     document.body.append(host)
     root = createRoot(host)
     await act(async () =>
-      root!.render(createElement(NewBlockPopover, { dates: [D], startMin: 9 * 60, durationMin: 60, today: '2026-11-13', namesOf: () => names, place: { left: 0, top: 0 }, onClose, onDates: () => undefined, onMore }))
+      root!.render(createElement(NewBlockPopover, { dates: [D], startMin: 9 * 60, durationMin: 60, today: '2026-11-13', namesOf: () => names, place: { left: 0, top: 0 }, dragged: true, onClose, onDates: () => undefined, onMore }))
     )
     const small = host.querySelector<HTMLElement>('[data-testid="week-new"]')!
     return { small, onMore, onClose, field: small.querySelector<HTMLInputElement>('[data-testid="week-new-name"]')! }
@@ -310,7 +310,7 @@ describe('okienko „Nowy blok” w „Tygodniu” (D431)', () => {
     expect(document.activeElement).toBe(field)
   })
 
-  it('Enter w polu „Nazwa” zapisuje blok z nazwą jak „Dodaj”; „Dodaj” bez nazwy – blok bez nazwy', async () => {
+  it('Enter w polu „Nazwa” zapisuje blok z nazwą; klik poza okienkiem bez nazwy – blok bez nazwy (D461: bez „Dodaj”)', async () => {
     const { field } = await popover()
     typeEnter(field, 'Analiza rynku')
     await act(async () => undefined)
@@ -321,7 +321,9 @@ describe('okienko „Nowy blok” w „Tygodniu” (D431)', () => {
     host!.remove()
     vi.mocked(addWeekBlocks).mockClear()
     const plain = await popover()
-    await act(async () => plain.small.querySelector<HTMLElement>('[data-testid="week-new-add"]')!.click())
+    expect(plain.small.querySelector('[data-testid="week-new-add"]')).toBeNull()
+    await act(async () => void document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })))
+    await act(async () => undefined)
     expect(vi.mocked(addWeekBlocks).mock.calls[0]![0].map((e) => e.block.name)).toEqual([null])
   })
 

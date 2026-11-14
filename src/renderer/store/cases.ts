@@ -294,7 +294,7 @@ export interface CasePushed {
  * (`push.planOf`, T770); `seen` – the day's file as the window knows it, for one not readable now. Its „Cofnij” –
  * `undoCase(result.undo)`; `moved` – the starts that changed.
  */
-export async function planCase(id: string, date: string, startMin: number, o: { push?: CasePush; seen?: (date: string) => RawRecord | null | undefined } = {}): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
+export async function planCase(id: string, date: string, startMin: number, o: { push?: CasePush; seen?: (date: string) => RawRecord | null | undefined; durationMin?: number } = {}): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
   let block: PlanBlock | null = null
   let moved = 0
   const r = await change(async (put) => {
@@ -323,7 +323,7 @@ export async function planCase(id: string, date: string, startMin: number, o: { 
     }
     const begunOf = (d: string, b: string) => (begunIn[d] ? begunIn[d].includes(b) : undefined)
     // Now – in the turn of the write (a turn waiting over 04:00 counts with the day it runs in).
-    const p = casePlan({ record: before, date, startMin, files: days, rules: settingsOn(useData.getState().rd.settings, date).categories, at: Date.now(), begun: begunOf })
+    const p = casePlan({ record: before, date, startMin, ...(o.durationMin != null ? { durationMin: o.durationMin } : {}), files: days, rules: settingsOn(useData.getState().rd.settings, date).categories, at: Date.now(), begun: begunOf })
     if (!p) return 'Tej sprawy już nie ma.'
     // Its old block today or later, its log not known: whether it began is not known – no write (T774).
     if ('refused' in p) return DAY_UNREADABLE

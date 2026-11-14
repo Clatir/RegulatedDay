@@ -102,8 +102,8 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('day-add').click()
       await expect(page.getByTestId('block-editor')).toBeVisible()
       await page.getByTestId('block-start').fill('3:30')
+      // D461: the start committed saves the new block – a work block after the approval asks for the exchange at once.
       await page.getByTestId('block-start').press('Enter')
-      await page.getByTestId('block-add').click()
       await expect(page.getByTestId('exchange')).toBeVisible()
       await shot(page, 'e3-03-exchange')
       await page.getByTestId('exchange-add').click()
@@ -194,7 +194,7 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
         expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true)
       }
       await page.keyboard.press('Control+KeyN')
-      await expect(page.getByTestId('block-add')).toHaveCount(0)
+      await expect(page.getByTestId('draft-tile')).toHaveCount(0)
       await page.keyboard.press('Escape')
       await expect(moveDialog).toBeHidden()
       expect(await page.evaluate(() => document.activeElement?.getAttribute('data-testid'))).toBe('block-move')

@@ -23,7 +23,7 @@ import { energyOrderVariant, lowestEnergy } from '@shared/engine/energyOrder'
 import type { Variant } from '@shared/engine/variants'
 import { nameById, type Names } from '@shared/blockName'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
-import { countLabel, logicalClock, plDate } from '@shared/format'
+import { countLabel, logicalClock, plDate, plural } from '@shared/format'
 import type { DaySnapshot } from '@shared/model/events'
 import { attachmentUndoOf, ownAttachmentIds, removalEdits, restoreEdits, type AttachmentUndo } from '@shared/model/attachment'
 import { dayFilesNow, editOf, isSaved, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
@@ -42,6 +42,17 @@ export function saveDay(date: string, seen: RawRecord | null, next: (raw: RawRec
     const before = (await dayFilesNow([date], () => seen))[date] ?? null
     return [dayFileEdit(date, before, next)]
   }, state)
+}
+
+/**
+ * A new block saved by itself (D461) says so for 10 s with „Cofnij”: the blocks taken out of their days' files again (each day in its
+ * own edit, as the file is then – a change made meanwhile to another block stays). Nothing for a save that pushed blocks apart: the
+ * bar's or the week's line „Cofnij” takes the whole edit back.
+ */
+export function newBlocksToast(added: ReadonlyArray<{ date: string; id: string }>): void {
+  const n = added.length
+  if (!n) return
+  undoToast(n === 1 ? 'Dodano blok' : `Dodano ${n} ${plural(n, 'blok', 'bloki', 'bloków')}`, () => void Promise.all(added.map((a) => saveDay(a.date, null, (raw) => takeBlock(raw, a.id)))))
 }
 
 /** A block as the day's file holds it now (a change of it made before), or as the window knows it. */

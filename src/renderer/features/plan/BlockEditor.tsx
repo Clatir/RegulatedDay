@@ -1,7 +1,7 @@
 /**
  * The editing panel of a block (D293: on the right of the plan): its own name (D430: „Nazwa” on top – empty, it is named as
  * before; a new block has the cursor in it), its category and variant, its start or the block it
- * follows („po sesji NY”), its length, fixed or flexible, in the foreground or the background, the marks of the second
+ * follows („po sesji NY”), its end („Koniec”, D464: typed – the length changes; „ok. HH:MM” of the forecast after a block) and length, fixed or flexible, in the foreground or the background, the marks of the second
  * shift and the weekly analysis, its routine, the computer recording a lecture, „Powtarzaj” (`repeat`, D381: a slot of the day's panel),
  * its list „Kroki” (`steps`, D440 – a slot of the screen, above the note), its note (a live Markdown editor, D388), its
  * attachments (`place`, D410). Every field saves on leaving it (spec „Edycja pól”); the panel changes nothing by itself.
@@ -15,7 +15,8 @@ import type { SessionDef } from '@shared/model/settings'
 import { SESSION_ANCHOR } from '@shared/engine/createDay'
 import { olderComputers } from '@shared/model/note'
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
-import { Choice, DurationField, TextField, TimeField } from '../../components/fields'
+import { forecastEndText } from '@shared/blockEnd'
+import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import type { SaveAnswer } from '../../store/data'
@@ -39,7 +40,9 @@ export function BlockEditor({
   inSeries,
   place,
   newBlock,
-  focusName
+  focusName,
+  forecastEnd,
+  onEscape
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -71,8 +74,12 @@ export function BlockEditor({
   newBlock?: { add: (name: string | null) => boolean | void }
   /** A block just made and saved at once (a click or a range on the axis of „Szablony”): the cursor starts in „Nazwa” too (D431). */
   focusName?: boolean
+  /** Where the forecast ends a block that follows another („po bloku”, D464): its „Koniec” says „ok. HH:MM”; left out – no forecast (templates, series). */
+  forecastEnd?: number | null
+  /** Esc (the second one, after a field's own): left out – `onClose`. A new block not saved yet throws itself away by it (D461), „Zamknij” saves it. */
+  onEscape?: () => void
 }) {
-  useEscapeLayer(true, onClose)
+  useEscapeLayer(true, onEscape ?? onClose)
   const owner = place ? ownerToAdd(block, place) : null
   const drop = useAttachDrop(owner)
   const rules = names.settings.categories[block.categoryId]
@@ -140,6 +147,15 @@ export function BlockEditor({
             <TimeField value={block.startMin} onCommit={(startMin) => set({ startMin })} aria-label="Godzina początku" errorPlacement="below" data-testid="block-start" />
           )}
         </div>
+      </Field>
+      <Field label="Koniec" labelWidth={92}>
+        {block.anchor || block.startMin == null ? (
+          <span className="num text-[12.5px] text-muted" data-testid="block-end-forecast">
+            {forecastEndText(forecastEnd) ?? '—'}
+          </span>
+        ) : (
+          <EndField startMin={block.startMin} durationMin={block.durationMin} onCommit={(durationMin) => set({ durationMin })} aria-label="Godzina końca" errorPlacement="below" data-testid="block-end" />
+        )}
       </Field>
       <Field label="Długość" labelWidth={92} hint={routine ? `Rutyna: ${durationLabel(routineMinutes(routine))} (zwykła), ${durationLabel(routineMinutes(routine, 'worse'))} (na gorsze dni).` : undefined}>
         <DurationField value={block.durationMin} onCommit={(durationMin) => set({ durationMin })} aria-label="Długość" errorPlacement="below" data-testid="block-duration" />

@@ -1,9 +1,9 @@
 /**
- * The name of a block (D430): „+ Blok” opens the panel of a new block with the cursor in „Nazwa”; the name typed and „Dodaj” –
- * the tile says the name in the category's place and the category beside its hours („14:00–15:00 · Inne obowiązki”), the day's
- * file has the name. Tomorrow (the wake at 12:00 in `seedAwake`): a new block in the day's first free place after the wake – a
- * whole hour at any hour the test runs (no exchange, no forecast moving it). D431: Enter in „Nazwa” of a new block adds it as
- * „Dodaj” does.
+ * The name of a block (D430): „+ Blok” opens the panel of a new block with the cursor in „Nazwa”, the block waiting on the axis
+ * dashed (D466); the name typed and left (D461: no „Dodaj” – the first committed field saves the block) – the tile says the name in
+ * the category's place and the category beside its hours („14:00–15:00 · Inne obowiązki”), the day's file has the name. Tomorrow
+ * (the wake at 12:00 in `seedAwake`): a new block in the day's first free place after the wake – a whole hour at any hour the test
+ * runs (no exchange, no forecast moving it). D431: Enter in „Nazwa” of a new block saves it.
  */
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -15,7 +15,7 @@ import { addDays } from '../../src/shared/time/zone'
 import { launch, withMainLog } from './app'
 import { seedAwake } from './seedAwake'
 
-test('nazwa bloku (D430, D431): „+ Blok”, kursor w polu „Nazwa”, „Dodaj” – kafelek z nazwą i kategorią przy godzinach; Enter w nazwie nowego bloku dodaje go', async () => {
+test('nazwa bloku (D430, D431, D461): „+ Blok”, kursor w polu „Nazwa”, opuszczenie pola zapisuje blok – kafelek z nazwą i kategorią przy godzinach; Enter w nazwie nowego bloku zapisuje go', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-block-name-'))
   const { today } = seedAwake(dataDir, [])
   const tomorrow = addDays(today, 1)
@@ -33,8 +33,13 @@ test('nazwa bloku (D430, D431): „+ Blok”, kursor w polu „Nazwa”, „Doda
       await expect(name).toBeFocused()
       // The placeholder: what the block is called without a name.
       await expect(name).toHaveAttribute('placeholder', 'Inne obowiązki')
+      // D466: the draft waits on the axis, dashed, with its hours; nothing is saved yet.
+      await expect(page.getByTestId('draft-tile')).toBeVisible()
+      await expect(page.getByTestId('block-add')).toHaveCount(0)
+      expect(dayFileFrom(JSON.parse(readFileSync(tomorrowFile, 'utf8')), tomorrow).blocks).toEqual([])
       await page.keyboard.type('Analiza rynku')
-      await page.getByTestId('block-add').click()
+      // D461: leaving the field is its first committed change – the block is saved.
+      await page.keyboard.press('Tab')
       const tile = page.locator('[data-block-title="Analiza rynku"]')
       await expect(tile).toBeVisible({ timeout: 15_000 })
       // Its hours (where the day's first free place is), then the category.
@@ -51,7 +56,7 @@ test('nazwa bloku (D430, D431): „+ Blok”, kursor w polu „Nazwa”, „Doda
       await page.keyboard.type('Przegląd tygodnia')
       await page.keyboard.press('Enter')
       await expect(page.locator('[data-block-title="Przegląd tygodnia"]')).toBeVisible({ timeout: 15_000 })
-      await expect(page.getByTestId('block-add')).toHaveCount(0)
+      await expect(page.getByTestId('draft-tile')).toHaveCount(0)
       await expect
         .poll(() => dayFileFrom(JSON.parse(readFileSync(tomorrowFile, 'utf8')), tomorrow).blocks.map((b) => b.name))
         .toEqual(['Analiza rynku', 'Przegląd tygodnia'])
