@@ -67,7 +67,8 @@ paths:
   `groupStarts` (`groupOf` z `parallel.ts`, 1.23-A), z przodu `groupFront` (to samo w `energy.ts`), `front` (pasek „+K w
   tle”), `groupStart`/`groupPlan` w `auto.ts`; blok spoza grupy (także stały sam, „Odcinam się”) pauzuje całą grupę, „Dalej” w
   grupie nic nie zaczyna; prośba i „Odcinam się” trzymają przód (T1200); koszt grupy – `groupCost` (T1205); zapauzowana grupa w prognozie
-  razem (`pausedLead`, T1211).
+  razem (`pausedLead`, T1211); przejęcie przodu zapisuje prowadzący (`groupFront`, T1259); grupa – `inGroupOf`,
+  `groupMate`, `untouched` (T1250–T1263).
 - `activityOf` bez żadnego komputera = cały czas bez wejścia; w testach dodaj `observe(...)` (DSL) – inaczej blok
   stały „przy komputerze” nie zacznie się (czeka na pierwsze użycie).
 - Otwarty odcinek innego komputera liczy się tylko do jego ostatniego `observe.alive` (`alive` w DSL).

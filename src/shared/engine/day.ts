@@ -697,13 +697,16 @@ export function computeDay(ctx: DayContext): DayState {
   // does not approve it – a commute or classes you started do, as before (a day of stationary classes approves itself).
   const approvalStart = (() => {
     if (firstWorkStart == null) return null
+    // Begun by the app: a block away from the computer (`awayStart`) and the rest of a group it began (`groupStart`, T1260) –
+    // the latter wherever it is, the app began it while you were away.
     const begunByItself = new Set(facts.autos.filter((a) => a.k === 'block.start' && a.rule === 'awayStart' && a.block).map((a) => a.block!))
+    const groupBegun = new Set(facts.autos.filter((a) => a.k === 'block.start' && a.rule === 'groupStart' && a.block).map((a) => a.block!))
     const atComputer = new Uint8Array(now)
     const away = new Uint8Array(now)
     for (const b of blocks) {
       const f = facts.blocks.get(b.id)
       if (!b.isWork || !f?.runs.length) continue
-      const mark = begunByItself.has(b.id) && placeOf(b.rules, b.variantId) === 'away' ? away : atComputer
+      const mark = (begunByItself.has(b.id) && placeOf(b.rules, b.variantId) === 'away') || groupBegun.has(b.id) ? away : atComputer
       for (const r of f.runs) for (let k = Math.max(0, r.from); k < Math.min(r.to === OPEN ? now : r.to, now); k++) mark[k] = 1
     }
     for (let k = firstWorkStart; k < now; k++) if (actual[k]! & F_END && !(away[k] && !atComputer[k])) return k

@@ -87,7 +87,7 @@ export function runningRequestOf(r: RequestFact, grid: Grid, person: (id: string
 const CLASS_TONE: Record<string, Tone> = { work: 'praca', life: 'zycie', free: 'wolne' }
 const CLASS_NAME: Record<string, string> = { work: 'praca', life: 'życie i opieka', free: 'wolne' }
 /** Automatic actions that are information only (spec: no „Cofnij”). */
-const INFO_RULES = new Set(['disconnect04'])
+const INFO_RULES = new Set(['disconnect04', 'groupFront'])
 
 const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 
@@ -104,6 +104,8 @@ export function autoText(a: AutoAction, blockName: string, clock: string): strin
       return `${name} skończony o ${clock} (według planu)`
     case 'groupStart':
       return `${name} zaczęty o ${clock} (razem z grupą)`
+    case 'groupFront':
+      return `${name} na pierwszym planie od ${clock} (po końcu bloku z grupy)`
     case 'groupPlan':
       return `${name} skończony o ${clock} (według planu, w tle grupy)`
     case 'plan':
@@ -414,7 +416,8 @@ export function engineView(i: EngineInput): WidgetView {
   const groups = planned.length ? [{ id: 'plan', text: `bloki stałe według planu: ${planned.length}`, items: planned.map(autoItem).reverse() }] : []
   const items = state.facts.autos
     // A meal or a regeneration of an absence: one line, at its end (its „Cofnij” takes the start back too).
-    .filter((a) => !asPlanned(a) && !(a.k === 'block.start' && (a.rule === 'absenceMeal' || a.rule === 'absenceRegen')))
+    // A block of a group resumed with it sent behind (`groupStart`, `block.fg`): no row – its resume has one (T1258).
+    .filter((a) => !asPlanned(a) && !(a.k === 'block.start' && (a.rule === 'absenceMeal' || a.rule === 'absenceRegen')) && !(a.k === 'block.fg' && a.rule === 'groupStart'))
     .map(autoItem)
     .reverse()
 

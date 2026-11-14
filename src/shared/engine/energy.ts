@@ -275,12 +275,15 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
 
   // Blocks of a parallel group behind (D476, D493): at a minute with nothing in front, the one whose run began last.
   const groupAt: Array<Span | null> = new Array(end).fill(null)
+  const rank = new Map(day.blocks.map((b, i) => [b.id, i]))
   for (const x of spans) {
     if (!x.bg || x.why !== 'group') continue
     for (let k = x.from; k < x.to; k++) {
       const cur = groupAt[k]
       // The one begun last – by its minute, then by the order of events (the same click: the last written), as `groupFront`.
-      if (!cur || cur.from < x.from || (cur.from === x.from && cur.order && x.order && compareOrder(x.order, cur.order) > 0)) groupAt[k] = x
+      // No order (a group to come, the forecast): as the group will begin – the later block of the plan last (T1262).
+      const later = cur && cur.from === x.from && (cur.order && x.order ? compareOrder(x.order, cur.order) > 0 : (rank.get(x.block.id) ?? 0) > (rank.get(cur.block.id) ?? 0))
+      if (!cur || cur.from < x.from || later) groupAt[k] = x
     }
   }
 

@@ -9,6 +9,7 @@ import { autoActions, type AutoEvent } from '@shared/engine/auto'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { autoText, engineView } from '@shared/engineView'
 import { requestAction } from '@shared/engine/requests'
+import { computeDay } from '@shared/engine/day'
 import { block, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
@@ -328,8 +329,18 @@ describe('grupa – poprawki po przeglądzie (T1195, T1200–T1207)', () => {
     click(s, '08:30', { a: 'start', block: 'n' })
     click(s, '08:40', { a: 'pause' })
     leader(s, '09:00')
-    const rows = s.state('09:01').facts.autos.filter((a) => a.rule === 'groupStart')
-    expect(rows.map((a) => [a.k, a.block])).toEqual([['block.resume', 'n']])
+    // Both are the app's (with the rule, T1258), one row on the list.
+    const autos = s.state('09:01').facts.autos.filter((a) => a.rule === 'groupStart')
+    expect(autos.map((a) => [a.k, a.block])).toEqual([
+      ['block.resume', 'n'],
+      ['block.fg', 'n']
+    ])
+    const t = s.at('09:01')
+    const ctx = s.contextAt(t)
+    const state = s.stateAt(t)
+    const care = { waterOn: false, waterEveryMin: 45, breakAfterMin: 90, solitudeAfterMin: 30 }
+    const v = engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, name: () => 'Nauka', care, modePrefs: { sessionMode: true, classMode: true }, pending: null })
+    expect(v.autos.items.filter((x) => x.text.includes('razem z grupą'))).toHaveLength(1)
   })
 
   it('praca grupy po granicy: koszt drugiego kliknięcia także z bloku obok; zaczęta sama – blok pracy czeka (T1205)', () => {
@@ -486,5 +497,149 @@ describe('prognoza zapauzowanej grupy (T1211)', () => {
     // b and c have 100 min left: d waits for them, not for a block after another.
     expect(at('d').from).toBeGreaterThanOrEqual(at('b').to)
     expect(at('d').from - at('a').from).toBeLessThan(130)
+  })
+})
+
+describe('1.23 – ostatnia runda poprawek grupy (T1250–T1263)', () => {
+  const beside = (b: ReturnType<typeof block>, root: string) => ({ ...b, alongside: root })
+  const day = (plan: ReturnType<typeof block>[]) => new Scenario({ date: DATE, plan }).observe('07:00', null)
+  const checkin: Parameters<Scenario['checkin']>[1] = { head: [2, 2], emotions: [2, 2], senses: [2, 2] }
+
+  it('przejęcie przodu jest zapisane: prowadzący pisze `block.fg` z `groupFront` od chwili, gdy przód się zwolnił (T1259)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '12:00', min: 30 }), beside(block({ id: 'b', cat: 'inne', at: '12:00', min: 80 }), 'a')])
+    click(s, '12:00', { a: 'start', block: 'a' })
+    click(s, '12:30', { a: 'finish', block: 'a' })
+    expect(leader(s, '12:31')).toMatchObject([{ k: 'block.fg', block: 'b', bg: false, at: s.at('12:30'), autoRule: 'groupFront' }])
+    expect(s.state('12:32').facts.blocks.get('b')!.runs.at(-1)!.bg).toBe(false)
+    expect(leader(s, '12:33')).toEqual([])
+  })
+
+  it('blok bez komputera po przejęciu: koniec pracy przejętego bloku jest „wolnym przodem” (T1259)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '12:00', min: 30 }), beside(block({ id: 'b', cat: 'inne', at: '12:00', min: 80 }), 'a'), block({ id: 'p', cat: 'posilek', at: '13:00', min: 30 })]).gap('12:55', null)
+    click(s, '12:00', { a: 'start', block: 'a' })
+    click(s, '12:30', { a: 'finish', block: 'a' })
+    leader(s, '12:31')
+    click(s, '13:20', { a: 'finish', block: 'b' })
+    expect(leader(s, '13:31')).toMatchObject([{ k: 'block.start', block: 'p', at: s.at('13:20'), autoRule: 'awayStart' }])
+  })
+
+  it('regeneracja, która przejęła przód, wstrzymuje blok stały do swojego końca (T1259)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '12:00', min: 20 }), beside(block({ id: 'r', cat: 'regeneracja', at: '12:00', min: 60 }), 'a'), block({ id: 'f', cat: 'zajecia-zdalne', at: '12:40', min: 60, fixed: true })])
+    click(s, '12:00', { a: 'start', block: 'a' })
+    click(s, '12:20', { a: 'finish', block: 'a' })
+    leader(s, '12:21')
+    expect(leader(s, '12:40')).toEqual([])
+    click(s, '12:50', { a: 'finish', block: 'r' })
+    expect(leader(s, '12:51')).toMatchObject([{ k: 'block.start', block: 'f', at: s.at('12:50') }])
+  })
+
+  it('prośba wpisana po fakcie dzieli blok, który przejął przód (T1259)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '12:00', min: 20 }), beside(block({ id: 'b', cat: 'inne', at: '12:00', min: 80 }), 'a')])
+    click(s, '12:00', { a: 'start', block: 'a' })
+    click(s, '12:20', { a: 'finish', block: 'a' })
+    leader(s, '12:21')
+    const t = s.at('13:00')
+    const r = requestAction(s.stateAt(t), { a: 'requestAfter', request: 'q', person: null, from: s.at('12:40'), to: s.at('12:50') }, t)
+    expect(r.ok && r.events.find((e) => e.k === 'request.start')?.splits).toEqual(['b'])
+  })
+
+  it('posiłek, który przejął przód: powrót liczony od przejęcia, nie od startu grupy (T1257)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '13:00', min: 20 }), beside(block({ id: 'p', cat: 'posilek', at: '13:00', min: 60 }), 'a')]).gap('13:05', '13:07').gap('13:25', '13:40')
+    click(s, '13:00', { a: 'start', block: 'a' })
+    click(s, '13:20', { a: 'finish', block: 'a' })
+    leader(s, '13:21')
+    expect(leader(s, '13:41')).toMatchObject([{ k: 'block.end', block: 'p', at: s.at('13:40'), autoRule: 'firstUse' }])
+  })
+
+  it('„Cofnij” startu bloku stałego, który zaczął grupę, cofa też starty reszty grupy (T1255)', () => {
+    const s = day([block({ id: 'f', cat: 'zajecia-zdalne', at: '09:00', min: 60, fixed: true }), beside(block({ id: 'n', cat: 'nauka', at: '09:00', min: 60 }), 'f')])
+    const out = leader(s, '09:00')
+    const start = out.find((e) => e.block === 'f')!
+    const r = click(s, '09:05', { a: 'undo', target: start.id })
+    expect(r.ok && r.events.length).toBe(2)
+    expect(bgOf(s, '09:06')).toEqual([])
+  })
+
+  it('„Koniec pracy” i „Odcinam się” z posiłkiem grupy z przodu: praca grupy w tle kończy się / pauzuje (T1254)', () => {
+    const plan = [block({ id: 'm', cat: 'posilek', at: '12:00', min: 30 }), beside(block({ id: 'w', cat: 'inne', at: '12:00', min: 60 }), 'm')]
+    const s = day(plan)
+    click(s, '12:00', { a: 'start', block: 'm' })
+    const end = click(s, '12:10', { a: 'workEnd' })
+    expect(end.ok && end.events.filter((e) => e.k === 'block.end').map((e) => e.block)).toEqual(['w'])
+    const c = day(plan)
+    click(c, '12:00', { a: 'start', block: 'm' })
+    const cut = click(c, '12:10', { a: 'cutOff' })
+    expect(cut.ok && cut.events.filter((e) => e.k === 'block.pause').map((e) => e.block).sort()).toEqual(['m', 'w'])
+  })
+
+  it('pierwszy blok grupy wyjęty z planu: blok stały grupy dalej do niej dołącza (T1251)', () => {
+    const plan = [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), beside(block({ id: 'b', cat: 'nauka', at: '08:00', min: 120 }), 'a'), beside(block({ id: 'f', cat: 'zajecia-zdalne', at: '08:00', min: 60, fixed: true }), 'a')]
+    const s = day(plan)
+    click(s, '07:45', { a: 'start', block: 'b' })
+    click(s, '07:50', { a: 'finish', block: 'b' })
+    leader(s, '07:51')
+    // „a” taken out of the day's file after it began: the plan without it.
+    const t = s.at('08:00')
+    const ctx = s.contextAt(t, { plan: plan.filter((b) => b.id !== 'a') })
+    const state = computeDay(ctx)
+    const out = autoActions({ ctx, state, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, gate: t })
+    expect(out.filter((e) => e.k === 'block.pause')).toEqual([])
+    expect(out.find((e) => e.block === 'f')).toMatchObject({ k: 'block.start', bg: true })
+  })
+
+  it('prognoza: blok stały grupy po swoim oknie nie stoi przy biegnącym pierwszym bloku (T1261)', () => {
+    const plan = [block({ id: 'a', cat: 'inne', at: '08:00', min: 120 }), beside(block({ id: 'f', cat: 'zajecia-zdalne', at: '08:00', min: 60, fixed: true }), 'a')]
+    const s = day(plan)
+    click(s, '09:10', { a: 'start', block: 'a' })
+    const st = s.state('09:15')
+    expect(st.forecast.find((p) => p.block.id === 'f')).toBeUndefined()
+  })
+
+  it('reszta grupy zaczęta kliknięciem w inny blok nie jest Twoim kliknięciem (`how: auto`, T1252)', () => {
+    const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), beside(block({ id: 'b', cat: 'nauka', at: '08:00', min: 60 }), 'a')])
+    const r = click(s, '08:00', { a: 'start', block: 'a' })
+    expect(r.ok && r.events.map((e) => [e.block, e.how])).toEqual([
+      ['a', 'click'],
+      ['b', 'auto']
+    ])
+  })
+
+  it('„Cofnij” jednego wiersza startu z grupą cofa też jego koniec według planu (T1256)', () => {
+    const s = day([block({ id: 'p', cat: 'posilek', at: '13:00', min: 60 }), beside(block({ id: 'r', cat: 'regeneracja', at: '13:00', min: 20 }), 'p')]).gap('12:50', null)
+    leader(s, '13:10')
+    expect(leader(s, '13:21')).toMatchObject([{ k: 'block.end', block: 'r', autoRule: 'groupPlan' }])
+    const row = s.state('13:22').facts.autos.find((a) => a.rule === 'groupStart' && a.block === 'r')!
+    const r = click(s, '13:23', { a: 'undo', target: row.id })
+    expect(r.ok && r.events.length).toBe(2)
+    expect(s.state('13:24').facts.problems).toEqual([])
+  })
+
+  it('praca grupy zaczęta z blokiem bez komputera nie zatwierdza granicy (D490, T1260)', () => {
+    const s = day([block({ id: 'p', cat: 'posilek', at: '13:00', min: 30 }), beside(block({ id: 'w', cat: 'inne', at: '13:00', min: 30 }), 'p')]).gap('12:50', null)
+    expect(leader(s, '13:10').map((e) => e.block)).toEqual(['p', 'w'])
+    expect(s.state('13:15').boundary.approvedAt).toBeNull()
+  })
+
+  it('prognoza energii grupy przed startem: po końcu pierwszego z przodu ostatni blok grupy w planie, jak zacznie się w timerze (T1262)', () => {
+    const run = (plan: ReturnType<typeof block>[]) => {
+      const e = day(plan).checkin('07:30', checkin).energy('08:00').series.head
+      return e[(10 - 4) * 60 + 50]! - e[(10 - 4) * 60 + 40]!
+    }
+    const a = block({ id: 'a', cat: 'analiza', at: '10:00', min: 30 })
+    const b = beside(block({ id: 'b', cat: 'nauka', at: '10:00', min: 60 }), 'a')
+    const c = beside(block({ id: 'c', cat: 'inne', at: '10:00', min: 60 }), 'a')
+    expect(run([a, b, c])).toBe(run([a, c]))
+  })
+
+  it('„Wznów” bloku, który dołącza do grupy z przodu, nie pyta o koszt reszty grupy (T1253)', () => {
+    const plan = [block({ id: 'm', cat: 'posilek', at: '13:00', min: 60 }), beside(block({ id: 'r', cat: 'regeneracja', variant: 'gra', at: '13:00', min: 60 }), 'm'), beside(block({ id: 'w', cat: 'inne', at: '13:00', min: 60 }), 'm')]
+    const s = day(plan).gap('12:50', '13:15')
+    s.approve('12:30', '07:30')
+    leader(s, '13:10')
+    // The work beside waits (its cost); the meal is paused, the regeneration takes the front.
+    click(s, '13:20', { a: 'pause' })
+    leader(s, '13:21')
+    const r = click(s, '13:25', { a: 'start', block: 'm' })
+    expect(r.ok).toBe(true)
   })
 })

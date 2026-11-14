@@ -126,9 +126,23 @@ export function forecast(inp: ForecastInput): Forecast {
     const out: Placed[] = []
     for (const b of beside.get(root.block.id) ?? []) {
       if (!grouped.has(b.id)) continue
+      // A fixed or waiting block of the group keeps its own window (T1261): a fixed one at its start (from now at the
+      // earliest), gone once the window passed; a session from its start or now, gone after its window (D192).
+      let from = root.from
+      let to = root.from + b.durationMin
+      if ((b.fixed || b.waits) && b.start != null) {
+        const end = b.start + b.durationMin
+        if (m >= end) {
+          dropped.add(b.id)
+          continue
+        }
+        from = b.waits && mode === 'window' ? b.start : Math.max(b.start, m)
+        const typical = b.waits && mode === 'typical' && b.rules.kind === 'session' ? inp.typicalMin(b) : null
+        to = b.fixed ? end : from + (typical ?? b.durationMin)
+      }
       const bg = front || b.bg
       if (!bg) front = true
-      const p: Placed = { block: b, from: root.from, to: root.from + b.durationMin, bg, due: root.due, running: false }
+      const p: Placed = { block: b, from, to, bg, due: root.due, running: false }
       put(p)
       if (!b.bg) out.push(p)
     }
