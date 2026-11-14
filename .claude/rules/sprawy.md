@@ -86,8 +86,11 @@ paths:
   odhaczenia, nigdy na dzień odhaczenia ani wcześniej; oba – odstęp zostaje; koniec `count` / `until`), `nextTaskId` (`derivedId` z id
   zadania – ten sam plik na każdym komputerze, T1041), `repeatText`. Zapis: okno – `changeRecord` (`store/cases.ts`: następne w tej samej
   edycji, gdy okno go nie ma; `CaseResult.next`, dymek `nextTaskText` z „Cofnij” obu), pasek – `WidgetEngine.answerTask` (gdy `recordView`
-  go nie zna). `folder.edit`: nowy rekord, który już jest z tą samą treścią, nie jest odmową (T1041). Ekran: „Powtarzaj” w wierszu
-  (`RepeatForm`, `SeriesFields special={false}`, `repeatDraft` / `repeatInputOf` / `repeatChanged` w `seriesForm.ts`), „↻ …” w `statusParts`.
+  go nie zna). Następne idzie za odhaczeniem (`after`, T923; okno – `put(…, owner)` w `change`, `CaseUndoFile.owner`, też w „Cofnij”):
+  pytanie przy odhaczeniu trzyma je, „ich” zabiera – nigdy otwarte zadanie obok następnego. `folder.edit`: nowy rekord, który już
+  jest z tą samą treścią, nie jest odmową (T1041). Ekran: „Powtarzaj” w wierszu (`RepeatForm`, `SeriesFields special={false}`,
+  `repeatDraft` / `repeatInputOf` / `repeatChanged` w `seriesForm.ts`; szkic wraca tylko po zmianie zapisanego `repeat`, nie dat
+  zadania ani dnia), „↻ …” w `statusParts`.
 - Kroki zadania (D440, T792, reguły `kroki.md`): `RequestRecord.steps` + `stepsDone`; `caseBlock` kopiuje listę do bloku,
   `withTaskBlock` – odhaczenia; zmiany w bloku i w zadaniu idą w obie strony (`engine/steps.ts`).
 - „Powtarzaj” nie dotyczy bloku zadania ani próśb (D408): `blockNotSeries` (kod `task` / `requests`), w panelu bloku `RepeatNote`.

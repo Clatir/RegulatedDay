@@ -1136,7 +1136,8 @@ export class WidgetEngine {
     const nextRel = next ? paths.record('request', next.id) : null
     // Not readable now: written as new – the folder refuses the whole answer then (a file it cannot read is never taken as missing).
     const made = next && nextRel && (await folder.recordView(nextRel).catch(() => undefined)) === undefined ? recordEdit(nextRel, null, next.raw) : null
-    const res = entry ? await this.d.edit(made ? [entry, made] : [entry]) : []
+    // The next one goes with the answer (T923): a question about the answer keeps it waiting, „ich” takes it out with it.
+    const res = entry ? await this.d.edit(made ? [entry, { ...made, after: [0] }] : [entry]) : []
     if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odpowiedź spotkała się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
     return this.refresh()
   }
