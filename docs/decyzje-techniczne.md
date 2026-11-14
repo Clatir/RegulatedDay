@@ -342,3 +342,5 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1067 | Wariant i kategoria utworzone oknem „+ Nowa…” (D463) zapisują się „od dziś”, niezależnie od „od kiedy” w Ustawieniach; lista „Wariant” jest tylko przy kategorii, która ma warianty, więc pierwszy wariant kategorii dodaje się w Ustawieniach |
 | T1068 | `Dialog` ma prop `centered`; okna kategorii i rutyny w wariancie `wide`; edytor kroków rutyny wyjęty do `RoutineSteps` (wspólny z „Rutynami”) |
 | T1069 | Karta wydarzenia całodniowego nie zamyka się od kliknięcia w okno nad nią (pytanie Del) |
+| T1070 | Następne zadanie powtarzanego (D465) idzie za wpisem odhaczenia (`after`, mechanizm T923) w oknie i na pasku – przy pytaniu o konflikt czeka razem z nim; jego zdjęcie w „Cofnij” idzie za przywróceniem zadania |
+| T1071 | „Powtarzaj”: niezapisany szkic zasady wraca do zapisanej tylko po zmianie zapisanego `repeat` albo zadania (nie po zmianie dat); „Postaw na osi”: wpisany koniec przypina pokazany początek (D464) |
