@@ -13,7 +13,7 @@ import { rdFrom } from '@shared/model/rd'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { BlockEditor } from '@renderer/features/plan/BlockEditor'
 import { Timeline } from '@renderer/features/plan/Timeline'
-import { draftRest, draftTile } from '@renderer/features/today/blockDraft'
+import { draftTile } from '@renderer/features/today/blockDraft'
 import { NewBlockPopover } from '@renderer/features/week/NewBlockPopover'
 import { addWeekBlocks } from '@renderer/features/week/weekActions'
 import { installEscape } from '@renderer/lib/escape'
@@ -163,13 +163,6 @@ describe('szkic na osi „Dziś” (D466)', () => {
     expect(night.querySelector('[data-testid="timeline-hours"]')!.textContent).toContain('01:00 +1')
   })
 
-  it('zmiana zatwierdzona w trakcie pierwszego zapisu czeka na jego koniec; to, co zapis już niósł, nie jest zapisywane drugi raz', () => {
-    const saved = { ...draftBlock, name: 'Analiza rynku' }
-    expect(draftRest(saved, { name: 'Analiza rynku' })).toBeNull()
-    expect(draftRest(saved, { name: 'Analiza rynku', durationMin: 90 })).toEqual({ durationMin: 90 })
-    expect(draftRest(saved, {})).toBeNull()
-  })
-
   it('„Dziś” rysuje szkic, a przy nowym bloku nie ma „Dodaj” ani „Anuluj”', () => {
     const page = readFileSync('src/renderer/features/today/TodayPage.tsx', 'utf8')
     expect(page).toMatch(/draft=\{draftTile\(draft, names\)\}/)
@@ -178,8 +171,8 @@ describe('szkic na osi „Dziś” (D466)', () => {
   })
 })
 
-describe('szkic w store: zamierzony tylko z przeciągnięcia (D461)', () => {
-  it('goły szkic nie jest zamierzony; zmiana pola albo „Więcej” (jawnie) – tak', () => {
+describe('szkic w store: zamierzony – przeciągnięcie, „+ Blok”, Ctrl+N, „Więcej” (D461, T1045)', () => {
+  it('goły szkic (klik osi) nie jest zamierzony; zmiana pola albo jawnie zamierzony – tak', () => {
     const b = planBlock({ id: 'd2', categoryId: 'inne', startMin: 600, durationMin: 60, origin: 'user' })
     setBlockDraft(D, b)
     expect(useUi.getState().blockDraft?.intended).toBe(false)

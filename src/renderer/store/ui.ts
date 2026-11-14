@@ -54,9 +54,9 @@ export function closeGoals(month: string): void {
 }
 
 /**
- * The day's new block (null: none) – clearing touches only that day's draft. `intended` (D461): made on purpose – a range dragged over
- * the axis, „Więcej” of „Tydzień”: it is saved when left even untouched; one from a bare click of the axis, „+ Blok” or Ctrl+N is
- * thrown away then (a changed field saves it at once, so a draft that is left is untouched, but for the steps).
+ * The day's new block (null: none) – clearing touches only that day's draft. `intended` (D461, T1045): made on purpose – a range
+ * dragged over the axis, „+ Blok”, Ctrl+N, „Więcej” of „Tydzień”: it is saved when left even untouched; one from a bare click of the
+ * axis is thrown away then (a changed field saves it at once, so a draft that is left is untouched, but for the steps).
  */
 export function setBlockDraft(date: string, block: PlanBlock | null, intended = false): void {
   if (block) useUi.setState({ blockDraft: { date, block, intended } })

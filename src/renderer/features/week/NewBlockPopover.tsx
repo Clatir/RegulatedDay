@@ -1,11 +1,12 @@
 /**
  * The small window of a new block on „Tydzień” (D366, D371): where the empty grid was clicked or dragged over – its name (D431:
  * on top, the cursor in it; empty – named as before), the category, the start, the end and the length (D464: the end changes the
- * length, the start stays – for each of the days). No „Dodaj” (D461): the block is saved in each of the days at that hour by Enter in
- * a field or by a click outside the window when it was dragged out or a field was changed (a bare click on the grid leaves nothing
- * behind – D461); it says so with „Cofnij” (`newBlocksToast`). „Anuluj” and Esc throw it away; „Więcej” (one day only) takes it to the full editing of
- * „Dziś” – the block still unsaved there, with its name, saved at its first field or when you leave it. The days gone by among
- * them are warned of, nothing is refused (D72).
+ * length, the start stays – for each of the days). No „Dodaj” (D461): the block is saved in each of the days at that hour
+ * by Enter in „Nazwa” or by a click outside the window when it was dragged out or a field was changed (a bare click on the grid
+ * leaves nothing behind – D461); it says so with „Cofnij” (`newBlocksToast`). A click outside that has to wait – today's exchange asked, today still
+ * counted – is held: the window stays, the click starts nothing below (T1049). „Anuluj” and Esc throw it away; „Więcej” (one day
+ * only) takes it to the full editing of „Dziś” – the block still unsaved there, with its name, saved at its first field or when you
+ * leave it. The days gone by among them are warned of, nothing is refused (D72).
  */
 import { useEffect, useRef, useState } from 'react'
 import { namedOf } from '@shared/blockName'
@@ -17,9 +18,10 @@ import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
 import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { Field } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
-import { commitActiveField } from '../../lib/commit'
 import { useEscapeLayer } from '../../lib/escape'
+import { holdGesture, useOutsidePointer } from '../../lib/outside'
 import { useDay, type DayModel } from '../../store/day'
+import { toast } from '../../store/ui'
 import { blockName, categoryOptions, type Names } from '../plan/blockView'
 import { lastNewBlockCategory, rememberNewBlockCategory, startCategory } from '../plan/lastCategory'
 import { ExchangeDialog } from '../today/ExchangeDialog'
@@ -28,6 +30,10 @@ import { newBlocksToast } from '../today/dayActions'
 import { addWeekBlocks } from './weekActions'
 import { NEW_BLOCK_WIDTH } from './weekLayout'
 import { daysLabel, pastWarning } from './weekText'
+
+/** How long a click outside waits for today to be counted (its exchange is asked from it) before it says nothing was added (T1049). */
+export const TODAY_WAIT_MS = 10_000
+export const TODAY_UNCOUNTED_TEXT = 'Nie dodano bloku – dzisiejszego dnia nie da się teraz policzyć. Spróbuj za chwilę.'
 
 /** A block to be added to a day (the exchange of today's comes first, the rest after it). */
 interface Entry {
@@ -134,8 +140,12 @@ export function NewBlockPopover({
   }
   /** The window stays open after Enter (days not written, the exchange left): the cursor back in „Nazwa” (T1028). */
   const backToName = () => ref.current?.querySelector<HTMLInputElement>('[data-testid="week-new-name"]')?.focus({ preventScroll: true })
-  /** Enter in a field (the name just typed – `n`: this render's state does not have it yet), or a click outside the window (D461). */
-  const add = (n = held.current.name) =>
+  /**
+   * Enter in „Nazwa” (the name just typed – `n`: this render's state does not have it yet), or a click outside the window (D461) –
+   * `press`: that click, held when the exchange is asked (it would start another window, a day, a screen – and the dialog, in this
+   * window, would go with it unanswered).
+   */
+  const add = (n = held.current.name, press?: PointerEvent) =>
     run(async () => {
       const entries = dates.map((date) => ({ date, block: blockOn(date, n) }))
       const mine = entries.find((e) => e.date === today)
@@ -143,6 +153,7 @@ export function NewBlockPopover({
         const proposal = proposeExchange(model.ctx, model.state, mine.block)
         if (proposal.needed) {
           // The exchange first: nothing is saved until today's block is decided; the other days follow it.
+          if (press) holdGesture(press)
           setExchange({ entry: mine, rest: entries.filter((e) => e !== mine), proposal })
           return
         }
@@ -151,24 +162,38 @@ export function NewBlockPopover({
     })
   const warning = pastWarning(dates, today)
   const locked = busy || (todayIn && !model)
+  // A click outside waits for today to be counted (the exchange is asked from it): the window stays meanwhile (T1049).
+  const [waiting, setWaiting] = useState(false)
   // D461: a click outside the window saves the block with what the fields hold (a field being typed in is committed first) – not
-  // while the exchange dialog stands over it, a save runs, or today is not counted yet.
-  const leave = useRef(() => undefined as void)
-  leave.current = () => {
-    if (locked || exchange) return
+  // while the exchange dialog stands over it or a save runs (that save is the leave: it closes the window or says what failed).
+  const leave = useRef((_press: PointerEvent) => undefined as void)
+  leave.current = (press) => {
+    if (busy || exchange) return
     // A bare click on the grid, nothing changed: no block (D461).
-    if (!dragged && !touched.current) onClose()
-    else void add()
-  }
-  useEffect(() => {
-    const away = (e: PointerEvent) => {
-      if (!ref.current || !(e.target instanceof Element) || ref.current.contains(e.target) || e.target.closest('[role="dialog"], [role="status"]')) return
-      commitActiveField()
-      leave.current()
+    if (!dragged && !touched.current) return onClose()
+    if (todayIn && !model) {
+      holdGesture(press)
+      setWaiting(true)
+      return
     }
-    document.addEventListener('pointerdown', away, true)
-    return () => document.removeEventListener('pointerdown', away, true)
-  }, [])
+    void add(undefined, press)
+  }
+  useOutsidePointer(true, ref, (press) => leave.current(press))
+  // Today counted while a click outside waits: the leave goes on (an exchange asked stands in this window, still open).
+  useEffect(() => {
+    if (!waiting || !model) return
+    setWaiting(false)
+    void add()
+  }, [waiting, model])
+  // Today not counted in a while: nothing is saved, and it is said; the window stays (another click tries again, Esc closes it).
+  useEffect(() => {
+    if (!waiting) return
+    const t = setTimeout(() => {
+      setWaiting(false)
+      toast(TODAY_UNCOUNTED_TEXT, 'error', 8000)
+    }, TODAY_WAIT_MS)
+    return () => clearTimeout(t)
+  }, [waiting])
   return (
     <div
       ref={ref}

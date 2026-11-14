@@ -17,6 +17,7 @@ import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { categoryName } from '@shared/model/rd'
 import { seriesOfBlock } from '@shared/model/series'
 import type { PlanBlock } from '@shared/model/plan'
+import type { StepOp } from '@shared/model/steps'
 import { DAY_TYPE_NAMES, RANGES } from '@shared/model/settings'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
@@ -24,6 +25,7 @@ import { atOf } from '@shared/engine/grid'
 import { TimeField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
 import { commitActiveField } from '../../lib/commit'
+import { useOutsidePointer } from '../../lib/outside'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
 import { isSaved, saveAnswer, useData, type SaveAnswer, type SendState } from '../../store/data'
@@ -60,7 +62,8 @@ import { caseTitle } from '../cases/casesLogic'
 import { nextFreeStart } from '../cases/casesUi'
 import { planOnAxis } from '../cases/planOnAxis'
 import { useCaseDrag } from '../cases/useCaseDrag'
-import { draftRest, draftTile } from './blockDraft'
+import { draftTile } from './blockDraft'
+import { firstSave } from './draftSave'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -80,6 +83,8 @@ import { axisWithRevealed, useVisibleAllDayIn } from '../calendars/visibleViews'
 import { UnclosedDays } from '../ritual/UnclosedDays'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
+/** What belongs to the new block on the screen: a press there is no click elsewhere (D461) – its panel and its tile on the axis. */
+const DRAFT_OWN = '[data-testid="block-editor"], [data-draft-tile]'
 
 export function TodayPage() {
   const view = useData((s) => s.view)
@@ -192,7 +197,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // Ctrl+N: a new block in the nearest free place (spec „Tworzenie”) – today from the next quarter, another day an hour
   // after the wake (A6-24).
   const nextPlace = (lengthMin?: number) => nextFreeStart(model.state, { isToday, nowMin: logicalMinuteOf(date, Date.now()), wakeMin: model.ctx.wakeMin }, lengthMin)
-  const newHere = () => create(nextPlace())
+  const newHere = () => create(nextPlace(), undefined, true)
   useNewShortcut(newHere)
   // D384: a sprawa of the panel beside the axis put on it – dropped at a minute, or in the nearest free place from now. A day
   // gone is history: no panel there (as no pushing, D367).
@@ -299,7 +304,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
       const hidden = hiddenBlocksAmong(pushed.map((p) => p.block), openId)
       if (pushed.length && hidden) toast(pushedText(pushed.length, hidden), 'info')
     }
-    return out
+    // How many it pushed apart – counted once, for the save and for what is said of it (a new block: the bar's „Cofnij”, no toast).
+    return { out, pushed: pushed.length }
   }
   /**
    * Fields of the block changed in its panel (D368: „Długość” shorter today – the bar may ask about the gap). The answer
@@ -354,16 +360,15 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
 
   /**
    * A new block: in the panel first, drawn dashed on the axis (D466); an hour long, or as long as the range dragged over the axis
-   * (D366). It saves itself (D461) – at its first committed field, or when you leave it if it was dragged out (`durationMin`: an
-   * intended range); a bare click, „+ Blok” and Ctrl+N left untouched create nothing, Esc throws any of them away. A draft that stood
-   * before is left first (saved or thrown away so), as by any other click elsewhere.
+   * (D366). It saves itself (D461) – at its first committed field, or when you leave it as it stands when it was made on purpose
+   * (`intended`: a range dragged out, „+ Blok”, Ctrl+N; T1045); a bare click of the axis left untouched creates nothing, Esc throws
+   * an untouched draft away. A draft that stood before is left first (saved or thrown away so), as by any other click elsewhere.
    */
-  const create = async (startMin: number, durationMin?: number) => {
+  const create = async (startMin: number, durationMin?: number, intended = durationMin != null) => {
     if (!(await leaveDraft())) return
     const b = newUserBlock('inne', startMin, durationMin ?? DEFAULT_NEW_BLOCK_MIN, model.state.settings.categories.inne)
-    saved.current = null
     setSelected(null)
-    setDraft(b, durationMin != null)
+    setDraft(b, intended)
   }
   /** Puts `b` into the day: a work block added today after the approval gets the exchange first (spec „Wymiana”); `quiet` – no dialog now. */
   const add = async (b: PlanBlock, quiet: boolean): Promise<'saved' | 'pushed' | 'asked' | 'failed'> => {
@@ -375,66 +380,77 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
       }
     }
     // D367: on a taken place it pushes the flexible blocks after it apart (the bar's line has the „Cofnij” then).
-    const change = addChange(model, b, pushes)
-    const pushed = pushedStarts(plan, change).length > 0
-    if (!isSaved(await saveChange(change))) return 'failed'
+    const { out, pushed } = await saveChange(addChange(model, b, pushes))
+    if (!isSaved(out)) return 'failed'
     rememberNewBlockCategory(b.categoryId)
-    return pushed ? 'pushed' : 'saved'
+    return pushed > 0 ? 'pushed' : 'saved'
   }
-  // The draft's one save at a time (D431, D461), what was committed while it ran, and the block just saved that the plan does not show yet.
-  const saving = useRef<Promise<boolean> | null>(null)
-  const later = useRef<Partial<PlanBlock>>({})
-  const saved = useRef<string | null>(null)
   const dateNow = useRef(date)
   dateNow.current = date
-  /**
-   * A field of the new block committed (D461): the block is saved with it – the first change makes it a block of the day, the
-   * panel goes on editing it. One committed while that save runs follows it. `quiet` (leaving the screen): the exchange is not asked.
-   * The answer is the note editor's (T670): saved, or asked (the draft keeps the value; why not – the toast or the dialog says).
-   */
-  const commitDraft = (patch: Partial<PlanBlock>, quiet = false): Promise<SaveAnswer> => {
+  /** The day's draft `id` as the store holds it now (never the one read at the render before). */
+  const draftNow = (id: string): PlanBlock | null => {
     const d = useUi.getState().blockDraft
-    if (!d || d.date !== date) return Promise.resolve(true)
-    const was = d.block
-    patchBlockDraft(date, patch)
-    if (saving.current) {
-      later.current = { ...later.current, ...patch }
-      return saving.current.then((ok) => (ok ? true : 'asked'))
-    }
-    // Saved already, the plan does not show it yet: a block like any, its field saves over the file's.
-    if (saved.current === was.id) return saveFields({ ...was, ...patch }, patch)
-    const full = { ...was, ...patch }
-    const run = (async () => {
-      const r = await add(full, quiet)
-      const rest = later.current
-      later.current = {}
-      if (r !== 'saved' && r !== 'pushed') return false
-      saved.current = full.id
-      // D461: it saved itself – it says so, with „Cofnij” (a push has the bar's own).
-      if (r === 'saved') newBlocksToast([{ date, id: full.id }])
-      if (dateNow.current === date) setSelected(full.id)
-      const more = draftRest(full, rest)
-      if (more) await saveFields(full, more)
-      return true
-    })()
-    saving.current = run
-    void run.finally(() => {
-      if (saving.current === run) saving.current = null
-    })
-    return run.then((ok) => (ok ? true : 'asked'))
+    return d?.date === date && d.block.id === id ? d.block : null
   }
-  /** Leaving the new block (a click elsewhere, a day, a screen, another block): saved as it stands when dragged out on purpose, otherwise thrown away; false – it is not saved (the exchange asks, or the save was refused). */
+  /**
+   * A field of the block in the panel committed (`isDraft`: the panel shows the new block). The new block's first one saves it with
+   * that field (D461): the draft becomes a block of the day, the panel goes on editing it. Once that save has started, a field waits
+   * for it and is its own change of the block, in the window's turn (`firstSave.after`, T1072 – shown in the draft at once, kept
+   * there when the first save fails); a block of the plan – its field as ever; a draft gone meanwhile (thrown away) – nothing. `quiet`
+   * (leaving the screen): the exchange is not asked. The answer is the note editor's (T670): saved, refused, or asked (the draft
+   * keeps the value; why not – the toast or the dialog says).
+   */
+  const changeBlock = (b: PlanBlock, patch: Partial<PlanBlock>, isDraft: boolean, quiet = false): Promise<SaveAnswer> => {
+    const later = firstSave.after(b.id, (saved) => saveFields(saved, patch))
+    const d = draftNow(b.id)
+    if (d) patchBlockDraft(date, patch)
+    if (later) return later
+    if (!isDraft) return saveFields(b, patch)
+    if (!d) return Promise.resolve(true)
+    const full = { ...d, ...patch }
+    return firstSave
+      .start(full, async () => {
+        const r = await add(full, quiet)
+        if (r !== 'saved' && r !== 'pushed') return false
+        // D461: it saved itself – it says so, with „Cofnij” (a push has the bar's own).
+        if (r === 'saved') newBlocksToast([{ date, id: full.id }])
+        if (dateNow.current === date) setSelected(full.id)
+        return true
+      })
+      .then((ok) => (ok ? true : 'asked'))
+  }
+  /**
+   * A change of the steps of the block in the panel (`isDraft` as in `changeBlock`): the new block's go into its draft (over the
+   * latest draft) – and once its first save has started, also after it as the block's own change (written, T1072); a block of the
+   * plan – as ever; a draft gone meanwhile – nothing.
+   */
+  const changeSteps = (b: PlanBlock, op: StepOp, isDraft: boolean): Promise<SaveAnswer> => {
+    const o = { date, today, raw, series, names, patchDraft: (steps: PlanBlock['steps']) => patchBlockDraft(date, { steps }), scope: stepsScope }
+    const d = draftNow(b.id)
+    const shown = d ? saveBlockSteps(o, d, op, true) : null
+    const later = firstSave.after(b.id, (saved) => saveBlockSteps(o, saved, op, false))
+    if (later) return later
+    if (shown) return shown
+    return isDraft ? Promise.resolve(true) : saveBlockSteps(o, b, op, false)
+  }
+  /**
+   * Leaving the new block (a click elsewhere, a day, a screen, another block, „Zamknij”): the field being typed in is committed and
+   * the block saved as it stands – a bare click of the axis left untouched is thrown away instead (T1045); a first save that runs is
+   * waited for. False – it is not saved (the exchange asks, or the save was refused): the panel stays.
+   */
   const leaveDraft = async (quiet = false): Promise<boolean> => {
-    if (!draft && !saving.current) return true
+    if (!draft) return true
     commitActiveField()
-    if (saving.current) return saving.current
-    // Nothing committed and not dragged out on purpose: left, it is thrown away – a stray click creates no block (D461).
+    const started = firstSave.of(draft.id)
+    if (started) return started.run
     const d = useUi.getState().blockDraft
-    if (d?.date === date && !d.intended) {
+    // Gone meanwhile (thrown away a moment ago, or written by the exchange's dialog): nothing to leave.
+    if (d?.date !== date || d.block.id !== draft.id) return true
+    if (!d.intended) {
       setDraft(null)
       return true
     }
-    return (await commitDraft({}, quiet)) === true
+    return (await changeBlock(d.block, {}, true, quiet)) === true
   }
   const leaving = useRef(leaveDraft)
   leaving.current = leaveDraft
@@ -443,17 +459,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     onLeaveBlockDraft(() => void leaving.current(true))
     return () => onLeaveBlockDraft(null)
   }, [])
-  const hasDraft = draft != null
-  useEffect(() => {
-    if (!hasDraft) return
-    const away = (e: PointerEvent) => {
-      const t = e.target
-      if (t instanceof Element && !t.closest('[data-testid="block-editor"], [role="dialog"], [role="status"], [data-draft-tile]')) void leaving.current()
-    }
-    document.addEventListener('pointerdown', away, true)
-    return () => document.removeEventListener('pointerdown', away, true)
-  }, [hasDraft])
-
+  useOutsidePointer(draft != null, DRAFT_OWN, () => void leaving.current())
 
   const typeColor = DAY_TYPE_COLORS[currentType]
   return (
@@ -636,8 +642,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             plan={plan}
             names={names}
             computers={view.computers}
-            onChange={(patch) => (draft ? commitDraft(patch) : saveFields(block, patch))}
-            // „Zamknij” saves a new block as it stands (D461); Esc throws it away (not while its save runs).
+            onChange={(patch) => changeBlock(block, patch, draft != null)}
+            // „Zamknij” leaves a new block – saved as it stands, a bare click of the axis untouched thrown away (D461, T1045); Esc
+            // throws it away (not once its save has started).
             onClose={() =>
               void leaveDraft().then((left) => {
                 if (!left) return
@@ -648,7 +655,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             onEscape={
               draft
                 ? () => {
-                    if (!saving.current) setDraft(null)
+                    if (!firstSave.of(draft.id)) setDraft(null)
                   }
                 : undefined
             }
@@ -657,14 +664,14 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             // D430, D431, D461: „+ Blok” (Ctrl+N, a range on the axis, „Więcej” of „Tydzień”) – the cursor in „Nazwa”, Enter there
             // saves the block with the name just typed (the draft of this render does not have it yet; a name that was changed
             // is committed by the blur and has started the save already). A save running: the cursor stays in the field (T1028).
-            newBlock={draft ? { add: (name) => (saving.current ? false : void commitDraft({ name })) } : undefined}
+            newBlock={draft ? { add: (name) => (firstSave.of(draft.id) ? false : void changeBlock(draft, { name }, true)) } : undefined}
             steps={
               <StepsEditor
                 steps={block.steps}
                 lengthMin={block.durationMin}
                 ticks={!draft}
                 onTick={(id, done) => tickBlockStep(date, block, id, done, raw)}
-                onOp={(op) => saveBlockSteps({ date, today, raw, series, names, patchDraft: (steps) => patchBlockDraft(date, { steps }), scope: stepsScope }, block, op, draft != null)}
+                onOp={(op) => changeSteps(block, op, draft != null)}
               />
             }
             place={draft ? undefined : dayPlace}
