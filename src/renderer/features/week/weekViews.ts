@@ -4,12 +4,12 @@
  * apart from the storage – the screens only draw what these give.
  */
 import { mayMoveBetween } from '@shared/engine/calendarViews'
-import { groupEndMin, groupOf, groupRootOf, PARALLEL_SAME_TEXT, parallelFullText, parallelJoinText } from '@shared/engine/parallel'
+import { groupEndMin, groupRootOf, PARALLEL_SAME_TEXT, parallelDrop, parallelFullText, parallelJoinText } from '@shared/engine/parallel'
 import type { HorizonBlock } from '@shared/engine/week'
 import type { AgendaBlock } from '@shared/engine/calendarViews'
 import { durationLabel } from '@shared/format'
 import { categoryName } from '@shared/model/rd'
-import { DRAG_STEP_MIN } from '@shared/model/plan'
+import { DRAG_STEP_MIN, type PlanBlock } from '@shared/model/plan'
 import { addDays, weekday } from '@shared/time/zone'
 import { blockName, type Names } from '../plan/blockView'
 import { snapMinute } from '../plan/gridCreate'
@@ -93,14 +93,20 @@ const NO_ONTO: ReadonlySet<HorizonBlock['state']> = new Set(['ran', 'missed', 'p
 export function weekOnto(blocks: readonly HorizonBlock[], dragged: string, target: string, max: number, nameOf: (b: HorizonBlock) => string): WeekOnto | null {
   const t = blocks.find((b) => b.id === target)
   if (!t || t.id === dragged || t.outsidePlan || NO_ONTO.has(t.state)) return null
-  const linked = blocks.filter((b) => !b.outsidePlan).map((b) => ({ id: b.id, alongside: b.alongside ?? null }))
-  const rootId = groupRootOf(new Map(linked.map((b) => [b.id, b])), target) ?? target
-  const root = blocks.find((b) => b.id === rootId) ?? t
-  const group = groupOf(linked, rootId)
-  if (group.includes(dragged)) return { target, startMin: root.startMin, text: PARALLEL_SAME_TEXT, same: true }
+  // The rules of the drop are `parallelDrop`'s (T1263): the column's blocks as a plan – where each stands, beside whom.
+  const inPlan = blocks.filter((b) => !b.outsidePlan)
+  const plan = inPlan.map((b) => ({ id: b.id, alongside: b.alongside ?? null, anchor: null, startMin: b.startMin, durationMin: Math.max(1, b.endMin - b.startMin) }) as unknown as PlanBlock)
+  // A block from another day comes into the column on its own (beside nobody).
+  if (!plan.some((b) => b.id === dragged)) plan.push({ id: dragged, alongside: null, anchor: null, startMin: null, durationMin: 1 } as unknown as PlanBlock)
   const ends = new Map(blocks.map((b) => [b.id, b.endMin]))
-  if (group.length + 1 > max) return { target, startMin: groupEndMin(linked, rootId, (id) => ends.get(id) ?? null), text: parallelFullText(max), same: false }
-  return { target, startMin: root.startMin, text: parallelJoinText(nameOf(root)), same: false }
+  const linked = inPlan.map((b) => ({ id: b.id, alongside: b.alongside ?? null }))
+  const drop = parallelDrop(plan, dragged, target, max, (root) => groupEndMin(linked, root, (id) => ends.get(id) ?? null))
+  if (!drop) return null
+  const rootId = drop.kind !== 'same' ? drop.root : (groupRootOf(new Map(linked.map((b) => [b.id, b])), target) ?? target)
+  const root = blocks.find((b) => b.id === rootId) ?? t
+  if (drop.kind === 'same') return { target, startMin: root.startMin, text: PARALLEL_SAME_TEXT, same: true }
+  if (drop.kind === 'full') return { target, startMin: drop.patch.startMin ?? root.startMin, text: parallelFullText(max), same: false }
+  return { target, startMin: drop.patch.startMin ?? root.startMin, text: parallelJoinText(nameOf(root)), same: false }
 }
 
 /**

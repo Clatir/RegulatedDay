@@ -18,7 +18,7 @@ import type { DayContext, DayState } from './day'
 import { blockAt, endShiftOf, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
 import { requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
-import { awayStartOf, awayStartUndoable, fixedWorkLeft, groupRootIn, groupStarts, groupStartsWith, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
+import { awayStartOf, awayStartUndoable, fixedWorkLeft, groupMate, groupRootIn, groupStarts, groupStartsWith, inGroupOf, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
 /** The rules of a request's end without „Koniec” (`requestEndOf`). */
@@ -199,7 +199,8 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
   const limited = info.rules.kind === 'meal' || info.rules.kind === 'routine' || info.categoryId === 'sprawy' || autoRegen
   const listening = info.isWork || info.isProject
   const limit = limited ? start + (length + AWAY_LIMIT_EXTRA_MIN) * MIN : listening ? start + length * MIN : null
-  const use = firstUseAfter(activity, start, AWAY_GAP_MIN)
+  // A block of a parallel group that took the front later (`groupFront`): the return is counted from then (T1257).
+  const use = firstUseAfter(activity, f.group != null ? runFromOf(state.grid, f) : start, AWAY_GAP_MIN)
   if (use) {
     if (limit != null && use.use > limit) return { at: limit, rule: 'limit' }
     return { at: use.use, rule: 'firstUse' }
@@ -211,6 +212,8 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
   return null
 }
 
+/** A block of a parallel group brought to the front by the app when the block in front ended (D493, T1259) – information only. */
+export const GROUP_FRONT_RULE = 'groupFront'
 /** The start of the rest of a parallel group with a block begun by itself (D499) – each on its own row with „Cofnij”. */
 export const GROUP_START_RULE = 'groupStart'
 /** The end of a block of a parallel group behind at its planned end (D499), done – on its own row with „Cofnij”. */
@@ -225,9 +228,8 @@ export const AWAY_PLAN_RULE = 'awayPlan'
  */
 function groupAutoStarts(inp: AutoInput, lead: string, at: number): AutoEvent[] {
   const date = inp.state.grid.date
-  return groupStarts(inp.ctx, inp.state, lead, at, 'auto').map((e) =>
-    e.k === 'block.fg' ? ({ ...e, id: derivedId(date, 'auto', GROUP_START_RULE, 'block.fg', String(e.block), e.at) } as AutoEvent) : auto(date, GROUP_START_RULE, e as TimerDraft & { block: string })
-  )
+  // Every one with the rule (T1258): the log tells the app's events from yours by it; the list shows no row of a `block.fg`.
+  return groupStarts(inp.ctx, inp.state, lead, at, 'auto').map((e) => auto(date, GROUP_START_RULE, e as TimerDraft & { block: string }))
 }
 
 /** The automatic end of a block away from the computer by `awayEnd` (one id for the rule and the check that waits for it). */
@@ -431,14 +433,14 @@ function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, Shu
     const list: AutoEvent[] = []
     const root = groupRootIn(inp.ctx.plan, b.id)
     // A fixed block of the group in front joins it (T1209): behind, pausing nothing – the group runs on in parallel.
-    if (!bg && front && root != null && front.fact.group === root) bg = true
+    if (!bg && front && root != null && inGroupOf(inp.ctx.plan, front, b.id)) bg = true
     else if (!bg && front) {
       if (front.info.protectedLife || isFixedLike(front.info)) bg = true
       else {
         list.push(auto(date, 'fixedStart', { k: 'block.pause', block: front.info.id, at: from }))
         // The rest of its parallel group pauses with it (D499, T1195).
         if (front.fact.group != null)
-          for (const x of t.bg) if (x.fact.group === front.fact.group && !isFixedLike(x.info) && !x.info.bg) list.push(auto(date, 'fixedStart', { k: 'block.pause', block: x.info.id, at: from }))
+          for (const x of t.bg) if (x.fact.group === front.fact.group && groupMate(x)) list.push(auto(date, 'fixedStart', { k: 'block.pause', block: x.info.id, at: from }))
       }
     }
     list.push(
@@ -525,6 +527,9 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   for (const tb of [...(fg ? [fg] : []), ...t.bg]) {
     const b = tb.info
     const f = tb.fact
+    // A block of a group taking the front this pass (`groupFront`, below): judged from the next pass, with its run in front –
+    // not from the run behind it had before (T1257).
+    if (tb === fg && f.group != null && (f.runs.at(-1)?.bg ?? false)) continue
     const endAt = at(tb.plannedEnd)
     const runFrom = runFromOf(state.grid, f)
     // The app was closed (or crashed) with the block running and no computer observed since: it ended at the close (D252).
@@ -600,6 +605,19 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
         if (end != null && due(end.due)) take([auto(date, 'idle', { k: 'block.end', block: b.id, at: end.at, done: null, rule: 'idle' })])
       }
     }
+  }
+
+  // D493 (T1259): a block of a parallel group the timer puts in front (`groupFront` – nothing else runs in front) still runs
+  // behind in the log: the leader writes it to the front from when the front was free – the facts (energy, the forecast,
+  // requests after the fact, the start of a block away from the computer, a regeneration holding a fixed block) see it there.
+  const front = t.fg
+  if (front && front.fact.group != null && (front.fact.runs.at(-1)?.bg ?? false)) {
+    let freeIdx = front.fact.runs.at(-1)!.from
+    for (const [, f] of state.facts.blocks) for (const r of f.runs) if (!r.bg && r.to !== OPEN && r.to <= nowIdx) freeIdx = Math.max(freeIdx, r.to)
+    for (const r of state.facts.requests) if (r.to !== OPEN) freeIdx = Math.max(freeIdx, r.to)
+    for (const d of state.facts.disconnect) if (d.to !== OPEN) freeIdx = Math.max(freeIdx, d.to)
+    const when = at(freeIdx)
+    if (due(when)) take([auto(date, GROUP_FRONT_RULE, { k: 'block.fg', block: front.info.id, at: when, bg: false })])
   }
 
   // Requests without „Koniec”: the first use after 2 min without input, the limit, the bedtime (spec „Prośba”).

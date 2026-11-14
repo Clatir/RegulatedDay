@@ -39,9 +39,11 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * 1.23-A too – parallel blocks (D476, T1162): a group takes its time once in the forecast – an older version would count its
  * blocks one after another (the computed end of work, the hard end, the freeze). 11 – the two together and the timer of a
  * parallel group (D476, D493, `block.start.group`): an older version would charge the blocks behind and leave the
- * foreground empty when the block in front ends; it gives way to this one as the leader.
+ * foreground empty when the block in front ends; it gives way to this one as the leader. 12 – the block of a group that
+ * takes the front is written there (`groupFront`, T1259): an older version would leave it behind in the log (no cost, no
+ * work in front for requests and the forecast); it gives way to this one as the leader.
  */
-export const RULES_VERSION = 11
+export const RULES_VERSION = 12
 
 /** What a block's start wrote of its plan (`block.start.planned`). */
 export interface StartPlanned {
