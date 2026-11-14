@@ -66,7 +66,8 @@ paths:
 - Grupa równoległa (D476, D493, D494, D499, T1190–T1199): `block.start.group` (`BlockFact.group`) – start grupy
   `groupStarts` (`groupOf` z `parallel.ts`, 1.23-A), z przodu `groupFront` (to samo w `energy.ts`), `front` (pasek „+K w
   tle”), `groupStart`/`groupPlan` w `auto.ts`; blok spoza grupy (także stały sam, „Odcinam się”) pauzuje całą grupę, „Dalej” w
-  grupie nic nie zaczyna; prośba i „Odcinam się” trzymają przód (T1200); koszt grupy – `groupCost` (T1205).
+  grupie nic nie zaczyna; prośba i „Odcinam się” trzymają przód (T1200); koszt grupy – `groupCost` (T1205); zapauzowana grupa w prognozie
+  razem (`pausedLead`, T1211).
 - `activityOf` bez żadnego komputera = cały czas bez wejścia; w testach dodaj `observe(...)` (DSL) – inaczej blok
   stały „przy komputerze” nie zacznie się (czeka na pierwsze użycie).
 - Otwarty odcinek innego komputera liczy się tylko do jego ostatniego `observe.alive` (`alive` w DSL).
