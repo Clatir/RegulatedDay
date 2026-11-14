@@ -1,6 +1,6 @@
 /**
  * The quiet modes and the states of the day the widget follows (spec „Cisza”, „Odcinam się”): the session mode (a
- * session block or a second shift of the session category runs, in the foreground or the background, or its planned
+ * block of the session category runs, in the foreground or the background, or its planned
  * start came and it waits for its first „Zacznij · Odwołaj”), the class mode (a block of a category with the class mode
  * runs), „mniej pytań” (a state of the day on every computer: from „Mniej pytań” to „Jest lepiej” or 04:00), the
  * night's quiet (from the effective bedtime to the wake) and „Odcinam się” (until „Wracam”, at the latest 04:00).

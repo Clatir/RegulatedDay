@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { newSeries } from '@shared/engine/series'
-import { planBlock } from '@shared/model/plan'
+import { planBlock, planBlockFrom } from '@shared/model/plan'
 import { DEFAULT_SPECIAL, type SeriesBlock, type SeriesRule } from '@shared/model/series'
 import { SERIES_MARK } from '@shared/seriesText'
 import { blockMayRepeat } from '@renderer/features/series/BlockSeries'
@@ -131,20 +131,20 @@ describe('pola panelu bloku', () => {
     expect(touchesSeries({ categoryId: 'inne', variantId: null })).toBe(true)
     expect(touchesSeries({ note: 'x' })).toBe(true)
     expect(touchesSeries({ anchor: null })).toBe(false)
-    expect(touchesSeries({ tag: null, waitUntilMin: null })).toBe(false)
+    expect(touchesSeries({ moves: 1, movedFrom: null })).toBe(false)
   })
 
   it('do serii idzie tylko to, co seria przechowuje', () => {
-    expect(seriesBlockPatch({ durationMin: 30, anchor: null, tag: null })).toEqual({ durationMin: 30 })
+    expect(seriesBlockPatch({ durationMin: 30, anchor: null, moves: 1 })).toEqual({ durationMin: 30 })
     expect(seriesBlockPatch({ categoryId: 'nauka', variantId: null })).toEqual({ categoryId: 'nauka', variantId: null })
   })
 
-  it('pole „Powtarzaj” mają bloki własne i szablonu, nie sesja, wykład, zajęcia zjazdu, druga zmiana ani prośby', () => {
+  it('pole „Powtarzaj” mają bloki własne i szablonu (także z dawnym oznaczeniem drugiej zmiany, D467), nie sesja, wykład, zajęcia zjazdu ani prośby', () => {
     expect(blockMayRepeat(blockOf({ origin: 'user' }))).toBe(true)
     expect(blockMayRepeat(blockOf({ origin: 'template' }))).toBe(true)
     expect(blockMayRepeat(blockOf({ origin: 'series', sourceId: 's1' }))).toBe(true)
     for (const origin of ['session', 'lecture', 'zjazd'] as const) expect(blockMayRepeat(blockOf({ origin }))).toBe(false)
-    expect(blockMayRepeat(blockOf({ tag: 'secondShift' }))).toBe(false)
+    expect(blockMayRepeat(planBlockFrom({ id: 'ds', categoryId: 'sesja', startMin: 1200, durationMin: 60, fixed: true, origin: 'template', tag: 'secondShift' })!)).toBe(true)
     expect(blockMayRepeat(blockOf({ requests: ['r1'] }))).toBe(false)
   })
 })

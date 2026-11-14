@@ -3,9 +3,9 @@
  * weekday (one without weekdays is the type's default), each with versions applying from a date. A change applies from
  * the date you choose – by default tomorrow – and never changes days past: the first edit makes a new version from that
  * date, a copy of the one in force then. The version is edited on the axis of a day it would make (the same functions as
- * the engine) with the same panel of a block as the day; a template block may follow a session („po sesji NY”), carry
- * the second shift or the weekly analysis. Ctrl+N makes a new template; a template can be copied. A block dragged or added
- * on a taken place of the axis pushes the flexible blocks after it apart (D367, D372) – „Przesunięto N bloków · Cofnij”
+ * the engine) with the same panel of a block as the day; a template block may follow a session („po sesji NY”). Ctrl+N
+ * makes a new template; a template can be copied. A block dragged or added on a taken place of the axis pushes the
+ * flexible blocks after it apart (D367, D372) – „Przesunięto N bloków · Cofnij”
  * stays on the page for 15 min, or until the template changes again. Below the templates: the list of series (D381, D401) –
  * each with its rule in words, edited and ended there (`SeriesEditor`); Ctrl K finds a series as one record.
  */

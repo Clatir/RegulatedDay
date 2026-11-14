@@ -17,7 +17,8 @@ const plan = () => [
   block({ id: 'ny', cat: 'sesja', at: '14:00', min: 180, fixed: true, origin: 'session', source: 'ny' }),
   block({ id: 'jrn', cat: 'journaling', after: 'ny', min: 30 }),
   block({ id: 'kolacja', cat: 'posilek', at: '19:15', min: 30 }),
-  block({ id: 'ds', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' }),
+  // D467: the evening of the example has no second shift – a life block (home matters) in its place.
+  block({ id: 'ds', cat: 'sprawy', at: '20:00', min: 60 }),
   block({ id: 'rutyna', cat: 'rutyny', at: '21:00', min: 15 })
 ]
 
@@ -36,7 +37,7 @@ function day(): Scenario {
 }
 
 describe('Model dnia – przykład (dzień zwykły)', () => {
-  it('granica: 17:30 + 15 min = 17:45, zatwierdzona; druga zmiana jej nie zmienia', () => {
+  it('granica: 17:30 + 15 min = 17:45, zatwierdzona; wieczorne bloki życia jej nie zmieniają', () => {
     const s = day()
     const st = s.state('09:00')
     expect(hhmm(st, st.boundary.proposal)).toBe('17:45')
@@ -113,8 +114,12 @@ describe('Model dnia – przykład (dzień zwykły)', () => {
       .ran('p1', '17:30', '19:15', { cat: 'projekty', min: 105 })
       .ran('kolacja', '19:15', '19:45')
 
-  it('wariant: projekty 17:30–19:15, po kolacji druga zmiana do 21:30 – twardy koniec nie mija, pora snu 22:30, nagroda za regenerację zostaje', () => {
-    const s = evening().start('ds', '20:00').extend('ds', 30, '20:50').end('ds', '21:30').ran('rutyna', '21:30', '21:45')
+  it('wariant: projekty 17:30–19:15, po sprawach domowych analiza 21:00–21:30 – twardy koniec nie mija, pora snu 22:30, nagroda za regenerację zostaje', () => {
+    const s = evening()
+      .ran('ds', '20:00', '21:00')
+      .start('analiza-wieczor', '21:00', { cat: 'analiza', min: 30, confirmUntil: '21:30' })
+      .end('analiza-wieczor', '21:30')
+      .ran('rutyna', '21:30', '21:45')
     // O 19:45 zaczyna się odpoczynek zgodny z planem: twardy koniec nie mija, a komunikatu nie ma.
     const at1950 = s.state('19:50')
     expect(at1950.hardEnd.passed).toBeNull()
@@ -122,7 +127,7 @@ describe('Model dnia – przykład (dzień zwykły)', () => {
     const at2000 = s.state('20:00')
     expect(hhmm(at2000, at2000.hardEnd.at)).toBe('21:15')
     expect(at2000.hardEnd.passed).toBeNull()
-    // Przedłużenie drugiej zmiany o 30 min, potwierdzone z góry: każda minuta po kolei przesuwa porę snu, do 22:30.
+    // Analiza 21:00–21:30 potwierdzona z góry przy pustej puli: każda minuta po kolei przesuwa porę snu, do 22:30.
     const st = s.state('22:30')
     expect([...st.minutes.values()].filter((m) => m.cls === 'empty' && m.upfront).length).toBe(30)
     expect(st.extensionMin).toBe(30)

@@ -4,7 +4,7 @@
  * are ticked and still have a class (`toSave`); the texts of the toasts after „Zapisz” and „Cofnij”. Nothing here
  * writes anything: the window sends `toSave` to the main process, which checks every day again.
  */
-import type { ZjazdPreview, ZjazdPreviewDay, ZjazdSaveResult, ZjazdUndoDay } from '@shared/api'
+import type { ZjazdPreview, ZjazdPreviewDay, ZjazdSaveResult } from '@shared/api'
 import { logicalClock, plDate, plural } from '@shared/format'
 import { zjazdDayType, ZJAZD_SKIP_TEXT } from '@shared/import/zjazdDay'
 import { subjectMax, zjazdKindOf, type ZjazdClass, type ZjazdDay, type ZjazdKind } from '@shared/import/zjazdy'
@@ -131,30 +131,10 @@ export function unchangedText(r: Pick<ZjazdSaveResult, 'unchanged'>): string | n
   return n ? `${n} ${plural(n, 'dzień', 'dni', 'dni')} bez zmian (już tak zapisane)` : null
 }
 
-/**
- * What the toast's „Cofnij” sends: the save's `undo` and the Fridays whose weekly-analysis answer („Tak” or „Nie”) came
- * after it – a Friday that the import changed too keeps the file from before the import and stands as the answer left it.
- */
-export function undoList(undo: readonly ZjazdUndoDay[], fridays: readonly ZjazdUndoDay[]): ZjazdUndoDay[] {
-  const list = [...undo]
-  for (const f of fridays) {
-    const i = list.findIndex((u) => u.date === f.date)
-    if (i >= 0) list[i] = { ...list[i]!, after: f.after }
-    else list.push(f)
-  }
-  return list
-}
-
-/**
- * The message of „Cofnij”; `fridays` – the days of the weekly-analysis answers that went back with the import, `lost` –
- * the Fridays whose file could not be read after the answer (their answer cannot go back: said, never quietly).
- */
-export function undoneText(r: Pick<ZjazdSaveResult, 'saved'>, fridays: readonly string[] = [], lost: readonly string[] = []): string {
-  const imported = r.saved.filter((d) => !fridays.includes(d))
-  const analysis = r.saved.some((d) => fridays.includes(d))
-  const notBack = lost.length ? ` Piątku ${lost.map(plDate).join(', ')} nie cofnięto – jego pliku nie dało się odczytać po odpowiedzi o analizie.` : ''
-  if (!r.saved.length) return `Nic nie cofnięto.${notBack}`
-  return `Cofnięto import zjazdów${imported.length ? `: ${daysText(imported.length)}` : ''}${analysis ? ' i odpowiedź o analizie tygodniowej' : ''}${notBack ? `.${notBack}` : ''}`
+/** The message of „Cofnij”. */
+export function undoneText(r: Pick<ZjazdSaveResult, 'saved'>): string {
+  if (!r.saved.length) return 'Nic nie cofnięto.'
+  return `Cofnięto import zjazdów: ${daysText(r.saved.length)}`
 }
 
 /** The days that left the preview with a question (a change from another computer met the edit). */

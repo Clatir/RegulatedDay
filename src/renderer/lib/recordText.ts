@@ -29,6 +29,8 @@ const BLOCK_FIELDS: Record<string, string> = {
   durationMin: 'długość',
   fixed: 'rodzaj',
   background: 'miejsce',
+  // Fields this version no longer reads (D467) but an older version on another computer still writes: a question about
+  // its change says them by name.
   tag: 'oznaczenie',
   waitUntilMin: 'czeka do',
   note: 'notatka',

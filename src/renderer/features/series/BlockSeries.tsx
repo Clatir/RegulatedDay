@@ -3,7 +3,7 @@
  * day's panel): a block of yours – flexible or fixed, one of a template too – can become a series (the rule, its end,
  * „W dni szczególne”, then „Utwórz serię”: the block is the first occurrence); a block that is an occurrence says its rule in
  * words („co 2 tygodnie w czwartek, do 30.04”) and edits it – the change asks „To i następne · Cała seria” (a change of the
- * rule is never one day's). Not for a block of a session, a lecture, a class of a „zjazd”, the second shift or requests.
+ * rule is never one day's). Not for a block of a session, a lecture, a class of a „zjazd” or requests.
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { SeriesScope } from '@shared/api'

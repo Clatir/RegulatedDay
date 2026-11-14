@@ -1,7 +1,7 @@
 /**
  * The bottom edge of a running block on the axis of „Dziś” (D365): what the window shows while it is dragged, and the end
  * the click `resize` of the timer then writes (`timerAction`). Only a running block of its own hour (`ownHourBlock`) – not
- * a paused one, a session, a lecture, a class of a „zjazd” nor the second shift (they keep „Przedłuż” on the bar). Its end
+ * a paused one, a session, a lecture nor a class of a „zjazd” (they keep „Przedłuż” on the bar). Its end
  * goes on the 5-min grid, never before now rounded up to 5 min nor under 5 min of the block; later is „Przedłuż” (up to
  * the boundary at once, past it its cost and „Potwierdź”), earlier moves its planned end back. Pure: the window counts it
  * on its day; the day's warnings after the change are counted with the change laid over the day (as after a change of

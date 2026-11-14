@@ -28,14 +28,14 @@ const ordinaryTemplate: Template = {
       blocks: [
         planBlock({ id: 'rutyna', categoryId: 'rutyny', startMin: 6 * 60 + 15, durationMin: 30, origin: 'template' }),
         planBlock({ id: 'jrn', categoryId: 'journaling', anchor: 'session:ny', durationMin: 30, origin: 'template' }),
-        planBlock({ id: 'ds', categoryId: 'sesja', startMin: 20 * 60, durationMin: 60, fixed: true, tag: 'secondShift', origin: 'template' })
+        planBlock({ id: 'ds', categoryId: 'sesja', startMin: 20 * 60, durationMin: 60, fixed: true, origin: 'template' })
       ]
     },
     {
       from: '2026-11-02',
       budgetMin: 8 * 60,
       maxMin: 18 * 60,
-      blocks: [planBlock({ id: 'ds', categoryId: 'sesja', startMin: 20 * 60, durationMin: 60, fixed: true, tag: 'secondShift', origin: 'template' })]
+      blocks: [planBlock({ id: 'ds', categoryId: 'sesja', startMin: 20 * 60, durationMin: 60, fixed: true, origin: 'template' })]
     }
   ]
 }
@@ -121,7 +121,7 @@ describe('sesje w strefie Nowego Jorku', () => {
 })
 
 describe('kalendarz świąt w dniu', () => {
-  it('27.11.2026: CME zamyka o 19:15, sesja NY się nie skraca (kończy się wcześniej), druga zmiana zostaje', () => {
+  it('27.11.2026: CME zamyka o 19:15, sesja NY się nie skraca (kończy się wcześniej), wieczorna sesja szablonu zostaje', () => {
     const snap = createDay(inputs('2026-11-27'))
     const cme = snap.holidays.find((h) => h.market === 'CME_FX')!
     expect(logicalMinuteOf('2026-11-27', cme.earlyCloseAt!)).toBe(19 * 60 + 15)

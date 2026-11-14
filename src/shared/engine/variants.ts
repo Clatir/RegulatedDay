@@ -1,6 +1,6 @@
 /**
  * The variants of a change of the plan (spec „Warianty zmiany planu”, D22, D79, T32, T49): when the forecast end of work
- * before the second shift falls after the approved boundary, or a pool of energy came down to the reserve – checked at
+ * falls after the approved boundary, or a pool of energy came down to the reserve – checked at
  * a trigger (a request, a block 2 min past 0, a fixed block over a flexible one, a descent) – the bar shows the marker of
  * variants once for that cause; its panel has 2–3 variants, computed deterministically. For missing
  * time they shorten or move flexible work blocks – first from the same gap between fixed blocks, then the latest
@@ -20,7 +20,6 @@ import { endShiftOf, OPEN, type BlockFact, type DayFacts } from './facts'
 import { atOf } from './grid'
 import { moveBetweenDays, moveGroup, moveRoots, newUserBlock, stayerStart, stayRuleOf, type StayRule } from './planEdit'
 import { suggestRegen } from './reserve'
-import { secondShiftStart } from './timer'
 
 /** A variant never shortens a block below this (the shortest block a drag leaves is `MIN_BLOCK_MIN` of `model/plan`). */
 export const VARIANT_MIN_BLOCK_MIN = 15
@@ -137,8 +136,8 @@ export function variantTriggers(state: DayState, energy: EnergyState | null): { 
 }
 
 /**
- * The causes of variants now, one for each trigger (the latest last): the forecast end of work before the second shift
- * after the approved boundary; a pool still at the reserve after its descent (not in calibration – `energy.variants`).
+ * The causes of variants now, one for each trigger (the latest last): the forecast end of work after the approved
+ * boundary; a pool still at the reserve after its descent (not in calibration – `energy.variants`).
  * `pushes` – triggers of the time the day's log does not hold: blocks pushed apart in the main window (D367, „Przesunięto
  * N bloków”), known to the bar of the computer that pushed them.
  */
@@ -279,9 +278,7 @@ export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCaus
   }
   if (cause.kind === 'time') {
     const gap = gapOfNow(state)
-    // Only the work before the second shift: the end of work (`lastWorkForecast`) leaves the rest out.
-    const second = secondShiftStart(state)
-    const all = candidates(state, (b) => isBoundaryWork(b) && !b.lectureOrCommute).filter((c) => c.from < second)
+    const all = candidates(state, (b) => isBoundaryWork(b) && !b.lectureOrCommute)
     // First the blocks of the same gap between fixed blocks (the latest first), then the latest planned of the rest.
     const inGap = all.filter((c) => c.from >= gap.from && c.from < gap.to).sort((a, b) => b.from - a.from)
     const rest = all.filter((c) => !inGap.includes(c)).sort((a, b) => b.from - a.from)

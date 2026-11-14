@@ -62,7 +62,7 @@ export interface HorizonBlock {
   movable?: true
   /** Fixed in the plan (its hour is fixed: a meeting, a lecture, a class of a „zjazd”, a session); absent – flexible. */
   fixed?: true
-  /** A trading session (a category of the kind „sesja”) or the second shift (D192); absent – not. */
+  /** A trading session (a category of the kind „sesja”, D192); absent – not. */
   session?: true
 }
 
@@ -86,7 +86,7 @@ export interface HorizonRegen {
   reached: boolean
 }
 
-/** Trading sessions of a day (blocks of a category of the kind „sesja”, the second shift of „Sesja tradingowa” too). */
+/** Trading sessions of a day (blocks of a category of the kind „sesja”). */
 export interface SessionCount {
   /** From the plan, over, without an extension: no „Przedłuż” and no minute outside its planned window. */
   clean: number
@@ -192,8 +192,8 @@ function gradeEnergy(frozen: FrozenDay | null): boolean {
   return typeof m === 'boolean' ? m : true
 }
 
-/** A trading session (a category of the kind „sesja”) or the second shift (D192: it is a session). */
-const isSessionBlock = (b: BlockInfo): boolean => b.rules.kind === 'session' || b.secondShift
+/** A trading session: a block of a category of the kind „sesja” (D192, D467). */
+const isSessionBlock = (b: BlockInfo): boolean => b.rules.kind === 'session'
 
 /**
  * The blocks of the day on the axis, as the day's own axis places them (`dayAxis`): a begun block where it ran, one still
@@ -270,7 +270,7 @@ function studyMinutes(state: DayState, when: HorizonWhen): number {
 
 /**
  * The trading sessions of a day (D356, D360 „sesje bez przedłużenia i bez sesji poza planem”, T554). A session is a begun
- * block of a category of the kind „sesja” (the session layer, the second shift of „Sesja tradingowa”, one added by hand).
+ * block of a category of the kind „sesja” (the session layer, a block of the template, one added by hand).
  * From the plan: in the day's plan now and there from the day's snapshot (the template, the session layer, a session the
  * answer „tak” added) or from the plan you approved with the boundary – the approval in force, the last one not opened
  * again (as `blockInfos`); one that names no blocks (a change of type) or none in force – the plan as it is. Any other

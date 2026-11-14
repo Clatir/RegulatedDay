@@ -25,7 +25,7 @@ import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
 import { TASK_ANSWERS, TASK_LINE_MIN, taskLineText, taskQuestions } from './engine/cases'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
-import { endsAtOf, fixedStartPair, laterWork, plannedEndOf, secondShiftStart, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
+import { endsAtOf, fixedStartPair, laterWork, plannedEndOf, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
 import { namedById, type NamedBlock } from './blockName'
 import { namingOf } from './engine/context'
@@ -240,7 +240,6 @@ function dayLines(i: EngineInput, t: TimerNow, modes: Modes, nameOf: (id: string
   // as the engine does (`setsWorkEnd`, D216).
   const lastEnd = state.facts.workEnds.at(-1)
   const afterWorkEnd = lastEnd != null && !workSince(state.facts, lastEnd, (id) => byId.get(id)?.isWork === true) && !t.fg?.info.isWork
-  const second = secondShiftStart(state)
   const out: BarLine[] = []
   for (const b of state.blocks) {
     if (!b.inPlan) continue
@@ -253,10 +252,9 @@ function dayLines(i: EngineInput, t: TimerNow, modes: Modes, nameOf: (id: string
     }
     const span = plannedSpan(b, byId)
     if (!span) continue
-    // After „Koniec pracy”: a fixed block of work still ahead before the second shift – the one that makes the click a
-    // break (D216; never the second shift, a block after work or one that keeps regeneration) – stays, or one click
-    // cancels it.
-    if (afterWorkEnd && b.fixed && setsEnd(b.id) && span.start < second && untouched(b.id) && state.now < span.start)
+    // After „Koniec pracy”: a fixed block of work still ahead – the one that makes the click a break (D216; never a
+    // block after work or one that keeps regeneration) – stays, or one click cancels it.
+    if (afterWorkEnd && b.fixed && setsEnd(b.id) && untouched(b.id) && state.now < span.start)
       out.push({ id: `fixedLeft:${b.id}`, text: `${nameOf(b.id)} o ${clockOf(at(span.start))} zostaje`, actions: [{ id: 'cancel', label: 'Odwołaj' }], dot: false })
     // A fixed block – a session too (D227) – ended by its plan (with its confirmed extensions): „Przedłuż” still possible
     // for 30 min after that end.

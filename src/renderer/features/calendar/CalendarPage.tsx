@@ -1,14 +1,13 @@
 /**
  * Kalendarz (D295): the month as a grid – every day in its type's colour with its marks („zjazd”, free, a holiday, an
  * early close of the market, the week of the session shift, its own wake); several dates are selected by dragging or
- * with Ctrl and get a type or a wake at once; a click on a day opens its plan. Marking a Saturday as a „zjazd” asks
- * once whether the weekly analysis goes to Friday 20:00–21:00 instead of the second shift (spec „Typy dni i szablony”).
+ * with Ctrl and get a type or a wake at once; a click on a day opens its plan.
  * Every day also shows up to three bars of its all-day events, fixed blocks and flexible blocks, „+N” for all the rest it holds
  * and the dot of its load (D418, D422, D429 – `useMonthView`, `monthCellView`).
- * „Wczytaj PDF zjazdów” (D357) reads a schedule into a preview you correct; only „Zapisz” writes the days (the same
- * question for a Saturday), its toast has „Cofnij”.
+ * „Wczytaj PDF zjazdów” (D357) reads a schedule into a preview you correct; only „Zapisz” writes the days, its toast has
+ * „Cofnij”.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { RawRecord, ZjazdSaveResult, ZjazdUndoDay } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
 import { dayRaw } from '@shared/data/dayEdits'
@@ -17,7 +16,7 @@ import { SERIES_MARK } from '@shared/seriesText'
 import { zjazdTypeRaw } from '@shared/import/zjazdDay'
 import { paths } from '@shared/data/paths'
 import { sessionShiftMin, sessionWindow } from '@shared/engine/createDay'
-import { logicalClock, plDate } from '@shared/format'
+import { logicalClock } from '@shared/format'
 import type { ZjazdDay } from '@shared/import/zjazdy'
 import { eventsOn } from '@shared/model/allDay'
 import { dayFileFrom } from '@shared/model/plan'
@@ -25,7 +24,6 @@ import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn, type DayTypeId } from '@
 import { blockFill } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
 import type { MonthDay } from '@shared/engine/calendarViews'
-import { Dialog } from '../../components/Dialog'
 import { calendarSieve } from '@shared/model/calendars'
 import { useCalendarFilter } from '../calendars/calendarFilter'
 import { CalendarChips } from '../calendars/CalendarChips'
@@ -37,26 +35,22 @@ import { useMonthView } from '../../store/horizon'
 import { useMachine } from '../../store/machine'
 import { openDay, toast, undoToast } from '../../store/ui'
 import { setWakeOnDays } from '../today/dayActions'
-import { analysisAsks, answerOf, type AnalysisAsk } from './analysisAsk'
 import { DAY_TYPE_COLORS, holidayMarks } from './dayTypes'
 import { emptyMonthDay, monthCellView, visibleMonthDay } from './monthCellView'
 import { gridDates, MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
-import { questionsText, savedText, skippedLines, undoList, undoneText, unchangedText } from './zjazdyDraft'
-import { noteFriday, runInTurn, type PendingImport } from './zjazdyRun'
+import { questionsText, savedText, skippedLines, undoneText, unchangedText } from './zjazdyDraft'
+import { runInTurn } from './zjazdyRun'
 import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
 import { ZjazdyPreviewPanel } from './ZjazdyPreview'
 
 export function CalendarPage() {
-  const { rd, templates, lectures, seriesPlans, stamp, routines, requests } = useData()
+  const { rd, seriesPlans, stamp, routines, requests } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const brightness = useMachine((s) => s.prefs.brightness)
   const [month, setMonth] = useState(monthOf(today))
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [files, setFiles] = useState<Record<string, RawRecord | null>>({})
-  const [ask, setAsk] = useState<AnalysisAsk[]>([])
   const importing = useZjazdy((s) => s.preview != null)
-  /** The save of an import whose toast with „Cofnij” waits for the answers about the weekly analysis (they go back with it). */
-  const pending = useRef<PendingImport | null>(null)
   const [wake, setWake] = useState<number | null>(null)
   const dates = useMemo(() => gridDates(month), [month])
   // The blocks (all of them, D429) and the load of each day of the month (D418), counted by the main process; the days of the neighbouring
@@ -80,7 +74,7 @@ export function CalendarPage() {
   }, [monthView, hiddenCalendars, rd])
   useEffect(() => {
     let alive = true
-    // The Fridays before the grid's Saturdays too (the weekly analysis), and the day after its end.
+    // The grid's days, with the day before it and the day after its end.
     void window.rd.dayFiles([addDays(dates[0]!, -1), ...dates, addDays(dates.at(-1)!, 1)]).then((f) => alive && setFiles(f))
     return () => {
       alive = false
@@ -89,11 +83,10 @@ export function CalendarPage() {
   const fileOf = (d: string) => (files[d] ? dayFileFrom(files[d], d) : null)
   const [busy, run] = useBusy()
   /** The days' files changed by `next`, each in its turn from the file as it is then (T517); one save at a time. */
-  const saveDays = (dates: readonly string[], next: (raw: RawRecord, date: string) => RawRecord, onBefore?: (date: string, before: RawRecord | null) => void) =>
+  const saveDays = (dates: readonly string[], next: (raw: RawRecord, date: string) => RawRecord) =>
     run(() =>
       trySaveWith(async () => {
         const now = await dayFilesNow(dates, (d) => files[d] ?? null)
-        for (const d of dates) onBefore?.(d, now[d] ?? null)
         return dates.map((d) => editOf(paths.day(d), now[d] ?? null, next(dayRaw(now[d], d), d)))
       })
     ).then((out) => out ?? null)
@@ -136,25 +129,11 @@ export function CalendarPage() {
     // A type that is no „zjazd” takes a day's import away in the same edit (its classes, the commute it moved).
     if (!isSaved(await saveDays(list, (r, d) => zjazdTypeRaw(r, d, t)))) return
     setSel(new Set())
-    // A Saturday marked as a „zjazd”: the weekly analysis to Friday – asked once, here or in Friday's morning plan.
-    if (t === 'zjazd-stacjonarny' || t === 'zjazd-zdalny') setAsk(await analysisAsks(list, { changes: rd.settings, templates, lectures, series: seriesPlans, dayType: t, fallback: fileOf }))
   }
 
   const setWakeOf = async (v: number | null) => {
     // The blocks you placed move with the wake, once (D334); one „Cofnij” for all the days.
     if (await run(() => setWakeOnDays([...sel].filter((d) => d >= today), today, (d) => files[d] ?? null, v))) setSel(new Set())
-  }
-
-  const answerAnalysis = async (a: AnalysisAsk, yes: boolean) => {
-    const seen: { before: RawRecord | null } = { before: null }
-    const out = await saveDays([a.friday], (r) => answerOf(r, a, yes), (_d, before) => (seen.before = before))
-    if (!isSaved(out)) return
-    // An answer after an import – „Tak” and „Nie” (its `asked`) alike: Friday goes back with it (its file as it stands
-    // now, read in the turn of the saves, is what „Cofnij” checks it against).
-    if (pending.current) await noteFriday(pending.current, a.friday, seen.before)
-    const rest = ask.filter((x) => x !== a)
-    setAsk(rest)
-    if (!rest.length) savedToast()
   }
 
   /** „Wczytaj PDF zjazdów”: a file picked in the dialog of Windows, read into the preview; nothing is saved (D357). */
@@ -179,13 +158,10 @@ export function CalendarPage() {
     if (notice) toast(notice.text, notice.kind, 8000)
   }
 
-  /** „Zapisano N dni zjazdów · Cofnij” – after the answers about the weekly analysis, which the „Cofnij” takes back too. */
-  const savedToast = () => {
-    const p = pending.current
-    pending.current = null
-    const text = p && savedText(p.out)
-    if (!p || !text) return
-    undoToast(text, () => void undoImport(undoList(p.out.undo, p.fridays), p.fridays.map((f) => f.date), p.lost))
+  /** „Zapisano N dni zjazdów · Cofnij”. */
+  const savedToast = (out: ZjazdSaveResult) => {
+    const text = savedText(out)
+    if (text) undoToast(text, () => void undoImport(out.undo))
   }
 
   /** The days of the import as the preview was corrected, saved in the turn of the window's saves (T517). */
@@ -203,19 +179,14 @@ export function CalendarPage() {
       const unchanged = unchangedText(out)
       if (unchanged) toast(unchanged, 'info', 6000)
       reportResult(out, 'Pominięte')
-      // A Saturday imported as a „zjazd”: the same question about the weekly analysis as when it is marked here; the toast
-      // with „Cofnij” comes once it is answered, so that the answer goes back with the import.
-      pending.current = { out, fridays: [], lost: [] }
-      const asks = out.undo.length ? await analysisAsks(out.undo.map((u) => u.date), { changes: rd.settings, templates, lectures, series: seriesPlans }).catch(() => []) : []
-      setAsk(asks)
-      if (!asks.length) savedToast()
+      savedToast(out)
     })
 
-  /** „Cofnij” of the toast: the days back as before the import (and the answers) – a day changed since stays as it is, with the reason. */
-  const undoImport = async (undo: ZjazdUndoDay[], fridays: string[], lost: string[]) => {
+  /** „Cofnij” of the toast: the days back as before the import – a day changed since stays as it is, with the reason. */
+  const undoImport = async (undo: ZjazdUndoDay[]) => {
     try {
       const out = await runInTurn(() => window.rd.zjazdyUndo(undo))
-      toast(undoneText(out, fridays, lost), 'info', lost.length ? 10_000 : 6000)
+      toast(undoneText(out), 'info', 6000)
       reportResult(out, 'Bez zmian')
     } catch (e) {
       toast(`Nie cofnięto: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
@@ -297,21 +268,6 @@ export function CalendarPage() {
             </span>
           </div>
         </>
-      )}
-      {ask[0] && (
-        <Dialog title="Analiza tygodniowa" onClose={() => void answerAnalysis(ask[0]!, false)} data-testid="ask-analysis">
-          <p className="text-[12.5px]">
-            Sobota {plDate(addDays(ask[0].friday, 1))} to zjazd. Przenieść analizę tygodniową na piątek {plDate(ask[0].friday)} 20:00–21:00, w miejsce drugiej zmiany? Aplikacja pyta o to raz.
-          </p>
-          <div className="flex justify-end gap-2">
-            <button type="button" className="btn" onClick={() => void answerAnalysis(ask[0]!, false)}>
-              Nie
-            </button>
-            <button type="button" className="btn btn-accent" onClick={() => void answerAnalysis(ask[0]!, true)} data-testid="ask-analysis-yes">
-              Tak, przenieś
-            </button>
-          </div>
-        </Dialog>
       )}
     </div>
   )

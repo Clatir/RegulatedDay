@@ -25,7 +25,6 @@ export interface WizardDraft {
   settings: RulesSettings
   general: GeneralSettings
   people: Person[]
-  secondShift: { on: boolean; startMin: number; durationMin: number }
   lectures: LectureSeries[]
   days: Record<string, DayTypeId>
   machine: { desktopBar: boolean; corner: Corner; stationaryClasses: boolean; autostart: boolean; pin: boolean }
@@ -42,7 +41,6 @@ const initial = (): Omit<WizardDraft, 'open'> => ({
   settings: DEFAULT_SETTINGS,
   general: DEFAULT_GENERAL,
   people: [],
-  secondShift: { on: true, startMin: 20 * 60, durationMin: 60 },
   lectures: [],
   days: {},
   machine: { desktopBar: true, corner: 'bottom-left', stationaryClasses: false, autostart: true, pin: true },
@@ -99,8 +97,9 @@ export function draftChanges(d: Pick<WizardDraft, 'settings'>) {
   return [{ id: SETUP_CHANGE_ID, from: SETUP_FROM, at: null, made: 0, patch: settingsPatch(DEFAULT_SETTINGS, d.settings) }]
 }
 
-export function draftTemplates(d: Pick<WizardDraft, 'secondShift'>) {
-  return defaultTemplates(d.secondShift)
+/** The templates „Zakończ” writes: the default ones (no step changes them since D467). */
+export function draftTemplates() {
+  return defaultTemplates()
 }
 
 export function newLecture(today: string): LectureSeries {
@@ -121,7 +120,7 @@ export function finishRecords(d: WizardDraft, at: number, computer: string) {
       general: d.general,
       categories: rdFrom(undefined).categories,
       people: d.people.filter((p) => p.name.trim()),
-      templates: draftTemplates(d),
+      templates: draftTemplates(),
       // A lecture added and left as it came (no name, nothing set) is not written – its category is always set (A7-19);
       // one without a name but with its day, time or dates set is kept (the name is optional).
       lectures: d.lectures.filter((l) => !untouchedLecture(l)),

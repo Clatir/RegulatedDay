@@ -4,9 +4,9 @@
  * (D305), the bar's place picked on the monitors' mock-up (D304), the calendar (a „zjazd”
  * marked on several dates), requests, routines, templates, the history with a restore, the settings (a value out of
  * its range refused with its message). Independent of the hour and the day it runs at (T528): today is an ordinary day
- * from its file, its second shift cancelled, so its work block at 03:00 of the night after (the end of the logical day,
- * always still to come) proposes the boundary – the sessions do it only on weekdays, and only before the second shift;
- * yesterday has a block of its own from `seed` (a Sunday has none from a template).
+ * from its file (its template has no blocks since D467), so its work block at 03:00 of the night after (the end of the
+ * logical day, always still to come) proposes the boundary; yesterday has a block of its own from `seed` (a Sunday has
+ * none from a template).
  */
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -14,10 +14,9 @@ import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
 import { DEFAULT_SESSIONS, DEFAULT_SETTINGS } from '../../src/shared/model/settings'
-import { defaultTemplates, firstComputerRecords, SECOND_SHIFT_BLOCK, SETUP_FROM, templateJson } from '../../src/shared/model/defaults'
+import { defaultTemplates, firstComputerRecords, SETUP_FROM, templateJson } from '../../src/shared/model/defaults'
 import { planBlock } from '../../src/shared/model/plan'
 import { paths } from '../../src/shared/data/paths'
-import { templateBlockId } from '../../src/shared/engine/createDay'
 import { createDailyBackup } from '../../src/main/data/backup'
 import { logicalMinuteOf } from '../../src/shared/time/day'
 import { addDays } from '../../src/shared/time/zone'
@@ -31,9 +30,8 @@ async function shot(page: Page, name: string): Promise<void> {
 
 /**
  * `sessions: false` – today's sessions answered „Nie”: no fixed work still to come makes „Koniec pracy” a break.
- * `secondShift: false` – today's second shift cancelled: the work block at 03:00 then proposes the boundary on any day.
  */
-function seed(dir: string, o: { sessions?: boolean; secondShift?: boolean } = {}): void {
+function seed(dir: string, o: { sessions?: boolean } = {}): void {
   const today = logicalToday()
   const records = firstComputerRecords(
     { settings: DEFAULT_SETTINGS, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [{ id: 'mama', name: 'Mama', archived: false }], templates: defaultTemplates(), lectures: [], days: {} },
@@ -50,7 +48,6 @@ function seed(dir: string, o: { sessions?: boolean; secondShift?: boolean } = {}
     date: today,
     dayType: 'zwykly',
     ...(o.sessions === false ? { sessions: Object.fromEntries(DEFAULT_SESSIONS.map((s) => [s.id, 'no'])) } : {}),
-    ...(o.secondShift === false ? { cancelled: [templateBlockId(today, 'zwykly', SECOND_SHIFT_BLOCK)] } : {}),
     blocks: [{ id: 'late', categoryId: 'inne', startMin: 27 * 60, durationMin: 30, fixed: false }]
   }
   mkdirSync(join(dir, 'days', today.slice(0, 4)), { recursive: true })
@@ -69,7 +66,7 @@ function seed(dir: string, o: { sessions?: boolean; secondShift?: boolean } = {}
 
 test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, historia, ustawienia', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-screens-'))
-  seed(dataDir, { secondShift: false })
+  seed(dataDir)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
@@ -301,11 +298,11 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       expect((await steps.getByLabel('Krok 1', { exact: true }).boundingBox())!.width).toBeGreaterThan(150)
       await shot(page, 'e3-06-routines')
 
-      // Szablony: the ordinary day with its second shift.
+      // Szablony: the ordinary day – no second shift and no mark of one (D467).
       await page.getByTestId('nav-templates').click()
       await page.getByTestId('template-item').first().click()
       await expect(page.getByTestId('template-editor')).toBeVisible()
-      await expect(page.getByTestId('template-timeline')).toContainText('druga zmiana')
+      await expect(page.getByTestId('template-timeline')).not.toContainText('druga zmiana')
       // D365: a block of the template with its own start (one added on a free place) – the bottom edge lengthens it by
       // the field's way (30 min, 33 px).
       const tAxis = page.getByTestId('template-timeline').getByTestId('timeline-axis')
@@ -493,7 +490,7 @@ test('trwający blok (D365): za granicą koszt i „Potwierdź · Anuluj” – 
   const nowMin = logicalMinuteOf(logicalToday(), Date.now())
   test.skip(nowMin > 28 * 60 - 100, 'blok przedłużony za granicę nie mieści się już w dobie logicznej (koniec o 04:00)')
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-resize-cost-'))
-  seed(dataDir, { sessions: false, secondShift: false })
+  seed(dataDir, { sessions: false })
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
@@ -560,8 +557,8 @@ test('trwający blok (D365): za granicą koszt i „Potwierdź · Anuluj” – 
 })
 
 test('rozsuwanie (D367): blok przeciągnięty na zajęte miejsce przesuwa kolejne w pliku dnia, w trakcie widać ich nowe miejsca; „Cofnij” w pasku przywraca plik', async () => {
-  // Tomorrow – a day to come at any hour of the run (no „now” on its axis): three blocks of yours an hour each, the
-  // template's second shift cancelled and no sessions, so nothing else stands between them.
+  // Tomorrow – a day to come at any hour of the run (no „now” on its axis): three blocks of yours an hour each and no
+  // sessions, so nothing else stands between them.
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-push-'))
   seed(dataDir)
   const tomorrow = addDays(logicalToday(), 1)
@@ -575,7 +572,6 @@ test('rozsuwanie (D367): blok przeciągnięty na zajęte miejsce przesuwa kolejn
       date: tomorrow,
       dayType: 'zwykly',
       sessions: Object.fromEntries(DEFAULT_SESSIONS.map((s) => [s.id, 'no'])),
-      cancelled: [templateBlockId(tomorrow, 'zwykly', SECOND_SHIFT_BLOCK)],
       blocks: [own('a', 13 * 60), own('b', 14 * 60), own('c', 15 * 60)]
     })
   )
@@ -625,7 +621,7 @@ test('rozsuwanie (D367): blok przeciągnięty na zajęte miejsce przesuwa kolejn
 })
 
 test('rozsuwanie w „Szablonach” (D367, D372): blok przeciągnięty na zajęty przesuwa kolejne w nowej wersji szablonu; „Cofnij” na stronie przywraca szablon', async () => {
-  // The ordinary day's template with three blocks of its own in the evening (after any session, the second shift left out):
+  // The ordinary day's template with three blocks of its own in the evening (after any session):
   // the day it makes (from tomorrow) has nothing else between them, on any day of the week.
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-push-template-'))
   seed(dataDir)
@@ -921,7 +917,7 @@ test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z
       await expect(page.getByTestId('bar-request')).toContainText('Zrobione teraz · Mama · 0:0')
       await page.getByTestId('bar-request-end').click()
       await expect(page.getByTestId('bar-request')).toHaveCount(0)
-      // A quiet mode (the template's second shift waits for „Zacznij” in the evening – the session mode): „Pilne” starts
+      // A quiet mode (a session waits for „Zacznij” – the session mode): „Pilne” starts
       // with 15 min without asking (D311).
       const quiet = await page.evaluate(async () => (await window.rd.widget()).quiet)
       await page.getByTestId('bar-group-request').click()
@@ -973,7 +969,7 @@ test('rutyny (D328): karta w „Dziś” z wersją i krokami; „Kroki ▸” w 
       const { night, quiet } = await page.evaluate(async () => await window.rd.widget())
       if (night) await page.getByTestId('routine-card-all').click()
       else {
-        // In a quiet mode (the evening's second shift waits for „Zacznij”) the routine's line waits in „⋯”.
+        // In a quiet mode (a session waits for „Zacznij”) the routine's line waits in „⋯”.
         if (quiet) await page.getByTestId('bar-main').getByTestId('bar-group-more').click()
         const line = page.getByTestId('bar-main').getByTestId(`bar-line-routine:${today}:rut2`)
         await expect(line).toBeVisible()

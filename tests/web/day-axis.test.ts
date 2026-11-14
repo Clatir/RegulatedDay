@@ -8,7 +8,7 @@ import { rdFrom } from '@shared/model/rd'
 import { dayAxis } from '@renderer/features/plan/dayItems'
 import { edgePatch, edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '@renderer/features/plan/edgeEdit'
 import { draggedEnd, draggedStart, draggedTopStart, dropSettled, holdEnds, staysPut, type TimelineItem } from '@renderer/features/plan/Timeline'
-import { DRAG_STEP_MIN, planBlock } from '@shared/model/plan'
+import { DRAG_STEP_MIN, planBlock, planBlockFrom } from '@shared/model/plan'
 import type { DayModel } from '@renderer/store/day'
 import { block, Scenario } from '../unit/engine/dsl'
 
@@ -57,11 +57,11 @@ describe('przeciąganie bloków na osi (D305)', () => {
     expect(m.get('zajecia')).toBe(false)
   })
 
-  it('druga zmiana (tag secondShift, jak sesja – D192): nieprzeciągalna', () => {
-    const second = block({ id: 'zmiana', cat: 'inne-obowiazki', at: '20:00', min: 60, fixed: true, tag: 'secondShift', origin: 'template' })
+  it('D467: blok z dawnym oznaczeniem drugiej zmiany przeciąga się jak każdy blok z własną godziną', () => {
+    const second = planBlockFrom({ id: 'zmiana', categoryId: 'inne', startMin: 20 * 60, durationMin: 60, fixed: true, tag: 'secondShift', origin: 'template' })!
     const m = axisOf(new Scenario({ date: DATE, plan: [...plan.slice(0, 1), second] }), null)
     expect(m.get('rano')).toBe(true)
-    expect(m.get('zmiana')).toBe(false)
+    expect(m.get('zmiana')).toBe(true)
   })
 
   it('zaczęty, miniony, zaparkowany albo odwołany blok: nie', () => {

@@ -66,12 +66,12 @@ paths:
   tylko dla bloku naprawdę zakończonego); `lastWorkStop` – późniejsze z tego bloku i niepotwierdzonego końca silnika
   (praca bez przebiegu bloku: czas do wyjaśnienia „praca”; koniec silnika tylko w dniu z pracą) – przycisk, kliknięcie
   i zamknięcie dnia. Czy praca biegnie, to osobne warunki: „Koniec pracy?” – `workRuns` (`isWork && !keepsRegen` albo
-  `requestHoldsWork` – celowo inne: czeka też przy drugiej zmianie, nie przy nagrywanym wykładzie); przycisk – blok
+  `requestHoldsWork` – celowo inne: nie czeka przy nagrywanym wykładzie); przycisk – blok
   `setsWorkEnd` na pierwszym planie albo w tle albo `requestHoldsWork`; wiersz końca pracy i zamknięcie dnia –
   `workRunning` (każdy `isWork`) albo `requestHoldsWork` (wiersza wtedy nie ma, zamknięcie nic nie zapisuje).
   `requestHoldsWork`: trwająca prośba przerwała blok `setsWorkEnd`, który jeszcze wróci (nie zakończony ani zaparkowany
-  w jej czasie, T503). Stały blok pracy, który jeszcze zostaje (`fixedWorkLeft`: niezaczęty, okno – dla
-  sesji `waitUntil` – jeszcze trwa; pominięta sesja już nie, jak `workEnds`): „Koniec pracy”, „Tak” i zamknięcie nic
+  w jej czasie, T503). Stały blok pracy, który jeszcze zostaje (`fixedWorkLeft`: niezaczęty, okno – także
+  wieczorny blok pracy, D467 – jeszcze trwa; pominięta sesja już nie, jak `workEnds`): „Koniec pracy”, „Tak” i zamknięcie nic
   nie kończą (D216), „Koniec pracy?” czeka. Przycisk bez biegnącej pracy: `workEndOpen` – koniec niepotwierdzony,
   żaden `work.end` nie sięga tej chwili (`workEndReaches` – jak silnik, z `workSince`; po zamknięciu dnia znika tylko
   tak – z jego `work.end`); nie czeka na wyliczony koniec (15 min). „Pracowałem do …”: linia i kliknięcie pomijają czas

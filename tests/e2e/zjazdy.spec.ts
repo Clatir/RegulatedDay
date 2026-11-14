@@ -1,9 +1,9 @@
 /**
  * „Wczytaj PDF zjazdów” (D357, 1.1.0) in the calendar: a PDF (the test identity takes it from RD_E2E_PDF instead of the
  * dialog of Windows) read into a preview, corrected, one day left out, „Zapisz” – the days are zjazdy in the calendar and
- * their classes blocks „<przedmiot> · <forma>” in the day's plan; the Saturday asks about the weekly analysis. A second test:
- * „Cofnij” of the toast right after „Tak” takes it all back – the days and Friday's analysis. Independent of the day it runs at (T528): the dates of the schedule are made from the
- * logical today. A third test reads the made-up PDF of the fixtures (every row with its own warnings) and cancels – nothing
+ * their classes blocks „<przedmiot> · <forma>” in the day's plan; no question about the weekly analysis (D467). A second
+ * test: „Cofnij” of the toast takes the days back, Friday untouched. Independent of the day it runs at (T528): the dates of
+ * the schedule are made from the logical today. A third test reads the made-up PDF of the fixtures (every row with its own warnings) and cancels – nothing
  * is written; a fourth: a file that is no PDF gives the message and no preview.
  */
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
@@ -25,7 +25,7 @@ async function shot(page: Page, name: string): Promise<void> {
 const NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 const plDate = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`
 
-/** The folder set up like the wizard's (the templates give a Saturday its weekly analysis to move). */
+/** The folder set up like the wizard's. */
 function seed(dir: string): void {
   const records = firstComputerRecords(
     { settings: DEFAULT_SETTINGS, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [], templates: defaultTemplates(), lectures: [], days: {} },
@@ -122,12 +122,9 @@ test('zjazdy z PDF: podgląd z poprawkami, zapis wybranych dni, pytanie o analiz
       await page.getByTestId('zjazdy-save').click()
       await expect(page.getByTestId('zjazdy-preview')).toHaveCount(0)
 
-      // A Saturday of the import: the weekly analysis asked about once, as when it is marked in the calendar.
-      await expect(page.getByTestId('ask-analysis')).toBeVisible()
-      await page.getByTestId('ask-analysis').getByRole('button', { name: 'Nie', exact: true }).click()
-      await expect(page.getByTestId('ask-analysis')).toHaveCount(0)
-      // The toast with „Cofnij” comes once the question is answered (the answer goes back with the import).
+      // A Saturday of the import asks nothing (D467: no weekly analysis to move): the toast with „Cofnij” comes at once.
       await expect(page.getByText('Zapisano 2 dni zjazdów')).toBeVisible()
+      await expect(page.getByTestId('ask-analysis')).toHaveCount(0)
 
       // The calendar: the days of the import are zjazdy of their kind; the day left out is not.
       await showMonthOf(page, s1)
@@ -154,7 +151,7 @@ test('zjazdy z PDF: podgląd z poprawkami, zapis wybranych dni, pytanie o analiz
   }
 })
 
-test('zjazdy z PDF: „Cofnij” po odpowiedzi „Tak” cofa dni i przeniesioną analizę piątku', async () => {
+test('zjazdy z PDF: „Cofnij” cofa dni importu; piątek zostaje bez zmian (bez analizy tygodniowej, D467)', async () => {
   const today = logicalToday()
   let s1 = addDays(today, 2)
   while (weekday(s1) !== 6) s1 = addDays(s1, 1)
@@ -175,15 +172,12 @@ test('zjazdy z PDF: „Cofnij” po odpowiedzi „Tak” cofa dni i przeniesion�
       await expect(page.getByTestId('zjazdy-preview')).toBeVisible()
       await page.getByTestId(`zjazdy-load-${s3}`).click()
       await page.getByTestId('zjazdy-save').click()
-      await expect(page.getByTestId('ask-analysis')).toBeVisible()
-      await page.getByTestId('ask-analysis-yes').click()
-      // Friday has the analysis now; the toast follows the answer.
       await expect(page.getByText('Zapisano 2 dni zjazdów')).toBeVisible()
-      await expect.poll(() => readBlocks(dataDir, friday).length).toBeGreaterThan(0)
+      await expect(page.getByTestId('ask-analysis')).toHaveCount(0)
       await expect.poll(() => zjazdBlocks(dataDir, s1).length).toBe(2)
-      // „Cofnij” at once (the toast stays 10 s): the import and the answer go back together.
+      // „Cofnij” at once (the toast stays 10 s): the import goes back.
       await page.getByTestId('toast-action').click()
-      await expect(page.getByText('Cofnięto import zjazdów: 2 dni i odpowiedź o analizie tygodniowej')).toBeVisible()
+      await expect(page.getByText('Cofnięto import zjazdów: 2 dni')).toBeVisible()
       await expect.poll(() => zjazdBlocks(dataDir, s1).length).toBe(0)
       await expect.poll(() => zjazdBlocks(dataDir, s2).length).toBe(0)
       await expect.poll(() => readBlocks(dataDir, friday).length).toBe(0)

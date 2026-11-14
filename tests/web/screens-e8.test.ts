@@ -18,8 +18,6 @@ import { resetSettingsFrom, saveSettings, setFromDate, useSettingsFrom } from '@
 import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 import { finishRecords, newLecture, patchWizard, resetWizard, useWizard } from '@renderer/features/wizard/wizardStore'
-import { moveToNowPatch } from '@renderer/features/today/TodayPage'
-import { placeLogical } from '@shared/time/day'
 
 describe('kolejność kroków rutyny (A6-02)', () => {
   const before = { id: 'r', name: 'Poranna', normal: [{ id: 'woda', name: 'woda', min: 2 }, { id: 'kot', name: 'kot', min: 5 }] }
@@ -100,6 +98,17 @@ describe('kreator: pusty wykład (A7-19)', () => {
   })
 })
 
+describe('kreator bez drugiej zmiany (D467)', () => {
+  it('szkic nie ma kroku ani pola drugiej zmiany; „Zakończ” zapisuje dzień zwykły bez bloków i sobotę z analizą bez oznaczenia', () => {
+    resetWizard()
+    expect('secondShift' in useWizard.getState()).toBe(false)
+    const templates = finishRecords(useWizard.getState(), 1000, 'pca').filter((r) => r.rel.startsWith('templates/'))
+    const blocks = (rel: string) => Object.values((templates.find((t) => t.rel === rel)!.value as { versions: Record<string, { blocks: Array<Record<string, unknown>> }> }).versions).flatMap((v) => v.blocks)
+    expect(blocks('templates/zwykly.json')).toEqual([])
+    expect(blocks('templates/sobota.json').map((b) => [b.categoryId, b.startMin, 'tag' in b, 'waitUntilMin' in b])).toEqual([['analiza', 9 * 60, false, false]])
+  })
+})
+
 describe('ustawienia od dziś / od daty (A7-13, T513)', () => {
   it('data ≤ dziś odrzucona, po dziś przyjęta; wyjście z Ustawień wraca do „od jutra”', () => {
     useSettingsFrom.setState({ mode: 'date', date: '2026-11-05' })
@@ -144,13 +153,5 @@ describe('zmiana „od dziś” przy dniu, którego nie da się teraz odczytać 
     expect(edits).toBe(0)
     expect(useUi.getState().toasts.some((t) => t.text.includes('„od dziś” nie została zapisana'))).toBe(true)
     resetSettingsFrom()
-  })
-})
-
-describe('„Przesuń na teraz” (A1-04, przegląd 0.21.0)', () => {
-  it('nowy start to pełna minuta teraz – plik dnia przyjmuje tylko pełne minuty – bez kotwicy', () => {
-    const p = moveToNowPatch('2026-10-28', placeLogical('2026-10-28', 19 * 60 + 40) + 37_000)
-    expect(p).toEqual({ startMin: 19 * 60 + 40, anchor: null })
-    expect(planBlock({ id: 'ds', categoryId: 'inne', durationMin: 60, ...p })?.startMin).toBe(19 * 60 + 40)
   })
 })

@@ -46,7 +46,7 @@ export const TEMPLATES: Template[] = [
     planBlock({ id: 'a2', categoryId: 'analiza', startMin: 13 * 60 + 15, durationMin: 45, origin: 'template' }),
     planBlock({ id: 'jrn', categoryId: 'journaling', anchor: 'session:ny', durationMin: 30, origin: 'template' }),
     planBlock({ id: 'kolacja', categoryId: 'posilek', startMin: 19 * 60 + 15, durationMin: 30, origin: 'template' }),
-    planBlock({ id: 'ds', categoryId: 'sesja', startMin: 20 * 60, durationMin: 60, fixed: true, tag: 'secondShift', origin: 'template' }),
+    planBlock({ id: 'ds', categoryId: 'sesja', startMin: 20 * 60, durationMin: 60, fixed: true, origin: 'template' }),
     planBlock({ id: 'wieczor', categoryId: 'rutyny', startMin: 21 * 60, durationMin: 15, origin: 'template' })
   ]),
   tpl('weekend', 'weekend', [], [
@@ -56,7 +56,7 @@ export const TEMPLATES: Template[] = [
     planBlock({ id: 'spacer', categoryId: 'regeneracja', variantId: 'spacer', startMin: 15 * 60, durationMin: 60, origin: 'template' })
   ]),
   tpl('sobota', 'weekend', [6], [
-    planBlock({ id: 'analiza-tyg', categoryId: 'analiza', startMin: 9 * 60, durationMin: 60, tag: 'weeklyAnalysis', waitUntilMin: 15 * 60, origin: 'template' }),
+    planBlock({ id: 'analiza-tyg', categoryId: 'analiza', startMin: 9 * 60, durationMin: 60, origin: 'template' }),
     planBlock({ id: 'obiad', categoryId: 'posilek', startMin: 13 * 60, durationMin: 45, origin: 'template' })
   ]),
   tpl('regeneracyjny', 'regeneracyjny', [], [planBlock({ id: 'drzemka', categoryId: 'regeneracja', variantId: 'drzemka', startMin: 14 * 60, durationMin: 60, origin: 'template' })]),

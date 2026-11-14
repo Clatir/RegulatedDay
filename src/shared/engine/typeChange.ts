@@ -3,8 +3,8 @@
  * without your acceptance: the app proposes parking the future flexible work blocks, asks about the fixed blocks one by
  * one (keep or cancel) and proposes returning the accepted requests to the queue. A switch to a type with a later maximum
  * shows the energy now, the type planned in the morning, the change of the minimum of regeneration and the blocks of the
- * new type missing for the rest of the day (sessions, the second shift and blocks anchored to them, blocks parked by an
- * earlier switch), each with its cost, checked only without one.
+ * new type missing for the rest of the day (sessions of the layer, blocks parked by an earlier switch), each with its
+ * cost, checked only without one.
  *
  * In the main window the switch is one dialog: the second snapshot, the parks and cancels, the new boundary and the
  * added blocks all take effect at its confirmation (T-decision: the instant of the choice is the instant of the change,
@@ -13,11 +13,11 @@
 import { derivedId } from '../model/ids'
 import type { PoolValues } from '../model/categories'
 import { RULES_VERSION, type AnyEvent } from '../model/events'
-import { templateFor, type PlanBlock, type Template } from '../model/plan'
+import type { PlanBlock } from '../model/plan'
 import type { DayTypeId, RulesSettings } from '../model/settings'
 import { weekday } from '../time/zone'
 import { isBoundaryWork } from './blocks'
-import { sessionBlock, SESSION_ANCHOR } from './createDay'
+import { sessionBlock } from './createDay'
 import { computeDay, settingsAtMinute, type DayContext, type DayState } from './day'
 import { exchangeCost } from './exchange'
 import { isRunning, lastRunEnd } from './facts'
@@ -31,7 +31,6 @@ export interface TypeChangeInput {
   to: DayTypeId
   /** The settings in force at the switch (with this day's changes „od dziś”). */
   settings: RulesSettings
-  templates: readonly Template[]
   /** „Dodaj bloki typu …” later in the day: the missing blocks of the type, whatever its maximum. */
   withAdd?: boolean
 }
@@ -116,29 +115,6 @@ function missingBlocks(inp: TypeChangeInput): Array<{ block: PlanBlock; session:
       if (!b || inPlan(b.id)) continue
       if (idxOfLogical(state.grid, b.startMin! + b.durationMin) <= nowMin) continue
       out.push({ block: b, session: def.id, ask: layer === 'ask' })
-    }
-  }
-  // The second shift of the new type's template and the blocks anchored to it.
-  const tpl = templateFor(inp.templates, to, weekday(date), date)
-  if (tpl) {
-    const blocks = tpl.version.blocks
-    const ids = new Map(blocks.map((b) => [b.id, derivedId(date, 'tpl', tpl.template.id, b.id)]))
-    const second = new Set(blocks.filter((b) => b.tag === 'secondShift').map((b) => b.id))
-    for (let changed = true; changed; ) {
-      changed = false
-      for (const b of blocks) {
-        if (!b.anchor || !second.has(b.anchor) || second.has(b.id)) continue
-        second.add(b.id)
-        changed = true
-      }
-    }
-    for (const b of blocks) {
-      if (!second.has(b.id)) continue
-      const id = ids.get(b.id)!
-      if (inPlan(id)) continue
-      const anchor = b.anchor ? (b.anchor.startsWith(SESSION_ANCHOR) ? null : (ids.get(b.anchor) ?? null)) : null
-      if (b.startMin != null && idxOfLogical(state.grid, b.startMin + b.durationMin) <= nowMin) continue
-      out.push({ block: { ...b, id, anchor, startMin: anchor ? null : b.startMin, origin: 'template', sourceId: b.id, tag: b.tag ?? (anchor ? 'secondShift' : null) }, session: null, ask: false })
     }
   }
   // Blocks parked today by an earlier switch: back as copies (the parked one stays parked in the log).
@@ -252,8 +228,8 @@ export function applyTypeChange(inp: TypeChangeInput, plan: TypeChangePlan, choi
     }
   }
 
-  // A switch to a regeneration day confirms the end of work (spec: the real end of the last work block before the
-  // second shift) when no work block runs and none stays.
+  // A switch to a regeneration day confirms the end of work (spec: the real end of the last work block) when no work
+  // block runs and none stays.
   if (to === 'regeneracyjny') {
     const runningWork = state.forecast.some((p) => p.running && isBoundaryWork(p.block))
     const staying = state.forecast.some((p) => !p.running && isBoundaryWork(p.block) && p.from >= state.now && !parked.includes(p.block.id) && !cancelled.includes(p.block.id) && notBegun(state, p.block.id))

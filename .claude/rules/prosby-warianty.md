@@ -21,7 +21,7 @@ D247, D263, D296, T202, T372. Decyzje T478–T481, T502, T503. Elementy w pasku 
   `computeDay`; D340: prognoza stawia elastyczny blok, który nie mieści się przed stałym, w całości za nim – cięcie
   w kolejności „ta sama przerwa, potem najpóźniejsze” jest sprawdzane, a gdy koniec pracy dalej wypada po granicy,
   cięcie i przeniesienie idą od bloku wyznaczającego koniec (najwyżej `MAX_DAY_COUNTS` = 8 przeliczeń); etykieta
-  z cięcia faktycznego, wariant bez poprawy zostaje z prawdziwym końcem pracy; gdy koniec robi blok niebędący kandydatem – stały albo biegnący – wyszukiwanie przerywa się od razu; kandydaci tylko sprzed drugiej zmiany; krok, po którym koniec się nie przesunął, jest
+  z cięcia faktycznego, wariant bez poprawy zostaje z prawdziwym końcem pracy; gdy koniec robi blok niebędący kandydatem – stały albo biegnący – wyszukiwanie przerywa się od razu; kandydaci – cała praca dnia (drugiej zmiany nie ma, D467); krok, po którym koniec się nie przesunął, jest
   cofany; te same zmiany liczone raz), `planWith`, `applyVariant` (pliki dni), `markerCause` (kiedy znacznik w pasku);
   `judgeDay` (dzień liczony ponownie ze zmianami), `keepPlan` („Zostaw plan” panelu bez przyczyny). Zmiana `start`
   (nowa godzina bloku) – `applyVariant` kładzie ją na bloku z pliku, bez `byVariant` (T610).
