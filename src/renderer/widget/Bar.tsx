@@ -359,7 +359,17 @@ function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: Ba
         <span className="text-[12px] text-muted">{routine.name}</span>
         {routine.worse.length > 0 &&
           (['normal', 'worse'] as const).map((v) => (
-            <BarButton key={v} mode={mode} pressed={version === v} testId={`bar-routine-version-${v}`} onAct={() => setVersion(v)}>
+            <BarButton
+              key={v}
+              mode={mode}
+              pressed={version === v}
+              testId={`bar-routine-version-${v}`}
+              // D481: the day's version of the block at once – the panel „Kroki” and the card in „Dziś” switch with it.
+              onAct={() => {
+                setVersion(v)
+                if (v !== version) act('routineVersion', `${routine.block}|${v}`)
+              }}
+            >
               {v === 'normal' ? 'zwykła' : 'gorsze dni'}
             </BarButton>
           ))}

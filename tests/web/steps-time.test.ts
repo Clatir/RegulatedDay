@@ -2,9 +2,8 @@
 /**
  * U1 (D460) on the screens: the time of a step in the list „Kroki” (a field beside its title, empty allowed), the sum under
  * the heading – „kroki: 45 min z 1 h” with a block's length, „kroki: 45 min” in a task – and the warning when the steps are
- * longer than the block (never a block of the save, D72); the panel's „Rutyna” copying the routine's steps into the block
- * (replaced while they are the untouched copy of the routine before, else at the end; „bez rutyny” leaves them; a block of a
- * task – no copy, its list goes with the task's, T792).
+ * longer than the block (never a block of the save, D72); the panel's „Rutyna” only points at the routine (D480: its length
+ * goes with it, its steps never – a block shows the routine's while it has none of its own, D473).
  */
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -13,10 +12,10 @@ import { planBlock, type PlanBlock } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import type { Routine } from '@shared/model/routines'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
-import { routineStepsCopy, stepsFrom, STEPS_MAX, type Step } from '@shared/model/steps'
+import { stepsFrom, type Step } from '@shared/model/steps'
 import { BlockEditor } from '@renderer/features/plan/BlockEditor'
 import { StepsEditor } from '@renderer/features/steps/StepsEditor'
-import { routineCutText, stepsTimeLine } from '@renderer/features/steps/stepsUi'
+import { stepsTimeLine } from '@renderer/features/steps/stepsUi'
 import { installEscape } from '@renderer/lib/escape'
 import { closeToast, useUi } from '@renderer/store/ui'
 
@@ -133,7 +132,7 @@ describe('czas kroku w liście „Kroki” (D460)', () => {
   })
 })
 
-describe('„Rutyna” w panelu bloku kopiuje kroki (D460)', () => {
+describe('„Rutyna” w panelu bloku tylko wskazuje rutynę (D480)', () => {
   const poranek: Routine = { id: 'r1', name: 'Poranek', archived: false, worse: [], normal: [
     { id: 'a', name: 'Prysznic', min: 10 },
     { id: 'b', name: 'Śniadanie', min: 20 },
@@ -147,51 +146,27 @@ describe('„Rutyna” w panelu bloku kopiuje kroki (D460)', () => {
     return onChange
   }
   const rutyna = (o: Partial<PlanBlock> = {}) => planBlock({ id: 'b1', categoryId: 'rutyny', startMin: 7 * 60, durationMin: 30, origin: 'user', ...o })
-  const shown = (steps: readonly Step[] | undefined) => (steps ?? []).map((s) => [s.title, s.min ?? null])
 
-  it('przykład ze specyfikacji: pusty blok, „Poranek” – kroki z nazwą i czasem, długość z rutyny (35 min)', async () => {
+  it('pusty blok, „Poranek” – rutyna i długość z rutyny (35 min), bez kopii kroków (blok pokaże kroki rutyny, D473)', async () => {
     const onChange = await mount(rutyna())
-    choose(q('block-routine')!, 'r1')
-    const patch = onChange.mock.calls[0]![0]
-    expect(patch).toMatchObject({ routine: 'r1', durationMin: 35 })
-    expect(shown(patch.steps)).toEqual([
-      ['Prysznic', 10],
-      ['Śniadanie', 20],
-      ['Leki', 5]
-    ])
-  })
-
-  it('nietknięta kopia poprzedniej rutyny – wymieniona; własne kroki – rutyna na końcu; „bez rutyny” – kroki zostają', async () => {
-    const copy = routineStepsCopy([], null, poranek).steps
-    let onChange = await mount(rutyna({ routine: 'r1', steps: copy }))
-    choose(q('block-routine')!, 'r2')
-    expect(shown(onChange.mock.calls[0]![0].steps)).toEqual([['Kolacja', 30]])
-    act(() => root!.unmount())
-    host!.remove()
-    const own = [...copy, { id: 'x', title: 'Podlać kwiaty', order: 3, done: false }]
-    onChange = await mount(rutyna({ routine: 'r1', steps: own }))
-    choose(q('block-routine')!, 'r2')
-    expect(shown(onChange.mock.calls[0]![0].steps)).toEqual([...shown(own), ['Kolacja', 30]])
-    act(() => root!.unmount())
-    host!.remove()
-    onChange = await mount(rutyna({ routine: 'r1', steps: copy }))
-    choose(q('block-routine')!, '-')
-    expect(onChange.mock.calls[0]![0]).toEqual({ routine: null })
-  })
-
-  it('blok zadania: rutyna bez kopiowania kroków (lista bloku idzie z listą zadania, T792)', async () => {
-    const onChange = await mount(rutyna({ task: 't1' }))
     choose(q('block-routine')!, 'r1')
     expect(onChange.mock.calls[0]![0]).toEqual({ routine: 'r1', durationMin: 35 })
   })
 
-  it('pełna lista: kroki, które się nie mieszczą, pominięte – dymek mówi ile', async () => {
-    const full = stepsFrom(Array.from({ length: STEPS_MAX - 1 }, (_, i) => ({ id: `m${i}`, title: `m${i}`, order: i })))
-    const onChange = await mount(rutyna({ steps: full }))
+  it('blok z własnymi krokami (też kopią z 1.20–1.21) – lista zostaje; „bez rutyny” – kroki zostają; blok zadania – tak samo', async () => {
+    const own = stepsFrom([{ id: 'x', title: 'Podlać kwiaty', order: 0 }])
+    let onChange = await mount(rutyna({ routine: 'r1', steps: own }))
+    choose(q('block-routine')!, 'r2')
+    expect(onChange.mock.calls[0]![0]).toEqual({ routine: 'r2', durationMin: 30 })
+    act(() => root!.unmount())
+    host!.remove()
+    onChange = await mount(rutyna({ routine: 'r1', steps: own }))
+    choose(q('block-routine')!, '-')
+    expect(onChange.mock.calls[0]![0]).toEqual({ routine: null })
+    act(() => root!.unmount())
+    host!.remove()
+    onChange = await mount(rutyna({ task: 't1' }))
     choose(q('block-routine')!, 'r1')
-    await act(async () => undefined)
-    expect(onChange.mock.calls[0]![0].steps).toHaveLength(STEPS_MAX)
-    expect(useUi.getState().toasts.map((t) => t.text)).toEqual([routineCutText(2)])
-    expect(routineCutText(2)).toBe(`Z rutyny nie skopiowano 2 kroków – w bloku mieści się najwyżej ${STEPS_MAX}.`)
+    expect(onChange.mock.calls[0]![0]).toEqual({ routine: 'r1', durationMin: 35 })
   })
 })

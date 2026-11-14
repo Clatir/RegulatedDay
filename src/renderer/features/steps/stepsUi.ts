@@ -10,7 +10,7 @@ import type { SaveAnswer } from '../../store/data'
 import { undoSteps, type StepsResult } from '../../store/steps'
 import { undoToast } from '../../store/ui'
 import { durationParser } from '../../components/fields'
-import { applyStepOp, moveStepOp, refusalFor, STEP_MIN_RANGE, STEPS_MAX, stepsTime, type Step, type StepOp, type StepsKind } from '@shared/model/steps'
+import { applyStepOp, moveStepOp, refusalFor, STEP_MIN_RANGE, stepsTime, type Step, type StepOp, type StepsKind } from '@shared/model/steps'
 
 /** What a change of steps became for a field: saved, refused (the text stays in the field – also a failed send), or asked (a question waits). */
 export function stepsAnswer(op: StepOp, r: StepsResult): SaveAnswer {
@@ -71,5 +71,3 @@ export function stepMinParse(text: string): Parsed<number | null> {
 /** A step's time in its field: „15 min” (also over an hour – the field is narrow). */
 export const stepMinText = (min: number | null): string => (min == null ? '' : `${min} min`)
 
-/** The routine's steps that did not fit into the block (D460, `routineStepsCopy`) – said by a toast. */
-export const routineCutText = (cut: number): string => `Z rutyny nie skopiowano ${cut} ${cut === 1 ? 'kroku' : 'kroków'} – w bloku mieści się najwyżej ${STEPS_MAX}.`

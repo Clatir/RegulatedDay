@@ -59,7 +59,8 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   (rozwinięcie w pasku z `WidgetView.routines`, akcja `routine` `<blok>|<wersja>|<kroki>`), `worse`; ten sam zapis
   `routineDone` co karta w „Dziś” (`RoutineCard`). Od 1.22 (T1108) karta i „Kroki ▸” to widoki listy bloku z dnia (`BarRoutine.version`,
   `done` – start rozwinięcia), zapis pisze też odhaczenia (`routineSaveEdits`) i wersję, a `all` bierze wersję dnia; jedna linia „Cofnij”
-  po krokach (`stepsUndo`: `routineSaved:` / `stepsFinished:`). Pulsowanie (D225): `pulseClass` w `Bar`, klasy w `index.css`.
+  po krokach (`stepsUndo`: `routineSaved:` / `stepsFinished:`). Przełącznik wersji w „Kroki ▸” – akcja `routineVersion` `<blok>|<wersja>`
+  od razu w dniu (D481, T1110, `pickRoutineVersion`). Pulsowanie (D225): `pulseClass` w `Bar`, klasy w `index.css`.
 - `engine/modes.ts` (sesja, zajęcia, „mniej pytań”, noc, „Odcinam się”), `engine/care.ts` (woda, ciąg pracy, kontakt).
 - Linie mają id `rodzaj:…` – pytania silnika `reguła:dzień:blok:próg`; `line|akcja|wartość` w `widgetAction('line')`.
 - Prośby (D311, D312, T503): `WidgetView.requests` – 3 osoby (`folder.widgetModel().people`), trwająca prośba (także

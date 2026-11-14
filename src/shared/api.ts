@@ -293,6 +293,8 @@ export type WidgetAction =
   | 'quickOpen'
   /** The tick of the bar's step line (D440): `<block>|<step>` ticked off on the bar's day. */
   | 'step'
+  /** The version of a routine picked in „Kroki ▸” (D481): `<block>|<version>` – the day's version of the block at once. */
+  | 'routineVersion'
 
 /** The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests). */
 export type BarActionId = 'placeBar' | 'corner' | 'openPanel'

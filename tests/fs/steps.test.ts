@@ -176,6 +176,32 @@ describe('rutyna na pasku – jedno odhaczenie z panelem (D473, D479, T1108)', (
   })
 })
 
+describe('wersja rutyny z paska (D481, T1110)', () => {
+  it('`routineVersion` z „Kroki ▸” zapisuje wersję bloku w dniu od razu – panel i karta ją widzą; rutyna bez tej wersji – odmowa, nic', async () => {
+    mkdirSync(join(dataDir, 'routines'), { recursive: true })
+    write(paths.record('routine', 'r'), { schema: 1, id: 'r', name: 'Poranna', normal: [{ id: 'woda', name: 'woda', min: 2 }], worse: [{ id: 'leki', name: 'leki', min: 1 }] })
+    write(paths.record('routine', 'p'), { schema: 1, id: 'p', name: 'Wieczór', normal: [{ id: 'k', name: 'kolacja', min: 20 }], worse: [] })
+    write(paths.day(DAY), { schema: 1, date: DAY, blocks: [
+      { id: 'rut', categoryId: 'rutyny', startMin: 10 * 60, durationMin: 10, fixed: false, origin: 'user', routine: 'r' },
+      { id: 'wie', categoryId: 'rutyny', startMin: 10 * 60, durationMin: 20, fixed: false, origin: 'user', routine: 'p' }
+    ] })
+    const clock = { now: placeLogical(DAY, 10 * 60 + 5) }
+    const a = await computer('pca', clock)
+    await a.w.refresh()
+    await a.w.act('routineVersion', 'rut|worse', 'bar')
+    const file = () => dayFileFrom(read(paths.day(DAY)), DAY)
+    expect(file().routineSteps?.rut).toMatchObject({ routine: 'r', version: 'worse', steps: [{ id: 'leki' }] })
+    expect(a.w.current().routines.find((r) => r.block === 'rut')).toMatchObject({ version: 'worse' })
+    // The block itself is never written; a routine without the worse days' version – the bar says why, nothing written.
+    expect(file().blocks.find((b) => b.id === 'rut')!.steps).toEqual([])
+    clock.now += 1_000
+    await a.w.act('routineVersion', 'wie|worse', 'bar')
+    expect(file().routineSteps?.wie).toBeUndefined()
+    expect(a.w.current().note?.text).toBe('Ten blok nie ma kroków rutyny do wyboru wersji.')
+    await a.folder.close('quit')
+  })
+})
+
 describe('linia kroku na pasku (D440, T793)', () => {
   it('„☐ Napisać testy · krok 1/4”, klik odhacza i pokazuje następny, ostatni kończy blok (D474) – „Skończono · Cofnij”, po „Cofnij” „Wszystkie kroki ✓”; bez dźwięku i powiadomień', async () => {
     write(paths.day(DAY), { schema: 1, date: DAY, blocks: [blockRaw] })

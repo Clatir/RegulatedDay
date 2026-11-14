@@ -1,8 +1,7 @@
 /**
- * U1 (D460): a step's time and the steps of a routine copied into a block – every example of the spec („## 8. Podzadania”,
- * „Czas kroku” and „Kroki z rutyny”) a test: the time read and written in the list (`min`, 1–240, optional), a version before
- * it keeping the field, the op of the panel, the sum „kroki: X min z Y” with its warning, the copy of the routine's usual
- * version (replaced while it is the untouched copy of the routine chosen before, else at the end; at most `STEPS_MAX`).
+ * U1 (D460): a step's time – every example of the spec („## 8. Podzadania”, „Czas kroku”) a test: the time read and written in
+ * the list (`min`, 1–240, optional), a version before it keeping the field, the op of the panel, the sum „kroki: X min z Y” with
+ * its warning; a routine's steps as a block's list (D480: never copied – `routineList`, D473).
  */
 import { describe, expect, it } from 'vitest'
 import { changedFrom, newSeries, sameOccurrence } from '@shared/engine/series'
@@ -10,8 +9,9 @@ import { blockJson, putBlock } from '@shared/data/dayEdits'
 import { dayFileFrom, planBlock } from '@shared/model/plan'
 import { requestFrom } from '@shared/model/requests'
 import { routineFrom, type Routine } from '@shared/model/routines'
+import { routineList } from '@shared/model/routineSteps'
 import { seriesBlockOf } from '@shared/model/series'
-import { applyStepOp, routineStepsCopy, sameStepList, STEP_MIN_BAD, STEPS_MAX, stepOpFrom, stepsFrom, stepsJson, stepsTime, type Step } from '@shared/model/steps'
+import { applyStepOp, sameStepList, STEP_MIN_BAD, STEPS_MAX, stepOpFrom, stepsFrom, stepsJson, stepsTime, type Step } from '@shared/model/steps'
 
 const ok = <T,>(x: T | { error: string }): T => {
   if (x && typeof x === 'object' && 'error' in x) throw new Error(x.error)
@@ -131,62 +131,23 @@ describe('suma czasów kroków (D460)', () => {
   })
 })
 
-describe('kroki z rutyny (D460)', () => {
-  it('przykład ze specyfikacji: rutyna „Poranek” w pustym bloku – trzy kroki z nazwą i czasem, nowe id', () => {
-    const { steps, cut } = routineStepsCopy([], null, poranek)
-    expect(view(steps)).toEqual([
+describe('kroki z rutyny (D480: bez kopii – lista rutyny, D473)', () => {
+  it('rutyna „Poranek” – lista rutyny: trzy kroki z nazwą i czasem, id kroków rutyny; krok bez nazwy – „krok N”', () => {
+    expect(view(routineList(poranek, 'normal'))).toEqual([
       ['Prysznic', 10, false],
       ['Śniadanie', 20, false],
       ['Leki', 5, false]
     ])
-    expect(cut).toBe(0)
-    expect(steps.map((s) => s.order)).toEqual([0, 1, 2])
-    expect(new Set(steps.map((s) => s.id)).size).toBe(3)
-    expect(steps.some((s) => ['a', 'b', 'c'].includes(s.id))).toBe(false)
-  })
-
-  it('zmiana rutyny przy nietkniętej kopii poprzedniej – kopia wymieniona; krok bez nazwy – „krok N”', () => {
-    const first = routineStepsCopy([], null, poranek).steps
-    expect(view(routineStepsCopy(first, poranek, wieczor).steps)).toEqual([
+    expect(routineList(poranek, 'normal').map((s) => [s.id, s.order])).toEqual([['a', 0], ['b', 1], ['c', 2]])
+    expect(view(routineList(wieczor, 'normal'))).toEqual([
       ['Kolacja', 30, false],
       ['krok 2', 15, false]
     ])
   })
 
-  it('kroki dopisane albo zmienione po kopii (albo własne) – kroki rutyny na końcu, nic nie znika; odhaczony krok kopii też ją „dotyka”', () => {
-    const first = routineStepsCopy([], null, poranek).steps
-    const own = ok(applyStepOp(first, { op: 'add', id: 'x', title: 'Podlać kwiaty' })).steps
-    expect(view(routineStepsCopy(own, poranek, wieczor).steps)).toEqual([
-      ['Prysznic', 10, false],
-      ['Śniadanie', 20, false],
-      ['Leki', 5, false],
-      ['Podlać kwiaty', null, false],
-      ['Kolacja', 30, false],
-      ['krok 2', 15, false]
-    ])
-    const retimed = ok(applyStepOp(first, { op: 'min', id: first[0]!.id, min: 12 })).steps
-    expect(routineStepsCopy(retimed, poranek, wieczor).steps).toHaveLength(5)
-    const ticked = first.map((s, k) => (k === 0 ? { ...s, done: true } : s))
-    expect(routineStepsCopy(ticked, poranek, wieczor).steps).toHaveLength(5)
-    // No routine before, steps of your own: appended.
-    const mine = stepsFrom([{ id: 'm', title: 'Mój krok', order: 7 }])
-    const appended = routineStepsCopy(mine, null, wieczor).steps
-    expect(view(appended)).toEqual([
-      ['Mój krok', null, false],
-      ['Kolacja', 30, false],
-      ['krok 2', 15, false]
-    ])
-    expect(appended.map((s) => s.order)).toEqual([7, 8, 9])
-  })
-
-  it('rutyna z 40 krokami mieści się cała; ponad `STEPS_MAX` w bloku – kroki, które się nie mieszczą, pominięte (`cut`)', () => {
+  it('rutyna z 40 krokami (`STEPS_MAX`) to cała lista bloku', () => {
     expect(STEPS_MAX).toBe(40)
     const big = routineFrom({ id: 'r3', name: 'Długa', normal: Array.from({ length: 40 }, (_, i) => ({ id: `n${i}`, name: `k${i}`, min: 1 })) })!
-    expect(routineStepsCopy([], null, big)).toMatchObject({ cut: 0 })
-    expect(routineStepsCopy([], null, big).steps).toHaveLength(40)
-    const mine = stepsFrom(Array.from({ length: 35 }, (_, i) => ({ id: `m${i}`, title: `m${i}`, order: i })))
-    const r = routineStepsCopy(mine, null, big)
-    expect(r.steps).toHaveLength(40)
-    expect(r.cut).toBe(35)
+    expect(routineList(big, 'normal')).toHaveLength(40)
   })
 })

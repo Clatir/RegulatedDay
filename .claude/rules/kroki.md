@@ -28,7 +28,7 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
 ## Pliki
 - `model/steps.ts` – `Step { id, title, order, done, min? }`, `STEPS_MAX` 40 (tylko przy dodawaniu; tyle co rutyna – T1031), `STEP_TITLE_MAX` 200 (T789);
   czas kroku (D460, T1030): `min` 1–240 (`STEP_MIN_RANGE`, `stepMinOf`; brak – pola nie ma, nigdy `min: undefined`), operacja `{ op: 'min' }`,
-  `stepsTime` (suma i nadmiar wobec długości bloku), `routineStepsCopy` (kroki rutyny do bloku – T1032); `sameStepList` porównuje też czas;
+  `stepsTime` (suma i nadmiar wobec długości bloku); `sameStepList` porównuje też czas (kopii kroków rutyny nie ma – D480, T1111);
   `stepsFrom` (każdy krok, kolejność po `order`, remis – kolejność w pliku; `done` nigdy z elementu listy), `stepsJson` /
   `withStepsJson` (zapis bez `done`, w kolejności pliku; lista niezmieniona – plik jak był; pozycja niezmieniona albo
   nieczytelna zostaje jak w pliku, zmieniona/usunięta zabiera czytelne pozycje swojego id – T787), `refusalFor` (pełna lista
@@ -47,7 +47,7 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
 - `features/steps/` – ekrany (T795–T799): `StepsEditor` (lista, pole „Dodaj krok”, ptaszki, tytuł w miejscu, uchwyt i Alt+↑/↓,
   pole „czas” kroku i linia „kroki: X min z Y” z ostrzeżeniem – `lengthMin`, w zadaniu bez niego, D460),
   `RoutineVersionPick` (slot `aside` nagłówka), `stepsFinish` (`finishBySteps`, `undoFinish` – D474),
-  `stepsUi` (`stepsAnswer` – „Cofnij” po usunięciu, `keyMove`, `dropMove`, `refusedOp`, `stepsTimeLine`, `stepMinParse`, `routineCutText`), `blockSteps` (`saveBlockSteps` –
+  `stepsUi` (`stepsAnswer` – „Cofnij” po usunięciu, `keyMove`, `dropMove`, `refusedOp`, `stepsTimeLine`, `stepMinParse`), `blockSteps` (`saveBlockSteps` –
   panel dnia: szkic, zakres serii, dzień). Używają go `TodayPage` (slot `steps` w `BlockEditor`), `TemplatesPage`, `SeriesEditor`
   (bez ptaszków) i `CasesPage` (wiersz zadania); licznik – `TimelineItem.steps` (`dayAxis`), `HorizonBlock.steps` (Tydzień).
 
@@ -80,10 +80,9 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
 - Pasek (T793): `WidgetView.steps` (`BarSteps`) – blok na pierwszym planie, pierwszy nieodhaczony; ukryte tylko w „Odcinam
   się”; akcja `step` `<blok>|<krok>` → `WidgetEngine.tickStep` (jedna edycja: dzień + zadanie). Tekst – `barStepText`.
 
-- Kroki z rutyny (D460, T1032–T1034): „Rutyna” w `BlockEditor` daje jedną zmianę `{ routine, durationMin, steps }` (`onChange` każdego
-  ekranu: szkic, dzień, „Tylko to” / zakres serii przez `seriesBlockPatch`, szablon, lista serii) – lista pusta albo nietknięta kopia
-  poprzedniej rutyny (tytuły i czasy, nic nieodhaczone) wymieniona, inna – rutyna na końcu, ponad 40 pominięte z dymkiem; blok zadania
-  (`block.task`) bez kopii (lista idzie z zadaniem, T792); „bez rutyny” kroków nie rusza; długość bloku nigdy nie idzie za krokami.
+- Wybór rutyny (D480, T1111 – zastępuje kopię D460, T1032): „Rutyna” w `BlockEditor` daje `{ routine, durationMin }` (`onChange` każdego
+  ekranu: szkic, dzień, „Tylko to” / zakres serii przez `seriesBlockPatch`, szablon, lista serii) – kroków nie rusza nigdy; blok bez
+  własnych kroków pokazuje rutynę (niżej), kopia z 1.20–1.21 zostaje własną listą; długość bloku nigdy nie idzie za krokami.
 - Kroki rutyny bez kopii (D473, T1100–T1103): blok z rutyną bez własnych kroków (szablon, seria, Twój – nie zadanie) pokazuje
   definicję rutyny, dopóki dzień nic nie odhaczy ani nie wybierze wersji; potem lista w `routineSteps` pliku dnia (zmiana rutyny
   jej nie rusza). Odhaczenie nie pisze bloku; wybór wersji tylko `routineSteps`; zmiana listy – własna lista bloku (`putBlock`),

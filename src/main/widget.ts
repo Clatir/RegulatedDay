@@ -28,7 +28,7 @@ import { energyOrderVariant } from '@shared/engine/energyOrder'
 import { casesFrom, isDone, taskAnswerRaw } from '@shared/engine/cases'
 import { nextTaskRaw } from '@shared/engine/caseRepeat'
 import { marketDay } from '@shared/calendar/holidays'
-import { routineSaveEdits, routineStepsNow, tickEdits, type BlockStepsEdit } from '@shared/engine/steps'
+import { routineSaveEdits, routineStepsNow, routineVersionEdits, tickEdits, type BlockStepsEdit } from '@shared/engine/steps'
 import { dayPlan } from '@shared/engine/createDay'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { applyVariant, keepPlan, markerCause, planCause, variantCauses, variantsFor, type Variant, type VariantCause, type VariantTrigger } from '@shared/engine/variants'
@@ -1044,6 +1044,13 @@ export class WidgetEngine {
         const ids = [...new Set((places ?? '').split(',').map(num))].flatMap((k) => (k != null && steps[k] ? [steps[k]!.id] : []))
         return this.routineDone(day, r, version as RoutineVersion, ids)
       }
+      case 'routineVersion': {
+        // The version picked in „Kroki ▸” (D481): `<block>|<version>` – the day's version of the block at once (the panel and the
+        // card in „Dziś” switch with it, T1101).
+        const [block, version] = (arg ?? '').split('|')
+        if (!block || !(ROUTINE_VERSIONS as readonly string[]).includes(version ?? '')) return
+        return this.pickRoutineVersion(day, block, version as RoutineVersion)
+      }
       case 'step': {
         // The tick of the step line (D440): `<block>|<step>` – the bar's day; no sound, no window.
         const [block, step] = (arg ?? '').split('|')
@@ -1247,6 +1254,23 @@ export class WidgetEngine {
     ].filter((x): x is { entry: EditEntry; made: RawRecord | null } => x.entry != null)
     const res = made.length ? await this.d.edit(made.map((x) => x.entry)) : []
     return { res, made }
+  }
+
+  /**
+   * The version of a block's routine picked on the bar (D481, T1110): written into the day as the panel's and the card's switch
+   * writes it (`routineVersionEdits` – the routine's list of that version kept by the day); the ticks stay the day's.
+   */
+  private async pickRoutineVersion(day: string | undefined, blockId: string, version: RoutineVersion): Promise<void> {
+    const at = await this.dayBlock(day, blockId)
+    if (!at) return this.refresh()
+    const out = routineVersionEdits({ date: at.day, day: at.before, block: at.block, version, routines: at.routines })
+    if ('error' in out) {
+      this.say(out.error)
+      return this.refresh()
+    }
+    const { res } = await this.writeSteps(at, out)
+    if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Wersja rutyny spotkała się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
+    return this.refresh()
   }
 
   /**

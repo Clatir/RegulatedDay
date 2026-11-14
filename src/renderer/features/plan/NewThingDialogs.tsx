@@ -84,7 +84,7 @@ function SaveButtons({ busy, ok, onSave, onClose }: { busy: boolean; ok: boolean
   )
 }
 
-/** A new routine: its name and the two versions of steps; the routine made is handed on (the block takes it and its steps, D460). */
+/** A new routine: its name and the two versions of steps; the routine made is handed on (the block takes it with its length – its steps are shown from the routine, never copied, D480). */
 export function NewRoutineDialog({ onCreated, onClose }: { onCreated: (r: Routine) => void; onClose: () => void }) {
   const [form, set, ref] = useForm<{ name: string; normal: RoutineStep[]; worse: RoutineStep[] }>({ name: '', normal: [{ id: newId(10), name: '', min: 5 }], worse: [] })
   const [busy, run] = useBusy()
