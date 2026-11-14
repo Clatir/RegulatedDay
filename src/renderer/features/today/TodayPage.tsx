@@ -30,7 +30,7 @@ import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
 import { isSaved, saveAnswer, useData, type SaveAnswer, type SendState } from '../../store/data'
 import { dayUsable, useDay, type DayModel } from '../../store/day'
-import { onLeaveBlockDraft, openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
+import { dropSavedDraft, onLeaveBlockDraft, openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
 import { attachTransfer } from '../attachments/attachDrop'
 import { dayPlace as placeOfDay, withAttachCounts } from '../attachments/attachView'
@@ -126,7 +126,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const draft = stored?.date === date && !plan.some((b) => b.id === stored.block.id) ? stored.block : null
   const setDraft = (b: PlanBlock | null, intended = false) => setBlockDraft(date, b, intended)
   useEffect(() => {
-    if (stored?.date === date && plan.some((b) => b.id === stored.block.id)) setBlockDraft(date, null)
+    if (stored?.date === date && plan.some((b) => b.id === stored.block.id)) dropSavedDraft(date, stored.block.id)
   }, [stored, plan, date])
   const [exchange, setExchange] = useState<{ block: PlanBlock; proposal: ExchangeProposal } | null>(null)
   // The exchange asked for a block of another day is no longer asked.

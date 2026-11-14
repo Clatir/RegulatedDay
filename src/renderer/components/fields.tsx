@@ -32,6 +32,11 @@ interface CommitFieldProps<T> {
   onReject?: (message: string) => void
   /** Every text accepted – also one equal to the value – and an edit cancelled (Esc): what the field holds now. */
   onAccept?: (value: T) => void
+  /**
+   * A text typed and accepted is committed even when it equals the value: the field of a new block not saved yet (D461 – its first
+   * committed field saves it, also with the value the field showed already).
+   */
+  commitSame?: boolean
   'aria-label'?: string
   'data-testid'?: string
 }
@@ -78,7 +83,7 @@ export function FieldShell({ error, errorId, className, placement = 'float', tes
 
 // The refused value's message goes away with Esc – wherever the focus is (the layer is the newest, so it is first). Only the message
 // and the frame: the value stays refused (A6-14: `onAccept` is not called, „Zapisz” of an answer still refuses).
-export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, shellClassName, errorPlacement, readOnly, check, onReject, onAccept, ...rest }: CommitFieldProps<T>) {
+export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, shellClassName, errorPlacement, readOnly, check, onReject, onAccept, commitSame, ...rest }: CommitFieldProps<T>) {
   const [draft, setDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const errorId = useId()
@@ -106,7 +111,7 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
     }
     setError(null)
     onAccept?.(r.value)
-    if (r.changed) onCommit(r.value)
+    if (r.changed || commitSame) onCommit(r.value)
   }
   return (
     <FieldShell error={error} errorId={errorId} className={shellClassName} placement={errorPlacement} testId={rest['data-testid']}>
