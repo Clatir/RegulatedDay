@@ -60,7 +60,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `withoutZjazd`, `zjazdTypeRaw`, `classImport`, `sameDayFile`); bloki `origin: 'zjazd'` i zajęcia zdalne w dniu zjazdu
   (`blockInfos(…, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
   `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365), 8 – serie w `day.create` (T716), 9 – bez drugiej
-  zmiany (D467).
+  zmiany (D467), 10 – bloki bez komputera same i zamiana przy „Zacznij” (D475, D478).
 - Serie (OPS1, D381, D382, D401, D404, T700–T719): `model/series.ts` (rekord, `ruleFallsOn`, `seriesVersionOn`,
   `specialOutcome`, licznik `countedBefore`/`seriesLast`, `seriesPlans` – `SeriesPlan { series, last }`, `countDatesToRead`,
   `seriesOfBlock`, `currentSeries` – lista), `engine/series.ts` (`seriesBlocks` w `createDay`, `pushedBySeries` – rozsuwanie
@@ -86,7 +86,8 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - Klasy minut pracy po granicy: `after` (przedłużenie), `max` (po maksimum), `empty` (przy pustej puli); `in` w granicy.
   Porę snu przesuwają tylko `empty` z `upfront` (potwierdzone z góry), najwyżej 2 h i nie po 03:59.
 - Koniec pracy: potwierdzony (`work.end`, `disconnect.start` w odcinku pracy) albo wyliczony – po odcinku pracy, gdy
-  żaden blok pracy nie może się już zacząć (elastyczny: 15 min od „due”, zapauzowany: 15 min od pauzy, przerwany
+  żaden blok pracy nie może się już zacząć (elastyczny: 15 min od „due”, zapauzowany: 15 min od pauzy – zamieniony przy „Zacznij”
+  (D478): od swojego miejsca, przerwany
   prośbą: od jej końca, czekający: do końca okna); stały blok pracy w planie robi z końca przerwę, a „Odcinam się”
   z pracą po „Wracam” przed zatwierdzoną granicą – też (T307, T320; blok zaczynający się w minucie: `starting`).
   `work.end` nie potwierdza odcinka, w którym po kliknięciu zaczęła się praca (przebiegi stykają się w minucie

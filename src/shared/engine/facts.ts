@@ -50,6 +50,17 @@ export interface Run {
    * foreground; both halves of a run a request cuts keep it, a corrected start (`block.fix`) sets it on the whole run.
    */
   begun: EventOrder
+  /**
+   * Where the block stands once this run is paused (index; D478, T1131): the place of the block whose start swapped with
+   * it (`block.pause.place`). None – it waits at its own place, as every paused block.
+   */
+  place?: number
+}
+
+/** Where a paused block stands in the forecast (index; D478), or null: at its own place (also running or ended). */
+export function pausedPlaceOf(f: BlockFact): number | null {
+  const last = f.runs.at(-1)
+  return f.endedAt == null && last != null && last.to !== OPEN ? (last.place ?? null) : null
 }
 
 export interface WorkEndFact {
@@ -357,6 +368,9 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
           break
         }
         run.to = Math.max(run.from, idx(e.at))
+        // D478: the place of the block it swapped with (an older version writes none).
+        const place: unknown = (e as { place?: unknown }).place
+        if (typeof place === 'number' && Number.isFinite(place)) run.place = Math.max(run.to, idx(place))
         break
       }
       case 'block.resume': {
@@ -556,12 +570,13 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
     }
   }
   // A request written in after the fact splits the flexible blocks it names (spec „nachodzi na blok elastyczny, dzieli
-  // go na dwie części”): whenever it was written, their runs in the foreground lose its minutes.
+  // go na dwie części”): whenever it was written, their runs in the foreground lose its minutes. The place a pause gave
+  // (D478) stays with the second half – the one that pause ended.
   for (const r of f.requests) {
     if (r.to === OPEN) continue
     for (const id of r.splits) {
       const b = f.blocks.get(id)
-      if (b) b.runs = b.runs.flatMap((x) => (x.bg || x.to <= r.from || x.from >= r.to ? [x] : [{ ...x, to: r.from }, { ...x, from: r.to }].filter((y) => y.to > y.from)))
+      if (b) b.runs = b.runs.flatMap((x) => (x.bg || x.to <= r.from || x.from >= r.to ? [x] : [{ from: x.from, to: r.from, bg: x.bg, begun: x.begun }, { ...x, from: r.to }].filter((y) => y.to > y.from)))
     }
   }
   // Corrections of real times (spec „korekta”), after everything else and in their order: a start never at or after the
@@ -619,7 +634,8 @@ export function blockAt(b: BlockFact, m: number): BlockFact {
     const gone = parkedAt != null || cancelledAt != null
     return { ...newBlock(b.id), parkedAt, cancelledAt, goneRule: gone ? b.goneRule : null, gone: b.gone && b.gone.at < m ? b.gone : null, addConfirmedAt }
   }
-  const runs = b.runs.filter((r) => r.from < m).map((r) => (r.to >= m ? { ...r, to: OPEN } : r))
+  // A run paused at m or later is open then – and the place its pause gave (D478) not there yet.
+  const runs = b.runs.filter((r) => r.from < m).map((r) => (r.to >= m ? { from: r.from, to: OPEN, bg: r.bg, begun: r.begun } : r))
   const ended = b.endedAt != null && b.endedAt < m
   return {
     ...b,

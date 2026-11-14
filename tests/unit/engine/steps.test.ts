@@ -218,8 +218,8 @@ describe('kroki w dniu', () => {
     const base = run(without)
     expect(run(with4)).toEqual(base)
     expect(run(ticked)).toEqual(base)
-    // No new rule of the day (D440): the version of the rules stays (9 – D467, not the steps).
-    expect(RULES_VERSION).toBe(9)
+    // No new rule of the day (D440): the version of the rules stays (9 – D467, not the steps; 10 – D475, D478).
+    expect(RULES_VERSION).toBe(10)
   })
 
   it('migawka starszej wersji bez kroków: blok szablonu i wystąpienie serii biorą listę ze źródła, odznaczoną (T791)', () => {

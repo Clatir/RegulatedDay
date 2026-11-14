@@ -12,6 +12,7 @@ import { isDone } from '@shared/engine/cases'
 import type { Priority, RequestRecord } from '@shared/model/requests'
 import { energyTrack } from '@shared/engine/energyTrack'
 import { atOf, logicalSpan } from '@shared/engine/grid'
+import { pausedPlaceOf } from '@shared/engine/facts'
 import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
 import { durationLabel, logicalClock } from '@shared/format'
@@ -57,7 +58,12 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
     // A started block stands where it ran (E4a); one still to come where the forecast puts it today, else at its plan.
     let from = span?.start ?? null
     let to = span?.end ?? null
-    if (f?.startedAt != null) {
+    // D478: a block a start swapped with waits, paused, where the forecast puts the rest of it (the clicked block's place).
+    const swapped = f != null && now != null && pausedPlaceOf(f) != null && placed.has(p.id)
+    if (swapped) {
+      from = placed.get(p.id)!.from
+      to = placed.get(p.id)!.to
+    } else if (f?.startedAt != null) {
       from = f.startedAt
       to = f.endedAt ?? Math.max(nowIdx ?? f.startedAt, plannedEndOf(state, info, f))
     } else if (!gone && now != null && placed.has(p.id)) {
@@ -75,7 +81,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       title: gone ? `${blockName(p, names)} (${gone})` : blockName(p, names),
       // D430: its category beside its hours when its own name is in the category's place.
       ...(kind ? { kind } : {}),
-      marks: [...blockMarks(p, { afterWork: info.afterWorkMark, fromYesterday: p.movedFrom === yesterday }), ...(f?.startedAt != null && f.endedAt == null ? ['biegnie'] : [])],
+      marks: [...blockMarks(p, { afterWork: info.afterWorkMark, fromYesterday: p.movedFrom === yesterday }), ...(f?.startedAt != null && f.endedAt == null && !swapped ? ['biegnie'] : [])],
       color: blockColor(p.categoryId, names),
       categoryId: p.categoryId,
       background: info.bg,
@@ -100,16 +106,19 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
     if (info.inPlan) continue
     const f = state.facts.blocks.get(info.id)
     if (!f || f.startedAt == null) continue
-    const to = f.endedAt ?? Math.max(nowIdx ?? f.startedAt, plannedEndOf(state, info, f))
+    // D478: swapped with a start, it waits where the forecast puts the rest of it – as a block of the plan does.
+    const swappedAt = now != null && pausedPlaceOf(f) != null ? placed.get(info.id) : undefined
+    const from = swappedAt?.from ?? f.startedAt
+    const to = swappedAt?.to ?? f.endedAt ?? Math.max(nowIdx ?? f.startedAt, plannedEndOf(state, info, f))
     // Named as everywhere (`namedById`); with its own name its category beside its hours, as „Tydzień” has it (`BlockBox`).
     const named = namedById(info.id, naming)
     const kind = named ? blockKind(named, names) : null
     items.push({
       id: info.id,
-      ...logicalSpan(g, f.startedAt, Math.max(to, f.startedAt + 1)),
+      ...logicalSpan(g, from, Math.max(to, from + 1)),
       title: named ? blockName(named, names) : 'blok',
       ...(kind ? { kind } : {}),
-      marks: f.endedAt == null ? ['poza planem', 'biegnie'] : ['poza planem'],
+      marks: f.endedAt == null && !swappedAt ? ['poza planem', 'biegnie'] : ['poza planem'],
       color: blockColor(info.categoryId, names),
       categoryId: info.categoryId,
       background: false,

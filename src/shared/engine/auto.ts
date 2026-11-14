@@ -186,6 +186,66 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
   return null
 }
 
+/** The automatic end of a block away from the computer by `awayEnd` (one id for the rule and the check that waits for it). */
+const awayEndEvent = (date: string, block: string, away: { at: number; rule: string }): AutoEvent => auto(date, away.rule, { k: 'block.end', block, at: away.at, done: null, rule: away.rule })
+
+/** The context the rules of running blocks judge in (outside `autoActions`, which builds its own). */
+function ctxOf(inp: AutoInput, t: TimerNow): Ctx {
+  const { state } = inp
+  return { inp, date: state.grid.date, nowIdx: state.now, byId: new Map(state.blocks.map((b) => [b.id, b])), idle: () => null, fixedHeld: t.held.length > 0 }
+}
+
+/**
+ * A flexible block of the plan away from the computer with its own hour (D475): what may begin by itself – a meal,
+ * routines, home requests, a regeneration, home affairs (the variant's place, else the category's). Not a commute (T1134:
+ * no rule ends a flexible one by itself), nor one planned in the background, nor one anchored to another (D194).
+ */
+const awayOwnHour = (b: BlockInfo): boolean => !b.fixed && !b.waits && b.inPlan && !b.bg && b.anchor == null && b.start != null && b.rules.kind !== 'commute' && placeOf(b) === 'away'
+
+/**
+ * D475 (T1133, T1134): such a block (`awayOwnHour`), not begun, parked nor cancelled, begins by itself once you are away
+ * from the computer within its planned time – at its hour when nothing runs in the foreground and no computer has input,
+ * else when input stops (a stretch without input on every computer of at least `AWAY_GAP_MIN`, from its beginning) or
+ * the foreground is free again; it ends then by the rules of a block away from the computer (the first use, the limit).
+ * Never before the day's first use of a computer (nobody knows you were up – a late wake, D337, decides those blocks), nor
+ * from the effective bedtime, nor in „Odcinam się” or while a request runs, nor from when a fixed block starts in the
+ * foreground (`fixedFgAt`, ms – its start in the same pass). One block a pass, the earliest; its id holds its planned
+ * start, not when it began, so one undone by „Cofnij” never starts by itself again that day.
+ */
+function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[] {
+  const { state, activity } = inp
+  if (t.fg) return []
+  if (state.facts.disconnect.some((d) => d.to === OPEN) || state.facts.requests.some((r) => r.to === OPEN)) return []
+  const firstUse = dayFirstUse(state, activity)
+  if (firstUse == null) return []
+  const date = state.grid.date
+  const at = (idx: number) => atOf(state.grid, idx)
+  // Since when the foreground is free (ms): the last run of the foreground that stopped, request or „Odcinam się”.
+  let free = firstUse
+  for (const [, f] of state.facts.blocks) for (const r of f.runs) if (!r.bg && r.to !== OPEN) free = Math.max(free, at(r.to))
+  for (const r of state.facts.requests) if (r.to !== OPEN) free = Math.max(free, at(r.to))
+  for (const d of state.facts.disconnect) if (d.to !== OPEN) free = Math.max(free, at(d.to))
+  const bedtime = at(state.bedtime.effective)
+  const candidates = state.blocks.filter(awayOwnHour).sort((a, b) => a.start! - b.start! || (a.id < b.id ? -1 : 1))
+  for (const b of candidates) {
+    const f = state.facts.blocks.get(b.id)
+    if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) continue
+    const lo = Math.max(at(b.start!), free)
+    const hi = Math.min(at(b.start! + b.durationMin), bedtime)
+    // The first stretch without input from `lo` long enough to tell you left (an open one up to now).
+    const away = activity.idle.find((x) => x.to - Math.max(x.from, lo) >= AWAY_GAP_MIN * MIN && Math.max(x.from, lo) < hi)
+    if (!away) continue
+    const from = Math.max(away.from, lo)
+    // Due once the gap is known (its threshold passed) – and a fixed block taking the foreground then or before comes first.
+    const known = from + AWAY_GAP_MIN * MIN
+    if (known > inp.now || known > inp.gate || from >= fixedFgAt) continue
+    const id = derivedId(date, 'auto', 'awayStart', 'block.start', b.id, at(b.start!))
+    if (state.facts.undone.has(id)) continue
+    return [{ id, autoRule: 'awayStart', k: 'block.start', block: b.id, at: from, bg: false, planned: startPlanned(b, inp.ctx.plan), confirmUntil: null, how: 'auto' }]
+  }
+  return []
+}
+
 /**
  * The absences (spec „Bezczynność i nieobecność”) during a work or project block at the computer, in order: from the
  * threshold of the question without input on all computers, since the block's last start or resume.
@@ -279,6 +339,10 @@ function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, Shu
   const disconnected = state.facts.disconnect.some((d) => d.to === OPEN)
   const fg = t.fg
   const firstUse = dayFirstUse(state, activity)
+  // The end of the block away from the computer in front (T1135) – the one the running-blocks pass of `autoActions` will
+  // write: not while the rule 'shutdown' judges it, nor one undone.
+  const fgAway = fg && placeOf(fg.info) === 'away' && !shutdowns.has(fg.info.id) ? awayEnd(ctxOf(inp, t), fg.info, fg.fact) : null
+  const fgAwayEnd = fgAway && !state.facts.undone.has(awayEndEvent(date, fg!.info.id, fgAway).id) ? fgAway : null
   for (const b of state.blocks) {
     if (!b.fixed || b.waits || !b.inPlan || disconnected) continue
     const f = state.facts.blocks.get(b.id)
@@ -301,7 +365,11 @@ function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, Shu
     const closedFg = fg ? shutdowns.get(fg.info.id) : undefined
     const closedBefore = closedFg && !state.facts.undone.has(closedFg.end.id) && closedFg.end.at <= from ? closedFg : null
     if (closedBefore && !closedBefore.due && !b.bg) continue
-    const front = closedBefore ? null : fg
+    // A block away from the computer in front that the first use (or its limit) ends at this start or before – the start
+    // of a block at the computer waits for that use – is not in front either (T1135): its end is written in the same
+    // pass, and the fixed block takes the foreground instead of going to the background behind a meal or a routine.
+    const endsBefore = !closedBefore && fgAwayEnd != null && fgAwayEnd.at <= from
+    const front = closedBefore || endsBefore ? null : fg
     if (!b.bg && front?.info.isRegen) continue
     // Held by a regeneration that has ended since its planned start: it starts at that end (spec „Bloki”).
     for (const r of state.blocks) {
@@ -353,7 +421,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   const shutdowns = shutdownActions(inp, t)
   const at = (idx: number) => atOf(state.grid, idx)
   const due = (ms: number) => ms <= gate && ms <= inp.now
-  const c: Ctx = { inp, date, nowIdx, byId, idle: () => null, fixedHeld: t.held.length > 0 }
+  const c = ctxOf(inp, t)
   const written = new Set(ctx.events.map((e) => e.id))
   /**
    * A rule's events: undone by „Cofnij” – the rule was overruled, the next rules judge the block (false); written
@@ -382,7 +450,14 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   if (openCut && inp.now >= dayEnd && due(dayEnd)) take([auto(date, 'disconnect04', { k: 'disconnect.end', at: dayEnd })])
 
   // Fixed blocks start by themselves at their planned time (`fixedStartLists`).
-  for (const list of fixedStartLists(inp, t, shutdowns)) take(list)
+  // Before them a flexible block away from the computer due earlier than the first of them in the foreground (D475,
+  // `awayStarts`): written first, the fixed starts wait for the next pass and are judged with it in front – a morning
+  // routine seen only at the day's first use still begins before the fixed block that use starts (T1137).
+  const fixedLists = fixedStartLists(inp, t, shutdowns)
+  let fixedFgAt = Number.POSITIVE_INFINITY
+  for (const list of fixedLists) for (const e of list) if (e.k === 'block.start' && e.bg === false && !list.some((x) => state.facts.undone.has(x.id))) fixedFgAt = Math.min(fixedFgAt, e.at)
+  const awayList = awayStarts(inp, t, fixedFgAt)
+  if (!(awayList.length && take(awayList))) for (const list of fixedLists) take(list)
   const fg = t.fg
 
   // Running blocks.
@@ -417,7 +492,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     const away = awayEnd(c, b, f)
     if (away) {
       if (!due(away.at)) continue
-      if (take([auto(date, away.rule, { k: 'block.end', block: b.id, at: away.at, done: null, rule: away.rule })])) continue
+      if (take([awayEndEvent(date, b.id, away)])) continue
     }
     // An absence from the threshold of its question during a work or project block (one overruled by „Cofnij” or an
     // answer is passed over – a later one is judged).
@@ -733,7 +808,8 @@ export function nextDeadline(state: DayState): number | null {
   const t = timerNow(state)
   const out: number[] = []
   for (const b of state.blocks) {
-    if (!(b.fixed || b.waits) || !b.inPlan) continue
+    // A flexible block away from the computer begins at its own hour too (D475) – the timer is set on it.
+    if (!(b.fixed || b.waits || awayOwnHour(b)) || !b.inPlan) continue
     const f = state.facts.blocks.get(b.id)
     if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) continue
     const span = plannedSpan(b, byId)
