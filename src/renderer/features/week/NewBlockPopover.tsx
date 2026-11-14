@@ -1,25 +1,30 @@
 /**
  * The small window of a new block on „Tydzień” (D366, D371): where the empty grid was clicked or dragged over – its name (D431:
- * on top, the cursor in it, Enter adds as „Dodaj”; empty – named as before), the category and the length, „Dodaj” (saves the
- * block in each of the days at that hour), „Anuluj” and „Więcej” (one day only: the full editing of „Dziś”, the block still
- * unsaved, with its name). The days gone by among them are warned of, nothing is refused (D72). Esc and
- * a click outside close it, nothing is saved by that.
+ * on top, the cursor in it; empty – named as before), the category, the start, the end and the length (D464: the end changes the
+ * length, the start stays – for each of the days). No „Dodaj” (D461): the block is saved in each of the days at that hour by Enter in
+ * a field or by a click outside the window when it was dragged out or a field was changed (a bare click on the grid leaves nothing
+ * behind – D461); it says so with „Cofnij” (`newBlocksToast`). „Anuluj” and Esc throw it away; „Więcej” (one day only) takes it to the full editing of
+ * „Dziś” – the block still unsaved there, with its name, saved at its first field or when you leave it. The days gone by among
+ * them are warned of, nothing is refused (D72).
  */
 import { useEffect, useRef, useState } from 'react'
 import { namedOf } from '@shared/blockName'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { newUserBlock } from '@shared/engine/planEdit'
 import { logicalClock } from '@shared/format'
+import { endOf } from '@shared/blockEnd'
 import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
-import { Choice, DurationField, TextField } from '../../components/fields'
+import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { Field } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
+import { commitActiveField } from '../../lib/commit'
 import { useEscapeLayer } from '../../lib/escape'
 import { useDay, type DayModel } from '../../store/day'
 import { blockName, categoryOptions, type Names } from '../plan/blockView'
 import { lastNewBlockCategory, rememberNewBlockCategory, startCategory } from '../plan/lastCategory'
 import { ExchangeDialog } from '../today/ExchangeDialog'
 import { showWeekPush } from '../../store/weekPush'
+import { newBlocksToast } from '../today/dayActions'
 import { addWeekBlocks } from './weekActions'
 import { NEW_BLOCK_WIDTH } from './weekLayout'
 import { daysLabel, pastWarning } from './weekText'
@@ -44,6 +49,7 @@ export function NewBlockPopover({
   dates,
   startMin,
   durationMin,
+  dragged,
   today,
   namesOf,
   place,
@@ -55,6 +61,8 @@ export function NewBlockPopover({
   dates: readonly string[]
   startMin: number
   durationMin: number
+  /** Dragged out over the grid (a range) – saved by a click outside even untouched; a bare click on the grid is not (D461). */
+  dragged?: boolean
   today: string
   namesOf: (date: string) => Names
   place: { left: number; top: number }
@@ -66,15 +74,32 @@ export function NewBlockPopover({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const names = namesOf(dates[0]!)
-  const [categoryId, setCategoryId] = useState(() =>
-    startCategory(
+  // What the fields hold (committed on leaving a field or Enter): also in a ref, because a click outside saves with what it finds
+  // there at once (D461) – a render later it would be the value from before the click blurred the field. The name (D431) empty – the
+  // block is named as before.
+  const [vals, setVals] = useState(() => ({
+    name: '',
+    categoryId: startCategory(
       lastNewBlockCategory(),
       categoryOptions(names).map((o) => o.value)
-    )
-  )
-  const [length, setLength] = useState(durationMin)
-  // D431: the name typed (committed on leaving the field or Enter); empty – the block is named as before.
-  const [name, setName] = useState('')
+    ),
+    start: startMin,
+    length: durationMin
+  }))
+  const held = useRef(vals)
+  // A field committed: a block to be kept even when the window was only clicked open.
+  const touched = useRef(false)
+  const change = (patch: Partial<typeof vals>) => {
+    touched.current = true
+    held.current = { ...held.current, ...patch }
+    setVals(held.current)
+  }
+  const { name, categoryId, start, length } = vals
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => void (mounted.current = false)
+  }, [])
   const [exchange, setExchange] = useState<{ entry: Entry; rest: Entry[]; proposal: ExchangeProposal } | null>(null)
   const [busy, run] = useBusy()
   const todayIn = dates.includes(today)
@@ -84,16 +109,10 @@ export function NewBlockPopover({
   useEffect(() => {
     ref.current?.scrollIntoView({ block: 'nearest' })
   }, [])
-  // A click outside closes it – not while the exchange dialog stands over it.
-  useEffect(() => {
-    if (exchange) return
-    const away = (e: PointerEvent) => {
-      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) onClose()
-    }
-    document.addEventListener('pointerdown', away)
-    return () => document.removeEventListener('pointerdown', away)
-  }, [exchange, onClose])
-  const blockOn = (date: string, n = name): PlanBlock => newUserBlock(categoryId, startMin, length, namesOf(date).settings.categories[categoryId], { name: n || null })
+  const blockOn = (date: string, n = held.current.name): PlanBlock => {
+    const v = held.current
+    return newUserBlock(v.categoryId, v.start, v.length, namesOf(date).settings.categories[v.categoryId], { name: n || null })
+  }
   /**
    * Saves the entries, all the days in one go; the days where nothing was written stay in the window (their toast said which),
    * the ones that wait for an answer to a question (a conflict) or whose outcome is not known do not – added again they
@@ -101,18 +120,22 @@ export function NewBlockPopover({
    */
   const save = async (entries: readonly Entry[]) => {
     const { saved, failed, push } = await addWeekBlocks(entries, today)
-    if (saved.length) rememberNewBlockCategory(categoryId)
+    if (saved.length) rememberNewBlockCategory(held.current.categoryId)
     // Blocks pushed apart in the days written (D400): the window's one line with its „Cofnij” for them all.
     if (push) showWeekPush(push)
+    // D461: saved by itself, it says so with „Cofnij” (a push has the line of the week).
+    else newBlocksToast(saved.map((date) => ({ date, id: entries.find((e) => e.date === date)!.block.id })))
+    // A click outside that began another window: this one is gone, what it asked is not asked again (the toast said what failed).
+    if (!mounted.current) return
     if (failed.length) {
       onDates(failed)
       backToName()
     } else onClose()
   }
-  /** The window stays open after Enter or „Dodaj” (days not written, the exchange left): the cursor back in „Nazwa” (T1028). */
+  /** The window stays open after Enter (days not written, the exchange left): the cursor back in „Nazwa” (T1028). */
   const backToName = () => ref.current?.querySelector<HTMLInputElement>('[data-testid="week-new-name"]')?.focus({ preventScroll: true })
-  /** „Dodaj”, or Enter in „Nazwa” with the name just typed (`n` – this render's state does not have it yet). */
-  const add = (n = name) =>
+  /** Enter in a field (the name just typed – `n`: this render's state does not have it yet), or a click outside the window (D461). */
+  const add = (n = held.current.name) =>
     run(async () => {
       const entries = dates.map((date) => ({ date, block: blockOn(date, n) }))
       const mine = entries.find((e) => e.date === today)
@@ -128,6 +151,24 @@ export function NewBlockPopover({
     })
   const warning = pastWarning(dates, today)
   const locked = busy || (todayIn && !model)
+  // D461: a click outside the window saves the block with what the fields hold (a field being typed in is committed first) – not
+  // while the exchange dialog stands over it, a save runs, or today is not counted yet.
+  const leave = useRef(() => undefined as void)
+  leave.current = () => {
+    if (locked || exchange) return
+    // A bare click on the grid, nothing changed: no block (D461).
+    if (!dragged && !touched.current) onClose()
+    else void add()
+  }
+  useEffect(() => {
+    const away = (e: PointerEvent) => {
+      if (!ref.current || !(e.target instanceof Element) || ref.current.contains(e.target) || e.target.closest('[role="dialog"], [role="status"]')) return
+      commitActiveField()
+      leave.current()
+    }
+    document.addEventListener('pointerdown', away, true)
+    return () => document.removeEventListener('pointerdown', away, true)
+  }, [])
   return (
     <div
       ref={ref}
@@ -136,14 +177,13 @@ export function NewBlockPopover({
       data-testid="week-new"
       data-date={dates[0]}
       data-dates={dates.join(',')}
-      data-start={startMin}
+      data-start={start}
     >
       {todayIn && <TodayModel date={today} onModel={setModel} />}
       <h3 className="text-[13px] font-medium">
         Nowy blok · {daysLabel(dates)}{' '}
         <span className="num" data-testid="week-new-hours">
-          {logicalClock(startMin)}
-          {dates.length > 1 ? `–${logicalClock(startMin + length)}` : ''}
+          {logicalClock(start)}–{logicalClock(endOf(start, length))}
         </span>
       </h3>
       <Field label="Nazwa" labelWidth={70}>
@@ -151,8 +191,8 @@ export function NewBlockPopover({
           value={name}
           max={BLOCK_NAME_MAX}
           placeholder={blockName(namedOf({ categoryId, variantId: null }), names)}
-          onCommit={setName}
-          // „Dodaj” off (today's day still counted, a save running): nothing – the cursor stays, Enter may come again.
+          onCommit={(name) => change({ name })}
+          // Not yet (today's day still counted, a save running): nothing – the cursor stays, Enter may come again.
           onEnter={(v) => {
             if (locked) return false
             void add(v)
@@ -164,10 +204,16 @@ export function NewBlockPopover({
         />
       </Field>
       <Field label="Kategoria" labelWidth={70}>
-        <Choice value={categoryId} options={categoryOptions(names, categoryId)} onChange={setCategoryId} aria-label="Kategoria" data-testid="week-new-category" />
+        <Choice value={categoryId} options={categoryOptions(names, categoryId)} onChange={(categoryId) => change({ categoryId })} aria-label="Kategoria" data-testid="week-new-category" />
+      </Field>
+      <Field label="Początek" labelWidth={70}>
+        <TimeField value={start} onCommit={(start) => change({ start })} aria-label="Godzina początku" errorPlacement="below" data-testid="week-new-start" />
+      </Field>
+      <Field label="Koniec" labelWidth={70}>
+        <EndField startMin={start} durationMin={length} onCommit={(length) => change({ length })} aria-label="Godzina końca" errorPlacement="below" data-testid="week-new-end" />
       </Field>
       <Field label="Długość" labelWidth={70}>
-        <DurationField value={length} onCommit={setLength} aria-label="Długość" errorPlacement="below" data-testid="week-new-duration" />
+        <DurationField value={length} onCommit={(length) => change({ length })} aria-label="Długość" errorPlacement="below" data-testid="week-new-duration" />
       </Field>
       {warning && (
         <p className="rounded border border-rose/40 bg-rose-soft px-2 py-1.5 text-[12px]" role="status" data-testid="week-new-past">
@@ -175,9 +221,6 @@ export function NewBlockPopover({
         </p>
       )}
       <div className="flex gap-2 pt-1">
-        <button type="button" className="btn btn-accent" disabled={locked} onClick={() => void add()} data-testid="week-new-add">
-          Dodaj
-        </button>
         <button type="button" className="btn" onClick={onClose} data-testid="week-new-cancel">
           Anuluj
         </button>
@@ -201,7 +244,7 @@ export function NewBlockPopover({
               backToName()
               return
             }
-            rememberNewBlockCategory(categoryId)
+            rememberNewBlockCategory(held.current.categoryId)
             void run(async () => {
               if (rest.length) await save(rest)
               else onClose()

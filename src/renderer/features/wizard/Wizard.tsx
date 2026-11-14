@@ -14,7 +14,7 @@ import { MODULES, MODULE_NAMES, rdFrom } from '@shared/model/rd'
 import { DAY_TYPES, DAY_TYPE_NAMES, NY_ZONE, RANGES, sessionWithEnd, sessionWithStart, type DayTypeId, type SessionChoice } from '@shared/model/settings'
 import { placeLogical } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
-import { Choice, ClockField, DateField, DurationField, TextField, TimeField } from '../../components/fields'
+import { Choice, ClockField, DateField, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { blockFill } from '@shared/theme'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { BRIGHTNESS_STEPS } from '@shared/machine'
@@ -421,6 +421,8 @@ function StepLectures({ today }: { today: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <Choice value={String(l.weekday)} options={WEEKDAY_NAMES.map((n, j) => ({ value: String(j + 1), label: n }))} onChange={(v) => set(i, { weekday: Number(v) })} className="w-[140px]" aria-label="Dzień tygodnia" />
             <TimeField value={l.startMin} onCommit={(startMin) => set(i, { startMin })} shellClassName="w-[80px]" aria-label="Godzina" />
+            <span className="text-muted">koniec</span>
+            <EndField startMin={l.startMin} durationMin={l.durationMin} onCommit={(durationMin) => set(i, { durationMin })} shellClassName="w-[80px]" aria-label="Godzina końca" data-testid="wizard-lecture-end" />
             <DurationField value={l.durationMin} onCommit={(durationMin) => set(i, { durationMin })} shellClassName="w-[100px]" aria-label="Długość" />
             <span className="text-muted">od</span>
             <DateField today={today} value={l.from} onCommit={(from) => set(i, { from })} shellClassName="w-[110px]" aria-label="Od" />

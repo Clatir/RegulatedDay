@@ -70,6 +70,19 @@ export interface TimelineItem {
   attach?: number
 }
 
+/**
+ * The new block not saved yet (D466), drawn on the axis where it will stand: dashed all round, with its hours – it grows with
+ * the panel's start, end and length, and gives way to the real tile when it is saved or goes when it is thrown away.
+ */
+export interface DraftTile {
+  startMin: number
+  endMin: number
+  title: string
+  color: string
+  /** The category beside the hours when the block has its own name (D430). */
+  kind?: string
+}
+
 /** What bounds a block's bottom edge besides the 5 min and the day's length (D365: a running block – not before now, not past the day). */
 export interface EdgeLimits {
   minEndMin?: number
@@ -222,6 +235,7 @@ export function Timeline({
   attached,
   onAttachDrop,
   ghost,
+  draft,
   from,
   to,
   extent,
@@ -278,6 +292,8 @@ export function Timeline({
   onAttachDrop?: (id: string, dt: DataTransfer) => void
   /** The span a sprawa dragged from outside the axis would take (D384) – drawn as a band while it is held; null – none. */
   ghost?: BlockSpan | null
+  /** The new block not saved yet (D466): a dashed tile with its hours; null – none. The axis widens to hold it. */
+  draft?: DraftTile | null
   /** The range shown (logical minutes); the blocks and lines widen it. */
   from: number
   to: number
@@ -324,7 +340,7 @@ export function Timeline({
   }, [holding])
   // The range of the axis (and so the place a click or a drag creates a block in) is that of ALL the day's blocks, the hidden ones too
   // (D427): hiding a calendar never moves the hours.
-  const span = extent ?? items
+  const span = [...(extent ?? items), ...(draft ? [draft] : [])]
   const lo = Math.floor(Math.min(from, ...span.map((i) => i.startMin), ...markers.map((m) => m.at)) / 60) * 60
   const hi = Math.ceil(Math.max(to, ...span.map((i) => i.endMin), ...markers.map((m) => m.at)) / 60) * 60
   // D366: a click on a gap (or in the column of hours) creates a block on the quarter, a drag one with its start and end.
@@ -549,7 +565,29 @@ export function Timeline({
         {hours.map((h) => (
           <div key={h} className="pointer-events-none absolute right-0 left-0 border-t border-line/60" style={{ top: y(h) }} />
         ))}
-        <div className="absolute inset-y-0 right-[96px] left-1.5">{lanes.main.map((i) => box(i, false))}</div>
+        <div className="absolute inset-y-0 right-[96px] left-1.5">
+          {lanes.main.map((i) => box(i, false))}
+          {draft && (
+            <div
+              className="absolute right-0 left-0 z-10 cursor-default overflow-hidden rounded-[3px] border border-dashed px-1.5 text-left leading-tight"
+              style={{ top: y(draft.startMin), height: Math.max(MIN_H, (draft.endMin - draft.startMin) * PPM - 1), background: blockFill(draft.color, brightness), borderColor: draft.color }}
+              onClick={(e) => e.stopPropagation()}
+              {...NO_GRID}
+              data-draft-tile="true"
+              data-testid="draft-tile"
+              data-start={draft.startMin}
+              data-end={draft.endMin}
+            >
+              <div className="flex min-w-0 items-baseline gap-1.5 pt-0.5 text-[12px]">
+                <span className="truncate text-fg">{draft.title}</span>
+              </div>
+              <div className="num truncate text-[11px] text-muted" data-testid="draft-tile-hours">
+                {logicalClock(draft.startMin)}–{logicalClock(draft.endMin)}
+                {draft.kind ? ` · ${draft.kind}` : ''}
+              </div>
+            </div>
+          )}
+        </div>
         <div className="absolute inset-y-0 right-1.5 w-[86px]">{lanes.side.map((i) => box(i, true))}</div>
         {attached && (
           <div className="absolute right-3 z-30" style={{ top: y(attached.endMin) }} onClick={(e) => e.stopPropagation()} {...NO_GRID}>

@@ -461,6 +461,8 @@ export interface CasePlanInput {
   /** The day of the axis and the logical minute it was dropped at. */
   date: string
   startMin: number
+  /** The block's length when it is not the sprawa's estimate (D464: the end typed in „Postaw na osi” – the estimate of the sprawa stays). */
+  durationMin?: number
   /** The files of the days the change reads: the day of the axis and the day the sprawa is planned in now (null – none). */
   files: Readonly<Record<string, Raw | null>>
   /** The categories in force on that day. */
@@ -516,8 +518,8 @@ function withoutOld(raw: Raw, date: string, id: string, r: RequestRecord): Raw {
  * „Inne”) as long as its estimate, named by the task; a request – a block of requests. The window counts what the block
  * pushes apart (D367) with it before the sprawa is written.
  */
-export function caseBlock(r: RequestRecord, startMin: number, rules: Readonly<Record<string, CategoryRules>>): PlanBlock {
-  const est = estimateOf(r)
+export function caseBlock(r: RequestRecord, startMin: number, rules: Readonly<Record<string, CategoryRules>>, durationMin?: number): PlanBlock {
+  const est = durationMin ?? estimateOf(r)
   if (r.kind !== 'task') return requestsBlock([r.id], est, startMin, rules[REQUEST_CATEGORY])
   const cat = r.categoryId && rules[r.categoryId] ? r.categoryId : DEFAULT_TASK_CATEGORY
   // D440: the block gets the task's steps – the same ids, ticked as the task has them (`withTaskBlock` writes the ticks).
@@ -560,7 +562,7 @@ export function casePlan(i: CasePlanInput): CasePlan | CasePlanRefusal | null {
     if (next !== raw && begun === undefined) return { refused: 'begunUnknown' }
     if (next !== raw && oldBlockTakeable(was.day, today, begun)) days[was.day] = next
   }
-  const block = caseBlock(r, i.startMin, i.rules)
+  const block = caseBlock(r, i.startMin, i.rules, i.durationMin)
   days[i.date] = withTaskBlock(fileOf(i.date), block)
   return { block, record: scheduledRaw(i.record, i.date, block.id, i.at), days }
 }
