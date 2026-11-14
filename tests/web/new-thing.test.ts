@@ -11,11 +11,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { planBlock, type PlanBlock } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { routineFrom, ROUTINE_SCHEMA } from '@shared/model/routines'
-import { DEFAULT_SETTINGS } from '@shared/model/settings'
+import { DEFAULT_SETTINGS, type RulesSettings } from '@shared/model/settings'
 import { BlockEditor } from '@renderer/features/plan/BlockEditor'
+import { HAND_ON_MS } from '@renderer/features/plan/NewThingDialogs'
 import { saveSettingsFrom } from '@renderer/features/settings/settingsStore'
 import { installEscape } from '@renderer/lib/escape'
-import { saveRecord, useData } from '@renderer/store/data'
+import { saveRd, saveRecord, useData } from '@renderer/store/data'
 import { closeToast, useUi } from '@renderer/store/ui'
 
 vi.mock('@renderer/store/data', async (orig) => ({ ...(await orig<typeof import('@renderer/store/data')>()), saveRecord: vi.fn(async () => [{ status: 'applied' }]), saveRd: vi.fn(async () => []) }))
@@ -42,9 +43,11 @@ afterEach(() => {
   for (const t of useUi.getState().toasts) closeToast(t.id)
   vi.mocked(saveRecord).mockClear()
   vi.mocked(saveSettingsFrom).mockClear()
+  vi.mocked(saveRd).mockClear()
 })
 
-async function mount(block: PlanBlock, o: { readOnly?: boolean } = {}) {
+type Extra = { readOnly?: boolean; day?: string; place?: { scope: 'day'; date: string; templateId: null } }
+async function mount(block: PlanBlock, o: Extra = {}) {
   const onChange = vi.fn((_p: Partial<PlanBlock>) => undefined)
   host = document.createElement('div')
   document.body.append(host)
@@ -52,6 +55,13 @@ async function mount(block: PlanBlock, o: { readOnly?: boolean } = {}) {
   await act(async () => root!.render(createElement(BlockEditor, { block, plan: [], names, computers: [], onChange, onClose: () => undefined, ...o })))
   return onChange
 }
+/** The panel rendered again – with the data the screen has now (`settings`) and the screen's code of this render (`onChange`). */
+async function again(block: PlanBlock, settings: RulesSettings) {
+  const onChange = vi.fn((_p: Partial<PlanBlock>) => undefined)
+  await act(async () => root!.render(createElement(BlockEditor, { block, plan: [], names: { ...names, settings }, computers: [], onChange, onClose: () => undefined })))
+  return onChange
+}
+const withCategory = (id: string, rules: Record<string, unknown>): RulesSettings => ({ ...DEFAULT_SETTINGS, categories: { ...DEFAULT_SETTINGS.categories, [id]: { ...DEFAULT_SETTINGS.categories.inne!, ...rules } } }) as RulesSettings
 const q = <T extends HTMLElement = HTMLElement>(id: string) => document.querySelector<T>(`[data-testid="${id}"]`)
 const choose = (id: string, value: string) =>
   act(() => {
@@ -158,7 +168,12 @@ describe('„+ Nowa…” → wariant i kategoria', () => {
     expect(added.costs).toEqual(DEFAULT_SETTINGS.categories.regeneracja!.costs)
     expect(from.from).toBe('2026-11-18')
     expect(from.at).not.toBeNull()
-    expect(onChange).toHaveBeenCalledWith({ variantId: added.id })
+    // Handed on once the panel's data have it – to the screen's code of that render.
+    expect(onChange).not.toHaveBeenCalled()
+    const regenNow = DEFAULT_SETTINGS.categories.regeneracja!
+    const now = await again(regen, { ...DEFAULT_SETTINGS, categories: { ...DEFAULT_SETTINGS.categories, regeneracja: { ...regenNow, variants: [...regenNow.variants, added as never] } } })
+    expect(now).toHaveBeenCalledWith({ variantId: added.id })
+    expect(onChange).not.toHaveBeenCalled()
     expect(q('new-variant')).toBeNull()
   })
 
@@ -176,8 +191,57 @@ describe('„+ Nowa…” → wariant i kategoria', () => {
     const [patch] = vi.mocked(saveSettingsFrom).mock.calls[0]!
     const [id, rules] = Object.entries((patch as { categories: Record<string, Record<string, unknown>> }).categories)[0]!
     expect(rules).toMatchObject({ cls: 'life', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1 }, background: false })
-    expect(onChange).toHaveBeenCalledWith({ categoryId: id, variantId: null })
+    // The name and colour after the rules (as „Kategorie”).
+    expect(saveRd).toHaveBeenCalledTimes(1)
+    // Przegląd 2: not the code of the render of the click (its data have no rules of the new category – no exchange in „Dziś”),
+    // but the screen's once its data have the category; the window waits till then.
+    expect(onChange).not.toHaveBeenCalled()
+    expect(q('new-category')).not.toBeNull()
+    await again(regen, DEFAULT_SETTINGS)
+    expect(onChange).not.toHaveBeenCalled()
+    const now = await again(regen, withCategory(id, rules))
+    expect(onChange).not.toHaveBeenCalled()
+    expect(now).toHaveBeenCalledTimes(1)
+    expect(now).toHaveBeenCalledWith({ categoryId: id, variantId: null })
     expect(q('new-category')).toBeNull()
+  })
+
+  it('dane, które nie pokazują nowej kategorii, nie trzymają okna bez końca: po chwili blok i tak ją dostaje', async () => {
+    const onChange = await mount(regen)
+    choose('block-category', '__new__')
+    type('new-category-name', 'Ogród')
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      await save()
+      expect(onChange).not.toHaveBeenCalled()
+      await act(async () => void vi.advanceTimersByTime(HAND_ON_MS))
+      expect(onChange).toHaveBeenCalledTimes(1)
+      expect(q('new-category')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('dzień miniony: bez „+ Nowa…” w Wariancie i Kategorii (zapisują się od dziś); Rutyna – tak; dziś i dzień przyszły – tak', async () => {
+    await mount(regen, { day: '2026-11-17' })
+    expect(labels('block-category')).not.toContain('+ Nowa…')
+    expect(labels('block-variant')).not.toContain('+ Nowa…')
+    act(() => root!.unmount())
+    host!.remove()
+    await mount(routineBlock, { day: '2026-11-17' })
+    expect(labels('block-routine').at(-1)).toBe('+ Nowa…')
+    act(() => root!.unmount())
+    host!.remove()
+    // The day of the attachments' place when the screen does not say it.
+    await mount(regen, { place: { scope: 'day', date: '2026-11-10', templateId: null } })
+    expect(labels('block-category')).not.toContain('+ Nowa…')
+    for (const day of ['2026-11-18', '2026-11-20']) {
+      act(() => root!.unmount())
+      host!.remove()
+      await mount(regen, { day })
+      expect(labels('block-category').at(-1)).toBe('+ Nowa…')
+      expect(labels('block-variant').at(-1)).toBe('+ Nowa…')
+    }
   })
 
   it('anulowanie okna kategorii nie zmienia bloku', async () => {

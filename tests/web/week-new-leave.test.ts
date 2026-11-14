@@ -71,10 +71,10 @@ const mount = async () => {
     recount: async () => act(async () => root!.render(createElement(NewBlockPopover, props(onClose))))
   }
 }
-/** A press and its click on the grid, outside the window. */
+/** A press and its click on the grid, outside the window (a click of the pointer: `detail` 1 – a keyboard's click, 0, is never held). */
 const clickOutside = async () => {
   await act(async () => void grid!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true })))
-  await act(async () => void grid!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })))
+  await act(async () => void grid!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })))
 }
 const shown = (id: string) => document.querySelector(`[data-testid="${id}"]`) != null
 

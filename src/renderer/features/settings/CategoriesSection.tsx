@@ -7,50 +7,17 @@
 import { useEffect, useState } from 'react'
 import { newId } from '@shared/model/ids'
 import { calendarOfCategory, setCategoryCalendarRaw } from '@shared/model/calendars'
-import type { CategoryRules } from '@shared/model/categories'
-import { CATEGORY_COLORS } from '@shared/model/rd'
-import { RANGES } from '@shared/model/settings'
 import { blockFill } from '@shared/theme'
 import { Choice, TextField } from '../../components/fields'
 import { Section, Toggle, cx } from '../../components/ui'
-import { saveRd, useData } from '../../store/data'
+import { useData } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { useBusy } from '../../lib/busy'
 import { takeFoundPick, useUi } from '../../store/ui'
 import { CLASS_NAMES, blockColor } from '../plan/blockView'
 import { saveCalendars } from './calendarEdits'
-import { SettingNumber } from './SettingNumber'
+import { ColorSwatches, CostNumbers, createCategory, FLAGS, NEW_CATEGORY_COSTS, PLACE_OPTIONS, setMeta } from './categoryFields'
 import { useShared } from './SharedSettings'
-
-export const FLAGS: Array<[keyof CategoryRules, string]> = [
-  ['background', 'może biec w tle'],
-  ['startsInBackground', 'zaczyna się w tle'],
-  ['protected', 'chroniony (warianty go nie skracają)'],
-  ['noMoveTomorrow', 'nie przenosić na jutro'],
-  ['noSleep', 'nie usypiaj komputera'],
-  ['contact', 'kontakt z ludźmi'],
-  ['classMode', 'tryb zajęć'],
-  ['keepsRegen', 'nie przerywa regeneracji'],
-  ['afterWorkAsProject', 'po końcu pracy jak projekt']
-]
-export const POOLS = [
-  ['head', 'głowa'],
-  ['emotions', 'emocje'],
-  ['senses', 'bodźce']
-] as const
-
-/** D463: the window of a new category (the panel of a block) sets the same fields. */
-export const PLACE_OPTIONS = [
-  { value: 'computer', label: 'przy komputerze' },
-  { value: 'passive', label: 'pasywnie przy komputerze' },
-  { value: 'away', label: 'poza komputerem' }
-] as const
-
-export const setMeta = (id: string, patch: Record<string, unknown>) =>
-  saveRd((raw) => {
-    const cats = raw.categories && typeof raw.categories === 'object' ? (raw.categories as Record<string, Record<string, unknown>>) : {}
-    return { ...raw, categories: { ...cats, [id]: { ...(cats[id] ?? {}), ...patch } } }
-  })
 
 export function CategoriesSection() {
   const { s, save } = useShared()
@@ -85,11 +52,10 @@ export function CategoriesSection() {
       const id = newId(10)
       // Its rules first: a change refused („od dziś” with today unreadable) leaves no category without rules, and the
       // name typed comes back to the field.
-      if (!(await save({ categories: { [id]: { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1 } } } }))) {
+      if (!(await createCategory(save, id, { cls: 'work', kind: 'other', place: 'computer', costs: NEW_CATEGORY_COSTS }, { name: n, color: null }))) {
         setName(n)
         return
       }
-      await setMeta(id, { name: n.slice(0, 60), color: null, archived: false })
       setOpen(id)
     })
   return (
@@ -104,9 +70,7 @@ export function CategoriesSection() {
               <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: blockFill(color, brightness), border: `1px solid ${color}` }} />
               <TextField value={meta?.name ?? ''} onCommit={(n) => void setMeta(id, { name: n })} required max={60} shellClassName="w-[200px]" aria-label="Nazwa kategorii" />
               <Choice value={c.cls} options={(['work', 'life', 'free'] as const).map((v) => ({ value: v, label: CLASS_NAMES[v] }))} onChange={(cls) => save({ categories: { [id]: { cls } } })} className="w-[130px]" aria-label="Klasa" />
-              {POOLS.map(([p, label]) => (
-                <SettingNumber key={p} field={{ kind: 'integer', range: RANGES.cost, label: `${meta?.name}: ${label}` }} value={c.costs[p]} onCommit={(v) => save({ categories: { [id]: { costs: { [p]: v } } } })} className="w-[52px]" />
-              ))}
+              <CostNumbers costs={c.costs} label={(pool) => `${meta?.name}: ${pool}`} onCommit={(p, v) => void save({ categories: { [id]: { costs: { [p]: v } } } })} />
               <span className="flex-1" />
               <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => setOpen(open === id ? null : id)} data-testid="category-more">
                 {open === id ? 'mniej' : 'więcej'}
@@ -124,16 +88,7 @@ export function CategoriesSection() {
                     aria-label="Miejsce"
                   />
                   <span className="ml-3 text-[12px] text-muted">Kolor</span>
-                  {[null, ...CATEGORY_COLORS].map((col) => (
-                    <button
-                      key={col ?? 'class'}
-                      type="button"
-                      className={cx('h-5 w-5 rounded-sm border', (meta?.color ?? null) === col ? 'ring-1 ring-lamp' : '')}
-                      style={{ background: col ? blockFill(col, brightness) : 'transparent', borderColor: col ?? 'var(--color-line-strong)' }}
-                      onClick={() => void setMeta(id, { color: col })}
-                      aria-label={col ? `kolor ${col}` : 'kolor klasy'}
-                    />
-                  ))}
+                  <ColorSwatches value={meta?.color ?? null} onPick={(color) => void setMeta(id, { color })} />
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[12px] text-muted">Kalendarz</span>

@@ -5,27 +5,24 @@
  * calendar and the properties the rules read (as „Kategorie”). „Zapisz” makes it through the same path as those screens and hands it
  * to the panel, which chooses it in the block; „Anuluj” and Esc leave everything as it was. A variant and a category are new
  * for every day – they are saved from today on („od dziś”), whatever the screen of the settings has chosen (nothing earlier
- * can use them).
+ * can use them; the panel of a day gone by does not offer them). They are handed to the panel once its data have them (`has`):
+ * what the panel's change reaches (the exchange of a new work block in „Dziś”) counts with the new rules.
  */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { paths } from '@shared/data/paths'
 import { newId } from '@shared/model/ids'
 import { calendarOfCategory, DEFAULT_CALENDAR_ID, setCategoryCalendarRaw } from '@shared/model/calendars'
 import type { Costs, Variant } from '@shared/model/categories'
-import { CATEGORY_COLORS } from '@shared/model/rd'
 import { ROUTINE_SCHEMA, routineFrom, type Routine, type RoutineStep, type RoutineVersion } from '@shared/model/routines'
-import { RANGES, settingsOn } from '@shared/model/settings'
-import { blockFill } from '@shared/theme'
+import { settingsOn } from '@shared/model/settings'
 import { Choice, TextField } from '../../components/fields'
 import { Dialog } from '../../components/Dialog'
-import { Field, Toggle, cx } from '../../components/ui'
+import { Field, Toggle } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { commitActiveField } from '../../lib/commit'
 import { isSaved, saveRecord, useData } from '../../store/data'
-import { useMachine } from '../../store/machine'
 import { saveCalendars } from '../settings/calendarEdits'
-import { FLAGS, PLACE_OPTIONS, POOLS, setMeta } from '../settings/CategoriesSection'
-import { SettingNumber } from '../settings/SettingNumber'
+import { ColorSwatches, CostNumbers, createCategory, FLAGS, NEW_CATEGORY_COSTS, PLACE_OPTIONS } from '../settings/categoryFields'
 import { saveSettingsFrom } from '../settings/settingsStore'
 import { RoutineSteps } from '../routines/RoutineSteps'
 import { CLASS_NAMES } from './blockView'
@@ -39,6 +36,39 @@ function useForm<T>(initial: T): readonly [T, (patch: Partial<T> | ((now: T) => 
     setShown(ref.current)
   }
   return [shown, set, ref] as const
+}
+
+/** How long a window waits for the panel's data to show the thing it made (the view read again) before handing it on anyway. */
+export const HAND_ON_MS = 2000
+
+/**
+ * The thing made is handed on by the newest `onCreated` – never the one of the render the click on „Zapisz” came from – once the
+ * panel's data have it (`has`, read in a render after the save): the screen's code it reaches counts with the new thing, not
+ * with the data from before it (a new category without rules there – no exchange for a new work block). Data that do not show
+ * it within `HAND_ON_MS` – handed on anyway; the window gone meanwhile – never.
+ */
+function useHandOn(onCreated: (id: string) => void, has: (id: string) => boolean): (id: string) => Promise<void> {
+  const latest = useRef({ onCreated, has })
+  latest.current = { onCreated, has }
+  const waiting = useRef<{ id: string; finish: (hand: boolean) => void } | null>(null)
+  // After every render: the data of this render may be the first to have it.
+  useEffect(() => {
+    const w = waiting.current
+    if (w && latest.current.has(w.id)) w.finish(true)
+  })
+  useEffect(() => () => waiting.current?.finish(false), [])
+  return (id) =>
+    new Promise<void>((resolve) => {
+      const finish = (hand: boolean) => {
+        clearTimeout(timer)
+        waiting.current = null
+        if (hand) latest.current.onCreated(id)
+        resolve()
+      }
+      const timer = setTimeout(() => finish(true), HAND_ON_MS)
+      waiting.current = { id, finish }
+      if (latest.current.has(id)) finish(true)
+    })
 }
 
 function SaveButtons({ busy, ok, onSave, onClose }: { busy: boolean; ok: boolean; onSave: () => void; onClose: () => void }) {
@@ -86,11 +116,15 @@ export function NewRoutineDialog({ onCreated, onClose }: { onCreated: (r: Routin
   )
 }
 
-/** A new variant of a category: its name and the cost of each pool an hour (as „Sposoby regeneracji”, a variant has no other fields). */
-export function NewVariantDialog({ categoryId, costs, onCreated, onClose }: { categoryId: string; costs: Costs; onCreated: (variantId: string) => void; onClose: () => void }) {
+/**
+ * A new variant of a category: its name and the cost of each pool an hour (as „Sposoby regeneracji”, a variant has no other
+ * fields). `has` – whether the panel's data have the variant made (it is handed on then).
+ */
+export function NewVariantDialog({ categoryId, costs, onCreated, has, onClose }: { categoryId: string; costs: Costs; onCreated: (variantId: string) => void; has: (variantId: string) => boolean; onClose: () => void }) {
   const today = useData((s) => s.view?.today ?? '')
   const [form, set, ref] = useForm<{ name: string; costs: Costs }>({ name: '', costs })
   const [busy, run] = useBusy()
+  const handOn = useHandOn(onCreated, has)
   const save = () =>
     run(async () => {
       commitActiveField()
@@ -102,7 +136,7 @@ export function NewVariantDialog({ categoryId, costs, onCreated, onClose }: { ca
       const now = settingsOn(useData.getState().rd.settings, today, at).categories[categoryId]?.variants ?? []
       const variant: Variant = { id: newId(10), name, costs: d.costs }
       if (!(await saveSettingsFrom({ categories: { [categoryId]: { variants: [...now, variant] } } }, { from: today, at }))) return
-      onCreated(variant.id)
+      await handOn(variant.id)
     })
   return (
     <Dialog title="Nowy wariant" onClose={onClose} centered data-testid="new-variant" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
@@ -118,12 +152,7 @@ function CostFields({ costs, onChange }: { costs: Costs; onChange: (c: Partial<C
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-3">
-        {POOLS.map(([p, label]) => (
-          <label key={p} className="flex items-center gap-1.5 text-[12.5px] text-muted">
-            {label}
-            <SettingNumber field={{ kind: 'integer', range: RANGES.cost, label: `Koszt: ${label}` }} value={costs[p]} onCommit={(v) => onChange({ [p]: v })} className="w-[52px]" data-testid={`new-cost-${p}`} />
-          </label>
-        ))}
+        <CostNumbers costs={costs} named label={(pool) => `Koszt: ${pool}`} onCommit={(p, v) => onChange({ [p]: v })} testId={(p) => `new-cost-${p}`} />
       </div>
       <span className="text-[11.5px] text-muted">Koszty: głowa, emocje, bodźce na godzinę (ujemne oddają energię).</span>
     </div>
@@ -140,13 +169,16 @@ type CategoryForm = {
   flags: Record<string, boolean>
 }
 
-/** A new category: the fields of its row in „Kategorie” (name, class, costs, place, colour, calendar, the properties). */
-export function NewCategoryDialog({ onCreated, onClose }: { onCreated: (categoryId: string) => void; onClose: () => void }) {
+/**
+ * A new category: the fields of its row in „Kategorie” (name, class, costs, place, colour, calendar, the properties). `has` –
+ * whether the panel's data have the category made (it is handed on then).
+ */
+export function NewCategoryDialog({ onCreated, has, onClose }: { onCreated: (categoryId: string) => void; has: (categoryId: string) => boolean; onClose: () => void }) {
   const today = useData((s) => s.view?.today ?? '')
   const rd = useData((s) => s.rd)
-  const brightness = useMachine((s) => s.prefs.brightness)
-  const [form, set, ref] = useForm<CategoryForm>({ name: '', cls: 'work', place: 'computer', color: null, calendar: DEFAULT_CALENDAR_ID, costs: { head: 1, emotions: 1, senses: 1 }, flags: {} })
+  const [form, set, ref] = useForm<CategoryForm>({ name: '', cls: 'work', place: 'computer', color: null, calendar: DEFAULT_CALENDAR_ID, costs: NEW_CATEGORY_COSTS, flags: {} })
   const [busy, run] = useBusy()
+  const handOn = useHandOn(onCreated, has)
   const save = () =>
     run(async () => {
       commitActiveField()
@@ -155,11 +187,10 @@ export function NewCategoryDialog({ onCreated, onClose }: { onCreated: (category
       if (!name || !today) return
       const id = newId(10)
       const rules = { cls: d.cls, kind: 'other', place: d.place, costs: d.costs, ...Object.fromEntries(FLAGS.map(([k]) => [k, d.flags[k] === true])) }
-      // Its rules first (as „Kategorie”): a change refused leaves no category without rules.
-      if (!(await saveSettingsFrom({ categories: { [id]: rules } }, { from: today, at: Date.now() }))) return
-      await setMeta(id, { name: name.slice(0, 60), color: d.color, archived: false })
+      // As „Kategorie” makes one (its rules first), from today on.
+      if (!(await createCategory((patch) => saveSettingsFrom(patch, { from: today, at: Date.now() }), id, rules, { name, color: d.color }))) return
       if (d.calendar !== DEFAULT_CALENDAR_ID && calendarOfCategory(useData.getState().rd, id) !== d.calendar) await saveCalendars((raw) => setCategoryCalendarRaw(raw, id, d.calendar))
-      onCreated(id)
+      await handOn(id)
     })
   return (
     <Dialog title="Nowa kategoria" onClose={onClose} wide centered data-testid="new-category" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
@@ -177,17 +208,7 @@ export function NewCategoryDialog({ onCreated, onClose }: { onCreated: (category
       </Field>
       <Field label="Kolor" labelWidth={90}>
         <div className="flex flex-wrap items-center gap-2">
-          {[null, ...CATEGORY_COLORS].map((col) => (
-            <button
-              key={col ?? 'class'}
-              type="button"
-              className={cx('h-5 w-5 rounded-sm border', form.color === col ? 'ring-1 ring-lamp' : '')}
-              style={{ background: col ? blockFill(col, brightness) : 'transparent', borderColor: col ?? 'var(--color-line-strong)' }}
-              onClick={() => set({ color: col })}
-              aria-label={col ? `kolor ${col}` : 'kolor klasy'}
-              aria-pressed={form.color === col}
-            />
-          ))}
+          <ColorSwatches value={form.color} onPick={(color) => set({ color })} />
         </div>
       </Field>
       {rd.calendars.length > 1 && (

@@ -8,7 +8,7 @@
  * HKU3 (D450): the switch „Listy · Macierz” on top (remembered by the window – `casesView.ts`), the quarter of a sprawa chosen in its row
  * (its stripe on the left), the matrix of Eisenhower (`CasesMatrix`) in place of the lists.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RequestCounters } from '@shared/api'
 import { dueBadge } from '@shared/engine/caseDates'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
@@ -332,10 +332,19 @@ function RepeatForm({ x, today, onSaved }: { x: CaseItem; today: string; onSaved
   const r = x.record
   const base = useMemo(() => repeatDraft(r.repeat, r.doDate ?? r.dueDate ?? today), [r.repeat, r.doDate, r.dueDate, today])
   // The saved repeat changed (here, on another computer) or another task: the form shows it again. Not the defaults of a new
-  // rule counted from the task's date and today – a date moved meanwhile or 04:00 never wipes the rule being edited.
+  // rule counted from the task's date and today – a date moved meanwhile or 04:00 never wipes the rule being edited; a form
+  // not touched since it showed the saved one follows them (its weekday, day of the month, „który z kolei” from the new date).
   const saved = JSON.stringify([r.id, r.repeat ?? null])
   const [draft, setDraft] = useState<SeriesDraft>(base)
-  useEffect(() => setDraft(base), [saved])
+  const touched = useRef(false)
+  const shown = useRef(saved)
+  useEffect(() => {
+    if (shown.current !== saved) {
+      shown.current = saved
+      touched.current = false
+    }
+    if (!touched.current) setDraft(base)
+  }, [saved, base])
   const [busy, run] = useBusy()
   const input = repeatInputOf(draft)
   const save = () =>
@@ -345,7 +354,15 @@ function RepeatForm({ x, today, onSaved }: { x: CaseItem; today: string; onSaved
     })
   return (
     <div className="flex max-w-[460px] flex-col gap-2 border-t border-line pt-1.5 text-[12px]" data-testid="case-repeat-form">
-      <SeriesFields draft={draft} onChange={(p) => setDraft((d) => ({ ...d, ...p }))} today={today} special={false} />
+      <SeriesFields
+        draft={draft}
+        onChange={(p) => {
+          touched.current = true
+          setDraft((d) => ({ ...d, ...p }))
+        }}
+        today={today}
+        special={false}
+      />
       {repeatChanged(r.repeat, draft) && draftProblem(draft) == null && (
         <button type="button" className="btn btn-accent self-start" disabled={busy} onClick={() => void save()} data-testid="case-repeat-save">
           Zapisz powtarzanie

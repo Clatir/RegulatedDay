@@ -204,6 +204,31 @@ describe('wiersz zadania: pole „Powtarzaj” i reguła słowami (D465)', () =>
     expect(sent).toEqual([])
   })
 
+  it('nietknięty formularz idzie za nową datą zadania (dzień miesiąca reguły wybranej potem); tknięty – zostaje (przegląd 2)', async () => {
+    const t = newTask('t2', Date.now(), TODAY, { title: 'Raz', list: 'week', doDate: addDays(TODAY, 3) })!
+    const { set } = stub([t])
+    await render()
+    const row = () => host!.querySelector<HTMLElement>('[data-case="t2"]')!
+    await act(async () => q('case-repeat-open', row())!.click())
+    // „Wykonać” moved with the form open and untouched: its defaults count from the new date.
+    const later = addDays(TODAY, 5)
+    const moved = patchedRaw(t, { doDate: later }, Date.now())
+    if ('error' in moved) throw new Error(moved.error)
+    await act(async () => set(rel('t2'), moved.raw))
+    await act(async () => {
+      const rule = q('series-rule', row()) as HTMLSelectElement
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(rule, 'monthDay')
+      rule.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect((q('series-month-day', row()) as HTMLInputElement).value).toBe(String(Number(later.slice(8, 10))))
+    // Touched now (the rule picked): a date moved again leaves it as it is.
+    const again = patchedRaw(moved.raw, { doDate: addDays(TODAY, 9) }, Date.now())
+    if ('error' in again) throw new Error(again.error)
+    await act(async () => set(rel('t2'), again.raw))
+    expect((q('series-rule', row()) as HTMLSelectElement).value).toBe('monthDay')
+    expect((q('series-month-day', row()) as HTMLInputElement).value).toBe(String(Number(later.slice(8, 10))))
+  })
+
   it('tekst w wierszu (czysty): reguła przy zadaniu niezrobionym, w „Zrobione” – nie', () => {
     const t = daily()
     const [x] = caseItems([requestFrom(t)!], TODAY, () => null)

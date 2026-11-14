@@ -9,7 +9,9 @@
  * D460: choosing a routine copies its usual steps into „Kroki” in the same change (`routineStepsCopy`) – a block of a task
  * keeps its list (it goes with the task's, T792); „bez rutyny” leaves the steps.
  * D463: the lists „Kategoria”, „Wariant” and „Rutyna” end with „+ Nowa…” – a window in the middle of the screen with all the fields of the thing
- * (`NewThingDialogs`); once saved, the new one is chosen in the block like one picked from the list (a field committed, D461).
+ * (`NewThingDialogs`); once saved, the new one is chosen in the block like one picked from the list (a field committed, D461) – a
+ * variant and a category once the panel's data (`names`) have it. A variant and a category are made from today on, so a block
+ * of a day gone by offers no „+ Nowa…” for them (its day would not have the new one); a routine is not dated – always.
  */
 import { useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
@@ -24,7 +26,7 @@ import { forecastEndText } from '@shared/blockEnd'
 import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
-import type { SaveAnswer } from '../../store/data'
+import { useData, type SaveAnswer } from '../../store/data'
 import { toast } from '../../store/ui'
 import { useAttachDrop } from '../attachments/attachDrop'
 import { routineCutText } from '../steps/stepsUi'
@@ -54,7 +56,8 @@ export function BlockEditor({
   newBlock,
   focusName,
   forecastEnd,
-  onEscape
+  onEscape,
+  day
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -90,6 +93,11 @@ export function BlockEditor({
   forecastEnd?: number | null
   /** Esc (the second one, after a field's own): left out – `onClose`. A new block not saved yet throws itself away by it (D461), „Zamknij” saves it. */
   onEscape?: () => void
+  /**
+   * The day of the block (a day's panel, also a new block's not saved yet): a day gone by has no „+ Nowa…” for a variant and a
+   * category. Left out – the day of `place`, else none (a template, a series: used from today on).
+   */
+  day?: string
 }) {
   useEscapeLayer(true, onEscape ?? onClose)
   const owner = place ? ownerToAdd(block, place) : null
@@ -106,6 +114,11 @@ export function BlockEditor({
       ]
   const routine = block.routine ? names.routines.find((r) => r.id === block.routine) : undefined
   const [making, setMaking] = useState<'routine' | 'variant' | 'category' | null>(null)
+  const today = useData((s) => s.view?.today ?? '')
+  const blockDay = day ?? (place?.scope === 'day' ? place.date : null)
+  // A variant and a category are made „od dziś”: a day gone by would not have them (T1067).
+  const newDated = blockDay == null || (today !== '' && blockDay >= today)
+  const newOption = (dated: boolean) => (readOnly || (dated && !newDated) ? [] : [NEW_OPTION])
   // D460: its steps with the routine, as one change of the block (the copy of the routine chosen before is replaced).
   const pickRoutine = (r: Routine | undefined) => {
     const was = block.routine ? names.routines.find((x) => x.id === block.routine) : null
@@ -139,7 +152,7 @@ export function BlockEditor({
       <Field label="Kategoria" labelWidth={92}>
         <Choice
           value={block.categoryId}
-          options={[...categoryOptions(names, block.categoryId), ...(readOnly ? [] : [NEW_OPTION])]}
+          options={[...categoryOptions(names, block.categoryId), ...newOption(true)]}
           onChange={(categoryId) => (categoryId === NEW_THING ? setMaking('category') : set({ categoryId, variantId: null }))}
           aria-label="Kategoria"
           data-testid="block-category"
@@ -149,7 +162,7 @@ export function BlockEditor({
         <Field label="Wariant" labelWidth={92}>
           <Choice
             value={block.variantId ?? '-'}
-            options={[{ value: '-', label: 'bez wariantu' }, ...variants.map((v) => ({ value: v.id, label: v.name })), ...(readOnly ? [] : [NEW_OPTION])]}
+            options={[{ value: '-', label: 'bez wariantu' }, ...variants.map((v) => ({ value: v.id, label: v.name })), ...newOption(true)]}
             onChange={(v) => (v === NEW_THING ? setMaking('variant') : set({ variantId: v === '-' ? null : v }))}
             aria-label="Wariant"
             data-testid="block-variant"
@@ -215,7 +228,7 @@ export function BlockEditor({
         <Field label="Rutyna" labelWidth={92}>
           <Choice
             value={block.routine ?? '-'}
-            options={[{ value: '-', label: 'bez rutyny' }, ...names.routines.filter((r) => !r.archived || r.id === block.routine).map((r) => ({ value: r.id, label: r.name })), ...(readOnly ? [] : [NEW_OPTION])]}
+            options={[{ value: '-', label: 'bez rutyny' }, ...names.routines.filter((r) => !r.archived || r.id === block.routine).map((r) => ({ value: r.id, label: r.name })), ...newOption(false)]}
             onChange={(v) => (v === NEW_THING ? setMaking('routine') : pickRoutine(names.routines.find((x) => x.id === v)))}
             aria-label="Rutyna"
             data-testid="block-routine"
@@ -247,6 +260,7 @@ export function BlockEditor({
         <NewVariantDialog
           categoryId={block.categoryId}
           costs={rules?.costs ?? { head: 1, emotions: 1, senses: 1 }}
+          has={(variantId) => (names.settings.categories[block.categoryId]?.variants ?? []).some((v) => v.id === variantId)}
           onClose={() => setMaking(null)}
           onCreated={(variantId) => {
             setMaking(null)
@@ -256,6 +270,7 @@ export function BlockEditor({
       )}
       {making === 'category' && (
         <NewCategoryDialog
+          has={(categoryId) => names.settings.categories[categoryId] != null}
           onClose={() => setMaking(null)}
           onCreated={(categoryId) => {
             setMaking(null)

@@ -7,6 +7,7 @@
  * - `useDeleteSelected(target)` for a screen whose selection is its own state (the panel is open for the block, the focus
  *   gone to the page) – used when the focus is on no marked element.
  * The newest registration answers; a resolver answering null means „nothing to remove here” (the focus on a row not selected).
+ * The answer is read twice: at the keypress (is there a question to ask) and once confirmed (what is removed – as it is then).
  */
 import { useEffect, useRef } from 'react'
 import { create } from 'zustand'
@@ -82,24 +83,45 @@ export function isEditable(el: EventTarget | null): boolean {
   return el.isContentEditable === true || el.closest('[contenteditable=""], [contenteditable="true"], .ProseMirror') != null
 }
 
-/** What Del removes with the focus on `from`: the marked element it is in, else the screen's selection; null – nothing. */
-export function deleteTargetOf(from: EventTarget | null): DeleteTarget | null {
-  const marked = from instanceof Element ? from.closest('[data-del]') : null
-  if (marked) {
-    const key = marked.getAttribute('data-del') ?? ''
-    const at = key.indexOf(':')
-    const entries = resolvers.get(key.slice(0, at)) ?? []
-    for (const e of [...entries].reverse()) {
-      const t = e.get()?.(key.slice(at + 1))
-      if (t) return t
-    }
-    return null
-  }
-  for (const e of [...selected].reverse()) {
-    const t = e.get()
+/** What the screen answers for the marked element `key` („prefix:id”) – the newest resolver that knows it. */
+function markedTarget(key: string): DeleteTarget | null {
+  const at = key.indexOf(':')
+  const entries = resolvers.get(key.slice(0, at)) ?? []
+  for (const e of [...entries].reverse()) {
+    const t = e.get()?.(key.slice(at + 1))
     if (t) return t
   }
   return null
+}
+
+/** The target and who answers it: the marked element (`mark:` its key) or the screen's selection (`entry:` its registration). */
+function found(from: EventTarget | null): { target: DeleteTarget; source: string } | null {
+  const marked = from instanceof Element ? from.closest('[data-del]') : null
+  if (marked) {
+    const key = marked.getAttribute('data-del') ?? ''
+    const target = markedTarget(key)
+    return target ? { target, source: `mark:${key}` } : null
+  }
+  for (const e of [...selected].reverse()) {
+    const target = e.get()
+    if (target) return { target, source: `entry:${e.id}` }
+  }
+  return null
+}
+
+/** The target of `source` as the screen answers now; null – gone, or another selection answers first (another element). */
+function foundAgain(source: string): DeleteTarget | null {
+  if (source.startsWith('mark:')) return markedTarget(source.slice('mark:'.length))
+  for (const e of [...selected].reverse()) {
+    const target = e.get()
+    if (target) return `entry:${e.id}` === source ? target : null
+  }
+  return null
+}
+
+/** What Del removes with the focus on `from`: the marked element it is in, else the screen's selection; null – nothing. */
+export function deleteTargetOf(from: EventTarget | null): DeleteTarget | null {
+  return found(from)?.target ?? null
 }
 
 interface Ask {
@@ -117,11 +139,23 @@ export function askDelete(title: string, yes = 'Usuń'): Promise<boolean> {
   })
 }
 
-/** Del of the window: asks (unless the removal asks itself) and runs the removal. */
+/**
+ * Del of the window: asks (unless the removal asks itself) and runs the removal. The question may stand long: once confirmed,
+ * the target is read again – its `run` is the element's as it is now (a block started meanwhile ends its timer, D336), not the
+ * one of the keypress. Gone meanwhile (or another selection answers) – nothing; its words changed – asked again with them.
+ */
 export async function deleteSelected(from: EventTarget | null): Promise<boolean> {
-  const t = deleteTargetOf(from)
-  if (!t) return false
-  if (!t.asked && !(await askDelete(t.title, t.yes))) return true
+  const first = found(from)
+  if (!first) return false
+  let t = first.target
+  while (!t.asked) {
+    const { title, yes } = t
+    if (!(await askDelete(title, yes))) return true
+    const now = foundAgain(first.source)
+    if (!now) return true
+    t = now
+    if (now.title === title && (now.yes ?? 'Usuń') === (yes ?? 'Usuń')) break
+  }
   await t.run()
   return true
 }

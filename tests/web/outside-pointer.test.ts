@@ -8,6 +8,8 @@ import { readFileSync } from 'node:fs'
 import { act, createElement, useRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { Dialog } from '@renderer/components/Dialog'
+import { installEscape } from '@renderer/lib/escape'
 import { holdGesture, useOutsidePointer } from '@renderer/lib/outside'
 
 beforeAll(() => {
@@ -24,10 +26,12 @@ afterEach(() => {
 })
 
 const press = (el: Element) => el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }))
-const click = (el: Element) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+const release = (el: Element, type: 'pointerup' | 'pointercancel' = 'pointerup') => el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true }))
+/** A click of the pointer (`detail` 1); `detail` 0 – a click made by the keyboard (Enter, Space on a button). */
+const click = (el: Element, detail = 1) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail }))
 
 /** A part of the screen with a field, a dialog and a toast beside it, and a place elsewhere. */
-function mount(o: { active?: boolean; bySelector?: boolean; onLeave?: (e: PointerEvent) => void } = {}) {
+function mount(o: { active?: boolean; bySelector?: boolean; onLeave?: (e: PointerEvent) => void; dialog?: boolean } = {}) {
   const onLeave = vi.fn(o.onLeave ?? (() => undefined))
   const committed = vi.fn()
   function Part() {
@@ -40,7 +44,8 @@ function mount(o: { active?: boolean; bySelector?: boolean; onLeave?: (e: Pointe
       createElement('div', { 'data-part-tile': '', 'data-testid': 'tile' }),
       createElement('div', { role: 'dialog', 'data-testid': 'dialog' }),
       createElement('div', { role: 'status', 'data-testid': 'toast' }),
-      createElement('div', { 'data-testid': 'elsewhere' })
+      createElement('div', { 'data-testid': 'elsewhere' }),
+      o.dialog ? createElement(Dialog, { title: 'Pytanie', onClose: () => undefined, 'data-testid': 'real-dialog', children: null }) : null
     )
   }
   host = document.createElement('div')
@@ -77,6 +82,16 @@ describe('klik poza częścią ekranu (D461, jeden hook)', () => {
     expect(s.onLeave).toHaveBeenCalledTimes(1)
   })
 
+  it('tło okna dialogowego (jego zewnętrzna warstwa) też nie jest „gdzie indziej” (przegląd 2)', () => {
+    const off = installEscape()
+    const m = mount({ dialog: true })
+    const backdrop = m.el('real-dialog').parentElement!
+    expect(backdrop.getAttribute('role')).toBeNull()
+    act(() => void press(backdrop))
+    off()
+    expect(m.onLeave).not.toHaveBeenCalled()
+  })
+
   it('nieaktywny albo odmontowany – nie słucha', () => {
     const m = mount({ active: false })
     act(() => void press(m.el('elsewhere')))
@@ -100,6 +115,39 @@ describe('klik poza częścią ekranu (D461, jeden hook)', () => {
     act(() => void click(m.el('elsewhere')))
     m.el('elsewhere').removeEventListener('pointerdown', below)
     expect(below).toHaveBeenCalledTimes(1)
+  })
+
+  it('`holdGesture`: naciśnięcie puszczone bez kliku (albo przerwane) – po chwili następny klik dochodzi; klik klawiatury nigdy nie jest zatrzymany (przegląd 2)', () => {
+    vi.useFakeTimers()
+    try {
+      const m = mount({ onLeave: (e) => holdGesture(e) })
+      const below = vi.fn()
+      m.el('elsewhere').addEventListener('click', below)
+      // Held: a click by the keyboard (Enter on a button) goes on – only the pointer's click of the press is held.
+      act(() => void press(m.el('elsewhere')))
+      act(() => void click(m.el('elsewhere'), 0))
+      expect(below).toHaveBeenCalledTimes(1)
+      // Let go with no click (elsewhere): the hold ends a moment after – the next click (any) is heard.
+      act(() => void release(m.el('elsewhere')))
+      act(() => void vi.runAllTimers())
+      act(() => void click(m.el('elsewhere')))
+      expect(below).toHaveBeenCalledTimes(2)
+      // The same with the press cancelled (the system took the pointer).
+      act(() => void press(m.el('elsewhere')))
+      act(() => void release(m.el('elsewhere'), 'pointercancel'))
+      act(() => void vi.runAllTimers())
+      act(() => void click(m.el('elsewhere')))
+      expect(below).toHaveBeenCalledTimes(3)
+      // Its own click, right after the release (the same turn), is still held.
+      act(() => void press(m.el('elsewhere')))
+      act(() => {
+        release(m.el('elsewhere'))
+        click(m.el('elsewhere'))
+      })
+      expect(below).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('„Dziś” i okienko „Tygodnia” słuchają przez ten jeden hook (bez własnych nasłuchów naciśnięcia)', () => {

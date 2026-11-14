@@ -25,7 +25,8 @@ export function StepsEditor({
   onTick,
   onOp,
   readOnly,
-  lengthMin
+  lengthMin,
+  removeAsks
 }: {
   steps: readonly Step[]
   /** Show the boxes (a block of a day, a task); off – a template's or a series' list. */
@@ -38,6 +39,11 @@ export function StepsEditor({
   readOnly?: boolean
   /** The block's length (D460: „kroki: X min z Y” and the warning past it); left out – a task (the sum alone). */
   lengthMin?: number | null
+  /**
+   * Whether a removal of a step will ask by itself now (a block of a series: its scope, not chosen yet for the panel – T798) –
+   * Del then asks no question of its own (D462). Left out – never.
+   */
+  removeAsks?: () => boolean
 }) {
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -60,10 +66,11 @@ export function StepsEditor({
     }
   }, [steps])
 
-  // D462: Del on the selected step (a click beside its fields, on its box or handle) removes it, as „×” does.
+  // D462: Del on the selected step (a click beside its fields, on its box or handle) removes it, as „×” does – a removal that
+  // asks the series' scope is not asked twice.
   useDeleteResolver('step', (id) => {
     const step = readOnly ? undefined : steps.find((x) => x.id === id)
-    return step ? removeTarget(step.title || 'krok', () => send({ op: 'remove', id })) : null
+    return step ? removeTarget(step.title || 'krok', () => send({ op: 'remove', id }), removeAsks?.() === true) : null
   })
 
   const send = async (op: StepOp): Promise<boolean> => {

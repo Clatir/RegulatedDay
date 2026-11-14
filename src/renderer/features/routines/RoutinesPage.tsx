@@ -45,10 +45,11 @@ export function RoutinesPage() {
   }, [pick, routines])
   const list = routines.filter((r) => showArchived || !r.archived).sort((a, b) => a.name.localeCompare(b.name, 'pl'))
   const current = routines.find((r) => r.id === selected) ?? null
-  // D462: Del on the selected routine (its row of the list, clicked) removes it, as „Usuń” does.
+  // D462: Del on the selected routine (its row of the list, clicked) removes it, as „Usuń” does; a row only focused (Tab) is
+  // not selected – nothing.
   const targetOf = (r: Routine) => removeTarget(r.name, async () => void ((await removeRoutine(r)) && setSelected((now) => (now === r.id ? null : now))))
   useDeleteResolver('routine', (id) => {
-    const r = routines.find((x) => x.id === id)
+    const r = id === selected ? routines.find((x) => x.id === id) : undefined
     return r ? targetOf(r) : null
   })
   return (
