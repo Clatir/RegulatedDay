@@ -10,6 +10,7 @@
  * kliknięciem pokazuje koszt …, a drugim w ciągu 10 s je wykonuje”) – except „Dalej”, whose first click already ends the
  * running block.
  */
+import { placeOf } from '../model/categories'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '../model/plan'
 import { ROUTINE_VERSIONS, type RoutineVersion } from '../model/routines'
 import { isBoundaryWork, ownHourBlock, plannedSpan, setsWorkEndBlock, startPlanned, zjazdRemoteClass, type BlockInfo } from './blocks'
@@ -297,6 +298,24 @@ export function fixedStartPair(state: DayState, a: AutoAction): { ids: string[];
   return { ids: [pause.id, start.id], alive }
 }
 
+/**
+ * May „Cofnij” take back a start of a block away from the computer that began by itself (D475, T1136): only while
+ * nothing but the app touched it since – one run, running or ended by an automatic end, no „Przedłuż” nor shortening.
+ * Afterwards the row is information (a click ended, paused or extended the block – taking the start back would leave those
+ * events without a start). Every other action: true.
+ */
+/** The start of a block the app began by itself (D475, rule `awayStart`), or undefined: begun by you, or not begun. */
+export function awayStartOf(state: Pick<DayState, 'facts'>, block: string): AutoAction | undefined {
+  return state.facts.autos.find((a) => a.k === 'block.start' && a.rule === 'awayStart' && a.block === block)
+}
+
+export function awayStartUndoable(state: DayState, a: AutoAction): boolean {
+  if (a.rule !== 'awayStart' || a.k !== 'block.start' || !a.block) return true
+  const f = state.facts.blocks.get(a.block)
+  if (!f || f.startedAt == null || f.runs.length !== 1 || f.endChanges.length) return false
+  return f.endedAt == null ? f.runs[0]!.to === OPEN : state.facts.autos.some((x) => x.id === f.endId)
+}
+
 export function timerNow(state: DayState): TimerNow {
   const now = state.now
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
@@ -406,6 +425,13 @@ export const ALREADY_OVER = 'ten blok już się skończył'
 /** … and one whose start was taken back meanwhile (`notBegun`: it leaves the plan as one that never began). */
 export const NOT_BEGUN = 'ten blok się nie zaczął'
 
+/**
+ * The running flexible block a start of another one swaps with (D478, T1130): not a regeneration (a break the start ends)
+ * nor a block away from the computer (clicking means you are back – it ends, as its first use would end it); and only
+ * before its planned end – at it or past it nothing of it is left to stand elsewhere: it ends, done, as „Dalej” ends it.
+ */
+const swaps = (b: BlockInfo) => !b.isRegen && placeOf(b.rules, b.variantId) !== 'away'
+
 /** The events of starting (or resuming) `info` at `at`, with what happens to the block in the foreground. */
 function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockInfo, at: number, confirmed: boolean): TimerDraft[] {
   const out: TimerDraft[] = []
@@ -421,8 +447,16 @@ function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockI
       // does a break (a regeneration begun now never ends the work it interrupts) and a block of life and care begun
       // over running work, a meal for one (D335).
       out.push({ k: 'block.pause', block: fg.info.id, at })
+    } else if (swaps(fg.info) && idxOf(state.grid, at) < fg.plannedEnd) {
+      // Another flexible block (D478): the two change places – the clicked one begins now, the running one pauses, not
+      // done, and stands at the clicked one's planned place (`place`; none – a block begun outside the plan: it waits as
+      // the next in the plan, its own place).
+      // Its planned place: its own hour; without one (anchored, a paused block's rest) – where the forecast shows it.
+      const place = !info.inPlan ? null : (info.start ?? state.forecast.find((p) => p.block.id === info.id && !p.running)?.from)
+      out.push({ k: 'block.pause', block: fg.info.id, at, ...(place != null ? { place: atOf(state.grid, place) } : {}) })
     } else {
-      // Another flexible block (or the start ends a regeneration): the running one ends here, done.
+      // The start ends a regeneration (a break), or a block away from the computer – a click there means you are back: the
+      // running one ends here, done.
       out.push({ k: 'block.end', block: fg.info.id, at, done: fg.info.fixed ? null : true, rule: null })
     }
   }
@@ -619,6 +653,12 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       const r = a.k === 'request.end' ? state.facts.requests.find((x) => x.id === a.request && x.endId === a.id) : undefined
       // A meal or a regeneration an answer to an absence made: its start and its end go back together (A1-09).
       let pair = a.rule === 'absenceMeal' || a.rule === 'absenceRegen' ? state.facts.autos.filter((x) => x.rule === a.rule && x.block === a.block && x.id !== a.id) : []
+      // A block away from the computer begun by itself (D475): the automatic end of it goes back with its start (T1136) –
+      // it never began.
+      if (a.rule === 'awayStart' && a.k === 'block.start') {
+        if (!awayStartUndoable(state, a)) return no('tego już nie cofniesz – blok zmienił się po starcie')
+        pair = state.facts.autos.filter((x) => x.k === 'block.end' && x.block === a.block && state.facts.blocks.get(a.block!)?.endId === x.id)
+      }
       // A fixed start's pause and that start go back together, either way, while the fixed block runs and the flexible one
       // stands in that pause (the flexible block goes on as before, the fixed one stays unstarted – it can be started by
       // hand); afterwards the two are only information (D350).

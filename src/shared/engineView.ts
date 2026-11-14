@@ -18,14 +18,14 @@ import { reserveMessageId } from './engine/game'
 import { hardEndCurrent, type HardEndNow } from './engine/hardEnd'
 import { suggestRegen } from './engine/reserve'
 import { REGEN_CATEGORY, type Pool } from './model/categories'
-import { isRunningRequest, OPEN, workSince, type AutoAction, type RequestFact } from './engine/facts'
+import { isRunningRequest, OPEN, pausedPlaceOf, workSince, type AutoAction, type RequestFact } from './engine/facts'
 import { atOf, type Grid } from './engine/grid'
 import { ritualDue } from './engine/ritual'
 import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
 import { TASK_ANSWERS, TASK_LINE_MIN, taskLineText, taskQuestions } from './engine/cases'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
-import { endsAtOf, fixedStartPair, laterWork, plannedEndOf, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
+import { awayStartUndoable, endsAtOf, fixedStartPair, laterWork, plannedEndOf, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
 import { namedById, type NamedBlock } from './blockName'
 import { namingOf } from './engine/context'
@@ -95,6 +95,10 @@ export function autoText(a: AutoAction, blockName: string, clock: string): strin
   switch (a.rule) {
     case 'fixedStart':
       return a.k === 'block.pause' ? `${name} – pauza o ${clock} (blok stały według planu)` : `${name} zaczęty o ${clock} (blok stały według planu)`
+    case 'awayStart':
+      return `${name} zaczęty o ${clock} (bez komputera, według planu)`
+    case 'awayPlan':
+      return `${name} skończony o ${clock} (według planu)`
     case 'plan':
       return `${name} skończony o ${clock} (według planu)`
     case 'fixedNoReaction':
@@ -327,7 +331,13 @@ export function engineView(i: EngineInput): WidgetView {
       lines.push({ id: `restart:${b.id}`, text: `${nameOf(b.id)} · do ${clockOf(at(span.end))}`, actions: [{ id: 'restart', label: 'Zacznij jeszcze raz' }], dot: false })
     }
     // Paused blocks waiting with nothing in the foreground („Wznów · Zaparkuj”) – not one a running request will resume.
-    if (!fg) for (const p of t.paused) if (p.info.id !== interruptedId) lines.push({ id: `paused:${p.info.id}`, text: nameOf(p.info.id), actions: [{ id: 'start', label: 'Wznów' }, { id: 'park', label: 'Zaparkuj' }], dot: true })
+    // One a start swapped with (D478) stands later in the plan: quiet (no dot, D240) until its place comes (T1141).
+    if (!fg)
+      for (const p of t.paused) {
+        if (p.info.id === interruptedId) continue
+        const place = pausedPlaceOf(p.fact)
+        lines.push({ id: `paused:${p.info.id}`, text: nameOf(p.info.id), actions: [{ id: 'start', label: 'Wznów' }, { id: 'park', label: 'Zaparkuj' }], dot: place == null || state.now >= place })
+      }
     for (const q of questions) if (q !== next) lines.push(questionLine(q, q.block && q.kind !== 'request' ? nameOf(q.block) : '', clockOf))
     // The break after 90 min of continuous work (D234: a dot, no notification); in a session or a class it waits.
     const run = i.care.breakAfterMin > 0 ? workRunStart(state, now) : null
@@ -391,7 +401,7 @@ export function engineView(i: EngineInput): WidgetView {
   // „Zrobione automatycznie” (D350): the actions as the plan said them (a fixed block's start, an end by the plan) in one
   // row that unfolds into them, each with „Cofnij”; what changes the counting of time – a flexible block's pause at a fixed
   // start too – and the rest each in a row of its own.
-  const autoItem = (a: (typeof state.facts.autos)[number]) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) && (fixedStartPair(state, a)?.alive ?? true) })
+  const autoItem = (a: (typeof state.facts.autos)[number]) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) && (fixedStartPair(state, a)?.alive ?? true) && awayStartUndoable(state, a) })
   const asPlanned = (a: (typeof state.facts.autos)[number]) => (a.rule === 'fixedStart' && a.k !== 'block.pause') || a.rule === 'plan'
   const planned = state.facts.autos.filter(asPlanned)
   const groups = planned.length ? [{ id: 'plan', text: `bloki stałe według planu: ${planned.length}`, items: planned.map(autoItem).reverse() }] : []

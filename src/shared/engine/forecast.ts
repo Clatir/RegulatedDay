@@ -9,7 +9,7 @@
  * Two modes: 'window' – waiting blocks in their planned window at full length (the boundary's proposal, the maximum, the
  * variants' marker); 'typical' – from now with the typical length (energy, budget, hard end, pool).
  */
-import { OPEN, endShiftOf, isRunning, ranMinutes, type DayFacts } from './facts'
+import { OPEN, endShiftOf, isRunning, pausedPlaceOf, ranMinutes, type DayFacts } from './facts'
 import { plannedSpan, type BlockInfo } from './blocks'
 
 export type ForecastMode = 'window' | 'typical'
@@ -132,7 +132,14 @@ export function forecast(inp: ForecastInput): Forecast {
 
   // 3. The foreground chain: flexible blocks (paused ones and not started) and anchored ones, in planned order.
   // Anchors in a cycle (a block anchored to itself, A→B→A) have no planned place: they sort last (never recurse forever).
+  // A paused block swapped with a start (D478) stands at that block's place: in the order and never earlier.
+  const placeOf = (b: BlockInfo): number | null => {
+    const f = fact(b.id)
+    return f && paused.includes(b) ? pausedPlaceOf(f) : null
+  }
   const plannedKey = (b: BlockInfo, depth = 0): number => {
+    const place = placeOf(b)
+    if (place != null) return place
     if (b.start != null) return b.start
     const a = b.anchor ? byId.get(b.anchor) : undefined
     return a && depth < 50 ? plannedKey(a, depth + 1) + a.durationMin : Number.POSITIVE_INFINITY
@@ -163,7 +170,8 @@ export function forecast(inp: ForecastInput): Forecast {
     const left = f?.startedAt != null ? Math.max(0, (f.planned?.durationMin ?? b.durationMin) + endShiftOf(f) - ranMinutes(f, m)) : b.durationMin
     let from: number
     let due: number
-    if (b.anchor) {
+    const place = placeOf(b)
+    if (b.anchor && place == null) {
       const af = fact(b.anchor)
       const ap = placedById.get(b.anchor)
       if (dropped.has(b.anchor)) {
@@ -184,7 +192,7 @@ export function forecast(inp: ForecastInput): Forecast {
       due = anchorEnd
       from = Math.max(anchorEnd, m)
     } else {
-      const planned = b.start ?? m
+      const planned = place ?? b.start ?? m
       due = Math.max(planned, cursorDue + buffer(b.categoryId))
       from = Math.max(planned, cursor + buffer(b.categoryId), m)
     }
@@ -200,7 +208,7 @@ export function forecast(inp: ForecastInput): Forecast {
     }
     const p: Placed = { block: b, from, to: from + left, bg: false, due, running: false }
     put(p)
-    if (!b.anchor || from >= cursor) {
+    if (!b.anchor || place != null || from >= cursor) {
       cursor = Math.max(cursor, p.to)
       cursorDue = Math.max(cursorDue, due + left)
       prevCat = b.categoryId

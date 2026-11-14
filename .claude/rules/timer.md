@@ -44,13 +44,21 @@ paths:
   bramkę; blok stały w tle nie czeka) – poza tym jak w 1.0.1 (G2).
 
 ## Pułapki
-- Start bloku życia (`isLife`) przy biegnącej pracy pauzuje ją jak regeneracja (D335, `startEvents`); inny blok pracy albo projektu
-  kończy biegnący. „Usuń” zaczętego bloku: `removeBegun` (`block.end` z `rule: 'removed'`, `done: false`) i `undoRemove`
+- Start bloku życia (`isLife`) przy biegnącej pracy pauzuje ją jak regeneracja (D335, `startEvents`); inny blok elastyczny zamienia się z
+  biegnącym (D478, niżej) – kończy go tylko po planowanym końcu, regeneracja i blok „poza komputerem”. „Usuń” zaczętego bloku: `removeBegun` (`block.end` z `rule: 'removed'`, `done: false`) i `undoRemove`
   (`undo` tego końca, D336; odmowa, gdy po zdarzeniu usunięcia – kolejnością zdarzeń `compareOrder` z `BlockFact.endOrder`, nie minutami – zaczął się inny blok, prośba (`RequestFact.begun`) albo „Odcinam się”; kończy przez `endInstant` jak „Skończyłem”; powody „już skończony” / „nie zaczął się” mają `code` w `ActionResult`/`TimerResult`); blok zdjęty z planu zostaje w dniu jako „poza planem” (`dayItems`) z nazwą ze startu albo z migawki dnia (`nameById`, T543, T1024), liczy się jak każdy przebieg.
 - Para `fixedStart` (`fixedStartPair` w `timer.ts`): pauza bloku elastycznego i start bloku stałego z tej samej listy (ten sam
   `at`, start na pierwszym planie). „Cofnij” przy któregokolwiek cofa oba – elastyczny biegnie jak przed startem, stały
   niezaczęty – ale tylko póki stały biegnie bez późniejszego kliknięcia (przedłużenie) i elastyczny stoi w tej pauzie
   (`alive`); potem oba wiersze to informacja (bez „Cofnij”, `undo` odrzucone). Start stałego bez pauzy – zwykłe „Cofnij”.
+- Zamiana przy „Zacznij” (D478, T1130–T1132): biegnący elastyczny pauzuje z `block.pause.place` (miejsce klikniętego w
+  prognozie) – `Run.place`/`pausedPlaceOf` w `facts.ts`, kolejność i dolna granica w `forecast.ts`, oś w `dayItems`, koniec
+  pracy w `day.ts`; regeneracja, blok „poza komputerem” i blok po planowanym końcu dalej się kończą.
+- Bloki bez komputera same (D475, T1133–T1137): `awayOwnHour` + `awayStarts` w `auto.ts` (reguła `awayStart`, id z
+  planowanym startem; także dojazd – koniec `awayPlan` – i przed pierwszym użyciem dnia, D486, D488) – po przerwie w
+  wejściu ≥ `AWAY_START_MIN` (od jej początku; regeneracja z limitem, sprawdzanie od nowa T465 – T1138–T1140), liczone przed `fixedStartLists` – wcześniejszy start idzie pierwszy, stałe czekają przebieg; `fixedStart` nie
+  widzi z przodu bloku „poza komputerem” kończonego najpóźniej w chwili startu; „Cofnij” startu (`awayStartUndoable` –
+  tylko póki blok ruszała sama aplikacja) cofa jego automatyczny koniec. „Tydzień” (`week.ts`) rysuje zamieniony jak oś.
 - `activityOf` bez żadnego komputera = cały czas bez wejścia; w testach dodaj `observe(...)` (DSL) – inaczej blok
   stały „przy komputerze” nie zacznie się (czeka na pierwsze użycie).
 - Otwarty odcinek innego komputera liczy się tylko do jego ostatniego `observe.alive` (`alive` w DSL).
@@ -85,6 +93,8 @@ paths:
   `endChanges` sortowane tak przed pętlą, ta sama kolejność dla sumy) do swojego
   końca (`confirmWindows` w `day.ts`). Limity krawędzi (`runningEdges`: `earliestEnd`, `latestEnd`) liczy jedno
   `limitsOf` w `resize.ts` – także podgląd; oba na siatce, zawsze `earliestEnd ≤ latestEnd`.
-- Późne wstanie (`lateWake.ts`) – pierwsze użycie z `dayFirstUse`; `presence.first` tylko bez zapisów obserwacji.
-- Prowadzący sprawdza `idle`, `firstUse`, `limit`, `absence`, `lastInput` przy każdym sprawdzeniu i cofa je, gdy
+- Późne wstanie (`lateWake.ts`, D488, T1144, T1150) – pierwszy blok dnia przesunięty w planie ≥ 20 min później niż w
+  migawce (z pobudką dnia); „Tak” cofa starty `awayStart` poranka (`applyLateWake`). Granica sama – od pierwszej pracy
+  przy komputerze (`approvalStart`, D490, T1149).
+- Prowadzący sprawdza `idle`, `firstUse`, `limit`, `absence`, `lastInput`, `awayPlan` (i start `awayStart`) przy każdym sprawdzeniu i cofa je, gdy
   późniejszy log z wejściem im przeczy (T465) – nowa reguła końca zależna od wejścia musi tam trafić.

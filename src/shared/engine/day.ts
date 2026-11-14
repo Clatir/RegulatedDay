@@ -12,6 +12,7 @@
  */
 import { compareEvents, eventAt, isKnown, type AnyEvent, type DaySnapshot, type MinuteClass } from '../model/events'
 import type { PlanBlock } from '../model/plan'
+import { placeOf } from '../model/categories'
 import type { DayTypeParams, RulesSettings } from '../model/settings'
 import { placeLogical } from '../time/day'
 import { addDays, weekday } from '../time/zone'
@@ -473,8 +474,14 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
           resolve = OPEN
           continue
         }
-        const expiry = due + 15
+        // Swapped with a start (D478): it waits at that block's place – it may begin there, as a block not started from its
+        // due (T1132). The pause that left it by e (its last run stopped up to e – the stretch may go on with the clicked
+        // block, work too): still paused in it – its due in the forecast; resumed or ended since – the place that pause gave.
         const back = f.runs.find((r) => r.from >= e)?.from ?? null
+        const left = f.runs.filter((r) => r.to !== OPEN && r.to <= e).at(-1)
+        const place = left?.place ?? null
+        const stands = place != null && back == null && f.endedAt == null && f.runs.at(-1) === left
+        const expiry = place != null ? Math.max(due, stands ? (dueOf.get(b.id) ?? place) : place) + 15 : due + 15
         if (back != null) resolve = back >= expiry ? Math.max(resolve, expiry) : OPEN
         else if (f.endedAt != null) resolve = Math.max(resolve, Math.min(f.endedAt, expiry))
         else if (!isRunning(f)) resolve = Math.max(resolve, expiry <= m ? expiry : OPEN)
@@ -685,13 +692,29 @@ export function computeDay(ctx: DayContext): DayState {
     if (end == null) return null
     return Math.min(maxAt(m, view, fcW), end + settingsAt(m).settings.boundaryBufferMin)
   }
-  // The approval: the last one written (not undone after it), else on its own at the start of the first work block.
+  // The approval: the last one written (not undone after it), else on its own at the start of the first work block (D490,
+  // T1149): a minute whose work is only a block away from the computer the app began by itself (a commute while you slept)
+  // does not approve it – a commute or classes you started do, as before (a day of stationary classes approves itself).
+  const approvalStart = (() => {
+    if (firstWorkStart == null) return null
+    const begunByItself = new Set(facts.autos.filter((a) => a.k === 'block.start' && a.rule === 'awayStart' && a.block).map((a) => a.block!))
+    const atComputer = new Uint8Array(now)
+    const away = new Uint8Array(now)
+    for (const b of blocks) {
+      const f = facts.blocks.get(b.id)
+      if (!b.isWork || !f?.runs.length) continue
+      const mark = begunByItself.has(b.id) && placeOf(b.rules, b.variantId) === 'away' ? away : atComputer
+      for (const r of f.runs) for (let k = Math.max(0, r.from); k < Math.min(r.to === OPEN ? now : r.to, now); k++) mark[k] = 1
+    }
+    for (let k = firstWorkStart; k < now; k++) if (actual[k]! & F_END && !(away[k] && !atComputer[k])) return k
+    return null
+  })()
   let implicit: { at: number; boundary: number } | null = null
-  if (firstWorkStart != null && !facts.approvals.some((a) => a.at <= firstWorkStart)) {
-    const view = viewAt(facts, firstWorkStart)
-    const fcW = forecast({ blocks, view, m: firstWorkStart, mode: 'window', transitionBufferMin: settingsAt(firstWorkStart).settings.transitionBufferMin, typicalMin: c.typical })
-    const p = proposalAt(firstWorkStart, view, actual, fcW)
-    if (p != null) implicit = { at: firstWorkStart, boundary: p }
+  if (approvalStart != null && !facts.approvals.some((a) => a.at <= approvalStart)) {
+    const view = viewAt(facts, approvalStart)
+    const fcW = forecast({ blocks, view, m: approvalStart, mode: 'window', transitionBufferMin: settingsAt(approvalStart).settings.transitionBufferMin, typicalMin: c.typical })
+    const p = proposalAt(approvalStart, view, actual, fcW)
+    if (p != null) implicit = { at: approvalStart, boundary: p }
   }
   type InForce = { boundary: number; at: number; auto: boolean }
   /**

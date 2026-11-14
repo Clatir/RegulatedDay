@@ -288,96 +288,108 @@ describe('zmiana typu w trakcie dnia', () => {
   })
 })
 
-describe('późne wstanie', () => {
+describe('późne wstanie (D488: pierwszy blok dnia przesunięty na później)', () => {
   const plan = [
     block({ id: 'ru', cat: 'rutyny', at: '06:00', min: 45 }),
     block({ id: 'po', cat: 'posilek', at: '06:45', min: 30 }),
     block({ id: 'an', cat: 'analiza', at: '07:30', min: 120 }),
     block({ id: 'na', cat: 'inne', at: '10:00', min: 240 })
   ]
+  /** The day's plan with the routine moved to `at` (after „Cofnij” of its automatic start). */
+  const moved = (at: string, p = plan) => p.map((b) => (b.id === 'ru' ? { ...b, startMin: lm(at) } : b))
+  const lwAt = (s: Scenario, time: string, extra: Parameters<Scenario['contextAt']>[1] = {}, file: DayFile | null = null) => {
+    const ctx = s.contextAt(s.at(time), extra)
+    return detectLateWake(ctx, computeDay(ctx), file)
+  }
 
-  it('pierwsze użycie ponad 30 min po końcu rutyny: przesunięcie rutyn i posiłków, skrócenie pracy do granicy', () => {
-    const s = new Scenario({ date: '2026-10-21', plan, settings: { transitionBufferMin: 0 } }).presence('08:30')
-    const ctx = s.contextAt(s.at('08:31'))
-    const lw = detectLateWake(ctx, computeDay(ctx), null)!
+  it('rutyna przesunięta o 105 min: „Tak” przesuwa resztę poranka o to samo i skraca pracę do granicy', () => {
+    const s = new Scenario({ date: '2026-10-21', plan, settings: { transitionBufferMin: 0 } })
+    const lw = lwAt(s, '07:00', { plan: moved('07:45') })!
     expect(lw).not.toBeNull()
-    expect(lw.delayMin).toBe(105)
-    expect(lw.shifts.map((x) => [x.block.id, x.toStartMin])).toEqual([
-      ['ru', lm('07:45')],
-      ['po', lm('08:30')]
-    ])
-    // The routine done by the first use, the meal 08:30–09:00 after it; from 08:31 the meal, the analysis to 11:01, the
-    // duties to 15:01 – the plan's proposal was 14:15: the duties 46 min shorter.
-    expect(lw.shortens.map((x) => [x.block.id, x.toMin])).toEqual([['na', 194]])
-    expect(lw.parks).toEqual([])
+    expect([lw.first.id, lw.plannedMin, lw.movedMin, lw.delayMin]).toEqual(['ru', lm('06:00'), lm('07:45'), 105])
+    // The meal planned 06:45 goes 105 min later; the routine itself stays where you put it.
+    expect(lw.shifts.map((x) => [x.block.id, x.toStartMin])).toEqual([['po', lm('08:30')]])
+    expect(lw.shortens.map((x) => x.block.id)).toEqual(['na'])
+    expect(lw.shortens[0]!.toMin).toBeLessThan(240)
   })
 
-  it('nie pyta: w porę, po planie porannym, w zjazd stacjonarny, po odpowiedzi', () => {
-    const early = new Scenario({ date: '2026-10-21', plan }).presence('07:10')
-    const c1 = early.contextAt(early.at('07:11'))
-    expect(detectLateWake(c1, computeDay(c1), null)).toBeNull()
-    const planned = new Scenario({ date: '2026-10-21', plan }).approve('14:15', '06:30').presence('08:30')
-    const c2 = planned.contextAt(planned.at('08:31'))
-    expect(detectLateWake(c2, computeDay(c2), null)).toBeNull()
-    // The plan approved and undone before the first use is not done (A6-11): the proposal comes.
-    const undone = new Scenario({ date: '2026-10-21', plan }).approve('14:15', '06:30').raw({ k: 'boundary.undo', at: new Scenario({ date: '2026-10-21', plan }).at('06:40') }, '06:40').presence('08:30')
-    const cu = undone.contextAt(undone.at('08:31'))
-    expect(detectLateWake(cu, computeDay(cu), null)).not.toBeNull()
-    const zjazd = new Scenario({ date: '2026-10-21', dayType: 'zjazd-stacjonarny', plan }).presence('08:30')
-    const c3 = zjazd.contextAt(zjazd.at('08:31'))
-    expect(detectLateWake(c3, computeDay(c3), null)).toBeNull()
-    const answered = new Scenario({ date: '2026-10-21', plan }).presence('08:30')
-    const c4 = answered.contextAt(answered.at('08:31'))
-    expect(detectLateWake(c4, computeDay(c4), { ...emptyDayFile('2026-10-21'), asked: { lateWake: 'no' } })).toBeNull()
+  it('blok już przesunięty dalej przez rozsuwanie zostaje, gdy opóźnienie stawia go wcześniej', () => {
+    const s = new Scenario({ date: '2026-10-21', plan, settings: { transitionBufferMin: 0 } })
+    const pushed = moved('07:45').map((b) => (b.id === 'po' ? { ...b, startMin: lm('09:00') } : b))
+    expect(lwAt(s, '07:00', { plan: pushed })!.shifts).toEqual([])
   })
 
-  it('raz pokazane czeka na odpowiedź: pierwsze „zobaczono” w logu niesie koniec rutyny i pobudkę, później dodany blok rutyny go nie zmienia (D337)', () => {
-    const s = new Scenario({ date: '2026-10-21', plan, settings: { transitionBufferMin: 0 } }).presence('08:30')
-    const first = detectLateWake(s.contextAt(s.at('08:31')), computeDay(s.contextAt(s.at('08:31'))), null)!
-    expect(first.routineEndMin).toBe(lm('06:45'))
-    expect(lateWakeSeenId('2026-10-21', first)).toBe(`lateWake:2026-10-21:${lm('06:45')}:${lm('06:00')}`)
-    // A routine block added later, earlier than the morning one and running to 09:00: the morning routine is another now.
-    const added = [block({ id: 'r0', cat: 'rutyny', at: '05:00', min: 240, origin: 'user' }), ...plan]
-    const later = s.contextAt(s.at('08:40'), { plan: added })
-    expect(detectLateWake(later, computeDay(later), null)).toBeNull()
-    // The window reported it seen (the log keeps it): the proposal goes on from the end it was shown with.
-    s.raw({ k: 'question.seen', at: s.at('08:31'), question: lateWakeSeenId('2026-10-21', first), how: 'main' }, '08:31')
-    const kept = s.contextAt(s.at('08:40'), { plan: added })
-    const seen = detectLateWake(kept, computeDay(kept), null)!
-    expect(seen.routineEndMin).toBe(lm('06:45'))
-    expect(seen.delayMin).toBe(first.delayMin)
+  it('nie pyta: przesunięcie poniżej 20 min, rutyna na swoim miejscu (także zaczęta sama), w zjazd stacjonarny, po odpowiedzi; pierwsze użycie nic nie znaczy', () => {
+    const s = new Scenario({ date: '2026-10-21', plan })
+    expect(lwAt(s, '07:00', { plan: moved('06:19') })).toBeNull()
+    expect(lwAt(s, '07:00', { plan: moved('06:20') })?.delayMin).toBe(20)
+    // The first use long after the routine's end (the trigger of D199): no proposal any more.
+    const late = new Scenario({ date: '2026-10-21', plan }).presence('08:30')
+    expect(lwAt(late, '08:31')).toBeNull()
+    // The morning plan approved: moving the routine still asks.
+    const approved = new Scenario({ date: '2026-10-21', plan }).approve('14:15', '06:30')
+    expect(lwAt(approved, '07:00', { plan: moved('07:45') })).not.toBeNull()
+    const zjazd = new Scenario({ date: '2026-10-21', dayType: 'zjazd-stacjonarny', plan })
+    expect(lwAt(zjazd, '07:00', { plan: moved('07:45') })).toBeNull()
+    expect(lwAt(s, '07:00', { plan: moved('07:45') }, { ...emptyDayFile('2026-10-21'), asked: { lateWake: 'no' } })).toBeNull()
+  })
+
+  it('raz pokazane czeka na odpowiedź: pierwsze „zobaczono” w logu niesie godzinę bloku i pobudkę, kolejne przesunięcie go nie zmienia (D337)', () => {
+    const s = new Scenario({ date: '2026-10-21', plan, settings: { transitionBufferMin: 0 } })
+    const first = lwAt(s, '07:00', { plan: moved('07:45') })!
+    expect(lateWakeSeenId('2026-10-21', first)).toBe(`lateWakeMoved:2026-10-21:${lm('07:45')}:${lm('06:00')}`)
+    // Moved back to its hour before the card was seen: nothing to ask.
+    expect(lwAt(s, '07:05', { plan })).toBeNull()
+    // The window reported it seen (the log keeps it): the proposal goes on from the hour it was shown with.
+    s.raw({ k: 'question.seen', at: s.at('07:00'), question: lateWakeSeenId('2026-10-21', first), how: 'main' }, '07:00')
+    const kept = lwAt(s, '07:05', { plan })!
+    expect([kept.movedMin, kept.delayMin]).toEqual([lm('07:45'), first.delayMin])
     // An answer still closes it.
-    expect(detectLateWake(kept, computeDay(kept), { ...emptyDayFile('2026-10-21'), asked: { lateWake: 'no' } })).toBeNull()
+    expect(lwAt(s, '07:05', { plan }, { ...emptyDayFile('2026-10-21'), asked: { lateWake: 'no' } })).toBeNull()
   })
 
   it('pierwsze „zobaczono” wygrywa; inna pobudka – liczenie z planu; wartości spoza dnia i cudze id są ignorowane (D337)', () => {
     const rutyna = [block({ id: 'ru', cat: 'rutyny', at: '07:00', min: 30 }), block({ id: 'an', cat: 'analiza', at: '10:00', min: 60 })]
     const mk = (seen: string[]) => {
-      const s = new Scenario({ date: '2026-10-21', plan: rutyna, settings: { transitionBufferMin: 0 } }).presence('09:00')
+      const s = new Scenario({ date: '2026-10-21', plan: rutyna, settings: { transitionBufferMin: 0 } })
       for (const q of seen) s.raw({ k: 'question.seen', at: s.at('09:01'), question: q, how: 'main' }, '09:01')
       return s
     }
-    const endOf = (s: Scenario, extra: Parameters<Scenario['contextAt']>[1] = {}) => {
-      const ctx = s.contextAt(s.at('09:02'), extra)
-      return detectLateWake(ctx, computeDay(ctx), null)?.routineEndMin ?? null
-    }
+    const movedPlan = moved('09:00', rutyna)
+    const hourOf = (s: Scenario, extra: Parameters<Scenario['contextAt']>[1] = { plan: movedPlan }) => lwAt(s, '09:02', extra)?.movedMin ?? null
     const wake = lm('06:00')
-    // The first of two is the one kept (a later one with another end does not move it).
-    expect(endOf(mk([`lateWake:2026-10-21:${lm('07:15')}:${wake}`, `lateWake:2026-10-21:${lm('07:00')}:${wake}`]))).toBe(lm('07:15'))
-    // Kept for another wake: counted from the plan (07:30).
-    expect(endOf(mk([`lateWake:2026-10-21:${lm('07:15')}:${lm('05:00')}`]))).toBe(lm('07:30'))
+    // The first of two is the one kept (a later one with another hour does not move it).
+    expect(hourOf(mk([`lateWakeMoved:2026-10-21:${lm('08:15')}:${wake}`, `lateWakeMoved:2026-10-21:${lm('08:00')}:${wake}`]))).toBe(lm('08:15'))
+    // Kept for another wake: counted from the plan (09:00).
+    expect(hourOf(mk([`lateWakeMoved:2026-10-21:${lm('08:15')}:${lm('05:00')}`]))).toBe(lm('09:00'))
     // Another day's id, outside the day (before 04:00 of the day), not a number: ignored.
-    for (const bad of ['lateWake:2026-10-22:450:360', `lateWake:2026-10-21:100:${wake}`, `lateWake:2026-10-21:x:${wake}`, 'lateWake:2026-10-21:450', `wait:2026-10-21:450:${wake}`]) expect(endOf(mk([bad]))).toBe(lm('07:30'))
-    // The wake moved to 08:30 (the routine with it): the end kept for the old wake does not hold – the card is gone as before.
-    const kept = mk([`lateWake:2026-10-21:${lm('07:30')}:${wake}`])
-    const moved = { plan: [block({ id: 'ru', cat: 'rutyny', at: '08:30', min: 30 }), rutyna[1]!], wakeMin: lm('08:30') }
-    expect(endOf(kept, moved)).toBeNull()
+    for (const bad of [`lateWake:2026-10-21:${lm('08:15')}:${wake}`, 'lateWakeMoved:2026-10-22:450:360', `lateWakeMoved:2026-10-21:100:${wake}`, `lateWakeMoved:2026-10-21:x:${wake}`, 'lateWake:2026-10-21:450', `wait:2026-10-21:450:${wake}`]) expect(hourOf(mk([bad]))).toBe(lm('09:00'))
+    // The day's wake set to 09:30: the morning moves by the plan itself – the routine at 09:00 is no later than planned.
+    const lateDay = { ...emptyDayFile('2026-10-21'), wakeMin: lm('09:30') }
+    expect(lwAt(mk([`lateWakeMoved:2026-10-21:${lm('09:00')}:${wake}`]), '09:02', { plan: movedPlan, wakeMin: lm('09:30') }, lateDay)).toBeNull()
   })
 
-  it('w czasie sesji propozycja czeka do jej końca', () => {
-    const s = new Scenario({ date: '2026-10-21', plan: [...plan, block({ id: 'lo', cat: 'sesja', at: '08:00', min: 180, fixed: true, origin: 'session', source: 'londyn' })] }).presence('08:30')
-    const ctx = s.contextAt(s.at('08:31'))
-    expect(detectLateWake(ctx, computeDay(ctx), null)?.waitUntilMin).toBe(lm('11:00'))
+  it('w czasie sesji trwającej teraz propozycja czeka do jej końca (nie sesja w nowej godzinie bloku, T1148)', () => {
+    const withSession = [...plan, block({ id: 'lo', cat: 'sesja', at: '09:00', min: 180, fixed: true, origin: 'session', source: 'londyn' })]
+    const s = new Scenario({ date: '2026-10-21', plan: withSession })
+    expect(lwAt(s, '07:00', { plan: moved('08:30', withSession) })?.waitUntilMin).toBeNull()
+    expect(lwAt(s, '09:30', { plan: moved('08:30', withSession) })?.waitUntilMin).toBe(lm('12:00'))
+  })
+
+  it('tylko rano: przeniesienie rutyny po południu na wieczór o nic nie pyta (T1148)', () => {
+    const s = new Scenario({ date: '2026-10-21', plan })
+    expect(lwAt(s, '15:00', { plan: moved('20:00') })).toBeNull()
+    expect(lwAt(s, '07:00', { plan: moved('12:00') })).toBeNull()
+    expect(lwAt(s, '07:00', { plan: moved('11:59') })?.delayMin).toBe(lm('11:59') - lm('06:00'))
+  })
+
+  it('godzina planowana jak w planie dnia: pobudka dnia i Twój blok stały przeniesiony na ten dzień (T1148)', () => {
+    const withFixed = [block({ id: 'st', cat: 'inne', at: '06:30', min: 30, fixed: true }), block({ id: 'ru', cat: 'rutyny', at: '07:00', min: 30 })]
+    const s = new Scenario({ date: '2026-10-21', plan: withFixed })
+    const file: DayFile = { ...emptyDayFile('2026-10-21'), wakeMin: lm('07:00'), blocks: [{ ...withFixed[0]!, startMin: lm('11:00'), origin: 'user' }] }
+    const dayPlanned = dayPlan(s.snapshot, file)
+    expect(dayPlanned.find((b) => b.id === 'ru')!.startMin).toBe(lm('08:00'))
+    expect(lwAt(s, '07:30', { plan: dayPlanned, wakeMin: lm('07:00') }, file)).toBeNull()
   })
 })
 

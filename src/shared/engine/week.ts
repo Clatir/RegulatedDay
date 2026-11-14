@@ -20,7 +20,7 @@ import { columnEnergy, type EnergyTrack } from './energyTrack'
 import { namingOf } from './context'
 import { snapshotEntries } from './createDay'
 import { computeDay, type DayContext, type DayState } from './day'
-import { foldFacts, isPassive, lastRunEnd, OPEN, ranMinutes, type BlockFact } from './facts'
+import { foldFacts, isPassive, lastRunEnd, OPEN, pausedPlaceOf, ranMinutes, type BlockFact } from './facts'
 import { countedEvents, isFreeDay } from './freeze'
 import { atOf, gridOf } from './grid'
 import { plannedEndOf } from './timer'
@@ -206,6 +206,8 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
   const nowIdx = when === 'today' ? state.now : null
   const placed = new Map(state.forecast.map((p) => [p.block.id, p]))
+  // D478: a block a start swapped with waits, paused, where the forecast puts the rest of it – as „Dziś” draws it.
+  const swapped = (f: BlockFact) => (nowIdx != null && pausedPlaceOf(f) != null ? placed.get(f.id) : undefined)
   const naming = namingOf(ctx, state.facts)
   const out: HorizonBlock[] = []
   const push = (info: BlockInfo, named: NamedBlock, from: number, to: number, st: HorizonBlockState, outsidePlan: boolean, steps?: Step[], movable = false) =>
@@ -230,7 +232,8 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
     // As in „Dziś” (`namedOfPlan`): also its own name (D357, D430) and its task (D384 – the task's title, D431).
     const named = namedOfPlan(p)
     if (f?.startedAt != null) {
-      push(info, named, f.startedAt, begunEnd(state, info, f, nowIdx), begunState(f, when), false, p.steps)
+      const sw = swapped(f)
+      push(info, named, sw?.from ?? f.startedAt, sw?.to ?? begunEnd(state, info, f, nowIdx), begunState(f, when), false, p.steps)
       continue
     }
     const gone: HorizonBlockState | null = f?.parkedAt != null ? 'parked' : f?.cancelledAt != null ? 'cancelled' : null
@@ -247,7 +250,8 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
     if (info.inPlan) continue
     const f = state.facts.blocks.get(info.id)
     if (!f || f.startedAt == null) continue
-    push(info, namedById(info.id, naming) ?? namedOf(info), f.startedAt, begunEnd(state, info, f, nowIdx), begunState(f, when), true)
+    const sw = swapped(f)
+    push(info, namedById(info.id, naming) ?? namedOf(info), sw?.from ?? f.startedAt, sw?.to ?? begunEnd(state, info, f, nowIdx), begunState(f, when), true)
   }
   return out.sort((a, b) => a.startMin - b.startMin || (a.id < b.id ? -1 : 1))
 }

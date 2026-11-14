@@ -33,9 +33,11 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * older version would make the day without them; it gives way to this one as the leader. 9 – no marks of a block (D467):
  * the evening block once marked as the second shift is work of its category – an older version would keep its minutes
  * out of the extension and the end of work (and wait for „Zacznij” at a weekly analysis) and freeze the day so; it gives
- * way to this one as the leader.
+ * way to this one as the leader. 10 – blocks away from the computer begin by themselves at their hour (D475, rule
+ * `awayStart`) and a start swaps with the running block (D478, `block.pause.place`): an older version would write no such
+ * start and put the swapped block back at its own place in the forecast; it gives way to this one as the leader.
  */
-export const RULES_VERSION = 9
+export const RULES_VERSION = 10
 
 /** What a block's start wrote of its plan (`block.start.planned`). */
 export interface StartPlanned {
@@ -127,7 +129,8 @@ export type TimerEvent =
       /** 'plan' – it happened at its planned time, said afterwards (the ritual): its times are no measure. */
       how: 'click' | 'auto' | 'start' | 'plan'
     })
-  | (EventBase & { k: 'block.pause'; block: string; at: number })
+  /** `place` (ms, D478): where the paused block stands – the place of the block whose start swapped with it. */
+  | (EventBase & { k: 'block.pause'; block: string; at: number; place?: number })
   | (EventBase & { k: 'block.resume'; block: string; at: number; confirmUntil: number | null })
   | (EventBase & { k: 'block.end'; block: string; at: number; done: boolean | null; rule: string | null })
   | (EventBase & { k: 'block.extend'; block: string; at: number; minutes: number })

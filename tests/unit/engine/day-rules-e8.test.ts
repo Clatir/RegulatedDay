@@ -99,22 +99,17 @@ describe('regeneracja „poza komputerem” o porze snu (A1-08)', () => {
   })
 })
 
-describe('późne wstanie od pierwszego użycia komputera (A1-10)', () => {
+describe('późne wstanie bez pierwszego użycia komputera (D488 zastępuje A1-10)', () => {
   const plan = [block({ id: 'ru', cat: 'rutyny', at: '06:00', min: 45 }), block({ id: 'an', cat: 'analiza', at: '07:30', min: 120 })]
 
-  it('nocne kodowanie po 04:00 nie jest pierwszym użyciem – propozycja od użycia rano', () => {
+  it('pierwsze użycie rano (także po nocnym kodowaniu) nie jest już wyzwalaczem – tylko przesunięta rutyna', () => {
     const s = new Scenario({ date: '2026-10-21', plan }).using('04:00', '04:40').presence('04:05')
     s.raw({ k: 'observe.to', at: s.at('04:40'), why: 'quit' }, '04:40')
     s.using('08:30', '09:00')
     const ctx = s.contextAt(s.at('08:45'))
-    const lw = detectLateWake(ctx, computeDay(ctx), null)
-    expect(lw?.firstUse).toBe(s.at('08:30'))
-  })
-
-  it('dzień bez zapisów obserwacji liczy od pierwszej obecności (zapas)', () => {
-    const s = new Scenario({ date: '2026-10-21', plan }).presence('08:30')
-    const ctx = s.contextAt(s.at('08:31'))
-    expect(detectLateWake(ctx, computeDay(ctx), null)?.firstUse).toBe(s.at('08:30'))
+    expect(detectLateWake(ctx, computeDay(ctx), null)).toBeNull()
+    const movedCtx = s.contextAt(s.at('08:45'), { plan: plan.map((b) => (b.id === 'ru' ? { ...b, startMin: lm('08:30') } : b)) })
+    expect(detectLateWake(movedCtx, computeDay(movedCtx), null)?.delayMin).toBe(150)
   })
 })
 

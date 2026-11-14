@@ -94,7 +94,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8l.1 Nazwy sesji „Sesja NY”, „Sesja Londyn”
    - [ ] E8l.2 „Start” posiłku przy biegnącej pracy pauzuje pracę
    - [ ] E8l.3 „Usuń” przy zaczętym bloku
-   - [ ] E8l.4 „Wstałeś później?” czeka na odpowiedź (gdy się zdarzy)
+   - [ ] E8l.4 „Wstałeś później?” czeka na odpowiedź (od 1.22.0 – po przesunięciu rutyny, 1.22-B.4)
    - [ ] E8l.5 Numer wersji w Ustawieniach
    - [ ] E8m.1 Pasek pulpitu nigdy nad oknami innych programów
    - [ ] E8m.2 „Uruchamiaj z Windows” pokazuje stan i da się wyłączyć
@@ -1375,12 +1375,15 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   „poza planem” i liczy się do budżetu; toast „Usunięty: … · Cofnij”, a „Cofnij” przywraca blok w planie i biegnący (D336).
 - **Nie przechodzi, gdy:** blok dalej biegnie po „Usuń”, przebieg znika z osi albo „Cofnij” nie przywraca bloku.
 
-#### E8l.4 „Wstałeś później?” czeka na odpowiedź (1.0.4)
+#### E8l.4 „Wstałeś później?” czeka na odpowiedź (1.0.4; od 1.22.0 – D488, jak 1.22-B.4)
 - [ ] Odebrane
-- **Automatycznie:** `tests/unit/engine/e3-plan.test.ts` (D337). Ty: gdy się zdarzy.
-- **Jak sprawdzić:** gdy rano pojawi się karta „Wstałeś później?”, dodaj blok rutyny, zanim odpowiesz.
-- **Oczekiwany efekt:** karta zostaje do Twojej odpowiedzi (albo rytuału) – dodany blok rutyny jej nie zabiera (D337).
-- **Nie przechodzi, gdy:** karta znika po dodaniu bloku rutyny.
+- **Automatycznie:** `tests/unit/engine/e3-plan.test.ts` (D337, D488). Ty: rano, raz.
+- **Jak sprawdzić:** rano przy rutynie zaczętej samej kliknij „Cofnij” na liście „Zrobione automatycznie” i przeciągnij
+  rutynę na osi o 30 min później; gdy pojawi się karta „Wstałeś później?”, przeciągnij rutynę z powrotem, zanim odpowiesz.
+- **Oczekiwany efekt:** karta pojawia się po przesunięciu (nie przy samym pierwszym użyciu komputera) i zostaje do Twojej
+  odpowiedzi (albo rytuału) z godziną, na którą przesunąłeś rutynę – powrót rutyny jej nie zabiera (D337).
+- **Nie przechodzi, gdy:** karta pojawia się przy pierwszym użyciu komputera bez przesunięcia albo znika po przesunięciu
+  rutyny z powrotem.
 
 #### E8l.5 Numer wersji w Ustawieniach (1.0.4)
 - [ ] Odebrane
