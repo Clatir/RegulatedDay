@@ -2466,7 +2466,7 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 
 #### KK1 Koszt na każdym kafelku (D501)
 - [ ] Odebrane
-- **Automatycznie:** `tests/web/tile-cost.test.ts`, `tests/web/tile-cost-week.test.ts`, `tests/web/week-costs.test.ts`, `tests/unit/block-costs.test.ts`, `tests/unit/engine/week-cost.test.ts`. Ty: rzut oka.
+- **Automatycznie:** `tests/web/tile-cost.test.ts`, `tests/web/tile-cost-week.test.ts`, `tests/web/cost-save.test.ts`, `tests/unit/block-costs.test.ts`, `tests/unit/engine/week-cost.test.ts`, `tests/unit/engine/cost-change.test.ts`. Ty: rzut oka.
 - **Jak sprawdzić:** w „Dziś”, „3 dniach” i „Tygodniu” zobacz kafelki: blok pracy, regenerację, blok z wariantem, blok z własnym kosztem, krótki blok (15 min) i bardzo niski kafelek w „Tygodniu”.
 - **Oczekiwany efekt:** w prawym dolnym rogu kafelka trzy liczby na godzinę w kolorach pul („3 · 1 · 1”), regeneracja z minusem („−1 · −2 · −3”); blok z własnym kosztem pokazuje własny, bez niego – wariantu, a bez wariantu – kategorii; w „Tygodniu” skrócony „3·1·1”; na niskim kafelku napis na końcu wiersza nazwy, a gdy i tam brak miejsca – po najechaniu na kafelek.
 - **Nie przechodzi, gdy:** któryś kafelek (np. regeneracja) nie ma kosztu; napis zakrywa nazwę; liczby są w lewym rogu; koszt różni się od tego w panelu bloku.
