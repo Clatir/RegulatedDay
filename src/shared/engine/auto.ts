@@ -18,7 +18,7 @@ import type { DayContext, DayState } from './day'
 import { blockAt, endShiftOf, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
 import { requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
-import { fixedWorkLeft, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
+import { awayStartUndoable, fixedWorkLeft, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
 /** The rules of a request's end without „Koniec” (`requestEndOf`). */
@@ -31,6 +31,12 @@ export const FIXED_REACTION_MIN = 10
 export const SESSION_IDLE_MIN = 30
 /** A block away from the computer ends at the first use after at least this long without input. */
 export const AWAY_GAP_MIN = 2
+/**
+ * A block away from the computer begins by itself (D475) after this long without input on every computer, from the
+ * stretch's beginning (T1138) – the idle threshold's default: a short break at the desk (coffee, reading) neither starts
+ * nor uses it up.
+ */
+export const AWAY_START_MIN = 10
 /** A meal, a routine and home affairs last without your answer at most their length plus this (D258). */
 export const AWAY_LIMIT_EXTRA_MIN = 30
 /** „Skończył się o …” among the answers when the question was first seen at least this long after the planned end. */
@@ -171,7 +177,9 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
   if (info.rules.kind === 'commute') return null
   const start = atOf(state.grid, f.startedAt)
   const length = (f.planned?.durationMin ?? info.durationMin) + endShiftOf(f)
-  const limited = info.rules.kind === 'meal' || info.rules.kind === 'routine' || info.categoryId === 'sprawy'
+  // A regeneration the app began by itself (D475) has the same limit (T1139): a long absence is no hours of rest.
+  const autoRegen = info.isRegen && state.facts.autos.some((a) => a.k === 'block.start' && a.rule === 'awayStart' && a.block === info.id)
+  const limited = info.rules.kind === 'meal' || info.rules.kind === 'routine' || info.categoryId === 'sprawy' || autoRegen
   const listening = info.isWork || info.isProject
   const limit = limited ? start + (length + AWAY_LIMIT_EXTRA_MIN) * MIN : listening ? start + length * MIN : null
   const use = firstUseAfter(activity, start, AWAY_GAP_MIN)
@@ -205,7 +213,7 @@ const awayOwnHour = (b: BlockInfo): boolean => !b.fixed && !b.waits && b.inPlan 
 /**
  * D475 (T1133, T1134): such a block (`awayOwnHour`), not begun, parked nor cancelled, begins by itself once you are away
  * from the computer within its planned time – at its hour when nothing runs in the foreground and no computer has input,
- * else when input stops (a stretch without input on every computer of at least `AWAY_GAP_MIN`, from its beginning) or
+ * else when input stops (a stretch without input on every computer of at least `AWAY_START_MIN`, from its beginning) or
  * the foreground is free again; it ends then by the rules of a block away from the computer (the first use, the limit).
  * Never before the day's first use of a computer (nobody knows you were up – a late wake, D337, decides those blocks), nor
  * from the effective bedtime, nor in „Odcinam się” or while a request runs, nor from when a fixed block starts in the
@@ -233,11 +241,11 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
     const lo = Math.max(at(b.start!), free)
     const hi = Math.min(at(b.start! + b.durationMin), bedtime)
     // The first stretch without input from `lo` long enough to tell you left (an open one up to now).
-    const away = activity.idle.find((x) => x.to - Math.max(x.from, lo) >= AWAY_GAP_MIN * MIN && Math.max(x.from, lo) < hi)
+    const away = activity.idle.find((x) => x.to - Math.max(x.from, lo) >= AWAY_START_MIN * MIN && Math.max(x.from, lo) < hi)
     if (!away) continue
     const from = Math.max(away.from, lo)
     // Due once the gap is known (its threshold passed) – and a fixed block taking the foreground then or before comes first.
-    const known = from + AWAY_GAP_MIN * MIN
+    const known = from + AWAY_START_MIN * MIN
     if (known > inp.now || known > inp.gate || from >= fixedFgAt) continue
     const id = derivedId(date, 'auto', 'awayStart', 'block.start', b.id, at(b.start!))
     if (state.facts.undone.has(id)) continue
@@ -569,6 +577,17 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     }
     if (still == null || idxOf(state.grid, still) !== f.endedAt) take([revalidate('later log')])
   }
+  // A block away from the computer begun by itself (D475) that a later log shows you were not away for (input within the
+  // stretch that began it, on another computer): its start and its automatic end undone (T1140) – while only the app
+  // touched it (`awayStartUndoable`). The block does not begin by itself again that day (its id is taken back).
+  for (const a of state.facts.autos) {
+    if (a.k !== 'block.start' || a.rule !== 'awayStart' || !a.block || state.facts.undone.has(a.id) || !awayStartUndoable(state, a)) continue
+    const from = at(a.at)
+    if (activity.idle.some((x) => x.from <= from + MIN && x.to - from >= AWAY_START_MIN * MIN)) continue
+    const f = state.facts.blocks.get(a.block)
+    const end = f?.endId ? state.facts.autos.find((x) => x.id === f.endId) : undefined
+    take([a, ...(end ? [end] : [])].map((x) => ({ id: derivedId(date, 'auto', 'revalidate', x.id), k: 'undo', at: inp.now, target: x.id, reason: 'later log', autoRule: 'revalidate' })))
+  }
   // The same for a request's end by input (the first use, the limit, the bedtime), with the block it resumed (the rule
   // resumes it again at the new end).
   for (const a of state.facts.autos) {
@@ -808,8 +827,7 @@ export function nextDeadline(state: DayState): number | null {
   const t = timerNow(state)
   const out: number[] = []
   for (const b of state.blocks) {
-    // A flexible block away from the computer begins at its own hour too (D475) – the timer is set on it.
-    if (!(b.fixed || b.waits || awayOwnHour(b)) || !b.inPlan) continue
+    if (!(b.fixed || b.waits) || !b.inPlan) continue
     const f = state.facts.blocks.get(b.id)
     if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) continue
     const span = plannedSpan(b, byId)

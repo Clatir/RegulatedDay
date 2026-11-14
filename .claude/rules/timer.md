@@ -55,8 +55,8 @@ paths:
   prognozie) – `Run.place`/`pausedPlaceOf` w `facts.ts`, kolejność i dolna granica w `forecast.ts`, oś w `dayItems`, koniec
   pracy w `day.ts`; regeneracja, blok „poza komputerem” i blok po planowanym końcu dalej się kończą.
 - Bloki bez komputera same (D475, T1133–T1137): `awayOwnHour` + `awayStarts` w `auto.ts` (reguła `awayStart`, id z
-  planowanym startem; bez dojazdu) – dopiero po pierwszym użyciu dnia i przerwie w wejściu ≥ `AWAY_GAP_MIN` (od jej
-  początku), liczone przed `fixedStartLists` – wcześniejszy start idzie pierwszy, stałe czekają przebieg; `fixedStart` nie
+  planowanym startem; bez dojazdu) – dopiero po pierwszym użyciu dnia i przerwie w wejściu ≥ `AWAY_START_MIN` (od jej
+  początku; regeneracja z limitem, sprawdzanie od nowa T465 – T1138–T1140), liczone przed `fixedStartLists` – wcześniejszy start idzie pierwszy, stałe czekają przebieg; `fixedStart` nie
   widzi z przodu bloku „poza komputerem” kończonego najpóźniej w chwili startu; „Cofnij” startu (`awayStartUndoable` –
   tylko póki blok ruszała sama aplikacja) cofa jego automatyczny koniec. „Tydzień” (`week.ts`) rysuje zamieniony jak oś.
 - `activityOf` bez żadnego komputera = cały czas bez wejścia; w testach dodaj `observe(...)` (DSL) – inaczej blok
@@ -94,5 +94,5 @@ paths:
   końca (`confirmWindows` w `day.ts`). Limity krawędzi (`runningEdges`: `earliestEnd`, `latestEnd`) liczy jedno
   `limitsOf` w `resize.ts` – także podgląd; oba na siatce, zawsze `earliestEnd ≤ latestEnd`.
 - Późne wstanie (`lateWake.ts`) – pierwsze użycie z `dayFirstUse`; `presence.first` tylko bez zapisów obserwacji.
-- Prowadzący sprawdza `idle`, `firstUse`, `limit`, `absence`, `lastInput` przy każdym sprawdzeniu i cofa je, gdy
+- Prowadzący sprawdza `idle`, `firstUse`, `limit`, `absence`, `lastInput` (i start `awayStart`) przy każdym sprawdzeniu i cofa je, gdy
   późniejszy log z wejściem im przeczy (T465) – nowa reguła końca zależna od wejścia musi tam trafić.

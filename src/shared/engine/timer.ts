@@ -444,9 +444,10 @@ function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockI
       out.push({ k: 'block.pause', block: fg.info.id, at })
     } else if (swaps(fg.info) && idxOf(state.grid, at) < fg.plannedEnd) {
       // Another flexible block (D478): the two change places – the clicked one begins now, the running one pauses, not
-      // done, and stands where the clicked one stood in the forecast (`place`; none – the clicked one had no place there,
-      // e.g. begun outside the plan: it waits as the next in the plan, its own place).
-      const place = state.forecast.find((p) => p.block.id === info.id && !p.running)?.from
+      // done, and stands at the clicked one's planned place (`place`; none – a block begun outside the plan: it waits as
+      // the next in the plan, its own place).
+      // Its planned place: its own hour; without one (anchored, a paused block's rest) – where the forecast shows it.
+      const place = !info.inPlan ? null : (info.start ?? state.forecast.find((p) => p.block.id === info.id && !p.running)?.from)
       out.push({ k: 'block.pause', block: fg.info.id, at, ...(place != null ? { place: atOf(state.grid, place) } : {}) })
     } else {
       // The start ends a regeneration (a break), or a block away from the computer – a click there means you are back: the

@@ -18,7 +18,7 @@ import { reserveMessageId } from './engine/game'
 import { hardEndCurrent, type HardEndNow } from './engine/hardEnd'
 import { suggestRegen } from './engine/reserve'
 import { REGEN_CATEGORY, type Pool } from './model/categories'
-import { isRunningRequest, OPEN, workSince, type AutoAction, type RequestFact } from './engine/facts'
+import { isRunningRequest, OPEN, pausedPlaceOf, workSince, type AutoAction, type RequestFact } from './engine/facts'
 import { atOf, type Grid } from './engine/grid'
 import { ritualDue } from './engine/ritual'
 import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
@@ -329,7 +329,13 @@ export function engineView(i: EngineInput): WidgetView {
       lines.push({ id: `restart:${b.id}`, text: `${nameOf(b.id)} · do ${clockOf(at(span.end))}`, actions: [{ id: 'restart', label: 'Zacznij jeszcze raz' }], dot: false })
     }
     // Paused blocks waiting with nothing in the foreground („Wznów · Zaparkuj”) – not one a running request will resume.
-    if (!fg) for (const p of t.paused) if (p.info.id !== interruptedId) lines.push({ id: `paused:${p.info.id}`, text: nameOf(p.info.id), actions: [{ id: 'start', label: 'Wznów' }, { id: 'park', label: 'Zaparkuj' }], dot: true })
+    // One a start swapped with (D478) stands later in the plan: quiet (no dot, D240) until its place comes (T1141).
+    if (!fg)
+      for (const p of t.paused) {
+        if (p.info.id === interruptedId) continue
+        const place = pausedPlaceOf(p.fact)
+        lines.push({ id: `paused:${p.info.id}`, text: nameOf(p.info.id), actions: [{ id: 'start', label: 'Wznów' }, { id: 'park', label: 'Zaparkuj' }], dot: place == null || state.now >= place })
+      }
     for (const q of questions) if (q !== next) lines.push(questionLine(q, q.block && q.kind !== 'request' ? nameOf(q.block) : '', clockOf))
     // The break after 90 min of continuous work (D234: a dot, no notification); in a session or a class it waits.
     const run = i.care.breakAfterMin > 0 ? workRunStart(state, now) : null

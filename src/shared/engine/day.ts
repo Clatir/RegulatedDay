@@ -18,7 +18,7 @@ import { addDays, weekday } from '../time/zone'
 import { activityOf, type Activity } from './activity'
 import { blockInfos, isBoundaryWork, plannedSpan, setsWorkEndBlock, type BlockInfo } from './blocks'
 import { EXPLAIN_END_RULES, explainMinutes, explainsOf, type Explain } from './explain'
-import { OPEN, compareOrder, foldFacts, isPassive, isRunning, orderOf, pausedPlaceOf, ranMinutes, sameClick, viewAt, workSince, type DayFacts, type EventOrder, type Segment } from './facts'
+import { OPEN, compareOrder, foldFacts, isPassive, isRunning, orderOf, ranMinutes, sameClick, viewAt, workSince, type DayFacts, type EventOrder, type Segment } from './facts'
 import { forecast, type Forecast, type Placed } from './forecast'
 import { atOf, gridOf, idxOf, idxOfLogical, type Grid } from './grid'
 
@@ -473,11 +473,14 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
           resolve = OPEN
           continue
         }
-        // Swapped with a start at e (D478): it waits at that block's place – it may begin there, as a block not started
-        // from its due (T1132): still paused – its due in the forecast; resumed or ended since – the place its pause gave.
-        const place = f.runs.find((r) => r.to === e)?.place ?? null
-        const expiry = place != null ? Math.max(due, (pausedPlaceOf(f) != null ? (dueOf.get(b.id) ?? place) : place)) + 15 : due + 15
+        // Swapped with a start (D478): it waits at that block's place – it may begin there, as a block not started from its
+        // due (T1132). The pause that left it by e (its last run stopped up to e – the stretch may go on with the clicked
+        // block, work too): still paused in it – its due in the forecast; resumed or ended since – the place that pause gave.
         const back = f.runs.find((r) => r.from >= e)?.from ?? null
+        const left = f.runs.filter((r) => r.to !== OPEN && r.to <= e).at(-1)
+        const place = left?.place ?? null
+        const stands = place != null && back == null && f.endedAt == null && f.runs.at(-1) === left
+        const expiry = place != null ? Math.max(due, stands ? (dueOf.get(b.id) ?? place) : place) + 15 : due + 15
         if (back != null) resolve = back >= expiry ? Math.max(resolve, expiry) : OPEN
         else if (f.endedAt != null) resolve = Math.max(resolve, Math.min(f.endedAt, expiry))
         else if (!isRunning(f)) resolve = Math.max(resolve, expiry <= m ? expiry : OPEN)

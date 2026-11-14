@@ -571,12 +571,19 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
   }
   // A request written in after the fact splits the flexible blocks it names (spec „nachodzi na blok elastyczny, dzieli
   // go na dwie części”): whenever it was written, their runs in the foreground lose its minutes. The place a pause gave
-  // (D478) stays with the second half – the one that pause ended.
+  // (D478) stays with the half that pause ended (the second; the first when the request reaches over the pause).
   for (const r of f.requests) {
     if (r.to === OPEN) continue
     for (const id of r.splits) {
       const b = f.blocks.get(id)
-      if (b) b.runs = b.runs.flatMap((x) => (x.bg || x.to <= r.from || x.from >= r.to ? [x] : [{ from: x.from, to: r.from, bg: x.bg, begun: x.begun }, { ...x, from: r.to }].filter((y) => y.to > y.from)))
+      if (b)
+        b.runs = b.runs.flatMap((x) => {
+          if (x.bg || x.to <= r.from || x.from >= r.to) return [x]
+          const parts = [{ from: x.from, to: r.from, bg: x.bg, begun: x.begun } as Run, { ...x, from: r.to }].filter((y) => y.to > y.from)
+          // The request reaches over the pause that gave the place: the half before it ends the run – it keeps the place.
+          if (x.place != null && parts.length === 1 && parts[0]!.place == null) parts[0]!.place = x.place
+          return parts
+        })
     }
   }
   // Corrections of real times (spec „korekta”), after everything else and in their order: a start never at or after the
