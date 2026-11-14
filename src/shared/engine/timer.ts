@@ -32,6 +32,8 @@ export interface TimerBlock {
   running: boolean
   /** Index of its start. */
   startedAt: number
+  /** Begun as a block of a parallel group (D476): the group's first block, else null. */
+  group: string | null
   /** Its planned end now (index): fixed blocks at their window's end, others after their length, pauses and „Przedłuż”. */
   plannedEnd: number
   ranMin: number
@@ -103,6 +105,8 @@ export type TimerAction =
   /** A routine's steps ticked off with its version (D328), and its „Cofnij”. */
   | { a: 'routineDone'; block: string; version: RoutineVersion; steps: string[] }
   | { a: 'routineUndo'; block: string }
+  /** D494: another block of a parallel group running behind comes to the foreground; the one in front goes behind it. */
+  | { a: 'front'; block: string }
   /** „Usuń” a block that has begun (D336): it ends now (the window takes it out of the plan), and „Cofnij” of that. */
   | { a: 'removeBegun'; block: string }
   | { a: 'undoRemove'; block: string }
@@ -316,6 +320,22 @@ export function awayStartUndoable(state: DayState, a: AutoAction): boolean {
   return f.endedAt == null ? f.runs[0]!.to === OPEN : state.facts.autos.some((x) => x.id === f.endId)
 }
 
+/**
+ * The block of a parallel group that takes the foreground when nothing else is in front (D493, T1191): of the blocks running
+ * in the background as blocks of a group (begun with `group`, not planned in the background), the one whose last run began
+ * last – the same order the timer's foreground keeps. Null – none.
+ */
+export function groupFront<T extends { info: BlockInfo; fact: BlockFact; running: boolean; bg: boolean }>(blocks: readonly T[]): T | null {
+  const lastRun = (t: T) => t.fact.runs.at(-1)?.from ?? t.fact.startedAt ?? 0
+  const begun = (t: T) => t.fact.runs.at(-1)?.begun
+  let best: T | null = null
+  for (const t of blocks) {
+    if (!t.running || !t.bg || t.fact.group == null || t.info.bg) continue
+    if (!best || lastRun(t) > lastRun(best) || (lastRun(t) === lastRun(best) && compareOrder(begun(t)!, begun(best)!) > 0)) best = t
+  }
+  return best
+}
+
 export function timerNow(state: DayState): TimerNow {
   const now = state.now
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
@@ -329,6 +349,7 @@ export function timerNow(state: DayState): TimerNow {
       info,
       fact: f,
       bg: open ? open.bg : (f.runs.at(-1)?.bg ?? info.bg),
+      group: f.group,
       running: isRunning(f),
       startedAt: f.startedAt,
       plannedEnd: plannedEndOf(state, info, f, now),
@@ -339,7 +360,10 @@ export function timerNow(state: DayState): TimerNow {
   // One block in the foreground: the latest started or resumed (two after a pause of sync – the later wins the place).
   const lastRun = (t: TimerBlock) => t.fact.runs.at(-1)?.from ?? t.startedAt
   const fgRunning = started.filter((t) => t.running && !t.bg).sort((a, b) => lastRun(b) - lastRun(a))
-  const fg = fgRunning[0] ?? null
+  // D493 (T1191): nothing in the foreground – the block in front ended – and blocks of a parallel group run behind: the one
+  // begun last is in front (`groupFront`, the same rule energy counts by).
+  const fg = fgRunning[0] ?? groupFront(started)
+  if (fg && fg.bg) fg.bg = false
   const bg = started.filter((t) => t.running && (t.bg || (fg != null && t !== fg && !t.bg)))
   const paused = started.filter((t) => !t.running && !t.bg)
 
@@ -531,6 +555,17 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       const start = events.at(-1)!
       start.planned = { categoryId: act.categoryId, variantId, durationMin: act.durationMin, fixed: false, costs: null, bgCostPct: null }
       if (cost) start.confirmUntil = at + act.durationMin * 60_000
+      return yes(events)
+    }
+    case 'front': {
+      // D494 (T1192): only a block of a parallel group running behind; the one in front – of a group or not – goes behind
+      // as a block of the group (it costs no energy there), the chosen one to the foreground.
+      const target = t.bg.find((x) => x.info.id === act.block)
+      if (!target || target.fact.group == null || target.info.bg) return no('ten blok nie biegnie w tle grupy')
+      const events: TimerDraft[] = []
+      if (t.fg && t.fg.fact.group != null && !t.fg.bg) events.push({ k: 'block.fg', block: t.fg.info.id, at, bg: true })
+      else if (t.fg && t.fg.fact.group == null) return no('na pierwszym planie biegnie blok spoza grupy')
+      events.push({ k: 'block.fg', block: target.info.id, at, bg: false })
       return yes(events)
     }
     case 'pause': {

@@ -462,7 +462,7 @@ export function engineView(i: EngineInput): WidgetView {
       start: modes.night ? null : start
     },
     // Only its hour in words („W tle: … do 10:30”): the day's minute, as in 1.0.1 – no countdown, no steps (E4a.1).
-    background: hidden || modes.night ? [] : t.bg.map((b) => ({ id: b.info.id, name: nameOf(b.info.id), endsAt: at(b.plannedEnd) })),
+    background: hidden || modes.night ? [] : t.bg.map((b) => ({ id: b.info.id, name: nameOf(b.info.id), endsAt: at(b.plannedEnd), ...(b.fact.group != null && !b.info.bg ? { group: true } : {}) })),
     autos: hidden ? { groups: [], items: [] } : { groups, items },
     fewer: modes.fewer,
     signals: !!i.energy?.enabled,

@@ -123,7 +123,8 @@ export interface WidgetView {
   /** The bar's own buttons now. */
   buttons: BarButtons
   /** Blocks in the background with „Zakończ teraz” and „Przedłuż” (in „⋯”). */
-  background: Array<{ id: string; name: string; endsAt: number }>
+  /** `group` – behind as a block of a parallel group (D476, D494): „+K w tle” counts it and „Na pierwszy plan” brings it in front. */
+  background: Array<{ id: string; name: string; endsAt: number; group?: boolean }>
   /**
    * „Zrobione automatycznie” (D350): the actions as the plan said them in one row that unfolds on a click into the list of
    * them, each with „Cofnij”; the rest (a flexible block's pause at a fixed start too) each in a row of its own.

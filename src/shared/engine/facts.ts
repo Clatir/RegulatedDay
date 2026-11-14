@@ -116,6 +116,8 @@ export interface BlockFact {
   endOrder: EventOrder | null
   /** „Dodaj bez wymiany” (index): its minutes after the boundary are confirmed in advance, up to its planned length. */
   addConfirmedAt: number | null
+  /** Begun as a block of a parallel group (D476, D493; `block.start.group`): the group's first block, else null. */
+  group: string | null
 }
 
 /** An action the app did itself (spec „Działania automatyczne”): on the list „zrobione automatycznie” with „Cofnij”. */
@@ -271,7 +273,8 @@ const newBlock = (id: string): BlockFact => ({
   endRule: null,
   endId: null,
   endOrder: null,
-  addConfirmedAt: null
+  addConfirmedAt: null,
+  group: null
 })
 
 /** Events that never change the timer's facts (they do not make segments stale either); energy never does either. */
@@ -353,6 +356,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         }
         const at = idx(e.at)
         b.startedAt = at
+        b.group = typeof e.group === 'string' && e.group.length > 0 ? e.group : null
         // `tag` of a start an older version wrote (D467) is never read – it may ride along in the spread, unused.
         const { name, task, routine, requests, ...planned } = e.planned
         b.planned = { ...planned, variantId: planned.variantId ?? null, fixed: planned.fixed === true, ...startNaming({ name, task, routine, requests }) }

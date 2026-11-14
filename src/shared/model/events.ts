@@ -128,6 +128,11 @@ export type TimerEvent =
       confirmUntil: number | null
       /** 'plan' – it happened at its planned time, said afterwards (the ritual): its times are no measure. */
       how: 'click' | 'auto' | 'start' | 'plan'
+      /**
+       * A block of a parallel group begun with it (D476, D493): the id of the group's first block. Its background run is
+       * the group's – it costs no energy, and the foreground falls to it when the block in front ends (T1190).
+       */
+      group?: string
     })
   /** `place` (ms, D478): where the paused block stands – the place of the block whose start swapped with it. */
   | (EventBase & { k: 'block.pause'; block: string; at: number; place?: number })

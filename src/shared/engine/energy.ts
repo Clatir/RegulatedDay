@@ -84,8 +84,11 @@ export interface EnergyOptions {
   calibration?: boolean
 }
 
-/** Why a block runs in the background: planned so, sent there (full cost), or set aside by a flexible block started over it. */
-type BgWhy = 'planned' | 'forced' | 'aside'
+/**
+ * Why a block runs in the background: planned so, sent there (full cost), set aside by a flexible block started over it, or
+ * behind as a block of a parallel group (D476: no cost – only the block in front costs).
+ */
+type BgWhy = 'planned' | 'forced' | 'aside' | 'group'
 
 /** What a block is to energy: as its start event says, else as planned. */
 interface Kind {
@@ -201,14 +204,14 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   }
 
   // The runs of the log, cut at now; a run begun at now stays (empty) – its block is in the forecast from now.
-  const actual: Array<{ b: BlockInfo; runs: Array<{ from: number; to: number; bg: boolean }> }> = []
+  const actual: Array<{ b: BlockInfo; group: boolean; runs: Array<{ from: number; to: number; bg: boolean; begun: number }> }> = []
   for (const b of day.blocks) {
     const f = day.facts.blocks.get(b.id)
     if (!f) continue
     const runs = f.runs
       .filter((r) => r.from <= now)
-      .map((r) => ({ from: Math.max(0, r.from), to: Math.max(0, r.from, Math.min(r.to === OPEN ? now : r.to, now, end)), bg: r.bg }))
-    actual.push({ b, runs })
+      .map((r) => ({ from: Math.max(0, r.from), to: Math.max(0, r.from, Math.min(r.to === OPEN ? now : r.to, now, end)), bg: r.bg, begun: r.from }))
+    actual.push({ b, group: f.group != null && !b.bg, runs })
   }
   const span = (b: BlockInfo, from: number, to: number, bg: boolean, rest: Partial<Span> = {}): Span => ({ ...kindOf(b), from, to, bg, why: null, returned: false, planned: false, ...rest })
   /** What is in the foreground of the log at k (or begins there) besides `except`. */
@@ -219,12 +222,13 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   }
   const spans: Span[] = []
   const lastWhy = new Map<string, BgWhy | null>()
-  for (const { b, runs } of actual) {
+  for (const { b, group, runs } of actual) {
     const kind = kindOf(b)
     let why: BgWhy | null = null
     runs.forEach((r, i) => {
       const prev = runs[i - 1]
       if (!r.bg) why = null
+      else if (group) why = 'group'
       else if (b.bg) why = 'planned'
       // A flexible block runs in the background by your choice: its share (T438).
       else if (kind.flexible) why = 'aside'
@@ -261,6 +265,13 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
     }
   }
 
+  // Blocks of a parallel group behind (D476, D493): at a minute with nothing in front, the one whose run began last.
+  const groupAt: Array<Span | null> = new Array(end).fill(null)
+  for (const x of spans) {
+    if (!x.bg || x.why !== 'group') continue
+    for (let k = x.from; k < x.to; k++) if (!groupAt[k] || groupAt[k]!.from < x.from) groupAt[k] = x
+  }
+
   // The summed cost an hour of every minute (hundredths), what is in the foreground, and fixed blocks running behind it.
   const raw = pools(() => new Int32Array(end))
   const add = (k: number, c: Costs, pct: number) => {
@@ -287,8 +298,9 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
     } else if (discAt[k]) {
       // „Odcinam się” is regeneration: quiet, a weighted blanket, warm light (spec).
       add(k, regenVariant(s, 'cisza'), 100)
-    } else if (fg) {
-      const main = Array.isArray(fg) ? pickFront(fg, s) : fg
+    } else if (fg || groupAt[k]) {
+      // Nothing in front but blocks of a parallel group behind: the one begun last is in front (D493, T1191).
+      const main = fg ? (Array.isArray(fg) ? pickFront(fg, s) : fg) : groupAt[k]!
       frontSpan[k] = main
       add(k, costOf(main, s), 100)
       // Beside a regeneration another fixed block waits (spec „Bloki”).
@@ -297,11 +309,13 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
       // Time without a block that is regeneration counts as „gra, film” (D146, T181).
       add(k, regenVariant(s, 'gra'), 100)
     }
-    hasFront[k] = reqAt[k] != null || discAt[k] || fg ? 1 : 0
+    hasFront[k] = reqAt[k] != null || discAt[k] || fg || groupAt[k] ? 1 : 0
   }
   for (const x of spans) {
     if (!x.bg) continue
     for (let k = x.from; k < x.to; k++) {
+      // Behind as a block of a parallel group: no cost; in front when nothing else is (counted above).
+      if (x.why === 'group') continue
       const s = settingsBy[k]!
       add(k, costOf(x, s), isSession(x) ? (hasFront[k] ? 0 : 100) : x.why === 'forced' ? 100 : (x.bgPct ?? s.backgroundCostPct))
     }
