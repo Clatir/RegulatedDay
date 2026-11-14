@@ -9,12 +9,15 @@
  *
  * The check-in and the signals are anchors: a signal carries the exact state before it as its computer knew it, so
  * corrections of times before it never change the state after it; a descent the leader registered stays. A block counts
- * as it began (its start event): a later edit of the plan never changes its past.
+ * as it began (its start event): a later edit of the plan never changes its past; a change of its cost in the window of its tile
+ * (`block.cost`, D501) counts from its minute on (`costChange.ts`).
  */
 import { POOLS, REGEN_CATEGORY, REQUEST_CATEGORY, costsOf, type CategoryRules, type Costs, type Pool, type PoolValues } from '../model/categories'
+import { baseCosts } from '../model/blockCosts'
 import { compareEvents, isKnown, type AnyEvent, type EnergyEvent } from '../model/events'
 import { DEFAULT_SETTINGS, type RulesSettings } from '../model/settings'
 import type { BlockInfo } from './blocks'
+import { costChangesOf, ownAt, startCostOf, type CostChange } from './costChange'
 import { REST_FREE, settingsAtMinute, type DayContext, type DayState } from './day'
 import { compareOrder, type EventOrder, OPEN } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
@@ -96,6 +99,8 @@ interface Kind {
   cat: string
   variant: string | null
   own: Costs | null
+  /** Its cost changed from a minute on (D501, `block.cost`), in the order they apply; null – none (the cost of its start all along). */
+  changes: readonly CostChange[] | null
   bgPct: number | null
   rules: CategoryRules
   flexible: boolean
@@ -136,15 +141,16 @@ export function regenVariant(s: RulesSettings, id: string): Costs {
   return cat && v ? (v.costs ?? cat.costs) : costsOf(DEFAULT_SETTINGS.categories[REGEN_CATEGORY]!, id)
 }
 
-function costOf(x: Kind, s: RulesSettings): Costs {
-  return x.own ?? costsOf(s.categories[x.cat] ?? x.rules, x.variant)
+/** What a block costs an hour at minute k: its own (changed from a minute on, D501), else its variant's or category's (`baseCosts`). */
+function costOf(x: Kind, s: RulesSettings, k: number): Costs {
+  return (x.changes ? ownAt(x.changes, k, x.own) : x.own) ?? baseCosts(s.categories, x.cat, x.variant, x.rules)
 }
 
-/** Among blocks in the foreground at once: regeneration and a protected life block stay, then the class mode, the costlier, the earlier. */
-function pickFront(spans: readonly Span[], s: RulesSettings): Span {
+/** Among blocks in the foreground at once (minute k): regeneration and a protected life block stay, then the class mode, the costlier, the earlier. */
+function pickFront(spans: readonly Span[], s: RulesSettings, k: number): Span {
   const rank = (x: Span) => (isRegen(x) ? 0 : x.rules.cls === 'life' && x.rules.protected ? 1 : x.rules.classMode ? 2 : 3)
   const sum = (x: Span) => {
-    const c = costOf(x, s)
+    const c = costOf(x, s, k)
     return c.head + c.emotions + c.senses
   }
   return [...spans].sort((a, b) => rank(a) - rank(b) || sum(b) - sum(a) || a.from - b.from || (a.block.id < b.block.id ? -1 : 1))[0]!
@@ -187,17 +193,20 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   const checkins = events.filter((e) => e.k === 'energy.checkin')
   const c0 = checkins.length ? Math.min(...checkins.map((e) => idx(e.at))) : null
 
+  // D501: the changes of a begun block's cost from a minute on (only after its start – `costChange.ts`).
+  const changes = costChangesOf(ctx.events, day.facts)
   const kinds = new Map<string, Kind>()
   const kindOf = (b: BlockInfo): Kind => {
     let k = kinds.get(b.id)
     if (!k) {
       const p = day.facts.blocks.get(b.id)?.planned
-      const cat = p?.categoryId ?? b.categoryId
+      const { cat, variant, own } = startCostOf(b, p)
       k = {
         block: b,
         cat,
-        variant: p ? p.variantId : b.variantId,
-        own: p?.costs !== undefined ? p.costs : b.costs,
+        variant,
+        own,
+        changes: changes.get(b.id) ?? null,
         bgPct: p?.bgCostPct !== undefined ? p.bgCostPct : b.bgCostPct,
         rules: ctx.snapshot.settings.categories[cat] ?? b.rules,
         flexible: !(p ? p.fixed : b.fixed) && !b.waits
@@ -222,7 +231,7 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   const frontOver = (k: number, except: BlockInfo): Span | null => {
     const over: Span[] = []
     for (const { b, runs } of actual) if (b !== except) for (const r of runs) if (!r.bg && r.from <= k && (k < r.to || k === r.from)) over.push(span(b, r.from, r.to, false))
-    return over.length ? pickFront(over, settingsBy[Math.min(k, end)]!) : null
+    return over.length ? pickFront(over, settingsBy[Math.min(k, end)]!, k) : null
   }
   const spans: Span[] = []
   const lastWhy = new Map<string, BgWhy | null>()
@@ -297,7 +306,7 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   /** A fixed block behind another one: its full cost (a session costs nothing, D202, T319); a flexible one pauses. */
   const behind = (k: number, x: Span, s: RulesSettings) => {
     if (x.flexible || isRegen(x)) return false
-    add(k, costOf(x, s), isSession(x) ? 0 : 100)
+    add(k, costOf(x, s, k), isSession(x) ? 0 : 100)
     return true
   }
   const frontSpan: Array<Span | null> = new Array(end).fill(null)
@@ -315,9 +324,9 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
       add(k, regenVariant(s, 'cisza'), 100)
     } else if (fg || groupAt[k]) {
       // Nothing in front but blocks of a parallel group behind: the one begun last is in front (D493, T1191).
-      const main = fg ? (Array.isArray(fg) ? pickFront(fg, s) : fg) : groupAt[k]!
+      const main = fg ? (Array.isArray(fg) ? pickFront(fg, s, k) : fg) : groupAt[k]!
       frontSpan[k] = main
-      add(k, costOf(main, s), 100)
+      add(k, costOf(main, s, k), 100)
       // Beside a regeneration another fixed block waits (spec „Bloki”).
       if (Array.isArray(fg) && !isRegen(main)) for (const x of fg) if (x !== main && behind(k, x, s)) (behindAt[k] ??= new Set()).add(x.block.id)
     } else if (day.rest[k] === REST_FREE) {
@@ -336,17 +345,17 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
         const front = frontSpan[k]
         // A request or „Odcinam się” in front: a fixed block of a group goes on behind at full cost, as any fixed one (T1209).
         if (!front && (reqAt[k] != null || discAt[k]) && !x.flexible && !isRegen(x)) {
-          add(k, costOf(x, s), isSession(x) ? 0 : 100)
+          add(k, costOf(x, s, k), isSession(x) ? 0 : 100)
           continue
         }
         if (!front || front.groupId === x.groupId || front.block.id === x.groupId) continue
         // As without the group: set aside (its share) when flexible, or fixed of a category that may run behind a flexible
         // block in front; else sent behind – full cost.
         const aside = x.flexible || (x.rules.background && front.flexible)
-        add(k, costOf(x, s), isSession(x) ? 0 : aside ? (x.bgPct ?? s.backgroundCostPct) : 100)
+        add(k, costOf(x, s, k), isSession(x) ? 0 : aside ? (x.bgPct ?? s.backgroundCostPct) : 100)
         continue
       }
-      add(k, costOf(x, s), isSession(x) ? (hasFront[k] ? 0 : 100) : x.why === 'forced' ? 100 : (x.bgPct ?? s.backgroundCostPct))
+      add(k, costOf(x, s, k), isSession(x) ? (hasFront[k] ? 0 : 100) : x.why === 'forced' ? 100 : (x.bgPct ?? s.backgroundCostPct))
     }
   }
   const perMin = pools((p) => raw[p].map((v) => Math.max(-SUM_CAP, Math.min(SUM_CAP, v))))

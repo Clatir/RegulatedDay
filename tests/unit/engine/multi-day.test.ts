@@ -352,11 +352,12 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
     expect(ctx.events).toEqual([])
   })
 
-  it('bez krzywej, gdy nikt jej nie rysuje (miesiąc, cele – T914): reszta dnia ta sama', () => {
+  it('bez krzywej, gdy nikt jej nie rysuje (miesiąc, cele – T914): reszta dnia ta sama, bez kosztu na kafelkach (T1305)', () => {
     const ctx = futureDay().contextAt(NOW)
     const none = horizonDay(ctx, 'future', null, { curve: false })
     expect(none.energy).toBeNull()
-    expect({ ...horizonDay(ctx, 'future'), energy: null }).toEqual(none)
+    const full = horizonDay(ctx, 'future')
+    expect({ ...full, energy: null, blocks: full.blocks.map(({ cost: _cost, ...b }) => b) }).toEqual(none)
   })
 })
 

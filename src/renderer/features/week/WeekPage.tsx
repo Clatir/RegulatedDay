@@ -27,6 +27,8 @@ import { CalendarChips } from '../calendars/CalendarChips'
 import { useVisibleAllDayIn, useVisibleDays } from '../calendars/visibleViews'
 import { AgendaView } from './AgendaView'
 import { DayGrid } from './DayGrid'
+import { EnergyStripLegend } from './EnergyStrip'
+import { hasEnergy } from '../plan/energyDraw'
 import { GoalsPanel } from './GoalsPanel'
 import { THREE_DAYS_PPM, goalsMonthOfWeek } from './weekLayout'
 import { weekTitle } from './weekText'
@@ -132,7 +134,11 @@ function WeekBody({ week, today, openCard, onCardOpened }: { week: string; today
       <GoalsPanel month={goalsMonthOfWeek(week, today)} />
       {view ? (
         // Keyed by the week: another week is another grid – a window of a new block or a drag never goes with it (D371).
-        <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} openCard={openCard} onCardOpened={onCardOpened} />
+        <>
+          {/* Some column shows the strip of energy (D500) – the legend of its shades stands over the columns. */}
+          {view.days.some((d) => hasEnergy(d.energy)) && <EnergyStripLegend />}
+          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} openCard={openCard} onCardOpened={onCardOpened} />
+        </>
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="week-loading">
           {failed ? 'Nie da się teraz policzyć tego tygodnia.' : 'Liczę tydzień…'}
@@ -160,7 +166,11 @@ function ThreeDaysBody({ middle }: { middle: string }) {
     <>
       <CalendarChips hiddenCount={seen.hiddenCount + hiddenInRange} />
       {view ? (
-        <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} ppm={THREE_DAYS_PPM} mode="3days" openCard={null} onCardOpened={() => undefined} />
+        <>
+          {/* Some column shows the strip of energy (D500) – the legend of its shades stands over the columns. */}
+          {view.days.some((d) => hasEnergy(d.energy)) && <EnergyStripLegend />}
+          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} ppm={THREE_DAYS_PPM} mode="3days" openCard={null} onCardOpened={() => undefined} />
+        </>
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="three-loading">
           {failed ? 'Nie da się teraz policzyć tych dni.' : 'Liczę dni…'}

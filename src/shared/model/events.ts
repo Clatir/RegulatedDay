@@ -9,6 +9,7 @@
  * day's file. Instants are ms UTC.
  */
 import { isIsoDate } from '../time/zone'
+import { isPoolCost } from './blockCosts'
 import { POOLS, type Costs, type Pool, type PoolValues } from './categories'
 import { MAX_BLOCK_MIN, type PlanBlock } from './plan'
 import { MAX_STEPS, ROUTINE_VERSIONS, type RoutineVersion } from './routines'
@@ -41,9 +42,12 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * parallel group (D476, D493, `block.start.group`): an older version would charge the blocks behind and leave the
  * foreground empty when the block in front ends; it gives way to this one as the leader. 12 – the block of a group that
  * takes the front is written there (`groupFront`, T1259): an older version would leave it behind in the log (no cost, no
- * work in front for requests and the forecast); it gives way to this one as the leader.
+ * work in front for requests and the forecast); it gives way to this one as the leader. 13 – the cost of a begun block changed
+ * from a minute on (D501, `block.cost`): an older version skips the event and counts the block by its start's costs to its end
+ * – the descents it would register (`energy.reserve`) and the reward of the frozen day; it gives way to this one as the leader
+ * (and, the event being the timer's, installs the new version without the 24 h – `unknownTimerEvents`).
  */
-export const RULES_VERSION = 12
+export const RULES_VERSION = 13
 
 /** What a block's start wrote of its plan (`block.start.planned`). */
 export interface StartPlanned {
@@ -140,6 +144,14 @@ export type TimerEvent =
        */
       group?: string
     })
+  /**
+   * The cost per hour of a begun block changed in the window of its tile (D501): from the minute of `at` to the block's end it costs
+   * `costs` (null – its variant's or category's again) instead of what its start wrote (`block.start.planned`); the minutes before
+   * stay as they were counted, and only a change after the block's start (in the log's order) counts – the last of a minute wins
+   * (`costChange.ts`). Passive for the day engine (`PASSIVE`). The timer's domain on purpose (T1300): an older version keeps it as
+   * an unknown event of the timer, counts the block by its start and installs the new version without the 24 h.
+   */
+  | (EventBase & { k: 'block.cost'; block: string; at: number; costs: Costs | null })
   /** `place` (ms, D478): where the paused block stands – the place of the block whose start swapped with it. */
   | (EventBase & { k: 'block.pause'; block: string; at: number; place?: number })
   | (EventBase & { k: 'block.resume'; block: string; at: number; confirmUntil: number | null })
@@ -276,6 +288,8 @@ export type EnergyEvent =
   | (EventBase & { k: 'energy.reserve'; at: number; pool: Pool; silent: boolean })
   /** The energy module switched on or off (a shared setting that works at once), with the state before. */
   | (EventBase & { k: 'energy.module'; at: number; on: boolean; was?: boolean })
+  /** `block.cost` as the first builds of 1.24 wrote it (the energy's domain) – read the same, never written (T1300). */
+  | (EventBase & { k: 'energy.cost'; at: number; block: string; costs: Costs | null })
 
 /** An event of a kind this version does not know: kept, skipped by the rules. */
 export type UnknownEvent = EventBase & { k: string; unknown: true; raw: Record<string, unknown> }
@@ -305,6 +319,8 @@ const isLength = (v: unknown): v is number => Number.isInteger(v) && (v as numbe
 /** A change of a block's planned end („Przedłuż”, a shortening): minutes, more than 0, at most a block's longest. */
 const isChange = (v: unknown): v is number => isNum(v) && v > 0 && v <= MAX_BLOCK_MIN
 const isAnswers = (v: unknown) => isPlain(v) && POOLS.every((p) => Array.isArray(v[p]) && (v[p] as unknown[]).length === 2 && (v[p] as unknown[]).every((a) => a === 0 || a === 1 || a === 2))
+/** Three costs of the pools in the schema's range (`RANGES.cost`). */
+const isCosts = (v: unknown) => isPlain(v) && POOLS.every((p) => isPoolCost(v[p]))
 const isValues = (v: unknown) => v == null || (isPlain(v) && POOLS.every((p) => isNum(v[p]) && (v[p] as number) >= 0 && (v[p] as number) <= 100))
 
 /** The fields every kind needs beyond the base: name → check. */
@@ -363,7 +379,9 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'energy.signal': { at: isNum, signal: (v) => (SIGNALS as readonly unknown[]).includes(v), before: isValues },
   'energy.relative': { at: isNum, pool: isPool, delta: (v) => v === -10 || v === 0 || v === 10, before: isValues },
   'energy.reserve': { at: isNum, pool: isPool },
-  'energy.module': { at: isNum, on: (v) => typeof v === 'boolean', was: (v) => v === undefined || typeof v === 'boolean' }
+  'energy.module': { at: isNum, on: (v) => typeof v === 'boolean', was: (v) => v === undefined || typeof v === 'boolean' },
+  'energy.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) },
+  'block.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) }
 }
 
 export const KNOWN_KINDS: ReadonlySet<string> = new Set(Object.keys(NEEDS))

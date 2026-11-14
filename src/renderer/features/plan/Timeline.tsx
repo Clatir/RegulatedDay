@@ -12,7 +12,8 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
-import type { Pool } from '@shared/model/categories'
+import type { TileCost as TileCostInfo } from '@shared/model/blockCosts'
+import type { Costs } from '@shared/model/categories'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import type { DueBadge } from '@shared/engine/caseDates'
 import type { Priority } from '@shared/model/requests'
@@ -21,13 +22,17 @@ import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { cx } from '../../components/ui'
 import { attachable, hasFiles, textTarget } from '../attachments/attachDrop'
 import { attachBadge, attachBadgeTitle } from '../attachments/attachView'
+import type { SaveAnswer } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { DueMark } from '../cases/DueMark'
 import { PriorityMark } from '../cases/PriorityMark'
-import { poolPath, POOL_COLOR, POOL_NAME } from './energyDraw'
+import { EnergyLanes } from './EnergyLanes'
+import { hasEnergy } from './energyDraw'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
 import { inParallelZone, tileAt, tileLanes } from './parallelDrag'
+import type { CostAsk } from './costSave'
+import { costRoom, TileCost } from './TileCost'
 
 export interface TimelineItem {
   id: string
@@ -72,6 +77,11 @@ export interface TimelineItem {
    * and links dropped on it (`onAttachDrop`). Left out – a tile that takes no drop (a block begun outside the plan).
    */
   attach?: number
+  /**
+   * The cost per hour on the tile's bottom right (D501: three numbers in the colours of the pools); absent – none (a template's, the wizard's axis).
+   * `edit` – a click on it opens the window that changes it (`Timeline.onCosts`).
+   */
+  cost?: TileCostInfo
 }
 
 /**
@@ -119,6 +129,8 @@ export interface TimelineMarker {
   label: string
   tone: 'lamp' | 'rose' | 'sea' | 'muted' | 'fg'
   dashed?: boolean
+  /** The line „teraz” (D500: the three numbers of the energy stand at it). */
+  now?: true
 }
 
 /** The energy's curve beside the axis (the one sampling: `@shared/engine/energyTrack`). */
@@ -255,6 +267,7 @@ export function Timeline({
   onParallel,
   attached,
   onAttachDrop,
+  onCosts,
   ghost,
   draft,
   from,
@@ -323,6 +336,8 @@ export function Timeline({
    * is lit while they are over it; the gestures of the axis (the drag of a block, the edges, a new block) are pointer ones and stay as they were.
    */
   onAttachDrop?: (id: string, dt: DataTransfer) => void
+  /** The block's own cost set in the window of its tile (D501), or null – the category's again; left out – the cost is only told. */
+  onCosts?: (id: string, costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>
   /** The span a sprawa dragged from outside the axis would take (D384) – drawn as a band while it is held; null – none. */
   ghost?: BlockSpan | null
   /** The new block not saved yet (D466): a dashed tile with its hours; null – none. The axis widens to hold it. */
@@ -376,6 +391,8 @@ export function Timeline({
   const span = [...(extent ?? items), ...(draft ? [draft] : [])]
   const lo = Math.floor(Math.min(from, ...span.map((i) => i.startMin), ...markers.map((m) => m.at)) / 60) * 60
   const hi = Math.ceil(Math.max(to, ...span.map((i) => i.endMin), ...markers.map((m) => m.at)) / 60) * 60
+  // The line „teraz” of the axis: the lanes stand its numbers on it and draw it in its colour (D500).
+  const nowMarker = markers.find((m) => m.now)
   // D366: a click on a gap (or in the column of hours) creates a block on the quarter, a drag one with its start and end;
   // with `clickCreates` off (D496, „Dziś”) a bare click makes nothing – only a drag does.
   const grid = useGridCreate({
@@ -465,6 +482,13 @@ export function Timeline({
     // D365: a movable block has both edges; one that only runs on – the bottom one.
     const topEdge = !!onResize && i.movable === true
     const endEdge = !!onResize && (i.movable === true || i.resize === 'end')
+    // D501: the cost stands in the tile's bottom right corner; a low tile has it at the end of the name's row, a low one beside another (or a
+    // narrow one) shows it only while the pointer is over the tile.
+    const costAt = !i.cost ? null : !tiny && !narrow ? 'corner' : tiny && lane.lanes === 1 ? 'row' : 'hover'
+    const costLabel = (className: string) =>
+      i.cost && costAt && (
+        <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} onChange={onCosts ? (costs, ask) => onCosts(i.id, costs, ask) : undefined} />
+      )
     return (
       <button
         key={i.id}
@@ -551,7 +575,7 @@ export function Timeline({
           setTimeout(() => (dropped.current = false), 0)
         }}
         className={cx(
-          'absolute overflow-hidden rounded-[3px] border-l-[3px] px-1.5 text-left leading-tight transition-colors',
+          'group absolute overflow-hidden rounded-[3px] border-l-[3px] px-1.5 text-left leading-tight transition-colors',
           selected === i.id ? 'ring-1 ring-lamp' : 'hover:brightness-110',
           i.waits && 'border-dashed',
           draggable && !dragged && 'cursor-grab',
@@ -584,8 +608,9 @@ export function Timeline({
         {...(onAttachDrop && i.attach !== undefined ? tileDrop(i.id, onAttachDrop, dropOver, setDropOver) : {})}
       >
         {i.priority && <PriorityMark priority={i.priority} testId="block-priority" apart />}
-        {topEdge && <span data-edge="top" data-testid={`block-${i.id}-edge-top`} className={cx('absolute inset-x-0 top-0 z-10 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
-        {endEdge && <span data-edge="end" data-testid={`block-${i.id}-edge-end`} className={cx('absolute inset-x-0 bottom-0 z-10 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
+        {/* The edges over everything in the tile (z-30 – the cost's label in the corner or shown on hover is z-20): the whole width resizes (D365, D501). */}
+        {topEdge && <span data-edge="top" data-testid={`block-${i.id}-edge-top`} className={cx('absolute inset-x-0 top-0 z-30 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
+        {endEdge && <span data-edge="end" data-testid={`block-${i.id}-edge-end`} className={cx('absolute inset-x-0 bottom-0 z-30 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         <div className={cx('flex min-w-0 items-baseline gap-1.5', tiny ? 'text-[11px]' : 'pt-0.5 text-[12px]')}>
           {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(start)}</span>}
           <span className="truncate text-fg">
@@ -617,19 +642,20 @@ export function Timeline({
               {attachBadge(i.attach)}
             </span>
           ) : null}
+          {costAt === 'row' && costLabel('ml-auto shrink-0')}
         </div>
         {!tiny && !narrow && (
-          <div className="truncate text-[11px] text-muted">
+          <div className={cx('truncate text-[11px] text-muted', costAt === 'corner' && costRoom(false))}>
             {logicalClock(start)}–{logicalClock(end)}
             {i.kind ? ` · ${i.kind}` : ''}
             {i.marks.length ? ` · ${i.marks.join(' · ')}` : ''}
           </div>
         )}
+        {costAt === 'corner' && costLabel('absolute right-1 bottom-px z-20')}
+        {costAt === 'hover' && costLabel('absolute top-px right-1 z-20 hidden group-hover:inline-block')}
       </button>
     )
   }
-
-  const energyPath = (pool: Pool) => poolPath(energy, pool, (v) => (v / 100) * 40, y)
 
   return (
     <div className="flex select-none" data-testid={rest['data-testid'] ?? 'timeline'}>
@@ -719,37 +745,8 @@ export function Timeline({
           </div>
         ))}
       </div>
-      {/* The energy forecast beside the axis: the three pools, the reserve as a line. */}
-      {energy && energy.samples.length > 0 && (
-        <div className="relative w-[48px] shrink-0 border-l border-line" style={{ height }} data-testid="energy-track">
-          <svg width={44} height={height} className="absolute top-0 left-1">
-            <line x1={(energy.reserve / 100) * 40} x2={(energy.reserve / 100) * 40} y1={0} y2={height} stroke="#D49A97" strokeDasharray="2 3" strokeWidth={1} />
-            {(['head', 'emotions', 'senses'] as Pool[]).map((p) => (
-              <path key={p} d={energyPath(p)} fill="none" stroke={POOL_COLOR[p]} strokeWidth={1.4} opacity={0.9}>
-                <title>{POOL_NAME[p]}</title>
-              </path>
-            ))}
-          </svg>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** The legend of the energy track. */
-export function EnergyLegend({ reserve }: { reserve: number }) {
-  return (
-    <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted">
-      {(['head', 'emotions', 'senses'] as Pool[]).map((p) => (
-        <span key={p} className="inline-flex items-center gap-1">
-          <span className="inline-block h-[2px] w-3" style={{ background: POOL_COLOR[p] }} />
-          {POOL_NAME[p]}
-        </span>
-      ))}
-      <span className="inline-flex items-center gap-1">
-        <span className="inline-block h-3 w-0 border-l border-dashed" style={{ borderColor: '#D49A97' }} />
-        rezerwa {reserve}
-      </span>
+      {/* D500: the energy beside the axis – three lanes G · E · B (`EnergyLanes`). */}
+      {hasEnergy(energy) && <EnergyLanes track={energy} lo={lo} ppm={PPM} height={height} nowAt={nowMarker?.at ?? null} nowColor={TONE[nowMarker?.tone ?? 'fg']} />}
     </div>
   )
 }

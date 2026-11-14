@@ -7,7 +7,7 @@
  */
 import { isIsoDate } from '../time/zone'
 import { NOTE_MAX } from './note'
-import { DAY_TYPES, type DayTypeId } from './settings'
+import { DAY_TYPES, RANGES, type DayTypeId } from './settings'
 import { routineStepsEntries, type RoutineStepsEntry } from './routineSteps'
 import { doneSetFrom, stepsFrom, type Step } from './steps'
 
@@ -170,7 +170,8 @@ export const requestIdsFrom = (v: unknown): string[] => (Array.isArray(v) ? [...
 
 function costsFrom(v: unknown): PlanBlock['costs'] {
   if (!isPlain(v)) return null
-  const k = (x: unknown) => intIn(x, -5, 5)
+  // The schema's range of a pool's cost (`RANGES.cost`), as the settings' categories read it.
+  const k = (x: unknown) => intIn(x, ...RANGES.cost)
   const [head, emotions, senses] = [k(v.head), k(v.emotions), k(v.senses)]
   return head == null || emotions == null || senses == null ? null : { head, emotions, senses }
 }

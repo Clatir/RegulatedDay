@@ -261,7 +261,8 @@ describe('kafelek bloku z nazwą', () => {
     const tile = (b: (typeof d.blocks)[number]) => {
       const div = document.createElement('div')
       div.innerHTML = renderToStaticMarkup(createElement(BlockBox, { block: b, lo: 6 * 60, lane: 0, lanes: 1, names: n, brightness: 100, date: day, attach: 0 }))
-      return [...div.querySelectorAll('button > span')].map((x) => x.textContent ?? '')
+      // The cost of the tile (D501) is its own label, told in `tile-cost.test.ts`.
+      return [...div.querySelectorAll('button > span:not([data-cost-of])')].map((x) => x.textContent ?? '')
     }
     expect(tile(by.n!)).toEqual(['Analiza rynku', '09:00–09:45 · Analiza'])
     expect(tile(by.p!)).toEqual(['Analiza', '10:00–10:45'])

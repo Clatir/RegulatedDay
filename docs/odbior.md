@@ -26,7 +26,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni), L2.4 (Win+Alt+N i okienko na wierzchu), L2.5 („+” na pasku pulpitu), L2.6 (dwa komputery i stare prośby po aktualizacji), SNT5.4 (pasek pulpitu z krokiem i ptaszkiem), SNT5.5 (dwa komputery – odhaczenia z obu), SNT5.6 (plik albo link przeciągnięty na okno), SNT4b.3, SNT1.7, SNT2.6 (dwa komputery).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni), L2.4 (Win+Alt+N i okienko na wierzchu), L2.5 („+” na pasku pulpitu), L2.6 (dwa komputery i stare prośby po aktualizacji), SNT5.4 (pasek pulpitu z krokiem i ptaszkiem), SNT5.5 (dwa komputery – odhaczenia z obu), SNT5.6 (plik albo link przeciągnięty na okno), SNT4b.3, SNT1.7, SNT2.6 (dwa komputery), EN3 (czy odcienie paska są dla Ciebie czytelne).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 - **W maszynie wirtualnej** (opcjonalnie): 68 z tych punktów może sprawdzić Cowork na świeżej instalacji, bez Twoich
@@ -165,7 +165,6 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] SNT4b.2 Seria: „To i następne”, „Cała seria”, „Zakończ serię”
    - [ ] SNT4b.3 Usunięcie z konfliktem nie gubi załączników (Tylko Ty – OneDrive)
    - [ ] SNT1.1 Przełącznik „Tydzień · 3 dni · Agenda” zapamiętany
-   - [ ] SNT1.2 Krzywa energii w kolumnach „Tygodnia” i „3 dni”
    - [ ] SNT1.3 Przeciąganie bloku między kolumnami
    - [ ] SNT1.4 Zakotwiczone przy przenoszeniu
    - [ ] SNT1.5 „Agenda” – 7 dni od dziś
@@ -193,6 +192,13 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] R4 Bloki równoległe w „Tygodniu” i „3 dniach” (1.23.0)
    - [ ] 1.23-B.1 Start grupy i pierwszy plan (1.23.0)
    - [ ] 1.23-B.2 Grupa a reszta dnia (1.23.0)
+   - [ ] EN1 Energia w „Dziś” – trzy pasy G · E · B, rezerwa, liczby przy „teraz”, podpowiedź, legenda (1.24.0)
+   - [ ] EN2 Pasek energii w „Tygodniu” i „3 dniach” – najsłabsza pula, „przyjęte”, bloki obok paska (1.24.0)
+   - [ ] EN3 Czy trzy odcienie paska są czytelne (1.24.0) (Tylko Ty – ocena)
+   - [ ] KK1 Koszt na każdym kafelku w „Dziś”, „3 dniach” i „Tygodniu”, także na niskim (1.24.0)
+   - [ ] KK2 Okienko kosztu: [−] [+], „Jak kategoria”, przeliczona prognoza (1.24.0)
+   - [ ] KK3 Zmiana kosztu trwającego bloku liczy się od chwili zmiany (1.24.0)
+   - [ ] KK4 Blok serii pyta o zakres w każdym widoku; blok skończony i dzień miniony – sam napis (1.24.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2376,6 +2382,7 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 
 #### SNT1.2 Krzywa energii w kolumnach „Tygodnia” i „3 dni” – dzień przyszły z przyjętymi wartościami, bez krzywej przed check-inem (1.18.0)
 - [ ] Odebrane
+- **Od 1.24.0 zastąpiony przez EN2** (pasek przy krawędzi kolumny zamiast krzywej, D500) – nie odbieraj; reguły dnia przyszłego i dnia bez check-inu sprawdza EN2.
 - **Automatycznie:** `tests/web/day-grid.test.ts` (krzywa w tle kolumny; dzień przyszły – linie rzadsze i jaśniejsze, z podpisem „przyjęte”; bez krzywej przed check-inem), `tests/web/week-views.test.ts` (wspólne rysowanie krzywej, trzy pule z kolorami), `tests/unit/engine/multi-day.test.ts` (dzień przyszły od przyjętego check-inu 100 / 100 / 100 o 04:00; dzisiaj bez check-inu – brak krzywej), `tests/fs/multi-day.test.ts` (krzywa dnia liczy się od nowa po przeniesieniu bloku). E2E `tests/e2e/week.spec.ts` („3 dni” z krzywą „przyjęte” jutro). Ty: rzut oka.
 - **Jak sprawdzić:** w „Tygodniu” zobacz kolumnę dzisiejszą i jutrzejszą, w „3 dniach” – wczoraj, dziś i jutro. Porównaj tło dnia dzisiejszego po check-inie z tłem jutra. W dniu, który minął bez check-inu, sprawdź kolumnę. Przenieś blok na jutro (SNT1.3) i zobacz, czy krzywa w kolumnie jutra się zmieniła.
 - **Oczekiwany efekt:** w tle kolumny są cienkie linie trzech pul energii, bez podpisu, dla dnia ze znaną energią; dla dnia przyszłego krzywa startuje od przyjętych 100 / 100 / 100 o 04:00, jest jaśniejsza i przerywana, z podpisem „przyjęte”; dzisiaj przed check-inem i dzień minięty bez check-inu – krzywej nie ma; po przeniesieniu bloku krzywa kolumny się przelicza.
@@ -2431,6 +2438,59 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Nie przechodzi, gdy:** pola nie ma albo stoi pod „Kategorią” (w panelu albo w okienku „Tygodnia”); po „+ Blok” albo w okienku trzeba kliknąć w pole, żeby pisać; Enter w nazwie nowego bloku go nie dodaje albo w istniejącym bloku robi coś więcej niż zatwierdzenie; „Więcej” gubi nazwę; blok zadania w „Tygodniu” nazywa się kategorią; same spacje zapisują pustą nazwę zamiast nazwy jak dotąd; kafelek z nazwą nie pokazuje kategorii przy godzinach albo pokazuje ją dwa razy; blok bez nazwy wygląda inaczej niż przedtem; zmiana nazwy w jednym dniu zmienia szablon albo inne dni; wystąpienie serii nie pyta o zakres; pasek pulpitu albo miesiąc pokazują kategorię zamiast nazwy.
 
 ---
+
+### EN – czytelna energia (1.24.0, D500)
+
+#### EN1 Energia w „Dziś” – trzy pasy G · E · B (D500)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/energy-draw.test.ts` (pasy 0–100, kreska rezerwy w każdym pasie, jaśniej poniżej rezerwy, litery, liczby przy „teraz” na kresce, podpowiedź, legenda, wygładzenie bez wychodzenia poza wartości prognozy, jedna próbka – bez pasów). Ty: rzut oka.
+- **Jak sprawdzić:** dziś po check-inie otwórz „Dziś” i spójrz na kolumnę obok osi. Przewiń oś w dół. Najedź myszą na pasy w kilku miejscach. Przeczytaj legendę nad osią.
+- **Oczekiwany efekt:** trzy wąskie pasy obok siebie z literami G · E · B nad nimi (litery zostają na górze przy przewijaniu); w każdym pasie słupek sięga tym dalej w prawo, im wyższa pula (100 = cały pas), a przerywana kreska stoi w miejscu rezerwy; tam, gdzie pula jest poniżej rezerwy, słupek jest wyraźnie jaśniejszy; przy linii „teraz” stoją trzy liczby, wyśrodkowane na niej; najechanie pokazuje np. „10:30 · głowa 71 · emocje 66 · bodźce 41”; legenda: „energia 0–100”, G głowa, E emocje, B bodźce, rezerwa, „jaśniej – poniżej rezerwy”. Kształt jest gładki, bez schodków i bez górek ponad prognozę.
+- **Nie przechodzi, gdy:** zamiast pasów są cienkie linie; brak kreski rezerwy w którymś pasie; słupek poniżej rezerwy wygląda tak samo jak nad nią; liczby przy „teraz” leżą pod kreską albo są inne niż w podpowiedzi w tej chwili; przed check-inem pojawiają się pasy.
+
+#### EN2 Pasek energii w „Tygodniu” i „3 dniach” (D500, D422)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/day-grid.test.ts` (pasek przy lewej krawędzi, najsłabsza pula, trzy odcienie, bloki na prawo od paska, podgląd nowego i przeciąganego bloku obok paska, dzień przyszły jaśniejszy z „przyjęte”, bez energii – nic, podpowiedź poza kolumną, legenda), `tests/web/energy-draw.test.ts` (odcienie przy rezerwie 30: poniżej 30, 30–44, od 45). E2E `tests/e2e/week.spec.ts` („3 dni” z paskiem „przyjęte” jutro). Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” i w „3 dniach” zobacz kolumny dziś (po check-inie), jutro i dzień miniony bez check-inu. Najedź myszą na pasek w kolumnie dziś, także w niedzieli przy prawej krawędzi okna. Przeciągnij blok w kolumnie dziś i zaznacz nowy blok po pustym miejscu.
+- **Oczekiwany efekt:** przy lewej krawędzi kolumny wąski pionowy pasek w kolorze puli, która w danej godzinie jest najsłabsza; bloki zaczynają się na prawo od paska, nic ich nie przykrywa; jutro pasek jest jaśniejszy, z podpisem „przyjęte”; dzień miniony bez check-inu – bez paska, bloki od krawędzi; podpowiedź „10:30 · głowa 71 · emocje 66 · bodźce 41” widać w całości (w niedzieli – na lewo od paska); podgląd miejsca przeciąganego i nowego bloku stoi tam, gdzie bloki; nad kolumnami legenda „energia 0–100 · pasek: najsłabsza pula” z kolorami pul i odcieniami „dobrze”, „uwaga (mniej niż 15 nad rezerwą)”, „poniżej rezerwy”.
+- **Nie przechodzi, gdy:** w tle kolumny dalej są krzywe; pasek zakrywa blok albo blok zakrywa pasek; podpowiedź jest ucięta; jutro wygląda tak samo mocno jak dziś albo bez „przyjęte”; dzień bez check-inu ma pasek; kolor paska nie zgadza się z najsłabszą liczbą w podpowiedzi.
+
+#### EN3 Czy odcienie paska są czytelne (D500)
+- [ ] Odebrane
+- **Automatycznie:** nic – to Twoja ocena. Tylko Ty.
+- **Jak sprawdzić:** przez kilka dni patrz w „Tygodniu” na paski dni z niską energią. Odcienie to przezroczystość koloru puli: „dobrze” najbledszy, „uwaga” średni, „poniżej rezerwy” pełny kolor; dzień przyszły – o połowę bledszy.
+- **Oczekiwany efekt:** bez najeżdżania widzisz, gdzie dzień schodzi do „uwagi” i pod rezerwę, także przy jaśniejszym ekranie.
+- **Nie przechodzi, gdy:** „dobrze” i „uwaga” są nie do odróżnienia albo „przyjęte” jutra myli się z „dobrze” dnia dzisiejszego – zgłoś, zmienię odcienie (np. szerokość albo inne kolory).
+
+### KK – koszt na kafelku (1.24.0, D501)
+
+#### KK1 Koszt na każdym kafelku (D501)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/tile-cost.test.ts`, `tests/web/tile-cost-week.test.ts`, `tests/web/cost-save.test.ts`, `tests/unit/block-costs.test.ts`, `tests/unit/engine/week-cost.test.ts`, `tests/unit/engine/cost-change.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś”, „3 dniach” i „Tygodniu” zobacz kafelki: blok pracy, regenerację, blok z wariantem, blok z własnym kosztem, krótki blok (15 min) i bardzo niski kafelek w „Tygodniu”.
+- **Oczekiwany efekt:** w prawym dolnym rogu kafelka trzy liczby na godzinę w kolorach pul („3 · 1 · 1”), regeneracja z minusem („−1 · −2 · −3”); blok z własnym kosztem pokazuje własny, bez niego – wariantu, a bez wariantu – kategorii; w „Tygodniu” skrócony „3·1·1”; na niskim kafelku napis na końcu wiersza nazwy, a gdy i tam brak miejsca – po najechaniu na kafelek.
+- **Nie przechodzi, gdy:** któryś kafelek (np. regeneracja) nie ma kosztu; napis zakrywa nazwę; liczby są w lewym rogu; koszt różni się od tego w panelu bloku.
+
+#### KK2 Okienko kosztu (D501)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/tile-cost.test.ts`, `tests/web/tile-cost-week.test.ts`.
+- **Jak sprawdzić:** kliknij koszt na kafelku jutrzejszego bloku pracy w „Dziś”, zmień głowę [+] dwa razy i bodźce [−] raz; zamknij okienko; otwórz je znowu i kliknij „Jak kategoria (…)”. To samo z kafelka w „Tygodniu”. Spróbuj zejść poniżej −5 i powyżej 5.
+- **Oczekiwany efekt:** okienko przy kafelku tylko dla tego bloku; każda zmiana od razu zmienia napis na kafelku, pole kosztu w panelu bloku i prognozę energii (pasy i pasek); wartości stają na −5 i 5; „Jak kategoria” wraca do kosztu kategorii (napis jak przed zmianą); inne bloki tej kategorii się nie zmieniają.
+- **Nie przechodzi, gdy:** zmiana dotyka innych bloków albo kategorii; prognoza się nie przelicza; okienko otwiera panel bloku zamiast siebie; po zamknięciu i otwarciu wartość wraca do starej.
+
+#### KK3 Zmiana kosztu trwającego bloku (D501)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/block-costs.test.ts`, `tests/web/tile-cost.test.ts`.
+- **Jak sprawdzić:** zacznij blok, po 20 minutach zmień jego koszt w okienku (np. głowa z 3 na 5); spójrz na pasy energii w „Dziś” przed linią „teraz” i za nią.
+- **Oczekiwany efekt:** minione 20 minut zostaje policzone po starym koszcie (pasy przed „teraz” bez zmian), nowy koszt działa od chwili zmiany do końca bloku (prognoza za „teraz” spada szybciej).
+- **Nie przechodzi, gdy:** zmienia się też energia sprzed zmiany; zmiana nie działa, póki blok trwa.
+
+#### KK4 Blok serii i bloki, których już nie zmienisz (D501)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/tile-cost.test.ts`, `tests/web/tile-cost-week.test.ts`.
+- **Jak sprawdzić:** zmień koszt bloku z serii w „Dziś”, w „3 dniach” i w „Tygodniu” – wybierz raz „Tylko to”, raz „To i następne”. Kliknij koszt na bloku skończonym i na bloku dnia minionego.
+- **Oczekiwany efekt:** w każdym widoku pytanie „Tylko to / To i następne / Cała seria”, a zmiana trafia tam, gdzie wybrałeś; blok skończony i dzień miniony pokazują sam napis, bez okienka.
+- **Nie przechodzi, gdy:** w którymś widoku seria nie pyta o zakres; „Tylko to” zmienia całą serię; na bloku skończonym można zmienić koszt.
 
 ### R – bloki równoległe, plan i widoki (1.23.0, część A; D476, D492–D498)
 

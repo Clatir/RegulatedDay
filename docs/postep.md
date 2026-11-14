@@ -70,12 +70,22 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    (d7, 2a3581c, T1220–T1231) i dokumenty (d7, ce4dbb6, T1240–T1242); wersja 1.23.0; D492–D499, T1160–T1242. Przegląd xhigh
    runda 2 całego 1.23 (13beb59..5f26bcf): 15 uwag – a8 poprawia na `claude/1.23-poprawki2` (drzewo `w123q`, T1212–T1219,
    T1250–T1269) – scalone (3f908ee, RULES_VERSION 12). Lokalnie `npm test` 3495/3495, build, lint, check-context ok;
-   Setup 1.23.0 w Pobranych 14.11 17:40. **PR #90** (paczka do `main`), CI run 43616954798; po zielonym – scalić (D285), sprawdzić
-   wydanie 1.23.0 z runu na `main`.
+   Setup 1.23.0 w Pobranych 14.11 17:40. PR #90 scalony 14.11 (5f2d9ae); wydanie 1.23.0 opublikowane 14.11 21:12 (run 43626981099,
+   Linux E2E D492 niestabilny – poprawka 0f9919b w 1.24).
    **Po 1.23 (decyzja 14.11):** szybki zapis „+” w chwili otwierania folderu czeka na folder i wtedy się zapisuje (dziś przepada).
    **Uwagi na później (d7):** TextField po Enter miga starą wartością; TipTap getMarkdown nieliniowy przy tysiącach znaczników;
    proces po will-quit żyje pod obciążeniem do 170 s (czy nowa kopia startuje); QUIT_MS wydłuża też zawieszenie w teście;
    `screens.spec:67` raz 9/10 (Szablony, długość 1 h).
+11. **1.24.0 – czytelna energia i koszt na kafelku (w toku, 14.11; D500, D501, T1270–T1289):** gałąź paczki `claude/1.24.0`
+   (od `main` po #90, drzewo `w124`; koordynator regulatedday-a8 – D, specyfikacja, CHANGELOG, wersja, scalanie, Setup.exe).
+   1.24-A energia (D500: pasy G · E · B w „Dziś”, pasek najsłabszej puli w „Tygodniu” i „3 dniach”) – d7, gałąź
+   `claude/1.24-energia` (drzewo `w124e`, T1280–T1289), przegląd high a8: 9 uwag poprawionych (c6d3f3a), scalone (ff6eba4).
+   1.24-B koszt na kafelku z okienkiem (D501; zaczęty blok – od chwili zmiany, seria pyta o zakres w każdym widoku) – a8,
+   gałąź `claude/1.24-koszt` (drzewo `w124k`, T1270–T1279), przegląd high: 10 uwag w poprawce. Dokumenty paczki – d7,
+   `claude/1.24-dokumenty` (CHANGELOG 1.24.0, odbiór EN1–EN3 i KK1–KK4; SNT1.2 zastąpiony przez EN2). Dalej: scalenie B,
+   pełne testy, wersja 1.24.0, lokalny Setup.exe w Pobranych; PR do `main` dopiero po zakończonym runie wydania 1.23.0.
+   Środowisko: wspólny `node_modules` w katalogu głównym jest ze starego `main` (bez `jsdom`, `@tiptap`) – drzewa paczki
+   potrzebują własnego `npm ci`.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
