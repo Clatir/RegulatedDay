@@ -42,9 +42,10 @@ export const finishedBlock = (f: { endedAt: number | null; finished: boolean } |
 
 /**
  * `today` – the logical day of the window (D409): the block of a task shows the task's due date badge, from `today` on (a day
- * gone by – none); null (the templates, the wizard) – none.
+ * gone by – none); null (the templates, the wizard) – none. `planCosts` – the axis of „Szablony” (D512): every block's cost as
+ * planned on the tile, its window open (the page says which tiles are its own).
  */
-export function dayAxis(model: DayModel, names: Names, now: number | null, today: string | null = null): DayAxis {
+export function dayAxis(model: DayModel, names: Names, now: number | null, today: string | null = null, planCosts = false): DayAxis {
   const { state, ctx } = model
   const g = state.grid
   const lm = (idx: number) => logicalMinuteOf(model.date, atOf(g, idx))
@@ -107,16 +108,19 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       ...taskPriority(sprawa),
       // D440: the counter of its steps on the tile (none – nothing).
       ...(counter ? { steps: counter } : {}),
-      // D501: the cost per hour on the tile – only for a day's window (`today` given: not the templates' nor the wizard's axis); a begun block's
-      // as the engine counts it now (its start, its changes from a minute on), another's as planned; `costEditable` – whether it may be changed.
+      // D501: the cost per hour on the tile – for a day's window (`today` given) and the templates' axis (`planCosts`, D512), not the wizard's;
+      // a begun block's as the engine counts it now (its start, its changes from a minute on), another's as planned (own, routine, variant,
+      // category – `blockCosts`); `costEditable` – whether it may be changed.
       ...(today != null
         ? {
             cost: {
-              ...(f?.startedAt != null ? begunCosts(ctx, state, info, changes) : blockCosts(p, state.settings.categories, info.rules)),
+              ...(f?.startedAt != null ? begunCosts(ctx, state, info, changes) : blockCosts(info, state.settings.categories, info.rules)),
               edit: costEditable(f, model.date < today, f?.startedAt == null && nowIdx != null && to <= nowIdx)
             }
           }
-        : {}),
+        : planCosts
+          ? { cost: { ...blockCosts(info, state.settings.categories, info.rules), edit: true } }
+          : {}),
       ...(edge ? { resize: 'end' as const } : {}),
       // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
       // nor a class imported from the PDF of „zjazdy” – D357), not passed – the one rule of

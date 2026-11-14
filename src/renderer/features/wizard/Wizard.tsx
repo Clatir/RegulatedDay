@@ -704,7 +704,7 @@ function Preview({ today }: { today: string }) {
     return countDay(
       shown,
       { date: shown, dayFile, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false },
-      { changes: draftChanges(w), templates: draftTemplates(), lectures: w.lectures, series: [] },
+      { changes: draftChanges(w), templates: draftTemplates(), lectures: w.lectures, series: [], routines: [] },
       placeLogical(shown, 4 * 60),
       false
     )

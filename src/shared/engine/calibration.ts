@@ -110,10 +110,11 @@ export interface CostEvidence {
 
 /**
  * Which costs a block ran with (its key in the evidence): a variant with its own costs – `category:variant`, else the
- * category; a block with its own costs is none of them (null: no evidence for a proposal).
+ * category; a block with its own costs or with its routine's (D512, `planned.routineCosts`) is none of them (null: no
+ * evidence for a proposal).
  */
-export function costKey(settings: RulesSettings, p: { categoryId: string; variantId: string | null; costs?: Costs | null }): string | null {
-  if (p.costs) return null
+export function costKey(settings: RulesSettings, p: { categoryId: string; variantId: string | null; costs?: Costs | null; routineCosts?: Costs | null }): string | null {
+  if (p.costs || p.routineCosts) return null
   const variant = p.variantId ? settings.categories[p.categoryId]?.variants.find((v) => v.id === p.variantId) : undefined
   return variant?.costs ? `${p.categoryId}:${variant.id}` : p.categoryId
 }

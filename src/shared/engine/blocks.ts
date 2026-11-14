@@ -7,6 +7,7 @@
  */
 import { REGEN_CATEGORY, type CategoryRules, type Costs } from '../model/categories'
 import type { PlanBlock } from '../model/plan'
+import { routineCostOf, type RoutineCosts } from '../model/routines'
 import type { RulesSettings } from '../model/settings'
 import type { BlockFact, DayFacts } from './facts'
 import { idxOfLogical, type Grid } from './grid'
@@ -49,6 +50,13 @@ export interface BlockInfo {
   protectedLife: boolean
   /** The block's own costs and share of them in the background (null: the category's, the setting). */
   costs: Costs | null
+  /**
+   * The cost of its routine (D512: `PlanBlock.routine` with a cost of its own, `DayContext.routineCosts`) – before its variant's and
+   * category's (`blockCosts`); only a block of a category of the kind „rutyna” has it (T1371: the panel offers the routine only there – one
+   * left on a block whose category changed costs nothing). null – no routine, or one without; undefined – the routine's file cannot be
+   * read now (T1372: costs as none, its start writes no routine's cost). A block begun outside the plan – none (its start says what it costs).
+   */
+  routineCosts: Costs | null | undefined
   bgCostPct: number | null
 }
 
@@ -76,10 +84,11 @@ export const ZJAZD_DAY_TYPES: ReadonlySet<string> = new Set(['zjazd-stacjonarny'
 export const zjazdRemoteClass = (rules: Pick<CategoryRules, 'kind'>, dayType: string): boolean => rules.kind === 'remoteClass' && ZJAZD_DAY_TYPES.has(dayType)
 
 /**
- * The blocks of a day: the plan's, then the ones that only the log knows (with what their start said). `typeAt`: the
- * day's type in force at a minute (index) – a day switched in its course has its snapshots of type.
+ * The blocks of a day: the plan's, then the ones that only the log knows (with what their start said). `routines` – the costs of
+ * the routines with their own (D512, `DayContext.routineCosts`); `typeAt`: the day's type in force at a minute (index) – a day
+ * switched in its course has its snapshots of type.
  */
-export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFacts, settings: RulesSettings, typeAt: (k: number) => string = () => ''): BlockInfo[] {
+export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFacts, settings: RulesSettings, routines: RoutineCosts, typeAt: (k: number) => string = () => ''): BlockInfo[] {
   const rulesOf = (id: string) => settings.categories[id] ?? (id === REGEN_CATEGORY ? { ...CAT_FALLBACK, cls: 'free' as const, kind: 'regen' as const } : CAT_FALLBACK)
   const out: BlockInfo[] = []
   const make = (p: PlanBlock, inPlan: boolean): BlockInfo => {
@@ -112,6 +121,7 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
       afterWorkMark: false,
       protectedLife: rules.cls === 'life' && rules.protected,
       costs: p.costs,
+      routineCosts: rules.kind === 'routine' ? routineCostOf(routines, p.routine) : null,
       bgCostPct: p.bgCostPct
     }
   }
@@ -207,6 +217,9 @@ export function startPlanned(info: BlockInfo, plan: readonly PlanBlock[] = []): 
     durationMin: p?.durationMin ?? info.durationMin,
     fixed: info.fixed,
     costs: info.costs,
+    // D512: the cost of its routine now – a later change of the routine never changes what the block began with; not known now (the
+    // routine's file cannot be read, T1372) – no field: the block counts the routine's cost as known later, never an empty one for good.
+    ...(info.routineCosts !== undefined ? { routineCosts: info.routineCosts } : {}),
     bgCostPct: info.bgCostPct
   }
 }

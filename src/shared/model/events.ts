@@ -45,9 +45,15 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * work in front for requests and the forecast); it gives way to this one as the leader. 13 – the cost of a begun block changed
  * from a minute on (D501, `block.cost`): an older version skips the event and counts the block by its start's costs to its end
  * – the descents it would register (`energy.reserve`) and the reward of the frozen day; it gives way to this one as the leader
- * (and, the event being the timer's, installs the new version without the 24 h – `unknownTimerEvents`).
+ * (and, the event being the timer's, installs the new version without the 24 h – `unknownTimerEvents`). 14 – the cost of a routine
+ * (D512, `Routine.costs`, `planned.routineCosts`): a block of a routine with a cost of its own costs that before its variant's and
+ * category's – an older version counts it without it (the descents it would register, the reward of the frozen day); it gives way to
+ * this one as the leader.
  */
-export const RULES_VERSION = 13
+export const RULES_VERSION = 14
+
+/** The rules since which a block's start writes the cost of its routine (D512, `planned.routineCosts`): an earlier start had none. */
+export const ROUTINE_COSTS_FROM = 14
 
 /** What a block's start wrote of its plan (`block.start.planned`). */
 export interface StartPlanned {
@@ -56,6 +62,12 @@ export interface StartPlanned {
   durationMin: number
   fixed: boolean
   costs?: Costs | null
+  /**
+   * The cost of the block's routine at the start (D512, `BlockInfo.routineCosts`; null – none). No field: a start of an older version
+   * (`v` < `ROUTINE_COSTS_FROM`, which knew no routine's cost) – read as null, the past stays as counted; one of this version – the
+   * routine's file could not be read then (T1372): the routine's cost as known now.
+   */
+  routineCosts?: Costs | null
   bgCostPct?: number | null
   name?: string | null
   task?: string | null

@@ -55,7 +55,7 @@ import { runningRequestOf } from '@shared/engineView'
 import type { RunningRequest } from '@shared/widget'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { blockName, type Names } from '@shared/blockName'
-import { routineFrom, type Routine } from '@shared/model/routines'
+import { routineCostsOf, routineFrom, type Routine } from '@shared/model/routines'
 import { countDatesToRead, ruleDates, seriesFrom, seriesLast, seriesPlans, typeOfDays, type Series, type SeriesPlan } from '@shared/model/series'
 import type { CsvDay } from '@shared/engine/csv'
 import { changeOrder, isDayTypeId, settingsOn, type DayTypeId, type SettingsChange } from '@shared/model/settings'
@@ -295,6 +295,12 @@ export interface Inputs {
   series: SeriesPlan[]
   /** The own types of the days the counts of the series read (date → type; a day without one is not here). */
   seriesDays: Record<string, DayTypeId>
+  /**
+   * The routines (D512: their costs count for their blocks) – a file that cannot be read now as read before; one never read in this run is
+   * left out, never the day, and its id is in `routinesUnknown` (T1372: its blocks' starts write no routine's cost).
+   */
+  routines: Routine[]
+  routinesUnknown: string[]
 }
 
 /** The rounds of reading the days a count of a series reads (a day read may move its end – `countDatesToRead`). */
@@ -608,9 +614,11 @@ export class DataFolder {
 
   /**
    * A folder of records – as the folder holds it, or (`own`) as this computer sees it, with your queued edits and new
-   * records still in the queue; a listing that fails keeps the names listed before (unknown is never empty).
+   * records still in the queue; a listing that fails keeps the names listed before (unknown is never empty). `day` – a lenient list the
+   * day is counted from (the routines, D512): every file looked at now (never from the memory of `LIST_TRUST_MS`; a file that cannot be
+   * read now is the version read before – `cachedJson`), one never read left out and its id put in `day.unknown`.
    */
-  private async cachedDir(dir: string, parse: (v: unknown) => unknown, lenient = false, own = false): Promise<unknown[]> {
+  private async cachedDir(dir: string, parse: (v: unknown) => unknown, lenient = false, own = false, day?: { unknown: string[] }): Promise<unknown[]> {
     let names: string[]
     try {
       names = (await this.o.fs.list(join(this.o.dataDir, dir))).filter((e) => !e.dir && e.name.endsWith('.json')).map((e) => e.name)
@@ -630,12 +638,16 @@ export class DataFolder {
     // list for showing takes a file looked at a moment ago from memory (`LIST_TRUST_MS`).
     const raws = await mapLimit(list, DIR_CONCURRENCY, async (rel) => {
       try {
-        const known = lenient ? this.trusted(rel) : undefined
+        const known = lenient && !day ? this.trusted(rel) : undefined
         if (known) return own ? this.queue.overlay(rel, known.value as Record<string, unknown> | undefined) : known.value
         return own ? await this.recordView(rel) : await this.shared(rel)
       } catch (e) {
         // A list for showing (requests) goes on without the unknown record; what a day is made from does not.
-        if (lenient && e instanceof UnknownRecordError) return undefined
+        if (lenient && e instanceof UnknownRecordError) {
+          const id = classify(rel)?.id
+          if (day && id) day.unknown.push(id)
+          return undefined
+        }
         throw e
       }
     })
@@ -658,7 +670,11 @@ export class DataFolder {
     const lectures = (await this.cachedDir(ID_COLLECTIONS.schedule, lectureFrom, false, own)) as LectureSeries[]
     const list = (await this.cachedDir(ID_COLLECTIONS.series, seriesFrom, false, own)) as Series[]
     const { plans, days } = await this.seriesOf(list, changes, own)
-    return { changes, templates, lectures, series: plans, seriesDays: days }
+    // D512: a routine's cost counts for its blocks – every file looked at now; one that cannot be read now is as read before, one never
+    // read is left out (its blocks cost their variant's or category's) and not known (T1372): a routine never makes the day unknown.
+    const unreadable = { unknown: [] as string[] }
+    const routines = (await this.cachedDir(ID_COLLECTIONS.routine, routineFrom, true, own, unreadable)) as Routine[]
+    return { changes, templates, lectures, series: plans, seriesDays: days, routines, routinesUnknown: unreadable.unknown.sort() }
   }
 
   /**
@@ -1484,7 +1500,8 @@ export class DataFolder {
       const dayFile = await this.dayFile(date, true)
       const nextFile = await this.dayFile(next, true)
       const made = daySnapshotOf(read.events) != null
-      const records = made ? [this.recordSig(paths.day(date)), this.recordSig(paths.day(next)), nextWakeForBedtime(null, nextFile, inp.changes, next)] : this.contextSig(date)
+      // A day made (its snapshot in the log) is counted from its files and the routines' costs (D512 – not in the snapshot).
+      const records = made ? [this.recordSig(paths.day(date)), this.recordSig(paths.day(next)), nextWakeForBedtime(null, nextFile, inp.changes, next), this.routinesSig()] : this.contextSig(date)
       const key = JSON.stringify([when === 'today' ? Math.floor(at / 60_000) : when === 'future' ? today : null, read.lastByComputer, read.events.length, read.copies, records, this.queue.pending.length])
       const was = this.horizonMemo.get(date)
       let day: HorizonDay
@@ -1756,13 +1773,33 @@ export class DataFolder {
 
   /**
    * What a day's context is made of in the folder – the settings, the templates, the plan of lectures, the day's file and
-   * the next one's – by size and time of modification as last read (call after reading them: `inputs`, `dayFile`): a day
-   * is counted again only when one of them changed (T501).
+   * the next one's – by size and time of modification as last read, and the routines' costs (D512) (call after reading them:
+   * `inputs`, `dayFile`): a day is counted again only when one of them changed (T501).
    */
   private contextSig(date: string): string {
     const of = (rel: string) => this.recordSig(rel)
     const dir = (d: string) => (this.listed.get(d) ?? []).map((n) => `${n}=${of(`${d}/${n}`)}`).join(',')
-    return [of(paths.settings), dir(ID_COLLECTIONS.template), dir(ID_COLLECTIONS.schedule), dir(ID_COLLECTIONS.series), this.seriesSig, of(paths.day(date)), of(paths.day(addDays(date, 1)))].join('|')
+    return [of(paths.settings), dir(ID_COLLECTIONS.template), dir(ID_COLLECTIONS.schedule), dir(ID_COLLECTIONS.series), this.routinesSig(), this.seriesSig, of(paths.day(date)), of(paths.day(addDays(date, 1)))].join('|')
+  }
+
+  /**
+   * The routines' costs as their files were last listed and read (D512, T1374): what a day counts of them – a change of a routine's steps
+   * or name counts no day again; a file listed and never read is a routine not known (its id).
+   */
+  private routinesSig(): string {
+    const d = ID_COLLECTIONS.routine
+    const routines: Routine[] = []
+    const unknown: string[] = []
+    for (const n of this.listed.get(d) ?? []) {
+      const rel = `${d}/${n}`
+      const k = classify(rel)
+      if (!k || k.conflict) continue
+      const c = this.cache.get(rel)
+      const r = c ? routineFrom(c.value) : null
+      if (r) routines.push(r)
+      else if (!c && !this.absent.has(rel)) unknown.push(rel)
+    }
+    return JSON.stringify([routineCostsOf(routines), unknown])
   }
 
   /** A record as last read: by size and time of modification ('-': not read, or not there). */

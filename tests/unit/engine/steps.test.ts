@@ -140,7 +140,7 @@ const tpl = (steps: Step[]): Template => ({
   versions: [{ from: '2026-01-01', blocks: [planBlock({ id: 'wdr', categoryId: 'inne', startMin: lm('09:00'), durationMin: 90, origin: 'template', steps })], budgetMin: null, maxMin: null }],
   archived: false
 })
-const inputsOf = (templates: Template[], series: PlanInputs['series'] = []): PlanInputs => ({ changes: [], templates, lectures: [], series })
+const inputsOf = (templates: Template[], series: PlanInputs['series'] = []): PlanInputs => ({ changes: [], templates, lectures: [], series, routines: [] })
 
 describe('kroki w dniu', () => {
   it('blok szablonu: każdego dnia kroki odznaczone; odhaczenie zapisuje plik dnia (`stepsDone`), nie blok ani szablon (T786)', () => {

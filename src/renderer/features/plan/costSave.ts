@@ -16,6 +16,7 @@ import { dayRaw } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { blockInfos } from '@shared/engine/blocks'
 import { costEditable, windowPassed } from '@shared/engine/costChange'
+import { routineCostsIn } from '@shared/engine/day'
 import { idxOf } from '@shared/engine/grid'
 import type { SeriesScope } from '@shared/api'
 import type { Costs } from '@shared/model/categories'
@@ -61,7 +62,7 @@ interface Now {
 /** A block of today not begun whose time passed by the clock (`windowPassed` – as the forecast drops it). */
 function passedNow(day: PlannedDay, id: string, at: number): boolean {
   const g = day.facts.grid
-  const infos = blockInfos(g, day.ctx.plan, day.facts, day.ctx.snapshot.settings)
+  const infos = blockInfos(g, day.ctx.plan, day.facts, day.ctx.snapshot.settings, routineCostsIn(day.ctx))
   const byId = new Map(infos.map((b) => [b.id, b]))
   const b = byId.get(id)
   return b != null && windowPassed(b, byId, idxOf(g, at))
