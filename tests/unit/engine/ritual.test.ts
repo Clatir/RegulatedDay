@@ -10,7 +10,8 @@ import { dayOutcome } from '@shared/engine/outcome'
 import { requestAction } from '@shared/engine/requests'
 import { timerAction, timerNow, workEndOpen, type TimerAction } from '@shared/engine/timer'
 import { engineView } from '@shared/engineView'
-import { block, hhmm, Scenario } from './dsl'
+import { planBlockFrom } from '@shared/model/plan'
+import { block, hhmm, lm, Scenario } from './dsl'
 
 const DATE = '2026-10-28' // a Wednesday
 
@@ -247,7 +248,7 @@ describe('wiersze rytuału', () => {
     expect(closeEvents(s.stateAt(t), 'ritual', t).map((d) => d.k)).toEqual(['ritual.close'])
   })
 
-  it('przy stałym bloku pracy przed drugą zmianą (D216) zamknięcie robi to, co „Koniec pracy”: nic nie kończy i nie potwierdza', () => {
+  it('przy stałym bloku pracy w planie (D216) zamknięcie robi to, co „Koniec pracy”: nic nie kończy i nie potwierdza', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '09:00', min: 60 }), block({ id: 'f', cat: 'inne', at: '15:30', min: 60, fixed: true })] }).using('07:00', '23:59')
     s.start('a', '09:00').pause('a', '09:30')
     const t = s.at('12:00')
@@ -327,15 +328,16 @@ describe('wiersze rytuału', () => {
     expect(workEndOpen(s.state('17:02'))).toBe(true)
   })
 
-  it('zamknięcie dnia kończy te zapauzowane bloki pracy, które kończy „Koniec pracy” – analiza tygodniowa i „po końcu pracy jak projekt” zostają (D195)', () => {
-    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'wa', cat: 'analiza', at: '10:00', min: 60, tag: 'weeklyAnalysis' }), block({ id: 'b', cat: 'inne', at: '12:00', min: 60 }), block({ id: 'n', cat: 'nauka', at: '13:00', min: 60 })] }).using('07:00', '23:59')
+  it('zamknięcie dnia kończy te zapauzowane bloki pracy, które kończy „Koniec pracy” – „po końcu pracy jak projekt” zostaje (D195), analiza z dawnym oznaczeniem nie (D467)', () => {
+    const wa = planBlockFrom({ id: 'wa', categoryId: 'analiza', startMin: lm('10:00'), durationMin: 60, tag: 'weeklyAnalysis', waitUntilMin: lm('15:00'), origin: 'template' })!
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), wa, block({ id: 'b', cat: 'inne', at: '12:00', min: 60 }), block({ id: 'n', cat: 'nauka', at: '13:00', min: 60 })] }).using('07:00', '23:59')
     s.ran('a', '08:00', '09:00')
     s.start('wa', '10:00').pause('wa', '10:30')
     s.start('b', '12:00').pause('b', '12:30')
     s.start('n', '13:00').pause('n', '13:20')
     const t = s.at('17:00')
     const ended = closeEvents(s.stateAt(t), 'ritual', t).filter((d) => d.k === 'block.end').map((d) => d.block)
-    expect(ended).toEqual(['b'])
+    expect(ended).toEqual(['wa', 'b'])
   })
 
   it('„Nie pamiętam” niczego nie potwierdza: granica bez danych', () => {

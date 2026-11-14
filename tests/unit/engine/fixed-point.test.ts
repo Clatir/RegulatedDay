@@ -21,11 +21,12 @@ const plan = () => [
   block({ id: 'ny', cat: 'sesja', at: '14:00', min: 180, fixed: true, origin: 'session', source: 'ny' }),
   block({ id: 'jrn', cat: 'journaling', after: 'ny', min: 30 }),
   block({ id: 'kolacja', cat: 'posilek', at: '19:15', min: 30 }),
-  block({ id: 'ds', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' }),
+  // D467: the evening of the example has no second shift – a life block (home matters) in its place.
+  block({ id: 'ds', cat: 'sprawy', at: '20:00', min: 60 }),
   block({ id: 'rutyna', cat: 'rutyny', at: '21:00', min: 15 })
 ]
 
-/** The example's variants together: NY 30 min longer, projects, a request after the hard end, the second shift to 21:30. */
+/** The example's variants together: NY 30 min longer, projects, a request after the hard end, an evening analysis to 21:30. */
 function fullDay(): Scenario {
   return new Scenario({ date: '2026-10-21', plan: plan(), settings: { transitionBufferMin: 0 } })
     .approve('17:45', '07:00')
@@ -44,9 +45,9 @@ function fullDay(): Scenario {
     .ran('p1', '18:00', '19:15', { cat: 'projekty', min: 75 })
     .ran('kolacja', '19:15', '19:45')
     .request('q1', '19:45', '20:00')
-    .start('ds', '20:00')
-    .extend('ds', 30, '20:50')
-    .end('ds', '21:30')
+    .ran('ds', '20:00', '21:00')
+    .start('aw', '21:00', { cat: 'analiza', min: 30, confirmUntil: '21:30' })
+    .end('aw', '21:30')
     .ran('rutyna', '21:30', '21:45')
 }
 
@@ -128,10 +129,10 @@ describe('punkt stały', () => {
   })
 
   it('odcinek przestaje obowiązywać, gdy przyjdzie zdarzenie timera sprzed jego końca, którego nie znał', () => {
-    // A log from a second computer arrives late with a pause of the second shift at 21:02 the leader never saw: the
+    // A log from a second computer arrives late with a pause of the evening analysis at 21:02 the leader never saw: the
     // segment 21:00–21:05 it falls in is counted again, the later minutes are no work any more.
     const s = replay(led().events)
-    s.raw({ k: 'block.pause', block: 'ds', at: s.at('21:02') }, '21:02', 'pcb')
+    s.raw({ k: 'block.pause', block: 'aw', at: s.at('21:02') }, '21:02', 'pcb')
     const st = s.state('22:30')
     const recounted = [...st.minutes.entries()].filter(([, m]) => !m.recorded)
     expect(recounted.length).toBe(2)

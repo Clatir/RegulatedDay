@@ -17,7 +17,7 @@ import { moveBetweenDays, moveGroup, moveRoots, stayerStart, stayHowOf, stayRule
 import { applyVariant, planWith, variantCauses, variantsFor } from '@shared/engine/variants'
 import { agendaDates, daysViewOf, horizonDay, threeDays, unknownDay, weekViewOf, type HorizonBlock, type HorizonDay } from '@shared/engine/week'
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
-import { dayFileFrom, layerKept, type PlanBlock } from '@shared/model/plan'
+import { dayFileFrom, layerKept, planBlockFrom, type PlanBlock } from '@shared/model/plan'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { dayEnd, placeLogical } from '@shared/time/day'
 import { block, lm, Scenario } from './dsl'
@@ -32,7 +32,7 @@ const futureDay = (plan = [block({ id: 'a', cat: 'inne', at: '09:00', min: 180, 
 const byId = (d: HorizonDay) => Object.fromEntries(d.blocks.map((b) => [b.id, b]))
 
 describe('D417 – które bloki przeciągasz między kolumnami (reguła „Dziś”, D305)', () => {
-  it('dzień przyszły: blok z własną godziną tak; sesja, wykład, zajęcia zjazdu, druga zmiana i zakotwiczony – nie', () => {
+  it('dzień przyszły: blok z własną godziną tak (także wieczorna sesja szablonu, D467); sesja warstwy, wykład, zajęcia zjazdu i zakotwiczony – nie', () => {
     const s = futureDay([
       block({ id: 'a', cat: 'inne', at: '09:00', min: 60, origin: 'user' }),
       block({ id: 'tpl', cat: 'analiza', at: '12:00', min: 60 }),
@@ -40,7 +40,7 @@ describe('D417 – które bloki przeciągasz między kolumnami (reguła „Dziś
       block({ id: 'lon', cat: 'sesja', at: '08:00', min: 60, fixed: true, origin: 'session', source: 'londyn' }),
       block({ id: 'w', cat: 'wyklad', at: '18:00', min: 90, fixed: true, origin: 'lecture' }),
       block({ id: 'z', cat: 'dojazd', at: '15:00', min: 60, fixed: true, origin: 'zjazd' }),
-      block({ id: 'ds', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' }),
+      planBlockFrom({ id: 'ds', categoryId: 'sesja', startMin: lm('20:00'), durationMin: 60, fixed: true, tag: 'secondShift', origin: 'template' })!,
       block({ id: 'after', cat: 'inne', after: 'a', min: 30, origin: 'user' })
     ])
     const by = byId(horizonDay(s.contextAt(NOW), 'future'))
@@ -52,7 +52,7 @@ describe('D417 – które bloki przeciągasz między kolumnami (reguła „Dziś
         ['lon', false],
         ['w', false],
         ['z', false],
-        ['ds', false],
+        ['ds', true],
         ['after', false]
       ])
     )
@@ -224,30 +224,30 @@ describe('D417 – przeniesienie na inny dzień z godziną upuszczenia', () => {
     expect(left[0]!.startMin).toBe(stayerStart(y, [x, y]))
   })
 
-  it('zostają też sesja własna (kategoria rodzaju sesja), analiza tygodniowa, „nie przenosić na jutro” i chronione (D426, T980)', () => {
+  it('zostają też sesja własna (kategoria rodzaju sesja), „nie przenosić na jutro” i chronione (D426, T980); analiza z dawnym oznaczeniem jedzie (D467)', () => {
     const x = block({ id: 'x', cat: 'inne', at: '09:00', min: 60, origin: 'user' })
     const after = (id: string, cat: string, o: Partial<PlanBlock> = {}) => ({ ...block({ id, cat, after: 'x', min: 15, origin: 'user' }), ...o })
-    const plan = [x, after('go', 'inne'), after('own', 'sesja'), after('wa', 'analiza', { tag: 'weeklyAnalysis' }), after('meal', 'posilek'), after('rut', 'rutyny'), after('reg', 'regeneracja')]
+    const plan = [x, after('go', 'inne'), after('own', 'sesja'), planBlockFrom({ id: 'wa', categoryId: 'analiza', anchor: 'x', durationMin: 15, origin: 'user', tag: 'weeklyAnalysis', waitUntilMin: lm('15:00') })!, after('meal', 'posilek'), after('rut', 'rutyny'), after('reg', 'regeneracja')]
     const g = moveGroup(plan, 'x', stayRuleOf(null, DEFAULT_SETTINGS))
-    expect(g.followers.map((b) => b.id)).toEqual(['go'])
-    expect(g.stayers.map((b) => b.id)).toEqual(['own', 'wa', 'meal', 'rut', 'reg'])
+    expect(g.followers.map((b) => b.id)).toEqual(['go', 'wa'])
+    expect(g.stayers.map((b) => b.id)).toEqual(['own', 'meal', 'rut', 'reg'])
     // The same rule for the series (one predicate of the layers' blocks).
     expect(layerKept(after('s', 'sesja', { origin: 'session' }))).toBe(true)
     expect(layerKept(after('own2', 'sesja'))).toBe(false)
   })
 
-  it('zostają też zaparkowany, odwołany i nieprzenośny (sesja, wykład, zjazd, druga zmiana) – jadą tylko niezaczęte, aktywne, przenośne (T961)', () => {
+  it('zostają też zaparkowany, odwołany i nieprzenośny (sesja, wykład, zjazd) – jadą tylko niezaczęte, aktywne, przenośne (T961); blok z dawnym oznaczeniem drugiej zmiany jedzie (D467)', () => {
     const x = block({ id: 'x', cat: 'inne', at: '09:00', min: 60, origin: 'user' })
     const after = (id: string, o: Partial<PlanBlock> = {}) => ({ ...block({ id, cat: 'inne', after: 'x', min: 15, origin: 'user' }), ...o })
-    const plan = [x, after('go'), after('park'), after('off'), after('ses', { origin: 'session', categoryId: 'sesja' }), after('lec', { origin: 'lecture' }), after('zj', { origin: 'zjazd' }), after('ds', { tag: 'secondShift' })]
+    const plan = [x, after('go'), after('park'), after('off'), after('ses', { origin: 'session', categoryId: 'sesja' }), after('lec', { origin: 'lecture' }), after('zj', { origin: 'zjazd' }), planBlockFrom({ id: 'ds', categoryId: 'inne', anchor: 'x', durationMin: 15, origin: 'user', tag: 'secondShift' })!]
     const s = new Scenario({ date: TODAY, plan })
     s.presence('07:30').raw({ k: 'block.park', block: 'park', at: s.at('08:00') }, '08:00').raw({ k: 'block.cancel', block: 'off', at: s.at('08:01') }, '08:01')
     const facts = computeDay(s.contextAt(NOW)).facts
     expect([facts.blocks.get('park')?.parkedAt != null, facts.blocks.get('off')?.cancelledAt != null]).toEqual([true, true])
     const g = moveGroup(plan, 'x', stayRuleOf(facts, DEFAULT_SETTINGS))
-    expect(g.followers.map((b) => b.id)).toEqual(['go'])
-    expect(g.stayers.map((b) => b.id)).toEqual(['park', 'off', 'ses', 'lec', 'zj', 'ds'])
-    expect(g.stayers.map((b) => stayHowOf(facts.blocks.get(b.id)))).toEqual(['parked', 'cancelled', 'kept', 'kept', 'kept', 'kept'])
+    expect(g.followers.map((b) => b.id)).toEqual(['go', 'ds'])
+    expect(g.stayers.map((b) => b.id)).toEqual(['park', 'off', 'ses', 'lec', 'zj'])
+    expect(g.stayers.map((b) => stayHowOf(facts.blocks.get(b.id)))).toEqual(['parked', 'cancelled', 'kept', 'kept', 'kept'])
   })
 
   it('zaczęty zakotwiczony zostaje w swoim dniu z własną godziną (bez kotwicy), a to, co za nim – z nim (D424)', () => {
@@ -431,7 +431,7 @@ describe('D418 – obciążenie dnia: minuty pracy wobec budżetu (T904)', () =>
 describe('D418 – komórka dnia w miesiącu', () => {
   const day = (o: Partial<HorizonDay> = {}): HorizonDay => ({ ...unknownDay(FUT, 'future'), read: 'full', dayType: 'zwykly', budget: { workMin: 400, limitMin: 480 }, ...o })
 
-  it('bloki stałe (spotkania, wykłady, zajęcia zjazdu) – bez sesji, drugiej zmiany i bloków zdjętych z dnia (T905)', () => {
+  it('bloki stałe (spotkania, wykłady, zajęcia zjazdu) – bez sesji i bloków zdjętych z dnia (T905)', () => {
     const blocks = [
       hb('lon', '08:00', 180, { fixed: true, session: true }),
       hb('meet', '10:00', 60, { fixed: true }),

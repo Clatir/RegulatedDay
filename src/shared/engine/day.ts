@@ -28,9 +28,7 @@ const SPILL_MIN = 12 * 60
 // Flags of a minute.
 const F_END = 1 // work that sets the boundary and the end of work
 const F_EXT = 2 // work whose minutes are classified (extension, overrun)
-const F_SSOUT = 4 // the second shift outside its planned time (an extension, never an overrun)
 const F_BUDGET = 8 // counts to the work budget
-const F_SECOND = 16 // the second shift in its planned time
 const F_PROJECT = 32
 const F_LIFE = 64
 const F_REGEN = 128 // a regeneration block in the foreground with no work beside it
@@ -168,7 +166,7 @@ export interface DayState {
   /** The forecast end of work (index), null in a day without work. */
   forecastWorkEnd: number | null
   /**
-   * The last minute of work before the second shift (index): the past and the forecast – also while an end of work is in
+   * The last minute of work (index): the past and the forecast – also while an end of work is in
    * force with work still to come (a last block paused by a request), as the variants compare it with the boundary.
    */
   lastWorkForecast: number | null
@@ -192,9 +190,6 @@ interface Ctx {
   settingsAt: (k: number) => { settings: RulesSettings; params: DayTypeParams; dayType: string }
   wake: number
   nextWake: number
-  secondShiftStart: number
-  /** Planned windows of the second shift's blocks. */
-  secondWindows: Map<string, { start: number; end: number }>
   typical: (b: BlockInfo) => number | null
   noWorkPlanned: boolean
   events: readonly AnyEvent[]
@@ -240,14 +235,9 @@ function confirmWindows(c: Ctx, b: BlockInfo, facts: DayFacts): Array<{ at: numb
   return out
 }
 
-/** The flags one block lays on a minute. */
-function blockFlags(c: Ctx, b: BlockInfo, minute: number, asProject: boolean): number {
+/** The flags one block lays on its minutes. */
+function blockFlags(b: BlockInfo, asProject: boolean): number {
   if (b.isWork) {
-    if (b.secondShift) {
-      const w = c.secondWindows.get(b.id)
-      const inside = w != null && minute >= w.start && minute < w.end
-      return F_BLOCK | F_BUDGET | (inside ? F_SECOND : F_SSOUT | F_EXT)
-    }
     if (asProject) return F_BLOCK | F_PROJECT
     if (b.rules.keepsRegen) return F_BUDGET
     if (b.afterWorkMark) return F_BLOCK | F_EXT
@@ -270,14 +260,15 @@ interface Span {
  * counts only while nothing runs in the foreground (D191, D202: rest begun during a session is rest; another block
  * begun during it counts once, as that block); other work in the background breaks a regeneration block.
  */
-function paint(c: Ctx, flags: Uint16Array, from: number, to: number, spans: readonly Span[], projects: ReadonlySet<string>, extra = 0): void {
+function paint(flags: Uint16Array, from: number, to: number, spans: readonly Span[], projects: ReadonlySet<string>, extra = 0): void {
   const fg = new Uint8Array(Math.max(0, to - from))
   for (const s of spans) {
     if (s.bg) continue
     const a = Math.max(from, s.from)
     const z = Math.min(to, s.to)
+    const f = blockFlags(s.block, projects.has(s.block.id)) | extra
     for (let k = a; k < z; k++) {
-      flags[k]! |= blockFlags(c, s.block, k, projects.has(s.block.id)) | extra
+      flags[k]! |= f
       fg[k - from] = 1
     }
   }
@@ -286,9 +277,9 @@ function paint(c: Ctx, flags: Uint16Array, from: number, to: number, spans: read
     const a = Math.max(from, s.from)
     const z = Math.min(to, s.to)
     const session = s.block.rules.kind === 'session'
+    const f = blockFlags(s.block, projects.has(s.block.id))
     for (let k = a; k < z; k++) {
       if (session && fg[k - from]) continue
-      const f = blockFlags(c, s.block, k, projects.has(s.block.id))
       // Background work (not „nie przerywa regeneracji”, not a session) takes a regeneration block's time away.
       if (f & F_END && !session) flags[k]! &= ~F_REGEN
       flags[k]! |= f | extra
@@ -351,8 +342,6 @@ function paintExplain(c: Ctx, arr: Uint16Array, plain: Uint16Array, x: Explain, 
     else if (!a) v |= F_EXPLAIN | F_BLOCK | (x.kind === 'work' ? F_TENT_REST : 0)
     else if (a.cls === 'rest' || (a.until != null && k >= a.until)) v |= F_EXPLAIN
     else if (a.cls === 'project') v |= F_EXPLAIN | F_BLOCK | F_PROJECT
-    // „praca” after the second shift counts as the second shift (outside its time: an extension, never the end of work).
-    else if (info?.secondShift) v |= F_EXPLAIN | blockFlags(c, info, k, false)
     else v |= F_EXPLAIN | F_BLOCK | F_BUDGET | F_END | (info?.lectureOrCommute ? 0 : F_EXT)
     arr[k] = v
   }
@@ -385,20 +374,19 @@ function paintUpfront(c: Ctx, flags: Uint16Array, facts: DayFacts, spans: readon
 }
 
 /**
- * Blocks waiting for „Zacznij” (a session, the weekly analysis) not started by the end of their wait (spec „Pierwszy
- * koniec pracy”): they do not make the day one without work and do not change the boundary – the planned end of the
- * last of them before the second shift (index), or null when none has expired (or one still may start).
+ * Blocks waiting for „Zacznij” (a fixed session) not started by the end of their wait – their planned end (spec
+ * „Pierwszy koniec pracy”): they do not make the day one without work and do not change the boundary – the planned end
+ * of the last of them (index), or null when none has expired (or one still may start).
  */
 function expiredWaitEnd(c: Ctx, view: DayFacts, m: number): number | null {
   let last: number | null = null
   for (const b of c.blocks) {
-    if (!b.waits || b.secondShift || !b.inPlan || !isBoundaryWork(b)) continue
+    if (!b.waits || !b.inPlan || !isBoundaryWork(b)) continue
     const span = plannedSpan(b, c.byId)
-    if (!span || span.start >= c.secondShiftStart) continue
+    if (!span) continue
     const f = view.blocks.get(b.id)
     if (f?.startedAt != null || f?.cancelledAt != null || f?.parkedAt != null) continue
-    const until = b.waitUntil ?? span.end
-    if (until > m) return null
+    if (span.end > m) return null
     last = Math.max(last ?? 0, span.end)
   }
   return last
@@ -422,7 +410,7 @@ function stretches(flags: Uint16Array, flag: number, until: number): Array<{ fro
 /**
  * Valid ends of work as known at m (spec „Koniec pracy”, „Pierwszy koniec pracy”): a stretch of work ends with a
  * confirmation („Koniec pracy”, „Odcinam się”), or when after it no work block runs and none is left in the plan
- * before the second shift that can still start – a flexible or anchored one that did not start (or was not resumed)
+ * that can still start – a flexible or anchored one that did not start (or was not resumed)
  * within 15 min of when it was due no longer counts, a waiting one counts until its window ends. An end after which a
  * fixed work block is left is only a break, and so is „Odcinam się” clicked in a stretch and followed by work begun
  * after „Wracam” before the boundary (that work's end is the end); clicked after the stretch, it then only confirms
@@ -467,13 +455,12 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
     const next = list[i + 1]?.from ?? OPEN
     // Clicked during this stretch: it did not end – only a break; the work after „Wracam” ends the day's work.
     if (view.disconnect.some((d) => d.from >= s.from && d.from <= e && workedAfter(d))) continue
-    // Blocks of work left in the plan before the second shift as of e.
+    // Blocks of work left in the plan as of e.
     let resolve = e
     let fixedLeft = false
     for (const b of c.blocks) {
       if (!isWorkHere(b.id) || !b.inPlan) continue
       const span = plannedSpan(b, c.byId)
-      if (span && span.start >= c.secondShiftStart) continue
       const f = view.blocks.get(b.id)
       if (f?.endedAt != null && f.endedAt <= e) continue
       if (f?.startedAt != null && f.startedAt < e) {
@@ -509,7 +496,7 @@ function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindo
       }
       if (b.waits) {
         if (!span) continue
-        const until = b.waitUntil ?? span.end
+        const until = span.end
         if (until <= e) continue
         // Left as a fixed block only by its own window (G1) – not by work another block still keeps open.
         const own = f?.startedAt != null ? OPEN : gone != null ? Math.min(gone, until) : until <= m ? until : OPEN
@@ -552,13 +539,6 @@ export function computeDay(ctx: DayContext): DayState {
   const settingsAt = (k: number) => settingsAtMinute(snapshot, facts, k)
   const blocks = blockInfos(g, ctx.plan, facts, snapshot.settings, (k) => settingsAt(k).dayType)
   const byId = new Map(blocks.map((b) => [b.id, b]))
-  const secondWindows = new Map<string, { start: number; end: number }>()
-  for (const b of blocks) {
-    if (!b.secondShift) continue
-    const s = plannedSpan(b, byId)
-    if (s) secondWindows.set(b.id, s)
-  }
-  const secondStarts = blocks.filter((b) => b.secondShift && b.start != null).map((b) => b.start!)
   const c: Ctx = {
     g,
     cap,
@@ -569,12 +549,10 @@ export function computeDay(ctx: DayContext): DayState {
     settingsAt,
     wake: idxOfLogical(g, ctx.wakeMin),
     nextWake: idxOf(g, placeLogical(addDays(ctx.date, 1), ctx.nextWakeMin)),
-    secondShiftStart: secondStarts.length ? Math.min(...secondStarts) : OPEN,
-    secondWindows,
     typical: typicalOf(ctx),
     noWorkPlanned: !snapshot.blocks.some((p) => {
       const r = snapshot.settings.categories[p.categoryId]
-      return r?.cls === 'work' && !r.keepsRegen && p.tag !== 'secondShift'
+      return r?.cls === 'work' && !r.keepsRegen
     }),
     events,
     asWritten: ctx.asWritten === true,
@@ -592,12 +570,12 @@ export function computeDay(ctx: DayContext): DayState {
 
   // The actual flags of the past, with the blocks counted as projects (D195) decided at their start.
   const projects = new Set<string>()
-  for (const b of blocks) if (b.isWork && !b.secondShift && b.afterWorkMark) projects.add(b.id)
+  for (const b of blocks) if (b.isWork && b.afterWorkMark) projects.add(b.id)
   let actual = new Uint16Array(cap)
   const paintActual = () => {
     actual = new Uint16Array(cap)
     const spans = actualSpans(c, facts, now)
-    paint(c, actual, 0, now, spans, projects)
+    paint(actual, 0, now, spans, projects)
     paintRequests(c, actual, facts, now)
     paintUpfront(c, actual, facts, spans, 0, now)
   }
@@ -610,7 +588,7 @@ export function computeDay(ctx: DayContext): DayState {
   // A block without a run (a request written in after the fact took all its minutes) has nothing to count.
   const candidates = blocks.filter((b) => {
     const f = facts.blocks.get(b.id)
-    return b.isWork && b.rules.afterWorkAsProject && !b.secondShift && !projects.has(b.id) && f?.startedAt != null && f.startedAt < now && f.runs.length > 0
+    return b.isWork && b.rules.afterWorkAsProject && !projects.has(b.id) && f?.startedAt != null && f.startedAt < now && f.runs.length > 0
   })
   // The non-passive events by their minute – built only on a day with such a block.
   const byMinute = new Map<number, AnyEvent[]>()
@@ -689,13 +667,12 @@ export function computeDay(ctx: DayContext): DayState {
     }
     return max
   }
-  /** The end of the last work block before the second shift, by the window forecast and the past (index). */
+  /** The end of the last work block, by the window forecast and the past (index). */
   const lastWorkEnd = (m: number, flags: Uint16Array, fc: Forecast): number | null => {
     let last: number | null = null
-    for (let k = 0; k < Math.min(m, c.secondShiftStart); k++) if (flags[k]! & F_END) last = k + 1
+    for (let k = 0; k < m; k++) if (flags[k]! & F_END) last = k + 1
     for (const p of fc.placed) {
       if (!isBoundaryWork(p.block) || p.to <= m || projects.has(p.block.id)) continue
-      if (p.from >= c.secondShiftStart) continue
       last = Math.max(last ?? 0, p.to)
     }
     return last
@@ -831,7 +808,7 @@ export function computeDay(ctx: DayContext): DayState {
     while (pendingAnswers.length && pendingAnswers[0]!.answer!.at < k) paintExplain(c, known, plain, pendingAnswers.shift()!, now, true)
     const f = actual[k]!
     const fk = known[k]!
-    const classifiable = (f & (F_EXT | F_SSOUT)) !== 0
+    const classifiable = (f & F_EXT) !== 0
     let ev: ReturnType<typeof evaluate> | null = null
     // A request without the hard end written at its start gets the one in force then (T82: requests are classified once).
     const starting = requestStarts.get(k)
@@ -856,7 +833,7 @@ export function computeDay(ctx: DayContext): DayState {
           if (boundary == null || k < boundary) info = { cls: 'in', upfront: (f & F_UPFRONT) !== 0, recorded: false }
           else {
             const empty = ev.pool.min <= 0
-            const pastMax = k >= ev.max && !(f & F_SSOUT)
+            const pastMax = k >= ev.max
             info = { cls: empty ? 'empty' : pastMax ? 'max' : 'after', upfront: (f & F_UPFRONT) !== 0, recorded: false }
           }
         }
@@ -933,7 +910,7 @@ export function computeDay(ctx: DayContext): DayState {
   let budget = 0
   let projectsMin = 0
   for (let k = 0; k < now; k++) {
-    if (actual[k]! & (F_BUDGET | F_SECOND)) budget++
+    if (actual[k]! & F_BUDGET) budget++
     if (actual[k]! & F_PROJECT) projectsMin++
   }
   const { settings, params, dayType } = settingsAt(now)
@@ -1089,11 +1066,11 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   const fcProjects = projects
   const workEndForecast = (() => {
     let last: number | null = null
-    for (let k = 0; k < Math.min(m, c.secondShiftStart); k++) if (flags[k]! & F_END) last = k + 1
-    for (const p of fcT.placed) if (isBoundaryWork(p.block) && !fcProjects.has(p.block.id) && p.from < c.secondShiftStart && p.to > m) last = Math.max(last ?? 0, p.to)
+    for (let k = 0; k < m; k++) if (flags[k]! & F_END) last = k + 1
+    for (const p of fcT.placed) if (isBoundaryWork(p.block) && !fcProjects.has(p.block.id) && p.to > m) last = Math.max(last ?? 0, p.to)
     return last
   })()
-  paint(c, flags, m, cap, spans, fcProjects, F_FORECAST)
+  paint(flags, m, cap, spans, fcProjects, F_FORECAST)
   // Requests of the past; a running one is ended now in the forecast (spec „Biegnąca prośba … kończona teraz”) – an urgent
   // one runs to its estimate (spec „pilne: … prognoza … znane od razu”), as the forecast places the blocks after it.
   paintRequests(c, flags, view, m)
@@ -1101,11 +1078,11 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   paintUpfront(c, flags, view, spans, m, cap)
 
   const ends = workEnds(c, view, flags, m, fcW, fcProjects, null, (t) => d.approvedAt(t + 1)?.boundary ?? OPEN)
-  // No other work before the second shift (past nor forecast) and the waiting blocks expired unstarted: their planned
+  // No other work (past nor forecast) and the waiting blocks expired unstarted: their planned
   // end is the first end of work until the ritual (spec „Pierwszy koniec pracy”).
   if (!ends.length) {
     let anyEnd = false
-    for (let k = 0; k < Math.min(cap, c.secondShiftStart) && !anyEnd; k++) if (flags[k]! & F_END) anyEnd = true
+    for (let k = 0; k < cap && !anyEnd; k++) if (flags[k]! & F_END) anyEnd = true
     const waited = anyEnd ? null : expiredWaitEnd(c, view, m)
     if (waited != null) ends.push({ at: waited, confirmed: false })
   }
@@ -1181,7 +1158,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     for (let k = r.from; k < to; k++) {
       const f = flags[k]!
       const broke = (f & F_DISC) !== 0 || (r.from > 0 && (flags[r.from - 1]! & F_REGEN) !== 0 && !(f & (F_END | F_PROJECT)))
-      const wouldRest = after[k] === 1 && !(f & (F_END | F_PROJECT | F_LIFE | F_SECOND))
+      const wouldRest = after[k] === 1 && !(f & (F_END | F_PROJECT | F_LIFE))
       if (broke || (he != null && k >= he && wouldRest)) {
         justified++
         justifiedBy[r.id] = (justifiedBy[r.id] ?? 0) + 1
@@ -1274,7 +1251,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     let byTime = 0
     if (!he.unreachable) {
       const fromIdx = Math.max(at, workEndNow ?? workEndForecast ?? at)
-      for (let k = fromIdx; k < he.at; k++) if (!(flags[k]! & (F_LIFE | F_REGEN | F_SECOND | F_BUDGET | F_EXT | F_SSOUT | F_REQUEST | F_END))) byTime++
+      for (let k = fromIdx; k < he.at; k++) if (!(flags[k]! & (F_LIFE | F_REGEN | F_BUDGET | F_EXT | F_REQUEST | F_END))) byTime++
     }
     return { min: Math.min(byLimit, byTime), byLimit, byTime, hardEnd: he }
   }
@@ -1294,7 +1271,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     for (let k = m; k < cap && k < bedtimeForecast + 1; k++) {
       const f = flags[k]!
       if (f & F_PROJECT) projF++
-      if (!(f & (F_EXT | F_SSOUT)) || k < appr.boundary) continue
+      if (!(f & F_EXT) || k < appr.boundary) continue
       if (f & F_UPFRONT && moved < limit) {
         const p = poolWith(bedtimeForecast, toward, k, extF, projF)
         if (p.min <= 0) {
@@ -1320,7 +1297,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     towardMin += towardStrict[k]!
   }
   let budgetFc = 0
-  for (let k = m; k < cap; k++) if (flags[k]! & (F_BUDGET | F_SECOND)) budgetFc++
+  for (let k = m; k < cap; k++) if (flags[k]! & F_BUDGET) budgetFc++
 
   return {
     max,

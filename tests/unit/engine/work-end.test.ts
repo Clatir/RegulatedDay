@@ -290,7 +290,7 @@ describe('praca zaczęta po „Koniec pracy” w minucie kliknięcia albo zaraz 
 
 describe('„Koniec pracy?” po pauzie, gdy wcześniejszy blok skończył się sam (G1, E8a.1)', () => {
   it('ostatnią pracą jest zapauzowany blok, nie blok zakończony progiem bezczynności – pytanie po 15 min jest (D165)', () => {
-    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '15:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '16:55', min: 30 }), block({ id: 'ds', cat: 'inne', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })] }).observe('07:00', null)
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '15:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '16:55', min: 30 })] }).observe('07:00', null)
     s.approve('18:00', '07:30').start('a', '15:00')
     s.write([{ id: 'auto-a-idle', k: 'block.end', block: 'a', at: s.at('16:52'), done: null, rule: 'idle', autoRule: 'idle' }], s.at('16:53'))
     s.start('b', '16:55').pause('b', '17:02')
@@ -300,7 +300,7 @@ describe('„Koniec pracy?” po pauzie, gdy wcześniejszy blok skończył się 
   })
 
   it('zapauzowana „Nauka” zaczęta przed końcem pracy to ostatnia praca – pytanie po 15 min jest (jedna definicja pracy)', () => {
-    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '16:00', min: 60 }), block({ id: 'n', cat: 'nauka', at: '16:55', min: 30 }), block({ id: 'ds', cat: 'inne', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })] }).observe('07:00', null)
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '16:00', min: 60 }), block({ id: 'n', cat: 'nauka', at: '16:55', min: 30 })] }).observe('07:00', null)
     s.approve('18:00', '07:30').start('a', '16:00')
     s.write([{ id: 'auto-a-idle', k: 'block.end', block: 'a', at: s.at('16:52'), done: null, rule: 'idle', autoRule: 'idle' }], s.at('16:53'))
     s.start('n', '16:55').pause('n', '17:02')

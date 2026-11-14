@@ -10,12 +10,12 @@ import { createDay, dayPlan, defaultDayType, firstFixedStart, morningBound } fro
 import { computeDay } from '@shared/engine/day'
 import { exchangeCost, isFullExchange, proposeExchange } from '@shared/engine/exchange'
 import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
-import { fromYesterday, holidayQuestions, morningWarnings, sessionQuestions, shiftNotice, weeklyAnalysisMove, type MorningInputs } from '@shared/engine/morning'
+import { fromYesterday, holidayQuestions, morningWarnings, sessionQuestions, shiftNotice, type MorningInputs } from '@shared/engine/morning'
 import { copiedDay, copiedTemplate, draggedBlock, moveBetweenDays, movedBlock, newBlockStart, leavesByCancel, newUserBlock, wakeChange, wakeShifted } from '@shared/engine/planEdit'
 import { applyTypeChange, planTypeChange } from '@shared/engine/typeChange'
 import { defaultTemplates, firstComputerRecords, settingsPatch } from '@shared/model/defaults'
 import { DEFAULT_GENERAL, rdFrom } from '@shared/model/rd'
-import { dayFileFrom, emptyDayFile, templateFor, templateFrom, type DayFile } from '@shared/model/plan'
+import { dayFileFrom, emptyDayFile, planBlockFrom, templateFor, templateFrom, type DayFile } from '@shared/model/plan'
 import { DEFAULT_SETTINGS, deepMerge, settingsFrom, settingsOn } from '@shared/model/settings'
 import { block, hhmm, lm, Scenario } from './dsl'
 
@@ -111,8 +111,7 @@ describe('poranek idzie za pobudką dnia', () => {
 describe('sesje niezaczęte do końca czekania', () => {
   const plan = [
     block({ id: 'lo', cat: 'sesja', at: '08:00', min: 180, fixed: true, origin: 'session', source: 'londyn' }),
-    block({ id: 'ny', cat: 'sesja', at: '14:00', min: 180, fixed: true, origin: 'session', source: 'ny' }),
-    block({ id: 'dz', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })
+    block({ id: 'ny', cat: 'sesja', at: '14:00', min: 180, fixed: true, origin: 'session', source: 'ny' })
   ]
 
   it('nie robią dnia bez pracy: pierwszym końcem pracy jest planowany koniec ostatniej z nich, granica się nie zmienia', () => {
@@ -130,11 +129,12 @@ describe('sesje niezaczęte do końca czekania', () => {
     expect(st.warnings).not.toContain('minimum regeneracji nie mieści się przed porą snu')
   })
 
-  it('praca zaplanowana po drugiej zmianie nie odbiera im roli końca pracy', () => {
+  it('D467: wieczorny blok pracy jest pracą dnia – koniec niezaczętych sesji nie jest wtedy końcem pracy', () => {
     const s = new Scenario({ date: '2026-10-21', plan: [...plan, block({ id: 'late', cat: 'inne', at: '21:15', min: 30 })] })
     const st = s.state('18:00')
-    expect(hhmm(st, st.firstEnd)).toBe('17:00')
-    expect(st.hardEnd.unreachable).toBe(false)
+    expect(st.firstEnd).toBeNull()
+    // 21:45 + 15 min is past the maximum of the ordinary day.
+    expect(hhmm(st, st.boundary.proposal)).toBe('19:00')
   })
 })
 
@@ -178,8 +178,8 @@ describe('wymiana (zasada 2)', () => {
     expect(p.overBudgetMin).toBe(30)
   })
 
-  it('blok pracy po drugiej zmianie też kosztuje swoje minuty po granicy (otwiera pracę ponownie)', () => {
-    const s = new Scenario({ date: '2026-10-21', plan: [...plan, block({ id: 'dz', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })], settings: { transitionBufferMin: 0 } }).approve('12:45', '07:30')
+  it('blok pracy po wieczornej sesji też kosztuje swoje minuty po granicy (otwiera pracę ponownie)', () => {
+    const s = new Scenario({ date: '2026-10-21', plan: [...plan, block({ id: 'dz', cat: 'sesja', at: '20:00', min: 60, fixed: true })], settings: { transitionBufferMin: 0 } }).approve('12:45', '07:30')
     const ctx = s.contextAt(s.at('07:45'))
     const p = proposeExchange(ctx, computeDay(ctx), newUserBlock('inne', lm('21:30'), 30, undefined))
     expect(p.needed).toBe(true)
@@ -211,14 +211,14 @@ describe('zmiana typu w trakcie dnia', () => {
     block({ id: 'an', cat: 'analiza', at: '08:00', min: 120 }),
     block({ id: 'na', cat: 'inne', at: '10:30', min: 120 }),
     block({ id: 'ny', cat: 'sesja', at: '14:00', min: 180, fixed: true, origin: 'session', source: 'ny' }),
-    block({ id: 'dz', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })
+    block({ id: 'dz', cat: 'sesja', at: '20:00', min: 60, fixed: true })
   ]
 
   it('na dzień regeneracyjny: parkowanie elastycznych, stałe pojedynczo, maksimum i granica z nowego typu, minimum według regeneracji możliwej do zebrania, koniec pracy', () => {
     const s = new Scenario({ date: '2026-10-21', plan, settings: { transitionBufferMin: 0 } }).approve('17:15', '07:30').ran('an', '08:00', '10:00')
     const ctx = s.contextAt(s.at('11:00'))
     const state = computeDay(ctx)
-    const inp = { ctx, state, energyNow: null, to: 'regeneracyjny' as const, settings: s.settings, templates: [] }
+    const inp = { ctx, state, energyNow: null, to: 'regeneracyjny' as const, settings: s.settings }
     const p = planTypeChange(inp)
     expect(p.from).toBe('zwykly')
     expect(p.laterMax).toBe(false)
@@ -226,8 +226,9 @@ describe('zmiana typu w trakcie dnia', () => {
     expect(p.fixed.map((b) => b.id).sort()).toEqual(['dz', 'ny'])
     expect(p.minRegen.before).toBe(90)
     expect(p.minRegen.after).toBe(150)
-    const r = applyTypeChange(inp, p, { park: ['na'], cancel: ['ny'], returnRequests: [], add: [] })
-    expect(r.events.map((e) => e.k)).toEqual(['block.park', 'block.cancel', 'day.snapshot', 'boundary.approve', 'work.end'])
+    // The evening session is work of its category (D467): only with it cancelled too no work stays, and the switch confirms the end.
+    const r = applyTypeChange(inp, p, { park: ['na'], cancel: ['ny', 'dz'], returnRequests: [], add: [] })
+    expect(r.events.map((e) => e.k)).toEqual(['block.park', 'block.cancel', 'block.cancel', 'day.snapshot', 'boundary.approve', 'work.end'])
     expect(r.boundary).not.toBeNull()
     for (const e of r.events) s.raw({ ...e, at: s.at('11:00') }, '11:00')
     const after = s.state('11:05')
@@ -237,11 +238,12 @@ describe('zmiana typu w trakcie dnia', () => {
     expect(hhmm(after, after.workEnd)).toBe('10:00')
   })
 
-  it('na dzień regeneracyjny: zapauzowana analiza tygodniowa kończy się jak każdy zapauzowany blok pracy (jak w 1.0.0)', () => {
-    const s = new Scenario({ date: '2026-10-21', plan: [block({ id: 'wa', cat: 'analiza', at: '08:00', min: 120, tag: 'weeklyAnalysis' })] }).observe('07:00', null)
+  it('na dzień regeneracyjny: zapauzowana analiza (także z dawnym oznaczeniem, D467) kończy się jak każdy zapauzowany blok pracy', () => {
+    const wa = planBlockFrom({ id: 'wa', categoryId: 'analiza', startMin: lm('08:00'), durationMin: 120, tag: 'weeklyAnalysis', waitUntilMin: lm('15:00'), origin: 'template' })!
+    const s = new Scenario({ date: '2026-10-21', plan: [wa] }).observe('07:00', null)
     s.start('wa', '08:00').pause('wa', '09:00')
     const ctx = s.contextAt(s.at('09:30'))
-    const inp = { ctx, state: computeDay(ctx), energyNow: null, to: 'regeneracyjny' as const, settings: s.settings, templates: [] }
+    const inp = { ctx, state: computeDay(ctx), energyNow: null, to: 'regeneracyjny' as const, settings: s.settings }
     const r = applyTypeChange(inp, planTypeChange(inp), { park: [], cancel: [], returnRequests: [], add: [] })
     expect(r.events.filter((e) => e.k === 'block.end').map((e) => e.block)).toEqual(['wa'])
   })
@@ -268,24 +270,20 @@ describe('zmiana typu w trakcie dnia', () => {
     expect(rth.durationMin).toBe(210)
   })
 
-  it('na typ z późniejszym maksimum: brakujące sesje i druga zmiana nowego typu do dodania, zaznaczone bez kosztu', () => {
+  it('na typ z późniejszym maksimum: brakujące sesje nowego typu do dodania, zaznaczone bez kosztu (bez drugiej zmiany, D467)', () => {
     const s = new Scenario({ date: '2026-10-21', dayType: 'regeneracyjny', plan: [block({ id: 'sp', cat: 'regeneracja', at: '09:30', min: 30 })] })
     const ctx = s.contextAt(s.at('09:00'))
     const state = computeDay(ctx)
-    const p = planTypeChange({ ctx, state, energyNow: null, to: 'zwykly', settings: s.settings, templates: defaultTemplates() })
+    const p = planTypeChange({ ctx, state, energyNow: null, to: 'zwykly', settings: s.settings })
     expect(p.laterMax).toBe(true)
-    const add = p.add.map((a) => [a.session ?? a.block.tag, a.checked])
-    // London 08:00–11:00 runs by the plan already (from now), NY 14:00, the second shift 20:00 of the template.
-    expect(add).toEqual(
-      expect.arrayContaining([
-        ['londyn', true],
-        ['ny', true],
-        ['secondShift', true]
-      ])
-    )
-    const r = applyTypeChange({ ctx, state, energyNow: null, to: 'zwykly', settings: s.settings, templates: defaultTemplates() }, p, { park: [], cancel: [], returnRequests: [], add: p.add.map((a) => a.block.id) })
+    // London 08:00–11:00 runs by the plan already (from now), NY 14:00.
+    expect(p.add.map((a) => [a.session, a.checked])).toEqual([
+      ['londyn', true],
+      ['ny', true]
+    ])
+    const r = applyTypeChange({ ctx, state, energyNow: null, to: 'zwykly', settings: s.settings }, p, { park: [], cancel: [], returnRequests: [], add: p.add.map((a) => a.block.id) })
     expect(r.sessionsYes.sort()).toEqual(['londyn', 'ny'])
-    expect(r.blocks.map((b) => b.tag)).toEqual(['secondShift'])
+    expect(r.blocks).toEqual([])
     expect(r.events.find((e) => e.k === 'day.snapshot')).toMatchObject({ dayType: 'zwykly', minRegen: null })
   })
 })
@@ -405,11 +403,17 @@ describe('plan poranny', () => {
     expect(sessionQuestions(snap, { ...emptyDayFile('2026-10-21'), sessions: { ny: 'yes' } }, '2026-10-21').map((s) => s.id)).toEqual(['londyn'])
   })
 
-  it('tydzień przed świętem w USA: raz pyta o sesje i drugą zmianę; przy skróconej sesji o drugą zmianę z godziną zamknięcia', () => {
+  it('tydzień przed świętem w USA: raz pyta o sesje; dzień skróconej sesji – bez pytania (D467: bez drugiej zmiany)', () => {
     const q = holidayQuestions(inputs('2026-11-20'))
-    expect(q.map((x) => x.text)).toEqual(['26.11 święto w USA — sesja Londyn i sesja NY i druga zmiana?', '27.11 CME zamyka o 19:15 — druga zmiana 20:00?'])
+    expect(q.map((x) => x.text)).toEqual(['26.11 święto w USA — sesja Londyn i sesja NY?'])
     const asked = holidayQuestions(inputs('2026-11-20', { '2026-11-26': { ...emptyDayFile('2026-11-26'), asked: { holiday: 'done' } } }))
-    expect(asked.map((x) => x.date)).toEqual(['2026-11-27'])
+    expect(asked).toEqual([])
+  })
+
+  it('D467: wieczorny blok szablonu z dawnym oznaczeniem drugiej zmiany nie dostaje pytania przed świętem', () => {
+    const raw = { id: 'zwykly', name: 'Dzień zwykły', dayType: 'zwykly', weekdays: [], versions: [{ from: '2020-01-01', blocks: [{ id: 'druga-zmiana', categoryId: 'sesja', startMin: lm('20:00'), durationMin: 60, fixed: true, tag: 'secondShift', origin: 'template' }] }] }
+    const q = holidayQuestions({ ...inputs('2026-11-20'), templates: [templateFrom(raw)!] })
+    expect(q.map((x) => x.text)).toEqual(['26.11 święto w USA — sesja Londyn i sesja NY?'])
   })
 
   it('tydzień przesunięcia sesji zapowiedziany tydzień wcześniej', () => {
@@ -422,18 +426,10 @@ describe('plan poranny', () => {
     expect(shiftNotice(inputs('2026-10-26'))).toBeNull()
   })
 
-  it('ostrzeżenia: praca po maksimum, minimum regeneracji, pora snu nie później niż koniec drugiej zmiany', () => {
-    const s = new Scenario({ date: '2026-10-21', plan: [block({ id: 'a', cat: 'analiza', at: '08:00', min: 13 * 60 }), block({ id: 'dz', cat: 'sesja', at: '21:30', min: 60, fixed: true, tag: 'secondShift' })] })
+  it('ostrzeżenia: praca po maksimum, minimum regeneracji, budżet (bez ostrzeżenia o drugiej zmianie, D467)', () => {
+    const s = new Scenario({ date: '2026-10-21', plan: [block({ id: 'a', cat: 'analiza', at: '08:00', min: 13 * 60 }), block({ id: 'dz', cat: 'sesja', at: '21:30', min: 60, fixed: true })] })
     const w = morningWarnings(s.state('07:00'))
-    expect(w).toEqual(expect.arrayContaining(['max', 'minimum', 'bedtimeSecondShift', 'budget']))
-  })
-
-  it('sobota zjazdem: w piątek analiza tygodniowa 20:00–21:00 w miejsce drugiej zmiany, pytana raz', () => {
-    const files = { '2026-10-24': { ...emptyDayFile('2026-10-24'), dayType: 'zjazd-stacjonarny' as const } }
-    const m = weeklyAnalysisMove(inputs('2026-10-23', files), '2026-10-23')!
-    expect(m.analysis).toMatchObject({ categoryId: 'analiza', startMin: lm('20:00'), durationMin: 60, tag: 'secondShift' })
-    expect(m.secondShift).not.toBeNull()
-    expect(weeklyAnalysisMove(inputs('2026-10-23', { ...files, '2026-10-23': { ...emptyDayFile('2026-10-23'), asked: { weeklyAnalysisMove: 'no' } } }), '2026-10-23')).toBeNull()
+    expect([...w].sort()).toEqual(['budget', 'max', 'minimum'])
   })
 })
 
@@ -504,7 +500,7 @@ describe('przenoszenie i kopiowanie', () => {
 })
 
 describe('kreator pierwszego komputera', () => {
-  it('zapisuje różnicę ustawień, szablony z drugą zmianą i analizą sobotnią, dni z kalendarza; dzień liczy się z nich', () => {
+  it('zapisuje różnicę ustawień, szablony (dzień zwykły bez bloków, sobota z analizą), dni z kalendarza; dzień liczy się z nich', () => {
     const settings = settingsFrom(deepMerge<unknown>(DEFAULT_SETTINGS, { dayTypes: { zwykly: { budgetMin: 480 } }, reserve: 12 }))
     expect(settingsPatch(DEFAULT_SETTINGS, settings)).toEqual({ dayTypes: { zwykly: { budgetMin: 480 } }, reserve: 12 })
     const records = firstComputerRecords(
@@ -519,9 +515,9 @@ describe('kreator pierwszego komputera', () => {
     expect(settingsOn(rd.settings, '2026-10-21').dayTypes.zwykly.budgetMin).toBe(480)
     const wed = createDay({ date: '2026-10-21', changes: rd.settings, templates, lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
     expect(wed.budgetMin).toBe(480)
-    expect(wed.blocks.find((b) => b.tag === 'secondShift')).toMatchObject({ startMin: lm('20:00'), durationMin: 60, fixed: true })
+    expect(wed.blocks.filter((b) => b.origin === 'template')).toEqual([])
     const sat = createDay({ date: '2026-10-24', changes: rd.settings, templates, lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
-    expect(sat.blocks.find((b) => b.tag === 'weeklyAnalysis')).toMatchObject({ startMin: lm('09:00'), waitUntilMin: lm('15:00') })
+    expect(sat.blocks.filter((b) => b.origin === 'template').map((b) => [b.categoryId, b.startMin, b.durationMin, b.fixed])).toEqual([['analiza', lm('09:00'), 60, false]])
     const zjazd = createDay({ date: '2026-10-31', changes: rd.settings, templates, lectures: [], series: [], dayFile: dayFileFrom(records[3]!.value, '2026-10-31'), holidays: marketDay, at: null })
     expect(zjazd.dayType).toBe('zjazd-stacjonarny')
   })

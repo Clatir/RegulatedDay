@@ -46,7 +46,7 @@ export interface TimelineItem {
   background: boolean
   /** Passed, parked or cancelled: shown dimmed. */
   dim?: boolean
-  /** Waits for „Zacznij” (a session, the second shift, the weekly analysis). */
+  /** Waits for „Zacznij” (a fixed session). */
   waits?: boolean
   /** An occurrence of a series: the mark `SERIES_MARK` stands by its name (D401). */
   series?: boolean

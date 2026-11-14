@@ -50,7 +50,7 @@ test('kreator pierwszego komputera: pusty folder, kroki z wartościami domyślny
       await expect(page.getByTestId('wizard-next')).toBeDisabled()
       await page.getByTestId('wizard-first').click()
       await page.getByTestId('wizard-next').click()
-      await expect(page.getByTestId('wizard-step')).toContainText('2 z 15')
+      await expect(page.getByTestId('wizard-step')).toContainText('2 z 14')
       await expect(page.getByTestId('wizard-preview')).toBeVisible()
       // Today's weekday is an ordinary day (by default Monday–Friday): the day below counts by the ordinary day's budget.
       await page.getByTestId(`wizard-weektype-${weekday(logicalToday()) - 1}`).selectOption('zwykly')
@@ -61,7 +61,8 @@ test('kreator pierwszego komputera: pusty folder, kroki z wartościami domyślny
       await page.getByTestId('wizard-zwykly-budgetMin').fill('8h')
       await page.getByTestId('wizard-zwykly-budgetMin').press('Enter')
       await shot(page, '04-work')
-      for (let i = 0; i < 6; i++) await page.getByTestId('wizard-next').click()
+      // D467: no step „Druga zmiana” – after „Sesje” come „Plan wykładów” and „Zjazdy”.
+      for (let i = 0; i < 5; i++) await page.getByTestId('wizard-next').click()
       // People.
       await expect(page.getByTestId('wizard-step')).toContainText('Osoby')
       await page.getByTestId('wizard-person').fill('Mama')

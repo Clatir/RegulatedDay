@@ -1,17 +1,17 @@
 /**
  * The morning plan (spec „Plan poranny”): in order „Strona B tygodnia” on Monday and „Cele na <miesiąc>” (D360), the questions about symptoms (the first check-in – D73), then the
  * plan – the day's wake (in the header), blocks moved from yesterday, the questions of the session layer and of
- * holidays, a lighter day after a stationary „zjazd”, the announcement of the session shift, the weekly analysis moved
- * to Friday, requests chosen from the queue, the warnings, the boundary to approve (approving it approves the plan) and
+ * holidays, a lighter day after a stationary „zjazd”, the announcement of the session shift, requests chosen from the
+ * queue, the warnings, the boundary to approve (approving it approves the plan) and
  * its exception. Every step can be skipped; nothing is blocked.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { marketDay } from '@shared/calendar/holidays'
-import { putBlock, setAsked, setCancelled, setSessionAnswer } from '@shared/data/dayEdits'
+import { setAsked, setCancelled, setSessionAnswer } from '@shared/data/dayEdits'
 import { dueBadge } from '@shared/engine/caseDates'
 import { checkinStates } from '@shared/engine/energy'
 import { atOf } from '@shared/engine/grid'
-import { fromYesterday, holidayQuestions, lighterDay, morningWarnings, sessionQuestions, shiftNotice, weeklyAnalysisMove, type MorningInputs, type MorningWarning } from '@shared/engine/morning'
+import { fromYesterday, holidayQuestions, lighterDay, morningWarnings, sessionQuestions, shiftNotice, type MorningInputs, type MorningWarning } from '@shared/engine/morning'
 import { morningCases, morningMinutes } from '@shared/engine/cases'
 import { freeStart } from '@shared/engine/planEdit'
 import { seriesQuestions } from '@shared/engine/series'
@@ -161,7 +161,6 @@ function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void }) {
 const WARNINGS: Record<MorningWarning, (m: DayModel, lm: (i: number) => string) => string> = {
   max: (m, lm) => `Praca kończy się po maksimum (${lm(m.state.boundary.max)}). Możesz przenieść blok na inny dzień albo dodać wyjątek granicy – albo zostawić plan; minuty po maksimum będą przekroczeniem.`,
   minimum: () => 'Minimum regeneracji nie mieści się przed porą snu – twardy koniec projektów wypada przed końcem pracy.',
-  bedtimeSecondShift: () => 'Pora snu wypada nie później niż koniec drugiej zmiany.',
   budget: (m) => `Plan przekracza budżet pracy (${durationLabel(m.state.budgetUsedMin + m.state.budget.forecastMin)} z ${durationLabel(m.state.budget.limitMin)}) – to tylko ostrzeżenie.`
 }
 
@@ -194,11 +193,11 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
   const ahead = useMemo(
     () =>
       inputs
-        ? { holidays: holidayQuestions(inputs), lighter: lighterDay(inputs, currentType), shift: shiftNotice(inputs), analysis: weeklyAnalysisMove(inputs, date) }
-        : { holidays: [], lighter: false, shift: null, analysis: null },
-    [inputs, currentType, date]
+        ? { holidays: holidayQuestions(inputs), lighter: lighterDay(inputs, currentType), shift: shiftNotice(inputs) }
+        : { holidays: [], lighter: false, shift: null },
+    [inputs, currentType]
   )
-  const { holidays, lighter, shift, analysis } = ahead
+  const { holidays, lighter, shift } = ahead
   // D382: an occurrence of a series on a „zjazd” or a day of regeneration (its field „W dni szczególne” says „pytaj”) – kept or called off for the day.
   const seriesAsk = seriesQuestions(series, model.ctx.plan, model.dayFile, currentType, date)
   const warnings = morningWarnings(s)
@@ -228,7 +227,6 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
       let next = setAsked(r, 'holiday', keep ? 'yes' : 'no')
       if (!keep) {
         for (const id of q.sessions) next = setSessionAnswer(next, id, 'no')
-        if (q.secondShift) next = setCancelled(next, q.secondShift, true)
         for (const id of q.lectures) next = setCancelled(next, id, true)
       }
       return next
@@ -312,27 +310,6 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
         <Card data-testid="shift-notice">
           Od {plDate(shift.from)} sesje zaczynają się godzinę wcześniej ({shift.starts.map((x) => `${x.name} ${x.at}`).join(', ')}); pobudka w dni z sesjami też o godzinę wcześniej.
           {shift.collisions.length > 0 && ` Kolizje: ${shift.collisions.map((c) => c.text).join('; ')}.`}
-        </Card>
-      )}
-      {analysis && (
-        <Card data-testid="ask-weekly-analysis">
-          <span className="flex-1">Sobota to zjazd – przenieść analizę tygodniową na dziś 20:00–21:00, w miejsce drugiej zmiany?</span>
-          <button
-            type="button"
-            className="btn"
-            onClick={() =>
-              void saveDay(date, raw, (r) => {
-                let next = setAsked(putBlock(r, analysis.analysis), 'weeklyAnalysisMove', 'yes')
-                if (analysis.secondShift) next = setCancelled(next, analysis.secondShift, true)
-                return next
-              })
-            }
-          >
-            Tak
-          </button>
-          <button type="button" className="btn" onClick={() => void saveDay(date, raw, (r) => setAsked(r, 'weeklyAnalysisMove', 'no'))}>
-            Nie
-          </button>
         </Card>
       )}
       {deadlines.length > 0 && (

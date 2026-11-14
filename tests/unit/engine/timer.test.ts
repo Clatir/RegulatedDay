@@ -13,6 +13,7 @@ import { requestAction } from '@shared/engine/requests'
 import { computeDay } from '@shared/engine/day'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { variantTriggers } from '@shared/engine/variants'
+import { planBlockFrom } from '@shared/model/plan'
 import { block, hhmm, lm, Scenario } from './dsl'
 
 const DATE = '2026-10-28' // a Wednesday
@@ -109,7 +110,7 @@ describe('kliknięcia timera', () => {
     expect(s.state('09:10').facts.blocks.get('b')?.parkedAt ?? null).toBeNull()
   })
 
-  it('Koniec pracy nic nie parkuje, gdy w planie przed drugą zmianą zostaje blok stały pracy (D216)', () => {
+  it('Koniec pracy nic nie parkuje, gdy w planie zostaje blok stały pracy (D216)', () => {
     const s = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '10:00', min: 60 }), block({ id: 'w', cat: 'zajecia-zdalne', at: '16:00', min: 90, fixed: true })]).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })
     const r = click(s, '08:50', { a: 'workEnd' })
@@ -763,40 +764,34 @@ describe('liczby pomocnicze', () => {
   })
 })
 
-describe('druga zmiana poza swoim planowanym czasem (spec „Druga zmiana”, A1-04)', () => {
-  const plan = () => [block({ id: 'a', cat: 'inne', at: '08:00', min: 120 }), block({ id: 'ds', cat: 'sesja', at: '20:00', min: 60, tag: 'secondShift' })]
+describe('D467: wieczorny blok z dawnym oznaczeniem drugiej zmiany – koszt jak każdego bloku swojej kategorii', () => {
+  // As an older version wrote them: a session and a block anchored to it, both marked.
+  const old = (raw: Record<string, unknown>) => planBlockFrom({ origin: 'template', ...raw })!
+  const plan = () => [
+    block({ id: 'a', cat: 'inne', at: '08:00', min: 120 }),
+    old({ id: 'ds', categoryId: 'sesja', startMin: lm('20:00'), durationMin: 60, tag: 'secondShift' }),
+    old({ id: 'po', categoryId: 'inne', anchor: 'ds', durationMin: 30, tag: 'secondShift' })
+  ]
 
-  it('wcześniejszy start: koszt minut przed oknem (nigdy przekroczenie) z „Przesuń na teraz”; w oknie – bez kosztu', () => {
-    const s = day(plan()).approve('09:15', '10:15')
-    const early = click(s, '19:40', { a: 'start', block: 'ds' })
+  it('start po granicy kosztuje wszystkie minuty bloku, po maksimum to przekroczenie – także w jego planowanym czasie; bez „Przesuń na teraz”', () => {
+    const early = click(day(plan()).approve('09:15', '10:15'), '19:40', { a: 'start', block: 'ds' })
     expect(early.ok).toBe(false)
-    expect(early.confirm).toMatchObject({ block: 'ds', minutes: 20, overrun: false, moveToNow: true })
-    const s2 = day(plan()).approve('09:15', '10:15')
-    expect(click(s2, '20:00', { a: 'start', block: 'ds' }).ok).toBe(true)
+    expect(early.confirm).toMatchObject({ block: 'ds', minutes: 60, overrun: true })
+    expect(early.confirm).not.toHaveProperty('moveToNow')
+    const onTime = click(day(plan()).approve('09:15', '10:15'), '20:05', { a: 'start', block: 'ds' })
+    expect(onTime.ok).toBe(false)
+    expect(onTime.confirm).toMatchObject({ block: 'ds', minutes: 60, overrun: true })
   })
 
-  it('„Przedłuż” drugiej zmiany za jej planowany koniec: zwykłe przedłużenie z kosztem, bez „Przesuń na teraz”', () => {
+  it('„Przedłuż” i blok zakotwiczony do niego kosztują jak każda praca po granicy', () => {
     const s = day(plan()).approve('09:15', '10:15')
-    expect(click(s, '20:00', { a: 'start', block: 'ds' }).ok).toBe(true)
+    expect(click(s, '20:00', { a: 'start', block: 'ds', confirm: true }).ok).toBe(true)
     const r = click(s, '20:55', { a: 'extend', minutes: 30 })
     expect(r.ok).toBe(false)
-    expect(r.confirm).toMatchObject({ block: 'ds', minutes: 30, overrun: false })
-    expect(r.confirm!.moveToNow).toBeUndefined()
-  })
-
-  // A flexible second shift in its window of „Zacznij”, and a template block anchored to it.
-  const flex = () => [block({ id: 'a', cat: 'inne', at: '08:00', min: 120 }), block({ id: 'ds', cat: 'inne', at: '20:00', min: 60, tag: 'secondShift' }), block({ id: 'po', cat: 'inne', after: 'ds', min: 30 })]
-
-  it('start później w swoim oknie kosztuje nic – tylko wcześniejszy start i „Przedłuż” (przegląd 0.21.0)', () => {
-    const s = day(flex()).approve('09:15', '10:15')
-    const r = click(s, '20:05', { a: 'start', block: 'ds' })
-    expect([r.ok, r.confirm]).toEqual([true, null])
-  })
-
-  it('blok zakotwiczony do drugiej zmiany nie jest drugą zmianą: bez kosztu i bez „Przesuń na teraz” (przegląd 0.21.0)', () => {
-    const s = day(flex()).approve('09:15', '10:15')
-    const r = click(s, '19:00', { a: 'start', block: 'po' })
-    expect([r.ok, r.confirm]).toEqual([true, null])
+    expect(r.confirm).toMatchObject({ block: 'ds', minutes: 30, overrun: true })
+    const after = click(day(plan()).approve('09:15', '10:15'), '19:00', { a: 'start', block: 'po' })
+    expect(after.ok).toBe(false)
+    expect(after.confirm).toMatchObject({ block: 'po', minutes: 30, overrun: true })
   })
 })
 

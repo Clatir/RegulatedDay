@@ -91,8 +91,8 @@ export function nameById(id: string, day: NamingDay, n: Names): string {
 export function blockName(b: NamedBlock, n: Names): string {
   // Its own name (a class imported from the PDF of „zjazdy”: „<przedmiot> · <forma>”, D357).
   if (b.name) return b.name
-  // A block of the session layer is „Sesja <name>” („Sesja NY”, D338); the second shift and a category block added by
-  // hand stay the category's „Sesja tradingowa”.
+  // A block of the session layer is „Sesja <name>” („Sesja NY”, D338); a category block of the template or added by hand
+  // stays the category's „Sesja tradingowa”.
   if (b.origin === 'session' && b.sourceId) {
     const s = n.settings.sessions.find((x) => x.id === b.sourceId)
     if (s) return `Sesja ${s.name}`

@@ -45,7 +45,7 @@ const template: Template = {
         planBlock({ id: 'spacer', categoryId: 'regeneracja', variantId: 'spacer', startMin: 12 * 60 + 15, durationMin: 30, origin: 'template' }),
         planBlock({ id: 'a2', categoryId: 'analiza', startMin: 13 * 60 + 30, durationMin: 30, origin: 'template' }),
         planBlock({ id: 'jrn', categoryId: 'journaling', anchor: 'session:ny', durationMin: 30, origin: 'template' }),
-        planBlock({ id: 'ds', categoryId: 'sesja', startMin: 20 * 60, durationMin: 60, fixed: true, tag: 'secondShift', origin: 'template' })
+        planBlock({ id: 'ds', categoryId: 'sesja', startMin: 20 * 60, durationMin: 60, fixed: true, origin: 'template' })
       ]
     }
   ]

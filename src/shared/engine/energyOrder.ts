@@ -383,7 +383,7 @@ export const energyOrderLabel = (e: { before: number; after: number }): string =
 
 /**
  * A block the order may move (D377): flexible (not fixed, not waiting for „Zacznij”), of the plan with an hour of its own
- * (`ownHourBlock` – not a session, a lecture, a class of a „zjazd”, the second shift, nor anchored), in the foreground,
+ * (`ownHourBlock` – not a session, a lecture, a class of a „zjazd”, nor anchored), in the foreground,
  * not begun, parked or cancelled – a protected one too, unlike `pushable` (rozsuwanie and the gaps never move it).
  */
 export function orderable(b: BlockInfo, facts: DayFacts): boolean {

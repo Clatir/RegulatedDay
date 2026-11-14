@@ -146,11 +146,11 @@ export const stayRuleOf = (facts: Pick<DayFacts, 'blocks'> | null | undefined, s
 
 /**
  * A block of a kind that keeps its day (D426, T980): of its day's layers (`layerKept` – a session of the layer, a lecture, a
- * class of a „zjazd”, the second shift), the weekly analysis, a session of a category of the kind „sesja” (D338), a block of a
- * category „nie przenosić na jutro” or protected.
+ * class of a „zjazd”), a session of a category of the kind „sesja” (D338), a block of a category „nie przenosić na jutro”
+ * or protected.
  */
 function keptKind(b: PlanBlock, categories: StayRule['categories']): boolean {
-  if (layerKept(b) || b.tag === 'weeklyAnalysis') return true
+  if (layerKept(b)) return true
   const r = categories[b.categoryId]
   return r != null && (r.kind === 'session' || r.noMoveTomorrow || r.protected)
 }

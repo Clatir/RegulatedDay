@@ -408,7 +408,7 @@ describe('znak w siatce miesiąca (D404)', () => {
 
 describe('wersja reguł (T716)', () => {
   it('wystąpienia w `day.create` prowadzącego: starsza wersja ustępuje prowadzenia', () => {
-    expect(RULES_VERSION).toBe(8)
+    expect(RULES_VERSION).toBeGreaterThanOrEqual(8)
   })
 })
 

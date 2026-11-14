@@ -1,13 +1,13 @@
 /**
  * What the first computer's wizard writes (spec „Kreator pierwszego komputera”): the settings you chose as one change of
  * rd.json in force from the start (the fields that differ from the starting values – a later version's new defaults
- * still reach the rest), the shared settings that work at once, the people, the default templates (the ordinary day with
- * the second shift 20:00–21:00, Saturday with the weekly analysis 9:00–10:00 waiting until 15:00, D226), the plan of
- * lectures and the days marked in the calendar. Nothing is written before „Zakończ”.
+ * still reach the rest), the shared settings that work at once, the people, the default templates (the ordinary day
+ * without blocks, Saturday with an analysis 9:00–10:00 – an ordinary block of its category, D467), the plan of lectures
+ * and the days marked in the calendar. Nothing is written before „Zakończ”.
  */
 import type { RawRecord } from '../api'
 import { paths } from '../data/paths'
-import { ANALYSIS_CATEGORY, SESSION_CATEGORY } from './categories'
+import { ANALYSIS_CATEGORY } from './categories'
 import { planBlock, sourceVersionKey, templateFrom, type LectureSeries, type PlanBlock, type Template, type TemplateVersion } from './plan'
 import { RD_SCHEMA, type CategoryMeta, type GeneralSettings, type Person } from './rd'
 import { DEFAULT_SETTINGS, type DayTypeId, type RulesSettings } from './settings'
@@ -33,17 +33,16 @@ export function settingsPatch(base: unknown, next: unknown): Record<string, unkn
   return out
 }
 
-export const SECOND_SHIFT_BLOCK = 'druga-zmiana'
-export const WEEKLY_ANALYSIS_BLOCK = 'analiza-tygodniowa'
+/** The block of the default Saturday template (its id as the versions before D467 wrote it). */
+export const SATURDAY_ANALYSIS_BLOCK = 'analiza-tygodniowa'
 
-/** The default templates: the ordinary day (with the second shift) and Saturday (with the weekly analysis). */
-export function defaultTemplates(secondShift: { on: boolean; startMin: number; durationMin: number } = { on: true, startMin: 20 * 60, durationMin: 60 }): Template[] {
-  const ordinary: PlanBlock[] = secondShift.on
-    ? [planBlock({ id: SECOND_SHIFT_BLOCK, categoryId: SESSION_CATEGORY, startMin: secondShift.startMin, durationMin: secondShift.durationMin, fixed: true, tag: 'secondShift', origin: 'template' })]
-    : []
-  const saturday: PlanBlock[] = [
-    planBlock({ id: WEEKLY_ANALYSIS_BLOCK, categoryId: ANALYSIS_CATEGORY, startMin: 9 * 60, durationMin: 60, tag: 'weeklyAnalysis', waitUntilMin: 15 * 60, origin: 'template' })
-  ]
+/**
+ * The default templates: the ordinary day without blocks (no second shift since D467 – an evening block is one you add) and
+ * Saturday with an analysis 9:00–10:00, a flexible block of its category.
+ */
+export function defaultTemplates(): Template[] {
+  const ordinary: PlanBlock[] = []
+  const saturday: PlanBlock[] = [planBlock({ id: SATURDAY_ANALYSIS_BLOCK, categoryId: ANALYSIS_CATEGORY, startMin: 9 * 60, durationMin: 60, origin: 'template' })]
   const v = (blocks: PlanBlock[]): TemplateVersion => ({ from: SETUP_FROM, blocks, budgetMin: null, maxMin: null })
   return [
     { id: 'zwykly', name: 'Dzień zwykły', dayType: 'zwykly', weekdays: [], versions: [v(ordinary)], archived: false },

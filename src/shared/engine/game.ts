@@ -275,7 +275,7 @@ function moduleOut(ctx: DayContext, state: DayState, gameOn: boolean): OutWhy | 
   // The plan is not kept as it was at that moment: the day's plan as created, less what was parked or cancelled before.
   const workPlanned = ctx.snapshot.blocks.some((p) => {
     const r = ctx.snapshot.settings.categories[p.categoryId]
-    if (r?.cls !== 'work' || r.keepsRegen || p.tag === 'secondShift') return false
+    if (r?.cls !== 'work' || r.keepsRegen) return false
     const f = state.facts.blocks.get(p.id)
     return !(f && f.startedAt == null && ((f.parkedAt != null && f.parkedAt < off) || (f.cancelledAt != null && f.cancelledAt < off)))
   })

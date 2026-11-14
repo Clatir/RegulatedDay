@@ -42,10 +42,10 @@ export interface Forecast {
   dropped: Set<string>
 }
 
-/** The planned window of a waiting block: start, and the last minute it may start (exclusive end). */
+/** The planned window of a waiting block: start, and the last minute it may start (exclusive end) – its planned end. */
 function waitWindow(b: BlockInfo): { start: number; end: number } | null {
   if (b.start == null) return null
-  return { start: b.start, end: b.waitUntil ?? b.start + b.durationMin }
+  return { start: b.start, end: b.start + b.durationMin }
 }
 
 export function forecast(inp: ForecastInput): Forecast {

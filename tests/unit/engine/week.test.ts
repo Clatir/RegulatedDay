@@ -249,11 +249,11 @@ describe('dzień przyszły – z planu', () => {
 })
 
 describe('sesje tradingowe – bez przedłużenia, poza planem', () => {
-  /** London 08:00–11:00 and NY 14:00–17:00 of the layer, the second shift 20:00–21:00 of the template. */
+  /** London 08:00–11:00 and NY 14:00–17:00 of the layer, an evening session 20:00–21:00 of the template. */
   const sessions = () => [
     block({ id: 'lon', cat: 'sesja', at: '08:00', min: 180, fixed: true, origin: 'session', source: 'londyn' }),
     block({ id: 'ny', cat: 'sesja', at: '14:00', min: 180, fixed: true, origin: 'session', source: 'ny' }),
-    block({ id: 'ds', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })
+    block({ id: 'ds', cat: 'sesja', at: '20:00', min: 60, fixed: true })
   ]
   const approve = (s: Scenario, plan: string[]) => s.raw({ k: 'boundary.approve', at: s.at('07:40'), boundary: s.at('17:15'), auto: false, plan }, '07:40')
 
@@ -271,7 +271,7 @@ describe('sesje tradingowe – bez przedłużenia, poza planem', () => {
     expect(horizonDay(ctx, 'past').sessions).toEqual({ clean: 2, extended: 1, outsidePlan: 2 })
   })
 
-  it('przedłużenie to „Przedłuż” albo bieg po planowanym końcu, jak go liczy silnik – nie wcześniejszy start drugiej zmiany', () => {
+  it('przedłużenie to „Przedłuż” albo bieg po planowanym końcu, jak go liczy silnik – nie wcześniejszy start stałej sesji', () => {
     const s = new Scenario({ date: PAST, plan: sessions(), settings: { transitionBufferMin: 0 } })
     s.presence('07:30').using('07:30', '22:00')
     // Begun 10 min early, ended with its window: no minute after its planned end.

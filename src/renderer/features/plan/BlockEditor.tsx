@@ -169,29 +169,6 @@ export function BlockEditor({
           />
         </Field>
       )}
-      {rules?.cls === 'work' && !inSeries && (
-        <Field label="Oznaczenie" labelWidth={92} hint={block.tag ? 'Czeka na „Zacznij”.' : undefined}>
-          <div className="flex flex-col gap-1.5">
-            <Segmented
-              value={block.tag ?? 'none'}
-              options={[
-                { value: 'none', label: 'brak' },
-                { value: 'secondShift', label: 'druga zmiana' },
-                { value: 'weeklyAnalysis', label: 'analiza tygodniowa' }
-              ]}
-              onChange={(v) => set({ tag: v === 'none' ? null : v, waitUntilMin: v === 'weeklyAnalysis' ? (block.waitUntilMin ?? 15 * 60) : null })}
-              aria-label="Oznaczenie"
-              data-testid="block-tag"
-            />
-            {block.tag === 'weeklyAnalysis' && (
-              <label className="flex items-center gap-2 text-[12px] text-muted">
-                czeka do
-                <TimeField value={block.waitUntilMin} onCommit={(waitUntilMin) => set({ waitUntilMin })} aria-label="Czeka do" shellClassName="w-[90px]" />
-              </label>
-            )}
-          </div>
-        </Field>
-      )}
       {rules?.kind === 'routine' && (
         <Field label="Rutyna" labelWidth={92}>
           <Choice

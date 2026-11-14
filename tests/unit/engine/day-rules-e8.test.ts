@@ -15,6 +15,7 @@ import { detectLateWake } from '@shared/engine/lateWake'
 import { timerNow } from '@shared/engine/timer'
 import { applyTypeChange, planTypeChange } from '@shared/engine/typeChange'
 import { variantCauses, variantsFor } from '@shared/engine/variants'
+import { planBlockFrom } from '@shared/model/plan'
 import { block, hhmm, lm, Scenario } from './dsl'
 
 const DATE = '2026-10-28' // a Wednesday
@@ -35,8 +36,7 @@ describe('oznaczenie „po pracy” (A1-05)', () => {
   const base = [
     block({ id: 'i', cat: 'inne', at: '09:00', min: 420 }),
     block({ id: 'n', cat: 'nauka', at: '17:00', min: 60 }),
-    block({ id: 'o', cat: 'ogladanie', at: '18:00', min: 60 }),
-    block({ id: 'ds', cat: 'inne', at: '20:00', min: 60, tag: 'secondShift' })
+    block({ id: 'o', cat: 'ogladanie', at: '18:00', min: 60 })
   ]
 
   it('dwa wieczorne bloki „po końcu pracy jak projekt” mają oznaczenie oba; granica liczy się bez nich', () => {
@@ -56,11 +56,18 @@ describe('oznaczenie „po pracy” (A1-05)', () => {
 })
 
 describe('„Dalej” i bloki czekające na „Zacznij” (A1-06)', () => {
-  it('sobotnia analiza tygodniowa nie jest następnym blokiem „Dalej” – zaczyna ją tylko jej linia', () => {
-    const plan = [block({ id: 'ru', cat: 'rutyny', at: '08:00', min: 30 }), block({ id: 'wa', cat: 'analiza', at: '09:00', min: 60, tag: 'weeklyAnalysis' })]
+  it('stała sesja nie jest następnym blokiem „Dalej” – zaczyna ją tylko jej linia', () => {
+    const plan = [block({ id: 'ru', cat: 'rutyny', at: '08:00', min: 30 }), block({ id: 'ny', cat: 'sesja', at: '09:00', min: 60, fixed: true })]
     const s = new Scenario({ date: '2026-10-31', dayType: 'weekend', plan }).observe('07:00', null)
     s.start('ru', '08:00')
     expect(timerNow(s.state('08:20')).next?.id ?? null).toBeNull()
+  })
+
+  it('D467: sobotnia analiza z dawnym oznaczeniem to zwykły elastyczny blok – „Dalej” ją zaczyna', () => {
+    const wa = planBlockFrom({ id: 'wa', categoryId: 'analiza', startMin: lm('09:00'), durationMin: 60, tag: 'weeklyAnalysis', waitUntilMin: lm('15:00'), origin: 'template' })!
+    const s = new Scenario({ date: '2026-10-31', dayType: 'weekend', plan: [block({ id: 'ru', cat: 'rutyny', at: '08:00', min: 30 }), wa] }).observe('07:00', null)
+    s.start('ru', '08:00')
+    expect(timerNow(s.state('08:20')).next?.id ?? null).toBe('wa')
   })
 })
 
@@ -252,7 +259,7 @@ describe('uwagi z przeglądu kodu 0.16.0', () => {
     s.approve('17:00', '07:30').start('a', '09:00').pause('a', '10:00')
     const ctx = s.contextAt(s.at('10:30'))
     const state = computeDay(ctx)
-    const inp = { ctx, state, energyNow: null, to: 'regeneracyjny' as const, settings: s.settings, templates: [] }
+    const inp = { ctx, state, energyNow: null, to: 'regeneracyjny' as const, settings: s.settings }
     const r = applyTypeChange(inp, planTypeChange(inp), { park: [], cancel: [], returnRequests: [], add: [] })
     expect(r.events.filter((e) => e.k === 'work.end' || e.k === 'block.end').map((e) => [e.k, e.k === 'work.end' ? e.end : e.block])).toEqual([
       ['work.end', s.at('10:00')],

@@ -1,7 +1,7 @@
 /**
  * Rules of „Model dnia” beyond the example: the boundary approved on its own, the 15-minute rule of the first end of work,
- * a day without work, the maximum moved by lectures, sessions and exceptions, „Odcinam się”, the budget, the second shift
- * outside its time, requests that take rest away, a block through 04:00 and the days of the clock change.
+ * a day without work, the maximum moved by lectures, sessions and exceptions, „Odcinam się”, the budget, an evening
+ * session as work of its category (D467), requests that take rest away, a block through 04:00 and the days of the clock change.
  */
 import { describe, expect, it } from 'vitest'
 import { Scenario, block, hhmm } from './dsl'
@@ -142,32 +142,32 @@ describe('koniec pracy', () => {
   })
 })
 
-describe('budżet i druga zmiana', () => {
-  it('budżet to czas zegarowy bloków pracy razem z drugą zmianą; nakładające się liczą się raz', () => {
+describe('budżet i wieczorna sesja (D467)', () => {
+  it('budżet to czas zegarowy bloków pracy razem z wieczorną sesją; nakładające się liczą się raz', () => {
     const s = ordinary([
       block({ id: 'a', cat: 'analiza', at: '08:00', min: 120 }),
       block({ id: 'rec', cat: 'wyklad', at: '09:00', min: 120, fixed: true, bg: true, origin: 'lecture' }),
-      block({ id: 'ds', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })
+      block({ id: 'ds', cat: 'sesja', at: '20:00', min: 60, fixed: true })
     ])
     s.approve('10:15', '07:00').ran('a', '08:00', '10:00').start('rec', '09:00', { bg: true }).end('rec', '11:00').ran('ds', '20:00', '21:00')
     const st = s.state('21:30')
-    // 08:00–11:00 (the recording overlaps the analysis) and 20:00–21:00.
+    // 08:00–11:00 (the recording overlaps the analysis) and 20:00–21:00 – the evening session after the boundary is an extension.
     expect(st.budgetUsedMin).toBe(240)
-    expect(st.extensionMin).toBe(0)
+    expect(st.extensionMin).toBe(60)
   })
 
-  it('wcześniejszy start drugiej zmiany to zwykłe przedłużenie, nigdy przekroczenie', () => {
+  it('wcześniejszy start wieczornej sesji: każda minuta po maksimum to przekroczenie, jak przy każdym bloku pracy', () => {
     const s = ordinary([
       block({ id: 'a', cat: 'analiza', at: '08:00', min: 120 }),
-      block({ id: 'ds', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })
+      block({ id: 'ds', cat: 'sesja', at: '20:00', min: 60, fixed: true })
     ])
     s.approve('10:15', '07:00').ran('a', '08:00', '10:00').workEnd('10:00').start('ds', '19:40', { confirmUntil: '20:00' }).end('ds', '21:00')
     const st = s.state('21:00')
     const cls = [...st.minutes.values()].map((m) => m.cls)
-    // 19:40–20:00 after the maximum (19:00), yet only an extension; 20:00–21:00 is the second shift's own time.
-    expect(cls.filter((c) => c === 'after').length).toBe(20)
-    expect(cls.filter((c) => c === 'max').length).toBe(0)
-    expect(st.extensionMin).toBe(20)
+    // 19:40–21:00 is all after the maximum (19:00), an overrun („max”, or „empty” once the pool runs out): no time of its own any more.
+    expect(cls.filter((c) => c === 'after').length).toBe(0)
+    expect(st.overrunMin).toBe(80)
+    expect(st.extensionMin).toBe(80)
   })
 })
 
