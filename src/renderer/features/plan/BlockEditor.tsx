@@ -105,6 +105,9 @@ export function BlockEditor({
   const rules = names.settings.categories[block.categoryId]
   const variants = (rules?.variants ?? []).filter((v) => !v.archived || v.id === block.variantId)
   const set = (patch: Partial<PlanBlock>): void | Promise<SaveAnswer> => (readOnly ? undefined : onChange(patch))
+  // D461: a new block saves itself at its first committed field – also one typed with the value it showed already (the start of a
+  // draft put by „+ Blok” at the very hour you type).
+  const commitSame = newBlock != null
   // A block of a series has its own hour (T707): nothing to follow.
   const anchors = inSeries
     ? []
@@ -183,7 +186,7 @@ export function BlockEditor({
           {block.anchor ? (
             <Choice value={block.anchor} options={anchors} onChange={(anchor) => set({ anchor })} aria-label="Po bloku" data-testid="block-anchor" />
           ) : (
-            <TimeField value={block.startMin} onCommit={(startMin) => set({ startMin })} aria-label="Godzina początku" errorPlacement="below" data-testid="block-start" />
+            <TimeField value={block.startMin} onCommit={(startMin) => set({ startMin })} commitSame={commitSame} aria-label="Godzina początku" errorPlacement="below" data-testid="block-start" />
           )}
         </div>
       </Field>
@@ -193,11 +196,11 @@ export function BlockEditor({
             {forecastEndText(forecastEnd) ?? '—'}
           </span>
         ) : (
-          <EndField startMin={block.startMin} durationMin={block.durationMin} onCommit={(durationMin) => set({ durationMin })} aria-label="Godzina końca" errorPlacement="below" data-testid="block-end" />
+          <EndField startMin={block.startMin} durationMin={block.durationMin} onCommit={(durationMin) => set({ durationMin })} commitSame={commitSame} aria-label="Godzina końca" errorPlacement="below" data-testid="block-end" />
         )}
       </Field>
       <Field label="Długość" labelWidth={92} hint={routine ? `Rutyna: ${durationLabel(routineMinutes(routine))} (zwykła), ${durationLabel(routineMinutes(routine, 'worse'))} (na gorsze dni).` : undefined}>
-        <DurationField value={block.durationMin} onCommit={(durationMin) => set({ durationMin })} aria-label="Długość" errorPlacement="below" data-testid="block-duration" />
+        <DurationField value={block.durationMin} onCommit={(durationMin) => set({ durationMin })} commitSame={commitSame} aria-label="Długość" errorPlacement="below" data-testid="block-duration" />
       </Field>
       <Field label="Rodzaj" labelWidth={92} hint={block.fixed ? 'Stały: zaczyna się o swojej godzinie.' : 'Elastyczny: idzie za końcem poprzedniego bloku, nie wcześniej niż o swojej godzinie.'}>
         <Segmented

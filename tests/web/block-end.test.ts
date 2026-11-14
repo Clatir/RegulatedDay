@@ -17,7 +17,10 @@ import { draftTile } from '@renderer/features/today/blockDraft'
 import { NewBlockPopover } from '@renderer/features/week/NewBlockPopover'
 import { addWeekBlocks } from '@renderer/features/week/weekActions'
 import { installEscape } from '@renderer/lib/escape'
-import { closeToast, patchBlockDraft, setBlockDraft, useUi } from '@renderer/store/ui'
+import { closeToast, dropSavedDraft, patchBlockDraft, setBlockDraft, useUi } from '@renderer/store/ui'
+import { nextFreeStart } from '@renderer/features/cases/casesUi'
+import { newUserBlock } from '@shared/engine/planEdit'
+import { block as specBlock, lm, Scenario } from '../unit/engine/dsl'
 
 vi.mock('@renderer/features/week/weekActions', async (orig) => ({ ...(await orig<typeof import('@renderer/features/week/weekActions')>()), addWeekBlocks: vi.fn(async () => ({ saved: ['2026-11-18'], failed: [], pending: [], unknown: false, push: null })) }))
 
@@ -132,6 +135,49 @@ describe('„Koniec” w panelu bloku (D464)', () => {
   })
 })
 
+describe('pole nowego bloku zatwierdzone tą samą wartością zapisuje szkic (D461)', () => {
+  // The day of E3 at any hour: a work block at 03:00 of the night after. „+ Blok” puts the draft in the nearest free place from
+  // the next quarter – from about 02:00 to 03:00 right after that block, at 03:30 +1: the start typed („3:30”) is the one the
+  // field shows already. Committed, it is still the first committed field – the draft saves (the exchange asks), at night as by day.
+  const day = new Scenario({ date: '2026-11-13', plan: [specBlock({ id: 'late', cat: 'inne', at: '03:00', min: 30, origin: 'user' })] })
+  /** Types `v` into the field and presses Enter. */
+  const typeEnter = (input: HTMLInputElement, v: string) =>
+    act(() => {
+      input.focus()
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, v)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    })
+  const draftAt = (now: string) => newUserBlock('inne', nextFreeStart(day.state(now), { isToday: true, nowMin: lm(now), wakeMin: day.snapshot.wakeMin }), 60, DEFAULT_SETTINGS.categories.inne)
+
+  it.each([
+    ['02:19', '03:30'],
+    ['14:10', '14:15']
+  ])('„+ Blok” o %s (szkic na %s), Początek 3:30 Enter – szkic zapisuje się z tym początkiem', async (now, shown) => {
+    const draft = draftAt(now)
+    expect(draft.startMin).toBe(lm(shown))
+    const { onChange } = await mountEditor(draft, { newBlock: { add: () => undefined } })
+    typeEnter(el('block-start'), '3:30')
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(onChange).toHaveBeenCalledWith({ startMin: lm('03:30') })
+  })
+
+  it('Koniec i Długość wpisane takie, jakie są, też zapisują szkic; w istniejącym bloku ta sama wartość nic nie zmienia', async () => {
+    const draft = draftAt('02:19')
+    const { onChange } = await mountEditor(draft, { newBlock: { add: () => undefined } })
+    typeEnter(el('block-end'), '4:30')
+    typeLeave(el('block-duration'), '60')
+    expect(onChange.mock.calls).toEqual([[{ durationMin: 60 }], [{ durationMin: 60 }]])
+    act(() => root!.unmount())
+    host!.remove()
+    const saved = await mountEditor(analiza)
+    typeEnter(el('block-start'), '9:00')
+    typeLeave(el('block-end'), '10:30')
+    typeLeave(el('block-duration'), '90')
+    expect(saved.onChange).not.toHaveBeenCalled()
+  })
+})
+
 describe('szkic na osi „Dziś” (D466)', () => {
   const draftBlock = planBlock({ id: 'd1', categoryId: 'inne', startMin: 9 * 60, durationMin: 60, origin: 'user', name: 'Analiza rynku' })
   const axis = (draft: ReturnType<typeof draftTile>) => {
@@ -182,6 +228,19 @@ describe('szkic w store: zamierzony – przeciągnięcie, „+ Blok”, Ctrl+N, 
     expect(useUi.getState().blockDraft?.intended).toBe(true)
     setBlockDraft(D, null)
     expect(useUi.getState().blockDraft).toBeNull()
+  })
+
+  it('zapisany szkic schodzi ze store sam: nowy zrobiony w międzyczasie (Ctrl+N tuż po zapisie poprzedniego) zostaje', () => {
+    // The day's effect that drops a draft once the plan has its block may run late, with the draft of the render before.
+    setBlockDraft(D, planBlock({ id: 'd4', categoryId: 'inne', startMin: 600, durationMin: 60, origin: 'user' }), true)
+    dropSavedDraft(D, 'd3')
+    expect(useUi.getState().blockDraft?.block.id).toBe('d4')
+    dropSavedDraft('2026-11-19', 'd4')
+    expect(useUi.getState().blockDraft?.block.id).toBe('d4')
+    dropSavedDraft(D, 'd4')
+    expect(useUi.getState().blockDraft).toBeNull()
+    const page = readFileSync('src/renderer/features/today/TodayPage.tsx', 'utf8')
+    expect(page).toContain('dropSavedDraft(date, stored.block.id)')
   })
 })
 

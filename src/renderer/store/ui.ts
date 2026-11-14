@@ -64,6 +64,15 @@ export function setBlockDraft(date: string, block: PlanBlock | null, intended = 
 }
 
 /**
+ * The day's draft of block `id` saved (the plan has its block): that draft goes – only it, as the store holds it now. The day's
+ * effect that calls this may run late, with the draft of the render before: a new one made meanwhile (Ctrl+N right after) stays.
+ */
+export function dropSavedDraft(date: string, id: string): void {
+  const d = useUi.getState().blockDraft
+  if (d?.date === date && d.block.id === id) useUi.setState({ blockDraft: null })
+}
+
+/**
  * What leaving the screen or the day does to a new block not saved yet (D461): the plan screen hands in its save (the block is
  * written as it stands, like when you click elsewhere), the change of view calls it first – the view changes at once, the save
  * goes on with what the screen knew. Null: no plan screen is open.
