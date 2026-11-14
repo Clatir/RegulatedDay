@@ -721,6 +721,14 @@ test('bloki równoległe (D492): bez przesunięcia – dymek „Równolegle z �
       await expect(toast).toBeVisible()
       await toast.getByTestId('toast-action').click()
       await expect.poll(file).toEqual({ a: [780, null], b: [960, null] })
+      // The file is written before the plan re-renders: wait until „b” stands at 16:00 again in its own lane and the
+      // toast is gone, otherwise the second drag can start on a stale layout and miss the group.
+      await expect(toast).toBeHidden()
+      await expect(b).not.toHaveAttribute('data-lane', '1/2')
+      await expect.poll(async () => {
+        const box = await b.boundingBox()
+        return box !== null && Math.abs(box.y - boxB.y) < 2 && Math.abs(box.x - boxB.x) < 2
+      }).toBe(true)
       // Again, then „b” dragged away by its name (the left part) to 18:00: it leaves the group – one after another again.
       await drop({ x: boxB.x + boxB.width * 0.85, y: boxB.y + 20 }, { x: boxB.x + boxB.width * 0.85, y: boxA.y + 30 })
       await expect.poll(file).toEqual({ a: [780, null], b: [780, 'a'] })
