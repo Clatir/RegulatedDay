@@ -2413,6 +2413,84 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 
 ---
 
+### R – bloki równoległe, plan i widoki (1.23.0, część A; D476, D492–D498)
+
+#### R1 Blok upuszczony na inny staje obok niego (D492)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („bloki równoległe”), `tests/web/parallel-drop.test.ts`, `tests/unit/engine/parallel.test.ts`.
+- **Jak sprawdzić:** jutro w „Dziś”: blok A 13:00 (1 h), C 14:00, B 16:00 (1,5 h). Chwyć B za prawą część kafelka i przeciągnij na prawą część A; puść. Potem „Cofnij” w pasku.
+- **Oczekiwany efekt:** w trakcie dymek „Równolegle z <nazwa A>”, B rysuje się w prawej połowie A, C przerywaną ramką o 14:30; po puszczeniu A i B stoją obok siebie od 13:00, C o 14:30, pasek „Przesunięto 1 blok · Cofnij”; „Cofnij” przywraca B na 16:00 i C na 14:00.
+- **Nie przechodzi, gdy:** B ląduje po A zamiast obok; C nie czeka do końca B; przeciągnięcie za nazwę (lewa część) przestaje rozsuwać jak dotąd.
+
+#### R2 Wyjście z grupy i „Cofnij” bez przesunięcia (D492, D497, D498)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („bez przesunięcia”), `tests/unit/engine/parallel.test.ts`.
+- **Jak sprawdzić:** ustaw B obok A, gdy nic po nich nie stoi – kliknij „Cofnij” w dymku; ustaw znowu i przeciągnij B za nazwę na 18:00; ustaw trzeci blok obok A i przeciągnij A w inne miejsce; zmień w panelu „Początek” bloku z grupy.
+- **Oczekiwany efekt:** dymek „Równolegle z <nazwa A> · Cofnij” cofa zmianę; odciągnięty blok stoi tam, gdzie go puszczono, sam; po odciągnięciu A pozostałe dwa zostają razem o starej godzinie; nowy „Początek” wyjmuje blok z grupy.
+- **Nie przechodzi, gdy:** odciągnięty blok wraca do grupy; reszta grupy rozjeżdża się po wyjściu A.
+
+#### R3 Limit bloków naraz (D476, D492)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/settings-fields.test.ts` (D476), `tests/web/parallel-drop.test.ts`.
+- **Jak sprawdzić:** Ustawienia → „Plan dnia” → „Najwięcej bloków naraz” 2; upuść trzeci blok na grupę dwóch.
+- **Oczekiwany efekt:** podgląd i dymek „Najwyżej 2 bloki naraz – zmienisz w Ustawieniach”; blok staje zaraz po grupie, sam; nic nie jest zablokowane.
+- **Nie przechodzi, gdy:** trzeci blok dołącza do grupy albo przeciągnięcie jest odrzucone.
+
+#### R4 „Tydzień” i „3 dni” (D476, D492)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/week.spec.ts` („Bloki równoległe w „Tygodniu””), `tests/web/parallel-drop.test.ts`.
+- **Jak sprawdzić:** w przyszłym tygodniu przeciągnij blok wtorku na prawą część innego bloku wtorku, potem blok środy na blok wtorku; to samo w „3 dniach”.
+- **Oczekiwany efekt:** pasmo upuszczenia mówi „Równolegle z <nazwa>”; bloki stoją obok siebie w kolumnie; blok ze środy przechodzi na wtorek obok celu z linią „Przeniesiono … · Cofnij”.
+- **Nie przechodzi, gdy:** blok staje po celu albo zostaje w środzie.
+
+#### R5 Nakładające się bloki obok siebie (D476)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/parallel-drop.test.ts` (pasy), `tests/e2e/screens.spec.ts` (`data-lane`).
+- **Jak sprawdzić:** w „Dziś” i „Szablonach” zobacz blok w tle (np. pranie) w czasie innego bloku i grupę równoległą.
+- **Oczekiwany efekt:** nakładające się kafelki dzielą szerokość osi po równo (przy trzech i więcej bez godzin na kafelku); wąskiej kolumny tła po prawej już nie ma; reszta dnia ma całą szerokość.
+- **Nie przechodzi, gdy:** kafelki się zakrywają albo blok w tle nadal stoi w wąskiej kolumnie.
+
+---
+
+### I – intuicyjność (1.21.0, D468–D472)
+
+#### I1 „Cofnij” zamknięcia dnia rano (D468)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/close-undo.test.ts`, `tests/web/unclosed-undo.test.ts`.
+- **Jak sprawdzić:** rano przy „Niezamkniętych dniach” kliknij „Wolne” przy jednym dniu, potem „Cofnij” w dymku; zamknij go „Nie pamiętam” i zostaw.
+- **Oczekiwany efekt:** dymek „Zamknięto <dzień>: wolny · Cofnij”; po „Cofnij” dzień wraca na listę; po drugim zamknięciu dzień znika i nie wraca.
+- **Nie przechodzi, gdy:** brak dymka; „Cofnij” nie przywraca dnia albo zmienia inny dzień.
+
+#### I2 „Szukaj · Ctrl K” w menu (D469)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/side-menu-search.test.ts`.
+- **Jak sprawdzić:** kliknij „Szukaj” u dołu menu bocznego.
+- **Oczekiwany efekt:** otwiera się ta sama wyszukiwarka co po Ctrl K; skróty Ctrl+cyfra ekranów bez zmian.
+- **Nie przechodzi, gdy:** pozycji nie ma albo zmienia kolejność ekranów.
+
+#### I3 Potwierdzenie szybkiego zapisu (D470)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/widget.test.ts` (D470), `tests/web/bar-render.test.ts`.
+- **Jak sprawdzić:** w pasku „+”, wpisz „Kupić mleko !jutro”, Enter; potem to samo skrótem globalnym szybkiego zapisu.
+- **Oczekiwany efekt:** pasek mówi „Dodano do Skrzynki: Kupić mleko” spokojnym kolorem (nie czerwonym), zadanie jest w Skrzynce.
+- **Nie przechodzi, gdy:** brak potwierdzenia albo jest czerwone jak błąd.
+
+#### I4 Pokój – „Otwórz Ustawienia” (D471) i statystyki – „zamrożone” (D472)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/room-off.test.ts`, `tests/web/stats-view.test.ts`.
+- **Jak sprawdzić:** wyłącz grę, otwórz „Pokój” i kliknij przycisk; otwórz „Statystyki”.
+- **Oczekiwany efekt:** przycisk otwiera Ustawienia na sekcji „Moduły”; nota nad statystykami mówi, kiedy dzień się zamraża.
+- **Nie przechodzi, gdy:** przycisk prowadzi gdzie indziej; nota bez wyjaśnienia.
+
+#### I5 Klik osi „Dziś” nic nie tworzy (D496)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/axis-click.test.ts`, `tests/e2e/block-autosave.spec.ts`.
+- **Jak sprawdzić:** w „Dziś” kliknij w puste miejsce osi; potem przeciągnij po niej 10:00–11:00; w „Szablonach” kliknij w pustą oś.
+- **Oczekiwany efekt:** klik w „Dziś” nic nie otwiera; przeciągnięcie daje szkic i blok; w „Szablonach” klik dalej dodaje blok.
+- **Nie przechodzi, gdy:** klik w „Dziś” otwiera panel albo kafelek szkicu; przeciągnięcie przestało tworzyć blok.
+
+---
+
 ### U – uwagi po 1.19.0 (1.20.0, D460–D467)
 
 #### U2 i U7 Nowy blok zapisuje się sam, szkic na osi (D461, D466)

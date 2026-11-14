@@ -434,6 +434,42 @@ export function closeEvents(state: DayState, how: CloseHow, at: number): TimerDr
   return out
 }
 
+/** Why „Cofnij” of a close does nothing (D468) – the window says it as it is. */
+export const CLOSE_UNDO = {
+  frozen: 'ten dzień jest już zamrożony – zamknięcia nie da się cofnąć',
+  gone: 'nie ma już tego zamknięcia w logu dnia',
+  undone: 'to zamknięcie jest już cofnięte',
+  foreign: 'to nie są zdarzenia tego zamknięcia',
+  closedElse: 'ten dzień zamknięto też innym zamknięciem – tego nie da się już cofnąć'
+} as const
+
+/**
+ * „Cofnij” of a close (D468): an `undo` for exactly the events that close wrote (`ids`, as the close returned them, T1081) –
+ * its `ritual.close` and, with „Jak zapisano”, the end of work and the paused work it ended (`closeEvents`: one write, the
+ * same computer and instant) – so the day folds as never closed (`foldFacts`: an undone event is none). Refused on a
+ * frozen day (later events are outside its grade), for a close undone or not in the day's log, ids that are not that close's,
+ * and while another close of the day stays (closed again, or on another computer – the day would stay closed). An event of
+ * it undone already on its own is skipped.
+ */
+export function closeUndoEvents(state: DayState, events: readonly AnyEvent[], ids: readonly string[], at: number): TimerDraft[] | string {
+  if (state.facts.frozen) return CLOSE_UNDO.frozen
+  const byId = new Map<string, AnyEvent>()
+  for (const e of events) if (isKnown(e)) byId.set(e.id, e)
+  const found = [...new Set(ids)].map((id) => byId.get(id))
+  const list = found.filter((e): e is AnyEvent => !!e)
+  const closes = list.filter((e) => e.k === 'ritual.close')
+  if (closes.length !== 1 || list.length !== found.length) return CLOSE_UNDO.gone
+  const close = closes[0]!
+  const undone = state.facts.undone
+  if (undone.has(close.id)) return CLOSE_UNDO.undone
+  // Written with it: the same computer, the same instant, and only what `closeEvents` writes besides the close.
+  const closeAt = (close as { at?: unknown }).at
+  const withIt = (e: AnyEvent) => e.c === close.c && (e as { at?: unknown }).at === closeAt && (e.k === 'work.end' || (e.k === 'block.end' && (e as { rule?: unknown }).rule === 'workEnd'))
+  if (!list.every((e) => e === close || withIt(e))) return CLOSE_UNDO.foreign
+  if (events.some((e) => isKnown(e) && e.k === 'ritual.close' && e.id !== close.id && !undone.has(e.id))) return CLOSE_UNDO.closedElse
+  return list.filter((e) => !undone.has(e.id)).map((e): TimerDraft => ({ k: 'undo', at, target: e.id, reason: 'close' }))
+}
+
 /** What „Jak zapisano” changes for the day (the morning's row shows it before the click). */
 export function closeEffect(ctx: DayContext, state: DayState, at: number, base: EffectBase = effectBase(ctx, state)): RitualEffect {
   return { changes: outcomeChanges(base.outcome, frozenOutcome(ctx, simEvents(ctx, closeEvents(state, 'asWritten', at), at), base.forecast)), forecast: base.forecast }

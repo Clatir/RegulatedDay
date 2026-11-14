@@ -14,7 +14,7 @@ import { paths } from '@shared/data/paths'
 import { casePlan, caseItems, listedRaw, listOf, scheduledOf, taskQuestionId, type CasePlan } from '@shared/engine/cases'
 import { DEFAULT_CATEGORIES } from '@shared/model/categories'
 import { dayFileFrom } from '@shared/model/plan'
-import { requestFrom, type RequestRecord } from '@shared/model/requests'
+import { requestFrom, TITLE_MAX, type RequestRecord } from '@shared/model/requests'
 import { logicalDayOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { DataFolder } from '../../src/main/data/folder'
@@ -127,12 +127,30 @@ describe('szybki zapis i zadanie na osi (D385, D384)', () => {
     try {
       expect(await hub.quickAdd('x')).toMatchObject({ ok: false })
       expect(await hub.open(dir)).toBe(true)
-      expect(await hub.quickAdd('   ')).toEqual({ ok: false, error: 'Wpisz, co zapisać.', id: null })
+      expect(await hub.quickAdd('   ')).toEqual({ ok: false, error: 'Wpisz, co zapisać.', id: null, title: null })
       const r = await hub.quickAdd('  Zamówić karmę dla kota ')
-      expect(r).toMatchObject({ ok: true, error: null })
+      expect(r).toMatchObject({ ok: true, error: null, title: 'Zamówić karmę dla kota' })
       const file = JSON.parse(readFileSync(join(dir, paths.record('request', r.id!)), 'utf8')) as Record<string, unknown>
       expect(file).toMatchObject({ kind: 'task', title: 'Zamówić karmę dla kota', list: 'inbox', estimateMin: 30, categoryId: 'inne', state: 'queued', person: null })
       expect(listOf(requestFrom(file)!, logicalDayOf(Date.now()))).toBe('inbox')
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('wynik szybkiego zapisu niesie tytuł faktycznie zapisany (złączone białe znaki, TITLE_MAX), nie wpisany', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const r = await hub.quickAdd('Kup   mleko	  i chleb')
+      const file = JSON.parse(readFileSync(join(dir, paths.record('request', r.id!)), 'utf8')) as Record<string, unknown>
+      expect(file.title).toBe('Kup mleko i chleb')
+      expect(r.title).toBe('Kup mleko i chleb')
+      const long = await hub.quickAdd('a'.repeat(TITLE_MAX + 50))
+      expect(long.title).toBe('a'.repeat(TITLE_MAX))
     } finally {
       await hub.close('quit')
     }
@@ -147,7 +165,7 @@ describe('szybki zapis i zadanie na osi (D385, D384)', () => {
       expect(await hub.open(dir)).toBe(true)
       const today = logicalDayOf(Date.now())
       const r = await hub.quickAdd('Zapłacić czynsz !jutro @dziś')
-      expect(r).toMatchObject({ ok: true, error: null })
+      expect(r).toMatchObject({ ok: true, error: null, title: 'Zapłacić czynsz' })
       const file = JSON.parse(readFileSync(join(dir, paths.record('request', r.id!)), 'utf8')) as Record<string, unknown>
       expect(file).toMatchObject({ kind: 'task', title: 'Zapłacić czynsz', list: 'inbox', dueDate: addDays(today, 1), doDate: today })
       // The date of doing is today: on „Dziś” at once – counted, the file says „Skrzynka” (D451).
@@ -155,7 +173,7 @@ describe('szybki zapis i zadanie na osi (D385, D384)', () => {
       // An unknown word stays in the title.
       const kept = await hub.quickAdd('Kup mleko !coś')
       expect(JSON.parse(readFileSync(join(dir, paths.record('request', kept.id!)), 'utf8'))).toMatchObject({ title: 'Kup mleko !coś', dueDate: null, doDate: null })
-      expect(await hub.quickAdd('!jutro')).toEqual({ ok: false, error: 'Wpisz, co zapisać.', id: null })
+      expect(await hub.quickAdd('!jutro')).toEqual({ ok: false, error: 'Wpisz, co zapisać.', id: null, title: null })
     } finally {
       await hub.close('quit')
     }

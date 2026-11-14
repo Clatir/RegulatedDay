@@ -16,9 +16,10 @@ import { Bar } from '../widget/Bar'
 import { Palette } from '../features/search/Palette'
 import { SeriesScopeDialog } from '../features/series/scopeAsk'
 import { openSearch } from '../features/search/searchStore'
-import { DIGIT_PAGES, PAGE_LABEL, pageKeys } from './pages'
+import { DIGIT_PAGES } from './pages'
+import { SideMenu } from './SideMenu'
 import { Toasts } from '../components/Toasts'
-import { EmptyState, cx } from '../components/ui'
+import { EmptyState } from '../components/ui'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { TodayPage } from '../features/today/TodayPage'
 import { CalendarPage } from '../features/calendar/CalendarPage'
@@ -68,37 +69,6 @@ function useHotkeys(): void {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
-}
-
-function NavItem({ page, active, keys }: { page: Page; active: boolean; keys: string | null }) {
-  return (
-    <button
-      onClick={() => navigate(page)}
-      title={keys ? `${PAGE_LABEL[page]} (${keys})` : PAGE_LABEL[page]}
-      data-testid={`nav-${page}`}
-      aria-current={active ? 'page' : undefined}
-      className={cx(
-        'flex h-[36px] w-full shrink-0 items-center gap-2 border-l-2 px-3 text-left transition-colors duration-100',
-        active ? 'border-lamp bg-lamp-soft text-lamp' : 'border-transparent text-fg hover:bg-hover'
-      )}
-    >
-      <span className="min-w-0 flex-1 truncate">{PAGE_LABEL[page]}</span>
-      {keys && <span className="num text-[11px] text-muted">{keys}</span>}
-    </button>
-  )
-}
-
-// One list in the order of PAGES: the settings right under the history (D306).
-function SideMenu({ page }: { page: Page }) {
-  return (
-    <nav className="flex w-[176px] shrink-0 flex-col overflow-y-auto border-r border-line bg-panel" data-testid="side-menu">
-      <div className="flex flex-col py-1">
-        {PAGES.map((p) => (
-          <NavItem key={p} page={p} active={page === p} keys={pageKeys(p)} />
-        ))}
-      </div>
-    </nav>
-  )
 }
 
 function Header({ children }: { children: ReactNode }) {

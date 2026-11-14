@@ -23,3 +23,7 @@ export function pageKeys(page: Page): string | null {
   const digit = DIGIT_PAGES.indexOf(page) + 1
   return digit ? `Ctrl ${digit}` : null
 }
+
+/** The search palette's entry at the bottom of the menu (D469): not a screen, so no digit; the keys are the hotkey's (Ctrl K, D387). */
+export const SEARCH_LABEL = 'Szukaj'
+export const SEARCH_KEYS = 'Ctrl K'

@@ -39,6 +39,8 @@ export interface GeneralSettings {
   solitudeAfterMin: number
   /** The morning plan's card of due dates (D409): the sprawy due within this many days after today (2: today to the day after). */
   deadlineDays: number
+  /** The most blocks at once in a group of parallel blocks (D476, D492): one more dropped on the group stands right after it. */
+  parallelMax: number
 }
 
 export const GENERAL_RANGES = {
@@ -46,7 +48,8 @@ export const GENERAL_RANGES = {
   breakAfterMin: [30, 240],
   breakMin: [5, 60],
   solitudeAfterMin: [10, 180],
-  deadlineDays: [1, 7]
+  deadlineDays: [1, 7],
+  parallelMax: [1, 5]
 } as const
 
 export const DEFAULT_GENERAL: GeneralSettings = {
@@ -55,7 +58,8 @@ export const DEFAULT_GENERAL: GeneralSettings = {
   breakAfterMin: 90,
   breakMin: 15,
   solitudeAfterMin: 30,
-  deadlineDays: 2
+  deadlineDays: 2,
+  parallelMax: 3
 }
 
 /** What a category is called and how it looks; its rules are dated settings (RulesSettings.categories). */
@@ -163,7 +167,8 @@ export function generalFrom(v: unknown): GeneralSettings {
     breakAfterMin: intOrOff(r.breakAfterMin, GENERAL_RANGES.breakAfterMin, DEFAULT_GENERAL.breakAfterMin),
     breakMin: intIn(r.breakMin, GENERAL_RANGES.breakMin, DEFAULT_GENERAL.breakMin),
     solitudeAfterMin: intOrOff(r.solitudeAfterMin, GENERAL_RANGES.solitudeAfterMin, DEFAULT_GENERAL.solitudeAfterMin),
-    deadlineDays: intIn(r.deadlineDays, GENERAL_RANGES.deadlineDays, DEFAULT_GENERAL.deadlineDays)
+    deadlineDays: intIn(r.deadlineDays, GENERAL_RANGES.deadlineDays, DEFAULT_GENERAL.deadlineDays),
+    parallelMax: intIn(r.parallelMax, GENERAL_RANGES.parallelMax, DEFAULT_GENERAL.parallelMax)
   }
 }
 

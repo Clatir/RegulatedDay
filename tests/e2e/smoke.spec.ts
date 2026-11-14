@@ -25,7 +25,11 @@ test('start: okno główne z menu bocznym, nazwą i paskiem; tożsamość testow
       await expect(page.getByTestId('bar-block')).toHaveText(/Bez bloku|^\d{2}:\d{2}$/)
       for (const p of PAGES) await expect(page.getByTestId(`nav-${p}`)).toBeVisible()
       // One list in this order, without a gap: the settings right under the history (D306), „Tydzień” right after the calendar (D361); no „Próba” (D286, D327).
-      const items = page.getByTestId('side-menu').locator('[data-testid^="nav-"]')
+      // „Szukaj” (D469) is no screen: it stands apart at the bottom of the menu, after the list.
+      const items = page.getByTestId('side-menu').locator('[data-testid^="nav-"]:not([data-testid="nav-search"])')
+      await expect(page.getByTestId('side-menu').getByTestId('nav-search')).toHaveAttribute('title', 'Szukaj (Ctrl K)')
+      const searchTop = (await page.getByTestId('nav-search').boundingBox())!.y
+      expect(searchTop).toBeGreaterThan((await page.getByTestId(`nav-${PAGES.at(-1)}`).boundingBox())!.y)
       expect(await items.evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')))).toEqual(PAGES.map((p) => `nav-${p}`))
       const gaps = await items.evaluateAll((els) => els.slice(1).map((el, i) => el.getBoundingClientRect().top - els[i]!.getBoundingClientRect().bottom))
       for (const gap of gaps) expect(Math.abs(gap)).toBeLessThan(1)

@@ -400,6 +400,12 @@ export function orderable(b: BlockInfo, facts: DayFacts): boolean {
 function gapsOf(state: DayState, identity: readonly Placed[], buf: (prev: string | null, cat: string) => number): Gap[] {
   // Anchors of the blocks the forecast places (one cancelled, parked or gone with its anchor holds nothing back, T611).
   const anchors = new Set(identity.flatMap((p) => (p.block.anchor != null ? [p.block.anchor] : [])))
+  // A group of parallel blocks (D492, T1163) stays as it stands: its first block holds the others with it.
+  for (const p of identity) {
+    if (p.block.alongside == null) continue
+    anchors.add(p.block.alongside)
+    anchors.add(p.block.id)
+  }
   const fg = identity.filter((p) => !p.bg).sort(byFrom)
   const out: Gap[] = []
   let lower = Number.NEGATIVE_INFINITY

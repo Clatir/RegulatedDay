@@ -43,7 +43,7 @@ import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { answered } from '@shared/engine/care'
 import { batteryLine, NO_SYNC, syncLines } from '@shared/sync/syncLines'
-import { noFolderView, SEEN_LINE, UNDO_LINE_MS, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
+import { noFolderView, SEEN_LINE, shortTitle, UNDO_LINE_MS, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
 const CONFIRM_MS = 10_000
@@ -52,6 +52,8 @@ export const DOUBLE_MS = 500
 const REFRESH_MS = 15_000
 /** A refused or failed click says why in the bar this long. */
 const NOTE_MS = 6_000
+/** The longest title the bar repeats after a quick capture (D470): the bar has a line, not a field. */
+const QUICK_SAID_MAX = 40
 const MIN = 60_000
 /** The questions of the engine (their ids: rule:day:block:threshold) – only they are marked seen. */
 const QUESTION_ID = SEEN_LINE
@@ -96,7 +98,7 @@ export interface WidgetDeps {
   /** The backups as the data service knows them (its last daily backup failed – A3-06). */
   backup?: () => { failed: { error: string } | null } | null
   /** The quick capture (D385, D402): a task of your own into „Skrzynka” – the field of the bar; why, when not saved. */
-  quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null }>
+  quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>
   /** „+” of the desktop bar (T756): it takes no keys – the icon's panel opens at the cursor with the field. */
   openQuick?: () => void
 }
@@ -169,6 +171,11 @@ export function planPushedIpc(w: Pick<WidgetEngine, 'pushed'>, log: WidgetDeps['
 /** The bar's note when a variant picked finds the plan as it would make it (D378). */
 export const PLAN_ALREADY = 'Plan już jest tak ułożony.'
 
+/** What the bar says after a quick capture (D470): the title as the folder saved it (the capture returns it), cut when long. */
+export function quickSavedText(saved: string): string {
+  return `Dodano do Skrzynki: ${shortTitle(saved, QUICK_SAID_MAX)}`
+}
+
 /** The longest label of a variant the window may give the bar (its line „Przestawiono: …”). */
 const ARRANGED_LABEL_MAX = 200
 
@@ -210,7 +217,8 @@ export class WidgetEngine {
   private view: WidgetView | null = null
   private pending: Pending | null = null
   /** The monotonic clock like every term of the bar (`until`): a wall clock set meanwhile changes none of them. */
-  private note: { text: string; until: number } | null = null
+  /** `ok`: a confirmation (a calm colour), not a refusal. */
+  private note: { text: string; until: number; ok?: true } | null = null
 
   private timer: ReturnType<typeof setInterval> | null = null
   private running: Promise<void> | null = null
@@ -365,7 +373,7 @@ export class WidgetEngine {
           cases: requests,
           allDay
         }),
-        note: this.note ? { text: this.note.text, left: this.note.until - mono } : null
+        note: this.note ? { text: this.note.text, left: this.note.until - mono, ...(this.note.ok ? { ok: true as const } : {}) } : null
       }
       this.names = names
       this.gapView(m, now, modes)
@@ -880,8 +888,8 @@ export class WidgetEngine {
     }
   }
 
-  private say(text: string): void {
-    this.note = { text, until: this.mono + NOTE_MS }
+  private say(text: string, ok = false): void {
+    this.note = { text, until: this.mono + NOTE_MS, ...(ok ? { ok: true as const } : {}) }
     setTimeout(() => void this.refresh(), NOTE_MS + 50).unref?.()
   }
 
@@ -1105,10 +1113,17 @@ export class WidgetEngine {
     await this.refresh()
   }
 
-  /** A title from the bar's field into „Skrzynka” (D385): refused – the bar says why. */
+  /** A title from the bar's field into „Skrzynka” (D385): saved – the bar says what was added (D470); refused – why. */
   private async quickAdd(title: string): Promise<void> {
-    const r = this.d.quickAdd ? await this.d.quickAdd(title) : { ok: false, error: 'Szybki zapis nie działa teraz.' }
-    if (!r.ok && r.error) this.say(r.error)
+    const r = this.d.quickAdd ? await this.d.quickAdd(title) : { ok: false, error: 'Szybki zapis nie działa teraz.', title: null }
+    if (r.ok) this.say(quickSavedText(r.title ?? ''), true)
+    else if (r.error) this.say(r.error)
+    return this.refresh()
+  }
+
+  /** The quick capture saved by the global shortcut (the window „Do skrzynki”, D470): the bar says it as it does for its own field. */
+  quickSaid(title: string): Promise<void> {
+    this.say(quickSavedText(title), true)
     return this.refresh()
   }
 

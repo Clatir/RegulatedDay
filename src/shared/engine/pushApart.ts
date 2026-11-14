@@ -54,7 +54,8 @@ export interface PushOptions {
  * close a gap (D368, `gaps.ts`).
  */
 export function pushable(b: BlockInfo, facts: DayFacts): boolean {
-  if (b.fixed || b.waits || b.bg || b.protectedLife || b.rules.protected || !ownHourBlock(b)) return false
+  // A block beside another one (D492, T1163) goes with its group's first block, never by itself.
+  if (b.fixed || b.waits || b.bg || b.alongside != null || b.protectedLife || b.rules.protected || !ownHourBlock(b)) return false
   const f = facts.blocks.get(b.id)
   return !f || (f.startedAt == null && f.parkedAt == null && f.cancelledAt == null)
 }
@@ -88,10 +89,12 @@ export function pushApart(ctx: DayContext, state: DayState, plan: readonly PlanB
   const typeAt = (k: number) => settingsAtMinute(ctx.snapshot, state.facts, k).dayType
   const after = blockInfos(g, plan, state.facts, ctx.snapshot.settings, typeAt)
   const x = after.find((b) => b.id === id)
-  // A block in the background takes no place of the foreground: it pushes nothing.
+  // A block in the background takes no place of the foreground: it pushes nothing. One beside another block (D492) pushes
+  // what comes after its group when it is not „w tle” by its kind (the forecast lets the group hold the foreground to its end).
   if (!x || x.start == null || x.bg) return []
   const at = opts.atMin != null ? idxOfLogical(g, opts.atMin) : x.start
-  const following = after.filter((b) => b.id !== id && pushable(b, state.facts) && before.has(b.id) && before.get(b.id)!.from >= at)
+  // The block's own group stays where the block joined it (D492): only what comes after the group makes room.
+  const following = after.filter((b) => b.id !== id && b.id !== x.alongside && pushable(b, state.facts) && before.has(b.id) && before.get(b.id)!.from >= at)
   if (!following.length) return []
   const forecastOf = shownForecaster(ctx, state)
   const lm = (idx: number) => logicalMinuteOf(g.date, atOf(g, idx))

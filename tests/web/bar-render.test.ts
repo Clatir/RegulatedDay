@@ -94,6 +94,14 @@ describe('terminy w widoku paska (zegar monotoniczny okna)', () => {
     expect(gone).not.toContain('data-testid="bar-pending"')
     expect(gone).not.toContain('data-testid="bar-note-click"')
   })
+
+  it('potwierdzenie (note.ok, D470) nie jest czerwone jak odmowa', () => {
+    const refusal = html(dayView({ note: { text: 'Wpisz, co zapisać.', left: 6_000 } }))
+    const said = html(dayView({ note: { text: 'Dodano do Skrzynki: Kup mleko', left: 6_000, ok: true } }))
+    expect(refusal).toMatch(/class="[^"]*text-rose[^"]*" data-testid="bar-note-click"/)
+    expect(said).toMatch(/class="[^"]*text-fg[^"]*" data-testid="bar-note-click"/)
+    expect(said).not.toMatch(/text-rose[^>]*data-testid="bar-note-click"/)
+  })
 })
 
 describe('podpis wydarzeń całodniowych na pasku pulpitu (D405)', () => {

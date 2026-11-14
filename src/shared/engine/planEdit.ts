@@ -119,7 +119,9 @@ export function movedBlock(b: PlanBlock, plan: readonly PlanBlock[], fromDate: s
     anchor: null,
     movedFrom: fromDate,
     moves: b.moves + (byYou ? 1 : 0),
-    origin: movedOrigin(b.origin)
+    origin: movedOrigin(b.origin),
+    // A block moved to another day leaves its group of parallel blocks (D492, T1167): the group stays on its day.
+    alongside: null
   }
 }
 
@@ -207,6 +209,8 @@ export interface MoveOptions {
   stay?: StayRule
   /** Moved by a variant (D313): the whole group is marked (`byVariant` – no note for accuracy, T963). */
   byVariant?: boolean
+  /** Dropped onto a block of the target (D492): beside that block (the first of its group) – `startMin` is the group's start. */
+  alongside?: string | null
 }
 
 /**
@@ -237,16 +241,30 @@ export function moveSource(fromRaw: Raw | null, file: DayFile, b: PlanBlock, pla
  * file holds it goes whole (T901): fields this version does not know (a newer one wrote them) stay with it – only what the
  * move changes is written over them.
  */
-export function moveTarget(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock, plan: readonly PlanBlock[], fromDate: string, toDate: string, byYou: boolean, startMin: number | undefined, followers: readonly PlanBlock[], byVariant = false): Raw {
+export function moveTarget(
+  fromRaw: Raw | null,
+  toRaw: Raw | null,
+  b: PlanBlock,
+  plan: readonly PlanBlock[],
+  fromDate: string,
+  toDate: string,
+  byYou: boolean,
+  startMin: number | undefined,
+  followers: readonly PlanBlock[],
+  byVariant = false,
+  alongside: string | null = null
+): Raw {
   const raws = dayBlocks(dayRaw(fromRaw, fromDate))
   const put = (raw: Raw, moved: PlanBlock): Raw => {
     const was = raws.find((x) => isRaw(x) && x.id === moved.id) as Raw | undefined
     return setStepsDone(setMovedTo(was ? putRawBlock(raw, blockJson(moved, was)) : putBlock(raw, moved), moved.id, null), moved.id, stepsDoneIn(fromRaw, moved.id))
   }
   const mark = byVariant ? { byVariant: true } : {}
-  let target = put(dayRaw(toRaw, toDate), { ...movedBlock(b, plan, fromDate, byYou, startMin), ...mark })
-  // A follower keeps its anchor (its hour is its anchor's end), the day it came from and one move more, as the block.
-  for (const f of followers) target = put(target, { ...f, movedFrom: fromDate, moves: f.moves + (byYou ? 1 : 0), origin: movedOrigin(f.origin), ...mark })
+  let target = put(dayRaw(toRaw, toDate), { ...movedBlock(b, plan, fromDate, byYou, startMin), ...mark, alongside })
+  // A follower keeps its anchor (its hour is its anchor's end), the day it came from and one move more, as the block; it stays
+  // beside a block that goes too, else leaves its group (T1167).
+  const going = new Set([b.id, ...followers.map((f) => f.id)])
+  for (const f of followers) target = put(target, { ...f, movedFrom: fromDate, moves: f.moves + (byYou ? 1 : 0), origin: movedOrigin(f.origin), alongside: f.alongside && going.has(f.alongside) ? f.alongside : null, ...mark })
   return target
 }
 
@@ -262,7 +280,7 @@ export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanB
   const followers = group.followers.map((f) => file.blocks.find((x) => x.id === f.id) ?? f)
   return {
     source: moveSource(fromRaw, file, b, plan, toDate, group),
-    target: moveTarget(fromRaw, toRaw, b, plan, fromDate, toDate, byYou, opts.startMin, followers, opts.byVariant),
+    target: moveTarget(fromRaw, toRaw, b, plan, fromDate, toDate, byYou, opts.startMin, followers, opts.byVariant, opts.alongside ?? null),
     followers,
     stayers: group.stayers
   }
@@ -294,7 +312,9 @@ export function copiedDay(plan: readonly PlanBlock[]): PlanBlock[] {
       requests: [],
       // Its steps start again on the day of the copy (D440): the copy has new ids, the day's ticks are the original's.
       steps: freshSteps(b.steps),
-      byVariant: false
+      byVariant: false,
+      // Beside the copy of its group's block (T1167); that one not copied – a block of its own.
+      alongside: b.alongside ? (ids.get(b.alongside) ?? null) : null
     })
   }
   return out
@@ -318,7 +338,8 @@ export function copiedTemplate(t: Template, id: string, name: string): Template 
         blocks: v.blocks.map((b) => ({
           ...b,
           id: ids.get(b.id)!,
-          anchor: b.anchor && !b.anchor.startsWith('session:') ? (ids.get(b.anchor) ?? null) : b.anchor
+          anchor: b.anchor && !b.anchor.startsWith('session:') ? (ids.get(b.anchor) ?? null) : b.anchor,
+          alongside: b.alongside ? (ids.get(b.alongside) ?? null) : null
         }))
       }
     })

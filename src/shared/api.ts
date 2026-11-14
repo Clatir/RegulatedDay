@@ -75,6 +75,7 @@ export const CH = {
   ritual: 'rd:ritual',
   ritualAnswer: 'rd:ritualAnswer',
   closeDay: 'rd:closeDay',
+  undoClose: 'rd:undoClose',
   unclosedDays: 'rd:unclosedDays',
   computerList: 'rd:computerList',
   exportCsv: 'rd:exportCsv',
@@ -138,11 +139,12 @@ export interface CaseDays {
   broken?: string[]
 }
 
-/** The quick capture saved (D385): the new task's id; refused – why (no folder, no title). */
+/** The quick capture saved (D385): the new task's id and its title as saved (D470 – without the words of dates); refused – why (no folder, no title). */
 export interface QuickAddResult {
   ok: boolean
   error: string | null
   id: string | null
+  title: string | null
 }
 
 /**
@@ -519,6 +521,11 @@ export interface TimerResult {
   code?: 'alreadyOver' | 'notBegun'
 }
 
+/** A day closed (D468): `written` – the ids of the events of the close, for its „Cofnij” (none when refused). */
+export interface CloseResult extends TimerResult {
+  written: string[]
+}
+
 export interface FolderProbe {
   path: string
   exists: boolean
@@ -794,7 +801,9 @@ export interface RdApi {
   /** An answer to a row of a day's ritual (`value`: an instant, a person, a stretch; `item`: a block of the summary row). */
   ritualAnswer(day: string, row: string, choice: string, value?: RitualValue, item?: string | null): Promise<TimerResult>
   /** Closing a day: the ritual, or the morning's „Jak zapisano”, „Wolne”, „Nie pamiętam”. */
-  closeDay(day: string, how: CloseHow): Promise<TimerResult>
+  closeDay(day: string, how: CloseHow): Promise<CloseResult>
+  /** „Cofnij” of a close (D468): the events of that close (`ids` from `closeDay`) undone – the day is not closed again. */
+  undoClose(day: string, ids: string[]): Promise<TimerResult>
   /** The days the morning shows to close (D318, spec „Rano aplikacja pokazuje wszystkie niezamknięte dni naraz”). */
   unclosedDays(): Promise<UnclosedDay[]>
   /** The computers of the folder for the settings (A3-13, „Zapomnij komputer”): this one first. */
