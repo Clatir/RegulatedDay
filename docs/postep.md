@@ -71,7 +71,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    CI dopiero dla 1.23.0). Przegląd xhigh 1.21: 9 uwag, 8 poprawianych. Odbiór I1–I4 w `docs/odbior.md`. Uwagi na później: „Cofnij” zamknięcia nie sprawdza
    zdarzeń zapisanych po nim (np. `block.fix`); po „Pomiń” przywrócony dzień wraca dopiero po ponownym otwarciu „Dziś”;
    bez folderu danych pasek nie pokazuje noty (błędy szybkiego zapisu prawie niewidoczne).
-9. **1.22.0 – reklamacja rutyn i timer (po wydaniu 1.21.0, jeden PR i jeden CI, przegląd xhigh – silnik dnia):** D473 kroki rutyny
+9. **1.22.0 – reklamacja rutyn i timer – Setup.exe w Pobranych 14.11 16:50 (gałąź paczki 7fe489c; 1.22-A scalone po dwóch rundach xhigh, 1.22-B po rundach a8; D473–D490, T1100–T1153; odbiór KR1–KR3, 1.22-B.1–B.4):** D473 kroki rutyny
    w bloku z rutyną (także z szablonu i serii; przyczyna reklamacji: w 1.20.0 kopia tylko przy ręcznym wyborze rutyny w
    `BlockEditor.pickRoutine`), D474 ostatni odhaczony krok kończy blok („Skończono: … · Cofnij”), D475 elastyczne bloki kategorii
    „poza komputerem” zaczynają się same o swojej godzinie, gdy nic nie biegnie, D477 ✓ przed nazwą ukończonego bloku na osi
