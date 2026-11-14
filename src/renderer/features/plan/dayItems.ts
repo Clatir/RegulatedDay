@@ -16,6 +16,7 @@ import { pausedPlaceOf } from '@shared/engine/facts'
 import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
 import { durationLabel, logicalClock } from '@shared/format'
+import { blockCosts } from '@shared/model/blockCosts'
 import { shownSteps } from '@shared/model/routineSteps'
 import { stepsCounter } from '@shared/model/steps'
 import { logicalMinuteOf } from '@shared/time/day'
@@ -103,6 +104,11 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       ...taskPriority(sprawa),
       // D440: the counter of its steps on the tile (none – nothing).
       ...(counter ? { steps: counter } : {}),
+      // D501: the cost per hour on the tile – only for a day's window (`today` given: not the templates' nor the wizard's axis); changed on the
+      // tile only while the block has not begun, is not taken off and its day is not gone by (the engine counts a begun block by its start).
+      ...(today != null
+        ? { cost: { ...blockCosts(p, model.state.settings.categories, info.rules), edit: !gone && f?.startedAt == null && model.date >= today && (nowIdx == null || to > nowIdx) } }
+        : {}),
       ...(edge ? { resize: 'end' as const } : {}),
       // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
       // nor a class imported from the PDF of „zjazdy” – D357), not passed – the one rule of
@@ -135,6 +141,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       background: false,
       dim: f.endedAt != null,
       ...(finishedBlock(f) ? { finished: true } : {}),
+      // D501: begun outside the plan – its cost says the tile, no window to change it.
+      ...(today != null ? { cost: { ...blockCosts({ costs: info.costs, categoryId: info.categoryId, variantId: info.variantId }, model.state.settings.categories, info.rules), edit: false } } : {}),
       waits: false
     })
   }

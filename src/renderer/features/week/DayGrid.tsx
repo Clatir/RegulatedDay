@@ -8,6 +8,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
+import type { Costs } from '@shared/model/categories'
 import { logicalClock } from '@shared/format'
 import { attachmentsOfBlock, type BlockPlace } from '@shared/model/attachment'
 import { settingsOn, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
@@ -16,7 +17,7 @@ import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { weekday } from '@shared/time/zone'
 import { cx } from '../../components/ui'
-import { useData } from '../../store/data'
+import { useData, type SaveAnswer } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { openDay, openPick, setBlockDraft, toast } from '../../store/ui'
 import { showWeekPush } from '../../store/weekPush'
@@ -27,8 +28,10 @@ import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { AllDayBar } from '../allday/AllDayBar'
 import { attachBadge, attachBadgeTitle, dayPlace } from '../attachments/attachView'
 import { EnergyBackdrop } from './EnergyBackdrop'
+import { TileCost } from '../plan/TileCost'
 import { NewBlockPopover } from './NewBlockPopover'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
+import { saveWeekCosts } from './weekCosts'
 import { moveWeekBlock } from './weekMove'
 import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, type Tone } from './weekText'
 import { DENIED_TEXT, dropOn, dropStart, dropStays, sameDrop, weekOnto, type BlockDrop } from './weekViews'
@@ -341,6 +344,7 @@ export function DayGrid({
             waiting={pick?.dates.includes(d.date) ? pick : null}
             grab={(b) => ({ down: grab(b, d.date, i), consumed: () => muted.current, dragging: flight === b.id })}
             drop={drop && drop.at.index === i ? { ...drop.at, durationMin: drop.durationMin } : null}
+            tight={mode === 'week'}
           />
         ))}
         {pick && (
@@ -430,7 +434,8 @@ function DayColumn({
   held,
   waiting,
   grab,
-  drop
+  drop,
+  tight
 }: {
   day: HorizonDay
   index: number
@@ -448,6 +453,8 @@ function DayColumn({
   waiting: NewPick | null
   grab: (b: HorizonBlock) => BlockGrab
   drop: (BlockDrop & { durationMin: number }) | null
+  /** The cost on a tile without spaces („3·1·1” – the week, D501). */
+  tight: boolean
 }) {
   const lanes = useMemo(() => laneLayout(day.blocks), [day.blocks])
   // D410: the attachments of each block (its own, the template's, the series') – 📎N on its tile.
@@ -482,7 +489,7 @@ function DayColumn({
       ))}
       <EnergyBackdrop date={day.date} track={day.energy} lo={lo} ppm={ppm} height={height} />
       {lanes.map(({ item, lane, lanes: n }) => (
-        <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} />
+        <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} onCosts={(costs) => saveWeekCosts(day.date, item.id, costs)} />
       ))}
       {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
       {drop && <DropBand range={{ startMin: drop.startMin, endMin: drop.startMin + drop.durationMin }} lo={lo} ppm={ppm} denied={drop.denied} note={drop.onto?.text} />}
@@ -511,7 +518,7 @@ function DropBand({ range, lo, ppm, denied, note }: { range: GridRange; lo: numb
 }
 
 /** A block on the axis: its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. A click opens its day (D366). */
-export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab }) {
+export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, onCosts }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; onCosts?: (costs: Costs | null) => void | Promise<SaveAnswer> }) {
   const { top, height } = blockSpan(b, lo, ppm)
   const color = blockColor(b.categoryId, names)
   const dim = b.state === 'missed' || b.state === 'parked' || b.state === 'cancelled'
@@ -520,7 +527,31 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
   const kind = blockKind(b.named, names)
   // D440: the counter of the steps „✓ 3/4” (none – nothing).
   const counter = stepsCounter(b.steps)
+  // D501: the cost in the tile's bottom right; a low tile has it at the end of the name's row, one beside another shows it only while the pointer is over it.
+  const costAt = !b.cost ? null : lanes > 1 ? 'hover' : height >= 30 ? 'corner' : 'row'
+  const costLabel = (className: string) => b.cost && <TileCost cost={b.cost} id={`week:${date}:${b.id}`} testId={`week-block-${date}-${b.id}-cost`} tight={tight} className={className} place={costAt ?? undefined} onChange={onCosts} />
   const title = `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}${b.background ? ' · w tle' : ''}${attach ? ` · ${attachBadgeTitle(attach)}` : ''}`
+  const nameContent = (
+    <>
+      {b.outsidePlan ? '+ ' : ''}
+      {name}
+      {b.named.origin === 'series' && (
+        <span className="ml-1 text-muted" title="Z serii" aria-label="z serii" data-testid="series-mark">
+          {SERIES_MARK}
+        </span>
+      )}
+      {counter && (
+        <span className="num ml-1 text-muted" title="Kroki" data-testid="steps-counter">
+          {counter}
+        </span>
+      )}
+      {attach > 0 && height < 30 && (
+        <span className="num ml-1 text-muted" data-testid="attach-badge">
+          {attachBadge(attach)}
+        </span>
+      )}
+    </>
+  )
   return (
     <button
       type="button"
@@ -537,7 +568,7 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
       data-state={b.state}
       data-outside={b.outsidePlan ? 'true' : undefined}
       data-movable={grab ? 'true' : undefined}
-      className={cx('absolute overflow-hidden rounded-[3px] border-l-[3px] px-1 text-left text-[11px] leading-tight', grab ? 'cursor-grab' : 'cursor-pointer', grab?.dragging && 'opacity-40', blockRinged(b.state) && 'ring-1 ring-lamp', blockDashed(b.state) && 'border-dashed', b.state === 'cancelled' && 'line-through')}
+      className={cx('group absolute overflow-hidden rounded-[3px] border-l-[3px] px-1 text-left text-[11px] leading-tight', grab ? 'cursor-grab' : 'cursor-pointer', grab?.dragging && 'opacity-40', blockRinged(b.state) && 'ring-1 ring-lamp', blockDashed(b.state) && 'border-dashed', b.state === 'cancelled' && 'line-through')}
       // Dimmed by its fill and edge, never its text (as on the day's axis, A8-05).
       style={{
         top,
@@ -548,27 +579,16 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
         borderLeftColor: dim ? blockEdgeDim(color) : color
       }}
     >
-      <span className="block truncate pt-px text-fg">
-        {b.outsidePlan ? '+ ' : ''}
-        {name}
-        {b.named.origin === 'series' && (
-          <span className="ml-1 text-muted" title="Z serii" aria-label="z serii" data-testid="series-mark">
-            {SERIES_MARK}
-          </span>
-        )}
-        {counter && (
-          <span className="num ml-1 text-muted" title="Kroki" data-testid="steps-counter">
-            {counter}
-          </span>
-        )}
-        {attach > 0 && height < 30 && (
-          <span className="num ml-1 text-muted" data-testid="attach-badge">
-            {attachBadge(attach)}
-          </span>
-        )}
-      </span>
+      {costAt === 'row' ? (
+        <span className="flex items-baseline gap-1 pt-px text-fg">
+          <span className="min-w-0 flex-1 truncate">{nameContent}</span>
+          {costLabel('shrink-0')}
+        </span>
+      ) : (
+        <span className="block truncate pt-px text-fg">{nameContent}</span>
+      )}
       {height >= 30 && (
-        <span className="num block truncate text-muted">
+        <span className={cx('num block truncate text-muted', costAt === 'corner' && 'pr-[58px]')}>
           {logicalClock(b.startMin)}–{logicalClock(b.endMin)}
           {kind ? ` · ${kind}` : ''}
           {attach > 0 && (
@@ -578,6 +598,8 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
           )}
         </span>
       )}
+      {costAt === 'corner' && costLabel('absolute right-px bottom-px z-20')}
+      {costAt === 'hover' && costLabel('absolute top-px right-px z-20 hidden group-hover:inline-block')}
     </button>
   )
 }

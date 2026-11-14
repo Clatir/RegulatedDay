@@ -12,7 +12,8 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
-import type { Pool } from '@shared/model/categories'
+import type { TileCost as TileCostInfo } from '@shared/model/blockCosts'
+import type { Costs, Pool } from '@shared/model/categories'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import type { DueBadge } from '@shared/engine/caseDates'
 import type { Priority } from '@shared/model/requests'
@@ -21,6 +22,7 @@ import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { cx } from '../../components/ui'
 import { attachable, hasFiles, textTarget } from '../attachments/attachDrop'
 import { attachBadge, attachBadgeTitle } from '../attachments/attachView'
+import type { SaveAnswer } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { DueMark } from '../cases/DueMark'
 import { PriorityMark } from '../cases/PriorityMark'
@@ -28,6 +30,7 @@ import { poolPath, POOL_COLOR, POOL_NAME } from './energyDraw'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
 import { inParallelZone, tileAt, tileLanes } from './parallelDrag'
+import { TileCost } from './TileCost'
 
 export interface TimelineItem {
   id: string
@@ -72,6 +75,11 @@ export interface TimelineItem {
    * and links dropped on it (`onAttachDrop`). Left out – a tile that takes no drop (a block begun outside the plan).
    */
   attach?: number
+  /**
+   * The cost per hour on the tile's bottom right (D501: three numbers in the colours of the pools); absent – none (a template's, the wizard's axis).
+   * `edit` – a click on it opens the window that changes it (`Timeline.onCosts`).
+   */
+  cost?: TileCostInfo
 }
 
 /**
@@ -255,6 +263,7 @@ export function Timeline({
   onParallel,
   attached,
   onAttachDrop,
+  onCosts,
   ghost,
   draft,
   from,
@@ -323,6 +332,8 @@ export function Timeline({
    * is lit while they are over it; the gestures of the axis (the drag of a block, the edges, a new block) are pointer ones and stay as they were.
    */
   onAttachDrop?: (id: string, dt: DataTransfer) => void
+  /** The block's own cost set in the window of its tile (D501), or null – the category's again; left out – the cost is only told. */
+  onCosts?: (id: string, costs: Costs | null) => void | Promise<SaveAnswer>
   /** The span a sprawa dragged from outside the axis would take (D384) – drawn as a band while it is held; null – none. */
   ghost?: BlockSpan | null
   /** The new block not saved yet (D466): a dashed tile with its hours; null – none. The axis widens to hold it. */
@@ -465,6 +476,13 @@ export function Timeline({
     // D365: a movable block has both edges; one that only runs on – the bottom one.
     const topEdge = !!onResize && i.movable === true
     const endEdge = !!onResize && (i.movable === true || i.resize === 'end')
+    // D501: the cost stands in the tile's bottom right corner; a low tile has it at the end of the name's row, a low one beside another (or a
+    // narrow one) shows it only while the pointer is over the tile.
+    const costAt = !i.cost ? null : !tiny && !narrow ? 'corner' : tiny && lane.lanes === 1 ? 'row' : 'hover'
+    const costLabel = (className: string) =>
+      i.cost && costAt && (
+        <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} onChange={onCosts ? (costs) => onCosts(i.id, costs) : undefined} />
+      )
     return (
       <button
         key={i.id}
@@ -551,7 +569,7 @@ export function Timeline({
           setTimeout(() => (dropped.current = false), 0)
         }}
         className={cx(
-          'absolute overflow-hidden rounded-[3px] border-l-[3px] px-1.5 text-left leading-tight transition-colors',
+          'group absolute overflow-hidden rounded-[3px] border-l-[3px] px-1.5 text-left leading-tight transition-colors',
           selected === i.id ? 'ring-1 ring-lamp' : 'hover:brightness-110',
           i.waits && 'border-dashed',
           draggable && !dragged && 'cursor-grab',
@@ -617,14 +635,17 @@ export function Timeline({
               {attachBadge(i.attach)}
             </span>
           ) : null}
+          {costAt === 'row' && costLabel('ml-auto shrink-0')}
         </div>
         {!tiny && !narrow && (
-          <div className="truncate text-[11px] text-muted">
+          <div className={cx('truncate text-[11px] text-muted', costAt === 'corner' && 'pr-[84px]')}>
             {logicalClock(start)}–{logicalClock(end)}
             {i.kind ? ` · ${i.kind}` : ''}
             {i.marks.length ? ` · ${i.marks.join(' · ')}` : ''}
           </div>
         )}
+        {costAt === 'corner' && costLabel('absolute right-1 bottom-px z-20')}
+        {costAt === 'hover' && costLabel('absolute top-px right-1 z-20 hidden group-hover:inline-block')}
       </button>
     )
   }

@@ -12,6 +12,7 @@
  * as it began (its start event): a later edit of the plan never changes its past.
  */
 import { POOLS, REGEN_CATEGORY, REQUEST_CATEGORY, costsOf, type CategoryRules, type Costs, type Pool, type PoolValues } from '../model/categories'
+import { blockCosts } from '../model/blockCosts'
 import { compareEvents, isKnown, type AnyEvent, type EnergyEvent } from '../model/events'
 import { DEFAULT_SETTINGS, type RulesSettings } from '../model/settings'
 import type { BlockInfo } from './blocks'
@@ -137,7 +138,8 @@ export function regenVariant(s: RulesSettings, id: string): Costs {
 }
 
 function costOf(x: Kind, s: RulesSettings): Costs {
-  return x.own ?? costsOf(s.categories[x.cat] ?? x.rules, x.variant)
+  // D501: the one rule of the block's cost – the tile's label says the same (`blockCosts`).
+  return blockCosts({ costs: x.own, categoryId: x.cat, variantId: x.variant }, s.categories, x.rules).costs
 }
 
 /** Among blocks in the foreground at once: regeneration and a protected life block stay, then the class mode, the costlier, the earlier. */

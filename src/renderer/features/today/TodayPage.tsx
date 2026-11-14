@@ -623,6 +623,11 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                 const owner = ownerToAdd(model.ctx.plan.find((b) => b.id === id) ?? null, dayPlace)
                 if (owner) void attachTransfer(owner, dt)
               }}
+              // D501: the window of the cost on a tile saves the block's own cost as the field of its panel does (a block of a series asks its scope).
+              onCosts={(id, costs) => {
+                const b = plan.find((x) => x.id === id)
+                return b ? changeBlock(b, { costs }, false) : undefined
+              }}
               markers={axis.markers}
               energy={axis.energy}
               selected={draft ? null : selected}

@@ -11,6 +11,7 @@
  * calendar). Pure, one `computeDay` a day (no loop over minutes with a full forecast).
  */
 import { namedById, namedOf, namedOfPlan, type NamedBlock } from '../blockName'
+import { blockCosts, type TileCost } from '../model/blockCosts'
 import { isKnown } from '../model/events'
 import type { Step } from '../model/steps'
 import type { BoundaryOutcome } from './outcome'
@@ -66,6 +67,8 @@ export interface HorizonBlock {
   session?: true
   /** Beside the block with this id – the first block of its group of parallel blocks (D492); absent – none. */
   alongside?: string
+  /** The cost per hour on its tile (D501): what counts, the category's, own or not, and whether it may be changed there; absent – not told. */
+  cost?: TileCost
 }
 
 /** The day's work against its budget (minutes, spec „Budżet pracy”): run so far and forecast from now; a day gone by – as written. */
@@ -226,7 +229,9 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
       ...(movable ? { movable: true as const } : {}),
       ...(info.fixed ? { fixed: true as const } : {}),
       ...(isSessionBlock(info) ? { session: true as const } : {}),
-      ...(info.alongside != null ? { alongside: info.alongside } : {})
+      ...(info.alongside != null ? { alongside: info.alongside } : {}),
+      // D501: changed on the tile only for a block of the plan still to come (not begun, not passed, not taken off; no day gone by).
+      cost: { ...blockCosts(info, state.settings.categories, info.rules), edit: !outsidePlan && st === 'planned' }
     })
   for (const p of ctx.plan) {
     const info = byId.get(p.id)
