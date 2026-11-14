@@ -32,10 +32,18 @@ export interface DayAxis {
 }
 
 /**
- * A block done (D477, T1106): it ended and was not left unfinished (`done` false – parked after it began, „Usuń”, „Dalej” as
- * not done); a fixed block ended by its window or by „Skończyłem” (`done` null) is done too. The axis puts ✓ before its name.
+ * The ends of a block that say it is done though they carry no `done` (T1106): its last step (`steps`), „Skończyłem” of a fixed
+ * block or a session (`endNow`, `finished`), a fixed block ended at its planned end (`plan`, `fixedNoReaction`).
  */
-export const finishedBlock = (f: { endedAt: number | null; done: boolean | null } | undefined): boolean => f?.endedAt != null && f.done !== false
+const DONE_ENDS: ReadonlySet<string> = new Set(['steps', 'endNow', 'finished', 'plan', 'fixedNoReaction'])
+
+/**
+ * A block done (D477, T1106): ended as done explicitly – `done` true („Skończyłem”, „Dalej” of a flexible block, the end of a
+ * meal or a regeneration after an absence) or one of `DONE_ENDS`; never an end the app made of an absence of you (idle,
+ * absence, the first use, the last input, two questions, the close of the app, „Odcinam się” – `done` null) nor one left
+ * unfinished (`done` false). The axis puts ✓ before its name.
+ */
+export const finishedBlock = (f: { endedAt: number | null; done: boolean | null; endRule: string | null } | undefined): boolean => f?.endedAt != null && (f.done === true || DONE_ENDS.has(f.endRule ?? ''))
 
 /**
  * `today` – the logical day of the window (D409): the block of a task shows the task's due date badge, from `today` on (a day

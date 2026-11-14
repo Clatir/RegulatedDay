@@ -6,7 +6,7 @@
  */
 import { REQUEST_CATEGORY, type CategoryRules } from '../model/categories'
 import { newId } from '../model/ids'
-import { blockJson, dayBlocks, dayRaw, isRaw, putBlock, putRawBlock, setMovedTo, setStepsDone, stepsDoneIn, takeBlock, type Raw } from '../data/dayEdits'
+import { blockJson, dayBlocks, dayRaw, isRaw, moveRoutineSteps, putBlock, putRawBlock, setMovedTo, setRoutineSteps, setStepsDone, stepsDoneIn, takeBlock, type Raw } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
 import { dayFileFrom, layerKept, MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlock, type DayFile, type PlanBlock, type Template } from '../model/plan'
 import { freshSteps } from '../model/steps'
@@ -219,7 +219,8 @@ export function moveSource(fromRaw: Raw | null, file: DayFile, b: PlanBlock, pla
   const own = new Set(file.blocks.map((x) => x.id))
   let source = dayRaw(fromRaw, fromDate)
   for (const id of [b.id, ...group.followers.map((f) => f.id)]) {
-    source = setStepsDone(setMovedTo(source, id, toDate), id, [])
+    // Its ticks and the routine's list its day keeps (D473) go with it (T1118).
+    source = setRoutineSteps(setStepsDone(setMovedTo(source, id, toDate), id, []), id, null)
     if (own.has(id)) source = takeBlock(source, id)
   }
   for (const s of group.stayers) {
@@ -241,7 +242,8 @@ export function moveTarget(fromRaw: Raw | null, toRaw: Raw | null, b: PlanBlock,
   const raws = dayBlocks(dayRaw(fromRaw, fromDate))
   const put = (raw: Raw, moved: PlanBlock): Raw => {
     const was = raws.find((x) => isRaw(x) && x.id === moved.id) as Raw | undefined
-    return setStepsDone(setMovedTo(was ? putRawBlock(raw, blockJson(moved, was)) : putBlock(raw, moved), moved.id, null), moved.id, stepsDoneIn(fromRaw, moved.id))
+    // Its ticks and the routine's list the source keeps for it (D473, T1118) – exactly the source's.
+    return moveRoutineSteps(fromRaw, setStepsDone(setMovedTo(was ? putRawBlock(raw, blockJson(moved, was)) : putBlock(raw, moved), moved.id, null), moved.id, stepsDoneIn(fromRaw, moved.id)), moved.id)
   }
   const mark = byVariant ? { byVariant: true } : {}
   let target = put(dayRaw(toRaw, toDate), { ...movedBlock(b, plan, fromDate, byYou, startMin), ...mark })

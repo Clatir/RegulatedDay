@@ -29,6 +29,7 @@ import { casesFrom, isDone, taskAnswerRaw } from '@shared/engine/cases'
 import { nextTaskRaw } from '@shared/engine/caseRepeat'
 import { marketDay } from '@shared/calendar/holidays'
 import { routineSaveEdits, routineStepsNow, routineVersionEdits, tickEdits, type BlockStepsEdit } from '@shared/engine/steps'
+import { listWhole, routineSaved, undoAfterSteps } from '@shared/engine/stepsFlow'
 import { dayPlan } from '@shared/engine/createDay'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { applyVariant, keepPlan, markerCause, planCause, variantCauses, variantsFor, type Variant, type VariantCause, type VariantTrigger } from '@shared/engine/variants'
@@ -36,7 +37,6 @@ import type { NoticeKind } from '@shared/machine'
 import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
 import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
-import { STEPS_QUIET } from '@shared/model/routineSteps'
 import { personName } from '@shared/model/rd'
 import { allDayFrom, type AllDayEvent } from '@shared/model/allDay'
 import { ROUTINE_VERSION_NAMES, ROUTINE_VERSIONS, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
@@ -371,8 +371,6 @@ export class WidgetEngine {
       const requests = casesFrom(await folder.collection('request').catch(() => []))
       // A collection not readable now leaves the bar without the label, never without the bar (D405).
       const allDay = (await folder.collection('allDay').catch(() => [])).map(allDayFrom).filter((x): x is AllDayEvent => !!x)
-      // The day's file (D473): the routine's list it keeps for a block and the ticks of its steps – not readable now, none.
-      const dayRawNow = ((await folder.recordView(paths.day(m.state.grid.date)).catch(() => undefined)) as RawRecord | undefined) ?? null
       const names = { rd, settings: m.state.settings, routines, requests }
       if (this.pending && this.pending.until <= mono) this.pending = null
       if (this.note && this.note.until <= mono) this.note = null
@@ -402,7 +400,8 @@ export class WidgetEngine {
           carried: m.carried,
           ritualFrom: await folder.ritualDay(),
           routines,
-          dayFile: dayRawNow ? dayFileFrom(dayRawNow, m.state.grid.date) : null,
+          // The day's file the model was counted from (D473: the routine's list it keeps, its ticks – read once, T1115).
+          dayFile: m.dayFile,
           cases: requests,
           allDay
         }),
@@ -1274,72 +1273,77 @@ export class WidgetEngine {
   }
 
   /**
-   * The block's list made whole by a tick on the bar (D474, T1104, T1108): a block of a routine is saved as ticked off (its
-   * line and card close – quiet when saved already), the block ends now, done, when it has begun and not ended (the timer
-   * refuses any other quietly). The bar says „Skończono: <nazwa> · Cofnij” – its „Cofnij” takes the end back (the block runs
-   * on, its step stays ticked) – or, the block not ended, „Zapisano: … · Cofnij” of the routine.
+   * The block's list made whole by a tick on the bar (D474, T1104, T1108 – the shared `listWhole`): a block of a routine is
+   * saved as ticked off (its line and card close – quiet when saved already), the block ends now, done, when it has begun and
+   * not ended (the timer refuses any other quietly). The bar says „Skończono: <nazwa> · Cofnij” – its „Cofnij” takes the end
+   * back (the block runs on, its step stays ticked) – or, the block not ended, „Zapisano: … · Cofnij” of the routine.
    */
   private async finishBySteps(at: DayBlockAt, out: BlockStepsEdit): Promise<void> {
     const name = this.names ? blockName(at.block, this.names) : 'blok'
     const version = routineStepsNow(out.day, at.day, at.block, at.routines)?.version ?? 'normal'
     const ids = out.steps.map((s) => s.id)
-    const saved = at.block.routine ? (await this.d.timer({ a: 'routineDone', block: at.block.id, version, steps: ids, day: at.day })).ok : false
-    const r = await this.d.timer({ a: 'stepsFinish', block: at.block.id, day: at.day })
-    if (!r.ok && r.code !== 'notBegun' && r.code !== 'alreadyOver' && r.why && !STEPS_QUIET.has(r.why)) this.say(r.why)
+    const r = await listWhole(this.d.timer, at.day, at.block.id, at.block.routine ? { version, steps: ids } : null)
+    for (const why of r.said) this.say(why)
     const until = this.mono + ROUTINE_UNDO_MS
-    if (r.ok) this.stepsUndo = { kind: 'stepsFinished', block: at.block.id, day: at.day, text: `Skończono: ${name}`, until, end: true, routine: false, edits: [] }
-    else if (saved) this.stepsUndo = { kind: 'routineSaved', block: at.block.id, day: at.day, text: `Zapisano: ${name} (${ROUTINE_VERSION_NAMES[version]}) – ${ids.length} z ${ids.length}`, until, end: false, routine: true, edits: [] }
+    if (r.ended) this.stepsUndo = { kind: 'stepsFinished', block: at.block.id, day: at.day, text: `Skończono: ${name}`, until, end: true, routine: false, edits: [] }
+    else if (r.saved) this.stepsUndo = { kind: 'routineSaved', block: at.block.id, day: at.day, text: `Zapisano: ${name} (${ROUTINE_VERSION_NAMES[version]}) – ${ids.length} z ${ids.length}`, until, end: false, routine: true, edits: [] }
   }
 
   /**
-   * A routine's steps saved (D328, T1108) – the same click as the card in „Dziś”, so the first save closes both (its line goes):
-   * first `routine.done` (saved elsewhere already – refused, nothing more written), then the day's ticks of the block's list
-   * become the ones saved, with the version picked (one state with the panel „Kroki”), then – the list whole – the end of the
-   * block (D474). „Zapisano: … · Cofnij” (or „Skończono: …”) stays in its place for a while (one click of the bar is easily the
-   * wrong one); its „Cofnij” takes back all of it.
+   * A routine's steps saved (D328, T1108 – the shared `routineSaved`) – the same click as the card in „Dziś”, so the first save
+   * closes both (its line goes): first `routine.done` (saved elsewhere already – refused, nothing more written), then the steps
+   * saved ticked off in the day with the version picked (only added – T1112; one state with the panel „Kroki”), then – the list
+   * whole and the ticks written – the end of the block (D474). Its line „Zapisano: … · Cofnij” (or „Skończono: …”) comes once
+   * all of it is written (T1114: a „Cofnij” before it would miss what is still being written) and stays for a while.
    */
   private async routineDone(day: string | undefined, routine: BarRoutine, version: RoutineVersion, steps: string[]): Promise<void> {
-    const r = await this.d.timer({ a: 'routineDone', block: routine.block, version, steps, day })
-    if (!r.ok || !day) {
-      if (!r.ok) this.say(r.why ?? 'rutyna nie zapisała się')
-      return this.refresh()
+    if (!day) return this.refresh()
+    let made: Array<{ entry: EditEntry; made: RawRecord | null }> = []
+    const r = await routineSaved(this.d.timer, day, routine.block, { version, steps }, async () => {
+      const at = await this.dayBlock(day, routine.block)
+      const out = at ? routineSaveEdits({ date: day, day: at.before, block: at.block, version, done: steps, task: at.taskBefore, routines: at.routines }) : null
+      if (!at || !out) return { ok: false, finished: false }
+      if ('error' in out) {
+        this.say(out.error)
+        return { ok: false, finished: false }
+      }
+      const w = await this.writeSteps(at, out)
+      made = w.made
+      const ok = w.res.every((o) => o.status === 'applied' || o.status === 'waiting')
+      if (!ok) this.say('Odhaczenie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
+      return { ok, finished: out.finished === true }
+    })
+    for (const why of r.said) this.say(why)
+    if (r.saved) {
+      const text = r.ended ? `Skończono: ${routine.name}` : `Zapisano: ${routine.name} (${ROUTINE_VERSION_NAMES[version]}) – ${steps.length} z ${routine[version].length}`
+      this.stepsUndo = { kind: r.ended ? 'stepsFinished' : 'routineSaved', block: routine.block, day, text, until: this.mono + ROUTINE_UNDO_MS, end: r.ended, routine: true, edits: made }
     }
-    const undo = { block: routine.block, day, until: this.mono + ROUTINE_UNDO_MS, routine: true }
-    const savedText = `Zapisano: ${routine.name} (${ROUTINE_VERSION_NAMES[version]}) – ${steps.length} z ${routine[version].length}`
-    this.stepsUndo = { ...undo, kind: 'routineSaved', text: savedText, end: false, edits: [] }
-    const at = await this.dayBlock(day, routine.block)
-    const out = at ? routineSaveEdits({ date: day, day: at.before, block: at.block, version, done: steps, task: at.taskBefore, routines: at.routines }) : null
-    if (!at || !out) return this.refresh()
-    if ('error' in out) {
-      this.say(out.error)
-      return this.refresh()
-    }
-    const { res, made } = await this.writeSteps(at, out)
-    if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odhaczenie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
-    const ended = out.finished === true && (await this.d.timer({ a: 'stepsFinish', block: routine.block, day })).ok
-    this.stepsUndo = { ...undo, kind: ended ? 'stepsFinished' : 'routineSaved', text: ended ? `Skończono: ${routine.name}` : savedText, end: ended, edits: made }
     return this.refresh()
   }
 
   /**
-   * „Cofnij” of the bar's line after steps (T1105, T1108): the end of the block taken back (it runs on), the routine's save
-   * (its line and card come back), the ticks the save wrote (each file back while it stands as the save left it).
+   * „Cofnij” of the bar's line after steps (T1105, T1109 – the shared `undoAfterSteps`): the end of the block first (it runs
+   * on) – refused, nothing more is taken back (D482); then the routine's save (its line and card come back), then the ticks
+   * the save wrote (each file back while it stands as the save left it).
    */
   private async undoStepsLine(): Promise<void> {
     const u = this.stepsUndo
     this.stepsUndo = null
     const folder = this.d.folder()
     if (u) {
-      const said = (r: TimerResult) => !r.ok && r.why && this.say(r.why)
-      if (u.end) said(await this.d.timer({ a: 'undoStepsFinish', block: u.block, day: u.day }))
-      if (u.routine) said(await this.d.timer({ a: 'routineUndo', block: u.block, day: u.day }))
-      const back: EditEntry[] = []
-      for (const x of folder ? u.edits : []) {
-        const now = ((await folder!.recordView(x.entry.rel)) as RawRecord | undefined) ?? null
-        const inv = editStands(x.entry, now, x.made) ? inverseEdit(x.entry, now, x.made) : null
-        if (inv) back.push(inv)
-      }
-      if (back.length) await this.d.edit(back)
+      const ticks = folder && u.edits.length
+        ? async () => {
+            const back: EditEntry[] = []
+            for (const x of u.edits) {
+              const now = ((await folder.recordView(x.entry.rel)) as RawRecord | undefined) ?? null
+              const inv = editStands(x.entry, now, x.made) ? inverseEdit(x.entry, now, x.made) : null
+              if (inv) back.push(inv)
+            }
+            if (back.length) await this.d.edit(back)
+          }
+        : null
+      const why = await undoAfterSteps(this.d.timer, { day: u.day, block: u.block, end: u.end, routine: u.routine, ticks })
+      if (why) this.say(why)
     }
     return this.refresh()
   }

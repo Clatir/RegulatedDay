@@ -28,6 +28,8 @@ export interface RoutineDue {
   version: RoutineVersion
   /** The block's list as its day shows it, with the day's ticks (D473: its own, else the routine's of `version`). */
   steps: Step[]
+  /** Every step the day ticked off for the block – of both versions (T1101: a tick of the other version stays the day's). */
+  ticked: string[]
   /** Indices: when it began (its start, or the plan's – before the first use it counts by the plan, D139) and ended. */
   from: number
   to: number
@@ -66,18 +68,20 @@ export function routinesDue(ctx: DayContext, state: DayState, routines: readonly
  * The lists of a block of a routine on its day (T1108): the version the day picked and its list with the day's ticks; the
  * other version as the routine has it now. A block with steps of its own (D460: a copy) – its list, no version to pick.
  */
-function dayLists(p: DayContext['plan'][number], routines: readonly Routine[], day: DayFile | null | undefined): Pick<RoutineDue, 'normal' | 'worse' | 'version' | 'steps'> {
-  const done = new Set(day?.stepsDone?.[p.id] ?? [])
-  const list = routineStepsOf(p, routines, day?.routineSteps, done)
+function dayLists(p: DayContext['plan'][number], routines: readonly Routine[], day: DayFile | null | undefined): Pick<RoutineDue, 'normal' | 'worse' | 'version' | 'steps' | 'ticked'> {
+  const ticked = [...(day?.stepsDone?.[p.id] ?? [])]
+  const list = routineStepsOf(p, routines, day?.routineSteps, new Set(ticked))
   // Its own list (with the day's ticks – `dayPlan`): no version to pick.
-  if (!list) return { normal: asRoutineSteps(p.steps), worse: [], version: 'normal', steps: p.steps }
+  if (!list) return { normal: asRoutineSteps(p.steps), worse: [], version: 'normal', steps: p.steps, ticked: p.steps.filter((s) => s.done).map((s) => s.id) }
   const shown = asRoutineSteps(list.steps)
   const other = (v: RoutineVersion) => (list.routine ? asRoutineSteps(routineList(list.routine, v)) : [])
-  const hasWorse = !!list.routine?.worse.length
+  // The version the day keeps is shown whatever the routine has now (T1116): a list „na gorsze dni” kept after the routine lost
+  // that version stays „na gorsze dni” everywhere – the card, the panel and the bar – and „zwykła” takes it back.
   return {
     version: list.version,
     steps: list.steps,
+    ticked,
     normal: list.version === 'normal' ? shown : other('normal'),
-    worse: !hasWorse ? [] : list.version === 'worse' ? shown : other('worse')
+    worse: list.version === 'worse' ? shown : list.routine?.worse.length ? other('worse') : []
   }
 }

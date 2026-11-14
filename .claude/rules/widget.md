@@ -98,9 +98,10 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 
 - Kroki (D440, T793, reguły `kroki.md`): `WidgetView.steps` – „☐ <krok> · krok 1/4” pod blokiem na pierwszym planie
   (`StepLine`, ptaszek `bar-step-tick` = akcja `step` `<blok>|<krok>` → `tickStep`), po ostatnim „Wszystkie kroki ✓”; w każdym
-  trybie poza „Odcinam się”; bez dźwięku i kropki. Blok rutyny bez własnych kroków – kroki rutyny (D473: `engineView` z `dayFile`,
-  `tickStep` z rutynami). Ostatni ptaszek kończy blok (D474): `finishBySteps` → timer `stepsFinish`, linia `stepsFinished:<blok>`
-  „Skończono: <nazwa> · Cofnij” przez `ROUTINE_UNDO_MS` (jak `routineSaved`), „Cofnij” = `undoStepsFinish`.
+  trybie poza „Odcinam się”; bez dźwięku i kropki. Blok rutyny bez własnych kroków – kroki rutyny (D473: `engineView` z `dayFile`
+  modelu – `widgetModel().dayFile`, T1115 – `tickStep` z rutynami). Ostatni ptaszek kończy blok (D474): `finishBySteps` → wspólne
+  `listWhole` (`engine/stepsFlow.ts`, T1120), linia `stepsFinished:<blok>` „Skończono: <nazwa> · Cofnij” przez `ROUTINE_UNDO_MS` (jak
+  `routineSaved`, po całym zapisie – T1114), „Cofnij” = `undoAfterSteps` (najpierw koniec; odmowa – nic więcej).
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
 

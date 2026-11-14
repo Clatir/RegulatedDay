@@ -518,8 +518,8 @@ export interface TimerResult {
   ok: boolean
   why: string | null
   confirm: { block: string; minutes: number; overrun: boolean; bedtime: boolean } | null
-  /** Why it did nothing, when the caller must tell it from other refusals (D336): never read from `why`. */
-  code?: 'alreadyOver' | 'notBegun'
+  /** Why it did nothing, when the caller must tell it from other refusals (D336, T1109): never read from `why`. */
+  code?: 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine'
 }
 
 /** A day closed (D468): `written` – the ids of the events of the close, for its „Cofnij” (none when refused). */

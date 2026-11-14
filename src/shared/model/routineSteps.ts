@@ -83,12 +83,6 @@ export function routineStepsOf(
   return { routineId: b.routine, routine, version: 'normal', steps: withDone(routineList(routine, 'normal'), done), kept: false }
 }
 
-/**
- * The refusals of the timer the end of a list says by no word (D474, T1104 – the app never guesses when a block ran): not begun,
- * over, not running nor paused, its routine saved already or none (the window and the bar).
- */
-export const STEPS_QUIET: ReadonlySet<string> = new Set(['ten blok się nie zaczął', 'ten blok już się skończył', 'ten blok nie biegnie', 'ta rutyna jest już zapisana', 'ten blok nie ma rutyny'])
-
 /** The steps `b` shows on its day (D440, D473): its own list (with the day's ticks, `dayPlan`), else its routine's. */
 export function shownSteps(
   b: Pick<PlanBlock, 'id' | 'routine' | 'task' | 'steps'>,

@@ -370,7 +370,7 @@ export function engineView(i: EngineInput): WidgetView {
     for (const r of routinesDue(i.ctx, state, i.routines ?? [], i.dayFile)) {
       if (state.now >= r.to + ROUTINE_LINE_MIN) continue
       const line = `routine:${state.grid.date}:${r.block}`
-      routines.push({ line, block: r.block, name: nameOf(r.block), normal: r.normal, worse: r.worse, version: r.version, done: r.steps.filter((s) => s.done).map((s) => s.id) })
+      routines.push({ line, block: r.block, name: nameOf(r.block), normal: r.normal, worse: r.worse, version: r.version, done: r.ticked })
       lines.push({ id: line, text: nameOf(r.block), actions: [{ id: 'all', label: '✓ Wszystkie' }, { id: 'steps', label: 'Kroki ▸' }, ...(r.worse.length ? [{ id: 'worse', label: 'gorsze dni' }] : [])], dot: false })
     }
   // „Zadanie zrobione? · Tak · Wraca na listę” (D384, T754): quiet lines (no dot) after the routines, today, for 3 h after

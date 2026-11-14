@@ -169,6 +169,8 @@ interface BarDay {
   state: DayState
   activity: Activity | null
   laid: AutoEvent[]
+  /** The day's file the context was made of (with the queue): the bar's steps of a routine read it (D473, T1115). */
+  dayFile: DayFile | null
 }
 
 /** `BarDay` with the activity always counted. */
@@ -1956,8 +1958,8 @@ export class DataFolder {
   }
 
   /** The day as you see it (your queued edits laid over the files): clicks and answers are judged on it. */
-  private async ownContext(date: string, read: DayRead, at: number, inp?: Inputs): Promise<DayContext> {
-    return dayContextOf(inp ?? (await this.inputs(true)), { date, events: read.events, dayFile: await this.dayFile(date, true), nextFile: await this.dayFile(addDays(date, 1), true) }, this.o.holidays, at)
+  private async ownContext(date: string, read: DayRead, at: number, inp?: Inputs, dayFile?: DayFile | null): Promise<DayContext> {
+    return dayContextOf(inp ?? (await this.inputs(true)), { date, events: read.events, dayFile: dayFile !== undefined ? dayFile : await this.dayFile(date, true), nextFile: await this.dayFile(addDays(date, 1), true) }, this.o.holidays, at)
   }
 
   /**
@@ -1977,21 +1979,22 @@ export class DataFolder {
   private async barDay(day: string, read: DayRead, at: number, withActivity: true, known?: Activity | null): Promise<BarDayWith>
   private async barDay(day: string, read: DayRead, at: number, withActivity?: boolean, known?: Activity | null): Promise<BarDay>
   private async barDay(day: string, read: DayRead, at: number, withActivity = false, known: Activity | null = null): Promise<BarDay> {
-    const ctx = await this.ownContext(day, read, at)
+    const dayFile = await this.dayFile(day, true)
+    const ctx = await this.ownContext(day, read, at, undefined, dayFile)
     const state = computeDay(ctx)
     const t = timerNow(state)
     const runs = t.fg != null || t.bg.length > 0
     const activity = known ?? (runs || withActivity ? await this.activityFor(day, read, at) : null)
-    if (!runs || !activity || !(await this.mayLay(day, read, at))) return { ctx, state, activity, laid: [] }
+    if (!runs || !activity || !(await this.mayLay(day, read, at))) return { ctx, state, activity, laid: [], dayFile }
     const written = new Set(ctx.events.map((e) => e.id))
     const inp = { ctx, state, activity, now: at, gate: await this.gateOf(day, read, at) }
     const shutdowns = shutdownActions(inp, t)
     const laid = [...shutdowns.values()].filter((x) => x.due && !written.has(x.end.id) && !state.facts.undone.has(x.end.id)).map((x) => x.end)
-    if (!laid.length || fixedStartPausesClosed(inp, t, shutdowns)) return { ctx, state, activity, laid: [] }
+    if (!laid.length || fixedStartPausesClosed(inp, t, shutdowns)) return { ctx, state, activity, laid: [], dayFile }
     // As the leader would write them now: after every event seen, the next numbers of this computer.
     const n = ctx.events.reduce((m, e) => (e.c === this.o.computer ? Math.max(m, e.n + 1) : m), 0)
     const over = { ...ctx, events: [...ctx.events, ...simEvents(ctx, laid, at, { c: this.o.computer, n })] }
-    return { ctx: over, state: computeDay(over), activity, laid }
+    return { ctx: over, state: computeDay(over), activity, laid, dayFile }
   }
 
   /**
@@ -2250,12 +2253,14 @@ export class DataFolder {
     rd: ReturnType<typeof rdFrom>
     people: Array<{ id: string; name: string }>
     carried: RunningRequest | null
+    /** The day's file the day was counted from (D473: the routine's list it keeps, its ticks – the bar reads it once, T1115). */
+    dayFile: DayFile | null
   }> {
     // The day before chosen – counted once, by the choice itself.
     const chosen = await this.barActiveDay(at)
     const day = chosen.day
     const read = chosen.read ?? (await this.log.readDay(day))
-    const { ctx, state, activity } = chosen.bar ?? (await this.barDay(day, read, at, true))
+    const { ctx, state, activity, dayFile } = chosen.bar ?? (await this.barDay(day, read, at, true))
     const rd = rdFrom(await this.recordView(paths.settings))
     const calibration = await this.calibrating(at)
     const today = logicalDayOf(at)
@@ -2267,7 +2272,8 @@ export class DataFolder {
       rd,
       // Today's log only for ranking the people: one not readable now never stops the bar.
       people: await this.topPeople(rd, today, day === today ? read.events : ((await this.log.readDay(today).catch(() => null))?.events ?? []), at),
-      carried: day === today ? await this.carriedRequest(addDays(today, -1), rd) : null
+      carried: day === today ? await this.carriedRequest(addDays(today, -1), rd) : null,
+      dayFile
     }
   }
 

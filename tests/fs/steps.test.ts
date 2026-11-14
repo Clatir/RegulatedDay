@@ -52,16 +52,19 @@ const write = (rel: string, v: unknown) => writeFileSync(join(dataDir, rel), JSO
 const read = (rel: string) => JSON.parse(readFileSync(join(dataDir, rel), 'utf8')) as Record<string, unknown>
 const asEdits = (entries: EditEntry[]) => entries.map((e) => ({ ...e, edits: e.edits.map((x) => ({ ...x, path: x.path.map(String) })) }))
 
-async function computer(id: string, clock: { now: number }) {
+async function computer(id: string, clock: { now: number }, edit?: (entries: EditEntry[], real: (e: EditEntry[]) => Promise<Array<{ status: string }>>) => Promise<Array<{ status: string }>>) {
   const folder = await DataFolder.open({ fs: nodeFs, dataDir, stateDir: join(root, `state-${id}`), computer: id, computerName: id.toUpperCase(), appVersion: '1.14.0', clock: { wall: () => clock.now, mono: () => clock.now }, holidays: marketDay, oneDriveRunning: () => true })
   const shown: NotifyIn[] = []
   const w = new WidgetEngine({
     folder: () => folder,
     timer: async (c) => {
       const r = await folder.timerClick(c as never)
-      return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
+      return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}) }
     },
-    edit: async (entries) => (await folder.edit(asEdits(entries))).map((x) => ({ status: x.status })),
+    edit: async (entries) => {
+      const real = async (e: EditEntry[]) => (await folder.edit(asEdits(e))).map((x) => ({ status: x.status }))
+      return (edit ? edit(entries, real) : real(entries)) as never
+    },
     answer: async () => ({ ok: true, why: null, confirm: null }),
     seen: async () => 0,
     clickedApp: () => undefined,
@@ -360,5 +363,81 @@ describe('dzień uszkodzony a nieczytelny w `caseDays` (przegląd 4, T792)', () 
     } finally {
       await hub.close('quit')
     }
+  })
+})
+
+describe('rutyna na pasku – przegląd 1.22-A (uwagi 3, 8, 9)', () => {
+  const seedRoutine = () => {
+    mkdirSync(join(dataDir, 'routines'), { recursive: true })
+    write(paths.record('routine', 'r'), { schema: 1, id: 'r', name: 'Poranna', normal: [{ id: 'woda', name: 'woda', min: 2 }, { id: 'kot', name: 'kot', min: 8 }], worse: [] })
+    write(paths.day(DAY), { schema: 1, date: DAY, blocks: [
+      { id: 'rut', categoryId: 'rutyny', startMin: 10 * 60, durationMin: 10, fixed: false, origin: 'user', routine: 'r' },
+      { id: 'inny', categoryId: 'inne', startMin: 11 * 60, durationMin: 30, fixed: false, origin: 'user' }
+    ] })
+  }
+  const line = `routine:${DAY}:rut`
+  const ends = async (folder: DataFolder) => (await folder.readDay(DAY)).events.filter((e) => e.k === 'block.end' && (e as { rule?: string }).rule === 'steps').length
+
+  it('3: zapis odhaczeń spotkał zmianę z innego komputera – „✓ Wszystkie” zapisuje rutynę, ale bloku nie kończy', async () => {
+    seedRoutine()
+    const clock = { now: placeLogical(DAY, 10 * 60 + 5) }
+    const a = await computer('pca', clock, async (entries, real) => (entries.some((e) => e.rel === paths.day(DAY) && e.edits.some((x) => x.path[0] === 'stepsDone')) ? entries.map(() => ({ status: 'conflict' })) : real(entries)))
+    expect((await a.folder.timerClick({ a: 'start', block: 'rut', day: DAY } as never)).ok).toBe(true)
+    clock.now += 60_000
+    await a.w.refresh()
+    await a.w.act('line', `${line}|all`, 'bar')
+    expect(await ends(a.folder)).toBe(0)
+    expect(a.w.current().lines.find((l) => l.id === 'routineSaved:rut')).toMatchObject({ text: 'Zapisano: Poranna (zwykła) – 2 z 2' })
+    await a.folder.close('quit')
+  })
+
+  it('8: „Cofnij” po zapisie, który skończył blok – po starcie innego bloku koniec się nie cofa, a zapis rutyny i odhaczenia zostają', async () => {
+    seedRoutine()
+    const clock = { now: placeLogical(DAY, 10 * 60 + 5) }
+    const a = await computer('pca', clock)
+    expect((await a.folder.timerClick({ a: 'start', block: 'rut', day: DAY } as never)).ok).toBe(true)
+    clock.now += 60_000
+    await a.w.refresh()
+    await a.w.act('line', `${line}|all`, 'bar')
+    expect(await ends(a.folder)).toBe(1)
+    expect(a.w.current().lines.find((l) => l.id === 'stepsFinished:rut')).toBeTruthy()
+    // Within the line's minute: another block begins.
+    clock.now += 10_000
+    expect((await a.folder.timerClick({ a: 'start', block: 'inny', day: DAY } as never)).ok).toBe(true)
+    await a.w.refresh()
+    clock.now += 1_000
+    await a.w.act('line', 'stepsFinished:rut|undo', 'bar')
+    expect(a.w.current().note?.text).toBe('tego już nie cofniesz – po zakończeniu zaczął się inny blok, prośba albo „Odcinam się”')
+    const events = (await a.folder.readDay(DAY)).events
+    expect(events.filter((e) => e.k === 'undo')).toHaveLength(0)
+    expect(dayFileFrom(read(paths.day(DAY)), DAY).stepsDone.rut?.sort()).toEqual(['kot', 'woda'])
+    await a.folder.close('quit')
+  })
+
+  it('9: „Cofnij” w trakcie zapisu odhaczeń nic nie cofa – linia z „Cofnij” przychodzi dopiero po całym zapisie', async () => {
+    seedRoutine()
+    const clock = { now: placeLogical(DAY, 10 * 60 + 5) }
+    let release: () => void = () => undefined
+    let started: () => void = () => undefined
+    const writing = new Promise<void>((r) => (started = r))
+    const a = await computer('pca', clock, async (entries, real) => {
+      if (!entries.some((e) => e.rel === paths.day(DAY))) return real(entries)
+      started()
+      await new Promise<void>((r) => (release = r))
+      return real(entries)
+    })
+    await a.w.refresh()
+    const save = a.w.act('line', `${line}|all`, 'bar')
+    await writing
+    // The routine saved, its ticks still being written: no „Cofnij” yet – a click of an old line does nothing.
+    clock.now += 1_000
+    await a.w.act('line', 'routineSaved:rut|undo', 'bar')
+    release()
+    await save
+    const events = (await a.folder.readDay(DAY)).events
+    expect(events.filter((e) => e.k === 'undo')).toHaveLength(0)
+    expect(events.filter((e) => e.k === 'routine.done')).toHaveLength(1)
+    expect(a.w.current().lines.find((l) => l.id === 'routineSaved:rut')).toBeTruthy()
+    await a.folder.close('quit')
   })
 })

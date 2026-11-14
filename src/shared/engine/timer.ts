@@ -121,8 +121,11 @@ export interface ActionCost {
   bedtime: boolean
 }
 
-/** Why a click found nothing to do, for a caller that must tell it from another refusal (D336) – never read from the text. */
-export type ResultCode = 'alreadyOver' | 'notBegun'
+/**
+ * Why a click found nothing to do, for a caller that must tell it from another refusal (D336) – never read from the text; the
+ * ends of a list of steps say these by no word (D474, D328 – `quietRefusal`, T1109).
+ */
+export type ResultCode = 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine'
 
 export type ActionResult =
   | { ok: true; events: TimerDraft[]; confirm: ActionCost | null }
@@ -409,8 +412,8 @@ export const STEPS_RULE = 'steps'
 
 /**
  * Whether anything has begun since the end of `f` (its place among the events, not minutes – as G1): another block, a request
- * or „Odcinam się” – a block whose end is taken back would run beside it („Cofnij” of an end by the steps; the same rule as
- * „Cofnij” of a removal, `undoRemove`).
+ * or „Odcinam się” – a block whose end is taken back would run beside it („Cofnij” of a removal, `undoRemove`, and of an end
+ * by the steps, `undoStepsFinish`).
  */
 function begunSinceEnd(state: DayState, f: { id: string; endOrder: EventOrder | null }): boolean {
   const end = f.endOrder
@@ -696,8 +699,8 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
     case 'routineDone': {
       // The bar and „Dziś” save one state (D328): the first save closes both, a second one finds it saved.
       const routine = ctx.plan.find((p) => p.id === act.block)?.routine
-      if (!routine) return no('ten blok nie ma rutyny')
-      if (state.facts.routines.has(act.block)) return no('ta rutyna jest już zapisana')
+      if (!routine) return no('ten blok nie ma rutyny', null, 'noRoutine')
+      if (state.facts.routines.has(act.block)) return no('ta rutyna jest już zapisana', null, 'routineSaved')
       if (!ROUTINE_VERSIONS.includes(act.version)) return no('nieznana wersja rutyny')
       const steps = [...new Set(Array.isArray(act.steps) ? act.steps : [])].filter((s) => typeof s === 'string' && s.length > 0)
       if (!steps.length) return no('zaznacz co najmniej jeden krok')
@@ -722,10 +725,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (!f?.endId || f.endRule !== REMOVED_RULE || f.endedAt == null) return no('tego bloku nie zdjęto z planu')
       // Only while nothing has begun since the removal itself (its place among the events, not minutes – as G1): another
       // block, a request or „Odcinam się” – the block would run beside it.
-      const end = f.endOrder
-      const later = (o: EventOrder) => compareOrder(o, end!) > 0
-      const since = !!end && ([...state.facts.blocks.values()].some((x) => x.id !== act.block && x.runs.some((r) => later(r.begun))) || state.facts.requests.some((r) => later(r.begun)) || state.facts.disconnect.some((d) => later(d.begun)))
-      if (since) return no('tego już nie cofniesz – po usunięciu zaczął się inny blok, prośba albo „Odcinam się”')
+      if (begunSinceEnd(state, f)) return no('tego już nie cofniesz – po usunięciu zaczął się inny blok, prośba albo „Odcinam się”')
       return yes([{ k: 'undo', at, target: f.endId, reason: 'user' }])
     }
     case 'stepsFinish': {
@@ -735,7 +735,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (!f || f.startedAt == null) return no(NOT_BEGUN, null, 'notBegun')
       if (f.endedAt != null) return no(ALREADY_OVER, null, 'alreadyOver')
       const open = [t.fg, ...t.bg, ...t.paused].find((x) => x?.info.id === act.block)
-      if (!open) return no('ten blok nie biegnie')
+      if (!open) return no('ten blok nie biegnie', null, 'notRunning')
       return yes([{ k: 'block.end', block: act.block, at: endInstant(state, open, at), done: isFixedLike(open.info) ? null : true, rule: STEPS_RULE }])
     }
     case 'undoStepsFinish': {

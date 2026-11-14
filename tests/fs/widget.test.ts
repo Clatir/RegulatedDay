@@ -71,7 +71,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       folder: () => (open ? folder : null),
       timer: async (c) => {
         const r = await folder.timerClick(c as never)
-        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
+        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}) }
       },
       edit: async (entries) => {
         if (editFails) throw new Error('plik jest teraz nieczytelny – zmiana nie została zapisana, spróbuj za chwilę')
@@ -79,7 +79,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       },
       answer: async (id, a, v) => {
         const r = await folder.answer(id, a, v)
-        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
+        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}) }
       },
       seen: (ids, how) => folder.markSeen(ids, how),
       clickedApp: () => undefined,

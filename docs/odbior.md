@@ -2424,17 +2424,17 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 
 #### KR2 Ostatni krok kończy blok (D474)
 - [ ] Odebrane
-- **Automatycznie:** `tests/unit/engine/routine-steps.test.ts` (ostatni nieodhaczony krok; `stepsFinish` – biegnący i zapauzowany blok kończy się jako skończony, niezaczęty – nic; „Cofnij” – biegnie dalej, odmowa po starcie innego bloku), E2E `tests/e2e/routine-steps.spec.ts` (panel – dymek i „Cofnij”), `tests/e2e/steps.spec.ts` (pasek pulpitu i pasek okna – linia „Skończono · Cofnij”).
-- **Jak sprawdzić:** zacznij blok z dwoma krokami (rutyna albo własne kroki); odhacz oba w panelu; kliknij „Cofnij” w dymku. Zacznij inny blok z krokami i odhacz ostatni krok na pasku pulpitu; kliknij „Cofnij” na pasku. Odhacz wszystkie kroki bloku bez rutyny, który jeszcze się nie zaczął, i bloku rutyny, który się nie zaczął. Na karcie zaczętej rutyny kliknij „✓ Wszystkie”, potem „Cofnij”.
+- **Automatycznie:** `tests/web/steps.test.ts` („Sprawy”: ostatni krok zadania kończy jego blok), `tests/fs/steps.test.ts` (pasek: konflikt odhaczeń – blok się nie kończy; „Cofnij” po starcie innego bloku – nic nie cofa; „Cofnij” w trakcie zapisu – nic), `tests/unit/engine/routine-steps.test.ts` (ostatni nieodhaczony krok; `stepsFinish` – biegnący i zapauzowany blok kończy się jako skończony, niezaczęty – nic; „Cofnij” – biegnie dalej, odmowa po starcie innego bloku), E2E `tests/e2e/routine-steps.spec.ts` (panel – dymek i „Cofnij”), `tests/e2e/steps.spec.ts` (pasek pulpitu i pasek okna – linia „Skończono · Cofnij”).
+- **Jak sprawdzić:** zacznij blok z dwoma krokami (rutyna albo własne kroki); odhacz oba w panelu; kliknij „Cofnij” w dymku. Zacznij inny blok z krokami i odhacz ostatni krok na pasku pulpitu; kliknij „Cofnij” na pasku. Zacznij blok zadania ze „Spraw” i odhacz jego ostatni krok na stronie „Sprawy”. Odhacz wszystkie kroki bloku bez rutyny, który jeszcze się nie zaczął, i bloku rutyny, który się nie zaczął. Na karcie zaczętej rutyny kliknij „✓ Wszystkie”, potem „Cofnij”.
 - **Oczekiwany efekt:** po ostatnim ptaszku blok kończy się w tej chwili: w oknie dymek „Skończono: <nazwa> · Cofnij”, na pasku linia „Skończono: <nazwa> · Cofnij” (ok. minuty); „Cofnij” – blok biegnie dalej, krok zostaje odhaczony, pasek mówi „Wszystkie kroki ✓”; blok niezaczęty się nie kończy – bez rutyny nic nie mówi, rutyna mówi „Zapisano: <nazwa> (zwykła) – N z N · Cofnij” i jej karta znika; „✓ Wszystkie” na karcie odhacza wszystkie kroki w panelu i kończy biegnący blok, a „Cofnij” zdejmuje odhaczenia, wraca karta i blok biegnie dalej.
 - **Nie przechodzi, gdy:** po ostatnim kroku blok dalej biegnie; kończy się już po przedostatnim; „Cofnij” nie wznawia bloku albo odznacza krok; blok niezaczęty zaczyna się albo kończy; aplikacja czegoś odmawia albo blokuje.
 
 #### KR3 Ukończony blok na osi „Dziś” (D477)
 - [ ] Odebrane
-- **Automatycznie:** `tests/web/routine-steps-axis.test.ts` (skończony – przygaszony z ✓; zaparkowany po starcie i niezaczęty – bez), E2E `tests/e2e/routine-steps.spec.ts`, `tests/e2e/steps.spec.ts`.
-- **Jak sprawdzić:** skończ jeden blok („Skończyłem”, „Dalej” albo ostatnim krokiem), drugi zacznij i zaparkuj po pauzie; spójrz na oś „Dziś”.
-- **Oczekiwany efekt:** skończony blok stoi na osi przygaszony, z „✓” przed nazwą, bez przekreślenia; zaparkowany (niedokończony) – przygaszony bez „✓”; „Cofnij” końca zdejmuje „✓”.
-- **Nie przechodzi, gdy:** brak „✓” przy skończonym; „✓” przy niedokończonym albo niezaczętym; nazwa przekreślona; skończony blok znika z osi.
+- **Automatycznie:** `tests/web/routine-steps-axis.test.ts` (skończony jawnie – przygaszony z ✓; zaparkowany po starcie, niezaczęty i skończony po bezczynności – bez), E2E `tests/e2e/routine-steps.spec.ts`, `tests/e2e/steps.spec.ts`.
+- **Jak sprawdzić:** skończ jeden blok („Skończyłem”, „Dalej” albo ostatnim krokiem), drugi zacznij i zaparkuj po pauzie, trzeci zacznij i odejdź od komputera, aż aplikacja sama go skończy; spójrz na oś „Dziś”.
+- **Oczekiwany efekt:** skończony blok stoi na osi przygaszony, z „✓” przed nazwą, bez przekreślenia; zaparkowany (niedokończony) i skończony przez aplikację przy Twojej nieobecności – przygaszone bez „✓”; „Cofnij” końca zdejmuje „✓”.
+- **Nie przechodzi, gdy:** brak „✓” przy skończonym; „✓” przy niedokończonym, niezaczętym albo skończonym samoczynnie po nieobecności; nazwa przekreślona; skończony blok znika z osi.
 
 ---
 

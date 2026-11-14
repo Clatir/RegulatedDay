@@ -3,6 +3,7 @@ paths:
   - "src/shared/model/steps.ts"
   - "src/shared/model/routineSteps.ts"
   - "src/shared/engine/routineCheck.ts"
+  - "src/shared/engine/stepsFlow.ts"
   - "src/renderer/features/today/RoutineCard.tsx"
   - "src/shared/engine/steps.ts"
   - "src/renderer/store/steps.ts"
@@ -91,14 +92,18 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
 - Ostatni krok kończy blok (D474, T1104, T1105): `tickEdits.finished` → okno `finishBySteps` / pasek `finishBySteps` – timer
   `stepsFinish` (`block.end`, reguła `steps`, tylko blok zaczęty i nieskończony dnia bieżącego; inaczej cicho nic) i `undoStepsFinish`
   („Cofnij”: koniec cofnięty, krok zostaje odhaczony; odmowa po starcie innego bloku, prośby, „Odcinam się”). Okno – dymek
-  „Skończono: <nazwa>”, pasek – linia `stepsFinished:<blok>` przez 60 s. Oś: skończony blok (`finishedBlock`, `done !== false`) ma
-  „✓ ” przed nazwą (`block-finished`, D477, T1106).
+  „Skończono: <nazwa>”, pasek – linia `stepsFinished:<blok>` przez 60 s (dopiero po całym zapisie – T1114). Oś: blok ukończony jawnie
+  (`finishedBlock`: `done` true albo reguła `steps`/`endNow`/`finished`/`plan`/`fixedNoReaction`; nie koniec z nieobecności – T1106) ma
+  „✓ ” przed nazwą (`block-finished`, D477). „Sprawy”: `taskTickEdits.block.finished` → `tickCaseStep` (T1113).
 - Jedno odhaczenie rutyny (D479, T1108, T1109): odhaczenia tylko w `stepsDone`, wersja tylko w `routineSteps`, `routine.done` = „zapisana”
   (zamyka kartę i linię). Karta (`RoutineCard`) i „Kroki ▸” paska to widoki listy dnia (`routinesDue(…, dayFile)`: `steps`, `version`) –
-  ptaszek karty = `tickBlockStep`, wersja = `pickRoutineVersion`; zapis karty/paska: `routineDone` → `routineSaveEdits` → przy całej
-  liście `stepsFinish` (`stepsFinish.ts` `saveRoutine`, `WidgetEngine.routineDone`); ostatni ptaszek gdziekolwiek – `routineDone` +
-  `stepsFinish` (`finishBySteps`). „Cofnij” zapisu cofa wszystko (koniec, zapis, odhaczenia), ostatniego ptaszka – sam koniec.
-  Odmowy bez słowa – `STEPS_QUIET` (`model/routineSteps.ts`).
+  ptaszek karty = `tickBlockStep`, wersja = `pickRoutineVersion`; „Kroki ▸” zaczyna od `RoutineDue.ticked` (obie wersje). Kolejność
+  końca listy – jedna, `engine/stepsFlow.ts` (T1120): `listWhole` (ostatni ptaszek: `routine.done` ≤ 40 id + `stepsFinish`), `routineSaved`
+  (zapis karty/paska: `routineDone` → odhaczenia `routineSaveEdits` – tylko dokłada, T1112 – → przy całej liście i zapisanych
+  odhaczeniach `stepsFinish`), `undoAfterSteps` (koniec najpierw – odmowa zatrzymuje resztę, D482); woła ją okno
+  (`features/steps/stepsFinish.ts`) i pasek (`WidgetEngine`). Odmowy bez słowa – po kodzie (`quietRefusal`, `ResultCode`).
+  Przeniesienie bloku zabiera wpis `routineSteps` z odhaczeniami (T1118); `routineSteps` w `ITEM_MAPS` (T1117); odhaczenia
+  zawsze z pliku (`dayBlockNow`, T1119); zatrzymana lista „na gorsze dni” bez tej wersji w rutynie – dalej `worse` (T1116).
 
 ## Pułapki
 - Starsza wersja (bez czasu kroku) pisze listę pozycja po pozycji: zmieniona pozycja zachowuje `min` (`{ ...x, title, order }`),

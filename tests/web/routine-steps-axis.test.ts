@@ -74,11 +74,21 @@ describe('oś „Dziś”: kroki rutyny i ukończone bloki', () => {
     expect(stepsAskScope(o, b, false, true)).toBe(false)
   })
 
-  it('`finishedBlock`: koniec bez oceny (blok stały – `done` null) to też ukończony; trwający – nie', () => {
-    expect(finishedBlock({ endedAt: 10, done: null })).toBe(true)
-    expect(finishedBlock({ endedAt: 10, done: true })).toBe(true)
-    expect(finishedBlock({ endedAt: 10, done: false })).toBe(false)
-    expect(finishedBlock({ endedAt: null, done: null })).toBe(false)
+  it('`finishedBlock` (przegląd 4): ✓ tylko przy jawnym ukończeniu – „Skończyłem”, ostatni krok, stały o planowanym końcu; koniec z nieobecności – bez ✓', () => {
+    const end = (done: boolean | null, endRule: string | null) => finishedBlock({ endedAt: 10, done, endRule })
+    expect([end(true, null), end(true, 'endNow'), end(null, 'steps'), end(null, 'endNow'), end(null, 'finished'), end(null, 'plan'), end(null, 'fixedNoReaction')]).toEqual([true, true, true, true, true, true, true])
+    // The app's own ends of a flexible block left alone (`done` null) and one left unfinished: no ✓.
+    expect(['idle', 'absence', 'shutdown', 'lastInput', 'twoQuestions', 'disconnect', 'firstUse', 'limit', 'bedtime', null].map((r) => end(null, r))).toEqual(Array(10).fill(false))
+    expect([end(false, 'park'), end(false, 'removed')]).toEqual([false, false])
+    expect(finishedBlock({ endedAt: null, done: null, endRule: null })).toBe(false)
     expect(finishedBlock(undefined)).toBe(false)
+  })
+
+  it('przegląd 4: blok skończony po bezczynności nie ma ✓ na osi', () => {
+    const s = new Scenario({ date: DATE, plan: [at('a', '08:00', 30)] }).observe('07:00', null)
+    s.start('a', '08:00').write([{ k: 'block.end', block: 'a', at: s.at('08:20'), done: null, rule: 'idle' }], s.at('08:20'))
+    const m = axis(s, '11:00')
+    expect(m.get('a')?.dim).toBe(true)
+    expect(m.get('a')?.finished).toBeUndefined()
   })
 })

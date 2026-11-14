@@ -265,9 +265,10 @@ const ITEM_LIST_KEYS: ReadonlySet<string> = new Set(Object.values(ITEM_LISTS).fl
 /**
  * Maps of records by id in rd.json (T973, D419): `categories`. The first write of an entry the file does not have yet (the
  * first calendar of a default category) is the edits of its fields – two computers writing the first different fields of one
- * entry meet in no question. The entry's removal stays one edit.
+ * entry meet in no question. The entry's removal stays one edit. A day's `routineSteps` (D473, T1117): the routine's lists of
+ * two blocks kept first on two computers are the fields of two entries, never one whole map meeting the other's as a question.
  */
-export const ITEM_MAPS: Partial<Record<FileKind, ReadonlySet<string>>> = { settings: new Set(['categories']) }
+export const ITEM_MAPS: Partial<Record<FileKind, ReadonlySet<string>>> = { settings: new Set(['categories']), day: new Set(['routineSteps']) }
 
 function itemEdits(kind: FileKind, path: Path, base: unknown, value: unknown): Array<{ path: Path; base: unknown; value: unknown }> | null {
   if (base !== undefined) return null

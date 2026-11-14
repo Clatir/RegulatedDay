@@ -154,8 +154,15 @@ export function changeTaskSteps(id: string, op: StepOp): Promise<StepsResult> {
 }
 
 /** A task's step ticked off or not (the page „Sprawy”): its block planned today or later too (T792). */
-export function tickTaskStep(id: string, stepId: string, done: boolean): Promise<StepsResult> {
-  return taskChange(id, (record, date, day, today) => taskTickEdits({ record, stepId, done, date, day, today }))
+export async function tickTaskStep(id: string, stepId: string, done: boolean): Promise<StepsResult & { whole: { date: string; block: string; routine: string | null; steps: Step[] } | null }> {
+  let whole: { date: string; block: string; routine: string | null; steps: Step[] } | null = null
+  const r = await taskChange(id, (record, date, day, today) => {
+    const out = taskTickEdits({ record, stepId, done, date, day, today })
+    whole = !('error' in out) && out.block?.finished && date ? { date, block: out.block.id, routine: out.block.routine, steps: out.block.steps } : null
+    return out
+  })
+  // D474 (T1113): the tick made the list of the task's block whole – saved, the caller ends the block as the panel's tick does.
+  return { ...r, whole: r.saved ? whole : null }
 }
 
 /**

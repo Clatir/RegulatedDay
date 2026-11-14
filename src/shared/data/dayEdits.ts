@@ -153,6 +153,18 @@ export function setRoutineSteps(raw: Raw, blockId: string, entry: { routine: str
   return { ...raw, [ROUTINE_STEPS]: all }
 }
 
+/**
+ * A block's routine list as one day's file holds it, put into another's as it is (a move – T1118: it goes with the ticks it
+ * keeps), or taken away (none in the source – the target's own goes too, as `setStepsDone` with none).
+ */
+export function moveRoutineSteps(from: Raw | null | undefined, to: Raw, blockId: string): Raw {
+  const src = from && isPlain(from[ROUTINE_STEPS]) ? (from[ROUTINE_STEPS] as Raw)[blockId] : undefined
+  if (src === undefined) return setRoutineSteps(to, blockId, null)
+  const all = isPlain(to[ROUTINE_STEPS]) ? { ...(to[ROUTINE_STEPS] as Raw) } : {}
+  all[blockId] = src
+  return { ...to, [ROUTINE_STEPS]: all }
+}
+
 /** The ids of a block's steps ticked off in the day's file. */
 export function stepsDoneIn(raw: Raw | null | undefined, blockId: string): string[] {
   const all = raw && isPlain(raw.stepsDone) ? raw.stepsDone : null
