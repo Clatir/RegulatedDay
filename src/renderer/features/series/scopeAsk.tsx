@@ -1,7 +1,8 @@
 /**
  * The question of a change or a removal of a block of a series (D381, D401): „Tylko to · To i następne · Cała seria”. Asked
- * only by a change in the panel of a block and by its removal – a drag, an edge, pushing apart, closing a gap and the
- * variants change the one occurrence without a question. One dialog for the window (`App.tsx`): `askScope` shows it and
+ * only by a change in the panel of a block, by its removal and by the window of the cost on its tile (D501: once while that window
+ * is open, not for a begun block – `seriesScope.ts`) – a drag, an edge, pushing apart, closing a gap and the variants change the one
+ * occurrence without a question. One dialog for the window (`App.tsx`): `askScope` shows it and
  * resolves with the scope picked, or null when it is closed (Esc, „Anuluj”, a click outside) – nothing is changed then.
  */
 import { create } from 'zustand'
@@ -25,6 +26,9 @@ interface Ask {
 const SCOPES: readonly SeriesScope[] = ['only', 'following', 'all']
 
 const useAsk = create<{ ask: Ask | null }>(() => ({ ask: null }))
+
+/** A question of a series' scope is open now – a small window over the page (the cost of a tile, D501) steps aside for it meanwhile. */
+export const useScopeAsked = (): boolean => useAsk((s) => s.ask != null)
 
 /** Shows the question; a question already open is closed first (null). */
 export function askScope(mode: ScopeMode, name: string, rule: string, scopes: readonly SeriesScope[] = SCOPES): Promise<SeriesScope | null> {

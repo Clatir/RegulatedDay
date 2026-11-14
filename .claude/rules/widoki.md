@@ -58,4 +58,6 @@ T950–T955, T960–T969, T980–T986 (część A; D426), T936–T939 (ekrany).
   `agenda-heading-`, `agenda-block-<dzień>-<id>`, `agenda-empty-`), komórka miesiąca – `monthCellView` + `MonthGrid` (`detail`):
   `month-bar-`, `month-more-`, `month-load-` – **bez prefiksu `day-`** (E2E wybierają komórki przez `[data-testid^="day-"]`);
   `data-counted` na stronie Kalendarza = miesiąc policzony (testy czekają na to przed odczytem tekstu komórki).
+- Koszt na kafelku (D501): `HorizonBlock.cost` (zaczęty – `begunCosts`, inny – `blockCosts`; `edit` – `costEditable`), `BlockBox` rysuje `plan/TileCost` („Tydzień” `tight` – „3·1·1”, „3 dni” „3 · 1 · 1”;
+  miejsce: róg / koniec wiersza nazwy / po najechaniu przy 2+ ścieżkach), zapis `plan/costSave.ts` `saveTileCosts` – ta sama droga co „Dziś”, blok serii pyta o zakres (reguły `koszt.md`).
 - Testy: `tests/web/week-views.test.ts`, `day-grid.test.ts`, `week-page-modes.test.ts`, `month-cells.test.ts`; E2E `week.spec.ts`.

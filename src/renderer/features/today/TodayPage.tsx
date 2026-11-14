@@ -44,8 +44,10 @@ import { finishBySteps } from '../steps/stepsFinish'
 import { RoutineVersionPick, routineVersionShown } from '../steps/RoutineVersionPick'
 import { pickRoutineVersion, tickBlockStep } from '../../store/steps'
 import { routineStepsOf } from '@shared/model/routineSteps'
-import { changeSeries, removeSeries } from '../series/seriesActions'
-import { occurrenceRuleText, seriesBlockPatch, touchesSeries } from '../series/seriesForm'
+import { removeSeries } from '../series/seriesActions'
+import { seriesFirst } from '../series/seriesScope'
+import { occurrenceRuleText } from '../series/seriesForm'
+import { saveTileCosts } from '../plan/costSave'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis, daySummary } from '../plan/dayItems'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
@@ -327,12 +329,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
    */
   const saveFields = async (b: PlanBlock, patch: Partial<PlanBlock>) => {
     // D401: a change of a block of a series in the panel asks its scope; „Tylko to” is the day's own edit (below, as any block's).
-    const of = seriesOfBlock(series, b, date)
-    if (of && touchesSeries(patch)) {
-      const scope = await askScope('change', blockName(b, names), occurrenceRuleText(of, date, today))
-      if (!scope) return false
-      if (scope !== 'only') return changeSeries({ date, blockId: b.id }, scope, { block: seriesBlockPatch(patch) }, 'Seria zmieniona')
-    }
+    const first = await seriesFirst({ series, block: b, date, today, name: blockName(b, names), patch })
+    if (first !== 'only') return first
     const freed = isToday ? freedByEdit(model.state, b, { ...b, ...patch }) : null
     const state: SendState = { afterSend: false }
     // D492 (T1166): a new start or „po bloku” of a block of a group takes it out of the group; the others stay together.
@@ -625,6 +623,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                 const owner = ownerToAdd(model.ctx.plan.find((b) => b.id === id) ?? null, dayPlace)
                 if (owner) void attachTransfer(owner, dt)
               }}
+              // D501: the window of the cost on a tile – one path with „3 dni” and „Tydzień” (a block of a series not begun asks its scope as
+              // the panel does, once a window; a begun block costs so from now on).
+              onCosts={(id, costs, ask) => saveTileCosts({ date, blockId: id, names, ofSeries: plan.find((x) => x.id === id)?.origin === 'series' }, costs, { ask })}
               markers={axis.markers}
               energy={axis.energy}
               selected={draft ? null : selected}

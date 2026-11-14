@@ -64,12 +64,17 @@ export function blockNow(raw: RawRecord, date: string, b: PlanBlock): PlanBlock 
   return dayFileFrom(raw, date).blocks.find((x) => x.id === b.id) ?? b
 }
 
+/** The day's file with fields of a block changed over the block as the file holds it then (a change made a moment before stays, A6-01). */
+export function patchedBlock(raw: RawRecord, date: string, b: PlanBlock, patch: Partial<PlanBlock>): RawRecord {
+  return putBlock(raw, { ...blockNow(raw, date, b), ...patch })
+}
+
 /**
  * Fields of a block changed (the panel of a block): over the block as the file holds it in its turn, so a change made a
  * moment before stays (A6-01).
  */
 export function patchDayBlock(date: string, seen: RawRecord | null, b: PlanBlock, patch: Partial<PlanBlock>, state?: SendState): Promise<EditOutcome[] | null> {
-  return saveDay(date, seen, (raw) => putBlock(raw, { ...blockNow(raw, date, b), ...patch }), state)
+  return saveDay(date, seen, (raw) => patchedBlock(raw, date, b, patch), state)
 }
 
 /**
@@ -81,9 +86,9 @@ export function putChange(raw: RawRecord, date: string, plan: readonly PlanBlock
   let r = raw
   for (const o of c.others) {
     const b = plan.find((x) => x.id === o.id)
-    if (b) r = putBlock(r, { ...blockNow(r, date, b), ...o.patch })
+    if (b) r = patchedBlock(r, date, b, o.patch)
   }
-  return putBlock(r, c.was ? { ...blockNow(r, date, c.was), ...c.patch } : c.block)
+  return c.was ? patchedBlock(r, date, c.was, c.patch) : putBlock(r, c.block)
 }
 
 /** A block the change pushes apart (D367): the block as the window knows it, and its new planned start. */

@@ -124,6 +124,11 @@ export interface BlockFact {
   addConfirmedAt: number | null
   /** Begun as a block of a parallel group (D476, D493; `block.start.group`): the group's first block, else null. */
   group: string | null
+  /**
+   * Where its start (`block.start`, not undone) stands in the log's order: a change of its cost (`block.cost`, D501) counts only after
+   * it – a change of a start taken back („Cofnij”) never reaches a later start of the block.
+   */
+  startOrder: EventOrder | null
 }
 
 /** An action the app did itself (spec „Działania automatyczne”): on the list „zrobione automatycznie” with „Cofnij”. */
@@ -297,11 +302,12 @@ const newBlock = (id: string): BlockFact => ({
   endId: null,
   endOrder: null,
   addConfirmedAt: null,
-  group: null
+  group: null,
+  startOrder: null
 })
 
 /** Events that never change the timer's facts (they do not make segments stale either); energy never does either. */
-const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown', 'block.exchange', 'cost.felt', 'routine.done', 'plan.freed'])
+const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown', 'block.exchange', 'cost.felt', 'routine.done', 'plan.freed', 'block.cost'])
 
 export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k) || e.dom === 'energy'
 
@@ -380,6 +386,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         const at = idx(e.at)
         b.startedAt = at
         b.group = typeof e.group === 'string' && e.group.length > 0 ? e.group : null
+        b.startOrder = orderOf(e)
         // `tag` of a start an older version wrote (D467) is never read – it may ride along in the spread, unused.
         const { name, task, routine, requests, ...planned } = e.planned
         b.planned = { ...planned, variantId: planned.variantId ?? null, fixed: planned.fixed === true, ...startNaming({ name, task, routine, requests }) }

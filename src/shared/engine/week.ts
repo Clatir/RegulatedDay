@@ -11,6 +11,8 @@
  * calendar). Pure, one `computeDay` a day (no loop over minutes with a full forecast).
  */
 import { namedById, namedOf, namedOfPlan, type NamedBlock } from '../blockName'
+import { blockCosts, type TileCost } from '../model/blockCosts'
+import { begunCosts, costChangesOf, costEditable } from './costChange'
 import { isKnown } from '../model/events'
 import type { Step } from '../model/steps'
 import type { BoundaryOutcome } from './outcome'
@@ -66,6 +68,8 @@ export interface HorizonBlock {
   session?: true
   /** Beside the block with this id – the first block of its group of parallel blocks (D492); absent – none. */
   alongside?: string
+  /** The cost per hour on its tile (D501): what counts, the category's, own or not, and whether it may be changed there; absent – not told. */
+  cost?: TileCost
 }
 
 /** The day's work against its budget (minutes, spec „Budżet pracy”): run so far and forecast from now; a day gone by – as written. */
@@ -177,8 +181,9 @@ function begunState(f: BlockFact, when: HorizonWhen): HorizonBlockState {
 
 /**
  * What the curve of a day's energy is counted with (T966): `curve` false – none (the month, the goals, „Agenda” – T914,
- * T954); `moduleOn` – the energy module as the settings have it now, for today and a day to come (a day gone by has its own –
- * `gradeEnergy`, T950). Both default to true.
+ * T954), nor the cost on the blocks' tiles (D501, T1305: only the columns of „Tydzień” and „3 dni” draw tiles); `moduleOn` – the
+ * energy module as the settings have it now, for today and a day to come (a day gone by has its own – `gradeEnergy`, T950). Both
+ * default to true.
  */
 export interface HorizonEnergy {
   curve?: boolean
@@ -202,7 +207,7 @@ const isSessionBlock = (b: BlockInfo): boolean => b.rules.kind === 'session'
  * to come today where the forecast puts it, otherwise at its planned time (an anchored one after its anchor); blocks
  * begun outside the plan where they ran.
  */
-function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): HorizonBlock[] {
+function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen, withCosts: boolean): HorizonBlock[] {
   const g = state.grid
   const lm = (idx: number) => logicalMinuteOf(ctx.date, atOf(g, idx))
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
@@ -211,6 +216,14 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
   // D478: a block a start swapped with waits, paused, where the forecast puts the rest of it – as „Dziś” draws it.
   const swapped = (f: BlockFact) => (nowIdx != null && pausedPlaceOf(f) != null ? placed.get(f.id) : undefined)
   const naming = namingOf(ctx, state.facts)
+  // D501: the cost on the tile – a begun block's as the engine counts it now (its start, its changes), another's as planned; changed there
+  // on a day not gone by: a block still to come (into the plan), a begun one until it ends (from now on) – `costEditable`.
+  const changes = withCosts ? costChangesOf(ctx.events, state.facts) : new Map()
+  const tileCost = (info: BlockInfo, st: HorizonBlockState): TileCost => {
+    const f = state.facts.blocks.get(info.id)
+    const costs = f?.startedAt != null ? begunCosts(ctx, state, info, changes) : blockCosts(info, state.settings.categories, info.rules)
+    return { ...costs, edit: costEditable(f, when === 'past', st === 'missed') }
+  }
   const out: HorizonBlock[] = []
   const push = (info: BlockInfo, named: NamedBlock, from: number, to: number, st: HorizonBlockState, outsidePlan: boolean, steps?: Step[], movable = false) =>
     out.push({
@@ -226,7 +239,8 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
       ...(movable ? { movable: true as const } : {}),
       ...(info.fixed ? { fixed: true as const } : {}),
       ...(isSessionBlock(info) ? { session: true as const } : {}),
-      ...(info.alongside != null ? { alongside: info.alongside } : {})
+      ...(info.alongside != null ? { alongside: info.alongside } : {}),
+      ...(withCosts ? { cost: tileCost(info, st) } : {})
     })
   for (const p of ctx.plan) {
     const info = byId.get(p.id)
@@ -358,7 +372,7 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
     dayType: state.dayType,
     templateId: ctx.snapshot.templateId,
     frozen: frozen != null,
-    blocks: axisBlocks(axis.ctx, axis.state, when),
+    blocks: axisBlocks(axis.ctx, axis.state, when, curve),
     wakeMin: lm(state.wake),
     bedtimeMin: lm(state.bedtime.forecast),
     boundary,

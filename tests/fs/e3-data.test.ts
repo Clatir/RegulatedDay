@@ -201,6 +201,24 @@ describe('folder danych dla okna głównego', () => {
     expect(snap.at).toBe(placeLogical(DAY, 10 * 60))
   })
 
+  it('zmiana kosztu zaczętego bloku z okna (D501): block.cost w dziedzinie timera, chwila z zegara procesu głównego; zły koszt – odmowa', async () => {
+    const { folder } = await make()
+    await folder.userEvents([{ k: 'block.cost', day: DAY, block: 'x', costs: { head: 4, emotions: 0, senses: -2 } }])
+    await expect(folder.userEvents([{ k: 'block.cost', day: DAY, block: 'x', costs: { head: 9, emotions: 0, senses: 0 } }])).rejects.toThrow(/costs/)
+    // The first builds' kind is read, never written by the window any more.
+    await expect(folder.userEvents([{ k: 'energy.cost', day: DAY, block: 'x', costs: null }])).rejects.toThrow(/nie pochodzi z okna/)
+    const events = readLogText(readFileSync(join(dataDir, paths.log(DAY, 'pca')), 'utf8')).events
+    expect(events.filter((e) => e.k === 'block.cost')).toEqual([expect.objectContaining({ dom: 'timer', block: 'x', costs: { head: 4, emotions: 0, senses: -2 }, at: expect.any(Number) })])
+    // This version knows it: no „unknown events of the timer” here. A version that does not know a kind of the timer's domain (as one
+    // before 1.24 reads `block.cost`) sees one – the night installation without the 24 h.
+    expect(await folder.unknownTimerEvents(placeLogical(DAY, 12 * 60))).toBe(false)
+    const later = { id: 'pcb-1', c: 'pcb', n: 1, t: placeLogical(DAY, 11 * 60), l: placeLogical(DAY, 11 * 60), v: 99, day: DAY, dom: 'timer', k: 'block.later', block: 'x', at: placeLogical(DAY, 11 * 60) }
+    mkdirSync(join(dataDir, paths.log(DAY, 'pcb'), '..'), { recursive: true })
+    writeFileSync(join(dataDir, paths.log(DAY, 'pcb')), `${JSON.stringify(later)}
+`)
+    expect(await folder.unknownTimerEvents(placeLogical(DAY, 12 * 60))).toBe(true)
+  })
+
   it('kopia konfliktowa rd.json: różnice tylko z jednej strony się łączą, po obu stronach – pytanie; odpowiedź zamyka kopię', async () => {
     write(paths.settings, { schema: 1, general: { waterEveryMin: 45, breakMin: 15 }, people: [{ id: 'a', name: 'Mama' }] })
     write('rd-DESKTOP-B.json', { schema: 1, general: { waterEveryMin: 60, breakMin: 15 }, people: [{ id: 'a', name: 'Mama' }, { id: 'b', name: 'Tata' }] })

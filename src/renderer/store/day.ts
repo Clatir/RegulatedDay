@@ -9,6 +9,8 @@ import { marketDay } from '@shared/calendar/holidays'
 import { dayContextOf, snapshotOf, type PlanInputs } from '@shared/engine/context'
 import { computeDay, type DayContext, type DayState } from '@shared/engine/day'
 import { computeEnergy, type EnergyState } from '@shared/engine/energy'
+import { foldFacts, type DayFacts } from '@shared/engine/facts'
+import { gridOf } from '@shared/engine/grid'
 import type { AnyEvent, DaySnapshot } from '@shared/model/events'
 import { dayFileFrom, type DayFile } from '@shared/model/plan'
 import type { DayTypeId } from '@shared/model/settings'
@@ -136,6 +138,34 @@ export function countDay(date: string, data: DayData, inputs: PlanInputs, at: nu
   const state = computeDay(ctx)
   const energy = computeEnergy(ctx, state, { moduleOn: energyOn, calibration })
   return { date, data, dayFile, snapshot, fromLog, ctx, state, energy, events }
+}
+
+/** A day read for an edit made in its turn without counting it (`plannedDay`): its plan, the facts of its log and its file. */
+export interface PlannedDay {
+  ctx: DayContext
+  facts: DayFacts
+  /** The day's file as the edit is made on it (with your queued edits, as `dayFiles` gives it). */
+  file: RawRecord | null
+}
+
+/**
+ * A day's plan and the facts of its log now – one read (`dayData`: its logs and its file), one snapshot – without counting the day (D501:
+ * an action that has to know in its turn whether a block is in the plan, has begun or ended). `'file'` – its file cannot be read now,
+ * `'log'` – its logs are not read whole (or the bridge failed).
+ */
+export async function plannedDay(date: string, at = Date.now()): Promise<PlannedDay | 'file' | 'log'> {
+  try {
+    const data = await window.rd.dayData(date)
+    if (data.unknown) return 'file'
+    if (!dayUsable(data)) return 'log'
+    const { rd, templates, lectures, seriesPlans } = useData.getState()
+    const events = data.events as AnyEvent[]
+    const src = { date, events, dayFile: data.dayFile ? dayFileFrom(data.dayFile, date) : null, nextFile: data.nextFile ? dayFileFrom(data.nextFile, addDays(date, 1)) : null }
+    const ctx = dayContextOf({ changes: rd.settings, templates, lectures, series: seriesPlans }, src, marketDay, at)
+    return { ctx, facts: foldFacts(gridOf(date), events), file: data.dayFile }
+  } catch {
+    return 'log'
+  }
 }
 
 /**
