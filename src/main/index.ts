@@ -19,6 +19,7 @@ import {
   type BarScreens,
   type EditEntry,
   type EventIn,
+  type QuickAddResult,
   type SystemSettingsPage,
   type TimerIn,
   type BarActionId,
@@ -219,8 +220,8 @@ const widget = new WidgetEngine({
 })
 
 /** The quick capture (D385): a task into „Skrzynka” – the window „Do skrzynki” and the bar's field. */
-function quickAdd(title: unknown): Promise<{ ok: boolean; error: string | null; id: string | null }> {
-  return hub ? hub.quickAdd(title) : Promise.resolve({ ok: false, error: 'Aplikacja jeszcze się uruchamia – nic nie zapisano.', id: null })
+function quickAdd(title: unknown): Promise<QuickAddResult> {
+  return hub ? hub.quickAdd(title) : Promise.resolve({ ok: false, error: 'Aplikacja jeszcze się uruchamia – nic nie zapisano.', id: null, title: null })
 }
 
 function widgetView(): WidgetView {
@@ -917,7 +918,7 @@ function registerIpc(): void {
     if (r.ok && viewOf(e.sender) === 'quick') {
       quick?.close('zapisano')
       // D470: the bar says where it went – the quick window is gone already.
-      void widget.quickSaid(typeof title === 'string' ? title : '')
+      void widget.quickSaid(r.title ?? '')
     }
     return r
   })

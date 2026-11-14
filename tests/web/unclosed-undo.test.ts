@@ -67,6 +67,18 @@ describe('„Cofnij” po zamknięciu dnia rano (D468)', () => {
     expect(row()).not.toBeNull()
   })
 
+  it('toast jest globalny: „Pomiń” i odmontowanie sekcji go nie zabierają, „Cofnij” dalej cofa zamknięcie', async () => {
+    const rd = await mount({ ok: true, why: null, confirm: null })
+    await click(`unclosed-free-${DAY}`)
+    await act(async () => void (host!.querySelector('[data-testid="unclosed-skip"]') as HTMLElement | null)?.click())
+    act(() => root!.unmount())
+    root = null
+    const t = useUi.getState().toasts.at(-1)!
+    expect(t).toMatchObject({ text: 'Zamknięto piątek 13.11.2026: wolny', action: { label: 'Cofnij' } })
+    await act(async () => t.action!.run())
+    expect(rd.undoClose).toHaveBeenCalledWith(DAY, ['pca-7', 'pca-8'])
+  })
+
   it('odmowa „Cofnij” (dzień zamrożony): powód w toaście, wiersza nie ma', async () => {
     const why = 'ten dzień jest już zamrożony – zamknięcia nie da się cofnąć'
     await mount({ ok: false, why, confirm: null })

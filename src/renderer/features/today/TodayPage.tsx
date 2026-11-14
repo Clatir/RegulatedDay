@@ -600,6 +600,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                 })
               }
               onCreate={create}
+              // D496: a bare click on the axis makes no draft – only a drag over it does.
+              clickCreates={false}
               // D305: the dragged block's planned start, as an edit of the day – today and later (a day gone is history);
               // D367: with the blocks it pushes apart.
               onMove={
@@ -752,6 +754,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   )
 }
 
+/** The hint under the side panel (D496): a bare click of the axis makes nothing in „Dziś”, a new block is a drag, „+ Blok” or Ctrl+N. */
+export const AXIS_HINT = 'Przeciągnij po osi, żeby dodać blok w tych godzinach, albo użyj „+ Blok” (Ctrl+N – w najbliższym wolnym miejscu).'
+
 /** Beside the plan when no block is selected: the warnings, the parked blocks, what the engine says of the day. */
 function SidePanel({ model, names, onSelect, onMove, cases }: { model: DayModel; names: Names; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
   const s = model.state
@@ -797,7 +802,7 @@ function SidePanel({ model, names, onSelect, onMove, cases }: { model: DayModel;
           ))}
         </div>
       )}
-      <p className={cx('text-[11.5px] text-muted')}>Kliknij wolne miejsce na osi, żeby dodać blok w tej godzinie – albo przeciągnij po nim, żeby ustawić początek i koniec (Ctrl N – w najbliższym wolnym miejscu).</p>
+      <p className={cx('text-[11.5px] text-muted')}>{AXIS_HINT}</p>
     </aside>
   )
 }

@@ -64,44 +64,26 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    miesiąca 1.18.1 (D429) scalona w PR #86 (`main` 16db060). Na prośbę użytkownika 13.11 wieczorem: nazwa bloku jak
    tytuł w Google Calendar (D430, D431) – 1.19.0, PR z gałęzi `claude/1.19.0-nazwa-bloku` (drzewo `ws4q`), scalić po
    wydaniu 1.18.1 (sekcja „Blok 3 – paczka SNT”). Blok 4 zamknięty (1.17.0). 1.19.0 scalone (PR #87, `main` b23f382).
-7. **Uwagi po 1.19.0 → 1.20.0 (14.11, D460–D467, czeka na odbiór):** osiem uwag użytkownika, pytania odpowiedziane 14.11 ok. 00:30,
-   bez pauz do wydania (użytkownik niedostępny ok. 9 h). Jedna gałąź `claude/1.20.0-uwagi` (drzewo `w120`), jeden PR
-   i jeden run (wypychanie gałęzi bez PR nie uruchamia CI). Zadania U1–U8, wykonawcy i drzewa – `docs/plan.md`,
-   „Uwagi po 1.19.0”. Numery D460–D469, T1030–T1080. 1.19.0 wydane 13.11 23:54 (run 43518181223). Scalić, gdy na
-   `main` nie biegnie run. Wersja 1.20.0, CHANGELOG i odbiór (punkty U1–U8) już na gałęzi. Stan zadań – tabela niżej.
-
-| Zadanie | Drzewo | Stan |
-| --- | --- | --- |
-| U1 + U6 (kroki z rutyny, powtarzanie spraw) | `w120a` | scalone (T1030–T1044) |
-| U2 + U7 + U5 (autozapis, szkic na osi, „Koniec”) | `w120b` | scalone (T1045–T1054) |
-| U8 (bez oznaczeń i drugiej zmiany) | `w120c` | scalone (T1055–T1064) |
-| U3 + U4 (Del, „+ Nowa…”) | `w120d` | scalone (T1065–T1069) |
-| Przegląd xhigh runda 1 (a+b+c): 13 uwag | `w120f`, `w120e` | poprawione i scalone (T1045, T1049, T1070–T1072) |
-| E2E E3 w nocy („+ Blok” o 02:20 – ta sama wartość pola nie zapisywała) | `w120g` | poprawione i scalone (T1077, T1078) |
-| Przegląd xhigh runda 2 (poprawki + U3/U4): 14 uwag | `w120h` (Del, okna, „+ Nowa…”), `w120g` (`TodayPage`, `draftSave`) | poprawione i scalone (T1067, T1073–T1076, T1079–T1080); runda 3 nie będzie (D351) |
-| PR 1.20.0 | `w120` | PR #88 + poprawka testu „!jutro” PR #89 scalone 14.11; 1.20.0 wydane 14.11 08:48 (run 43569379305) |
-
+7. **1.20.0 (uwagi po 1.19.0, D460–D467):** wydane 14.11 08:48 (PR #88, #89); wpis, tabela i uwagi na później – `docs/archiwum/postep-uwagi-1.20.md`; czeka na odbiór (U1–U8).
 8. **1.21.0 – przegląd intuicyjności (14.11, D468–D472, T1081–T1093):** skan `src/renderer` (trzy obszary), 7 uwag, użytkownik
    wybrał 1–6; punkt 2 (okno „Analiza tygodniowa”) odpadł – usunięte w 1.20.0 (D467). Gałąź `claude/1.21.0-intuicyjnosc`
-   (drzewo `w121`), jeden PR i jeden CI. Odbiór I1–I4 w `docs/odbior.md`. Uwagi na później: „Cofnij” zamknięcia nie sprawdza
+   (drzewo `w121`) = gałąź paczki 1.21–1.23 (D491: 1.21 i 1.22 tylko lokalny Setup.exe w Pobranych, bez PR i CI; jeden PR z pełnym
+   CI dopiero dla 1.23.0). Przegląd xhigh 1.21: 9 uwag, 8 poprawianych. Odbiór I1–I4 w `docs/odbior.md`. Uwagi na później: „Cofnij” zamknięcia nie sprawdza
    zdarzeń zapisanych po nim (np. `block.fix`); po „Pomiń” przywrócony dzień wraca dopiero po ponownym otwarciu „Dziś”;
    bez folderu danych pasek nie pokazuje noty (błędy szybkiego zapisu prawie niewidoczne).
 9. **1.22.0 – reklamacja rutyn i timer (po wydaniu 1.21.0, jeden PR i jeden CI, przegląd xhigh – silnik dnia):** D473 kroki rutyny
    w bloku z rutyną (także z szablonu i serii; przyczyna reklamacji: w 1.20.0 kopia tylko przy ręcznym wyborze rutyny w
    `BlockEditor.pickRoutine`), D474 ostatni odhaczony krok kończy blok („Skończono: … · Cofnij”), D475 elastyczne bloki kategorii
    „poza komputerem” zaczynają się same o swojej godzinie, gdy nic nie biegnie, D477 ✓ przed nazwą ukończonego bloku na osi
-   „Dziś”, D478 „Zacznij” na innym bloku zamienia go miejscami z biegnącym (biegnący nie znika). Numery od D479, T1100.
+   „Dziś”, D478 „Zacznij” na innym bloku zamienia go miejscami z biegnącym (biegnący nie znika). Równolegle w dwóch sesjach
+   (zlecenia 14.11 ok. 10:40, raporty do regulatedday-ab): 1.22-A kroki (D473, D474, D477) – sesja regulatedday-d7, gałąź
+   `claude/1.22-kroki`, numery D479–D484, T1100–T1129; 1.22-B timer (D475, D478) – sesja regulatedday-a8, gałąź
+   `claude/1.22-timer`, D485–D490, T1130–T1159. Ta sesja scala obie do `claude/1.21.0-intuicyjnosc`, przegląd xhigh, Setup.exe.
 10. **1.23.0 – bloki równoległe (D476, po 1.22.0):** przeciągnięcie bloku na inny = biegną razem, najwyżej N (Ustawienia, domyślnie 3),
    pierwszy plan = ostatnio zaczęty, energia tylko z niego; widoki pokazują nakładające się bloki obok siebie. Szacunek 6–10 h.
+   1.23-A (plan, gest, widoki, ustawienie) – regulatedday-d7 po 1.22-A, gałąź `claude/1.23-widoki`, D492–D495, T1160–T1189;
+   timer bloków równoległych – po 1.22-B. Potem jeden PR paczki do `main` z pełnym CI (D491).
 
-**Do pokazania użytkownikowi przy odbiorze 1.20.0:** klik w blok w „Tygodniu” i „3 dniach” otwiera „Dziś” z zaznaczonym
-blokiem (T1066 – Del działa po kliknięciu); „+ Nowa…” dla Wariantu i Kategorii nie ma na dniu minionym (T1067); wieczorny
-blok dawnej drugiej zmiany w szablonie liczy się teraz jak praca (granica, przedłużenie – D467); Esc na ruszonym szkicu
-zapisuje go (T1080).
-**Uwagi na później:** `tests/e2e/quick.spec.ts` „„+” w pasku okna głównego…” niestabilny już na 1.19.0 (lokalnie 2 na 6) –
-zapis z pola paska czasem nie dochodzi; `AllDayCard` ma własny nasłuch kliku poza kartą – przejść na `useOutsidePointer`;
-porzucenie zadania nie ma akcji w interfejsie, więc
-nie tworzy następnego (T1042).
 
 ## Ciąg L – stan (D380)
 Numery: D404, T700–T719 (L1), T750–T799 (L2, L3 – uzgodnione z sesją HKU1 12.11); kolejne D – osobno od HKU1 (ma D405, D406). „Przed etapem” pominięte na

@@ -227,6 +227,7 @@ export function Timeline({
   selected,
   onSelect,
   onCreate,
+  clickCreates = true,
   onMove,
   onResize,
   resizeNote,
@@ -253,6 +254,8 @@ export function Timeline({
    * start and the length of the range (on the 5-min grid, D366).
    */
   onCreate?: (min: number, durationMin?: number) => void
+  /** Whether a bare click on an empty place makes a draft too (D366); false – only a drag creates (D496, „Dziś”). */
+  clickCreates?: boolean
   /**
    * A movable block dragged with the left button to a new start (logical minute); it may return the span the block stands
    * at after it (a template's morning the day's wake moves – D372), where it is held until the day shows it.
@@ -343,13 +346,16 @@ export function Timeline({
   const span = [...(extent ?? items), ...(draft ? [draft] : [])]
   const lo = Math.floor(Math.min(from, ...span.map((i) => i.startMin), ...markers.map((m) => m.at)) / 60) * 60
   const hi = Math.ceil(Math.max(to, ...span.map((i) => i.endMin), ...markers.map((m) => m.at)) / 60) * 60
-  // D366: a click on a gap (or in the column of hours) creates a block on the quarter, a drag one with its start and end.
+  // D366: a click on a gap (or in the column of hours) creates a block on the quarter, a drag one with its start and end;
+  // with `clickCreates` off (D496, „Dziś”) a bare click makes nothing – only a drag does.
   const grid = useGridCreate({
     lo,
     hi,
     ppm: PPM,
     flatMin: DEFAULT_NEW_BLOCK_MIN,
-    onClick: (min) => onCreate?.(Math.round(min / 15) * 15),
+    onClick: (min) => {
+      if (clickCreates) onCreate?.(Math.round(min / 15) * 15)
+    },
     onRange: (r) => onCreate?.(r.startMin, r.endMin - r.startMin)
   })
   const gridBind = onCreate ? grid.bind : {}

@@ -139,11 +139,12 @@ export interface CaseDays {
   broken?: string[]
 }
 
-/** The quick capture saved (D385): the new task's id; refused – why (no folder, no title). */
+/** The quick capture saved (D385): the new task's id and its title as saved (D470 – without the words of dates); refused – why (no folder, no title). */
 export interface QuickAddResult {
   ok: boolean
   error: string | null
   id: string | null
+  title: string | null
 }
 
 /**

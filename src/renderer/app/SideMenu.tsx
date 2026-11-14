@@ -1,3 +1,4 @@
+// adapted from FI src/renderer/app/App.tsx @ de81f2b
 /**
  * The side menu of the main window: one list in the order of PAGES (the settings right under the history, D306) and, at the
  * bottom, „Szukaj” – the visible way into the search palette (D469), with its shortcut shown like the screens' ones.

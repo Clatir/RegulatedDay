@@ -2047,11 +2047,14 @@ export class DataFolder {
     // its journal.
     for (const d of [yesterday, day]) for (const e of this.log.ownEvents(d)) seen.add(`${d}|${e.id}`)
     const fresh = (d: string, list: readonly AutoEvent[]) => list.filter((e) => !seen.has(`${d}|${e.id}`))
-    const ready = [...this.checked(yesterday, fresh(yesterday, carried)), ...this.checked(day, [...fresh(day, laid), ...drafts])]
-    const written = ready.map((d) => this.append(d))
-    if (ready.length) await this.log.flush()
-    // `checked` keeps every draft (or throws): the drafts are the last of `ready`.
-    return written.slice(written.length - drafts.length)
+    // All three checked before the first write (a part that fails leaves nothing behind); written in this order.
+    const early = this.checked(yesterday, fresh(yesterday, carried))
+    const ends = this.checked(day, fresh(day, laid))
+    const own = this.checked(day, drafts)
+    for (const d of [...early, ...ends]) this.append(d)
+    const written = own.map((d) => this.append(d))
+    if (early.length || ends.length || own.length) await this.log.flush()
+    return written
   }
 
   /** Drafts of the timer as lines of a day's log, each checked first (an error: none of them). */

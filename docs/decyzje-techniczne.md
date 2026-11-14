@@ -360,3 +360,4 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1091 | „Szukaj” (D469) to pozycja poza `PAGES` w `app/SideMenu.tsx` (menu wydzielone z `App.tsx`), bez cyfry i `aria-current` |
 | T1092 | `WidgetView.note.ok` – nota potwierdzenia w spokojnym kolorze (`text-fg`); bez pola – odmowa (czerwona) jak dotąd |
 | T1093 | Potwierdzenie szybkiego zapisu (D470): `quickSavedText` – tytuł bez słów dat (`!jutro`, `@pt`), najwyżej 40 znaków z „…”; `WidgetEngine.quickSaid` woła go także po zapisie z okienka skrótu globalnego (`CH.quickAdd` w `index.ts`) |
+| T1094 | „Cofnij” zamknięcia dnia (D468) zostaje dymkiem `undoToast` (użytkownik 14.11: „dymek jak wszędzie”) – przy więcej niż 4 zamknięciach w 10 s najstarsze „Cofnij” znikają (limit `toast()`), świadomie. Stałe okna korekty w `shared/engine/freezeWindow.ts` (okno nie ciągnie silnika); `QuickAddResult.title` – pasek mówi tytuł zapisany przez folder |

@@ -42,7 +42,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null }> } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }> } = {}) {
   // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
   // alone (Windows sets the time back or forward – the monotonic clock goes on).
   const clock = {
@@ -2499,7 +2499,7 @@ describe('szybki zapis „+” – potwierdzenie w pasku (D470)', () => {
     const { w, clock } = await make({
       quickAdd: async (t) => {
         saved.push(t)
-        return { ok: true, error: null }
+        return { ok: true, error: null, title: 'Zamówić karmę' }
       }
     })
     await w.refresh()
@@ -2512,16 +2512,17 @@ describe('szybki zapis „+” – potwierdzenie w pasku (D470)', () => {
   })
 
   it('długi tytuł jest skrócony do 40 znaków z wielokropkiem; krótki zostaje cały', async () => {
-    const { w } = await make({ quickAdd: async () => ({ ok: true, error: null }) })
+    const long = `Zadzwonić ${'x'.repeat(100)}`
+    const { w } = await make({ quickAdd: async () => ({ ok: true, error: null, title: long }) })
     await w.refresh()
-    await w.act('quickAdd', `Zadzwonić ${'x'.repeat(100)}`, 'bar')
+    await w.act('quickAdd', long, 'bar')
     const text = w.current().note!.text
     expect(text).toBe(`Dodano do Skrzynki: Zadzwonić ${'x'.repeat(29)}…`)
     expect([...text.slice('Dodano do Skrzynki: '.length)]).toHaveLength(40)
   })
 
   it('odmowa mówi tylko powód (jak dotąd), bez potwierdzenia', async () => {
-    const { w } = await make({ quickAdd: async () => ({ ok: false, error: 'Wpisz, co zapisać.' }) })
+    const { w } = await make({ quickAdd: async () => ({ ok: false, error: 'Wpisz, co zapisać.', title: null }) })
     await w.refresh()
     await w.act('quickAdd', '!jutro', 'bar')
     expect(w.current().note).toMatchObject({ text: 'Wpisz, co zapisać.' })
@@ -2531,7 +2532,14 @@ describe('szybki zapis „+” – potwierdzenie w pasku (D470)', () => {
   it('szybki zapis skrótem globalnym: quickSaid mówi to samo w pasku', async () => {
     const { w } = await make()
     await w.refresh()
-    await w.quickSaid('Kup mleko @pt')
+    await w.quickSaid('Kup mleko')
     expect(w.current().note).toMatchObject({ text: 'Dodano do Skrzynki: Kup mleko', ok: true })
+  })
+
+  it('pasek powtarza tytuł zapisany przez folder (zwrócony z zapisu), nie liczy go od nowa z surowego tekstu i zegara paska', async () => {
+    const { w } = await make({ quickAdd: async () => ({ ok: true, error: null, title: 'Tytuł z folderu' }) })
+    await w.refresh()
+    await w.act('quickAdd', 'Kup mleko !jutro', 'bar')
+    expect(w.current().note).toMatchObject({ text: 'Dodano do Skrzynki: Tytuł z folderu', ok: true })
   })
 })

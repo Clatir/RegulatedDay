@@ -1025,16 +1025,16 @@ export class DataHub {
    */
   async quickAdd(title: unknown): Promise<QuickAddResult> {
     const f = this.service?.folder
-    if (!f) return { ok: false, error: 'Folder danych nie jest otwarty – nic nie zapisano.', id: null }
+    if (!f) return { ok: false, error: 'Folder danych nie jest otwarty – nic nie zapisano.', id: null, title: null }
     const now = f.clock.now()
     const id = newId()
     const today = logicalDayOf(now)
     const q = parseQuickDates(typeof title === 'string' ? title : '', today)
     const raw = newTask(id, now, today, { title: q.title, dueDate: q.dueDate, doDate: q.doDate })
-    if (!raw) return { ok: false, error: 'Wpisz, co zapisać.', id: null }
+    if (!raw) return { ok: false, error: 'Wpisz, co zapisać.', id: null, title: null }
     const out = await this.edit([recordEdit(paths.record('request', id), null, raw)!])
     const ok = out.every((o) => o.status === 'applied' || o.status === 'waiting')
-    return { ok, error: ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: ok ? id : null }
+    return { ok, error: ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: ok ? id : null, title: ok ? String(raw.title) : null }
   }
 
   /** The logical day of the clock `quickAdd` saves with (D454: the preview of the words of dates counts from it, not from the window's clock). */

@@ -1,10 +1,11 @@
 # Changelog
 
 ## 1.21.0
-- „Niezamknięte dni” rano: po „Jak zapisano”, „Wolne” albo „Nie pamiętam” pojawia się „Zamknięto <dzień>: … · Cofnij”. „Cofnij” przywraca dzień na listę, dopóki aplikacja go nie zamroziła.
+- „Niezamknięte dni” rano: po „Jak zapisano”, „Wolne” albo „Nie pamiętam” pojawia się dymek „Zamknięto <dzień>: … · Cofnij”. „Cofnij” przywraca dzień na listę, dopóki aplikacja go nie zamroziła.
 - Wyszukiwarka ma przycisk: u dołu menu bocznego jest „Szukaj · Ctrl K”.
 - Szybki zapis „+”: po zapisaniu zadania pasek mówi „Dodano do Skrzynki: <tytuł>” – także po zapisie skrótem globalnym.
 - Pokój przy wyłączonej grze ma przycisk „Otwórz Ustawienia”, który od razu pokazuje sekcję „Moduły”.
+- „Dziś”: kliknięcie w puste miejsce osi już niczego nie otwiera – nowy blok tworzy przeciągnięcie po osi, „+ Blok” albo Ctrl+N.
 - Statystyki wyjaśniają, kiedy dzień jest „zamrożony”: po oknie korekty – 24 h od otwarcia następnego dnia, najpóźniej 72 h po końcu dnia.
 
 ## 1.20.0

@@ -2440,6 +2440,13 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Oczekiwany efekt:** przycisk otwiera Ustawienia na sekcji „Moduły”; nota nad statystykami mówi, kiedy dzień się zamraża.
 - **Nie przechodzi, gdy:** przycisk prowadzi gdzie indziej; nota bez wyjaśnienia.
 
+#### I5 Klik osi „Dziś” nic nie tworzy (D496)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/axis-click.test.ts`, `tests/e2e/block-autosave.spec.ts`.
+- **Jak sprawdzić:** w „Dziś” kliknij w puste miejsce osi; potem przeciągnij po niej 10:00–11:00; w „Szablonach” kliknij w pustą oś.
+- **Oczekiwany efekt:** klik w „Dziś” nic nie otwiera; przeciągnięcie daje szkic i blok; w „Szablonach” klik dalej dodaje blok.
+- **Nie przechodzi, gdy:** klik w „Dziś” otwiera panel albo kafelek szkicu; przeciągnięcie przestało tworzyć blok.
+
 ---
 
 ### U – uwagi po 1.19.0 (1.20.0, D460–D467)

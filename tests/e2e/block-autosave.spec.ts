@@ -1,8 +1,7 @@
 /**
  * Nowy blok zapisuje się sam (D461), stoi na osi jako szkic (D466) i ma godzinę końca (D464). „Dziś” (jutro: pobudka o 12:00
- * w `seedAwake`, pusty plan – bez wymiany, bez rozsuwania): kliknięcie osi tylko otwiera szkic (kafelek z przerywaną ramką, nic w
- * pliku), Esc odrzuca nietknięty szkic, każde opuszczenie nietkniętego szkicu z gołego kliknięcia osi też (przypadkowy klik nie tworzy
- * bloku); szkic z przeciągnięcia, „+ Blok” i Ctrl+N zapisuje się takim, jaki jest, przy „Zamknij”, kliku gdzie indziej, zmianie dnia i
+ * w `seedAwake`, pusty plan – bez wymiany, bez rozsuwania): goły klik osi nie robi niczego – ani szkicu, ani panelu (D496, tylko
+ * przeciągnięcie tworzy), Esc odrzuca nietknięty szkic; szkic z przeciągnięcia, „+ Blok” i Ctrl+N zapisuje się takim, jaki jest, przy „Zamknij”, kliku gdzie indziej, zmianie dnia i
  * ekranu (z „Cofnij”, T1045); pierwsze zatwierdzone
  * pole zapisuje blok, a panel edytuje go dalej. Pole „Koniec” zmienia długość (początek zostaje), po północy z dopiskiem „+1 dzień”.
  * „Postaw na osi” w Sprawach i wykłady w ustawieniach mają je też.
@@ -65,21 +64,27 @@ async function tomorrowPage(prefix: string) {
   return { ...run, dataDir, today, tomorrow }
 }
 
-test('nowy blok (D461, D466): kliknięcie osi to tylko szkic na osi (przerywana ramka, godziny), Esc go odrzuca; „Zamknij” zapisuje „+ Blok” i przeciągnięcie; „Dodaj” nie ma', async () => {
+test('nowy blok (D461, D466, D496): goły klik osi nic nie robi; szkic z „+ Blok” na osi (przerywana ramka, godziny), Esc go odrzuca; „Zamknij” zapisuje „+ Blok” i przeciągnięcie; „Dodaj” nie ma', async () => {
   const { app, page, userData, errors, dataDir, tomorrow } = await tomorrowPage('rd-e2e-autosave-draft-')
   try {
     await withMainLog(userData, async () => {
-      await clickAxis(page)
-      await expect(page.getByTestId('block-editor')).toBeVisible()
       const tile = page.getByTestId('draft-tile')
+      // D496: a bare click on the axis makes nothing – no draft, no panel, nothing in the file (only a drag creates).
+      await clickAxis(page)
+      await expect(page.getByTestId('day-add')).toBeVisible()
+      await expect(tile).toHaveCount(0)
+      await expect(page.getByTestId('block-editor')).toHaveCount(0)
+      expect(spans(dataDir, tomorrow)).toEqual([])
+
+      // „+ Blok”: the dashed tile with the hours of the panel's start and end.
+      await page.getByTestId('day-add').click()
+      await expect(page.getByTestId('block-editor')).toBeVisible()
       await expect(tile).toBeVisible()
       await expect(tile).toHaveCSS('border-top-style', 'dashed')
       await expect(page.getByTestId('block-add')).toHaveCount(0)
-      // The tile says the hours of the panel's start and length.
       const start = await page.getByTestId('block-start').inputValue()
       const end = await page.getByTestId('block-end').inputValue()
       await expect(page.getByTestId('draft-tile-hours')).toContainText(`${start}–${end}`)
-      // A bare click creates no block.
       expect(spans(dataDir, tomorrow)).toEqual([])
       // Esc on a draft not touched throws it away: no tile, no panel, nothing in the file.
       await page.keyboard.press('Escape')
@@ -87,12 +92,6 @@ test('nowy blok (D461, D466): kliknięcie osi to tylko szkic na osi (przerywana 
       await expect(page.getByTestId('block-editor')).toHaveCount(0)
       expect(spans(dataDir, tomorrow)).toEqual([])
 
-      // A bare click and a click elsewhere: nothing was made – no block, the draft is gone (a stray click creates nothing).
-      await clickAxis(page)
-      await expect(tile).toBeVisible()
-      await page.getByTestId('day-title').click()
-      await expect(tile).toHaveCount(0)
-      await expect(page.getByTestId('block-editor')).toHaveCount(0)
       // „+ Blok” untouched and Esc: thrown away (Esc throws away a draft not touched).
       await page.getByTestId('day-add').click()
       await expect(tile).toBeVisible()
@@ -229,12 +228,12 @@ test('nowy blok (D461): klik gdzie indziej, zmiana dnia i zmiana ekranu zapisuj�
       await expect(page.getByTestId('draft-tile')).toBeVisible()
       await page.keyboard.press('Control+Digit2')
       await expect.poll(() => spans(dataDir, tomorrow).length, { timeout: 15_000 }).toBe(4)
-      // Another day, empty: a bare click of the axis untouched and another screen – nothing is made.
+      // Another day, empty: a bare click of the axis makes no draft (D496), and another screen – nothing is made.
       await page.getByTestId('nav-today').click()
       await page.getByTestId('day-next').click()
       const later = addDays(tomorrow, 1)
       await clickAxis(page)
-      await expect(page.getByTestId('draft-tile')).toBeVisible()
+      await expect(page.getByTestId('draft-tile')).toHaveCount(0)
       await page.keyboard.press('Control+Digit2')
       await page.keyboard.press('Control+Digit1')
       await expect(page.getByTestId('day-add')).toBeVisible()
